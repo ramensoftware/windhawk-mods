@@ -6,9 +6,8 @@
 // @author          Dev-StudioCode
 // @github          https://github.com/Dev-StudioCode
 // @homepage        https://github.com/Dev-StudioCode/FluxDesk
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lole32 -luuid -lruntimeobject -lshlwapi -lshell32
+// @include         windhawk.exe
+// @compilerOptions -lole32 -lruntimeobject -lshlwapi -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -22,11 +21,11 @@ Assigns, preloads, and coordinates distinct background wallpapers across virtual
 * **Per-Desktop Wallpapers**: Assigns individual background images per virtual workspace from a folder or specific overrides.
 * **Touchpad Preloading**: Direct assignment through Windows 11 internal virtual desktop manager ensures backgrounds are preloaded for smooth trackpad swipe transitions.
 * **Persistent Wallpaper Backup**: Safely saves original desktop wallpaper paths to Windhawk mod storage before any assignment is applied, ensuring your original backgrounds can be restored even across Explorer restarts or reboots.
-* **Safe In-Process Design**: Runs on a dedicated asynchronous worker thread inside `explorer.exe` with zero vtable patching, avoiding system instability.
+* **Isolated Tool Mod Design**: Runs as a dedicated background tool mod process (`windhawk.exe`) making COM calls to the Immersive Shell, guaranteeing Explorer stability with zero in-process hooks.
 
 ### System Changes and Persistence
 * **What Windows Stores**: The mod assigns backgrounds using `IVirtualDesktopManagerInternal::SetDesktopWallpaper`. Windows persists per-desktop wallpapers in the user registry under `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops\Desktops\{GUID}`.
-* **Restoration on Exit**: When `restoreOriginalOnUnload` is enabled (default), unloading or disabling the mod restores your original desktop wallpapers from Windhawk storage and clears the saved backup entries. If disabled, the assigned wallpapers remain active in Windows settings.
+* **Restoration on Exit**: When `restoreOriginalOnUnload` is enabled (default), unloading or disabling the mod restores your original desktop wallpapers from Windhawk storage and clears the saved backup entries. If disabled, the assigned wallpapers remain active in Windows settings and storage entries are cleared for a fresh baseline.
 
 ### Compatibility Note
 * Designed specifically for Windows 11 Version 24H2 and newer (Build 26100+).
@@ -55,7 +54,7 @@ Source code, issue tracker & roadmap: [GitHub Repository](https://github.com/Dev
   $description: 'Specific image path to assign to virtual desktop 4.'
 - shuffle: true
   $name: Shuffle Folder Wallpapers
-  $description: 'Randomize wallpaper assignments across desktops from the folder on load or changes.'
+  $description: 'Randomize wallpaper assignments across desktops from the folder.'
 - restoreOriginalOnUnload: true
   $name: Restore Original Wallpapers on Exit
   $description: 'Restore original desktop wallpapers when the mod is disabled or unloaded.'
@@ -99,6 +98,7 @@ constexpr IID IID_IVirtualDesktopNotificationService = {
 
 constexpr UINT WM_APP_RELOAD_SETTINGS = WM_APP + 101;
 constexpr UINT WM_APP_DESKTOPS_CHANGED = WM_APP + 102;
+constexpr UINT WM_APP_RECONNECT = WM_APP + 103;
 
 constexpr PCWSTR SYSTEM_DEFAULT_WALLPAPER_TAG = L"__SYSTEM_DEFAULT__";
 
@@ -158,8 +158,10 @@ struct IVirtualDesktopNotificationService : IUnknown {
 
 struct ScopedHString {
     HSTRING hstr = nullptr;
-    explicit ScopedHString(const std::wstring& str) {
-        WindowsCreateString(str.c_str(), static_cast<UINT32>(str.length()), &hstr);
+    ScopedHString(const std::wstring& str) {
+        if (!str.empty()) {
+            WindowsCreateString(str.c_str(), static_cast<UINT32>(str.length()), &hstr);
+        }
     }
     ~ScopedHString() {
         if (hstr) {
@@ -168,6 +170,13 @@ struct ScopedHString {
     }
     operator HSTRING() const { return hstr; }
 };
+
+inline bool IsDisconnectedHr(HRESULT hr) {
+    return hr == RPC_E_DISCONNECTED ||
+           hr == HRESULT_FROM_WIN32(RPC_S_SERVER_UNAVAILABLE) ||
+           hr == HRESULT_FROM_WIN32(RPC_S_CALL_FAILED) ||
+           hr == CO_E_OBJNOTCONNECTED;
+}
 
 // ---------------------------------------------------------------------------
 // Mod Settings & State
@@ -188,6 +197,8 @@ std::vector<std::wstring> g_folderWallpapers;
 HANDLE g_hStopEvent = nullptr;
 HANDLE g_hWorkerThread = nullptr;
 DWORD g_workerThreadId = 0;
+HWND g_hWndMsg = nullptr;
+UINT g_msgTaskbarCreated = 0;
 
 // ---------------------------------------------------------------------------
 // Settings Loader
@@ -225,10 +236,10 @@ void LoadSettings() {
                 if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
                     LPCWSTR ext = PathFindExtensionW(fd.cFileName);
                     if (ext && (_wcsicmp(ext, L".jpg") == 0 ||
-                               _wcsicmp(ext, L".jpeg") == 0 ||
-                               _wcsicmp(ext, L".png") == 0 ||
-                               _wcsicmp(ext, L".bmp") == 0 ||
-                               _wcsicmp(ext, L".webp") == 0)) {
+                                _wcsicmp(ext, L".jpeg") == 0 ||
+                                _wcsicmp(ext, L".png") == 0 ||
+                                _wcsicmp(ext, L".bmp") == 0 ||
+                                _wcsicmp(ext, L".webp") == 0)) {
                         g_folderWallpapers.push_back(basePath + fd.cFileName);
                     }
                 }
@@ -245,20 +256,20 @@ void LoadSettings() {
 }
 
 // ---------------------------------------------------------------------------
-// Wallpaper Resolution, Application & Restoration
+// Wallpaper Helpers & Storage Management
 // ---------------------------------------------------------------------------
 
 std::wstring GetDesktopWallpaperPath(IVirtualDesktop* pDesktop) {
     HSTRING hPath = nullptr;
-    std::wstring path;
+    std::wstring pathStr;
     if (SUCCEEDED(pDesktop->GetWallpaperPath(&hPath)) && hPath) {
         PCWSTR raw = WindowsGetStringRawBuffer(hPath, nullptr);
         if (raw) {
-            path = raw;
+            pathStr = raw;
         }
         WindowsDeleteString(hPath);
     }
-    return path;
+    return pathStr;
 }
 
 std::wstring GetConfiguredWallpaperForDesktop(UINT index) {
@@ -326,7 +337,6 @@ void ApplyAllWallpapers(IVirtualDesktopManagerInternal* pMgr) {
             std::wstring currentWallpaper = GetDesktopWallpaperPath(pDesktop);
 
             if (!targetWallpaper.empty()) {
-                // Ensure initial wallpaper is preserved in Windhawk storage before any override
                 if (guidStr[0] != L'\0') {
                     std::wstring stored = GetStoredOriginal(guidStr);
                     if (stored.empty()) {
@@ -336,13 +346,11 @@ void ApplyAllWallpapers(IVirtualDesktopManagerInternal* pMgr) {
                     }
                 }
 
-                // Avoid redundant writes if already applied
                 if (_wcsicmp(currentWallpaper.c_str(), targetWallpaper.c_str()) != 0) {
                     ScopedHString hPath(targetWallpaper);
                     pMgr->SetDesktopWallpaper(pDesktop, hPath);
                 }
             } else {
-                // When an assignment is cleared, restore original background from Windhawk storage
                 if (guidStr[0] != L'\0') {
                     RestoreDesktopFromBackup(pMgr, pDesktop, guidStr);
                 }
@@ -374,7 +382,6 @@ void RestoreOriginalWallpapers(IVirtualDesktopManagerInternal* pMgr) {
                 if (g_settings.restoreOriginalOnUnload) {
                     RestoreDesktopFromBackup(pMgr, pDesktop, guidStr);
                 } else {
-                    // With restore disabled, clear stored backup so next enable gets a fresh baseline
                     Wh_DeleteValue(guidStr);
                 }
             }
@@ -395,7 +402,7 @@ private:
     DWORD m_targetThreadId = 0;
 
 public:
-    explicit NotificationSink(DWORD targetThreadId) : m_targetThreadId(targetThreadId) {}
+    NotificationSink(DWORD targetThreadId) : m_targetThreadId(targetThreadId) {}
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) override {
         if (!ppvObject) return E_POINTER;
@@ -456,15 +463,117 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// Worker Thread Procedure
+// Shell Connection & Worker Loop
 // ---------------------------------------------------------------------------
+
+bool ConnectShell(
+    IServiceProvider** ppServiceProvider,
+    IVirtualDesktopManagerInternal** ppDesktopManager,
+    IVirtualDesktopNotificationService** ppNotificationService,
+    NotificationSink** ppSink,
+    DWORD* pdwCookie,
+    DWORD workerThreadId) {
+
+    HRESULT hr = CoCreateInstance(
+        CLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER,
+        IID_PPV_ARGS(ppServiceProvider));
+
+    if (SUCCEEDED(hr) && *ppServiceProvider) {
+        (*ppServiceProvider)->QueryService(
+            SID_VirtualDesktopManagerInternal,
+            IID_IVirtualDesktopManagerInternal,
+            (void**)ppDesktopManager);
+
+        (*ppServiceProvider)->QueryService(
+            SID_VirtualDesktopNotificationService,
+            IID_IVirtualDesktopNotificationService,
+            (void**)ppNotificationService);
+
+        if (*ppDesktopManager && *ppNotificationService) {
+            *ppSink = new NotificationSink(workerThreadId);
+            HRESULT hrReg = (*ppNotificationService)->Register(*ppSink, pdwCookie);
+            if (FAILED(hrReg)) {
+                Wh_Log(L"Notification register failed: 0x%08X", hrReg);
+            }
+            return true;
+        }
+
+        if (*ppDesktopManager) {
+            (*ppDesktopManager)->Release();
+            *ppDesktopManager = nullptr;
+        }
+        if (*ppNotificationService) {
+            (*ppNotificationService)->Release();
+            *ppNotificationService = nullptr;
+        }
+        (*ppServiceProvider)->Release();
+        *ppServiceProvider = nullptr;
+    }
+    return false;
+}
+
+void DisconnectShell(
+    IServiceProvider** ppServiceProvider,
+    IVirtualDesktopManagerInternal** ppDesktopManager,
+    IVirtualDesktopNotificationService** ppNotificationService,
+    NotificationSink** ppSink,
+    DWORD* pdwCookie) {
+
+    if (*ppNotificationService && *pdwCookie) {
+        (*ppNotificationService)->Unregister(*pdwCookie);
+        *pdwCookie = 0;
+    }
+
+    if (*ppSink) {
+        CoDisconnectObject(static_cast<IUnknown*>(*ppSink), 0);
+        (*ppSink)->Release();
+        *ppSink = nullptr;
+    }
+
+    if (*ppDesktopManager) {
+        RestoreOriginalWallpapers(*ppDesktopManager);
+        (*ppDesktopManager)->Release();
+        *ppDesktopManager = nullptr;
+    }
+
+    if (*ppNotificationService) {
+        (*ppNotificationService)->Release();
+        *ppNotificationService = nullptr;
+    }
+
+    if (*ppServiceProvider) {
+        (*ppServiceProvider)->Release();
+        *ppServiceProvider = nullptr;
+    }
+}
+
+LRESULT CALLBACK MessageWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == g_msgTaskbarCreated && g_msgTaskbarCreated != 0) {
+        if (g_workerThreadId) {
+            PostThreadMessageW(g_workerThreadId, WM_APP_RECONNECT, 0, 0);
+        }
+        return 0;
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
 
 DWORD WINAPI WorkerThreadProc(LPVOID) {
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    // Initialize thread message queue before any messages can be posted
     MSG msgDummy;
     PeekMessageW(&msgDummy, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    WNDCLASSW wc = {0};
+    wc.lpfnWndProc = MessageWindowProc;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = L"Windhawk_VDWS_MsgWnd";
+    RegisterClassW(&wc);
+
+    g_hWndMsg = CreateWindowExW(
+        WS_EX_TOOLWINDOW, wc.lpszClassName, L"", WS_POPUP,
+        0, 0, 0, 0, nullptr, nullptr, wc.hInstance, nullptr);
+
+    g_msgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
 
     IServiceProvider* pServiceProvider = nullptr;
     IVirtualDesktopManagerInternal* pDesktopManager = nullptr;
@@ -472,105 +581,60 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     NotificationSink* pSink = nullptr;
     DWORD dwCookie = 0;
 
-    // Retry connection without fixed deadline until immersive shell is ready or stop is requested
+    LoadSettings();
+
+    // Initial connection loop with stop event support
     while (true) {
         if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
+            if (g_hWndMsg) DestroyWindow(g_hWndMsg);
+            UnregisterClassW(wc.lpszClassName, wc.hInstance);
             if (SUCCEEDED(hrCo)) CoUninitialize();
             return 0;
         }
 
-        HRESULT hr = CoCreateInstance(
-            CLSID_ImmersiveShell, nullptr, CLSCTX_LOCAL_SERVER,
-            IID_PPV_ARGS(&pServiceProvider));
-
-        if (SUCCEEDED(hr) && pServiceProvider) {
-            pServiceProvider->QueryService(
-                SID_VirtualDesktopManagerInternal,
-                IID_IVirtualDesktopManagerInternal,
-                (void**)&pDesktopManager);
-
-            pServiceProvider->QueryService(
-                SID_VirtualDesktopNotificationService,
-                IID_IVirtualDesktopNotificationService,
-                (void**)&pNotificationService);
-
-            if (pDesktopManager && pNotificationService) {
-                break;
-            }
-
-            // Release partial interfaces to prevent leaks across retry iterations
-            if (pDesktopManager) {
-                pDesktopManager->Release();
-                pDesktopManager = nullptr;
-            }
-            if (pNotificationService) {
-                pNotificationService->Release();
-                pNotificationService = nullptr;
-            }
-            pServiceProvider->Release();
-            pServiceProvider = nullptr;
+        if (ConnectShell(&pServiceProvider, &pDesktopManager, &pNotificationService, &pSink, &dwCookie, GetCurrentThreadId())) {
+            ApplyAllWallpapers(pDesktopManager);
+            break;
         }
 
         if (WaitForSingleObject(g_hStopEvent, 500) == WAIT_OBJECT_0) {
+            if (g_hWndMsg) DestroyWindow(g_hWndMsg);
+            UnregisterClassW(wc.lpszClassName, wc.hInstance);
             if (SUCCEEDED(hrCo)) CoUninitialize();
             return 0;
         }
     }
 
-    // Initial settings load and wallpaper application
-    LoadSettings();
-    ApplyAllWallpapers(pDesktopManager);
-
-    // Register notification sink
-    pSink = new NotificationSink(GetCurrentThreadId());
-    HRESULT hrReg = pNotificationService->Register(pSink, &dwCookie);
-    if (FAILED(hrReg)) {
-        Wh_Log(L"Notification register failed: 0x%08X", hrReg);
-    }
-
-    // Message loop for thread-safe asynchronous notifications and settings updates
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0) {
-            break;
-        }
         if (msg.message == WM_APP_RELOAD_SETTINGS) {
             LoadSettings();
-            ApplyAllWallpapers(pDesktopManager);
+            if (pDesktopManager) {
+                ApplyAllWallpapers(pDesktopManager);
+            }
         } else if (msg.message == WM_APP_DESKTOPS_CHANGED) {
-            ApplyAllWallpapers(pDesktopManager);
+            if (pDesktopManager) {
+                ApplyAllWallpapers(pDesktopManager);
+            }
+        } else if (msg.message == WM_APP_RECONNECT) {
+            DisconnectShell(&pServiceProvider, &pDesktopManager, &pNotificationService, &pSink, &dwCookie);
+            Sleep(500);
+            ConnectShell(&pServiceProvider, &pDesktopManager, &pNotificationService, &pSink, &dwCookie, GetCurrentThreadId());
+            if (pDesktopManager) {
+                ApplyAllWallpapers(pDesktopManager);
+            }
         }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
-    // Unregister notification sink
-    if (pNotificationService && dwCookie) {
-        pNotificationService->Unregister(dwCookie);
-        dwCookie = 0;
-    }
+    DisconnectShell(&pServiceProvider, &pDesktopManager, &pNotificationService, &pSink, &dwCookie);
 
-    if (pSink) {
-        CoDisconnectObject(static_cast<IUnknown*>(pSink), 0);
-        pSink->Release();
-        pSink = nullptr;
+    if (g_hWndMsg) {
+        DestroyWindow(g_hWndMsg);
+        g_hWndMsg = nullptr;
     }
-
-    // Restore original wallpapers
-    RestoreOriginalWallpapers(pDesktopManager);
-
-    if (pDesktopManager) {
-        pDesktopManager->Release();
-        pDesktopManager = nullptr;
-    }
-    if (pNotificationService) {
-        pNotificationService->Release();
-        pNotificationService = nullptr;
-    }
-    if (pServiceProvider) {
-        pServiceProvider->Release();
-        pServiceProvider = nullptr;
-    }
+    UnregisterClassW(wc.lpszClassName, wc.hInstance);
 
     if (SUCCEEDED(hrCo)) {
         CoUninitialize();
@@ -578,35 +642,12 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     return 0;
 }
 
-bool IsPrimaryExplorerProcess() {
-    HWND shell = GetShellWindow();
-    DWORD ownerPid = 0;
-    if (shell) {
-        GetWindowThreadProcessId(shell, &ownerPid);
-    }
-    if (ownerPid) {
-        return ownerPid == GetCurrentProcessId();
-    }
-    PCWSTR commandLine = GetCommandLineW();
-    if (!commandLine) {
-        return true;
-    }
-    return !wcsstr(commandLine, L"/factory,") && !wcsstr(commandLine, L"-Embedding");
-}
-
-}  // namespace
-
 // ---------------------------------------------------------------------------
-// Windhawk Lifecycle Entry Points
+// Tool Mod Dedicated Process Callbacks
 // ---------------------------------------------------------------------------
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"Initializing Virtual Desktop Wallpaper Switch (24H2+)");
-
-    if (!IsPrimaryExplorerProcess()) {
-        Wh_Log(L"Skipping non-primary Explorer process");
-        return FALSE;
-    }
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Initializing Virtual Desktop Wallpaper Switch (Dedicated Tool Mod)");
 
     g_hStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hStopEvent) {
@@ -625,20 +666,19 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (g_workerThreadId) {
         PostThreadMessageW(g_workerThreadId, WM_APP_RELOAD_SETTINGS, 0, 0);
     }
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Uninitializing Virtual Desktop Wallpaper Switch");
 
-    if (g_hStopEvent) {
-        SetEvent(g_hStopEvent);
-    }
-
     if (g_hWorkerThread && g_workerThreadId) {
+        if (g_hStopEvent) {
+            SetEvent(g_hStopEvent);
+        }
         PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_hWorkerThread, INFINITE);
         CloseHandle(g_hWorkerThread);
@@ -650,4 +690,175 @@ void Wh_ModUninit() {
         CloseHandle(g_hStopEvent);
         g_hStopEvent = nullptr;
     }
+}
+
+}  // namespace
+
+// ---------------------------------------------------------------------------
+// Canonical Windhawk Tool Mod Launcher Boilerplate (Verbatim from Wiki)
+// ---------------------------------------------------------------------------
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
