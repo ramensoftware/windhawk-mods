@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              window-centralizer
 // @name            Window Centralizer
-// @description     Predictably centers new windows and dialogs to their parent, the screen or the mouse cursor, with configurable threshold and live exclusion list.
-// @version         1.2.0
+// @description     Centers new windows, of up to a target size, to their parent, screen, or the mouse cursor, with live exclusion list.
+// @version         1.3.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
 // @include         *
@@ -14,38 +14,33 @@
 /*
 # Window Centralizer
 
-New dialogs and small windows open centered to where they came from, the mouse cursor, or the monitor, instead of randomly around the screen.
+Center new windows where they came from, the mouse cursor, or the monitor, instead of randomly around the screen. Use a size limit setting to filter large ones, which generally save their last position, intended by the user. 
 
-The window is placed **before** it appears, so there is no jump and no flicker. Elevated programs are covered as well.
+The window is placed **before** it appears, so there is no jump or flicker. Elevated programs are covered as well.
 
-With **Show windows after complete UI load** on, a centered window is also kept invisible for a moment while it draws its contents, so classic dialogs don't flash blank while loading. Its opening animation, from Windows or from an animation mod, may then be skipped; turn the option off to keep animations playing at the final position.
+**Show windows only after complete UI load** keeps a centered window invisible for a moment while it draws its contents, so classic dialogs don't flash blank while loading. Its opening animation, from Windows or a mod, may then be skipped.
 
 ## Modes
 
-- **Parent window / monitor**: centered on the window it came from, otherwise the active or topmost window of the same program. Orphan windows, such as the Run dialog or a program just launched, open centered on the monitor where the mouse cursor is. With **Center on the unrelated launcher window** on, a program started from another one opens centered on the window it was started from. Programs that Windows starts on the launcher's behalf (Store apps, some file associations) or that hand the file to an instance already running aren't linked to that window and open at the center of the monitor.
-- **Parent monitor only**: centered on the monitor of the window it came from, or on the monitor with the mouse cursor when orphan. With the window size limit to target at 100%, every window opens at the center of the screen.
-- **Mouse cursor**: centered on the mouse cursor.
+- **Parent**: centers on the active window it came from. Orphans, like some OS program or an app just launched, center on the monitor where the mouse cursor is. **Center on the unrelated launcher window** moves an indirectly executed software to the window it was called from. Programs that Windows starts on the launcher's behalf (Store apps, some file associations), or that hand the file to an instance already running, aren't linked to that window and open at the center of the monitor.
+- **Monitor**: centers on the monitor of the window it came from, or the one where the mouse cursor is, when orphan. With the size limit at 100%, every window opens at the center of the screen.
+- **Mouse cursor**: centers on the mouse cursor.
 
 In every mode the window is kept inside the monitor's work area.
 
 ## Which windows are moved
 
-- Only windows with a title bar that are smaller than the **window size limit to target** setting (a percentage of the monitor's work area). Large main windows keep their assigned position.
-- Standard Windows dialogs (Save As, Run, properties pages…) are always centered, whatever their size.
-- Windows of UWP apps such as Calculator and Clock are centered the first time they get focus, so they can be seen jumping after appearing.
-- Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved. Windows that an animation mod fades in are still centered.
-- A window that is hidden and shown again (for example a Find dialog that is reopened) is centered again.
-- Some programs move their window again right after showing it (Firefox). The mod takes care of that. Initial moves by other tools (FancyZones), and the user's own dragging, are left alone.
+- The ones with a title bar, and smaller than the **window size limit to target** setting, even if animated.
+- Windows of UWP apps such as Calculator and Clock are centered the first time they get focus, if you notice them jumping after appearing.
+- Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved.
+- A window that is hidden and reopened (like a Find dialog) is centered again.
+- Intended moves by other tools, like FancyZones, are left alone.
 
 ## Ignoring windows
 
-Press **Win+Alt+I** while a window is active to stop centering that kind of window. Press it again to undo. A short notification confirms the option.
+An assigned hotkey toggles centering on/off for the active window. A short notification near the title bar confirms the option. Entries can also be reviewed and removed at the **Ignored windows list**.
 
-It covers the kind of window, not the document or page it shows: ignoring one Chrome window ignores every Chrome window, and ignoring the Properties of a folder ignores Properties for every folder. Standard dialogs, which all share one window class, are told apart by the kinds of controls they contain, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one kind. UWP apps are told apart by the app's own program, so each one can be ignored separately.
-
-The **Ignored windows** list opens with **Win+Ctrl+Alt+I**, and entries can be reviewed and removed there. If its hotkey is empty or taken by another program, that window opens whenever the mod settings are saved.
-
-Both hotkeys can be changed in the mod settings. They run in a small background process started by Windhawk.
+Ignoring covers the generalized class of a window, not the document or page it contains: toggling a Chrome window replicates to every other one from the app, ignoring Properties of a folder defines it for every other item. Standard dialogs, which all share one window class, are told apart by their controls, so Find and Save As stay separate. Dialogs of the same program built from the same kinds of controls, such as simple message boxes, are treated as one class. UWP apps are told apart by their own program, so each one can be ignored separately.
 
 ## Compatibility
 
@@ -55,27 +50,30 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
 
 // ==WindhawkModSettings==
 /*
+- maxAreaPercent: 20
+  $name: Window size limit to target — % of the monitor area
+  $description: Windows larger than this keep their assigned position.
 - mode: parent
   $name: Center on
   $options:
-    - parent: Parent window / monitor
-    - monitor: Parent monitor only
+    - parent: Parent
+    - monitor: Monitor
     - mouse: Mouse cursor
-- centerOnLauncher: false
-  $name: Center on the unrelated launcher window
-  $description: A program started from another one (context menu, file opened from a folder, etc.) is centered on the window it was started from, instead of the monitor. Only in the "Parent window / monitor" mode.
-- maxAreaPercent: 10
-  $name: Window size limit to target — % of the monitor area
-  $description: Windows larger than this keep their assigned position. Standard dialogs are centered regardless, but can be set to be ignored.
+- centerOnLauncher: true
+  $name: Parent mode also center on the unrelated launcher window
+  $description: Move a program to where it was called from, instead of the center of the screen.
+- centerChildWindows: true
+  $name: Always center child windows
+  $description: Move windows that belong to another, whatever their size. If disabled, follow the size limit, like any other.
 - revealWhenDrawn: true
-  $name: Show windows after complete UI load
-  $description: A centered window stays invisible until its contents finish drawing (half a second at most), avoiding the native flicker. Windows drawn with DirectX (browsers, WPF, WinUI) can't be detected and gain little. Opening animations may be skipped; turn off to keep them.
-- ignoreHotkey: Win+Alt+I
-  $name: Ignore hotkey
-  $description: Add/remove the active window to the list. Win + Ctrl, Alt, Shift + key, like Win+Alt+I. Leave empty for no hotkey.
-- listHotkey: Win+Ctrl+Alt+I
-  $name: Ignored list hotkey
-  $description: Opens the list of ignored windows, same format as above. If empty, the list opens whenever these settings are saved.
+  $name: Show windows only after complete UI load
+  $description: A centered window stays invisible until its contents finish drawing (half a second at most), avoiding the native flicker. Windows drawn with DirectX (browsers, WPF, WinUI) can't be detected and gain little. May skip opening animations, turn off to keep them.
+- ignoreHotkey: Win+Shift+I
+  $name: Ignore active window hotkey
+  $description: Toggles centering on/off for that window. Win + Ctrl, Alt, Shift + key, like Win+Shift+I.
+- listHotkey: Win+Ctrl+Shift+I
+  $name: Ignored windows list hotkey
+  $description: Opens a secondary window with the list. Same format as above, like Win+Ctrl+Shift+I. If empty, opens whenever these settings are saved.
 */
 // ==/WindhawkModSettings==
 
@@ -103,6 +101,7 @@ enum Mode { MODE_PARENT, MODE_MONITOR, MODE_MOUSE };
 std::atomic<int> g_mode{MODE_PARENT};
 std::atomic<int> g_maxAreaPercent{10};
 std::atomic<bool> g_revealWhenDrawn{true};
+std::atomic<bool> g_centerChildWindows{true};
 std::atomic<bool> g_centerOnLauncher{false};
 
 // Tool process only, read and written on the host thread.
@@ -125,6 +124,7 @@ void LoadCenteringSettings() {
     g_maxAreaPercent = pct < 1 ? 1 : (pct > 100 ? 100 : pct);
     g_revealWhenDrawn = Wh_GetIntSetting(L"revealWhenDrawn") != 0;
     g_centerOnLauncher = Wh_GetIntSetting(L"centerOnLauncher") != 0;
+    g_centerChildWindows = Wh_GetIntSetting(L"centerChildWindows") != 0;
 }
 
 void LoadHotkeySettings() {
@@ -604,16 +604,17 @@ POINT ReferencePoint(HWND hwnd) {
 }
 
 /// Top-left that centers a w×h window on c, kept inside the work area of c's monitor. False if the
-/// window is over the size threshold and isn't a standard dialog.
+/// window is over the size threshold, unless it has an owner window and child windows are always centered.
 bool PlaceAround(HWND hwnd, POINT c, int w, int h, int* x, int* y) {
     MONITORINFO mi = {};
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(MonitorFromPoint(c, MONITOR_DEFAULTTONEAREST), &mi);
     const RECT& wa = mi.rcWork;
     long long monitorArea = (long long)(wa.right - wa.left) * (wa.bottom - wa.top);
-    wchar_t cls[16];
-    bool isDialog = GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && IsDialogClass(cls);
-    if (!isDialog && (long long)w * h * 100 > monitorArea * g_maxAreaPercent)
+    // Only owned windows count: a new main window of the same program also gets a parent from FindParent,
+    // but it should keep its saved size and position.
+    bool alwaysCenter = g_centerChildWindows && IsValidParent(GetWindow(hwnd, GW_OWNER), hwnd);
+    if (!alwaysCenter && (long long)w * h * 100 > monitorArea * g_maxAreaPercent)
         return false;
     int nx = c.x - w / 2, ny = c.y - h / 2;
     nx = nx + w > wa.right ? wa.right - w : nx;
