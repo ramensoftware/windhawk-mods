@@ -463,7 +463,7 @@ bool HookTaskbarViewTrace() {
 // Internal, versioned ABI. Only use these slots after QueryInterface succeeds.
 // Slots were checked against twinui.pcshell.dll 10.0.26100.8117 public symbols
 // and call sites. WindowId is a uint32_t containing the low 32 bits of HWND.
-// Selection fields are decoded; unrecognized layouts preserve native selection.
+// Selection observes the adapter through native methods; unavailable methods preserve native selection.
 constexpr GUID kDataModelStatics = {
     0xb9215acb, 0x5441, 0x5728, {0x93, 0x03, 0xed, 0xa3, 0xf4, 0x96, 0x83, 0xe6}};
 constexpr GUID kDataModel = {
@@ -1671,8 +1671,7 @@ public:
     }
 };
 
-// Inspected Taskbar.dll CTaskThumbnail layout, relative to _CreateWindowVisual's
-// concrete this pointer. Native destructor/unregistration owns these fields.
+// Native factory methods own preview implementation and lifetime.
 using WindowThumbnailFactory = HRESULT(WINAPI*)(void*, uint32_t, IUnknown**);
 using GroupThumbnailFactory = HRESULT(WINAPI*)(void*, IUnknown*, IUnknown**);
 WindowThumbnailFactory g_windowThumbnailFactory = nullptr;
@@ -1701,6 +1700,7 @@ HRESULT WINAPI WindowThumbnailFactoryHook(void* self, uint32_t window, IUnknown*
 bool HookThumbnailFactories() {
     HMODULE module = LoadLibraryExW(L"DesktopSwitcherDataModel.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) return false;
+    // DesktopSwitcherDataModel.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{L"public: virtual long __cdecl DesktopThumbnailDeviceImpl::CreateThumbnailFactoryForWindow(struct Windows::Internal::ApplicationModel::WindowManagement::WindowId,struct Windows::Internal::ComposableShell::Multitasking::IThumbnailFactory * *)"}, &g_windowThumbnailFactory, WindowThumbnailFactoryHook},
         {{L"public: virtual long __cdecl DesktopThumbnailDeviceImpl::CreateThumbnailFactoryForTaskGroup(struct Windows::Internal::Shell::TaskGroups::ITaskGroup *,struct Windows::Internal::ComposableShell::Multitasking::IThumbnailFactory * *)"}, &g_groupThumbnailFactory},
