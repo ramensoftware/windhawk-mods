@@ -2,7 +2,7 @@
 // @id              taskbar-weather
 // @name            Taskbar Weather
 // @description     Current weather on the taskbar with a details card on hover. No Widgets, browser or API key needed
-// @version         1.5.1
+// @version         1.5.2
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @license         MIT
@@ -72,7 +72,8 @@ are filled in; clear them to stop all requests.
 - If a request fails, the last reading stays and the card says when it was
   fetched. A reading is marked as stale once it is older than 30 minutes, or
   twice the update interval if that is longer.
-- Vertical taskbars (left or right on Windows 10) are not supported.
+- Vertical taskbars (left or right on Windows 10) are not supported. The
+  label is not shown on them.
 
 ## Credits
 
@@ -202,10 +203,6 @@ UINT taskbarCreatedMessage;
 // process exit, when the graphics threads are already gone.
 [[clang::no_destroy]] ComPtr<ID2D1Factory> d2dFactory;
 [[clang::no_destroy]] ComPtr<IDWriteFactory> writeFactory;
-// The request in flight. Wh_ModUninit closes it to cancel a slow request, so
-// whichever side takes it out of here first closes it.
-SRWLOCK requestLock = SRWLOCK_INIT;
-HINTERNET activeRequest = nullptr;
 bool hover = false, lightTaskbar = false;
 BYTE cardAlpha = 0;
 int contentWidth = -1;
@@ -470,7 +467,7 @@ bool Fetch(Reading& next) {
     }
 
     HINTERNET session =
-        WinHttpOpen(L"WindhawkTaskbarWeather/1.5",
+        WinHttpOpen(L"WindhawkTaskbarWeather/" WH_MOD_VERSION,
                     WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, nullptr, nullptr, 0);
     if (!session) {
         return false;
@@ -484,16 +481,6 @@ bool Fetch(Reading& next) {
                                         WINHTTP_DEFAULT_ACCEPT_TYPES,
                                         WINHTTP_FLAG_SECURE)
                    : nullptr;
-    if (request) {
-        AcquireSRWLockExclusive(&requestLock);
-        if (WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) {
-            WinHttpCloseHandle(request);
-            request = nullptr;
-        } else {
-            activeRequest = request;
-        }
-        ReleaseSRWLockExclusive(&requestLock);
-    }
     bool ok = request &&
               WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                                  WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
@@ -533,12 +520,7 @@ bool Fetch(Reading& next) {
         body.resize(old + read);
     }
     if (request) {
-        AcquireSRWLockExclusive(&requestLock);
-        if (activeRequest == request) {
-            WinHttpCloseHandle(request);
-        }
-        activeRequest = nullptr;
-        ReleaseSRWLockExclusive(&requestLock);
+        WinHttpCloseHandle(request);
     }
     if (connection) {
         WinHttpCloseHandle(connection);
@@ -1237,7 +1219,9 @@ void EnsureWeatherWindow() {
     }
     HWND taskbar = FindOwnTaskbar();
     RECT bounds{};
-    if (!taskbar || !GetClientRect(taskbar, &bounds) || bounds.bottom < 24) {
+    // Vertical taskbars aren't supported, so skip them.
+    if (!taskbar || !GetClientRect(taskbar, &bounds) || bounds.bottom < 24 ||
+        bounds.bottom > bounds.right) {
         return;
     }
     window = CreateWindowExW(WS_EX_LAYERED | WS_EX_NOACTIVATE, kClass,
@@ -1455,16 +1439,12 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     SetEvent(stopEvent);
-    // Closing the request handle cancels a request that is still running.
-    AcquireSRWLockExclusive(&requestLock);
-    if (activeRequest) {
-        WinHttpCloseHandle(activeRequest);
-        activeRequest = nullptr;
-    }
-    ReleaseSRWLockExclusive(&requestLock);
     if (HWND controller = controllerWindow) {
         PostMessageW(controller, WM_CLOSE, 0, 0);
     }
+    // A request in flight is synchronous and can't be cancelled, so this can
+    // wait for it. Each WinHTTP step times out after 5 s and the body read
+    // stops after 30 s, so the worst case is about 35 s on a stalled network.
     if (fetchThread) {
         WaitForSingleObject(fetchThread, INFINITE);
         CloseHandle(fetchThread);
