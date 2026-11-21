@@ -9,6 +9,15 @@
       "parentId": null,
       "timestamp": 1791605717,
       "votes": 1
+    },
+    {
+      "authorName": "ChrsPaps",
+      "content": "There's another radial wheel offering - which i've been using. However, it had two problems:\n1) Slow/laggy (used on ARM64 Windows)\n2) You weren't able to click the shown windows.\nYour implementation of the radial wheel is 1) Fast 2) Can click the shown windows\nGood Job! 👌",
+      "id": 136,
+      "modVersion": "1.8.0",
+      "parentId": null,
+      "timestamp": 1795247205,
+      "votes": 0
     }
   ]
 }

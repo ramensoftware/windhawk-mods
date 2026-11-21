@@ -1,3 +1,23 @@
+## 1.3.0 ([Nov 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8abff951c8f8f54e48541f0aa39519d160e1cc05/mods/winklok.wh.cpp))
+
+**New features :**
+* Repeating local events support (daily, weekly, monthly, yearly)
+* Optional seconds clock in calendar tab
+* Do Not Disturb toggle in notification panel & Notification count badge
+* Quick +1 min / +5 min buttons on finished timer popups
+* Search in notes bar & Markdown (.md) export in notes
+* Full WinKlok backup and restore option (.wkbak file)
+* Keyboard shortcuts for Stopwatch (Space and L)
+
+**Bug fixes & Improvements :**
+* Smoother notification panel animations and scrolling
+* Improved event editor scrolling and repeat icons
+* More reliable Google Calendar syncing and auth handling
+* Better iCalendar (.ics) and Takeout archive imports/exports
+* Multi-monitor taskbar and UI rendering fixes
+* Improved notification snapshot privacy and cleanup
+* Improved Calendar tab UI
+
 ## 1.2.0 ([Nov 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/56b8c34918bf9700281471ec588be57c86dc697a/mods/winklok.wh.cpp))
 
 **New features :**

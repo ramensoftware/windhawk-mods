@@ -1,3 +1,12 @@
+## 1.2.0 ([Nov 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bccd6babe55b52d78e9caecec8b027cf2ad0b31f/mods/touchpad-relaxed-hand-tracking.wh.cpp))
+
+* **Improved click stability:** more assertive tap-hold drag action and pointer position while clicking.
+* **Scroll output live switch hotkey and memory (optional):** press Win, or Win + modifiers, during a scroll to use the other output method (wheel or touch) for that action. The mod will remember the last choice **for each program**. 
+* **Scroll inertia stops on any key press**, as Windows' own does (Ctrl no longer zooms a page that is still scrolling).
+* **Thumb recognition with fewer fingers:** in any tracking mode, a thumb resting well under the other fingers is recognized and left out, so it no longer moves the pointer with them.
+* **Speed multiplier moving fingers correction:** a resting thumb was counting as a moving finger. Not anymore, only when it also moves (but still do not steer the pointer). 
+* **Resizable diagnostics overlay**: its window dragging and resizing respond only to native taps to avoid lag.
+
 ## 1.1.0 ([Nov 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ce1a605b853f4a015dffaef8ea6c6447bf6fcbfc/mods/touchpad-relaxed-hand-tracking.wh.cpp))
 
 * **Improved movement precision:** slow movements no longer lose distance, resting fingers drop out of the movement, and a single finger moving on its own leads, for precise positioning.

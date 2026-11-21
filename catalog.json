@@ -529,7 +529,7 @@
         "rating": 10,
         "ratingBreakdown": [6, 2, 9, 22, 346],
         "ratingUsers": 385,
-        "reviews": 1,
+        "reviews": 2,
         "trendingSorting": 19.619975868992665,
         "updated": 1795140301000,
         "users": 17010
@@ -3589,7 +3589,7 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1792155902000,
+        "updated": 1795276819000,
         "users": 24
       },
       "metadata": {
@@ -3605,7 +3605,7 @@
         ],
         "license": "MIT",
         "name": "Coin & Stock Monitor",
-        "version": "1.2.1"
+        "version": "1.3.0"
       }
     },
     "color-picker-dialog-hex-input": {
@@ -15191,7 +15191,7 @@
         "ratingUsers": 141,
         "reviews": 0,
         "trendingSorting": -0.6850015249987015,
-        "updated": 1794967225000,
+        "updated": 1795276831000,
         "users": 5661
       },
       "metadata": {
@@ -15207,7 +15207,7 @@
         ],
         "license": "MIT",
         "name": "Remove Context Menu Items",
-        "version": "1.13.0"
+        "version": "1.14.0"
       }
     },
     "remove-fullscreen-popup-chrome": {
@@ -20849,7 +20849,7 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794798012000,
+        "updated": 1795276825000,
         "users": 31
       },
       "metadata": {
@@ -20864,7 +20864,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Touchpad Relaxed Hand Tracking",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "touhou-kbd-binds": {
@@ -24641,7 +24641,7 @@
         "ratingUsers": 43,
         "reviews": 1,
         "trendingSorting": 21.764084740226473,
-        "updated": 1794621697000,
+        "updated": 1795276837000,
         "users": 1091
       },
       "metadata": {
@@ -24658,7 +24658,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "WinKlok",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "winpager": {

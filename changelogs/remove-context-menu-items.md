@@ -1,3 +1,7 @@
+## 1.14.0 ([Nov 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0307abbf9e62434de8ef54a82113c932e264ad3a/mods/remove-context-menu-items.wh.cpp))
+
+* Fixed filtering for Windows 10 taskbar menus
+
 ## 1.13.0 ([Nov 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b42475141002a12ff4fa218eee827c875eebfe78/mods/remove-context-menu-items.wh.cpp))
 
 * Restored the Ctrl key as a bypass option, with a dropdown to choose Ctrl, Alt, or both
