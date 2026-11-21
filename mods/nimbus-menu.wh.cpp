@@ -3819,7 +3819,9 @@ static void PlaceBands(std::vector<HWND>& bands, std::vector<RECT>& cur, bool on
                 dwp = DeferWindowPos(dwp, bands[i], nullptr, 0, 0, 0, 0,
                                      SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         } else if (!EqualRect(&w, &cur[i]) && dwp) {
-            UINT flags = SWP_NOACTIVATE | SWP_NOZORDER;
+            // (blur only: nothing to copy, nobody to tell. Moved many times a second while the dock zooms:
+            // without these, the ~20 bands took up to 30 ms a frame.)
+            UINT flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOCOPYBITS | SWP_NOSENDCHANGING | SWP_NOOWNERZORDER;
             if (cur[i].right <= cur[i].left) flags |= SWP_SHOWWINDOW;
             dwp = DeferWindowPos(dwp, bands[i], nullptr, w.left, w.top, w.right - w.left, w.bottom - w.top, flags);
         }
