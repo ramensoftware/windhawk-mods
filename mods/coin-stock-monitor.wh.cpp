@@ -2,7 +2,7 @@
 // @id              coin-stock-monitor
 // @name            Coin & Stock Monitor
 // @description     Shows stock and crypto prices on the Windows 11 taskbar, with a configurable price API, symbol list, colors and entry-price percentage
-// @version         1.2.1
+// @version         1.3.0
 // @author          jayll1303
 // @github          https://github.com/jayll1303
 // @license         MIT
@@ -15,7 +15,7 @@
 /*
 # Coin & Stock Monitor
 
-![Taskbar screenshot](https://raw.githubusercontent.com/jayll1303/coin-stock-monitor/main/docs/screenshot.png)
+![Taskbar screenshot](https://raw.githubusercontent.com/jayll1303/coin-stock-monitor/5f24a58683a10b0ae59f77063e4406158b037102/docs/screenshot.png)
 
 Shows live stock and crypto prices on the left side of the taskbar.
 
@@ -33,35 +33,34 @@ stop all requests, disable the mod.
 
 ## Settings
 
-* **Price API URL** - requested once per symbol. `{symbol}` is replaced with the
-  URL-encoded symbol.
-* **Price JSON key** - the key whose numeric value is the price in the response.
-  Yahoo Finance uses `regularMarketPrice`.
-* **Symbols** - separated by `|`, shown in order. At most 4 symbols, shown 2 per line.
-* **Entry prices** - `SYMBOL=PRICE` pairs separated by `|`. Use `.` as the decimal
-  separator. A comma is accepted only as a thousands separator, followed by exactly
-  three digits, so `12,005` means `12005` and `0,45` is rejected. Lists saved with
-  commas by older versions still work. When a symbol has an entry price, its price
-  and signed percentage change from the entry are shown.
-  The color is the gain color when the price is at or above the entry, and the
-  loss color otherwise.
-* **Text alignment** - left or right inside the monitor area.
-* **Left offset** and **Monitor width** - position and size of the monitor area, in
-  pixels from the left edge of the taskbar.
-* **Text color** - `#RRGGBB` for symbols and prices without an entry price. The
-  default is green. Leave empty to follow the taskbar theme.
-* **Gain color** and **Loss color** - `#RRGGBB` colors for prices and percentages
-  compared with entry prices.
-* **Refresh interval** - seconds between fetches (minimum 15).
+* **Symbols** - up to 4, separated by `|`, shown 2 per line. Optional **Entry
+  prices** use `SYMBOL=PRICE` pairs separated by `|`; use `.` for decimals and
+  commas as thousands separators, e.g. `12,005`.
+* **Color preset** - coordinated text, gain, loss and Solid background colors.
+  Custom uses the custom color settings; new installs use Slate defaults.
+* **Background** - Transparent, Solid - full area, or Solid - fit text. Fit text
+  hugs both lines with padding. **Text alignment**, **Left offset** and **Monitor
+  width** position the monitor; Fit text retains its left/right anchor within the
+  width. Dimensions are at 100% scaling.
+* **Refresh interval** - seconds between requests (minimum 15).
+* **Price API URL** and **Price JSON key** - advanced settings; leave unchanged
+  for Yahoo Finance.
 
 Changing any setting reloads the mod.
 
+### Upgrading from 1.2.x
+
+The existing settings keep their saved keys, so your symbols, entry prices, colors,
+refresh interval, placement and API settings remain active after updating. New
+installations use the Custom preset with Slate color defaults. The new Background
+setting defaults to Transparent.
+
 ### Example: CoinGecko
 
-* Price API URL: `https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd`
-* Price JSON key: `usd`
-* Symbols: `bitcoin|ethereum` (CoinGecko coin ids, not ticker symbols)
-* Entry prices: `bitcoin=60000` (use the same ids as Symbols)
+* **Price API URL**: `https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd`
+* **Price JSON key**: `usd`
+* **Symbols**: `bitcoin|ethereum` (CoinGecko coin ids, not ticker symbols)
+* **Entry prices**: `bitcoin=60000` (use the same ids as Symbols)
 
 ## Limitations
 
@@ -70,71 +69,91 @@ Changing any setting reloads the mod.
   With a left-aligned Start button, the monitor overlaps Start.
 * If the taskbar has many apps or a wide Start area, reduce **Monitor width** so
   the monitor does not cover the task list.
+* A solid background improves readability but does not reserve taskbar layout
+  space. The monitor still uses **Left offset** and **Monitor width**.
 * Pixel values are for 100% display scaling.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- ApiUrl: "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1d"
-  $name: Price API URL
-  $description: >-
-    URL requested once per symbol. {symbol} is replaced with the URL-encoded
-    symbol. The default is the Yahoo Finance chart API (stocks and crypto, no key).
-- PriceKey: regularMarketPrice
-  $name: Price JSON key
-  $description: >-
-    JSON key whose numeric value is the price in the API response. Yahoo Finance
-    uses regularMarketPrice. CoinGecko uses the currency code, e.g. usd.
 - Symbols: BTC-USD|ETH-USD|AAPL
   $name: Symbols
-  $description: >-
-    Symbols to show, separated by |, in order. At most 4 symbols, shown 2 per line.
-    Yahoo examples: BTC-USD, AAPL, VNM.VN, ^GSPC. For CoinGecko, use coin ids such
-    as bitcoin|ethereum.
+  $description: Up to 4 symbols separated by |, shown 2 per line.
 - EntryPrices: ""
-  $name: Entry prices
+  $name: Entry prices (optional)
   $description: >-
-    SYMBOL=PRICE pairs, separated by |, e.g. BTC-USD=60000|AAPL=300. Use . as the
-    decimal separator. A comma is accepted only as a thousands separator, followed
-    by exactly three digits, so 12,005 means 12005 and 0,45 is rejected. Lists saved
-    with commas by older versions still work. Symbols with an entry price show the
-    signed percentage change from it. Symbols without one show only the price.
+    SYMBOL=PRICE pairs separated by |, e.g. BTC-USD=60000|AAPL=300.
+    Use . for decimals. Commas are thousands separators, e.g. 12,005.
 - TextAlign: left
   $name: Text alignment
-  $description: >-
-    Aligns the text inside the monitor area. Left puts the text at the left edge of
-    the area, and right puts it at the right edge.
+  $description: Align text within Width; Fit text keeps the same left or right anchor.
   $options:
   - left: Left
   - right: Right
-- TextColor: "#19FF00"
-  $name: Text color
+- TextColor: "#DEE5EF"
+  $name: Custom text color
   $description: >-
-    Hex color (#RRGGBB) for symbols and prices without an entry price. Leave
-    empty to follow the taskbar theme.
-- UpColor: "#00A850"
-  $name: Gain color
+    #RRGGBB for neutral text; new installs use the Slate default. Leave empty to
+    follow the taskbar theme in Transparent mode or automatically contrast with
+    the Solid background.
+    Avoid #FF00FF in Transparent mode; it is the transparency color key.
+- UpColor: "#70DCC0"
+  $name: Custom gain color
   $description: >-
-    Hex color (#RRGGBB) for prices and percentages at or above their entry price.
-- DownColor: "#E0301E"
-  $name: Loss color
+    #RRGGBB for prices at or above entry. Used with the Custom preset.
+    Avoid #FF00FF in Transparent mode; it is the transparency color key.
+- DownColor: "#FFA0AD"
+  $name: Custom loss color
   $description: >-
-    Hex color (#RRGGBB) for prices and percentages below their entry price.
+    #RRGGBB for prices below entry. Used with the Custom preset.
+    Avoid #FF00FF in Transparent mode; it is the transparency color key.
+- Appearance:
+  - Preset: custom
+    $name: Color preset
+    $description: >-
+      Custom uses the custom colors above. Slate,
+      Charcoal, Warm Graphite and Blue / Amber suit dark taskbars; Porcelain suits light.
+    $options:
+    - custom: Custom (Slate defaults)
+    - slate: Slate
+    - charcoal: Charcoal
+    - warm_graphite: Warm Graphite
+    - blue_amber: Blue / Amber
+    - porcelain: Porcelain
+  - Background: transparent
+    $name: Background
+    $description: >-
+      Solid backgrounds help with transparent dock themes. Fit text grows and
+      shrinks around the text with padding. Full area uses Width.
+    $options:
+    - transparent: Transparent
+    - solid: Solid - full area
+    - text: Solid - fit text
+  - BackgroundColor: "#1E2633"
+    $name: Custom solid background
+    $description: '#RRGGBB, used only with the Custom preset and a Solid background.'
+  $name: Appearance
+  $description: Pick a palette and background. Custom text, gain and loss colors are above.
 - RefreshSeconds: 60
   $name: Refresh interval (seconds)
-  $description: >-
-    How often prices are fetched. Values below 15 are raised to 15.
+  $description: Minimum 15 seconds. One request per symbol each refresh.
 - LeftOffset: 8
-  $name: Left offset (pixels)
-  $description: >-
-    Distance from the left edge of the taskbar to the monitor. Pixel values are for
-    100% display scaling.
+  $name: Left offset
+  $description: Distance from the taskbar left edge, in pixels at 100% scaling.
 - Width: 480
-  $name: Monitor width (pixels)
+  $name: Monitor width
   $description: >-
-    Width of the monitor area. Text is aligned inside it. The area grows if the text
-    is wider. Keep LeftOffset + Width less than the distance to the Start button.
+    Alignment area in pixels at 100% scaling. Expands if text is wider.
+    Keep Left offset + Width before Start to avoid covering task buttons.
+- ApiUrl: "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=1d"
+  $name: Price API URL (advanced)
+  $description: >-
+    Leave unchanged for Yahoo Finance. {symbol} is URL-encoded and replaced for
+    each symbol. Requests are sent from explorer.exe.
+- PriceKey: regularMarketPrice
+  $name: Price JSON key (advanced)
+  $description: 'Numeric JSON key: regularMarketPrice for Yahoo, usd for CoinGecko.'
 */
 // ==/WindhawkModSettings==
 
@@ -173,9 +192,31 @@ constexpr DWORD kTaskbarPollIntervalMs = 1000;
 constexpr int kMinRefreshSeconds = 15;
 constexpr COLORREF kColorKey = RGB(255, 0, 255);
 constexpr int kTextPaddingX = 8;
+constexpr int kTextPaddingY = 3;
 constexpr size_t kSymbolsPerLine = 2;
 constexpr size_t kMaxSymbols = 4;
 constexpr int kFontPointSize = 9;
+
+struct ColorPalette {
+    PCWSTR name;
+    COLORREF text;
+    COLORREF gain;
+    COLORREF loss;
+    COLORREF background;
+};
+
+constexpr ColorPalette kColorPalettes[] = {
+    {L"slate", RGB(0xDE, 0xE5, 0xEF), RGB(0x70, 0xDC, 0xC0),
+     RGB(0xFF, 0xA0, 0xAD), RGB(0x1E, 0x26, 0x33)},
+    {L"charcoal", RGB(0xE6, 0xE6, 0xE6), RGB(0x72, 0xD5, 0xA3),
+     RGB(0xFF, 0x92, 0x92), RGB(0x20, 0x20, 0x20)},
+    {L"warm_graphite", RGB(0xEA, 0xE3, 0xD9), RGB(0xB2, 0xD4, 0x9A),
+     RGB(0xF5, 0xA4, 0x91), RGB(0x28, 0x25, 0x22)},
+    {L"blue_amber", RGB(0xE4, 0xE8, 0xEE), RGB(0x8A, 0xC8, 0xFF),
+     RGB(0xFF, 0xC0, 0x78), RGB(0x20, 0x24, 0x2B)},
+    {L"porcelain", RGB(0x30, 0x36, 0x40), RGB(0x17, 0x62, 0x3D),
+     RGB(0xA5, 0x27, 0x37), RGB(0xF3, 0xF4, 0xF6)},
+};
 
 struct EntryPrice {
     std::wstring symbol;
@@ -195,6 +236,9 @@ struct Settings {
     COLORREF textColor = 0;
     COLORREF upColor = 0;
     COLORREF downColor = 0;
+    bool solidBackground = false;
+    bool fitBackgroundToText = false;
+    COLORREF backgroundColor = RGB(0x1E, 0x26, 0x33);
 };
 
 // Gain and loss tones use the configured up and down colors. Neutral uses the text color.
@@ -320,6 +364,7 @@ std::vector<EntryPrice> ParseEntryPrices(const std::wstring& list) {
 }
 
 // Parses "#RRGGBB" or "RRGGBB". Leaves `color` unchanged on failure.
+// RGB() packs COLORREF as 0x00BBGGRR; convert #RRGGBB channels before packing.
 bool ParseColor(const std::wstring& text, COLORREF& color) {
     std::wstring hex = Trim(text);
     if (!hex.empty() && hex[0] == L'#') {
@@ -664,6 +709,20 @@ bool IsLightTaskbarTheme() {
     return value != 0;
 }
 
+double SrgbChannelToLinear(BYTE channel) {
+    const double value = channel / 255.0;
+    return value <= 0.04045 ? value / 12.92
+                            : std::pow((value + 0.055) / 1.055, 2.4);
+}
+
+COLORREF ContrastingTextColor(COLORREF background) {
+    const double luminance =
+        0.2126 * SrgbChannelToLinear(GetRValue(background)) +
+        0.7152 * SrgbChannelToLinear(GetGValue(background)) +
+        0.0722 * SrgbChannelToLinear(GetBValue(background));
+    return luminance > 0.179 ? RGB(0, 0, 0) : RGB(255, 255, 255);
+}
+
 COLORREF ResolveColor(Tone tone) {
     switch (tone) {
         case Tone::gain:
@@ -673,6 +732,9 @@ COLORREF ResolveColor(Tone tone) {
         default:
             if (g_settings.hasTextColor) {
                 return g_settings.textColor;
+            }
+            if (g_settings.solidBackground) {
+                return ContrastingTextColor(g_settings.backgroundColor);
             }
             return IsLightTaskbarTheme() ? RGB(0, 0, 0) : RGB(255, 255, 255);
     }
@@ -693,34 +755,57 @@ int MeasureLineWidth(HDC dc, const TextLine& line) {
     return width;
 }
 
-int MeasureTextWidth(HWND overlay, const TextLines& lines) {
+SIZE MeasureTextSize(HWND overlay, const TextLines& lines) {
     HDC dc = GetDC(overlay);
     HGDIOBJ oldFont = SelectObject(dc, g_font);
-    int width = 0;
+    SIZE size{};
     for (const TextLine& line : lines) {
-        width = std::max(width, MeasureLineWidth(dc, line));
+        size.cx = std::max(size.cx, static_cast<LONG>(MeasureLineWidth(dc, line)));
     }
+    TEXTMETRICW metrics{};
+    GetTextMetricsW(dc, &metrics);
+    size.cy = metrics.tmHeight * static_cast<LONG>(lines.size());
     SelectObject(dc, oldFont);
     ReleaseDC(overlay, dc);
-    return width;
+    return size;
 }
 
-// Places the monitor area at LeftOffset from the taskbar's left edge. The text is
-// aligned inside the area. The area is at least Width wide, and wider if the text
-// needs more room.
+bool FitBackgroundToText() {
+    return g_settings.solidBackground && g_settings.fitBackgroundToText;
+}
+
+int TextPaddingX(int dpi) {
+    return MulDiv(kTextPaddingX, dpi, 96);
+}
+
+RECT CalculateOverlayRect(int taskbarHeight, int dpi, SIZE textSize) {
+    const bool fitText = FitBackgroundToText();
+    const int contentWidth = static_cast<int>(textSize.cx) + 2 * TextPaddingX(dpi);
+    const int areaWidth = std::max(MulDiv(g_settings.width, dpi, 96), contentWidth);
+    const int width = fitText ? contentWidth : areaWidth;
+    const int contentHeight = static_cast<int>(textSize.cy) +
+                              2 * MulDiv(kTextPaddingY, dpi, 96);
+    const int height = fitText ? std::min(taskbarHeight, contentHeight) : taskbarHeight;
+    int left = MulDiv(g_settings.leftOffset, dpi, 96);
+    if (fitText && g_settings.alignRight) {
+        left += areaWidth - width;
+    }
+    const int top = (taskbarHeight - height) / 2;
+    return {left, top, left + width, top + height};
+}
+
+// Fit-text Solid mode resizes the actual opaque child window, so no transparent
+// color-key border or extra filled area is needed around its background.
 void RefreshOverlay(HWND overlay) {
     HWND taskbar = GetParent(overlay);
     int dpi = static_cast<int>(GetDpiForWindow(taskbar));
-
-    RECT taskbarClient;
+    RECT taskbarClient{};
     GetClientRect(taskbar, &taskbarClient);
-
-    int textWidth = MeasureTextWidth(overlay, GetDisplayLines());
-    int width = std::max(MulDiv(g_settings.width, dpi, 96),
-                         textWidth + 2 * kTextPaddingX);
-    int left = MulDiv(g_settings.leftOffset, dpi, 96);
-    SetWindowPos(overlay, HWND_TOP, left, 0, width, taskbarClient.bottom,
-                 SWP_NOACTIVATE);
+    RECT placement = CalculateOverlayRect(
+        taskbarClient.bottom, dpi, MeasureTextSize(overlay, GetDisplayLines()));
+    SetWindowPos(overlay, HWND_TOP, placement.left, placement.top,
+                 placement.right - placement.left,
+                 placement.bottom - placement.top, SWP_NOACTIVATE);
     InvalidateRect(overlay, nullptr, TRUE);
 }
 
@@ -730,9 +815,10 @@ void PaintOverlay(HWND overlay) {
 
     RECT rect;
     GetClientRect(overlay, &rect);
-    HBRUSH keyBrush = CreateSolidBrush(kColorKey);
-    FillRect(dc, &rect, keyBrush);
-    DeleteObject(keyBrush);
+    HBRUSH backgroundBrush = CreateSolidBrush(
+        g_settings.solidBackground ? g_settings.backgroundColor : kColorKey);
+    FillRect(dc, &rect, backgroundBrush);
+    DeleteObject(backgroundBrush);
 
     TextLines lines = GetDisplayLines();
     HGDIOBJ oldFont = SelectObject(dc, g_font);
@@ -742,11 +828,12 @@ void PaintOverlay(HWND overlay) {
     GetTextMetricsW(dc, &metrics);
     int lineHeight = metrics.tmHeight;
     int y = (rect.bottom - lineHeight * static_cast<int>(lines.size())) / 2;
+    const int paddingX = TextPaddingX(static_cast<int>(GetDpiForWindow(overlay)));
 
     for (const TextLine& line : lines) {
         int width = MeasureLineWidth(dc, line);
-        int x = g_settings.alignRight ? rect.right - kTextPaddingX - width
-                                      : rect.left + kTextPaddingX;
+        int x = g_settings.alignRight ? rect.right - paddingX - width
+                                     : rect.left + paddingX;
         for (const TextPart& part : line) {
             SetTextColor(dc, ResolveColor(part.tone));
             TextOutW(dc, x, y, part.text.c_str(),
@@ -765,6 +852,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
                                 WPARAM wParam,
                                 LPARAM lParam) {
     switch (message) {
+        case WM_NCHITTEST:
+            // Keep the overlay click-through in transparent and solid modes.
+            return HTTRANSPARENT;
+
         case WM_ERASEBKGND:
             return 1;
 
@@ -810,14 +901,19 @@ void WINAPI CreateOverlayOnTaskbarThread(PVOID parameter) {
 
     if (!g_font) {
         int dpi = static_cast<int>(GetDpiForWindow(taskbar));
+        // Avoid color-key fringes in Transparent mode; antialias on Solid.
+        const int fontQuality = g_settings.solidBackground
+                                    ? ANTIALIASED_QUALITY
+                                    : NONANTIALIASED_QUALITY;
         g_font = CreateFontW(-MulDiv(kFontPointSize, dpi, 72), 0, 0, 0,
                              FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                              OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                             NONANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+                             fontQuality, DEFAULT_PITCH, L"Segoe UI");
     }
 
-    // Layered + color key makes the background transparent, and WS_EX_TRANSPARENT
-    // lets clicks fall through to the taskbar.
+    // Transparent mode uses a color key. Solid mode uses full opacity without a
+    // color key, so every background/text color (including magenta) stays opaque.
+    // WM_NCHITTEST keeps clicks falling through to the taskbar in both modes.
     HWND overlay = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE, kOverlayClassName,
         nullptr, WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, taskbar, nullptr, module,
@@ -825,7 +921,11 @@ void WINAPI CreateOverlayOnTaskbarThread(PVOID parameter) {
     if (!overlay) {
         return;
     }
-    SetLayeredWindowAttributes(overlay, kColorKey, 0, LWA_COLORKEY);
+    if (g_settings.solidBackground) {
+        SetLayeredWindowAttributes(overlay, 0, 255, LWA_ALPHA);
+    } else {
+        SetLayeredWindowAttributes(overlay, kColorKey, 0, LWA_COLORKEY);
+    }
     SetTimer(overlay, kPlacementTimerId, kPlacementIntervalMs, nullptr);
     g_overlay = overlay;
     RefreshOverlay(overlay);
@@ -884,6 +984,15 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     return 0;
 }
 
+const ColorPalette* FindColorPalette(PCWSTR name) {
+    for (const ColorPalette& palette : kColorPalettes) {
+        if (_wcsicmp(name, palette.name) == 0) {
+            return &palette;
+        }
+    }
+    return nullptr;
+}
+
 COLORREF ColorSetting(PCWSTR name, COLORREF fallback) {
     COLORREF color = fallback;
     std::wstring text = StringSetting::make(name).get();
@@ -897,7 +1006,8 @@ void LoadSettings() {
     g_settings.apiUrl = StringSetting::make(L"ApiUrl").get();
     g_settings.priceKey = ToUtf8(StringSetting::make(L"PriceKey").get());
     // Symbols never contain commas, so lists saved by older versions still work.
-    g_settings.symbols = SplitList(StringSetting::make(L"Symbols").get(), L"|,");
+    g_settings.symbols =
+        SplitList(StringSetting::make(L"Symbols").get(), L"|,");
     if (g_settings.symbols.size() > kMaxSymbols) {
         Wh_Log(L"Only the first %u symbols are shown", static_cast<unsigned>(kMaxSymbols));
         g_settings.symbols.resize(kMaxSymbols);
@@ -911,11 +1021,32 @@ void LoadSettings() {
     g_settings.alignRight =
         wcscmp(StringSetting::make(L"TextAlign").get(), L"left") != 0;
 
-    std::wstring textColor = StringSetting::make(L"TextColor").get();
-    g_settings.hasTextColor = ParseColor(textColor, g_settings.textColor);
-
-    g_settings.upColor = ColorSetting(L"UpColor", RGB(0x00, 0xA8, 0x50));
-    g_settings.downColor = ColorSetting(L"DownColor", RGB(0xE0, 0x30, 0x1E));
+    std::wstring preset = StringSetting::make(L"Appearance.Preset").get();
+    if (preset.empty()) {
+        preset = L"custom";
+    }
+    const ColorPalette* palette = FindColorPalette(preset.c_str());
+    if (palette) {
+        g_settings.hasTextColor = true;
+        g_settings.textColor = palette->text;
+        g_settings.upColor = palette->gain;
+        g_settings.downColor = palette->loss;
+        g_settings.backgroundColor = palette->background;
+    } else {
+        if (preset != L"custom") {
+            Wh_Log(L"Unknown color preset %s, using custom colors", preset.c_str());
+        }
+        std::wstring textColor =
+            StringSetting::make(L"TextColor").get();
+        g_settings.hasTextColor = ParseColor(textColor, g_settings.textColor);
+        g_settings.upColor = ColorSetting(L"UpColor", RGB(0x70, 0xDC, 0xC0));
+        g_settings.downColor = ColorSetting(L"DownColor", RGB(0xFF, 0xA0, 0xAD));
+        g_settings.backgroundColor =
+            ColorSetting(L"Appearance.BackgroundColor", RGB(0x1E, 0x26, 0x33));
+    }
+    std::wstring background = StringSetting::make(L"Appearance.Background").get();
+    g_settings.solidBackground = background == L"solid" || background == L"text";
+    g_settings.fitBackgroundToText = background == L"text";
 }
 
 }  // namespace
