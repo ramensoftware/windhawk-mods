@@ -2,7 +2,7 @@
 // @id              spotlight-launcher
 // @name            Spotlight Launcher
 // @description     Application launcher. Alt+Space opens a floating search bar that finds your programs instantly.
-// @version         1.2.0
+// @version         1.3.0
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
 // @include         windhawk.exe
@@ -31,6 +31,10 @@ cannot affect the way Windows works.
 - **Instant, forgiving search.** Case- and accent-insensitive, multi-word and acronym matching, with the
   letters that matched highlighted. Results are ranked by match quality, then by how often and how
   recently you use them, and an app you pick after typing a few words comes first next time.
+- **Your language, with your IME.** Chinese, Japanese, Korean and any other input method work in the
+  bar: the composition appears underlined in the field with the candidates under the caret.
+- **The Windows key, if you prefer it.** Pick **Win** as the shortcut and it opens the bar instead of
+  the Start menu, which stays closed so only one panel appears.
 - **Files, without a second window.** Browse your drives and folders in the bar: locations and drive
   chips, sorting, previews, and rename, copy, terminal and Recycle Bin actions. Narrow the list with
   `*.pdf`, `type:image`, `dir:`, and by size and date too: `size:>10mb`, `modified:today`.
@@ -186,6 +190,7 @@ Copyright (c) 2026-present David Ravelo.
       - ctrl+alt+space: Ctrl + Alt + Space
       - shift+alt+space: Shift + Alt + Space
       - ctrl+shift+space: Ctrl + Shift + Space
+      - win: Win (disables the Windows Start menu)
   - DetailsKey: ctrl+i
     $name: Details panel shortcut
     $description: Key that shows or hides the actions and details panel for the selected app. If you pick Ctrl + Space here, choose a different combination for the main shortcut so the two do not clash.
@@ -298,6 +303,12 @@ Copyright (c) 2026-present David Ravelo.
 #include <wincodec.h>
 #include <commoncontrols.h>
 #include <sddl.h>
+// TSF is what lets an IME (Microsoft Pinyin and friends) compose inside this window instead of
+// dropping the text; imm.h only supplies the WM_IME_SETCONTEXT flag used to hide the legacy
+// composition window.
+#include <msctf.h>
+#include <olectl.h>
+#include <imm.h>
 
 // windows.h defines DrawText as a macro (DrawTextW); it must be removed BEFORE d2d1.h
 // so that ID2D1RenderTarget::DrawText keeps its name.
@@ -1422,6 +1433,7 @@ static const UINT WM_APP_BOOKMARKS = WM_APP + 8;     // a background bookmark lo
 static const UINT WM_APP_RECENT = WM_APP + 9;        // a background recent-files load finished
 static const UINT WM_APP_GLOBAL = WM_APP + 10;       // a partial/final global file search arrived
 static const UINT WM_APP_EVERYTHING = WM_APP + 11;   // Everything answered a "find:" query
+static const UINT WM_APP_STARTSHOWN = WM_APP + 12;   // the Start menu appeared (Windows-key hotkey)
 
 // Start menu reindexing
 static const double kAutoSafetyRescanSec = 600.0;  // fallback in Automatic mode (MSIX apps)
@@ -1440,6 +1452,7 @@ static const UINT_PTR TIMER_GSEARCH = 8;  // debounce for the global "find:" sea
 static const UINT_PTR TIMER_EVFALLBACK = 9;  // "find:" via Everything: fall back if it never answers
 static const UINT_PTR TIMER_WINCLOSE = 10;   // re-read the window list while a closed window disappears
 static const UINT_PTR TIMER_WINACTION = 11;  // verify an async window action once it has landed
+static const UINT_PTR TIMER_STARTCHECK = 12;  // dismiss the Start menu when the Windows key opened it
 static const int HOTKEY_ID = 1;
 
 // ===== Types =====
@@ -1801,6 +1814,9 @@ static ID2D1BitmapBrush* g_backBrush = nullptr;   // brush in surface coordinate
 static ID2D1Bitmap* g_noiseBmp = nullptr;         // grain tile
 static ID2D1BitmapBrush* g_noiseBrush = nullptr;
 static double g_lastHide = -1e9;                  // last time the window was hidden
+// Until this time the bar accepts a focus loss and takes the foreground back: a Windows-key open
+// can race with the Start menu, which steals the focus right after the bar appears.
+static double g_winOpenUntil = 0;
 
 static std::vector<AppEntry> g_apps;
 static std::vector<SearchResult> g_results;
@@ -1890,6 +1906,14 @@ static std::wstring g_text;
 static int g_caret = 0;
 static int g_anchor = 0;
 static float g_inputScroll = 0;
+// IME composition in progress (CJK input), kept apart from g_text until it is committed. The
+// caret rectangle of the composition is where the IME puts its candidate list.
+static std::wstring g_imeComposition;
+static int g_imeCursor = 0;
+static float g_imeX = 0;
+static float g_imeTopY = 0;
+static float g_imeBotY = 0;
+static void TsfSetFocus(bool focused);  // defined with the TSF text store, far below
 static bool g_caretOn = true;
 
 static int g_sel = 0;
@@ -2388,6 +2412,7 @@ static void LoadSettings() {
     LauncherSettings c;
     std::wstring hk = GetStringSetting(L"Shortcuts.Hotkey");
     UINT mods = 0;
+    UINT vk = VK_SPACE;
     if (hk == L"alt+space") {
         mods = MOD_ALT;
     } else if (hk == L"ctrl+space") {
@@ -2398,11 +2423,16 @@ static void LoadSettings() {
         mods = MOD_SHIFT | MOD_ALT;
     } else if (hk == L"ctrl+shift+space") {
         mods = MOD_CONTROL | MOD_SHIFT;
+    } else if (hk == L"win") {
+        // The Windows key on its own: RegisterHotKey cannot claim it, so the launcher watches the
+        // key with a low-level hook instead (see RegisterLauncherHotkey).
+        mods = 0;
+        vk = VK_LWIN;
     } else {
         mods = MOD_ALT;
     }
     c.hotkeyMods = mods;
-    c.hotkeyVk = VK_SPACE;
+    c.hotkeyVk = vk;
 
     c.verticalPct = std::clamp(GetIntSetting(L"Appearance.VerticalPosition"), 0, 100);
     {
@@ -10160,6 +10190,9 @@ static void PrepareBackdrop() {
     }
     // DWM must stop compositing the window before capturing, or it shows up in the capture.
     if (IsWindowVisible(g_hwnd)) {
+        // Hand the IME back before the window is hidden: a composition left open would be
+        // committed into a hidden field.
+        TsfSetFocus(false);
         ShowWindow(g_hwnd, SW_HIDE);
         WaitForCompositor();
     } else if (NowSec() - g_lastHide < 0.12) {
@@ -12032,6 +12065,10 @@ static void DrawBandEditor(float cx, float cy, float cw) {
     }
     SetBrush(g_pal.text);
     g_rt->DrawTextLayout(D2D1::Point2F(ox, top), tl, g_brush);
+    // The IME candidates hang from the caret of the field being edited.
+    g_imeX = ox + caretX;
+    g_imeTopY = mid - 8 * s;
+    g_imeBotY = mid + 10 * s;
     if (g_caretOn && g_vis != Vis::Hiding) {
         SetBrush(g_pal.text);
         D2D1_RECT_F cr = D2D1::RectF(ox + caretX, mid - 8 * s, ox + caretX + 1.5f * s, mid + 8 * s);
@@ -13101,6 +13138,7 @@ static D2D1_RECT_F HelpTabRect(float cx, float cy, int i) {
 // Labels for the F1 sheet, built from the configured shortcuts so the sheet never shows a
 // combination the user has changed.
 static std::wstring HotkeyHelpText() {
+    if (g_cfg.hotkeyVk == VK_LWIN) return L"Win";
     switch (g_cfg.hotkeyMods) {
         case MOD_CONTROL: return L"Ctrl + Space";
         case MOD_CONTROL | MOD_ALT: return L"Ctrl + Alt + Space";
@@ -13812,7 +13850,28 @@ static void Render() {
         D2D1_RECT_F clip = D2D1::RectF(fieldX, cy, fieldX + fieldW, cy + kBarH * s);
         g_rt->PushAxisAlignedClip(&clip, D2D1_ANTIALIAS_MODE_ALIASED);
 
-        if (g_text.empty()) {
+        // An IME composition is drawn in the field, at the caret, before it is committed: the
+        // legacy composition window is suppressed (see WM_IME_SETCONTEXT), so this is the only
+        // place the user sees what is being typed.
+        const bool imeHere = !g_imeComposition.empty() && !g_helpOpen && !g_form.active &&
+                             !g_mgr.active && g_bandEdit == BandEdit::None;
+        std::wstring visText = g_text;
+        int visCaret = g_caret;
+        size_t imeFrom = g_text.size();
+        if (imeHere) {
+            // The composition replaces the selection, exactly as the committed text will.
+            const size_t a = (size_t)std::clamp(std::min(g_anchor, g_caret), 0, (int)g_text.size());
+            const size_t b = (size_t)std::clamp(std::max(g_anchor, g_caret), 0, (int)g_text.size());
+            visText = g_text.substr(0, a) + g_imeComposition + g_text.substr(b);
+            imeFrom = a;
+            visCaret = (int)a + std::clamp(g_imeCursor, 0, (int)g_imeComposition.size());
+        }
+        if (visText.empty()) {
+            if (!g_helpOpen && !g_form.active && g_bandEdit == BandEdit::None) {
+                g_imeX = fieldX;
+                g_imeTopY = barMid - 13 * s;
+                g_imeBotY = barMid + 15 * s;
+            }
             SetBrush(g_pal.textDim, 0.85f);
             D2D1_RECT_F r = D2D1::RectF(fieldX, cy, fieldX + fieldW, cy + kBarH * s);
             const wchar_t* ph =
@@ -13830,12 +13889,12 @@ static void Render() {
             }
         } else {
             IDWriteTextLayout* tl = nullptr;
-            g_dw->CreateTextLayout(g_text.c_str(), (UINT32)g_text.size(), g_fmtInput, 10000.f,
+            g_dw->CreateTextLayout(visText.c_str(), (UINT32)visText.size(), g_fmtInput, 10000.f,
                                    kBarH * s, &tl);
             if (tl) {
                 float cxPos = 0, cyTmp = 0;
                 DWRITE_HIT_TEST_METRICS hm = {};
-                tl->HitTestTextPosition((UINT32)g_caret, FALSE, &cxPos, &cyTmp, &hm);
+                tl->HitTestTextPosition((UINT32)visCaret, FALSE, &cxPos, &cyTmp, &hm);
 
                 if (cxPos - g_inputScroll > fieldW - 4 * s) g_inputScroll = cxPos - (fieldW - 4 * s);
                 if (cxPos - g_inputScroll < 0) g_inputScroll = cxPos;
@@ -13844,7 +13903,7 @@ static void Render() {
                 const float ox = fieldX - g_inputScroll;
                 float chh = 26 * s;
 
-                if (g_anchor != g_caret) {
+                if (!imeHere && g_anchor != g_caret) {
                     float ax = 0, ay = 0;
                     DWRITE_HIT_TEST_METRICS hm2 = {};
                     tl->HitTestTextPosition((UINT32)g_anchor, FALSE, &ax, &ay, &hm2);
@@ -13858,15 +13917,38 @@ static void Render() {
                 SetBrush(g_pal.text);
                 g_rt->DrawTextLayout(D2D1::Point2F(ox, cy), tl, g_brush);
 
-                // Inline calculator result, faintly after the typed text.
-                if (GhostShown()) {
+                // The composition is underlined the way every Windows text field marks it.
+                if (imeHere && imeFrom + g_imeComposition.size() <= visText.size()) {
+                    DWRITE_HIT_TEST_METRICS parts[8] = {};
+                    UINT32 pcount = 0;
+                    if (SUCCEEDED(tl->HitTestTextRange((UINT32)imeFrom, (UINT32)g_imeComposition.size(),
+                                                       ox, cy, parts, 8, &pcount))) {
+                        SetBrush(g_pal.text, 0.72f);
+                        for (UINT32 k = 0; k < pcount; ++k) {
+                            const DWRITE_HIT_TEST_METRICS& pt = parts[k];
+                            D2D1_RECT_F ul = D2D1::RectF(pt.left, barMid + chh / 2 + 1 * s,
+                                                         pt.left + pt.width, barMid + chh / 2 + 2.5f * s);
+                            g_rt->FillRectangle(&ul, g_brush);
+                        }
+                    }
+                }
+
+                // Inline calculator result, faintly after the typed text. Not while an IME
+                // composition is open: the text is not settled yet.
+                if (!imeHere && GhostShown()) {
                     float endX = 0, endY = 0;
                     DWRITE_HIT_TEST_METRICS hmEnd = {};
-                    tl->HitTestTextPosition((UINT32)g_text.size(), FALSE, &endX, &endY, &hmEnd);
+                    tl->HitTestTextPosition((UINT32)visText.size(), FALSE, &endX, &endY, &hmEnd);
                     std::wstring ghost = L"   = " + g_calcDisplay;
                     SetBrush(g_pal.textDim, 0.75f);
                     D2D1_RECT_F gr = D2D1::RectF(ox + endX, cy, fieldX + fieldW, cy + kBarH * s);
                     g_rt->DrawText(ghost.c_str(), (UINT32)ghost.size(), g_fmtInput, &gr, g_brush);
+                }
+
+                if (!g_helpOpen && !g_form.active && g_bandEdit == BandEdit::None) {
+                    g_imeX = ox + cxPos;
+                    g_imeTopY = barMid - 13 * s;
+                    g_imeBotY = barMid + 15 * s;
                 }
 
                 if (g_caretOn && !g_helpOpen && !g_form.active && g_bandEdit == BandEdit::None &&
@@ -14539,6 +14621,8 @@ static void ShowLauncher() {
     g_matchBrush->SetColor(&g_pal.match);
 
     g_text.clear();
+    g_imeComposition.clear();
+    g_imeCursor = 0;
     g_caret = g_anchor = 0;
     g_inputScroll = 0;
     g_caretOn = true;
@@ -14630,6 +14714,7 @@ static void ShowLauncher() {
     g_vis = Vis::Showing;
     g_visStart = NowSec();
     g_shownAt = g_visStart;
+    g_winOpenUntil = (g_cfg.hotkeyVk == VK_LWIN) ? g_shownAt + 0.7 : 0;
     g_alpha = 0;
     g_offY = 14.0 * g_scale;
 
@@ -14643,6 +14728,7 @@ static void ShowLauncher() {
         if (prev && prev != g_hwnd) g_prevForeground = prev;
     }
     ForceForeground(g_hwnd);
+    TsfSetFocus(true);
     Sound::Resume();
     Sound::OnOpen();
 
@@ -19628,8 +19714,200 @@ static int HitRow(int mx, int my) {
 
 // ===== Window =====
 
+// ---- The Windows key as the launcher shortcut ----------------------------------------------
+// RegisterHotKey cannot claim Win on its own, and Windows opens the Start menu on the key-up, so
+// the key is watched with a low-level hook: a Win press that was not followed by another key
+// opens the launcher, and (when the user asked for it) an unassigned mask key is injected before
+// the real key-up so Windows cancels the Start menu. IAppVisibility is the fallback for the cases
+// where Start still appears: it reports when the Start menu is shown, and the bar dismisses it.
+static HHOOK g_winKeyHook = nullptr;
+static HANDLE g_winKeyThread = nullptr;
+static DWORD g_winKeyThreadId = 0;
+static IAppVisibility* g_appVisibility = nullptr;
+static DWORD g_appVisibilityCookie = 0;
+
+static bool StartMenuVisible() {
+    BOOL visible = FALSE;
+    return g_appVisibility && SUCCEEDED(g_appVisibility->IsLauncherVisible(&visible)) && visible;
+}
+
+// Sends Esc to the Start menu, and only to it: the foreground window has to be the Start menu's
+// own process, or the keystroke would land in whatever else took the focus.
+static void DismissStartMenu() {
+    if (!StartMenuVisible()) return;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &pid);
+    bool isStart = false;
+    if (HANDLE proc = pid ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) : nullptr) {
+        WCHAR imgPath[MAX_PATH];
+        DWORD sz = ARRAYSIZE(imgPath);
+        if (QueryFullProcessImageNameW(proc, 0, imgPath, &sz)) {
+            const WCHAR* leaf = wcsrchr(imgPath, L'\\');
+            leaf = leaf ? leaf + 1 : imgPath;
+            isStart = _wcsicmp(leaf, L"startmenuexperiencehost.exe") == 0;
+        }
+        CloseHandle(proc);
+    }
+    if (!isStart) return;
+    INPUT keys[2] = {};
+    keys[0].type = keys[1].type = INPUT_KEYBOARD;
+    keys[0].ki.wVk = keys[1].ki.wVk = VK_ESCAPE;
+    keys[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, keys, sizeof(INPUT));
+}
+
+struct StartVisibilityWatcher final : IAppVisibilityEvents {
+    std::atomic<ULONG> refs{1};
+    IFACEMETHODIMP QueryInterface(REFIID riid, void** out) override {
+        if (!out) return E_POINTER;
+        if (riid == IID_IUnknown || riid == __uuidof(IAppVisibilityEvents)) {
+            *out = static_cast<IAppVisibilityEvents*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *out = nullptr;
+        return E_NOINTERFACE;
+    }
+    IFACEMETHODIMP_(ULONG) AddRef() override { return ++refs; }
+    IFACEMETHODIMP_(ULONG) Release() override {
+        ULONG left = --refs;
+        if (!left) delete this;
+        return left;
+    }
+    IFACEMETHODIMP AppVisibilityOnMonitorChanged(HMONITOR, MONITOR_APP_VISIBILITY,
+                                                 MONITOR_APP_VISIBILITY) override {
+        return S_OK;
+    }
+    IFACEMETHODIMP LauncherVisibilityChange(BOOL visible) override {
+        if (visible && g_cfg.hotkeyVk == VK_LWIN) {
+            if (HWND wnd = g_hwnd) PostMessageW(wnd, WM_APP_STARTSHOWN, 0, 0);
+        }
+        return S_OK;
+    }
+};
+
+static void WatchStart() {
+    if (g_appVisibility) return;
+    if (FAILED(CoCreateInstance(__uuidof(AppVisibility), nullptr, CLSCTX_INPROC_SERVER,
+                                __uuidof(IAppVisibility), (void**)&g_appVisibility)) ||
+        !g_appVisibility) {
+        return;
+    }
+    StartVisibilityWatcher* watcher = new StartVisibilityWatcher();
+    if (FAILED(g_appVisibility->Advise(watcher, &g_appVisibilityCookie))) {
+        g_appVisibility->Release();
+        g_appVisibility = nullptr;
+    }
+    watcher->Release();
+}
+
+static void UnwatchStart() {
+    if (g_appVisibility) {
+        g_appVisibility->Unadvise(g_appVisibilityCookie);
+        g_appVisibility->Release();
+        g_appVisibility = nullptr;
+        g_appVisibilityCookie = 0;
+    }
+}
+
+// This runs in the input pipeline: no locks, no disk, no waiting. It only decides whether the
+// press was the Windows key on its own, and posts the launcher message.
+static LRESULT CALLBACK WinKeyHookProc(int nCode, WPARAM wp, LPARAM lp) {
+    static bool winDown = false, alone = false;
+    static DWORD lastDown = 0;
+    if (nCode == HC_ACTION && lp) {
+        const KBDLLHOOKSTRUCT* key = (const KBDLLHOOKSTRUCT*)lp;
+        if (!(key->flags & LLKHF_INJECTED)) {
+            const bool win = key->vkCode == VK_LWIN || key->vkCode == VK_RWIN;
+            const bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
+            if (win && down) {
+                // After Win+L the key-up happens on the lock screen, unseen: winDown alone cannot
+                // be trusted, so a fresh press resets "alone".
+                if (!winDown || lastDown != key->vkCode) {
+                    winDown = true;
+                    alone = true;
+                }
+            } else if (win) {
+                const bool open = winDown && alone &&
+                                  !(g_cfg.disableFullscreen && g_vis == Vis::Hidden &&
+                                    IsForegroundFullscreen());
+                winDown = false;
+                if (open) {
+                    // An unassigned mask key between the press and the real Win key-up makes
+                    // Windows cancel the Start menu while the key is still released normally.
+                    INPUT mask[2] = {};
+                    mask[0].type = mask[1].type = INPUT_KEYBOARD;
+                    mask[0].ki.wVk = mask[1].ki.wVk = 0xE8;
+                    mask[1].ki.dwFlags = KEYEVENTF_KEYUP;
+                    SendInput(2, mask, sizeof(INPUT));
+                    if (HWND wnd = g_hwnd) PostMessageW(wnd, WM_HOTKEY, HOTKEY_ID, 0);
+                }
+            } else if (down) {
+                alone = false;
+            }
+            lastDown = down ? key->vkCode : 0;
+        }
+    }
+    return CallNextHookEx(nullptr, nCode, wp, lp);
+}
+
+static DWORD WINAPI WinKeyThreadProc(LPVOID ready) {
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create the message queue
+    g_winKeyHook = SetWindowsHookExW(WH_KEYBOARD_LL, WinKeyHookProc, GetModuleHandleW(nullptr), 0);
+    SetEvent((HANDLE)ready);
+    while (g_winKeyHook && GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        DispatchMessageW(&msg);
+    }
+    if (g_winKeyHook) {
+        UnhookWindowsHookEx(g_winKeyHook);
+        g_winKeyHook = nullptr;
+    }
+    return 0;
+}
+
+static void UninstallWinKeyHook() {
+    UnwatchStart();
+    if (!g_winKeyThread) return;
+    PostThreadMessageW(g_winKeyThreadId, WM_QUIT, 0, 0);
+    // Bounded on purpose: the hook thread only pumps messages, but its callback can be inside
+    // SendInput waiting on the input pipeline. A stuck thread must never freeze a settings change
+    // or the unload, so after the timeout the hook is removed from here, its handle is left alone
+    // (it still belongs to a running thread) and the thread exits on its own once the callback
+    // returns and the loop finds no hook.
+    if (WaitForSingleObject(g_winKeyThread, 1500) == WAIT_OBJECT_0) {
+        CloseHandle(g_winKeyThread);
+    } else {
+        OutputDebugStringW(L"Spotlight: Win key hook thread did not stop in time\n");
+    }
+    if (g_winKeyHook) {
+        UnhookWindowsHookEx(g_winKeyHook);
+        g_winKeyHook = nullptr;
+    }
+    g_winKeyThread = nullptr;
+    g_winKeyThreadId = 0;
+}
+
 static bool RegisterLauncherHotkey() {
     UnregisterHotKey(g_hwnd, HOTKEY_ID);
+    UninstallWinKeyHook();
+    if (g_cfg.hotkeyVk == VK_LWIN) {
+        HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!ready) return false;
+        g_winKeyThread = CreateThread(nullptr, 0, WinKeyThreadProc, ready, 0, &g_winKeyThreadId);
+        // Bounded: the thread signals as soon as the hook is installed. If it does not, the hook
+        // failed to install (or the thread never started), so report the failure instead of
+        // leaving the UI thread waiting for an event that will not arrive.
+        const bool started =
+            g_winKeyThread && WaitForSingleObject(ready, 2000) == WAIT_OBJECT_0;
+        CloseHandle(ready);
+        if (!started || !g_winKeyHook) {
+            UninstallWinKeyHook();  // release the thread and whatever it managed to install
+            return false;
+        }
+        WatchStart();
+        return true;
+    }
     if (!RegisterHotKey(g_hwnd, HOTKEY_ID, g_cfg.hotkeyMods | MOD_NOREPEAT, g_cfg.hotkeyVk)) {
         return false;
     }
@@ -19663,8 +19941,540 @@ static void RegisterHotkeyOrWarn() {
     }
 }
 
+// ===== IME input (CJK and every other IME) ===================================================
+// A plain Win32 window that only handles WM_CHAR never sees what an IME produces: the IME talks
+// to the focused window through a text store, and without one the composition is either dropped
+// or drawn in the legacy floating window that has nothing to do with this UI. Implementing
+// ITextStoreACP gives the IME a real document to compose into, and ITfContextOwnerCompositionSink
+// turns the composition on and off, so the text appears in the search field as it is typed, with
+// the candidates hanging from the caret.
+//
+// The composition is kept apart from g_text (g_imeComposition) and only committed on
+// OnEndComposition: the query, the calculator and every result stay untouched until the user
+// accepts the candidate.
+static void CommitImeText(const std::wstring& s) {
+    if (s.empty()) return;
+    if (g_form.active) {
+        FormReplaceSelection(s);
+    } else if (g_mgr.active && g_mgr.editing && g_mgr.field != kMgrFieldHotkey) {
+        ManagerReplaceSelection(s);
+    } else if (g_bandEdit != BandEdit::None) {
+        if (g_bandEdit == BandEdit::Rename) {
+            // A committed characters goes through the same filter the typed one would meet.
+            std::wstring clean;
+            clean.reserve(s.size());
+            for (const wchar_t ch : s) {
+                if (!wcschr(L"\\/:*?\"<>|", ch)) clean.push_back(ch);
+            }
+            if (!clean.empty()) BandReplace(clean);
+        } else {
+            BandReplace(s);
+        }
+    } else {
+        ReplaceSelection(s);
+    }
+}
+
+// The plain text the IME composes into: the search field only. Every other text surface (form,
+// manager, band editor) keeps its own document and would need its own store to receive IME text;
+// an empty document there makes the IME commit through CommitImeText instead.
+static const std::wstring& ActivePlainText(int& outCaret, int& outAnchor) {
+    if (!g_form.active && !g_mgr.active && g_bandEdit == BandEdit::None) {
+        outCaret = g_caret;
+        outAnchor = g_anchor;
+        return g_text;
+    }
+    outCaret = 0;
+    outAnchor = 0;
+    static const std::wstring kEmpty;
+    return kEmpty;
+}
+
+class TsfTextStore final : public ITextStoreACP, public ITfContextOwnerCompositionSink {
+public:
+    TsfTextStore() = default;
+    ~TsfTextStore() {
+        if (m_sink) { m_sink->Release(); m_sink = nullptr; }
+    }
+
+    void ResetComposition() {
+        m_composing = false;
+        m_compStart = 0;
+        m_compEnd = 0;
+        m_selStart = 0;
+        m_selEnd = 0;
+        g_imeComposition.clear();
+        g_imeCursor = 0;
+    }
+
+    void NotifyTextAndSelectionChanged() {
+        if (!m_sink || m_inEditSession || m_composing) return;
+        if (m_sinkMask & TS_AS_SEL_CHANGE) m_sink->OnSelectionChange();
+        if (m_sinkMask & TS_AS_LAYOUT_CHANGE) m_sink->OnLayoutChange(TS_LC_CHANGE, 1);
+    }
+
+    // IUnknown
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (!ppv) return E_INVALIDARG;
+        *ppv = nullptr;
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, __uuidof(ITextStoreACP))) {
+            *ppv = static_cast<ITextStoreACP*>(this);
+        } else if (IsEqualIID(riid, __uuidof(ITfContextOwnerCompositionSink))) {
+            *ppv = static_cast<ITfContextOwnerCompositionSink*>(this);
+        } else {
+            return E_NOINTERFACE;
+        }
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return (ULONG)InterlockedIncrement(&m_ref); }
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG r = (ULONG)InterlockedDecrement(&m_ref);
+        if (r == 0) delete this;
+        return r;
+    }
+
+    // ITextStoreACP
+    STDMETHODIMP AdviseSink(REFIID riid, IUnknown* punk, DWORD dwMask) override {
+        if (!punk) return E_INVALIDARG;
+        if (!IsEqualIID(riid, __uuidof(ITextStoreACPSink))) return E_INVALIDARG;
+        ITextStoreACPSink* sink = nullptr;
+        if (FAILED(punk->QueryInterface(__uuidof(ITextStoreACPSink), (void**)&sink))) {
+            return E_NOINTERFACE;
+        }
+        if (m_sink) {
+            if (m_sink == sink) {
+                m_sinkMask = dwMask;
+                sink->Release();
+                return S_OK;
+            }
+            sink->Release();
+            return CONNECT_E_ADVISELIMIT;
+        }
+        m_sink = sink;
+        m_sinkMask = dwMask;
+        return S_OK;
+    }
+    STDMETHODIMP UnadviseSink(IUnknown* punk) override {
+        if (!punk || !m_sink) return CONNECT_E_NOCONNECTION;
+        if (m_sink) { m_sink->Release(); m_sink = nullptr; }
+        m_sinkMask = 0;
+        return S_OK;
+    }
+    STDMETHODIMP RequestLock(DWORD dwLockFlags, HRESULT* phrSession) override {
+        if (!phrSession) return E_INVALIDARG;
+        if (!m_sink) return E_UNEXPECTED;
+        if (m_lockType != 0) {
+            if (dwLockFlags & TS_LF_SYNC) {
+                *phrSession = TS_E_SYNCHRONOUS;
+                return S_OK;
+            }
+            m_lockQueue.push_back(dwLockFlags);
+            *phrSession = TS_S_ASYNC;
+            return S_OK;
+        }
+        m_lockType = dwLockFlags & TS_LF_READWRITE;
+        if (m_lockType == 0) m_lockType = TS_LF_READ;
+        m_inEditSession = true;
+        *phrSession = m_sink->OnLockGranted(m_lockType);
+        m_inEditSession = false;
+        m_lockType = 0;
+        while (!m_lockQueue.empty()) {
+            const DWORD nextFlags = m_lockQueue.front();
+            m_lockQueue.pop_front();
+            m_lockType = nextFlags & TS_LF_READWRITE;
+            if (m_lockType == 0) m_lockType = TS_LF_READ;
+            m_inEditSession = true;
+            m_sink->OnLockGranted(m_lockType);
+            m_inEditSession = false;
+            m_lockType = 0;
+        }
+        return S_OK;
+    }
+    STDMETHODIMP GetStatus(TS_STATUS* pdcs) override {
+        if (!pdcs) return E_INVALIDARG;
+        pdcs->dwDynamicFlags = 0;
+        pdcs->dwStaticFlags = 0;
+        return S_OK;
+    }
+    STDMETHODIMP QueryInsert(LONG acpTestStart, LONG acpTestEnd, ULONG,
+                             LONG* pacpResultStart, LONG* pacpResultEnd) override {
+        const LONG len = (LONG)CurrentDoc().size();
+        const LONG s = std::clamp(acpTestStart, (LONG)0, len);
+        const LONG e = std::clamp(acpTestEnd, s, len);
+        if (pacpResultStart) *pacpResultStart = s;
+        if (pacpResultEnd) *pacpResultEnd = e;
+        return S_OK;
+    }
+    STDMETHODIMP GetSelection(ULONG ulIndex, ULONG ulCount, TS_SELECTION_ACP* pSelection,
+                              ULONG* pcFetched) override {
+        if (!pcFetched) return E_INVALIDARG;
+        *pcFetched = 0;
+        if (m_lockType == 0) return TS_E_NOLOCK;
+        if (ulIndex != TF_DEFAULT_SELECTION && ulIndex != 0) return TS_E_NOSELECTION;
+        if (ulCount == 0 || !pSelection) return S_OK;
+        if (m_composing) {
+            pSelection[0].acpStart = m_selStart;
+            pSelection[0].acpEnd = m_selEnd;
+        } else {
+            int c = 0, a = 0;
+            ActivePlainText(c, a);
+            pSelection[0].acpStart = std::min(c, a);
+            pSelection[0].acpEnd = std::max(c, a);
+        }
+        pSelection[0].style.ase = TS_AE_END;
+        pSelection[0].style.fInterimChar = FALSE;
+        *pcFetched = 1;
+        return S_OK;
+    }
+    STDMETHODIMP SetSelection(ULONG ulCount, const TS_SELECTION_ACP* pSelection) override {
+        if ((m_lockType & TS_LF_READWRITE) != TS_LF_READWRITE) return TS_E_NOLOCK;
+        if (ulCount == 0 || !pSelection) return E_INVALIDARG;
+        const LONG len = (LONG)CurrentDoc().size();
+        const LONG s = std::clamp(pSelection[0].acpStart, (LONG)0, len);
+        const LONG e = std::clamp(pSelection[0].acpEnd, s, len);
+        if (m_composing) {
+            m_selStart = s;
+            m_selEnd = e;
+            g_imeCursor = std::clamp((int)(e - m_compStart), 0, (int)g_imeComposition.size());
+        } else if (!g_form.active && !g_mgr.active && g_bandEdit == BandEdit::None) {
+            g_anchor = (int)s;
+            g_caret = (int)e;
+        }
+        MarkDirty();
+        return S_OK;
+    }
+    STDMETHODIMP GetText(LONG acpStart, LONG acpEnd, WCHAR* pchPlain, ULONG cchPlainReq,
+                         ULONG* pcchPlainRet, TS_RUNINFO* prgRunInfo, ULONG cRunInfoReq,
+                         ULONG* pcRunInfoRet, LONG* pacpNext) override {
+        if (m_lockType == 0) return TS_E_NOLOCK;
+        const std::wstring doc = CurrentDoc();
+        const LONG len = (LONG)doc.size();
+        if (acpStart < 0 || acpStart > len) return TS_E_INVALIDPOS;
+        LONG end = (acpEnd < 0) ? len : std::min(acpEnd, len);
+        if (end < acpStart) end = acpStart;
+        const ULONG avail = (ULONG)(end - acpStart);
+        const ULONG copyLen = pchPlain ? std::min(avail, cchPlainReq) : 0;
+        if (copyLen > 0 && pchPlain) {
+            memcpy(pchPlain, doc.data() + acpStart, copyLen * sizeof(WCHAR));
+        }
+        if (pcchPlainRet) *pcchPlainRet = copyLen;
+        if (prgRunInfo && cRunInfoReq > 0) {
+            prgRunInfo[0].uCount = copyLen;
+            prgRunInfo[0].type = TS_RT_PLAIN;
+            if (pcRunInfoRet) *pcRunInfoRet = 1;
+        } else if (pcRunInfoRet) {
+            *pcRunInfoRet = 0;
+        }
+        if (pacpNext) *pacpNext = acpStart + (LONG)copyLen;
+        return S_OK;
+    }
+    STDMETHODIMP SetText(DWORD, LONG acpStart, LONG acpEnd, const WCHAR* pchText, ULONG cch,
+                         TS_TEXTCHANGE* pChange) override {
+        if ((m_lockType & TS_LF_READWRITE) != TS_LF_READWRITE) return TS_E_NOLOCK;
+        const std::wstring ins(pchText ? pchText : L"", cch);
+        if (m_composing) {
+            // The IME edits the composition only: g_text keeps the text before and after it.
+            int c = 0, a = 0;
+            const std::wstring& base = ActivePlainText(c, a);
+            const LONG basePre = (LONG)std::min(c, a);
+            const LONG basePostStart = (LONG)std::max(c, a);
+            std::wstring doc = base.substr(0, basePre) + g_imeComposition + base.substr(basePostStart);
+            const LONG len = (LONG)doc.size();
+            const LONG s = std::clamp(acpStart, (LONG)0, len);
+            LONG e = std::clamp(acpEnd, s, len);
+            doc.replace((size_t)s, (size_t)(e - s), ins);
+            LONG newCompEnd = std::max(m_compStart, m_compEnd - (e - s) + (LONG)cch);
+            if (m_compStart == 0 && m_compEnd == 0 && g_imeComposition.empty()) {
+                m_compStart = s;
+                newCompEnd = s + (LONG)cch;
+            }
+            m_compEnd = std::min((LONG)doc.size(), newCompEnd);
+            const LONG compLen = std::max((LONG)0, m_compEnd - m_compStart);
+            g_imeComposition = doc.substr((size_t)m_compStart, (size_t)compLen);
+            m_selStart = m_selEnd = s + (LONG)cch;
+            g_imeCursor = std::clamp((int)(m_selEnd - m_compStart), 0, (int)g_imeComposition.size());
+            if (pChange) {
+                pChange->acpStart = s;
+                pChange->acpOldEnd = e;
+                pChange->acpNewEnd = s + (LONG)cch;
+            }
+        } else {
+            const LONG len = (LONG)CurrentDoc().size();
+            const LONG s = std::clamp(acpStart, (LONG)0, len);
+            const LONG e = std::clamp(acpEnd, s, len);
+            if (!ins.empty()) CommitImeText(ins);
+            m_selStart = m_selEnd = s + (LONG)cch;
+            if (pChange) {
+                pChange->acpStart = s;
+                pChange->acpOldEnd = e;
+                pChange->acpNewEnd = s + (LONG)cch;
+            }
+        }
+        MarkDirty();
+        return S_OK;
+    }
+    STDMETHODIMP GetFormattedText(LONG, LONG, IDataObject**) override { return E_NOTIMPL; }
+    STDMETHODIMP GetEmbedded(LONG, REFGUID, REFIID, IUnknown**) override { return E_NOTIMPL; }
+    STDMETHODIMP QueryInsertEmbedded(const GUID*, const FORMATETC*, BOOL* pfInsertable) override {
+        if (pfInsertable) *pfInsertable = FALSE;
+        return S_OK;
+    }
+    STDMETHODIMP InsertEmbedded(DWORD, LONG, LONG, IDataObject*, TS_TEXTCHANGE*) override {
+        return E_NOTIMPL;
+    }
+    STDMETHODIMP InsertTextAtSelection(DWORD dwFlags, const WCHAR* pchText, ULONG cch,
+                                       LONG* pacpStart, LONG* pacpEnd,
+                                       TS_TEXTCHANGE* pChange) override {
+        if ((m_lockType & TS_LF_READWRITE) != TS_LF_READWRITE) return TS_E_NOLOCK;
+        TS_SELECTION_ACP sel = {};
+        ULONG fetched = 0;
+        if (FAILED(GetSelection(TF_DEFAULT_SELECTION, 1, &sel, &fetched)) || fetched == 0) {
+            return TS_E_NOSELECTION;
+        }
+        LONG s = sel.acpStart, e = sel.acpEnd;
+        QueryInsert(s, e, cch, &s, &e);
+        if (dwFlags & TS_IAS_QUERYONLY) {
+            if (pacpStart) *pacpStart = s;
+            if (pacpEnd) *pacpEnd = e;
+            return S_OK;
+        }
+        TS_TEXTCHANGE tc = {};
+        const HRESULT hr = SetText(0, s, e, pchText, cch, &tc);
+        if (SUCCEEDED(hr)) {
+            if (pChange) *pChange = tc;
+            if (pacpStart) *pacpStart = tc.acpStart;
+            if (pacpEnd) *pacpEnd = tc.acpNewEnd;
+        }
+        return hr;
+    }
+    STDMETHODIMP InsertEmbeddedAtSelection(DWORD, IDataObject*, LONG*, LONG*, TS_TEXTCHANGE*) override {
+        return E_NOTIMPL;
+    }
+    STDMETHODIMP RequestSupportedAttrs(DWORD, ULONG, const TS_ATTRID*) override { return S_OK; }
+    STDMETHODIMP RequestAttrsAtPosition(LONG, ULONG, const TS_ATTRID*, DWORD) override { return S_OK; }
+    STDMETHODIMP RequestAttrsTransitioningAtPosition(LONG, ULONG, const TS_ATTRID*, DWORD) override {
+        return S_OK;
+    }
+    STDMETHODIMP FindNextAttrTransition(LONG, LONG, ULONG, const TS_ATTRID*, DWORD, LONG* pacpNext,
+                                        BOOL* pfFound, LONG* plFoundOffset) override {
+        if (pacpNext) *pacpNext = 0;
+        if (pfFound) *pfFound = FALSE;
+        if (plFoundOffset) *plFoundOffset = 0;
+        return S_OK;
+    }
+    STDMETHODIMP RetrieveRequestedAttrs(ULONG, TS_ATTRVAL*, ULONG* pcFetched) override {
+        if (pcFetched) *pcFetched = 0;
+        return S_OK;
+    }
+    STDMETHODIMP GetEndACP(LONG* pacp) override {
+        if (m_lockType == 0) return TS_E_NOLOCK;
+        if (!pacp) return E_INVALIDARG;
+        *pacp = (LONG)CurrentDoc().size();
+        return S_OK;
+    }
+    STDMETHODIMP GetActiveView(TsViewCookie* pvcView) override {
+        if (!pvcView) return E_INVALIDARG;
+        *pvcView = 1;
+        return S_OK;
+    }
+    STDMETHODIMP GetACPFromPoint(TsViewCookie, const POINT*, DWORD, LONG*) override {
+        return E_NOTIMPL;
+    }
+    // The candidate list hangs from the caret: the IME asks for that rectangle in screen pixels.
+    STDMETHODIMP GetTextExt(TsViewCookie vcView, LONG, LONG, RECT* prc, BOOL* pfClipped) override {
+        if (vcView != 1 || !prc) return E_INVALIDARG;
+        if (!g_hwnd) return E_FAIL;
+        POINT tl = {(LONG)std::lround(g_imeX), (LONG)std::lround(g_imeTopY)};
+        POINT br = {(LONG)std::lround(g_imeX) + 2, (LONG)std::lround(g_imeBotY)};
+        ClientToScreen(g_hwnd, &tl);
+        ClientToScreen(g_hwnd, &br);
+        prc->left = tl.x;
+        prc->top = tl.y;
+        prc->right = br.x;
+        prc->bottom = br.y;
+        if (pfClipped) *pfClipped = FALSE;
+        return S_OK;
+    }
+    STDMETHODIMP GetScreenExt(TsViewCookie vcView, RECT* prc) override {
+        if (vcView != 1 || !prc) return E_INVALIDARG;
+        if (!g_hwnd) return E_FAIL;
+        GetClientRect(g_hwnd, prc);
+        POINT tl = {prc->left, prc->top};
+        POINT br = {prc->right, prc->bottom};
+        ClientToScreen(g_hwnd, &tl);
+        ClientToScreen(g_hwnd, &br);
+        prc->left = tl.x;
+        prc->top = tl.y;
+        prc->right = br.x;
+        prc->bottom = br.y;
+        return S_OK;
+    }
+    STDMETHODIMP GetWnd(TsViewCookie vcView, HWND* phwnd) override {
+        if (vcView != 1 || !phwnd) return E_INVALIDARG;
+        *phwnd = g_hwnd;
+        return S_OK;
+    }
+
+    // ITfContextOwnerCompositionSink
+    STDMETHODIMP OnStartComposition(ITfCompositionView*, BOOL* pfOk) override {
+        if (pfOk) *pfOk = TRUE;
+        int c = 0, a = 0;
+        ActivePlainText(c, a);
+        m_composing = true;
+        m_compStart = std::min(c, a);
+        m_compEnd = m_compStart;
+        m_selStart = m_compStart;
+        m_selEnd = m_compStart;
+        g_imeComposition.clear();
+        g_imeCursor = 0;
+        MarkDirty();
+        return S_OK;
+    }
+    STDMETHODIMP OnUpdateComposition(ITfCompositionView*, ITfRange* pRangeNew) override {
+        if (pRangeNew) {
+            ITfRangeACP* acp = nullptr;
+            if (SUCCEEDED(pRangeNew->QueryInterface(__uuidof(ITfRangeACP), (void**)&acp))) {
+                LONG s = 0, cch = 0;
+                if (SUCCEEDED(acp->GetExtent(&s, &cch))) {
+                    m_compStart = std::max((LONG)0, s);
+                    m_compEnd = m_compStart + std::max((LONG)0, cch);
+                    int c = 0, a = 0;
+                    const std::wstring& base = ActivePlainText(c, a);
+                    const std::wstring doc = base.substr(0, (size_t)std::min(c, a)) + g_imeComposition +
+                                             base.substr((size_t)std::max(c, a));
+                    if (m_compStart <= (LONG)doc.size()) {
+                        const LONG avail =
+                            std::min(m_compEnd - m_compStart, (LONG)doc.size() - m_compStart);
+                        g_imeComposition =
+                            doc.substr((size_t)m_compStart, (size_t)std::max((LONG)0, avail));
+                    }
+                }
+                acp->Release();
+            }
+        }
+        MarkDirty();
+        return S_OK;
+    }
+    STDMETHODIMP OnEndComposition(ITfCompositionView*) override {
+        const std::wstring committed = g_imeComposition;
+        m_composing = false;
+        m_compStart = 0;
+        m_compEnd = 0;
+        g_imeComposition.clear();
+        g_imeCursor = 0;
+        if (!committed.empty()) {
+            CommitImeText(committed);
+        }
+        MarkDirty();
+        return S_OK;
+    }
+
+private:
+    std::wstring CurrentDoc() const {
+        int c = 0, a = 0;
+        const std::wstring& base = ActivePlainText(c, a);
+        if (!m_composing) return base;
+        return base.substr(0, (size_t)std::min(c, a)) + g_imeComposition +
+               base.substr((size_t)std::max(c, a));
+    }
+
+    volatile LONG m_ref = 1;
+    ITextStoreACPSink* m_sink = nullptr;
+    DWORD m_sinkMask = 0;
+    DWORD m_lockType = 0;
+    bool m_inEditSession = false;
+    std::deque<DWORD> m_lockQueue;
+    bool m_composing = false;
+    LONG m_compStart = 0;
+    LONG m_compEnd = 0;
+    LONG m_selStart = 0;
+    LONG m_selEnd = 0;
+};
+
+static ITfThreadMgr* g_tsfMgr = nullptr;
+static TfClientId g_tsfClientId = 0;
+static ITfDocumentMgr* g_tsfDocMgr = nullptr;
+static ITfContext* g_tsfContext = nullptr;
+static TfEditCookie g_tsfEditCookie = 0;
+static TsfTextStore* g_tsfStore = nullptr;
+
+// Called once, on the UI thread (which is the one with its own message queue and an STA).
+static void TsfInit() {
+    if (g_tsfMgr) return;
+    if (FAILED(CoCreateInstance(CLSID_TF_ThreadMgr, nullptr, CLSCTX_INPROC_SERVER,
+                                __uuidof(ITfThreadMgr), (void**)&g_tsfMgr)) || !g_tsfMgr) {
+        return;
+    }
+    if (FAILED(g_tsfMgr->Activate(&g_tsfClientId))) {
+        g_tsfMgr->Release();
+        g_tsfMgr = nullptr;
+        return;
+    }
+    if (FAILED(g_tsfMgr->CreateDocumentMgr(&g_tsfDocMgr)) || !g_tsfDocMgr) {
+        g_tsfMgr->Deactivate();
+        g_tsfMgr->Release();
+        g_tsfMgr = nullptr;
+        return;
+    }
+    g_tsfStore = new TsfTextStore();
+    if (FAILED(g_tsfDocMgr->CreateContext(g_tsfClientId, 0,
+                                          static_cast<ITextStoreACP*>(g_tsfStore),
+                                          &g_tsfContext, &g_tsfEditCookie)) ||
+        !g_tsfContext || FAILED(g_tsfDocMgr->Push(g_tsfContext))) {
+        if (g_tsfContext) { g_tsfContext->Release(); g_tsfContext = nullptr; }
+        g_tsfStore->Release();
+        g_tsfStore = nullptr;
+        g_tsfDocMgr->Release();
+        g_tsfDocMgr = nullptr;
+        g_tsfMgr->Deactivate();
+        g_tsfMgr->Release();
+        g_tsfMgr = nullptr;
+    }
+}
+
+static void TsfShutdown() {
+    if (g_tsfDocMgr) {
+        g_tsfDocMgr->Pop(TF_POPF_ALL);
+    }
+    if (g_tsfContext) { g_tsfContext->Release(); g_tsfContext = nullptr; }
+    if (g_tsfDocMgr) { g_tsfDocMgr->Release(); g_tsfDocMgr = nullptr; }
+    if (g_tsfStore) { g_tsfStore->Release(); g_tsfStore = nullptr; }
+    if (g_tsfMgr) {
+        g_tsfMgr->Deactivate();
+        g_tsfMgr->Release();
+        g_tsfMgr = nullptr;
+    }
+    g_tsfClientId = 0;
+}
+
+// Gives the IME the document while the bar is open, and takes it away before it is hidden: an
+// abandoned composition would otherwise be committed into a bar the user cannot see.
+static void TsfSetFocus(bool focused) {
+    if (!g_tsfMgr) return;
+    if (focused && g_tsfDocMgr) {
+        g_tsfMgr->SetFocus(g_tsfDocMgr);
+        if (g_tsfStore) g_tsfStore->NotifyTextAndSelectionChanged();
+    } else {
+        if (g_tsfStore) g_tsfStore->ResetComposition();
+        g_tsfMgr->SetFocus(nullptr);
+    }
+}
+
 static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
+        case WM_SETFOCUS:
+            TsfSetFocus(true);
+            break;
+        case WM_KILLFOCUS:
+            TsfSetFocus(false);
+            break;
+        case WM_IME_SETCONTEXT:
+            // The composition is drawn inside the field; the legacy composition window would
+            // float over the bar with its own font, colours and position.
+            lp &= ~(LPARAM)ISC_SHOWUICOMPOSITIONWINDOW;
+            return DefWindowProcW(hwnd, msg, wp, lp);
+
         case WM_HOTKEY:
             if (wp == HOTKEY_ID) {
                 // Respect the "Disable in fullscreen" toggle: while a fullscreen window is
@@ -19674,12 +20484,40 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
                     return 0;
                 }
                 ToggleLauncher();
+                if (g_cfg.hotkeyVk == VK_LWIN && g_vis != Vis::Hidden) {
+                    // The mask key normally keeps Start closed; if it still opened, check shortly
+                    // after and close it. It takes a moment for the shell to report it.
+                    SetTimer(hwnd, TIMER_STARTCHECK, 200, nullptr);
+                }
+            }
+            return 0;
+
+        case WM_APP_STARTSHOWN:
+            // The Start menu appeared while the bar is open (Windows-key shortcut): close it and
+            // keep the bar in front, so only one panel is on screen.
+            if (g_cfg.hotkeyVk == VK_LWIN) {
+                if (g_vis != Vis::Hidden && NowSec() - g_shownAt < 0.35) {
+                    DismissStartMenu();
+                    ForceForeground(hwnd);
+                } else if (g_vis != Vis::Hidden || NowSec() - g_lastHide < 0.5) {
+                    if (g_vis != Vis::Hidden) HideLauncher();
+                    DismissStartMenu();
+                } else if (!(g_cfg.disableFullscreen && IsForegroundFullscreen())) {
+                    ToggleLauncher();
+                    SetTimer(hwnd, TIMER_STARTCHECK, 200, nullptr);
+                }
             }
             return 0;
 
         case WM_TIMER:
             if (wp == TIMER_FRAME) {
                 OnFrame();
+            } else if (wp == TIMER_STARTCHECK) {
+                KillTimer(g_hwnd, TIMER_STARTCHECK);
+                if (g_vis != Vis::Hidden && StartMenuVisible()) {
+                    DismissStartMenu();
+                    ForceForeground(hwnd);
+                }
             } else if (wp == TIMER_COPY) {
                 KillTimer(g_hwnd, TIMER_COPY);
                 MarkDirty();  // redraw without the "Copied" flash
@@ -19750,6 +20588,14 @@ static LRESULT CALLBACK LauncherWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
         case WM_ACTIVATE:
             if (LOWORD(wp) == WA_INACTIVE && g_vis != Vis::Hidden && !IgnoreFocusLoss() &&
                 NowSec() - g_shownAt > 0.15) {
+                // A Windows-key open can race with the Start menu, which takes the foreground a
+                // moment after the bar appears. That is not the user clicking away: close the menu
+                // and take the focus back instead of disappearing.
+                if (NowSec() < g_winOpenUntil) {
+                    if (StartMenuVisible()) DismissStartMenu();
+                    ForceForeground(hwnd);
+                    return 0;
+                }
                 HideLauncher();
             } else if (LOWORD(wp) == WA_ACTIVE && g_cfg.disableFullscreen &&
                        g_vis != Vis::Hidden && IsForegroundFullscreen()) {
@@ -20346,6 +21192,7 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
         return 1;
     }
     LiveCreate(hInst);
+    TsfInit();
 
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), nullptr,
                       (void**)&g_d2d);
@@ -20400,7 +21247,9 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     ++g_bookmarkGen;  // a load still in flight must not touch a dying window
     ++g_recentGen;    // same for Recent files
     UnregisterHotKey(g_hwnd, HOTKEY_ID);
+    UninstallWinKeyHook();
     Sound::Shutdown();
+    TsfShutdown();
     LiveDestroy();
     DestroyWindow(g_hwnd);
     g_hwnd = nullptr;
