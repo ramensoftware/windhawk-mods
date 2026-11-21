@@ -2,11 +2,11 @@
 // @id              hide-snapped
 // @name            Snap Groups: Alt+Tab and taskbar
 // @description     Group-only Alt+Tab and separate taskbar buttons with tiled member icons.
-// @version         0.5.2
+// @version         0.5.3
 // @author          coldfeudal
 // @github          https://github.com/coldfeudal
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -ladvapi32 -lshell32 -luuid -lgdi32 -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
@@ -55,10 +55,12 @@ activation/minimization; animation behavior follows those native commands.
 
 ## Tested configuration and limitations
 
-Earlier 0.4.x versions were tested on Windows 11 25H2 (26200.8246, x64)
-with Windhawk 1.7.3; the method-based 0.5.0 rewrite still needs interactive retesting:
-group switching, independent taskbar buttons, native previews, icon layout,
-Explorer restart, disable/enable and the support-trace toggle.
+Version 0.5.2 was tested on Windows 11 25H2 (26200.8246, x64), Windhawk 1.7.3:
+Alt+Tab advancement, group activity and no empty buttons after disable/enable;
+group recovery, native previews, Alt+Tab/activity and minimize/restore after
+Explorer restart; group creation on the other monitor. Separate classic/modern
+preview routes were not independently identified. The support-trace toggle and
+heavy-game scenario below were confirmed on 0.4.24, not repeated for 0.5.x.
 
 - **Independent taskbar per monitor 1.7.0:** group creation, moving groups
   between monitors and restoring minimized groups; no empty buttons or unload
@@ -76,7 +78,7 @@ available. Missing optional preview/selection methods leave those paths native.
 Shell interfaces are undocumented; other Windows versions and DLL revisions
 remain unverified, and updates can require changes to the mod.
 Longer sessions and other monitor/DPI/virtual desktop configurations have limited
-coverage. The current build targets AMD64. ARM64 builds and runtime behavior are unverified.
+coverage. ARM64 installation is allowed; ARM64 runtime behavior is unverified.
 
 Report mod problems in https://github.com/ramensoftware/windhawk-mods/issues.
 Include "hide-snapped" in the title and mention @coldfeudal in the report.
@@ -155,7 +157,6 @@ The Alt+Tab scoping approach was informed by
 #include <winstring.h>
 #include <wrl/client.h>
 #include <atomic>
-#include <array>
 #include <cstdint>
 #include <cstring>
 #include <cwchar>
@@ -396,31 +397,28 @@ void FlushTaskbarTrace() {
 
 struct RealityContext {
     void* controller;
-
 };
 thread_local RealityContext* g_realityContext = nullptr;
-
-
 using RealityCheck = void(WINAPI*)(void*);
 using CollectionCount = uint32_t(WINAPI*)(void*);
 RealityCheck g_realityCheck = nullptr;
 CollectionCount g_collectionCount = nullptr, g_bindableSize = nullptr;
-void CaptureRealitySize(uint32_t result, uintptr_t) {
+void CaptureRealitySize(uint32_t result) {
     // Independent observations only: no guessed caller address or field layout,
     // and no inferred equality between potentially unrelated nested collections.
     if (g_realityContext) TraceWrite(TraceObservedCount, result, 0);
 }
 uint32_t WINAPI BindableSizeTraceHook(void* self) {
     auto result = g_bindableSize(self);
-    CaptureRealitySize(result, 0);
+    CaptureRealitySize(result);
     return result;
 }
-void CaptureRealityCount(void* self, uint32_t result, uintptr_t) {
+void CaptureRealityCount(void* self, uint32_t result) {
     if (g_realityContext) TraceWrite(TraceObservedCount, result, 1, TracePointer(self));
 }
 uint32_t WINAPI CollectionCountTraceHook(void* self) {
     auto result = g_collectionCount(self);
-    CaptureRealityCount(self, result, reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    CaptureRealityCount(self, result);
     return result;
 }
 void WINAPI RealityCheckTraceHook(void* self) {
@@ -807,7 +805,6 @@ using GetTaskIcon = HRESULT(WINAPI*)(void*, IUnknown*, IUnknown*, HICON*);
 using UpdateTaskIcon = void(WINAPI*)(void*, IUnknown*, IUnknown*);
 UpdateTaskIcon g_updateTaskIcon = nullptr;
 GetTaskIcon g_getTaskIcon = nullptr;
-
 
 void* g_nativeGroupVtable = nullptr;
 
@@ -1267,14 +1264,14 @@ void WINAPI MoveSourceTraceHook(void* self, void* const* group, uint32_t index) 
     TraceScope trace(TraceMove, self, group ? *group : nullptr, index);
     g_moveSourceGroup(self, group, index);
 }
-void CaptureNullAppId(void* self, PCWSTR result, uintptr_t) {
+void CaptureNullAppId(void* self, PCWSTR result) {
     if (!result && HasNativeGroupVtable(self)) {
         TraceWrite(TraceNullAppId, TracePointer(self)); FlushTaskbarTrace();
     }
 }
 PCWSTR WINAPI NativeAppIdTraceHook(void* self) {
     auto result = g_nativeAppId(self);
-    CaptureNullAppId(self, result, reinterpret_cast<uintptr_t>(__builtin_return_address(0)));
+    CaptureNullAppId(self, result);
     return result; // don't read, replace or log the string
 }
 
@@ -1465,7 +1462,7 @@ bool HookTaskbarFilter() {
         {{L"protected: void __cdecl CTaskListWnd::_HandleClick(struct ITaskBtnGroup *,int,enum CTaskListWnd::eCLICKACTION,int,int)"}, &g_handleButtonClick, HandleButtonClickHook},
         {{L"public: virtual long __cdecl CTaskListWnd::GetIcon(struct ITaskGroup *,struct ITaskItem *,struct HICON__ * *)"}, &g_getTaskIcon, GetTaskIconHook},
         {{L"protected: void __cdecl CTaskBand::_UpdateItemIcon(struct ITaskGroup *,struct ITaskItem *)"}, &g_updateTaskIcon},
-        {{L"public: virtual struct ITaskItem * __cdecl CTaskItem::GetTabContainerItem(void)const "}, &g_nativeAppId, g_binaryTraceEnabled ? NativeAppIdTraceHook : nullptr},
+        {{L"public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void)"}, &g_nativeAppId, g_binaryTraceEnabled ? NativeAppIdTraceHook : nullptr},
         {{L"public: virtual long __cdecl CTaskGroup::EnumTaskItems(struct IEnumTaskItems * *)"}, &g_nativeEnumItems},
         {{L"public: virtual long __cdecl CEnumTaskItems::Next(struct ITaskItem * *)"}, &g_nativeNextItem},
         {{L"const CTaskGroup::`vftable'{for `ITaskGroup'}"}, &g_nativeGroupVtable},
@@ -1680,7 +1677,7 @@ HRESULT RouteWindowThumbnailFactory(WindowThumbnailFactory original, GroupThumbn
         void* self, uint32_t windowId, IUnknown** output) {
     if (!output) return E_POINTER;
     if (!g_nativePreviewAvailable || !createGroup) return original(self, windowId, output);
-    HWND window = reinterpret_cast<HWND>(static_cast<uintptr_t>(windowId));
+    HWND window = reinterpret_cast<HWND>(static_cast<intptr_t>(static_cast<int32_t>(windowId)));
     ComPtr<IUnknown> group;
     { std::lock_guard lock(g_hiddenMembersMutex);
       auto found = g_proxyGroups->find(IdentifyWindow(window));
@@ -1739,6 +1736,7 @@ struct TaskbarOperations {
     virtual bool Create(GroupButton&) = 0;
     virtual void Update(GroupButton&) = 0;
     virtual HRESULT Hide(const WindowIdentity&) = 0;
+    virtual bool NeedsRestore(const WindowIdentity&) { return false; }
     virtual HRESULT Restore(const WindowIdentity&) = 0;
     virtual void Destroy(GroupButton&) = 0;
     virtual ~TaskbarOperations() = default;
@@ -1834,7 +1832,8 @@ public:
         }
         for (const auto& member : desiredHidden) {
             // Hide is idempotent; unchanged members need no repeated refresh.
-            if (SUCCEEDED(operations.Hide(member))) hidden.insert(member);
+            if (SUCCEEDED(operations.Hide(member)) || operations.NeedsRestore(member))
+                hidden.insert(member);
         }
         for (auto it = buttons.begin(); it != buttons.end();) {
             if (retained.contains(it->first)) { ++it; continue; }
@@ -2303,6 +2302,10 @@ public:
         if (FAILED(hr) && reportedHideErrors.insert(hr).second)
             Wh_Log(L"phase=taskbar hide-failed hr=%08X", hr);
         return hr;
+    }
+    bool NeedsRestore(const WindowIdentity& member) override {
+        std::lock_guard lock(g_hiddenMembersMutex);
+        return g_pendingButtonRestore.contains(member);
     }
     HRESULT Restore(const WindowIdentity& member) override {
         { std::lock_guard lock(g_hiddenMembersMutex); g_hiddenMembers.erase(member); }
@@ -2807,6 +2810,8 @@ BOOL Wh_ModInit() {
     };
     const bool hooked = WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
     g_cachedOnlyAltTab = !g_evaluateItem;
+    if (g_cachedOnlyAltTab)
+        Wh_Log(L"phase=selection mode=cache-only reason=evaluate-item-unavailable");
     Wh_Log(L"phase=selection adapter-methods=%d", g_taskGroupItemCount && g_countGroupItems);
     // Keep the reference for the process lifetime. Hooks are queued until Init
     // returns and their trampolines can outlive BeforeUninit.
