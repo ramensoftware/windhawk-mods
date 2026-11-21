@@ -95,8 +95,11 @@ to the internet and restart `explorer.exe` (or toggle the mod).
   "Manage your fingerprint data" and, unless a Family Safety applet is present, "Parental Controls".
 - "Change your picture" lists the pictures of `ProgramData\Microsoft\User Account Pictures\Default Pictures`,
   which Windows 10/11 do not ship; "Browse for more pictures..." works.
-- When the mod is disabled or updated, it closes the open User Accounts windows itself and waits until they are gone,
-  and the three links of the page that the mod hides come back. The page and its DirectUI file (private copies in the
+- When the mod is disabled or updated, it closes the Explorer windows that currently show the User Accounts page and waits
+  until they are gone (a window that has moved on to another folder is left alone). The **whole window closes, including
+  any other tabs in it**, and so do the dialogs the page has open; save your work in those tabs first. The close request
+  is repeated every second and the wait is logged every few seconds. A pending UAC prompt cannot be closed by the mod:
+  answer it. The three links of the page that the mod hides come back. The page and its DirectUI file (private copies in the
   mod's storage folder) stay loaded in `explorer.exe` until it restarts, but nothing in them points into the mod.
 - If the Windows 7 page cannot be loaded for any reason, the Windows 10/11 User Accounts page is used.
 - After changing a setting, close open User Accounts windows.
@@ -1854,22 +1857,49 @@ struct ComDeleter {
 
 std::atomic<LONG> g_liveObjects{0};
 SRWLOCK g_threadsLock = SRWLOCK_INIT;
-std::vector<DWORD> g_objectThreads;      // threads that created an adapter: one per Explorer window
+struct ThreadCount {
+    DWORD tid;
+    LONG count;
+};
+std::vector<ThreadCount> g_threadCounts;      // threads that hold adapters right now, with how many each (guarded by g_threadsLock)
+
+// Records one more live adapter for `tid`. Returns false if it could not be recorded (out of memory).
+bool AddLive(DWORD tid) {
+    try {
+        ExclusiveLock lock(g_threadsLock);
+        for (ThreadCount& t : g_threadCounts)
+            if (t.tid == tid) {
+                t.count++;
+                return true;
+            }
+        g_threadCounts.push_back({tid, 1});
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+// Forgets one adapter of `tid`; the thread leaves the list when its last adapter is gone, so a thread id that Windows
+// reuses later for an unrelated window is never matched.
+void RemoveLive(DWORD tid) {
+    ExclusiveLock lock(g_threadsLock);
+    for (size_t i = 0; i < g_threadCounts.size(); i++)
+        if (g_threadCounts[i].tid == tid) {
+            if (--g_threadCounts[i].count <= 0) g_threadCounts.erase(g_threadCounts.begin() + i);
+            return;
+        }
+}
 
 struct LiveObject {
-    LiveObject() {
-        g_liveObjects.fetch_add(1);
-        try {
-            const DWORD tid = GetCurrentThreadId();
-            ExclusiveLock lock(g_threadsLock);
-            if (std::find(g_objectThreads.begin(), g_objectThreads.end(), tid) == g_objectThreads.end())
-                g_objectThreads.push_back(tid);
-        } catch (...) {
-        }
-    }
+    const DWORD tid = GetCurrentThreadId();
+    const bool tracked;
+    LiveObject() : tracked(AddLive(tid)) { g_liveObjects.fetch_add(1); }
     LiveObject(const LiveObject&) = delete;
     LiveObject& operator=(const LiveObject&) = delete;
-    ~LiveObject() { g_liveObjects.fetch_sub(1); }
+    ~LiveObject() {
+        g_liveObjects.fetch_sub(1);
+        if (tracked) RemoveLive(tid);
+    }
 };
 
 struct SavedImport {
@@ -1893,27 +1923,70 @@ void RestorePageImports() {
     g_savedImports.clear();
 }
 
-BOOL CALLBACK CloseCabinetWindow(HWND hwnd, LPARAM) {
-    wchar_t cls[32];
-    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"CabinetWClass") == 0)
-        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+// Top-level window of a thread that holds adapters. Two kinds are closed: the Explorer window itself and the popups it
+// owns (the page's modal dialogs: "Browse for more pictures...", confirmation boxes), because a modal dialog keeps its
+// owner from closing. The popups go first. Closing a CabinetWClass window closes all of its tabs.
+struct CloseContext {
+    std::vector<HWND> popups, windows;
+};
+
+BOOL CALLBACK CollectThreadWindow(HWND hwnd, LPARAM param) {
+    CloseContext* context = reinterpret_cast<CloseContext*>(param);
+    try {
+        wchar_t cls[32];
+        if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) && wcscmp(cls, L"CabinetWClass") == 0)
+            context->windows.push_back(hwnd);
+        else if (GetWindow(hwnd, GW_OWNER) && IsWindowVisible(hwnd) && IsWindowEnabled(hwnd))
+            context->popups.push_back(hwnd);
+    } catch (...) {
+    }
     return TRUE;
 }
 
-// Closes the Explorer windows that hold adapters and waits, with no time limit, until the last adapter is released.
-void RundownLiveObjects() {
-    if (g_liveObjects.load() <= 0) return;
+// Posts WM_CLOSE to the windows of the threads that still hold adapters, and to the enabled popups those windows own.
+void PostCloseToThreads(const std::vector<DWORD>& threads) {
+    CloseContext context;
+    for (DWORD tid : threads) EnumThreadWindows(tid, CollectThreadWindow, reinterpret_cast<LPARAM>(&context));
+    for (HWND hwnd : context.popups) PostMessageW(hwnd, WM_CLOSE, 0, 0);
+    for (HWND hwnd : context.windows) PostMessageW(hwnd, WM_CLOSE, 0, 0);
+}
+
+std::vector<DWORD> ThreadsWithObjects() {
     std::vector<DWORD> threads;
     try {
         SharedLock lock(g_threadsLock);
-        threads = g_objectThreads;
+        for (const ThreadCount& t : g_threadCounts) threads.push_back(t.tid);
     } catch (...) {
+        threads.clear();
     }
+    return threads;
+}
+
+// Closes the windows of the threads that hold adapters and waits, with no time limit (the mod's code must not be unmapped
+// while an adapter points into it), until the last adapter is released. WM_CLOSE is posted again about once a second,
+// because a window can ignore it (a modal dialog, a pending prompt), and the remaining count is logged every 5 seconds
+// so that a stuck unload can be seen in the log.
+void RundownLiveObjects() {
+    if (g_liveObjects.load() <= 0) return;
     Wh_Log(L"Unload: closing the User Accounts windows (%ld object(s) alive)", long(g_liveObjects.load()));
-    for (DWORD tid : threads) EnumThreadWindows(tid, CloseCabinetWindow, 0);
-    const bool ownWindows = std::find(threads.begin(), threads.end(), GetCurrentThreadId()) != threads.end();
+    const DWORD self = GetCurrentThreadId();
+    ULONGLONG lastClose = 0, lastLog = GetTickCount64();
     while (g_liveObjects.load() > 0) {
-        if (ownWindows) {      // a window of this very thread can only close if its messages are processed
+        const std::vector<DWORD> threads = ThreadsWithObjects();
+        const ULONGLONG now = GetTickCount64();
+        if (now - lastClose >= 1000 || lastClose == 0) {
+            PostCloseToThreads(threads);
+            lastClose = now;
+        }
+        if (now - lastLog >= 5000) {
+            lastLog = now;
+            Wh_Log(L"Unload: still waiting for %ld object(s) held by %lu thread(s)%s", long(g_liveObjects.load()),
+                   static_cast<unsigned long>(threads.size()),
+                   threads.empty() ? L" (none of them is on a thread the mod recorded: kept by the page after its window closed?)"
+                                   : L"");
+        }
+        if (std::find(threads.begin(), threads.end(), self) != threads.end()) {
+            // A window of this very thread can only close if its messages are processed.
             MSG msg;
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 TranslateMessage(&msg);
@@ -1922,6 +1995,7 @@ void RundownLiveObjects() {
         }
         Sleep(20);
     }
+    Wh_Log(L"Unload: all objects released");
 }
 
 // ---- files ----------------------------------------------------------------------------------------------------------
