@@ -34,6 +34,16 @@ so that the devices aren't queried twice. Exit the standalone app before
 enabling the mod. If the display does not start, exit that app and
 disable/re-enable the mod.
 
+Two other mods cover parts of this one: [BT Battery
+Monitor](https://windhawk.net/mods/bt-battery-monitor) shows Bluetooth battery
+levels in the tray, and [Logitech Battery
+Tray](https://windhawk.net/mods/logitech-battery-tray) shows Logitech devices
+in the taskbar, through G HUB and HID++. This mod also reads the Bluetooth
+levels that Windows exposes and speaks HID++ itself, and adds vendor protocols
+for many other brands. If Bluetooth or Logitech devices are all you need, one
+of those mods may be enough. Enabled together with this mod, they show the same
+devices twice.
+
 ## Device support and limitations
 
 - The device drivers are ported from [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor),
@@ -64,7 +74,9 @@ disable/re-enable the mod.
 - Battery queries are only sent to product IDs known to use each protocol,
   including on vendor IDs that several brands share and that BatteryHub queries
   as a whole (Glorious, Hitscan, G-Wolves, Kysona and its partner brands,
-  LAMZU, ZOWIE).
+  LAMZU, ZOWIE). Logitech, Razer and Corsair vendor IDs belong to one brand
+  each, so their devices are recognized by the HID collections of their
+  protocol (HID++, Razer's 91-byte feature report, Corsair Bragi) instead.
 - Not included: drivers that switch a device to another mode or need
   keep-alive traffic (e.g. Razer Barracuda X, Razer BlackShark V2 Pro (2023),
   Logitech G435, Turtle Beach), drivers that hold Bluetooth connections (Galaxy
@@ -186,110 +198,30 @@ AirPods protocol reference: [SpriteOvO/AirPodsDesktop](https://github.com/Sprite
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <roapi.h>
+#include <sddl.h>
 #include <set>
 #include <setupapi.h>
 #include <shellapi.h>
 #include <string>
 #include <utility>
 #include <vector>
-#include <winstring.h>
 #include <xinput.h>
 
-#ifdef __MINGW32__
-#define boolean bool
-#endif
-#include <windows.system.power.h>
-namespace ABI { namespace Windows { namespace Devices { namespace Power {
-using ABI::Windows::System::Power::BatteryStatus;
-} } } }
-#include <windows.devices.power.h>
-#include <windows.gaming.input.h>
-#include <windows.storage.streams.h>
-#include <robuffer.h>
-#ifdef __MINGW32__
-#undef boolean
-#endif
-
 #undef GetCurrentTime  // a windows.h macro, which breaks Storyboard::GetCurrentTime
+#include <winrt/Windows.Devices.Bluetooth.Advertisement.h>
+#include <winrt/Windows.Devices.Power.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Gaming.Input.h>
+#include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.h>
-
-// Minimal declarations for the stable Windows Bluetooth advertisement ABI.
-// Windhawk 1.7.3's SDK lacks windows.devices.bluetooth.advertisement.h.
-// Interface order and IDs match the Windows SDK / mingw-w64 public WinRT headers.
-// Unused method signatures below keep the original vtable slots; they are never invoked.
-namespace WindhawkAirPodsAbi {
-enum BluetoothLEAdvertisementWatcherStatus { BluetoothLEAdvertisementWatcherStatus_Created, BluetoothLEAdvertisementWatcherStatus_Started,
-    BluetoothLEAdvertisementWatcherStatus_Stopping, BluetoothLEAdvertisementWatcherStatus_Stopped, BluetoothLEAdvertisementWatcherStatus_Aborted };
-enum BluetoothLEScanningMode { BluetoothLEScanningMode_Passive, BluetoothLEScanningMode_Active };
-struct IBluetoothLEAdvertisementWatcher;
-struct IBluetoothLEAdvertisementReceivedEventArgs;
-struct IBluetoothLEManufacturerData;
-
-MIDL_INTERFACE("90eb4eca-d465-5ea0-a61c-033c8c5ecef2") Received : IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE Invoke(IBluetoothLEAdvertisementWatcher*, IBluetoothLEAdvertisementReceivedEventArgs*) = 0;
-};
-MIDL_INTERFACE("78ab070e-ad7e-5912-a4f1-7be33e4560af") DataList : IInspectable {
-    virtual HRESULT STDMETHODCALLTYPE GetAt(UINT32, IBluetoothLEManufacturerData**) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_Size(UINT32*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedIndexOf() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetMany() = 0;
-};
-MIDL_INTERFACE("912dba18-6963-4533-b061-4694dafb34e5") IBluetoothLEManufacturerData : IInspectable {
-    virtual HRESULT STDMETHODCALLTYPE get_CompanyId(UINT16*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE put_CompanyId(UINT16) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_Data(ABI::Windows::Storage::Streams::IBuffer**) = 0;
-    virtual HRESULT STDMETHODCALLTYPE put_Data(ABI::Windows::Storage::Streams::IBuffer*) = 0;
-};
-MIDL_INTERFACE("066fb2b7-33d1-4e7d-8367-cf81d0f79653") IBluetoothLEAdvertisement : IInspectable {
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetFlags() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedPutFlags() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetLocalName() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedPutLocalName() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetServiceUuids() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetManufacturerData() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetDataSections() = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetManufacturerDataByCompanyId(UINT16, DataList**) = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetSectionsByType() = 0;
-};
-MIDL_INTERFACE("27987ddf-e596-41be-8d43-9e6731d4a913") IBluetoothLEAdvertisementReceivedEventArgs : IInspectable {
-    virtual HRESULT STDMETHODCALLTYPE get_RawSignalStrengthInDBm(INT16*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_BluetoothAddress(UINT64*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetAdvertisementType() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetTimestamp() = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_Advertisement(IBluetoothLEAdvertisement**) = 0;
-};
-MIDL_INTERFACE("a6ac336f-f3d3-4297-8d6c-c81ea6623f40") IBluetoothLEAdvertisementWatcher : IInspectable {
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetMinSamplingInterval() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetMaxSamplingInterval() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetMinOutOfRangeTimeout() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetMaxOutOfRangeTimeout() = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_Status(BluetoothLEAdvertisementWatcherStatus*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE get_ScanningMode(BluetoothLEScanningMode*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE put_ScanningMode(BluetoothLEScanningMode) = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetSignalStrengthFilter() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedPutSignalStrengthFilter() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedGetAdvertisementFilter() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedPutAdvertisementFilter() = 0;
-    virtual HRESULT STDMETHODCALLTYPE Start() = 0;
-    virtual HRESULT STDMETHODCALLTYPE Stop() = 0;
-    virtual HRESULT STDMETHODCALLTYPE add_Received(Received*, EventRegistrationToken*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE remove_Received(EventRegistrationToken) = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedAddStopped() = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnusedRemoveStopped() = 0;
-};
-}
-#ifdef __CRT_UUID_DECL
-__CRT_UUID_DECL(WindhawkAirPodsAbi::Received, 0x90eb4eca, 0xd465, 0x5ea0, 0xa6, 0x1c, 0x03, 0x3c, 0x8c, 0x5e, 0xce, 0xf2)
-__CRT_UUID_DECL(WindhawkAirPodsAbi::IBluetoothLEAdvertisementWatcher, 0xa6ac336f, 0xf3d3, 0x4297, 0x8d, 0x6c, 0xc8, 0x1e, 0xa6, 0x62, 0x3f, 0x40)
-#endif
 
 enum class DeviceKind { Other, Mouse, Headset, Keyboard, Gamepad, Phone, Microphone };
 
@@ -349,8 +281,10 @@ public:
 
     bool Write(const std::vector<BYTE>& data, int timeoutMs = 500);
     bool Write(std::initializer_list<BYTE> data, int timeoutMs = 500) { return Write(std::vector<BYTE>(data), timeoutMs); }
-    // Reads one input report into `buf` (resized to fit). Returns the byte count, or -1 on timeout/error.
+    // Reads one input report into `buf` (resized to fit). Returns the byte count, -1 on timeout, or
+    // kReadError when the read itself fails, e.g. after the device is unplugged.
     int Read(std::vector<BYTE>& buf, int timeoutMs);
+    static constexpr int kReadError = -2;
     // For collections without an interrupt OUT pipe (WriteFile fails there): arms a read, sends
     // `data` with HidD_SetOutputReport, and returns the first input report like Read() does.
     int SetOutputAndRead(const std::vector<BYTE>& data, std::vector<BYTE>& buf, int timeoutMs);
@@ -490,7 +424,7 @@ void PollXInput(PollContext& ctx);
 // are polled in the dedicated Windhawk process, so that a stuck device query never blocks Explorer.
 // The polling process sends the widget's content with WM_COPYDATA to a message-only window, which
 // Explorer creates while the widget is attached. Explorer posts clicks on the widget back to the
-// polling process's window, and asks it to send the content again while it has none.
+// polling process's window, and asks it for the content when it creates the receiver.
 namespace WidgetIpc {
 constexpr const wchar_t* kToolWindowClass = L"TaskbarWirelessBatteryWnd";
 constexpr const wchar_t* kReceiverClass = L"TaskbarWirelessBatteryXaml";
@@ -800,17 +734,19 @@ int HidDev::Read(std::vector<BYTE>& buf, int timeoutMs) {
     OVERLAPPED ov{};
     ov.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     DWORD got = 0;
-    bool done = false;
+    bool done = false, timedOut = false;
     if (ReadFile(h_, tmp.data(), (DWORD)tmp.size(), nullptr, &ov) || GetLastError() == ERROR_IO_PENDING) {
         if (timeoutMs > 0 && WaitForSingleObject(ov.hEvent, (DWORD)timeoutMs) == WAIT_OBJECT_0) {
             done = GetOverlappedResult(h_, &ov, &got, FALSE) != FALSE;
         } else {
             CancelIo(h_);
             done = GetOverlappedResult(h_, &ov, &got, TRUE) != FALSE;  // it may have completed meanwhile
+            timedOut = true;
         }
     }
     CloseHandle(ov.hEvent);
-    if (!done || got == 0) return -1;
+    if (!done) return timedOut ? -1 : kReadError;
+    if (got == 0) return -1;
     size_t off = tmp[0] == 0 ? 1 : 0;  // hidapi semantics: drop the "no report ID" byte
     buf.assign(tmp.begin() + off, tmp.begin() + got);
     return (int)buf.size();
@@ -951,14 +887,7 @@ DeviceKind KindFromCollections(const std::vector<HidColl>& all, USHORT vid, USHO
 
 namespace wb_driver_airpods {
 namespace {
-using namespace WindhawkAirPodsAbi;
-
-template<class T> struct Com {
-    T* p = nullptr;
-    ~Com() { if (p) p->Release(); }
-    T** out() { return &p; }
-    T* operator->() const { return p; }
-};
+using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
 
 struct Seen { airpods::Battery battery; ULONGLONG when = 0; INT16 rssi = -127; };
 struct State {
@@ -967,116 +896,78 @@ struct State {
     HANDLE refresh = nullptr;
     bool pending = false;
     ULONGLONG signalled = 0;
-    unsigned events = 0, apple = 0, decoded = 0;
 };
 
-class Handler final : public Received {
-    std::atomic<ULONG> refs{1};
-    std::shared_ptr<State> state;
-public:
-    explicit Handler(std::shared_ptr<State> s) : state(std::move(s)) {}
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** out) override {
-        if (!out) return E_POINTER;
-        *out = nullptr;
-        if (iid == __uuidof(IUnknown) || iid == __uuidof(Received) || iid == __uuidof(IAgileObject)) {
-            *out = static_cast<Received*>(this); AddRef(); return S_OK;
+void OnReceived(State& state, const BluetoothLEAdvertisementReceivedEventArgs& args) {
+    const INT16 rssi = args.RawSignalStrengthInDBm();
+    if (rssi < -85) return;
+    for (const auto& item : args.Advertisement().GetManufacturerDataByCompanyId(0x004C)) {
+        auto buffer = item.Data();
+        airpods::Battery battery;
+        if (buffer.Length() < 27 || !airpods::Decode(buffer.data(), buffer.Length(), battery)) continue;
+        const UINT64 address = args.BluetoothAddress();
+        const auto now = GetTickCount64();
+        std::lock_guard<std::mutex> lock(state.mutex);
+        for (auto it = state.seen.begin(); it != state.seen.end();)
+            if (now - it->second.when > 120000) it = state.seen.erase(it); else ++it;
+        if (state.seen.size() >= 32 && !state.seen.count(address)) continue;
+        auto previous = state.seen.find(address);
+        bool changed = previous == state.seen.end();
+        if (!changed) {
+            const auto& old = previous->second.battery;
+            changed = old.model != battery.model || old.left != battery.left || old.right != battery.right ||
+                old.box != battery.box || old.leftCharging != battery.leftCharging ||
+                old.rightCharging != battery.rightCharging || old.boxCharging != battery.boxCharging ||
+                now - previous->second.when > 30000;
         }
-        return E_NOINTERFACE;
+        state.seen[address] = {battery, now, rssi};
+        state.pending = state.pending || changed;
+        // One UI refresh at most every 3 seconds; no disk logs or raw packet retention.
+        if (state.pending && state.refresh && now - state.signalled >= 3000) {
+            SetEvent(state.refresh); state.signalled = now; state.pending = false;
+        }
     }
-    ULONG STDMETHODCALLTYPE AddRef() override { return ++refs; }
-    ULONG STDMETHODCALLTYPE Release() override { ULONG n = --refs; if (!n) delete this; return n; }
-    HRESULT STDMETHODCALLTYPE Invoke(IBluetoothLEAdvertisementWatcher*, IBluetoothLEAdvertisementReceivedEventArgs* args) override {
-        Com<IBluetoothLEAdvertisement> ad;
-        Com<DataList> list;
-        if (FAILED(args->get_Advertisement(ad.out())) || !ad.p ||
-            FAILED(ad->GetManufacturerDataByCompanyId(0x004C, list.out())) || !list.p) return S_OK;
-        UINT32 count = 0; list->get_Size(&count);
-        {
-            std::lock_guard<std::mutex> lock(state->mutex);
-            ++state->events; if (count) ++state->apple;
-        }
-        for (UINT32 i = 0; i < count; ++i) {
-            Com<IBluetoothLEManufacturerData> item;
-            Com<ABI::Windows::Storage::Streams::IBuffer> buffer;
-            Com<::Windows::Storage::Streams::IBufferByteAccess> access;
-            if (FAILED(list->GetAt(i, item.out())) || !item.p || FAILED(item->get_Data(buffer.out())) || !buffer.p) continue;
-            UINT32 length = 0;
-            if (FAILED(buffer->get_Length(&length)) || length < 27 ||
-                FAILED(buffer->QueryInterface(__uuidof(::Windows::Storage::Streams::IBufferByteAccess), (void**)access.out()))) continue;
-            BYTE* bytes = nullptr;
-            if (FAILED(access->Buffer(&bytes))) continue;
-            airpods::Battery battery;
-            if (!airpods::Decode(bytes, length, battery)) continue;
-            UINT64 address = 0; INT16 rssi = -127;
-            if (FAILED(args->get_BluetoothAddress(&address)) || FAILED(args->get_RawSignalStrengthInDBm(&rssi)) || rssi < -85) continue;
-            const auto now = GetTickCount64();
-            std::lock_guard<std::mutex> lock(state->mutex);
-            ++state->decoded;
-            for (auto it = state->seen.begin(); it != state->seen.end();)
-                if (now - it->second.when > 120000) it = state->seen.erase(it); else ++it;
-            if (state->seen.size() >= 32 && !state->seen.count(address)) continue;
-            auto previous = state->seen.find(address);
-            bool changed = previous == state->seen.end();
-            if (!changed) {
-                const auto& old = previous->second.battery;
-                changed = old.model != battery.model || old.left != battery.left || old.right != battery.right ||
-                    old.box != battery.box || old.leftCharging != battery.leftCharging ||
-                    old.rightCharging != battery.rightCharging || old.boxCharging != battery.boxCharging ||
-                    now - previous->second.when > 30000;
-            }
-            state->seen[address] = {battery, now, rssi};
-            state->pending = state->pending || changed;
-            // One UI refresh at most every 3 seconds; no disk logs or raw packet retention.
-            if (state->pending && state->refresh && now - state->signalled >= 3000) {
-                SetEvent(state->refresh); state->signalled = now; state->pending = false;
-            }
-        }
-        return S_OK;
-    }
-};
+}
 
 struct Receiver {
     std::shared_ptr<State> state = std::make_shared<State>();
-    IBluetoothLEAdvertisementWatcher* watcher = nullptr;
-    EventRegistrationToken token{};
-    HRESULT error = S_OK;
+    BluetoothLEAdvertisementWatcher watcher{ nullptr };
+    winrt::event_token token{};
     ULONGLONG attempted = 0;
-    bool initialized = false;
 
     void stop() {
-        if (watcher) {
-            watcher->Stop(); watcher->remove_Received(token); watcher->Release(); watcher = nullptr;
+        if (!watcher) return;
+        try {
+            watcher.Stop();
+            watcher.Received(token);
+        } catch (...) {
         }
-        if (initialized) { RoUninitialize(); initialized = false; }
+        watcher = nullptr;
     }
     void start() {
         if (watcher) {
-            BluetoothLEAdvertisementWatcherStatus status;
-            if (SUCCEEDED(watcher->get_Status(&status)) && status == BluetoothLEAdvertisementWatcherStatus_Started) return;
+            try {
+                if (watcher.Status() == BluetoothLEAdvertisementWatcherStatus::Started) return;
+            } catch (...) {
+            }
             stop();
         }
         const auto now = GetTickCount64();
         if (attempted && now - attempted < 10000) return;
         attempted = now;
-        error = RoInitialize(RO_INIT_MULTITHREADED);
-        if (FAILED(error)) return;
-        initialized = true;
-        const wchar_t* cls = L"Windows.Devices.Bluetooth.Advertisement.BluetoothLEAdvertisementWatcher";
-        HSTRING name = nullptr; IInspectable* instance = nullptr;
-        error = WindowsCreateString(cls, (UINT32)wcslen(cls), &name);
-        if (SUCCEEDED(error)) error = RoActivateInstance(name, &instance);
-        if (name) WindowsDeleteString(name);
-        if (SUCCEEDED(error)) {
-            error = instance->QueryInterface(__uuidof(IBluetoothLEAdvertisementWatcher), (void**)&watcher);
-            instance->Release();
+        try {
+            watcher = BluetoothLEAdvertisementWatcher();
+            watcher.ScanningMode(BluetoothLEScanningMode::Passive);
+            token = watcher.Received([state = state](const auto&, const BluetoothLEAdvertisementReceivedEventArgs& args) {
+                try {
+                    OnReceived(*state, args);
+                } catch (...) {
+                }
+            });
+            watcher.Start();
+        } catch (...) {
+            stop();
         }
-        if (FAILED(error)) { stop(); return; }
-        error = watcher->put_ScanningMode(BluetoothLEScanningMode_Passive);
-        auto* handler = new Handler(state);
-        if (SUCCEEDED(error)) error = watcher->add_Received(handler, &token);
-        handler->Release();
-        if (SUCCEEDED(error)) error = watcher->Start();
-        if (FAILED(error)) stop();
     }
 };
 
@@ -2215,6 +2106,7 @@ bool ReadBattery(const HidColl& c, bool vgn, int& percent, bool& charging) {
     std::vector<BYTE> r;
     while ((LONGLONG)end - (LONGLONG)GetTickCount64() > 0) {
         int n = d.Read(r, 100);
+        if (n == HidDev::kReadError) return false;
         if (n < 10 || r[0] != 0x04 || r[1] != (BYTE)(seq & 0xFF) || r[2] != (BYTE)(seq >> 8) || r[3] != 0x1A || r[5] || r[6])
             continue;
         if (r[8] > 100 || r[9] > 2) return false;
@@ -2303,12 +2195,17 @@ void PollAtkKeyboard(PollContext& ctx) {
             s.via = cable ? L"USB cable" : L"2.4 GHz receiver";
             s.graceSec = 1800;
             ULONGLONG now = GetTickCount64();
+            if (cable) {  // the receiver keeps its own reading, and is asked right after the cable is unplugged
+                lastAsk = 0;
+                lastPercent = -1;
+                lastCharging = false;
+            }
             bool ask = cable || !lastAsk || now - lastAsk >= kReceiverIntervalMs;
             int percent = -1;
             bool charging = false;
             if (ask) {
-                lastAsk = now;
-                if (ReadBattery(*c, model->vgn, percent, charging)) {
+                if (!cable) lastAsk = now;
+                if (ReadBattery(*c, model->vgn, percent, charging) && !cable) {
                     lastPercent = percent;
                     lastCharging = charging;
                 }
@@ -2489,8 +2386,12 @@ const Model kModels[] = { { 0x4B1A, true, L"Audeze Maxwell" }, { 0x4B1E, true, L
                           { 0x4B19, false, L"Audeze Maxwell" }, { 0x4B18, false, L"Audeze Maxwell" },
                           { 0x4B29, false, L"Audeze Maxwell 2" }, { 0x4B28, false, L"Audeze Maxwell 2" } };
 
+// Only the valid part of the report is scanned: as with the AKG dongle's report, byte 1 is the number of valid
+// bytes from byte 3 on, and the tail can hold an old battery reply.
 int FindLevel(const std::vector<BYTE>& b) {
-    for (size_t i = 0; i + 4 < b.size(); i++)
+    if (b.size() < 4) return -1;
+    size_t end = (std::min)(b.size(), (size_t)3 + b[1]);
+    for (size_t i = 3; i + 4 < end; i++)
         if (b[i] == 0xD6 && b[i + 1] == 0x0C && b[i + 2] == 0x00 && b[i + 3] == 0x00 && b[i + 4] <= 100) return b[i + 4];
     return -1;
 }
@@ -3159,7 +3060,9 @@ bool WaitReply(HidDev& d, BYTE cmd, ULONGLONG end, std::vector<BYTE>& reply, boo
         const LONGLONG left = (LONGLONG)end - (LONGLONG)GetTickCount64();
         if (left <= 0) break;
         std::vector<BYTE> r;
-        if (d.Read(r, left > 100 ? 100 : (int)left) < 0) continue;
+        int n = d.Read(r, left > 100 ? 100 : (int)left);
+        if (n == HidDev::kReadError) break;
+        if (n < 0) continue;
         if (AulaMouseProtocol::IsHeartbeat(r)) {
             linkDown = r[8] == 0;
             continue;
@@ -4023,7 +3926,9 @@ bool NrfReadBattery(HidDev& device, int& percent) {
     std::vector<BYTE> reply;
     for (auto now = GetTickCount64(); now < deadline; now = GetTickCount64()) {
         const auto waitMs = static_cast<int>((std::min)(100ULL, deadline - now));
-        if (device.Read(reply, waitMs) < static_cast<int>(kNrfFrame)) continue;
+        const int n = device.Read(reply, waitMs);
+        if (n == HidDev::kReadError) return false;
+        if (n < static_cast<int>(kNrfFrame)) continue;
         if (reply[0] != 0x41 || reply[2] != 0x8C || reply[3] != 0x01) continue;
         if (reply[kNrfFrame - 1] != NrfChecksum(reply) || reply[6] > 100) continue;
         percent = reply[6];
@@ -4454,7 +4359,9 @@ void PollGameSir(PollContext& ctx) {
             bool found = false;
             ULONGLONG end = GetTickCount64() + 800;
             while (!found && (LONGLONG)end - (LONGLONG)GetTickCount64() > 0) {
-                if (d.Read(r, 200) < 19) continue;
+                int n = d.Read(r, 200);
+                if (n == HidDev::kReadError) break;
+                if (n < 19) continue;
                 if (r[0] != 0x01) continue;  // state frame (F4 00 ...) or anything else
                 found = true;
             }
@@ -5029,6 +4936,9 @@ bool CloudAlpha2(const HidColl& c, DeviceStatus& s) {
 // From github.com/PMarinov1994/ngenuity-linux-cli (Haste 2 Wireless). Verified on a Core Wireless (03F0:0AB5), on
 // a Haste 2 Wireless (03F0:0F98, MI_02 FF00:0001, 64-byte reports; level matched NGENUITY, BatteryHub PR #312)
 // and on a Haste 2 Mini (03F0:0DA0, level matches NGENUITY); the 0D97 dongle is untested.
+std::map<USHORT, ULONGLONG> g_hasteLinkUpAt;  // per dongle: when its mouse linked, 0 while it is not linked
+bool g_hastePolled = false;                   // set after the first PollHyperX
+
 bool HasteWireless(const HidColl& c, DeviceStatus& s) {
     HidDev d;
     if (!d.Open(c)) return false;
@@ -5046,13 +4956,11 @@ bool HasteWireless(const HidColl& c, DeviceStatus& s) {
     // For about 5 s after it powers on the mouse reports 40% instead of its real level (measured 2026-11-17 on
     // a Core Wireless: 40% for 2-5 s, then 70%). A reading inside that settle window is not trusted. The first
     // poll after the app starts assumes the mouse has been on for a while.
-    static ULONGLONG linkUpAt = 0;
-    static bool polled = false;
     const ULONGLONG kSettleMs = 6000;
     ULONGLONG now = GetTickCount64();
+    ULONGLONG& linkUpAt = g_hasteLinkUpAt[c.pid];
     if (!linked) linkUpAt = 0;
-    else if (linkUpAt == 0) linkUpAt = polled ? now : now - kSettleMs;
-    polled = true;
+    else if (linkUpAt == 0) linkUpAt = g_hastePolled ? now : now - kSettleMs;
     bool settled = now - linkUpAt >= kSettleMs;
 
     s = Base(c.pid, c.pid == 0x0AB5 ? L"HyperX Pulsefire Haste 2 Core Wireless"
@@ -5212,6 +5120,7 @@ void PollHyperX(PollContext& ctx) {
             }
         }
     }
+    g_hastePolled = true;
 }
 
 }
@@ -5669,7 +5578,10 @@ public:
         std::vector<BYTE> r;
         while ((LONGLONG)end - (LONGLONG)GetTickCount64() > 0) {
             for (HidDev* d : { &l_, &s_ }) {
-                if (!d->ok() || d->Read(r, 15) < 7) continue;
+                if (!d->ok()) continue;
+                int n = d->Read(r, 15);
+                if (n == HidDev::kReadError) return -1;  // the device is gone
+                if (n < 7) continue;
                 if ((r[0] != 0x10 && r[0] != 0x11) || r[1] != idx) continue;
                 if (r[2] == b2 && r[3] == b3) {
                     p.assign(r.begin() + 4, r.end());
@@ -6756,14 +6668,20 @@ void PollXenta(PollContext& ctx) {
                 l.dev = std::make_unique<HidDev>();
                 if (!l.dev->OpenReadOnly(*c)) { g_xenta.erase(c->path); continue; }
             }
-            // Take everything queued since the last poll; a new listener waits for two frames.
-            ULONGLONG until = GetTickCount64() + (fresh ? 5000 : 0);
+            // Take everything queued since the last poll; a new listener waits for two frames. The time limit
+            // also applies to a collection that keeps sending reports.
+            const ULONGLONG until = GetTickCount64() + (fresh ? 5000 : 1000);
             std::vector<BYTE> r;
             int got = 0;
             while (true) {
-                int wait = fresh && got < 2 ? (int)std::max<LONGLONG>(1, (LONGLONG)until - (LONGLONG)GetTickCount64()) : 30;
-                if (fresh && got < 2 && (LONGLONG)until - (LONGLONG)GetTickCount64() <= 0) break;
-                if (l.dev->Read(r, wait) < 5) break;
+                LONGLONG left = (LONGLONG)until - (LONGLONG)GetTickCount64();
+                if (left <= 0) break;
+                int n = l.dev->Read(r, fresh && got < 2 ? (int)left : (int)std::min<LONGLONG>(30, left));
+                if (n == HidDev::kReadError) {  // e.g. replugged: reopened at the next poll
+                    l.dev.reset();
+                    break;
+                }
+                if (n < 5) break;
                 if (!IsXentaFrame(r)) continue;
                 l.prev = l.last;
                 l.last.assign(r.begin(), r.begin() + 5);
@@ -7562,7 +7480,9 @@ void PollPlayStation(PollContext& ctx) {
         bool charging = false, found = false;
         ULONGLONG end = GetTickCount64() + 500;
         while (!found && (LONGLONG)end - (LONGLONG)GetTickCount64() > 0) {
-            if (d.Read(r, 100) < 10) continue;
+            int n = d.Read(r, 100);
+            if (n == HidDev::kReadError) break;
+            if (n < 10) continue;
             if (IsDs4(c.pid)) {
                 size_t at = r[0] == 0x01 ? 30 : r[0] == 0x11 ? 32 : 0;
                 if (!at || r.size() <= at || (r[0] == 0x01 && bt)) continue;
@@ -9184,6 +9104,7 @@ void PollSteelSeriesElite(PollContext& ctx) {
     while ((LONGLONG)end - (LONGLONG)GetTickCount64() > 0 && (level < 0 || power < 0)) {
         for (auto& d : handles) {
             int n = d->Read(r, 30);
+            if (n == HidDev::kReadError) return;  // the base station is gone
             if (n < 5) continue;
             if (r[0] == 0x01 && r[1] == 0xB0 && n > 15) {  // the direct reply
                 if (r[6] <= 100) level = r[6];
@@ -9461,99 +9382,59 @@ void PollWlmouse(PollContext& ctx) { wb_driver_wlmouse::PollWlmouse(ctx); }
 namespace wb_driver_xinput {
 namespace {
 
-using namespace ABI::Windows::Gaming::Input;
-using ABI::Windows::Devices::Power::IBatteryReport;
-
-template <class T>
-void Release(T*& p) {
-    if (p) p->Release();
-    p = nullptr;
-}
-
-IRawGameControllerStatics* Statics() {
-    static IRawGameControllerStatics* statics = nullptr;
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        RoInitialize(RO_INIT_MULTITHREADED);  // our poll thread; harmless if already initialised
-        const wchar_t* cls = L"Windows.Gaming.Input.RawGameController";
-        HSTRING name = nullptr;
-        if (SUCCEEDED(WindowsCreateString(cls, (UINT32)wcslen(cls), &name))) {
-            RoGetActivationFactory(name, __uuidof(IRawGameControllerStatics), (void**)&statics);
-            WindowsDeleteString(name);
-        }
-        if (statics) Sleep(300);  // the controller list fills in asynchronously after first use
-    }
-    return statics;
-}
+using namespace winrt::Windows::Gaming::Input;
+using winrt::Windows::System::Power::BatteryStatus;
 
 // Vendors whose controllers report a real battery through Windows.Gaming.Input:
 // Microsoft, and GameSir in Xbox (GIP) mode (e.g. G7 Pro on its receiver, 3537:105E).
 bool WgiVendor(UINT16 vid) { return vid == 0x045E || vid == 0x3537; }
 
+bool g_wgiListed = false;
+
 // Adds Xbox controllers with a real percentage. Returns how many were added; `thirdParty` counts
 // the non-Microsoft ones among them.
 int PollWgi(PollContext& ctx, int& thirdParty) {
     thirdParty = 0;
-    IRawGameControllerStatics* statics = Statics();
-    if (!statics) return 0;
-    __FIVectorView_1_Windows__CGaming__CInput__CRawGameController* list = nullptr;
-    if (FAILED(statics->get_RawGameControllers(&list)) || !list) return 0;
-    UINT32 count = 0;
-    list->get_Size(&count);
+    const auto claimed = ctx.claimed;  // by the vendor drivers, so that identical controllers are all added
     int added = 0;
-    for (UINT32 i = 0; i < count; i++) {
-        IRawGameController* raw = nullptr;
-        if (FAILED(list->GetAt(i, &raw)) || !raw) continue;
-        UINT16 vid = 0, pid = 0;
-        raw->get_HardwareVendorId(&vid);
-        raw->get_HardwareProductId(&pid);
-        if (ctx.IsClaimed(vid, pid)) { Release(raw); continue; }  // a vendor driver already reads this pad
-        IGameControllerBatteryInfo* info = nullptr;
-        IBatteryReport* report = nullptr;
-        if (WgiVendor(vid) && SUCCEEDED(raw->QueryInterface(__uuidof(IGameControllerBatteryInfo), (void**)&info)) && info &&
-            SUCCEEDED(info->TryGetBatteryReport(&report)) && report) {
-            __FIReference_1_INT32 *rem = nullptr, *full = nullptr;
-            report->get_RemainingCapacityInMilliwattHours(&rem);
-            report->get_FullChargeCapacityInMilliwattHours(&full);
-            INT32 r = 0, f = 0;
-            if (rem) rem->get_Value(&r);
-            if (full) full->get_Value(&f);
-            ABI::Windows::System::Power::BatteryStatus st = ABI::Windows::System::Power::BatteryStatus_NotPresent;
-            report->get_Status(&st);
-            if (f > 0 && st != ABI::Windows::System::Power::BatteryStatus_NotPresent) {
-                DeviceStatus s;
-                s.key = L"xbox:" + Hex4(pid) + L":" + std::to_wstring(i);
-                s.name = L"Xbox controller";
-                IRawGameController2* raw2 = nullptr;
-                if (SUCCEEDED(raw->QueryInterface(__uuidof(IRawGameController2), (void**)&raw2)) && raw2) {
-                    HSTRING dn = nullptr;
-                    if (SUCCEEDED(raw2->get_DisplayName(&dn)) && dn) {
-                        UINT32 len = 0;
-                        const wchar_t* p = WindowsGetStringRawBuffer(dn, &len);
-                        if (p && len) s.name.assign(p, len);
-                        WindowsDeleteString(dn);
-                    }
-                    Release(raw2);
-                }
-                // GIP reports a generic "Xbox One Game Controller" for third-party pads.
-                if (vid == 0x3537) s.name = L"GameSir controller";
-                s.kind = DeviceKind::Gamepad;
-                s.via = L"Xbox Wireless / Bluetooth";
-                s.percent = Clamp100(r * 100 / f);
-                s.charging = st == ABI::Windows::System::Power::BatteryStatus_Charging;
-                ctx.Add(s, vid, pid);
-                added++;
-                if (vid != 0x045E) thirdParty++;
-            }
-            Release(rem);
-            Release(full);
+    try {
+        auto list = RawGameController::RawGameControllers();
+        if (!g_wgiListed) {
+            g_wgiListed = true;
+            Sleep(300);  // the controller list fills in asynchronously after first use
+            list = RawGameController::RawGameControllers();
         }
-        Release(report);
-        Release(info);
-        Release(raw);
+        for (uint32_t i = 0; i < list.Size(); i++) {
+            auto raw = list.GetAt(i);
+            UINT16 vid = raw.HardwareVendorId(), pid = raw.HardwareProductId();
+            if (claimed.count({ vid, pid })) continue;  // a vendor driver already reads this pad
+            if (!WgiVendor(vid)) continue;
+            auto report = raw.TryGetBatteryReport();
+            if (!report) continue;
+            auto rem = report.RemainingCapacityInMilliwattHours(), full = report.FullChargeCapacityInMilliwattHours();
+            INT32 r = rem ? rem.Value() : 0, f = full ? full.Value() : 0;
+            BatteryStatus st = report.Status();
+            if (f <= 0 || st == BatteryStatus::NotPresent) continue;
+            DeviceStatus s;
+            s.key = L"xbox:" + Hex4(pid) + L":" + std::to_wstring(i);
+            s.name = L"Xbox controller";
+            if (auto raw2 = raw.try_as<IRawGameController2>()) {
+                winrt::hstring name = raw2.DisplayName();
+                if (!name.empty()) s.name = name.c_str();
+            }
+            // GIP reports a generic "Xbox One Game Controller" for third-party pads.
+            if (vid == 0x3537) s.name = L"GameSir controller";
+            s.kind = DeviceKind::Gamepad;
+            s.via = L"Xbox Wireless / Bluetooth";
+            s.percent = Clamp100(r * 100 / f);
+            s.charging = st == BatteryStatus::Charging;
+            ctx.Add(s, vid, pid);
+            added++;
+            if (vid != 0x045E) thirdParty++;
+        }
+    } catch (...) {
+        Wh_Log(L"Reading the game controllers failed: %08X", (unsigned)winrt::to_hresult());
     }
-    Release(list);
     return added;
 }
 
@@ -9565,12 +9446,9 @@ struct XInputApi { GetBatteryFn battery = nullptr; GetStateFn state = nullptr; }
 const XInputApi& LoadXInput() {
     static XInputApi api = [] {
         XInputApi a;
-        for (const wchar_t* dll : { L"xinput1_4.dll", L"xinput9_1_0.dll" }) {
-            if (HMODULE m = LoadLibraryExW(dll, nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)) {
-                a.battery = (GetBatteryFn)GetProcAddress(m, "XInputGetBatteryInformation");
-                a.state = (GetStateFn)GetProcAddress(m, "XInputGetState");
-                if (a.battery && a.state) break;
-            }
+        if (HMODULE m = LoadLibraryExW(L"xinput1_4.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)) {
+            a.battery = (GetBatteryFn)GetProcAddress(m, "XInputGetBatteryInformation");
+            a.state = (GetStateFn)GetProcAddress(m, "XInputGetState");
         }
         return a;
     }();
@@ -9911,7 +9789,7 @@ constexpr UINT WM_TRAY = WM_APP + 1;
 constexpr UINT WM_RESULTS = WM_APP + 2;
 constexpr UINT WM_WIDGET_CLICK = WidgetIpc::kClickMessage;
 constexpr UINT_PTR TIMER_DEBOUNCE = 1;
-constexpr UINT_PTR TIMER_WIDGET = 2;
+constexpr UINT_PTR TIMER_FALLBACK = 2;
 constexpr ULONGLONG WIDGET_GRACE_MS = 10000;
 
 constexpr UINT PLACEHOLDER_ID = 1;
@@ -9927,7 +9805,7 @@ bool g_lightTaskbar;
 bool g_wantWidget = true;      // user's choice: taskbar widget (default) or tray icons
 bool g_useWidget = false;      // what is actually shown right now
 HWND g_receiver = nullptr;     // Explorer's widget receiver while the taskbar widget is attached
-ULONGLONG g_receiverSeen = 0;  // when the receiver last existed, or the start
+ULONGLONG g_receiverMissingSince = 0;  // when Reconcile found no receiver, 0 while it exists
 bool g_hideLastKnown = false;  // hide (last known) / asleep devices from taskbar and tray
 
 struct TrayEntry {
@@ -9963,10 +9841,32 @@ bool ReadLightTaskbar() {
 // Device keys the user chose to hide, stored in Windhawk mod storage.
 std::set<std::wstring> g_hidden;
 
+// Mod storage is shared by all users of a regular Windhawk install, so the value name includes the user's SID.
+const std::wstring& HiddenValueName() {
+    static const std::wstring name = [] {
+        std::wstring result = L"HiddenDevices";
+        HANDLE token;
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+            BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+            DWORD size = 0;
+            LPWSTR sid = nullptr;
+            if (GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &size) &&
+                ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer)->User.Sid, &sid)) {
+                result += L"_";
+                result += sid;
+                LocalFree(sid);
+            }
+            CloseHandle(token);
+        }
+        return result;
+    }();
+    return name;
+}
+
 void LoadHidden() {
     g_hidden.clear();
     std::vector<wchar_t> data(65536, 0);
-    Wh_GetStringValue(L"HiddenDevices", data.data(), data.size());
+    Wh_GetStringValue(HiddenValueName().c_str(), data.data(), data.size());
     std::wstring text(data.data());
     for (size_t start = 0; start < text.size();) {
         // Accept the old newline format and the spaces written by portable 1.7.3.
@@ -9985,7 +9885,7 @@ void SaveHidden() {
         if (!text.empty()) text += L'|';
         text += key;
     }
-    Wh_SetStringValue(L"HiddenDevices", text.c_str());
+    Wh_SetStringValue(HiddenValueName().c_str(), text.c_str());
 }
 
 bool IsHidden(const std::wstring& key) { return g_hidden.count(key) != 0; }
@@ -10246,9 +10146,11 @@ void UpdateWidget() {
         }
     }
     COPYDATASTRUCT cds{ kCopyDataId, (DWORD)(offsetof(Payload, items) + payload->count * sizeof(Item)), payload.get() };
-    // A receiver that is busy, e.g. while Explorer starts, gets the content again on the next Reconcile.
-    if (!SendMessageTimeoutW(g_receiver, WM_COPYDATA, (WPARAM)g_hwnd, (LPARAM)&cds, SMTO_ABORTIFHUNG, 1000, nullptr))
+    // A receiver that is busy, e.g. while Explorer starts, gets the content again when the timer reconciles.
+    if (!SendMessageTimeoutW(g_receiver, WM_COPYDATA, (WPARAM)g_hwnd, (LPARAM)&cds, SMTO_ABORTIFHUNG, 1000, nullptr)) {
         g_receiver = nullptr;
+        SetTimer(g_hwnd, TIMER_FALLBACK, (UINT)WIDGET_GRACE_MS, nullptr);
+    }
 }
 
 void OnResults(std::vector<DeviceStatus>& results) {
@@ -10286,12 +10188,18 @@ void OnResults(std::vector<DeviceStatus>& results) {
 
 // Makes the actual display match the chosen mode; falls back to tray icons while Explorer has no
 // taskbar widget attached (Windows 10, Explorer not ready yet). Explorer can take a while to attach
-// it, also after it restarts, so the tray icons only appear after a grace period. Called once a second.
+// it, also after it restarts, so the tray icons only appear when the receiver is still missing after
+// a grace period. Called at the start, when Explorer creates a receiver or restarts, and by the
+// fallback timer.
 void Reconcile() {
     HWND receiver = FindWindowExW(HWND_MESSAGE, nullptr, WidgetIpc::kReceiverClass, nullptr);
     ULONGLONG now = GetTickCount64();
-    if (receiver) g_receiverSeen = now;
-    bool use = g_wantWidget && now - g_receiverSeen < WIDGET_GRACE_MS;
+    if (receiver) g_receiverMissingSince = 0;
+    else if (!g_receiverMissingSince) g_receiverMissingSince = now;
+    ULONGLONG missing = receiver ? 0 : now - g_receiverMissingSince;
+    bool use = g_wantWidget && missing < WIDGET_GRACE_MS;
+    if (use && !receiver) SetTimer(g_hwnd, TIMER_FALLBACK, (UINT)(WIDGET_GRACE_MS - missing), nullptr);
+    else KillTimer(g_hwnd, TIMER_FALLBACK);
     bool changed = use != g_useWidget;
     g_useWidget = use;
     if (changed) {
@@ -10358,6 +10266,8 @@ void ShowMenu() {
 // ---- worker thread ----------------------------------------------------------------------------
 
 DWORD WINAPI Worker(LPVOID) {
+    // For the WinRT drivers (AirPods, Xbox controllers).
+    HRESULT ro = RoInitialize(RO_INIT_MULTITHREADED);
     auto devices = PollAllDevices(g_stopEvt);
     ULONGLONG nextPoll = GetTickCount64() + (DWORD)ModConfig::pollMs.load();
     for (;;) {
@@ -10366,7 +10276,12 @@ DWORD WINAPI Worker(LPVOID) {
         HANDLE hs[3] = { g_stopEvt, g_refreshEvt, g_airpodsEvt };
         const auto now = GetTickCount64();
         DWORD reason = WaitForMultipleObjects(3, hs, FALSE, now < nextPoll ? (DWORD)(nextPoll - now) : 0);
-        if (reason == WAIT_OBJECT_0 || reason == WAIT_FAILED) { StopAirPods(); return 0; }
+        if (reason == WAIT_OBJECT_0 || reason == WAIT_FAILED) {
+            StopAirPods();
+            winrt::clear_factory_cache();
+            if (SUCCEEDED(ro)) RoUninitialize();
+            return 0;
+        }
         if (reason == WAIT_OBJECT_0 + 2) {
             RefreshAirPods(devices); // BLE reception must not increase polling of other vendors
         } else {
@@ -10422,7 +10337,7 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             return TRUE;
         case WM_TIMER:
             if (wp == TIMER_DEBOUNCE) { KillTimer(h, TIMER_DEBOUNCE); SetEvent(g_refreshEvt); }
-            if (wp == TIMER_WIDGET) Reconcile();
+            if (wp == TIMER_FALLBACK) { KillTimer(h, TIMER_FALLBACK); Reconcile(); }
             return 0;
         case WM_SETTINGCHANGE:
             if (lp && !lstrcmpW((LPCWSTR)lp, L"ImmersiveColorSet")) {
@@ -10431,7 +10346,7 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         case WM_DESTROY:
-            KillTimer(h, TIMER_WIDGET);
+            KillTimer(h, TIMER_FALLBACK);
             g_useWidget = false;
             UpdateWidget();
             SetEvent(g_stopEvt);
@@ -10474,8 +10389,9 @@ int Run(HINSTANCE inst) {
     // A hidden top-level window (not message-only) so it receives the TaskbarCreated broadcast.
     g_hwnd = CreateWindowExW(WS_EX_TOOLWINDOW, wc.lpszClassName, kAppName, WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst, nullptr);
     if (!g_hwnd) { closeMutexes(); return 1; }
-    // Explorer posts the widget clicks, also when Windhawk runs elevated.
-    ChangeWindowMessageFilterEx(g_hwnd, WM_WIDGET_CLICK, MSGFLT_ALLOW, nullptr);
+    // Explorer posts these, also when Windhawk runs elevated.
+    for (UINT msg : { WM_WIDGET_CLICK, WidgetIpc::kResendMessage, g_taskbarCreatedMsg })
+        if (msg) ChangeWindowMessageFilterEx(g_hwnd, msg, MSGFLT_ALLOW, nullptr);
     ModHost::window = g_hwnd;
     if (ModHost::stopRequested) PostMessageW(g_hwnd, WM_CLOSE, 0, 0);
 
@@ -10491,10 +10407,8 @@ int Run(HINSTANCE inst) {
     g_wantWidget = LoadWidgetMode();
     g_hideLastKnown = LoadHideLastKnown();
     LoadHidden();
-    g_receiverSeen = GetTickCount64();
     Reconcile();
     UpdatePlaceholder();  // something to click on until the first poll finishes
-    SetTimer(g_hwnd, TIMER_WIDGET, 1000, nullptr);
     g_worker = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
 
     MSG m;
@@ -10601,7 +10515,8 @@ std::atomic<HWND> g_taskbar;
 std::atomic<bool> g_unloading;
 HANDLE g_stopEvent, g_lostEvent, g_watcher;
 
-// Taskbar thread only.
+// Taskbar thread only. Detach releases the XAML objects; they aren't destroyed at process exit, when the XAML
+// core can already be gone.
 struct ItemView {
     StackPanel panel{ nullptr };
     FontIcon icon{ nullptr };
@@ -10609,11 +10524,11 @@ struct ItemView {
     FontIcon bolt{ nullptr };
     ToolTip tip{ nullptr };
 };
-Panel g_tray{ nullptr };  // SystemTrayFrameGrid
-ColumnDefinition g_column{ nullptr };
-Button g_button{ nullptr };
-StackPanel g_itemsPanel{ nullptr };
-std::vector<ItemView> g_views;
+[[clang::no_destroy]] Panel g_tray{ nullptr };  // SystemTrayFrameGrid
+[[clang::no_destroy]] ColumnDefinition g_column{ nullptr };
+[[clang::no_destroy]] Button g_button{ nullptr };
+[[clang::no_destroy]] StackPanel g_itemsPanel{ nullptr };
+[[clang::no_destroy]] std::optional<std::vector<ItemView>> g_views{ std::in_place };
 winrt::event_token g_clickToken, g_rightTappedToken, g_unloadedToken, g_themeToken;
 HWND g_receiver;
 HWND g_tool;  // the sender of the last payload
@@ -10621,6 +10536,7 @@ std::unique_ptr<WidgetIpc::Payload> g_payload;
 UINT g_retryMs = 1000;
 UINT_PTR RetryTimerId() { return (UINT_PTR)&g_retryMs; }  // distinct from Explorer's own timer ids
 constexpr UINT_PTR kToolCheckTimer = 1;
+constexpr UINT kToolCheckMs = 30000;
 
 const wchar_t* const kBolt = L"\uE945";            // LightningBolt
 const wchar_t* const kBatteryUnknown = L"\uE996";  // shown when there is nothing to display
@@ -10753,18 +10669,18 @@ void Render() {
         auto red = light ? MakeBrush(255, 196, 30, 40) : MakeBrush(255, 255, 90, 90);
         auto blue = light ? MakeBrush(255, 0, 120, 212) : MakeBrush(255, 96, 205, 255);
         size_t count = std::max<UINT32>(p->count, 1);  // without devices, a placeholder to click on
-        while (g_views.size() < count) {
-            g_views.push_back(CreateItemView());
-            g_itemsPanel.Children().Append(g_views.back().panel);
+        while (g_views->size() < count) {
+            g_views->push_back(CreateItemView());
+            g_itemsPanel.Children().Append(g_views->back().panel);
         }
-        while (g_views.size() > count) {
+        while (g_views->size() > count) {
             g_itemsPanel.Children().RemoveAtEnd();
-            g_views.pop_back();
+            g_views->pop_back();
         }
         g_itemsPanel.Spacing(p->gap);
         std::wstring summary;
         if (!p->count) {
-            ItemView& v = g_views[0];
+            ItemView& v = (*g_views)[0];
             v.icon.Glyph(kBatteryUnknown);
             v.text.Visibility(Visibility::Collapsed);
             v.bolt.Visibility(Visibility::Collapsed);
@@ -10773,7 +10689,7 @@ void Render() {
             v.tip.Content(winrt::box_value(winrt::hstring(summary)));
         }
         for (UINT32 i = 0; i < p->count; i++) {
-            ItemView& v = g_views[i];
+            ItemView& v = (*g_views)[i];
             const Item& it = p->items[i];
             v.icon.Glyph(Glyph((DeviceKind)it.kind, it.flags & kBluetooth));
             v.text.Text(it.text[0] ? std::wstring(it.text) : it.percent >= 0 ? std::to_wstring(it.percent) + L"%" : L"?");
@@ -10815,18 +10731,18 @@ LRESULT CALLBACK ReceiverProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_COPYDATA:
             if (!StorePayload((const COPYDATASTRUCT*)lp)) return FALSE;
             g_tool = (HWND)wp;
+            // Without the polling process, e.g. after it crashed, the readings it sent would go stale.
+            if (g_payload->visible) SetTimer(hwnd, kToolCheckTimer, kToolCheckMs, nullptr);
+            else KillTimer(hwnd, kToolCheckTimer);
             Render();
             return TRUE;
         case WM_TIMER:
             if (wp != kToolCheckTimer) return 0;
-            // Without the polling process, e.g. after it crashed, its last readings would go stale.
-            if (g_tool && !IsWindow(g_tool)) {
+            if (!IsWindow(g_tool)) {
+                KillTimer(hwnd, kToolCheckTimer);
                 g_tool = nullptr;
                 g_payload.reset();
                 Render();
-            }
-            if (!g_payload) {
-                if (HWND tool = FindWindowW(WidgetIpc::kToolWindowClass, nullptr)) PostMessageW(tool, WidgetIpc::kResendMessage, 0, 0);
             }
             return 0;
     }
@@ -10895,7 +10811,7 @@ void Detach() {
             Wh_Log(L"Removing the taskbar widget failed: %08X", (unsigned)winrt::to_hresult());
         }
     }
-    g_views.clear();
+    g_views.reset();
     g_itemsPanel = nullptr;
     g_button = nullptr;
     g_column = nullptr;
@@ -10925,6 +10841,7 @@ bool Attach(HWND taskbar) {
     }
     g_tray = tray;
     g_button = CreateButton();
+    g_views.emplace();
     if (grid) {
         Grid::SetColumn(g_button, 0);
         tray.Children().Append(g_button);
@@ -10932,7 +10849,9 @@ bool Attach(HWND taskbar) {
         tray.Children().InsertAt(0, g_button);
     }
     g_receiver = CreateWindowExW(0, WidgetIpc::kReceiverClass, nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_module, nullptr);
-    if (g_receiver) SetTimer(g_receiver, kToolCheckTimer, 2000, nullptr);
+    // A polling process that already runs is asked for the content; one that starts later finds the receiver.
+    if (HWND tool = g_receiver ? FindWindowW(WidgetIpc::kToolWindowClass, nullptr) : nullptr)
+        PostMessageW(tool, WidgetIpc::kResendMessage, 0, 0);
     Render();
     Wh_Log(L"Taskbar widget attached");
     return true;
@@ -10979,13 +10898,46 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, 
     return DefSubclassProc(hwnd, msg, wp, lp);
 }
 
+bool IsExplorerPath(const wchar_t* path) {
+    const wchar_t* name = wcsrchr(path, L'\\');
+    return !_wcsicmp(name ? name + 1 : path, L"explorer.exe");
+}
+
+bool IsExplorerProcess(DWORD pid) {
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return false;
+    wchar_t path[MAX_PATH];
+    DWORD size = ARRAYSIZE(path);
+    bool result = QueryFullProcessImageNameW(process, 0, path, &size) && IsExplorerPath(path);
+    CloseHandle(process);
+    return result;
+}
+
+// A Shell_TrayWnd window of this process, or with `otherExplorer`, of another explorer.exe process. Other
+// apps can create windows of this class too, so FindWindow can return one of theirs.
+HWND FindTaskbarWnd(bool otherExplorer) {
+    struct Search { bool otherExplorer; HWND found; } search{ otherExplorer, nullptr };
+    EnumWindows([](HWND hwnd, LPARAM lp) WINAPI -> BOOL {
+        auto& search = *reinterpret_cast<Search*>(lp);
+        wchar_t cls[32];
+        DWORD pid = 0;
+        if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) || _wcsicmp(cls, L"Shell_TrayWnd") ||
+            !GetWindowThreadProcessId(hwnd, &pid))
+            return TRUE;
+        bool current = pid == GetCurrentProcessId();
+        if (search.otherExplorer ? current || !IsExplorerProcess(pid) : !current) return TRUE;
+        search.found = hwnd;
+        return FALSE;
+    }, (LPARAM)&search);
+    return search.found;
+}
+
 // Windhawk can load the mod before Explorer creates the taskbar window, and Explorer can recreate it.
 DWORD WINAPI WatchTaskbar(LPVOID) {
     for (;;) {
         if (!g_taskbar) {
-            HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-            DWORD pid = 0;
-            if (taskbar && GetWindowThreadProcessId(taskbar, &pid) && pid != GetCurrentProcessId()) return 0;
+            HWND taskbar = FindTaskbarWnd(false);
+            if (!taskbar && FindTaskbarWnd(true)) return 0;  // another Explorer process has the taskbar
             if (taskbar && WindhawkUtils::SetWindowSubclassFromAnyThread(taskbar, TaskbarSubclassProc, 0)) {
                 g_taskbar = taskbar;
                 PostMessageW(taskbar, g_taskbarMsg, kAttach, 0);
@@ -11003,17 +10955,12 @@ bool IsExplorer() {
     wchar_t path[MAX_PATH];
     DWORD n = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
     if (!n || n == ARRAYSIZE(path)) return false;
-    const wchar_t* name = wcsrchr(path, L'\\');
-    return !_wcsicmp(name ? name + 1 : path, L"explorer.exe");
+    return IsExplorerPath(path);
 }
 
 BOOL Init() {
     // Other Explorer processes, e.g. with folder windows in a separate process, have no taskbar.
-    if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(taskbar, &pid);
-        if (pid != GetCurrentProcessId()) return FALSE;
-    }
+    if (!FindTaskbarWnd(false) && FindTaskbarWnd(true)) return FALSE;
     g_taskbarDll = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_taskbarDll) return FALSE;
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
