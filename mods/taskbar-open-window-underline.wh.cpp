@@ -23,6 +23,8 @@ open in front of you.
 has moved to its own mod, which marks taskbar icons for open, maximized and
 minimized windows and works with hidden labels:
 [Taskbar App State Indicators](https://windhawk.net/mods/taskbar-app-state-indicators).
+If you only used the icon underline, you can disable this mod after installing
+Taskbar App State Indicators; otherwise this update turns label underlines on.
 
 ![Labels underlined](https://raw.githubusercontent.com/Deen-0x/windhawk-assets/refs/heads/main/taskbar-open-window-underline/demo.png)
 *Whole label*
