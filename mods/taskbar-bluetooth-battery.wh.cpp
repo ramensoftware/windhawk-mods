@@ -2,7 +2,7 @@
 // @id              taskbar-bluetooth-battery
 // @name            Taskbar Bluetooth Device Battery Level
 // @description     Displays connected Bluetooth devices and their battery levels on the Windows 11 taskbar system tray
-// @version         1.0.6
+// @version         1.0.7
 // @author          Vicente Higino
 // @github          https://github.com/vicente-higino
 // @homepage        https://github.com/vicente-higino/taskbar-bluetooth-battery
@@ -130,7 +130,6 @@ directly on the Windows 11 taskbar system tray using a native XAML widget.
 #include <optional>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -400,6 +399,11 @@ struct OrientationStatesSubscription {
 
 [[clang::no_destroy]] std::optional<std::vector<OrientationStatesSubscription>>
     g_orientationSubscriptions{std::in_place};
+
+// Weak reference to the primary taskbar's XamlRoot, used to tell primary and
+// secondary taskbar tray frames apart. Accessed only on the taskbar UI thread.
+[[clang::no_destroy]] std::optional<winrt::weak_ref<XamlRoot>>
+    g_primaryTaskbarXamlRoot{std::in_place};
 
 constexpr PCWSTR kWidgetElementName = L"WindhawkBluetoothBatteryWidget";
 
@@ -935,6 +939,31 @@ struct ContainerAggregation {
     std::optional<bool> aepIsConnected;
 };
 
+// Waits for a WinRT async operation for at most `timeoutMs`, or until the mod
+// starts unloading. If it doesn't complete in time, it's cancelled and nullptr
+// is returned, so a slow or unresponsive device can't block the worker thread
+// (and mod unload) for long. The status is polled instead of registering a
+// Completed handler, so nothing can call back into the mod's code after it's
+// unloaded. Errors are rethrown by GetResults().
+template <typename TAsyncOperation>
+auto GetAsyncResultWithTimeout(TAsyncOperation const& op, DWORD timeoutMs)
+    -> decltype(op.GetResults()) {
+    using winrt::Windows::Foundation::AsyncStatus;
+
+    ULONGLONG startTick = GetTickCount64();
+    while (op.Status() == AsyncStatus::Started) {
+        if (g_unloading || GetTickCount64() - startTick >= timeoutMs) {
+            op.Cancel();
+            return nullptr;
+        }
+        Sleep(20);
+    }
+
+    return op.GetResults();
+}
+
+constexpr DWORD kBleAsyncTimeoutMs = 3000;
+
 std::vector<BluetoothDeviceBatteryInfo> DiscoverConnectedBluetoothBatteries() {
     auto classicDevices = QueryClassicBluetoothDevices();
 
@@ -1088,6 +1117,10 @@ std::vector<BluetoothDeviceBatteryInfo> DiscoverConnectedBluetoothBatteries() {
     std::vector<BluetoothDeviceBatteryInfo> connectedList;
 
     for (auto& [key, agg] : containers) {
+        if (g_unloading) {
+            break;
+        }
+
         bool isConnected = agg.classicRootConnected || agg.bleRootConnected;
         uint16_t bleAppearanceRaw = 0;
 
@@ -1114,10 +1147,11 @@ std::vector<BluetoothDeviceBatteryInfo> DiscoverConnectedBluetoothBatteries() {
                 using namespace winrt::Windows::Devices::Bluetooth::
                     GenericAttributeProfile;
 
-                auto bleOp =
-                    BluetoothLEDevice::FromBluetoothAddressAsync(*agg.bleBtAddress);
-                auto bleDevice = bleOp.get();
-                if (bleDevice) {
+                auto bleDevice = GetAsyncResultWithTimeout(
+                    BluetoothLEDevice::FromBluetoothAddressAsync(
+                        *agg.bleBtAddress),
+                    kBleAsyncTimeoutMs);
+                if (bleDevice && !g_unloading) {
                     if (bleDevice.ConnectionStatus() ==
                         BluetoothConnectionStatus::Connected) {
                         isConnected = true;
@@ -1136,33 +1170,33 @@ std::vector<BluetoothDeviceBatteryInfo> DiscoverConnectedBluetoothBatteries() {
                     }
 
                     if (isConnected && !agg.batteryPercent) {
-                        auto servicesResult =
-                            bleDevice
-                                .GetGattServicesForUuidAsync(
-                                    GattServiceUuids::Battery(),
-                                    BluetoothCacheMode::Cached)
-                                .get();
-                        if (servicesResult.Status() ==
+                        auto servicesResult = GetAsyncResultWithTimeout(
+                            bleDevice.GetGattServicesForUuidAsync(
+                                GattServiceUuids::Battery(),
+                                BluetoothCacheMode::Cached),
+                            kBleAsyncTimeoutMs);
+                        if (servicesResult && !g_unloading &&
+                            servicesResult.Status() ==
                                 GattCommunicationStatus::Success &&
                             servicesResult.Services().Size() > 0) {
                             auto service = servicesResult.Services().GetAt(0);
-                            auto charsResult =
-                                service
-                                    .GetCharacteristicsForUuidAsync(
-                                        GattCharacteristicUuids::BatteryLevel(),
-                                        BluetoothCacheMode::Cached)
-                                    .get();
-                            if (charsResult.Status() ==
+                            auto charsResult = GetAsyncResultWithTimeout(
+                                service.GetCharacteristicsForUuidAsync(
+                                    GattCharacteristicUuids::BatteryLevel(),
+                                    BluetoothCacheMode::Cached),
+                                kBleAsyncTimeoutMs);
+                            if (charsResult && !g_unloading &&
+                                charsResult.Status() ==
                                     GattCommunicationStatus::Success &&
                                 charsResult.Characteristics().Size() > 0) {
                                 auto characteristic =
                                     charsResult.Characteristics().GetAt(0);
-                                auto readResult =
-                                    characteristic
-                                        .ReadValueAsync(
-                                            BluetoothCacheMode::Cached)
-                                        .get();
-                                if (readResult.Status() ==
+                                auto readResult = GetAsyncResultWithTimeout(
+                                    characteristic.ReadValueAsync(
+                                        BluetoothCacheMode::Cached),
+                                    kBleAsyncTimeoutMs);
+                                if (readResult &&
+                                    readResult.Status() ==
                                         GattCommunicationStatus::Success &&
                                     readResult.Value() &&
                                     readResult.Value().Length() >= 1) {
@@ -1271,6 +1305,60 @@ HWND FindCurrentProcessTaskbarWnd() {
         reinterpret_cast<LPARAM>(&hTaskbarWnd));
 
     return hTaskbarWnd;
+}
+
+using RunFromWindowThreadProc_t = void (*)(PVOID parameter);
+
+// Runs `proc` synchronously on the thread that owns `hWnd`.
+// Based on RunFromWindowThread from the taskbar-labels mod.
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         PVOID procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    RUN_FROM_WINDOW_THREAD_PARAM* param =
+                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessageW(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
 }
 
 FrameworkElement EnumChildElements(
@@ -1501,22 +1589,11 @@ std::wstring FormatShortDeviceName(std::wstring_view name) {
     return truncated;
 }
 
-void LaunchUriOnStaThread(PCWSTR uri) {
-    std::wstring uriCopy(uri);
-    std::thread([uriCopy = std::move(uriCopy)]() {
-        HRESULT hrInit = CoInitializeEx(
-            nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-        SHELLEXECUTEINFOW sei{};
-        sei.cbSize = sizeof(sei);
-        sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
-        sei.lpVerb = L"open";
-        sei.lpFile = uriCopy.c_str();
-        sei.nShow = SW_SHOWNORMAL;
-        ShellExecuteExW(&sei);
-        if (SUCCEEDED(hrInit)) {
-            CoUninitialize();
-        }
-    }).detach();
+// Called from the widget's pointer handlers, which run on the taskbar UI
+// thread (an STA thread with a message loop), so the URI can be launched
+// directly without spawning a thread that could outlive the mod.
+void LaunchUri(PCWSTR uri) {
+    ShellExecuteW(nullptr, L"open", uri, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 void HandleWidgetClick(FrameworkElement) {
@@ -1530,11 +1607,11 @@ void HandleWidgetClick(FrameworkElement) {
 
     switch (g_settings.clickAction) {
         case ClickAction::openQuickSettings:
-            LaunchUriOnStaThread(L"ms-controlcenter:bluetooth");
+            LaunchUri(L"ms-controlcenter:bluetooth");
             break;
 
         case ClickAction::openBluetoothSettings:
-            LaunchUriOnStaThread(L"ms-settings:bluetooth");
+            LaunchUri(L"ms-settings:bluetooth");
             break;
 
         case ClickAction::refresh:
@@ -1904,6 +1981,33 @@ void RemoveAllInjectedWidgets() {
 bool ApplyBluetoothWidgetToSystemTrayFrame(FrameworkElement systemTrayFrame,
                                            bool forceUpdate);
 bool ApplyBluetoothWidgetToXamlRoot(XamlRoot xamlRoot, bool forceUpdate);
+XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd);
+
+// Returns whether the element belongs to the primary taskbar. Must be called on
+// the taskbar UI thread. If the primary taskbar can't be resolved, returns true
+// so that the widget isn't hidden everywhere.
+bool IsOnPrimaryTaskbar(FrameworkElement const& element) {
+    auto elementXamlRoot = element.XamlRoot();
+    if (!elementXamlRoot) {
+        return true;
+    }
+
+    XamlRoot primaryXamlRoot =
+        g_primaryTaskbarXamlRoot ? g_primaryTaskbarXamlRoot->get() : nullptr;
+    if (!primaryXamlRoot) {
+        if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+            primaryXamlRoot = GetTaskbarXamlRoot(hTaskbarWnd);
+        }
+        if (!primaryXamlRoot) {
+            return true;
+        }
+        if (g_primaryTaskbarXamlRoot) {
+            *g_primaryTaskbarXamlRoot = winrt::make_weak(primaryXamlRoot);
+        }
+    }
+
+    return elementXamlRoot == primaryXamlRoot;
+}
 
 void SubscribeToOrientationChanges(FrameworkElement systemTrayFrame,
                                    VisualStateGroup orientationStates) {
@@ -1971,6 +2075,13 @@ bool ApplyBluetoothWidgetToSystemTrayFrame(FrameworkElement systemTrayFrame,
                                            bool forceUpdate) {
     if (g_unloading || g_inLayoutUpdate || !systemTrayFrame ||
         !g_injectedWidgets) {
+        return false;
+    }
+
+    // The MeasureOverride and IconView hooks run for every SystemTrayFrame,
+    // including the ones on secondary taskbars, so the setting is enforced here.
+    if (!g_settings.showOnSecondaryTaskbars &&
+        !IsOnPrimaryTaskbar(systemTrayFrame)) {
         return false;
     }
 
@@ -2268,12 +2379,32 @@ XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
 
 #if defined(_M_X64)
     {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
         const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
         if (b && b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
             b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
             taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
         }
     }
+#elif defined(_M_ARM64)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p && p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#else
+#error "Unsupported architecture"
 #endif
 
     auto* taskbarElementIUnknown =
@@ -2371,10 +2502,15 @@ void PerformUiThreadWidgetUpdate(bool recreate) {
         RemoveAllInjectedWidgets();
     }
 
+    if (g_primaryTaskbarXamlRoot) {
+        *g_primaryTaskbarXamlRoot = nullptr;
+    }
+
     if (g_unloading) {
         g_autoRevokerList.reset();
         g_injectedWidgets.reset();
         g_orientationSubscriptions.reset();
+        g_primaryTaskbarXamlRoot.reset();
         return;
     }
 
@@ -2466,23 +2602,24 @@ bool EnsureTaskbarSubclassed() {
     return false;
 }
 
-void RequestUiWidgetUpdate(bool recreateLayout, bool synchronous) {
+bool RequestUiWidgetUpdate(bool recreateLayout, bool synchronous) {
     if (g_isNonTaskbarProcess.load()) {
-        return;
+        return false;
     }
 
     if (!EnsureTaskbarSubclassed() || !g_hTaskbarWnd ||
         g_msgUpdateWidgets == 0) {
-        return;
+        return false;
     }
 
     if (synchronous) {
         SendMessageW(g_hTaskbarWnd, g_msgUpdateWidgets,
                      recreateLayout ? 1 : 0, 0);
-    } else {
-        PostMessageW(g_hTaskbarWnd, g_msgUpdateWidgets,
-                     recreateLayout ? 1 : 0, 0);
+        return true;
     }
+
+    return PostMessageW(g_hTaskbarWnd, g_msgUpdateWidgets,
+                        recreateLayout ? 1 : 0, 0) != FALSE;
 }
 
 // ---------------------------------------------------------------------------
@@ -2726,6 +2863,7 @@ DWORD WINAPI BluetoothMonitorThreadProc(LPVOID) {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
 
     bool firstRun = true;
+    bool uiUpdatePending = false;
     while (!g_unloading) {
         auto discovered = DiscoverConnectedBluetoothBatteries();
 
@@ -2743,7 +2881,13 @@ DWORD WINAPI BluetoothMonitorThreadProc(LPVOID) {
         if (changed && !g_unloading) {
             Wh_Log(L"Bluetooth devices updated: %zu connected",
                    g_connectedDevices.size());
-            RequestUiWidgetUpdate(false, false);
+            uiUpdatePending = true;
+        }
+
+        // Retry on the next poll if the taskbar doesn't exist yet (e.g. right
+        // after an Explorer restart), so the subclass still gets installed.
+        if (uiUpdatePending && !g_unloading) {
+            uiUpdatePending = !RequestUiWidgetUpdate(false, false);
         }
 
         if (g_unloading) {
@@ -2902,6 +3046,12 @@ void Wh_ModAfterInit() {
                                   nullptr, 0, nullptr);
 }
 
+void RunUiThreadTeardown(PVOID) {
+    // With g_unloading set, this revokes the pending IconView.Loaded handlers,
+    // unsubscribes CurrentStateChanged and removes all injected widgets.
+    PerformUiThreadWidgetUpdate(true);
+}
+
 void Wh_ModBeforeUninit() {
     g_unloading = true;
 
@@ -2915,7 +3065,10 @@ void Wh_ModBeforeUninit() {
     }
 
     if (g_workerThread) {
-        WaitForSingleObject(g_workerThread, 5000);
+        // Each blocking WinRT call in the worker is bounded and aborts once
+        // g_unloading is set, so this wait is short. It must not time out:
+        // the mod can't be unloaded while the thread still runs its code.
+        WaitForSingleObject(g_workerThread, INFINITE);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
@@ -2925,8 +3078,28 @@ void Wh_ModBeforeUninit() {
         g_wakeEvent = nullptr;
     }
 
+    // The SystemTrayFrame and IconView hooks can inject widgets and register
+    // handlers even if the taskbar was never subclassed (e.g. the mod was
+    // loaded before Shell_TrayWnd existed), so the teardown must not depend on
+    // the subclass. Run it on the taskbar thread directly.
+    if (!g_isNonTaskbarProcess.load()) {
+        HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+        if (!hTaskbarWnd) {
+            hTaskbarWnd = g_hTaskbarWnd;
+        }
+        bool tornDown =
+            hTaskbarWnd &&
+            RunFromWindowThread(hTaskbarWnd, RunUiThreadTeardown, nullptr);
+        if (!tornDown && g_taskbarSubclassed.load() && g_hTaskbarWnd) {
+            SendMessageW(g_hTaskbarWnd, g_msgUpdateWidgets, 1, 0);
+            tornDown = true;
+        }
+        if (!tornDown) {
+            Wh_Log(L"Failed to run the UI thread teardown");
+        }
+    }
+
     if (g_taskbarSubclassed.load() && g_hTaskbarWnd) {
-        SendMessageW(g_hTaskbarWnd, g_msgUpdateWidgets, 1, 0);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(
             g_hTaskbarWnd, TaskbarWndSubclassProc);
         g_taskbarSubclassed = false;
