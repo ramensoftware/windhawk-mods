@@ -23,10 +23,11 @@ Change the font face and point size of GDI text in Windows 11 File Explorer.
 
 Every GDI font starts as a `LOGFONTW`. The mod hooks the four places Windows
 creates one: `CreateFontIndirectW`, `CreateFontW`, `CreateFontIndirectExW` and
-`uxtheme!GetThemeFont`. It edits a private copy of `lfFaceName` and `lfHeight`
-before the font is built. Explorer therefore receives a font already sized as
-configured, and text measurement, row height and truncation are derived from
-its metrics.
+`uxtheme!GetThemeFont`. It replaces `lfFaceName` and scales `lfHeight` and
+`lfWidth` in a private copy before the font is built. Each font is scaled
+exactly once, relative to Windows' 9 pt UI baseline, so Explorer's own DPI
+scaling and the size difference between headings and body text are preserved.
+Text measurement, row height and truncation all follow the resulting metrics.
 
 `CreateFontIndirectExW` and `GetThemeFont` extend this to DirectUI and themed
 controls, including the left navigation pane.
@@ -36,24 +37,30 @@ render icons as empty squares. The vertical and horizontal offsets adjust only
 the drawing origin, keeping text aligned with fixed-size icon bitmaps; layout
 measurement is unaffected.
 
+## Screenshot
+
+| Before | After |
+| --- | --- |
+| ![Before: default Explorer font](https://raw.githubusercontent.com/wodenwhel/images/e15776dd9ec89c68fe3865b7c2f41b1b35cf5238/windhawk/explorer-font-size-changer-Before.png) | ![After: custom font face and size](https://raw.githubusercontent.com/wodenwhel/images/e15776dd9ec89c68fe3865b7c2f41b1b35cf5238/windhawk/explorer-font-size-changer-After.png) |
+
 ## Settings
 
 | Setting | Default | Description |
 | --- | --- | --- |
 | `fontFace` | `None` | An installed font face name, up to 31 characters. `None` or empty keeps the original face |
-| `fontSizePt` | `0` | `0` keeps the original size; otherwise 6-72 pt. Converted to pixels using the window DPI when available |
-| `verticalOffsetPx` | `-1` | Shifts drawn text vertically. Negative moves up, positive moves down; `0` disables the shift |
+| `fontSizePt` | `0` | `0` keeps the original size; otherwise 6-72 scales all text proportionally from Windows' 9 pt UI baseline, preserving relative sizes |
+| `verticalOffsetPx` | `0` | Shifts drawn text vertically. Negative moves up, positive moves down; `0` disables the shift |
 | `horizontalOffsetPx` | `0` | Shifts drawn text horizontally. Negative moves left, positive moves right; `0` disables the shift |
 | `skipSymbolFonts` | on | Leaves Marlett, Segoe MDL2 Assets, Wingdings, etc. unchanged so icons do not turn into boxes |
 
 ## Notes and limitations
 
 - Font changes apply to fonts created after the mod is loaded. Restart
-  `explorer.exe` (or sign out and back in) after installing or changing
-  settings so cached UI fonts are recreated.
-- The point size is converted with the DPI of the painting window, then the
-  thread DPI context, then the system DPI. Fonts created outside a paint
-  cycle on a mixed-DPI multi-monitor setup may use the system DPI.
+  `explorer.exe` (or sign out and back in) after installing, changing settings
+  or disabling the mod so cached UI fonts are recreated.
+- The size setting scales proportionally from Windows' 9 pt UI baseline, so
+  headings, captions and body text keep their relative sizes on mixed-DPI
+  monitors.
 - Some Windows 11 surfaces use XAML / DirectWrite rather than GDI. They keep
   their original fonts.
 - The two offset settings shift GDI-drawn text only. They do not change icon
@@ -73,30 +80,32 @@ Font substitution approach inspired by [Gabriela Cristei](https://github.com/cri
 
 ## 工作原理
 
-每个 GDI 字体都由 `LOGFONTW` 创建。本 mod 在 Windows 建字体的四个入口挂钩：
-`CreateFontIndirectW`、`CreateFontW`、`CreateFontIndirectExW` 与 `uxtheme!GetThemeFont`，
-并在创建前修改私有副本中的 `lfFaceName` 与 `lfHeight`。
-资源管理器由此获得已按设定字号创建的字体，文字测量、行高计算与长串截断均基于该字体的度量。
+每个 GDI 字体都由 `LOGFONTW` 创建。本 mod 在 Windows 建字体的四个入口挂钩：`CreateFontIndirectW`、`CreateFontW`、`CreateFontIndirectExW` 与 `uxtheme!GetThemeFont`，并在创建前替换私有副本中的 `lfFaceName`、按比例缩放 `lfHeight` 与 `lfWidth`。每个字体只缩放一次，缩放以 Windows 标准 9 磅界面文字为基准，资源管理器自身的 DPI 换算以及标题与正文的大小层级均予保留。文字测量、行高计算与长串截断均基于所得字体的度量。
 
 `CreateFontIndirectExW` 与 `GetThemeFont` 把覆盖范围扩展到 DirectUI 与主题化控件，包括左侧导航窗格。
 
-符号与图标字体均予排除，避免图标因字体替换而显示为方框。
-垂直与水平偏移仅调整文字的绘制原点，使其与固定尺寸的图标位图保持对齐，布局测量不受影响。
+符号与图标字体均予排除，避免图标因字体替换而显示为方框。垂直与水平偏移仅调整文字的绘制原点，使其与固定尺寸的图标位图保持对齐，布局测量不受影响。
+
+## 效果截图
+
+| 修改前 | 修改后 |
+| --- | --- |
+| ![修改前：资源管理器默认字体](https://raw.githubusercontent.com/wodenwhel/images/e15776dd9ec89c68fe3865b7c2f41b1b35cf5238/windhawk/explorer-font-size-changer-Before.png) | ![修改后：自定义字体与字号](https://raw.githubusercontent.com/wodenwhel/images/e15776dd9ec89c68fe3865b7c2f41b1b35cf5238/windhawk/explorer-font-size-changer-After.png) |
 
 ## 设置项
 
 | 设置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `fontFace` | `None` | 已安装的字体名，最长 31 个字符。填 `None` 或留空表示保持原字体名 |
-| `fontSizePt` | `0` | `0` 保持原字号；否则按 6-72 磅设置，优先按窗口 DPI 换算为像素 |
-| `verticalOffsetPx` | `-1` | 上下平移文字，负数上移、正数下移；`0` 不偏移 |
+| `fontSizePt` | `0` | `0` 保持原字号；否则按 6-72 设置，以 Windows 标准 9 磅界面文字为基准等比缩放，保留文字间的大小层级 |
+| `verticalOffsetPx` | `0` | 上下平移文字，负数上移、正数下移；`0` 不偏移 |
 | `horizontalOffsetPx` | `0` | 左右平移文字，负数左移、正数右移；`0` 不偏移 |
 | `skipSymbolFonts` | 开 | 保持 Marlett、Segoe MDL2 Assets、Wingdings 等不变，避免图标变成方框 |
 
 ## 说明与限制
 
-- 字体改动作用于 mod 加载后创建的字体。安装或更改设置后需重启 `explorer.exe`（或注销后重新登录），让缓存的界面字体重新创建。
-- 字号换算依次采用绘制窗口 DPI、线程 DPI 上下文、系统 DPI。混合缩放的多显示器环境中，绘制周期之外创建的字体可能使用系统 DPI。
+- 字体改动作用于 mod 加载后创建的字体。安装、更改设置或禁用后需重启 `explorer.exe`（或注销后重新登录），让缓存的界面字体重新创建。
+- 字号设置以 Windows 标准 9 磅界面文字为基准等比缩放，标题、小字与正文保持原有层级，混合 DPI 的多显示器环境同样适用。
 - Windows 11 部分界面使用 XAML / DirectWrite 而非 GDI，其字体保持原样。
 - 两个偏移只平移 GDI 绘制的文字，不改变图标位图、行高或列宽；取值过大会把文字推出行或单元格。
 - 需要 x86-64 Windhawk 1.7.3 或更新版本。
@@ -115,11 +124,11 @@ Font substitution approach inspired by [Gabriela Cristei](https://github.com/cri
   $description: None or empty keeps the original font face. Max 31 characters.
   $description:zh-CN: 填 None 或留空表示保持原字体名，最长 31 个字符。
 - fontSizePt: 0
-  $name: Font size (pt)
-  $name:zh-CN: 字号（磅）
-  $description: 0 keeps the original size, otherwise 6-72 pt. Converted with the window DPI where available.
-  $description:zh-CN: 0 表示保持原字号；否则按 6-72 磅设置，优先按窗口 DPI 换算。
-- verticalOffsetPx: -1
+  $name: Font size (9 pt base)
+  $name:zh-CN: 字号（以 9 磅为基准）
+  $description: 0 keeps the original size, otherwise 6-72 scales all text proportionally from the Windows 9 pt UI baseline, preserving relative sizes.
+  $description:zh-CN: 0 表示保持原字号；否则按 6-72 设置，以 Windows 标准 9 磅界面文字为基准等比缩放，保留文字间的大小层级。
+- verticalOffsetPx: 0
   $name: Text vertical offset (px)
   $name:zh-CN: 文本垂直偏移（像素）
   $description: Shifts drawn text vertically. Negative moves up, positive moves down, 0 disables it. Range -16 to 16.
@@ -146,6 +155,8 @@ Font substitution approach inspired by [Gabriela Cristei](https://github.com/cri
 #include <windows.h>
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <string_view>
 #include <windhawk_utils.h>
@@ -158,8 +169,8 @@ namespace {
 // 范围在代码钳制：设置块只用基础字段，兼容 Windhawk 1.7.3。
 constexpr int kMinPointSize = 6;
 constexpr int kMaxPointSize = 72;
-constexpr int kMaxOffsetPx = 16;      // 水平、垂直共用
-constexpr UINT kFallbackDpi = 96;
+constexpr int kDefaultUiPointSize = 9;  // Windows 标准 UI 文字，缩放基准
+constexpr int kMaxOffsetPx = 16;        // 水平、垂直共用
 constexpr size_t kMaxFaceChars = LF_FACESIZE - 1;  // 31
 
 // ── 文本工具 ────────────────────────────────────────────────────────────────
@@ -185,7 +196,7 @@ bool StartsWithIgnoreCase(std::wstring_view text, std::wstring_view prefix) {
 struct Settings {
     WCHAR face[LF_FACESIZE] = {};
     int point_size = 0;         // 0 = 保持原字号
-    int vertical_offset = -1;   // 负数上移
+    int vertical_offset = 0;    // 负数上移
     int horizontal_offset = 0;  // 正数右移
     bool skip_symbol_fonts = true;
 };
@@ -244,83 +255,6 @@ void ReloadSettings() {
     g_settings.Set(LoadSettings());
 }
 
-// ── 绘制窗口上下文 ──────────────────────────────────────────────────────────
-// 字体创建回调没有 HDC；借 WM_PAINT 的窗口句柄定位 DPI。嵌套绘制以最外层为准。
-class PaintContext {
-public:
-    void Enter(HWND hwnd) {
-        if (depth_++ == 0) window_ = hwnd;
-    }
-
-    void Leave() {
-        if (depth_ > 0 && --depth_ == 0) window_ = nullptr;
-    }
-
-    HWND window() const { return window_; }
-
-private:
-    HWND window_ = nullptr;
-    int depth_ = 0;
-};
-
-thread_local PaintContext t_paint;
-
-// ── DPI ─────────────────────────────────────────────────────────────────────
-// 动态解析避开 SDK 版本差异；优先级：绘制窗口 > 线程上下文 > 系统 > 96。
-class DpiProvider {
-public:
-    void Resolve(HMODULE user32) {
-        get_window_ = As<GetDpiForWindow>(user32, "GetDpiForWindow");
-        get_system_ = As<GetDpiForSystem>(user32, "GetDpiForSystem");
-        get_context_ = As<GetThreadContext>(user32, "GetThreadDpiAwarenessContext");
-        dpi_of_context_ = As<DpiOfContext>(user32, "GetDpiFromDpiAwarenessContext");
-    }
-
-    UINT Y() const {
-        const UINT window_dpi = FromWindow();
-        if (window_dpi > 0) return window_dpi;
-        const UINT context_dpi = FromContext();
-        if (context_dpi > 0) return context_dpi;
-        const UINT system_dpi = FromSystem();
-        if (system_dpi > 0) return system_dpi;
-        return kFallbackDpi;
-    }
-
-private:
-    using GetDpiForWindow = UINT(WINAPI*)(HWND);
-    using GetDpiForSystem = UINT(WINAPI*)();
-    using GetThreadContext = void*(WINAPI*)();
-    using DpiOfContext = UINT(WINAPI*)(void*);
-
-    template <typename Fn>
-    static Fn As(HMODULE module, LPCSTR name) {
-        return reinterpret_cast<Fn>(GetProcAddress(module, name));
-    }
-
-    UINT FromWindow() const {
-        return (get_window_ && t_paint.window())
-                   ? get_window_(t_paint.window())
-                   : 0;
-    }
-
-    UINT FromContext() const {
-        if (!get_context_ || !dpi_of_context_) return 0;
-        void* context = get_context_();
-        return context ? dpi_of_context_(context) : 0;
-    }
-
-    UINT FromSystem() const {
-        return get_system_ ? get_system_() : 0;
-    }
-
-    GetDpiForWindow get_window_ = nullptr;
-    GetDpiForSystem get_system_ = nullptr;
-    GetThreadContext get_context_ = nullptr;
-    DpiOfContext dpi_of_context_ = nullptr;
-};
-
-DpiProvider g_dpi;
-
 // ── 字体改写 ────────────────────────────────────────────────────────────────
 // lfFaceName 可能占满 32 个 WCHAR 且无 NUL，按长度取视图而非 wcslen。
 std::wstring_view LogFontFace(const LOGFONTW& font) {
@@ -354,33 +288,105 @@ bool IsSymbolFont(const LOGFONTW& font) {
     return false;
 }
 
-// 负 lfHeight 表示字符高度，与系统 UI 字体惯例一致。
-int PointSizeToHeight(int points, UINT dpi_y) {
-    const int pixels = MulDiv(points, static_cast<int>(dpi_y), 72);
-    return pixels > 0 ? -pixels : -1;
+// 调用方已按窗口 DPI 与文字角色算好 lfHeight / lfWidth；等比缩放即可，
+// 无需自行换算 DPI，标题与小字的大小层级也不会被抹平。
+// 偏置随符号取反，负数按绝对值四舍五入，保证 9 pt 时严格恒等。
+LONG Scaled(LONG value, int points) {
+    const LONGLONG product =
+        static_cast<LONGLONG>(value) * static_cast<LONGLONG>(points);
+    const LONGLONG base = kDefaultUiPointSize;
+    const LONGLONG bias = product >= 0 ? base / 2 : -base / 2;
+    return static_cast<LONG>((product + bias) / base);
 }
 
-// 只改副本，不碰调用方的 const 结构；覆盖式赋值天然幂等，
-// 同一 LOGFONTW 经过多个 hook 点结果一致。
-void ApplyFontSettings(LOGFONTW& font, const Settings& s) {
+// 调用方可能 GetObjectW 回读本 mod 已缩放的字体再重建（就地重命名框等），
+// 连乘会累积放大。记录改写结果的指纹，命中即视为已缩放，跳过第二次。
+constexpr size_t kScaledFontSlots = 64;
+SRWLOCK g_scaled_font_lock = SRWLOCK_INIT;
+uint64_t g_scaled_font_fingerprints[kScaledFontSlots] = {};
+size_t g_scaled_font_cursor = 0;
+
+uint64_t FontFingerprint(const LOGFONTW& font) {
+    uint64_t hash = 0xcbf29ce484222325ULL;  // FNV-1a
+    auto mix = [&hash](uint64_t value) {
+        hash ^= value;
+        hash *= 0x100000001b3ULL;
+    };
+    mix(static_cast<uint64_t>(static_cast<uint32_t>(font.lfHeight)));
+    mix(static_cast<uint64_t>(static_cast<uint32_t>(font.lfWidth)));
+    mix(static_cast<uint64_t>(static_cast<uint32_t>(font.lfWeight)));
+    mix(font.lfCharSet);
+    mix(font.lfItalic);
+    mix(font.lfQuality);
+    mix(font.lfPitchAndFamily);
+    for (int i = 0; i < LF_FACESIZE && font.lfFaceName[i] != L'\0'; ++i) {
+        mix(static_cast<uint64_t>(font.lfFaceName[i]));
+    }
+    return hash;
+}
+
+bool AlreadyScaled(const LOGFONTW& font) {
+    const uint64_t fingerprint = FontFingerprint(font);
+    AcquireSRWLockShared(&g_scaled_font_lock);
+    bool found = false;
+    for (uint64_t entry : g_scaled_font_fingerprints) {
+        if (entry == fingerprint) {
+            found = true;
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&g_scaled_font_lock);
+    return found;
+}
+
+void MarkScaled(const LOGFONTW& font) {
+    AcquireSRWLockExclusive(&g_scaled_font_lock);
+    g_scaled_font_fingerprints[g_scaled_font_cursor] = FontFingerprint(font);
+    g_scaled_font_cursor = (g_scaled_font_cursor + 1) % kScaledFontSlots;
+    ReleaseSRWLockExclusive(&g_scaled_font_lock);
+}
+
+// 字号设置改变后，旧标记对应的是旧倍率，必须清空重新基准。
+void ResetScaledFontMarks() {
+    AcquireSRWLockExclusive(&g_scaled_font_lock);
+    std::memset(g_scaled_font_fingerprints, 0,
+                sizeof(g_scaled_font_fingerprints));
+    g_scaled_font_cursor = 0;
+    ReleaseSRWLockExclusive(&g_scaled_font_lock);
+}
+
+// 只改副本。apply_size=false 供 GetThemeFont 使用：调用方随后仍会走
+// CreateFontIndirectW，尺寸在那里缩放，避免重复。
+void ApplyFontSettings(LOGFONTW& font, const Settings& s, bool apply_size) {
     if (s.skip_symbol_fonts && IsSymbolFont(font)) return;
     if (s.face[0] != L'\0') {
         SetFace(font, s.face);
         font.lfCharSet = DEFAULT_CHARSET;  // 原 charset 可能绑定旧字体
     }
-    if (s.point_size > 0) {
-        font.lfHeight = PointSizeToHeight(s.point_size, g_dpi.Y());
-        font.lfWidth = 0;  // 让 GDI 按高度匹配宽度，避免字形拉伸
+    // 9 pt 是恒等基准，不介入也不留标记，否则会把原始字体误判为已缩放。
+    if (apply_size && s.point_size > 0 &&
+        s.point_size != kDefaultUiPointSize && !AlreadyScaled(font)) {
+        font.lfHeight = Scaled(font.lfHeight, s.point_size);
+        font.lfWidth = Scaled(font.lfWidth, s.point_size);
+        MarkScaled(font);  // 记录改写后的结果，供回读派生时比对
     }
 }
+
+// 缩放不幂等：gdi32 内部可能由 CreateFontIndirectW 转入 CreateFontIndirectExW。
+// 线程标记包住原函数调用，保证每个字体只缩放一次。
+thread_local bool t_size_applied = false;
+
+struct SizeOnceGuard {
+    const bool previous = t_size_applied;
+    SizeOnceGuard() { t_size_applied = true; }
+    ~SizeOnceGuard() { t_size_applied = previous; }
+};
 
 // ── 原函数指针 ──────────────────────────────────────────────────────────────
 using CreateFontIndirectW_t = decltype(&CreateFontIndirectW);
 using CreateFontW_t = decltype(&CreateFontW);
 using CreateFontIndirectExW_t = decltype(&CreateFontIndirectExW);
 using GetThemeFont_t = HRESULT(WINAPI*)(void*, HDC, int, int, int, LOGFONTW*);
-using BeginPaint_t = decltype(&BeginPaint);
-using EndPaint_t = decltype(&EndPaint);
 using DrawTextW_t = decltype(&DrawTextW);
 using DrawTextExW_t = decltype(&DrawTextExW);
 using ExtTextOutW_t = decltype(&ExtTextOutW);
@@ -391,20 +397,21 @@ CreateFontIndirectW_t g_original_create_font_indirect_w = nullptr;
 CreateFontW_t g_original_create_font_w = nullptr;
 CreateFontIndirectExW_t g_original_create_font_indirect_ex_w = nullptr;
 GetThemeFont_t g_original_get_theme_font = nullptr;
-BeginPaint_t g_original_begin_paint = nullptr;
-EndPaint_t g_original_end_paint = nullptr;
 DrawTextW_t g_original_draw_text_w = nullptr;
 DrawTextExW_t g_original_draw_text_ex_w = nullptr;
 ExtTextOutW_t g_original_ext_text_out_w = nullptr;
 TextOutW_t g_original_text_out_w = nullptr;
 TabbedTextOutW_t g_original_tabbed_text_out_w = nullptr;
 
-// ── 字体创建与绘制上下文 hook ───────────────────────────────────────────────
-// 在创建阶段改写，让 Explorer 用新度量自行测量、排行高、截断长串。
+// ── 字体创建 hook ───────────────────────────────────────────────────────────
+// 创建阶段改写，让 Explorer 用新度量自行测量、排行高、截断长串。
 HFONT WINAPI CreateFontIndirectW_Hook(const LOGFONTW* log_font) {
-    if (!log_font) return g_original_create_font_indirect_w(log_font);
+    if (!log_font || t_size_applied) {
+        return g_original_create_font_indirect_w(log_font);
+    }
     LOGFONTW copy = *log_font;
-    ApplyFontSettings(copy, g_settings.Get());
+    ApplyFontSettings(copy, g_settings.Get(), true);
+    SizeOnceGuard guard;
     return g_original_create_font_indirect_w(&copy);
 }
 
@@ -415,6 +422,12 @@ HFONT WINAPI CreateFontW_Hook(INT height, INT width, INT escapement,
                               DWORD out_precision, DWORD clip_precision,
                               DWORD quality, DWORD pitch_and_family,
                               LPCWSTR face_name) {
+    if (t_size_applied) {
+        return g_original_create_font_w(
+            height, width, escapement, orientation, weight, italic, underline,
+            strikeout, char_set, out_precision, clip_precision, quality,
+            pitch_and_family, face_name);
+    }
     LOGFONTW font = {};
     font.lfHeight = height;
     font.lfWidth = width;
@@ -430,41 +443,54 @@ HFONT WINAPI CreateFontW_Hook(INT height, INT width, INT escapement,
     font.lfQuality = static_cast<BYTE>(quality);
     font.lfPitchAndFamily = static_cast<BYTE>(pitch_and_family);
     if (face_name) SetFace(font, std::wstring_view(face_name));
-    ApplyFontSettings(font, g_settings.Get());
+    ApplyFontSettings(font, g_settings.Get(), true);
+    SizeOnceGuard guard;
     return g_original_create_font_indirect_w(&font);
 }
 
-// DirectUI / dui70 走这个入口；只改 elfLogFont，保留 design vector。
+// DirectUI / dui70 走这个入口。GDI 只读 dvNumAxes 个值，调用方缓冲区可能
+// 刚好结束在那里，故按实际长度复制，避免读越界。
 HFONT WINAPI CreateFontIndirectExW_Hook(const ENUMLOGFONTEXDVW* font) {
-    if (!font) return g_original_create_font_indirect_ex_w(font);
-    ENUMLOGFONTEXDVW copy = *font;
-    ApplyFontSettings(copy.elfEnumLogfontEx.elfLogFont, g_settings.Get());
+    if (!font || t_size_applied) {
+        return g_original_create_font_indirect_ex_w(font);
+    }
+    const DWORD axes = font->elfDesignVector.dvNumAxes;
+    if (axes > MM_MAX_NUMAXES) {
+        return g_original_create_font_indirect_ex_w(font);
+    }
+    const size_t used = offsetof(ENUMLOGFONTEXDVW, elfDesignVector) +
+                        offsetof(DESIGNVECTOR, dvValues) +
+                        static_cast<size_t>(axes) * sizeof(LONG);
+    ENUMLOGFONTEXDVW copy = {};
+    std::memcpy(&copy, font, used);
+    ApplyFontSettings(copy.elfEnumLogfontEx.elfLogFont, g_settings.Get(), true);
+    SizeOnceGuard guard;
     return g_original_create_font_indirect_ex_w(&copy);
 }
 
-// 主题化控件先取 LOGFONTW 再建字体，在返回值上改写。
+// 主题化控件先取 LOGFONTW 再建字体；只替换字体名，
+// 尺寸留给随后的 CreateFontIndirectW，避免缩放两次。
 HRESULT WINAPI GetThemeFont_Hook(void* theme, HDC hdc, int part, int state,
                                  int prop, LOGFONTW* font) {
     const HRESULT hr =
         g_original_get_theme_font(theme, hdc, part, state, prop, font);
-    if (SUCCEEDED(hr) && font) ApplyFontSettings(*font, g_settings.Get());
+    if (SUCCEEDED(hr) && font) {
+        ApplyFontSettings(*font, g_settings.Get(), false);
+    }
     return hr;
-}
-
-HDC WINAPI BeginPaint_Hook(HWND hwnd, LPPAINTSTRUCT paint) {
-    HDC hdc = g_original_begin_paint(hwnd, paint);
-    if (hdc && hwnd) t_paint.Enter(hwnd);
-    return hdc;
-}
-
-BOOL WINAPI EndPaint_Hook(HWND hwnd, const PAINTSTRUCT* paint) {
-    const BOOL result = g_original_end_paint(hwnd, paint);
-    t_paint.Leave();
-    return result;
 }
 
 // ── 文本偏移 hook ───────────────────────────────────────────────────────────
 // 只平移绘制位置，不换字体、不改宽高；测量调用 DT_CALCRECT 原样透传。
+// DrawText / TabbedTextOut 内部会再调 ExtTextOutW；外层已应用偏移时内层
+// 必须透传，否则偏移叠加两次。
+thread_local int t_offset_depth = 0;
+
+struct OffsetScope {
+    OffsetScope() { ++t_offset_depth; }
+    ~OffsetScope() { --t_offset_depth; }
+};
+
 struct TextOffset {
     int x = 0;
     int y = 0;
@@ -485,38 +511,56 @@ RECT Shifted(RECT rect, TextOffset offset) {
     return rect;
 }
 
-// 测量、空矩形、零偏移一律透传；否则返回平移后的矩形供绘制使用。
-RECT* PrepareDrawRect(RECT* src, UINT format, TextOffset offset,
-                      RECT* storage) {
-    if (offset.IsZero() || !src || (format & DT_CALCRECT)) return src;
-    *storage = Shifted(*src, offset);
-    return storage;
-}
-
 INT WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR text, INT len, LPRECT rect,
                           UINT format) {
-    RECT storage;
-    return g_original_draw_text_w(
-        hdc, text, len,
-        PrepareDrawRect(rect, format, CurrentOffset(), &storage), format);
+    const TextOffset offset = CurrentOffset();
+    if (offset.IsZero() || t_offset_depth > 0 || !rect ||
+        (format & DT_CALCRECT)) {
+        return g_original_draw_text_w(hdc, text, len, rect, format);
+    }
+    OffsetScope scope;
+    RECT adjusted = Shifted(*rect, offset);
+    return g_original_draw_text_w(hdc, text, len, &adjusted, format);
 }
 
 INT WINAPI DrawTextExW_Hook(HDC hdc, LPWSTR text, INT len, LPRECT rect,
                             UINT format, LPDRAWTEXTPARAMS params) {
-    RECT storage;
-    return g_original_draw_text_ex_w(
-        hdc, text, len,
-        PrepareDrawRect(rect, format, CurrentOffset(), &storage), format, params);
+    const TextOffset offset = CurrentOffset();
+    if (offset.IsZero() || t_offset_depth > 0 || !rect ||
+        (format & DT_CALCRECT)) {
+        return g_original_draw_text_ex_w(hdc, text, len, rect, format, params);
+    }
+    OffsetScope scope;
+    RECT adjusted = Shifted(*rect, offset);
+    return g_original_draw_text_ex_w(hdc, text, len, &adjusted, format, params);
 }
 
 BOOL WINAPI ExtTextOutW_Hook(HDC hdc, INT x, INT y, UINT options,
                              const RECT* rect, LPCWSTR text, UINT cch,
                              const INT* dx) {
     const TextOffset offset = CurrentOffset();
-    RECT storage;
+    // 零偏移、无文字（纯擦背景）、外层已偏移时，原样透传。
+    if (offset.IsZero() || cch == 0 || t_offset_depth > 0) {
+        return g_original_ext_text_out_w(hdc, x, y, options, rect, text, cch,
+                                         dx);
+    }
+    OffsetScope scope;
+
+    // ETO_OPAQUE 时 rect 同时是背景填充区：先按原矩形填充，再单独绘制
+    // 平移后的文字，避免背景被一并挪走。
+    if ((options & ETO_OPAQUE) && rect) {
+        g_original_ext_text_out_w(hdc, x, y, ETO_OPAQUE, rect, L"", 0,
+                                  nullptr);
+        RECT clip = Shifted(*rect, offset);
+        return g_original_ext_text_out_w(
+            hdc, x + offset.x, y + offset.y, options & ~ETO_OPAQUE, &clip,
+            text, cch, dx);
+    }
+
+    RECT storage = {};
     const RECT* clip = rect;
-    if (!offset.IsZero() && rect) {
-        storage = Shifted(*rect, offset);  // 裁剪/背景同步平移，否则文字被切
+    if (rect) {
+        storage = Shifted(*rect, offset);  // 裁剪矩形同步平移，否则文字被切
         clip = &storage;
     }
     return g_original_ext_text_out_w(hdc, x + offset.x, y + offset.y, options,
@@ -525,6 +569,10 @@ BOOL WINAPI ExtTextOutW_Hook(HDC hdc, INT x, INT y, UINT options,
 
 BOOL WINAPI TextOutW_Hook(HDC hdc, INT x, INT y, LPCWSTR text, INT cch) {
     const TextOffset offset = CurrentOffset();
+    if (offset.IsZero() || t_offset_depth > 0) {
+        return g_original_text_out_w(hdc, x, y, text, cch);
+    }
+    OffsetScope scope;
     return g_original_text_out_w(hdc, x + offset.x, y + offset.y, text, cch);
 }
 
@@ -532,6 +580,11 @@ LONG WINAPI TabbedTextOutW_Hook(HDC hdc, INT x, INT y, LPCWSTR text,
                                 INT count, INT tab_count, const INT* tabs,
                                 INT tab_origin) {
     const TextOffset offset = CurrentOffset();
+    if (offset.IsZero() || t_offset_depth > 0) {
+        return g_original_tabbed_text_out_w(hdc, x, y, text, count, tab_count,
+                                            tabs, tab_origin);
+    }
+    OffsetScope scope;
     // 制表位以 tab_origin 为基准，文字右移时原点须同步，否则制表位错位。
     return g_original_tabbed_text_out_w(
         hdc, x + offset.x, y + offset.y, text, count, tab_count, tabs,
@@ -582,7 +635,6 @@ bool InstallHooks() {
         Wh_Log(L"Core system modules are not loaded");
         return false;
     }
-    g_dpi.Resolve(user32);
     Wh_Log(L"Initializing font hooks");
 
     // 唯一必需项：字体改写主入口。其余失败只记日志，不拖垮整个 mod。
@@ -605,6 +657,7 @@ bool InstallHooks() {
     }
 
     // CreateFontW 复用核心的 original，须排在其后；其余表项互不依赖。
+    // ExtTextOutW / TextOutW 是 gdi32 导出，不是 user32。
     // 新增 hook 只需在此加一行。
     const Hook optional[] = {
         {gdi32, "CreateFontW", L"CreateFontW", CreateFontW_Hook,
@@ -613,17 +666,13 @@ bool InstallHooks() {
          CreateFontIndirectExW_Hook, &g_original_create_font_indirect_ex_w},
         {uxtheme, "GetThemeFont", L"GetThemeFont", GetThemeFont_Hook,
          &g_original_get_theme_font},
-        {user32, "BeginPaint", L"BeginPaint", BeginPaint_Hook,
-         &g_original_begin_paint},
-        {user32, "EndPaint", L"EndPaint", EndPaint_Hook,
-         &g_original_end_paint},
         {user32, "DrawTextW", L"DrawTextW", DrawTextW_Hook,
          &g_original_draw_text_w},
         {user32, "DrawTextExW", L"DrawTextExW", DrawTextExW_Hook,
          &g_original_draw_text_ex_w},
-        {user32, "ExtTextOutW", L"ExtTextOutW", ExtTextOutW_Hook,
+        {gdi32, "ExtTextOutW", L"ExtTextOutW", ExtTextOutW_Hook,
          &g_original_ext_text_out_w},
-        {user32, "TextOutW", L"TextOutW", TextOutW_Hook,
+        {gdi32, "TextOutW", L"TextOutW", TextOutW_Hook,
          &g_original_text_out_w},
         {user32, "TabbedTextOutW", L"TabbedTextOutW", TabbedTextOutW_Hook,
          &g_original_tabbed_text_out_w},
@@ -641,11 +690,13 @@ bool InstallHooks() {
 
 BOOL Wh_ModInit() {
     ReloadSettings();
+    ResetScaledFontMarks();
     return InstallHooks() ? TRUE : FALSE;
 }
 
 void Wh_ModSettingsChanged() {
     ReloadSettings();
+    ResetScaledFontMarks();
 }
 
 void Wh_ModUninit() {
