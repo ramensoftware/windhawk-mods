@@ -14,15 +14,15 @@
 /*
 # Window Centralizer
 
-Center new windows where they came from, the mouse cursor, or the monitor, instead of randomly around the screen. Use a size limit setting to filter large ones, which generally save their last position, intended by the user. 
+Center new windows where they came from, the mouse cursor, or the monitor, instead of randomly around the screen. Use a size limit setting to filter large ones, which generally save their last position, intended by the user.
 
-The window is placed **before** it appears, so there is no jump or flicker. Elevated programs are covered as well.
+The window is placed **before** it appears, so there is no jump or flicker. Elevated programs are covered as well. UWP apps such as Calculator and Clock are centered right after they get focus, and may be seen jump.
 
 **Show windows only after complete UI load** keeps a centered window invisible for a moment while it draws its contents, so classic dialogs don't flash blank while loading. Its opening animation, from Windows or a mod, may then be skipped.
 
 ## Modes
 
-- **Parent**: centers on the active window it came from. Orphans, like some OS program or an app just launched, center on the monitor where the mouse cursor is. **Center on the unrelated launcher window** moves an indirectly executed software to the window it was called from. Programs that Windows starts on the launcher's behalf (Store apps, some file associations), or that hand the file to an instance already running, aren't linked to that window and open at the center of the monitor.
+- **Parent**: centers on the active window it came from. Orphans, like some OS program or an app just launched, center on the monitor where the mouse cursor is. **Center on the unrelated launcher window (on by default)** moves an indirectly executed software to the window it was called from. Programs that Windows starts on the launcher's behalf (Store apps, some file associations), or that hand the file to an instance already running, aren't linked to that window and open at the center of the monitor.
 - **Monitor**: centers on the monitor of the window it came from, or the one where the mouse cursor is, when orphan. With the size limit at 100%, every window opens at the center of the screen.
 - **Mouse cursor**: centers on the mouse cursor.
 
@@ -31,7 +31,6 @@ In every mode the window is kept inside the monitor's work area.
 ## Which windows are moved
 
 - The ones with a title bar, and smaller than the **window size limit to target** setting, even if animated.
-- Windows of UWP apps such as Calculator and Clock are centered the first time they get focus, if you notice them jumping after appearing.
 - Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved.
 - A window that is hidden and reopened (like a Find dialog) is centered again.
 - Intended moves by other tools, like FancyZones, are left alone.
@@ -64,7 +63,7 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
   $description: Move a program to where it was called from, instead of the center of the screen.
 - centerChildWindows: true
   $name: Always center child windows
-  $description: Move windows that have an owner, whatever their size. If disabled, follow the size limit, like any other.
+  $description: Move windows that have an owner, whatever their size. If disabled, follow the size limit, like any other. System default dialogs count as OS owned windows. 
 - revealWhenDrawn: true
   $name: Show windows only after complete UI load
   $description: A centered window stays invisible until its contents finish drawing (half a second at most), avoiding the native flicker. Windows drawn with DirectX (browsers, WPF, WinUI) can't be detected and gain little. May skip opening animations, turn off to keep them.
@@ -99,10 +98,10 @@ enum Mode { MODE_PARENT, MODE_MONITOR, MODE_MOUSE };
 
 // Read by the hooks on application threads while Wh_ModSettingsChanged rewrites them.
 std::atomic<int> g_mode{MODE_PARENT};
-std::atomic<int> g_maxAreaPercent{10};
+std::atomic<int> g_maxAreaPercent{20};
 std::atomic<bool> g_revealWhenDrawn{true};
 std::atomic<bool> g_centerChildWindows{true};
-std::atomic<bool> g_centerOnLauncher{false};
+std::atomic<bool> g_centerOnLauncher{true};
 
 // Tool process only, read and written on the host thread.
 wchar_t g_ignoreHotkey[64];
