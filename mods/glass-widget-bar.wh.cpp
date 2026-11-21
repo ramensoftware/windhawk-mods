@@ -2,14 +2,14 @@
 // @id              glass-widget-bar
 // @name            Glass Widget Bar
 // @name:tr-TR      Cam Widget Barı
-// @description     A frosted-glass desktop bar with an analog clock, a calendar and music controls
-// @description:tr-TR Buzlu cam görünümlü masaüstü barı: analog saat, takvim ve müzik denetimi
-// @version         0.3.0
+// @description     A frosted-glass desktop bar with an analog clock, a calendar and music controls, with optional weather
+// @description:tr-TR Buzlu cam görünümlü masaüstü barı: analog saat, takvim ve müzik denetimi, isteğe bağlı hava durumu
+// @version         0.4.0
 // @author          TheRealAlperN
 // @github          https://github.com/TheRealAlperN
 // @license         GPL-3.0
 // @include         windhawk.exe
-// @compilerOptions -lgdiplus -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -ladvapi32 -lruntimeobject -lshcore
+// @compilerOptions -lgdiplus -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -ladvapi32 -lruntimeobject -lshcore -lwinhttp
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -21,13 +21,13 @@ shows through a soft, dark-tinted rounded panel with thin light edges. The
 widgets have no glass of their own; they are drawn straight onto the frame and
 separated by thin dividers.
 
-![Glass Widget Bar in English, Turkish, German and Japanese](https://raw.githubusercontent.com/TheRealAlperN/glass-widget-bar/main/screenshots/glass-widget-bar.gif)
+![Glass Widget Bar in English, Turkish, German and Japanese, with the optional weather widget](https://raw.githubusercontent.com/TheRealAlperN/glass-widget-bar/main/screenshots/glass-widget-bar-weather.gif)
 
 | Widget | What it does |
 | --- | --- |
 | **Clock** | Analog clock with an orange second hand |
 | **Calendar** | Weekday, large day number, month grid; today is highlighted in red |
-| **Music** | The track that is playing right now (Spotify, browser, Media Player...), cover art, progress and ⏮ ⏯ ⏭ buttons |
+| **Music** | The track that is playing right now (Spotify, browser, Media Player...), cover art, progress and ⏮ ⏯ ⏭ buttons. Click or drag the progress bar to jump to another position (when the player allows it) |
 
 ## Languages
 Labels, day names and month names follow your **Windows display language**
@@ -56,7 +56,32 @@ machine-assisted, corrections are welcome.
 - The defaults of the frame (opacity 15, blur 10) match the dock mod this
   frame comes from. If your wallpaper is very bright, raise the opacity.
 - The music widget reads the Windows media session, so every app that
-  publishes one is shown.
+  publishes one is shown. Browsers publish videos the same way as music, so a
+  video playing in a browser can appear in the music widget. If that bothers
+  you, set "Media from web browsers" to "Hide": browser sessions are then
+  skipped and only other apps are shown (music inside a browser is hidden too),
+  or to "Music only (auto)": a browser session is also shown when it reports an
+  album title. Spotify Web, YouTube Music and Apple Music web do, a plain
+  YouTube video does not.
+  This is a guess from the album field, not a certain split. A browser is
+  recognised by its app id (Chrome, Edge, Opera, Brave, Vivaldi, Yandex,
+  Firefox); a browser that reports an id without its name, which Firefox may
+  do, is treated like any other app and is not filtered.
+- **Weather (optional, off by default).** In the settings, "Weather widget
+  replaces" lets you swap one of the three areas (clock, calendar or music)
+  for the weather; the replaced area is hidden. With the default "Off" the mod
+  never uses the network. When it is on, the mod contacts two Open-Meteo hosts
+  over HTTPS. **geocoding-api.open-meteo.com** gets the city name you typed and
+  the language code of the bar (it only localizes the place name), to find the
+  coordinates. **api.open-meteo.com** then gets the coordinates, about every 15
+  minutes (every 2 minutes after a failed request; a city that is not found is
+  not asked again until you change the settings). No API key, no account, and
+  your location is never read from Windows or from your IP address. Weather
+  data by
+  [Open-Meteo.com](https://open-meteo.com/) (CC BY 4.0, free for
+  non-commercial use); the credit "Open-Meteo.com" is shown in the weather
+  area. The weather messages ("enter a city" and so on) exist in Turkish and English
+  only.
 - Developed on Windows 11 (64-bit).
 
 ## Credits and license
@@ -160,6 +185,42 @@ released under **GPL-3.0** as well.
 - blur: 10
   $name: Frame blur (0-100, dock default 10)
   $name:tr-TR: Çerçeve bulanıklığı (0-100, dock varsayılanı 10)
+- browserMedia: show
+  $name: Media from web browsers
+  $name:tr-TR: Tarayıcıdaki medya
+  $description: Hide skips every browser session and shows only other apps (Spotify, Media Player...); music played inside a browser is then hidden too. Music only (auto) also shows a browser session when it reports an album title, which music sites such as Spotify Web, YouTube Music and Apple Music do and plain videos do not. This is a guess from the album field, not a certain split. A video with album data is shown and a song without album data is hidden.
+  $description:tr-TR: Gizle, tüm tarayıcı oturumlarını atlar ve yalnız diğer uygulamaları (Spotify, Media Player...) gösterir; tarayıcıda çalan müzik de gizlenir. Yalnız müzik (otomatik), ayrıca albüm bilgisi bildiren tarayıcı oturumunu da gösterir. Spotify Web, YouTube Music ve Apple Music gibi müzik siteleri albüm bildirir, düz videolar bildirmez. Bu albüm alanından yapılan bir tahmindir, kesin ayrım değildir. Albüm bilgisi olan bir video gösterilir, albümü olmayan bir şarkı gizlenir.
+  $options:
+  - show: Show
+  - hide: Hide
+  - auto: Music only (auto)
+  $options:tr-TR:
+  - show: Göster
+  - hide: Gizle
+  - auto: Yalnız müzik (otomatik)
+- weatherSlot: none
+  $name: Weather widget replaces
+  $name:tr-TR: Hava durumu şunun yerine geçsin
+  $description: Off by default. Pick one of the three areas to show the weather there instead; that area is hidden. Turning it on makes the mod contact open-meteo.com (see the readme).
+  $description:tr-TR: Varsayılan kapalı. Üç alandan birini seçin, hava durumu onun yerinde görünür; o alan gizlenir. Açınca mod open-meteo.com'a bağlanır (bkz. readme).
+  $options:
+  - none: Off (clock, calendar and music)
+  - clock: Clock
+  - calendar: Calendar
+  - music: Music
+  $options:tr-TR:
+  - none: Kapalı (saat, takvim ve müzik)
+  - clock: Saat
+  - calendar: Takvim
+  - music: Müzik
+- weatherCity: ""
+  $name: Weather city
+  $name:tr-TR: Hava durumu şehri
+  $description: City name, for example Istanbul or Berlin. This name is sent to geocoding-api.open-meteo.com to find the coordinates, together with the language code of the bar (only used to localize the place name).
+  $description:tr-TR: Şehir adı, örneğin İstanbul ya da Berlin. Koordinatı bulmak için bu ad, barın dil koduyla birlikte (yalnız yer adını yerelleştirmek için) geocoding-api.open-meteo.com'a gönderilir.
+- weatherFahrenheit: false
+  $name: Show temperature in Fahrenheit
+  $name:tr-TR: Sıcaklığı Fahrenheit göster
 - hotkeyEnabled: true
   $name: Enable the "bring to front" hotkey
   $name:tr-TR: '"Öne getir" kısayolunu etkinleştir'
@@ -190,13 +251,18 @@ released under **GPL-3.0** as well.
 
 #include <shellapi.h>
 #include <shellscalingapi.h>
+#include <winhttp.h>
 #include <objidl.h>
 #include <gdiplus.h>
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cwctype>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -337,6 +403,25 @@ std::wstring Upper(const wchar_t* s) {
 }
 
 // ---------------------------------------------------------------- settings
+// setting "browserMedia": 0 = show, 1 = hide, 2 = auto (music only) (read by the media thread)
+std::atomic<int> g_browserMode{0};
+
+enum { C_CLOCK, C_CAL, C_MUSIC, C_COUNT };
+
+// Weather: the setting picks which of the three cells it replaces (C_CLOCK, C_CAL or
+// C_MUSIC; -1 = off, the default, and then nothing is ever sent over the network).
+std::atomic<int> g_wxSlot{-1};
+struct WxCfg {
+    int slot = -1;
+    std::wstring city;
+    std::wstring lang;  // language code sent to the geocoder (only localizes the place name)
+    bool fahrenheit = false;
+};
+WxCfg g_wxCfg;            // guarded by g_wxMx
+std::mutex g_wxMx;
+HANDLE g_wxEvt = nullptr;     // auto-reset: the settings changed, the weather thread should re-read
+HANDLE g_wxThread = nullptr;
+
 struct Settings {
     bool bottom = false;
     bool topmost = false;
@@ -385,13 +470,46 @@ void LoadSettings() {
     }
     Wh_FreeStringSetting(key);
 
+    PCWSTR bm = Wh_GetStringSetting(L"browserMedia");
+    g_browserMode = !bm ? 0 : wcscmp(bm, L"hide") == 0 ? 1 : wcscmp(bm, L"auto") == 0 ? 2 : 0;
+    Wh_FreeStringSetting(bm);
+
     PCWSTR lang = Wh_GetStringSetting(L"language");
-    SelectLanguage(lang);
+    SelectLanguage(lang);  // before the weather config below, which carries the language code
     Wh_FreeStringSetting(lang);
+
+    {
+        PCWSTR ws = Wh_GetStringSetting(L"weatherSlot");
+        int slot = -1;
+        if (ws) {
+            if (wcscmp(ws, L"clock") == 0) slot = C_CLOCK;
+            else if (wcscmp(ws, L"calendar") == 0) slot = C_CAL;
+            else if (wcscmp(ws, L"music") == 0) slot = C_MUSIC;
+        }
+        Wh_FreeStringSetting(ws);
+        PCWSTR wc = Wh_GetStringSetting(L"weatherCity");
+        std::wstring city = wc ? wc : L"";
+        Wh_FreeStringSetting(wc);
+        while (!city.empty() && iswspace(city.back())) city.pop_back();
+        size_t lead = 0;
+        while (lead < city.size() && iswspace(city[lead])) lead++;
+        city.erase(0, lead);
+        {
+            std::lock_guard<std::mutex> lk(g_wxMx);
+            g_wxCfg.slot = slot;
+            g_wxCfg.city = city;
+            g_wxCfg.lang = g_lang->id;
+            size_t dash = g_wxCfg.lang.find(L'-');
+            if (dash != std::wstring::npos) g_wxCfg.lang.resize(dash);
+            g_wxCfg.fahrenheit = Wh_GetIntSetting(L"weatherFahrenheit") != 0;
+        }
+        g_wxSlot = slot;
+        if (g_wxEvt) SetEvent(g_wxEvt);
+    }
+
 }
 
 // ---------------------------------------------------------------- state
-enum { C_CLOCK, C_CAL, C_MUSIC, C_COUNT };
 const float kCellW[C_COUNT] = {116, 236, 290};
 enum { B_PREV, B_PLAY, B_NEXT, B_COUNT };
 
@@ -413,7 +531,7 @@ HDC g_memDC = nullptr;
 HBITMAP g_dib = nullptr, g_oldBmp = nullptr;
 void* g_bits = nullptr;
 std::unique_ptr<Bitmap> g_frame, g_glass;
-std::unique_ptr<Font> fNum, fTitle, fLabel, fSmall, fSmallB, fTiny, fNumeral, fSym;
+std::unique_ptr<Font> fNum, fTitle, fLabel, fSmall, fSmallB, fTiny, fNumeral, fSym, fTemp;
 
 int g_hoverBtn = -1;
 bool g_tracking = false;
@@ -426,7 +544,9 @@ struct MediaState {
     bool playing = false;
     bool canPrev = false, canNext = false, canToggle = false;
     bool hasTimeline = false;
+    bool canSeek = false;  // the player accepts a new playback position
     double pos = 0, dur = 0;
+    double start = 0;      // timeline start (seconds); a seek position is start + pos
     ULONGLONG posTick = 0;
     std::wstring title, artist;
     int artGen = 0;
@@ -438,7 +558,29 @@ std::mutex g_mediaMx;
 // process exit (releasing the proxy during shutdown can hang).
 [[clang::no_destroy]] wmc::GlobalSystemMediaTransportControlsSession g_session{nullptr};
 HANDLE g_mediaThread = nullptr;
-HANDLE g_mediaEvt = nullptr;
+HANDLE g_stopEvt = nullptr;   // manual-reset: asks the media and weather threads to stop
+HANDLE g_cmdEvt = nullptr;    // auto-reset: a button command is waiting for the media thread
+std::vector<int> g_cmds;      // pending button commands (guarded by g_mediaMx)
+std::atomic<unsigned> g_mediaSeq{0};  // bumped each time the media thread publishes a state
+
+// UI side: a click flips the play/pause icon at once and keeps it until the player
+// confirms (or 1.2 s pass), so the bar answers before the player does.
+unsigned g_seqSeen = 0;
+bool g_optOn = false;
+bool g_optPlaying = false;
+ULONGLONG g_optUntil = 0;
+int g_pressBtn = -1;  // button held down with the mouse, -1 = none
+
+// Seeking on the progress bar (click or drag).
+constexpr int kCmdSeek = 100;     // a command value in g_cmds, beside the B_* buttons
+int64_t g_seekTicks = 0;          // requested position in 100 ns units (guarded by g_mediaMx)
+RectF g_prog;                     // click area of the progress bar
+bool g_hoverProg = false;         // mouse over the bar
+bool g_scrub = false;             // the bar is being dragged
+float g_scrubFrac = 0;            // dragged position, 0..1
+bool g_seekHold = false;          // after a seek the bar shows the target until the player confirms
+double g_seekTarget = 0;
+ULONGLONG g_seekTick = 0, g_seekUntil = 0;
 
 // copy on the UI side
 MediaState g_m;
@@ -579,13 +721,17 @@ std::unique_ptr<Bitmap> LoadWallpaperScreen(int mw, int mh) {
                            nullptr, OPEN_EXISTING, 0, nullptr);
     if (f == INVALID_HANDLE_VALUE) return scr;
     DWORD sz = GetFileSize(f, nullptr);
+    // A wallpaper picture is never this large; refuse a failed size query or a huge file
+    // instead of trying to allocate it.
+    if (sz == INVALID_FILE_SIZE || sz == 0 || sz > 512u * 1024 * 1024) { CloseHandle(f); return scr; }
     HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, sz);
     if (!hg) { CloseHandle(f); return scr; }
     void* mem = GlobalLock(hg);
     DWORD rd = 0;
-    ReadFile(f, mem, sz, &rd, nullptr);
-    GlobalUnlock(hg);
+    BOOL readOk = mem && ReadFile(f, mem, sz, &rd, nullptr) && rd == sz;
+    if (mem) GlobalUnlock(hg);
     CloseHandle(f);
+    if (!readOk) { GlobalFree(hg); return scr; }
 
     IStream* st = nullptr;
     if (FAILED(CreateStreamOnHGlobal(hg, TRUE, &st)) || !st) {
@@ -594,7 +740,7 @@ std::unique_ptr<Bitmap> LoadWallpaperScreen(int mw, int mh) {
     }
     {
         Bitmap img(st);
-        if (img.GetLastStatus() == Ok) {
+        if (img.GetLastStatus() == Ok && img.GetWidth() > 0 && img.GetHeight() > 0) {
             int iw = img.GetWidth(), ih = img.GetHeight();
             wchar_t style[16] = L"10", tile[16] = L"0";
             DWORD n = sizeof(style);
@@ -850,6 +996,7 @@ void Layout() {
         float off[B_COUNT] = {-46 * S, 0, 46 * S};
         for (int i = 0; i < B_COUNT; i++)
             g_btn[i] = RectF(cx + off[i] - bs / 2, cy - bs / 2, bs, bs);
+        g_prog = RectF(colX, c.Y + 60 * S, colW, 16 * S);  // around the bar (centre c.Y + 68 * S)
     }
 
     MONITORINFO mi = {sizeof(mi)};
@@ -891,25 +1038,31 @@ void Layout() {
     fTiny.reset(MakeFont({L"Segoe UI Variable Display", L"Segoe UI"}, 9.5f * S));
     fNumeral.reset(MakeFont({L"Segoe UI Variable Display", L"Segoe UI"}, 14 * S, FontStyleBold));
     fSym.reset(MakeFont({L"Segoe UI Symbol", L"Segoe UI"}, 40 * S));
+    fTemp.reset(MakeFont({L"Segoe UI Variable Display Light", L"Segoe UI Light"}, 34 * S));
 
     BuildWeekdayInitials();
     BuildGlass();
 }
 
 // ---------------------------------------------------------------- music data
+// UI thread: only queues the command; the media thread sends it, so a slow player
+// can never freeze the bar.
 void MediaCommand(int which) {
-    wmc::GlobalSystemMediaTransportControlsSession s{nullptr};
     {
         std::lock_guard<std::mutex> lk(g_mediaMx);
-        s = g_session;
+        if (g_cmds.size() < 8) g_cmds.push_back(which);
     }
-    if (!s) return;
-    try {
-        if (which == B_PREV) s.TrySkipPreviousAsync();
-        else if (which == B_PLAY) s.TryTogglePlayPauseAsync();
-        else if (which == B_NEXT) s.TrySkipNextAsync();
-    } catch (...) {
+    if (g_cmdEvt) SetEvent(g_cmdEvt);
+}
+
+// UI thread: asks the player to jump to `sec` seconds from the start of the track.
+void SeekCommand(double sec) {
+    {
+        std::lock_guard<std::mutex> lk(g_mediaMx);
+        g_seekTicks = (int64_t)((g_m.start + sec) * 10000000.0);
+        if (g_cmds.size() < 8) g_cmds.push_back(kCmdSeek);
     }
+    if (g_cmdEvt) SetEvent(g_cmdEvt);
 }
 
 // Waits for a WinRT async operation for a bounded time so that the stop event is
@@ -924,19 +1077,71 @@ auto AwaitWithTimeout(const Op& op) {
     return op.GetResults();
 }
 
+// Browsers publish videos and music the same way, so the only reliable split is by app.
+bool IsBrowserApp(const winrt::hstring& appId) {
+    std::wstring id = appId.c_str();
+    for (wchar_t& ch : id) ch = (wchar_t)towlower(ch);
+    static const wchar_t* kBrowsers[] = {L"chrome", L"msedge", L"firefox", L"opera",
+                                         L"brave",  L"vivaldi", L"yandex"};
+    for (const wchar_t* b : kBrowsers)
+        if (id.find(b) != std::wstring::npos) return true;
+    return false;
+}
+
+// Whether the bar may show this session. Apps other than browsers always; a browser
+// session depends on the setting. In "auto" mode a browser session counts as music when it
+// reports an album title: measured with Opera GX, Spotify Web, YouTube Music and Apple Music web report one,
+// a plain YouTube video does not (it reports "Music" as the type too, so the type is useless).
+bool SessionAllowed(const wmc::GlobalSystemMediaTransportControlsSession& x) {
+    int mode = g_browserMode;
+    if (mode == 0 || !IsBrowserApp(x.SourceAppUserModelId())) return true;
+    if (mode == 1) return false;
+    try {
+        auto p = AwaitWithTimeout(x.TryGetMediaPropertiesAsync());
+        return !p.AlbumTitle().empty();
+    } catch (...) {
+        return false;
+    }
+}
+
+// The session the bar shows. Normally Windows' "current" one; with browser media hidden
+// (or only music allowed) the first allowed session (a playing one first) is used instead.
+wmc::GlobalSystemMediaTransportControlsSession PickSession(
+    const wmc::GlobalSystemMediaTransportControlsSessionManager& mgr) {
+    auto cur = mgr.GetCurrentSession();
+    if (g_browserMode == 0) return cur;
+    if (cur && SessionAllowed(cur)) return cur;
+    wmc::GlobalSystemMediaTransportControlsSession best{nullptr};
+    for (auto const& x : mgr.GetSessions()) {
+        if (!SessionAllowed(x)) continue;
+        if (x.GetPlaybackInfo().PlaybackStatus() ==
+            wmc::GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing)
+            return x;
+        if (!best) best = x;
+    }
+    return best;
+}
+
 DWORD WINAPI MediaThread(LPVOID) {
     try { winrt::init_apartment(winrt::apartment_type::multi_threaded); } catch (...) {}
     wmc::GlobalSystemMediaTransportControlsSessionManager mgr{nullptr};
     std::wstring lastKey;
     std::vector<BYTE> art;
     int artGen = 0, artTries = 0;
+    wmc::GlobalSystemMediaTransportControlsSession cur{nullptr};
+    // After a button command the state is re-read quickly, because players answer late.
+    static const DWORD kBurst[] = {150, 300, 500};
+    int burst = 0;
+    HANDLE waitHandles[2] = {g_stopEvt, g_cmdEvt};
 
-    do {
+    for (;;) {
         try {
             if (!mgr)
                 mgr = AwaitWithTimeout(
                     wmc::GlobalSystemMediaTransportControlsSessionManager::RequestAsync());
-            auto s = mgr.GetCurrentSession();
+            // The music area is replaced by the weather: do not read the media session at all.
+            wmc::GlobalSystemMediaTransportControlsSession s{nullptr};
+            if (g_wxSlot != C_MUSIC) s = PickSession(mgr);
             MediaState ns;
             if (s) {
                 auto props = AwaitWithTimeout(s.TryGetMediaPropertiesAsync());
@@ -985,6 +1190,8 @@ DWORD WINAPI MediaThread(LPVOID) {
                 double pos = std::chrono::duration<double>(tl.Position()).count() - start;
                 ns.dur = end - start;
                 ns.hasTimeline = ns.dur > 1.0 && ns.dur < 6 * 3600.0;
+                ns.start = start;
+                ns.canSeek = ctl.IsPlaybackPositionEnabled();
                 if (ns.hasTimeline) {
                     if (ns.playing) {
                         double since = std::chrono::duration<double>(
@@ -1000,20 +1207,276 @@ DWORD WINAPI MediaThread(LPVOID) {
             ns.artGen = artGen;
             g_media = std::move(ns);
             g_session = s;
+            cur = s;
+            g_mediaSeq++;
         } catch (...) {
             mgr = nullptr;
+            cur = nullptr;
             std::lock_guard<std::mutex> lk(g_mediaMx);
             g_media = MediaState();
             g_session = nullptr;
+            g_mediaSeq++;
         }
-    } while (WaitForSingleObject(g_mediaEvt, 800) == WAIT_TIMEOUT);
+
+        DWORD w = WaitForMultipleObjects(2, waitHandles, FALSE, burst > 0 ? kBurst[3 - burst] : 800);
+        if (w == WAIT_OBJECT_0) break;  // stop requested
+        if (burst > 0) burst--;
+        if (w == WAIT_OBJECT_0 + 1) {
+            std::vector<int> cmds;
+            int64_t seekTicks = 0;
+            {
+                std::lock_guard<std::mutex> lk(g_mediaMx);
+                cmds.swap(g_cmds);
+                seekTicks = g_seekTicks;
+            }
+            for (int which : cmds) {
+                if (!cur) break;
+                try {
+                    if (which == kCmdSeek) AwaitWithTimeout(cur.TryChangePlaybackPositionAsync(seekTicks));
+                    else if (which == B_PREV) AwaitWithTimeout(cur.TrySkipPreviousAsync());
+                    else if (which == B_PLAY) AwaitWithTimeout(cur.TryTogglePlayPauseAsync());
+                    else if (which == B_NEXT) AwaitWithTimeout(cur.TrySkipNextAsync());
+                } catch (...) {
+                }
+            }
+            burst = 3;
+        }
+    }
 
     {
         std::lock_guard<std::mutex> lk(g_mediaMx);
         g_session = nullptr;
     }
+    cur = nullptr;
     mgr = nullptr;
     try { winrt::uninit_apartment(); } catch (...) {}
+    return 0;
+}
+
+// ---------------------------------------------------------------- weather data
+// Data: Open-Meteo (open-meteo.com), CC-BY 4.0, free for non-commercial use, no API key.
+// Only the typed city name goes out (geocoding) and then the coordinates (forecast).
+enum WxStatus { WX_OFF, WX_NEED_CITY, WX_LOADING, WX_OK, WX_ERROR, WX_NOT_FOUND };
+struct WxState {
+    int status = WX_OFF;
+    double temp = 0;
+    int code = 0;
+    bool day = true;
+    std::wstring place;
+};
+WxState g_wx;  // guarded by g_wxMx
+std::atomic<unsigned> g_wxSeq{0};
+unsigned g_wxSeqSeen = 0;
+WxState g_wxUi;  // UI-side copy
+
+std::string Utf8(const std::wstring& w) {
+    if (w.empty()) return "";
+    int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+    std::string s(n, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), s.data(), n, nullptr, nullptr);
+    return s;
+}
+
+std::wstring FromUtf8(const std::string& s) {
+    if (s.empty()) return L"";
+    int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0);
+    std::wstring w(n, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), w.data(), n);
+    return w;
+}
+
+std::string UrlEncode(const std::string& s) {
+    static const char* hex = "0123456789ABCDEF";
+    std::string o;
+    for (unsigned char c : s) {
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') o += (char)c;
+        else {
+            o += '%';
+            o += hex[c >> 4];
+            o += hex[c & 15];
+        }
+    }
+    return o;
+}
+
+// HTTPS GET with short time limits; false on any failure or a status other than 200.
+bool HttpGet(const wchar_t* host, const std::wstring& path, std::string& out) {
+    out.clear();
+    bool ok = false;
+    HINTERNET ses = WinHttpOpen(L"GlassWidgetBar/0.4", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!ses) return false;
+    WinHttpSetTimeouts(ses, 5000, 5000, 5000, 8000);
+    HINTERNET con = WinHttpConnect(ses, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
+    HINTERNET req = con ? WinHttpOpenRequest(con, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
+                                             WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE)
+                        : nullptr;
+    if (req && WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+        WinHttpReceiveResponse(req, nullptr)) {
+        DWORD status = 0, sz = sizeof(status);
+        WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                            WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz, WINHTTP_NO_HEADER_INDEX);
+        if (status == 200) {
+            ok = true;
+            for (;;) {
+                DWORD avail = 0;
+                if (!WinHttpQueryDataAvailable(req, &avail)) { ok = false; break; }
+                if (avail == 0) break;
+                if (out.size() + avail > 256 * 1024) { ok = false; break; }
+                size_t at = out.size();
+                out.resize(at + avail);
+                DWORD got = 0;
+                if (!WinHttpReadData(req, &out[at], avail, &got)) { ok = false; break; }
+                out.resize(at + got);
+            }
+        }
+    }
+    if (req) WinHttpCloseHandle(req);
+    if (con) WinHttpCloseHandle(con);
+    WinHttpCloseHandle(ses);
+    return ok;
+}
+
+// Minimal JSON reading: the value after "key": at or after position `from`.
+bool JsonNum(const std::string& s, size_t from, const char* key, double& v) {
+    std::string k = std::string("\"") + key + "\":";
+    size_t p = s.find(k, from);
+    if (p == std::string::npos) return false;
+    p += k.size();
+    char* end = nullptr;
+    v = strtod(s.c_str() + p, &end);
+    return end != s.c_str() + p;
+}
+
+bool JsonStr(const std::string& s, size_t from, const char* key, std::string& v) {
+    std::string k = std::string("\"") + key + "\":\"";
+    size_t p = s.find(k, from);
+    if (p == std::string::npos) return false;
+    p += k.size();
+    v.clear();
+    while (p < s.size() && s[p] != '"') {
+        if (s[p] == '\\' && p + 1 < s.size()) p++;
+        v += s[p++];
+    }
+    return true;
+}
+
+void WxPublish(const WxState& st) {
+    {
+        std::lock_guard<std::mutex> lk(g_wxMx);
+        g_wx = st;
+    }
+    g_wxSeq++;
+}
+
+DWORD WINAPI WeatherThread(LPVOID) {
+    WxCfg last;
+    bool haveLast = false;
+    double lat = 0, lon = 0;
+    std::wstring place;
+    bool geoOk = false;
+    bool notFound = false;  // the geocoder answered "no such city" for this city and language
+    WxState lastGood;       // last successful reading, kept through a short outage
+    bool haveGood = false;
+    ULONGLONG goodTick = 0;
+    ULONGLONG nextFetch = 0;
+    HANDLE hs[2] = {g_stopEvt, g_wxEvt};
+
+    for (;;) {
+        WxCfg cfg;
+        {
+            std::lock_guard<std::mutex> lk(g_wxMx);
+            cfg = g_wxCfg;
+        }
+        bool changed = !haveLast || cfg.slot != last.slot || cfg.city != last.city ||
+                       cfg.lang != last.lang || cfg.fahrenheit != last.fahrenheit;
+        // The geocoder is only asked again for another city or language, not for a new slot or unit.
+        bool geoChanged = !haveLast || cfg.city != last.city || cfg.lang != last.lang;
+        if (!haveLast || cfg.city != last.city || cfg.fahrenheit != last.fahrenheit) haveGood = false;
+        DWORD waitMs = INFINITE;
+
+        if (cfg.slot < 0) {
+            if (changed) WxPublish(WxState());
+        } else if (cfg.city.empty()) {
+            if (changed) {
+                WxState st;
+                st.status = WX_NEED_CITY;
+                WxPublish(st);
+            }
+        } else if (changed || GetTickCount64() >= nextFetch) {
+            if (changed) {
+                WxState st;
+                if (haveGood) st = lastGood;
+                else st.status = WX_LOADING;
+                WxPublish(st);
+            }
+            bool ok = false;
+            std::string body;
+            if (geoChanged || (!geoOk && !notFound)) {
+                geoOk = false;
+                notFound = false;
+                std::wstring path = L"/v1/search?count=1&format=json&language=" + cfg.lang +
+                                    L"&name=" + FromUtf8(UrlEncode(Utf8(cfg.city)));
+                if (HttpGet(L"geocoding-api.open-meteo.com", path, body)) {
+                    size_t r = body.find("\"results\":[");
+                    std::string nm;
+                    if (r != std::string::npos && JsonNum(body, r, "latitude", lat) &&
+                        JsonNum(body, r, "longitude", lon)) {
+                        geoOk = true;
+                        place = JsonStr(body, r, "name", nm) ? FromUtf8(nm) : cfg.city;
+                    } else {
+                        notFound = true;  // the service answered, but knows no such city
+                    }
+                }
+            }
+            WxState st;
+            st.status = notFound ? WX_NOT_FOUND : WX_ERROR;
+            // Unloading waits for this thread, so do not start the second request after a stop.
+            if (geoOk && WaitForSingleObject(g_stopEvt, 0) != WAIT_OBJECT_0) {
+                char coords[96];
+                snprintf(coords, sizeof(coords), "latitude=%.4f&longitude=%.4f", lat, lon);
+                std::string q = std::string("/v1/forecast?") + coords +
+                                "&current=temperature_2m,weather_code,is_day&timezone=auto" +
+                                (cfg.fahrenheit ? "&temperature_unit=fahrenheit" : "");
+                if (HttpGet(L"api.open-meteo.com", FromUtf8(q), body)) {
+                    size_t c = body.find("\"current\":{");
+                    double t = 0, code = 0, day = 1;
+                    if (c != std::string::npos && JsonNum(body, c, "temperature_2m", t) &&
+                        JsonNum(body, c, "weather_code", code)) {
+                        JsonNum(body, c, "is_day", day);
+                        st.status = WX_OK;
+                        st.temp = t;
+                        st.code = (int)code;
+                        st.day = day != 0;
+                        st.place = place;
+                        ok = true;
+                    }
+                }
+            }
+            ULONGLONG now = GetTickCount64();
+            if (ok) {
+                lastGood = st;
+                haveGood = true;
+                goodTick = now;
+            } else if (st.status == WX_ERROR && haveGood && now - goodTick < 60ULL * 60 * 1000) {
+                st = lastGood;  // a short outage: keep showing the last reading (for up to an hour)
+            }
+            WxPublish(st);
+            // fresh data every 15 minutes; after a failure try again in 2 minutes; a city that
+            // was not found is not retried until the settings change
+            nextFetch = now + (ok ? 15ULL * 60 * 1000 : notFound ? 24ULL * 3600 * 1000 : 2ULL * 60 * 1000);
+        }
+        last = cfg;
+        haveLast = true;
+
+        if (cfg.slot >= 0 && !cfg.city.empty()) {
+            ULONGLONG now = GetTickCount64();
+            ULONGLONG left = nextFetch > now ? nextFetch - now : 0;
+            waitMs = (DWORD)(std::min)(left, (ULONGLONG)60000) + 50;
+        }
+        DWORD w = WaitForMultipleObjects(2, hs, FALSE, waitMs);
+        if (w == WAIT_OBJECT_0) break;  // stop requested
+    }
     return 0;
 }
 
@@ -1044,11 +1507,37 @@ std::unique_ptr<Bitmap> DecodeArt(const std::vector<BYTE>& bytes) {
 }
 
 // UI side: copies the shared state. Returns true if anything changed.
+// Called every timer tick (0.1 s); the copy itself only happens when the media thread
+// has published something new, or when the click-feedback window ends.
 bool MediaTick() {
+    bool optEnded = false;
+    if (g_optOn && GetTickCount64() >= g_optUntil) {
+        g_optOn = false;
+        optEnded = true;
+    }
+    unsigned seq = g_mediaSeq.load();
+    if (seq == g_seqSeen && !optEnded) return false;
+    g_seqSeen = seq;
+
     MediaState c;
     {
         std::lock_guard<std::mutex> lk(g_mediaMx);
         c = g_media;
+    }
+    if (g_optOn) {
+        if (c.playing == g_optPlaying) g_optOn = false;  // the player confirmed
+        else c.playing = g_optPlaying;                   // keep the instant icon for now
+    }
+    if (g_seekHold) {
+        // After a seek keep showing the target until the player reports a position close to it.
+        ULONGLONG now = GetTickCount64();
+        double expected = g_seekTarget + (c.playing ? (now - g_seekTick) / 1000.0 : 0.0);
+        if (now >= g_seekUntil || std::fabs(c.pos - expected) < 2.0) {
+            g_seekHold = false;
+        } else {
+            c.pos = g_seekTarget;
+            c.posTick = g_seekTick;
+        }
     }
     bool changed = c.have != g_m.have || c.playing != g_m.playing || c.title != g_m.title ||
                    c.artist != g_m.artist || c.artGen != g_m.artGen ||
@@ -1060,6 +1549,37 @@ bool MediaTick() {
     c.art.clear();
     g_m = std::move(c);
     return changed;
+}
+
+// A button was clicked: tell the player, and for play/pause answer on screen at once.
+void ClickButton(int b) {
+    MediaCommand(b);
+    if (b == B_PLAY && g_m.have && g_m.canToggle) {
+        ULONGLONG now = GetTickCount64();
+        if (g_m.playing) g_m.pos += (now - g_m.posTick) / 1000.0;  // freeze the progress
+        g_m.posTick = now;
+        g_m.playing = !g_m.playing;
+        g_optPlaying = g_m.playing;
+        g_optOn = true;
+        g_optUntil = now + 1200;
+    }
+    g_dirty = true;
+}
+
+// The progress bar was clicked or released at `frac` (0..1): jump there, and show the
+// target at once (the player answers late).
+void SeekFrac(float frac) {
+    frac = std::clamp(frac, 0.0f, 1.0f);
+    double sec = frac * g_m.dur;
+    SeekCommand(sec);
+    ULONGLONG now = GetTickCount64();
+    g_m.pos = sec;
+    g_m.posTick = now;
+    g_seekHold = true;
+    g_seekTarget = sec;
+    g_seekTick = now;
+    g_seekUntil = now + 2000;
+    g_dirty = true;
 }
 
 std::wstring Mmss(double sec) {
@@ -1255,7 +1775,11 @@ void DrawMusic(Graphics& g, const RectF& c) {
         double pos = g_m.pos;
         if (g_m.playing) pos += (GetTickCount64() - g_m.posTick) / 1000.0;
         pos = std::clamp(pos, 0.0, g_m.dur);
-        float by = c.Y + 66 * S, bh = 4 * S;
+        if (g_scrub) pos = g_scrubFrac * g_m.dur;  // dragging: follow the mouse
+        // Hovering (or dragging) a bar the player can seek: the bar grows and gets a knob.
+        bool hot = (g_hoverProg || g_scrub) && g_m.canSeek;
+        float labY = c.Y + 66 * S;  // the time labels stay where they are
+        float bh = (hot ? 6.0f : 4.0f) * S, by = c.Y + 68 * S - bh / 2;
         GraphicsPath tp;
         RRect(tp, colX, by, colW, bh, bh / 2);
         SolidBrush tb(Ca(46, 255, 255, 255));
@@ -1263,11 +1787,18 @@ void DrawMusic(Graphics& g, const RectF& c) {
         float fw = (std::max)(bh, colW * (float)(pos / g_m.dur));
         GraphicsPath fp;
         RRect(fp, colX, by, fw, bh, bh / 2);
-        SolidBrush fb(Ca(225, 255, 255, 255));
+        SolidBrush fb(Ca(hot ? 255 : 225, 255, 255, 255));
         g.FillPath(&fb, &fp);
-        Txt(g, Mmss(pos), fTiny.get(), Ca(120, 255, 255, 255), RectF(colX, by + 6 * S, 60 * S, 12 * S));
+        if (hot) {
+            float kr = 6.0f * S, kx = (std::min)(colX + fw, colX + colW - kr);
+            SolidBrush ks(Ca(60, 0, 0, 0));
+            g.FillEllipse(&ks, kx - kr, by + bh / 2 - kr + 1.0f * S, kr * 2, kr * 2);  // soft shadow
+            SolidBrush kb(Ca(255, 255, 255, 255));
+            g.FillEllipse(&kb, kx - kr, by + bh / 2 - kr, kr * 2, kr * 2);
+        }
+        Txt(g, Mmss(pos), fTiny.get(), Ca(120, 255, 255, 255), RectF(colX, labY + 6 * S, 60 * S, 12 * S));
         Txt(g, L"-" + Mmss(g_m.dur - pos), fTiny.get(), Ca(120, 255, 255, 255),
-            RectF(colX + colW - 60 * S, by + 6 * S, 60 * S, 12 * S), StringAlignmentFar);
+            RectF(colX + colW - 60 * S, labY + 6 * S, 60 * S, 12 * S), StringAlignmentFar);
     }
 
     // buttons
@@ -1276,7 +1807,10 @@ void DrawMusic(Graphics& g, const RectF& c) {
         bool enabled = !g_m.have ? false : (i == B_PREV ? g_m.canPrev : i == B_NEXT ? g_m.canNext : g_m.canToggle);
         bool hot = g_hoverBtn == i && enabled;
         float cx = b.X + b.Width / 2, cy = b.Y + b.Height / 2;
-        if (hot) {
+        if (g_pressBtn == i && enabled) {
+            SolidBrush pb2(Ca(70, 255, 255, 255));
+            g.FillEllipse(&pb2, cx - 16 * S, cy - 16 * S, 32 * S, 32 * S);
+        } else if (hot) {
             SolidBrush hb(Ca(34, 255, 255, 255));
             g.FillEllipse(&hb, cx - 16 * S, cy - 16 * S, 32 * S, 32 * S);
         }
@@ -1304,6 +1838,142 @@ void DrawMusic(Graphics& g, const RectF& c) {
     }
 }
 
+// ---------------------------------------------------------------- weather drawing
+void WxCloud(Graphics& g, float cx, float cy, float s, int a) {
+    // One path, filled once: overlapping parts of a semi-transparent cloud would show seams.
+    GraphicsPath p(FillModeWinding);
+    p.AddEllipse(cx - 0.40f * s, cy - 0.02f * s, 0.34f * s, 0.34f * s);
+    p.AddEllipse(cx - 0.25f * s, cy - 0.30f * s, 0.50f * s, 0.50f * s);
+    p.AddEllipse(cx + 0.06f * s, cy - 0.06f * s, 0.38f * s, 0.38f * s);
+    p.AddRectangle(RectF(cx - 0.23f * s, cy + 0.12f * s, 0.48f * s, 0.20f * s));
+    SolidBrush b(Ca(a, 255, 255, 255));
+    g.FillPath(&b, &p);
+}
+
+void WxSun(Graphics& g, float cx, float cy, float r) {
+    SolidBrush b(Ca(255, ORANGE[0], ORANGE[1], ORANGE[2]));
+    g.FillEllipse(&b, cx - r, cy - r, 2 * r, 2 * r);
+    Pen p(Ca(255, ORANGE[0], ORANGE[1], ORANGE[2]), r * 0.22f);
+    p.SetStartCap(LineCapRound);
+    p.SetEndCap(LineCapRound);
+    for (int i = 0; i < 8; i++) {
+        float a = i * 3.14159265f / 4;
+        g.DrawLine(&p, cx + cosf(a) * r * 1.4f, cy + sinf(a) * r * 1.4f, cx + cosf(a) * r * 1.8f,
+                   cy + sinf(a) * r * 1.8f);
+    }
+}
+
+void WxMoon(Graphics& g, float cx, float cy, float r) {
+    GraphicsPath full, cut;
+    full.AddEllipse(cx - r, cy - r, 2 * r, 2 * r);
+    cut.AddEllipse(cx - r + r * 0.55f, cy - r - r * 0.25f, 2 * r * 0.9f, 2 * r * 0.9f);
+    Region reg(&full);
+    reg.Exclude(&cut);
+    SolidBrush b(Ca(235, 255, 255, 255));
+    g.FillRegion(&b, &reg);
+}
+
+// s = size of the icon box; the picture is drawn around (cx, cy).
+void DrawWxIcon(Graphics& g, float cx, float cy, float s, int code, bool day) {
+    auto rain = [&](int n, bool heavy) {
+        Pen p(Ca(255, 90, 170, 255), s * 0.045f);
+        p.SetStartCap(LineCapRound);
+        p.SetEndCap(LineCapRound);
+        for (int i = 0; i < n; i++) {
+            float x = cx - 0.20f * s + i * (0.40f * s / (n > 1 ? n - 1 : 1));
+            g.DrawLine(&p, x, cy + 0.40f * s, x - 0.06f * s, cy + (heavy ? 0.62f : 0.55f) * s);
+        }
+    };
+    bool partly = code == 2;
+    if (code == 0 || code == 1) {
+        if (day) WxSun(g, cx, cy, s * 0.22f);
+        else WxMoon(g, cx, cy, s * 0.30f);
+    } else if (partly) {
+        if (day) WxSun(g, cx - 0.16f * s, cy - 0.16f * s, s * 0.15f);
+        else WxMoon(g, cx - 0.16f * s, cy - 0.16f * s, s * 0.2f);
+        WxCloud(g, cx + 0.06f * s, cy + 0.08f * s, s * 0.82f, 240);
+    } else {
+        WxCloud(g, cx, cy - 0.12f * s, s * 0.92f, code == 3 ? 225 : 240);
+        if (code == 45 || code == 48) {
+            Pen p(Ca(190, 255, 255, 255), s * 0.045f);
+            p.SetStartCap(LineCapRound);
+            p.SetEndCap(LineCapRound);
+            for (int i = 0; i < 3; i++)
+                g.DrawLine(&p, cx - 0.28f * s, cy + (0.36f + i * 0.11f) * s, cx + 0.28f * s,
+                           cy + (0.36f + i * 0.11f) * s);
+        } else if ((code >= 51 && code <= 57) || (code >= 61 && code <= 67) || (code >= 80 && code <= 82)) {
+            rain(code >= 61 && code != 80 ? 4 : 3, code == 65 || code == 67 || code == 82);
+        } else if ((code >= 71 && code <= 77) || code == 85 || code == 86) {
+            SolidBrush b(Ca(240, 255, 255, 255));
+            for (int i = 0; i < 3; i++) {
+                float x = cx - 0.22f * s + i * 0.22f * s;
+                float y = cy + (i == 1 ? 0.52f : 0.44f) * s;
+                g.FillEllipse(&b, x - s * 0.04f, y - s * 0.04f, s * 0.08f, s * 0.08f);
+            }
+        } else if (code >= 95) {
+            PointF bolt[6] = {PointF(cx + 0.04f * s, cy + 0.30f * s), PointF(cx - 0.12f * s, cy + 0.55f * s),
+                              PointF(cx - 0.01f * s, cy + 0.55f * s), PointF(cx - 0.06f * s, cy + 0.78f * s),
+                              PointF(cx + 0.16f * s, cy + 0.50f * s), PointF(cx + 0.04f * s, cy + 0.50f * s)};
+            SolidBrush b(Ca(255, 255, 214, 10));
+            g.FillPolygon(&b, bolt, 6);
+        }
+    }
+}
+
+bool WxTick() {
+    unsigned seq = g_wxSeq.load();
+    if (seq == g_wxSeqSeen) return false;
+    g_wxSeqSeen = seq;
+    std::lock_guard<std::mutex> lk(g_wxMx);
+    g_wxUi = g_wx;
+    return true;
+}
+
+// The Open-Meteo credit (CC BY 4.0 asks for it next to the data). It is kept faint on
+// purpose so the bar stays calm.
+void DrawWxCredit(Graphics& g, const RectF& r, StringAlignment ha) {
+    Txt(g, L"Open-Meteo.com", fTiny.get(), Ca(70, 255, 255, 255), r, ha);
+}
+
+void DrawWeather(Graphics& g, const RectF& c) {
+    bool tr = wcscmp(g_lang->id, L"tr") == 0;  // texts exist in Turkish and English only
+    const WxState& w = g_wxUi;
+    if (w.status != WX_OK) {
+        const wchar_t* msg = L"";
+        if (w.status == WX_NEED_CITY) msg = tr ? L"Ayarlardan bir şehir girin" : L"Enter a city in the settings";
+        else if (w.status == WX_LOADING) msg = L"…";
+        else if (w.status == WX_NOT_FOUND) msg = tr ? L"Şehir bulunamadı" : L"City not found";
+        else if (w.status == WX_ERROR) msg = tr ? L"Hava durumu alınamadı" : L"Weather unavailable";
+        WxCloud(g, c.X + c.Width / 2, c.Y + c.Height / 2 - 18 * S, 44 * S, 70);
+        StringFormat sf;
+        sf.SetAlignment(StringAlignmentCenter);
+        sf.SetLineAlignment(StringAlignmentNear);
+        SolidBrush tb(Ca(150, 255, 255, 255));
+        g.DrawString(msg, -1, fSmall.get(), RectF(c.X, c.Y + c.Height / 2 + 14 * S, c.Width, 40 * S), &sf, &tb);
+        return;
+    }
+    wchar_t tbuf[24];
+    int t = (int)lround(w.temp);
+    wsprintfW(tbuf, L"%d°", t);
+    bool compact = c.Width < 160 * S;
+    if (compact) {
+        DrawWxIcon(g, c.X + c.Width / 2, c.Y + 24 * S, 50 * S, w.code, w.day);
+        Txt(g, tbuf, fTemp.get(), Ca(255, 255, 255, 255), RectF(c.X, c.Y + 44 * S, c.Width, 42 * S),
+            StringAlignmentCenter, StringAlignmentCenter);
+        Txt(g, w.place, fSmallB.get(), Ca(150, 255, 255, 255), RectF(c.X, c.Y + 86 * S, c.Width, 14 * S),
+            StringAlignmentCenter, StringAlignmentNear, true);
+        DrawWxCredit(g, RectF(c.X, c.Y + 101 * S, c.Width, 12 * S), StringAlignmentCenter);
+    } else {
+        DrawWxIcon(g, c.X + 46 * S, c.Y + c.Height / 2 - 6 * S, 76 * S, w.code, w.day);
+        float colX = c.X + 100 * S, colW = c.Width - 100 * S;
+        Txt(g, w.place, fTitle.get(), Ca(255, 255, 255, 255), RectF(colX, c.Y + 22 * S, colW, 20 * S),
+            StringAlignmentNear, StringAlignmentNear, true);
+        Txt(g, tbuf, fNum.get(), Ca(255, 255, 255, 255), RectF(colX, c.Y + 40 * S, colW, 56 * S),
+            StringAlignmentNear, StringAlignmentCenter);
+        DrawWxCredit(g, RectF(colX, c.Y + 100 * S, colW, 12 * S), StringAlignmentNear);
+    }
+}
+
 void Render() {
     if (!g_frame || !g_glass || !g_hwnd) return;
     SYSTEMTIME lt;
@@ -1318,9 +1988,13 @@ void Render() {
         g.SetPixelOffsetMode(PixelOffsetModeHalf);
 
         DrawDividers(g);
-        DrawClock(g, g_cell[C_CLOCK], lt);
-        DrawCalendar(g, g_cell[C_CAL], lt);
-        DrawMusic(g, g_cell[C_MUSIC]);
+        int wxSlot = g_wxSlot;
+        if (wxSlot == C_CLOCK) DrawWeather(g, g_cell[C_CLOCK]);
+        else DrawClock(g, g_cell[C_CLOCK], lt);
+        if (wxSlot == C_CAL) DrawWeather(g, g_cell[C_CAL]);
+        else DrawCalendar(g, g_cell[C_CAL], lt);
+        if (wxSlot == C_MUSIC) DrawWeather(g, g_cell[C_MUSIC]);
+        else DrawMusic(g, g_cell[C_MUSIC]);
     }
     HDC sdc = GetDC(nullptr);
     POINT pt = {g_winX, g_winY}, src = {0, 0};
@@ -1332,9 +2006,19 @@ void Render() {
 
 // ---------------------------------------------------------------- window
 int BtnAt(float x, float y) {
+    if (g_wxSlot == C_MUSIC) return -1;  // the music area is hidden: no buttons
     for (int i = 0; i < B_COUNT; i++)
         if (g_btn[i].Contains(x, y)) return i;
     return -1;
+}
+
+// True when the point is over a progress bar that can be clicked to seek.
+bool OnProgress(float x, float y) {
+    return g_wxSlot != C_MUSIC && g_m.have && g_m.hasTimeline && g_m.canSeek && g_prog.Contains(x, y);
+}
+
+float ProgressFrac(float x) {
+    return g_prog.Width > 0 ? std::clamp((x - g_prog.X) / g_prog.Width, 0.0f, 1.0f) : 0.0f;
 }
 
 void ApplyZOrder() {
@@ -1370,7 +2054,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     g_lastSec = lt.wSecond;
                     dirty = true;
                 }
-                if (++ticks % 8 == 0 && MediaTick()) dirty = true;
+                ticks++;
+                if (MediaTick()) dirty = true;
+                if (WxTick()) dirty = true;
                 if (ticks % 5 == 0 && CheckWallpaper()) dirty = true;  // about every 0.5 s
                 if (ticks % 40 == 0 && (IsIconic(hwnd) || !IsWindowVisible(hwnd))) {
                     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
@@ -1387,16 +2073,29 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 TrackMouseEvent(&te);
                 g_tracking = true;
             }
+            float mx = (float)(short)LOWORD(lp), my = (float)(short)HIWORD(lp);
+            bool hp = g_scrub || OnProgress(mx, my);
+            bool redraw = false;
             if (b != g_hoverBtn) {
                 g_hoverBtn = b;
-                Render();
+                redraw = true;
             }
+            if (hp != g_hoverProg) {
+                g_hoverProg = hp;
+                redraw = true;
+            }
+            if (g_scrub) {
+                g_scrubFrac = ProgressFrac(mx);
+                redraw = true;
+            }
+            if (redraw) Render();
             return 0;
         }
         case WM_MOUSELEAVE:
             g_tracking = false;
-            if (g_hoverBtn != -1) {
+            if (g_hoverBtn != -1 || (g_hoverProg && !g_scrub)) {
                 g_hoverBtn = -1;
+                if (!g_scrub) g_hoverProg = false;
                 Render();
             }
             return 0;
@@ -1404,19 +2103,60 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             POINT pt;
             GetCursorPos(&pt);
             ScreenToClient(hwnd, &pt);
-            SetCursor(LoadCursorW(nullptr, BtnAt((float)pt.x, (float)pt.y) >= 0 ? IDC_HAND : IDC_ARROW));
+            bool hand = BtnAt((float)pt.x, (float)pt.y) >= 0 || g_scrub || OnProgress((float)pt.x, (float)pt.y);
+            SetCursor(LoadCursorW(nullptr, hand ? IDC_HAND : IDC_ARROW));
             return TRUE;
         }
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
-        case WM_LBUTTONUP: {
+        case WM_LBUTTONDOWN: {
+            float dx = (float)(short)LOWORD(lp), dy = (float)(short)HIWORD(lp);
+            if (OnProgress(dx, dy)) {  // progress bar: click or drag to seek
+                g_scrub = true;
+                g_hoverProg = true;
+                g_scrubFrac = ProgressFrac(dx);
+                SetCapture(hwnd);
+                Render();
+                return 0;
+            }
             int b = BtnAt((float)(short)LOWORD(lp), (float)(short)HIWORD(lp));
             if (b >= 0) {
-                MediaCommand(b);
-                g_dirty = true;
+                g_pressBtn = b;
+                SetCapture(hwnd);
+                Render();  // pressed look right away
             }
             return 0;
         }
+        case WM_LBUTTONUP: {
+            if (g_scrub) {
+                float ux = (float)(short)LOWORD(lp), uy = (float)(short)HIWORD(lp);
+                g_scrub = false;
+                ReleaseCapture();
+                SeekFrac(ProgressFrac(ux));
+                g_hoverProg = OnProgress(ux, uy);
+                Render();
+                return 0;
+            }
+            int pressed = g_pressBtn;
+            if (pressed >= 0) {
+                g_pressBtn = -1;
+                ReleaseCapture();
+            }
+            int b = BtnAt((float)(short)LOWORD(lp), (float)(short)HIWORD(lp));
+            if (b >= 0 && b == pressed) ClickButton(b);
+            Render();
+            return 0;
+        }
+        case WM_CAPTURECHANGED:
+            if (g_scrub) {  // capture taken away while dragging: drop the drag, no seek
+                g_scrub = false;
+                Render();
+            }
+            if (g_pressBtn >= 0) {
+                g_pressBtn = -1;
+                Render();
+            }
+            return 0;
         case WM_KILLFOCUS:
         case WM_ACTIVATE:
             ApplyZOrder();
@@ -1441,6 +2181,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_APP + 1:  // settings changed
             LoadSettings();
+            if (g_cmdEvt) SetEvent(g_cmdEvt);  // media thread re-reads at once (browser setting)
             ApplyHotkey(hwnd);
             Layout();
             ApplyZOrder();
@@ -1510,7 +2251,7 @@ DWORD WINAPI UiThread(LPVOID) {
     g_glass.reset();
     g_artBmp.reset();
     fNum.reset(); fTitle.reset(); fLabel.reset(); fSmall.reset(); fSmallB.reset();
-    fTiny.reset(); fNumeral.reset(); fSym.reset();
+    fTiny.reset(); fNumeral.reset(); fSym.reset(); fTemp.reset();
     if (g_memDC) {
         SelectObject(g_memDC, g_oldBmp);
         DeleteObject(g_dib);
@@ -1525,16 +2266,21 @@ DWORD WINAPI UiThread(LPVOID) {
 }  // namespace
 
 BOOL WhTool_ModInit() {
-    g_mediaEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_stopEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_cmdEvt = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_wxEvt = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_uiReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_mediaEvt || !g_uiReady) {
+    if (!g_stopEvt || !g_cmdEvt || !g_wxEvt || !g_uiReady) {
         Wh_Log(L"CreateEventW failed: %lu", GetLastError());
-        if (g_mediaEvt) CloseHandle(g_mediaEvt);
+        if (g_stopEvt) CloseHandle(g_stopEvt);
+        if (g_cmdEvt) CloseHandle(g_cmdEvt);
+        if (g_wxEvt) CloseHandle(g_wxEvt);
         if (g_uiReady) CloseHandle(g_uiReady);
-        g_mediaEvt = g_uiReady = nullptr;
+        g_stopEvt = g_cmdEvt = g_wxEvt = g_uiReady = nullptr;
         return FALSE;
     }
     g_mediaThread = CreateThread(nullptr, 0, MediaThread, nullptr, 0, nullptr);
+    g_wxThread = CreateThread(nullptr, 0, WeatherThread, nullptr, 0, nullptr);
     g_thread = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
     return TRUE;
 }
@@ -1544,7 +2290,7 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    if (g_mediaEvt) SetEvent(g_mediaEvt);
+    if (g_stopEvt) SetEvent(g_stopEvt);
     if (g_thread) {
         // Wait until the window exists, or until the thread has ended on its own
         // (startup failure); only then is it safe to ask it to close.
@@ -1561,9 +2307,23 @@ void WhTool_ModUninit() {
         CloseHandle(g_mediaThread);
         g_mediaThread = nullptr;
     }
-    if (g_mediaEvt) {
-        CloseHandle(g_mediaEvt);
-        g_mediaEvt = nullptr;
+    if (g_wxThread) {
+        // Network calls have time limits, so this ends too.
+        WaitForSingleObject(g_wxThread, INFINITE);
+        CloseHandle(g_wxThread);
+        g_wxThread = nullptr;
+    }
+    if (g_wxEvt) {
+        CloseHandle(g_wxEvt);
+        g_wxEvt = nullptr;
+    }
+    if (g_stopEvt) {
+        CloseHandle(g_stopEvt);
+        g_stopEvt = nullptr;
+    }
+    if (g_cmdEvt) {
+        CloseHandle(g_cmdEvt);
+        g_cmdEvt = nullptr;
     }
     if (g_uiReady) {
         CloseHandle(g_uiReady);
