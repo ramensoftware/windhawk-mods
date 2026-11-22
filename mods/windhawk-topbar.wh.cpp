@@ -2633,7 +2633,9 @@ void ShellTrayPushToClient();
 wuxm::SolidColorBrush FontColorBrush(uint8_t alpha);
 void ApplyAllControlStyles();
 bool UserControlStylesSetProperty(FrameworkElement const& element, const std::wstring& propName);
-static bool g_applyingUserControlStyles = false;
+bool ThemeOrUserStylesSetProperty(FrameworkElement const& element, const std::wstring& propName);
+// 0 = BuiltInStyles (Settings app defaults), 1 = Theme styles, 2 = User YAML controlStyles
+static int g_styleApplyTier = 0;
 void ApplyControlStylesToPopupRoot(FrameworkElement const& root);
 void UpdateTrayIconRotation();
 void ApplyVisibilitySettings();
@@ -3259,6 +3261,13 @@ const std::vector<ControlStyleRule>& BuiltInStyles() {
             L"BorderBrush:=#18FFFFFF",
             L"BorderBrush@PointerOver:=#26FFFFFF",
             L"BorderBrush@Pressed:=#12FFFFFF"}},
+        {L"StackPanel#PinnedTrayPanel", {
+            L"Margin=3,4",
+            L"CornerRadius=6",
+            L"BorderThickness=1",
+            L"BackgroundSizing=InnerBorderEdge",
+            L"Background:=#0FFFFFFF",
+            L"BorderBrush:=#18FFFFFF"}},
         {L"ResourceButton", {
             L"Background:=transparent",
             L"Background@PointerOver:=transparent",
@@ -3326,43 +3335,22 @@ const std::vector<ControlStyleRule>& BuiltInStyles() {
 }
 const std::vector<ControlStyleRule> g_themeGreenBarStyles = {
     {L"TopBarRoot", {L"Background:=#102A27", L"IconColor=#7FD1C4"}},
-    {L"WeatherButton", {L"Background:=#27403C"}},
-    {L"WallpaperButton", {L"Background:=#27403C"}},
-    {L"RecycleBinButton", {L"Background:=#27403C"}},
-    {L"SettingsButton", {L"Background:=#27403C"}},
-    {L"WifiHeaderToggle", {L"Width=50"}},
-    {L"BluetoothHeaderToggle", {L"Width=50"}},
-    {L"StartButton", {L"Background:=#27403C"}},
-    {L"SearchButton", {L"Background:=#27403C"}},
-    {L"VirtualDesktopButton", {L"Background:=#27403C"}},
-    {L"ClockButton", {L"Background:=#27403C"}},
-    {L"DisplayButton", {L"Background:=#27403C"}},
-    {L"SoundButton", {L"Background:=#27403C"}},
-    {L"WifiButton", {L"Background:=#27403C"}},
-    {L"BluetoothButton", {L"Background:=#27403C"}},
-    {L"ResourceButton", {L"Background:=#27403C"}},
-    {L"NetworkButton", {L"Background:=#27403C", L"BorderThickness=1", L"BorderBrush:=#1B2E2B", L"Margin=5,4"}},
-    {L"SpeedTestButton", {L"Background:=#27403C"}},
-    {L"BatteryButton", {L"Background:=#27403C"}}, 
-    {L"ControlCenterButton", {L"Background:=#27403C"}},
-    {L"NotificationsButton", {L"Background:=#27403C"}},
-    {L"TaskButton", {L"Background:=#27403C"}},
-    {L"TaskOverflowButton", {L"Background:=#27403C"}},
+    {L"Grid#TopBarRoot > StackPanel > Button", {L"Background:=#27403C"}},
+    {L"Grid#TopBarRoot > StackPanel > Button#ResourceButton > ContentPresenter#ContentPresenter > Grid#ResourceGrid",
+     {L"Background=transparent"}},
+    {L"Grid#TopBarRoot > StackPanel > Button#ResourceButton > ContentPresenter#ContentPresenter > Grid#ResourceGrid > Button > ContentPresenter#ContentPresenter",
+     {L"Background:=#27403C"}},
+    {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder > ContentPresenter > Viewbox#TopBarScaler > Border > Grid#BarRoot > Grid#TopBarRoot > StackPanel#ControlCenterPanel > StackPanel#PinnedTrayPanel",
+     {L"Background:=#27403C"}},
+    {L"Button#TaskButton", {L"Background:=#27403C"}},
     {L"AppTitleButton", {L"Background:=#27403C"}},
-    {L"MediaButton", {L"Background:=#27403C"}},
-    {L"TrayIconButton", {L"Background:=#27403C"}},
-    {L"PinnedTrayIconButton", {L"Background:=#27403C"}},
-    {L"MediaTransportButton, MediaPrevButton, MediaPauseButton, MediaResumeButton, MediaNextButton", {L"Background:=#1B2E2B"}},
+    {L"MediaTransportButton", {L"Background:=#1B2E2B"}},
     {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder",
      {L"IconColor=#7FD1C4", L"Background:=#1B2E2B"}},
     {L"FlyoutBlurHost", {L"Background:=#1B2E2B"}},
     {L"Canvas > MenuFlyoutPresenter > Grid > Border#PART_BackgroundBorder",
      {L"Background:=#1B2E2B"}},
-    // Split resource / network tiles follow the same button colour.
     {L"ResourceCpuButton, ResourceRamButton, ResourceGpuButton, ResourceDiskButton, NetworkDownloadButton, NetworkUploadButton",
-     {L"Background:=#27403C", L"BorderThickness=1", L"BorderBrush:=#1B2E2B", L"Margin=3,4,3,4"}},
-    {L"ResourceButton",
-     {L"Background:=transparent", L"BorderThickness=0", L"Padding=0", L"Margin=0"}},
 };
 
 const std::vector<ControlStyleRule> g_themeNoIslandsStyles = {
@@ -6187,7 +6175,7 @@ void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rul
         normalizedProperty.pop_back();
     if (normalizedProperty == L"Background") {
         const std::wstring elementName(element.Name());
-        if (g_applyingUserControlStyles) {
+        if (g_styleApplyTier >= 1) {
             if (elementName == L"TopBarRoot" || elementName == L"BarRoot") {
                 if (auto blurIt = g_namedElements.find(L"GlobalBlurLayer");
                     blurIt != g_namedElements.end()) {
@@ -6210,7 +6198,7 @@ void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rul
         }
     }
 
-    if (g_applyingUserControlStyles &&
+    if (g_styleApplyTier >= 1 &&
         normalizedProperty.find(L'@') == std::wstring::npos &&
         !element.try_as<wuxc::TextBlock>() &&
         (normalizedProperty == L"FontFamily" || normalizedProperty == L"FontSize" ||
@@ -6233,7 +6221,10 @@ void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rul
                 if (auto tb = node.try_as<wuxc::TextBlock>()) {
                     if (!isIconGlyphTb(tb)) {
                         auto tbFe = tb.as<FrameworkElement>();
-                        if (!UserControlStylesSetProperty(tbFe, normalizedProperty)) {
+                        bool childHasOwnRule = (g_styleApplyTier >= 2)
+                            ? UserControlStylesSetProperty(tbFe, normalizedProperty)
+                            : ThemeOrUserStylesSetProperty(tbFe, normalizedProperty);
+                        if (!childHasOwnRule) {
                             ApplySingleStyleToElement(tbFe, trimmedRule);
                         }
                     }
@@ -7064,11 +7055,12 @@ void ApplyControlStylesToPopupRoot(FrameworkElement const& root) {
 
     ApplyIconColorToElement(root, defaultIconColor);
     ApplyRuleListToPopupRoot(BuiltInStyles(), root);
-    ApplyRuleListToPopupRoot(g_themeStyleRules, root);
     {
-        bool prevUser = g_applyingUserControlStyles;
-        g_applyingUserControlStyles = true;
-        struct UserGuard { bool prev; ~UserGuard() { g_applyingUserControlStyles = prev; } } userGuard{prevUser};
+        int prevTier = g_styleApplyTier;
+        struct TierGuard { int prev; ~TierGuard() { g_styleApplyTier = prev; } } tierGuard{prevTier};
+        g_styleApplyTier = 1;
+        ApplyRuleListToPopupRoot(g_themeStyleRules, root);
+        g_styleApplyTier = 2;
         ApplyRuleListToPopupRoot(g_controlStyleRules, root);
     }
     ApplyShadowTree(root);
@@ -7096,19 +7088,22 @@ static void ApplyControlStylesToSurface(FrameworkElement const& surface) {
         }
     };
     apply(BuiltInStyles());
-    apply(g_themeStyleRules);
     {
-        bool prevUser = g_applyingUserControlStyles;
-        g_applyingUserControlStyles = true;
-        struct UserGuard { bool prev; ~UserGuard() { g_applyingUserControlStyles = prev; } } userGuard{prevUser};
+        int prevTier = g_styleApplyTier;
+        struct TierGuard { int prev; ~TierGuard() { g_styleApplyTier = prev; } } tierGuard{prevTier};
+        g_styleApplyTier = 1;
+        apply(g_themeStyleRules);
+        g_styleApplyTier = 2;
         apply(g_controlStyleRules);
     }
 }
 
-bool UserControlStylesSetProperty(FrameworkElement const& element, const std::wstring& propName) {
-    if (!element || g_controlStyleRules.empty()) return false;
+static bool RuleListSetsProperty(const std::vector<ControlStyleRule>& rules,
+                                 FrameworkElement const& element,
+                                 const std::wstring& propName) {
+    if (!element || rules.empty()) return false;
     try {
-        for (auto const& rule : g_controlStyleRules) {
+        for (auto const& rule : rules) {
             bool setsProp = false;
             for (auto const& style : rule.styles) {
                 auto trimmed = TrimWs(style);
@@ -7142,6 +7137,15 @@ bool UserControlStylesSetProperty(FrameworkElement const& element, const std::ws
         }
     } catch (...) {}
     return false;
+}
+
+bool UserControlStylesSetProperty(FrameworkElement const& element, const std::wstring& propName) {
+    return RuleListSetsProperty(g_controlStyleRules, element, propName);
+}
+
+bool ThemeOrUserStylesSetProperty(FrameworkElement const& element, const std::wstring& propName) {
+    return RuleListSetsProperty(g_controlStyleRules, element, propName) ||
+           RuleListSetsProperty(g_themeStyleRules, element, propName);
 }
 
 void UpdateCenterPanelAlignment() {
@@ -7298,13 +7302,14 @@ void ApplyAllControlStyles() {
     } catch (...) {}
 
     ApplyRuleList(BuiltInStyles());
-    ApplyRuleList(g_themeStyleRules);
     try { AdaptNetworkButtonDensity(); } catch (...) {}
     try { AdaptTopBarHeightDensity(); } catch (...) {}
     {
-        bool prevUser = g_applyingUserControlStyles;
-        g_applyingUserControlStyles = true;
-        struct UserGuard { bool prev; ~UserGuard() { g_applyingUserControlStyles = prev; } } userGuard{prevUser};
+        int prevTier = g_styleApplyTier;
+        struct TierGuard { int prev; ~TierGuard() { g_styleApplyTier = prev; } } tierGuard{prevTier};
+        g_styleApplyTier = 1;
+        ApplyRuleList(g_themeStyleRules);
+        g_styleApplyTier = 2;
         ApplyRuleList(g_controlStyleRules);
     }
     try {
@@ -7399,11 +7404,11 @@ void ApplyAllControlStyles() {
     if (!g_settings.fontColor.empty() && g_appTitleButton) {
         if (auto text = g_appTitleButton.Content().try_as<wuxc::TextBlock>()) {
             bool hasUserForeground =
-                UserControlStylesSetProperty(text.as<FrameworkElement>(), L"Foreground") ||
-                UserControlStylesSetProperty(g_appTitleButton.as<FrameworkElement>(), L"Foreground");
+                ThemeOrUserStylesSetProperty(text.as<FrameworkElement>(), L"Foreground") ||
+                ThemeOrUserStylesSetProperty(g_appTitleButton.as<FrameworkElement>(), L"Foreground");
             if (!hasUserForeground) {
                 if (auto tbIt = g_namedElements.find(L"TopBarRoot"); tbIt != g_namedElements.end()) {
-                    hasUserForeground = UserControlStylesSetProperty(tbIt->second, L"Foreground");
+                    hasUserForeground = ThemeOrUserStylesSetProperty(tbIt->second, L"Foreground");
                 }
             }
             if (!hasUserForeground) {
@@ -28464,8 +28469,8 @@ void ApplyResourceFlyoutContentUI(const resource::Usage& usage,
         swprintf_s(respBuf, L"%.1f ms", detailed.diskResponseMs);
         label1 = L"Usage";         value1 = usage.diskAvailable ? (std::to_wstring(usage.disk) + L"%") : L"-";
         label2 = L"Capacity";      value2 = resource::FormatDiskCapacityShort(detailed.diskCapacityBytes);
-        label3 = L"Download";      value3 = fmtDiskRate(detailed.diskReadBytesPerSec);
-        label4 = L"Upload";        value4 = fmtDiskRate(detailed.diskWriteBytesPerSec);
+        label3 = L"Read";          value3 = fmtDiskRate(detailed.diskReadBytesPerSec);
+        label4 = L"Write";         value4 = fmtDiskRate(detailed.diskWriteBytesPerSec);
         label5 = L"Response time"; value5 = respBuf;
         label6 = L"Drive Type";    value6 = detailed.diskType.empty() ? L"N/A" : detailed.diskType;
     }
@@ -43203,7 +43208,7 @@ void ApplyTopBarBackgroundNow() {
     }
     auto it = g_namedElements.find(L"TopBarRoot");
     if (it == g_namedElements.end()) return;
-    if (UserControlStylesSetProperty(it->second, L"Background")) return;
+    if (ThemeOrUserStylesSetProperty(it->second, L"Background")) return;
     auto element = it->second.try_as<UIElement>();
     if (!element) return;
     auto brush = winrt::make<XamlBlurBrush>(
@@ -49404,7 +49409,7 @@ void RefreshPinnedTrayIconsOnBar() {
     for (const auto& rec : orderedPinned) {
         auto btn = MakeGhostButton(L"PinnedTrayIconButton", EffectiveControlCorner());
         btn.VerticalAlignment(VerticalAlignment::Stretch);
-        btn.Margin(Thickness{2, 4, 2, 4});
+        btn.Margin(Thickness{2, 1, 2, 1});
         btn.Padding(Thickness{5, 0, 5, 0});
         btn.HorizontalContentAlignment(HorizontalAlignment::Center);
         if (auto bmp = LoadTrayBitmapCached(rec, extractSize)) {
@@ -54706,7 +54711,7 @@ FrameworkElement BuildTopBarContent() {
     root.Loaded([root](wf::IInspectable const&, RoutedEventArgs const&) {
         try { StripInheritedIslandBackgrounds(); } catch (...) {}
         // The bar carries the user's Windhawk Blur / Saturation / Tint unless overridden by YAML controlStyles.
-        if (root.Background() == nullptr && !UserControlStylesSetProperty(root, L"Background")) {
+        if (root.Background() == nullptr && !ThemeOrUserStylesSetProperty(root, L"Background")) {
             root.Background(CreateGlobalBlurBrush(root.as<UIElement>()));
         }
     });
@@ -55903,6 +55908,7 @@ g_centerPanel.Children().Append(resourceButton);
         g_pinnedTrayPanel.Orientation(wuxc::Orientation::Horizontal);
         g_pinnedTrayPanel.VerticalAlignment(VerticalAlignment::Stretch);
         g_pinnedTrayPanel.Visibility(Visibility::Collapsed);
+        RegisterNamed(L"PinnedTrayPanel", g_pinnedTrayPanel);
         rightPanel.Children().Append(g_pinnedTrayPanel);
         rightPanel.Children().Append(trayButton);
         RunOnUiThread([] { try { RefreshPinnedTrayIconsOnBar(); } catch (...) {} });
@@ -62038,7 +62044,7 @@ void ApplyFlyoutBlurBrush(wuxc::Border const& border) {
 void RefreshFlyoutBackdropBrushes() {
     for (const auto& entry : g_namedElements) {
         if (entry.first.find(L"BlurHost") == std::wstring::npos) continue;
-        if (UserControlStylesSetProperty(entry.second, L"Background")) continue;
+        if (ThemeOrUserStylesSetProperty(entry.second, L"Background")) continue;
         try {
             if (auto border = entry.second.try_as<wuxc::Border>())
                 ApplyFlyoutBlurBrush(border);
