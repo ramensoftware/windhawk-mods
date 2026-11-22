@@ -7,7 +7,7 @@
 // @github          https://github.com/MrSpy00
 // @include         explorer.exe
 // @license         MIT
-// @compilerOptions -lole32 -loleaut32 -ldwmapi -lgdi32 -luser32 -lwindowsapp -lruntimeobject -lshcore -lgdiplus -lshell32 -luuid -lkernel32
+// @compilerOptions -lole32 -loleaut32 -ldwmapi -lgdi32 -luser32 -lwtsapi32 -lwindowsapp -lruntimeobject -lshcore -lgdiplus -lshell32 -luuid -lkernel32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -41,12 +41,18 @@ Captures system audio (WASAPI Loopback or microphone input) and integrates with 
 
 ## Key Features
 - **DWM Acrylic Blur**: Uses native DWM acrylic composition without `WS_EX_LAYERED` on the main panel
-- **Taskbar Z-Band Placement**: Uses `CreateWindowInBand` for proper taskbar layering
+- **Taskbar Z-Band Placement**: Uses `CreateWindowInBand` (`ZBID_IMMERSIVE_NOTIFICATION`) inside `explorer.exe` so the panel stays above the taskbar
 - **Media Info & Controls**: Scrolling track title, artist, album art, source badge, progress bar, and playback/volume buttons
 - **Custom Flyouts**: Acrylic media-change flyout with seekable progress bar and volume / Lock-key OSD flyout
 - **Smart Click-Through**: Playback buttons and trackbar are interactive while the visualizer region stays click-through
 - **Auto-Hide**: Automatically hides on fullscreen apps, audio silence, or idle media timeout
-- **Presets**: Built-in layout presets plus 3 customizable user preset slots
+- **Presets**: Built-in layout presets plus 3 customizable user preset slots stored in Windhawk mod storage
+
+## Notes
+- **All-in-one design**: Combines a 8-style spectrum visualizer, GSMTC media controls, acrylic track-change flyout, volume/lock-key OSD, and layout presets into one cohesive taskbar-band capsule.
+- **Native Windows OSD**: Showing the custom volume flyout does not suppress the built-in Windows volume OSD; both may appear together.
+- **Microphone mode**: Setting Audio Capture Source to Microphone causes Windows to show the microphone-in-use indicator on Explorer.
+- **Presets**: Selecting Preset 1–6 overrides individual layout size settings; keeping `Save Current Settings` active overwrites that slot on settings changes.
 */
 // ==/WindhawkModReadme==
 
@@ -56,10 +62,26 @@ Captures system audio (WASAPI Loopback or microphone input) and integrates with 
   $name: "[1. Visualizer] Show Spectrum Visualizer"
 - BarCount: 32
   $name: "[1. Visualizer] Bar Count (4-128)"
-- Style: 0
-  $name: "[1. Visualizer] Style (0=Bars 1=Mirror 2=Blocks 3=Wave 4=Oscilloscope 5=Curve 6=Symmetrical 7=Particles)"
-- ColorMode: 0
-  $name: "[1. Visualizer] Color Mode (0=Gradient 1=Rainbow 2=Solid 3=Beat 4=Adaptive 5=Pitch-Reactive)"
+- Style: "0"
+  $name: "[1. Visualizer] Style"
+  $options:
+    - "0": "Bars"
+    - "1": "Mirror"
+    - "2": "Blocks"
+    - "3": "Wave"
+    - "4": "Oscilloscope"
+    - "5": "Curve"
+    - "6": "Symmetrical"
+    - "7": "Particles"
+- ColorMode: "0"
+  $name: "[1. Visualizer] Color Mode"
+  $options:
+    - "0": "Gradient"
+    - "1": "Rainbow"
+    - "2": "Solid"
+    - "3": "Beat-Reactive"
+    - "4": "Adaptive"
+    - "5": "Pitch-Reactive"
 - Color1: 00CCFF
   $name: "[1. Visualizer] Color1 Primary/Top (Hex RRGGBB)"
 - Color2: FF3300
@@ -67,7 +89,7 @@ Captures system audio (WASAPI Loopback or microphone input) and integrates with 
 - Smoothing: 70
   $name: "[1. Visualizer] Smoothing (0-95)"
 - Sensitivity: 200
-  $name: "[1. Visualizer] Sensitivity % (50-800)"
+  $name: "[1. Visualizer] Sensitivity % (10-1000)"
 - ShowPeaks: true
   $name: "[1. Visualizer] Show Peak Hold Indicators"
 - PeakFallSpeed: 2
@@ -75,7 +97,7 @@ Captures system audio (WASAPI Loopback or microphone input) and integrates with 
 - GlowEffect: false
   $name: "[1. Visualizer] Glow Effect"
 - GlowIntensity: 40
-  $name: "[1. Visualizer] Glow Intensity (10-120)"
+  $name: "[1. Visualizer] Glow Intensity (5-150)"
 - BarSpacing: 1
   $name: "[1. Visualizer] Bar Spacing (px)"
 - BlockSize: 4
@@ -190,8 +212,12 @@ Captures system audio (WASAPI Loopback or microphone input) and integrates with 
   $name: "[6. Panel Layout & Size] Panel Width (px)"
 - PanelHeight: 48
   $name: "[6. Panel Layout & Size] Panel Height (px)"
-- Position: 1
-  $name: "[6. Panel Layout & Size] Position (0=Left 1=Center 2=Right)"
+- Position: "1"
+  $name: "[6. Panel Layout & Size] Position"
+  $options:
+    - "0": "Left"
+    - "1": "Center"
+    - "2": "Right"
 - OffsetX: 0
   $name: "[6. Panel Layout & Size] X Offset (px)"
 - OffsetY: 0
@@ -262,8 +288,11 @@ Captures system audio (WASAPI Loopback or microphone input) and integrates with 
   $name: "[8. Theme & Typography] Custom Artist Color (Hex)"
 - ShowTextShadow: true
   $name: "[8. Theme & Typography] Show Text Shadow"
-- CaptureMode: 0
-  $name: "[9. Audio Input] Audio Capture Source (0=System Audio, 1=Microphone)"
+- CaptureMode: "0"
+  $name: "[9. Audio Input] Audio Capture Source"
+  $options:
+    - "0": "System Audio (Loopback)"
+    - "1": "Microphone"
 - PresetMode: "0"
   $name: "[10. Presets] Active Layout Preset"
   $options:
@@ -286,8 +315,6 @@ Captures system audio (WASAPI Loopback or microphone input) and integrates with 
 
 #define INITGUID
 #define _USE_MATH_DEFINES
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX          // Disable windows.h min/max macros in favor of std::min/max
 
 #include <cmath>
 #ifndef M_PI
@@ -296,6 +323,7 @@ Captures system audio (WASAPI Loopback or microphone input) and integrates with 
 
 #include <windows.h>
 #include <windowsx.h>
+#include <wtsapi32.h>
 #include <tlhelp32.h>
 #include <mmdeviceapi.h>
 #include <audioclient.h>
@@ -314,6 +342,7 @@ Captures system audio (WASAPI Loopback or microphone input) and integrates with 
 #include <atomic>
 #include <algorithm>
 #include <condition_variable>
+#include <optional>
 #include <cstring>
 #include <cstdio>
 
@@ -498,35 +527,11 @@ struct ModSettings {
     int   presetAction             = 0;
 } g_Settings;
 
-static wstring GetPresetFilePath() {
-    const wchar_t* appData = _wgetenv(L"APPDATA");
-    if (!appData || !appData[0]) {
-        appData = _wgetenv(L"LOCALAPPDATA");
-    }
-    if (appData && appData[0]) {
-        wstring path = appData;
-        path += L"\\Windhawk_TaskbarAudioMediaSuite_presets.ini";
-        return path;
-    }
-    wchar_t tmpDir[MAX_PATH] = {};
-    if (GetTempPathW(MAX_PATH, tmpDir) > 0) {
-        wstring path = tmpDir;
-        path += L"Windhawk_TaskbarAudioMediaSuite_presets.ini";
-        return path;
-    }
-    return L"Windhawk_TaskbarAudioMediaSuite_presets.ini";
-}
-
 static void SavePreset(int index) {
-    wchar_t section[32];
-    swprintf_s(section, L"Preset%d", index);
-    
-    wstring filePath = GetPresetFilePath();
-    
     auto writeNum = [&](const wchar_t* key, int val) {
-        wchar_t buf[32];
-        swprintf_s(buf, L"%d", val);
-        WritePrivateProfileStringW(section, key, buf, filePath.c_str());
+        wchar_t name[96];
+        swprintf_s(name, L"Preset%d_%s", index, key);
+        Wh_SetIntValue(name, val);
     };
 
     writeNum(L"panelW", g_Settings.panelW);
@@ -586,13 +591,10 @@ static void SavePreset(int index) {
 }
 
 static void LoadPreset(int index) {
-    wchar_t section[32];
-    swprintf_s(section, L"Preset%d", index);
-
-    wstring filePath = GetPresetFilePath();
-
     auto readNum = [&](const wchar_t* key, int def) -> int {
-        return GetPrivateProfileIntW(section, key, def, filePath.c_str());
+        wchar_t name[96];
+        swprintf_s(name, L"Preset%d_%s", index, key);
+        return Wh_GetIntValue(name, def);
     };
 
     g_Settings.panelW = readNum(L"panelW", g_Settings.panelW);
@@ -653,18 +655,24 @@ static void LoadPreset(int index) {
 
 static void LoadSettings() {
     auto clamp = [](int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; };
+    auto readOptionInt = [](const wchar_t* key, int def) -> int {
+        PCWSTR s = Wh_GetStringSetting(key);
+        int v = (s[0] != L'\0') ? _wtoi(s) : def;
+        Wh_FreeStringSetting(s);
+        return v;
+    };
 
     g_Settings.showVisualizer    = Wh_GetIntSetting(L"ShowVisualizer")    != 0;
     g_Settings.showMediaInfo     = Wh_GetIntSetting(L"ShowMediaInfo")     != 0;
     g_Settings.showMediaControls = Wh_GetIntSetting(L"ShowMediaControls") != 0;
     g_Settings.barCount          = clamp(Wh_GetIntSetting(L"BarCount"),       4,  MAX_BARS);
-    g_Settings.style             = clamp(Wh_GetIntSetting(L"Style"),          0,  7);
-    g_Settings.colorMode         = clamp(Wh_GetIntSetting(L"ColorMode"),      0,  5);
+    g_Settings.style             = clamp(readOptionInt(L"Style", 0),          0,  7);
+    g_Settings.colorMode         = clamp(readOptionInt(L"ColorMode", 0),      0,  5);
     g_Settings.smoothing         = clamp(Wh_GetIntSetting(L"Smoothing"),      0,  95);
     g_Settings.sensitivity       = clamp(Wh_GetIntSetting(L"Sensitivity"),    10, 1000);
     g_Settings.panelW            = clamp(Wh_GetIntSetting(L"PanelWidth"),     60, 2000);
     g_Settings.panelH            = clamp(Wh_GetIntSetting(L"PanelHeight"),    16, 400);
-    g_Settings.position          = clamp(Wh_GetIntSetting(L"Position"),       0,  2);
+    g_Settings.position          = clamp(readOptionInt(L"Position", 1),       0,  2);
     g_Settings.offsetX           = Wh_GetIntSetting(L"OffsetX");
     g_Settings.offsetY           = Wh_GetIntSetting(L"OffsetY");
     g_Settings.targetFPS         = clamp(Wh_GetIntSetting(L"TargetFPS"),      10, 60);
@@ -696,18 +704,7 @@ static void LoadSettings() {
     g_Settings.scrollPadding     = clamp(Wh_GetIntSetting(L"ScrollPadding"), 10, 500);
     g_Settings.useCustomTextColors = Wh_GetIntSetting(L"UseCustomTextColors") != 0;
     g_Settings.showTextShadow    = Wh_GetIntSetting(L"ShowTextShadow")    != 0;
-    g_Settings.captureMode       = clamp(Wh_GetIntSetting(L"CaptureMode"), 0, 1);
-    auto readOptionInt = [](const wchar_t* key, int def) -> int {
-        PCWSTR s = Wh_GetStringSetting(key);
-        int v = def;
-        if (s && s[0] != L'\0') {
-            v = _wtoi(s);
-        } else {
-            v = Wh_GetIntSetting(key);
-        }
-        if (s) Wh_FreeStringSetting(s);
-        return v;
-    };
+    g_Settings.captureMode       = clamp(readOptionInt(L"CaptureMode", 0), 0, 1);
 
     g_Settings.showMediaFlyout   = Wh_GetIntSetting(L"ShowMediaFlyout") != 0;
     g_Settings.flyoutOnFullscreen = Wh_GetIntSetting(L"FlyoutOnFullscreen") != 0;
@@ -971,11 +968,16 @@ static std::atomic<int> g_volumeFlyoutType{0}; // 0=Volume, 1=Caps Lock, 2=Num L
 static std::atomic<bool> g_volumeFlyoutActive{false}; // true=On, false=Off
 
 static HHOOK g_keyboardHook = nullptr;
+static DWORD g_hookThreadId = 0;
 
-typedef BOOL(WINAPI* pWTSRegisterSessionNotification)(HWND, DWORD);
-typedef BOOL(WINAPI* pWTSUnRegisterSessionNotification)(HWND);
-static pWTSRegisterSessionNotification g_WTSRegisterSessionNotification = nullptr;
-static pWTSUnRegisterSessionNotification g_WTSUnRegisterSessionNotification = nullptr;
+static HMODULE GetOwnModuleHandle() {
+    HMODULE hMod = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        (LPCWSTR)GetOwnModuleHandle,
+        &hMod);
+    return hMod ? hMod : GetModuleHandleW(nullptr);
+}
 
 static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
@@ -983,24 +985,12 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
             DWORD vk = pKbd->vkCode;
             if (vk == VK_CAPITAL || vk == VK_NUMLOCK || vk == VK_SCROLL) {
-                bool active = false;
-                DWORD fgThreadId = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
-                DWORD ourThreadId = GetCurrentThreadId();
-                if (fgThreadId != 0 && fgThreadId != ourThreadId) {
-                    AttachThreadInput(ourThreadId, fgThreadId, TRUE);
-                    active = (GetKeyState(vk) & 0x0001) != 0;
-                    AttachThreadInput(ourThreadId, fgThreadId, FALSE);
-                } else {
-                    active = (GetKeyState(vk) & 0x0001) != 0;
-                }
+                bool active = (GetKeyState(vk) & 0x0001) != 0;
 
                 int type = 0;
                 if (vk == VK_CAPITAL) type = 1;
                 else if (vk == VK_NUMLOCK) type = 2;
                 else if (vk == VK_SCROLL) type = 3;
-
-                Wh_Log(L"Keyboard hook: VK toggle detected (vk=%u, type=%d, active=%d). Target HWND=%p, IsWindow=%d", 
-                       vk, type, active, g_hVolumeFlyoutWnd, g_hVolumeFlyoutWnd ? IsWindow(g_hVolumeFlyoutWnd) : 0);
 
                 if (g_hVolumeFlyoutWnd && IsWindow(g_hVolumeFlyoutWnd)) {
                     PostMessageW(g_hVolumeFlyoutWnd, WM_APP + 41, type, active ? 1 : 0);
@@ -1009,33 +999,6 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
         }
     }
     return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
-}
-
-static void HideWindowsOsd() {
-    if (!g_Settings.showVolumeFlyout) return;
-    
-    HWND hOsd = FindWindowW(L"MtcUihostClass", nullptr);
-    if (hOsd && IsWindowVisible(hOsd)) {
-        ShowWindow(hOsd, SW_HIDE);
-    }
-    
-    auto HideOsdClass = [](const wchar_t* className) {
-        HWND hXamlOsd = nullptr;
-        while ((hXamlOsd = FindWindowExW(nullptr, hXamlOsd, className, nullptr)) != nullptr) {
-            if (IsWindowVisible(hXamlOsd)) {
-                RECT r;
-                GetWindowRect(hXamlOsd, &r);
-                int w = r.right - r.left;
-                int h = r.bottom - r.top;
-                // Volume/brightness flyout is small. Other WASDK flyouts like Start Menu are large.
-                if (w > 0 && w < 300 && h > 0 && h < 650) {
-                    ShowWindow(hXamlOsd, SW_HIDE);
-                }
-            }
-        }
-    };
-    HideOsdClass(L"XamlExplorerHostIslandWindow");
-    HideOsdClass(L"XamlExplorerHostIslandWindow_WASDK");
 }
 
 static void AdjustSystemVolume(int delta) {
@@ -1144,7 +1107,7 @@ static float        g_ringBuf[RING_SIZE] = {};
 static int          g_ringWrite          = 0;
 static mutex        g_ringMutex;
 static atomic<bool> g_audioRunning{false};
-static thread       g_audioThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_audioThread;
 static UINT32       g_sampleRate = 44100;
 
 // Auto-hide state
@@ -1177,7 +1140,7 @@ static winrt::event_token g_tokenSessionsChanged;
 static winrt::event_token g_tokenPlaybackInfoChanged;
 static winrt::event_token g_tokenMediaPropertiesChanged;
 static winrt::event_token g_tokenTimelinePropertiesChanged;
-static GlobalSystemMediaTransportControlsSession g_CurrentRegisteredSession = nullptr;
+[[clang::no_destroy]] static GlobalSystemMediaTransportControlsSession g_CurrentRegisteredSession = nullptr;
 
 static std::mutex g_mediaUpdateMutex;
 static std::condition_variable g_mediaUpdateCv;
@@ -1190,14 +1153,14 @@ static void TriggerInstantMediaUpdate() {
 }
 
 static mutex        g_sessionMgrMutex;
-static GlobalSystemMediaTransportControlsSessionManager g_SessionManager = nullptr;
+[[clang::no_destroy]] static GlobalSystemMediaTransportControlsSessionManager g_SessionManager = nullptr;
 static atomic<bool> g_mediaRunning{false};
-static thread       g_mediaThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_mediaThread;
 
-static thread*      g_visThread    = nullptr;
+[[clang::no_destroy]] static std::optional<std::thread> g_visThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_hookThread;
 static atomic<bool> g_threadFinished{false};
 static atomic<bool> g_uninitRequested{false};
-static HMODULE      g_hWts         = nullptr;
 
 // Button info
 struct Button {
@@ -1237,7 +1200,6 @@ static uint64_t  g_flyoutCachedArtGen   = UINT64_MAX;
 
 static void CalculateLayout(int W, int H, float& mediaX, float& mediaW, float& visX, float& visW, float& ctrlX, float& ctrlW);
 static void WakeUpAudio(HWND hwnd);
-static void WakeUpRenderer(HWND hwnd);
 static void RedrawMediaFlyout();
 static void RedrawVolumeFlyout();
 
@@ -1358,14 +1320,21 @@ static Color DWORDtoColor(DWORD d, BYTE a = 255) {
     return Color(a, (d>>16)&0xFF, (d>>8)&0xFF, d&0xFF);
 }
 
-static bool IsSystemLightMode() {
+static std::atomic<bool> g_cachedLightMode{false};
+
+static void RefreshSystemLightMode() {
     DWORD value = 0; DWORD size = sizeof(value);
+    bool light = false;
     if (RegGetValueW(HKEY_CURRENT_USER,
         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
         L"SystemUsesLightTheme", RRF_RT_DWORD, nullptr, &value, &size) == ERROR_SUCCESS) {
-        return value != 0;
+        light = value != 0;
     }
-    return false;
+    g_cachedLightMode.store(light, memory_order_relaxed);
+}
+
+static bool IsSystemLightMode() {
+    return g_cachedLightMode.load(memory_order_relaxed);
 }
 
 static Color ExtractVibrantColor(Bitmap* bmp) {
@@ -1715,15 +1684,10 @@ static void WakeUpAudio(HWND hwnd) {
         Wh_Log(L"Audio awakened from dynamic sleep.");
     }
     
-    if (g_lowFPSMode.load(memory_order_relaxed)) {
-        g_lowFPSMode.store(false, memory_order_relaxed);
+    if (g_lowFPSMode.exchange(false, memory_order_relaxed)) {
         int interval = max(16, 1000 / max(1, g_Settings.targetFPS));
         SetTimer(hwnd, IDT_RENDER, interval, nullptr);
     }
-}
-
-static void WakeUpRenderer(HWND hwnd) {
-    WakeUpAudio(hwnd);
 }
 
 static void SeekToPosition(double seconds) {
@@ -1950,8 +1914,9 @@ static void AudioCaptureThread() {
                                 }
                                 s /= chF;
                                 if (std::abs(s) > 0.005f && g_lowFPSMode.load(memory_order_relaxed)) {
-                                    g_lowFPSMode.store(false, memory_order_relaxed);
-                                    SendNotifyMessageW(g_hVisWnd, WM_APP + 25, 0, 0);
+                                    if (g_hVisWnd && IsWindow(g_hVisWnd)) {
+                                        PostMessageW(g_hVisWnd, WM_APP + 25, 0, 0);
+                                    }
                                 }
                             }
                             g_ringBuf[g_ringWrite] = s;
@@ -2419,15 +2384,15 @@ static void UpdateMediaInfo() {
                 // Note: sourceAppId and appIcon already handled above via s_lastSourceAppId
             }
 
-            if (isPlaying) {
-                WakeUpAudio(g_hVisWnd);
+            if (isPlaying && g_hVisWnd && IsWindow(g_hVisWnd)) {
+                PostMessageW(g_hVisWnd, WM_APP + 25, 0, 0);
             }
 
             if (g_hVisWnd && IsWindow(g_hVisWnd)) {
                 InvalidateRect(g_hVisWnd, nullptr, FALSE);
             }
             if (g_hMediaFlyoutWnd && IsWindow(g_hMediaFlyoutWnd)) {
-                RedrawMediaFlyout();
+                PostMessageW(g_hMediaFlyoutWnd, WM_APP + 36, 0, 0);
             }
         } else {
             s_noSessionCount++;
@@ -2470,7 +2435,7 @@ static void UpdateMediaInfo() {
                         InvalidateRect(g_hVisWnd, nullptr, FALSE);
                     }
                     if (g_hMediaFlyoutWnd && IsWindow(g_hMediaFlyoutWnd)) {
-                        RedrawMediaFlyout();
+                        PostMessageW(g_hMediaFlyoutWnd, WM_APP + 36, 0, 0);
                     }
                 }
             }
@@ -2505,7 +2470,7 @@ static void UpdateMediaInfo() {
                 InvalidateRect(g_hVisWnd, nullptr, FALSE);
             }
             if (g_hMediaFlyoutWnd && IsWindow(g_hMediaFlyoutWnd)) {
-                RedrawMediaFlyout();
+                PostMessageW(g_hMediaFlyoutWnd, WM_APP + 36, 0, 0);
             }
         }
     }
@@ -3611,7 +3576,7 @@ static void DrawPanel(HDC hdc, int W, int H) {
     if (g_Settings.showMediaControls && ctrlW > 0.0f) {
         if (g_Settings.showVisualizer && visW > 0.0f) {
             float div2_X = ctrlX + ctrlW + gap / 2.0f;
-            g.DrawLine(&divPen, div2_X, containerY + 4.0f, div2_X, containerY + containerH - 4.0f);
+            g.DrawLine(&divPen, div2_X, containerY + (float)g_Settings.dividerPadding, div2_X, containerY + containerH - (float)g_Settings.dividerPadding);
         }
     }
 }
@@ -3671,7 +3636,7 @@ static void RepositionWindow(HWND hwnd) {
         }
     }
 
-    WakeUpRenderer(hwnd);
+    WakeUpAudio(hwnd);
     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
 }
 
@@ -3769,7 +3734,7 @@ static void RegisterBarHook(HWND hwnd) {
             g_barHook = SetWinEventHook(
                 EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
                 nullptr, BarHookProc, pid, tid,
-                WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+                WINEVENT_OUTOFCONTEXT);
     }
     PostMessage(hwnd, WM_APP + 20, 0, 0);
 }
@@ -4838,6 +4803,13 @@ static LRESULT CALLBACK MediaFlyoutWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARA
             return 0;
         }
 
+        case WM_APP + 36: { // Redraw media flyout on UI thread only
+            if (g_mediaFlyoutState != 0) {
+                RedrawMediaFlyout();
+            }
+            return 0;
+        }
+
         case WM_TIMER: {
             if (wp == TIMER_MEDIA_SHOW) {
                 POINT pt; GetCursorPos(&pt);
@@ -4984,11 +4956,6 @@ static LRESULT CALLBACK VolumeFlyoutWndProc(HWND hwnd, UINT msg, WPARAM wp, LPAR
             return 0;
         }
 
-        case WM_APP + 40: { // Volume changed trigger
-            // Discard volume OSD triggers from our mod
-            return 0;
-        }
-
         case WM_APP + 41: { // Lock key state changed trigger (wp = type, lp = active)
             int prevType = g_volumeFlyoutType.load();
             int newType = (int)wp;
@@ -4998,9 +4965,6 @@ static LRESULT CALLBACK VolumeFlyoutWndProc(HWND hwnd, UINT msg, WPARAM wp, LPAR
             if (g_Settings.hideOnFullscreen && IsFullscreenActive()) return 0; // Don't show in fullscreen
             
             g_volumeFlyoutShowTimeLeft = g_Settings.volumeFlyoutDuration * 1000;
-            
-            Wh_Log(L"VolumeFlyoutWndProc: Received WM_APP + 41 (type=%d, active=%d, state=%d, prevType=%d)", 
-                   newType, lp, g_volumeFlyoutState, prevType);
 
             // If the flyout is already visible/active and the type did not change,
             // just redraw smoothly. If it was fading out (state == 3), abort fade out and show fully.
@@ -5087,7 +5051,8 @@ static LRESULT CALLBACK VolumeFlyoutWndProc(HWND hwnd, UINT msg, WPARAM wp, LPAR
 static LRESULT CALLBACK VisWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_CREATE: {
-UpdateAppearance(hwnd);
+            RefreshSystemLightMode();
+            UpdateAppearance(hwnd);
             int interval = max(16, 1000 / max(1, g_Settings.targetFPS));
             SetTimer(hwnd, IDT_RENDER, interval, nullptr);
             SetTimer(hwnd, IDT_RETRY,  600,      nullptr);
@@ -5109,9 +5074,7 @@ UpdateAppearance(hwnd);
             return 0;
 
         case WM_DESTROY:
-            if (g_WTSUnRegisterSessionNotification) {
-                g_WTSUnRegisterSessionNotification(hwnd);
-            }
+            WTSUnRegisterSessionNotification(hwnd);
             KillTimer(hwnd, IDT_RENDER);
             KillTimer(hwnd, IDT_RETRY);
             KillTimer(hwnd, IDT_IDLE);
@@ -5121,6 +5084,7 @@ UpdateAppearance(hwnd);
             return 0;
 
         case WM_SETTINGCHANGE:
+            RefreshSystemLightMode();
             UpdateAppearance(hwnd);
             InvalidateRect(hwnd, NULL, TRUE);
             return 0;
@@ -5152,7 +5116,7 @@ UpdateAppearance(hwnd);
         }
 
         case WM_MOUSEMOVE: {
-            WakeUpRenderer(hwnd);
+            WakeUpAudio(hwnd);
             POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
             if (g_isSeeking) {
                 RECT pbRect = GetProgressBarRect(hwnd);
@@ -5194,7 +5158,7 @@ UpdateAppearance(hwnd);
         }
 
         case WM_LBUTTONDOWN: {
-            WakeUpRenderer(hwnd);
+            WakeUpAudio(hwnd);
             POINT pt = { GET_X_LPARAM(lp), GET_Y_LPARAM(lp) };
             
             RECT pbRect = GetProgressBarRect(hwnd);
@@ -5268,7 +5232,7 @@ UpdateAppearance(hwnd);
         }
 
         case WM_LBUTTONDBLCLK: {
-            WakeUpRenderer(hwnd);
+            WakeUpAudio(hwnd);
             g_compactMode = !g_compactMode;
             RepositionWindow(hwnd);
             InvalidateRect(hwnd, NULL, TRUE);
@@ -5276,7 +5240,7 @@ UpdateAppearance(hwnd);
         }
 
         case WM_MOUSEWHEEL: {
-            WakeUpRenderer(hwnd);
+            WakeUpAudio(hwnd);
             short zDelta = GET_WHEEL_DELTA_WPARAM(wp);
             AdjustSystemVolume(zDelta > 0 ? 1 : -1);
             return 0;
@@ -5317,7 +5281,7 @@ UpdateAppearance(hwnd);
         }
 
         case WM_APP + 25: {
-            WakeUpRenderer(hwnd);
+            WakeUpAudio(hwnd);
             return 0;
         }
 
@@ -5393,7 +5357,8 @@ UpdateAppearance(hwnd);
             return 0;
 
         case WM_APP + 21:
-            // Settings changed: refresh timer interval and window position
+            // Settings changed: reload on panel thread, refresh timer interval and window position
+            LoadSettings();
             KillTimer(hwnd, IDT_RENDER);
             SetTimer(hwnd, IDT_RENDER, max(16, 1000 / max(1, g_Settings.targetFPS)), nullptr);
             UpdateAppearance(hwnd);
@@ -5479,6 +5444,29 @@ static void CleanupModGdiplusResources() {
     }
 }
 
+static void HookThreadProc() {
+    g_hookThreadId = GetCurrentThreadId();
+    HMODULE hMod = GetOwnModuleHandle();
+    g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hMod, 0);
+    if (!g_keyboardHook) {
+        Wh_Log(L"Failed to register keyboard hook. Error: %d", GetLastError());
+    } else {
+        Wh_Log(L"Keyboard hook registered successfully on dedicated thread. hMod=%p", hMod);
+    }
+
+    MSG msg;
+    while (!g_uninitRequested.load(memory_order_relaxed) && GetMessage(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+
+    if (g_keyboardHook) {
+        UnhookWindowsHookEx(g_keyboardHook);
+        g_keyboardHook = nullptr;
+    }
+    g_hookThreadId = 0;
+}
+
 static void VisThread() {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
@@ -5522,50 +5510,52 @@ static void VisThread() {
         return;
     }
 
-    // Register window classes
+    HINSTANCE hOwnInst = GetOwnModuleHandle();
+
+    // Register window classes under the mod's own HINSTANCE (fatal on any failure)
     static const WCHAR* WNDCLASS_NAME = L"WindhawkAudioMediaSuite_v7_0_0";
-    WNDCLASS wc      = {};
+    WNDCLASSW wc     = {};
     wc.lpfnWndProc   = VisWndProc;
-    wc.hInstance     = GetModuleHandle(nullptr);
+    wc.hInstance     = hOwnInst;
     wc.lpszClassName = WNDCLASS_NAME;
     wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
     wc.style         = CS_DBLCLKS;
     wc.hbrBackground = nullptr;
 
-    if (!RegisterClass(&wc)) {
-        DWORD err = GetLastError();
-        if (err != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(L"RegisterClass failed: %u", err);
-            GdiplusShutdown(tok);
-            CoUninitialize();
-            g_threadFinished = true;
-            return;
-        }
-    }
-
-    WNDCLASS wcMedia = {};
+    WNDCLASSW wcMedia = {};
     wcMedia.lpfnWndProc = MediaFlyoutWndProc;
-    wcMedia.hInstance = GetModuleHandle(nullptr);
+    wcMedia.hInstance = hOwnInst;
     wcMedia.lpszClassName = L"WindhawkMediaFlyout_v7";
     wcMedia.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wcMedia.style = CS_DBLCLKS;
     wcMedia.hbrBackground = nullptr;
-    RegisterClass(&wcMedia);
 
-    WNDCLASS wcVolume = {};
+    WNDCLASSW wcVolume = {};
     wcVolume.lpfnWndProc = VolumeFlyoutWndProc;
-    wcVolume.hInstance = GetModuleHandle(nullptr);
+    wcVolume.hInstance = hOwnInst;
     wcVolume.lpszClassName = L"WindhawkVolumeFlyout_v7";
     wcVolume.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wcVolume.style = 0;
     wcVolume.hbrBackground = nullptr;
-    RegisterClass(&wcVolume);
+
+    bool regVis = RegisterClassW(&wc) != 0;
+    bool regMedia = regVis && (RegisterClassW(&wcMedia) != 0);
+    bool regVol = regMedia && (RegisterClassW(&wcVolume) != 0);
+    if (!regVol) {
+        Wh_Log(L"RegisterClassW failed: %u", GetLastError());
+        if (regMedia) UnregisterClassW(L"WindhawkMediaFlyout_v7", hOwnInst);
+        if (regVis) UnregisterClassW(WNDCLASS_NAME, hOwnInst);
+        GdiplusShutdown(tok);
+        CoUninitialize();
+        g_threadFinished = true;
+        return;
+    }
 
     // IMPORTANT: No WS_EX_LAYERED on main bar - DWM acrylic handles compositing.
     // Combining WS_EX_LAYERED with acrylic breaks Explorer DWM compositing.
     DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
 
-    HMODULE hUser32 = GetModuleHandle(L"user32.dll");
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     pCreateWindowInBand CreateWindowInBand = nullptr;
     if (hUser32) {
         CreateWindowInBand = (pCreateWindowInBand)GetProcAddress(hUser32, "CreateWindowInBand");
@@ -5577,25 +5567,23 @@ static void VisThread() {
             exStyle, WNDCLASS_NAME, L"AudioMediaSuiteWnd",
             WS_POPUP,
             0, 0, g_Settings.panelW, g_Settings.panelH,
-            nullptr, nullptr, wc.hInstance, nullptr,
+            nullptr, nullptr, hOwnInst, nullptr,
             ZBID_IMMERSIVE_NOTIFICATION);
         if (g_hVisWnd) {
             Wh_Log(L"Created window in ZBID_IMMERSIVE_NOTIFICATION band");
-            if (g_WTSRegisterSessionNotification) {
-                g_WTSRegisterSessionNotification(g_hVisWnd, 0);
-            }
+            WTSRegisterSessionNotification(g_hVisWnd, 0);
         }
     }
 
     if (!g_hVisWnd) {
         Wh_Log(L"Falling back to CreateWindowEx");
-        g_hVisWnd = CreateWindowEx(
+        g_hVisWnd = CreateWindowExW(
             exStyle, WNDCLASS_NAME, L"AudioMediaSuiteWnd",
             WS_POPUP,
             0, 0, g_Settings.panelW, g_Settings.panelH,
-            nullptr, nullptr, wc.hInstance, nullptr);
-        if (g_hVisWnd && g_WTSRegisterSessionNotification) {
-            g_WTSRegisterSessionNotification(g_hVisWnd, 0);
+            nullptr, nullptr, hOwnInst, nullptr);
+        if (g_hVisWnd) {
+            WTSRegisterSessionNotification(g_hVisWnd, 0);
         }
     }
 
@@ -5603,21 +5591,21 @@ static void VisThread() {
         Wh_Log(L"CreateWindow failed: %u", GetLastError());
         CleanupModGdiplusResources();
         GdiplusShutdown(tok);
-        UnregisterClass(WNDCLASS_NAME, wc.hInstance);
-        UnregisterClass(L"WindhawkMediaFlyout_v7", wc.hInstance);
-        UnregisterClass(L"WindhawkVolumeFlyout_v7", wc.hInstance);
+        UnregisterClassW(WNDCLASS_NAME, hOwnInst);
+        UnregisterClassW(L"WindhawkMediaFlyout_v7", hOwnInst);
+        UnregisterClassW(L"WindhawkVolumeFlyout_v7", hOwnInst);
         CoUninitialize();
         g_threadFinished = true;
         return;
     }
 
     // Create flyouts hidden
-    g_hMediaFlyoutWnd = CreateWindowEx(
+    g_hMediaFlyoutWnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED,
         L"WindhawkMediaFlyout_v7", L"WindhawkMediaFlyout",
         WS_POPUP,
         0, 0, g_Settings.mediaFlyoutW, g_Settings.mediaFlyoutH,
-        nullptr, nullptr, wc.hInstance, nullptr);
+        nullptr, nullptr, hOwnInst, nullptr);
     if (g_hMediaFlyoutWnd) {
         UpdateLayeredWindowHelper(g_hMediaFlyoutWnd, 0, 1);
         MediaFlyoutLayout l = CalculateMediaFlyoutLayout(g_Settings.mediaFlyoutW, g_Settings.mediaFlyoutH);
@@ -5629,12 +5617,12 @@ static void VisThread() {
         Wh_Log(L"Failed to create Media Flyout window. Error: %d", GetLastError());
     }
 
-    g_hVolumeFlyoutWnd = CreateWindowEx(
+    g_hVolumeFlyoutWnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_LAYERED,
         L"WindhawkVolumeFlyout_v7", L"WindhawkVolumeFlyout",
         WS_POPUP,
         0, 0, g_Settings.volumeFlyoutW, g_Settings.volumeFlyoutH,
-        nullptr, nullptr, wc.hInstance, nullptr);
+        nullptr, nullptr, hOwnInst, nullptr);
     if (g_hVolumeFlyoutWnd) {
         UpdateLayeredWindowHelper(g_hVolumeFlyoutWnd, 0, 2);
         Wh_Log(L"Volume Flyout window created successfully. HWND=%p", g_hVolumeFlyoutWnd);
@@ -5648,30 +5636,15 @@ static void VisThread() {
     if (!g_uninitRequested.load(memory_order_relaxed)) {
         // Start worker threads
         g_mediaRunning = true;
-        g_mediaThread  = thread(MediaUpdateThread);
+        g_mediaThread.emplace(MediaUpdateThread);
 
         g_audioRunning = true;
-        g_audioThread  = thread(AudioCaptureThread);
+        g_audioThread.emplace(AudioCaptureThread);
+
+        g_hookThread.emplace(HookThreadProc);
 
         // Register volume callback
         RegisterVolumeNotification(g_hVisWnd);
-
-        // Register low-level keyboard hook using the correct DLL module handle
-        HMODULE hMod = nullptr;
-        GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            (LPCWSTR)LowLevelKeyboardProc,
-            &hMod
-        );
-        if (!hMod) {
-            hMod = GetModuleHandle(nullptr);
-        }
-        g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hMod, 0);
-        if (!g_keyboardHook) {
-            Wh_Log(L"Failed to register keyboard hook. Error: %d", GetLastError());
-        } else {
-            Wh_Log(L"Keyboard hook registered successfully. hMod=%p", hMod);
-        }
 
         // Message loop
         MSG msg;
@@ -5681,20 +5654,29 @@ static void VisThread() {
         }
     }
 
-    if (g_keyboardHook) {
-        UnhookWindowsHookEx(g_keyboardHook);
-        g_keyboardHook = nullptr;
-    }
-
     // Cleanup
+    if (g_hookThreadId != 0) {
+        PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0);
+    }
+    if (g_hookThread && g_hookThread->joinable()) {
+        g_hookThread->join();
+    }
+    g_hookThread.reset();
+
     UnregisterVolumeNotification();
 
     g_audioRunning = false;
-    if (g_audioThread.joinable()) g_audioThread.join();
+    if (g_audioThread && g_audioThread->joinable()) {
+        g_audioThread->join();
+    }
+    g_audioThread.reset();
 
     g_mediaRunning = false;
     g_mediaUpdateCv.notify_all();
-    if (g_mediaThread.joinable()) g_mediaThread.join();
+    if (g_mediaThread && g_mediaThread->joinable()) {
+        g_mediaThread->join();
+    }
+    g_mediaThread.reset();
 
     if (g_hVisWnd && IsWindow(g_hVisWnd)) {
         DestroyWindow(g_hVisWnd);
@@ -5709,24 +5691,14 @@ static void VisThread() {
         g_hVolumeFlyoutWnd = nullptr;
     }
 
-    UnregisterClass(WNDCLASS_NAME, wc.hInstance);
-    UnregisterClass(L"WindhawkMediaFlyout_v7", wc.hInstance);
-    UnregisterClass(L"WindhawkVolumeFlyout_v7", wc.hInstance);
+    UnregisterClassW(WNDCLASS_NAME, hOwnInst);
+    UnregisterClassW(L"WindhawkMediaFlyout_v7", hOwnInst);
+    UnregisterClassW(L"WindhawkVolumeFlyout_v7", hOwnInst);
 
     CleanupModGdiplusResources();
     GdiplusShutdown(tok);
     CoUninitialize();
     g_threadFinished = true;
-}
-
-static void LoadWtsApi() {
-    if (!g_hWts) {
-        g_hWts = LoadLibraryW(L"wtsapi32.dll");
-    }
-    if (g_hWts) {
-        g_WTSRegisterSessionNotification = (pWTSRegisterSessionNotification)GetProcAddress(g_hWts, "WTSRegisterSessionNotification");
-        g_WTSUnRegisterSessionNotification = (pWTSUnRegisterSessionNotification)GetProcAddress(g_hWts, "WTSUnRegisterSessionNotification");
-    }
 }
 
 // =========================================================================
@@ -5737,24 +5709,19 @@ BOOL Wh_ModInit() {
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0)
         return FALSE;
 
-    // Filter out service/factory explorer processes
+    // Filter out separate/factory explorer processes
     int    argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argv) {
         for (int i = 1; i < argc; i++) {
-            if (_wcsicmp(argv[i], L"/separate")      == 0 ||
-                _wcsicmp(argv[i], L"/factory")        == 0 ||
-                _wcsicmp(argv[i], L"-service")        == 0 ||
-                _wcsicmp(argv[i], L"-service-start")  == 0 ||
-                _wcsicmp(argv[i], L"-service-stop")   == 0) {
+            if (_wcsicmp(argv[i], L"/separate") == 0 ||
+                _wcsnicmp(argv[i], L"/factory", 8) == 0) {
                 LocalFree(argv);
                 return FALSE;
             }
         }
         LocalFree(argv);
     }
-
-    LoadWtsApi();
 
     g_barCreated = RegisterWindowMessage(L"TaskbarCreated");
     LoadSettings();
@@ -5766,9 +5733,7 @@ BOOL Wh_ModInit() {
     g_idleSeconds.store(0, memory_order_relaxed);
     g_silenceFrames.store(0, memory_order_relaxed);
 
-    g_visThread = new (std::nothrow) thread(VisThread);
-    if (!g_visThread) return FALSE;
-
+    g_visThread.emplace(VisThread);
     return TRUE;
 }
 
@@ -5777,6 +5742,10 @@ void Wh_ModUninit() {
     g_audioRunning = false;
     g_mediaRunning = false;
     g_mediaUpdateCv.notify_all();
+
+    if (g_hookThreadId != 0) {
+        PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0);
+    }
 
     if (g_hVisWnd && IsWindow(g_hVisWnd)) {
         PostMessage(g_hVisWnd, WM_APP, 0, 0);
@@ -5794,8 +5763,7 @@ void Wh_ModUninit() {
             Sleep(50);
         }
         if (g_visThread->joinable()) g_visThread->join();
-        delete g_visThread;
-        g_visThread = nullptr;
+        g_visThread.reset();
     }
 
     {
@@ -5803,18 +5771,11 @@ void Wh_ModUninit() {
         g_SessionManager = nullptr;
     }
 
-    g_WTSRegisterSessionNotification = nullptr;
-    g_WTSUnRegisterSessionNotification = nullptr;
-    if (g_hWts) {
-        FreeLibrary(g_hWts);
-        g_hWts = nullptr;
-    }
-
     g_visThreadId = 0;
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
-    if (g_hVisWnd && IsWindow(g_hVisWnd))
+    if (g_hVisWnd && IsWindow(g_hVisWnd)) {
         PostMessage(g_hVisWnd, WM_APP + 21, 0, 0);
+    }
 }
