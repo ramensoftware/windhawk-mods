@@ -7992,7 +7992,7 @@
         "ratingUsers": 23,
         "reviews": 0,
         "trendingSorting": 14.393898460561495,
-        "updated": 1795136614000,
+        "updated": 1795309370000,
         "users": 654
       },
       "metadata": {
@@ -8008,7 +8008,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "Explorer Translucent Menus",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "explorer-tree-click-expand": {
@@ -15764,7 +15764,7 @@
         "ratingUsers": 15,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794589221000,
+        "updated": 1795309364000,
         "users": 86
       },
       "metadata": {
@@ -15781,7 +15781,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Round Everything Interface",
-        "version": "2.0.1"
+        "version": "2.1.0"
       }
     },
     "rounded-selection-rectangle": {
@@ -16395,7 +16395,7 @@
         "ratingUsers": 80,
         "reviews": 0,
         "trendingSorting": 14.113970340695946,
-        "updated": 1794596684000,
+        "updated": 1795309358000,
         "users": 1766
       },
       "metadata": {
@@ -16412,7 +16412,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Siri Plus Launchpad",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "sleep-countdown-reset": {

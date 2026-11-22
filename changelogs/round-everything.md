@@ -1,3 +1,16 @@
+## 2.1.0 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e545a64111a569c9a0fe36901e0e15f04f013752/mods/round-everything.wh.cpp))
+
+* **Hide the frame without a maximized window** (new General option, off by default): each monitor shows its frame only while a window is maximized on it. Otherwise the frame and its shadow are off, and they come back together with the taskbar's look. The monitor corners and the bezel line stay up, and the work area stays reserved either way.
+* **Transparent taskbar when nothing is maximized** (new General option, on by default): with the option above on, the taskbar's own background and border line are hidden while no frame shows, so the wallpaper shows through. Off, the taskbar looks as it does without the mod.
+* Aero Peek with the hide option on: the peeked window decides. If it's maximized (or minimized from maximized) on a monitor, that monitor keeps its frame; every other monitor shows the taskbar's resting look.
+* Task View: the frame stays in place under Task View, so nothing has to come back when it closes and it no longer flickers on open or close. The taskbar keeps its look over Task View without its monitor corners; with "Hide the frame without a maximized window" on and "Transparent taskbar when nothing is maximized" off, every taskbar takes its native look there.
+* When the frame comes back, it has the maximized window's title-bar color right away.
+* Explorer's own windows have their titles read without being sent a message.
+* Fixed: taskbar thumbnails opened by a click (a grouped button, or "thumbnails on click" in Disable Taskbar Thumbnails) were taken for Task View and hid the frame on every monitor.
+* Fixed: after Windows updates that rearrange the taskbar's layout (e.g. KB5137006), the taskbar could blink every 1.5 seconds. The corner ears now find their place in the new layout; where there's none, the corners stay square instead.
+* Fixed: a frame waiting for its taskbar to reveal it could be withdrawn before it showed, briefly leaving the taskbar without its frame after a layout change.
+* Fixed: a monitor with no maximized window could keep the mod ticking at 60 Hz.
+
 ## 2.0.1 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e886acc3788a96739956aa821580c9fec9c339c3/mods/round-everything.wh.cpp))
 
 * Fix: on Windows builds whose symbols aren't public yet (26300.9974), windows weren't rounded and maximized ones got no border or shadow - one optional symbol the online cache doesn't list failed the whole udwm.dll lookup; the restore animation's clip is now tracked through symbols it does list

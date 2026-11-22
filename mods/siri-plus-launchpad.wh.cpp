@@ -2,7 +2,7 @@
 // @id              siri-plus-launchpad
 // @name            Siri Plus Launchpad
 // @description     Replaces the Start menu with a macOS 27 Siri-style launcher: search bar with categories, app tabs, files, clipboard, actions and live glass
-// @version         1.2.0
+// @version         1.3.0
 // @author          Thiago Silva
 // @github          https://github.com/brideinflame-rgb
 // @homepage        https://github.com/brideinflame-rgb/Siri-Plus-Launchpad
@@ -20,7 +20,7 @@ A [Windhawk](https://windhawk.net) mod that replaces the Windows 11 Start menu w
 
 Press the **Windows key** (or click **Start**) and type, or pick what you want to search from the menu that drops down from the bar.
 
-![Original Siri mode](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-siri-v2.gif)
+![Original Siri mode](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/siri-plus-launchpad-1.3.0.webp)
 
 ---
 
@@ -29,15 +29,17 @@ Press the **Windows key** (or click **Start**) and type, or pick what you want t
 - **Four modes**: Original Siri (default), Floating, Window and Fullscreen
 - **Live glass**: real-time blur behind the bar and panels (animated wallpapers and videos keep playing underneath), plus a liquid glass with refraction in the Siri modes
 - **Search everything at once**: type in the bar and apps, actions, folders and files show up together in one list, like Spotlight or Flow Launcher, or pick a category (Apps, Files, Actions, Clipboard) to search only there
+- **Accents don't matter**: *acao* finds *ação* and the other way around (can be turned off)
 - **Calculator**: type a calculation and its result shows first; Enter copies it
 - **Windows Settings**: type *display*, *startup apps*, *update*, *wi-fi*... and the matching Settings page opens
-- **App tabs**: All, automatic categories and up to 6 tabs of your own
+- **App tabs**: All, automatic categories and up to 6 tabs of your own (Original Siri and Floating)
 - **Recent apps row**: recently opened or installed apps (or the most used ones) on top
 - **Power options**: type *shut down*, *restart*, *sleep*, *lock* or *sign out*, or the floating power button (off by default; turn it on in *Siri bar*)
-- **Keyboard shortcuts**: Ctrl+1 … Ctrl+4 jump to Applications, Files, Actions and Clipboard, and can also open the launcher from any program (optional)
+- **Keyboard shortcuts**: Ctrl+1 … Ctrl+5 jump to Applications, Files, Actions, Clipboard and Phone, and can also open the launcher from any program (optional)
 - **Custom icons**: give any app your own icon from a folder of your icons (such as a downloaded icon pack), with search and a color filter
-- **Themes**: Clear glass, Custom liquid glass (your color at the top, fading to clear glass at the bottom), Light, Dark, OLED (deep black), Siri (macOS 27 gradient) and a fully Custom theme, with an optional glass effect on Light, Dark and OLED
-- **Settings panel**: the **⋯** button at the end of the bar opens every setting in a macOS-style panel, applied live
+- **Themes**: Glass (clear glass, as in the Mac OS 27 Finder Bar, over a live or still blur), Liquid glass (the background bends at the edges), Custom glass (your color at the top, fading to clear glass at the bottom), Light, Dark, OLED (deep black) and Siri (macOS 27 gradient), with an optional glass effect on Light, Dark and OLED, glass buttons, an animated colored backlight and chrome details. **Every theme can be customized** in *Appearance*, right under the theme, keeps its own settings and has a *Restore theme defaults* button
+- **Settings panel**: the **⋯** button at the end of the bar opens every setting in a macOS-style panel, applied live. It only shows what applies to the chosen theme and mode
+- **Phone**: your phone linked in Phone Link, with its battery and its notifications as they arrive (optional, off by default)
 - **Move the bar**: hold the Siri bar and drag it anywhere, on any monitor
 - **Backup**: save settings, folders, tabs and custom icons to one file and restore them, even after reinstalling
 - **Your language**: follows the Windows display language, or pick one (English, Portuguese, Spanish, French, German, Italian and Simplified Chinese)
@@ -47,36 +49,36 @@ Press the **Windows key** (or click **Start**) and type, or pick what you want t
 ## Screenshots
 
 ### Original Siri (default)
-| Clear glass | Dark | OLED |
+| Liquid glass | Dark | OLED |
 |---|---|---|
-| ![Original Siri, Clear glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-glass.png) | ![Original Siri, Dark theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-dark.png) | ![Original Siri, OLED theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-oled.png) |
+| ![Original Siri, Liquid glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-glass.png) | ![Original Siri, Dark theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-dark.png) | ![Original Siri, OLED theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-oled.png) |
 
-| Custom liquid glass |
+| Custom glass |
 |---|
-| ![Original Siri, Custom liquid glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-custom-liquid.png) |
+| ![Original Siri, Custom glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/original-custom-liquid.png) |
 
 ### Floating
-| Clear glass | Light | Siri gradient |
+| Liquid glass | Light | Siri gradient |
 |---|---|---|
-| ![Floating, Clear glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-glass.png) | ![Floating, Light theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-light.png) | ![Floating, Siri theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-siri.png) |
+| ![Floating, Liquid glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-glass.png) | ![Floating, Light theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-light.png) | ![Floating, Siri theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-siri.png) |
 
 | Dark | OLED |
 |---|---|
 | ![Floating, Dark theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-dark.png) | ![Floating, OLED theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/floating-oled.png) |
 
 ### Window
-| Clear glass | Light | Siri gradient |
+| Liquid glass | Light | Siri gradient |
 |---|---|---|
-| ![Window, Clear glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-glass.png) | ![Window, Light theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-light.png) | ![Window, Siri theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-siri.png) |
+| ![Window, Liquid glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-glass.png) | ![Window, Light theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-light.png) | ![Window, Siri theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-siri.png) |
 
 | Dark | OLED |
 |---|---|
 | ![Window, Dark theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-dark.png) | ![Window, OLED theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/window-oled.png) |
 
 ### Fullscreen
-| Clear glass | Light | Siri gradient |
+| Liquid glass | Light | Siri gradient |
 |---|---|---|
-| ![Fullscreen, Clear glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-glass.png) | ![Fullscreen, Light theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-light.png) | ![Fullscreen, Siri theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-siri.png) |
+| ![Fullscreen, Liquid glass theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-glass.png) | ![Fullscreen, Light theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-light.png) | ![Fullscreen, Siri theme](https://raw.githubusercontent.com/brideinflame-rgb/Siri-Plus-Launchpad/main/screenshots/fullscreen-siri.png) |
 
 | Dark | OLED |
 |---|---|
@@ -98,7 +100,7 @@ Press the **Windows key** (or click **Start**) and type, or pick what you want t
 ### Original Siri (default)
 A search bar in the macOS 27 style.
 
-- **Categories menu**: hover over the bar (or click it) and a menu drops down with **Applications**, **Files**, **Actions** and **Clipboard**, each with its icon and its keyboard shortcut (default **Ctrl+1 … Ctrl+4**, configurable).
+- **Categories menu**: hover over the bar (or click it) and a menu drops down with **Applications**, **Files**, **Actions**, **Clipboard** and, when turned on, **Phone**, each with its icon and its keyboard shortcut (default **Ctrl+1 … Ctrl+5**, configurable).
 - **Search everything**: type straight away in "Search" and one list shows **Applications**, **Actions**, **Folders** and **Documents and files** together, each under its title (the best matches and the most used apps first). Apps show up at once; folders and files come in a moment later, below them, so nothing you are about to click moves. **Show all** next to a title opens that category with what you typed; **Enter** opens the first result. The clipboard is never part of it. Erasing the text brings back the plain "Search" bar. It can be turned off (*Siri bar → Typing in Search looks everywhere*): then typing goes to Applications.
 - **Calculator**: type a calculation such as *2+2*, *15% * 80* or *(3+4)^2* and its result shows first, in a list; **Enter** copies it. Dates and phone numbers such as *2024-11-04* or *555-1234* are left alone (type *5 - 3* with spaces, or start with **=** or **calc**, as in *=5-3*, to always calculate), and the decimal mark follows Windows' region settings. It can be turned off (*Search → Calculator*).
 - Picking a category makes its icon and name glide from the menu into the bar, and the search then works only inside that category.
@@ -113,14 +115,14 @@ A search bar in the macOS 27 style.
 - **Open file location**: right-click a file or folder found by the search and choose *Open file location* to see it in File Explorer, already selected.
 
 ### Floating
-The bar appears out of an animated circle, the **Siri wave** or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is "sucked" back into the bubble. Hover the category icon at the start of the bar and it turns into a back arrow, as in Original Siri: a click clears the search, goes back to Applications and closes the results panel.
+The bar appears out of an animated circle, the **Siri wave** or a soft glow, with zoom and an adjustable bounce. Clicking it or typing slides the results panel down. When it closes, the bar is "sucked" back into the bubble. Hover the category icon at the start of the bar and it turns into a back arrow, as in Original Siri: a click clears the search, goes back to Applications and closes the results panel. In Applications, the **app tabs** (All, the categories and your own tabs) sit in a row under the categories, and the **first row** shows the recent or most used apps, as in Original Siri.
 
 ### Window and Fullscreen
 The classic Launchpad grid with pages or vertical scrolling, folders and a power button. Pages always slide inside the glass. Fullscreen respects the work area and the space reserved by docks.
 
 ---
 
-## Managing app tabs (Original Siri)
+## Managing app tabs (Original Siri and Floating)
 
 | What | How |
 |---|---|
@@ -129,7 +131,7 @@ The classic Launchpad grid with pages or vertical scrolling, folders and a power
 | Remove an app | Inside a tab, right-click the app → **Remove from tab** |
 | Rename or delete | Right-click the tab → **Rename tab** / **Delete tab** |
 | Built-in tabs | They can also be edited (add or remove apps) and deleted. **Restore default tabs** brings them back |
-| Move through tabs | **Tab / Shift+Tab**, or click and drag the strip sideways (the mouse wheel works too) |
+| Move through tabs | **Tab / Shift+Tab** (Original Siri), or click and drag the strip sideways (the mouse wheel works too) |
 
 ---
 
@@ -153,11 +155,19 @@ The classic Launchpad grid with pages or vertical scrolling, folders and a power
 - **Custom icons**: put your icon images in a folder (for example a downloaded icon pack), then right-click an app → **Change icon...** The first time, the launcher asks for that folder (it can be changed later in *Apps and icons → Icon gallery folder*). The folder's images (PNG, JPG, JPEG, BMP, ICO, GIF or WebP, subfolders included) show in a grid; type to search them by name, or use the color dots to see only one color or put them in rainbow order. Images added to the folder show up the next time it opens. The new icon is remembered across restarts; **Reset icon** brings back the original. Works in every mode, including apps inside folders.
 - Icon size, number of columns and the scrolling direction are configurable.
 
+## Phone (Phone Link)
+- Off by default: turn it on in the settings panel's *Phone* section. It shows up only when Windows' **Phone Link** is installed and a phone is linked.
+- **Original Siri**: *Phone* in the categories menu, under *Clipboard* (**Ctrl+5**, configurable). **Floating, Window and Fullscreen**: a *Phone* tab next to *Clipboard*.
+- **Your phone**: its picture, name, connection, Bluetooth and battery, as Phone Link shows them in Start. A click opens the phone's screen.
+- **Notifications**: every notification Phone Link has from the phone, newest first, with the app's icon, who sent it or its title, what it says and when. New ones show up by themselves while the category is open. A click opens that app on the phone's screen. Each one has an **×** to clear it from the list, and **Clear all** clears what is shown (they stay in Phone Link and on the phone). *Notifications shown* (1 to 10) sets how many fit in the box; when there are more, the mouse wheel scrolls through them inside the box, and the rest of the menu stays put.
+- **Features**: Messages, Calls, Photos and Send files open in Phone Link, plus *Open Phone Link* and *Open phone screen*.
+- How it works: it reads, on this PC only, the card Phone Link keeps for Start and a temporary copy of Phone Link's notifications list, deleted right after reading. Nothing is changed in Phone Link and nothing is sent anywhere. Answering a notification is not possible from here: Phone Link offers no way for other programs to send.
+
 ## Settings panel
 - Click the **⋯** button at the end of the bar (every mode). A window in the style of macOS System Settings grows out of the bar: the sections on the left, with a search field on top, and the settings of the chosen section on the right. Every change applies at once.
-- Sections: **General**, **Appearance**, **Custom theme**, **Search** (search everything, Files and Clipboard), **Siri bar**, **Results size**, **Window and Fullscreen**, **Animations**, **Keyboard shortcuts**, **Apps and icons**, **Performance** and **Backup and defaults**. Every setting has a short line saying what it does, and the ones that don't apply to what you chose (the mode, the theme, the glass style or a switch they depend on) are dimmed, say why and can't be changed until they do.
+- Sections: **General** (mode, language, how it opens), **Appearance** (the theme and, right under it, everything of its own), **Search** (search everything, Files and Clipboard), **Phone** (Phone Link), **Keyboard shortcuts** (Original Siri), **Apps and icons**, **Performance** and **Backup and defaults** (also the look of the settings window: the theme's, or a light or dark glass of its own). The part under the theme (*Customize theme*) holds everything that belongs to the chosen theme and mode: the look, the glass, the menus and, for the chosen mode, the Siri bar and the size of its results, or the window, plus the animations. Each theme keeps its own values, and what the theme or the mode doesn't use is hidden. Every setting has a short line saying what it does; one that depends on a switch or on Light performance mode is dimmed and says why.
 - Changes made there are kept on top of Windhawk's settings, and a change made later in Windhawk wins again.
-- **Theme defaults** (Appearance) brings back the chosen theme's own look. **Restore all defaults** puts every setting back to how the mod comes and the bar back in the center; folders, tabs and custom icons stay.
+- **Restore theme defaults** (Appearance) forgets what you changed in the chosen theme. **Restore all defaults** puts every setting of every theme back to how the mod comes and the bar back in the center; folders, tabs and custom icons stay.
 - **Back up** saves everything to a `.siribackup` file: every setting (the icon gallery folder too), folders, tabs, search history, the bar's place and the custom icons, with their pictures inside the file. **Restore a backup** brings it all back, also after uninstalling the mod (which erases its stored data) or on another PC.
 - **Done** (or **Esc**) closes it: the window switches off where it is, like an old TV (CRT), and the launcher closes; a new mode or bar size shows the next time it opens. In Light performance mode the window opens without its content coming in one piece at a time.
 
@@ -173,18 +183,19 @@ All options are in the **⋯** settings panel (in seven languages) and in the mo
 
 | Block | Options |
 |---|---|
-| ① Mode | Original Siri (default), Floating, Window, Fullscreen |
-| ② Theme | Clear glass, Custom liquid glass, Light, Dark, OLED, Siri (macOS 27 gradient), Custom |
+| ① Mode | Original Siri (default), Floating, Window, Fullscreen; Floating: open the results box on click or on mouse over |
+| ② Theme | Glass, Liquid glass, Custom glass, Light, Siri (macOS 27 gradient), Dark, OLED |
 | Language | Automatic (Windows) or English, Português, Español, Français, Deutsch, Italiano, 中文（简体） |
 | Performance | **Light (faster)** works with any theme and is made so slower PCs can enjoy the mod smoothly: it turns off liquid glass, the live blur, the blur behind menus and the shadows, keeps it to 60 frames per second and calms the animations; a frame rate limit (automatic, 120, 60 or 30); and *Draw with*: the graphics card (default) or the processor (experimental, for laptops with two graphics cards) |
-| ③ Appearance | Theme defaults button, glass transparency (each theme keeps its own; Light and OLED start solid), corner rounding, background blur (0 = no blur), blur behind right-click menus, text color (automatic: on clear glass, black over light backgrounds; or white or black), glass style (translucent glass with a live blur, or liquid glass for Floating and Original Siri, with its refraction strength and an optional live mode), glass effect on Light/Dark/OLED |
-| ④ Custom theme | Color, opacity, dark-to-light gradient, border width, color and opacity |
-| ⑤ Window and Fullscreen | Window size, search style (top bar or centered box), power button and its position, opening and closing animations (pop, fade, rise from/sink into the taskbar, CRT), animation speed, blur behind open folders |
-| ⑥ Floating and Original Siri | Bar size (96 px tall by default), results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, search everything when typing, power options when typing, floating power button (off by default) and its side (left or right of the bar), first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions and Clipboard (defaults **Ctrl+1**, **Ctrl+2**, **Ctrl+3**, **Ctrl+4**; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed (off by default) |
-| ⑦ Opening | Open with the Windows key and/or the Start button |
-| ⑧ Apps and icons | Icon size, columns, scrolling direction, jiggle, drag to the taskbar to pin, icon gallery folder |
-| ⑨ Files | On/off, search history, list or icons, indexer, maximum results |
-| ⑩ Clipboard | On/off, number of items kept, how long a copy stays |
+| ③ Appearance (how every theme starts) | Glass transparency (Light and OLED start solid), corner rounding, background blur (0 = no blur), blur behind right-click menus, text color (automatic: on Liquid glass, black over light backgrounds; or white or black), refraction at the edges (0 = no bending; Glass never bends) with an optional live mode, selection in menus (glass, colored, frosted or two colors blended) and its colors, glass effect on Light/Dark/OLED, glass buttons, chrome ring on the settings button, animated chrome border, animated backlight (intensity, 1 to 5 colors), the Custom glass color, strength and reach. In the ⋯ panel, *Customize theme* keeps these, the bar, window and animation settings for each theme |
+| ④ Window and Fullscreen | Window size, search style (top bar or centered box), power button and its position, opening and closing animations (pop, fade, rise from/sink into the taskbar, CRT), animation speed, blur behind open folders |
+| ⑤ Floating and Original Siri | Bar size (96 px tall by default), results box width and rows for each category (Files and Clipboard as wide as the bar by default), circle animation (Siri wave, soft glow, none), circle zoom, bounce of the circle and of the results box, opening/closing duration, animation speed, search everything when typing, power options when typing, floating power button (off by default) and its side (left or right of the bar), first row (recent, most used, off), Original Siri category shortcuts for Applications, Files, Actions, Clipboard and Phone (defaults **Ctrl+1**, **Ctrl+2**, **Ctrl+3**, **Ctrl+4**, **Ctrl+5**; any combination starting with Ctrl, e.g. Ctrl+Shift+F or Ctrl+F2), and whether they also work with the launcher closed (off by default) |
+| ⑥ Opening | Open with the Windows key and/or the Start button |
+| ⑦ Apps and icons | Icon size, text size of the results (80 to 160 %), columns, scrolling direction, jiggle, drag to the taskbar to pin, icon gallery folder |
+| Search | Ignore accents (on by default), calculator |
+| ⑧ Files | On/off, search history, list or icons, indexer, maximum results |
+| ⑨ Clipboard | On/off, number of items kept, how long a copy stays |
+| ⑩ Phone | On/off (off by default), notifications shown (1 to 10) |
 
 ---
 
@@ -194,13 +205,13 @@ All options are in the **⋯** settings panel (in seven languages) and in the mo
 |---|---|
 | **Win** / Start button | Open or close |
 | Type | Search (in Original Siri, typing right away searches apps, actions, folders and files together) |
-| **Ctrl+1 / 2 / 3 / 4** | Original Siri: go to Applications / Files / Actions / Clipboard (configurable). With *Also with the launcher closed* on (off by default) they open the launcher from any program, and other programs no longer get those keys |
+| **Ctrl+1 / 2 / 3 / 4 / 5** | Original Siri: go to Applications / Files / Actions / Clipboard / Phone (configurable). With *Also with the launcher closed* on (off by default) they open the launcher from any program, and other programs no longer get those keys |
 | **Tab / Shift+Tab** | Original Siri: next/previous app tab, or move through the results in Files, Clipboard and Actions |
 | Arrows + **Enter** | Move through results / open |
 | Other **Ctrl+digits** | Launch the matching result (never an action such as Shut down) |
 | **Esc** | Closes menus, then clears the search, goes back to the categories and finally closes |
 | Right-click on the search bar | Cut, Copy, Paste, Select all, Delete all |
-| Long-press an app | Select it; then a simple click selects or deselects more apps (Window/Fullscreen: right-click → **New folder with N items** puts them in a folder; Original Siri: inside the app picker) |
+| Long-press an app | Select it; then a simple click selects or deselects more apps (Window/Fullscreen: right-click → **New folder with N items** puts them in a folder; Floating: right-click → **Pin selected to taskbar**; Original Siri: inside the app picker) |
 
 ---
 
@@ -214,10 +225,11 @@ All options are in the **⋯** settings panel (in seven languages) and in the mo
 - The mod never goes online.
 - Its own files (icons restored from a backup, the colors found for the gallery's images) are kept in the mod's storage folder, which Windhawk removes together with the mod. The gallery's images are only read from the folder you choose; backups are written only where you choose. **Create desktop shortcut** adds a shortcut to your desktop only when you pick it, and never replaces a file already there.
 - The clipboard history lives in memory only and is never written to disk.
+- **Phone** (off by default): reads Phone Link's Start card and a temporary copy of its notifications list, on this PC only. The copy is written to the mod's storage folder (`Phone` subfolder) and deleted right after reading (a copy left by an interrupted read is deleted the next time the launcher starts); nothing is changed or sent. Notifications you clear are remembered (by their id only) until Phone Link drops them.
 
 ## Compatibility
 - **Right after a Windows update**: Windhawk may not have the symbols for the new Windows files yet, and the mod can't place its Start hook. It keeps working in a temporary way until they arrive: the Windows key and clicks on the Start button are caught directly and open the launcher as always; only Ctrl+Esc or a touch on the Start button shows Windows' own Start menu for a moment before the launcher takes its place. Nothing needs to be done; the normal way comes back by itself the next time the mod loads with the symbols available.
-- **Category shortcuts from any program** (off by default): when *Shortcuts → Also with the launcher closed* is on, Ctrl+1 … Ctrl+4 are registered as system hotkeys, so other programs no longer get them (for example, the browser's Ctrl+1 for the first tab). Leave it off, or pick other combinations, if you need those keys elsewhere.
+- **Category shortcuts from any program** (off by default): when *Shortcuts → Also with the launcher closed* is on, Ctrl+1 … Ctrl+5 are registered as system hotkeys, so other programs no longer get them (for example, the browser's Ctrl+1 for the first tab). Leave it off, or pick other combinations, if you need those keys elsewhere.
 - **Fullscreen Start** (`fullscreen-start`): don't enable both. Each one replaces the Start menu through the same hook without calling the original, so only one of them would get the Windows key.
 - **Spotlight Launcher**: it adds a separate search bar on Alt+Space and leaves the Start menu alone. This mod replaces the Start menu itself (Windows key and Start button) and adds app tabs, folders, files, clipboard history and actions. Both can be used together.
 
@@ -243,8 +255,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
 - displayMode: siriOriginal
   $name: "① Mode"
   $name:pt-BR: "① Modo"
-  $description: "Tip: the ⋯ button at the end of the bar opens these settings inside the launcher. A value changed there takes priority over the one shown here until you change it here again. Glass transparency and Background blur are the exception: chosen there, they are kept for that theme until you use its Theme defaults button"
-  $description:pt-BR: "Dica: o botão ⋯ no fim da barra abre estas configurações dentro do menu. Um valor mudado lá vale no lugar do que aparece aqui até você mudá-lo aqui de novo. A Transparência do vidro e o Desfoque do fundo são a exceção: escolhidos lá, ficam guardados para aquele tema até você usar o botão Padrões do tema"
+  $description: "Tip: the ⋯ button at the end of the bar opens these settings inside the launcher. A value changed there takes priority over the one shown here until you change it here again. There, Appearance → Customize theme keeps its own settings for each theme (and its Restore theme defaults button); the values here are what every theme starts with"
+  $description:pt-BR: "Dica: o botão ⋯ no fim da barra abre estas configurações dentro do menu. Um valor mudado lá vale no lugar do que aparece aqui até você mudá-lo aqui de novo. Lá, Aparência → Personalizar tema guarda ajustes próprios para cada tema (com o botão Restaurar tema padrão); os valores daqui são como todo tema começa"
   $options:
   - siriOriginal: Original Siri (macOS 27 style menu, default)
   - siri: Floating (search bar)
@@ -255,25 +267,36 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - siri: Flutuante (barra de pesquisa)
   - window: Janela
   - fullscreen: Tela cheia
+- floatingOpen: click
+  $name: "Floating: open the results box"
+  $name:pt-BR: "Flutuante: abrir a caixa de resultados"
+  $description: "Click the search bar, or just rest the mouse on it"
+  $description:pt-BR: "Clicar na barra de pesquisa, ou só passar o mouse sobre ela"
+  $options:
+  - click: On click
+  - hover: On mouse over
+  $options:pt-BR:
+  - click: Ao clicar
+  - hover: Ao passar o mouse
 - theme: glass
   $name: "② Theme (all modes)"
   $name:pt-BR: "② Tema (todos os modos)"
   $options:
-  - glass: Clear glass
+  - frost: Glass
+  - glass: Liquid glass
+  - tintedliquid: Custom glass
   - light: Light
-  - tintedliquid: Custom liquid glass
   - siri: Siri (macOS 27 gradient)
   - dark: Dark
   - oled: OLED (deep black)
-  - custom: Custom (block ④)
   $options:pt-BR:
-  - glass: Vidro transparente
+  - frost: Vidro
+  - glass: Vidro líquido
+  - tintedliquid: Vidro personalizado
   - light: Claro
-  - tintedliquid: Vidro líquido personalizado
   - siri: Siri (degradê do macOS 27)
   - dark: Escuro
   - oled: OLED (preto profundo)
-  - custom: Personalizado (bloco ④)
 - language: auto
   $name: Language
   $name:pt-BR: Idioma
@@ -302,6 +325,11 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   $name:pt-BR: Calculadora na pesquisa
   $description: "Type a calculation (2+2, 15% * 80, (3+4)^2) and its result shows first; Enter copies it. Start with = or calc to always calculate (=5-3)"
   $description:pt-BR: "Digite uma conta (2+2, 15% * 80, (3+4)^2) e o resultado aparece primeiro; Enter copia. Comece com = ou calc para sempre calcular (=5-3)"
+- ignoreAccents: true
+  $name: Ignore accents in the search
+  $name:pt-BR: Ignorar acentos na pesquisa
+  $description: 'Searching for "acao" also finds "ação", and the other way around, in apps, files, actions and the other categories'
+  $description:pt-BR: 'Pesquisar "acao" também encontra "ação", e o contrário, em apps, arquivos, ações e nas outras categorias'
 - performance: normal
   $name: Performance
   $name:pt-BR: Desempenho
@@ -343,8 +371,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - transparency: 80
     $name: Glass transparency (%)
     $name:pt-BR: "Transparência do vidro (%)"
-    $description: "Ready-made themes. 100 = completely clear; lower = more solid. While this stays at 80, Light and OLED start solid (0) and Custom liquid glass starts clear (100). A value chosen in the launcher's own settings is kept for that theme and used instead of this one"
-    $description:pt-BR: "Temas prontos. 100 = totalmente transparente; menos = mais sólido. Enquanto isto fica em 80, Claro e OLED começam sólidos (0) e Vidro líquido personalizado começa transparente (100). Um valor escolhido nas configurações do próprio menu fica guardado para aquele tema e vale no lugar deste"
+    $description: "Ready-made themes. 100 = completely clear; lower = more solid. While this stays at 80, Light and OLED start solid (0) and Custom glass starts clear (100). A value chosen in the launcher's own settings is kept for that theme and used instead of this one"
+    $description:pt-BR: "Temas prontos. 100 = totalmente transparente; menos = mais sólido. Enquanto isto fica em 80, Claro e OLED começam sólidos (0) e Vidro personalizado começa transparente (100). Um valor escolhido nas configurações do próprio menu fica guardado para aquele tema e vale no lugar deste"
   - cornerRadius: 26
     $name: Corner rounding (px)
     $name:pt-BR: "Arredondamento dos cantos (px)"
@@ -353,13 +381,13 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - blur: 60
     $name: Background blur (0-100, 0 = none)
     $name:pt-BR: "Desfoque do fundo (0–100, 0 = nenhum)"
-    $description: "Live blur behind the menus (animated wallpapers and videos keep playing). Needs Windows' transparency effects; without them a blurred still image is used. Custom liquid glass starts with no blur while this stays at 60. A value chosen in the launcher's own settings is kept for that theme and used instead of this one"
-    $description:pt-BR: "Desfoque ao vivo atrás dos menus (papéis de parede animados e vídeos continuam rodando). Precisa dos efeitos de transparência do Windows; sem eles, usa uma imagem parada desfocada. Vidro líquido personalizado começa sem desfoque enquanto isto fica em 60. Um valor escolhido nas configurações do próprio menu fica guardado para aquele tema e vale no lugar deste"
+    $description: "Live blur behind the menus (animated wallpapers and videos keep playing). Needs Windows' transparency effects; without them a blurred still image is used. Custom glass starts with no blur while this stays at 60. A value chosen in the launcher's own settings is kept for that theme and used instead of this one"
+    $description:pt-BR: "Desfoque ao vivo atrás dos menus (papéis de parede animados e vídeos continuam rodando). Precisa dos efeitos de transparência do Windows; sem eles, usa uma imagem parada desfocada. Vidro personalizado começa sem desfoque enquanto isto fica em 60. Um valor escolhido nas configurações do próprio menu fica guardado para aquele tema e vale no lugar deste"
   - menuTextColor: auto
     $name: Text color
     $name:pt-BR: "Cor do texto"
-    $description: "Automatic: on the clear glass theme the text turns black over a light background (the bar, the menus and the results)"
-    $description:pt-BR: "Automática: no tema Vidro transparente o texto fica preto sobre um fundo claro (barra, menus e resultados)"
+    $description: "Automatic: on the Liquid glass theme the text turns black over a light background (the bar, the menus and the results)"
+    $description:pt-BR: "Automática: no tema Vidro líquido o texto fica preto sobre um fundo claro (barra, menus e resultados)"
     $options:
     - auto: Automatic (by the background)
     - white: White
@@ -374,50 +402,46 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $description: The icons and the window under a right-click menu are blurred. 100 = default, up to 200
     $description:pt-BR: "Os ícones e a janela sob um menu de clique direito ficam desfocados. 100 = padrão, até 200"
   - menuSelection: glass
-    $name: "Clear glass and Custom liquid glass themes: selection in menus"
-    $name:pt-BR: "Temas Vidro transparente e Vidro líquido personalizado: seleção nos menus"
-    $description: How the item under the mouse is highlighted in the menus. Colored and Frosted use the selection color
-    $description:pt-BR: "Como o item sob o mouse fica destacado nos menus. Colorida e Fosca usam a cor da seleção"
+    $name: "Selection in menus and results"
+    $name:pt-BR: "Seleção nos menus e nos resultados"
+    $description: How the item under the mouse is highlighted in the menus and in the search results. Colored and Frosted use the selection color
+    $description:pt-BR: "Como o item sob o mouse fica destacado nos menus e nos resultados da pesquisa. Colorida e Fosca usam a cor da seleção"
     $options:
     - glass: Glass
     - color: Colored (like macOS)
     - frosted: Frosted color
+    - gradient: Two colors blended
     $options:pt-BR:
     - glass: Vidro
     - color: Colorida (como no macOS)
     - frosted: Cor fosca
+    - gradient: Duas cores misturadas
   - menuSelectionColor: "#447FEF"
-    $name: "Clear glass and Custom liquid glass themes: selection color"
-    $name:pt-BR: "Temas Vidro transparente e Vidro líquido personalizado: cor da seleção"
+    $name: "Glass, Liquid glass, Custom glass and OLED themes: selection color"
+    $name:pt-BR: "Temas Vidro, Vidro líquido, Vidro personalizado e OLED: cor da seleção"
     $description: "Starts with the macOS blue (#447FEF)"
     $description:pt-BR: "Começa com o azul do macOS (#447FEF)"
-  - glassStyle: liquid
-    $name: "Glass themes: glass style"
-    $name:pt-BR: "Temas de vidro: estilo do vidro"
-    $options:
-    - frosted: Translucent glass
-    - liquid: Liquid glass (refraction at the edges; Floating and Original Siri only)
-    $options:pt-BR:
-    - frosted: Vidro translúcido
-    - liquid: Vidro líquido (refração nas bordas; só Flutuante e Siri original)
+  - menuSelectionColor2: "#B44BFF"
+    $name: "Second selection color (Two colors blended)"
+    $name:pt-BR: "Segunda cor da seleção (Duas cores misturadas)"
   - refraction: 70
-    $name: "Liquid glass: refraction at the edges (%)"
-    $name:pt-BR: "Vidro líquido: refração nas bordas (%)"
-    $description: "How much the liquid glass bends what is behind it"
-    $description:pt-BR: "Quanto o vidro líquido curva o que está atrás dele"
+    $name: "Refraction at the edges (%)"
+    $name:pt-BR: "Refração nas bordas (%)"
+    $description: "How much the glass bends what is behind it at the edges. 0 = no bending (the Glass theme never bends)"
+    $description:pt-BR: "Quanto o vidro curva o que está atrás dele nas bordas. 0 = sem curvatura (o tema Vidro nunca curva)"
   - tintLevel: 100
-    $name: "Custom liquid glass theme: color strength at the top (%)"
-    $name:pt-BR: "Tema Vidro líquido personalizado: força da cor no topo (%)"
+    $name: "Custom glass theme: color strength at the top (%)"
+    $name:pt-BR: "Tema Vidro personalizado: força da cor no topo (%)"
     $description: "100 = solid at the top; lower lets the background show through the dark part too"
     $description:pt-BR: "100 = sólido no topo; menos deixa o fundo aparecer também na parte escura"
   - tintReach: 29
-    $name: "Custom liquid glass theme: how far down the color goes (%)"
-    $name:pt-BR: "Tema Vidro líquido personalizado: até onde a cor desce (%)"
+    $name: "Custom glass theme: how far down the color goes (%)"
+    $name:pt-BR: "Tema Vidro personalizado: até onde a cor desce (%)"
     $description: "Where the color gives way to the clear glass: lower values keep it near the top, higher values bring it down"
     $description:pt-BR: "Onde a cor dá lugar ao vidro transparente: valores baixos a mantêm perto do topo, valores altos a trazem para baixo"
   - tintColor: "#050505"
-    $name: "Custom liquid glass theme: glass color"
-    $name:pt-BR: "Tema Vidro líquido personalizado: cor do vidro"
+    $name: "Custom glass theme: glass color"
+    $name:pt-BR: "Tema Vidro personalizado: cor do vidro"
     $description: "Starts black (#050505); any color works"
     $description:pt-BR: "Começa preto (#050505); qualquer cor funciona"
   - glassEffect: true
@@ -425,38 +449,83 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $name:pt-BR: "Temas Claro, Escuro e OLED: efeito vidro"
     $description: "Light on the top, the thickness of the glass at the edges and a beveled rim"
     $description:pt-BR: "Brilho no topo, a espessura do vidro nas bordas e uma borda chanfrada"
+  - glassButtons: true
+    $name: Glass buttons
+    $name:pt-BR: Botões de vidro
+    $description: "Buttons, tabs, shortcut keys, menu icons and the settings controls as clear polished glass"
+    $description:pt-BR: "Botões, abas, teclas de atalho, ícones dos menus e os controles das configurações como vidro límpido e polido"
+  - backlight: false
+    $name: Backlight
+    $name:pt-BR: Retroiluminação
+    $description: "A colored glow around the bar, the results box, the menus and the buttons, its colors turning around them"
+    $description:pt-BR: "Um brilho colorido em volta da barra, da caixa de resultados, dos menus e dos botões, com as cores girando em volta"
+  - backlightIntensity: 70
+    $name: "Backlight intensity (%)"
+    $name:pt-BR: "Intensidade da retroiluminação (%)"
+  - backlightColors: 3
+    $name: "Backlight: how many colors turn around (1-5)"
+    $name:pt-BR: "Retroiluminação: quantas cores giram em volta (1–5)"
+  - backlightColor: "#2F6BFF"
+    $name: Backlight color 1
+    $name:pt-BR: Cor 1 da retroiluminação
+  - backlightColor2: "#B44BFF"
+    $name: Backlight color 2
+    $name:pt-BR: Cor 2 da retroiluminação
+  - backlightColor3: "#FF4B8B"
+    $name: Backlight color 3
+    $name:pt-BR: Cor 3 da retroiluminação
+  - backlightColor4: "#FFB020"
+    $name: Backlight color 4
+    $name:pt-BR: Cor 4 da retroiluminação
+  - backlightColor5: "#20D3A0"
+    $name: Backlight color 5
+    $name:pt-BR: Cor 5 da retroiluminação
+  - chromeRing: true
+    $name: Chrome ring on the settings button
+    $name:pt-BR: Anel cromado no botão de configurações
+    $description: "Under the mouse, in every mode"
+    $description:pt-BR: "Com o mouse em cima, em todos os modos"
+  - chromeBorder: false
+    $name: Animated chrome border
+    $name:pt-BR: Borda cromada animada
+    $description: "Around the bar, the results box and the menus. The OLED theme starts with it on"
+    $description:pt-BR: "Em volta da barra, da caixa de resultados e dos menus. O tema OLED começa com ela ligada"
   - liveGlass: false
     $name: "Liquid glass: follow the background live"
     $name:pt-BR: "Vidro líquido: acompanhar o fundo ao vivo"
     $description: "Videos and animated wallpapers move inside the glass, but the launcher no longer shows in screenshots and screen recordings"
     $description:pt-BR: "Vídeos e papéis de parede animados se mexem dentro do vidro, mas o menu deixa de aparecer em prints e gravações de tela"
-  $name: "③ Appearance (all themes)"
-  $name:pt-BR: "③ Aparência (todos os temas)"
-- custom:
-  - color: "#1e1e1e"
-    $name: Color
-    $name:pt-BR: "Cor"
-    $description: "The color of the glass"
-    $description:pt-BR: "A cor do vidro"
-  - opacity: 60
-    $name: Opacity (%)
-    $name:pt-BR: "Opacidade (%)"
-  - shading: 70
-    $name: "Floating / Original Siri: dark-to-light gradient (%, 0 = off)"
-    $name:pt-BR: "Flutuante / Siri original: degradê escuro → claro (%, 0 = desligado)"
-  - borderWidth: 1
-    $name: Border width (px, 0 = none)
-    $name:pt-BR: "Espessura da borda (px, 0 = nenhuma)"
-    $description: "0 = no border"
-    $description:pt-BR: "0 = sem borda"
-  - borderColor: "#ffffff"
-    $name: Border color
-    $name:pt-BR: "Cor da borda"
-  - borderOpacity: 18
-    $name: Border opacity (%)
-    $name:pt-BR: "Opacidade da borda (%)"
-  $name: "④ Custom theme (only used when Theme = Custom)"
-  $name:pt-BR: "④ Tema personalizado (só vale com o Tema = Personalizado)"
+  $name: "③ Appearance (how every theme starts)"
+  $name:pt-BR: "③ Aparência (como todo tema começa)"
+- settingsWindow:
+  - background: theme
+    $name: Background
+    $name:pt-BR: Fundo
+    $description: "Follow the theme, or a glass of its own with the blur you choose"
+    $description:pt-BR: "Seguir o tema, ou um vidro próprio com o desfoque que você escolher"
+    $options:
+    - theme: Follow the theme
+    - custom: Custom
+    $options:pt-BR:
+    - theme: Seguir o tema
+    - custom: Personalizado
+  - tone: dark
+    $name: Tone (Custom)
+    $name:pt-BR: Tom (Personalizado)
+    $options:
+    - dark: Dark
+    - light: Light
+    $options:pt-BR:
+    - dark: Escuro
+    - light: Claro
+  - blur: 60
+    $name: "Blur (%, 0 = none)"
+    $name:pt-BR: "Desfoque (%, 0 = nenhum)"
+  - transparency: 40
+    $name: "Transparency (%)"
+    $name:pt-BR: "Transparência (%)"
+  $name: "Settings window (the ⋯ button)"
+  $name:pt-BR: "Janela de configurações (o botão ⋯)"
 - window:
   - width: 80
     $name: "Window width (%, Window mode only)"
@@ -525,8 +594,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $name:pt-BR: "Desfoque atrás da pasta aberta (0–100)"
     $description: "How blurred the apps behind an open folder look"
     $description:pt-BR: "Quão embaçados ficam os apps atrás de uma pasta aberta"
-  $name: "⑤ Window and Fullscreen modes"
-  $name:pt-BR: "⑤ Modos Janela e Tela cheia"
+  $name: "④ Window and Fullscreen modes"
+  $name:pt-BR: "④ Modos Janela e Tela cheia"
 - siri:
   - pillWidth: 560
     $name: Bar width (px)
@@ -634,8 +703,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     - left: À esquerda da barra
     - right: À direita da barra
   - firstRow: recent
-    $name: "Original Siri: first row of apps (separated by a line)"
-    $name:pt-BR: "Siri original: primeira linha de aplicativos (separada por uma linha)"
+    $name: "Floating and Original Siri: first row of apps (separated by a line)"
+    $name:pt-BR: "Flutuante e Siri original: primeira linha de aplicativos (separada por uma linha)"
     $options:
     - recent: Recently opened or installed
     - used: Most used
@@ -658,13 +727,16 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - shortcutClipboard: Ctrl+4
     $name: "Original Siri: shortcut - Clipboard"
     $name:pt-BR: "Siri original: atalho — Área de transferência"
+  - shortcutPhone: Ctrl+5
+    $name: "Original Siri: shortcut - Phone"
+    $name:pt-BR: "Siri original: atalho — Celular"
   - shortcutsAnywhere: false
     $name: "Original Siri: the shortcuts above also work with the launcher closed"
     $name:pt-BR: "Siri original: os atalhos acima funcionam também com o menu fechado"
     $description: "They then open the launcher on that category from any program, and that program no longer gets those keys (e.g. Ctrl+1 for browser tabs)"
     $description:pt-BR: "Assim eles abrem o menu na categoria de qualquer programa, e esse programa deixa de receber essas teclas (ex.: Ctrl+1 das abas do navegador)"
-  $name: "⑥ Floating and Original Siri modes"
-  $name:pt-BR: "⑥ Modos Flutuante e Siri original"
+  $name: "⑤ Floating and Original Siri modes"
+  $name:pt-BR: "⑤ Modos Flutuante e Siri original"
 - open:
   - winKey: true
     $name: The Windows key opens the launcher
@@ -676,12 +748,17 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $name:pt-BR: "Abrir com o botão Iniciar"
     $description: "Off: the Start button on the taskbar opens the Windows Start menu"
     $description:pt-BR: "Desligado: o botão Iniciar da barra de tarefas abre o Iniciar do Windows"
-  $name: "⑦ Opening"
-  $name:pt-BR: "⑦ Abertura"
+  $name: "⑥ Opening"
+  $name:pt-BR: "⑥ Abertura"
 - grid:
   - iconSize: 64
     $name: Icon size (px, Floating / Original Siri up to 56)
     $name:pt-BR: "Tamanho dos ícones (px; nos modos Flutuante e Siri original até 56)"
+  - textSize: 100
+    $name: Text size of the results (%, 80 to 160)
+    $name:pt-BR: "Tamanho do texto dos resultados (%, 80 a 160)"
+    $description: "The names of apps, files and the other results, in the grid and in lists. 100 = normal"
+    $description:pt-BR: "Os nomes dos apps, arquivos e dos outros resultados, na grade e nas listas. 100 = normal"
   - columns: 0
     $name: Columns (0 = automatic)
     $name:pt-BR: "Colunas (0 = automático)"
@@ -709,8 +786,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     $name:pt-BR: "Pasta da galeria de ícones"
     $description: "A folder with your icon images, for example a downloaded icon pack. Right-click an app > Change icon... shows them"
     $description:pt-BR: "Uma pasta com suas imagens de ícones, por exemplo um pacote de ícones baixado. Clique direito em um app > Alterar ícone... mostra elas"
-  $name: "⑧ Apps and icons"
-  $name:pt-BR: "⑧ Aplicativos e ícones"
+  $name: "⑦ Apps and icons"
+  $name:pt-BR: "⑦ Aplicativos e ícones"
 - files:
   - enabled: true
     $name: Files category
@@ -749,8 +826,8 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
   - maxResults: 50
     $name: Maximum results
     $name:pt-BR: "Máximo de resultados"
-  $name: "⑨ Files"
-  $name:pt-BR: "⑨ Arquivos"
+  $name: "⑧ Files"
+  $name:pt-BR: "⑧ Arquivos"
 - clipboard:
   - enabled: true
     $name: Clipboard category
@@ -781,8 +858,19 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
     - 8h: 8 horas
     - 24h: 1 dia
     - 7d: 7 dias
-  $name: "⑩ Clipboard"
-  $name:pt-BR: "⑩ Área de transferência"
+  $name: "⑨ Clipboard"
+  $name:pt-BR: "⑨ Área de transferência"
+- phone:
+  - enabled: false
+    $name: Phone category
+    $name:pt-BR: "Categoria Celular"
+    $description: "Off by default. Your phone linked in Phone Link: battery, the latest notifications, messages, calls and photos. Read only on this PC, from a temporary copy deleted right after; nothing is changed or sent"
+    $description:pt-BR: "Desligada por padrão. Seu celular vinculado no Vincular ao Celular: bateria, últimas notificações, mensagens, chamadas e fotos. Lido só neste PC, de uma cópia temporária apagada logo depois; nada é alterado nem enviado"
+  - notifications: 10
+    $name: "Notifications shown (1-10)"
+    $name:pt-BR: "Notificações mostradas (1–10)"
+  $name: "⑩ Phone"
+  $name:pt-BR: "⑩ Celular"
 */
 // ==/WindhawkModSettings==
 
@@ -813,6 +901,7 @@ Copyright (c) 2026 Thiago Silva. Licensed under the **GNU General Public License
 #include <chrono>
 #include <optional>
 #include <map>
+#include <set>
 #include <atomic>
 #include <mutex>
 #include <uiautomation.h>
@@ -861,6 +950,8 @@ struct UiTranslation {
 };
 
 const UiTranslation kUiTranslations[] = {
+    {L"Phone", L"Celular", L"Teléfono", L"Téléphone", L"Telefon", L"Telefono"},
+    {L"Search Phone", L"Pesquisar no celular", L"Buscar en el teléfono", L"Rechercher sur le téléphone", L"Telefon durchsuchen", L"Cerca nel telefono"},
     {L"Apps", L"Aplicativos", L"Aplicaciones", L"Applications", L"Apps", L"App"},
     {L"Files", L"Arquivos", L"Archivos", L"Fichiers", L"Dateien", L"File"},
     {L"Clipboard", L"Área de transferência", L"Portapapeles", L"Presse-papiers", L"Zwischenablage", L"Appunti"},
@@ -931,9 +1022,13 @@ const UiTranslation kUiTranslations[] = {
     {L"Everything is still indexing...", L"O Everything ainda está indexando...", L"Everything todavía está indexando...", L"Everything est encore en cours d’indexation...", L"Everything indiziert noch...", L"Everything sta ancora indicizzando..."},
     {L"All", L"Todos", L"Todas", L"Toutes", L"Alle", L"Tutte"},
     {L"Cancel", L"Cancelar", L"Cancelar", L"Annuler", L"Abbrechen", L"Annulla"},
+    {L"Yes", L"Sim", L"Sí", L"Oui", L"Ja", L"Sì"},
+    {L"No", L"Não", L"No", L"Non", L"Nein", L"No"},
+    {L"OK", L"OK", L"Aceptar", L"OK", L"OK", L"OK"},
     {L"Done (%d)", L"Concluir (%d)", L"Listo (%d)", L"Terminé (%d)", L"Fertig (%d)", L"Fine (%d)"},
     {L"New tab", L"Nova aba", L"Nueva pestaña", L"Nouvel onglet", L"Neuer Tab", L"Nuova scheda"},
     {L"New tab with this app", L"Nova aba com este aplicativo", L"Nueva pestaña con esta aplicación", L"Nouvel onglet avec cette application", L"Neuer Tab mit dieser App", L"Nuova scheda con questa app"},
+    {L"New tab with the selected apps", L"Nova aba com os aplicativos selecionados", L"Nueva pestaña con las aplicaciones seleccionadas", L"Nouvel onglet avec les applications sélectionnées", L"Neuer Tab mit den ausgewählten Apps", L"Nuova scheda con le app selezionate"},
     {L"Add app", L"Adicionar aplicativo", L"Añadir aplicación", L"Ajouter une application", L"App hinzufügen", L"Aggiungi app"},
     {L"Rename tab", L"Renomear aba", L"Renombrar pestaña", L"Renommer l’onglet", L"Tab umbenennen", L"Rinomina scheda"},
     {L"Delete tab", L"Excluir aba", L"Eliminar pestaña", L"Supprimer l’onglet", L"Tab löschen", L"Elimina scheda"},
@@ -956,12 +1051,95 @@ PCWSTR CfgT(PCWSTR en, PCWSTR pt);
 PCWSTR TabLabel(int id) {
     if (id == 4) return CfgT(L"Icon gallery", L"Galeria de ícones");
     if (id == 5) return Tr(L"Search");
-    return Tr(id == 0 ? L"Apps" : id == 1 ? L"Files" : id == 3 ? L"Actions" : L"Clipboard");
+    return Tr(id == 0 ? L"Apps" : id == 1 ? L"Files" : id == 3 ? L"Actions" : id == 6 ? L"Phone" : L"Clipboard");
 }
 
 // Simplified Chinese, by the English text (the interface strings of both tables above and the settings panel)
 struct ZhTranslation { PCWSTR en, zh; };
 const ZhTranslation kZhTranslations[] = {
+    {L"Your phone from Phone Link: battery and notifications", L"通过“手机连接”查看手机：电量和通知"},
+    {L"Notifications shown", L"显示的通知数"},
+    {L"How many notifications show at once. When the phone has more, they scroll inside their own box", L"同时显示的通知数量。手机上更多的通知会在其自己的框内滚动"},
+    {L"Turn on the Phone category first", L"请先开启手机分类"},
+    {L"Clear all", L"全部清除"},
+    {L"No notifications", L"没有通知"},
+    {L"now", L"刚刚"},
+    {L"%lld min ago", L"%lld 分钟前"},
+    {L"Phone category", L"手机分类"},
+    {L"Your phone linked in Phone Link: battery, the latest notifications with what they say, messages, calls and photos. Needs Phone Link", L"在“手机连接”中关联的手机：电量、最新通知及其内容、消息、通话和照片。需要“手机连接”"},
+    {L"Battery", L"电量"},
+    {L"Recent", L"最近"},
+    {L"Features", L"功能"},
+    {L"Phone Link", L"手机连接"},
+    {L"No linked phone. Link one in Phone Link, and turn on \"Show mobile device in Start\" in Settings", L"没有已关联的手机。请在“手机连接”中关联手机，并在设置中开启“在开始菜单中显示移动设备”"},
+    {L"Couldn't read Phone Link", L"无法读取“手机连接”"},
+    {L"Phone", L"手机"},
+    {L"Search Phone", L"搜索手机"},
+    {L"Two colors blended", L"双色混合"},
+    {L"Second selection color", L"第二选择颜色"},
+    {L"Blended with the first one across the item. Starts purple", L"沿项目与第一种颜色混合。默认为紫色"},
+    {L"Colored and Frosted selection, and the first of the two colors. Starts with the macOS blue", L"彩色和磨砂选择，以及两种颜色中的第一种。默认为 macOS 蓝"},
+    {L"Chrome ring on the settings button", L"设置按钮上的镀铬圆环"},
+    {L"Under the mouse, a polished ring with its light running around the button (every mode)", L"鼠标悬停时，按钮周围出现光线流动的抛光圆环（所有模式）"},
+    {L"Animated chrome border", L"动态镀铬边框"},
+    {L"A polished edge around the bar, the results box and the menus, its light running around them", L"搜索栏、结果框和菜单周围的抛光边框，光线沿边缘流动"},
+    {L"A colored glow around the bar, the results box, the menus and the buttons, its colors turning around them", L"搜索栏、结果框、菜单和按钮周围的彩色光晕，颜色环绕旋转"},
+    {L"Backlight intensity", L"背光强度"},
+    {L"How strong the glow is", L"光晕的强度"},
+    {L"Backlight colors", L"背光颜色数"},
+    {L"How many colors turn around (1 = one color whose light travels around)", L"有几种颜色环绕旋转（1 = 单色光沿边缘流动）"},
+    {L"Color 1", L"颜色 1"},
+    {L"Color 2", L"颜色 2"},
+    {L"Color 3", L"颜色 3"},
+    {L"Color 4", L"颜色 4"},
+    {L"Color 5", L"颜色 5"},
+    {L"Buttons and backlight", L"按钮和背光"},
+    {L"Glass buttons", L"玻璃按钮"},
+    {L"Buttons, tabs, shortcut keys, menu icons and these controls as clear polished glass", L"按钮、标签、快捷键、菜单图标和这些控件呈现为清澈的抛光玻璃"},
+    {L"Backlight", L"背光"},
+    {L"A colored glow around the bar, the results box and the buttons, with a bright line at the bottom", L"搜索栏、结果框和按钮周围的彩色光晕，底部有一条亮线"},
+    {L"Backlight color", L"背光颜色"},
+    {L"Starts blue; any color works", L"默认为蓝色；任何颜色都可以"},
+    {L"Turn on Backlight first", L"请先开启背光"},
+    {L"Open the results box", L"打开结果框"},
+    {L"Floating: click the search bar, or just rest the mouse on it, to show the apps", L"浮动：单击搜索栏，或将鼠标悬停在其上，即可显示应用"},
+    {L"On click", L"单击时"},
+    {L"On mouse over", L"鼠标悬停时"},
+    {L"Glass follows the background live", L"玻璃实时跟随背景"},
+    {L"Settings window", L"设置窗口"},
+    {L"The look of this window: the theme's, or its own", L"此窗口的外观：跟随主题，或使用自己的外观"},
+    {L"Tone", L"色调"},
+    {L"Light: a white glass with dark text. Dark: a smoky glass with white text", L"浅色：白色玻璃配深色文字。深色：烟灰玻璃配白色文字"},
+    {L"Follow the theme, or a glass of its own: light or dark, with the blur and transparency you choose. The same for every theme", L"跟随主题，或使用独立玻璃：浅色或深色，模糊度和透明度可选。所有主题相同"},
+    {L"Only with Background blur above 0", L"仅在背景模糊大于 0 时可用"},
+    {L"On: the glass follows videos and animated wallpapers (the launcher then stays out of screenshots and recordings). Off: a still picture, lighter on the PC", L"开启：玻璃跟随视频和动态壁纸（启动器不会出现在截图和录屏中）。关闭：一张静态图片，更省资源"},
+    {L"Background of this window", L"此窗口的背景"},
+    {L"Follow the theme, or a glass of its own with the blur you choose. The same for every theme", L"跟随主题，或使用你选择模糊度的独立玻璃。所有主题相同"},
+    {L"Follow the theme", L"跟随主题"},
+    {L"Blur", L"模糊"},
+    {L"How much the window blurs what is behind it. 0 = none", L"窗口对背后内容的模糊程度。0 = 无"},
+    {L"Transparency", L"透明度"},
+    {L"The theme and, under it, everything of its own: each theme keeps its own; what it doesn't use is hidden", L"主题及其下方的专属设置：每个主题各自保存；不使用的设置会隐藏"},
+    {L"Custom glass", L"自定义玻璃"},
+    {L"Customize theme", L"自定义主题"},
+    {L"Transparency, glass, menus and, for the chosen mode, the Siri bar, the window and the animations. Each theme keeps its own", L"透明度、玻璃、菜单，以及所选模式下的 Siri 栏、窗口和动画。每个主题各自保存"},
+    {L"Restore theme defaults", L"恢复主题默认值"},
+    {L"Brings this theme back to how it comes. Its values are then kept for this theme, so changing them in Windhawk's Settings tab no longer reaches it", L"将此主题恢复为初始状态。之后这些值会保存在此主题中，在 Windhawk 的设置标签页中更改它们将不再影响它"},
+    {L"Look", L"外观"},
+    {L"How much of what is behind shows through. 100 = completely clear", L"透出背后内容的程度。100 = 完全透明"},
+    {L"How much the glass bends what is behind it at the edges. 0 = no bending", L"玻璃在边缘弯曲背后内容的程度。0 = 不弯曲"},
+    {L"Glass effect", L"玻璃效果"},
+    {L"How the item under the mouse is highlighted, in the menus and in the search results. Colored is like macOS; Frosted lets the glass show through", L"鼠标下项目的高亮方式，包括菜单和搜索结果。彩色与 macOS 相同；磨砂会透出玻璃"},
+    {L"Results: Applications", L"结果：应用"},
+    {L"Results: Files", L"结果：文件"},
+    {L"Results: Actions", L"结果：操作"},
+    {L"Results: Clipboard", L"结果：剪贴板"},
+    {L"Customize ›", L"自定义 ›"},
+    {L"Turn on Glass effect first", L"请先开启玻璃效果"},
+    {L"Only with Refraction above 0", L"仅在折射大于 0 时可用"},
+    {L"Mode, language and how the launcher opens", L"模式、语言和菜单的打开方式"},
+    {L"The theme, and how to make it your own", L"主题，以及如何让它成为你的风格"},
+    {L"Everything that belongs to the chosen theme and mode. Each theme keeps its own; what it doesn't use is hidden", L"属于所选主题和模式的全部设置。每个主题各自保存；不使用的设置会隐藏"},
     {L"Apps", L"应用"},
     {L"Files", L"文件"},
     {L"Clipboard", L"剪贴板"},
@@ -1032,9 +1210,13 @@ const ZhTranslation kZhTranslations[] = {
     {L"Everything is still indexing...", L"Everything 仍在建立索引..."},
     {L"All", L"全部"},
     {L"Cancel", L"取消"},
+    {L"Yes", L"是"},
+    {L"No", L"否"},
+    {L"OK", L"确定"},
     {L"Done (%d)", L"完成（%d）"},
     {L"New tab", L"新建标签"},
     {L"New tab with this app", L"用此应用新建标签"},
+    {L"New tab with the selected apps", L"用所选应用新建标签"},
     {L"Add app", L"添加应用"},
     {L"Rename tab", L"重命名标签"},
     {L"Delete tab", L"删除标签"},
@@ -1051,6 +1233,8 @@ const ZhTranslation kZhTranslations[] = {
     {L"Hold an app to select it", L"按住一个应用以选择它"},
     {L"Everything did not reply", L"Everything 没有响应"},
     {L"Calculator", L"计算器"},
+    {L"Ignore accents", L"忽略重音符号"},
+    {L"Searching for \"acao\" also finds \"ação\", and the other way around, in apps, files, actions and the other categories", L"搜索“acao”也能找到“ação”，反之亦然，适用于应用、文件、操作和其他类别"},
     {L"Windows Settings", L"Windows 设置"},
     {L"Display", L"显示"},
     {L"Night light", L"夜间模式"},
@@ -1175,7 +1359,7 @@ const ZhTranslation kZhTranslations[] = {
     {L"Icon size, columns, scrolling and your own icons", L"图标大小、列数、滚动和你自己的图标"},
     {L"Lighter effects and fewer frames for laptops and slower PCs", L"为笔记本和较慢的电脑提供更轻的效果和更少的帧数"},
     {L"Backup and defaults", L"备份和默认设置"},
-    {L"Save everything to a file, bring it back, or start over", L"把所有内容保存到文件、恢复，或从头开始"},
+    {L"Save everything to a file, bring it back, start over, and the look of this window", L"把所有内容保存到文件、恢复、从头开始，以及此窗口的外观"},
     {L"Performance", L"性能"},
     {L"Light works with any theme and is made so slower PCs can enjoy the mod smoothly: no liquid glass, no live blur, no blur behind menus, no shadows, at most 60 frames per second and calmer animations", L"轻量模式适用于任何主题，专为配置较低的电脑设计，让它们也能流畅使用本模组：无液态玻璃、无实时模糊、菜单后无模糊、无阴影，最多每秒 60 帧，动画更平缓"},
     {L"Normal", L"正常"},
@@ -1392,6 +1576,8 @@ const ZhTranslation kZhTranslations[] = {
     {L"Open with the Windows key", L"用 Windows 键打开"},
     {L"Open with the Start button", L"用开始按钮打开"},
     {L"Icon size", L"图标大小"},
+    {L"Text size of the results", L"结果文字大小"},
+    {L"The names of apps, files and the other results, in the grid and in lists. 100 = normal", L"应用、文件和其他结果的名称，在网格和列表中。100 = 正常"},
     {L"Floating and Original Siri use up to 56 px", L"浮动和原版 Siri 最多使用 56 像素"},
     {L"Columns", L"列数"},
     {L"0 = automatic", L"0 = 自动"},
@@ -1480,6 +1666,7 @@ constexpr UINT_PTR kTimerStartRects = 16;    // without the Start hook: finds wh
 constexpr UINT_PTR kTimerStartCheck = 15;    // without the Start hook: makes sure Windows' Start menu went away after the launcher opened
 constexpr UINT_PTR kTimerAppsChanged = 14;   // reads the app list again a moment after the last change (installers write many files)
 constexpr UINT_PTR kTimerCaret = 13;       // the text cursor blinks (on, off) while the launcher is open
+constexpr UINT_PTR kTimerPhone = 17;       // the Phone category looks for a newer card from Phone Link while it shows
 bool g_caretOn = true;
 void CaretRestart();   // (defined with the window, below)
 constexpr UINT kFileSearchDelayMs = 220;
@@ -1500,7 +1687,7 @@ constexpr int kTabBase = 900000000;
 enum { kMenuRename = 1, kMenuUndoFolder, kMenuNewFolder, kMenuSelect, kMenuSelectAll, kMenuClearSelection, kMenuPin, kMenuDesktop,
        kMenuResetIcon, kMenuUninstall,
        kMenuLock, kMenuSleep, kMenuRestart, kMenuShutdown, kMenuSignOut,
-       kMenuHistRemove, kMenuHistClear, kMenuTabApps, kMenuTabFiles, kMenuTabClipboard, kMenuTabActions,
+       kMenuHistRemove, kMenuHistClear, kMenuTabApps, kMenuTabFiles, kMenuTabClipboard, kMenuTabActions, kMenuTabPhone,
        kMenuNewTab, kMenuAddApps, kMenuRenameTab, kMenuDeleteTab, kMenuRemoveFromTab, kMenuRestoreTabs,
        kMenuTextCut, kMenuTextCopy, kMenuTextPaste, kMenuTextDeleteAll, kMenuTextSelectAll, kMenuClipRemove, kMenuClipClear, kMenuGhIcon, kMenuBarCenter, kMenuOpenLocation };
 constexpr int kMenuAddToTab = 300;   // + user tab index
@@ -1519,10 +1706,28 @@ std::wstring ToLower(std::wstring text) {
     return text;
 }
 
+// The text without its accents ("ação" -> "acao"): split into letter + mark, then the marks are dropped
+std::wstring FoldAccents(const std::wstring& text) {
+    if (text.empty()) return text;
+    int n = FoldStringW(MAP_COMPOSITE, text.c_str(), (int)text.size(), nullptr, 0);
+    if (n <= 0) return text;
+    std::wstring split(n, L'\0');
+    if (FoldStringW(MAP_COMPOSITE, text.c_str(), (int)text.size(), split.data(), n) <= 0) return text;
+    std::wstring out;
+    out.reserve(split.size());
+    for (wchar_t c : split) if (c < 0x0300 || c > 0x036F) out += c;   // combining diacritical marks
+    return out;
+}
+// How a name and the typed text are compared: lowercase, and without accents when they are ignored
+std::wstring SearchKey(const std::wstring& text, bool ignoreAccents) {
+    std::wstring s = ToLower(text);
+    return ignoreAccents ? FoldAccents(s) : s;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Settings
 
-enum class Theme { Custom, Light, Glass, Siri, Dark, Oled, Tinted };
+enum class Theme { Custom, Light, Glass, Siri, Dark, Oled, Tinted, Frost };
 enum class Anim { Zoom, Fade, Slide, Crt };
 enum class Indexer { Auto, Everything, Windows, Scan };
 
@@ -1537,29 +1742,36 @@ float AnimSeconds(Anim a, bool closing) {
 }
 
 struct Settings {
-    Theme theme = Theme::Custom;       // Window / Fullscreen
+    Theme theme = Theme::Glass;
     int blurAmount = 60;
     int menuBlur = 100;            // blur behind context menus, % of the default
     int menuText = -1;             // text color: -1 automatic (clear glass: by the background), 0 white, 1 black
-    int menuSelection = 0;         // clear glass menus, item under the mouse: 0 glass, 1 solid color, 2 frosted color
+    int menuSelection = 0;         // menus, item under the mouse: 0 glass, 1 solid color, 2 frosted color, 3 two colors blended
+    D2D1_COLOR_F menuSelectionColor2 = D2D1::ColorF(0xB44BFF);
     D2D1_COLOR_F menuSelectionColor = D2D1::ColorF(0x447FEF);
+    bool glassButtons = true;      // buttons, tabs, keycaps, menu icons and the panel's controls as clear polished glass
+    bool backlight = false;        // a colored glow around the bar, the box and the buttons
+    D2D1_COLOR_F backlightColors[5] = {D2D1::ColorF(0x2F6BFF), D2D1::ColorF(0xB44BFF), D2D1::ColorF(0xFF4B8B), D2D1::ColorF(0xFFB020), D2D1::ColorF(0x20D3A0)};
+    int backlightCount = 3;        // how many of those colors turn around the shape
+    int backlightIntensity = 70;   // %
+    bool chromeBorder = false;     // a chrome edge whose light runs around the bar, the box and the menus
+    bool chromeRing = true;        // the settings button gets a chrome ring under the mouse
     int glassTransparency = 80;   // Clear glass theme
     bool liveBackground = true;   // no snapshot: animated wallpapers and videos keep playing behind
     bool glassLiquid = true;       // glass themes: refraction (liquid glass) instead of the live blur
     int refraction = 70;          // liquid glass: how far the edges bend the background (%)
-    bool liveGlass = false;       // liquid glass: picture retaken while open (hides the launcher from captures)
-    int tintLevel = 100;         // Custom liquid glass theme: how solid the color is at the top (%)
-    int tintReach = 29;          // Custom liquid glass theme: how far down the color goes before the clear glass (%)
-    D2D1_COLOR_F tintColor = D2D1::ColorF(0x050505);   // Custom liquid glass theme: the color of the glass
+    bool liveGlass = false;        // liquid glass: picture retaken while open (hides the launcher from captures)
+    int tintLevel = 100;         // Custom glass theme: how solid the color is at the top (%)
+    int tintReach = 29;          // Custom glass theme: how far down the color goes before the clear glass (%)
+    D2D1_COLOR_F tintColor = D2D1::ColorF(0x050505);   // Custom glass theme: the color of the glass
     bool light = false;           // light mode (any theme): no liquid glass, no live blur, no blur behind menus, no shadows, at most 60 fps
     int maxFps = 0;               // frame rate limit (0 = the monitor's)
     bool cpuDraw = false;         // draw with the processor (no graphics card)
     bool glassEffect = true;      // Light, Dark and OLED themes: glass optics (sheen, edge thickness, beveled rim)
-    float opacity = 0.6f;
-    D2D1_COLOR_F tint{0.118f, 0.118f, 0.118f, 1.0f};
     int windowWidth = 80;
     int windowHeight = 75;
     int iconSize = 64;
+    int textSize = 100;            // results text, in % (80 to 160)
     int columns = 0;
     bool fullscreen = false;
     bool searchBox = false;
@@ -1567,9 +1779,6 @@ struct Settings {
     int folderRadius = 26;
     int folderBlur = 40;
     float animSpeed = 1.0f;
-    int borderWidth = 1;
-    D2D1_COLOR_F borderColor{1.0f, 1.0f, 1.0f, 1.0f};
-    float borderOpacity = 0.18f;
     bool horizontal = false;
     bool dragToPin = true;
     bool showPower = true;
@@ -1578,11 +1787,10 @@ struct Settings {
     bool darkText = false;
     bool siri = false;
     bool siriOriginal = false;   // Original Siri: hover menu, Actions, app filters, recommendations
+    bool floatingHover = false;  // Floating: the results box opens with the mouse over the bar (not only on click)
     int siriFirstRow = 1;   // 0 off, 1 recently opened/installed, 2 most used
     int siriPillW = 560;
     int siriPillH = 96;
-    D2D1_COLOR_F siriPillColor{0.118f, 0.118f, 0.118f, 1.0f};
-    float siriPillOpacity = 0.72f;
     int siriPillIntroMs = 520;
     int siriPillOutroMs = 420;
     int siriBounce = 50;
@@ -1590,6 +1798,7 @@ struct Settings {
     bool siriPowerLeft = false;   // the floating power button on the left of the bar
     bool generalSearch = true;    // Original Siri: typing in "Search" looks for apps, actions, folders and files
     bool calculator = true;       // a typed calculation shows its result
+    bool ignoreAccents = true;    // "acao" finds "ação" (and the other way around)
     int siriCircleZoom = 25;
     int siriOrbStyle = 0;   // 0 wave, 1 glow, 2 none
     int siriPanelBounce = 30;
@@ -1598,15 +1807,14 @@ struct Settings {
     // Results box per category (Applications use the two above; width 0 = as wide as the bar)
     int filesPanelW = 0, filesRows = 3, actionsPanelW = 680, actionsRows = 3, clipPanelW = 0, clipRows = 3;
     bool siriHorizontal = true;
-    D2D1_COLOR_F siriPanelColor{0.118f, 0.118f, 0.118f, 1.0f};
-    float siriPanelOpacity = 0.60f;
     int siriPanelRadius = 24;
-    bool siriShade = true;
-    int siriShadeStrength = 70;
     bool siriPower = true;
     Anim openAnim = Anim::Zoom, closeAnim = Anim::Zoom;
     bool filesEnabled = true;
     bool clipEnabled = true;
+    bool phoneEnabled = false;     // the Phone category (Phone Link), when Phone Link is installed (off until turned on)
+    bool phoneWanted = false;      // the setting itself (Phone Link may be installed later)
+    int phoneMax = 10;             // how many notifications it shows (1-10)
     Indexer indexer = Indexer::Auto;
     int maxResults = 50;
     int clipMax = 30;
@@ -1614,6 +1822,7 @@ struct Settings {
 };
 
 Settings g_settings;
+std::wstring SearchKey(const std::wstring& text) { return SearchKey(text, g_settings.ignoreAccents); }
 // Read by the Start menu hook (another thread): what is allowed to open the launcher
 std::atomic<bool> g_startButtonEnabled{true}, g_winKeyEnabled{true};
 std::vector<std::wstring> g_searchHistory;
@@ -1621,16 +1830,17 @@ bool g_historyEnabled = true;
 bool g_filesList = false;
 
 struct Shortcut { bool valid = false, shift = false; UINT vk = 0; };
-Shortcut g_shortcuts[4];   // category shortcuts (Ctrl+...), indexed by tab id: Apps, Files, Clipboard, Actions
-std::wstring g_shortcutLabels[4];   // as shown in the categories menu
+Shortcut g_shortcuts[7];   // category shortcuts (Ctrl+...), indexed by tab id: Apps, Files, Clipboard, Actions, -, -, Phone
+std::wstring g_shortcutLabels[7];   // as shown in the categories menu
+constexpr int kShortcutTabs[] = {0, 1, 2, 3, 6};   // the categories that have one
 bool g_shortcutsAnywhere = false;    // Original Siri: the category shortcuts also work with the launcher closed (hotkeys)
 void UpdateCategoryHotkeys();
 void SaveSearchHistory();
 void QueryChanged();
 
 
-// Visible categories: 0 Apps (always), 1 Files, 2 Clipboard, 3 Actions (Original Siri)
-int g_tabIds[4] = {0, 1, 2, 3};
+// Visible categories: 0 Apps (always), 1 Files, 2 Clipboard, 3 Actions (Original Siri), 6 Phone
+int g_tabIds[5] = {0, 1, 2, 3, 6};
 int g_tabCount = 3;
 
 void BuildTabs() {
@@ -1639,6 +1849,7 @@ void BuildTabs() {
     if (g_settings.filesEnabled) g_tabIds[g_tabCount++] = 1;
     if (g_settings.siriOriginal) g_tabIds[g_tabCount++] = 3;
     if (g_settings.clipEnabled) g_tabIds[g_tabCount++] = 2;
+    if (g_settings.phoneEnabled) g_tabIds[g_tabCount++] = 6;   // Phone, after the clipboard
 }
 bool TabsVisible() { return g_tabCount > 1; }
 bool TabEnabled(int id) { for (int i = 0; i < g_tabCount; i++) if (g_tabIds[i] == id) return true; return false; }
@@ -1715,7 +1926,419 @@ struct CfgSection { PCWSTR en, pt, descEn, descPt, glyph; UINT32 color; };
 // Texts written with English and Portuguese side by side; Spanish, French, German and Italian come from this table
 struct CfgTranslation { PCWSTR en, es, fr, de, it; };
 const CfgTranslation kCfgTranslations[] = {
+    {L"Phone", L"Teléfono", L"Téléphone", L"Telefon", L"Telefono"},
+    {L"Your phone from Phone Link: battery and notifications",
+     L"Tu teléfono desde Enlace Móvil: batería y notificaciones",
+     L"Votre téléphone via Mobile connecté : batterie et notifications",
+     L"Dein Telefon über Smartphone-Link: Akku und Benachrichtigungen",
+     L"Il telefono da Collegamento al telefono: batteria e notifiche"},
+    {L"Notifications shown",
+     L"Notificaciones mostradas",
+     L"Notifications affichées",
+     L"Angezeigte Benachrichtigungen",
+     L"Notifiche mostrate"},
+    {L"How many notifications show at once. When the phone has more, they scroll inside their own box",
+     L"Cuántas notificaciones se ven a la vez. Si el teléfono tiene más, se desplazan dentro de su propio cuadro",
+     L"Combien de notifications s’affichent à la fois. S’il y en a plus, elles défilent dans leur propre cadre",
+     L"Wie viele Benachrichtigungen gleichzeitig zu sehen sind. Gibt es mehr, scrollen sie in ihrem eigenen Feld",
+     L"Quante notifiche si vedono insieme. Se il telefono ne ha di più, scorrono nel loro riquadro"},
+    {L"Turn on the Phone category first",
+     L"Activa primero la categoría Teléfono",
+     L"Activez d’abord la catégorie Téléphone",
+     L"Schalte zuerst die Kategorie Telefon ein",
+     L"Attiva prima la categoria Telefono"},
+    {L"Clear all",
+     L"Borrar todo",
+     L"Tout effacer",
+     L"Alle löschen",
+     L"Cancella tutto"},
+    {L"No notifications",
+     L"Sin notificaciones",
+     L"Aucune notification",
+     L"Keine Benachrichtigungen",
+     L"Nessuna notifica"},
+    {L"now",
+     L"ahora",
+     L"maintenant",
+     L"jetzt",
+     L"ora"},
+    {L"%lld min ago",
+     L"hace %lld min",
+     L"il y a %lld min",
+     L"vor %lld Min.",
+     L"%lld min fa"},
+    {L"Phone category",
+     L"Categoría Teléfono",
+     L"Catégorie Téléphone",
+     L"Kategorie Telefon",
+     L"Categoria Telefono"},
+    {L"Your phone linked in Phone Link: battery, the latest notifications with what they say, messages, calls and photos. Needs Phone Link",
+     L"Tu teléfono vinculado en Enlace Móvil: batería, las últimas notificaciones con su texto, mensajes, llamadas y fotos. Necesita Enlace Móvil",
+     L"Votre téléphone associé dans Mobile connecté : batterie, dernières notifications avec leur texte, messages, appels et photos. Nécessite Mobile connecté",
+     L"Dein in Smartphone-Link verbundenes Telefon: Akku, die neuesten Benachrichtigungen mit Inhalt, Nachrichten, Anrufe und Fotos. Benötigt Smartphone-Link",
+     L"Il telefono collegato in Collegamento al telefono: batteria, ultime notifiche con il loro testo, messaggi, chiamate e foto. Richiede Collegamento al telefono"},
+    {L"Battery",
+     L"Batería",
+     L"Batterie",
+     L"Akku",
+     L"Batteria"},
+    {L"Recent",
+     L"Reciente",
+     L"Récent",
+     L"Zuletzt",
+     L"Recenti"},
+    {L"Features",
+     L"Funciones",
+     L"Fonctionnalités",
+     L"Funktionen",
+     L"Funzionalità"},
+    {L"Phone Link",
+     L"Enlace Móvil",
+     L"Mobile connecté",
+     L"Smartphone-Link",
+     L"Collegamento al telefono"},
+    {L"No linked phone. Link one in Phone Link, and turn on \"Show mobile device in Start\" in Settings",
+     L"Ningún teléfono vinculado. Vincula uno en Enlace Móvil y activa \"Mostrar dispositivo móvil en Inicio\" en Configuración",
+     L"Aucun téléphone associé. Associez-en un dans Mobile connecté et activez \"Afficher l’appareil mobile dans Démarrer\" dans les Paramètres",
+     L"Kein Telefon verbunden. Verbinde eines in Smartphone-Link und aktiviere \"Mobilgerät in Start anzeigen\" in den Einstellungen",
+     L"Nessun telefono collegato. Collegane uno in Collegamento al telefono e attiva \"Mostra dispositivo mobile in Start\" nelle Impostazioni"},
+    {L"Couldn't read Phone Link",
+     L"No se pudo leer Enlace Móvil",
+     L"Impossible de lire Mobile connecté",
+     L"Smartphone-Link konnte nicht gelesen werden",
+     L"Impossibile leggere Collegamento al telefono"},
+    {L"Two colors blended",
+     L"Dos colores mezclados",
+     L"Deux couleurs mélangées",
+     L"Zwei Farben gemischt",
+     L"Due colori sfumati"},
+    {L"Second selection color",
+     L"Segundo color de selección",
+     L"Deuxième couleur de sélection",
+     L"Zweite Auswahlfarbe",
+     L"Secondo colore di selezione"},
+    {L"Blended with the first one across the item. Starts purple",
+     L"Mezclado con el primero a lo largo del elemento. Empieza morado",
+     L"Mélangée à la première sur toute la ligne. Commence en violet",
+     L"Mit der ersten über den Eintrag gemischt. Beginnt violett",
+     L"Sfumato con il primo lungo la voce. Inizia viola"},
+    {L"Colored and Frosted selection, and the first of the two colors. Starts with the macOS blue",
+     L"Selección Coloreada y Esmerilada, y el primero de los dos colores. Empieza con el azul de macOS",
+     L"Sélection Colorée et Givrée, et la première des deux couleurs. Commence avec le bleu de macOS",
+     L"Farbige und Milchglas-Auswahl sowie die erste der zwei Farben. Beginnt mit dem macOS-Blau",
+     L"Selezione Colorata e Smerigliata, e il primo dei due colori. Inizia con il blu di macOS"},
+    {L"Chrome ring on the settings button",
+     L"Anillo cromado en el botón de ajustes",
+     L"Anneau chromé sur le bouton des réglages",
+     L"Chromring an der Einstellungsschaltfläche",
+     L"Anello cromato sul pulsante delle impostazioni"},
+    {L"Under the mouse, a polished ring with its light running around the button (every mode)",
+     L"Con el ratón encima, un anillo pulido con la luz recorriendo el botón (todos los modos)",
+     L"Au survol, un anneau poli dont la lumière fait le tour du bouton (tous les modes)",
+     L"Unter der Maus ein polierter Ring, dessen Licht um die Schaltfläche läuft (alle Modi)",
+     L"Al passaggio del mouse, un anello lucido con la luce che scorre intorno al pulsante (tutte le modalità)"},
+    {L"Animated chrome border",
+     L"Borde cromado animado",
+     L"Bordure chromée animée",
+     L"Animierter Chromrand",
+     L"Bordo cromato animato"},
+    {L"A polished edge around the bar, the results box and the menus, its light running around them",
+     L"Un borde pulido alrededor de la barra, el cuadro de resultados y los menús, con la luz recorriéndolo",
+     L"Une bordure polie autour de la barre, de la boîte de résultats et des menus, la lumière en faisant le tour",
+     L"Ein polierter Rand um die Leiste, das Ergebnisfeld und die Menüs, mit umlaufendem Licht",
+     L"Un bordo lucido intorno alla barra, al riquadro dei risultati e ai menu, con la luce che vi scorre attorno"},
+    {L"A colored glow around the bar, the results box, the menus and the buttons, its colors turning around them",
+     L"Un brillo de color alrededor de la barra, el cuadro de resultados, los menús y los botones, con los colores girando",
+     L"Une lueur colorée autour de la barre, de la boîte de résultats, des menus et des boutons, ses couleurs tournant autour",
+     L"Ein farbiges Leuchten um Leiste, Ergebnisfeld, Menüs und Schaltflächen, dessen Farben umlaufen",
+     L"Un bagliore colorato intorno alla barra, al riquadro dei risultati, ai menu e ai pulsanti, con i colori che ruotano"},
+    {L"Backlight intensity",
+     L"Intensidad de la retroiluminación",
+     L"Intensité du rétroéclairage",
+     L"Stärke der Hintergrundbeleuchtung",
+     L"Intensità della retroilluminazione"},
+    {L"How strong the glow is",
+     L"Qué tan fuerte es el brillo",
+     L"L’intensité de la lueur",
+     L"Wie stark das Leuchten ist",
+     L"Quanto è forte il bagliore"},
+    {L"Backlight colors",
+     L"Colores de la retroiluminación",
+     L"Couleurs du rétroéclairage",
+     L"Farben der Hintergrundbeleuchtung",
+     L"Colori della retroilluminazione"},
+    {L"How many colors turn around (1 = one color whose light travels around)",
+     L"Cuántos colores giran (1 = un color cuya luz recorre el borde)",
+     L"Combien de couleurs tournent (1 = une couleur dont la lumière fait le tour)",
+     L"Wie viele Farben umlaufen (1 = eine Farbe, deren Licht umläuft)",
+     L"Quanti colori ruotano (1 = un colore la cui luce scorre attorno)"},
+    {L"Color 1",
+     L"Color 1",
+     L"Couleur 1",
+     L"Farbe 1",
+     L"Colore 1"},
+    {L"Color 2",
+     L"Color 2",
+     L"Couleur 2",
+     L"Farbe 2",
+     L"Colore 2"},
+    {L"Color 3",
+     L"Color 3",
+     L"Couleur 3",
+     L"Farbe 3",
+     L"Colore 3"},
+    {L"Color 4",
+     L"Color 4",
+     L"Couleur 4",
+     L"Farbe 4",
+     L"Colore 4"},
+    {L"Color 5",
+     L"Color 5",
+     L"Couleur 5",
+     L"Farbe 5",
+     L"Colore 5"},
+    {L"Buttons and backlight",
+     L"Botones y retroiluminación",
+     L"Boutons et rétroéclairage",
+     L"Schaltflächen und Hintergrundbeleuchtung",
+     L"Pulsanti e retroilluminazione"},
+    {L"Glass buttons",
+     L"Botones de cristal",
+     L"Boutons en verre",
+     L"Glas-Schaltflächen",
+     L"Pulsanti in vetro"},
+    {L"Buttons, tabs, shortcut keys, menu icons and these controls as clear polished glass",
+     L"Botones, pestañas, teclas de atajo, iconos de menús y estos controles como cristal pulido y transparente",
+     L"Boutons, onglets, touches de raccourci, icônes des menus et ces contrôles en verre poli et limpide",
+     L"Schaltflächen, Tabs, Tastenkürzel, Menüsymbole und diese Steuerelemente als klares, poliertes Glas",
+     L"Pulsanti, schede, tasti di scelta rapida, icone dei menu e questi controlli come vetro limpido e lucido"},
+    {L"Backlight",
+     L"Retroiluminación",
+     L"Rétroéclairage",
+     L"Hintergrundbeleuchtung",
+     L"Retroilluminazione"},
+    {L"A colored glow around the bar, the results box and the buttons, with a bright line at the bottom",
+     L"Un brillo de color alrededor de la barra, el cuadro de resultados y los botones, con una línea clara abajo",
+     L"Une lueur colorée autour de la barre, de la boîte de résultats et des boutons, avec une ligne claire en bas",
+     L"Ein farbiges Leuchten um die Leiste, das Ergebnisfeld und die Schaltflächen, mit einer hellen Linie unten",
+     L"Un bagliore colorato intorno alla barra, al riquadro dei risultati e ai pulsanti, con una linea chiara in basso"},
+    {L"Backlight color",
+     L"Color de la retroiluminación",
+     L"Couleur du rétroéclairage",
+     L"Farbe der Hintergrundbeleuchtung",
+     L"Colore della retroilluminazione"},
+    {L"Starts blue; any color works",
+     L"Empieza en azul; cualquier color sirve",
+     L"Commence en bleu ; toute couleur convient",
+     L"Beginnt blau; jede Farbe geht",
+     L"Inizia blu; va bene qualsiasi colore"},
+    {L"Turn on Backlight first",
+     L"Activa primero la Retroiluminación",
+     L"Activez d’abord le Rétroéclairage",
+     L"Schalte zuerst die Hintergrundbeleuchtung ein",
+     L"Attiva prima la Retroilluminazione"},
+    {L"Open the results box",
+     L"Abrir el cuadro de resultados",
+     L"Ouvrir la boîte de résultats",
+     L"Ergebnisfeld öffnen",
+     L"Aprire il riquadro dei risultati"},
+    {L"Floating: click the search bar, or just rest the mouse on it, to show the apps",
+     L"Flotante: haz clic en la barra de búsqueda, o solo pasa el ratón sobre ella, para mostrar las apps",
+     L"Flottant : cliquez sur la barre de recherche, ou survolez-la simplement, pour afficher les apps",
+     L"Schwebend: Klicke auf die Suchleiste oder fahre einfach mit der Maus darüber, um die Apps anzuzeigen",
+     L"Fluttuante: fai clic sulla barra di ricerca, o passaci sopra con il mouse, per mostrare le app"},
+    {L"On click",
+     L"Al hacer clic",
+     L"Au clic",
+     L"Beim Klicken",
+     L"Al clic"},
+    {L"On mouse over",
+     L"Al pasar el ratón",
+     L"Au survol",
+     L"Beim Darüberfahren",
+     L"Al passaggio del mouse"},
+    {L"Glass follows the background live",
+     L"El cristal sigue el fondo en vivo",
+     L"Le verre suit l’arrière-plan en direct",
+     L"Glas folgt dem Hintergrund live",
+     L"Il vetro segue lo sfondo dal vivo"},
+    {L"Settings window",
+     L"Ventana de configuración",
+     L"Fenêtre des réglages",
+     L"Einstellungsfenster",
+     L"Finestra delle impostazioni"},
+    {L"The look of this window: the theme's, or its own",
+     L"El aspecto de esta ventana: el del tema, o uno propio",
+     L"L’apparence de cette fenêtre : celle du thème, ou la sienne",
+     L"Das Aussehen dieses Fensters: das des Designs oder ein eigenes",
+     L"L’aspetto di questa finestra: quello del tema, o uno proprio"},
+    {L"Tone",
+     L"Tono",
+     L"Teinte",
+     L"Ton",
+     L"Tono"},
+    {L"Light: a white glass with dark text. Dark: a smoky glass with white text",
+     L"Claro: un cristal blanco con texto oscuro. Oscuro: un cristal ahumado con texto blanco",
+     L"Clair : un verre blanc avec un texte sombre. Sombre : un verre fumé avec un texte blanc",
+     L"Hell: weißes Glas mit dunklem Text. Dunkel: rauchiges Glas mit weißem Text",
+     L"Chiaro: un vetro bianco con testo scuro. Scuro: un vetro fumé con testo bianco"},
+    {L"Follow the theme, or a glass of its own: light or dark, with the blur and transparency you choose. The same for every theme",
+     L"Seguir el tema, o un cristal propio: claro u oscuro, con el desenfoque y la transparencia que elijas. Igual para todos los temas",
+     L"Suivre le thème, ou un verre à part : clair ou sombre, avec le flou et la transparence de votre choix. Le même pour tous les thèmes",
+     L"Dem Design folgen oder ein eigenes Glas: hell oder dunkel, mit gewählter Unschärfe und Transparenz. Gleich für alle Designs",
+     L"Seguire il tema, o un vetro proprio: chiaro o scuro, con la sfocatura e la trasparenza che scegli. Uguale per tutti i temi"},
+    {L"Only with Background blur above 0",
+     L"Solo con el Desenfoque del fondo por encima de 0",
+     L"Seulement avec un Flou d’arrière-plan supérieur à 0",
+     L"Nur mit Hintergrundunschärfe über 0",
+     L"Solo con la Sfocatura dello sfondo sopra 0"},
+    {L"On: the glass follows videos and animated wallpapers (the launcher then stays out of screenshots and recordings). Off: a still picture, lighter on the PC",
+     L"Activado: el cristal sigue los vídeos y fondos animados (el menú no aparece en capturas ni grabaciones). Desactivado: una imagen fija, más ligera",
+     L"Activé : le verre suit les vidéos et fonds animés (le menu n’apparaît pas dans les captures ni les enregistrements). Désactivé : une image fixe, plus légère",
+     L"Ein: Das Glas folgt Videos und animierten Hintergründen (das Menü erscheint nicht in Screenshots und Aufnahmen). Aus: ein Standbild, schonender für den PC",
+     L"Attivo: il vetro segue video e sfondi animati (il menu non compare in screenshot e registrazioni). Disattivo: un’immagine fissa, più leggera"},
+    {L"Background of this window",
+     L"Fondo de esta ventana",
+     L"Arrière-plan de cette fenêtre",
+     L"Hintergrund dieses Fensters",
+     L"Sfondo di questa finestra"},
+    {L"Follow the theme, or a glass of its own with the blur you choose. The same for every theme",
+     L"Seguir el tema, o un cristal propio con el desenfoque que elijas. Igual para todos los temas",
+     L"Suivre le thème, ou un verre à part avec le flou de votre choix. Le même pour tous les thèmes",
+     L"Dem Design folgen oder ein eigenes Glas mit der gewählten Unschärfe. Gleich für alle Designs",
+     L"Seguire il tema, o un vetro proprio con la sfocatura che scegli. Uguale per tutti i temi"},
+    {L"Follow the theme",
+     L"Seguir el tema",
+     L"Suivre le thème",
+     L"Dem Design folgen",
+     L"Segui il tema"},
+    {L"Blur",
+     L"Desenfoque",
+     L"Flou",
+     L"Unschärfe",
+     L"Sfocatura"},
+    {L"How much the window blurs what is behind it. 0 = none",
+     L"Cuánto desenfoca la ventana lo que hay detrás. 0 = nada",
+     L"À quel point la fenêtre floute l’arrière-plan. 0 = aucun",
+     L"Wie stark das Fenster den Hintergrund weichzeichnet. 0 = keine",
+     L"Quanto la finestra sfoca ciò che sta dietro. 0 = nessuna"},
+    {L"Transparency",
+     L"Transparencia",
+     L"Transparence",
+     L"Transparenz",
+     L"Trasparenza"},
+    {L"The theme and, under it, everything of its own: each theme keeps its own; what it doesn't use is hidden",
+     L"El tema y, debajo, todo lo suyo: cada tema guarda lo suyo; lo que no usa queda oculto",
+     L"Le thème et, en dessous, tout ce qui lui est propre : chaque thème garde le sien ; ce qu’il n’utilise pas est masqué",
+     L"Das Design und darunter alles Eigene: Jedes Design behält seine Werte; was es nicht nutzt, ist ausgeblendet",
+     L"Il tema e, sotto, tutto ciò che è suo: ogni tema conserva il suo; ciò che non usa è nascosto"},
+    {L"Custom glass",
+     L"Cristal personalizado",
+     L"Verre personnalisé",
+     L"Eigenes Glas",
+     L"Vetro personalizzato"},
+    {L"Customize theme",
+     L"Personalizar tema",
+     L"Personnaliser le thème",
+     L"Design anpassen",
+     L"Personalizza tema"},
+    {L"Transparency, glass, menus and, for the chosen mode, the Siri bar, the window and the animations. Each theme keeps its own",
+     L"Transparencia, cristal, menús y, según el modo elegido, la barra Siri, la ventana y las animaciones. Cada tema guarda los suyos",
+     L"Transparence, verre, menus et, selon le mode choisi, la barre Siri, la fenêtre et les animations. Chaque thème garde les siens",
+     L"Transparenz, Glas, Menüs und, je nach gewähltem Modus, die Siri-Leiste, das Fenster und die Animationen. Jedes Design behält seine eigenen",
+     L"Trasparenza, vetro, menu e, in base alla modalità scelta, la barra Siri, la finestra e le animazioni. Ogni tema conserva i suoi"},
+    {L"Restore theme defaults",
+     L"Restaurar tema predeterminado",
+     L"Rétablir le thème par défaut",
+     L"Design-Standard wiederherstellen",
+     L"Ripristina tema predefinito"},
+    {L"Brings this theme back to how it comes. Its values are then kept for this theme, so changing them in Windhawk's Settings tab no longer reaches it",
+     L"Devuelve este tema a como viene. Sus valores quedan guardados en este tema, así que cambiarlos en la pestaña Settings de Windhawk ya no le llega",
+     L"Ramène ce thème à son état d’origine. Ses valeurs sont alors gardées pour ce thème : les changer dans l’onglet Settings de Windhawk ne l’atteint plus",
+     L"Setzt dieses Design auf den Auslieferungszustand zurück. Seine Werte bleiben dann für dieses Design gespeichert, Änderungen im Settings-Tab von Windhawk erreichen es nicht mehr",
+     L"Riporta questo tema a come era. I suoi valori restano salvati per questo tema, quindi cambiarli nella scheda Settings di Windhawk non lo raggiunge più"},
+    {L"Look",
+     L"Aspecto",
+     L"Apparence",
+     L"Aussehen",
+     L"Aspetto"},
+    {L"How much of what is behind shows through. 100 = completely clear",
+     L"Cuánto se ve de lo que hay detrás. 100 = totalmente transparente",
+     L"Ce qui transparaît de l’arrière-plan. 100 = entièrement transparent",
+     L"Wie viel vom Hintergrund durchscheint. 100 = völlig klar",
+     L"Quanto si vede di ciò che sta dietro. 100 = completamente trasparente"},
+    {L"How much the glass bends what is behind it at the edges. 0 = no bending",
+     L"Cuánto curva el cristal lo que hay detrás en los bordes. 0 = sin curvatura",
+     L"À quel point le verre courbe l’arrière-plan sur les bords. 0 = aucune courbure",
+     L"Wie stark das Glas den Hintergrund an den Rändern krümmt. 0 = keine Krümmung",
+     L"Quanto il vetro curva ciò che sta dietro ai bordi. 0 = nessuna curvatura"},
+    {L"Glass effect",
+     L"Efecto cristal",
+     L"Effet verre",
+     L"Glaseffekt",
+     L"Effetto vetro"},
+    {L"How the item under the mouse is highlighted, in the menus and in the search results. Colored is like macOS; Frosted lets the glass show through",
+     L"Cómo se resalta el elemento bajo el ratón, en los menús y en los resultados de búsqueda. Coloreada es como en macOS; Esmerilada deja ver el cristal",
+     L"Comment l’élément sous la souris est mis en évidence, dans les menus et les résultats de recherche. Colorée comme sur macOS ; Givrée laisse voir le verre",
+     L"Wie das Element unter der Maus hervorgehoben wird, in den Menüs und in den Suchergebnissen. Farbig wie bei macOS; Mattiert lässt das Glas durchscheinen",
+     L"Come viene evidenziato l’elemento sotto il mouse, nei menu e nei risultati della ricerca. Colorata è come su macOS; Satinata lascia vedere il vetro"},
+    {L"Results: Applications",
+     L"Resultados: Aplicaciones",
+     L"Résultats : Applications",
+     L"Ergebnisse: Apps",
+     L"Risultati: App"},
+    {L"Results: Files",
+     L"Resultados: Archivos",
+     L"Résultats : Fichiers",
+     L"Ergebnisse: Dateien",
+     L"Risultati: File"},
+    {L"Results: Actions",
+     L"Resultados: Acciones",
+     L"Résultats : Actions",
+     L"Ergebnisse: Aktionen",
+     L"Risultati: Azioni"},
+    {L"Results: Clipboard",
+     L"Resultados: Portapapeles",
+     L"Résultats : Presse-papiers",
+     L"Ergebnisse: Zwischenablage",
+     L"Risultati: Appunti"},
+    {L"Customize ›",
+     L"Personalizar ›",
+     L"Personnaliser ›",
+     L"Anpassen ›",
+     L"Personalizza ›"},
+    {L"Turn on Glass effect first",
+     L"Activa primero el Efecto cristal",
+     L"Activez d’abord l’Effet verre",
+     L"Zuerst den Glaseffekt einschalten",
+     L"Attiva prima l’Effetto vetro"},
+    {L"Only with Refraction above 0",
+     L"Solo con la Refracción por encima de 0",
+     L"Seulement avec une Réfraction supérieure à 0",
+     L"Nur mit Lichtbrechung über 0",
+     L"Solo con la Rifrazione sopra 0"},
+    {L"Mode, language and how the launcher opens",
+     L"Modo, idioma y cómo se abre el menú",
+     L"Mode, langue et ouverture du menu",
+     L"Modus, Sprache und wie das Menü sich öffnet",
+     L"Modalità, lingua e come si apre il menu"},
+    {L"The theme, and how to make it your own",
+     L"El tema y cómo hacerlo tuyo",
+     L"Le thème, et comment le personnaliser",
+     L"Das Design und wie Sie es anpassen",
+     L"Il tema e come renderlo tuo"},
+    {L"Everything that belongs to the chosen theme and mode. Each theme keeps its own; what it doesn't use is hidden",
+     L"Todo lo que pertenece al tema y al modo elegidos. Cada tema guarda lo suyo; lo que no usa queda oculto",
+     L"Tout ce qui appartient au thème et au mode choisis. Chaque thème garde le sien ; ce qu’il n’utilise pas est masqué",
+     L"Alles, was zum gewählten Design und Modus gehört. Jedes Design behält seine eigenen Werte; was es nicht nutzt, ist ausgeblendet",
+     L"Tutto ciò che appartiene al tema e alla modalità scelti. Ogni tema conserva il suo; ciò che non usa è nascosto"},
     {L"Calculator", L"Calculadora", L"Calculatrice", L"Rechner", L"Calcolatrice"},
+    {L"Ignore accents", L"Ignorar acentos", L"Ignorer les accents", L"Akzente ignorieren", L"Ignora gli accenti"},
+    {L"Searching for \"acao\" also finds \"ação\", and the other way around, in apps, files, actions and the other categories",
+     L"Buscar \"acao\" también encuentra \"ação\", y al revés, en apps, archivos, acciones y las demás categorías",
+     L"Chercher « acao » trouve aussi « ação », et inversement, dans les apps, les fichiers, les actions et les autres catégories",
+     L"Die Suche nach „acao“ findet auch „ação“ und umgekehrt, in Apps, Dateien, Aktionen und den anderen Kategorien",
+     L"Cercare \"acao\" trova anche \"ação\", e viceversa, nelle app, nei file, nelle azioni e nelle altre categorie"},
     {L"Windows Settings", L"Configuración de Windows", L"Paramètres Windows", L"Windows-Einstellungen", L"Impostazioni di Windows"},
     {L"Display", L"Pantalla", L"Affichage", L"Anzeige", L"Schermo"},
     {L"Night light", L"Luz nocturna", L"Éclairage nocturne", L"Nachtmodus", L"Luce notturna"},
@@ -2133,11 +2756,11 @@ const CfgTranslation kCfgTranslations[] = {
      L"Sauvegarde et valeurs par défaut",
      L"Sicherung und Standards",
      L"Backup e valori predefiniti"},
-    {L"Save everything to a file, bring it back, or start over",
-     L"Guardar todo en un archivo, recuperarlo o empezar de nuevo",
-     L"Tout enregistrer dans un fichier, le restaurer ou repartir de zéro",
-     L"Alles in einer Datei sichern, zurückholen oder neu anfangen",
-     L"Salvare tutto in un file, ripristinarlo o ricominciare da capo"},
+    {L"Save everything to a file, bring it back, start over, and the look of this window",
+     L"Guardar todo en un archivo, recuperarlo, empezar de nuevo y el aspecto de esta ventana",
+     L"Tout enregistrer dans un fichier, le restaurer, repartir de zéro et l’apparence de cette fenêtre",
+     L"Alles in einer Datei sichern, zurückholen, neu anfangen und das Aussehen dieses Fensters",
+     L"Salvare tutto in un file, ripristinarlo, ricominciare da capo e l’aspetto di questa finestra"},
     {L"Performance", L"Rendimiento", L"Performances", L"Leistung", L"Prestazioni"},
     {L"Light works with any theme and is made so slower PCs can enjoy the mod smoothly: no liquid glass, no live blur, no blur behind menus, no shadows, at most 60 frames per second and calmer animations",
      L"El modo Ligero funciona con cualquier tema y está hecho para que los PC menos potentes disfruten del mod con fluidez: sin cristal líquido, sin desenfoque en vivo, sin desenfoque tras los menús, sin sombras, como máximo 60 fotogramas por segundo y animaciones más sencillas",
@@ -3152,6 +3775,16 @@ const CfgTranslation kCfgTranslations[] = {
      L"Ouvrir avec le bouton Démarrer",
      L"Mit der Start-Schaltfläche öffnen",
      L"Apri con il pulsante Start"},
+    {L"Text size of the results",
+     L"Tamaño del texto de los resultados",
+     L"Taille du texte des résultats",
+     L"Textgröße der Ergebnisse",
+     L"Dimensione del testo dei risultati"},
+    {L"The names of apps, files and the other results, in the grid and in lists. 100 = normal",
+     L"Los nombres de apps, archivos y los demás resultados, en la cuadrícula y en las listas. 100 = normal",
+     L"Les noms des apps, des fichiers et des autres résultats, dans la grille et dans les listes. 100 = normal",
+     L"Die Namen von Apps, Dateien und den anderen Ergebnissen, im Raster und in Listen. 100 = normal",
+     L"I nomi di app, file e degli altri risultati, nella griglia e negli elenchi. 100 = normale"},
     {L"Icon size",
      L"Tamaño de los iconos",
      L"Taille des icônes",
@@ -3373,30 +4006,28 @@ std::wstring CfgFormat(PCWSTR format, int n) {
 }
 
 const CfgSection kCfgSections[] = {
-    {L"General", L"Geral", L"Mode, theme, language and how the launcher opens", L"Modo, tema, idioma e como o menu abre", L"\uE713", 0x8E8E93},
-    {L"Appearance", L"Aparência", L"Glass, corners, blur, text and menus", L"Vidro, cantos, desfoque, texto e menus", L"\uE771", 0x0A84FF},
-    {L"Custom theme", L"Tema personalizado", L"Your own colors, used when the theme is Custom", L"Suas próprias cores, usadas quando o tema é Personalizado", L"\uE790", 0xBF5AF2},
+    {L"General", L"Geral", L"Mode, language and how the launcher opens", L"Modo, idioma e como o menu abre", L"\uE713", 0x8E8E93},
+    {L"Appearance", L"Aparência", L"The theme and, under it, everything of its own: each theme keeps its own; what it doesn't use is hidden", L"O tema e, logo abaixo, tudo o que é dele: cada tema guarda o seu; o que ele não usa fica oculto", L"\uE771", 0x0A84FF},
     {L"Search", L"Pesquisa", L"What the bar finds: everything at once, files and your copies", L"O que a barra encontra: tudo de uma vez, arquivos e suas cópias", L"\uE721", 0x0A84FF},
-    {L"Siri bar", L"Barra Siri", L"The bar of the Floating and Original Siri modes and its buttons", L"A barra dos modos Flutuante e Siri original e seus botões", L"\uE720", 0xFF375F},
-    {L"Results size", L"Tamanho dos resultados", L"How wide and tall the results box is in each category", L"Quão larga e alta é a caixa de resultados em cada categoria", L"\uE8A9", 0x30B0C7},
-    {L"Window and Fullscreen", L"Janela e Tela cheia", L"The Launchpad-style grid: size, search and power button", L"A grade estilo Launchpad: tamanho, pesquisa e botão de energia", L"\uE740", 0x5E5CE6},
-    {L"Animations", L"Animações", L"How the launcher opens and closes in each mode", L"Como o menu abre e fecha em cada modo", L"\uE768", 0x30D158},
+    {L"Phone", L"Celular", L"Your phone from Phone Link: battery and notifications", L"Seu celular pelo Vincular ao Celular: bateria e notificações", L"\uE8EA", 0x30D158},
     {L"Keyboard shortcuts", L"Atalhos de teclado", L"Ctrl shortcuts that jump to a category", L"Atalhos Ctrl que levam direto a uma categoria", L"\uE765", 0x64D2FF},
     {L"Apps and icons", L"Apps e ícones", L"Icon size, columns, scrolling and your own icons", L"Tamanho dos ícones, colunas, rolagem e seus próprios ícones", L"\uE71D", 0xFF453A},
     {L"Performance", L"Desempenho", L"Lighter effects and fewer frames for laptops and slower PCs", L"Efeitos mais leves e menos quadros para notebooks e PCs mais lentos", L"\uEC4A", 0xFF9F0A},
-    {L"Backup and defaults", L"Backup e padrões", L"Save everything to a file, bring it back, or start over", L"Salvar tudo num arquivo, trazer de volta ou recomeçar", L"\uE777", 0x8E8E93},
+    {L"Backup and defaults", L"Backup e padrões", L"Save everything to a file, bring it back, start over, and the look of this window", L"Salvar tudo num arquivo, trazer de volta, recomeçar e a aparência desta janela", L"\uE777", 0x8E8E93},
 };
 constexpr int kCfgSectionCount = (int)ARRAYSIZE(kCfgSections);
 
 const CfgOpt kOptMode[] = {{L"siriOriginal", L"Original Siri", L"Siri original"}, {L"siri", L"Floating", L"Flutuante"},
                            {L"window", L"Window", L"Janela"}, {L"fullscreen", L"Fullscreen", L"Tela cheia"}};
-const CfgOpt kOptTheme[] = {{L"glass", L"Clear glass", L"Vidro transparente"}, {L"light", L"Light", L"Claro"},
-                            {L"tintedliquid", L"Custom liquid glass", L"Vidro líquido personalizado"}, {L"siri", L"Siri gradient", L"Degradê Siri"}, {L"dark", L"Dark", L"Escuro"},
-                            {L"oled", L"OLED (deep black)", L"OLED (preto profundo)"}, {L"custom", L"Custom", L"Personalizado"}};
-const CfgOpt kOptGlass[] = {{L"frosted", L"Translucent glass", L"Vidro translúcido"}, {L"liquid", L"Liquid glass", L"Vidro líquido"}};
+const CfgOpt kOptCfgTone[] = {{L"dark", L"Dark", L"Escuro"}, {L"light", L"Light", L"Claro"}};
+const CfgOpt kOptCfgBackground[] = {{L"theme", L"Follow the theme", L"Seguir o tema"}, {L"custom", L"Custom", L"Personalizado"}};
+const CfgOpt kOptTheme[] = {{L"frost", L"Glass", L"Vidro"}, {L"glass", L"Liquid glass", L"Vidro líquido"},
+                            {L"tintedliquid", L"Custom glass", L"Vidro personalizado"}, {L"light", L"Light", L"Claro"},
+                            {L"siri", L"Siri gradient", L"Degradê Siri"}, {L"dark", L"Dark", L"Escuro"}, {L"oled", L"OLED (deep black)", L"OLED (preto profundo)"}};
 const CfgOpt kOptClipKeep[] = {{L"always", L"Until Windows restarts", L"Até o Windows reiniciar"}, {L"15m", L"15 minutes", L"15 minutos"},
                                {L"1h", L"1 hour", L"1 hora"}, {L"8h", L"8 hours", L"8 horas"}, {L"24h", L"1 day", L"1 dia"}, {L"7d", L"7 days", L"7 dias"}};
 const CfgOpt kOptSearch[] = {{L"bar", L"Top bar", L"Barra superior"}, {L"box", L"Centered box", L"Caixa centralizada"}};
+const CfgOpt kOptFloatingOpen[] = {{L"click", L"On click", L"Ao clicar"}, {L"hover", L"On mouse over", L"Ao passar o mouse"}};
 const CfgOpt kOptSide[] = {{L"left", L"Left", L"À esquerda"}, {L"right", L"Right", L"À direita"}};
 const CfgOpt kOptOpenAnim[] = {{L"zoom", L"Pop in", L"Surgir"}, {L"fade", L"Fade", L"Esmaecer"},
                                {L"slide", L"Rise from taskbar", L"Subir da barra de tarefas"}, {L"crt", L"CRT", L"CRT"}};
@@ -3410,7 +4041,8 @@ const CfgOpt kOptView[] = {{L"list", L"List", L"Lista"}, {L"icons", L"Icons (gri
 const CfgOpt kOptIndexer[] = {{L"auto", L"Automatic", L"Automático"}, {L"everything", L"Everything", L"Everything"},
                               {L"windows", L"Windows Search", L"Pesquisa do Windows"}, {L"scan", L"Direct scan (slow)", L"Verificação direta (lenta)"}};
 
-const CfgOpt kOptMenuSelection[] = {{L"glass", L"Glass", L"Vidro"}, {L"color", L"Colored", L"Colorida"}, {L"frosted", L"Frosted color", L"Cor fosca"}};
+const CfgOpt kOptMenuSelection[] = {{L"glass", L"Glass", L"Vidro"}, {L"color", L"Colored", L"Colorida"}, {L"frosted", L"Frosted color", L"Cor fosca"},
+                                     {L"gradient", L"Two colors blended", L"Duas cores misturadas"}};
 const CfgOpt kOptPerformance[] = {{L"normal", L"Normal", L"Normal"}, {L"light", L"Light (faster)", L"Leve (mais rápido)"}};
 const CfgOpt kOptFrameRate[] = {{L"auto", L"Automatic (monitor)", L"Automático (monitor)"}, {L"120", L"120", L"120"}, {L"60", L"60", L"60"}, {L"30", L"30", L"30"}};
 const CfgOpt kOptRenderer[] = {{L"gpu", L"Graphics card", L"Placa de vídeo"}, {L"cpu", L"Processor (experimental)", L"Processador (experimental)"}};
@@ -3425,8 +4057,9 @@ const CfgItem kCfgItems[] = {
      L"How the launcher looks. Original Siri: a bar with a categories menu. Floating: a bar with a results box. Window and Fullscreen: a grid of apps, like Launchpad. Used the next time it opens",
      L"Como o menu aparece. Siri original: uma barra com o menu de categorias. Flutuante: uma barra com uma caixa de resultados. Janela e Tela cheia: uma grade de apps, como o Launchpad. Vale na próxima vez que abrir",
      0, 0, 0, nullptr, CFG_OPTS(kOptMode)},
-    {0, kCfgChoice, L"theme", L"Theme", L"Tema", L"The colors and the glass of everything: bar, menus, results and this window",
-     L"As cores e o vidro de tudo: barra, menus, resultados e esta janela", 0, 0, 0, nullptr, CFG_OPTS(kOptTheme)},
+    {0, kCfgChoice, L"floatingOpen", L"Open the results box", L"Abrir a caixa de resultados",
+     L"Floating: click the search bar, or just rest the mouse on it, to show the apps", L"Flutuante: clicar na barra de pesquisa, ou só passar o mouse sobre ela, para mostrar os apps",
+     0, 0, 0, nullptr, CFG_OPTS(kOptFloatingOpen)},
     {0, kCfgChoice, L"language", L"Language", L"Idioma", L"Automatic follows the language of Windows", L"Automático segue o idioma do Windows",
      0, 0, 0, nullptr, CFG_OPTS(kOptLanguage)},
     {0, kCfgGroup, L"#g.open", L"Opening the launcher", L"Como o menu abre", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
@@ -3436,43 +4069,61 @@ const CfgItem kCfgItems[] = {
      L"Off: the Start button on the taskbar opens the Windows Start menu", L"Desligado: o botão Iniciar da barra de tarefas abre o Iniciar do Windows",
      0, 0, 0, nullptr, nullptr, 0},
     // 1 Appearance
-    {1, kCfgButton, L"#themeReset", L"Theme defaults", L"Padrão do tema",
-     L"Brings back the chosen theme's own look: its transparency, corners, blur and glass",
-     L"Volta ao visual próprio do tema escolhido: transparência, cantos, desfoque e vidro", 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgChoice, L"theme", L"Theme", L"Tema", L"The colors and the glass of everything: bar, menus, results and this window",
+     L"As cores e o vidro de tudo: barra, menus, resultados e esta janela", 0, 0, 0, nullptr, CFG_OPTS(kOptTheme)},
+    // Customize theme: everything below Theme is kept per theme; what the theme or the mode doesn't use is hidden
+    {1, kCfgGroup, L"#g.customize", L"Customize theme", L"Personalizar tema", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgButton, L"#themeReset", L"Restore theme defaults", L"Restaurar tema padrão",
+     L"Brings this theme back to how it comes. Its values are then kept for this theme, so changing them in Windhawk's Settings tab no longer reaches it",
+     L"Volta este tema a como ele vem. Os valores passam a ficar guardados neste tema, então mudá-los na aba Settings do Windhawk não chega mais a ele", 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgGroup, L"#g.look", L"Look", L"Visual", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgSlider, L"appearance.transparency", L"Glass transparency", L"Transparência do vidro",
-     L"How much of what is behind shows through. Each theme keeps its own; Light and OLED start solid. 100 = completely clear",
-     L"Quanto do que está atrás aparece. Cada tema guarda a sua; Claro e OLED começam sólidos. 100 = totalmente transparente", 0, 100, 1, L"%", nullptr, 0},
-    {1, kCfgSlider, L"appearance.cornerRadius", L"Corner rounding", L"Arredondamento dos cantos",
-     L"How round the corners of the window, the open folders and the results box are",
-     L"Quão arredondados ficam os cantos da janela, das pastas abertas e da caixa de resultados", 0, 60, 1, L"px", nullptr, 0},
+     L"How much of what is behind shows through. 100 = completely clear",
+     L"Quanto do que está atrás aparece. 100 = totalmente transparente", 0, 100, 1, L"%", nullptr, 0},
     {1, kCfgSlider, L"appearance.blur", L"Background blur", L"Desfoque do fundo",
      L"How blurred what is behind the launcher looks. 0 = none. The live blur needs Windows' transparency effects",
      L"Quão embaçado fica o que está atrás do menu. 0 = nenhum. O desfoque ao vivo precisa dos efeitos de transparência do Windows", 0, 100, 1, nullptr, nullptr, 0},
+    {1, kCfgSlider, L"appearance.cornerRadius", L"Corner rounding", L"Arredondamento dos cantos",
+     L"How round the corners of the window, the open folders and the results box are",
+     L"Quão arredondados ficam os cantos da janela, das pastas abertas e da caixa de resultados", 0, 60, 1, L"px", nullptr, 0},
     {1, kCfgChoice, L"appearance.menuTextColor", L"Text color", L"Cor do texto",
      L"Automatic: on clear glass, black over a light background and white over a dark one",
      L"Automática: no vidro transparente, preto sobre um fundo claro e branco sobre um escuro", 0, 0, 0, nullptr, CFG_OPTS(kOptMenuText)},
-    {1, kCfgGroup, L"#g.menus", L"Menus", L"Menus", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {1, kCfgChoice, L"appearance.menuSelection", L"Selection in menus", L"Seleção nos menus",
-     L"How the item under the mouse is highlighted (Clear glass theme). Colored is like macOS; Frosted lets the glass show through",
-     L"Como o item sob o mouse fica destacado (tema Vidro transparente). Colorida é como no macOS; Fosca deixa o vidro aparecer", 0, 0, 0, nullptr, CFG_OPTS(kOptMenuSelection)},
-    {1, kCfgColor, L"appearance.menuSelectionColor", L"Selection color", L"Cor da seleção",
-     L"Colored and Frosted selection. Starts with the macOS blue", L"Seleção Colorida e Fosca. Começa com o azul do macOS",
-     0, 0, 0, nullptr, nullptr, 0},
-    {1, kCfgSlider, L"appearance.menuBlur", L"Blur behind menus", L"Desfoque atrás dos menus",
-     L"How blurred the icons behind a right-click menu look, so its text is easy to read. 100 = default, 0 = none",
-     L"Quão embaçados ficam os ícones atrás de um menu de clique direito, para o texto dele ficar fácil de ler. 100 = padrão, 0 = nenhum", 0, 200, 5, L"%", nullptr, 0},
     {1, kCfgGroup, L"#g.glass", L"Glass", L"Vidro", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {1, kCfgChoice, L"appearance.glassStyle", L"Clear glass style", L"Estilo do vidro transparente",
-     L"Translucent glass: flat glass with a soft live blur. Liquid glass: the background bends at the edges, like macOS 26 (heavier). For the Clear glass and Siri themes; applies the next time it opens",
-     L"Vidro translúcido: vidro reto com desfoque suave ao vivo. Vidro líquido: o fundo se curva nas bordas, como no macOS 26 (mais pesado). Para os temas Vidro transparente e Siri; vale na próxima vez que abrir",
-     0, 0, 0, nullptr, CFG_OPTS(kOptGlass)},
     {1, kCfgSlider, L"appearance.refraction", L"Refraction at the edges", L"Refração nas bordas",
-     L"How much the liquid glass bends what is behind it", L"Quanto o vidro líquido curva o que está atrás dele", 0, 100, 1, L"%", nullptr, 0},
+     L"How much the glass bends what is behind it at the edges. 0 = no bending",
+     L"Quanto o vidro curva o que está atrás dele nas bordas. 0 = sem curvatura", 0, 100, 1, L"%", nullptr, 0},
     {1, kCfgToggle, L"appearance.liveGlass", L"Liquid glass follows the background live", L"Vidro líquido acompanha o fundo ao vivo",
      L"Videos move inside the glass, but the launcher no longer shows in screenshots and recordings. Used the next time it opens",
      L"Vídeos se mexem dentro do vidro, mas o menu deixa de aparecer em prints e gravações. Vale na próxima vez que abrir",
      0, 0, 0, nullptr, nullptr, 0},
-    {1, kCfgGroup, L"#g.tinted", L"Custom liquid glass", L"Vidro líquido personalizado", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgToggle, L"appearance.glassEffect", L"Glass effect", L"Efeito vidro",
+     L"Light on the top, the thickness of the glass at the edges and a beveled rim",
+     L"Brilho no topo, a espessura do vidro nas bordas e uma borda chanfrada", 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgGroup, L"#g.buttons", L"Buttons and backlight", L"Botões e retroiluminação", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgToggle, L"appearance.glassButtons", L"Glass buttons", L"Botões de vidro",
+     L"Buttons, tabs, shortcut keys, menu icons and these controls as clear polished glass",
+     L"Botões, abas, teclas de atalho, ícones dos menus e estes controles como vidro límpido e polido", 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgToggle, L"appearance.chromeRing", L"Chrome ring on the settings button", L"Anel cromado no botão de configurações",
+     L"Under the mouse, a polished ring with its light running around the button (every mode)",
+     L"Com o mouse em cima, um anel polido com a luz correndo em volta do botão (todos os modos)", 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgToggle, L"appearance.chromeBorder", L"Animated chrome border", L"Borda cromada animada",
+     L"A polished edge around the bar, the results box and the menus, its light running around them",
+     L"Uma borda polida em volta da barra, da caixa de resultados e dos menus, com a luz correndo em volta", 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgToggle, L"appearance.backlight", L"Backlight", L"Retroiluminação",
+     L"A colored glow around the bar, the results box, the menus and the buttons, its colors turning around them",
+     L"Um brilho colorido em volta da barra, da caixa de resultados, dos menus e dos botões, com as cores girando em volta", 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgSlider, L"appearance.backlightIntensity", L"Backlight intensity", L"Intensidade da retroiluminação",
+     L"How strong the glow is", L"O quanto o brilho é forte", 5, 100, 5, L"%", nullptr, 0},
+    {1, kCfgSlider, L"appearance.backlightColors", L"Backlight colors", L"Cores da retroiluminação",
+     L"How many colors turn around (1 = one color whose light travels around)", L"Quantas cores giram em volta (1 = uma cor com a luz correndo em volta)",
+     1, 5, 1, nullptr, nullptr, 0},
+    {1, kCfgColor, L"appearance.backlightColor", L"Color 1", L"Cor 1", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgColor, L"appearance.backlightColor2", L"Color 2", L"Cor 2", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgColor, L"appearance.backlightColor3", L"Color 3", L"Cor 3", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgColor, L"appearance.backlightColor4", L"Color 4", L"Cor 4", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgColor, L"appearance.backlightColor5", L"Color 5", L"Cor 5", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgGroup, L"#g.tinted", L"Custom glass", L"Vidro personalizado", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
     {1, kCfgSlider, L"appearance.tintLevel", L"Color strength at the top", L"Força da cor no topo",
      L"100 = solid at the top; lower lets the background show through the dark part too. The clear part follows Glass transparency",
      L"100 = sólido no topo; menos deixa o fundo aparecer também na parte escura. A parte transparente segue a Transparência do vidro", 0, 100, 1, L"%", nullptr, 0},
@@ -3482,168 +4133,188 @@ const CfgItem kCfgItems[] = {
     {1, kCfgColor, L"appearance.tintColor", L"Glass color", L"Cor do vidro",
      L"Starts black; any color works. Light colors get dark text", L"Começa preto; qualquer cor funciona. Cores claras ganham texto escuro",
      0, 0, 0, nullptr, nullptr, 0},
-    {1, kCfgToggle, L"appearance.glassEffect", L"Glass effect on Light, Dark and OLED", L"Efeito vidro nos temas Claro, Escuro e OLED",
-     L"Light on the top, the thickness of the glass at the edges and a beveled rim",
-     L"Brilho no topo, a espessura do vidro nas bordas e uma borda chanfrada", 0, 0, 0, nullptr, nullptr, 0},
-    // 2 Custom theme
-    {2, kCfgColor, L"custom.color", L"Color", L"Cor", L"The color of the glass", L"A cor do vidro", 0, 0, 0, nullptr, nullptr, 0},
-    {2, kCfgSlider, L"custom.opacity", L"Opacity", L"Opacidade", L"How solid that color is. 100 = no transparency",
-     L"Quão sólida é essa cor. 100 = sem transparência", 0, 100, 1, L"%", nullptr, 0},
-    {2, kCfgSlider, L"custom.shading", L"Dark-to-light gradient", L"Degradê escuro → claro",
-     L"Darker at the top of the bar, lighter at the bottom of the results. 0 = off",
-     L"Mais escuro no topo da barra, mais claro embaixo dos resultados. 0 = desligado", 0, 100, 1, L"%", nullptr, 0},
-    {2, kCfgGroup, L"#g.border", L"Border", L"Borda", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {2, kCfgSlider, L"custom.borderWidth", L"Border width", L"Espessura da borda", L"0 = no border", L"0 = sem borda", 0, 8, 1, L"px", nullptr, 0},
-    {2, kCfgColor, L"custom.borderColor", L"Border color", L"Cor da borda", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {2, kCfgSlider, L"custom.borderOpacity", L"Border opacity", L"Opacidade da borda", nullptr, nullptr, 0, 100, 1, L"%", nullptr, 0},
-    // 3 Search
-    {3, kCfgToggle, L"siri.generalSearch", L"Typing in Search looks everywhere", L"Digitar em Pesquisar procura em tudo",
-     L"Apps, actions, folders and files in one list, like Spotlight. Off: typing goes to Applications",
-     L"Apps, ações, pastas e arquivos numa lista, como no Spotlight. Desligado: digitar vai para Aplicativos",
-     0, 0, 0, nullptr, nullptr, 0},
-    {3, kCfgToggle, L"calculator", L"Calculator", L"Calculadora",
-     L"Type a calculation (2+2, 15% * 80, (3+4)^2) and its result shows first; Enter copies it. Start with = or calc to always calculate (=5-3)",
-     L"Digite uma conta (2+2, 15% * 80, (3+4)^2) e o resultado aparece primeiro; Enter copia. Comece com = ou calc para sempre calcular (=5-3)", 0, 0, 0, nullptr, nullptr, 0},
-    {3, kCfgGroup, L"#g.files", L"Files", L"Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {3, kCfgToggle, L"files.enabled", L"Files category", L"Categoria Arquivos", L"Search for files and folders on this PC",
-     L"Procurar arquivos e pastas neste PC", 0, 0, 0, nullptr, nullptr, 0},
-    {3, kCfgToggle, L"files.history", L"Remember searches", L"Lembrar pesquisas", L"Your last searches show when the Files search is empty",
-     L"Suas últimas pesquisas aparecem quando a pesquisa de Arquivos está vazia", 0, 0, 0, nullptr, nullptr, 0},
-    {3, kCfgChoice, L"files.view", L"Results view", L"Exibição dos resultados",
-     L"How files show while you type: a list with their folder, or big icons", L"Como os arquivos aparecem enquanto você digita: uma lista com a pasta deles, ou ícones grandes",
-     0, 0, 0, nullptr, CFG_OPTS(kOptView)},
-    {3, kCfgChoice, L"files.indexer", L"File indexer", L"Indexador de arquivos",
-     L"What finds the files. Everything is the fastest, but it must be running (not as administrator)",
-     L"O que encontra os arquivos. O Everything é o mais rápido, mas precisa estar aberto (não como administrador)", 0, 0, 0, nullptr, CFG_OPTS(kOptIndexer)},
-    {3, kCfgSlider, L"files.maxResults", L"Maximum results", L"Máximo de resultados", L"How many files a search can bring",
-     L"Quantos arquivos uma pesquisa pode trazer", 10, 500, 10, nullptr, nullptr, 0},
-    {3, kCfgGroup, L"#g.clip", L"Clipboard", L"Área de transferência", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {3, kCfgToggle, L"clipboard.enabled", L"Clipboard category", L"Categoria Área de transferência",
-     L"Keeps what you copy, to paste it again later. Off: nothing is kept and the history is cleared",
-     L"Guarda o que você copia, para colar de novo depois. Desligada: nada é guardado e o histórico é apagado", 0, 0, 0, nullptr, nullptr, 0},
-    {3, kCfgSlider, L"clipboard.size", L"Items kept", L"Itens guardados", L"How many copies the history keeps", L"Quantas cópias o histórico guarda",
-     5, 200, 1, nullptr, nullptr, 0},
-    {3, kCfgChoice, L"clipboard.keep", L"How long a copy stays", L"Por quanto tempo uma cópia fica",
-     L"Older copies leave the history by themselves", L"Cópias mais antigas saem do histórico sozinhas", 0, 0, 0, nullptr, CFG_OPTS(kOptClipKeep)},
-    // 4 Siri bar
-    {4, kCfgSlider, L"siri.pillWidth", L"Bar width", L"Largura da barra", L"How long the search bar is", L"O comprimento da barra de pesquisa",
+    {1, kCfgGroup, L"#g.menus", L"Menus", L"Menus", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgChoice, L"appearance.menuSelection", L"Selection in menus", L"Seleção nos menus",
+     L"How the item under the mouse is highlighted, in the menus and in the search results. Colored is like macOS; Frosted lets the glass show through",
+     L"Como o item sob o mouse fica destacado, nos menus e nos resultados da pesquisa. Colorida é como no macOS; Fosca deixa o vidro aparecer", 0, 0, 0, nullptr, CFG_OPTS(kOptMenuSelection)},
+    {1, kCfgColor, L"appearance.menuSelectionColor", L"Selection color", L"Cor da seleção",
+     L"Colored and Frosted selection, and the first of the two colors. Starts with the macOS blue",
+     L"Seleção Colorida e Fosca, e a primeira das duas cores. Começa com o azul do macOS", 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgColor, L"appearance.menuSelectionColor2", L"Second selection color", L"Segunda cor da seleção",
+     L"Blended with the first one across the item. Starts purple", L"Misturada com a primeira ao longo do item. Começa roxa", 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgSlider, L"appearance.menuBlur", L"Blur behind menus", L"Desfoque atrás dos menus",
+     L"How blurred the icons behind a right-click menu look, so its text is easy to read. 100 = default, 0 = none",
+     L"Quão embaçados ficam os ícones atrás de um menu de clique direito, para o texto dele ficar fácil de ler. 100 = padrão, 0 = nenhum", 0, 200, 5, L"%", nullptr, 0},
+    {1, kCfgGroup, L"#g.siriBar", L"Siri bar", L"Barra Siri", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgSlider, L"siri.pillWidth", L"Bar width", L"Largura da barra", L"How long the search bar is", L"O comprimento da barra de pesquisa",
      200, 1400, 10, L"px", nullptr, 0},
-    {4, kCfgSlider, L"siri.pillHeight", L"Bar height", L"Altura da barra", L"How tall the search bar is", L"A altura da barra de pesquisa",
+    {1, kCfgSlider, L"siri.pillHeight", L"Bar height", L"Altura da barra", L"How tall the search bar is", L"A altura da barra de pesquisa",
      36, 96, 1, L"px", nullptr, 0},
-    {4, kCfgChoice, L"siri.firstRow", L"First row of apps", L"Primeira linha de apps",
+    {1, kCfgChoice, L"siri.firstRow", L"First row of apps", L"Primeira linha de apps",
      L"Apps shown on top, separated by a line: the ones you opened or installed lately, or the ones you use most",
      L"Apps mostrados no topo, separados por uma linha: os que você abriu ou instalou por último, ou os que mais usa",
      0, 0, 0, nullptr, CFG_OPTS(kOptFirstRow)},
-    {4, kCfgGroup, L"#g.power", L"Power", L"Energia", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {4, kCfgToggle, L"siri.powerPill", L"Power options when typing shut down, restart…", L"Opções de energia ao digitar desligar, reiniciar…",
+    {1, kCfgGroup, L"#g.power", L"Power", L"Energia", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgToggle, L"siri.powerPill", L"Power options when typing shut down, restart…", L"Opções de energia ao digitar desligar, reiniciar…",
      L"Typing one of these words shows the buttons to lock, sleep, restart or shut down",
      L"Digitar uma dessas palavras mostra os botões de bloquear, suspender, reiniciar ou desligar", 0, 0, 0, nullptr, nullptr, 0},
-    {4, kCfgToggle, L"siri.powerButton", L"Floating power button", L"Botão de energia flutuante", L"A round power button next to the bar",
+    {1, kCfgToggle, L"siri.powerButton", L"Floating power button", L"Botão de energia flutuante", L"A round power button next to the bar",
      L"Um botão de energia redondo ao lado da barra", 0, 0, 0, nullptr, nullptr, 0},
-    {4, kCfgChoice, L"siri.powerButtonSide", L"Side of the power button", L"Lado do botão de energia",
+    {1, kCfgChoice, L"siri.powerButtonSide", L"Side of the power button", L"Lado do botão de energia",
      L"Left or right of the bar. Used the next time it opens", L"À esquerda ou à direita da barra. Vale na próxima vez que abrir",
      0, 0, 0, nullptr, CFG_OPTS(kOptSide)},
-    // 5 Results size
-    {5, kCfgGroup, L"#g.sizeApps", L"Applications", L"Aplicativos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {5, kCfgSlider, L"siri.panelWidth", L"Width", L"Largura", L"Also used by the general search", L"Também usada pela pesquisa geral",
+    {1, kCfgGroup, L"#g.sizeApps", L"Results: Applications", L"Resultados: Aplicativos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgSlider, L"siri.panelWidth", L"Width", L"Largura", L"Also used by the general search", L"Também usada pela pesquisa geral",
      300, 1400, 10, L"px", nullptr, 0},
-    {5, kCfgSlider, L"siri.panelRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
+    {1, kCfgSlider, L"siri.panelRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
      1, 8, 1, nullptr, nullptr, 0},
-    {5, kCfgGroup, L"#g.sizeFiles", L"Files", L"Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {5, kCfgSlider, L"siri.filesWidth", L"Width", L"Largura", L"0 = same width as the bar", L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
-    {5, kCfgSlider, L"siri.filesRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
+    {1, kCfgGroup, L"#g.sizeFiles", L"Results: Files", L"Resultados: Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgSlider, L"siri.filesWidth", L"Width", L"Largura", L"0 = same width as the bar", L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
+    {1, kCfgSlider, L"siri.filesRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
      1, 8, 1, nullptr, nullptr, 0},
-    {5, kCfgGroup, L"#g.sizeActions", L"Actions", L"Ações", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {5, kCfgSlider, L"siri.actionsWidth", L"Width", L"Largura", L"0 = same width as the bar", L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
-    {5, kCfgSlider, L"siri.actionsRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
+    {1, kCfgGroup, L"#g.sizeActions", L"Results: Actions", L"Resultados: Ações", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgSlider, L"siri.actionsWidth", L"Width", L"Largura", L"0 = same width as the bar", L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
+    {1, kCfgSlider, L"siri.actionsRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
      1, 8, 1, nullptr, nullptr, 0},
-    {5, kCfgGroup, L"#g.sizeClip", L"Clipboard", L"Área de transferência", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {5, kCfgSlider, L"siri.clipboardWidth", L"Width", L"Largura", L"0 = same width as the bar", L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
-    {5, kCfgSlider, L"siri.clipboardRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
+    {1, kCfgGroup, L"#g.sizeClip", L"Results: Clipboard", L"Resultados: Área de transferência", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgSlider, L"siri.clipboardWidth", L"Width", L"Largura", L"0 = same width as the bar", L"0 = mesma largura da barra", 0, 1400, 10, L"px", nullptr, 0},
+    {1, kCfgSlider, L"siri.clipboardRows", L"Rows", L"Linhas", L"How many rows show before it scrolls", L"Quantas linhas aparecem antes de rolar",
      1, 8, 1, nullptr, nullptr, 0},
-    // 6 Window and Fullscreen
-    {6, kCfgSlider, L"window.width", L"Window width", L"Largura da janela", L"Share of the screen the window takes (Window mode)",
+    {1, kCfgGroup, L"#g.window", L"Window and Fullscreen", L"Janela e Tela cheia", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgSlider, L"window.width", L"Window width", L"Largura da janela", L"Share of the screen the window takes (Window mode)",
      L"Quanto da tela a janela ocupa (modo Janela)", 30, 100, 1, L"%", nullptr, 0},
-    {6, kCfgSlider, L"window.height", L"Window height", L"Altura da janela", L"Share of the screen the window takes (Window mode)",
+    {1, kCfgSlider, L"window.height", L"Window height", L"Altura da janela", L"Share of the screen the window takes (Window mode)",
      L"Quanto da tela a janela ocupa (modo Janela)", 30, 100, 1, L"%", nullptr, 0},
-    {6, kCfgChoice, L"window.searchStyle", L"Search style", L"Estilo da pesquisa", L"A search bar across the top, or a centered box as on macOS",
+    {1, kCfgChoice, L"window.searchStyle", L"Search style", L"Estilo da pesquisa", L"A search bar across the top, or a centered box as on macOS",
      L"Uma barra de pesquisa no topo, ou uma caixa centralizada como no macOS", 0, 0, 0, nullptr, CFG_OPTS(kOptSearch)},
-    {6, kCfgSlider, L"window.folderBlur", L"Blur behind an open folder", L"Desfoque atrás da pasta aberta",
+    {1, kCfgSlider, L"window.folderBlur", L"Blur behind an open folder", L"Desfoque atrás da pasta aberta",
      L"How blurred the apps behind an open folder look", L"Quão embaçados ficam os apps atrás de uma pasta aberta", 0, 100, 1, nullptr, nullptr, 0},
-    {6, kCfgGroup, L"#g.wpower", L"Power button", L"Botão de energia", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {6, kCfgToggle, L"window.showPowerButton", L"Show power button", L"Mostrar botão de energia", L"A power button next to the search",
+    {1, kCfgGroup, L"#g.wpower", L"Power button", L"Botão de energia", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgToggle, L"window.showPowerButton", L"Show power button", L"Mostrar botão de energia", L"A power button next to the search",
      L"Um botão de energia ao lado da pesquisa", 0, 0, 0, nullptr, nullptr, 0},
-    {6, kCfgChoice, L"window.powerButtonPosition", L"Power button position", L"Posição do botão de energia", L"Left or right of the search",
+    {1, kCfgChoice, L"window.powerButtonPosition", L"Power button position", L"Posição do botão de energia", L"Left or right of the search",
      L"À esquerda ou à direita da pesquisa", 0, 0, 0, nullptr, CFG_OPTS(kOptSide)},
-    // 7 Animations
-    {7, kCfgGroup, L"#g.animSiri", L"Floating and Original Siri", L"Flutuante e Siri original", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {7, kCfgChoice, L"siri.orbStyle", L"Circle animation", L"Animação do círculo", L"What plays inside the circle the bar grows out of",
+    {1, kCfgGroup, L"#g.animSiri", L"Animations", L"Animações", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgChoice, L"siri.orbStyle", L"Circle animation", L"Animação do círculo", L"What plays inside the circle the bar grows out of",
      L"O que aparece dentro do círculo de onde a barra nasce", 0, 0, 0, nullptr, CFG_OPTS(kOptOrb)},
-    {7, kCfgSlider, L"siri.circleZoom", L"Circle zoom when opening", L"Zoom do círculo ao abrir", L"How much the circle grows before it becomes the bar. 0 = none",
+    {1, kCfgSlider, L"siri.circleZoom", L"Circle zoom when opening", L"Zoom do círculo ao abrir", L"How much the circle grows before it becomes the bar. 0 = none",
      L"Quanto o círculo cresce antes de virar a barra. 0 = nenhum", 0, 60, 1, L"%", nullptr, 0},
-    {7, kCfgSlider, L"siri.bounce", L"Circle bounce", L"Bounce do círculo", L"How much the circle springs when it appears. 0 = none",
+    {1, kCfgSlider, L"siri.bounce", L"Circle bounce", L"Bounce do círculo", L"How much the circle springs when it appears. 0 = none",
      L"Quanto o círculo quica ao aparecer. 0 = nenhum", 0, 100, 1, L"%", nullptr, 0},
-    {7, kCfgSlider, L"siri.panelBounce", L"Results box bounce", L"Bounce da caixa de resultados", L"How much the results box springs when it opens. 0 = none",
+    {1, kCfgSlider, L"siri.panelBounce", L"Results box bounce", L"Bounce da caixa de resultados", L"How much the results box springs when it opens. 0 = none",
      L"Quanto a caixa de resultados quica ao abrir. 0 = nenhum", 0, 100, 1, L"%", nullptr, 0},
-    {7, kCfgSlider, L"siri.introMs", L"Opening duration", L"Duração da abertura", L"0 = instant", L"0 = instantânea", 0, 2000, 20, L"ms", nullptr, 0},
-    {7, kCfgSlider, L"siri.outroMs", L"Closing duration", L"Duração do fechamento", L"0 = instant", L"0 = instantâneo", 0, 2000, 20, L"ms", nullptr, 0},
-    {7, kCfgSlider, L"siri.animationSpeed", L"Animation speed", L"Velocidade das animações", L"100 = normal; more is faster",
+    {1, kCfgSlider, L"siri.introMs", L"Opening duration", L"Duração da abertura", L"0 = instant", L"0 = instantânea", 0, 2000, 20, L"ms", nullptr, 0},
+    {1, kCfgSlider, L"siri.outroMs", L"Closing duration", L"Duração do fechamento", L"0 = instant", L"0 = instantâneo", 0, 2000, 20, L"ms", nullptr, 0},
+    {1, kCfgSlider, L"siri.animationSpeed", L"Animation speed", L"Velocidade das animações", L"100 = normal; more is faster",
      L"100 = normal; mais é mais rápido", 25, 400, 5, L"%", nullptr, 0},
-    {7, kCfgGroup, L"#g.animWindow", L"Window and Fullscreen", L"Janela e Tela cheia", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {7, kCfgChoice, L"window.openAnimation", L"Opening animation", L"Animação de abertura", L"How the window appears",
+    {1, kCfgGroup, L"#g.animWindow", L"Animations", L"Animações", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {1, kCfgChoice, L"window.openAnimation", L"Opening animation", L"Animação de abertura", L"How the window appears",
      L"Como a janela aparece", 0, 0, 0, nullptr, CFG_OPTS(kOptOpenAnim)},
-    {7, kCfgChoice, L"window.closeAnimation", L"Closing animation", L"Animação de fechamento", L"How the window goes away",
+    {1, kCfgChoice, L"window.closeAnimation", L"Closing animation", L"Animação de fechamento", L"How the window goes away",
      L"Como a janela some", 0, 0, 0, nullptr, CFG_OPTS(kOptCloseAnim)},
-    {7, kCfgSlider, L"window.animationSpeed", L"Animation speed", L"Velocidade das animações", L"100 = normal; more is faster",
+    {1, kCfgSlider, L"window.animationSpeed", L"Animation speed", L"Velocidade das animações", L"100 = normal; more is faster",
      L"100 = normal; mais é mais rápido", 25, 400, 5, L"%", nullptr, 0},
-    // 8 Keyboard shortcuts
-    {8, kCfgShortcut, L"siri.shortcutApps", L"Applications", L"Aplicativos", L"Click and press the keys (Ctrl + …). Backspace clears it",
+    // 2 Search
+    {2, kCfgToggle, L"siri.generalSearch", L"Typing in Search looks everywhere", L"Digitar em Pesquisar procura em tudo",
+     L"Apps, actions, folders and files in one list, like Spotlight. Off: typing goes to Applications",
+     L"Apps, ações, pastas e arquivos numa lista, como no Spotlight. Desligado: digitar vai para Aplicativos",
+     0, 0, 0, nullptr, nullptr, 0},
+    {2, kCfgToggle, L"calculator", L"Calculator", L"Calculadora",
+     L"Type a calculation (2+2, 15% * 80, (3+4)^2) and its result shows first; Enter copies it. Start with = or calc to always calculate (=5-3)",
+     L"Digite uma conta (2+2, 15% * 80, (3+4)^2) e o resultado aparece primeiro; Enter copia. Comece com = ou calc para sempre calcular (=5-3)", 0, 0, 0, nullptr, nullptr, 0},
+    {2, kCfgToggle, L"ignoreAccents", L"Ignore accents", L"Ignorar acentos", L"Searching for \"acao\" also finds \"ação\", and the other way around, in apps, files, actions and the other categories",
+     L"Pesquisar \"acao\" também encontra \"ação\", e o contrário, em apps, arquivos, ações e nas outras categorias", 0, 0, 0, nullptr, nullptr, 0},
+    {2, kCfgGroup, L"#g.files", L"Files", L"Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {2, kCfgToggle, L"files.enabled", L"Files category", L"Categoria Arquivos", L"Search for files and folders on this PC",
+     L"Procurar arquivos e pastas neste PC", 0, 0, 0, nullptr, nullptr, 0},
+    {2, kCfgToggle, L"files.history", L"Remember searches", L"Lembrar pesquisas", L"Your last searches show when the Files search is empty",
+     L"Suas últimas pesquisas aparecem quando a pesquisa de Arquivos está vazia", 0, 0, 0, nullptr, nullptr, 0},
+    {2, kCfgChoice, L"files.view", L"Results view", L"Exibição dos resultados",
+     L"How files show while you type: a list with their folder, or big icons", L"Como os arquivos aparecem enquanto você digita: uma lista com a pasta deles, ou ícones grandes",
+     0, 0, 0, nullptr, CFG_OPTS(kOptView)},
+    {2, kCfgChoice, L"files.indexer", L"File indexer", L"Indexador de arquivos",
+     L"What finds the files. Everything is the fastest, but it must be running (not as administrator)",
+     L"O que encontra os arquivos. O Everything é o mais rápido, mas precisa estar aberto (não como administrador)", 0, 0, 0, nullptr, CFG_OPTS(kOptIndexer)},
+    {2, kCfgSlider, L"files.maxResults", L"Maximum results", L"Máximo de resultados", L"How many files a search can bring",
+     L"Quantos arquivos uma pesquisa pode trazer", 10, 500, 10, nullptr, nullptr, 0},
+    {2, kCfgGroup, L"#g.clip", L"Clipboard", L"Área de transferência", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {2, kCfgToggle, L"clipboard.enabled", L"Clipboard category", L"Categoria Área de transferência",
+     L"Keeps what you copy, to paste it again later. Off: nothing is kept and the history is cleared",
+     L"Guarda o que você copia, para colar de novo depois. Desligada: nada é guardado e o histórico é apagado", 0, 0, 0, nullptr, nullptr, 0},
+    {2, kCfgSlider, L"clipboard.size", L"Items kept", L"Itens guardados", L"How many copies the history keeps", L"Quantas cópias o histórico guarda",
+     5, 200, 1, nullptr, nullptr, 0},
+    {2, kCfgChoice, L"clipboard.keep", L"How long a copy stays", L"Por quanto tempo uma cópia fica",
+     L"Older copies leave the history by themselves", L"Cópias mais antigas saem do histórico sozinhas", 0, 0, 0, nullptr, CFG_OPTS(kOptClipKeep)},
+    // 3 Phone (Phone Link)
+    {3, kCfgToggle, L"phone.enabled", L"Phone category", L"Categoria Celular",
+     L"Your phone linked in Phone Link: battery, the latest notifications with what they say, messages, calls and photos. Needs Phone Link",
+     L"Seu celular vinculado no Vincular ao Celular: bateria, as últimas notificações com o que dizem, mensagens, chamadas e fotos. Precisa do Vincular ao Celular",
+     0, 0, 0, nullptr, nullptr, 0},
+    {3, kCfgSlider, L"phone.notifications", L"Notifications shown", L"Notificações mostradas",
+     L"How many notifications show at once. When the phone has more, they scroll inside their own box", L"Quantas notificações aparecem de uma vez. Quando o celular tem mais, elas rolam dentro da própria caixa",
+     1, 10, 1, nullptr, nullptr, 0},
+    // 4 Keyboard shortcuts
+    {4, kCfgShortcut, L"siri.shortcutApps", L"Applications", L"Aplicativos", L"Click and press the keys (Ctrl + …). Backspace clears it",
      L"Clique e pressione as teclas (Ctrl + …). Backspace apaga", 0, 0, 0, nullptr, nullptr, 0},
-    {8, kCfgShortcut, L"siri.shortcutFiles", L"Files", L"Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {8, kCfgShortcut, L"siri.shortcutActions", L"Actions", L"Ações", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {8, kCfgShortcut, L"siri.shortcutClipboard", L"Clipboard", L"Área de transferência", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {8, kCfgToggle, L"siri.shortcutsAnywhere", L"Also with the launcher closed", L"Também com o menu fechado",
+    {4, kCfgShortcut, L"siri.shortcutFiles", L"Files", L"Arquivos", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {4, kCfgShortcut, L"siri.shortcutActions", L"Actions", L"Ações", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {4, kCfgShortcut, L"siri.shortcutClipboard", L"Clipboard", L"Área de transferência", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {4, kCfgShortcut, L"siri.shortcutPhone", L"Phone", L"Celular", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {4, kCfgToggle, L"siri.shortcutsAnywhere", L"Also with the launcher closed", L"Também com o menu fechado",
      L"They open the launcher on that category from any program, and that program no longer gets those keys",
      L"Abrem o menu na categoria de qualquer programa, e esse programa deixa de receber essas teclas", 0, 0, 0, nullptr, nullptr, 0},
-    // 9 Apps and icons
-    {9, kCfgSlider, L"grid.iconSize", L"Icon size", L"Tamanho dos ícones", L"Floating and Original Siri use up to 56 px",
+    // 5 Apps and icons
+    {5, kCfgSlider, L"grid.iconSize", L"Icon size", L"Tamanho dos ícones", L"Floating and Original Siri use up to 56 px",
      L"Os modos Flutuante e Siri original usam até 56 px", 24, 192, 1, L"px", nullptr, 0},
-    {9, kCfgSlider, L"grid.columns", L"Columns", L"Colunas", L"How many apps fit side by side. 0 = automatic", L"Quantos apps cabem lado a lado. 0 = automático",
+    {5, kCfgSlider, L"grid.textSize", L"Text size of the results", L"Tamanho do texto dos resultados", L"The names of apps, files and the other results, in the grid and in lists. 100 = normal",
+     L"Os nomes dos apps, arquivos e dos outros resultados, na grade e nas listas. 100 = normal", 80, 160, 5, L"%", nullptr, 0},
+    {5, kCfgSlider, L"grid.columns", L"Columns", L"Colunas", L"How many apps fit side by side. 0 = automatic", L"Quantos apps cabem lado a lado. 0 = automático",
      0, 30, 1, nullptr, nullptr, 0},
-    {9, kCfgChoice, L"grid.pageMode", L"Scrolling direction", L"Direção da rolagem", L"Pages side by side, as on macOS, or one long list going down",
+    {5, kCfgChoice, L"grid.pageMode", L"Scrolling direction", L"Direção da rolagem", L"Pages side by side, as on macOS, or one long list going down",
      L"Páginas lado a lado, como no macOS, ou uma lista longa para baixo", 0, 0, 0, nullptr, CFG_OPTS(kOptPage)},
-    {9, kCfgToggle, L"grid.jiggle", L"Jiggle selected icons", L"Ícones selecionados tremem", L"Selected apps shake, as on an iPhone",
+    {5, kCfgToggle, L"grid.jiggle", L"Jiggle selected icons", L"Ícones selecionados tremem", L"Selected apps shake, as on an iPhone",
      L"Os apps selecionados tremem, como no iPhone", 0, 0, 0, nullptr, nullptr, 0},
-    {9, kCfgToggle, L"grid.dragToPin", L"Drag an icon to the taskbar to pin it", L"Arrastar o ícone até a barra de tarefas fixa o app",
+    {5, kCfgToggle, L"grid.dragToPin", L"Drag an icon to the taskbar to pin it", L"Arrastar o ícone até a barra de tarefas fixa o app",
      L"Drop an app on the taskbar and it stays pinned there", L"Solte um app na barra de tarefas e ele fica fixado lá", 0, 0, 0, nullptr, nullptr, 0},
-    {9, kCfgGroup, L"#g.gallery", L"Your icons", L"Seus ícones", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    {9, kCfgText, L"grid.iconsFolder", L"Icon gallery folder", L"Pasta da galeria de ícones",
+    {5, kCfgGroup, L"#g.gallery", L"Your icons", L"Seus ícones", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {5, kCfgText, L"grid.iconsFolder", L"Icon gallery folder", L"Pasta da galeria de ícones",
      L"A folder with your icon images, for example a downloaded icon pack. Right-click an app > Change icon... shows them",
      L"Uma pasta com suas imagens de ícones, por exemplo um pacote de ícones baixado. Clique direito em um app > Alterar ícone... mostra elas",
      0, 0, 0, nullptr, nullptr, 0},
-    {9, kCfgButton, L"#iconsFolderPick", L"Choose the gallery folder", L"Escolher a pasta da galeria", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
-    // 10 Performance
-    {10, kCfgChoice, L"performance", L"Performance", L"Desempenho",
+    {5, kCfgButton, L"#iconsFolderPick", L"Choose the gallery folder", L"Escolher a pasta da galeria", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    // 6 Performance
+    {6, kCfgChoice, L"performance", L"Performance", L"Desempenho",
      L"Light works with any theme and is made so slower PCs can enjoy the mod smoothly: no liquid glass, no live blur, no blur behind menus, no shadows, at most 60 frames per second and calmer animations",
      L"O modo Leve funciona com qualquer tema e foi feito para que PCs menos potentes aproveitem o mod com fluidez: sem vidro líquido, sem desfoque ao vivo, sem desfoque atrás dos menus, sem sombras, no máximo 60 quadros por segundo e animações mais calmas",
      0, 0, 0, nullptr, CFG_OPTS(kOptPerformance)},
-    {10, kCfgChoice, L"frameRate", L"Frame rate limit", L"Limite de quadros por segundo",
+    {6, kCfgChoice, L"frameRate", L"Frame rate limit", L"Limite de quadros por segundo",
      L"Fewer frames use less power", L"Menos quadros gastam menos energia", 0, 0, 0, nullptr, CFG_OPTS(kOptFrameRate)},
-    {10, kCfgChoice, L"renderer", L"Draw with", L"Desenhar com",
+    {6, kCfgChoice, L"renderer", L"Draw with", L"Desenhar com",
      L"Processor: draws the launcher's own content with the processor (can help laptops with two graphics cards)",
      L"Processador: desenha o conteúdo do menu com o processador (pode ajudar notebooks com duas placas)", 0, 0, 0, nullptr, CFG_OPTS(kOptRenderer)},
-    // 11 Backup and defaults
-    {11, kCfgButton, L"#export", L"Back up", L"Fazer backup",
+    // 7 Backup and defaults (and, at the end, this window's own look: the same for every theme)
+    {7, kCfgButton, L"#export", L"Back up", L"Fazer backup",
      L"Saves every setting, folders, tabs and the custom icons (their pictures go inside the file)",
      L"Salva todas as configurações, pastas, abas e os ícones personalizados (as imagens vão dentro do arquivo)",
      0, 0, 0, nullptr, nullptr, 0},
-    {11, kCfgButton, L"#import", L"Restore a backup", L"Restaurar backup",
+    {7, kCfgButton, L"#import", L"Restore a backup", L"Restaurar backup",
      L"Brings everything back from a backup file, even after reinstalling the mod or on another PC",
      L"Traz tudo de volta de um arquivo de backup, mesmo depois de reinstalar o mod ou em outro PC",
      0, 0, 0, nullptr, nullptr, 0},
-    {11, kCfgButton, L"#reset", L"Restore all defaults", L"Restaurar todos os padrões",
+    {7, kCfgButton, L"#reset", L"Restore all defaults", L"Restaurar todos os padrões",
      L"Every setting goes back to how the mod comes, and the bar to the center. Folders, tabs and custom icons stay",
      L"Todos os ajustes voltam a como o mod vem, e a barra volta ao centro. Pastas, abas e ícones personalizados ficam", 0, 0, 0, nullptr, nullptr, 0},
+    {7, kCfgGroup, L"#g.settingsWindow", L"Settings window", L"Janela de configurações", nullptr, nullptr, 0, 0, 0, nullptr, nullptr, 0},
+    {7, kCfgChoice, L"settingsWindow.background", L"Background", L"Fundo",
+     L"Follow the theme, or a glass of its own: light or dark, with the blur and transparency you choose. The same for every theme",
+     L"Seguir o tema, ou um vidro próprio: claro ou escuro, com o desfoque e a transparência que você escolher. Vale para todos os temas", 0, 0, 0, nullptr, CFG_OPTS(kOptCfgBackground)},
+    {7, kCfgChoice, L"settingsWindow.tone", L"Tone", L"Tom",
+     L"Light: a white glass with dark text. Dark: a smoky glass with white text", L"Claro: um vidro branco com texto escuro. Escuro: um vidro fumê com texto branco",
+     0, 0, 0, nullptr, CFG_OPTS(kOptCfgTone)},
+    {7, kCfgSlider, L"settingsWindow.blur", L"Blur", L"Desfoque",
+     L"How much the window blurs what is behind it. 0 = none", L"Quanto a janela desfoca o que está atrás dela. 0 = nenhum", 0, 100, 1, L"%", nullptr, 0},
+    {7, kCfgSlider, L"settingsWindow.transparency", L"Transparency", L"Transparência",
+     L"How much of what is behind shows through. 100 = completely clear", L"Quanto do que está atrás aparece. 100 = totalmente transparente", 0, 100, 1, L"%", nullptr, 0},
 };
 #undef CFG_OPTS
 constexpr int kCfgItemCount = (int)ARRAYSIZE(kCfgItems);
@@ -3658,6 +4329,7 @@ struct CfgOverride { std::wstring value, base; };
 std::map<std::wstring, CfgOverride> g_cfgOverrides;
 bool g_cfgOverridesLoaded, g_cfgOverridesDirty;
 constexpr WCHAR kCfgOverridesKey[] = L"settingsPanel";
+std::map<std::wstring, std::wstring> g_cfgLegacy;   // panel values of settings this version no longer has
 
 // The stored lists put one entry per record. The separator is a control character, not a line break: portable Windhawk keeps
 // values in an INI file, where a line break is lost. Values written by earlier versions (with line breaks) are still read.
@@ -3678,16 +4350,17 @@ void LoadCfgOverrides() {
         if (b == std::wstring::npos) continue;
         std::wstring key = line.substr(0, a);
         if (CfgFind(key.c_str())) g_cfgOverrides[key] = {line.substr(a + 1, b - a - 1), line.substr(b + 1)};
+        else g_cfgLegacy[key] = line.substr(a + 1, b - a - 1);   // a setting this version no longer has (read once to carry it over)
     }
 }
 
 // Bumped whenever a setting or an override changes: answers worked out from the settings are kept until then
 // (reading Windhawk's settings is too slow to repeat for every frame the panel draws)
 unsigned g_cfgVersion = 1;
-void SaveThemeTransparency();
+void SaveThemeValues();
 void SaveCfgOverrides() {
     ++g_cfgVersion;
-    SaveThemeTransparency();
+    SaveThemeValues();
     std::wstring text;
     for (auto& [key, o] : g_cfgOverrides) text += key + L"\t" + o.value + L"\t" + o.base + kRecSep;
     Wh_SetStringValue(kCfgOverridesKey, text.c_str());
@@ -3741,15 +4414,16 @@ struct GearState { bool shown = false, hover = false; float anim = 0; };
 GearState g_gear;
 std::map<std::wstring, std::wstring> g_cfgValues;   // what the panel shows
 
+bool IsThemeKey(PCWSTR key);
+std::wstring CfgThemeStr(Theme t, PCWSTR key);
 void CfgRefreshValues() {
     ++g_cfgVersion;
     g_cfgValues.clear();
     for (const CfgItem& it : kCfgItems) {
         if (it.type == kCfgButton || it.type == kCfgGroup) continue;
-        g_cfgValues[it.key] = CfgIsInt(it) ? std::to_wstring(CfgInt(it.key)) : CfgStr(it.key);
+        g_cfgValues[it.key] = IsThemeKey(it.key) ? CfgThemeStr(g_settings.theme, it.key)   // the active theme's own
+                            : CfgIsInt(it) ? std::to_wstring(CfgInt(it.key)) : CfgStr(it.key);
     }
-    g_cfgValues[L"appearance.transparency"] = std::to_wstring(g_settings.glassTransparency);   // the active theme's own
-    g_cfgValues[L"appearance.blur"] = std::to_wstring(g_settings.blurAmount);                   // the active theme's own too
     if (g_cfgOverridesDirty) SaveCfgOverrides();
 }
 
@@ -3768,6 +4442,9 @@ D2D1_RECT_F GearRect();
 bool HitMore(float x, float y);
 extern bool g_moreHover;
 bool MoreFading();
+bool RingSpinning();
+bool HoverRingSpinning();
+bool AmbientSpinning();
 void DrawMoreButton();
 void TrackLeave(HWND hwnd);
 // Icon gallery (defined further down)
@@ -3799,6 +4476,7 @@ int g_autoDarkText = -1;   // automatic text color on clear glass: 1 black, 0 wh
 struct CfgDefault { PCWSTR key, value; };
 const CfgDefault kCfgDefaults[] = {
     {L"displayMode", L"siriOriginal"},
+    {L"floatingOpen", L"click"},
     {L"theme", L"glass"},
     {L"language", L"auto"},
     {L"performance", L"normal"},
@@ -3810,20 +4488,29 @@ const CfgDefault kCfgDefaults[] = {
     {L"appearance.menuBlur", L"100"},
     {L"appearance.menuTextColor", L"auto"},
     {L"appearance.menuSelection", L"glass"},
+    {L"appearance.menuSelectionColor2", L"#B44BFF"},
     {L"appearance.menuSelectionColor", L"#447FEF"},
-    {L"appearance.glassStyle", L"liquid"},
+    {L"appearance.glassButtons", L"1"},
+    {L"appearance.backlight", L"0"},
+    {L"appearance.backlightColors", L"3"},
+    {L"appearance.backlightIntensity", L"70"},
+    {L"appearance.backlightColor", L"#2F6BFF"},
+    {L"appearance.backlightColor2", L"#B44BFF"},
+    {L"appearance.backlightColor3", L"#FF4B8B"},
+    {L"appearance.backlightColor4", L"#FFB020"},
+    {L"appearance.backlightColor5", L"#20D3A0"},
+    {L"appearance.chromeBorder", L"0"},
+    {L"appearance.chromeRing", L"1"},
     {L"appearance.refraction", L"70"},
     {L"appearance.glassEffect", L"1"},
     {L"appearance.liveGlass", L"0"},
+    {L"settingsWindow.background", L"theme"},
+    {L"settingsWindow.tone", L"dark"},
+    {L"settingsWindow.blur", L"60"},
+    {L"settingsWindow.transparency", L"40"},
     {L"appearance.tintLevel", L"100"},
     {L"appearance.tintReach", L"29"},
     {L"appearance.tintColor", L"#050505"},
-    {L"custom.color", L"#1e1e1e"},
-    {L"custom.opacity", L"60"},
-    {L"custom.shading", L"70"},
-    {L"custom.borderWidth", L"1"},
-    {L"custom.borderColor", L"#ffffff"},
-    {L"custom.borderOpacity", L"18"},
     {L"siri.pillWidth", L"560"},
     {L"siri.pillHeight", L"96"},
     {L"siri.panelWidth", L"680"},
@@ -3838,6 +4525,7 @@ const CfgDefault kCfgDefaults[] = {
     {L"siri.powerPill", L"1"},
     {L"siri.generalSearch", L"1"},
     {L"calculator", L"1"},
+    {L"ignoreAccents", L"1"},
     {L"siri.powerButton", L"0"},
     {L"siri.powerButtonSide", L"right"},
     {L"siri.orbStyle", L"wave"},
@@ -3851,6 +4539,7 @@ const CfgDefault kCfgDefaults[] = {
     {L"siri.shortcutFiles", L"Ctrl+2"},
     {L"siri.shortcutActions", L"Ctrl+3"},
     {L"siri.shortcutClipboard", L"Ctrl+4"},
+    {L"siri.shortcutPhone", L"Ctrl+5"},
     {L"siri.shortcutsAnywhere", L"0"},
     {L"window.width", L"80"},
     {L"window.height", L"75"},
@@ -3864,6 +4553,7 @@ const CfgDefault kCfgDefaults[] = {
     {L"open.winKey", L"1"},
     {L"open.startButton", L"1"},
     {L"grid.iconSize", L"64"},
+    {L"grid.textSize", L"100"},
     {L"grid.columns", L"0"},
     {L"grid.pageMode", L"vertical"},
     {L"grid.jiggle", L"1"},
@@ -3875,14 +4565,20 @@ const CfgDefault kCfgDefaults[] = {
     {L"files.indexer", L"auto"},
     {L"files.maxResults", L"50"},
     {L"clipboard.enabled", L"1"},
+    {L"phone.enabled", L"0"},
+    {L"phone.notifications", L"10"},
     {L"clipboard.size", L"30"},
     {L"clipboard.keep", L"always"},
 };
 
-// Glass transparency is kept per theme: Light and OLED start solid (0), the others from the Windhawk setting
-constexpr WCHAR kThemeTransparencyKey[] = L"themeTransparency";
-std::map<std::wstring, int> g_themeTransparency;
-bool g_themeTransparencyLoaded;
+// Every theme keeps its own customization: everything in "Customize theme" (the look, the glass, the menus, and the Siri bar,
+// window and animation settings of each mode). What a theme never had changed comes from its own defaults and from the
+// shared values (the Windhawk settings, or the panel's)
+constexpr int kCfgThemeSection = 1;   // Appearance: everything below Theme, except this window's background
+constexpr WCHAR kThemeValuesKey[] = L"themeSettings";
+constexpr WCHAR kThemeTransparencyKey[] = L"themeTransparency";   // 1.1.0 to 1.2.0: transparency and blur per theme, carried over
+std::map<std::wstring, std::map<std::wstring, std::wstring>> g_themeValues;
+bool g_themeValuesLoaded;
 PCWSTR ThemeName(Theme t) {
     switch (t) {
         case Theme::Light: return L"light";
@@ -3890,50 +4586,124 @@ PCWSTR ThemeName(Theme t) {
         case Theme::Tinted: return L"tintedliquid";
         case Theme::Dark: return L"dark";
         case Theme::Oled: return L"oled";
+        case Theme::Frost: return L"frost";
         case Theme::Custom: return L"custom";
         default: return L"glass";
     }
 }
-void LoadThemeTransparency() {
-    g_themeTransparencyLoaded = true;
-    g_themeTransparency.clear();
-    WCHAR buf[512] = {};
-    Wh_GetStringValue(kThemeTransparencyKey, buf, ARRAYSIZE(buf));
-    for (const auto& line : SplitRecords(buf)) {
+constexpr PCWSTR kThemeNames[] = {L"frost", L"glass", L"tintedliquid", L"light", L"siri", L"dark", L"oled"};
+bool IsThemeKey(PCWSTR key) {
+    const CfgItem* it = CfgFind(key);
+    return it && it->section == kCfgThemeSection && it->type != kCfgButton && it->type != kCfgGroup && wcscmp(key, L"theme") &&
+           wcsncmp(key, L"settingsWindow.", 15);
+}
+void SaveThemeValues() {
+    ++g_cfgVersion;
+    if (!g_themeValuesLoaded) return;
+    std::wstring text = std::wstring(L"#\tformat\t2") + kRecSep;   // also marks the old values as carried over
+    for (auto& [theme, values] : g_themeValues)
+        for (auto& [key, value] : values) text += theme + L"\t" + key + L"\t" + value + kRecSep;
+    Wh_SetStringValue(kThemeValuesKey, text.c_str());
+}
+bool CfgOverrideFor(PCWSTR key, std::wstring& out);
+std::wstring GetStringSetting(PCWSTR name);
+// The first time this version runs: what was kept per theme or shared goes to each theme, and the themes that are gone
+// are replaced (Custom by Custom liquid glass with its color, Clear glass with the Translucent style by Glass)
+void MigrateThemeValues() {
+    {
+        WCHAR old[512] = {};
+        Wh_GetStringValue(kThemeTransparencyKey, old, ARRAYSIZE(old));
+        for (const auto& line : SplitRecords(old)) {
+            auto f = Split(line, L'\t');
+            if (f.size() != 2 || f[0].empty()) continue;
+            size_t hash = f[0].find(L'#');
+            std::wstring theme = f[0].substr(0, hash);
+            g_themeValues[theme][hash == std::wstring::npos ? L"appearance.transparency" : L"appearance.blur"] = f[1];
+        }
+    }
+    if (!g_cfgOverridesLoaded) LoadCfgOverrides();
+    std::vector<std::wstring> shared;
+    for (auto& [key, o] : g_cfgOverrides) if (IsThemeKey(key.c_str())) shared.push_back(key);
+    for (const std::wstring& key : shared) {
+        std::wstring v;
+        if (CfgOverrideFor(key.c_str(), v))
+            for (PCWSTR theme : kThemeNames) g_themeValues[theme].emplace(key, v);   // (a value kept per theme stays)
+        g_cfgOverrides.erase(key);
+    }
+    auto legacy = [](PCWSTR key) {
+        auto found = g_cfgLegacy.find(key);
+        return found != g_cfgLegacy.end() ? found->second : GetStringSetting(key);
+    };
+    std::wstring theme, moveTo;
+    if (!CfgOverrideFor(L"theme", theme)) theme = GetStringSetting(L"theme");
+    if (theme == L"custom") {
+        moveTo = L"tintedliquid";
+        std::wstring color = legacy(L"custom.color");
+        if (!color.empty()) g_themeValues[moveTo].emplace(L"appearance.tintColor", color);
+    } else if ((theme.empty() || theme == L"glass") && legacy(L"appearance.glassStyle") == L"frosted") {
+        moveTo = L"frost";
+    }
+    if (!moveTo.empty()) {
+        std::wstring base = GetStringSetting(L"theme");
+        if (moveTo == base) g_cfgOverrides.erase(L"theme");
+        else g_cfgOverrides[L"theme"] = {moveTo, base};
+    }
+    g_cfgLegacy.clear();
+    SaveCfgOverrides();   // (writes the theme values too, with the mark that they were carried over)
+    Wh_DeleteValue(kThemeTransparencyKey);
+}
+void LoadThemeValues() {
+    g_themeValuesLoaded = true;
+    g_themeValues.clear();
+    std::vector<WCHAR> buf(32768);
+    Wh_GetStringValue(kThemeValuesKey, buf.data(), (int)buf.size());
+    buf.back() = 0;
+    if (!buf[0]) { MigrateThemeValues(); return; }
+    for (const auto& line : SplitRecords(buf.data())) {
         auto f = Split(line, L'\t');
-        if (f.size() == 2 && !f[0].empty()) g_themeTransparency[f[0]] = std::clamp(_wtoi(f[1].c_str()), 0, 100);
+        if (f.size() == 3 && f[0] != L"#" && IsThemeKey(f[1].c_str())) g_themeValues[f[0]][f[1]] = f[2];
     }
 }
-void SaveThemeTransparency() {
-    ++g_cfgVersion;
-    std::wstring text;
-    for (auto& [theme, v] : g_themeTransparency) text += theme + L"\t" + std::to_wstring(v) + kRecSep;
-    Wh_SetStringValue(kThemeTransparencyKey, text.c_str());
+// A theme's own starting value for a setting, used while the shared value is still the one the mod comes with
+std::wstring ThemeDefaultFor(Theme t, PCWSTR key) {
+    // Light and OLED start solid, Custom liquid glass fully clear below its color
+    if (!wcscmp(key, L"appearance.transparency"))
+        return t == Theme::Light || t == Theme::Oled ? L"0" : t == Theme::Tinted ? L"100" : L"";
+    if (!wcscmp(key, L"appearance.blur")) return t == Theme::Tinted ? L"0" : L"";   // the bent picture stays sharp
+    if (!wcscmp(key, L"appearance.liveGlass")) return t == Theme::Frost ? L"1" : L"";   // Glass: the live blur
+    if (!wcscmp(key, L"appearance.chromeBorder")) return t == Theme::Oled ? L"1" : L"";   // OLED: the chrome border on
+    // OLED starts as deep black: no glass effect and no backlight
+    if (!wcscmp(key, L"appearance.glassEffect")) return t == Theme::Oled ? L"0" : L"";
+    if (!wcscmp(key, L"appearance.backlight")) return t == Theme::Oled ? L"0" : L"";
+    if (!wcscmp(key, L"appearance.menuSelection")) return t == Theme::Oled ? L"gradient" : L"";   // OLED: two colors blended
+    return L"";
 }
-int ThemeTransparency(Theme t, int fromWindhawk) {
-    if (!g_themeTransparencyLoaded) LoadThemeTransparency();
-    auto found = g_themeTransparency.find(ThemeName(t));
-    if (found != g_themeTransparency.end()) return found->second;
-    // (the same store also keeps each theme's own blur, under "<theme>#blur")
-    // Light and OLED start solid and Custom liquid glass starts fully clear below its color,
-    // unless the Windhawk setting was moved from its default (80): then it counts
-    if (fromWindhawk != 80) return fromWindhawk;
-    return (t == Theme::Light || t == Theme::Oled) ? 0 : t == Theme::Tinted ? 100 : fromWindhawk;
+// What a theme setting is for a theme: its own value, else its default, else the shared value
+std::wstring CfgThemeStr(Theme t, PCWSTR key) {
+    if (!g_themeValuesLoaded) LoadThemeValues();
+    auto theme = g_themeValues.find(ThemeName(t));
+    if (theme != g_themeValues.end()) {
+        auto found = theme->second.find(key);
+        if (found != theme->second.end()) return found->second;
+    }
+    const CfgItem* it = CfgFind(key);
+    std::wstring shared = it && CfgIsInt(*it) ? std::to_wstring(CfgInt(key)) : CfgStr(key);
+    std::wstring own = ThemeDefaultFor(t, key);
+    if (!own.empty())
+        for (const CfgDefault& d : kCfgDefaults)
+            if (!wcscmp(d.key, key) && ToLower(shared) == ToLower(d.value)) return own;
+    return shared;
 }
 
-// The blur chosen in the panel is kept for each theme. Without one, Custom liquid glass starts with no blur
-// (the bent picture stays sharp) while the general setting is at its default (60)
-int ThemeBlur(Theme t, int general) {
-    if (!g_themeTransparencyLoaded) LoadThemeTransparency();
-    auto found = g_themeTransparency.find(std::wstring(ThemeName(t)) + L"#blur");
-    if (found != g_themeTransparency.end()) return found->second;
-    return t == Theme::Tinted && general == 60 ? 0 : general;
-}
+bool g_cfgWinCustom, g_cfgWinLight; int g_cfgWinBlur = 60, g_cfgWinTransparency = 40;   // the settings window's own background
+bool PhoneLinkInstalled();
 void LoadSettings() {
     ++g_cfgVersion;
     Settings s;
-    auto I = [](PCWSTR k) { return CfgInt(k); };   // the settings panel can override Windhawk
-    auto S = [](PCWSTR k) { return CfgStr(k); };
+    // The settings panel can override Windhawk; the settings of "Customize theme" are the active theme's own
+    bool themeKnown = false;
+    auto S = [&](PCWSTR k) { return themeKnown && IsThemeKey(k) ? CfgThemeStr(s.theme, k) : CfgStr(k); };
+    auto I = [&](PCWSTR k) { return themeKnown && IsThemeKey(k) ? _wtoi(CfgThemeStr(s.theme, k).c_str()) : CfgInt(k); };
 
     // Language: the one chosen, or the language of Windows
     {
@@ -3950,29 +4720,52 @@ void LoadSettings() {
     // Original Siri is the main mode (also used when the setting is missing or unknown)
     s.siriOriginal = mode != L"window" && mode != L"fullscreen" && mode != L"siri";
     s.siri = mode == L"siri" || s.siriOriginal;
+    s.floatingHover = mode == L"siri" && S(L"floatingOpen") == L"hover";
 
     // ② Theme (one for every mode)
+    if (!g_themeValuesLoaded) LoadThemeValues();   // (the first time, also carries the older settings over)
     std::wstring theme = S(L"theme");
-    s.theme = theme == L"light" ? Theme::Light : theme == L"siri" ? Theme::Siri : theme == L"tintedliquid" ? Theme::Tinted : theme == L"custom" ? Theme::Custom
+    s.theme = theme == L"light" ? Theme::Light : theme == L"siri" ? Theme::Siri : theme == L"frost" ? Theme::Frost
+            : theme == L"tintedliquid" || theme == L"custom" ? Theme::Tinted   // (the Custom theme is gone: Custom liquid glass replaces it)
             : theme == L"dark" ? Theme::Dark : theme == L"oled" ? Theme::Oled : Theme::Glass;
+    themeKnown = true;
 
     // ③ Appearance
-    s.glassTransparency = ThemeTransparency(s.theme, std::clamp(I(L"appearance.transparency"), 0, 100));
+    s.glassTransparency = std::clamp(I(L"appearance.transparency"), 0, 100);
     s.cornerRadius = std::clamp(I(L"appearance.cornerRadius"), 0, 60);
     s.blurAmount = std::clamp(I(L"appearance.blur"), 0, 100);
-    s.blurAmount = ThemeBlur(s.theme, s.blurAmount);
     s.menuBlur = std::clamp(I(L"appearance.menuBlur"), 0, 200);
     {
         std::wstring c = S(L"appearance.menuTextColor");
         s.menuText = c == L"white" ? 0 : c == L"black" ? 1 : -1;
         std::wstring sel = S(L"appearance.menuSelection");
-        s.menuSelection = sel == L"color" ? 1 : sel == L"frosted" ? 2 : 0;
+        s.menuSelection = sel == L"color" ? 1 : sel == L"frosted" ? 2 : sel == L"gradient" ? 3 : 0;
         s.menuSelectionColor = ParseColor(S(L"appearance.menuSelectionColor"), D2D1::ColorF(0x447FEF));
+        s.menuSelectionColor2 = ParseColor(S(L"appearance.menuSelectionColor2"), D2D1::ColorF(0xB44BFF));
     }
     s.liveBackground = s.blurAmount == 0;
-    s.glassLiquid = S(L"appearance.glassStyle") == L"liquid";
-    s.refraction = std::clamp(I(L"appearance.refraction"), 0, 100);
+    s.refraction = s.theme == Theme::Frost ? 0 : std::clamp(I(L"appearance.refraction"), 0, 100);   // Glass never bends
+    s.glassLiquid = s.refraction > 0;   // the theme decides whether it bends (Glass never does); 0 = no bending
     s.liveGlass = I(L"appearance.liveGlass") != 0;
+    s.glassButtons = I(L"appearance.glassButtons") != 0;
+    s.backlight = I(L"appearance.backlight") != 0;
+    {
+        static const UINT32 kBacklightDefaults[5] = {0x2F6BFF, 0xB44BFF, 0xFF4B8B, 0xFFB020, 0x20D3A0};
+        for (int i = 0; i < 5; i++) {
+            WCHAR key[48];
+            swprintf(key, ARRAYSIZE(key), i ? L"appearance.backlightColor%d" : L"appearance.backlightColor", i + 1);
+            s.backlightColors[i] = ParseColor(S(key), D2D1::ColorF(kBacklightDefaults[i]));
+        }
+    }
+    s.backlightCount = std::clamp(I(L"appearance.backlightColors"), 1, 5);
+    s.backlightIntensity = std::clamp(I(L"appearance.backlightIntensity"), 0, 100);
+    s.chromeBorder = I(L"appearance.chromeBorder") != 0;
+    s.chromeRing = I(L"appearance.chromeRing") != 0;
+    // This settings window: the theme's glass, or a glass of its own with its own blur and transparency
+    g_cfgWinCustom = S(L"settingsWindow.background") == L"custom";
+    g_cfgWinBlur = std::clamp(I(L"settingsWindow.blur"), 0, 100);
+    g_cfgWinTransparency = std::clamp(I(L"settingsWindow.transparency"), 0, 100);
+    g_cfgWinLight = S(L"settingsWindow.tone") == L"light";
     s.tintLevel = std::clamp(I(L"appearance.tintLevel"), 0, 100);
     s.tintReach = std::clamp(I(L"appearance.tintReach"), 0, 100);
     s.tintColor = ParseColor(S(L"appearance.tintColor"), D2D1::ColorF(0x050505));
@@ -3982,17 +4775,6 @@ void LoadSettings() {
     s.cpuDraw = S(L"renderer") == L"cpu";
     s.glassEffect = I(L"appearance.glassEffect") != 0;
     s.folderRadius = s.siriPanelRadius = s.cornerRadius;
-
-    // ④ Custom theme: one color/opacity for the window, the Siri bar and the Siri panel
-    s.tint = ParseColor(S(L"custom.color"), s.tint);
-    s.siriPillColor = s.siriPanelColor = s.tint;
-    s.opacity = s.siriPanelOpacity = std::clamp(I(L"custom.opacity"), 0, 100) / 100.0f;
-    s.siriPillOpacity = std::min(1.0f, s.opacity + 0.12f);
-    s.siriShadeStrength = std::clamp(I(L"custom.shading"), 0, 100);
-    s.siriShade = s.siriShadeStrength > 0;
-    s.borderWidth = std::clamp(I(L"custom.borderWidth"), 0, 8);
-    s.borderColor = ParseColor(S(L"custom.borderColor"), s.borderColor);
-    s.borderOpacity = std::clamp(I(L"custom.borderOpacity"), 0, 100) / 100.0f;
 
     // ⑤ Window / Fullscreen
     s.windowWidth = std::clamp(I(L"window.width"), 30, 100);
@@ -4024,6 +4806,7 @@ void LoadSettings() {
     s.siriPowerButton = I(L"siri.powerButton") != 0;
     s.generalSearch = I(L"siri.generalSearch") != 0;
     s.calculator = I(L"calculator") != 0;
+    s.ignoreAccents = I(L"ignoreAccents") != 0;
     s.siriPowerLeft = S(L"siri.powerButtonSide") == L"left";
     std::wstring firstRow = S(L"siri.firstRow");
     s.siriFirstRow = firstRow == L"off" ? 0 : firstRow == L"used" ? 2 : 1;
@@ -4031,6 +4814,7 @@ void LoadSettings() {
 
     // ⑧ Apps and icons
     s.iconSize = std::clamp(I(L"grid.iconSize"), 24, 192);
+    s.textSize = std::clamp(I(L"grid.textSize"), 80, 160);
     s.columns = std::clamp(I(L"grid.columns"), 0, 30);
     s.horizontal = s.siriHorizontal = S(L"grid.pageMode") == L"horizontal";
     s.jiggle = I(L"grid.jiggle") != 0;
@@ -4044,6 +4828,9 @@ void LoadSettings() {
               : ix == L"scan"       ? Indexer::Scan : Indexer::Auto;
     s.maxResults = std::clamp(I(L"files.maxResults"), 10, 500);
     s.clipEnabled = I(L"clipboard.enabled") != 0;
+    s.phoneWanted = I(L"phone.enabled") != 0;
+    s.phoneEnabled = s.phoneWanted && PhoneLinkInstalled();
+    s.phoneMax = std::clamp(I(L"phone.notifications"), 1, 10);
     s.clipMax = std::clamp(I(L"clipboard.size"), 5, 200);
     {
         std::wstring keep = S(L"clipboard.keep");
@@ -4052,13 +4839,10 @@ void LoadSettings() {
     }
 
     Theme active = s.theme;
-    s.darkText = active == Theme::Light ? true : active == Theme::Tinted ? Luma(s.tintColor) > 0.6f
-               : active != Theme::Custom ? false : Luma(s.siri ? s.siriPanelColor : s.tint) > 0.6f;
-    // Text color chosen in the settings (every theme but Custom); automatic: clear glass follows the background
-    if (active != Theme::Custom) {
-        if (s.menuText >= 0) s.darkText = s.menuText == 1;
-        else if (active == Theme::Glass && g_autoDarkText >= 0) s.darkText = g_autoDarkText == 1;
-    }
+    s.darkText = active == Theme::Light ? true : active == Theme::Tinted ? Luma(s.tintColor) > 0.6f : false;
+    // Text color chosen in the settings; automatic: clear glass follows the background
+    if (s.menuText >= 0) s.darkText = s.menuText == 1;
+    else if ((active == Theme::Glass || active == Theme::Frost) && g_autoDarkText >= 0) s.darkText = g_autoDarkText == 1;
     g_settings = s;
     BuildTabs();
     g_winKeyEnabled = I(L"open.winKey") != 0;
@@ -4069,6 +4853,7 @@ void LoadSettings() {
     g_shortcuts[1] = ParseShortcut(S(L"siri.shortcutFiles"), g_shortcutLabels[1]);
     g_shortcuts[2] = ParseShortcut(S(L"siri.shortcutClipboard"), g_shortcutLabels[2]);
     g_shortcuts[3] = ParseShortcut(S(L"siri.shortcutActions"), g_shortcutLabels[3]);
+    g_shortcuts[6] = ParseShortcut(S(L"siri.shortcutPhone"), g_shortcutLabels[6]);
     g_shortcutsAnywhere = I(L"siri.shortcutsAnywhere") != 0;
     UpdateCategoryHotkeys();   // only acts on the launcher's thread (not at the first load)
     g_ghSetting = S(L"grid.iconsFolder");
@@ -4099,6 +4884,11 @@ struct App {
     IDWriteTextFormat* labelFormat = nullptr;
     float labelW = 0, labelH = 0;
     std::wstring labelText;
+    // Phone rows: when it happened (right side), and the icon font glyph when there is no picture
+    std::wstring when, glyphText;
+    PCWSTR glyph = nullptr;
+    std::wstring key;           // Phone notification: its id and time (for clearing it from the list)
+    bool phoneBox = false;      // Phone notification shown in the notifications box (it scrolls on its own)
 };
 
 struct Folder {
@@ -4110,6 +4900,17 @@ struct Folder {
 using AppList = std::vector<std::shared_ptr<App>>;
 [[clang::no_destroy]] AppList g_apps;
 [[clang::no_destroy]] AppList g_tabItems;
+constexpr int kPhoneKind = 8;   // App.kind of a Phone row (target: the ms-phone: link it opens)
+[[clang::no_destroy]] AppList g_phoneItems;      // the Phone category's rows (see PhoneRefresh)
+[[clang::no_destroy]] std::wstring g_phoneStatus;
+bool PhoneRefresh(bool force);
+void DeletePhoneLeftovers();
+bool PhoneBoxWheel(LPARAM lParam, int delta);
+int g_phoneBoxFirst, g_phoneBoxTotal;   // the Phone notifications box: the first one shown, and how many there are
+void OpenPhoneLink(const std::wstring& url);
+void ClearPhoneNotifs(const std::wstring& key);
+void ComposePhoneItems();   // one notification (its key), or all of them (empty)
+void RefreshTabItems(bool resetScroll);
 std::vector<std::wstring> g_clipHistory;
 constexpr WCHAR kHistoryKey[] = L"fileHistory";
 constexpr int kHistoryMax = 20;
@@ -4334,7 +5135,7 @@ int g_openFolderIndex = -1;
 int g_siriTab;            // 0 Apps, 1 Files, 2 Clipboard, 3 Actions, 4 icon gallery, 5 general search (kTabAll)
 constexpr int kTabAll = 5;  // Original Siri: typing in "Search" looks for apps, actions, folders and files together
 float g_tabSlide;         // animated tab indicator (visible slot)
-float g_tabNatural[4];
+float g_tabNatural[7];   // natural width of each category tab, indexed by tab id (0-3, 6 Phone)
 std::unordered_map<std::wstring, float> g_chipWidths;   // measured filter labels (cleared when the scale changes)
 float g_chipPad;   // padding around a filter label
 bool g_searchActive;      // Window/Fullscreen: category strip visible (search bar clicked or typing)
@@ -4342,6 +5143,7 @@ float g_tabsAnim;         // Window/Fullscreen: 0 hidden -> 1 strip fully shown
 
 // Siri mode state
 bool g_siriExpanded;      // results panel wanted
+bool g_hoverOpenArmed;    // Floating "on mouse over": the next time the mouse comes onto the bar opens the box
 float g_siriAnim;         // 0 = pill only, 1 = panel fully open
 float g_siriBtnAnim;      // floating power button: 0 = hidden behind the bar, 1 = out on the right
 float g_pillIntro = 1.0f; // 0 -> 1: circle -> pill
@@ -4371,7 +5173,9 @@ std::unordered_map<std::wstring, unsigned long long> g_userAssistTime;   // ... 
 std::unordered_map<std::wstring, unsigned long long> g_launchTimes;      // last launch through the mod
 std::unordered_map<std::wstring, unsigned long long> g_firstSeen;         // when an app first showed up (installed)
 constexpr WCHAR kKnownAppsKey[] = L"knownApps";
-int g_firstRowCount;   // items in the Original Siri first row (a line is drawn under it)
+void SaveLongValue(PCWSTR base, const std::wstring& data);
+std::wstring LoadLongValue(PCWSTR base);
+int g_firstRowCount;   // items in the Floating / Original Siri first row (a line is drawn under it)
 
 unsigned long long NowFileTime() {
     FILETIME ft;
@@ -4415,11 +5219,9 @@ void LoadLaunchCounts() {
             g_launchTimes[parts[2]] = _wcstoui64(parts[1].c_str(), nullptr, 10);
         }
     }
-    std::vector<WCHAR> known(1 << 16, 0);
-    Wh_GetStringValue(kKnownAppsKey, known.data(), known.size());
-    known.back() = 0;
+    std::wstring known = LoadLongValue(kKnownAppsKey);
     g_firstSeen.clear();
-    for (auto& line : SplitRecords(known.data())) {
+    for (auto& line : SplitRecords(known.c_str())) {
         size_t tab = line.find(L'\t');
         if (tab != std::wstring::npos) g_firstSeen[line.substr(tab + 1)] = _wcstoui64(line.substr(0, tab).c_str(), nullptr, 10);
     }
@@ -4444,11 +5246,8 @@ void UpdateKnownApps(const AppList& apps) {
     }
     if (!changed) return;
     std::wstring data;
-    for (auto& [target, time] : g_firstSeen) {
-        if (data.size() > 30000) break;   // portable Windhawk reads a value back correctly only up to 32,767 characters
-        data += std::to_wstring(time) + L"\t" + target + kRecSep;
-    }
-    Wh_SetStringValue(kKnownAppsKey, data.c_str());
+    for (auto& [target, time] : g_firstSeen) data += std::to_wstring(time) + L"\t" + target + kRecSep;
+    SaveLongValue(kKnownAppsKey, data);   // every app is kept (in parts), so none comes back as "just installed"
 }
 
 void SaveLaunchCounts() {
@@ -4614,26 +5413,28 @@ bool ChipEditable(int chip) {
 
 void BuildMainItems(std::vector<int>& out) {
     out.clear();
-    std::wstring q = ToLower(g_query);
+    std::wstring q = SearchKey(g_query);
     if (g_siriTab == 4) { GhFilterItems(out, q); return; }   // icon gallery: name, color and order
     if (g_siriTab != 0) {
         bool indexed = (g_siriTab == 1 && !g_query.empty()) || g_siriTab == kTabAll; // already filtered
         for (int i = 0; i < (int)g_tabItems.size(); i++) {
             const App& a = *g_tabItems[i];
-            if (indexed || ToLower(a.kind == 2 ? a.target : a.name).find(q) != std::wstring::npos) out.push_back(kTabBase + i);
+            const std::wstring& hay = a.kind == 2 ? a.target : a.name;
+            bool hit = SearchKey(hay).find(q) != std::wstring::npos || (a.kind == kPhoneKind && SearchKey(a.detail).find(q) != std::wstring::npos);
+            if (indexed || hit) out.push_back(kTabBase + i);
         }
         return;
     }
     if (!g_query.empty() || g_settings.siri) {
         if (!g_tabItems.empty() && g_tabItems[0]->kind == 7) out.push_back(kTabBase);   // the calculator's result
-        bool picking = g_settings.siriOriginal && Picking();
-        bool filter = g_settings.siriOriginal && g_appFilter >= 0 && !picking;
+        bool picking = Picking();   // (Original Siri and Floating: the app tabs)
+        bool filter = g_appFilter >= 0 && !picking;
         auto keep = [&](const App& a) {
             return !filter || ChipHas(g_appFilter, a);
         };
         size_t prefix = 0;
         g_firstRowCount = 0;
-        if (g_settings.siriOriginal && g_settings.siriFirstRow && g_query.empty() && !filter && !picking) {
+        if (g_settings.siriFirstRow && g_query.empty() && !filter && !picking) {   // Floating and Original Siri
             // First row: recently opened/installed apps, or the most used ones; a line separates it from the rest
             std::vector<std::pair<unsigned long long, int>> scored;
             for (int i = 0; i < (int)g_apps.size() && i < kFolderBase; i++) {
@@ -4650,10 +5451,10 @@ void BuildMainItems(std::vector<int>& out) {
             prefix = out.size();
         }
         for (int i = 0; i < (int)g_apps.size() && i < kFolderBase; i++)
-            if (ToLower(g_apps[i]->name).find(q) != std::wstring::npos && keep(*g_apps[i])) out.push_back(i);
+            if (SearchKey(g_apps[i]->name).find(q) != std::wstring::npos && keep(*g_apps[i])) out.push_back(i);
         for (int f = 0; f < (int)g_folders.size(); f++)
             for (int a = 0; a < (int)g_folders[f].apps.size() && a < 10000; a++)
-                if (ToLower(g_folders[f].apps[a]->name).find(q) != std::wstring::npos && keep(*g_folders[f].apps[a]))
+                if (SearchKey(g_folders[f].apps[a]->name).find(q) != std::wstring::npos && keep(*g_folders[f].apps[a]))
                     out.push_back(kFolderAppBase + f * 10000 + a);
         std::stable_sort(out.begin() + prefix, out.end(), [](int x, int y) { return NameLess(ResolveApp(x)->name, ResolveApp(y)->name); });
         return;
@@ -4764,6 +5565,40 @@ std::wstring Clean(std::wstring s) {
     return s;
 }
 
+// A value that can grow long, kept in parts ("folders", "folders2", ...), each under 30,000 characters: portable
+// Windhawk reads a longer value back wrongly. The parts are joined again when it is read (a record can span two parts)
+constexpr int kMaxValueParts = 40;
+std::wstring ValuePartKey(PCWSTR base, int part) { return part == 0 ? std::wstring(base) : std::wstring(base) + std::to_wstring(part + 1); }
+void SaveLongValue(PCWSTR base, const std::wstring& data) {
+    int parts = 0;
+    size_t at = 0;
+    do {
+        size_t n = std::min<size_t>(30000, data.size() - at);
+        if (at + n < data.size() && n > 0 && IS_HIGH_SURROGATE(data[at + n - 1])) n--;   // a character's two halves stay together
+        Wh_SetStringValue(ValuePartKey(base, parts).c_str(), data.substr(at, n).c_str());
+        at += n; parts++;
+    } while (at < data.size() && parts < kMaxValueParts);
+    std::vector<WCHAR> probe(1 << 15);
+    for (int i = parts; i < kMaxValueParts; i++) {   // parts left from a longer value
+        std::wstring key = ValuePartKey(base, i);
+        if (!Wh_GetStringValue(key.c_str(), probe.data(), (int)probe.size())) break;
+        Wh_DeleteValue(key.c_str());
+    }
+}
+std::wstring LoadLongValue(PCWSTR base) {
+    std::wstring out;
+    std::vector<WCHAR> buf(1 << 18, 0);   // (earlier versions kept the whole value in the first part)
+    for (int part = 0; part < kMaxValueParts; part++) {
+        buf[0] = 0;
+        Wh_GetStringValue(ValuePartKey(base, part).c_str(), buf.data(), (int)buf.size());
+        buf.back() = 0;
+        if (!buf[0]) break;
+        out += buf.data();
+    }
+    return out;
+}
+bool IsLongValue(const std::wstring& key);
+
 void SaveFolders() {
     std::wstring data;
     for (const auto& f : g_folders) {
@@ -4771,15 +5606,13 @@ void SaveFolders() {
         for (const auto& a : f.apps) { data += L'\t'; data += Clean(a->target); }
         data += kRecSep;
     }
-    Wh_SetStringValue(kFoldersKey, data.c_str());
+    SaveLongValue(kFoldersKey, data);
 }
 
 void LoadFolders() {
-    std::vector<WCHAR> buf(1 << 18, 0);
-    Wh_GetStringValue(kFoldersKey, buf.data(), buf.size());
-    buf.back() = 0;
+    std::wstring stored = LoadLongValue(kFoldersKey);
     g_folders.clear();
-    for (const auto& line : SplitRecords(buf.data())) {
+    for (const auto& line : SplitRecords(stored.c_str())) {
         auto fields = Split(line, L'\t');
         if (fields.size() < 2) continue;
         Folder folder;
@@ -4801,15 +5634,13 @@ void SaveCustomTabs() {
         for (const auto& target : t.targets) { data += L'\t'; data += Clean(target); }
         data += kRecSep;
     }
-    Wh_SetStringValue(kCustomTabsKey, data.c_str());
+    SaveLongValue(kCustomTabsKey, data);
 }
 
 void LoadCustomTabs() {
-    std::vector<WCHAR> buf(1 << 17, 0);
-    Wh_GetStringValue(kCustomTabsKey, buf.data(), buf.size());
-    buf.back() = 0;
+    std::wstring stored = LoadLongValue(kCustomTabsKey);
     g_customTabs.clear();
-    for (const auto& line : SplitRecords(buf.data())) {
+    for (const auto& line : SplitRecords(stored.c_str())) {
         auto fields = Split(line, L'\t');
         if (fields.empty() || fields[0].empty() || (int)g_customTabs.size() >= kMaxCustomTabs) continue;
         CustomTab tab;
@@ -4829,15 +5660,13 @@ void SaveBuiltinTabs() {
         for (const auto& t : b.removed) { data += L"\t-"; data += Clean(t); }
         data += kRecSep;
     }
-    Wh_SetStringValue(kBuiltinTabsKey, data.c_str());
+    SaveLongValue(kBuiltinTabsKey, data);
 }
 
 void LoadBuiltinTabs() {
-    std::vector<WCHAR> buf(1 << 17, 0);
-    Wh_GetStringValue(kBuiltinTabsKey, buf.data(), buf.size());
-    buf.back() = 0;
+    std::wstring stored = LoadLongValue(kBuiltinTabsKey);
     for (auto& b : g_builtinTabs) b = BuiltinTab{};
-    for (const auto& line : SplitRecords(buf.data())) {
+    for (const auto& line : SplitRecords(stored.c_str())) {
         auto fields = Split(line, L'\t');
         if (fields.size() < 2) continue;
         int i = _wtoi(fields[0].c_str());
@@ -4989,7 +5818,8 @@ std::vector<HANDLE> g_fileThreadHandles;   // file search threads (UI thread onl
 std::wstring g_fileStatus;
 bool g_fileSearching;
 
-struct FileJob { std::wstring query; Indexer indexer; int max; int iconPx; UINT gen; HWND wnd; bool noScan = false; };   // noScan: indexes only
+struct FileJob { std::wstring query; Indexer indexer; int max; int iconPx; UINT gen; HWND wnd; bool noScan = false;   // noScan: indexes only
+                 bool ignoreAccents = false; std::wstring key; };   // key: the query as names are compared (SearchKey)
 struct FileResult { UINT gen; AppList list; std::wstring status; };
 
 bool Stale(UINT gen) { return gen != g_fileSearchGen || g_workerStop; }
@@ -4999,6 +5829,7 @@ bool Stale(UINT gen) { return gen != g_fileSearchGen || g_workerStop; }
 constexpr WCHAR kEvIpcClass[] = L"WindhawkLaunchpadEverythingIPC";
 constexpr DWORD kEvCopyQuery2W = 18;                 // EVERYTHING_IPC_COPYDATA_QUERY2W
 constexpr DWORD kEvReqName = 0x1, kEvReqPath = 0x2, kEvReqFullPath = 0x4;
+constexpr DWORD kEvMatchAccents = 0x10;               // EVERYTHING_IPC_MATCHACCENTS
 constexpr DWORD kEvSortNameAsc = 1;                  // EVERYTHING_IPC_SORT_NAME_ASCENDING
 constexpr DWORD kEvReplyId = 0x4C503031;             // our dwData tag for replies
 constexpr UINT  kEvWmIpc = WM_USER;                  // EVERYTHING_WM_IPC
@@ -5102,7 +5933,7 @@ bool SearchEverything(const FileJob& job, std::vector<std::wstring>& out, std::w
     auto* q = (EvQuery2*)buf.data();
     q->reply_hwnd = (DWORD)(DWORD_PTR)wnd;
     q->reply_copydata_message = kEvReplyId;
-    q->search_flags = 0;
+    q->search_flags = job.ignoreAccents ? 0 : kEvMatchAccents;
     q->offset = 0;
     q->max_results = (DWORD)job.max;
     q->request_flags = kEvReqFullPath;
@@ -5142,6 +5973,7 @@ constexpr PROPERTYKEY kPkeyItemNameDisplay = {{0xb725f130, 0x47ef, 0x101a, {0xa5
 constexpr IID kIidConditionFactory2 = {0x71d222e1, 0x432f, 0x429e, {0x8c, 0x13, 0xb6, 0xda, 0xfd, 0xe5, 0x07, 0x7a}};
 constexpr IID kIidCondition         = {0x0fc988d4, 0xc935, 0x4b97, {0xa9, 0x73, 0x46, 0x28, 0x2e, 0xa1, 0x75, 0xc8}};
 constexpr int kCopValueContains = 9; // COP_VALUE_CONTAINS
+constexpr int kCopWordStartsWith = 13; // COP_WORD_STARTSWITH (the full-text index, which ignores accents by default)
 
 struct IConditionFactory2Min : IUnknown {
     // IConditionFactory
@@ -5159,13 +5991,13 @@ struct IConditionFactory2Min : IUnknown {
 };
 
 
-bool SearchWindowsIndex(const FileJob& job, std::vector<std::wstring>& out) {
+bool SearchWindowsIndexOp(const FileJob& job, int op, std::vector<std::wstring>& out) {
     ComPtr<ISearchFolderItemFactory> factory;
     ComPtr<IConditionFactory2Min> conditions;
     ComPtr<ICondition> condition;
     if (FAILED(CoCreateInstance(kClsidSearchFolderFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory))) ||
         FAILED(CoCreateInstance(kClsidConditionFactory, nullptr, CLSCTX_INPROC_SERVER, kIidConditionFactory2, (void**)conditions.GetAddressOf())) ||
-        FAILED(conditions->CreateStringLeaf(kPkeyItemNameDisplay, kCopValueContains, job.query.c_str(), nullptr,
+        FAILED(conditions->CreateStringLeaf(kPkeyItemNameDisplay, op, job.query.c_str(), nullptr,
                                             0, kIidCondition, (void**)condition.GetAddressOf()))) {
         Wh_Log(L"Windows Search: factory failed");
         return false;
@@ -5198,6 +6030,17 @@ bool SearchWindowsIndex(const FileJob& job, std::vector<std::wstring>& out) {
     Wh_Log(L"Windows Search: %d results", (int)out.size());
     return true;
 }
+// The name contains the text; ignoring accents, also the names with a word starting with it in any accent
+// (the name match compares accents, the word match of the index doesn't): "acao" finds "Relatório de ação.docx"
+bool SearchWindowsIndex(const FileJob& job, std::vector<std::wstring>& out) {
+    if (!SearchWindowsIndexOp(job, kCopValueContains, out)) return false;
+    if (job.ignoreAccents && (int)out.size() < job.max && !Stale(job.gen)) {
+        std::vector<std::wstring> words;
+        SearchWindowsIndexOp(job, kCopWordStartsWith, words);
+        for (auto& w : words) if ((int)out.size() < job.max) out.push_back(std::move(w));   // duplicates are removed later
+    }
+    return true;
+}
 // ---------- Direct scan (fallback, time-limited) ----------
 void ScanDir(const std::wstring& dir, const FileJob& job, std::vector<std::wstring>& out, double deadline, int depth) {
     if (depth > 12 || (int)out.size() >= job.max || Stale(job.gen) || Now() > deadline) return;
@@ -5210,7 +6053,8 @@ void ScanDir(const std::wstring& dir, const FileJob& job, std::vector<std::wstri
         if (Stale(job.gen) || Now() >= deadline || (int)out.size() >= job.max) break;
         if (fd.cFileName[0] == L'.' || fd.cFileName[0] == L'$') continue;
         std::wstring full = dir + L"\\" + fd.cFileName;
-        if (StrStrIW(fd.cFileName, job.query.c_str())) out.push_back(full);
+        if (job.ignoreAccents ? SearchKey(fd.cFileName, true).find(job.key) != std::wstring::npos : StrStrIW(fd.cFileName, job.query.c_str()) != nullptr)
+            out.push_back(full);
         if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
             !(fd.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_SYSTEM)))
             subdirs.push_back(full);
@@ -5331,7 +6175,8 @@ void StartFileSearch(const std::wstring& q) {
     g_fileResults.clear(); g_fileStatus.clear();
     g_fileSearching = g_settings.filesEnabled && q.size() >= 2;
     if (!g_fileSearching) return;
-    auto* job = new FileJob{q, g_settings.indexer, g_settings.maxResults, CurrentIconPixels(), gen, g_wnd, g_siriTab == kTabAll};
+    auto* job = new FileJob{q, g_settings.indexer, g_settings.maxResults, CurrentIconPixels(), gen, g_wnd, g_siriTab == kTabAll,
+                            g_settings.ignoreAccents, SearchKey(q)};
     if (HANDLE t = CreateThread(nullptr, 0, FileSearchThread, job, 0, nullptr)) {
         // Forget the searches that already finished; the running ones are waited for at teardown
         std::erase_if(g_fileThreadHandles, [](HANDLE h) {
@@ -5557,7 +6402,7 @@ PCWSTR SettingsGlyph(const std::wstring& target) {
 // How well a name matches what was typed: 4 starts with it, 3 a word starts with it, 2 the initials, 1 anywhere, 0 no
 int MatchScore(const std::wstring& name, const std::wstring& q) {
     if (q.empty()) return 0;
-    std::wstring n = ToLower(name);
+    std::wstring n = SearchKey(name);
     size_t at = n.find(q);
     if (at == 0) return 4;
     auto wordStart = [&](size_t i) { return i == 0 || !iswalnum(n[i - 1]); };
@@ -5573,7 +6418,7 @@ int MatchScore(const std::wstring& name, const std::wstring& q) {
 bool IsGroupTitle(const App* a) { return a && a->kind == 6; }
 
 void BuildGeneralResults(AppList& out) {
-    std::wstring q = ToLower(g_query);
+    std::wstring q = SearchKey(g_query);
     if (q.empty()) return;
     if (auto calc = CalcItem()) out.push_back(std::move(calc));   // a calculation's result comes first
     auto title = [&](PCWSTR text, int showAll, int total, int shown) {
@@ -5674,6 +6519,9 @@ void LoadTabSource() {
         BuildGeneralResults(g_tabItems);
     } else if (g_siriTab == 4) {
         GhItems(g_tabItems);   // the icon gallery
+    } else if (g_siriTab == 6 && g_settings.phoneEnabled) {
+        ComposePhoneItems();   // (follows a changed "Notifications shown" at once)
+        g_tabItems = g_phoneItems;
     } else if (g_siriTab == 2 && g_settings.clipEnabled) {
         PruneClipHistory();
         for (const auto& text : g_clipHistory) {
@@ -5811,30 +6659,40 @@ bool TransparencyEffectsOn();
 bool g_transparencyOn = true;   // Windows' transparency effects (its blur needs them), read when opening
 bool LiquidWanted();
 bool LiquidActive();
-int BlurStrength() { return g_settings.light || g_settings.liveBackground || (g_glassOk && g_transparencyOn) || LiquidWanted() ? 0 : g_settings.blurAmount; }
-bool LiveBlurOn() { return !g_settings.light && g_glassOk && g_transparencyOn && !g_settings.liveBackground && !LiquidActive() &&
-                          (ActiveTheme() != Theme::Oled || g_settings.glassEffect); }
+// Glass theme with "follow the background live" off: a blurred still picture instead of the live blur
+bool GlassStillBlur() { return ActiveTheme() == Theme::Frost && !g_settings.liveGlass && !LiquidWanted(); }
+int BlurStrength() {
+    return g_settings.light || g_settings.liveBackground || (g_glassOk && g_transparencyOn && !GlassStillBlur()) || LiquidWanted() ? 0
+                                                                                                                                  : g_settings.blurAmount;
+}
+extern bool g_cfgWinCustom; extern int g_cfgWinBlur;
+bool CfgWindowOwnBackground();
+bool LiveBlurOn() {
+    if (CfgWindowOwnBackground()) return !g_settings.light && g_glassOk && g_transparencyOn && g_cfgWinBlur > 0;   // its own blur
+    return !g_settings.light && g_glassOk && g_transparencyOn && !g_settings.liveBackground && !LiquidActive() && !GlassStillBlur() &&
+           (ActiveTheme() != Theme::Oled || g_settings.glassEffect);
+}
 
 // Margin the window keeps around themed shapes so their shadow is not cut
 float ThemeShadowMargin(float s) {
     switch (ActiveTheme()) {
         case Theme::Glass: case Theme::Light: case Theme::Siri: case Theme::Dark: case Theme::Oled: case Theme::Tinted: return std::round(18 * s);
+        case Theme::Frost: return std::round(18 * s);
         default: return 0.0f;
     }
 }
 
-// The themes where the selection in menus can be colored (Clear glass and Custom liquid glass)
-bool MenuSelectionTheme() { Theme t = ActiveTheme(); return t == Theme::Glass || t == Theme::Tinted; }
 // Base color for popups (context menu) that matches the theme
 D2D1_COLOR_F ThemeMenuColor() {
     switch (ActiveTheme()) {
         case Theme::Light: return D2D1::ColorF(0.96f, 0.96f, 0.98f, 0.82f);
         case Theme::Glass: return D2D1::ColorF(0.10f, 0.10f, 0.12f, 0.55f);
+        case Theme::Frost: return D2D1::ColorF(0.10f, 0.10f, 0.12f, 0.55f);
         case Theme::Siri: return D2D1::ColorF(0.08f, 0.08f, 0.09f, 0.82f);
         case Theme::Dark: return D2D1::ColorF(0.13f, 0.13f, 0.14f, 0.86f);
         case Theme::Oled: return D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.97f);
         case Theme::Tinted: return Alpha(g_settings.tintColor, 0.90f);
-        default: return Alpha(g_settings.siri ? g_settings.siriPanelColor : g_settings.tint, 0.70f);
+        default: return D2D1::ColorF(0.10f, 0.10f, 0.12f, 0.55f);
     }
 }
 void Fill(const D2D1_RECT_F& r, D2D1_COLOR_F color, float radius = 0) {
@@ -5932,11 +6790,6 @@ void CaptureBackdrop(const RECT& rc, float sigma) {
     g_backdropImage = std::move(picture);
 }
 
-// The still blurred picture, stretched over the window (0, 0, width, height)
-void DrawBackdropPicture(ID2D1Bitmap* picture, float width, float height) {
-    D2D1_RECT_F source = D2D1::RectF(0, 0, g_backdropImage.sourceWidth, g_backdropImage.sourceHeight);
-    g_target->DrawBitmap(picture, D2D1::RectF(0, 0, width, height), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, source);
-}
 
 ID2D1Bitmap* GetBackdropBitmap() {
     Backdrop& b = g_backdropImage;
@@ -6003,6 +6856,7 @@ struct Layout {
     D2D1_RECT_F siriPanel{};
     D2D1_RECT_F siriPower{};
     D2D1_RECT_F siriTabs{};   // category strip (all modes)
+    D2D1_RECT_F siriChips{};  // app tabs strip (Original Siri: the same as siriTabs; Floating: a row under it)
     bool list = false;        // Files tab shown as a one-column list
     D2D1_RECT_F listHeader{}; // 'Recent searches' strip above the list
 };
@@ -6045,21 +6899,25 @@ ComPtr<IDWriteTextFormat> OneLineFormat(PCWSTR family, float px, DWRITE_FONT_WEI
     return format;
 }
 
+int g_formatText;   // the results text size the formats were made with
+UiLanguage g_formatLang;   // and the language (the tab widths are measured on the translated labels)
+float TextScale() { return g_settings.textSize / 100.0f; }   // results text (grid.textSize)
+float TextGrow() { return std::max(1.0f, TextScale()); }    // rows grow with bigger text (smaller text keeps the rows)
 void EnsureFormats(float scale) {
-    if (g_labelFormat && g_formatScale == scale) return;
-    g_formatScale = scale;
+    if (g_labelFormat && g_formatScale == scale && g_formatText == g_settings.textSize && g_formatLang == g_uiLanguage) return;
+    g_formatScale = scale; g_formatText = g_settings.textSize; g_formatLang = g_uiLanguage;
     auto make = [&](float size, DWRITE_FONT_WEIGHT weight, DWRITE_TEXT_ALIGNMENT align, ComPtr<IDWriteTextFormat>& format) {
         format = OneLineFormat(L"Segoe UI Variable Text", size * scale, weight, align);
     };
-    make(12.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER, g_labelFormat);
+    make(12.0f * TextScale(), DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER, g_labelFormat);   // the results' names
     make(14.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_searchFormat);
     make(18.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_siriFormat);
     make(16.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER, g_titleFormat);
     make(16, DWRITE_FONT_WEIGHT_SEMI_LIGHT, DWRITE_TEXT_ALIGNMENT_CENTER, g_messageFormat);
     make(13.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_menuFormat);
     make(13.0f, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, g_tabFormat);
-    make(14.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_listFormat);
-    make(11.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_listSubFormat);
+    make(14.0f * TextScale(), DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_listFormat);
+    make(11.0f * TextScale(), DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, g_listSubFormat);
     make(12.0f, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING, g_hintFormat);
     make(15.0f, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_LEADING, g_categoryFormat);
     make(11.5f, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER, g_keyFormat);
@@ -6083,7 +6941,7 @@ void EnsureFormats(float scale) {
     }
     g_chipWidths.clear();
     g_chipPad = 26 * scale;
-    for (int id = 0; id < 4; id++) {
+    for (int id : {0, 1, 2, 3, 6}) {
         PCWSTR label = TabLabel(id);
         float textWidth = 0;
         ComPtr<IDWriteTextLayout> layout;
@@ -6095,6 +6953,8 @@ void EnsureFormats(float scale) {
     }
 }
 
+// Floating: the app tabs show in a row of their own while Applications is open
+bool FloatingChipsShown() { return g_settings.siri && !g_settings.siriOriginal && g_siriTab == 0 && g_openFolderIndex < 0; }
 // Original Siri shows the app filters instead of the category strip (categories come from the hover menu)
 bool SiriStripVisible() { return g_siriTab == 4 || (g_settings.siriOriginal ? g_siriTab == 0 : TabsVisible()); }   // 4: the icon gallery search
 // Chips: "All", the built-in categories and the user tabs (while picking apps: Cancel and Done)
@@ -6159,17 +7019,17 @@ void FilterSlotRect(const D2D1_RECT_F& r, const std::vector<int>& chips, int i, 
 }
 
 void ClampChipScroll() {
-    const D2D1_RECT_F& r = g_layout.siriTabs;
+    const D2D1_RECT_F& r = g_layout.siriChips;
     g_chipScroll = std::clamp(g_chipScroll, 0.0f, std::max(0.0f, FiltersNaturalWidth() - (r.right - r.left)));
 }
 
 bool ChipsOverflow() {
-    const D2D1_RECT_F& r = g_layout.siriTabs;
+    const D2D1_RECT_F& r = g_layout.siriChips;
     return r.right > r.left && FiltersNaturalWidth() > r.right - r.left + 0.5f;
 }
 
 void EnsureChipVisible(int chip) {
-    const D2D1_RECT_F& r = g_layout.siriTabs;
+    const D2D1_RECT_F& r = g_layout.siriChips;
     if (r.right <= r.left) return;
     ClampChipScroll();
     auto chips = Chips();
@@ -6292,7 +7152,7 @@ float SiriContentAlpha() { return std::clamp((g_siriAnim - 0.55f) / 0.45f, 0.0f,
 bool g_histClearHover;
 bool ListMode() {
     if (g_openFolderIndex >= 0) return false;
-    if (g_siriTab == 3 || g_siriTab == 2 || g_siriTab == kTabAll) return true;   // Actions, the clipboard and the general search are lists
+    if (g_siriTab == 3 || g_siriTab == 2 || g_siriTab == 6 || g_siriTab == kTabAll) return true;   // Actions, the clipboard, Phone and the general search are lists
     if (g_siriTab == 0 && g_openFolderIndex < 0 && !g_tabItems.empty() && g_tabItems[0]->kind == 7) return true;   // a calculation
     return g_siriTab == 1 && g_settings.filesEnabled && (g_query.empty() || g_filesList);
 }
@@ -6313,12 +7173,15 @@ PCWSTR ActionGlyph(const std::wstring& id) {
     if (id == L"screenshot") return L"\uE722";
     return L"\uE74D";   // recycle bin
 }
-PCWSTR TabGlyph(int tab) { return tab == 0 ? L"\uE71D" : tab == 1 ? L"\uE8B7" : tab == 3 ? L"\uE945" : tab == 4 ? L"\uE753" : tab == 5 ? L"\uE721" : L"\uE77F"; }
+PCWSTR TabGlyph(int tab) {
+    return tab == 0 ? L"\uE71D" : tab == 1 ? L"\uE8B7" : tab == 3 ? L"\uE945" : tab == 4 ? L"\uE753" : tab == 5 ? L"\uE721" : tab == 6 ? L"\uE8EA" : L"\uE77F";
+}
 
 constexpr float kSiriGap = 10, kSiriPad = 14, kSiriTabs = 32;
 
 float SiriIconPx(float s) { return std::round(std::min(g_settings.iconSize, 56) * s); }
-float SiriCellHeight(float s) { return std::round(SiriIconPx(s) + std::round(18 * s) + 30 * s); }
+float TextGrow();
+float SiriCellHeight(float s) { return std::round(SiriIconPx(s) + std::round(18 * s * TextGrow()) + 30 * s); }
 
 // Room above the pill so the zoomed circle (bigger than the bar) is never cut at the window top
 float SiriTopPad(float s) {
@@ -6331,7 +7194,7 @@ float SiriShadowMargin(float s) { return ThemeShadowMargin(s); }
 
 // Window mode with a ready-made theme draws the glass slightly inside the window, leaving room for its shadow
 float WindowInset(float s) {
-    if (g_settings.siri || g_settings.fullscreen || ActiveTheme() == Theme::Custom) return 0.0f;
+    if (g_settings.siri || g_settings.fullscreen) return 0.0f;
     return std::max(std::round(16 * s), ThemeShadowMargin(s) * 0.6f);
 }
 
@@ -6356,6 +7219,7 @@ float SiriPanelWidthNow(float s) {
 int SiriWindowHeight(float s) {
     float pillH = std::round(g_settings.siriPillH * s), gap = std::round(kSiriGap * s), pad = std::round(kSiriPad * s);
     float tabsBlock = TabsVisible() || g_settings.siriOriginal ? std::round(kSiriTabs * s) + std::round(pad * 0.6f) : 0;
+    if (!g_settings.siriOriginal) tabsBlock += std::round(kSiriTabs * s) + std::round(pad * 0.3f);   // Floating: the app tabs row
     float h = SiriTopPad(s) + pillH + gap + pad + tabsBlock + SiriMaxRows() * SiriCellHeight(s) + pad;   // room for the tallest box
     if (g_settings.siriPower) h += std::round(kSiriPowerPill * s) + gap;
     h += SiriShadowMargin(s);
@@ -6389,7 +7253,7 @@ void ComputeSiriLayout() {
         L.btnPower = D2D1::RectF(left, cy - btn / 2, left + btn, cy + btn / 2);
     }
     L.icon = SiriIconPx(s);
-    L.labelHeight = std::round(18 * s);
+    L.labelHeight = std::round(18 * s * TextGrow());
     L.cellPad = std::round(6 * s);
     L.cellHeight = SiriCellHeight(s);
 
@@ -6421,10 +7285,20 @@ void ComputeSiriLayout() {
         L.siriTabs = D2D1::RectF(0, 0, 0, 0);
         L.viewTop = panelTop + pad;
     }
+    L.siriChips = D2D1::RectF(0, 0, 0, 0);
+    if (g_settings.siriOriginal) {
+        if (g_siriTab == 0) L.siriChips = L.siriTabs;
+    } else if (FloatingChipsShown()) {
+        // Floating: the app tabs (All, the categories, your own tabs) in a row of their own, under the category strip
+        float chipsW = std::min(panelW - 2 * pad, FiltersNaturalWidth());
+        float chipsLeft = std::round((W - chipsW) / 2), top = L.siriTabs.bottom > L.siriTabs.top ? L.viewTop - std::round(pad * 0.3f) : L.viewTop;
+        L.siriChips = D2D1::RectF(chipsLeft, top, chipsLeft + chipsW, top + tabsH);
+        L.viewTop = L.siriChips.bottom + std::round(pad * 0.6f);
+    }
     L.visibleRows = std::max(1, rowsNow);
     L.list = ListMode(); L.listHeader = D2D1::RectF(0, 0, 0, 0);
     if (L.list) {
-        float viewportH = rowsNow * SiriCellHeight(s), rowH = std::round(44 * s);
+        float viewportH = rowsNow * SiriCellHeight(s), rowH = std::round(44 * s * (0.4f + 0.6f * TextGrow()));
         float hdr = HistoryHeader() ? std::round(30 * s) : 0;
         if (hdr > 0) { L.listHeader = D2D1::RectF(panelLeft + pad, L.viewTop, panelRight - pad, L.viewTop + hdr); L.viewTop += hdr; }
         L.icon = std::round(30 * s); L.cellPad = std::round(3 * s); L.columns = 1;
@@ -6459,7 +7333,7 @@ void ComputeSiriLayout() {
             L.dots = D2D1::RectF(std::round(cx - w / 2), top, std::round(cx + w / 2), top + h);
         } else {
             float height = L.pages * gapDots + 2 * padDots;
-            float x = std::round(panelRight - h - 8 * s);
+            float x = std::round(panelRight - h - 2 * s);   // at the box's edge, clear of the rows' X and the notifications' own bar
             float y = std::round(L.viewTop + ((L.viewBottom - L.viewTop) - height) / 2);
             L.dots = D2D1::RectF(x, y, x + h, y + height);
         }
@@ -6482,7 +7356,7 @@ void ComputeSiriLayout() {
         auto move = [](D2D1_RECT_F& r, float dy) { if (r.bottom > r.top) { r.top += dy; r.bottom += dy; } };
         mirror(L.search); mirror(L.btnPower); mirror(L.siriPower);
         float dy = (H - contentBottom) - panelTop;
-        move(L.siriTabs, dy); move(L.listHeader, dy); move(L.dots, dy); move(full, dy);
+        move(L.siriTabs, dy); move(L.siriChips, dy); move(L.listHeader, dy); move(L.dots, dy); move(full, dy);
         L.viewTop += dy; L.viewBottom += dy;
         L.siriPanel = ex > 0.001f ? LerpRect(L.search, full, ex) : D2D1::RectF(0, 0, 0, 0);
         L.siriPanel.left = std::max(L.siriPanel.left, 0.0f);
@@ -6495,7 +7369,7 @@ void ComputeSiriLayout() {
 
 void ComputeLayout() {
     if (g_settings.siri) { ComputeSiriLayout(); if (g_cfg.active) CfgApplyLayout(); return; }
-    g_layout.siriPanel = g_layout.siriPower = g_layout.siriTabs = D2D1::RectF(0, 0, 0, 0);
+    g_layout.siriPanel = g_layout.siriPower = g_layout.siriTabs = g_layout.siriChips = D2D1::RectF(0, 0, 0, 0);
     Layout& L = g_layout; float s = L.scale; float W = (float)L.width, H = (float)L.height;
     float padding = 40 * s;
     bool inFolder = g_openFolderIndex >= 0;
@@ -6550,7 +7424,7 @@ void ComputeLayout() {
 
     // A cell: the icon, its name under it and some air
     L.icon = std::round(g_settings.iconSize * s);
-    L.labelHeight = std::round(18 * s);
+    L.labelHeight = std::round(18 * s * TextGrow());
     L.cellPad = std::round(6 * s);
     L.cellHeight = L.icon + std::round(L.labelHeight + 45 * s);
 
@@ -6570,7 +7444,7 @@ void ComputeLayout() {
         L.gridLeft = std::round((W - listW) / 2);
         if (hdr > 0) { L.listHeader = D2D1::RectF(L.gridLeft, L.viewTop, L.gridLeft + listW, L.viewTop + hdr); L.viewTop += hdr; }
         L.icon = std::round(32 * s); L.cellPad = std::round(3 * s); L.columns = 1;
-        L.cellWidth = std::floor(listW); L.cellHeight = std::round(46 * s);
+        L.cellWidth = std::floor(listW); L.cellHeight = std::round(46 * s * (0.4f + 0.6f * TextGrow()));
     }
     L.horizontal = (g_settings.siri ? g_settings.siriHorizontal : g_settings.horizontal) && !L.list;
     L.dotsH = std::round(std::clamp(std::min(W, H) * 0.028f, 16 * s, 28 * s));
@@ -6821,8 +7695,195 @@ int MenuHit(float x, float y) {
     return -1;
 }
 
-void DrawThemeShadow(const D2D1_RECT_F& r, float radius, float strength, float spread, float dy);
+void DrawThemeShadow(const D2D1_RECT_F& r, float radius, float strength, float spread, float dy, D2D1_COLOR_F color = D2D1::ColorF(0, 0, 0));
 ComPtr<ID2D1LinearGradientBrush> MakeGradient(const D2D1_GRADIENT_STOP* stops, UINT32 count, D2D1_POINT_2F from, D2D1_POINT_2F to);
+
+D2D1_COLOR_F Alpha(D2D1_COLOR_F c, float a);
+// Points along a rounded rectangle's edge, clockwise from the middle of the top: u = 0..1 of the way around
+struct EdgeWalk {
+    D2D1_RECT_F r; float rad, straightW, straightH, arc, total;
+    EdgeWalk(const D2D1_RECT_F& rect, float radius) : r(rect) {
+        rad = std::min(radius, std::min(r.right - r.left, r.bottom - r.top) / 2);
+        straightW = std::max(0.0f, r.right - r.left - 2 * rad);
+        straightH = std::max(0.0f, r.bottom - r.top - 2 * rad);
+        arc = 3.14159265f * rad / 2;
+        total = std::max(1.0f, 2 * straightW + 2 * straightH + 4 * arc);
+    }
+    D2D1_POINT_2F At(float u) const {
+        float d = (u - std::floor(u)) * total;
+        float cx0 = r.left + rad, cx1 = r.right - rad, cy0 = r.top + rad, cy1 = r.bottom - rad;
+        auto corner = [&](float cx, float cy, float a0, float t) {
+            float a = (a0 + 90.0f * t) * 3.14159265f / 180;
+            return D2D1::Point2F(cx + rad * std::cos(a), cy + rad * std::sin(a));
+        };
+        float half = straightW / 2;
+        if (d < half) return D2D1::Point2F((cx0 + cx1) / 2 + d, r.top);
+        d -= half;
+        if (d < arc) return corner(cx1, cy0, -90, d / arc);
+        d -= arc;
+        if (d < straightH) return D2D1::Point2F(r.right, cy0 + d);
+        d -= straightH;
+        if (d < arc) return corner(cx1, cy1, 0, d / arc);
+        d -= arc;
+        if (d < straightW) return D2D1::Point2F(cx1 - d, r.bottom);
+        d -= straightW;
+        if (d < arc) return corner(cx0, cy1, 90, d / arc);
+        d -= arc;
+        if (d < straightH) return D2D1::Point2F(r.left, cy1 - d);
+        d -= straightH;
+        if (d < arc) return corner(cx0, cy0, 180, d / arc);
+        d -= arc;
+        return D2D1::Point2F(cx0 + std::min(d, half), r.top);
+    }
+};
+double Now();
+bool g_noBacklight;   // set while drawing the settings window: its controls never glow
+bool BacklightOn() { return g_settings.backlight && !g_settings.light && !g_noBacklight && g_settings.backlightIntensity > 0; }
+ID2D1PathGeometry* OutsideOf(const D2D1_RECT_F& r, float radius);
+// The backlight's colors as one smooth gradient across the shape whose direction turns (a full turn every 7 s), so
+// the colors travel around the edge. One color: a bright part of it travels around instead
+ComPtr<ID2D1LinearGradientBrush> BacklightBrush(const D2D1_RECT_F& r, float extra) {
+    const float ang = (float)(std::fmod(Now() / 7.0, 1.0) * 2 * 3.14159265);
+    const float dx = std::cos(ang), dy = std::sin(ang);
+    const float cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+    const float half = std::fabs(dx) * (r.right - r.left) / 2 + std::fabs(dy) * (r.bottom - r.top) / 2 + extra;
+    D2D1_GRADIENT_STOP stops[7];
+    UINT32 count;
+    int n = g_settings.backlightCount;
+    if (n <= 1) {
+        const D2D1_COLOR_F c = g_settings.backlightColors[0];
+        stops[0] = {0.0f, Alpha(c, 0.25f)}; stops[1] = {0.55f, Alpha(c, 0.55f)}; stops[2] = {1.0f, Alpha(c, 1.0f)};
+        count = 3;
+    } else {
+        for (int i = 0; i <= n; i++) stops[i] = {(float)i / n, Alpha(g_settings.backlightColors[i % n], 1.0f)};
+        count = n + 1;
+    }
+    return MakeGradient(stops, count, D2D1::Point2F(cx - dx * half, cy - dy * half), D2D1::Point2F(cx + dx * half, cy + dy * half));
+}
+// Backlight: soft colored light all around the shape (only outside it), and a fine line of the same colors on the edge
+void DrawBacklightGlow(const D2D1_RECT_F& r, float radius, float a, float spread) {
+    if (!BacklightOn() || a <= 0.001f) return;
+    ID2D1PathGeometry* outside = OutsideOf(r, radius);
+    auto brush = BacklightBrush(r, spread);
+    if (!outside || !brush) return;
+    const float k = g_settings.backlightIntensity / 100.0f * a;
+    g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), outside), nullptr);
+    const int steps = 14;
+    for (int i = steps; i >= 1; i--) {   // stacked, like the shadow: strongest at the edge, fading smoothly outward
+        float g = spread * i / steps;
+        brush->SetOpacity(std::min(1.0f, 1.1f * k / steps));
+        g_target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left - g, r.top - g, r.right + g, r.bottom + g), radius + g, radius + g), brush.Get());
+    }
+    g_target->PopLayer();
+}
+void DrawBacklightRim(const D2D1_RECT_F& r, float radius, float a) {
+    if (!BacklightOn() || a <= 0.001f) return;
+    float s = g_layout.scale, k = g_settings.backlightIntensity / 100.0f * a, bw = std::max(1.0f, 1.4f * s), half = bw / 2;
+    auto brush = BacklightBrush(r, 0);
+    if (!brush) return;
+    D2D1_ROUNDED_RECT edge = D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half),
+                                               std::max(0.0f, radius - half), std::max(0.0f, radius - half));
+    brush->SetOpacity(std::min(1.0f, 0.95f * k + 0.05f));
+    g_target->DrawRoundedRectangle(edge, brush.Get(), bw);
+    g_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.12f * k));   // a little hotter than the glow
+    g_target->DrawRoundedRectangle(edge, g_brush.Get(), bw * 0.6f);
+}
+
+// A chrome edge whose light runs around it: two highlights on opposite sides travelling slowly, with a touch of blue
+// and amber beside each, like light split by a polished metal edge. The settings button gets it under the mouse; with
+// "Animated chrome border", the bar, the results box and the menus have it all the time
+ComPtr<ID2D1RadialGradientBrush> MakeRadial(const D2D1_GRADIENT_STOP* stops, UINT32 count, D2D1_POINT_2F center, float radius);
+// Drawn as whole lines (no pieces, so no dashes where pieces meet): a faint polished edge, then the same edge again
+// painted with a light spot centered where each highlight is, so only the part of the line near it lights up
+void DrawChromeEdge(const D2D1_RECT_F& r, float radius, float a, float turnsPerSecond) {
+    if (a <= 0.001f) return;
+    float s = g_layout.scale, w = std::max(1.2f, 1.6f * s), in = w / 2 + 0.3f * s;
+    D2D1_RECT_F er = D2D1::RectF(r.left + in, r.top + in, r.right - in, r.bottom - in);
+    float rr = std::max(0.0f, std::min(radius - in, std::min(er.right - er.left, er.bottom - er.top) / 2));
+    D2D1_ROUNDED_RECT edge = D2D1::RoundedRect(er, rr, rr);
+    // On a light surface (dark text: Light, light glass, a light custom color) white light would vanish: the same
+    // metal is drawn darker there (graphite, with deeper blue and amber), so the edge shows on every color and transparency
+    const bool lightSurface = g_settings.darkText;
+    // A dark hairline just outside the polished line keeps it apart from any wallpaper or surface color
+    g_brush->SetColor(D2D1::ColorF(0, 0, 0, (lightSurface ? 0.10f : 0.22f) * a));
+    g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(er.left - w * 0.5f, er.top - w * 0.5f, er.right + w * 0.5f, er.bottom + w * 0.5f),
+                                                     rr + w * 0.5f, rr + w * 0.5f), g_brush.Get(), std::max(1.0f, 0.6f * s));
+    g_brush->SetColor(lightSurface ? D2D1::ColorF(0.18f, 0.20f, 0.24f, 0.30f * a) : D2D1::ColorF(1, 1, 1, 0.16f * a));
+    g_target->DrawRoundedRectangle(edge, g_brush.Get(), w);
+    EdgeWalk e(er, rr);
+    const float phase = (float)std::fmod(Now() * turnsPerSecond, 1.0);
+    // Light spot: white in the middle, a touch of blue then amber towards its rim, like light split by polished metal
+    D2D1_GRADIENT_STOP spot[5] = {{0.0f, D2D1::ColorF(1, 1, 1, 1.0f)}, {0.30f, D2D1::ColorF(0.96f, 0.98f, 1, 0.85f)},
+                                  {0.55f, D2D1::ColorF(0.62f, 0.80f, 1, 0.50f)}, {0.78f, D2D1::ColorF(1, 0.86f, 0.58f, 0.22f)},
+                                  {1.0f, D2D1::ColorF(1, 1, 1, 0.0f)}};
+    if (lightSurface) {
+        spot[0] = {0.0f, D2D1::ColorF(0.10f, 0.11f, 0.14f, 0.95f)}; spot[1] = {0.30f, D2D1::ColorF(0.22f, 0.25f, 0.32f, 0.80f)};
+        spot[2] = {0.55f, D2D1::ColorF(0.10f, 0.38f, 0.85f, 0.50f)}; spot[3] = {0.78f, D2D1::ColorF(0.80f, 0.50f, 0.10f, 0.25f)};
+        spot[4] = {1.0f, D2D1::ColorF(0.1f, 0.1f, 0.1f, 0.0f)};
+    }
+    float size = std::clamp(e.total * 0.09f, 9 * s, 80 * s);
+    for (int k = 0; k < 2; k++) {
+        D2D1_POINT_2F c = e.At(phase + 0.5f * k);
+        if (auto b = MakeRadial(spot, 5, c, size * (k ? 0.85f : 1.0f))) {
+            b->SetOpacity(a * (k ? 0.6f : 1.0f));
+            g_target->DrawRoundedRectangle(edge, b.Get(), w);
+        }
+    }
+}
+void DrawChromeRing(D2D1_POINT_2F c, float r, float a) {
+    DrawChromeEdge(D2D1::RectF(c.x - r, c.y - r, c.x + r, c.y + r), r, a, 0.42f);
+}
+bool ChromeBorderOn() { return g_settings.chromeBorder && !g_settings.light && !g_noBacklight; }
+// Fullscreen: the border stays still (a moving light would redraw the whole monitor-sized window 30 times a second)
+bool ChromeBorderStill() { return g_settings.fullscreen && !g_settings.siri; }
+float ChromeBorderSpeed() { return ChromeBorderStill() ? 0.0f : 0.09f; }
+
+// Glass buttons: a clear, polished glass piece. Almost no fill (what is behind stays clean), a faint light on the top
+// half, a crisp hairline rim bright at the top and the bottom, and inside it a second fine line that only catches
+// light along the bottom: the thickness of the glass, without the milky look of acrylic
+void DrawClearGlassButton(const D2D1_RECT_F& r, float radius, float a, float level, bool shadow) {
+    float s = g_layout.scale, h = r.bottom - r.top;
+    const bool onLight = g_settings.darkText;   // light themes: a touch more body and a gray hairline to show the edge
+    const float L = std::clamp(level, 0.5f, 2.2f);
+    if (shadow) DrawThemeShadow(r, radius, 0.13f * a, 6 * s, 2.5f * s);
+    const float fill = onLight ? 0.16f : 0.05f;
+    D2D1_GRADIENT_STOP body[3] = {{0.0f, D2D1::ColorF(1, 1, 1, std::min(0.9f, fill * 1.6f * L))},
+                                  {0.5f, D2D1::ColorF(1, 1, 1, std::min(0.9f, fill * 0.6f * L))},
+                                  {1.0f, D2D1::ColorF(1, 1, 1, std::min(0.9f, fill * 1.0f * L))}};
+    if (auto b = MakeGradient(body, 3, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom))) {
+        b->SetOpacity(a);
+        g_target->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), b.Get());
+    }
+    // Soft light on the upper half
+    float inset = 1.2f * s, tr = std::max(0.0f, radius - inset);
+    D2D1_RECT_F top = D2D1::RectF(r.left + inset, r.top + inset, r.right - inset, r.top + h * 0.5f);
+    D2D1_GRADIENT_STOP glow[2] = {{0.0f, D2D1::ColorF(1, 1, 1, std::min(0.5f, 0.10f * L))}, {1.0f, D2D1::ColorF(1, 1, 1, 0.0f)}};
+    if (auto g = MakeGradient(glow, 2, D2D1::Point2F(0, top.top), D2D1::Point2F(0, top.bottom))) {
+        g->SetOpacity(a);
+        g_target->FillRoundedRectangle(D2D1::RoundedRect(top, tr, tr), g.Get());
+    }
+    // Crisp rim
+    float bw = std::max(1.0f, 1.0f * s), half = bw / 2, rr = std::max(0.0f, radius - half);
+    D2D1_GRADIENT_STOP rim[4] = {{0.0f, D2D1::ColorF(1, 1, 1, std::min(1.0f, 0.62f * std::sqrt(L)))}, {0.32f, D2D1::ColorF(1, 1, 1, 0.14f)},
+                                 {0.70f, D2D1::ColorF(1, 1, 1, 0.10f)}, {1.0f, D2D1::ColorF(1, 1, 1, std::min(1.0f, 0.38f * std::sqrt(L)))}};
+    if (auto e = MakeGradient(rim, 4, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom))) {
+        e->SetOpacity(a);
+        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rr, rr), e.Get(), bw);
+    }
+    if (onLight) {
+        g_brush->SetColor(D2D1::ColorF(0.40f, 0.42f, 0.48f, 0.22f * a));
+        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rr, rr), g_brush.Get(), bw * 0.8f);
+    }
+    // The glass's thickness: a fine inner line, clear at the top, catching the light along the bottom
+    float in2 = std::max(2.0f * s, std::min(3.5f * s, h * 0.07f)), ir = std::max(0.0f, radius - in2);
+    D2D1_GRADIENT_STOP depth[3] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.0f)}, {0.6f, D2D1::ColorF(1, 1, 1, 0.02f)},
+                                   {1.0f, D2D1::ColorF(1, 1, 1, std::min(0.6f, 0.24f * std::sqrt(L)))}};
+    if (auto d = MakeGradient(depth, 3, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom))) {
+        d->SetOpacity(a);
+        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + in2, r.top + in2, r.right - in2, r.bottom - in2), ir, ir), d.Get(),
+                                       std::max(0.8f, 0.8f * s));
+    }
+}
 
 // Raised liquid-glass button: soft shadow, translucent body, light caught on the top edge and a bright beveled rim.
 // level > 1 makes it stand out more (hover / selected).
@@ -6830,7 +7891,16 @@ void DrawGlassButton(const D2D1_RECT_F& r, float radius, float a, float level = 
     if (a <= 0.001f || r.right - r.left < 2 || r.bottom - r.top < 2) return;
     float s = g_layout.scale, h = r.bottom - r.top;
     radius = std::min(radius, std::min(r.right - r.left, h) / 2);
-    if (shadow) DrawThemeShadow(r, radius, 0.20f * a, 5 * s, 2.5f * s);
+    if (g_settings.glassButtons) {
+        if (shadow) DrawBacklightGlow(r, radius, 0.7f * a, 12 * s);
+        DrawClearGlassButton(r, radius, a, level, shadow);
+        if (shadow) DrawBacklightRim(r, radius, a);
+        return;
+    }
+    if (shadow) {
+        DrawBacklightGlow(r, radius, 0.7f * a, 12 * s);
+        DrawThemeShadow(r, radius, 0.20f * a, 5 * s, 2.5f * s);
+    }
     float base = g_settings.darkText ? 0.30f : 0.10f;   // light themes need a whiter body
     D2D1_GRADIENT_STOP body[3] = {
         {0.0f, D2D1::ColorF(1, 1, 1, std::min(1.0f, (base + 0.12f) * level))},
@@ -6873,6 +7943,12 @@ void DrawGlassButton(const D2D1_RECT_F& r, float radius, float a, float level = 
             g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rr, rr), line.Get(), bw);
         }
     }
+    if (shadow) DrawBacklightRim(r, radius, a);
+}
+// A small glass piece (keycap, icon tile, field): thick glass when Glass buttons is on, else the flat tint
+void GlassField(const D2D1_RECT_F& r, float radius, float flatTint, float level = 1.0f) {
+    if (g_settings.glassButtons) DrawGlassButton(r, radius, 1.0f, level, false);
+    else Fill(r, Fg(flatTint), radius);
 }
 
 // Discreet capsule: a faint tint and a hairline edge (selected filter, page dots)
@@ -6896,13 +7972,24 @@ int g_surfaceMaxTransparency = 100;
 void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, bool shadow);
 void PushOpacity(float a);
 D2D1_COLOR_F Alpha(D2D1_COLOR_F c, float a);
-// Item under the mouse in the clear glass theme's menus: the theme's glass, a solid color (macOS) or a frosted color.
+// Item under the mouse in the menus (every theme): the theme's glass, a solid color (macOS), a frosted color or two colors.
 // Returns true when the row is a solid color, so its text turns white
 bool DrawMenuSelection(const D2D1_RECT_F& row, float radius, bool danger) {
-    if (!MenuSelectionTheme() || g_settings.menuSelection == 0) return false;
+    if (g_settings.menuSelection == 0) return false;
     float s = g_layout.scale;
     D2D1_COLOR_F c = danger ? D2D1::ColorF(0.92f, 0.26f, 0.24f) : g_settings.menuSelectionColor;
     if (g_settings.menuSelection == 1) { Fill(row, Alpha(c, 1.0f), radius); return true; }
+    if (g_settings.menuSelection == 3 && !danger) {
+        // Two colors blended across the row, with a soft sheen on top (white text over it)
+        D2D1_GRADIENT_STOP mix[2] = {{0.0f, Alpha(g_settings.menuSelectionColor, 1.0f)}, {1.0f, Alpha(g_settings.menuSelectionColor2, 1.0f)}};
+        if (auto fill = MakeGradient(mix, 2, D2D1::Point2F(row.left, 0), D2D1::Point2F(row.right, 0)))
+            g_target->FillRoundedRectangle(D2D1::RoundedRect(row, radius, radius), fill.Get());
+        D2D1_GRADIENT_STOP sheen[2] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.14f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.0f)}};
+        if (auto top = MakeGradient(sheen, 2, D2D1::Point2F(0, row.top), D2D1::Point2F(0, row.bottom)))
+            g_target->FillRoundedRectangle(D2D1::RoundedRect(row, radius, radius), top.Get());
+        return true;
+    }
+    if (g_settings.menuSelection == 3) { Fill(row, Alpha(c, 1.0f), radius); return true; }   // (Delete stays red)
     Fill(row, Alpha(c, 0.40f), radius);
     D2D1_GRADIENT_STOP veil[2] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.16f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.03f)}};
     if (auto sheen = MakeGradient(veil, 2, D2D1::Point2F(0, row.top), D2D1::Point2F(0, row.bottom)))
@@ -6914,17 +8001,28 @@ bool DrawMenuSelection(const D2D1_RECT_F& row, float radius, bool danger) {
     return false;
 }
 D2D1_COLOR_F MenuInk(bool onColor, float a) { return onColor ? D2D1::ColorF(1, 1, 1, std::min(1.0f, a + 0.05f)) : Fg(a); }
+// A result under the mouse (weak) or the one Enter opens (strong): the menus' selection color when the theme has one
+// (Colored, Frosted color, Two colors), otherwise clear glass (or a plain veil with glass buttons off).
+// Returns true when the row is a solid color, so its text turns white
+bool DrawResultHighlight(const D2D1_RECT_F& r, float radius, bool strong) {
+    if (g_settings.menuSelection != 0) {
+        if (strong) return DrawMenuSelection(r, radius, false);
+        PushOpacity(0.45f);
+        DrawMenuSelection(r, radius, false);
+        g_target->PopLayer();
+        return false;
+    }
+    if (g_settings.glassButtons) { DrawGlassButton(r, radius, 1.0f, strong ? 1.8f : 1.2f, false); return false; }
+    Fill(r, Fg(strong ? 0.22f : 0.13f), radius);
+    return false;
+}
 
 void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
     const Layout& L = g_layout;
     float s = L.scale;
     PushOpacity(e);
-    if (ActiveTheme() != Theme::Custom) {
-        DrawThemedShape(r, rad, BlurStrength() > 0 ? GetBackdropBitmap() : nullptr, true);
-    } else {
-        DrawThemeShadow(r, rad, 0.20f, 10 * s, 4 * s);
-        Fill(r, Alpha(g_settings.siriPanelColor, std::max(0.55f, g_settings.siriPanelOpacity)), rad);
-    }
+    DrawThemedShape(r, rad, BlurStrength() > 0 ? GetBackdropBitmap() : nullptr, true);
+
     for (int i = 0; i < (int)g_menu.items.size(); i++) {
         const MenuItem& it = g_menu.items[i];
         float top = MenuItemTop(i);
@@ -6933,11 +8031,16 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
         bool onColor = false;
         if (i == g_menu.hover) {
             float rowRad = std::max(4 * s, rad - 8 * s);   // concentric with the menu
-            bool custom = MenuSelectionTheme() && g_settings.menuSelection != 0;
+            bool custom = g_settings.menuSelection != 0;
             if (custom) onColor = DrawMenuSelection(row, rowRad, false);
+            else if (g_settings.glassButtons) DrawGlassButton(row, rowRad, 1.0f, 1.5f, false);   // Glass selection: clear glass
             else Fill(row, Fg(0.11f), rowRad);
         }
         if (it.glyph && g_glyphLargeFormat) {
+            if (g_settings.glassButtons) {   // the icon on its own little glass tile
+                float tc = row.left + 26 * s, ts = std::min(34 * s, g_menu.itemH - 6 * s) / 2;
+                DrawGlassButton(D2D1::RectF(tc - ts, cy - ts, tc + ts, cy + ts), 9 * s, 1.0f, onColor ? 1.3f : 0.9f, false);
+            }
             g_brush->SetColor(MenuInk(onColor, 0.88f));
             g_target->DrawText(it.glyph, (UINT32)wcslen(it.glyph), g_glyphLargeFormat.Get(),
                                D2D1::RectF(row.left + 8 * s, row.top, row.left + 44 * s, row.bottom), g_brush.Get());
@@ -6946,7 +8049,8 @@ void DrawCategoryMenu(const D2D1_RECT_F& r, float rad, float e) {
         if (it.hint && g_keyFormat) {
             keyW = 58 * s;
             D2D1_RECT_F key = D2D1::RectF(row.right - 12 * s - keyW, cy - 12 * s, row.right - 12 * s, cy + 12 * s);
-            Fill(key, onColor ? D2D1::ColorF(1, 1, 1, 0.18f) : Fg(0.08f), 7 * s);
+            if (g_settings.glassButtons) DrawGlassButton(key, 7 * s, 1.0f, onColor ? 1.3f : 0.9f, false);
+            else Fill(key, onColor ? D2D1::ColorF(1, 1, 1, 0.18f) : Fg(0.08f), 7 * s);
             g_brush->SetColor(MenuInk(onColor, 0.55f));
             g_target->DrawText(it.hint, (UINT32)wcslen(it.hint), g_keyFormat.Get(), key, g_brush.Get());
         }
@@ -7010,38 +8114,21 @@ void DrawPopupMenu(const D2D1::Matrix3x2F& base) {
     D2D1_RECT_F r = g_menu.rect; float rad = (g_menu.category ? 24 : 14) * s;
     if (g_menu.category) { DrawCategoryMenu(r, rad, e); return; }
     // Same glass, shadow and rim as the selected theme (power menu and context menus, in every mode)
-    bool themed = ActiveTheme() != Theme::Custom;
     DrawMenuBackdropBlur(r, rad, e);   // the icons and window under the menu, blurred (every theme)
     PushOpacity(e);
-    if (themed) {
-        // Context menus: the theme's glass, but solid enough to read over the window at any transparency,
-        // with a fine outline that sets it apart from what is behind
-        g_surfaceMaxTransparency = 35;
-        DrawThemedShape(r, rad, BlurStrength() > 0 ? GetBackdropBitmap() : nullptr, true);
-        g_surfaceMaxTransparency = 100;
-        // A text color against the theme gets a veil on the glass so it reads: light under black text, dark under white
-        bool lightGlass = ActiveTheme() == Theme::Light;
-        if (g_settings.darkText && !lightGlass) Fill(r, D2D1::ColorF(1, 1, 1, 0.55f), rad);
-        if (!g_settings.darkText && lightGlass) Fill(r, D2D1::ColorF(0, 0, 0, 0.55f), rad);
-        float bw = std::max(1.0f, 1.0f * s), half = bw / 2, rr = std::max(0.0f, rad - half);
-        g_brush->SetColor(g_settings.darkText ? D2D1::ColorF(0.45f, 0.47f, 0.52f, 0.35f) : D2D1::ColorF(1, 1, 1, 0.16f));
-        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rr, rr), g_brush.Get(), bw);
-    } else {
-        DrawThemeShadow(r, rad, 0.20f, 10 * s, 4 * s);
-        ComPtr<ID2D1RoundedRectangleGeometry> geo;
-        g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, rad, rad), &geo);
-        if (geo) {
-            g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), geo.Get()), nullptr);
-            if (BlurStrength() > 0) {
-                if (ID2D1Bitmap* bmp = GetBackdropBitmap())
-                    g_target->DrawBitmap(bmp, D2D1::RectF(0, 0, (float)L.width, (float)L.height), 1, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-                        D2D1::RectF(0, 0, g_backdropImage.sourceWidth, g_backdropImage.sourceHeight));
-            }
-            Fill(r, ThemeMenuColor());
-            Fill(r, D2D1::ColorF(1, 1, 1, 0.07f));
-            g_target->PopLayer();
-        }
-    }
+    // Context menus: the theme's glass, but solid enough to read over the window at any transparency,
+    // with a fine outline that sets it apart from what is behind
+    g_surfaceMaxTransparency = 35;
+    DrawThemedShape(r, rad, BlurStrength() > 0 ? GetBackdropBitmap() : nullptr, true);
+    g_surfaceMaxTransparency = 100;
+    // A text color against the theme gets a veil on the glass so it reads: light under black text, dark under white
+    bool lightGlass = ActiveTheme() == Theme::Light;
+    if (g_settings.darkText && !lightGlass) Fill(r, D2D1::ColorF(1, 1, 1, 0.55f), rad);
+    if (!g_settings.darkText && lightGlass) Fill(r, D2D1::ColorF(0, 0, 0, 0.55f), rad);
+    float bw = std::max(1.0f, 1.0f * s), half = bw / 2, rr = std::max(0.0f, rad - half);
+    g_brush->SetColor(g_settings.darkText ? D2D1::ColorF(0.45f, 0.47f, 0.52f, 0.35f) : D2D1::ColorF(1, 1, 1, 0.16f));
+    g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rr, rr), g_brush.Get(), bw);
+
     for (int i = 0; i < (int)g_menu.items.size(); i++) {
         const MenuItem& it = g_menu.items[i]; float top = MenuItemTop(i);
         if (it.separator) {
@@ -7053,7 +8140,7 @@ void DrawPopupMenu(const D2D1::Matrix3x2F& base) {
         D2D1_RECT_F row = D2D1::RectF(r.left + 6 * s, top, r.right - 6 * s, top + g_menu.itemH);
         bool onColor = false;
         if (i == g_menu.hover) {
-            if (MenuSelectionTheme() && g_settings.menuSelection != 0) onColor = DrawMenuSelection(row, 8 * s, it.danger);
+            if (g_settings.menuSelection != 0) onColor = DrawMenuSelection(row, 8 * s, it.danger);
             else {
                 if (it.danger) Fill(row, D2D1::ColorF(1, 0.3f, 0.3f, 0.20f), 8 * s);
                 DrawGlassButton(row, 8 * s, 1.0f, 1.2f, false);
@@ -7075,13 +8162,7 @@ void DrawPopupMenu(const D2D1::Matrix3x2F& base) {
             g_target->DrawText(it.hint, (UINT32)wcslen(it.hint), g_hintFormat.Get(), D2D1::RectF(row.left, row.top, row.right - 12 * s, row.bottom), g_brush.Get());
         }
     }
-    g_target->PopLayer();
-    if (themed) return;   // the themed shape already has its rim
-    D2D1_GRADIENT_STOP rimStops[3] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.55f)}, {0.5f, D2D1::ColorF(1, 1, 1, 0.12f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.35f)}};
-    if (auto rim = MakeGradient(rimStops, 3, D2D1::Point2F(r.left, r.top), D2D1::Point2F(r.right, r.bottom))) {
-        rim->SetOpacity(e);
-        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + 0.6f, r.top + 0.6f, r.right - 0.6f, r.bottom - 0.6f), rad, rad), rim.Get(), 1.2f * s);
-    }
+    g_target->PopLayer();   // (the themed shape has its own rim)
 }
 
 // ---------- Multi-select ----------
@@ -7093,8 +8174,11 @@ App* AppOfMain(int idx) {
 }
 App* SelectableApp(int idx) {
     App* a = AppOfMain(idx);
+    if (!a) return nullptr;   // (also an index outside the list, such as -1 for empty space)
     int it = g_layoutItems[idx];
-    return a && (it < kFolderBase || (Picking() && it >= kFolderAppBase && it < kTabBase)) ? a : nullptr;
+    // Floating lists the apps of every folder too: they can be selected there like the others
+    bool folderApp = it >= kFolderAppBase && it < kTabBase;
+    return it < kFolderBase || (folderApp && (Picking() || (g_settings.siri && !g_settings.siriOriginal))) ? a : nullptr;
 }
 bool IsSelected(int idx) { App* a = SelectableApp(idx); return a && g_selection.count(a); }
 
@@ -7245,14 +8329,12 @@ void DrawSearchBar(const Layout& L, float a) {
     bool box = g_settings.searchBox && !siri;
     if (box) {
         float rad = (r.bottom - r.top) / 2;
-        if (ActiveTheme() == Theme::Custom) DrawGlassButton(r, rad, a, g_searchActive ? 1.35f : 1.0f);
-        else {
-            // The same glass as the chosen theme (a field of that glass inside the window), a little brighter while typing
-            PushOpacity(a);
-            DrawThemedShape(r, rad, nullptr, false);
-            if (g_searchActive) Fill(r, Fg(0.06f), rad);
-            g_target->PopLayer();
-        }
+        // The same glass as the chosen theme (a field of that glass inside the window), a little brighter while typing
+        PushOpacity(a);
+        DrawThemedShape(r, rad, nullptr, false);
+        if (g_searchActive) Fill(r, Fg(0.06f), rad);
+        g_target->PopLayer();
+    
     }
     float m = siri ? 1.3f : 1.0f;
     float cx = r.left + (siri ? 30 : (box ? 18 : 12)) * s, cy = (r.top + r.bottom) / 2;
@@ -7361,7 +8443,8 @@ void DrawSearchBar(const Layout& L, float a) {
             g_target->DrawText(ph, (UINT32)wcslen(ph), fmt, text, g_brush.Get());
         }
     } else if (g_query.empty()) {
-        PCWSTR ph = g_siriTab == 1 ? Tr(L"Search Files") : g_siriTab == 2 ? Tr(L"Search Clipboard") : g_siriTab == 3 ? Tr(L"Search Actions")
+        PCWSTR ph = Picking() ? (g_selection.empty() ? Tr(L"Hold an app to select it") : Tr(L"Click apps to select or deselect them"))   // Floating picking
+                  : g_siriTab == 1 ? Tr(L"Search Files") : g_siriTab == 2 ? Tr(L"Search Clipboard") : g_siriTab == 3 ? Tr(L"Search Actions") : g_siriTab == 6 ? Tr(L"Search Phone")
                   : siri ? Tr(L"Search Apps") : Tr(L"Search Applications");
         g_brush->SetColor(Fg(0.4f * a));
         g_target->DrawText(ph, (UINT32)wcslen(ph), fmt, text, g_brush.Get());
@@ -7526,7 +8609,10 @@ void DrawMessage(PCWSTR text) {
     const Layout& L = g_layout;
     float height = g_settings.siri ? L.cellHeight : 120 * L.scale;
     g_brush->SetColor(Fg(0.6f));
-    g_target->DrawText(text, (UINT32)wcslen(text), g_messageFormat.Get(), D2D1::RectF(0, L.viewTop, (float)L.width, L.viewTop + height), g_brush.Get());
+    // In the Siri results box: centered in the box (it may sit off-center, beside the power button)
+    bool box = g_settings.siri && L.siriPanel.right > L.siriPanel.left;
+    D2D1_RECT_F r = D2D1::RectF(box ? L.siriPanel.left : 0, L.viewTop, box ? L.siriPanel.right : (float)L.width, L.viewTop + height);
+    g_target->DrawText(text, (UINT32)wcslen(text), g_messageFormat.Get(), r, g_brush.Get());
 }
 
 D2D1_RECT_F FolderMiniSlot(const D2D1_RECT_F& r, int index, float pad) {
@@ -7558,7 +8644,8 @@ void DrawHistoryHeader(const Layout& L) {
     if (g_listFormat) {
         D2D1_RECT_F t = D2D1::RectF(L.listHeader.left + 10 * s, L.listHeader.top, L.listHeader.right - 40 * s, L.listHeader.bottom);
         g_brush->SetColor(Fg(0.55f));
-        g_target->DrawText(Tr(L"Recent searches"), 15, g_listFormat.Get(), t, g_brush.Get());
+        PCWSTR header = Tr(L"Recent searches");
+        g_target->DrawText(header, (UINT32)wcslen(header), g_listFormat.Get(), t, g_brush.Get());
     }
     D2D1_RECT_F r = HistClearRect(L);
     if (g_histClearHover) Fill(r, Fg(0.12f), 8 * s);
@@ -7575,7 +8662,9 @@ D2D1_RECT_F ClipDeleteRect(const D2D1_RECT_F& row) {
     float s = g_layout.scale, cy = (row.top + row.bottom) / 2, d = std::round(24 * s);
     return D2D1::RectF(row.right - 10 * s - d, cy - d / 2, row.right - 10 * s, cy + d / 2);
 }
-bool ClipRows() { return g_siriTab == 2 && g_openFolderIndex < 0 && g_layout.list; }
+bool ClipRows() { return (g_siriTab == 2 || g_siriTab == 6) && g_openFolderIndex < 0 && g_layout.list; }
+// Rows with an X: a copy in the clipboard, or a phone notification
+bool RowHasX(const App* a) { return a && (a->kind == 2 || (a->kind == 8 && !a->key.empty())); }
 
 IDWriteTextLayout* LabelLayout(App& app, const D2D1_RECT_F& r) {
     float w = r.right - r.left, h = r.bottom - r.top;
@@ -7600,7 +8689,7 @@ void DrawGroupTitle(const Cell& c, const App& title, float opacity, bool line, b
         g_target->DrawLine(D2D1::Point2F(c.highlight.left + 8 * s, y), D2D1::Point2F(c.highlight.right - 8 * s, y), g_brush.Get(), 1.0f);
     }
     if (!title.target.empty() && g_hintFormat) {
-        PCWSTR more = CfgT(L"Show all", L"Mostrar todos");
+        PCWSTR more = title.target == L"#phoneclear" ? CfgT(L"Clear all", L"Limpar tudo") : CfgT(L"Show all", L"Mostrar todos");
         g_brush->SetColor(Fg((hover ? 0.92f : 0.55f) * opacity));
         g_target->DrawText(more, (UINT32)wcslen(more), g_hintFormat.Get(), r, g_brush.Get());
         r.right -= 110 * s;
@@ -7609,6 +8698,24 @@ void DrawGroupTitle(const Cell& c, const App& title, float opacity, bool line, b
         g_brush->SetColor(Fg(0.50f * opacity));
         g_target->DrawText(title.name.c_str(), (UINT32)title.name.size(), g_listSubFormat.Get(), r, g_brush.Get());
     }
+}
+
+// Phone: the notifications box's scroll bar (how far through the notifications it is), beside its rows
+void DrawPhoneBoxBar(const Layout& L, const std::vector<int>& items, float scroll, float alpha) {
+    float s = L.scale, top = 1e9f, bottom = -1e9f, right = 0;
+    for (int i = 0; i < (int)items.size(); i++) {
+        App* a = items[i] >= 0 && !IsFolderItem(items[i]) ? ResolveApp(items[i]) : nullptr;
+        if (!a || !a->phoneBox) continue;
+        Cell c = CellAtIn(L, scroll, i);
+        top = std::min(top, c.highlight.top); bottom = std::max(bottom, c.highlight.bottom); right = c.highlight.right;
+    }
+    if (bottom <= top) return;
+    int total = std::max(1, g_phoneBoxTotal), shown = std::min(g_settings.phoneMax, total);
+    float w = std::max(2.0f, 3 * s), x = right - w - 2 * s, trackTop = top + 6 * s, trackH = bottom - top - 12 * s;
+    if (trackH <= 4 * s) return;
+    Fill(D2D1::RectF(x, trackTop, x + w, trackTop + trackH), Fg(0.08f * alpha), w / 2);
+    float thumbH = std::max(12 * s, trackH * shown / total), thumbTop = trackTop + (trackH - thumbH) * g_phoneBoxFirst / std::max(1, total - shown);
+    Fill(D2D1::RectF(x, thumbTop, x + w, thumbTop + thumbH), Fg(0.45f * alpha), w / 2);
 }
 
 void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, float alpha, bool interactive, int hiddenFolderItem, float hiddenFade) {
@@ -7628,6 +8735,7 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
             if (g_siriTab == 3) msg = Tr(L"No actions found");
             if (g_siriTab == kTabAll) msg = Tr(L"Nothing found");
             if (g_siriTab == 4) msg = GhMessage();
+            if (g_siriTab == 6) msg = !g_query.empty() ? Tr(L"Nothing found") : g_phoneStatus.empty() ? Tr(L"Phone") : g_phoneStatus.c_str();
             DrawMessage(msg);
             return;
         }
@@ -7650,9 +8758,15 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
         }
 
         bool sel = interactive && IsSelected(i);
-        if (sel) Fill(c.highlight, D2D1::ColorF(0.04f, 0.52f, 1.0f, 0.22f), 12 * s);
+        // Rows with an X (a copy, a notification): the highlight stops before the X, which is a button of its own
+        D2D1_RECT_F hl = c.highlight;
+        if (interactive && L.list && ClipRows() && RowHasX(IsFolderItem(item) ? nullptr : ResolveApp(item)))
+            hl.right = ClipDeleteRect(c.highlight).left - 6 * s;
+        bool onColor = false;   // the row is a solid selection color: its text is white
+        if (sel) Fill(hl, D2D1::ColorF(0.04f, 0.52f, 1.0f, 0.22f), 12 * s);
         else if (interactive && (i == g_selected || i == g_hover))
-            Fill(c.highlight, Fg(i == g_selected ? 0.18f : 0.10f), 12 * s);
+            onColor = DrawResultHighlight(hl, 12 * s, i == g_selected);
+        auto ink = [&](float a) { return MenuInk(onColor, a); };
         float dragDim = (interactive && ((i == g_pressed && g_isDragging) || i == g_dragItem || (sel && GroupDrag()))) ? 0.4f : 1.0f;
         float opacity = dragDim * alpha * PageFade(L, scroll, i);
 
@@ -7662,7 +8776,7 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
             if (item == hiddenFolderItem) labelOpacity *= 1.0f - hiddenFade;
             else DrawFolderIcon(f, c.icon, opacity);
             if (g_labelFormat) {
-                g_brush->SetColor(Fg(0.95f * labelOpacity));
+                g_brush->SetColor(ink(0.95f * labelOpacity));
                 g_target->DrawText(f.name.c_str(), (UINT32)f.name.size(), g_labelFormat.Get(), c.label, g_brush.Get());
             }
         } else {
@@ -7675,23 +8789,35 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
             if (jiggle) g_target->SetTransform(JiggleMatrix(c.icon, i, s) * baseTransform);
             if (ID2D1Bitmap* bitmap = GetBitmap(app)) {
                 g_target->DrawBitmap(bitmap, c.icon, opacity, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            } else if (app.kind == kPhoneKind) {
+                // Phone: the feature's glyph on a small round glass
+                float d = std::min(c.icon.right - c.icon.left, c.icon.bottom - c.icon.top) * 0.86f;
+                D2D1_POINT_2F ic = D2D1::Point2F((c.icon.left + c.icon.right) / 2, (c.icon.top + c.icon.bottom) / 2);
+                D2D1_RECT_F disc = D2D1::RectF(ic.x - d / 2, ic.y - d / 2, ic.x + d / 2, ic.y + d / 2);
+                if (g_settings.glassButtons) DrawGlassButton(disc, d / 2, opacity, 1.0f, false);
+                else Fill(disc, Fg(0.12f * opacity), d / 2);
+                PCWSTR glyph = app.glyph ? app.glyph : app.glyphText.c_str();
+                if (g_glyphFormat && glyph && *glyph) {
+                    g_brush->SetColor(ink(0.88f * opacity));
+                    g_target->DrawText(glyph, (UINT32)wcslen(glyph), g_glyphFormat.Get(), disc, g_brush.Get());
+                }
             } else {
                 Fill(c.icon, Fg(0.12f * opacity), 14 * s);
                 if (app.kind == 2 && L.list && g_glyphFormat) {
-                    g_brush->SetColor(Fg(0.8f * opacity));
+                    g_brush->SetColor(ink(0.8f * opacity));
                     g_target->DrawText(L"\uE77F", 1, g_glyphFormat.Get(), c.icon, g_brush.Get());   // clipboard
                 } else if ((app.kind == 2 || app.kind == 3) && g_titleFormat) {
                     PCWSTR glyph = app.kind == 2 ? L"Aa" : L"\u21BA"; // ↺
-                    g_brush->SetColor(Fg(0.8f * opacity));
+                    g_brush->SetColor(ink(0.8f * opacity));
                     g_target->DrawText(glyph, (UINT32)wcslen(glyph), g_titleFormat.Get(), c.icon, g_brush.Get());
                 }
                 if (app.kind == 7 && g_glyphFormat) {   // calculator
-                    g_brush->SetColor(Fg(0.85f * opacity));
+                    g_brush->SetColor(ink(0.85f * opacity));
                     g_target->DrawText(L"\uE8EF", 1, g_glyphFormat.Get(), c.icon, g_brush.Get());
                 }
                 if (app.kind == 4 && g_glyphFormat) {
                     PCWSTR glyph = ActionGlyph(app.target);
-                    g_brush->SetColor(Fg(0.85f * opacity));
+                    g_brush->SetColor(ink(0.85f * opacity));
                     g_target->DrawText(glyph, (UINT32)wcslen(glyph), g_glyphFormat.Get(), c.icon, g_brush.Get());
                 }
 
@@ -7702,14 +8828,16 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
                 if (g_listFormat) {
                     // Files show their folder under the name so same-named items can be told apart
                     bool clip = app.kind == 2 && g_listSubFormat;
-                    bool twoLines = clip || (app.kind == 7 && g_listSubFormat) ||
+                    bool twoLines = clip || (app.kind == 7 && g_listSubFormat) || (app.kind == kPhoneKind && g_listSubFormat && !app.detail.empty()) ||
                                     (app.kind == 1 && g_listSubFormat && app.target.find(L'\\') != std::wstring::npos);
                     D2D1_RECT_F nameRect = c.label;
-                    if (app.kind == 2 && interactive && ClipRows()) {
-                        // X to remove this copy: faint, clearer on the hovered row, a glass circle under the mouse
+                    if (RowHasX(&app) && interactive && ClipRows()) {
+                        // X to remove this copy (or clear this notification): faint, clearer on the hovered row, a glass circle under the mouse
                         D2D1_RECT_F x = ClipDeleteRect(c.highlight);
                         nameRect.right = std::min(nameRect.right, x.left - 8 * s);
-                        if (i == g_clipXHover) DrawGlassButton(x, (x.right - x.left) / 2, opacity, 1.4f, false);
+                        // Always a small glass circle; it lights up under the mouse
+                        DrawGlassButton(x, (x.right - x.left) / 2, opacity * (i == g_clipXHover || i == g_hover ? 1.0f : 0.7f),
+                                        i == g_clipXHover ? 1.6f : i == g_hover ? 1.1f : 0.8f, false);
                         D2D1_POINT_2F xc = D2D1::Point2F((x.left + x.right) / 2, (x.top + x.bottom) / 2);
                         float arm = 4 * s;
                         g_brush->SetColor(Fg((i == g_clipXHover ? 0.95f : i == g_hover ? 0.60f : 0.28f) * opacity));
@@ -7720,12 +8848,19 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
                     std::wstring name = app.name, folder;
                     if (clip) ClipRowText(app.target, name, folder);
                     else if (app.kind == 7) folder = app.detail + L"   \u00B7   " + CfgT(L"Enter copies the result", L"Enter copia o resultado");
+                    else if (app.kind == kPhoneKind) folder = app.detail;
                     else if (twoLines) folder = app.target.substr(0, app.target.find_last_of(L'\\'));
-                    g_brush->SetColor(Fg(0.95f * opacity));
+                    if (app.kind == kPhoneKind && !app.when.empty() && g_hintFormat) {   // when, on the right of the first line
+                        D2D1_RECT_F whenRect = D2D1::RectF(nameRect.right - 110 * s, nameRect.top, nameRect.right - 6 * s, nameRect.bottom);
+                        g_brush->SetColor(ink(0.50f * opacity));
+                        g_target->DrawText(app.when.c_str(), (UINT32)app.when.size(), g_hintFormat.Get(), whenRect, g_brush.Get());
+                        nameRect.right -= 116 * s;
+                    }
+                    g_brush->SetColor(ink(0.95f * opacity));
                     g_target->DrawText(name.c_str(), (UINT32)name.size(), g_listFormat.Get(), nameRect, g_brush.Get());
                     if (twoLines) {
                         D2D1_RECT_F subRect = D2D1::RectF(c.label.left, nameRect.bottom - 3 * s, nameRect.right, c.label.bottom - 2 * s);
-                        g_brush->SetColor(Fg(0.5f * opacity));
+                        g_brush->SetColor(ink((app.kind == kPhoneKind ? 0.72f : 0.5f) * opacity));   // a notification's text is easy to read
                         g_target->DrawText(folder.c_str(), (UINT32)folder.size(), g_listSubFormat.Get(), subRect, g_brush.Get());
                     }
                 }
@@ -7735,13 +8870,14 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
                         g_brush->SetColor(D2D1::ColorF(0, 0, 0, 0.45f * opacity));
                         g_target->DrawTextLayout(D2D1::Point2F(c.label.left, c.label.top + 1 * s), tl, g_brush.Get());
                     }
-                    g_brush->SetColor(Fg(0.95f * opacity));
+                    g_brush->SetColor(ink(0.95f * opacity));
                     g_target->DrawTextLayout(D2D1::Point2F(c.label.left, c.label.top), tl, g_brush.Get());
                 }
             }
         }
     }
 
+    if (interactive && g_siriTab == 6 && g_phoneBoxTotal > g_settings.phoneMax) DrawPhoneBoxBar(L, items, scroll, alpha);
     if (interactive && g_isDragging && g_dragItem >= 0 && g_dragItem < (int)items.size() && g_dragX >= 0) {
         int item = items[g_dragItem];
         D2D1_RECT_F dragRect = D2D1::RectF(g_dragX - L.icon / 2, g_dragY - L.icon / 2, g_dragX + L.icon / 2, g_dragY + L.icon / 2);
@@ -7754,8 +8890,8 @@ void DrawMainGrid(const Layout& L, const std::vector<int>& items, float scroll, 
         }
     }
 
-    // Original Siri: a thin line under the first row (recent / most used apps)
-    if (interactive && g_settings.siriOriginal && g_siriTab == 0 && !L.list && g_firstRowCount > 0 &&
+    // Floating and Original Siri: a thin line under the first row (recent / most used apps)
+    if (interactive && g_settings.siri && g_siriTab == 0 && !L.list && g_firstRowCount > 0 &&
         (int)items.size() > g_firstRowCount && L.columns > 0) {
         Cell rowStart = CellAtIn(L, scroll, 0), rowEnd = CellAtIn(L, scroll, std::min(L.columns, g_firstRowCount) - 1);
         float y = std::round(rowStart.highlight.top + L.cellHeight - L.cellPad) + 0.5f;
@@ -7781,9 +8917,9 @@ void DrawFolderPanel(float t, const D2D1_RECT_F& from, float fromPad, bool settl
     float radius = Lerp(16 * s, g_settings.folderRadius * s, t);
 
     Fill(rect, D2D1::ColorF(1, 1, 1, Lerp(0.2f, 0.04f, t)), radius);
-    if (g_settings.borderWidth > 0) {
-        g_brush->SetColor(Alpha(g_settings.borderColor, g_settings.borderOpacity * t));
-        g_target->DrawRoundedRectangle(D2D1::RoundedRect(rect, radius, radius), g_brush.Get(), g_settings.borderWidth * s);
+    {   // a fine light edge (1 px, white at 18 %)
+        g_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.18f * t));
+        g_target->DrawRoundedRectangle(D2D1::RoundedRect(rect, radius, radius), g_brush.Get(), 1.0f * s);
     }
 
     D2D1_RECT_F clip = D2D1::RectF(rect.left, Lerp(rect.top, L.viewTop, t), rect.right, Lerp(rect.bottom, L.viewBottom, t));
@@ -7800,9 +8936,7 @@ void DrawFolderPanel(float t, const D2D1_RECT_F& from, float fromPad, bool settl
         App& app = *folder.apps[appIdx];
         Cell c = CellAtIn(L, g_scroll, i);
 
-        if (settled && (i == g_selected || i == g_hover)) {
-            Fill(c.highlight, Fg(i == g_selected ? 0.18f : 0.10f), 12 * s);
-        }
+        bool onColor = settled && (i == g_selected || i == g_hover) && DrawResultHighlight(c.highlight, 12 * s, i == g_selected);
 
         D2D1_RECT_F slot = FolderMiniSlot(from, appIdx, fromPad);
         float delay = std::min(appIdx, 8) * 0.035f;
@@ -7835,7 +8969,7 @@ void DrawFolderPanel(float t, const D2D1_RECT_F& from, float fromPad, bool settl
                     g_brush->SetColor(D2D1::ColorF(0, 0, 0, 0.45f * lo));
                     g_target->DrawTextLayout(D2D1::Point2F(label.left, label.top + s), tl, g_brush.Get());
                 }
-                g_brush->SetColor(Fg(0.95f * lo));
+                g_brush->SetColor(MenuInk(onColor, 0.95f * lo));
                 g_target->DrawTextLayout(D2D1::Point2F(label.left, label.top), tl, g_brush.Get());
             }
         }
@@ -7859,48 +8993,6 @@ void DrawFolderPanel(float t, const D2D1_RECT_F& from, float fromPad, bool settl
 }
 
 void StartFrames();
-
-void DrawGlass(const D2D1_RECT_F& r, float radius, float sheenScale = 1.0f) {
-    float s = g_layout.scale;
-    float w = r.right - r.left;
-    ComPtr<ID2D1GradientStopCollection> sheenStops;
-    ComPtr<ID2D1LinearGradientBrush> sheen;
-    D2D1_GRADIENT_STOP sheenData[3] = {
-        {0.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, (g_settings.darkText ? 0.30f : 0.16f) * sheenScale)},
-        {0.45f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.04f * sheenScale)},
-        {1.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.0f)},
-    };
-    if (SUCCEEDED(g_target->CreateGradientStopCollection(sheenData, 3, &sheenStops)) &&
-        SUCCEEDED(g_target->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(D2D1::Point2F(r.left, r.top), D2D1::Point2F(r.left + w * 0.4f, r.bottom)),
-            sheenStops.Get(), &sheen))) {
-        g_target->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), sheen.Get());
-    }
-    if (g_settings.fullscreen) return;
-
-    ComPtr<ID2D1GradientStopCollection> rimStops;
-    ComPtr<ID2D1LinearGradientBrush> rim;
-    D2D1_GRADIENT_STOP rimData[4] = {
-        {0.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.60f)},
-        {0.30f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.12f)},
-        {0.70f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.10f)},
-        {1.0f, D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.45f)},
-    };
-    if (FAILED(g_target->CreateGradientStopCollection(rimData, 4, &rimStops)) ||
-        FAILED(g_target->CreateLinearGradientBrush(
-            D2D1::LinearGradientBrushProperties(D2D1::Point2F(r.left, r.top), D2D1::Point2F(r.right, r.bottom)),
-            rimStops.Get(), &rim))) return;
-    float bw = std::max(1.0f, 1.5f * s), half = bw / 2;
-    float outer = std::max(0.0f, radius - half);
-    g_target->DrawRoundedRectangle(
-        D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), outer, outer),
-        rim.Get(), bw);
-    float inset = bw + 1.5f * s, inner = std::max(0.0f, radius - inset);
-    rim->SetOpacity(0.35f);
-    g_target->DrawRoundedRectangle(
-        D2D1::RoundedRect(D2D1::RectF(r.left + inset, r.top + inset, r.right - inset, r.bottom - inset), inner, inner),
-        rim.Get(), bw * 0.8f);
-}
 
 void PushOpacity(float a) {
     g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), a), nullptr);
@@ -7974,7 +9066,7 @@ void DrawSiriIntroOrb(const Layout& L) {
     const float cy = (r.top + r.bottom) * 0.5f;
     const float t = (float)Now() * 2.8f;
     const float intro = std::clamp(g_pillIntro / kIntroCircle, 0.0f, 1.0f);
-    const float alpha = (1.0f - Ease(intro)) * g_settings.siriPillOpacity;
+    const float alpha = (1.0f - Ease(intro)) * 0.72f;
     const float radius = size * 0.29f;
 
     struct OrbColor { float r, g, b, phase; };
@@ -8015,11 +9107,23 @@ void DrawSiriIntroOrb(const Layout& L) {
 
 // ---------- Themes ----------
 // Soft drop shadow drawn only outside the shape, so translucent glass stays clean
-void DrawThemeShadow(const D2D1_RECT_F& r, float radius, float strength, float spread, float dy) {
+void DrawThemeShadow(const D2D1_RECT_F& r, float radius, float strength, float spread, float dy, D2D1_COLOR_F color) {
     if (g_settings.light || !g_d2d) return;   // light mode: no shadows
     // Everything but the shape itself (the shadow never darkens the glass). Building it is the slow part, so the last
     // few are kept: shapes that don't move (most of the time) reuse theirs
-    if (!g_shadowCuts) return;
+    ID2D1PathGeometry* outside = OutsideOf(r, radius);
+    if (!outside) return;
+    g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), outside), nullptr);
+    const int steps = 10;
+    for (int i = steps; i >= 1; i--) {
+        float g = spread * i / steps;
+        Fill(D2D1::RectF(r.left - g, r.top - g + dy, r.right + g, r.bottom + g + dy), Alpha(color, strength / steps), radius + g);
+    }
+    g_target->PopLayer();
+}
+// Everything but a rounded rectangle (the area a shadow or a glow may paint), kept for the last few shapes
+ID2D1PathGeometry* OutsideOf(const D2D1_RECT_F& r, float radius) {
+    if (!g_shadowCuts || !g_d2d) return nullptr;
     auto& cuts = *g_shadowCuts;
     ID2D1PathGeometry* outside = nullptr;
     for (const ShadowCut& c : cuts)
@@ -8032,20 +9136,14 @@ void DrawThemeShadow(const D2D1_RECT_F& r, float radius, float strength, float s
         if (FAILED(g_d2d->CreateRectangleGeometry(D2D1::RectF(-10000, -10000, 10000, 10000), &area)) ||
             FAILED(g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, radius, radius), &hole)) ||
             FAILED(g_d2d->CreatePathGeometry(&geo)) || FAILED(geo->Open(&sink)))
-            return;
+            return nullptr;
         area->CombineWithGeometry(hole.Get(), D2D1_COMBINE_MODE_EXCLUDE, nullptr, sink.Get());
         sink->Close();
         if (cuts.size() >= 12) cuts.erase(cuts.begin());
         cuts.push_back({r, radius, geo});
         outside = geo.Get();
     }
-    g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), outside), nullptr);
-    const int steps = 10;
-    for (int i = steps; i >= 1; i--) {
-        float g = spread * i / steps;
-        Fill(D2D1::RectF(r.left - g, r.top - g + dy, r.right + g, r.bottom + g + dy), D2D1::ColorF(0, 0, 0, strength / steps), radius + g);
-    }
-    g_target->PopLayer();
+    return outside;
 }
 
 ComPtr<ID2D1LinearGradientBrush> MakeGradient(const D2D1_GRADIENT_STOP* stops, UINT32 count, D2D1_POINT_2F from, D2D1_POINT_2F to) {
@@ -8062,6 +9160,16 @@ ComPtr<ID2D1LinearGradientBrush> MakeGradient(const D2D1_GRADIENT_STOP* stops, U
     g_target->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(from, to), collection.Get(), &brush);
     return brush;
 }
+// The same, round (its stop collection kept with the linear ones)
+ComPtr<ID2D1RadialGradientBrush> MakeRadial(const D2D1_GRADIENT_STOP* stops, UINT32 count, D2D1_POINT_2F center, float radius) {
+    ComPtr<ID2D1LinearGradientBrush> linear = MakeGradient(stops, count, center, center);
+    ComPtr<ID2D1GradientStopCollection> collection;
+    if (!linear) return nullptr;
+    linear->GetGradientStopCollection(&collection);
+    ComPtr<ID2D1RadialGradientBrush> brush;
+    g_target->CreateRadialGradientBrush(D2D1::RadialGradientBrushProperties(center, D2D1::Point2F(0, 0), radius, radius), collection.Get(), &brush);
+    return brush;
+}
 
 // ---------- Liquid glass (Glass theme, like macOS 26): the screen behind, refracted at the edges ----------
 // A snapshot of the screen is taken as the launcher opens (before it shows). Each glass shape draws that picture
@@ -8073,9 +9181,13 @@ constexpr GUID kClsidDisplacement = {0xedc48364, 0x0417, 0x4111, {0x94, 0x50, 0x
 constexpr GUID kClsidColorMatrix = {0x921f03d6, 0x641c, 0x47df, {0x85, 0x2d, 0xb4, 0xbb, 0x61, 0x53, 0xae, 0x11}};
 constexpr UINT_PTR kTimerLiquid = 9;
 // Extra picture around the window, for the edges to bend in from (more when the refraction is set above 60 %: the lens is deeper)
+bool FlatGlass();
 int LiquidMargin() {
     float extra = std::clamp((g_settings.refraction - 60) / 40.0f, 0.0f, 1.0f);
-    return (int)std::lround(64 + 120 * extra * std::max(1.0f, g_layout.scale));
+    int margin = (int)std::lround(64 + 120 * extra * std::max(1.0f, g_layout.scale));
+    // Glass blurs much more: enough picture around for the blur to reach (or the edges would darken)
+    if (FlatGlass()) margin = std::max(margin, (int)std::lround(g_settings.blurAmount / 100.0f * 72 * std::max(1.0f, g_layout.scale)));
+    return margin;
 }
 
 struct LiquidSnap {
@@ -8087,6 +9199,7 @@ struct LiquidSnap {
     bool fresh = false;              // new pixels not yet in the bitmap
 };
 [[clang::no_destroy]] LiquidSnap g_liquid;
+UINT g_liquidVersion;   // goes up each time the picture changes
 
 struct LiquidMap { int w = 0, h = 0, radius = 0, band = 0, depth = 0; ComPtr<ID2D1Bitmap> bitmap; UINT generation = 0; double used = 0; };
 [[clang::no_destroy]] std::vector<LiquidMap> g_liquidMaps;
@@ -8100,15 +9213,21 @@ bool LiquidWanted() { return LiquidSetting() && !g_cfg.active; }
 bool LiquidSetting() {
     // Only in Floating and Original Siri: there the glass is a bar and a box. In Window and Fullscreen the glass is the
     // whole window, and bending all of it (and retaking it live) is far too heavy for every frame
-    if (!g_settings.siri || g_settings.light) return false;
+    if (g_settings.light) return false;
     Theme t = ActiveTheme();
+    // Glass and Liquid glass take the picture in every mode, blurred by the mod itself: Windows' own blur, mixed with the
+    // sharp background behind it, looked smudged. In Window and Fullscreen it is not bent (see FlatGlass)
+    if (t == Theme::Frost || t == Theme::Glass) return true;
+    if (!g_settings.siri) return false;
     bool glassTheme = t == Theme::Glass || t == Theme::Siri || t == Theme::Tinted ||
                       ((t == Theme::Light || t == Theme::Dark || t == Theme::Oled) && g_settings.glassEffect);
     return glassTheme && g_settings.glassLiquid;
 }
 bool LiquidActive() { return LiquidWanted() && g_liquid.width > 0; }
 
+void ResetFlatGlass();
 void FreeLiquid() {
+    ResetFlatGlass();   // (its blurred copy of the snapshot too)
     g_liquid.pixels.clear(); g_liquid.pixels.shrink_to_fit();
     g_liquid.width = g_liquid.height = 0; g_liquid.bitmap.Reset(); g_liquid.fresh = false;
     g_liquidMaps.clear();
@@ -8142,9 +9261,11 @@ ID2D1Bitmap* LiquidSnapBitmap() {
                                D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)), &g_liquid.bitmap);
         g_liquid.generation = g_targetGeneration;
         g_liquid.fresh = false;
+        g_liquidVersion++;
     } else if (g_liquid.fresh) {
         g_liquid.bitmap->CopyFromMemory(nullptr, g_liquid.pixels.data(), g_liquid.width * 4);
         g_liquid.fresh = false;
+        g_liquidVersion++;
     }
     return g_liquid.bitmap.Get();
 }
@@ -8160,7 +9281,7 @@ ID2D1Bitmap* LiquidMapFor(float w, float h, float radius, float band, float dept
             return m.bitmap.Get();
         }
     std::vector<UINT32> px((size_t)mw * mh);
-    float hw = mw, hh = mh;   // half of the full size = the map size
+    float hw = mw * 0.5f, hh = mh * 0.5f;   // the shape's centre in map pixels (the map is stretched over the whole shape)
     float r = std::min({radius / 2, hw, hh}), b = std::max(1.0f, band / 2), dep = std::max(0.5f, depth / 2);
     for (int y = 0; y < mh; y++) {
         for (int x = 0; x < mw; x++) {
@@ -8216,6 +9337,42 @@ bool EnsureLiquidEffects(ID2D1DeviceContext* dc) {
     return true;
 }
 
+// The glass picture is not bent: the Glass theme, no refraction, or Window and Fullscreen (the whole window is the
+// glass, and bending all of it every frame is far too heavy). Then it gets a frosted blur instead of a light softening
+bool FlatGlass() { return ActiveTheme() == Theme::Frost || g_settings.refraction <= 0 || !g_settings.siri; }
+float GlassSigma(float s) {
+    return FlatGlass() ? g_settings.blurAmount / 100.0f * 24 * s : std::pow(g_settings.blurAmount / 100.0f, 2.0f) * 4 * s;
+}
+// The flat picture is the same for every shape and frame until the background is retaken: it is blurred once and kept
+// (a full-screen blur every frame would be heavy in Fullscreen)
+struct FlatCache { ComPtr<ID2D1Effect> source, blur, color; UINT version = 0, generation = 0; float sigma = -1, dx = 0, dy = 0; };
+[[clang::no_destroy]] FlatCache g_lqFlat;
+void ResetFlatGlass() { g_lqFlat = FlatCache{}; }
+ID2D1Effect* FlatGlassImage(ID2D1DeviceContext* dc, ID2D1Bitmap* snap, float sigma, float dx, float dy) {
+    FlatCache& c = g_lqFlat;
+    if (c.color && c.version == g_liquidVersion && c.generation == g_targetGeneration && c.sigma == sigma && c.dx == dx && c.dy == dy)
+        return c.color.Get();
+    c = FlatCache{};
+    if (FAILED(dc->CreateEffect(kClsidAffine, &c.source)) || FAILED(dc->CreateEffect(kClsidGaussianBlur, &c.blur)) ||
+        FAILED(dc->CreateEffect(kClsidColorMatrix, &c.color))) { c = FlatCache{}; return nullptr; }
+    c.source->SetInput(0, snap);
+    c.source->SetValue(D2D1_2DAFFINETRANSFORM_PROP_TRANSFORM_MATRIX, D2D1::Matrix3x2F::Translation(dx, dy));
+    ID2D1Effect* last = c.source.Get();
+    if (sigma > 0.3f) {
+        c.blur->SetInputEffect(0, c.source.Get());
+        c.blur->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION, sigma);
+        c.blur->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE, D2D1_BORDER_MODE_HARD);
+        last = c.blur.Get();
+    }
+    D2D1_MATRIX_5X4_F cm{};
+    g_lqColor->GetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, &cm);   // the same light touch of color as Liquid glass
+    c.color->SetInputEffect(0, last);
+    c.color->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, cm);
+    c.color->SetValue(D2D1_PROPERTY_CACHED, TRUE);   // kept until something above changes
+    c.version = g_liquidVersion; c.generation = g_targetGeneration; c.sigma = sigma; c.dx = dx; c.dy = dy;
+    return c.color.Get();
+}
+
 // The refracted picture inside a shape (the caller has clipped to the shape)
 bool DrawLiquidImage(const D2D1_RECT_F& r, float radius) {
     ComPtr<ID2D1DeviceContext> dc;
@@ -8239,8 +9396,16 @@ bool DrawLiquidImage(const D2D1_RECT_F& r, float radius) {
     // While the settings open or close every shape changes size each frame: no bending then (a new map
     // per frame is slow, and the moving edges look odd); it comes back as soon as they settle
     if (g_cfg.active && (g_cfg.closing || g_cfg.anim < 1.0f)) depth = 0;
-    float sigma = std::pow(g_settings.blurAmount / 100.0f, 2.0f) * 4 * s;   // clear glass: just a light softening
+    float sigma = GlassSigma(s);
     const Layout& L = g_layout;
+    if (FlatGlass()) {
+        ID2D1Effect* flat = FlatGlassImage(dc.Get(), snap, sigma, (float)(g_liquid.rc.left - L.area.left), (float)(g_liquid.rc.top - L.area.top));
+        if (!flat) return false;
+        g_target->SetTransform(D2D1::Matrix3x2F::Identity());
+        dc->DrawImage(flat, D2D1::Point2F(dr.left, dr.top), dr, D2D1_INTERPOLATION_MODE_LINEAR);
+        g_target->SetTransform(m);
+        return true;
+    }
     g_lqSource->SetInput(0, snap);
     g_lqSource->SetValue(D2D1_2DAFFINETRANSFORM_PROP_TRANSFORM_MATRIX,
                          D2D1::Matrix3x2F::Translation((float)(g_liquid.rc.left - L.area.left), (float)(g_liquid.rc.top - L.area.top)));
@@ -8275,6 +9440,34 @@ bool DrawLiquidImage(const D2D1_RECT_F& r, float radius) {
     return true;
 }
 
+// Glass and Liquid glass: down to 80 % transparency the glass is the clear smoky one as designed. Below that it doesn't
+// get grayer or darker (that reads as dirty glass over the colors): the smoke fades out and a thin white veil takes its
+// place, so the colors behind stay clean and only get lighter and softer, and the edge turns into a bright fine line
+float ClearGlassK(int transparency) { return std::clamp((80.0f - transparency) / 80.0f, 0.0f, 1.0f); }
+void ClearGlassBody(int transparency, D2D1_GRADIENT_STOP out[3]) {
+    const float k = ClearGlassK(transparency), smoke = std::min((100 - transparency) / 100.0f * 0.6f, 0.12f) * (1 - k);
+    const float white = 0.30f * k;
+    // Over a dark smoke, white lightens it: blend the two into one color with the right alpha (so they don't stack gray)
+    auto mix = [&](float sm, float wh, float g) {
+        float a = sm + wh * (1 - sm);
+        float c = a > 0 ? (wh * 1.0f + sm * (1 - wh) * g) / a : 1.0f;
+        return D2D1::ColorF(c, c, std::min(1.0f, c + 0.01f * k), a);
+    };
+    out[0] = {0.0f, mix(smoke * 0.85f, white * 1.15f, 0.07f)};
+    out[1] = {0.5f, mix(smoke, white, 0.04f)};
+    out[2] = {1.0f, mix(smoke * 0.9f, white * 0.85f, 0.06f)};
+}
+void ClearGlassRim(int transparency, D2D1_GRADIENT_STOP rim[7]) {
+    const float k = ClearGlassK(transparency);
+    const D2D1_COLOR_F bright[7] = {D2D1::ColorF(1, 1, 1, 0.62f), D2D1::ColorF(1, 1, 1, 0.26f), D2D1::ColorF(1, 1, 1, 0.16f),
+                                    D2D1::ColorF(1, 1, 1, 0.14f), D2D1::ColorF(1, 1, 1, 0.18f), D2D1::ColorF(1, 1, 1, 0.30f),
+                                    D2D1::ColorF(1, 1, 1, 0.50f)};
+    for (int i = 0; i < 7; i++) {
+        const D2D1_COLOR_F a = rim[i].color, b = bright[i];
+        rim[i].color = D2D1::ColorF(a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k, a.a + (b.a - a.a) * k);
+    }
+}
+
 // A liquid glass shape: the refracted background with the same body and edge as the frosted glass
 void DrawLiquidShape(const D2D1_RECT_F& r, float radius, bool shadow) {
     float s = g_layout.scale, h = r.bottom - r.top, w = r.right - r.left;
@@ -8284,12 +9477,8 @@ void DrawLiquidShape(const D2D1_RECT_F& r, float radius, bool shadow) {
     if (FAILED(g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, radius, radius), &clip))) return;
     g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip.Get()), nullptr);
     DrawLiquidImage(r, radius);
-    float tint = (100 - g_settings.glassTransparency) / 100.0f * 0.6f;
-    D2D1_GRADIENT_STOP body[3] = {
-        {0.0f, D2D1::ColorF(0.07f, 0.07f, 0.07f, tint * 0.85f)},
-        {0.5f, D2D1::ColorF(0.04f, 0.04f, 0.04f, tint)},
-        {1.0f, D2D1::ColorF(0.06f, 0.06f, 0.06f, tint * 0.9f)},
-    };
+    D2D1_GRADIENT_STOP body[3];
+    ClearGlassBody(g_settings.glassTransparency, body);
     if (auto brush = MakeGradient(body, 3, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom))) g_target->FillRectangle(r, brush.Get());
     float glowH = std::min(h * 0.22f, 14 * s);
     D2D1_GRADIENT_STOP glow[2] = {{0.0f, D2D1::ColorF(1, 1, 1, 0.07f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.0f)}};
@@ -8302,6 +9491,7 @@ void DrawLiquidShape(const D2D1_RECT_F& r, float radius, bool shadow) {
         {0.75f, D2D1::ColorF(0.25f, 0.25f, 0.25f, 0.56f)}, {0.9f, D2D1::ColorF(0.25f, 0.25f, 0.25f, 0.56f)},
         {1.0f, D2D1::ColorF(0.76f, 0.76f, 0.76f, 0.44f)},
     };
+    ClearGlassRim(g_settings.glassTransparency, softRim);
     if (auto rim = MakeGradient(softRim, 7, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom))) {
         float bw = std::max(1.0f, 1.2f * s), half = bw / 2, rr = std::max(0.0f, radius - half);
         g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rr, rr), rim.Get(), bw);
@@ -8311,9 +9501,21 @@ void DrawLiquidShape(const D2D1_RECT_F& r, float radius, bool shadow) {
 // Light: bright frosted glass, white top glow, luminous rim and a soft shadow.
 // Clear glass: almost no fill, the wallpaper shows through; a thick-glass edge and a shadow projected on the wallpaper.
 // Siri (macOS 27): smoky glass, dark at the top fading to clear at the bottom, thin light rim.
+void DrawThemedShapeBody(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, bool shadow);
 void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, bool shadow) {
+    // Backlight: only the big shapes that cast a shadow (bar, results box, menus, the window), not the pieces inside
+    const bool big = shadow && r.bottom - r.top >= 1 && r.right - r.left >= 1;
+    float rad = std::min(radius, std::min(r.right - r.left, r.bottom - r.top) / 2);
+    if (big) DrawBacklightGlow(r, rad, 1.0f, 22 * g_layout.scale);
+    DrawThemedShapeBody(r, radius, backdrop, shadow);
+    if (big) DrawBacklightRim(r, rad, 1.0f);
+    if (big && ChromeBorderOn()) DrawChromeEdge(r, rad, 0.9f, ChromeBorderSpeed());
+}
+void DrawThemedShapeBody(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, bool shadow) {
     const Layout& L = g_layout;
     Theme theme = ActiveTheme();
+    // Glass (as in the Finder bar) is drawn like Liquid glass, without bending: the same clear glass over the blur
+    if (theme == Theme::Frost) theme = Theme::Glass;
     // Light mode: "acrylic". No blur, no liquid and no window behind: a firmer tint (the glass can't be see-through
     // without a blur, or the page behind would show through sharp) with a soft sheen, so it still reads as glass
     const bool acrylic = g_settings.light && theme == Theme::Glass;
@@ -8341,12 +9543,18 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
         {0.5f, D2D1::ColorF(0.97f, 0.97f, 0.99f, 0.40f)},
         {1.0f, D2D1::ColorF(0.93f, 0.94f, 0.97f, 0.34f)},
     };
-    float tint = (100 - transparency) / 100.0f * 0.6f;   // 0 = clear, 0.6 = smoky
-    D2D1_GRADIENT_STOP glassBody[3] = {
-        {0.0f, D2D1::ColorF(0.07f, 0.07f, 0.07f, tint * 0.85f)},
-        {0.5f, D2D1::ColorF(0.04f, 0.04f, 0.04f, tint)},
-        {1.0f, D2D1::ColorF(0.06f, 0.06f, 0.06f, tint * 0.9f)},
-    };
+    D2D1_GRADIENT_STOP glassBody[3];
+    ClearGlassBody(transparency, glassBody);   // Glass and Liquid glass
+    if (acrylic) {
+        // Light mode: no blur behind, so the glass needs a firm veil to keep the text readable over a sharp wallpaper
+        // (the thin veil of the clear glass is not enough). A neutral black over a light wallpaper turned muddy and
+        // yellowish: it is a clean milky white under dark text, and a cool deep blue-gray under white text
+        const float a = 0.62f - transparency / 100.0f * 0.4f;   // 40 % (the most it allows) = 0.46
+        const D2D1_COLOR_F c = g_settings.darkText ? D2D1::ColorF(0.97f, 0.98f, 1.0f) : D2D1::ColorF(0.09f, 0.11f, 0.15f);
+        glassBody[0] = {0.0f, Alpha(c, a * 1.08f)};
+        glassBody[1] = {0.5f, Alpha(c, a)};
+        glassBody[2] = {1.0f, Alpha(c, a * 0.94f)};
+    }
     D2D1_GRADIENT_STOP siriBody[3] = {
         {0.0f, D2D1::ColorF(0.05f, 0.05f, 0.06f, 0.80f)},
         {0.55f, D2D1::ColorF(0.11f, 0.11f, 0.13f, 0.54f)},
@@ -8381,6 +9589,10 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
     D2D1_GRADIENT_STOP oledBody[3] = {
         {0.0f, D2D1::ColorF(0.0f, 0.0f, 0.0f, oledA)}, {0.5f, D2D1::ColorF(0.0f, 0.0f, 0.0f, oledA)}, {1.0f, D2D1::ColorF(0.0f, 0.0f, 0.0f, oledA)},
     };
+    // Dark and OLED with Glass effect: a glass you can see the blur through (not an opaque slab with a sheen)
+    if (g_settings.glassEffect && !g_settings.light) {
+        for (int i = 0; i < 3; i++) { darkBody[i].color.a *= 0.78f; oledBody[i].color.a = std::min(oledBody[i].color.a, 0.80f); }
+    }
     // Glass transparency also thins out the Light, Siri and Dark glass (80 % = the theme as designed, 100 % = clear)
     float density = std::clamp((100 - transparency) / 20.0f, 0.0f, 2.5f);
     for (auto* stops : {lightBody, siriBody, darkBody})
@@ -8395,7 +9607,7 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
     g_target->FillRectangle(r, g_brush.Get());
     const bool optics = theme == Theme::Siri || theme == Theme::Tinted || (g_settings.glassEffect && (theme == Theme::Light || theme == Theme::Dark || theme == Theme::Oled));
     // How strong the glass light is: softer on the light theme (white on white) and on OLED (keeps the black deep)
-    const float ok = theme == Theme::Light ? 0.7f : theme == Theme::Oled ? 0.6f : theme == Theme::Tinted ? 0.5f : 1.0f;
+    const float ok = theme == Theme::Light ? 0.7f : theme == Theme::Oled ? 1.0f : theme == Theme::Tinted ? 0.5f : 1.0f;
     if (optics) {
         // Glass optics over the tint: a sheen on the upper part, light bouncing back along the bottom,
         // and the thickness of the glass as a faint bright band just inside the edge
@@ -8408,7 +9620,8 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
         if (auto bottom = MakeGradient(bounce, 2, D2D1::Point2F(0, r.bottom - bounceH), D2D1::Point2F(0, r.bottom)))
             g_target->FillRectangle(D2D1::RectF(r.left, r.bottom - bounceH, r.right, r.bottom), bottom.Get());
         float tw = 3.5f * s, ti = tw / 2 + 1.2f * s;
-        g_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.09f * ok));
+        // (on Dark and OLED the glass is dark, so its thickness needs more light to show)
+        g_brush->SetColor(D2D1::ColorF(1, 1, 1, (theme == Theme::Dark || theme == Theme::Oled ? 0.16f : 0.09f) * ok));
         g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + ti, r.top + ti, r.right - ti, r.bottom - ti),
                                                          std::max(0.0f, radius - ti), std::max(0.0f, radius - ti)), g_brush.Get(), tw);
     }
@@ -8491,56 +9704,17 @@ void DrawThemedShape(const D2D1_RECT_F& r, float radius, ID2D1Bitmap* backdrop, 
         return;
     }
     ComPtr<ID2D1LinearGradientBrush> rim = theme == Theme::Light ? MakeGradient(softLightRim, 5, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom))
-                                                                 : MakeGradient(softRim, 7, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom));
+                                                                 : (theme == Theme::Glass ? ClearGlassRim(acrylic ? 0 : transparency, softRim) : (void)0,
+                                                                    MakeGradient(softRim, 7, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.bottom)));
     if (!rim) return;
     float bw = std::max(1.0f, 1.2f * s), half = bw / 2, rr = std::max(0.0f, radius - half);
     g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rr, rr), rim.Get(), bw);
 }
 
 void DrawSiriShapes(const Layout& L) {
-    float s = L.scale, W = (float)L.width, H = (float)L.height;
+    float s = L.scale;
     ID2D1Bitmap* backdrop = BlurStrength() > 0 ? GetBackdropBitmap() : nullptr;
-    const bool themed = ActiveTheme() != Theme::Custom;
-
-    // One continuous vertical gradient across pill, power pill and panel (macOS style):
-    // darkest at the top of the pill, getting lighter (slightly cool) towards the bottom of the panel
-    const bool shading = !themed && g_settings.siriShade && !g_settings.darkText && g_settings.siriShadeStrength > 0;
-    const float k = g_settings.siriShadeStrength / 100.0f;
-    ComPtr<ID2D1LinearGradientBrush> shade;
-    if (shading) {
-        D2D1_GRADIENT_STOP data[3] = {
-            {0.0f, D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.60f * k)},
-            {0.45f, D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.10f * k)},
-            {1.0f, D2D1::ColorF(0.85f, 0.88f, 1.0f, 0.30f * k)},
-        };
-        float top = L.search.top, bottom = std::max({L.search.bottom, L.siriPanel.bottom, L.siriPower.bottom});
-        ComPtr<ID2D1GradientStopCollection> stops;
-        if (SUCCEEDED(g_target->CreateGradientStopCollection(data, 3, &stops)))
-            g_target->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(D2D1::Point2F(0, top), D2D1::Point2F(0, std::max(top + 1, bottom))),
-                                                stops.Get(), &shade);
-    }
-    auto shape = [&](const D2D1_RECT_F& r, float radius, D2D1_COLOR_F color, float opacity) {
-        if (themed) { DrawThemedShape(r, radius, backdrop, true); return; }
-        if (backdrop) {
-            ComPtr<ID2D1RoundedRectangleGeometry> clip;
-            g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(r, radius, radius), &clip);
-            if (clip) {
-                g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip.Get()), nullptr);
-                DrawBackdropPicture(backdrop, W, H);
-                g_target->PopLayer();
-            }
-        }
-        g_brush->SetColor(Alpha(color, opacity));
-        g_target->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), g_brush.Get());
-        if (shade) g_target->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), shade.Get());
-        DrawGlass(r, radius, shade ? 0.35f : 1.0f);
-        if (g_settings.borderWidth > 0) {
-            float bw = g_settings.borderWidth * s, half = bw / 2, rr = std::max(0.0f, radius - half);
-            g_brush->SetColor(Alpha(g_settings.borderColor, g_settings.borderOpacity));
-            D2D1_RECT_F edge = D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half);
-            g_target->DrawRoundedRectangle(D2D1::RoundedRect(edge, rr, rr), g_brush.Get(), bw);
-        }
-    };
+    auto shape = [&](const D2D1_RECT_F& r, float radius) { DrawThemedShape(r, radius, backdrop, true); };
 
     float ex = SiriExpandEase();
     float panelW = L.siriPanel.right - L.siriPanel.left, panelH = L.siriPanel.bottom - L.siriPanel.top;
@@ -8549,19 +9723,19 @@ void DrawSiriShapes(const Layout& L) {
         float rad = std::min({Lerp(pillR, g_settings.siriPanelRadius * s, ex), panelH / 2, panelW / 2});
         float pa = std::min(1.0f, g_siriAnim * 4);
         PushOpacity(pa);
-        shape(L.siriPanel, rad, g_settings.siriPanelColor, g_settings.siriPanelOpacity);
+        shape(L.siriPanel, rad);
         g_target->PopLayer();
     }
 
     float powerHeight = L.siriPower.bottom - L.siriPower.top;
-    if (powerHeight > 2) shape(L.siriPower, powerHeight / 2, g_settings.siriPillColor, g_settings.siriPillOpacity);
+    if (powerHeight > 2) shape(L.siriPower, powerHeight / 2);
 
     // Floating power button: drawn before the bar so it comes out from behind it
     if (L.btnPower.right > L.btnPower.left) {
         const D2D1_RECT_F& b = L.btnPower;
         float r = (b.right - b.left) / 2;
         PushOpacity(Ease(g_siriBtnAnim));
-        shape(b, r, g_settings.siriPillColor, g_settings.siriPillOpacity);
+        shape(b, r);
         if (g_powerHover || g_powerPillByButton) Fill(b, Fg(g_powerPillByButton ? 0.18f : 0.12f), r);
         DrawPowerIcon(D2D1::Point2F((b.left + b.right) / 2, (b.top + b.bottom) / 2), s, 1.0f);
         g_target->PopLayer();
@@ -8570,7 +9744,7 @@ void DrawSiriShapes(const Layout& L) {
     if (ia > 0.001f) {
         bool layer = ia < 0.999f;
         if (layer) PushOpacity(ia);
-        shape(L.search, (L.search.bottom - L.search.top) / 2, g_settings.siriPillColor, g_settings.siriPillOpacity);
+        shape(L.search, (L.search.bottom - L.search.top) / 2);
         if (layer) g_target->PopLayer();
     }
     DrawSiriIntroOrb(L);
@@ -8622,8 +9796,8 @@ void DrawSiriPillContent(const Layout& L) {
 
 // Category strip — only the enabled categories, shared by every mode
 int FilterAt(float x, float y) {
-    if (!g_settings.siriOriginal || g_siriTab != 0 || g_siriAnim < 0.95f) return kNoChip;
-    const D2D1_RECT_F& r = g_layout.siriTabs;
+    if (!g_settings.siri || g_siriTab != 0 || g_siriAnim < 0.95f) return kNoChip;   // Original Siri and Floating
+    const D2D1_RECT_F& r = g_layout.siriChips;
     if (r.right <= r.left || !InRect(r, x, y)) return kNoChip;
     auto chips = Chips();
     for (int i = 0; i < (int)chips.size(); i++) {
@@ -8635,7 +9809,7 @@ int FilterAt(float x, float y) {
 }
 
 void DrawFilters(const Layout& L) {
-    const D2D1_RECT_F& r = L.siriTabs;
+    const D2D1_RECT_F& r = L.siriChips;
     if (g_siriTab != 0 || r.right <= r.left || !g_tabFormat) return;
     float s = L.scale, h = r.bottom - r.top, rad = h / 2, inset = 3 * s;
     auto chips = Chips();
@@ -8686,6 +9860,7 @@ void DrawGhSearchBox(const Layout& L);
 void DrawTabs(const Layout& L) {
     if (g_siriTab == 4) { DrawGhSearchBox(L); return; }   // icon gallery: a search field for the icon names
     if (g_settings.siriOriginal) { DrawFilters(L); return; }
+    if (FloatingChipsShown()) DrawFilters(L);   // Floating: the app tabs row under the category strip
     const D2D1_RECT_F& r = L.siriTabs;
     if (!TabsVisible() || r.right <= r.left || !g_tabFormat) return;
     float s = L.scale, h = r.bottom - r.top, rad = h / 2, inset = 3 * s;
@@ -8958,6 +10133,238 @@ void HideGlass() {
     g_glassPlaced = RECT{};
 }
 
+// ---------- Alerts in the launcher (macOS style) ----------
+void Render();
+void StartFrames();
+void OnFrame();
+void CfgSurface(const D2D1_RECT_F& r, float rad, float alpha, bool tint);
+extern bool g_cfgWinLight;
+extern HANDLE g_frameWaitTimer;
+extern bool g_frameTimer;
+// Messages (backup saved, restore this backup?...) are drawn inside the launcher with the chosen theme, like a macOS
+// alert: the glass of the theme, a symbol on top, a bold title, the text under it and rounded buttons side by side
+// (the main one in the selection color). MacAlert waits for the answer like MessageBox, with a message loop of its own.
+struct AlertButton { std::wstring label; int id; bool primary; D2D1_RECT_F r; };
+struct AlertState {
+    bool active = false;
+    std::wstring title, body;
+    PCWSTR glyph = L"";
+    std::vector<AlertButton> buttons;
+    int hover = -1, pressed = -1, focus = -1, result = 0, cancelId = IDCANCEL;
+    double start = 0;
+    D2D1_RECT_F rect{};
+};
+AlertState g_alert;
+[[clang::no_destroy]] ComPtr<IDWriteTextFormat> g_alertTitleFmt, g_alertBodyFmt, g_alertButtonFmt;
+float g_alertFmtScale;
+
+float AlertTextHeight(const std::wstring& text, IDWriteTextFormat* fmt, float width) {
+    if (text.empty() || !fmt) return 0;
+    ComPtr<IDWriteTextLayout> layout;
+    DWRITE_TEXT_METRICS tm{};
+    if (FAILED(g_dwrite->CreateTextLayout(text.c_str(), (UINT32)text.size(), fmt, width, 4000, &layout)) || FAILED(layout->GetMetrics(&tm))) return 0;
+    return std::ceil(tm.height);
+}
+
+void DrawMacAlert(const Layout& L) {
+    if (!g_alert.active) return;
+    float s = L.scale, W = (float)L.width, H = (float)L.height;
+    if (!g_alertTitleFmt || g_alertFmtScale != s) {
+        g_alertFmtScale = s;
+        auto make = [&](float px, DWRITE_FONT_WEIGHT w, ComPtr<IDWriteTextFormat>& f) {
+            f.Reset();
+            if (SUCCEEDED(g_dwrite->CreateTextFormat(L"Segoe UI Variable Text", nullptr, w, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, px * s, L"", &f))) {
+                f->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                f->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+                f->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+            }
+        };
+        make(14.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, g_alertTitleFmt);
+        make(12.5f, DWRITE_FONT_WEIGHT_NORMAL, g_alertBodyFmt);
+        make(13.0f, DWRITE_FONT_WEIGHT_MEDIUM, g_alertButtonFmt);
+        if (g_alertButtonFmt) g_alertButtonFmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    }
+    // Size: as wide as a macOS alert, as tall as its text
+    float w = std::min(std::round(300 * s), W - 24 * s), pad = std::round(20 * s), inner = w - 2 * pad;
+    float iconD = std::round(52 * s), btnH = std::round(32 * s), gap = std::round(10 * s);
+    float titleH = AlertTextHeight(g_alert.title, g_alertTitleFmt.Get(), inner);
+    float bodyH = AlertTextHeight(g_alert.body, g_alertBodyFmt.Get(), inner);
+    float h = pad + iconD + gap + titleH + (bodyH > 0 ? std::round(6 * s) + bodyH : 0) + std::round(18 * s) + btnH + pad;
+    // Where: on the settings window, on the results box, or under the bar
+    float cx = W / 2, cy = H / 2;
+    if (g_cfg.active) { cx = (g_cfg.window.left + g_cfg.window.right) / 2; cy = (g_cfg.window.top + g_cfg.window.bottom) / 2; }
+    else if (g_settings.siri) {
+        cx = (L.search.left + L.search.right) / 2;
+        bool panel = L.siriPanel.bottom - L.siriPanel.top > h * 0.6f;
+        cy = panel ? (L.siriPanel.top + L.siriPanel.bottom) / 2 : (g_siriFlip ? L.search.top - 16 * s - h / 2 : L.search.bottom + 16 * s + h / 2);
+    }
+    float left = std::clamp(std::round(cx - w / 2), 8 * s, std::max(8 * s, W - w - 8 * s));
+    float top = std::clamp(std::round(cy - h / 2), 8 * s, std::max(8 * s, H - h - 8 * s));
+    D2D1_RECT_F r = D2D1::RectF(left, top, left + w, top + h);
+    g_alert.rect = r;
+    // Opening: a quick fade with a small zoom, as on macOS
+    float t = (float)std::clamp((Now() - g_alert.start) / 0.2, 0.0, 1.0), e = Ease(t);
+    float k = 0.92f + 0.08f * BackOutK(t, 1.4f);
+    D2D1::Matrix3x2F base;
+    g_target->GetTransform(&base);
+    g_target->SetTransform(D2D1::Matrix3x2F::Scale(k, k, D2D1::Point2F(cx, (r.top + r.bottom) / 2)) * base);
+    PushOpacity(e);
+    float rad = std::round(22 * s);
+    // Over the settings window it looks like that window (its own glass, blur, transparency and tone when it has them,
+    // no backlight); elsewhere like the theme
+    const bool cfgLook = g_cfg.active;
+    const bool savedDark = g_settings.darkText, savedNoBacklight = g_noBacklight;
+    if (cfgLook) { if (CfgWindowOwnBackground()) g_settings.darkText = g_cfgWinLight; g_noBacklight = true; }
+    if (cfgLook) CfgSurface(r, rad, 1.0f, false);
+    else DrawThemedShape(r, rad, BlurStrength() > 0 ? GetBackdropBitmap() : nullptr, true);
+    // The symbol on a round glass
+    D2D1_RECT_F icon = D2D1::RectF(cx - iconD / 2, r.top + pad, cx + iconD / 2, r.top + pad + iconD);
+    icon.left = r.left + (w - iconD) / 2; icon.right = icon.left + iconD;
+    DrawGlassButton(icon, iconD / 2, 1.0f, 1.3f, false);
+    if (g_glyphLargeFormat) {
+        g_brush->SetColor(Fg(0.92f));
+        D2D1::Matrix3x2F m2;
+        g_target->GetTransform(&m2);
+        D2D1_POINT_2F ic = D2D1::Point2F((icon.left + icon.right) / 2, (icon.top + icon.bottom) / 2);
+        g_target->SetTransform(D2D1::Matrix3x2F::Scale(1.35f, 1.35f, ic) * m2);
+        g_target->DrawText(g_alert.glyph, (UINT32)wcslen(g_alert.glyph), g_glyphLargeFormat.Get(), icon, g_brush.Get());
+        g_target->SetTransform(m2);
+    }
+    float y = icon.bottom + gap;
+    if (g_alertTitleFmt) {
+        g_brush->SetColor(Fg(0.96f));
+        g_target->DrawText(g_alert.title.c_str(), (UINT32)g_alert.title.size(), g_alertTitleFmt.Get(), D2D1::RectF(r.left + pad, y, r.right - pad, y + titleH + 2), g_brush.Get());
+        y += titleH;
+    }
+    if (bodyH > 0 && g_alertBodyFmt) {
+        y += std::round(6 * s);
+        g_brush->SetColor(Fg(0.72f));
+        g_target->DrawText(g_alert.body.c_str(), (UINT32)g_alert.body.size(), g_alertBodyFmt.Get(), D2D1::RectF(r.left + pad, y, r.right - pad, y + bodyH + 2), g_brush.Get());
+    }
+    // Buttons side by side (one button: the whole width); the main one on the right, in the selection color
+    int n = (int)g_alert.buttons.size();
+    float bTop = r.bottom - pad - btnH, bw = n > 0 ? (inner - gap * (n - 1)) / n : inner;
+    for (int i = 0; i < n; i++) {
+        AlertButton& b = g_alert.buttons[i];
+        b.r = D2D1::RectF(r.left + pad + i * (bw + gap), bTop, r.left + pad + i * (bw + gap) + bw, bTop + btnH);
+        bool hot = i == g_alert.hover, down = i == g_alert.pressed && hot;
+        if (b.primary) {
+            D2D1_COLOR_F c = cfgLook ? D2D1::ColorF(g_settings.darkText ? 0x007AFF : 0x0A84FF) : g_settings.menuSelectionColor;   // the settings' blue
+            if (down) { c.r *= 0.85f; c.g *= 0.85f; c.b *= 0.85f; }
+            Fill(b.r, Alpha(c, 1.0f), btnH / 2);
+            D2D1_GRADIENT_STOP sheen[2] = {{0.0f, D2D1::ColorF(1, 1, 1, hot ? 0.24f : 0.16f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.0f)}};
+            if (auto top = MakeGradient(sheen, 2, D2D1::Point2F(0, b.r.top), D2D1::Point2F(0, b.r.bottom)))
+                g_target->FillRoundedRectangle(D2D1::RoundedRect(b.r, btnH / 2, btnH / 2), top.Get());
+        } else {
+            DrawGlassButton(b.r, btnH / 2, 1.0f, down ? 2.0f : hot ? 1.6f : 1.1f, false);
+        }
+        if (i == g_alert.focus) {   // the keyboard's button
+            g_brush->SetColor(b.primary ? D2D1::ColorF(1, 1, 1, 0.8f) : Fg(0.6f));
+            D2D1_RECT_F f = D2D1::RectF(b.r.left - 2.5f * s, b.r.top - 2.5f * s, b.r.right + 2.5f * s, b.r.bottom + 2.5f * s);
+            g_target->DrawRoundedRectangle(D2D1::RoundedRect(f, btnH / 2 + 2.5f * s, btnH / 2 + 2.5f * s), g_brush.Get(), 1.5f * s);
+        }
+        if (g_alertButtonFmt) {
+            g_brush->SetColor(b.primary ? D2D1::ColorF(1, 1, 1, 0.98f) : Fg(0.92f));
+            g_target->DrawText(b.label.c_str(), (UINT32)b.label.size(), g_alertButtonFmt.Get(), b.r, g_brush.Get());
+        }
+    }
+    g_target->PopLayer();
+    g_target->SetTransform(base);
+    g_settings.darkText = savedDark; g_noBacklight = savedNoBacklight;
+}
+
+int AlertButtonAt(float x, float y) {
+    for (int i = 0; i < (int)g_alert.buttons.size(); i++) if (InRect(g_alert.buttons[i].r, x, y)) return i;
+    return -1;
+}
+
+// The input of the launcher's window while an alert is up: the buttons answer, everything else is ignored
+bool AlertInput(const MSG& msg) {
+    switch (msg.message) {
+        case WM_MOUSEMOVE: {
+            int h = AlertButtonAt((float)GET_X_LPARAM(msg.lParam), (float)GET_Y_LPARAM(msg.lParam));
+            if (h != g_alert.hover) { g_alert.hover = h; Render(); }
+            return true;
+        }
+        case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
+            g_alert.pressed = AlertButtonAt((float)GET_X_LPARAM(msg.lParam), (float)GET_Y_LPARAM(msg.lParam));
+            Render();
+            return true;
+        case WM_LBUTTONUP: {
+            int b = AlertButtonAt((float)GET_X_LPARAM(msg.lParam), (float)GET_Y_LPARAM(msg.lParam));
+            if (b >= 0 && b == g_alert.pressed) { g_alert.result = g_alert.buttons[b].id; g_alert.active = false; }
+            g_alert.pressed = -1;
+            Render();
+            return true;
+        }
+        case WM_KEYDOWN: {
+            int n = (int)g_alert.buttons.size();
+            if (msg.wParam == VK_RETURN || msg.wParam == VK_SPACE) {
+                if (g_alert.focus >= 0 && g_alert.focus < n) { g_alert.result = g_alert.buttons[g_alert.focus].id; g_alert.active = false; }
+            } else if (msg.wParam == VK_ESCAPE) {
+                g_alert.result = g_alert.cancelId; g_alert.active = false;
+            } else if (n > 1 && (msg.wParam == VK_TAB || msg.wParam == VK_LEFT || msg.wParam == VK_RIGHT)) {
+                bool back = msg.wParam == VK_LEFT || (msg.wParam == VK_TAB && (GetKeyState(VK_SHIFT) & 0x8000));
+                g_alert.focus = ((g_alert.focus + (back ? -1 : 1)) % n + n) % n;
+                Render();
+            }
+            return true;
+        }
+        case WM_RBUTTONDOWN: case WM_RBUTTONUP: case WM_RBUTTONDBLCLK: case WM_MBUTTONDOWN: case WM_MBUTTONUP:
+        case WM_MOUSEWHEEL: case WM_MOUSEHWHEEL: case WM_CHAR: case WM_KEYUP: case WM_SYSKEYDOWN: case WM_SYSKEYUP: case WM_CONTEXTMENU:
+            return true;
+    }
+    return false;
+}
+
+void ForceForeground(HWND);
+// Like MessageBoxW (MB_OK, MB_OKCANCEL or MB_YESNO, with MB_ICONINFORMATION / MB_ICONWARNING / MB_ICONQUESTION), but drawn in the
+// launcher with its theme. The first paragraph is the title; the rest is the text under it
+int MacAlert(PCWSTR text, UINT flags) {
+    if (!g_wnd || !g_shown || g_alert.active) return MessageBoxW(g_wnd, text, L"Siri Plus Launchpad", flags);
+    std::wstring all = text;
+    size_t cut = all.find(L"\n\n");
+    AlertState a;
+    a.title = cut == std::wstring::npos ? all : all.substr(0, cut);
+    a.body = cut == std::wstring::npos ? std::wstring() : all.substr(cut + 2);
+    UINT icon = flags & MB_ICONMASK, kind = flags & MB_TYPEMASK;
+    a.glyph = icon == MB_ICONWARNING ? L"" : icon == MB_ICONQUESTION ? L"" : icon == MB_ICONERROR ? L"" : L"";
+    if (kind == MB_YESNO) { a.buttons = {{Tr(L"No"), IDNO, false, {}}, {Tr(L"Yes"), IDYES, true, {}}}; a.cancelId = IDNO; }
+    else if (kind == MB_OKCANCEL) { a.buttons = {{Tr(L"Cancel"), IDCANCEL, false, {}}, {Tr(L"OK"), IDOK, true, {}}}; a.cancelId = IDCANCEL; }
+    else { a.buttons = {{Tr(L"OK"), IDOK, true, {}}}; a.cancelId = IDOK; }
+    a.focus = (int)a.buttons.size() - 1;   // Enter: the main button
+    a.result = a.cancelId;
+    a.active = true;
+    a.start = Now();
+    g_alert = std::move(a);
+    if (g_menu.open) { g_menu.open = false; }
+    if (GetCapture() == g_wnd) ReleaseCapture();
+    ForceForeground(g_wnd);
+    Render();
+    MSG msg;
+    bool quit = false;
+    while (g_alert.active && !quit) {
+        if (!g_shown) { g_alert.result = g_alert.cancelId; break; }   // the launcher was closed meanwhile (Win key...)
+        // As the launcher's own loop: the frame timer keeps the animations (backlight, chrome) going under the alert
+        bool opening = Now() - g_alert.start < 0.25;
+        if (opening) Render();
+        DWORD handles = g_frameWaitTimer ? 1 : 0;
+        DWORD wait = MsgWaitForMultipleObjectsEx(handles, handles ? &g_frameWaitTimer : nullptr, opening ? 15 : INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        if (handles && wait == WAIT_OBJECT_0 && g_frameTimer) OnFrame();
+        while (g_alert.active && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) { PostQuitMessage((int)msg.wParam); quit = true; g_alert.result = g_alert.cancelId; break; }
+            if (msg.hwnd == g_wnd && AlertInput(msg)) continue;
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+    int result = g_alert.result;
+    g_alert.active = false;
+    g_alert.buttons.clear();
+    if (g_shown) { Render(); StartFrames(); }
+    return result;
+}
+
 struct GlassPiece { D2D1_RECT_F r; float radius; };
 
 // The shapes the live blur goes under (window coordinates, after the opening animation transform)
@@ -8966,7 +10373,7 @@ void CollectGlassPieces(const Layout& L, const D2D1::Matrix3x2F& m, std::vector<
     alpha = 1.0f;
     if (g_settings.siri) {
         float ia = PillIntroAlpha(), pa = std::min(1.0f, g_siriAnim * 4);
-        if (g_cfg.active) { CfgCollectGlass(out); alpha = 1.0f; return; }
+        if (g_cfg.active) { CfgCollectGlass(out); alpha = 1.0f; if (g_alert.active) out.push_back({g_alert.rect, 22 * s}); return; }
         if (ia > 0.02f) out.push_back({L.search, (L.search.bottom - L.search.top) / 2});
         if (L.btnPower.right > L.btnPower.left && g_siriBtnAnim > 0.3f) out.push_back({L.btnPower, (L.btnPower.right - L.btnPower.left) / 2});
         float powerH = L.siriPower.bottom - L.siriPower.top;
@@ -8988,6 +10395,7 @@ void CollectGlassPieces(const Layout& L, const D2D1::Matrix3x2F& m, std::vector<
         out.push_back({D2D1::RectF(std::min(a.x, b.x), std::min(a.y, b.y), std::max(a.x, b.x), std::max(a.y, b.y)), radius * std::fabs(m._11)});
     }
     if (g_menu.open) out.push_back({g_menu.rect, (g_menu.category ? 24 : 14) * s});
+    if (g_alert.active) out.push_back({g_alert.rect, 22 * s});
 }
 
 // Cuts the live blur to the shapes and keeps the glass window right under ours
@@ -8997,7 +10405,8 @@ void UpdateGlass(const Layout& L, const D2D1::Matrix3x2F& m, float windowAlpha) 
     std::vector<GlassPiece> pieces;
     float alpha = 1.0f;
     CollectGlassPieces(L, m, pieces, alpha);
-    alpha *= windowAlpha * (0.35f + 0.65f * g_settings.blurAmount / 100.0f);   // weaker blur = more of the sharp background
+    const int blur = CfgWindowOwnBackground() ? g_cfgWinBlur : g_settings.blurAmount;   // (the settings window may have its own)
+    alpha *= windowAlpha * (0.35f + 0.65f * blur / 100.0f);   // weaker blur = more of the sharp background
     comp::Vec2 whole{(float)L.width, (float)(L.height + L.extraBottom)};
     // Each property is a call into the compositor: only what changed since the last frame is sent
     struct Sent { bool visible = false; float x = -1, y = -1, w = -1, h = -1, radius = -1, opacity = -1, vw = -1, vh = -1; };
@@ -9052,32 +10461,12 @@ void Render() {
         else DrawSiriShapes(L);
     }
     const bool windowBg = !g_settings.siri && !g_cfg.active;   // with the settings open the window is folded away
-    const bool themed = windowBg && ActiveTheme() != Theme::Custom;
-    if (themed) {
+    if (windowBg) {
         // Window mode keeps a margin so the theme shadow fits inside the window
         float m = WindowInset(L.scale);
         DrawThemedShape(D2D1::RectF(m, m, W - m, H - m), std::max(0.0f, radius - m * 0.25f), GetBackdropBitmap(), !g_settings.fullscreen);
-    }
-    if (!themed && BlurStrength() > 0 && windowBg) {
-        if (ID2D1Bitmap* bitmap = GetBackdropBitmap()) {
-            ComPtr<ID2D1RoundedRectangleGeometry> clipGeo;
-            g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(D2D1::RectF(0, 0, W, H), radius, radius), &clipGeo);
-            g_target->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clipGeo.Get()), nullptr);
-            DrawBackdropPicture(bitmap, W, H);
-            g_target->PopLayer();
-        }
-    }
-
-    if (windowBg && !themed) {
-        g_brush->SetColor(Alpha(g_settings.tint, g_settings.opacity));
-        g_target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(0, 0, W, H), radius, radius), g_brush.Get());
-        DrawGlass(D2D1::RectF(0, 0, W, H), radius);
-    }
-
-    if (!g_settings.fullscreen && windowBg && !themed && g_settings.borderWidth > 0) {
-        float bw = g_settings.borderWidth * L.scale, h = bw / 2, rr = std::max(0.0f, radius - h);
-        g_brush->SetColor(Alpha(g_settings.borderColor, g_settings.borderOpacity));
-        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(h, h, W - h, H - h), rr, rr), g_brush.Get(), bw);
+        // Fullscreen casts no shadow (so DrawThemedShape leaves the border out): the chrome border is drawn here
+        if (g_settings.fullscreen && ChromeBorderOn()) DrawChromeEdge(D2D1::RectF(m, m, W - m, H - m), std::max(0.0f, radius - m * 0.25f), 0.9f, ChromeBorderSpeed());
     }
 
     D2D1::Matrix3x2F zoomMatrix = fx.m;
@@ -9183,6 +10572,7 @@ void Render() {
     g_target->SetTransform(D2D1::Matrix3x2F::Identity());
 
 present:
+    if (g_alert.active) { g_target->SetTransform(D2D1::Matrix3x2F::Identity()); DrawMacAlert(L); }   // over everything, in the theme
     HRESULT drawn = g_target->EndDraw();
     if (drawn == D2DERR_RECREATE_TARGET) { ResetTarget(); return; }   // the next frame makes a new target
     const float windowAlpha = std::clamp(fx.alpha, 0.0f, 1.0f);
@@ -9221,7 +10611,7 @@ void StartFrames() {
 
 void StopFrames() {
     if (g_frameWaitTimer) CancelWaitableTimer(g_frameWaitTimer);
-    else KillTimer(g_wnd, kTimerFrame);
+    KillTimer(g_wnd, kTimerFrame);   // (also a fallback timer started before the waitable timer existed)
     g_frameTimer = false;
 }
 
@@ -9465,7 +10855,10 @@ void OnFrame() {
         }
         // Files: the results box only comes out once something is typed (empty = just the bar);
         // Clipboard: only when something has been copied
-        bool panelOpen = g_siriExpanded && !((g_siriTab == 1 || g_siriTab == kTabAll) && g_query.empty()) && !(g_siriTab == 2 && g_clipHistory.empty());
+        // Floating: the box stays open on Files and Clipboard with nothing typed, with the recent searches or the copied
+        // items, or a line saying there are none yet (Original Siri keeps its categories menu for that)
+        bool panelOpen = g_siriExpanded && !(g_siriTab == kTabAll && g_query.empty()) &&
+                         (!g_settings.siriOriginal || (!(g_siriTab == 1 && g_query.empty()) && !(g_siriTab == 2 && g_clipHistory.empty())));
         float expandTarget = panelOpen ? 1.0f : 0.0f;
         if (g_siriAnim != expandTarget) {
             float step = dt * g_settings.animSpeed / (panelOpen ? 0.34f : 0.24f);
@@ -9482,11 +10875,14 @@ void OnFrame() {
         }
         if (relayout) { ComputeLayout(); FitCategoryMenu(); }
     }
-    if (JiggleActive() || MoreFading()) animating = true;
+    // Only the slow ambient animations are running: a frame every 1/30 s is enough
+    bool ambientOnly = !animating && !JiggleActive() && !MoreFading() && !HoverRingSpinning() && AmbientSpinning();
+    if (JiggleActive() || MoreFading() || RingSpinning()) animating = true;
     bool done = g_settings.siri ? (g_closing && g_siriClosingPill && g_pillIntro <= 0.0f)
                                 : (g_closing && g_appear <= 0);
+    static double lastAmbient = 0;
     if (done) { HideNow(); animating = false; }
-    else Render();
+    else if (!ambientOnly || Now() - lastAmbient >= 1.0 / 30) { lastAmbient = Now(); Render(); }
     if (!animating) StopFrames();
 }
 ////////////////////////////////////////////////////////////////////////////////
@@ -9598,7 +10994,7 @@ float ScreenLuminance(const RECT& rc) {
 // Automatic text color on clear glass: the background where the launcher is about to show (it is still hidden)
 void UpdateAutoTextColor() {
     g_autoDarkText = -1;
-    if (g_settings.menuText < 0 && ActiveTheme() == Theme::Glass) {
+    if (g_settings.menuText < 0 && (ActiveTheme() == Theme::Glass || ActiveTheme() == Theme::Frost)) {
         float lum = ScreenLuminance(g_layout.area);
         if (lum >= 0) g_autoDarkText = lum > 0.55f ? 1 : 0;
     }
@@ -9650,6 +11046,7 @@ void Open() {
     g_clearHover = false; g_histClearHover = false; g_backHover = false;
     ResetPowerPill();
     g_siriExpanded = false; g_siriAnim = 0; g_siriBtnAnim = 0; g_siriTab = 0; g_tabSlide = 0; g_siriClosingPill = false;
+    g_hoverOpenArmed = false;   // (the mouse has to come onto the bar: if the bar opens under it, nothing happens until it moves off and back)
     g_appFilter = -1;
     g_pickerChip = kNoChip; g_chipRename = -1; g_chipScroll = 0; g_chipPress = false;
     g_siriChosen = false;
@@ -9672,7 +11069,7 @@ void Open() {
         RECT cap = mi.rcMonitor;
         if (g_settings.liveGlass) InflateRect(&(cap = L.area), LiquidMargin(), LiquidMargin());
         if (!CaptureLiquid(cap)) FreeLiquid();
-        if (g_settings.liveGlass) SetTimer(g_wnd, kTimerLiquid, 33, nullptr);
+        if (g_settings.liveGlass) SetTimer(g_wnd, kTimerLiquid, g_settings.siri ? 33 : 66, nullptr);   // (a whole window: fewer times)
     } else FreeLiquid();
     if (BlurStrength() > 0)
         CaptureBackdrop(L.area, BlurStrength() / 100.0f * 60 * L.scale);
@@ -9681,6 +11078,15 @@ void Open() {
     ForceForeground(g_wnd); PlaceWindows(); Render(); StartFrames();
     // The app list follows installs by itself (WatchApps); as a fallback it is also read again when opening, at most every 5 minutes
     if (!g_appsLoaded || Now() - g_appsTime > 300 || g_appsIconPixels != IconPixels()) StartLoadingApps();
+    if (g_settings.phoneWanted && !g_settings.phoneEnabled && PhoneLinkInstalled()) {   // Phone Link installed since
+        g_settings.phoneEnabled = true;
+        BuildTabs();
+        UpdateCategoryHotkeys();
+    }
+    if (g_settings.phoneEnabled) {
+        PhoneRefresh(false);
+        if (g_siriTab == 6) { RefreshTabItems(false); SetTimer(g_wnd, kTimerPhone, 3000, nullptr); }
+    }
 }
 
 void Close() {
@@ -9741,10 +11147,12 @@ void LaunchApp(int item) {
         ap = ResolveApp(item);
     }
     if (!ap) return;
+    if (ap->kind == 6 && ap->target == L"#phoneclear") { ClearPhoneNotifs(L""); return; }   // Phone: "Clear all"
     if (ap->kind == 6) { if (!ap->target.empty()) SetSiriTab(_wtoi(ap->target.c_str())); return; }   // "Show all"
     if (ap->kind == 2 || ap->kind == 7) { CopyText(ap->target); Close(); return; }   // a copy, or the calculator's result
     if (ap->kind == 5) { GhApply(ap->target); return; }   // icon gallery: this picture becomes the app's icon
     if (ap->kind == 4) { RunAction(ap->target); return; }
+    if (ap->kind == kPhoneKind) { OpenPhoneLink(ap->target); Close(); return; }   // Phone: Phone Link opens on that
     CountLaunch(*ap);
     if (ap->kind == 3) { SetQuery(ap->target); QueryChanged(); return; }
     if (ap->kind == 1 && (g_siriTab == 1 || g_siriTab == kTabAll) && !g_query.empty()) AddSearchHistory(g_query);
@@ -9845,7 +11253,11 @@ void SetSiriTab(int tab) {
         GhClose(false);
         if (tab == 0) { RefreshTabItems(true); StartFrames(); return; }
     }
-    if (tab < 0 || tab > 3 || !TabEnabled(tab) || tab == g_siriTab) return;
+    if (tab < 0 || (tab > 3 && tab != 6) || !TabEnabled(tab) || tab == g_siriTab) return;
+    if (tab == 6) {   // Phone: the card as Phone Link has it now, and kept up to date while it shows
+        PhoneRefresh(true);
+        if (g_wnd) SetTimer(g_wnd, kTimerPhone, 3000, nullptr);
+    }
     g_siriTab = tab;
     g_selection.clear();
     if (g_settings.siri) ExpandSiri(); else g_searchActive = true;
@@ -10109,7 +11521,7 @@ void OnKeyDown(WPARAM key) {
     ClampQueryCaret();
     if (ctrlDown && g_openFolderIndex < 0 && g_settings.siriOriginal) {
         // Original Siri category shortcuts (Ctrl+..., set in the mod's settings)
-        for (int tab = 0; tab < 4; tab++) {
+        for (int tab : kShortcutTabs) {
             const Shortcut& sc = g_shortcuts[tab];
             if (!sc.valid || sc.vk != (UINT)key || sc.shift != shiftDown) continue;
             if (!TabEnabled(tab)) return;
@@ -10746,10 +12158,11 @@ void OpenCategoryMenu() {
     const Layout& L = g_layout;
     float s = L.scale;
     std::vector<MenuItem> items;
-    for (int i = 0; i < g_tabCount && i < 4; i++) {
+    for (int i = 0; i < g_tabCount && i < 5; i++) {
         int id = g_tabIds[i];
-        int menuId = id == 0 ? kMenuTabApps : id == 1 ? kMenuTabFiles : id == 3 ? kMenuTabActions : kMenuTabClipboard;
-        items.push_back({TabLabel(id), menuId, false, false, TabGlyph(id), g_shortcuts[id].valid ? g_shortcutLabels[id].c_str() : nullptr});
+        int menuId = id == 0 ? kMenuTabApps : id == 1 ? kMenuTabFiles : id == 3 ? kMenuTabActions : id == 6 ? kMenuTabPhone : kMenuTabClipboard;
+        PCWSTR key = id < 7 && g_shortcuts[id].valid ? g_shortcutLabels[id].c_str() : nullptr;
+        items.push_back({TabLabel(id), menuId, false, false, TabGlyph(id), key});
     }
     g_menu.folder = g_menu.appIdx = g_menu.folderApp = -1;
     OpenMenu(L.search.left, L.search.bottom + 10 * s, std::move(items), false, 0);
@@ -10853,6 +12266,15 @@ void CancelChipRename() {
     ComputeLayout(); Render();
 }
 
+std::vector<App*> AllApps();
+// What a menu on an app acts on: the selected apps when it was opened on one of them (Floating), else that app
+std::vector<App*> MenuTargets(App* app) {
+    std::vector<App*> out;
+    if (app && g_selection.size() > 1 && g_selection.count(app)) { for (App* a : AllApps()) if (g_selection.count(a)) out.push_back(a); }
+    else if (app) out.push_back(app);
+    return out;
+}
+
 void NewCustomTab(App* app) {
     if ((int)g_customTabs.size() >= kMaxCustomTabs) return;
     std::wstring base = Tr(L"New tab"), name = base;
@@ -10862,7 +12284,11 @@ void NewCustomTab(App* app) {
     for (int n = 2; taken(name); n++) name = base + L" " + std::to_wstring(n);
     CustomTab tab;
     tab.name = name;
-    if (app) tab.targets.push_back(ToLower(app->target));
+    for (App* a : MenuTargets(app)) {   // the app, or all the selected apps
+        std::wstring t = ToLower(a->target);
+        if (std::find(tab.targets.begin(), tab.targets.end(), t) == tab.targets.end()) tab.targets.push_back(t);
+    }
+    g_selection.clear();   // they are in the tab now: the selection (and its jiggle) ends
     g_customTabs.push_back(std::move(tab));
     SaveCustomTabs();
     g_appFilter = kChipCustom + (int)g_customTabs.size() - 1;
@@ -10896,36 +12322,37 @@ void RestoreBuiltinTabs() {
     ComputeLayout(); Render();
 }
 
-void AddToChip(int chip, const App& app) {
+// save: false while several apps are added or removed in a row (the caller saves and refreshes once at the end)
+void AddToChip(int chip, const App& app, bool save = true) {
     std::wstring t = ToLower(app.target);
     if (chip >= kChipCustom) {
         int tab = chip - kChipCustom;
         if (tab >= (int)g_customTabs.size() || TabHas(tab, app)) return;
         g_customTabs[tab].targets.push_back(t);
-        SaveCustomTabs();
+        if (save) SaveCustomTabs();
     } else if (chip >= 0 && chip < kFilterCount) {
         auto& b = g_builtinTabs[chip];
         b.removed.erase(std::remove(b.removed.begin(), b.removed.end(), t), b.removed.end());
         if (AppCategory(app) != chip && !ListHas(b.added, t)) b.added.push_back(t);
-        SaveBuiltinTabs();
+        if (save) SaveBuiltinTabs();
     }
 }
 
-void RemoveFromChip(int chip, const App& app) {
+void RemoveFromChip(int chip, const App& app, bool save = true) {
     std::wstring t = ToLower(app.target);
     if (chip >= kChipCustom) {
         int tab = chip - kChipCustom;
         if (tab >= (int)g_customTabs.size()) return;
         auto& v = g_customTabs[tab].targets;
         v.erase(std::remove(v.begin(), v.end(), t), v.end());
-        SaveCustomTabs();
+        if (save) SaveCustomTabs();
     } else if (chip >= 0 && chip < kFilterCount) {
         auto& b = g_builtinTabs[chip];
         b.added.erase(std::remove(b.added.begin(), b.added.end(), t), b.added.end());
         if (AppCategory(app) == chip && !ListHas(b.removed, t)) b.removed.push_back(t);
-        SaveBuiltinTabs();
+        if (save) SaveBuiltinTabs();
     } else return;
-    RefreshAppsView();
+    if (save) RefreshAppsView();
 }
 
 std::vector<App*> AllApps() {
@@ -11015,7 +12442,10 @@ void ExecuteMenu(int id) {
     CloseMenu();
     if (id >= kMenuCfgBase && id < kMenuCfgBase + kCfgItemCount * 32) { CfgChoose(id - kMenuCfgBase); return; }
     if (id >= kMenuAddToTab && id < kMenuAddToTab + kMaxCustomTabs) {
-        if (app) AddToChip(kChipCustom + id - kMenuAddToTab, *app);
+        for (App* a : MenuTargets(app)) AddToChip(kChipCustom + id - kMenuAddToTab, *a, false);
+        SaveCustomTabs();   // once for all the apps
+        g_selection.clear();
+        RefreshAppsView();
         Render();
         return;
     }
@@ -11024,7 +12454,14 @@ void ExecuteMenu(int id) {
         case kMenuAddApps: StartPicker(g_menuChip); break;
         case kMenuRenameTab: if (g_menuChip >= kChipCustom) BeginChipRename(g_menuChip - kChipCustom); break;
         case kMenuDeleteTab: DeleteChip(g_menuChip); break;
-        case kMenuRemoveFromTab: if (app) RemoveFromChip(g_menuChip, *app); break;
+        case kMenuRemoveFromTab: {
+            auto apps = MenuTargets(app);
+            g_selection.clear();
+            for (App* a : apps) RemoveFromChip(g_menuChip, *a, false);
+            if (g_menuChip >= kChipCustom) SaveCustomTabs(); else if (g_menuChip >= 0 && g_menuChip < kFilterCount) SaveBuiltinTabs();   // once
+            RefreshAppsView();
+            break;
+        }
         case kMenuRestoreTabs: RestoreBuiltinTabs(); break;
         case kMenuTextCopy: CopyQueryToClipboard(); break;
         case kMenuTextCut:
@@ -11037,8 +12474,8 @@ void ExecuteMenu(int id) {
             break;
         case kMenuTextDeleteAll: ClearQuery(); QueryChanged(); break;
         case kMenuTextSelectAll: g_queryAnchor = 0; g_queryCaret = g_query.size(); Render(); break;
-        case kMenuTabApps: case kMenuTabFiles: case kMenuTabClipboard: case kMenuTabActions: {
-            int tab = id == kMenuTabApps ? 0 : id == kMenuTabFiles ? 1 : id == kMenuTabActions ? 3 : 2;
+        case kMenuTabApps: case kMenuTabFiles: case kMenuTabClipboard: case kMenuTabActions: case kMenuTabPhone: {
+            int tab = id == kMenuTabApps ? 0 : id == kMenuTabFiles ? 1 : id == kMenuTabActions ? 3 : id == kMenuTabPhone ? 6 : 2;
             if (g_flyIndex >= 0) {
                 // The row's icon and label fly into the bar
                 float s = g_layout.scale, top = MenuItemTop(g_flyIndex);
@@ -11068,18 +12505,15 @@ void ExecuteMenu(int id) {
         case kMenuDesktop: {
             bool ok = true;
             if (app && g_selection.count(app) && g_selection.size() > 1) {
-                for (auto& a : g_apps) if (g_selection.count(a.get())) ok = CreateDesktopShortcut(*a) && ok;
+                for (App* a : AllApps()) if (g_selection.count(a)) ok = CreateDesktopShortcut(*a) && ok;   // (folder apps too: Floating)
             } else if (app) ok = CreateDesktopShortcut(*app);
             if (!ok) {
-                DialogBegin(false);
-                MessageBoxW(g_wnd, Tr(L"Could not create the shortcut."), L"Siri Plus Launchpad", MB_ICONWARNING);
-                DialogEnd();
-                if (g_shown) ForceForeground(g_wnd);
+                MacAlert(Tr(L"Could not create the shortcut."), MB_ICONWARNING);
             }
             break;
         }
         case kMenuPin:
-            if (app && g_selection.count(app) && g_selection.size() > 1) { for (auto& a : g_apps) if (g_selection.count(a.get())) PinToTaskbar(a->target); }
+            if (app && g_selection.count(app) && g_selection.size() > 1) { for (App* a : AllApps()) if (g_selection.count(a)) PinToTaskbar(a->target); }
             else if (app) PinToTaskbar(app->target);
             break;
         case kMenuHistRemove:
@@ -11151,9 +12585,10 @@ void RunPowerChoice(int id) {
 constexpr int kHotkeyBase = 100;   // + tab
 void UpdateCategoryHotkeys() {
     if (!g_wnd || GetWindowThreadProcessId(g_wnd, nullptr) != GetCurrentThreadId()) return;   // the window's own thread only
-    for (int tab = 0; tab < 4; tab++) UnregisterHotKey(g_wnd, kHotkeyBase + tab);
+    for (int tab : kShortcutTabs) UnregisterHotKey(g_wnd, kHotkeyBase + tab);
     if (!g_settings.siriOriginal || !g_shortcutsAnywhere || g_cfg.capture >= 0) return;
-    for (int tab = 0; tab < 4; tab++) {
+    for (int tab : kShortcutTabs) {
+        if (!TabEnabled(tab)) continue;   // a category that is off doesn't take its key from other programs
         const Shortcut& sc = g_shortcuts[tab];
         if (sc.valid && !RegisterHotKey(g_wnd, kHotkeyBase + tab, MOD_CONTROL | (sc.shift ? MOD_SHIFT : 0) | MOD_NOREPEAT, sc.vk))
             Wh_Log(L"RegisterHotKey %s failed (%u)", g_shortcutLabels[tab].c_str(), GetLastError());
@@ -11162,7 +12597,7 @@ void UpdateCategoryHotkeys() {
 
 // Opens the launcher right on that category (pressed again: closes it)
 void OnCategoryShortcut(int tab) {
-    if (!g_settings.siriOriginal || tab < 0 || tab > 3 || !TabEnabled(tab)) return;
+    if (!g_settings.siriOriginal || tab < 0 || (tab > 3 && tab != 6) || !TabEnabled(tab)) return;
     if (g_shown && !g_closing && g_siriExpanded && g_siriTab == tab) { Close(); return; }
     if (!g_shown || g_closing) Open();
     if (g_menu.open) CloseMenu();
@@ -11274,7 +12709,10 @@ std::wstring CfgFold(std::wstring s) {
         for (int i = 0; from[i]; i++) if (c == from[i]) { c = to[i]; break; }
     return s;
 }
+bool CfgItemHidden(const CfgItem& it);
+bool CfgSectionShown(int section);
 bool CfgMatches(const CfgItem& it) {
+    if (CfgItemHidden(it) || !CfgSectionShown(it.section)) return false;
     if (g_cfg.search.empty()) return it.section == g_cfg.section;
     if (it.type == kCfgGroup) return false;   // group titles only show inside their section
     std::wstring q = CfgFold(g_cfg.search);
@@ -11318,13 +12756,15 @@ PCWSTR CfgButtonText(const CfgItem& it) {
     return CfgT(L"Restore…", L"Restaurar…");
 }
 // Which modes use a section or a setting (the mode chosen in General, even before the launcher reopens with it)
-enum CfgModes { kModesAll, kModesSiri, kModesOriginal, kModesWindow };
-int CfgSectionModes(int section) { return section == 4 || section == 5 ? kModesSiri : section == 6 ? kModesWindow : section == 8 ? kModesOriginal : kModesAll; }
+enum CfgModes { kModesAll, kModesSiri, kModesOriginal, kModesWindow, kModesFloating };
+int CfgSectionModes(int section) { return section == 4 ? kModesOriginal : kModesAll; }   // (Keyboard shortcuts)
+std::wstring CfgNow(PCWSTR key);
 int CfgItemModes(const CfgItem& it) {
     std::wstring k = it.key;
-    if (k == L"siri.generalSearch" || k == L"siri.firstRow" || k.rfind(L"siri.shortcut", 0) == 0) return kModesOriginal;
-    if (k.rfind(L"siri.", 0) == 0 || k == L"appearance.glassStyle" || k == L"appearance.refraction" || k == L"appearance.liveGlass" ||
-        k == L"custom.shading") return kModesSiri;
+    if (k == L"floatingOpen") return kModesFloating;
+    if (k == L"siri.generalSearch" || k.rfind(L"siri.shortcut", 0) == 0) return kModesOriginal;
+    if (k == L"appearance.liveGlass" && (CfgNow(L"theme") == L"frost" || CfgNow(L"theme") == L"glass")) return kModesAll;
+    if (k.rfind(L"siri.", 0) == 0 || k == L"appearance.refraction" || k == L"appearance.liveGlass") return kModesSiri;
     if (k.rfind(L"window.", 0) == 0) return kModesWindow;
     return kModesAll;
 }
@@ -11334,7 +12774,7 @@ std::wstring CfgModeNote(int modes) {
     static const CfgItem* modeItem = CfgFind(L"displayMode");
     std::wstring mode = modeItem && !CfgValue(*modeItem).empty() ? CfgValue(*modeItem) : CfgStr(L"displayMode");   // the panel's copy
     bool window = mode == L"window" || mode == L"fullscreen", original = !window && mode != L"siri";
-    bool used = modes == kModesSiri ? !window : modes == kModesWindow ? window : original;
+    bool used = modes == kModesSiri ? !window : modes == kModesWindow ? window : modes == kModesFloating ? mode == L"siri" : original;
     if (used) return {};
     PCWSTR modeName = mode.c_str();
     for (const CfgOpt& o : kOptMode) if (mode == o.value) modeName = CfgT(o.en, o.pt);
@@ -11353,8 +12793,28 @@ std::wstring CfgNow(PCWSTR key) {
 }
 bool CfgNowOn(PCWSTR key) { return _wtoi(CfgNow(key).c_str()) != 0; }
 
-// Why a setting can't be used with what is chosen right now (theme, glass style, performance mode, a switch it depends on);
-// empty when it can. Those settings are dimmed, say why, and don't react to the mouse
+// Hidden in the panel: the chosen theme or mode doesn't use it (the panel only shows what applies to them)
+bool CfgItemHidden(const CfgItem& it) {
+    // Backlight: only as many color rows as colors chosen
+    if (!wcsncmp(it.key, L"appearance.backlightColor", 25) && it.type == kCfgColor) {
+        int n = it.key[25] ? it.key[25] - L'0' : 1;
+        if (n > std::clamp(_wtoi(CfgNow(L"appearance.backlightColors").c_str()), 1, 5)) return true;
+    }
+    if (it.type == kCfgGroup) return false;   // (a title shows when something under it does)
+    if (!CfgModeNote(CfgItemModes(it)).empty()) return true;
+    const std::wstring k = it.key, theme = CfgNow(L"theme");
+    if (k == L"appearance.menuSelection" || k == L"appearance.menuSelectionColor" || k == L"appearance.menuSelectionColor2") {
+        if (k == L"appearance.menuSelectionColor2") return CfgNow(L"appearance.menuSelection") != L"gradient";
+    }
+    if (k == L"appearance.tintLevel" || k == L"appearance.tintReach" || k == L"appearance.tintColor") return theme != L"tintedliquid";
+    if (k == L"appearance.glassEffect") return theme != L"light" && theme != L"dark" && theme != L"oled";
+    if (k == L"appearance.refraction") return theme == L"frost";   // Glass never bends (Liquid glass is the theme that does)
+    if (k == L"settingsWindow.blur" || k == L"settingsWindow.transparency" || k == L"settingsWindow.tone")
+        return CfgNow(L"settingsWindow.background") != L"custom";
+    return false;
+}
+// Why a setting that is shown can't be used right now (performance mode, a switch it depends on); empty when it can.
+// Those settings are dimmed, say why, and don't react to the mouse
 std::wstring CfgLockReason(const CfgItem& it) {
     if (it.type == kCfgGroup) return {};
     const std::wstring k = it.key;
@@ -11362,27 +12822,21 @@ std::wstring CfgLockReason(const CfgItem& it) {
     const std::wstring theme = CfgNow(L"theme");
     const bool light = CfgNow(L"performance") == L"light";
     const bool lightDarkOled = theme == L"light" || theme == L"dark" || theme == L"oled";
-    if (k == L"appearance.transparency" && theme == L"custom") return note(L"Not used by the Custom theme", L"Não é usado pelo tema Personalizado");
     if ((k == L"appearance.blur" || k == L"appearance.menuBlur") && light)
         return note(L"Turned off by Light performance mode", L"Desligado pelo modo de desempenho Leve");
-    if (k == L"appearance.menuSelection" || k == L"appearance.menuSelectionColor") {
-        if (theme != L"glass" && theme != L"tintedliquid")
-            return note(L"Only for the Clear glass and Custom liquid glass themes", L"Só para os temas Vidro transparente e Vidro líquido personalizado");
-        if (k == L"appearance.menuSelectionColor" && CfgNow(L"appearance.menuSelection") == L"glass")
-            return note(L"Only with the Colored or Frosted color selection", L"Só com a seleção Colorida ou Cor fosca");
-    }
-    if ((k == L"appearance.tintLevel" || k == L"appearance.tintReach" || k == L"appearance.tintColor") && theme != L"tintedliquid")
-        return note(L"Only for the Custom liquid glass theme", L"Só para o tema Vidro líquido personalizado");
-    if (k == L"appearance.glassEffect" && !lightDarkOled)
-        return note(L"Only for the Light, Dark and OLED themes", L"Só para os temas Claro, Escuro e OLED");
-    if (k == L"appearance.glassStyle" || k == L"appearance.refraction" || k == L"appearance.liveGlass") {
+    if (k == L"appearance.menuSelectionColor" && CfgNow(L"appearance.menuSelection") == L"glass")
+        return note(L"Only with the Colored or Frosted color selection", L"Só com a seleção Colorida ou Cor fosca");
+    if (k.rfind(L"appearance.backlight", 0) == 0 && k != L"appearance.backlight") {
         if (light) return note(L"Turned off by Light performance mode", L"Desligado pelo modo de desempenho Leve");
-        const bool glassy = theme == L"glass" || theme == L"siri" || theme == L"tintedliquid" || (lightDarkOled && CfgNowOn(L"appearance.glassEffect"));
-        if (!glassy)
-            return note(L"Needs a theme with glass: Clear glass, Custom liquid glass, Siri gradient, or Light, Dark and OLED with the glass effect",
-                        L"Precisa de um tema com vidro: Vidro transparente, Vidro líquido personalizado, Degradê Siri, ou Claro, Escuro e OLED com o efeito vidro");
-        if (k != L"appearance.glassStyle" && CfgNow(L"appearance.glassStyle") != L"liquid")
-            return note(L"Only with the Liquid glass style", L"Só com o estilo Vidro líquido");
+        if (!CfgNowOn(L"appearance.backlight")) return note(L"Turn on Backlight first", L"Ative a Retroiluminação primeiro");
+    }
+    if ((k == L"appearance.backlight" || k == L"appearance.chromeBorder" || k == L"appearance.chromeRing") && light)
+        return note(L"Turned off by Light performance mode", L"Desligado pelo modo de desempenho Leve");
+    if (k == L"appearance.refraction" || k == L"appearance.liveGlass") {
+        if (light) return note(L"Turned off by Light performance mode", L"Desligado pelo modo de desempenho Leve");
+        if (lightDarkOled && !CfgNowOn(L"appearance.glassEffect")) return note(L"Turn on Glass effect first", L"Ative o Efeito vidro primeiro");
+        if (k == L"appearance.liveGlass" && theme != L"frost" && theme != L"glass" && _wtoi(CfgNow(L"appearance.refraction").c_str()) <= 0)
+            return note(L"Only with Refraction above 0", L"Só com a Refração acima de 0");
     }
     if (k == L"siri.powerButtonSide" && !CfgNowOn(L"siri.powerButton"))
         return note(L"Turn on the floating power button first", L"Ative o botão de energia flutuante primeiro");
@@ -11390,16 +12844,16 @@ std::wstring CfgLockReason(const CfgItem& it) {
         return note(L"Turn on Show power button first", L"Ative Mostrar botão de energia primeiro");
     if ((k == L"files.history" || k == L"files.view" || k == L"files.indexer" || k == L"files.maxResults") && !CfgNowOn(L"files.enabled"))
         return note(L"Turn on the Files category first", L"Ative a categoria Arquivos primeiro");
+    if (k == L"phone.notifications" && !CfgNowOn(L"phone.enabled"))
+        return note(L"Turn on the Phone category first", L"Ative a categoria Celular primeiro");
     if ((k == L"clipboard.size" || k == L"clipboard.keep") && !CfgNowOn(L"clipboard.enabled"))
         return note(L"Turn on the Clipboard category first", L"Ative a categoria Área de transferência primeiro");
     return {};
 }
-// The same for a whole section (Custom theme: only when that theme is chosen)
-std::wstring CfgSectionLock(int section) {
-    if (section == 2 && CfgNow(L"theme") != L"custom")
-        return CfgT(L"Only used when the theme is Custom", L"Só é usado quando o tema é Personalizado");
-    return {};
-}
+// The same for a whole section (none today: kept for sections that depend on something)
+std::wstring CfgSectionLock(int) { return {}; }
+// A section the chosen mode doesn't use is left out of the list (Keyboard shortcuts: Original Siri only)
+bool CfgSectionShown(int section) { return CfgModeNote(CfgSectionModes(section)).empty(); }
 // A section's description, plus the note when the chosen mode or theme doesn't use the section
 std::wstring CfgSectionDesc(int section) {
     const CfgSection& sec = kCfgSections[section];
@@ -11419,13 +12873,9 @@ bool CfgItemLocked(const CfgItem& it) {
 }
 std::wstring CfgItemDesc(const CfgItem& it) {
     PCWSTR d = CfgT(it.descEn, it.descPt);
-    if (!wcscmp(it.key, L"appearance.glassStyle")) {   // says what the chosen style is
-        d = CfgNow(L"appearance.glassStyle") == L"liquid"
-            ? CfgT(L"The background bends at the edges, like macOS 26. Heavier on the PC; Floating and Original Siri modes. Applies the next time it opens",
-                   L"O fundo se curva nas bordas, como no macOS 26. Mais pesado para o PC; modos Flutuante e Siri original. Vale na próxima vez que abrir")
-            : CfgT(L"Flat glass with a soft live blur behind it. Light on the PC. Applies the next time it opens",
-                   L"Vidro reto com um desfoque suave ao vivo por trás. Leve para o PC. Vale na próxima vez que abrir");
-    }
+    if (!wcscmp(it.key, L"appearance.liveGlass") && CfgNow(L"theme") == L"frost")
+        d = CfgT(L"On: the glass follows videos and animated wallpapers (the launcher then stays out of screenshots and recordings). Off: a still picture, lighter on the PC",
+                 L"Ligado: o vidro acompanha vídeos e papéis de parede animados (o menu não aparece em capturas de tela e gravações). Desligado: uma imagem parada, mais leve para o PC");
     std::wstring desc = d ? d : L"", note = CfgItemNote(it);
     if (note.empty()) return desc;
     return desc.empty() ? note : desc + L"\n" + note;
@@ -11466,6 +12916,7 @@ void CfgBuild() {
     float y = g_cfgView.top + std::round(4 * s) - std::round(g_cfg.scroll);
     float startY = y;
     g_cfgHeader = D2D1::RectF(0, 0, 0, 0);
+    if (!CfgSectionShown(g_cfg.section)) g_cfg.section = 0;   // the mode changed: that section is no longer listed
     if (g_cfg.search.empty()) {
         float textW = cardR - cardL - in - std::round(56 * s) - in;
         float dh = CfgTextHeight(CfgSectionDesc(g_cfg.section).c_str(), g_cfgHeadDesc.Get(), textW);
@@ -11475,15 +12926,17 @@ void CfgBuild() {
     }
     auto addCard = [&](int section) {
         float top = y;
+        int title = -1;   // a group title waiting for its first shown setting (a title with nothing shown under it is left out)
         for (int i = 0; i < kCfgItemCount; i++) {
             const CfgItem& it = kCfgItems[i];
             if (it.section != section || !CfgMatches(it)) continue;
-            if (it.type == kCfgGroup) {   // a title: the card so far ends, the next ones start under it
+            if (it.type == kCfgGroup) { title = i; continue; }
+            if (title >= 0) {   // a title: the card so far ends, the next ones start under it
                 if (y > top) { g_cfgCards.push_back(D2D1::RectF(cardL, top, cardR, y)); y += std::round(16 * s); }
-                g_cfgCaptions.push_back({section, D2D1::RectF(cardL + std::round(4 * s), y, cardR, y + std::round(24 * s)), i});
+                g_cfgCaptions.push_back({section, D2D1::RectF(cardL + std::round(4 * s), y, cardR, y + std::round(24 * s)), title});
                 y += std::round(26 * s);
                 top = y;
-                continue;
+                title = -1;
             }
             float cw = CfgControlWidth(it, s);
             float labelW = cardR - cardL - 2 * in - cw - std::round(16 * s);
@@ -11518,7 +12971,7 @@ void CfgBuild() {
     const D2D1_RECT_F& S = g_cfg.side;
     float rowH = std::round(32 * s), sy = g_cfg.bar.bottom + std::round(14 * s);   // under the search field
     for (int sec = 0; sec < kCfgSectionCount; sec++) {
-        if (!g_cfg.search.empty() && !CfgSectionHasMatch(sec)) continue;
+        if (!CfgSectionShown(sec) || (!g_cfg.search.empty() && !CfgSectionHasMatch(sec))) continue;
         g_cfgSideRows.push_back({sec, D2D1::RectF(S.left + std::round(8 * s), sy, S.right - std::round(8 * s), sy + rowH - std::round(2 * s))});
         sy += rowH;
     }
@@ -11541,7 +12994,7 @@ void CfgApplyLayout() {
     float fm = std::round(12 * s), fh = std::round(30 * s);
     g_cfg.bar = D2D1::RectF(left0 + fm, top0 + std::round(16 * s), left0 + sideW - fm, top0 + std::round(16 * s) + fh);
     L.search = g_cfg.bar;   // the settings search (typing goes there)
-    L.btnPower = L.btnBack = L.panel = L.dots = L.siriPanel = L.siriPower = L.siriTabs = D2D1::RectF(0, 0, 0, 0);
+    L.btnPower = L.btnBack = L.panel = L.dots = L.siriPanel = L.siriPower = L.siriTabs = L.siriChips = D2D1::RectF(0, 0, 0, 0);
     g_cfg.scroll = std::clamp(g_cfg.scroll, 0.0f, std::max(0.0f, g_cfg.contentH));
     // The rows only move when something they depend on changes (not with every frame of the opening)
     struct BuiltFor { float W, H, s, scroll; int section; std::wstring search; unsigned version; UiLanguage lang; };
@@ -11607,22 +13060,28 @@ void CfgCollectGlass(std::vector<GlassPiece>& out) {
 }
 
 // ---------- Drawing ----------
+// The settings window is open with a background of its own
+bool CfgWindowOwnBackground() { return g_cfg.active && g_cfgWinCustom; }
 void CfgSurface(const D2D1_RECT_F& r, float rad, float alpha, bool tint) {
     if (alpha <= 0.001f || r.right - r.left < 2 || r.bottom - r.top < 2) return;
     float s = g_layout.scale;
     rad = std::min(rad, std::min(r.right - r.left, r.bottom - r.top) / 2);
     PushOpacity(alpha);
-    if (ActiveTheme() != Theme::Custom) DrawThemedShape(r, rad, nullptr, true);
-    else {
-        DrawThemeShadow(r, rad, 0.22f, 12 * s, 5 * s);
-        Fill(r, Alpha(g_settings.siriPanelColor, std::max(0.6f, g_settings.siriPanelOpacity)), rad);
-        if (g_settings.borderWidth > 0) {
-            float bw = g_settings.borderWidth * s, half = bw / 2;
-            g_brush->SetColor(Alpha(g_settings.borderColor, g_settings.borderOpacity));
-            g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half),
-                                                             std::max(0.0f, rad - half), std::max(0.0f, rad - half)), g_brush.Get(), bw);
-        }
-    }
+    if (CfgWindowOwnBackground()) {
+        // Its own glass: a veil the transparency controls (light under dark text, dark under white text), a fine top
+        // light and a soft rim; the blur behind comes from the live glass window
+        DrawThemeShadow(r, rad, 0.20f, 12 * s, 5 * s);
+        float a = (100 - g_cfgWinTransparency) / 100.0f;
+        if (!LiveBlurOn()) a = std::max(a, 0.70f);   // with no blur behind, the page behind would be sharp under the text
+        Fill(r, g_settings.darkText ? D2D1::ColorF(0.97f, 0.97f, 0.98f, 0.10f + a * 0.85f) : D2D1::ColorF(0.06f, 0.06f, 0.07f, 0.08f + a * 0.85f), rad);
+        float glowH = std::min((r.bottom - r.top) * 0.2f, 16 * s);
+        D2D1_GRADIENT_STOP glow[2] = {{0.0f, D2D1::ColorF(1, 1, 1, g_settings.darkText ? 0.40f : 0.07f)}, {1.0f, D2D1::ColorF(1, 1, 1, 0.0f)}};
+        if (auto top = MakeGradient(glow, 2, D2D1::Point2F(0, r.top), D2D1::Point2F(0, r.top + glowH)))
+            g_target->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left, r.top, r.right, r.top + glowH), rad, rad), top.Get());
+        float bw = std::max(1.0f, 1.0f * s), half = bw / 2, rr = std::max(0.0f, rad - half);
+        g_brush->SetColor(g_settings.darkText ? D2D1::ColorF(0.45f, 0.47f, 0.52f, 0.30f) : D2D1::ColorF(1, 1, 1, 0.16f));
+        g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + half, r.top + half, r.right - half, r.bottom - half), rr, rr), g_brush.Get(), bw);
+    } else DrawThemedShape(r, rad, nullptr, true);
     if (tint) Fill(r, g_settings.darkText ? D2D1::ColorF(1, 1, 1, 0.38f) : D2D1::ColorF(0.05f, 0.05f, 0.07f, 0.34f), rad);
     g_target->PopLayer();
 }
@@ -11663,6 +13122,17 @@ void DrawCfgSideRows() {
 
 void DrawCfgToggle(const D2D1_RECT_F& c, bool on) {
     float h = c.bottom - c.top, r = h / 2;
+    if (g_settings.glassButtons) {
+        // A glass track (the color shows inside it when on) and a glass knob
+        if (on) Fill(c, Alpha(CfgAccent(), 0.85f), r);
+        DrawGlassButton(c, r, 1.0f, on ? 0.7f : 0.9f, false);
+        float d = h - 4 * g_layout.scale, cx = on ? c.right - 2 * g_layout.scale - d / 2 : c.left + 2 * g_layout.scale + d / 2, cy = (c.top + c.bottom) / 2;
+        D2D1_RECT_F k = D2D1::RectF(cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2);
+        g_brush->SetColor(D2D1::ColorF(1, 1, 1, g_cfgDrawLocked ? 0.45f : 0.80f));
+        g_target->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), d / 2, d / 2), g_brush.Get());
+        DrawGlassButton(k, d / 2, 1.0f, 2.0f, true);
+        return;
+    }
     Fill(c, on ? CfgAccent() : Fg(0.20f), r);
     float d = h - 4 * g_layout.scale, cx = on ? c.right - 2 * g_layout.scale - d / 2 : c.left + 2 * g_layout.scale + d / 2, cy = (c.top + c.bottom) / 2;
     g_brush->SetColor(D2D1::ColorF(0, 0, 0, 0.18f));
@@ -11699,7 +13169,7 @@ void DrawCfgControl(const CfgRow& row, bool hover) {
             break;
         }
         case kCfgChoice: {
-            Fill(c, Fg(hover ? 0.16f : 0.10f), 7 * s);
+            GlassField(c, 7 * s, hover ? 0.16f : 0.10f, hover ? 1.3f : 0.9f);
             CfgText(CfgOptionLabel(it, v), g_cfgBody.Get(), D2D1::RectF(c.left + 10 * s, c.top, c.right - 26 * s, c.bottom), Fg(g_cfgDrawLocked ? 0.40f : 0.92f));
             CfgText(L"", g_cfgGlyphXS.Get(), D2D1::RectF(c.right - 24 * s, c.top, c.right - 6 * s, c.bottom), Fg(0.70f));
             break;
@@ -11713,7 +13183,7 @@ void DrawCfgControl(const CfgRow& row, bool hover) {
             g_target->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(c.left + d / 2, cy), d / 2 - 1 * s, d / 2 - 1 * s), g_brush.Get(), 1 * s);
             D2D1_RECT_F box = D2D1::RectF(c.left + d + 8 * s, c.top, c.right, c.bottom);
             bool editing = g_cfg.edit == row.item;
-            Fill(box, Fg(editing ? 0.14f : hover ? 0.12f : 0.08f), 7 * s);
+            GlassField(box, 7 * s, editing ? 0.14f : hover ? 0.12f : 0.08f, editing || hover ? 1.2f : 0.85f);
             if (editing) {
                 g_brush->SetColor(CfgAccent());
                 g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(box.left + 0.75f * s, box.top + 0.75f * s, box.right - 0.75f * s, box.bottom - 0.75f * s),
@@ -11731,7 +13201,7 @@ void DrawCfgControl(const CfgRow& row, bool hover) {
         }
         case kCfgText: {
             bool editing = g_cfg.edit == row.item;
-            Fill(c, Fg(editing ? 0.14f : hover ? 0.12f : 0.08f), 7 * s);
+            GlassField(c, 7 * s, editing ? 0.14f : hover ? 0.12f : 0.08f, editing || hover ? 1.2f : 0.85f);
             if (editing) {
                 g_brush->SetColor(CfgAccent());
                 g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(c.left + 0.75f * s, c.top + 0.75f * s, c.right - 0.75f * s, c.bottom - 0.75f * s),
@@ -11756,7 +13226,7 @@ void DrawCfgControl(const CfgRow& row, bool hover) {
         }
         case kCfgShortcut: {
             bool capturing = g_cfg.capture == row.item;
-            Fill(c, Fg(capturing ? 0.14f : hover ? 0.12f : 0.08f), 7 * s);
+            GlassField(c, 7 * s, capturing ? 0.14f : hover ? 0.12f : 0.08f, capturing || hover ? 1.2f : 0.85f);
             if (capturing) {
                 g_brush->SetColor(CfgAccent());
                 g_target->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(c.left + 0.75f * s, c.top + 0.75f * s, c.right - 0.75f * s, c.bottom - 0.75f * s),
@@ -11767,7 +13237,7 @@ void DrawCfgControl(const CfgRow& row, bool hover) {
         }
         case kCfgButton: {
             bool enabled = CfgButtonEnabled(it), danger = !wcscmp(it.key, L"#reset");
-            Fill(c, Fg(enabled && hover ? 0.16f : 0.10f), 7 * s);
+            GlassField(c, 7 * s, enabled && hover ? 0.16f : 0.10f, enabled && hover ? 1.3f : 0.9f);
             CfgText(CfgButtonText(it), g_cfgButton.Get(), c, !enabled ? Fg(0.35f) : danger ? DangerInk() : Fg(0.92f));
             break;
         }
@@ -11853,7 +13323,10 @@ void DrawCfgPanelContent() {
         float block = row.labelH + (desc ? std::round(2 * s) + row.descH : 0);
         float top = (row.r.top + row.r.bottom) / 2 - block / 2;
         float labelRight = row.ctl.left - std::round(16 * s);
-        CfgText(CfgT(it.en, it.pt), g_cfgBody.Get(), D2D1::RectF(row.r.left + in, top, labelRight, top + row.labelH), Fg(unused ? 0.55f : 0.94f));
+        // Glass isn't the liquid one: its switch just says the blur follows the background live
+        PCWSTR label = !wcscmp(it.key, L"appearance.liveGlass") && CfgNow(L"theme") == L"frost"
+            ? CfgT(L"Glass follows the background live", L"Vidro acompanha o fundo ao vivo") : CfgT(it.en, it.pt);
+        CfgText(label, g_cfgBody.Get(), D2D1::RectF(row.r.left + in, top, labelRight, top + row.labelH), Fg(unused ? 0.55f : 0.94f));
         if (desc)
             CfgText(desc, g_cfgDesc.Get(), D2D1::RectF(row.r.left + in, top + row.labelH + std::round(2 * s), labelRight, top + block + 4 * s), Fg(unused ? 0.42f : 0.55f));
         g_cfgDrawLocked = unused;
@@ -11898,12 +13371,22 @@ float MoreGearT() {
     return g_moreHover ? u : 1.0f - u;
 }
 bool MoreFading() { return g_moreHoverAt >= 0 && Now() - g_moreHoverAt < 0.22; }
+// The settings button's chrome ring turns while the mouse is on it
+bool HoverRingSpinning() {
+    return g_settings.chromeRing && ((g_moreHover && MoreShown()) || (g_gear.hover && !g_cfg.active && g_gear.anim > 0));
+}
+// The backlight's colors and the chrome border turn all the time the launcher is open (slowly: 30 frames a second is plenty)
+bool AmbientSpinning() {
+    return g_shown && !g_settings.light && ((g_settings.backlight && g_settings.backlightIntensity > 0) || (g_settings.chromeBorder && !ChromeBorderStill()));
+}
+bool RingSpinning() { return HoverRingSpinning() || AmbientSpinning(); }
 void DrawMoreButton() {
     if (!MoreShown()) return;
     D2D1_RECT_F g = GearRect();
     float s = g_layout.scale, r = (g.right - g.left) / 2, e = Ease(MoreGearT());
     D2D1_POINT_2F c = D2D1::Point2F((g.left + g.right) / 2, (g.top + g.bottom) / 2);
     if (e > 0.001f) DrawGlassButton(g, r, e, 1.15f, false);   // a faint glass circle comes up under it
+    if (e > 0.001f && g_settings.chromeRing && !g_settings.light) DrawChromeRing(c, r, e);   // and a chrome ring, its light running around
     // The dots gather to the middle and fade
     if (e < 0.999f) {
         g_brush->SetColor(Fg(0.45f * (1 - e)));
@@ -11933,6 +13416,7 @@ void DrawGear() {
     D2D1_RECT_F sr = D2D1::RectF(c.x - r, c.y - r, c.x + r, c.y + r);
     bool hover = !g_cfg.active && g_gear.hover;
     DrawGlassButton(sr, r, std::min(1.0f, a * 1.5f), hover ? 1.8f : 1.25f, true);
+    if (hover && g_settings.chromeRing && !g_settings.light) DrawChromeRing(c, r, std::min(1.0f, a * 1.5f));
     D2D1::Matrix3x2F base;
     g_target->GetTransform(&base);
     float angle = (g_cfg.active ? g_cfg.anim : 0.0f) * 180.0f + (1 - k) * -90.0f;
@@ -11993,6 +13477,12 @@ void DrawCfgPlain() {
     g_target->PopLayer();
 }
 void DrawCfgPlainWindow() {
+    // With a background of its own, the window's text follows its tone (dark text on the light glass), not the theme
+    struct TextScope {
+        bool saved;
+        TextScope() : saved(g_settings.darkText) { if (CfgWindowOwnBackground()) g_settings.darkText = g_cfgWinLight; g_noBacklight = true; }
+        ~TextScope() { g_settings.darkText = saved; g_noBacklight = false; }
+    } textScope;
     CfgFormats(g_layout.scale);
     float s = g_layout.scale;
     D2D1_RECT_F win = CfgPlainRect();
@@ -12036,8 +13526,7 @@ void DrawCfgWindow() {
     if (a <= 0.001f) return;
     float rad = g_cfg.fullscreen ? 0.0f : g_settings.cornerRadius * g_layout.scale;
     PushOpacity(a);
-    if (ActiveTheme() != Theme::Custom) DrawThemedShape(g_cfg.window, rad, nullptr, !g_cfg.fullscreen);
-    else { Fill(g_cfg.window, Alpha(g_settings.tint, g_settings.opacity), rad); DrawGlass(g_cfg.window, rad); }
+    DrawThemedShape(g_cfg.window, rad, nullptr, !g_cfg.fullscreen);
     g_target->PopLayer();
 }
 
@@ -12066,11 +13555,10 @@ void CfgApplySettings() {
 void CfgSet(const CfgItem& it, const std::wstring& value, bool save = true) {
     ++g_cfgVersion;
     if (!g_cfgOverridesLoaded) LoadCfgOverrides();
-    const bool themeBlur = !wcscmp(it.key, L"appearance.blur");
-    if (themeBlur || !wcscmp(it.key, L"appearance.transparency")) {   // kept for the active theme only
-        if (!g_themeTransparencyLoaded) LoadThemeTransparency();
-        g_themeTransparency[std::wstring(ThemeName(g_settings.theme)) + (themeBlur ? L"#blur" : L"")] = std::clamp(_wtoi(value.c_str()), 0, 100);
-        if (save) SaveThemeTransparency();
+    if (IsThemeKey(it.key)) {   // "Customize theme": kept for the active theme only
+        if (!g_themeValuesLoaded) LoadThemeValues();
+        g_themeValues[ThemeName(g_settings.theme)][it.key] = value;
+        if (save) SaveThemeValues(); else g_cfgOverridesDirty = true;   // (saved with the panel's values)
         g_cfgValues[it.key] = value;
         CfgApplySettings();
         return;
@@ -12081,10 +13569,7 @@ void CfgSet(const CfgItem& it, const std::wstring& value, bool save = true) {
     if (save) SaveCfgOverrides(); else g_cfgOverridesDirty = true;
     g_cfgValues[it.key] = value;
     CfgApplySettings();
-    if (!wcscmp(it.key, L"theme")) {   // the new theme's own transparency and blur
-        g_cfgValues[L"appearance.transparency"] = std::to_wstring(g_settings.glassTransparency);
-        g_cfgValues[L"appearance.blur"] = std::to_wstring(g_settings.blurAmount);
-    }
+    if (!wcscmp(it.key, L"theme")) CfgRefreshValues();   // "Customize theme" now shows the new theme's own values
 }
 
 // One setting back to its default (as an override when Windhawk has another value)
@@ -12097,8 +13582,9 @@ void CfgSetDefault(const CfgDefault& d) {
     else g_cfgOverrides[it->key] = {d.value, base};
 }
 
-// The look of the active theme differs from its defaults (Appearance; for Custom also its own section)
+// The active theme was customized (Customize theme: something of its own was changed)
 bool CfgThemeChangedNow();
+std::wstring ThemeKeyDefault(Theme t, PCWSTR key);
 bool CfgThemeChanged() {   // (drawn with every frame of the Appearance section: worked out once per change)
     static unsigned version = 0;
     static Theme theme = Theme::Custom;
@@ -12107,15 +13593,12 @@ bool CfgThemeChanged() {   // (drawn with every frame of the Appearance section:
     return changed;
 }
 bool CfgThemeChangedNow() {
-    if (!g_cfgOverridesLoaded) LoadCfgOverrides();
-    if (!g_themeTransparencyLoaded) LoadThemeTransparency();
-    if (g_themeTransparency.count(ThemeName(g_settings.theme)) || g_themeTransparency.count(std::wstring(ThemeName(g_settings.theme)) + L"#blur")) return true;
-    for (const CfgDefault& d : kCfgDefaults) {
-        const CfgItem* it = CfgFind(d.key);
-        if (!it || (it->section != 1 && !(it->section == 2 && g_settings.theme == Theme::Custom))) continue;
-        if (!wcscmp(d.key, L"appearance.transparency")) continue;
-        std::wstring v = CfgIsInt(*it) ? std::to_wstring(CfgInt(it->key)) : CfgStr(it->key);
-        if (ToLower(v) != ToLower(d.value)) return true;
+    if (!g_themeValuesLoaded) LoadThemeValues();
+    // The values in effect (the theme's own, or those set in Windhawk's Settings tab), compared to how the theme comes
+    for (const CfgItem& it : kCfgItems) {
+        if (!IsThemeKey(it.key)) continue;
+        std::wstring d = ThemeKeyDefault(g_settings.theme, it.key);
+        if (!d.empty() && ToLower(CfgThemeStr(g_settings.theme, it.key)) != ToLower(d)) return true;
     }
     return false;
 }
@@ -12179,17 +13662,22 @@ bool PickIconsFolderFromMenu() {
     return true;
 }
 
+// How a theme setting comes with the mod: the theme's own default (OLED: deep black...), else the mod's default
+std::wstring ThemeKeyDefault(Theme t, PCWSTR key) {
+    std::wstring own = ThemeDefaultFor(t, key);
+    if (!own.empty()) return own;
+    for (const CfgDefault& d : kCfgDefaults) if (!wcscmp(d.key, key)) return d.value;
+    return {};
+}
+// The active theme back to how it comes with the mod (bar 96 px tall, no floating power button...). Its values are
+// written out, so values changed in Windhawk's own Settings tab (shared by the themes) don't come back with it
 void CfgResetTheme() {
-    if (!g_cfgOverridesLoaded) LoadCfgOverrides();
-    if (!g_themeTransparencyLoaded) LoadThemeTransparency();
-    g_themeTransparency.erase(ThemeName(g_settings.theme));
-    g_themeTransparency.erase(std::wstring(ThemeName(g_settings.theme)) + L"#blur");
-    for (const CfgDefault& d : kCfgDefaults) {
-        const CfgItem* it = CfgFind(d.key);
-        if (!it || (it->section != 1 && !(it->section == 2 && g_settings.theme == Theme::Custom))) continue;
-        if (!wcscmp(d.key, L"appearance.transparency")) continue;   // per theme, just cleared above
-        CfgSetDefault(d);
-    }
+    if (!g_themeValuesLoaded) LoadThemeValues();
+    auto& values = g_themeValues[ThemeName(g_settings.theme)];
+    values.clear();
+    for (const CfgItem& it : kCfgItems)
+        if (IsThemeKey(it.key)) { std::wstring d = ThemeKeyDefault(g_settings.theme, it.key); if (!d.empty()) values[it.key] = d; }
+    SaveThemeValues();
     SaveCfgOverrides();
     CfgApplySettings();
     CfgRefreshValues();
@@ -12205,8 +13693,8 @@ void CfgResetAll() {
     if (!g_cfgOverridesLoaded) LoadCfgOverrides();
     g_cfgOverrides.clear();
     for (const CfgDefault& d : kCfgDefaults) CfgSetDefault(d);
-    g_themeTransparency.clear();
-    g_themeTransparencyLoaded = true;
+    g_themeValues.clear();   // every theme as it comes
+    g_themeValuesLoaded = true;
     g_barPosX = g_barPosY = -1;
     Wh_SetIntValue(L"barX", -1);
     Wh_SetIntValue(L"barY", -1);
@@ -12222,7 +13710,7 @@ void CfgResetAll() {
 // the mod is uninstalled (which erases its storage) or on another PC.
 constexpr char kBackupHeader[] = "SiriPlusLaunchpadBackup 1";
 constexpr PCWSTR kBackupStrings[] = {kFoldersKey, kCustomTabsKey, kBuiltinTabsKey, kHistoryKey, kLaunchKey, kKnownAppsKey, L"barMonitor",
-                                     kThemeTransparencyKey};
+                                     kThemeValuesKey, kThemeTransparencyKey};
 constexpr PCWSTR kBackupInts[] = {L"barX", L"barY"};
 
 std::string B64Encode(const std::string& in) {
@@ -12267,6 +13755,734 @@ std::wstring FromUtf8(const std::string& s);
 std::string B64W(const std::wstring& s) { return B64Encode(ToUtf8(s)); }
 bool B64ToW(const std::string& s, std::wstring& out) { std::string raw; if (!B64Decode(s, raw)) return false; out = FromUtf8(raw); return true; }
 
+////////////////////////////////////////////////////////////////////////////////
+// Phone (Phone Link / "Vincular ao Celular"). Phone Link keeps the card that Windows' Start menu shows beside it
+// (the linked phone: its picture, name, connection and battery, its features and the latest notifications) in an
+// Adaptive Card file it updates by itself. The Phone category reads that file, and the notifications themselves from a
+// temporary copy of Phone Link's notifications database (see PhoneNotifThread). Nothing is written to Phone Link,
+// nothing leaves the PC, and every link opens Phone Link itself (ms-phone:...).
+
+// A small JSON reader (the card is JSON)
+enum class JType { Null, Bool, Num, Str, Arr, Obj };
+struct JVal {
+    JType t = JType::Null;
+    double n = 0;
+    std::wstring s;
+    std::vector<JVal> a;
+    std::vector<std::pair<std::wstring, JVal>> o;
+    const JVal* Get(PCWSTR key) const {
+        if (t != JType::Obj) return nullptr;
+        for (const auto& kv : o) if (kv.first == key) return &kv.second;
+        return nullptr;
+    }
+    std::wstring Text(PCWSTR key) const {
+        const JVal* v = Get(key);
+        return v && v->t == JType::Str ? v->s : std::wstring();
+    }
+};
+struct JReader {
+    const wchar_t *p, *end;
+    int depth = 0;
+    void Space() { while (p < end && (*p == L' ' || *p == L'\t' || *p == L'\r' || *p == L'\n')) p++; }
+    bool Lit(PCWSTR w) {
+        size_t n = wcslen(w);
+        if ((size_t)(end - p) < n || wcsncmp(p, w, n) != 0) return false;
+        p += n;
+        return true;
+    }
+    bool Hex4(unsigned& v) {
+        if (end - p < 4) return false;
+        v = 0;
+        for (int i = 0; i < 4; i++) {
+            wchar_t c = *p++;
+            v <<= 4;
+            if (c >= L'0' && c <= L'9') v |= c - L'0';
+            else if (c >= L'a' && c <= L'f') v |= c - L'a' + 10;
+            else if (c >= L'A' && c <= L'F') v |= c - L'A' + 10;
+            else return false;
+        }
+        return true;
+    }
+    bool String(std::wstring& out) {
+        if (p >= end || *p != L'"') return false;
+        p++;
+        while (p < end && *p != L'"') {
+            wchar_t c = *p++;
+            if (c != L'\\') { out += c; continue; }
+            if (p >= end) return false;
+            wchar_t e = *p++;
+            switch (e) {
+                case L'n': out += L'\n'; break;
+                case L't': out += L'\t'; break;
+                case L'r': out += L'\r'; break;
+                case L'b': out += L'\b'; break;
+                case L'f': out += L'\f'; break;
+                case L'u': { unsigned v; if (!Hex4(v)) return false; out += (wchar_t)v; break; }
+                default: out += e; break;
+            }
+        }
+        if (p >= end) return false;
+        p++;
+        return true;
+    }
+    bool Value(JVal& v) {
+        if (++depth > 64) return false;
+        Space();
+        bool ok = false;
+        if (p < end && *p == L'{') {
+            v.t = JType::Obj;
+            p++;
+            Space();
+            if (p < end && *p == L'}') { p++; ok = true; }
+            while (!ok && p < end) {
+                std::wstring key;
+                Space();
+                if (!String(key)) break;
+                Space();
+                if (p >= end || *p != L':') break;
+                p++;
+                v.o.emplace_back(std::move(key), JVal{});
+                if (!Value(v.o.back().second)) break;
+                Space();
+                if (p < end && *p == L',') { p++; continue; }
+                if (p < end && *p == L'}') { p++; ok = true; }
+                break;
+            }
+        } else if (p < end && *p == L'[') {
+            v.t = JType::Arr;
+            p++;
+            Space();
+            if (p < end && *p == L']') { p++; ok = true; }
+            while (!ok && p < end) {
+                v.a.emplace_back();
+                if (!Value(v.a.back())) break;
+                Space();
+                if (p < end && *p == L',') { p++; continue; }
+                if (p < end && *p == L']') { p++; ok = true; }
+                break;
+            }
+        } else if (p < end && *p == L'"') {
+            v.t = JType::Str;
+            ok = String(v.s);
+        } else if (Lit(L"true")) { v.t = JType::Bool; v.n = 1; ok = true; }
+        else if (Lit(L"false")) { v.t = JType::Bool; ok = true; }
+        else if (Lit(L"null")) { ok = true; }
+        else {
+            wchar_t* stop = nullptr;
+            v.n = wcstod(p, &stop);
+            if (stop && stop > p) { v.t = JType::Num; p = stop; ok = true; }
+        }
+        depth--;
+        return ok;
+    }
+};
+
+// A picture inside the card ("data:image/...;base64,...") as square icon pixels (fitted, centered)
+bool DecodeImageBytes(const std::string& bytes, int size, std::vector<UINT32>& px) {
+    ComPtr<IStream> stream;
+    stream.Attach(SHCreateMemStream((const BYTE*)bytes.data(), (UINT)bytes.size()));
+    ComPtr<IWICImagingFactory> wic; ComPtr<IWICBitmapDecoder> dec; ComPtr<IWICBitmapFrameDecode> frame;
+    ComPtr<IWICBitmapScaler> scaler; ComPtr<IWICFormatConverter> conv;
+    if (!stream || FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))) ||
+        FAILED(wic->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &dec)) || FAILED(dec->GetFrame(0, &frame)))
+        return false;
+    UINT w = 0, h = 0;
+    frame->GetSize(&w, &h);
+    if (!w || !h) return false;
+    float k = (float)size / std::max(w, h);
+    UINT sw = std::clamp((UINT)std::lround(w * k), 1u, (UINT)size), sh = std::clamp((UINT)std::lround(h * k), 1u, (UINT)size);
+    if (FAILED(wic->CreateBitmapScaler(&scaler)) || FAILED(scaler->Initialize(frame.Get(), sw, sh, (WICBitmapInterpolationMode)4)) ||
+        FAILED(wic->CreateFormatConverter(&conv)) ||
+        FAILED(conv->Initialize(scaler.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom)))
+        return false;
+    std::vector<UINT32> tmp((size_t)sw * sh);
+    if (FAILED(conv->CopyPixels(nullptr, sw * 4, (UINT)tmp.size() * 4, (BYTE*)tmp.data()))) return false;
+    px.assign((size_t)size * size, 0);
+    UINT ox = (size - sw) / 2, oy = (size - sh) / 2;
+    for (UINT y = 0; y < sh; y++) std::copy_n(&tmp[(size_t)y * sw], sw, &px[(size_t)(y + oy) * size + ox]);
+    return true;
+}
+bool DataUrlBytes(const std::wstring& url, std::string& bytes) {
+    if (url.rfind(L"data:", 0) != 0) return false;
+    size_t comma = url.find(L','), b64 = url.find(L";base64");
+    if (comma == std::wstring::npos || b64 == std::wstring::npos || b64 > comma) return false;
+    std::string text;
+    text.reserve(url.size() - comma);
+    for (size_t i = comma + 1; i < url.size(); i++) if (url[i] > L' ') text += (char)url[i];
+    return B64Decode(text, bytes);
+}
+// Several pictures drawn one over the other (the phone's picture and its frame) into one icon
+bool CardIcon(const std::vector<std::wstring>& urls, int size, App& app) {
+    std::vector<UINT32> out;
+    for (const std::wstring& url : urls) {
+        std::string bytes;
+        std::vector<UINT32> px;
+        if (!DataUrlBytes(url, bytes) || !DecodeImageBytes(bytes, size, px)) continue;
+        if (out.empty()) { out = std::move(px); continue; }
+        for (size_t i = 0; i < out.size(); i++) {   // premultiplied "over"
+            UINT32 s = px[i], d = out[i];
+            UINT32 ia = 255 - (s >> 24);
+            UINT32 r = 0;
+            for (int sh = 0; sh < 32; sh += 8) {
+                UINT32 c = ((s >> sh) & 0xFF) + (((d >> sh) & 0xFF) * ia + 127) / 255;
+                r |= std::min(c, 255u) << sh;
+            }
+            out[i] = r;
+        }
+    }
+    if (out.empty()) return false;
+    app.pixels = std::move(out);
+    app.iconSize = size; app.bitmap.Reset(); app.generation = 0;
+    return true;
+}
+
+// What a part of the card holds: its texts, pictures and the first link, in reading order
+struct CardBits {
+    std::vector<const JVal*> texts, images;
+    std::wstring url;
+    std::vector<std::wstring> previewTexts;   // the notification's own text (heading, body, time)
+};
+void CardWalk(const JVal& v, CardBits& bits, bool inPreview) {
+    if (v.t == JType::Arr) { for (const JVal& x : v.a) CardWalk(x, bits, inPreview); return; }
+    if (v.t != JType::Obj) return;
+    std::wstring type = v.Text(L"type");
+    if (inPreview) {
+        if (type == L"TextBlock" && !v.Text(L"text").empty()) bits.previewTexts.push_back(v.Text(L"text"));
+    } else {
+        if (type == L"TextBlock") bits.texts.push_back(&v);
+        if (type == L"Image") bits.images.push_back(&v);
+    }
+    for (const auto& [key, child] : v.o) {
+        if (key == L"selectAction") {
+            if (!inPreview && bits.url.empty()) bits.url = child.Text(L"url");
+            continue;
+        }
+        if (key == L"preview") { CardWalk(child, bits, true); continue; }
+        if (child.t == JType::Obj || child.t == JType::Arr) CardWalk(child, bits, inPreview);
+    }
+}
+// The lists in the card (features, recent notifications): containers with the "list" style
+void CardLists(const JVal& v, std::vector<const JVal*>& lists) {
+    if (v.t == JType::Arr) { for (const JVal& x : v.a) CardLists(x, lists); return; }
+    if (v.t != JType::Obj) return;
+    if (v.Text(L"customStyle") == L"list") { lists.push_back(&v); return; }
+    for (const auto& kv : v.o)
+        if (kv.first != L"preview" && (kv.second.t == JType::Obj || kv.second.t == JType::Arr)) CardLists(kv.second, lists);
+}
+// Everything outside the lists (the phone's picture, name and status)
+void CardHeader(const JVal& v, CardBits& bits) {
+    if (v.t == JType::Arr) { for (const JVal& x : v.a) CardHeader(x, bits); return; }
+    if (v.t != JType::Obj || v.Text(L"customStyle") == L"list") return;
+    std::wstring type = v.Text(L"type");
+    if (type == L"TextBlock") bits.texts.push_back(&v);
+    if (type == L"Image") bits.images.push_back(&v);
+    for (const auto& kv : v.o) {
+        if (kv.first == L"selectAction") { if (bits.url.empty()) bits.url = kv.second.Text(L"url"); continue; }
+        if (kv.first == L"preview" || kv.first == L"companionActions") continue;
+        if (kv.second.t == JType::Obj || kv.second.t == JType::Arr) CardHeader(kv.second, bits);
+    }
+}
+
+PCWSTR PhoneGlyphForUrl(const std::wstring& url) {
+    if (url.find(L"ms-phone:messages") == 0) return L"\uE8BD";
+    if (url.find(L"ms-phone:calling") == 0) return L"\uE717";
+    if (url.find(L"ms-phone:photos") == 0) return L"\uE91B";
+    if (url.find(L"ms-phone:filetransfer") == 0) return L"\uE724";
+    if (url.find(L"ms-phone:remoting") == 0) return L"\uE8EA";
+    return L"\uE8EA";
+}
+
+FILETIME g_phoneStamp{};
+[[clang::no_destroy]] AppList g_phoneCard;   // the card's rows (see ComposePhoneItems)
+[[clang::no_destroy]] std::wstring g_phoneDir, g_phoneDeviceId;   // the linked phone's database folder and id (from the card)
+double g_phoneChecked = -1e9;
+int g_phonePx;
+
+std::wstring PhoneCardPath() {
+    PWSTR local = nullptr;
+    std::wstring path;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &local)) && local)
+        path = std::wstring(local) + L"\\Packages\\Microsoft.YourPhone_8wekyb3d8bbwe\\LocalState\\StartMenu\\StartMenuCompanion.json";
+    CoTaskMemFree(local);
+    return path;
+}
+bool PhoneLinkInstalled() {
+    PWSTR local = nullptr;
+    bool found = false;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &local)) && local) {
+        DWORD a = GetFileAttributesW((std::wstring(local) + L"\\Packages\\Microsoft.YourPhone_8wekyb3d8bbwe").c_str());
+        found = a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+    }
+    CoTaskMemFree(local);
+    return found;
+}
+
+std::shared_ptr<App> PhoneRow(const std::wstring& name, const std::wstring& detail, const std::wstring& when, const std::wstring& url) {
+    auto app = std::make_shared<App>();
+    app->kind = kPhoneKind; app->name = name; app->detail = detail; app->when = when; app->target = url;
+    return app;
+}
+std::shared_ptr<App> PhoneTitle(const std::wstring& name) {
+    auto app = std::make_shared<App>();
+    app->kind = 6; app->name = name;
+    return app;
+}
+
+void BuildPhoneItems(const JVal& card, AppList& out, int px) {
+    out.clear();
+    // The phone: picture, name, connection, Bluetooth and battery
+    CardBits head;
+    if (const JVal* body = card.Get(L"body")) CardHeader(*body, head);
+    std::wstring speak = card.Text(L"speak"), name, connection, battery;
+    size_t dash = speak.find(L" - ");
+    name = dash != std::wstring::npos ? speak.substr(0, dash) : speak;
+    if (dash != std::wstring::npos) connection = speak.substr(dash + 3);
+    for (const JVal* t : head.texts) {
+        std::wstring text = t->Text(L"text");
+        if (name.empty() && !text.empty()) name = text;
+        if (!text.empty() && text.back() == L'%') battery = text;
+    }
+    bool bluetooth = false;
+    std::vector<std::wstring> phonePics;
+    for (const JVal* img : head.images) {
+        std::wstring tip = img->Text(L"tooltip");
+        if (tip.empty()) phonePics.push_back(img->Text(L"url"));
+        else if (tip.find(L"Bluetooth") != std::wstring::npos) {
+            // Only when the tooltip clearly says it is on (in other display languages it stays out of the line)
+            std::wstring t = ToLower(tip);
+            bluetooth = (t.find(L"ativad") != std::wstring::npos && t.find(L"desativ") == std::wstring::npos) ||
+                        (t.find(L" on") != std::wstring::npos && t.find(L" off") == std::wstring::npos) || t.find(L"enabled") != std::wstring::npos;
+        }
+    }
+    std::wstring status = connection;
+    if (bluetooth) status += std::wstring(status.empty() ? L"" : L"   \u00B7   ") + L"Bluetooth";
+    if (!battery.empty()) status += std::wstring(status.empty() ? L"" : L"   \u00B7   ") + CfgT(L"Battery", L"Bateria") + L" " + battery;
+    auto device = PhoneRow(name.empty() ? CfgT(L"Phone", L"Celular") : name, status, L"", head.url.empty() ? L"ms-phone:" : head.url);
+    if (size_t at = head.url.find(L"deviceid="); at != std::wstring::npos) {
+        std::wstring id = head.url.substr(at + 9, head.url.find(L'&', at) == std::wstring::npos ? std::wstring::npos : head.url.find(L'&', at) - at - 9);
+        PWSTR local = nullptr;
+        if (!id.empty() && id.find_first_of(L"\\/.") == std::wstring::npos && SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &local)) && local)
+            g_phoneDeviceId = id, g_phoneDir = std::wstring(local) + L"\\Packages\\Microsoft.YourPhone_8wekyb3d8bbwe\\LocalCache\\Indexed\\" + id + L"\\System\\Database";
+        CoTaskMemFree(local);
+    }
+    device->glyph = L"\uE8EA";
+    CardIcon(phonePics, px, *device);
+    out.push_back(device);
+
+    // Lists: the features (Messages, Calls, Photos, Send files) and the recent notifications
+    std::vector<const JVal*> lists;
+    if (const JVal* body = card.Get(L"body")) CardLists(*body, lists);
+    AppList features, recent;
+    std::wstring featuresTitle, recentTitle;
+    for (const JVal* list : lists) {
+        const JVal* items = list->Get(L"items");
+        if (!items || items->t != JType::Arr) continue;
+        bool isRecent = false;
+        AppList rows;
+        for (const JVal& row : items->a) {
+            CardBits bits;
+            CardWalk(row, bits, false);
+            if (bits.texts.empty() || bits.url.empty()) continue;
+            std::wstring title = bits.texts[0]->Text(L"text"), second = bits.texts.size() > 1 ? bits.texts[1]->Text(L"text") : L"";
+            if (!bits.previewTexts.empty() || bits.url.find(L"Notification") != std::wstring::npos) {
+                // A notification: the app, what it said (the card only shows "1 new notification") and when
+                isRecent = true;
+                std::wstring detail, when;
+                const auto& p = bits.previewTexts;
+                if (p.size() >= 3) {
+                    when = p[2];
+                    detail = p[0] + L"  \u2014  " + p[1];
+                } else if (!p.empty()) {
+                    detail = p[0];
+                    if (p.size() == 2) when = p[1];
+                }
+                if (detail.empty()) detail = second;
+                int count = second.empty() ? 0 : _wtoi(second.c_str());
+                auto app = PhoneRow(count > 1 ? title + L"  (" + std::to_wstring(count) + L")" : title, detail, when, bits.url);
+                std::vector<std::wstring> pics;
+                if (!bits.images.empty()) pics.push_back(bits.images[0]->Text(L"url"));
+                if (!CardIcon(pics, px, *app)) app->glyph = L"\uEA8F";
+                rows.push_back(std::move(app));
+            } else {
+                auto app = PhoneRow(title, L"", L"", bits.url);   // (one line: the description stays in Phone Link)
+                app->glyph = PhoneGlyphForUrl(bits.url);
+                rows.push_back(std::move(app));
+            }
+        }
+        std::wstring title = list->Text(L"title");
+        if (isRecent) { recentTitle = title; for (auto& r : rows) recent.push_back(std::move(r)); }
+        else { featuresTitle = title; for (auto& r : rows) features.push_back(std::move(r)); }
+    }
+    // Recent first (what is new), then the features, then opening Phone Link itself. The recent part is a mark:
+    // ComposePhoneItems puts the phone's notifications there (or the card's short list when they can't be read)
+    out.push_back(PhoneTitle(L"\x1E" L"recent"));
+    for (auto& r : recent) { r->labelText = L"\x1E" L"card"; out.push_back(std::move(r)); }
+    if (!features.empty()) {
+        out.push_back(PhoneTitle(featuresTitle.empty() ? CfgT(L"Features", L"Recursos") : featuresTitle));
+        for (auto& r : features) out.push_back(std::move(r));
+    }
+    if (const JVal* actions = card.Get(L"companionActions"); actions && actions->t == JType::Arr) {
+        bool titled = false;
+        for (const JVal& a : actions->a) {
+            if (a.Text(L"category") != L"actions" || a.Text(L"url").empty()) continue;
+            if (!titled) { out.push_back(PhoneTitle(CfgT(L"Phone Link", L"Vincular ao Celular"))); titled = true; }
+            auto app = PhoneRow(a.Text(L"title"), L"", L"", a.Text(L"url"));
+            app->glyphText = a.Text(L"glyph");
+            app->glyph = app->glyphText.empty() ? L"\uE8EA" : nullptr;
+            out.push_back(std::move(app));
+        }
+    }
+}
+
+
+// ---------- Phone notifications: every notification Phone Link has from the phone, as it arrives ----------
+// Phone Link keeps them in its notifications database (most of it still in the write-ahead log). A worker thread
+// copies the database and its log aside (Phone Link keeps writing the original), reads it with the SQLite that comes
+// with Windows (winsqlite3.dll), takes each app's icon from Phone Link's app list, and deletes the copies.
+constexpr UINT WM_APP_PHONE = WM_APP + 10;
+struct WinSqlite {
+    HMODULE dll = nullptr;
+    int(__stdcall* open)(const char*, void**, int, const char*) = nullptr;
+    int(__stdcall* close)(void*) = nullptr;
+    int(__stdcall* prepare)(void*, const char*, int, void**, const char**) = nullptr;
+    int(__stdcall* step)(void*) = nullptr;
+    int(__stdcall* reset)(void*) = nullptr;
+    int(__stdcall* finalize)(void*) = nullptr;
+    int(__stdcall* bindText16)(void*, int, const void*, int, void (*)(void*)) = nullptr;
+    const void*(__stdcall* text16)(void*, int) = nullptr;
+    long long(__stdcall* int64)(void*, int) = nullptr;
+    const void*(__stdcall* blob)(void*, int) = nullptr;
+    int(__stdcall* bytes)(void*, int) = nullptr;
+    bool Load() {
+        dll = LoadLibraryExW(L"winsqlite3.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!dll) return false;
+        auto get = [&](auto& fn, const char* name) {
+            fn = reinterpret_cast<std::remove_reference_t<decltype(fn)>>(GetProcAddress(dll, name));
+            return fn != nullptr;
+        };
+        return get(open, "sqlite3_open_v2") && get(close, "sqlite3_close") && get(prepare, "sqlite3_prepare_v2") && get(step, "sqlite3_step") &&
+               get(reset, "sqlite3_reset") && get(finalize, "sqlite3_finalize") && get(bindText16, "sqlite3_bind_text16") &&
+               get(text16, "sqlite3_column_text16") && get(int64, "sqlite3_column_int64") && get(blob, "sqlite3_column_blob") &&
+               get(bytes, "sqlite3_column_bytes");
+    }
+    ~WinSqlite() { if (dll) FreeLibrary(dll); }
+};
+// A file another program keeps open for writing, copied (CopyFile would not share it)
+bool CopySharedFile(const std::wstring& from, const std::wstring& to) {
+    DeleteFileW(to.c_str());
+    HANDLE in = CreateFileW(from.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (in == INVALID_HANDLE_VALUE) return false;
+    HANDLE out = CreateFileW(to.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY, nullptr);
+    bool ok = out != INVALID_HANDLE_VALUE;
+    std::vector<char> buf(1 << 16);
+    DWORD got = 0, put = 0;
+    while (ok && ReadFile(in, buf.data(), (DWORD)buf.size(), &got, nullptr) && got) ok = WriteFile(out, buf.data(), got, &put, nullptr) && put == got;
+    CloseHandle(in);
+    if (out != INVALID_HANDLE_VALUE) CloseHandle(out);
+    if (!ok) DeleteFileW(to.c_str());
+    return ok;
+}
+// Opens a copy of one of Phone Link's databases (with its log). The copies are listed in `made`, to delete after
+void* OpenPhoneDb(WinSqlite& q, const std::wstring& dir, PCWSTR name, const std::wstring& tmp, std::vector<std::wstring>& made) {
+    std::wstring src = dir + L"\\" + name, dst = tmp + name;
+    for (PCWSTR ext : {L"", L"-wal", L"-shm"}) made.push_back(dst + ext);
+    DeleteFileW((dst + L"-shm").c_str());
+    if (!CopySharedFile(src, dst)) return nullptr;
+    if (!CopySharedFile(src + L"-wal", dst + L"-wal")) DeleteFileW((dst + L"-wal").c_str());
+    void* db = nullptr;
+    if (q.open(ToUtf8(dst).c_str(), &db, 0x2 /* read-write: the copy's log is folded in */, nullptr) != 0) {
+        if (db) q.close(db);
+        return nullptr;
+    }
+    return db;
+}
+std::wstring PhoneAgo(long long fileTime) {
+    if (fileTime <= 0) return {};
+    FILETIME nowFt;
+    GetSystemTimeAsFileTime(&nowFt);
+    long long now = ((long long)nowFt.dwHighDateTime << 32) | nowFt.dwLowDateTime;
+    long long secs = (now - fileTime) / 10000000;
+    WCHAR b[64];
+    if (secs < 60) return CfgT(L"now", L"agora");
+    if (secs < 3600) { swprintf(b, 64, CfgT(L"%lld min ago", L"há %lld min"), secs / 60); return b; }
+    FILETIME ft{(DWORD)fileTime, (DWORD)(fileTime >> 32)}, local;
+    SYSTEMTIME st, today;
+    FileTimeToLocalFileTime(&ft, &local);
+    FileTimeToSystemTime(&local, &st);
+    GetLocalTime(&today);
+    if (st.wYear == today.wYear && st.wMonth == today.wMonth && st.wDay == today.wDay)
+        GetTimeFormatEx(nullptr, TIME_NOSECONDS, &st, nullptr, b, 64);
+    else GetDateFormatEx(nullptr, 0, &st, L"d MMM", b, 64, nullptr);
+    return b;
+}
+struct PhoneNotifJob { HWND wnd; int px; std::wstring dir, deviceId; };
+struct PhoneNotifResult { bool ok = false; AppList rows; };
+[[clang::no_destroy]] std::map<std::wstring, std::vector<UINT32>> g_phoneIconCache;   // worker thread only (one at a time)
+int g_phoneIconCachePx;
+DWORD WINAPI PhoneNotifThread(LPVOID param) {
+    std::unique_ptr<PhoneNotifJob> job((PhoneNotifJob*)param);
+    HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    auto* result = new PhoneNotifResult;
+    WinSqlite q;
+    std::wstring tmp = ModFolder(L"Phone");   // the mod's storage (Windhawk removes it with the mod)
+    if (!tmp.empty()) tmp += L"\\";              // (OpenPhoneDb appends the file name)
+    std::vector<std::wstring> made;
+    if (!tmp.empty() && q.Load()) {
+        if (g_phoneIconCachePx != job->px) { g_phoneIconCache.clear(); g_phoneIconCachePx = job->px; }
+        void* apps = OpenPhoneDb(q, job->dir, L"phoneapps.db", tmp, made);
+        void* iconQuery = nullptr;
+        if (apps) q.prepare(apps, "SELECT blob FROM phone_apps WHERE package_name = ?", -1, &iconQuery, nullptr);
+        if (void* db = OpenPhoneDb(q, job->dir, L"notifications.db", tmp, made)) {
+            void* st = nullptr;
+            if (q.prepare(db, "SELECT package_name, json, post_time, notification_id FROM notifications ORDER BY post_time DESC LIMIT 60", -1, &st, nullptr) == 0 && st) {
+                result->ok = true;
+                while (q.step(st) == 100 /* a row */) {
+                    auto col = [&](int i) { const wchar_t* t = (const wchar_t*)q.text16(st, i); return std::wstring(t ? t : L""); };
+                    std::wstring package = col(0), json = col(1);
+                    long long posted = q.int64(st, 2);
+                    JVal n;
+                    JReader reader{json.c_str(), json.c_str() + json.size()};
+                    if (!reader.Value(n) || n.t != JType::Obj) continue;
+                    std::wstring app = n.Text(L"appName"), title = n.Text(L"title"), text = n.Text(L"text");
+                    if (title.empty() && text.empty()) continue;
+                    std::wstring name = title.empty() ? app : title;
+                    std::wstring detail = text.empty() ? app : text;
+                    for (wchar_t& c : detail) if (c == L'\n' || c == L'\r') c = L' ';
+                    // Opens the app on the phone's screen in Phone Link (the same link Start uses for a notification)
+                    auto row = PhoneRow(name, detail, PhoneAgo(posted),
+                                        L"ms-phone:remoting?deviceid=" + job->deviceId + L"&packagename=" + package +
+                                        L"&launchsource=recent_groupedNotification&startScenarioId=recent_groupedNotification&scenarioId=recent_groupedNotification");
+                    row->labelText = app;   // (the app's name, under its icon)
+                    row->key = col(3) + L"|" + std::to_wstring(posted);   // a notification updated later comes back
+                    auto cached = g_phoneIconCache.find(package);
+                    if (cached == g_phoneIconCache.end() && iconQuery) {
+                        std::vector<UINT32> px;
+                        q.reset(iconQuery);
+                        if (q.bindText16(iconQuery, 1, package.c_str(), -1, (void (*)(void*))-1 /* copy */) == 0 && q.step(iconQuery) == 100) {
+                            const void* b = q.blob(iconQuery, 0);
+                            int nb = q.bytes(iconQuery, 0);
+                            if (b && nb > 0) DecodeImageBytes(std::string((const char*)b, nb), job->px, px);
+                        }
+                        cached = g_phoneIconCache.emplace(package, std::move(px)).first;
+                    }
+                    if (cached != g_phoneIconCache.end() && !cached->second.empty()) {
+                        row->pixels = cached->second;
+                        row->iconSize = job->px;
+                    } else row->glyph = L"";
+                    result->rows.push_back(std::move(row));
+                }
+                q.finalize(st);
+            }
+            q.close(db);
+        }
+        if (iconQuery) q.finalize(iconQuery);
+        if (apps) q.close(apps);
+    }
+    for (const std::wstring& f : made) DeleteFileW(f.c_str());   // nothing of the phone is left behind
+    if (!job->wnd || !PostMessageW(job->wnd, WM_APP_PHONE, 0, (LPARAM)result)) delete result;
+    if (SUCCEEDED(co)) CoUninitialize();
+    return 0;
+}
+// Copies left by a read that was cut short (Explorer closed or crashed meanwhile): removed when the launcher starts,
+// whether or not the Phone category is on
+void DeletePhoneLeftovers() {
+    WCHAR base[MAX_PATH];
+    if (!Wh_GetModStoragePath(base, ARRAYSIZE(base))) return;
+    std::wstring dir = std::wstring(base) + L"\\Phone\\";
+    WIN32_FIND_DATAW fd;
+    HANDLE find = FindFirstFileW((dir + L"*").c_str(), &fd);
+    if (find == INVALID_HANDLE_VALUE) return;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) DeleteFileW((dir + fd.cFileName).c_str());
+    } while (FindNextFileW(find, &fd));
+    FindClose(find);
+}
+HANDLE g_phoneThread;
+FILETIME g_phoneNotifStamp{};
+bool g_phoneNotifOk;   // the database could be read (else the card's short list stays)
+[[clang::no_destroy]] AppList g_phoneNotifs;
+[[clang::no_destroy]] std::set<std::wstring> g_phoneCleared;   // notifications cleared from the list (their keys)
+// The newest change time of the notifications database (and its log)
+FILETIME PhoneNotifStamp(const std::wstring& dir) {
+    FILETIME best{};
+    for (PCWSTR f : {L"\\notifications.db", L"\\notifications.db-wal"}) {
+        WIN32_FILE_ATTRIBUTE_DATA fa{};
+        if (GetFileAttributesExW((dir + f).c_str(), GetFileExInfoStandard, &fa) && CompareFileTime(&fa.ftLastWriteTime, &best) > 0) best = fa.ftLastWriteTime;
+    }
+    return best;
+}
+void StartPhoneNotifs(bool force) {
+    if (!g_settings.phoneEnabled || g_phoneDir.empty() || !g_wnd) return;
+    if (g_phoneThread) {
+        if (WaitForSingleObject(g_phoneThread, 0) != WAIT_OBJECT_0) return;   // still reading
+        CloseHandle(g_phoneThread);
+        g_phoneThread = nullptr;
+    }
+    FILETIME stamp = PhoneNotifStamp(g_phoneDir);
+    if (!force && CompareFileTime(&stamp, &g_phoneNotifStamp) == 0) return;
+    g_phoneNotifStamp = stamp;
+    auto* job = new PhoneNotifJob{g_wnd, CurrentIconPixels(), g_phoneDir, g_phoneDeviceId};
+    g_phoneThread = CreateThread(nullptr, 0, PhoneNotifThread, job, 0, nullptr);
+    if (!g_phoneThread) delete job;
+}
+
+void ComposePhoneItems();
+// Reads the card again when Phone Link changed it (cheap check: the file's time). Returns true when the rows changed
+void LoadPhoneCleared();
+bool PhoneRefresh(bool force) {
+    if (!g_settings.phoneEnabled) return false;
+    static bool clearedLoaded = false;
+    if (!clearedLoaded) { LoadPhoneCleared(); clearedLoaded = true; }
+    double now = Now();
+    if (!force && now - g_phoneChecked < 2.0) return false;
+    g_phoneChecked = now;
+    std::wstring path = PhoneCardPath();
+    WIN32_FILE_ATTRIBUTE_DATA fa{};
+    if (path.empty() || !GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fa)) {
+        bool had = !g_phoneItems.empty();
+        g_phoneItems.clear();
+        g_phoneStamp = {};
+        g_phoneStatus = CfgT(L"No linked phone. Link one in Phone Link, and turn on \"Show mobile device in Start\" in Settings",
+                             L"Nenhum celular vinculado. Vincule um no Vincular ao Celular e ative \"Mostrar dispositivo móvel no Iniciar\" nas Configurações");
+        return had;
+    }
+    int px = CurrentIconPixels();
+    if (!force && CompareFileTime(&fa.ftLastWriteTime, &g_phoneStamp) == 0 && px == g_phonePx && !g_phoneItems.empty()) {
+        StartPhoneNotifs(false);   // a new notification changes the database first
+        return false;
+    }
+    std::string raw;
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (f != INVALID_HANDLE_VALUE) {
+        LARGE_INTEGER size{};
+        if (GetFileSizeEx(f, &size) && size.QuadPart > 0 && size.QuadPart < 8 * 1024 * 1024) {
+            raw.resize((size_t)size.QuadPart);
+            DWORD got = 0;
+            if (!ReadFile(f, raw.data(), (DWORD)raw.size(), &got, nullptr)) got = 0;
+            raw.resize(got);
+        }
+        CloseHandle(f);
+    }
+    if (raw.size() >= 3 && (unsigned char)raw[0] == 0xEF && (unsigned char)raw[1] == 0xBB && (unsigned char)raw[2] == 0xBF) raw.erase(0, 3);
+    std::wstring text = FromUtf8(raw);
+    JVal card;
+    JReader reader{text.c_str(), text.c_str() + text.size()};
+    if (text.empty() || !reader.Value(card) || card.t != JType::Obj) {
+        // Phone Link may be writing it right now: keep what was shown and look again shortly
+        if (g_phoneItems.empty()) g_phoneStatus = CfgT(L"Couldn't read Phone Link", L"N\u00E3o foi poss\u00EDvel ler o Vincular ao Celular");
+        g_phoneChecked = now - 1.5;
+        return false;
+    }
+    g_phoneStamp = fa.ftLastWriteTime;
+    g_phonePx = px;
+    BuildPhoneItems(card, g_phoneCard, px);
+    g_phoneStatus.clear();
+    ComposePhoneItems();
+    StartPhoneNotifs(true);
+    return true;
+}
+// The rows shown: the card, with the phone's notifications (newest first) in place of its short "recent" list
+void ComposePhoneItems() {
+    g_phoneItems.clear();
+    for (const auto& row : g_phoneCard) {
+        if (row->kind == 6 && row->name == L"\x1E" L"recent") {
+            if (g_phoneNotifOk) {
+                // The newest notifications in a box of "Notifications shown" rows; when there are more, the box
+                // scrolls through them on its own (the wheel over it), the rest of the menu stays where it is
+                AppList all;
+                for (const auto& n : g_phoneNotifs) if (!g_phoneCleared.count(n->key)) all.push_back(n);
+                size_t shown = std::min(all.size(), (size_t)g_settings.phoneMax);
+                g_phoneBoxTotal = (int)all.size();
+                g_phoneBoxFirst = std::clamp(g_phoneBoxFirst, 0, std::max(0, g_phoneBoxTotal - (int)shown));
+                auto title = PhoneTitle(CfgT(L"Notifications", L"Notificações"));
+                if (shown) title->target = L"#phoneclear";   // "Clear all" on the right
+                g_phoneItems.push_back(std::move(title));
+                if (!shown) {
+                    auto none = PhoneRow(CfgT(L"No notifications", L"Nenhuma notificação"), L"", L"", L"ms-phone:");
+                    none->glyph = L"\uEA8F";
+                    g_phoneItems.push_back(std::move(none));
+                }
+                for (size_t i = 0; i < shown; i++) {
+                    const auto& n = all[g_phoneBoxFirst + i];
+                    n->phoneBox = all.size() > shown;
+                    g_phoneItems.push_back(n);
+                }
+            } else {
+                bool any = false;
+                for (const auto& r : g_phoneCard) any |= r->labelText == L"\x1E" L"card";
+                if (any) g_phoneItems.push_back(PhoneTitle(CfgT(L"Recent", L"Recente")));
+            }
+            continue;
+        }
+        if (row->labelText == L"\x1E" L"card" && g_phoneNotifOk) continue;   // the database has them all
+        g_phoneItems.push_back(row);
+    }
+}
+// Cleared notifications: hidden from this list only (Phone Link and the phone keep them). Remembered across restarts
+// until Phone Link drops them, so the list doesn't grow
+constexpr WCHAR kPhoneClearedKey[] = L"phoneCleared";
+void SavePhoneCleared() {
+    std::wstring data;
+    for (const auto& k : g_phoneCleared) { data += k; data += kRecSep; }
+    Wh_SetStringValue(kPhoneClearedKey, data.c_str());
+}
+void LoadPhoneCleared() {
+    g_phoneCleared.clear();
+    std::vector<WCHAR> buf(1 << 15, 0);
+    Wh_GetStringValue(kPhoneClearedKey, buf.data(), (int)buf.size());
+    buf.back() = 0;
+    for (const auto& k : SplitRecords(buf.data())) if (!k.empty()) g_phoneCleared.insert(k);
+}
+// The wheel over the notifications box moves through the notifications, one per notch
+bool PhoneBoxWheel(LPARAM lParam, int delta) {
+    POINT p{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+    ScreenToClient(g_wnd, &p);
+    int idx = ItemAt(p.x, p.y);
+    App* a = idx >= 0 && idx < (int)g_layoutItems.size() ? ResolveApp(g_layoutItems[idx]) : nullptr;
+    if (!a || !a->phoneBox) return false;
+    static int rest = 0;
+    rest += delta;
+    int steps = rest / WHEEL_DELTA;
+    rest %= WHEEL_DELTA;
+    if (!steps) return true;
+    int before = g_phoneBoxFirst;
+    g_phoneBoxFirst = std::clamp(g_phoneBoxFirst - steps, 0, std::max(0, g_phoneBoxTotal - g_settings.phoneMax));
+    if (g_phoneBoxFirst != before) {
+        ComposePhoneItems();
+        RefreshTabItems(false);
+        g_hover = ItemAt(p.x, p.y);   // the row under the mouse is another notification now
+        Render();
+    }
+    return true;
+}
+void ClearPhoneNotifs(const std::wstring& key) {
+    if (key.empty()) { for (const auto& row : g_phoneItems) if (row->kind == 8 && !row->key.empty()) g_phoneCleared.insert(row->key); }   // what is shown
+    else g_phoneCleared.insert(key);
+    SavePhoneCleared();
+    ComposePhoneItems();
+    if (g_shown && g_siriTab == 6) { RefreshTabItems(false); StartFrames(); }
+}
+void OnPhoneNotifs(PhoneNotifResult* result) {
+    std::unique_ptr<PhoneNotifResult> own(result);
+    if (result->ok) {
+        g_phoneNotifOk = true;
+        g_phoneNotifs = std::move(result->rows);
+        // Forget cleared notifications that Phone Link no longer has
+        std::set<std::wstring> live;
+        for (const auto& n : g_phoneNotifs) live.insert(n->key);
+        size_t before = g_phoneCleared.size();
+        std::erase_if(g_phoneCleared, [&](const std::wstring& k) { return !live.count(k); });
+        if (g_phoneCleared.size() != before) SavePhoneCleared();
+    }
+    ComposePhoneItems();
+    if (g_shown && g_siriTab == 6) { RefreshTabItems(false); StartFrames(); }
+}
+void OpenPhoneLink(const std::wstring& url) {
+    // Only Phone Link's own links (they come from Phone Link's files)
+    std::wstring link = url.rfind(L"ms-phone:", 0) == 0 ? url : L"ms-phone:";
+    ShellExecuteW(nullptr, L"open", link.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
 bool ReadWholeFile(const std::wstring& path, std::string& out, DWORD maxBytes) {
     HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
     if (f == INVALID_HANDLE_VALUE) return false;
@@ -12291,7 +14507,11 @@ bool WriteWholeFile(const std::wstring& path, const std::string& data) {
     return ok;
 }
 
+bool IsLongValue(const std::wstring& key) {
+    return key == kFoldersKey || key == kCustomTabsKey || key == kBuiltinTabsKey || key == kKnownAppsKey;
+}
 std::wstring StorageString(PCWSTR key) {
+    if (IsLongValue(key)) return LoadLongValue(key);   // all its parts
     std::vector<WCHAR> buf(1 << 20, 0);
     Wh_GetStringValue(key, buf.data(), buf.size());
     buf.back() = 0;
@@ -12299,13 +14519,8 @@ std::wstring StorageString(PCWSTR key) {
 }
 
 // A message over the launcher (it stays open while the box is up)
-int BackupMessage(PCWSTR text, UINT flags) {
-    DialogBegin(false);
-    int r = MessageBoxW(g_wnd, text, L"Siri Plus Launchpad", flags);
-    DialogEnd();
-    if (g_shown) ForceForeground(g_wnd);
-    return r;
-}
+int MacAlert(PCWSTR text, UINT flags);
+int BackupMessage(PCWSTR text, UINT flags) { return MacAlert(text, flags); }   // drawn in the launcher, in the theme
 
 bool PickBackupFile(bool save, std::wstring& out) {
     ComPtr<IFileDialog> dlg;
@@ -12321,6 +14536,11 @@ bool PickBackupFile(bool save, std::wstring& out) {
         swprintf_s(name, L"SiriPlusLaunchpad %04d-%02d-%02d.siribackup", st.wYear, st.wMonth, st.wDay);
         dlg->SetFileName(name);
     }
+    if (save) {   // "already exists, replace it?" is asked by the launcher (in its look), not by Windows' dialog
+        DWORD options = 0;
+        dlg->GetOptions(&options);
+        dlg->SetOptions(options & ~FOS_OVERWRITEPROMPT);
+    }
     DialogBegin(true);
     HRESULT hr = dlg->Show(g_wnd);
     DialogEnd();
@@ -12328,6 +14548,12 @@ bool PickBackupFile(bool save, std::wstring& out) {
     ComPtr<IShellItem> res; PWSTR path = nullptr;
     if (FAILED(hr) || FAILED(dlg->GetResult(&res)) || FAILED(res->GetDisplayName(SIGDN_FILESYSPATH, &path))) return false;
     out = path; CoTaskMemFree(path);
+    if (save && GetFileAttributesW(out.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        std::wstring name = out.substr(out.find_last_of(L"\\/") + 1);
+        wchar_t text[600];
+        swprintf(text, 600, CfgT(L"\u201C%ls\u201D already exists.\n\nDo you want to replace it?", L"\u201C%ls\u201D j\u00E1 existe.\n\nDeseja substitu\u00ED-lo?"), name.c_str());
+        if (MacAlert(text, MB_YESNO | MB_ICONWARNING) != IDYES) return false;
+    }
     return true;
 }
 
@@ -12391,6 +14617,8 @@ void BackupImport() {
 
     if (!g_cfgOverridesLoaded) LoadCfgOverrides();
     g_cfgOverrides.clear();
+    g_cfgLegacy.clear();
+    bool themeValuesInFile = false;   // a backup made before 1.3.0 has only the older per-theme values: carried over below
     std::unordered_map<std::wstring, std::wstring> icons;
     int iconsBad = 0;
     size_t pos = 0;
@@ -12410,13 +14638,18 @@ void BackupImport() {
         std::wstring key, value;
         if (f.size() == 3 && f[0] == "S" && B64ToW(f[1], key) && B64ToW(f[2], value)) {
             const CfgItem* it = CfgFind(key.c_str());
-            if (!it || it->type == kCfgButton || it->type == kCfgGroup) continue;
+            if (!it) { g_cfgLegacy[key] = value; continue; }   // a setting this version no longer has (carried over below)
+            if (it->type == kCfgButton || it->type == kCfgGroup) continue;
             std::wstring base = CfgWindhawkValue(*it);
+            for (WCHAR& c : value) if (c < 0x20 || c == kRecSep) c = L' ';   // a hand-edited file: no line breaks or tabs in a setting
             if (value != base) g_cfgOverrides[it->key] = {value, base};
         } else if (f.size() == 3 && f[0] == "V" && B64ToW(f[1], key) && B64ToW(f[2], value)) {
             for (PCWSTR k : kBackupStrings) if (key == k) {
+                if (key == kThemeValuesKey) themeValuesInFile = true;
                 for (WCHAR& c : value) if (c == L'\n') c = kRecSep;   // backups made by earlier versions
-                Wh_SetStringValue(k, value.c_str());
+                value.erase(std::remove_if(value.begin(), value.end(), [](WCHAR c) { return c < 0x20 && c != L'\t' && c != kRecSep; }), value.end());
+                if (IsLongValue(k)) SaveLongValue(k, value);   // in parts, as the mod keeps it
+                else Wh_SetStringValue(k, value.c_str());
             }
         } else if (f.size() == 3 && f[0] == "N" && B64ToW(f[1], key)) {
             for (PCWSTR k : kBackupInts) if (key == k) Wh_SetIntValue(k, atoi(f[2].c_str()));
@@ -12428,7 +14661,8 @@ void BackupImport() {
             icons[target] = file;
         }
     }
-    LoadThemeTransparency();   // the per-theme transparency just written from the backup (saved again as is below)
+    if (!themeValuesInFile) Wh_DeleteValue(kThemeValuesKey);   // an older backup: its values are carried over as on the first run
+    LoadThemeValues();   // the theme values just written from the backup (saved again as they are below)
     SaveCfgOverrides();
 
     // Load everything again, as when the mod starts
@@ -12546,7 +14780,7 @@ void CfgEnter() {
     Layout& L = g_layout;
     g_cfg = CfgState{};
     g_cfg.active = true;
-    g_cfg.section = g_cfgLastSection;
+    g_cfg.section = g_cfgLastSection < kCfgSectionCount ? g_cfgLastSection : 0;
     g_cfg.siriMode = g_settings.siri; g_cfg.siriOriginal = g_settings.siriOriginal; g_cfg.fullscreen = g_settings.fullscreen;
     g_cfg.powerButton = g_settings.siriPowerButton;
     g_cfg.powerLeft = g_settings.siriPowerLeft;
@@ -12640,7 +14874,7 @@ bool CfgOnControl(int row, float x, float y) {
 }
 
 void CfgSelectSection(int section) {
-    if (section < 0 || section >= kCfgSectionCount) return;
+    if (section < 0 || section >= kCfgSectionCount || !CfgSectionShown(section)) return;
     CfgCommitEdit();
     if (g_cfg.capture >= 0) { g_cfg.capture = -1; UpdateCategoryHotkeys(); }
     if (section != g_cfg.section || !g_cfg.search.empty()) { g_cfg.sectionFade = 0; StartFrames(); }
@@ -12797,7 +15031,8 @@ bool CfgMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT& resu
                 if (!g_cfg.search.empty()) { g_cfg.search.clear(); g_cfg.scroll = 0; ComputeLayout(); Render(); }
                 else CfgExit();
             } else if ((wParam == VK_DOWN || wParam == VK_UP) && g_cfg.search.empty()) {
-                CfgSelectSection(std::clamp(g_cfg.section + (wParam == VK_DOWN ? 1 : -1), 0, kCfgSectionCount - 1));
+                for (int step = wParam == VK_DOWN ? 1 : -1, sec = g_cfg.section + step; sec >= 0 && sec < kCfgSectionCount; sec += step)
+                    if (CfgSectionShown(sec)) { CfgSelectSection(sec); break; }   // (sections the mode doesn't use are skipped)
             }
             return true;
         }
@@ -13083,7 +15318,7 @@ DWORD WINAPI GhIconThread(void*) {
 
 void GhStopThreads() {
     g_ghStop = true;
-    if (g_ghWake) SetEvent(g_ghWake);
+    if (g_ghWake) ReleaseSemaphore(g_ghWake, kGhIconThreads + 1, nullptr);   // every icon thread wakes and sees the stop
     std::vector<HANDLE*> threads = {&g_ghListThread};
     for (HANDLE& h : g_ghIconThreads) threads.push_back(&h);
     for (HANDLE* h : threads)
@@ -13134,12 +15369,12 @@ void GhQueueVisible() {
     g_ghQueue = std::move(wanted);
     g_ghQueueFolder = g_gh.key;
     ReleaseSRWLockExclusive(&g_ghLock);
-    if (!g_ghWake) g_ghWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_ghWake) g_ghWake = CreateSemaphoreW(nullptr, 0, 1024, nullptr);   // one wake per thread (an event would wake only one)
     // One thread for the pictures on screen; more while the colors of the whole folder are being found
     int threads = g_gh.paths.empty() ? 0 : GhColorMode() ? kGhIconThreads : 1;
     for (int i = 0; i < threads; i++)
         if (!g_ghIconThreads[i]) g_ghIconThreads[i] = CreateThread(nullptr, 0, GhIconThread, nullptr, 0, nullptr);
-    if (g_ghWake) for (int i = 0; i < threads; i++) SetEvent(g_ghWake);
+    if (g_ghWake && threads > 0) ReleaseSemaphore(g_ghWake, threads, nullptr);
 }
 
 // Called on every frame: when the gallery was scrolled to other rows, the pictures there are asked for
@@ -13168,7 +15403,7 @@ void GhFilterItems(std::vector<int>& out, const std::wstring& q) {
     out.clear();
     for (int i = 0; i < (int)g_tabItems.size(); i++) {
         const App& a = *g_tabItems[i];
-        if (ToLower(a.name).find(q) == std::wstring::npos) continue;
+        if (SearchKey(a.name).find(q) == std::wstring::npos) continue;
         if (g_gh.colorFilter >= 0) {
             auto c = g_ghColors.find(a.target);
             if (c == g_ghColors.end() || c->second.cls != g_gh.colorFilter) continue;
@@ -13331,10 +15566,7 @@ void OnGhColorTimer() {
 void GhApply(const std::wstring& path) {
     std::wstring file;
     if (!GhEnsureFile(g_gh.key, path, file)) {
-        DialogBegin(false);
-        MessageBoxW(g_wnd, CfgT(L"This image is no longer in the folder.", L"Esta imagem não está mais na pasta."), L"Siri Plus Launchpad", MB_ICONWARNING);
-        DialogEnd();
-        if (g_shown) ForceForeground(g_wnd);
+        MacAlert(CfgT(L"This image is no longer in the folder.", L"Esta imagem não está mais na pasta."), MB_ICONWARNING);
         return;
     }
     std::wstring target = g_gh.target;
@@ -13345,10 +15577,7 @@ void GhApply(const std::wstring& path) {
     for (auto& a : g_apps) apply(*a);
     for (auto& f : g_folders) for (auto& a : f.apps) apply(*a);
     if (!applied) {
-        DialogBegin(false);
-        MessageBoxW(g_wnd, CfgT(L"Could not load this image.", L"Não foi possível carregar esta imagem."), L"Siri Plus Launchpad", MB_ICONWARNING);
-        DialogEnd();
-        if (g_shown) ForceForeground(g_wnd);
+        MacAlert(CfgT(L"Could not load this image.", L"Não foi possível carregar esta imagem."), MB_ICONWARNING);
         return;
     }
     g_customIcons[target] = file;
@@ -13588,6 +15817,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         case WM_APP_SHORTCUT: OnCategoryShortcut((int)wParam); return 0;
         case WM_APP_FILES: OnFilesFound((FileResult*)lParam); return 0;
+        case WM_APP_PHONE: OnPhoneNotifs((PhoneNotifResult*)lParam); return 0;
         case WM_APP_GHLIST: OnGhList((GhListResult*)lParam); return 0;
         case WM_APP_GHICON: OnGhIcon((GhIconResult*)lParam); return 0;
         case WM_APP_RELOAD:
@@ -13644,6 +15874,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
             }
             else if (wParam == kTimerClipRetry) { KillTimer(hwnd, kTimerClipRetry); OnClipboardUpdate(); }
+            else if (wParam == kTimerPhone) {
+                if (!g_shown || g_siriTab != 6) KillTimer(hwnd, kTimerPhone);
+                else if (PhoneRefresh(false)) { RefreshTabItems(false); StartFrames(); }
+            }
             else if (wParam == kTimerBarHold) BarDragGrab(hwnd);
             else if (wParam == kTimerGhColor) OnGhColorTimer();
             else if (wParam == kTimerLiquid) {
@@ -13685,7 +15919,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             return 0;
         case WM_ACTIVATE:
-            if (LOWORD(wParam) == WA_INACTIVE && g_shown && !g_closing && !g_dialogOpen) {
+            if (LOWORD(wParam) == WA_INACTIVE && g_shown && !g_closing && !g_dialogOpen && !g_alert.active) {
                 g_lastClosed = Now();
                 if (g_cfg.active) CfgExit();   // clicking outside the settings: they close with their animation
                 else Close();
@@ -13693,6 +15927,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         case WM_SETCURSOR:
             if (g_barDrag.active) { SetCursor(LoadCursorW(nullptr, IDC_SIZEALL)); return TRUE; }
+            if (g_alert.active && LOWORD(lParam) == HTCLIENT) { SetCursor(LoadCursorW(nullptr, IDC_ARROW)); return TRUE; }
             if (LOWORD(lParam) == HTCLIENT) {
                 POINT p; GetCursorPos(&p); ScreenToClient(hwnd, &p);
                 bool hand = TabAt((float)p.x, (float)p.y) >= 0 || FilterAt((float)p.x, (float)p.y) != kNoChip ||
@@ -13768,7 +16003,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 // (also while the bar is still forming: the options appear as the animation ends)
                 if (g_gear.shown) {
                     bool gh = InRect(GearRect(), (float)x, (float)y);
-                    if (gh != g_gear.hover) { g_gear.hover = gh; Render(); }
+                    if (gh != g_gear.hover) { g_gear.hover = gh; Render(); if (gh) StartFrames(); }
                 }
                 bool mh = HitMore((float)x, (float)y);
                 if (mh != g_moreHover) { SetMoreHover(mh); Render(); }
@@ -13776,6 +16011,17 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     !g_gear.shown && !g_moreHover && InRect(g_layout.search, (float)x, (float)y)) {
                     OpenCategoryMenu();
                     return 0;
+                }
+                // Floating, "on mouse over": resting on the bar opens the results box. Once per visit: after Esc closes it,
+                // it opens again only when the mouse leaves the bar and comes back
+                if (g_settings.floatingHover) {
+                    bool onBar = InRect(g_layout.search, (float)x, (float)y);
+                    if (!onBar) g_hoverOpenArmed = true;
+                    else if (g_hoverOpenArmed && !g_siriExpanded && !g_siriClosingPill && g_pillIntro >= 1.0f && !g_menu.open && !g_gear.shown &&
+                             !g_moreHover && !g_barDrag.pending && g_openFolderIndex < 0 && !HitClear((float)x, (float)y) && !HitBack((float)x, (float)y)) {
+                        g_hoverOpenArmed = false;
+                        ExpandSiri();
+                    }
                 }
                 bool ph = g_openFolderIndex < 0 && PowerButtonOn() && InRect(g_layout.btnPower, (float)x, (float)y);
                 if (ph != g_powerHover) { g_powerHover = ph; Render(); }
@@ -13789,7 +16035,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (pc != g_powerPillHover) { g_powerPillHover = pc; Render(); }
                 int hover = ItemAt(x, y);
                 if (hover != g_hover) { g_hover = hover; Render(); }
-                int xh = ClipRows() && hover >= 0 && InRect(ClipDeleteRect(CellAtIn(g_layout, g_scroll, hover).highlight), (float)x, (float)y) ? hover : -1;
+                int xh = ClipRows() && hover >= 0 && hover < (int)g_layoutItems.size() && RowHasX(ResolveApp(g_layoutItems[hover])) &&
+                         InRect(ClipDeleteRect(CellAtIn(g_layout, g_scroll, hover).highlight), (float)x, (float)y) ? hover : -1;
                 if (xh != g_clipXHover) { g_clipXHover = xh; Render(); }
             }
             return 0;
@@ -13924,8 +16171,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             if (ClipRows()) {
                 int idx = ItemAt(x, y);
-                if (idx >= 0 && InRect(ClipDeleteRect(CellAtIn(g_layout, g_scroll, idx).highlight), (float)x, (float)y)) {
-                    if (App* a = ResolveApp(g_layoutItems[idx]); a && a->kind == 2) { g_clipXHover = -1; RemoveClipItem(a->target); }
+                if (idx >= 0 && RowHasX(ResolveApp(g_layoutItems[idx])) && InRect(ClipDeleteRect(CellAtIn(g_layout, g_scroll, idx).highlight), (float)x, (float)y)) {
+                    App* a = ResolveApp(g_layoutItems[idx]);
+                    g_clipXHover = -1;
+                    if (a->kind == 2) RemoveClipItem(a->target);
+                    else ClearPhoneNotifs(a->key);
                     g_ignoreUp = true;
                     return 0;
                 }
@@ -14003,7 +16253,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (g_openFolderIndex >= 0) {
                     if (!InRect(g_layout.panel, (float)x, (float)y)) CloseFolder();
                 } else if (!InRect(g_layout.search, (float)x, (float)y) && !InRect(g_layout.siriPanel, (float)x, (float)y) &&
-                           !InRect(g_layout.siriPower, (float)x, (float)y) && !InRect(g_layout.siriTabs, (float)x, (float)y)) {
+                           !InRect(g_layout.siriPower, (float)x, (float)y) && !InRect(g_layout.siriTabs, (float)x, (float)y) &&
+                           !InRect(g_layout.siriChips, (float)x, (float)y)) {
                     if (!g_selection.empty()) g_selection.clear();
                     else Close();
                 }
@@ -14068,8 +16319,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 return 0;
             }
 
-            if (g_settings.siriOriginal && g_openFolderIndex < 0) {
-                // Original Siri: user tabs instead of folders (only inside the apps panel)
+            if (g_settings.siri && g_openFolderIndex < 0) {
+                // Original Siri and Floating: user tabs instead of folders (only inside the apps panel)
                 if (Picking() || !InRect(g_layout.siriPanel, (float)x, (float)y)) return 0;
                 CommitChipRename();
                 g_menu.open = false; g_menu.folder = g_menu.appIdx = g_menu.folderApp = -1;
@@ -14094,20 +16345,25 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 } else if (App* a = AppOfMain(ItemAt(x, y))) {
                     g_menu.appIdx = ItemAt(x, y);
                     g_menuChip = current;
+                    // Floating also selects apps (long press, Ctrl+click) to pin several at once
+                    bool floatSel = !g_settings.siriOriginal && SelectableApp(g_menu.appIdx) != nullptr;
+                    bool sel = floatSel && g_selection.count(a) != 0;
+                    if (floatSel) { items.push_back({sel ? Tr(L"Deselect") : Tr(L"Select"), kMenuSelect}); separate(); }
                     if (editable) {
                         items.push_back({Tr(L"Add app"), kMenuAddApps});
                         items.push_back({Tr(L"Remove from tab"), kMenuRemoveFromTab});
                     } else {
-                        if (room) items.push_back({Tr(L"New tab with this app"), kMenuNewTab});
+                        bool many = sel && g_selection.size() > 1;   // the menu acts on all the selected apps
+                        if (room) items.push_back({many ? Tr(L"New tab with the selected apps") : Tr(L"New tab with this app"), kMenuNewTab});
                         for (int k = 0; k < (int)g_customTabs.size(); k++) {
-                            if (TabHas(k, *a)) continue;
+                            if (!many && TabHas(k, *a)) continue;
                             wchar_t text[160];
                             swprintf(text, 160, Tr(L"Add to \u201C%ls\u201D"), g_customTabs[k].name.c_str());
                             items.push_back({text, kMenuAddToTab + k});
                         }
                     }
                     separate();
-                    items.push_back({Tr(L"Pin to taskbar"), kMenuPin});
+                    items.push_back({sel && g_selection.size() > 1 ? Tr(L"Pin selected to taskbar") : Tr(L"Pin to taskbar"), kMenuPin});
                     items.push_back({Tr(L"Create desktop shortcut"), kMenuDesktop});
                     separate();
                     items.push_back({Tr(L"Change icon..."), kMenuGhIcon});
@@ -14119,6 +16375,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (editable) items.push_back({Tr(L"Add app"), kMenuAddApps});
                     if (room) items.push_back({Tr(L"New tab"), kMenuNewTab});
                     if (hidden) items.push_back({Tr(L"Restore default tabs"), kMenuRestoreTabs});
+                    if (!g_settings.siriOriginal && !g_selection.empty()) { separate(); items.push_back({Tr(L"Clear selection"), kMenuClearSelection}); }
                 }
                 if (items.empty()) return 0;
                 OpenMenu((float)x, (float)y, std::move(items));
@@ -14192,10 +16449,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_MOUSEWHEEL:
         case WM_MOUSEHWHEEL: {
             if (g_menu.open || g_closing) return 0;
-            if (g_settings.siriOriginal && g_siriTab == 0 && ChipsOverflow()) {
+            if (g_settings.siri && g_siriTab == 0 && ChipsOverflow()) {
                 POINT p{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
                 ScreenToClient(hwnd, &p);
-                if (InRect(g_layout.siriTabs, (float)p.x, (float)p.y)) {
+                if (InRect(g_layout.siriChips, (float)p.x, (float)p.y)) {
                     // The filter strip scrolls sideways
                     float d = (float)GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA * 60 * g_layout.scale;
                     g_chipScroll += msg == WM_MOUSEHWHEEL ? d : -d;
@@ -14204,6 +16461,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
             }
             if (!FolderSettled()) return 0;
+            if (msg == WM_MOUSEWHEEL && g_siriTab == 6 && PhoneBoxWheel(lParam, GET_WHEEL_DELTA_WPARAM(wParam))) return 0;
             bool h = msg == WM_MOUSEHWHEEL;
             if (h && !g_layout.horizontal) return 0;
             if (g_layout.horizontal && Now() - g_lastFlip < 0.28) { g_wheelDelta = 0; return 0; }
@@ -14219,10 +16477,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_CHAR: OnChar((WCHAR)wParam); return 0;
         case WM_CLOSE: Close(); return 0;
         case WM_HOTKEY:
-            if (wParam >= kHotkeyBase && wParam < kHotkeyBase + 4) OnCategoryShortcut((int)wParam - kHotkeyBase);
+            if (wParam >= kHotkeyBase && wParam < kHotkeyBase + 7) OnCategoryShortcut((int)wParam - kHotkeyBase);
             return 0;
         case WM_DESTROY:
-            for (int tab = 0; tab < 4; tab++) UnregisterHotKey(hwnd, kHotkeyBase + tab);
+            for (int tab : kShortcutTabs) UnregisterHotKey(hwnd, kHotkeyBase + tab);
             KillTimer(hwnd, kTimerLongPress);
             KillTimer(hwnd, kTimerFileSearch);
             KillTimer(hwnd, kTimerAppsChanged); KillTimer(hwnd, kTimerStartCheck); KillTimer(hwnd, kTimerStartRects); UnwatchApps(); UnwatchStart();
@@ -14236,6 +16494,7 @@ HANDLE g_readyEvent;
 
 
 DWORD WINAPI StartThread(void*) {
+    DeletePhoneLeftovers();   // (copies of Phone Link's database from a read that was cut short)
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2); OleInitialize(nullptr);
     LoadSettings(); LoadFolders(); LoadCustomTabs(); LoadBuiltinTabs(); LoadCustomIcons();
     LoadSearchHistory(); LoadLaunchCounts();
@@ -14289,6 +16548,7 @@ DWORD WINAPI StartThread(void*) {
     ++g_fileSearchGen;                                   // every file thread becomes stale
     if (g_worker) { WaitForSingleObject(g_worker, INFINITE); CloseHandle(g_worker); g_worker = nullptr; }
     for (HANDLE h : g_fileThreadHandles) { WaitForSingleObject(h, INFINITE); CloseHandle(h); }   // they run code from this module
+    if (g_phoneThread) { WaitForSingleObject(g_phoneThread, INFINITE); CloseHandle(g_phoneThread); g_phoneThread = nullptr; }
     std::vector<HANDLE>().swap(g_fileThreadHandles);
     UnregisterEvIpcClass();                              // Everything IPC reply windows are gone
     AcquireSRWLockExclusive(&g_extIconsLock);
@@ -14298,13 +16558,17 @@ DWORD WINAPI StartThread(void*) {
     MSG msg;
     while (PeekMessageW(&msg, nullptr, WM_APP_APPS, WM_APP_APPS, PM_REMOVE)) delete (AppList*)msg.lParam;
     while (PeekMessageW(&msg, nullptr, WM_APP_FILES, WM_APP_FILES, PM_REMOVE)) delete (FileResult*)msg.lParam;
+    while (PeekMessageW(&msg, nullptr, WM_APP_PHONE, WM_APP_PHONE, PM_REMOVE)) delete (PhoneNotifResult*)msg.lParam;
     g_selection.clear(); g_menu = PopupMenu{};
     AppList().swap(g_apps); AppList().swap(g_tabItems); AppList().swap(g_fileResults);
+    AppList().swap(g_phoneItems); AppList().swap(g_phoneCard); AppList().swap(g_phoneNotifs);   // (their bitmaps and text layouts)
+    ResetFlatGlass();
     g_clipHistory.clear(); g_clipTimes.clear();
     g_searchHistory.clear();
     g_fileStatus.clear();
     std::vector<Folder>().swap(g_folders); g_customIcons.clear(); g_mainItems.clear(); g_backdropImage = {}; FreeSurface(g_surface);
     g_labelFormat.Reset(); g_searchFormat.Reset(); g_siriFormat.Reset(); g_messageFormat.Reset();
+    g_alertTitleFmt.Reset(); g_alertBodyFmt.Reset(); g_alertButtonFmt.Reset();   // (the alerts' own formats)
     g_titleFormat.Reset(); g_menuFormat.Reset(); g_tabFormat.Reset(); g_listFormat.Reset();
     g_listSubFormat.Reset(); g_glyphFormat.Reset(); g_hintFormat.Reset();
     g_glyphLargeFormat.Reset(); g_categoryFormat.Reset(); g_keyFormat.Reset();

@@ -2,12 +2,100 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-22T00:00:39.000Z</updated>
+    <updated>2026-11-22T01:02:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Translucent Menus 1.3.0]]></title>
+        <id>https://windhawk.net/mods/explorer-translucent-menus#7396cacb5edb6c4f8f9817e382b5633bbfc9010d</id>
+        <link href="https://windhawk.net/mods/explorer-translucent-menus"/>
+        <updated>2026-11-22T01:02:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add an opt-in material setting scoped to Explorer file-list infotips.</li>
+<li>Bind native popup drawing hooks to the verified offscreen paint target.</li>
+</ul>
+]]></content>
+        <author>
+            <name>alkali210</name>
+            <uri>https://github.com/alkali210</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Round Everything Interface 2.1.0]]></title>
+        <id>https://windhawk.net/mods/round-everything#e545a64111a569c9a0fe36901e0e15f04f013752</id>
+        <link href="https://windhawk.net/mods/round-everything"/>
+        <updated>2026-11-22T01:02:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Hide the frame without a maximized window</strong> (new General option, off by default): each monitor shows its frame only while a window is maximized on it. Otherwise the frame and its shadow are off, and they come back together with the taskbar's look. The monitor corners and the bezel line stay up, and the work area stays reserved either way.</li>
+<li><strong>Transparent taskbar when nothing is maximized</strong> (new General option, on by default): with the option above on, the taskbar's own background and border line are hidden while no frame shows, so the wallpaper shows through. Off, the taskbar looks as it does without the mod.</li>
+<li>Aero Peek with the hide option on: the peeked window decides. If it's maximized (or minimized from maximized) on a monitor, that monitor keeps its frame; every other monitor shows the taskbar's resting look.</li>
+<li>Task View: the frame stays in place under Task View, so nothing has to come back when it closes and it no longer flickers on open or close. The taskbar keeps its look over Task View without its monitor corners; with &quot;Hide the frame without a maximized window&quot; on and &quot;Transparent taskbar when nothing is maximized&quot; off, every taskbar takes its native look there.</li>
+<li>When the frame comes back, it has the maximized window's title-bar color right away.</li>
+<li>Explorer's own windows have their titles read without being sent a message.</li>
+<li>Fixed: taskbar thumbnails opened by a click (a grouped button, or &quot;thumbnails on click&quot; in Disable Taskbar Thumbnails) were taken for Task View and hid the frame on every monitor.</li>
+<li>Fixed: after Windows updates that rearrange the taskbar's layout (e.g. KB5137006), the taskbar could blink every 1.5 seconds. The corner ears now find their place in the new layout; where there's none, the corners stay square instead.</li>
+<li>Fixed: a frame waiting for its taskbar to reveal it could be withdrawn before it showed, briefly leaving the taskbar without its frame after a layout change.</li>
+<li>Fixed: a monitor with no maximized window could keep the mod ticking at 60 Hz.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Siri Plus Launchpad 1.3.0]]></title>
+        <id>https://windhawk.net/mods/siri-plus-launchpad#039477d3c35bbc563d7fb23074499391aaa47425</id>
+        <link href="https://windhawk.net/mods/siri-plus-launchpad"/>
+        <updated>2026-11-22T01:02:38.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Themes reorganized</strong>: Glass (clear glass, as in the Mac OS 27 Finder Bar), Liquid glass and Custom glass, plus Light, Siri, Dark and OLED. Each theme keeps its own customization right under it in Appearance, the panel only shows what applies to the chosen theme and mode, and <em>Restore theme defaults</em> brings a theme back to how the mod comes.</li>
+<li><strong>Glass buttons</strong>: buttons, tabs, shortcut keys, menu icons and the settings controls drawn as clear, polished glass (can be turned off).</li>
+<li><strong>Animated backlight</strong> (off by default): a colored glow around the bar, the results box, the menus and the buttons, with 1 to 5 colors turning around them and an intensity setting.</li>
+<li><strong>Chrome details</strong>: an animated chrome border around the bar, the box and the menus (on by default only on OLED) and a chrome ring on the settings button under the mouse. They work on every theme: graphite on light surfaces, and still in Fullscreen. Both can be turned off.</li>
+<li><strong>Every selection in every theme</strong>: Glass, Colored, Frosted color and Two colors blended, with their colors, for the menus <strong>and the search results</strong> (the result under the mouse and the one Enter opens), instead of a dim veil.</li>
+<li><strong>OLED starts deep black</strong>: no glass effect and no backlight by default.</li>
+<li><strong>Text size of the results</strong>: 80 to 160 % (Apps and icons); rows grow with bigger text.</li>
+<li><strong>The settings window's own look</strong>: follow the theme, or a light or dark glass of its own with its own blur and transparency (Backup and defaults).</li>
+<li><strong>macOS-style alerts</strong>: backup and restore messages and confirmations (also &quot;already exists, replace it?&quot;) are drawn inside the launcher, in the settings window's look, instead of Windows message boxes.</li>
+<li><strong>Floating mode</strong>:
+<ul>
+<li>The results box can open on mouse over.</li>
+<li>Files and Clipboard stay open with nothing typed: recent searches, copied items, or a line saying there are none yet.</li>
+<li>Applications gets the app tabs (All, the categories and your own tabs) in a row under the categories, and the first row of recent or most used apps, as in Original Siri.</li>
+<li>Several selected apps can be put in a tab, added to a tab or removed from it at once.</li>
+</ul>
+</li>
+<li><strong>Search ignores accents</strong> (on by default, can be turned off): &quot;acao&quot; also finds &quot;ação&quot; and the other way around, in apps, files, actions and the other categories.</li>
+<li><strong>Phone category (Phone Link)</strong>, off by default, in its own settings section:
+<ul>
+<li>The linked phone (battery and connection) and its notifications as they arrive.</li>
+<li>Shortcuts to Messages, Calls, Photos and Send files.</li>
+<li>Notifications can be cleared one by one or all at once, and they scroll inside the box when there are more than it shows (1 to 10).</li>
+<li>Ctrl+5 opens it in Original Siri.</li>
+<li>Everything is read on this PC only; nothing in Phone Link is changed.</li>
+</ul>
+</li>
+<li><strong>Fixed</strong>: Glass and Liquid glass no longer look smudged; they blur the background themselves in every mode.</li>
+<li><strong>Fixed</strong>: lowering the glass transparency no longer turns the glass smoky.</li>
+<li><strong>Fixed</strong>: Light performance mode no longer looks yellowish over light wallpapers.</li>
+<li><strong>Fixed</strong>: the Glass effect option now works on Dark and OLED.</li>
+<li><strong>Fixed</strong>: Liquid glass now bends all four edges.</li>
+<li><strong>Fixed</strong>: in lists with a remove button (Clipboard, Phone), the hover highlight no longer covers the button or the scroll bar.</li>
+<li><strong>Fixed</strong>: the Phone tab was missing in Floating and Window modes.</li>
+<li><strong>Fixed</strong>: the &quot;Recent searches&quot; title was cut off in translated languages.</li>
+<li><strong>Fixed</strong>: folders and tabs could be lost on PCs with very many apps in portable Windhawk.</li>
+<li><strong>Fixed</strong>: a Ctrl+click on empty space could crash Explorer.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Thiago Silva</name>
+            <uri>https://github.com/brideinflame-rgb</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Adobe Dark Menus 1.2.0]]></title>
         <id>https://windhawk.net/mods/adobe-dark-menus#010db23e5452d774a1da74265b441c8a33fb5564</id>
@@ -529,234 +617,6 @@ are left alone too.</li>
         <author>
             <name>JeremyWayne93</name>
             <uri>https://github.com/JeremyWayne93</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Copy Progress Bar Styles 1.0.0]]></title>
-        <id>https://windhawk.net/mods/copy-progress-styles#5f2d87ca50d9c4d0a3c8075bd81ae2bff4605f71</id>
-        <link href="https://windhawk.net/mods/copy-progress-styles"/>
-        <updated>2026-11-20T20:04:54.000Z</updated>
-        <content type="html"><![CDATA[<h1>File Copy Progress Bar Styles</h1>
-<p>Restyles the progress bar shown in the Windows file copy / move / delete dialog, and the
-extraction progress bar of 7-Zip and WinRAR.</p>
-<p>Screenshots of the styles are shown below.</p>
-<p><strong>Accent styles</strong> (use the accent color)</p>
-<ul>
-<li>
-<p><strong>Solid</strong> - flat color</p>
-<p><img src="https://i.imgur.com/vdd9Uv5.png" alt="Solid style"></p>
-</li>
-<li>
-<p><strong>Satin</strong> - gradient with a top highlight</p>
-</li>
-<li>
-<p><strong>Candy Cane</strong> - diagonal stripes</p>
-<p><img src="https://i.imgur.com/FzzmGxh.png" alt="Candy Cane style"></p>
-</li>
-<li>
-<p><strong>Neon Tube</strong> - dark track with a glowing core</p>
-<p><img src="https://i.imgur.com/fLQqUQt.png" alt="Neon Tube style"></p>
-</li>
-<li>
-<p><strong>Arcade</strong> - retro blocks</p>
-<p><img src="https://i.imgur.com/kTFi3jM.png" alt="Arcade style"></p>
-</li>
-</ul>
-<p><strong>Designer styles</strong> (fixed colors, some with their own track)</p>
-<ul>
-<li>
-<p><strong>Evergreen</strong> - dark green timeline with stepped bands and a diamond knob</p>
-<p><img src="https://i.imgur.com/G2zPbsh.png" alt="Evergreen style"></p>
-</li>
-<li>
-<p><strong>Sorbet</strong> - pink, yellow and blue segments</p>
-<p><img src="https://i.imgur.com/nx5igz7.png" alt="Sorbet style"></p>
-</li>
-<li>
-<p><strong>Polka</strong> - blue gradient with dot markers</p>
-<p><img src="https://i.imgur.com/VmmfywN.png" alt="Polka style"></p>
-</li>
-<li>
-<p><strong>Aurora</strong> - cyan-to-lilac gradient with an end marker and tick track</p>
-<p><img src="https://i.imgur.com/ZOjlvY1.png" alt="Aurora style"></p>
-</li>
-<li>
-<p><strong>Ember</strong> - orange diagonal stripes on a striped gray track</p>
-<p><img src="https://i.imgur.com/wf7WwLz.png" alt="Ember style"></p>
-</li>
-<li>
-<p><strong>Mint</strong> - soft green bar with a subtle bottom shade</p>
-<p><img src="https://i.imgur.com/fvcFM5f.png" alt="Mint style"></p>
-</li>
-<li>
-<p><strong>Fire &amp; Ice</strong> - red-to-icy-blue gradient</p>
-<p><img src="https://i.imgur.com/URI28xU.png" alt="Fire &amp; Ice style"></p>
-</li>
-<li>
-<p><strong>Prism</strong> - full-spectrum gradient</p>
-<p><img src="https://i.imgur.com/OZzUoOu.png" alt="Prism style"></p>
-</li>
-<li>
-<p><strong>Confetti</strong> - colorful mosaic</p>
-<p><img src="https://i.imgur.com/J7TYCcC.png" alt="Confetti style"></p>
-</li>
-<li>
-<p><strong>Carbon</strong> - dark mosaic on a dark track</p>
-<p><img src="https://i.imgur.com/RQL1wxd.png" alt="Carbon style"></p>
-</li>
-<li>
-<p><strong>Dusk</strong> - navy-to-orange-to-lilac gradient</p>
-<p><img src="https://i.imgur.com/o1m91bm.png" alt="Dusk style"></p>
-</li>
-</ul>
-<p>Paused and error states automatically switch to amber and red.</p>
-<p><strong>Notes</strong></p>
-<ul>
-<li>Only the copy dialog is restyled by default. The drive usage bars in This PC keep the
-standard Windows look. Turn on &quot;Also restyle other progress bars in Explorer&quot; to
-restyle those too.</li>
-<li>The mod also loads into 7-Zip (7zG.exe, 7zFM.exe) and WinRAR (WinRAR.exe) and restyles
-their extraction progress bars. To turn that off, switch off &quot;Also style 7-Zip and
-WinRAR&quot; in the settings (or add those processes to the mod's custom process exclusion
-list in the Advanced tab). Extracting a ZIP with Explorer's built-in &quot;Extract All&quot; uses
-the normal copy dialog.</li>
-<li>Tested on Windows 11. The theme lookup uses an undocumented uxtheme function (ordinal
-74), so other Windows versions have not been verified.</li>
-<li>In a dark copy dialog the tracks of the styles are darkened to match.</li>
-<li>Windows itself turns a drive bar red when the drive has under 10% free.</li>
-<li>Copy dialogs shown by other processes (for example inside an app's Open/Save dialog)
-are not styled. Add those processes in the mod's custom process inclusion list.</li>
-<li>Setting changes show up the next time the bar repaints.</li>
-<li>To troubleshoot, enable logging in the mod's Advanced tab and watch the log during a copy.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Pixeliota</name>
-            <uri>https://github.com/Pixeliota</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Border Switch 1.2.1]]></title>
-        <id>https://windhawk.net/mods/windows-border-switch#9f2ceff99e7031e99407c854368b55bd4f248acb</id>
-        <link href="https://windhawk.net/mods/windows-border-switch"/>
-        <updated>2026-11-20T20:04:48.000Z</updated>
-        <content type="html"><![CDATA[<h1>Windows Border Switch</h1>
-<p><strong>English</strong> · <a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Windows_Border_Switch/README.ru.md">Русский</a></p>
-<p>Windows Border Switch hides system-drawn borders around windows and panels in Windows 11.</p>
-<h2>Features</h2>
-<table>
-<thead>
-<tr>
-<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Windows_Border_Switch/Assets/Screenshots/Dark_Border_Comparison.png" alt="Dark theme comparison, with default borders on the left and hidden borders on the right"></th>
-<th style="text-align:center"><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Windows_Border_Switch/Assets/Screenshots/Light_Border_Comparison.png" alt="Light theme comparison, with default borders on the left and hidden borders on the right"></th>
-</tr>
-</thead>
-</table>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Controls</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Active window</td>
-<td>The focused window's system border or its title bar accent color</td>
-</tr>
-<tr>
-<td>Inactive windows</td>
-<td>System borders of windows without focus</td>
-</tr>
-<tr>
-<td>Dialogs</td>
-<td>System borders of classic Win32 dialogs, with or without focus</td>
-</tr>
-<tr>
-<td>Taskbar</td>
-<td>The taskbar edge and the virtual desktops strip at the bottom of Task View</td>
-</tr>
-<tr>
-<td>Start menu</td>
-<td>The Start menu and its Phone Link panel</td>
-</tr>
-<tr>
-<td>Search</td>
-<td>The Windows Search panel</td>
-</tr>
-<tr>
-<td>Notifications</td>
-<td>The notification center, calendar, and notification banners on the desktop</td>
-</tr>
-<tr>
-<td>Quick Settings</td>
-<td>Quick Settings and the media controls above them</td>
-</tr>
-<tr>
-<td>Keyboard layout</td>
-<td>The outer border of the keyboard layout selector</td>
-</tr>
-<tr>
-<td>Widgets</td>
-<td>The outer border of the Widgets board</td>
-</tr>
-<tr>
-<td>Exceptions</td>
-<td>Keep the usual border and title bar for active, inactive, or all windows of selected apps</td>
-</tr>
-</tbody>
-</table>
-<p>The interface is available in English, Russian, Spanish, German, Brazilian Portuguese, and Simplified Chinese.</p>
-<h3>Limitations</h3>
-<ul>
-<li>Shell borders depend on the Windows build and Windows Web Experience Pack. After enabling or updating the mod, some panels may require restarting Windows Explorer or signing out and back in.</li>
-<li>Apps running as administrator, including Windhawk, may retain their borders. Apps that draw their own frames control their appearance.</li>
-</ul>
-<h2>Platforms</h2>
-<p>Requires Windows 11 x64 or ARM64.</p>
-<h3>Compatibility</h3>
-<p>The following mods overlap with Windows Border Switch for application window borders:</p>
-<ul>
-<li><a href="https://windhawk.net/mods/invisible-borders">Invisible Window Borders</a> — also hides system-drawn window borders.</li>
-<li><a href="https://windhawk.net/mods/win11-accent-border">Windows 11 Accent Window Border</a> — sets window border colors, which can conflict with hiding those borders.</li>
-</ul>
-<p>Do not use multiple mods to control the same window border or title bar: they can override each other's settings and exceptions. To use either mod for window borders and Windows Border Switch only for shell panels, set <strong>Active window</strong>, <strong>Inactive windows</strong>, and <strong>Dialogs</strong> to <strong>Windows-defined</strong> in Windows Border Switch.</p>
-<p>The following Styler mods customize shell panels. Their themes and custom rules may also change borders:</p>
-<ul>
-<li><a href="https://windhawk.net/mods/windows-11-start-menu-styler">Windows 11 Start Menu Styler</a> — styles the Start menu and Search panel (<a href="https://github.com/ramensoftware/windows-11-start-menu-styling-guide">styling guide</a>).</li>
-<li><a href="https://windhawk.net/mods/windows-11-taskbar-styler">Windows 11 Taskbar Styler</a> — styles the taskbar, including its edge (<a href="https://github.com/ramensoftware/windows-11-taskbar-styling-guide">styling guide</a>).</li>
-<li><a href="https://windhawk.net/mods/windows-11-notification-center-styler">Windows 11 Notification Center Styler</a> — styles notifications, the calendar, Quick Settings, and media controls (<a href="https://github.com/ramensoftware/windows-11-notification-center-styling-guide">styling guide</a>).</li>
-</ul>
-<p>If a theme or rule controls the same border, set the corresponding Windows Border Switch option to <strong>Windows-defined</strong>, or remove the overlapping Styler rules.</p>
-<h2>Usage</h2>
-<p>Open the mod's <strong>Settings</strong> to change each setting independently. Initially, the mod keeps the active window border, removes its title bar accent color, and hides the other listed borders. Choose <strong>Windows-defined</strong> to restore Windows styling for a setting.</p>
-<p>Under <strong>Exceptions</strong>, add an executable name such as <code>steam.exe</code> and select which windows to exempt under <strong>Do not hide border</strong>.</p>
-<h2>Links</h2>
-<ul>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Windows_Border_Switch">Windows Border Switch on GitHub</a></li>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md">DSN Windhawk Mods</a></li>
-</ul>
-]]></content>
-        <author>
-            <name>CTravkin</name>
-            <uri>https://github.com/CTravkin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Shortcut Arrow Icons 2.0.0]]></title>
-        <id>https://windhawk.net/mods/remove-shortcut-arrows#b158ee856a1be9d1cbfa930b45068ab3463242ba</id>
-        <link href="https://windhawk.net/mods/remove-shortcut-arrows"/>
-        <updated>2026-11-20T19:02:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Improved Desktop Stability:</strong> Shortcut arrows now stay hidden reliably when Explorer recreates the desktop at startup and after system setting or theme changes.</li>
-<li><strong>Process &amp; Subclass Isolation:</strong> Restricted window hooks strictly to the primary desktop list view, preventing conflicts with other File Explorer windows or separate Explorer processes.</li>
-<li><strong>Visual Preview:</strong> Added a side-by-side before-and-after preview to the mod description.</li>
-<li><strong>SEO &amp; Title Polish:</strong> Renamed to &quot;Remove Shortcut Arrow Icons&quot; for better searchability.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
         </author>
     </entry>
 </feed>

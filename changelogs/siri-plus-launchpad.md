@@ -1,3 +1,37 @@
+## 1.3.0 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/039477d3c35bbc563d7fb23074499391aaa47425/mods/siri-plus-launchpad.wh.cpp))
+
+* **Themes reorganized**: Glass (clear glass, as in the Mac OS 27 Finder Bar), Liquid glass and Custom glass, plus Light, Siri, Dark and OLED. Each theme keeps its own customization right under it in Appearance, the panel only shows what applies to the chosen theme and mode, and *Restore theme defaults* brings a theme back to how the mod comes.
+* **Glass buttons**: buttons, tabs, shortcut keys, menu icons and the settings controls drawn as clear, polished glass (can be turned off).
+* **Animated backlight** (off by default): a colored glow around the bar, the results box, the menus and the buttons, with 1 to 5 colors turning around them and an intensity setting.
+* **Chrome details**: an animated chrome border around the bar, the box and the menus (on by default only on OLED) and a chrome ring on the settings button under the mouse. They work on every theme: graphite on light surfaces, and still in Fullscreen. Both can be turned off.
+* **Every selection in every theme**: Glass, Colored, Frosted color and Two colors blended, with their colors, for the menus **and the search results** (the result under the mouse and the one Enter opens), instead of a dim veil.
+* **OLED starts deep black**: no glass effect and no backlight by default.
+* **Text size of the results**: 80 to 160 % (Apps and icons); rows grow with bigger text.
+* **The settings window's own look**: follow the theme, or a light or dark glass of its own with its own blur and transparency (Backup and defaults).
+* **macOS-style alerts**: backup and restore messages and confirmations (also "already exists, replace it?") are drawn inside the launcher, in the settings window's look, instead of Windows message boxes.
+* **Floating mode**:
+  * The results box can open on mouse over.
+  * Files and Clipboard stay open with nothing typed: recent searches, copied items, or a line saying there are none yet.
+  * Applications gets the app tabs (All, the categories and your own tabs) in a row under the categories, and the first row of recent or most used apps, as in Original Siri.
+  * Several selected apps can be put in a tab, added to a tab or removed from it at once.
+* **Search ignores accents** (on by default, can be turned off): "acao" also finds "ação" and the other way around, in apps, files, actions and the other categories.
+* **Phone category (Phone Link)**, off by default, in its own settings section:
+  * The linked phone (battery and connection) and its notifications as they arrive.
+  * Shortcuts to Messages, Calls, Photos and Send files.
+  * Notifications can be cleared one by one or all at once, and they scroll inside the box when there are more than it shows (1 to 10).
+  * Ctrl+5 opens it in Original Siri.
+  * Everything is read on this PC only; nothing in Phone Link is changed.
+* **Fixed**: Glass and Liquid glass no longer look smudged; they blur the background themselves in every mode.
+* **Fixed**: lowering the glass transparency no longer turns the glass smoky.
+* **Fixed**: Light performance mode no longer looks yellowish over light wallpapers.
+* **Fixed**: the Glass effect option now works on Dark and OLED.
+* **Fixed**: Liquid glass now bends all four edges.
+* **Fixed**: in lists with a remove button (Clipboard, Phone), the hover highlight no longer covers the button or the scroll bar.
+* **Fixed**: the Phone tab was missing in Floating and Window modes.
+* **Fixed**: the "Recent searches" title was cut off in translated languages.
+* **Fixed**: folders and tabs could be lost on PCs with very many apps in portable Windhawk.
+* **Fixed**: a Ctrl+click on empty space could crash Explorer.
+
 ## 1.2.0 ([Nov 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a93589dee0307dd5b6f697293cf296e6b55bdb30/mods/siri-plus-launchpad.wh.cpp))
 
 New

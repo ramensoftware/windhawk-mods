@@ -1,3 +1,8 @@
+## 1.3.0 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7396cacb5edb6c4f8f9817e382b5633bbfc9010d/mods/explorer-translucent-menus.wh.cpp))
+
+* Add an opt-in material setting scoped to Explorer file-list infotips.
+* Bind native popup drawing hooks to the verified offscreen paint target.
+
 ## 1.2.0 ([Nov 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ad6603ecaaede48bcbed7f93cbcb1725ccd7f3ab/mods/explorer-translucent-menus.wh.cpp))
 
 * Add an option to customize hover highlight color.
