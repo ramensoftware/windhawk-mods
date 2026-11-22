@@ -30,7 +30,7 @@ Authentic macOS-style translucent volume HUD for Windows with classic step click
 * **Dynamic device switching**: Automatically follows the default audio output device when headphones, speakers, or Bluetooth devices are connected.
 
 ### Key Capture & Shortcuts
-The mod captures physical volume keys system-wide via `RegisterHotKey`, so background apps will not receive duplicate volume events:
+The mod captures physical volume keys system-wide via `RegisterHotKey`, so other apps no longer receive the volume keys:
 - `Volume Up` — Increase volume by 6.25% (1 step)
 - `Volume Down` — Decrease volume by 6.25% (1 step)
 - `Volume Mute` — Toggle mute
@@ -39,6 +39,13 @@ Optional shortcuts (if enabled in settings):
 - `Ctrl + Alt + Up` — Volume Up
 - `Ctrl + Alt + Down` — Volume Down
 - `Ctrl + Alt + V` — Mute / Unmute
+
+### Comparison with Other OSD Mods
+Unlike `win10-volume-brightness-osd` (which restores Windows 8/10 flyouts with brightness controls) or `osd-custom-pill` (which provides modern animated pills), Volu is focused exclusively on authentic macOS volume HUD fidelity:
+* Classic square frosted glass aesthetics with multi-pass soft drop shadow.
+* Authentic wooden and tactile step clicks.
+* 16-step quantization (6.25% per step) strictly synchronizing with the 16-segment bar.
+* Lightweight tool mod architecture dedicated solely to volume control.
 */
 // ==/WindhawkModReadme==
 
@@ -81,17 +88,17 @@ Optional shortcuts (if enabled in settings):
 #include <cmath>
 #include <algorithm>
 
-#pragma comment(lib, "gdiplus.lib")
-#pragma comment(lib, "gdi32.lib")
-#pragma comment(lib, "ole32.lib")
-#pragma comment(lib, "winmm.lib")
-#pragma comment(lib, "shcore.lib")
-
 using namespace Gdiplus;
 
 // Forward declarations for audio assets
 extern const unsigned char g_woodClickWav[];
 extern const unsigned char g_tactileClickWav[];
+
+// Unique event context GUID to recognize the mod's own volume changes
+// {5A44AFEA-43E3-45BC-B0FB-2B7775A6073B}
+static const GUID g_voluEventContext = {
+    0x5a44afea, 0x43e3, 0x45bc, { 0xb0, 0xfb, 0x2b, 0x77, 0x75, 0xa6, 0x07, 0x3b }
+};
 
 enum class SoundScheme {
     Wood,
@@ -187,7 +194,6 @@ static int g_hudAlpha = 255;
 
 static std::atomic<float> g_lastVolume{0.0f};
 static std::atomic<bool> g_lastMuted{false};
-static std::atomic<bool> g_bInternalVolumeChange{false};
 
 static void PlayClickSound(bool isMuted) {
     if (isMuted) return;
@@ -287,9 +293,7 @@ private:
 
 public:
     AudioManager() = default;
-    ~AudioManager() {
-        Uninitialize();
-    }
+    ~AudioManager() = default;
 
     bool Initialize() {
         HRESULT hr = CoCreateInstance(
@@ -389,16 +393,19 @@ public:
         }
     }
 
-    bool HasEndpoint() const {
-        return m_pEndpointVolume != nullptr;
-    }
-
     bool StepVolume(float delta) {
-        if (!m_pEndpointVolume) return false;
+        if (!m_pEndpointVolume) {
+            BindEndpoint();
+            if (!m_pEndpointVolume) return false;
+        }
 
         float current = 0.0f;
-        if (FAILED(m_pEndpointVolume->GetMasterVolumeLevelScalar(&current))) {
-            return false;
+        HRESULT hr = m_pEndpointVolume->GetMasterVolumeLevelScalar(&current);
+        if (FAILED(hr)) {
+            BindEndpoint();
+            if (!m_pEndpointVolume || FAILED(m_pEndpointVolume->GetMasterVolumeLevelScalar(&current))) {
+                return false;
+            }
         }
 
         // Snap to nearest 1/16 grid step
@@ -408,39 +415,40 @@ public:
         if (newVol < 0.0f) newVol = 0.0f;
         if (newVol > 1.0f) newVol = 1.0f;
 
-        g_bInternalVolumeChange.store(true);
-
         BOOL isMuted = FALSE;
         m_pEndpointVolume->GetMute(&isMuted);
         if (isMuted) {
-            m_pEndpointVolume->SetMute(FALSE, nullptr);
+            m_pEndpointVolume->SetMute(FALSE, &g_voluEventContext);
             g_lastMuted.store(false);
         }
 
-        HRESULT hr = m_pEndpointVolume->SetMasterVolumeLevelScalar(newVol, nullptr);
+        hr = m_pEndpointVolume->SetMasterVolumeLevelScalar(newVol, &g_voluEventContext);
         if (SUCCEEDED(hr)) {
             g_lastVolume.store(newVol);
         }
-
-        g_bInternalVolumeChange.store(false);
         return SUCCEEDED(hr);
     }
 
     bool ToggleMute() {
-        if (!m_pEndpointVolume) return false;
+        if (!m_pEndpointVolume) {
+            BindEndpoint();
+            if (!m_pEndpointVolume) return false;
+        }
 
         BOOL isMuted = FALSE;
-        if (FAILED(m_pEndpointVolume->GetMute(&isMuted))) {
-            return false;
+        HRESULT hr = m_pEndpointVolume->GetMute(&isMuted);
+        if (FAILED(hr)) {
+            BindEndpoint();
+            if (!m_pEndpointVolume || FAILED(m_pEndpointVolume->GetMute(&isMuted))) {
+                return false;
+            }
         }
 
         BOOL newMuted = !isMuted;
-        g_bInternalVolumeChange.store(true);
-        HRESULT hr = m_pEndpointVolume->SetMute(newMuted, nullptr);
+        hr = m_pEndpointVolume->SetMute(newMuted, &g_voluEventContext);
         if (SUCCEEDED(hr)) {
             g_lastMuted.store(newMuted ? true : false);
         }
-        g_bInternalVolumeChange.store(false);
         return SUCCEEDED(hr);
     }
 
@@ -470,16 +478,19 @@ static AudioManager g_audioMgr;
 STDMETHODIMP AudioEndpointVolumeCallback::OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify) {
     if (!pNotify) return S_OK;
 
+    // Skip the mod's own volume/mute changes to avoid duplicate renders and click sounds
+    if (IsEqualGUID(pNotify->guidEventContext, g_voluEventContext)) {
+        return S_OK;
+    }
+
     float newVol = pNotify->fMasterVolume;
     bool newMuted = (pNotify->bMuted != FALSE);
 
     g_lastVolume.store(newVol);
     g_lastMuted.store(newMuted);
 
-    bool isInternal = g_bInternalVolumeChange.load();
-
     if (g_hHudWnd) {
-        PostMessageW(g_hHudWnd, WM_USER_SHOW_HUD, (WPARAM)isInternal, 0);
+        PostMessageW(g_hHudWnd, WM_USER_SHOW_HUD, 0, 0);
     }
 
     return S_OK;
@@ -806,6 +817,31 @@ static void RegisterHotkeys(HWND hWnd) {
     }
 }
 
+static void LoadSettings() {
+    auto soundScheme = WindhawkUtils::StringSetting::make(L"soundScheme");
+    if (wcscmp(soundScheme.get(), L"tactile") == 0) {
+        g_settings.soundScheme = SoundScheme::Tactile;
+    } else if (wcscmp(soundScheme.get(), L"none") == 0) {
+        g_settings.soundScheme = SoundScheme::None;
+    } else {
+        g_settings.soundScheme = SoundScheme::Wood;
+    }
+
+    g_settings.timeoutMs = Wh_GetIntSetting(L"timeoutMs");
+    if (g_settings.timeoutMs < 500) g_settings.timeoutMs = 1300;
+
+    auto position = WindhawkUtils::StringSetting::make(L"position");
+    if (wcscmp(position.get(), L"top") == 0) {
+        g_settings.position = HudPosition::Top;
+    } else if (wcscmp(position.get(), L"bottom") == 0) {
+        g_settings.position = HudPosition::Bottom;
+    } else {
+        g_settings.position = HudPosition::Center;
+    }
+
+    g_settings.enableHotkeys = (Wh_GetIntSetting(L"enableHotkeys") != 0);
+}
+
 static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_HOTKEY:
@@ -836,16 +872,12 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
             }
             break;
 
-        case WM_USER_SHOW_HUD: {
-            bool isInternal = (wParam != 0);
-            if (isInternal) {
-                PlayClickSound(g_audioMgr.IsMuted());
-            }
+        case WM_USER_SHOW_HUD:
             ShowHud(hWnd);
             return 0;
-        }
 
         case WM_USER_SETTINGS_CHANGED:
+            LoadSettings();
             RegisterHotkeys(hWnd);
             return 0;
 
@@ -960,6 +992,7 @@ static DWORD WINAPI HudThreadProc(LPVOID lpParam) {
     }
 
     if (g_hHudWnd) {
+        LoadSettings();
         RegisterHotkeys(g_hHudWnd);
     } else {
         Wh_Log(L"Failed to create HUD window: %u", GetLastError());
@@ -1011,41 +1044,11 @@ static DWORD WINAPI HudThreadProc(LPVOID lpParam) {
 }
 
 // ============================================================================
-// --- Settings Loading ---
-// ============================================================================
-
-static void LoadSettings() {
-    auto soundScheme = WindhawkUtils::StringSetting::make(L"soundScheme");
-    if (soundScheme.get() && wcscmp(soundScheme.get(), L"tactile") == 0) {
-        g_settings.soundScheme = SoundScheme::Tactile;
-    } else if (soundScheme.get() && wcscmp(soundScheme.get(), L"none") == 0) {
-        g_settings.soundScheme = SoundScheme::None;
-    } else {
-        g_settings.soundScheme = SoundScheme::Wood;
-    }
-
-    g_settings.timeoutMs = Wh_GetIntSetting(L"timeoutMs");
-    if (g_settings.timeoutMs < 500) g_settings.timeoutMs = 1300;
-
-    auto position = WindhawkUtils::StringSetting::make(L"position");
-    if (position.get() && wcscmp(position.get(), L"top") == 0) {
-        g_settings.position = HudPosition::Top;
-    } else if (position.get() && wcscmp(position.get(), L"bottom") == 0) {
-        g_settings.position = HudPosition::Bottom;
-    } else {
-        g_settings.position = HudPosition::Center;
-    }
-
-    g_settings.enableHotkeys = (Wh_GetIntSetting(L"enableHotkeys") != 0);
-}
-
-// ============================================================================
 // --- Windhawk Tool Mod Callbacks ---
 // ============================================================================
 
 BOOL WhTool_ModInit() {
-    Wh_Log(L"Volu - macOS Volume HUD: WhTool_ModInit");
-    LoadSettings();
+    Wh_Log(L"WhTool_ModInit");
 
     g_hHudReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hHudReady) {
@@ -1061,9 +1064,7 @@ BOOL WhTool_ModInit() {
         return FALSE;
     }
 
-    if (WaitForSingleObject(g_hHudReady, 5000) != WAIT_OBJECT_0) {
-        Wh_Log(L"HUD thread did not signal ready in time");
-    }
+    WaitForSingleObject(g_hHudReady, INFINITE);
     CloseHandle(g_hHudReady);
     g_hHudReady = nullptr;
 
@@ -1071,24 +1072,21 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
-    Wh_Log(L"Volu - macOS Volume HUD: WhTool_ModSettingsChanged");
-    LoadSettings();
+    Wh_Log(L"WhTool_ModSettingsChanged");
     if (g_hHudWnd) {
         PostMessageW(g_hHudWnd, WM_USER_SETTINGS_CHANGED, 0, 0);
     }
 }
 
 void WhTool_ModUninit() {
-    Wh_Log(L"Volu - macOS Volume HUD: WhTool_ModUninit");
+    Wh_Log(L"WhTool_ModUninit");
 
     if (g_dwHudThreadId) {
         PostThreadMessageW(g_dwHudThreadId, WM_QUIT, 0, 0);
     }
 
     if (g_hHudThread) {
-        if (WaitForSingleObject(g_hHudThread, 5000) != WAIT_OBJECT_0) {
-            Wh_Log(L"HUD thread did not exit in time");
-        }
+        WaitForSingleObject(g_hHudThread, INFINITE);
         CloseHandle(g_hHudThread);
         g_hHudThread = nullptr;
         g_dwHudThreadId = 0;
@@ -1212,7 +1210,7 @@ void Wh_ModAfterInit() {
 
     WCHAR
     commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID L"\"") / sizeof(WCHAR)) - 1];
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
