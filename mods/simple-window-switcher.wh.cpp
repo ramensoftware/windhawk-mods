@@ -182,15 +182,16 @@ navigation can change the selection while the UI remains hidden.
   material's own look. The switcher then draws the material itself, which has
   no Windows drop shadow. On Windows 10, Acrylic follows **Switcher Background
   Color** and **Background Opacity** instead.
-- The switcher and its element corners set to Follow Corner Preference follow
-  **Corner Preference**. With Default, that is the Windows corner radius,
-  including changes made by the
+- **Corner Preference** sets the switcher's corners. With **Default**, it follows
+  the Windows corner shape, including changes made by the
   [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius)
-  mod on regular and portable Windhawk installs. Squared, Rounded, Rounded small,
-  and Custom take precedence over it for the switcher and all of its elements.
-- On Windows 11, live thumbnails are rounded on every material. Each element's
-  corner setting can also use its own Custom radius, for example when the
-  Windows corner radius is 0.
+  mod on regular and portable Windhawk installs. Elements set to **Follow Corner
+  Preference** inherit the full switcher shape.
+- The switcher, task border, close button, thumbnails, group indicator, and
+  Badge icon background each offer **Custom Uniform** and **Custom Per-Corner**.
+  Enter four values from 0 to 32 clockwise from the top-left corner, such as
+  `2,11,17,23`. An empty or invalid tuple uses that control's uniform radius.
+- On Windows 11, custom thumbnail corners work with every material.
 - On Windows 11, Mica, Mica Alt, and Acrylic keep their material at every
   corner radius. Radii that Windows does not draw itself use a material drawn
   by the switcher, which has no Windows drop shadow.
@@ -217,13 +218,23 @@ What each feature does on each Windows version. Details are in
 | Auto defaults: highlight style, font, animations, shadows, hover effect, close button and badge backgrounds | Windows 10 style | Windows 11 style |
 | **Corners** | | |
 | Corner Preference: Default | Square | Windows corner radius |
-| Corner Preference: Squared, Rounded, Rounded small, Custom | Yes | Yes |
+| Corner Preference: Squared, Rounded, Rounded small, Custom Uniform, Custom Per-Corner | Yes | Yes |
 | Mica and Acrylic at every corner radius | Not applicable | Yes |
 | Rounded live thumbnails | None material at 99-100% opacity only | Every material |
-| Custom radius for each element's corners | Yes | Yes |
+| Independent uniform and per-corner radii for each element | Yes | Yes |
 | **Everything else** | | |
 | Layouts, grouping, Desktop item, Custom Header, filtering, and keyboard, mouse and touchpad controls | Yes | Yes |
 | Exclude in Xbox Mode | Not applicable | Yes |
+
+## Breaking changes in v3.0
+
+The former **Task Border and Close Button Corners** setting now controls only
+the task border. The close button has its own **Close Button Corners** setting
+and defaults to **Follow Corner Preference**. This preserves the appearance
+when both previously followed the switcher's corners. To restore a previous
+**Squared** setting, select **Squared** for the close button. To restore a
+previous **Custom** radius, select **Custom Uniform** for the close button and enter
+the previous radius in **Close Button Corner Radius**.
 
 ## Configuration
 
@@ -519,50 +530,84 @@ nothing failed.
           - none: Squared
           - round: Rounded
           - roundSmall: Rounded small
-          - custom: Custom
+          - custom: Custom Uniform
+          - perCorner: Custom Per-Corner
         - customCornerRadius: 8
           $name: Custom Corner Radius (px)
-          $description: Corner radius in pixels (0-32), used when Corner Preference is Custom.
+          $description: Radius for all corners (0-32 px at 100% scale). Custom Per-Corner also uses this radius if its four values are empty or invalid.
+        - customPerCornerRadius: ""
+          $name: Switcher Per-Corner Radius
+          $description: Enter four comma-separated radii from 0 to 32 in top-left, top-right, bottom-right, bottom-left order (for example 2,11,17,23). Zero makes a corner square. An empty or invalid value uses the uniform radius above.
         - taskRoundedCorners: "true"
-          $name: Task Border and Close Button Corners
-          $description: Corners of the selected task border and the close button. Follow Corner Preference uses the switcher's radius, so a Squared switcher gives square corners here too. Custom uses Task Border and Close Button Corner Radius instead.
+          $name: Task Border Corners
+          $description: Corners of the selected task highlight and border. Follow Corner Preference uses the switcher's corners.
           $options:
           - true: Follow Corner Preference
           - false: Squared
-          - custom: Custom
+          - custom: Custom Uniform
+          - perCorner: Custom Per-Corner
         - taskCornerRadius: 8
-          $name: Task Border and Close Button Corner Radius (px)
-          $description: Corner radius in pixels (0-32), used when Task Border and Close Button Corners is Custom.
+          $name: Task Border Corner Radius (px)
+          $description: Radius for all corners (0-32 px at 100% scale). Custom Per-Corner also uses this radius if its four values are empty or invalid.
+        - taskPerCornerRadius: ""
+          $name: Task Border Per-Corner Radius
+          $description: Enter four comma-separated radii from 0 to 32 in top-left, top-right, bottom-right, bottom-left order (for example 2,11,17,23). Zero makes a corner square. An empty or invalid value uses the uniform radius above.
+        - closeButtonCorners: "true"
+          $name: Close Button Corners
+          $description: Corners of the close button's background and border. Follow Corner Preference uses the switcher's corners.
+          $options:
+          - true: Follow Corner Preference
+          - false: Squared
+          - custom: Custom Uniform
+          - perCorner: Custom Per-Corner
+        - closeButtonCornerRadius: 8
+          $name: Close Button Corner Radius (px)
+          $description: Radius for all corners (0-32 px at 100% scale). Custom Per-Corner also uses this radius if its four values are empty or invalid.
+        - closeButtonPerCornerRadius: ""
+          $name: Close Button Per-Corner Radius
+          $description: Enter four comma-separated radii from 0 to 32 in top-left, top-right, bottom-right, bottom-left order (for example 2,11,17,23). Zero makes a corner square. An empty or invalid value uses the uniform radius above.
         - roundThumbnailCorners: "true"
           $name: Thumbnail Corners
-          $description: Corners of the live window thumbnails, their shadow and hover outline. Follow Corner Preference uses the switcher's radius, so a Squared switcher gives square corners here too. Custom uses Thumbnail Corner Radius instead, for example when the Windows corner radius is 0.
+          $description: Corners of the live window thumbnails, their shadow and hover outline. Follow Corner Preference uses the switcher's corners.
           $options:
           - true: Follow Corner Preference
           - false: Squared
-          - custom: Custom
+          - custom: Custom Uniform
+          - perCorner: Custom Per-Corner
         - thumbnailCornerRadius: 8
           $name: Thumbnail Corner Radius (px)
-          $description: Thumbnail corner radius in pixels (0-32), used when Thumbnail Corners is Custom.
+          $description: Radius for all corners (0-32 px at 100% scale). Custom Per-Corner also uses this radius if its four values are empty or invalid.
+        - thumbnailPerCornerRadius: ""
+          $name: Thumbnail Per-Corner Radius
+          $description: Enter four comma-separated radii from 0 to 32 in top-left, top-right, bottom-right, bottom-left order (for example 2,11,17,23). Zero makes a corner square. An empty or invalid value uses the uniform radius above.
         - roundGroupIndicator: "true"
           $name: Group Indicator Corners
-          $description: Corners of the group indicator. Follow Corner Preference uses the switcher's radius and Custom uses Group Indicator Corner Radius, both limited to half the indicator's height.
+          $description: Corners of the group indicator, limited to half its height. Follow Corner Preference uses the switcher's corners.
           $options:
           - true: Follow Corner Preference
           - false: Squared
-          - custom: Custom
+          - custom: Custom Uniform
+          - perCorner: Custom Per-Corner
         - groupIndicatorCornerRadius: 8
           $name: Group Indicator Corner Radius (px)
-          $description: Corner radius in pixels (0-32), used when Group Indicator Corners is Custom.
+          $description: Radius for all corners (0-32 px at 100% scale). Custom Per-Corner also uses this radius if its four values are empty or invalid.
+        - groupIndicatorPerCornerRadius: ""
+          $name: Group Indicator Per-Corner Radius
+          $description: Enter four comma-separated radii from 0 to 32 in top-left, top-right, bottom-right, bottom-left order (for example 2,11,17,23). Zero makes a corner square. An empty or invalid value uses the uniform radius above.
         - roundBadgeIconBackground: "true"
           $name: Badge Icon Background Corners
-          $description: Corners of the badge icon background (Badge layout). Follow Corner Preference uses the switcher's radius and Custom uses Badge Icon Background Corner Radius, both limited to half the background's size.
+          $description: Corners of the badge icon background in Badge layout, limited to half its size. Follow Corner Preference uses the switcher's corners.
           $options:
           - true: Follow Corner Preference
           - false: Squared
-          - custom: Custom
+          - custom: Custom Uniform
+          - perCorner: Custom Per-Corner
         - badgeIconBackgroundCornerRadius: 8
           $name: Badge Icon Background Corner Radius (px)
-          $description: Corner radius in pixels (0-32), used when Badge Icon Background Corners is Custom.
+          $description: Radius for all corners (0-32 px at 100% scale). Custom Per-Corner also uses this radius if its four values are empty or invalid.
+        - badgeIconBackgroundPerCornerRadius: ""
+          $name: Badge Icon Background Per-Corner Radius
+          $description: Enter four comma-separated radii from 0 to 32 in top-left, top-right, bottom-right, bottom-left order (for example 2,11,17,23). Zero makes a corner square. An empty or invalid value uses the uniform radius above.
       $name: Corners
     - Thumbnails:
         - thumbnailPosition: bottom
@@ -1071,6 +1116,7 @@ nothing failed.
 #include <atomic>
 #include <deque>
 #include <memory>
+#include <optional>
 #include <exception>
 #include <map>
 #include <string>
@@ -1141,6 +1187,29 @@ namespace SwsSelectionProtocol {
 #define SWS_HOTKEY_ALTSHIFTESC      10
 #define SWS_HOTKEY_RETRY_TIMER_ID   100
 #define SWS_HOTKEY_RETRY_INTERVAL   2000
+
+struct TabHotkey {
+    int id;
+    UINT modifiers;
+};
+
+static constexpr TabHotkey kTabHotkeys[] = {
+    {SWS_HOTKEY_ALTTAB, MOD_ALT},
+    {SWS_HOTKEY_ALTSHIFTTAB, MOD_ALT | MOD_SHIFT},
+    {SWS_HOTKEY_ALTCTRLTAB, MOD_ALT | MOD_CONTROL},
+    {SWS_HOTKEY_ALTSHIFTCTRLTAB, MOD_ALT | MOD_SHIFT | MOD_CONTROL},
+    {SWS_HOTKEY_WINALTTAB, MOD_ALT | MOD_WIN},
+    {SWS_HOTKEY_WINALTSHIFTTAB, MOD_ALT | MOD_SHIFT | MOD_WIN},
+};
+
+static int TabHotkeyId(UINT modifiers, UINT vk) {
+    if (vk == VK_TAB) {
+        for (const auto& chord : kTabHotkeys) {
+            if ((modifiers & ~MOD_NOREPEAT) == chord.modifiers) return chord.id;
+        }
+    }
+    return 0;
+}
 #define SWS_BG_DARK          RGB(32, 32, 32)
 #define SWS_BG_LIGHT         RGB(243, 243, 243)
 #define SWS_CONTOUR_DARK     RGB(255, 255, 255)
@@ -1166,6 +1235,7 @@ namespace SwsSelectionProtocol {
 // the first handoff after a raw touchpad session.
 #define SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID 112
 #define SWS_WINDOW_LIST_RECONCILE_TIMER_ID 120
+#define SWS_SHELL_INVOCATION_TIMER_ID 121
 #define SWS_WINDOW_LIST_RECONCILE_TIMEOUT_MS 3000u
 #define SWS_BACKDROP_RETRY_TIMER_ID 117
 // Marker expiry never extends the invisible foreground shield's lifetime.
@@ -1222,6 +1292,17 @@ static constexpr int SWS_RAW_TAP_SLOP = 65535 / 50;
 #define WM_SWS_RAPID_TIMEOUT (WM_APP + 12)
 // wParam: backdrop build generation whose screen read has finished. No lParam.
 #define WM_SWS_BACKDROP_CAPTURED (WM_APP + 13)
+// WPARAM packs the optional assist token above the low-byte hotkey ID.
+// LPARAM carries the Explorer PID.
+#define WM_SWS_EXPLORER_HOTKEY (WM_APP + 14)
+#define WM_SWS_EXPLORER_SHELL_ASSIST (WM_APP + 15)
+#define SWS_HOTKEY_POLICY_PROP L"WindhawkSWSHotkeyPolicy"
+#define SWS_SHELL_ASSIST_PROP L"WindhawkSWSShellAssist"
+static constexpr ULONG_PTR kHotkeyReady = 1;
+static constexpr ULONG_PTR kHotkeyExcludeXbox = 2;
+static constexpr ULONG_PTR kHotkeyShellAssist = 4;
+static constexpr DWORD kShellAssistTokenMask = 0x00FFFFFF;
+static constexpr DWORD kShellAssistReady = 0x01000000;
 #define SWS_RAW_FRAME_QUEUE_FLAG 0x80000000u
 #define SWS_RAW_FRAME_QUEUE_INDEX_MASK 0xFFu
 #define SWS_RAW_FRAME_QUEUE_EPOCH_SHIFT 8u
@@ -1442,6 +1523,35 @@ struct WindowEntry {
     MotionTrackClock hoverScaleClock;
     bool isDesktopItem = false;
 };
+// Clockwise from the top-left corner, matching the DWM corner-radius mod.
+struct CornerRadii {
+    int topLeft = 0;
+    int topRight = 0;
+    int bottomRight = 0;
+    int bottomLeft = 0;
+
+    static CornerRadii Uniform(int radius) {
+        return {radius, radius, radius, radius};
+    }
+
+    bool operator==(const CornerRadii&) const = default;
+
+    int Max() const {
+        return (std::max)({topLeft, topRight, bottomRight, bottomLeft});
+    }
+
+    CornerRadii Clamped(int limit) const {
+        limit = (std::max)(limit, 0);
+        return {(std::min)(topLeft, limit), (std::min)(topRight, limit),
+                (std::min)(bottomRight, limit), (std::min)(bottomLeft, limit)};
+    }
+
+    CornerRadii Pixels(UINT dpi) const {
+        return {MulDiv(topLeft, dpi, 96), MulDiv(topRight, dpi, 96),
+                MulDiv(bottomRight, dpi, 96), MulDiv(bottomLeft, dpi, 96)};
+    }
+};
+
 struct Settings {
     WCHAR theme[32];
     bool micaAlt;         // "mica" theme with the Mica Alt backdrop
@@ -1503,18 +1613,12 @@ struct Settings {
     int dockSwitcherPadding;
     int entryPadding;
     bool perMonitorWindows;
-    bool taskRoundedCorners;
-    bool customTaskCorners;
-    int taskCornerRadius;
-    bool roundThumbnailCorners;
-    bool customThumbnailCorners;
-    int thumbnailCornerRadius;
-    bool roundGroupIndicator;
-    bool customGroupIndicatorCorners;
-    int groupIndicatorCornerRadius;
-    bool roundBadgeIconBackground;
-    bool customBadgeIconBackgroundCorners;
-    int badgeIconBackgroundCornerRadius;
+    // Empty element overrides inherit the switcher's resolved corners.
+    std::optional<CornerRadii> taskCorners;
+    std::optional<CornerRadii> closeButtonCorners;
+    std::optional<CornerRadii> thumbnailCorners;
+    std::optional<CornerRadii> groupIndicatorCorners;
+    std::optional<CornerRadii> badgeIconBackgroundCorners;
     bool reverseScrollDirection;
     bool centerTaskContent;
     bool showApplications;
@@ -1526,7 +1630,7 @@ struct Settings {
     bool showMinimizedIndicator;
     WCHAR minimizedIndicatorStyle[32];
     int minimizedIconOpacity;
-    int customCornerRadius;
+    CornerRadii customSwitcherCorners;
     WCHAR switcherPosition[32];
     int switcherPositionMargin;
     bool showHoverBorder;
@@ -1748,11 +1852,9 @@ static bool g_keyboardPendingForegroundHandoff = false;
 // Center, Quick Settings) owned the foreground. Those surfaces keep the
 // foreground right, so the switcher must claim it while the hotkey grant is
 // still fresh instead of waiting for the visible presentation.
-static bool g_keyboardShellSource = false;
 static bool g_keyboardPendingForegroundHandoffSucceeded = false;
 // Alt release observed before keyboard foreground handoff; recheck after handoff.
 static bool g_keyboardPendingAltRelease = false;
-static bool g_keyboardHandoffRevealDeferralLogged = false;
 enum class KeyboardReleaseSource : unsigned char {
     None,
     Poll,
@@ -1773,7 +1875,9 @@ static int g_dpiX = 96, g_dpiY = 96;
 static int g_autoFitScalePct = 100;
 static int g_winW = 0, g_winH = 0;
 static int g_activePadDivider = 0;
-static bool g_hotkeysRegistered = false;
+static UINT g_taskbarCreatedMessage = 0;
+static DWORD s_forwardedHotkeyShellPid = 0;
+static unsigned int s_forwardedHotkeys = 0;
 static bool g_isAltBacktickSameApp = false;
 static WCHAR g_sameAppSessionKey[MAX_PATH] = {};
 static HMONITOR g_hCurrentMonitor = NULL;
@@ -2843,9 +2947,6 @@ static void DestroyBackdropWindow() {
 static HANDLE g_hSwitcherThread = NULL;
 static DWORD g_dwSwitcherThreadId = 0;
 static bool g_isExplorer = false;
-static HANDLE g_restartExplorerPromptThread = NULL;
-static std::atomic<HWND> g_restartExplorerPromptWindow{nullptr};
-static HANDLE g_restartExplorerPromptGate = NULL;
 static IsShellWindow_t g_IsShellManagedWindow = nullptr;
 static IsShellWindow_t g_IsShellFrameWindow = nullptr;
 static GhostWindowFromHungWindow_t g_GhostWindowFromHungWindow = nullptr;
@@ -2900,15 +3001,12 @@ static bool MicaAltSupported() {
     return s_cached == 1;
 }
 
-static int g_systemDwmRadius = 8;
+static CornerRadii g_systemDwmCorners = CornerRadii::Uniform(8);
 static int g_systemDwmSmallRadius = 4;
 static bool g_customCornerRadiusModActive = false;
 
-// custom-corner-radius changes the corners DWM draws and exposes no API, so its
-// settings are read from Windhawk's own storage: the registry for a regular
-// install, an INI file for a portable one. Both are located through
-// windhawk.ini, next to windhawk.exe. This runs on demand, each time the
-// switcher is shown, so no watcher is needed.
+// The DWM property supplies the radius pair. Windhawk storage supplies
+// corner order, host exclusions, and compatibility with older builds.
 struct CornerModRaw {
     bool disabled = false;
     bool hasRadius = false;
@@ -3134,7 +3232,7 @@ static bool ParseCornerModPerCorner(PCWSTR text, int corners[4]) {
     for (int i = 0; i < 4; i++) {
         PWSTR end = NULL;
         values[i] = (int)wcstol(p, &end, 10);
-        if (end == p) return false;
+        if (end == p || values[i] > 65534) return false;
         while (iswspace(*end)) end++;
         if (*end != (i < 3 ? L',' : L'\0')) return false;
         p = end + 1;
@@ -3143,42 +3241,39 @@ static bool ParseCornerModPerCorner(PCWSTR text, int corners[4]) {
     return true;
 }
 
-static void ResolveCornerModRadii(const CornerModRaw& raw, int* outRadius,
-                                  int* outSmallRadius) {
-    const int nativeRadius = IsWin11OrGreater() ? 8 : 0;
-    const int nativeSmallRadius = IsWin11OrGreater() ? 4 : 0;
-
-    int radius = raw.radius;  // -1 keeps the original radius
-    int corners[4] = {-1, -1, -1, -1};
-    if (raw.perCorner[0]) ParseCornerModPerCorner(raw.perCorner, corners);
-    bool hasCornerRadius = false;
-    for (int c : corners) {
-        if (c >= 0) hasCornerRadius = true;
+static CornerRadii ResolveCornerModShape(const CornerModRaw& raw, int nativeRadius) {
+    const int base = raw.radius < 0 ? nativeRadius : (std::min)(raw.radius, 65534);
+    int corners[4];
+    if (!raw.perCorner[0] || !ParseCornerModPerCorner(raw.perCorner, corners)) {
+        return CornerRadii::Uniform(base);
     }
-    if (radius < 0 && hasCornerRadius) radius = nativeRadius ? nativeRadius : 8;
-    if (hasCornerRadius) {
-        int maxRadius = radius;
-        for (int c : corners) {
-            maxRadius = (std::max)(maxRadius, c < 0 ? radius : c);
-        }
-        radius = maxRadius;
+    for (int& corner : corners) {
+        if (corner < 0) corner = base;
     }
-
-    int small = raw.smallRadius;
-    if (!raw.hasSmallRadius) {
-        // Only very old mod versions lack smallRadius.
-        small = (raw.hasRadius && radius >= 0)
-                    ? (int)roundf((float)radius * 0.5f)
-                    : 6;
-    }
-
-    *outRadius = radius < 0 ? nativeRadius : radius;
-    *outSmallRadius = small < 0 ? nativeSmallRadius : small;
+    return {corners[0], corners[1], corners[2], corners[3]};
 }
 
-// Returns true when custom-corner-radius is enabled and affects this process,
-// with the corner radii DWM now draws. Otherwise returns the Windows defaults.
-static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadius) {
+static CornerRadii ResolvePublishedCornerModShape(
+    int publishedRadius, const CornerModRaw* settings, int nativeRadius) {
+    if (settings) {
+        CornerRadii shape = ResolveCornerModShape(*settings, nativeRadius);
+        if (shape.Max() == publishedRadius) return shape;
+    }
+    return CornerRadii::Uniform(publishedRadius);
+}
+
+static bool DetectSystemDwmCornerRadiusValues(CornerRadii& corners, int& small) {
+    constexpr WCHAR kPublishedRadiiProp[] = L"Windhawk_CustomCornerRadius_Radii";
+    HWND hDwm = FindWindowW(L"Dwm", nullptr);
+    ULONG_PTR radii = hDwm ? reinterpret_cast<ULONG_PTR>(
+                               GetPropW(hDwm, kPublishedRadiiProp))
+                         : 0;
+    // Each word is a radius in DIPs plus one. Zero radius is valid.
+    const bool published = LOWORD(radii) != 0 && HIWORD(radii) != 0;
+    const int nativeRadius = IsWin11OrGreater() ? 8 : 0;
+    const int nativeSmall = IsWin11OrGreater() ? 4 : 0;
+    CornerModRaw settings;
+    int enabledSources = 0;
     const CornerModStorage& storage = GetCornerModStorage();
     const WCHAR* modIds[] = {L"custom-corner-radius",
                              L"local@custom-corner-radius"};
@@ -3189,28 +3284,50 @@ static bool DetectSystemDwmCornerRadiusValues(int* outRadius, int* outSmallRadiu
                          ? ReadCornerModFromIni(storage, modId, &raw)
                          : ReadCornerModFromRegistry(storage, modId, &raw);
         if (!found || raw.disabled) continue;
-        if (raw.excludesThisProcess) break;
-        ResolveCornerModRadii(raw, outRadius, outSmallRadius);
-        return true;
+        if (++enabledSources == 1) settings = raw;
+        if (!published) break;
     }
 
-    // Native OS Fallback
-    if (outRadius) *outRadius = IsWin11OrGreater() ? 8 : 0;
-    if (outSmallRadius) *outSmallRadius = IsWin11OrGreater() ? 4 : 0;
+    if (!settings.excludesThisProcess) {
+        if (published) {
+            // The pair does not identify which producer published it.
+            const CornerModRaw* shapeSource = enabledSources == 1 ? &settings : nullptr;
+            corners = ResolvePublishedCornerModShape(LOWORD(radii) - 1, shapeSource, nativeRadius);
+            small = HIWORD(radii) - 1;
+            return true;
+        }
+        if (enabledSources) {
+            corners = ResolveCornerModShape(settings, nativeRadius);
+            // Very old producer versions did not have a small radius setting.
+            small = settings.smallRadius;
+            if (!settings.hasSmallRadius) {
+                small = settings.hasRadius && settings.radius >= 0
+                            ? (corners.Max() + 1) / 2 : 6;
+            }
+            small = small < 0 ? nativeSmall : (std::min)(small, 65534);
+            return true;
+        }
+    }
+
+    corners = CornerRadii::Uniform(nativeRadius);
+    small = nativeSmall;
     return false;
 }
 
-static void DetectSystemDwmCornerRadius() {
-    int r = 8, s = 4;
-    const bool active = DetectSystemDwmCornerRadiusValues(&r, &s);
-    if (active != g_customCornerRadiusModActive || r != g_systemDwmRadius ||
-        s != g_systemDwmSmallRadius) {
-        Wh_Log(L"SWS: corner radius mod active=%d radius=%d small=%d", active,
-               r, s);
+static bool DetectSystemDwmCornerRadius() {
+    CornerRadii corners;
+    int small = 0;
+    const bool active = DetectSystemDwmCornerRadiusValues(corners, small);
+    const bool shapeChanged = corners != g_systemDwmCorners || small != g_systemDwmSmallRadius;
+    if (active != g_customCornerRadiusModActive || shapeChanged) {
+        Wh_Log(L"SWS: corner radius mod active=%d radius=%d small=%d corners=%d,%d,%d,%d",
+               active, corners.Max(), small, corners.topLeft, corners.topRight,
+               corners.bottomRight, corners.bottomLeft);
     }
     g_customCornerRadiusModActive = active;
-    g_systemDwmRadius = r;
-    g_systemDwmSmallRadius = s;
+    g_systemDwmCorners = corners;
+    g_systemDwmSmallRadius = small;
+    return shapeChanged;
 }
 
 struct ThumbCacheState {
@@ -3252,7 +3369,7 @@ struct SharedThumbnailVisual {
     IDCompositionVisual2* container = nullptr;
     IDCompositionRectangleClip* clip = nullptr;
     RECT clipRect = {};
-    float radius = -1.0f;
+    CornerRadii corners;
 };
 static IDCompositionDesktopDevice* g_sharedThumbnailDevice = nullptr;
 static SwsCreateSharedThumbnailVisual_t g_createSharedThumbnailVisual = nullptr;
@@ -3260,7 +3377,7 @@ static bool g_sharedThumbnailApiResolved = false;
 static std::map<HWND, SharedThumbnailTarget> g_sharedThumbnailTargets;
 static std::map<HTHUMBNAIL, SharedThumbnailVisual> g_sharedThumbnailVisuals;
 
-static int GetThumbnailCornerRadiusPx();
+static CornerRadii GetThumbnailCornerRadiiPx();
 
 static bool EnsureSharedThumbnailDevice() {
     if (g_sharedThumbnailDevice) return true;
@@ -3361,7 +3478,7 @@ static void ReleaseSharedThumbnailDevice() {
 
 static HRESULT RegisterSwitcherThumbnail(HWND destination, HWND source, HTHUMBNAIL* thumbnail) {
     *thumbnail = nullptr;
-    if (GetThumbnailCornerRadiusPx() > 0) {
+    if (GetThumbnailCornerRadiiPx().Max() > 0) {
         if (SharedThumbnailTarget* target = EnsureSharedThumbnailTarget(destination)) {
             // Creation fails with E_INVALIDARG unless the thumbnail starts
             // visible with a destination; the caller positions it right after.
@@ -3414,23 +3531,23 @@ static HRESULT RegisterSwitcherThumbnail(HWND destination, HWND source, HTHUMBNA
 static void UpdateSharedThumbnailClip(SharedThumbnailVisual& entry, const RECT& rect) {
     int width = rect.right - rect.left;
     int height = rect.bottom - rect.top;
-    float radius = (float)std::max(0, std::min(GetThumbnailCornerRadiusPx(),
-                                               std::min(width, height) / 2));
-    if (EqualRect(&entry.clipRect, &rect) && entry.radius == radius) return;
+    const CornerRadii corners = GetThumbnailCornerRadiiPx()
+                                    .Clamped((std::min)(width, height) / 2);
+    if (EqualRect(&entry.clipRect, &rect) && entry.corners == corners) return;
     entry.clipRect = rect;
-    entry.radius = radius;
+    entry.corners = corners;
     entry.clip->SetLeft((float)rect.left);
     entry.clip->SetTop((float)rect.top);
     entry.clip->SetRight((float)rect.right);
     entry.clip->SetBottom((float)rect.bottom);
-    entry.clip->SetTopLeftRadiusX(radius);
-    entry.clip->SetTopLeftRadiusY(radius);
-    entry.clip->SetTopRightRadiusX(radius);
-    entry.clip->SetTopRightRadiusY(radius);
-    entry.clip->SetBottomLeftRadiusX(radius);
-    entry.clip->SetBottomLeftRadiusY(radius);
-    entry.clip->SetBottomRightRadiusX(radius);
-    entry.clip->SetBottomRightRadiusY(radius);
+    entry.clip->SetTopLeftRadiusX((float)corners.topLeft);
+    entry.clip->SetTopLeftRadiusY((float)corners.topLeft);
+    entry.clip->SetTopRightRadiusX((float)corners.topRight);
+    entry.clip->SetTopRightRadiusY((float)corners.topRight);
+    entry.clip->SetBottomLeftRadiusX((float)corners.bottomLeft);
+    entry.clip->SetBottomLeftRadiusY((float)corners.bottomLeft);
+    entry.clip->SetBottomRightRadiusX((float)corners.bottomRight);
+    entry.clip->SetBottomRightRadiusY((float)corners.bottomRight);
 }
 
 static void ReleaseDwmThumbnailRegistration(DwmThumbnailRegistration* record) {
@@ -3514,6 +3631,7 @@ static inline HRESULT SafeDwmUnregisterThumbnail(HTHUMBNAIL h) {
 static void LoadSettings();
 static void SWS_RegisterHotkeys();
 static void SWS_UnregisterHotkeys();
+static void PublishSwitcherHotkeyPolicy();
 static void SWS_SetSessionEscHotkeys(bool enable);
 static void ApplySwitcherRegion();
 static void ApplyThemeToWindow(HWND hWnd);
@@ -3534,7 +3652,7 @@ static void DestroyBackdropWindow();
 static void PaintSwitcher();
 static void PaintSwitcherOverlay();
 static INT GetCornerPref();
-static int GetWindowCornerRadiusPx();
+static CornerRadii GetWindowCornerRadiiPx();
 static void DrawSwitcherStaticContent(HDC hdc, bool fillBg, HWND hWnd);
 static void FillSwitcherBackground(HDC hdc, const RECT& rect, bool fillBg);
 static void DrawScrollTransitionFrame(HDC hdc, int w, int h, bool includeSelection);
@@ -3555,6 +3673,11 @@ static int HitTestChevron(HWND hWnd, int x, int y);
 static void EnterAppGroup();
 static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreWindows);
 static void TapUnassignedKeyForForeground();
+static void StopShellInvocationHandoff();
+static DWORD ShellProcessId();
+static DWORD LastShellInvocationInputTick();
+enum class ShellInvocationPhase { Staging, Reveal, Poll };
+static void TryShellInvocationHandoff(ShellInvocationPhase phase);
 static bool ActivateRawTouchpadWindow();
 static void ReconcileDeferredKeyboardReleaseAfterReveal();
 static bool TryCommitProtectedRapidKeyboardRelease();
@@ -3987,7 +4110,7 @@ static std::map<HWND, PresentationWindowState> g_presentationWindows;
 struct PresentationRegionState {
     int width = 0;
     int height = 0;
-    int radius = 0;
+    CornerRadii corners;
     bool applied = false;
 };
 static std::map<HWND, PresentationRegionState> g_presentationRegions;
@@ -4016,7 +4139,7 @@ static bool s_applyingThemeToWindow = false;
 // itself: a click-through window directly below each presentation surface
 // hosts a composition backdrop clipped to the exact radius, and the surface
 // switches to the layered renderer the None theme uses.
-static int GetResolvedCornerRadiusDIP();
+static CornerRadii GetResolvedCornerRadiiDIP();
 
 #define SWS_MATERIAL_CLASSNAME L"WindhawkSWS_Material"
 
@@ -4249,7 +4372,7 @@ struct SwsComposedMaterial {
     bool effects = false;
     int width = 0;
     int height = 0;
-    int radius = -1;
+    CornerRadii corners;
     DWORD affinity = WDA_NONE;
 };
 // Keyed by presentation surface. All composition objects live on the switcher
@@ -4269,18 +4392,19 @@ static bool UsesLayeredPresentation() {
     return ThemeIs(L"none") || g_presentationComposed;
 }
 
-// The DWM corner preference that draws radiusDIP exactly, or -1.
-static int NativeCornerPreferenceForRadius(int radiusDIP) {
-    if (radiusDIP <= 0) return 1;                       // DWMWCP_DONOTROUND
-    if (radiusDIP == g_systemDwmRadius) return 2;       // DWMWCP_ROUND
-    if (radiusDIP == g_systemDwmSmallRadius) return 3;  // DWMWCP_ROUNDSMALL
+// The DWM corner preference that draws the requested shape exactly, or -1.
+static int NativeCornerPreferenceForShape(const CornerRadii& corners) {
+    if (corners.Max() == 0) return 1;                                      // DWMWCP_DONOTROUND
+    if (corners == g_systemDwmCorners) return 2;                           // DWMWCP_ROUND
+    if (corners == CornerRadii::Uniform(g_systemDwmSmallRadius)) return 3;  // DWMWCP_ROUNDSMALL
     return -1;
 }
 
 static bool CornerPreferenceIsDefault() {
     const WCHAR* pref = g_settings.cornerPreference;
     return wcscmp(pref, L"none") != 0 && wcscmp(pref, L"roundSmall") != 0 &&
-           wcscmp(pref, L"round") != 0 && wcscmp(pref, L"custom") != 0;
+           wcscmp(pref, L"round") != 0 && wcscmp(pref, L"custom") != 0 &&
+           wcscmp(pref, L"perCorner") != 0;
 }
 
 static bool ComposedMaterialWanted() {
@@ -4290,8 +4414,7 @@ static bool ComposedMaterialWanted() {
     // Windows' own materials have no tint or luminosity settings.
     if (g_settings.materialTuning) return true;
     if (CornerPreferenceIsDefault()) return false;
-    int radiusDIP = GetResolvedCornerRadiusDIP();
-    return NativeCornerPreferenceForRadius(radiusDIP) < 0;
+    return NativeCornerPreferenceForShape(GetResolvedCornerRadiiDIP()) < 0;
 }
 
 // DWM draws its solid fallback instead of Mica/Acrylic when transparency
@@ -4502,7 +4625,6 @@ static bool EnsureComposedMaterial(HWND presentation) {
             material.root.Children().InsertAtTop(material.fill);
             material.target.Root(material.root);
             material.width = material.height = 0;
-            material.radius = -1;
         }
 
         // Mica and Mica Alt tint the blurred wallpaper, Acrylic what is behind.
@@ -4554,21 +4676,19 @@ static void SyncComposedMaterial(HWND presentation, bool aboutToShow) {
         if (IsWindowVisible(material.window)) ShowWindow(material.window, SW_HIDE);
         return;
     }
-    // Same pixel radius as the layered surface's corner mask.
-    const int radius = (std::min)(GetWindowCornerRadiusPx(), (std::min)(w, h) / 2);
-    if (w != material.width || h != material.height || radius != material.radius) {
+    const CornerRadii corners = GetWindowCornerRadiiPx()
+                                    .Clamped((std::min)(w, h) / 2);
+    if (w != material.width || h != material.height || corners != material.corners) {
         try {
             material.clip.Right((float)w);
             material.clip.Bottom((float)h);
-            const winrt::Windows::Foundation::Numerics::float2 corner{
-                (float)radius, (float)radius};
-            material.clip.TopLeftRadius(corner);
-            material.clip.TopRightRadius(corner);
-            material.clip.BottomRightRadius(corner);
-            material.clip.BottomLeftRadius(corner);
+            material.clip.TopLeftRadius({(float)corners.topLeft, (float)corners.topLeft});
+            material.clip.TopRightRadius({(float)corners.topRight, (float)corners.topRight});
+            material.clip.BottomRightRadius({(float)corners.bottomRight, (float)corners.bottomRight});
+            material.clip.BottomLeftRadius({(float)corners.bottomLeft, (float)corners.bottomLeft});
             material.width = w;
             material.height = h;
-            material.radius = radius;
+            material.corners = corners;
         } catch (...) {
         }
     }
@@ -5790,19 +5910,56 @@ static void InvalidateStaticCache() {
 }
 
 static HRGN s_cachedRoundRectRgn = NULL;
-static int s_cachedRgnW = 0, s_cachedRgnH = 0, s_cachedRgnRadius = 0;
+static int s_cachedRgnW = 0, s_cachedRgnH = 0;
+static CornerRadii s_cachedRgnCorners;
 
-static HRGN GetCachedRoundRectRgn(int w, int h, int radius) {
-    if (radius <= 0 || w <= 0 || h <= 0) return NULL;
-    if (!s_cachedRoundRectRgn || s_cachedRgnW != w || s_cachedRgnH != h || s_cachedRgnRadius != radius) {
+static HRGN CreateCornerRegion(int width, int height, CornerRadii corners) {
+    corners = corners.Clamped((std::min)(width, height) / 2);
+    const int maxRadius = corners.Max();
+    if (corners == CornerRadii::Uniform(maxRadius)) {
+        return CreateRoundRectRgn(0, 0, width + 1, height + 1,
+                                  maxRadius * 2, maxRadius * 2);
+    }
+
+    // Subtract the cutout of each rounded corner from a rectangular region.
+    HRGN region = CreateRectRgn(0, 0, width + 1, height + 1);
+    if (!region) return nullptr;
+    const int radii[] = {corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft};
+    const int midX = (width + 1) / 2;
+    const int midY = (height + 1) / 2;
+    const RECT quadrants[] = {
+        {0, 0, midX, midY}, {midX, 0, width + 1, midY},
+        {midX, midY, width + 1, height + 1}, {0, midY, midX, height + 1},
+    };
+    for (int i = 0; i < 4; ++i) {
+        const int r = radii[i];
+        if (!r) continue;
+        HRGN cut = CreateRectRgnIndirect(&quadrants[i]);
+        HRGN round = CreateRoundRectRgn(0, 0, width + 1, height + 1, r * 2, r * 2);
+        const bool ok = cut && round &&
+                        CombineRgn(cut, cut, round, RGN_DIFF) != ERROR &&
+                        CombineRgn(region, region, cut, RGN_DIFF) != ERROR;
+        if (cut) DeleteObject(cut);
+        if (round) DeleteObject(round);
+        if (!ok) {
+            DeleteObject(region);
+            return nullptr;
+        }
+    }
+    return region;
+}
+
+static HRGN GetCachedRoundRectRgn(int w, int h, CornerRadii corners) {
+    if (corners.Max() == 0 || w <= 0 || h <= 0) return NULL;
+    if (!s_cachedRoundRectRgn || s_cachedRgnW != w || s_cachedRgnH != h || s_cachedRgnCorners != corners) {
         if (s_cachedRoundRectRgn) {
             DeleteObject(s_cachedRoundRectRgn);
             s_cachedRoundRectRgn = NULL;
         }
-        s_cachedRoundRectRgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius * 2, radius * 2);
+        s_cachedRoundRectRgn = CreateCornerRegion(w, h, corners);
         s_cachedRgnW = w;
         s_cachedRgnH = h;
-        s_cachedRgnRadius = radius;
+        s_cachedRgnCorners = corners;
     }
     return s_cachedRoundRectRgn;
 }
@@ -5894,7 +6051,7 @@ static void RefreshScrollIconCanvas() {
         memset(s_cachedScrollToBits, 0, (size_t)s_cachedScrollToW * s_cachedScrollToH * sizeof(DWORD));
     SelectClipRgn(s_cachedScrollToDC,
                   UsesLayeredPresentation() ? NULL :
-                  GetCachedRoundRectRgn(s_cachedScrollToW, s_cachedScrollToH, GetWindowCornerRadiusPx()));
+                  GetCachedRoundRectRgn(s_cachedScrollToW, s_cachedScrollToH, GetWindowCornerRadiiPx()));
     DrawSwitcherStaticContent(s_cachedScrollToDC, ShouldFillBackground(), g_hSwitcher);
 }
 
@@ -5904,7 +6061,7 @@ static void FreeCachedBuffers() {
         s_cachedRoundRectRgn = NULL;
         s_cachedRgnW = 0;
         s_cachedRgnH = 0;
-        s_cachedRgnRadius = 0;
+        s_cachedRgnCorners = {};
     }
     if (s_cachedMemDC) {
         if (s_cachedOldBitmap) SelectObject(s_cachedMemDC, s_cachedOldBitmap);
@@ -6149,9 +6306,9 @@ static void CaptureOutgoingSnapshot() {
                 DrawScrollTransitionFrame(s_cachedStaticDC, w, h, false);
                 g_staticContentDirty = false;
             } else {
-                int radius = GetWindowCornerRadiusPx();
+                CornerRadii corners = GetWindowCornerRadiiPx();
                 if (s_cachedStaticBits) memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
-                HRGN hClip = UsesLayeredPresentation() ? NULL : GetCachedRoundRectRgn(w, h, radius);
+                HRGN hClip = UsesLayeredPresentation() ? NULL : GetCachedRoundRectRgn(w, h, corners);
                 SelectClipRgn(s_cachedStaticDC, hClip);
                 DrawSwitcherStaticContent(s_cachedStaticDC, ShouldFillBackground(), g_hSwitcher);
                 g_staticContentDirty = false;
@@ -6252,14 +6409,14 @@ static void PreRenderScrollCanvases() {
     if (w <= 0 || h <= 0) return;
     if (!EnsureScrollBuffers(w, h)) return;
 
-    int radius = GetWindowCornerRadiusPx();
+    CornerRadii corners = GetWindowCornerRadiiPx();
 
     // 1. Pre-render Outgoing Canvas: copy from s_cachedStaticDC (holding previous view before reflow)
     if (s_cachedStaticDC && s_cachedStaticW == w && s_cachedStaticH == h) {
         BitBlt(s_cachedScrollFromDC, 0, 0, w, h, s_cachedStaticDC, 0, 0, SRCCOPY);
     } else {
         if (s_cachedScrollFromBits) memset(s_cachedScrollFromBits, 0, (size_t)w * h * sizeof(DWORD));
-        HRGN hClip = UsesLayeredPresentation() ? NULL : GetCachedRoundRectRgn(w, h, radius);
+        HRGN hClip = UsesLayeredPresentation() ? NULL : GetCachedRoundRectRgn(w, h, corners);
         SelectClipRgn(s_cachedScrollFromDC, hClip);
         DrawSwitcherStaticContent(s_cachedScrollFromDC, ShouldFillBackground(), g_hSwitcher);
     }
@@ -6268,7 +6425,7 @@ static void PreRenderScrollCanvases() {
     if (s_cachedScrollToBits) memset(s_cachedScrollToBits, 0, (size_t)w * h * sizeof(DWORD));
     // Layered canvases keep a rectangular background. Only the final presented
     // frame is rounded; moving an already-rounded canvas exposes alpha holes.
-    HRGN hClip = UsesLayeredPresentation() ? NULL : GetCachedRoundRectRgn(w, h, radius);
+    HRGN hClip = UsesLayeredPresentation() ? NULL : GetCachedRoundRectRgn(w, h, corners);
     SelectClipRgn(s_cachedScrollToDC, hClip);
     s_scrollIconCanvasDirty = false;
     DrawSwitcherStaticContent(s_cachedScrollToDC, ShouldFillBackground(), g_hSwitcher);
@@ -7173,40 +7330,32 @@ static int GetHeaderRowHeightPx() {
 static INT GetCornerPref() {
     if (CornerPreferenceIsDefault()) {
         // "default" or legacy "auto". A zero DWM radius means square corners.
-        if (g_systemDwmRadius <= 0) return 1; // DWMWCP_DONOTROUND
+        if (g_systemDwmCorners.Max() <= 0) return 1; // DWMWCP_DONOTROUND
         return 0; // DWMWCP_DEFAULT (Let Windows / DWM mod decide)
     }
-    int radiusDIP = GetResolvedCornerRadiusDIP();
-    int exact = NativeCornerPreferenceForRadius(radiusDIP);
+    const CornerRadii corners = GetResolvedCornerRadiiDIP();
+    int exact = NativeCornerPreferenceForShape(corners);
     if (exact >= 0) return exact;
-    // DWM can't draw this radius; the composed material owns the shape. If it
-    // is unavailable, use the nearest DWM shape rather than a region.
-    return abs(radiusDIP - g_systemDwmSmallRadius) < abs(radiusDIP - g_systemDwmRadius)
+    // If composed material is unavailable, approximate with a DWM preference.
+    int radiusDIP = corners.Max();
+    return abs(radiusDIP - g_systemDwmSmallRadius) < abs(radiusDIP - g_systemDwmCorners.Max())
                ? 3   // DWMWCP_ROUNDSMALL
                : 2;  // DWMWCP_ROUND
 }
 
-// The switcher's corner radius in DIP from Corner Preference (0 = square).
-static int GetResolvedCornerRadiusDIP() {
-    int radiusDIP = 0;
-    if (wcscmp(g_settings.cornerPreference, L"none") == 0) {
-        radiusDIP = 0;
-    } else if (wcscmp(g_settings.cornerPreference, L"roundSmall") == 0) {
-        radiusDIP = 4;
-    } else if (wcscmp(g_settings.cornerPreference, L"round") == 0) {
-        radiusDIP = 8;
-    } else if (wcscmp(g_settings.cornerPreference, L"custom") == 0) {
-        radiusDIP = g_settings.customCornerRadius;
-    } else { // "default" or legacy "auto"
-        radiusDIP = g_systemDwmRadius;
+static CornerRadii GetResolvedCornerRadiiDIP() {
+    if (wcscmp(g_settings.cornerPreference, L"none") == 0) return {};
+    if (wcscmp(g_settings.cornerPreference, L"roundSmall") == 0) return CornerRadii::Uniform(4);
+    if (wcscmp(g_settings.cornerPreference, L"round") == 0) return CornerRadii::Uniform(8);
+    if (wcscmp(g_settings.cornerPreference, L"custom") == 0 ||
+        wcscmp(g_settings.cornerPreference, L"perCorner") == 0) {
+        return g_settings.customSwitcherCorners;
     }
-    return std::max(radiusDIP, 0);
+    return g_systemDwmCorners;
 }
 
-static int GetWindowCornerRadiusPx() {
-    int radiusDIP = GetResolvedCornerRadiusDIP();
-    if (radiusDIP <= 0) return 0;
-    return MulDiv(radiusDIP, g_dpiX, 96);
+static CornerRadii GetWindowCornerRadiiPx() {
+    return GetResolvedCornerRadiiDIP().Pixels(g_dpiX);
 }
 
 static void ClearPresentationWindowRegion(HWND hWnd) {
@@ -7261,24 +7410,17 @@ static void ApplyPresentationWindowRegion(HWND hWnd) {
     if (!GetWindowRect(hWnd, &actual)) return;
     int width = actual.right - actual.left;
     int height = actual.bottom - actual.top;
-    int radiusDIP = GetResolvedCornerRadiusDIP();
-    UINT dpi = QueryWindowDpi(hWnd);
-    if (!dpi) dpi = g_dpiX;
-    int radius = radiusDIP > 0 ? MulDiv(radiusDIP, dpi, 96) : 0;
-    if (width <= 0 || height <= 0 || radius <= 0) {
-        ClearPresentationWindowRegion(hWnd);
-        return;
-    }
-
-    radius = (std::min)(radius, (std::min)(width, height) / 2);
-    if (radius <= 0) {
+    // The switcher and its mirrors share a layout and pixel scale.
+    const CornerRadii corners = GetWindowCornerRadiiPx()
+                                    .Clamped((std::min)(width, height) / 2);
+    if (width <= 0 || height <= 0 || corners.Max() == 0) {
         ClearPresentationWindowRegion(hWnd);
         return;
     }
 
     auto& state = g_presentationRegions[hWnd];
     if (state.applied && state.width == width && state.height == height &&
-        state.radius == radius) {
+        state.corners == corners) {
         RECT currentRegionBox = {};
         int currentRegionType = GetWindowRgnBox(hWnd, &currentRegionBox);
         if (currentRegionType != ERROR && currentRegionType != NULLREGION) {
@@ -7287,8 +7429,7 @@ static void ApplyPresentationWindowRegion(HWND hWnd) {
         state.applied = false;
     }
 
-    HRGN region = CreateRoundRectRgn(0, 0, width + 1, height + 1,
-                                     radius * 2, radius * 2);
+    HRGN region = CreateCornerRegion(width, height, corners);
     if (!region) return;
     SetLastError(ERROR_SUCCESS);
     int setResult = SetWindowRgn(hWnd, region, TRUE);
@@ -7296,54 +7437,33 @@ static void ApplyPresentationWindowRegion(HWND hWnd) {
         DWORD error = GetLastError();
         DeleteObject(region);
         Wh_Log(L"SWS: Acrylic corner region failed hwnd=%p size=%dx%d dpi=%u radius=%d error=%u",
-               hWnd, width, height, dpi, radius, error);
+               hWnd, width, height, (UINT)g_dpiX, corners.Max(), error);
         return;
     }
     state.width = width;
     state.height = height;
-    state.radius = radius;
+    state.corners = corners;
     state.applied = true;
 }
 
-static bool UseTaskRoundedCorners() {
-    return g_settings.taskRoundedCorners;
+static CornerRadii ResolveElementCornerRadiiPx(const std::optional<CornerRadii>& corners) {
+    return corners ? corners->Pixels(g_dpiX) : GetWindowCornerRadiiPx();
 }
 
-// Each element's corner setting follows the switcher's own radius from Corner
-// Preference, keeps the element square, or uses the element's custom radius.
-static int ResolveElementCornerRadiusPx(bool round, bool custom, int customRadiusDip) {
-    if (!round) {
-        return 0;
-    }
-    if (custom) {
-        return MulDiv(customRadiusDip, g_dpiX, 96);
-    }
-    return GetWindowCornerRadiusPx();
+static CornerRadii GetTaskUiCornerRadiiPx() {
+    return ResolveElementCornerRadiiPx(g_settings.taskCorners);
 }
 
-static int GetTaskUiCornerRadiusPx() {
-    return ResolveElementCornerRadiusPx(UseTaskRoundedCorners(), g_settings.customTaskCorners,
-                                        g_settings.taskCornerRadius);
+static CornerRadii GetThumbnailCornerRadiiPx() {
+    return ResolveElementCornerRadiiPx(g_settings.thumbnailCorners);
 }
 
-static int GetThumbnailCornerRadiusPx() {
-    return ResolveElementCornerRadiusPx(g_settings.roundThumbnailCorners,
-                                        g_settings.customThumbnailCorners,
-                                        g_settings.thumbnailCornerRadius);
+static CornerRadii GetGroupIndicatorCornerRadiiPx(int limit) {
+    return ResolveElementCornerRadiiPx(g_settings.groupIndicatorCorners).Clamped(limit);
 }
 
-static int GetGroupIndicatorCornerRadiusPx(int maxRadius) {
-    return std::min(ResolveElementCornerRadiusPx(g_settings.roundGroupIndicator,
-                                                 g_settings.customGroupIndicatorCorners,
-                                                 g_settings.groupIndicatorCornerRadius),
-                    maxRadius);
-}
-
-static int GetBadgeIconBackgroundCornerRadiusPx(int maxRadius) {
-    return std::min(ResolveElementCornerRadiusPx(g_settings.roundBadgeIconBackground,
-                                                 g_settings.customBadgeIconBackgroundCorners,
-                                                 g_settings.badgeIconBackgroundCornerRadius),
-                    maxRadius);
+static CornerRadii GetBadgeIconBackgroundCornerRadiiPx(int limit) {
+    return ResolveElementCornerRadiiPx(g_settings.badgeIconBackgroundCorners).Clamped(limit);
 }
 
 static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY,
@@ -7390,8 +7510,8 @@ static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY,
     }
 }
 
-static int GetCloseButtonCornerRadiusPx() {
-    return GetTaskUiCornerRadiusPx();
+static CornerRadii GetCloseButtonCornerRadiiPx() {
+    return ResolveElementCornerRadiiPx(g_settings.closeButtonCorners);
 }
 static bool ShouldUseDarkMode() {
     if (wcscmp(g_settings.colorScheme, L"light") == 0) return false;
@@ -7449,79 +7569,6 @@ static bool ResolveAPIs() {
 
     return true;
 }
-
-// Explorer restart prompt
-
-constexpr WCHAR kRestartTitle[] = L"WindowSwitcher++ - Windhawk";
-constexpr WCHAR kRestartText[] = L"Explorer needs to be restarted for changes to take effect. Restart now?";
-
-static HRESULT CALLBACK RestartPromptDialogCallback(HWND hwnd, UINT msg, WPARAM, LPARAM, LONG_PTR) {
-    if (msg == TDN_CREATED) {
-        g_restartExplorerPromptWindow = hwnd;
-        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-    } else if (msg == TDN_DESTROYED) {
-        g_restartExplorerPromptWindow = nullptr;
-    }
-    return S_OK;
-}
-
-static DWORD WINAPI RestartPromptThreadProc(LPVOID) {
-    TASKDIALOGCONFIG tdc = {};
-    tdc.cbSize = sizeof(tdc);
-    tdc.dwFlags = TDF_ALLOW_DIALOG_CANCELLATION;
-    tdc.dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON;
-    tdc.pszWindowTitle = kRestartTitle;
-    tdc.pszMainIcon = TD_INFORMATION_ICON;
-    tdc.pszContent = kRestartText;
-    tdc.pfCallback = RestartPromptDialogCallback;
-
-    int button;
-    if (SUCCEEDED(TaskDialogIndirect(&tdc, &button, nullptr, nullptr)) && button == IDYES) {
-        WCHAR cmd[] = L"cmd.exe /c \"timeout /t 1 /nobreak >nul & taskkill /F /IM explorer.exe & start explorer.exe\"";
-        STARTUPINFO si = { .cb = sizeof(si) };
-        PROCESS_INFORMATION pi = {};
-        if (CreateProcess(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-            CloseHandle(pi.hThread);
-            CloseHandle(pi.hProcess);
-        }
-    }
-    HANDLE gate = (HANDLE)InterlockedExchangePointer(
-        reinterpret_cast<PVOID*>(&g_restartExplorerPromptGate), nullptr);
-    if (gate) {
-        ResetEvent(gate);
-        CloseHandle(gate);
-    }
-    return 0;
-}
-
-static void PromptForExplorerRestart() {
-    if (g_restartExplorerPromptThread) {
-        if (WaitForSingleObject(g_restartExplorerPromptThread, 0) != WAIT_OBJECT_0) return;
-        CloseHandle(g_restartExplorerPromptThread);
-        g_restartExplorerPromptThread = NULL;
-    }
-
-    HANDLE gate = CreateEventW(nullptr, TRUE, TRUE, L"Windhawk_SWS_RestartPrompt");
-    if (!gate) {
-        return;
-    }
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(gate);
-        return;
-    }
-    g_restartExplorerPromptGate = gate;
-    g_restartExplorerPromptThread = CreateThread(
-        nullptr, 0, RestartPromptThreadProc, nullptr, 0, nullptr);
-    if (!g_restartExplorerPromptThread) {
-        HANDLE failedGate = (HANDLE)InterlockedExchangePointer(
-            reinterpret_cast<PVOID*>(&g_restartExplorerPromptGate), nullptr);
-        if (failedGate) {
-            ResetEvent(failedGate);
-            CloseHandle(failedGate);
-        }
-    }
-}
-
 
 // Window Filtering (ported from SWS)
 
@@ -8655,20 +8702,37 @@ static bool IsDesktopSourceWindow(HWND hWnd) {
     return hWnd && hWnd == GetShellWindow();
 }
 
+static bool IsDesktopInvocationSource(HWND window) {
+    if (!window) return false;
+    HWND root = GetAncestor(window, GA_ROOT);
+    if (window == GetDesktopWindow() || IsDesktopSourceWindow(window) ||
+        IsDesktopSourceWindow(root)) return true;
+
+    // Explorer can give focus to a separate desktop WorkerW or one of its children.
+    WCHAR className[32]{};
+    if (!root || !GetClassNameW(root, className, ARRAYSIZE(className)) ||
+        (wcscmp(className, L"WorkerW") != 0 && wcscmp(className, L"Progman") != 0)) return false;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(root, &pid);
+    return pid && pid == ShellProcessId();
+}
+
 typedef BOOL (WINAPI *pfnIsGamingFullScreenExperienceActive)();
 
 static bool IsGamingExperienceActive() {
-    static HMODULE s_hGamemode = LoadLibraryExW(
-        L"api-ms-win-gaming-experience-l1-1-0.dll", nullptr,
-        LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!s_hGamemode) {
-        s_hGamemode = LoadLibraryExW(L"gamemode.dll", nullptr,
-                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (!s_hGamemode) return false;
-    static pfnIsGamingFullScreenExperienceActive s_pfn = 
-        (pfnIsGamingFullScreenExperienceActive)GetProcAddress(s_hGamemode, "IsGamingFullScreenExperienceActive");
-    return s_pfn ? (s_pfn() != FALSE) : false;
+    static const auto isActive = [] {
+        HMODULE module = LoadLibraryExW(
+            L"api-ms-win-gaming-experience-l1-1-0.dll", nullptr,
+            LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!module) {
+            module = LoadLibraryExW(L"gamemode.dll", nullptr,
+                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
+        }
+        return module ? reinterpret_cast<pfnIsGamingFullScreenExperienceActive>(
+                            GetProcAddress(module, "IsGamingFullScreenExperienceActive"))
+                      : nullptr;
+    }();
+    return isActive && isActive();
 }
 
 static bool IsXboxModeOrForeground() {
@@ -9099,9 +9163,7 @@ static PCWSTR KeyboardHandoffReason(const TouchpadProcessSecurity& source,
 
 // A lower-integrity switcher can lose keyboard-state visibility while an
 // elevated window remains foreground. Unknown security data stays conservative.
-static bool ForegroundRequiresKeyboardHandoff(
-    HWND foreground, TouchpadProcessSecurity* foregroundSecurity = nullptr,
-    TouchpadProcessSecurity* selfSecurity = nullptr) {
+static bool ForegroundRequiresKeyboardHandoff(HWND foreground) {
     if (!foreground || IsSwitcherWindow(foreground)) return false;
     DWORD foregroundPid = 0;
     if (!GetWindowThreadProcessId(foreground, &foregroundPid) || !foregroundPid) {
@@ -9109,8 +9171,6 @@ static bool ForegroundRequiresKeyboardHandoff(
     }
     TouchpadProcessSecurity source = ReadTouchpadProcessSecurity(foregroundPid);
     TouchpadProcessSecurity self = ReadTouchpadProcessSecurity(GetCurrentProcessId());
-    if (foregroundSecurity) *foregroundSecurity = source;
-    if (selfSecurity) *selfSecurity = self;
     return wcscmp(KeyboardHandoffReason(source, self), L"none") != 0;
 }
 
@@ -9186,11 +9246,67 @@ static ULONGLONG s_touchpadActivationRetryDeadline = 0;
 static HWND s_pendingActivationListTarget = NULL;
 static ULONGLONG s_pendingActivationListDeadline = 0;
 static bool s_touchpadCommitActivation = false;
-// Touchpad commit that found a shell flyout (Start, Search, Quick Settings) in
-// the foreground: tick when its dismissal was requested (0 = none pending) and
-// whether Escape was already sent a second time.
+struct ActivationWindow {
+    HWND window = nullptr;
+    DWORD process = 0;
+    DWORD thread = 0;
+
+    static ActivationWindow Capture(HWND window) {
+        ActivationWindow identity{window};
+        if (window) {
+            identity.thread = GetWindowThreadProcessId(window, &identity.process);
+        }
+        if (!identity.thread) return {};
+        return identity;
+    }
+
+    bool Matches(HWND candidate) const {
+        if (!window || candidate != window) return false;
+        ActivationWindow current = Capture(candidate);
+        return current.thread == thread && current.process == process;
+    }
+};
+
+static ActivationWindow s_sessionShell;
+static bool s_forwardedAltTabShellSession = false;
+static DWORD s_shellAssistToken = 0;
+static DWORD s_shellAssistExplorerPid = 0;
+static ActivationWindow s_shellInvocationReturn;
+static ULONGLONG s_shellInvocationDeadline = 0;
+static DWORD s_shellInvocationInputTick = 0;
+enum class ShellInvocationState { NotStarted, AwaitingForeground, Observing, Abandoned };
+static ShellInvocationState s_shellInvocationState = ShellInvocationState::NotStarted;
+static bool s_stagingSwitcherOffscreen = false;
+static ActivationWindow s_activationRetryWindow;
+static ActivationWindow s_shellCommitFallback;
+static ULONGLONG s_shellCommitDeadline = 0;
 static ULONGLONG s_shellDismissStartTick = 0;
+static ULONGLONG s_shellForegroundConfirmTick = 0;
+static bool s_shellNeedsEligibility = false;
 static bool s_shellDismissResent = false;
+static std::vector<ActivationWindow> s_shellGroupRestoreWindows;
+static std::vector<ActivationWindow> s_shellNativeRestoreWindows;
+static bool s_shellRestoreWaitStarted = false;
+static bool s_exitRestorePending = false;
+
+static void ClearExitActivationRetry() {
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
+    s_touchpadActivationRetryTarget = nullptr;
+    s_touchpadActivationRetryDeadline = 0;
+    s_touchpadCommitActivation = false;
+    s_activationRetryWindow = {};
+    s_shellCommitFallback = {};
+    s_shellCommitDeadline = 0;
+    s_shellDismissStartTick = 0;
+    s_shellForegroundConfirmTick = 0;
+    s_shellNeedsEligibility = false;
+    s_shellDismissResent = false;
+    s_shellGroupRestoreWindows.clear();
+    s_shellNativeRestoreWindows.clear();
+    s_shellRestoreWaitStarted = false;
+    s_exitRestorePending = false;
+}
+
 // Release tracking also protects ordinary delayed touchpad sessions.
 static bool s_touchpadPending = false;
 static ULONGLONG s_touchpadRapidPendingTick = 0;
@@ -9628,7 +9744,8 @@ static bool StickyTwoFingerTapCloseCompleted() {
 }
 
 static void RetainStickyTwoFingerTapForeground() {
-    if (!StickyTwoFingerTapOwnershipLive() || s_stickyTwoFingerTapFocusRestoreActive) return;
+    if (!StickyTwoFingerTapOwnershipLive() ||
+        s_stickyTwoFingerTapFocusRestoreActive) return;
     bool closeCompleted = StickyTwoFingerTapCloseCompleted();
     HWND foreground = GetForegroundWindow();
     if (IsSwitcherWindow(foreground)) {
@@ -9810,10 +9927,23 @@ static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
 // drives the retry timer) is created earlier in the file.
 static bool TryHookTwinuiAltTab();
 static bool TryHookExplorerSuppression();
+static bool AttachExplorerHotkeyWindow();
+static void RunExplorerShellAssist(DWORD token, HWND source);
 
 LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_SWS_EXPLORER_SHELL_ASSIST) {
+        if (wParam && wParam <= kShellAssistTokenMask) {
+            RunExplorerShellAssist(static_cast<DWORD>(wParam), reinterpret_cast<HWND>(lParam));
+        }
+        return 0;
+    }
     if (uMsg == WM_TIMER && wParam == SWS_EXPLORER_HOOK_RETRY_TIMER_ID) {
-        if (TryHookExplorerSuppression()) {
+        // Keep looking for the immersive window briefly during shell startup.
+        // The registration observer also catches native threads as they start.
+        static unsigned int hotkeyAttachAttempts = 0;
+        bool hotkeyReady = hotkeyAttachAttempts >= 30 || AttachExplorerHotkeyWindow();
+        if (!hotkeyReady) ++hotkeyAttachAttempts;
+        if (TryHookExplorerSuppression() && hotkeyReady) {
             KillTimer(hWnd, SWS_EXPLORER_HOOK_RETRY_TIMER_ID);
         }
         return 0;
@@ -9952,8 +10082,11 @@ static DWORD WINAPI ExplorerIpcThread(LPVOID) {
     // Hooking CTray::_RaiseDesktop needs Windhawk's symbols for explorer.exe, which can
     // still be loading when the mod is injected: try once now and let the IPC window's
     // timer retry until it takes (see ExplorerIpcWndProc).
-    if (hIpcWnd && !TryHookExplorerSuppression()) {
-        SetTimer(hIpcWnd, SWS_EXPLORER_HOOK_RETRY_TIMER_ID, 2000, NULL);
+    if (hIpcWnd) {
+        bool hotkeyReady = AttachExplorerHotkeyWindow();
+        if (!TryHookExplorerSuppression() || !hotkeyReady) {
+            SetTimer(hIpcWnd, SWS_EXPLORER_HOOK_RETRY_TIMER_ID, 2000, NULL);
+        }
     }
 
     MSG msg;
@@ -11903,13 +12036,40 @@ static std::shared_ptr<WindowIconShadow> GetWindowIconShadow(
 // Classic thumbnails are square, so their corners are painted over with the
 // background, which only matches an opaque None material. Thumbnails drawn as
 // rounded composition visuals need no mask.
-static bool ThumbnailCornersNeedMask(int cornerRadius) {
-    return cornerRadius > 0 && !g_sharedThumbnailDevice && ThemeIs(L"none") &&
+// Straight edges join the four arcs. A zero radius contributes a square vertex.
+static void AddCornerPath(Gdiplus::GraphicsPath& path, float x, float y,
+                          float width, float height, CornerRadii corners,
+                          float outset = 0.0f, float inset = 0.0f) {
+    const float limit = (std::max)(0.0f, (std::min)(width, height) * 0.5f);
+    auto radius = [&](int value) {
+        return value ? (std::max)(0.0f, (std::min)((float)value + outset, limit) - inset)
+                     : 0.0f;
+    };
+    const float tl = radius(corners.topLeft);
+    const float tr = radius(corners.topRight);
+    const float br = radius(corners.bottomRight);
+    const float bl = radius(corners.bottomLeft);
+    const float right = x + width;
+    const float bottom = y + height;
+
+    if (tl > 0.0f) path.AddArc(x, y, tl * 2, tl * 2, 180, 90);
+    else path.AddLine(x, y, x, y);
+    if (tr > 0.0f) path.AddArc(right - tr * 2, y, tr * 2, tr * 2, 270, 90);
+    else path.AddLine(right, y, right, y);
+    if (br > 0.0f) path.AddArc(right - br * 2, bottom - br * 2, br * 2, br * 2, 0, 90);
+    else path.AddLine(right, bottom, right, bottom);
+    if (bl > 0.0f) path.AddArc(x, bottom - bl * 2, bl * 2, bl * 2, 90, 90);
+    else path.AddLine(x, bottom, x, bottom);
+    path.CloseFigure();
+}
+
+static bool ThumbnailCornersNeedMask(CornerRadii corners) {
+    return corners.Max() > 0 && !g_sharedThumbnailDevice && ThemeIs(L"none") &&
            g_settings.opacity >= 99;
 }
 
-static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID) {
-    if (radiusPx <= 0) {
+static void MaskRectCorners(HDC hdc, const RECT& rc, CornerRadii corners, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID) {
+    if (corners.Max() == 0) {
         return;
     }
 
@@ -11919,12 +12079,8 @@ static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpa
         return;
     }
 
-    int r = radiusPx;
-    if (r * 2 > w) r = w / 2;
-    if (r * 2 > h) r = h / 2;
-    if (r <= 0) {
-        return;
-    }
+    corners = corners.Clamped((std::min)(w, h) / 2);
+    if (corners.Max() == 0) return;
 
     COLORREF bg = (overrideBg != CLR_INVALID) ? overrideBg : GetBgColor();
     // In layered mode, punch fully transparent corners to force thumbnail clipping.
@@ -11937,68 +12093,78 @@ static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpa
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     Gdiplus::SolidBrush brush(Gdiplus::Color(alpha, GetRValue(bg), GetGValue(bg), GetBValue(bg)));
 
-    int d = r * 2;
-    Gdiplus::GraphicsPath cutTl, cutTr, cutBr, cutBl;
     Gdiplus::REAL ext = (alpha != 0) ? 1.0f : 0.0f; // Extend outward to cover anti-aliased edge
 
-    cutTl.StartFigure();
-    cutTl.AddLine((Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.top + r, (Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.top - ext);
-    cutTl.AddLine((Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.top - ext, (Gdiplus::REAL)rc.left + r, (Gdiplus::REAL)rc.top - ext);
-    cutTl.AddArc((Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 270, -90);
-    cutTl.CloseFigure();
+    if (const int r = corners.topLeft) {
+        const int d = r * 2;
+        Gdiplus::GraphicsPath cutTl;
+        cutTl.StartFigure();
+        cutTl.AddLine((Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.top + r, (Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.top - ext);
+        cutTl.AddLine((Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.top - ext, (Gdiplus::REAL)rc.left + r, (Gdiplus::REAL)rc.top - ext);
+        cutTl.AddArc((Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 270, -90);
+        cutTl.CloseFigure();
+        graphics.FillPath(&brush, &cutTl);
+    }
 
-    cutTr.StartFigure();
-    cutTr.AddLine((Gdiplus::REAL)rc.right - r, (Gdiplus::REAL)rc.top - ext, (Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.top - ext);
-    cutTr.AddLine((Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.top - ext, (Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.top + r);
-    cutTr.AddArc((Gdiplus::REAL)rc.right - d, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 0, -90);
-    cutTr.CloseFigure();
+    if (const int r = corners.topRight) {
+        const int d = r * 2;
+        Gdiplus::GraphicsPath cutTr;
+        cutTr.StartFigure();
+        cutTr.AddLine((Gdiplus::REAL)rc.right - r, (Gdiplus::REAL)rc.top - ext, (Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.top - ext);
+        cutTr.AddLine((Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.top - ext, (Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.top + r);
+        cutTr.AddArc((Gdiplus::REAL)rc.right - d, (Gdiplus::REAL)rc.top, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 0, -90);
+        cutTr.CloseFigure();
+        graphics.FillPath(&brush, &cutTr);
+    }
 
-    cutBr.StartFigure();
-    cutBr.AddLine((Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.bottom - r, (Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.bottom + ext);
-    cutBr.AddLine((Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.bottom + ext, (Gdiplus::REAL)rc.right - r, (Gdiplus::REAL)rc.bottom + ext);
-    cutBr.AddArc((Gdiplus::REAL)rc.right - d, (Gdiplus::REAL)rc.bottom - d, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 90, -90);
-    cutBr.CloseFigure();
+    if (const int r = corners.bottomRight) {
+        const int d = r * 2;
+        Gdiplus::GraphicsPath cutBr;
+        cutBr.StartFigure();
+        cutBr.AddLine((Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.bottom - r, (Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.bottom + ext);
+        cutBr.AddLine((Gdiplus::REAL)rc.right + ext, (Gdiplus::REAL)rc.bottom + ext, (Gdiplus::REAL)rc.right - r, (Gdiplus::REAL)rc.bottom + ext);
+        cutBr.AddArc((Gdiplus::REAL)rc.right - d, (Gdiplus::REAL)rc.bottom - d, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 90, -90);
+        cutBr.CloseFigure();
+        graphics.FillPath(&brush, &cutBr);
+    }
 
-    cutBl.StartFigure();
-    cutBl.AddLine((Gdiplus::REAL)rc.left + r, (Gdiplus::REAL)rc.bottom + ext, (Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.bottom + ext);
-    cutBl.AddLine((Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.bottom + ext, (Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.bottom - r);
-    cutBl.AddArc((Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.bottom - d, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 180, -90);
-    cutBl.CloseFigure();
-
-    graphics.FillPath(&brush, &cutTl);
-    graphics.FillPath(&brush, &cutTr);
-    graphics.FillPath(&brush, &cutBr);
-    graphics.FillPath(&brush, &cutBl);
+    if (const int r = corners.bottomLeft) {
+        const int d = r * 2;
+        Gdiplus::GraphicsPath cutBl;
+        cutBl.StartFigure();
+        cutBl.AddLine((Gdiplus::REAL)rc.left + r, (Gdiplus::REAL)rc.bottom + ext, (Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.bottom + ext);
+        cutBl.AddLine((Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.bottom + ext, (Gdiplus::REAL)rc.left - ext, (Gdiplus::REAL)rc.bottom - r);
+        cutBl.AddArc((Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.bottom - d, (Gdiplus::REAL)d, (Gdiplus::REAL)d, 180, -90);
+        cutBl.CloseFigure();
+        graphics.FillPath(&brush, &cutBl);
+    }
 }
 
 // Draw a rectangular contour around a floating-point rect.
 // direction: 1 = inner (shrinks inward), -1 = outer (grows outward)
-static void DrawContourF(HDC hdc, const RectF& rc, float contourSize, int direction, float overrideCornerRadius = -1.0f, BYTE alpha = 255) {
+static void DrawContourF(HDC hdc, const RectF& rc, float contourSize, int direction, CornerRadii corners, BYTE alpha = 255) {
     if (alpha == 0) return;
     COLORREF c = GetContourColor();
     BYTE r = GetRValue(c), g = GetGValue(c), b = GetBValue(c);
 
-    float cornerRadius = (overrideCornerRadius >= 0.0f) ? overrideCornerRadius : (float)GetTaskUiCornerRadiusPx();
     float penWidth = contourSize * (float)g_dpiX / 96.0f;
     if (penWidth < 1.0f) penWidth = 1.0f;
 
     RectF drawRc = rc;
+    const float outset = direction < 0 ? 2.0f : 0.0f;
     if (direction < 0) {
         drawRc.left -= 2.0f;
         drawRc.top -= 2.0f;
         drawRc.right += 2.0f;
         drawRc.bottom += 2.0f;
-        cornerRadius += 2.0f;
     }
 
-    if (cornerRadius > 0.0f) {
+    if (corners.Max() > 0) {
         // --- ROUNDED BRANCH: Smooth WinUI 3 Fluent soft antialiasing ---
         float width = drawRc.right - drawRc.left - penWidth;
         float height = drawRc.bottom - drawRc.top - penWidth;
         if (width <= 0.0f || height <= 0.0f) return;
 
-        if (cornerRadius * 2.0f > width) cornerRadius = width * 0.5f;
-        if (cornerRadius * 2.0f > height) cornerRadius = height * 0.5f;
 
         Gdiplus::Graphics graphics(hdc);
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
@@ -12007,15 +12173,8 @@ static void DrawContourF(HDC hdc, const RectF& rc, float contourSize, int direct
         Gdiplus::REAL left = drawRc.left + penWidth * 0.5f;
         Gdiplus::REAL top = drawRc.top + penWidth * 0.5f;
 
-        float pathRadius = cornerRadius - penWidth * 0.5f;
-        if (pathRadius < 0.0f) pathRadius = 0.0f;
-        Gdiplus::REAL d = pathRadius * 2.0f;
         Gdiplus::GraphicsPath path;
-        path.AddArc(left, top, d, d, 180, 90);
-        path.AddArc(left + width - d, top, d, d, 270, 90);
-        path.AddArc(left + width - d, top + height - d, d, d, 0, 90);
-        path.AddArc(left, top + height - d, d, d, 90, 90);
-        path.CloseFigure();
+        AddCornerPath(path, left, top, width, height, corners, outset, penWidth * 0.5f);
 
         // Dual-pass WinUI 3 Fluent soft antialiasing
         BYTE haloAlpha = (BYTE)(alpha * 0.30f);
@@ -12070,11 +12229,8 @@ static void DrawSelectionFillF(HDC hdc, const RectF& rc) {
     BYTE g = GetGValue(c);
     BYTE b = GetBValue(c);
 
-    float cornerRadius = (float)GetTaskUiCornerRadiusPx();
-    if (cornerRadius > 0.0f) {
-        float maxRadius = fminf(width, height) * 0.5f;
-        if (cornerRadius > maxRadius) cornerRadius = maxRadius;
-
+    const CornerRadii corners = GetTaskUiCornerRadiiPx();
+    if (corners.Max() > 0) {
         Gdiplus::Graphics graphics(hdc);
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
@@ -12086,14 +12242,9 @@ static void DrawSelectionFillF(HDC hdc, const RectF& rc) {
         Gdiplus::REAL top = fillRc.top;
         Gdiplus::REAL w = width;
         Gdiplus::REAL h = height;
-        Gdiplus::REAL d = cornerRadius * 2.0f;
 
         Gdiplus::GraphicsPath path;
-        path.AddArc(left, top, d, d, 180, 90);
-        path.AddArc(left + w - d, top, d, d, 270, 90);
-        path.AddArc(left + w - d, top + h - d, d, d, 0, 90);
-        path.AddArc(left, top + h - d, d, d, 90, 90);
-        path.CloseFigure();
+        AddCornerPath(path, left, top, w, h, corners);
         graphics.FillPath(&brush, &path);
         Gdiplus::Pen strokePen(Gdiplus::Color(strokeAlpha, r, g, b), 1.0f);
         graphics.DrawPath(&strokePen, &path);
@@ -12389,8 +12540,8 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
-    int btnRadius = GetCloseButtonCornerRadiusPx();
-    if ((float)(btnRadius * 2) > btnW) btnRadius = (int)(btnW / 2.0f);
+    const CornerRadii corners = GetCloseButtonCornerRadiiPx()
+                                    .Clamped((int)((std::min)(btnW, btnH) / 2.0f));
 
     // 1. Solid idle plate for contrast against bright or dark thumbnails (configured by setting / Win11 default)
     BYTE idlePlateAlpha = g_settings.showCloseButtonBackground ? (BYTE)roundf(255.0f * btnAlpha) : 0;
@@ -12401,24 +12552,15 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
         BYTE borderAlpha = (BYTE)roundf((g_isDarkMode ? 32.0f : 22.0f) * btnAlpha);
         Gdiplus::Pen borderPen(Gdiplus::Color(borderAlpha, GetRValue(borderCol), GetGValue(borderCol), GetBValue(borderCol)), 1.0f);
 
-        if (btnRadius > 0) {
+        if (corners.Max() > 0) {
             // Soft drop shadow for elevation contrast over complex thumbnail content
             Gdiplus::GraphicsPath shadowPath;
-            Gdiplus::REAL d = (Gdiplus::REAL)(btnRadius * 2);
-            shadowPath.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)(by + 1.0f), d, d, 180.0f, 90.0f);
-            shadowPath.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)(by + 1.0f), d, d, 270.0f, 90.0f);
-            shadowPath.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)(by + btnH + 1.0f) - d, d, d, 0.0f, 90.0f);
-            shadowPath.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)(by + btnH + 1.0f) - d, d, d, 90.0f, 90.0f);
-            shadowPath.CloseFigure();
+            AddCornerPath(shadowPath, bx, by + 1.0f, btnW, btnH, corners);
             Gdiplus::SolidBrush shadowBrush(Gdiplus::Color((BYTE)roundf(40.0f * btnAlpha), 0, 0, 0));
             graphics.FillPath(&shadowBrush, &shadowPath);
 
             Gdiplus::GraphicsPath path;
-            path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)by, d, d, 180.0f, 90.0f);
-            path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)by, d, d, 270.0f, 90.0f);
-            path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)(by + btnH) - d, d, d, 0.0f, 90.0f);
-            path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)(by + btnH) - d, d, d, 90.0f, 90.0f);
-            path.CloseFigure();
+            AddCornerPath(path, bx, by, btnW, btnH, corners);
             graphics.FillPath(&idleBrush, &path);
             graphics.DrawPath(&borderPen, &path);
         } else {
@@ -12432,14 +12574,9 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
     if (redAlpha > 0) {
         COLORREF redPlateCol = IsWin11OrGreater() ? RGB(196, 43, 28) : RGB(232, 17, 35);
         Gdiplus::SolidBrush redBrush(Gdiplus::Color(redAlpha, GetRValue(redPlateCol), GetGValue(redPlateCol), GetBValue(redPlateCol)));
-        if (btnRadius > 0) {
+        if (corners.Max() > 0) {
             Gdiplus::GraphicsPath path;
-            Gdiplus::REAL d = (Gdiplus::REAL)(btnRadius * 2);
-            path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)by, d, d, 180.0f, 90.0f);
-            path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)by, d, d, 270.0f, 90.0f);
-            path.AddArc((Gdiplus::REAL)(bx + btnW) - d, (Gdiplus::REAL)(by + btnH) - d, d, d, 0.0f, 90.0f);
-            path.AddArc((Gdiplus::REAL)bx, (Gdiplus::REAL)(by + btnH) - d, d, d, 90.0f, 90.0f);
-            path.CloseFigure();
+            AddCornerPath(path, bx, by, btnW, btnH, corners);
             graphics.FillPath(&redBrush, &path);
         } else {
             graphics.FillRectangle(&redBrush, (Gdiplus::REAL)bx, (Gdiplus::REAL)by, (Gdiplus::REAL)btnW, (Gdiplus::REAL)btnH);
@@ -12464,7 +12601,7 @@ static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float ho
     if (penWidth < 1.0f) penWidth = 1.0f;
 
     Gdiplus::Pen xPen(Gdiplus::Color(xAlpha, r, g, b), penWidth);
-    Gdiplus::LineCap cap = (btnRadius > 0) ? Gdiplus::LineCapRound : Gdiplus::LineCapFlat;
+    Gdiplus::LineCap cap = (corners.Max() > 0) ? Gdiplus::LineCapRound : Gdiplus::LineCapFlat;
     xPen.SetStartCap(cap);
     xPen.SetEndCap(cap);
 
@@ -12490,7 +12627,7 @@ static const ThumbnailShadowPass kThumbnailShadowPasses[5] = {
     {  1,  7, 5 }   // Pass 4: Subtle contact occlusion edge
 };
 
-static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float alphaMult = 1.0f, float elevationScale = 1.0f) {
+static void DrawThumbnailShadow(HDC hdc, const RECT& rc, CornerRadii corners, float alphaMult = 1.0f, float elevationScale = 1.0f) {
     if (alphaMult <= 0.01f) return;
     if (ThemeIs(L"none")) {
         alphaMult *= ((float)g_settings.opacity / 100.0f);
@@ -12500,7 +12637,10 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
     int rch = rc.bottom - rc.top;
     if (rcw <= 0 || rch <= 0) return;
 
-    int shadowRadius = (std::min)(cornerRadius, DpiScale(12, g_dpiX));
+    if (corners == CornerRadii::Uniform(corners.Max())) {
+        corners = corners.Clamped(DpiScale(12, g_dpiX));
+    }
+    corners = corners.Clamped((std::min)(rcw, rch) / 2);
 
     // Dynamic elevation lift factors when zoomed (WinUI 3 Fluent elevation standards)
     float spreadScale = 1.0f;
@@ -12526,16 +12666,9 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
         Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp);
         Gdiplus::REAL sw = (Gdiplus::REAL)(rcw + sp * 2);
         Gdiplus::REAL sh = (Gdiplus::REAL)(rch + sp * 2);
-        if (shadowRadius > 0) {
-            Gdiplus::REAL sd = (Gdiplus::REAL)(shadowRadius * 2 + sp * 2);
-            if (sd > sw) sd = sw;
-            if (sd > sh) sd = sh;
+        if (corners.Max() > 0) {
             Gdiplus::GraphicsPath sPath;
-            sPath.AddArc(sx, sy, sd, sd, 180.0f, 90.0f);
-            sPath.AddArc(sx + sw - sd, sy, sd, sd, 270.0f, 90.0f);
-            sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0.0f, 90.0f);
-            sPath.AddArc(sx, sy + sh - sd, sd, sd, 90.0f, 90.0f);
-            sPath.CloseFigure();
+            AddCornerPath(sPath, sx, sy, sw, sh, corners, (float)sp);
             gfx.FillPath(&shadowBrush, &sPath);
         } else {
             gfx.FillRectangle(&shadowBrush, sx, sy, sw, sh);
@@ -12561,16 +12694,9 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
         Gdiplus::REAL sy = (Gdiplus::REAL)(rc.top - sp);
         Gdiplus::REAL sw = (Gdiplus::REAL)(rcw + sp * 2);
         Gdiplus::REAL sh = (Gdiplus::REAL)(rch + sp * 2);
-        if (shadowRadius > 0) {
-            Gdiplus::REAL sd = (Gdiplus::REAL)(shadowRadius * 2 + sp * 2);
-            if (sd > sw) sd = sw;
-            if (sd > sh) sd = sh;
+        if (corners.Max() > 0) {
             Gdiplus::GraphicsPath sPath;
-            sPath.AddArc(sx, sy, sd, sd, 180.0f, 90.0f);
-            sPath.AddArc(sx + sw - sd, sy, sd, sd, 270.0f, 90.0f);
-            sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0.0f, 90.0f);
-            sPath.AddArc(sx, sy + sh - sd, sd, sd, 90.0f, 90.0f);
-            sPath.CloseFigure();
+            AddCornerPath(sPath, sx, sy, sw, sh, corners, (float)sp);
             gfx.FillPath(&shadowBrush, &sPath);
         } else {
             gfx.FillRectangle(&shadowBrush, sx, sy, sw, sh);
@@ -12579,7 +12705,7 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
 }
 
 // Shared drawing routine for both layered and buffered paint paths
-static void DrawTaskEntry(HDC hdc, WindowEntry& e, int padLeft, int rowTitleH, int iconSz, int cornerRadius, int closeBtnReserve, bool isHovered, float alpha = 1.0f) {
+static void DrawTaskEntry(HDC hdc, WindowEntry& e, int padLeft, int rowTitleH, int iconSz, CornerRadii thumbnailCorners, int closeBtnReserve, bool isHovered, float alpha = 1.0f) {
     if (alpha <= 0.01f) return;
 
     // DrawText's rectangle clips negative side bearings and ClearType fringes.
@@ -12642,11 +12768,11 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, int padLeft, int rowTitleH, i
     if (g_settings.showThumbnails && g_settings.showThumbnailShadow && !g_layoutTransition.active &&
         !(e.rcThumbActual.left == 0 && e.rcThumbActual.right == 0 &&
           e.rcThumbActual.top == 0 && e.rcThumbActual.bottom == 0)) {
-        DrawThumbnailShadow(hdc, e.rcThumbActual, cornerRadius, alpha, 1.0f);
+        DrawThumbnailShadow(hdc, e.rcThumbActual, thumbnailCorners, alpha, 1.0f);
     }
 
-    if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
-        MaskRectCorners(hdc, e.rcThumbActual, cornerRadius);
+    if (g_settings.showThumbnails && ThumbnailCornersNeedMask(thumbnailCorners)) {
+        MaskRectCorners(hdc, e.rcThumbActual, thumbnailCorners);
     }
 
     // ---- Badge layout rendering path ----
@@ -12935,7 +13061,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, bool includeSelectionFill
     SetBkMode(hdc, TRANSPARENT);
 
     int masterPadX = DpiScale(g_settings.switcherPadding, g_dpiX);
-    int cornerRadius = GetThumbnailCornerRadiusPx();
+    const CornerRadii thumbnailCorners = GetThumbnailCornerRadiiPx();
 
     // Central Preview shadow / card backdrop
     bool showPreview = DockShowPreview();
@@ -12951,10 +13077,10 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, bool includeSelectionFill
         }
         // Active preview reflow/slide shadows are submitted dynamically by PaintSwitcher.
         if (g_settings.showThumbnailShadow && shadowAlphaMult > 0.01f && !g_layoutTransition.active && !g_dockPreviewSlide.active) {
-            DrawThumbnailShadow(hdc, shadowRc, cornerRadius, shadowAlphaMult);
+            DrawThumbnailShadow(hdc, shadowRc, thumbnailCorners, shadowAlphaMult);
         }
-        if (ThumbnailCornersNeedMask(cornerRadius)) {
-            MaskRectCorners(hdc, shadowRc, cornerRadius);
+        if (ThumbnailCornersNeedMask(thumbnailCorners)) {
+            MaskRectCorners(hdc, shadowRc, thumbnailCorners);
         }
     }
 
@@ -13059,7 +13185,7 @@ static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool inclu
     int padLeft    = DpiScale(g_settings.entryPadding, g_dpiX);
     int rowTitleH  = GetHeaderRowHeightPx();
     int iconSz     = GetHeaderIconSizePx();
-    int cornerRadius = GetThumbnailCornerRadiusPx();
+    const CornerRadii thumbnailCorners = GetThumbnailCornerRadiiPx();
     int closeBtnReserve = DpiScale(24, g_dpiX) + padLeft;
 
     int masterPadX = DpiScale(g_settings.switcherPadding, g_dpiX);
@@ -13084,7 +13210,7 @@ static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool inclu
             e.rcThumbSlot = dep.rcThumbCurrent;
             e.hIcon = dep.hIcon;
             wcsncpy_s(e.title, dep.title, _TRUNCATE);
-            DrawTaskEntry(hdc, e, padLeft, rowTitleH, iconSz, cornerRadius, closeBtnReserve, false, dep.alpha);
+            DrawTaskEntry(hdc, e, padLeft, rowTitleH, iconSz, thumbnailCorners, closeBtnReserve, false, dep.alpha);
         }
     }
 
@@ -13098,7 +13224,7 @@ static void DrawSwitcherContentInner(HDC hdc, bool fillBg, HWND hWnd, bool inclu
 
         bool isHovered = (i == g_hoverIndex && g_hoverWnd == hWnd);
         float itemAlpha = (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f;
-        DrawTaskEntry(hdc, e, padLeft, rowTitleH, iconSz, cornerRadius, closeBtnReserve, isHovered, itemAlpha);
+        DrawTaskEntry(hdc, e, padLeft, rowTitleH, iconSz, thumbnailCorners, closeBtnReserve, isHovered, itemAlpha);
     }
 
     // Restore clip
@@ -13203,7 +13329,7 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
         if (alpha < 0) alpha = 0;
         Gdiplus::SolidBrush bgBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
         
-        Gdiplus::REAL r = (Gdiplus::REAL)GetBadgeIconBackgroundCornerRadiusPx(bgSize / 2);
+        const CornerRadii corners = GetBadgeIconBackgroundCornerRadiiPx(bgSize / 2);
         
         if (g_settings.showBadgeIconBackgroundShadow) {
             for (int pass = 5; pass > 0; --pass) {
@@ -13212,18 +13338,11 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
                 shadowAlpha = (int)roundf(shadowAlpha * motionAlpha);
                 Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
                 int sp = pass;
-                if (r > 0) {
+                if (corners.Max() > 0) {
                     Gdiplus::GraphicsPath sPath;
                     Gdiplus::REAL sw = (Gdiplus::REAL)(bgSize + sp * 2), sh = sw;
                     Gdiplus::REAL sx = (Gdiplus::REAL)(bgX - sp), sy = (Gdiplus::REAL)(bgY - sp + 1);
-                    Gdiplus::REAL sd = r * 2 + sp * 2;
-                    if (sd > sw) sd = sw;
-                    if (sd > sh) sd = sh;
-                    sPath.AddArc(sx, sy, sd, sd, 180, 90);
-                    sPath.AddArc(sx + sw - sd, sy, sd, sd, 270, 90);
-                    sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0, 90);
-                    sPath.AddArc(sx, sy + sh - sd, sd, sd, 90, 90);
-                    sPath.CloseFigure();
+                    AddCornerPath(sPath, sx, sy, sw, sh, corners, (float)sp);
                     gfx.FillPath(&shadowBrush, &sPath);
                 } else {
                     gfx.FillRectangle(&shadowBrush, bgX - sp, bgY - sp + 1, bgSize + sp * 2, bgSize + sp * 2);
@@ -13231,18 +13350,11 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
             }
         }
 
-        if (r > 0) {
+        if (corners.Max() > 0) {
             Gdiplus::GraphicsPath path;
             Gdiplus::REAL w = (Gdiplus::REAL)bgSize, h = (Gdiplus::REAL)bgSize;
             Gdiplus::REAL x = (Gdiplus::REAL)bgX, y = (Gdiplus::REAL)bgY;
-            Gdiplus::REAL d = r * 2;
-            if (d > w) d = w;
-            if (d > h) d = h;
-            path.AddArc(x, y, d, d, 180, 90);
-            path.AddArc(x + w - d, y, d, d, 270, 90);
-            path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
-            path.AddArc(x, y + h - d, d, d, 90, 90);
-            path.CloseFigure();
+            AddCornerPath(path, x, y, w, h, corners);
             gfx.FillPath(&bgBrush, &path);
         } else {
             gfx.FillRectangle(&bgBrush, bgX, bgY, bgSize, bgSize);
@@ -13352,7 +13464,7 @@ static bool ComputeGroupIndicatorAnchor(
     return true;
 }
 
-static void DrawSwitcherOuterBorder(HDC hdc, int w, int h, int radiusPx) {
+static void DrawSwitcherOuterBorder(HDC hdc, int w, int h, CornerRadii corners) {
     if (w <= 0 || h <= 0) return;
 
     Gdiplus::Graphics graphics(hdc);
@@ -13370,7 +13482,7 @@ static void DrawSwitcherOuterBorder(HDC hdc, int w, int h, int radiusPx) {
     BYTE g = GetGValue(borderCol);
     BYTE b = GetBValue(borderCol);
 
-    if (radiusPx <= 0) {
+    if (corners.Max() == 0) {
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeNone);
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeNone);
         Gdiplus::Pen pen(Gdiplus::Color(borderAlpha, r, g, b), 1.0f);
@@ -13380,29 +13492,17 @@ static void DrawSwitcherOuterBorder(HDC hdc, int w, int h, int radiusPx) {
         graphics.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
         graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
         Gdiplus::Pen pen(Gdiplus::Color(borderAlpha, r, g, b), 1.0f);
-        pen.SetLineJoin(Gdiplus::LineJoinRound);
+        pen.SetLineJoin(corners == CornerRadii::Uniform(corners.Max())
+                            ? Gdiplus::LineJoinRound : Gdiplus::LineJoinMiter);
 
         Gdiplus::REAL left = 0.5f;
         Gdiplus::REAL top = 0.5f;
         Gdiplus::REAL right = (Gdiplus::REAL)w - 0.5f;
         Gdiplus::REAL bottom = (Gdiplus::REAL)h - 0.5f;
-        Gdiplus::REAL rad = (Gdiplus::REAL)radiusPx - 0.5f;
-        if (rad * 2.0f > (right - left)) rad = (right - left) * 0.5f;
-        if (rad * 2.0f > (bottom - top)) rad = (bottom - top) * 0.5f;
-
-        if (rad > 0.0f) {
-            Gdiplus::REAL d = rad * 2.0f;
-            Gdiplus::GraphicsPath path;
-            path.StartFigure();
-            path.AddArc(left, top, d, d, 180.0f, 90.0f);
-            path.AddArc(right - d, top, d, d, 270.0f, 90.0f);
-            path.AddArc(right - d, bottom - d, d, d, 0.0f, 90.0f);
-            path.AddArc(left, bottom - d, d, d, 90.0f, 90.0f);
-            path.CloseFigure();
-            graphics.DrawPath(&pen, &path);
-        } else {
-            graphics.DrawRectangle(&pen, left, top, right - left, bottom - top);
-        }
+        if (right <= left || bottom <= top) return;
+        Gdiplus::GraphicsPath path;
+        AddCornerPath(path, left, top, right - left, bottom - top, corners, -0.5f);
+        graphics.DrawPath(&pen, &path);
     }
 }
 
@@ -13412,7 +13512,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
     int offX = (int)roundf(g_scrollTransition.offsetCurrentX);
     int offY = (int)roundf(g_scrollTransition.offsetCurrentY);
 
-    int cornerRadius = GetThumbnailCornerRadiusPx();
+    const CornerRadii thumbnailCorners = GetThumbnailCornerRadiiPx();
 
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
     int masterPadX = DpiScale(g_settings.switcherPadding, g_dpiX);
@@ -13447,9 +13547,9 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             }
             if (collidesWithIncoming) continue;
 
-            if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
+            if (g_settings.showThumbnails && ThumbnailCornersNeedMask(thumbnailCorners)) {
                 COLORREF maskColor = GetBgColor();
-                MaskRectCorners(hdc, snapThumb, cornerRadius, true, maskColor);
+                MaskRectCorners(hdc, snapThumb, thumbnailCorners, true, maskColor);
             }
 
             DrawBadgeIconOverlay(hdc, snapThumb, snap.hIcon, NULL, NULL, NULL, false, snap.alpha,
@@ -13463,9 +13563,9 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             if (dep.alpha <= 0.01f) continue;
             RECT depThumb = dep.rcThumbCurrent;
 
-            if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
+            if (g_settings.showThumbnails && ThumbnailCornersNeedMask(thumbnailCorners)) {
                 COLORREF maskColor = GetBgColor();
-                MaskRectCorners(hdc, depThumb, cornerRadius, true, maskColor);
+                MaskRectCorners(hdc, depThumb, thumbnailCorners, true, maskColor);
             }
             DrawBadgeIconOverlay(hdc, depThumb, dep.hIcon, NULL, NULL, NULL, false, dep.alpha,
                                  dep.iconCell ? dep.iconCell->icon : nullptr);
@@ -13490,12 +13590,12 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             OffsetRect(&rcThumbSlot, offX, offY);
         }
 
-        if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
+        if (g_settings.showThumbnails && ThumbnailCornersNeedMask(thumbnailCorners)) {
             COLORREF maskColor = GetBgColor();
             if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
                 maskColor = GetSelectionFillOnBgColor();
             }
-            MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor);
+            MaskRectCorners(hdc, rcThumbActual, thumbnailCorners, true, maskColor);
         }
 
         // Badge layout: draw icon overlay on thumbnail
@@ -13606,7 +13706,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             int op = g_isDarkMode ? g_settings.indicatorBgOpacityDark : g_settings.indicatorBgOpacityLight;
             int alpha = (int)roundf(((float)(op * 255) / 100.0f) * groupBadgeAlpha);
             Gdiplus::SolidBrush pillBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
-            Gdiplus::REAL pillRadius = (Gdiplus::REAL)GetGroupIndicatorCornerRadiusPx(badgeH / 2);
+            const CornerRadii pillCorners = GetGroupIndicatorCornerRadiiPx(badgeH / 2);
             
             if (g_settings.showGroupIndicatorShadow && groupBadgeAlpha > 0.05f) {
                 for (int pass = 5; pass > 0; --pass) {
@@ -13619,17 +13719,10 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                     Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp);
                     Gdiplus::REAL sw = (Gdiplus::REAL)(badgeW + sp * 2);
                     Gdiplus::REAL sh = (Gdiplus::REAL)(badgeH + sp * 2);
-                    Gdiplus::REAL sd = pillRadius * 2.0f + sp * 2.0f;
-                    if (sd > sw) sd = sw;
-                    if (sd > sh) sd = sh;
                     
-                    if (pillRadius > 0) {
+                    if (pillCorners.Max() > 0) {
                         Gdiplus::GraphicsPath sPath;
-                        sPath.AddArc(sx, sy, sd, sd, 180, 90);
-                        sPath.AddArc(sx + sw - sd, sy, sd, sd, 270, 90);
-                        sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0, 90);
-                        sPath.AddArc(sx, sy + sh - sd, sd, sd, 90, 90);
-                        sPath.CloseFigure();
+                        AddCornerPath(sPath, sx, sy, sw, sh, pillCorners, (float)sp);
                         gfx.FillPath(&shadowBrush, &sPath);
                     } else {
                         gfx.FillRectangle(&shadowBrush, sx, sy, sw, sh);
@@ -13637,16 +13730,11 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 }
             }
 
-            if (pillRadius > 0) {
+            if (pillCorners.Max() > 0) {
                 Gdiplus::GraphicsPath pillPath;
-                Gdiplus::REAL d = pillRadius * 2.0f;
                 Gdiplus::REAL px = (Gdiplus::REAL)badgeX, py = (Gdiplus::REAL)badgeY;
                 Gdiplus::REAL pw = (Gdiplus::REAL)badgeW, ph = (Gdiplus::REAL)badgeH;
-                pillPath.AddArc(px, py, d, d, 180, 90);
-                pillPath.AddArc(px + pw - d, py, d, d, 270, 90);
-                pillPath.AddArc(px + pw - d, py + ph - d, d, d, 0, 90);
-                pillPath.AddArc(px, py + ph - d, d, d, 90, 90);
-                pillPath.CloseFigure();
+                AddCornerPath(pillPath, px, py, pw, ph, pillCorners);
                 gfx.FillPath(&pillBrush, &pillPath);
             } else {
                 gfx.FillRectangle(&pillBrush, badgeX, badgeY, badgeW, badgeH);
@@ -13677,8 +13765,8 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 hRc.bottom += (float)offY;
             }
             BYTE hoverAlpha = (BYTE)(g_animHoverAlphaCurrent * 255.0f);
-            float hoverRadius = (float)GetThumbnailCornerRadiusPx();
-            DrawContourF(hdc, hRc, 1.0f, 1, hoverRadius, hoverAlpha);
+            const CornerRadii hoverCorners = GetThumbnailCornerRadiiPx();
+            DrawContourF(hdc, hRc, 1.0f, 1, hoverCorners, hoverAlpha);
         } else {
             g_animHoverAlphaCurrent = 0.0f;
             g_animHoverActive = false;
@@ -13689,7 +13777,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
     if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && !IsWindowTruncated(g_selectedIndex)) {
         if (HighlightHasBorder()) {
             RectF selRc = SelectionRectWithViewport();
-            DrawContourF(hdc, selRc, (float)SWS_CONTOUR_SIZE, 1, (float)GetTaskUiCornerRadiusPx());
+            DrawContourF(hdc, selRc, (float)SWS_CONTOUR_SIZE, 1, GetTaskUiCornerRadiiPx());
         }
     }
 
@@ -13799,14 +13887,14 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
     if (g_settings.showSwitcherBorder) {
         SelectClipRgn(hdc, NULL);
         RECT wRc; GetClientRect(hWnd, &wRc);
-        int winRadius = GetWindowCornerRadiusPx();
-        DrawSwitcherOuterBorder(hdc, wRc.right, wRc.bottom, winRadius);
+        CornerRadii windowCorners = GetWindowCornerRadiiPx();
+        DrawSwitcherOuterBorder(hdc, wRc.right, wRc.bottom, windowCorners);
     }
 }
 
 static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
     if (g_windows.empty()) return;
-    int cornerRadius = GetThumbnailCornerRadiusPx();
+    const CornerRadii thumbnailCorners = GetThumbnailCornerRadiiPx();
 
     for (int idx = 0; idx < (int)g_windows.size(); idx++) {
         int i = (g_layoutStartIndex + idx) % g_windows.size();
@@ -13816,12 +13904,12 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
         RECT rcThumbActual = e.rcThumbActual;
         RECT rcCell = e.rcCell;
 
-        if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
+        if (g_settings.showThumbnails && ThumbnailCornersNeedMask(thumbnailCorners)) {
             COLORREF maskColor = GetBgColor();
             if (i == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
                 maskColor = GetSelectionFillOnBgColor();
             }
-            MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor);
+            MaskRectCorners(hdc, rcThumbActual, thumbnailCorners, true, maskColor);
         }
 
         // Badge layout: draw icon overlay on thumbnail
@@ -13914,7 +14002,7 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
             int op = g_isDarkMode ? g_settings.indicatorBgOpacityDark : g_settings.indicatorBgOpacityLight;
             int alpha = (int)roundf(((float)(op * 255) / 100.0f) * groupBadgeAlpha);
             Gdiplus::SolidBrush pillBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
-            Gdiplus::REAL pillRadius = (Gdiplus::REAL)GetGroupIndicatorCornerRadiusPx(badgeH / 2);
+            const CornerRadii pillCorners = GetGroupIndicatorCornerRadiiPx(badgeH / 2);
 
             if (g_settings.showGroupIndicatorShadow && groupBadgeAlpha > 0.05f) {
                 for (int pass = 5; pass > 0; --pass) {
@@ -13927,17 +14015,10 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
                     Gdiplus::REAL sy = (Gdiplus::REAL)(badgeY - sp);
                     Gdiplus::REAL sw = (Gdiplus::REAL)(badgeW + sp * 2);
                     Gdiplus::REAL sh = (Gdiplus::REAL)(badgeH + sp * 2);
-                    Gdiplus::REAL sd = pillRadius * 2.0f + sp * 2.0f;
-                    if (sd > sw) sd = sw;
-                    if (sd > sh) sd = sh;
 
-                    if (pillRadius > 0) {
+                    if (pillCorners.Max() > 0) {
                         Gdiplus::GraphicsPath sPath;
-                        sPath.AddArc(sx, sy, sd, sd, 180, 90);
-                        sPath.AddArc(sx + sw - sd, sy, sd, sd, 270, 90);
-                        sPath.AddArc(sx + sw - sd, sy + sh - sd, sd, sd, 0, 90);
-                        sPath.AddArc(sx, sy + sh - sd, sd, sd, 90, 90);
-                        sPath.CloseFigure();
+                        AddCornerPath(sPath, sx, sy, sw, sh, pillCorners, (float)sp);
                         gfx.FillPath(&shadowBrush, &sPath);
                     } else {
                         gfx.FillRectangle(&shadowBrush, sx, sy, sw, sh);
@@ -13945,16 +14026,11 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
                 }
             }
 
-            if (pillRadius > 0) {
+            if (pillCorners.Max() > 0) {
                 Gdiplus::GraphicsPath pillPath;
-                Gdiplus::REAL d = pillRadius * 2.0f;
                 Gdiplus::REAL px = (Gdiplus::REAL)badgeX, py = (Gdiplus::REAL)badgeY;
                 Gdiplus::REAL pw = (Gdiplus::REAL)badgeW, ph = (Gdiplus::REAL)badgeH;
-                pillPath.AddArc(px, py, d, d, 180, 90);
-                pillPath.AddArc(px + pw - d, py, d, d, 270, 90);
-                pillPath.AddArc(px + pw - d, py + ph - d, d, d, 0, 90);
-                pillPath.AddArc(px, py + ph - d, d, d, 90, 90);
-                pillPath.CloseFigure();
+                AddCornerPath(pillPath, px, py, pw, ph, pillCorners);
                 gfx.FillPath(&pillBrush, &pillPath);
             } else {
                 gfx.FillRectangle(&pillBrush, badgeX, badgeY, badgeW, badgeH);
@@ -13972,19 +14048,19 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
 
 static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
     if (g_windows.empty()) return;
-    int cornerRadius = GetThumbnailCornerRadiusPx();
+    const CornerRadii thumbnailCorners = GetThumbnailCornerRadiiPx();
 
     // 1. Zoomed thumbnail override (if hover zoom is active for a specific entry)
     if (ThumbnailHoverIsZoom() && g_hoverThumbIndex >= 0 && g_hoverThumbIndex < (int)g_windows.size() && !IsWindowTruncated(g_hoverThumbIndex)) {
         const auto& e = g_windows[g_hoverThumbIndex];
         if (e.hoverScale > 1.0001f) {
             RECT rcThumbActual = GetScaledThumbRect(e);
-            if (g_settings.showThumbnails && ThumbnailCornersNeedMask(cornerRadius)) {
+            if (g_settings.showThumbnails && ThumbnailCornersNeedMask(thumbnailCorners)) {
                 COLORREF maskColor = GetBgColor();
                 if (g_hoverThumbIndex == g_selectedIndex && HighlightHasFill() && !DockLayoutActive()) {
                     maskColor = GetSelectionFillOnBgColor();
                 }
-                MaskRectCorners(hdc, rcThumbActual, cornerRadius, true, maskColor);
+                MaskRectCorners(hdc, rcThumbActual, thumbnailCorners, true, maskColor);
             }
             int drawnIconX = e.drawnIconX;
             int drawnIconY = e.drawnIconY;
@@ -14025,8 +14101,8 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
                         ? g_animHoverCurrent
                         : (isValidHover ? ToRectF(g_windows[g_hoverThumbIndex].rcThumbActual) : g_animHoverCurrent);
             BYTE hoverAlpha = (BYTE)(g_animHoverAlphaCurrent * 255.0f);
-            float hoverRadius = (float)GetThumbnailCornerRadiusPx();
-            DrawContourF(hdc, hRc, 1.0f, 1, hoverRadius, hoverAlpha);
+            const CornerRadii hoverCorners = GetThumbnailCornerRadiiPx();
+            DrawContourF(hdc, hRc, 1.0f, 1, hoverCorners, hoverAlpha);
         } else {
             g_animHoverAlphaCurrent = 0.0f;
             g_animHoverActive = false;
@@ -14037,7 +14113,7 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
     if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && !IsWindowTruncated(g_selectedIndex)) {
         if (HighlightHasBorder()) {
             RectF selRc = SelectionRectWithViewport();
-            DrawContourF(hdc, selRc, (float)SWS_CONTOUR_SIZE, 1, (float)GetTaskUiCornerRadiusPx());
+            DrawContourF(hdc, selRc, (float)SWS_CONTOUR_SIZE, 1, GetTaskUiCornerRadiiPx());
         }
     }
 
@@ -14135,8 +14211,8 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
     if (g_settings.showSwitcherBorder) {
         SelectClipRgn(hdc, NULL);
         RECT wRc; GetClientRect(hWnd, &wRc);
-        int winRadius = GetWindowCornerRadiusPx();
-        DrawSwitcherOuterBorder(hdc, wRc.right, wRc.bottom, winRadius);
+        CornerRadii windowCorners = GetWindowCornerRadiiPx();
+        DrawSwitcherOuterBorder(hdc, wRc.right, wRc.bottom, windowCorners);
     }
 }
 
@@ -14161,7 +14237,7 @@ static void PaintSwitcherOverlay() {
         if (!ready) return;
     }
 
-    int radius = GetWindowCornerRadiusPx();
+    CornerRadii corners = GetWindowCornerRadiiPx();
 
     bool animatedDecoration = DockLayoutActive() && g_settings.showGroupIndicator && g_settings.showCloseButton;
     for (const auto& entry : g_windows) {
@@ -14186,7 +14262,7 @@ static void PaintSwitcherOverlay() {
             if (s_cachedOverlayStaticBits) {
                 memset(s_cachedOverlayStaticBits, 0, (size_t)w * h * sizeof(DWORD));
             }
-            HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+            HRGN hClip = GetCachedRoundRectRgn(w, h, corners);
             SelectClipRgn(s_cachedOverlayStaticDC, hClip);
             DrawSwitcherOverlayStaticContent(s_cachedOverlayStaticDC, targetWnd);
             g_overlayStaticDirty = false;
@@ -14195,7 +14271,7 @@ static void PaintSwitcherOverlay() {
         // Fast blit pre-rendered static overlay (<0.05ms)
         BitBlt(s_cachedOverlayDC, 0, 0, w, h, s_cachedOverlayStaticDC, 0, 0, SRCCOPY);
 
-        HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+        HRGN hClip = GetCachedRoundRectRgn(w, h, corners);
         SelectClipRgn(s_cachedOverlayDC, hClip);
         DrawSwitcherOverlayDynamicContent(s_cachedOverlayDC, targetWnd);
     } else {
@@ -14203,7 +14279,7 @@ static void PaintSwitcherOverlay() {
         if (s_cachedOverlayBits) {
             memset(s_cachedOverlayBits, 0, (size_t)w * h * sizeof(DWORD));
         }
-        HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+        HRGN hClip = GetCachedRoundRectRgn(w, h, corners);
         SelectClipRgn(s_cachedOverlayDC, hClip);
         DrawSwitcherOverlay(s_cachedOverlayDC, targetWnd);
     }
@@ -14238,7 +14314,7 @@ static void DrawScrollTransitionFrame(HDC hdc, int w, int h, bool includeSelecti
                 OffsetRect(&shadow, (int)roundf(g_dockPreviewSlide.currentOffset), 0);
                 alpha = g_dockPreviewSlide.currentAlpha;
             }
-            DrawThumbnailShadow(hdc, shadow, GetThumbnailCornerRadiusPx(), alpha);
+            DrawThumbnailShadow(hdc, shadow, GetThumbnailCornerRadiiPx(), alpha);
         }
     }
     int padX = DpiScale(g_settings.switcherPadding, g_dpiX);
@@ -14298,7 +14374,7 @@ static void PaintSwitcher() {
             if (!ready) return;
         }
 
-        int radius = GetWindowCornerRadiusPx();
+        CornerRadii corners = GetWindowCornerRadiiPx();
 
         // The final alpha mask owns rounding. A retained GDI region here would
         // clip settled frames differently from scroll frames at the corners.
@@ -14340,7 +14416,7 @@ static void PaintSwitcher() {
                             shadowRc.right += offX;
                             shadowAlphaMult = g_dockPreviewSlide.currentAlpha;
                         }
-                        DrawThumbnailShadow(s_cachedMemDC, shadowRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult);
+                        DrawThumbnailShadow(s_cachedMemDC, shadowRc, GetThumbnailCornerRadiiPx(), shadowAlphaMult);
                     }
                 } else {
                     if (g_layoutTransition.active) {
@@ -14348,7 +14424,7 @@ static void PaintSwitcher() {
                             const auto& e = g_windows[i];
                             if (e.rcThumbActual.right > e.rcThumbActual.left && !IsWindowTruncated((int)i)) {
                                 float itemAlpha = e.isNewEntry ? e.enterAlpha : 1.0f;
-                                DrawThumbnailShadow(s_cachedMemDC, e.rcThumbActual, GetThumbnailCornerRadiusPx(), itemAlpha);
+                                DrawThumbnailShadow(s_cachedMemDC, e.rcThumbActual, GetThumbnailCornerRadiiPx(), itemAlpha);
                             }
                         }
                     } else if (ThumbnailHoverIsZoom()) {
@@ -14359,7 +14435,7 @@ static void PaintSwitcher() {
                                 float shadowAlphaMult = (e.hoverScale - 1.0f) / SWS_HOVER_ZOOM_DELTA;
                                 if (shadowAlphaMult < 0.0f) shadowAlphaMult = 0.0f;
                                 if (shadowAlphaMult > 1.0f) shadowAlphaMult = 1.0f;
-                                DrawThumbnailShadow(s_cachedMemDC, scaledRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult, e.hoverScale);
+                                DrawThumbnailShadow(s_cachedMemDC, scaledRc, GetThumbnailCornerRadiiPx(), shadowAlphaMult, e.hoverScale);
                             }
                         }
                     }
@@ -14380,9 +14456,9 @@ static void PaintSwitcher() {
             }
             DrawScrollTransitionFrame(s_cachedMemDC, w, h, true);
         }
-        if (radius > 0) {
+        if (corners.Max() > 0) {
             RECT rcFull = { 0, 0, w, h };
-            MaskRectCorners(s_cachedMemDC, rcFull, radius);
+            MaskRectCorners(s_cachedMemDC, rcFull, corners);
         }
 
         POINT ptSrc = {0,0}; SIZE sz = {w, h};
@@ -14400,9 +14476,9 @@ static void PaintSwitcher() {
                 // cards jump to the target page while its thumbnails still move.
                 if (!g_scrollTransition.active) {
                     DrawSwitcherContent(s_cachedMemDC, true, hMirror);
-                    if (radius > 0) {
+                    if (corners.Max() > 0) {
                         RECT full = { 0, 0, w, h };
-                        MaskRectCorners(s_cachedMemDC, full, radius);
+                        MaskRectCorners(s_cachedMemDC, full, corners);
                     }
                 }
                 RECT mwr = {}; GetPresentationWindowRect(hMirror, &mwr);
@@ -14436,13 +14512,11 @@ static void CancelPendingShow() {
     g_showDelayDeadlineTick = 0;
     g_touchpadInvocation = false;
     g_keyboardPendingForegroundHandoff = false;
-    g_keyboardShellSource = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
     g_keyboardPendingAltRelease = false;
     g_keyboardPendingReleaseSource = KeyboardReleaseSource::None;
     g_keyboardReleaseProbeTick = 0;
     g_keyboardReleaseProbeSamples = 0;
-    g_keyboardHandoffRevealDeferralLogged = false;
     g_backdropSwitcherPresented = false;
     s_touchpadPending = false;
     s_touchpadRapidPendingTick = 0;
@@ -15405,8 +15479,18 @@ static void StopMouseHookThread() {
 // Kept in one place because both the pending-show reveal and the immediate show use it.
 static void PresentSwitcherWindows() {
     const bool touchpadPresentation = g_touchpadInvocation || g_isTouchpadGestureActive;
+    // Stage the painted primary HWND so the shell handoff can start before
+    // the switcher, its mirrors, and its overlay are exposed on screen.
+    if (s_sessionShell.window) {
+        s_stagingSwitcherOffscreen = true;
+        SetWindowPos(g_hSwitcher, nullptr, -32000, -32000, 0, 0,
+                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        ShowWindow(g_hSwitcher, SW_SHOWNA);
+        TryShellInvocationHandoff(ShellInvocationPhase::Reveal);
+    }
     // All HWNDs must carry frame zero before any of them becomes visible.
     ApplyPresentationWindowOffset();
+    s_stagingSwitcherOffscreen = false;
     ShowWindow(g_hSwitcher, SW_SHOWNA);
     HWND keyboardHandoffSource = nullptr;
     HWND touchpadHandoffSource = nullptr;
@@ -15414,8 +15498,9 @@ static void PresentSwitcherWindows() {
         // The switcher is visible and frame-zero painted before this eligibility
         // request. Do not steal focus during the hidden show-delay period.
         keyboardHandoffSource = GetForegroundWindow();
-        if (!g_keyboardPendingForegroundHandoffSucceeded ||
-            keyboardHandoffSource != g_hSwitcher) {
+        if (!s_sessionShell.window &&
+            (!g_keyboardPendingForegroundHandoffSucceeded ||
+             keyboardHandoffSource != g_hSwitcher)) {
             TapUnassignedKeyForForeground();
         }
     }
@@ -15425,38 +15510,31 @@ static void PresentSwitcherWindows() {
         touchpadHandoffSource = GetForegroundWindow();
         // Best-effort legacy foreground request; SendInput's return alone does
         // not prove last-input eligibility or routing across an elevated app.
-        if (GetForegroundWindow() != g_hSwitcher &&
+        if (!s_sessionShell.window && GetForegroundWindow() != g_hSwitcher &&
             (!s_nativeTouchpadInvocation.token || !s_nativeTouchpadInvocation.rawAdopted)) {
             TapUnassignedKeyForForeground();
         }
     }
-    BOOL foreground = GetForegroundWindow() == g_hSwitcher;
-    if (!foreground) foreground = SetForegroundWindow(g_hSwitcher);
-    const bool foregroundFallbackNeeded =
-        (touchpadPresentation || g_keyboardPendingForegroundHandoff ||
-         g_keyboardShellSource) &&
-        GetForegroundWindow() != g_hSwitcher;
-    if (foregroundFallbackNeeded) {
-        // Shell-source keyboard sessions can deny the supported foreground
-        // request even after the eligibility tap. Reuse the bounded legacy
-        // fallback already required by the touchpad path, then verify actual
-        // foreground ownership before allowing a protected commit.
-        SwitchToThisWindow(g_hSwitcher, TRUE);
-        foreground = GetForegroundWindow() == g_hSwitcher;
+    if (!s_sessionShell.window) {
+        if (GetForegroundWindow() != g_hSwitcher) SetForegroundWindow(g_hSwitcher);
+        if ((touchpadPresentation || g_keyboardPendingForegroundHandoff) &&
+            GetForegroundWindow() != g_hSwitcher) {
+            SwitchToThisWindow(g_hSwitcher, TRUE);
+        }
     }
-    if (touchpadPresentation) {
+    if (touchpadPresentation && !s_sessionShell.window) {
         const bool active = GetForegroundWindow() == g_hSwitcher;
         if (!active) {
-            Wh_Log(L"SWS: touchpad foreground handoff source=%p set=%d active=0",
-                   touchpadHandoffSource, foreground);
+            Wh_Log(L"SWS: touchpad foreground handoff source=%p active=0",
+                   touchpadHandoffSource);
         }
     }
     if (g_keyboardPendingForegroundHandoff && !touchpadPresentation) {
         g_keyboardPendingForegroundHandoffSucceeded =
             GetForegroundWindow() == g_hSwitcher;
-        if (!g_keyboardPendingForegroundHandoffSucceeded) {
-            Wh_Log(L"SWS: keyboard handoff after presentation source=%p set=%d active=0",
-                   keyboardHandoffSource, foreground);
+        if (!g_keyboardPendingForegroundHandoffSucceeded && !s_sessionShell.window) {
+            Wh_Log(L"SWS: keyboard handoff after presentation source=%p active=0",
+                   keyboardHandoffSource);
         }
     }
     // Mirrors already carry frame 0 (pushed by PaintSwitcher above); show them
@@ -15528,7 +15606,21 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
     // and frame-zero paint are staged. None changes WS_EX_LAYERED while visible,
     // which otherwise exposes one unpainted frame before PresentSwitcherWindows().
     if (IsWindowVisible(g_hSwitcher)) {
+        if (s_sessionShell.window && !g_touchpadInvocation) {
+            Wh_Log(L"SWS: shell keyboard staging hide source=%p foreground=%p altDown=%d",
+                   s_sessionShell.window, GetForegroundWindow(),
+                   (GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
+        }
+        const DWORD inputTick = s_sessionShell.window && GetForegroundWindow() == g_hSwitcher
+                                    ? LastShellInvocationInputTick() : 0;
         ShowWindow(g_hSwitcher, SW_HIDE);
+        if (inputTick && inputTick == LastShellInvocationInputTick()) {
+            HWND foreground = GetAncestor(GetForegroundWindow(), GA_ROOT);
+            if (foreground && !IsShellSurfaceWindow(foreground) && !IsSwitcherWindow(foreground)) {
+                s_shellInvocationReturn = ActivationWindow::Capture(foreground);
+                s_shellInvocationInputTick = inputTick;
+            }
+        }
     }
 
     // The raw reader can publish lift while the timer message is waiting in the
@@ -16063,7 +16155,10 @@ static void RememberCrossLineGoal(int offset, double slot) {
 }
 
 static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
-                         ULONGLONG invocationStartTick = 0) {
+                         ULONGLONG invocationStartTick = 0,
+                         PCWSTR shortcut = nullptr, DWORD shellAssistToken = 0,
+                         DWORD explorerPid = 0, bool useDesktopMru = false,
+                         bool forwardedAltTab = false) {
     const ULONGLONG invocationTick = invocationStartTick ? invocationStartTick :
                                      GetTickCount64();
     s_crossLineGoal.valid = false;
@@ -16072,28 +16167,38 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     InvalidateSwsFocusRecoverySession();
     ClearSwsSwitchAnimationSelection();
     // A new invocation supersedes a previous denied activation request.
-    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
-    s_touchpadActivationRetryTarget = NULL;
-    s_touchpadActivationRetryDeadline = 0;
-    s_touchpadCommitActivation = false;
-    s_shellDismissStartTick = 0;
+    StopShellInvocationHandoff();
+    ClearExitActivationRetry();
+    s_sessionShell = {};
+    s_shellInvocationState = ShellInvocationState::NotStarted;
     // Publish intent before layout/icon work so the raw reader can mark a
     // three-finger stroke during this invocation's scheduling window.
     g_touchpadSwitcherActive.store(true);
     PublishNativeSwipePolicy();
     HWND invocationInput = invocationSource ? invocationSource : GetForegroundWindow();
     HWND invocationWindow = CanonicalAltTabWindow(invocationInput);
-    const bool shellSource = IsShellSurfaceWindow(invocationInput);
+    HWND invocationRoot = invocationInput ? GetAncestor(invocationInput, GA_ROOT) : nullptr;
+    const bool shellSource = IsShellSurfaceWindow(invocationRoot);
+    if (shellSource) {
+        s_sessionShell = ActivationWindow::Capture(invocationRoot);
+        s_forwardedAltTabShellSession = forwardedAltTab;
+        Wh_Log(L"SWS: shell invocation source=%p via=%s visible=%d",
+               invocationRoot, shortcut ? shortcut : (touchpadInvocation ? L"touchpad" : L"other"),
+               IsWindowVisible(invocationRoot));
+        for (HWND candidate : g_mruWindows) {
+            HWND root = GetAncestor(candidate, GA_ROOT);
+            if (!root || !IsWindowVisible(root) || IsIconic(root) ||
+                IsShellSurfaceWindow(root)) continue;
+            s_shellInvocationReturn = ActivationWindow::Capture(root);
+            break;
+        }
+    }
     s_switchAnimationSource = invocationWindow;
     g_sameAppSessionKey[0] = L'\0';
     if (g_isAltBacktickSameApp) {
         GetWindowGroupKey(invocationWindow, g_sameAppSessionKey, ARRAYSIZE(g_sameAppSessionKey));
     }
-    int oldDwmRadius = g_systemDwmRadius;
-    int oldDwmSmallRadius = g_systemDwmSmallRadius;
-    DetectSystemDwmCornerRadius();
-    if (g_systemDwmRadius != oldDwmRadius ||
-        g_systemDwmSmallRadius != oldDwmSmallRadius) {
+    if (DetectSystemDwmCornerRadius()) {
         LoadSettings();
         if (g_hSwitcher) {
             ApplyThemeToWindow(g_hSwitcher);
@@ -16141,12 +16246,17 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     SWS_SetSessionEscHotkeys(true);
     g_drillInAfterReveal = false;
     g_selectedIndex = 0;
+    const bool desktopInitialSelection = !shellSource && useDesktopMru && !sticky &&
+                                         !touchpadInvocation && IsDesktopInvocationSource(invocationInput);
     // Sticky sessions and touchpad invocations (which step from entry 0 on their
     // own) keep the first entry. Alt+Tab starts on the entry after the current
     // window.
     if (!touchpadInvocation && !sticky) {
         const int invocationIndex = FindEntryContainingWindow(invocationWindow);
-        if (invocationIndex >= 0) {
+        if (desktopInitialSelection) {
+            // Select the second app, even when Desktop is a separate list entry.
+            if (g_windows.size() > 1 && !g_windows[1].isDesktopItem) g_selectedIndex = 1;
+        } else if (invocationIndex >= 0) {
             g_selectedIndex = (invocationIndex + 1) % (int)g_windows.size();
         } else if (shellSource) {
             // Start, Search and similar flyouts are not list entries. Entry 0 is
@@ -16174,6 +16284,11 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
         RefreshEntrySourceSize(w);
     }
     ComputeLayout(hMon);
+    if (desktopInitialSelection && g_selectedIndex > 0 && IsWindowTruncated(g_selectedIndex)) {
+        // Keep the initial highlight in view on layouts that fit only one entry.
+        g_layoutStartIndex = g_selectedIndex;
+        ComputeLayout(hMon);
+    }
     if (g_winW <= 0 || g_winH <= 0) {
         // A zero-sized layout means we never reveal. RegisterThumbnailsEarly above
         // already registered DWM thumbnails for the new list; release them so this
@@ -16215,11 +16330,13 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
 
     CancelPendingShow();
     g_touchpadInvocation = touchpadInvocation;
-    TouchpadProcessSecurity keyboardSourceSecurity{}, keyboardSelfSecurity{};
+    if (s_sessionShell.window && !touchpadInvocation && shellAssistToken && explorerPid &&
+        SetPropW(g_hSwitcher, SWS_SHELL_ASSIST_PROP, ULongToHandle(shellAssistToken))) {
+        s_shellAssistToken = shellAssistToken;
+        s_shellAssistExplorerPid = explorerPid;
+    }
     g_keyboardPendingForegroundHandoff =
-        !touchpadInvocation && ForegroundRequiresKeyboardHandoff(
-            invocationInput, &keyboardSourceSecurity, &keyboardSelfSecurity);
-    g_keyboardShellSource = !touchpadInvocation && shellSource;
+        !touchpadInvocation && ForegroundRequiresKeyboardHandoff(invocationInput);
 
     MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
     int cx, cy;
@@ -16272,24 +16389,14 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
         } else {
             // Non-layered (Mica / Acrylic): Keep window off-screen during grace period
             // to avoid corrupting DWM hardware backdrop state with WS_EX_LAYERED.
+            s_stagingSwitcherOffscreen = true;
             SetWindowPos(g_hSwitcher, HWND_TOPMOST, -32000, -32000, g_winW, g_winH, SWP_NOACTIVATE);
+            s_stagingSwitcherOffscreen = false;
         }
         ShowWindow(g_hSwitcher, SW_SHOWNA);
-        if (g_keyboardShellSource) {
-            // Shell flyouts keep the foreground right and swallow the following
-            // Tab/Alt-up input. Claim the foreground now, while the hotkey grant
-            // is fresh, so the commit-time activation of the target is allowed.
-            if (!SetForegroundWindow(g_hSwitcher) &&
-                GetForegroundWindow() != g_hSwitcher) {
-                SwitchToThisWindow(g_hSwitcher, TRUE);
-            }
-            if (GetForegroundWindow() != g_hSwitcher) {
-                Wh_Log(L"SWS: shell surface foreground claim failed source=%p", invocationInput);
-            }
-        }
-        // Keep source window foreground during show-delay. WM_HOTKEY is delivered
-        // to this HWND while hidden/off-screen, and the Alt poll timer detects
-        // release. Activation happens after visible presentation.
+        // Keep WM_HOTKEY and the Alt poll available during staging. Keyboard
+        // sessions defer foreground activation until after the last layout hide.
+        TryShellInvocationHandoff(ShellInvocationPhase::Staging);
 
         if (g_hCloseBtnWnd) {
             ShowWindow(g_hCloseBtnWnd, SW_HIDE);
@@ -16363,6 +16470,7 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
 
 static void HideSwitcher() {
     if (g_isHidingSwitcher) return;
+    StopShellInvocationHandoff();
     // Never lose a commit that was waiting for the exit fade (for example when a
     // new gesture interrupts the fade).
     RunDeferredExitActivation();
@@ -16460,7 +16568,6 @@ static void HideSwitcher() {
     g_isVisible = false;
     g_isPendingShow = false;
     g_keyboardPendingForegroundHandoff = false;
-    g_keyboardShellSource = false;
     g_keyboardPendingForegroundHandoffSucceeded = false;
     g_keyboardPendingAltRelease = false;
     g_keyboardReleaseProbeTick = 0;
@@ -16503,9 +16610,25 @@ static void HideSwitcher() {
     RefreshTouchpadGestureKinds();
 }
 
-// Never wait synchronously on another application's window procedure. These
-// requests remain subject to UIPI; a queued restore is not proof of activation.
+static bool QueueNativeWindowRestore(HWND hWnd) {
+    auto identity = s_shellCommitDeadline ? ActivationWindow::Capture(hWnd) : ActivationWindow{};
+    if (!ShowWindowAsync(hWnd, SW_RESTORE)) {
+        PostMessageW(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+    }
+    if (!s_shellCommitDeadline) return false;
+    if (identity.window) s_shellNativeRestoreWindows.push_back(identity);
+    return true;
+}
+
+static bool HasShellNativeRestoreRequest(HWND hWnd) {
+    return std::any_of(s_shellNativeRestoreWindows.begin(), s_shellNativeRestoreWindows.end(),
+                       [hWnd](const ActivationWindow& request) { return request.Matches(hWnd); });
+}
+
+// A queued restore is not proof of activation. During a shell handoff wait
+// for Windows to process it before issuing any separate activation request.
 static bool RestoreWindowIfIconic(HWND hWnd) {
+    if (HasShellNativeRestoreRequest(hWnd)) return IsIconic(hWnd);
     for (auto& request : s_ownerRestoreRequests) {
         if (request.window != hWnd) continue;
         DWORD processId = 0;
@@ -16530,11 +16653,7 @@ static bool RestoreWindowIfIconic(HWND hWnd) {
             GetTickCount64() - request.submittedAt >= 1000 &&
             !ownerRestoreActive && !animationActive) {
             request.nativeFallback = true;
-            BOOL asyncRestore = ShowWindowAsync(hWnd, SW_RESTORE);
-            if (!asyncRestore) {
-                PostMessageW(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
-            }
-            return false;
+            return QueueNativeWindowRestore(hWnd);
         }
         return IsIconic(hWnd) || ownerRestoreActive || animationActive;
     }
@@ -16566,52 +16685,325 @@ static bool RestoreWindowIfIconic(HWND hWnd) {
         }
     }
 
-    BOOL asyncRestore = ShowWindowAsync(hWnd, SW_RESTORE);
-    if (!asyncRestore) {
-        PostMessageW(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+    return QueueNativeWindowRestore(hWnd);
+}
+
+// Only dismiss the flyout from this invocation, even if another shell surface
+// takes foreground while activation is pending.
+static bool SessionShellHoldsForeground() {
+    return s_sessionShell.Matches(GetAncestor(GetForegroundWindow(), GA_ROOT));
+}
+
+static bool ShellDismissInputDown() {
+    constexpr int keys[] = {VK_MENU, VK_CONTROL, VK_SHIFT, VK_LWIN, VK_RWIN, VK_ESCAPE};
+    for (int key : keys) {
+        if (GetAsyncKeyState(key) & 0x8000) return true;
     }
-    return false;
+    return ExplicitShellInputDown();
 }
 
-// Shell flyouts lock the foreground against background processes and only the
-// physical Alt key lifts the lock, which a touchpad gesture does not produce.
-// Closing the flyout is a system-initiated foreground change, so the commit
-// closes it first and activates the target once it is gone.
-static bool ShellSurfaceHoldsForeground() {
-    HWND hForeground = GetForegroundWindow();
-    return hForeground && hForeground != g_hSwitcher &&
-           IsShellSurfaceWindow(hForeground);
+static void PostEscapeToSessionShellFocus() {
+    if (!(GetAsyncKeyState(VK_MENU) & 0x8000) ||
+        (GetAsyncKeyState(VK_CONTROL) & 0x8000) ||
+        (GetAsyncKeyState(VK_SHIFT) & 0x8000) ||
+        (GetAsyncKeyState(VK_ESCAPE) & 0x8000) ||
+        ExplicitShellInputDown() || !SessionShellHoldsForeground()) return;
+
+    GUITHREADINFO info{sizeof(info)};
+    if (!GetGUIThreadInfo(s_sessionShell.thread, &info) || !info.hwndFocus ||
+        info.hwndFocus == s_sessionShell.window ||
+        GetAncestor(info.hwndFocus, GA_ROOT) != s_sessionShell.window) return;
+
+    // Windowless XAML handles Escape in its focused input window. Posting
+    // directly lets it dismiss the flyout without injecting system Alt+Esc.
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(info.hwndFocus, &pid) || pid != s_sessionShell.process ||
+        !SessionShellHoldsForeground()) return;
+    const LPARAM key = 1 | (MapVirtualKeyW(VK_ESCAPE, MAPVK_VK_TO_VSC) << 16);
+    if (PostMessageW(info.hwndFocus, WM_KEYDOWN, VK_ESCAPE, key)) {
+        PostMessageW(info.hwndFocus, WM_KEYUP, VK_ESCAPE,
+                     static_cast<LPARAM>(static_cast<DWORD>(key) | 0xC0000000u));
+    }
 }
 
-static void TapEscapeKey() {
+static DWORD TapEscapeKey() {
     INPUT inputs[2] = {};
     inputs[0].type = INPUT_KEYBOARD;
     inputs[0].ki.wVk = VK_ESCAPE;
+    inputs[0].ki.time = GetTickCount();
     inputs[1] = inputs[0];
     inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
-    SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
+    return SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT)) == ARRAYSIZE(inputs)
+               ? inputs[0].ki.time : 0;
 }
 
 #define SWS_SHELL_DISMISS_RESEND_MS 350
 #define SWS_SHELL_DISMISS_TIMEOUT_MS 1200
 
+// Launch and commit share a single Escape budget for the original flyout.
+static DWORD TryDismissSessionShell(ULONGLONG now) {
+    if (ShellDismissInputDown() || !SessionShellHoldsForeground()) return 0;
+    if (!s_shellDismissStartTick) {
+        s_shellDismissStartTick = now;
+    } else if (!s_shellDismissResent &&
+               now - s_shellDismissStartTick >= SWS_SHELL_DISMISS_RESEND_MS) {
+        s_shellDismissResent = true;
+    } else {
+        return 0;
+    }
+    DWORD inputTick = TapEscapeKey();
+    if (inputTick) s_shellNeedsEligibility = true;
+    return inputTick;
+}
+
+static void CancelForwardedShellAssist() {
+    if (s_shellAssistToken && g_hSwitcher) RemovePropW(g_hSwitcher, SWS_SHELL_ASSIST_PROP);
+    s_shellAssistToken = 0;
+    s_shellAssistExplorerPid = 0;
+}
+
+static void RequestExplorerShellAssist() {
+    const DWORD token = s_shellAssistToken;
+    if (!token || GetPropW(g_hSwitcher, SWS_SHELL_ASSIST_PROP) != ULongToHandle(token)) return;
+
+    HWND ipc = FindWindowExW(HWND_MESSAGE, nullptr, L"WindhawkSWS_IpcWindow", nullptr);
+    DWORD pid = 0;
+    if (ipc) GetWindowThreadProcessId(ipc, &pid);
+    bool posted = pid == s_shellAssistExplorerPid && pid == ShellProcessId() &&
+                  SetPropW(g_hSwitcher, SWS_SHELL_ASSIST_PROP, ULongToHandle(token | kShellAssistReady)) &&
+                  PostMessageW(ipc, WM_SWS_EXPLORER_SHELL_ASSIST, token,
+                               reinterpret_cast<LPARAM>(s_sessionShell.window));
+    if (!posted) CancelForwardedShellAssist();
+    Wh_Log(L"SWS: shell invocation Explorer assist source=%p token=%u posted=%d",
+           s_sessionShell.window, token, posted);
+}
+
+static void StopShellInvocationHandoff() {
+    CancelForwardedShellAssist();
+    s_forwardedAltTabShellSession = false;
+    if (s_shellInvocationDeadline && g_hSwitcher) {
+        KillTimer(g_hSwitcher, SWS_SHELL_INVOCATION_TIMER_ID);
+    }
+    s_shellInvocationDeadline = 0;
+    s_shellInvocationReturn = {};
+    s_shellInvocationInputTick = 0;
+}
+
+static DWORD LastShellInvocationInputTick() {
+    LASTINPUTINFO input{sizeof(input), 0};
+    return GetLastInputInfo(&input) ? input.dwTime : 0;
+}
+
+static bool SessionShellIsVisible() {
+    HWND shell = s_sessionShell.window;
+    if (!s_sessionShell.Matches(shell) || !IsWindowVisible(shell)) return false;
+    DWORD cloaked = 0;
+    return FAILED(DwmGetWindowAttribute(shell, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) ||
+           !cloaked;
+}
+
+static void TryShellInvocationHandoff(ShellInvocationPhase phase) {
+    if (!s_sessionShell.window || g_animExitActive || !IsWindowVisible(g_hSwitcher) ||
+        (phase == ShellInvocationPhase::Staging && !g_touchpadInvocation) ||
+        s_shellInvocationState == ShellInvocationState::Abandoned) return;
+    const bool presentation = phase != ShellInvocationPhase::Poll;
+    if (!presentation && !s_shellInvocationDeadline) return;
+
+    const ULONGLONG now = GetTickCount64();
+    const bool firstAttempt = s_shellInvocationState == ShellInvocationState::NotStarted;
+    if (firstAttempt) {
+        s_shellInvocationState = ShellInvocationState::AwaitingForeground;
+        s_shellInvocationDeadline = now + SWS_SHELL_DISMISS_TIMEOUT_MS;
+        if (!SetTimer(g_hSwitcher, SWS_SHELL_INVOCATION_TIMER_ID, 40, nullptr)) {
+            StopShellInvocationHandoff();
+        }
+    }
+
+    const HWND shell = s_sessionShell.window;
+    const bool transferred = s_shellInvocationState == ShellInvocationState::Observing;
+    HWND foreground = GetAncestor(GetForegroundWindow(), GA_ROOT);
+    if (presentation && !transferred && s_sessionShell.Matches(foreground)) {
+        BOOL granted = SetForegroundWindow(g_hSwitcher);
+        if (!granted && SessionShellHoldsForeground()) {
+            SwitchToThisWindow(g_hSwitcher, TRUE);
+        }
+        foreground = GetAncestor(GetForegroundWindow(), GA_ROOT);
+        Wh_Log(L"SWS: shell invocation claim source=%p staging=%d set=%d foreground=%p",
+               shell, phase == ShellInvocationPhase::Staging, granted, foreground);
+        if (phase == ShellInvocationPhase::Reveal && s_sessionShell.Matches(foreground)) {
+            RequestExplorerShellAssist();
+        }
+    }
+
+    if (!s_sessionShell.Matches(foreground) && !IsSwitcherWindow(foreground) &&
+        s_shellInvocationInputTick && s_shellInvocationReturn.Matches(foreground) &&
+        LastShellInvocationInputTick() == s_shellInvocationInputTick &&
+        (!transferred || phase == ShellInvocationPhase::Reveal)) {
+        // The flyout yielded to the pre-flyout MRU window, or hiding the staged
+        // switcher during layout returned focus there. New input cancels this claim.
+        s_shellInvocationInputTick = 0;
+        if (s_shellNeedsEligibility && !ShellDismissInputDown()) {
+            TapUnassignedKeyForForeground();
+            s_shellNeedsEligibility = false;
+        }
+        SetForegroundWindow(g_hSwitcher);
+        foreground = GetAncestor(GetForegroundWindow(), GA_ROOT);
+    }
+
+    if (IsSwitcherWindow(foreground) && !transferred) {
+        CancelForwardedShellAssist();
+        s_shellInvocationState = ShellInvocationState::Observing;
+        s_shellInvocationInputTick = 0;
+        Wh_Log(L"SWS: shell invocation foreground transferred source=%p foreground=%p",
+               shell, foreground);
+    }
+    const bool visible = SessionShellIsVisible();
+    if (phase == ShellInvocationPhase::Reveal) {
+        Wh_Log(L"SWS: shell invocation reveal source=%p visible=%d foreground=%p",
+               shell, visible, foreground);
+    }
+    // Windows can hide the flyout before assigning foreground to a new HWND.
+    // Keep the return identity until that transition settles or times out.
+    const bool stillForeground = s_sessionShell.Matches(foreground);
+    const bool dismissed = !visible && foreground && !stillForeground;
+    if (dismissed && (s_shellInvocationDeadline || firstAttempt)) {
+        Wh_Log(L"SWS: shell invocation dismissed source=%p foreground=%p", shell, foreground);
+    }
+    if (foreground && !stillForeground && !IsSwitcherWindow(foreground)) {
+        s_shellInvocationState = ShellInvocationState::Abandoned;
+    }
+    if (dismissed || s_shellInvocationState == ShellInvocationState::Abandoned) {
+        StopShellInvocationHandoff();
+        return;
+    }
+    if (!s_shellInvocationDeadline) return;
+    if (now >= s_shellInvocationDeadline) {
+        Wh_Log(L"SWS: shell invocation dismissal timed out source=%p visible=%d transferred=%d foreground=%p",
+               shell, visible, s_shellInvocationState == ShellInvocationState::Observing,
+               foreground);
+        StopShellInvocationHandoff();
+        return;
+    }
+    // Once the switcher takes foreground, only observe the shell closing. Never
+    // send delayed input to a surface that opens or regains focus afterward.
+    if (!visible || s_shellInvocationState == ShellInvocationState::Observing ||
+        !SessionShellHoldsForeground()) return;
+    if (firstAttempt) {
+        s_shellInvocationInputTick = LastShellInvocationInputTick();
+        if (SessionShellHoldsForeground()) {
+            BOOL posted = PostMessageW(shell, WM_CANCELMODE, 0, 0);
+            Wh_Log(L"SWS: shell invocation cancel mode source=%p posted=%d", shell, posted);
+        }
+        if (phase == ShellInvocationPhase::Reveal && s_forwardedAltTabShellSession) {
+            PostEscapeToSessionShellFocus();
+        }
+    }
+    if (DWORD inputTick = TryDismissSessionShell(now)) s_shellInvocationInputTick = inputTick;
+}
+
+static void ScheduleExitActivationRetry(HWND target, UINT timeout) {
+    auto identity = ActivationWindow::Capture(target);
+    if (!g_hSwitcher || !identity.window ||
+        !SetTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID, 40, NULL)) {
+        ClearExitActivationRetry();
+        return;
+    }
+    s_activationRetryWindow = identity;
+    s_touchpadActivationRetryDeadline = GetTickCount64() + timeout;
+    s_touchpadActivationRetryTarget = target;
+}
+
 static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreWindows) {
     if (!hTarget || !IsWindow(hTarget)) {
         ClearPendingActivationListTarget();
         ClearSwsSwitchAnimationSelection();
-        s_touchpadCommitActivation = false;
+        ClearExitActivationRetry();
         return;
-    }
-
-    for (HWND hWindow : restoreWindows) {
-        if (IsWindow(hWindow) && hWindow != hTarget && IsIconic(hWindow)) {
-            ShowWindowAsync(hWindow, SW_SHOWNOACTIVATE);
-        }
     }
 
     const bool retrying = s_touchpadActivationRetryTarget != NULL;
     HWND hPopup = GetLastActivePopup(hTarget);
-    HWND hForegroundTarget = IsWindowVisible(hPopup) ? hPopup : hTarget;
+    HWND hForegroundTarget =
+        IsWindowVisible(hPopup) && GetAncestor(hPopup, GA_ROOTOWNER) ==
+                                      GetAncestor(hTarget, GA_ROOTOWNER)
+            ? hPopup : hTarget;
+    if (s_sessionShell.window && !retrying) {
+        s_shellCommitDeadline = GetTickCount64() + SWS_SHELL_DISMISS_TIMEOUT_MS;
+        for (HWND sibling : restoreWindows) {
+            if (sibling == hTarget || !IsIconic(sibling)) continue;
+            if (auto identity = ActivationWindow::Capture(sibling); identity.window) {
+                s_shellGroupRestoreWindows.push_back(identity);
+            }
+        }
+        HWND foreground = GetAncestor(GetForegroundWindow(), GA_ROOT);
+        if (!s_sessionShell.Matches(foreground) && !IsSwitcherWindow(foreground) &&
+            !IsShellSurfaceWindow(foreground)) {
+            s_shellCommitFallback = ActivationWindow::Capture(foreground);
+        }
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (s_shellCommitDeadline) {
+        HWND foreground = GetAncestor(GetForegroundWindow(), GA_ROOT);
+        if (s_sessionShell.Matches(foreground)) {
+            s_shellForegroundConfirmTick = 0;
+            if (now >= s_shellCommitDeadline) {
+                Wh_Log(L"SWS: shell commit dismissal timed out source=%p target=%p",
+                       foreground, hTarget);
+                ClearExitActivationRetry();
+                return;
+            }
+            TryDismissSessionShell(now);
+            if (!retrying) ScheduleExitActivationRetry(hTarget, 1800);
+            return;
+        }
+        // Dismissing a flyout can return focus to the previous application.
+        // Allow that first transition and record it for subsequent retries.
+        if (foreground && foreground != hTarget && foreground != hForegroundTarget &&
+            !IsSwitcherWindow(foreground)) {
+            if (s_shellForegroundConfirmTick) {
+                // Once Windows activated the selection, leaving it for a
+                // different app is a new focus change, even for the app
+                // the flyout initially returned to.
+                ClearExitActivationRetry();
+                return;
+            }
+            if (!s_shellCommitFallback.Matches(foreground)) {
+                if (s_shellCommitFallback.window || IsShellSurfaceWindow(foreground)) {
+                    ClearExitActivationRetry();
+                    return;
+                }
+                s_shellCommitFallback = ActivationWindow::Capture(foreground);
+            }
+        }
+        if (s_shellNeedsEligibility && !ShellDismissInputDown()) {
+            TapUnassignedKeyForForeground();
+            s_shellNeedsEligibility = false;
+        }
+    }
+    if (!retrying && s_touchpadCommitActivation) {
+        TapUnassignedKeyForForeground();
+        if (!s_sessionShell.window && s_altSessionOwner &&
+            !g_isTouchpadGestureActive && !s_rawSessionOwned &&
+            GetForegroundWindow() != g_hSwitcher) {
+            SetForegroundWindow(g_hSwitcher);
+            if (GetForegroundWindow() != g_hSwitcher) SwitchToThisWindow(g_hSwitcher, TRUE);
+        }
+    }
+    if (s_shellCommitDeadline) {
+        for (const auto& sibling : s_shellGroupRestoreWindows) {
+            if (sibling.Matches(sibling.window) && IsIconic(sibling.window)) {
+                ShowWindowAsync(sibling.window, SW_SHOWNOACTIVATE);
+            }
+        }
+        s_shellGroupRestoreWindows.clear();
+    } else if (!retrying) {
+        for (HWND hWindow : restoreWindows) {
+            if (IsWindow(hWindow) && hWindow != hTarget && IsIconic(hWindow)) {
+                ShowWindowAsync(hWindow, SW_SHOWNOACTIVATE);
+            }
+        }
+    }
+
     SwsOwnerRestoreRequest rootFallback{};
     if (s_touchpadActivationRetryTarget == hTarget) {
         for (const auto& request : s_ownerRestoreRequests) {
@@ -16636,106 +17028,42 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
             }
         }
     }
-    bool ownerRestorePending = RestoreWindowIfIconic(hTarget);
+    bool restorePending = RestoreWindowIfIconic(hTarget);
     if (hForegroundTarget != hTarget) {
-        ownerRestorePending = RestoreWindowIfIconic(hForegroundTarget) ||
-                              ownerRestorePending;
+        restorePending = RestoreWindowIfIconic(hForegroundTarget) || restorePending;
     }
-    if (s_touchpadCommitActivation && !retrying) {
-        const bool keyboardCommit = s_altSessionOwner &&
-                                    !g_isTouchpadGestureActive &&
-                                    !s_rawSessionOwned;
-        if (!keyboardCommit && ShellSurfaceHoldsForeground()) {
-            HWND shellForeground = GetForegroundWindow();
-            TapEscapeKey();
-            s_shellDismissStartTick = GetTickCount64();
-            s_shellDismissResent = false;
-            Wh_Log(L"SWS: shell surface dismiss before activate fg=%p target=%p",
-                   shellForeground, hForegroundTarget);
-        } else {
-            // Make one foreground-eligibility request for this handoff, not one
-            // synthetic key for every rejected retry (which can keep stealing
-            // last-input eligibility while a different app owns the foreground).
-            TapUnassignedKeyForForeground();
-            if (keyboardCommit && GetForegroundWindow() != g_hSwitcher) {
-                // SearchHost and Start can remain foreground after the switcher
-                // is created. Reclaim foreground once at commit time, while this
-                // keyboard session still owns the input handoff, before
-                // activating the selected application.
-                SetForegroundWindow(g_hSwitcher);
-                if (GetForegroundWindow() != g_hSwitcher) {
-                    SwitchToThisWindow(g_hSwitcher, TRUE);
-                }
-                if (GetForegroundWindow() != g_hSwitcher) {
-                    Wh_Log(L"SWS: shell surface foreground reclaim failed target=%p", hForegroundTarget);
-                }
-            }
+    s_exitRestorePending = restorePending;
+    if (restorePending && s_shellCommitDeadline && !s_shellRestoreWaitStarted) {
+        s_shellRestoreWaitStarted = true;
+        if (retrying) s_touchpadActivationRetryDeadline = GetTickCount64() + 3000;
+    }
+    if (!restorePending && GetForegroundWindow() != hForegroundTarget) {
+        if (!SetForegroundWindow(hForegroundTarget) && s_shellNativeRestoreWindows.empty()) {
+            SwitchToThisWindow(hForegroundTarget, TRUE);
         }
     }
-    bool dismissWait = false;
-    if (s_shellDismissStartTick) {
-        const ULONGLONG elapsed = GetTickCount64() - s_shellDismissStartTick;
-        if (elapsed < SWS_SHELL_DISMISS_TIMEOUT_MS && ShellSurfaceHoldsForeground()) {
-            // Activating now would be denied. Wait for the flyout to close; a
-            // Search box with text may need a second Escape.
-            dismissWait = true;
-            if (!s_shellDismissResent && elapsed > SWS_SHELL_DISMISS_RESEND_MS) {
-                s_shellDismissResent = true;
-                TapEscapeKey();
-            }
-        } else {
-            Wh_Log(L"SWS: shell surface dismiss done=%d after %llums target=%p",
-                   !ShellSurfaceHoldsForeground(), elapsed, hForegroundTarget);
-            s_shellDismissStartTick = 0;
-            // The dismissal reset the input state, so ask for foreground
-            // eligibility again right before the activation.
-            TapUnassignedKeyForForeground();
-        }
-    }
-    const bool alreadyForeground = !ownerRestorePending && !dismissWait &&
-                                   GetForegroundWindow() == hForegroundTarget;
-    bool activationSkipped = alreadyForeground;
-    BOOL foregroundOk = alreadyForeground;
-    if (!ownerRestorePending && !dismissWait && !alreadyForeground) {
-        foregroundOk = SetForegroundWindow(hForegroundTarget);
-        if (!foregroundOk) SwitchToThisWindow(hForegroundTarget, TRUE);
-    }
-    bool active = !ownerRestorePending && !dismissWait &&
-                  GetForegroundWindow() == hForegroundTarget;
-    if (!active || ownerRestorePending) {
+    const bool active = !restorePending && GetForegroundWindow() == hForegroundTarget;
+    if (!active) {
         s_pendingActivationListTarget = hTarget;
         s_pendingActivationListDeadline = GetTickCount64() +
             SWS_WINDOW_LIST_RECONCILE_TIMEOUT_MS;
     } else {
         ClearPendingActivationListTarget();
     }
-    if (!retrying || active) {
-        if (!active && !dismissWait) {
-            Wh_Log(L"SWS: activate %p -> SetForegroundWindow=%d active=0 skipped=%d",
-                   hForegroundTarget, foregroundOk, activationSkipped);
-        }
+    if (active && s_shellCommitDeadline && !s_shellForegroundConfirmTick) {
+        s_shellForegroundConfirmTick = now + 120;
     }
-    if (active) {
-        s_touchpadActivationRetryTarget = NULL;
-        s_touchpadActivationRetryDeadline = 0;
-        s_shellDismissStartTick = 0;
-        if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
-        UpdateMruWindow(hTarget);
-        s_touchpadCommitActivation = false;
-    } else if (g_hSwitcher && ((!g_isVisible && !g_isPendingShow) || g_animExitActive ||
-                               dismissWait)) {
-        // Foreground activation may be denied transiently after the raw input
-        // process releases the switcher, or while the visual exit is still
-        // running. Retry without blocking this message pump; never attach to
-        // or send synchronously to the target thread.
-        if (!retrying) {
-            // The absolute deadline is established once. Resetting it here on
-            // each failed attempt made the 600 ms retry run for many seconds.
-            s_touchpadActivationRetryDeadline = GetTickCount64() +
-                (ownerRestorePending ? 3000u : (dismissWait ? 1800u : 600u));
-            SetTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID, 40, NULL);
+    const bool confirming = active && s_shellForegroundConfirmTick > now;
+    if (active && !confirming) {
+        if (s_shellCommitDeadline) {
+            Wh_Log(L"SWS: shell commit confirmed source=%p target=%p",
+                   s_sessionShell.window, hForegroundTarget);
         }
-        s_touchpadActivationRetryTarget = ownerRestorePending ? hTarget : hForegroundTarget;
+        ClearExitActivationRetry();
+        UpdateMruWindow(hTarget);
+    } else if (!retrying && ((!g_isVisible && !g_isPendingShow) || g_animExitActive || confirming)) {
+        ScheduleExitActivationRetry(
+            hTarget, restorePending ? 3000u : (s_shellCommitDeadline ? 1800u : 600u));
     }
 }
 
@@ -16781,13 +17109,15 @@ static void ShowDesktop() {
 
 static void StartExitAnimation(bool activateSelectedWindow) {
     if ((!g_isVisible && !g_isPendingShow) || g_animExitActive) return;
+    StopShellInvocationHandoff();
     g_backdropPresentationClosing = true;
     g_backdropSwitcherPresented = false;
     CancelTwoFingerTapDismiss();
     ClearStickyTwoFingerTapOwnership();
     g_touchpadTwoFingerCloseActive.store(false);
     if (!activateSelectedWindow) {
-        s_touchpadCommitActivation = false;
+        ClearExitActivationRetry();
+        s_sessionShell = {};
         ClearSwsSwitchAnimationSelection();
     }
     // A lift during cancellation must not commit; continuing the cancelled
@@ -17026,9 +17356,6 @@ static bool DeferKeyboardHandoffCommit() {
         MarkKeyboardReleaseCandidate(KeyboardReleaseSource::ExplicitKeyUp);
     }
     if (TryCommitProtectedRapidKeyboardRelease()) return true;
-    if (!g_keyboardHandoffRevealDeferralLogged) {
-        g_keyboardHandoffRevealDeferralLogged = true;
-    }
     KeepAltReleasePolling();
     return true;
 }
@@ -19114,6 +19441,10 @@ static void RunSwsFocusRecovery(ULONG_PTR generation) {
     if (request.unspecifiedFocus &&
         (IsNativeSwitcherWindow(foreground) ||
          GetTickCount64() - s_lastTouchpadScrollTick.load(std::memory_order_acquire) < 1200)) return;
+    if (s_sessionShell.window && !g_touchpadInvocation) {
+        Wh_Log(L"SWS: shell keyboard cancel reason=focus-loss source=%p foreground=%p altDown=%d",
+               s_sessionShell.window, foreground, (GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
+    }
     StartExitAnimation(false);
 }
 
@@ -19569,7 +19900,7 @@ static void BeginTouchpadGesture(int step, bool sticky = false) {
     }
     RevealPendingSwitcher();
     if (g_hSwitcher && (g_isVisible || g_isPendingShow)) {
-        if (g_isVisible && GetForegroundWindow() != g_hSwitcher &&
+        if (!s_sessionShell.window && g_isVisible && GetForegroundWindow() != g_hSwitcher &&
             !ActivateRawTouchpadWindow()) {
             ScheduleRawTouchpadForegroundRetry();
         }
@@ -20374,7 +20705,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos,
             if (!g_isVisible && !g_isPendingShow) return;
             PromoteRawTouchpadShieldToSession();
             PublishRawSwipe();
-            if (!openedHorizontal && g_isVisible && g_hSwitcher &&
+            if (!openedHorizontal && !s_sessionShell.window && g_isVisible && g_hSwitcher &&
                 GetForegroundWindow() != g_hSwitcher) {
                 // The immediate fallback has no pending presentation handoff.
                 TapUnassignedKeyForForeground();
@@ -20440,7 +20771,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos,
                 }
                 PromoteRawTouchpadShieldToSession();
                 PublishRawSwipe();
-                if (g_isVisible && GetForegroundWindow() != g_hSwitcher) {
+                if (!s_sessionShell.window && g_isVisible && GetForegroundWindow() != g_hSwitcher) {
                     ActivateRawTouchpadWindow();
                 }
                 // This opening stroke must not also drill into a group.
@@ -20555,6 +20886,35 @@ static void HandleQueuedRawTouchpadFrame(WPARAM wParam) {
 }
 
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    const bool forwardedHotkey = uMsg == WM_SWS_EXPLORER_HOTKEY;
+    DWORD forwardedAssistToken = 0;
+    if (forwardedHotkey) {
+        if (hWnd != g_hSwitcher || !GetPropW(hWnd, SWS_HOTKEY_POLICY_PROP) ||
+            wParam > MAXDWORD) return 0;
+        forwardedAssistToken = static_cast<DWORD>(wParam >> 8);
+        // The low byte keeps the chord ID and lParam keeps the Explorer PID.
+        // Older Explorer builds send the ID alone, which decodes to token zero.
+        wParam &= 0xFF;
+        for (const auto& chord : kTabHotkeys) {
+            if (wParam == static_cast<WPARAM>(chord.id)) {
+                DWORD shellPid = static_cast<DWORD>(lParam);
+                if (shellPid != s_forwardedHotkeyShellPid) {
+                    s_forwardedHotkeyShellPid = shellPid;
+                    s_forwardedHotkeys = 0;
+                }
+                s_forwardedHotkeys |= 1u << chord.id;
+                uMsg = WM_HOTKEY;
+                break;
+            }
+        }
+        if (uMsg != WM_HOTKEY) return 0;
+    }
+    if (g_taskbarCreatedMessage && uMsg == g_taskbarCreatedMessage && hWnd == g_hSwitcher) {
+        CancelForwardedShellAssist();
+        s_forwardedHotkeys = 0;
+        SWS_RegisterHotkeys();
+        return 0;
+    }
     // Composed material windows follow their surface: position, size, z-order
     // and visibility. Processing continues below.
     if (!g_composedMaterials.empty()) {
@@ -20675,8 +21035,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
     }
 
-    // Mirrors and the layered control overlay must receive mouse input without
-    // becoming the active SWS window. The main window remains the keyboard owner.
     if (uMsg == WM_MOUSEACTIVATE && hWnd != g_hSwitcher) {
         return MA_NOACTIVATE;
     }
@@ -20839,17 +21197,36 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             return 0;
         }
 
+        if (wParam == SWS_SHELL_INVOCATION_TIMER_ID) {
+            if (!s_shellInvocationDeadline || g_animExitActive || (!g_isVisible && !g_isPendingShow)) {
+                StopShellInvocationHandoff();
+            } else {
+                TryShellInvocationHandoff(ShellInvocationPhase::Poll);
+            }
+            return 0;
+        }
         if (wParam == SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID) {
+            const bool timedOut = s_touchpadActivationRetryTarget &&
+                                  GetTickCount64() >= s_touchpadActivationRetryDeadline;
             if (((g_isVisible || g_isPendingShow) && !g_animExitActive) ||
                 !s_touchpadActivationRetryTarget ||
-                !IsWindow(s_touchpadActivationRetryTarget) ||
-                GetTickCount64() >= s_touchpadActivationRetryDeadline ||
-                ExplicitShellInputDown()) {
-                KillTimer(hWnd, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
-                s_touchpadActivationRetryTarget = NULL;
-                s_touchpadActivationRetryDeadline = 0;
-                s_touchpadCommitActivation = false;
-                s_shellDismissStartTick = 0;
+                !s_activationRetryWindow.Matches(s_touchpadActivationRetryTarget) ||
+                timedOut ||
+                (ExplicitShellInputDown() &&
+                 (!s_shellCommitDeadline ||
+                  (GetAsyncKeyState(VK_LBUTTON) & 0x8000) ||
+                  (GetAsyncKeyState(VK_RBUTTON) & 0x8000) ||
+                  (GetAsyncKeyState(VK_MBUTTON) & 0x8000)))) {
+                if (timedOut) {
+                    PCWSTR result = s_exitRestorePending ? L"restore timed out" :
+                                                          L"foreground confirmation timed out";
+                    Wh_Log(L"SWS: %s source=%p target=%p foreground=%p", result,
+                           s_sessionShell.window, s_touchpadActivationRetryTarget,
+                           GetForegroundWindow());
+                    ClearSwsSwitchAnimationSelection();
+                    ClearPendingActivationListTarget();
+                }
+                ClearExitActivationRetry();
                 return 0;
             }
             HWND target = s_touchpadActivationRetryTarget;
@@ -20893,7 +21270,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
         if (wParam == SWS_TOUCHPAD_SHIELD_FOCUS_RETRY_TIMER_ID) {
             KillTimer(hWnd, SWS_TOUCHPAD_SHIELD_FOCUS_RETRY_TIMER_ID);
-            if ((!s_rawTouchpadShieldActive && !g_isTouchpadGestureActive) ||
+            // The accepted shell invocation has its own bounded foreground retry.
+            if (((g_isVisible || g_isPendingShow) && s_sessionShell.window) ||
+                (!s_rawTouchpadShieldActive && !g_isTouchpadGestureActive) ||
                 s_rawGestureTips == 0) {
                 return 0;
             }
@@ -21157,7 +21536,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
             return 0;
         }
-        if (g_settings.excludeXboxMode && IsXboxModeOrForeground()) {
+        // Explorer applies the exclusion before forwarding, so its messages
+        // never enter the direct registration's Tab replay path.
+        if (!forwardedHotkey && g_settings.excludeXboxMode && IsXboxModeOrForeground()) {
             SWS_UnregisterHotkeys();
             INPUT inputs[2] = {};
             inputs[0].type = INPUT_KEYBOARD;
@@ -21231,11 +21612,18 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
         if (!g_isVisible && !g_isPendingShow) {
             HWND hFg = GetForegroundWindow();
+            const bool altBacktick = id == SWS_HOTKEY_ALTBACKTICK ||
+                                     id == SWS_HOTKEY_ALTBACKTICK_UK;
             if (hFg && !IsSwitcherWindow(hFg)) {
                 UpdateMruWindow(hFg);
             }
             if (isAltBacktickTrigger) g_isAltBacktickSameApp = true;
-            ShowSwitcher(isCtrl);
+            PCWSTR shortcut = altBacktick ? L"backtick" :
+                              (forwardedHotkey ? L"explorer-tab" : L"direct-tab");
+            ShowSwitcher(isCtrl, hFg, 0, shortcut, forwardedAssistToken,
+                         forwardedHotkey ? static_cast<DWORD>(lParam) : 0,
+                         !isBackward && !isAltBacktickTrigger,
+                         forwardedHotkey && id == SWS_HOTKEY_ALTTAB);
 
             // When "Cycle Between Windows of Current Application" is combined with
             // "Group Windows by Application", skip the collapsed group entry and open
@@ -21326,8 +21714,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                     if (s_cachedStaticBits) {
                         memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
                     }
-                    int radius = GetWindowCornerRadiusPx();
-                    HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
+                    CornerRadii corners = GetWindowCornerRadiiPx();
+                    HRGN hClip = GetCachedRoundRectRgn(w, h, corners);
                     SelectClipRgn(s_cachedStaticDC, hClip);
                     DrawSwitcherStaticContent(s_cachedStaticDC, ShouldFillBackground(), hWnd);
                     g_staticContentDirty = false;
@@ -21346,7 +21734,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                                 shadowRc.right += offX;
                                 shadowAlphaMult = g_dockPreviewSlide.currentAlpha;
                             }
-                            DrawThumbnailShadow(hdcBuf, shadowRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult);
+                            DrawThumbnailShadow(hdcBuf, shadowRc, GetThumbnailCornerRadiiPx(), shadowAlphaMult);
                         }
                     } else {
                         if (g_layoutTransition.active) {
@@ -21354,7 +21742,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                                 const auto& e = g_windows[i];
                                 if (e.rcThumbActual.right > e.rcThumbActual.left && !IsWindowTruncated((int)i)) {
                                     float itemAlpha = e.isNewEntry ? e.enterAlpha : 1.0f;
-                                    DrawThumbnailShadow(hdcBuf, e.rcThumbActual, GetThumbnailCornerRadiusPx(), itemAlpha);
+                                    DrawThumbnailShadow(hdcBuf, e.rcThumbActual, GetThumbnailCornerRadiiPx(), itemAlpha);
                                 }
                             }
                         } else if (ThumbnailHoverIsZoom()) {
@@ -21365,7 +21753,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                                     float shadowAlphaMult = (e.hoverScale - 1.0f) / SWS_HOVER_ZOOM_DELTA;
                                     if (shadowAlphaMult < 0.0f) shadowAlphaMult = 0.0f;
                                     if (shadowAlphaMult > 1.0f) shadowAlphaMult = 1.0f;
-                                    DrawThumbnailShadow(hdcBuf, scaledRc, GetThumbnailCornerRadiusPx(), shadowAlphaMult, e.hoverScale);
+                                    DrawThumbnailShadow(hdcBuf, scaledRc, GetThumbnailCornerRadiiPx(), shadowAlphaMult, e.hoverScale);
                                 }
                             }
                         }
@@ -21546,6 +21934,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         ResetScrollWheelAccumulators();
         SWS_UnregisterHotkeys();
         LoadSettings();
+        PublishSwitcherHotkeyPolicy();
         if (!g_isVisible && !g_isPendingShow) ApplyHiddenObjectEventHook();
         if (!g_settings.handleTouchpadGestures) {
             s_rawGestureTips = 0;
@@ -21629,7 +22018,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         UpdateRefreshRateTiming(true);
         // Dismiss safely instead of retaining stale monitor handles/pixel bounds.
         // The next invocation resolves the monitor, DPI, fonts and backdrop anew.
-        if (hWnd == g_hSwitcher && (g_isVisible || g_isPendingShow) &&
+        if (hWnd == g_hSwitcher && !s_stagingSwitcherOffscreen &&
+            (g_isVisible || g_isPendingShow) &&
             (LOWORD(wParam) != g_dpiX || HIWORD(wParam) != g_dpiY)) {
             PostMessageW(hWnd, WM_SWS_CANCEL_INPUT, 0, 0);
         }
@@ -21794,6 +22184,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (LOWORD(wParam) == WA_INACTIVE && (g_isVisible || g_isPendingShow)) {
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewActive = (HWND)lParam;
+            if (s_sessionShell.window && !g_touchpadInvocation) {
+                Wh_Log(L"SWS: shell keyboard deactivated source=%p next=%p",
+                       s_sessionShell.window, hNewActive);
+            }
             HWND hCheck = hNewActive ? hNewActive : GetForegroundWindow();
             if (StickyTwoFingerTapOwnershipLive()) {
                 RetainStickyTwoFingerTapForeground();
@@ -21841,6 +22235,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (g_isVisible || g_isPendingShow) {
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewFocus = (HWND)wParam;
+            if (s_sessionShell.window && !g_touchpadInvocation) {
+                Wh_Log(L"SWS: shell keyboard lost focus source=%p next=%p",
+                       s_sessionShell.window, hNewFocus);
+            }
             HWND hCheck = hNewFocus ? hNewFocus : GetForegroundWindow();
             if (StickyTwoFingerTapOwnershipLive()) {
                 RetainStickyTwoFingerTapForeground();
@@ -21958,37 +22356,75 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
 // Hotkey Helpers
 
-static HANDLE g_hHotkeyMutex = NULL;
 static bool g_registeredHotkeys[SWS_HOTKEY_ALTBACKTICK_UK + 1] = {};
+static SRWLOCK s_hotkeyPolicyLock = SRWLOCK_INIT;
+static HWND s_hotkeyEndpoint = nullptr;
+static bool s_hotkeyEndpointStopping = false;
+
+static void PublishSwitcherHotkeyPolicy() {
+    AcquireSRWLockExclusive(&s_hotkeyPolicyLock);
+    if (!s_hotkeyEndpointStopping && g_hSwitcher) {
+        ULONG_PTR policy = kHotkeyReady | kHotkeyShellAssist;
+        if (g_settings.excludeXboxMode) policy |= kHotkeyExcludeXbox;
+        if (SetPropW(g_hSwitcher, SWS_HOTKEY_POLICY_PROP, reinterpret_cast<HANDLE>(policy))) {
+            s_hotkeyEndpoint = g_hSwitcher;
+        } else {
+            Wh_Log(L"SWS: unable to publish hotkey policy (error=%u)", GetLastError());
+        }
+    }
+    ReleaseSRWLockExclusive(&s_hotkeyPolicyLock);
+}
+
+static void StopSwitcherHotkeyForwarding() {
+    AcquireSRWLockExclusive(&s_hotkeyPolicyLock);
+    s_hotkeyEndpointStopping = true;
+    if (s_hotkeyEndpoint) {
+        RemovePropW(s_hotkeyEndpoint, SWS_HOTKEY_POLICY_PROP);
+        s_hotkeyEndpoint = nullptr;
+    }
+    ReleaseSRWLockExclusive(&s_hotkeyPolicyLock);
+}
+
+static DWORD ShellProcessId() {
+    DWORD pid = 0;
+    if (HWND shell = GetShellWindow()) GetWindowThreadProcessId(shell, &pid);
+    return pid;
+}
 
 static void SWS_RegisterHotkeys() {
     if (!g_hSwitcher) return;
-    bool wantAltBacktick = (wcscmp(g_settings.altBacktickBehavior, L"none") != 0);
+    const bool wantAltBacktick = wcscmp(g_settings.altBacktickBehavior, L"none") != 0;
     auto registerOne = [](int id, UINT mods, UINT vk) {
         if (!g_registeredHotkeys[id]) {
             g_registeredHotkeys[id] = RegisterHotKey(g_hSwitcher, id, mods, vk) != FALSE;
         }
         return g_registeredHotkeys[id];
     };
-    bool r1 = registerOne(SWS_HOTKEY_ALTTAB, MOD_ALT, VK_TAB);
-    bool r2 = registerOne(SWS_HOTKEY_ALTSHIFTTAB, MOD_ALT | MOD_SHIFT, VK_TAB);
-    bool r3 = registerOne(SWS_HOTKEY_ALTCTRLTAB, MOD_ALT | MOD_CONTROL, VK_TAB);
-    bool r4 = registerOne(SWS_HOTKEY_ALTSHIFTCTRLTAB, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB);
-    bool r5us = !wantAltBacktick || registerOne(SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3);
-    bool r5uk = !wantAltBacktick || registerOne(SWS_HOTKEY_ALTBACKTICK_UK, MOD_ALT, VK_OEM_8);
-    bool r6 = registerOne(SWS_HOTKEY_WINALTTAB, MOD_ALT | MOD_WIN, VK_TAB);
-    bool r7 = registerOne(SWS_HOTKEY_WINALTSHIFTTAB, MOD_ALT | MOD_SHIFT | MOD_WIN, VK_TAB);
-    g_hotkeysRegistered = r1 && r2 && r3 && r4;
-    if (r1) {
-        if (!g_hHotkeyMutex) {
-            g_hHotkeyMutex = CreateMutexW(NULL, TRUE, L"Windhawk_SWS_HotkeyMutex");
+
+    DWORD shellPid = ShellProcessId();
+    if (shellPid != s_forwardedHotkeyShellPid) s_forwardedHotkeys = 0;
+    // Give the shell first opportunity to register Tab shortcuts at startup.
+    DWORD taskbarPid = 0;
+    if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        GetWindowThreadProcessId(taskbar, &taskbarPid);
+    }
+    bool allTabHotkeysReady = shellPid && taskbarPid == shellPid;
+    if (allTabHotkeysReady) {
+        for (const auto& chord : kTabHotkeys) {
+            if ((s_forwardedHotkeys & (1u << chord.id)) == 0 &&
+                !registerOne(chord.id, chord.modifiers, VK_TAB)) {
+                allTabHotkeysReady = false;
+            }
         }
     }
-    if (g_hotkeysRegistered && r5us && r5uk && r6 && r7) {
+
+    bool usReady = !wantAltBacktick || registerOne(SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3);
+    bool ukReady = !wantAltBacktick || registerOne(SWS_HOTKEY_ALTBACKTICK_UK, MOD_ALT, VK_OEM_8);
+    if (allTabHotkeysReady && usReady && ukReady) {
         KillTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID);
     } else {
-        // Keep successful registrations. An optional shortcut conflict must not
-        // disable ordinary Alt+Tab; retries touch only missing registrations.
+        // Retry only unresolved chords. Keep both successful direct
+        // registrations and chords already observed on the Explorer route.
         SetTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID, SWS_HOTKEY_RETRY_INTERVAL, NULL);
     }
 }
@@ -22019,12 +22455,6 @@ static void SWS_UnregisterHotkeys() {
     for (int id = 1; id <= SWS_HOTKEY_ALTBACKTICK_UK; ++id) {
         if (g_registeredHotkeys[id] && g_hSwitcher) UnregisterHotKey(g_hSwitcher, id);
         g_registeredHotkeys[id] = false;
-    }
-    g_hotkeysRegistered = false;
-    if (g_hHotkeyMutex) {
-        ReleaseMutex(g_hHotkeyMutex);
-        CloseHandle(g_hHotkeyMutex);
-        g_hHotkeyMutex = NULL;
     }
 }
 
@@ -22059,17 +22489,6 @@ static bool LoadAutoBoolSetting(LPCWSTR settingName, bool autoVal) {
     return result;
 }
 
-// Corner settings: "true" follows Corner Preference, "false" is square and
-// "custom" uses the element's own radius setting (0-32 px).
-static void LoadCornerSetting(LPCWSTR modeName, LPCWSTR radiusName, bool* round,
-                              bool* custom, int* radiusDip) {
-    PCWSTR mode = Wh_GetStringSetting(modeName);
-    *custom = mode && _wcsicmp(mode, L"custom") == 0;
-    if (mode) Wh_FreeStringSetting(mode);
-    *round = *custom || LoadAutoBoolSetting(modeName, true);
-    *radiusDip = std::clamp(Wh_GetIntSetting(radiusName), 0, 32);
-}
-
 static int LoadIntSetting(LPCWSTR settingName, int defaultVal) {
     PCWSTR s = Wh_GetStringSetting(settingName);
     if (!s || !*s) {
@@ -22078,6 +22497,52 @@ static int LoadIntSetting(LPCWSTR settingName, int defaultVal) {
     }
     Wh_FreeStringSetting(s);
     return Wh_GetIntSetting(settingName);
+}
+
+static constexpr int kMaxCustomCornerRadius = 32;
+
+static std::optional<CornerRadii> ParseCustomCornerRadii(PCWSTR text) {
+    int values[4] = {};
+    if (!text) return std::nullopt;
+    for (int i = 0; i < 4; ++i) {
+        while (iswspace(*text)) ++text;
+        if (*text < L'0' || *text > L'9') return std::nullopt;
+        do {
+            values[i] = values[i] * 10 + (*text - L'0');
+            if (values[i] > kMaxCustomCornerRadius) return std::nullopt;
+            ++text;
+        } while (*text >= L'0' && *text <= L'9');
+        while (iswspace(*text)) ++text;
+        if (*text != (i < 3 ? L',' : L'\0')) return std::nullopt;
+        if (i < 3) ++text;
+    }
+    return CornerRadii{values[0], values[1], values[2], values[3]};
+}
+
+static CornerRadii LoadCustomCornerShape(bool perCorner, PCWSTR radiusName,
+                                        PCWSTR tupleName) {
+    if (perCorner) {
+        auto tuple = WindhawkUtils::StringSetting::make(tupleName);
+        if (auto corners = ParseCustomCornerRadii(tuple.get())) return *corners;
+    }
+    return CornerRadii::Uniform(
+        std::clamp(LoadIntSetting(radiusName, 8), 0, kMaxCustomCornerRadius));
+}
+
+static std::optional<CornerRadii> LoadElementCornerShape(PCWSTR modeName,
+                                                        PCWSTR radiusName,
+                                                        PCWSTR tupleName) {
+    auto setting = WindhawkUtils::StringSetting::make(modeName);
+    PCWSTR mode = setting.get();
+    if (!mode || !*mode || _wcsicmp(mode, L"true") == 0 ||
+        _wcsicmp(mode, L"auto") == 0 || wcscmp(mode, L"1") == 0) {
+        return std::nullopt;
+    }
+    bool perCorner = _wcsicmp(mode, L"perCorner") == 0;
+    if (perCorner || _wcsicmp(mode, L"custom") == 0) {
+        return LoadCustomCornerShape(perCorner, radiusName, tupleName);
+    }
+    return CornerRadii{};
 }
 
 // Material Tuning opacities: 0-100, or -1 for the material's own value.
@@ -22118,28 +22583,24 @@ static void LoadSettings() {
     if (wcscmp(g_settings.cornerPreference, L"auto") == 0) {
         wcsncpy_s(g_settings.cornerPreference, L"default", _TRUNCATE);
     }
-    g_settings.customCornerRadius = Wh_GetIntSetting(L"Appearance.Corners.customCornerRadius");
-    if (g_settings.customCornerRadius < 0) g_settings.customCornerRadius = 0;
-    if (g_settings.customCornerRadius > 32) g_settings.customCornerRadius = 32;
-    // Element corners follow the switcher's own radius (true) or stay square
-    // (false). An empty or earlier "auto" value follows, the default.
-    LoadCornerSetting(L"Appearance.Corners.taskRoundedCorners",
-                      L"Appearance.Corners.taskCornerRadius",
-                      &g_settings.taskRoundedCorners, &g_settings.customTaskCorners,
-                      &g_settings.taskCornerRadius);
-    LoadCornerSetting(L"Appearance.Corners.roundThumbnailCorners",
-                      L"Appearance.Corners.thumbnailCornerRadius",
-                      &g_settings.roundThumbnailCorners, &g_settings.customThumbnailCorners,
-                      &g_settings.thumbnailCornerRadius);
-    LoadCornerSetting(L"Appearance.Corners.roundGroupIndicator",
-                      L"Appearance.Corners.groupIndicatorCornerRadius",
-                      &g_settings.roundGroupIndicator, &g_settings.customGroupIndicatorCorners,
-                      &g_settings.groupIndicatorCornerRadius);
-    LoadCornerSetting(L"Appearance.Corners.roundBadgeIconBackground",
-                      L"Appearance.Corners.badgeIconBackgroundCornerRadius",
-                      &g_settings.roundBadgeIconBackground,
-                      &g_settings.customBadgeIconBackgroundCorners,
-                      &g_settings.badgeIconBackgroundCornerRadius);
+    g_settings.customSwitcherCorners = LoadCustomCornerShape(
+        wcscmp(g_settings.cornerPreference, L"perCorner") == 0,
+        L"Appearance.Corners.customCornerRadius", L"Appearance.Corners.customPerCornerRadius");
+    g_settings.taskCorners = LoadElementCornerShape(
+        L"Appearance.Corners.taskRoundedCorners", L"Appearance.Corners.taskCornerRadius",
+        L"Appearance.Corners.taskPerCornerRadius");
+    g_settings.closeButtonCorners = LoadElementCornerShape(
+        L"Appearance.Corners.closeButtonCorners", L"Appearance.Corners.closeButtonCornerRadius",
+        L"Appearance.Corners.closeButtonPerCornerRadius");
+    g_settings.thumbnailCorners = LoadElementCornerShape(
+        L"Appearance.Corners.roundThumbnailCorners", L"Appearance.Corners.thumbnailCornerRadius",
+        L"Appearance.Corners.thumbnailPerCornerRadius");
+    g_settings.groupIndicatorCorners = LoadElementCornerShape(
+        L"Appearance.Corners.roundGroupIndicator", L"Appearance.Corners.groupIndicatorCornerRadius",
+        L"Appearance.Corners.groupIndicatorPerCornerRadius");
+    g_settings.badgeIconBackgroundCorners = LoadElementCornerShape(
+        L"Appearance.Corners.roundBadgeIconBackground", L"Appearance.Corners.badgeIconBackgroundCornerRadius",
+        L"Appearance.Corners.badgeIconBackgroundPerCornerRadius");
     LoadStringSetting(L"Accessibility.scrollWheelBehavior", g_settings.scrollWheelBehavior, L"never");
     LoadStringSetting(L"Accessibility.scrollWheelAction", g_settings.scrollWheelAction, L"selection");
     LoadStringSetting(L"Accessibility.scrollSecondaryAction", g_settings.scrollSecondaryAction, L"page");
@@ -22621,21 +23082,186 @@ static void LoadSettings() {
 
 // Explorer.exe hooks for Alt+Tab hotkey
 
-static bool SWS_IsAltTabHotkey(UINT fsModifiers, UINT vk) {
-    UINT baseMods = fsModifiers & ~MOD_NOREPEAT;
-    if (vk == VK_TAB && (baseMods & MOD_ALT)) return true;
-    return false;
+static SRWLOCK s_explorerHotkeyLock = SRWLOCK_INIT;
+static std::vector<std::pair<DWORD, HHOOK>> s_explorerHotkeyHooks;
+static std::atomic<bool> s_explorerHotkeyStopping = false;
+static std::atomic<unsigned int> s_explorerHotkeyCalls = 0;
+
+struct ExplorerShellAssistTicket {
+    DWORD token = 0;
+    ActivationWindow endpoint;
+    ActivationWindow source;
+};
+
+static SRWLOCK s_explorerShellAssistLock = SRWLOCK_INIT;
+static DWORD s_explorerShellAssistSequence = 0;
+static ExplorerShellAssistTicket s_explorerShellAssistTickets[64];
+
+static DWORD RecordExplorerShellAssist(HWND endpoint, HWND foreground) {
+    const auto source = ActivationWindow::Capture(GetAncestor(foreground, GA_ROOT));
+    const auto receiver = ActivationWindow::Capture(endpoint);
+    if (!source.window || !receiver.window) return 0;
+
+    DWORD token = 0;
+    AcquireSRWLockExclusive(&s_explorerShellAssistLock);
+    for (size_t i = 0; i < ARRAYSIZE(s_explorerShellAssistTickets); ++i) {
+        if (++s_explorerShellAssistSequence > kShellAssistTokenMask) s_explorerShellAssistSequence = 1;
+        auto& slot = s_explorerShellAssistTickets[
+            s_explorerShellAssistSequence % ARRAYSIZE(s_explorerShellAssistTickets)];
+        // Preserve the invocation the host is already staging while repeated
+        // Tab messages continue to arrive for navigation.
+        if (slot.token && slot.endpoint.Matches(slot.endpoint.window) &&
+            (HandleToULong(GetPropW(slot.endpoint.window, SWS_SHELL_ASSIST_PROP)) &
+             kShellAssistTokenMask) == slot.token) continue;
+        token = s_explorerShellAssistSequence;
+        slot = {token, receiver, source};
+        break;
+    }
+    ReleaseSRWLockExclusive(&s_explorerShellAssistLock);
+    return token;
 }
 
-typedef BOOL(WINAPI *RegisterHotKey_t)(HWND hWnd, int id, UINT fsModifiers, UINT vk);
+static ExplorerShellAssistTicket TakeExplorerShellAssist(DWORD token) {
+    ExplorerShellAssistTicket result;
+    if (!token || token > kShellAssistTokenMask) return result;
+    AcquireSRWLockExclusive(&s_explorerShellAssistLock);
+    auto& slot = s_explorerShellAssistTickets[token % ARRAYSIZE(s_explorerShellAssistTickets)];
+    if (slot.token == token) {
+        result = slot;
+        slot = {};
+    }
+    ReleaseSRWLockExclusive(&s_explorerShellAssistLock);
+    return result;
+}
+
+static void RunExplorerShellAssist(DWORD token, HWND source) {
+    const auto ticket = TakeExplorerShellAssist(token);
+    const HWND endpoint = FindWindowW(SWS_CLASSNAME, SWS_MAIN_WINDOW_TITLE);
+    const ULONG_PTR policy = endpoint ? reinterpret_cast<ULONG_PTR>(
+        GetPropW(endpoint, SWS_HOTKEY_POLICY_PROP)) : 0;
+    const bool eligible =
+        !s_explorerHotkeyStopping.load() && ShellProcessId() == GetCurrentProcessId() &&
+        (policy & kHotkeyReady) && (policy & kHotkeyShellAssist) &&
+        ticket.endpoint.Matches(endpoint) && IsWindowVisible(endpoint) &&
+        ticket.source.Matches(source) && IsShellSurfaceWindow(source) &&
+        ticket.source.Matches(GetAncestor(GetForegroundWindow(), GA_ROOT)) &&
+        GetPropW(endpoint, SWS_SHELL_ASSIST_PROP) == ULongToHandle(token | kShellAssistReady);
+    BOOL result = eligible ? SetForegroundWindow(endpoint) : FALSE;
+    Wh_Log(L"SWS: Explorer shell assist token=%u source=%p eligible=%d set=%d foreground=%p",
+           token, source, eligible, result, GetForegroundWindow());
+}
+
+static LRESULT CALLBACK ExplorerHotkeyGetMessage(int code, WPARAM wParam, LPARAM lParam) {
+    ++s_explorerHotkeyCalls;
+    if (code == HC_ACTION && wParam == PM_REMOVE && !s_explorerHotkeyStopping.load()) {
+        auto* message = reinterpret_cast<MSG*>(lParam);
+        if (message->message == WM_HOTKEY) {
+            int id = TabHotkeyId(LOWORD(message->lParam), HIWORD(message->lParam));
+            if (id && ShellProcessId() == GetCurrentProcessId()) {
+                HWND endpoint = FindWindowW(SWS_CLASSNAME, SWS_MAIN_WINDOW_TITLE);
+                ULONG_PTR policy = endpoint ? reinterpret_cast<ULONG_PTR>(
+                    GetPropW(endpoint, SWS_HOTKEY_POLICY_PROP)) : 0;
+                if ((policy & kHotkeyReady) &&
+                    (!(policy & kHotkeyExcludeXbox) || !IsXboxModeOrForeground())) {
+                    DWORD pid = 0;
+                    if (GetWindowThreadProcessId(endpoint, &pid) && pid) {
+                        HWND foreground = GetForegroundWindow();
+                        DWORD assistToken = (policy & kHotkeyShellAssist)
+                                                ? RecordExplorerShellAssist(endpoint, foreground) : 0;
+                        BOOL granted = AllowSetForegroundWindow(pid);
+                        DWORD error = granted ? ERROR_SUCCESS : GetLastError();
+                        if (PostMessageW(endpoint, WM_SWS_EXPLORER_HOTKEY,
+                                         (assistToken << 8) | id, GetCurrentProcessId())) {
+                            Wh_Log(L"SWS: Explorer hotkey id=%d source=%p targetPid=%u grant=%d error=%u token=%u",
+                                   id, foreground, pid, granted, error, assistToken);
+                            message->message = WM_NULL;
+                        } else if (assistToken) {
+                            TakeExplorerShellAssist(assistToken);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    LRESULT result = CallNextHookEx(nullptr, code, wParam, lParam);
+    --s_explorerHotkeyCalls;
+    return result;
+}
+
+static bool AttachExplorerHotkeyThread(DWORD threadId) {
+    AcquireSRWLockExclusive(&s_explorerHotkeyLock);
+    bool attached = false;
+    if (!s_explorerHotkeyStopping.load()) {
+        for (const auto& entry : s_explorerHotkeyHooks) {
+            if (entry.first == threadId) {
+                attached = true;
+                break;
+            }
+        }
+        if (!attached) {
+            HHOOK hook = SetWindowsHookExW(
+                WH_GETMESSAGE, ExplorerHotkeyGetMessage, nullptr, threadId);
+            if (hook) {
+                s_explorerHotkeyHooks.emplace_back(threadId, hook);
+                attached = true;
+            } else {
+                Wh_Log(L"SWS: Explorer hotkey hook failed (tid=%u error=%u)",
+                       threadId, GetLastError());
+            }
+        }
+    }
+    ReleaseSRWLockExclusive(&s_explorerHotkeyLock);
+    return attached;
+}
+
+static bool AttachExplorerHotkeyWindow() {
+    if (s_explorerHotkeyStopping.load()) return true;
+    DWORD shellPid = ShellProcessId();
+    if (shellPid && shellPid != GetCurrentProcessId()) return true;
+    // Late injection: Explorer may already have registered its shortcuts.
+    HWND window = FindWindowW(L"ApplicationManager_ImmersiveShellWindow", nullptr);
+    if (!window) window = FindWindowW(L"TaskSwitcherWnd", nullptr);
+    DWORD pid = 0;
+    DWORD threadId = window ? GetWindowThreadProcessId(window, &pid) : 0;
+    return threadId && pid == GetCurrentProcessId() && AttachExplorerHotkeyThread(threadId);
+}
+
+using RegisterHotKey_t = decltype(&RegisterHotKey);
 static RegisterHotKey_t RegisterHotKey_Original;
 
 static BOOL WINAPI RegisterHotKey_Hook(HWND hWnd, int id, UINT fsModifiers, UINT vk) {
-    if (SWS_IsAltTabHotkey(fsModifiers, vk)) {
-        SetLastError(0);
-        return TRUE;
+    // Early injection: keep the actual registration in Explorer. Reapply the
+    // message hook for any native Alt+Tab recipient on a different thread.
+    BOOL registered = RegisterHotKey_Original(hWnd, id, fsModifiers, vk);
+    DWORD error = GetLastError();
+    if (registered && TabHotkeyId(fsModifiers, vk) &&
+        !s_explorerHotkeyStopping.load()) {
+        DWORD shellPid = ShellProcessId();
+        if (!shellPid || shellPid == GetCurrentProcessId()) {
+            DWORD pid = GetCurrentProcessId();
+            DWORD threadId = hWnd ? GetWindowThreadProcessId(hWnd, &pid) : GetCurrentThreadId();
+            if (threadId && pid == GetCurrentProcessId()) AttachExplorerHotkeyThread(threadId);
+        }
     }
-    return RegisterHotKey_Original(hWnd, id, fsModifiers, vk);
+    SetLastError(error);
+    return registered;
+}
+
+static void DetachExplorerHotkeyHooks() {
+    s_explorerHotkeyStopping.store(true);
+    AcquireSRWLockExclusive(&s_explorerHotkeyLock);
+    for (const auto& entry : s_explorerHotkeyHooks) {
+        if (!UnhookWindowsHookEx(entry.second) &&
+            GetLastError() != ERROR_INVALID_HOOK_HANDLE) {
+            Wh_Log(L"SWS: Explorer hotkey unhook failed (tid=%u error=%u)",
+                   entry.first, GetLastError());
+        }
+    }
+    s_explorerHotkeyHooks.clear();
+    ReleaseSRWLockExclusive(&s_explorerHotkeyLock);
+
+    // A hook can still be executing on its owner thread after unhooking.
+    while (s_explorerHotkeyCalls.load() != 0) Sleep(1);
 }
 
 using XamlAltTabViewHost_Show_t = HRESULT(WINAPI*)(void* pThis, void* param1, int param2, void* param3);
@@ -23653,6 +24279,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
 
     g_hFont = CreateScaledFont(96);
 
+    g_taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
     SWS_RegisterHotkeys();
 
     UpdateRefreshRateTiming();
@@ -23671,6 +24298,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     UpdateTouchpadGestureTakeover(TouchpadGestureTakeoverWanted());
 
 
+    PublishSwitcherHotkeyPolicy();
     MSG msg;
     while (true) {
         // Keep reports and discrete commands in queue order. Bound dispatch by
@@ -23747,6 +24375,12 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     }
 
 thread_exit:
+    StopShellInvocationHandoff();
+    s_deferredExitTarget = nullptr;
+    s_deferredExitRestore.clear();
+    ClearExitActivationRetry();
+    s_sessionShell = {};
+    StopSwitcherHotkeyForwarding();
     StopMouseHookThread();
     ClearStickyTwoFingerTapOwnership();
     g_touchpadTwoFingerCloseActive.store(false);
@@ -24703,20 +25337,6 @@ void WINAPI EntryPoint_Hook() {
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk lifecycle
 
-static bool IsMainExplorer() {
-    HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (hTaskbar) {
-        DWORD trayPid = 0;
-        GetWindowThreadProcessId(hTaskbar, &trayPid);
-        if (trayPid != GetCurrentProcessId()) {
-            return false;
-        }
-    }
-    return true;
-}
-
-
-
 BOOL Wh_ModInit() {
     WCHAR exePath[MAX_PATH];
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
@@ -24737,7 +25357,7 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // --- explorer.exe path: hook RegisterHotKey, ShowWindow, and twinui.pcshell.dll ---
+    // Observe native hotkey registration and install the existing shell gesture hooks.
     if (_wcsicmp(exeName, L"explorer.exe") == 0) {
         g_isExplorer = true;
 
@@ -24775,29 +25395,7 @@ BOOL Wh_ModInit() {
         }
 
 #endif
-        // Check if Explorer has already registered standard hotkeys.
-        // We use Alt+Tab as a probe. If it fails, Explorer is mid-session and already owns it.
-        // We only do this for the main Explorer process to avoid false prompts in secondary Explorers.
-        if (!GetSystemMetrics(SM_SHUTTINGDOWN) && IsMainExplorer()) {
-            if (!RegisterHotKey(NULL, 0x1337, MOD_ALT, VK_TAB)) {
-                HANDLE hMutex = OpenMutexW(MUTEX_ALL_ACCESS, FALSE, L"Windhawk_SWS_HotkeyMutex");
-                bool isToolModHolding = false;
-                if (hMutex) {
-                    if (WaitForSingleObject(hMutex, 0) == WAIT_TIMEOUT) {
-                        isToolModHolding = true;
-                    } else {
-                        ReleaseMutex(hMutex);
-                    }
-                    CloseHandle(hMutex);
-                }
-
-                if (!isToolModHolding) {
-                    PromptForExplorerRestart();
-                }
-            } else {
-                UnregisterHotKey(NULL, 0x1337);
-            }
-        }
+        AttachExplorerHotkeyWindow();
 
         return TRUE;
     }
@@ -25002,6 +25600,7 @@ void Wh_ModSettingsChanged() {
 void Wh_ModBeforeUninit() {
     SignalToolHostExiting();
     if (g_isExplorer) {
+        DetachExplorerHotkeyHooks();
         s_nativeSwipeShutdownRequested.store(true);
         s_nativeSwipeHooksAvailable.store(false);
         PublishNativeSwipeHookStatus(false);
@@ -25020,35 +25619,18 @@ void Wh_ModBeforeUninit() {
         }
         s_nativeSwipeHooksAvailable.store(false);
         PublishNativeSwipeHookStatus(false);
+    } else if (!g_isToolModProcessLauncher) {
+        StopSwitcherHotkeyForwarding();
     }
 }
 
 void Wh_ModUninit() {
     SignalToolHostExiting();
     if (g_isExplorer) {
-        HWND promptWnd = g_restartExplorerPromptWindow;
-        if (promptWnd) PostMessage(promptWnd, WM_CLOSE, 0, 0);
-
         for (auto& pair : g_uwpIconCache) {
             if (pair.second) DestroyIcon(pair.second);
         }
         g_uwpIconCache.clear();
-
-        if (g_isExplorer && IsMainExplorer()) {
-            if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
-                PromptForExplorerRestart();
-            }
-        }
-
-        if (g_restartExplorerPromptThread) {
-            if (WaitForSingleObject(g_restartExplorerPromptThread, 30000) == WAIT_TIMEOUT) {
-                HWND wnd = g_restartExplorerPromptWindow;
-                if (wnd) PostMessage(wnd, WM_CLOSE, 0, 0);
-                WaitForSingleObject(g_restartExplorerPromptThread, INFINITE);
-            }
-            CloseHandle(g_restartExplorerPromptThread);
-            g_restartExplorerPromptThread = NULL;
-        }
         return;
     }
 
