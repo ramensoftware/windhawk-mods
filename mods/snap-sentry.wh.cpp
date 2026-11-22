@@ -175,40 +175,40 @@ page](https://github.com/mario0318/SnapSentry/issues).
 - clipboardMode: image
   $name: What to copy to the clipboard
   $options:
-  - image: The picture
-  - file: The file, to paste into a folder
-  - path: Where the file is, as text
-  - none: Nothing
+  - image: Image, the picture itself
+  - file: File, to paste into a folder
+  - path: Path, where the file is, as text
+  - none: None, leave the clipboard alone
 - pathFormat: plain
   $name: How to write the path
-  $description: Only used when copying where the file is.
+  $description: Only used with Path.
   $options:
-  - plain: Plain path
-  - quoted: Path in quotes
-  - uri: Clickable file link
-  - markdown: Markdown image, for notes and bug reports
+  - plain: Plain, just the path
+  - quoted: Quoted, the path in quotes
+  - uri: File link, a clickable link
+  - markdown: Markdown, shows the picture in notes and bug reports
 
 # ---- Deleting the screenshot ----
 - deleteFile: false
   $name: Delete the screenshot after copying
-  $description: Only when copying the picture or nothing. Animated or multi-page images are always kept.
+  $description: Only with Image or None. With Image, animated or multi-page images are kept.
 - recycle: true
   $name: Delete to the Recycle Bin
   $description: Turn off to delete for good.
 - removeExactDuplicates: false
   $name: Remove identical recent screenshots
-  $description: Took the same screenshot twice? The extra copy goes to the Recycle Bin. Only when copying the picture.
+  $description: Took the same screenshot twice within ten minutes? The extra copy goes to the Recycle Bin, but not after a popup button click. Only with Image.
 
 # ---- The popup ----
 - showActionPopup: false
   $name: Ask what to do after each screenshot
-  $description: Shows a notification with buttons to delete or keep it.
+  $description: Shows a notification with buttons to delete or keep it. While it's on, a temporary registry entry gives the notification its name. Windows may keep SnapSentry listed in its notification settings.
 - delaySeconds: 5
   $name: Seconds before the automatic choice
   $description: With the popup on, 0 waits for your click (up to 10 minutes). Maximum 3600.
 - popupPreview: false
   $name: Show a preview
-  $description: A small picture of the screenshot in the notification.
+  $description: A small picture of the screenshot in the notification. While it's up, a temporary copy sits in Windhawk's data folder, which every account on the PC shares.
 - popupShowFolder: false
   $name: Show the folder
   $description: Shows where the screenshot was saved.
@@ -216,17 +216,17 @@ page](https://github.com/mario0318/SnapSentry/issues).
   $name: Clicking the notification
   $description: Never deletes anything.
   $options:
-  - copy: Copy and keep
-  - open: Open the screenshot
-  - folder: Show it in File Explorer
-  - keep: Keep without copying
+  - copy: Copy, copy it and keep the file
+  - open: Open, open the screenshot and copy it
+  - folder: Folder, show it in File Explorer and copy it
+  - keep: Keep, keep it without copying
 - popupDeleteButton: true
   $name: Delete button
 - popupCopyDeleteButton: true
   $name: Copy and delete button
 - popupKeepButton: true
   $name: Keep button
-  $description: With no buttons, the notification just shows the screenshot, which is copied and kept.
+  $description: With no buttons, the notification just shows the screenshot. If the countdown doesn't decide first, it is copied and kept.
 - popupHighlight: none
   $name: Highlighted button
   $description: Colors one button on Windows 11. In the fallback dialog, Enter picks it.
@@ -242,7 +242,7 @@ page](https://github.com/mario0318/SnapSentry/issues).
   $description: Uses the window you were looking at, plus the time.
 - renameTimeOnly: false
   $name: Name by time only
-  $description: Leaves out the window name, for example 2026-11-03 07-43-31.
+  $description: With renaming on, leaves out the window name, for example 2026-11-03 07-43-31.
 - captureSessions: false
   $name: Capture sessions
   $description: Adds a tray icon. Take a batch of screenshots, put them in order, add captions and export them together. Session screenshots are never deleted.
@@ -265,10 +265,10 @@ page](https://github.com/mario0318/SnapSentry/issues).
 # ---- Advanced ----
 - folder: ""
   $name: Folder to watch
-  $description: Leave empty for your Screenshots folder. Every new image saved here is treated as a screenshot, so don't pick your Downloads folder.
+  $description: Leave empty for your Screenshots folder, or paste a full path such as %USERPROFILE%\Pictures\ShareX. Every new image saved here is treated as a screenshot, so don't pick your Downloads folder.
 - logDetails: false
   $name: Detailed log
-  $description: For troubleshooting. The log will include file names.
+  $description: For troubleshooting. The log will include file paths.
 */
 // ==/WindhawkModSettings==
 
