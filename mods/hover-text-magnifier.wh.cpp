@@ -2,7 +2,7 @@
 // @id              hover-text-magnifier
 // @name            Hover Text Magnifier (macOS-style)
 // @description     On-cursor hover bubble with large text via UI Automation; optional pixel magnifier fallback.
-// @version         1.3.5
+// @version         1.4.0
 // @author          Math Shamenson
 // @github          https://github.com/insane66613
 // @license         MIT
@@ -31,10 +31,14 @@ Inspired by the macOS feature, it displays a high-contrast, large-text bubble fo
 *   **Dynamic Sizing:** The bubble expands to fit single words or full paragraphs.
 *   **Customizable:** Build for your eyes—choose from High Contrast, Dark, Sepia, or Light themes. Customizable fonts and sizes.
 *   **Trigger Modes:** Hold Ctrl (default) or toggle with Caps Lock (blocks original Caps Lock function when active).
+*   **Toggle Hotkey (optional):** A hotkey like Ctrl+Alt+M turns the magnifier on and off without holding a key. In "Always on" it pauses the magnifier instead.
+*   **Pause in Full Screen (optional):** No bubble while a full screen game, video or slide show is in front.
+*   **App Exclusion List (optional):** Name apps (like `code.exe, photoshop.exe`) where the bubble never shows.
 
 ## Usage
 *   **Default:** Hold **Ctrl** and hover over any text to see it magnified.
 *   **Toggle:** Go to settings and set Trigger Key to **CapsLock**. Tap CapsLock to toggle the magnifier on/off permanently.
+*   **Toggle hotkey:** Set *Toggle hotkey* (empty by default) to switch the magnifier on and off with any key combination, whatever the trigger key is.
 
 ## Administrator applications (Windhawk 2.0)
 Windhawk 2.0 selects its UIAccess helper host for this mod, enabling accessibility
@@ -179,6 +183,16 @@ can inspect the secure UAC desktop.
   $name: Hide bubble when no text is found
 - fallbackToMagnifier: true
   $name: Fallback to magnifier
+
+- toggleHotkey: ""
+  $name: Toggle hotkey
+  $description: Turns the magnifier on and off without holding the trigger key. In "Always on" it pauses the magnifier. With CapsLock it works like tapping CapsLock. Write it like Ctrl+Alt+M. Leave empty for no hotkey
+- pauseFullscreen: false
+  $name: Pause in full screen apps
+  $description: No bubble while a full screen game, video or slide show is in front
+- excludedApps: ""
+  $name: Excluded apps
+  $description: App names split by commas, like code.exe, photoshop.exe. The bubble never shows over these apps or while they are in front
 */
 // ==/WindhawkModSettings==
 
@@ -205,6 +219,7 @@ can inspect the secure UAC desktop.
 #include <algorithm>
 #include <cmath>
 #include <cwctype>
+#include <vector>
 
 
 static constexpr wchar_t kHostClassName[] = L"WH_HoverTextMagnifierHost";
@@ -276,6 +291,10 @@ struct AppSettings {
     int autoHideDelayMs = 0;
     int textOpacityPercent = 100;
     int magnifierOpacityPercent = 100;
+
+    std::wstring toggleHotkey;
+    bool pauseFullscreen = false;
+    std::vector<std::wstring> excludedApps;  // Lowercase, without ".exe".
 };
 
 struct UiaRequest {
@@ -359,6 +378,12 @@ struct RuntimeState {
     HHOOK hKeyboardHook = nullptr;
     std::atomic<bool> capsLockToggleState{false};
     std::atomic<bool> capsLockKeyDown{false};
+
+    // Toggle hotkey state, owned by the worker thread.
+    bool hotkeyRegistered = false;
+    bool hotkeyToggled = false;
+    bool paused = false;
+    ULONGLONG lastPauseCheckTick = 0;
 
     HWND hwndHost = nullptr;
     HWND hwndMag = nullptr;
@@ -687,6 +712,172 @@ struct StringSetting {
     operator PCWSTR() const { return value; }
 };
 
+// ---- Toggle hotkey, full screen pause and app exclusion ----
+
+static constexpr int kToggleHotkeyId = 1;
+
+static std::wstring LowerTrim(const std::wstring& in) {
+    size_t a = in.find_first_not_of(L" \t");
+    if (a == std::wstring::npos) return L"";
+    size_t b = in.find_last_not_of(L" \t");
+    std::wstring out = in.substr(a, b - a + 1);
+    for (auto& c : out) c = (wchar_t)towlower(c);
+    return out;
+}
+
+// "Code.exe " -> "code", so a list entry matches with or without ".exe".
+static std::wstring ExeKey(const std::wstring& name) {
+    std::wstring k = LowerTrim(name);
+    if (k.size() > 4 && k.compare(k.size() - 4, 4, L".exe") == 0) k.resize(k.size() - 4);
+    return k;
+}
+
+static UINT KeyNameToVk(const std::wstring& name) {
+    std::wstring k = LowerTrim(name);
+    if (k.empty()) return 0;
+    if (k.size() == 1) {
+        wchar_t c = (wchar_t)towupper(k[0]);
+        if ((c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9')) return c;
+        SHORT scan = VkKeyScanW(k[0]);
+        return scan == -1 ? 0 : (scan & 0xFF);
+    }
+    if (k[0] == L'f' && k.size() <= 3) {
+        int n = _wtoi(k.c_str() + 1);
+        if (n >= 1 && n <= 24) return VK_F1 + n - 1;
+    }
+    if (k.rfind(L"numpad", 0) == 0 && k.size() == 7 && iswdigit(k[6])) {
+        return VK_NUMPAD0 + (k[6] - L'0');
+    }
+    static const struct { PCWSTR name; UINT vk; } names[] = {
+        {L"space", VK_SPACE},     {L"tab", VK_TAB},         {L"enter", VK_RETURN},
+        {L"esc", VK_ESCAPE},      {L"escape", VK_ESCAPE},   {L"backspace", VK_BACK},
+        {L"insert", VK_INSERT},   {L"delete", VK_DELETE},   {L"del", VK_DELETE},
+        {L"home", VK_HOME},       {L"end", VK_END},         {L"pageup", VK_PRIOR},
+        {L"pagedown", VK_NEXT},   {L"up", VK_UP},           {L"down", VK_DOWN},
+        {L"left", VK_LEFT},       {L"right", VK_RIGHT},     {L"pause", VK_PAUSE},
+        {L"scrolllock", VK_SCROLL}, {L"printscreen", VK_SNAPSHOT},
+    };
+    for (auto& n : names) {
+        if (k == n.name) return n.vk;
+    }
+    return 0;
+}
+
+// "Ctrl+Alt+M" -> RegisterHotKey modifiers and key.
+static bool ParseHotkey(const std::wstring& text, UINT* mods, UINT* vk) {
+    *mods = 0;
+    *vk = 0;
+    size_t start = 0;
+    while (start <= text.size()) {
+        size_t plus = text.find(L'+', start);
+        std::wstring part = text.substr(start, plus == std::wstring::npos ? std::wstring::npos : plus - start);
+        std::wstring k = LowerTrim(part);
+        if (k == L"ctrl" || k == L"control") *mods |= MOD_CONTROL;
+        else if (k == L"alt") *mods |= MOD_ALT;
+        else if (k == L"shift") *mods |= MOD_SHIFT;
+        else if (k == L"win" || k == L"windows") *mods |= MOD_WIN;
+        else if (!k.empty()) {
+            if (*vk) return false;  // Two plain keys.
+            *vk = KeyNameToVk(k);
+            if (!*vk) return false;
+        }
+        if (plus == std::wstring::npos) break;
+        start = plus + 1;
+    }
+    return *vk != 0;
+}
+
+// Runs on the worker thread: WM_HOTKEY lands in its message queue.
+static void UpdateToggleHotkey() {
+    if (g.hotkeyRegistered) {
+        UnregisterHotKey(nullptr, kToggleHotkeyId);
+        g.hotkeyRegistered = false;
+    }
+    g.hotkeyToggled = false;
+    if (g.cfg.toggleHotkey.empty()) return;
+    UINT mods, vk;
+    if (!ParseHotkey(g.cfg.toggleHotkey, &mods, &vk)) {
+        Wh_Log(L"Can't read the toggle hotkey \"%s\"", g.cfg.toggleHotkey.c_str());
+        return;
+    }
+    g.hotkeyRegistered = RegisterHotKey(nullptr, kToggleHotkeyId, mods | MOD_NOREPEAT, vk) != FALSE;
+    if (!g.hotkeyRegistered) {
+        Wh_Log(L"Toggle hotkey \"%s\" is taken by another app", g.cfg.toggleHotkey.c_str());
+    }
+}
+
+static void OnToggleHotkey() {
+    if (g.cfg.triggerKey == TriggerKey::CapsLock) {
+        g.capsLockToggleState = !g.capsLockToggleState;
+    } else {
+        g.hotkeyToggled = !g.hotkeyToggled;
+    }
+}
+
+static bool ForegroundIsFullscreen() {
+    QUERY_USER_NOTIFICATION_STATE state;
+    if (SUCCEEDED(SHQueryUserNotificationState(&state)) &&
+        (state == QUNS_BUSY || state == QUNS_RUNNING_D3D_FULL_SCREEN ||
+         state == QUNS_PRESENTATION_MODE)) {
+        return true;
+    }
+    HWND fg = GetForegroundWindow();
+    if (!fg || fg == GetShellWindow() || fg == GetDesktopWindow()) return false;
+    wchar_t cls[64] = {};
+    GetClassNameW(fg, cls, ARRAYSIZE(cls));
+    if (!wcscmp(cls, L"WorkerW") || !wcscmp(cls, L"Progman") || !wcscmp(cls, L"Shell_TrayWnd")) {
+        return false;
+    }
+    // A borderless window covering its whole monitor: a game or a video.
+    if ((GetWindowLongW(fg, GWL_STYLE) & WS_CAPTION) == WS_CAPTION) return false;
+    RECT r;
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (!GetWindowRect(fg, &r) ||
+        !GetMonitorInfoW(MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST), &mi)) {
+        return false;
+    }
+    return r.left <= mi.rcMonitor.left && r.top <= mi.rcMonitor.top &&
+           r.right >= mi.rcMonitor.right && r.bottom >= mi.rcMonitor.bottom;
+}
+
+static std::wstring ExeKeyOfWindow(HWND wnd) {
+    static DWORD cachedPid = 0;
+    static std::wstring cachedName;
+    DWORD pid = 0;
+    if (!wnd) return L"";
+    GetWindowThreadProcessId(GetAncestor(wnd, GA_ROOT), &pid);
+    if (!pid) return L"";
+    if (pid == cachedPid) return cachedName;
+    std::wstring name;
+    if (HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)) {
+        wchar_t path[MAX_PATH];
+        DWORD size = ARRAYSIZE(path);
+        if (QueryFullProcessImageNameW(process, 0, path, &size)) {
+            std::wstring full(path, size);
+            size_t slash = full.find_last_of(L"\\/");
+            name = ExeKey(slash == std::wstring::npos ? full : full.substr(slash + 1));
+        }
+        CloseHandle(process);
+    }
+    cachedPid = pid;
+    cachedName = name;
+    return name;
+}
+
+static bool ShouldPause(POINT pt) {
+    if (g.cfg.pauseFullscreen && ForegroundIsFullscreen()) return true;
+    if (g.cfg.excludedApps.empty()) return false;
+    for (HWND wnd : {WindowFromPoint(pt), GetForegroundWindow()}) {
+        std::wstring name = ExeKeyOfWindow(wnd);
+        if (name.empty()) continue;
+        for (auto& app : g.cfg.excludedApps) {
+            if (name == app) return true;
+        }
+    }
+    return false;
+}
+
 static void LoadSettings() {
     StringSetting trig(L"triggerKey");
     StringSetting mode(L"mode");
@@ -818,6 +1009,25 @@ static void LoadSettings() {
     g.cfg.cornerRadius = 16;
     g.cfg.padding = 18;
     g.cfg.offsetX = 24; g.cfg.offsetY = 24;
+
+    {
+        StringSetting hotkey(L"toggleHotkey");
+        g.cfg.toggleHotkey = hotkey ? LowerTrim(hotkey.value) : L"";
+        g.cfg.pauseFullscreen = Wh_GetIntSetting(L"pauseFullscreen") != 0;
+        g.cfg.excludedApps.clear();
+        StringSetting apps(L"excludedApps");
+        std::wstring list = apps ? apps.value : L"";
+        size_t start = 0;
+        while (start <= list.size()) {
+            size_t end = list.find_first_of(L",;", start);
+            std::wstring name = ExeKey(list.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start));
+            if (!name.empty()) g.cfg.excludedApps.push_back(name);
+            if (end == std::wstring::npos) break;
+            start = end + 1;
+        }
+        g.paused = false;
+        g.lastPauseCheckTick = 0;
+    }
 
     g.cfg.updateIntervalMs      = 16; // Fixed 60fps
     g.cfg.uiaQueryMinIntervalMs = 60; // Fixed sensible default
@@ -1544,6 +1754,10 @@ static void TickUpdate() {
     if (!g.hwndHost) return;
 
     bool triggerDown = IsTriggerDown(g.cfg.triggerKey);
+    if (g.hotkeyToggled) {
+        // The toggle hotkey shows it without a held key, or pauses "Always on".
+        triggerDown = g.cfg.triggerKey != TriggerKey::None;
+    }
     ULONGLONG nowTick = GetTickCount64();
 
     static bool dbgWasTriggerDown = false;
@@ -1576,6 +1790,18 @@ static void TickUpdate() {
     if (!GetCursorPos(&pt)) {
         EnsureVisibility(false);
         return;
+    }
+
+    if (g.cfg.pauseFullscreen || !g.cfg.excludedApps.empty()) {
+        // Checked a few times a second, not every frame.
+        if (nowTick - g.lastPauseCheckTick >= 250) {
+            g.lastPauseCheckTick = nowTick;
+            g.paused = ShouldPause(pt);
+        }
+        if (g.paused) {
+            EnsureVisibility(false);
+            return;
+        }
     }
 
     UpdateEffectiveSizing(pt);
@@ -1805,6 +2031,7 @@ static void WorkerThread() {
         g.workerFinished.store(true, std::memory_order_release);
         return;
     }
+    UpdateToggleHotkey();
 
     // Use LL Hook if CapsLock needed
     if (g.cfg.triggerKey == TriggerKey::CapsLock) {
@@ -1866,8 +2093,13 @@ static void WorkerThread() {
                 g.running = false;
                 break;
             }
+            if (msg.message == WM_HOTKEY && msg.wParam == kToggleHotkeyId) {
+                OnToggleHotkey();
+                continue;
+            }
             if (msg.message == WM_APP_RELOAD_SETTINGS) {
                 LoadSettings();
+                UpdateToggleHotkey();
                 if (g.cfg.triggerKey == TriggerKey::CapsLock) InstallHooks(); else UninstallHooks();
                 ApplyOpacityForMode(g.showingText, g.showingMag);
             }
@@ -1883,6 +2115,10 @@ static void WorkerThread() {
     DestroyWindows();
 
     UninstallHooks();
+    if (g.hotkeyRegistered) {
+        UnregisterHotKey(nullptr, kToggleHotkeyId);
+        g.hotkeyRegistered = false;
+    }
 
     // Signal UIA thread to exit
     {
