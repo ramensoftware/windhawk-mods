@@ -155,10 +155,10 @@ Everything the mod does, in detail, is below.
 * **Tray sizes, clearer**: Other apps' icons before scrolling is dimmed
   when the tray icons open as a grid or a list with names, which it doesn't
   change; the grid's size is its Grid columns.
-* **Faísca's small pill, your width**: when the island is
-  hidden with only her on it, a slider sets how wide her
-  pill is beside her (Faísca section); with Line opacity at
-  0%, only she floats at the top.
+* **Faísca's small pill**: when the island is hidden with only her on it,
+  a slider sets how wide her pill is beside her (Faísca section), and Line
+  opacity applies to it too; at 0%, only she floats at the top of the
+  screen.
 * **Neon, your colors** (the Vice theme from 3.3, renamed): five palettes (Sunset, Miami, Synthwave, Toxic and
   Inferno) or one color of yours, and the island builds the whole neon from
   it (Look tab, under Colors). A switch makes its background pure black,
@@ -173,9 +173,6 @@ Everything the mod does, in detail, is below.
 * **Bubbles out of the clock**: while the island is minimized or hidden as
   the clock (the Bar too), the Caps Lock, Num Lock and keyboard language
   bubbles grow out of the line or the clock itself, in its shape (#7520).
-* **Faísca floating alone**: Line opacity also applies to her small pill
-  when she's alone on the hidden island; at 0%, only she floats at the top
-  of the screen.
 * **Neon, easier to read**: its texts take Bahnschrift a little wider, the
   letters apart, still narrower than the other themes' font.
 * **Fixed**: What's playing reads the app again right after you press play,
@@ -286,6 +283,7 @@ the bell; and the notches hiding together as one line:
 | The other way around (light in dark mode) | ![Auto inverted](https://i.imgur.com/tMr0Hqo.png) |
 | Your own colors | ![Your own colors](https://i.imgur.com/27jYaq7.png) |
 | Neon (called Vice in 3.3), with its pause-menu power menu | ![The island turning from Black to Neon, then its power menu opening as a pause menu](https://i.imgur.com/H6UxMXU.gif) |
+| Neon's palettes, with the animated neon | ![The island's neon flowing along its edge while it goes through Sunset, Miami, Synthwave, Toxic and Inferno](https://i.imgur.com/vum7r5X.gif) |
 
 ## The island in detail
 
@@ -618,7 +616,7 @@ the island on and set up the taskbar, the dock and its animations.
 | :--- | :--- |
 | Profiles | Up to 10 sets of the island's settings: "+" saves the current ones, a click applies one, the one in use keeps every change; a pill button switches them (Shift+wheel); a profile's pencil makes it turn on by itself with some apps in front or with a style chosen (and, after its app, go back to the one before or stay). Notifications, notes and tasks aren't in them. |
 | Backup | Export or import a file with notes, tasks, shortcuts, your commands, events, the agendas' links (keep it private), pinned folders, the wallpapers' folder, profiles and settings. They're kept by Windhawk on this computer, for every account on it. Reset (a double click) puts the island's settings back as they came; notes, tasks, events and profiles stay. |
-| Language | English, Portuguese, Chinese (Simplified and Traditional), German, Spanish, Russian, Japanese, Vietnamese, French, Turkish, Korean, Indonesian, Polish, Thai, or Windows' display language; the dates follow it. The list shows who translated each language (their GitHub name). |
+| Language | English, Portuguese, Chinese (Simplified and Traditional), German, Spanish, Russian, Japanese, Vietnamese, French, Turkish, Korean, Indonesian, Polish, Thai, or Windows' display language; the dates follow it. The list shows the GitHub name of whoever translated a language, for the ones people translated (see Credits). |
 | Style | Island, Fixed or Bar, and what only that style has: the notches (none, middle, corners or three, for each style; their curves; hiding each on its own; hiding an empty one; which notch's line opens the island), dragging the pill, upright on the sides. |
 | Place | Where it sits (per monitor), a place and icons per app (pill style), the distance from the edges. |
 | Hiding | Hiding as a line after a time, or only while a window is maximized or over it, or as only the clock (also the Bar hidden with Win+J); a timer going on the line; the line's opacity, fading away after a while for OLED screens, opening it with the mouse or a click, and how long the area that brings it back is; the minimize arrow; Win+J (its keys recorded by a click). |
@@ -1078,10 +1076,9 @@ Os detalhes de cada opção estão em inglês acima e, passo a passo, no site
   rolar fica esmaecido quando os ícones da bandeja abrem em grade ou em
   lista com nomes, que ele não muda; o tamanho da grade é o de Colunas da
   grade.
-* **A pílula pequena da Faísca, na largura que você
-  quiser**: com a ilha escondida e só ela na pílula, um
-  controle define a largura em volta dela (seção Faísca);
-  com a opacidade da linha em 0%, só ela flutua no topo.
+* **A pílula pequena da Faísca**: com a ilha escondida e só ela na pílula,
+  um controle define a largura em volta dela (seção Faísca), e a opacidade
+  da linha vale também para ela; em 0%, só ela flutua no topo da tela.
 * **Neon, as suas cores** (o tema Vice da 3.3, com nome novo): cinco paletas (Pôr do sol, Miami, Synthwave,
   Tóxico e Inferno) ou uma cor sua, e a ilha monta o neon inteiro a partir
   dela (aba Aparência, abaixo de Cores). Um interruptor deixa o fundo dele
@@ -1098,9 +1095,6 @@ Os detalhes de cada opção estão em inglês acima e, passo a passo, no site
 * **Bolhas saindo do relógio**: com a ilha minimizada ou escondida como
   relógio (a Barra também), as bolhas do Caps Lock, do Num Lock e do idioma
   do teclado saem da própria linha ou do relógio, no formato dele (#7520).
-* **Faísca flutuando sozinha**: a opacidade da linha vale também para a
-  pílula pequena dela quando está sozinha na ilha escondida; em 0%, só ela
-  flutua no topo da tela.
 * **Neon, mais fácil de ler**: os textos usam a Bahnschrift um pouco mais
   larga, com as letras separadas, ainda mais estreita que a fonte dos
   outros temas.
@@ -1212,6 +1206,7 @@ se escondendo juntos numa linha:
 | O contrário (claro no modo escuro) | ![Automático invertido](https://i.imgur.com/tMr0Hqo.png) |
 | Suas próprias cores | ![Suas próprias cores](https://i.imgur.com/27jYaq7.png) |
 | Neon (o Vice da 3.3), com o menu de energia de menu de pausa | ![A ilha passando do Preto para o Neon e o menu de energia abrindo como menu de pausa](https://i.imgur.com/H6UxMXU.gif) |
+| As paletas do Neon, com o neon animado | ![O neon da ilha correndo pela borda enquanto passa por Pôr do sol, Miami, Synthwave, Tóxico e Inferno](https://i.imgur.com/vum7r5X.gif) |
 
 ### Compatibilidade
 
@@ -17776,6 +17771,7 @@ constexpr WCHAR kChineseTexts[] =
     L"In use: close what's open on it\0" L"正在使用：请关闭其中打开的文件\0"
     L"Inferno\0" L"炼狱\0"
     L"Installed apps\0" L"已安装的应用\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"安装更新需要他们先注销。重启和关机仍可正常使用\0"
     L"Instrumental\0" L"纯音乐\0"
     L"Ionicons (online)\0" L"Ionicons（在线）\0"
     L"Island\0" L"灵动岛\0"
@@ -18124,6 +18120,7 @@ constexpr WCHAR kChineseTexts[] =
     L"Other apps' icons before scrolling\0" L"滚动前显示的其他应用图标数\0"
     L"Other apps' tray icons\0" L"其他应用的托盘图标\0"
     L"Other files\0" L"其他文件\0"
+    L"Other people are signed in\0" L"其他人已登录\0"
     L"Out when one comes or under the mouse\0" L"有新通知或鼠标悬停时展开\0"
     L"Output\0" L"输出\0"
     L"Overcast\0" L"阴\0"
@@ -19664,6 +19661,7 @@ constexpr WCHAR kGermanTexts[] =
     L"In use: close what's open on it\0" L"In Verwendung: Geöffnetes darauf schließen\0"
     L"Inferno\0" L"Inferno\0"
     L"Installed apps\0" L"Installierte Apps\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"Zum Installieren der Updates müssen sie sich zuerst abmelden. Neu starten und Herunterfahren funktionieren weiterhin\0"
     L"Instrumental\0" L"Instrumental\0"
     L"Ionicons (online)\0" L"Ionicons (online)\0"
     L"Island\0" L"Insel\0"
@@ -20012,6 +20010,7 @@ constexpr WCHAR kGermanTexts[] =
     L"Other apps' icons before scrolling\0" L"Symbole anderer Apps vor dem Scrollen\0"
     L"Other apps' tray icons\0" L"Infobereich-Symbole anderer Apps\0"
     L"Other files\0" L"Andere Dateien\0"
+    L"Other people are signed in\0" L"Andere Personen sind angemeldet\0"
     L"Out when one comes or under the mouse\0" L"Offen bei neuer Meldung oder unter der Maus\0"
     L"Output\0" L"Ausgabe\0"
     L"Overcast\0" L"Bedeckt\0"
@@ -21552,6 +21551,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"In use: close what's open on it\0" L"En uso: cierra lo que esté abierto en ella\0"
     L"Inferno\0" L"Infierno\0"
     L"Installed apps\0" L"Apps instaladas\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"Para instalar las actualizaciones, primero deben cerrar sesión. Reiniciar y Apagar siguen funcionando\0"
     L"Instrumental\0" L"Instrumental\0"
     L"Ionicons (online)\0" L"Ionicons (en línea)\0"
     L"Island\0" L"Isla\0"
@@ -21900,6 +21900,7 @@ constexpr WCHAR kSpanishTexts[] =
     L"Other apps' icons before scrolling\0" L"Iconos de otras apps antes de desplazar\0"
     L"Other apps' tray icons\0" L"Iconos de la bandeja de otras apps\0"
     L"Other files\0" L"Otros archivos\0"
+    L"Other people are signed in\0" L"Hay otras personas con sesión iniciada\0"
     L"Out when one comes or under the mouse\0" L"Salen cuando llega una o con el ratón encima\0"
     L"Output\0" L"Salida\0"
     L"Overcast\0" L"Nublado\0"
@@ -23440,6 +23441,7 @@ constexpr WCHAR kRussianTexts[] =
     L"In use: close what's open on it\0" L"Используется: закройте открытое на нём\0"
     L"Inferno\0" L"Инферно\0"
     L"Installed apps\0" L"Установленные приложения\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"Чтобы установить обновления, им нужно сначала выйти. Перезагрузка и завершение работы по-прежнему доступны\0"
     L"Instrumental\0" L"Инструментальная\0"
     L"Ionicons (online)\0" L"Ionicons (онлайн)\0"
     L"Island\0" L"Остров\0"
@@ -23788,6 +23790,7 @@ constexpr WCHAR kRussianTexts[] =
     L"Other apps' icons before scrolling\0" L"Значки других приложений до прокрутки\0"
     L"Other apps' tray icons\0" L"Значки области уведомлений других приложений\0"
     L"Other files\0" L"Другие файлы\0"
+    L"Other people are signed in\0" L"В системе есть другие пользователи\0"
     L"Out when one comes or under the mouse\0" L"Выходят при новом уведомлении или под мышью\0"
     L"Output\0" L"Вывод\0"
     L"Overcast\0" L"Пасмурно\0"
@@ -25328,6 +25331,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"In use: close what's open on it\0" L"使用中: 開いているものを閉じてください\0"
     L"Inferno\0" L"インフェルノ\0"
     L"Installed apps\0" L"インストール済みのアプリ\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"更新をインストールするには、先にサインアウトしてもらう必要があります。再起動とシャットダウンは通常どおり使えます\0"
     L"Instrumental\0" L"インストゥルメンタル\0"
     L"Ionicons (online)\0" L"Ionicons（オンライン）\0"
     L"Island\0" L"アイランド\0"
@@ -25676,6 +25680,7 @@ constexpr WCHAR kJapaneseTexts[] =
     L"Other apps' icons before scrolling\0" L"スクロールまでに表示する他のアプリのアイコン数\0"
     L"Other apps' tray icons\0" L"他のアプリのトレイ アイコン\0"
     L"Other files\0" L"その他のファイル\0"
+    L"Other people are signed in\0" L"他のユーザーがサインインしています\0"
     L"Out when one comes or under the mouse\0" L"通知が届いたときやマウスを載せたときに出る\0"
     L"Output\0" L"出力\0"
     L"Overcast\0" L"曇り\0"
@@ -27216,6 +27221,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"In use: close what's open on it\0" L"Ổ đĩa đang được sử dụng. Hãy đóng các tệp đang mở trên ổ đĩa rồi thử lại\0"
     L"Inferno\0" L"Hỏa ngục\0"
     L"Installed apps\0" L"Ứng dụng đã cài đặt\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"Để cài bản cập nhật, họ cần đăng xuất trước. Khởi động lại và Tắt máy vẫn dùng được\0"
     L"Instrumental\0" L"Nhạc không lời\0"
     L"Ionicons (online)\0" L"Ionicons (trực tuyến)\0"
     L"Island\0" L"Island\0"
@@ -27564,6 +27570,7 @@ constexpr WCHAR kVietnameseTexts[] =
     L"Other apps' icons before scrolling\0" L"Số biểu tượng hiển thị trước khi cuộn\0"
     L"Other apps' tray icons\0" L"Biểu tượng khay hệ thống của ứng dụng khác\0"
     L"Other files\0" L"Tệp khác\0"
+    L"Other people are signed in\0" L"Có người khác đang đăng nhập\0"
     L"Out when one comes or under the mouse\0" L"Hiện ra khi có thông báo mới hoặc khi chuột ở trên\0"
     L"Output\0" L"Thiết bị phát\0"
     L"Overcast\0" L"Trời âm u\0"
@@ -29104,6 +29111,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"In use: close what's open on it\0" L"En cours d'utilisation\u00A0: fermez ce qui y est ouvert\0"
     L"Inferno\0" L"Enfer\0"
     L"Installed apps\0" L"Apps installées\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"Pour installer les mises à jour, elles doivent d'abord se déconnecter. Redémarrer et Arrêter fonctionnent toujours\0"
     L"Instrumental\0" L"Instrumental\0"
     L"Ionicons (online)\0" L"Ionicons (en ligne)\0"
     L"Island\0" L"Île\0"
@@ -29452,6 +29460,7 @@ constexpr WCHAR kFrenchTexts[] =
     L"Other apps' icons before scrolling\0" L"Icônes des autres apps avant le défilement\0"
     L"Other apps' tray icons\0" L"Icônes des autres apps dans la zone de notification\0"
     L"Other files\0" L"Autres fichiers\0"
+    L"Other people are signed in\0" L"D'autres personnes sont connectées\0"
     L"Out when one comes or under the mouse\0" L"Sortent à l'arrivée d'une notification ou sous la souris\0"
     L"Output\0" L"Sortie\0"
     L"Overcast\0" L"Ciel couvert\0"
@@ -30992,6 +31001,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"In use: close what's open on it\0" L"Kullanımda: üzerinde açık olanı kapat\0"
     L"Inferno\0" L"Cehennem\0"
     L"Installed apps\0" L"Yüklü uygulamalar\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"Güncellemeleri yüklemek için önce oturumlarını kapatmaları gerekir. Yeniden başlat ve Kapat çalışmaya devam eder\0"
     L"Instrumental\0" L"Enstrümantal\0"
     L"Ionicons (online)\0" L"Ionicons (çevrimiçi)\0"
     L"Island\0" L"Ada\0"
@@ -31340,6 +31350,7 @@ constexpr WCHAR kTurkishTexts[] =
     L"Other apps' icons before scrolling\0" L"Kaydırmadan önce diğer uygulamaların simgeleri\0"
     L"Other apps' tray icons\0" L"Diğer uygulamaların tepsi simgeleri\0"
     L"Other files\0" L"Diğer dosyalar\0"
+    L"Other people are signed in\0" L"Başka kişiler oturum açmış\0"
     L"Out when one comes or under the mouse\0" L"Biri geldiğinde veya fare üzerindeyken çıkar\0"
     L"Output\0" L"Çıkış\0"
     L"Overcast\0" L"Kapalı\0"
@@ -32880,6 +32891,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"In use: close what's open on it\0" L"사용 중: 열려 있는 것을 닫으세요\0"
     L"Inferno\0" L"인페르노\0"
     L"Installed apps\0" L"설치된 앱\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"업데이트를 설치하려면 먼저 로그아웃해야 합니다. 다시 시작과 시스템 종료는 계속 사용할 수 있습니다\0"
     L"Instrumental\0" L"연주곡\0"
     L"Ionicons (online)\0" L"Ionicons (온라인)\0"
     L"Island\0" L"아일랜드\0"
@@ -33228,6 +33240,7 @@ constexpr WCHAR kKoreanTexts[] =
     L"Other apps' icons before scrolling\0" L"스크롤 전에 표시할 다른 앱의 아이콘\0"
     L"Other apps' tray icons\0" L"다른 앱의 트레이 아이콘\0"
     L"Other files\0" L"기타 파일\0"
+    L"Other people are signed in\0" L"다른 사용자가 로그인되어 있습니다\0"
     L"Out when one comes or under the mouse\0" L"새 알림이 오거나 마우스를 올리면 나와요\0"
     L"Output\0" L"출력\0"
     L"Overcast\0" L"흐림\0"
@@ -34768,6 +34781,7 @@ constexpr WCHAR kIndonesianTexts[] =
     L"In use: close what's open on it\0" L"Digunakan: tutup aplikasi yang terbuka di atasnya\0"
     L"Inferno\0" L"Inferno\0"
     L"Installed apps\0" L"Aplikasi terpasang\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"Untuk memasang pembaruan, mereka perlu keluar dulu. Mulai ulang dan Matikan tetap berfungsi\0"
     L"Instrumental\0" L"Instrumental\0"
     L"Ionicons (online)\0" L"Ionicons (daring)\0"
     L"Island\0" L"Pulau\0"
@@ -35116,6 +35130,7 @@ constexpr WCHAR kIndonesianTexts[] =
     L"Other apps' icons before scrolling\0" L"Ikon aplikasi lain sebelum digulir\0"
     L"Other apps' tray icons\0" L"Ikon tray aplikasi lain\0"
     L"Other files\0" L"File lainnya\0"
+    L"Other people are signed in\0" L"Ada orang lain yang masuk\0"
     L"Out when one comes or under the mouse\0" L"Muncul saat ada yang datang atau saat mouse di atasnya\0"
     L"Output\0" L"Keluaran\0"
     L"Overcast\0" L"Berawan tebal\0"
@@ -36656,6 +36671,7 @@ constexpr WCHAR kPolishTexts[] =
     L"In use: close what's open on it\0" L"W użyciu: zamknij to, co jest na nim otwarte\0"
     L"Inferno\0" L"Inferno\0"
     L"Installed apps\0" L"Zainstalowane aplikacje\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"Aby zainstalować aktualizacje, muszą się najpierw wylogować. Uruchom ponownie i Zamknij nadal działają\0"
     L"Instrumental\0" L"Instrumentalny\0"
     L"Ionicons (online)\0" L"Ionicons (online)\0"
     L"Island\0" L"Wyspa\0"
@@ -37004,6 +37020,7 @@ constexpr WCHAR kPolishTexts[] =
     L"Other apps' icons before scrolling\0" L"Ikony innych aplikacji przed przewijaniem\0"
     L"Other apps' tray icons\0" L"Ikony zasobnika innych aplikacji\0"
     L"Other files\0" L"Inne pliki\0"
+    L"Other people are signed in\0" L"Zalogowane są inne osoby\0"
     L"Out when one comes or under the mouse\0" L"Wysuwa się, gdy coś przyjdzie, lub pod myszą\0"
     L"Output\0" L"Wyjście\0"
     L"Overcast\0" L"Pochmurno\0"
@@ -38544,6 +38561,7 @@ constexpr WCHAR kThaiTexts[] =
     L"In use: close what's open on it\0" L"กำลังใช้งานอยู่: โปรดปิดโปรแกรมที่เปิดค้างไว้ในไดรฟ์นี้\0"
     L"Inferno\0" L"Inferno\0"
     L"Installed apps\0" L"แอปที่ติดตั้งแล้ว\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"ต้องให้ผู้ใช้เหล่านั้นออกจากระบบก่อนจึงจะติดตั้งการอัปเดตได้ รีสตาร์ทและปิดเครื่องยังใช้งานได้ตามปกติ\0"
     L"Instrumental\0" L"เพลงบรรเลง\0"
     L"Ionicons (online)\0" L"Ionicons (ออนไลน์)\0"
     L"Island\0" L"เกาะ\0"
@@ -38892,6 +38910,7 @@ constexpr WCHAR kThaiTexts[] =
     L"Other apps' icons before scrolling\0" L"จำนวนไอคอนแอปอื่นก่อนเริ่มเลื่อน\0"
     L"Other apps' tray icons\0" L"ไอคอนถาดระบบของแอปอื่น\0"
     L"Other files\0" L"ไฟล์อื่นๆ\0"
+    L"Other people are signed in\0" L"มีผู้ใช้อื่นลงชื่อเข้าใช้อยู่\0"
     L"Out when one comes or under the mouse\0" L"ออกมาเมื่อมีรายการใหม่หรือเมื่อชี้เมาส์\0"
     L"Output\0" L"อุปกรณ์ส่งออกเสียง\0"
     L"Overcast\0" L"มีเมฆมาก\0"
@@ -40432,6 +40451,7 @@ constexpr WCHAR kTraditionalChineseTexts[] =
     L"In use: close what's open on it\0" L"正在使用：請關閉其中開啟的檔案\0"
     L"Inferno\0" L"煉獄\0"
     L"Installed apps\0" L"已安裝的應用程式\0"
+    L"Installing updates needs them signed out first. Restart and Shut down still work\0" L"安裝更新需要他們先登出。重新啟動和關機仍可正常使用\0"
     L"Instrumental\0" L"純音樂\0"
     L"Ionicons (online)\0" L"Ionicons（線上）\0"
     L"Island\0" L"動態島\0"
@@ -40780,6 +40800,7 @@ constexpr WCHAR kTraditionalChineseTexts[] =
     L"Other apps' icons before scrolling\0" L"開始捲動前可顯示的其他應用程式圖示數\0"
     L"Other apps' tray icons\0" L"其他應用程式的系統匣圖示\0"
     L"Other files\0" L"其他檔案\0"
+    L"Other people are signed in\0" L"其他人已登入\0"
     L"Out when one comes or under the mouse\0" L"有新通知或滑鼠停留時滑出\0"
     L"Output\0" L"輸出\0"
     L"Overcast\0" L"陰\0"
@@ -45866,6 +45887,7 @@ struct TextTranslator {
 };
 constexpr TextTranslator kTextTranslators[] = {
     {TextLanguage::Vietnamese, L"caotu2k5"},
+    {TextLanguage::French, L"11ethann11"},
     {TextLanguage::Indonesian, L"cslavioindo"},
     {TextLanguage::Polish, L"salackij-bit"},
     {TextLanguage::Thai, L"notactuallyoak"},
@@ -47117,6 +47139,12 @@ bool g_dndSeenOn;
 // The profile the island set while it has it on: 1 "alarms only" (with its
 // own "Do not disturb"), 0 "priority only", -1 not known (just started).
 int g_turnedDndAlarms = -1;
+// Whether the user chose "Do not disturb" (see DoNotDisturbChosen), as last
+// asked: Windows' quiet hours server is asked at most this often, an
+// out-of-process call on the island's thread.
+constexpr double kDndChosenSeconds = 5;
+double g_dndChosenAt;
+bool g_dndChosen = true;
 
 // Whether an island's process runs: its mutex exists while it does (one it
 // can't open exists too). In the island's own process once it released its
@@ -47178,8 +47206,13 @@ void UpdateWindowsQuiet(bool islandRunning) {
             if (g_turnedDndOffAt && NowSeconds() - g_turnedDndOffAt <= 5) {
                 return;
             }
-            bool chosen = true;
-            if (!DoNotDisturbChosen(&chosen) || chosen) {
+            if (NowSeconds() - g_dndChosenAt >= kDndChosenSeconds) {
+                g_dndChosenAt = NowSeconds();
+                if (!DoNotDisturbChosen(&g_dndChosen)) {
+                    g_dndChosen = true;
+                }
+            }
+            if (g_dndChosen) {
                 g_dndSeenOn = true;
                 return;
             }
@@ -56370,6 +56403,21 @@ void Panel::KeptTick() {
         KillTimer(m_hwnd, kPanelKeptTimerId);
         return;
     }
+    // (Kept only while the window in front covers the panel's monitor, a
+    // game in full screen: Alt+Tab or the Win key to another window closes
+    // it.)
+    const HMONITOR monitor =
+        MonitorFromWindow(m_hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO info{sizeof(info)};
+    if (GetMonitorInfo(monitor, &info) &&
+        !CoversMonitor(GetAncestor(GetForegroundWindow(), GA_ROOT), monitor,
+                       info.rcMonitor)) {
+        m_keptWithoutFocus = false;
+        KillTimer(m_hwnd, kPanelKeptTimerId);
+        Close();
+        StartIslandAnimation();
+        return;
+    }
     POINT cursor;
     RECT rect{};
     if (GetCursorPos(&cursor) && GetWindowRect(m_hwnd, &rect) &&
@@ -56999,7 +57047,8 @@ LRESULT Panel::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             // Clicked somewhere else (not a dialog of its own). Another
             // window taking the focus by itself, no button down and the
             // mouse still on the panel (a game in borderless full screen
-            // taking it back): it stays until the mouse goes away.
+            // taking it back): it stays until the mouse goes away, while
+            // that window covers its monitor (see KeptTick).
             if (LOWORD(wParam) == WA_INACTIVE && !m_dialogShown &&
                 !StaysWhenDeactivated()) {
                 if (FocusTakenWithoutClick()) {
@@ -74416,6 +74465,9 @@ struct MediaState {
     // The cover (an image file's bytes), and a number that changes with it.
     std::vector<BYTE> thumbnail;
     UINT thumbnailSerial = 0;
+    // The cover is still the song before's: told first, without waiting for
+    // the new one (#7627), not this song's yet (see NoteSongChange).
+    bool coverCarried = false;
 
     // Where it is now, moving while it plays.
     double Now() const {
@@ -75205,9 +75257,11 @@ DWORD WINAPI MediaThreadProc(LPVOID parameter) {
                             // What's playing shown first, without waiting for
                             // the cover (#7627). Told again below once it's
                             // read.
+                            state.coverCarried = true;
                             if (!publish(state)) {
                                 break;
                             }
+                            state.coverCarried = false;
                             std::vector<BYTE> cover;
                             try {
                                 auto thumbnail = properties
@@ -76702,7 +76756,8 @@ void RunPowerAction(PowerAction action, HWND window) {
         case PowerAction::UpdateShutDown: {
             // Like the Start menu's: the updates installed as Windows
             // restarts or shuts down (a full shutdown, as they need), the
-            // apps asked to close as usual. Without it, the plain action.
+            // apps asked to close as usual. Without it, the plain action;
+            // with other accounts signed in, nothing, and a notice.
             const bool restart = action == PowerAction::UpdateRestart;
             EnableShutdownPrivilege();
             const DWORD error = InitiateShutdownW(
@@ -76711,7 +76766,20 @@ void RunPowerAction(PowerAction action, HWND window) {
                     (restart ? SHUTDOWN_RESTART : SHUTDOWN_POWEROFF),
                 SHTDN_REASON_MAJOR_OPERATINGSYSTEM |
                     SHTDN_REASON_MINOR_UPGRADE | SHTDN_REASON_FLAG_PLANNED);
-            if (error != ERROR_SUCCESS) {
+            if (error == ERROR_SHUTDOWN_USERS_LOGGED_ON) {
+                // (Windows installs them only with the others signed out, or
+                // forced out as Start warns: their work isn't lost here.)
+                IslandLog(L"InitiateShutdown with updates: other accounts "
+                          L"signed in");
+                ShowIslandNotice(
+                    0xE716, 0xFF9F0A,
+                    Tr(L"Other people are signed in",
+                       L"Outras pessoas estão conectadas"),
+                    Tr(L"Installing updates needs them signed out first. "
+                       L"Restart and Shut down still work",
+                       L"Para instalar as atualizações, elas precisam sair "
+                       L"antes. Reiniciar e Desligar continuam funcionando"));
+            } else if (error != ERROR_SUCCESS) {
                 IslandLog(L"InitiateShutdown with updates failed: %u", error);
                 RunPowerAction(
                     restart ? PowerAction::Restart : PowerAction::ShutDown,
@@ -78227,6 +78295,9 @@ struct ThermalZoneWatch {
 // With no zone that changes after this long, Windows is taken as not
 // reporting the processor's temperature (see UsageThreadProc).
 constexpr double kThermalStuckSeconds = 300;
+// Ruled out for only fixed figures: looked at again this often, from a fresh
+// watch (a real zone in whole degrees can stay flat on an idle PC).
+constexpr double kThermalLookAgainSeconds = 600;
 
 // The processor's temperature, in tenths of a degree, from the thermal
 // zones Windows reports (their counter gives kelvin): the hottest believable
@@ -78310,6 +78381,8 @@ DWORD WINAPI UsageThreadProc(LPVOID parameter) {
     PdhQuery thermalQuery;
     int thermalMisses = 0;
     ThermalZoneWatch thermalWatch;
+    // When it was ruled out for only fixed figures (0: it wasn't).
+    double thermalStuckAt = 0;
     UsageDetails usage;
     CountCores(&usage);
     std::wstring gpuInstance;
@@ -78426,7 +78499,15 @@ DWORD WINAPI UsageThreadProc(LPVOID parameter) {
         // read again). One empty reading doesn't hide it: two in a row do,
         // until it reads again (one read before, like before a sleep). Only
         // zones that change count: with none after kThermalStuckSeconds
-        // (only fixed figures), it isn't reported either.
+        // (only fixed figures), it isn't reported either, and is looked at
+        // again every kThermalLookAgainSeconds.
+        if (thermalStuckAt > 0 &&
+            NowSeconds() - thermalStuckAt >= kThermalLookAgainSeconds) {
+            thermalStuckAt = 0;
+            thermalWatch = {};
+            int stuck = 0;
+            g_cpuTempFound.compare_exchange_strong(stuck, -1);
+        }
         if (g_usageCpuTempWanted && g_cpuTempFound != 0) {
             const int tenths =
                 ReadCpuTemperature(pdh, thermalQuery, &thermalWatch);
@@ -78442,6 +78523,7 @@ DWORD WINAPI UsageThreadProc(LPVOID parameter) {
                 if (NowSeconds() - thermalWatch.since >= kThermalStuckSeconds) {
                     usage.cpuTemperature = -1;
                     g_cpuTempFound = 0;
+                    thermalStuckAt = NowSeconds();
                 }
             } else if (++thermalMisses >= 2) {
                 usage.cpuTemperature = -1;
@@ -127289,6 +127371,7 @@ bool ControlPanel::OnMouseMove(POINT pt) {
             const bool changed = m_hover.part != Part::None;
             m_hover = {};
             FollowInfoHover(pt, m_hover);
+            FollowTipHover();
             return changed;
         }
     }
@@ -151030,7 +151113,11 @@ void Island::RenderPlacedBanner() {
                                       radius,
                                       radius},
                                      brush.get(), 1);
+        // (On the banner's own canvas: not the island's area for its
+        // flow-only frames, see m_neonArea.)
+        const RECT neonKept = m_neonArea;
         DrawViceEdge(target, rect, radius, nullptr, ViceAmount());
+        m_neonArea = neonKept;
         const float contents =
             (float)std::clamp((m_bannerAmount - 0.45) / 0.55, 0.0, 1.0) *
             (1 - (float)std::clamp(m_bannerSwap, 0.0, 1.0));
@@ -160100,8 +160187,10 @@ void Island::NoteSongChange() {
     }
     m_songChangedAt = now;
     // (No wait for a cover that came with the title or just before it, or
-    // from an app that never has one, like VLC 3's.)
-    if (!m_songCoverAt || now - m_songCoverAt < kSongCoverFreshSeconds) {
+    // from an app that never has one, like VLC 3's. One carried over from
+    // the song before isn't this song's: it waits for the next.)
+    if (!state.coverCarried &&
+        (!m_songCoverAt || now - m_songCoverAt < kSongCoverFreshSeconds)) {
         ShowSongNotice();
         return;
     }
@@ -163953,11 +164042,7 @@ bool Island::PanelPlace(IslandItem item,
     D2D1_RECT_F from{};
     if (clicked) {
         from = clicked->rect;
-    } else if (item == IslandItem::None) {
-        const float middle = (m_pill.left + m_pill.right) / 2;
-        const float half = std::round(kIslandIconSlot * IconScale()) / 2;
-        from = {middle - half, m_pill.top, middle + half, m_pill.bottom};
-    } else {
+    } else if (item != IslandItem::None) {
         for (const auto& slot : m_slots) {
             if (slot.item == IslandItem::Clock) {
                 from = slot.rect;
@@ -163965,8 +164050,12 @@ bool Island::PanelPlace(IslandItem item,
             }
         }
     }
+    // (No item, or neither its icon nor the clock on the bar, like the
+    // launcher's shortcut: its middle.)
     if (from.right <= from.left) {
-        return false;
+        const float middle = (m_pill.left + m_pill.right) / 2;
+        const float half = std::round(kIslandIconSlot * IconScale()) / 2;
+        from = {middle - half, m_pill.top, middle + half, m_pill.bottom};
     }
     *anchor = {m_position.x + (LONG)((from.left + from.right) / 2),
                m_position.y + (LONG)(m_pill.bottom + gap)};
