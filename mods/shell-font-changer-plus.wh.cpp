@@ -2,7 +2,7 @@
 // @id              shell-font-changer-plus
 // @name            Shell Font Changer Plus
 // @description     Any installed font and text size in File Explorer, with icons and emoji left intact
-// @version         1.4.1
+// @version         1.4.2
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @homepage        https://github.com/DavidHiFi/davids-windhawk-mods
@@ -37,8 +37,8 @@ never turn into empty boxes.
 - **Classic, themed and modern text.** GDI text, visual-style themes and
   DirectWrite layouts are all covered.
 - **Text fits its controls.** Text that would overflow shrinks a little, to no
-  less than 85% of its height or 80% of its width. If it still overflows, the
-  original UI font draws it.
+  less than 85% of its height or 80% of its width. If classic text still
+  overflows, the original UI font draws it.
 - **Clean to remove.** The mod writes nothing to the registry, so turning it off
   leaves nothing behind.
 
@@ -60,10 +60,12 @@ Settings apply without reloading the mod. Explorer sizes its rows and boxes
 when it creates a window's fonts, so a new text size shows in windows opened
 after the change. Restart Explorer to resize the desktop and the windows that
 were already open, and again after turning the size back to 100 or turning the
-mod off. Turning the mod off and on again without that restart can make some
-text grow twice, and a restart fixes it. Text drawn by DirectWrite never
-shrinks below its original size to fit its box, and text that ends in "..."
-keeps its "...".
+mod off. Turning the mod off and on again, or updating it, without that
+restart can make some text grow twice, and a restart fixes it.
+
+To fit its box, text drawn by DirectWrite never shrinks below its original
+size when only the size is changed, or below 85% of it with a font set. Text
+that ends in "..." keeps its size and its "...".
 
 The Windows 11 command bar and address bar, Start, Search and Settings are
 drawn by XAML or web views and keep their fonts. The
@@ -690,6 +692,11 @@ void applySettings() {
 
 BOOL Wh_ModInit() {
     applySettings();
+    wchar_t face[LF_FACESIZE];
+    if (!policy::face(face) && sizing::percent == 100) {
+        Wh_Log(L"No font is set and the size is 100, so the mod stays idle.");
+        return FALSE;
+    }
     bool ok = true;
     #define HOOK(fn, hook, original) ok = Wh_SetFunctionHook(reinterpret_cast<void*>(fn), reinterpret_cast<void*>(hook), reinterpret_cast<void**>(&original)) && ok
     auto user = LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
