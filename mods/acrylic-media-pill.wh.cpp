@@ -3,7 +3,8 @@
 // @name            Acrylic Media Pill
 // @description     Glass media pill for the taskbar (cover art, title/artist, mini visualizer) with a click-to-open player card. Dark / Light / Liquid Glass themes, smooth anti-aliased edges. Works with dock-style taskbars.
 // @version         1.0.0
-// @author          you
+// @author          nozwin
+// @github          https://github.com/nozwin
 // @include         explorer.exe
 // @compilerOptions -DWINRT_NO_MODULE_LOCK -lole32 -loleaut32 -lruntimeobject -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32
 // ==/WindhawkMod==
