@@ -345,7 +345,23 @@ bool IsEditControl(HWND hWnd)
     // Fallback for .NET WinForms wrapped Edit controls
     // Required for those within PropertyGrid controls that swallow the
     // WM_GETDLGCODE query.
-    return _wcsnicmp(szClassName, L"WindowsForms10.EDIT.", 20) == 0;
+    if (_wcsnicmp(szClassName, L"WindowsForms10.EDIT.", 20) == 0)
+    {
+        return true;
+    }
+
+    // Fallback for ATL/WTL wrapped Edit controls (experimental)
+    // ATL dynamically generates class names (e.g., "ATL:00007FF65AD47060") via
+    // memory thunks, bypassing OS superclass detection.
+    // Example: "Results:" text box in Windhawk Symbol Helper.
+    //
+    // NOTE: EM_GETLIMITTEXT is defined as (WM_USER + 37), which may collide
+    // with custom messages and trigger unintended behavior on non-Edit ATL
+    // windows. Looking for a safer way to identify ATL-wrapped Edit controls.
+    //
+    // Reference: https://github.com/ramensoftware/windhawk-mods/pull/4004
+    return (_wcsnicmp(szClassName, L"ATL:", 4) == 0 &&
+        SendMessageW(hWnd, EM_GETLIMITTEXT, 0, 0) != 0);
 }
 
 // Helper: Validate the Ctrl+Backspace hotkey on a target Edit control
