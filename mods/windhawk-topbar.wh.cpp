@@ -65036,11 +65036,11 @@ static void InstallShellStartActivationHook() {
     if (!module) module = LoadLibraryExW(L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module) { Wh_Log(L"TopBar Start: twinui.pcshell.dll unavailable"); return; }
     // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {{
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellHooks[] = {{
         {LR"(public: virtual long __cdecl XamlLauncher::ShowStartView(enum IMMERSIVELAUNCHERSHOWMETHOD,enum IMMERSIVELAUNCHERSHOWFLAGS))"},
         &g_showStartViewOriginal, TopBarShowStartViewHook
     }};
-    if (!WindhawkUtils::HookSymbols(module, twinuiPcshellDllHooks, ARRAYSIZE(twinuiPcshellDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, twinuiPcshellHooks, ARRAYSIZE(twinuiPcshellHooks))) {
         Wh_Log(L"TopBar Start: shell activation symbol unavailable; retaining taskbar fallback");
         return;
     }
