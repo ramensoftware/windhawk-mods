@@ -142,7 +142,8 @@ CharClass GetCharClass(WCHAR wch)
 // Helper: Resolve a prolonged sound mark to the preceding Japanese kana
 CharClass GetProlongedSoundMarkClass(std::wstring_view text, int iPos)
 {
-    while (iPos > 0 && IsProlongedSoundMark(text[iPos - 1]))
+    while (iPos > 0 && (IsProlongedSoundMark(text[iPos - 1]) ||
+        text[iPos - 1] == L'\u3099' || text[iPos - 1] == L'\u309A'))
     {
         iPos--;
     }
@@ -158,6 +159,8 @@ bool IsSelectorOrJoiner(char32_t codePoint)
 {
     return (codePoint >= 0xFE00 && codePoint <= 0xFE0F) ||
         codePoint == 0x200D || codePoint == 0x20E3 ||
+        codePoint == 0x3099 || codePoint == 0x309A ||
+        (codePoint >= 0xE0020 && codePoint <= 0xE007F) ||
         (codePoint >= 0xE0100 && codePoint <= 0xE01EF);
 }
 
