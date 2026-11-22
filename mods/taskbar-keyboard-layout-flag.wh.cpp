@@ -214,6 +214,7 @@ std::atomic<HWND> g_shellTrayHwnd{ nullptr };
 std::atomic<HKL> g_lastKnownHkl{ nullptr };
 std::atomic<bool> g_modUnloading{ false };
 std::atomic<bool> g_systemTrayHookAttempted{ false };
+std::atomic<bool> g_win10IndicatorAttached{ false };
 
 std::unordered_map<WORD, LANGID> g_deviceLayoutCache;
 std::unordered_map<LANGID, std::wstring> g_countryCodeCache;
@@ -1152,7 +1153,8 @@ bool IsTrayInputIndicatorWindow(HWND hwnd) {
 }
 
 bool ShouldSuppressTaskbarIndicatorText(HDC hdc) {
-    if (!hdc || g_inOurPaint || g_modUnloading.load(std::memory_order_acquire)) {
+    if (!g_win10IndicatorAttached.load(std::memory_order_relaxed) ||
+        !hdc || g_inOurPaint || g_modUnloading.load(std::memory_order_acquire)) {
         return false;
     }
 
@@ -1275,7 +1277,8 @@ HPAINTBUFFER WINAPI BeginBufferedPaint_Hook(
     HDC hdcTarget, const RECT* prcTarget, BP_BUFFERFORMAT dwFormat,
     BP_PAINTPARAMS* pPaintParams, HDC* phdc) {
     HPAINTBUFFER hpb = BeginBufferedPaint_Orig(hdcTarget, prcTarget, dwFormat, pPaintParams, phdc);
-    if (hpb && phdc && *phdc && !g_modUnloading.load(std::memory_order_acquire)) {
+    if (g_win10IndicatorAttached.load(std::memory_order_relaxed) &&
+        hpb && phdc && *phdc && !g_modUnloading.load(std::memory_order_acquire)) {
         bool isIndicator = (g_inIndicatorNativePaint > 0);
         if (!isIndicator && hdcTarget) {
             HWND hwnd = WindowFromDC(hdcTarget);
@@ -1289,30 +1292,41 @@ HPAINTBUFFER WINAPI BeginBufferedPaint_Hook(
 }
 
 HRESULT WINAPI EndBufferedPaint_Hook(HPAINTBUFFER hBufferedPaint, BOOL fUpdateTarget) {
-    if (hBufferedPaint && !g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire)) {
-        HDC bufDC = GetBufferedPaintDC(hBufferedPaint);
-        if (bufDC) {
-            g_activeIndicatorPaintDCs.Erase(bufDC);
+    if (g_win10IndicatorAttached.load(std::memory_order_relaxed) &&
+        hBufferedPaint && !g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire)) {
+        HDC bufDC = nullptr;
+        if (!g_activeIndicatorPaintDCs.Empty()) {
+            bufDC = GetBufferedPaintDC(hBufferedPaint);
+            if (bufDC) {
+                g_activeIndicatorPaintDCs.Erase(bufDC);
+            }
         }
 
-        HDC targetDC = GetBufferedPaintTargetDC(hBufferedPaint);
-        HWND hwnd = targetDC ? WindowFromDC(targetDC) : nullptr;
-        if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
-            g_bufferedPaintHandled = true;
-            // Keep g_inOurPaint alive across EndBufferedPaint_Orig so its internal
-            // BitBlt/GdiAlphaBlend to targetDC does not composite the flag a second time.
-            ReentrancyFlagGuard guard(g_inOurPaint);
-            if (fUpdateTarget && bufDC) {
-                CompositeFlagOntoDC(hwnd, bufDC);
+        if (g_inIndicatorNativePaint > 0) {
+            if (!bufDC) {
+                bufDC = GetBufferedPaintDC(hBufferedPaint);
             }
-            return EndBufferedPaint_Orig(hBufferedPaint, fUpdateTarget);
+            HDC targetDC = GetBufferedPaintTargetDC(hBufferedPaint);
+            HWND hwnd = targetDC ? WindowFromDC(targetDC) : nullptr;
+            if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
+                g_bufferedPaintHandled = true;
+                // Keep g_inOurPaint alive across EndBufferedPaint_Orig so its internal
+                // BitBlt/GdiAlphaBlend to targetDC does not composite the flag a second time.
+                ReentrancyFlagGuard guard(g_inOurPaint);
+                if (fUpdateTarget && bufDC) {
+                    CompositeFlagOntoDC(hwnd, bufDC);
+                }
+                return EndBufferedPaint_Orig(hBufferedPaint, fUpdateTarget);
+            }
         }
     }
     return EndBufferedPaint_Orig(hBufferedPaint, fUpdateTarget);
 }
 
 BOOL WINAPI BitBlt_Hook(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x1, int y1, DWORD rop) {
-    if (!g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire) && hdc) {
+    if (g_win10IndicatorAttached.load(std::memory_order_relaxed) &&
+        g_inIndicatorNativePaint > 0 &&
+        !g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire) && hdc) {
         HWND hwnd = WindowFromDC(hdc);
         if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
             ReentrancyFlagGuard guard(g_inOurPaint);
@@ -1327,7 +1341,9 @@ BOOL WINAPI BitBlt_Hook(HDC hdc, int x, int y, int cx, int cy, HDC hdcSrc, int x
 
 BOOL WINAPI StretchBlt_Hook(HDC hdcDest, int xDest, int yDest, int wDest, int hDest,
                             HDC hdcSrc, int xSrc, int ySrc, int wSrc, int hSrc, DWORD rop) {
-    if (!g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire) && hdcDest) {
+    if (g_win10IndicatorAttached.load(std::memory_order_relaxed) &&
+        g_inIndicatorNativePaint > 0 &&
+        !g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire) && hdcDest) {
         HWND hwnd = WindowFromDC(hdcDest);
         if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
             ReentrancyFlagGuard guard(g_inOurPaint);
@@ -1342,7 +1358,9 @@ BOOL WINAPI StretchBlt_Hook(HDC hdcDest, int xDest, int yDest, int wDest, int hD
 
 BOOL WINAPI GdiAlphaBlend_Hook(HDC hdcDest, int xoriginDest, int yoriginDest, int wDest, int hDest,
                                HDC hdcSrc, int xoriginSrc, int yoriginSrc, int wSrc, int hSrc, BLENDFUNCTION ftn) {
-    if (!g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire) && hdcDest) {
+    if (g_win10IndicatorAttached.load(std::memory_order_relaxed) &&
+        g_inIndicatorNativePaint > 0 &&
+        !g_inOurPaint && !g_modUnloading.load(std::memory_order_acquire) && hdcDest) {
         HWND hwnd = WindowFromDC(hdcDest);
         if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
             ReentrancyFlagGuard guard(g_inOurPaint);
@@ -1655,6 +1673,7 @@ void AttachWin10IndicatorWindow(HWND hwnd) {
     if (!IsTrayInputIndicatorWindow(hwnd) || IsAlreadySubclassed(hwnd)) return;
 
     if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, Win10IndicatorSubclassProc, 0)) {
+        g_win10IndicatorAttached.store(true, std::memory_order_relaxed);
         {
             std::unique_lock lock(g_stateLock);
             g_subclassedIndicators.push_back(hwnd);
@@ -1785,7 +1804,7 @@ HMODULE GetSystemTrayModuleHandle() {
 
         if (_wcsicmp(moduleName, L"Taskbar.View.dll") == 0) {
             VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(module, nullptr);
-            if (fixedFileInfo &&
+            if (!fixedFileInfo ||
                 HIWORD(fixedFileInfo->dwFileVersionMS) >= 2604) {
                 continue;
             }
@@ -2279,17 +2298,23 @@ bool HookSystemTraySymbols(HMODULE systemTrayMod) {
         return false;
     }
 
+    if (!IconView_UpdateIcon_Orig) {
+        Wh_Log(L"Optional symbol IconView::UpdateIcon did not resolve; existing indicators will attach on recreation or hover.");
+    }
+
     return true;
 }
 
-void HandleLoadedModuleIfSystemTray(HMODULE mod, PCWSTR modulePath) {
-    (void)modulePath;
+void HandleLoadedModuleIfSystemTray(HMODULE mod) {
     if (!mod || g_modUnloading.load(std::memory_order_acquire)) {
         return;
     }
 
     if (!g_systemTrayHookAttempted && GetSystemTrayModuleHandle() == mod &&
         !g_systemTrayHookAttempted.exchange(true)) {
+        wchar_t modPath[MAX_PATH] = {};
+        GetModuleFileNameW(mod, modPath, ARRAYSIZE(modPath));
+        Wh_Log(L"Hooking system tray module: %s", modPath);
         if (HookSystemTraySymbols(mod)) {
             Wh_ApplyHookOperations();
         }
@@ -2472,7 +2497,7 @@ LoadLibraryExW_t LoadLibraryExW_Orig = nullptr;
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName, HANDLE hFile, DWORD dwFlags) {
     HMODULE mod = LoadLibraryExW_Orig(lpLibFileName, hFile, dwFlags);
     if (mod) {
-        HandleLoadedModuleIfSystemTray(mod, lpLibFileName);
+        HandleLoadedModuleIfSystemTray(mod);
     }
     return mod;
 }
@@ -2499,6 +2524,7 @@ void LoadSettings() {
 
 BOOL Wh_ModInit() {
     g_modUnloading.store(false, std::memory_order_release);
+    g_win10IndicatorAttached.store(false, std::memory_order_relaxed);
     g_stopWatchdogMsg = RegisterWindowMessageW(L"Windhawk_StopWatchdog_" WH_MOD_ID);
     g_runFromWindowThreadMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
@@ -2522,7 +2548,7 @@ BOOL Wh_ModInit() {
     }
 
     // 2. Install Windows 10 indicator text suppression & buffered-paint hooks
-    //    (strictly gated to TrayInputIndicatorWClass paint via thread-local checks)
+    //    (strictly gated to TrayInputIndicatorWClass paint via atomic/thread-local checks)
     InstallDirect2DAndDWriteHooks();
 
     WindhawkUtils::SetFunctionHook(BeginBufferedPaint, BeginBufferedPaint_Hook, &BeginBufferedPaint_Orig);
@@ -2590,6 +2616,7 @@ void Wh_ModAfterInit() {
 
 void Wh_ModUninit() {
     g_modUnloading.store(true, std::memory_order_release);
+    g_win10IndicatorAttached.store(false, std::memory_order_relaxed);
 
     // 1. Restore Windows 11 XAML indicator TextBlocks and remove injected Image on the UI thread
     DispatchToAllTaskbarUIThreads(CleanupWin11IndicatorsOnUIThread);
