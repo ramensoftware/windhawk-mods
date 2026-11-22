@@ -2,7 +2,7 @@
 // @id              same-app-window-cycler
 // @name            Same-App Window Cycler (Alt+`)
 // @description     macOS-style Cmd+` for Windows: cycle through the windows of the current app with Alt+` (Alt+Shift+` goes backwards)
-// @version         0.1.3
+// @version         0.1.4
 // @author          mdozkanji
 // @github          https://github.com/mdozkanji
 // @include         windhawk.exe
@@ -53,6 +53,8 @@ virtual desktop, and activates the next one.
   ApplicationFrameHost.exe are all treated as one "app".
 - Windows of elevated (administrator) apps may only flash instead of coming to
   the front.
+- "Always on top" windows (such as Picture-in-Picture) are skipped while
+  cycling, unless one of them is the current window.
 - If you switch keyboard layouts and the key left of `1` produces a different
   virtual key, the hotkey stays on the key it was registered with. Disable and
   re-enable the mod after changing layouts.
@@ -146,7 +148,12 @@ static bool IsSwitchable(HWND hwnd) {
     return true;
 }
 
+static bool IsTopmost(HWND hwnd) {
+    return (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+}
+
 struct EnumContext {
+    HWND foreground;
     std::wstring exePath;
     std::vector<HWND> windows;  // Z-order, topmost first.
 };
@@ -155,6 +162,13 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
     auto* ctx = reinterpret_cast<EnumContext*>(lParam);
 
     if (!IsSwitchable(hwnd)) {
+        return TRUE;
+    }
+
+    // Activating a window doesn't lift it above a topmost one, so cycling
+    // through topmost windows (Picture-in-Picture, windows pinned on top)
+    // would get stuck on them. Only include one if it's the current window.
+    if (hwnd != ctx->foreground && IsTopmost(hwnd)) {
         return TRUE;
     }
 
@@ -181,6 +195,7 @@ static void CycleWindows(bool backwards) {
     }
 
     EnumContext ctx;
+    ctx.foreground = foreground;
     if (!GetExePath(foreground, ctx.exePath)) {
         return;
     }
@@ -203,9 +218,14 @@ static void CycleWindows(bool backwards) {
             // Exact reverse of forward: push the current window below the
             // app's last window, then activate the one that was behind it.
             // Without this, backward would only toggle between two windows.
-            SetWindowPos(ctx.windows[0], ctx.windows.back(), 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                             SWP_ASYNCWINDOWPOS);
+            //
+            // Moving a topmost window below a non-topmost one would make it
+            // non-topmost, so only move it within its own band.
+            if (IsTopmost(ctx.windows[0]) == IsTopmost(ctx.windows.back())) {
+                SetWindowPos(ctx.windows[0], ctx.windows.back(), 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                                 SWP_ASYNCWINDOWPOS);
+            }
             target = ctx.windows[1];
         } else {
             // The foreground window isn't one of the listed windows (for
