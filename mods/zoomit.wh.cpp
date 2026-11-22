@@ -10,7 +10,7 @@
 // @include         windhawk.exe
 // @include         windhawk-mod.exe
 // @include         windhawk-mod-uiaccess.exe
-// @compilerOptions -ld2d1 -ldwrite -lwindowscodecs -lole32 -luuid -lgdi32 -luser32 -lshell32 -lshlwapi -ladvapi32 -ldwmapi
+// @compilerOptions -ld2d1 -ldwrite -lwindowscodecs -lole32 -luuid -lgdi32 -luser32 -lshell32 -ladvapi32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -65,6 +65,14 @@ works like Sysinternals ZoomIt, without a separate app running in the tray.
   same hotkey.
 - Write hotkeys like `Ctrl+1`, `Ctrl+Shift+Z` or `Win+Alt+F2`. Leave one empty
   to turn it off.
+
+## How it differs from WinDraw and Taskbar Snipper
+[WinDraw](https://windhawk.net/mods/windraw) and
+[Taskbar Snipper](https://windhawk.net/mods/taskbar-snipper) mark up the screen
+at its normal size. ZoomIt is a tool for presenting: it zooms into a still
+picture of the screen first, and you draw on the zoomed view, with a blur pen
+and text, on Sysinternals ZoomIt's own keys. If you only want to mark up the
+screen, WinDraw has more drawing tools.
 
 ## Credits
 Works like [ZoomIt](https://learn.microsoft.com/sysinternals/downloads/zoomit)
@@ -168,14 +176,12 @@ Shamenson.
 #include <dwrite.h>
 #include <shlobj.h>
 #include <shellapi.h>
-#include <shlwapi.h>
 #include <shobjidl.h>
 #include <wincodec.h>
 #include <windowsx.h>
 #include <wrl/client.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <string>
 #include <vector>
