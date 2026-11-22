@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              shell-font-changer-plus
 // @name            Shell Font Changer Plus
-// @description     Any installed font in File Explorer, with icons and emoji left intact
-// @version         1.3.5
+// @description     Any installed font and text size in File Explorer, with icons and emoji left intact
+// @version         1.4.0
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @homepage        https://github.com/DavidHiFi/davids-windhawk-mods
@@ -16,8 +16,9 @@
 /*
 # Shell Font Changer Plus
 
-Change the text font in File Explorer to any font you have installed. Icons
-and emoji keep their own glyphs, so buttons never turn into empty boxes.
+Change the text font in File Explorer to any font you have installed, and make
+the text bigger or smaller. Icons and emoji keep their own glyphs, so buttons
+never turn into empty boxes.
 
 ![Shell Font Changer Plus preview](https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/shell-font-changer-plus.png)
 
@@ -27,6 +28,9 @@ and emoji keep their own glyphs, so buttons never turn into empty boxes.
   headers follow the font you pick.
 - **Icons and emoji stay intact.** Symbol and icon fonts keep their own glyphs,
   so buttons never show empty boxes.
+- **Text size.** Scale File Explorer's text from 75% to 200%. Rows, columns
+  and boxes are laid out for the new size, headings stay larger than body text,
+  and each monitor keeps its own scaling.
 - **Weight is kept.** Semibold and bold text stays semibold and bold.
 - **Classic, themed and modern text.** GDI text, visual-style themes and
   DirectWrite layouts are all covered.
@@ -40,10 +44,21 @@ and emoji keep their own glyphs, so buttons never turn into empty boxes.
 
 Type an installed font family name in the settings, such as `FiraCode Nerd Font`
 or `Inter`. The field starts empty, so nothing changes until you pick a font.
-Leave it empty, or type `None`, to turn the mod off.
+Leave it empty, or type `None`, to keep the original font.
+
+Set **Text size** to make the text bigger or smaller. It is a percentage of the
+size Windows picks: 100 keeps it as it is, 125 makes it a quarter bigger. It
+works with or without a font. With the font empty and the size at 100, the mod
+does nothing.
 
 If the font is not installed, or its name is 32 characters or longer, the mod
 does not start. The Windhawk log says why.
+
+Explorer sizes its rows and boxes when it creates a window's fonts, so a new
+text size shows in windows opened after the change. Restart Explorer to resize
+the desktop and the windows that were already open, and again after turning the
+size back to 100 or turning the mod off. Text drawn by DirectWrite keeps its
+size where its box was set for the original size.
 
 The Windows 11 command bar and address bar, Start, Search and Settings are
 drawn by XAML or web views and keep their fonts. The
@@ -57,7 +72,9 @@ Turn off the original Explorer Font Changer before you turn this one on.
 ## Credits
 
 Based on [Explorer Font Changer](https://windhawk.net/mods/explorer-font-changer)
-by Gabriela Cristei. MIT.
+by Gabriela Cristei. MIT. The text size scales each font in proportion when it
+is created, the approach worked out in
+[wodenwhel](https://github.com/wodenwhel)'s Explorer Font Size Changer.
 */
 // ==/WindhawkModReadme==
 
@@ -67,6 +84,9 @@ by Gabriela Cristei. MIT.
   - name: ""
     $name: Font family
     $description: An installed font family, such as Inter. Leave empty or type None to keep the original font.
+  - size: 100
+    $name: Text size
+    $description: Percent of the size Windows picks, 75 to 200 (Suggested 100, which keeps it). Shows in newly opened windows.
   $name: Text font
 */
 // ==/WindhawkModSettings==
@@ -79,6 +99,7 @@ by Gabriela Cristei. MIT.
 #include <algorithm>
 #include <vector>
 #include <cmath>
+#include <unordered_map>
 
 namespace policy {
 std::wstring target;
@@ -139,6 +160,122 @@ LONG fitHeight(LONG height, double scale) {
 }
 }
 
+// Text size. Each font is scaled once, where it is created, so Explorer
+// measures and lays out with the new size. The caller's height already holds
+// the monitor's DPI and the text's role, so it is scaled rather than replaced.
+namespace sizing {
+int percent = 100;
+bool on() { return percent != 100; }
+
+// Above zero inside a creation hook, so a nested CreateFont* call, and the
+// replacement fonts FontScope builds from already scaled fonts, pass through.
+thread_local int depth = 0;
+struct Guard {
+    Guard() { ++depth; }
+    ~Guard() { --depth; }
+    Guard(const Guard&) = delete;
+    Guard& operator=(const Guard&) = delete;
+};
+
+struct Original {
+    LONG height;
+    LONG width;
+};
+// Fonts this mod scaled, with the size the caller asked for. GetObjectW
+// reports that size, so a font derived from a read-back is scaled once, not
+// twice. Handles leave the map in DeleteObject.
+SRWLOCK lock = SRWLOCK_INIT;
+std::unordered_map<HFONT, Original> scaled;
+
+decltype(&GetObjectW) getObjectOriginal;
+decltype(&DeleteObject) deleteObjectOriginal;
+decltype(&CreateFontIndirectW) createIndirectOriginal;
+decltype(&CreateFontIndirectExW) createIndirectExOriginal;
+decltype(&CreateFontW) createOriginal;
+
+// The font as GDI holds it, past the GetObjectW hook.
+int realObject(HGDIOBJ object, int size, LPVOID buffer) {
+    return getObjectOriginal ? getObjectOriginal(object, size, buffer) : GetObjectW(object, size, buffer);
+}
+
+bool wanted(const LOGFONTW& font) {
+    return on() && depth == 0 && font.lfHeight != 0 && font.lfFaceName[0] != L'@' &&
+           !policy::protectedFace(font.lfFaceName, font.lfCharSet);
+}
+void apply(LOGFONTW& font) {
+    font.lfHeight = MulDiv(font.lfHeight, percent, 100);
+    font.lfWidth = MulDiv(font.lfWidth, percent, 100);
+}
+void remember(HFONT font, const LOGFONTW& requested) {
+    if (!font) return;
+    AcquireSRWLockExclusive(&lock);
+    scaled[font] = {requested.lfHeight, requested.lfWidth};
+    ReleaseSRWLockExclusive(&lock);
+}
+
+HFONT WINAPI createIndirectHook(const LOGFONTW* font) {
+    if (!font || !wanted(*font)) return createIndirectOriginal(font);
+    Guard guard;
+    LOGFONTW copy = *font;
+    apply(copy);
+    HFONT result = createIndirectOriginal(&copy);
+    remember(result, *font);
+    return result;
+}
+HFONT WINAPI createIndirectExHook(const ENUMLOGFONTEXDVW* font) {
+    if (!font || !wanted(font->elfEnumLogfontEx.elfLogFont)) return createIndirectExOriginal(font);
+    // GDI reads only dvNumAxes design values, so the caller's buffer may end there.
+    const DWORD axes = font->elfDesignVector.dvNumAxes;
+    if (axes > MM_MAX_NUMAXES) return createIndirectExOriginal(font);
+    Guard guard;
+    ENUMLOGFONTEXDVW copy{};
+    memcpy(&copy, font, offsetof(ENUMLOGFONTEXDVW, elfDesignVector) + offsetof(DESIGNVECTOR, dvValues) + axes * sizeof(LONG));
+    apply(copy.elfEnumLogfontEx.elfLogFont);
+    HFONT result = createIndirectExOriginal(&copy);
+    remember(result, font->elfEnumLogfontEx.elfLogFont);
+    return result;
+}
+HFONT WINAPI createHook(int height, int width, int escapement, int orientation, int weight, DWORD italic,
+                        DWORD underline, DWORD strikeOut, DWORD charset, DWORD precision, DWORD clip,
+                        DWORD quality, DWORD pitch, LPCWSTR face) {
+    LOGFONTW requested{};
+    requested.lfHeight = height;
+    requested.lfWidth = width;
+    requested.lfCharSet = static_cast<BYTE>(charset);
+    if (face) wcsncpy_s(requested.lfFaceName, face, _TRUNCATE);
+    if (!wanted(requested))
+        return createOriginal(height, width, escapement, orientation, weight, italic, underline, strikeOut,
+                              charset, precision, clip, quality, pitch, face);
+    Guard guard;
+    LOGFONTW copy = requested;
+    apply(copy);
+    HFONT result = createOriginal(copy.lfHeight, copy.lfWidth, escapement, orientation, weight, italic, underline,
+                                  strikeOut, charset, precision, clip, quality, pitch, face);
+    remember(result, requested);
+    return result;
+}
+int WINAPI getObjectHook(HANDLE object, int size, LPVOID buffer) {
+    const int result = getObjectOriginal(object, size, buffer);
+    if (!buffer || result < static_cast<int>(sizeof(LOGFONTW)) || GetObjectType(object) != OBJ_FONT) return result;
+    AcquireSRWLockShared(&lock);
+    if (auto it = scaled.find(static_cast<HFONT>(object)); it != scaled.end()) {
+        auto* font = static_cast<LOGFONTW*>(buffer);
+        font->lfHeight = it->second.height;
+        font->lfWidth = it->second.width;
+    }
+    ReleaseSRWLockShared(&lock);
+    return result;
+}
+BOOL WINAPI deleteObjectHook(HGDIOBJ object) {
+    if (object && GetObjectType(object) == OBJ_FONT) {
+        AcquireSRWLockExclusive(&lock);
+        scaled.erase(static_cast<HFONT>(object));
+        ReleaseSRWLockExclusive(&lock);
+    }
+    return deleteObjectOriginal(object);
+}
+}
+
 // Scope the selected font to one call. Restoring it before DeleteObject is
 // required even for DT_CALCRECT, nested drawing calls and failed draws.
 class FontScope {
@@ -148,20 +285,20 @@ class FontScope {
     LOGFONTW font{};  // target face at the original height
     double scale = 1.0;
     LONG naturalWidth = 0;
-    const wchar_t* text = nullptr;
-    UINT length = 0;
 
     HFONT build() const {
         LOGFONTW scaled = font;
         scaled.lfHeight = policy::fitHeight(font.lfHeight, scale);
+        // The source font already has the text size; do not scale it again.
+        sizing::Guard guard;
         return CreateFontIndirectW(&scaled);
     }
 public:
-    FontScope(HDC hdc, const wchar_t* text, UINT length, bool glyphIndices = false)
-        : text(text), length(length) {
+    FontScope(HDC hdc, const wchar_t* text, UINT length, bool glyphIndices = false) {
         if (!policy::enabled || !hdc || glyphIndices || policy::protectedText(text, length)) return;
         LOGFONTW font{};
-        if (GetObjectW(GetCurrentObject(hdc, OBJ_FONT), sizeof(font), &font) != sizeof(font)) return;
+        // The real height, text size included, so the target face matches it.
+        if (sizing::realObject(GetCurrentObject(hdc, OBJ_FONT), sizeof(font), &font) != sizeof(font)) return;
         // '@' faces are vertical CJK layouts; a horizontal face would rotate them.
         if (font.lfFaceName[0] == L'@' || policy::protectedFace(font.lfFaceName, font.lfCharSet) ||
             _wcsicmp(font.lfFaceName, policy::target.c_str()) == 0) return;
@@ -402,24 +539,35 @@ HRESULT WINAPI themeExHook(HTHEME theme, HDC dc, int part, int state, LPCWSTR te
 }
 
 void updateLayout(IDWriteTextLayout* layout, const WCHAR* text, UINT length, IDWriteTextFormat* format) {
-    if (!policy::enabled || !layout || !format || !length || policy::protectedText(text, length)) return;
+    if (!(policy::enabled || sizing::on()) || !layout || !format || !length || policy::protectedText(text, length)) return;
     std::wstring family(format->GetFontFamilyNameLength() + 1, L'\0');
     if (FAILED(format->GetFontFamilyName(family.data(), static_cast<UINT>(family.size()))) || policy::protectedFace(family.c_str())) return;
-    IDWriteFontCollection* collection = nullptr;
-    if (FAILED(format->GetFontCollection(&collection)) || !collection) return;
-    UINT index = 0;
-    BOOL exists = FALSE;
-    collection->FindFamilyName(policy::target.c_str(), &index, &exists);
-    collection->Release();
-    // A custom font collection without the target keeps its original family.
-    if (!exists) return;
     DWRITE_TEXT_RANGE range{0, length};
-    // Legacy GDI names such as "Segoe UI Semibold" carry their weight in the
-    // name, and DirectWrite does not resolve them. Keep that weight.
-    auto weight = static_cast<DWRITE_FONT_WEIGHT>(policy::nameWeight(family.c_str()));
-    if (weight > format->GetFontWeight()) layout->SetFontWeight(weight, range);
-    layout->SetFontFamilyName(policy::target.c_str(), range);
+    bool changed = false;
+    if (policy::enabled) {
+        IDWriteFontCollection* collection = nullptr;
+        UINT index = 0;
+        BOOL exists = FALSE;
+        if (SUCCEEDED(format->GetFontCollection(&collection)) && collection) {
+            collection->FindFamilyName(policy::target.c_str(), &index, &exists);
+            collection->Release();
+        }
+        // A custom font collection without the target keeps its original family.
+        if (exists) {
+            // Legacy GDI names such as "Segoe UI Semibold" carry their weight in the
+            // name, and DirectWrite does not resolve them. Keep that weight.
+            auto weight = static_cast<DWRITE_FONT_WEIGHT>(policy::nameWeight(family.c_str()));
+            if (weight > format->GetFontWeight()) layout->SetFontWeight(weight, range);
+            layout->SetFontFamilyName(policy::target.c_str(), range);
+            changed = true;
+        }
+    }
     float size = format->GetFontSize();
+    if (sizing::on()) {
+        size = size * static_cast<float>(sizing::percent) / 100.0f;
+        if (SUCCEEDED(layout->SetFontSize(size, range))) changed = true;
+    }
+    if (!changed) return;
     // Keep the requested size unless the actual control bounds require a reduction.
     const float widthLimit = layout->GetMaxWidth();
     const float heightLimit = layout->GetMaxHeight();
@@ -455,9 +603,11 @@ bool loadSettings() {
     const auto* name = Wh_GetStringSetting(L"font.name");
     policy::target = name ? name : L"";
     Wh_FreeStringSetting(name);
+    sizing::percent = std::clamp(Wh_GetIntSetting(L"font.size"), 75, 200);
     policy::enabled = !policy::target.empty() && _wcsicmp(policy::target.c_str(), L"None") != 0;
     if (!policy::enabled) {
-        Wh_Log(L"No font is set, so the mod stays idle.");
+        if (sizing::on()) return true;
+        Wh_Log(L"No font is set and the size is 100, so the mod stays idle.");
         return false;
     }
     if (policy::target.size() >= LF_FACESIZE) {
@@ -491,14 +641,24 @@ BOOL Wh_ModInit() {
     auto theme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!user || !gdi || !theme) return FALSE;
     // Explicit exports avoid MinGW import thunks inside this mod DLL.
-    HOOK(GetProcAddress(user, "DrawTextW"), drawTextHook, drawTextOriginal);
-    HOOK(GetProcAddress(user, "DrawTextExW"), drawTextExHook, drawTextExOriginal);
-    HOOK(GetProcAddress(gdi, "TextOutW"), textOutHook, textOutOriginal);
-    HOOK(GetProcAddress(gdi, "ExtTextOutW"), extTextOutHook, extTextOutOriginal);
-    HOOK(GetProcAddress(gdi, "GetTextExtentPoint32W"), extentHook, extentOriginal);
-    HOOK(GetProcAddress(gdi, "GetTextExtentExPointW"), extentExHook, extentExOriginal);
-    HOOK(GetProcAddress(theme, "DrawThemeText"), themeHook, themeOriginal);
-    HOOK(GetProcAddress(theme, "DrawThemeTextEx"), themeExHook, themeExOriginal);
+    if (policy::enabled) {
+        HOOK(GetProcAddress(user, "DrawTextW"), drawTextHook, drawTextOriginal);
+        HOOK(GetProcAddress(user, "DrawTextExW"), drawTextExHook, drawTextExOriginal);
+        HOOK(GetProcAddress(gdi, "TextOutW"), textOutHook, textOutOriginal);
+        HOOK(GetProcAddress(gdi, "ExtTextOutW"), extTextOutHook, extTextOutOriginal);
+        HOOK(GetProcAddress(gdi, "GetTextExtentPoint32W"), extentHook, extentOriginal);
+        HOOK(GetProcAddress(gdi, "GetTextExtentExPointW"), extentExHook, extentExOriginal);
+        HOOK(GetProcAddress(theme, "DrawThemeText"), themeHook, themeOriginal);
+        HOOK(GetProcAddress(theme, "DrawThemeTextEx"), themeExHook, themeExOriginal);
+    }
+    if (sizing::on()) {
+        // New fonts are scaled once at creation, so every later measure and draw agrees.
+        HOOK(GetProcAddress(gdi, "CreateFontIndirectW"), sizing::createIndirectHook, sizing::createIndirectOriginal);
+        HOOK(GetProcAddress(gdi, "CreateFontIndirectExW"), sizing::createIndirectExHook, sizing::createIndirectExOriginal);
+        HOOK(GetProcAddress(gdi, "CreateFontW"), sizing::createHook, sizing::createOriginal);
+        HOOK(GetProcAddress(gdi, "GetObjectW"), sizing::getObjectHook, sizing::getObjectOriginal);
+        HOOK(GetProcAddress(gdi, "DeleteObject"), sizing::deleteObjectHook, sizing::deleteObjectOriginal);
+    }
     IDWriteFactory* factory = nullptr;
     if (SUCCEEDED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&factory)))) {
         // IDWriteFactory: IUnknown 0..2; the two layout methods are 18 and 19.
@@ -511,7 +671,7 @@ BOOL Wh_ModInit() {
         ok = false;
     }
     #undef HOOK
-    Wh_Log(L"Shell font changer initialized. Font: %s", policy::target.c_str());
+    Wh_Log(L"Shell font changer initialized. Font: %s, size: %d%%", policy::enabled ? policy::target.c_str() : L"(original)", sizing::percent);
     return ok;
 }
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
