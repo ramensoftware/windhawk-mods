@@ -3350,7 +3350,6 @@ const std::vector<ControlStyleRule> g_themeGreenBarStyles = {
     {L"FlyoutBlurHost", {L"Background:=#1B2E2B"}},
     {L"Canvas > MenuFlyoutPresenter > Grid > Border#PART_BackgroundBorder",
      {L"Background:=#1B2E2B"}},
-    {L"ResourceCpuButton, ResourceRamButton, ResourceGpuButton, ResourceDiskButton, NetworkDownloadButton, NetworkUploadButton",
 };
 
 const std::vector<ControlStyleRule> g_themeNoIslandsStyles = {
