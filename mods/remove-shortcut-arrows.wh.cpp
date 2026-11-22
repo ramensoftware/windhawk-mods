@@ -2,7 +2,7 @@
 // @id              remove-shortcut-arrows
 // @name            Remove Shortcut Arrow Icons
 // @description     Removes shortcut arrow icons from desktop and File Explorer cleanly in memory.
-// @version         2.0.0
+// @version         2.0.1
 // @author          Dev-StudioCode
 // @github          https://github.com/Dev-StudioCode
 // @include         explorer.exe
@@ -65,6 +65,11 @@ static const GUID g_iidImageList = {
 
 static std::vector<OverlayBackup> g_backupOverlays;
 static int g_overlayImageIndex = -1;
+// Posted to the desktop list view so the icon refresh runs after Explorer has
+// finished building the desktop. Refreshing inside CreateWindowExW crashed
+// Explorer at start (CListViewHost::SetWorkAreasWithDPI on a half-built view).
+static UINT g_msgDeferredRefresh =
+    RegisterWindowMessageW(L"RemoveShortcutArrows_DeferredRefresh");
 static WindhawkUtils::StringSetting g_customIconPath;
 
 // ---------------------------------------------------------------------------
@@ -255,7 +260,7 @@ static void RefreshDesktop() {
 static void RefreshDesktopAndExplorer() {
   if (g_overlayImageIndex >= 0) {
     SHChangeNotify(
-        SHCNE_UPDATEIMAGE, SHCNF_DWORD | SHCNF_FLUSH, nullptr,
+        SHCNE_UPDATEIMAGE, SHCNF_DWORD | SHCNF_FLUSHNOWAIT, nullptr,
         reinterpret_cast<LPCVOID>(static_cast<ULONG_PTR>(g_overlayImageIndex)));
   }
   RefreshDesktop();
@@ -288,6 +293,10 @@ static bool IsDesktopFolderView(HWND hWnd) {
 static LRESULT CALLBACK DesktopSubclassProc(
     HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
     DWORD_PTR dwRefData) {
+  if (g_msgDeferredRefresh && uMsg == g_msgDeferredRefresh) {
+    EnsureShortcutOverlayHidden();
+    return 0;
+  }
   switch (uMsg) {
     case WM_SETTINGCHANGE:
     case WM_THEMECHANGED:
@@ -308,7 +317,7 @@ static HWND WINAPI CreateWindowExW_Hook(
                                        hWndParent, hMenu, hInstance, lpParam);
   if (hWnd && IsDesktopFolderView(hWnd)) {
     WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, DesktopSubclassProc, 0);
-    EnsureShortcutOverlayHidden();
+    PostMessageW(hWnd, g_msgDeferredRefresh, 0, 0);
   }
   return hWnd;
 }
