@@ -92,7 +92,7 @@ Nimbus replaces part of Windows, so a few of its actions are Windows settings. H
 | The taskbar's own **"Automatically hide the taskbar"** option (saved by Windows in your profile) | While "Hide the Windows taskbar" is on (the default), so the hidden taskbar doesn't reserve screen space | Your original choice is kept and put back when the mod stops, on sign-out or shutdown, at the next start after a crash, and by the Explorer part when the mod is turned off. |
 | Each app's **"Show notification banners"** switch (Settings › System › Notifications) | Only if you turn on "Hide Windows' own banners" and confirm (off by default) | Every app's original value is saved before anything is switched off (nothing is switched off if that backup can't be saved). Put back when the option goes off, when the mod stops, on sign-out or shutdown, and by the Explorer part when the mod is turned off. |
 | Night light, power plan and mode, each monitor's brightness (DDC/CI), Bluetooth and Wi-Fi on or off, volume, keyboard language | Only when you click them, like in Windows' quick settings | They're your choices, so they stay as you set them (the same as when you change them in Windows). |
-| The default sound output (and the one for calls), and an app's own output (complete sound panel only, off by default) | Only when you drag an app or click Default or Calls on an output. These use the same parts of Windows its Sound settings use, which Microsoft doesn't document | Windows keeps them, as when set in Settings › Sound › Volume mixer (its "Reset" puts every app back on the default). An app on a second output is a copy Nimbus plays: it stops with ×, when the app closes, or when Nimbus stops. An app that picks its own outputs (TeamSpeak, Discord) is muted on the one you take it off. Going back to the simple panel puts it all back: every app on the default, copies off, those mutes undone. |
+| The default sound output (and the one for calls), and an app's own output (complete sound panel only, off by default) | Only when you drag an app or click Default or Calls on an output. These use the same parts of Windows its Sound settings use, which Microsoft doesn't document | Windows keeps them, as when set in Settings › Sound › Volume mixer (its "Reset" puts every app back on the default). An app on a second output is a copy Nimbus plays: it stops with ×, when the app closes, or when Nimbus stops. An app that picks its own outputs (TeamSpeak, Discord) is muted on the one you take it off. Those mutes are undone when Nimbus stops and done again when it starts. Going back to the simple panel puts back what Nimbus changed (each app's output as it was, copies off, those mutes undone), also later for an app that wasn't running; an output chosen in Windows' own mixer stays. A copy plays slightly behind, so two outputs in the same room sound doubled. |
 
 **BatteryHub** (optional, off by default): with "Devices › Use BatteryHub" on, Nimbus runs [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) (installed separately, version 1.1 or newer) hidden every 5 minutes with `--json`, only to read the batteries of USB receivers; it closes by itself, at most after 20 seconds. Turn it off in the Devices panel or in Settings › Status area.
 
@@ -165,7 +165,7 @@ O Nimbus substitui uma parte do Windows, então algumas ações dele são config
 | A opção **"Ocultar automaticamente a barra de tarefas"** do próprio Windows (salva no seu perfil) | Enquanto "Esconder a barra do Windows" estiver ligado (o padrão), pra barra escondida não reservar espaço na tela | A sua escolha original fica guardada e volta quando o mod para, ao sair da conta ou desligar o PC, no próximo início depois de um travamento, e pela parte do Explorador quando o mod é desligado. |
 | O botão **"Mostrar faixas de notificação"** de cada app (Configurações › Sistema › Notificações) | Só se você ligar "Esconder os avisos do Windows" e confirmar (desligado por padrão) | O valor original de cada app é salvo antes de qualquer coisa ser desligada (se o backup não puder ser salvo, nada é desligado). Volta quando a opção é desligada, quando o mod para, ao sair da conta ou desligar o PC, e pela parte do Explorador quando o mod é desligado. |
 | Luz noturna, plano e modo de energia, brilho de cada monitor (DDC/CI), Bluetooth e Wi-Fi ligado ou desligado, volume, idioma do teclado | Só quando você clica, como nas Configurações rápidas do Windows | São escolhas suas, então ficam como você deixou (igual a mudar pelo Windows). |
-| A saída de som padrão (e a das chamadas), e a saída de cada app (só no painel de som completo, desligado por padrão) | Só quando você arrasta um app ou clica em Padrão ou Chamadas numa saída. Usam as mesmas partes do Windows que as Configurações de som usam, que a Microsoft não documenta | O Windows guarda, como em Configurações › Som › Mixer de volume (o "Redefinir" de lá volta todos os apps pra padrão). Um app numa segunda saída é uma cópia que o Nimbus toca: para no ×, quando o app fecha ou quando o Nimbus para. Um app que escolhe as próprias saídas (TeamSpeak, Discord) fica mudo na saída de onde você tira ele. Voltar pro painel simples desfaz tudo: cada app na padrão, sem cópias e sem esses mudos. |
+| A saída de som padrão (e a das chamadas), e a saída de cada app (só no painel de som completo, desligado por padrão) | Só quando você arrasta um app ou clica em Padrão ou Chamadas numa saída. Usam as mesmas partes do Windows que as Configurações de som usam, que a Microsoft não documenta | O Windows guarda, como em Configurações › Som › Mixer de volume (o "Redefinir" de lá volta todos os apps pra padrão). Um app numa segunda saída é uma cópia que o Nimbus toca: para no ×, quando o app fecha ou quando o Nimbus para. Um app que escolhe as próprias saídas (TeamSpeak, Discord) fica mudo na saída de onde você tira ele. Esses mudos saem quando o Nimbus para e voltam quando ele liga. Voltar pro painel simples desfaz o que o Nimbus mudou (a saída de cada app como era, sem cópias e sem esses mudos), também depois pra um app que estava fechado; a saída escolhida no mixer do próprio Windows fica. A cópia toca um pouco atrasada, então duas saídas na mesma sala soam dobradas. |
 
 **BatteryHub** (opcional, desligado por padrão): com "Dispositivos › Usar o BatteryHub" ligado, o Nimbus abre o [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) (instalado à parte, versão 1.1 ou mais nova) escondido a cada 5 minutos com `--json`, só pra ler as baterias de receptores USB; ele fecha sozinho, no máximo em 20 segundos. Desligue no painel Dispositivos ou em Ajustes › Área de status.
 
@@ -2007,7 +2007,7 @@ static void SndRoute(DWORD pid, const std::wstring& id) {
     }
     HSTRING hd = nullptr;
     if (!id.empty()) {
-        std::wstring full = L"\\\\?\\SWD#MMDEVAPI#" + id + L"#{e6327cad-dcec-4949-ae8a-991e976a79d2}";
+        std::wstring full = id.compare(0, 4, L"\\\\?\\") == 0 ? id : L"\\\\?\\SWD#MMDEVAPI#" + id + L"#{e6327cad-dcec-4949-ae8a-991e976a79d2}";
         WindowsCreateString(full.c_str(), (UINT32)full.size(), &hd);
     }
     HRESULT a = pol->SetPersistedDefaultAudioEndpoint(pid, eRender, eMultimedia, hd);
@@ -2058,7 +2058,7 @@ static DWORD WINAPI SndCopyThread(void* param) {
     {
         typedef HRESULT(WINAPI * ActivateFn)(LPCWSTR, REFIID, PROPVARIANT*, IActivateAudioInterfaceCompletionHandler*,
                                              IActivateAudioInterfaceAsyncOperation**);
-        HMODULE mm = LoadLibraryW(L"mmdevapi.dll");
+        static HMODULE mm = LoadLibraryExW(L"mmdevapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
         auto activate = mm ? (ActivateFn)GetProcAddress(mm, "ActivateAudioInterfaceAsync") : nullptr;
         NimbusLoopbackParams lp = {1, c->pid, 0};
         PROPVARIANT pv;
@@ -2187,6 +2187,9 @@ static int SndOutOf(const std::wstring& id) {
 
 // Every output that's on, and the apps playing on each (a paused app stays where it was last).
 static void SndLoad() {
+    std::unordered_map<std::wstring, ComPtr<IWICBitmapSource>> icons;  // (kept by path: not extracted again on every read)
+    for (auto& a : g_snd.apps)
+        if (a.v.icon) icons[a.v.path] = a.v.icon;
     g_snd.outs.clear();
     g_snd.apps.clear();
     if (!g_stat.mmde) return;
@@ -2276,6 +2279,7 @@ static void SndLoad() {
                     a.v.name.resize(wcslen(a.v.name.c_str()));
                 }
                 sv->GetMasterVolume(&a.v.level);
+                if (auto ic = icons.find(a.v.path); ic != icons.end()) a.v.icon = ic->second;
                 g_snd.apps.push_back(a);
                 it = g_snd.apps.end() - 1;
             }
@@ -2305,31 +2309,45 @@ static void SndLoad() {
 }
 
 static bool SndIsCopy(const SndApp& a, int oi) { return oi >= 0 && oi < (int)g_snd.outs.size() && SndCopyAt(a.v.pid, g_snd.outs[oi].id) >= 0; }
+static std::vector<std::wstring> SndList(const wchar_t* name);
+// The first time Nimbus moves an app: what Windows had for it (put back when going back to Simple).
+static void SndRememberRoute(const SndApp& a) {
+    auto v = SndList(L"sound.routed");
+    std::wstring pre = a.v.path + L"|";
+    for (auto& x : v)
+        if (x.compare(0, pre.size(), pre) == 0) return;
+    std::wstring before;
+    if (ComPtr<NimbusAudioPolicy> pol = SndPolicy()) {
+        HSTRING h = nullptr;
+        if (SUCCEEDED(pol->GetPersistedDefaultAudioEndpoint(a.v.pid, eRender, eMultimedia, &h)) && h) {
+            UINT32 n = 0;
+            const wchar_t* t = WindowsGetStringRawBuffer(h, &n);
+            if (t) before.assign(t, n);
+            WindowsDeleteString(h);
+        }
+    }
+    v.push_back(pre + before);
+    StoreItems(L"sound.routed", v);
+}
 // Its own output: to the default means following it.
-static void SndRouteTo(const SndApp& a, int oi) { SndRoute(a.v.pid, g_snd.outs[oi].def ? L"" : g_snd.outs[oi].id); }
+static void SndRouteTo(const SndApp& a, int oi) {
+    SndRememberRoute(a);
+    SndRoute(a.v.pid, g_snd.outs[oi].def ? L"" : g_snd.outs[oi].id);
+}
 static bool SndHas(const std::vector<int>& v, int x) { return std::find(v.begin(), v.end(), x) != v.end(); }
 static bool SndHasSession(const SndApp& a, int oi) {
     return std::any_of(a.sess.begin(), a.sess.end(), [&](const auto& x) { return x.first == oi; });
 }
-// Muted by the panel: "app path|output id", one per line (Windows keeps a session's mute, so it's undone by the reset).
-static std::vector<std::wstring> SndMutedList() {
+// What the complete panel changed, so it can be put back (one value per entry, as the mod's other lists):
+// "sound.muted": "app path|output id" for a session it muted; "sound.routed": "app path|the app's output
+// before Nimbus" (empty: it followed the default) for an app it moved.
+static std::vector<std::wstring> SndList(const wchar_t* name) {
     std::vector<std::wstring> v;
-    std::wstring all;
-    ReadLong(UserPrefix() + L"sound.muted", all);
-    size_t a = 0;
-    while (a < all.size()) {
-        size_t b = all.find(L'\n', a);
-        if (b == std::wstring::npos) b = all.size();
-        if (b > a) v.push_back(all.substr(a, b - a));
-        a = b + 1;
-    }
+    LoadItems(name, L'\n', v);
     return v;
 }
-static void SndMutedSave(const std::vector<std::wstring>& v) {
-    std::wstring all;
-    for (auto& x : v) all += x + L"\n";
-    Wh_SetStringValue((UserPrefix() + L"sound.muted").c_str(), all.c_str());
-}
+static std::vector<std::wstring> SndMutedList() { return SndList(L"sound.muted"); }
+static void SndMutedSave(const std::vector<std::wstring>& v) { StoreItems(L"sound.muted", v); }
 static void SndMuteOn(const SndApp& a, int oi, bool mute) {
     for (auto& x : a.sess)
         if (x.first == oi) x.second->SetMute(mute, nullptr);
@@ -2342,44 +2360,96 @@ static void SndMuteOn(const SndApp& a, int oi, bool mute) {
     SndMutedSave(v);
 }
 
-// Back to the simple panel: everything as Windows had it (copies off, every app on the default, the
-// panel's mutes undone).
-static void SndResetAll() {
-    SndCopiesStopAll(GetTickCount() + 2000);
-    if (ComPtr<NimbusAudioPolicy> pol = SndPolicy()) pol->ClearAllPersistedApplicationDefaultEndpoints();
-    auto muted = SndMutedList();
-    if (!muted.empty() && g_stat.mmde) {
-        ComPtr<IMMDeviceCollection> col;
-        UINT n = 0;
-        if (SUCCEEDED(g_stat.mmde->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &col))) col->GetCount(&n);
-        for (UINT i = 0; i < n; i++) {
-            ComPtr<IMMDevice> dev;
-            LPWSTR id = nullptr;
-            if (FAILED(col->Item(i, &dev)) || FAILED(dev->GetId(&id))) continue;
-            std::wstring devId = id;
-            CoTaskMemFree(id);
-            ComPtr<IAudioSessionManager2> mgr;
-            ComPtr<IAudioSessionEnumerator> en;
-            if (FAILED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)mgr.GetAddressOf())) ||
-                FAILED(mgr->GetSessionEnumerator(&en)))
-                continue;
-            int sn = 0;
-            en->GetCount(&sn);
-            for (int k = 0; k < sn; k++) {
-                ComPtr<IAudioSessionControl> c;
-                ComPtr<IAudioSessionControl2> c2;
-                ComPtr<ISimpleAudioVolume> sv;
-                if (FAILED(en->GetSession(k, &c)) || FAILED(c.As(&c2)) || FAILED(c.As(&sv))) continue;
-                DWORD pid = 0;
-                c2->GetProcessId(&pid);
-                std::wstring path = pid ? ProcessPath(pid) : L"";
-                if (!path.empty() && std::find(muted.begin(), muted.end(), path + L"|" + devId) != muted.end()) sv->SetMute(FALSE, nullptr);
-            }
+// Every app session on every output: (pid, app path, output id, its volume control).
+struct SndSess {
+    DWORD pid;
+    std::wstring path, dev;
+    ComPtr<ISimpleAudioVolume> sv;
+};
+static std::vector<SndSess> SndAllSessions() {
+    std::vector<SndSess> out;
+    if (!g_stat.mmde) return out;
+    ComPtr<IMMDeviceCollection> col;
+    UINT n = 0;
+    if (FAILED(g_stat.mmde->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &col))) return out;
+    col->GetCount(&n);
+    std::unordered_map<DWORD, std::wstring> paths;
+    for (UINT i = 0; i < n; i++) {
+        ComPtr<IMMDevice> dev;
+        LPWSTR id = nullptr;
+        if (FAILED(col->Item(i, &dev)) || FAILED(dev->GetId(&id))) continue;
+        std::wstring devId = id;
+        CoTaskMemFree(id);
+        ComPtr<IAudioSessionManager2> mgr;
+        ComPtr<IAudioSessionEnumerator> en;
+        if (FAILED(dev->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, (void**)mgr.GetAddressOf())) ||
+            FAILED(mgr->GetSessionEnumerator(&en)))
+            continue;
+        int sn = 0;
+        en->GetCount(&sn);
+        for (int k = 0; k < sn; k++) {
+            ComPtr<IAudioSessionControl> c;
+            ComPtr<IAudioSessionControl2> c2;
+            ComPtr<ISimpleAudioVolume> sv;
+            if (FAILED(en->GetSession(k, &c)) || FAILED(c.As(&c2)) || FAILED(c.As(&sv))) continue;
+            DWORD pid = 0;
+            c2->GetProcessId(&pid);
+            if (!pid) continue;
+            auto it = paths.find(pid);
+            if (it == paths.end()) it = paths.emplace(pid, ProcessPath(pid)).first;
+            if (!it->second.empty()) out.push_back({pid, it->second, devId, sv});
         }
     }
-    SndMutedSave({});
+    return out;
+}
+// The panel's mutes on or off for the apps running now (the list stays: turning the mod off undoes them,
+// starting it does them again).
+static void SndMutesApply(bool mute) {
+    auto muted = SndMutedList();
+    if (muted.empty()) return;
+    for (auto& x : SndAllSessions())
+        if (std::find(muted.begin(), muted.end(), x.path + L"|" + x.dev) != muted.end()) x.sv->SetMute(mute, nullptr);
+}
+// In Simple: what the complete panel changed goes back as soon as each app runs (its output as Windows
+// had it, its mute off); done entries leave the lists. Returns whether some wait for an app to run.
+static bool SndPutBack() {
+    auto muted = SndMutedList(), routed = SndList(L"sound.routed");
+    if (muted.empty() && routed.empty()) return false;
+    auto all = SndAllSessions();
+    std::vector<std::wstring> mutedLeft, routedLeft;
+    for (auto& m : muted) {
+        bool done = false;
+        for (auto& x : all)
+            if (m == x.path + L"|" + x.dev) {
+                x.sv->SetMute(FALSE, nullptr);
+                done = true;
+            }
+        if (!done) mutedLeft.push_back(m);
+    }
+    for (auto& r : routed) {
+        size_t bar = r.rfind(L'|');
+        if (bar == std::wstring::npos) continue;
+        std::wstring path = r.substr(0, bar), before = r.substr(bar + 1);
+        auto it = std::find_if(all.begin(), all.end(), [&](const SndSess& x) { return x.path == path; });
+        if (it != all.end()) SndRoute(it->pid, before);
+        else routedLeft.push_back(r);
+    }
+    SndMutedSave(mutedLeft);
+    StoreItems(L"sound.routed", routedLeft);
+    if (mutedLeft.size() < muted.size() || routedLeft.size() < routed.size())
+        Wh_Log(L"sound: put back %d, %d waiting for their app", (int)(muted.size() - mutedLeft.size() + routed.size() - routedLeft.size()),
+               (int)(mutedLeft.size() + routedLeft.size()));
+    return !mutedLeft.empty() || !routedLeft.empty();
+}
+constexpr UINT_PTR TIMER_SND_PUTBACK = 37;  // (on the message window, while something waits for its app)
+static HWND SndMsgWnd();
+// Back to the simple panel: copies off, and what Nimbus changed goes back (only that: an output chosen in
+// Windows' own mixer stays).
+static void SndResetAll() {
+    SndCopiesStopAll(GetTickCount() + 2000);
+    if (SndPutBack() && SndMsgWnd()) SetTimer(SndMsgWnd(), TIMER_SND_PUTBACK, 30000, nullptr);
     g_snd.note.clear();
-    Wh_Log(L"sound: back to the simple panel, every app on the default output");
+    Wh_Log(L"sound: back to the simple panel");
 }
 // Its own outputs (not Nimbus' copies).
 static int SndOwnCount(const SndApp& a) {
@@ -7236,7 +7306,10 @@ LRESULT CALLBACK StartProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             // (A panel opened from the Start, or its text box for a note, taking the focus isn't leaving:
             // typing a note from the Status tab needs it.)
             wchar_t toCls[64] = {};
-            if (lp) GetClassNameW(GetAncestor((HWND)lp, GA_ROOT), toCls, ARRAYSIZE(toCls));
+            HWND toRoot = lp ? GetAncestor((HWND)lp, GA_ROOT) : nullptr;
+            DWORD toPid = 0;
+            if (toRoot) GetWindowThreadProcessId(toRoot, &toPid);
+            if (toRoot && toPid == GetCurrentProcessId()) GetClassNameW(toRoot, toCls, ARRAYSIZE(toCls));
             bool toOurPanel = !wcscmp(toCls, L"NimbusMenu_Flyout") || !wcscmp(toCls, L"NimbusMenu_NoteEdit");
             if (LOWORD(wp) == WA_INACTIVE && s.open && !s.menuOpen && !toOurPanel && GetTickCount() - s.openedAt > 150 &&
                 GetTickCount() - g_lastWinAlone > 1500 && !TrayClickJustNow()) {
@@ -13048,6 +13121,7 @@ static bool DrawPlayerArt(Dock& d, D2D1_RECT_F r, float radius) { return DrawPla
 
 // The bars' step (20 a second while they show and something plays).
 constexpr UINT_PTR TIMER_PLAYER_VIS = 35;
+static HWND SndMsgWnd() { return g_msgWnd; }
 static void PlayerVisStep() {
     MediaInfo m = MediaNow();
     float peak = 0;
@@ -13558,8 +13632,15 @@ static void StartStatusTab(const StartPaint& p) {
         if (al != DWRITE_TEXT_ALIGNMENT_LEADING) f->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
     };
     // A clickable spot; returns whether it's under the mouse or the keyboard.
+    // (only the part inside the tab's clip is clickable: scrolled-out controls can't be pressed unseen)
+    auto clipped = [&](D2D1_RECT_F& r) {
+        if (r.bottom <= p.top || r.top >= p.bottom) return false;
+        r.top = std::max(r.top, p.top);
+        r.bottom = std::min(r.bottom, p.bottom);
+        return true;
+    };
     auto button = [&](D2D1_RECT_F r, std::function<void()> fn) {
-        if (!live) return false;
+        if (!live || !clipped(r)) return false;
         int idx = (int)s.rows.size();
         StartRow row{r, RowFn};
         row.fn = std::move(fn);
@@ -13577,8 +13658,9 @@ static void StartStatusTab(const StartPaint& p) {
         rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(x, cy - SS(2), x + w * v, cy + SS(2)), SS(2), SS(2)), p.text);
         rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + w * v, cy), SS(8), SS(8)), tint.Get());
         rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + w * v, cy), SS(5.5f), SS(5.5f)), p.text);
-        if (!live) return;
-        StartRow row{D2D1::RectF(x - SS(8), y, x + w + SS(8), y + SS(32)), RowSlide};
+        D2D1_RECT_F hr = D2D1::RectF(x - SS(8), y, x + w + SS(8), y + SS(32));
+        if (!live || !clipped(hr)) return;
+        StartRow row{hr, RowSlide};
         row.slide = std::move(set);
         row.x0 = x;
         row.x1 = x + w;
@@ -13607,14 +13689,14 @@ static void StartStatusTab(const StartPaint& p) {
         text(L2(L"Arraste uma parte pela alça pra mudar a ordem (ou Alt + setas).", L"Drag a part by its handle to change the order (or Alt + arrows)."),
              s.small.Get(), p.pad, y, R - p.pad - SS(130), SS(26), p.sub);
         const wchar_t* reset = L2(L"Voltar ao padrão", L"Back to default");
-        D2D1_RECT_F rr = D2D1::RectF(R - SS(124), y, R, y + SS(26));
-        int idx = (int)s.rows.size();
-        StartRow row{rr, RowFn};
+        D2D1_RECT_F rr = D2D1::RectF(R - SS(124), y, R, y + SS(26)), hr = rr;
+        int idx = clipped(hr) ? (int)s.rows.size() : -2;
+        StartRow row{hr, RowFn};
         row.fn = [] {
             Wh_SetStringValue((UserPrefix() + L"start.statusOrder").c_str(), L"");
             LoadStartSecOrder();
         };
-        s.rows.push_back(std::move(row));
+        if (idx >= 0) s.rows.push_back(std::move(row));
         if (s.hover == idx) rt->FillRoundedRectangle(D2D1::RoundedRect(rr, SS(8), SS(8)), p.cardHi);
         text(reset, s.small.Get(), rr.left, rr.top, rr.right - rr.left - SS(8), SS(26), p.text, DWRITE_TEXT_ALIGNMENT_TRAILING);
         y += SS(34);
@@ -13791,9 +13873,10 @@ static void StartStatusTab(const StartPaint& p) {
                     int ti = order[t];
                     float x = L - SS(4) + (t % cols) * cell, ty = y + (t / cols) * cell;
                     D2D1_RECT_F r = D2D1::RectF(x + SS(2), ty + SS(2), x + cell - SS(2), ty + cell - SS(2));
-                    if (live) {
+                    D2D1_RECT_F hr = r;
+                    if (live && clipped(hr)) {
                         int idx = (int)s.rows.size();
-                        s.rows.push_back({r, RowTray, nullptr, ti});
+                        s.rows.push_back({hr, RowTray, nullptr, ti});
                         if (s.hover == idx) rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(9), SS(9)), p.cardHi);
                     }
                     ComPtr<ID2D1Bitmap> bmp;
@@ -13898,11 +13981,11 @@ static void StartStatusTab(const StartPaint& p) {
         y += gap;
         if (s.org) {
             // The part, with its handle (dots on the left), as one row to drag or to move with Alt + arrows.
-            D2D1_RECT_F r = D2D1::RectF(p.pad - SS(6), top + (top == inner ? 0 : SS(2)), R + SS(6), y);
-            int idx = (int)s.rows.size();
-            StartRow row{r, RowSec};
+            D2D1_RECT_F r = D2D1::RectF(p.pad - SS(6), top + (top == inner ? 0 : SS(2)), R + SS(6), y), hr = r;
+            int idx = clipped(hr) ? (int)s.rows.size() : -2;
+            StartRow row{hr, RowSec};
             row.power = k;
-            s.rows.push_back(std::move(row));
+            if (idx >= 0) s.rows.push_back(std::move(row));
             bool dragged = s.secDrag.active && s.secDrag.sec == k;
             if (s.hover == idx || dragged) {
                 ComPtr<ID2D1SolidColorBrush> edge;
@@ -14965,11 +15048,15 @@ static void StatusInit() {
     LoadShelf();
     NotifInit();
     LoadNotes();
+    // The complete sound panel's mutes come back with the mod; in Simple, what's left goes back.
+    if (SoundFull()) SndMutesApply(true);
+    else if (SndPutBack() && g_msgWnd) SetTimer(g_msgWnd, TIMER_SND_PUTBACK, 30000, nullptr);
 }
 
 static void StatusUninit() {
     // What Windows keeps goes back first (if a worker below is slow, nothing is left changed).
     RestoreBanners();
+    if (SoundFull()) SndMutesApply(false);  // (an app isn't left silent on an output after Nimbus is gone)
     BrightSignalStop();
     BtSignalStop();
     MediaSignalStop();
@@ -14984,6 +15071,8 @@ static void StatusUninit() {
         MediaJoin(deadline);
         DevJoin(deadline);
         SndCopiesStopAll(deadline);
+        g_snd.outs.clear();
+        g_snd.apps.clear();
         while (g_ccBusy && (LONG)(deadline - GetTickCount()) > 0) Sleep(10);
     }
     if (g_msgWnd) KillTimer(g_msgWnd, TIMER_PLAYER_VIS);
@@ -16608,8 +16697,8 @@ static void PageStatus(float& y, float x, float w) {
     if (g_sw.statusTab == 5) {
     Section(y, x, w, L2(L"Som", L"Sound"));
     SwRow soundRow = RSeg(L2(L"Painel de som", L"Sound panel"),
-               L2(L"Simples: o volume e o de cada app. Completo: os apps à esquerda e todas as saídas à direita; arraste um app pra uma saída (ele toca nela também), de uma saída pra outra (troca), ou tire com o ×. O completo mexe na saída de som do Windows: a padrão e a de cada app (o Windows guarda essa escolha, como nas Configurações de som), e toca uma cópia do app numa segunda saída enquanto o Nimbus roda. Voltando pro Simples, tudo volta: cada app na saída padrão, sem cópias e sem os mudos do painel.",
-                  L"Simple: the volume and each app's. Complete: apps on the left and every output on the right; drag an app onto an output (it plays there too), from one output to another (it moves), or take it off with ×. Complete changes Windows' sound output: the default one and each app's (Windows keeps that choice, as in the Sound settings), and plays a copy of an app on a second output while Nimbus runs. Back to Simple, it all goes back: every app on the default output, copies off, its mutes undone."),
+               L2(L"Simples: o volume e o de cada app. Completo: os apps à esquerda e todas as saídas à direita; arraste um app pra uma saída (ele toca nela também), de uma saída pra outra (troca), ou tire com o ×. O completo mexe na saída de som do Windows: a padrão e a de cada app (o Windows guarda essa escolha, como nas Configurações de som), e toca uma cópia do app numa segunda saída enquanto o Nimbus roda. Voltando pro Simples, o que o Nimbus mudou volta (a saída de cada app como era, sem cópias e sem os mudos do painel); a saída escolhida no mixer do próprio Windows fica.",
+                  L"Simple: the volume and each app's. Complete: apps on the left and every output on the right; drag an app onto an output (it plays there too), from one output to another (it moves), or take it off with ×. Complete changes Windows' sound output: the default one and each app's (Windows keeps that choice, as in the Sound settings), and plays a copy of an app on a second output while Nimbus runs. Back to Simple, what Nimbus changed goes back (each app's output as it was, copies off, its mutes undone); an output chosen in Windows' own mixer stays."),
                L"soundPanel", {{L"simples", L2(L"Simples", L"Simple")}, {L"completo", L2(L"Completo", L"Complete")}});
     soundRow.pick = [](const std::wstring& v) {
         if (v == L"simples" && SoundFull()) SndResetAll();
@@ -17622,6 +17711,8 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 SwSetPage(PgComecar);
             } else if (wp == TIMER_PLAYER_VIS) {
                 PlayerVisStep();
+            } else if (wp == TIMER_SND_PUTBACK) {
+                if (SoundFull() || !SndPutBack()) KillTimer(hwnd, TIMER_SND_PUTBACK);
             } else if (wp == TIMER_APPLY) {
                 // A change in the settings window (several quick ones apply once).
                 KillTimer(hwnd, TIMER_APPLY);
