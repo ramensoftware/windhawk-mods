@@ -75257,7 +75257,9 @@ DWORD WINAPI MediaThreadProc(LPVOID parameter) {
                             // What's playing shown first, without waiting for
                             // the cover (#7627). Told again below once it's
                             // read.
-                            state.coverCarried = true;
+                            // (Carried over only when there's one: an app
+                            // that never sends a cover isn't kept waiting.)
+                            state.coverCarried = !state.thumbnail.empty();
                             if (!publish(state)) {
                                 break;
                             }
