@@ -476,6 +476,18 @@ LRESULT CALLBACK LocalSendSubclassProc(HWND hWnd, UINT message, WPARAM wParam, L
             return result;
         }
 
+        case WM_DPICHANGED: {
+            // Flutter applies the suggested rectangle while handling this
+            // message. That rectangle reflects our flyout placement, not a
+            // placement requested by LocalSend, so don't retain it as the
+            // window state to restore after the mod is disabled.
+            bool wasApplyingFlyoutRect = g_applyingFlyoutRect;
+            g_applyingFlyoutRect = true;
+            LRESULT result = DefSubclassProc(hWnd, message, wParam, lParam);
+            g_applyingFlyoutRect = wasApplyingFlyoutRect;
+            return result;
+        }
+
         case WM_WINDOWPOSCHANGING: {
             auto* position = reinterpret_cast<WINDOWPOS*>(lParam);
             if (position->flags & SWP_HIDEWINDOW) {
@@ -578,8 +590,6 @@ BOOL CALLBACK AttachExistingLocalSendWindow(HWND hWnd, LPARAM) {
 }
 
 BOOL Wh_ModInit() {
-    g_settings = ReadWindhawkSettings();
-
     g_applyMessage = RegisterWindowMessageW(L"Windhawk_LocalSendFlyout_Apply");
     g_settingsMessage = RegisterWindowMessageW(L"Windhawk_LocalSendFlyout_Settings");
     g_showRequestMessage = RegisterWindowMessageW(L"Windhawk_LocalSendFlyout_ShowRequest");
