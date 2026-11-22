@@ -85,6 +85,8 @@ Some requests are handled through a temporary transparent Explorer window before
 
 Tab activation resolves the target window handle against Explorer's current tab order and issues one verified selection command. It does not step through unrelated tabs. If the required internal activation symbols are unavailable or the tab changes during resolution, activation fails safely; a routing failure restores the original window. Navigation completion uses browser events with bounded direct-view checks for providers that omit events.
 
+If tab navigation cannot be confirmed before the timeout, the original window is restored. A slow location, such as a network share, can finish loading in the tab later and leave both copies open.
+
 The mod is distributed under the MIT license.
 
 ## 简体中文
@@ -124,6 +126,8 @@ Ctrl+N 和将页签拖出为独立窗口，可能不携带本 mod 能识别的�
 部分请求会先经过临时透明窗口，再完成页签路由，因此不保证整个过程完全不创建窗口。无法安全完成时会恢复临时窗口，避免丢弃打开请求；恢复时会还原原有窗口显示状态，包括已有的分层透明属性。
 
 页签切换会先按窗口句柄查找当前页签位置，再发出一次经过验证的切换命令，不再逐个显示其他页签。所需内部接口缺失或查找期间目标发生变化时，会安全终止激活；路由失败时恢复原窗口。导航完成优先使用浏览器事件；缺少事件时只进行有限次直接视图检查。
+
+如果超时前无法确认页签导航完成，会恢复原窗口。网络共享等加载较慢的位置可能随后在页签中打开，此时两处都会保留该目录。
 
 本 mod 使用 MIT 许可。
 
@@ -204,9 +208,13 @@ inline bool HasWindowClass(HWND window, PCWSTR expected) noexcept {
     return GetClassNameW(window, name, static_cast<int>(std::size(name))) &&
            wcscmp(name, expected) == 0;
 }
+
+inline constexpr wchar_t kRedirectingProperty[] = L"ETR.Redirecting";
+inline constexpr wchar_t kConstructionShowProperty[] = L"ETR.ConstructionShow";
+
 inline bool IsStagingFrame(HWND window) noexcept {
-    if (GetPropW(window, L"ETR.Redirecting") ||
-        GetPropW(window, L"ETR.ConstructionShow"))
+    if (GetPropW(window, kRedirectingProperty) ||
+        GetPropW(window, kConstructionShowProperty))
         return true;
     BYTE alpha = 255;
     DWORD flags = 0;
@@ -1416,9 +1424,9 @@ namespace etr {
 // token. All bookkeeping uses one mutex; every window API runs outside it.
 class WindowPresentationStore final {
    public:
-    static constexpr const wchar_t* PropertyName = L"ETR.Redirecting";
+    static constexpr const wchar_t* PropertyName = kRedirectingProperty;
     static constexpr const wchar_t* ConstructionPropertyName =
-        L"ETR.ConstructionShow";
+        kConstructionShowProperty;
 
     WindowPresentationStore() = default;
     WindowPresentationStore(const WindowPresentationStore&) = delete;
@@ -2400,6 +2408,7 @@ static void CompleteMerge(HWND source,
     // after this point must never cause the source window to reappear.
     LASTINPUTINFO initialInput{sizeof(initialInput), 0};
     const bool canRetry = GetLastInputInfo(&initialInput);
+    const HWND initialForeground = GetForegroundWindow();
     const ULONGLONG retryUntil = std::min(deadline, GetTickCount64() + 400);
     bool focused = false;
     bool restored = selection.children.empty();
@@ -2415,13 +2424,15 @@ static void CompleteMerge(HWND source,
             return;
 
         const ULONGLONG now = GetTickCount64();
-        if (!canRetry || !foreground || now >= retryUntil ||
+        if (!canRetry || now >= retryUntil ||
             !CooperativeWait(static_cast<DWORD>(
                 std::min<ULONGLONG>(50, retryUntil - now))))
             break;
         LASTINPUTINFO input{sizeof(input), 0};
+        const HWND currentForeground = GetForegroundWindow();
         if (!GetLastInputInfo(&input) || input.dwTime != initialInput.dwTime ||
-            GetForegroundWindow() != frame)
+            (currentForeground != frame &&
+             currentForeground != initialForeground))
             return;
         auto current = ActiveFolderView(browser, frame, tab, folder);
         if (!current)
@@ -2557,7 +2568,7 @@ static void ExecuteMergeRequest(MergeRequest* parameter) {
         auto late = CaptureSelection(catalog, source, folder.get());
         if (!late) {
             // Retain the earlier snapshot if only the selection query failed.
-            // If the source itself navigated away, keep the original window.
+            // Keep the source window if its current folder cannot be verified.
             const auto current = catalog.ReadFrameDestination(source);
             if (!current || !ILIsEqual(current->identity.get(), folder.get()))
                 return;
