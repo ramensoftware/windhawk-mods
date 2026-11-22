@@ -19,6 +19,10 @@ Shows the current keyboard layout as a small badge next to the mouse pointer,
 so you know which language you are about to type in before you press a key. It
 follows the layout of the app you are working in.
 
+![Badge next to the text caret, with the Caps Lock and Num Lock marks](https://i.imgur.com/tph9cXo.png)
+![Badge for the Ukrainian layout with the Caps Lock mark](https://i.imgur.com/YMY9W4X.png)
+![Badge with the Caps Lock and Num Lock marks](https://i.imgur.com/vFnIUrc.png)
+
 ## Indicator modes
 
 * **Label next to pointer**: a floating badge that follows the mouse pointer.
@@ -78,6 +82,8 @@ The mod runs in its own `windhawk.exe` process, not inside Explorer or other
 apps, and installs no hooks. It checks
 the pointer 60 times a second only while the badge is visible and the pointer
 is moving, and slows down to about 8 checks a second when nothing is happening.
+While the badge sits at the text caret, the mod also asks the app you are typing
+in for its caret position 8 to 20 times a second.
 
 ## Limitations
 
@@ -91,15 +97,11 @@ is moving, and slows down to about 8 checks a second when nothing is happening.
   detected.
 * The label I-beam in text-cursor mode is always black and white. It does not
   follow a custom pointer color or scheme.
-* The **Switching enabled** setting pauses and resumes everything without
-  disabling the mod.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: Switching enabled (pause/resume)
 - indicatorMode: "FollowPointer"
   $name: Indicator mode
   $options:
@@ -216,7 +218,6 @@ struct Mapping {
 };
 
 struct Settings {
-    bool enabled = true;
     Mode mode = Mode::FollowPointer;
     Position position = Position::TopLeft;
     double offsetX = -14, offsetY = 12, size = 9, opacity = .6, roundness = 1;
@@ -287,7 +288,6 @@ std::wstring LimitLabel(const std::wstring& text) {
 
 Settings LoadSettings() {
     Settings settings;
-    settings.enabled = Wh_GetIntSetting(L"enabled") != 0;
     auto mode = ReadString(L"indicatorMode");
     settings.mode = mode == L"TextCursor" ? Mode::TextCursor : mode == L"Off" ? Mode::Off : Mode::FollowPointer;
     auto position = ReadString(L"position");
@@ -493,7 +493,7 @@ POINT PlaceBadge(Position position, POINT cursor, int width, int height,
 
 bool ShouldShow(const Settings& settings, bool pointerVisible, bool overText,
                 bool fullscreen, ULONGLONG now, ULONGLONG switched) {
-    if (!settings.enabled || settings.mode != Mode::FollowPointer ||
+    if (settings.mode != Mode::FollowPointer ||
         (settings.hideWhenPointerHidden && !pointerVisible) ||
         (settings.hideInFullScreen && fullscreen)) { return false; }
     return settings.visibility == Visibility::Always ||
@@ -852,7 +852,6 @@ public:
     // How long to sleep before the next Tick. The fast rate is only needed
     // while the badge is on screen and has to follow the pointer or fade.
     DWORD PollInterval() const {
-        if (!settings_.enabled) { return 500; }
         if (settings_.mode != Mode::FollowPointer) { return 120; }
         if (fading_) { return 16; }
         if (atCaret_) { return alpha_ ? 50 : 120; }
@@ -913,7 +912,7 @@ public:
         lastInput_ = inputTick;
         bool buttons = ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON) |
                          GetAsyncKeyState(VK_MBUTTON)) & 0x8001) != 0;
-        bool caretAllowed = gotCursor && settings_.enabled && settings_.showAtCaret &&
+        bool caretAllowed = gotCursor && settings_.showAtCaret &&
             settings_.mode == Mode::FollowPointer && !(settings_.hideInFullScreen && fullscreen_);
         if (!caretAllowed) {
             atCaret_ = false;
@@ -963,11 +962,11 @@ public:
         if (cursorPending_ && now >= retryAt_) {
             int factor = std::clamp(static_cast<int>(std::lround(std::max(
                 dpiScale_, GetSystemMetrics(SM_CYCURSOR) / 32.))), 1, 8);
-            const Style* text = settings_.enabled && language_.layout && settings_.mode == Mode::TextCursor ? &style_ : nullptr;
-            std::wstring arrow = settings_.enabled && hasMapping_ ? mapping_.cursorPath : L"";
+            const Style* text = language_.layout && settings_.mode == Mode::TextCursor ? &style_ : nullptr;
+            std::wstring arrow = hasMapping_ ? mapping_.cursorPath : L"";
             std::wstring key = language_.id + L"/" + std::to_wstring(revision_) + L"/" + std::to_wstring(factor) +
                 L"/" + std::to_wstring(locks_);
-            bool applied = settings_.enabled ? cursors_.Apply(arrow, text, key, settings_.typingScale, factor) : cursors_.Restore();
+            bool applied = cursors_.Apply(arrow, text, key, settings_.typingScale, factor);
             cursorPending_ = !applied;
             if (!applied) {
                 Wh_Log(L"Cursor update failed; check configured CUR/ANI or image paths");
