@@ -139,27 +139,75 @@ CharClass GetCharClass(WCHAR wch)
     return CharClass::Alphanumeric;
 }
 
-// Helper: Determine the character class at a UTF-16 index with surrogate pairs
+// Helper: Resolve a prolonged sound mark to the preceding Japanese kana
+CharClass GetProlongedSoundMarkClass(std::wstring_view text, int iPos)
+{
+    while (iPos > 0 && IsProlongedSoundMark(text[iPos - 1]))
+    {
+        iPos--;
+    }
+    if (iPos > 0 && GetCharClass(text[iPos - 1]) == CharClass::Hiragana)
+    {
+        return CharClass::Hiragana;
+    }
+    return CharClass::Katakana;
+}
+
+// Helper: Identify selectors and joiners that attach to a base character
+bool IsSelectorOrJoiner(char32_t codePoint)
+{
+    return (codePoint >= 0xFE00 && codePoint <= 0xFE0F) ||
+        codePoint == 0x200D || codePoint == 0x20E3 ||
+        (codePoint >= 0xE0100 && codePoint <= 0xE01EF);
+}
+
+// Helper: Determine the character class at a UTF-16 index
 CharClass GetCharClassAt(std::wstring_view text, int iPos, int& cchCharLen)
 {
-    if (iPos > 0 && IS_SURROGATE_PAIR(text[iPos - 1], text[iPos]))
+    cchCharLen = 0;
+    while (iPos >= 0)
     {
-        cchCharLen = 2;
-        char32_t codePoint = 0x10000 +
-            ((static_cast<char32_t>(text[iPos - 1]) - 0xD800) << 10) +
-            (static_cast<char32_t>(text[iPos]) - 0xDC00);
-        if (codePoint >= 0x20000 && codePoint <= 0x3FFFF)
+        int cchCodePointLen = 1;
+        char32_t codePoint = text[iPos];
+        if (iPos > 0 && IS_SURROGATE_PAIR(text[iPos - 1], text[iPos]))
         {
-            return CharClass::Ideograph;
+            cchCodePointLen = 2;
+            codePoint = 0x10000 +
+                ((static_cast<char32_t>(text[iPos - 1]) - 0xD800) << 10) +
+                (static_cast<char32_t>(text[iPos]) - 0xDC00);
         }
-        if (codePoint >= 0x1F000 && codePoint <= 0x1FAFF)
+
+        // Keep selectors and joiners attached to the preceding base character
+        cchCharLen += cchCodePointLen;
+        if (IsSelectorOrJoiner(codePoint) && iPos >= cchCodePointLen)
         {
-            return CharClass::Punctuation;
+            iPos -= cchCodePointLen;
+            continue;
         }
-        return CharClass::Alphanumeric;
+
+        // Classify CJK ideographs and emoji outside the BMP
+        if (cchCodePointLen == 2)
+        {
+            if (codePoint >= 0x20000 && codePoint <= 0x3FFFF)
+            {
+                return CharClass::Ideograph;
+            }
+            if (codePoint >= 0x1F000 && codePoint <= 0x1FAFF)
+            {
+                return CharClass::Punctuation;
+            }
+            return CharClass::Alphanumeric;
+        }
+
+        if (IsProlongedSoundMark(text[iPos]))
+        {
+            return GetProlongedSoundMarkClass(text, iPos);
+        }
+
+        return GetCharClass(text[iPos]);
     }
-    cchCharLen = 1;
-    return GetCharClass(text[iPos]);
+
+    return CharClass::Alphanumeric;
 }
 
 // Helper: Calculate the starting index of the previous word
@@ -183,21 +231,6 @@ DWORD FindPreviousWordStart(std::wstring_view text, DWORD dwSelStart)
     // Identify the character class to delete
     int cchCharLen = 1;
     CharClass targetCharClass = GetCharClassAt(text, iPos, cchCharLen);
-
-    // Attach trailing prolonged sound marks to a preceding hiragana word
-    if (IsProlongedSoundMark(text[iPos]))
-    {
-        while (iPos > 0 && IsProlongedSoundMark(text[iPos - 1]))
-        {
-            iPos--;
-        }
-
-        if (iPos > 0 && GetCharClass(text[iPos - 1]) == CharClass::Hiragana)
-        {
-            targetCharClass = CharClass::Hiragana;
-        }
-    }
-
     iPos -= cchCharLen;
 
     if (targetCharClass == CharClass::Ideograph)
@@ -209,9 +242,7 @@ DWORD FindPreviousWordStart(std::wstring_view text, DWORD dwSelStart)
     while (iPos >= 0)
     {
         CharClass prevCharClass = GetCharClassAt(text, iPos, cchCharLen);
-        if (prevCharClass != targetCharClass &&
-            !(targetCharClass == CharClass::Hiragana &&
-                IsProlongedSoundMark(text[iPos])))
+        if (prevCharClass != targetCharClass)
         {
             break;
         }
