@@ -250,6 +250,38 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/7c580ee0a0792936a65cda7b12b25c2f5ba0281e/mods/hide-snapped.wh.cpp"
       }
     },
+    "language-cursor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795313337948,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795313337948,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Sanekx Arcs",
+        "compilerOptions": "-lgdiplus -lgdi32 -lshcore -loleacc -lole32 -luuid",
+        "description": "Показує поточну розкладку клавіатури маленькою позначкою біля курсора миші, з кольором, зображенням або власним курсором для кожної мови.",
+        "github": "https://github.com/SanekxArcs",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Мова біля курсора",
+        "version": "1.0.0"
+      },
+      "metadataEnglish": {
+        "description": "Shows the current keyboard layout as a small badge next to the mouse pointer, with a color, image or custom pointer for each language.",
+        "name": "Language Cursor"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7642",
+      "source": {
+        "sha256": "0f3f24d54ebf3d7c11ff208e2dbe2070dec7b9d858de2770f1dd7049429673e4",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/b92841a48a1cd4b9d1eacf70b609f333f7aa54de/mods/language-cursor.wh.cpp"
+      }
+    },
     "lockscreen-background": {
       "details": {
         "defaultSorting": 0,
@@ -495,6 +527,36 @@
       "source": {
         "sha256": "1166aea917dbf902bbc12f57cf6bdd3a1bb8dd3244f709f558003a21a81089a2",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/e294035edd4a98e7c13d26d624edf004175ffb0f/mods/system-tray-network-speedtest.wh.cpp"
+      }
+    },
+    "taskbar-app-volume-mixer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795313337948,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795313337948,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Sanekx Arcs",
+        "compilerOptions": "-lcomctl32 -ldwmapi -lgdi32 -lole32 -loleaut32 -lruntimeobject -lversion -lshell32",
+        "description": "Scroll over the taskbar to open a mixer of all apps and control the volume of each app separately",
+        "github": "https://github.com/SanekxArcs",
+        "include": [
+          "explorer.exe",
+          "ShellExperienceHost.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Taskbar App Volume Mixer",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7640",
+      "source": {
+        "sha256": "3894d6569274948e7a82f4b0b7ccdf70a20cffee59ed40fe84430a798ee8d551",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/10467409bdc9c514819149ce7e797d5db31ce907/mods/taskbar-app-volume-mixer.wh.cpp"
       }
     },
     "taskbar-notification-bell-badge": {

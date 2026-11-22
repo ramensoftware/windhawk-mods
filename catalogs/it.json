@@ -7199,7 +7199,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 14.32593457159228,
-        "updated": 1794686596000,
+        "updated": 1795313101000,
         "users": 145
       },
       "metadata": {
@@ -7216,7 +7216,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Item Pins",
-        "version": "1.1.5"
+        "version": "1.1.7"
       }
     },
     "explorer-large-icons-view": {
@@ -7257,7 +7257,7 @@
         "ratingUsers": 5,
         "reviews": 0,
         "trendingSorting": 11.4,
-        "updated": 1795043049000,
+        "updated": 1795313096000,
         "users": 114
       },
       "metadata": {
@@ -7271,7 +7271,7 @@
           "explorer.exe"
         ],
         "name": "File Explorer List view indent fix and files area spacing",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "explorer-name-windows": {
@@ -16695,12 +16695,12 @@
         "ratingUsers": 17,
         "reviews": 1,
         "trendingSorting": -0.014371832934613311,
-        "updated": 1793851230000,
+        "updated": 1795313091000,
         "users": 148
       },
       "metadata": {
         "author": "mario0318",
-        "compilerOptions": "-lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -lbcrypt -luuid -lgdi32",
+        "compilerOptions": "-lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -lbcrypt -luuid -lgdi32 -ldwmapi",
         "description": "Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.",
         "github": "https://github.com/mario0318",
         "include": [
@@ -16708,7 +16708,7 @@
         ],
         "license": "GPL-3.0",
         "name": "SnapSentry",
-        "version": "0.23.0"
+        "version": "0.24.0"
       }
     },
     "snipping-tool-pen-text": {

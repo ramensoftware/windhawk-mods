@@ -1,3 +1,13 @@
+## 0.24.0 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bdcfeae3c89b790c4ede7aefb587e06ba091bd23/mods/snap-sentry.wh.cpp))
+
+* Optional small picture of the screenshot in the notification
+* Optional line showing the folder the screenshot was saved in
+* Choose what clicking the notification does: copy, open the screenshot, open its folder, or keep it without copying. A click never deletes
+* Any of the three buttons can be hidden
+* One button (Keep, Copy + delete, or Delete) can be highlighted, and the fallback dialog starts on that choice too
+* The fallback dialog's title bar follows dark mode
+* The log says why the dialog was used instead of a notification, and why a picture was left out, without file paths
+
 ## 0.23.0 ([Nov 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/af08e3162218984b6e83d0f10f3738e63ab94795/mods/snap-sentry.wh.cpp))
 
 * 0.23.0: The notification no longer leaves a Start Menu shortcut or a registry entry behind. SnapSentry's name and icon now come from a temporary entry that Windows discards at sign-out.
