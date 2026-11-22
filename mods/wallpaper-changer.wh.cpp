@@ -5,8 +5,7 @@
 // @version         1.0.0
 // @author          David Ravelo
 // @github          https://github.com/DavidRaveloU
-// @include         explorer.exe
-// @architecture    x86-64
+// @include         windhawk.exe
 // @compilerOptions -lole32 -lshell32 -luser32 -lgdi32 -luuid -ld2d1 -ldwrite -lwindowscodecs
 // @license         MIT
 // ==/WindhawkMod==
@@ -17,7 +16,9 @@
   $name: Wallpapers folder
   $description: >-
     Folder that holds your wallpapers. Every subfolder becomes a collection.
-    Leave empty to use your Pictures folder. Example: C:\Users\David\Pictures\Wallpapers\
+    Leave empty to use your Pictures folder, but then everything inside it is scanned (up to 5000
+    images), personal photos and screenshots included: a folder just for wallpapers works better.
+    Example: C:\Users\David\Pictures\Wallpapers\
 - style: carousel
   $name: Style
   $description: >-
@@ -68,6 +69,17 @@ Choose a folder of wallpapers, turn its subfolders into collections and change y
 couple of seconds without opening Settings. Three looks are available, picked with the **Style**
 setting.
 
+## How it differs from Simple Wallpaper Switcher
+
+[Simple Wallpaper Switcher](https://windhawk.net/mods/simple-wallpaper-switcher) is a compact utility
+picker: a paged thumbnail grid with folder navigation and search, themes and a tray icon. This mod is
+a gallery instead. You browse one wallpaper at a time, large, with the keyboard or by dragging, and
+the selector and the effect are one motion: the card you pick grows from where it was on screen until
+it is the wallpaper, and the overlay stays until the desktop really shows it. That costs more (a
+Direct2D scene and a monitor-size decode on every change, about 33 MB at 4K), which a compact picker
+should not carry. If you want search, themes or a tray icon, Simple Wallpaper Switcher is the better
+fit.
+
 ## Styles
 
 ### Card carousel
@@ -117,7 +129,9 @@ log says so.
 
 ## How to use
 
-1. Set **Wallpapers folder** in the mod settings (it defaults to your Pictures folder).
+1. Set **Wallpapers folder** in the mod settings. It defaults to your Pictures folder, which is
+   scanned whole (up to 5000 images, personal photos included), so a folder just for wallpapers works
+   better.
 2. Press the hotkey (**Ctrl+Alt+P** by default) to open the selector.
 3. Move with the **arrow keys**, the **mouse wheel** or by **dragging**. `Home` and `End` jump to the
    first and last card.
@@ -125,7 +139,9 @@ log says so.
    button or clicking another window closes the selector without changing anything.
 
 The wallpaper only changes when you confirm, never while you browse. It goes through the Windows
-desktop wallpaper setting, so Windows keeps it after the mod is disabled.
+desktop wallpaper setting, so Windows keeps it after the mod is disabled. Applying an image also
+replaces a Slideshow or Windows Spotlight background. With **Only change the current monitor** the
+wallpaper is saved for that monitor only.
 
 ## Collections
 
@@ -139,7 +155,7 @@ rescans the folder.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| Wallpapers folder | your Pictures folder | Every subfolder becomes a collection. Quotes around the path and `%VARIABLES%` are accepted. |
+| Wallpapers folder | your Pictures folder | Every subfolder becomes a collection. Quotes around the path and `%VARIABLES%` are accepted. Empty scans the whole Pictures folder (up to 5000 images), so a folder just for wallpapers is better. |
 | Style | Card carousel | Card carousel, Folder strip or Showcase. Applies the next time the selector opens. |
 | Transition | Card expand | Card expand, Blinds, Pixelate, Tile wave, Random or None. |
 | Only change the current monitor | off | Off: every monitor changes and plays the effect. On: only the monitor the selector opened on. |
@@ -150,7 +166,9 @@ rescans the folder.
 
 - Supported images: JPG, JPEG, PNG, BMP and WebP (WebP needs the Windows WebP codec). The folder is
   scanned each time the selector opens, up to 5000 images.
-- Previews are decoded with the Windows imaging components inside `explorer.exe`, on a background
+- The mod runs as a Windhawk tool mod, in its own `windhawk.exe` process, so nothing it does can
+  affect Explorer, the taskbar or the desktop.
+- Previews are decoded with the Windows imaging components in that process, on a background
   thread. Images above roughly 150 megapixels show "No preview" instead of being decoded.
 - Nothing runs in the background while the selector is closed, apart from the hotkey itself and, for
   a couple of seconds after you pick a wallpaper, the transition.
@@ -184,12 +202,13 @@ For a pull request: fork the
 #include <cmath>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 // ---------------------------------------------------------------------------
-// Pure logic. No Windows state, so test/logic_test.cpp compiles it on the host.
+// Pure logic: no Windows state.
 // ---------------------------------------------------------------------------
 
 static wchar_t AsciiLower(wchar_t c) {
@@ -735,11 +754,11 @@ static MonitorSource ParseMonitorSource(const std::wstring& id) {
     return LowerKey(TrimAscii(id)) == L"focus" ? MonitorSource::Focus : MonitorSource::Mouse;
 }
 
-#ifndef WC_LOGIC_TEST
-
 // ---------------------------------------------------------------------------
 // Windows side: hotkey, UI thread and window.
 // ---------------------------------------------------------------------------
+
+#include <windhawk_utils.h>
 
 #include <d2d1.h>
 #include <dwrite.h>
@@ -908,10 +927,7 @@ static HINSTANCE ModuleInstance() {
 }
 
 static std::wstring ReadStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring out = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return out;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 static std::wstring PicturesFolder() {
@@ -955,24 +971,27 @@ static void RegisterHotkeyFromSettings(HWND hwnd) {
 // by pointer, so a window destroyed before it reads it cannot leak it.
 // ---------------------------------------------------------------------------
 
-static std::thread g_scanThread;
+// A joinable std::thread destroyed at process exit calls std::terminate, and the unload code does
+// not run then, so these are never destroyed (see Windhawk's "Global objects and process shutdown").
+[[clang::no_destroy]] static std::optional<std::thread> g_scanThread;
 static std::atomic<bool> g_scanCancel{false};
 static std::mutex g_scanMutex;
 static std::optional<std::vector<Collection>> g_scanResult;
 
 static void StopScan() {
     g_scanCancel = true;
-    if (g_scanThread.joinable()) g_scanThread.join();
+    if (g_scanThread && g_scanThread->joinable()) g_scanThread->join();
+    g_scanThread.reset();
 }
 
 static void StartScan(HWND hwnd, std::wstring root) {
     StopScan();
     g_scanCancel = false;
-    g_scanThread = std::thread([hwnd, root = std::move(root)] {
+    g_scanThread.emplace([hwnd, root = std::move(root)] {
         std::vector<Collection> library;
         try {
             library = ScanLibrary(root, g_scanCancel);
-        } catch (...) {  // an escaping exception would end explorer.exe: show an empty library instead
+        } catch (...) {  // an escaping exception would end the host process: show an empty library instead
             Wh_Log(L"Scanning the wallpapers folder failed");
             library.push_back(Collection{L"All", {}});
         }
@@ -990,7 +1009,7 @@ static void StartScan(HWND hwnd, std::wstring root) {
 // never waits on the shell's COM server.
 // ---------------------------------------------------------------------------
 
-static std::thread g_applyThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_applyThread;  // see g_scanThread
 
 // The id Windows gives the monitor that sits at `target`, or empty when none matches.
 static std::wstring FindMonitorId(IDesktopWallpaper* wallpaper, const RECT& target) {
@@ -1239,7 +1258,8 @@ public:
         bi.bmiHeader.biBitCount = 32;
         bi.bmiHeader.biCompression = BI_RGB;
         dc_ = CreateCompatibleDC(nullptr);
-        dib_ = dc_ ? CreateDIBSection(dc_, &bi, DIB_RGB_COLORS, &bits_, nullptr, 0) : nullptr;
+        void* bits = nullptr;  // required by the API, the pixels are only reached through the DC
+        dib_ = dc_ ? CreateDIBSection(dc_, &bi, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
         if (!dib_) return false;
         old_ = SelectObject(dc_, dib_);
         return true;
@@ -1264,15 +1284,11 @@ public:
                                    ULW_ALPHA) != FALSE;
     }
 
-    // The premultiplied BGRA pixels of the last frame. test/render_preview.cpp saves them.
-    const BYTE* Bits() const { return static_cast<const BYTE*>(bits_); }
-
     ComPtr<ID2D1DCRenderTarget> rt;
 
 private:
     HDC dc_ = nullptr;
     HBITMAP dib_ = nullptr;
-    void* bits_ = nullptr;
     HGDIOBJ old_ = nullptr;
     SIZE size_{};
 };
@@ -1301,6 +1317,7 @@ static void PlaceAboveDesktop(HWND window) {
 }
 
 static std::atomic<bool> g_applyCancel{false};  // an effect that is playing jumps to its end
+static std::atomic<bool> g_applySuperseded{false};  // with it, a newer wallpaper follows: this one is not written
 
 static void PumpMessages() {
     MSG msg;
@@ -1358,11 +1375,24 @@ static std::vector<Probe> MakeProbes(const Thumb& image, const RectF& place, COL
     return probes;
 }
 
+// Whether the point is on the desktop: nothing but the desktop (or the effect's own overlay, which
+// is under every app) is there. An app window or the taskbar over it shows its own pixels instead.
+static bool OnDesktop(POINT p, HWND overlay) {
+    HWND window = WindowFromPoint(p);
+    HWND root = window ? GetAncestor(window, GA_ROOT) : nullptr;
+    if (!root) return false;
+    if (root == overlay) return true;
+    wchar_t cls[32] = L"";
+    GetClassNameW(root, cls, 32);
+    return !wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW");
+}
+
 // Whether the desktop shows the wallpaper at the probes. The overlay must be excluded from
-// capture, or this reads the overlay itself.
-// `seen` gets what was read (r, g, b per patch) and `close` how many patches match.
-static bool DesktopShowsWallpaper(const std::vector<Probe>& probes, POINT origin, std::vector<int>& seen,
-                                  int& close) {
+// capture, or this reads the overlay itself. Probes under another window are left out, and with
+// fewer than four left `covered` is set: there is no desktop to wait for.
+// `seen` gets what was read (r, g, b per patch, -1 for a left out one) and `close` how many match.
+static bool DesktopShowsWallpaper(const std::vector<Probe>& probes, POINT origin, HWND overlay,
+                                  std::vector<int>& seen, int& close, bool& covered) {
     constexpr int kSide = 5, kTolerance = 16;  // patch size, and the largest accepted channel difference
     const int n = static_cast<int>(probes.size());
     HDC screen = GetDC(nullptr);
@@ -1377,6 +1407,7 @@ static bool DesktopShowsWallpaper(const std::vector<Probe>& probes, POINT origin
     void* bits = nullptr;
     HBITMAP dib = mem ? CreateDIBSection(mem, &bi, DIB_RGB_COLORS, &bits, nullptr, 0) : nullptr;
     bool result = false;
+    covered = false;
     if (dib && bits) {
         HGDIOBJ old = SelectObject(mem, dib);
         for (int i = 0; i < n; ++i) {
@@ -1387,7 +1418,13 @@ static bool DesktopShowsWallpaper(const std::vector<Probe>& probes, POINT origin
         const BYTE* px = static_cast<const BYTE*>(bits);
         close = 0;
         seen.clear();
+        int shown = 0;  // the patches on the desktop
         for (int i = 0; i < n; ++i) {
+            if (!OnDesktop(POINT{origin.x + probes[i].x, origin.y + probes[i].y}, overlay)) {
+                seen.insert(seen.end(), {-1, -1, -1});
+                continue;
+            }
+            ++shown;
             long sum[3] = {0, 0, 0};
             for (int y = 0; y < kSide; ++y) {
                 for (int x = 0; x < kSide; ++x) {
@@ -1403,7 +1440,8 @@ static bool DesktopShowsWallpaper(const std::vector<Probe>& probes, POINT origin
             seen.insert(seen.end(), {r, g, b});
             if (ColorsClose(r, g, b, probes[i].r, probes[i].g, probes[i].b, kTolerance)) ++close;
         }
-        result = close * 4 >= n * 3;  // three out of four patches
+        covered = shown < 4;
+        result = !covered && close * 4 >= shown * 3;  // three out of four patches
         SelectObject(mem, old);
     }
     if (dib) DeleteObject(dib);
@@ -1557,7 +1595,7 @@ static bool PlayTransition(const std::vector<TransitionJob>& jobs, const std::ws
     // captures (it stays on screen), and it goes back in once the wallpaper is seen.
     constexpr DWORD kExcludeFromCapture = 0x11;  // WDA_EXCLUDEFROMCAPTURE, Windows 10 2004 and later
     for (auto& st : stages) st->excluded = SetWindowDisplayAffinity(st->overlay.hwnd, kExcludeFromCapture) != FALSE;
-    ApplyWallpaper(path, only);
+    if (!g_applySuperseded) ApplyWallpaper(path, only);
     if (intact && !g_applyCancel) {
         const Clock::time_point applied = Clock::now();
         auto since = [&] {
@@ -1575,8 +1613,11 @@ static bool PlayTransition(const std::vector<TransitionJob>& jobs, const std::ws
                 bool ready = since() >= 1500;
                 if (st->excluded && st->probes.size() >= 4) {
                     std::vector<int> now;
-                    ready = DesktopShowsWallpaper(st->probes, st->origin(), now, st->matching) &&
-                            SamplesStable(st->last, now, 3);  // not still fading in
+                    bool covered = false;
+                    const bool shows = DesktopShowsWallpaper(st->probes, st->origin(), st->overlay.hwnd, now,
+                                                             st->matching, covered);
+                    // a monitor under an app has no desktop to wait for; otherwise not still fading in
+                    ready = covered || (shows && SamplesStable(st->last, now, 3));
                     st->last = std::move(now);
                 }
                 st->streak = ready ? st->streak + 1 : 0;
@@ -1606,7 +1647,8 @@ static bool PlayTransition(const std::vector<TransitionJob>& jobs, const std::ws
 
 static void StopApply() {
     g_applyCancel = true;
-    if (g_applyThread.joinable()) g_applyThread.join();
+    if (g_applyThread && g_applyThread->joinable()) g_applyThread->join();
+    g_applyThread.reset();
     g_applyCancel = false;
 }
 
@@ -1614,8 +1656,11 @@ static void StopApply() {
 // overlay per job, and the wallpaper is set under it.
 static void ApplyWallpaperAsync(std::wstring path, std::optional<RECT> only,
                                 std::vector<TransitionJob> jobs = {}, HWND notify = nullptr) {
-    StopApply();  // a previous apply is cut short and finishes at once
-    g_applyThread = std::thread([path = std::move(path), only, jobs = std::move(jobs), notify] {
+    g_applySuperseded = true;  // a previous apply is cut short, and does not write its wallpaper
+    StopApply();
+    g_applySuperseded = false;
+    g_applyThread.emplace([path = std::move(path), only, jobs = std::move(jobs), notify] {
+        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);  // pixels, as the shell reports them
         const bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
         try {
             if (jobs.empty() || !PlayTransition(jobs, path, only, notify)) ApplyWallpaper(path, only);
@@ -2603,17 +2648,14 @@ static void HideSelector() {
     ShowWindow(hwnd, SW_HIDE);
 }
 
-// A hotkey normally grants foreground rights; if Windows still refuses, borrow
-// the foreground thread's input queue for the call.
+// A hotkey normally grants foreground rights; if Windows still refuses, an empty input event
+// from this thread makes it accept the call (no input queue is shared with the other app).
 static bool TakeForeground(HWND hwnd) {
     SetForegroundWindow(hwnd);
     if (GetForegroundWindow() == hwnd) return true;
-    const DWORD self = GetCurrentThreadId();
-    const DWORD fg = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
-    if (fg && fg != self && AttachThreadInput(self, fg, TRUE)) {
-        SetForegroundWindow(hwnd);
-        AttachThreadInput(self, fg, FALSE);
-    }
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
+    SetForegroundWindow(hwnd);
     return GetForegroundWindow() == hwnd;
 }
 
@@ -2960,6 +3002,8 @@ struct UiStart {
 
 static DWORD WINAPI UiThreadProc(LPVOID param) {
     auto* start = static_cast<UiStart*>(param);
+    // The code works in real pixels (monitor rectangles, per-monitor DPI), whatever the host process is.
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
 
     HWND hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kWindowClass,
@@ -3010,7 +3054,7 @@ static DWORD WINAPI UiThreadProc(LPVOID param) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     WNDCLASSEXW wc{sizeof(wc)};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = ModuleInstance();
@@ -3039,22 +3083,196 @@ BOOL Wh_ModInit() {
     return FALSE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (HWND hwnd = g_hwnd.load()) PostMessageW(hwnd, WM_WC_SETTINGS, 0, 0);
 }
 
-void Wh_ModBeforeUninit() {
+// The process exits right after this returns, so everything is stopped and joined here.
+void WhTool_ModUninit() {
     if (!g_uiThread) return;
-    // A quit posted before the message queue exists is lost, so keep posting
-    // until the thread is really gone.
-    while (WaitForSingleObject(g_uiThread, 50) == WAIT_TIMEOUT) {
-        PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
-    }
+    // WhTool_ModInit returned only after the thread made its window, so its message queue exists.
+    PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
+    WaitForSingleObject(g_uiThread, INFINITE);
     CloseHandle(g_uiThread);
     g_uiThread = nullptr;
     UnregisterClassW(kWindowClass, ModuleInstance());
 }
 
-void Wh_ModUninit() {}
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
-#endif  // WC_LOGIC_TEST
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
