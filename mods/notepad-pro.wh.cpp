@@ -464,7 +464,7 @@ static void BuildMmLines(EditorCtx* c);
 
 static bool LineModelUsable(EditorCtx* c) {
     if (!c->docOk || c->docStale) return false;
-    GETTEXTLENGTHEX gtl = {GTL_NUMCHARS, 1200 /*CP_UNICODE*/};
+    GETTEXTLENGTHEX gtl = {GTL_NUMCHARS, 1200};
     LONG len = (LONG)SendMessageW(c->edit, EM_GETTEXTLENGTHEX, (WPARAM)&gtl, 0);
     if (c->docSynLen != len) return false;
     if (c->mmBuiltRev != c->docRev) BuildMmLines(c);
@@ -554,7 +554,7 @@ static int MeasureGutterWidth(EditorCtx* c, int digits) {
     ReleaseDC(wnd, dc);
     int dpi = (int)GetDpiForWindow(c->edit);
     if (dpi <= 0) dpi = 96;
-    return sz.cx + MulDiv(8, dpi, 96) /*left pad*/ + MulDiv(10, dpi, 96) /*right pad + divider*/;
+    return sz.cx + MulDiv(8, dpi, 96) + MulDiv(10, dpi, 96);
 }
 
 // Layout: reserve space inside the editor and place the gutter on top
@@ -1402,8 +1402,8 @@ static void RefreshSyntax(EditorCtx* c, LONG len, ULONGLONG now) {
         c->docSynLen = -2;
         return;
     }
-    // Plain files are read only for the minimap, on the timer tick, so a keystroke adds no extra editor traffic.
-    if (c->docStale && !(c->lang < 0 && c->inMsg) &&
+    // [keep] read plain files <= 200000 chars during the message too, so the line table is current
+    if (c->docStale && !(c->lang < 0 && c->inMsg && len > 200000) &&
         (len <= 200000 || now - c->synChangeTick > 150)) {
         c->docStale = false;
         if (ReadDocText(c, len, c->docText)) {
@@ -1520,7 +1520,7 @@ static void SyntaxTick(EditorCtx* c) {
         c->synSigValid = false;
     }
 
-    GETTEXTLENGTHEX gtl = {GTL_NUMCHARS, 1200 /*CP_UNICODE*/};
+    GETTEXTLENGTHEX gtl = {GTL_NUMCHARS, 1200};
     LONG len = (LONG)SendMessageW(c->edit, EM_GETTEXTLENGTHEX, (WPARAM)&gtl, 0);
     LONG lines = (LONG)SendMessageW(c->edit, EM_GETLINECOUNT, 0, 0);
     ULONGLONG now = GetTickCount64();
@@ -1862,7 +1862,7 @@ static void GutterTick(EditorCtx* c, bool fontChanged) {
     }
 
     // Detect text changes (length / visual line count)
-    GETTEXTLENGTHEX gtl = {GTL_NUMCHARS, 1200 /*CP_UNICODE*/};
+    GETTEXTLENGTHEX gtl = {GTL_NUMCHARS, 1200};
     LONG len = (LONG)SendMessageW(c->edit, EM_GETTEXTLENGTHEX, (WPARAM)&gtl, 0);
     LONG lines = (LONG)SendMessageW(c->edit, EM_GETLINECOUNT, 0, 0);
     ULONGLONG now = GetTickCount64();
@@ -2089,7 +2089,7 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
     // Length in the editor's numbering (CRLF = one character).
     LONG docLen = ExpectedEditorLength(c);
     // Second opinion on where the text ends: the editor's character count.
-    GETTEXTLENGTHEX gtlLive = {GTL_NUMCHARS, 1200 /*CP_UNICODE*/};
+    GETTEXTLENGTHEX gtlLive = {GTL_NUMCHARS, 1200};
     LONG liveLen = (LONG)SendMessageW(edit, EM_GETTEXTLENGTHEX, (WPARAM)&gtlLive, 0);
     if (liveLen > 0) docLen = std::min(docLen, liveLen);
     std::vector<Row> rowList;
@@ -3259,7 +3259,7 @@ struct GlyphHook {
     }
     static void Install(void* comObject) {
         void** vtbl = *(void***)comObject;
-        HookSlot(vtbl, 29 /* ID2D1RenderTarget::DrawGlyphRun */, (void*)hook, (void**)&orig);
+        HookSlot(vtbl, 29, (void*)hook, (void**)&orig);
     }
 };
 
