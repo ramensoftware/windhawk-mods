@@ -23,6 +23,8 @@
 
 **aegisCapsule** is a hardware-accelerated (Direct2D / DirectWrite) dynamic capsule companion for Windows, featuring frosted Liquid Glass optics, media controls, a WASAPI voice recorder, quick notes, a Pomodoro timer, and a living wellness assistant.
 
+![aegisCapsule Preview](https://raw.githubusercontent.com/MrSpy00/windhawk-mods/screenshots/screenshots/aegis-capsule-preview.png)
+
 ### Key Capabilities
 - **Liquid Glass Optical Engine:** Multi-layer frosted glass sheen, animated caustic light waves, ambient accent glow, and dual-rim highlights.
 - **Full-Screen Auto-Hide:** Automatically hides when full-screen games or video players are active.
@@ -154,7 +156,7 @@
     $description: "Choose what the capsule shows by default when collapsed."
     $description:tr-TR: "Kapsül beklemedeyken varsayılan olarak ne göstereceğini seçin."
     $options:
-      - '0': "Smart Dynamic (Auto-adapts to Pomodoro"
+      - '0': "Smart Dynamic (Auto-adapts to Pomodoro)"
       - '1': "Clock & Weather Duo (Centered 50/50 Classic)"
       - '2': "Clock Only (Minimalist Large Time)"
       - '3': "System Telemetry HUD (Clock + CPU + RAM)"
@@ -232,6 +234,8 @@
     $name:tr-TR: "Otomatik DPI Ölçekleme"
     $description: "Automatically scales font sizes and metrics to match monitor DPI."
     $description:tr-TR: "Monitör DPI değerine göre otomatik ölçekler."
+  $name: "Appearance & Layout"
+  $name:tr-TR: "Görünüm & Düzen"
 - Optics:
   - LiquidGlass: true
     $name: "Liquid Glass Optical Engine"
@@ -378,7 +382,7 @@
     $description: "How the glowing accent color is chosen."
     $description:tr-TR: "Vurgu renginin nasıl belirleneceğini seçin."
     $options:
-      - auto: "Auto (from album art"
+      - auto: "Auto (from album art)"
       - system: "Windows System Accent"
       - custom: "Custom Hex Color"
   - CustomAccentHex: "#4cc9f0"
@@ -519,6 +523,8 @@
     $name:tr-TR: "Tuş Kilidi Süresi (sn)"
     $description: "How long to display Caps/Num Lock popups."
     $description:tr-TR: "Tuş kilidi OSD süresi."
+  $name: "Modules"
+  $name:tr-TR: "Modüller"
 - FineTuning:
   - HoverScalePercent: 102
     $name: "Hover scale (%)"
@@ -595,7 +601,15 @@
 */
 // ==/WindhawkModSettings==
 
+// Portions of the Direct2D island layout, spring physics, and privacy/audio
+// scaffolding are adapted from Dynamic Island for Windows:
+// Copyright (c) 2025 Himanshu (devcode90) - MIT License.
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files to deal in the Software
+// without restriction, subject to the MIT License conditions.
+
 #include <windows.h>
+#include <sddl.h>
 #include <unknwn.h>
 #include <dwmapi.h>
 #include <shellapi.h>
@@ -826,8 +840,25 @@ struct Settings {
     int weatherUpdateMinutes = 10;
 };
 
+struct CowBytes {
+    std::shared_ptr<std::vector<uint8_t>> ptr;
+    std::vector<uint8_t>& mut() {
+        if (!ptr) ptr = std::make_shared<std::vector<uint8_t>>();
+        else if (ptr.use_count() > 1) ptr = std::make_shared<std::vector<uint8_t>>(*ptr);
+        return *ptr;
+    }
+    void resize(size_t n) { mut().resize(n); }
+    void clear() { ptr.reset(); }
+    bool empty() const { return !ptr || ptr->empty(); }
+    size_t size() const { return ptr ? ptr->size() : 0; }
+    uint8_t* data() { return mut().data(); }
+    const uint8_t* data() const { return ptr ? ptr->data() : nullptr; }
+    uint8_t& operator[](size_t i) { return mut()[i]; }
+    const uint8_t& operator[](size_t i) const { return (*ptr)[i]; }
+};
+
 struct BitmapPixels {
-    std::vector<uint8_t> bgra;
+    CowBytes bgra;
     UINT width = 0;
     UINT height = 0;
     uint64_t generation = 0;
@@ -1022,6 +1053,43 @@ HANDLE g_recordingThread = nullptr;
 DWORD g_renderThreadId = 0;
 DWORD g_keyboardThreadId = 0;
 UINT g_shellHookMessage = 0;
+std::atomic<bool> g_pinnedExpanded{false};
+std::atomic<bool> g_gameOverlayPinned{false};
+
+std::wstring GetCurrentUserSidString() {
+    static std::wstring s_sid = []() -> std::wstring {
+        HANDLE hToken = nullptr;
+        if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) return L"Default";
+        DWORD len = 0;
+        GetTokenInformation(hToken, TokenUser, nullptr, 0, &len);
+        std::wstring result = L"Default";
+        if (len > 0) {
+            std::vector<BYTE> buf(len);
+            if (GetTokenInformation(hToken, TokenUser, buf.data(), len, &len)) {
+                LPWSTR sidStr = nullptr;
+                if (ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buf.data())->User.Sid, &sidStr) && sidStr) {
+                    result = sidStr;
+                    LocalFree(sidStr);
+                }
+            }
+        }
+        CloseHandle(hToken);
+        return result;
+    }();
+    return s_sid;
+}
+
+void SetPinnedExpanded(bool v) {
+    g_pinnedExpanded.store(v, std::memory_order_relaxed);
+    std::wstring key = L"PinnedExpanded_" + GetCurrentUserSidString();
+    Wh_SetIntValue(key.c_str(), v ? 1 : 0);
+}
+
+void SetGameOverlayPinned(bool v) {
+    g_gameOverlayPinned.store(v, std::memory_order_relaxed);
+    std::wstring key = L"GameOverlayPinned_" + GetCurrentUserSidString();
+    Wh_SetIntValue(key.c_str(), v ? 1 : 0);
+}
 
 HHOOK g_keyboardHook = nullptr;
 FILETIME g_prevIdleTime{};
@@ -1221,6 +1289,8 @@ std::wstring GetStringSettingCopy(PCWSTR name) {
 
 void LoadSettings() {
     Settings next;
+    g_pinnedExpanded.store(Wh_GetIntValue((L"PinnedExpanded_" + GetCurrentUserSidString()).c_str(), 0) != 0, std::memory_order_relaxed);
+    g_gameOverlayPinned.store(Wh_GetIntValue((L"GameOverlayPinned_" + GetCurrentUserSidString()).c_str(), 0) != 0, std::memory_order_relaxed);
 
     // Language
     const int localLang = Wh_GetIntValue(L"LanguageOverride", -1);
@@ -1722,17 +1792,14 @@ std::wstring GetNotesFilePath() {
     if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath)) > 0 && storagePath[0] != L'\0') {
         std::wstring dir = storagePath;
         CreateDirectoryW(dir.c_str(), nullptr);
-        return dir + L"\\notes.txt";
+        return dir + L"\\notes_" + GetCurrentUserSidString() + L".txt";
     }
-    wchar_t tempDir[MAX_PATH] = {};
-    if (GetTempPathW(ARRAYSIZE(tempDir), tempDir) > 0) {
-        return std::wstring(tempDir) + L"aegisCapsule_notes.txt";
-    }
-    return L"aegisCapsule_notes.txt";
+    return L"";
 }
 
 void LoadQuickNotes() {
     std::wstring path = GetNotesFilePath();
+    if (path.empty()) return;
     HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile != INVALID_HANDLE_VALUE) {
         DWORD size = GetFileSize(hFile, nullptr);
@@ -1783,6 +1850,7 @@ void SaveQuickNote(const std::wstring& note) {
     }
 
     std::wstring path = GetNotesFilePath();
+    if (path.empty()) return;
     HANDLE hFile = CreateFileW(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile != INVALID_HANDLE_VALUE) {
         int u8len = WideCharToMultiByte(CP_UTF8, 0, formattedNote.c_str(), static_cast<int>(formattedNote.size()), nullptr, 0, nullptr, nullptr);
@@ -2628,13 +2696,16 @@ void AbortActiveHttp() {
 
 void ApplySystemToastSuppression(bool suppress) {
     static constexpr wchar_t kPushKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications";
+    const std::wstring sid = GetCurrentUserSidString();
+    const std::wstring activeKey = L"ToastSuppressionActive_" + sid;
+    const std::wstring prevKey = L"ToastEnabledPrev_" + sid;
     if (suppress) {
-        if (Wh_GetIntValue(L"ToastSuppressionActive", 0) == 0) {
+        if (Wh_GetIntValue(activeKey.c_str(), 0) == 0) {
             DWORD prev = 1;
             DWORD size = sizeof(prev);
             RegGetValueW(HKEY_CURRENT_USER, kPushKey, L"ToastEnabled", RRF_RT_DWORD, nullptr, &prev, &size);
-            Wh_SetIntValue(L"ToastEnabledPrev", static_cast<int>(prev));
-            Wh_SetIntValue(L"ToastSuppressionActive", 1);
+            Wh_SetIntValue(prevKey.c_str(), static_cast<int>(prev));
+            Wh_SetIntValue(activeKey.c_str(), 1);
         }
         HKEY hKey = nullptr;
         if (RegCreateKeyExW(HKEY_CURRENT_USER, kPushKey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
@@ -2642,14 +2713,14 @@ void ApplySystemToastSuppression(bool suppress) {
             RegSetValueExW(hKey, L"ToastEnabled", 0, REG_DWORD, reinterpret_cast<const BYTE*>(&val), sizeof(val));
             RegCloseKey(hKey);
         }
-    } else if (Wh_GetIntValue(L"ToastSuppressionActive", 0) != 0) {
-        DWORD prev = static_cast<DWORD>(Wh_GetIntValue(L"ToastEnabledPrev", 1));
+    } else if (Wh_GetIntValue(activeKey.c_str(), 0) != 0) {
+        DWORD prev = static_cast<DWORD>(Wh_GetIntValue(prevKey.c_str(), 1));
         HKEY hKey = nullptr;
         if (RegCreateKeyExW(HKEY_CURRENT_USER, kPushKey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
             RegSetValueExW(hKey, L"ToastEnabled", 0, REG_DWORD, reinterpret_cast<const BYTE*>(&prev), sizeof(prev));
             RegCloseKey(hKey);
         }
-        Wh_SetIntValue(L"ToastSuppressionActive", 0);
+        Wh_SetIntValue(activeKey.c_str(), 0);
     }
 }
 
@@ -2735,10 +2806,10 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
     AppendMenuW(menu, MF_STRING, 1, tr ? L"✕ Uyarıyı / OSD'yi Kapat" : L"✕ Dismiss current alert / OSD");
     
     // Root Action 2: Pin / Expand / Game switches
-    const int pinned = Wh_GetIntValue(L"PinnedExpanded", 0);
+    const bool pinned = g_pinnedExpanded.load(std::memory_order_relaxed);
     AppendMenuW(menu, MF_STRING | (pinned ? MF_CHECKED : 0), 2, tr ? (pinned ? L"📌 Kapsülü Açık Sabitle: AÇIK" : L"📌 Kapsülü Açık Sabitle: KAPALI") : (pinned ? L"📌 Pinned Expanded: ON" : L"📌 Pinned Expanded: OFF"));
 
-    const int gameOverlayPinned = Wh_GetIntValue(L"GameOverlayPinned", 0);
+    const bool gameOverlayPinned = g_gameOverlayPinned.load(std::memory_order_relaxed);
     AppendMenuW(menu, MF_STRING | (gameOverlayPinned ? MF_CHECKED : 0), 3, tr ? (gameOverlayPinned ? L"🎮 Oyun Overlay Modu: AÇIK ✓" : L"🎮 Oyun Overlay Modu: KAPALI") : (gameOverlayPinned ? L"🎮 Game Overlay Mode: ON ✓" : L"🎮 Game Overlay Mode: OFF"));
     
     const int activeExpandOnHover = Wh_GetIntValue(L"ExpandOnHoverOverride", -1) >= 0 
@@ -2908,11 +2979,11 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             DismissTransientState();
             break;
         case 2:
-            Wh_SetIntValue(L"PinnedExpanded", Wh_GetIntValue(L"PinnedExpanded", 0) ? 0 : 1);
+            SetPinnedExpanded(!g_pinnedExpanded.load(std::memory_order_relaxed));
             g_layoutDirty = true;
             break;
         case 3:
-            Wh_SetIntValue(L"GameOverlayPinned", Wh_GetIntValue(L"GameOverlayPinned", 0) ? 0 : 1);
+            SetGameOverlayPinned(!g_gameOverlayPinned.load(std::memory_order_relaxed));
             g_layoutDirty = true;
             break;
         case 4: Wh_SetIntValue(L"PillOpacityOverride", 100); LoadSettings(); break;
@@ -2981,13 +3052,13 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
                 g_state.quickNotes.clear();
             }
             std::wstring path = GetNotesFilePath();
-            DeleteFileW(path.c_str());
+            if (!path.empty()) DeleteFileW(path.c_str());
             TriggerCustomAlert(L"Quick Notes", tr ? L"Tüm Notlar Temizlendi 🗑️" : L"Notes Cleared 🗑️", tr ? L"Tüm notlarınız başarıyla silindi." : L"All notes have been removed.", 3.0);
             break;
         }
         case 78: {
             std::wstring path = GetNotesFilePath();
-            ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            if (!path.empty()) ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             break;
         }
         case 79: {
@@ -3242,6 +3313,48 @@ class Renderer {
     float lastFontScale_ = 0.0f; // tracks current font scale to avoid redundant format recreation
 
    public:
+    void DiscardDeviceResources() {
+        target_.Reset();
+        pillBgBrush_.Reset();
+        tintBrush_.Reset();
+        accentBrush_.Reset();
+        textBrush_.Reset();
+        mutedBrush_.Reset();
+        whiteBrush_.Reset();
+        redBrush_.Reset();
+        greenBrush_.Reset();
+        yellowBrush_.Reset();
+        cyanBrush_.Reset();
+        orangeBrush_.Reset();
+        magentaBrush_.Reset();
+        waveformBrush_.Reset();
+        cardBgBrush_.Reset();
+        cardBorderBrush_.Reset();
+        dividerBrush_.Reset();
+        weekendBrush_.Reset();
+        calHeaderBrush_.Reset();
+        glassBorderBrush_.Reset();
+        glassGlossBrush_.Reset();
+        glowBorderBrush_.Reset();
+        for (auto& b : shadowBrushes_) b.Reset();
+        sheenStops_.Reset();
+        sheenBrush_.Reset();
+        cachedSheenIntensity_ = -1.0f;
+        cachedSheenOpacity_ = -1.0f;
+        shimmerStops_.Reset();
+        shimmerBrush_.Reset();
+        cachedShimmerIntensity_ = -1.0f;
+        cachedShimmerOpacity_ = -1.0f;
+        artBitmap_.Reset();
+        artGeneration_ = 0;
+        mediaSourceIconBitmap_.Reset();
+        mediaSourceIconGeneration_ = 0;
+        notificationIconBitmap_.Reset();
+        notificationIconGeneration_ = 0;
+        clipboardIconBitmap_.Reset();
+        clipboardIconGeneration_ = 0;
+    }
+
     bool Initialize(HWND hwnd) {
         hwnd_ = hwnd;
 
@@ -4864,7 +4977,7 @@ class Renderer {
     }
 
     void DrawExpandedDashboard(const SharedState& state, D2D1_RECT_F rect, const Settings& settings, double now, float scale) {
-        if (settings.gameOverlay || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0) {
+        if (settings.gameOverlay || g_gameOverlayPinned.load(std::memory_order_relaxed)) {
             DrawGameOverlay(state, rect, scale);
             return;
         }
@@ -6033,6 +6146,16 @@ class Renderer {
 
         if (!EnsureBackingBitmap(pixelWidth, pixelHeight)) return false;
 
+        if (!target_) {
+            if (!d2dFactory_) return false;
+            D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
+                D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                0.0f, 0.0f,
+                D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE);
+            if (FAILED(d2dFactory_->CreateDCRenderTarget(&props, &target_))) return false;
+        }
+
         RECT rc = {0, 0, pixelWidth, pixelHeight};
         HRESULT hr = target_->BindDC(memDc_, &rc);
         if (FAILED(hr)) return false;
@@ -6072,7 +6195,7 @@ class Renderer {
 
         hr = target_->EndDraw();
         if (hr == D2DERR_RECREATE_TARGET) {
-            target_.Reset();
+            DiscardDeviceResources();
             return false;
         }
         if (FAILED(hr)) return false;
@@ -6259,7 +6382,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
             // Collapsed Click-To-Expand
             if (!settings.expandOnHover && !isExpandedPill) {
-                Wh_SetIntValue(L"PinnedExpanded", 1);
+                SetPinnedExpanded(true);
                 g_layoutDirty = true;
                 return 0;
             }
@@ -6318,8 +6441,7 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
         case WM_LBUTTONDBLCLK: {
-            int pinned = Wh_GetIntValue(L"PinnedExpanded", 0);
-            Wh_SetIntValue(L"PinnedExpanded", pinned ? 0 : 1);
+            SetPinnedExpanded(!g_pinnedExpanded.load(std::memory_order_relaxed));
             g_layoutDirty = true;
             return 0;
         }
@@ -6486,8 +6608,8 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
             }
         }
 
-        bool pinned = Wh_GetIntValue(L"PinnedExpanded", 0) != 0;
-        bool isGameOverlayPinned = Wh_GetIntValue(L"GameOverlayPinned", 0) != 0;
+        bool pinned = g_pinnedExpanded.load(std::memory_order_relaxed);
+        bool isGameOverlayPinned = g_gameOverlayPinned.load(std::memory_order_relaxed);
         bool expand = (isHover && settings.expandOnHover) || pinned || isGameOverlayPinned;
 
         Activity primary;
@@ -7172,7 +7294,7 @@ void UpdateSystemMetrics() {
     }
 
     Settings s = GetSettingsSnapshot();
-    bool needGpu = s.gameOverlay || g_idleTab.load() == 3 || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0;
+    bool needGpu = s.gameOverlay || g_idleTab.load() == 3 || g_gameOverlayPinned.load(std::memory_order_relaxed);
     int gpu = needGpu ? GetGpuUsage() : 0;
     {
         std::lock_guard lock(g_stateMutex);
@@ -7280,7 +7402,7 @@ void WhTool_ModUninit() {
 
     for (HANDLE& t : threads) {
         if (t) {
-            WaitForSingleObject(t, INFINITE);
+            WaitForSingleObject(t, 3000);
             CloseHandle(t);
             t = nullptr;
         }
@@ -7319,14 +7441,14 @@ void WhTool_ModUninit() {
 
 } // namespace
 
-// ============================================================================
+////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
 // The mod will load and run in a dedicated windhawk.exe process.
 //
-// Paste the code below as part of the mod code, and change these callbacks:
+// Paste the code below as part of the mod code, and use these callbacks:
 // * WhTool_ModInit
 // * WhTool_ModSettingsChanged
 // * WhTool_ModUninit
