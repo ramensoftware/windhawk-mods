@@ -83,6 +83,9 @@ to the internet and restart `explorer.exe` (or toggle the mod).
 - **Show a generic user name**: off by default. When on, the name of the signed-in user is shown as a generic one
   ("User", "Utente", "Benutzer", ...) on this page only; Windows and the account keep the real name. Saving the generic name
   unchanged in "Change the account name" does nothing, so the account is never renamed by mistake.
+- **Show legacy online ID and fingerprint links**: off by default. When enabled, the page's original visibility
+  checks apply; fingerprint hardware may be required. Close and reopen the page after changing the setting. These
+  links can remain unavailable or nonfunctional because their Windows 7 targets are normally absent on Windows 10/11.
 - **Block account removal from the classic page**: on by default. Turn it off to use the classic page's normal
   deletion flow; see the warning under *Notes and limitations*.
 - **Keep downloaded files when the mod is disabled**: on by default, so that enabling the mod again needs no
@@ -110,8 +113,13 @@ to the internet and restart `explorer.exe` (or toggle the mod).
 - The mod has been tested on Windows 10 21H2 and Windows 11 24H2. Other versions from Windows 10 1607 on may work, but have not been tested.
 - This is the Windows 7 page: it does not know Microsoft accounts as such (they appear as the local accounts they
   are bound to).
-- Three links of the Windows 7 page have no target on Windows 10/11 and are left out: "Link online IDs",
-  "Manage your fingerprint data" and, unless a Family Safety applet is present, "Parental Controls".
+- **Legacy online ID and fingerprint links are best effort.** "Link online IDs" and "Manage your fingerprint data"
+  are suppressed by default and can be allowed by a setting. Their original availability checks still apply, and
+  functionality depends on specific legacy components or separate restorations that this mod does not provide or
+  verify. The Windows 7 targets are normally absent on Windows 10/11, and even a restored component or provider may
+  not be compatible or operational. In particular, this mod removes the online IDs page definition from its private
+  copy: enabling the link does not restore that page, and a test produced a file-not-found error when it was clicked.
+  No working restoration is guaranteed. "Parental Controls" remains conditional on a Family Safety applet being present.
 - "Change your picture" lists the pictures of `ProgramData\Microsoft\User Account Pictures\Default Pictures`,
   which Windows 10/11 do not ship; "Browse for more pictures..." works.
 - When the mod is disabled or updated, it closes the Explorer windows that currently show the User Accounts page and waits
@@ -157,6 +165,13 @@ to the internet and restart `explorer.exe` (or toggle the mod).
   $description: This setting replaces the name of the signed-in user with a generic one ("User", localized to the page language) on this page only. Windows, the account and the other accounts are not changed. Applies to windows opened after the change.
   $description:it-IT: Questa impostazione sostituisce il nome dell'utente connesso con uno generico ("Utente", localizzato nella lingua della pagina) solo in questa pagina. Windows, l'account e gli altri account non vengono modificati. Si applica alle finestre aperte dopo la modifica.
   $description:de-DE: Diese Einstellung ersetzt den Namen des angemeldeten Benutzers nur auf dieser Seite durch einen generischen Namen ("Benutzer", in der Seitensprache). Windows, das Konto und die anderen Konten werden nicht geändert. Gilt für nach der Änderung geöffnete Fenster.
+- showLegacyLinks: false
+  $name: Show legacy online ID and fingerprint links
+  $name:it-IT: Mostra i collegamenti precedenti per ID online e impronte
+  $name:de-DE: Alte Links für Online-IDs und Fingerabdrücke anzeigen
+  $description: This setting allows the classic page to show the Link online IDs and Manage your fingerprint data links instead of suppressing them. They depend on the original Windows checks, including fingerprint hardware, and might not appear. Their Windows 7 targets are normally absent on Windows 10/11, so the links may not work. Close and reopen the page after changing this setting.
+  $description:it-IT: Questa impostazione consente alla pagina classica di mostrare i collegamenti per ID online e impronte invece di nasconderli. Dipendono dai controlli originali di Windows, incluso il lettore di impronte, e potrebbero non apparire. Le destinazioni di Windows 7 normalmente non sono presenti in Windows 10/11, quindi i collegamenti potrebbero non funzionare. Chiudi e riapri la pagina dopo la modifica.
+  $description:de-DE: Diese Einstellung erlaubt der klassischen Seite, die alten Links für Online-IDs und Fingerabdrücke anzuzeigen, statt sie zu unterdrücken. Die ursprünglichen Windows-Prüfungen einschließlich Fingerabdruckgerät gelten weiterhin, daher erscheinen sie möglicherweise nicht. Die Windows-7-Ziele fehlen unter Windows 10/11 normalerweise, sodass die Links möglicherweise nicht funktionieren. Schließe die Seite nach der Änderung und öffne sie erneut.
 - blockAccountRemoval: true
   $name: Block account removal from the classic page
   $name:it-IT: Blocca la rimozione degli account dalla pagina classica
@@ -1954,6 +1969,7 @@ std::atomic<bool> g_keepFiles{true};
 std::atomic<int> g_languageSetting{0};      // 0 automatic, 1 English, 2 Italian, 3 French, 4 Spanish, 5 Portuguese, 6 German
 std::atomic<bool> g_hideUserName{false};
 std::atomic<bool> g_blockAccountRemoval{true};
+std::atomic<bool> g_showLegacyLinks{false};
 std::atomic<const wchar_t*> g_genericName{L"User"};
 
 SRWLOCK g_stateLock = SRWLOCK_INIT;         // guards the block below
@@ -2438,6 +2454,7 @@ void LoadSettings() {
     g_keepFiles.store(Wh_GetIntSetting(L"keepFilesOnDisable") != 0);
     g_hideUserName.store(Wh_GetIntSetting(L"hideUserName") != 0);
     g_blockAccountRemoval.store(Wh_GetIntSetting(L"blockAccountRemoval") != 0);
+    g_showLegacyLinks.store(Wh_GetIntSetting(L"showLegacyLinks") != 0);
 }
 
 // ---- setup (worker thread) ------------------------------------------------------------------------------------------
@@ -2593,11 +2610,11 @@ HMODULE LoadVerified(const std::wstring& path, const std::string& sha256) {
 // asking Windows; here the answer is given that makes it leave the dead link out.
 
 // "Link online IDs" is offered on every workstation; its page was in OnlineIDcpl.dll (Windows 7 only). The page reads
-// the product type for nothing else.
+// the product type for nothing else. The optional setting keeps the original answer.
 BOOL WINAPI Page_GetVersionExW(LPOSVERSIONINFOW info) {
     CallGuard guard;
     const BOOL ok = GetVersionExW(info);
-    if (ok && info && info->dwOSVersionInfoSize >= sizeof(OSVERSIONINFOEXW))
+    if (!g_showLegacyLinks.load() && ok && info && info->dwOSVersionInfoSize >= sizeof(OSVERSIONINFOEXW))
         reinterpret_cast<OSVERSIONINFOEXW*>(info)->wProductType = VER_NT_SERVER;
     return ok;
 }
@@ -2619,10 +2636,11 @@ HRESULT WINAPI Page_WPC_InstallState(DWORD* state) {
 }
 
 // "Manage your fingerprint data" is offered when a fingerprint reader is found through winbio.dll; it starts
-// biocpl.dll, which Windows 10/11 do not have. Without that file the page is not given winbio.dll.
+// biocpl.dll, which Windows 10/11 do not have. By default, without that file the page is not given winbio.dll.
+// The optional setting permits the original check; it does not create a missing target.
 HMODULE WINAPI Page_LoadLibraryW(LPCWSTR name) {
     CallGuard guard;
-    if (name && _wcsicmp(name, L"winbio.dll") == 0) {
+    if (!g_showLegacyLinks.load() && name && _wcsicmp(name, L"winbio.dll") == 0) {
         wchar_t path[MAX_PATH];
         const UINT n = GetSystemDirectoryW(path, ARRAYSIZE(path));
         if (n && n + 12 < ARRAYSIZE(path)) {
