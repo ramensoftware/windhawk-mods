@@ -224,7 +224,12 @@ If you find this mod useful, you can support its development and maintenance:
 #define _WIN32_WINNT 0x0A00
 #endif
 
+// clang-format off
+#undef _WINSOCKAPI_
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
+// clang-format on
 
 // Must follow windows.h for ULONG and WINAPI_FAMILY_PARTITION
 #include <powrprof.h>
@@ -239,7 +244,6 @@ If you find this mod useful, you can support its development and maintenance:
 #include <mmdeviceapi.h>
 #include <psapi.h>
 #include <shellapi.h>
-#include <shobjidl.h>
 #include <tlhelp32.h>
 
 #include <algorithm>
@@ -2147,9 +2151,7 @@ GetActiveNetworkProcessIdsCached(const ModSettings& settings) {
             for (DWORD i = 0; i < pTable->dwNumEntries; ++i) {
                 const auto& row = pTable->table[i];
                 if (row.dwOwningPid != 0 && row.dwOwningPid != 4) {
-                    BYTE firstByte =
-                        static_cast<BYTE>(row.dwLocalAddr & 0xFF);
-                    if (firstByte != 127) {
+                    if (row.dwLocalAddr != INADDR_ANY && (row.dwLocalAddr & 0xFF) != 127) {
                         activePids.insert(row.dwOwningPid);
                     }
                 }
@@ -2173,17 +2175,8 @@ GetActiveNetworkProcessIdsCached(const ModSettings& settings) {
             for (DWORD i = 0; i < pTable6->dwNumEntries; ++i) {
                 const auto& row = pTable6->table[i];
                 if (row.dwOwningPid != 0 && row.dwOwningPid != 4) {
-                    bool isLoopback = true;
-                    for (int b = 0; b < 15; ++b) {
-                        if (row.ucLocalAddr[b] != 0) {
-                            isLoopback = false;
-                            break;
-                        }
-                    }
-                    if (row.ucLocalAddr[15] != 1) {
-                        isLoopback = false;
-                    }
-                    if (!isLoopback) {
+                    const auto* addr = reinterpret_cast<const IN6_ADDR*>(row.ucLocalAddr);
+                    if (!IN6_IS_ADDR_LOOPBACK(addr) && !IN6_IS_ADDR_UNSPECIFIED(addr)) {
                         activePids.insert(row.dwOwningPid);
                     }
                 }
@@ -2998,16 +2991,6 @@ static void PruneTerminatedSoftTrimmedProcesses() {
 // Window State Map
 // ---------------------------------------------------------------------------
 
-// {aa509085-9a56-4c40-a7e8-637ff42d136d}
-static constexpr GUID kCLSID_VirtualDesktopManager = {
-    0xaa509085, 0x9a56, 0x4c40, {0xa7, 0xe8, 0x63, 0x7f, 0xf4, 0x2d, 0x13, 0x6d}};
-
-// {a5cd92ff-29be-454c-8d04-d82879fb3f1b}
-static constexpr IID kIID_IVirtualDesktopManager = {
-    0xa5cd92ff, 0x29be, 0x454c, {0x8d, 0x04, 0xd8, 0x28, 0x79, 0xfb, 0x3f, 0x1b}};
-
-static IVirtualDesktopManager* g_pVirtualDesktopManager = nullptr;
-
 static BOOL CALLBACK EnumWindowStateProc(HWND hwnd, LPARAM lParam) {
     auto* map = reinterpret_cast<std::unordered_map<DWORD, WindowState>*>(lParam);
     if (!IsWindowVisible(hwnd))
@@ -3018,13 +3001,6 @@ static BOOL CALLBACK EnumWindowStateProc(HWND hwnd, LPARAM lParam) {
     if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
         cloaked != 0) {
         return TRUE;
-    }
-
-    if (g_pVirtualDesktopManager) {
-        BOOL onCurrent = TRUE;
-        if (SUCCEEDED(g_pVirtualDesktopManager->IsWindowOnCurrentVirtualDesktop(hwnd, &onCurrent)) && !onCurrent) {
-            return TRUE;
-        }
     }
 
     // Ignore stub or zero-sized helper windows
@@ -4188,14 +4164,14 @@ static void RefreshGameConfigStoreCache() {
                             DWORD flagsType = 0;
                             bool isGame = true;
                             if (RegQueryValueExW(hSub, L"Flags", nullptr, &flagsType, reinterpret_cast<LPBYTE>(&flags), &flagsSize) == ERROR_SUCCESS && flagsType == REG_DWORD) {
+                                // Flags bitmask: 0x1 = Game title registered in Windows, 0x10 = Xbox GameDVR monitored game
                                 if ((flags & 0x11) == 0) {
                                     isGame = false;
                                 }
                             }
                             if (isGame) {
                                 DWORD bufSize = sizeof(pathBuf);
-                                DWORD type = 0;
-                                if (RegQueryValueExW(hSub, L"MatchedExeFullPath", nullptr, &type, reinterpret_cast<LPBYTE>(pathBuf), &bufSize) == ERROR_SUCCESS && type == REG_SZ && pathBuf[0] != L'\0') {
+                                if (RegGetValueW(hSub, nullptr, L"MatchedExeFullPath", RRF_RT_REG_SZ, nullptr, pathBuf, &bufSize) == ERROR_SUCCESS && pathBuf[0] != L'\0') {
                                     g_gameConfigStoreFullPaths.insert(ToLower(pathBuf));
                                     const wchar_t* lastSlash = wcsrchr(pathBuf, L'\\');
                                     if (!lastSlash) {
@@ -4232,39 +4208,11 @@ static bool IsRegisteredWindowsGame(const std::wstring& procName, HANDLE hProc =
         wchar_t imagePath[MAX_PATH]{};
         DWORD pathLen = _countof(imagePath);
         if (QueryFullProcessImageNameW(hProc, 0, imagePath, &pathLen) && pathLen > 0) {
-            if (g_gameConfigStoreFullPaths.count(ToLower(imagePath)) != 0) {
-                return true;
-            }
+            return (g_gameConfigStoreFullPaths.count(ToLower(imagePath)) != 0);
         }
     }
+    // Only fall back to exe name matching if process handle is null or QueryFullProcessImageNameW failed (e.g. access denied)
     return (!procName.empty() && g_gameConfigStoreExeNames.count(ToLower(procName)) != 0);
-}
-
-static bool HasGameRuntimeSignature(HANDLE hProc) {
-    if (!hProc) {
-        return false;
-    }
-    wchar_t imagePath[MAX_PATH]{};
-    DWORD pathLen = _countof(imagePath);
-    if (QueryFullProcessImageNameW(hProc, 0, imagePath, &pathLen) && pathLen > 0) {
-        std::wstring fullPathLower = ToLower(imagePath);
-        // Exclude launchers, tools, and background wallpapers located in game directories
-        if (fullPathLower.find(L"\\epic games\\launcher\\") != std::wstring::npos ||
-            fullPathLower.find(L"wallpaper32.exe") != std::wstring::npos ||
-            fullPathLower.find(L"wallpaper64.exe") != std::wstring::npos ||
-            fullPathLower.find(L"steam.exe") != std::wstring::npos ||
-            fullPathLower.find(L"galaxyclient.exe") != std::wstring::npos) {
-            return false;
-        }
-        // Common verified game directories without store client collision
-        if (fullPathLower.find(L"\\steamapps\\common\\") != std::wstring::npos ||
-            fullPathLower.find(L"\\epic games\\") != std::wstring::npos ||
-            fullPathLower.find(L"\\gog games\\") != std::wstring::npos ||
-            fullPathLower.find(L"\\xboxgames\\") != std::wstring::npos) {
-            return true;
-        }
-    }
-    return false;
 }
 
 static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
@@ -4289,9 +4237,9 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
     if (kSystemClasses.count(className) != 0)
         return false;
 
-    // Check borderless windowed mode covering monitor (foreground only)
+    // Check borderless windowed mode covering monitor
     HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
-    if (hMon && hwnd == GetForegroundWindow()) {
+    if (hMon) {
         MONITORINFO mi{};
         mi.cbSize = sizeof(mi);
         if (GetMonitorInfoW(hMon, &mi)) {
@@ -4312,7 +4260,7 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
     if (g_pfnSHQueryUserNotificationState) {
         QUERY_USER_NOTIFICATION_STATE quns = QUNS_NOT_PRESENT;
         if (SUCCEEDED(g_pfnSHQueryUserNotificationState(&quns))) {
-            if (quns == QUNS_RUNNING_D3D_FULL_SCREEN && hwnd == GetForegroundWindow()) {
+            if (quns == QUNS_RUNNING_D3D_FULL_SCREEN) {
                 return true;
             }
         }
@@ -4328,30 +4276,22 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
         }
     }
 
-    HANDLE hGameCheck = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (hGameCheck) {
-        bool regGame = IsRegisteredWindowsGame(procName, hGameCheck);
-        CloseHandle(hGameCheck);
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (hProc) {
+        bool regGame = IsRegisteredWindowsGame(procName, hProc);
         if (regGame) {
+            CloseHandle(hProc);
             return true;
         }
-    } else if (!procName.empty() && IsRegisteredWindowsGame(procName)) {
-        return true;
-    }
-
-    // Packaged apps (UWP/MSIX like Store, Settings, Calculator) are standard Windows apps,
-    // not dedicated 3D games, unless running exclusive D3D above or registered as a game.
-    HANDLE hCheck = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (hCheck) {
-        bool isPkg = IsPackagedAppCached(pid, hCheck);
-        bool hasGameDir = HasGameRuntimeSignature(hCheck);
-        CloseHandle(hCheck);
-        if (hasGameDir) {
-            return true;
-        }
+        // Packaged apps (UWP/MSIX like Store, Settings, Calculator) are standard Windows apps,
+        // not dedicated 3D games, unless running exclusive D3D above or registered as a game.
+        bool isPkg = IsPackagedAppCached(pid, hProc);
+        CloseHandle(hProc);
         if (isPkg) {
             return false;
         }
+    } else if (!procName.empty() && IsRegisteredWindowsGame(procName)) {
+        return true;
     }
 
     return false;
@@ -5025,7 +4965,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
         for (const auto& entry : processList) {
             DWORD pid = entry.pid;
             if (pid == 0 || pid == 4 || pid == foregroundPid ||
-                immuneFamilyPids.count(pid) || handledPids.count(pid)) {
+                handledPids.count(pid)) {
                 continue;
             }
             // Exclude main browser UI windows
@@ -5882,10 +5822,6 @@ BOOL WhTool_ModInit() {
 
     CheckAndRecoverCrashedPowerScheme();
 
-    CoCreateInstance(kCLSID_VirtualDesktopManager, nullptr, CLSCTX_INPROC_SERVER,
-                     kIID_IVirtualDesktopManager,
-                     reinterpret_cast<void**>(&g_pVirtualDesktopManager));
-
     LoadSettings();
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -6097,10 +6033,6 @@ void WhTool_ModUninit() {
         }
         g_powerWorkerThread.reset();
     }
-    if (g_pVirtualDesktopManager) {
-        g_pVirtualDesktopManager->Release();
-        g_pVirtualDesktopManager = nullptr;
-    }
     if (g_powerWakeEvent) {
         CloseHandle(g_powerWakeEvent);
         g_powerWakeEvent = nullptr;
@@ -6250,15 +6182,15 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        auto* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandle(nullptr));
-        auto* ntHeaders =
-            reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
+        // clang-format off
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = reinterpret_cast<BYTE*>(dosHeader) + entryPointRVA;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
 
-        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook), nullptr);
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
@@ -6278,10 +6210,10 @@ void Wh_ModAfterInit() {
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath,
                               ARRAYSIZE(currentProcessPath))) {
-    case 0:
-    case ARRAYSIZE(currentProcessPath):
-        Wh_Log(L"GetModuleFileName failed");
-        return;
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
     }
 
     WCHAR
@@ -6347,3 +6279,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+// clang-format on
