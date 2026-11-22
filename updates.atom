@@ -2,12 +2,70 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-22T04:03:31.000Z</updated>
+    <updated>2026-11-22T05:00:09.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[SMTC Now Playing Desktop Widgets 1.0.11]]></title>
+        <id>https://windhawk.net/mods/smtc-now-playing-widgets#f9c2d2b7d92dd48c22becca49e1511d7f4134cd9</id>
+        <link href="https://windhawk.net/mods/smtc-now-playing-widgets"/>
+        <updated>2026-11-22T05:00:09.000Z</updated>
+        <content type="html"><![CDATA[<h1>SMTC Now Playing Desktop Widgets</h1>
+<p>Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows 11 desktop using the native Windows System Media Transport Controls (SMTC) API.</p>
+<p><img src="https://raw.githubusercontent.com/minster586/windhawk-assets/main/img.webp" alt="SMTC Now Playing Desktop Widgets Preview"></p>
+<p>When album art is unavailable, the widgets display an embedded default image.</p>
+<h2>Themes</h2>
+<ul>
+<li><strong>Standard</strong>: Wide horizontal Acrylic card with rounded album art, bold track/artist text, 5 outlined playback controls, and a progress bar with timestamps.</li>
+<li><strong>Album</strong>: Full-bleed dimmed album art square with centered track/artist text, corner timestamps, and a bottom-edge progress bar.</li>
+<li><strong>Cardstock</strong>: Vertical portrait Acrylic card with full-brightness album art, centered track/artist, and progress bar. Automatically shrinks uniformly when playback controls are disabled.</li>
+<li><strong>Simplified</strong>: Sleek single-row horizontal Acrylic bar with compact art, track/artist text, 5 outlined playback controls, and a clean progress bar without timestamps.</li>
+</ul>
+<h2>Usage</h2>
+<ul>
+<li><strong>Move Widgets</strong>: Left-click and drag any widget across any monitor (unless &quot;Lock Position&quot; is enabled for that instance). Coordinates save automatically.</li>
+<li><strong>Display-Only Mode</strong>: Enable &quot;Disable Playback Controls&quot; on any instance to hide all transport buttons and disable progress bar seeking.</li>
+</ul>
+]]></content>
+        <author>
+            <name>minster586</name>
+            <uri>https://github.com/minster586</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Hello Auto OK 0.1.3]]></title>
+        <id>https://windhawk.net/mods/windows-hello-auto-ok#d32f034946b86a639d2ade33e0af860e7bf02286</id>
+        <link href="https://windhawk.net/mods/windows-hello-auto-ok"/>
+        <updated>2026-11-22T05:00:04.000Z</updated>
+        <content type="html"><![CDATA[<h1>Windows Hello Auto OK</h1>
+<p>Confirms the ready OK button in standard Windows Hello biometric dialogs,
+regardless of the requesting application or interface language.</p>
+<p><img src="https://raw.githubusercontent.com/hermanzamula/windhawk-windows-hello-auto-ok/main/docs/preview.gif" alt="Animated preview"></p>
+<p><em>Illustrated demo using an English interface and the display name User.</em></p>
+<p>Detection uses AutomationId, control types, visibility and enabled state.
+It never matches captions, translated messages, account names or websites.
+Visible dialogs owned by the Windows CredentialUIBroker are monitored directly,
+only while the Hello dialog itself is the foreground window. Visible credential input fields prevent
+automatic confirmation.</p>
+<p>This removes Windows Hello's manual confirmation step: a program requesting
+verification can be approved as soon as Windows recognizes you, provided its
+Hello dialog is active. Background dialogs are never confirmed automatically.</p>
+<p>The mod runs inside CredentialUIBroker.exe, with no helper process or UAC launcher.
+It reacts to window events and checks readiness only while its dialog is active.
+No credential values, account names, or biometric data are read.</p>
+<p>This is an experimental release. Its readiness check describes the standard
+Windows Hello UI structure, not an independent biometric-success API. Windows
+still performs authentication. Custom application dialogs and future changes
+to the system UI may require an update.</p>
+]]></content>
+        <author>
+            <name>hermanzamula</name>
+            <uri>https://github.com/hermanzamula</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Edge No Bleed 1.0.0]]></title>
         <id>https://windhawk.net/mods/edge-no-bleed#94fec81390dbd142801006fee21a3b72bc08271f</id>
@@ -502,71 +560,6 @@ screenshot is scaled with a crisp filter.</li>
         <author>
             <name>QCQ171-C</name>
             <uri>https://github.com/QCQ171-C</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Default Folder 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-default-folder#e2f0cc12211f5928767f93f61ce51750d41616d5</id>
-        <link href="https://windhawk.net/mods/explorer-default-folder"/>
-        <updated>2026-11-21T17:02:23.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Default Folder</h1>
-<p>Opens every new File Explorer <strong>window or tab</strong> in a folder of your choice
-when it would otherwise open <strong>This PC</strong>, <strong>Home</strong> or <strong>Quick access</strong>.</p>
-<p>Enter a folder in the mod settings, for example <code>D:\Documents</code>,
-<code>%USERPROFILE%\Downloads</code>, <code>~\Downloads</code>, <code>Downloads</code> or <code>shell:Downloads</code>.
-Environment variables are expanded, and <code>~</code> or a relative path starts at your
-user folder. Leave the setting empty to keep Explorer's normal behavior.</p>
-<p>You can apply the folder to new windows only, new tabs only, or both, and
-optionally reopen the folder you closed most recently instead.</p>
-<p>Windows and tabs opened for any other folder are not changed, and navigating
-to This PC or Home yourself in an existing tab is not redirected. A new window
-or tab that is explicitly opened at This PC or Home (for example with the This
-PC desktop icon) can't be told apart from a default one, so it is redirected
-too.</p>
-<h2>How it works</h2>
-<p>The mod listens to Shell window events instead of polling, so it costs
-nothing while idle and redirects a new tab as soon as its first location
-loads. Its background thread never holds up Explorer's windows, even when the
-folder is on a slow or offline network share.</p>
-<h2>Compatibility</h2>
-<p>Designed for File Explorer on Windows 10 and 11. It uses documented Shell COM
-interfaces rather than version-specific Explorer symbols, so it does not need
-an update for each Explorer build.</p>
-]]></content>
-        <author>
-            <name>DanRotaru</name>
-            <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinKlok 1.3.0]]></title>
-        <id>https://windhawk.net/mods/winklok#8abff951c8f8f54e48541f0aa39519d160e1cc05</id>
-        <link href="https://windhawk.net/mods/winklok"/>
-        <updated>2026-11-21T16:00:37.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>New features :</strong></p>
-<ul>
-<li>Repeating local events support (daily, weekly, monthly, yearly)</li>
-<li>Optional seconds clock in calendar tab</li>
-<li>Do Not Disturb toggle in notification panel &amp; Notification count badge</li>
-<li>Quick +1 min / +5 min buttons on finished timer popups</li>
-<li>Search in notes bar &amp; Markdown (.md) export in notes</li>
-<li>Full WinKlok backup and restore option (.wkbak file)</li>
-<li>Keyboard shortcuts for Stopwatch (Space and L)</li>
-</ul>
-<p><strong>Bug fixes &amp; Improvements :</strong></p>
-<ul>
-<li>Smoother notification panel animations and scrolling</li>
-<li>Improved event editor scrolling and repeat icons</li>
-<li>More reliable Google Calendar syncing and auth handling</li>
-<li>Better iCalendar (.ics) and Takeout archive imports/exports</li>
-<li>Multi-monitor taskbar and UI rendering fixes</li>
-<li>Improved notification snapshot privacy and cleanup</li>
-<li>Improved Calendar tab UI</li>
-</ul>
-]]></content>
-        <author>
-            <name>Shifting Whistler</name>
-            <uri>https://github.com/shifting-whistler</uri>
         </author>
     </entry>
 </feed>

@@ -16641,6 +16641,31 @@
         "version": "1.0.0"
       }
     },
+    "smtc-now-playing-widgets": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795323609000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795323609000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "minster586",
+        "compilerOptions": "-lgdi32 -lole32 -loleaut32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshcore -lruntimeobject -luuid",
+        "description": "Multi-instance, multi-monitor Windows 11 Acrylic Now Playing widgets powered natively by SMTC with Standard, Album, Cardstock, and Simplified themes.",
+        "github": "https://github.com/minster586",
+        "homepage": "https://links.smartcraft.me/@minster586",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "SMTC Now Playing Desktop Widgets",
+        "version": "1.0.11"
+      }
+    },
     "snap-commander": {
       "details": {
         "defaultSorting": 3976,
@@ -24653,6 +24678,31 @@
         "license": "MIT",
         "name": "Windows Border Switch",
         "version": "1.2.6"
+      }
+    },
+    "windows-hello-auto-ok": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795323604000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795323604000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "hermanzamula",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -luiautomationcore",
+        "description": "Language-independent confirmation of ready Windows Hello biometric dialogs across applications.",
+        "github": "https://github.com/hermanzamula",
+        "include": [
+          "CredentialUIBroker.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows Hello Auto OK",
+        "version": "0.1.3"
       }
     },
     "windows-key-to-search": {

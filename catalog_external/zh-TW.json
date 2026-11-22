@@ -439,35 +439,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/eec67bcfb9e3f958b4262b825d369b89aa8cc1ac/mods/shell-font-changer-plus.wh.cpp"
       }
     },
-    "smtc-now-playing-widgets": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795238322807,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795238322807,
-        "users": 0
-      },
-      "metadata": {
-        "author": "minster586",
-        "compilerOptions": "-lgdi32 -lole32 -loleaut32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshcore -lruntimeobject -luuid",
-        "description": "Multi-instance, multi-monitor Windows 11 Acrylic Now Playing widgets powered natively by SMTC with Standard, Album, Cardstock, and Simplified themes.",
-        "github": "https://github.com/minster586",
-        "homepage": "https://links.smartcraft.me/@minster586",
-        "include": [
-          "windhawk.exe"
-        ],
-        "name": "SMTC Now Playing Desktop Widgets",
-        "version": "1.0.11"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7546",
-      "source": {
-        "sha256": "f646865be867eab005a2a151e6e9fb6e7efe71b78e48ae2d95d6a9bd5e2ff9f4",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/827cac49edf4cbe245942a611c6bc4ea54a1f2fb/mods/smtc-now-playing-widgets.wh.cpp"
-      }
-    },
     "system-tray-breaktimer": {
       "details": {
         "defaultSorting": 0,
@@ -772,35 +743,6 @@
       "source": {
         "sha256": "012569f93597643a5f639085f478b85fc0406b1863fa32aa2b8833ff857b3b2a",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c2226cdb15a3684219163cfcf0dbeeb4c02ab62a/mods/windows-11-lock-screen-styler.wh.cpp"
-      }
-    },
-    "windows-hello-auto-ok": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795201559344,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795201559344,
-        "users": 0
-      },
-      "metadata": {
-        "author": "hermanzamula",
-        "compilerOptions": "-lole32 -loleaut32 -luuid -luiautomationcore",
-        "description": "Language-independent confirmation of ready Windows Hello biometric dialogs across applications.",
-        "github": "https://github.com/hermanzamula",
-        "include": [
-          "CredentialUIBroker.exe"
-        ],
-        "license": "MIT",
-        "name": "Windows Hello Auto OK",
-        "version": "0.1.3"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/6929",
-      "source": {
-        "sha256": "bcb94ae75a1ebdae9968703816380d7eb067fa5934fdd26e8230276c12df0f5f",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/97280142169461b31c4604085dbd4f59112e5e98/mods/windows-hello-auto-ok.wh.cpp"
       }
     },
     "zoneshift": {
