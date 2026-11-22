@@ -339,38 +339,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/991fce6699190290a9e5dc3527bccae938ef2fa5/mods/mac-text-keys.wh.cpp"
       }
     },
-    "quick-share-tile": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795294675721,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795294675721,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "ThePsychof",
-        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lruntimeobject -lole32 -loleaut32 -lshell32 -lgdi32 -luuid",
-        "description": "Replaces the Windows 11 Nearby sharing tile with a Quick Share launcher.",
-        "github": "https://github.com/ThePsychof",
-        "include": [
-          "ShellHost.exe"
-        ],
-        "license": "GPL-3.0-only",
-        "name": "Quick Share Tile",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/6980",
-      "source": {
-        "sha256": "e90acf954ebdaedde85066e36d683f3acfba36556bbc99d906edce88f5e227f4",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/395456d8421c6c55b80acf50d1bfe2b40561f220/mods/quick-share-tile.wh.cpp"
-      }
-    },
     "rdp-icon-refresh": {
       "details": {
         "defaultSorting": 0,
@@ -672,6 +640,36 @@
       "source": {
         "sha256": "3a1e0f10e7ab714ec4af3fa6483030de22d2e1f6b1e1e511e9eadda818e44445",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3b284d718598ae924d4af8f3af3959f4e5c46d47/mods/titlebar-opacity-button.wh.cpp"
+      }
+    },
+    "twinkle-brightness": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795374561919,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795374561919,
+        "users": 0
+      },
+      "metadata": {
+        "author": "isousluer",
+        "compilerOptions": "-ldxva2 -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -ladvapi32",
+        "description": "Brightness sliders for every display in the system tray, with hotkeys, an on-screen indicator, time-based schedules, and idle dimming",
+        "github": "https://github.com/isousluer",
+        "homepage": "https://github.com/isousluer/twinkle-brightness",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Twinkle Brightness",
+        "version": "1.1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7786",
+      "source": {
+        "sha256": "53f1195dbd488733b641eafb12505cb1db5cc2dd079a1e9ce03015db368dd5fe",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3fded2a8922236ec21cde4fff3d70724b37c6209/mods/twinkle-brightness.wh.cpp"
       }
     },
     "volu-macos-volume-hud": {

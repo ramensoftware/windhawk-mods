@@ -2,12 +2,80 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-22T18:02:36.000Z</updated>
+    <updated>2026-11-22T19:04:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick Share Tile 1.0.0]]></title>
+        <id>https://windhawk.net/mods/quick-share-tile#c9c51968a2897244218062c9ab6b6da1dc90c296</id>
+        <link href="https://windhawk.net/mods/quick-share-tile"/>
+        <updated>2026-11-22T19:04:43.000Z</updated>
+        <content type="html"><![CDATA[<h1>Quick Share Tile</h1>
+<p>Replace the Windows 11 <strong>Nearby sharing</strong> Quick Settings tile
+with a <strong>Quick Share</strong> launcher.</p>
+<p>Keep your Quick Settings layout intact while giving the native
+Nearby sharing tile a new purpose.</p>
+<h2>Preview</h2>
+<p><img src="https://raw.githubusercontent.com/ThePsychof/QuickShare-Tile/main/Before%26After.png" alt="Before and after"></p>
+<h2>Features</h2>
+<ul>
+<li>Replaces the Nearby sharing tile with Quick Share.</li>
+<li>Changes the tile's name and icon.</li>
+<li>Preserves native tile dimensions, position and styling.</li>
+<li>Launches Quick Share with a single click.</li>
+<li>Automatically restores the original tile when disabled.</li>
+</ul>
+<h2>Requirements</h2>
+<ul>
+<li>
+<p>Windows 11 x64, build 24H2 or later (Quick Settings hosted by ShellHost.exe).</p>
+</li>
+<li>
+<p>Windhawk.</p>
+</li>
+<li>
+<p><a href="https://www.android.com/better-together/quick-share-app/">Google's Quick Share for Windows</a> installed (not Samsung's app of the same name).</p>
+</li>
+<li>
+<p>Quick Share shortcut located at:</p>
+<p><code>C:\ProgramData\Microsoft\Windows\Start Menu\Quick Share.lnk</code></p>
+</li>
+</ul>
+<h2>Settings</h2>
+<h3>Native tile to replace</h3>
+<p>The accessibility name of the tile to replace.</p>
+<p>Default: <code>Nearby sharing</code></p>
+<p>The name is language-dependent. Change it if your Windows
+installation uses another display language.</p>
+<h3>Log the visual tree</h3>
+<p>Logs the Quick Settings visual tree for troubleshooting.</p>
+<h2>Known Limitations</h2>
+<ul>
+<li>Tested on Windows 11 x64 build 26300.</li>
+<li>Other Windows builds are not guaranteed to work.</li>
+<li>The tile's active appearance still reflects Nearby sharing,
+not Quick Share's actual running state.</li>
+<li>The Quick Share shortcut path is currently hardcoded.</li>
+<li>This mod launches Quick Share; it does not implement
+Quick Share functionality.</li>
+</ul>
+<h2>Credits</h2>
+<p>Parts of the ControlCenter.dll hooking and cleanup logic are based on
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/refined-quick-settings-and-sound.wh.cpp">refined-quick-settings-and-sound</a>
+(GPL-3.0-only). This mod is therefore also released under GPL-3.0-only.</p>
+<h2>Uninstallation</h2>
+<p>Disable or remove the mod through Windhawk.</p>
+<p>The original Nearby sharing tile is restored, including
+its label, icon, click behavior and keyboard navigation.</p>
+]]></content>
+        <author>
+            <name>ThePsychof</name>
+            <uri>https://github.com/ThePsychof</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[System Tray BreakTimer 0.1.8]]></title>
         <id>https://windhawk.net/mods/system-tray-breaktimer#9bf6636b4044a0a18d75174ff84f2e478ebb81f7</id>
@@ -1254,131 +1322,6 @@ so that the panel fits the screen. Items that still don't fit are not shown.</li
         <author>
             <name>NIKTO</name>
             <uri>https://github.com/NIKTO-2</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WindowPilot 1.2.0]]></title>
-        <id>https://windhawk.net/mods/windowpilot#0ec737dcbc499f06130908d2cb62fdbd537ac152</id>
-        <link href="https://windhawk.net/mods/windowpilot"/>
-        <updated>2026-11-19T00:01:43.000Z</updated>
-        <content type="html"><![CDATA[<h1>WindowPilot</h1>
-<h2>English</h2>
-<p>Control the foreground window with configurable shortcuts:</p>
-<table>
-<thead>
-<tr>
-<th>Default shortcut</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Win + Q</td>
-<td>Close normally, preserving the application's save prompts</td>
-</tr>
-<tr>
-<td>Win + Z</td>
-<td>Minimize</td>
-</tr>
-<tr>
-<td>Win + N</td>
-<td>Maximize; optionally restore when already maximized</td>
-</tr>
-<tr>
-<td>Win + Shift + N</td>
-<td>Open the native Windows Notification Center</td>
-</tr>
-<tr>
-<td>Win + S</td>
-<td>Original Windows Search, unchanged</td>
-</tr>
-</tbody>
-</table>
-<p>Each window action has independent enable, shortcut, game protection and
-double-press confirmation settings. Game protection is enabled by default;
-double-press confirmation is disabled by default. Shortcuts support Win, Ctrl,
-Alt, Shift, A–Z, 0–9, F1–F24 and common named keys. Examples: <code>Win+Q</code>,
-<code>Ctrl+Alt+F10</code>, <code>Win+Shift+N</code>. Only the exact configured combination is consumed.
-Changing or disabling a shortcut immediately releases its old combination.
-Win+S and Win+L are reserved; duplicate or invalid bindings show a warning.</p>
-<p>With confirmation enabled, press and release the shortcut twice in <strong>less than
-3 seconds</strong>. The hint disappears after 1.5 seconds by default; its disappearance
-does not shorten the confirmation deadline. Holding a key never confirms.
-Switching windows, choosing another action, pressing Esc or saving settings
-cancels a pending confirmation. Timings are configurable for each action.</p>
-<p><strong>Hint appearance:</strong> automatically follows the Windows display language in
-English, Portuguese or Spanish, with English fallback for other languages.
-You can also select a language manually. Dark and light themes can follow
-Windows or be selected explicitly. <strong>Always on top</strong> is configurable and
-enabled by default. The hint never steals keyboard focus or intercepts clicks.
-Settings labels follow the language selected in the Windhawk interface.</p>
-<p><strong>Compatibility:</strong> Windows 11 x64 and Windhawk 1.7.3 or later. WindowPilot
-runs in a dedicated Windhawk tool process for standard desktop windows.
-Elevated apps and secure-desktop prompts are outside the supported scope.</p>
-<p><strong>Games:</strong> detection uses editable executable/path patterns, Unity/Unreal
-window classes and optional fullscreen geometry. It is conservative: browser
-F11 fullscreen can be protected too; ordinary maximized windows are excluded
-from the fullscreen heuristic. Add unrecognized windowed games to the list.
-When game protection applies, the original Windows shortcut receives the key.
-The same applies on the desktop, taskbar, menus and windows that cannot perform
-the requested action. On eligible windows, the defaults take over Windows
-Search (Win+Q), Snap layouts (Win+Z) and Notification Center (Win+N).
-Use Win+S for Search, Win+Shift+N for notifications, or change the assignments
-to use the original combinations.</p>
-<p>Notifications use the original Win+N after the alternate shortcut's modifiers
-are released. Tagged synthetic input prevents recursive maximization. If an
-existing Windows policy disables Notification Center, the hint explains the
-restriction. Closing a window sends a normal close request to the application.</p>
-<h2>Português</h2>
-<p>Atalhos padrão: <strong>Win+Q</strong> fecha, <strong>Win+Z</strong> minimiza, <strong>Win+N</strong> maximiza/restaura,
-<strong>Win+Shift+N</strong> abre notificações e <strong>Win+S</strong> continua sendo a pesquisa nativa.
-Cada ação tem opções independentes de ativação, atalho, proteção para jogos e
-duas pressões. A proteção para jogos vem ativada e a confirmação desativada.</p>
-<p>Com a confirmação ligada, solte a tecla e pressione novamente em menos de
-3 segundos. O aviso some após 1,5 segundo, mas o prazo continua válido.
-Trocar de janela, usar outra ação, pressionar Esc ou salvar configurações cancela.</p>
-<p>Em <strong>Aparência do aviso</strong>, escolha idioma automático/inglês/português/espanhol,
-tema automático/escuro/claro e <strong>Sempre no topo</strong>. O modo automático acompanha
-o idioma de exibição e o tema do Windows; o aviso não captura foco nem cliques.
-Os rótulos das configurações seguem o idioma da interface do Windhawk.</p>
-<p>Compatível com Windows 11 x64 e Windhawk 1.7.3 ou posterior. O mod roda em um
-processo dedicado do Windhawk para janelas comuns. Aplicativos elevados e a
-área de trabalho segura ficam fora da cobertura. Use o botão do Windhawk para
-desativar o mod inteiro.</p>
-<p>Para jogos protegidos, área de trabalho, barra de tarefas, menus ou janelas que
-não aceitam a ação, vale o atalho original do Windows. Em janelas compatíveis,
-os padrões substituem Pesquisa (Win+Q), layouts de encaixe (Win+Z) e Central
-de Notificações (Win+N). Use Win+S para pesquisar, Win+Shift+N para notificações
-ou mude as combinações para recuperar os atalhos originais. Se uma política do
-Windows bloquear a Central de Notificações, o aviso indica a restrição.</p>
-<h2>Español</h2>
-<p>Atajos predeterminados: <strong>Win+Q</strong> cierra, <strong>Win+Z</strong> minimiza, <strong>Win+N</strong> maximiza/restaura,
-<strong>Win+Shift+N</strong> abre notificaciones y <strong>Win+S</strong> conserva la búsqueda de Windows.
-Cada acción tiene controles independientes para activar, cambiar el atajo,
-ignorar juegos y exigir dos pulsaciones. La protección para juegos está activada;
-la confirmación está desactivada de forma predeterminada.</p>
-<p>Con la confirmación activada, suelta la tecla y pulsa de nuevo en menos de
-3 segundos. El aviso desaparece después de 1,5 segundos, pero el plazo sigue
-vigente. Cambiar de ventana, usar otra acción, pulsar Esc o guardar ajustes cancela.</p>
-<p>En <strong>Apariencia del aviso</strong>, elige idioma automático/inglés/portugués/español,
-tema automático/oscuro/claro y <strong>Siempre visible</strong>. El modo automático sigue el
-idioma de visualización y el tema de Windows. El aviso no roba foco ni clics.
-Los ajustes siguen el idioma elegido en la interfaz de Windhawk.</p>
-<p>Compatible con Windows 11 x64 y Windhawk 1.7.3 o posterior. El mod se ejecuta
-en un proceso dedicado de Windhawk para ventanas normales. Las aplicaciones
-elevadas y el escritorio seguro quedan fuera del alcance. Usa el interruptor
-de Windhawk para desactivar todo el mod.</p>
-<p>En juegos protegidos, el escritorio, la barra de tareas, los menús o ventanas
-que no admiten la acción, se conserva el atajo original de Windows. En ventanas
-compatibles, los valores predeterminados sustituyen Búsqueda (Win+Q), diseños
-de acoplamiento (Win+Z) y Centro de notificaciones (Win+N). Usa Win+S para
-buscar, Win+Shift+N para las notificaciones o cambia las combinaciones para
-recuperar los atajos originales. Un aviso indica si una directiva de Windows
-bloquea el Centro de notificaciones.</p>
-]]></content>
-        <author>
-            <name>ghostzpy</name>
-            <uri>https://github.com/ghostzpy</uri>
         </author>
     </entry>
 </feed>

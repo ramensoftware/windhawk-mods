@@ -2,12 +2,80 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-22T18:02:36.000Z</updated>
+    <updated>2026-11-22T19:04:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick Share Tile 1.0.0]]></title>
+        <id>https://windhawk.net/mods/quick-share-tile#c9c51968a2897244218062c9ab6b6da1dc90c296</id>
+        <link href="https://windhawk.net/mods/quick-share-tile"/>
+        <updated>2026-11-22T19:04:43.000Z</updated>
+        <content type="html"><![CDATA[<h1>Quick Share Tile</h1>
+<p>Replace the Windows 11 <strong>Nearby sharing</strong> Quick Settings tile
+with a <strong>Quick Share</strong> launcher.</p>
+<p>Keep your Quick Settings layout intact while giving the native
+Nearby sharing tile a new purpose.</p>
+<h2>Preview</h2>
+<p><img src="https://raw.githubusercontent.com/ThePsychof/QuickShare-Tile/main/Before%26After.png" alt="Before and after"></p>
+<h2>Features</h2>
+<ul>
+<li>Replaces the Nearby sharing tile with Quick Share.</li>
+<li>Changes the tile's name and icon.</li>
+<li>Preserves native tile dimensions, position and styling.</li>
+<li>Launches Quick Share with a single click.</li>
+<li>Automatically restores the original tile when disabled.</li>
+</ul>
+<h2>Requirements</h2>
+<ul>
+<li>
+<p>Windows 11 x64, build 24H2 or later (Quick Settings hosted by ShellHost.exe).</p>
+</li>
+<li>
+<p>Windhawk.</p>
+</li>
+<li>
+<p><a href="https://www.android.com/better-together/quick-share-app/">Google's Quick Share for Windows</a> installed (not Samsung's app of the same name).</p>
+</li>
+<li>
+<p>Quick Share shortcut located at:</p>
+<p><code>C:\ProgramData\Microsoft\Windows\Start Menu\Quick Share.lnk</code></p>
+</li>
+</ul>
+<h2>Settings</h2>
+<h3>Native tile to replace</h3>
+<p>The accessibility name of the tile to replace.</p>
+<p>Default: <code>Nearby sharing</code></p>
+<p>The name is language-dependent. Change it if your Windows
+installation uses another display language.</p>
+<h3>Log the visual tree</h3>
+<p>Logs the Quick Settings visual tree for troubleshooting.</p>
+<h2>Known Limitations</h2>
+<ul>
+<li>Tested on Windows 11 x64 build 26300.</li>
+<li>Other Windows builds are not guaranteed to work.</li>
+<li>The tile's active appearance still reflects Nearby sharing,
+not Quick Share's actual running state.</li>
+<li>The Quick Share shortcut path is currently hardcoded.</li>
+<li>This mod launches Quick Share; it does not implement
+Quick Share functionality.</li>
+</ul>
+<h2>Credits</h2>
+<p>Parts of the ControlCenter.dll hooking and cleanup logic are based on
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/refined-quick-settings-and-sound.wh.cpp">refined-quick-settings-and-sound</a>
+(GPL-3.0-only). This mod is therefore also released under GPL-3.0-only.</p>
+<h2>Uninstallation</h2>
+<p>Disable or remove the mod through Windhawk.</p>
+<p>The original Nearby sharing tile is restored, including
+its label, icon, click behavior and keyboard navigation.</p>
+]]></content>
+        <author>
+            <name>ThePsychof</name>
+            <uri>https://github.com/ThePsychof</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[System Tray BreakTimer 0.1.8]]></title>
         <id>https://windhawk.net/mods/system-tray-breaktimer#9bf6636b4044a0a18d75174ff84f2e478ebb81f7</id>
@@ -678,22 +746,6 @@ sections:</p>
         <author>
             <name>Zach Vaughn</name>
             <uri>https://github.com/zachvdev</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Key to Search 1.2]]></title>
-        <id>https://windhawk.net/mods/windows-key-to-search#b7bb26e58746bf1e7f0fe17711a5e37394b049bf</id>
-        <link href="https://windhawk.net/mods/windows-key-to-search"/>
-        <updated>2026-11-22T00:00:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Search now opens without simulating Win+S, so Win+S remaps (e.g. PowerToys Keyboard Manager) no longer interfere. Thanks to Asteski.</li>
-<li>Other tools that use the Windows key, such as PowerToys remaps and AltSnap Win+drag, now work alongside the mod.</li>
-<li>Releasing Win after a Win+click, drag, or scroll no longer opens Search.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Tyler</name>
-            <uri>https://github.com/snowtyler</uri>
         </author>
     </entry>
 </feed>
