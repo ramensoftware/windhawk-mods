@@ -307,6 +307,8 @@ struct EditorCtx {
     std::vector<uint32_t> mkDel;    // sorted: lines were removed right before these line indices
     unsigned mkRev = ~0u;           // docRev the markers were computed for
     bool mkDirty = false;           // the markers changed: the gutter needs a repaint
+    bool mkExactFailed = false;     // [windhawk-reviewer] an expensive exact diff gave up for this baseline
+    int mkExactSkips = 0;           // [windhawk-reviewer] runs since then (every 32nd retries)
 
     int synSettle = 0;       // timer ticks left in which the syntax row snapshot is re-checked
     uint64_t snapHash = 0;   // fingerprint of the snapshot, to see whether a re-check changed it
@@ -484,8 +486,34 @@ static LONG CountBreaks(EditorCtx* c, LONG from, LONG to) {
     return CountBreaksRows(c->edit, from, to);
 }
 
+// [windhawk-reviewer] Line-count shortcut. Counting paragraph breaks from the row geometry costs 2-3
+// SendMessage calls per visual row and was redone after every edit (on the order of 100,000 calls for
+// a keystroke near the end of a large file). When the document copy is current, the minimap's line
+// table (mmStart) already maps a character index to its logical line with one upper_bound, so use
+// that. It is built here on demand (no editor messages, works with the minimap off); without a
+// current copy (plain file with the minimap and markers off, very large file, copy stale after an edit)
+// the row-walking count below is still the fallback.
+static LONG MmLineOf(const EditorCtx* c, LONG idx);  // defined with the minimap model
+static void BuildMmLines(EditorCtx* c);
+
+static bool LineModelUsable(EditorCtx* c) {
+    if (!c->docOk || c->docStale) return false;
+    GETTEXTLENGTHEX gtl = {GTL_NUMCHARS, 1200 /*CP_UNICODE*/};
+    LONG len = (LONG)SendMessageW(c->edit, EM_GETTEXTLENGTHEX, (WPARAM)&gtl, 0);
+    if (c->docSynLen != len) return false;  // the copy is not of the text that is in the editor now
+    if (c->mmBuiltRev != c->docRev) BuildMmLines(c);
+    return !c->mmStart.empty();
+}
+
 // Number of paragraph breaks in [0, idx), walking from the cached anchor.
 static LONG BreaksBefore(EditorCtx* c, CrCache& cache, LONG idx) {
+    if (LineModelUsable(c)) {  // [windhawk-reviewer] one lookup instead of walking the rows
+        LONG line = MmLineOf(c, idx);
+        cache.valid = true;
+        cache.pos = idx;
+        cache.count = line;
+        return line;
+    }
     LONG result;
     if (cache.valid) {
         if (idx >= cache.pos)
@@ -1100,6 +1128,9 @@ static void HashLines(const std::wstring& t, std::vector<uint64_t>& h) {
 struct LineDiff {
     std::vector<uint8_t> aDel;  // line of the baseline is gone
     std::vector<uint8_t> bIns;  // line of the current text is new
+    // [windhawk-reviewer] don't retry an exact diff that already gave up (see DiffRange)
+    bool skipBigExact = false;    // in: an expensive exact diff already gave up for this baseline
+    bool bigExactFailed = false;  // out: an expensive exact diff gave up during this run
 };
 
 static void MarkAll(LineDiff& out, int a0, int a1, int b0, int b1) {
@@ -1185,7 +1216,16 @@ static void DiffRange(const uint64_t* A, int a0, int a1, const uint64_t* B, int 
     const int n = a1 - a0, m = b1 - b0;
     // Work budget of about 4e7 steps: small documents get exact diffs, huge ones a bounded effort.
     const int cap = (int)std::clamp<int64_t>(40000000LL / (n + m), 64, 3000);
-    if (MyersRange(A, a0, a1, B, b0, b1, cap, out)) return;
+    // [windhawk-reviewer] MyersRange keeps a snapshot of V for every round, i.e. about D*D ints: ~36 MB
+    // at the 3,000-round cap, allocated on the UI thread and thrown away when it gives up. That used to
+    // repeat on every edit. Once an expensive (D > 1000, > ~4 MB) attempt has failed for this baseline
+    // it is skipped (the anchor fallback below takes over); MarkerTick lets one in every 32 runs retry,
+    // so the exact diff comes back when the document moves closer to its baseline.
+    const bool expensive = std::min(cap, n + m) > 1000;
+    if (!(expensive && out.skipBigExact)) {
+        if (MyersRange(A, a0, a1, B, b0, b1, cap, out)) return;
+        if (expensive) out.bigExactFailed = true;
+    }
 
     // Too many differences for an exact diff (e.g. a replace-all across the file): anchor on the
     // lines that occur exactly once on both sides, keep the longest in-order chain of those, and
@@ -1309,6 +1349,7 @@ static void MarkerResetState(EditorCtx* c) {
     c->mkDel.clear();
     c->mkRev = ~0u;
     c->mkDirty = true;
+    c->mkExactFailed = false;  // [windhawk-reviewer] a new baseline gets a fresh try at the exact diff
 }
 
 // Runs whenever the title is re-read. A different name means a different document, but the
@@ -1379,7 +1420,13 @@ static void MarkerTick(EditorCtx* c, ULONGLONG now) {
     LineDiff d;
     d.aDel.assign(base.size(), 0);
     d.bIns.assign(cur.size(), 0);
+    // [windhawk-reviewer] remember when the expensive exact diff gave up, and don't redo it on every edit
+    d.skipBigExact = c->mkExactFailed && (++c->mkExactSkips % 32) != 0;
     DiffRange(base.data(), 0, (int)base.size(), cur.data(), 0, (int)cur.size(), d, 0);
+    if (d.bigExactFailed)
+        c->mkExactFailed = true;
+    else if (!d.skipBigExact)
+        c->mkExactFailed = false;  // the exact diff worked (or was not needed): back to normal
     std::vector<uint8_t> st;
     std::vector<uint32_t> del;
     BuildMarkers(d, (int)base.size(), (int)cur.size(), st, del);
@@ -1645,15 +1692,27 @@ static void ViewRows(EditorCtx* c, LONG& rows, LONG& first, LONG& last) {
     first = std::clamp<LONG>(first, 0, rows - 1);
     RECT cr;
     GetClientRect(edit, &cr);
-    LONG lo = first, hi = rows - 1;
-    while (lo < hi) {  // binary search: rows are ordered top to bottom
-        LONG mid = lo + (hi - lo + 1) / 2;
-        LONG idx = (LONG)SendMessageW(edit, EM_LINEINDEX, mid, 0);
-        POINT pt{};
-        if (idx >= 0 && PosFromChar(edit, idx, &pt) && pt.y < cr.bottom)
-            lo = mid;
-        else
-            hi = mid - 1;
+    // [windhawk-reviewer] The binary search used to run from `first` to the last row of the document,
+    // so most probes hit rows far below the screen, which can make RichEdit lay out text nobody sees.
+    // The last visible row is at most first + cr.bottom / minPitch + 1, so the search starts capped
+    // there. minPitch is a deliberately low guess for the row height; if every probe up to the cap is
+    // still visible (rows denser than guessed) the cap is widened, so the result never depends on it.
+    const LONG minPitch = std::max<LONG>(4, c->fontPx / 2);
+    LONG lo = first;
+    LONG hi = std::min<LONG>(rows - 1, first + cr.bottom / minPitch + 1);
+    for (;;) {
+        const LONG bound = hi;
+        while (lo < hi) {  // binary search: rows are ordered top to bottom
+            LONG mid = lo + (hi - lo + 1) / 2;
+            LONG idx = (LONG)SendMessageW(edit, EM_LINEINDEX, mid, 0);
+            POINT pt{};
+            if (idx >= 0 && PosFromChar(edit, idx, &pt) && pt.y < cr.bottom)
+                lo = mid;
+            else
+                hi = mid - 1;
+        }
+        if (lo < bound || bound >= rows - 1) break;  // stopped inside the cap (or it is the end)
+        hi = std::min<LONG>(rows - 1, bound + (bound - first) + 1);  // the cap is still visible: widen
     }
     last = lo;
 }
@@ -1929,7 +1988,9 @@ static void GutterTick(EditorCtx* c, bool fontChanged) {
         if (!c->numsShown) {
             c->textDirty = false;  // no numbers to size, nothing to count
         } else if ((len <= 4000000 && lines <= 50000) || now - c->lastChangeTick > 200) {
-            c->totalLogical = CountBreaks(c, 0, len) + 1;
+            // [windhawk-reviewer] with a current document copy the line count is just the size of the
+            // line table; the row-walking recount is only the fallback (see LineModelUsable)
+            c->totalLogical = LineModelUsable(c) ? (LONG)c->mmStart.size() : CountBreaks(c, 0, len) + 1;
             c->textDirty = false;
         }
         c->sigValid = false;
@@ -3181,7 +3242,19 @@ static LONG FindInRow(const EditorCtx* c, const SnapRow& r, const std::wstring& 
     LONG end = std::min<LONG>(r.end, (LONG)c->docText.size());
     LONG best = -1;
     double bestD = 1e18;
-    for (LONG p = std::max<LONG>(r.idx, 0); p + n <= end; p++) {
+    LONG start = std::max<LONG>(r.idx, 0);
+    // [windhawk-reviewer] With word wrap off a row is a whole logical line, and every glyph run used to
+    // scan all of it (a minified one-line JSON file = the entire file per run, on every paint). Rows up
+    // to kFindFullRowMax characters are still scanned completely, exactly as before; only longer
+    // rows are searched in a window of +-kFindWindow characters around the estimated column.
+    constexpr LONG kFindFullRowMax = 4096;
+    constexpr LONG kFindWindow = 1024;
+    if (end - start > kFindFullRowMax) {
+        LONG center = (LONG)std::clamp<double>((double)r.idx + estCol, (double)start, (double)end);
+        start = std::max<LONG>(start, center - kFindWindow);
+        end = std::min<LONG>(end, center + kFindWindow + n);
+    }
+    for (LONG p = start; p + n <= end; p++) {
         bool ok = true;
         for (LONG k = 0; k < n; k++) {
             WCHAR s = S[(size_t)k];
