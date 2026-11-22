@@ -2,7 +2,7 @@
 // @id              remove-context-menu-items
 // @name            Remove Context Menu Items
 // @description     Removes unwanted items from file context menus with configurable options and context-aware filtering
-// @version         1.13.0
+// @version         1.14.0
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -865,10 +865,11 @@ thread_local std::vector<HMENU> tl_detachedSubmenus;
 // window: whether to filter the menu at all, and (for ShellDefView) enough
 // to skip a redundant re-walk later when looking up the selected files.
 enum class ShellViewKind {
-    None,           // not a real file/folder context menu (taskbar, tray, Start menu, Explorer-frame toolbars, etc.)
+    None,           // not a menu the mod filters (Start menu, Explorer-frame toolbars, etc.)
     Desktop,        // right-click on the desktop
     ShellDefView,   // right-click in the main file list view -- has a selection to read
     NavPane,        // right-click in the navigation pane -- no IFolderView selection to read
+    Taskbar,        // right-click on the taskbar (incl. the Windows 10-style one) -- filtered, but no file selection
 };
 
 // True only for the desktop: the root window is the shell desktop window
@@ -893,6 +894,13 @@ bool IsDesktopWindow(HWND hwnd) {
     return FindWindowExW(root, nullptr, L"SHELLDLL_DefView", nullptr) != nullptr;
 }
 
+// True for the taskbar's own top-level window classes: the primary taskbar
+// and the per-monitor secondary ones.
+bool IsTaskbarWindowClass(const wchar_t* className) {
+    return wcscmp(className, L"Shell_TrayWnd") == 0 ||
+           wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
+}
+
 // Classifies hwnd with a single ancestor walk. Desktop check MUST run
 // first: desktop's icon view is itself hosted in a SHELLDLL_DefView, so
 // checking the loop first misclassifies desktop, breaking extension filtering.
@@ -908,6 +916,18 @@ ShellViewKind ClassifyShellView(HWND hwnd) {
         }
         if (wcscmp(className, L"NamespaceTreeControl") == 0) {
             return ShellViewKind::NavPane;
+        }
+        if (IsTaskbarWindowClass(className)) {
+            return ShellViewKind::Taskbar;
+        }
+    }
+    // A popup can also be owned by a taskbar window without being its child
+    // (e.g. a taskbar button's menu), so check the owner chain as well.
+    for (HWND h = GetWindow(GetAncestor(hwnd, GA_ROOT), GW_OWNER); h; h = GetWindow(h, GW_OWNER)) {
+        wchar_t className[256] = {0};
+        GetClassNameW(h, className, ARRAYSIZE(className));
+        if (IsTaskbarWindowClass(className)) {
+            return ShellViewKind::Taskbar;
         }
     }
     return ShellViewKind::None;
@@ -1856,9 +1876,9 @@ BOOL WINAPI TrackPopupMenuEx_Hook(
     HWND hWnd,
     LPTPMPARAMS lptpm
 ) {
-    // Only filter genuine file/folder context menus. TrackPopupMenuEx is
-    // hooked process-wide, so hWnd can also belong to the taskbar, tray
-    // icons, or the Start menu.
+    // Only filter file/folder context menus and the taskbar's menus.
+    // TrackPopupMenuEx is hooked process-wide, so hWnd can also belong to
+    // other windows, such as the Start menu.
     ShellViewKind kind = ClassifyShellView(hWnd);
     std::optional<MenuTrackingGuard> guard;
     if (kind != ShellViewKind::None) {

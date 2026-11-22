@@ -2,7 +2,7 @@
 // @id              mac-os-27-finder-bar
 // @name            Mac OS 27 Finder Bar
 // @description     A macOS 27-style menu bar for Windows 11: global app menus, system status, Control Center, clock and live glass
-// @version         1.1.0
+// @version         1.1.1
 // @author          Thiago Silva
 // @github          https://github.com/brideinflame-rgb
 // @homepage        https://github.com/brideinflame-rgb/Mac-OS-27-Finder-Bar
@@ -28,7 +28,7 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 
 ## Left side
 
-- **Logo menu**: About This PC, System Settings, Microsoft Store (both with pending update counts), Force Quit, Show Desktop, Sleep, Hibernate, Restart, Shut Down, Lock Screen, Sign Out and **Menu Bar Settings…**
+- **Logo menu**: About This PC, System Settings, Microsoft Store (both with pending update counts), Force Quit, Show Desktop, Sleep, Hibernate, Restart, Shut Down, Lock Screen, Sign Out and **Menu Bar Settings…**; Restart, Shut Down and Sign Out ask in a glass dialog
 - **Active app name** (shown as *Finder* for the desktop and File Explorer, a name you can change): hide the app, hide others, open file location, close window, quit, force quit
 - **Global menu**:
   - apps with a classic menu bar (Win32): the app's real menus
@@ -43,7 +43,7 @@ Available in English, Português, Español, Français, Deutsch, Italiano and 中
 - Keyboard layout (when there is more than one), emoji, on-screen keyboard
 - **Battery** (percentage, charging, time remaining), **Wi-Fi** (current network, available and known networks), **Bluetooth** and **Sound** (scroll on the icon to change the volume, right-click to mute, switch output and input)
 - **Now Playing**: the song name scrolls across the bar when it doesn't fit; its bar icon is a thin circle with a rounded play or pause sign; the panel has a large-cover, compact or full-cover layout (the cover fills the panel, with glass buttons on top, white ones in light glass themes) and a progress bar drawn as a line, a colored line or a wave
-- **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), **microphone and camera** (the icons turn orange and green while an app uses them, as on the Mac; click to see which apps use them and mute the microphone), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed; the widget is colored, liquid glass or plain glass, and its animations can be turned off) and the **Notifications** button
+- **Focus** (when Do Not Disturb is on), **Search** (Windows Search or Siri Plus Launchpad), **microphone and camera** (the icons turn orange and green while an app uses them, as on the Mac; click to see which apps use them and mute the microphone), **Weather** (Open-Meteo, MET Norway or wttr.in, no account needed; the widget is colored, liquid glass or plain glass, and its animations can be turned off) and the **Notifications** button (the bell turns red when a notification arrives)
 - **Clock**: the calendar and your agenda from your own .ics files, imported right from the settings window. Date and time formats are configurable
 - An arrow collapses the icons that don't fit; each icon can be turned on or off in the settings
 
@@ -59,18 +59,20 @@ Wi-Fi, Bluetooth, media playing, dark mode, Do Not Disturb, brightness, sound an
 
 ## Notice pills
 
-Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, Caps Lock, USB devices and drives, finished downloads, copy and cut, screenshots and screen recordings. Pills you can act on (open and edit a screenshot or recording, open a download, reply to a message) stay 2.5 times longer and are kept in the bell panel; the rest only show in the pill. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (the bar's background, glass, liquid glass, custom liquid glass, light, dark or OLED), text color (the theme's, white or black), live background for the glass styles, size, position, duration and opening and closing animations are all configurable.
+Small glass pills drop from the bar for headphones, audio output, low battery, charger, Focus, Caps Lock, Num Lock, Scroll Lock, USB devices and drives, finished downloads, copy and cut, screenshots and screen recordings. Pills you can act on (open and edit a screenshot or recording, open a download, reply to a message) stay 2.5 times longer and are kept in the bell panel; the rest only show in the pill. Volume, brightness and Bluetooth changes can show as floating pills too. The pill's style (the bar's background, glass, liquid glass, custom liquid glass, light, dark or OLED), text color (the theme's, white or black), live background for the glass styles, size, position, duration and opening and closing animations are all configurable.
 
 ## Notifications
 
-Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Notice pills** (off by default) and the bar shows your apps' notifications:
+![Stacked notifications: the wheel turns the stack, a drag dismisses the front card and a click spreads them into the list](https://raw.githubusercontent.com/brideinflame-rgb/Mac-OS-27-Finder-Bar/main/screenshots/notifications-stack.webp)
 
-- in the pill and in the bell panel, grouped by app. The panel is **Floating** (default: the top and each notification in its own glass card, in the Control Center's style) or **Inside the box** (one panel); with nothing to show it's always the small panel. The text color follows the theme or is always white or black. The bell itself is one of the bar items
+Turn on **Receive app notifications** in logo → **Menu Bar Settings…** → **Notice pills** → **Notifications button** (off by default) and the bar shows your apps' notifications. It works on its own: with **Show notice pills** off, notifications still go to the bell; with both on, they also drop in a pill:
+
+- in the pill and in the bell panel, grouped by app. The panel is **Floating** (default: the top and each notification in its own glass card, in the Control Center's style; with three apps or more the cards are stacked, the mouse wheel turns the stack to the next one, and a click spreads them into the list with an animation; scrolling, with the wheel or by dragging, piles the cards at the edges, as on Android) or **Inside the box** (one panel); with nothing to show it's always the small panel. The text color follows the theme or is always white or black. The bell itself is one of the bar items
 - a round picture on each notification: the sender's photo when the app saves it on the PC with the notification (with the app's icon in the corner), otherwise the app's icon. Photos sent as web links (WhatsApp does this) aren't downloaded
 - **reply** to messages (like WhatsApp) right from the pill or from the Reply button in the panel, when the app supports replies. Your replies stay in the card until you clear it
 - new messages from the same conversation (same app and sender or group) go into the card that's already there, in order, instead of a new one
 - **drag** a notification aside in the panel to clear it
-- **Only the bar shows notifications**: optional; Windows' own banners move off the screen while the bar shows them, and come back when the option or the mod is turned off
+- **Only the bar shows notifications**: optional, with notice pills on; Windows' own banners move off the screen while the bar shows them, and come back when the option or the mod is turned off
 
 ## Bar and glass
 
@@ -81,12 +83,13 @@ Turn on **Windows notifications** in logo → **Menu Bar Settings…** → **Not
 - "Window color" bar background: transparent over the desktop, and the color of the title bar of the maximized window on that display (it stays while a menu, search or another window is in front)
 - Bar text and icons in white, black or automatic (following the Windows theme, or the solid background)
 - Clicking the album cover (Control Center or Now Playing) brings the playing app's window to the front
-- Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is
+- Optional: hide the bar while a window is maximized on its display (the window gets the whole height) and bring it back when none is; pointing at the top edge shows it over the window until the pointer leaves, as on macOS. The bar slides up and down when it hides and shows
+- **Back up your settings**: export everything set in Menu Bar Settings to a file, and import it again later or on another PC
 - Hide with the handle (optional): the bar stays hidden and a click on a thin pill at the top center shows it, windows move down (with the "Window color" background, the bar takes the color of the active window's title bar); another click hides it. It works only while "Hide when a window is maximized" is off, since that one brings the bar back on its own
 - Choose where the bar shows: all displays, the main one, or a specific display (listed by name); if that display is disconnected, the bar moves to the main one
 - **Disks** (optional): its menu lists every local and removable disk with a usage bar and opens it in Explorer
 - Bar icons share one size: each icon is measured and scaled to the same height, and icons and text grow together with one size setting; the bar height is set on its own
-- Nine selection colors: one for the bar, the menus and their switches; and the font of the bar and panels, picked in the settings window
+- Nine selection colors, or a gradient of two, shared by the bar, the menus and their switches; and the font of the bar and panels, picked in the settings window
 - Hides with full-screen apps (optional)
 
 ## Settings
@@ -126,7 +129,7 @@ The bar runs in its own Windhawk process (shown as Windhawk in Task Manager), so
 ## Known limitations
 
 - Apps without a classic menu bar use ready-made menus based on keyboard shortcuts.
-- Bluetooth lists the connected classic (non-BLE) devices; connecting and disconnecting a paired device opens Settings. New devices can be found and paired in the bar's Bluetooth pill (a pairing code shows in the pill, to confirm or to type on the device), except devices that ask you to type a PIN on the PC, which need Settings.
+- Bluetooth lists the connected devices, classic and Bluetooth LE (mice, keyboards); connecting and disconnecting a paired device opens Settings. New devices can be found and paired in the bar's Bluetooth pill (a pairing code shows in the pill, to confirm or to type on the device), except devices that ask you to type a PIN on the PC, which need Settings.
 - Power mode and energy saver use undocumented Windows functions; if Windows refuses, the tile opens the matching Settings page.
 - Screen recording uses Win+Shift+R and needs an up-to-date Snipping Tool.
 - Replying from the pill works with apps that register a notification activator with Windows; otherwise the pill opens the app and copies your text.
@@ -347,6 +350,7 @@ struct Settings {
     bool showDisks;  // discos na barra, com quanto está cheio
     bool usbPills, downloadPills, clipPills, shotPills;
     bool islFocus, islBattery, islBluetooth, islAudio, islHistory, winNotifs, islHistNotices, islCaps;
+    bool islLocks = true;  // Num Lock e Scroll Lock (como o Caps Lock)
     bool islLive;  // pílulas de aviso com vidro: a foto do fundo acompanha ao vivo
     int islTextColor, ntfTextColor;  // cor do texto nas pílulas e nas notificações: 0 tema, 1 branco, 2 preto
     bool winNotifsOnly;  // só a barra mostra as notificações (faixas do Windows desligadas)
@@ -358,6 +362,7 @@ struct Settings {
     DWORD tintColor;          // Vidro líquido personalizado: a cor (0xRRGGBB)
     int tintLevel, tintReach;  // força da cor no topo e até onde ela desce (%)
     int selBar;  // cor da seleção (barra, menus e pílulas): índice em kSelPalette, -1 = fosca
+    int selBar2 = -1;  // segunda cor (degradê da esquerda para a direita): -1 = sem degradê
     int searchTarget;     // ícone de busca: 0 pesquisa do Windows, 1 Siri Plus Launchpad
     int openAnim;  // 0 nenhuma, 1 esmaecer, 2 cascata
     int ntfIconShape;  // ícones das notificações: 0 círculo, 1 formato macOS (squircle)
@@ -394,8 +399,45 @@ static bool SelColor(D2D1_COLOR_F* c, bool* darkText = nullptr) {
     if (i < 0 || i >= kSelCount) return false;
     DWORD v = kSelPalette[i].rgb;
     *c = D2D1::ColorF(((v >> 16) & 255) / 255.0f, ((v >> 8) & 255) / 255.0f, (v & 255) / 255.0f, 1.0f);
-    if (darkText) *darkText = v == 0xFFD60A;
+    if (darkText) {
+        *darkText = v == 0xFFD60A;
+        // Com o degradê, o texto escuro só quando as duas cores são claras (amarelo).
+        int j = g_settings.selBar2;
+        if (j >= 0 && j < kSelCount && j != i) *darkText = *darkText && kSelPalette[j].rgb == 0xFFD60A;
+    }
     return true;
+}
+// A segunda cor da seleção (o degradê), se houver.
+static bool SelColor2(D2D1_COLOR_F* c) {
+    int i = g_settings.selBar2;
+    if (g_settings.selBar < 0 || i < 0 || i >= kSelCount || i == g_settings.selBar) return false;
+    DWORD v = kSelPalette[i].rgb;
+    *c = D2D1::ColorF(((v >> 16) & 255) / 255.0f, ((v >> 8) & 255) / 255.0f, (v & 255) / 255.0f, 1.0f);
+    return true;
+}
+// Pinta uma seleção (pílula ou faixa arredondada) na cor escolhida, ou no degradê
+// das duas cores, da esquerda para a direita. alpha: a opacidade.
+static void SelFill(ID2D1RenderTarget* rt, ID2D1SolidColorBrush* br, const D2D1_ROUNDED_RECT& rr, D2D1_COLOR_F c1,
+                    float alpha) {
+    D2D1_COLOR_F c2;
+    if (SelColor2(&c2)) {
+        c1.a = c2.a = alpha;
+        D2D1_GRADIENT_STOP stops[2] = {{0.0f, c1}, {1.0f, c2}};
+        ID2D1GradientStopCollection* sc = nullptr;
+        ID2D1LinearGradientBrush* lg = nullptr;
+        if (SUCCEEDED(rt->CreateGradientStopCollection(stops, 2, &sc)) &&
+            SUCCEEDED(rt->CreateLinearGradientBrush(
+                D2D1::LinearGradientBrushProperties(D2D1::Point2F(rr.rect.left, 0), D2D1::Point2F(rr.rect.right, 0)), sc, &lg))) {
+            rt->FillRoundedRectangle(rr, lg);
+            lg->Release();
+            sc->Release();
+            return;
+        }
+        if (sc) sc->Release();
+    }
+    c1.a = alpha;
+    br->SetColor(c1);
+    rt->FillRoundedRectangle(rr, br);
 }
 // A cor de destaque dos menus e das pílulas (interruptores ligados, controles):
 // a cor da seleção da barra; com a seleção fosca, a cor de destaque da Central.
@@ -460,6 +502,9 @@ static void SaveThemeGlass() {
     Wh_SetStringValue(L"glassLive", live);
 }
 static void LoadGlassPrefs() {
+    // Sem nada guardado (restauração, ou importação de um arquivo sem o vidro),
+    // volta ao padrão, e não aos valores que já estavam na memória.
+    g_glass = GlassPrefs();
     wchar_t buf[128] = {};
     Wh_GetStringValue(L"glass", buf, ARRAYSIZE(buf));
     int t, c, l, r, b, v, k = 0;
@@ -557,6 +602,7 @@ static const UiDefault kUiDefaults[] = {
     {L"tintLevel", L"100"},
     {L"tintReach", L"29"},
     {L"selectionBar", L"blue"},
+    {L"selectionBar2", L"none"},
     {L"allMonitors", L"1"},
     {L"autoHide", L"0"},
     {L"hideOnFullscreen", L"1"},
@@ -603,6 +649,7 @@ static const UiDefault kUiDefaults[] = {
     {L"ntfTextColor", L"theme"},
     {L"islHistNotices", L"1"},
     {L"islCaps", L"1"},
+    {L"islLocks", L"1"},
     {L"islStyle", L"follow"},
     {L"islSize", L"100"},
     {L"islDuration", L"26"},
@@ -763,8 +810,13 @@ static float MarqueeOffset(float textW, float gap, float s, ULONGLONG start) {
     return ph < pause ? 0.0f : (float)((ph - pause) * speed);
 }
 
+// Importar ou restaurar os ajustes: os valores guardados fora de LoadSettings (a
+// ordem dos ícones, o vidro desta janela, a previsão) são lidos de novo na
+// próxima recarga (CfgReloadCached).
+static bool g_cfgRecache = false;
+static std::vector<int> g_barOrder;  // a ordem dos ícones da direita (BarOrder)
 static void LoadSettings() {
-    FlushSaves();  // o que ainda não foi gravado não pode ser lido por cima
+    FlushSaves();  // o que ainda não foi gravado não pode ser lido por cima (nem desfazer a restauração depois)
     // "Restaurar os ajustes da barra" (no Windhawk): ao ser ligado, apaga uma vez
     // os valores da janela de ajustes; volta a valer ao ser desligado e religado.
     {
@@ -772,12 +824,14 @@ static void LoadSettings() {
         int done = Wh_GetIntValue(L"resetDone", 0);
         if (reset && !done) {
             for (const auto& d : kUiDefaults) OvrSetStr(d.key, L"");
-            // Também o vidro, a ordem dos ícones, o vidro desta janela e as opções
+            // Também o vidro (o geral e o de cada tema), a ordem dos ícones, o vidro desta janela e as opções
             // da previsão. Ficam: o lugar da previsão, os calendários importados e
             // os blocos da Central (são dados do usuário, não aparência).
-            for (PCWSTR k : {L"glass", L"settingsLook", L"barOrder", L"weatherGlass", L"weatherOpts", L"weatherStyle", L"weatherAnim"})
+            for (PCWSTR k : {L"glass", L"glassTheme", L"glassLive", L"settingsLook", L"barOrder", L"weatherGlass", L"weatherOpts",
+                             L"weatherStyle", L"weatherAnim"})
                 Wh_SetStringValue(k, L"");
             Wh_SetIntValue(L"resetDone", 1);
+            g_cfgRecache = true;
             Wh_Log(L"Ajustes da barra restaurados ao padrão");
         } else if (!reset && done) {
             Wh_SetIntValue(L"resetDone", 0);
@@ -858,6 +912,7 @@ static void LoadSettings() {
     s.shotPills = OvrInt(L"shotPills") != 0;
     s.islFocus = OvrInt(L"islFocus") != 0;
     s.islCaps = OvrInt(L"islCaps") != 0;
+    s.islLocks = OvrInt(L"islLocks") != 0;
     s.winNotifs = OvrInt(L"winNotifs") != 0;
     s.winNotifsOnly = OvrInt(L"winNotifsOnly") != 0;
     s.islBattery = OvrInt(L"islBattery") != 0;
@@ -912,6 +967,10 @@ static void LoadSettings() {
         s.tintReach = std::clamp(OvrInt(L"tintReach"), 0, 100);
     }
     s.selBar = SelIndex(OvrStr(L"selectionBar"));
+    {
+        std::wstring v2 = OvrStr(L"selectionBar2");
+        s.selBar2 = v2.empty() || v2 == L"none" ? -1 : SelIndex(v2);
+    }
     s.searchTarget = OvrStr(L"searchTarget") == L"siri" ? 1 : 0;
     SetUiLangChoice(OvrStr(L"language"));
     {
@@ -955,6 +1014,7 @@ static void LoadSettings() {
 #define TIMER_REBUILD   3
 #define TIMER_MAXNOW    87  // logo depois de uma janela maximizar ou restaurar (o tique de 1 s é a reserva)
 #define TIMER_PEEKCOLOR 88  // a cor da janela ativa, depois que as janelas descem para a barra
+#define TIMER_ACTIVE    89  // confere o app ativo depois de minimizar ou fechar
 
 static const wchar_t kBarClass[] = L"WhFinderTopBar";
 static const wchar_t kOwnerClass[] = L"WhFinderTopBarOwner";
@@ -983,6 +1043,10 @@ struct Bar {
     bool appbarReleased = false;      // escondida por janela maximizada: o espaço do topo foi devolvido
     bool autoShown = false;
     int hideCountdown = 0;
+    // Deslizar ao mostrar e esconder (issue #9): de cima para baixo e de volta.
+    ULONGLONG slideTick = 0;
+    bool slideIn = false;
+    bool maxPeek = false;  // escondida por janela maximizada, mostrada pelo mouse no topo (issue #7)
     int hover = -1;
     int open = -1;
     int flash = -1;  // item destacado pelo indicador de volume/brilho
@@ -1016,6 +1080,8 @@ struct Bar {
     float hVisFrom = 0, hVisTo = 0, hGrowFrom = 0, hGrowTo = 0;
     ULONGLONG hVisTick = 0, hGrowTick = 0;
     bool maxHidden = false;       // escondida por janela maximizada
+    bool reserveAfterSlide = false;  // alça: reservar o espaço (as janelas descem) quando a barra terminar de descer
+    bool restoreAfterSlide = false;  // janela maximizada saiu: reservar de novo quando a barra terminar de descer
     HWND peekSrc = nullptr;       // a janela de onde veio peekColor
     ULONGLONG lqShot = 0;         // vidro líquido sem "ao vivo": quando a foto do fundo foi tirada
     bool lqShown = false;         // a barra estava visível na última volta do vidro líquido
@@ -1279,6 +1345,9 @@ static void OpenUri(PCWSTR uri, PCWSTR params = nullptr) {
     ShellExecuteW(nullptr, L"open", target.c_str(), params, nullptr, SW_SHOWNORMAL);
 }
 
+// Uma caixa de confirmação de vidro, no estilo do macOS (issue #10): ícone,
+// título, texto e dois botões. Modal (espera a resposta). Mais abaixo.
+static bool GlassConfirm(wchar_t glyph, PCWSTR title, PCWSTR text, PCWSTR okLabel);
 static bool Confirm(PCWSTR text) {
     // Dono = a janela do mod: a caixa não vira o "app ativo" da barra.
     return MessageBoxW(g_owner, T(text), L"Mac OS 27 Finder Bar",
@@ -1361,6 +1430,18 @@ static void ForceForeground(HWND h) {
     SetFocus(h);
 }
 
+// Onde desenhar uma capa para ela cobrir a caixa sem deformar: a miniatura 16:9
+// de um vídeo (YouTube) é cortada dos lados, em vez de esticada (issue #13).
+// Quem chama recorta pela caixa.
+static D2D1_RECT_F CoverFill(ID2D1Bitmap* bmp, const D2D1_RECT_F& box) {
+    D2D1_SIZE_F bs = bmp->GetSize();
+    float bw = box.right - box.left, bh = box.bottom - box.top;
+    if (bs.width < 1 || bs.height < 1) return box;
+    float sc = std::max(bw / bs.width, bh / bs.height);
+    float dw = bs.width * sc, dh = bs.height * sc;
+    float cx = (box.left + box.right) / 2, cy = (box.top + box.bottom) / 2;
+    return D2D1::RectF(cx - dw / 2, cy - dh / 2, cx + dw / 2, cy + dh / 2);
+}
 static bool IsCloaked(HWND h) {
     DWORD cloaked = 0;
     return SUCCEEDED(DwmGetWindowAttribute(h, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked;
@@ -2807,7 +2888,10 @@ static int CountWindowsUpdates() {
     if (SUCCEEDED(CoCreateInstance(kClsid, nullptr, CLSCTX_INPROC_SERVER, kIid, (void**)&ses)) && ses &&
         SUCCEEDED(ses->CreateUpdateSearcher(&se)) && se) {
         se->put_Online(VARIANT_FALSE);
-        BSTR q = SysAllocString(L"IsInstalled=0 and IsHidden=0");
+        // BrowseOnly=0: sem as opcionais (drivers e prévias que as Configurações
+        // listam à parte, em "Atualizações opcionais"): contadas, o ícone ficava
+        // com "1" com o Windows já em dia (issue #2).
+        BSTR q = SysAllocString(L"IsInstalled=0 and IsHidden=0 and BrowseOnly=0");
         LONG c = 0;
         // Busca assíncrona: o encerramento pode interromper (RequestAbort).
         HANDLE ev = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -2980,7 +3064,7 @@ static HMENU BuildLogoMenu() {
         SetEvent(g_updKick);
     AddItem(m, ID_ABOUT, L"Sobre este PC");
     AddSep(m);
-    AddItem(m, ID_SETTINGS, L"Configurações do Sistema..." + UpdBadge(g_updWin));
+    AddItem(m, ID_SETTINGS, L"Ajustes do Sistema..." + UpdBadge(g_updWin));
     AddItem(m, ID_STORE, L"Microsoft Store..." + UpdBadge(g_updApps));
     AddSep(m);
     AddItem(m, ID_TASKMGR, L"Forçar encerramento...\tCtrl+Shift+Esc");
@@ -3736,6 +3820,11 @@ static HMENU BuildNetworkMenu() {
     return m;
 }
 
+// Aparelhos Bluetooth LE conectados (mouses e teclados novos, como os da
+// Logitech): a busca clássica não os lista (issue #16). A consulta (WinRT) roda
+// numa thread e fica guardada; o menu e a pílula usam a última e pedem outra.
+static void BleRefresh();
+static std::vector<std::wstring> BleConnectedNames();
 static HMENU BuildBluetoothMenu() {
     HMENU m = CreatePopupMenu();
     bool btOn = RadioStateBt() != 0;
@@ -3756,6 +3845,7 @@ static HMENU BuildBluetoothMenu() {
     di.dwSize = sizeof(di);
     HBLUETOOTH_DEVICE_FIND f = BluetoothFindFirstDevice(&sp, &di);
     int n = 0;
+    std::vector<std::wstring> names;  // os já listados (o mesmo aparelho pode estar nas duas buscas)
     if (f) {
         AddHeader(m, L"Dispositivos");
         do {
@@ -3764,12 +3854,21 @@ static HMENU BuildBluetoothMenu() {
             wchar_t icon = major == 1 ? 0xE7F8 : major == 2 ? 0xE8EA : major == 4 ? 0xE7F6 : major == 5 ? 0xE765 : 0xE702;
             std::wstring label = std::wstring(1, icon) + L" " + (di.szName[0] ? di.szName : L"Dispositivo");
             AddItem(m, ID_BT_LIST + n, label, di.fConnected != FALSE);
+            names.push_back(di.szName);
             n++;
             di.dwSize = sizeof(di);
         } while (n < 30 && BluetoothFindNextDevice(f, &di));
         BluetoothFindDeviceClose(f);
-        AddSep(m);
     }
+    BleRefresh();
+    for (const std::wstring& ble : BleConnectedNames()) {
+        if (n >= 45 || std::find(names.begin(), names.end(), ble) != names.end()) continue;
+        if (!n) AddHeader(m, L"Dispositivos");
+        AddItem(m, ID_BT_LIST + n, std::wstring(1, (wchar_t)0xE702) + L" " + ble, true);
+        names.push_back(ble);
+        n++;
+    }
+    if (n) AddSep(m);
     AddItem(m, ID_BT_ADD, L"Adicionar dispositivo...");
     AddItem(m, ID_BT_SETTINGS, L"Configurações de Bluetooth...");
     return m;
@@ -3998,13 +4097,13 @@ static void RunCommand(const TopMenu* tm, UINT cmd) {
             break;
         }
         case ID_RESTART:
-            if (Confirm(L"Reiniciar o computador agora?")) {
+            if (GlassConfirm(0xE777, L"Reiniciar o computador agora?", L"Os apps abertos serão fechados.", L"Reiniciar")) {
                 PrivGuard pg(SE_SHUTDOWN_NAME);
                 ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
             }
             break;
         case ID_SHUTDOWN:
-            if (Confirm(L"Desligar o computador agora?")) {
+            if (GlassConfirm(0xE7E8, L"Desligar o computador agora?", L"Os apps abertos serão fechados.", L"Desligar")) {
                 PrivGuard pg(SE_SHUTDOWN_NAME);
                 ExitWindowsEx(EWX_SHUTDOWN | EWX_POWEROFF,
                               SHTDN_REASON_MAJOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
@@ -4012,7 +4111,7 @@ static void RunCommand(const TopMenu* tm, UINT cmd) {
             break;
         case ID_LOCK: LockWorkStation(); break;
         case ID_LOGOFF:
-            if (Confirm(L"Encerrar a sessão agora? Os apps abertos serão fechados."))
+            if (GlassConfirm(0xF3B1, L"Encerrar a sessão agora?", L"Os apps abertos serão fechados.", L"Encerrar sessão"))
                 ExitWindowsEx(EWX_LOGOFF, 0);
             break;
 
@@ -4439,6 +4538,7 @@ static LRESULT CALLBACK TrayClientProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
             // TaskbarCreated (que pode cair na janela em que a barra o ignora).
             static bool firstHello = true;
             if (!firstHello && !g_rebuildScheduled) {
+                Wh_Log(L"Refaz as barras: um Explorer novo se apresentou (o anterior fechou ou travou)");
                 g_rebuildScheduled = true;
                 RequestReload(1);
             }
@@ -4514,6 +4614,14 @@ static void ApplyTrayMsg(const TrayMsg& m) {
 
 static void LayoutTrayPopup();
 static void CloseTrayPopup(bool refocus);
+// Os ícones do próprio Windows (volume, rede, energia…), que o explorer.exe ainda
+// registra na bandeja com GUIDs da família 7820AE7x-23E3-…: a barra já mostra
+// isso nos itens dela, então não entram no espelho da bandeja (issue #3).
+static bool TrayIsShellIcon(const TrayIcon& t) {
+    if (!t.hasGuid || t.guid.Data2 != 0x23E3 || t.guid.Data3 != 0x4229) return false;
+    if ((t.guid.Data1 & 0xFFFFFF00u) != 0x7820AE00u) return false;
+    return true;
+}
 
 static void ProcessTrayQueue() {
     std::vector<std::vector<BYTE>> q;
@@ -4856,6 +4964,50 @@ static auto CcAwait(Op const& op, DWORD ms = 3000) {
         throw winrt::hresult_canceled();
     }
     return op.GetResults();
+}
+
+static SRWLOCK g_bleLock = SRWLOCK_INIT;
+static std::vector<std::wstring> g_bleNames;
+static volatile LONG g_bleBusy = 0;
+static ULONGLONG g_bleTick = 0;
+static std::vector<std::wstring> BleConnectedNames() {
+    AcquireSRWLockShared(&g_bleLock);
+    std::vector<std::wstring> v = g_bleNames;
+    ReleaseSRWLockShared(&g_bleLock);
+    return v;
+}
+static DWORD WINAPI BleThread(void*) {
+    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    std::vector<std::wstring> found;
+    bool ok = false;
+    try {
+        using namespace winrt::Windows::Devices;
+        auto sel = Bluetooth::BluetoothLEDevice::GetDeviceSelectorFromConnectionStatus(
+            Bluetooth::BluetoothConnectionStatus::Connected);
+        auto all = CcAwait(Enumeration::DeviceInformation::FindAllAsync(sel), 4000);
+        for (auto const& d : all) {
+            std::wstring name(d.Name());
+            if (!name.empty() && std::find(found.begin(), found.end(), name) == found.end()) found.push_back(name);
+        }
+        ok = true;
+    } catch (...) {
+    }
+    if (ok) {
+        AcquireSRWLockExclusive(&g_bleLock);
+        g_bleNames.swap(found);
+        ReleaseSRWLockExclusive(&g_bleLock);
+    }
+    winrt::uninit_apartment();
+    InterlockedExchange(&g_bleBusy, 0);
+    return 0;
+}
+static void BleRefresh() {
+    // No máximo uma consulta a cada 2 s (o menu aberto pede de novo a cada 2,5 s).
+    ULONGLONG now = GetTickCount64();
+    if (g_bleTick && now - g_bleTick < 2000) return;
+    if (InterlockedCompareExchange(&g_bleBusy, 1, 0) != 0) return;
+    g_bleTick = now;
+    if (!StartJobThread(BleThread, nullptr)) InterlockedExchange(&g_bleBusy, 0);
 }
 
 static void CcDoRadios(unsigned jobs) {
@@ -5940,7 +6092,13 @@ static bool CcEnsureResources() {
 }
 
 // maxSide > 0: reduz a imagem (se for maior) para no máximo esse lado, antes de virar bitmap.
-static ID2D1Bitmap* DecodeImage(ID2D1RenderTarget* rt, const std::vector<BYTE>& bytes, UINT maxSide = 0) {
+// coverW/coverH > 0: uma capa pequena (o Chrome manda miniaturas de ~150 px) é
+// ampliada aqui, uma vez, em bicúbica de alta qualidade, até cobrir a caixa onde
+// vai ser desenhada: fica bem mais lisa que a ampliação linear a cada quadro.
+// fitWide: uma capa larga (miniatura de vídeo) é ampliada para caber inteira na
+// caixa, em vez de cobri-la (ArtWide / DrawArtFit).
+static ID2D1Bitmap* DecodeImage(ID2D1RenderTarget* rt, const std::vector<BYTE>& bytes, UINT maxSide = 0, float coverW = 0,
+                                float coverH = 0, bool fitWide = false) {
     if (!g_wic || bytes.empty()) return nullptr;
     IWICStream* stream = nullptr;
     IWICBitmapDecoder* dec = nullptr;
@@ -5961,6 +6119,14 @@ static ID2D1Bitmap* DecodeImage(ID2D1RenderTarget* rt, const std::vector<BYTE>& 
             double k = (double)maxSide / std::max(w, h);
             UINT sw = std::max(1u, (UINT)std::lround(w * k)), sh = std::max(1u, (UINT)std::lround(h * k));
             if (SUCCEEDED(scaler->Initialize(conv, sw, sh, WICBitmapInterpolationModeFant))) src = scaler;
+        } else if (coverW > 0 && coverH > 0 && SUCCEEDED(conv->GetSize(&w, &h)) && w && h) {
+            bool wide = fitWide && w > h * 1.15;
+            double k = wide ? std::min(coverW / w, coverH / h) : std::max(coverW / w, coverH / h);
+            if (k > 1.05 && k < 16 && SUCCEEDED(g_wic->CreateBitmapScaler(&scaler))) {
+                UINT sw = (UINT)std::lround(w * k), sh = (UINT)std::lround(h * k);
+                // 4 = WICBitmapInterpolationModeHighQualityCubic (Windows 10+; falta nos cabeçalhos do MinGW).
+                if (SUCCEEDED(scaler->Initialize(conv, sw, sh, (WICBitmapInterpolationMode)4))) src = scaler;
+            }
         }
         rt->CreateBitmapFromWicBitmap(src, nullptr, &bmp);
     }
@@ -7129,7 +7295,7 @@ static void CcDrawMedia(const CcShared& sh) {
         ID2D1Layer* layer = nullptr;
         if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(artR, &clip)) && SUCCEEDED(g_cc.rt->CreateLayer(&layer))) {
             g_cc.rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), layer);
-            g_cc.rt->DrawBitmap(g_cc.art, art, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            g_cc.rt->DrawBitmap(g_cc.art, CoverFill(g_cc.art, art), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
             g_cc.rt->PopLayer();
         }
         SafeRelease(layer);
@@ -7464,7 +7630,7 @@ static void CcRender() {
     g_cc.rt->Clear(D2D1::ColorF(0, 0, 0, 0));
     if (newArt) {
         SafeRelease(g_cc.art);
-        g_cc.art = DecodeImage(g_cc.rt, sh.thumb);
+        g_cc.art = DecodeImage(g_cc.rt, sh.thumb, 0, 44 * g_cc.s, 44 * g_cc.s);  // a caixa da capa no Controle
         g_cc.artSerial = serial;
     }
 
@@ -7871,16 +8037,21 @@ static void CcPowerChoose(int row) {
     }
     GUID plan{};
     bool hasPlan = PowerPlanActive(&plan);
+    // (Registro para a issue #4: a barra fechando ao trocar o modo de energia.)
+    Wh_Log(L"Energia: escolha %d (tipo %d)", it.index, it.kind);
     if (it.kind == 1) {
         // O modo só vale com o plano Equilibrado (como nas Configurações do Windows).
         if (hasPlan && !IsEqualGUID(plan, kPlanBalanced)) PowerPlanSet(kPlanBalanced);
-        PowerModeSet(kPowerModes[it.index].g);
+        bool ok = PowerModeSet(kPowerModes[it.index].g);
+        Wh_Log(L"Energia: modo trocado (%d)", ok ? 1 : 0);
     } else if (it.kind == 2 && it.index < (int)g_ccPowerPlans.size()) {
-        PowerPlanSet(g_ccPowerPlans[it.index]);
+        bool ok = PowerPlanSet(g_ccPowerPlans[it.index]);
+        Wh_Log(L"Energia: plano trocado (%d)", ok ? 1 : 0);
     }
     CcRefreshLocal();
     CcPowerBuild();
     CcApplyGeometry();
+    Wh_Log(L"Energia: central atualizada");
 }
 
 static void CcActivate(int id) {
@@ -9116,8 +9287,7 @@ static void GmRender(GmLevel* lv) {
             if (selColored) {
                 // Destaque na cor escolhida, com a luz de vidro por cima.
                 D2D1_ROUNDED_RECT hr = D2D1::RoundedRect(r, 7 * s, 7 * s);
-                br->SetColor(D2D1::ColorF(selC.r, selC.g, selC.b, 0.92f));
-                rt->FillRoundedRectangle(hr, br);
+                SelFill(rt, br, hr, selC, 0.92f);
                 GlassCardLight(rt, hr, 0.22f, s);
             } else if (hot) {
                 // Seleção fosca: um vidro mais claro, o texto continua na cor normal.
@@ -9851,7 +10021,7 @@ static void TrayComputeLayout() {
 
     g_tray.shown.clear();
     for (int i = 0; i < (int)g_trayIcons.size(); i++)
-        if (!g_trayIcons[i].hidden && g_trayIcons[i].icon) g_tray.shown.push_back(i);
+        if (!g_trayIcons[i].hidden && g_trayIcons[i].icon && !TrayIsShellIcon(g_trayIcons[i])) g_tray.shown.push_back(i);
 
     int n = (int)g_tray.shown.size();
     int cols = std::max(1, std::min(n, 6));
@@ -10784,17 +10954,27 @@ static void FlyLoadBt() {
     BLUETOOTH_DEVICE_INFO di{};
     di.dwSize = sizeof(di);
     HBLUETOOTH_DEVICE_FIND f = BluetoothFindFirstDevice(&sp, &di);
-    if (!f) return;
-    int n = 0;
-    do {
-        if (di.fConnected) {
-            DWORD major = (di.ulClassofDevice >> 8) & 0x1F;
-            wchar_t icon = major == 1 ? 0xE7F8 : major == 2 ? 0xE8EA : major == 4 ? 0xE7F6 : major == 5 ? 0xE765 : 0xE702;
-            g_fly.devs.push_back({di.szName[0] ? di.szName : T(L"Dispositivo"), icon});
+    std::vector<std::wstring> names;
+    if (f) {
+        int n = 0;
+        do {
+            if (di.fConnected) {
+                DWORD major = (di.ulClassofDevice >> 8) & 0x1F;
+                wchar_t icon = major == 1 ? 0xE7F8 : major == 2 ? 0xE8EA : major == 4 ? 0xE7F6 : major == 5 ? 0xE765 : 0xE702;
+                g_fly.devs.push_back({di.szName[0] ? di.szName : T(L"Dispositivo"), icon});
+                names.push_back(di.szName);
+            }
+            di.dwSize = sizeof(di);
+        } while (++n < 40 && g_fly.devs.size() < 6 && BluetoothFindNextDevice(f, &di));
+        BluetoothFindDeviceClose(f);
+    }
+    // Os LE conectados (mouses e teclados novos).
+    BleRefresh();
+    for (const std::wstring& ble : BleConnectedNames())
+        if (g_fly.devs.size() < 6 && std::find(names.begin(), names.end(), ble) == names.end()) {
+            g_fly.devs.push_back({ble, (wchar_t)0xE702});
+            names.push_back(ble);
         }
-        di.dwSize = sizeof(di);
-    } while (++n < 40 && g_fly.devs.size() < 6 && BluetoothFindNextDevice(f, &di));
-    BluetoothFindDeviceClose(f);
 }
 
 // ---- Procurar e parear aparelhos Bluetooth (sem abrir as Configurações) ----
@@ -11813,6 +11993,7 @@ struct NowPlayingWnd {
     HGDIOBJ oldBmp = nullptr;
     IDWriteTextFormat *fTitle = nullptr, *fText = nullptr, *fSmall = nullptr, *fIcon = nullptr;
     ID2D1Bitmap* artBmp = nullptr;
+    ID2D1Bitmap* artBlur = nullptr;  // a capa em poucos pixels, ampliada: o fundo desfocado de uma capa larga
     UINT artSerial = 0;
     int hover = 0;  // 1 anterior, 2 tocar, 3 próxima, 4 saída, 5 barra
     bool dragging = false, tracking = false, menuOpen = false;
@@ -12082,8 +12263,47 @@ static D2D1_COLOR_F NpArtTint(const std::vector<BYTE>& bytes) {
     return out;
 }
 
+// Capa larga (a miniatura 16:9 de um vídeo): o Chrome a manda com ~150 px de
+// largura. Cortada para cobrir a caixa, sobravam ~84 px esticados; inteira, ela
+// usa a largura toda, e o resto da caixa é a própria capa desfocada, como no iOS.
+static bool ArtWide(ID2D1Bitmap* bmp) {
+    if (!bmp) return false;
+    D2D1_SIZE_F bs = bmp->GetSize();
+    return bs.width > bs.height * 1.15f;
+}
+// Desenha a capa na caixa (quem chama recorta por ela) e devolve onde a imagem
+// nítida ficou. midBottom: até onde centralizar na vertical (a capa cheia deixa
+// o texto e os botões embaixo).
+static D2D1_RECT_F DrawArtFit(ID2D1RenderTarget* rt, ID2D1Bitmap* bmp, ID2D1Bitmap* blur, const D2D1_RECT_F& box,
+                              float midBottom = -1) {
+    if (!ArtWide(bmp)) {
+        D2D1_RECT_F dst = CoverFill(bmp, box);
+        rt->DrawBitmap(bmp, dst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        return dst;
+    }
+    if (blur) {
+        rt->DrawBitmap(blur, CoverFill(blur, box), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        ID2D1SolidColorBrush* veil = nullptr;
+        if (SUCCEEDED(rt->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0.18f), &veil))) {
+            rt->FillRectangle(box, veil);
+            veil->Release();
+        }
+    }
+    D2D1_SIZE_F bs = bmp->GetSize();
+    float bw = box.right - box.left, bh = box.bottom - box.top;
+    float sc = std::min(bw / bs.width, bh / bs.height);
+    float dw = bs.width * sc, dh = bs.height * sc;
+    float bottom = midBottom > box.top + dh ? std::min(midBottom, box.bottom) : box.bottom;
+    float top = box.top + std::max(0.0f, (bottom - box.top - dh) / 2);
+    float left = box.left + (bw - dw) / 2;
+    D2D1_RECT_F dst = D2D1::RectF(left, top, left + dw, top + dh);
+    rt->DrawBitmap(bmp, dst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+    return dst;
+}
+
 static void NpReleaseGraphics() {
     SafeRelease(g_np.artBmp);
+    SafeRelease(g_np.artBlur);
     g_np.artSerial = 0;
     SafeRelease(g_np.brush);
     SafeRelease(g_np.rt);
@@ -12176,7 +12396,10 @@ static void NpRender() {
     sh.posTick = g_ccShared.posTick;
     sh.app = g_ccShared.app;
     UINT serial = g_ccShared.thumbSerial;
-    bool newArt = serial != g_np.artSerial;
+    // (Também quando a caixa da capa muda de tamanho: a capa é ampliada para ela.)
+    static float artBoxW = 0, artBoxH = 0;
+    float boxW = g_np.art.right - g_np.art.left, boxH = g_np.art.bottom - g_np.art.top;
+    bool newArt = serial != g_np.artSerial || std::fabs(boxW - artBoxW) > 0.5f || std::fabs(boxH - artBoxH) > 0.5f;
     if (newArt) sh.thumb = g_ccShared.thumb;
     ReleaseSRWLockShared(&g_ccLock);
     bool playing = sh.playing;
@@ -12230,7 +12453,11 @@ static void NpRender() {
     rt->Clear(D2D1::ColorF(0, 0, 0, 0));
     if (newArt) {
         SafeRelease(g_np.artBmp);
-        g_np.artBmp = DecodeImage(rt, sh.thumb);
+        SafeRelease(g_np.artBlur);
+        g_np.artBmp = DecodeImage(rt, sh.thumb, 0, boxW, boxH, true);
+        g_np.artBlur = DecodeImage(rt, sh.thumb, 8);
+        artBoxW = boxW;
+        artBoxH = boxH;
         g_np.artSerial = serial;
         static UINT tintSerial = (UINT)-1;
         static D2D1_COLOR_F tintCache;
@@ -12253,15 +12480,9 @@ static void NpRender() {
         if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(pr, &clip)) && SUCCEEDED(rt->CreateLayer(&cl))) {
             rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), cl);
             if (g_np.artBmp && sh.mediaHas) {
-                // Preenche sem deformar: a capa é cortada nas laterais.
-                D2D1_SIZE_F bs = g_np.artBmp->GetSize();
-                float pw = P.right - P.left, ph = P.bottom - P.top;
-                float sc = std::max(pw / std::max(1.0f, bs.width), ph / std::max(1.0f, bs.height));
-                float dw = bs.width * sc, dh = bs.height * sc;
-                D2D1_RECT_F dst = D2D1::RectF(P.left + (pw - dw) / 2, P.top + (ph - dh) / 2, P.left + (pw + dw) / 2,
-                                              P.top + (ph + dh) / 2);
-                rt->DrawBitmap(g_np.artBmp, dst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-                coverDst = dst;
+                // Preenche sem deformar: a capa é cortada nas laterais; uma capa
+                // larga fica inteira, no alto, sobre ela mesma desfocada.
+                coverDst = DrawArtFit(rt, g_np.artBmp, g_np.artBlur, P, g_np.appR.top - 40 * s * g_np.k);
             } else {
                 D2D1_GRADIENT_STOP gs[] = {{0.0f, Argb(g_settings.ccAccent | 0xFF000000)},
                                            {0.6f, D2D1::ColorF(0.957f, 0.447f, 0.714f, 1)},
@@ -12310,7 +12531,7 @@ static void NpRender() {
         ID2D1Layer* cl = nullptr;
         if (SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(artR, &clip)) && SUCCEEDED(rt->CreateLayer(&cl))) {
             rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), cl);
-            rt->DrawBitmap(g_np.artBmp, g_np.art, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            DrawArtFit(rt, g_np.artBmp, g_np.artBlur, g_np.art);
             rt->PopLayer();
         }
         SafeRelease(cl);
@@ -12483,6 +12704,8 @@ static void NpRender() {
                 D2D1::Matrix3x2F was;
                 rt->GetTransform(&was);
                 rt->SetTransform(D2D1::Matrix3x2F::Scale(1.22f, 1.22f, D2D1::Point2F(mx, my)) * was);
+                if (g_np.artBlur && ArtWide(g_np.artBmp))  // (fora da capa larga, o fundo desfocado)
+                    rt->DrawBitmap(g_np.artBlur, CoverFill(g_np.artBlur, P), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
                 rt->DrawBitmap(g_np.artBmp, coverDst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
                 rt->SetTransform(was);
                 br->SetColor(D2D1::ColorF(0, 0, 0, 0.18f));  // um véu, para o ícone branco ler bem
@@ -12780,12 +13003,14 @@ static LRESULT CALLBACK NpWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 static void NpToggle(Bar* b, int idx) {
     if (g_np.hwnd && g_np.closing) DestroyWindow(g_np.hwnd);  // termina o fechamento já
     if (g_np.hwnd) {
-        bool same = g_np.bar == b;
-        NpClose();
-        if (same) {
+        if (g_np.bar == b) {
+            NpClose();
             FocusActive();
             return;
         }
+        // Outro monitor: fecha já (o novo painel usa o mesmo g_np).
+        g_captureNeedsFlush = true;
+        DestroyWindow(g_np.hwnd);
     }
     CcQueue(JOB_MEDIA);
     g_np.bar = b;
@@ -12863,11 +13088,11 @@ enum BsKind { BR_HEADER, BR_ITEM, BR_SWITCH, BR_SLIDER, BR_NOTE, BR_CHOICE, BR_C
 enum BsVal {
     BV_NONE, BV_CLOCK, BV_GLOBALMENU, BV_NET, BV_BT, BV_BATT, BV_DISPLAY, BV_VOL, BV_KBD, BV_TRAY, BV_CC,
     BV_NOW, BV_FOCUS, BV_SEARCH, BV_PRIV, BV_MORE, BV_ISLAND, BV_KBDNAV, BV_USB, BV_DLDONE, BV_CLIP, BV_SHOT,
-    BV_ISLFOCUS, BV_ISLCAPS, BV_ISLBATT, BV_ISLBT, BV_ISLAUDIO, BV_ISLHIST, BV_ISLSTYLE, BV_ISLSIZE, BV_ISLDUR, BV_ISLIN, BV_ISLOUT,
-    BV_ISLPOS, BV_ISLTEST, BV_ISLCLEAR, BV_NPLAYOUT, BV_NPSIZE, BV_WINNOTIF, BV_WINONLY, BV_ISLHISTNOT,
+    BV_ISLFOCUS, BV_ISLCAPS, BV_ISLLOCKS, BV_ISLBATT, BV_ISLBT, BV_ISLAUDIO, BV_ISLHIST, BV_ISLSTYLE, BV_ISLSIZE, BV_ISLDUR, BV_ISLIN, BV_ISLOUT,
+    BV_ISLPOS, BV_ISLTEST, BV_NTFTEST, BV_CFGEXPORT, BV_CFGIMPORT, BV_ISLCLEAR, BV_NPLAYOUT, BV_NPSIZE, BV_WINNOTIF, BV_WINONLY, BV_ISLHISTNOT,
     BV_WXPROV, BV_WXUNIT, BV_WXLOOK, BV_WXANIM, BV_WXGLASS, BV_WXINT, BV_WXTEMP, BV_WXPLACE, BV_WXNOW, BV_WXRESULT,
     BV_BATTPCT, BV_HIDEFS, BV_OSD, BV_DIM,
-    BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_UPDATES,
+    BV_G_REFRACT, BV_G_BLUR, BV_G_LIVE, BV_WEATHER, BV_BARSTYLE, BV_HEIGHT, BV_FONT, BV_BSSTYLE, BV_BSTRANSP, BV_SELBAR, BV_SELBAR2, BV_UPDATES,
     BV_G_TINT, BV_SEARCHTGT, BV_LANG, BV_NPBAR, BV_ICSADD, BV_ICSCLEAR,
     BV_TCOLOR, BV_TLEVEL, BV_TREACH, BV_CCCLOSE, BV_NTFSHAPE, BV_TEXTCOLOR, BV_DISK, BV_BARMON, BV_HIDEMAX, BV_HANDLE,
     BV_THEMEHEAD, BV_TGROUP, BV_THEMENONE, BV_THEMERESET,  // Personalizar tema
@@ -12949,6 +13174,7 @@ static const BsRowDef kBsRows[] = {
     {BR_CHOICE, BV_MONTEXT0 + 7, L"Cor do texto e dos ícones", 0, 0},
     {BR_GROUP, BV_NONE, L"Seleção na barra", 0, 0},
     {BR_COLORS, BV_SELBAR, L"Cor da pílula de seleção na barra", 0, 0, L"Vale também para a seleção e os interruptores dos menus e das pílulas"},
+    {BR_COLORS, BV_SELBAR2, L"Segunda cor (degradê)", 0, 0, L"O primeiro círculo: uma cor só; outra cor faz a seleção ir da cor de cima até ela"},
     {BR_GROUP, BV_NONE, L"Tamanho da barra", 0, 0},
     {BR_SLIDER, BV_HEIGHT, L"Altura da barra", 0, 0, L"Só a altura: do topo da tela até a borda de baixo da barra"},
     {BR_SLIDER, BV_FONT, L"Tamanho dos ícones e da fonte", 0, 0, L"Ícones e texto crescem e diminuem juntos, na mesma proporção"},
@@ -12986,7 +13212,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SLIDER, BV_TREACH, L"Até onde a cor desce", 0, 0, L"Valores baixos mantêm a cor perto do topo; altos a trazem para baixo"},
     {BR_ACTION, BV_THEMERESET, L"Restaurar o padrão deste tema", 0, 0, L"Volta os ajustes acima aos valores de quando o mod foi instalado"},
     {BR_HEADER, BV_NONE, L"Pílulas de aviso", 0xEA8F, 0xFF375F, L"Avisos que descem da barra e o botão de Notificações"},
-    {BR_SWITCH, BV_ISLAND, L"Mostrar avisos em pílula", 0, 0},
+    {BR_SWITCH, BV_ISLAND, L"Mostrar avisos em pílula", 0, 0, L"Só as pílulas: as notificações dos apps continuam chegando ao botão do sino"},
     {BR_ACTION, BV_ISLTEST, L"Testar a pílula agora", 0, 0},
     {BR_GROUP, BV_NONE, L"Aparência", 0, 0},
     {BR_CHOICE, BV_ISLSTYLE, L"Estilo", 0, 0, L"Acompanhar a barra: o mesmo fundo da barra (com Cor da janela, vidro; com Transparente, líquido)"},
@@ -12998,14 +13224,15 @@ static const BsRowDef kBsRows[] = {
     {BR_CHOICE, BV_ISLIN, L"Como aparece", 0, 0},
     {BR_CHOICE, BV_ISLOUT, L"Como some", 0, 0},
     {BR_GROUP, BV_NONE, L"Botão de Notificações", 0, 0},
+    {BR_SWITCH, BV_WINNOTIF, L"Receber as notificações dos apps", 0, 0, L"WhatsApp, Discord, e-mail… (experimental). Vão para o botão do sino e, com as pílulas ligadas, também para a pílula; clicar abre o app"},
+    {BR_SWITCH, BV_WINONLY, L"Somente a barra mostra as notificações", 0, 0, L"Com as pílulas ligadas: tira as faixas do Windows da tela; chamadas, alarmes e lembretes continuam"},
     {BR_CHOICE, BV_NTFLAYOUT, L"Notificações", 0, 0, L"Flutuante: o topo e cada notificação no seu próprio vidro, sem caixa atrás; dentro da caixa: tudo num painel só"},
     {BR_CHOICE, BV_NTFTEXT, L"Cor do texto das notificações", 0, 0, L"Seguir o tema, ou sempre branco ou preto, em qualquer tema"},
+    {BR_ACTION, BV_NTFTEST, L"Testar notificações", 0, 0, L"Cada toque manda uma notificação de teste, de um app diferente, que fica no botão; Limpar, no painel, tira todas"},
     {BR_SWITCH, BV_ISLHISTNOT, L"No botão, mostrar também os avisos da pílula", 0, 0},
     {BR_CHOICE, BV_NTFSHAPE, L"Formato dos ícones", 0, 0, L"Nas notificações: círculo ou o formato dos ícones do macOS"},
     {BR_ACTION, BV_ISLCLEAR, L"Limpar as notificações", 0, 0},
     {BR_GROUP, BV_NONE, L"Avisar quando", 0, 0},
-    {BR_SWITCH, BV_WINNOTIF, L"Notificações do Windows (experimental)", 0, 0, L"WhatsApp, Discord, e-mail… Clicar abre o app"},
-    {BR_SWITCH, BV_WINONLY, L"Somente a barra mostra as notificações", 0, 0, L"Tira as faixas do Windows da tela; chamadas, alarmes e lembretes continuam"},
     {BR_SWITCH, BV_CLIP, L"Texto, imagem ou arquivos copiados", 0, 0},
     {BR_SWITCH, BV_SHOT, L"Capturas e gravações de tela", 0, 0, L"Clique na pílula para abrir e editar"},
     {BR_SWITCH, BV_DLDONE, L"Downloads concluídos", 0, 0, L"Clique na pílula para abrir o arquivo"},
@@ -13015,6 +13242,7 @@ static const BsRowDef kBsRows[] = {
     {BR_SWITCH, BV_ISLBATT, L"Bateria fraca e carregador", 0, 0},
     {BR_SWITCH, BV_ISLFOCUS, L"Foco (Não Perturbe)", 0, 0},
     {BR_SWITCH, BV_ISLCAPS, L"Caps Lock ligado e desligado", 0, 0},
+    {BR_SWITCH, BV_ISLLOCKS, L"Num Lock e Scroll Lock ligados e desligados", 0, 0},
     {BR_HEADER, BV_NONE, L"Previsão do tempo", 0xE753, 0x5AC8FA, L"Lugar, serviço, unidade e aparência do widget"},
     {BR_SWITCH, BV_WEATHER, L"Mostrar na barra", 0, 0},
     {BR_SWITCH, BV_WXTEMP, L"Temperatura ao lado do ícone", 0, 0},
@@ -13034,9 +13262,12 @@ static const BsRowDef kBsRows[] = {
     {BR_HEADER, BV_NONE, L"Calendário", 0xE787, 0xFF453A, L"A agenda que aparece ao clicar no relógio"},
     {BR_ACTION, BV_ICSADD, L"Importar arquivo .ics", 0, 0, L"O arquivo fica onde está; mudanças nele aparecem na agenda"},
     {BR_ACTION, BV_ICSCLEAR, L"Remover os calendários importados", 0, 0},
-    {BR_HEADER, BV_NONE, L"Esta janela", 0xE713, 0x8E8E93, L"O vidro desta janela de Ajustes"},
+    {BR_HEADER, BV_NONE, L"Ajustes e backup", 0xE713, 0x8E8E93, L"O vidro desta janela e a cópia dos ajustes"},
     {BR_CHOICE, BV_BSSTYLE, L"Vidro", 0, 0},
     {BR_SLIDER, BV_BSTRANSP, L"Transparência", 0, 0},
+    {BR_GROUP, BV_NONE, L"Cópia dos ajustes", 0, 0},
+    {BR_ACTION, BV_CFGEXPORT, L"Exportar os ajustes", 0, 0, L"Salva todos os ajustes desta janela num arquivo, para guardar ou levar a outro PC"},
+    {BR_ACTION, BV_CFGIMPORT, L"Importar os ajustes", 0, 0, L"Troca os ajustes atuais pelos do arquivo"},
     {BR_NOTE, BV_NONE,
      L"O vidro líquido vale a partir do próximo painel aberto. Ao vivo (e no fundo Líquido da barra), a barra e os painéis não aparecem em capturas de tela.", 0,
      0},
@@ -13074,6 +13305,7 @@ static const BsBoolKey kBsKeys[] = {
     {BV_SHOT, L"shotPills", &Settings::shotPills},
     {BV_ISLFOCUS, L"islFocus", &Settings::islFocus},
     {BV_ISLCAPS, L"islCaps", &Settings::islCaps},
+    {BV_ISLLOCKS, L"islLocks", &Settings::islLocks},
     {BV_WINNOTIF, L"winNotifs", &Settings::winNotifs},
     {BV_WINONLY, L"winNotifsOnly", &Settings::winNotifsOnly},
     {BV_ISLBATT, L"islBattery", &Settings::islBattery},
@@ -13320,6 +13552,7 @@ static int BsGet(int val) {
         case BV_WXPROV: case BV_WXUNIT: case BV_WXLOOK: case BV_WXANIM: case BV_WXGLASS: case BV_WXINT: case BV_WXTEMP:
             return WxSettingGet(val);
         case BV_SELBAR: return g_settings.selBar;
+        case BV_SELBAR2: return g_settings.selBar2;
         case BV_BSTRANSP: return g_bsTransp;
         case BV_HEIGHT: return std::clamp((g_settings.height - 20) * 100 / 28, 0, 100);
         case BV_FONT: return std::clamp((int)std::lround((g_settings.fontSize - 10) * 10), 0, 100);
@@ -13438,6 +13671,13 @@ static void BsSet(int val, int v) {
     if (val == BV_SEARCHTGT) {
         g_settings.searchTarget = v == 1 ? 1 : 0;
         OvrSetStr(L"searchTarget", g_settings.searchTarget ? L"siri" : L"windows");
+        return;
+    }
+    if (val == BV_SELBAR2) {
+        int idx = v < 0 || v >= kSelCount ? -1 : v;
+        g_settings.selBar2 = idx;
+        OvrSetStr(L"selectionBar2", idx < 0 ? L"none" : kSelPalette[idx].key);
+        RedrawAll();
         return;
     }
     if (val == BV_SELBAR) {
@@ -13857,6 +14097,9 @@ static const unsigned kThemeTinted = 0x08;   // personalizado
 static bool BsRowShown(const BsRowDef& d) {
     if (BvIsMon(d.val)) return g_settings.barPerMon && BsMonAt(BvMonIndex(d.val), nullptr);
     if (d.val == BV_TEXTCOLOR) return !g_settings.barPerMon;
+    if (d.val == BV_SELBAR2) return g_settings.selBar >= 0;  // a seleção fosca não tem degradê
+    // Tirar as faixas do Windows só faz sentido com as pílulas (que as substituem).
+    if (d.val == BV_WINONLY) return g_settings.winNotifs && g_settings.islandPills;
     if (d.val == BV_PANELSTYLE) return g_settings.panelLookCustom;
     if (d.val == BV_CLEARMENUS) return (BsBarThemes() & 0x02) != 0;  // a barra (ou um monitor) no Transparente
     if (d.val == BV_ISLLIVE) return !IslSolid();  // só com um estilo de vidro
@@ -14063,11 +14306,14 @@ static PCWSTR BsChoiceText(int val) {
 static PCWSTR BsActionText(int val) {
     switch (val) {
         case BV_ISLTEST: return L"Testar";
+        case BV_NTFTEST: return L"Testar";
         case BV_ISLCLEAR: return L"Limpar";
         case BV_WXNOW: return L"Atualizar";
         case BV_THEMERESET: return L"Restaurar";
         case BV_SIZERESET: return L"Restaurar";
         case BV_ICSADD: return L"Importar…";
+        case BV_CFGEXPORT: return L"Exportar…";
+        case BV_CFGIMPORT: return L"Importar…";
         case BV_ICSCLEAR: return L"Remover";
     }
     return L"Abrir";
@@ -14504,6 +14750,12 @@ static void BsDrawRow(size_t i, const BsRow& row, float oy) {
                     rt->FillEllipse(el, g_bs.brush);
                     g_bs.brush->SetColor(BsFg(0.35f));
                     rt->DrawEllipse(el, g_bs.brush, 1 * s);
+                    if (d.val == BV_SELBAR2) {
+                        // Sem segunda cor: um traço.
+                        float q = rad * 0.6f;
+                        rt->DrawLine(D2D1::Point2F(p.x - q, p.y + q), D2D1::Point2F(p.x + q, p.y - q), g_bs.brush, 1.4f * s,
+                                     RoundStroke());
+                    }
                 } else if (tintRow) {
                     DWORD cv = kTintPalette[k - 1];
                     g_bs.brush->SetColor(D2D1::ColorF(((cv >> 16) & 255) / 255.0f, ((cv >> 8) & 255) / 255.0f, (cv & 255) / 255.0f, 1));
@@ -14731,7 +14983,7 @@ static void BsDrawWindow() {
     SafeRelease(clipGeo);
 }
 
-// O vidro escolhido em "Esta janela" vale para a janela de Ajustes e para as
+// O vidro escolhido em "Ajustes e backup" vale para a janela de Ajustes e para as
 // caixas de seleção dela (desfoque, líquido ou transparente, com a sua
 // transparência), não o tema da barra.
 struct BsLookScope {
@@ -15252,6 +15504,7 @@ static LRESULT CALLBACK BsWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 } else if (d.kind == BR_COLORS) {
                     if (part >= 10) {
                         BsSet(d.val, part - 11);  // 10 = fosca (-1)
+                        BsLayout();  // linhas que dependem da cor (a segunda cor)
                         BsRender();
                     }
                 } else if (d.kind == BR_CHOICE) {
@@ -15274,7 +15527,10 @@ static LRESULT CALLBACK BsWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     }
                 } else if ((d.kind == BR_ITEM || d.kind == BR_SWITCH) && part == 1) {
                     BsSet(d.val, !BsGet(d.val));
-                    if (!BsReopenIfNeeded()) BsRender();
+                    if (!BsReopenIfNeeded()) {
+                        BsLayout();  // linhas que dependem de um interruptor
+                        BsRender();
+                    }
                 }
             }
             return 0;
@@ -15360,7 +15616,7 @@ static void BsOpenAt(const POINT* at, float scroll) {
     g_bs.hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kBsClass, L"Ajustes", WS_POPUP,
                                 g_bs.pos.x, g_bs.pos.y, g_bs.W, g_bs.H, nullptr, nullptr, g_hInst, nullptr);
     if (!g_bs.hwnd) return;
-    // O vidro desta janela é escolhido nela mesma ("Esta janela"): desfoque do
+    // O vidro desta janela é escolhido nela mesma ("Ajustes e backup"): desfoque do
     // Windows, líquido (sempre ao vivo, porque a janela pode ser arrastada) ou
     // transparente (sem desfoque; só a tinta, que a transparência controla).
     BsLookScope look;  // o vidro desta janela, e não o tema da barra (sólido não cria o desfoque)
@@ -18751,6 +19007,7 @@ struct IslandHist {
     ULONGLONG id = 0;  // fixo: o índice muda quando uma conversa sobe para o fim
 };
 static ULONGLONG g_islHistNext = 1;
+static bool NtfClearing();  // "Limpar" do painel em andamento
 static std::vector<IslandHist> g_islHist;  // o mais novo no fim
 static int g_islUnread = 0;
 
@@ -19063,6 +19320,272 @@ static void IslandRender() {
     DeleteDC(dc);
 }
 
+// ---- A caixa de confirmação de vidro (Reiniciar, Desligar, Encerrar sessão) ----
+static const wchar_t kGcClass[] = L"WhFinderTopBarConfirm";
+struct GcState {
+    HWND hwnd = nullptr;
+    GlassLayer glass;
+    POINT pos{};
+    int W = 0, H = 0;
+    float s = 1, M = 0;
+    wchar_t glyph = 0;
+    std::wstring title, text, ok;
+    int hover = -1;   // 0 cancelar, 1 confirmar
+    int result = -1;  // -1 esperando
+    D2D1_RECT_F panel{}, btnOk{}, btnCancel{};
+};
+static GcState* g_gc = nullptr;
+static void GcRender() {
+    GcState& g = *g_gc;
+    PanelThemeScope panelTheme;
+    LiquidScope liquid(g.glass.lq, g.hwnd);
+    float s = g.s;
+    bool light = PanelLightNow();
+    D2D1_COLOR_F fg = light ? D2D1::ColorF(0, 0, 0, 0.88f) : D2D1::ColorF(1, 1, 1, 0.95f);
+    D2D1_COLOR_F sub = light ? D2D1::ColorF(0, 0, 0, 0.60f) : D2D1::ColorF(1, 1, 1, 0.68f);
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+    bi.bmiHeader.biWidth = g.W;
+    bi.bmiHeader.biHeight = -g.H;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HDC dc = CreateCompatibleDC(nullptr);
+    HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ID2D1DCRenderTarget* rt = nullptr;
+    ID2D1SolidColorBrush* br = nullptr;
+    IDWriteTextFormat* fT = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_SEMI_BOLD, 14 * s);
+    IDWriteTextFormat* fS = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_NORMAL, 12 * s);
+    IDWriteTextFormat* fB = MakeFormat(g_settings.fontFamily.c_str(), DWRITE_FONT_WEIGHT_SEMI_BOLD, 13 * s);
+    IDWriteTextFormat* fI = MakeFormat(g_iconFont.c_str(), DWRITE_FONT_WEIGHT_NORMAL, 28 * s);
+    auto props = D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_DEFAULT,
+                                              D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                                              96.0f, 96.0f);
+    if (bmp && fT && fS && fB && fI && SUCCEEDED(g_d2d->CreateDCRenderTarget(&props, &rt)) &&
+        SUCCEEDED(rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &br))) {
+        HGDIOBJ old = SelectObject(dc, bmp);
+        RECT bind = {0, 0, g.W, g.H};
+        rt->BindDC(dc, &bind);
+        rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        rt->BeginDraw();
+        rt->Clear(D2D1::ColorF(0, 0, 0, 0));
+        D2D1_RECT_F P = g.panel;
+        // Sombra suave e o vidro (o mesmo dos painéis).
+        for (int k = 3; k >= 1; k--) {
+            float o = k * 4 * s;
+            br->SetColor(D2D1::ColorF(0, 0, 0, 0.06f));
+            rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(P.left - o / 2, P.top + o / 2, P.right + o / 2, P.bottom + o), 18 * s + o, 18 * s + o), br);
+        }
+        DrawLiquidGlass(rt, br, P, 18 * s, s, false, false, g.glass.ok, true);
+        float cx = (P.left + P.right) / 2, y = P.top + 22 * s, w = P.right - P.left - 36 * s;
+        auto text = [&](const std::wstring& t, IDWriteTextFormat* f, D2D1_COLOR_F c, float top, float hgt, bool draw = true) {
+            IDWriteTextLayout* l = nullptr;
+            if (SUCCEEDED(g_dwrite->CreateTextLayout(t.c_str(), (UINT32)t.size(), f, w, hgt, &l))) {
+                // Quebra as linhas (um nome de arquivo longo) dentro da janela.
+                l->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
+                l->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+                l->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                DWRITE_TEXT_METRICS m{};
+                l->GetMetrics(&m);
+                if (draw) {
+                    br->SetColor(c);
+                    rt->DrawTextLayout(D2D1::Point2F(cx - w / 2, top), l, br);
+                }
+                l->Release();
+                return m.height;
+            }
+            return 0.0f;
+        };
+        // Ícone num círculo na cor de destaque.
+        D2D1_COLOR_F acc = D2D1::ColorF(0.04f, 0.52f, 1.0f, 1);
+        SelColor(&acc);
+        float ir = 26 * s;
+        br->SetColor(acc);
+        rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, y + ir), ir, ir), br);
+        {
+            std::wstring gl(1, g.glyph);
+            IDWriteTextLayout* l = nullptr;
+            if (SUCCEEDED(g_dwrite->CreateTextLayout(gl.c_str(), 1, fI, 2 * ir, 2 * ir, &l))) {
+                l->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                l->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                DWRITE_TEXT_RANGE all = {0, 1};
+                l->SetFontSize(24 * s, all);
+                br->SetColor(D2D1::ColorF(1, 1, 1, 1));
+                rt->DrawTextLayout(D2D1::Point2F(cx - ir, y), l, br);
+                l->Release();
+            }
+        }
+        y += 2 * ir + 14 * s;
+        {
+            // O título e o texto, centrados entre o ícone e os botões.
+            std::wstring ti = T(g.title.c_str()), tx = T(g.text.c_str());
+            float hT = text(ti, fT, fg, 0, 400 * s, false), hX = text(tx, fS, sub, 0, 400 * s, false);
+            float room = g.btnOk.top - 8 * s - y, block = hT + 6 * s + hX;
+            y += std::max(0.0f, (room - block) / 2);
+            y += text(ti, fT, fg, y, 400 * s) + 6 * s;
+            text(tx, fS, sub, y, 400 * s);
+        }
+        // Os botões: confirmar (na cor de destaque) em cima, Cancelar embaixo.
+        auto button = [&](const D2D1_RECT_F& rr, const std::wstring& label, bool primary, bool hot) {
+            D2D1_ROUNDED_RECT rd = D2D1::RoundedRect(rr, (rr.bottom - rr.top) / 2, (rr.bottom - rr.top) / 2);
+            if (primary) {
+                SelFill(rt, br, rd, acc, hot ? 1.0f : 0.92f);
+            } else {
+                br->SetColor(light ? D2D1::ColorF(0, 0, 0, hot ? 0.14f : 0.08f) : D2D1::ColorF(1, 1, 1, hot ? 0.22f : 0.14f));
+                rt->FillRoundedRectangle(rd, br);
+            }
+            IDWriteTextLayout* l = nullptr;
+            if (SUCCEEDED(g_dwrite->CreateTextLayout(label.c_str(), (UINT32)label.size(), fB, rr.right - rr.left, rr.bottom - rr.top, &l))) {
+                l->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                l->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                br->SetColor(primary ? D2D1::ColorF(1, 1, 1, 1) : fg);
+                rt->DrawTextLayout(D2D1::Point2F(rr.left, rr.top), l, br);
+                l->Release();
+            }
+        };
+        button(g.btnOk, T(g.ok.c_str()), true, g.hover == 1);
+        button(g.btnCancel, T(L"Cancelar"), false, g.hover == 0);
+        rt->EndDraw();
+        POINT src = {0, 0};
+        SIZE size = {g.W, g.H};
+        BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        HDC screen = GetDC(nullptr);
+        UpdateLayeredWindow(g.hwnd, screen, &g.pos, &size, dc, &src, 0, &blend, ULW_ALPHA);
+        ReleaseDC(nullptr, screen);
+        SelectObject(dc, old);
+    }
+    SafeRelease(br);
+    SafeRelease(rt);
+    if (fT) fT->Release();
+    if (fS) fS->Release();
+    if (fB) fB->Release();
+    if (fI) fI->Release();
+    if (bmp) DeleteObject(bmp);
+    DeleteDC(dc);
+}
+static LRESULT CALLBACK GcWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (!g_gc || g_gc->hwnd != hwnd) return DefWindowProcW(hwnd, msg, wp, lp);
+    GcState& g = *g_gc;
+    switch (msg) {
+        case WM_MOUSEMOVE: {
+            float x = (float)LP_X(lp), y = (float)LP_Y(lp);
+            int h = InRect(g.btnOk, x, y) ? 1 : InRect(g.btnCancel, x, y) ? 0 : -1;
+            if (h != g.hover) {
+                g.hover = h;
+                GcRender();
+            }
+            TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, hwnd, 0};
+            TrackMouseEvent(&tme);
+            return 0;
+        }
+        case WM_MOUSELEAVE:
+            if (g.hover != -1) {
+                g.hover = -1;
+                GcRender();
+            }
+            return 0;
+        case WM_LBUTTONUP: {
+            float x = (float)LP_X(lp), y = (float)LP_Y(lp);
+            if (InRect(g.btnOk, x, y)) g.result = 1;
+            else if (InRect(g.btnCancel, x, y)) g.result = 0;
+            return 0;
+        }
+        case WM_KEYDOWN:
+            if (wp == VK_RETURN) g.result = 1;
+            else if (wp == VK_ESCAPE) g.result = 0;
+            return 0;
+        case WM_CLOSE:
+            g.result = 0;
+            return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+static bool GlassConfirm(wchar_t glyph, PCWSTR title, PCWSTR text, PCWSTR okLabel) {
+    if (g_gc || g_bars.empty()) return Confirm(title);
+    // No monitor do mouse, um pouco acima do meio.
+    POINT pt;
+    GetCursorPos(&pt);
+    Bar* b = g_bars[0];
+    for (Bar* x : g_bars)
+        if (x->monitor == MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST)) b = x;
+    GcState g;
+    g.s = b->dpi / 96.0f;
+    g.M = std::round(24 * g.s);
+    g.glyph = glyph;
+    g.title = title;
+    g.text = text;
+    g.ok = okLabel;
+    float s = g.s, pw = 272 * s, ph = 262 * s;
+    {
+        // A altura acompanha o texto: o ícone, o título e o texto (com as linhas
+        // quebradas) e, embaixo, os dois botões.
+        float tw = pw - 36 * s, th = 0;
+        auto measure = [&](const std::wstring& t, DWRITE_FONT_WEIGHT wt, float px) {
+            float h = 0;
+            IDWriteTextFormat* f = MakeFormat(g_settings.fontFamily.c_str(), wt, px);
+            IDWriteTextLayout* l = nullptr;
+            if (f && SUCCEEDED(g_dwrite->CreateTextLayout(t.c_str(), (UINT32)t.size(), f, tw, 400 * s, &l))) {
+                l->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
+                DWRITE_TEXT_METRICS m{};
+                l->GetMetrics(&m);
+                h = m.height;
+                l->Release();
+            }
+            if (f) f->Release();
+            return h;
+        };
+        th = measure(T(g.title.c_str()), DWRITE_FONT_WEIGHT_SEMI_BOLD, 14 * s) + 6 * s +
+             measure(T(g.text.c_str()), DWRITE_FONT_WEIGHT_NORMAL, 12 * s);
+        ph = std::max(ph, 22 * s + 52 * s + 14 * s + th + 18 * s + 82 * s);
+    }
+    g.W = (int)std::ceil(pw + 2 * g.M);
+    g.H = (int)std::ceil(ph + 2 * g.M);
+    g.panel = D2D1::RectF(g.M, g.M, g.M + pw, g.M + ph);
+    g.btnOk = D2D1::RectF(g.M + 18 * s, g.M + ph - 82 * s, g.M + pw - 18 * s, g.M + ph - 52 * s);
+    g.btnCancel = D2D1::RectF(g.M + 18 * s, g.M + ph - 44 * s, g.M + pw - 18 * s, g.M + ph - 14 * s);
+    int cx = (b->monRect.left + b->monRect.right) / 2, cy = b->monRect.top + (b->monRect.bottom - b->monRect.top) * 2 / 5;
+    g.pos = {cx - g.W / 2, cy - g.H / 2};
+    g_gc = &g;
+    {
+        PanelThemeScope panelTheme;
+        if (GlassLayerCreate(g.glass, g.pos, g.W, g.H, true, true) && !g.glass.lq) GlassLayerDestroy(g.glass);
+    }
+    g.hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW, kGcClass, L"Mac OS 27 Finder Bar", WS_POPUP,
+                             g.pos.x, g.pos.y, g.W, g.H, g_owner, nullptr, g_hInst, nullptr);
+    if (!g.hwnd) {
+        GlassLayerDestroy(g.glass);
+        g_gc = nullptr;
+        return Confirm(title);
+    }
+    HideFromCapture(g.hwnd);
+    GcRender();
+    ShowWindow(g.hwnd, SW_SHOW);
+    ForceForeground(g.hwnd);
+    while (g.result < 0) {
+        DWORD w = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE, QS_ALLINPUT);
+        if (w == WAIT_OBJECT_0) {
+            g.result = 0;  // o mod está fechando
+            break;
+        }
+        MSG msg;
+        while (g.result < 0 && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                PostQuitMessage((int)msg.wParam);
+                g.result = 0;
+                break;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        // Clique fora ou outra janela ativa: continua aberta (como no macOS).
+    }
+    DestroyWindow(g.hwnd);
+    GlassLayerDestroy(g.glass);
+    g_gc = nullptr;
+    return g.result == 1;
+}
+
 static void IslandStart(const IslandNote& n) {
     Bar* b = nullptr;
     for (Bar* x : g_bars)
@@ -19092,7 +19615,11 @@ static void IslandStart(const IslandNote& n) {
         // O mesmo vidro da Central: ao vivo, a foto do fundo acompanha a janela
         // de baixo (mas a pílula sai de gravações e capturas); sem ao vivo, a
         // foto é tirada quando ela aparece, e a pílula aparece nas gravações.
-        if (GlassLayerCreate(g_isl.glass, g_isl.pos, g_isl.W, g_isl.H) && !g_isl.glass.lq) GlassLayerDestroy(g_isl.glass);
+        // A pílula só usa o vidro desenhado por ela (a foto do fundo): no Vidro
+        // ao vivo, o padrão seria o desfoque do Windows, que a pílula não tem,
+        // e ela ficava sem vidro nenhum (issue #17). Força a foto.
+        if (GlassLayerCreate(g_isl.glass, g_isl.pos, g_isl.W, g_isl.H, true, true) && !g_isl.glass.lq)
+            GlassLayerDestroy(g_isl.glass);
         if (g_isl.glass.lq && g_isl.glass.lq->live && g_owner) SetTimer(g_owner, TIMER_LIQUID, 40, nullptr);
     }
     if (!g_isl.hwnd) {
@@ -19110,8 +19637,12 @@ static void IslandStart(const IslandNote& n) {
 }
 
 static void NtfRefresh();
+static void NtfFrontNewest();
 static void IslandPush(const IslandNote& n, bool force) {
-    if (!g_settings.islandPills && !force) return;
+    // Pílulas desligadas: as notificações dos apps ainda vão para o botão (sem
+    // a pílula); os outros avisos, não.
+    bool noPill = !g_settings.islandPills && !force;
+    if (noPill && !n.isNotif) return;
     bool isNotif = n.isNotif;
     // Vão para o painel de notificações só as notificações dos apps e os avisos
     // com algo a fazer (abrir a captura, a gravação, o download...). "Copiado",
@@ -19127,6 +19658,7 @@ static void IslandPush(const IslandNote& n, bool force) {
                     same = i;
                     break;
                 }
+        if (same >= 0 && NtfClearing()) same = -1;  // (sendo limpa: a mensagem nova abre outro cartão)
         if (same >= 0) {
             IslandHist h = std::move(g_islHist[same]);
             g_islHist.erase(g_islHist.begin() + same);
@@ -19145,8 +19677,10 @@ static void IslandPush(const IslandNote& n, bool force) {
         }
         if (isNotif || g_settings.islHistNotices) g_islUnread++;
         if (g_settings.islHistory) RedrawAll();
-        NtfRefresh();  // painel de notificações aberto: entra na hora
+        NtfFrontNewest();  // a mais nova vai para a frente da pilha
+        NtfRefresh();      // painel de notificações aberto: entra na hora
     }
+    if (noPill) return;
     if (g_isl.hwnd) {
         // Aviso de estado (Caps Lock, Foco, saída de áudio...): o mesmo tipo de aviso
         // que já está na pílula troca o texto na hora, e os repetidos na fila somem.
@@ -19208,7 +19742,9 @@ static void IslandMakeGlass() {
     GlassLayerDestroy(g_isl.glass);
     if (IslSolid()) return;
     IslGlassScope islGlass;
-    if (GlassLayerCreate(g_isl.glass, g_isl.pos, g_isl.W, g_isl.H) && !g_isl.glass.lq) GlassLayerDestroy(g_isl.glass);
+    // Só o vidro desenhado pela pílula (a foto do fundo), como em IslandStart.
+    if (GlassLayerCreate(g_isl.glass, g_isl.pos, g_isl.W, g_isl.H, true, true) && !g_isl.glass.lq)
+        GlassLayerDestroy(g_isl.glass);
     if (g_isl.glass.lq && g_isl.glass.lq->live && g_owner) SetTimer(g_owner, TIMER_LIQUID, 40, nullptr);
 }
 
@@ -19961,11 +20497,19 @@ static void ShotOnSaved(std::wstring* path) {
 // Caps Lock: a pílula avisa quando liga e desliga (lido a cada 200 ms).
 #define TIMER_CAPS 83
 static void CapsPoll() {
-    static int last = -1;
+    static int last = -1, lastNum = -1, lastScroll = -1;
     int cur = (GetKeyState(VK_CAPITAL) & 1) ? 1 : 0;
     if (last >= 0 && cur != last && g_settings.islCaps)
         IslandShow(0xE765, 0x0A84FF, cur ? L"Caps Lock ativado" : L"Caps Lock desativado");
     last = cur;
+    // Num Lock e Scroll Lock, do mesmo jeito (issue #8).
+    int num = (GetKeyState(VK_NUMLOCK) & 1) ? 1 : 0, scroll = (GetKeyState(VK_SCROLL) & 1) ? 1 : 0;
+    if (lastNum >= 0 && num != lastNum && g_settings.islLocks)
+        IslandShow(0xE765, 0x0A84FF, num ? L"Num Lock ativado" : L"Num Lock desativado");
+    if (lastScroll >= 0 && scroll != lastScroll && g_settings.islLocks)
+        IslandShow(0xE765, 0x0A84FF, scroll ? L"Scroll Lock ativado" : L"Scroll Lock desativado");
+    lastNum = num;
+    lastScroll = scroll;
 }
 
 // A mesma gravação pode chegar duas vezes (área de transferência e pasta):
@@ -20797,7 +21341,9 @@ static void BnrOnNotification() {
 
 // Liga/desliga conforme o ajuste.
 static void NotifApply() {
-    bool want = g_settings.winNotifs && g_settings.islandPills;
+    // Mesmo sem as pílulas as notificações vão para o botão; sem as pílulas e sem
+    // o sino na barra, nada as mostraria, então não lê.
+    bool want = g_settings.winNotifs && (g_settings.islandPills || g_settings.islHistory);
     if (!want) {
         NotifStop();
         g_notifApiOk = false;
@@ -20838,14 +21384,15 @@ static void NotifOnMsg(NotifMsg* m) {
             }
             if (g_settings.winNotifs) ToastWatchStart();
         }
-        IslandShow(0xEA8F, 0x8E8E93, L"Notificações do Windows",
-                   m->kind == 1 ? L"Acesso negado: lendo os avisos da tela (deixe as faixas ligadas)"
-                                : L"Lendo os avisos da tela (deixe as faixas ligadas)",
-                   L"", false, true);
+        if (g_settings.islandPills)
+            IslandShow(0xEA8F, 0x8E8E93, L"Notificações do Windows",
+                       m->kind == 1 ? L"Acesso negado: lendo os avisos da tela (deixe as faixas ligadas)"
+                                    : L"Lendo os avisos da tela (deixe as faixas ligadas)",
+                       L"", false, true);
     } else if (m->kind == 4) {
         g_notifApiOk = true;
         BnrApply();
-        IslandShow(0xEA8F, 0x30D158, L"Notificações do Windows", L"Ativas", L"", false, true);
+        if (g_settings.islandPills) IslandShow(0xEA8F, 0x30D158, L"Notificações do Windows", L"Ativas", L"", false, true);
     } else if (g_settings.winNotifs) {
         BnrOnNotification();
         // Título: a primeira linha (quem mandou/assunto). Embaixo: o app e a mensagem.
@@ -20886,11 +21433,24 @@ static void NotifOnMsg(NotifMsg* m) {
 
 static const wchar_t kNtfClass[] = L"WhFinderTopBarNotifs";
 struct NtfBlock {
-    int kind;        // 1 cartão (com o app dentro), 2 chip "+N", 3 título "Avisos", 4 linha de aviso, 5 vazio
+    int kind;        // 1 cartão (com o app dentro), 2 chip "+N", 3 título "Avisos", 4 linha de aviso, 5 vazio,
+                     // 6 "Mostrar menos" (volta para a pilha)
     D2D1_RECT_F r;   // em coordenadas do conteúdo
     int group = -1;
     std::vector<int> items;  // índices em g_islHist (o primeiro é o mais novo)
     D2D1_RECT_F reply{};     // cartão: o botão Responder (vazio se não dá para responder)
+    // Pilha (flutuante, com 3 ou mais apps): onde fica na lista (rl) e na pilha
+    // (rs); r, a opacidade e a do conteúdo saem da animação entre as duas.
+    D2D1_RECT_F rl{}, rs{}, replyL{};
+    float rsAlpha = 1, rsContent = 1;  // na pilha: a do bloco e a do conteúdo
+    float alpha = 1, contentA = 1;
+    int order = 0;  // a ordem na cascata (o cartão de cima é o 0)
+    float stackE = 1;     // 0 na pilha fechada, 1 na lista
+    float pileDepth = 0;  // rolando: quanto o cartão entrou no monte da borda (0 = livre)
+    int depth = 0;        // na pilha: 0 na frente, 1 e 2 atrás (o resto escondido)
+    D2D1_RECT_F rsFrom{}; // girando a pilha: de onde o cartão sai
+    float alphaFrom = 1, contentFrom = 1;
+    int clearOrder = 0;   // "Limpar": a vez dele na cascata (de cima para baixo)
 };
 struct NtfGroup {
     std::wstring app, aumid;
@@ -20910,6 +21470,25 @@ struct NotifPanel {
     std::vector<NtfBlock> blocks;
     bool compact = false;  // vazio: o painel pequeno, num cartão só
     std::vector<D2D1_RECT_F> glassRects;  // onde está cada vidro do desfoque (para a animação)
+    // Muitas notificações (soltas): empilhadas como no Android; um clique abre a lista.
+    bool stackable = false, stackOpen = false;
+    ULONGLONG stackTick = 0;         // a animação entre pilha e lista (0: parada)
+    float listH = 0, stackH = 0;     // altura do conteúdo na lista e na pilha
+    float listPanelBottom = 0;       // onde o painel termina com a lista aberta
+    // Rolagem suave (roda do mouse ou arrastar na vertical), com os cartões
+    // se amontoando nas bordas como no Android.
+    float scrollTarget = 0;
+    // Na pilha fechada, a roda do mouse gira os cartões: stackRot é o grupo da frente.
+    int stackRot = 0;
+    int wheelAcc = 0;  // a roda somada até um "dente"
+    ULONGLONG rotTick = 0;
+    float stackHFrom = 0;
+    size_t cardsEnd = 0;
+    float cardsListEnd = 0;
+    ULONGLONG clearTick = 0;  // "Limpar": os cartões saem para a direita, um depois do outro
+    std::vector<ULONGLONG> clearIds;  // as notificações que estavam no painel no clique (só elas são apagadas)
+    bool dragScroll = false;
+    float dragY0 = 0, dragScroll0 = 0;
     std::set<std::wstring> expanded;
     float contentH = 0, scroll = 0;
     int hover = -1;  // bloco; -2 Limpar, -3 central do Windows
@@ -21112,12 +21691,223 @@ static float NtfRepliesH(int histIdx, float s) {
 }
 static float NtfRowH(float s) { return 64 * s; }    // item extra num grupo aberto
 
+// Folga embaixo, para o último cartão sair inteiro do monte da borda.
+static float NtfPileGap() { return NtfFloating() ? 26 * g_ntf.s : 0.0f; }
+static float NtfMaxScroll() {
+    float vh = g_ntf.view.bottom - g_ntf.view.top;
+    float over = g_ntf.contentH - vh;
+    return over > 0 ? over + NtfPileGap() : 0.0f;
+}
+// Rolando a lista (solta e aberta), os cartões que passam da borda de baixo não
+// somem cortados: se amontoam nela, cada um um pouco atrás do anterior (com a
+// mesma largura), como no Android; na de cima, o mesmo. Rolar os tira do monte.
+static void NtfPile() {
+    float s = g_ntf.s;
+    // Só quando a lista não cabe (e rola): senão o último cartão entrava no monte
+    // e não dava para arrastá-lo para dispensar.
+    bool on = NtfFloating() && (!g_ntf.stackable || (g_ntf.stackOpen && !g_ntf.stackTick)) && NtfMaxScroll() > 0;
+    float vh = g_ntf.view.bottom - g_ntf.view.top, D = 12 * s;
+    float Lb = vh - NtfPileGap() + 4 * s;                   // começa a amontoar embaixo
+    float Tt = std::min(g_ntf.scroll, 16 * s);              // e em cima (só depois de rolar)
+    std::map<int, float> byGroup;  // o chip vai junto com o seu cartão
+    for (NtfBlock& b : g_ntf.blocks) {
+        b.pileDepth = 0;
+        if (!on || (b.kind != 1 && b.kind != 4)) continue;
+        float vt = b.r.top - g_ntf.scroll, vb = b.r.bottom - g_ntf.scroll, dy = 0, x = 0;
+        if (vb > Lb) {
+            x = (vb - Lb) / D;
+            dy = Lb + D * (1 - std::exp(-x)) - vb;
+        } else if (vt < Tt) {
+            x = (Tt - vt) / D;
+            dy = Tt - D * (1 - std::exp(-x)) - vt;
+        }
+        if (x <= 0) continue;
+        b.pileDepth = x;
+        b.r = D2D1::RectF(b.r.left, b.r.top + dy, b.r.right, b.r.bottom + dy);
+        if (b.reply.right > b.reply.left)
+            b.reply = D2D1::RectF(b.reply.left, b.reply.top + dy, b.reply.right, b.reply.bottom + dy);
+        b.contentA *= std::clamp(1 - (x - 1.0f) * 0.7f, 0.0f, 1.0f);  // fundo do monte: só o vidro
+        b.alpha *= std::clamp(1.8f - x * 0.25f, 0.0f, 1.0f);           // bem no fundo, some
+        if (b.kind == 1) byGroup[b.group] = dy;
+    }
+    for (NtfBlock& b : g_ntf.blocks)
+        if (b.kind == 2 && byGroup.count(b.group)) {
+            float dy = byGroup[b.group];
+            b.r = D2D1::RectF(b.r.left, b.r.top + dy, b.r.right, b.r.bottom + dy);
+            b.alpha = 0;  // no monte, o chip fica escondido
+        }
+}
+// Onde cada bloco fica na pilha fechada, com o grupo stackRot na frente: o da
+// frente inteiro; os dois de trás um pouco menores e abaixo, aparecendo pela
+// borda de baixo; o resto escondido atrás. Os blocos de baixo sobem junto.
+static void NtfStackRects() {
+    float s = g_ntf.s;
+    int n = (int)g_ntf.groups.size();
+    if (!g_ntf.stackable || n == 0) {
+        for (NtfBlock& b : g_ntf.blocks) {
+            b.rs = b.rl;
+            b.rsAlpha = b.rsContent = 1;
+            b.depth = 0;
+        }
+        g_ntf.stackH = g_ntf.listH;
+        return;
+    }
+    const NtfBlock* front = nullptr;
+    for (const NtfBlock& b : g_ntf.blocks)
+        if (b.kind == 1 && b.group == g_ntf.stackRot) front = &b;
+    if (!front) return;
+    float frontH = front->rl.bottom - front->rl.top, x0 = front->rl.left, x1 = front->rl.right;
+    for (NtfBlock& b : g_ntf.blocks) {
+        if (b.kind != 1) continue;
+        int d = ((b.group - g_ntf.stackRot) % n + n) % n;
+        int dd = std::min(d, 2);
+        float in = 11 * s * dd, drop = 9 * s * dd;
+        b.depth = d;
+        b.rs = d == 0 ? D2D1::RectF(x0, 0, x1, frontH) : D2D1::RectF(x0 + in, drop, x1 - in, frontH + drop);
+        b.rsAlpha = d <= 2 ? 1.0f : 0.0f;
+        b.rsContent = d == 0 ? 1.0f : 0.0f;
+    }
+    float shift = frontH + 9 * s * 2 + 14 * s - g_ntf.cardsListEnd;
+    for (size_t i = 0; i < g_ntf.blocks.size(); i++) {
+        NtfBlock& b = g_ntf.blocks[i];
+        if (b.kind == 2) {
+            // O chip vai junto com o seu cartão; só o da frente aparece.
+            const NtfBlock* card = nullptr;
+            for (const NtfBlock& c : g_ntf.blocks)
+                if (c.kind == 1 && c.group == b.group) card = &c;
+            float dx = card ? card->rs.left - card->rl.left : 0, dy = card ? card->rs.top - card->rl.top : 0;
+            b.depth = card ? card->depth : 0;
+            b.rs = D2D1::RectF(b.rl.left + dx, b.rl.top + dy, b.rl.right + dx, b.rl.bottom + dy);
+            b.rsAlpha = b.depth == 0 ? 1.0f : 0.0f;
+        } else if (b.kind == 6) {
+            b.rs = b.rl;
+            b.rsAlpha = 0;
+        } else if (b.kind != 1 && i >= g_ntf.cardsEnd) {
+            b.rs = D2D1::RectF(b.rl.left, b.rl.top + shift, b.rl.right, b.rl.bottom + shift);
+        }
+    }
+    g_ntf.stackH = g_ntf.listH + shift;
+}
+// Gira a pilha fechada (roda do mouse): o da frente vai para trás e o próximo vem.
+static void NtfStackRotate(int dir) {
+    int n = (int)g_ntf.groups.size();
+    if (!g_ntf.stackable || g_ntf.stackOpen || g_ntf.stackTick || n < 2 || !g_ntf.hwnd) return;
+    for (NtfBlock& b : g_ntf.blocks) {
+        b.rsFrom = b.r;
+        b.alphaFrom = b.alpha;
+        b.contentFrom = b.contentA;
+    }
+    g_ntf.stackHFrom = g_ntf.contentH;
+    g_ntf.stackRot = ((g_ntf.stackRot + dir) % n + n) % n;
+    NtfStackRects();
+    g_ntf.rotTick = GetTickCount64();
+    g_ntf.hover = -1;
+    SetTimer(g_ntf.hwnd, 4, 10, nullptr);
+}
+// Mola que passa um pouco do fim e volta.
+static float NtfEaseBack(float u) {
+    const float c1 = 1.35f, c3 = c1 + 1;
+    float v = u - 1;
+    return 1 + c3 * v * v * v + c1 * v * v;
+}
+// Onde cada bloco está agora, entre a pilha e a lista: cada cartão sai na sua
+// vez (cascata) com a mola; os de trás aparecem com o conteúdo esmaecendo; e
+// o giro da pilha. Também ajusta a altura do painel e os montes das bordas.
+// Devolve true quando a animação acabou.
+static bool NtfApplyStack() {
+    float s = g_ntf.s, M = g_ntf.M;
+    bool done = true;
+    int maxOrder = 0;
+    for (const NtfBlock& b : g_ntf.blocks) maxOrder = std::max(maxOrder, std::min(b.order, 8));
+    float frontE = g_ntf.stackOpen ? 1.0f : 0.0f;
+    for (NtfBlock& b : g_ntf.blocks) {
+        float e;  // 0 = na pilha, 1 = na lista
+        if (!g_ntf.stackable) e = 1;
+        else if (!g_ntf.stackTick) e = g_ntf.stackOpen ? 1.0f : 0.0f;
+        else {
+            float ms = (float)(GetTickCount64() - g_ntf.stackTick);
+            int ord = std::min(b.order, 8);
+            if (!g_ntf.stackOpen) ord = maxOrder - ord;  // fechando: os de baixo voltam primeiro
+            float u = std::clamp((ms - 32.0f * ord) / 440.0f, 0.0f, 1.0f);
+            if (u < 1) done = false;
+            float k = NtfEaseBack(u);
+            e = g_ntf.stackOpen ? k : 1 - k;
+            if (b.kind == 1 && b.depth == 0) frontE = std::clamp(e, 0.0f, 1.0f);
+        }
+        auto lerp = [&](float a, float c) { return a + (c - a) * e; };
+        b.r = D2D1::RectF(lerp(b.rs.left, b.rl.left), lerp(b.rs.top, b.rl.top), lerp(b.rs.right, b.rl.right),
+                          lerp(b.rs.bottom, b.rl.bottom));
+        float ec = std::clamp(e, 0.0f, 1.0f);
+        b.stackE = g_ntf.stackable ? ec : 1.0f;
+        b.alpha = b.rsAlpha + (1 - b.rsAlpha) * ec;
+        b.contentA = b.rsContent + (1 - b.rsContent) * ec * ec;
+        if (g_ntf.rotTick && !g_ntf.stackOpen) {
+            // Girando: de onde estava até o novo lugar na pilha.
+            float u = std::clamp((float)(GetTickCount64() - g_ntf.rotTick) / 380.0f, 0.0f, 1.0f);
+            if (u < 1) done = false;
+            float k = NtfEaseBack(u), kc = std::clamp(u * 1.6f, 0.0f, 1.0f);
+            auto mix = [&](float a, float c) { return a + (c - a) * k; };
+            b.r = D2D1::RectF(mix(b.rsFrom.left, b.r.left), mix(b.rsFrom.top, b.r.top), mix(b.rsFrom.right, b.r.right),
+                              mix(b.rsFrom.bottom, b.r.bottom));
+            b.alpha = b.alphaFrom + (b.alpha - b.alphaFrom) * kc;
+            b.contentA = b.contentFrom + (b.contentA - b.contentFrom) * kc;
+        }
+        if (b.replyL.right > b.replyL.left) {
+            float dx = b.r.right - b.rl.right, dy = b.r.bottom - b.rl.bottom;
+            b.reply = D2D1::RectF(b.replyL.left + dx, b.replyL.top + dy, b.replyL.right + dx, b.replyL.bottom + dy);
+        }
+    }
+    float stackNow = g_ntf.stackH;
+    if (g_ntf.rotTick && !g_ntf.stackOpen) {
+        float u = std::clamp((float)(GetTickCount64() - g_ntf.rotTick) / 380.0f, 0.0f, 1.0f);
+        float k = 1 - (1 - u) * (1 - u) * (1 - u);
+        stackNow = g_ntf.stackHFrom + (g_ntf.stackH - g_ntf.stackHFrom) * k;
+    }
+    if (done) g_ntf.stackTick = g_ntf.rotTick = 0;
+    // O painel cresce (ou encolhe) com o cartão de cima.
+    g_ntf.contentH = g_ntf.stackable ? stackNow + (g_ntf.listH - stackNow) * frontE : g_ntf.listH;
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    float maxH = 640 * s;
+    if (g_ntf.bar && GetMonitorInfoW(g_ntf.bar->monitor, &mi)) maxH = (mi.rcWork.bottom - mi.rcWork.top) * 0.75f;
+    float top = 52 * s, pw = 360 * s;
+    float ph = std::min(maxH, top + g_ntf.contentH + 4 * s);
+    if (g_ntf.H > 0) ph = std::min(ph, g_ntf.H - 2 * M);  // não passa da janela
+    g_ntf.panel = D2D1::RectF(M, M, M + pw, M + ph);
+    g_ntf.view = D2D1::RectF(M, M + top, M + pw, M + ph - 4 * s);
+    g_ntf.scroll = std::clamp(g_ntf.scroll, 0.0f, NtfMaxScroll());
+    g_ntf.scrollTarget = std::clamp(g_ntf.scrollTarget, 0.0f, NtfMaxScroll());
+    NtfPile();
+    return done;
+}
+static void NtfStackToggle(bool open) {
+    if (!g_ntf.stackable || g_ntf.stackOpen == open || !g_ntf.hwnd) return;
+    g_ntf.stackOpen = open;
+    g_ntf.stackTick = GetTickCount64();
+    g_ntf.rotTick = 0;
+    g_ntf.scroll = g_ntf.scrollTarget = 0;
+    g_ntf.hover = -1;
+    SetTimer(g_ntf.hwnd, 4, 10, nullptr);
+}
+
 static void NtfLayout() {
     float s = g_ntf.s, M = g_ntf.M;
     float pw = 360 * s;
     float x0 = M + 12 * s, x1 = M + pw - 12 * s;
     g_ntf.blocks.clear();
     float y = 0;
+    // Três apps ou mais, soltos: a pilha. Na lista aberta, "Mostrar menos" no alto.
+    bool wasStackable = g_ntf.stackable;
+    g_ntf.stackable = g_settings.ntfCards && g_ntf.groups.size() >= 3;
+    if (!g_ntf.stackable) g_ntf.stackOpen = false;
+    // O terceiro app chegou com a lista já aberta: ela continua aberta (não pula para a pilha).
+    else if (!wasStackable && g_ntf.hwnd) g_ntf.stackOpen = true;
+    if (g_ntf.stackable) {
+        NtfBlock hb{6, D2D1::RectF(x1 - 132 * s, 0, x1, 30 * s), -1, {}};
+        hb.rsAlpha = 0;
+        g_ntf.blocks.push_back(hb);
+        y += 38 * s;
+    }
     for (size_t gi = 0; gi < g_ntf.groups.size(); gi++) {
         const NtfGroup& g = g_ntf.groups[gi];
         // O ícone e o nome do app ficam dentro do cartão, na linha da hora.
@@ -21128,11 +21918,17 @@ static void NtfLayout() {
                   (extra > 0 || canReply ? 34 * s : 0);
         NtfBlock card{1, D2D1::RectF(x0, y, x1, y + h), (int)gi, g.items};
         if (canReply) card.reply = D2D1::RectF(x1 - 12 * s - 104 * s, y + h - 32 * s, x1 - 12 * s, y + h - 8 * s);
+        card.order = (int)gi;
         g_ntf.blocks.push_back(card);
-        if (extra > 0)
-            g_ntf.blocks.push_back({2, D2D1::RectF(x0 + 12 * s, y + h - 32 * s, x0 + 12 * s + 150 * s, y + h - 8 * s), (int)gi, {}});
+        if (extra > 0) {
+            NtfBlock chip{2, D2D1::RectF(x0 + 12 * s, y + h - 32 * s, x0 + 12 * s + 150 * s, y + h - 8 * s), (int)gi, {}};
+            chip.order = (int)gi;
+            g_ntf.blocks.push_back(chip);
+        }
         y += h + 12 * s;
     }
+    g_ntf.cardsEnd = g_ntf.blocks.size();
+    g_ntf.cardsListEnd = y;
     // Vazio (sem notificações e sem avisos para mostrar): o painel pequeno.
     g_ntf.compact = g_ntf.groups.empty();
     if (g_settings.islHistNotices)
@@ -21169,21 +21965,32 @@ static void NtfLayout() {
             y += h + 12 * s;
         }
     }
-    g_ntf.contentH = y;
-    // Altura: até 75% da tela; o resto rola.
-    MONITORINFO mi{};
-    mi.cbSize = sizeof(mi);
-    float maxH = 640 * s;
-    if (g_ntf.bar && GetMonitorInfoW(g_ntf.bar->monitor, &mi)) maxH = (mi.rcWork.bottom - mi.rcWork.top) * 0.75f;
-    float top = 52 * s;
-    float ph = std::min(maxH, top + y + 4 * s);
-    g_ntf.panel = D2D1::RectF(M, M, M + pw, M + ph);
-    g_ntf.view = D2D1::RectF(M, M + top, M + pw, M + ph - 4 * s);
+    for (NtfBlock& b : g_ntf.blocks) {
+        b.rl = b.r;
+        b.replyL = b.reply;
+    }
+    g_ntf.listH = y;
+    if (g_ntf.stackable && !g_ntf.groups.empty())
+        g_ntf.stackRot = ((g_ntf.stackRot % (int)g_ntf.groups.size()) + (int)g_ntf.groups.size()) % (int)g_ntf.groups.size();
+    else g_ntf.stackRot = 0;
+    NtfStackRects();
+    g_ntf.stackHFrom = g_ntf.stackH;
+    // Os blocos foram refeitos: um giro em andamento perderia de onde saiu (quem
+    // dispensa um cartão começa o seu depois daqui).
+    g_ntf.rotTick = 0;
+    {
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        float maxH = 640 * s;
+        if (g_ntf.bar && GetMonitorInfoW(g_ntf.bar->monitor, &mi)) maxH = (mi.rcWork.bottom - mi.rcWork.top) * 0.75f;
+        g_ntf.listPanelBottom = M + std::min(maxH, 52 * s + y + 4 * s);
+    }
+    NtfApplyStack();
     float by = (NtfFloating() ? 10 : 14) * s;  // centrados na pílula do topo
     float bx = NtfFloating() ? x1 - 10 * s : M + pw - 14 * s;  // soltos: a pílula tem a largura dos cartões
     g_ntf.clearBtn = D2D1::RectF(bx - 70 * s, M + by, bx, M + by + 26 * s);
     g_ntf.winBtn = D2D1::RectF(bx - 108 * s, M + by, bx - 78 * s, M + by + 26 * s);
-    g_ntf.scroll = std::clamp(g_ntf.scroll, 0.0f, std::max(0.0f, g_ntf.contentH - (g_ntf.view.bottom - g_ntf.view.top)));
+    g_ntf.scroll = std::clamp(g_ntf.scroll, 0.0f, NtfMaxScroll());
 }
 
 // O desfoque do Windows atrás do painel (temas Vidro e Cor da janela): a caixa
@@ -21203,7 +22010,10 @@ static void NtfGlassShapes() {
     for (const NtfBlock& b : g_ntf.blocks) {
         D2D1_RECT_F r = D2D1::RectF(b.r.left, b.r.top + oy, b.r.right, b.r.bottom + oy);
         float rad;
+        if (b.alpha < 0.05f) continue;  // escondido atrás da pilha
+        if (g_ntf.clearTick && b.kind != 6) continue;  // limpando: os cartões saem sem o desfoque
         if (b.kind == 1) rad = 20 * s;
+        else if (b.kind == 6) rad = (r.bottom - r.top) / 2;
         else if (b.kind == 4) {
             r.top += 2 * s;
             r.bottom -= 2 * s;
@@ -21278,6 +22088,67 @@ static void NtfDrawText(ID2D1RenderTarget* rt, ID2D1SolidColorBrush* br, const s
     l->Release();
 }
 
+// Uma camada com opacidade (só quando precisa).
+struct NtfAlphaScope {
+    ID2D1RenderTarget* rt;
+    ID2D1Layer* layer = nullptr;
+    NtfAlphaScope(ID2D1RenderTarget* t, bool on, float a) : rt(t) {
+        if (on && SUCCEEDED(rt->CreateLayer(&layer)))
+            rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                                D2D1::IdentityMatrix(), std::clamp(a, 0.0f, 1.0f)),
+                          layer);
+    }
+    ~NtfAlphaScope() {
+        if (layer) {
+            rt->PopLayer();
+            layer->Release();
+        }
+    }
+};
+static void NtfFrontNewest() {
+    if (!g_ntf.clearTick) g_ntf.stackRot = 0;  // (limpando: no fim)
+}
+// O buraco do cartão da frente da pilha: a geometria (tudo menos o cartão) e
+// uma camada, feitas uma vez por quadro e usadas por todos os de trás.
+struct NtfHole {
+    ID2D1Geometry* geo = nullptr;
+    ID2D1Layer* layer = nullptr;
+    void Build(ID2D1RenderTarget* rt, const D2D1_RECT_F& hole, float radius) {
+        ID2D1RectangleGeometry* all = nullptr;
+        ID2D1RoundedRectangleGeometry* cut = nullptr;
+        ID2D1PathGeometry* path = nullptr;
+        ID2D1GeometrySink* sink = nullptr;
+        if (SUCCEEDED(g_d2d->CreateRectangleGeometry(D2D1::RectF(-10000, -10000, 10000, 10000), &all)) &&
+            SUCCEEDED(g_d2d->CreateRoundedRectangleGeometry(D2D1::RoundedRect(hole, radius, radius), &cut)) &&
+            SUCCEEDED(g_d2d->CreatePathGeometry(&path)) && SUCCEEDED(path->Open(&sink)) &&
+            SUCCEEDED(all->CombineWithGeometry(cut, D2D1_COMBINE_MODE_EXCLUDE, nullptr, sink)) && SUCCEEDED(sink->Close())) {
+            geo = path;
+            path = nullptr;
+        }
+        SafeRelease(sink);
+        SafeRelease(path);
+        SafeRelease(cut);
+        SafeRelease(all);
+        if (geo && FAILED(rt->CreateLayer(&layer))) layer = nullptr;
+    }
+    ~NtfHole() {
+        SafeRelease(layer);
+        SafeRelease(geo);
+    }
+};
+// Desenha tudo menos o buraco (o cartão da frente da pilha).
+struct NtfMaskScope {
+    ID2D1RenderTarget* rt;
+    bool on = false;
+    NtfMaskScope(ID2D1RenderTarget* t, const NtfHole* hole) : rt(t) {
+        if (!hole || !hole->geo || !hole->layer) return;
+        rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), hole->geo, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE), hole->layer);
+        on = true;
+    }
+    ~NtfMaskScope() {
+        if (on) rt->PopLayer();
+    }
+};
 static void NtfRender() {
     if (!g_ntf.hwnd) return;
     PanelThemeScope panelTheme;  // o vidro é o da Central (não o dos menus)
@@ -21374,6 +22245,12 @@ static void NtfRender() {
     rt->Clear(D2D1::ColorF(0, 0, 0, 0));
     if (anim) PushAnim(rt, layer, pv, pivot);
     const bool floating = NtfFloating();
+    // Um fundo invisível (alfa 1/255) no painel todo: com o vidro bem
+    // transparente, os pixels dos cartões ficavam com alfa 0 e a roda do mouse
+    // (e o clique) passavam para a janela de baixo; só pegava onde os cartões
+    // da pilha se somavam.
+    br->SetColor(D2D1::ColorF(0, 0, 0, 1.0f / 255));
+    rt->FillRectangle(P, br);
     if (floating) {
         // Sem painel atrás: o topo é uma pílula de vidro, e cada notificação o seu cartão.
         // Mesma largura dos cartões.
@@ -21411,10 +22288,41 @@ static void NtfRender() {
     // Conteúdo rolável.
     rt->PushAxisAlignedClip(g_ntf.view, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
     float oy = g_ntf.view.top - g_ntf.scroll;
-    for (size_t bi = 0; bi < g_ntf.blocks.size(); bi++) {
+    // Os cartões de baixo primeiro (na pilha, os de trás ficam atrás), e cada chip
+    // logo depois do seu cartão.
+    bool stackFront = false;
+    D2D1_RECT_F frontR{};
+    if (floating && g_ntf.stackable && (!g_ntf.stackOpen || g_ntf.stackTick))
+        for (const NtfBlock& b : g_ntf.blocks)
+            if (b.kind == 1 && b.depth == 0) {
+                frontR = D2D1::RectF(b.r.left, b.r.top + oy, b.r.right, b.r.bottom + oy);
+                // Arrastando o da frente para o lado: o de trás vai aparecendo.
+                if (g_ntf.swiping && g_ntf.swipeBlock >= 0 && g_ntf.swipeBlock == (int)(&b - g_ntf.blocks.data())) {
+                    frontR.left += g_ntf.swipeDx;
+                    frontR.right += g_ntf.swipeDx;
+                }
+                stackFront = true;
+            }
+    NtfHole hole;
+    if (stackFront) hole.Build(rt, frontR, 20 * s);
+    std::vector<size_t> drawOrder;
+    for (size_t i = 0; i < g_ntf.blocks.size(); i++) drawOrder.push_back(i);
+    std::stable_sort(drawOrder.begin(), drawOrder.end(), [](size_t a, size_t c) {
+        const NtfBlock &x = g_ntf.blocks[a], &y = g_ntf.blocks[c];
+        bool xc = x.kind == 1 || x.kind == 2, yc = y.kind == 1 || y.kind == 2;
+        if (x.pileDepth != y.pileDepth) return x.pileDepth > y.pileDepth;  // o fundo do monte atrás
+        if (xc && yc && x.group != y.group) return x.depth != y.depth ? x.depth > y.depth : x.group > y.group;
+        return false;
+    });
+    for (size_t bi : drawOrder) {
         const NtfBlock& b = g_ntf.blocks[bi];
         D2D1_RECT_F r = D2D1::RectF(b.r.left, b.r.top + oy, b.r.right, b.r.bottom + oy);
         if (r.bottom < g_ntf.view.top - 4 || r.top > g_ntf.view.bottom + 4) continue;
+        if (b.alpha < 0.01f) continue;
+        // Na pilha, o cartão da frente não deixa ver os de trás: eles só
+        // aparecem fora dele (pela borda de baixo).
+        NtfMaskScope behind(rt, stackFront && b.kind == 1 && b.depth > 0 ? &hole : nullptr);
+        NtfAlphaScope fade(rt, b.alpha < 0.999f, b.alpha);
         // O cartão sendo arrastado: vai junto com o mouse e esmaece.
         struct SwipeScope {
             ID2D1RenderTarget* rt;
@@ -21438,8 +22346,21 @@ static void NtfRender() {
                 }
                 rt->SetTransform(saved);
             }
-        } swipe(rt, g_ntf.swiping && g_ntf.swipeBlock == (int)bi, g_ntf.swipeDx,
-                1.0f - 0.75f * std::min(1.0f, std::fabs(g_ntf.swipeDx) / std::max(1.0f, (b.r.right - b.r.left) * 0.6f)));
+        };
+        // "Limpar": cada cartão desliza para a direita e some, em cascata (issue #14).
+        float clrDx = 0, clrA = 1;
+        if (g_ntf.clearTick) {
+            float u = std::clamp(((float)(GetTickCount64() - g_ntf.clearTick) - 45.0f * std::min(b.clearOrder, 8)) / 300.0f,
+                                 0.0f, 1.0f);
+            float e = u * u * (3 - 2 * u);
+            clrDx = e * (b.r.right - b.r.left + 40 * s);
+            clrA = 1 - e;
+            if (clrA < 0.01f) continue;
+        }
+        bool swiped = g_ntf.swiping && g_ntf.swipeBlock == (int)bi;
+        SwipeScope swipe(rt, swiped || g_ntf.clearTick, swiped ? g_ntf.swipeDx : clrDx,
+                         swiped ? 1.0f - 0.75f * std::min(1.0f, std::fabs(g_ntf.swipeDx) / std::max(1.0f, (b.r.right - b.r.left) * 0.6f))
+                                : clrA);
         bool hot = g_ntf.hover == (int)bi && !g_ntf.swiping;
         if (b.kind == 1) {
             // Cartão: ícone e nome do app, hora e seta; a foto de quem mandou e o
@@ -21456,6 +22377,9 @@ static void NtfRender() {
                 br->SetColor(g_light ? D2D1::ColorF(1, 1, 1, 0.85f) : D2D1::ColorF(1, 1, 1, 0.30f));
                 rt->DrawRoundedRectangle(rr, br, 1.2f * s);
             }
+            // Atrás na pilha, o cartão é só o vidro; o conteúdo aparece ao abrir.
+            NtfAlphaScope contentFade(rt, b.contentA < 0.999f, b.contentA);
+            if (b.contentA > 0.02f) {
             bool open = g_ntf.expanded.count(g.app) > 0;
             size_t n = open ? b.items.size() : 1;
             float y = r.top + 10 * s;
@@ -21581,6 +22505,22 @@ static void NtfRender() {
                     l->Release();
                 }
             }
+            }  // conteúdo
+        } else if (b.kind == 6) {
+            // "Mostrar menos": volta para a pilha.
+            DrawLiquidGlass(rt, br, r, (r.bottom - r.top) / 2, s, false, hot, g_ntf.glass.ok, true);
+            std::wstring t = std::wstring(L"\xE70E  ") + T(L"Mostrar menos");
+            IDWriteTextLayout* l = nullptr;
+            if (SUCCEEDED(g_dwrite->CreateTextLayout(t.c_str(), (UINT32)t.size(), g_ntf.fSmall, r.right - r.left, r.bottom - r.top, &l))) {
+                l->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                l->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                DWRITE_TEXT_RANGE glyph = {0, 1};
+                l->SetFontFamilyName(g_iconFont.c_str(), glyph);
+                l->SetFontSize(10 * s, glyph);
+                br->SetColor(fg);
+                rt->DrawTextLayout(D2D1::Point2F(r.left, r.top), l, br);
+                l->Release();
+            }
         } else if (b.kind == 2) {
             // Chip "+N notificações" / "Mostrar menos".
             const NtfGroup& g = g_ntf.groups[b.group];
@@ -21668,14 +22608,20 @@ static int NtfHit(float x, float y) {
     if (in(g_ntf.winBtn)) return -3;
     if (!in(g_ntf.view)) return -1;
     float cy = y - g_ntf.view.top + g_ntf.scroll;
-    // Chips por cima dos cartões.
-    for (int pass = 0; pass < 2; pass++)
+    // Chips por cima dos cartões; no monte da borda, o que está mais na frente.
+    for (int pass = 0; pass < 2; pass++) {
+        int best = -1;
         for (size_t i = 0; i < g_ntf.blocks.size(); i++) {
             const NtfBlock& b = g_ntf.blocks[i];
             if ((pass == 0) != (b.kind == 2)) continue;
-            if (b.kind == 3 || b.kind == 5) continue;
-            if (x >= b.r.left && x < b.r.right && cy >= b.r.top && cy < b.r.bottom) return (int)i;
+            if (b.kind == 3 || b.kind == 5 || b.alpha < 0.5f) continue;
+            if (x >= b.r.left && x < b.r.right && cy >= b.r.top && cy < b.r.bottom &&
+                (best < 0 || b.pileDepth < g_ntf.blocks[best].pileDepth ||
+                 (b.pileDepth == g_ntf.blocks[best].pileDepth && b.depth < g_ntf.blocks[best].depth)))
+                best = (int)i;
         }
+        if (best >= 0) return best;
+    }
     return -1;
 }
 
@@ -21695,8 +22641,25 @@ static void NtfClose() {
 }
 
 // Nova notificação com o painel aberto: refaz a lista (o tamanho da janela fica).
+static bool g_ntfHoldRender = false;  // quem chamou desenha depois (com a animação)
+static bool NtfClearing() { return g_ntf.clearTick != 0; }
+// Fim do "Limpar": apaga as notificações que estavam no painel no clique. Uma que
+// chegou durante a cascata fica (e uma mensagem nova numa conversa que estava lá
+// virou um cartão novo, com outro id).
+static void NtfClearDone() {
+    g_ntf.clearTick = 0;
+    const std::vector<ULONGLONG>& ids = g_ntf.clearIds;
+    g_islHist.erase(std::remove_if(g_islHist.begin(), g_islHist.end(),
+                                   [&](const IslandHist& h) { return std::find(ids.begin(), ids.end(), h.id) != ids.end(); }),
+                    g_islHist.end());
+    g_ntf.clearIds.clear();
+    g_ntf.stackRot = 0;
+    g_islUnread = std::min<int>(g_islUnread, (int)g_islHist.size());
+    g_ntf.expanded.clear();
+}
 static void NtfRefresh() {
     if (!g_ntf.hwnd || g_ntf.closing) return;
+    if (g_ntf.clearTick) return;  // (a cascata continua com os blocos do clique; o fim monta o painel)
     NtfBuildGroups();
     NtfLayout();
     // O painel não passa do tamanho da janela criada.
@@ -21707,7 +22670,7 @@ static void NtfRefresh() {
     }
     NtfGlassShapes();
     g_islUnread = 0;
-    NtfRender();
+    if (!g_ntfHoldRender) NtfRender();
 }
 
 // A notificação (índice em g_islHist) sob o ponto y de um cartão ou aviso.
@@ -21772,20 +22735,72 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             } else if (wp == 3) {
                 NtfRender();
                 if (GetTickCount64() - g_ntf.openTick > 420) KillTimer(hwnd, 3);
+            } else if (wp == 4) {
+                // Pilha ↔ lista.
+                bool done = NtfApplyStack();
+                NtfGlassShapes();
+                NtfRender();
+                if (done) KillTimer(hwnd, 4);
+            } else if (wp == 6) {
+                // "Limpar": a cascata acabou, apaga de verdade.
+                ULONGLONG ms = GetTickCount64() - g_ntf.clearTick;
+                int last = 0;
+                for (const NtfBlock& cb : g_ntf.blocks) last = std::max(last, std::min(cb.clearOrder, 8));
+                if (ms < (ULONGLONG)(45 * last + 320)) {
+                    NtfRender();
+                    return 0;
+                }
+                KillTimer(hwnd, 6);
+                NtfClearDone();
+                NtfRefresh();
+                RedrawAll();
+            } else if (wp == 5) {
+                // Rolagem suave: chega no alvo devagar, e os montes das bordas giram junto.
+                float d = g_ntf.scrollTarget - g_ntf.scroll;
+                bool end = std::fabs(d) < 0.5f;
+                g_ntf.scroll = end ? g_ntf.scrollTarget : g_ntf.scroll + d * 0.22f;
+                NtfApplyStack();
+                NtfGlassShapes();
+                NtfRender();
+                if (end) KillTimer(hwnd, 5);
             }
             return 0;
         case WM_MOUSEWHEEL: {
-            float maxS = std::max(0.0f, g_ntf.contentH - (g_ntf.view.bottom - g_ntf.view.top));
-            g_ntf.scroll = std::clamp(g_ntf.scroll - GET_WHEEL_DELTA_WPARAM(wp) / 120.0f * 60 * g_ntf.s, 0.0f, maxS);
-            NtfGlassShapes();  // em cartões soltos, o desfoque acompanha cada cartão
-            NtfRender();
+            if (g_ntf.stackable && !g_ntf.stackOpen) {
+                // A pilha fechada gira: para baixo, a próxima notificação vem para a
+                // frente. Um cartão por "dente" (WHEEL_DELTA): touchpads mandam vários
+                // passos pequenos por gesto.
+                g_ntf.wheelAcc += GET_WHEEL_DELTA_WPARAM(wp);
+                while (std::abs(g_ntf.wheelAcc) >= WHEEL_DELTA) {
+                    int dir = g_ntf.wheelAcc < 0 ? 1 : -1;
+                    g_ntf.wheelAcc += dir * WHEEL_DELTA;
+                    NtfStackRotate(dir);
+                }
+                return 0;
+            }
+            g_ntf.scrollTarget = std::clamp(g_ntf.scrollTarget - GET_WHEEL_DELTA_WPARAM(wp) / 120.0f * 90 * g_ntf.s, 0.0f,
+                                            NtfMaxScroll());
+            SetTimer(hwnd, 5, 10, nullptr);
             return 0;
         }
         case WM_LBUTTONDOWN: {
             float x = (float)LP_X(lp), y = (float)LP_Y(lp);
             int h = NtfHit(x, y);
             NtfSwipeReset();
-            if (h >= 0 && h < (int)g_ntf.blocks.size() && (g_ntf.blocks[h].kind == 1 || g_ntf.blocks[h].kind == 4)) {
+            bool stacked = g_ntf.stackable && (!g_ntf.stackOpen || g_ntf.stackTick);
+            // Arrastar na vertical rola (decidido no movimento).
+            g_ntf.dragScroll = false;
+            g_ntf.dragY0 = y;
+            g_ntf.dragScroll0 = g_ntf.scroll;
+            if (!stacked && NtfMaxScroll() > 0) {
+                g_ntf.swipeX0 = x;
+                SetCapture(hwnd);
+            }
+            if (h >= 0 && h < (int)g_ntf.blocks.size() && (g_ntf.blocks[h].kind == 1 || g_ntf.blocks[h].kind == 4) &&
+                !(stacked && g_ntf.blocks[h].kind == 1 &&
+                  (g_ntf.blocks[h].depth != 0 || g_ntf.stackTick || g_ntf.rotTick)) &&
+                g_ntf.blocks[h].pileDepth < 0.3f) {
+                // (Na pilha fechada, só o cartão da frente se arrasta para dispensar.)
                 g_ntf.swipeBlock = h;
                 g_ntf.swipeItem = NtfItemAt(g_ntf.blocks[h], y);
                 if (g_ntf.swipeItem >= 0 && g_ntf.swipeItem < (int)g_islHist.size()) g_ntf.swipeId = g_islHist[g_ntf.swipeItem].id;
@@ -21795,12 +22810,26 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         }
         case WM_CAPTURECHANGED:
+            g_ntf.dragScroll = false;
             if (g_ntf.swiping) {
                 NtfSwipeReset();
                 NtfRender();
             }
             return 0;
         case WM_MOUSEMOVE: {
+            if ((wp & MK_LBUTTON) && GetCapture() == hwnd && !g_ntf.swiping) {
+                float dy = (float)LP_Y(lp) - g_ntf.dragY0, dx0 = (float)LP_X(lp) - g_ntf.swipeX0;
+                if (!g_ntf.dragScroll && !(g_ntf.stackable && !g_ntf.stackOpen) && NtfMaxScroll() > 0 &&
+                    std::fabs(dy) > 8 * g_ntf.s && std::fabs(dy) > std::fabs(dx0))
+                    g_ntf.dragScroll = true;
+                if (g_ntf.dragScroll) {
+                    g_ntf.scroll = g_ntf.scrollTarget = std::clamp(g_ntf.dragScroll0 - dy, 0.0f, NtfMaxScroll());
+                    NtfApplyStack();
+                    NtfGlassShapes();
+                    NtfRender();
+                    return 0;
+                }
+            }
             if (g_ntf.swipeBlock >= 0 && (wp & MK_LBUTTON)) {
                 float dx = (float)LP_X(lp) - g_ntf.swipeX0;
                 if (!g_ntf.swiping && std::fabs(dx) > 8 * g_ntf.s) g_ntf.swiping = true;
@@ -21836,6 +22865,14 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_LBUTTONUP: {
             float x = (float)LP_X(lp), y = (float)LP_Y(lp);
+            if (g_ntf.dragScroll) {
+                // Foi uma rolagem, não um clique.
+                g_ntf.dragScroll = false;
+                NtfSwipeReset();
+                if (GetCapture() == hwnd) ReleaseCapture();
+                return 0;
+            }
+            if (GetCapture() == hwnd && g_ntf.swipeBlock < 0) ReleaseCapture();
             if (g_ntf.swipeBlock >= 0) {
                 bool swiped = g_ntf.swiping;
                 int bi = g_ntf.swipeBlock, item = -1;
@@ -21850,9 +22887,45 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     // Passou de um terço da largura: apaga só essa notificação; senão volta.
                     float w = bi < (int)g_ntf.blocks.size() ? g_ntf.blocks[bi].r.right - g_ntf.blocks[bi].r.left : 300 * g_ntf.s;
                     if (std::fabs(dx) > w * 0.33f && item >= 0 && item < (int)g_islHist.size()) {
+                        // Na pilha fechada, o próximo sobe para a frente com a mola
+                        // (de onde estava, atrás); o dispensado sai.
+                        bool stackedDel = g_ntf.stackable && !g_ntf.stackOpen;
+                        std::map<std::wstring, NtfBlock> before;
+                        if (stackedDel)
+                            for (const NtfBlock& ob : g_ntf.blocks)
+                                if ((ob.kind == 1 || ob.kind == 2) && ob.group >= 0 && ob.group < (int)g_ntf.groups.size())
+                                    before[g_ntf.groups[ob.group].app + (ob.kind == 2 ? L"\x1" : L"")] = ob;
+                        float hBefore = g_ntf.contentH;
                         g_islHist.erase(g_islHist.begin() + item);
                         g_islUnread = std::min<int>(g_islUnread, (int)g_islHist.size());
+                        g_ntfHoldRender = stackedDel;
                         NtfRefresh();
+                        g_ntfHoldRender = false;
+                        if (stackedDel && !(g_ntf.stackable && !g_ntf.stackOpen)) NtfRender();
+                        if (stackedDel && g_ntf.stackable && !g_ntf.stackOpen) {
+                            for (NtfBlock& nb : g_ntf.blocks) {
+                                nb.rsFrom = nb.rs;
+                                nb.alphaFrom = 0;
+                                nb.contentFrom = 0;
+                                if ((nb.kind == 1 || nb.kind == 2) && nb.group >= 0 && nb.group < (int)g_ntf.groups.size()) {
+                                    auto it = before.find(g_ntf.groups[nb.group].app + (nb.kind == 2 ? L"\x1" : L""));
+                                    if (it != before.end()) {
+                                        nb.rsFrom = it->second.r;
+                                        nb.alphaFrom = it->second.alpha;
+                                        nb.contentFrom = it->second.contentA;
+                                    }
+                                } else {
+                                    nb.alphaFrom = nb.alpha;
+                                    nb.contentFrom = nb.contentA;
+                                }
+                            }
+                            g_ntf.stackHFrom = hBefore;
+                            g_ntf.rotTick = GetTickCount64();
+                            NtfApplyStack();
+                            NtfGlassShapes();
+                            NtfRender();
+                            SetTimer(hwnd, 4, 10, nullptr);
+                        }
                         RedrawAll();
                     } else {
                         NtfRender();
@@ -21861,12 +22934,50 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 }
             }
             int h = NtfHit(x, y);
+            bool stackedNow = g_ntf.stackable && !g_ntf.stackOpen;
+            if (h >= 0 && h < (int)g_ntf.blocks.size() && g_ntf.blocks[h].kind == 6) {
+                NtfStackToggle(false);  // Mostrar menos
+                return 0;
+            }
+            if (h >= 0 && h < (int)g_ntf.blocks.size() && g_ntf.blocks[h].pileDepth > 0.3f) {
+                // Um cartão no monte da borda: rola até ele.
+                const NtfBlock& pb = g_ntf.blocks[h];
+                float vh = g_ntf.view.bottom - g_ntf.view.top;
+                float want = pb.rl.top - g_ntf.scroll < 0 ? pb.rl.top - 8 * g_ntf.s : pb.rl.bottom - vh + NtfPileGap();
+                g_ntf.scrollTarget = std::clamp(want, 0.0f, NtfMaxScroll());
+                SetTimer(hwnd, 5, 10, nullptr);
+                return 0;
+            }
+            if (stackedNow && h >= 0 && h < (int)g_ntf.blocks.size() &&
+                (g_ntf.blocks[h].kind == 1 || g_ntf.blocks[h].kind == 2) && !NtfOnReply(h, x, y)) {
+                NtfStackToggle(true);  // um clique na pilha abre a lista
+                return 0;
+            }
             if (h == -2) {
-                g_islHist.clear();
-                g_islUnread = 0;
-                g_ntf.expanded.clear();
-                NtfRefresh();
-                RedrawAll();
+                // Limpar: primeiro a animação (os cartões saem para a direita),
+                // depois apaga (no fim do timer 6).
+                if (g_ntf.clearTick) return 0;
+                std::vector<size_t> byTop;
+                for (size_t i = 0; i < g_ntf.blocks.size(); i++) byTop.push_back(i);
+                std::stable_sort(byTop.begin(), byTop.end(),
+                                 [](size_t a, size_t c) { return g_ntf.blocks[a].r.top < g_ntf.blocks[c].r.top; });
+                for (size_t k = 0; k < byTop.size(); k++) g_ntf.blocks[byTop[k]].clearOrder = (int)k;
+                bool any = false;
+                for (const NtfBlock& cb : g_ntf.blocks) any |= cb.kind == 1 || cb.kind == 4;
+                if (!any || g_settings.openAnim == 0) {
+                    g_islHist.clear();
+                    g_islUnread = 0;
+                    g_ntf.expanded.clear();
+                    NtfRefresh();
+                    RedrawAll();
+                    return 0;
+                }
+                g_ntf.clearIds.clear();
+                for (const IslandHist& ih : g_islHist) g_ntf.clearIds.push_back(ih.id);
+                g_ntf.clearTick = GetTickCount64();
+                g_ntf.hover = -1;
+                NtfGlassShapes();
+                SetTimer(hwnd, 6, 10, nullptr);
             } else if (h == -3) {
                 NtfClose();
                 SendKeys(M_WIN, 'N');
@@ -21901,6 +23012,12 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_DESTROY:
             KillTimer(hwnd, 2);
             KillTimer(hwnd, 3);
+            KillTimer(hwnd, 4);
+            KillTimer(hwnd, 5);
+            KillTimer(hwnd, 6);
+            if (g_ntf.clearTick) NtfClearDone();  // fechou no meio da animação: apaga do mesmo jeito
+            g_ntf.stackTick = 0;
+            g_ntf.dragScroll = false;
             GlassLayerDestroy(g_ntf.glass);
             NtfReleaseGraphics();
             for (IDWriteTextFormat** f : {&g_ntf.fHead, &g_ntf.fApp, &g_ntf.fTitle, &g_ntf.fBody, &g_ntf.fSmall, &g_ntf.fIcon, &g_ntf.fAvatar})
@@ -21924,12 +23041,15 @@ static LRESULT CALLBACK NtfWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 static void NtfToggle(Bar* b, int idx) {
     if (g_ntf.hwnd && g_ntf.closing) DestroyWindow(g_ntf.hwnd);
     if (g_ntf.hwnd) {
-        bool same = g_ntf.bar == b;
-        NtfClose();
-        if (same) {
+        if (g_ntf.bar == b) {
+            NtfClose();
             FocusActive();
             return;
         }
+        // Clique no sino de outro monitor: o painel aberto fecha já (sem a
+        // animação), porque o novo usa o mesmo g_ntf (janela, vidro).
+        g_captureNeedsFlush = true;
+        DestroyWindow(g_ntf.hwnd);
     }
     g_ntf.bar = b;
     g_ntf.barIdx = idx;
@@ -21937,11 +23057,19 @@ static void NtfToggle(Bar* b, int idx) {
     g_ntf.M = std::round(24 * g_ntf.s);
     g_ntf.scroll = 0;
     g_ntf.hover = -1;
+    g_ntf.stackOpen = false;  // abre na pilha
+    g_ntf.stackable = false;
+    g_ntf.stackTick = 0;
+    g_ntf.scrollTarget = 0;
+    g_ntf.stackRot = 0;
+    g_ntf.rotTick = 0;
+    g_ntf.H = 0;
     NtfBuildGroups();
     NtfLayout();
     float s = g_ntf.s;
     g_ntf.W = (int)std::ceil(g_ntf.panel.right + g_ntf.M);
-    g_ntf.H = (int)std::ceil(g_ntf.panel.bottom + g_ntf.M);
+    // A janela já tem a altura da lista aberta (a pilha cresce dentro dela).
+    g_ntf.H = (int)std::ceil(std::max(g_ntf.panel.bottom, g_ntf.listPanelBottom) + g_ntf.M);
     // Folga para crescer se chegar notificação com o painel aberto.
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
@@ -22024,6 +23152,212 @@ static void IcsImport() {
     else if (added > 1) IslandShow(0xE787, 0xFF453A, TF(L"%s calendários importados", {std::to_wstring(added)}), L"", L"", false, true);
 }
 
+// ---- Exportar e importar os ajustes (issue #6) ----
+// Os ajustes da janela de Ajustes ficam no armazenamento do mod (ui.*, e alguns
+// sem o prefixo). O arquivo é texto UTF-8, uma linha "chave=valor" por ajuste;
+// a importação só aceita estas chaves.
+static std::vector<std::wstring> CfgKeys() {
+    std::vector<std::wstring> keys;
+    for (const UiDefault& d : kUiDefaults) keys.push_back(std::wstring(L"ui.") + d.key);
+    static const PCWSTR kUiExtra[] = {L"barStyleMon", L"textColorMon", L"fontFamily", L"barMonitor", L"barStyle",
+                                      L"selectionBar", L"selectionBar2", L"panelThemeMode", L"panelThemeStyle",
+                                      L"tintColor", L"tintLevel", L"tintReach", L"theme", L"language"};
+    for (PCWSTR k : kUiExtra) {
+        std::wstring full = std::wstring(L"ui.") + k;
+        if (std::find(keys.begin(), keys.end(), full) == keys.end()) keys.push_back(full);
+    }
+    // (As mesmas da restauração em LoadSettings, mais o "ao vivo", o tema do vidro,
+    // os blocos da Central e o lugar da previsão.)
+    static const PCWSTR kRaw[] = {L"glass",      L"settingsLook", L"barOrder",    L"weatherGlass", L"ccLayout",    L"glassLive",
+                                  L"glassTheme", L"weather",      L"weatherAnim", L"weatherOpts",  L"weatherStyle"};
+    for (PCWSTR k : kRaw) keys.push_back(k);
+    return keys;
+}
+static std::wstring CfgEscape(const std::wstring& v) {
+    std::wstring o;
+    for (wchar_t c : v) {
+        if (c == L'\\') o += L"\\\\";
+        else if (c == L'\n') o += L"\\n";
+        else if (c == L'\r') o += L"\\r";
+        else if (c < 0x20) {
+            wchar_t h[8];
+            swprintf(h, ARRAYSIZE(h), L"\\x%02X", (unsigned)c);
+            o += h;
+        } else o += c;
+    }
+    return o;
+}
+static std::wstring CfgUnescape(const std::wstring& v) {
+    std::wstring o;
+    for (size_t i = 0; i < v.size(); i++) {
+        if (v[i] != L'\\' || i + 1 >= v.size()) {
+            o += v[i];
+            continue;
+        }
+        wchar_t n = v[++i];
+        if (n == L'n') o += L'\n';
+        else if (n == L'r') o += L'\r';
+        else if (n == L'x' && i + 2 < v.size()) {
+            o += (wchar_t)wcstoul(v.substr(i + 1, 2).c_str(), nullptr, 16);
+            i += 2;
+        } else o += n;
+    }
+    return o;
+}
+static std::wstring CfgPickFileOnce(bool save) {
+    IFileDialog* dlg = nullptr;
+    if (FAILED(CoCreateInstance(save ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+                                save ? IID_IFileSaveDialog : IID_IFileOpenDialog, (void**)&dlg)))
+        return L"";
+    COMDLG_FILTERSPEC spec[] = {{T(L"Ajustes da Finder Bar (.txt)"), L"*.txt"}};
+    dlg->SetFileTypes(1, spec);
+    dlg->SetDefaultExtension(L"txt");
+    if (save) dlg->SetFileName(L"Mac OS 27 Finder Bar.txt");
+    dlg->SetTitle(T(save ? L"Exportar os ajustes" : L"Importar os ajustes"));
+    DWORD opt = 0;
+    dlg->GetOptions(&opt);
+    // (Substituir um arquivo que já existe é perguntado no diálogo de vidro, em
+    // CfgPickFile, e não na caixa do Windows.)
+    dlg->SetOptions((opt & ~FOS_OVERWRITEPROMPT) | FOS_FORCEFILESYSTEM | (save ? 0 : FOS_FILEMUSTEXIST));
+    std::wstring path;
+    if (SUCCEEDED(dlg->Show(g_bs.hwnd))) {
+        IShellItem* it = nullptr;
+        if (SUCCEEDED(dlg->GetResult(&it)) && it) {
+            PWSTR p = nullptr;
+            if (SUCCEEDED(it->GetDisplayName(SIGDN_FILESYSPATH, &p)) && p) {
+                path = p;
+                CoTaskMemFree(p);
+            }
+            it->Release();
+        }
+    }
+    dlg->Release();
+    return path;
+}
+static std::wstring CfgPickFile(bool save) {
+    std::wstring path;
+    for (;;) {
+        path = CfgPickFileOnce(save);
+        if (!save || path.empty() || GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) break;
+        const wchar_t* name = wcsrchr(path.c_str(), L'\\');
+        name = name ? name + 1 : path.c_str();
+        if (GlassConfirm(0xE74E, L"Este arquivo já existe", TF(L"Substituir “%s” pelos ajustes de agora?", {name}).c_str(),
+                         L"Substituir"))
+            break;
+        // Não: o Explorador abre de novo, para escolher outro nome (a não ser que o
+        // mod esteja fechando: o diálogo também devolve "não" nesse caso).
+        if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+            path.clear();
+            break;
+        }
+    }
+    if (g_bs.hwnd) SetForegroundWindow(g_bs.hwnd);
+    return path;
+}
+static void CfgExport() {
+    std::wstring path = CfgPickFile(true);
+    if (path.empty()) return;
+    std::wstring text = L"# Mac OS 27 Finder Bar\r\n";
+    int n = 0;
+    for (const std::wstring& k : CfgKeys()) {
+        std::vector<wchar_t> buf(8192, 0);
+        Wh_GetStringValue(k.c_str(), buf.data(), (size_t)buf.size());
+        if (!buf[0]) continue;
+        text += k + L"=" + CfgEscape(buf.data()) + L"\r\n";
+        n++;
+    }
+    int len = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0, nullptr, nullptr);
+    std::string utf8(len, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), utf8.data(), len, nullptr, nullptr);
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    DWORD wrote = 0;
+    bool ok = f != INVALID_HANDLE_VALUE && WriteFile(f, utf8.data(), (DWORD)utf8.size(), &wrote, nullptr) &&
+              wrote == utf8.size();
+    if (f != INVALID_HANDLE_VALUE) CloseHandle(f);
+    if (ok) IslandShow(0xE74E, 0x30D158, L"Ajustes exportados", TF(L"%s ajustes salvos", {std::to_wstring(n)}), L"", false, true);
+    else IslandShow(0xE74E, 0xFF453A, L"Não foi possível exportar", L"", L"", false, true);
+}
+static void CfgImport() {
+    std::wstring path = CfgPickFile(false);
+    if (path.empty()) return;
+    std::string data;
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (f != INVALID_HANDLE_VALUE) {
+        LARGE_INTEGER sz{};
+        if (GetFileSizeEx(f, &sz) && sz.QuadPart > 0 && sz.QuadPart < 1024 * 1024) {
+            data.resize((size_t)sz.QuadPart);
+            DWORD got = 0;
+            if (!ReadFile(f, data.data(), (DWORD)data.size(), &got, nullptr)) got = 0;
+            data.resize(got);
+        }
+        CloseHandle(f);
+    }
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, data.data(), (int)data.size(), nullptr, 0);
+    std::wstring text(wlen, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, data.data(), (int)data.size(), text.data(), wlen);
+    if (text.rfind(L"# Mac OS 27 Finder Bar", 0) != 0 && text.rfind(L"\xFEFF# Mac OS 27 Finder Bar", 0) != 0) {
+        IslandShow(0xE74E, 0xFF453A, L"Não foi possível importar", L"O arquivo não é uma cópia dos ajustes", L"", false, true);
+        return;
+    }
+    std::vector<std::wstring> keys = CfgKeys();
+    // Substitui: os ajustes que não estão no arquivo (estavam no padrão quando
+    // ele foi exportado) voltam ao padrão, como na restauração.
+    FlushSaves();  // (antes: uma gravação adiada escreveria por cima do arquivo)
+    for (const std::wstring& k : keys) Wh_SetStringValue(k.c_str(), L"");
+    g_cfgRecache = true;
+    int n = 0;
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t end = text.find(L'\n', pos);
+        if (end == std::wstring::npos) end = text.size();
+        std::wstring line = text.substr(pos, end - pos);
+        pos = end + 1;
+        if (!line.empty() && line.back() == L'\r') line.pop_back();
+        size_t eq = line.find(L'=');
+        if (line.empty() || line[0] == L'#' || eq == std::wstring::npos) continue;
+        std::wstring k = line.substr(0, eq);
+        if (std::find(keys.begin(), keys.end(), k) == keys.end()) continue;  // só as chaves conhecidas
+        Wh_SetStringValue(k.c_str(), CfgUnescape(line.substr(eq + 1)).c_str());
+        n++;
+    }
+    IslandShow(0xE74E, 0x30D158, L"Ajustes importados", TF(L"%s ajustes aplicados", {std::to_wstring(n)}), L"", false, true);
+    RequestReload(1);  // recarrega tudo com os ajustes novos
+}
+
+// Lê de novo o que fica guardado em memória depois da primeira leitura: sem isso,
+// a barra continuava com a ordem dos ícones, o vidro desta janela e o lugar da
+// previsão de antes, até reiniciar o mod (e uma mudança depois gravava o valor
+// antigo por cima do importado).
+static void CfgReloadCached() {
+    g_barOrder.clear();
+    int st = g_bsStyle, tr = g_bsTransp;
+    BsLoadLook();
+    if (g_bs.hwnd && (st != g_bsStyle || tr != g_bsTransp)) {
+        g_bsReopen = true;  // o vidro é criado com a janela: reabre no mesmo lugar
+        BsReopenIfNeeded();
+    }
+    // A previsão: volta ao padrão e lê o que estiver guardado (WxLoad só troca o que acha).
+    bool had = g_wx.hasPlace;
+    double lat = g_wx.lat, lon = g_wx.lon;
+    int prov = g_wx.provider, iv = g_wx.interval;
+    WxState fresh;
+    fresh.data = g_wx.data;
+    fresh.fetched = g_wx.fetched;
+    fresh.loading = g_wx.loading;
+    fresh.failed = g_wx.failed;
+    g_wx = fresh;
+    g_wxGlassT = 55;
+    WxLoad();
+    if (had != g_wx.hasPlace || lat != g_wx.lat || lon != g_wx.lon || prov != g_wx.provider) {
+        g_wx.data = WxData{};
+        g_wx.fetched = 0;
+        g_wx.failed = false;
+        WxRefresh();
+    }
+    if (iv != g_wx.interval && g_owner) SetTimer(g_owner, TIMER_WEATHER, WxIntervalMs(), nullptr);
+    if (g_wxw.hwnd) DestroyWindow(g_wxw.hwnd);
+}
+
 static void BsAction(int val) {
     switch (val) {
         case BV_SIZERESET:
@@ -22053,6 +23387,8 @@ static void BsAction(int val) {
             break;
         }
         case BV_ICSADD: IcsImport(); break;
+        case BV_CFGEXPORT: CfgExport(); break;
+        case BV_CFGIMPORT: CfgImport(); break;
         case BV_ICSCLEAR:
             IcsImportedSave({});
             IslandShow(0xE787, 0x8E8E93, L"Calendários importados removidos", L"", L"", false, true);
@@ -22061,6 +23397,30 @@ static void BsAction(int val) {
             IslandShow(0xEA8F, 0x0A84FF,
                        L"Teste da pílula", L"Assim aparecem os avisos", L"", false, true);
             break;
+        case BV_NTFTEST: {
+            // Uma notificação de teste por toque, alternando entre apps de mentira
+            // (para ver a pilha, os grupos e a rolagem do painel).
+            static int n = 0;
+            struct Fake { PCWSTR app, who, text; DWORD color; };
+            static const Fake kFake[] = {
+                {L"Mensagens", L"Ana", L"Chegou! Te espero na entrada.", 0x30D158},
+                {L"E-mail", L"Equipe", L"Resumo da semana: 3 tarefas concluídas.", 0x0A84FF},
+                {L"Agenda", L"Reunião às 15:00", L"Sala 2, com a equipe de design.", 0xFF453A},
+                {L"Fotos", L"Novas memórias", L"Veja as fotos de uma viagem.", 0xFF9F0A},
+                {L"Música", L"Tocando agora", L"Uma playlist nova foi criada para você.", 0xBF5AF2},
+            };
+            const Fake& f = kFake[n % ARRAYSIZE(kFake)];
+            n++;
+            IslandNote note;
+            note.glyph = 0xEA8F;
+            note.color = f.color;
+            note.isNotif = true;
+            note.app = T(f.app);
+            note.title = T(f.who);
+            note.body = TF(L"%s (teste %s)", {std::wstring(T(f.text)), std::to_wstring(n)});
+            IslandPush(note, false);  // com as pílulas desligadas, vai só para o botão
+            break;
+        }
         case BV_ISLCLEAR:
             g_islHist.clear();
             g_islUnread = 0;
@@ -22284,6 +23644,9 @@ static void OpenItemMenu(Bar* b, int idx) {
 
     b->open = -1;
     InvalidateRect(b->hwnd, nullptr, FALSE);
+    // Deslizando para outro menu da barra: o app não volta para a frente entre um
+    // menu e o outro (isso fazia a janela dele piscar a cada troca; issue #12).
+    const bool switching = !cmd && g_gmSwitchTo >= 0;
 
     if (helpPicked) {
         // Resultado da busca: executa no menu de onde ele veio.
@@ -22310,7 +23673,7 @@ static void OpenItemMenu(Bar* b, int idx) {
             DWORD_PTR r;
             SendMessageTimeoutW(target, WM_UNINITMENUPOPUP, (WPARAM)nativeSub, 0, SMTO_ABORTIFHUNG, 200, &r);
         }
-        FocusActive();
+        if (!switching) FocusActive();
         if (cmd && target && IsWindow(target)) PostMessageW(target, WM_COMMAND, MAKEWPARAM(cmd, 0), 0);
         return;
     }
@@ -22357,7 +23720,7 @@ static void OpenItemMenu(Bar* b, int idx) {
         FlyToggle(b, idx, cmd == ID_SLIDER_VOL ? FLY_VOL : FLY_BRIGHT);
         return;
     }
-    bool keepFocus = it.kind == K_LOGO && (cmd == ID_SLEEP || cmd == ID_HIBERNATE || cmd == ID_LOCK);
+    bool keepFocus = switching || (it.kind == K_LOGO && (cmd == ID_SLEEP || cmd == ID_HIBERNATE || cmd == ID_LOCK));
     if (!keepFocus) FocusActive();
     RunCommand(hasTm ? &tm : nullptr, cmd);
 }
@@ -22674,6 +24037,7 @@ static void BarSetupStyle(Bar* b) {
 
 // ---- Ícones animados da barra (volume, Wi-Fi, brilho) ----
 #define BAR_ANIM_TIMER 78
+#define BAR_SLIDE_TIMER 1489  // a barra deslizando ao aparecer ou sumir (não pode repetir TIMER_TIP, 79)
 
 
 // Corre `v` atrás de `target` (suave); diz se ainda está se mexendo.
@@ -22733,8 +24097,8 @@ static bool BarAnimStep(Bar* b) {
     return moving;
 }
 
-// Ordem dos ícones da direita (da esquerda para a direita), guardada pelo mod.
-static std::vector<int> g_barOrder;
+// Ordem dos ícones da direita (da esquerda para a direita), guardada pelo mod
+// (g_barOrder, declarada junto de LoadSettings).
 static const std::vector<int>& BarOrder() {
     static const int kDefault[] = {K_WEATHER, K_NOW, K_TRAY, K_DISK, K_DISPLAY, K_KBD, K_BATTERY, K_NET,
                                    K_BT,      K_VOL, K_FOCUS, K_SEARCH, K_PRIV, K_NOTIF, K_CC};
@@ -23201,9 +24565,7 @@ static void Render(Bar* b) {
         D2D1_COLOR_F ac;
         bool acDark = false;
         if (SelColor(&ac, &acDark)) {
-            ac.a = i == b->open || i == b->flash ? 0.95f : 0.80f;
-            b->brush->SetColor(ac);
-            b->rt->FillRoundedRectangle(pill, b->brush);
+            SelFill(b->rt, b->brush, pill, ac, i == b->open || i == b->flash ? 0.95f : 0.80f);
             selItem[i] = acDark ? 0 : 1;  // amarelo: mantém o texto normal
         } else {
             b->brush->SetColor(i == b->open || i == b->flash ? hlOpen : hl);
@@ -23315,13 +24677,15 @@ static void Render(Bar* b) {
                 b->brush->SetColor(fg);
                 continue;
             }
-            if (p.spec.kind == K_NOTIF && g_islUnread > 0 && !shadowPass) {
-                // Ponto vermelho: avisos que ainda não foram vistos.
-                float is = s * g_settings.iconScale;
-                float cx = (p.l + p.r) / 2 + 6 * is, cy = h / 2 - 6 * is;
-                b->brush->SetColor(D2D1::ColorF(1.0f, 0.23f, 0.19f, 1));
-                b->rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 2.8f * is, 2.8f * is), b->brush);
+            if (p.spec.kind == K_NOTIF && g_islUnread > 0) {
+                // Notificação não vista: o próprio sino fica vermelho, como o
+                // microfone e a câmera em uso (a sombra não; sobre a pílula de
+                // seleção fica o branco dela, que o vermelho sumiria nela).
+                bool onSel = placedIdx > 0 && placedIdx - 1 < selItem.size() && selItem[placedIdx - 1];
+                b->brush->SetColor(shadowPass || onSel ? fg : D2D1::ColorF(1.0f, 0.27f, 0.23f, 1));
+                BarGlyph(b, (wchar_t)0xEA8F, std::round((p.l + p.r) / 2), h / 2, s);
                 b->brush->SetColor(fg);
+                continue;
             }
             if (p.spec.kind == K_MORE) {
                 // Seta: ‹ mostra os ícones escondidos, › recolhe.
@@ -23479,13 +24843,25 @@ static void SetAppBarPos(Bar* b, bool onlyIfChanged) {
     abd.uEdge = ABE_TOP;
     abd.rc = {b->monRect.left, b->monRect.top, b->monRect.right, b->monRect.top + b->heightPx};
     SHAppBarMessage(ABM_QUERYPOS, &abd);
+    // A barra nunca sai do próprio monitor. Fora dele (acima do topo), o Windows
+    // a passa para o monitor vizinho, que pode ter outra escala: chega um
+    // WM_DPICHANGED e as barras se refaziam sem parar.
+    if (abd.rc.top < b->monRect.top || abd.rc.top > b->monRect.bottom - b->heightPx ||
+        abd.rc.left != b->monRect.left || abd.rc.right != b->monRect.right) {
+        Wh_Log(L"Barra %d,%d: o Windows sugeriu a posição %d,%d-%d,%d; fica no topo do monitor", b->monRect.left,
+               b->monRect.top, abd.rc.left, abd.rc.top, abd.rc.right, abd.rc.bottom);
+        abd.rc.left = b->monRect.left;
+        abd.rc.right = b->monRect.right;
+        abd.rc.top = std::clamp(abd.rc.top, b->monRect.top, b->monRect.bottom - b->heightPx);
+    }
     abd.rc.bottom = abd.rc.top + b->heightPx;
     RECT cur;
     if (onlyIfChanged && GetWindowRect(b->hwnd, &cur) && EqualRect(&cur, &abd.rc)) return;
     g_inSetPos = true;
     SHAppBarMessage(ABM_SETPOS, &abd);
+    bool handleHidden = g_settings.autoHide && !b->autoShown;  // escondida pela alça: continua
     SetWindowPos(b->hwnd, HWND_TOPMOST, abd.rc.left, abd.rc.top, abd.rc.right - abd.rc.left,
-                 b->heightPx, SWP_NOACTIVATE | (b->hiddenForFullscreen ? 0 : SWP_SHOWWINDOW));
+                 b->heightPx, SWP_NOACTIVATE | (b->hiddenForFullscreen || handleHidden ? 0 : SWP_SHOWWINDOW));
     g_inSetPos = false;
 }
 
@@ -23510,10 +24886,53 @@ static bool IsShellOverlayProcess(HWND w) {
     return false;
 }
 
+static bool WindowIsFullscreenOn(HWND fg, Bar* b);
+// A janela de cima neste monitor (a primeira de verdade na ordem do Windows).
+struct TopOnMon {
+    HMONITOR mon;
+    HWND found = nullptr;
+};
+static BOOL CALLBACK TopOnMonProc(HWND w, LPARAM lp) {
+    auto* f = reinterpret_cast<TopOnMon*>(lp);
+    if (!IsWindowVisible(w) || IsIconic(w) || IsCloaked(w)) return TRUE;
+    if (GetWindowLongW(w, GWL_EXSTYLE) & (WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)) return TRUE;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(w, &pid);
+    // A barra, os painéis dela e o shell (barra de tarefas); as janelas do
+    // Explorador de Arquivos contam (uma delas na frente do vídeo o cobre).
+    if (IsShellOrSelf(pid) && !ClassIs(w, L"CabinetWClass")) return TRUE;
+    if (MonitorFromWindow(w, MONITOR_DEFAULTTONULL) != f->mon) return TRUE;
+    // Sobreposições do tamanho da tela que não são um app em tela cheia: janelas
+    // em camadas (efeitos do cursor, ilhas, papéis de parede animados) e as de
+    // outros mods do Windhawk (que rodam em windhawk.exe ou windhawk-mod.exe). Um
+    // vídeo ou jogo em tela cheia não é janela em camadas.
+    if (GetWindowLongW(w, GWL_EXSTYLE) & WS_EX_LAYERED) return TRUE;
+    if (_wcsnicmp(BaseName(ExeOfPid(pid)), L"windhawk", 8) == 0) return TRUE;
+    if (IsShellOverlayProcess(w)) return TRUE;
+    f->found = w;
+    return FALSE;
+}
+static HWND g_fsWhy = nullptr;  // a janela que fez a barra se esconder (para o log)
 static bool ForegroundIsFullscreenOn(Bar* b) {
     HWND fg = GetForegroundWindow();
+    g_fsWhy = fg;
     if (!fg || ClassIs(fg, L"Progman") || ClassIs(fg, L"WorkerW")) return false;
-    if (MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != b->monitor) return false;
+    if (MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != b->monitor) {
+        // O app ativo está noutro monitor: vale a janela de cima deste (um vídeo
+        // em tela cheia no segundo monitor enquanto se trabalha no primeiro;
+        // antes a barra continuava por cima dele, issue #1).
+        TopOnMon t{b->monitor};
+        EnumWindows(TopOnMonProc, (LPARAM)&t);
+        g_fsWhy = t.found;
+        return t.found && WindowIsFullscreenOn(t.found, b);
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(fg, &pid);
+    if (IsShellOrSelf(pid)) return false;
+    return WindowIsFullscreenOn(fg, b);
+}
+static bool WindowIsFullscreenOn(HWND fg, Bar* b) {
+    if (!fg || ClassIs(fg, L"Progman") || ClassIs(fg, L"WorkerW")) return false;
     // Não contam: janelas invisíveis ou escondidas pelo DWM, sobreposições
     // (transparentes ao mouse, de ferramenta: Game Bar, NVIDIA, Discord, Steam,
     // gravadores), painéis do Windows e janelas maximizadas com barra de título.
@@ -23588,16 +25007,23 @@ static void BarReleaseSpace(Bar* b, bool release) {
 
 // Tela cheia (e janela maximizada, se pedido): confere a cada segundo (o aviso do
 // Windows nem sempre chega) e, com janelas maximizando ou restaurando, na hora.
+static void BarSlide(Bar* b, bool in);
 static void UpdateFullscreen() {
+    // O tique rápido também confere o mouse no topo (barra escondida por janela
+    // maximizada); liga quando a opção é ligada sem recriar as barras.
+    static bool fastOn = false;
+    bool wantFast = g_settings.autoHide || g_settings.hideWhenMaximized;
+    if (g_owner && wantFast != fastOn) {
+        fastOn = wantFast;
+        if (wantFast) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
+        else KillTimer(g_owner, TIMER_FAST);
+    }
     for (Bar* b : g_bars) {
         bool hide = false, forMax = false;
         // (Com "Ocultar com a alça", só a alça esconde e mostra a barra.)
-        if (g_settings.hideOnFullscreen && !(g_settings.autoHide && g_settings.revealHandle)) {
-            HWND fg = GetForegroundWindow();
-            DWORD pid = 0;
-            if (fg) GetWindowThreadProcessId(fg, &pid);
-            hide = !IsShellOrSelf(pid) && ForegroundIsFullscreenOn(b);
-        }
+        if (g_settings.hideOnFullscreen && !(g_settings.autoHide && g_settings.revealHandle))
+            hide = ForegroundIsFullscreenOn(b);  // (o shell e a própria barra não contam)
+        HWND why = hide ? g_fsWhy : nullptr;
         if (!hide && g_settings.hideWhenMaximized && !g_settings.autoHide && AnyMaximizedOn(b)) hide = forMax = true;
         // Só esconde se continuar em tela cheia na conferência seguinte (uma janela
         // que pisca do tamanho da tela não derruba a barra); volta na hora.
@@ -23610,11 +25036,16 @@ static void UpdateFullscreen() {
             if (now - b->fsSince < 600) hide = false;
             else {
                 wchar_t cls[96] = L"";
-                GetClassNameW(GetForegroundWindow(), cls, ARRAYSIZE(cls));
-                Wh_Log(L"Tela cheia: barra oculta (janela %s)", cls);
+                if (why) GetClassNameW(why, cls, ARRAYSIZE(cls));
+                DWORD wpid = 0;
+                if (why) GetWindowThreadProcessId(why, &wpid);
+                Wh_Log(L"Tela cheia: barra oculta no monitor %d,%d (janela %s de %s, %s)", b->monRect.left, b->monRect.top, cls,
+                       BaseName(ExeOfPid(wpid)), why == GetForegroundWindow() ? L"em primeiro plano" : L"no topo deste monitor");
             }
         }
+        bool wasMaxHidden = b->maxHidden;
         b->maxHidden = hide && forMax;
+        if (!b->maxHidden) b->maxPeek = false;
         if (!b->maxHidden && !g_settings.autoHide && b->autoShown) {
             b->autoShown = false;
             if (b->peekColorOn) {
@@ -23623,15 +25054,27 @@ static void UpdateFullscreen() {
             }
         }
         if (hide != b->hiddenForFullscreen) {
+            Wh_Log(L"Barra %d,%d: %s (%s)", b->monRect.left, b->monRect.top, hide ? L"oculta" : L"volta",
+                   forMax || wasMaxHidden ? L"janela maximizada" : L"tela cheia");
             b->hiddenForFullscreen = hide;
-            ShowWindow(b->hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
-            if (hide && b->shadow) ShowWindow(b->shadow, SW_HIDE);
-            if (!hide) BarSyncShadow(b);
-            if (!hide) SetWindowPos(b->hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            // Com a alça, a barra escondida por ela continua escondida ao sair da
+            // tela cheia (issue #15): só a alça a mostra.
+            bool handleHidden = g_settings.autoHide && !b->autoShown;
+            if ((hide && forMax) || (!hide && wasMaxHidden && !handleHidden)) {
+                // Janela maximizada: a barra desliza (sobe e some; desce de volta e
+                // só então reserva o espaço de novo).
+                b->restoreAfterSlide = !hide;
+                BarSlide(b, !hide);
+            } else {
+                if (hide || !handleHidden) ShowWindow(b->hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
+                if (hide && b->shadow) ShowWindow(b->shadow, SW_HIDE);
+                if (!hide && !handleHidden) BarSyncShadow(b);
+                if (!hide && !handleHidden) SetWindowPos(b->hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
         }
         // Escondida por janela maximizada, a barra devolve o espaço do topo; ao
         // voltar, reserva de novo.
-        BarReleaseSpace(b, hide && forMax);
+        if (!(b->restoreAfterSlide && !hide)) BarReleaseSpace(b, hide && forMax);
         HandleSync(b);
     }
 }
@@ -23837,6 +25280,101 @@ static void HandleRender(Bar* b) {
     DeleteDC(dc);
 }
 // A alça aparece só quando a barra está escondida por um desses dois modos.
+// A barra desliza de cima para baixo ao aparecer, e de volta ao sumir, como no
+// macOS. Sem as animações dos painéis, é na hora.
+static bool g_barSlideMove = false;  // a própria barra está deslizando para fora do topo
+static constexpr float kSlideInMs = 320, kSlideOutMs = 220;
+static void BarReserveSpace(Bar* b);
+// Recorta a barra no próprio monitor enquanto ela desliza: a parte acima do topo
+// não aparece no monitor de cima (quando há um).
+static void BarClip(Bar* b, int hidden) {
+    if (hidden <= 0) {
+        SetWindowRgn(b->hwnd, nullptr, TRUE);
+        return;
+    }
+    int w = b->monRect.right - b->monRect.left;
+    HRGN r = CreateRectRgn(0, std::min(hidden, b->heightPx), w, b->heightPx);
+    if (r && !SetWindowRgn(b->hwnd, r, TRUE)) DeleteObject(r);  // (com sucesso, a janela fica com a região)
+}
+// A barra chegou ao lugar: agora reserva o espaço (as janelas descem), pela alça
+// ou depois de uma janela maximizada; reservar antes a punha no lugar por um
+// quadro e o deslizar recomeçava de cima.
+static void BarSlideDone(Bar* b) {
+    if (b->reserveAfterSlide) BarReserveSpace(b);
+    if (b->restoreAfterSlide) {
+        b->restoreAfterSlide = false;
+        BarReleaseSpace(b, false);
+    }
+}
+static void BarSlideStep(Bar* b) {
+    if (!b->slideTick) {  // (não está deslizando)
+        KillTimer(b->hwnd, BAR_SLIDE_TIMER);
+        return;
+    }
+    float u = std::clamp((float)(GetTickCount64() - b->slideTick) / (b->slideIn ? kSlideInMs : kSlideOutMs), 0.0f, 1.0f);
+    // Entra freando devagar (quártica), sai acelerando (cúbica).
+    float v = 1 - u;
+    float off = b->slideIn ? v * v * v * v : u * u * u;
+    int y = b->monRect.top - (int)std::lround(b->heightPx * off);
+    BarClip(b, b->monRect.top - y);
+    g_barSlideMove = true;
+    SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    g_barSlideMove = false;
+    if (u < 1) return;
+    KillTimer(b->hwnd, BAR_SLIDE_TIMER);
+    b->slideTick = 0;
+    if (!b->slideIn) {
+        ShowWindow(b->hwnd, SW_HIDE);
+        SetWindowPos(b->hwnd, nullptr, b->monRect.left, b->monRect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        BarClip(b, 0);
+    } else {
+        BarClip(b, 0);
+        BarSlideDone(b);
+    }
+    BarSyncShadow(b);
+}
+static void BarSlide(Bar* b, bool in) {
+    if (g_settings.openAnim == 0) {
+        if (in) {
+            KillTimer(b->hwnd, BAR_SLIDE_TIMER);
+            b->slideTick = 0;
+            BarClip(b, 0);
+            SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top, 0, 0,
+                         SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            BarSlideDone(b);
+        } else {
+            ShowWindow(b->hwnd, SW_HIDE);
+        }
+        BarSyncShadow(b);
+        return;
+    }
+    if (b->shadow) ShowWindow(b->shadow, SW_HIDE);
+    // Continua de onde está: no meio de um deslizar para o outro lado, ou já à
+    // vista (mostrada ao encostar no topo, quando a janela maximizada sai).
+    float from = 0;
+    if (b->slideTick || IsWindowVisible(b->hwnd)) {
+        RECT wr;
+        GetWindowRect(b->hwnd, &wr);
+        from = std::clamp((float)(b->monRect.top - wr.top) / std::max(1, b->heightPx), 0.0f, 1.0f);  // 0 à vista, 1 escondida
+    } else {
+        from = in ? 1.0f : 0.0f;
+    }
+    if (in && !IsWindowVisible(b->hwnd)) {
+        BarClip(b, b->heightPx);  // (escondida até o primeiro passo)
+        g_barSlideMove = true;
+        SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top - b->heightPx, 0, 0,
+                     SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        g_barSlideMove = false;
+        from = 1;
+    }
+    b->slideIn = in;
+    // O tempo já andado: entrar a partir de "from" escondida, sair a partir de "from".
+    float doneFrac = in ? 1 - std::sqrt(std::sqrt(std::max(0.0f, from))) : std::cbrt(std::max(0.0f, from));
+    b->slideTick = GetTickCount64() - (ULONGLONG)(doneFrac * (in ? kSlideInMs : kSlideOutMs));
+    SetTimer(b->hwnd, BAR_SLIDE_TIMER, 10, nullptr);
+    BarSlideStep(b);
+}
+
 static void HandleSync(Bar* b) {
     // Modo "com a alça": a alça fica sempre, ela mostra e esconde a barra.
     bool want = g_settings.autoHide && g_settings.revealHandle && !b->hiddenForFullscreen;
@@ -23960,9 +25498,12 @@ static bool AnyBarStyle(int st) {
 // vista, então as janelas (a maximizada também) descem e nada fica por baixo dela.
 // Ela fica até a alça ser clicada de novo (com "Cor da janela", na cor da barra de
 // título da janela ativa).
-static void BarRevealTemp(Bar* b) {
-    b->autoShown = true;
-    b->hideCountdown = 10;
+// O espaço da barra é reservado (as janelas descem) só quando ela termina de
+// descer: reservar antes fazia as janelas pularem de uma vez e o Windows
+// redesenhá-las bem no meio do deslizar, que travava.
+static void BarReserveSpace(Bar* b) {
+    b->reserveAfterSlide = false;
+    if (!b->autoShown) return;
     if (!b->appbar) {
         APPBARDATA abd{};
         abd.cbSize = sizeof(abd);
@@ -23972,13 +25513,18 @@ static void BarRevealTemp(Bar* b) {
         b->peekReserved = b->appbar;
         if (b->appbar) SetAppBarPos(b, false);
     }
+    if (g_owner && BarPeekColors(b)) SetTimer(g_owner, TIMER_PEEKCOLOR, 180, nullptr);  // depois que as janelas descem
+}
+static void BarRevealTemp(Bar* b) {
+    b->autoShown = true;
+    b->hideCountdown = 10;
     SetWindowPos(b->hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top, b->monRect.right - b->monRect.left, b->heightPx,
-                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    BarSyncShadow(b);
+                 SWP_NOACTIVATE | SWP_NOMOVE);
+    b->reserveAfterSlide = true;
+    BarSlide(b, true);  // desce do topo; no fim, reserva o espaço
     HandleSync(b);
     HandleAnimTo(b);  // a alça vai para a borda de baixo da barra (some quando o mouse sai)
     if (b->handle) SetWindowPos(b->handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    if (g_owner && BarPeekColors(b)) SetTimer(g_owner, TIMER_PEEKCOLOR, 180, nullptr);  // depois que as janelas descem
 }
 // A barra mostrada pela alça se escondeu: devolve o espaço (as janelas sobem de novo).
 static void BarPeekEnd(Bar* b) {
@@ -24028,9 +25574,9 @@ static LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             if (b->autoShown) {
                 // Segundo clique: a barra some, as janelas sobem e a alça volta ao alto.
                 b->autoShown = false;
+                b->reserveAfterSlide = false;
                 b->hover = -1;
-                ShowWindow(b->hwnd, SW_HIDE);
-                if (b->shadow) ShowWindow(b->shadow, SW_HIDE);
+                BarSlide(b, false);  // sobe e some
                 BarPeekEnd(b);
                 HandleAnimTo(b);  // volta ao alto e reaparece crescendo
             } else {
@@ -24041,9 +25587,36 @@ static LRESULT CALLBACK HandleWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+// Escondida por uma janela maximizada: o mouse encostado no topo do monitor
+// mostra a barra por cima da janela (sem empurrá-la), e ela sobe de novo quando
+// o mouse sai dela (issue #7), como no macOS.
+static void MaxPeekTick(Bar* b) {
+    if (!b->maxHidden || !b->hiddenForFullscreen) {
+        b->maxPeek = false;
+        return;
+    }
+    POINT pt;
+    if (!GetCursorPos(&pt)) return;
+    bool inX = pt.x >= b->monRect.left && pt.x < b->monRect.right;
+    bool buttons = (GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000;
+    if (!b->maxPeek) {
+        if (inX && pt.y <= b->monRect.top + 1 && pt.y >= b->monRect.top - 2 && !buttons) {
+            b->maxPeek = true;
+            BarSlide(b, true);
+        }
+    } else {
+        float s = b->dpi / 96.0f;
+        bool onBar = inX && pt.y < b->monRect.top + b->heightPx + (int)(10 * s);
+        if (!onBar && !g_menuOpen && !AnyOtherPanelOpen(nullptr)) {
+            b->maxPeek = false;
+            BarSlide(b, false);
+        }
+    }
+}
 static void AutoHideTick() {
     for (Bar* b : g_bars) {
-        // Só "Ocultar com a alça" usa isto.
+        MaxPeekTick(b);
+        // Só "Ocultar com a alça" usa o resto.
         if (!g_settings.autoHide) {
             b->autoShown = false;
             HandleSync(b);
@@ -24060,6 +25633,19 @@ static void AutoHideTick() {
 // App ativo: atualização
 // ===========================================================================
 
+static void UpdateActiveApp(HWND fg);
+// O app da barra foi minimizado, escondido ou fechado, e o primeiro plano foi
+// para algo que não é app (a barra de tarefas, nada): a barra volta ao Finder,
+// como no macOS (antes só voltava com um clique na área de trabalho; issue #5).
+static void ActiveRecheck() {
+    HWND a = g_active.hwnd;
+    if (!a || g_active.finder) return;
+    if (IsWindow(a) && IsWindowVisible(a) && !IsIconic(a)) return;
+    HWND fg = GetForegroundWindow();
+    ActiveApp x;
+    if (fg && fg != a && ResolveActive(fg, x)) UpdateActiveApp(fg);
+    else UpdateActiveApp(GetShellWindow());  // Progman: a área de trabalho
+}
 static void UpdateActiveApp(HWND fg) {
     ActiveApp a;
     if (!ResolveActive(fg, a)) return;
@@ -24114,6 +25700,10 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
     if (event == EVENT_SYSTEM_FOREGROUND && g_owner) SetTimer(g_owner, TIMER_PEEKCOLOR, 120, nullptr);  // outra janela ativa: outra cor
     if (event == EVENT_SYSTEM_FOREGROUND) UpdateActiveApp(hwnd);
     else if (hwnd == g_active.hwnd) UpdateWindowColor();  // minimizar/restaurar
+    // Minimizar o app da barra, ou o primeiro plano ir para a barra de tarefas:
+    // confere daqui a pouco se o app ainda está à vista.
+    if ((event == EVENT_SYSTEM_MINIMIZESTART && hwnd == g_active.hwnd) || event == EVENT_SYSTEM_FOREGROUND)
+        if (g_owner) SetTimer(g_owner, TIMER_ACTIVE, 250, nullptr);
 }
 
 // ===========================================================================
@@ -24133,6 +25723,7 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         if (GetTickCount64() < g_ignoreTaskbarCreatedUntil) return 0;  // fomos nós que enviamos
         // Cada barra recebe o aviso: uma reconstrução só, para todas.
         if (!g_rebuildScheduled) {
+            Wh_Log(L"Refaz as barras: aviso TaskbarCreated (o Explorer reiniciou ou um app o enviou)");
             g_rebuildScheduled = true;
             RequestReload(1);
         }
@@ -24142,9 +25733,43 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
-        case WM_WINDOWPOSCHANGED:
-            BarSyncShadow(b);
+        case WM_WINDOWPOSCHANGED: {
+            // Movida para cima do topo sem passar pelo WM_WINDOWPOSCHANGING (um
+            // SetWindowPos com SWP_NOSENDCHANGING, de outro processo): volta já.
+            static bool fixing = false;
+            auto* wpos = reinterpret_cast<WINDOWPOS*>(lp);
+            if (wpos && !fixing && !g_barSlideMove && !b->slideTick && !(wpos->flags & SWP_NOMOVE) &&
+                (wpos->y < b->monRect.top || wpos->x != b->monRect.left)) {
+                wchar_t fgc[64] = L"";
+                GetClassNameW(GetForegroundWindow(), fgc, ARRAYSIZE(fgc));
+                Wh_Log(L"Barra %d,%d: foi movida para %d,%d sem aviso antes (%s, flags 0x%X, janela ativa %s); volta",
+                       b->monRect.left, b->monRect.top, wpos->x, wpos->y,
+                       (InSendMessageEx(nullptr) & ISMEX_SEND) ? L"outra thread" : L"esta thread", wpos->flags, fgc);
+                fixing = true;
+                SetWindowPos(hwnd, nullptr, b->monRect.left, b->monRect.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                fixing = false;
+            }
+            if (!b->slideTick) BarSyncShadow(b);  // (deslizando, a sombra volta no fim)
             break;
+        }
+        case WM_WINDOWPOSCHANGING: {
+            // A barra só sai do topo do monitor quando ela mesma desliza. Qualquer
+            // outro movimento para cima do topo (o Windows, outro programa) é
+            // desfeito aqui, antes de acontecer: fora do monitor, ela passaria
+            // para o vizinho de outra escala.
+            auto* wpos = reinterpret_cast<WINDOWPOS*>(lp);
+            if (wpos && !(wpos->flags & SWP_NOMOVE) && !g_barSlideMove &&
+                (wpos->y < b->monRect.top || wpos->x != b->monRect.left)) {
+                wchar_t fgc[64] = L"";
+                GetClassNameW(GetForegroundWindow(), fgc, ARRAYSIZE(fgc));
+                Wh_Log(L"Barra %d,%d: movimento para %d,%d desfeito (%s, flags 0x%X, janela ativa %s)", b->monRect.left,
+                       b->monRect.top, wpos->x, wpos->y,
+                       (InSendMessageEx(nullptr) & ISMEX_SEND) ? L"outra thread" : L"esta thread", wpos->flags, fgc);
+                wpos->x = b->monRect.left;
+                wpos->y = b->monRect.top;
+            }
+            break;
+        }
 
         case WM_MOUSEMOVE: {
             if (b->pressIdx >= 0) {
@@ -24342,16 +25967,25 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 SetAppBarPos(b, true);
             } else if (wp == ABN_FULLSCREENAPP && g_settings.hideOnFullscreen && !(g_settings.autoHide && g_settings.revealHandle)) {
                 bool hide = lp && ForegroundIsFullscreenOn(b);
-                if (hide != b->hiddenForFullscreen) {
+                // (Escondida por janela maximizada, só a conferência dela a mostra: este
+                // aviso a mostrava por cima da janela, e ela sumia de novo logo depois.)
+                if (hide != b->hiddenForFullscreen && !(b->maxHidden && !hide)) {
+                    Wh_Log(L"Barra %d,%d: %s (aviso de tela cheia do Windows)", b->monRect.left, b->monRect.top,
+                           hide ? L"oculta" : L"volta");
                     b->hiddenForFullscreen = hide;
-                    ShowWindow(hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
-                    if (!hide)
+                    bool handleHidden = g_settings.autoHide && !b->autoShown;  // (issue #15)
+                    if (hide || !handleHidden) ShowWindow(hwnd, hide ? SW_HIDE : SW_SHOWNOACTIVATE);
+                    if (!hide && !handleHidden)
                         SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 }
             }
             return 0;
 
         case WM_TIMER:
+            if (wp == BAR_SLIDE_TIMER) {
+                BarSlideStep(b);
+                return 0;
+            }
             if (wp == BAR_ANIM_TIMER || wp == TIMER_MARQUEE) {
                 InvalidateRect(hwnd, nullptr, FALSE);
                 return 0;
@@ -24380,7 +26014,29 @@ static LRESULT CALLBACK BarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_DPICHANGED:
             // Só mudanças reais de monitor/escala recriam a barra (nunca
             // SPI_SETWORKAREA, que o próprio AppBar dispara: geraria um loop).
+            if (msg == WM_DPICHANGED) {
+                // A escala do monitor da barra não mudou: foi a janela que passou
+                // (por um instante) para um monitor vizinho de outra escala. Não
+                // refaz; só põe a barra de volta no lugar.
+                UINT mx = 96, my = 96;
+                if (SUCCEEDED(GetDpiForMonitor(b->monitor, MDT_EFFECTIVE_DPI, &mx, &my)) && mx == b->dpi) {
+                    if (g_barSlideMove || b->slideTick) return 0;  // (deslizando: o fim do deslizar a põe no lugar)
+                    RECT wr{};
+                    GetWindowRect(hwnd, &wr);
+                    Wh_Log(L"Barra %d,%d: WM_DPICHANGED ignorado (janela em %d,%d-%d,%d, a escala do monitor é a mesma)",
+                           b->monRect.left, b->monRect.top, wr.left, wr.top, wr.right, wr.bottom);
+                    if (!b->slideTick && IsWindowVisible(hwnd))
+                        SetWindowPos(hwnd, HWND_TOPMOST, b->monRect.left, b->monRect.top, b->monRect.right - b->monRect.left,
+                                     b->heightPx, SWP_NOACTIVATE);
+                    return 0;
+                }
+            }
             if (!g_rebuildScheduled) {
+                RECT wr{};
+                GetWindowRect(hwnd, &wr);
+                Wh_Log(L"Refaz as barras: %s (barra do monitor %d,%d, janela em %d,%d-%d,%d, wParam %u)",
+                       msg == WM_DPICHANGED ? L"WM_DPICHANGED" : L"WM_DISPLAYCHANGE", b->monRect.left, b->monRect.top,
+                       wr.left, wr.top, wr.right, wr.bottom, (unsigned)wp);
                 g_rebuildScheduled = true;
                 SetTimer(hwnd, TIMER_REBUILD, 800, nullptr);
             }
@@ -24495,6 +26151,11 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
                     if (b->autoShown && BarPeekColors(b)) BarSamplePeekColor(b);
                 return 0;
             }
+            if (wp == TIMER_ACTIVE) {
+                KillTimer(hwnd, TIMER_ACTIVE);
+                ActiveRecheck();
+                return 0;
+            }
             if (wp == TIMER_MAXNOW) {
                 KillTimer(hwnd, TIMER_MAXNOW);
                 UpdateFullscreen();
@@ -24507,9 +26168,10 @@ static LRESULT CALLBACK OwnerWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
                 UpdateFullscreen();
                 if (AnyBarStyle(4)) UpdateWindowColor();
                 if (g_statusTick % 5 == 0) PurgeDeadTrayIcons();
+                if (g_statusTick % 15 == 0 && RadioStateBt() != 0) BleRefresh();  // os LE conectados, para o menu já ter
                 if (g_cc.hwnd && g_cc.drag < 0) CcOnUpdate();
-                if (g_active.hwnd && !IsWindow(g_active.hwnd)) {
-                    UpdateActiveApp(GetForegroundWindow());
+                if (g_active.hwnd && (!IsWindow(g_active.hwnd) || IsIconic(g_active.hwnd) || !IsWindowVisible(g_active.hwnd))) {
+                    ActiveRecheck();  // fechado ou minimizado (a reserva do evento)
                 } else if (g_settings.showGlobalMenu && NativeMenuCount(g_active.hwnd) != g_nativeMenuCount) {
                     BuildTopMenus();
                     RedrawAll();
@@ -24638,8 +26300,9 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR mon, HDC, LPRECT, LPARAM chosenPre
 static void CreateBars() {
     ResolveTheme();
     EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc, BarChosenMonitorPresent() ? 1 : 0);
-    // O tique rápido: "Ocultar com a alça".
-    if (g_settings.autoHide) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
+    // O tique rápido: "Ocultar com a alça" e o mouse no topo com a barra
+    // escondida por janela maximizada.
+    if (g_settings.autoHide || g_settings.hideWhenMaximized) SetTimer(g_owner, TIMER_FAST, 100, nullptr);
     else KillTimer(g_owner, TIMER_FAST);
     UpdateWindowColor();
 }
@@ -24850,6 +26513,14 @@ static DWORD WINAPI BarThread(LPVOID) {
     islc.lpszClassName = kIslClass;
     RegisterClassExW(&islc);
 
+    WNDCLASSEXW gcc{};
+    gcc.cbSize = sizeof(gcc);
+    gcc.lpfnWndProc = GcWndProc;
+    gcc.hInstance = g_hInst;
+    gcc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    gcc.lpszClassName = kGcClass;
+    RegisterClassExW(&gcc);
+
     WNDCLASSEXW tipc{};
     tipc.cbSize = sizeof(tipc);
     tipc.lpfnWndProc = TipWndProc;
@@ -24958,6 +26629,7 @@ static DWORD WINAPI BarThread(LPVOID) {
 
     g_msgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     LoadSettings();
+    g_cfgRecache = false;  // (aqui o que fica em memória ainda vai ser lido pela primeira vez)
     PollStatus(true);
     CreateBars();
     KbdNavApply();
@@ -24991,6 +26663,10 @@ static DWORD WINAPI BarThread(LPVOID) {
                 g_rebuildScheduled = false;
                 Settings before = g_settings;
                 LoadSettings();
+                if (g_cfgRecache) {
+                    g_cfgRecache = false;
+                    CfgReloadCached();
+                }
                 // Aparência, ícones, fonte, idioma...: valem na barra que já existe,
                 // sem ela sumir e voltar.
                 if (msg.wParam == 0 && !g_bars.empty() && before.allMonitors == g_settings.allMonitors &&
@@ -25064,7 +26740,7 @@ static DWORD WINAPI BarThread(LPVOID) {
     }
     if (g_owner) { DestroyWindow(g_owner); g_owner = nullptr; }
     for (PCWSTR cls : {kWorkerClass, kOsdClass, kFlyClass, kNpClass, kNtfClass, kBsClass, kWxClass, kShadowClass, kTipClass,
-                       kIslClass, kCalClass, kCcClass, kGmClass, kCcGlassClass, kTrayClass, kBarClass, kHandleClass, kOwnerClass})
+                       kIslClass, kGcClass, kCalClass, kCcClass, kGmClass, kCcGlassClass, kTrayClass, kBarClass, kHandleClass, kOwnerClass})
         UnregisterClassW(cls, g_hInst);
     // 4) Composição: os painéis (e os visuais dentro deles) saem aqui, na
     //    thread que os criou, antes do compositor e da fila de despacho.
@@ -25340,7 +27016,7 @@ const UiTr kUiTr[] = {
     {L"%s atualização", L"%s update", L"%s actualización", L"%s mise à jour", L"%s Update", L"%s aggiornamento", L"%s 个更新"},
     {L"%s atualizações", L"%s updates", L"%s actualizaciones", L"%s mises à jour", L"%s Updates", L"%s aggiornamenti", L"%s 个更新"},
     {L"Sobre este PC", L"About This PC", L"Acerca de este equipo", L"À propos de ce PC", L"Über diesen PC", L"Informazioni su questo PC", L"关于此电脑"},
-    {L"Configurações do Sistema...", L"System Settings...", L"Configuración del sistema...", L"Paramètres système...", L"Systemeinstellungen...", L"Impostazioni di sistema...", L"系统设置..."},
+    {L"Ajustes do Sistema...", L"System Settings...", L"Configuración del sistema...", L"Paramètres système...", L"Systemeinstellungen...", L"Impostazioni di sistema...", L"系统设置..."},
     {L"Forçar encerramento...", L"Force Quit...", L"Forzar salida...", L"Forcer à quitter...", L"Sofort beenden...", L"Uscita forzata...", L"强制退出..."},
     {L"Mostrar área de trabalho", L"Show Desktop", L"Mostrar escritorio", L"Afficher le bureau", L"Desktop anzeigen", L"Mostra desktop", L"显示桌面"},
     {L"Suspender", L"Sleep", L"Suspender", L"Mettre en veille", L"Energie sparen", L"Sospendi", L"睡眠"},
@@ -25527,7 +27203,45 @@ const UiTr kUiTr[] = {
     {L"Vídeos e papéis de parede animados continuam aparecendo atrás do vidro", L"Videos and animated wallpapers keep showing behind the glass", L"Los vídeos y fondos animados se siguen viendo detrás del vidrio", L"Les vidéos et fonds d’écran animés restent visibles derrière le verre", L"Videos und animierte Hintergründe bleiben hinter dem Glas sichtbar", L"Video e sfondi animati restano visibili dietro il vetro", L"视频和动态壁纸仍会显示在玻璃后面"},
     {L"Pílulas de aviso", L"Notice Pills", L"Píldoras de aviso", L"Pastilles d’alerte", L"Hinweis-Pillen", L"Pillole di avviso", L"提醒胶囊"},
     {L"Avisos que descem da barra e o botão de Notificações", L"Notices that drop from the bar and the Notifications button", L"Avisos que bajan de la barra y el botón de Notificaciones", L"Alertes qui descendent de la barre et bouton Notifications", L"Hinweise, die aus der Leiste fallen, und die Mitteilungstaste", L"Avvisi che scendono dalla barra e il pulsante Notifiche", L"从菜单栏下拉的提醒和通知按钮"},
+    {L"Só as pílulas: as notificações dos apps continuam chegando ao botão do sino", L"Only the pills: app notifications still reach the bell button", L"Solo las píldoras: las notificaciones de las apps siguen llegando al botón de la campana", L"Seulement les pastilles : les notifications des apps arrivent toujours au bouton cloche", L"Nur die Pillen: App-Mitteilungen kommen weiter an der Glocke an", L"Solo le pillole: le notifiche delle app arrivano comunque al pulsante della campanella", L"仅胶囊：应用通知仍会进入铃铛按钮"},
     {L"Mostrar avisos em pílula", L"Show notice pills", L"Mostrar avisos en píldora", L"Afficher les pastilles d’alerte", L"Hinweis-Pillen anzeigen", L"Mostra avvisi a pillola", L"显示提醒胶囊"},
+    {L"Segunda cor (degradê)", L"Second color (gradient)", L"Segundo color (degradado)", L"Deuxième couleur (dégradé)", L"Zweite Farbe (Verlauf)", L"Secondo colore (sfumatura)", L"第二种颜色（渐变）"},
+    {L"O primeiro círculo: uma cor só; outra cor faz a seleção ir da cor de cima até ela", L"The first circle: one color; another color makes the selection go from the color above to it", L"El primer círculo: un solo color; otro color hace que la selección vaya del color de arriba a él", L"Le premier cercle : une seule couleur ; une autre couleur fait aller la sélection de la couleur du dessus jusqu’à elle", L"Der erste Kreis: eine Farbe; eine andere Farbe lässt die Auswahl von der Farbe darüber zu ihr verlaufen", L"Il primo cerchio: un solo colore; un altro colore fa andare la selezione dal colore sopra fino a esso", L"第一个圆：单色；选择其他颜色时，选中效果从上方颜色渐变到该颜色"},
+    {L"Cópia dos ajustes", L"Settings backup", L"Copia de los ajustes", L"Copie des réglages", L"Sicherung der Einstellungen", L"Copia delle impostazioni", L"设置备份"},
+    {L"Exportar os ajustes", L"Export settings", L"Exportar los ajustes", L"Exporter les réglages", L"Einstellungen exportieren", L"Esporta le impostazioni", L"导出设置"},
+    {L"Importar os ajustes", L"Import settings", L"Importar los ajustes", L"Importer les réglages", L"Einstellungen importieren", L"Importa le impostazioni", L"导入设置"},
+    {L"Salva todos os ajustes desta janela num arquivo, para guardar ou levar a outro PC", L"Saves all the settings of this window to a file, to keep or take to another PC", L"Guarda todos los ajustes de esta ventana en un archivo, para conservarlos o llevarlos a otro PC", L"Enregistre tous les réglages de cette fenêtre dans un fichier, à garder ou à emporter sur un autre PC", L"Speichert alle Einstellungen dieses Fensters in einer Datei, zum Aufbewahren oder für einen anderen PC", L"Salva tutte le impostazioni di questa finestra in un file, da conservare o portare su un altro PC", L"将此窗口的所有设置保存到文件，便于保留或带到另一台电脑"},
+    {L"Troca os ajustes atuais pelos do arquivo", L"Replaces the current settings with the ones in the file", L"Cambia los ajustes actuales por los del archivo", L"Remplace les réglages actuels par ceux du fichier", L"Ersetzt die aktuellen Einstellungen durch die aus der Datei", L"Sostituisce le impostazioni attuali con quelle del file", L"用文件中的设置替换当前设置"},
+    {L"Exportar…", L"Export…", L"Exportar…", L"Exporter…", L"Exportieren…", L"Esporta…", L"导出…"},
+    {L"Ajustes da Finder Bar (.txt)", L"Finder Bar settings (.txt)", L"Ajustes de Finder Bar (.txt)", L"Réglages de Finder Bar (.txt)", L"Finder-Bar-Einstellungen (.txt)", L"Impostazioni di Finder Bar (.txt)", L"Finder Bar 设置 (.txt)"},
+    {L"Ajustes exportados", L"Settings exported", L"Ajustes exportados", L"Réglages exportés", L"Einstellungen exportiert", L"Impostazioni esportate", L"设置已导出"},
+    {L"%s ajustes salvos", L"%s settings saved", L"%s ajustes guardados", L"%s réglages enregistrés", L"%s Einstellungen gespeichert", L"%s impostazioni salvate", L"已保存 %s 项设置"},
+    {L"Não foi possível exportar", L"Couldn’t export", L"No se pudo exportar", L"Impossible d’exporter", L"Export fehlgeschlagen", L"Impossibile esportare", L"无法导出"},
+    {L"Não foi possível importar", L"Couldn’t import", L"No se pudo importar", L"Impossible d’importer", L"Import fehlgeschlagen", L"Impossibile importare", L"无法导入"},
+    {L"O arquivo não é uma cópia dos ajustes", L"The file isn’t a settings backup", L"El archivo no es una copia de los ajustes", L"Le fichier n’est pas une copie des réglages", L"Die Datei ist keine Sicherung der Einstellungen", L"Il file non è una copia delle impostazioni", L"该文件不是设置备份"},
+    {L"Ajustes importados", L"Settings imported", L"Ajustes importados", L"Réglages importés", L"Einstellungen importiert", L"Impostazioni importate", L"设置已导入"},
+    {L"%s ajustes aplicados", L"%s settings applied", L"%s ajustes aplicados", L"%s réglages appliqués", L"%s Einstellungen übernommen", L"%s impostazioni applicate", L"已应用 %s 项设置"},
+    {L"Os apps abertos serão fechados.", L"Open apps will be closed.", L"Las apps abiertas se cerrarán.", L"Les apps ouvertes seront fermées.", L"Geöffnete Apps werden geschlossen.", L"Le app aperte verranno chiuse.", L"打开的应用将被关闭。"},
+    {L"Encerrar a sessão agora?", L"Sign out now?", L"¿Cerrar sesión ahora?", L"Se déconnecter maintenant ?", L"Jetzt abmelden?", L"Disconnettersi ora?", L"现在注销吗？"},
+    {L"Encerrar sessão", L"Sign out", L"Cerrar sesión", L"Se déconnecter", L"Abmelden", L"Disconnetti", L"注销"},
+    {L"Reiniciar", L"Restart", L"Reiniciar", L"Redémarrer", L"Neu starten", L"Riavvia", L"重启"},
+    {L"Desligar", L"Shut Down", L"Apagar", L"Éteindre", L"Herunterfahren", L"Arresta", L"关机"},
+    {L"Testar notificações", L"Test notifications", L"Probar notificaciones", L"Tester les notifications", L"Benachrichtigungen testen", L"Prova le notifiche", L"测试通知"},
+    {L"Cada toque manda uma notificação de teste, de um app diferente, que fica no botão; Limpar, no painel, tira todas", L"Each click sends a test notification from a different app, kept in the button; Clear, in the panel, removes them all", L"Cada clic envía una notificación de prueba de una app distinta, que queda en el botón; Borrar, en el panel, las quita todas", L"Chaque clic envoie une notification de test d’une app différente, gardée dans le bouton ; Effacer, dans le panneau, les retire toutes", L"Jeder Klick sendet eine Testbenachrichtigung einer anderen App, die im Knopf bleibt; Löschen im Bereich entfernt alle", L"Ogni clic invia una notifica di prova da un’app diversa, che resta nel pulsante; Cancella, nel pannello, le rimuove tutte", L"每次点击发送一条来自不同应用的测试通知，保留在按钮中；面板中的“清除”会全部移除"},
+    {L"%s (teste %s)", L"%s (test %s)", L"%s (prueba %s)", L"%s (test %s)", L"%s (Test %s)", L"%s (prova %s)", L"%s（测试 %s）"},
+    {L"E-mail", L"Email", L"Correo", L"E-mail", L"E-Mail", L"E-mail", L"电子邮件"},
+    {L"Agenda", L"Calendar", L"Calendario", L"Calendrier", L"Kalender", L"Calendario", L"日历"},
+    {L"Mensagens", L"Messages", L"Mensajes", L"Messages", L"Nachrichten", L"Messaggi", L"信息"},
+    {L"Equipe", L"Team", L"Equipo", L"Équipe", L"Team", L"Team", L"团队"},
+    {L"Chegou! Te espero na entrada.", L"I’m here! Waiting at the entrance.", L"¡Llegué! Te espero en la entrada.", L"Je suis là ! Je t’attends à l’entrée.", L"Bin da! Ich warte am Eingang.", L"Sono arrivata! Ti aspetto all’ingresso.", L"我到了！在门口等你。"},
+    {L"Resumo da semana: 3 tarefas concluídas.", L"Weekly summary: 3 tasks done.", L"Resumen de la semana: 3 tareas hechas.", L"Résumé de la semaine : 3 tâches terminées.", L"Wochenübersicht: 3 Aufgaben erledigt.", L"Riepilogo della settimana: 3 attività completate.", L"本周总结：完成 3 项任务。"},
+    {L"Reunião às 15:00", L"Meeting at 3:00 PM", L"Reunión a las 15:00", L"Réunion à 15 h", L"Besprechung um 15:00", L"Riunione alle 15:00", L"15:00 会议"},
+    {L"Sala 2, com a equipe de design.", L"Room 2, with the design team.", L"Sala 2, con el equipo de diseño.", L"Salle 2, avec l’équipe design.", L"Raum 2, mit dem Designteam.", L"Sala 2, con il team di design.", L"2 号会议室，与设计团队。"},
+    {L"Fotos", L"Photos", L"Fotos", L"Photos", L"Fotos", L"Foto", L"照片"},
+    {L"Novas memórias", L"New memories", L"Nuevos recuerdos", L"Nouveaux souvenirs", L"Neue Erinnerungen", L"Nuovi ricordi", L"新回忆"},
+    {L"Veja as fotos de uma viagem.", L"See the photos from a trip.", L"Mira las fotos de un viaje.", L"Revoyez les photos d’un voyage.", L"Sieh dir die Fotos einer Reise an.", L"Guarda le foto di un viaggio.", L"查看一次旅行的照片。"},
+    {L"Música", L"Music", L"Música", L"Musique", L"Musik", L"Musica", L"音乐"},
+    {L"Uma playlist nova foi criada para você.", L"A new playlist was made for you.", L"Se creó una nueva lista para ti.", L"Une nouvelle playlist a été créée pour vous.", L"Eine neue Playlist wurde für dich erstellt.", L"È stata creata una nuova playlist per te.", L"为你创建了一个新歌单。"},
     {L"Testar a pílula agora", L"Test the pill now", L"Probar la píldora ahora", L"Tester la pastille maintenant", L"Pille jetzt testen", L"Prova la pillola ora", L"立即测试胶囊"},
     {L"Aparência", L"Appearance", L"Apariencia", L"Apparence", L"Erscheinungsbild", L"Aspetto", L"外观"},
     {L"Estilo", L"Style", L"Estilo", L"Style", L"Stil", L"Stile", L"样式"},
@@ -25539,8 +27253,8 @@ const UiTr kUiTr[] = {
     {L"No botão, mostrar também os avisos da pílula", L"Also show the pill notices in the button", L"Mostrar también los avisos de la píldora en el botón", L"Afficher aussi les alertes des pastilles dans le bouton", L"Pillen-Hinweise auch in der Taste zeigen", L"Mostra anche gli avvisi della pillola nel pulsante", L"在按钮中也显示胶囊提醒"},
     {L"Limpar as notificações", L"Clear notifications", L"Borrar las notificaciones", L"Effacer les notifications", L"Mitteilungen löschen", L"Cancella le notifiche", L"清除通知"},
     {L"Avisar quando", L"Notify when", L"Avisar cuando", L"Alerter quand", L"Hinweis bei", L"Avvisa quando", L"在以下情况提醒"},
-    {L"Notificações do Windows (experimental)", L"Windows notifications (experimental)", L"Notificaciones de Windows (experimental)", L"Notifications Windows (expérimental)", L"Windows-Mitteilungen (experimentell)", L"Notifiche di Windows (sperimentale)", L"Windows 通知 (实验性)"},
-    {L"WhatsApp, Discord, e-mail… Clicar abre o app", L"WhatsApp, Discord, email… Clicking opens the app", L"WhatsApp, Discord, correo… Al hacer clic se abre la app", L"WhatsApp, Discord, e-mail… Un clic ouvre l’app", L"WhatsApp, Discord, E-Mail… Ein Klick öffnet die App", L"WhatsApp, Discord, e-mail… Il clic apre l’app", L"WhatsApp、Discord、电子邮件… 点击打开应用"},
+    {L"Receber as notificações dos apps", L"Receive app notifications", L"Recibir las notificaciones de las apps", L"Recevoir les notifications des apps", L"App-Mitteilungen empfangen", L"Ricevi le notifiche delle app", L"接收应用通知"},
+    {L"WhatsApp, Discord, e-mail… (experimental). Vão para o botão do sino e, com as pílulas ligadas, também para a pílula; clicar abre o app", L"WhatsApp, Discord, email… (experimental). They go to the bell button and, with pills on, to the pill too; clicking opens the app", L"WhatsApp, Discord, correo… (experimental). Van al botón de la campana y, con las píldoras activadas, también a la píldora; al hacer clic se abre la app", L"WhatsApp, Discord, e-mail… (expérimental). Elles vont au bouton cloche et, avec les pastilles activées, aussi à la pastille ; un clic ouvre l’app", L"WhatsApp, Discord, E-Mail… (experimentell). Sie gehen an die Glocke und, mit aktiven Pillen, auch an die Pille; ein Klick öffnet die App", L"WhatsApp, Discord, e-mail… (sperimentale). Vanno al pulsante della campanella e, con le pillole attive, anche alla pillola; il clic apre l’app", L"WhatsApp、Discord、电子邮件…（实验性）。通知进入铃铛按钮，开启胶囊时也会显示在胶囊中；点击打开应用"},
     {L"Texto, imagem ou arquivos copiados", L"Copied text, image or files", L"Texto, imagen o archivos copiados", L"Texte, image ou fichiers copiés", L"Kopierter Text, Bild oder Dateien", L"Testo, immagine o file copiati", L"复制的文本、图片或文件"},
     {L"Downloads concluídos", L"Finished downloads", L"Descargas completadas", L"Téléchargements terminés", L"Abgeschlossene Downloads", L"Download completati", L"下载完成"},
     {L"Clique na pílula para abrir o arquivo", L"Click the pill to open the file", L"Haz clic en la píldora para abrir el archivo", L"Cliquez sur la pastille pour ouvrir le fichier", L"Auf die Pille klicken, um die Datei zu öffnen", L"Fai clic sulla pillola per aprire il file", L"点击胶囊打开文件"},
@@ -25563,8 +27277,10 @@ const UiTr kUiTr[] = {
     {L"Aparência do widget", L"Widget look", L"Aspecto del widget", L"Apparence du widget", L"Aussehen des Widgets", L"Aspetto del widget", L"小组件外观"},
     {L"Transparência do widget de vidro", L"Glass widget transparency", L"Transparencia del widget de vidrio", L"Transparence du widget en verre", L"Transparenz des Glas-Widgets", L"Trasparenza del widget di vetro", L"玻璃小组件透明度"},
     {L"Open-Meteo: 7 dias, por hora. MET Norway (Yr): 7 dias, do instituto meteorológico norueguês. wttr.in: 3 dias, de 3 em 3 horas.", L"Open-Meteo: 7 days, hourly. MET Norway (Yr): 7 days, from the Norwegian Meteorological Institute. wttr.in: 3 days, every 3 hours.", L"Open-Meteo: 7 días, por hora. MET Norway (Yr): 7 días, del instituto meteorológico noruego. wttr.in: 3 días, cada 3 horas.", L"Open-Meteo : 7 jours, heure par heure. MET Norway (Yr) : 7 jours, de l’institut météorologique norvégien. wttr.in : 3 jours, toutes les 3 heures.", L"Open-Meteo: 7 Tage, stündlich. MET Norway (Yr): 7 Tage, vom Norwegischen Meteorologischen Institut. wttr.in: 3 Tage, alle 3 Stunden.", L"Open-Meteo: 7 giorni, ora per ora. MET Norway (Yr): 7 giorni, dall’istituto meteorologico norvegese. wttr.in: 3 giorni, ogni 3 ore.", L"Open-Meteo: 7 天, 逐小时。MET Norway (Yr): 7 天, 来自挪威气象研究所。wttr.in: 3 天, 每 3 小时。"},
-    {L"Esta janela", L"This Window", L"Esta ventana", L"Cette fenêtre", L"Dieses Fenster", L"Questa finestra", L"此窗口"},
-    {L"O vidro desta janela de Ajustes", L"The glass of this Settings window", L"El vidrio de esta ventana de Ajustes", L"Le verre de cette fenêtre de réglages", L"Das Glas dieses Einstellungsfensters", L"Il vetro di questa finestra Impostazioni", L"此设置窗口的玻璃效果"},
+    {L"Ajustes e backup", L"Settings & Backup", L"Ajustes y copia de seguridad", L"Réglages et sauvegarde", L"Einstellungen & Backup", L"Impostazioni e backup", L"设置与备份"},
+    {L"Este arquivo já existe", L"This file already exists", L"Este archivo ya existe", L"Ce fichier existe déjà", L"Diese Datei ist bereits vorhanden", L"Questo file esiste già", L"此文件已存在"},
+    {L"Substituir “%s” pelos ajustes de agora?", L"Replace “%s” with the current settings?", L"¿Reemplazar «%s» con los ajustes actuales?", L"Remplacer « %s » par les réglages actuels ?", L"„%s“ durch die aktuellen Einstellungen ersetzen?", L"Sostituire «%s» con le impostazioni attuali?", L"用当前设置替换“%s”?"},
+    {L"O vidro desta janela e a cópia dos ajustes", L"The glass of this window and the settings backup", L"El vidrio de esta ventana y la copia de los ajustes", L"Le verre de cette fenêtre et la sauvegarde des réglages", L"Das Glas dieses Fensters und die Sicherung der Einstellungen", L"Il vetro di questa finestra e il backup delle impostazioni", L"此窗口的玻璃效果与设置备份"},
     {L"Vidro", L"Glass", L"Vidrio", L"Verre", L"Glas", L"Vetro", L"玻璃"},
     {L"Transparência", L"Transparency", L"Transparencia", L"Transparence", L"Transparenz", L"Trasparenza", L"透明度"},
     {L"O vidro líquido vale a partir do próximo painel aberto. Ao vivo (e no fundo Líquido da barra), a barra e os painéis não aparecem em capturas de tela.", L"Liquid glass applies from the next panel opened. With Live (and the bar’s Liquid background), the bar and panels don’t show up in screenshots.", L"El vidrio líquido se aplica desde el siguiente panel que se abra. En vivo (y con el fondo Líquido de la barra), la barra y los paneles no aparecen en las capturas de pantalla.", L"Le verre liquide s’applique à partir du prochain panneau ouvert. En direct (et avec l’arrière-plan Liquide de la barre), la barre et les panneaux n’apparaissent pas dans les captures d’écran.", L"Flüssiges Glas gilt ab dem nächsten geöffneten Bereich. Live (und mit dem Hintergrund „Flüssig“ der Leiste) erscheinen Leiste und Bereiche nicht auf Bildschirmfotos.", L"Il vetro liquido vale dal prossimo pannello aperto. In tempo reale (e con lo sfondo Liquido della barra), la barra e i pannelli non compaiono negli screenshot.", L"液态玻璃从下一个打开的面板开始生效。实时模式 (以及菜单栏的液态背景) 下, 菜单栏和面板不会出现在截图中。"},
@@ -25811,7 +27527,7 @@ const UiTr kUiTr[] = {
     {L"Linha", L"Line", L"Línea", L"Ligne", L"Linie", L"Linea", L"线条"},
     {L"Linha colorida", L"Colored line", L"Línea de color", L"Ligne colorée", L"Farbige Linie", L"Linea colorata", L"彩色线条"},
     {L"Somente a barra mostra as notificações", L"Only the bar shows notifications", L"Solo la barra muestra las notificaciones", L"Seule la barre affiche les notifications", L"Nur die Leiste zeigt Mitteilungen", L"Solo la barra mostra le notifiche", L"仅由菜单栏显示通知"},
-    {L"Tira as faixas do Windows da tela; chamadas, alarmes e lembretes continuam", L"Takes the Windows banners off the screen; calls, alarms and reminders stay", L"Quita los banners de Windows de la pantalla; las llamadas, alarmas y recordatorios se mantienen", L"Retire les bannières Windows de l’écran ; appels, alarmes et rappels restent", L"Nimmt die Windows-Banner vom Bildschirm; Anrufe, Wecker und Erinnerungen bleiben", L"Toglie i banner di Windows dallo schermo; chiamate, sveglie e promemoria restano", L"将 Windows 横幅移出屏幕; 来电、闹钟和提醒仍会显示"},
+    {L"Com as pílulas ligadas: tira as faixas do Windows da tela; chamadas, alarmes e lembretes continuam", L"With pills on: takes the Windows banners off the screen; calls, alarms and reminders stay", L"Con las píldoras activadas: quita los banners de Windows de la pantalla; las llamadas, alarmas y recordatorios se mantienen", L"Avec les pastilles activées : retire les bannières Windows de l’écran ; appels, alarmes et rappels restent", L"Mit aktiven Pillen: nimmt die Windows-Banner vom Bildschirm; Anrufe, Wecker und Erinnerungen bleiben", L"Con le pillole attive: toglie i banner di Windows dallo schermo; chiamate, sveglie e promemoria restano", L"开启胶囊时：将 Windows 横幅移出屏幕；来电、闹钟和提醒仍会显示"},
     {L"Responder", L"Reply", L"Responder", L"Répondre", L"Antworten", L"Rispondi", L"回复"},
     {L"Digite uma resposta", L"Type a reply", L"Escribe una respuesta", L"Tapez une réponse", L"Antwort eingeben", L"Scrivi una risposta", L"输入回复"},
     {L"Enviar", L"Send", L"Enviar", L"Envoyer", L"Senden", L"Invia", L"发送"},
@@ -25819,6 +27535,11 @@ const UiTr kUiTr[] = {
     {L"Não deu para responder daqui", L"Couldn’t reply from here", L"No se pudo responder desde aquí", L"Impossible de répondre d’ici", L"Antworten von hier nicht möglich", L"Impossibile rispondere da qui", L"无法在此回复"},
     {L"Texto copiado: cole na conversa", L"Text copied: paste it in the chat", L"Texto copiado: pégalo en la conversación", L"Texte copié : collez-le dans la conversation", L"Text kopiert: im Chat einfügen", L"Testo copiato: incollalo nella chat", L"文本已复制: 请粘贴到对话中"},
     {L"Recortado", L"Cut", L"Cortado", L"Coupé", L"Ausgeschnitten", L"Tagliato", L"已剪切"},
+    {L"Num Lock ativado", L"Num Lock on", L"Bloq Num activado", L"Verr. Num activé", L"Num-Taste an", L"Bloc Num attivo", L"数字锁定已开启"},
+    {L"Num Lock desativado", L"Num Lock off", L"Bloq Num desactivado", L"Verr. Num désactivé", L"Num-Taste aus", L"Bloc Num disattivato", L"数字锁定已关闭"},
+    {L"Scroll Lock ativado", L"Scroll Lock on", L"Bloq Despl activado", L"Arrêt défil activé", L"Rollen-Taste an", L"Bloc Scorr attivo", L"滚动锁定已开启"},
+    {L"Scroll Lock desativado", L"Scroll Lock off", L"Bloq Despl desactivado", L"Arrêt défil désactivé", L"Rollen-Taste aus", L"Bloc Scorr disattivato", L"滚动锁定已关闭"},
+    {L"Num Lock e Scroll Lock ligados e desligados", L"Num Lock and Scroll Lock on and off", L"Bloq Num y Bloq Despl activados y desactivados", L"Verr. Num et Arrêt défil activés et désactivés", L"Num- und Rollen-Taste an und aus", L"Bloc Num e Bloc Scorr attivati e disattivati", L"数字锁定和滚动锁定开启和关闭"},
     {L"Caps Lock ativado", L"Caps Lock on", L"Bloq Mayús activado", L"Verr. Maj activé", L"Feststelltaste an", L"Bloc Maiusc attivo", L"大写锁定已开启"},
     {L"Caps Lock desativado", L"Caps Lock off", L"Bloq Mayús desactivado", L"Verr. Maj désactivé", L"Feststelltaste aus", L"Bloc Maiusc disattivato", L"大写锁定已关闭"},
     {L"Caps Lock ligado e desligado", L"Caps Lock on and off", L"Bloq Mayús activado y desactivado", L"Verr. Maj activé et désactivé", L"Feststelltaste an und aus", L"Bloc Maiusc attivato e disattivato", L"大写锁定开启和关闭"},

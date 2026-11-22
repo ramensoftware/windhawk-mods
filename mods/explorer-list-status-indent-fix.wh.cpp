@@ -2,7 +2,7 @@
 // @id              explorer-list-status-indent-fix
 // @name            File Explorer List view indent fix and files area spacing
 // @description     Removes the empty space before every item in the List, Small icons and Content views of File Explorer, and evens out the gaps around the items, icons and names of the files area
-// @version         1.0
+// @version         1.1
 // @author          NDruce
 // @github          https://github.com/NDruce
 // @include         explorer.exe
@@ -127,7 +127,14 @@ which usually happens when a file dialog is opened for the first time.
 The indent comes from `UIProperty::HasVisibleContent` in `explorerframe.dll`,
 which reports the status icons area as having content in the List, Small icons
 and Content views regardless of the actual content. The mod makes it report the
-actual state.
+actual state. That relies on the debug symbols of `explorerframe.dll`, which
+Windhawk downloads from Microsoft. Right after a Windows update, the symbols of
+the new build might not be published yet. Until they are, the status area is
+left as is, and the rest of the adjustments still work. To try to load the
+symbols again, change a setting of the mod, or turn the mod off and on again.
+Windhawk waits for a minute after a failed attempt before it tries again, and
+for a few hours when File Explorer is restarted. A restart of Windhawk or of
+the computer always makes it try again.
 
 Everything else is done by changing properties of DirectUI elements: of the
 items and of the items area. The elements are adjusted when they're created,
@@ -997,6 +1004,13 @@ static void ApplyItemSpacing(void* item, ItemKind kind, const std::wstring& key,
         return;
     }
 
+    // Without the symbols, the status area keeps its stock width in the List,
+    // Small icons and Content views, see SetupHooksImpl. Don't change the
+    // width of its content there, so that a status icon stays where it is.
+    // Whether the hook is set doesn't change while the mod is loaded, so that
+    // applying and restoring stay consistent.
+    bool keepStatusAreaWidth = !UIProperty_HasVisibleContent_Original && kind != ItemKind::Tiles;
+
     RECT stateIconsPadding = GetElementPadding(stateIcons);
     SIZE stateIconsMinSize = GetElementMinSize(stateIcons);
     SIZE visibleMinSize = GetElementVisibleMinSize(container);
@@ -1067,7 +1081,7 @@ static void ApplyItemSpacing(void* item, ItemKind kind, const std::wstring& key,
             }
         }
     }
-    if (apply) {
+    if (apply && !keepStatusAreaWidth) {
         // In the Content view, the item has no padding of its own and the
         // item icon has a left padding. The status area is sized by its
         // content and padding there.
@@ -1136,7 +1150,7 @@ static void ApplyItemSpacing(void* item, ItemKind kind, const std::wstring& key,
         }
     }
 
-    if (kind == ItemKind::Content) {
+    if (kind == ItemKind::Content && !keepStatusAreaWidth) {
         // Make the left padding of the item icon smaller. It's the element
         // which follows the status area.
         HANDLE containerGadget = Element_GetDisplayNode(container);
@@ -1599,24 +1613,29 @@ static BOOL SetupHooksImpl() {
         return FALSE;
     }
 
-    // explorerframe.dll
-    WindhawkUtils::SYMBOL_HOOK explorerFrameHooks[] = {
+    // explorerframe.dll. Only the addresses are looked up here, and the hook
+    // is set below if all of them are found. Without the symbols, for example
+    // right after a Windows update when they aren't published yet, the status
+    // area stays as is, and the rest of the adjustments still work.
+    BOOL(WINAPI* hasVisibleContent)(void*) = nullptr;
+    PropertyProc_t visibleMinSizeProp = nullptr;
+    WindhawkUtils::SYMBOL_HOOK explorerframe_dll_hooks[] = {
         {
             {LR"(public: virtual int __cdecl UIProperty::HasVisibleContent(void))"},
-            &UIProperty_HasVisibleContent_Original,
-            UIProperty_HasVisibleContent_Hook,
+            &hasVisibleContent,
         },
         {
             {LR"(public: static struct DirectUI::PropertyInfo const * __cdecl UIBase::VisibleMinSizeProp(void))"},
-            &UIBase_VisibleMinSizeProp,
+            &visibleMinSizeProp,
             nullptr,
             true,
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(g_explorerFrameModule, explorerFrameHooks, ARRAYSIZE(explorerFrameHooks))) {
-        Wh_Log(L"HookSymbols failed");
-        return FALSE;
+    bool symbolsFound = WindhawkUtils::HookSymbols(g_explorerFrameModule, explorerframe_dll_hooks, ARRAYSIZE(explorerframe_dll_hooks)) &&
+                        hasVisibleContent;
+    if (!symbolsFound) {
+        Wh_Log(L"The symbols of explorerframe.dll weren't found, the status area is left as is");
     }
 
     // Nothing fails from here on.
@@ -1625,7 +1644,12 @@ static BOOL SetupHooksImpl() {
     g_applyWork = work;
     ReleaseSRWLockExclusive(&g_originalsLock);
 
-    WindhawkUtils::SetFunctionHook(getTopLevel, Element_GetTopLevel_Hook, &Element_GetTopLevel_Original);
+    if (symbolsFound) {
+        UIBase_VisibleMinSizeProp = visibleMinSizeProp;
+        WindhawkUtils::SetFunctionHook(hasVisibleContent, UIProperty_HasVisibleContent_Hook, &UIProperty_HasVisibleContent_Original);
+        WindhawkUtils::SetFunctionHook(getTopLevel, Element_GetTopLevel_Hook, &Element_GetTopLevel_Original);
+    }
+
     WindhawkUtils::SetFunctionHook(createElement, DUIXmlParser_CreateElement_Hook, &DUIXmlParser_CreateElement_Original);
 
     return TRUE;
@@ -1678,7 +1702,7 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD f
     HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
     if (module && !g_lateInitStarted) {
         DWORD lastError = GetLastError();
-        if (module == GetModuleHandleW(L"explorerframe.dll")) {
+        if (GetModuleHandleW(L"explorerframe.dll")) {
             LateInit();
         }
 
@@ -1741,6 +1765,13 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
+    // Hooks can't be set after this function returns, and LateInit might
+    // still be setting them. The symbols might be loading, which can take a
+    // while.
+    while (g_lateInitRefCount > 0) {
+        Sleep(10);
+    }
+
     AcquireSRWLockExclusive(&g_originalsLock);
     PTP_WORK work = std::exchange(g_applyWork, nullptr);
     ReleaseSRWLockExclusive(&g_originalsLock);
@@ -1755,20 +1786,21 @@ void Wh_ModBeforeUninit() {
 void Wh_ModUninit() {
     Wh_Log(L">");
 
-    // Don't unload in the middle of setting the hooks. Wait for a limited
-    // time, the symbols might be loading.
-    for (int i = 0; i < 500 && g_lateInitRefCount > 0; i++) {
-        Sleep(10);
-    }
-
     FreeLoadedModules();
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
+
+    // Without the symbols, reload the mod, which tries to load them again.
+    if (g_initialized && !UIProperty_HasVisibleContent_Original) {
+        *bReload = TRUE;
+        return TRUE;
+    }
 
     // Restore with the old settings, then apply the new settings.
     ApplyToExistingWindows(false);
     LoadSettings();
     ApplyToExistingWindows(true);
+    return TRUE;
 }

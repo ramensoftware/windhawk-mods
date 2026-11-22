@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnails
 // @name            Disable Taskbar Thumbnails
 // @description     Disable taskbar thumbnail and virtual desktop switcher hover flyouts, or replace thumbnails with a list
-// @version         1.2
+// @version         1.2.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -85,7 +85,6 @@ enum class WinVersion {
     Unsupported,
     Win10,
     Win11,
-    Win11_24H2,
 };
 
 WinVersion g_winVersion;
@@ -243,8 +242,13 @@ HoverFlyoutModel_TransitionToFlyoutVisibleStickyState_Hook(void* pThis,
     g_hoverFlyoutWindow = {};
 }
 
-using HoverFlyoutController_ShowTaskListButtonHoverFlyout_t = void(
-    WINAPI*)(void* pThis, void* param1, void* param2, int param3, int param4);
+using HoverFlyoutController_ShowTaskListButtonHoverFlyout_t =
+    void(WINAPI*)(void* pThis,
+                  void* param1,
+                  void* param2,
+                  int param3,
+                  int param4,
+                  bool param5);
 HoverFlyoutController_ShowTaskListButtonHoverFlyout_t
     HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original;
 void WINAPI
@@ -252,30 +256,58 @@ HoverFlyoutController_ShowTaskListButtonHoverFlyout_Hook(void* pThis,
                                                          void* param1,
                                                          void* param2,
                                                          int param3,
-                                                         int param4) {
+                                                         int param4,
+                                                         bool param5) {
     Wh_Log(L">");
 
     if (g_settings.mode != Mode::disabled &&
         g_settings.mode != Mode::listOnClick) {
         HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original(
-            pThis, param1, param2, param3, param4);
+            pThis, param1, param2, param3, param4, param5);
         return;
     }
 
     g_showTaskListButtonHoverFlyoutThreadId = GetCurrentThreadId();
 
     HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original(
+        pThis, param1, param2, param3, param4, param5);
+
+    g_showTaskListButtonHoverFlyoutThreadId = 0;
+}
+
+using HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_t = void(
+    WINAPI*)(void* pThis, void* param1, void* param2, int param3, int param4);
+HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_t
+    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original;
+void WINAPI
+HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Hook(void* pThis,
+                                                              void* param1,
+                                                              void* param2,
+                                                              int param3,
+                                                              int param4) {
+    Wh_Log(L">");
+
+    if (g_settings.mode != Mode::disabled &&
+        g_settings.mode != Mode::listOnClick) {
+        HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original(
+            pThis, param1, param2, param3, param4);
+        return;
+    }
+
+    g_showTaskListButtonHoverFlyoutThreadId = GetCurrentThreadId();
+
+    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original(
         pThis, param1, param2, param3, param4);
 
     g_showTaskListButtonHoverFlyoutThreadId = 0;
 }
 
-using HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_t =
+using HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old2_t =
     void(WINAPI*)(void* pThis, void* param1, void* param2, int param3);
-HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_t
-    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original;
+HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old2_t
+    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old2_Original;
 void WINAPI
-HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Hook(void* pThis,
+HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old2_Hook(void* pThis,
                                                               void* param1,
                                                               void* param2,
                                                               int param3) {
@@ -283,14 +315,14 @@ HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Hook(void* pThis,
 
     if (g_settings.mode != Mode::disabled &&
         g_settings.mode != Mode::listOnClick) {
-        HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original(
+        HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old2_Original(
             pThis, param1, param2, param3);
         return;
     }
 
     g_showTaskListButtonHoverFlyoutThreadId = GetCurrentThreadId();
 
-    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original(
+    HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old2_Original(
         pThis, param1, param2, param3);
 
     g_showTaskListButtonHoverFlyoutThreadId = 0;
@@ -380,16 +412,23 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
         },
         {
-            {LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutController::ShowTaskListButtonHoverFlyout(class std::vector<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement>,class std::allocator<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement> > >,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::Foundation::IInspectable> const &,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind,enum winrt::WindowsUdk::UI::Shell::TaskbarFlyoutKind))"},
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutController::ShowTaskListButtonHoverFlyout(class std::vector<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement>,class std::allocator<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement> > >,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::Foundation::IInspectable> const &,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind,enum winrt::WindowsUdk::UI::Shell::TaskbarFlyoutKind,bool))"},
             &HoverFlyoutController_ShowTaskListButtonHoverFlyout_Original,
             HoverFlyoutController_ShowTaskListButtonHoverFlyout_Hook,
             true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
         },
         {
-            // Pre-KB5053656 (March 27, 2025):
-            {LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutController::ShowTaskListButtonHoverFlyout(class std::vector<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement>,class std::allocator<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement> > >,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::Foundation::IInspectable> const &,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))"},
+            // Pre-KB5132057:
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutController::ShowTaskListButtonHoverFlyout(class std::vector<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement>,class std::allocator<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement> > >,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::Foundation::IInspectable> const &,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind,enum winrt::WindowsUdk::UI::Shell::TaskbarFlyoutKind))"},
             &HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Original,
             HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old1_Hook,
+            true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
+        },
+        {
+            // Pre-KB5053656 (March 27, 2025):
+            {LR"(private: void __cdecl winrt::Taskbar::implementation::HoverFlyoutController::ShowTaskListButtonHoverFlyout(class std::vector<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement>,class std::allocator<struct winrt::weak_ref<struct winrt::Windows::UI::Xaml::FrameworkElement> > >,struct winrt::Windows::Foundation::Collections::IVector<struct winrt::Windows::Foundation::IInspectable> const &,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))"},
+            &HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old2_Original,
+            HoverFlyoutController_ShowTaskListButtonHoverFlyout_Old2_Hook,
             true,  // New XAML thumbnails, enabled in late Windows 11 24H2.
         },
         {
@@ -499,7 +538,9 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
-WinVersion GetExplorerVersion() {
+WinVersion GetExplorerVersion(bool* hasWin10Taskbar) {
+    *hasWin10Taskbar = false;
+
     VS_FIXEDFILEINFO* fixedFileInfo = GetModuleVersionInfo(nullptr, nullptr);
     if (!fixedFileInfo) {
         return WinVersion::Unsupported;
@@ -514,12 +555,12 @@ WinVersion GetExplorerVersion() {
 
     switch (major) {
         case 10:
+            // explorer.exe includes the Win10 taskbar before this build.
+            *hasWin10Taskbar = build < 26100 || (build == 26100 && qfe < 1301);
             if (build < 22000) {
                 return WinVersion::Win10;
-            } else if (build < 26100) {
-                return WinVersion::Win11;
             } else {
-                return WinVersion::Win11_24H2;
+                return WinVersion::Win11;
             }
             break;
     }
@@ -681,15 +722,14 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    g_winVersion = GetExplorerVersion();
+    bool hasWin10Taskbar;
+    g_winVersion = GetExplorerVersion(&hasWin10Taskbar);
     if (g_winVersion == WinVersion::Unsupported) {
         Wh_Log(L"Unsupported Windows version");
         return FALSE;
     }
 
     if (g_settings.oldTaskbarOnWin11) {
-        bool hasWin10Taskbar = g_winVersion < WinVersion::Win11_24H2;
-
         if (g_winVersion >= WinVersion::Win11) {
             g_winVersion = WinVersion::Win10;
         }
@@ -717,11 +757,11 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
 
-        WindhawkUtils::Wh_SetFunctionHookT(
+        WindhawkUtils::SetFunctionHook(
             (ShowWindow_t)GetProcAddress(win32u, "NtUserShowWindow"),
             ShowWindow_Hook, &ShowWindow_Original);
 
-        WindhawkUtils::Wh_SetFunctionHookT(
+        WindhawkUtils::SetFunctionHook(
             (EnableWindow_t)GetProcAddress(win32u, "NtUserEnableWindow"),
             EnableWindow_Hook, &EnableWindow_Original);
 
@@ -743,9 +783,9 @@ BOOL Wh_ModInit() {
     HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
         kernelBaseModule, "LoadLibraryExW");
-    WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                       LoadLibraryExW_Hook,
-                                       &LoadLibraryExW_Original);
+    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                   LoadLibraryExW_Hook,
+                                   &LoadLibraryExW_Original);
 
     g_initialized = true;
 
