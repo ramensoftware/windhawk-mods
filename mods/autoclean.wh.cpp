@@ -39,7 +39,7 @@ Windows Storage Sense covers basic periodic Temp and Recycle Bin cleanup, wherea
 
 ## Safety Guards
 - **Temp Path Validation**: Refuses to clean drive roots, `%windir%`, `%USERPROFILE%`, or known user folders (Desktop, Documents, Downloads, Pictures, Music, Videos, AppData) if `%TEMP%` is misconfigured.
-- **Minimum Age Grace Periods**: Honored on all automatic Temp sweeps (default 10 minutes) and Recycle Bin pruning (default 24 hours / 1440 minutes) so active installers, build tools, and recent deletions stay protected.
+- **Minimum Age Grace Periods**: Honored on all Temp sweeps (default 24 hours / 1440 minutes) and Recycle Bin pruning (default 24 hours / 1440 minutes) so active installers, build tools, PyInstaller payloads, and recent deletions stay protected.
 - **Reparse-Point & Attribute Safety**: Skips junctions/symlinks, respects Windows file locks, and restores Read-Only/Hidden/System attributes if a locked file cannot be deleted.
 - **Safe Recycle Bin Defaults**: Automatic Recycle Bin size/count thresholds and startup cleaning are off by default; only 30-day age expiry is enabled out of the box.
 */
@@ -105,15 +105,12 @@ Windows Storage Sense covers basic periodic Temp and Recycle Bin cleanup, wherea
     - Minutes: Minutes
     - Hours: Hours
     - Days: Days
-  - oldestFirst: true
-    $name: Oldest-first target pruning
-    $description: Prune oldest-modified eligible files first until Temp size drops to the target percentage.
   - fullSweep: false
     $name: Always perform full sweep
-    $description: Delete all eligible Temp files (still honoring minimum file age) instead of stopping at the target percentage.
+    $description: Delete all eligible Temp files (still honoring minimum file age) instead of pruning oldest-first down to the target percentage.
   - targetPercent: 50
     $name: Target percentage to keep (%)
-    $description: Stop pruning oldest-first once Temp size is at or below this percentage (10 to 90%).
+    $description: When Full Sweep is off, prune oldest-first once Temp exceeds this percentage of the size limit (10 to 90%).
   - mouseGesture: TripleLeftClick
     $name: Mouse shortcut to clean Temp folders
     $description: Triple left-click (3x) on empty Desktop or Taskbar space to clean Temp immediately.
@@ -127,9 +124,9 @@ Windows Storage Sense covers basic periodic Temp and Recycle Bin cleanup, wherea
     - DesktopAndTaskbar: Desktop & Taskbar empty space (Recommended)
     - TaskbarOnly: Taskbar empty space only
     - DesktopOnly: Desktop empty space only
-  - minFileAgeMinutes: 10
+  - minFileAgeMinutes: 1440
     $name: Minimum file age (minutes)
-    $description: Skip Temp files modified more recently than this grace period on all automatic and manual passes (0 disables).
+    $description: Skip Temp files and empty folders modified more recently than this grace period on all passes (default 1440 = 24 hours; 0 disables).
   - cooldownSeconds: 30
     $name: Post-clean cooldown (seconds)
     $description: Minimum wait after a Temp cleanup before running another automatic pass.
@@ -146,7 +143,7 @@ Windows Storage Sense covers basic periodic Temp and Recycle Bin cleanup, wherea
 - recycleBinCleaner:
   - sizeThresholdEnabled: false
     $name: Enable Recycle Bin size threshold
-    $description: Automatically prune the Recycle Bin when its total size reaches the limit (off by default for safety).
+    $description: Automatically prune the Recycle Bin when its total size reaches the limit (off by default; if recent items within the grace period alone exceed the target, all older items are removed).
   - sizeThresholdValue: 500
     $name: Recycle Bin size limit
     $description: Numeric size limit (minimum 1).
@@ -180,7 +177,7 @@ Windows Storage Sense covers basic periodic Temp and Recycle Bin cleanup, wherea
     $description: When a size or count threshold triggers, permanently empty the entire Recycle Bin instead of pruning oldest-first down to the target %.
   - targetPercent: 50
     $name: Target percentage to keep (%)
-    $description: Stop pruning oldest items once the Recycle Bin shrinks to this percentage of the triggered limit (10 to 90%).
+    $description: Stop pruning oldest items once total Recycle Bin size/count drops to this percentage of the triggered limit (10 to 90%; protected recent items still count toward total size/count).
   - minItemAgeMinutes: 1440
     $name: Minimum deleted item age (minutes)
     $description: Keep items deleted more recently than this grace period during oldest-first and emergency pruning (default 1440 = 24 hours; 0 disables).
@@ -233,9 +230,9 @@ Windows Storage Sense covers basic periodic Temp and Recycle Bin cleanup, wherea
   - emergencyCheckSeconds: 60
     $name: Free space check interval (seconds)
     $description: How often to check drive free space (15 to 3600 seconds).
-  - cleanRecycleOnEmergency: true
+  - cleanRecycleOnEmergency: false
     $name: Also prune Recycle Bin on low-disk emergency
-    $description: Prune oldest eligible Recycle Bin items on the low-space drive (honoring minimum item age) during a low-disk emergency.
+    $description: Prune oldest eligible Recycle Bin items on the low-space drive (honoring minimum item age) when free space crosses below the floor (off by default).
   - bypassDeferralOnEmergency: true
     $name: Bypass fullscreen/battery deferral on emergency
     $description: Run immediately during low-disk emergencies even if fullscreen or on battery.
@@ -309,7 +306,6 @@ struct ModSettings {
     bool timerEnabled = true;
     uint64_t timerIntervalMs = 3600000ULL;
 
-    bool oldestFirst = true;
     bool fullSweep = false;
     int targetPercent = 50;
 
@@ -321,7 +317,7 @@ struct ModSettings {
     bool deferOnFullscreen = true;
     bool deferOnBattery = true;
 
-    uint64_t minFileAgeMs = 600000ULL;
+    uint64_t minFileAgeMs = 1440ULL * 60000ULL;
     uint64_t cooldownMs = 30000ULL;
     bool cleanWindowsTemp = false;
     bool dryRun = false;
@@ -350,7 +346,7 @@ struct ModSettings {
     int rbMouseScope = 0; // 0=DesktopAndTaskbar, 1=Anywhere
     uint64_t rbMouseMaxIntervalMs = 400ULL;
     bool rbPlaySound = false;
-    bool cleanRecycleOnEmergency = true;
+    bool cleanRecycleOnEmergency = false;
 
     // Temp 3x Left-Click Shortcut
     bool tempGestureEnabled = true;
@@ -527,9 +523,18 @@ static bool IsSafeTempDir(const std::wstring& dir) {
     WCHAR winDir[MAX_PATH]{};
     if (GetWindowsDirectoryW(winDir, ARRAYSIZE(winDir)) > 0) {
         std::wstring canonWin = CanonicalizeDirPath(winDir);
-        std::wstring canonWinTemp = canonWin + L"/Temp";
+        std::wstring canonWinTemp = canonWin + L"\\Temp";
         if (IsSameOrParentDir(dir, canonWin) ||
             (IsSameOrChildDir(dir, canonWin) && _wcsicmp(dir.c_str(), canonWinTemp.c_str()) != 0)) {
+            return false;
+        }
+    }
+
+    WCHAR pf64[MAX_PATH]{};
+    DWORD pf64Len = GetEnvironmentVariableW(L"ProgramW6432", pf64, ARRAYSIZE(pf64));
+    if (pf64Len > 0 && pf64Len < ARRAYSIZE(pf64)) {
+        std::wstring canonPf64 = CanonicalizeDirPath(pf64);
+        if (IsSameOrParentDir(dir, canonPf64) || IsSameOrChildDir(dir, canonPf64)) {
             return false;
         }
     }
@@ -1762,12 +1767,17 @@ static void DrainAndRearmDirWatches(std::vector<DirWatchHandle*>& watches) {
         if (!w || !w->eventHandle) {
             continue;
         }
-        while (WaitForSingleObject(w->eventHandle, 0) == WAIT_OBJECT_0) {
-            DWORD bytesTransferred = 0;
-            GetOverlappedResult(w->dirHandle, &w->overlapped, &bytesTransferred, FALSE);
-            if (!ArmDirWatch(*w)) {
-                break;
+        if (w->pending) {
+            while (WaitForSingleObject(w->eventHandle, 0) == WAIT_OBJECT_0) {
+                DWORD bytesTransferred = 0;
+                GetOverlappedResult(w->dirHandle, &w->overlapped, &bytesTransferred, FALSE);
+                w->pending = false;
+                if (!ArmDirWatch(*w)) {
+                    break;
+                }
             }
+        } else {
+            ArmDirWatch(*w);
         }
     }
 }
@@ -1848,7 +1858,6 @@ struct RecycleCleanResult {
     RecycleCleanStatus status = RecycleCleanStatus::AlreadyEmpty;
     uint64_t bytesFreed = 0;
     uint64_t itemsCleaned = 0;
-    uint64_t itemsRemaining = 0;
     uint64_t oldestRemainingDeletedAt100Ns = 0;
 };
 
@@ -2181,7 +2190,6 @@ static RecycleCleanResult RunRecycleBinClean(
             Wh_Log(L"[%s | RecycleBin-Prune]%s: 0 eligible items (all within min age or skipped)",
                    reason, cfg.dryRun ? L" (DRY-RUN ONLY)" : L"");
             res.status = cfg.dryRun ? RecycleCleanStatus::DryRun : RecycleCleanStatus::AlreadyEmpty;
-            res.itemsRemaining = activeItems;
             res.oldestRemainingDeletedAt100Ns = oldestProtected;
             return res;
         }
@@ -2218,6 +2226,7 @@ static RecycleCleanResult RunRecycleBinClean(
 
         uint64_t freedBytes = 0;
         uint64_t deletedItems = 0;
+        uint64_t failedItems = 0;
         uint64_t oldestSurvivor = oldestProtected;
 
         for (const auto& item : candidates) {
@@ -2257,9 +2266,9 @@ static RecycleCleanResult RunRecycleBinClean(
                 else remBytes = 0;
                 if (remItems > 0) remItems--;
             } else {
-                if (oldestSurvivor == 0 || item.deletedAt100Ns < oldestSurvivor) {
-                    oldestSurvivor = item.deletedAt100Ns;
-                }
+                // Do not add failed items to oldestSurvivor so they cannot cause a 1s retry loop;
+                // they will be retried on the next Recycle Bin change or next surviving item's expiry.
+                failedItems++;
             }
         }
 
@@ -2272,19 +2281,19 @@ static RecycleCleanResult RunRecycleBinClean(
         }
 
         Wh_Log(
-            L"[%s | RecycleBin-Prune]%s: %s %llu bytes (%llu items, %llu remaining)",
+            L"[%s | RecycleBin-Prune]%s: %s %llu bytes (%llu items, %llu remaining, %llu failed)",
             reason,
             cfg.dryRun ? L" (DRY-RUN ONLY)" : L"",
             cfg.dryRun ? L"would free" : L"freed",
             static_cast<unsigned long long>(freedBytes),
             static_cast<unsigned long long>(deletedItems),
-            static_cast<unsigned long long>(remItems));
+            static_cast<unsigned long long>(remItems),
+            static_cast<unsigned long long>(failedItems));
         res.status = cfg.dryRun
             ? RecycleCleanStatus::DryRun
             : (deletedItems > 0 ? RecycleCleanStatus::Pruned : RecycleCleanStatus::AlreadyEmpty);
         res.bytesFreed = freedBytes;
         res.itemsCleaned = deletedItems;
-        res.itemsRemaining = remItems;
         res.oldestRemainingDeletedAt100Ns = oldestSurvivor;
         return res;
     }
@@ -2302,7 +2311,6 @@ static RecycleCleanResult RunRecycleBinClean(
         res.status = RecycleCleanStatus::DryRun;
         res.bytesFreed = activeBytes;
         res.itemsCleaned = activeItems;
-        res.itemsRemaining = 0;
         return res;
     }
 
@@ -2350,7 +2358,6 @@ static RecycleCleanResult RunRecycleBinClean(
     res.status = RecycleCleanStatus::Emptied;
     res.bytesFreed = activeBytes;
     res.itemsCleaned = activeItems;
-    res.itemsRemaining = 0;
     return res;
 }
 
@@ -2469,7 +2476,9 @@ static void CollectCandidatesRecursive(
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             CollectCandidatesRecursive(
                 childPath, depth + 1, now100Ns, effectiveMinAgeMs, cfg, files, dirs, stats);
-            dirs.push_back({childPath, depth + 1});
+            if (IsOlderThanGracePeriod(fd, now100Ns, effectiveMinAgeMs)) {
+                dirs.push_back({childPath, depth + 1});
+            }
         } else {
             uint64_t fileSize = (static_cast<uint64_t>(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
             stats.totalBytesScanned += fileSize;
@@ -2503,19 +2512,12 @@ static CleanStats RunCleanupPass(const ModSettings& cfg, const wchar_t* reason, 
             ToExtendedPath(dir), 0, now100Ns, effectiveMinAgeMs, cfg, files, dirs, stats);
     }
 
-    bool isTimerOrManual = (wcscmp(reason, L"Timer") == 0 || wcscmp(reason, L"Taskbar3xClick") == 0);
-    bool useOldestFirst = !isFullSweepMode && cfg.oldestFirst;
-    if (useOldestFirst && isTimerOrManual && stats.totalBytesScanned < cfg.thresholdBytes) {
-        useOldestFirst = false;
-    }
+    bool useOldestFirst = !isFullSweepMode;
 
     uint64_t targetBytes = 0;
     uint64_t remainingBytes = stats.eligibleBytes;
     if (useOldestFirst) {
-        uint64_t basis = (stats.totalBytesScanned >= cfg.thresholdBytes)
-            ? cfg.thresholdBytes
-            : stats.eligibleBytes;
-        targetBytes = ScaleByPercentU64(basis, cfg.targetPercent);
+        targetBytes = ScaleByPercentU64(cfg.thresholdBytes, cfg.targetPercent);
         std::sort(files.begin(), files.end(), [](const FileCandidate& a, const FileCandidate& b) {
             return a.timestamp100Ns < b.timestamp100Ns;
         });
@@ -2525,7 +2527,7 @@ static CleanStats RunCleanupPass(const ModSettings& cfg, const wchar_t* reason, 
         if (g_stopRequested.load(std::memory_order_relaxed)) {
             break;
         }
-        if (useOldestFirst && remainingBytes <= targetBytes && stats.filesDeleted > 0) {
+        if (useOldestFirst && remainingBytes <= targetBytes) {
             break;
         }
         if (cfg.dryRun) {
@@ -2712,6 +2714,7 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
 
     uint64_t lastEmergencyCheck = 0;
+    bool emergencyBaselineRecorded = false;
     bool emergencyFloorActive = false;
     uint64_t lastCleanTime = 0;
     uint64_t lastRecycleCleanTime = 0;
@@ -2719,7 +2722,6 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
     bool startupTempPending = cfg.startupCleanTemp;
     bool startupRecyclePending = cfg.startupCleanRecycle;
     bool watchDirty = cfg.thresholdEnabled;
-    uint64_t firstWriteEventTime = watchDirty ? now : 0;
     uint64_t lastWriteEventTime = watchDirty ? now : 0;
     bool deferredPending = false;
     bool lastCleanWinTemp = cfg.cleanWindowsTemp;
@@ -2736,7 +2738,6 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             DrainAndRearmDirWatches(watches);
         }
         watchDirty = false;
-        firstWriteEventTime = 0;
         lastWriteEventTime = 0;
         return stats;
     };
@@ -2760,7 +2761,6 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             lastCleanWinTemp = cfg.cleanWindowsTemp;
             lastThreshEnabled = cfg.thresholdEnabled;
             watchDirty = cfg.thresholdEnabled;
-            firstWriteEventTime = watchDirty ? now : 0;
             lastWriteEventTime = watchDirty ? now : 0;
         }
 
@@ -2773,6 +2773,7 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             g_recycleDirty.store(true, std::memory_order_release);
             lastEmergencyCheck = 0;
             if (cfg.emergencyEnabled != lastEmergEnabled || cfg.emergencyFloorBytes != lastEmergFloorBytes) {
+                emergencyBaselineRecorded = false;
                 emergencyFloorActive = false;
                 lastEmergEnabled = cfg.emergencyEnabled;
                 lastEmergFloorBytes = cfg.emergencyFloorBytes;
@@ -2785,7 +2786,6 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             lastTimerEnabled = cfg.timerEnabled;
             if (cfg.thresholdEnabled) {
                 watchDirty = true;
-                firstWriteEventTime = 0;
                 lastWriteEventTime = 0;
             }
         }
@@ -2806,7 +2806,7 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
         // 0a. Immediate manual 3x left-click Temp trigger
         if (g_manualTempRequested.exchange(false, std::memory_order_acq_rel)) {
             Wh_Log(L"3x empty-space left-click Temp trigger activated");
-            CleanStats stats = runTempPassAndDrain(L"Taskbar3xClick", cfg.fullSweep);
+            CleanStats stats = runTempPassAndDrain(L"Taskbar3xClick", true);
             lastCleanTime = GetTickCount64();
             NotifyTempToast(stats, cfg.dryRun, true);
         }
@@ -2871,7 +2871,12 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             uint64_t freeBytes = 0;
             wchar_t lowDrive = 0;
             bool belowFloor = IsDiskSpaceBelowFloor(cfg, &freeBytes, &lowDrive);
-            if (!belowFloor) {
+            if (!emergencyBaselineRecorded) {
+                // First check after process start only records whether the drive is already below the floor
+                // so emergency cleanup runs only on an actual crossing below the floor.
+                emergencyBaselineRecorded = true;
+                emergencyFloorActive = belowFloor;
+            } else if (!belowFloor) {
                 emergencyFloorActive = false;
             } else if (!emergencyFloorActive) {
                 if (!ShouldDeferCleanup(cfg, true, &deferReason)) {
@@ -2960,9 +2965,9 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
                     } else if (cfg.rbRetentionEnabled) {
                         RecycleCleanResult ageRes = RunRecycleBinClean(
                             cfg, L"RecycleAgeExpiry", RecycleCleanMode::ExpireOldItems);
+                        lastRecycleCleanTime = GetTickCount64();
                         updateNextRecycleExpiry(ageRes.oldestRemainingDeletedAt100Ns);
                         if (ageRes.itemsCleaned > 0) {
-                            lastRecycleCleanTime = GetTickCount64();
                             NotifyRecycleToast(ageRes, false);
                         }
                     }
@@ -2975,16 +2980,15 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             }
         }
 
-        // 5. Event-driven Temp threshold trigger (debounced with max-wait cap under steady writes)
+        // 5. Event-driven Temp threshold trigger (watches stay paused while watchDirty to avoid I/O wakeups)
         now = GetTickCount64();
-        uint64_t maxDebounceWaitMs = (std::max)(MultiplyClampU64(cfg.debounceMs, 3ULL), 60000ULL);
-        bool debounceElapsed = (lastWriteEventTime == 0) ||
-                               (now - lastWriteEventTime >= cfg.debounceMs) ||
-                               (firstWriteEventTime != 0 && (now - firstWriteEventTime >= maxDebounceWaitMs));
+        bool debounceElapsed = (lastWriteEventTime == 0) || (now - lastWriteEventTime >= cfg.debounceMs);
         if (allowAutoRuns && cfg.thresholdEnabled && (watchDirty || deferredPending) &&
             debounceElapsed &&
             (lastCleanTime == 0 || (now - lastCleanTime >= cfg.cooldownMs))) {
             if (!ShouldDeferCleanup(cfg, false, &deferReason)) {
+                DrainAndRearmDirWatches(watches);
+
                 BOOL bgEntered = SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
                 uint64_t totalSize = 0;
                 for (const auto& dir : GetTargetTempDirs(cfg)) {
@@ -2995,7 +2999,6 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
                 }
 
                 watchDirty = false;
-                firstWriteEventTime = 0;
                 lastWriteEventTime = 0;
                 deferredPending = false;
                 if (totalSize >= cfg.thresholdBytes) {
@@ -3009,9 +3012,6 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             } else {
                 deferredPending = true;
                 lastWriteEventTime = now;
-                if (firstWriteEventTime == 0) {
-                    firstWriteEventTime = now;
-                }
             }
         }
 
@@ -3039,13 +3039,9 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
                     minWait(elapsed < cfg.startupDelayMs ? (cfg.startupDelayMs - elapsed) : 1000ULL);
                 }
                 if (cfg.thresholdEnabled && watchDirty) {
-                    uint64_t quietRem = (lastWriteEventTime != 0 && now - lastWriteEventTime < cfg.debounceMs)
+                    uint64_t debRem = (lastWriteEventTime != 0 && now - lastWriteEventTime < cfg.debounceMs)
                         ? (cfg.debounceMs - (now - lastWriteEventTime))
                         : 0;
-                    uint64_t capRem = (firstWriteEventTime != 0 && now - firstWriteEventTime < maxDebounceWaitMs)
-                        ? (maxDebounceWaitMs - (now - firstWriteEventTime))
-                        : 0;
-                    uint64_t debRem = (std::min)(quietRem, capRem);
                     uint64_t coolRem = (lastCleanTime != 0 && now - lastCleanTime < cfg.cooldownMs)
                         ? (cfg.cooldownMs - (now - lastCleanTime))
                         : 0;
@@ -3080,8 +3076,12 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
 
         std::vector<HANDLE> waitHandles;
         waitHandles.push_back(g_wakeEvent);
-        for (DirWatchHandle* w : watches) {
-            waitHandles.push_back(w->eventHandle);
+        if (!watchDirty) {
+            for (DirWatchHandle* w : watches) {
+                if (w->pending) {
+                    waitHandles.push_back(w->eventHandle);
+                }
+            }
         }
 
         DWORD waitParam = (waitMs == INFINITE)
@@ -3095,17 +3095,17 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             waitParam);
 
         if (res >= WAIT_OBJECT_0 + 1 && res < WAIT_OBJECT_0 + waitHandles.size()) {
-            size_t idx = static_cast<size_t>(res - (WAIT_OBJECT_0 + 1));
-            DirWatchHandle* w = watches[idx];
-            DWORD bytesTransferred = 0;
-            GetOverlappedResult(w->dirHandle, &w->overlapped, &bytesTransferred, FALSE);
-            ArmDirWatch(*w);
-            uint64_t evNow = GetTickCount64();
-            if (!watchDirty || firstWriteEventTime == 0) {
-                firstWriteEventTime = evNow;
+            HANDLE signaled = waitHandles[res - WAIT_OBJECT_0];
+            for (DirWatchHandle* w : watches) {
+                if (w->eventHandle == signaled) {
+                    DWORD bytesTransferred = 0;
+                    GetOverlappedResult(w->dirHandle, &w->overlapped, &bytesTransferred, FALSE);
+                    w->pending = false;
+                    break;
+                }
             }
             watchDirty = true;
-            lastWriteEventTime = evNow;
+            lastWriteEventTime = GetTickCount64();
         }
     }
 
@@ -3155,7 +3155,6 @@ static void LoadSettings() {
     if (timerMs < 15000ULL) timerMs = 15000ULL;
     next.timerIntervalMs = timerMs;
 
-    next.oldestFirst = Wh_GetIntSetting(L"tempCleaner.oldestFirst") != 0;
     next.fullSweep = Wh_GetIntSetting(L"tempCleaner.fullSweep") != 0;
     int targetPct = Wh_GetIntSetting(L"tempCleaner.targetPercent");
     if (targetPct < 10) targetPct = 10;
