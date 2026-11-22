@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         1.1.0
+// @version         1.1.1
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -239,6 +239,7 @@ If you find this mod useful, you can support its development and maintenance:
 #include <mmdeviceapi.h>
 #include <psapi.h>
 #include <shellapi.h>
+#include <shobjidl.h>
 #include <tlhelp32.h>
 
 #include <algorithm>
@@ -657,17 +658,25 @@ static void ClearPowerSchemeState() {
 }
 
 static void RestoreOriginalPowerScheme() {
-    std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
-    if (!g_isPerformancePlanEngaged.load() || !g_hasOriginalPowerScheme) {
-        return;
+    GUID origScheme{};
+    GUID engagedGuid{};
+    {
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
+        if (!g_isPerformancePlanEngaged.load() || !g_hasOriginalPowerScheme) {
+            return;
+        }
+        origScheme = g_originalPowerScheme;
+        engagedGuid = g_engagedPowerPlanGuid;
     }
+
     GUID* pCurrent = nullptr;
     if (PowerGetActiveScheme(nullptr, &pCurrent) == ERROR_SUCCESS && pCurrent) {
         bool currentMatchesEngaged =
-            IsEqualGUID(*pCurrent, g_engagedPowerPlanGuid);
+            IsEqualGUID(*pCurrent, engagedGuid);
         LocalFree(pCurrent);
         if (!currentMatchesEngaged) {
             // User manually switched power schemes during workload; do not overwrite user's choice
+            std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
             g_isPerformancePlanEngaged.store(false);
             g_hasOriginalPowerScheme = false;
             g_engagedPowerPlanGuid = GUID{};
@@ -676,11 +685,14 @@ static void RestoreOriginalPowerScheme() {
             return;
         }
     }
-    DWORD res = PowerSetActiveScheme(nullptr, &g_originalPowerScheme);
-    g_isPerformancePlanEngaged.store(false);
-    g_hasOriginalPowerScheme = false;
-    g_engagedPowerPlanGuid = GUID{};
-    ClearPowerSchemeState();
+    DWORD res = PowerSetActiveScheme(nullptr, &origScheme);
+    {
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
+        g_isPerformancePlanEngaged.store(false);
+        g_hasOriginalPowerScheme = false;
+        g_engagedPowerPlanGuid = GUID{};
+        ClearPowerSchemeState();
+    }
     if (res == ERROR_SUCCESS) {
         Wh_Log(L"[Power] Restored original system power plan.");
     } else {
@@ -689,17 +701,25 @@ static void RestoreOriginalPowerScheme() {
 }
 
 static void EngageTargetPowerScheme(const GUID& targetGuid) {
-    std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
-    if (g_hasFailedPowerPlanGuid &&
-        IsEqualGUID(g_lastFailedPowerPlanGuid, targetGuid)) {
-        return;
-    }
-    if (g_isPerformancePlanEngaged.load()) {
-        if (IsEqualGUID(g_engagedPowerPlanGuid, targetGuid)) {
+    bool alreadyEngaged = false;
+    {
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
+        if (g_hasFailedPowerPlanGuid &&
+            IsEqualGUID(g_lastFailedPowerPlanGuid, targetGuid)) {
             return;
         }
+        if (g_isPerformancePlanEngaged.load()) {
+            if (IsEqualGUID(g_engagedPowerPlanGuid, targetGuid)) {
+                return;
+            }
+            alreadyEngaged = true;
+        }
+    }
+
+    if (alreadyEngaged) {
         // Swapping target scheme while already engaged (e.g. settings changed during workload)
         DWORD res = PowerSetActiveScheme(nullptr, &targetGuid);
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
         if (res == ERROR_SUCCESS) {
             g_engagedPowerPlanGuid = targetGuid;
             SavePowerSchemeState(g_originalPowerScheme, targetGuid, /*engaged=*/true);
@@ -729,6 +749,7 @@ static void EngageTargetPowerScheme(const GUID& targetGuid) {
         LocalFree(pCurrent);
 
         DWORD res = PowerSetActiveScheme(nullptr, &targetGuid);
+        std::lock_guard<std::mutex> lock(g_powerSchemeMutex);
         if (res == ERROR_SUCCESS) {
             g_originalPowerScheme = originalGuid;
             g_hasOriginalPowerScheme = true;
@@ -1397,7 +1418,7 @@ static bool IsKnownHeavyElectronApp(const std::wstring& name) {
     static const std::unordered_set<std::wstring> kElectronApps = {
         L"discord.exe", L"slack.exe", L"teams.exe", L"telegram.exe",
         L"whatsapp.exe", L"signal.exe", L"skype.exe", L"spotify.exe",
-        L"code.exe", L"steamwebhelper.exe", L"obs64.exe"};
+        L"code.exe", L"steamwebhelper.exe"};
     return kElectronApps.count(ToLower(name)) != 0;
 }
 
@@ -1967,8 +1988,8 @@ GetActiveAudioProcessIdsCached(const ModSettings& settings) {
     // 1. Instant Elastic Rebound: for any audio stream newly started or resumed,
     // if it was throttled by the mod, restore it immediately to normal operation.
     for (DWORD pid : rawPids) {
-        if (g_audioPidFirstActive.find(pid) == g_audioPidFirstActive.end()) {
-            g_audioPidFirstActive[pid] = now;
+        auto [it, inserted] = g_audioPidFirstActive.try_emplace(pid, now);
+        if (inserted) {
             RestoreAndEraseThrottledProcess(pid);
             RestoreAndEraseSoftTrimmedProcess(pid);
         }
@@ -1976,7 +1997,7 @@ GetActiveAudioProcessIdsCached(const ModSettings& settings) {
 
         // Tier 2: Sustained audio stream (>= 1.5s) engages full audio protection logging
         auto durMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                         now - g_audioPidFirstActive[pid])
+                         now - it->second)
                          .count();
         if (durMs >= 1500) {
             if (g_loggedSanctuaryPids.insert(pid).second) {
@@ -2129,6 +2150,40 @@ GetActiveNetworkProcessIdsCached(const ModSettings& settings) {
                     BYTE firstByte =
                         static_cast<BYTE>(row.dwLocalAddr & 0xFF);
                     if (firstByte != 127) {
+                        activePids.insert(row.dwOwningPid);
+                    }
+                }
+            }
+        }
+    }
+
+    // Query IPv6 UDP Table
+    size = 0;
+    if (GetExtendedUdpTable(nullptr, &size, FALSE, AF_INET6,
+                            UDP_TABLE_OWNER_PID, 0) ==
+        ERROR_INSUFFICIENT_BUFFER) {
+        std::vector<BYTE> buffer(size);
+        if (GetExtendedUdpTable(buffer.data(), &size, FALSE,
+                                AF_INET6,
+                                UDP_TABLE_OWNER_PID,
+                                0) == NO_ERROR) {
+            auto* pTable6 =
+                reinterpret_cast<const MIB_UDP6TABLE_OWNER_PID*>(
+                    buffer.data());
+            for (DWORD i = 0; i < pTable6->dwNumEntries; ++i) {
+                const auto& row = pTable6->table[i];
+                if (row.dwOwningPid != 0 && row.dwOwningPid != 4) {
+                    bool isLoopback = true;
+                    for (int b = 0; b < 15; ++b) {
+                        if (row.ucLocalAddr[b] != 0) {
+                            isLoopback = false;
+                            break;
+                        }
+                    }
+                    if (row.ucLocalAddr[15] != 1) {
+                        isLoopback = false;
+                    }
+                    if (!isLoopback) {
                         activePids.insert(row.dwOwningPid);
                     }
                 }
@@ -2943,6 +2998,16 @@ static void PruneTerminatedSoftTrimmedProcesses() {
 // Window State Map
 // ---------------------------------------------------------------------------
 
+// {aa509085-9a56-4c40-a7e8-637ff42d136d}
+static constexpr GUID kCLSID_VirtualDesktopManager = {
+    0xaa509085, 0x9a56, 0x4c40, {0xa7, 0xe8, 0x63, 0x7f, 0xf4, 0x2d, 0x13, 0x6d}};
+
+// {a5cd92ff-29be-454c-8d04-d82879fb3f1b}
+static constexpr IID kIID_IVirtualDesktopManager = {
+    0xa5cd92ff, 0x29be, 0x454c, {0x8d, 0x04, 0xd8, 0x28, 0x79, 0xfb, 0x3f, 0x1b}};
+
+static IVirtualDesktopManager* g_pVirtualDesktopManager = nullptr;
+
 static BOOL CALLBACK EnumWindowStateProc(HWND hwnd, LPARAM lParam) {
     auto* map = reinterpret_cast<std::unordered_map<DWORD, WindowState>*>(lParam);
     if (!IsWindowVisible(hwnd))
@@ -2953,6 +3018,13 @@ static BOOL CALLBACK EnumWindowStateProc(HWND hwnd, LPARAM lParam) {
     if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
         cloaked != 0) {
         return TRUE;
+    }
+
+    if (g_pVirtualDesktopManager) {
+        BOOL onCurrent = TRUE;
+        if (SUCCEEDED(g_pVirtualDesktopManager->IsWindowOnCurrentVirtualDesktop(hwnd, &onCurrent)) && !onCurrent) {
+            return TRUE;
+        }
     }
 
     // Ignore stub or zero-sized helper windows
@@ -3250,9 +3322,7 @@ static void UpdateAiProcessActivity(const ModSettings& settings) {
                 continue;
 
             // Freshly detected AI process: initialize timestamp so it starts protected
-            if (g_aiLastInferenceTime.find(pid) == g_aiLastInferenceTime.end()) {
-                g_aiLastInferenceTime[pid] = now;
-            }
+            g_aiLastInferenceTime.try_emplace(pid, now);
 
             HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
             if (!hProc)
@@ -3493,13 +3563,13 @@ struct DecisionResult {
 
 struct SystemActionArbiter {
     const ModSettings& settings;
-    DWORD currentPid = 0;
-    DWORD foregroundPid = 0;
+    DWORD currentPid{0};
+    DWORD foregroundPid{0};
     const std::unordered_set<DWORD>& activeAudioPids;
     const std::unordered_set<DWORD>& immuneFamilyPids;
-    std::chrono::steady_clock::time_point now;
-    const std::unordered_map<DWORD, std::wstring>* procNames = nullptr;
-    const std::unordered_set<DWORD>* activeNetworkPids = nullptr;
+    std::chrono::steady_clock::time_point now{};
+    const std::unordered_map<DWORD, std::wstring>* procNames{nullptr};
+    const std::unordered_set<DWORD>* activeNetworkPids{nullptr};
 
     [[nodiscard]] DecisionResult EvaluatePreOpen(
         DWORD pid,
@@ -4084,7 +4154,8 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
 // ---------------------------------------------------------------------------
 
 static std::mutex g_gameConfigStoreMutex;
-static std::unordered_set<std::wstring> g_gameConfigStoreCache;
+static std::unordered_set<std::wstring> g_gameConfigStoreFullPaths;
+static std::unordered_set<std::wstring> g_gameConfigStoreExeNames;
 static std::chrono::steady_clock::time_point g_lastGameConfigStoreScan{};
 
 static void RefreshGameConfigStoreCache() {
@@ -4094,7 +4165,8 @@ static void RefreshGameConfigStoreCache() {
         std::chrono::duration_cast<std::chrono::minutes>(now - g_lastGameConfigStoreScan).count() < 10) {
         return; // Cache valid for 10 minutes
     }
-    g_gameConfigStoreCache.clear();
+    g_gameConfigStoreFullPaths.clear();
+    g_gameConfigStoreExeNames.clear();
     try {
         HKEY hParent = nullptr;
         if (RegOpenKeyExW(HKEY_CURRENT_USER, L"System\\GameConfigStore\\Children", 0, KEY_READ, &hParent) == ERROR_SUCCESS) {
@@ -4111,16 +4183,28 @@ static void RefreshGameConfigStoreCache() {
                         HKEY hSub = nullptr;
                         if (RegOpenKeyExW(hParent, subkeyName.data(), 0, KEY_READ, &hSub) == ERROR_SUCCESS) {
                             wchar_t pathBuf[MAX_PATH]{};
-                            DWORD bufSize = sizeof(pathBuf);
-                            DWORD type = 0;
-                            if (RegQueryValueExW(hSub, L"MatchedExeFullPath", nullptr, &type, reinterpret_cast<LPBYTE>(pathBuf), &bufSize) == ERROR_SUCCESS && type == REG_SZ) {
-                                const wchar_t* lastSlash = wcsrchr(pathBuf, L'\\');
-                                if (!lastSlash) {
-                                    lastSlash = wcsrchr(pathBuf, L'/');
+                            DWORD flags = 0;
+                            DWORD flagsSize = sizeof(flags);
+                            DWORD flagsType = 0;
+                            bool isGame = true;
+                            if (RegQueryValueExW(hSub, L"Flags", nullptr, &flagsType, reinterpret_cast<LPBYTE>(&flags), &flagsSize) == ERROR_SUCCESS && flagsType == REG_DWORD) {
+                                if ((flags & 0x11) == 0) {
+                                    isGame = false;
                                 }
-                                const wchar_t* exePtr = lastSlash ? (lastSlash + 1) : pathBuf;
-                                if (exePtr[0] != L'\0') {
-                                    g_gameConfigStoreCache.insert(ToLower(exePtr));
+                            }
+                            if (isGame) {
+                                DWORD bufSize = sizeof(pathBuf);
+                                DWORD type = 0;
+                                if (RegQueryValueExW(hSub, L"MatchedExeFullPath", nullptr, &type, reinterpret_cast<LPBYTE>(pathBuf), &bufSize) == ERROR_SUCCESS && type == REG_SZ && pathBuf[0] != L'\0') {
+                                    g_gameConfigStoreFullPaths.insert(ToLower(pathBuf));
+                                    const wchar_t* lastSlash = wcsrchr(pathBuf, L'\\');
+                                    if (!lastSlash) {
+                                        lastSlash = wcsrchr(pathBuf, L'/');
+                                    }
+                                    const wchar_t* exePtr = lastSlash ? (lastSlash + 1) : pathBuf;
+                                    if (exePtr[0] != L'\0') {
+                                        g_gameConfigStoreExeNames.insert(ToLower(exePtr));
+                                    }
                                 }
                             }
                             RegCloseKey(hSub);
@@ -4138,13 +4222,22 @@ static void RefreshGameConfigStoreCache() {
     g_lastGameConfigStoreScan = now;
 }
 
-static bool IsRegisteredWindowsGame(const std::wstring& procName) {
-    if (procName.empty()) {
+static bool IsRegisteredWindowsGame(const std::wstring& procName, HANDLE hProc = nullptr) {
+    if (procName.empty() && !hProc) {
         return false;
     }
     RefreshGameConfigStoreCache();
     std::lock_guard<std::mutex> lock(g_gameConfigStoreMutex);
-    return g_gameConfigStoreCache.count(ToLower(procName)) != 0;
+    if (hProc) {
+        wchar_t imagePath[MAX_PATH]{};
+        DWORD pathLen = _countof(imagePath);
+        if (QueryFullProcessImageNameW(hProc, 0, imagePath, &pathLen) && pathLen > 0) {
+            if (g_gameConfigStoreFullPaths.count(ToLower(imagePath)) != 0) {
+                return true;
+            }
+        }
+    }
+    return (!procName.empty() && g_gameConfigStoreExeNames.count(ToLower(procName)) != 0);
 }
 
 static bool HasGameRuntimeSignature(HANDLE hProc) {
@@ -4196,9 +4289,9 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
     if (kSystemClasses.count(className) != 0)
         return false;
 
-    // Check borderless windowed mode covering monitor
+    // Check borderless windowed mode covering monitor (foreground only)
     HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
-    if (hMon) {
+    if (hMon && hwnd == GetForegroundWindow()) {
         MONITORINFO mi{};
         mi.cbSize = sizeof(mi);
         if (GetMonitorInfoW(hMon, &mi)) {
@@ -4207,7 +4300,7 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
                 if (rc.left <= mi.rcMonitor.left && rc.top <= mi.rcMonitor.top &&
                     rc.right >= mi.rcMonitor.right && rc.bottom >= mi.rcMonitor.bottom) {
                     LONG style = GetWindowLongW(hwnd, GWL_STYLE);
-                    if ((style & WS_POPUP) || !(style & WS_CAPTION)) {
+                    if (!(style & WS_THICKFRAME) && !(style & WS_CAPTION)) {
                         return true;
                     }
                 }
@@ -4235,7 +4328,14 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
         }
     }
 
-    if (!procName.empty() && IsRegisteredWindowsGame(procName)) {
+    HANDLE hGameCheck = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (hGameCheck) {
+        bool regGame = IsRegisteredWindowsGame(procName, hGameCheck);
+        CloseHandle(hGameCheck);
+        if (regGame) {
+            return true;
+        }
+    } else if (!procName.empty() && IsRegisteredWindowsGame(procName)) {
         return true;
     }
 
@@ -4924,7 +5024,8 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
             static_cast<int64_t>(settings.browserTabInactivityMinutes) * 60;
         for (const auto& entry : processList) {
             DWORD pid = entry.pid;
-            if (pid == 0 || pid == 4 || pid == foregroundPid || handledPids.count(pid)) {
+            if (pid == 0 || pid == 4 || pid == foregroundPid ||
+                immuneFamilyPids.count(pid) || handledPids.count(pid)) {
                 continue;
             }
             // Exclude main browser UI windows
@@ -4933,8 +5034,8 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
                 continue;
             }
 
-            // Never trim processes actively playing audio
-            if (activeAudioPids.count(pid)) {
+            // Never trim processes actively playing audio or transmitting network data
+            if (activeAudioPids.count(pid) || activeNetworkPids.count(pid)) {
                 continue;
             }
 
@@ -4959,6 +5060,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
                 if (cpuPercent > 0.5) {
                     // Active tab (e.g. video streaming, web games, dynamic scripts)
                     g_rendererLastActiveTime[pid] = now;
+                    RestoreAndEraseSoftTrimmedProcess(pid);
                 } else if (itAct != g_rendererLastActiveTime.end()) {
                     auto inactiveSec =
                         std::chrono::duration_cast<std::chrono::seconds>(
@@ -5780,6 +5882,10 @@ BOOL WhTool_ModInit() {
 
     CheckAndRecoverCrashedPowerScheme();
 
+    CoCreateInstance(kCLSID_VirtualDesktopManager, nullptr, CLSCTX_INPROC_SERVER,
+                     kIID_IVirtualDesktopManager,
+                     reinterpret_cast<void**>(&g_pVirtualDesktopManager));
+
     LoadSettings();
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -5991,6 +6097,10 @@ void WhTool_ModUninit() {
         }
         g_powerWorkerThread.reset();
     }
+    if (g_pVirtualDesktopManager) {
+        g_pVirtualDesktopManager->Release();
+        g_pVirtualDesktopManager = nullptr;
+    }
     if (g_powerWakeEvent) {
         CloseHandle(g_powerWakeEvent);
         g_powerWakeEvent = nullptr;
@@ -6140,15 +6250,15 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
-        IMAGE_NT_HEADERS* ntHeaders =
-            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+        auto* dosHeader =
+            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandle(nullptr));
+        auto* ntHeaders =
+            reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
 
         DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+        void* entryPoint = reinterpret_cast<BYTE*>(dosHeader) + entryPointRVA;
 
-        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook), nullptr);
         return TRUE;
     }
 
