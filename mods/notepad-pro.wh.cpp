@@ -99,12 +99,15 @@ This mod is under active development, with additional quality-of-life improvemen
 #include <climits>
 #include <cmath>
 #include <cstdint>
+#include <cwctype>  // [windhawk-reviewer] iswalpha / iswalnum / towlower: include their header directly
 #include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+#include <windhawk_utils.h>  // [windhawk-reviewer] WindhawkUtils::SetFunctionHook / StringSetting
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -121,8 +124,16 @@ constexpr WCHAR kPropTop[] = L"WhNotepadPro.Top";
 constexpr UINT_PTR kEditSubclassId = 0x4E505245;
 constexpr UINT_PTR kTopSubclassId = 0x4E505254;
 constexpr UINT kSysCmdId = 0xA1F0;           // WM_SYSCOMMAND id (low 4 bits must be 0)
-constexpr UINT_PTR kTickTimer = 1;           // runs on the gutter window (~60 Hz)
-constexpr UINT_PTR kDiscoverTimer = 0x4E50;  // runs on the top-level window
+constexpr UINT_PTR kTickTimer = 1;           // runs on the gutter window (16 ms while busy, 250 ms idle)
+// [windhawk-reviewer] kDiscoverTimer (a 750 ms EnumChildWindows rescan of every Notepad window) was
+// removed on purpose: the CreateWindowExW hook and the initial enumeration in AttachTop already
+// find every editor. Don't bring the poll back without a case those two miss.
+// [windhawk-reviewer] Adaptive tick rate: the per-editor timer used to be a fixed 16 ms (60 Hz) for as
+// long as Notepad was open. See SetTickRate() / WakeTick() / SettleTickRate().
+constexpr UINT kTickFastMs = 16;          // typing, scrolling, dragging, or something still settling
+constexpr UINT kTickSlowMs = 250;         // idle backstop (also background tabs and minimized windows)
+constexpr ULONGLONG kTickGraceMs = 300;   // stay fast this long after the last wake-up event
+constexpr ULONGLONG kTickStartMs = 1000;  // ... and this long after an editor was attached
 constexpr WCHAR kMenuText[] = L"Line Numbers";
 constexpr UINT kSysCmdMinimapId = 0xA1E0;    // WM_SYSCOMMAND id for the minimap toggle
 constexpr WCHAR kMenuTextMinimap[] = L"Minimap";
@@ -165,6 +176,14 @@ std::atomic<int> g_themeEpoch{0};
 std::atomic<int> g_highlightStyle{0};  // 0 none, 1 underline, 2 bold, 3 both
 std::atomic<bool> g_unloading{false};
 UINT g_runMsg = 0;
+
+// [windhawk-reviewer] window classes are registered with the mod's own module (not the exe), and the
+// gutter / minimap windows are only created when their class registered (see Wh_ModInit). A stale class
+// left by an earlier instance of the mod would otherwise be picked up by CreateWindowExW, and its
+// window procedure points into an unloaded image.
+HINSTANCE g_hInst = nullptr;
+std::atomic<bool> g_gutterClassOk{false};
+std::atomic<bool> g_minimapClassOk{false};
 
 std::mutex g_mutex;  // guards g_editors, g_tops
 
@@ -220,8 +239,8 @@ struct EditorCtx {
     int tickCount = 0;
     bool inTick = false;
 
-    // -1 unknown, 1 = EM_GETTEXTRANGE works, 0 = use row geometry instead
-    int textMode = 0;  // always 0: EM_GETTEXTRANGE stops at paragraph marks in this editor
+    // [windhawk-reviewer] the always-0 `textMode` was removed together with its dead EM_GETTEXTRANGE
+    // paths (ReadText / CountBreaksText): line breaks are counted from the row geometry only.
 
     bool textDirty = true;
     LONG textLen = -1, lineCount = -1;
@@ -302,6 +321,18 @@ struct EditorCtx {
     POINT synScroll = {};
     DWORD synSelS = 0, synSelE = 0;
     int synW = 0, synH = 0;
+
+    // [windhawk-reviewer] row-geometry calibration: these used to be shared globals (g_cal*) that every
+    // thread painting an editor wrote without synchronization; now per editor (keyed by pixel font size).
+    int calKey = 0;
+    int calPitch = 0;   // distance between visual rows, px
+    int calOrigin = 0;  // y of row 0 when not scrolled, px
+    bool calPitchValid = false;
+    bool calOriginValid = false;
+
+    // [windhawk-reviewer] adaptive tick rate, see SetTickRate()
+    UINT tickMs = 0;          // current period of kTickTimer in ms (0 = timer not running)
+    ULONGLONG fastUntil = 0;  // GetTickCount64() until which the timer stays fast after a wake-up
 };
 
 struct TopCtx {
@@ -413,45 +444,13 @@ static bool PosFromChar(HWND edit, LONG idx, POINT* out) {
     return true;
 }
 
-// Copies up to n chars starting at `from` (buf needs n+1 elements).
-static LONG ReadText(HWND edit, LONG from, LONG n, WCHAR* buf) {
-    TEXTRANGEW tr;
-    tr.chrg.cpMin = from;
-    tr.chrg.cpMax = from + n;
-    tr.lpstrText = buf;
-    LRESULT got = SendMessageW(edit, EM_GETTEXTRANGE, 0, (LPARAM)&tr);
-    if (got < 0) got = 0;
-    if (got > n) got = n;
-    buf[got] = 0;
-    return (LONG)got;
-}
+// [windhawk-reviewer] ReadText() removed: it was only used by the dead CountBreaksText().
 
 static bool IsBreakChar(WCHAR ch) {
     return ch == L'\r' || ch == L'\n' || ch == 0x2029;
 }
 
-// Paragraph breaks in text range [from, to) ("\r\n" counts once).
-static LONG CountBreaksText(HWND edit, LONG from, LONG to) {
-    LONG total = 0;
-    WCHAR prev = 0;
-    WCHAR buf[4097];
-    if (from > 0) {
-        WCHAR p[2];
-        if (ReadText(edit, from - 1, 1, p) == 1) prev = p[0];
-    }
-    while (from < to) {
-        LONG n = std::min<LONG>(4096, to - from);
-        LONG got = ReadText(edit, from, n, buf);
-        if (got <= 0) break;
-        for (LONG i = 0; i < got; i++) {
-            WCHAR ch = buf[i];
-            if (ch == L'\r' || ch == 0x2029 || (ch == L'\n' && prev != L'\r')) total++;
-            prev = ch;
-        }
-        from += got;
-    }
-    return total;
-}
+// [windhawk-reviewer] CountBreaksText() removed: dead code (textMode was always 0).
 
 // A visual row `idx` (row number v > 0) starts a new paragraph if the previous
 // row ended with a paragraph break. Without reading text we infer this from
@@ -466,7 +465,7 @@ static bool RowStartsParagraphByGap(HWND edit, LONG v, LONG idx) {
     return idx > pidx + plen;
 }
 
-// Same count as above, derived from row geometry (fallback when text can't be read).
+// Paragraph breaks in [from, to) ("\r\n" counts once), derived from the row geometry.
 static LONG CountBreaksRows(HWND edit, LONG from, LONG to) {
     LONG lines = (LONG)SendMessageW(edit, EM_GETLINECOUNT, 0, 0);
     LONG v = (LONG)SendMessageW(edit, EM_LINEFROMCHAR, from, 0);
@@ -481,8 +480,8 @@ static LONG CountBreaksRows(HWND edit, LONG from, LONG to) {
 }
 
 static LONG CountBreaks(EditorCtx* c, LONG from, LONG to) {
-    return c->textMode == 1 ? CountBreaksText(c->edit, from, to)
-                            : CountBreaksRows(c->edit, from, to);
+    // [windhawk-reviewer] the dead textMode / CountBreaksText dispatch was removed (textMode was always 0)
+    return CountBreaksRows(c->edit, from, to);
 }
 
 // Number of paragraph breaks in [0, idx), walking from the cached anchor.
@@ -713,9 +712,8 @@ enum LangFlags {
 struct LangCfg {
     const WCHAR* exts;  // space separated, lower case
     int flags;
-    const WCHAR* keywords;
-    const WCHAR* types;
-    const WCHAR* constants;
+    // [windhawk-reviewer] the raw keywords / types / constants pointers were removed: nothing read them
+    // after BuildSet() had turned them into the kw / ty / cn sets.
     std::unordered_set<std::wstring_view> kw, ty, cn;
 };
 
@@ -737,9 +735,6 @@ static std::vector<LangCfg> BuildLangs() {
         LangCfg l;
         l.exts = exts;
         l.flags = flags;
-        l.keywords = kw;
-        l.types = ty;
-        l.constants = cn;
         BuildSet(l.kw, kw);
         BuildSet(l.ty, ty);
         BuildSet(l.cn, cn);
@@ -987,8 +982,7 @@ static void Tokenize(const LangCfg& L, const std::wstring& t, std::vector<uint8_
     }
 }
 
-// Reads the whole document (char indexes must match EM_LINEINDEX et al.).
-static LONG g_lastExpected = 0;     // editor-space length implied by the row geometry
+// [windhawk-reviewer] g_lastExpected (a global only ReadDocText used) is now a local in ReadDocText.
 
 // The editor numbers characters with a line break counting as ONE character (CRLF is a
 // single paragraph mark), while EM_GETTEXTEX hands back CRLF text. Everything in the
@@ -1020,7 +1014,8 @@ static LONG ExpectedEditorLength(EditorCtx* c) {
 
 // Reads the whole document in the editor's own index space.
 static bool ReadDocText(EditorCtx* c, LONG len, std::wstring& out) {
-    g_lastExpected = ExpectedEditorLength(c);
+    // [windhawk-reviewer] was the global g_lastExpected; editor-space length implied by the row geometry
+    const LONG lastExpected = ExpectedEditorLength(c);
 
     // Path 1: whole text in one call, then normalise line breaks.
     out.assign((size_t)len + 1, L'\0');
@@ -1031,7 +1026,7 @@ static bool ReadDocText(EditorCtx* c, LONG len, std::wstring& out) {
     SendMessageW(c->edit, EM_GETTEXTEX, (WPARAM)&gt, (LPARAM)&out[0]);
     out.resize(wcsnlen(out.c_str(), (size_t)len + 1));
     CollapseBreaks(out);
-    if (std::abs((long)out.size() - (long)g_lastExpected) <= 1) {
+    if (std::abs((long)out.size() - (long)lastExpected) <= 1) {
         return true;
     }
 
@@ -1051,24 +1046,15 @@ static bool ReadDocText(EditorCtx* c, LONG len, std::wstring& out) {
         LRESULT got = SendMessageW(c->edit, EM_GETLINE, v, (LPARAM)buf.data());
         if (got > 0) out.append(buf.data(), (size_t)std::min<LRESULT>(got, ll));
     }
-    return std::abs((long)out.size() - (long)g_lastExpected) <= 1;
+    return std::abs((long)out.size() - (long)lastExpected) <= 1;
 }
 
 // Language from the file name in the window title; none for unsaved ("Untitled") tabs.
+static std::wstring DocName(HWND edit);  // defined with the change markers below
+
 static int DetectLang(HWND edit) {
-    HWND top = GetAncestor(edit, GA_ROOT);
-    if (!top) return -1;
-    WCHAR buf[512] = {};
-    GetWindowTextW(top, buf, 511);
-    std::wstring t = buf;
-    size_t p = std::wstring::npos;
-    for (const WCHAR* sep : {L" - ", L" \u2013 ", L" \u2014 "}) {
-        size_t q = t.rfind(sep);
-        if (q != std::wstring::npos && (p == std::wstring::npos || q > p)) p = q;
-    }
-    if (p != std::wstring::npos) t.resize(p);
-    while (!t.empty() && (t[0] == L'*' || t[0] == L' ' || t[0] == 0x25CF)) t.erase(0, 1);
-    while (!t.empty() && t.back() == L' ') t.pop_back();
+    // [windhawk-reviewer] reuse DocName()'s title parsing instead of repeating it here
+    std::wstring t = DocName(edit);
     size_t dot = t.rfind(L'.');
     if (dot == std::wstring::npos || dot + 1 >= t.size() || t.size() - dot > 9) return -1;
     std::wstring ext = t.substr(dot + 1);
@@ -1093,7 +1079,7 @@ static int DetectLang(HWND edit) {
 // Change markers: what changed in the document since it was opened
 // ---------------------------------------------------------------------------
 
-// DIFFBEGIN
+// [windhawk-reviewer] removed the leftover DIFFBEGIN / DIFFEND markers around the diff code
 // Hash of every line (lines are separated by '\r', the editor's paragraph mark).
 static void HashLines(const std::wstring& t, std::vector<uint64_t>& h) {
     h.clear();
@@ -1284,7 +1270,6 @@ static void BuildMarkers(const LineDiff& d, int nOld, int nNew, std::vector<uint
         if (dc > ic && (del.empty() || del.back() != (uint32_t)j)) del.push_back((uint32_t)j);
     }
 }
-// DIFFEND
 
 // "Untitled" tabs (and anything without a name) get no markers: typing into a new document
 // would turn every line green.
@@ -1627,9 +1612,7 @@ static void SyntaxTick(EditorCtx* c) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Per-editor controller: runs from a ~60 Hz timer plus message hooks
-// ---------------------------------------------------------------------------
+// [windhawk-reviewer] removed the empty "Per-editor controller" section header
 
 // ---------------------------------------------------------------------------
 // Minimap (1/2): document model, geometry, layout
@@ -1738,9 +1721,6 @@ static bool MmCompute(EditorCtx* c, int H, MmGeo& g) {
     return true;
 }
 
-// Scrolls the editor so that the slider's top edge lands on minimap y = yTop. The slider
-// travels over [0, contentPx - sliderPx], which maps linearly onto the whole document, so
-// dragging stays stable even while the minimap itself scrolls.
 // Scrolls so that logical line `line` (minimap space) becomes the first visible line.
 static void MmScrollToTopLine(EditorCtx* c, const MmGeo& g, LONG line) {
     line = std::clamp<LONG>(line, 0, g.nLines - 1);
@@ -1772,6 +1752,10 @@ static void MmScrollToEnd(EditorCtx* c) {
     c->mmEndY = sp.y;
 }
 
+// [windhawk-reviewer] this comment used to sit above MmScrollToTopLine() by mistake.
+// Scrolls the editor so that the slider's top edge lands on minimap y = yTop. The slider
+// travels over [0, contentPx - sliderPx], which maps linearly onto the whole document, so
+// dragging stays stable even while the minimap itself scrolls.
 static void MmScrollTo(EditorCtx* c, const MmGeo& g, int yTop) {
     double V = std::min<double>(g.view, (double)g.nLines);
     if ((double)g.nLines <= V) return;
@@ -1990,6 +1974,67 @@ static void GutterTick(EditorCtx* c, bool fontChanged) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// [windhawk-reviewer] Adaptive tick rate
+//
+// The tick used to run from a fixed 16 ms timer for as long as Notepad was open (one per tab,
+// including hidden tabs and minimized windows), which keeps the CPU out of its low-power states.
+// Now the timer only runs fast while something can change or is still settling and otherwise
+// falls back to a slow backstop. Editor messages (typing, scrolling, size, show, selection) and the
+// minimap's mouse input call WakeTick(); every Tick() re-picks the rate when it ends.
+// ---------------------------------------------------------------------------
+
+// ms == 0 stops the timer. SetTimer with the same id replaces the running timer.
+static void SetTickRate(EditorCtx* c, UINT ms) {
+    if (!c->gutter || c->tickMs == ms) return;
+    c->tickMs = ms;
+    if (ms) {
+        if (!SetTimer(c->gutter, kTickTimer, ms, nullptr)) c->tickMs = 0;  // retry on the next call
+    } else {
+        KillTimer(c->gutter, kTickTimer);
+    }
+}
+
+// Something happened that the next ticks must pick up quickly: run fast for a short while.
+static void WakeTick(EditorCtx* c) {
+    c->fastUntil = GetTickCount64() + kTickGraceMs;
+    SetTickRate(c, kTickFastMs);
+}
+
+// Is there still work that only the timer tick does? Every condition here drains by itself (or
+// ends with the user's input), so the timer cannot get stuck on the fast rate.
+static bool TickBusy(EditorCtx* c, ULONGLONG now) {
+    if (c->mmDrag || c->mmDragPending) return true;  // a minimap drag is applied by the tick
+    if (GetCapture() == c->edit) return true;        // mouse selection in progress
+    // The settle counters only count down in ticks that actually reach them.
+    if (c->settle > 0 && (c->active || c->mmActive)) return true;
+    if (c->synSettle > 0 && c->lang >= 0) return true;
+    // Marker baseline still follows a document that is loading.
+    if (c->mkOn && c->mkHave && !c->mkFrozen && now < c->mkFollowUntil) return true;
+    // Document copy still to be read (docStale / docRetry). Mirrors the conditions under which
+    // RefreshSyntax really reads it, so an unneeded copy doesn't keep the timer fast forever.
+    if (c->docStale && (c->lang >= 0 || c->mmActive || c->mkOn) &&
+        (size_t)c->synLen <= kSyntaxMaxChars)
+        return true;
+    return false;
+}
+
+// Picks the timer rate once a tick is over: fast while busy (or shortly after a wake-up), slow
+// otherwise. Hidden editors (background tabs) and minimized windows only need the slow backstop.
+// NOTE: hidden editors keep a slow visibility poll instead of stopping the timer completely,
+// because Notepad may hide a whole tab host without sending WM_SHOWWINDOW to the editor itself.
+static void SettleTickRate(EditorCtx* c) {
+    if (!c->gutter) return;
+    ULONGLONG now = GetTickCount64();
+    bool fast = now < c->fastUntil;
+    if (!fast) {
+        HWND top = GetAncestor(c->edit, GA_ROOT);
+        bool dormant = !IsWindowVisible(c->edit) || (top && IsIconic(top));
+        fast = !dormant && TickBusy(c, now);
+    }
+    SetTickRate(c, fast ? kTickFastMs : kTickSlowMs);
+}
+
 static void Tick(EditorCtx* c) {
     if (c->inTick || !IsWindow(c->edit)) return;
     c->inTick = true;
@@ -1997,6 +2042,25 @@ static void Tick(EditorCtx* c) {
         EditorCtx* c;
         ~Guard() { c->inTick = false; }
     } guard{c};
+    // [windhawk-reviewer] re-pick the timer rate on every way out of this tick
+    struct RateGuard {
+        EditorCtx* c;
+        ~RateGuard() { SettleTickRate(c); }
+    } rateGuard{c};
+
+    // [windhawk-reviewer] minimized windows: IsWindowVisible stays true for them, so skip the tick.
+    {
+        HWND topWnd = GetAncestor(c->edit, GA_ROOT);
+        if (topWnd && IsIconic(topWnd)) return;
+    }
+
+    // [windhawk-reviewer] At the slow rate one tick stands in for ~15 fast ones: make the periodic
+    // checks (title / language every 15 ticks, theme and inset self-test every 30) run on every slow
+    // tick, so they keep their ~0.25-0.5 s latency instead of stretching to several seconds.
+    if (c->tickMs >= kTickSlowMs && !c->inMsg) {
+        c->synTick = 14;
+        c->tickCount = 29;
+    }
 
     SyntaxTick(c);
 
@@ -2060,13 +2124,10 @@ static void Tick(EditorCtx* c) {
 // Painting (double-buffered, so no flicker/tearing)
 // ---------------------------------------------------------------------------
 
-// Row geometry learned from rows whose position the editor reports correctly.
-// Shared by all editors, keyed by the pixel font size (so zoom/DPI changes reset it).
-static int g_calKey = 0;
-static int g_calPitch = 0;   // distance between visual rows, px
-static int g_calOrigin = 0;  // y of row 0 when not scrolled, px
-static bool g_calPitchValid = false;
-static bool g_calOriginValid = false;
+// Row geometry learned from rows whose position the editor reports correctly. Kept per editor
+// (EditorCtx::cal*), keyed by the pixel font size (so zoom/DPI changes reset it).
+// [windhawk-reviewer] these used to be shared g_cal* globals written by every painting thread; two
+// windows (or two zoom levels) overwrote each other's values.
 
 static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
     HWND edit = c->edit;
@@ -2136,9 +2197,9 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
     // Pass 1b: repair unreliable rows from reliable neighbours + a uniform row pitch.
     int rowPitch = 0;
     if (!rowList.empty()) {
-        if (g_calKey != c->fontPx) {
-            g_calKey = c->fontPx;
-            g_calPitchValid = g_calOriginValid = false;
+        if (c->calKey != c->fontPx) {
+            c->calKey = c->fontPx;
+            c->calPitchValid = c->calOriginValid = false;
         }
         POINT sp{};
         SendMessageW(edit, EM_GETSCROLLPOS, 0, (LPARAM)&sp);
@@ -2151,10 +2212,10 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
             }
         }
         if (pitch > 0) {
-            g_calPitch = pitch;
-            g_calPitchValid = true;
-        } else if (g_calPitchValid) {
-            pitch = g_calPitch;
+            c->calPitch = pitch;
+            c->calPitchValid = true;
+        } else if (c->calPitchValid) {
+            pitch = c->calPitch;
         } else {
             TEXTMETRICW t{};
             GetTextMetricsW(dc, &t);
@@ -2164,11 +2225,11 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
         rowPitch = pitch;
 
         // Learn where row 0 sits (unscrolled) from any reliable row.
-        if (g_calPitchValid) {
+        if (c->calPitchValid) {
             for (const Row& r : rowList) {
                 if (r.rel && r.idx > 0 && r.idx < docLen) {
-                    g_calOrigin = r.y - (int)r.v * pitch + sp.y;
-                    g_calOriginValid = true;
+                    c->calOrigin = r.y - (int)r.v * pitch + sp.y;
+                    c->calOriginValid = true;
                     break;
                 }
             }
@@ -2183,8 +2244,8 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
             }
             if (ref >= 0) {
                 rowList[k].y = rowList[ref].y + (k - ref) * pitch;
-            } else if (g_calOriginValid) {
-                rowList[k].y = g_calOrigin + (int)rowList[k].v * pitch - sp.y;
+            } else if (c->calOriginValid) {
+                rowList[k].y = c->calOrigin + (int)rowList[k].v * pitch - sp.y;
             } else {
                 // Nothing learned yet: guess the top inset (16 DIP unless the editor
                 // reports a non-zero formatting-rect top).
@@ -2390,7 +2451,7 @@ static LRESULT CALLBACK GutterProc(HWND h, UINT msg, WPARAM wParam, LPARAM lPara
 // Minimap (2/2): painting and mouse handling
 // ---------------------------------------------------------------------------
 
-static uint8_t EffClass(uint8_t k);
+// [windhawk-reviewer] EffClass() was an identity function and was removed.
 static D2D1_COLOR_F SynColor(bool dark, int k);
 
 struct MmCanvas {
@@ -2465,7 +2526,7 @@ static void MmDrawLine(EditorCtx* c, MmCanvas& cv, uint32_t s, uint32_t e, int y
             col += 4 - (col % 4);
             continue;
         }
-        uint8_t k = haveCls ? EffClass(c->cls[i]) : (uint8_t)kcDefault;
+        uint8_t k = haveCls ? c->cls[i] : (uint8_t)kcDefault;
         if (runStart >= 0 && k != runCls) flush(col);
         if (runStart < 0) {
             runStart = col;
@@ -2569,6 +2630,7 @@ static LRESULT CALLBACK MinimapProc(HWND h, UINT msg, WPARAM wParam, LPARAM lPar
         }
         case WM_LBUTTONDOWN: {
             if (!c || !IsWindow(c->edit)) break;
+            WakeTick(c);  // [windhawk-reviewer] tick-rate fix: a click / drag needs the fast timer
             SetFocus(c->edit);  // keep typing in the editor
             RECT rc;
             GetClientRect(h, &rc);
@@ -2611,6 +2673,7 @@ static LRESULT CALLBACK MinimapProc(HWND h, UINT msg, WPARAM wParam, LPARAM lPar
             if (c->mmDrag && (wParam & MK_LBUTTON) && IsWindow(c->edit)) {
                 c->mmDragY = GET_Y_LPARAM(lParam);  // applied by the next timer tick
                 c->mmDragPending = true;
+                WakeTick(c);  // [windhawk-reviewer] tick-rate fix: apply the drag on the fast timer
             }
             return 0;
         }
@@ -2727,12 +2790,7 @@ static LRESULT CALLBACK TopSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM 
         case WM_DWMCOLORIZATIONCOLORCHANGED:
             g_themeEpoch++;  // live theme updates
             break;
-        case WM_TIMER:
-            if (wParam == kDiscoverTimer) {
-                EnumChildWindows(h, DiscoverProc, 0);
-                return 0;
-            }
-            break;
+        // [windhawk-reviewer] the WM_TIMER / kDiscoverTimer editor rescan was removed (see the constants).
         case WM_NCDESTROY: {
             RemoveWindowSubclass(h, TopSubclassProc, kTopSubclassId);
             RemovePropW(h, kPropTop);
@@ -2771,7 +2829,8 @@ static void AttachTop(HWND top) {
                         kSysCmdMinimapId, kMenuTextMinimap);
         }
     }
-    SetTimer(top, kDiscoverTimer, 750, nullptr);  // finds editors created without our hook
+    // [windhawk-reviewer] no 750 ms discovery timer anymore: the CreateWindowExW hook plus this
+    // one-time enumeration of existing child windows find every editor.
     EnumChildWindows(top, DiscoverProc, 0);
 }
 
@@ -2784,7 +2843,7 @@ static void DetachTop(TopCtx* t) {
     }
     HWND top = t->hwnd;
     if (IsWindow(top)) {
-        KillTimer(top, kDiscoverTimer);
+        // [windhawk-reviewer] (there is no kDiscoverTimer to kill anymore)
         RemoveSysItem(GetSystemMenu(top, FALSE));
         RemoveWindowSubclass(top, TopSubclassProc, kTopSubclassId);
         RemovePropW(top, kPropTop);
@@ -2833,6 +2892,9 @@ static void DetachEditor(EditorCtx* c, bool windowDestroyed) {
 // original margins) must only run from the timer, once Notepad has finished setting
 // the control up; here we only advance the gutter if it is already active.
 static void TickNow(EditorCtx* c) {
+    // [windhawk-reviewer] every message-driven tick (edit, scroll, size, show) speeds the timer up
+    // again; this is how EditSubclassProc calls SetTickRate(c, 16).
+    WakeTick(c);
     bool prev = c->inMsg;
     c->inMsg = true;  // minimap work and plain-file document reads wait for the timer tick
     if (c->active || c->mmActive)
@@ -2915,6 +2977,23 @@ static LRESULT CALLBACK EditSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM
             TickNow(c);
             return r;
         }
+        // [windhawk-reviewer] tick-rate fix: these move the caret / selection without any of the
+        // messages above, so wake the timer for the current-line highlight and the syntax snapshot
+        // (otherwise a mouse click would show up only on the next slow tick).
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+        case WM_LBUTTONDBLCLK:
+        case EM_SETSEL:
+        case EM_EXSETSEL: {
+            LRESULT r = DefSubclassProc(h, msg, wParam, lParam);
+            WakeTick(c);
+            return r;
+        }
+        case WM_MOUSEMOVE: {
+            LRESULT r = DefSubclassProc(h, msg, wParam, lParam);
+            if (wParam & MK_LBUTTON) WakeTick(c);  // drag-selecting; plain hovering needs no tick
+            return r;
+        }
     }
     return DefSubclassProc(h, msg, wParam, lParam);
 }
@@ -2939,14 +3018,22 @@ void AttachEditor(HWND edit) {
     }
 
     // Hidden sibling window stacked above the editor; it also hosts the poll timer.
-    c->gutter = CreateWindowExW(WS_EX_NOPARENTNOTIFY, kGutterClass, L"",
-                                WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 0, 0, parent, nullptr,
-                                GetModuleHandleW(nullptr), c);
-    if (c->gutter) SetTimer(c->gutter, kTickTimer, 16, nullptr);
+    // [windhawk-reviewer] only created if the class registered; uses the mod's own module handle.
+    if (g_gutterClassOk.load())
+        c->gutter = CreateWindowExW(WS_EX_NOPARENTNOTIFY, kGutterClass, L"",
+                                    WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 0, 0, parent, nullptr,
+                                    g_hInst, c);
+    // [windhawk-reviewer] start fast for a short warm-up (Activate() needs a few early ticks);
+    // Tick() then picks the rate itself, see SetTickRate().
+    c->fastUntil = GetTickCount64() + kTickStartMs;
+    SetTickRate(c, kTickFastMs);
 
     // Second hidden sibling, on the right-hand side; only shown while the minimap is on.
-    c->minimap = CreateWindowExW(WS_EX_NOPARENTNOTIFY, kMinimapClass, L"", WS_CHILD | WS_CLIPSIBLINGS,
-                                 0, 0, 0, 0, parent, nullptr, GetModuleHandleW(nullptr), c);
+    // [windhawk-reviewer] same here: skipped when the minimap class did not register.
+    if (g_minimapClassOk.load())
+        c->minimap = CreateWindowExW(WS_EX_NOPARENTNOTIFY, kMinimapClass, L"",
+                                     WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 0, 0, parent, nullptr,
+                                     g_hInst, c);
 
     HWND top = GetAncestor(edit, GA_ROOT);
     if (top && top != edit) {
@@ -2965,23 +3052,16 @@ void AttachEditor(HWND edit) {
 
 using GlyphFn = void(STDMETHODCALLTYPE*)(void*, D2D1_POINT_2F, const DWRITE_GLYPH_RUN*, void*,
                                          DWRITE_MEASURING_MODE);
-using CreateBrushFn = HRESULT(STDMETHODCALLTYPE*)(void*, const D2D1_COLOR_F*, const void*, void**);
-using GetDpiFn = void(STDMETHODCALLTYPE*)(void*, float*, float*);
-using GetTransformFn = void(STDMETHODCALLTYPE*)(void*, float*);
-
-static ULONG ComAddRef(void* o) {
-    return ((ULONG(STDMETHODCALLTYPE*)(void*))(*(void***)o)[1])(o);
-}
-static ULONG ComRelease(void* o) {
-    return ((ULONG(STDMETHODCALLTYPE*)(void*))(*(void***)o)[2])(o);
-}
+// [windhawk-reviewer] The raw vtable helpers (ComAddRef / ComRelease, CreateBrushFn / GetDpiFn /
+// GetTransformFn and the vt[8] / vt[31] / vt[52] / font-face slot 11 calls) were replaced by typed COM
+// calls below. Only the hooked DrawGlyphRun slot (29) is still addressed by index (GlyphHook::Install).
 
 struct ModRange {
     uintptr_t base, end;
     bool riched;
 };
 struct FaceMap {
-    void* face;
+    IDWriteFontFace* face;  // [windhawk-reviewer] typed (was void*)
     std::unordered_map<UINT16, WCHAR> rev;  // glyph index -> character
 };
 static std::mutex g_synMutex;  // guards g_ranges, g_faces
@@ -3014,11 +3094,12 @@ static bool CallerIsRiched(void* ra) {
     return riched;
 }
 
-// Turns glyph indices back into characters using the font's cmap (IDWriteFontFace
-// vtable: AddRef=1, Release=2, GetGlyphIndices=11). Unknown glyphs become 0xFFFF.
+// Turns glyph indices back into characters using the font's cmap (IDWriteFontFace::
+// GetGlyphIndices). Unknown glyphs become 0xFFFF.
+// [windhawk-reviewer] typed COM calls instead of raw vtable slots (AddRef / Release / slot 11).
 static bool DecodeRun(const DWRITE_GLYPH_RUN* run, std::wstring& S) {
     std::lock_guard<std::mutex> lk(g_synMutex);
-    void* face = run->fontFace;
+    IDWriteFontFace* face = run->fontFace;
     FaceMap* fm = nullptr;
     for (FaceMap* f : g_faces)
         if (f->face == face) {
@@ -3027,20 +3108,18 @@ static bool DecodeRun(const DWRITE_GLYPH_RUN* run, std::wstring& S) {
         }
     if (!fm) {
         if (g_faces.size() >= 16) {
-            ComRelease(g_faces.front()->face);
+            g_faces.front()->face->Release();
             delete g_faces.front();
             g_faces.erase(g_faces.begin());
         }
         fm = new FaceMap();
         fm->face = face;
-        ComAddRef(face);  // keep the pointer valid / unique while cached
+        face->AddRef();  // keep the pointer valid / unique while cached
         std::vector<UINT32> cps;
         for (UINT32 cp = 0x20; cp <= 0x7E; cp++) cps.push_back(cp);
         for (UINT32 cp = 0xA0; cp <= 0x17F; cp++) cps.push_back(cp);
         std::vector<UINT16> gl(cps.size(), 0);
-        auto getIdx = (HRESULT(STDMETHODCALLTYPE*)(void*, const UINT32*, UINT32,
-                                                   UINT16*))(*(void***)face)[11];
-        if (SUCCEEDED(getIdx(face, cps.data(), (UINT32)cps.size(), gl.data()))) {
+        if (SUCCEEDED(face->GetGlyphIndices(cps.data(), (UINT32)cps.size(), gl.data()))) {
             for (size_t i = 0; i < cps.size(); i++)
                 if (gl[i]) fm->rev.emplace(gl[i], (WCHAR)cps[i]);  // first mapping wins
         }
@@ -3122,10 +3201,8 @@ static LONG FindInRow(const EditorCtx* c, const SnapRow& r, const std::wstring& 
     return best;
 }
 
-// Token class as it is drawn. Comments get their own muted gray (see SynColor).
-static uint8_t EffClass(uint8_t k) {
-    return k;
-}
+// [windhawk-reviewer] EffClass() removed (it just returned its argument). Comments get their own
+// muted gray in SynColor.
 
 // Returns true if the run was drawn (in colored pieces) by us.
 static bool TryColorRun(void* self, D2D1_POINT_2F o, const DWRITE_GLYPH_RUN* run, void* brush,
@@ -3138,14 +3215,15 @@ static bool TryColorRun(void* self, D2D1_POINT_2F o, const DWRITE_GLYPH_RUN* run
     const LONG n = (LONG)S.size();
 
     // Device-pixel position of the run's baseline origin.
-    void** vt = *(void***)self;
+    // [windhawk-reviewer] typed COM calls instead of raw vtable slots 52 (GetDpi) / 31 (GetTransform).
+    auto* rt = static_cast<ID2D1RenderTarget*>(self);
     float dpiX = 96.f, dpiY = 96.f;
-    ((GetDpiFn)vt[52])(self, &dpiX, &dpiY);
-    float mt[6] = {1, 0, 0, 1, 0, 0};
-    ((GetTransformFn)vt[31])(self, mt);
+    rt->GetDpi(&dpiX, &dpiY);
+    D2D1_MATRIX_3X2_F mt = {1, 0, 0, 1, 0, 0};
+    rt->GetTransform(&mt);
     double scale = dpiX > 0 ? dpiX / 96.0 : 1.0;
-    double xPx = (o.x * mt[0] + o.y * mt[2] + mt[4]) * scale;
-    double yPx = (o.x * mt[1] + o.y * mt[3] + mt[5]) * scale;
+    double xPx = (o.x * mt._11 + o.y * mt._21 + mt._31) * scale;
+    double yPx = (o.x * mt._12 + o.y * mt._22 + mt._32) * scale;
     double advPx = run->glyphAdvances[0] * scale;
 
     if (!c->offValid) {
@@ -3226,29 +3304,28 @@ static bool TryColorRun(void* self, D2D1_POINT_2F o, const DWRITE_GLYPH_RUN* run
     // Anything to color in this run?
     bool any = false;
     for (LONG i = 0; i < n; i++)
-        if (EffClass(c->cls[(size_t)(found + i)]) != kcDefault) {
+        if (c->cls[(size_t)(found + i)] != kcDefault) {
             any = true;
             break;
         }
     if (!any) return false;
 
     // Draw the run in segments of equal token class.
-    void* brushes[kcCount] = {};
-    auto createBrush = (CreateBrushFn)vt[8];
+    ID2D1SolidColorBrush* brushes[kcCount] = {};  // [windhawk-reviewer] typed (was void* + vtable slot 8)
     bool dark = c->dark;
     float x = o.x;
     LONG i = 0;
     while (i < n) {
-        uint8_t kc = EffClass(c->cls[(size_t)(found + i)]);
+        uint8_t kc = c->cls[(size_t)(found + i)];
         LONG j = i + 1;
-        while (j < n && EffClass(c->cls[(size_t)(found + j)]) == kc) j++;
+        while (j < n && c->cls[(size_t)(found + j)] == kc) j++;
 
         void* useBrush = brush;
         if (kc != kcDefault) {
             if (!brushes[kc]) {
                 D2D1_COLOR_F col = SynColor(dark, kc);
-                void* b = nullptr;
-                if (SUCCEEDED(createBrush(self, &col, nullptr, &b)) && b) brushes[kc] = b;
+                ID2D1SolidColorBrush* b = nullptr;
+                if (SUCCEEDED(rt->CreateSolidColorBrush(col, &b)) && b) brushes[kc] = b;
             }
             if (brushes[kc]) useBrush = brushes[kc];
         }
@@ -3264,8 +3341,8 @@ static bool TryColorRun(void* self, D2D1_POINT_2F o, const DWRITE_GLYPH_RUN* run
         for (LONG q = i; q < j; q++) x += run->glyphAdvances[q];
         i = j;
     }
-    for (void* b : brushes)
-        if (b) ComRelease(b);
+    for (ID2D1SolidColorBrush* b : brushes)
+        if (b) b->Release();
     return true;
 }
 
@@ -3310,7 +3387,9 @@ struct GlyphHook {
 // Create throw-away instances of each concrete render-target class just to read
 // their vtables; the code they point at is shared by every real instance.
 static void InstallD2DHooks() {
-    HMODULE d2d = LoadLibraryW(L"d2d1.dll");
+    // [windhawk-reviewer] System32 only: a bare LoadLibraryW name uses the default search order, and
+    // neither d2d1.dll nor d3d11.dll is a KnownDLL, so a copy next to the exe could be loaded instead.
+    HMODULE d2d = LoadLibraryExW(L"d2d1.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!d2d) {
         return;
     }
@@ -3334,7 +3413,7 @@ static void InstallD2DHooks() {
     rp.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
 
     // 0: ID2D1DeviceContext (most likely for a modern, GPU-composed control)
-    HMODULE d3d = LoadLibraryW(L"d3d11.dll");
+    HMODULE d3d = LoadLibraryExW(L"d3d11.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);  // [windhawk-reviewer] see above
     using D3D11CreateDevice_t = HRESULT(WINAPI*)(IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT,
                                                  const D3D_FEATURE_LEVEL*, UINT, UINT,
                                                  ID3D11Device**, D3D_FEATURE_LEVEL*,
@@ -3438,20 +3517,20 @@ HWND WINAPI CreateWindowExW_Hook(DWORD ex, LPCWSTR cls, LPCWSTR name, DWORD styl
 }
 
 static void LoadSettings() {
-    PCWSTR st = Wh_GetStringSetting(L"lineNumberSettings.HighlightStyle");
+    // [windhawk-reviewer] WindhawkUtils::StringSetting (RAII) instead of Wh_GetStringSetting /
+    // Wh_FreeStringSetting. Wh_GetStringSetting never returns NULL, so the NULL checks are gone.
     int v = 0;
-    if (st) {
-        if (wcscmp(st, L"underline") == 0) v = 1;
-        else if (wcscmp(st, L"bold") == 0) v = 2;
-        else if (wcscmp(st, L"both") == 0) v = 3;
+    {
+        auto st = WindhawkUtils::StringSetting::make(L"lineNumberSettings.HighlightStyle");
+        if (wcscmp(st.get(), L"underline") == 0) v = 1;
+        else if (wcscmp(st.get(), L"bold") == 0) v = 2;
+        else if (wcscmp(st.get(), L"both") == 0) v = 3;
     }
-    Wh_FreeStringSetting(st);
     g_highlightStyle = v;
     g_mmOnlyScroll = Wh_GetIntSetting(L"minimapSettings.MinimapOnlyWithScrollbar") != 0;
 
-    PCWSTR cb = Wh_GetStringSetting(L"minimapSettings.ClickBehavior");
-    g_mmClickLine = !(cb && wcscmp(cb, L"proportional") == 0);  // "line" is the default
-    Wh_FreeStringSetting(cb);
+    auto cb = WindhawkUtils::StringSetting::make(L"minimapSettings.ClickBehavior");
+    g_mmClickLine = wcscmp(cb.get(), L"proportional") != 0;  // "line" is the default
 }
 
 BOOL Wh_ModInit() {
@@ -3461,22 +3540,33 @@ BOOL Wh_ModInit() {
     g_minimapEnabled = Wh_GetIntValue(L"MinimapEnabled", 1) != 0;
     g_runMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
+    // [windhawk-reviewer] register the window classes with this mod's own module (not the exe's),
+    // and remember whether that worked: AttachEditor skips creating the gutter / minimap windows
+    // when a class failed to register. Falls back to the exe's handle if the lookup fails.
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCWSTR)&Wh_ModInit, &g_hInst) ||
+        !g_hInst) {
+        g_hInst = GetModuleHandleW(nullptr);
+    }
+
     WNDCLASSW wc{};
     wc.lpfnWndProc = GutterProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = g_hInst;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kGutterClass;
-    RegisterClassW(&wc);
+    g_gutterClassOk = RegisterClassW(&wc) != 0;
 
     WNDCLASSW mc{};
     mc.lpfnWndProc = MinimapProc;
-    mc.hInstance = GetModuleHandleW(nullptr);
+    mc.hInstance = g_hInst;
     mc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     mc.lpszClassName = kMinimapClass;
-    RegisterClassW(&mc);
+    g_minimapClassOk = RegisterClassW(&mc) != 0;
 
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
-                       (void**)&CreateWindowExW_Original);
+    // [windhawk-reviewer] WindhawkUtils::SetFunctionHook (typed) instead of void* casts.
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                   &CreateWindowExW_Original);
     return TRUE;
 }
 
@@ -3507,29 +3597,43 @@ void Wh_ModUninit() {
     {
         std::lock_guard<std::mutex> lk(g_synMutex);
         for (FaceMap* f : g_faces) {
-            ComRelease(f->face);
+            f->face->Release();  // [windhawk-reviewer] typed COM call (was ComRelease)
             delete f;
         }
         g_faces.clear();
     }
 
-    std::vector<EditorCtx*> editors;
-    std::vector<TopCtx*> tops;
+    // [windhawk-reviewer] unload race: only the HWNDs are copied while the lock is held. The old code
+    // copied the context pointers, released the lock and then read c->edit / t->hwnd; if a tab or
+    // window closed in between, its WM_NCDESTROY had already deleted that context. The context is now
+    // looked up again on the window's own thread (GetPropW), where it cannot be deleted underneath us.
+    std::vector<HWND> editors;
+    std::vector<HWND> tops;
     {
         std::lock_guard<std::mutex> lk(g_mutex);
-        editors = g_editors;
-        tops = g_tops;
+        for (EditorCtx* c : g_editors) editors.push_back(c->edit);
+        for (TopCtx* t : g_tops) tops.push_back(t->hwnd);
     }
-    for (EditorCtx* c : editors) {
-        HWND h = c->edit;
+    for (HWND h : editors) {
         if (IsWindow(h))
-            RunFromWindowThread(h, [](void* p) { DetachEditor((EditorCtx*)p, false); }, c);
+            RunFromWindowThread(
+                h,
+                [](void* p) {
+                    if (auto* c = (EditorCtx*)GetPropW((HWND)p, kPropEditor)) DetachEditor(c, false);
+                },
+                h);
     }
-    for (TopCtx* t : tops) {
-        HWND h = t->hwnd;
+    for (HWND h : tops) {
         if (IsWindow(h))
-            RunFromWindowThread(h, [](void* p) { DetachTop((TopCtx*)p); }, t);
+            RunFromWindowThread(
+                h,
+                [](void* p) {
+                    if (auto* t = (TopCtx*)GetPropW((HWND)p, kPropTop)) DetachTop(t);
+                },
+                h);
     }
-    UnregisterClassW(kGutterClass, GetModuleHandleW(nullptr));
-    UnregisterClassW(kMinimapClass, GetModuleHandleW(nullptr));
+    // [windhawk-reviewer] unregister with the same module handle the classes were registered with,
+    // and only the ones this instance registered.
+    if (g_gutterClassOk.load()) UnregisterClassW(kGutterClass, g_hInst);
+    if (g_minimapClassOk.load()) UnregisterClassW(kMinimapClass, g_hInst);
 }
