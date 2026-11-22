@@ -6,6 +6,7 @@
 // @author          nozwin
 // @github          https://github.com/nozwin
 // @include         explorer.exe
+// @compilerOptions -DWINRT_NO_MODULE_LOCK -lole32 -loleaut32 -lruntimeobject -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
