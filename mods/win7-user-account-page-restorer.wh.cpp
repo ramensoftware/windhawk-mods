@@ -59,7 +59,7 @@ to the internet and restart `explorer.exe` (or toggle the mod).
   instead of `System32\usercpl.dll` (one documented function, `PSPropertyBag_ReadStr`, answers differently for that
   one value). The private copy is Microsoft's file with **no code byte changed**; only its resources are extended:
   the strings (the symbol server has no `.mui` files, so the strings are embedded in the mod, in English, Italian,
-  French, Spanish and Portuguese), the picture frame, and the page definition.
+  French, Spanish, Portuguese and German), the picture frame, and the page definition.
 - **The "modified page".** The original Windows 7 layouts cannot load on Windows 10/11 as they are, for two reasons,
   and both are solved inside the private copy, with nothing in `System32` involved:
   - they take the picture frame from `shacct.dll`, which no longer contains it since Windows 10 1607 (this is why
@@ -74,11 +74,11 @@ to the internet and restart `explorer.exe` (or toggle the mod).
 - **Scope.** The mod runs only in `explorer.exe`. Until the page is opened for the first time it loads nothing.
 
 ## Settings
-- **Page language**: *Automatic* follows the Windows display language (English, Italian, French, Spanish or Portuguese;
+- **Page language**: *Automatic* follows the Windows display language (English, Italian, French, Spanish, Portuguese or German;
   English if Windows uses another language). Applies to windows opened after the change; if the page was already used in this session, restart
   `explorer.exe`.
 - **Show a generic user name**: off by default. When on, the name of the signed-in user is shown as a generic one
-  ("User", "Utente", ...) on this page only; Windows and the account keep the real name. Saving the generic name
+  ("User", "Utente", "Benutzer", ...) on this page only; Windows and the account keep the real name. Saving the generic name
   unchanged in "Change the account name" does nothing, so the account is never renamed by mistake.
 - **Keep downloaded files when the mod is disabled**: on by default, so that enabling the mod again needs no
   download.
@@ -86,7 +86,7 @@ to the internet and restart `explorer.exe` (or toggle the mod).
 ## Notes and limitations
 - **Best effort.** This mod is provided on a best-effort basis. It runs a Windows 7 page on top of Windows 10/11
   components that Microsoft can change at any time, so some features may not work, or may stop working after a
-  Windows update. The translations of the page (French, Spanish and Portuguese in particular) were also written
+  Windows update. The translations of the page (French, Spanish, Portuguese and German in particular) were also written
   without the original Microsoft files and may differ from the official wording.
 - **The Guest account is an edge case and is not supported by modern Windows.**
   The Windows 7 page can turn the Guest account on and off, but the Guest account is
@@ -111,6 +111,7 @@ to the internet and restart `explorer.exe` (or toggle the mod).
 - After changing a setting, close open User Accounts windows.
 
 ## Credits
+- **RandomGuy5747** (WinClassic) for the German translation of the page.
 - **RandomGuy5747** (WinClassic) for pointing out that the Windows 7 page can run on Windows 10 with the Windows 7
   DirectUI, in the thread "Secure restoration of Control Panel applets in Windows 10/11".
 - **Brawllux** (CPL Restoration Pack) for the finding that the page needs the picture frame of `shacct.dll`.
@@ -124,8 +125,10 @@ to the internet and restart `explorer.exe` (or toggle the mod).
 - language: auto
   $name: Page language
   $name:it-IT: Lingua della pagina
+  $name:de-DE: Seitensprache
   $description: This setting chooses the language of the restored page. "Automatic" follows the Windows display language.
   $description:it-IT: Questa impostazione sceglie la lingua della pagina ripristinata. "Automatica" segue la lingua di visualizzazione di Windows.
+  $description:de-DE: Diese Einstellung legt die Sprache der wiederhergestellten Seite fest. "Automatisch" folgt der Windows-Anzeigesprache.
   $options:
     - auto: Automatic (Windows display language)
     - en-US: English
@@ -133,21 +136,27 @@ to the internet and restart `explorer.exe` (or toggle the mod).
     - fr-FR: Français
     - es-ES: Español
     - pt-PT: Português
+    - de-DE: Deutsch
 - hideUserName: false
   $name: Show a generic user name
   $name:it-IT: Mostra un nome utente generico
+  $name:de-DE: Generischen Benutzernamen anzeigen
   $description: This setting replaces the name of the signed-in user with a generic one ("User", localized to the page language) on this page only. Windows, the account and the other accounts are not changed. Applies to windows opened after the change.
   $description:it-IT: Questa impostazione sostituisce il nome dell'utente connesso con uno generico ("Utente", localizzato nella lingua della pagina) solo in questa pagina. Windows, l'account e gli altri account non vengono modificati. Si applica alle finestre aperte dopo la modifica.
+  $description:de-DE: Diese Einstellung ersetzt den Namen des angemeldeten Benutzers nur auf dieser Seite durch einen generischen Namen ("Benutzer", in der Seitensprache). Windows, das Konto und die anderen Konten werden nicht geändert. Gilt für nach der Änderung geöffnete Fenster.
 - keepFilesOnDisable: true
   $name: Keep downloaded files when the mod is disabled
   $name:it-IT: Conserva i file scaricati quando la mod viene disattivata
+  $name:de-DE: Heruntergeladene Dateien beim Deaktivieren der Mod beibehalten
   $description: This setting decides whether the downloaded and generated files stay in the mod's storage folder. If on, they stay, so enabling the mod again works offline. If off, they are deleted when the mod is unloaded (files still in use are left).
   $description:it-IT: Questa impostazione decide se i file scaricati e generati restano nella cartella della mod. Se attiva, restano, così la riattivazione funziona senza connessione. Se disattiva, vengono eliminati allo scaricamento della mod (i file ancora in uso restano).
+  $description:de-DE: Diese Einstellung legt fest, ob die heruntergeladenen und erzeugten Dateien im Speicherordner der Mod bleiben. Wenn aktiviert, bleiben sie erhalten, sodass die erneute Aktivierung offline funktioniert. Wenn deaktiviert, werden sie beim Entladen der Mod gelöscht (Dateien, die noch verwendet werden, bleiben).
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <winhttp.h>
+#include <shellapi.h>
 #include <oaidl.h>
 #include <ocidl.h>
 #include <oleauto.h>
@@ -1120,9 +1129,187 @@ static const StringEntry kStringsPt[] = {
     {2002, L"Horizontal"},
     {2003, L"Vertical"},
 };
+static const StringEntry kStringsDe[] = {
+    {1, L"Benutzerkonten"},
+    {2, L"Ändern Sie die Einstellungen und Kennwörter der Benutzerkonten für Personen, die diesen Computer gemeinsam nutzen."},
+    {3, L"Hier klicken, um Text einzugeben"},
+    {4, L"Ändern Sie die Kontoinformationen dieser Person, z. B. den Kontotyp, den Namen, das Kennwort oder das Bild, oder löschen Sie dieses Konto."},
+    {5, L"Ändern Sie das Bild des Gastkontos oder verhindern Sie den Gastzugriff auf diesen Computer."},
+    {6, L"Ermöglichen Sie Personen ohne Benutzerkonto den Zugriff auf diesen Computer."},
+    {7, L"Auf dem Willkommensbildschirm werden die Namen aller Benutzer mit einem Konto auf diesem Computer angezeigt. Dieser Bildschirm erscheint beim Starten des Computers oder beim Wechseln des Benutzers."},
+    {8, L"Im Startmenü können Sie eine Computeraktivität auswählen, z. B. neue E-Mail-Nachrichten lesen oder im Internet surfen. Dieses Menü wird für jeden Benutzer personalisiert, der diesen Computer gemeinsam nutzt."},
+    {9, L"Ein Kennworthinweis kann Ihnen helfen, sich an Ihr Kennwort zu erinnern."},
+    {10, L"Ein Kennworthinweis kann dieser Person helfen, sich an ihr Kennwort zu erinnern."},
+    {11, L"Windows kann die Systemsteuerung für Benutzerkonten nicht öffnen."},
+    {12, L"Das aktuelle Benutzerkonto wurde nicht erkannt. Starten Sie den Computer neu, und öffnen Sie anschließend die Benutzerkonten."},
+    {13, L"Die eingegebenen Kennwörter stimmen nicht überein. Geben Sie das neue Kennwort bitte in beiden Feldern erneut ein."},
+    {14, L"Das eingegebene Kennwort ist falsch. Geben Sie Ihr aktuelles Kennwort bitte erneut ein."},
+    {15, L"Das eingegebene Kennwort entspricht nicht den Anforderungen der Kennwortrichtlinie. Überprüfen Sie die Anforderungen an die Mindestlänge, Komplexität und den Kennwortverlauf."},
+    {16, L"Windows kann das Kennwort nicht ändern."},
+    {17, L"Windows kann das Kennwort nicht entfernen. Die Kennwort- und/oder Kontorichtlinien erfordern, dass das Konto über ein Kennwort verfügt."},
+    {18, L"Der angegebene Kontoname ist ungültig, da Kontonamen folgende Zeichen nicht enthalten dürfen: /\\[]\":;|<>+=,?*\n\nGeben Sie bitte einen anderen Namen ein."},
+    {19, L"Der angegebene Kontoname kann nicht verwendet werden, da es sich um einen reservierten Namen handelt. Geben Sie bitte einen anderen Namen ein."},
+    {20, L"Der Benutzername darf nicht mit dem Computernamen identisch sein.\n\nGeben Sie bitte einen anderen Namen ein."},
+    {21, L"Die angegebene Gruppe ist nicht vorhanden."},
+    {22, L"Ein Konto mit dem Namen '%s' ist bereits vorhanden. Geben Sie einen anderen Namen ein."},
+    {23, L"Das angegebene Bild hat einen unbekannten Typ oder ist ungültig. Wählen Sie ein anderes Bild aus."},
+    {24, L"Es ist keine Kamera und kein Scanner verfügbar. Stellen Sie sicher, dass die Kamera angeschlossen und eingeschaltet ist, und versuchen Sie es erneut."},
+    {30, L"Der Benutzer, dessen Konto Sie löschen möchten, ist angemeldet. Bevor Sie das Konto löschen, sollten Sie zu diesem Benutzerkonto wechseln und sich dort abmelden. Wenn Sie ohne diese Schritte fortfahren, besteht die Gefahr eines Datenverlusts. Möchten Sie trotzdem fortfahren?"},
+    {31, L"Das Gastkonto ist angemeldet. Bevor Sie das Gastkonto deaktivieren können, müssen Sie zum Gastkonto wechseln und sich dort abmelden."},
+    {34, L"Windows kann das aktuell angemeldete Benutzerkonto nicht löschen."},
+    {37, L"Kennwortgeschützt"},
+    {38, L"Gastkonto"},
+    {39, L"Standardbenutzer"},
+    {40, L"Unbekannter Kontotyp"},
+    {41, L"Administrator"},
+    {42, L"Das Gastkonto ist aktiviert"},
+    {43, L"Das Gastkonto ist deaktiviert"},
+    {44, L"Windows kann das Kennwort nicht entfernen."},
+    {45, L"Benutzerkonten"},
+    {46, L"Diese Aktion kann aufgrund einer Kontoeinschränkung nicht ausgeführt werden. Wenden Sie sich an Ihren Administrator."},
+    {48, L"Neues Konto erstellen"},
+    {49, L"Konto ändern"},
+    {50, L"Bild auswählen"},
+    {51, L"Konto umbenennen"},
+    {52, L"Gastkonto aktivieren"},
+    {53, L"Gastoptionen ändern"},
+    {54, L"Konten verwalten"},
+    {55, L"Ihren Namen ändern"},
+    {56, L"Konto löschen"},
+    {57, L"Löschen bestätigen"},
+    {58, L"Kennwort ändern"},
+    {59, L"Kontotyp ändern"},
+    {60, L"Ihr Kennwort ändern"},
+    {61, L"Ihr Bild ändern"},
+    {62, L"Kennwort erstellen"},
+    {63, L"Ihr Kennwort erstellen"},
+    {64, L"Kennwort entfernen"},
+    {65, L"Ihr Kennwort entfernen"},
+    {66, L"Ihren Kontotyp ändern"},
+    {67, L"Windows konnte das Dialogfeld für die erweiterten Optionen nicht starten."},
+    {68, L"Der angegebene Kontoname ist ungültig, da bereits ein Konto mit diesem Namen vorhanden ist.\n\nGeben Sie bitte einen anderen Namen ein."},
+    {69, L"Benutzerkontobild"},
+    {70, L"Benutzerkontokachel"},
+    {71, L"Systemsteuerung für Benutzerkonten"},
+    {72, L"Administratorrechte erforderlich"},
+    {73, L"Neues Kennwort"},
+    {74, L"Neues Kennwort bestätigen"},
+    {75, L"Geben Sie einen Kennworthinweis ein"},
+    {76, L"Aktuelles Kennwort"},
+    {78, L"Neuer Kontoname"},
+    {79, L"Hilfe"},
+    {80, L"Bilddateien (*.bmp,*.gif,*.jpg,*.png)|*.bmp;*.dib;*.gif;*.jpg;*.jpe;*.jpeg;*.png;*.rle|Bitmap (*.bmp,*.dib,*.rle)|*.bmp;*.dib;*.rle|GIF (*.gif)|*.gif|JPEG (*.jpg)|*.jpg|PNG (*.png)|*.png|Alle Dateien (*.*)|*"},
+    {91, L"Dieses Programm wird durch eine Gruppenrichtlinie blockiert. Weitere Informationen erhalten Sie von Ihrem Systemadministrator."},
+    {92, L"Aufgabenbereich für Benutzerkonten"},
+    {93, L"Hauptaufgabenbereich für Benutzerkonten"},
+    {94, L"Benutzerliste"},
+    {95, L"Systemsteuerung für Benutzerkonten"},
+    {100, L"Kennwortrücksetzdiskette erstellen"},
+    {101, L"Online-IDs verknüpfen"},
+    {102, L"Dateiverschlüsselungszertifikate verwalten"},
+    {103, L"Erweiterte Eigenschaften des Benutzerprofils konfigurieren"},
+    {104, L"Umgebungsvariablen ändern"},
+    {105, L"Jugendschutz"},
+    {106, L"Anmeldeinformationen verwalten"},
+    {107, L"Fingerabdruckdaten verwalten"},
+    {1100, L"&Standardbenutzer"},
+    {1101, L"&Administrator"},
+    {1108, L"Änderungen an Ihrem Benutzerkonto vornehmen"},
+    {1109, L"Ihren Kontonamen ändern"},
+    {1110, L"Ein Kennwort für Ihr Konto erstellen"},
+    {1111, L"Ihr Kennwort ändern"},
+    {1112, L"Ihr Kennwort entfernen"},
+    {1113, L"Ihr Bild ändern"},
+    {1114, L"Ihren Kontotyp ändern"},
+    {1115, L"Ein anderes Konto verwalten"},
+    {1116, L"Benutzerkonten verwalten"},
+    {1117, L"Um Ihr Kennwort zu ändern, drücken Sie STRG+ALT+ENTF und wählen Sie Kennwort ändern."},
+    {1119, L"Änderungen am Konto von %username% vornehmen"},
+    {1120, L"Namen ändern"},
+    {1121, L"Kennwort erstellen"},
+    {1122, L"Kennwort ändern"},
+    {1123, L"Kennwort entfernen"},
+    {1124, L"Bild ändern"},
+    {1128, L"Neues Konto erstellen"},
+    {1129, L"Was möchten Sie am Gastkonto ändern?"},
+    {1130, L"Gastkonto deaktivieren"},
+    {1131, L"Geben Sie einen Kontonamen ein und wählen Sie einen Kontotyp aus"},
+    {1133, L"Dieser Name wird auf dem Willkommensbildschirm und im Startmenü angezeigt."},
+    {1136, L"Abbrechen"},
+    {1137, L"Konto erstellen"},
+    {1138, L"Wählen Sie ein neues Bild für das Konto von %username% aus"},
+    {1139, L"Das ausgewählte Bild wird auf dem Willkommensbildschirm und im Startmenü angezeigt."},
+    {1140, L"Weitere Bilder suchen..."},
+    {1141, L"Bild ändern"},
+    {1142, L"Geben Sie einen neuen Kontonamen für das Konto von %username% ein"},
+    {1145, L"Möchten Sie das Gastkonto aktivieren?"},
+    {1146, L"Wenn Sie das Gastkonto aktivieren, können Personen ohne eigenes Konto das Gastkonto verwenden, um sich an diesem Computer anzumelden. Kennwortgeschützte Dateien, Ordner oder Einstellungen sind für Gastbenutzer nicht zugänglich."},
+    {1147, L"Aktivieren"},
+    {1148, L"Wählen Sie das Konto aus, das Sie ändern möchten"},
+    {1149, L"Was ist ein Benutzerkonto?"},
+    {1150, L"Weitere mögliche Aufgaben"},
+    {1151, L"Jugendschutz einrichten"},
+    {1155, L"Geben Sie einen neuen Kontonamen ein"},
+    {1157, L"Möchten Sie die Dateien von %username% behalten?"},
+    {1158, L"Bevor Sie das Konto von %username% löschen, kann Windows den Inhalt der Ordner Desktop, Dokumente, Favoriten, Musik, Bilder und Videos von %username% automatisch in einem neuen Ordner namens '%username%' auf Ihrem Desktop speichern. Windows kann jedoch die E-Mail-Nachrichten und andere Einstellungen von %username% nicht speichern."},
+    {1159, L"Dateien löschen"},
+    {1160, L"Dateien behalten"},
+    {1161, L"Möchten Sie das Konto von %username% wirklich löschen?"},
+    {1162, L"Sie löschen das Konto, behalten aber die Dateien."},
+    {1163, L"%username% kann sich anschließend nicht mehr anmelden und alle Einstellungen von %username% werden gelöscht. Die Dateien von %username% werden jedoch auf Ihrem Desktop in einem Ordner namens '%username%' gespeichert."},
+    {1164, L"Konto löschen"},
+    {1165, L"Kennwort von %username% ändern"},
+    {1166, L"Sie setzen das Kennwort für %username% zurück. Wenn Sie dies tun, verliert %username% alle persönlichen Zertifikate und gespeicherten Kennwörter für Websites oder Netzwerkressourcen."},
+    {1167, L"Sie ändern das Kennwort für %username%. Wenn Sie dies tun, verliert %username% alle EFS-verschlüsselten Dateien, persönlichen Zertifikate und gespeicherten Kennwörter für Websites oder Netzwerkressourcen."},
+    {1168, L"Wenn %username% das Kennwort vergessen hat, kann die Person die Kennwortrücksetzdiskette verwenden."},
+    {1169, L"Um zukünftigen Datenverlust zu vermeiden, sollten Sie %username% auffordern, eine Kennwortrücksetzdiskette zu erstellen."},
+    {1172, L"Wenn Ihr Kennwort Großbuchstaben enthält, müssen Sie diese bei jeder Anmeldung genauso eingeben."},
+    {1174, L"Der Kennworthinweis ist für alle Benutzer dieses Computers sichtbar."},
+    {1175, L"Kontotyp ändern"},
+    {1176, L"Ihr Kennwort ändern"},
+    {1181, L"Wählen Sie ein neues Bild für Ihr Konto aus"},
+    {1182, L"Kennwort für das Konto von %username% erstellen"},
+    {1183, L"Sie erstellen ein Kennwort für %username%."},
+    {1184, L"Wenn Sie dies tun, verliert %username% alle EFS-verschlüsselten Dateien, persönlichen Zertifikate und gespeicherten Kennwörter für Websites oder Netzwerkressourcen."},
+    {1185, L"Um zukünftigen Datenverlust zu vermeiden, sollten Sie %username% auffordern, eine Kennwortrücksetzdiskette zu erstellen."},
+    {1186, L"Kennwort für Ihr Konto erstellen"},
+    {1188, L"Sie entfernen das Kennwort für %username%. Wenn Sie dies tun, verliert %username% alle persönlichen Zertifikate und gespeicherten Kennwörter für Websites oder Netzwerkressourcen."},
+    {1189, L"Sie entfernen das Kennwort für %username%. Wenn Sie dies tun, verliert %username% alle EFS-verschlüsselten Dateien, persönlichen Zertifikate und gespeicherten Kennwörter für Websites oder Netzwerkressourcen."},
+    {1190, L"Wenn %username% das Kennwort vergessen hat, kann die Person die Kennwortrücksetzdiskette verwenden."},
+    {1191, L"Ihr Kennwort entfernen"},
+    {1192, L"Möchten Sie Ihr Kennwort wirklich entfernen?"},
+    {1193, L"Wenn Sie Ihr Kennwort entfernen, können andere Personen auf Ihr Konto zugreifen und Einstellungen ändern."},
+    {1194, L"Wenn Sie Ihr Kennwort entfernen, können andere Personen auf Ihr Konto zugreifen und Einstellungen ändern."},
+    {1195, L"Wenn Sie Ihr Kennwort vergessen haben, können Sie die Kennwortrücksetzdiskette verwenden."},
+    {1196, L"Kennwort entfernen"},
+    {1197, L"Wählen Sie einen neuen Kontotyp für %username% aus"},
+    {1198, L"Benutzer mit einem Standardkonto können die meisten Programme verwenden und Systemeinstellungen ändern, die keine Auswirkungen auf andere Benutzer oder die Sicherheit des Computers haben."},
+    {1199, L"Administratoren haben uneingeschränkten Zugriff auf den Computer und können alle gewünschten Änderungen vornehmen. Abhängig von den Benachrichtigungseinstellungen müssen Administratoren möglicherweise ihr Kennwort eingeben oder eine Bestätigung erteilen, bevor sie Änderungen vornehmen können, die andere Benutzer betreffen.\n\nWir empfehlen, jedes Konto mit einem sicheren Kennwort zu schützen."},
+    {1200, L"Wählen Sie Ihren neuen Kontotyp aus"},
+    {1201, L"Zur Hauptseite der Benutzerkonten wechseln"},
+    {1203, L"Sie müssen einem anderen Benutzer dieses Computers ein Administratorkonto zuweisen, bevor Sie den Kontotyp dieses Benutzers ändern können. Dadurch wird sichergestellt, dass auf diesem Computer immer mindestens ein Benutzer über ein Administratorkonto verfügt."},
+    {1204, L"Was ist ein Kennworthinweis?"},
+    {1205, L"So erstellen Sie ein sicheres Kennwort"},
+    {1206, L"Warum wird ein Standardkonto empfohlen?"},
+    {1207, L"Windows löscht alle Dateien von %username% und anschließend das Konto von %username%."},
+    {1213, L"Einstellungen der Benutzerkontensteuerung ändern"},
+    {1216, L"Kontonamen ändern"},
+    {1217, L"Kennwort erstellen"},
+    {1218, L"Kennwort ändern"},
+    {1219, L"Kennwort entfernen"},
+    {1220, L"Bild ändern"},
+    {1221, L"Kontotyp ändern"},
+    {1222, L"Konto löschen"},
+    {1223, L"Anderes Konto verwalten"},
+    {1226, L"Wenn das Kennwort Großbuchstaben enthält, müssen diese bei jeder Anmeldung genauso eingegeben werden."},
+    {2000, L"Zum Ändern des vertikalen Anzeigebereichs"},
+    {2001, L"Zum Ändern des horizontalen Anzeigebereichs"},
+    {2002, L"Horizontal"},
+    {2003, L"Vertikal"},
+};
 // </strings>
 
-enum class Language { English, Italian, French, Spanish, Portuguese };
+enum class Language { English, Italian, French, Spanish, Portuguese, German };
 
 struct StringTable {
     const StringEntry* entries;
@@ -1144,6 +1331,7 @@ StringTable TableFor(Language language) {
     if (language == Language::French) return {kStringsFr, ARRAYSIZE(kStringsFr), L"fr-FR", L"Utilisateur"};
     if (language == Language::Spanish) return {kStringsEs, ARRAYSIZE(kStringsEs), L"es-ES", L"Usuario"};
     if (language == Language::Portuguese) return {kStringsPt, ARRAYSIZE(kStringsPt), L"pt-PT", L"Utilizador"};
+    if (language == Language::German) return {kStringsDe, ARRAYSIZE(kStringsDe), L"de-DE", L"Benutzer"};
     return {kStringsEn, ARRAYSIZE(kStringsEn), L"en-US", L"User"};
 }
 
@@ -1743,7 +1931,7 @@ HANDLE g_stopEvent = nullptr;
 HANDLE g_setupThread = nullptr;
 std::atomic<HINTERNET> g_request{nullptr};
 std::atomic<bool> g_keepFiles{true};
-std::atomic<int> g_languageSetting{0};      // 0 automatic, 1 English, 2 Italian, 3 French, 4 Spanish, 5 Portuguese
+std::atomic<int> g_languageSetting{0};      // 0 automatic, 1 English, 2 Italian, 3 French, 4 Spanish, 5 Portuguese, 6 German
 std::atomic<bool> g_hideUserName{false};
 std::atomic<const wchar_t*> g_genericName{L"User"};
 
@@ -2201,11 +2389,13 @@ Language CurrentLanguage() {
     if (setting == 3) return Language::French;
     if (setting == 4) return Language::Spanish;
     if (setting == 5) return Language::Portuguese;
+    if (setting == 6) return Language::German;
     switch (PRIMARYLANGID(GetUserDefaultUILanguage())) {
         case LANG_ITALIAN: return Language::Italian;
         case LANG_FRENCH: return Language::French;
         case LANG_SPANISH: return Language::Spanish;
         case LANG_PORTUGUESE: return Language::Portuguese;
+        case LANG_GERMAN: return Language::German;
         default: return Language::English;
     }
 }
@@ -2220,6 +2410,7 @@ void LoadSettings() {
             else if (!wcscmp(s.value, L"fr-FR")) language = 3;
             else if (!wcscmp(s.value, L"es-ES")) language = 4;
             else if (!wcscmp(s.value, L"pt-PT")) language = 5;
+            else if (!wcscmp(s.value, L"de-DE")) language = 6;
         }
     }
     g_languageSetting.store(language);
@@ -2273,7 +2464,7 @@ void RunSetup() {
         return binDir + L"\\usercpl7." + TableFor(language).tag + L"." + kGeneratorRevision + L".dll";
     };
     Language language = CurrentLanguage();
-    for (Language other : {Language::English, Language::Italian, Language::French, Language::Spanish, Language::Portuguese}) {
+    for (Language other : {Language::English, Language::Italian, Language::French, Language::Spanish, Language::Portuguese, Language::German}) {
         if (other != language && GetModuleHandleW(pathFor(other).c_str())) {
             Wh_Log(L"The page language applies after explorer.exe restarts (the page is in use)");
             language = other;
@@ -2595,6 +2786,397 @@ struct IFactory7 : IUnknown {
 
 bool Same(REFGUID a, const GUID& b) { return memcmp(&a, &b, sizeof(GUID)) == 0; }
 
+// Diagnostic: if an unknown object returned by the system factory is a dual/dispatch interface, log the names of its
+// methods with their vtable slot (from its type library) so the Windows 10 layout can be compared with Windows 7.
+void DumpDispatch(IUnknown* unk) {
+    static std::atomic<int> dumps{0};
+    if (dumps.fetch_add(1) >= 4) return;
+    IDispatch* disp = nullptr;
+    if (FAILED(unk->QueryInterface(kIidDispatch, reinterpret_cast<void**>(&disp))) || !disp) {
+        Wh_Log(L"[diag] object has no IDispatch");
+        return;
+    }
+    ITypeInfo* ti = nullptr;
+    if (SUCCEEDED(disp->GetTypeInfo(0, 0, &ti)) && ti) {
+        TYPEATTR* attr = nullptr;
+        if (SUCCEEDED(ti->GetTypeAttr(&attr)) && attr) {
+            BSTR typeName = nullptr;
+            ti->GetDocumentation(MEMBERID_NIL, &typeName, nullptr, nullptr, nullptr);
+            Wh_Log(L"[diag] type %s: %u functions", typeName ? typeName : L"?", unsigned(attr->cFuncs));
+            SysFreeString(typeName);
+            for (UINT i = 0; i < attr->cFuncs && i < 64; i++) {
+                FUNCDESC* fd = nullptr;
+                if (FAILED(ti->GetFuncDesc(i, &fd)) || !fd) continue;
+                BSTR name = nullptr;
+                UINT n = 0;
+                ti->GetNames(fd->memid, &name, 1, &n);
+                Wh_Log(L"[diag]   slot %d memid %ld %s (%d params, kind %d)", int(fd->oVft / sizeof(void*)),
+                       long(fd->memid), name ? name : L"?", int(fd->cParams), int(fd->invkind));
+                SysFreeString(name);
+                ti->ReleaseFuncDesc(fd);
+            }
+            ti->ReleaseTypeAttr(attr);
+        }
+        ti->Release();
+    } else {
+        Wh_Log(L"[diag] object has no type info");
+    }
+    disp->Release();
+}
+
+// Diagnostic: dumps every interface of a type library (vtable slot, name, parameter types and directions). Run once on
+// the system usercpl and on the Windows 7 copy, then compare ILogonEnumUsers / ILogonUser / ILocalMachine.
+static void LogTypeDesc(ITypeInfo* ti, const TYPEDESC& td, WCHAR* out, size_t cap) {
+    if (td.vt == VT_PTR && td.lptdesc) {
+        WCHAR inner[96] = L"?";
+        LogTypeDesc(ti, *td.lptdesc, inner, 96);
+        swprintf_s(out, cap, L"%s*", inner);
+    } else if (td.vt == VT_USERDEFINED) {
+        ITypeInfo* ref = nullptr;
+        BSTR n = nullptr;
+        if (SUCCEEDED(ti->GetRefTypeInfo(td.hreftype, &ref)) && ref) {
+            ref->GetDocumentation(MEMBERID_NIL, &n, nullptr, nullptr, nullptr);
+            ref->Release();
+        }
+        swprintf_s(out, cap, L"%s", n ? n : L"userdefined");
+        SysFreeString(n);
+    } else {
+        swprintf_s(out, cap, L"vt%d", int(td.vt));
+    }
+}
+
+static void DumpTypeLibObject(ITypeLib* tl, const wchar_t* label);
+static void DumpTypeLib(const wchar_t* path) {
+    ITypeLib* tl = nullptr;
+    if (FAILED(LoadTypeLibEx(path, REGKIND_NONE, &tl)) || !tl) {
+        Wh_Log(L"[tlb] cannot load type library from %s", path);
+        return;
+    }
+    DumpTypeLibObject(tl, path);
+    tl->Release();
+}
+
+static void DumpTypeLibObject(ITypeLib* tl, const wchar_t* label) {
+    Wh_Log(L"[tlb] === %s ===", label);
+    const UINT count = tl->GetTypeInfoCount();
+    for (UINT i = 0; i < count; i++) {
+        ITypeInfo* ti = nullptr;
+        if (FAILED(tl->GetTypeInfo(i, &ti)) || !ti) continue;
+        TYPEATTR* a = nullptr;
+        if (SUCCEEDED(ti->GetTypeAttr(&a)) && a) {
+            BSTR tn = nullptr;
+            ti->GetDocumentation(MEMBERID_NIL, &tn, nullptr, nullptr, nullptr);
+            if (a->typekind == TKIND_INTERFACE || a->typekind == TKIND_DISPATCH) {
+                Wh_Log(L"[tlb] %s {%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X} kind=%d funcs=%u", tn ? tn : L"?",
+                       a->guid.Data1, a->guid.Data2, a->guid.Data3, a->guid.Data4[0], a->guid.Data4[1],
+                       a->guid.Data4[2], a->guid.Data4[3], a->guid.Data4[4], a->guid.Data4[5], a->guid.Data4[6],
+                       a->guid.Data4[7], int(a->typekind), unsigned(a->cFuncs));
+                for (UINT f = 0; f < a->cFuncs; f++) {
+                    FUNCDESC* fd = nullptr;
+                    if (FAILED(ti->GetFuncDesc(f, &fd)) || !fd) continue;
+                    BSTR names[16] = {};
+                    UINT nn = 0;
+                    ti->GetNames(fd->memid, names, 16, &nn);
+                    WCHAR sig[512] = L"";
+                    for (int pi = 0; pi < fd->cParams; pi++) {
+                        WCHAR t[96] = L"?";
+                        LogTypeDesc(ti, fd->lprgelemdescParam[pi].tdesc, t, 96);
+                        const USHORT fl = fd->lprgelemdescParam[pi].paramdesc.wParamFlags;
+                        WCHAR one[160];
+                        swprintf_s(one, L"%s%s%s ", (fl & PARAMFLAG_FIN) ? L"[in]" : L"",
+                                   (fl & PARAMFLAG_FOUT) ? L"[out]" : L"", t);
+                        wcscat_s(sig, one);
+                    }
+                    Wh_Log(L"[tlb]   slot %d %s(%d) kind=%d : %s", int(fd->oVft / sizeof(void*)),
+                           (nn && names[0]) ? names[0] : L"?", int(fd->cParams), int(fd->invkind), sig);
+                    for (UINT k = 0; k < nn; k++) SysFreeString(names[k]);
+                    ti->ReleaseFuncDesc(fd);
+                }
+            }
+            SysFreeString(tn);
+            ti->ReleaseTypeAttr(a);
+        }
+        ti->Release();
+    }
+}
+
+// Reads a registry value (REG_SZ) of HKCR\<subkey> into out.
+static bool ReadClassesString(const wchar_t* subkey, const wchar_t* value, wchar_t* out, DWORD cch) {
+    DWORD size = cch * sizeof(wchar_t);
+    return RegGetValueW(HKEY_CLASSES_ROOT, subkey, value, RRF_RT_REG_SZ, nullptr, out, &size) == ERROR_SUCCESS;
+}
+
+static void GuidToString(const GUID& g, wchar_t* out, size_t cap) {
+    swprintf_s(out, cap, L"{%08lX-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}", g.Data1, g.Data2, g.Data3, g.Data4[0],
+               g.Data4[1], g.Data4[2], g.Data4[3], g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7]);
+}
+
+// Logs how an interface id is registered (name, proxy/stub class, type library) and dumps its registered type library.
+// The Windows 10/11 usercpl type library cannot be loaded from the file, but it is registered through the interface id.
+static void DumpRegisteredInterface(const wchar_t* tag, const GUID& iid) {
+    wchar_t g[64];
+    GuidToString(iid, g, ARRAYSIZE(g));
+    wchar_t key[160], v[260];
+    swprintf_s(key, L"Interface\\%s", g);
+    if (ReadClassesString(key, nullptr, v, ARRAYSIZE(v))) Wh_Log(L"[reg] %s %s name=%s", tag, g, v);
+    else Wh_Log(L"[reg] %s %s: interface not registered", tag, g);
+    swprintf_s(key, L"Interface\\%s\\ProxyStubClsid32", g);
+    wchar_t ps[64] = L"";
+    if (ReadClassesString(key, nullptr, ps, ARRAYSIZE(ps))) {
+        Wh_Log(L"[reg] %s ProxyStubClsid32=%s (00020424=typelib marshaler, 00020420=IDispatch proxy)", tag, ps);
+        swprintf_s(key, L"CLSID\\%s\\InprocServer32", ps);
+        if (ReadClassesString(key, nullptr, v, ARRAYSIZE(v))) Wh_Log(L"[reg] %s proxy dll=%s", tag, v);
+    } else {
+        Wh_Log(L"[reg] %s has no ProxyStubClsid32", tag);
+    }
+    swprintf_s(key, L"Interface\\%s\\TypeLib", g);
+    wchar_t libid[64] = L"", ver[32] = L"";
+    if (!ReadClassesString(key, nullptr, libid, ARRAYSIZE(libid))) {
+        Wh_Log(L"[reg] %s has no TypeLib key", tag);
+        return;
+    }
+    ReadClassesString(key, L"Version", ver, ARRAYSIZE(ver));
+    Wh_Log(L"[reg] %s TypeLib=%s version=%s", tag, libid, ver);
+    GUID lib{};
+    if (FAILED(CLSIDFromString(libid, &lib))) return;
+    unsigned major = 1, minor = 0;
+    swscanf_s(ver, L"%x.%x", &major, &minor);
+    ITypeLib* tl = nullptr;
+    HRESULT hr = LoadRegTypeLib(lib, WORD(major), WORD(minor), 0, &tl);
+    if (FAILED(hr) || !tl) {
+        Wh_Log(L"[reg] %s LoadRegTypeLib failed 0x%08lX", tag, hr);
+        return;
+    }
+    ITypeInfo* ti = nullptr;
+    if (SUCCEEDED(tl->GetTypeInfoOfGuid(iid, &ti)) && ti) {
+        TYPEATTR* a = nullptr;
+        if (SUCCEEDED(ti->GetTypeAttr(&a)) && a) {
+            Wh_Log(L"[reg] %s typeinfo kind=%d funcs=%u", tag, int(a->typekind), unsigned(a->cFuncs));
+            ti->ReleaseTypeAttr(a);
+        }
+        ti->Release();
+    }
+    DumpTypeLibObject(tl, tag);
+    tl->Release();
+}
+
+// Logs the module and offset of a code address.
+static void LogAddress(const wchar_t* what, const void* address) {
+    HMODULE module = nullptr;
+    wchar_t path[MAX_PATH] = L"?";
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           static_cast<LPCWSTR>(address), &module) && module)
+        GetModuleFileNameW(module, path, ARRAYSIZE(path));
+    const wchar_t* base = wcsrchr(path, L'\\');
+    Wh_Log(L"[guard] %s %s+0x%llX", what, base ? base + 1 : path,
+           static_cast<unsigned long long>(reinterpret_cast<const BYTE*>(address) - reinterpret_cast<const BYTE*>(module)));
+}
+
+// Anti-crash: calls the adapters forward to the Windows 10/11 objects run inside a guard. If such a call raises an access
+// violation (for example because a Windows 10 method does not match what the Windows 7 page expects), the fault is
+// caught by the vectored handler, the thread is resumed right after the guard and the call fails with an error code
+// instead of taking Explorer down.
+struct alignas(16) FaultGuard {
+    CONTEXT ctx;
+    volatile LONG faulted;
+    FaultGuard* prev;
+};
+thread_local FaultGuard* t_faultGuard = nullptr;
+
+template <class F>
+__attribute__((noinline, optnone)) HRESULT FaultGuardedCall(const wchar_t* what, F&& f) {
+    FaultGuard g;
+    g.faulted = 0;
+    g.prev = t_faultGuard;
+    RtlCaptureContext(&g.ctx);
+    if (g.faulted) {
+        t_faultGuard = g.prev;
+        Wh_Log(L"[guard] %s failed with an access violation; the call was cancelled", what);
+        return HRESULT_FROM_WIN32(ERROR_INVALID_FUNCTION);
+    }
+    t_faultGuard = &g;
+    const HRESULT hr = f();
+    t_faultGuard = g.prev;
+    return hr;
+}
+#define GUARD(call) FaultGuardedCall(L"" #call, [&]() -> HRESULT { return (call); })
+
+// ---- MIDL proxy dump -------------------------------------------------------------------------------------------------
+// The Windows 10/11 account interfaces are marshaled by a compiled MIDL proxy (OneCoreUAPCommonProxyStub.dll), which has
+// no type library. Its NDR procedure strings still describe every method: count, parameters, direction, stack slot.
+struct MidlServerInfo {
+    const void* pStubDesc;
+    const void* DispatchTable;
+    const unsigned char* ProcString;
+    const unsigned short* FmtStringOffset;
+    const void* ThunkTable;
+    const void* pTransferSyntax;
+    ULONG_PTR nCount;
+    const void* pSyntaxInfo;
+};
+struct MidlStubVtbl {
+    const IID* piid;
+    const MidlServerInfo* pServerInfo;
+    unsigned long DispatchTableCount;
+    const void* pDispatchTable;
+};
+struct MidlProxyFileInfo {
+    const void* pProxyVtblList;
+    const MidlStubVtbl* const* pStubVtblList;
+    const void* pNamesArray;
+    const void* pDelegatedIIDs;
+    int(__stdcall* pIIDLookupRtn)(const IID*, int*);
+    unsigned short TableSize;
+    unsigned short TableVersion;
+};
+
+static bool Readable(const void* p, size_t n) {
+    if (!p) return false;
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (!VirtualQuery(p, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT) return false;
+    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
+    return reinterpret_cast<const BYTE*>(p) + n <= static_cast<const BYTE*>(mbi.BaseAddress) + mbi.RegionSize;
+}
+
+static HRESULT DumpProxyInterface(const wchar_t* tag, const GUID& iid) {
+    HMODULE ps = LoadLibraryW(L"OneCoreUAPCommonProxyStub.dll");
+    if (!ps) {
+        Wh_Log(L"[ndr] %s: proxy dll not loadable (%lu)", tag, GetLastError());
+        return E_FAIL;
+    }
+    typedef void(WINAPI * GetProxyDllInfo_t)(const MidlProxyFileInfo***, const CLSID**);
+    GetProxyDllInfo_t fn = reinterpret_cast<GetProxyDllInfo_t>(reinterpret_cast<void*>(GetProcAddress(ps, "GetProxyDllInfo")));
+    if (!fn) {
+        Wh_Log(L"[ndr] %s: GetProxyDllInfo not exported", tag);
+        return E_FAIL;
+    }
+    const MidlProxyFileInfo** infos = nullptr;
+    const CLSID* id = nullptr;
+    fn(&infos, &id);
+    Wh_Log(L"[ndr] %s: GetProxyDllInfo -> list %p", tag, static_cast<const void*>(infos));
+    for (int f = 0; infos && Readable(infos + f, sizeof(void*)) && infos[f] && f < 64; f++) {
+        const MidlProxyFileInfo* fi = infos[f];
+        if (!Readable(fi, sizeof(MidlProxyFileInfo))) {
+            Wh_Log(L"[ndr] %s: file %d at %p not readable", tag, f, static_cast<const void*>(fi));
+            break;
+        }
+        Wh_Log(L"[ndr] %s: file %d stubs=%p lookup=%p table=%u version=0x%X", tag, f,
+               static_cast<const void*>(fi->pStubVtblList), reinterpret_cast<const void*>(fi->pIIDLookupRtn),
+               unsigned(fi->TableSize), unsigned(fi->TableVersion));
+        if (!fi->pStubVtblList || fi->TableSize == 0 || fi->TableSize > 4096) continue;
+        for (unsigned e = 0; e < fi->TableSize; e++) {
+            if (!Readable(fi->pStubVtblList + e, sizeof(void*))) break;
+            const MidlStubVtbl* sv = fi->pStubVtblList[e];
+            if (!Readable(sv, sizeof(MidlStubVtbl)) || !Readable(sv->piid, sizeof(GUID))) continue;
+            if (memcmp(sv->piid, &iid, sizeof(GUID)) != 0) continue;
+            const MidlServerInfo* si = sv->pServerInfo;
+            if (!Readable(si, sizeof(MidlServerInfo))) {
+                Wh_Log(L"[ndr] %s: server info %p not readable", tag, static_cast<const void*>(si));
+                return E_FAIL;
+            }
+            Wh_Log(L"[ndr] %s: found at file %d entry %u, %lu methods (including the 3 IUnknown ones), proc=%p fmtoff=%p",
+                   tag, f, e, sv->DispatchTableCount, static_cast<const void*>(si->ProcString),
+                   static_cast<const void*>(si->FmtStringOffset));
+            for (unsigned m = 3; m < sv->DispatchTableCount && m < 64; m++) {
+                if (!Readable(si->FmtStringOffset + m, sizeof(unsigned short))) break;
+                const unsigned short off = si->FmtStringOffset[m];
+                if (off == 0xFFFF) {
+                    Wh_Log(L"[ndr]   method %u: no procedure string", m);
+                    continue;
+                }
+                const unsigned char* q = si->ProcString + off;
+                if (!Readable(q, 24)) {
+                    Wh_Log(L"[ndr]   method %u: procedure string not readable", m);
+                    continue;
+                }
+                wchar_t raw[128] = L"";
+                for (int k = 0; k < 20; k++) {
+                    wchar_t b2[8];
+                    swprintf_s(b2, L"%02X ", q[k]);
+                    wcscat_s(raw, b2);
+                }
+                Wh_Log(L"[ndr]   method %u raw: %s", m, raw);
+                const unsigned char oiFlags = q[1];
+                q += 2;
+                if (oiFlags & 0x08) q += 4;                      // HasRpcFlags
+                const unsigned procNum = *reinterpret_cast<const unsigned short*>(q);
+                const unsigned stackSize = *reinterpret_cast<const unsigned short*>(q + 2);
+                q += 4;
+                q += 4;                                           // client / server constant buffer sizes
+                const unsigned char optFlags = q[0];
+                const unsigned params = q[1];
+                q += 2;
+                if (optFlags & 0x40) q += q[0];                   // HasExtensions: first byte is its length
+                if (params > 16 || !Readable(q, params * 6)) {
+                    Wh_Log(L"[ndr]   method %u proc %u: parameter count %u looks wrong", m, procNum, params);
+                    continue;
+                }
+                wchar_t line[640];
+                swprintf_s(line, L"[ndr]   method %u proc %u stack=%u params=%u oi=0x%02X:", m, procNum, stackSize,
+                           params, unsigned(oiFlags));
+                for (unsigned i = 0; i < params; i++, q += 6) {
+                    const unsigned attrs = *reinterpret_cast<const unsigned short*>(q);
+                    const unsigned slot = *reinterpret_cast<const unsigned short*>(q + 2);
+                    const unsigned type = *reinterpret_cast<const unsigned short*>(q + 4);
+                    wchar_t one[96];
+                    swprintf_s(one, L" [slot %u %s%s%s%s%s type %s%02X]", slot / 8, (attrs & 0x08) ? L"in " : L"",
+                               (attrs & 0x10) ? L"out " : L"", (attrs & 0x20) ? L"ret " : L"",
+                               (attrs & 0x100) ? L"ref " : L"", (attrs & 0x01) ? L"mustsize " : L"",
+                               (attrs & 0x40) ? L"base=0x" : L"off=0x", type);
+                    wcscat_s(line, one);
+                }
+                Wh_Log(L"%s", line);
+            }
+            return S_OK;
+        }
+    }
+    Wh_Log(L"[ndr] %s: interface not found in the proxy dll", tag);
+    return E_FAIL;
+}
+
+// Runs DumpTypeLib once per process on its own thread (type library loading must not delay the UI).
+static DWORD WINAPI DumpTypeLibsThread(LPVOID) {
+    HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    wchar_t win[MAX_PATH] = L"";
+    GetWindowsDirectoryW(win, MAX_PATH);
+    std::wstring sys = std::wstring(win) + L"\\System32\\usercpl.dll";
+    std::wstring mun = std::wstring(win) + L"\\SystemResources\\usercpl.dll.mun";
+    GUARD(DumpProxyInterface(L"Enum10", kIidEnum10));
+    GUARD(DumpProxyInterface(L"User10", kIidUser10));
+    GUARD(DumpProxyInterface(L"Factory10", kIidFactory10));
+    DumpRegisteredInterface(L"Enum10", kIidEnum10);
+    DumpRegisteredInterface(L"User10", kIidUser10);
+    DumpRegisteredInterface(L"Factory10", kIidFactory10);
+    {
+        const GUID localMachine10 = {0xE93CF64B, 0xC14D, 0x4A1A, {0x95, 0x72, 0xAD, 0xAB, 0x3C, 0x2E, 0x94, 0x61}};
+        DumpRegisteredInterface(L"LocalMachine10", localMachine10);
+    }
+    DumpTypeLib(sys.c_str());
+    DumpTypeLib(mun.c_str());
+    if (g_pageModule) {
+        wchar_t own[MAX_PATH] = L"";
+        if (GetModuleFileNameW(g_pageModule, own, MAX_PATH)) DumpTypeLib(own);
+    }
+    if (SUCCEEDED(co)) CoUninitialize();
+    return 0;
+}
+
+[[maybe_unused]] static void StartTypeLibDumpOnce() {
+    static std::atomic<bool> started{false};
+    if (started.exchange(true)) return;
+    if (HANDLE h = CreateThread(nullptr, 0, DumpTypeLibsThread, nullptr, 0, nullptr)) CloseHandle(h);
+}
+
+
+// Diagnostics for the account adapters (names of settings and result codes only, never values or passwords).
+void LogIid(const wchar_t* what, REFGUID g) {
+    static std::atomic<int> logged{0};
+    if (logged.fetch_add(1) >= 200) return;
+    wchar_t text[64] = L"?";
+    StringFromGUID2(g, text, ARRAYSIZE(text));
+    Wh_Log(L"[diag] %s %s", what, text);
+}
+
 // IUnknown and the empty IDispatch shared by the two adapters. The page calls the methods directly; scripting, the
 // only user of IDispatch, never sees these objects.
 template <class Interface, const GUID* Iid>
@@ -2608,6 +3190,7 @@ struct AdapterBase : Interface, LiveObject {
             AddRef();
             return S_OK;
         }
+        LogIid(L"QueryInterface refused by an adapter:", iid);
         *object = nullptr;
         return E_NOINTERFACE;
     }
@@ -2801,7 +3384,7 @@ struct UserAdapter final : AdapterBase<IUser7, &kIidUser7> {
     ~UserAdapter() override { inner->Release(); }
 
     HRESULT STDMETHODCALLTYPE get_setting(BSTR name, VARIANT* value) override {
-        const HRESULT hr = inner->get_setting(name, value);
+        const HRESULT hr = GUARD(inner->get_setting(name, value));
         // "Hide user name": the name of the signed-in user is shown as a generic one on this page only. Windows, the
         // account and every other account are not touched.
         if (SUCCEEDED(hr) && current && name && value && g_hideUserName.load()) {
@@ -2862,14 +3445,16 @@ struct UserAdapter final : AdapterBase<IUser7, &kIidUser7> {
         if (current && g_hideUserName.load() && name && _wcsicmp(name, L"DisplayName") == 0 && value.vt == VT_BSTR &&
             value.bstrVal && wcscmp(value.bstrVal, g_genericName.load()) == 0)
             return S_OK;
-        return inner->put_setting(name, value);
+        const HRESULT hr = GUARD(inner->put_setting(name, value));
+        Wh_Log(L"[diag] put_setting(%s) vt=%u -> 0x%08lX", name ? name : L"(null)", unsigned(value.vt), hr);
+        return hr;
     }
-    HRESULT STDMETHODCALLTYPE get_isLoggedOn(VARIANT_BOOL* v) override { return inner->get_isLoggedOn(v); }
-    HRESULT STDMETHODCALLTYPE get_passwordRequired(VARIANT_BOOL* v) override { return inner->get_passwordRequired(v); }
+    HRESULT STDMETHODCALLTYPE get_isLoggedOn(VARIANT_BOOL* v) override { return GUARD(inner->get_isLoggedOn(v)); }
+    HRESULT STDMETHODCALLTYPE get_passwordRequired(VARIANT_BOOL* v) override { return GUARD(inner->get_passwordRequired(v)); }
     HRESULT STDMETHODCALLTYPE get_interactiveLogonAllowed(VARIANT_BOOL* v) override {
-        return inner->get_interactiveLogonAllowed(v);
+        return GUARD(inner->get_interactiveLogonAllowed(v));
     }
-    HRESULT STDMETHODCALLTYPE get_isProfilePrivate(VARIANT_BOOL* v) override { return inner->get_isProfilePrivate(v); }
+    HRESULT STDMETHODCALLTYPE get_isProfilePrivate(VARIANT_BOOL* v) override { return GUARD(inner->get_isProfilePrivate(v)); }
     HRESULT STDMETHODCALLTYPE get_isPasswordResetAvailable(VARIANT_BOOL* v) override {
         // Gone from Windows 10. Windows 7 answered "true" when a password reset disk could be used at the Welcome
         // screen; the page only words a hint differently.
@@ -2877,14 +3462,16 @@ struct UserAdapter final : AdapterBase<IUser7, &kIidUser7> {
         *v = VARIANT_FALSE;
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE get_isMemberOfDomain(VARIANT_BOOL* v) override { return inner->get_isMemberOfDomain(v); }
-    HRESULT STDMETHODCALLTYPE logoff(VARIANT_BOOL* r) override { return inner->logoff(r); }
+    HRESULT STDMETHODCALLTYPE get_isMemberOfDomain(VARIANT_BOOL* v) override { return GUARD(inner->get_isMemberOfDomain(v)); }
+    HRESULT STDMETHODCALLTYPE logoff(VARIANT_BOOL* r) override { return GUARD(inner->logoff(r)); }
     HRESULT STDMETHODCALLTYPE changePassword(VARIANT n, VARIANT o, VARIANT_BOOL* r) override {
-        return inner->changePassword(n, o, r);
+        const HRESULT hr = GUARD(inner->changePassword(n, o, r));
+        Wh_Log(L"[diag] changePassword -> 0x%08lX (result=%d)", hr, r ? int(*r) : -1);
+        return hr;
     }
-    HRESULT STDMETHODCALLTYPE makeProfilePrivate(VARIANT_BOOL p) override { return inner->makeProfilePrivate(p); }
+    HRESULT STDMETHODCALLTYPE makeProfilePrivate(VARIANT_BOOL p) override { return GUARD(inner->makeProfilePrivate(p)); }
     HRESULT STDMETHODCALLTYPE getMailAccountInfo(UINT i, VARIANT* n, UINT* u) override {
-        return inner->getMailAccountInfo(i, n, u);
+        return GUARD(inner->getMailAccountInfo(i, n, u));
     }
 };
 
@@ -2905,6 +3492,12 @@ HRESULT WrapUser(HRESULT hr, IUser10* user, IUser7** out, bool current = false) 
     return hr;
 }
 
+// Windows 10/11 IEnum10::create faults inside the RPC proxy (its signature differs from the one declared here), so the
+// account is created by an elevated "net user /add" and the user object is then read back from an in-process
+// enumerator. Defined after the CoCreateInstance hook, which provides the original CoCreateInstance.
+HRESULT CreateAccountWorkaround(BSTR loginName, IUser10** user);
+std::atomic<bool> g_createFaulted{false};
+
 struct EnumAdapter final : AdapterBase<IEnum7, &kIidEnum7> {
     IEnum10* inner;      // owned
     int flags = 0;
@@ -2920,14 +3513,14 @@ struct EnumAdapter final : AdapterBase<IEnum7, &kIidEnum7> {
         flags = f;
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE get_length(UINT* count) override { return inner->get_length(count); }
+    HRESULT STDMETHODCALLTYPE get_length(UINT* count) override { return GUARD(inner->get_length(count)); }
     HRESULT STDMETHODCALLTYPE get_currentUser(IUser7** user) override {
         IUser10* u = nullptr;
-        return WrapUser(inner->get_currentUser(&u), u, user, true);
+        return WrapUser(GUARD(inner->get_currentUser(&u)), u, user, true);
     }
     HRESULT STDMETHODCALLTYPE item(VARIANT id, IUser7** user) override {
         IUser10* u = nullptr;
-        return WrapUser(inner->item(id, &u), u, user);
+        return WrapUser(GUARD(inner->item(id, &u)), u, user);
     }
     HRESULT STDMETHODCALLTYPE _NewEnum(IUnknown** enumerator) override {
         if (enumerator) *enumerator = nullptr;
@@ -2935,10 +3528,20 @@ struct EnumAdapter final : AdapterBase<IEnum7, &kIidEnum7> {
     }
     HRESULT STDMETHODCALLTYPE create(BSTR loginName, IUser7** user) override {
         IUser10* u = nullptr;
-        return WrapUser(inner->create(loginName, &u), u, user);
+        HRESULT hr = HRESULT_FROM_WIN32(ERROR_INVALID_FUNCTION);
+        if (!g_createFaulted.load()) hr = GUARD(inner->create(loginName, &u));
+        if (hr == HRESULT_FROM_WIN32(ERROR_INVALID_FUNCTION)) {
+            // The proxy call faulted (and will fault again): create the account another way.
+            g_createFaulted.store(true);
+            Wh_Log(L"[create] IEnum10::create is unusable; using the elevated net.exe workaround");
+            hr = CreateAccountWorkaround(loginName, &u);
+        }
+        Wh_Log(L"[diag] create: name length %u -> 0x%08lX, user=%p", loginName ? SysStringLen(loginName) : 0u, hr,
+               static_cast<void*>(u));
+        return WrapUser(hr, u, user);
     }
     HRESULT STDMETHODCALLTYPE remove(VARIANT id, VARIANT backupPath, VARIANT_BOOL* result) override {
-        return inner->remove(id, backupPath, result);
+        return GUARD(inner->remove(id, backupPath, result));
     }
     HRESULT STDMETHODCALLTYPE Advise(IUnknown*, DWORD* cookie) override {
         // Change notifications (for the Windows 7 Welcome screen) are gone from Windows 10. The page refreshes its
@@ -2947,10 +3550,10 @@ struct EnumAdapter final : AdapterBase<IEnum7, &kIidEnum7> {
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE Unadvise(DWORD) override { return S_OK; }
-    HRESULT STDMETHODCALLTYPE ResetList() override { return inner->ResetList(); }
+    HRESULT STDMETHODCALLTYPE ResetList() override { return GUARD(inner->ResetList()); }
     HRESULT STDMETHODCALLTYPE get_currentUserWithImpersonation(IUser7** user) override {
         IUser10* u = nullptr;
-        return WrapUser(inner->get_currentUserWithImpersonation(&u), u, user, true);
+        return WrapUser(GUARD(inner->get_currentUserWithImpersonation(&u)), u, user, true);
     }
 };
 
@@ -2991,24 +3594,77 @@ struct FactoryAdapter final : IFactory7, LiveObject {
         return ULONG(left);
     }
     HRESULT STDMETHODCALLTYPE Activate(HWND owner, REFGUID elevationClass) override {
-        return inner->Activate(owner, elevationClass);
+        // StartTypeLibDumpOnce();   // diagnostic dump of the account interfaces; enable to log them again
+        const HRESULT hr = GUARD(inner->Activate(owner, elevationClass));
+        Wh_Log(L"[diag] factory Activate -> 0x%08lX", hr);
+        return hr;
     }
     HRESULT STDMETHODCALLTYPE CreateObject(REFCLSID clsid, REFIID iid, void** object) override {
         if (!object) return E_POINTER;
         if (Same(clsid, kClsidLogonEnumUsers) && Same(iid, kIidEnum7)) {
             *object = nullptr;
             IEnum10* e = nullptr;
-            const HRESULT hr = inner->CreateObject(clsid, kIidEnum10, reinterpret_cast<void**>(&e));
+            const HRESULT hr = GUARD(inner->CreateObject(clsid, kIidEnum10, reinterpret_cast<void**>(&e)));
             if (FAILED(hr) || !e) return FAILED(hr) ? hr : E_NOINTERFACE;
             return WrapEnum(e, iid, object);
         }
-        return inner->CreateObject(clsid, iid, object);
+        const HRESULT hr = GUARD(inner->CreateObject(clsid, iid, object));
+        LogIid(L"factory CreateObject for class", clsid);
+        LogIid(L"  requested interface", iid);
+        Wh_Log(L"[diag]   -> 0x%08lX, object=%p", hr, object ? *object : nullptr);
+        if (SUCCEEDED(hr) && object && *object) DumpDispatch(static_cast<IUnknown*>(*object));
+        return hr;
     }
 };
 
 // =====================================================================================================================
 // Hooks (explorer.exe)
 // =====================================================================================================================
+
+// Records where a fatal exception happens while the page's adapters are alive (the page is the likely cause, and Explorer
+// would otherwise give no hint). It only logs; the exception is always passed on.
+PVOID g_vehHandle = nullptr;
+LONG CALLBACK CrashLogger(PEXCEPTION_POINTERS info) {
+    if (FaultGuard* guard = t_faultGuard) {
+        const DWORD c = info->ExceptionRecord->ExceptionCode;
+        if (c == 0xC0000005 || c == 0xC00000FD) {
+            Wh_Log(L"[guard] exception 0x%08lX at %p inside a guarded call", c, info->ExceptionRecord->ExceptionAddress);
+            LogAddress(L"fault address in", info->ExceptionRecord->ExceptionAddress);
+            Wh_Log(L"[guard] access type %p target %p", reinterpret_cast<void*>(info->ExceptionRecord->ExceptionInformation[0]),
+                   reinterpret_cast<void*>(info->ExceptionRecord->ExceptionInformation[1]));
+            {
+                void* frames[12];
+                const USHORT n = RtlCaptureStackBackTrace(0, ARRAYSIZE(frames), frames, nullptr);
+                for (USHORT i = 0; i < n; i++) LogAddress(L"frame", frames[i]);
+            }
+            guard->faulted = 1;
+            RtlRestoreContext(&guard->ctx, nullptr);
+        }
+    }
+    const DWORD code = info->ExceptionRecord->ExceptionCode;
+    if ((code == 0xC0000005 || code == 0xC0000409 || code == 0xC00000FD || code == 0xC0000374) && g_liveObjects.load() > 0) {
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1) < 5) {
+            Wh_Log(L"[crash] exception 0x%08lX at %p, access info %p %p (thread %lu)", code,
+                   info->ExceptionRecord->ExceptionAddress,
+                   reinterpret_cast<void*>(info->ExceptionRecord->ExceptionInformation[0]),
+                   reinterpret_cast<void*>(info->ExceptionRecord->ExceptionInformation[1]), GetCurrentThreadId());
+            void* frames[16];
+            const USHORT n = RtlCaptureStackBackTrace(0, ARRAYSIZE(frames), frames, nullptr);
+            for (USHORT i = 0; i < n; i++) {
+                HMODULE module = nullptr;
+                wchar_t path[MAX_PATH] = L"?";
+                if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                       static_cast<LPCWSTR>(frames[i]), &module) && module)
+                    GetModuleFileNameW(module, path, ARRAYSIZE(path));
+                const wchar_t* base = wcsrchr(path, L'\\');
+                Wh_Log(L"[crash]   frame %u: %s+0x%llX", unsigned(i), base ? base + 1 : path,
+                       static_cast<unsigned long long>(reinterpret_cast<BYTE*>(frames[i]) - reinterpret_cast<BYTE*>(module)));
+            }
+        }
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
 
 using PSPropertyBag_ReadStr_t = HRESULT(WINAPI*)(IPropertyBag*, LPCWSTR, LPWSTR, int);
 PSPropertyBag_ReadStr_t PSPropertyBag_ReadStr_Orig;
@@ -3052,6 +3708,65 @@ HRESULT WINAPI PSPropertyBag_ReadStr_Hook(IPropertyBag* bag, LPCWSTR name, LPWST
 
 using CoCreateInstance_t = HRESULT(WINAPI*)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
 CoCreateInstance_t CoCreateInstance_Orig;
+
+// Creates a local account named `name` (no password, standard group membership as net.exe sets it) in an elevated
+// net.exe, then returns its user object read from a fresh in-process enumerator.
+HRESULT CreateAccountWorkaround(BSTR loginName, IUser10** user) {
+    if (user) *user = nullptr;
+    if (!loginName || !user) return E_POINTER;
+    const UINT len = SysStringLen(loginName);
+    // Windows rules for local account names: 1..20 characters, none of  " / \ [ ] : ; | = , + * ? < >  and no control
+    // characters, not ending in a period.
+    bool valid = len >= 1 && len <= 20 && loginName[len - 1] != L'.';
+    for (UINT i = 0; valid && i < len; i++) {
+        const wchar_t c = loginName[i];
+        if (c < 0x20 || wcschr(L"\"/\\[]:;|=,+*?<>", c)) valid = false;
+    }
+    if (!valid) {
+        Wh_Log(L"[create] name rejected by the account name rules");
+        return HRESULT_FROM_WIN32(ERROR_INVALID_NAME);
+    }
+
+    wchar_t sysdir[MAX_PATH] = L"";
+    GetSystemDirectoryW(sysdir, MAX_PATH);
+    const std::wstring exe = std::wstring(sysdir) + L"\\net.exe";
+    const std::wstring params = L"user \"" + std::wstring(loginName, len) + L"\" /add";
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+    sei.lpVerb = L"runas";
+    sei.lpFile = exe.c_str();
+    sei.lpParameters = params.c_str();
+    sei.nShow = SW_HIDE;
+    if (!ShellExecuteExW(&sei) || !sei.hProcess) {
+        const DWORD err = GetLastError();
+        Wh_Log(L"[create] could not start the elevated net.exe (%lu)", err);
+        return HRESULT_FROM_WIN32(err ? err : ERROR_CANCELLED);
+    }
+    DWORD wait = WaitForSingleObject(sei.hProcess, 120000);
+    DWORD exitCode = 1;
+    GetExitCodeProcess(sei.hProcess, &exitCode);
+    CloseHandle(sei.hProcess);
+    Wh_Log(L"[create] net.exe user /add finished: wait=%lu exit=%lu", wait, exitCode);
+    if (wait != WAIT_OBJECT_0 || exitCode != 0) return HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS);
+
+    IEnum10* e = nullptr;
+    HRESULT hr = CoCreateInstance_Orig(kClsidLogonEnumUsers, nullptr, CLSCTX_ALL, kIidEnum10, reinterpret_cast<void**>(&e));
+    if (FAILED(hr) || !e) {
+        Wh_Log(L"[create] cannot get an enumerator to read the new account back: 0x%08lX", hr);
+        return FAILED(hr) ? hr : E_NOINTERFACE;
+    }
+    GUARD(e->ResetList());
+    VARIANT id;
+    VariantInit(&id);
+    id.vt = VT_BSTR;
+    id.bstrVal = loginName;                      // borrowed, not freed
+    hr = GUARD(e->item(id, user));
+    e->Release();
+    Wh_Log(L"[create] account created; reading it back -> 0x%08lX, user=%p", hr, static_cast<void*>(*user));
+    if (SUCCEEDED(hr) && !*user) hr = E_FAIL;
+    return hr;
+}
 
 HRESULT CreatePageObject(const GUID& systemClass, LPUNKNOWN outer, REFIID iid, LPVOID* object) {
     const DllGetClassObject_t getClassObject = EnsurePageLoaded();
@@ -3198,6 +3913,7 @@ BOOL Wh_ModInit() {
     // Download, verification and generation happen on a worker thread: Explorer never waits for them. Until they are
     // done (or if they fail) the hooks change nothing.
     StartSetup();
+    if (!g_vehHandle) g_vehHandle = AddVectoredExceptionHandler(0, CrashLogger);
     return TRUE;
 }
 
@@ -3215,6 +3931,10 @@ void Wh_ModBeforeUninit() {
 }
 
 void Wh_ModUninit() {
+    if (g_vehHandle) {
+        RemoveVectoredExceptionHandler(g_vehHandle);
+        g_vehHandle = nullptr;
+    }
     if (g_setupThread) {
         CancelDownload();
         // No time limit: every wait in the thread is on g_stopEvent, a download is cancelled and the loops check
