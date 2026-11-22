@@ -23,6 +23,7 @@
 * Please do not use this mod with other Alt+Tab mods. They might conflict with this mod.
 * If you are using an alternative shell like Explorer7, have disabled the modern Alt+Tab UI with `AltTabSettings` registry, or if you prefer to have the classic Alt+Tab restored (on 24H2+) even without Explorer running, enable the last option in the mod settings.
     * If you enable this setting, you may have to restart Explorer after disabling this mod to get the modern switcher UI back.
+* It is recommended to disable the mod logging when not needed. It may cause noticeable lag.
 
 ![Animated Screenshot](https://raw.githubusercontent.com/Ingan121/ClassicWindowSwitcher/refs/heads/master/cws.webp)
 ## Differences with the original classic switcher
@@ -880,7 +881,10 @@ void sws_IconPainter_DrawIcon(HICON hIcon, HDC hDC, HBRUSH hBrush, Gdiplus::GpGr
     }
 }
 
-
+static BOOL sws_IsSharedIcon(HICON hIcon)
+{
+    return hIcon == sws_DefAppIcon || hIcon == sws_LegacyDefAppIcon || hIcon == sws_DesktopIcon;
+}
 
 static void __stdcall _sws_IconPainter_Callback(
     HWND hWnd,
@@ -898,7 +902,6 @@ static void __stdcall _sws_IconPainter_Callback(
         DWORD dwProcessId;
         GetWindowThreadProcessId(hWnd, &dwProcessId);
         sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->layout.pWindowList.pList;
-        //if (uMsg == SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG) Wh_Log(L"aaa2 dwSrc %p idx %d", pWindowList[params->index].dwIconSource, params->index);
         if ((!hIcon || (params->bUseApplicationIcon && !pWindowList[params->index].dwIconSource)) && uMsg != SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG)
         {
             if (params->bUseApplicationIcon && !pWindowList[params->index].dwIconSource)
@@ -927,8 +930,6 @@ static void __stdcall _sws_IconPainter_Callback(
             case 1: // Get application icon from EXE or UWP info
             {
                 pWindowList[params->index].dwIconSource++;
-                wchar_t wszPath[MAX_PATH];
-                ZeroMemory(wszPath, MAX_PATH * sizeof(wchar_t));
                 if (!params->bIsDesktop)
                 {
                     if (_this->pGetIconQueue.csInited)
@@ -936,32 +937,28 @@ static void __stdcall _sws_IconPainter_Callback(
                         CRITICAL_SECTION* cs = &_this->pGetIconQueue.cs;
                         EnterCriticalSection(cs);
                         if (_this->hAsyncGetAppIconThread && !_this->pGetIconQueue.isExiting) {
-                            DWORD dwExitCode = 0;
-                            if (GetExitCodeThread(_this->hAsyncGetAppIconThread, &dwExitCode) && dwExitCode == STILL_ACTIVE)
+                            sws_getIconQueueItem* item = (sws_getIconQueueItem*)malloc(sizeof(sws_getIconQueueItem));
+                            if (item)
                             {
-                                sws_getIconQueueItem* item = (sws_getIconQueueItem*)malloc(sizeof(sws_getIconQueueItem));
-                                if (item)
+                                item->hWnd = hWnd;
+                                item->dwProcessId = dwProcessId;
+                                item->szIcon = pWindowList[params->index].szIcon;
+                                item->params = *params;
+                                item->dwWindowFlags = 0;
+                                if (_this->pGetIconQueue.rear)
                                 {
-                                    item->hWnd = hWnd;
-                                    item->dwProcessId = dwProcessId;
-                                    item->szIcon = pWindowList[params->index].szIcon;
-                                    item->params = *params;
-                                    item->dwWindowFlags = NULL;
-                                    if (_this->pGetIconQueue.rear)
-                                    {
-                                        item->next = _this->pGetIconQueue.rear->next;
-                                        _this->pGetIconQueue.rear->next = item;
-                                    }
-                                    else
-                                    {
-                                        item->next = item;
-                                    }
-                                    _this->pGetIconQueue.rear = item;
-                                    LeaveCriticalSection(cs);
-                                    WakeAllConditionVariable(&_this->pGetIconQueue.cv);
-                                    free(params);
-                                    return;
+                                    item->next = _this->pGetIconQueue.rear->next;
+                                    _this->pGetIconQueue.rear->next = item;
                                 }
+                                else
+                                {
+                                    item->next = item;
+                                }
+                                _this->pGetIconQueue.rear = item;
+                                LeaveCriticalSection(cs);
+                                WakeAllConditionVariable(&_this->pGetIconQueue.cv);
+                                free(params);
+                                return;
                             }
                         }
                         LeaveCriticalSection(cs);
@@ -978,11 +975,7 @@ static void __stdcall _sws_IconPainter_Callback(
         }
         else
         {
-            if (pWindowList[params->index].hIcon &&
-                sws_DefAppIcon && pWindowList[params->index].hIcon != sws_DefAppIcon &&
-                sws_LegacyDefAppIcon && pWindowList[params->index].hIcon != sws_LegacyDefAppIcon &&
-                sws_DesktopIcon && pWindowList[params->index].hIcon != sws_DesktopIcon
-                )
+            if (pWindowList[params->index].hIcon && sws_IsSharedIcon(pWindowList[params->index].hIcon))
             {
                 DestroyIcon(pWindowList[params->index].hIcon);
                 pWindowList[params->index].hIcon = NULL;
@@ -1381,11 +1374,11 @@ void sws_WindowHelpers_GetDesktopText(wchar_t* wszTitle)
         if (LoadStringW(_sws_ExplorerFrame, 13140, wszTitle, MAX_PATH))
         {
             // Strip CJK "(D)" from it
-			wchar_t* pos = wcsstr(wszTitle, L"(&D)");
-			if (pos != NULL)
-			{
-				*pos = L'\0';
-			}
+            wchar_t* pos = wcsstr(wszTitle, L"(&D)");
+            if (pos != NULL)
+            {
+                *pos = L'\0';
+            }
             return;
         }
     }
@@ -1528,7 +1521,7 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
                             {
                                 titleText.replace(pos, 2, wszTitle2);
                                 wcsncpy_s(wszTitle, MAX_PATH, titleText.c_str(), _TRUNCATE);
-                                Wh_Log(L"Perf-SHCreateItemInKnownFolder %d", sws_milliseconds_now() - a1);
+                                Wh_Log(L"Perf-SHCreateItemInKnownFolder %lld", sws_milliseconds_now() - a1);
                                 return;
                             }
                         }
@@ -1727,8 +1720,7 @@ void sws_WindowSwitcherLayoutWindow_Erase(sws_WindowSwitcherLayoutWindow* _this)
 
 void sws_WindowSwitcherLayoutWindow_Clear(sws_WindowSwitcherLayoutWindow* _this)
 {
-    //if (_this->hIcon && !_this->bOwnProcess)
-    if (_this->hIcon && sws_DefAppIcon && _this->hIcon != sws_DefAppIcon && sws_LegacyDefAppIcon && _this->hIcon != sws_LegacyDefAppIcon && sws_DesktopIcon && _this->hIcon != sws_DesktopIcon)
+    if (_this->hIcon && sws_DefAppIcon && sws_IsSharedIcon(_this->hIcon))
     {
         DestroyIcon(_this->hIcon);
     }
@@ -4219,7 +4211,7 @@ static DWORD CALLBACK _sws_WindowSwitcher_AsyncGetAppIconProcedure(sws_WindowSwi
                         sizeof(SHFILEINFOW),
                         SHGFI_ICON
                     );
-                    Wh_Log(L"Perf-SHGetFileInfoW %d", sws_milliseconds_now() - a1);
+                    Wh_Log(L"Perf-SHGetFileInfoW %lld", sws_milliseconds_now() - a1);
                     if (shinfo.hIcon)
                     {
                         ok = PostMessageW(_this->hWnd, SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG, (ULONG_PTR)pItem, (LRESULT)shinfo.hIcon);
@@ -4268,7 +4260,6 @@ static DWORD CALLBACK _sws_WindowSwitcher_AsyncGetAppIconProcedure(sws_WindowSwi
 
                                 SIZE size = { szIcon, szIcon };
                                 HBITMAP hBitmap;
-                                Wh_Log(L"Perf-GetImage %d", sws_milliseconds_now() - a1);
                                 hr = imageFactory->GetImage(
                                     size,
                                     flags,
@@ -4291,6 +4282,7 @@ static DWORD CALLBACK _sws_WindowSwitcher_AsyncGetAppIconProcedure(sws_WindowSwi
                                         szIcon -= (int)(szIcon * factor);
                                         pItem->szIcon += szIcon;
 
+                                        Wh_Log(L"Perf-GetImage %lld", sws_milliseconds_now() - a1);
                                         ok = PostMessageW(_this->hWnd, SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG, (ULONG_PTR)pItem, (LRESULT)hExIcon);
                                         if (!ok)
                                         {
