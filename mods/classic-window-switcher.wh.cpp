@@ -390,6 +390,8 @@ typedef struct _sws_getIconQueue
     BOOL isExiting;
 } sws_getIconQueue;
 
+static void sws_getIconQueue_Push(sws_getIconQueue* _this, sws_getIconQueueItem* item);
+
 // sws_tshwnd.h
 typedef struct _sws_tshwnd
 {
@@ -945,16 +947,7 @@ static void __stdcall _sws_IconPainter_Callback(
                                 item->szIcon = pWindowList[params->index].szIcon;
                                 item->params = *params;
                                 item->dwWindowFlags = 0;
-                                if (_this->pGetIconQueue.rear)
-                                {
-                                    item->next = _this->pGetIconQueue.rear->next;
-                                    _this->pGetIconQueue.rear->next = item;
-                                }
-                                else
-                                {
-                                    item->next = item;
-                                }
-                                _this->pGetIconQueue.rear = item;
+                                sws_getIconQueue_Push(&_this->pGetIconQueue, item);
                                 LeaveCriticalSection(cs);
                                 WakeAllConditionVariable(&_this->pGetIconQueue.cv);
                                 free(params);
@@ -1017,6 +1010,54 @@ static void __stdcall _sws_IconPainter_Callback(
     if (uMsg != SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG)
     {
         free(params);
+    }
+}
+
+static BOOL sws_getIconQueue_IsEmpty(sws_getIconQueue* _this)
+{
+    return !_this->rear;
+}
+
+static void sws_getIconQueue_Push(sws_getIconQueue* _this, sws_getIconQueueItem* item)
+{
+    if (sws_getIconQueue_IsEmpty(_this))
+    {
+        item->next = item;
+    }
+    else
+    {
+        item->next = _this->rear->next;
+        _this->rear->next = item;
+    }
+    _this->rear = item;
+}
+
+static sws_getIconQueueItem* sws_getIconQueue_Pop(sws_getIconQueue* _this)
+{
+    sws_getIconQueueItem* pItem = _this->rear->next;
+    if (pItem == _this->rear)
+    {
+        _this->rear = NULL;
+    }
+    else
+    {
+        _this->rear->next = pItem->next;
+    }
+    return pItem;
+}
+
+static void sws_getIconQueue_Clear(sws_getIconQueue* _this)
+{
+    if (!sws_getIconQueue_IsEmpty(_this))
+    {
+        sws_getIconQueueItem* pItem = _this->rear->next;
+        _this->rear = _this->rear->next = NULL;
+        while (pItem)
+        {
+            sws_getIconQueueItem* next = pItem->next;
+            free(pItem);
+            pItem = next;
+        }
     }
 }
 
@@ -3173,6 +3214,10 @@ static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
     _sws_WindowSwitcher_Calculate(_this, pOldHWNDs, cntOldHWNDSs, dwOldIndex);
     if (pOldHWNDs) free(pOldHWNDs);
     pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->layout.pWindowList.pList;
+    sws_getIconQueue* queue = &_this->pGetIconQueue;
+    EnterCriticalSection(&queue->cs);
+    sws_getIconQueue_Clear(queue);
+    LeaveCriticalSection(&queue->cs);
     if (_this->layout.pWindowList.cbSize == 0)
     {
         ShowWindow(_this->hWnd, SW_HIDE);
@@ -4160,11 +4205,12 @@ static DWORD CALLBACK _sws_WindowSwitcher_AsyncGetAppIconProcedure(sws_WindowSwi
         sws_error_t rv = sws_error_Report(hrCo);
     }
 
+    sws_getIconQueue* queue = &_this->pGetIconQueue;
     while (TRUE)
     {
-        CRITICAL_SECTION* cs = &_this->pGetIconQueue.cs;
+        CRITICAL_SECTION* cs = &queue->cs;
         EnterCriticalSection(cs);
-        while (!_this->pGetIconQueue.rear && !_this->pGetIconQueue.isExiting)
+        while (sws_getIconQueue_IsEmpty(queue) && !_this->pGetIconQueue.isExiting)
         {
             SleepConditionVariableCS(&_this->pGetIconQueue.cv, cs, INFINITE);
         }
@@ -4174,15 +4220,7 @@ static DWORD CALLBACK _sws_WindowSwitcher_AsyncGetAppIconProcedure(sws_WindowSwi
             LeaveCriticalSection(cs);
             break;
         }
-        sws_getIconQueueItem* pItem = _this->pGetIconQueue.rear->next;
-        if (pItem == _this->pGetIconQueue.rear)
-        {
-            _this->pGetIconQueue.rear = NULL;
-        }
-        else
-        {
-            _this->pGetIconQueue.rear->next = pItem->next;
-        }
+        sws_getIconQueueItem* pItem = sws_getIconQueue_Pop(queue);
         LeaveCriticalSection(cs);
 
         Wh_Log(L"Getting app icon for idx %d / hWnd %p / pid %d asynchronously...", pItem->params.index, pItem->hWnd, pItem->dwProcessId);
@@ -4311,17 +4349,7 @@ static DWORD CALLBACK _sws_WindowSwitcher_AsyncGetAppIconProcedure(sws_WindowSwi
         }
     }
 
-    if (_this->pGetIconQueue.rear)
-    {
-        sws_getIconQueueItem* pItem = _this->pGetIconQueue.rear->next;
-        _this->pGetIconQueue.rear = _this->pGetIconQueue.rear->next = NULL;
-        while (pItem)
-        {
-            sws_getIconQueueItem* next = pItem->next;
-            free(pItem);
-            pItem = next;
-        }
-    }
+    sws_getIconQueue_Clear(queue);
 
     if (SUCCEEDED(hrCo))
     {
