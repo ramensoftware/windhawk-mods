@@ -23,6 +23,12 @@ Right-clicking the network icon in the Windows 11 taskbar and choosing
 replaces it with a native flyout above the taskbar that runs the official
 **Ookla Speedtest CLI** in the background and shows the test live.
 
+## Screenshots
+
+| Download | Upload | History |
+| --- | --- | --- |
+| ![Download](https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/download.png) | ![Upload](https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/upload.png) | ![History](https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/history.png) |
+
 ## Features
 
 - Live gauge (0 to 2,000+ Mbps) drawn as a soft light bar with smooth motion:
@@ -48,14 +54,34 @@ replaces it with a native flyout above the taskbar that runs the official
 
 ## Ookla license and privacy
 
-The mod runs `speedtest.exe` with `--accept-license --accept-gdpr`, which
-**accepts Ookla's license and privacy terms on your behalf**. Read them before
-enabling the mod:
-[EULA](https://www.speedtest.net/about/eula),
+Before the first test, the flyout explains what Ookla receives and links
+Ookla's [EULA](https://www.speedtest.net/about/eula),
 [Terms of Use](https://www.speedtest.net/about/terms) and
-[Privacy Policy](https://www.speedtest.net/about/privacy).
-As with any Speedtest run, the result is stored by Ookla; that is what the
-result link points to.
+[Privacy Policy](https://www.speedtest.net/about/privacy). No test runs until
+you click **Accept and test**. Only then does the mod start `speedtest.exe`
+with `--accept-license --accept-gdpr`. The acceptance is stored separately for
+each Windows user.
+
+The Speedtest CLI also records the acceptance in its own file,
+`%APPDATA%\Ookla\Speedtest CLI\speedtest-cli.ini`, which stays after the mod
+is removed. Delete that folder to reset it.
+
+## Network access
+
+The mod opens no connections itself. It runs `speedtest.exe`, which:
+
+- contacts Ookla's servers to pick a test server, then downloads from and
+  uploads to that Speedtest server;
+- uploads the result to speedtest.net, where Ookla stores it (the result link
+  in the history points there).
+
+Ookla receives your public IP address, your internet provider and the test
+results, under its privacy policy.
+
+A test runs every time the flyout opens, and on Start, Repeat or Retry. Set
+**Start the test automatically** to **Never** to make tests click-only (*Auto*
+already waits for a click on metered connections). Clicking a history row or
+a terms link opens speedtest.net in your browser.
 
 ## Data usage
 
@@ -67,8 +93,8 @@ when Windows reports the connection as metered.
 
 - Stop, Esc, closing the flyout or disabling the mod ends `speedtest.exe`
   immediately (it runs inside a kill-on-close job object).
-- The history lives in the mod's own Windhawk storage and is removed with the
-  mod.
+- The history lives in the mod's own Windhawk storage, separately for each
+  Windows user, and is removed with the mod.
 - [Network Menu Speed Test](https://windhawk.net/mods/network-speedtest-native)
   intercepts the same link. If both are installed, disable one of them.
 
@@ -88,7 +114,7 @@ bar, the smooth motion and the test history.
   $description: Full path of the Ookla Speedtest CLI. Environment variables such as %LOCALAPPDATA% are expanded.
 - extraPatterns: ""
   $name: Extra URL patterns
-  $description: Additional URL substrings to intercept, separated by | (example speedtest.net|ookla.com).
+  $description: Additional URL substrings to intercept, separated by | (example speedtest.net|ookla.com). Applies to links opened through the shell, not to direct browser launches.
 - fallbackToOriginal: true
   $name: Fall back to the web page
   $description: If the native flyout cannot open, open the original web page instead of doing nothing.
@@ -130,6 +156,7 @@ bar, the smooth motion and the test history.
 #include <iphlpapi.h>
 #include <iptypes.h>
 #include <netlistmgr.h>
+#include <sddl.h>
 #include <cmath>
 #include <cstdlib>
 #include <algorithm>
@@ -178,19 +205,15 @@ struct UiStrings {
     PCWSTR download;
     PCWSTR upload;
     PCWSTR jitter;
-    PCWSTR dataUsed;
     PCWSTR copy;
     PCWSTR copied;
-    PCWSTR openResult;
     PCWSTR start;
     PCWSTR stop;
     PCWSTR repeat;
-    PCWSTR resultsTitle;
     PCWSTR failedTitle;
     PCWSTR failedHint;
     PCWSTR retry;
     PCWSTR closeName;
-    PCWSTR server;
     PCWSTR errNotFound;
     PCWSTR errNoResult;
     PCWSTR errCanceled;
@@ -205,6 +228,15 @@ struct UiStrings {
     PCWSTR today;
     PCWSTR yesterday;
     PCWSTR dataSuffix;
+    PCWSTR consentTitle;
+    PCWSTR consentBody;
+    PCWSTR consentLicense;
+    PCWSTR consentTerms;
+    PCWSTR consentPrivacy;
+    PCWSTR consentAccept;
+    PCWSTR accDownload;
+    PCWSTR accUpload;
+    PCWSTR accPing;
     PCWSTR locale;
     bool decimalComma;
     bool dayFirst;
@@ -222,19 +254,15 @@ static const UiStrings kStringsPt = {
     .download = L"Download",
     .upload = L"Upload",
     .jitter = L"Jitter",
-    .dataUsed = L"Dados usados",
     .copy = L"Copiar",
     .copied = L"Copiado",
-    .openResult = L"Abrir resultado",
     .start = L"Iniciar",
     .stop = L"Parar",
     .repeat = L"Repetir",
-    .resultsTitle = L"Resultados do teste",
     .failedTitle = L"O teste falhou",
     .failedHint = L"Tente de novo em instantes.",
     .retry = L"Tentar de novo",
     .closeName = L"Fechar",
-    .server = L"Servidor",
     .errNotFound = L"speedtest.exe não encontrado em:\n",
     .errNoResult = L"O Speedtest terminou sem resultado. Verifique a conexão e tente de novo.",
     .errCanceled = L"Teste cancelado.",
@@ -249,6 +277,15 @@ static const UiStrings kStringsPt = {
     .today = L"Hoje",
     .yesterday = L"Ontem",
     .dataSuffix = L" de dados",
+    .consentTitle = L"Antes do primeiro teste",
+    .consentBody = L"O teste usa o Speedtest CLI da Ookla. Durante o teste, a Ookla recebe o seu IP, o seu provedor e os resultados, e guarda o resultado em speedtest.net. Para continuar, aceite a licen\u00E7a e a pol\u00EDtica de privacidade da Ookla.",
+    .consentLicense = L"Licen\u00E7a",
+    .consentTerms = L"Termos",
+    .consentPrivacy = L"Privacidade",
+    .consentAccept = L"Aceitar e testar",
+    .accDownload = L", download ",
+    .accUpload = L" Mbps, upload ",
+    .accPing = L" Mbps, ping ",
     .locale = L"pt-BR",
     .decimalComma = true,
     .dayFirst = true,
@@ -266,19 +303,15 @@ static const UiStrings kStringsEn = {
     .download = L"Download",
     .upload = L"Upload",
     .jitter = L"Jitter",
-    .dataUsed = L"Data used",
     .copy = L"Copy",
     .copied = L"Copied",
-    .openResult = L"Open result",
     .start = L"Start",
     .stop = L"Stop",
     .repeat = L"Repeat",
-    .resultsTitle = L"Test results",
     .failedTitle = L"Test failed",
     .failedHint = L"Try again in a moment.",
     .retry = L"Retry",
     .closeName = L"Close",
-    .server = L"Server",
     .errNotFound = L"speedtest.exe not found at:\n",
     .errNoResult = L"Speedtest ended without a result. Check the connection and try again.",
     .errCanceled = L"Test canceled.",
@@ -293,6 +326,15 @@ static const UiStrings kStringsEn = {
     .today = L"Today",
     .yesterday = L"Yesterday",
     .dataSuffix = L" of data",
+    .consentTitle = L"Before your first test",
+    .consentBody = L"This test uses the Ookla Speedtest CLI. During the test, Ookla receives your IP address, your internet provider and the results, and stores the result on speedtest.net. To continue, accept Ookla's license and privacy policy.",
+    .consentLicense = L"License",
+    .consentTerms = L"Terms",
+    .consentPrivacy = L"Privacy",
+    .consentAccept = L"Accept and test",
+    .accDownload = L", download ",
+    .accUpload = L" Mbps, upload ",
+    .accPing = L" Mbps, ping ",
     .locale = L"en-US",
     .decimalComma = false,
     .dayFirst = false,
@@ -904,6 +946,12 @@ static void PushHistory(std::vector<HistoryEntry>& entries, HistoryEntry entry,
     }
 }
 
+// Storage value names are per Windows user: the mod's storage is machine-wide,
+// and each user's Explorer hosts its own flyout and history.
+static std::wstring StorageName(PCWSTR base, const std::wstring& sid) {
+    return sid.empty() ? std::wstring(base) : std::wstring(base) + L"-" + sid;
+}
+
 // "Today · 03:16", "Yesterday · 21:42" or a short date ("17/11 · 09:05" day
 // first, "11/17 · 09:05" month first). Both times are local.
 static std::wstring DayLabel(ULONGLONG entryTime, ULONGLONG nowTime, PCWSTR today,
@@ -935,19 +983,57 @@ static ULONGLONG LocalTicks(const SYSTEMTIME& t) {
     return ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
 }
 
-// Loaded once on the UI thread; only the primary explorer hosts the flyout,
-// so this is the single writer of the "history" value.
+// String SID of the user this process runs as ("" if it cannot be read).
+static std::wstring CurrentUserSid() {
+    std::wstring result;
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        return result;
+    }
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    std::vector<BYTE> buffer(size);
+    PWSTR text = nullptr;
+    if (size && GetTokenInformation(token, TokenUser, buffer.data(), size, &size) &&
+        ConvertSidToStringSidW(((TOKEN_USER*)buffer.data())->User.Sid, &text)) {
+        result = text;
+        LocalFree(text);
+    }
+    CloseHandle(token);
+    return result;
+}
+
+// Set once in Wh_ModInit. History and the Ookla consent are stored per user.
+static std::wstring g_userSid;
+
+// Loaded once on the UI thread. Only the primary explorer of this user hosts
+// the flyout, so it is the single writer of this user's history value.
 static std::vector<HistoryEntry> g_history;
 
 static void LoadHistory() {
     // shortcut: 128K chars covers 100 entries (~22K) with room; Windhawk returns "" if it overflows.
     std::vector<wchar_t> buffer(128 * 1024);
-    size_t length = Wh_GetStringValue(L"history", buffer.data(), buffer.size());
-    g_history = ParseHistory(std::wstring(buffer.data(), length));
+    size_t length = Wh_GetStringValue(StorageName(L"history", g_userSid).c_str(), buffer.data(),
+                                      buffer.size());
+    g_history = ParseHistory(std::wstring(buffer.data(), std::min(length, buffer.size() - 1)));
+}
+
+// The user accepted Ookla's license and privacy policy in the flyout.
+static bool HasOoklaConsent() {
+    return Wh_GetIntValue(StorageName(L"consent", g_userSid).c_str(), 0) == 1;
+}
+
+static bool SaveOoklaConsent() {
+    if (!Wh_SetIntValue(StorageName(L"consent", g_userSid).c_str(), 1)) {
+        Wh_Log(L"Saving the Ookla consent failed");
+        return false;
+    }
+    return true;
 }
 
 static void SaveHistory() {
-    if (!Wh_SetStringValue(L"history", SerializeHistory(g_history).c_str())) {
+    if (!Wh_SetStringValue(StorageName(L"history", g_userSid).c_str(),
+                           SerializeHistory(g_history).c_str())) {
         Wh_Log(L"Saving the history failed");
     }
 }
@@ -1434,8 +1520,10 @@ static bool CancelRequested() {
 }
 
 static constexpr wchar_t kSpeedtestArgs[] =
-    L" --format=jsonl --progress=yes --progress-update-interval=100"
-    L" --accept-license --accept-gdpr";
+    L" --format=jsonl --progress=yes --progress-update-interval=100";
+// Passed only after the user accepted in the flyout (HasOoklaConsent); the CLI
+// would otherwise wait for an answer on a console nobody can see.
+static constexpr wchar_t kSpeedtestConsentArgs[] = L" --accept-license --accept-gdpr";
 
 struct OoklaRun {
     Phase phase = Phase::Warmup;
@@ -1542,6 +1630,11 @@ static void HandleOoklaLine(const std::string& line, OoklaRun* run) {
 // Starts speedtest.exe hidden, in g_job, with stdout+stderr on one pipe.
 // Returns the process handle and the read end, or throws a UI message.
 static void LaunchSpeedtest(const std::wstring& exe, HANDLE* process, HANDLE* readPipe) {
+    // Last line of defence, before anything is allocated.
+    if (!HasOoklaConsent()) {
+        Wh_Log(L"Refusing to start speedtest.exe without the user's Ookla consent");
+        throw std::wstring(g_str->errUnexpected);
+    }
     DWORD attributes = GetFileAttributesW(exe.c_str());
     if (exe.empty() || attributes == INVALID_FILE_ATTRIBUTES ||
         (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
@@ -1580,7 +1673,7 @@ static void LaunchSpeedtest(const std::wstring& exe, HANDLE* process, HANDLE* re
     startup.StartupInfo.hStdError = writeEnd;
     startup.lpAttributeList = attributeList;
 
-    std::wstring commandLine = L"\"" + exe + L"\"" + kSpeedtestArgs;
+    std::wstring commandLine = L"\"" + exe + L"\"" + kSpeedtestArgs + kSpeedtestConsentArgs;
     PROCESS_INFORMATION info = {};
     // The original pointer bypasses this mod's own CreateProcessW hook.
     CreateProcessW_t create = CreateProcessW_Original ? CreateProcessW_Original : CreateProcessW;
@@ -1617,9 +1710,20 @@ static void RunTestWorker() {
         }
         StateSetPhase(Phase::Warmup, g_str->connecting);
 
-        HANDLE process = nullptr;
-        HANDLE readPipe = nullptr;
-        LaunchSpeedtest(SpeedtestPath(), &process, &readPipe);
+        // Closed on every path, including an exception while parsing.
+        struct HandleGuard {
+            HANDLE handle = nullptr;
+            ~HandleGuard() {
+                if (handle) {
+                    CloseHandle(handle);
+                }
+            }
+        };
+        HandleGuard processGuard;
+        HandleGuard pipeGuard;
+        LaunchSpeedtest(SpeedtestPath(), &processGuard.handle, &pipeGuard.handle);
+        HANDLE process = processGuard.handle;
+        HANDLE readPipe = pipeGuard.handle;
         // A cancel that raced the launch found no process in the job yet.
         if (CancelRequested()) {
             TerminateJobObject(g_job, 1);
@@ -1648,10 +1752,10 @@ static void RunTestWorker() {
             HandleOoklaLine(pending, &run);
         }
         CloseHandle(readPipe);
+        pipeGuard.handle = nullptr;
         WaitForSingleObject(process, 5000);
         DWORD exitCode = 0;
         GetExitCodeProcess(process, &exitCode);
-        CloseHandle(process);
 
         if (CancelRequested()) {
             throw std::wstring(g_str->errCanceled);
@@ -2192,6 +2296,7 @@ enum class View {
     Gauge,
     History,
     Error,
+    Consent,
 };
 
 enum class Hot {
@@ -2201,6 +2306,10 @@ enum class Hot {
     Close,
     Retry,
     Row,
+    Accept,
+    LinkLicense,
+    LinkTerms,
+    LinkPrivacy,
 };
 
 static View g_view = View::Gauge;
@@ -2286,6 +2395,30 @@ static constexpr D2D1_RECT_F kCloseRect = {352.0f, 9.0f, 384.0f, 39.0f};
 static constexpr D2D1_RECT_F kCopyRect = {308.0f, 47.0f, 380.0f, 73.0f};
 static constexpr D2D1_RECT_F kErrorRect = {20.0f, 56.0f, 380.0f, 296.0f};
 static constexpr D2D1_RECT_F kRetryRect = {136.0f, 230.0f, 264.0f, 262.0f};
+
+// First-run Ookla consent card (DIP).
+static constexpr D2D1_RECT_F kConsentRect = {20.0f, 56.0f, 380.0f, 372.0f};
+static constexpr D2D1_RECT_F kAcceptRect = {110.0f, 310.0f, 290.0f, 344.0f};
+static constexpr D2D1_RECT_F kLinkRects[3] = {
+    {40.0f, 262.0f, 140.0f, 284.0f},
+    {150.0f, 262.0f, 250.0f, 284.0f},
+    {260.0f, 262.0f, 360.0f, 284.0f},
+};
+static constexpr PCWSTR kOoklaUrls[3] = {
+    L"https://www.speedtest.net/about/eula",
+    L"https://www.speedtest.net/about/terms",
+    L"https://www.speedtest.net/about/privacy",
+};
+static constexpr Hot kLinkHots[3] = {Hot::LinkLicense, Hot::LinkTerms, Hot::LinkPrivacy};
+
+static int LinkIndex(Hot hot) {
+    for (int i = 0; i < 3; i++) {
+        if (kLinkHots[i] == hot) {
+            return i;
+        }
+    }
+    return -1;
+}
 
 // History list geometry (DIP).
 static constexpr float kListTop = 84.0f;
@@ -2535,6 +2668,17 @@ static Hot HitTest(float x, float y, int* row = nullptr) {
     }
     if (g_view == View::Error) {
         return InRect(kRetryRect, x, y) ? Hot::Retry : Hot::None;
+    }
+    if (g_view == View::Consent) {
+        if (InRect(kAcceptRect, x, y)) {
+            return Hot::Accept;
+        }
+        for (int i = 0; i < 3; i++) {
+            if (InRect(kLinkRects[i], x, y)) {
+                return kLinkHots[i];
+            }
+        }
+        return Hot::None;
     }
     if (g_view == View::History) {
         if (InRect(kCopyRect, x, y)) {
@@ -2800,6 +2944,47 @@ static void DrawHistory(float alpha) {
     g_renderTarget->PopAxisAlignedClip();
 }
 
+// First run: explains what Ookla receives, links its terms, and asks for an
+// explicit accept before the CLI is ever started with --accept-license/gdpr.
+static void DrawConsent(float alpha) {
+    FillRounded(kConsentRect, 8, WithAlpha(g_palette.cardFill, alpha));
+    StrokeRounded(kConsentRect, 8, WithAlpha(g_palette.cardStroke, alpha));
+
+    Text(L"\xE946", Rect(20, 76, 380, 106), 24, WithAlpha(g_palette.accent, alpha),
+         DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER,
+         DWRITE_PARAGRAPH_ALIGNMENT_CENTER, 2);
+    Text(g_str->consentTitle, Rect(20, 112, 380, 134), 15, WithAlpha(g_palette.text, alpha),
+         DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+    Text(g_str->consentBody, Rect(40, 142, 360, 252), 12,
+         WithAlpha(g_palette.secondary, alpha), DWRITE_FONT_WEIGHT_NORMAL,
+         DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER, 0, true);
+
+    PCWSTR labels[3] = {g_str->consentLicense, g_str->consentTerms, g_str->consentPrivacy};
+    for (int i = 0; i < 3; i++) {
+        bool hover = g_hot == kLinkHots[i];
+        Text(std::wstring(labels[i]) + L" \x2197", kLinkRects[i], 12,
+             WithAlpha(hover ? Lighten(g_palette.accent, 0.2f) : g_palette.accent, alpha),
+             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER,
+             DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        if (g_focus == kLinkHots[i] && FocusVisible()) {
+            DrawFocusRing(kLinkRects[i], 4, alpha);
+        }
+    }
+
+    bool hover = g_hot == Hot::Accept;
+    bool pressed = g_pressed == Hot::Accept;
+    FillRounded(kAcceptRect, 4,
+                WithAlpha(pressed ? Shade(g_palette.accent, 0.18f)
+                                  : Lighten(g_palette.accent, hover ? 0.18f : 0.0f),
+                          alpha));
+    Text(g_str->consentAccept, kAcceptRect, 13, WithAlpha(g_palette.accentText, alpha),
+         DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER,
+         DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    if (g_focus == Hot::Accept && FocusVisible()) {
+        DrawFocusRing(kAcceptRect, 4, alpha);
+    }
+}
+
 static void DrawError(float alpha, const TestState& state) {
     FillRounded(kErrorRect, 8, WithAlpha(g_palette.cardFill, alpha));
     StrokeRounded(kErrorRect, 8, WithAlpha(g_palette.cardStroke, alpha));
@@ -2920,6 +3105,9 @@ static void DrawView(View view, float alpha, const TestState& state) {
         case View::Error:
             DrawError(alpha, state);
             break;
+        case View::Consent:
+            DrawConsent(alpha);
+            break;
     }
 }
 
@@ -2972,7 +3160,11 @@ static void DrawFrame(const TestState& state) {
         DrawView(g_view, 1.0f, state);
     }
 
-    if (g_view != View::Error || (g_animating && g_animFrom != View::Error)) {
+    // The consent card has its own Accept button and the error card its Retry.
+    auto hasStartButton = [](View view) {
+        return view != View::Error && view != View::Consent;
+    };
+    if (hasStartButton(g_view) || (g_animating && hasStartButton(g_animFrom))) {
         DrawButton(buttonAlpha, state);
     }
 
@@ -3408,6 +3600,17 @@ static void StartOrCancelTest(HWND hwnd) {
         return;
     }
 
+    // No test (and no license/GDPR flags) until the user accepted in the flyout.
+    // Focus is left empty on purpose: a stray or auto-repeated Enter must not
+    // accept a card the user has not read; Tab reaches the button.
+    if (!HasOoklaConsent()) {
+        BeginView(View::Consent);
+        g_focus = Hot::None;
+        SetTimer(hwnd, 1, 16, nullptr);
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return;
+    }
+
     if (g_testThread) {
         // The previous worker may still be unwinding; it only cleans up now.
         DWORD wait = WaitForSingleObject(g_testThread, 2000);
@@ -3557,10 +3760,16 @@ static void ShowFlyoutWindow(HWND hwnd) {
         g_network = ReadNetwork();
 
         int startMode = g_autoStart.load(std::memory_order_relaxed);
-        if (startMode == 0 && IsConnectionMetered()) {
+        if (!HasOoklaConsent()) {
+            // First run: the consent card instead of a test (no initial focus,
+            // see StartOrCancelTest).
+            g_view = View::Consent;
+            g_focus = Hot::None;
+            startTest = false;
+        } else if (startMode == 0 && IsConnectionMetered()) {
             startMode = 2;
         }
-        if (startMode == 2) {
+        if (startTest && startMode == 2) {
             StateSetCaption(g_str->ready);
             g_focus = Hot::Start;
             startTest = false;
@@ -3610,6 +3819,10 @@ static void HideFlyoutWindow(HWND hwnd, bool restoreForeground = true) {
     }
     ShowWindow(hwnd, SW_HIDE);
     KillTimer(hwnd, 1);
+    // Free the D3D device, swap chain and DirectComposition objects once the
+    // flyout has stayed hidden for a minute (timer 2): reopening right away
+    // keeps them, so it is fast and never shows an empty first frame.
+    SetTimer(hwnd, 2, 60 * 1000, nullptr);
     ApplyBackdrop(hwnd, false);
     g_scrimFadeAt = 0;
     g_uiVisible = false;
@@ -3648,6 +3861,20 @@ static void ActivateHot(HWND hwnd, Hot hot) {
                 OpenResultPage(g_history[(size_t)g_focusRow].url);
             }
             break;
+        case Hot::Accept:
+            if (SaveOoklaConsent()) {
+                StartOrCancelTest(hwnd);
+            } else {
+                // Without a stored consent Accept would only loop back here.
+                StateFail(g_str->errUnexpected);
+                BeginView(View::Error);
+            }
+            break;
+        case Hot::LinkLicense:
+        case Hot::LinkTerms:
+        case Hot::LinkPrivacy:
+            OpenResultPage(kOoklaUrls[LinkIndex(hot)]);
+            break;
         default:
             break;
     }
@@ -3664,6 +3891,14 @@ static int AccChildId(Hot hot) {
             return 3;
         case Hot::Row:
             return 4;
+        case Hot::Accept:
+            return 5;
+        case Hot::LinkLicense:
+            return 6;
+        case Hot::LinkTerms:
+            return 7;
+        case Hot::LinkPrivacy:
+            return 8;
         default:
             return 0;
     }
@@ -3679,6 +3914,14 @@ static Hot HotFromAccChild(int id) {
             return Hot::Copy;
         case 4:
             return Hot::Row;
+        case 5:
+            return Hot::Accept;
+        case 6:
+            return Hot::LinkLicense;
+        case 7:
+            return Hot::LinkTerms;
+        case 8:
+            return Hot::LinkPrivacy;
         default:
             return Hot::None;
     }
@@ -3690,6 +3933,11 @@ static std::vector<Hot> FocusOrder() {
     order.push_back(Hot::Close);
     if (g_view == View::Error) {
         order.push_back(Hot::Retry);
+        return order;
+    }
+    if (g_view == View::Consent) {
+        order.insert(order.end(), std::begin(kLinkHots), std::end(kLinkHots));
+        order.push_back(Hot::Accept);
         return order;
     }
     if (g_view == View::History) {
@@ -3710,9 +3958,9 @@ static std::wstring RowAccName(int index) {
     const HistoryEntry& e = g_history[(size_t)index];
     SYSTEMTIME localNow = {};
     GetLocalTime(&localNow);
-    return EntryDay(e.time, LocalTicks(localNow)) + L", download " + FormatNumber(e.download) +
-           L" Mbps, upload " + FormatNumber(e.upload) + L" Mbps, ping " +
-           FormatNumber(e.ping) + L" ms, " + e.server;
+    return EntryDay(e.time, LocalTicks(localNow)) + g_str->accDownload + FormatNumber(e.download) +
+           g_str->accUpload + FormatNumber(e.upload) + g_str->accPing + FormatNumber(e.ping) +
+           L" ms, " + e.server;
 }
 
 static void MoveFocus(int delta) {
@@ -3742,7 +3990,12 @@ static bool IsAvailableHot(Hot hot) {
         case Hot::Close:
             return true;
         case Hot::Start:
-            return g_view != View::Error;
+            return g_view != View::Error && g_view != View::Consent;
+        case Hot::Accept:
+        case Hot::LinkLicense:
+        case Hot::LinkTerms:
+        case Hot::LinkPrivacy:
+            return g_view == View::Consent;
         case Hot::Copy:
             return g_view == View::History;
         case Hot::Row:
@@ -3762,6 +4015,12 @@ static D2D1_RECT_F HotRect(Hot hot) {
             return kCopyRect;
         case Hot::Row:
             return RowRect(g_focusRow);
+        case Hot::Accept:
+            return kAcceptRect;
+        case Hot::LinkLicense:
+        case Hot::LinkTerms:
+        case Hot::LinkPrivacy:
+            return kLinkRects[LinkIndex(hot)];
         case Hot::Close:
             return kCloseRect;
         case Hot::Retry:
@@ -3872,6 +4131,18 @@ public:
                 }
                 case Hot::Retry:
                     value = g_str->retry;
+                    break;
+                case Hot::Accept:
+                    value = g_str->consentAccept;
+                    break;
+                case Hot::LinkLicense:
+                    value = g_str->consentLicense;
+                    break;
+                case Hot::LinkTerms:
+                    value = g_str->consentTerms;
+                    break;
+                case Hot::LinkPrivacy:
+                    value = g_str->consentPrivacy;
                     break;
                 case Hot::Start: {
                     TestState state = CopyState();
@@ -4299,6 +4570,11 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hwnd, UINT message, WPARAM wParam,
         case WM_TIMER:
             if (wParam == 1) {
                 TickFlyout(hwnd);
+            } else if (wParam == 2) {
+                KillTimer(hwnd, 2);
+                if (!g_uiVisible) {
+                    ReleaseTargets();
+                }
             }
             return 0;
 
@@ -4625,23 +4901,68 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     return 0;
 }
 
-static bool IsPrimaryShellProcess() {
-    // Only the explorer.exe that owns the taskbar hosts the flyout; before
-    // the taskbar exists, fall back to the process name.
-    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (tray) {
-        DWORD trayPid = 0;
-        GetWindowThreadProcessId(tray, &trayPid);
-        return trayPid == GetCurrentProcessId();
+static bool IsExplorerPath(PCWSTR path) {
+    PCWSTR name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    return _wcsicmp(name, L"explorer.exe") == 0;
+}
+
+static bool ProcessIsExplorer(DWORD pid) {
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        return false;
     }
+    wchar_t path[MAX_PATH * 2] = {};
+    DWORD size = ARRAYSIZE(path);
+    bool explorer = QueryFullProcessImageNameW(process, 0, path, &size) && IsExplorerPath(path);
+    CloseHandle(process);
+    return explorer;
+}
+
+struct TrayScan {
+    DWORD self;
+    bool mine;
+    bool otherExplorer;
+};
+
+static BOOL CALLBACK ScanTrayWindows(HWND hwnd, LPARAM param) {
+    auto* scan = (TrayScan*)param;
+    wchar_t className[32] = {};
+    if (!GetClassNameW(hwnd, className, ARRAYSIZE(className)) ||
+        wcscmp(className, L"Shell_TrayWnd") != 0) {
+        return TRUE;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == scan->self) {
+        scan->mine = true;
+        return FALSE;
+    }
+    if (ProcessIsExplorer(pid)) {
+        scan->otherExplorer = true;
+    }
+    return TRUE;
+}
+
+static bool IsPrimaryShellProcess() {
+    // Only the explorer.exe that owns the taskbar hosts the flyout. Some
+    // customization tools create a fake Shell_TrayWnd in their own process,
+    // so every taskbar window is checked instead of the first FindWindow hit.
+    TrayScan scan = {GetCurrentProcessId(), false, false};
+    EnumWindows(ScanTrayWindows, (LPARAM)&scan);
+    if (scan.mine) {
+        return true;
+    }
+    if (scan.otherExplorer) {
+        return false;
+    }
+    // No real taskbar yet (early injection): the first explorer.exe hosts it.
     wchar_t path[MAX_PATH * 2] = {};
     DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
     if (!length || length >= ARRAYSIZE(path)) {
         return false;
     }
-    PCWSTR name = wcsrchr(path, L'\\');
-    name = name ? name + 1 : path;
-    return _wcsicmp(name, L"explorer.exe") == 0;
+    return IsExplorerPath(path);
 }
 
 static HANDLE CreateKillOnCloseJob() {
@@ -4663,6 +4984,10 @@ static HANDLE CreateKillOnCloseJob() {
 
 BOOL Wh_ModInit(void) {
     SelectLanguage();
+    g_userSid = CurrentUserSid();
+    if (g_userSid.empty()) {
+        Wh_Log(L"User SID unavailable; history and consent use shared names");
+    }
     LoadSettings();
     InterlockedExchange(&g_shutdown, 0);
 
