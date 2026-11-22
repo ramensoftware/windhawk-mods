@@ -76,7 +76,9 @@ the settings.
 
 When the value gets within 1 of a multiple of 5, or would pass over one, it
 lands exactly on that multiple. With a step of 1, scrolling up from 5 gives 6,
-7, 8, 10. The snap applies to steps smaller than 5 and to dragging a bar.
+7, 8, 10. The snap applies to steps smaller than 5 and to dragging a bar in
+the popup. The jump list slider snaps when you scroll on it, not when you drag
+it.
 
 ## Logarithmic app volume
 
@@ -112,8 +114,10 @@ feature off in the settings of this mod instead.
 [Better Volume Mixer](https://windhawk.net/mods/better-volume-mixer) is another
 mixer popup with per-app volume, mute and output device switching. It isn't
 related to this mod and works in a different way: it opens from its own tray
-icon and has pinned apps and themes, which this mod doesn't have. It doesn't
-react to scrolling over the taskbar. Both can be enabled at the same time.
+icon and has pinned apps and themes, which this mod doesn't have. Better
+Volume Mixer also changes the system volume when you scroll over its tray icon.
+If you enable both mods, set "Scroll area" in this mod to "The taskbar without
+the notification area", or both will react to that scroll.
 
 ## Limitations
 
