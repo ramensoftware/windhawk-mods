@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              localsend-flyout
 // @name            LocalSend Flyout
-// @description     LocalSend flyout inspired by Quick Share Flyout; created for LocalSend with vibecode
+// @description     Open LocalSend as a compact flyout above the system tray
 // @version         1.0.0
 // @author          blactin
 // @github          https://github.com/blactin
@@ -20,15 +20,15 @@ flyout. Click LocalSend's tray icon to open it; click elsewhere to dismiss it.
 Use LocalSend's own **Send** page to pick or drop files, then choose a device
 as usual.
 
+![LocalSend Flyout demo](https://raw.githubusercontent.com/blactin/localsend-flyout/main/assets/localsend-flyout-demo.gif)
+
 ## Inspiration
 
 **Original mod:** [Quick Share Flyout](https://windhawk.net/mods/quick-share-flyout)
 by [0Allu](https://github.com/0Allu).
 
-Quick Share Flyout inspired the tray-adjacent flyout interaction. This is a
-separate LocalSend-specific implementation, created with **vibecode**: it
-targets LocalSend's own Windows window and preserves LocalSend's established
-transfer and approval flow. It does not copy the original mod blindly.
+This mod is based on the MIT-licensed Quick Share Flyout code by 0Allu and
+adapts its tray-flyout interaction to LocalSend's Windows window.
 
 This mod only changes the LocalSend window. It does not inspect files, call
 LocalSend's network API, start a CLI process, select recipients, or bypass a
@@ -42,8 +42,10 @@ its normal device discovery and HTTPS/TLS protection.
 * Drag files onto the LocalSend UI, or use its file picker.
 * Click outside the flyout to hide it (unless disabled in settings).
 
-The mod deliberately leaves notification windows alone. That keeps it confined
-to the LocalSend process and makes disabling it completely reversible.
+The mod deliberately leaves notification windows alone. It does not modify
+LocalSend's files or settings. If LocalSend's **Save window placement** option
+is enabled, closing the flyout with Alt+F4 may cause LocalSend itself to save
+the flyout's size and position.
 */
 // ==/WindhawkModReadme==
 
@@ -51,13 +53,13 @@ to the LocalSend process and makes disabling it completely reversible.
 /*
 - width: 500
   $name: Width
-  $description: Flyout width in pixels at 100% display scaling.
+  $description: Flyout width in pixels at 100% display scaling (320–1200).
 - height: 620
   $name: Height
-  $description: Flyout height in pixels at 100% display scaling.
+  $description: Flyout height in pixels at 100% display scaling (360–1200).
 - edgeMargin: 12
   $name: Screen-edge margin
-  $description: Margin in pixels at 100% display scaling.
+  $description: Margin in pixels at 100% display scaling (0–80).
 - closeWhenFocusIsLost: true
   $name: Close when focus is lost
   $description: Hide the flyout after clicking elsewhere. It stays open while files are dragged onto it.
@@ -84,20 +86,10 @@ to the LocalSend process and makes disabling it completely reversible.
 constexpr PCWSTR kLocalSendWindowClass = L"FLUTTER_RUNNER_WIN32_WINDOW";
 constexpr PCWSTR kLocalSendTitle = L"LocalSend";
 
-// Use numeric DWM attributes so this source also builds with SDKs that predate
-// Windows 11's DWM_WINDOW_CORNER_PREFERENCE enum. Older systems simply ignore
-// the corner preference.
-constexpr DWMWINDOWATTRIBUTE kDwmTransitionsForcedDisabled =
-    static_cast<DWMWINDOWATTRIBUTE>(3);
-constexpr DWMWINDOWATTRIBUTE kDwmWindowCornerPreference =
-    static_cast<DWMWINDOWATTRIBUTE>(33);
-constexpr int kDwmDefaultCorners = 0;
-constexpr int kDwmRoundCorners = 2;
-
 constexpr UINT_PTR kClickAwayTimer = 0x4C53464C;
 constexpr UINT kClickAwayIntervalMs = 60;
-constexpr DWORD kTrayFollowupGraceMs = 350;
-constexpr DWORD kTrayCloseSuppressMs = 450;
+constexpr ULONGLONG kTrayFollowupGraceMs = 350;
+constexpr ULONGLONG kTrayCloseSuppressMs = 450;
 
 struct Settings {
     int width;
@@ -108,15 +100,9 @@ struct Settings {
     bool keepTopmost;
 };
 
-// g_settings is used only by the LocalSend UI thread. The Windhawk settings
-// callback can run on another thread, so it writes g_pendingSettings under a
-// lock and asks the UI thread to apply a fresh snapshot.
-CRITICAL_SECTION g_settingsLock;
-Settings g_pendingSettings{};
 Settings g_settings{};
 
 std::atomic<HWND> g_window;
-std::atomic<bool> g_unloading;
 UINT g_applyMessage;
 UINT g_settingsMessage;
 UINT g_showRequestMessage;
@@ -125,8 +111,9 @@ UINT g_showRequestMessage;
 bool g_flyoutEnabled;
 bool g_addedToolWindow;
 bool g_buttonWasDown;
-DWORD g_lastShownAt;
-DWORD g_ignoreShowRequestsUntil;
+bool g_applyingFlyoutRect;
+ULONGLONG g_lastShownAt;
+ULONGLONG g_ignoreShowRequestsUntil;
 RECT g_flyoutRect{};
 
 struct OriginalWindowState {
@@ -182,7 +169,7 @@ HWND FindTaskbarForMonitor(HMONITOR monitor) {
     while ((taskbar = FindWindowExW(nullptr, taskbar, L"Shell_SecondaryTrayWnd", nullptr))) {
         if (MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST) == monitor) return taskbar;
     }
-    return primary;
+    return nullptr;
 }
 
 enum class TaskbarEdge { Top, Bottom, Left, Right };
@@ -277,12 +264,27 @@ void CaptureOriginalWindowState(HWND hWnd) {
     g_original.captured = true;
 }
 
+void CaptureRequestedWindowRect(const WINDOWPOS& position) {
+    if (!g_original.captured) return;
+
+    RECT rect = g_original.rect;
+    if (!(position.flags & SWP_NOMOVE)) {
+        rect.left = position.x;
+        rect.top = position.y;
+    }
+    if (!(position.flags & SWP_NOSIZE)) {
+        rect.right = rect.left + position.cx;
+        rect.bottom = rect.top + position.cy;
+    }
+    g_original.rect = rect;
+}
+
 void SetFlyoutDwmAttributes(HWND hWnd, bool enabled) {
     BOOL transitionsDisabled = enabled;
-    DwmSetWindowAttribute(hWnd, kDwmTransitionsForcedDisabled, &transitionsDisabled,
+    DwmSetWindowAttribute(hWnd, DWMWA_TRANSITIONS_FORCEDISABLED, &transitionsDisabled,
                           sizeof(transitionsDisabled));
-    int cornerPreference = enabled ? kDwmRoundCorners : kDwmDefaultCorners;
-    DwmSetWindowAttribute(hWnd, kDwmWindowCornerPreference, &cornerPreference,
+    DWM_WINDOW_CORNER_PREFERENCE cornerPreference = enabled ? DWMWCP_ROUND : DWMWCP_DEFAULT;
+    DwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPreference,
                           sizeof(cornerPreference));
 }
 
@@ -299,11 +301,13 @@ void SetToolWindowStyle(HWND hWnd, bool shouldHide) {
 
 void MoveToFlyoutRect(HWND hWnd, bool useCursorMonitor) {
     CalculateFlyoutRect(hWnd, useCursorMonitor);
+    g_applyingFlyoutRect = true;
     SetWindowPos(hWnd, g_settings.keepTopmost ? HWND_TOPMOST : HWND_NOTOPMOST,
                  g_flyoutRect.left, g_flyoutRect.top,
                  g_flyoutRect.right - g_flyoutRect.left,
                  g_flyoutRect.bottom - g_flyoutRect.top,
                  SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    g_applyingFlyoutRect = false;
 }
 
 void RestoreOriginalWindowState(HWND hWnd) {
@@ -335,19 +339,6 @@ Settings ReadWindhawkSettings() {
     return settings;
 }
 
-void StorePendingSettings(const Settings& settings) {
-    EnterCriticalSection(&g_settingsLock);
-    g_pendingSettings = settings;
-    LeaveCriticalSection(&g_settingsLock);
-}
-
-Settings TakePendingSettings() {
-    EnterCriticalSection(&g_settingsLock);
-    Settings settings = g_pendingSettings;
-    LeaveCriticalSection(&g_settingsLock);
-    return settings;
-}
-
 bool AnyMouseButtonDown(bool* wasPressedSinceLastCall = nullptr) {
     bool down = false;
     for (int button : {VK_LBUTTON, VK_RBUTTON, VK_MBUTTON}) {
@@ -363,12 +354,14 @@ bool CursorIsOverFlyout(HWND hWnd) {
     return GetCursorPos(&cursor) && GetAncestor(WindowFromPoint(cursor), GA_ROOT) == hWnd;
 }
 
+using ShowWindow_t = decltype(&ShowWindow);
+ShowWindow_t ShowWindow_Original;
+
 void HideFlyout(HWND hWnd) {
     KillTimer(hWnd, kClickAwayTimer);
     g_buttonWasDown = false;
     // Call the original to avoid treating this deliberate hide as a tray show
     // request when LocalSend's window-manager plugin reacts to activation.
-    extern decltype(&ShowWindow) ShowWindow_Original;
     ShowWindow_Original(hWnd, SW_HIDE);
 }
 
@@ -390,7 +383,11 @@ void CheckClickAway(HWND hWnd) {
     bool down = AnyMouseButtonDown(&pressed);
     bool releasedOutside = !down && (g_buttonWasDown || pressed) && !CursorIsOverFlyout(hWnd);
     g_buttonWasDown = down;
-    if (releasedOutside) HideFlyout(hWnd);
+    if (releasedOutside) {
+        bool trayClick = CursorIsOverTray();
+        HideFlyout(hWnd);
+        if (trayClick) g_ignoreShowRequestsUntil = GetTickCount64() + kTrayCloseSuppressMs;
+    }
 }
 
 // Called on LocalSend's UI thread. Only a request originating over the tray
@@ -399,8 +396,8 @@ void CheckClickAway(HWND hWnd) {
 bool ConsumeTrayShowRequest(HWND hWnd) {
     if (!g_flyoutEnabled || !CursorIsOverTray()) return false;
 
-    DWORD now = GetTickCount();
-    if (static_cast<LONG>(now - g_ignoreShowRequestsUntil) < 0) return true;
+    ULONGLONG now = GetTickCount64();
+    if (now < g_ignoreShowRequestsUntil) return true;
 
     if (!IsWindowVisible(hWnd)) return false;
 
@@ -414,7 +411,7 @@ bool ConsumeTrayShowRequest(HWND hWnd) {
 }
 
 bool DispatchTrayShowRequest(HWND hWnd) {
-    if (!hWnd || hWnd != g_window || !g_flyoutEnabled) return false;
+    if (!hWnd || hWnd != g_window) return false;
     if (GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId()) {
         return ConsumeTrayShowRequest(hWnd);
     }
@@ -442,11 +439,14 @@ void ApplyFlyoutMode(HWND hWnd, bool enabled) {
 LRESULT CALLBACK LocalSendSubclassProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam,
                                        DWORD_PTR) {
     if (message == g_applyMessage) {
+        // Settings can change before LocalSend creates its first window. Read them
+        // here on the window thread so initial attachment uses the latest values.
+        if (wParam) g_settings = ReadWindhawkSettings();
         ApplyFlyoutMode(hWnd, wParam != 0);
         return 0;
     }
     if (message == g_settingsMessage) {
-        g_settings = TakePendingSettings();
+        g_settings = ReadWindhawkSettings();
         ApplyFlyoutMode(hWnd, true);
         return 0;
     }
@@ -482,10 +482,11 @@ LRESULT CALLBACK LocalSendSubclassProc(HWND hWnd, UINT message, WPARAM wParam, L
                 KillTimer(hWnd, kClickAwayTimer);
                 break;
             }
+            if (!g_applyingFlyoutRect) CaptureRequestedWindowRect(*position);
             bool becomingVisible = !IsWindowVisible(hWnd) && (position->flags & SWP_SHOWWINDOW);
             if (becomingVisible) {
                 CalculateFlyoutRect(hWnd, true);
-                g_lastShownAt = GetTickCount();
+                g_lastShownAt = GetTickCount64();
             } else if (g_flyoutRect.right <= g_flyoutRect.left ||
                        g_flyoutRect.bottom <= g_flyoutRect.top) {
                 CalculateFlyoutRect(hWnd, false);
@@ -545,12 +546,10 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className, LPCWSTR windo
                                  HWND parent, HMENU menu, HINSTANCE instance, LPVOID parameter) {
     HWND hWnd = CreateWindowExW_Original(exStyle, className, windowName, style, x, y, width, height,
                                          parent, menu, instance, parameter);
-    if (hWnd && !parent && !g_unloading && !g_window && IsLocalSendMainWindow(hWnd)) Attach(hWnd);
+    if (hWnd && !parent && !g_window && IsLocalSendMainWindow(hWnd)) Attach(hWnd);
     return hWnd;
 }
 
-using ShowWindow_t = decltype(&ShowWindow);
-ShowWindow_t ShowWindow_Original;
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int command) {
     switch (command) {
         case SW_SHOWNORMAL:
@@ -579,10 +578,7 @@ BOOL CALLBACK AttachExistingLocalSendWindow(HWND hWnd, LPARAM) {
 }
 
 BOOL Wh_ModInit() {
-    InitializeCriticalSection(&g_settingsLock);
-    Settings initialSettings = ReadWindhawkSettings();
-    StorePendingSettings(initialSettings);
-    g_settings = initialSettings;
+    g_settings = ReadWindhawkSettings();
 
     g_applyMessage = RegisterWindowMessageW(L"Windhawk_LocalSendFlyout_Apply");
     g_settingsMessage = RegisterWindowMessageW(L"Windhawk_LocalSendFlyout_Settings");
@@ -602,14 +598,12 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    StorePendingSettings(ReadWindhawkSettings());
     if (HWND hWnd = g_window; hWnd && IsWindow(hWnd)) {
         SendMessageW(hWnd, g_settingsMessage, 0, 0);
     }
 }
 
 void Wh_ModUninit() {
-    g_unloading = true;
     if (HWND hWnd = g_window.exchange(nullptr); hWnd && IsWindow(hWnd)) {
         // This mod has no modal loops or worker callbacks. Restoring through
         // the UI thread before removing the subclass keeps its WndProc out of
@@ -617,6 +611,5 @@ void Wh_ModUninit() {
         SendMessageW(hWnd, g_applyMessage, FALSE, 0);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, LocalSendSubclassProc);
     }
-    DeleteCriticalSection(&g_settingsLock);
 }
 
