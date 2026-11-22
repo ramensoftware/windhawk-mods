@@ -2,12 +2,96 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-21T21:54:17.000Z</updated>
+    <updated>2026-11-22T00:00:39.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Adobe Dark Menus 1.2.0]]></title>
+        <id>https://windhawk.net/mods/adobe-dark-menus#010db23e5452d774a1da74265b441c8a33fb5564</id>
+        <link href="https://windhawk.net/mods/adobe-dark-menus"/>
+        <updated>2026-11-22T00:00:39.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The Effect submenu of the After Effects right-click menu now opens as one dark column that scrolls, like the Effect menu on the menu bar.</li>
+<li>Added a Scroll Long Menus with the Mouse Wheel setting, on by default: the mouse wheel now scrolls a menu taller than the screen.</li>
+<li>Added a Darken Photoshop Message Boxes setting, on by default: Photoshop's message boxes, such as the prompt to save changes, are now dark.</li>
+<li>Title Bar Color and Title Bar Text Color now say they need Windows 11, and sit right after Border Color in the settings.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Saber Naeemi</name>
+            <uri>https://github.com/sabergraphics</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[MacOS Style Dock 1.2.0]]></title>
+        <id>https://windhawk.net/mods/macos-style-dock#7454669d26ffd162e4a663d4e420069b70227117</id>
+        <link href="https://windhawk.net/mods/macos-style-dock"/>
+        <updated>2026-11-22T00:00:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New: Liquid Glass (off by default). The dock's rim bends what's behind it like real glass, instead of only a frosted blur. Turn it on by picking Lens, Reflection or Stretch in &quot;Edge Style&quot;, and adjust &quot;Edge Depth&quot;, &quot;Edge Strength&quot; and its own &quot;Liquid Glass Blur&quot;.</li>
+<li>Liquid Glass has two downsides: it trails the screen behind the dock by a frame or two, and while it's on, the taskbar is hidden from screenshots, screen recordings and screen sharing. If either is a problem, set &quot;Edge Style&quot; to Off for the plain frosted glass.</li>
+<li>New shortcuts while Liquid Glass is on: Win+Ctrl+Shift+G freezes the glass so the taskbar shows up in screen captures, and Win+Ctrl+Shift+K turns Liquid Glass off at once in an emergency, until the mod's settings are saved again.</li>
+<li>New: the system tray gets a background. By default it matches the dock (its glass, Liquid Glass, border and glow) as a smaller pill. Turn off &quot;Match Dock Style&quot; to give it its own color, opacity, blur and border. &quot;Tray Padding&quot; sets the room around its icons and clock.</li>
+<li>New: per-pixel brightness limits behind the dock and the tray, on by default at 80, so bright windows behind them are dimmed and the tray's clock and icons stay readable. Under dark text it becomes a minimum brightness instead.</li>
+<li>The tray's text and icon shadow can now be adjusted: color, opacity, blur and offset.</li>
+<li>The tray now slides in and out of its hot corner without fading.</li>
+<li>New dock options: &quot;No Background&quot;, a Custom border (color, width and opacity), and None for &quot;App Activity Indicators&quot;.</li>
+<li>New dividers: one before the Recycle Bin (on by default), and up to 5 more at positions of your choice with &quot;Custom Index Dividers&quot;.</li>
+<li>New &quot;Keep Icons Still&quot; option, which turns off the bounce Windows gives icons as apps open, close, minimize or are restored.</li>
+<li>Start can now stay in the dock: turn off &quot;Hide Windows Start Button&quot; to keep it at the front, with Windows' icon or your own (&quot;Start Menu Icon&quot;).</li>
+<li>&quot;Squircle Color&quot; has new options: Always Light, Prefer Light, Prefer Dark and Always Dark.</li>
+<li>Custom icons now accept Mac .icns files as well as PNG and other images, at any size. Each icon now has a single &quot;Margins&quot; setting (-50 to 50) instead of a margin and a size.</li>
+<li>Squircle icons: fixed icons showing another app's icon and icons that never got their tile. As a last resort, a tile is now made from the app's icon as Start shows it.</li>
+<li>Fixed the dock and hot corners staying blocked after an exclusive full screen game was minimized or switched away from.</li>
+<li>Settings are reorganized into new groups (Dock Size, Dock Color, Liquid Glass, Tray Color, Dock Items, Custom Icons, Hot Corners, Additional Settings). Settings saved in 1.1.2 don't carry over, so the mod starts from its defaults once. This is intended.</li>
+<li>New defaults: &quot;Magnification&quot; 60 (was 70), &quot;Dock Glow Spread&quot; 8 (was 6), &quot;Dock Glow Opacity&quot; 63 (was 60).</li>
+<li>The readme has a new Liquid Glass section near the top, links to macOS icon resources, and a new section on the system tray.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Zach Vaughn</name>
+            <uri>https://github.com/zachvdev</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Key to Search 1.2]]></title>
+        <id>https://windhawk.net/mods/windows-key-to-search#b7bb26e58746bf1e7f0fe17711a5e37394b049bf</id>
+        <link href="https://windhawk.net/mods/windows-key-to-search"/>
+        <updated>2026-11-22T00:00:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Search now opens without simulating Win+S, so Win+S remaps (e.g. PowerToys Keyboard Manager) no longer interfere. Thanks to Asteski.</li>
+<li>Other tools that use the Windows key, such as PowerToys remaps and AltSnap Win+drag, now work alongside the mod.</li>
+<li>Releasing Win after a Win+click, drag, or scroll no longer opens Search.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Tyler</name>
+            <uri>https://github.com/snowtyler</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Always On Top Windows 2.0]]></title>
+        <id>https://windhawk.net/mods/always-on-top#6404a2817c4bcec6ec788e37e345d9ada3d3bb5b</id>
+        <link href="https://windhawk.net/mods/always-on-top"/>
+        <updated>2026-11-22T00:00:24.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>show Frame when pinning the window And the ability to change its color, thickness, and borders .</li>
+<li>Supports transparency of the pinned window .</li>
+<li>Customize the shortcut completely .</li>
+<li>Clean and rebuild for a cleaner code .</li>
+<li>Support for pinning the window by right-clicking on the window title .</li>
+<li>Block the pin of full-screen game windows and block the pin of open windows as maximized. .</li>
+<li>The ability to add applications to the excluded applications list due to lack of pinned .</li>
+</ul>
+]]></content>
+        <author>
+            <name>AhmedAwad7</name>
+            <uri>https://github.com/AhmedAwad7</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-thumbnails#1ed0a9ffdfc4864a8845fd64b2c1f19fe0eda373</id>
@@ -673,148 +757,6 @@ are not styled. Add those processes in the mod's custom process inclusion list.<
         <author>
             <name>Dev-StudioCode</name>
             <uri>https://github.com/Dev-StudioCode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Outlook Refined 0.7.0]]></title>
-        <id>https://windhawk.net/mods/outlook-refined#ed8c3d55fbc5176147fbf0dcd155757337628d73</id>
-        <link href="https://windhawk.net/mods/outlook-refined"/>
-        <updated>2026-11-20T19:02:28.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Shift+right-click any folder, then Color..., to give it one of Outlook's own 15 folder colors. This works in Favorites and in the account trees, including shared mailboxes, where Outlook offers no color. Each color uses its light or dark shade to match the theme, and Automatic gives back Outlook's color.</li>
-<li>Account labels also apply to shared mailboxes, matched by their address.</li>
-<li>The Favorites heading is no longer replaced by the primary account's label.</li>
-<li>American spelling in a setting label (&quot;gray&quot;).</li>
-</ul>
-]]></content>
-        <author>
-            <name>Analytic Endeavors</name>
-            <uri>https://github.com/ae-reid-havens</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Automatic Folder Icons 1.0.0]]></title>
-        <id>https://windhawk.net/mods/auto-folder-icons#9bd932407ef64a7883ca4add937ede92251f8cc2</id>
-        <link href="https://windhawk.net/mods/auto-folder-icons"/>
-        <updated>2026-11-20T19:02:22.000Z</updated>
-        <content type="html"><![CDATA[<h1>Automatic Folder Icons</h1>
-<p>Put a <code>folder.ico</code> or <code>favicon.ico</code> file directly inside a folder, and Explorer
-shows it as the icon of that folder. Nothing else is needed: no <code>desktop.ini</code>,
-no registry changes, no folder attributes, and the mod never writes to your
-folders.</p>
-<p>Before and after:</p>
-<p><img src="https://i.imgur.com/mQgmUT8.png" alt="Before"> <img src="https://i.imgur.com/IfUzLX1.png" alt="After"></p>
-<h2>How it works</h2>
-<ul>
-<li><code>folder.ico</code> takes priority. If it is missing or isn't a valid icon,
-<code>favicon.ico</code> is used, and then the original Windows icon.</li>
-<li><code>favicon.ico</code> can be turned off in the mod settings. This is useful if you
-have web projects, where many folders contain a <code>favicon.ico</code>.</li>
-<li>Hidden icon files work too.</li>
-<li>A folder that has an icon file shows the icon instead of a thumbnail preview.</li>
-<li>Adding, replacing or removing the icon file is picked up within a couple of
-seconds while an Explorer window or the desktop is in use. If Windows keeps a
-cached icon, press F5 or reopen the parent folder.</li>
-</ul>
-<h2>Performance</h2>
-<ul>
-<li>Files, including ZIP and CAB archives, are skipped without touching the
-disk. Only folders are checked, with two small file lookups per folder.</li>
-<li>Up to 256 recently shown folders are remembered and rechecked every two
-seconds, and only while Explorer is the active app and you are using the
-PC. Nothing is checked while you work in another app or are away, and the
-disk tree is never scanned.</li>
-</ul>
-<h2>Limitations</h2>
-<ul>
-<li>Only <code>explorer.exe</code> is affected. Other apps, including their open and save
-dialogs, show the original icons.</li>
-<li>Only local fixed and removable drives are supported. Network paths, virtual
-folders, reparse points, cloud placeholders, paths longer than about 245
-characters and icon files larger than 4 MiB are skipped.</li>
-<li>After enabling or disabling the mod, some icons may stay cached until
-Explorer is restarted. The mod never restarts Explorer by itself.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Sanekx Arcs</name>
-            <uri>https://github.com/SanekxArcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Fast Navigation 1.1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-fast-navigation#814cfdde194e6e74c8f4e97df85af01693fb2284</id>
-        <link href="https://windhawk.net/mods/explorer-fast-navigation"/>
-        <updated>2026-11-20T18:05:05.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Accelerate grouped folder presentation via confined GroupingWork and CDefCollection::_GroupItem hook</li>
-<li>Prevent tab state collisions using bounded TabTable per CShellBrowser and UIItemsView</li>
-<li>Ensure complete deferred task drops in multiple inheritance by tracking canonical IUnknown pointers</li>
-<li>Offload storage metadata probing to NT threadpool work items with direct queue messaging</li>
-<li>Harden unload safety with uninterrupted subclass lifetime guards and fast-path bailout</li>
-<li>Emit factual transition telemetry directly in Wh_Log for DebugView and mod diagnostics</li>
-</ul>
-]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Simple Wallpaper Switcher 0.1.3]]></title>
-        <id>https://windhawk.net/mods/simple-wallpaper-switcher#05bfdedf882180fc609ad099c2d7ba21d3f56464</id>
-        <link href="https://windhawk.net/mods/simple-wallpaper-switcher"/>
-        <updated>2026-11-20T18:04:59.000Z</updated>
-        <content type="html"><![CDATA[<h1>Simple Wallpaper Switcher</h1>
-<p><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-banner.gif" alt="Simple Wallpaper Switcher showing the picker and wallpaper changes"></p>
-<h2>Screenshots</h2>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Solid</th>
-<th style="text-align:center">Blurred</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-solid-material.png" alt="Solid"></td>
-<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-blur-material.png" alt="Blurred"></td>
-</tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Acrylic</th>
-<th style="text-align:center">Quick-menu</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-acrylic-material.png" alt="Acrylic"></td>
-<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-taskbar-quick-menu.png" alt="Quick-menu"></td>
-</tr>
-</tbody>
-</table>
-<h3>Your wallpaper collection, ready when you are.</h3>
-<p>Browse your wallpapers in a compact visual picker, choose a new look, and watch it transition onto your desktop.</p>
-<h2>Find your next wallpaper</h2>
-<p>See your collection as a grid of thumbnails. Browse folders with the breadcrumb menu, click a wallpaper to apply it, or use the keyboard to move through your collection.</p>
-<h2>Stay in the flow</h2>
-<p>Choose another wallpaper while a transition is running. The effect retargets to your latest choice, so you can keep browsing without waiting for each change to finish.</p>
-<h2>Make it yours</h2>
-<p>Choose from the shared Emberveil themes and set the picker background to Solid, Blur, or Acrylic. Pick a transition effect, or let Random choose one for you.</p>
-<h2>Wallpaper behavior</h2>
-<p>Applying a wallpaper updates the Windows desktop wallpaper setting. Windows keeps that image after the mod is disabled or removed, and applying an image replaces a Slideshow or Windows Spotlight background. The picker applies the image to the monitor under the pointer.</p>
-<h2>Get started</h2>
-<p>Set your wallpaper folder in the mod settings, then open the picker from its tray icon or keyboard shortcut.</p>
-<p>The tray icon stays available while the mod is enabled. Disable the mod in Windhawk to stop the switcher.</p>
-<p>Click a thumbnail to apply it. Use the arrow keys to move, Enter or Space to apply, and the mouse wheel to change pages. Click the magnifying glass in the breadcrumb, or start typing, to filter filenames in the current folder. Press Escape to clear the search.</p>
-<p>Supported image formats: JPEG, PNG, BMP, and WebP.</p>
-]]></content>
-        <author>
-            <name>HHeitlager</name>
-            <uri>https://github.com/hheitlager</uri>
         </author>
     </entry>
 </feed>

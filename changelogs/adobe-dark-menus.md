@@ -1,3 +1,10 @@
+## 1.2.0 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/010db23e5452d774a1da74265b441c8a33fb5564/mods/adobe-dark-menus.wh.cpp))
+
+* The Effect submenu of the After Effects right-click menu now opens as one dark column that scrolls, like the Effect menu on the menu bar.
+* Added a Scroll Long Menus with the Mouse Wheel setting, on by default: the mouse wheel now scrolls a menu taller than the screen.
+* Added a Darken Photoshop Message Boxes setting, on by default: Photoshop's message boxes, such as the prompt to save changes, are now dark.
+* Title Bar Color and Title Bar Text Color now say they need Windows 11, and sit right after Border Color in the settings.
+
 ## 1.1.0 ([Nov 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c8081b42eb681f51cbc8bd85d68ae5da00319ea7/mods/adobe-dark-menus.wh.cpp))
 
 * Fixed a crash on exit, seen in InDesign and Audition.

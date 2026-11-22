@@ -1,3 +1,9 @@
+## 1.2 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b7bb26e58746bf1e7f0fe17711a5e37394b049bf/mods/windows-key-to-search.wh.cpp))
+
+* Search now opens without simulating Win+S, so Win+S remaps (e.g. PowerToys Keyboard Manager) no longer interfere. Thanks to Asteski.
+* Other tools that use the Windows key, such as PowerToys remaps and AltSnap Win+drag, now work alongside the mod.
+* Releasing Win after a Win+click, drag, or scroll no longer opens Search.
+
 ## 1.1 ([Nov 14, 2026](https://github.com/ramensoftware/windhawk-mods/blob/67fcfd331c26b0b9a87a1a4c7976c04ab976ef05/mods/windows-key-to-search.wh.cpp))
 
 * The taskbar now appears alongside Search, including over fullscreen apps.
