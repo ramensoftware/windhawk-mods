@@ -1674,19 +1674,27 @@ MOD_NON_WINDOWS_TARGET_MODULES = {
 # Mods accepted with noUndecoratedSymbols, with their symbol hook targets.
 # Hooking any other target brings back the manual inspection.
 MOD_NO_UNDECORATED_SYMBOLS_TARGETS = {
+    'brave-acrylic': {'chrome.dll'},
     'chrome-context-menu-items': {'chrome.dll'},
     'chrome-native-ui-tweaks': {'chrome.dll'},
+    'office-fix-account-disp-name': {'mso30win32client.dll'},
+    'office-ui-reverter-universal': {'mso40uiwin32client.dll'},
     'word-image-resize-anti-flip': {'oart.dll'},
     'word-mathtype-dark-fix': {'wwlib.dll'},
     'word-omath-shade-fix': {'wwlib.dll'},
+    'word-pdf-lossless-export': {'mso.dll'},
 }
 
 # Mods accepted with onlineCacheUrl, with their symbol hook targets.
 # Hooking any other target brings back the manual inspection.
 MOD_ONLINE_CACHE_URL_TARGETS = {
+    'brave-acrylic': {'chrome.dll'},
+    'office-fix-account-disp-name': {'mso30win32client.dll'},
+    'office-ui-reverter-universal': {'mso40uiwin32client.dll'},
     'word-image-resize-anti-flip': {'oart.dll'},
     'word-mathtype-dark-fix': {'wwlib.dll'},
     'word-omath-shade-fix': {'wwlib.dll'},
+    'word-pdf-lossless-export': {'mso.dll'},
 }
 
 
