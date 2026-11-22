@@ -2,12 +2,187 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-22T07:04:08.000Z</updated>
+    <updated>2026-11-22T18:02:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[System Tray BreakTimer 0.1.8]]></title>
+        <id>https://windhawk.net/mods/system-tray-breaktimer#9bf6636b4044a0a18d75174ff84f2e478ebb81f7</id>
+        <link href="https://windhawk.net/mods/system-tray-breaktimer"/>
+        <updated>2026-11-22T18:02:36.000Z</updated>
+        <content type="html"><![CDATA[<h1>System Tray BreakTimer</h1>
+<p>Each time you enable the mod, it starts paused. Click <strong>P</strong> in the notification
+area to start. Windows can place new icons in the tray overflow.</p>
+<p><img src="https://raw.githubusercontent.com/haniobaid/windhawk-mods/system-tray-breaktimer-media/system-tray-breaktimer.png" alt="Break window with a circular countdown and examples of the five tray states"></p>
+<p><strong>S</strong> means Standby until the next whole clock minute. A fresh interval started
+at exactly :00 begins immediately. With the default 15-minute interval, starting
+at 1:01:25 shows S until 1:02:00. The tray shows <strong>2</strong> at 1:15:59, then
+<strong>60</strong> in the seconds color at 1:16:00. It counts down to <strong>1</strong> in seconds.
+Set <strong>Start seconds countdown</strong> to any value from 5 to 60 seconds. For example,
+at 10 seconds the tray shows <strong>1</strong> minute until 1:16:50. The break starts at 1:17:00
+and lasts one minute by default. <strong>B</strong> means a break is in progress. Hover over
+the icon for the unit, time remaining and pause reason. Both minutes and
+seconds use bold numerals in your chosen tray colors.</p>
+<p>The borderless break window has a <strong>Skip Break</strong> button and a gauge-colored
+<strong>X</strong> in its upper-right corner. Both end the break silently and start a fresh work interval with the usual
+Standby. The gauge scales to 90% of the shorter usable monitor dimension.
+With multiple windows, one action applies to them all. To skip with the
+keyboard, Alt+Tab to the break window marked <strong>B</strong> and press Enter on <strong>Skip Break</strong>.</p>
+<p><strong>Tray commands</strong></p>
+<p>A single left-click toggles pause. Pausing discards the current interval, and
+unpausing starts a fresh one. Turn on <strong>Require a double-click to pause or
+unpause</strong> if you prefer. Keyboard activation still takes one press. Right-click
+the tray icon to open its menu.</p>
+<p>When the tray shows <strong>P</strong>, the menu contains only <strong>Unpause</strong>.
+During <strong>S / Standby</strong> or
+<strong>B / On break</strong>, the menu contains only <strong>Pause</strong>. During the work countdown,
+including its final seconds, the menu has three commands.</p>
+<ul>
+<li><strong>Skip to next break</strong> starts a break immediately. Its end schedules a fresh
+work interval.</li>
+<li><strong>Reset</strong> ends the current phase and starts a fresh work interval.</li>
+<li><strong>Pause</strong> discards the current countdown, closes any break windows and
+leaves the mod paused indefinitely until you unpause it. When you unpause,
+<strong>S</strong> appears until the next whole minute, then the entire <strong>Break every</strong>
+interval begins. At exactly :00 it starts immediately.</li>
+</ul>
+<p><strong>Sound</strong> — In Settings, <strong>Play wind chimes</strong> is on by default. The default
+audio device plays one short chime for each of these two events.</p>
+<ul>
+<li>The tray countdown reaches zero and a scheduled break begins.</li>
+<li>The gauge reaches 00:00 and the break finishes naturally.</li>
+</ul>
+<p>Choosing <strong>Skip to next break</strong> starts the break silently. It still chimes if
+the gauge reaches zero. <strong>Skip Break</strong>, <strong>X</strong>, <strong>Reset</strong>, <strong>Pause</strong> and <strong>Unpause</strong>
+are silent. Each event plays its cue once across all monitors. Turning sound
+off also stops a cue already playing.</p>
+<p>The bundled wind chime was recorded by <a href="https://freesound.org/people/GnoteSoundz/sounds/169855/">GnoteSoundz</a>
+and is available under <a href="https://creativecommons.org/publicdomain/zero/1.0/">CC0 1.0</a>.
+To use your own recording, browse to a local WAV under <strong>Custom sound file (optional)</strong>.
+Choose uncompressed 8- or 16-bit PCM, mono or stereo, at 8–48 kHz, up to
+10 seconds and 2 MiB. An empty field or an unreadable or unsupported file
+uses the bundled chime. On Windhawk 1.x, you can paste a quoted path copied
+from Explorer. If you replace the WAV at the same path, switch sound off and
+back on to load it again.</p>
+<p><strong>Settings</strong> — Open the mod's Details, then Settings. Windhawk 2.0 alpha 8
+shows break durations as minute sliders and includes a file browser. Windhawk 1.x
+uses numeric fields for durations and a text field for the WAV path. If
+<strong>Break every</strong> is below twice <strong>Break for</strong>, the timer uses twice the break
+length. For example, a 25-minute break and a 40-minute interval give 50 minutes of work.
+Changes to durations apply on the next fresh interval or break. Appearance
+changes take effect immediately. Set <strong>Background opacity</strong> under <strong>Tray icon</strong>
+to 0% for a transparent background or to 100% for a solid color. After an
+update, the saved opacity slider value controls the background.
+Windows controls whether the full-screen
+pause banner appears. The timer pauses independently of banner delivery.</p>
+<p><strong>Automatic pauses</strong></p>
+<p>After five idle minutes during work or Standby, the icon shows <strong>P</strong>. The timer
+starts a fresh <strong>Break every</strong> interval when you return. Ordinary idle time
+during a break lets the gauge run to zero.</p>
+<p>Locking or disconnecting the session, suspending the PC, or entering full screen
+with auto-pause enabled also pauses the timer. If a break is in progress, its
+window closes silently. When the last pause reason clears, the icon shows <strong>S</strong>
+until the next whole minute, then starts the full work interval. At exactly
+:00 it starts immediately. For example, unlocking at 2:04:20 starts the default
+15-minute work interval at 2:05, with the next break at 2:20.</p>
+<p>A manual pause lasts until you choose <strong>Unpause</strong>. Choosing <strong>Unpause</strong> also
+overrides a current idle or full-screen pause. An unavailable Windows session
+must reconnect, unlock or wake before a new interval can begin.</p>
+<p>Full-screen auto-pause and its optional banner both default to off. With
+auto-pause off, the break window can appear over a game or presentation and
+may interrupt exclusive full screen. Enable <strong>Auto-pause for full-screen apps</strong>
+to pause the timer while a full-screen app is detected.</p>
+<p>Inspired by <a href="https://github.com/hovancik/stretchly">Stretchly</a>. Functionality inspiration only. No code was reused.</p>
+]]></content>
+        <author>
+            <name>haniobaid</name>
+            <uri>https://github.com/haniobaid</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Snap Groups: Alt+Tab and taskbar 0.5.3]]></title>
+        <id>https://windhawk.net/mods/hide-snapped#dffea8bdfcd848438f5832deabb3431953a98a2f</id>
+        <link href="https://windhawk.net/mods/hide-snapped"/>
+        <updated>2026-11-22T18:02:31.000Z</updated>
+        <content type="html"><![CDATA[<h1>Snap Groups: Alt+Tab and taskbar</h1>
+<p>Keep native Snap Groups in Alt+Tab and give each group a separate taskbar button
+with a grid of its application icons. Individual member buttons can be hidden;
+windows outside groups remain accessible.</p>
+<p><img src="https://raw.githubusercontent.com/coldfeudal/public/main/images/hide-snapped-poster.webp" alt="Snap Groups demonstration"></p>
+<h2>Usage</h2>
+<p>Enable Snap windows and the option to show snapped groups in Alt+Tab under
+Windows Settings &gt; System &gt; Multitasking. Arrange at least two windows into a
+native Snap Group. The mod reads groups maintained by Windows.</p>
+<p>A group button brings all members forward. With the default click setting,
+clicking an active group minimizes it. If a member is already minimized, the
+button restores the group. Closing a group button minimizes the group by default
+and does not close the applications. Group buttons are temporary and cannot be
+pinned; ordinary pinned application launchers remain.</p>
+<p>The taskbar label uses the native localized group title. Hover previews use the
+Windows group visual. Win+Tab is unchanged. Group commands use native Windows
+activation/minimization; animation behavior follows those native commands.</p>
+<h2>Settings</h2>
+<ul>
+<li>Independently enable Alt+Tab filtering, group taskbar buttons and hiding of
+individual member buttons.</li>
+<li>Keep separate buttons for separate groups, including groups of the same apps.</li>
+<li>Display two to four equally sized icons in a two-column grid. Adjust icon size,
+spacing and incomplete-row alignment. The icon limit does not limit membership.</li>
+<li>Order icons by screen rows from top
+to bottom and centers from left to right. A tall window belongs to its first
+row (default), or use Windows' member order. Minimized windows use restored
+positions; only icon order changes.</li>
+<li>Choose restore-only or minimize-if-active behavior, and the close-button action.</li>
+<li>Adjust refresh interval and current-virtual-desktop filtering.</li>
+<li>Enable or disable native hover previews.</li>
+<li>Diagnostic mode keeps individual Alt+Tab cards and disables taskbar integration.</li>
+</ul>
+<h2>Tested configuration and limitations</h2>
+<p>Version 0.5.2 was tested on Windows 11 25H2 (26200.8246, x64), Windhawk 1.7.3:
+Alt+Tab advancement, group activity and no empty buttons after disable/enable;
+group recovery, native previews, Alt+Tab/activity and minimize/restore after
+Explorer restart; group creation on the other monitor. Separate classic/modern
+preview routes were not independently identified. The support-trace toggle and
+heavy-game scenario below were confirmed on 0.4.24, not repeated for 0.5.x.</p>
+<ul>
+<li><strong>Independent taskbar per monitor 1.7.0:</strong> group creation, moving groups
+between monitors and restoring minimized groups; no empty buttons or unload
+stalls in the tested disable/enable scenario.</li>
+<li><strong>Alt+Tab per monitor 1.2.1:</strong> switching during a heavy game and after closing
+it, including disabling both mods without restarting Explorer.</li>
+</ul>
+<p>Taskbar integration calls native DLL methods and COM interfaces; it does not
+parse machine instructions or read private task-list/preview object fields.
+Native task items come from the shell enumerator. Hidden members and pending
+button restores use owned window icons until their own task list is restored.
+Native previews replace the window thumbnail factory for owned group proxies;
+Windows creates and manages the visual itself. Required shell symbols must be
+available. Missing optional preview/selection methods leave those paths native.
+Shell interfaces are undocumented; other Windows versions and DLL revisions
+remain unverified, and updates can require changes to the mod.
+Longer sessions and other monitor/DPI/virtual desktop configurations have limited
+coverage. ARM64 installation is allowed; ARM64 runtime behavior is unverified.</p>
+<p>Report mod problems in https://github.com/ramensoftware/windhawk-mods/issues.
+Include &quot;hide-snapped&quot; in the title and mention @coldfeudal in the report.</p>
+<h2>Diagnostics and removal</h2>
+<p>Windhawk debug logging records phase codes and counts without window/document
+titles. Disable this mod to restore the native taskbar and switcher behavior.
+Enable Record support trace only when collecting diagnostics. Changing this
+setting reloads the mod. Bounded journals are stored in Windhawk's per-mod
+storage directory, in the traces subfolder. A background writer saves queued
+records. Records may be dropped under load. Journals contain numeric identities,
+counts and stack/module information, without window titles or AppID strings.</p>
+<p>The Alt+Tab scoping approach was informed by
+<a href="https://windhawk.net/mods/alt-tab-per-monitor">Alt+Tab per monitor</a>.</p>
+]]></content>
+        <author>
+            <name>coldfeudal</name>
+            <uri>https://github.com/coldfeudal</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Floating Taskbar 2.1.15]]></title>
         <id>https://windhawk.net/mods/floating-taskbar#cb956cc0a64236fa2498a8ea08c095855b986434</id>
@@ -519,41 +694,6 @@ sections:</p>
         <author>
             <name>Tyler</name>
             <uri>https://github.com/snowtyler</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Always On Top Windows 2.0]]></title>
-        <id>https://windhawk.net/mods/always-on-top#6404a2817c4bcec6ec788e37e345d9ada3d3bb5b</id>
-        <link href="https://windhawk.net/mods/always-on-top"/>
-        <updated>2026-11-22T00:00:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>show Frame when pinning the window And the ability to change its color, thickness, and borders .</li>
-<li>Supports transparency of the pinned window .</li>
-<li>Customize the shortcut completely .</li>
-<li>Clean and rebuild for a cleaner code .</li>
-<li>Support for pinning the window by right-clicking on the window title .</li>
-<li>Block the pin of full-screen game windows and block the pin of open windows as maximized. .</li>
-<li>The ability to add applications to the excluded applications list due to lack of pinned .</li>
-</ul>
-]]></content>
-        <author>
-            <name>AhmedAwad7</name>
-            <uri>https://github.com/AhmedAwad7</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Taskbar Thumbnails 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnails#1ed0a9ffdfc4864a8845fd64b2c1f19fe0eda373</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnails"/>
-        <updated>2026-11-21T21:54:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with the latest Windows 11 update.</li>
-<li>Fixed the &quot;Customize the old taskbar on Windows 11&quot; option on Windows 11 24H2 builds before 26100.1301, which still include the old taskbar.</li>
-</ul>
-]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

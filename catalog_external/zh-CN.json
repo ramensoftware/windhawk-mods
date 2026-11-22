@@ -255,38 +255,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/721a9137674f8c731562f377925c9027c7af0a6d/mods/explorer-tabs-session-saver-revamped.wh.cpp"
       }
     },
-    "hide-snapped": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795201559344,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795277173823,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "coldfeudal",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ladvapi32 -lshell32 -luuid -lgdi32 -lcomctl32",
-        "description": "Group-only Alt+Tab and separate taskbar buttons with tiled member icons.",
-        "github": "https://github.com/coldfeudal",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "MIT",
-        "name": "Snap Groups: Alt+Tab and taskbar",
-        "version": "0.5.3"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7609",
-      "source": {
-        "sha256": "4bdc0202e42c9638ca9fd51435836d791c7c3e6cace25cd08acd83f37c8e0494",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/7c580ee0a0792936a65cda7b12b25c2f5ba0281e/mods/hide-snapped.wh.cpp"
-      }
-    },
     "language-cursor": {
       "details": {
         "defaultSorting": 0,
@@ -438,6 +406,35 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/8efc04e73cf69b1a153c5ff05b6bb0b7423b634f/mods/rdp-icon-refresh.wh.cpp"
       }
     },
+    "same-app-window-cycler": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795370788861,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795370788861,
+        "users": 0
+      },
+      "metadata": {
+        "author": "mdozkanji",
+        "compilerOptions": "-ldwmapi -lshell32",
+        "description": "macOS-style Cmd+` for Windows: cycle through the windows of the current app with Alt+` (Alt+Shift+` goes backwards)",
+        "github": "https://github.com/mdozkanji",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Same-App Window Cycler (Alt+`)",
+        "version": "0.1.4"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7739",
+      "source": {
+        "sha256": "88281afc1a4585c497cb77d0cb7fdaec87398b63442427c8c83337091d330d51",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6e9706ac0f9bbeb620d3c8e087a8e5c3f8ef7708/mods/same-app-window-cycler.wh.cpp"
+      }
+    },
     "shell-font-changer-plus": {
       "details": {
         "defaultSorting": 0,
@@ -467,35 +464,6 @@
       "source": {
         "sha256": "124c606301a06fcb1636b58b225c8e87ed8dbe283731a27a9783fb1575c3043c",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/eec67bcfb9e3f958b4262b825d369b89aa8cc1ac/mods/shell-font-changer-plus.wh.cpp"
-      }
-    },
-    "system-tray-breaktimer": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795277173823,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795277173823,
-        "users": 0
-      },
-      "metadata": {
-        "author": "haniobaid",
-        "compilerOptions": "-luser32 -lgdi32 -lshell32 -ldwmapi -lwinmm -lwtsapi32",
-        "description": "Count down to windowed breaks in the notification area with a circular break timer and optional wind chimes.",
-        "github": "https://github.com/haniobaid",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "System Tray BreakTimer",
-        "version": "0.1.8"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7771",
-      "source": {
-        "sha256": "83343d9309ca85dc65a39abdba2d19fd437e0b39a2f03ccbb0604936badec00a",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/23f24713bcbac8e986246758ff7677f29d21273b/mods/system-tray-breaktimer.wh.cpp"
       }
     },
     "system-tray-network-speedtest": {
@@ -531,6 +499,37 @@
       "source": {
         "sha256": "1166aea917dbf902bbc12f57cf6bdd3a1bb8dd3244f709f558003a21a81089a2",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/e294035edd4a98e7c13d26d624edf004175ffb0f/mods/system-tray-network-speedtest.wh.cpp"
+      }
+    },
+    "taskbar-app-state-indicators": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795370788861,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795370788861,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Deen-0x",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldwmapi -ld2d1",
+        "description": "Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, dots for several windows or a badge, and progress, all animated along the frame.",
+        "github": "https://github.com/Deen-0x",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Taskbar App State Indicators",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7747",
+      "source": {
+        "sha256": "a95200e2448abfd8c6b3e438a077631b29fa5f31a28d53e2d7fc437ec17be652",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3ffb7a9eea45a80dcb66b1276ff21cfee84b41c0/mods/taskbar-app-state-indicators.wh.cpp"
       }
     },
     "taskbar-app-volume-mixer": {
@@ -712,6 +711,37 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1ab68558cc75dd2a732870144c3a3af22ccfab0a/mods/volu-macos-volume-hud.wh.cpp"
       }
     },
+    "win7-user-account-page-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795370788861,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795370788861,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lwinhttp -lole32 -loleaut32",
+        "description": "This mod restores the Windows 7 User Accounts Control Panel page on Windows 10 and 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Windows 7 User Account Page Restorer",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7751",
+      "source": {
+        "sha256": "fce9059585da932cd31113f4479f90e46360b390d338f5116c8940fb031eeb38",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/fa498fd213319bfb9c206317039ab53762c999be/mods/win7-user-account-page-restorer.wh.cpp"
+      }
+    },
     "windows-11-lock-screen-styler": {
       "details": {
         "defaultSorting": 0,
@@ -787,13 +817,13 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795277173823,
+        "updated": 1795370788861,
         "users": 0
       },
       "metadata": {
         "author": "DavidHiFi",
-        "compilerOptions": "-ld2d1 -ldwrite -lwindowscodecs -lole32 -loleaut32 -luuid -lgdi32 -luser32 -lshell32 -lshlwapi -ladvapi32 -ldwmapi",
-        "description": "Zoom, draw and read text bigger under the mouse with a hotkey, like Sysinternals ZoomIt",
+        "compilerOptions": "-ld2d1 -ldwrite -lwindowscodecs -lole32 -luuid -lgdi32 -luser32 -lshell32 -ladvapi32 -ldwmapi",
+        "description": "Zoom into the screen and draw on it with a hotkey, like Sysinternals ZoomIt",
         "donateUrl": "https://ko-fi.com/DavidHiFi",
         "github": "https://github.com/DavidHiFi",
         "homepage": "https://github.com/DavidHiFi/davids-windhawk-mods",
@@ -803,12 +833,12 @@
           "windhawk-mod-uiaccess.exe"
         ],
         "name": "ZoomIt",
-        "version": "1.2.3"
+        "version": "1.3.0"
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7541",
       "source": {
-        "sha256": "fb1846af538476be299ec5c4428e9e55164bf51d4feb43f27ba800746c0ff503",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/472c64fd6a7f38e3f26b224d6621c25457e49347/mods/zoomit.wh.cpp"
+        "sha256": "7d4aaffa606b5b6d230e9dbc46db7ec90aea919e04025e95cf752b36ae5c9ed4",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/e2af281f6e83a75dec896ceb0978a25854098952/mods/zoomit.wh.cpp"
       }
     }
   }

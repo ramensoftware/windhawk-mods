@@ -9862,6 +9862,34 @@
         "version": "1.0.2"
       }
     },
+    "hide-snapped": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795370551000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795370551000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "coldfeudal",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ladvapi32 -lshell32 -luuid -lgdi32 -lcomctl32",
+        "description": "Group-only Alt+Tab and separate taskbar buttons with tiled member icons.",
+        "github": "https://github.com/coldfeudal",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Snap Groups: Alt+Tab and taskbar",
+        "version": "0.5.3"
+      }
+    },
     "hide-start-button": {
       "details": {
         "defaultSorting": 64593,
@@ -17412,6 +17440,31 @@
         ],
         "name": "Enable SyslistView32",
         "version": "2.0.0"
+      }
+    },
+    "system-tray-breaktimer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795370556000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795370556000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "haniobaid",
+        "compilerOptions": "-luser32 -lgdi32 -lshell32 -ldwmapi -lwinmm -lwtsapi32",
+        "description": "Count down to windowed breaks in the notification area with a circular break timer and optional wind chimes.",
+        "github": "https://github.com/haniobaid",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "System Tray BreakTimer",
+        "version": "0.1.8"
       }
     },
     "system-tray-folders": {
