@@ -2,7 +2,7 @@
 // @id            adobe-acrylic-menus
 // @name          Adobe Acrylic Menus
 // @description   Acrylic popup menus and experimental dark Lightroom Classic dialogs.
-// @version       1.3.2
+// @version       1.3.3
 // @author        Marvin Menzel
 // @github        https://github.com/marvintrvl
 // @license       MIT
@@ -70,16 +70,30 @@ the additional all-dialog switch extends the effect to captioned secondary windo
 The main Lightroom editing frame is excluded. Close and reopen dialogs after
 changing these settings. Custom controls, expanded dropdowns, file pickers, browser
 panes and confirmation dialogs may remain opaque or light. Inspect text, focus and
-control states after enabling the experiment. Turn the experiment off if needed.
+control states after enabling the experiment. The Preferences-only acrylic mode
+and fixes for specific dialogs depend on English window titles. Other UI
+languages can still use general dialog styling and the all-dialog acrylic mode,
+but may miss these targeted fixes.
 
 Testing so far has primarily been performed in Lightroom Classic on Windows 11.
 The Adobe process targets come from the upstream mod; acrylic behavior elsewhere
 has not been comprehensively verified. Disable Adobe Dark Menus for the same
 applications when using this fork.
 
-Optional diagnostics write window classes, handles, styles, sizes and visibility
-to separate files in %TEMP%\AdobeAcrylicReports; they do not record captions or
-input values. Diagnostic reports are disabled by default.
+This separate submission integrates acrylic with Adobe-specific menu painting,
+including clearing opaque rows and preserving composited menu text. Its
+Lightroom dialog styling is also specific to Adobe. The fork shares hooks with
+Adobe Dark Menus and is intended to be used independently.
+
+## Screenshots
+
+**Lightroom Classic Settings menu**
+
+![Acrylic Settings menu with Copy Settings highlighted](https://raw.githubusercontent.com/marvintrvl/windhawk-mods/d1ea0c2d1fbc6502a347c3964b84f94420e960c7/images/adobe-acrylic-menus/lightroom-acrylic-settings-menu.png)
+
+**Lightroom Classic Preferences with optional dialog acrylic**
+
+![Acrylic Preferences dialog on the Interface tab](https://raw.githubusercontent.com/marvintrvl/windhawk-mods/d1ea0c2d1fbc6502a347c3964b84f94420e960c7/images/adobe-acrylic-menus/lightroom-acrylic-preferences.png)
 
 Original Adobe Dark Menus copyright (c) 2026 SABER. Used under the MIT license;
 the complete license is included in this source file.
@@ -100,9 +114,9 @@ the complete license is included in this source file.
   $description: An 8-digit value supplies popup tint opacity unless Menu Tint Color also has alpha.
 - MenuTextColor: "#FFFFFF"
   $name: "Menu Text Color"
-- HighlightBgColor: "#E0E0E3"
+- HighlightBgColor: "#505050"
   $name: "Highlight Background Color"
-  $description: An 8-digit value supplies popup hover opacity.
+  $description: Solid selection color for dropdown lists and menus without acrylic.
 - MenuBarHighlightColor: "#505050"
   $name: "Menu Bar Highlight Color"
   $description: Background for the selected top menu label; independent of popup item highlights.
@@ -137,16 +151,13 @@ the complete license is included in this source file.
     to keep the columns, which stay light.
 - ExperimentalDarkPreferences: false
   $name: "Experimental dark Lightroom dialogs"
-  $description: 'Opt-in prototype for Lightroom Classic secondary windows. Close dialogs before changing; app-drawn controls and images may remain light.'
+  $description: 'Opt-in for Lightroom Classic secondary windows. Some targeted fixes require the English UI. Close dialogs before changing.'
 - ExperimentalPreferencesAcrylic: false
   $name: "Experimental acrylic Preferences"
-  $description: 'Opt in to Lightroom acrylic dialogs. Requires Experimental dark Lightroom dialogs. Close dialogs before changing.'
+  $description: 'Enables acrylic for English-language Preferences. Requires Experimental dark Lightroom dialogs. Close dialogs before changing.'
 - ExperimentalAllDialogAcrylic: false
   $name: "Experimental acrylic for other Lightroom dialogs"
-  $description: 'Extends acrylic to captioned secondary Lightroom windows. Requires both experimental dark dialogs and acrylic Preferences. The main Lightroom editing window is excluded.'
-- DialogDiagnostics: false
-  $name: "Save Lightroom dialog diagnostics"
-  $description: 'Writes window class and geometry reports to the temporary AdobeAcrylicReports folder. Reports are retained until manually removed.'
+  $description: 'Extends acrylic to captioned Lightroom secondary windows in any UI language. Some targeted fixes need English. Requires both experimental dialog settings above.'
 - PreferencesTintColor: "#2D2D2D"
   $name: "Preferences acrylic tint"
   $description: 'Independent of menu tint. Uses the selected color hex format; an 8-digit color overrides Preferences tint opacity.'
@@ -168,16 +179,25 @@ the complete license is included in this source file.
     not active.
 - MenuMaterial: "acrylic"
   $name: "Popup Menu Material"
-  $description: 'solid, transparent, acrylic, system-acrylic, or mica. solid disables all experimental popup effects.'
+  $description: Solid disables the experimental popup effects.
+  $options:
+  - acrylic: Acrylic
+  - transparent: Transparent
+  - system-acrylic: System Acrylic
+  - mica: Mica
+  - solid: Solid
 - MenuTintOpacity: 35
   $name: "Menu Tint Opacity (1-100)"
   $description: 'Opacity of Acrylic or transparent tint when the color has no alpha. Text and icons are not intentionally faded.'
 - MenuTintColor: "#2D2D2D"
   $name: "Menu Tint Color"
   $description: 'Optional tint color. Empty follows Menu Background Color. An 8-digit value supplies tint opacity and takes priority over Menu Background Color alpha.'
+- MenuHoverColor: "#E0E0E3"
+  $name: "Acrylic Menu Hover Color"
+  $description: 'Color of the translucent hover overlay. Leave empty to follow the solid highlight color. An 8-digit value overrides Menu Hover Opacity.'
 - MenuHoverOpacity: 30
   $name: "Menu Hover Opacity (0-100)"
-  $description: 'Opacity of the selected item highlight when Highlight Background Color has no alpha (experimental). '
+  $description: 'Opacity of the acrylic hover overlay when its color has no alpha.'
 - MenuHoverInset: 7
   $name: "Hover Horizontal Inset (DIP)"
   $description: 'Padding on the left and right of selected menu items, like Explorer translucent menus.'
@@ -253,6 +273,7 @@ extern std::atomic<int> g_acrylicHoverVerticalInset;
 extern std::atomic<int> g_acrylicHoverRadius;
 extern std::atomic<bool> g_acrylicClearOpaqueRows;
 extern std::atomic<COLORREF> g_acrylicTint;
+extern std::atomic<COLORREF> g_acrylicHoverColor;
 extern std::atomic<bool> g_acrylicRounded;
 extern std::atomic<bool> g_acrylicSupported;
 void AcrylicResetAllPopups();
@@ -428,7 +449,7 @@ void LoadSettings() {
     g_scrollColumnMenus.store(Wh_GetIntSetting(L"ScrollColumnMenus") != 0, std::memory_order_relaxed);
     g_themeTitleBars.store(Wh_GetIntSetting(L"ThemeTitleBars") != 0, std::memory_order_relaxed);
     auto materialSetting = WindhawkUtils::StringSetting::make(L"MenuMaterial");
-    PCWSTR material = materialSetting.get();
+    PCWSTR material = materialSetting.get() ? materialSetting.get() : L"";
     int materialValue = !_wcsicmp(material, L"transparent") ? 1
                       : !_wcsicmp(material, L"acrylic") ? 2
                       : !_wcsicmp(material, L"system-acrylic") ? 3
@@ -490,15 +511,19 @@ void LoadSettings() {
     g_colTitleBarText.store(colTitleBarText, std::memory_order_relaxed);
     auto tintSetting = WindhawkUtils::StringSetting::make(L"MenuTintColor");
     auto backgroundSetting = WindhawkUtils::StringSetting::make(L"MenuBgColor");
-    auto highlightSetting = WindhawkUtils::StringSetting::make(L"HighlightBgColor");
+    auto hoverSetting = WindhawkUtils::StringSetting::make(L"MenuHoverColor");
     int alphaPercent;
     // An explicit tint alpha wins over the background alpha. Both override
     // MenuTintOpacity; without alpha the percentage setting remains in effect.
     if (ParseColorAlpha(tintSetting.get(), &alphaPercent) ||
         ParseColorAlpha(backgroundSetting.get(), &alphaPercent))
         g_acrylicOpacity.store(alphaPercent, std::memory_order_relaxed);
-    if (ParseColorAlpha(highlightSetting.get(), &alphaPercent))
+    if (ParseColorAlpha(hoverSetting.get(), &alphaPercent))
         g_acrylicHoverOpacity.store(alphaPercent, std::memory_order_relaxed);
+    g_acrylicHoverColor.store(
+        ParseHexColorOr(hoverSetting.get() ? hoverSetting.get() : L"",
+                        g_colHighlight.load(std::memory_order_relaxed)),
+        std::memory_order_relaxed);
     COLORREF tintColor;
     if (!ParseHexColor(tintSetting.get(), &tintColor))
         tintColor = g_colMenu.load(std::memory_order_relaxed);
@@ -1175,6 +1200,7 @@ std::atomic<int> g_acrylicHoverVerticalInset{2};
 std::atomic<int> g_acrylicHoverRadius{6};
 std::atomic<bool> g_acrylicClearOpaqueRows{true};
 std::atomic<COLORREF> g_acrylicTint{RGB(45, 45, 45)};
+std::atomic<COLORREF> g_acrylicHoverColor{RGB(224, 224, 227)};
 std::atomic<bool> g_acrylicRounded{true};
 std::atomic<bool> g_acrylicSupported{false};
 std::mutex g_acrylicWindowsMutex;
@@ -1185,24 +1211,32 @@ thread_local int tl_acrylicDrawing = 0;
 // the same GDI/uxtheme work to the current popup.
 thread_local int tl_acrylicPopupPaintDepth = 0;
 thread_local int tl_acrylicPrepareDepth = 0;
+thread_local unsigned tl_visibleMenuPopups = 0;
+constexpr WCHAR kVisibleMenuPopupProp[] = L"Wh.AdobeAcrylicMenus.VisiblePopup";
+
+// These transitions run on the popup's own thread. The property makes repeated
+// show/hide messages idempotent when user32 reuses the same window.
+void TrackMenuPopupVisibility(HWND hwnd, bool visible) {
+    if (visible) {
+        if (!GetPropW(hwnd, kVisibleMenuPopupProp) &&
+            SetPropW(hwnd, kVisibleMenuPopupProp, reinterpret_cast<HANDLE>(1))) {
+            ++tl_visibleMenuPopups;
+        }
+    } else if (RemovePropW(hwnd, kVisibleMenuPopupProp) && tl_visibleMenuPopups) {
+        --tl_visibleMenuPopups;
+    }
+}
+
+bool InAcrylicPopupPaintContext() {
+    return tl_visibleMenuPopups || tl_acrylicPopupPaintDepth ||
+           tl_menuDrawDepth || tl_menuDepth;
+}
 
 bool AcrylicPopupIsActive(HWND hwnd) {
-    if (!hwnd) return false;
+    if (!hwnd || ProcessIsExiting()) return false;
     std::lock_guard<std::mutex> lock(g_acrylicWindowsMutex);
     return g_acrylicWindows.contains(hwnd);
 }
-
-// Require a successfully composed popup on THIS UI thread. A blind check for
-// "menu is open" can clear GDI surfaces even after DWM rejected Acrylic.
-bool AcrylicThreadHasActivePopup() {
-    DWORD tid = GetCurrentThreadId();
-    std::lock_guard<std::mutex> lock(g_acrylicWindowsMutex);
-    for (HWND hwnd : g_acrylicWindows) {
-        if (GetWindowThreadProcessId(hwnd, nullptr) == tid) return true;
-    }
-    return false;
-}
-
 
 // The popup effects can be undone without leaving a modified main Adobe window.
 // Because Windows does not expose getters for every backdrop attribute, resetting
@@ -1216,7 +1250,7 @@ void AcrylicResetPopup(HWND hwnd) {
     }
     DWM_BLURBEHIND blur{DWM_BB_ENABLE, FALSE, nullptr, FALSE};
     DwmEnableBlurBehindWindow(hwnd, &blur);
-    DWORD backdrop = 1; // DWMSBT_AUTO
+    DWORD backdrop = 0; // DWMSBT_AUTO
     DwmSetWindowAttribute(hwnd, 38, &backdrop, sizeof(backdrop));
     DWORD corner = 0; // DWMWCP_DEFAULT
     DwmSetWindowAttribute(hwnd, 33, &corner, sizeof(corner));
@@ -1225,6 +1259,7 @@ void AcrylicResetPopup(HWND hwnd) {
 }
 
 void AcrylicResetAllPopups() {
+    if (ProcessIsExiting()) return;
     std::vector<HWND> windows;
     {
         std::lock_guard<std::mutex> lock(g_acrylicWindowsMutex);
@@ -1240,22 +1275,21 @@ bool AcrylicIsEnabled() {
 }
 
 bool AcrylicIsPopupDC(HDC hdc) {
-    if (!AcrylicIsEnabled() || tl_ourPaintDepth) return false;
+    if (!InAcrylicPopupPaintContext() || !hdc || tl_ourPaintDepth ||
+        !AcrylicIsEnabled() || ProcessIsExiting() ||
+        g_unloading.load(std::memory_order_relaxed)) return false;
     HWND hwnd = WindowFromDC(hdc);
     if (hwnd) {
         return ClassifyWindow(hwnd) == WindowKind::MenuPopup &&
                AcrylicPopupIsActive(hwnd);
     }
-    // user32 often paints into an offscreen menu bitmap. Accept memory DCs
-    // only while the actual popup is painting or a menu is being tracked.
-    // The calling uxtheme hook additionally verifies the "Menu" theme.
-    if (GetObjectType(hdc) != OBJ_MEMDC || !AcrylicThreadHasActivePopup())
-        return false;
-    // Only the exact synchronous owner-draw target for an active popup.
+    // For offscreen painting, require the exact synchronous owner-draw DC
+    // for a menu attached to an active popup on this thread.
     int index = tl_drawNesting - 1;
     if (index < 0 || index >= kMaxNestedDraws) return false;
     const DRAWITEMSTRUCT* item = tl_drawItems[index];
     if (!item || item->CtlType != ODT_MENU || item->hDC != hdc) return false;
+    if (GetObjectType(hdc) != OBJ_MEMDC) return false;
     HMENU menu = reinterpret_cast<HMENU>(item->hwndItem);
     std::vector<HWND> windows;
     {
@@ -1358,11 +1392,12 @@ void AcrylicPreparePopup(HWND hwnd) {
     Wh_Log(L"[Adobe Acrylic] Backdrop applied: popup=%p material=%d "
            L"menu=%p (trackDepth=%d).", hwnd, material, popupMenu,
            tl_menuDepth);
-    DWORD corner = g_acrylicRounded.load(std::memory_order_relaxed) ? 3 : 1;
+    DWORD corner = g_acrylicRounded.load(std::memory_order_relaxed) ? 3 : 0;
     DwmSetWindowAttribute(hwnd, 33, &corner, sizeof(corner));
     {
         std::lock_guard<std::mutex> lock(g_acrylicWindowsMutex);
-        g_acrylicWindows.insert(hwnd);
+        if (!g_unloading.load(std::memory_order_relaxed))
+            g_acrylicWindows.insert(hwnd);
     }
 }
 
@@ -1411,7 +1446,7 @@ bool AcrylicPaintHover(HDC dc, const RECT* rect) {
         return false;
     }
     HGDIOBJ previous = SelectObject(buffer, bitmap);
-    COLORREF color = g_colHighlight.load(std::memory_order_relaxed);
+    COLORREF color = g_acrylicHoverColor.load(std::memory_order_relaxed);
     BYTE baseAlpha = static_cast<BYTE>((opacity * 255 + 50) / 100);
     DWORD* output = static_cast<DWORD*>(pixels);
 
@@ -1477,7 +1512,7 @@ bool AcrylicNativeHoverBrush(HBRUSH brush) {
 // This hook is deliberately limited to native, not owner-drawn, popup rows.
 // Owner-drawn Photoshop painting has its own original color-override scope.
 bool AcrylicClearNativeFill(HDC dc, const RECT* rect, HBRUSH brush) {
-    if (!rect || tl_ourPaintDepth || tl_menuDrawDepth > 0 ||
+    if (!InAcrylicPopupPaintContext() || !rect || tl_ourPaintDepth || tl_menuDrawDepth > 0 ||
         tl_comboListDepth > 0 || !AcrylicIsEnabled() ||
         !g_acrylicClearOpaqueRows.load(std::memory_order_relaxed) ||
         !AcrylicIsPopupDC(dc)) return false;
@@ -1600,16 +1635,8 @@ bool AcrylicDrawOwnerText(HDC target, RECT* rect, DWORD flags,
 // painting a solid rectangle over the underlying Acrylic backdrop.
 bool AcrylicThemeBackground(HTHEME theme, HDC dc, int part, int state,
                             const RECT* rect, const RECT* clip) {
-    if (!rect || IsRectEmpty(rect) || !AcrylicIsMenuTheme(theme)) return false;
-    if (!AcrylicIsPopupDC(dc)) {
-        static std::atomic<bool> loggedUnmatched{false};
-        static std::atomic<bool> loggedUnmatchedItem{false};
-        auto& logged = part == 27 ? loggedUnmatchedItem : loggedUnmatched;
-        if (GetObjectType(dc) == OBJ_MEMDC && AcrylicThreadHasActivePopup() &&
-            !logged.exchange(true, std::memory_order_relaxed))
-            Wh_Log(L"[Adobe Acrylic] Unassociated Menu theme memory DC: part=%d state=%d; passed through", part, state);
-        return false;
-    }
+    if (!InAcrylicPopupPaintContext() || !rect || IsRectEmpty(rect) ||
+        !AcrylicIsMenuTheme(theme) || !AcrylicIsPopupDC(dc)) return false;
     RECT area = *rect;
     if (clip && !IntersectRect(&area, rect, clip)) return true;
     if ((part == 14 || part == 27) && (state == 2 || state == 4)) {
@@ -1656,6 +1683,7 @@ LRESULT CALLBACK MenuPopupSubclassProc(HWND hWnd,
                                        WPARAM wParam,
                                        LPARAM lParam,
                                        [[maybe_unused]] DWORD_PTR dwRefData) {
+    if (ProcessIsExiting()) return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     // MN_SIZEWINDOW (0x01E2) is the reliable post-layout point: the menu
     // handle is attached but user32 hasn't presented its first frame.
     if (uMsg == 0x01E2) {
@@ -1665,9 +1693,18 @@ LRESULT CALLBACK MenuPopupSubclassProc(HWND hWnd,
     }
     // Fallback for popups whose menu layout skips MN_SIZEWINDOW.
     if (uMsg == WM_WINDOWPOSCHANGING && lParam &&
-        (reinterpret_cast<const WINDOWPOS*>(lParam)->flags & SWP_SHOWWINDOW))
+        (reinterpret_cast<const WINDOWPOS*>(lParam)->flags & SWP_SHOWWINDOW)) {
+        TrackMenuPopupVisibility(hWnd, true);
         AcrylicPreparePopup(hWnd);
+    }
+    if (uMsg == WM_WINDOWPOSCHANGED && lParam &&
+        (reinterpret_cast<const WINDOWPOS*>(lParam)->flags &
+         (SWP_SHOWWINDOW | SWP_HIDEWINDOW))) {
+        TrackMenuPopupVisibility(hWnd, IsWindowVisible(hWnd));
+    }
+    if (uMsg == WM_SHOWWINDOW) TrackMenuPopupVisibility(hWnd, wParam != FALSE);
     if (uMsg == WM_NCDESTROY) {
+        TrackMenuPopupVisibility(hWnd, false);
         if (!ProcessIsExiting()) {
             std::lock_guard<std::mutex> lock(g_acrylicWindowsMutex);
             g_acrylicWindows.erase(hWnd);
@@ -1687,10 +1724,9 @@ LRESULT CALLBACK MenuPopupSubclassProc(HWND hWnd,
 
     // Scope native WM_PAINT/WM_PRINT drawing to this verified popup. In
     // Lightroom, exported TrackPopupMenu hooks are not always called.
-    bool paintsPopup = AcrylicPopupIsActive(hWnd) &&
-                       (uMsg == WM_PAINT || uMsg == WM_PRINT ||
+    bool paintsPopup = (uMsg == WM_PAINT || uMsg == WM_PRINT ||
                         uMsg == WM_PRINTCLIENT || uMsg == WM_ERASEBKGND ||
-                        uMsg == WM_NCPAINT);
+                        uMsg == WM_NCPAINT) && AcrylicPopupIsActive(hWnd);
     if (paintsPopup) ++tl_acrylicPopupPaintDepth;
     LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
     if (paintsPopup) --tl_acrylicPopupPaintDepth;
@@ -1883,8 +1919,7 @@ std::atomic<bool> g_preferencesAcrylicEnabled{false};
 std::atomic<bool> g_allDialogAcrylicEnabled{false};
 std::atomic<int> g_preferencesTintOpacity{45};
 std::atomic<COLORREF> g_preferencesTint{RGB(45,45,45)};
-std::atomic<int> g_preferencesAcrylicStatus{0};
-std::atomic<DWORD> g_preferencesAcrylicError{0};
+bool g_isLightroomProcess = false;
 std::mutex g_preferencesAcrylicMutex;
 std::unordered_map<HWND, AcrylicAccentPolicy> g_dialogAcrylicWindows;
 
@@ -1896,6 +1931,7 @@ bool IsPreferencesAcrylicSurface(HWND hwnd) {
 }
 
 void ResetPreferencesAcrylicWindow(HWND root, bool redraw) {
+    if (ProcessIsExiting()) return;
     AcrylicAccentPolicy original{};
     {
         std::lock_guard<std::mutex> lock(g_preferencesAcrylicMutex);
@@ -1912,6 +1948,7 @@ void ResetPreferencesAcrylicWindow(HWND root, bool redraw) {
 }
 
 void ResetPreferencesAcrylic() {
+    if (ProcessIsExiting()) return;
     std::unordered_map<HWND, AcrylicAccentPolicy> windows;
     {
         std::lock_guard<std::mutex> lock(g_preferencesAcrylicMutex);
@@ -1926,23 +1963,16 @@ void ResetPreferencesAcrylic() {
 }
 
 void PreparePreferencesAcrylic(HWND root) {
-    g_preferencesAcrylicStatus.store(0, std::memory_order_relaxed);
-    g_preferencesAcrylicError.store(0, std::memory_order_relaxed);
-    if (!g_darkPreferences.load(std::memory_order_relaxed) ||
+    if (ProcessIsExiting() || g_unloading.load(std::memory_order_relaxed) ||
+        !g_darkPreferences.load(std::memory_order_relaxed) ||
         !g_preferencesAcrylicEnabled.load(std::memory_order_relaxed) ||
         !g_acrylicSetComposition) return;
     WCHAR title[128]{};
     bool isPreferences = GetWindowTextW(root, title, ARRAYSIZE(title)) && !_wcsicmp(title, L"Preferences");
-    if (!isPreferences && !g_allDialogAcrylicEnabled.load(std::memory_order_relaxed)) {
-        g_preferencesAcrylicStatus.store(1, std::memory_order_relaxed);
-        return;
-    }
+    if (!isPreferences && !g_allDialogAcrylicEnabled.load(std::memory_order_relaxed)) return;
     {
         std::lock_guard<std::mutex> lock(g_preferencesAcrylicMutex);
-        if (g_dialogAcrylicWindows.contains(root)) {
-            g_preferencesAcrylicStatus.store(2, std::memory_order_relaxed);
-            return;
-        }
+        if (g_dialogAcrylicWindows.contains(root)) return;
     }
     AcrylicAccentPolicy original{};
     AcrylicCompositionData previous{19, &original, sizeof(original)};
@@ -1960,9 +1990,7 @@ void PreparePreferencesAcrylic(HWND root) {
     AcrylicCompositionData data{19, &accent, sizeof(accent)};
     SetLastError(0);
     if (!g_acrylicSetComposition(root, &data)) {
-        g_preferencesAcrylicError.store(GetLastError(), std::memory_order_relaxed);
-        g_preferencesAcrylicStatus.store(3, std::memory_order_relaxed);
-        Wh_Log(L"[Adobe Acrylic] Preferences acrylic composition was rejected.");
+        Wh_Log(L"Lightroom dialog acrylic composition was rejected, error=%lu.", GetLastError());
         return;
     }
     bool abort = false;
@@ -1976,7 +2004,6 @@ void PreparePreferencesAcrylic(HWND root) {
         g_acrylicSetComposition(root, &restore);
         return;
     }
-    g_preferencesAcrylicStatus.store(4, std::memory_order_relaxed);
     Wh_Log(L"[Adobe Acrylic] Preferences acrylic applied, opacity=%d", opacity);
 }
 std::mutex g_preferencesMutex;
@@ -2030,12 +2057,9 @@ void FindWatermarkOptionsPanel(HWND root) {
     Wh_Log(L"[Adobe Acrylic] Options panel hwnd=%p", panel);
 }
 
-bool IsLightroomPreferences(HWND hwnd) {
-    if (!hwnd || !g_darkPreferences.load(std::memory_order_relaxed)) return false;
-    WCHAR executable[MAX_PATH]{};
-    if (!GetModuleFileNameW(nullptr, executable, ARRAYSIZE(executable))) return false;
-    const WCHAR* name = wcsrchr(executable, L'\\');
-    if (_wcsicmp(name ? name + 1 : executable, L"Lightroom.exe")) return false;
+bool IsLightroomSecondaryWindow(HWND hwnd) {
+    if (!hwnd || !g_isLightroomProcess ||
+        !g_darkPreferences.load(std::memory_order_relaxed)) return false;
     if (GetAncestor(hwnd, GA_ROOT) != hwnd) return false;
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     if ((style & WS_CHILD) || (style & WS_CAPTION) != WS_CAPTION) return false;
@@ -2055,7 +2079,7 @@ bool IsPreferencesGroupBox(HWND hwnd) {
 }
 
 bool IsDialogMfcGroupContainer(HWND hwnd) {
-    if (!hwnd || !g_darkPreferences.load(std::memory_order_relaxed)) return false;
+    if (!hwnd || !g_darkPreferences.load(std::memory_order_relaxed) || ProcessIsExiting()) return false;
     {
         std::lock_guard<std::mutex> lock(g_preferencesMutex);
         if (!g_preferencesWindows.contains(hwnd)) return false;
@@ -2221,7 +2245,7 @@ void PaintPreferencesGroupBox(HWND hwnd, HDC dc) {
 // Header items are painted through their native custom-draw notification;
 // resizing, reordering, hit testing and the list contents remain native.
 bool DrawDialogListHeader(HWND parent, LPARAM param, LRESULT* result) {
-    if (!param || !result) return false;
+    if (!param || !result || ProcessIsExiting()) return false;
     auto* info = reinterpret_cast<NMCUSTOMDRAW*>(param);
     if (info->hdr.code != NM_CUSTOMDRAW || !info->hdr.hwndFrom ||
         GetParent(info->hdr.hwndFrom) != parent) return false;
@@ -2293,10 +2317,9 @@ bool DrawDialogListHeader(HWND parent, LPARAM param, LRESULT* result) {
     return true;
 }
 
-void WritePreferencesDiagnostic(HWND root);
-
 LRESULT CALLBACK PreferencesDarkSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
                                          DWORD_PTR) {
+    if (ProcessIsExiting()) return DefSubclassProc(hwnd, msg, wp, lp);
     if (msg == WM_NCDESTROY) {
         if (!ProcessIsExiting()) ResetPreferencesAcrylicWindow(hwnd, false);
         if (g_watermarkOptionsPanel.load(std::memory_order_relaxed) == hwnd)
@@ -2369,7 +2392,7 @@ LRESULT CALLBACK PreferencesDarkSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM 
         // This window is already a tracked dialog child. Limit the generic MFC
         // treatment to containers parented by group boxes, not photo previews.
         bool page = msg == WM_ERASEBKGND &&
-                    (IsLightroomPreferences(hwnd) || !_wcsicmp(cls, L"#32770") ||
+                    (IsLightroomSecondaryWindow(hwnd) || !_wcsicmp(cls, L"#32770") ||
                      !_wcsicmp(cls, L"SysTabControl32") ||
                      !_wcsicmp(parentClass, L"SysTabControl32") || mfcContainer ||
                      IsWatermarkOptionsContainer(hwnd));
@@ -2423,12 +2446,11 @@ LRESULT CALLBACK PreferencesDarkSubclass(HWND hwnd, UINT msg, WPARAM wp, LPARAM 
     }
     LRESULT result = DefSubclassProc(hwnd, msg, wp, lp);
     // Some dialogs receive their title after their first show/activation hook.
-    if (msg == WM_SETTEXT && IsLightroomPreferences(hwnd) &&
+    if (msg == WM_SETTEXT && IsLightroomSecondaryWindow(hwnd) &&
         !IsPreferencesAcrylicSurface(hwnd)) {
         WCHAR title[64]{};
         if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) && !_wcsicmp(title, L"Preferences")) {
             PreparePreferencesAcrylic(hwnd);
-            WritePreferencesDiagnostic(hwnd);
             RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
         }
     }
@@ -2554,7 +2576,7 @@ bool PreferencesDarkTabBackground(HTHEME theme, HDC dc, int part,
                                   const RECT* rect, const RECT* clip) {
     if (!g_darkPreferences.load(std::memory_order_relaxed) || !dc || !theme ||
         !rect || IsRectEmpty(rect) || (part != 9 && part != 10) ||
-        !g_acrylicGetThemeClass) return false;
+        !g_acrylicGetThemeClass || ProcessIsExiting()) return false;
     HWND hwnd = WindowFromDC(dc);
     if (!hwnd) return false;
     {
@@ -2578,98 +2600,8 @@ bool PreferencesDarkTabBackground(HTHEME theme, HDC dc, int part,
     return true;
 }
 
-// A bounded class/geometry report, no control text or field values. Reports
-// are independent of Windhawk logging and never overwrite earlier captures.
-std::atomic<unsigned long> g_dialogReportSequence{0};
-void WritePreferencesDiagnostic(HWND root) {
-    if (!Wh_GetIntSetting(L"DialogDiagnostics")) return;
-    WCHAR tempPath[MAX_PATH]{};
-    DWORD length = GetTempPathW(ARRAYSIZE(tempPath), tempPath);
-    if (!length || length >= ARRAYSIZE(tempPath)) return;
-    WCHAR directory[MAX_PATH]{};
-    if (swprintf_s(directory, ARRAYSIZE(directory), L"%sAdobeAcrylicReports", tempPath) < 0) return;
-    if (!CreateDirectoryW(directory, nullptr) && GetLastError() != ERROR_ALREADY_EXISTS) {
-        Wh_Log(L"[Adobe Acrylic] Failed to create diagnostic directory, error=%lu", GetLastError());
-        return;
-    }
-    WCHAR rootTitle[128]{};
-    GetWindowTextW(root, rootTitle, ARRAYSIZE(rootTitle));
-    // Use only these known, fixed names; arbitrary window titles can contain
-    // private filenames or other user data and are never written to reports.
-    PCWSTR category = !_wcsicmp(rootTitle, L"Watermark Editor") ? L"Watermark-Editor"
-                     : !_wcsicmp(rootTitle, L"Preferences") ? L"Preferences"
-                     : !_wcsicmp(rootTitle, L"Catalog Settings") ? L"Catalog-Settings"
-                     : !_wcsicmp(rootTitle, L"Tethered Capture Settings") ? L"Tethered-Capture"
-                     : L"Dialog";
-    HANDLE file = INVALID_HANDLE_VALUE;
-    WCHAR path[MAX_PATH]{};
-    for (int attempt = 0; attempt < 16; ++attempt) {
-        SYSTEMTIME now{};
-        GetLocalTime(&now);
-        unsigned long sequence = g_dialogReportSequence.fetch_add(1, std::memory_order_relaxed);
-        int count = swprintf_s(path, ARRAYSIZE(path),
-            L"%s\\%s-%04u%02u%02u-%02u%02u%02u-%03u-p%lu-w%p-%lu.txt",
-            directory, category, now.wYear, now.wMonth, now.wDay,
-            now.wHour, now.wMinute, now.wSecond, now.wMilliseconds,
-            GetCurrentProcessId(), root, sequence);
-        if (count < 0) return;
-        file = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-                           CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (file != INVALID_HANDLE_VALUE || GetLastError() != ERROR_FILE_EXISTS) break;
-    }
-    if (file == INVALID_HANDLE_VALUE) return;
-    DWORD written = 0;
-    const WORD bom = 0xFEFF;
-    WriteFile(file, &bom, sizeof(bom), &written, nullptr);
-    WCHAR status[256]{};
-    int statusLength = swprintf_s(status, ARRAYSIZE(status),
-        L"acrylic: dark=%d enabled=%d preferences_title=%d active=%d status=%d error=%lu\r\n",
-        g_darkPreferences.load(std::memory_order_relaxed),
-        g_preferencesAcrylicEnabled.load(std::memory_order_relaxed),
-        !_wcsicmp(rootTitle, L"Preferences"),
-        IsPreferencesAcrylicSurface(root),
-        g_preferencesAcrylicStatus.load(std::memory_order_relaxed),
-        static_cast<unsigned long>(g_preferencesAcrylicError.load(std::memory_order_relaxed)));
-    if (statusLength > 0) WriteFile(file, status, static_cast<DWORD>(statusLength * sizeof(WCHAR)), &written, nullptr);
-    struct Context { HANDLE file; unsigned count; } context{file, 0};
-    auto writeWindow = [](HWND hwnd, Context* ctx) {
-        WCHAR cls[96]{}, parentCls[96]{}, line[512]{};
-        GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-        HWND parent = GetParent(hwnd);
-        if (parent) GetClassNameW(parent, parentCls, ARRAYSIZE(parentCls));
-        RECT rc{};
-        GetWindowRect(hwnd, &rc);
-        int n = swprintf_s(line, ARRAYSIZE(line),
-            L"class=%s parentClass=%s hwnd=%p parent=%p style=0x%08lX size=%ldx%ld visible=%d\r\n",
-            cls, parentCls, hwnd, parent,
-            static_cast<unsigned long>(GetWindowLongPtrW(hwnd, GWL_STYLE)),
-            rc.right - rc.left, rc.bottom - rc.top, IsWindowVisible(hwnd));
-        DWORD count = 0;
-        if (n > 0) WriteFile(ctx->file, line, static_cast<DWORD>(n * sizeof(WCHAR)), &count, nullptr);
-    };
-    writeWindow(root, &context);
-    EnumChildWindows(root, [](HWND child, LPARAM data) WINAPI -> BOOL {
-        auto* ctx = reinterpret_cast<Context*>(data);
-        if (ctx->count++ >= 600) return FALSE;
-        WCHAR cls[96]{}, parentCls[96]{}, line[512]{};
-        GetClassNameW(child, cls, ARRAYSIZE(cls));
-        HWND parent = GetParent(child);
-        if (parent) GetClassNameW(parent, parentCls, ARRAYSIZE(parentCls));
-        RECT rc{}; GetWindowRect(child, &rc);
-        int n = swprintf_s(line, ARRAYSIZE(line),
-            L"class=%s parentClass=%s hwnd=%p parent=%p style=0x%08lX size=%ldx%ld visible=%d\r\n",
-            cls, parentCls, child, parent,
-            static_cast<unsigned long>(GetWindowLongPtrW(child, GWL_STYLE)),
-            rc.right - rc.left, rc.bottom - rc.top, IsWindowVisible(child));
-        DWORD count = 0;
-        if (n > 0) WriteFile(ctx->file, line, static_cast<DWORD>(n * sizeof(WCHAR)), &count, nullptr);
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&context));
-    CloseHandle(file);
-}
-
 void PreparePreferences(HWND hwnd) {
-    if (tl_preparingPreferences || !IsLightroomPreferences(hwnd) || ProcessIsExiting() ||
+    if (tl_preparingPreferences || !IsLightroomSecondaryWindow(hwnd) || ProcessIsExiting() ||
         g_unloading.load(std::memory_order_relaxed)) return;
     tl_preparingPreferences = true;
     PreparePreferencesAcrylic(hwnd);
@@ -2681,13 +2613,13 @@ void PreparePreferences(HWND hwnd) {
     }, 0);
     WCHAR cls[128]{};
     GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-    WritePreferencesDiagnostic(hwnd);
     Wh_Log(L"[Adobe Acrylic] Experimental Preferences styling applied hwnd=%p class=%s", hwnd, cls);
     RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
     tl_preparingPreferences = false;
 }
 
 void RemovePreferencesStyling() {
+    if (ProcessIsExiting()) return;
     ResetPreferencesAcrylic();
     std::vector<HWND> windows;
     std::unordered_map<HWND, DialogListColors> listColors;
@@ -3934,7 +3866,7 @@ BOOL WINAPI PatBlt_Hook(HDC hdc, int x, int y, int w, int h, DWORD rop) {
             }
         }
     }
-    if (rop == PATCOPY && w > 0 && h > 0) {
+    if (InAcrylicPopupPaintContext() && rop == PATCOPY && w > 0 && h > 0) {
         RECT rect{x, y, x + w, y + h};
         if (AcrylicClearNativeFill(hdc, &rect,
                     (HBRUSH)GetCurrentObject(hdc, OBJ_BRUSH))) return TRUE;
@@ -4058,10 +3990,16 @@ BOOL Wh_ModInit() {
     g_pRtlDllShutdownInProgress = (RtlDllShutdownInProgress_t)(void*)GetProcAddress(
         GetModuleHandleW(L"ntdll.dll"), "RtlDllShutdownInProgress");
 
+    WCHAR executable[MAX_PATH]{};
+    DWORD executableLength = GetModuleFileNameW(nullptr, executable, ARRAYSIZE(executable));
+    if (executableLength && executableLength < ARRAYSIZE(executable)) {
+        const WCHAR* name = wcsrchr(executable, L'\\');
+        g_isLightroomProcess = !_wcsicmp(name ? name + 1 : executable, L"Lightroom.exe");
+    }
+
     LoadSettings();
 
     HMODULE uxtheme = GetModuleHandleW(L"uxtheme.dll");
-    if (!uxtheme) uxtheme = LoadLibraryW(L"uxtheme.dll");
     if (uxtheme) {
         g_acrylicGetThemeClass = reinterpret_cast<AcrylicGetThemeClassFn>(
             GetProcAddress(uxtheme, MAKEINTRESOURCEA(74)));
@@ -4200,6 +4138,7 @@ void Wh_ModUninit() {
         }
         for (HWND hWnd : popups) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, MenuPopupSubclassProc);
+            RemovePropW(hWnd, kVisibleMenuPopupProp);
         }
     }
 
