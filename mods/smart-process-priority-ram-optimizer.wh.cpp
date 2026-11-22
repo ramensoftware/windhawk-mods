@@ -6,7 +6,7 @@
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
-// @compilerOptions -lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32 -lpowrprof -liphlpapi
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32 -lpowrprof -liphlpapi
 // @donateUrl       https://buymeacoffee.com/gilnett
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -224,14 +224,6 @@ If you find this mod useful, you can support its development and maintenance:
 #define _WIN32_WINNT 0x0A00
 #endif
 
-// clang-format off
-#undef _WINSOCKAPI_
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
-// clang-format on
-
-// Must follow windows.h for ULONG and WINAPI_FAMILY_PARTITION
 #include <powrprof.h>
 
 #include <objbase.h>
@@ -293,6 +285,9 @@ typedef struct _PROCESS_POWER_THROTTLING_STATE {
 #endif
 #ifndef PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION
 #define PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION 0x4u
+#endif
+#ifndef AF_INET
+#define AF_INET 2
 #endif
 #ifndef AF_INET6
 #define AF_INET6 23
@@ -2087,7 +2082,7 @@ GetActiveNetworkProcessIdsCached(const ModSettings& settings) {
                     row.dwOwningPid != 0 && row.dwOwningPid != 4) {
                     BYTE firstByte =
                         static_cast<BYTE>(row.dwRemoteAddr & 0xFF);
-                    if (firstByte != 127 && row.dwRemoteAddr != 0) {
+                    if (firstByte != 127) {
                         activePids.insert(row.dwOwningPid);
                     }
                 }
@@ -2112,22 +2107,17 @@ GetActiveNetworkProcessIdsCached(const ModSettings& settings) {
                 if (row.dwState == MIB_TCP_STATE_ESTAB &&
                     row.dwOwningPid != 0 && row.dwOwningPid != 4) {
                     bool isLoopback = true;
-                    bool isUnspecified = true;
                     for (int b = 0; b < 15; ++b) {
                         if (row.ucRemoteAddr[b] != 0) {
                             isLoopback = false;
-                            isUnspecified = false;
                             break;
                         }
                     }
                     if (row.ucRemoteAddr[15] != 1) {
                         isLoopback = false;
                     }
-                    if (row.ucRemoteAddr[15] != 0) {
-                        isUnspecified = false;
-                    }
 
-                    if (!isLoopback && !isUnspecified) {
+                    if (!isLoopback) {
                         activePids.insert(row.dwOwningPid);
                     }
                 }
@@ -2151,7 +2141,7 @@ GetActiveNetworkProcessIdsCached(const ModSettings& settings) {
             for (DWORD i = 0; i < pTable->dwNumEntries; ++i) {
                 const auto& row = pTable->table[i];
                 if (row.dwOwningPid != 0 && row.dwOwningPid != 4) {
-                    if (row.dwLocalAddr != INADDR_ANY && (row.dwLocalAddr & 0xFF) != 127) {
+                    if ((row.dwLocalAddr & 0xFF) != 127) {
                         activePids.insert(row.dwOwningPid);
                     }
                 }
@@ -2175,8 +2165,18 @@ GetActiveNetworkProcessIdsCached(const ModSettings& settings) {
             for (DWORD i = 0; i < pTable6->dwNumEntries; ++i) {
                 const auto& row = pTable6->table[i];
                 if (row.dwOwningPid != 0 && row.dwOwningPid != 4) {
-                    const auto* addr = reinterpret_cast<const IN6_ADDR*>(row.ucLocalAddr);
-                    if (!IN6_IS_ADDR_LOOPBACK(addr) && !IN6_IS_ADDR_UNSPECIFIED(addr)) {
+                    bool isLoopback = true;
+                    for (int b = 0; b < 15; ++b) {
+                        if (row.ucLocalAddr[b] != 0) {
+                            isLoopback = false;
+                            break;
+                        }
+                    }
+                    if (row.ucLocalAddr[15] != 1) {
+                        isLoopback = false;
+                    }
+
+                    if (!isLoopback) {
                         activePids.insert(row.dwOwningPid);
                     }
                 }
@@ -4279,16 +4279,9 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
     HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (hProc) {
         bool regGame = IsRegisteredWindowsGame(procName, hProc);
-        if (regGame) {
-            CloseHandle(hProc);
-            return true;
-        }
-        // Packaged apps (UWP/MSIX like Store, Settings, Calculator) are standard Windows apps,
-        // not dedicated 3D games, unless running exclusive D3D above or registered as a game.
-        bool isPkg = IsPackagedAppCached(pid, hProc);
         CloseHandle(hProc);
-        if (isPkg) {
-            return false;
+        if (regGame) {
+            return true;
         }
     } else if (!procName.empty() && IsRegisteredWindowsGame(procName)) {
         return true;
@@ -6101,6 +6094,7 @@ void WhTool_ModUninit() {
     Wh_Log(L"Mod unloaded cleanly.");
 }
 
+// clang-format off
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
@@ -6182,8 +6176,8 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        // clang-format off
-        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
