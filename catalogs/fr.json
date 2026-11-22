@@ -25580,6 +25580,38 @@
         "name": "Zen Duplicate Titlebar Fix (Win10)",
         "version": "1.0.0"
       }
+    },
+    "zoneshift": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795377673000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795377673000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Dev-StudioCode",
+        "compilerOptions": "-ladvapi32 -luser32",
+        "description": "Spoof timezone and local time for specific apps without altering the Windows system clock.",
+        "github": "https://github.com/Dev-StudioCode",
+        "homepage": "https://github.com/Dev-StudioCode/ZoneShift",
+        "include": [
+          "wallpaper32.exe",
+          "wallpaper64.exe",
+          "webwallpaper32.exe",
+          "webwallpaper64.exe",
+          "edgewallpaper32.exe",
+          "edgewallpaper64.exe",
+          "ui32.exe",
+          "wallpaperui.exe"
+        ],
+        "name": "ZoneShift - Per-App Timezone Spoofer",
+        "version": "1.0.0"
+      }
     }
   }
 }

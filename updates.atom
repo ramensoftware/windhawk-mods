@@ -2,12 +2,95 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-22T19:04:43.000Z</updated>
+    <updated>2026-11-22T20:01:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[ZoneShift - Per-App Timezone Spoofer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/zoneshift#5ffe64b9a51c9ea00a038ef3b7c018694838eff7</id>
+        <link href="https://windhawk.net/mods/zoneshift"/>
+        <updated>2026-11-22T20:01:13.000Z</updated>
+        <content type="html"><![CDATA[<h1>ZoneShift - Per-App Timezone Spoofer</h1>
+<p><strong>ZoneShift</strong> is a lightweight, high-performance Windhawk mod that spoofs the time zone and local time for individual Windows applications without changing the system clock or affecting other running programs.</p>
+<hr>
+<h3>Why Per-App Timezone Spoofing?</h3>
+<ol>
+<li>
+<p><strong>Wallpaper Engine &amp; Desktop Customization</strong>:</p>
+<ul>
+<li>Web wallpapers (Chromium/CEF), Scene wallpapers (DirectX/native), and Edge wallpapers can display the local clock of any chosen city (e.g. Tokyo, London, New York) or simulate day/night lighting cycles for a different hemisphere without altering your PC's real clock.</li>
+</ul>
+</li>
+<li>
+<p><strong>International Outreach &amp; Client Work</strong>:</p>
+<ul>
+<li>Localize browser profiles, CRM tools, scheduling calendars, Slack, Discord, or web apps to match client timezones, avoiding timezone math errors while keeping your taskbar clock accurate.</li>
+</ul>
+</li>
+<li>
+<p><strong>Software Testing &amp; QA</strong>:</p>
+<ul>
+<li>Verify application behavior across global regions (e.g., date-boundary logic, DST shifts, calendar schedulers, daily reset intervals) on demand.</li>
+</ul>
+</li>
+<li>
+<p><strong>Privacy &amp; Anti-Fingerprinting</strong>:</p>
+<ul>
+<li>Mask your real physical timezone from web tracking scripts and telemetry engines that cross-check timezone offsets.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3>Important Usage Notes</h3>
+<ul>
+<li>
+<p><strong>Adding Custom Applications</strong>:
+By default, ZoneShift targets Wallpaper Engine processes to keep other apps unaffected out of the box. To target any other application (browsers, chat apps, games, etc.):</p>
+<ol>
+<li>Open the <strong>Windhawk UI</strong>.</li>
+<li>Navigate to <strong>ZoneShift</strong> -&gt; <strong>Details</strong> -&gt; <strong>Advanced</strong> tab.</li>
+<li>Under <strong>Process inclusion list</strong>, add the executable name (e.g., <code>chrome.exe</code>, <code>slack.exe</code>, <code>yourapp.exe</code>).</li>
+<li>Click <strong>Save</strong>.</li>
+</ol>
+</li>
+<li>
+<p><strong>Web Wallpapers and Time Shifting</strong>:
+Chromium/CEF web wallpapers evaluate local time via ICU using the spoofed <code>TimeZoneKeyName</code> and UTC time. To apply an artificial minute offset in web wallpapers, enable <code>Shift UTC Time</code>.</p>
+</li>
+<li>
+<p><strong>UTC Time Shifting in Browsers</strong>:
+Enabling <code>Shift UTC Time</code> shifts <code>GetSystemTime</code>. Note that shifting UTC time by more than a few minutes in web browsers may cause HTTPS security certificate validation failures, expired cookies, or invalid TOTP two-factor authentication codes. Keep this option disabled unless specifically required.</p>
+</li>
+<li>
+<p><strong>Client Games &amp; Anti-Cheat</strong>:
+Many multiplayer games employ anti-cheat systems that inspect or block process hooks. Use caution when injecting mods into protected games, and note that server-authoritative games determine daily resets on the game server.</p>
+</li>
+</ul>
+<hr>
+<h3>How It Works</h3>
+<p>Windows apps query time through multiple Win32, NT, ICU, CRT, and registry APIs. ZoneShift intercepts all critical layers at the process level:</p>
+<ul>
+<li><strong><code>GetDynamicTimeZoneInformation</code> &amp; <code>GetTimeZoneInformation</code></strong>: Modern Win32 APIs used by Chromium, Electron, CEF, Node.js, and ICU to resolve IANA and Windows timezones.</li>
+<li><strong><code>GetLocalTime</code></strong>: Native API called by C++/DirectX apps, desktop widgets, and Wallpaper Engine scene wallpapers.</li>
+<li><strong><code>SystemTimeToTzSpecificLocalTime[Ex]</code> / <code>TzSpecificLocalTimeToSystemTime[Ex]</code></strong>: Local-to-UTC and UTC-to-local conversions with full dynamic Daylight Saving Time (DST) support.</li>
+<li><strong><code>FileTimeToLocalFileTime</code> / <code>LocalFileTimeToFileTime</code></strong>: File and timestamp conversions.</li>
+<li><strong><code>NtQuerySystemInformation</code> (<code>SystemTimeOfDayInformation</code>)</strong>: Low-level NT kernel time-of-day bias.</li>
+<li><strong><code>RegQueryValueExW</code></strong>: Intercepts <code>TimeZoneKeyName</code> and <code>ActiveTimeBias</code> queries.</li>
+<li><strong>Windows ICU Integration</strong>: Automatically converts any IANA identifier (e.g. <code>Europe/Warsaw</code>, <code>America/Mexico_City</code>, <code>Asia/Tokyo</code>) to Windows time zones using <code>icu.dll</code>.</li>
+</ul>
+<hr>
+<h3>Source Code &amp; Support</h3>
+<p>Source code, issue tracker, and documentation:
+<a href="https://github.com/Dev-StudioCode/ZoneShift">GitHub Repository</a></p>
+]]></content>
+        <author>
+            <name>Dev-StudioCode</name>
+            <uri>https://github.com/Dev-StudioCode</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Share Tile 1.0.0]]></title>
         <id>https://windhawk.net/mods/quick-share-tile#c9c51968a2897244218062c9ab6b6da1dc90c296</id>
@@ -715,37 +798,6 @@ sections:</p>
         <author>
             <name>Saber Naeemi</name>
             <uri>https://github.com/sabergraphics</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MacOS Style Dock 1.2.0]]></title>
-        <id>https://windhawk.net/mods/macos-style-dock#7454669d26ffd162e4a663d4e420069b70227117</id>
-        <link href="https://windhawk.net/mods/macos-style-dock"/>
-        <updated>2026-11-22T00:00:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New: Liquid Glass (off by default). The dock's rim bends what's behind it like real glass, instead of only a frosted blur. Turn it on by picking Lens, Reflection or Stretch in &quot;Edge Style&quot;, and adjust &quot;Edge Depth&quot;, &quot;Edge Strength&quot; and its own &quot;Liquid Glass Blur&quot;.</li>
-<li>Liquid Glass has two downsides: it trails the screen behind the dock by a frame or two, and while it's on, the taskbar is hidden from screenshots, screen recordings and screen sharing. If either is a problem, set &quot;Edge Style&quot; to Off for the plain frosted glass.</li>
-<li>New shortcuts while Liquid Glass is on: Win+Ctrl+Shift+G freezes the glass so the taskbar shows up in screen captures, and Win+Ctrl+Shift+K turns Liquid Glass off at once in an emergency, until the mod's settings are saved again.</li>
-<li>New: the system tray gets a background. By default it matches the dock (its glass, Liquid Glass, border and glow) as a smaller pill. Turn off &quot;Match Dock Style&quot; to give it its own color, opacity, blur and border. &quot;Tray Padding&quot; sets the room around its icons and clock.</li>
-<li>New: per-pixel brightness limits behind the dock and the tray, on by default at 80, so bright windows behind them are dimmed and the tray's clock and icons stay readable. Under dark text it becomes a minimum brightness instead.</li>
-<li>The tray's text and icon shadow can now be adjusted: color, opacity, blur and offset.</li>
-<li>The tray now slides in and out of its hot corner without fading.</li>
-<li>New dock options: &quot;No Background&quot;, a Custom border (color, width and opacity), and None for &quot;App Activity Indicators&quot;.</li>
-<li>New dividers: one before the Recycle Bin (on by default), and up to 5 more at positions of your choice with &quot;Custom Index Dividers&quot;.</li>
-<li>New &quot;Keep Icons Still&quot; option, which turns off the bounce Windows gives icons as apps open, close, minimize or are restored.</li>
-<li>Start can now stay in the dock: turn off &quot;Hide Windows Start Button&quot; to keep it at the front, with Windows' icon or your own (&quot;Start Menu Icon&quot;).</li>
-<li>&quot;Squircle Color&quot; has new options: Always Light, Prefer Light, Prefer Dark and Always Dark.</li>
-<li>Custom icons now accept Mac .icns files as well as PNG and other images, at any size. Each icon now has a single &quot;Margins&quot; setting (-50 to 50) instead of a margin and a size.</li>
-<li>Squircle icons: fixed icons showing another app's icon and icons that never got their tile. As a last resort, a tile is now made from the app's icon as Start shows it.</li>
-<li>Fixed the dock and hot corners staying blocked after an exclusive full screen game was minimized or switched away from.</li>
-<li>Settings are reorganized into new groups (Dock Size, Dock Color, Liquid Glass, Tray Color, Dock Items, Custom Icons, Hot Corners, Additional Settings). Settings saved in 1.1.2 don't carry over, so the mod starts from its defaults once. This is intended.</li>
-<li>New defaults: &quot;Magnification&quot; 60 (was 70), &quot;Dock Glow Spread&quot; 8 (was 6), &quot;Dock Glow Opacity&quot; 63 (was 60).</li>
-<li>The readme has a new Liquid Glass section near the top, links to macOS icon resources, and a new section on the system tray.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Zach Vaughn</name>
-            <uri>https://github.com/zachvdev</uri>
         </author>
     </entry>
 </feed>

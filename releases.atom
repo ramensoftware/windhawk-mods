@@ -2,12 +2,95 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-22T19:04:43.000Z</updated>
+    <updated>2026-11-22T20:01:13.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[ZoneShift - Per-App Timezone Spoofer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/zoneshift#5ffe64b9a51c9ea00a038ef3b7c018694838eff7</id>
+        <link href="https://windhawk.net/mods/zoneshift"/>
+        <updated>2026-11-22T20:01:13.000Z</updated>
+        <content type="html"><![CDATA[<h1>ZoneShift - Per-App Timezone Spoofer</h1>
+<p><strong>ZoneShift</strong> is a lightweight, high-performance Windhawk mod that spoofs the time zone and local time for individual Windows applications without changing the system clock or affecting other running programs.</p>
+<hr>
+<h3>Why Per-App Timezone Spoofing?</h3>
+<ol>
+<li>
+<p><strong>Wallpaper Engine &amp; Desktop Customization</strong>:</p>
+<ul>
+<li>Web wallpapers (Chromium/CEF), Scene wallpapers (DirectX/native), and Edge wallpapers can display the local clock of any chosen city (e.g. Tokyo, London, New York) or simulate day/night lighting cycles for a different hemisphere without altering your PC's real clock.</li>
+</ul>
+</li>
+<li>
+<p><strong>International Outreach &amp; Client Work</strong>:</p>
+<ul>
+<li>Localize browser profiles, CRM tools, scheduling calendars, Slack, Discord, or web apps to match client timezones, avoiding timezone math errors while keeping your taskbar clock accurate.</li>
+</ul>
+</li>
+<li>
+<p><strong>Software Testing &amp; QA</strong>:</p>
+<ul>
+<li>Verify application behavior across global regions (e.g., date-boundary logic, DST shifts, calendar schedulers, daily reset intervals) on demand.</li>
+</ul>
+</li>
+<li>
+<p><strong>Privacy &amp; Anti-Fingerprinting</strong>:</p>
+<ul>
+<li>Mask your real physical timezone from web tracking scripts and telemetry engines that cross-check timezone offsets.</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3>Important Usage Notes</h3>
+<ul>
+<li>
+<p><strong>Adding Custom Applications</strong>:
+By default, ZoneShift targets Wallpaper Engine processes to keep other apps unaffected out of the box. To target any other application (browsers, chat apps, games, etc.):</p>
+<ol>
+<li>Open the <strong>Windhawk UI</strong>.</li>
+<li>Navigate to <strong>ZoneShift</strong> -&gt; <strong>Details</strong> -&gt; <strong>Advanced</strong> tab.</li>
+<li>Under <strong>Process inclusion list</strong>, add the executable name (e.g., <code>chrome.exe</code>, <code>slack.exe</code>, <code>yourapp.exe</code>).</li>
+<li>Click <strong>Save</strong>.</li>
+</ol>
+</li>
+<li>
+<p><strong>Web Wallpapers and Time Shifting</strong>:
+Chromium/CEF web wallpapers evaluate local time via ICU using the spoofed <code>TimeZoneKeyName</code> and UTC time. To apply an artificial minute offset in web wallpapers, enable <code>Shift UTC Time</code>.</p>
+</li>
+<li>
+<p><strong>UTC Time Shifting in Browsers</strong>:
+Enabling <code>Shift UTC Time</code> shifts <code>GetSystemTime</code>. Note that shifting UTC time by more than a few minutes in web browsers may cause HTTPS security certificate validation failures, expired cookies, or invalid TOTP two-factor authentication codes. Keep this option disabled unless specifically required.</p>
+</li>
+<li>
+<p><strong>Client Games &amp; Anti-Cheat</strong>:
+Many multiplayer games employ anti-cheat systems that inspect or block process hooks. Use caution when injecting mods into protected games, and note that server-authoritative games determine daily resets on the game server.</p>
+</li>
+</ul>
+<hr>
+<h3>How It Works</h3>
+<p>Windows apps query time through multiple Win32, NT, ICU, CRT, and registry APIs. ZoneShift intercepts all critical layers at the process level:</p>
+<ul>
+<li><strong><code>GetDynamicTimeZoneInformation</code> &amp; <code>GetTimeZoneInformation</code></strong>: Modern Win32 APIs used by Chromium, Electron, CEF, Node.js, and ICU to resolve IANA and Windows timezones.</li>
+<li><strong><code>GetLocalTime</code></strong>: Native API called by C++/DirectX apps, desktop widgets, and Wallpaper Engine scene wallpapers.</li>
+<li><strong><code>SystemTimeToTzSpecificLocalTime[Ex]</code> / <code>TzSpecificLocalTimeToSystemTime[Ex]</code></strong>: Local-to-UTC and UTC-to-local conversions with full dynamic Daylight Saving Time (DST) support.</li>
+<li><strong><code>FileTimeToLocalFileTime</code> / <code>LocalFileTimeToFileTime</code></strong>: File and timestamp conversions.</li>
+<li><strong><code>NtQuerySystemInformation</code> (<code>SystemTimeOfDayInformation</code>)</strong>: Low-level NT kernel time-of-day bias.</li>
+<li><strong><code>RegQueryValueExW</code></strong>: Intercepts <code>TimeZoneKeyName</code> and <code>ActiveTimeBias</code> queries.</li>
+<li><strong>Windows ICU Integration</strong>: Automatically converts any IANA identifier (e.g. <code>Europe/Warsaw</code>, <code>America/Mexico_City</code>, <code>Asia/Tokyo</code>) to Windows time zones using <code>icu.dll</code>.</li>
+</ul>
+<hr>
+<h3>Source Code &amp; Support</h3>
+<p>Source code, issue tracker, and documentation:
+<a href="https://github.com/Dev-StudioCode/ZoneShift">GitHub Repository</a></p>
+]]></content>
+        <author>
+            <name>Dev-StudioCode</name>
+            <uri>https://github.com/Dev-StudioCode</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick Share Tile 1.0.0]]></title>
         <id>https://windhawk.net/mods/quick-share-tile#c9c51968a2897244218062c9ab6b6da1dc90c296</id>
@@ -1294,34 +1377,6 @@ so that the panel fits the screen. Items that still don't fit are not shown.</li
         <author>
             <name>Sanekx Arcs</name>
             <uri>https://github.com/SanekxArcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Yandex Music Transparency 1.1]]></title>
-        <id>https://windhawk.net/mods/yandex-music-transparency#8f4eaeef62ea9804e81a529e792d7423b45d5c04</id>
-        <link href="https://windhawk.net/mods/yandex-music-transparency"/>
-        <updated>2026-11-19T04:05:06.000Z</updated>
-        <content type="html"><![CDATA[<h1>Yandex Music Transparency</h1>
-<p>Automatically makes the <strong>Yandex Music</strong> (<code>Яндекс Музыка.exe</code>) desktop window transparent on startup and continuously prevents the Electron application from resetting its opacity or removing <code>WS_EX_LAYERED</code>.</p>
-<p>Unlike one-shot rule-based or hotkey-based opacity mods, this mod injects into the process to actively preserve your chosen transparency level across window state changes and redraws.</p>
-<h2>Settings</h2>
-<ul>
-<li><strong>Window Opacity (<code>Alpha</code>)</strong>: Controls the opacity level from <code>50</code> (more transparent) to <code>255</code> (fully opaque). Default is <code>220</code>.</li>
-</ul>
-<h2>Using with other applications</h2>
-<p>Although tailored for Yandex Music by default, you can apply the same persistent transparency to other Chromium/Electron applications by adding their executable names in the mod's <strong>Advanced</strong> tab under <strong>Custom process inclusion list</strong>.</p>
-<h2>Limitations</h2>
-<ul>
-<li>Only affects top-level windows with the <code>Chrome_WidgetWin_1</code> window class.</li>
-<li>Windows that already use color-key transparency (<code>LWA_COLORKEY</code>) are skipped to avoid visual artifacts.</li>
-<li>Disabling or unloading the mod restores the window's original opacity and layered style.</li>
-</ul>
-<h2>Credits</h2>
-<p>Created with assistance from ChatGPT.</p>
-]]></content>
-        <author>
-            <name>NIKTO</name>
-            <uri>https://github.com/NIKTO-2</uri>
         </author>
     </entry>
 </feed>

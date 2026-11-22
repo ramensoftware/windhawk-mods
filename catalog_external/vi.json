@@ -765,42 +765,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c2226cdb15a3684219163cfcf0dbeeb4c02ab62a/mods/windows-11-lock-screen-styler.wh.cpp"
       }
     },
-    "zoneshift": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795294675721,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795294675721,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Dev-StudioCode",
-        "compilerOptions": "-ladvapi32 -luser32",
-        "description": "Spoof timezone and local time for specific apps without altering the Windows system clock.",
-        "github": "https://github.com/Dev-StudioCode",
-        "homepage": "https://github.com/Dev-StudioCode/ZoneShift",
-        "include": [
-          "wallpaper32.exe",
-          "wallpaper64.exe",
-          "webwallpaper32.exe",
-          "webwallpaper64.exe",
-          "edgewallpaper32.exe",
-          "edgewallpaper64.exe",
-          "ui32.exe",
-          "wallpaperui.exe"
-        ],
-        "name": "ZoneShift - Per-App Timezone Spoofer",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7545",
-      "source": {
-        "sha256": "cd866bf04d6f1226376933207eb4864acf8e30a1b056b0ceab3421a7e71cb4e8",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6aa2a5a8829ee08ec59bdfd7e9057922fea422f3/mods/zoneshift.wh.cpp"
-      }
-    },
     "zoomit": {
       "details": {
         "defaultSorting": 0,
