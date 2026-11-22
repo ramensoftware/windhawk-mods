@@ -24638,7 +24638,7 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1795205088000,
+        "updated": 1795316500000,
         "users": 36
       },
       "metadata": {
@@ -24661,7 +24661,7 @@
         ],
         "license": "MIT",
         "name": "Windows Border Switch",
-        "version": "1.2.1"
+        "version": "1.2.6"
       },
       "metadataEnglish": {
         "description": "Hide system-drawn borders on app windows and shell elements"

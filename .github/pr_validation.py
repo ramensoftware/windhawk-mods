@@ -1674,11 +1674,27 @@ MOD_NON_WINDOWS_TARGET_MODULES = {
 # Mods accepted with noUndecoratedSymbols, with their symbol hook targets.
 # Hooking any other target brings back the manual inspection.
 MOD_NO_UNDECORATED_SYMBOLS_TARGETS = {
+    'brave-acrylic': {'chrome.dll'},
     'chrome-context-menu-items': {'chrome.dll'},
     'chrome-native-ui-tweaks': {'chrome.dll'},
+    'office-fix-account-disp-name': {'mso30win32client.dll'},
+    'office-ui-reverter-universal': {'mso40uiwin32client.dll'},
     'word-image-resize-anti-flip': {'oart.dll'},
     'word-mathtype-dark-fix': {'wwlib.dll'},
     'word-omath-shade-fix': {'wwlib.dll'},
+    'word-pdf-lossless-export': {'mso.dll'},
+}
+
+# Mods accepted with onlineCacheUrl, with their symbol hook targets.
+# Hooking any other target brings back the manual inspection.
+MOD_ONLINE_CACHE_URL_TARGETS = {
+    'brave-acrylic': {'chrome.dll'},
+    'office-fix-account-disp-name': {'mso30win32client.dll'},
+    'office-ui-reverter-universal': {'mso40uiwin32client.dll'},
+    'word-image-resize-anti-flip': {'oart.dll'},
+    'word-mathtype-dark-fix': {'wwlib.dll'},
+    'word-omath-shade-fix': {'wwlib.dll'},
+    'word-pdf-lossless-export': {'mso.dll'},
 }
 
 
@@ -1737,10 +1753,12 @@ def get_symbol_hook_blocks(mod_source: str):
         yield line_num, target_from_name, targets_from_comment
 
 
-def is_no_undecorated_symbols_accepted(mod_id: str, mod_source: str):
-    """Whether the mod is accepted with noUndecoratedSymbols and all of its symbol
-    hook targets are known and among the accepted ones."""
-    accepted_targets = MOD_NO_UNDECORATED_SYMBOLS_TARGETS.get(mod_id)
+def is_symbol_option_accepted(
+    mod_targets: dict[str, set[str]], mod_id: str, mod_source: str
+):
+    """Whether the mod is in mod_targets and all of its symbol hook targets are
+    known and among the accepted ones."""
+    accepted_targets = mod_targets.get(mod_id)
     if not accepted_targets:
         return False
 
@@ -1839,6 +1857,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
         (r'\bWh_FindNextSymbol\b', 'Wh_FindNextSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
         (r'\bWh_FindCloseSymbol\b', 'Wh_FindCloseSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
         (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
+        (r'\bonlineCacheUrl\b', 'onlineCacheUrl', 'It\'s usually best to let Windhawk handle the online symbol cache'),
         (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
         (r'\b__ptr64\b', '__ptr64', 'Windhawk doesn\'t use symbols with __ptr64 markers (UNDNAME_NO_PTR64)'),
         (r'\b__try\b', '__try', 'Using SEH is usually discouraged'),
@@ -1847,8 +1866,11 @@ def validate_specific_keywords(path: Path, mod_source: str):
     # fmt: on
 
     mod_id = path.name.removesuffix('.wh.cpp')
-    no_undecorated_symbols_accepted = is_no_undecorated_symbols_accepted(
-        mod_id, mod_source
+    no_undecorated_symbols_accepted = is_symbol_option_accepted(
+        MOD_NO_UNDECORATED_SYMBOLS_TARGETS, mod_id, mod_source
+    )
+    online_cache_url_accepted = is_symbol_option_accepted(
+        MOD_ONLINE_CACHE_URL_TARGETS, mod_id, mod_source
     )
 
     for line_num, line in enumerate(mod_source_lines, start=1):
@@ -1861,6 +1883,9 @@ def validate_specific_keywords(path: Path, mod_source: str):
                     continue
 
                 if word == 'noUndecoratedSymbols' and no_undecorated_symbols_accepted:
+                    continue
+
+                if word == 'onlineCacheUrl' and online_cache_url_accepted:
                     continue
 
                 add_review_item(

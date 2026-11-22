@@ -7,7 +7,7 @@
 // @description:de-DE Blendet die vom System gezeichneten Rahmen von Anwendungsfenstern und Shell-Elementen aus
 // @description:pt-BR Oculta as bordas que o sistema desenha nas janelas de aplicativos e nos elementos do shell
 // @description:zh-CN 隐藏由系统为应用窗口和外壳元素绘制的边框
-// @version         1.2.1
+// @version         1.2.6
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -22,7 +22,7 @@
 // @architecture    x86-64
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -luuid -ladvapi32
 // ==/WindhawkMod==
-// Build: 50
+// Build: 55
 
 // ==WindhawkModReadme==
 /*
@@ -1188,17 +1188,46 @@ std::mutex g_shellXamlMutex;
 std::atomic<unsigned> g_shellXamlMask;
 std::atomic<bool> g_shellXamlStopping;
 Worker g_shellXamlWorker;
+winrt::handle g_shellContentChanged;
+Worker g_shellSymbolWorker;
+winrt::handle g_shellSymbolWake;
+
+void WakeShellSymbolWorker() {
+    if (g_shellSymbolWake) {
+        SetEvent(g_shellSymbolWake.get());
+    }
+}
+
+void NotifyShellContentChanged() {
+    if (g_shellXamlStopping) {
+        return;
+    }
+    if (g_shellContentChanged) {
+        SetEvent(g_shellContentChanged.get());
+    }
+    WakeShellSymbolWorker();
+}
 
 template<class Source>
 struct XamlSources {
     std::vector<std::pair<DWORD, winrt::weak_ref<Source>>> sources;
 
-    void Add(Source const& source) {
+    bool Add(Source const& source) {
         const DWORD thread = GetCurrentThreadId();
-        std::erase_if(sources, [thread](auto const& entry) {
-            return entry.first == thread && !entry.second.get();
+        bool known = false;
+        std::erase_if(sources, [&](auto const& entry) {
+            if (entry.first != thread) {
+                return false;
+            }
+            auto existing = entry.second.get();
+            known |= existing == source;
+            return !existing;
         });
+        if (known) {
+            return false;
+        }
         sources.emplace_back(thread, winrt::make_weak(source));
+        return true;
     }
 
     std::vector<Source> OnCurrentThread() {
@@ -1219,9 +1248,9 @@ struct XamlSources {
 };
 
 using WidgetSource = WinUI::Hosting::DesktopWindowXamlSource;
-using TaskbarSource = Xaml::Hosting::DesktopWindowXamlSource;
+using ShellSource = Xaml::Hosting::DesktopWindowXamlSource;
 XamlSources<WidgetSource> g_widgetSources;
-XamlSources<TaskbarSource> g_taskbarSources;
+XamlSources<ShellSource> g_shellSources;
 XamlSources<Xaml::FrameworkElement> g_taskViewRoots;
 XamlSources<Xaml::FrameworkElement> g_controlCenterElements;
 std::mutex g_sourcesMutex;
@@ -1236,21 +1265,75 @@ std::vector<MeasuredTaskbar> g_measuredTaskbars;
 decltype(&RoGetActivationFactory) g_getActivationFactory;
 using CreateXamlSource = HRESULT(WINAPI*)(void*, void*, void**, void**);
 CreateXamlSource g_createXamlSource;
+using SetXamlContent = HRESULT(WINAPI*)(IUnknown*, void*);
+SetXamlContent g_setXamlContent;
 using ActivateInstance = HRESULT(WINAPI*)(void*, void**);
 ActivateInstance g_createMetadata, g_activateXamlType;
 using GetXamlType = HRESULT(WINAPI*)(void*, HSTRING, void**);
 GetXamlType g_getXamlType;
 std::mutex g_factoryMutex;
 
+bool IsShellXamlWindow(HWND window);
+
+HWND ShellSourceWindow(ShellSource const& source) {
+    HWND island = nullptr;
+    auto native = source.try_as<IDesktopWindowXamlSourceNative>();
+    return native && SUCCEEDED(native->get_WindowHandle(&island)) && island
+        ? GetAncestor(island, GA_ROOT) : nullptr;
+}
+
+bool CurrentThreadOwnsShellXamlWindow() {
+    bool found = false;
+    EnumThreadWindows(GetCurrentThreadId(), [](HWND window, LPARAM result) -> BOOL {
+        if (!IsShellXamlWindow(window)) {
+            return TRUE;
+        }
+        *reinterpret_cast<bool*>(result) = true;
+        return FALSE;
+    }, reinterpret_cast<LPARAM>(&found));
+    return found;
+}
+
 template<class Method, class Interface>
 void HookFactoryMethod(Interface const& instance, size_t slot, Method hook, Method& original) {
     std::lock_guard guard(g_factoryMutex);
-    if (!original) {
+    if (!original && !g_shellXamlStopping) {
         auto table = *reinterpret_cast<void***>(winrt::get_abi(instance));
         if (WindhawkUtils::SetFunctionHook(reinterpret_cast<Method>(table[slot]), hook, &original)) {
             Wh_ApplyHookOperations();
         }
     }
+}
+
+HRESULT WINAPI CaptureShellContent(IUnknown* self, void* content) {
+    const HRESULT hr = g_setXamlContent(self, content);
+    if (SUCCEEDED(hr) && content && !g_shellXamlStopping) {
+        try {
+            ShellSource source{nullptr};
+            winrt::copy_from_abi(source, self);
+            bool notify = true;
+            if (g_shellHost == ShellHost::Explorer) {
+                if (const HWND window = ShellSourceWindow(source)) {
+                    if (!IsShellXamlWindow(window)) {
+                        return hr;
+                    }
+                } else {
+                    // Content can be set before the island has a native window.
+                    notify = CurrentThreadOwnsShellXamlWindow();
+                }
+            }
+            {
+                std::lock_guard guard(g_sourcesMutex);
+                g_shellSources.Add(source);
+            }
+            if (notify) {
+                NotifyShellContentChanged();
+            }
+        } catch (...) {
+            Wh_Log(L"Unable to track XAML island content: %08X", winrt::to_hresult());
+        }
+    }
+    return hr;
 }
 
 template<class Source>
@@ -1260,11 +1343,14 @@ HRESULT WINAPI CaptureXamlSource(void* factory, void* outer, void** inner, void*
         try {
             Source source{nullptr};
             winrt::copy_from_abi(source, *result);
-            std::lock_guard guard(g_sourcesMutex);
             if constexpr (std::is_same_v<Source, WidgetSource>) {
+                std::lock_guard guard(g_sourcesMutex);
                 g_widgetSources.Add(source);
             } else {
-                g_taskbarSources.Add(source);
+                // IDesktopWindowXamlSource::put_Content follows get_Content.
+                HookFactoryMethod(source, 7, CaptureShellContent, g_setXamlContent);
+                std::lock_guard guard(g_sourcesMutex);
+                g_shellSources.Add(source);
             }
         } catch (...) {
             Wh_Log(L"Unable to track XAML source: %08X", winrt::to_hresult());
@@ -1408,9 +1494,10 @@ HRESULT WINAPI FindShellFactory(HSTRING classId, REFIID iid, void** result) {
         if (g_shellHost == ShellHost::Widgets && name == winrt::name_of<WidgetSource>()) {
             winrt::copy_from_abi(object, *result);
             HookXamlSource<WidgetSource, WinUI::Hosting::IDesktopWindowXamlSourceFactory>(object);
-        } else if (g_shellHost == ShellHost::Explorer && name == winrt::name_of<TaskbarSource>()) {
+        } else if ((g_shellHost == ShellHost::Explorer || g_shellHost == ShellHost::Flyouts) &&
+                   name == winrt::name_of<ShellSource>()) {
             winrt::copy_from_abi(object, *result);
-            HookXamlSource<TaskbarSource, Xaml::Hosting::IDesktopWindowXamlSourceFactory>(object);
+            HookXamlSource<ShellSource, Xaml::Hosting::IDesktopWindowXamlSourceFactory>(object);
         } else if (g_shellHost == ShellHost::Explorer && name == kSwitcherMetadata) {
             winrt::copy_from_abi(object, *result);
             if (auto factory = object.try_as<Foundation::IActivationFactory>()) {
@@ -1637,21 +1724,45 @@ void ScanShellTree(Xaml::DependencyObject const& node, unsigned mask, unsigned d
     }
 }
 
+Xaml::UIElement ShellSourceContent(ShellSource const& source) noexcept try {
+    return source.Content();
+} catch (...) {
+    Wh_Log(L"Unable to read XAML island content: %08X", winrt::to_hresult());
+    return nullptr;
+}
+
 void ScanControlCenter(unsigned mask) {
+    std::vector<ShellSource> sources;
     std::vector<Xaml::FrameworkElement> elements;
     {
         std::lock_guard guard(g_sourcesMutex);
+        sources = g_shellSources.OnCurrentThread();
         elements = g_controlCenterElements.OnCurrentThread();
     }
     std::vector<Xaml::XamlRoot> scanned;
-    for (auto const& element : elements) {
-        if (auto root = element.XamlRoot(); root && std::ranges::find(scanned, root) == scanned.end()) {
-            scanned.push_back(root);
-            ScanShellTree(root.Content(), mask);
-            for (auto popup : Xaml::Media::VisualTreeHelper::GetOpenPopupsForXamlRoot(root)) {
-                ScanShellTree(popup.Child(), mask);
-            }
+    auto scan = [&](Xaml::UIElement const& element) {
+        if (!element) {
+            return;
         }
+        try {
+            if (auto root = element.XamlRoot(); !root) {
+                ScanShellTree(element, mask);
+            } else if (std::ranges::find(scanned, root) == scanned.end()) {
+                scanned.push_back(root);
+                ScanShellTree(root.Content(), mask);
+                for (auto popup : Xaml::Media::VisualTreeHelper::GetOpenPopupsForXamlRoot(root)) {
+                    ScanShellTree(popup.Child(), mask);
+                }
+            }
+        } catch (...) {
+            Wh_Log(L"Unable to scan Quick Settings XAML root: %08X", winrt::to_hresult());
+        }
+    };
+    for (auto const& source : sources) {
+        scan(ShellSourceContent(source));
+    }
+    for (auto const& element : elements) {
+        scan(element);
     }
 }
 
@@ -1672,11 +1783,11 @@ void ScanShellOnUiThread(HWND hwnd, bool refresh) noexcept try {
         const unsigned keyboardMask = mask & BorderBit(ShellBorder::KeyboardLayout);
         const unsigned shellMask = mask & ~keyboardMask;
         const bool keyboardWindow = keyboardMask && IsKeyboardLayoutWindow(hwnd);
-        std::vector<TaskbarSource> taskbars;
+        std::vector<ShellSource> sources;
         std::vector<Xaml::FrameworkElement> taskViews, measuredTaskbars;
         {
             std::lock_guard guard(g_sourcesMutex);
-            taskbars = g_taskbarSources.OnCurrentThread();
+            sources = g_shellSources.OnCurrentThread();
             taskViews = g_taskViewRoots.OnCurrentThread();
             if (mask & BorderBit(ShellBorder::Taskbar)) {
                 const DWORD thread = GetCurrentThreadId();
@@ -1689,18 +1800,15 @@ void ScanShellOnUiThread(HWND hwnd, bool refresh) noexcept try {
                 }
             }
         }
-        for (auto const& taskbar : taskbars) {
-            if (keyboardWindow) {
-                HWND island = nullptr;
-                auto native = taskbar.try_as<IDesktopWindowXamlSourceNative>();
-                if (native && SUCCEEDED(native->get_WindowHandle(&island)) &&
-                    GetAncestor(island, GA_ROOT) == hwnd) {
-                    ScanShellTree(taskbar.Content(), keyboardMask);
-                    continue;
-                }
+        for (auto const& source : sources) {
+            const HWND window = ShellSourceWindow(source);
+            if (window && !IsShellXamlWindow(window)) {
+                continue;
             }
-            if (shellMask) {
-                ScanShellTree(taskbar.Content(), shellMask);
+            if (keyboardWindow && window == hwnd) {
+                ScanShellTree(ShellSourceContent(source), keyboardMask);
+            } else if (shellMask) {
+                ScanShellTree(ShellSourceContent(source), shellMask);
             }
         }
         for (auto const& frame : measuredTaskbars) {
@@ -1758,12 +1866,14 @@ void RememberControlCenterElement(IUnknown* object) noexcept try {
     if (FAILED(object->QueryInterface(winrt::guid_of<Xaml::FrameworkElement>(), winrt::put_abi(element)))) {
         return;
     }
-    std::lock_guard guard(g_sourcesMutex);
-    const auto elements = g_controlCenterElements.OnCurrentThread();
-    if (!g_shellXamlStopping && std::ranges::find(elements, element) == elements.end()) {
-        g_controlCenterElements.Add(element);
-        Wh_Log(L"Discovered Quick Settings view on thread %lu", GetCurrentThreadId());
+    {
+        std::lock_guard guard(g_sourcesMutex);
+        if (g_shellXamlStopping || !g_controlCenterElements.Add(element)) {
+            return;
+        }
     }
+    NotifyShellContentChanged();
+    Wh_Log(L"Discovered Quick Settings content on thread %lu", GetCurrentThreadId());
 } catch (...) {
     Wh_Log(L"Unable to track Quick Settings content: %08X", winrt::to_hresult());
 }
@@ -1779,14 +1889,16 @@ HRESULT WINAPI ControlCenterFocusHook(IUnknown* self, void* args) {
 HRESULT WINAPI ControlCenterConnectHook(IUnknown* self, int id, IUnknown* target) {
     const HRESULT hr = g_controlCenterConnect(self, id, target);
     if (SUCCEEDED(hr)) {
-        RememberControlCenterElement(self);
+        // Connect runs inside InitializeComponent. Track the constructed child
+        // so the deferred scan can find its root once it is attached.
+        RememberControlCenterElement(target);
     }
     return hr;
 }
 
 enum class ControlCenterHookResult { Installed, Missing, Retry, Failed };
 
-ControlCenterHookResult HookControlCenter(HMODULE module, bool applyNow) {
+ControlCenterHookResult HookControlCenter(HMODULE module) {
     void* focus = nullptr;
     void* connect = nullptr;
     const WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[] = {
@@ -1802,11 +1914,15 @@ ControlCenterHookResult HookControlCenter(HMODULE module, bool applyNow) {
         Wh_Log(L"Quick Settings discovery symbols are unavailable on this build");
         return ControlCenterHookResult::Missing;
     }
+    std::lock_guard guard(g_factoryMutex);
+    if (g_shellXamlStopping) {
+        return ControlCenterHookResult::Failed;
+    }
     const bool focusHook = focus && WindhawkUtils::SetFunctionHook(
         reinterpret_cast<ControlCenterFocus>(focus), ControlCenterFocusHook, &g_controlCenterFocus);
     const bool connectHook = connect && WindhawkUtils::SetFunctionHook(
         reinterpret_cast<ControlCenterConnect>(connect), ControlCenterConnectHook, &g_controlCenterConnect);
-    const bool installed = (focusHook || connectHook) && (!applyNow || Wh_ApplyHookOperations());
+    const bool installed = (focusHook || connectHook) && Wh_ApplyHookOperations();
     Wh_Log(L"Quick Settings discovery hooks: %s", installed ? L"ready" : L"unavailable");
     return installed ? ControlCenterHookResult::Installed : ControlCenterHookResult::Failed;
 }
@@ -1816,7 +1932,7 @@ struct ControlCenterHookRetry {
     ULONGLONG nextAttempt = 0;
     bool finished = false;
 
-    DWORD Update(bool applyNow) {
+    DWORD Update() {
         if (finished) {
             return INFINITE;
         }
@@ -1830,7 +1946,7 @@ struct ControlCenterHookRetry {
         }
         // Allow Windhawk's regular and startup failure caches to expire.
         constexpr DWORD delays[] = {65'000, 4 * 60 * 60 * 1'000 + 2'000};
-        if (HookControlCenter(module, applyNow) != ControlCenterHookResult::Retry) {
+        if (HookControlCenter(module) != ControlCenterHookResult::Retry) {
             finished = true;
             return INFINITE;
         }
@@ -1916,6 +2032,9 @@ TaskbarHookResult HookTaskbarLayout(HMODULE module) {
         return TaskbarHookResult::Missing;
     }
     std::lock_guard guard(g_factoryMutex);
+    if (g_shellXamlStopping) {
+        return TaskbarHookResult::Missing;
+    }
     // Windhawk removes disabled hooks after applying, including failed installs.
     return WindhawkUtils::SetFunctionHook(reinterpret_cast<MeasureTaskbarFrame>(measure),
                                           MeasureTaskbarFrameHook, &g_measureTaskbarFrame) &&
@@ -1979,6 +2098,27 @@ struct TaskbarLayoutRetry {
         return INFINITE;
     }
 };
+
+DWORD WINAPI RunShellSymbolWorker(void* parameter) {
+    const HANDLE stop = static_cast<HANDLE>(parameter);
+    const HANDLE handles[] = {stop, g_shellSymbolWake.get()};
+    const DWORD count = g_shellSymbolWake ? ARRAYSIZE(handles) : 1;
+    TaskbarLayoutRetry taskbarLayout;
+    while (WaitForSingleObject(stop, 0) == WAIT_TIMEOUT && !g_shellXamlStopping) {
+        const unsigned mask = g_shellXamlMask.load();
+        DWORD timeout = INFINITE;
+        if (g_shellHost == ShellHost::Explorer && (mask & BorderBit(ShellBorder::Taskbar))) {
+            timeout = taskbarLayout.Update();
+        } else if (g_shellHost == ShellHost::Flyouts && (mask & BorderBit(ShellBorder::QuickSettings))) {
+            timeout = g_controlCenterHookRetry.Update();
+        }
+        const DWORD result = WaitForMultipleObjects(count, handles, FALSE, timeout);
+        if (result != WAIT_TIMEOUT && (count == 1 || result != WAIT_OBJECT_0 + 1)) {
+            break;
+        }
+    }
+    return 0;
+}
 
 UINT ShellScanMessage() {
     static const UINT message = RegisterWindowMessageW(L"Windhawk.WindowsBorderSwitch.ScanShellXaml");
@@ -2073,18 +2213,25 @@ bool RefreshShellXamlWindows(bool refresh, bool visibleOnly = false) {
 bool g_shellXamlScanPending;
 UINT_PTR g_shellXamlScanTimer;
 
+void ScheduleShellScan() {
+    if (!g_shellXamlScanPending) {
+        g_shellXamlScanPending = true;
+        if (g_shellXamlScanTimer) {
+            KillTimer(nullptr, g_shellXamlScanTimer);
+        }
+        g_shellXamlScanTimer = SetTimer(nullptr, 0, 100, nullptr);
+    }
+}
+
 void CALLBACK OnShellXamlWindow(HWINEVENTHOOK, DWORD event, HWND window, LONG object, LONG child, DWORD, DWORD) {
     if (g_shellHost == ShellHost::Explorer && event == EVENT_OBJECT_CREATE && window &&
         ClassIs(window, L"Windows.UI.Composition.DesktopWindowContentBridge")) {
         window = GetAncestor(window, GA_ROOT);
     }
     if (event != EVENT_OBJECT_DESTROY && object == OBJID_WINDOW && child == CHILDID_SELF &&
-        window && IsShellXamlWindow(window) && !g_shellXamlScanPending) {
-        g_shellXamlScanPending = true;
-        if (g_shellXamlScanTimer) {
-            KillTimer(nullptr, g_shellXamlScanTimer);
-        }
-        g_shellXamlScanTimer = SetTimer(nullptr, 0, 100, nullptr);
+        window && IsShellXamlWindow(window)) {
+        ScheduleShellScan();
+        WakeShellSymbolWorker();
     }
 }
 
@@ -2102,20 +2249,13 @@ DWORD WINAPI RunShellXamlWorker(void* parameter) {
     if (RefreshShellXamlWindows(false, watchVisiblePanels) && watchVisiblePanels) {
         g_shellXamlScanTimer = SetTimer(nullptr, 0, kVisiblePanelScanMs, nullptr);
     }
-    TaskbarLayoutRetry taskbarLayout;
+    const HANDLE wakeHandles[] = {stop, g_shellContentChanged.get()};
+    const DWORD wakeCount = g_shellContentChanged ? ARRAYSIZE(wakeHandles) : 1;
     while (WaitForSingleObject(stop, 0) == WAIT_TIMEOUT) {
-        DWORD timeout = INFINITE;
-        if (g_shellHost == ShellHost::Explorer) {
-            timeout = taskbarLayout.Update();
-        } else if (g_shellHost == ShellHost::Flyouts &&
-                   (g_shellXamlMask.load() & BorderBit(ShellBorder::QuickSettings))) {
-            timeout = g_controlCenterHookRetry.Update(true);
-        }
-        const DWORD result = MsgWaitForMultipleObjects(1, &stop, FALSE, timeout, QS_ALLINPUT);
-        if (result == WAIT_TIMEOUT) {
-            continue;
-        }
-        if (result != WAIT_OBJECT_0 + 1) {
+        const DWORD result = MsgWaitForMultipleObjects(wakeCount, wakeHandles, FALSE, INFINITE, QS_ALLINPUT);
+        if (wakeCount > 1 && result == WAIT_OBJECT_0 + 1) {
+            ScheduleShellScan();
+        } else if (result != WAIT_OBJECT_0 + wakeCount) {
             break;
         }
         MSG message;
@@ -2124,6 +2264,10 @@ DWORD WINAPI RunShellXamlWorker(void* parameter) {
             if (!message.hwnd && message.message == WM_TIMER && message.wParam == g_shellXamlScanTimer) {
                 KillTimer(nullptr, std::exchange(g_shellXamlScanTimer, 0));
                 g_shellXamlScanPending = true;
+                if (g_shellHost == ShellHost::Flyouts) {
+                    // ControlCenter.dll can load after the window's show event.
+                    WakeShellSymbolWorker();
+                }
             } else {
                 TranslateMessage(&message);
                 DispatchMessageW(&message);
@@ -2157,6 +2301,10 @@ void ApplyShellXamlSettings(unsigned mask) {
     } else {
         g_shellXamlWorker.Stop();
     }
+    if (mask & (BorderBit(ShellBorder::Taskbar) | BorderBit(ShellBorder::QuickSettings))) {
+        g_shellSymbolWorker.Start(RunShellSymbolWorker);
+    }
+    WakeShellSymbolWorker();
 }
 
 WindowEffect ReadSetting(PCWSTR name) {
@@ -2258,15 +2406,19 @@ BOOL Wh_ModInit() {
     } else if (_wcsicmp(name, L"WidgetBoard.exe") == 0) {
         g_shellHost = ShellHost::Widgets;
     }
-    if (g_shellHost == ShellHost::Explorer || g_shellHost == ShellHost::Widgets) {
+    if (g_shellHost == ShellHost::Explorer || g_shellHost == ShellHost::Flyouts) {
+        g_shellContentChanged.attach(CreateEventW(nullptr, FALSE, FALSE, nullptr));
+        g_shellSymbolWake.attach(CreateEventW(nullptr, FALSE, FALSE, nullptr));
+    }
+    if (g_shellHost == ShellHost::Explorer || g_shellHost == ShellHost::Widgets ||
+        g_shellHost == ShellHost::Flyouts) {
         auto combase = GetModuleHandleW(L"combase.dll");
         auto factory = combase ? reinterpret_cast<decltype(g_getActivationFactory)>(
                                     GetProcAddress(combase, "RoGetActivationFactory")) : nullptr;
-        if (!factory || !WindhawkUtils::SetFunctionHook(factory, FindShellFactory, &g_getActivationFactory)) {
+        if ((!factory || !WindhawkUtils::SetFunctionHook(factory, FindShellFactory, &g_getActivationFactory)) &&
+            g_shellHost != ShellHost::Flyouts) {
             return FALSE;
         }
-    } else if (g_shellHost == ShellHost::Flyouts) {
-        g_controlCenterHookRetry.Update(false);
     }
     return g_shellHost != ShellHost::Unknown;
 }
@@ -2280,7 +2432,11 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModBeforeUninit() {
-    g_shellXamlStopping = true;
+    {
+        // Close hook registration after any operation already holding the lock.
+        std::lock_guard guard(g_factoryMutex);
+        g_shellXamlStopping = true;
+    }
     g_shellXamlWorker.Stop();
     std::unordered_set<DWORD> editedThreads;
     {
@@ -2298,6 +2454,8 @@ void Wh_ModBeforeUninit() {
             return FALSE;
         }, 0);
     }
+    // A lookup may still be finishing inside Windhawk. Drain it before unload.
+    g_shellSymbolWorker.Stop();
     g_windowWorker.Stop();
     g_windowSettingsChanged.close();
 }

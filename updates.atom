@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-22T02:05:01.000Z</updated>
+    <updated>2026-11-22T03:01:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Border Switch 1.2.6]]></title>
+        <id>https://windhawk.net/mods/windows-border-switch#c7efc6a870f85a9bcdf3573d16482340d68f8ca9</id>
+        <link href="https://windhawk.net/mods/windows-border-switch"/>
+        <updated>2026-11-22T03:01:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix taskbar, Quick Settings, and media control borders that could stay visible after a symbol lookup failure.</li>
+<li>Discover borders through XAML islands and keep border updates running while symbols load.</li>
+<li>Prevent XAML hook registration during unload and skip scans triggered by regular File Explorer windows.</li>
+</ul>
+]]></content>
+        <author>
+            <name>CTravkin</name>
+            <uri>https://github.com/CTravkin</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Item Pins 1.1.7]]></title>
         <id>https://windhawk.net/mods/explorer-item-pins#1f0a0c8c8a855d45889855ac6c329e9b5b5d5915</id>
@@ -445,38 +461,6 @@ an update for each Explorer build.</p>
         <author>
             <name>jayll1303</name>
             <uri>https://github.com/jayll1303</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[macOS Gestures - Mission Control 1.6.0]]></title>
-        <id>https://windhawk.net/mods/macos-gestures-mission-control#11efbe449849c5cb5773643a522bf4af22b28b90</id>
-        <link href="https://windhawk.net/mods/macos-gestures-mission-control"/>
-        <updated>2026-11-20T22:04:23.000Z</updated>
-        <content type="html"><![CDATA[<h3>New</h3>
-<ul>
-<li>Four-finger option: the gestures can use three or four fingers. The other finger count keeps Windows' own gestures.</li>
-<li>Win+Tab opens Mission Control in place of Windows' Task View, on the monitor of the window in front, also on PCs without a touchpad. Press Win+Tab again, Esc or pick a window to close it. Can be turned off in the settings.</li>
-<li>App Exposé: swiping down while Mission Control is closed shows the windows of the app in front, without the desktops bar. Swipe up to leave. With the desktop or the taskbar in front, or an app that has no windows on this desktop, all the windows are shown.</li>
-<li>&quot;Swipe down (Mission Control closed)&quot; setting: App Exposé (default), all windows of the current desktop, or minimize all windows.
-<ul>
-<li>Minimizing fires once, after the fingers travel 35% of &quot;Swipe distance&quot;.</li>
-<li>It affects the windows of the current virtual desktop, on every monitor, with no limit on their number.</li>
-<li>It uses the same filters as Mission Control (for example, always-on-top).</li>
-<li>Windows without a minimize button are skipped.</li>
-<li>Windows are minimized from the bottom of the z-order up, so Windows doesn't activate and animate the next window after each one.</li>
-<li>A swipe up brings them back, in the same order, as long as nothing else was opened or restored by hand in the meantime and you are on the same desktop. Otherwise the swipe up opens Mission Control as usual.</li>
-</ul>
-</li>
-<li>Alt+Tab inside Mission Control and App Exposé works as an internal switcher instead of opening Windows' switcher on top of the overlay, which used to break it. It moves the selection between the windows (Shift goes back, holding Tab keeps cycling) and picks the selected one when Alt is released. The first press goes to the window after the one you were in, and small touchpad nudges while cycling don't drop the selection.</li>
-<li>&quot;Alt+Tab while Mission Control is open&quot; setting: cycle (default), ignore, or let Windows handle it.</li>
-<li>Reorder desktops: drag a card of the desktops bar sideways to move that desktop. Unnamed desktops are renumbered by position, like in Task View. Clicking a card now switches on release, so a click can be told apart from a drag. Requires Windows 11 24H2 (26100.2605) or later; on other builds the cards can't be dragged and everything else keeps working.</li>
-<li>Titles are drawn with DirectWrite.</li>
-<li>README: added a &quot;Support the project&quot; section.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Frixed</name>
-            <uri>https://github.com/frixed</uri>
         </author>
     </entry>
 </feed>
