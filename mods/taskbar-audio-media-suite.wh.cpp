@@ -17,6 +17,17 @@
 A real-time audio spectrum visualizer, media player control bar, and custom media/volume flyouts for the Windows taskbar.
 Captures system audio (WASAPI Loopback or microphone input) and integrates with Windows media players (Spotify, browsers, etc.) via GSMTC.
 
+## Screenshots
+
+**Taskbar Panel (Media Info + Controls + Spectrum Visualizer)**
+![Taskbar Panel](https://raw.githubusercontent.com/MrSpy00/windhawk-mods/screenshots/screenshots/taskbar-audio-media-suite-panel.png)
+
+**Track-Change Media Flyout**
+![Media Flyout](https://raw.githubusercontent.com/MrSpy00/windhawk-mods/screenshots/screenshots/taskbar-audio-media-suite-media-flyout.png)
+
+**Volume & Lock-Key OSD Flyout**
+![Volume Flyout](https://raw.githubusercontent.com/MrSpy00/windhawk-mods/screenshots/screenshots/taskbar-audio-media-suite-volume-flyout.png)
+
 ## Visualizer Styles
 | ID | Style        | Description                                |
 |----|--------------|--------------------------------------------|
@@ -48,8 +59,12 @@ Captures system audio (WASAPI Loopback or microphone input) and integrates with 
 - **Auto-Hide**: Automatically hides on fullscreen apps, audio silence, or idle media timeout
 - **Presets**: Built-in layout presets plus 3 customizable user preset slots stored in Windhawk mod storage
 
+## Similar Mods & Attribution
+- **`taskbar-music-lounge` by `Hashah2311`**: Credits to `Hashah2311` — the `CreateWindowInBand` (`ZBID_IMMERSIVE_NOTIFICATION`) panel placement, DWM `SetWindowCompositionAttribute` acrylic setup, taskbar `EVENT_OBJECT_LOCATIONCHANGE` hook, and GSMTC session/thumbnail structure build upon the architecture of `taskbar-music-lounge`. Compared to `taskbar-music-lounge`, this mod adds an 8-style / 6-color-mode WASAPI FFT spectrum visualizer with particles, interactive track seeking, an acrylic track-change flyout, a volume & Caps/Num/Scroll Lock OSD flyout, and 6 layout presets.
+- **`taskbar-fluent-media-player` & `taskbar-media-widget`**: Those mods inject or hook into the Windows 11 taskbar XAML tree (or tray child windows), whereas this mod runs as an independent `ZBID_IMMERSIVE_NOTIFICATION` band window with custom GDI+ rendering and coupled media/volume OSD flyouts.
+- **`osd-custom-pill` & `lock-keys-notifier`**: Those provide standalone OSD popups, whereas the media and volume/lock-key flyouts here share the panel's GSMTC session state, dominant album-art color, and positioning relative to the taskbar panel.
+
 ## Notes
-- **All-in-one design**: Combines a 8-style spectrum visualizer, GSMTC media controls, acrylic track-change flyout, volume/lock-key OSD, and layout presets into one cohesive taskbar-band capsule.
 - **Native Windows OSD**: Showing the custom volume flyout does not suppress the built-in Windows volume OSD; both may appear together.
 - **Microphone mode**: Setting Audio Capture Source to Microphone causes Windows to show the microphone-in-use indicator on Explorer.
 - **Presets**: Selecting Preset 1–6 overrides individual layout size settings; keeping `Save Current Settings` active overwrites that slot on settings changes.
