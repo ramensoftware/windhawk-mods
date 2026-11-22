@@ -1,43 +1,47 @@
 // ==WindhawkMod==
 // @id              autoclean
 // @name            AutoClean
-// @description     Zero-UI event-driven background temp cleaner with AI agent temp protection, KB/MB/GB/TB thresholds, oldest-first pruning, and OLED toasts
-// @version         2.2026.1811
+// @description     Event-driven background Temp folder and Recycle Bin cleaner with AI agent protection, oldest-first pruning, mouse shortcuts, and OLED toasts
+// @version         2.2026.2211
 // @author          Ashix
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @donateUrl       https://ko-fi.com/kashix
-// @include         windhawk-mod.exe
 // @include         windhawk.exe
-// @compilerOptions -ladvapi32 -lole32 -loleaut32 -lshell32 -lshlwapi -luser32 -lgdi32 -lgdiplus -ldwmapi -lwtsapi32 -luuid
+// @compilerOptions -ladvapi32 -lole32 -loleaut32 -lshell32 -lshlwapi -lshcore -luser32 -lgdi32 -lgdiplus -ldwmapi -lwtsapi32 -luuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # AutoClean
 
-Silent, zero-UI background temporary folder cleaner running in a dedicated Windhawk Tool Mod process.
+Silent, event-driven background Temp folder and Recycle Bin cleaner running in a dedicated Windhawk Tool Mod process.
+
+![AutoClean OLED Toast](https://raw.githubusercontent.com/k-ashix/ashix-windhawk-mods/main/Auto_Clean/Auto_Clean.png)
 
 ## Action Triggers — Temp & Recycle Bin
 | Icon | Shortcut / Trigger | Action |
 |---|---|---|
-| 🖱️ | `3x Left-Click` (`Desktop & Taskbar`) | Clean Temp folders immediately and show OLED corner toast |
-| 🖱️ | `Middle-Click` (`1x`/`2x`/`3x`, `Desktop & Taskbar`) | Empty Recycle Bin immediately and show OLED corner toast |
-| 🚀 | `Windows Login / Startup` | Clean Temp folders and/or Recycle Bin automatically after login |
+| 🖱️ | `3x Left-Click` (`Desktop & Taskbar empty space`) | Clean Temp folders immediately and show OLED corner toast |
+| 🖱️ | `Middle-Click` (`1x`/`2x`/`3x`, `Desktop & Taskbar empty space`) | Empty Recycle Bin immediately and show OLED corner toast |
+| 🚀 | `Windows Login / Startup` | Clean Temp folders (and optionally Recycle Bin) automatically after login |
 | 📦 | `Size Limit` (`KB`/`MB`/`GB`/`TB`) | Prune oldest items first or full sweep when Temp or Recycle Bin hits limit |
 | 🔢 | `File Count Limit` (`X items`) | Prune oldest-deleted items or empty Recycle Bin at `X` items |
-| ⏱️ | `Timer Schedule` (`15s` to `Days`) | Clean Temp and Recycle Bin on independent repeating schedules |
-| ⚠️ | `Low Disk Space Emergency` | Immediately free Temp and Recycle Bin when drive free space drops below floor |
+| ⏱️ | `Timer / Retention` | Clean Temp on a repeating schedule and expire Recycle Bin items older than your retention window |
+| ⚠️ | `Low Disk Space Emergency` | Free Temp and oldest Recycle Bin items on the low-space drive when free space crosses below the floor |
 
-## Features
-- **Event-Driven Watching**: Uses `ReadDirectoryChangesW` so idle CPU and disk usage stay at zero until temp files are actually written.
-- **Dual Mutual Triggers**: Run by **Size Threshold** (`KB`/`MB`/`GB`/`TB`, debounced 15–30s+), by **Periodic Timer** (`15s` up to `Days`), or **both together**.
-- **Oldest-First Target Pruning vs. Full Sweep**: Separate toggles let you prune only the oldest files down to a target percentage of your threshold, or perform a full sweep of all eligible files.
-- **Background I/O Priority**: Runs scans and deletions under `THREAD_MODE_BACKGROUND_BEGIN` so foreground builds, Photoshop, Blender, and games never stall.
-- **Fullscreen & Battery Smart Deferral**: Automatically defers non-emergency runs during fullscreen apps/games or on battery power.
-- **Low-Disk Emergency Floor**: Triggers an immediate cleanup if drive free space drops below your `MB`/`GB`/`TB` floor.
-- **AI Agents Temp Protection**: Respects local `%TEMP%` folders created by AI coding & desktop agents (Claude Code, Codex, Hermes Agent, OpenClaw, Gemini CLI, OpenCode, Cursor, Windsurf, Goose, Aider, Copilot, MCP) by default, with a configurable pattern list so agents manage their own scratchpads and worktrees.
-- **Security & Safety Guards**: Strict `%TEMP%` allowlist (`C:\Windows\Temp` opt-in without UAC), reparse-point/junction/symlink blocking, Windows file-lock respect, minimum file age grace period, wildcard exclusions, and Dry-Run logging.
+## How AutoClean Differs from Windows Storage Sense
+Windows Storage Sense covers basic periodic Temp and Recycle Bin cleanup, whereas AutoClean adds:
+- **True Event-Driven Watching**: Uses `ReadDirectoryChangesW` for `%TEMP%` and `SHChangeNotifyRegister` on the Recycle Bin so idle CPU and disk usage stay at zero (secondary HDDs can spin down normally).
+- **AI Agent `%TEMP%` Protection**: Preserves local `%TEMP%` scratchpads and worktrees created by AI coding & desktop agents (Claude Code, Codex, Hermes, OpenClaw, Gemini CLI, OpenCode, Cursor, Windsurf, Goose, Aider, Copilot, MCP) by default.
+- **Instant Empty-Space Mouse Shortcuts**: Triple left-click empty Desktop/Taskbar space to clean Temp, or middle-click empty space to empty the Recycle Bin, with UI Automation checks so taskbar buttons and desktop icons are never triggered.
+- **Granular Controls & Smart Deferral**: Exact `KB`/`MB`/`GB`/`TB` size caps, oldest-first pruning to a target percentage, wildcard exclusions, fullscreen/battery deferral, single-shot Dry-Run simulation, and borderless OLED corner toasts.
+
+## Safety Guards
+- **Temp Path Validation**: Refuses to clean drive roots, `%windir%`, `%USERPROFILE%`, or known user folders (Desktop, Documents, Downloads, Pictures, Music, Videos, AppData) if `%TEMP%` is misconfigured.
+- **Minimum Age Grace Periods**: Honored on all automatic Temp sweeps (default 10 minutes) and Recycle Bin pruning (default 24 hours / 1440 minutes) so active installers, build tools, and recent deletions stay protected.
+- **Reparse-Point & Attribute Safety**: Skips junctions/symlinks, respects Windows file locks, and restores Read-Only/Hidden/System attributes if a locked file cannot be deleted.
+- **Safe Recycle Bin Defaults**: Automatic Recycle Bin size/count thresholds and startup cleaning are off by default; only 30-day age expiry is enabled out of the box.
 */
 // ==/WindhawkModReadme==
 
@@ -87,7 +91,7 @@ Silent, zero-UI background temporary folder cleaner running in a dedicated Windh
     - TB: TB
   - debounceSeconds: 20
     $name: Write debounce interval (seconds)
-    $description: Wait time after Temp writes before measuring size (5 to 3600 seconds).
+    $description: Wait time after Temp writes before measuring size (5 to 3600 seconds; capped under continuous writes).
   - timerEnabled: true
     $name: Enable Temp periodic timer
     $description: Automatically clean Temp folders on a fixed schedule (default every 1 hour).
@@ -106,7 +110,7 @@ Silent, zero-UI background temporary folder cleaner running in a dedicated Windh
     $description: Prune oldest-modified eligible files first until Temp size drops to the target percentage.
   - fullSweep: false
     $name: Always perform full sweep
-    $description: Delete all eligible Temp files instead of stopping at the target percentage.
+    $description: Delete all eligible Temp files (still honoring minimum file age) instead of stopping at the target percentage.
   - targetPercent: 50
     $name: Target percentage to keep (%)
     $description: Stop pruning oldest-first once Temp size is at or below this percentage (10 to 90%).
@@ -125,7 +129,7 @@ Silent, zero-UI background temporary folder cleaner running in a dedicated Windh
     - DesktopOnly: Desktop empty space only
   - minFileAgeMinutes: 10
     $name: Minimum file age (minutes)
-    $description: Skip Temp files modified more recently than this grace period (0 disables).
+    $description: Skip Temp files modified more recently than this grace period on all automatic and manual passes (0 disables).
   - cooldownSeconds: 30
     $name: Post-clean cooldown (seconds)
     $description: Minimum wait after a Temp cleanup before running another automatic pass.
@@ -140,9 +144,9 @@ Silent, zero-UI background temporary folder cleaner running in a dedicated Windh
     $description: File or folder name patterns to skip (e.g. *.lock, windhawk*).
   $name: 2. Temp Folder Cleaner
 - recycleBinCleaner:
-  - sizeThresholdEnabled: true
+  - sizeThresholdEnabled: false
     $name: Enable Recycle Bin size threshold
-    $description: Automatically clean the Recycle Bin when its total size reaches the limit.
+    $description: Automatically prune the Recycle Bin when its total size reaches the limit (off by default for safety).
   - sizeThresholdValue: 500
     $name: Recycle Bin size limit
     $description: Numeric size limit (minimum 1).
@@ -155,44 +159,37 @@ Silent, zero-UI background temporary folder cleaner running in a dedicated Windh
     - TB: TB
   - countThresholdEnabled: false
     $name: Enable Recycle Bin item-count limit
-    $description: Automatically clean the Recycle Bin when deleted item count reaches the limit.
+    $description: Automatically prune the Recycle Bin when deleted item count reaches the limit (off by default).
   - maxItems: 50
     $name: Maximum items in Recycle Bin
     $description: Clean when the Recycle Bin holds at least this many items (minimum 1).
-  - timerEnabled: true
-    $name: Enable Recycle Bin 30-day / periodic auto-clean
-    $description: Automatically clean Recycle Bin items older than the schedule (default 30 Days) and on schedule across reboots.
-  - timerValue: 30
-    $name: Recycle Bin retention / schedule interval
-    $description: Auto-clean items older than this interval and run scheduled pruning (default 30 Days).
-  - timerUnit: Days
-    $name: Recycle Bin timer unit
+  - retentionEnabled: true
+    $name: Enable Recycle Bin age expiry
+    $description: Automatically delete individual Recycle Bin items once they have been in the bin longer than the retention age (default 30 Days).
+  - retentionValue: 30
+    $name: Recycle Bin item retention age
+    $description: Delete individual items older than this age (default 30 Days).
+  - retentionUnit: Days
+    $name: Recycle Bin retention unit
     $options:
-    - Seconds: Seconds
     - Minutes: Minutes
     - Hours: Hours
     - Days: Days
   - fullSweep: false
-    $name: Empty entire Recycle Bin (Full Sweep)
-    $description: Permanently remove all items in the Recycle Bin (keep off so scheduled runs prune items >30 days & oldest-first).
-  - oldestFirst: true
-    $name: Oldest-first & 30-day age pruning
-    $description: When Full Sweep is off, automatically prune items older than the schedule (30 days) or oldest-first down to target %.
+    $name: Empty entire Recycle Bin on threshold (Full Sweep)
+    $description: When a size or count threshold triggers, permanently empty the entire Recycle Bin instead of pruning oldest-first down to the target %.
   - targetPercent: 50
     $name: Target percentage to keep (%)
-    $description: Stop pruning oldest items once the Recycle Bin shrinks to this percentage (10 to 90%).
-  - minItemAgeMinutes: 0
+    $description: Stop pruning oldest items once the Recycle Bin shrinks to this percentage of the triggered limit (10 to 90%).
+  - minItemAgeMinutes: 1440
     $name: Minimum deleted item age (minutes)
-    $description: Keep recently deleted items during oldest-first pruning (0 disables).
-  - checkIntervalSeconds: 30
-    $name: Background check interval (seconds)
-    $description: How often to check Recycle Bin size and item count (15 to 3600 seconds).
+    $description: Keep items deleted more recently than this grace period during oldest-first and emergency pruning (default 1440 = 24 hours; 0 disables).
   - cooldownSeconds: 15
     $name: Post-clean cooldown (seconds)
     $description: Minimum wait between automatic Recycle Bin cleanups (5 to 3600 seconds).
   - mouseGesture: DoubleMiddleClick
     $name: Middle-click shortcut to empty Recycle Bin
-    $description: Click the middle mouse button (scroll wheel) to empty the Recycle Bin immediately.
+    $description: Click the middle mouse button (scroll wheel) on empty Desktop or Taskbar space to empty the Recycle Bin immediately.
     $options:
     - Disabled: Off (Disabled)
     - SingleMiddleClick: Single Middle-Click (1x)
@@ -200,13 +197,10 @@ Silent, zero-UI background temporary folder cleaner running in a dedicated Windh
     - TripleMiddleClick: Triple Middle-Click (3x)
   - mouseScope: DesktopAndTaskbar
     $name: Where Recycle Bin middle-click works
-    $description: Desktop & Taskbar only prevents accidental triggers in browsers or 3D/CAD apps.
+    $description: Empty Desktop & Taskbar space prevents accidental triggers on taskbar buttons, icons, browsers, or 3D/CAD apps.
     $options:
-    - DesktopAndTaskbar: Desktop & Taskbar only (Recommended)
+    - DesktopAndTaskbar: Desktop & Taskbar empty space only (Recommended)
     - Anywhere: Anywhere on screen (except fullscreen games)
-  - mouseSwallowTriggerClick: true
-    $name: Block triggering middle-click from reaching apps
-    $description: Stop the final middle-click from closing a taskbar window or starting auto-scroll.
   - playSound: false
     $name: Play Windows sound when emptied
     $description: Play the standard Windows Recycle Bin sound on full empty.
@@ -214,19 +208,19 @@ Silent, zero-UI background temporary folder cleaner running in a dedicated Windh
 - universalSafety:
   - cleanTempOnStart: true
     $name: Clean Temp folders on startup
-    $description: Automatically clean Temp folders after Windows login or mod load.
-  - cleanRecycleBinOnStart: true
-    $name: Empty Recycle Bin on startup
-    $description: Automatically clean the Recycle Bin after Windows login or mod load.
+    $description: Automatically clean Temp folders after Windows login or mod load (honors minimum file age).
+  - cleanRecycleBinOnStart: false
+    $name: Clean Recycle Bin on startup
+    $description: Automatically clean the Recycle Bin after Windows login or mod load (off by default).
   - startupDelaySeconds: 12
     $name: Lazy post-login delay (seconds)
-    $description: Wait time after actual Windows desktop login & taskbar load before running startup cleanups (5 to 300 seconds).
+    $description: Wait time after interactive Windows desktop login before running startup cleanups (5 to 300 seconds).
   - startupFullSweep: true
     $name: Full sweep on startup
-    $description: Perform a full sweep of Temp and Recycle Bin on startup instead of keeping a percentage.
+    $description: Clean all eligible Temp files (still honoring minimum file age) on startup instead of keeping a target percentage.
   - emergencyEnabled: true
     $name: Enable low-disk emergency floor
-    $description: Trigger an immediate cleanup if free space on the Temp drive drops below the floor.
+    $description: Trigger a cleanup once when free space on the Temp drive crosses below the floor (re-arms after recovering above the floor).
   - freeSpaceValue: 5
     $name: Minimum free disk space
     $description: Numeric free space floor (minimum 1).
@@ -240,8 +234,8 @@ Silent, zero-UI background temporary folder cleaner running in a dedicated Windh
     $name: Free space check interval (seconds)
     $description: How often to check drive free space (15 to 3600 seconds).
   - cleanRecycleOnEmergency: true
-    $name: Also empty Recycle Bin on low-disk emergency
-    $description: Empty the Recycle Bin in addition to Temp folders during a low-disk emergency.
+    $name: Also prune Recycle Bin on low-disk emergency
+    $description: Prune oldest eligible Recycle Bin items on the low-space drive (honoring minimum item age) during a low-disk emergency.
   - bypassDeferralOnEmergency: true
     $name: Bypass fullscreen/battery deferral on emergency
     $description: Run immediately during low-disk emergencies even if fullscreen or on battery.
@@ -279,12 +273,16 @@ Silent, zero-UI background temporary folder cleaner running in a dedicated Windh
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
 #include <windows.h>
 #include <objbase.h>
 #include <sddl.h>
 #include <shlobj.h>
+#include <knownfolders.h>
 #include <shlwapi.h>
 #include <shellapi.h>
+#include <shellscalingapi.h>
 #include <dwmapi.h>
 #include <wtsapi32.h>
 #include <gdiplus.h>
@@ -331,39 +329,33 @@ struct ModSettings {
     std::vector<std::wstring> aiAgentPatterns;
     std::vector<std::wstring> excludePatterns;
 
-    // Startup & Windows Login (12s post-login lazy start)
+    // Startup & Windows Login
     bool startupCleanTemp = true;
-    bool startupCleanRecycle = true;
+    bool startupCleanRecycle = false;
     uint64_t startupDelayMs = 12000ULL;
     bool startupFullSweep = true;
 
-    // Recycle Bin Cleaner (default: 30-day retention & schedule enabled)
-    bool rbSizeThresholdEnabled = true;
+    // Recycle Bin Cleaner
+    bool rbSizeThresholdEnabled = false;
     uint64_t rbSizeThresholdBytes = 500ULL * 1024ULL * 1024ULL;
     bool rbCountThresholdEnabled = false;
     uint64_t rbMaxItems = 50ULL;
-    bool rbTimerEnabled = true;
-    uint64_t rbTimerIntervalMs = 30ULL * 86400ULL * 1000ULL;
+    bool rbRetentionEnabled = true;
+    uint64_t rbRetentionAgeMs = 30ULL * 86400ULL * 1000ULL;
     bool rbFullSweep = false;
-    bool rbOldestFirst = true;
     int rbTargetPercent = 50;
-    uint64_t rbMinAgeMs = 0ULL;
-    uint64_t rbCheckMs = 30000ULL;
+    uint64_t rbMinAgeMs = 1440ULL * 60000ULL;
     uint64_t rbCooldownMs = 15000ULL;
     int rbMouseClicksRequired = 2;
     int rbMouseScope = 0; // 0=DesktopAndTaskbar, 1=Anywhere
     uint64_t rbMouseMaxIntervalMs = 400ULL;
-    bool rbMouseSwallowClick = true;
     bool rbPlaySound = false;
     bool cleanRecycleOnEmergency = true;
 
-    // Taskbar 3x Left-Click Temp Shortcut
+    // Temp 3x Left-Click Shortcut
     bool tempGestureEnabled = true;
-    bool tempGestureEmptySpaceOnly = true;
     uint64_t tempGestureMaxIntervalMs = 400ULL;
-
-    // Taskbar & Desktop 3x Left-Click Temp Shortcut Scope (0=DesktopAndTaskbar, 1=TaskbarOnly, 2=DesktopOnly)
-    int tempGestureScope = 0;
+    int tempGestureScope = 0; // 0=DesktopAndTaskbar, 1=TaskbarOnly, 2=DesktopOnly
 
     // Corner Toast Feedback & Screenshot Visibility
     bool toastEnabled = true;
@@ -373,7 +365,6 @@ struct ModSettings {
 };
 
 static CRITICAL_SECTION g_settingsMtx;
-static bool g_settingsMtxInit = false;
 static ModSettings g_settings;
 static HANDLE g_wakeEvent = nullptr;
 static HANDLE g_workerThread = nullptr;
@@ -382,10 +373,10 @@ static DWORD g_mouseThreadId = 0;
 static HANDLE g_uiThread = nullptr;
 static HANDLE g_uiReadyEvent = nullptr;
 static HWND g_uiMsgHwnd = nullptr;
+
 static std::atomic<int> g_mouseClicksRequired{2};
 static std::atomic<int> g_mouseTriggerScope{0};
 static std::atomic<uint32_t> g_mouseMaxIntervalMs{400};
-static std::atomic<bool> g_mouseSwallowClick{true};
 static std::atomic<bool> g_tempGestureEnabled{true};
 static std::atomic<int> g_tempGestureScope{0};
 static std::atomic<uint32_t> g_tempGestureMaxIntervalMs{400};
@@ -396,16 +387,20 @@ static std::atomic<bool> g_toastExcludeFromCapture{true};
 
 static constexpr UINT WM_APP_CHECK_TEMP_TAP = WM_APP + 1;
 static constexpr UINT WM_APP_SHOW_TOAST = WM_APP + 2;
+static constexpr UINT WM_APP_CHECK_RECYCLE_TAP = WM_APP + 3;
+static constexpr UINT WM_APP_RECYCLE_CHANGED = WM_APP + 4;
+
 static std::atomic<bool> g_stopRequested{false};
 static std::atomic<bool> g_manualTempRequested{false};
 static std::atomic<bool> g_manualRecycleRequested{false};
 static std::atomic<bool> g_settingsReconfigured{false};
-static uint64_t g_totalFreedBytes = 0;
+static std::atomic<bool> g_recycleDirty{true};
+static std::atomic<uint64_t> g_ignoreRecycleNotifyUntilTick{0};
 
 static void ShowCleanToast(const std::wstring& title, const std::wstring& subtitle, bool isManual);
 
 // ============================================================================
-// Helpers: Overflow-Safe Units, Paths, Matching, Time
+// Helpers: Overflow-Safe Units, Paths, Validation, Matching, Time
 // ============================================================================
 
 static uint64_t ScaleByPercentU64(uint64_t value, int pct) {
@@ -440,7 +435,6 @@ static uint64_t MultiplyClampU64(uint64_t a, uint64_t b) {
 }
 
 static uint64_t UnitToMultiplier(PCWSTR unit) {
-    if (!unit) return 1024ULL * 1024ULL;
     if (wcscmp(unit, L"KB") == 0) return 1024ULL;
     if (wcscmp(unit, L"MB") == 0) return 1024ULL * 1024ULL;
     if (wcscmp(unit, L"GB") == 0) return 1024ULL * 1024ULL * 1024ULL;
@@ -449,7 +443,6 @@ static uint64_t UnitToMultiplier(PCWSTR unit) {
 }
 
 static int ParseMouseGestureClicks(PCWSTR val) {
-    if (!val) return 2;
     if (wcscmp(val, L"Disabled") == 0) return 0;
     if (wcscmp(val, L"SingleMiddleClick") == 0) return 1;
     if (wcscmp(val, L"DoubleMiddleClick") == 0) return 2;
@@ -458,25 +451,22 @@ static int ParseMouseGestureClicks(PCWSTR val) {
 }
 
 static int ParseMouseScope(PCWSTR val) {
-    if (!val) return 0;
     if (wcscmp(val, L"Anywhere") == 0) return 1;
     return 0;
 }
 
 static int ParseTempMouseScope(PCWSTR val) {
-    if (!val) return 0;
     if (wcscmp(val, L"TaskbarOnly") == 0) return 1;
     if (wcscmp(val, L"DesktopOnly") == 0) return 2;
-    return 0; // DesktopAndTaskbar
+    return 0;
 }
 
-static uint64_t TimeUnitToMs(PCWSTR unit) {
-    if (!unit) return 3600000ULL;
+static uint64_t TimeUnitToMs(PCWSTR unit, uint64_t fallbackMs) {
     if (wcscmp(unit, L"Seconds") == 0) return 1000ULL;
     if (wcscmp(unit, L"Minutes") == 0) return 60ULL * 1000ULL;
     if (wcscmp(unit, L"Hours") == 0) return 3600ULL * 1000ULL;
     if (wcscmp(unit, L"Days") == 0) return 86400ULL * 1000ULL;
-    return 3600000ULL;
+    return fallbackMs;
 }
 
 static std::wstring StripTrailingSlashes(std::wstring path) {
@@ -484,6 +474,17 @@ static std::wstring StripTrailingSlashes(std::wstring path) {
         path.pop_back();
     }
     return path;
+}
+
+static std::wstring CanonicalizeDirPath(const std::wstring& raw) {
+    if (raw.empty()) {
+        return L"";
+    }
+    WCHAR fullPath[MAX_PATH + 4]{};
+    DWORD fullLen = GetFullPathNameW(raw.c_str(), ARRAYSIZE(fullPath), fullPath, nullptr);
+    std::wstring res = (fullLen > 0 && fullLen < ARRAYSIZE(fullPath)) ? fullPath : raw;
+    std::replace(res.begin(), res.end(), L'/', L'\\');
+    return StripTrailingSlashes(std::move(res));
 }
 
 static std::wstring ToExtendedPath(const std::wstring& path) {
@@ -494,6 +495,80 @@ static std::wstring ToExtendedPath(const std::wstring& path) {
         return L"\\\\?\\UNC\\" + path.substr(2);
     }
     return L"\\\\?\\" + path;
+}
+
+static bool IsSameOrParentDir(const std::wstring& candidate, const std::wstring& protectedPath) {
+    if (candidate.empty() || protectedPath.empty()) {
+        return false;
+    }
+    if (_wcsicmp(candidate.c_str(), protectedPath.c_str()) == 0) {
+        return true;
+    }
+    if (candidate.size() < protectedPath.size() &&
+        _wcsnicmp(candidate.c_str(), protectedPath.c_str(), candidate.size()) == 0 &&
+        protectedPath[candidate.size()] == L'\\') {
+        return true;
+    }
+    return false;
+}
+
+static bool IsSameOrChildDir(const std::wstring& candidate, const std::wstring& basePath) {
+    return IsSameOrParentDir(basePath, candidate);
+}
+
+static bool IsSafeTempDir(const std::wstring& dir) {
+    if (dir.size() < 4) {
+        return false;
+    }
+    if (PathIsRootW(dir.c_str())) {
+        return false;
+    }
+
+    WCHAR winDir[MAX_PATH]{};
+    if (GetWindowsDirectoryW(winDir, ARRAYSIZE(winDir)) > 0) {
+        std::wstring canonWin = CanonicalizeDirPath(winDir);
+        std::wstring canonWinTemp = canonWin + L"/Temp";
+        if (IsSameOrParentDir(dir, canonWin) ||
+            (IsSameOrChildDir(dir, canonWin) && _wcsicmp(dir.c_str(), canonWinTemp.c_str()) != 0)) {
+            return false;
+        }
+    }
+
+    static const KNOWNFOLDERID* const kProtectedFolders[] = {
+        &FOLDERID_Profile,
+        &FOLDERID_Desktop,
+        &FOLDERID_Documents,
+        &FOLDERID_Downloads,
+        &FOLDERID_Pictures,
+        &FOLDERID_Music,
+        &FOLDERID_Videos,
+        &FOLDERID_LocalAppData,
+        &FOLDERID_RoamingAppData,
+        &FOLDERID_ProgramFiles,
+        &FOLDERID_ProgramFilesX86,
+        &FOLDERID_ProgramData,
+        &FOLDERID_SavedGames,
+        &FOLDERID_UserProfiles,
+    };
+
+    for (const KNOWNFOLDERID* fid : kProtectedFolders) {
+        PWSTR knownPath = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(*fid, KF_FLAG_DONT_VERIFY, nullptr, &knownPath)) && knownPath) {
+            std::wstring canonKnown = CanonicalizeDirPath(knownPath);
+            CoTaskMemFree(knownPath);
+            // Allow subdirectories of Profile/LocalAppData/UserProfiles (e.g. AppData\Local\Temp),
+            // but refuse if Temp resolves to those folders themselves, or to/inside/above other known folders.
+            if (*fid == FOLDERID_Profile || *fid == FOLDERID_LocalAppData || *fid == FOLDERID_UserProfiles) {
+                if (_wcsicmp(dir.c_str(), canonKnown.c_str()) == 0) {
+                    return false;
+                }
+            } else if (IsSameOrParentDir(dir, canonKnown) || IsSameOrChildDir(dir, canonKnown)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 static std::wstring ResolveUserTempDir() {
@@ -511,12 +586,12 @@ static std::wstring ResolveUserTempDir() {
         return L"";
     }
 
-    WCHAR fullPath[MAX_PATH + 4]{};
-    DWORD fullLen = GetFullPathNameW(rawPath, ARRAYSIZE(fullPath), fullPath, nullptr);
-    if (fullLen == 0 || fullLen >= ARRAYSIZE(fullPath)) {
-        return StripTrailingSlashes(rawPath);
+    std::wstring resolved = CanonicalizeDirPath(rawPath);
+    if (!IsSafeTempDir(resolved)) {
+        Wh_Log(L"Refusing unsafe Temp folder path: %s", resolved.c_str());
+        return L"";
     }
-    return StripTrailingSlashes(fullPath);
+    return resolved;
 }
 
 static std::wstring ResolveWindowsTempDir() {
@@ -525,7 +600,7 @@ static std::wstring ResolveWindowsTempDir() {
     if (len == 0 || len >= ARRAYSIZE(winDir)) {
         return L"";
     }
-    std::wstring path = StripTrailingSlashes(winDir);
+    std::wstring path = CanonicalizeDirPath(winDir);
     path += L"\\Temp";
     return path;
 }
@@ -546,7 +621,6 @@ static std::vector<std::wstring> GetTargetTempDirs(const ModSettings& cfg) {
 }
 
 static std::wstring NormalizeExcludePattern(PCWSTR raw) {
-    if (!raw) return L"";
     std::wstring s(raw);
     while (!s.empty() && (s.front() == L' ' || s.front() == L'\t' || s.front() == L'\\' || s.front() == L'/')) {
         s.erase(s.begin());
@@ -555,28 +629,6 @@ static std::wstring NormalizeExcludePattern(PCWSTR raw) {
         s.pop_back();
     }
     return s;
-}
-
-static std::vector<std::wstring> DefaultAiAgentPatterns() {
-    return {
-        L"claude*",
-        L"tmpclaude-*",
-        L"wvm-*",
-        L"codex*",
-        L"openai-codex*",
-        L"hermes*",
-        L".hermes*",
-        L"openclaw*",
-        L".openclaw*",
-        L"gemini-*",
-        L"opencode*",
-        L"cursor-*",
-        L"windsurf-*",
-        L"goose-*",
-        L"aider*",
-        L"copilot-*",
-        L"mcp-*",
-    };
 }
 
 static bool IsExcludedName(const wchar_t* name, const std::vector<std::wstring>& patterns) {
@@ -634,8 +686,8 @@ static bool IsCaptureOverlayActive() {
 
 static std::atomic<bool> g_sessionLocked{false};
 
-// Verifies the user has actually passed the Windows logon/password screen and the interactive
-// desktop ("Default") plus Explorer shell/taskbar are live on screen.
+// Verifies the user is on the interactive "Default" desktop (past the Windows logon/lock screen)
+// without requiring a visible Shell_TrayWnd, so alternative shells and hidden taskbars work too.
 static bool IsInteractiveUserDesktopReady() {
     if (g_sessionLocked.load(std::memory_order_relaxed)) {
         return false;
@@ -650,17 +702,7 @@ static bool IsInteractiveUserDesktopReady() {
     DWORD needed = 0;
     BOOL nameOk = GetUserObjectInformationW(hDesk, UOI_NAME, deskName, sizeof(deskName), &needed);
     CloseDesktop(hDesk);
-    if (!nameOk || _wcsicmp(deskName, L"Default") != 0) {
-        return false;
-    }
-
-    HWND hShell = GetShellWindow();
-    HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!hShell || !hTray || !IsWindowVisible(hTray)) {
-        return false;
-    }
-
-    return true;
+    return nameOk && _wcsicmp(deskName, L"Default") == 0;
 }
 
 static bool IsBorderlessFullscreenActive() {
@@ -681,7 +723,6 @@ static bool IsBorderlessFullscreenActive() {
         }
     }
 
-    // Ordinary maximized/titled desktop windows are not fullscreen games
     LONG_PTR style = GetWindowLongPtrW(fg, GWL_STYLE);
     if ((style & WS_CAPTION) && (style & (WS_THICKFRAME | WS_MAXIMIZE))) {
         return false;
@@ -711,7 +752,6 @@ static bool IsBorderlessFullscreenActive() {
 static bool IsFullscreenBusy() {
     QUERY_USER_NOTIFICATION_STATE state = QUNS_ACCEPTS_NOTIFICATIONS;
     if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
-        // Only defer on true D3D exclusive fullscreen or presentation mode (not QUNS_BUSY Focus Assist)
         if (state == QUNS_RUNNING_D3D_FULL_SCREEN ||
             state == QUNS_PRESENTATION_MODE) {
             return true;
@@ -743,7 +783,7 @@ static bool ShouldDeferCleanup(const ModSettings& cfg, bool isEmergency, const w
     return false;
 }
 
-static bool IsDiskSpaceBelowFloor(const ModSettings& cfg, uint64_t* outFreeBytes) {
+static bool IsDiskSpaceBelowFloor(const ModSettings& cfg, uint64_t* outFreeBytes, wchar_t* outDriveLetter) {
     if (!cfg.emergencyEnabled) {
         return false;
     }
@@ -759,21 +799,15 @@ static bool IsDiskSpaceBelowFloor(const ModSettings& cfg, uint64_t* outFreeBytes
     if (outFreeBytes) {
         *outFreeBytes = freeBytesAvail.QuadPart;
     }
+    if (outDriveLetter && userTemp.size() >= 2 && userTemp[1] == L':') {
+        *outDriveLetter = static_cast<wchar_t>(towupper(userTemp[0]));
+    }
     return freeBytesAvail.QuadPart < cfg.emergencyFloorBytes;
 }
 
 // ============================================================================
-// UI Thread (UIA Empty-Taskbar Check + Toast Host) & Mouse Hook Thread
+// UI Thread (UIA Empty-Space Check, Recycle Bin Watcher & Toast Host)
 // ============================================================================
-
-static bool IsShellDesktopOrTaskbarRootClass(PCWSTR cls) {
-    if (!cls || !*cls) return false;
-    return wcscmp(cls, L"Progman") == 0 ||
-           wcscmp(cls, L"WorkerW") == 0 ||
-           wcscmp(cls, L"Shell_TrayWnd") == 0 ||
-           wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0 ||
-           wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0;
-}
 
 static bool IsPointOnTaskbarRect(POINT pt) {
     HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
@@ -795,33 +829,9 @@ static bool IsPointOnTaskbarRect(POINT pt) {
     return false;
 }
 
-static bool IsPointAllowedForMiddleClick(POINT pt) {
-    if (g_toastExcludeFromCapture.load(std::memory_order_relaxed) && IsCaptureOverlayActive()) {
-        return false;
-    }
-    if (g_mouseTriggerScope.load(std::memory_order_relaxed) == 1) {
-        return !IsFullscreenBusy();
-    }
-    if (IsPointOnTaskbarRect(pt)) {
-        return true;
-    }
-    HWND hWnd = WindowFromPoint(pt);
-    if (!hWnd) return false;
-    HWND hRoot = GetAncestor(hWnd, GA_ROOT);
-    if (!hRoot) hRoot = hWnd;
-    WCHAR rootCls[96]{};
-    GetClassNameW(hRoot, rootCls, ARRAYSIZE(rootCls));
-    return IsShellDesktopOrTaskbarRootClass(rootCls);
-}
-
 static bool IsPointOnDesktopWindow(POINT pt) {
     HWND hWnd = WindowFromPoint(pt);
     if (!hWnd) return false;
-    WCHAR cls[96]{};
-    GetClassNameW(hWnd, cls, ARRAYSIZE(cls));
-    if (wcscmp(cls, L"SysListView32") == 0 || wcscmp(cls, L"SHELLDLL_DefView") == 0) {
-        return true;
-    }
     HWND hRoot = GetAncestor(hWnd, GA_ROOT);
     if (!hRoot) hRoot = hWnd;
     WCHAR rootCls[96]{};
@@ -829,8 +839,7 @@ static bool IsPointOnDesktopWindow(POINT pt) {
     return wcscmp(rootCls, L"Progman") == 0 || wcscmp(rootCls, L"WorkerW") == 0;
 }
 
-static bool IsPointCandidateForTempTap(POINT pt) {
-    int scope = g_tempGestureScope.load(std::memory_order_relaxed);
+static bool IsPointCandidateForScope(POINT pt, int scope) {
     bool onTaskbar = IsPointOnTaskbarRect(pt);
     if (scope == 1) { // TaskbarOnly
         return onTaskbar;
@@ -842,8 +851,17 @@ static bool IsPointCandidateForTempTap(POINT pt) {
     return onTaskbar || onDesktop; // DesktopAndTaskbar
 }
 
-static bool IsPointEmptyDesktopOrTaskbarUIA(IUIAutomation* pUia, POINT pt) {
-    int scope = g_tempGestureScope.load(std::memory_order_relaxed);
+static bool IsPointCandidateForMiddleClick(POINT pt) {
+    if (g_toastExcludeFromCapture.load(std::memory_order_relaxed) && IsCaptureOverlayActive()) {
+        return false;
+    }
+    if (g_mouseTriggerScope.load(std::memory_order_relaxed) == 1) {
+        return !IsFullscreenBusy();
+    }
+    return IsPointCandidateForScope(pt, 0);
+}
+
+static bool IsPointEmptyDesktopOrTaskbarUIA(IUIAutomation* pUia, POINT pt, int scope) {
     bool onTaskbar = IsPointOnTaskbarRect(pt);
     bool onDesktop = !onTaskbar && IsPointOnDesktopWindow(pt);
 
@@ -852,14 +870,13 @@ static bool IsPointEmptyDesktopOrTaskbarUIA(IUIAutomation* pUia, POINT pt) {
     if (!onTaskbar && !onDesktop) return false;
 
     if (!pUia) {
-        return true;
+        return false;
     }
 
     IUIAutomationElement* pElem = nullptr;
     HRESULT hr = pUia->ElementFromPoint(pt, &pElem);
     if (FAILED(hr) || !pElem) {
-        // On desktop, fail closed so rapid clicks near icons/menus never misfire.
-        return onTaskbar;
+        return false;
     }
 
     CONTROLTYPEID ctrlType = 0;
@@ -877,7 +894,6 @@ static bool IsPointEmptyDesktopOrTaskbarUIA(IUIAutomation* pUia, POINT pt) {
     pElem->Release();
 
     if (onDesktop) {
-        // On Desktop, reject clicks on desktop icons (UIA_ListItemControlTypeId) or context menus/rename boxes
         if (ctrlType == UIA_ListItemControlTypeId ||
             ctrlType == UIA_ButtonControlTypeId ||
             ctrlType == UIA_MenuItemControlTypeId ||
@@ -885,7 +901,6 @@ static bool IsPointEmptyDesktopOrTaskbarUIA(IUIAutomation* pUia, POINT pt) {
             ctrlType == UIA_TreeItemControlTypeId) {
             return false;
         }
-        // Empty desktop wallpaper is UIA_ListControlTypeId ("SysListView32") or UIA_PaneControlTypeId
         return true;
     }
 
@@ -923,12 +938,10 @@ struct ClickGestureState {
     POINT firstDownPt{};
     int completedClicks = 0;
     bool downInProgress = false;
-    bool swallowNextUp = false;
 };
 
 static ClickGestureState g_mclickState;
 static ClickGestureState g_leftTapState;
-static ClickGestureState g_rightTapState;
 static HHOOK g_mouseHook = nullptr;
 
 static void ResetClickGesture(ClickGestureState& s) {
@@ -956,12 +969,12 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
         return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
     }
 
-    // Gesture Guard: X-buttons and wheel scrolls reset all click gestures immediately.
-    if (wParam == WM_XBUTTONDOWN || wParam == WM_XBUTTONUP ||
+    // Gesture Guard: non-target buttons and wheel scrolls reset all click gestures immediately.
+    if (wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP ||
+        wParam == WM_XBUTTONDOWN || wParam == WM_XBUTTONUP ||
         wParam == WM_MOUSEWHEEL || wParam == WM_MOUSEHWHEEL) {
         ResetClickGesture(g_mclickState);
         ResetClickGesture(g_leftTapState);
-        ResetClickGesture(g_rightTapState);
         return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
     }
 
@@ -974,51 +987,43 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
             !IsWithinMultiClickTolerance(ms->pt, g_leftTapState.firstDownPt)) {
             ResetClickGesture(g_leftTapState);
         }
-        if ((g_rightTapState.downInProgress || g_rightTapState.completedClicks > 0) &&
-            !IsWithinMultiClickTolerance(ms->pt, g_rightTapState.firstDownPt)) {
-            ResetClickGesture(g_rightTapState);
-        }
         return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
     }
 
     uint64_t now = GetTickCount64();
 
-    // 1. 3x Left-Click or 3x Right-Click on Empty Taskbar Space -> Temp Cleanup
-    if (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONUP ||
-        wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP) {
+    // 1. 3x Left-Click on Empty Desktop/Taskbar Space -> Temp Cleanup
+    if (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONUP) {
         ResetClickGesture(g_mclickState);
-        bool isLeft = (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONUP);
-        bool isDown = (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN);
-        ClickGestureState& tapState = isLeft ? g_leftTapState : g_rightTapState;
-        ClickGestureState& otherState = isLeft ? g_rightTapState : g_leftTapState;
-        ResetClickGesture(otherState);
+        bool isDown = (wParam == WM_LBUTTONDOWN);
 
         if (!g_tempGestureEnabled.load(std::memory_order_relaxed)) {
-            ResetClickGesture(tapState);
+            ResetClickGesture(g_leftTapState);
             return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
         }
 
         uint64_t maxInterval = g_tempGestureMaxIntervalMs.load(std::memory_order_relaxed);
         if (isDown) {
-            if (tapState.completedClicks > 0) {
-                uint64_t elapsed = now - tapState.lastDownTick;
-                if (elapsed > maxInterval || !IsWithinMultiClickTolerance(ms->pt, tapState.firstDownPt)) {
-                    ResetClickGesture(tapState);
+            if (g_leftTapState.completedClicks > 0) {
+                uint64_t elapsed = now - g_leftTapState.lastDownTick;
+                if (elapsed > maxInterval || !IsWithinMultiClickTolerance(ms->pt, g_leftTapState.firstDownPt)) {
+                    ResetClickGesture(g_leftTapState);
                 }
             }
+            int tempScope = g_tempGestureScope.load(std::memory_order_relaxed);
             if ((g_toastExcludeFromCapture.load(std::memory_order_relaxed) && IsCaptureOverlayActive()) ||
-                !IsPointCandidateForTempTap(ms->pt)) {
-                ResetClickGesture(tapState);
+                !IsPointCandidateForScope(ms->pt, tempScope)) {
+                ResetClickGesture(g_leftTapState);
                 return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
             }
-            if (tapState.completedClicks == 0) {
-                tapState.firstDownPt = ms->pt;
+            if (g_leftTapState.completedClicks == 0) {
+                g_leftTapState.firstDownPt = ms->pt;
             }
-            tapState.lastDownTick = now;
-            tapState.downInProgress = true;
+            g_leftTapState.lastDownTick = now;
+            g_leftTapState.downInProgress = true;
 
-            if (tapState.completedClicks + 1 >= 3) {
-                ResetClickGesture(tapState);
+            if (g_leftTapState.completedClicks + 1 >= 3) {
+                ResetClickGesture(g_leftTapState);
                 if (g_uiMsgHwnd) {
                     PostMessageW(
                         g_uiMsgHwnd,
@@ -1028,41 +1033,39 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
                 }
             }
         } else {
-            if (tapState.downInProgress) {
-                uint64_t elapsed = now - tapState.lastDownTick;
+            if (g_leftTapState.downInProgress) {
+                uint64_t elapsed = now - g_leftTapState.lastDownTick;
                 if (elapsed <= maxInterval &&
-                    IsWithinMultiClickTolerance(ms->pt, tapState.firstDownPt)) {
-                    tapState.downInProgress = false;
-                    tapState.completedClicks++;
+                    IsWithinMultiClickTolerance(ms->pt, g_leftTapState.firstDownPt)) {
+                    g_leftTapState.downInProgress = false;
+                    g_leftTapState.completedClicks++;
                 } else {
-                    ResetClickGesture(tapState);
+                    ResetClickGesture(g_leftTapState);
                 }
             } else {
-                ResetClickGesture(tapState);
+                ResetClickGesture(g_leftTapState);
             }
         }
         return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
     }
 
-    // 2. Middle-Click Shortcut -> Recycle Bin Cleanup
+    // 2. Middle-Click Shortcut -> Recycle Bin Cleanup (verified asynchronously via UIA on UI thread)
     int requiredClicks = g_mouseClicksRequired.load(std::memory_order_relaxed);
     if (requiredClicks <= 0) {
         ResetClickGesture(g_mclickState);
-        g_mclickState.swallowNextUp = false;
         return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
     }
 
     uint64_t maxInterval = g_mouseMaxIntervalMs.load(std::memory_order_relaxed);
     if (wParam == WM_MBUTTONDOWN) {
         ResetClickGesture(g_leftTapState);
-        ResetClickGesture(g_rightTapState);
         if (g_mclickState.completedClicks > 0) {
             uint64_t elapsed = now - g_mclickState.lastDownTick;
             if (elapsed > maxInterval || !IsWithinMultiClickTolerance(ms->pt, g_mclickState.firstDownPt)) {
                 ResetClickGesture(g_mclickState);
             }
         }
-        if (!IsPointAllowedForMiddleClick(ms->pt)) {
+        if (!IsPointCandidateForMiddleClick(ms->pt)) {
             ResetClickGesture(g_mclickState);
             return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
         }
@@ -1074,23 +1077,18 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
 
         if (g_mclickState.completedClicks + 1 >= requiredClicks) {
             ResetClickGesture(g_mclickState);
-            g_manualRecycleRequested.store(true, std::memory_order_release);
-            if (g_wakeEvent) {
-                SetEvent(g_wakeEvent);
-            }
-            if (g_mouseSwallowClick.load(std::memory_order_relaxed)) {
-                g_mclickState.swallowNextUp = true;
-                return 1;
+            if (g_uiMsgHwnd) {
+                PostMessageW(
+                    g_uiMsgHwnd,
+                    WM_APP_CHECK_RECYCLE_TAP,
+                    static_cast<WPARAM>(ms->pt.x),
+                    static_cast<LPARAM>(ms->pt.y));
             }
         }
         return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
     }
 
     if (wParam == WM_MBUTTONUP) {
-        if (g_mclickState.swallowNextUp) {
-            g_mclickState.swallowNextUp = false;
-            return 1;
-        }
         if (g_mclickState.downInProgress) {
             uint64_t elapsed = now - g_mclickState.lastDownTick;
             if (elapsed <= maxInterval &&
@@ -1115,7 +1113,7 @@ static DWORD WINAPI MouseHookThreadProc(LPVOID) {
 
     g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandleW(nullptr), 0);
     if (!g_mouseHook) {
-        Wh_Log(L"AutoClean: SetWindowsHookExW(WH_MOUSE_LL) failed (err=%lu)", GetLastError());
+        Wh_Log(L"SetWindowsHookExW(WH_MOUSE_LL) failed (err=%lu)", GetLastError());
         return 0;
     }
 
@@ -1139,19 +1137,17 @@ static void SyncMouseHookThread(bool needHook) {
     if (needHook && !g_mouseThread && !g_stopRequested.load(std::memory_order_relaxed)) {
         ResetClickGesture(g_mclickState);
         ResetClickGesture(g_leftTapState);
-        ResetClickGesture(g_rightTapState);
         g_mouseThread = CreateThread(nullptr, 0, MouseHookThreadProc, nullptr, 0, &g_mouseThreadId);
     } else if (!needHook && g_mouseThread) {
         if (g_mouseThreadId != 0) {
             PostThreadMessageW(g_mouseThreadId, WM_QUIT, 0, 0);
         }
-        WaitForSingleObject(g_mouseThread, 2000);
+        WaitForSingleObject(g_mouseThread, INFINITE);
         CloseHandle(g_mouseThread);
         g_mouseThread = nullptr;
         g_mouseThreadId = 0;
         ResetClickGesture(g_mclickState);
         ResetClickGesture(g_leftTapState);
-        ResetClickGesture(g_rightTapState);
     }
 }
 
@@ -1177,8 +1173,6 @@ struct ToastWindowState {
     bool fadingOut = false;
     uint64_t qpcFreq = 1;
     uint64_t animStartQpc = 0;
-    uint64_t showStartTick = 0;
-    uint32_t durationMs = 3200;
     BYTE currentAlpha = 0;
     int widthPx = 0;
     int heightPx = 0;
@@ -1192,42 +1186,16 @@ static constexpr UINT_PTR kToastAnimTimerId = 1;
 static constexpr UINT_PTR kToastHideTimerId = 2;
 static constexpr wchar_t kToastWndClass[] = L"AutoCleanToastWndClass";
 
-static void EnablePerMonitorDpiV2ForCurrentThread() {
-    using SetThreadDpiAwarenessContext_t = DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    auto pSetThreadDpi = user32
-        ? reinterpret_cast<SetThreadDpiAwarenessContext_t>(
-              GetProcAddress(user32, "SetThreadDpiAwarenessContext"))
-        : nullptr;
-    if (pSetThreadDpi) {
-        pSetThreadDpi(reinterpret_cast<DPI_AWARENESS_CONTEXT>(-4)); // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-    }
-}
-
 static UINT GetMonitorDpiForPoint(POINT pt, HWND fallbackHwnd) {
     HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-    HMODULE shcore = GetModuleHandleW(L"shcore.dll");
-    if (!shcore) {
-        shcore = LoadLibraryW(L"shcore.dll");
-    }
-    if (shcore && hMon) {
-        using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
-        auto pGetDpiForMonitor = reinterpret_cast<GetDpiForMonitor_t>(
-            GetProcAddress(shcore, "GetDpiForMonitor"));
-        if (pGetDpiForMonitor) {
-            UINT dpiX = 96, dpiY = 96;
-            if (SUCCEEDED(pGetDpiForMonitor(hMon, 0 /*MDT_EFFECTIVE_DPI*/, &dpiX, &dpiY)) && dpiX >= 96) {
-                return dpiX;
-            }
+    if (hMon) {
+        UINT dpiX = 96, dpiY = 96;
+        if (SUCCEEDED(GetDpiForMonitor(hMon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) && dpiX >= 96) {
+            return dpiX;
         }
     }
-    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    auto pGetDpiForWindow = user32
-        ? reinterpret_cast<GetDpiForWindow_t>(GetProcAddress(user32, "GetDpiForWindow"))
-        : nullptr;
-    if (pGetDpiForWindow && fallbackHwnd) {
-        UINT dpi = pGetDpiForWindow(fallbackHwnd);
+    if (fallbackHwnd) {
+        UINT dpi = GetDpiForWindow(fallbackHwnd);
         if (dpi >= 96) return dpi;
     }
     HDC hdc = GetDC(nullptr);
@@ -1294,19 +1262,17 @@ static void RenderToastContent(const std::wstring& title, const std::wstring& su
         return MulDiv(logical, static_cast<int>(dpi), 96);
     };
 
-    // Determine semantic state for fill-only left accent bar
     bool isDryRun = (title.find(L"DRY RUN") != std::wstring::npos || title.find(L"Dry-Run") != std::wstring::npos);
     bool isError = (title.find(L"Error") != std::wstring::npos);
     bool isEmpty = (title.find(L"Empty") != std::wstring::npos || title.find(L"Already Clean") != std::wstring::npos);
 
-    // Strictly warm Terracotta & Tan palette (zero blue/cool tones)
     Gdiplus::Color accentFill = isDryRun
-        ? Gdiplus::Color(255, 224, 138, 68)   // Warm amber-terracotta (#E08A44) for Dry-Run preview
+        ? Gdiplus::Color(255, 224, 138, 68)
         : (isError
-            ? Gdiplus::Color(255, 200, 90, 50)   // Deep rust terracotta (#C85A32) for Error
+            ? Gdiplus::Color(255, 200, 90, 50)
             : (isEmpty
-                ? Gdiplus::Color(255, 212, 163, 115) // Warm desert tan (#D4A373) for Already Clean / Empty
-                : Gdiplus::Color(255, 217, 119, 87))); // Signature terracotta orange (#D97757) for Cleaned/Freed
+                ? Gdiplus::Color(255, 212, 163, 115)
+                : Gdiplus::Color(255, 217, 119, 87)));
 
     int accentBarW = (std::max)(3, scale(3));
     int leftInset = scale(12) + accentBarW + scale(10);
@@ -1317,7 +1283,6 @@ static void RenderToastContent(const std::wstring& title, const std::wstring& su
     int maxW = scale(460);
     float radius = static_cast<float>(scale(12));
 
-    // Exact physical-pixel font sizes (UnitPixel) prevent GDI+ 96-DPI bitmap point under-scaling blur
     float titlePx = static_cast<float>(MulDiv(13, static_cast<int>(dpi), 96));
     float subPx = static_cast<float>(MulDiv(11, static_cast<int>(dpi), 96));
 
@@ -1366,20 +1331,17 @@ static void RenderToastContent(const std::wstring& title, const std::wstring& su
         g.SetPageUnit(Gdiplus::UnitPixel);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-        // ClearTypeGridFit against opaque fills (alpha=255) yields razor-sharp subpixel glyphs
         g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
         g.SetTextContrast(6);
 
         float fw = static_cast<float>(w);
         float fh = static_cast<float>(h);
 
-        // 1. Outer fill-only base container (warm dark espresso-terracotta tint, zero border/stroke/outline)
         Gdiplus::GraphicsPath outerPath;
         BuildRoundedRectPath(outerPath, 0.0f, 0.0f, fw, fh, radius);
         Gdiplus::SolidBrush outerSurfaceBrush(Gdiplus::Color(255, 24, 17, 13));
         g.FillPath(&outerSurfaceBrush, &outerPath);
 
-        // 2. Inner OLED Black (#000000) card fill inset by 1px (creates subtle modern depth purely via fills)
         float inset = 1.0f;
         Gdiplus::GraphicsPath innerPath;
         BuildRoundedRectPath(
@@ -1387,7 +1349,6 @@ static void RenderToastContent(const std::wstring& title, const std::wstring& su
         Gdiplus::SolidBrush oledBlackBrush(Gdiplus::Color(255, 0, 0, 0));
         g.FillPath(&oledBlackBrush, &innerPath);
 
-        // 3. Thin vertical rounded accent pill bar on the left (pure fill, no stroke)
         float barX = static_cast<float>(scale(11));
         float barY = static_cast<float>(scale(11));
         float barW = static_cast<float>(accentBarW);
@@ -1397,15 +1358,11 @@ static void RenderToastContent(const std::wstring& title, const std::wstring& su
         Gdiplus::SolidBrush accentBrush(accentFill);
         g.FillPath(&accentBrush, &accentBarPath);
 
-        // 4. Crisp integer-snapped title and subtitle glyphs (warm cream & muted tan)
         Gdiplus::SolidBrush titleBrush(Gdiplus::Color(255, 245, 240, 235));
         Gdiplus::SolidBrush subBrush(Gdiplus::Color(255, 196, 178, 162));
 
-        int titleY = padY;
-        Gdiplus::PointF ptTitle(static_cast<float>(leftInset), static_cast<float>(titleY));
-        Gdiplus::PointF ptSub(
-            static_cast<float>(leftInset),
-            static_cast<float>(padY + titleH + gapY));
+        Gdiplus::PointF ptTitle(static_cast<float>(leftInset), static_cast<float>(padY));
+        Gdiplus::PointF ptSub(static_cast<float>(leftInset), static_cast<float>(padY + titleH + gapY));
 
         g.DrawString(title.c_str(), -1, &titleFont, ptTitle, fmt, &titleBrush);
         g.DrawString(subtitle.c_str(), -1, &subFont, ptSub, fmt, &subBrush);
@@ -1417,7 +1374,6 @@ static void RenderToastContent(const std::wstring& title, const std::wstring& su
     g_toast.widthPx = w;
     g_toast.heightPx = h;
 
-    // Position in bottom-right of active cursor's monitor work area
     RECT wa{};
     {
         HMONITOR hMon = MonitorFromPoint(cursorPt, MONITOR_DEFAULTTONEAREST);
@@ -1552,7 +1508,6 @@ static void EnsureToastWindowCreated() {
         wc.hInstance,
         nullptr);
     if (g_toast.hwnd) {
-        // Suppress any Windows 11 DWM system border around the layered popup window
         COLORREF borderNone = 0xFFFFFFFE; // DWMWA_COLOR_NONE
         DwmSetWindowAttribute(g_toast.hwnd, 34 /*DWMWA_BORDER_COLOR*/, &borderNone, sizeof(borderNone));
     }
@@ -1575,7 +1530,6 @@ static void DisplayToastPayload(const ToastPayload& item) {
     g_toast.visible = true;
     g_toast.hovered = false;
     g_toast.fadingOut = false;
-    g_toast.durationMs = item.durationMs;
 
     RenderToastContent(item.title, item.subtitle);
     PresentToastAlpha(0);
@@ -1598,7 +1552,6 @@ static void HandleToastShowMessage(LPARAM lParam) {
         return;
     }
 
-    // Queue back-to-back automatic toasts (e.g. Startup Temp + Recycle Bin) so neither overwrites the other
     if (g_toast.visible && !item.isManual) {
         if (g_toast.pendingQueue.size() < 4) {
             g_toast.pendingQueue.push_back(std::move(item));
@@ -1626,8 +1579,40 @@ static LRESULT CALLBACK UiMsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     }
     if (msg == WM_APP_CHECK_TEMP_TAP) {
         POINT pt{static_cast<LONG>(wParam), static_cast<LONG>(lParam)};
-        if (IsPointEmptyDesktopOrTaskbarUIA(g_pUia, pt)) {
+        int scope = g_tempGestureScope.load(std::memory_order_relaxed);
+        if (IsPointEmptyDesktopOrTaskbarUIA(g_pUia, pt, scope)) {
             g_manualTempRequested.store(true, std::memory_order_release);
+            if (g_wakeEvent) {
+                SetEvent(g_wakeEvent);
+            }
+        }
+        return 0;
+    }
+    if (msg == WM_APP_CHECK_RECYCLE_TAP) {
+        POINT pt{static_cast<LONG>(wParam), static_cast<LONG>(lParam)};
+        int scope = g_mouseTriggerScope.load(std::memory_order_relaxed);
+        bool allowed = (scope == 1)
+            ? !IsFullscreenBusy()
+            : IsPointEmptyDesktopOrTaskbarUIA(g_pUia, pt, 0);
+        if (allowed) {
+            g_manualRecycleRequested.store(true, std::memory_order_release);
+            if (g_wakeEvent) {
+                SetEvent(g_wakeEvent);
+            }
+        }
+        return 0;
+    }
+    if (msg == WM_APP_RECYCLE_CHANGED) {
+        PIDLIST_ABSOLUTE* ppidl = nullptr;
+        LONG lEvent = 0;
+        HANDLE hLock = SHChangeNotification_Lock(
+            reinterpret_cast<HANDLE>(wParam), static_cast<DWORD>(lParam), &ppidl, &lEvent);
+        if (hLock) {
+            SHChangeNotification_Unlock(hLock);
+        }
+        uint64_t ignoreUntil = g_ignoreRecycleNotifyUntilTick.load(std::memory_order_acquire);
+        if (GetTickCount64() >= ignoreUntil) {
+            g_recycleDirty.store(true, std::memory_order_release);
             if (g_wakeEvent) {
                 SetEvent(g_wakeEvent);
             }
@@ -1642,7 +1627,6 @@ static LRESULT CALLBACK UiMsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 }
 
 static DWORD WINAPI UiThreadProc(LPVOID) {
-    EnablePerMonitorDpiV2ForCurrentThread();
     ULONG_PTR gdiplusToken = 0;
     Gdiplus::GdiplusStartupInput gdiplusInput;
     bool gdiplusOk = (Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusInput, nullptr) == Gdiplus::Ok);
@@ -1661,13 +1645,30 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     wc.lpszClassName = L"AutoCleanUiMsgClass";
     RegisterClassExW(&wc);
 
-    // Use top-level invisible window so WTSRegisterSessionNotification receives WM_WTSSESSION_CHANGE
     g_uiMsgHwnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         wc.lpszClassName, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, wc.hInstance, nullptr);
+
     bool wtsRegistered = false;
+    ULONG shNotifyId = 0;
     if (g_uiMsgHwnd) {
         wtsRegistered = (WTSRegisterSessionNotification(g_uiMsgHwnd, NOTIFY_FOR_THIS_SESSION) != FALSE);
+
+        PIDLIST_ABSOLUTE pidlBin = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder, 0, nullptr, &pidlBin)) && pidlBin) {
+            SHChangeNotifyEntry entry{};
+            entry.pidl = pidlBin;
+            entry.fRecursive = TRUE;
+            shNotifyId = SHChangeNotifyRegister(
+                g_uiMsgHwnd,
+                SHCNRF_ShellLevel | SHCNRF_InterruptLevel | SHCNRF_NewDelivery,
+                SHCNE_CREATE | SHCNE_DELETE | SHCNE_MKDIR | SHCNE_RMDIR |
+                    SHCNE_RENAMEITEM | SHCNE_RENAMEFOLDER | SHCNE_UPDATEITEM | SHCNE_UPDATEDIR,
+                WM_APP_RECYCLE_CHANGED,
+                1,
+                &entry);
+            CoTaskMemFree(pidlBin);
+        }
     }
 
     if (g_uiReadyEvent) {
@@ -1694,6 +1695,10 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     DestroyToastDib();
     UnregisterClassW(kToastWndClass, wc.hInstance);
 
+    if (shNotifyId != 0) {
+        SHChangeNotifyDeregister(shNotifyId);
+        shNotifyId = 0;
+    }
     if (g_uiMsgHwnd) {
         if (wtsRegistered) {
             WTSUnRegisterSessionNotification(g_uiMsgHwnd);
@@ -1752,6 +1757,21 @@ static bool ArmDirWatch(DirWatchHandle& w) {
     return w.pending;
 }
 
+static void DrainAndRearmDirWatches(std::vector<DirWatchHandle*>& watches) {
+    for (DirWatchHandle* w : watches) {
+        if (!w || !w->eventHandle) {
+            continue;
+        }
+        while (WaitForSingleObject(w->eventHandle, 0) == WAIT_OBJECT_0) {
+            DWORD bytesTransferred = 0;
+            GetOverlappedResult(w->dirHandle, &w->overlapped, &bytesTransferred, FALSE);
+            if (!ArmDirWatch(*w)) {
+                break;
+            }
+        }
+    }
+}
+
 static void CloseDirWatches(std::vector<DirWatchHandle*>& watches) {
     for (DirWatchHandle* w : watches) {
         if (w->dirHandle != INVALID_HANDLE_VALUE) {
@@ -1806,7 +1826,7 @@ static void OpenDirWatches(const ModSettings& cfg, std::vector<DirWatchHandle*>&
 }
 
 // ============================================================================
-// Recycle Bin Engine (Full Sweep + Oldest-First $I/$R Pruning)
+// Recycle Bin Engine (Event-Driven + Oldest-First $I/$R Pruning)
 // ============================================================================
 
 enum class RecycleCleanStatus {
@@ -1817,14 +1837,29 @@ enum class RecycleCleanStatus {
     Failed,
 };
 
+enum class RecycleCleanMode {
+    FullEmpty,
+    ExpireOldItems,
+    PruneThresholds,
+    EmergencyPrune,
+};
+
 struct RecycleCleanResult {
     RecycleCleanStatus status = RecycleCleanStatus::AlreadyEmpty;
     uint64_t bytesFreed = 0;
     uint64_t itemsCleaned = 0;
     uint64_t itemsRemaining = 0;
+    uint64_t oldestRemainingDeletedAt100Ns = 0;
 };
 
-static void PersistTelemetry(uint64_t freedBytes, const wchar_t* reason, bool dryRun);
+static void NotifyRecycleBinChanged() {
+    g_ignoreRecycleNotifyUntilTick.store(GetTickCount64() + 1500ULL, std::memory_order_release);
+    PIDLIST_ABSOLUTE pidlBin = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder, 0, nullptr, &pidlBin)) && pidlBin) {
+        SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_IDLIST, pidlBin, nullptr);
+        CoTaskMemFree(pidlBin);
+    }
+}
 
 static bool QueryRecycleBinStats(uint64_t* outBytes, uint64_t* outItems) {
     SHQUERYRBINFO rbInfo{};
@@ -1909,62 +1944,105 @@ static bool ReadRecycleMetaFile(const std::wstring& metaExtPath, uint64_t* outSi
 }
 
 static bool DeleteTreeRecursive(const std::wstring& extPath) {
+    if (g_stopRequested.load(std::memory_order_relaxed)) {
+        return false;
+    }
+
     std::wstring pattern = extPath + L"\\*";
     WIN32_FIND_DATAW fd{};
     HANDLE hFind = FindFirstFileExW(
         pattern.c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, FIND_FIRST_EX_LARGE_FETCH);
     if (hFind != INVALID_HANDLE_VALUE) {
         do {
+            if (g_stopRequested.load(std::memory_order_relaxed)) {
+                break;
+            }
             if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0) {
                 continue;
             }
             std::wstring child = extPath + L"\\" + fd.cFileName;
-            if (fd.dwFileAttributes & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN)) {
-                SetFileAttributesW(child.c_str(), FILE_ATTRIBUTE_NORMAL);
+            DWORD origAttrs = fd.dwFileAttributes;
+            bool clearedAttrs = false;
+            if (origAttrs & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN)) {
+                clearedAttrs = (SetFileAttributesW(child.c_str(), FILE_ATTRIBUTE_NORMAL) != FALSE);
             }
-            if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
-                !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
-                DeleteTreeRecursive(child);
-            } else if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-                RemoveDirectoryW(child.c_str());
+            bool removed = false;
+            if ((origAttrs & FILE_ATTRIBUTE_DIRECTORY) &&
+                !(origAttrs & FILE_ATTRIBUTE_REPARSE_POINT)) {
+                removed = DeleteTreeRecursive(child);
+            } else if (origAttrs & FILE_ATTRIBUTE_DIRECTORY) {
+                removed = (RemoveDirectoryW(child.c_str()) != FALSE);
             } else {
-                DeleteFileW(child.c_str());
+                removed = (DeleteFileW(child.c_str()) != FALSE);
+            }
+            if (!removed && clearedAttrs) {
+                SetFileAttributesW(child.c_str(), origAttrs);
             }
         } while (FindNextFileW(hFind, &fd));
         FindClose(hFind);
     }
-    SetFileAttributesW(extPath.c_str(), FILE_ATTRIBUTE_NORMAL);
-    return RemoveDirectoryW(extPath.c_str()) != FALSE;
+
+    if (g_stopRequested.load(std::memory_order_relaxed)) {
+        return false;
+    }
+
+    DWORD dirAttrs = GetFileAttributesW(extPath.c_str());
+    bool clearedDirAttrs = false;
+    if (dirAttrs != INVALID_FILE_ATTRIBUTES &&
+        (dirAttrs & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN))) {
+        clearedDirAttrs = (SetFileAttributesW(extPath.c_str(), FILE_ATTRIBUTE_NORMAL) != FALSE);
+    }
+    bool dirRemoved = (RemoveDirectoryW(extPath.c_str()) != FALSE);
+    if (!dirRemoved && clearedDirAttrs) {
+        SetFileAttributesW(extPath.c_str(), dirAttrs);
+    }
+    return dirRemoved;
 }
 
 static bool DeleteRecycleCandidate(const RecycleItemCandidate& item) {
     bool dataRemoved = true;
     DWORD attrs = GetFileAttributesW(item.dataFileExtPath.c_str());
     if (attrs != INVALID_FILE_ATTRIBUTES) {
+        bool clearedAttrs = false;
         if (attrs & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN)) {
-            SetFileAttributesW(item.dataFileExtPath.c_str(), FILE_ATTRIBUTE_NORMAL);
+            clearedAttrs = (SetFileAttributesW(item.dataFileExtPath.c_str(), FILE_ATTRIBUTE_NORMAL) != FALSE);
         }
         if ((attrs & FILE_ATTRIBUTE_DIRECTORY) && !(attrs & FILE_ATTRIBUTE_REPARSE_POINT)) {
             dataRemoved = DeleteTreeRecursive(item.dataFileExtPath);
         } else if (attrs & FILE_ATTRIBUTE_DIRECTORY) {
-            dataRemoved = RemoveDirectoryW(item.dataFileExtPath.c_str()) != FALSE;
+            dataRemoved = (RemoveDirectoryW(item.dataFileExtPath.c_str()) != FALSE);
         } else {
-            dataRemoved = DeleteFileW(item.dataFileExtPath.c_str()) != FALSE;
+            dataRemoved = (DeleteFileW(item.dataFileExtPath.c_str()) != FALSE);
+        }
+        if (!dataRemoved && clearedAttrs) {
+            SetFileAttributesW(item.dataFileExtPath.c_str(), attrs);
         }
     }
     if (!dataRemoved) {
         return false;
     }
-    SetFileAttributesW(item.metaFileExtPath.c_str(), FILE_ATTRIBUTE_NORMAL);
-    return DeleteFileW(item.metaFileExtPath.c_str()) != FALSE;
+
+    DWORD metaAttrs = GetFileAttributesW(item.metaFileExtPath.c_str());
+    bool clearedMetaAttrs = false;
+    if (metaAttrs != INVALID_FILE_ATTRIBUTES &&
+        (metaAttrs & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN))) {
+        clearedMetaAttrs = (SetFileAttributesW(item.metaFileExtPath.c_str(), FILE_ATTRIBUTE_NORMAL) != FALSE);
+    }
+    bool metaRemoved = (DeleteFileW(item.metaFileExtPath.c_str()) != FALSE);
+    if (!metaRemoved && clearedMetaAttrs) {
+        SetFileAttributesW(item.metaFileExtPath.c_str(), metaAttrs);
+    }
+    return metaRemoved;
 }
 
 static void CollectRecycleBinCandidates(
     uint64_t now100Ns,
     uint64_t minAgeMs,
+    wchar_t driveFilter,
     std::vector<RecycleItemCandidate>& outCandidates,
     uint64_t* outTotalBytes,
-    uint64_t* outTotalItems) {
+    uint64_t* outTotalItems,
+    uint64_t* outOldestProtectedDeletedAt100Ns) {
     std::wstring sid = GetCurrentUserSidString();
     if (sid.empty()) {
         return;
@@ -1976,7 +2054,11 @@ static void CollectRecycleBinCandidates(
         if (!(driveMask & (1U << d))) {
             continue;
         }
-        wchar_t root[] = {static_cast<wchar_t>(L'A' + d), L':', L'\\', L'\0'};
+        wchar_t driveLetter = static_cast<wchar_t>(L'A' + d);
+        if (driveFilter != 0 && towupper(driveLetter) != towupper(driveFilter)) {
+            continue;
+        }
+        wchar_t root[] = {driveLetter, L':', L'\\', L'\0'};
         if (GetDriveTypeW(root) != DRIVE_FIXED) {
             continue;
         }
@@ -2012,6 +2094,10 @@ static void CollectRecycleBinCandidates(
             if (outTotalItems) (*outTotalItems)++;
 
             if (grace100Ns > 0 && now100Ns > deletedAt && (now100Ns - deletedAt) < grace100Ns) {
+                if (outOldestProtectedDeletedAt100Ns &&
+                    (*outOldestProtectedDeletedAt100Ns == 0 || deletedAt < *outOldestProtectedDeletedAt100Ns)) {
+                    *outOldestProtectedDeletedAt100Ns = deletedAt;
+                }
                 continue;
             }
 
@@ -2028,21 +2114,35 @@ static uint64_t GetCurrentSystemFileTime100Ns() {
     return FileTimeToU64(ftNow);
 }
 
-static uint64_t LoadPersistedFileTime100Ns(PCWSTR keyName) {
+static std::wstring GetUserScheduleKey(PCWSTR baseName) {
+    std::wstring sid = GetCurrentUserSidString();
+    if (sid.empty()) {
+        return baseName;
+    }
+    return std::wstring(baseName) + L"." + sid;
+}
+
+static uint64_t LoadPersistedFileTime100Ns(const std::wstring& keyName) {
     WCHAR buf[64]{};
-    if (Wh_GetStringValue(keyName, buf, ARRAYSIZE(buf)) == 0 || !buf[0]) {
+    if (Wh_GetStringValue(keyName.c_str(), buf, ARRAYSIZE(buf)) == 0 || !buf[0]) {
         return 0;
     }
     return _wcstoui64(buf, nullptr, 10);
 }
 
-static void SavePersistedFileTime100Ns(PCWSTR keyName, uint64_t val100Ns) {
+static void SavePersistedFileTime100Ns(const std::wstring& keyName, uint64_t val100Ns) {
     WCHAR buf[64]{};
     swprintf_s(buf, L"%llu", static_cast<unsigned long long>(val100Ns));
-    Wh_SetStringValue(keyName, buf);
+    Wh_SetStringValue(keyName.c_str(), buf);
 }
 
-static RecycleCleanResult RunRecycleBinClean(const ModSettings& cfg, const wchar_t* reason, bool forceFullSweep) {
+static RecycleCleanResult RunRecycleBinClean(
+    const ModSettings& cfg,
+    const wchar_t* reason,
+    RecycleCleanMode mode,
+    bool sizeHit = false,
+    bool countHit = false,
+    wchar_t driveFilter = 0) {
     RecycleCleanResult res;
     uint64_t rbBytes = 0;
     uint64_t rbItems = 0;
@@ -2052,122 +2152,167 @@ static RecycleCleanResult RunRecycleBinClean(const ModSettings& cfg, const wchar
     std::vector<RecycleItemCandidate> candidates;
     uint64_t scannedBytes = 0;
     uint64_t scannedItems = 0;
-    uint64_t effectiveMinAgeMs = forceFullSweep ? 0ULL : cfg.rbMinAgeMs;
-    CollectRecycleBinCandidates(now100Ns, effectiveMinAgeMs, candidates, &scannedBytes, &scannedItems);
+    uint64_t oldestProtected = 0;
+    uint64_t effectiveMinAgeMs = (mode == RecycleCleanMode::FullEmpty) ? 0ULL : cfg.rbMinAgeMs;
+    CollectRecycleBinCandidates(
+        now100Ns, effectiveMinAgeMs, driveFilter, candidates, &scannedBytes, &scannedItems, &oldestProtected);
 
-    if (scannedItems > rbItems) rbItems = scannedItems;
-    if (scannedBytes > rbBytes) rbBytes = scannedBytes;
+    uint64_t activeBytes = (driveFilter != 0) ? scannedBytes : (std::max)(rbBytes, scannedBytes);
+    uint64_t activeItems = (driveFilter != 0) ? scannedItems : (std::max)(rbItems, scannedItems);
 
     if (!statsOk && scannedItems == 0) {
-        Wh_Log(L"AutoClean [%s | RecycleBin]: SHQueryRecycleBinW failed", reason);
+        Wh_Log(L"[%s | RecycleBin]: SHQueryRecycleBinW failed", reason);
         res.status = RecycleCleanStatus::Failed;
         return res;
     }
-    if (rbItems == 0 && rbBytes == 0) {
-        Wh_Log(L"AutoClean [%s | RecycleBin]: already empty", reason);
+    if (activeItems == 0 && activeBytes == 0) {
+        Wh_Log(L"[%s | RecycleBin]: already empty", reason);
         res.status = RecycleCleanStatus::AlreadyEmpty;
         return res;
     }
 
-    if (cfg.dryRun) {
+    BOOL bgEntered = SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+
+    if (mode != RecycleCleanMode::FullEmpty) {
+        if (candidates.empty()) {
+            if (bgEntered) {
+                SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
+            }
+            Wh_Log(L"[%s | RecycleBin-Prune]%s: 0 eligible items (all within min age or skipped)",
+                   reason, cfg.dryRun ? L" (DRY-RUN ONLY)" : L"");
+            res.status = cfg.dryRun ? RecycleCleanStatus::DryRun : RecycleCleanStatus::AlreadyEmpty;
+            res.itemsRemaining = activeItems;
+            res.oldestRemainingDeletedAt100Ns = oldestProtected;
+            return res;
+        }
+
+        std::sort(candidates.begin(), candidates.end(), [](const RecycleItemCandidate& a, const RecycleItemCandidate& b) {
+            return a.deletedAt100Ns < b.deletedAt100Ns;
+        });
+
+        uint64_t expireAge100Ns = cfg.rbRetentionEnabled
+            ? MultiplyClampU64(cfg.rbRetentionAgeMs, 10000ULL)
+            : 0ULL;
+
+        uint64_t remBytes = activeBytes;
+        uint64_t remItems = activeItems;
+
+        bool enforceByteTarget = false;
+        bool enforceItemTarget = false;
+        uint64_t targetBytes = remBytes;
+        uint64_t targetItems = remItems;
+
+        if (mode == RecycleCleanMode::PruneThresholds) {
+            if (sizeHit) {
+                enforceByteTarget = true;
+                targetBytes = ScaleByPercentU64(cfg.rbSizeThresholdBytes, cfg.rbTargetPercent);
+            }
+            if (countHit) {
+                enforceItemTarget = true;
+                targetItems = ScaleByPercentU64(cfg.rbMaxItems, cfg.rbTargetPercent);
+            }
+        } else if (mode == RecycleCleanMode::EmergencyPrune) {
+            enforceByteTarget = true;
+            targetBytes = ScaleByPercentU64(remBytes, cfg.rbTargetPercent);
+        }
+
+        uint64_t freedBytes = 0;
+        uint64_t deletedItems = 0;
+        uint64_t oldestSurvivor = oldestProtected;
+
+        for (const auto& item : candidates) {
+            if (g_stopRequested.load(std::memory_order_relaxed)) {
+                break;
+            }
+
+            bool isExpiredByAge = (expireAge100Ns > 0 && now100Ns > item.deletedAt100Ns &&
+                                   (now100Ns - item.deletedAt100Ns) >= expireAge100Ns);
+
+            bool shouldDelete = false;
+            if (mode == RecycleCleanMode::ExpireOldItems) {
+                shouldDelete = isExpiredByAge;
+            } else {
+                bool needMoreBytes = enforceByteTarget && (remBytes > targetBytes);
+                bool needMoreItems = enforceItemTarget && (remItems > targetItems);
+                shouldDelete = isExpiredByAge || needMoreBytes || needMoreItems;
+            }
+
+            if (!shouldDelete) {
+                if (oldestSurvivor == 0 || item.deletedAt100Ns < oldestSurvivor) {
+                    oldestSurvivor = item.deletedAt100Ns;
+                }
+                continue;
+            }
+
+            if (cfg.dryRun) {
+                freedBytes += item.sizeBytes;
+                deletedItems++;
+                if (remBytes >= item.sizeBytes) remBytes -= item.sizeBytes;
+                else remBytes = 0;
+                if (remItems > 0) remItems--;
+            } else if (DeleteRecycleCandidate(item)) {
+                freedBytes += item.sizeBytes;
+                deletedItems++;
+                if (remBytes >= item.sizeBytes) remBytes -= item.sizeBytes;
+                else remBytes = 0;
+                if (remItems > 0) remItems--;
+            } else {
+                if (oldestSurvivor == 0 || item.deletedAt100Ns < oldestSurvivor) {
+                    oldestSurvivor = item.deletedAt100Ns;
+                }
+            }
+        }
+
+        if (bgEntered) {
+            SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
+        }
+
+        if (!cfg.dryRun && deletedItems > 0) {
+            NotifyRecycleBinChanged();
+        }
+
         Wh_Log(
-            L"AutoClean [%s | RecycleBin] (DRY-RUN ONLY): would clean %llu bytes (%llu items) — zero files touched",
+            L"[%s | RecycleBin-Prune]%s: %s %llu bytes (%llu items, %llu remaining)",
             reason,
-            static_cast<unsigned long long>(rbBytes),
-            static_cast<unsigned long long>(rbItems));
+            cfg.dryRun ? L" (DRY-RUN ONLY)" : L"",
+            cfg.dryRun ? L"would free" : L"freed",
+            static_cast<unsigned long long>(freedBytes),
+            static_cast<unsigned long long>(deletedItems),
+            static_cast<unsigned long long>(remItems));
+        res.status = cfg.dryRun
+            ? RecycleCleanStatus::DryRun
+            : (deletedItems > 0 ? RecycleCleanStatus::Pruned : RecycleCleanStatus::AlreadyEmpty);
+        res.bytesFreed = freedBytes;
+        res.itemsCleaned = deletedItems;
+        res.itemsRemaining = remItems;
+        res.oldestRemainingDeletedAt100Ns = oldestSurvivor;
+        return res;
+    }
+
+    // Full Empty path (explicit user middle-click or Full Sweep enabled on threshold)
+    if (cfg.dryRun) {
+        if (bgEntered) {
+            SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
+        }
+        Wh_Log(
+            L"[%s | RecycleBin-FullSweep] (DRY-RUN ONLY): would free %llu bytes (%llu items) — zero files touched",
+            reason,
+            static_cast<unsigned long long>(activeBytes),
+            static_cast<unsigned long long>(activeItems));
         res.status = RecycleCleanStatus::DryRun;
-        res.bytesFreed = rbBytes;
-        res.itemsCleaned = rbItems;
+        res.bytesFreed = activeBytes;
+        res.itemsCleaned = activeItems;
         res.itemsRemaining = 0;
         return res;
     }
 
-    bool isExpireOnlyPass = (wcscmp(reason, L"RecycleAge30d") == 0);
-    bool useOldestFirst = isExpireOnlyPass || (!forceFullSweep && !cfg.rbFullSweep && cfg.rbOldestFirst);
-    BOOL bgEntered = SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
-
-    if (useOldestFirst) {
-        if (!candidates.empty()) {
-            std::sort(candidates.begin(), candidates.end(), [](const RecycleItemCandidate& a, const RecycleItemCandidate& b) {
-                return a.deletedAt100Ns < b.deletedAt100Ns;
-            });
-
-            uint64_t expireAge100Ns = cfg.rbTimerEnabled
-                ? MultiplyClampU64(cfg.rbTimerIntervalMs, 10000ULL)
-                : MultiplyClampU64(30ULL * 86400ULL * 1000ULL, 10000ULL);
-
-            uint64_t remBytes = scannedBytes > 0 ? scannedBytes : rbBytes;
-            uint64_t remItems = scannedItems > 0 ? scannedItems : rbItems;
-            uint64_t targetBytes = ScaleByPercentU64(remBytes, cfg.rbTargetPercent);
-            uint64_t targetItems = ScaleByPercentU64(remItems, cfg.rbTargetPercent);
-            if (cfg.rbSizeThresholdEnabled && remBytes >= cfg.rbSizeThresholdBytes) {
-                targetBytes = ScaleByPercentU64(cfg.rbSizeThresholdBytes, cfg.rbTargetPercent);
-            }
-            if (cfg.rbCountThresholdEnabled && remItems >= cfg.rbMaxItems) {
-                targetItems = ScaleByPercentU64(cfg.rbMaxItems, cfg.rbTargetPercent);
-            }
-
-            uint64_t freedBytes = 0;
-            uint64_t deletedItems = 0;
-            for (const auto& item : candidates) {
-                if (g_stopRequested.load(std::memory_order_relaxed)) {
-                    break;
-                }
-                bool isExpiredByAge = (expireAge100Ns > 0 && now100Ns > item.deletedAt100Ns &&
-                                       (now100Ns - item.deletedAt100Ns) >= expireAge100Ns);
-                if (isExpireOnlyPass && !isExpiredByAge) {
-                    // Candidates are sorted oldest-first; once an item is newer than 30d/schedule, stop.
-                    break;
-                }
-                if (!isExpireOnlyPass && !isExpiredByAge &&
-                    remBytes <= targetBytes && remItems <= targetItems && deletedItems > 0) {
-                    break;
-                }
-                if (DeleteRecycleCandidate(item)) {
-                    freedBytes += item.sizeBytes;
-                    deletedItems++;
-                    if (remBytes >= item.sizeBytes) remBytes -= item.sizeBytes;
-                    else remBytes = 0;
-                    if (remItems > 0) remItems--;
-                }
-            }
-
-            if (bgEntered) {
-                SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
-            }
-
-            if (deletedItems > 0) {
-                SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-                PersistTelemetry(freedBytes, reason, cfg.dryRun);
-            }
-            Wh_Log(
-                L"AutoClean [%s | RecycleBin-OldestFirst]: freed %llu bytes (%llu items pruned, %llu remaining)",
-                reason,
-                static_cast<unsigned long long>(freedBytes),
-                static_cast<unsigned long long>(deletedItems),
-                static_cast<unsigned long long>(remItems));
-            res.status = deletedItems > 0 ? RecycleCleanStatus::Pruned : RecycleCleanStatus::AlreadyEmpty;
-            res.bytesFreed = freedBytes;
-            res.itemsCleaned = deletedItems;
-            res.itemsRemaining = remItems;
-            return res;
-        }
-        if (isExpireOnlyPass) {
-            if (bgEntered) {
-                SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
-            }
-            res.status = RecycleCleanStatus::AlreadyEmpty;
-            return res;
-        }
-    }
-
+    g_ignoreRecycleNotifyUntilTick.store(GetTickCount64() + 1500ULL, std::memory_order_release);
     DWORD flags = SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI;
     if (!cfg.rbPlaySound) {
         flags |= SHERB_NOSOUND;
     }
     HRESULT hr = SHEmptyRecycleBinW(nullptr, nullptr, flags);
     if (FAILED(hr) && !candidates.empty()) {
-        // Fallback: direct $I/$R removal if SHEmptyRecycleBinW fails on background thread
         uint64_t fallbackFreed = 0;
         uint64_t fallbackDeleted = 0;
         for (const auto& item : candidates) {
@@ -2178,10 +2323,10 @@ static RecycleCleanResult RunRecycleBinClean(const ModSettings& cfg, const wchar
             }
         }
         if (fallbackDeleted > 0) {
-            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+            NotifyRecycleBinChanged();
             hr = S_OK;
-            rbBytes = fallbackFreed;
-            rbItems = fallbackDeleted;
+            activeBytes = fallbackFreed;
+            activeItems = fallbackDeleted;
         }
     }
     if (bgEntered) {
@@ -2190,22 +2335,21 @@ static RecycleCleanResult RunRecycleBinClean(const ModSettings& cfg, const wchar
 
     if (FAILED(hr)) {
         Wh_Log(
-            L"AutoClean [%s | RecycleBin-FullSweep]: SHEmptyRecycleBinW failed (hr=0x%08X)",
+            L"[%s | RecycleBin-FullSweep]: SHEmptyRecycleBinW failed (hr=0x%08X)",
             reason,
             static_cast<unsigned int>(hr));
         res.status = RecycleCleanStatus::Failed;
         return res;
     }
 
-    PersistTelemetry(rbBytes, reason, cfg.dryRun);
     Wh_Log(
-        L"AutoClean [%s | RecycleBin-FullSweep]: freed %llu bytes (%llu items)",
+        L"[%s | RecycleBin-FullSweep]: freed %llu bytes (%llu items)",
         reason,
-        static_cast<unsigned long long>(rbBytes),
-        static_cast<unsigned long long>(rbItems));
+        static_cast<unsigned long long>(activeBytes),
+        static_cast<unsigned long long>(activeItems));
     res.status = RecycleCleanStatus::Emptied;
-    res.bytesFreed = rbBytes;
-    res.itemsCleaned = rbItems;
+    res.bytesFreed = activeBytes;
+    res.itemsCleaned = activeItems;
     res.itemsRemaining = 0;
     return res;
 }
@@ -2279,7 +2423,6 @@ static uint64_t MeasureDirectoryBytes(const std::wstring& extDir, const ModSetti
 
 static void CollectCandidatesRecursive(
     const std::wstring& extDir,
-    bool isRoot,
     size_t depth,
     uint64_t now100Ns,
     uint64_t effectiveMinAgeMs,
@@ -2325,8 +2468,7 @@ static void CollectCandidatesRecursive(
         std::wstring childPath = extDir + L"\\" + fd.cFileName;
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
             CollectCandidatesRecursive(
-                childPath, false, depth + 1, now100Ns, effectiveMinAgeMs, cfg, files, dirs, stats);
-            // Always queue subdirectories for empty-folder removal; RemoveDirectoryW only removes empty dirs
+                childPath, depth + 1, now100Ns, effectiveMinAgeMs, cfg, files, dirs, stats);
             dirs.push_back({childPath, depth + 1});
         } else {
             uint64_t fileSize = (static_cast<uint64_t>(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow;
@@ -2342,42 +2484,15 @@ static void CollectCandidatesRecursive(
     } while (FindNextFileW(hFind, &fd));
 
     FindClose(hFind);
-    (void)isRoot;
-}
-
-static void PersistTelemetry(uint64_t freedBytes, const wchar_t* reason, bool dryRun) {
-    if (dryRun || freedBytes == 0) {
-        return;
-    }
-    g_totalFreedBytes += freedBytes;
-
-    SYSTEMTIME st{};
-    GetLocalTime(&st);
-    WCHAR timeBuf[64]{};
-    swprintf_s(
-        timeBuf,
-        L"%04u-%02u-%02u %02u:%02u:%02u",
-        st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-
-    WCHAR lastBytesBuf[32]{};
-    WCHAR totalMbBuf[32]{};
-    swprintf_s(lastBytesBuf, L"%llu", static_cast<unsigned long long>(freedBytes));
-    swprintf_s(totalMbBuf, L"%llu", static_cast<unsigned long long>(g_totalFreedBytes / (1024ULL * 1024ULL)));
-
-    Wh_SetStringValue(L"telemetry.lastCleanTime", timeBuf);
-    Wh_SetStringValue(L"telemetry.lastReason", reason);
-    Wh_SetStringValue(L"telemetry.lastFreedBytes", lastBytesBuf);
-    Wh_SetStringValue(L"telemetry.totalFreedMB", totalMbBuf);
 }
 
 static CleanStats RunCleanupPass(const ModSettings& cfg, const wchar_t* reason, bool forceFullSweep) {
-    // Enter Windows background I/O & CPU mode without holding any locks.
     BOOL bgEntered = SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
 
     uint64_t now100Ns = GetCurrentSystemFileTime100Ns();
     bool isFullSweepMode = forceFullSweep || cfg.fullSweep;
-    // Full sweep (including Startup Full Sweep) cleans all unlocked temp files regardless of minFileAgeMs
-    uint64_t effectiveMinAgeMs = isFullSweepMode ? 0ULL : cfg.minFileAgeMs;
+    // Always honor minFileAgeMs so full sweeps ignore targetPercent without deleting brand-new files.
+    uint64_t effectiveMinAgeMs = cfg.minFileAgeMs;
 
     CleanStats stats;
     std::vector<FileCandidate> files;
@@ -2385,13 +2500,12 @@ static CleanStats RunCleanupPass(const ModSettings& cfg, const wchar_t* reason, 
 
     for (const auto& dir : GetTargetTempDirs(cfg)) {
         CollectCandidatesRecursive(
-            ToExtendedPath(dir), true, 0, now100Ns, effectiveMinAgeMs, cfg, files, dirs, stats);
+            ToExtendedPath(dir), 0, now100Ns, effectiveMinAgeMs, cfg, files, dirs, stats);
     }
 
     bool isTimerOrManual = (wcscmp(reason, L"Timer") == 0 || wcscmp(reason, L"Taskbar3xClick") == 0);
     bool useOldestFirst = !isFullSweepMode && cfg.oldestFirst;
     if (useOldestFirst && isTimerOrManual && stats.totalBytesScanned < cfg.thresholdBytes) {
-        // When below the size threshold on a scheduled timer or manual click, clean all eligible files
         useOldestFirst = false;
     }
 
@@ -2415,7 +2529,6 @@ static CleanStats RunCleanupPass(const ModSettings& cfg, const wchar_t* reason, 
             break;
         }
         if (cfg.dryRun) {
-            // Strictly non-destructive: never modify attributes or delete files in Dry-Run mode
             stats.bytesFreed += f.sizeBytes;
             stats.filesDeleted++;
             if (remainingBytes >= f.sizeBytes) remainingBytes -= f.sizeBytes;
@@ -2423,9 +2536,10 @@ static CleanStats RunCleanupPass(const ModSettings& cfg, const wchar_t* reason, 
             continue;
         }
         DWORD attrs = GetFileAttributesW(f.extPath.c_str());
+        bool clearedAttrs = false;
         if (attrs != INVALID_FILE_ATTRIBUTES &&
             (attrs & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))) {
-            SetFileAttributesW(f.extPath.c_str(), FILE_ATTRIBUTE_NORMAL);
+            clearedAttrs = (SetFileAttributesW(f.extPath.c_str(), FILE_ATTRIBUTE_NORMAL) != FALSE);
         }
         if (DeleteFileW(f.extPath.c_str())) {
             stats.bytesFreed += f.sizeBytes;
@@ -2433,11 +2547,13 @@ static CleanStats RunCleanupPass(const ModSettings& cfg, const wchar_t* reason, 
             if (remainingBytes >= f.sizeBytes) remainingBytes -= f.sizeBytes;
             else remainingBytes = 0;
         } else {
+            if (clearedAttrs) {
+                SetFileAttributesW(f.extPath.c_str(), attrs);
+            }
             stats.skippedLocked++;
         }
     }
 
-    // Prune deepest empty directories first.
     std::sort(dirs.begin(), dirs.end(), [](const DirCandidate& a, const DirCandidate& b) {
         return a.depth > b.depth;
     });
@@ -2449,12 +2565,15 @@ static CleanStats RunCleanupPass(const ModSettings& cfg, const wchar_t* reason, 
             continue;
         }
         DWORD dAttrs = GetFileAttributesW(d.extPath.c_str());
+        bool clearedAttrs = false;
         if (dAttrs != INVALID_FILE_ATTRIBUTES &&
             (dAttrs & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))) {
-            SetFileAttributesW(d.extPath.c_str(), FILE_ATTRIBUTE_NORMAL);
+            clearedAttrs = (SetFileAttributesW(d.extPath.c_str(), FILE_ATTRIBUTE_NORMAL) != FALSE);
         }
         if (RemoveDirectoryW(d.extPath.c_str())) {
             stats.dirsDeleted++;
+        } else if (clearedAttrs) {
+            SetFileAttributesW(d.extPath.c_str(), dAttrs);
         }
     }
 
@@ -2462,10 +2581,8 @@ static CleanStats RunCleanupPass(const ModSettings& cfg, const wchar_t* reason, 
         SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
     }
 
-    PersistTelemetry(stats.bytesFreed, reason, cfg.dryRun);
-
     Wh_Log(
-        L"AutoClean [%s | %s]%s: freed %llu bytes (%llu files, %llu dirs); scanned=%llu skipped locked=%llu recent=%llu aiAgents=%llu excluded=%llu reparse=%llu",
+        L"[%s | %s]%s: freed %llu bytes (%llu files, %llu dirs); scanned=%llu skipped locked=%llu recent=%llu aiAgents=%llu excluded=%llu reparse=%llu",
         reason,
         useOldestFirst ? L"OldestFirst" : L"FullSweep",
         cfg.dryRun ? L" (DRY-RUN ONLY)" : L"",
@@ -2574,45 +2691,65 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
     std::vector<DirWatchHandle*> watches;
     OpenDirWatches(cfg, watches);
 
+    std::wstring tempTimerKey = GetUserScheduleKey(L"schedule.lastTempTimerFt");
+
     uint64_t now = GetTickCount64();
     uint64_t loginDesktopReadyTick = 0;
     if (IsInteractiveUserDesktopReady()) {
         loginDesktopReadyTick = now;
-        Wh_Log(L"AutoClean: interactive user desktop active; lazy startup scheduled in %llu ms",
+        Wh_Log(L"Interactive user desktop active; lazy startup scheduled in %llu ms",
                static_cast<unsigned long long>(cfg.startupDelayMs));
     } else {
-        Wh_Log(L"AutoClean: waiting for user to pass Windows logon gate before starting timers");
+        Wh_Log(L"Waiting for interactive desktop before starting automatic timers");
     }
 
     uint64_t lastTimerClean = now;
-    uint64_t lastRecycleTimerClean = now;
-    uint64_t lastTempTimerFt100Ns = LoadPersistedFileTime100Ns(L"schedule.lastTempTimerFt");
-    uint64_t lastRecycleTimerFt100Ns = LoadPersistedFileTime100Ns(L"schedule.lastRecycleTimerFt");
+    uint64_t lastTempTimerFt100Ns = LoadPersistedFileTime100Ns(tempTimerKey);
     uint64_t nowFt100Ns = GetCurrentSystemFileTime100Ns();
     if (lastTempTimerFt100Ns == 0 || lastTempTimerFt100Ns > nowFt100Ns) {
         lastTempTimerFt100Ns = nowFt100Ns;
-        SavePersistedFileTime100Ns(L"schedule.lastTempTimerFt", lastTempTimerFt100Ns);
-    }
-    if (lastRecycleTimerFt100Ns == 0 || lastRecycleTimerFt100Ns > nowFt100Ns) {
-        lastRecycleTimerFt100Ns = nowFt100Ns;
-        SavePersistedFileTime100Ns(L"schedule.lastRecycleTimerFt", lastRecycleTimerFt100Ns);
+        SavePersistedFileTime100Ns(tempTimerKey, lastTempTimerFt100Ns);
     }
 
     uint64_t lastEmergencyCheck = 0;
-    uint64_t lastRecycleCheck = 0;
+    bool emergencyFloorActive = false;
     uint64_t lastCleanTime = 0;
     uint64_t lastRecycleCleanTime = 0;
+    uint64_t nextRecycleExpireFt100Ns = 0;
     bool startupTempPending = cfg.startupCleanTemp;
     bool startupRecyclePending = cfg.startupCleanRecycle;
     bool watchDirty = cfg.thresholdEnabled;
+    uint64_t firstWriteEventTime = watchDirty ? now : 0;
     uint64_t lastWriteEventTime = watchDirty ? now : 0;
     bool deferredPending = false;
     bool lastCleanWinTemp = cfg.cleanWindowsTemp;
     bool lastThreshEnabled = cfg.thresholdEnabled;
     bool lastTimerEnabled = cfg.timerEnabled;
-    bool lastRbTimerEnabled = cfg.rbTimerEnabled;
+    bool lastEmergEnabled = cfg.emergencyEnabled;
+    uint64_t lastEmergFloorBytes = cfg.emergencyFloorBytes;
     bool lastDryRun = false;
     bool dryRunCompletedOnce = false;
+
+    auto runTempPassAndDrain = [&](const wchar_t* reason, bool forceFullSweep) -> CleanStats {
+        CleanStats stats = RunCleanupPass(cfg, reason, forceFullSweep);
+        if (!cfg.dryRun) {
+            DrainAndRearmDirWatches(watches);
+        }
+        watchDirty = false;
+        firstWriteEventTime = 0;
+        lastWriteEventTime = 0;
+        return stats;
+    };
+
+    auto updateNextRecycleExpiry = [&](uint64_t oldestSurvivor100Ns) {
+        if (cfg.rbRetentionEnabled && oldestSurvivor100Ns > 0) {
+            uint64_t effectiveAgeMs = (std::max)(cfg.rbRetentionAgeMs, cfg.rbMinAgeMs);
+            uint64_t age100Ns = MultiplyClampU64(effectiveAgeMs, 10000ULL);
+            nextRecycleExpireFt100Ns = oldestSurvivor100Ns + age100Ns;
+        } else {
+            nextRecycleExpireFt100Ns = 0;
+        }
+    };
 
     while (!g_stopRequested.load(std::memory_order_relaxed)) {
         cfg = SnapshotSettings();
@@ -2623,7 +2760,8 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             lastCleanWinTemp = cfg.cleanWindowsTemp;
             lastThreshEnabled = cfg.thresholdEnabled;
             watchDirty = cfg.thresholdEnabled;
-            lastWriteEventTime = now;
+            firstWriteEventTime = watchDirty ? now : 0;
+            lastWriteEventTime = watchDirty ? now : 0;
         }
 
         if (!cfg.dryRun) {
@@ -2632,93 +2770,91 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
         }
 
         if (g_settingsReconfigured.exchange(false, std::memory_order_acq_rel)) {
-            lastRecycleCheck = 0;
+            g_recycleDirty.store(true, std::memory_order_release);
             lastEmergencyCheck = 0;
+            if (cfg.emergencyEnabled != lastEmergEnabled || cfg.emergencyFloorBytes != lastEmergFloorBytes) {
+                emergencyFloorActive = false;
+                lastEmergEnabled = cfg.emergencyEnabled;
+                lastEmergFloorBytes = cfg.emergencyFloorBytes;
+            }
             if (cfg.timerEnabled && !lastTimerEnabled) {
                 lastTimerClean = now;
                 lastTempTimerFt100Ns = GetCurrentSystemFileTime100Ns();
-                SavePersistedFileTime100Ns(L"schedule.lastTempTimerFt", lastTempTimerFt100Ns);
-            }
-            if (cfg.rbTimerEnabled && !lastRbTimerEnabled) {
-                lastRecycleTimerClean = now;
-                lastRecycleTimerFt100Ns = GetCurrentSystemFileTime100Ns();
-                SavePersistedFileTime100Ns(L"schedule.lastRecycleTimerFt", lastRecycleTimerFt100Ns);
+                SavePersistedFileTime100Ns(tempTimerKey, lastTempTimerFt100Ns);
             }
             lastTimerEnabled = cfg.timerEnabled;
-            lastRbTimerEnabled = cfg.rbTimerEnabled;
             if (cfg.thresholdEnabled) {
                 watchDirty = true;
+                firstWriteEventTime = 0;
                 lastWriteEventTime = 0;
             }
         }
 
-        // Single-shot Dry-Run Mode: when enabled, run exactly once, show explicit preview toast, and stop repeating
+        // Single-shot Dry-Run Mode
         if (cfg.dryRun && (!dryRunCompletedOnce || !lastDryRun)) {
             lastDryRun = true;
             dryRunCompletedOnce = true;
-            Wh_Log(L"AutoClean Dry-Run mode enabled: running single-shot non-destructive preview");
-            CleanStats tempPreview = RunCleanupPass(cfg, L"DryRunPreview", cfg.fullSweep);
-            RecycleCleanResult rbPreview = RunRecycleBinClean(cfg, L"DryRunPreview", cfg.rbFullSweep);
+            Wh_Log(L"Dry-Run mode enabled: running single-shot non-destructive preview");
+            CleanStats tempPreview = runTempPassAndDrain(L"DryRunPreview", cfg.fullSweep);
+            RecycleCleanResult rbPreview = RunRecycleBinClean(
+                cfg,
+                L"DryRunPreview",
+                cfg.rbFullSweep ? RecycleCleanMode::FullEmpty : RecycleCleanMode::ExpireOldItems);
             NotifySingleShotDryRunToast(tempPreview, rbPreview);
         }
 
         // 0a. Immediate manual 3x left-click Temp trigger
         if (g_manualTempRequested.exchange(false, std::memory_order_acq_rel)) {
-            Wh_Log(L"AutoClean 3x taskbar/desktop left-click Temp trigger activated");
-            CleanStats stats = RunCleanupPass(cfg, L"Taskbar3xClick", cfg.fullSweep);
+            Wh_Log(L"3x empty-space left-click Temp trigger activated");
+            CleanStats stats = runTempPassAndDrain(L"Taskbar3xClick", cfg.fullSweep);
             lastCleanTime = GetTickCount64();
-            watchDirty = false;
             NotifyTempToast(stats, cfg.dryRun, true);
         }
 
         // 0b. Immediate manual middle-click Recycle Bin trigger
         if (g_manualRecycleRequested.exchange(false, std::memory_order_acq_rel)) {
-            Wh_Log(L"AutoClean middle-click Recycle Bin trigger activated");
-            RecycleCleanResult rbRes = RunRecycleBinClean(cfg, L"MiddleClick", true);
+            Wh_Log(L"Middle-click Recycle Bin trigger activated");
+            RecycleCleanResult rbRes = RunRecycleBinClean(cfg, L"MiddleClick", RecycleCleanMode::FullEmpty);
             lastRecycleCleanTime = GetTickCount64();
+            updateNextRecycleExpiry(rbRes.oldestRemainingDeletedAt100Ns);
             NotifyRecycleToast(rbRes, true);
         }
 
-        // Gate all automatic background triggers until the user has passed the Windows logon screen
-        // and also pause automatic background loops once single-shot Dry-Run has executed.
         bool desktopReady = IsInteractiveUserDesktopReady();
         now = GetTickCount64();
         if (desktopReady && loginDesktopReadyTick == 0) {
             loginDesktopReadyTick = now;
             lastTimerClean = now;
-            lastRecycleTimerClean = now;
-            Wh_Log(L"AutoClean: user passed Windows logon gate; lazy startup will fire in %llu ms",
+            Wh_Log(L"Interactive desktop ready; lazy startup will fire in %llu ms",
                    static_cast<unsigned long long>(cfg.startupDelayMs));
         }
 
         const wchar_t* deferReason = nullptr;
         bool allowAutoRuns = desktopReady && (!cfg.dryRun || !dryRunCompletedOnce);
 
-        // 1. Lazy Post-Logon Startup cleanup trigger (waits startupDelayMs AFTER interactive desktop login)
+        // 1. Lazy Post-Logon Startup cleanup trigger
         if (allowAutoRuns && (startupTempPending || startupRecyclePending) &&
             loginDesktopReadyTick != 0 && (now - loginDesktopReadyTick >= cfg.startupDelayMs)) {
             if (!ShouldDeferCleanup(cfg, false, &deferReason)) {
                 if (startupTempPending) {
-                    Wh_Log(L"AutoClean lazy post-login startup Temp cleanup triggered (fullSweep=%d)",
-                           cfg.startupFullSweep ? 1 : 0);
-                    CleanStats stats = RunCleanupPass(cfg, L"Startup", cfg.startupFullSweep);
+                    Wh_Log(L"Startup Temp cleanup triggered (fullSweep=%d)", cfg.startupFullSweep ? 1 : 0);
+                    CleanStats stats = runTempPassAndDrain(L"Startup", cfg.startupFullSweep);
                     startupTempPending = false;
                     lastCleanTime = GetTickCount64();
                     lastTimerClean = lastCleanTime;
                     lastTempTimerFt100Ns = GetCurrentSystemFileTime100Ns();
-                    SavePersistedFileTime100Ns(L"schedule.lastTempTimerFt", lastTempTimerFt100Ns);
-                    watchDirty = false;
+                    SavePersistedFileTime100Ns(tempTimerKey, lastTempTimerFt100Ns);
                     NotifyTempToast(stats, cfg.dryRun, false);
                 }
                 if (startupRecyclePending) {
-                    Wh_Log(L"AutoClean lazy post-login startup Recycle Bin cleanup triggered");
-                    // Respect 30-day retention on startup unless user explicitly enabled Recycle Bin Full Sweep
-                    bool forceRbStartupSweep = cfg.startupFullSweep && cfg.rbFullSweep;
-                    RecycleCleanResult rbRes = RunRecycleBinClean(
-                        cfg, forceRbStartupSweep ? L"Startup" : L"RecycleAge30d", forceRbStartupSweep);
+                    Wh_Log(L"Startup Recycle Bin cleanup triggered");
+                    RecycleCleanMode rbMode = (cfg.startupFullSweep && cfg.rbFullSweep)
+                        ? RecycleCleanMode::FullEmpty
+                        : RecycleCleanMode::ExpireOldItems;
+                    RecycleCleanResult rbRes = RunRecycleBinClean(cfg, L"Startup", rbMode);
                     startupRecyclePending = false;
                     lastRecycleCleanTime = GetTickCount64();
-                    lastRecycleTimerClean = lastRecycleCleanTime;
+                    updateNextRecycleExpiry(rbRes.oldestRemainingDeletedAt100Ns);
                     NotifyRecycleToast(rbRes, false);
                 }
                 deferredPending = false;
@@ -2727,26 +2863,35 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             }
         }
 
-        // 2. Low-disk emergency floor check
+        // 2. Low-disk emergency floor check (edge-triggered once per crossing below the floor)
         now = GetTickCount64();
         if (allowAutoRuns && cfg.emergencyEnabled &&
             (lastEmergencyCheck == 0 || (now - lastEmergencyCheck >= cfg.emergencyCheckMs))) {
             lastEmergencyCheck = now;
             uint64_t freeBytes = 0;
-            if (IsDiskSpaceBelowFloor(cfg, &freeBytes)) {
+            wchar_t lowDrive = 0;
+            bool belowFloor = IsDiskSpaceBelowFloor(cfg, &freeBytes, &lowDrive);
+            if (!belowFloor) {
+                emergencyFloorActive = false;
+            } else if (!emergencyFloorActive) {
                 if (!ShouldDeferCleanup(cfg, true, &deferReason)) {
-                    Wh_Log(L"AutoClean emergency floor triggered: %llu < %llu free bytes",
+                    emergencyFloorActive = true;
+                    Wh_Log(L"Emergency floor crossed on %c:\\: %llu < %llu free bytes",
+                           lowDrive ? lowDrive : L'?',
                            static_cast<unsigned long long>(freeBytes),
                            static_cast<unsigned long long>(cfg.emergencyFloorBytes));
-                    CleanStats stats = RunCleanupPass(cfg, L"EmergencyFloor", true);
+                    CleanStats stats = runTempPassAndDrain(L"EmergencyFloor", true);
                     NotifyTempToast(stats, cfg.dryRun, false);
                     if (cfg.cleanRecycleOnEmergency) {
-                        RecycleCleanResult rbRes = RunRecycleBinClean(cfg, L"EmergencyFloor", true);
+                        RecycleCleanResult rbRes = RunRecycleBinClean(
+                            cfg, L"EmergencyFloor", RecycleCleanMode::EmergencyPrune, false, false, lowDrive);
                         lastRecycleCleanTime = GetTickCount64();
+                        if (rbRes.itemsCleaned > 0) {
+                            g_recycleDirty.store(true, std::memory_order_release);
+                        }
                         NotifyRecycleToast(rbRes, false);
                     }
                     lastCleanTime = GetTickCount64();
-                    watchDirty = false;
                     deferredPending = false;
                 } else {
                     deferredPending = true;
@@ -2754,7 +2899,7 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             }
         }
 
-        // 3. Temp periodic timer trigger (tick + persisted FILETIME across sleep/reboots)
+        // 3. Temp periodic timer trigger (tick + per-user persisted FILETIME across sleep/reboots)
         now = GetTickCount64();
         nowFt100Ns = GetCurrentSystemFileTime100Ns();
         uint64_t tempTimerFtDeltaMs = (nowFt100Ns > lastTempTimerFt100Ns)
@@ -2763,14 +2908,13 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
         if (allowAutoRuns && cfg.timerEnabled &&
             ((now - lastTimerClean >= cfg.timerIntervalMs) || (tempTimerFtDeltaMs >= cfg.timerIntervalMs))) {
             if (!ShouldDeferCleanup(cfg, false, &deferReason)) {
-                Wh_Log(L"AutoClean scheduled Temp timer triggered (interval=%llu ms)",
+                Wh_Log(L"Scheduled Temp timer triggered (interval=%llu ms)",
                        static_cast<unsigned long long>(cfg.timerIntervalMs));
-                CleanStats stats = RunCleanupPass(cfg, L"Timer", cfg.fullSweep);
+                CleanStats stats = runTempPassAndDrain(L"Timer", cfg.fullSweep);
                 lastTimerClean = GetTickCount64();
                 lastCleanTime = lastTimerClean;
                 lastTempTimerFt100Ns = GetCurrentSystemFileTime100Ns();
-                SavePersistedFileTime100Ns(L"schedule.lastTempTimerFt", lastTempTimerFt100Ns);
-                watchDirty = false;
+                SavePersistedFileTime100Ns(tempTimerKey, lastTempTimerFt100Ns);
                 deferredPending = false;
                 NotifyTempToast(stats, cfg.dryRun, false);
             } else {
@@ -2778,71 +2922,67 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             }
         }
 
-        // 4. Recycle Bin periodic timer trigger (tick + persisted FILETIME across reboots, default 30 Days)
+        // 4. Event-driven Recycle Bin threshold & age-expiry pass (driven by SHChangeNotifyRegister + next-expiry wakeup)
         now = GetTickCount64();
         nowFt100Ns = GetCurrentSystemFileTime100Ns();
-        uint64_t rbTimerFtDeltaMs = (nowFt100Ns > lastRecycleTimerFt100Ns)
-            ? ((nowFt100Ns - lastRecycleTimerFt100Ns) / 10000ULL)
-            : 0ULL;
-        if (allowAutoRuns && cfg.rbTimerEnabled &&
-            ((now - lastRecycleTimerClean >= cfg.rbTimerIntervalMs) || (rbTimerFtDeltaMs >= cfg.rbTimerIntervalMs))) {
+        bool rbAutoActive = cfg.rbSizeThresholdEnabled || cfg.rbCountThresholdEnabled || cfg.rbRetentionEnabled;
+        bool rbExpireDue = cfg.rbRetentionEnabled && nextRecycleExpireFt100Ns > 0 && nowFt100Ns >= nextRecycleExpireFt100Ns;
+        bool rbNeedsCheck = rbAutoActive && (g_recycleDirty.load(std::memory_order_acquire) || rbExpireDue);
+
+        if (allowAutoRuns && rbNeedsCheck &&
+            (lastRecycleCleanTime == 0 || (now - lastRecycleCleanTime >= cfg.rbCooldownMs))) {
             if (!ShouldDeferCleanup(cfg, false, &deferReason)) {
-                Wh_Log(L"AutoClean scheduled Recycle Bin timer triggered (interval=%llu ms)",
-                       static_cast<unsigned long long>(cfg.rbTimerIntervalMs));
-                RecycleCleanResult rbRes = RunRecycleBinClean(cfg, L"RecycleTimer", cfg.rbFullSweep);
-                lastRecycleTimerClean = GetTickCount64();
-                lastRecycleCleanTime = lastRecycleTimerClean;
-                lastRecycleTimerFt100Ns = GetCurrentSystemFileTime100Ns();
-                SavePersistedFileTime100Ns(L"schedule.lastRecycleTimerFt", lastRecycleTimerFt100Ns);
+                g_recycleDirty.store(false, std::memory_order_release);
+                uint64_t rbBytes = 0;
+                uint64_t rbItems = 0;
+                if (QueryRecycleBinStats(&rbBytes, &rbItems) && rbItems > 0) {
+                    bool sizeHit = cfg.rbSizeThresholdEnabled && (rbBytes >= cfg.rbSizeThresholdBytes);
+                    bool countHit = cfg.rbCountThresholdEnabled && (rbItems >= cfg.rbMaxItems);
+                    if (sizeHit || countHit) {
+                        Wh_Log(
+                            L"Recycle Bin threshold reached: %llu bytes, %llu items (sizeHit=%d countHit=%d)",
+                            static_cast<unsigned long long>(rbBytes),
+                            static_cast<unsigned long long>(rbItems),
+                            sizeHit ? 1 : 0,
+                            countHit ? 1 : 0);
+                        RecycleCleanMode rbMode = cfg.rbFullSweep
+                            ? RecycleCleanMode::FullEmpty
+                            : RecycleCleanMode::PruneThresholds;
+                        RecycleCleanResult rbRes = RunRecycleBinClean(
+                            cfg,
+                            sizeHit ? L"RecycleSizeThreshold" : L"RecycleCountThreshold",
+                            rbMode,
+                            sizeHit,
+                            countHit);
+                        lastRecycleCleanTime = GetTickCount64();
+                        updateNextRecycleExpiry(rbRes.oldestRemainingDeletedAt100Ns);
+                        NotifyRecycleToast(rbRes, false);
+                    } else if (cfg.rbRetentionEnabled) {
+                        RecycleCleanResult ageRes = RunRecycleBinClean(
+                            cfg, L"RecycleAgeExpiry", RecycleCleanMode::ExpireOldItems);
+                        updateNextRecycleExpiry(ageRes.oldestRemainingDeletedAt100Ns);
+                        if (ageRes.itemsCleaned > 0) {
+                            lastRecycleCleanTime = GetTickCount64();
+                            NotifyRecycleToast(ageRes, false);
+                        }
+                    }
+                } else {
+                    nextRecycleExpireFt100Ns = 0;
+                }
                 deferredPending = false;
-                NotifyRecycleToast(rbRes, false);
             } else {
                 deferredPending = true;
             }
         }
 
-        // 5. Recycle Bin size, item-count, OR 30-day expired item check
+        // 5. Event-driven Temp threshold trigger (debounced with max-wait cap under steady writes)
         now = GetTickCount64();
-        bool rbThresholdsActive = cfg.rbSizeThresholdEnabled || cfg.rbCountThresholdEnabled || cfg.rbTimerEnabled;
-        if (allowAutoRuns && rbThresholdsActive &&
-            (lastRecycleCheck == 0 || (now - lastRecycleCheck >= cfg.rbCheckMs)) &&
-            (lastRecycleCleanTime == 0 || (now - lastRecycleCleanTime >= cfg.rbCooldownMs))) {
-            lastRecycleCheck = now;
-            uint64_t rbBytes = 0;
-            uint64_t rbItems = 0;
-            if (QueryRecycleBinStats(&rbBytes, &rbItems) && rbItems > 0) {
-                bool sizeHit = cfg.rbSizeThresholdEnabled && (rbBytes >= cfg.rbSizeThresholdBytes);
-                bool countHit = cfg.rbCountThresholdEnabled && (rbItems >= cfg.rbMaxItems);
-                if (sizeHit || countHit) {
-                    if (!ShouldDeferCleanup(cfg, false, &deferReason)) {
-                        Wh_Log(
-                            L"AutoClean Recycle Bin %s reached: %llu bytes, %llu items",
-                            sizeHit ? L"size threshold" : L"item-count threshold",
-                            static_cast<unsigned long long>(rbBytes),
-                            static_cast<unsigned long long>(rbItems));
-                        RecycleCleanResult rbRes = RunRecycleBinClean(
-                            cfg, sizeHit ? L"RecycleSizeThreshold" : L"RecycleCountThreshold", cfg.rbFullSweep);
-                        lastRecycleCleanTime = GetTickCount64();
-                        deferredPending = false;
-                        NotifyRecycleToast(rbRes, false);
-                    } else {
-                        deferredPending = true;
-                    }
-                } else if (cfg.rbTimerEnabled && !ShouldDeferCleanup(cfg, false, &deferReason)) {
-                    // Auto-prune any individual Recycle Bin items that have been in the bin longer than 30d/schedule
-                    RecycleCleanResult ageRes = RunRecycleBinClean(cfg, L"RecycleAge30d", false);
-                    if (ageRes.itemsCleaned > 0) {
-                        lastRecycleCleanTime = GetTickCount64();
-                        NotifyRecycleToast(ageRes, false);
-                    }
-                }
-            }
-        }
-
-        // 6. Event-driven Temp threshold trigger (runs only after writes + debounce)
-        now = GetTickCount64();
+        uint64_t maxDebounceWaitMs = (std::max)(MultiplyClampU64(cfg.debounceMs, 3ULL), 60000ULL);
+        bool debounceElapsed = (lastWriteEventTime == 0) ||
+                               (now - lastWriteEventTime >= cfg.debounceMs) ||
+                               (firstWriteEventTime != 0 && (now - firstWriteEventTime >= maxDebounceWaitMs));
         if (allowAutoRuns && cfg.thresholdEnabled && (watchDirty || deferredPending) &&
-            (lastWriteEventTime == 0 || (now - lastWriteEventTime >= cfg.debounceMs)) &&
+            debounceElapsed &&
             (lastCleanTime == 0 || (now - lastCleanTime >= cfg.cooldownMs))) {
             if (!ShouldDeferCleanup(cfg, false, &deferReason)) {
                 BOOL bgEntered = SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
@@ -2855,23 +2995,29 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
                 }
 
                 watchDirty = false;
+                firstWriteEventTime = 0;
+                lastWriteEventTime = 0;
                 deferredPending = false;
                 if (totalSize >= cfg.thresholdBytes) {
-                    Wh_Log(L"AutoClean threshold reached: %llu >= %llu bytes",
+                    Wh_Log(L"Temp threshold reached: %llu >= %llu bytes",
                            static_cast<unsigned long long>(totalSize),
                            static_cast<unsigned long long>(cfg.thresholdBytes));
-                    CleanStats stats = RunCleanupPass(cfg, L"Threshold", cfg.fullSweep);
+                    CleanStats stats = runTempPassAndDrain(L"Threshold", cfg.fullSweep);
                     lastCleanTime = GetTickCount64();
                     NotifyTempToast(stats, cfg.dryRun, false);
                 }
             } else {
                 deferredPending = true;
                 lastWriteEventTime = now;
+                if (firstWriteEventTime == 0) {
+                    firstWriteEventTime = now;
+                }
             }
         }
 
         // Compute exact sleep duration until next due event (0% CPU at idle)
         now = GetTickCount64();
+        nowFt100Ns = GetCurrentSystemFileTime100Ns();
         uint64_t waitMs = INFINITE;
         auto minWait = [&](uint64_t candidate) {
             if (waitMs == INFINITE || candidate < waitMs) {
@@ -2880,8 +3026,10 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
         };
 
         if (!desktopReady) {
-            // Poll lightly every 2s until the user completes Windows login
-            minWait(2000ULL);
+            // While locked, WTSRegisterSessionNotification wakes g_wakeEvent on unlock; no polling needed.
+            if (!g_sessionLocked.load(std::memory_order_acquire)) {
+                minWait(2000ULL);
+            }
         } else if (allowAutoRuns) {
             if (deferredPending) {
                 minWait(15000ULL);
@@ -2891,25 +3039,34 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
                     minWait(elapsed < cfg.startupDelayMs ? (cfg.startupDelayMs - elapsed) : 1000ULL);
                 }
                 if (cfg.thresholdEnabled && watchDirty) {
-                    uint64_t debounceRem = (lastWriteEventTime != 0 && now - lastWriteEventTime < cfg.debounceMs)
+                    uint64_t quietRem = (lastWriteEventTime != 0 && now - lastWriteEventTime < cfg.debounceMs)
                         ? (cfg.debounceMs - (now - lastWriteEventTime))
                         : 0;
+                    uint64_t capRem = (firstWriteEventTime != 0 && now - firstWriteEventTime < maxDebounceWaitMs)
+                        ? (maxDebounceWaitMs - (now - firstWriteEventTime))
+                        : 0;
+                    uint64_t debRem = (std::min)(quietRem, capRem);
                     uint64_t coolRem = (lastCleanTime != 0 && now - lastCleanTime < cfg.cooldownMs)
                         ? (cfg.cooldownMs - (now - lastCleanTime))
                         : 0;
-                    minWait((std::max)(debounceRem, coolRem));
+                    minWait((std::max)(debRem, coolRem));
                 }
                 if (cfg.timerEnabled) {
                     uint64_t elapsed = now - lastTimerClean;
                     minWait(elapsed < cfg.timerIntervalMs ? (cfg.timerIntervalMs - elapsed) : 1000ULL);
                 }
-                if (cfg.rbTimerEnabled) {
-                    uint64_t elapsed = now - lastRecycleTimerClean;
-                    minWait(elapsed < cfg.rbTimerIntervalMs ? (cfg.rbTimerIntervalMs - elapsed) : 1000ULL);
+                if (cfg.rbRetentionEnabled && nextRecycleExpireFt100Ns > 0) {
+                    if (nextRecycleExpireFt100Ns > nowFt100Ns) {
+                        minWait((nextRecycleExpireFt100Ns - nowFt100Ns) / 10000ULL + 1000ULL);
+                    } else {
+                        minWait(1000ULL);
+                    }
                 }
-                if (rbThresholdsActive) {
-                    uint64_t elapsed = (lastRecycleCheck == 0) ? cfg.rbCheckMs : (now - lastRecycleCheck);
-                    minWait(elapsed < cfg.rbCheckMs ? (cfg.rbCheckMs - elapsed) : 1000ULL);
+                if (rbAutoActive && g_recycleDirty.load(std::memory_order_acquire)) {
+                    uint64_t coolRem = (lastRecycleCleanTime != 0 && now - lastRecycleCleanTime < cfg.rbCooldownMs)
+                        ? (cfg.rbCooldownMs - (now - lastRecycleCleanTime))
+                        : 1000ULL;
+                    minWait(coolRem);
                 }
                 if (cfg.emergencyEnabled) {
                     uint64_t elapsed = (lastEmergencyCheck == 0) ? cfg.emergencyCheckMs : (now - lastEmergencyCheck);
@@ -2943,8 +3100,12 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
             DWORD bytesTransferred = 0;
             GetOverlappedResult(w->dirHandle, &w->overlapped, &bytesTransferred, FALSE);
             ArmDirWatch(*w);
+            uint64_t evNow = GetTickCount64();
+            if (!watchDirty || firstWriteEventTime == 0) {
+                firstWriteEventTime = evNow;
+            }
             watchDirty = true;
-            lastWriteEventTime = GetTickCount64();
+            lastWriteEventTime = evNow;
         }
     }
 
@@ -2958,207 +3119,170 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
 static void LoadSettings() {
     ModSettings next;
 
-    // Guard against Windhawk's Wh_GetIntSetting returning 0 for unsaved registry keys
-    bool tempGroupSaved = (Wh_GetIntSetting(L"tempCleaner.thresholdValue") > 0);
-    bool rbGroupSaved = (Wh_GetIntSetting(L"recycleBinCleaner.sizeThresholdValue") > 0);
-    bool univGroupSaved = (Wh_GetIntSetting(L"universalSafety.freeSpaceValue") > 0);
-
-    // 1. AI Agents Temp Protection (upgrade-safe: defaults to Enabled + built-in list when unsaved)
-    PCWSTR aiModeStr = Wh_GetStringSetting(L"aiAgentProtection.protectionMode");
-    bool aiGroupSaved = (aiModeStr && *aiModeStr);
-    next.aiAgentProtectionEnabled = !aiGroupSaved || wcscmp(aiModeStr, L"Disabled") != 0;
-    Wh_FreeStringSetting(aiModeStr);
+    // 1. AI Agents Temp Protection
+    auto aiModeStr = WindhawkUtils::StringSetting::make(L"aiAgentProtection.protectionMode");
+    next.aiAgentProtectionEnabled = wcscmp(aiModeStr.get(), L"Disabled") != 0;
 
     for (int i = 0;; i++) {
-        PCWSTR pat = Wh_GetStringSetting(L"aiAgentProtection.agentTempPatterns[%d]", i);
-        if (!pat || !*pat) {
-            if (pat) Wh_FreeStringSetting(pat);
+        auto pat = WindhawkUtils::StringSetting::make(L"aiAgentProtection.agentTempPatterns[%d]", i);
+        if (!*pat.get()) {
             break;
         }
-        std::wstring cleanPat = NormalizeExcludePattern(pat);
+        std::wstring cleanPat = NormalizeExcludePattern(pat.get());
         if (!cleanPat.empty()) {
             next.aiAgentPatterns.push_back(std::move(cleanPat));
         }
-        Wh_FreeStringSetting(pat);
-    }
-    if (next.aiAgentPatterns.empty() && !aiGroupSaved) {
-        next.aiAgentPatterns = DefaultAiAgentPatterns();
     }
 
     // 2. Temp Folder Cleaner
-    next.thresholdEnabled = tempGroupSaved ? (Wh_GetIntSetting(L"tempCleaner.thresholdEnabled") != 0) : true;
-    int rawThresh = tempGroupSaved ? Wh_GetIntSetting(L"tempCleaner.thresholdValue") : 500;
-    if (rawThresh < 1) rawThresh = 500;
-    PCWSTR threshUnit = Wh_GetStringSetting(L"tempCleaner.thresholdUnit");
-    next.thresholdBytes = MultiplyClampU64(static_cast<uint64_t>(rawThresh), UnitToMultiplier(threshUnit));
-    Wh_FreeStringSetting(threshUnit);
+    next.thresholdEnabled = Wh_GetIntSetting(L"tempCleaner.thresholdEnabled") != 0;
+    int rawThresh = Wh_GetIntSetting(L"tempCleaner.thresholdValue");
+    if (rawThresh < 1) rawThresh = 1;
+    auto threshUnit = WindhawkUtils::StringSetting::make(L"tempCleaner.thresholdUnit");
+    next.thresholdBytes = MultiplyClampU64(static_cast<uint64_t>(rawThresh), UnitToMultiplier(threshUnit.get()));
 
-    int debSec = tempGroupSaved ? Wh_GetIntSetting(L"tempCleaner.debounceSeconds") : 20;
+    int debSec = Wh_GetIntSetting(L"tempCleaner.debounceSeconds");
     if (debSec < 5) debSec = 5;
     if (debSec > 3600) debSec = 3600;
     next.debounceMs = static_cast<uint64_t>(debSec) * 1000ULL;
 
-    next.timerEnabled = tempGroupSaved ? (Wh_GetIntSetting(L"tempCleaner.timerEnabled") != 0) : true;
-    int rawTimerVal = tempGroupSaved ? Wh_GetIntSetting(L"tempCleaner.timerValue") : 1;
+    next.timerEnabled = Wh_GetIntSetting(L"tempCleaner.timerEnabled") != 0;
+    int rawTimerVal = Wh_GetIntSetting(L"tempCleaner.timerValue");
     if (rawTimerVal < 1) rawTimerVal = 1;
-    PCWSTR timerUnit = Wh_GetStringSetting(L"tempCleaner.timerUnit");
-    uint64_t timerUnitMult = (timerUnit && *timerUnit) ? TimeUnitToMs(timerUnit) : 3600000ULL;
-    uint64_t timerMs = MultiplyClampU64(static_cast<uint64_t>(rawTimerVal), timerUnitMult);
-    Wh_FreeStringSetting(timerUnit);
+    auto timerUnit = WindhawkUtils::StringSetting::make(L"tempCleaner.timerUnit");
+    uint64_t timerMs = MultiplyClampU64(
+        static_cast<uint64_t>(rawTimerVal), TimeUnitToMs(timerUnit.get(), 3600000ULL));
     if (timerMs < 15000ULL) timerMs = 15000ULL;
     next.timerIntervalMs = timerMs;
 
-    next.oldestFirst = tempGroupSaved ? (Wh_GetIntSetting(L"tempCleaner.oldestFirst") != 0) : true;
-    next.fullSweep = tempGroupSaved ? (Wh_GetIntSetting(L"tempCleaner.fullSweep") != 0) : false;
-    int targetPct = tempGroupSaved ? Wh_GetIntSetting(L"tempCleaner.targetPercent") : 50;
+    next.oldestFirst = Wh_GetIntSetting(L"tempCleaner.oldestFirst") != 0;
+    next.fullSweep = Wh_GetIntSetting(L"tempCleaner.fullSweep") != 0;
+    int targetPct = Wh_GetIntSetting(L"tempCleaner.targetPercent");
     if (targetPct < 10) targetPct = 10;
     if (targetPct > 90) targetPct = 90;
     next.targetPercent = targetPct;
 
-    PCWSTR tempGestureStr = Wh_GetStringSetting(L"tempCleaner.mouseGesture");
-    next.tempGestureEnabled = !tempGestureStr || !*tempGestureStr || wcscmp(tempGestureStr, L"Disabled") != 0;
-    Wh_FreeStringSetting(tempGestureStr);
+    auto tempGestureStr = WindhawkUtils::StringSetting::make(L"tempCleaner.mouseGesture");
+    next.tempGestureEnabled = wcscmp(tempGestureStr.get(), L"Disabled") != 0;
 
-    PCWSTR tempScopeStr = Wh_GetStringSetting(L"tempCleaner.mouseScope");
-    next.tempGestureScope = ParseTempMouseScope(tempScopeStr);
-    Wh_FreeStringSetting(tempScopeStr);
+    auto tempScopeStr = WindhawkUtils::StringSetting::make(L"tempCleaner.mouseScope");
+    next.tempGestureScope = ParseTempMouseScope(tempScopeStr.get());
 
-    int minAgeMin = tempGroupSaved ? Wh_GetIntSetting(L"tempCleaner.minFileAgeMinutes") : 10;
+    int minAgeMin = Wh_GetIntSetting(L"tempCleaner.minFileAgeMinutes");
     if (minAgeMin < 0) minAgeMin = 0;
     if (minAgeMin > 10080) minAgeMin = 10080;
     next.minFileAgeMs = static_cast<uint64_t>(minAgeMin) * 60000ULL;
 
-    int cooldownSec = tempGroupSaved ? Wh_GetIntSetting(L"tempCleaner.cooldownSeconds") : 30;
+    int cooldownSec = Wh_GetIntSetting(L"tempCleaner.cooldownSeconds");
     if (cooldownSec < 5) cooldownSec = 5;
     if (cooldownSec > 3600) cooldownSec = 3600;
     next.cooldownMs = static_cast<uint64_t>(cooldownSec) * 1000ULL;
 
-    next.cleanWindowsTemp = tempGroupSaved ? (Wh_GetIntSetting(L"tempCleaner.cleanWindowsTemp") != 0) : false;
+    next.cleanWindowsTemp = Wh_GetIntSetting(L"tempCleaner.cleanWindowsTemp") != 0;
 
     for (int i = 0;; i++) {
-        PCWSTR pat = Wh_GetStringSetting(L"tempCleaner.excludePatterns[%d]", i);
-        if (!pat || !*pat) {
-            if (pat) Wh_FreeStringSetting(pat);
+        auto pat = WindhawkUtils::StringSetting::make(L"tempCleaner.excludePatterns[%d]", i);
+        if (!*pat.get()) {
             break;
         }
-        std::wstring cleanPat = NormalizeExcludePattern(pat);
+        std::wstring cleanPat = NormalizeExcludePattern(pat.get());
         if (!cleanPat.empty()) {
             next.excludePatterns.push_back(std::move(cleanPat));
         }
-        Wh_FreeStringSetting(pat);
-    }
-    if (next.excludePatterns.empty() && !tempGroupSaved) {
-        next.excludePatterns = {L"*.lock", L"*.lck", L"windhawk*"};
     }
 
-    // 2. Recycle Bin Cleaner (default: 30-day schedule & retention active)
-    next.rbSizeThresholdEnabled = rbGroupSaved ? (Wh_GetIntSetting(L"recycleBinCleaner.sizeThresholdEnabled") != 0) : true;
-    int rawRbThresh = rbGroupSaved ? Wh_GetIntSetting(L"recycleBinCleaner.sizeThresholdValue") : 500;
-    if (rawRbThresh < 1) rawRbThresh = 500;
-    PCWSTR rbUnit = Wh_GetStringSetting(L"recycleBinCleaner.sizeThresholdUnit");
-    next.rbSizeThresholdBytes = MultiplyClampU64(static_cast<uint64_t>(rawRbThresh), UnitToMultiplier(rbUnit));
-    Wh_FreeStringSetting(rbUnit);
+    // 3. Recycle Bin Cleaner
+    next.rbSizeThresholdEnabled = Wh_GetIntSetting(L"recycleBinCleaner.sizeThresholdEnabled") != 0;
+    int rawRbThresh = Wh_GetIntSetting(L"recycleBinCleaner.sizeThresholdValue");
+    if (rawRbThresh < 1) rawRbThresh = 1;
+    auto rbUnit = WindhawkUtils::StringSetting::make(L"recycleBinCleaner.sizeThresholdUnit");
+    next.rbSizeThresholdBytes = MultiplyClampU64(static_cast<uint64_t>(rawRbThresh), UnitToMultiplier(rbUnit.get()));
 
-    next.rbCountThresholdEnabled = rbGroupSaved ? (Wh_GetIntSetting(L"recycleBinCleaner.countThresholdEnabled") != 0) : false;
-    int rawRbMaxItems = rbGroupSaved ? Wh_GetIntSetting(L"recycleBinCleaner.maxItems") : 50;
-    if (rawRbMaxItems < 1) rawRbMaxItems = 50;
+    next.rbCountThresholdEnabled = Wh_GetIntSetting(L"recycleBinCleaner.countThresholdEnabled") != 0;
+    int rawRbMaxItems = Wh_GetIntSetting(L"recycleBinCleaner.maxItems");
+    if (rawRbMaxItems < 1) rawRbMaxItems = 1;
     next.rbMaxItems = static_cast<uint64_t>(rawRbMaxItems);
 
-    next.rbTimerEnabled = rbGroupSaved ? (Wh_GetIntSetting(L"recycleBinCleaner.timerEnabled") != 0) : true;
-    int rawRbTimerVal = rbGroupSaved ? Wh_GetIntSetting(L"recycleBinCleaner.timerValue") : 30;
-    if (rawRbTimerVal < 1) rawRbTimerVal = 30;
-    PCWSTR rbTimerUnit = Wh_GetStringSetting(L"recycleBinCleaner.timerUnit");
-    uint64_t rbUnitMult = (rbTimerUnit && *rbTimerUnit) ? TimeUnitToMs(rbTimerUnit) : (86400ULL * 1000ULL);
-    uint64_t rbTimerMs = MultiplyClampU64(static_cast<uint64_t>(rawRbTimerVal), rbUnitMult);
-    Wh_FreeStringSetting(rbTimerUnit);
-    if (rbTimerMs < 15000ULL) rbTimerMs = 15000ULL;
-    next.rbTimerIntervalMs = rbTimerMs;
+    next.rbRetentionEnabled = Wh_GetIntSetting(L"recycleBinCleaner.retentionEnabled") != 0;
+    int rawRbRetVal = Wh_GetIntSetting(L"recycleBinCleaner.retentionValue");
+    if (rawRbRetVal < 1) rawRbRetVal = 1;
+    auto rbRetUnit = WindhawkUtils::StringSetting::make(L"recycleBinCleaner.retentionUnit");
+    uint64_t rbRetMs = MultiplyClampU64(
+        static_cast<uint64_t>(rawRbRetVal), TimeUnitToMs(rbRetUnit.get(), 86400ULL * 1000ULL));
+    if (rbRetMs < 60000ULL) rbRetMs = 60000ULL;
+    next.rbRetentionAgeMs = rbRetMs;
 
-    next.rbFullSweep = rbGroupSaved ? (Wh_GetIntSetting(L"recycleBinCleaner.fullSweep") != 0) : false;
-    next.rbOldestFirst = rbGroupSaved ? (Wh_GetIntSetting(L"recycleBinCleaner.oldestFirst") != 0) : true;
-    int rbTargetPct = rbGroupSaved ? Wh_GetIntSetting(L"recycleBinCleaner.targetPercent") : 50;
+    next.rbFullSweep = Wh_GetIntSetting(L"recycleBinCleaner.fullSweep") != 0;
+    int rbTargetPct = Wh_GetIntSetting(L"recycleBinCleaner.targetPercent");
     if (rbTargetPct < 10) rbTargetPct = 10;
     if (rbTargetPct > 90) rbTargetPct = 90;
     next.rbTargetPercent = rbTargetPct;
 
-    int rbMinAgeMin = rbGroupSaved ? Wh_GetIntSetting(L"recycleBinCleaner.minItemAgeMinutes") : 0;
+    int rbMinAgeMin = Wh_GetIntSetting(L"recycleBinCleaner.minItemAgeMinutes");
     if (rbMinAgeMin < 0) rbMinAgeMin = 0;
     if (rbMinAgeMin > 525600) rbMinAgeMin = 525600;
     next.rbMinAgeMs = static_cast<uint64_t>(rbMinAgeMin) * 60000ULL;
 
-    int rbCheckSec = rbGroupSaved ? Wh_GetIntSetting(L"recycleBinCleaner.checkIntervalSeconds") : 30;
-    if (rbCheckSec < 15) rbCheckSec = 15;
-    if (rbCheckSec > 3600) rbCheckSec = 3600;
-    next.rbCheckMs = static_cast<uint64_t>(rbCheckSec) * 1000ULL;
-
-    int rbCoolSec = rbGroupSaved ? Wh_GetIntSetting(L"recycleBinCleaner.cooldownSeconds") : 15;
+    int rbCoolSec = Wh_GetIntSetting(L"recycleBinCleaner.cooldownSeconds");
     if (rbCoolSec < 5) rbCoolSec = 5;
     if (rbCoolSec > 3600) rbCoolSec = 3600;
     next.rbCooldownMs = static_cast<uint64_t>(rbCoolSec) * 1000ULL;
 
-    PCWSTR gestureStr = Wh_GetStringSetting(L"recycleBinCleaner.mouseGesture");
-    next.rbMouseClicksRequired = (gestureStr && *gestureStr) ? ParseMouseGestureClicks(gestureStr) : 2;
-    Wh_FreeStringSetting(gestureStr);
+    auto gestureStr = WindhawkUtils::StringSetting::make(L"recycleBinCleaner.mouseGesture");
+    next.rbMouseClicksRequired = ParseMouseGestureClicks(gestureStr.get());
 
-    PCWSTR scopeStr = Wh_GetStringSetting(L"recycleBinCleaner.mouseScope");
-    next.rbMouseScope = ParseMouseScope(scopeStr);
-    Wh_FreeStringSetting(scopeStr);
+    auto scopeStr = WindhawkUtils::StringSetting::make(L"recycleBinCleaner.mouseScope");
+    next.rbMouseScope = ParseMouseScope(scopeStr.get());
 
-    next.rbMouseSwallowClick = rbGroupSaved ? (Wh_GetIntSetting(L"recycleBinCleaner.mouseSwallowTriggerClick") != 0) : true;
-    next.rbPlaySound = rbGroupSaved ? (Wh_GetIntSetting(L"recycleBinCleaner.playSound") != 0) : false;
+    next.rbPlaySound = Wh_GetIntSetting(L"recycleBinCleaner.playSound") != 0;
 
-    // 3. Universal, Toast & Safety
-    next.startupCleanTemp = univGroupSaved ? (Wh_GetIntSetting(L"universalSafety.cleanTempOnStart") != 0) : true;
-    next.startupCleanRecycle = univGroupSaved ? (Wh_GetIntSetting(L"universalSafety.cleanRecycleBinOnStart") != 0) : true;
-    int startDelay = univGroupSaved ? Wh_GetIntSetting(L"universalSafety.startupDelaySeconds") : 12;
+    // 4. Universal, Toast & Safety
+    next.startupCleanTemp = Wh_GetIntSetting(L"universalSafety.cleanTempOnStart") != 0;
+    next.startupCleanRecycle = Wh_GetIntSetting(L"universalSafety.cleanRecycleBinOnStart") != 0;
+    int startDelay = Wh_GetIntSetting(L"universalSafety.startupDelaySeconds");
     if (startDelay < 5) startDelay = 5;
     if (startDelay > 300) startDelay = 300;
     next.startupDelayMs = static_cast<uint64_t>(startDelay) * 1000ULL;
-    next.startupFullSweep = univGroupSaved ? (Wh_GetIntSetting(L"universalSafety.startupFullSweep") != 0) : true;
+    next.startupFullSweep = Wh_GetIntSetting(L"universalSafety.startupFullSweep") != 0;
 
-    next.emergencyEnabled = univGroupSaved ? (Wh_GetIntSetting(L"universalSafety.emergencyEnabled") != 0) : true;
-    int rawFloor = univGroupSaved ? Wh_GetIntSetting(L"universalSafety.freeSpaceValue") : 5;
-    if (rawFloor < 1) rawFloor = 5;
-    PCWSTR floorUnit = Wh_GetStringSetting(L"universalSafety.freeSpaceUnit");
-    uint64_t floorUnitMult = (floorUnit && *floorUnit) ? UnitToMultiplier(floorUnit) : (1024ULL * 1024ULL * 1024ULL);
-    next.emergencyFloorBytes = MultiplyClampU64(static_cast<uint64_t>(rawFloor), floorUnitMult);
-    Wh_FreeStringSetting(floorUnit);
+    next.emergencyEnabled = Wh_GetIntSetting(L"universalSafety.emergencyEnabled") != 0;
+    int rawFloor = Wh_GetIntSetting(L"universalSafety.freeSpaceValue");
+    if (rawFloor < 1) rawFloor = 1;
+    auto floorUnit = WindhawkUtils::StringSetting::make(L"universalSafety.freeSpaceUnit");
+    next.emergencyFloorBytes = MultiplyClampU64(static_cast<uint64_t>(rawFloor), UnitToMultiplier(floorUnit.get()));
 
-    int emergSec = univGroupSaved ? Wh_GetIntSetting(L"universalSafety.emergencyCheckSeconds") : 60;
+    int emergSec = Wh_GetIntSetting(L"universalSafety.emergencyCheckSeconds");
     if (emergSec < 15) emergSec = 15;
     if (emergSec > 3600) emergSec = 3600;
     next.emergencyCheckMs = static_cast<uint64_t>(emergSec) * 1000ULL;
 
-    next.cleanRecycleOnEmergency = univGroupSaved ? (Wh_GetIntSetting(L"universalSafety.cleanRecycleOnEmergency") != 0) : true;
-    next.emergencyBypassDeferral = univGroupSaved ? (Wh_GetIntSetting(L"universalSafety.bypassDeferralOnEmergency") != 0) : true;
-    next.deferOnFullscreen = univGroupSaved ? (Wh_GetIntSetting(L"universalSafety.deferOnFullscreen") != 0) : true;
-    next.deferOnBattery = univGroupSaved ? (Wh_GetIntSetting(L"universalSafety.deferOnBattery") != 0) : true;
+    next.cleanRecycleOnEmergency = Wh_GetIntSetting(L"universalSafety.cleanRecycleOnEmergency") != 0;
+    next.emergencyBypassDeferral = Wh_GetIntSetting(L"universalSafety.bypassDeferralOnEmergency") != 0;
+    next.deferOnFullscreen = Wh_GetIntSetting(L"universalSafety.deferOnFullscreen") != 0;
+    next.deferOnBattery = Wh_GetIntSetting(L"universalSafety.deferOnBattery") != 0;
 
-    int maxIntMs = univGroupSaved ? Wh_GetIntSetting(L"universalSafety.mouseMaxIntervalMs") : 400;
+    int maxIntMs = Wh_GetIntSetting(L"universalSafety.mouseMaxIntervalMs");
     if (maxIntMs < 150) maxIntMs = 150;
     if (maxIntMs > 800) maxIntMs = 800;
     next.rbMouseMaxIntervalMs = static_cast<uint64_t>(maxIntMs);
     next.tempGestureMaxIntervalMs = static_cast<uint64_t>(maxIntMs);
 
-    next.toastEnabled = univGroupSaved ? (Wh_GetIntSetting(L"universalSafety.toastEnabled") != 0) : true;
-    PCWSTR toastScopeStr = Wh_GetStringSetting(L"universalSafety.toastTriggerScope");
-    next.toastShowOnAuto = !toastScopeStr || !*toastScopeStr || wcscmp(toastScopeStr, L"ManualOnly") != 0;
-    Wh_FreeStringSetting(toastScopeStr);
-    int toastDur = univGroupSaved ? Wh_GetIntSetting(L"universalSafety.toastDurationMs") : 3200;
+    next.toastEnabled = Wh_GetIntSetting(L"universalSafety.toastEnabled") != 0;
+    auto toastScopeStr = WindhawkUtils::StringSetting::make(L"universalSafety.toastTriggerScope");
+    next.toastShowOnAuto = wcscmp(toastScopeStr.get(), L"ManualOnly") != 0;
+    int toastDur = Wh_GetIntSetting(L"universalSafety.toastDurationMs");
     if (toastDur < 1200) toastDur = 1200;
     if (toastDur > 10000) toastDur = 10000;
     next.toastDurationMs = static_cast<uint32_t>(toastDur);
 
-    PCWSTR capStr = Wh_GetStringSetting(L"universalSafety.screenshotBehavior");
-    next.toastExcludeFromCapture = !capStr || !*capStr || wcscmp(capStr, L"ShowInCapture") != 0;
-    Wh_FreeStringSetting(capStr);
+    auto capStr = WindhawkUtils::StringSetting::make(L"universalSafety.screenshotBehavior");
+    next.toastExcludeFromCapture = wcscmp(capStr.get(), L"ShowInCapture") != 0;
 
     next.dryRun = Wh_GetIntSetting(L"universalSafety.dryRun") != 0;
 
     g_mouseClicksRequired.store(next.rbMouseClicksRequired, std::memory_order_relaxed);
     g_mouseTriggerScope.store(next.rbMouseScope, std::memory_order_relaxed);
     g_mouseMaxIntervalMs.store(static_cast<uint32_t>(next.rbMouseMaxIntervalMs), std::memory_order_relaxed);
-    g_mouseSwallowClick.store(next.rbMouseSwallowClick, std::memory_order_relaxed);
     g_tempGestureEnabled.store(next.tempGestureEnabled, std::memory_order_relaxed);
     g_tempGestureScope.store(next.tempGestureScope, std::memory_order_relaxed);
     g_tempGestureMaxIntervalMs.store(static_cast<uint32_t>(next.tempGestureMaxIntervalMs), std::memory_order_relaxed);
@@ -3203,7 +3327,6 @@ static void ShowCleanToast(const std::wstring& title, const std::wstring& subtit
 
 BOOL WhTool_ModInit() {
     InitializeCriticalSection(&g_settingsMtx);
-    g_settingsMtxInit = true;
     g_stopRequested.store(false, std::memory_order_relaxed);
 
     g_wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -3214,7 +3337,7 @@ BOOL WhTool_ModInit() {
 
     g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);
     if (g_uiThread) {
-        WaitForSingleObject(g_uiReadyEvent, 2000);
+        WaitForSingleObject(g_uiReadyEvent, INFINITE);
     }
 
     LoadSettings();
@@ -3226,7 +3349,7 @@ BOOL WhTool_ModInit() {
             PostMessageW(g_uiMsgHwnd, WM_QUIT, 0, 0);
         }
         if (g_uiThread) {
-            WaitForSingleObject(g_uiThread, 2000);
+            WaitForSingleObject(g_uiThread, INFINITE);
             CloseHandle(g_uiThread);
             g_uiThread = nullptr;
         }
@@ -3254,7 +3377,7 @@ void WhTool_ModUninit() {
     }
     SyncMouseHookThread(false);
     if (g_workerThread) {
-        WaitForSingleObject(g_workerThread, 5000);
+        WaitForSingleObject(g_workerThread, INFINITE);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
@@ -3262,7 +3385,7 @@ void WhTool_ModUninit() {
         PostMessageW(g_uiMsgHwnd, WM_QUIT, 0, 0);
     }
     if (g_uiThread) {
-        WaitForSingleObject(g_uiThread, 3000);
+        WaitForSingleObject(g_uiThread, INFINITE);
         CloseHandle(g_uiThread);
         g_uiThread = nullptr;
     }
@@ -3274,24 +3397,28 @@ void WhTool_ModUninit() {
         CloseHandle(g_wakeEvent);
         g_wakeEvent = nullptr;
     }
-    if (g_settingsMtxInit) {
-        DeleteCriticalSection(&g_settingsMtx);
-        g_settingsMtxInit = false;
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
-    // Keep main thread alive at 0% CPU so g_toolModProcessMutex is never abandoned (WAIT_ABANDONED)
-    Sleep(INFINITE);
+    ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
@@ -3336,19 +3463,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // Windhawk 2.0 native host (windhawk-mod.exe) does not pass "-tool-mod <id>" on the command line.
-    WCHAR modulePath[MAX_PATH]{};
-    if (!isCurrentToolModProcess && GetModuleFileNameW(nullptr, modulePath, ARRAYSIZE(modulePath)) > 0) {
-        PCWSTR baseName = PathFindFileNameW(modulePath);
-        if (baseName && (
-            _wcsicmp(baseName, L"windhawk-mod.exe") == 0 ||
-            _wcsicmp(baseName, L"windhawk-mod-uiaccess.exe") == 0 ||
-            _wcsicmp(baseName, L"windhawk-mod-elevated.exe") == 0)) {
-            isToolModProcess = true;
-            isCurrentToolModProcess = true;
-        }
-    }
-
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
@@ -3356,11 +3470,8 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            DWORD waitRes = WaitForSingleObject(g_toolModProcessMutex, 5000);
-            if (waitRes != WAIT_OBJECT_0) {
-                Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-                ExitProcess(1);
-            }
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
         }
         if (!WhTool_ModInit()) {
             ExitProcess(1);
@@ -3421,7 +3532,7 @@ void Wh_ModAfterInit() {
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
 
-    auto pCreateProcessInternalW =
+    CreateProcessInternalW_t pCreateProcessInternalW =
         (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
@@ -3454,11 +3565,6 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
-    }
-    if (g_toolModProcessMutex) {
-        ReleaseMutex(g_toolModProcessMutex);
-        CloseHandle(g_toolModProcessMutex);
-        g_toolModProcessMutex = nullptr;
     }
     WhTool_ModUninit();
     ExitProcess(0);
