@@ -2,7 +2,7 @@
 // @id              no-click-touchpad-tap-and-hold
 // @name            No-Click Touchpad: Tap & Hold
 // @description     Tap a corner to right-click and hold two fingers to drag, with a ring around the pointer while the drag is on. For touchpads that no longer click.
-// @version         1.0
+// @version         1.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -27,6 +27,11 @@ It's also handy if you'd rather tap than press.
 Tap the bottom right corner of the touchpad with one finger to right-click. You can
 switch to the bottom left corner in the mod's settings. Without the mod, a tap in
 that corner is a normal left click.
+
+To avoid right-clicking by accident, set "Taps to right-click" to two. Then you tap
+the corner twice, as fast as a double-click, and a single tap there does nothing.
+How fast is set by Windows' double-click speed (Settings > Bluetooth & devices >
+Mouse > Additional mouse settings).
 
 ## Drag
 Rest two fingers on the touchpad and keep them still for a moment. A ring appears
@@ -75,6 +80,12 @@ page](https://github.com/mario0318/no-click-touchpad-tap-and-hold/issues).
 - cornerTap: true
   $name: Corner tap right-click
   $description: A quick one-finger tap in the chosen corner right-clicks
+- cornerTaps: single
+  $name: Taps to right-click
+  $description: With two, a single tap in the corner does nothing
+  $options:
+  - single: One tap
+  - double: Two taps
 - corner: bottomRight
   $name: Corner
   $options:
@@ -179,6 +190,7 @@ constexpr DWORD kRingFrameMs = 15;
 // ---------------------------------------------------------------------------
 struct Settings {
     bool cornerTap = true;
+    bool doubleTap = false;
     bool bottomLeft = false;
     double zoneW = 0.5, zoneH = 0.33;
     DWORD maxTapMs = 400;
@@ -208,6 +220,8 @@ static void ReadWindowsZone(double* w, double* h) {
 static void LoadSettings() {
     Settings s;
     s.cornerTap = Wh_GetIntSetting(L"cornerTap") != 0;
+    s.doubleTap =
+        wcscmp(WindhawkUtils::StringSetting::make(L"cornerTaps"), L"double") == 0;
     s.bottomLeft =
         wcscmp(WindhawkUtils::StringSetting::make(L"corner"), L"bottomLeft") == 0;
 
@@ -241,10 +255,10 @@ static void LoadSettings() {
         }
     }
     g_s = s;
-    Wh_Log(L"Settings: corner %s %.2fx%.2f, cornerTap %d, twoFingerDrag %d, hold %u ms, "
-           L"lift grace %u ms, ring %d #%02X%02X%02X",
+    Wh_Log(L"Settings: corner %s %.2fx%.2f, cornerTap %d, doubleTap %d, twoFingerDrag %d, "
+           L"hold %u ms, lift grace %u ms, ring %d #%02X%02X%02X",
            s.bottomLeft ? L"bottomLeft" : L"bottomRight", s.zoneW, s.zoneH, s.cornerTap,
-           s.twoFingerDrag, s.holdMs, s.dragLockMs, s.ring, s.ringR, s.ringG, s.ringB);
+           s.doubleTap, s.twoFingerDrag, s.holdMs, s.dragLockMs, s.ring, s.ringR, s.ringG, s.ringB);
 }
 
 // ---------------------------------------------------------------------------
@@ -470,7 +484,12 @@ int g_maxFingers;
 // The session before this one, for a tap whose click comes after the next
 // touch has already started.
 bool g_prevTap;
-DWORD g_prevEnd;
+DWORD g_prevStart, g_prevEnd;
+
+// With two taps to right-click: the first corner tap was swallowed, and a second
+// one that starts within the double-click time of its lift right-clicks.
+bool g_armed;
+DWORD g_armedEnd;
 
 // A primary click held back until it's clear whether it was a corner tap.
 bool g_pending, g_pendingUp;
@@ -878,6 +897,7 @@ static void ProcessFrame(Dev& d) {
             if (g_pending)
                 ResolvePending();
             g_prevTap = IsCornerTap();
+            g_prevStart = g_startTick;
             g_prevEnd = g_endTick;
             auto& first = *g_fingers.begin();
             g_haveSession = true;
@@ -1046,17 +1066,30 @@ static void ResolvePending() {
     g_pending = false;
     KillTimer(g_hwnd, kTapTimer);
     if (!g_pendingUp) {
+        g_armed = false;
         SendDown(PrimaryDown());  // a press: the real release follows through the hook
         return;
     }
     if (g_pendingPrev || IsCornerTap()) {
+        DWORD tapStart = g_pendingPrev ? g_prevStart : g_startTick;
+        DWORD tapEnd = g_pendingPrev ? g_prevEnd : g_endTick;
         if (g_pendingPrev)
             g_prevTap = false;
         else
             g_consumed = true;
+        if (g_s.doubleTap &&
+            !(g_armed && tapStart - g_armedEnd <= GetDoubleClickTime())) {
+            // The first of two taps: nothing happens yet.
+            g_armed = true;
+            g_armedEnd = tapEnd;
+            Wh_Log(L"Corner tap, waiting for a second one");
+            return;
+        }
+        g_armed = false;
         Wh_Log(L"Corner tap -> right click");
         SendClick(SecondaryDown());
     } else {
+        g_armed = false;
         SendClick(PrimaryDown());
     }
 }
