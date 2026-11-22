@@ -2225,6 +2225,24 @@ static void RestoreLocalValue(const wux::DependencyObject& target, const wux::De
     }
 }
 
+// Coupe l'infobulle XAML de `target` en mémorisant la valeur posée par la barre.
+// Au démarrage d'explorer.exe, la barre la pose après notre premier passage :
+// on rappelle donc cette fonction à chaque mise à jour. Renvoie vrai si la barre
+// avait reposé une infobulle depuis.
+static bool SuppressToolTip(const wux::DependencyObject& target, winrt::Windows::Foundation::IInspectable& original) {
+    const auto property = wux::Controls::ToolTipService::ToolTipProperty();
+    const auto value = target.ReadLocalValue(property);
+    if (!value) {
+        return false;  // déjà coupée par nous
+    }
+    const bool setByTaskbar = value != wux::DependencyProperty::UnsetValue();
+    if (setByTaskbar) {
+        original = value;
+    }
+    wux::Controls::ToolTipService::SetToolTip(target, winrt::Windows::Foundation::IInspectable{nullptr});
+    return setByTaskbar;
+}
+
 // Rectangle écran (pixels physiques) de l'élément, calculé depuis la fenêtre
 // hôte XAML de la barre sous le curseur ; repli sur un carré autour du curseur.
 static tbf::Rect ElementScreenRect(const wux::FrameworkElement& element) {
@@ -2272,10 +2290,8 @@ static bool ResolveIconParts(FolderButton& state, const wux::FrameworkElement& e
             return false;
         }
         // L'infobulle du bouton de Windows 11 est aussi portée par l'IconPanel.
-        const auto toolTipProperty = wux::Controls::ToolTipService::ToolTipProperty();
         state.iconPanel = winrt::make_weak(iconPanel);
-        state.originalIconPanelToolTip = iconPanel.ReadLocalValue(toolTipProperty);
-        wux::Controls::ToolTipService::SetToolTip(iconPanel, winrt::Windows::Foundation::IInspectable{nullptr});
+        SuppressToolTip(iconPanel, state.originalIconPanelToolTip);
     }
     auto image = FindChildByName(iconPanel, L"Icon").try_as<wux::Controls::Image>();
     if (!image) {
@@ -2289,7 +2305,17 @@ static bool ResolveIconParts(FolderButton& state, const wux::FrameworkElement& e
 // Thread du conteneur uniquement.
 static void ApplyFolderVisuals(FolderButton& state) {
     auto element = state.element.get();
-    if (!element || !ResolveIconParts(state, element)) {
+    if (!element) {
+        return;
+    }
+    bool toolTipSetAgain = SuppressToolTip(element, state.originalButtonToolTip);
+    if (auto iconPanel = state.iconPanel.get()) {
+        toolTipSetAgain = SuppressToolTip(iconPanel, state.originalIconPanelToolTip) || toolTipSetAgain;
+    }
+    if (toolTipSetAgain) {
+        Wh_Log(L"[XAML] Tooltip set again by the taskbar for %s: hidden", state.folderId.c_str());
+    }
+    if (!ResolveIconParts(state, element)) {
         return;
     }
     auto image = state.icon.get();
@@ -2368,9 +2394,7 @@ static std::shared_ptr<FolderButton> AttachFolderButton(const wux::FrameworkElem
 
     // L'infobulle du bouton de Windows 11 est portée par le ToolTipService XAML
     // du bouton et de son IconPanel (coupée par ResolveIconParts) : on la coupe sur les deux.
-    const auto toolTipProperty = wux::Controls::ToolTipService::ToolTipProperty();
-    state->originalButtonToolTip = element.ReadLocalValue(toolTipProperty);
-    wux::Controls::ToolTipService::SetToolTip(element, winrt::Windows::Foundation::IInspectable{nullptr});
+    SuppressToolTip(element, state->originalButtonToolTip);
 
     if (!ResolveIconParts(*state, element)) {
         // Modèle pas encore appliqué : on réessaie au chargement du bouton
