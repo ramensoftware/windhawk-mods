@@ -7,8 +7,8 @@
 // @github          https://github.com/Kouqqu
 // @homepage        https://github.com/Kouqqu/Volu
 // @donateUrl       https://dalink.to/koukku
-// @include         explorer.exe
-// @compilerOptions -lgdiplus -lgdi32 -lole32 -lwinmm -ldwmapi -lshcore -lcomctl32
+// @include         windhawk.exe
+// @compilerOptions -lgdiplus -lgdi32 -lole32 -lwinmm -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -23,11 +23,19 @@ Authentic macOS-style translucent volume HUD for Windows with classic step click
 * **Pixel-perfect design**: Authentic macOS frosted glass HUD overlay with clean 16-step volume bar.
 * **Audio feedback**: Classic wooden and modern tactile volume step clicks. Silent on mute.
 * **Smooth animations**: Smooth fade-out transition with configurable on-screen duration.
-* **Flexible positioning**: Place the HUD at the center, top, bottom, or corners of your screen.
-* **Custom hotkeys**: Global shortcuts (`Ctrl + Alt + Up`, `Ctrl + Alt + Down`, `Ctrl + Alt + V`), can be toggled on/off in settings.
-* **Native suppression**: Intercepts physical media keys (`Volume Up`, `Volume Down`, `Mute`) and suppresses the default Windows flyouts.
+* **Flexible positioning**: Place the HUD at the center, top, or bottom of your screen.
+* **Optional hotkeys**: Global shortcuts (`Ctrl + Alt + Up`, `Ctrl + Alt + Down`, `Ctrl + Alt + V`), disabled by default to avoid shortcut conflicts.
+* **Native flyout suppression**: Intercepts physical media keys (`Volume Up`, `Volume Down`, `Mute`) system-wide using `RegisterHotKey`, suppressing the default Windows flyouts.
+* **1/16 Quantization**: Each key press changes volume by 1/16 (6.25%) matching macOS, instead of Windows' default 2%.
+* **Dynamic device switching**: Automatically follows the default audio output device when headphones, speakers, or Bluetooth devices are connected.
 
-### Shortcuts
+### Key Capture & Shortcuts
+The mod captures physical volume keys system-wide via `RegisterHotKey`, so background apps will not receive duplicate volume events:
+- `Volume Up` — Increase volume by 6.25% (1 step)
+- `Volume Down` — Decrease volume by 6.25% (1 step)
+- `Volume Mute` — Toggle mute
+
+Optional shortcuts (if enabled in settings):
 - `Ctrl + Alt + Up` — Volume Up
 - `Ctrl + Alt + Down` — Volume Down
 - `Ctrl + Alt + V` — Mute / Unmute
@@ -50,32 +58,59 @@ Authentic macOS-style translucent volume HUD for Windows with classic step click
   $name: HUD Position
   $description: Screen placement of the volume HUD.
   $options:
-    - center: Center of Active Screen (macOS Classic)
-    - bottom: Bottom Center
-    - top: Top Center
-- enableHotkeys: true
-  $name: Enable Hotkeys
-  $description: Enable Ctrl+Alt+Up / Ctrl+Alt+Down / Ctrl+Alt+V for volume control.
+    - center: Center
+    - top: Top
+    - bottom: Bottom
+- enableHotkeys: false
+  $name: Enable Custom Hotkeys (Ctrl+Alt)
+  $description: Enable global shortcuts Ctrl+Alt+Up (Volume Up), Ctrl+Alt+Down (Volume Down), and Ctrl+Alt+V (Mute). Note that Ctrl+Alt combinations may conflict with shortcuts in other apps (such as VS Code multi-cursor) or AltGr on international keyboard layouts.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_api.h>
+#include <windhawk_utils.h>
+
 #include <windows.h>
-#include <commctrl.h>
-#include <gdiplus.h>
+#include <mmsystem.h>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
-#include <mmsystem.h>
-#include <cmath>
-#include <algorithm>
+#include <shellscalingapi.h>
+#include <gdiplus.h>
+
 #include <atomic>
+#include <cmath>
 
-using namespace Gdiplus;
+#pragma comment(lib, "gdiplus.lib")
+#pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "winmm.lib")
+#pragma comment(lib, "shcore.lib")
 
-// --- Embedded Sounds Forward Declarations ---
-extern const unsigned char g_woodClickWav[59610];
-extern const unsigned char g_tactileClickWav[18254];
+// Forward declarations for audio assets
+extern const unsigned char g_woodClickWav[];
+extern const unsigned char g_tactileClickWav[];
 
-// --- Z-Band API Definitions ---
+enum class SoundScheme {
+    Wood,
+    Tactile,
+    None
+};
+
+enum class HudPosition {
+    Center,
+    Top,
+    Bottom
+};
+
+struct ModSettings {
+    SoundScheme soundScheme = SoundScheme::Wood;
+    int timeoutMs = 1300;
+    HudPosition position = HudPosition::Center;
+    bool enableHotkeys = false;
+};
+
+static ModSettings g_settings;
+
 enum ZBID {
     ZBID_DEFAULT = 0,
     ZBID_DESKTOP = 1,
@@ -94,15 +129,17 @@ enum ZBID {
     ZBID_GENUINE_WINDOWS = 14,
     ZBID_IMMERSIVE_RESTRICTED = 15,
     ZBID_SYSTEM_TOOLS = 16,
+    ZBID_LOCK = 17,
+    ZBID_ABOVELOCK_UX = 18,
 };
 
-typedef HWND(WINAPI* pCreateWindowInBand)(
+typedef HWND(WINAPI* CreateWindowInBand_t)(
     DWORD dwExStyle,
     LPCWSTR lpClassName,
     LPCWSTR lpWindowName,
     DWORD dwStyle,
-    int x,
-    int y,
+    int X,
+    int Y,
     int nWidth,
     int nHeight,
     HWND hWndParent,
@@ -112,66 +149,44 @@ typedef HWND(WINAPI* pCreateWindowInBand)(
     DWORD dwBand
 );
 
-// --- Settings ---
-enum class SoundScheme {
-    Wood,
-    Tactile,
-    None
-};
+#define WM_USER_SHOW_HUD         (WM_USER + 101)
+#define WM_USER_SETTINGS_CHANGED  (WM_USER + 102)
+#define WM_USER_DEVICE_CHANGED   (WM_USER + 103)
 
-enum class Position {
-    Center,
-    Bottom,
-    Top
-};
+#define TIMER_ID_HIDE            1001
+#define TIMER_ID_FADE            1002
 
-struct Settings {
-    SoundScheme soundScheme = SoundScheme::Wood;
-    int timeoutMs = 1300;
-    Position position = Position::Center;
-    bool enableHotkeys = true;
-} g_settings;
+#define HOTKEY_ID_VOL_UP         2001
+#define HOTKEY_ID_VOL_DOWN       2002
+#define HOTKEY_ID_VOL_MUTE       2003
+#define HOTKEY_ID_VOL_UP_CUSTOM  2004
+#define HOTKEY_ID_VOL_DOWN_CUSTOM 2005
+#define HOTKEY_ID_VOL_MUTE_CUSTOM 2006
 
-// --- Global State ---
-static ULONG_PTR g_gdiplusToken = 0;
+#define HUD_WINDOW_CLASS L"Volu_MacOS_Volume_HUD_Class"
+
 static HWND g_hHudWnd = NULL;
 static HANDLE g_hHudThread = NULL;
 static DWORD g_dwHudThreadId = 0;
-static HHOOK g_hKeyboardHook = NULL;
-static std::atomic<bool> g_bInternalVolumeChange(false);
-static std::atomic<bool> g_bRunning(true);
-static float g_lastVolume = -1.0f;
-static bool g_lastMuted = false;
+static HANDLE g_hHudReady = NULL;
 
-static int g_hudAlpha = 255;
+static ULONG_PTR g_gdiplusToken = 0;
 static HDC g_hMemDC = NULL;
-static HBITMAP g_hMemBmp = NULL;
-static HBITMAP g_hOldMemBmp = NULL;
+static HBITMAP g_hDIB = NULL;
+static HBITMAP g_hOldBitmap = NULL;
 static void* g_pvBits = nullptr;
-static int g_bmpWidth = 0;
-static int g_bmpHeight = 0;
-static int g_posX = 0;
-static int g_posY = 0;
+static int g_nBufferWidth = 0;
+static int g_nBufferHeight = 0;
 
-#define WM_USER_SHOW_HUD (WM_USER + 101)
-#define WM_USER_VOLUME_ACTION (WM_USER + 102)
-#define WM_USER_SETTINGS_CHANGED (WM_USER + 103)
+static double g_dCurrentAlpha = 0.0;
+static ULONGLONG g_ullFadeStartTime = 0;
 
-#define IDT_HIDE 1
-#define IDT_FADE_OUT 2
-#define IDT_WATCHDOG 3
+static std::atomic<float> g_lastVolume{0.0f};
+static std::atomic<bool> g_lastMuted{false};
+static std::atomic<bool> g_bInternalVolumeChange{false};
 
-#define HOTKEY_ID_UP 9001
-#define HOTKEY_ID_DOWN 9002
-#define HOTKEY_ID_MUTE 9003
-#define HOTKEY_ID_VOL_UP 9004
-#define HOTKEY_ID_VOL_DOWN 9005
-#define HOTKEY_ID_VOL_MUTE 9006
-
-#define SUBCLASS_ID_TRAY 1001
-
-// --- Sound Playback ---
-void PlayClickSound() {
+static void PlayClickSound(bool isMuted) {
+    if (isMuted) return;
     if (g_settings.soundScheme == SoundScheme::None) return;
 
     const unsigned char* pData = nullptr;
@@ -182,854 +197,1053 @@ void PlayClickSound() {
     }
 
     if (pData) {
-        PlaySoundW((LPCWSTR)pData, NULL, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
+        PlaySoundW((LPCWSTR)pData, nullptr, SND_MEMORY | SND_ASYNC | SND_NODEFAULT);
     }
 }
 
-// --- Audio Manager Forward Declaration ---
-class AudioManager;
-static AudioManager* g_pAudioMgr = nullptr;
+// ============================================================================
+// --- Audio Management (WASAPI + Dynamic Device Tracking) ---
+// ============================================================================
 
-// --- Audio Endpoint Notification Callback ---
 class AudioEndpointVolumeCallback : public IAudioEndpointVolumeCallback {
-    LONG m_cRef;
+private:
+    LONG m_refCount = 1;
+
 public:
-    AudioEndpointVolumeCallback() : m_cRef(1) {}
-    ULONG STDMETHODCALLTYPE AddRef() { return InterlockedIncrement(&m_cRef); }
-    ULONG STDMETHODCALLTYPE Release() {
-        ULONG ulRef = InterlockedDecrement(&m_cRef);
-        if (ulRef == 0) delete this;
-        return ulRef;
-    }
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) {
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
         if (riid == __uuidof(IUnknown) || riid == __uuidof(IAudioEndpointVolumeCallback)) {
             *ppv = static_cast<IAudioEndpointVolumeCallback*>(this);
             AddRef();
             return S_OK;
         }
-        *ppv = NULL;
+        *ppv = nullptr;
         return E_NOINTERFACE;
     }
-    HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify);
+
+    STDMETHODIMP_(ULONG) AddRef() override {
+        return InterlockedIncrement(&m_refCount);
+    }
+
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG count = InterlockedDecrement(&m_refCount);
+        if (count == 0) delete this;
+        return count;
+    }
+
+    STDMETHODIMP OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify) override;
+};
+
+class AudioDeviceNotificationClient : public IMMNotificationClient {
+private:
+    LONG m_refCount = 1;
+
+public:
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == __uuidof(IUnknown) || riid == __uuidof(IMMNotificationClient)) {
+            *ppv = static_cast<IMMNotificationClient*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    STDMETHODIMP_(ULONG) AddRef() override {
+        return InterlockedIncrement(&m_refCount);
+    }
+
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG count = InterlockedDecrement(&m_refCount);
+        if (count == 0) delete this;
+        return count;
+    }
+
+    STDMETHODIMP OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDeviceId) override {
+        if (flow == eRender && (role == eMultimedia || role == eConsole)) {
+            if (g_hHudWnd) {
+                PostMessageW(g_hHudWnd, WM_USER_DEVICE_CHANGED, 0, 0);
+            }
+        }
+        return S_OK;
+    }
+
+    STDMETHODIMP OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) override { return S_OK; }
+    STDMETHODIMP OnDeviceAdded(LPCWSTR pwstrDeviceId) override { return S_OK; }
+    STDMETHODIMP OnDeviceRemoved(LPCWSTR pwstrDeviceId) override { return S_OK; }
+    STDMETHODIMP OnPropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key) override { return S_OK; }
 };
 
 class AudioManager {
 private:
     IMMDeviceEnumerator* m_pEnumerator = nullptr;
     IMMDevice* m_pDevice = nullptr;
-    IAudioEndpointVolume* m_pEndpoint = nullptr;
-    AudioEndpointVolumeCallback* m_pCallback = nullptr;
+    IAudioEndpointVolume* m_pEndpointVolume = nullptr;
+    AudioEndpointVolumeCallback* m_pVolumeCallback = nullptr;
+    AudioDeviceNotificationClient* m_pDeviceNotify = nullptr;
 
 public:
+    AudioManager() = default;
+    ~AudioManager() {
+        Uninitialize();
+    }
+
     bool Initialize() {
-        HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_INPROC_SERVER,
-                                      __uuidof(IMMDeviceEnumerator), (void**)&m_pEnumerator);
+        HRESULT hr = CoCreateInstance(
+            __uuidof(MMDeviceEnumerator),
+            nullptr,
+            CLSCTX_ALL,
+            __uuidof(IMMDeviceEnumerator),
+            (void**)&m_pEnumerator
+        );
         if (FAILED(hr) || !m_pEnumerator) {
-            Wh_Log(L"CoCreateInstance MMDeviceEnumerator failed: 0x%08X", hr);
+            Wh_Log(L"Failed to create MMDeviceEnumerator: 0x%08X", hr);
             return false;
         }
 
-        hr = m_pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &m_pDevice);
-        if (FAILED(hr) || !m_pDevice) {
-            Wh_Log(L"GetDefaultAudioEndpoint failed: 0x%08X", hr);
-            return false;
+        m_pVolumeCallback = new AudioEndpointVolumeCallback();
+        m_pDeviceNotify = new AudioDeviceNotificationClient();
+
+        hr = m_pEnumerator->RegisterEndpointNotificationCallback(m_pDeviceNotify);
+        if (FAILED(hr)) {
+            Wh_Log(L"RegisterEndpointNotificationCallback failed: 0x%08X", hr);
         }
 
-        hr = m_pDevice->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_INPROC_SERVER, NULL, (void**)&m_pEndpoint);
-        if (FAILED(hr) || !m_pEndpoint) {
-            Wh_Log(L"Activate IAudioEndpointVolume failed: 0x%08X", hr);
-            return false;
-        }
-
-        m_pCallback = new AudioEndpointVolumeCallback();
-        m_pEndpoint->RegisterControlChangeNotify(m_pCallback);
-        Wh_Log(L"AudioManager initialized successfully");
+        BindEndpoint();
         return true;
     }
 
-    void Uninitialize() {
-        if (m_pEndpoint && m_pCallback) {
-            m_pEndpoint->UnregisterControlChangeNotify(m_pCallback);
-            m_pCallback->Release();
-            m_pCallback = nullptr;
+    void BindEndpoint() {
+        UnbindEndpoint();
+
+        if (!m_pEnumerator) return;
+
+        HRESULT hr = m_pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &m_pDevice);
+        if (FAILED(hr) || !m_pDevice) {
+            Wh_Log(L"No default audio endpoint: 0x%08X", hr);
+            return;
         }
-        if (m_pEndpoint) {
-            m_pEndpoint->Release();
-            m_pEndpoint = nullptr;
+
+        hr = m_pDevice->Activate(
+            __uuidof(IAudioEndpointVolume),
+            CLSCTX_ALL,
+            nullptr,
+            (void**)&m_pEndpointVolume
+        );
+        if (FAILED(hr) || !m_pEndpointVolume) {
+            Wh_Log(L"Activate(IAudioEndpointVolume) failed: 0x%08X", hr);
+            m_pDevice->Release();
+            m_pDevice = nullptr;
+            return;
+        }
+
+        if (m_pVolumeCallback) {
+            m_pEndpointVolume->RegisterControlChangeNotify(m_pVolumeCallback);
+        }
+
+        float vol = 0.0f;
+        BOOL mute = FALSE;
+        if (SUCCEEDED(m_pEndpointVolume->GetMasterVolumeLevelScalar(&vol))) {
+            g_lastVolume.store(vol);
+        }
+        if (SUCCEEDED(m_pEndpointVolume->GetMute(&mute))) {
+            g_lastMuted.store(mute ? true : false);
+        }
+    }
+
+    void UnbindEndpoint() {
+        if (m_pEndpointVolume) {
+            if (m_pVolumeCallback) {
+                m_pEndpointVolume->UnregisterControlChangeNotify(m_pVolumeCallback);
+            }
+            m_pEndpointVolume->Release();
+            m_pEndpointVolume = nullptr;
         }
         if (m_pDevice) {
             m_pDevice->Release();
             m_pDevice = nullptr;
         }
+    }
+
+    void Uninitialize() {
+        UnbindEndpoint();
+
         if (m_pEnumerator) {
+            if (m_pDeviceNotify) {
+                m_pEnumerator->UnregisterEndpointNotificationCallback(m_pDeviceNotify);
+            }
             m_pEnumerator->Release();
             m_pEnumerator = nullptr;
         }
+
+        if (m_pDeviceNotify) {
+            m_pDeviceNotify->Release();
+            m_pDeviceNotify = nullptr;
+        }
+        if (m_pVolumeCallback) {
+            m_pVolumeCallback->Release();
+            m_pVolumeCallback = nullptr;
+        }
     }
 
-    float GetVolume() {
-        if (!m_pEndpoint) return 0.0f;
+    bool HasEndpoint() const {
+        return m_pEndpointVolume != nullptr;
+    }
+
+    bool StepVolume(float delta) {
+        if (!m_pEndpointVolume) return false;
+
+        float current = 0.0f;
+        if (FAILED(m_pEndpointVolume->GetMasterVolumeLevelScalar(&current))) {
+            return false;
+        }
+
+        // Snap to nearest 1/16 grid step
+        float roundedStep = roundf(current * 16.0f);
+        float nextStep = roundedStep + delta;
+        float newVol = nextStep / 16.0f;
+        if (newVol < 0.0f) newVol = 0.0f;
+        if (newVol > 1.0f) newVol = 1.0f;
+
+        g_bInternalVolumeChange.store(true);
+
+        BOOL isMuted = FALSE;
+        m_pEndpointVolume->GetMute(&isMuted);
+        if (isMuted) {
+            m_pEndpointVolume->SetMute(FALSE, nullptr);
+            g_lastMuted.store(false);
+        }
+
+        HRESULT hr = m_pEndpointVolume->SetMasterVolumeLevelScalar(newVol, nullptr);
+        if (SUCCEEDED(hr)) {
+            g_lastVolume.store(newVol);
+        }
+
+        g_bInternalVolumeChange.store(false);
+        return SUCCEEDED(hr);
+    }
+
+    bool ToggleMute() {
+        if (!m_pEndpointVolume) return false;
+
+        BOOL isMuted = FALSE;
+        if (FAILED(m_pEndpointVolume->GetMute(&isMuted))) {
+            return false;
+        }
+
+        BOOL newMuted = !isMuted;
+        g_bInternalVolumeChange.store(true);
+        HRESULT hr = m_pEndpointVolume->SetMute(newMuted, nullptr);
+        if (SUCCEEDED(hr)) {
+            g_lastMuted.store(newMuted ? true : false);
+        }
+        g_bInternalVolumeChange.store(false);
+        return SUCCEEDED(hr);
+    }
+
+    float GetCurrentVolume() {
+        if (!m_pEndpointVolume) return g_lastVolume.load();
         float vol = 0.0f;
-        m_pEndpoint->GetMasterVolumeLevelScalar(&vol);
-        return vol;
+        if (SUCCEEDED(m_pEndpointVolume->GetMasterVolumeLevelScalar(&vol))) {
+            g_lastVolume.store(vol);
+            return vol;
+        }
+        return g_lastVolume.load();
     }
 
     bool IsMuted() {
-        if (!m_pEndpoint) return false;
+        if (!m_pEndpointVolume) return g_lastMuted.load();
         BOOL muted = FALSE;
-        m_pEndpoint->GetMute(&muted);
-        return muted != FALSE;
-    }
-
-    void StepVolume(int step) {
-        if (!m_pEndpoint) return;
-        float current = GetVolume();
-        float delta = 1.0f / 16.0f;
-        float target = (step > 0) ? (current + delta) : (current - delta);
-        if (target > 1.0f) target = 1.0f;
-        if (target < 0.0f) target = 0.0f;
-
-        g_bInternalVolumeChange = true;
-        if (IsMuted()) {
-            m_pEndpoint->SetMute(FALSE, NULL);
-            g_lastMuted = false;
+        if (SUCCEEDED(m_pEndpointVolume->GetMute(&muted))) {
+            g_lastMuted.store(muted ? true : false);
+            return muted != FALSE;
         }
-        m_pEndpoint->SetMasterVolumeLevelScalar(target, NULL);
-        g_lastVolume = target;
-        PlayClickSound();
-
-        if (g_hHudWnd) {
-            PostMessageW(g_hHudWnd, WM_USER_SHOW_HUD, 0, 0);
-        }
-        g_bInternalVolumeChange = false;
-    }
-
-    void ToggleMute() {
-        if (!m_pEndpoint) return;
-        BOOL muted = FALSE;
-        m_pEndpoint->GetMute(&muted);
-        BOOL newMute = !muted;
-
-        g_bInternalVolumeChange = true;
-        m_pEndpoint->SetMute(newMute, NULL);
-        g_lastMuted = (newMute != FALSE);
-
-        if (g_hHudWnd) {
-            PostMessageW(g_hHudWnd, WM_USER_SHOW_HUD, 0, 0);
-        }
-        g_bInternalVolumeChange = false;
+        return g_lastMuted.load();
     }
 };
 
-HRESULT STDMETHODCALLTYPE AudioEndpointVolumeCallback::OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify) {
-    if (g_bRunning && !g_bInternalVolumeChange && g_hHudWnd && pNotify) {
-        bool volChanged = (std::abs(pNotify->fMasterVolume - g_lastVolume) > 0.001f);
-        bool muteChanged = (pNotify->bMuted != g_lastMuted);
+static AudioManager g_audioMgr;
 
-        if (volChanged || muteChanged) {
-            g_lastVolume = pNotify->fMasterVolume;
-            g_lastMuted = (pNotify->bMuted != FALSE);
-            if (volChanged && !g_lastMuted) {
-                PlayClickSound();
-            }
-            PostMessageW(g_hHudWnd, WM_USER_SHOW_HUD, 0, 0);
-        }
+STDMETHODIMP AudioEndpointVolumeCallback::OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify) {
+    if (!pNotify) return S_OK;
+
+    float newVol = pNotify->fMasterVolume;
+    bool newMuted = (pNotify->bMuted != FALSE);
+
+    g_lastVolume.store(newVol);
+    g_lastMuted.store(newMuted);
+
+    bool isInternal = g_bInternalVolumeChange.load();
+
+    if (g_hHudWnd) {
+        PostMessageW(g_hHudWnd, WM_USER_SHOW_HUD, (WPARAM)isInternal, 0);
     }
+
     return S_OK;
 }
 
-// --- Helper: Add Rounded Rectangle to GraphicsPath ---
-void AddRoundedRect(GraphicsPath& path, float x, float y, float w, float h, float r) {
-    float d = r * 2.0f;
-    path.AddArc(x, y, d, d, 180.0f, 90.0f);
-    path.AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
-    path.AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
-    path.AddArc(x, y + h - d, d, d, 90.0f, 90.0f);
-    path.CloseFigure();
-}
+// ============================================================================
+// --- GDI+ Drawing & HUD Rendering ---
+// ============================================================================
 
-// --- HUD Rendering (Exact 1:1 Match to Classic macOS & WPF Design) ---
-void RenderHudContent(HWND hWnd, float volume, bool isMuted) {
-    // 1. Determine active monitor
-    HWND hFg = GetForegroundWindow();
-    HMONITOR hMon = hFg ? MonitorFromWindow(hFg, MONITOR_DEFAULTTOPRIMARY) : MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
-
-    MONITORINFO mi = { sizeof(MONITORINFO) };
-    if (!GetMonitorInfoW(hMon, &mi)) {
-        mi.rcMonitor.left = 0;
-        mi.rcMonitor.top = 0;
-        mi.rcMonitor.right = GetSystemMetrics(SM_CXSCREEN);
-        mi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
+static void EnsureBackbuffer(HDC hdcScreen, int width, int height) {
+    if (g_hMemDC && g_nBufferWidth == width && g_nBufferHeight == height) {
+        return;
     }
 
-    // 2. Determine DPI for monitor
-    UINT dpi = 96;
-    HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
-    if (hShcore) {
-        typedef HRESULT(WINAPI* pGetDpiForMonitor)(HMONITOR, int, UINT*, UINT*);
-        pGetDpiForMonitor getDpiForMon = (pGetDpiForMonitor)GetProcAddress(hShcore, "GetDpiForMonitor");
-        if (getDpiForMon && hMon) {
-            UINT dpiX = 96, dpiY = 96;
-            if (SUCCEEDED(getDpiForMon(hMon, 0 /*MDT_EFFECTIVE_DPI*/, &dpiX, &dpiY))) {
-                dpi = dpiX;
-            }
-        }
+    if (g_hMemDC) {
+        if (g_hOldBitmap) SelectObject(g_hMemDC, g_hOldBitmap);
+        DeleteDC(g_hMemDC);
+        g_hMemDC = nullptr;
     }
-    if (dpi == 0) {
-        HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-        if (hUser32) {
-            typedef UINT(WINAPI* pGetDpiForSystem)();
-            pGetDpiForSystem getDpiForSystem = (pGetDpiForSystem)GetProcAddress(hUser32, "GetDpiForSystem");
-            if (getDpiForSystem) dpi = getDpiForSystem();
-        }
-    }
-    if (dpi == 0) dpi = 96;
-
-    float scale = (float)dpi / 96.0f;
-
-    // Window size: 240x240 to accommodate soft drop shadow
-    int winSize = (int)std::round(240.0f * scale);
-    int width = winSize;
-    int height = winSize;
-
-    // Card size: 200x200, placed at offset (20, 16)
-    float cardX = 20.0f * scale;
-    float cardY = 16.0f * scale;
-    float cardW = 200.0f * scale;
-    float cardH = 200.0f * scale;
-    float cardRadius = 26.0f * scale;
-
-    // Screen bounds on target monitor
-    int monW = mi.rcMonitor.right - mi.rcMonitor.left;
-    int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
-    int posX = mi.rcMonitor.left + (monW - width) / 2;
-    int posY = mi.rcMonitor.top + (monH - height) / 2;
-    if (g_settings.position == Position::Bottom) {
-        posY = mi.rcMonitor.bottom - height - (int)(80.0f * scale);
-    } else if (g_settings.position == Position::Top) {
-        posY = mi.rcMonitor.top + (int)(80.0f * scale);
+    if (g_hDIB) {
+        DeleteObject(g_hDIB);
+        g_hDIB = nullptr;
+        g_pvBits = nullptr;
     }
 
-    g_bmpWidth = width;
-    g_bmpHeight = height;
-    g_posX = posX;
-    g_posY = posY;
+    g_hMemDC = CreateCompatibleDC(hdcScreen);
+    if (!g_hMemDC) return;
 
-    // Create / Recreate DIB section if dimensions changed
-    HDC hdcScreen = GetDC(NULL);
-    if (!g_hMemDC) {
-        g_hMemDC = CreateCompatibleDC(hdcScreen);
-    }
-
-    if (g_hMemBmp) {
-        SelectObject(g_hMemDC, g_hOldMemBmp);
-        DeleteObject(g_hMemBmp);
-        g_hMemBmp = NULL;
-    }
-
-    BITMAPINFO bmi = {0};
+    BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = width;
-    bmi.bmiHeader.biHeight = -height; // Top-down DIB
+    bmi.bmiHeader.biHeight = -height;
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
 
-    g_hMemBmp = CreateDIBSection(g_hMemDC, &bmi, DIB_RGB_COLORS, &g_pvBits, NULL, 0);
-    g_hOldMemBmp = (HBITMAP)SelectObject(g_hMemDC, g_hMemBmp);
-
-    // Clear DIB memory to 0 (crucial for per-pixel alpha transparency!)
-    memset(g_pvBits, 0, width * height * 4);
-
-    // Render with GDI+
-    {
-        Bitmap bmp(width, height, PixelFormat32bppPARGB);
-        Graphics g(&bmp);
-
-        // Anti-aliasing for curves and smooth shapes
-        g.SetSmoothingMode(SmoothingModeAntiAlias);
-        g.SetPixelOffsetMode(PixelOffsetModeHalf);
-
-        // Clear transparent background
-        g.Clear(Color(0, 0, 0, 0));
-
-        // 1. Soft Drop Shadow (multi-pass smooth shadow)
-        for (int step = 3; step >= 1; --step) {
-            float sOffset = (float)step * 2.0f * scale;
-            float sGrow = (float)step * 1.5f * scale;
-            BYTE sAlpha = (BYTE)(14 * (4 - step));
-            SolidBrush shadowBrush(Color(sAlpha, 0, 0, 0));
-            GraphicsPath sPath;
-            AddRoundedRect(sPath, cardX - sGrow, cardY + sOffset - sGrow, cardW + sGrow * 2.0f, cardH + sGrow * 2.0f, cardRadius + sGrow);
-            g.FillPath(&shadowBrush, &sPath);
-        }
-
-        // 2. Frosted Translucent Card (#C8B0BAC4)
-        GraphicsPath cardPath;
-        AddRoundedRect(cardPath, cardX, cardY, cardW, cardH, cardRadius);
-        SolidBrush cardBrush(Color(200, 176, 186, 196));
-        g.FillPath(&cardBrush, &cardPath);
-
-        // Dark charcoal color (#1C1E24)
-        Color darkColor(255, 28, 30, 36);
-        SolidBrush darkBrush(darkColor);
-
-        // 3. Speaker Canvas Area (centered horizontally in card, Y at 38px)
-        float cx0 = cardX + 40.0f * scale;
-        float cy0 = cardY + 38.0f * scale;
-
-        // Speaker Body: exact XAML path M 8,26 H 25 L 53,7 C 55,5.5 57,7 57,9 V 77 C 57,79 55,80.5 53,79 L 25,60 H 8 C 5.8,60 4,58.2 4,56 V 30 C 4,27.8 5.8,26 8,26 Z
-        GraphicsPath speakerPath;
-        speakerPath.AddLine(cx0 + 8.0f * scale, cy0 + 26.0f * scale, cx0 + 25.0f * scale, cy0 + 26.0f * scale);
-        speakerPath.AddLine(cx0 + 25.0f * scale, cy0 + 26.0f * scale, cx0 + 53.0f * scale, cy0 + 7.0f * scale);
-        speakerPath.AddBezier(cx0 + 53.0f * scale, cy0 + 7.0f * scale, cx0 + 55.0f * scale, cy0 + 5.5f * scale, cx0 + 57.0f * scale, cy0 + 7.0f * scale, cx0 + 57.0f * scale, cy0 + 9.0f * scale);
-        speakerPath.AddLine(cx0 + 57.0f * scale, cy0 + 9.0f * scale, cx0 + 57.0f * scale, cy0 + 77.0f * scale);
-        speakerPath.AddBezier(cx0 + 57.0f * scale, cy0 + 77.0f * scale, cx0 + 57.0f * scale, cy0 + 79.0f * scale, cx0 + 55.0f * scale, cy0 + 80.5f * scale, cx0 + 53.0f * scale, cy0 + 79.0f * scale);
-        speakerPath.AddLine(cx0 + 53.0f * scale, cy0 + 79.0f * scale, cx0 + 25.0f * scale, cy0 + 60.0f * scale);
-        speakerPath.AddLine(cx0 + 25.0f * scale, cy0 + 60.0f * scale, cx0 + 8.0f * scale, cy0 + 60.0f * scale);
-        speakerPath.AddBezier(cx0 + 8.0f * scale, cy0 + 60.0f * scale, cx0 + 5.8f * scale, cy0 + 60.0f * scale, cx0 + 4.0f * scale, cy0 + 58.2f * scale, cx0 + 4.0f * scale, cy0 + 56.0f * scale);
-        speakerPath.AddLine(cx0 + 4.0f * scale, cy0 + 56.0f * scale, cx0 + 4.0f * scale, cy0 + 30.0f * scale);
-        speakerPath.AddBezier(cx0 + 4.0f * scale, cy0 + 30.0f * scale, cx0 + 4.0f * scale, cy0 + 27.8f * scale, cx0 + 5.8f * scale, cy0 + 26.0f * scale, cx0 + 8.0f * scale, cy0 + 26.0f * scale);
-        speakerPath.CloseFigure();
-        g.FillPath(&darkBrush, &speakerPath);
-
-        // 4. Sound Waves
-        bool showWave1 = false, showWave2 = false, showWave3 = false;
-        if (isMuted) {
-            showWave1 = showWave2 = showWave3 = true;
-        } else if (volume > 0.001f) {
-            if (volume > 0.66f) {
-                showWave1 = showWave2 = showWave3 = true;
-            } else if (volume > 0.33f) {
-                showWave1 = showWave2 = true;
-            } else {
-                showWave1 = true;
-            }
-        }
-
-        Pen wavePen(darkColor, 4.2f * scale);
-        wavePen.SetStartCap(LineCapRound);
-        wavePen.SetEndCap(LineCapRound);
-
-        // Wave 1: R=24, Center=(54.5, 43.0), Start=-45, Sweep=90
-        if (showWave1) {
-            float w1_cx = cx0 + 54.5f * scale;
-            float w1_cy = cy0 + 43.0f * scale;
-            float r1 = 24.0f * scale;
-            g.DrawArc(&wavePen, w1_cx - r1, w1_cy - r1, r1 * 2.0f, r1 * 2.0f, -45.0f, 90.0f);
-        }
-        // Wave 2: R=38, Center=(57.0, 43.0), Start=-36, Sweep=72
-        if (showWave2) {
-            float w2_cx = cx0 + 57.0f * scale;
-            float w2_cy = cy0 + 43.0f * scale;
-            float r2 = 38.0f * scale;
-            g.DrawArc(&wavePen, w2_cx - r2, w2_cy - r2, r2 * 2.0f, r2 * 2.0f, -36.0f, 72.0f);
-        }
-        // Wave 3: R=52, Center=(60.5, 43.0), Start=-32, Sweep=64
-        if (showWave3) {
-            float w3_cx = cx0 + 60.5f * scale;
-            float w3_cy = cy0 + 43.0f * scale;
-            float r3 = 52.0f * scale;
-            g.DrawArc(&wavePen, w3_cx - r3, w3_cy - r3, r3 * 2.0f, r3 * 2.0f, -32.0f, 64.0f);
-        }
-
-        // 5. Classic macOS Mute Slash: X1=4, Y1=14 to X2=118, Y2=72
-        if (isMuted) {
-            Pen mutePen(darkColor, 4.6f * scale);
-            mutePen.SetStartCap(LineCapRound);
-            mutePen.SetEndCap(LineCapRound);
-            g.DrawLine(&mutePen, cx0 + 4.0f * scale, cy0 + 14.0f * scale, cx0 + 118.0f * scale, cy0 + 72.0f * scale);
-        }
-
-        // 6. 16-Segment Continuous Rectangular Progress Bar
-        // Snap to whole integer device pixels with SmoothingModeNone for razor-sharp hairline dividers
-        g.SetSmoothingMode(SmoothingModeNone);
-        g.SetPixelOffsetMode(PixelOffsetModeNone);
-
-        int barX = (int)std::round(cardX + 27.0f * scale);
-        int barY = (int)std::round(cardY + 162.0f * scale);
-        int barW = (int)std::round(146.0f * scale);
-        int barH = (int)std::round(8.0f * scale);
-
-        // Solid dark background track (#1C1E24)
-        g.FillRectangle(&darkBrush, barX, barY, barW, barH);
-
-        // Active white segments
-        int activeBlocks = isMuted ? 0 : (int)std::round(volume * 16.0f);
-        activeBlocks = (std::max)(0, (std::min)(16, activeBlocks));
-
-        SolidBrush whiteBrush(Color(255, 255, 255, 255));
-
-        for (int i = 0; i < 16; ++i) {
-            int colLeft = barX + 1 + (int)std::round((float)i * (float)(barW - 2) / 16.0f);
-            int colRight = barX + 1 + (int)std::round((float)(i + 1) * (float)(barW - 2) / 16.0f);
-            int segW = (colRight - colLeft) - (i < 15 ? 1 : 0);
-
-            if (i < activeBlocks && segW > 0) {
-                g.FillRectangle(&whiteBrush, colLeft, barY + 1, segW, barH - 2);
-            }
-        }
-
-        // Copy PARGB bits to DIB section
-        BitmapData data;
-        Rect lockRect(0, 0, width, height);
-        bmp.LockBits(&lockRect, ImageLockModeRead, PixelFormat32bppPARGB, &data);
-        memcpy(g_pvBits, data.Scan0, width * height * 4);
-        bmp.UnlockBits(&data);
+    g_hDIB = CreateDIBSection(g_hMemDC, &bmi, DIB_RGB_COLORS, &g_pvBits, nullptr, 0);
+    if (!g_hDIB || !g_pvBits) {
+        DeleteDC(g_hMemDC);
+        g_hMemDC = nullptr;
+        g_hDIB = nullptr;
+        g_pvBits = nullptr;
+        return;
     }
 
-    // Apply to Layered Window
-    BLENDFUNCTION blend = {0};
-    blend.BlendOp = AC_SRC_OVER;
-    blend.SourceConstantAlpha = 255;
-    blend.AlphaFormat = AC_SRC_ALPHA;
-
-    POINT ptDst = { posX, posY };
-    SIZE sizeDst = { width, height };
-    POINT ptSrc = { 0, 0 };
-
-    UpdateLayeredWindow(hWnd, hdcScreen, &ptDst, &sizeDst, g_hMemDC, &ptSrc, 0, &blend, ULW_ALPHA);
-    ReleaseDC(NULL, hdcScreen);
+    g_hOldBitmap = (HBITMAP)SelectObject(g_hMemDC, g_hDIB);
+    g_nBufferWidth = width;
+    g_nBufferHeight = height;
 }
 
-void UpdateHudAlpha(HWND hWnd, BYTE alpha) {
-    if (!g_hMemDC) return;
-
-    HDC hdcScreen = GetDC(NULL);
-    BLENDFUNCTION blend = {0};
-    blend.BlendOp = AC_SRC_OVER;
-    blend.SourceConstantAlpha = alpha;
-    blend.AlphaFormat = AC_SRC_ALPHA;
-
-    POINT ptDst = { g_posX, g_posY };
-    SIZE sizeDst = { g_bmpWidth, g_bmpHeight };
-    POINT ptSrc = { 0, 0 };
-
-    UpdateLayeredWindow(hWnd, hdcScreen, &ptDst, &sizeDst, g_hMemDC, &ptSrc, 0, &blend, ULW_ALPHA);
-    ReleaseDC(NULL, hdcScreen);
+static void AddRoundRect(Gdiplus::GraphicsPath* path, float x, float y, float w, float h, float r) {
+    float d = r * 2.0f;
+    path->AddArc(x, y, d, d, 180.0f, 90.0f);
+    path->AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
+    path->AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
+    path->AddArc(x + w - d, y + h - d, d, d, 90.0f, 90.0f);
+    path->CloseFigure();
 }
 
-// --- Forward Declarations ---
-LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
+static int GetMonitorDpi(HMONITOR hMon) {
+    UINT dpiX = 96, dpiY = 96;
+    if (SUCCEEDED(GetDpiForMonitor(hMon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
+        return (int)dpiX;
+    }
+    return 96;
+}
 
-// --- Window Procedure ---
-LRESULT CALLBACK HudWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    switch (uMsg) {
-        case WM_HOTKEY: {
-            if (wParam == HOTKEY_ID_VOL_UP) {
-                if (g_pAudioMgr) g_pAudioMgr->StepVolume(+1);
-            } else if (wParam == HOTKEY_ID_VOL_DOWN) {
-                if (g_pAudioMgr) g_pAudioMgr->StepVolume(-1);
-            } else if (wParam == HOTKEY_ID_VOL_MUTE) {
-                if (g_pAudioMgr) g_pAudioMgr->ToggleMute();
-            } else if (g_settings.enableHotkeys) {
-                if (wParam == HOTKEY_ID_UP) {
-                    if (g_pAudioMgr) g_pAudioMgr->StepVolume(+1);
-                } else if (wParam == HOTKEY_ID_DOWN) {
-                    if (g_pAudioMgr) g_pAudioMgr->StepVolume(-1);
-                } else if (wParam == HOTKEY_ID_MUTE) {
-                    if (g_pAudioMgr) g_pAudioMgr->ToggleMute();
-                }
+static void RenderHudContent(float volume, bool isMuted) {
+    if (!g_hHudWnd) return;
+
+    HWND hFore = GetForegroundWindow();
+    HMONITOR hMon = MonitorFromWindow(hFore ? hFore : g_hHudWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {sizeof(MONITORINFO)};
+    GetMonitorInfoW(hMon, &mi);
+
+    int dpi = GetMonitorDpi(hMon);
+    float scale = (float)dpi / 96.0f;
+
+    int nWidth = (int)(200.0f * scale);
+    int nHeight = (int)(200.0f * scale);
+
+    int posX = mi.rcMonitor.left + (mi.rcMonitor.right - mi.rcMonitor.left - nWidth) / 2;
+    int posY = 0;
+
+    switch (g_settings.position) {
+        case HudPosition::Top:
+            posY = mi.rcMonitor.top + (int)(120.0f * scale);
+            break;
+        case HudPosition::Bottom:
+            posY = mi.rcMonitor.bottom - nHeight - (int)(120.0f * scale);
+            break;
+        case HudPosition::Center:
+        default:
+            posY = mi.rcMonitor.top + (mi.rcMonitor.bottom - mi.rcMonitor.top - nHeight) / 2;
+            break;
+    }
+
+    HDC hdcScreen = GetDC(nullptr);
+    EnsureBackbuffer(hdcScreen, nWidth, nHeight);
+    if (!g_hMemDC || !g_pvBits) {
+        ReleaseDC(nullptr, hdcScreen);
+        return;
+    }
+
+    memset(g_pvBits, 0, nWidth * nHeight * 4);
+
+    {
+        Gdiplus::Graphics g(g_hMemDC);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+        // 1. Frosted Glass Background Card
+        float cardMargin = 8.0f * scale;
+        float cardX = cardMargin;
+        float cardY = cardMargin;
+        float cardW = nWidth - 2.0f * cardMargin;
+        float cardH = nHeight - 2.0f * cardMargin;
+        float cornerRadius = 18.0f * scale;
+
+        Gdiplus::GraphicsPath cardPath;
+        AddRoundRect(&cardPath, cardX, cardY, cardW, cardH, cornerRadius);
+
+        Gdiplus::SolidBrush bgBrush(Gdiplus::Color(220, 25, 25, 25));
+        g.FillPath(&bgBrush, &cardPath);
+
+        Gdiplus::Pen borderPen(Gdiplus::Color(55, 255, 255, 255), 1.0f);
+        g.DrawPath(&borderPen, &cardPath);
+
+        // 2. Speaker Icon & Waves
+        float cx = cardX + cardW / 2.0f;
+        float cy = cardY + 68.0f * scale;
+
+        Gdiplus::SolidBrush iconBrush(Gdiplus::Color(230, 240, 240, 240));
+        Gdiplus::Pen wavePen(Gdiplus::Color(230, 240, 240, 240), 2.2f * scale);
+        wavePen.SetStartCap(Gdiplus::LineCapRound);
+        wavePen.SetEndCap(Gdiplus::LineCapRound);
+
+        float spkX = cx - 36.0f * scale;
+        float spkY = cy;
+
+        // Speaker Body
+        Gdiplus::GraphicsPath spkPath;
+        spkPath.AddRectangle(Gdiplus::RectF(spkX, spkY - 10.0f * scale, 9.0f * scale, 20.0f * scale));
+
+        Gdiplus::PointF conePts[4] = {
+            Gdiplus::PointF(spkX + 8.0f * scale, spkY - 10.0f * scale),
+            Gdiplus::PointF(spkX + 22.0f * scale, spkY - 21.0f * scale),
+            Gdiplus::PointF(spkX + 22.0f * scale, spkY + 21.0f * scale),
+            Gdiplus::PointF(spkX + 8.0f * scale, spkY + 10.0f * scale)
+        };
+        spkPath.AddPolygon(conePts, 4);
+        g.FillPath(&iconBrush, &spkPath);
+
+        if (isMuted) {
+            // Mute Slash
+            Gdiplus::Pen slashPen(Gdiplus::Color(235, 220, 70, 70), 3.0f * scale);
+            slashPen.SetStartCap(Gdiplus::LineCapRound);
+            slashPen.SetEndCap(Gdiplus::LineCapRound);
+            g.DrawLine(&slashPen, cx - 18.0f * scale, cy - 20.0f * scale, cx + 28.0f * scale, cy + 20.0f * scale);
+        } else {
+            // Sound Waves
+            float waveCenterX = spkX + 18.0f * scale;
+            if (volume > 0.01f) {
+                g.DrawArc(&wavePen, waveCenterX - 11.0f * scale, cy - 11.0f * scale, 22.0f * scale, 22.0f * scale, -42.0f, 84.0f);
             }
-            return 0;
+            if (volume >= 0.33f) {
+                g.DrawArc(&wavePen, waveCenterX - 19.0f * scale, cy - 19.0f * scale, 38.0f * scale, 38.0f * scale, -45.0f, 90.0f);
+            }
+            if (volume >= 0.66f) {
+                g.DrawArc(&wavePen, waveCenterX - 27.0f * scale, cy - 27.0f * scale, 54.0f * scale, 54.0f * scale, -48.0f, 96.0f);
+            }
         }
 
-        case WM_APPCOMMAND: {
-            int cmd = GET_APPCOMMAND_LPARAM(lParam);
-            if (cmd == APPCOMMAND_VOLUME_UP) {
-                if (g_pAudioMgr) g_pAudioMgr->StepVolume(+1);
-                return TRUE;
-            } else if (cmd == APPCOMMAND_VOLUME_DOWN) {
-                if (g_pAudioMgr) g_pAudioMgr->StepVolume(-1);
-                return TRUE;
-            } else if (cmd == APPCOMMAND_VOLUME_MUTE) {
-                if (g_pAudioMgr) g_pAudioMgr->ToggleMute();
-                return TRUE;
+        // 3. 16-Segment Volume Bar
+        int activeSegments = isMuted ? 0 : (int)roundf(volume * 16.0f);
+        if (activeSegments < 0) activeSegments = 0;
+        if (activeSegments > 16) activeSegments = 16;
+
+        float barW = cardW - 32.0f * scale;
+        float barH = 12.0f * scale;
+        float barX = cardX + (cardW - barW) / 2.0f;
+        float barY = cardY + cardH - 34.0f * scale;
+
+        int iBarX = (int)std::floor(barX);
+        int iBarY = (int)std::floor(barY);
+        int iBarW = (int)std::floor(barW);
+        int iBarH = (int)std::floor(barH);
+
+        g.SetSmoothingMode(Gdiplus::SmoothingModeNone);
+
+        Gdiplus::SolidBrush bgBarBrush(Gdiplus::Color(120, 25, 25, 25));
+        Gdiplus::Pen barBorderPen(Gdiplus::Color(65, 255, 255, 255), 1.0f);
+        g.FillRectangle(&bgBarBrush, iBarX, iBarY, iBarW, iBarH);
+        g.DrawRectangle(&barBorderPen, iBarX, iBarY, iBarW, iBarH);
+
+        Gdiplus::SolidBrush activeSegmentBrush(Gdiplus::Color(245, 245, 245, 245));
+        Gdiplus::Pen dividerPen(Gdiplus::Color(210, 20, 20, 20), 1.0f);
+
+        for (int i = 0; i < 16; i++) {
+            int segX1 = iBarX + 1 + (i * (iBarW - 2)) / 16;
+            int segX2 = iBarX + 1 + ((i + 1) * (iBarW - 2)) / 16;
+            int segW = segX2 - segX1;
+
+            if (i < activeSegments) {
+                g.FillRectangle(&activeSegmentBrush, segX1, iBarY + 1, segW, iBarH - 1);
+            }
+
+            if (i > 0) {
+                g.DrawLine(&dividerPen, segX1, iBarY + 1, segX1, iBarY + iBarH - 1);
+            }
+        }
+    }
+
+    POINT ptSrc = {0, 0};
+    SIZE sizeWnd = {nWidth, nHeight};
+    POINT ptDst = {posX, posY};
+
+    BLENDFUNCTION blend = {};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.BlendFlags = 0;
+    blend.SourceConstantAlpha = (BYTE)(g_dCurrentAlpha * 255.0);
+    blend.AlphaFormat = AC_SRC_ALPHA;
+
+    UpdateLayeredWindow(
+        g_hHudWnd,
+        hdcScreen,
+        &ptDst,
+        &sizeWnd,
+        g_hMemDC,
+        &ptSrc,
+        0,
+        &blend,
+        ULW_ALPHA
+    );
+
+    ReleaseDC(nullptr, hdcScreen);
+}
+
+static void UpdateHudAlpha(double alpha) {
+    if (!g_hHudWnd) return;
+    g_dCurrentAlpha = alpha;
+    if (g_dCurrentAlpha < 0.0) g_dCurrentAlpha = 0.0;
+    if (g_dCurrentAlpha > 1.0) g_dCurrentAlpha = 1.0;
+
+    BLENDFUNCTION blend = {};
+    blend.BlendOp = AC_SRC_OVER;
+    blend.BlendFlags = 0;
+    blend.SourceConstantAlpha = (BYTE)(g_dCurrentAlpha * 255.0);
+    blend.AlphaFormat = AC_SRC_ALPHA;
+
+    UpdateLayeredWindow(g_hHudWnd, nullptr, nullptr, nullptr, nullptr, nullptr, 0, &blend, ULW_ALPHA);
+}
+
+static void ShowHud() {
+    if (!g_hHudWnd) return;
+
+    KillTimer(g_hHudWnd, TIMER_ID_HIDE);
+    KillTimer(g_hHudWnd, TIMER_ID_FADE);
+
+    float vol = g_audioMgr.GetCurrentVolume();
+    bool muted = g_audioMgr.IsMuted();
+
+    g_dCurrentAlpha = 1.0;
+    RenderHudContent(vol, muted);
+
+    SetWindowPos(
+        g_hHudWnd,
+        HWND_TOPMOST,
+        0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW
+    );
+
+    SetTimer(g_hHudWnd, TIMER_ID_HIDE, g_settings.timeoutMs, nullptr);
+}
+
+// ============================================================================
+// --- Hotkey Registration & Window Procedure ---
+// ============================================================================
+
+static void UnregisterHotkeys(HWND hWnd) {
+    UnregisterHotKey(hWnd, HOTKEY_ID_VOL_UP);
+    UnregisterHotKey(hWnd, HOTKEY_ID_VOL_DOWN);
+    UnregisterHotKey(hWnd, HOTKEY_ID_VOL_MUTE);
+    UnregisterHotKey(hWnd, HOTKEY_ID_VOL_UP_CUSTOM);
+    UnregisterHotKey(hWnd, HOTKEY_ID_VOL_DOWN_CUSTOM);
+    UnregisterHotKey(hWnd, HOTKEY_ID_VOL_MUTE_CUSTOM);
+}
+
+static void RegisterHotkeys(HWND hWnd) {
+    UnregisterHotkeys(hWnd);
+
+    // Physical volume keys (system-wide capture)
+    if (!RegisterHotKey(hWnd, HOTKEY_ID_VOL_UP, 0, VK_VOLUME_UP)) {
+        Wh_Log(L"RegisterHotKey VK_VOLUME_UP failed: %u", GetLastError());
+    }
+    if (!RegisterHotKey(hWnd, HOTKEY_ID_VOL_DOWN, 0, VK_VOLUME_DOWN)) {
+        Wh_Log(L"RegisterHotKey VK_VOLUME_DOWN failed: %u", GetLastError());
+    }
+    if (!RegisterHotKey(hWnd, HOTKEY_ID_VOL_MUTE, 0, VK_VOLUME_MUTE)) {
+        Wh_Log(L"RegisterHotKey VK_VOLUME_MUTE failed: %u", GetLastError());
+    }
+
+    // Custom hotkeys (Ctrl+Alt) if enabled
+    if (g_settings.enableHotkeys) {
+        RegisterHotKey(hWnd, HOTKEY_ID_VOL_UP_CUSTOM, MOD_CONTROL | MOD_ALT, VK_UP);
+        RegisterHotKey(hWnd, HOTKEY_ID_VOL_DOWN_CUSTOM, MOD_CONTROL | MOD_ALT, VK_DOWN);
+        RegisterHotKey(hWnd, HOTKEY_ID_VOL_MUTE_CUSTOM, MOD_CONTROL | MOD_ALT, 'V');
+    }
+}
+
+static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_HOTKEY:
+            switch (wParam) {
+                case HOTKEY_ID_VOL_UP:
+                case HOTKEY_ID_VOL_UP_CUSTOM:
+                    if (g_audioMgr.StepVolume(1.0f)) {
+                        PlayClickSound(g_audioMgr.IsMuted());
+                        ShowHud();
+                    }
+                    return 0;
+
+                case HOTKEY_ID_VOL_DOWN:
+                case HOTKEY_ID_VOL_DOWN_CUSTOM:
+                    if (g_audioMgr.StepVolume(-1.0f)) {
+                        PlayClickSound(g_audioMgr.IsMuted());
+                        ShowHud();
+                    }
+                    return 0;
+
+                case HOTKEY_ID_VOL_MUTE:
+                case HOTKEY_ID_VOL_MUTE_CUSTOM:
+                    if (g_audioMgr.ToggleMute()) {
+                        PlayClickSound(g_audioMgr.IsMuted());
+                        ShowHud();
+                    }
+                    return 0;
             }
             break;
-        }
-
-        case WM_USER_SETTINGS_CHANGED: {
-            if (g_settings.enableHotkeys) {
-                RegisterHotKey(hWnd, HOTKEY_ID_UP, MOD_CONTROL | MOD_ALT, VK_UP);
-                RegisterHotKey(hWnd, HOTKEY_ID_DOWN, MOD_CONTROL | MOD_ALT, VK_DOWN);
-                RegisterHotKey(hWnd, HOTKEY_ID_MUTE, MOD_CONTROL | MOD_ALT, 'V');
-            } else {
-                UnregisterHotKey(hWnd, HOTKEY_ID_UP);
-                UnregisterHotKey(hWnd, HOTKEY_ID_DOWN);
-                UnregisterHotKey(hWnd, HOTKEY_ID_MUTE);
-            }
-            return 0;
-        }
-
-        case WM_USER_VOLUME_ACTION: {
-            if (wParam == 1) {
-                if (g_pAudioMgr) g_pAudioMgr->StepVolume(+1);
-            } else if (wParam == (WPARAM)-1) {
-                if (g_pAudioMgr) g_pAudioMgr->StepVolume(-1);
-            } else if (wParam == 0) {
-                if (g_pAudioMgr) g_pAudioMgr->ToggleMute();
-            }
-            return 0;
-        }
 
         case WM_USER_SHOW_HUD: {
-            KillTimer(hWnd, IDT_FADE_OUT);
-            g_hudAlpha = 255;
-
-            float vol = g_pAudioMgr ? g_pAudioMgr->GetVolume() : 0.0f;
-            bool muted = g_pAudioMgr ? g_pAudioMgr->IsMuted() : false;
-
-            RenderHudContent(hWnd, vol, muted);
-            ShowWindow(hWnd, SW_SHOWNOACTIVATE);
-
-            SetTimer(hWnd, IDT_HIDE, g_settings.timeoutMs, NULL);
+            bool isInternal = (wParam != 0);
+            if (isInternal) {
+                PlayClickSound(g_audioMgr.IsMuted());
+            }
+            ShowHud();
             return 0;
         }
 
-        case WM_TIMER: {
-            if (wParam == IDT_HIDE) {
-                KillTimer(hWnd, IDT_HIDE);
-                g_hudAlpha = 255;
-                SetTimer(hWnd, IDT_FADE_OUT, 16, NULL);
+        case WM_USER_SETTINGS_CHANGED:
+            RegisterHotkeys(hWnd);
+            return 0;
+
+        case WM_USER_DEVICE_CHANGED:
+            g_audioMgr.BindEndpoint();
+            return 0;
+
+        case WM_TIMER:
+            if (wParam == TIMER_ID_HIDE) {
+                KillTimer(hWnd, TIMER_ID_HIDE);
+                g_ullFadeStartTime = GetTickCount64();
+                SetTimer(hWnd, TIMER_ID_FADE, 16, nullptr);
                 return 0;
-            } else if (wParam == IDT_FADE_OUT) {
-                g_hudAlpha -= 18;
-                if (g_hudAlpha <= 0) {
-                    KillTimer(hWnd, IDT_FADE_OUT);
-                    g_hudAlpha = 0;
+            }
+            if (wParam == TIMER_ID_FADE) {
+                ULONGLONG elapsed = GetTickCount64() - g_ullFadeStartTime;
+                if (elapsed >= 300) {
+                    KillTimer(hWnd, TIMER_ID_FADE);
+                    UpdateHudAlpha(0.0);
                     ShowWindow(hWnd, SW_HIDE);
                 } else {
-                    UpdateHudAlpha(hWnd, (BYTE)g_hudAlpha);
-                }
-                return 0;
-            } else if (wParam == IDT_WATCHDOG) {
-                if (!g_hKeyboardHook) {
-                    g_hKeyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
+                    double progress = (double)elapsed / 300.0;
+                    double alpha = 1.0 - progress;
+                    UpdateHudAlpha(alpha);
                 }
                 return 0;
             }
             break;
-        }
 
-        case WM_DESTROY: {
-            KillTimer(hWnd, IDT_HIDE);
-            KillTimer(hWnd, IDT_FADE_OUT);
-            KillTimer(hWnd, IDT_WATCHDOG);
-            UnregisterHotKey(hWnd, HOTKEY_ID_VOL_UP);
-            UnregisterHotKey(hWnd, HOTKEY_ID_VOL_DOWN);
-            UnregisterHotKey(hWnd, HOTKEY_ID_VOL_MUTE);
-            UnregisterHotKey(hWnd, HOTKEY_ID_UP);
-            UnregisterHotKey(hWnd, HOTKEY_ID_DOWN);
-            UnregisterHotKey(hWnd, HOTKEY_ID_MUTE);
-            if (g_hMemDC) {
-                if (g_hMemBmp) {
-                    SelectObject(g_hMemDC, g_hOldMemBmp);
-                    DeleteObject(g_hMemBmp);
-                    g_hMemBmp = NULL;
-                }
-                DeleteDC(g_hMemDC);
-                g_hMemDC = NULL;
-            }
+        case WM_DESTROY:
+            KillTimer(hWnd, TIMER_ID_HIDE);
+            KillTimer(hWnd, TIMER_ID_FADE);
             return 0;
-        }
     }
-    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+
+    return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-// --- Low-Level Keyboard Hook ---
-LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION) {
-        KBDLLHOOKSTRUCT* pKbd = (KBDLLHOOKSTRUCT*)lParam;
-        bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
-        bool isUp = (wParam == WM_KEYUP || wParam == WM_SYSKEYUP);
+// ============================================================================
+// --- HUD Thread Procedure ---
+// ============================================================================
 
-        if (isDown || isUp) {
-            // 1. Hardware Multimedia Keys (Fn keys, keyboard volume buttons)
-            if (pKbd->vkCode == VK_VOLUME_UP) {
-                if (isDown && g_hHudWnd) {
-                    PostMessageW(g_hHudWnd, WM_USER_VOLUME_ACTION, 1, 0);
-                }
-                return 1; // Suppress BOTH key-down and key-up from Windows shell!
-            }
-            if (pKbd->vkCode == VK_VOLUME_DOWN) {
-                if (isDown && g_hHudWnd) {
-                    PostMessageW(g_hHudWnd, WM_USER_VOLUME_ACTION, (WPARAM)-1, 0);
-                }
-                return 1; // Suppress BOTH key-down and key-up from Windows shell!
-            }
-            if (pKbd->vkCode == VK_VOLUME_MUTE) {
-                if (isDown && g_hHudWnd) {
-                    PostMessageW(g_hHudWnd, WM_USER_VOLUME_ACTION, 0, 0);
-                }
-                return 1; // Suppress BOTH key-down and key-up from Windows shell!
-            }
+static DWORD WINAPI HudThreadProc(LPVOID lpParam) {
+    // 1. Create message queue first
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-            // 2. Custom Hotkeys: Ctrl + Alt + Up / Down / V
-            if (g_settings.enableHotkeys) {
-                bool ctrl = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 ||
-                            (GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0 ||
-                            (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0 ||
-                            (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    // 2. Initialize COM & GDI+
+    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
 
-                bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0 ||
-                           (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0 ||
-                           (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0 ||
-                           (GetKeyState(VK_MENU) & 0x8000) != 0 ||
-                           (pKbd->flags & LLKHF_ALTDOWN) != 0;
+    // 3. Initialize Audio Manager
+    g_audioMgr.Initialize();
 
-                if (ctrl && alt) {
-                    if (pKbd->vkCode == VK_UP) {
-                        if (isDown && g_hHudWnd) PostMessageW(g_hHudWnd, WM_USER_VOLUME_ACTION, 1, 0);
-                        return 1;
-                    }
-                    if (pKbd->vkCode == VK_DOWN) {
-                        if (isDown && g_hHudWnd) PostMessageW(g_hHudWnd, WM_USER_VOLUME_ACTION, (WPARAM)-1, 0);
-                        return 1;
-                    }
-                    // Check 'V' via virtual key code, scan code 0x2F (QWERTY V/M) or 0x56
-                    if (pKbd->vkCode == 'V' || pKbd->scanCode == 0x2F || pKbd->vkCode == 0x56) {
-                        if (isDown && g_hHudWnd) PostMessageW(g_hHudWnd, WM_USER_VOLUME_ACTION, 0, 0);
-                        return 1;
-                    }
-                }
-            }
-        }
-    }
-    return CallNextHookEx(g_hKeyboardHook, nCode, wParam, lParam);
-}
+    // 4. Register Window Class using mod's own module handle
+    HINSTANCE hModInstance = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        (LPCWSTR)&HudWndProc,
+        &hModInstance
+    );
 
-// --- Taskbar / Shell Window Subclass for WM_APPCOMMAND ---
-static LRESULT CALLBACK TraySubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    if (uMsg == WM_APPCOMMAND) {
-        int cmd = GET_APPCOMMAND_LPARAM(lParam);
-        if (cmd == APPCOMMAND_VOLUME_UP) {
-            if (g_pAudioMgr) g_pAudioMgr->StepVolume(+1);
-            return TRUE; // Suppress native Windows volume flyout!
-        } else if (cmd == APPCOMMAND_VOLUME_DOWN) {
-            if (g_pAudioMgr) g_pAudioMgr->StepVolume(-1);
-            return TRUE; // Suppress native Windows volume flyout!
-        } else if (cmd == APPCOMMAND_VOLUME_MUTE) {
-            if (g_pAudioMgr) g_pAudioMgr->ToggleMute();
-            return TRUE; // Suppress native Windows volume flyout!
-        }
-    }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
-// --- HUD Thread (Hosts COM, WASAPI, Hook & Window Message Loop) ---
-DWORD WINAPI HudThreadProc(LPVOID lpParam) {
-    HRESULT hrCom = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    if (FAILED(hrCom)) {
-        Wh_Log(L"CoInitializeEx failed: 0x%08X", hrCom);
-    }
-
-    GdiplusStartupInput gdiplusStartupInput;
-    GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, NULL);
-
-    // 1. Initialize Audio Manager on this thread
-    g_pAudioMgr = new AudioManager();
-    if (!g_pAudioMgr->Initialize()) {
-        Wh_Log(L"Failed to initialize Audio Manager");
-    } else {
-        g_lastVolume = g_pAudioMgr->GetVolume();
-        g_lastMuted = g_pAudioMgr->IsMuted();
-    }
-
-    // 2. Register Window Class
-    WNDCLASSEXW wc = {0};
-    wc.cbSize = sizeof(WNDCLASSEXW);
+    WNDCLASSEXW wc = {sizeof(WNDCLASSEXW)};
     wc.lpfnWndProc = HudWndProc;
-    wc.hInstance = GetModuleHandleW(NULL);
-    wc.lpszClassName = L"VoluMacOsVolumeHudWnd";
-    RegisterClassExW(&wc);
+    wc.hInstance = hModInstance;
+    wc.lpszClassName = HUD_WINDOW_CLASS;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
 
-    // 3. Create Layered Window in Notification Band
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    pCreateWindowInBand CreateWindowInBand = nullptr;
-    if (hUser32) {
-        CreateWindowInBand = (pCreateWindowInBand)GetProcAddress(hUser32, "CreateWindowInBand");
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"RegisterClassExW failed: %u", GetLastError());
     }
 
-    if (CreateWindowInBand) {
-        g_hHudWnd = CreateWindowInBand(
-            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
-            wc.lpszClassName,
-            L"Volu Volume HUD",
+    // 5. Create HUD Window
+    CreateWindowInBand_t pfnCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "CreateWindowInBand"
+    );
+
+    DWORD exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
+    if (pfnCreateWindowInBand) {
+        g_hHudWnd = pfnCreateWindowInBand(
+            exStyle,
+            HUD_WINDOW_CLASS,
+            L"VoluHud",
             WS_POPUP,
-            0, 0, 240, 240,
-            NULL, NULL, wc.hInstance, NULL,
+            0, 0, 0, 0,
+            nullptr, nullptr,
+            hModInstance,
+            nullptr,
             ZBID_IMMERSIVE_NOTIFICATION
         );
-        if (g_hHudWnd) {
-            Wh_Log(L"Created HUD window in ZBID_IMMERSIVE_NOTIFICATION band");
-        }
     }
-
     if (!g_hHudWnd) {
-        Wh_Log(L"Falling back to standard CreateWindowExW");
         g_hHudWnd = CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
-            wc.lpszClassName,
-            L"Volu Volume HUD",
+            exStyle,
+            HUD_WINDOW_CLASS,
+            L"VoluHud",
             WS_POPUP,
-            0, 0, 240, 240,
-            NULL, NULL, wc.hInstance, NULL
+            0, 0, 0, 0,
+            nullptr, nullptr,
+            hModInstance,
+            nullptr
         );
     }
 
-    // 4. Register Hardware Multimedia Keys (Fn keys, dedicated volume buttons)
-    RegisterHotKey(g_hHudWnd, HOTKEY_ID_VOL_UP, 0, VK_VOLUME_UP);
-    RegisterHotKey(g_hHudWnd, HOTKEY_ID_VOL_DOWN, 0, VK_VOLUME_DOWN);
-    RegisterHotKey(g_hHudWnd, HOTKEY_ID_VOL_MUTE, 0, VK_VOLUME_MUTE);
-
-    // 5. Register Custom Hotkeys (Ctrl+Alt+Up/Down/V) if enabled
-    if (g_settings.enableHotkeys) {
-        RegisterHotKey(g_hHudWnd, HOTKEY_ID_UP, MOD_CONTROL | MOD_ALT, VK_UP);
-        RegisterHotKey(g_hHudWnd, HOTKEY_ID_DOWN, MOD_CONTROL | MOD_ALT, VK_DOWN);
-        RegisterHotKey(g_hHudWnd, HOTKEY_ID_MUTE, MOD_CONTROL | MOD_ALT, 'V');
+    if (g_hHudWnd) {
+        RegisterHotkeys(g_hHudWnd);
+    } else {
+        Wh_Log(L"Failed to create HUD window: %u", GetLastError());
     }
 
-    // 6. Subclass Explorer's Taskbar & Shell Windows to suppress WM_APPCOMMAND volume flyouts
-    HWND hTray = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (hTray) {
-        SetWindowSubclass(hTray, TraySubclassProc, SUBCLASS_ID_TRAY, 0);
-    }
-    HWND hShell = GetShellWindow();
-    if (hShell && hShell != hTray) {
-        SetWindowSubclass(hShell, TraySubclassProc, SUBCLASS_ID_TRAY, 0);
-    }
+    // Signal ready event to WhTool_ModInit
+    SetEvent(g_hHudReady);
 
-    // 7. Install Low-Level Keyboard Hook as second intercept layer
-    g_hKeyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
-    if (!g_hKeyboardHook) {
-        HMODULE hMod = NULL;
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           (LPCWSTR)&LowLevelKeyboardProc, &hMod);
-        g_hKeyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hMod, 0);
-    }
-
-    // 8. Set Hook Watchdog Timer (every 2 seconds)
-    SetTimer(g_hHudWnd, IDT_WATCHDOG, 2000, NULL);
-
-    // 9. Active Message Loop
-    MSG msg;
-    while (GetMessageW(&msg, NULL, 0, 0)) {
+    // 6. Message Loop
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
-    // 10. Cleanup
-    if (hTray) RemoveWindowSubclass(hTray, TraySubclassProc, SUBCLASS_ID_TRAY);
-    if (hShell && hShell != hTray) RemoveWindowSubclass(hShell, TraySubclassProc, SUBCLASS_ID_TRAY);
-
-    if (g_hKeyboardHook) {
-        UnhookWindowsHookEx(g_hKeyboardHook);
-        g_hKeyboardHook = NULL;
-    }
+    // 7. Teardown
+    PlaySoundW(nullptr, nullptr, 0);
 
     if (g_hHudWnd) {
+        UnregisterHotkeys(g_hHudWnd);
         DestroyWindow(g_hHudWnd);
-        g_hHudWnd = NULL;
+        g_hHudWnd = nullptr;
     }
 
-    if (g_pAudioMgr) {
-        g_pAudioMgr->Uninitialize();
-        delete g_pAudioMgr;
-        g_pAudioMgr = nullptr;
+    UnregisterClassW(HUD_WINDOW_CLASS, hModInstance);
+
+    g_audioMgr.Uninitialize();
+
+    if (g_hMemDC) {
+        if (g_hOldBitmap) SelectObject(g_hMemDC, g_hOldBitmap);
+        DeleteDC(g_hMemDC);
+        g_hMemDC = nullptr;
+    }
+    if (g_hDIB) {
+        DeleteObject(g_hDIB);
+        g_hDIB = nullptr;
+        g_pvBits = nullptr;
     }
 
-    UnregisterClassW(wc.lpszClassName, wc.hInstance);
-    GdiplusShutdown(g_gdiplusToken);
-    CoUninitialize();
+    if (g_gdiplusToken) {
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+    }
+
+    if (SUCCEEDED(hrCo)) {
+        CoUninitialize();
+    }
+
     return 0;
 }
 
-// --- Helper: Safe Boolean Setting Reader with Defaults ---
-bool GetBoolSettingWithDefault(PCWSTR name, bool defaultValue) {
-    PCWSTR str = Wh_GetStringSetting(name);
-    if (!str || wcslen(str) == 0) {
-        Wh_FreeStringSetting(str);
-        return defaultValue;
-    }
-    bool result = defaultValue;
-    if (wcscmp(str, L"0") == 0 || _wcsicmp(str, L"false") == 0) {
-        result = false;
-    } else if (wcscmp(str, L"1") == 0 || _wcsicmp(str, L"true") == 0) {
-        result = true;
-    } else {
-        result = (Wh_GetIntSetting(name) != 0);
-    }
-    Wh_FreeStringSetting(str);
-    return result;
-}
+// ============================================================================
+// --- Settings Loading ---
+// ============================================================================
 
-// --- Settings Management ---
-void LoadSettings() {
-    PCWSTR soundSchemeStr = Wh_GetStringSetting(L"soundScheme");
-    if (soundSchemeStr && wcscmp(soundSchemeStr, L"tactile") == 0) {
+static void LoadSettings() {
+    auto soundScheme = WindhawkUtils::StringSetting::make(L"soundScheme");
+    if (soundScheme.get() && wcscmp(soundScheme.get(), L"tactile") == 0) {
         g_settings.soundScheme = SoundScheme::Tactile;
-    } else if (soundSchemeStr && wcscmp(soundSchemeStr, L"none") == 0) {
+    } else if (soundScheme.get() && wcscmp(soundScheme.get(), L"none") == 0) {
         g_settings.soundScheme = SoundScheme::None;
     } else {
         g_settings.soundScheme = SoundScheme::Wood;
     }
-    Wh_FreeStringSetting(soundSchemeStr);
 
-    int timeout = Wh_GetIntSetting(L"timeoutMs");
-    g_settings.timeoutMs = (timeout >= 200) ? timeout : 1300;
+    g_settings.timeoutMs = Wh_GetIntSetting(L"timeoutMs");
+    if (g_settings.timeoutMs < 500) g_settings.timeoutMs = 1300;
 
-    PCWSTR posStr = Wh_GetStringSetting(L"position");
-    if (posStr && wcscmp(posStr, L"bottom") == 0) {
-        g_settings.position = Position::Bottom;
-    } else if (posStr && wcscmp(posStr, L"top") == 0) {
-        g_settings.position = Position::Top;
+    auto position = WindhawkUtils::StringSetting::make(L"position");
+    if (position.get() && wcscmp(position.get(), L"top") == 0) {
+        g_settings.position = HudPosition::Top;
+    } else if (position.get() && wcscmp(position.get(), L"bottom") == 0) {
+        g_settings.position = HudPosition::Bottom;
     } else {
-        g_settings.position = Position::Center;
+        g_settings.position = HudPosition::Center;
     }
-    Wh_FreeStringSetting(posStr);
 
-    g_settings.enableHotkeys = GetBoolSettingWithDefault(L"enableHotkeys", true);
+    g_settings.enableHotkeys = (Wh_GetIntSetting(L"enableHotkeys") != 0);
 }
 
-// --- Windhawk Entry Points ---
-BOOL Wh_ModInit() {
-    Wh_Log(L"Volu - macOS Volume HUD: Initializing");
-    g_bRunning = true;
+// ============================================================================
+// --- Windhawk Tool Mod Callbacks ---
+// ============================================================================
 
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Volu - macOS Volume HUD: WhTool_ModInit");
     LoadSettings();
 
-    // Spawn dedicated HUD Thread which owns COM, WASAPI, Hook, and Window Message Loop
-    g_hHudThread = CreateThread(NULL, 0, HudThreadProc, NULL, 0, &g_dwHudThreadId);
-    if (!g_hHudThread) {
-        Wh_Log(L"Failed to create HUD thread");
+    g_hHudReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hHudReady) {
+        Wh_Log(L"CreateEvent failed: %u", GetLastError());
         return FALSE;
     }
+
+    g_hHudThread = CreateThread(nullptr, 0, HudThreadProc, nullptr, 0, &g_dwHudThreadId);
+    if (!g_hHudThread) {
+        Wh_Log(L"CreateThread failed: %u", GetLastError());
+        CloseHandle(g_hHudReady);
+        g_hHudReady = nullptr;
+        return FALSE;
+    }
+
+    if (WaitForSingleObject(g_hHudReady, 5000) != WAIT_OBJECT_0) {
+        Wh_Log(L"HUD thread did not signal ready in time");
+    }
+    CloseHandle(g_hHudReady);
+    g_hHudReady = nullptr;
 
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Volu - macOS Volume HUD: Uninitializing");
-    g_bRunning = false;
-
-    if (g_dwHudThreadId) {
-        PostThreadMessageW(g_dwHudThreadId, WM_QUIT, 0, 0);
-        if (g_hHudThread) {
-            WaitForSingleObject(g_hHudThread, 2000);
-            CloseHandle(g_hHudThread);
-            g_hHudThread = NULL;
-        }
-        g_dwHudThreadId = 0;
-    }
-}
-
-void Wh_ModSettingsChanged() {
-    Wh_Log(L"Volu - macOS Volume HUD: Settings changed");
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L"Volu - macOS Volume HUD: WhTool_ModSettingsChanged");
     LoadSettings();
     if (g_hHudWnd) {
         PostMessageW(g_hHudWnd, WM_USER_SETTINGS_CHANGED, 0, 0);
     }
+}
+
+void WhTool_ModUninit() {
+    Wh_Log(L"Volu - macOS Volume HUD: WhTool_ModUninit");
+
+    if (g_dwHudThreadId) {
+        PostThreadMessageW(g_dwHudThreadId, WM_QUIT, 0, 0);
+    }
+
+    if (g_hHudThread) {
+        if (WaitForSingleObject(g_hHudThread, 5000) != WAIT_OBJECT_0) {
+            Wh_Log(L"HUD thread did not exit in time");
+        }
+        CloseHandle(g_hHudThread);
+        g_hHudThread = nullptr;
+        g_dwHudThreadId = 0;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID L"\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
 
 // ============================================================================
