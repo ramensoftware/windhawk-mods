@@ -838,6 +838,26 @@ function enrichCatalog(
     };
 }
 
+// The app's and each mod's latest version, in the update server's
+// versions.json format. A bare version string can't carry a nuked flag, so a
+// flagged mod's entry takes the catalog's shape.
+function buildVersions(catalog: ReturnType<typeof enrichCatalog>) {
+    const mods: Record<string, any> = {};
+    for (const [id, mod] of Object.entries(catalog.mods)) {
+        const version = mod.metadata.version;
+        const nuked = mod.details.nuked;
+        mods[id] = nuked == null ? version : {
+            metadata: { version },
+            details: { nuked },
+        };
+    }
+
+    return {
+        app: catalog.app,
+        mods,
+    };
+}
+
 function buildExternalCatalog(
     listings: ExternalModListing[],
     language: string,
@@ -929,6 +949,7 @@ async function generateModCatalogs(cache: GitCache) {
 
     const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, reviewsByMod, modTimes, cache);
     fs.writeFileSync('catalog.json', JSONcompactNumberArrays(JSONstringifyOrder(englishCatalogEnriched, 2)));
+    fs.writeFileSync('versions.json', JSONstringifyOrder(buildVersions(englishCatalogEnriched), 2));
 
     // The external catalog is written even when it lists nothing, since the
     // app reads a missing document as a failure.
