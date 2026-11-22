@@ -20,7 +20,7 @@
 Authentic macOS-style translucent volume HUD for Windows with classic step click sounds.
 
 ### Features
-* **Pixel-perfect design**: Authentic macOS frosted glass HUD overlay with clean 16-step volume bar.
+* **Pixel-perfect design**: Authentic macOS frosted glass HUD overlay with clean 16-step volume bar and soft drop shadow.
 * **Audio feedback**: Classic wooden and modern tactile volume step clicks. Silent on mute.
 * **Smooth animations**: Smooth fade-out transition with configurable on-screen duration.
 * **Flexible positioning**: Place the HUD at the center, top, or bottom of your screen.
@@ -58,9 +58,9 @@ Optional shortcuts (if enabled in settings):
   $name: HUD Position
   $description: Screen placement of the volume HUD.
   $options:
-    - center: Center
-    - top: Top
-    - bottom: Bottom
+    - center: Center of Active Screen (macOS Classic)
+    - top: Top Center
+    - bottom: Bottom Center
 - enableHotkeys: false
   $name: Enable Custom Hotkeys (Ctrl+Alt)
   $description: Enable global shortcuts Ctrl+Alt+Up (Volume Up), Ctrl+Alt+Down (Volume Down), and Ctrl+Alt+V (Mute). Note that Ctrl+Alt combinations may conflict with shortcuts in other apps (such as VS Code multi-cursor) or AltGr on international keyboard layouts.
@@ -79,12 +79,15 @@ Optional shortcuts (if enabled in settings):
 
 #include <atomic>
 #include <cmath>
+#include <algorithm>
 
 #pragma comment(lib, "gdiplus.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "shcore.lib")
+
+using namespace Gdiplus;
 
 // Forward declarations for audio assets
 extern const unsigned char g_woodClickWav[];
@@ -153,8 +156,8 @@ typedef HWND(WINAPI* CreateWindowInBand_t)(
 #define WM_USER_SETTINGS_CHANGED  (WM_USER + 102)
 #define WM_USER_DEVICE_CHANGED   (WM_USER + 103)
 
-#define TIMER_ID_HIDE            1001
-#define TIMER_ID_FADE            1002
+#define IDT_HIDE                 1001
+#define IDT_FADE_OUT             1002
 
 #define HOTKEY_ID_VOL_UP         2001
 #define HOTKEY_ID_VOL_DOWN       2002
@@ -172,14 +175,15 @@ static HANDLE g_hHudReady = NULL;
 
 static ULONG_PTR g_gdiplusToken = 0;
 static HDC g_hMemDC = NULL;
-static HBITMAP g_hDIB = NULL;
-static HBITMAP g_hOldBitmap = NULL;
+static HBITMAP g_hMemBmp = NULL;
+static HBITMAP g_hOldMemBmp = NULL;
 static void* g_pvBits = nullptr;
-static int g_nBufferWidth = 0;
-static int g_nBufferHeight = 0;
 
-static double g_dCurrentAlpha = 0.0;
-static ULONGLONG g_ullFadeStartTime = 0;
+static int g_bmpWidth = 0;
+static int g_bmpHeight = 0;
+static int g_posX = 0;
+static int g_posY = 0;
+static int g_hudAlpha = 255;
 
 static std::atomic<float> g_lastVolume{0.0f};
 static std::atomic<bool> g_lastMuted{false};
@@ -482,57 +486,16 @@ STDMETHODIMP AudioEndpointVolumeCallback::OnNotify(PAUDIO_VOLUME_NOTIFICATION_DA
 }
 
 // ============================================================================
-// --- GDI+ Drawing & HUD Rendering ---
+// --- GDI+ Drawing & HUD Rendering (Exact 1:1 Match to Classic macOS HUD) ---
 // ============================================================================
 
-static void EnsureBackbuffer(HDC hdcScreen, int width, int height) {
-    if (g_hMemDC && g_nBufferWidth == width && g_nBufferHeight == height) {
-        return;
-    }
-
-    if (g_hMemDC) {
-        if (g_hOldBitmap) SelectObject(g_hMemDC, g_hOldBitmap);
-        DeleteDC(g_hMemDC);
-        g_hMemDC = nullptr;
-    }
-    if (g_hDIB) {
-        DeleteObject(g_hDIB);
-        g_hDIB = nullptr;
-        g_pvBits = nullptr;
-    }
-
-    g_hMemDC = CreateCompatibleDC(hdcScreen);
-    if (!g_hMemDC) return;
-
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = width;
-    bmi.bmiHeader.biHeight = -height;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    g_hDIB = CreateDIBSection(g_hMemDC, &bmi, DIB_RGB_COLORS, &g_pvBits, nullptr, 0);
-    if (!g_hDIB || !g_pvBits) {
-        DeleteDC(g_hMemDC);
-        g_hMemDC = nullptr;
-        g_hDIB = nullptr;
-        g_pvBits = nullptr;
-        return;
-    }
-
-    g_hOldBitmap = (HBITMAP)SelectObject(g_hMemDC, g_hDIB);
-    g_nBufferWidth = width;
-    g_nBufferHeight = height;
-}
-
-static void AddRoundRect(Gdiplus::GraphicsPath* path, float x, float y, float w, float h, float r) {
+static void AddRoundedRect(GraphicsPath& path, float x, float y, float w, float h, float r) {
     float d = r * 2.0f;
-    path->AddArc(x, y, d, d, 180.0f, 90.0f);
-    path->AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
-    path->AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
-    path->AddArc(x + w - d, y + h - d, d, d, 90.0f, 90.0f);
-    path->CloseFigure();
+    path.AddArc(x, y, d, d, 180.0f, 90.0f);
+    path.AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
+    path.AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
+    path.AddArc(x, y + h - d, d, d, 90.0f, 90.0f);
+    path.CloseFigure();
 }
 
 static int GetMonitorDpi(HMONITOR hMon) {
@@ -543,212 +506,269 @@ static int GetMonitorDpi(HMONITOR hMon) {
     return 96;
 }
 
-static void RenderHudContent(float volume, bool isMuted) {
-    if (!g_hHudWnd) return;
+static void RenderHudContent(HWND hWnd, float volume, bool isMuted) {
+    // 1. Determine active monitor
+    HWND hFg = GetForegroundWindow();
+    HMONITOR hMon = hFg ? MonitorFromWindow(hFg, MONITOR_DEFAULTTOPRIMARY) : MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
 
-    HWND hFore = GetForegroundWindow();
-    HMONITOR hMon = MonitorFromWindow(hFore ? hFore : g_hHudWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = {sizeof(MONITORINFO)};
-    GetMonitorInfoW(hMon, &mi);
+    MONITORINFO mi = { sizeof(MONITORINFO) };
+    if (!GetMonitorInfoW(hMon, &mi)) {
+        mi.rcMonitor.left = 0;
+        mi.rcMonitor.top = 0;
+        mi.rcMonitor.right = GetSystemMetrics(SM_CXSCREEN);
+        mi.rcMonitor.bottom = GetSystemMetrics(SM_CYSCREEN);
+    }
 
     int dpi = GetMonitorDpi(hMon);
     float scale = (float)dpi / 96.0f;
 
-    int nWidth = (int)(200.0f * scale);
-    int nHeight = (int)(200.0f * scale);
+    // Window size: 240x240 to accommodate soft drop shadow
+    int winSize = (int)std::round(240.0f * scale);
+    int width = winSize;
+    int height = winSize;
 
-    int posX = mi.rcMonitor.left + (mi.rcMonitor.right - mi.rcMonitor.left - nWidth) / 2;
-    int posY = 0;
+    // Card size: 200x200, placed at offset (20, 16)
+    float cardX = 20.0f * scale;
+    float cardY = 16.0f * scale;
+    float cardW = 200.0f * scale;
+    float cardH = 200.0f * scale;
+    float cardRadius = 26.0f * scale;
 
-    switch (g_settings.position) {
-        case HudPosition::Top:
-            posY = mi.rcMonitor.top + (int)(120.0f * scale);
-            break;
-        case HudPosition::Bottom:
-            posY = mi.rcMonitor.bottom - nHeight - (int)(120.0f * scale);
-            break;
-        case HudPosition::Center:
-        default:
-            posY = mi.rcMonitor.top + (mi.rcMonitor.bottom - mi.rcMonitor.top - nHeight) / 2;
-            break;
+    // Screen bounds on target monitor
+    int monW = mi.rcMonitor.right - mi.rcMonitor.left;
+    int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+    int posX = mi.rcMonitor.left + (monW - width) / 2;
+    int posY = mi.rcMonitor.top + (monH - height) / 2;
+    if (g_settings.position == HudPosition::Bottom) {
+        posY = mi.rcMonitor.bottom - height - (int)(80.0f * scale);
+    } else if (g_settings.position == HudPosition::Top) {
+        posY = mi.rcMonitor.top + (int)(80.0f * scale);
     }
 
-    HDC hdcScreen = GetDC(nullptr);
-    EnsureBackbuffer(hdcScreen, nWidth, nHeight);
-    if (!g_hMemDC || !g_pvBits) {
-        ReleaseDC(nullptr, hdcScreen);
+    g_bmpWidth = width;
+    g_bmpHeight = height;
+    g_posX = posX;
+    g_posY = posY;
+
+    // Create / Recreate DIB section if dimensions changed
+    HDC hdcScreen = GetDC(NULL);
+    if (!g_hMemDC) {
+        g_hMemDC = CreateCompatibleDC(hdcScreen);
+    }
+
+    if (g_hMemBmp) {
+        SelectObject(g_hMemDC, g_hOldMemBmp);
+        DeleteObject(g_hMemBmp);
+        g_hMemBmp = NULL;
+    }
+
+    BITMAPINFO bmi = {0};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height; // Top-down DIB
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    g_hMemBmp = CreateDIBSection(g_hMemDC, &bmi, DIB_RGB_COLORS, &g_pvBits, NULL, 0);
+    if (!g_hMemBmp || !g_pvBits) {
+        ReleaseDC(NULL, hdcScreen);
         return;
     }
 
-    memset(g_pvBits, 0, nWidth * nHeight * 4);
+    g_hOldMemBmp = (HBITMAP)SelectObject(g_hMemDC, g_hMemBmp);
 
+    // Clear DIB memory to 0 (crucial for per-pixel alpha transparency!)
+    memset(g_pvBits, 0, width * height * 4);
+
+    // Render with GDI+
     {
-        Gdiplus::Graphics g(g_hMemDC);
-        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+        Bitmap bmp(width, height, PixelFormat32bppPARGB);
+        Graphics g(&bmp);
 
-        // 1. Frosted Glass Background Card
-        float cardMargin = 8.0f * scale;
-        float cardX = cardMargin;
-        float cardY = cardMargin;
-        float cardW = nWidth - 2.0f * cardMargin;
-        float cardH = nHeight - 2.0f * cardMargin;
-        float cornerRadius = 18.0f * scale;
+        // Anti-aliasing for curves and smooth shapes
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        g.SetPixelOffsetMode(PixelOffsetModeHalf);
 
-        Gdiplus::GraphicsPath cardPath;
-        AddRoundRect(&cardPath, cardX, cardY, cardW, cardH, cornerRadius);
+        // Clear transparent background
+        g.Clear(Color(0, 0, 0, 0));
 
-        Gdiplus::SolidBrush bgBrush(Gdiplus::Color(220, 25, 25, 25));
-        g.FillPath(&bgBrush, &cardPath);
+        // 1. Soft Drop Shadow (multi-pass smooth shadow)
+        for (int step = 3; step >= 1; --step) {
+            float sOffset = (float)step * 2.0f * scale;
+            float sGrow = (float)step * 1.5f * scale;
+            BYTE sAlpha = (BYTE)(14 * (4 - step));
+            SolidBrush shadowBrush(Color(sAlpha, 0, 0, 0));
+            GraphicsPath sPath;
+            AddRoundedRect(sPath, cardX - sGrow, cardY + sOffset - sGrow, cardW + sGrow * 2.0f, cardH + sGrow * 2.0f, cardRadius + sGrow);
+            g.FillPath(&shadowBrush, &sPath);
+        }
 
-        Gdiplus::Pen borderPen(Gdiplus::Color(55, 255, 255, 255), 1.0f);
-        g.DrawPath(&borderPen, &cardPath);
+        // 2. Frosted Translucent Card (#C8B0BAC4)
+        GraphicsPath cardPath;
+        AddRoundedRect(cardPath, cardX, cardY, cardW, cardH, cardRadius);
+        SolidBrush cardBrush(Color(200, 176, 186, 196));
+        g.FillPath(&cardBrush, &cardPath);
 
-        // 2. Speaker Icon & Waves
-        float cx = cardX + cardW / 2.0f;
-        float cy = cardY + 68.0f * scale;
+        // Dark charcoal color (#1C1E24)
+        Color darkColor(255, 28, 30, 36);
+        SolidBrush darkBrush(darkColor);
 
-        Gdiplus::SolidBrush iconBrush(Gdiplus::Color(230, 240, 240, 240));
-        Gdiplus::Pen wavePen(Gdiplus::Color(230, 240, 240, 240), 2.2f * scale);
-        wavePen.SetStartCap(Gdiplus::LineCapRound);
-        wavePen.SetEndCap(Gdiplus::LineCapRound);
+        // 3. Speaker Canvas Area (centered horizontally in card, Y at 38px)
+        float cx0 = cardX + 40.0f * scale;
+        float cy0 = cardY + 38.0f * scale;
 
-        float spkX = cx - 36.0f * scale;
-        float spkY = cy;
+        // Speaker Body: exact XAML path M 8,26 H 25 L 53,7 C 55,5.5 57,7 57,9 V 77 C 57,79 55,80.5 53,79 L 25,60 H 8 C 5.8,60 4,58.2 4,56 V 30 C 4,27.8 5.8,26 8,26 Z
+        GraphicsPath speakerPath;
+        speakerPath.AddLine(cx0 + 8.0f * scale, cy0 + 26.0f * scale, cx0 + 25.0f * scale, cy0 + 26.0f * scale);
+        speakerPath.AddLine(cx0 + 25.0f * scale, cy0 + 26.0f * scale, cx0 + 53.0f * scale, cy0 + 7.0f * scale);
+        speakerPath.AddBezier(cx0 + 53.0f * scale, cy0 + 7.0f * scale, cx0 + 55.0f * scale, cy0 + 5.5f * scale, cx0 + 57.0f * scale, cy0 + 7.0f * scale, cx0 + 57.0f * scale, cy0 + 9.0f * scale);
+        speakerPath.AddLine(cx0 + 57.0f * scale, cy0 + 9.0f * scale, cx0 + 57.0f * scale, cy0 + 77.0f * scale);
+        speakerPath.AddBezier(cx0 + 57.0f * scale, cy0 + 77.0f * scale, cx0 + 57.0f * scale, cy0 + 79.0f * scale, cx0 + 55.0f * scale, cy0 + 80.5f * scale, cx0 + 53.0f * scale, cy0 + 79.0f * scale);
+        speakerPath.AddLine(cx0 + 53.0f * scale, cy0 + 79.0f * scale, cx0 + 25.0f * scale, cy0 + 60.0f * scale);
+        speakerPath.AddLine(cx0 + 25.0f * scale, cy0 + 60.0f * scale, cx0 + 8.0f * scale, cy0 + 60.0f * scale);
+        speakerPath.AddBezier(cx0 + 8.0f * scale, cy0 + 60.0f * scale, cx0 + 5.8f * scale, cy0 + 60.0f * scale, cx0 + 4.0f * scale, cy0 + 58.2f * scale, cx0 + 4.0f * scale, cy0 + 56.0f * scale);
+        speakerPath.AddLine(cx0 + 4.0f * scale, cy0 + 56.0f * scale, cx0 + 4.0f * scale, cy0 + 30.0f * scale);
+        speakerPath.AddBezier(cx0 + 4.0f * scale, cy0 + 30.0f * scale, cx0 + 4.0f * scale, cy0 + 27.8f * scale, cx0 + 5.8f * scale, cy0 + 26.0f * scale, cx0 + 8.0f * scale, cy0 + 26.0f * scale);
+        speakerPath.CloseFigure();
+        g.FillPath(&darkBrush, &speakerPath);
 
-        // Speaker Body
-        Gdiplus::GraphicsPath spkPath;
-        spkPath.AddRectangle(Gdiplus::RectF(spkX, spkY - 10.0f * scale, 9.0f * scale, 20.0f * scale));
-
-        Gdiplus::PointF conePts[4] = {
-            Gdiplus::PointF(spkX + 8.0f * scale, spkY - 10.0f * scale),
-            Gdiplus::PointF(spkX + 22.0f * scale, spkY - 21.0f * scale),
-            Gdiplus::PointF(spkX + 22.0f * scale, spkY + 21.0f * scale),
-            Gdiplus::PointF(spkX + 8.0f * scale, spkY + 10.0f * scale)
-        };
-        spkPath.AddPolygon(conePts, 4);
-        g.FillPath(&iconBrush, &spkPath);
-
+        // 4. Sound Waves
+        bool showWave1 = false, showWave2 = false, showWave3 = false;
         if (isMuted) {
-            // Mute Slash
-            Gdiplus::Pen slashPen(Gdiplus::Color(235, 220, 70, 70), 3.0f * scale);
-            slashPen.SetStartCap(Gdiplus::LineCapRound);
-            slashPen.SetEndCap(Gdiplus::LineCapRound);
-            g.DrawLine(&slashPen, cx - 18.0f * scale, cy - 20.0f * scale, cx + 28.0f * scale, cy + 20.0f * scale);
-        } else {
-            // Sound Waves
-            float waveCenterX = spkX + 18.0f * scale;
-            if (volume > 0.01f) {
-                g.DrawArc(&wavePen, waveCenterX - 11.0f * scale, cy - 11.0f * scale, 22.0f * scale, 22.0f * scale, -42.0f, 84.0f);
-            }
-            if (volume >= 0.33f) {
-                g.DrawArc(&wavePen, waveCenterX - 19.0f * scale, cy - 19.0f * scale, 38.0f * scale, 38.0f * scale, -45.0f, 90.0f);
-            }
-            if (volume >= 0.66f) {
-                g.DrawArc(&wavePen, waveCenterX - 27.0f * scale, cy - 27.0f * scale, 54.0f * scale, 54.0f * scale, -48.0f, 96.0f);
+            showWave1 = showWave2 = showWave3 = true;
+        } else if (volume > 0.001f) {
+            if (volume > 0.66f) {
+                showWave1 = showWave2 = showWave3 = true;
+            } else if (volume > 0.33f) {
+                showWave1 = showWave2 = true;
+            } else {
+                showWave1 = true;
             }
         }
 
-        // 3. 16-Segment Volume Bar
-        int activeSegments = isMuted ? 0 : (int)roundf(volume * 16.0f);
-        if (activeSegments < 0) activeSegments = 0;
-        if (activeSegments > 16) activeSegments = 16;
+        Pen wavePen(darkColor, 4.2f * scale);
+        wavePen.SetStartCap(LineCapRound);
+        wavePen.SetEndCap(LineCapRound);
 
-        float barW = cardW - 32.0f * scale;
-        float barH = 12.0f * scale;
-        float barX = cardX + (cardW - barW) / 2.0f;
-        float barY = cardY + cardH - 34.0f * scale;
+        // Wave 1: R=24, Center=(54.5, 43.0), Start=-45, Sweep=90
+        if (showWave1) {
+            float w1_cx = cx0 + 54.5f * scale;
+            float w1_cy = cy0 + 43.0f * scale;
+            float r1 = 24.0f * scale;
+            g.DrawArc(&wavePen, w1_cx - r1, w1_cy - r1, r1 * 2.0f, r1 * 2.0f, -45.0f, 90.0f);
+        }
+        // Wave 2: R=38, Center=(57.0, 43.0), Start=-36, Sweep=72
+        if (showWave2) {
+            float w2_cx = cx0 + 57.0f * scale;
+            float w2_cy = cy0 + 43.0f * scale;
+            float r2 = 38.0f * scale;
+            g.DrawArc(&wavePen, w2_cx - r2, w2_cy - r2, r2 * 2.0f, r2 * 2.0f, -36.0f, 72.0f);
+        }
+        // Wave 3: R=52, Center=(60.5, 43.0), Start=-32, Sweep=64
+        if (showWave3) {
+            float w3_cx = cx0 + 60.5f * scale;
+            float w3_cy = cy0 + 43.0f * scale;
+            float r3 = 52.0f * scale;
+            g.DrawArc(&wavePen, w3_cx - r3, w3_cy - r3, r3 * 2.0f, r3 * 2.0f, -32.0f, 64.0f);
+        }
 
-        int iBarX = (int)std::floor(barX);
-        int iBarY = (int)std::floor(barY);
-        int iBarW = (int)std::floor(barW);
-        int iBarH = (int)std::floor(barH);
+        // 5. Classic macOS Mute Slash: X1=4, Y1=14 to X2=118, Y2=72
+        if (isMuted) {
+            Pen mutePen(darkColor, 4.6f * scale);
+            mutePen.SetStartCap(LineCapRound);
+            mutePen.SetEndCap(LineCapRound);
+            g.DrawLine(&mutePen, cx0 + 4.0f * scale, cy0 + 14.0f * scale, cx0 + 118.0f * scale, cy0 + 72.0f * scale);
+        }
 
-        g.SetSmoothingMode(Gdiplus::SmoothingModeNone);
+        // 6. 16-Segment Continuous Rectangular Progress Bar
+        // Snap to whole integer device pixels with SmoothingModeNone for razor-sharp hairline dividers
+        g.SetSmoothingMode(SmoothingModeNone);
+        g.SetPixelOffsetMode(PixelOffsetModeNone);
 
-        Gdiplus::SolidBrush bgBarBrush(Gdiplus::Color(120, 25, 25, 25));
-        Gdiplus::Pen barBorderPen(Gdiplus::Color(65, 255, 255, 255), 1.0f);
-        g.FillRectangle(&bgBarBrush, iBarX, iBarY, iBarW, iBarH);
-        g.DrawRectangle(&barBorderPen, iBarX, iBarY, iBarW, iBarH);
+        int barX = (int)std::round(cardX + 27.0f * scale);
+        int barY = (int)std::round(cardY + 162.0f * scale);
+        int barW = (int)std::round(146.0f * scale);
+        int barH = (int)std::round(8.0f * scale);
 
-        Gdiplus::SolidBrush activeSegmentBrush(Gdiplus::Color(245, 245, 245, 245));
-        Gdiplus::Pen dividerPen(Gdiplus::Color(210, 20, 20, 20), 1.0f);
+        // Solid dark background track (#1C1E24)
+        g.FillRectangle(&darkBrush, barX, barY, barW, barH);
 
-        for (int i = 0; i < 16; i++) {
-            int segX1 = iBarX + 1 + (i * (iBarW - 2)) / 16;
-            int segX2 = iBarX + 1 + ((i + 1) * (iBarW - 2)) / 16;
-            int segW = segX2 - segX1;
+        // Active white segments
+        int activeBlocks = isMuted ? 0 : (int)std::round(volume * 16.0f);
+        activeBlocks = (std::max)(0, (std::min)(16, activeBlocks));
 
-            if (i < activeSegments) {
-                g.FillRectangle(&activeSegmentBrush, segX1, iBarY + 1, segW, iBarH - 1);
-            }
+        SolidBrush whiteBrush(Color(255, 255, 255, 255));
 
-            if (i > 0) {
-                g.DrawLine(&dividerPen, segX1, iBarY + 1, segX1, iBarY + iBarH - 1);
+        for (int i = 0; i < 16; ++i) {
+            int colLeft = barX + 1 + (int)std::round((float)i * (float)(barW - 2) / 16.0f);
+            int colRight = barX + 1 + (int)std::round((float)(i + 1) * (float)(barW - 2) / 16.0f);
+            int segW = (colRight - colLeft) - (i < 15 ? 1 : 0);
+
+            if (i < activeBlocks && segW > 0) {
+                g.FillRectangle(&whiteBrush, colLeft, barY + 1, segW, barH - 2);
             }
         }
+
+        // Copy PARGB bits to DIB section
+        BitmapData data;
+        Rect lockRect(0, 0, width, height);
+        bmp.LockBits(&lockRect, ImageLockModeRead, PixelFormat32bppPARGB, &data);
+        memcpy(g_pvBits, data.Scan0, width * height * 4);
+        bmp.UnlockBits(&data);
     }
 
-    POINT ptSrc = {0, 0};
-    SIZE sizeWnd = {nWidth, nHeight};
-    POINT ptDst = {posX, posY};
-
-    BLENDFUNCTION blend = {};
+    // Apply to Layered Window
+    BLENDFUNCTION blend = {0};
     blend.BlendOp = AC_SRC_OVER;
-    blend.BlendFlags = 0;
-    blend.SourceConstantAlpha = (BYTE)(g_dCurrentAlpha * 255.0);
+    blend.SourceConstantAlpha = 255;
     blend.AlphaFormat = AC_SRC_ALPHA;
 
-    UpdateLayeredWindow(
-        g_hHudWnd,
-        hdcScreen,
-        &ptDst,
-        &sizeWnd,
-        g_hMemDC,
-        &ptSrc,
-        0,
-        &blend,
-        ULW_ALPHA
-    );
+    POINT ptDst = { posX, posY };
+    SIZE sizeDst = { width, height };
+    POINT ptSrc = { 0, 0 };
 
-    ReleaseDC(nullptr, hdcScreen);
+    UpdateLayeredWindow(hWnd, hdcScreen, &ptDst, &sizeDst, g_hMemDC, &ptSrc, 0, &blend, ULW_ALPHA);
+    ReleaseDC(NULL, hdcScreen);
 }
 
-static void UpdateHudAlpha(double alpha) {
-    if (!g_hHudWnd) return;
-    g_dCurrentAlpha = alpha;
-    if (g_dCurrentAlpha < 0.0) g_dCurrentAlpha = 0.0;
-    if (g_dCurrentAlpha > 1.0) g_dCurrentAlpha = 1.0;
+static void UpdateHudAlpha(HWND hWnd, BYTE alpha) {
+    if (!g_hMemDC) return;
 
-    BLENDFUNCTION blend = {};
+    HDC hdcScreen = GetDC(NULL);
+    BLENDFUNCTION blend = {0};
     blend.BlendOp = AC_SRC_OVER;
-    blend.BlendFlags = 0;
-    blend.SourceConstantAlpha = (BYTE)(g_dCurrentAlpha * 255.0);
+    blend.SourceConstantAlpha = alpha;
     blend.AlphaFormat = AC_SRC_ALPHA;
 
-    UpdateLayeredWindow(g_hHudWnd, nullptr, nullptr, nullptr, nullptr, nullptr, 0, &blend, ULW_ALPHA);
+    POINT ptDst = { g_posX, g_posY };
+    SIZE sizeDst = { g_bmpWidth, g_bmpHeight };
+    POINT ptSrc = { 0, 0 };
+
+    UpdateLayeredWindow(hWnd, hdcScreen, &ptDst, &sizeDst, g_hMemDC, &ptSrc, 0, &blend, ULW_ALPHA);
+    ReleaseDC(NULL, hdcScreen);
 }
 
-static void ShowHud() {
-    if (!g_hHudWnd) return;
+static void ShowHud(HWND hWnd) {
+    if (!hWnd) return;
 
-    KillTimer(g_hHudWnd, TIMER_ID_HIDE);
-    KillTimer(g_hHudWnd, TIMER_ID_FADE);
+    KillTimer(hWnd, IDT_HIDE);
+    KillTimer(hWnd, IDT_FADE_OUT);
 
     float vol = g_audioMgr.GetCurrentVolume();
     bool muted = g_audioMgr.IsMuted();
 
-    g_dCurrentAlpha = 1.0;
-    RenderHudContent(vol, muted);
+    g_hudAlpha = 255;
+    RenderHudContent(hWnd, vol, muted);
 
     SetWindowPos(
-        g_hHudWnd,
+        hWnd,
         HWND_TOPMOST,
         0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW
     );
 
-    SetTimer(g_hHudWnd, TIMER_ID_HIDE, g_settings.timeoutMs, nullptr);
+    SetTimer(hWnd, IDT_HIDE, g_settings.timeoutMs, nullptr);
 }
 
 // ============================================================================
@@ -794,7 +814,7 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
                 case HOTKEY_ID_VOL_UP_CUSTOM:
                     if (g_audioMgr.StepVolume(1.0f)) {
                         PlayClickSound(g_audioMgr.IsMuted());
-                        ShowHud();
+                        ShowHud(hWnd);
                     }
                     return 0;
 
@@ -802,7 +822,7 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
                 case HOTKEY_ID_VOL_DOWN_CUSTOM:
                     if (g_audioMgr.StepVolume(-1.0f)) {
                         PlayClickSound(g_audioMgr.IsMuted());
-                        ShowHud();
+                        ShowHud(hWnd);
                     }
                     return 0;
 
@@ -810,7 +830,7 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
                 case HOTKEY_ID_VOL_MUTE_CUSTOM:
                     if (g_audioMgr.ToggleMute()) {
                         PlayClickSound(g_audioMgr.IsMuted());
-                        ShowHud();
+                        ShowHud(hWnd);
                     }
                     return 0;
             }
@@ -821,7 +841,7 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
             if (isInternal) {
                 PlayClickSound(g_audioMgr.IsMuted());
             }
-            ShowHud();
+            ShowHud(hWnd);
             return 0;
         }
 
@@ -834,30 +854,38 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
             return 0;
 
         case WM_TIMER:
-            if (wParam == TIMER_ID_HIDE) {
-                KillTimer(hWnd, TIMER_ID_HIDE);
-                g_ullFadeStartTime = GetTickCount64();
-                SetTimer(hWnd, TIMER_ID_FADE, 16, nullptr);
+            if (wParam == IDT_HIDE) {
+                KillTimer(hWnd, IDT_HIDE);
+                g_hudAlpha = 255;
+                SetTimer(hWnd, IDT_FADE_OUT, 16, nullptr);
                 return 0;
             }
-            if (wParam == TIMER_ID_FADE) {
-                ULONGLONG elapsed = GetTickCount64() - g_ullFadeStartTime;
-                if (elapsed >= 300) {
-                    KillTimer(hWnd, TIMER_ID_FADE);
-                    UpdateHudAlpha(0.0);
+            if (wParam == IDT_FADE_OUT) {
+                g_hudAlpha -= 18;
+                if (g_hudAlpha <= 0) {
+                    KillTimer(hWnd, IDT_FADE_OUT);
+                    g_hudAlpha = 0;
                     ShowWindow(hWnd, SW_HIDE);
                 } else {
-                    double progress = (double)elapsed / 300.0;
-                    double alpha = 1.0 - progress;
-                    UpdateHudAlpha(alpha);
+                    UpdateHudAlpha(hWnd, (BYTE)g_hudAlpha);
                 }
                 return 0;
             }
             break;
 
         case WM_DESTROY:
-            KillTimer(hWnd, TIMER_ID_HIDE);
-            KillTimer(hWnd, TIMER_ID_FADE);
+            KillTimer(hWnd, IDT_HIDE);
+            KillTimer(hWnd, IDT_FADE_OUT);
+            UnregisterHotkeys(hWnd);
+            if (g_hMemDC) {
+                if (g_hMemBmp) {
+                    SelectObject(g_hMemDC, g_hOldMemBmp);
+                    DeleteObject(g_hMemBmp);
+                    g_hMemBmp = NULL;
+                }
+                DeleteDC(g_hMemDC);
+                g_hMemDC = NULL;
+            }
             return 0;
     }
 
@@ -875,8 +903,8 @@ static DWORD WINAPI HudThreadProc(LPVOID lpParam) {
 
     // 2. Initialize COM & GDI+
     HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-    Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
+    GdiplusStartupInput gdiplusStartupInput;
+    GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
 
     // 3. Initialize Audio Manager
     g_audioMgr.Initialize();
@@ -960,18 +988,18 @@ static DWORD WINAPI HudThreadProc(LPVOID lpParam) {
     g_audioMgr.Uninitialize();
 
     if (g_hMemDC) {
-        if (g_hOldBitmap) SelectObject(g_hMemDC, g_hOldBitmap);
+        if (g_hMemBmp) {
+            SelectObject(g_hMemDC, g_hOldMemBmp);
+            DeleteObject(g_hMemBmp);
+            g_hMemBmp = NULL;
+        }
         DeleteDC(g_hMemDC);
-        g_hMemDC = nullptr;
-    }
-    if (g_hDIB) {
-        DeleteObject(g_hDIB);
-        g_hDIB = nullptr;
+        g_hMemDC = NULL;
         g_pvBits = nullptr;
     }
 
     if (g_gdiplusToken) {
-        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
     }
 
