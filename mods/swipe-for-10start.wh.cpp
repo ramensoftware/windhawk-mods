@@ -1,8 +1,10 @@
 // ==WindhawkMod==
 // @id              swipe-for-10start
-// @name            Legacy Start Swipe
-// @description     Swipe in from the taskbar edge to pull the Start menu out with your finger, and swipe back to close it
-// @version         0.7.0
+// @name            Swipe for 10Start
+// @name:zh-CN      Swipe for 10Start
+// @description     Touch and pen swipe gestures for ExplorerPatcher's legacy Windows 10 Start menu: pull it out with your finger, drag it back to close, with the same animation on the Windows key.
+// @description:zh-CN 为 ExplorerPatcher 恢复的 Windows 10 经典开始菜单加上触摸与手写笔滑动：手指拉出、拖回关闭，Win 键开合播放同一套动画。
+// @version         0.8.3
 // @author          Zhanyuanium
 // @github          https://github.com/Zhanyuanium
 // @license         MIT
@@ -15,53 +17,246 @@
 
 // ==WindhawkModReadme==
 /*
-# Legacy Start Swipe
+# Swipe for 10Start
 
-Touch and pen gestures for the Windows 10 Start menu that ExplorerPatcher
-restores on Windows 11. Swipe in from the taskbar edge and the menu follows
-your finger out; drag the open menu back toward that edge and it slides away.
-The Windows key, the Start button and a click away play the same animation.
+Touch and pen swipe gestures for the legacy Windows 10 Start menu that
+ExplorerPatcher restores on Windows 11. Swipe in from the taskbar edge and the
+menu opens following your finger; drag the open menu back toward that edge and
+it slides away and closes. Keyboard opens and closes get the same animation.
+By Zhanyuanium, distributed as a Windhawk mod.
 
-What it does:
+![Bottom taskbar: the menu follows the finger and a close is reversed](https://raw.githubusercontent.com/Zhanyuanium/swipe-for-10start/main/docs/images/demo-bottom.gif)
 
-- Pull the menu out from the taskbar edge with one finger; the panel stays
-  under the finger, and lifting with enough travel lets it settle open.
-- A tap on the taskbar background opens nothing; the pull must travel 24 DIP.
-- Drag the open menu back toward the taskbar to close it with the same spring.
-- A press during a close, or a pull still down when it lands, takes the menu
-  back; a menu is never left shown but empty.
+![Left taskbar: the same gesture](https://raw.githubusercontent.com/Zhanyuanium/swipe-for-10start/main/docs/images/demo-left.gif)
 
-What you need:
+## What you need
 
-- Windows 11, x86-64, with ExplorerPatcher's legacy Start
-  (`Start_ShowClassicMode=1`). Verified on build 26300.9974 with
-  ExplorerPatcher 26100.9711.
-- Windhawk 2.0 or later and a touchscreen or pen.
+- **Windows 11** with **ExplorerPatcher** set to the Windows 10 (legacy) Start
+  menu (`Start_ShowClassicMode=1`). Verified on Windows 11 build 26300.10075
+  (`twinui.pcshell.dll` fixed 10.0.26100.10068) and ExplorerPatcher 26100.9711.
+- **Windhawk** 2.0 or later.
+- A touchscreen or pen. (The mouse is deliberately not used for these
+  gestures.)
 
-Install **Legacy Start Swipe** from Windhawk and enable it. One mod covers both
-processes: the gesture runs in StartMenuExperienceHost, the shell calls in Explorer.
+## The mod
 
-Settings:
+One Windhawk mod ships, and it runs in both processes it needs: the controller
+in StartMenuExperienceHost and the executor in Explorer.
 
-- **Menu animation style** — *Windows 11* glides like Quick Settings;
-  *Windows 10* is slower off the mark and lands firmer.
-- **Animation start speed** — how fast the menu keeps moving when you lift your
-  finger, as a percentage of the finger's speed: 0 starts from a standstill,
-  100 continues at that speed, up to 300 snaps it away. Windows-key opens and
-  closes start from rest.
-Known limits:
+- **The controller** owns the gesture itself: edge-pull to open, follow the
+  finger, drag to dismiss, and the animation. It also consumes the executor's
+  intents and schedules the close's dismiss.
+- **The executor** runs in Explorer and executes the shell's own
+  `ShowStartView`/`Dismiss` on the launcher's thread. The Windows key, the Start
+  button and a click away publish one intent; the controller decides open or
+  close from its own published state, runs the one shell-close settle, and then
+  asks the executor to dismiss. A close applies the open spring in the closing
+  direction: it moves at once and decelerates into the taskbar.
+  A press during a close is read as a reopen: while the window is still on
+  screen the close is cancelled and the panel settles back from where the
+  retract left it; a press inside the shell's hide is latched and served when
+  the hide lands. A pull during the close does the same at 24 DIP of inward
+  travel. When it grabbed the panel while some of it was still on screen, the
+  armed dismiss is cancelled and the panel reverses from where the retract
+  reached instead of finishing and then popping open. A pull that began in the
+  band and reaches 24 DIP only after the close has finished is still an open:
+  `ShowStartView` is requested and the panel follows the finger from the entry.
+  A pull that lands where the panel has already left, or one on the retract's
+  surface that the close outruns, gets no second chance: it must lift, and the
+  menu stays closed until a new pull. Recovery is best effort, not a guarantee:
+  a press the bridge already swallowed has no native replay left, so a peer that
+  dies between the gate and the serve loses that press.
+  Win+Tab, the lock screen and a display change pass through untouched, so a
+  lock never waits. If the executor half is refused — the Explorer build does
+  not match, or the launcher's public symbols cannot be resolved — the menu
+  still opens and closes, but the close is instant. The launcher hooks are found
+  by public symbol, and their private layout is enabled only on the verified
+  reference image (the fixed file version and all 13 reference RVAs); any other
+  build keeps the shell's own path. The Start half withdraws its interception
+  whenever it has no usable renderer: while the menu's root is being replaced or
+  a failed geometry write has invalidated it, a press runs the shell's own path
+  exactly once, and the mod resumes when a usable root is attached.
 
-- The shell owns the reveal, so the first frame can arrive about a quarter of a
-  second after the open starts.
-- If the launcher's private symbols or the menu layout are unavailable, the mod
-  steps aside and the shell handles every press natively; the Start side also
-  withdraws while the menu's root is replaced or a failed write invalidates it.
-- Tested on one 2880x1800 display at 200 %: the live left docked taskbar and,
-  earlier, the bottom layouts. The gesture reads the taskbar's edge rather than
-  assuming a side.
+## Install
 
-The repository has the [user guide](https://github.com/Zhanyuanium/swipe-for-10start#readme)
-and the full [limits and troubleshooting](https://github.com/Zhanyuanium/swipe-for-10start/blob/main/docs/limits.md).
+Install the mod from the Windhawk UI, or from an elevated PowerShell in this
+repository:
+
+```powershell
+pwsh -File .\tools\install_mods.ps1
+```
+
+The script runs `tools/make_store_mods.ps1 -Profile local` first: that writes the
+single-file build to `dist\local\`, with the shared headers inlined and no `-I`
+in `@compilerOptions`, because an installed mod is compiled from stdin with no
+repository beside it. It then installs and enables the mod. Windhawk's install
+folder must be on `PATH`; `-Compiler` names `windhawk-cli` explicitly, `-All`
+also installs the diagnostic probes, and `-SkipRestart` leaves the menu host
+alone.
+
+The script restarts `StartMenuExperienceHost.exe` when it finishes; do it by hand
+(Task Manager → details → `StartMenuExperienceHost.exe` → end task; it restarts
+itself) or sign out and back in — the mod can only attach when the menu process
+creates its window. `mod install` leaves a previously disabled mod disabled, so
+the script enables it; the Explorer half hooks Explorer when the mod is enabled,
+without an Explorer restart on this build.
+
+## Settings
+
+- **Menu animation style** (`AnimationStyle`, default `Windows 11`) — the
+  shape of the slide. `Windows 11` is fitted to the motion of the system's own
+  panels (the Quick Settings flyout); `Windows 10` is the feel the mod shipped
+  with originally, a looser spring that can overshoot slightly. Both run the
+  same spring — the choice changes the feel, never the mechanism — and it also
+  decides how opening and closing with the Windows key looks.
+- **Animation start speed (% of swipe speed)** (`GestureStartSpeedPercent`,
+  default 100, range 0-300) — how fast the menu keeps moving the moment you
+  lift your finger, as a percentage of the finger's speed in the direction the
+  menu is going. 100 continues at finger speed, higher values snap away
+  faster, 0 always starts the animation from a standstill. A finger that was
+  held still starts from rest whatever this says, and Windows-key opens always
+  start from rest — this setting does not affect them.
+- **Drag intent distance (% of travel)** (`CommitDistancePercent`,
+  default 10, range 1-50) — how far a drag must go toward the target before
+  releasing commits it. A pull that travels less than this springs back closed;
+  a close drag that travels less than this reverses back open. The same value
+  applies on every taskbar side, and a quick flick commits even when it is
+  shorter.
+- **Write a diagnostic trace file** (`DiagnosticTrace`, default off) — turns on
+  the decision log described below. Leave it off for everyday use; a bug report
+  or a maintainer will ask for it.
+
+## What works where
+
+- Taskbar on the **left**, **top**, **right** or **bottom**. **Auto-hide** is
+  supported.
+- **One display.** A taskbar on a secondary monitor or a rotated display is not
+  supported; every measurement is the primary panel.
+- **Touch** works. **Pen** input is decoded (hover is ignored) but has not yet
+  been exercised by hand.
+- On a top or bottom taskbar, a vertical swipe inside the open menu scrolls
+  what is under your finger — the app list, or the grid of pinned tiles — and
+  becomes a dismiss only once that area reaches its end.
+- A pull that starts just inside the screen edge — up to about half a taskbar's
+  height, the strip the system's own swipe opens from — opens the menu, and the
+  menu follows the finger from the frame it appears. A tap on the taskbar
+  background does not request a touch open: the mod asks for the menu only after
+  the finger has travelled 24 DIP away from the edge. A tap on a pinned app,
+  the clock or the tray stays a native press; a tap on the Start button still
+  opens the menu, as it always does. A pull that starts further in does not open
+  it: only the taskbar edge does that.
+- Mouse drag is deliberately not enabled.
+
+## Try it
+
+- Swipe in from the taskbar edge: the menu opens and follows your finger. A
+  swipe that begins a little further in, about half a taskbar's height, keeps
+  up with your hand too instead of snapping open. A quick flick that ends
+  before the menu appears still carries its speed into the opening motion, and
+  the menu rises from the bottom edge instead of appearing part-way open. A
+  short or reversed pull springs back; a longer pull or a flick keeps it open.
+- With the menu open, drag it toward the taskbar edge to dismiss it — past the
+  drag-intent distance (a tenth of the panel's travel by default), or with a
+  flick, it commits and slides out.
+- Press the Windows key: the same animation plays on open and on close.
+
+## If something looks wrong
+
+- The mod can write a decision log into two files in its Windhawk storage
+  folder, which Windhawk shows on the mod's page: `renderer.log` from the Start
+  half and `bridge.log` from the Explorer half, both under
+  `local@swipe-for-10start`. They are written only while **Write a diagnostic
+  trace file** (`DiagnosticTrace`) is on; turn it on once from an elevated
+  shell with
+  `windhawk-cli mod settings set local@swipe-for-10start DiagnosticTrace=true`
+  or from the mod's settings, then reproduce the problem.
+- After disabling and re-enabling the mod, restart
+  `StartMenuExperienceHost.exe` — gestures cannot attach to the already-open
+  menu window.
+- The root hook is found by public symbol, not by address. If `StartUI_.dll`
+  does not carry `StartUI::App::PrepareRootElement` (or its symbols cannot be
+  read), no gesture starts and the log shows `startui root symbol unresolved
+  ...`; the shell then handles every press natively.
+- While the menu is being dragged, its contents still receive touches at their
+  original positions — a known limit, along with the assumption that the touch
+  panel covers the primary monitor.
+- The full technical documentation — what was measured, what was falsified,
+  and every design decision — lives in [docs/](docs/README.md), including the
+  complete [known-limits list](docs/limits.md).
+- [CHANGELOG.md](CHANGELOG.md) lists each release tag with the version it
+  shipped.
+
+
+---
+
+# Swipe for 10Start
+
+ExplorerPatcher 在 Windows 11 上恢复了经典的 Windows 10 开始菜单；本模组为它加上触摸和手写笔滑动手势。从任务栏所在的屏幕边缘划入，菜单会跟随手指打开；把已打开的菜单往该边缘拖回，菜单会滑出并关闭。用键盘打开或关闭菜单时播放同一套动画。由 Zhanyuanium 开发，以 Windhawk 模组形式发布。
+
+![任务栏在底部：菜单跟随手指，关闭被反转](https://raw.githubusercontent.com/Zhanyuanium/swipe-for-10start/main/docs/images/demo-bottom.gif)
+
+![任务栏在左侧：同样的手势](https://raw.githubusercontent.com/Zhanyuanium/swipe-for-10start/main/docs/images/demo-left.gif)
+
+## 你需要什么
+
+- **Windows 11**，且 **ExplorerPatcher** 已设置为 Windows 10（经典）开始菜单（`Start_ShowClassicMode=1`）。已在 Windows 11 build 26300.10075（`twinui.pcshell.dll` 固定版本 10.0.26100.10068）和
+  ExplorerPatcher 26100.9711 上验证。
+- **Windhawk** 2.0 或更高版本。
+- 触摸屏或手写笔。（本模组刻意不响应鼠标拖动。）
+
+## 模组由两部分组成
+
+只发布一个 Windhawk 模组，但它同时运行在需要的两个进程中：StartMenuExperienceHost 里是控制器，Explorer 里是执行器。
+
+- **控制器**负责手势本身：边缘划入打开、跟随手指、拖动关闭，以及滑动动画。它还接收执行器的意图，并在关闭时安排 dismiss。
+- **执行器**运行在 Explorer 中，在启动器自己的线程上执行系统自己的 `ShowStartView`/`Dismiss`。Win 键、开始按钮和点击空白各发布一个意图；控制器根据自己的已发布状态决定打开或关闭，跑完唯一的镜像回弹，再请执行器 dismiss。关闭使用与手势关闭相同的动画。关闭过程中的按键按“重新打开”处理：窗口还在屏幕上时取消这次关闭，面板从收回到的位置回弹；按键落在系统 hide 里时被锁存，等 hide 落地再补发。关闭过程中的手指只有在落在仍在屏幕上的那部分面板（或任务栏边缘带）上时才算抓住这次收回：向内划过 24 DIP 时中止这次关闭，已武装的 dismiss 被撤销，面板从回收到的位置直接反向，而不是先收完再弹出。从边缘带起手、但直到关闭结束之后才划满 24 DIP 的手指同样是一次打开：模组请求 `ShowStartView`，面板从入场位置跟随手指。恢复是尽力而为，不是保证：桥已经吞掉的按键没有原生回放，若控制器在门禁与补发之间消失，这一次按键就丢了。落在面板已经离开的区域、或者在收回表面上被关闭抢先落地的手指没有第二次机会——它必须先抬起，菜单也要等下一次新的拉动。Win+Tab、锁屏和显示变化直接透传，锁屏绝不会被拖住。如果 Explorer 的半边被拒绝——系统版本不符，或启动器的公开符号解析不到——菜单照常开关，但关闭是瞬间的。启动器的钩子按公开符号查找，私有布局只在已验证的参考映像上启用（固定的文件版本和全部 13 个参考 RVA）；其他版本仍走系统自己的路径。Start 半边在没有可用渲染器时也会撤回拦截：菜单根正在替换，或一次几何写入失败使其失效时，按键恰好在系统自己的路径上执行一次；可用根挂上后恢复。
+
+## 安装
+
+在 Windhawk 界面中安装该模组，或者在仓库目录下以管理员身份运行 PowerShell：
+
+```powershell
+pwsh -File .\tools\install_mods.ps1
+```
+
+脚本先运行 `tools/make_store_mods.ps1 -Profile local`，把共享头文件内联后的单文件构建写到 `dist\local\`（`@compilerOptions` 中不再有 `-I`，因为安装后的模组由 Windhawk 从标准输入编译，旁边没有仓库）；随后安装并启用该模组。Windhawk 的安装目录必须在 `PATH` 上；`-Compiler` 可直接指定 `windhawk-cli`，`-All` 会一并安装诊断探针，`-SkipRestart` 则不重启菜单宿主。
+
+脚本结束时重启 `StartMenuExperienceHost.exe`；手动操作时在任务管理器 → 详细信息 →
+`StartMenuExperienceHost.exe` → 结束任务，它会自动重启，或者注销并重新登录——模组只能在菜单进程创建窗口时挂载。`mod install` 不会启用先前被禁用的模组，所以脚本会显式启用它；Explorer 的半边在模组启用时挂钩 Explorer，在当前系统版本上不必重启它。
+
+## 设置项
+
+- **菜单动画样式**（`AnimationStyle`，默认 `Windows 11`）——滑动动画的曲线形状。`Windows 11` 拟合自系统自带面板（快速设置弹出面板）的动作；`Windows 10` 是本模组最初发布时的手感，弹簧更松，可能略微过冲。两者跑的是同一条弹簧——这个选择只改手感，不改机制——同一个选择也决定按 Windows 键开合菜单时的动画。
+- **动画起步速度（占滑动速度的百分比）**（`GestureStartSpeedPercent`，默认 100，范围 0–300）——松手瞬间菜单继续滑动的速度，取手指朝菜单目标方向的速度分量的百分比。100 表示按手指速度继续；更大的值甩得更快；0 总是从静止起步。手指停住再抬起时无论设多少都从静止起步；用 Windows 键打开也总是从静止起步——这两种情况都不受这个设置影响。
+- **拖动意图距离（占行程的百分比）**（`CommitDistancePercent`，默认 10，范围 1–50）——拖动朝目标方向走多远，松手才算数。拉开不足这个距离会弹回关闭状态；收回不足这个距离会回弹重新打开。四个任务栏方向共用同一个值；快速一甩即使距离更短也会生效。
+- **写入诊断跟踪文件**（`DiagnosticTrace`，默认关闭）——打开下文所述的决策日志。日常使用请保持关闭；只有在维护者或缺陷报告要求时才打开。
+
+## 适用的场景
+
+- 任务栏在**左侧**、**顶部**、**右侧**或**底部**。支持**自动隐藏**。
+- **单块显示器。** 任务栏放在副屏、或屏幕旋转后，均不支持；所有测量都来自主显示器。
+- **触摸**可用。**手写笔**输入已解码（悬停被忽略），但尚未在真机上实测过。
+- 任务栏在顶部或底部时，在已打开的菜单里上下滑动，会先滚动手指下方的内容（应用列表，或固定磁贴的网格）；等这块区域滚到底，同一次滑动才开始关闭菜单。
+- 从屏幕边缘稍微靠里一点起手——大约半个任务栏高，也就是系统自带滑动的起手范围——菜单会打开，并且从出现的那一帧起就跟随手指。单击任务栏空白不会请求触摸打开：手指要朝桌面方向移动满 24 DIP，模组才会请求打开。点在固定应用、时钟或托盘上是一次原生点击；点开始按钮仍会打开菜单，和平时一样。起手位置更靠里则不会打开菜单：只有任务栏边缘能打开它。
+- 鼠标拖动刻意未启用。
+
+## 上手一试
+
+- 从任务栏边缘划入：菜单打开并跟随手指。从稍微靠里一点（约半个任务栏高）起手也会跟随手指，不会在手底下直接弹开。快速一甩若在菜单出现之前就离手，菜单也会顺着这股速度从屏幕边缘升起，而不是先停一下、再以半开的样子出现。拉得短或往回推会弹回去；拉得更长或快速一甩则保持打开。
+- 菜单打开时，把它往任务栏边缘拖即可关闭——拖过拖动意图距离（默认是面板行程的十分之一），或快速一甩，就构成一次关闭手势，菜单随之滑出。
+- 按 Windows 键：打开和关闭时播放同一套动画。
+
+## 如果看起来不对
+
+- 模组可以把决策日志写进它的 Windhawk 存储目录（Windhawk 在模组页面上显示该路径）下的两个文件：Start 半边的 `renderer.log` 和 Explorer 半边的 `bridge.log`，都在 `local@swipe-for-10start` 下。只有打开 **写入诊断跟踪文件**（`DiagnosticTrace`）时才会写；打开一次即可：
+  `windhawk-cli mod settings set local@swipe-for-10start DiagnosticTrace=true`，
+  也可以在模组设置里打开（命令行需要管理员权限），然后复现问题。
+- 禁用再启用模组后要重启 `StartMenuExperienceHost.exe`——手势无法挂到已经存在的菜单窗口上。
+- 根钩子按公开符号查找，不依赖固定地址。若 `StartUI_.dll` 不含 `StartUI::App::PrepareRootElement`（或读不到符号），手势不会启动，日志里会看到 `startui root symbol unresolved ...`；此时所有按键都交给系统自行处理。
+- 拖动菜单期间，菜单内容仍在原位置接收触摸——这是已知限制；另一条已知限制：本模组假设触摸面板覆盖主显示器。
+- 完整的技术文档在 [docs/](docs/README.md)（英文），其中有测量数据、被证伪的方案和每项设计决定的理由，也包括完整的[已知限制列表](docs/limits.md)。
+- 每次发布的 tag 与对应的版本号见 [CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md)（英文版 [CHANGELOG.md](CHANGELOG.md)）。
+
 */
 // ==/WindhawkModReadme==
 
@@ -69,37 +264,37 @@ and the full [limits and troubleshooting](https://github.com/Zhanyuanium/swipe-f
 /*
 - AnimationStyle: Windows 11
   $name: Menu animation style
+  $name:zh-CN: 菜单动画样式
   $description: >-
-    How the menu moves whenever it slides: touch swipes, and Windows-key
-    opens and closes too. Both choices are the same spring, only the damping
-    differs. Windows 11 (1.72) is fitted to the native Quick Settings panel
-    (Win+A) and glides into place; Windows 10 (0.9) is slower off the mark
-    and lands firmer, the feel this mod shipped with. A bigger menu takes
-    longer rather than moving faster: the duration follows the travel and is
-    not a setting.
+    The shape of the slide. Windows 11 is fitted to the system's Quick Settings
+    flyout; Windows 10 is the looser spring the mod shipped with. Both run the
+    same spring; the choice changes the feel, never the mechanism, and it also
+    decides how opening and closing with the Windows key look.
+  $description:zh-CN: 滑动动画的曲线形状。Windows 11 拟合自系统自带面板（快速设置弹出面板）的动作；Windows 10 是本模组最初发布时的手感，弹簧更松，可能略微过冲。两者跑的是同一条弹簧——这个选择只改手感，不改机制——同一个选择也决定按 Windows 键开合菜单时的动画。
   $options:
-  - Windows 11: glides like the Win+A Quick Settings panel
-  - Windows 10: slower off the mark, lands firmer (as shipped)
+  - Windows 11: glides like the Quick Settings flyout
+  - Windows 10: looser spring, can overshoot slightly
 - GestureStartSpeedPercent: 100
   $name: Animation start speed (% of swipe speed)
+  $name:zh-CN: 动画起步速度（占滑动速度的百分比）
   $description: >-
-    How fast the menu keeps moving at the instant you lift your finger. The
-    speed is measured from an 8-30 ms window of reports that ends at the newest
-    point, which must itself be no more than 30 ms before you lift, and it is
-    projected onto the direction the menu is about to move: 100 continues at
-    that component, a higher value snaps it away faster (up to 300), 0 starts
-    from a standstill. A finger held still has no speed to carry, and sideways
-    motion does not count, because only the part toward the target enters the
-    motion. Neither do Windows-key opens and closes: they start from rest
-    whatever you set.
+    How fast the menu keeps moving the moment you lift your finger, as a
+    percentage of the finger's speed in the direction the menu is going. 100
+    continues at finger speed, higher values snap away faster, 0 always starts
+    from a standstill. A finger held still starts from rest whatever this says,
+    and Windows-key opens always start from rest; this setting does not affect
+    them.
+  $description:zh-CN: 松手瞬间菜单继续滑动的速度，取手指朝菜单目标方向的速度分量的百分比。100 表示按手指速度继续；更大的值甩得更快；0 总是从静止起步。手指停住再抬起时无论设多少都从静止起步；用 Windows 键打开也总是从静止起步——这两种情况都不受这个设置影响。
+- CommitDistancePercent: 10
+  $name: Drag intent distance (% of travel)
+  $name:zh-CN: 拖动意图距离（占行程的百分比）
+  $description: How far a drag must travel toward the target before releasing commits it. A shorter pull springs back closed; a shorter close drag reverses back open. The same value applies on every taskbar side; a quick flick commits even when it is shorter.
+  $description:zh-CN: 拖动朝目标方向走多远，松手才算数。拉开不足这个距离会弹回关闭状态；收回不足这个距离会回弹重新打开。四个任务栏方向共用同一个值；快速一甩即使距离更短也会生效。
 - DiagnosticTrace: false
   $name: Write a diagnostic trace file
-  $description: >-
-    Writes the mod's decision lines to a log file in its storage folder, one
-    file per process (renderer.log in the Start menu host, bridge.log in
-    Explorer). Turn it on only when a maintainer or a bug report asks for it:
-    the trace is capped, but it is meant for diagnosis, not for everyday use.
-    Off, nothing is written to disk.
+  $name:zh-CN: 写入诊断跟踪文件
+  $description: Turns on the decision log described below. Leave it off for everyday use; a bug report or a maintainer will ask for it.
+  $description:zh-CN: 打开下文所述的决策日志。日常使用请保持关闭；只有在维护者或缺陷报告要求时才打开。
 */
 // ==/WindhawkModSettings==
 
@@ -113,29 +308,71 @@ and the full [limits and troubleshooting](https://github.com/Zhanyuanium/swipe-f
  *   APIs for Progress, and swipe_ipc_shared.h for the intents, executor
  *   commands and acks, the open generation, the controller direction and peer
  *   liveness. In explorer.exe (namespace bridge): twinui.pcshell.dll
- *   10.0.26100.9949 (the launcher singleton, ShowStartView, Dismiss, IsVisible,
+ *   fixed 10.0.26100.10068 (display string 9949; the launcher singleton,
+ *   ShowStartView, Dismiss, IsVisible,
  *   XamlLauncher::OnHotkeyInvoke, XamlLauncherState::OnStartShown/
  *   OnStartHidden/HideStartAndCortana, CStartExperienceManager::Show), the same
  *   channel from the other end.
  * [OUTPUT]: the panel's Progress through the one damped-spring settle, the
  *   reveal and dismiss follows, the coast and the geometry snapshot; the hidden
  *   executor window on explorer's launcher thread that runs the one shell call
- *   per command; one decision line and one executor line per trigger. Every
+ *   per command; one decision line and one executor line per trigger. One intent
+ *   is outstanding at a time: an admitted press waits in a four-entry FIFO until
+ *   the intent ack for the press before it (or its 1000 ms bound) and then decides
+ *   from the direction the controller published by then; an ack timeout reads
+ *   the Start side's `intentTaken` claim: a taken sequence is consumed and holds
+ *   the queue until its ack, an untaken current record with a live peer is
+ *   reserved (never overwritten), and only a moved record or a peer whose state
+ *   is gone is replayed. Admission reconciliation reads the same claim and holds
+ *   the slot on a claim found there.
+ *   A queue overflow drops the arriving press with the depth and keeps the
+ *   queue's order; a press still unpublished past its wait runs the shell's own
+ *   primitive under the executor guard. Every
  *   line goes through `TraceLog`: `Wh_Log` always, and the role's file only
- *   while the `DiagnosticTrace` setting is on. Wh_ModInit
+ *   while the `DiagnosticTrace` setting is on. The two interruption dates are
+ *   `motion sample` — the position and slope `TakeProgressNow` reads, once per
+ *   call under the composition lock (a grab logs one, `caller=pull`, and its
+ *   follow binds to it without taking again) — and `exec dismiss enter`, the QPC
+ *   instant
+ *   taken immediately before the launcher call and written after it returned.
+ *   Wh_ModInit
  *   selects exactly one role table from the host executable name
  *   (start::Role or bridge::Role), and the four Windhawk entry points forward
- *   to that table.
+ *   to that table. The bridge reads the loaded twinui fixed file version before
+ *   its one symbol attempt: any other image is refused with
+ *   `exec launcher layout unverified ... skipped=version` and no PDB fetch.
  * [POS]: the single shipping source. The two halves were two mods before 0.7.0
  *   and keep their two runtime lifetimes: explorer outlives a Start restart, and
  *   a touch-first open can reach the launcher before any Win or Start-button
  *   hook ran. The controller decides; the executor performs. The one shared rule
- *   is the suppression window: a close suppresses the retracted panel until the
- *   executor's dismiss has landed. The cloak read is tri-state (a failed read is
+ *   is the close record: one accepted close (serial, acceptance tick, the menu it
+ *   was accepted against, a phase and the repair bound) owns the retracted panel
+ *   until an ending retires it — the landing, a pull cancel, an external takeover,
+ *   a terminal repair, or the repair bound itself. No reader asks a clock whether
+ *   a close is in flight. The cloak read is tri-state (a failed read is
  *   unknown, never hidden), and a landing is bound to the open generation the
  *   dismiss command was stamped with — a close intent's zero is stamped with the
  *   section's current generation, and zero stays valid only while no open has
  *   been published. A fresh open cancels a still-queued command at the bridge.
+ *   The same cancel body serves an explicit open request — a press, or a band pull
+ *   the retract refused at or below the entry — through one recovery ticket, and
+ *   the tails differ because only one request has a finger: a press settles the
+ *   panel back from its live position, while a pull takes the retract over in one
+ *   take — the position is pinned and the follow binds to it on the same report,
+ *   keeping the finger-to-panel offset it took over rather than starting at the
+ *   open's entry — and a pull the retract had already hidden starts the ordinary
+ *   show at the entry and binds there. A transfer is refused when the
+ *   dismiss already
+ *   returned from the shell call with its hide unconfirmed, or its published
+ *   deadline has passed and the bridge may already be inside the call; a refusal
+ *   spends the contact's one grab opportunity and consumes it through the same
+ *   mute a down refused at admission gets. A close that has already ended is not
+ *   a refusal for a band down — the pull is the ordinary open of a closed menu,
+ *   and the finger is not swallowed where the key works — and a landing retires
+ *   no grant, so a contact still on its way to its own 24 DIP report keeps its
+ *   right. A close consumes every
+ *   contact already on the glass, and a landing serves no touch open of its own:
+ *   only the independently owed explicit request reopens.
  *   A landing the cloak never reports — the
  *   window was already hidden when `Dismiss` ran — is finished by the executor's
  *   own confirmation (`win close observed reason=confirmed-without-transition`),
@@ -202,20 +439,22 @@ and the full [limits and troubleshooting](https://github.com/Zhanyuanium/swipe-f
 // Shared-memory contract between the StartMenuExperienceHost-side controller and
 // the explorer-side bridge.
 //
-// Two processes, one session-local section and four auto-reset events. There is
+// Two processes, one session-local section and five auto-reset events. There is
 // no file, no mutex and no polling: every record carries its own sequence
 // number, and a reader accepts a record only when that number did not move
 // while the record was being copied.
 //
-//   Local\SwipeFor10Start_SingleMod_State      SwipeIpcState
-//   Local\SwipeFor10Start_SingleMod_Intent     auto-reset, bridge -> Start
-//   Local\SwipeFor10Start_SingleMod_IntentAck  auto-reset, Start -> bridge
-//   Local\SwipeFor10Start_SingleMod_Exec       auto-reset, Start -> bridge
-//   Local\SwipeFor10Start_SingleMod_ExecAck    auto-reset, bridge -> Start
+//   Local\SwipeFor10Start_SingleMod3_State      SwipeIpcState
+//   Local\SwipeFor10Start_SingleMod3_Intent     auto-reset, bridge -> Start
+//   Local\SwipeFor10Start_SingleMod3_IntentAck  auto-reset, Start -> bridge
+//   Local\SwipeFor10Start_SingleMod3_Exec       auto-reset, Start -> bridge
+//   Local\SwipeFor10Start_SingleMod3_ExecAck    auto-reset, bridge -> Start
+//   Local\SwipeFor10Start_SingleMod3_Capability auto-reset, bridge -> Start
 //
 // The names are session-local because both processes run as the same user in the
 // same session. There is no product version word: the ABI namespace *is* the
-// layout identity. A future incompatible layout changes the prefix, so an old
+// layout identity. The `3` marks the 232-byte layout that added `execCapable`; a
+// future incompatible layout changes the prefix again, so an old
 // pinned development image can never join this channel and a same-size change is
 // never reinterpreted across a staggered update. Only a single shipping mod
 // uses these names.
@@ -318,19 +557,31 @@ and the full [limits and troubleshooting](https://github.com/Zhanyuanium/swipe-f
 // alive and the tick is younger than kSwipePeerStaleMs: a clean disable is
 // immediate through peerState, and a crashed host is caught by the tick going
 // stale. That window is a detection budget, not a delivery guarantee.
+//
+// Executor capability (bridge -> Start): execCapable is one word. It is 1 only
+// while the bridge has an executor window created on the recorded launcher
+// thread, a started worker, a verified launcher layout and the show/dismiss
+// primitives that window will call. The bridge clears it on any loss - unload,
+// window destruction, worker exit, symbol refusal - and signals capabilityEvent.
+// The Start side publishes peerState=alive only while execCapable is 1 and
+// withdraws it when the word drops, so a mapping is never mistaken for a usable
+// executor. The word is a flag, not a record: the reader takes the steady value
+// and the event only says that it changed.
 
 constexpr wchar_t kSwipeIpcStateName[] =
-    L"Local\\SwipeFor10Start_SingleMod_State";
+    L"Local\\SwipeFor10Start_SingleMod3_State";
 constexpr wchar_t kSwipeIpcIntentEventName[] =
-    L"Local\\SwipeFor10Start_SingleMod_Intent";
+    L"Local\\SwipeFor10Start_SingleMod3_Intent";
 constexpr wchar_t kSwipeIpcIntentAckEventName[] =
-    L"Local\\SwipeFor10Start_SingleMod_IntentAck";
+    L"Local\\SwipeFor10Start_SingleMod3_IntentAck";
 constexpr wchar_t kSwipeIpcExecEventName[] =
-    L"Local\\SwipeFor10Start_SingleMod_Exec";
+    L"Local\\SwipeFor10Start_SingleMod3_Exec";
 constexpr wchar_t kSwipeIpcExecAckEventName[] =
-    L"Local\\SwipeFor10Start_SingleMod_ExecAck";
+    L"Local\\SwipeFor10Start_SingleMod3_ExecAck";
+constexpr wchar_t kSwipeIpcCapabilityEventName[] =
+    L"Local\\SwipeFor10Start_SingleMod3_Capability";
 
-constexpr uint32_t kSwipeIpcMagic = 0x53313053;  // 'S' '0' '1' 'S', LE
+constexpr uint32_t kSwipeIpcMagic = 0x53333053;  // 'S' '3' '0' 'S', LE
 
 // M3 intents, executor commands and acknowledgements.
 constexpr int32_t kSwipeIntentOpen = 0;
@@ -485,6 +736,19 @@ struct SwipeIpcState {
     volatile LONG peerTick;
     volatile LONG peerState;
     volatile LONG peerEpoch;
+
+    // Start -> bridge: the sequence of the intent the consumer has taken for
+    // processing. The Start side writes it before it acts, so a publisher whose
+    // ack timed out can tell "the controller has this record" from "the record
+    // is still untaken". One atomic word, not a seqlock: it is a claim, not a
+    // record with fields that must agree.
+    volatile LONG64 intentTaken;
+
+    // Bridge -> Start: 1 only while the executor can actually execute. The Start
+    // side requires it before it advertises a controller and before it drives a
+    // touch open or close; a press is never swallowed for a bridge that cannot
+    // perform the command. Written by the bridge, read by the Start side.
+    volatile LONG execCapable;
 };
 
 static_assert(offsetof(SwipeIpcState, magic) == 0, "layout");
@@ -524,7 +788,9 @@ static_assert(offsetof(SwipeIpcState, controllerTouch) == 200, "layout");
 static_assert(offsetof(SwipeIpcState, peerTick) == 204, "layout");
 static_assert(offsetof(SwipeIpcState, peerState) == 208, "layout");
 static_assert(offsetof(SwipeIpcState, peerEpoch) == 212, "layout");
-static_assert(sizeof(SwipeIpcState) == 216, "layout");
+static_assert(offsetof(SwipeIpcState, intentTaken) == 216, "layout");
+static_assert(offsetof(SwipeIpcState, execCapable) == 224, "layout");
+static_assert(sizeof(SwipeIpcState) == 232, "layout");
 
 struct SwipeIpcChannel {
     SwipeIpcState* state;
@@ -533,6 +799,7 @@ struct SwipeIpcChannel {
     HANDLE intentAckEvent;
     HANDLE execEvent;
     HANDLE execAckEvent;
+    HANDLE capabilityEvent;
 };
 
 // Reads a 64-bit field that the other process may write at any time.
@@ -709,6 +976,8 @@ inline bool SwipeIpcOpen(SwipeIpcChannel* channel, bool* created, DWORD* error) 
         CreateEventW(nullptr, FALSE, FALSE, kSwipeIpcExecEventName);
     HANDLE execAckEvent =
         CreateEventW(nullptr, FALSE, FALSE, kSwipeIpcExecAckEventName);
+    HANDLE capabilityEvent =
+        CreateEventW(nullptr, FALSE, FALSE, kSwipeIpcCapabilityEventName);
 
     *error = 0;
     channel->state = state;
@@ -717,6 +986,7 @@ inline bool SwipeIpcOpen(SwipeIpcChannel* channel, bool* created, DWORD* error) 
     channel->intentAckEvent = intentAckEvent;
     channel->execEvent = execEvent;
     channel->execAckEvent = execAckEvent;
+    channel->capabilityEvent = capabilityEvent;
     return true;
 }
 
@@ -741,6 +1011,9 @@ inline void SwipeIpcClose(SwipeIpcChannel* channel) {
     }
     if (channel->execAckEvent) {
         CloseHandle(channel->execAckEvent);
+    }
+    if (channel->capabilityEvent) {
+        CloseHandle(channel->capabilityEvent);
     }
     *channel = SwipeIpcChannel{};
 }
@@ -889,6 +1162,46 @@ inline bool SwipeIpcReadIntent(SwipeIpcChannel* channel, SwipeIpcIntent* out) {
     record.seq = sequence;
     *out = record;
     return sequence != 0;
+}
+
+// The consumer's claim: "I have this intent sequence and am about to act on it".
+// Written before the record is copied, so a publisher whose answer is late can
+// prove that a replay would be a second execution. 0 means no claim has been
+// made. A claim is not a lock: the publisher's abort below is what makes an
+// untaken record unreachable, and the consumer re-checks this word after its
+// copy before it acts.
+inline void SwipeIpcTakeIntent(SwipeIpcChannel* channel, LONG64 seq) {
+    if (channel->state && seq > 0) {
+        InterlockedExchange64(&channel->state->intentTaken, seq);
+    }
+}
+
+inline LONG64 SwipeIpcTakenIntent(SwipeIpcChannel* channel) {
+    return channel->state ? SwipeIpcLoad64(&channel->state->intentTaken) : 0;
+}
+
+// The raw sequence of the current intent record, or 0 when there is none. An odd
+// value is a record being written, or one the publisher aborted: it names no
+// intent and must not be claimed.
+inline LONG64 SwipeIpcIntentSequence(SwipeIpcChannel* channel) {
+    if (!channel->state) {
+        return 0;
+    }
+    const LONG64 sequence = SwipeIpcLoad64(&channel->state->intentSeq);
+    return (sequence & 1) != 0 ? 0 : sequence;
+}
+
+// Abandons the published intent `seq` so no consumer can take or copy it
+// afterwards. The counter is stepped to its odd state, which every reader
+// rejects; the next writer steps past it, so an aborted sequence is never
+// reused. True means the record was still `seq` and is now unreachable. False
+// means it had already moved: the caller must not replay.
+inline bool SwipeIpcAbortIntent(SwipeIpcChannel* channel, LONG64 seq) {
+    if (!channel->state || seq <= 0 || (seq & 1) != 0) {
+        return false;
+    }
+    return InterlockedCompareExchange64(&channel->state->intentSeq, seq + 1,
+                                        seq) == seq;
 }
 
 inline bool SwipeIpcAnswerIntent(SwipeIpcChannel* channel, LONG64 intentSeq,
@@ -1108,6 +1421,22 @@ inline uint32_t SwipeIpcPeerEpoch(SwipeIpcChannel* channel) {
                : 0;
 }
 
+// The published liveness words, for a diagnostic that has to say why a timeout
+// was replayed or treated as consumed. The reader that decides liveness is
+// SwipeIpcPeerAlive above; these are reads, not a second gate.
+inline int32_t SwipeIpcPeerState(SwipeIpcChannel* channel) {
+    return channel->state
+               ? InterlockedCompareExchange(&channel->state->peerState, 0, 0)
+               : kSwipePeerGone;
+}
+
+inline uint32_t SwipeIpcPeerTick(SwipeIpcChannel* channel) {
+    return channel->state
+               ? static_cast<uint32_t>(InterlockedCompareExchange(
+                     &channel->state->peerTick, 0, 0))
+               : 0;
+}
+
 // True while the Start side is attached and its tick is younger than `staleMs`.
 // The comparison clock is read here, after the tick, never passed in by the
 // caller: a tick published between the caller's own clock read and this call
@@ -1131,6 +1460,25 @@ inline bool SwipeIpcPeerAlive(SwipeIpcChannel* channel, uint32_t staleMs) {
         return false;
     }
     return now - tick < staleMs;
+}
+
+// The executor capability word. The bridge writes it only from the lifecycle
+// points that can add or remove a piece of the executor (window, worker,
+// symbols, unload); the Start side only reads it. The event is a wake, not the
+// fact: a reader that missed a signal still sees the steady value.
+inline void SwipeIpcPublishExecCapable(SwipeIpcChannel* channel, bool capable) {
+    if (!channel->state) {
+        return;
+    }
+    InterlockedExchange(&channel->state->execCapable, capable ? 1 : 0);
+    if (channel->capabilityEvent) {
+        SetEvent(channel->capabilityEvent);
+    }
+}
+
+inline bool SwipeIpcExecCapable(SwipeIpcChannel* channel) {
+    return channel->state != nullptr &&
+           InterlockedCompareExchange(&channel->state->execCapable, 0, 0) == 1;
 }
 #pragma clang diagnostic pop
 // ---- end swipe_ipc_shared.h ----
@@ -1375,6 +1723,12 @@ bool SwipeCloseIntentAllowed(uint32_t method) {
            method == kSwipeDismissMethodClickAwayEvidence;
 }
 
+// The release the two role-start lines name. Windhawk exposes no runtime read of
+// the mod's @version metadata, so this is the one authored copy; the metadata
+// block above and this constant change in the same commit. A role-start line that
+// says a different release is a bug, not history.
+constexpr wchar_t kModVersion[] = L"0.8.3";
+
 namespace start {
 
 
@@ -1507,6 +1861,14 @@ constexpr int kGestureStartSpeedDefault = 100;
 constexpr int kGestureStartSpeedMin = 0;
 constexpr int kGestureStartSpeedMax = 300;
 
+// The percentage of the panel's travel a release must cover toward the target
+// to commit. One value for every axis keeps the release rule the same on all
+// four taskbar sides; the clamp keeps a malformed setting from turning a tap
+// into a commit or demanding a full-panel drag.
+constexpr int kCommitDistancePercentDefault = 10;
+constexpr int kCommitDistancePercentMin = 1;
+constexpr int kCommitDistancePercentMax = 50;
+
 // Every gesture close ends in one executor dismiss at the end of its settle. The
 // dismiss is the bridge's Dismiss on the launcher thread: no key handler, no
 // explorer-side request and no re-arm exist. The settle runs first, so the panel
@@ -1526,11 +1888,6 @@ static_assert(static_cast<uint64_t>(kSettleMaxDuration.count()) <=
               "the close dismiss must run inside the restore suppression");
 
 // Gesture thresholds. Delta and Distance are DIP, velocity is DIP/ms.
-constexpr float kCommitDistanceFraction = 0.20f;
-// A vertical dismiss starts counting only once the list underneath has reached
-// its end, so the remaining drag is short by nature; 20% of the panel would ask
-// for a drag most people never make.
-constexpr float kCommitDistanceFractionVertical = 0.10f;
 constexpr float kCommitVelocity = 0.45f;
 constexpr float kScrollAbortPerp = 120.0f;
 constexpr float kScrollAbortRatio = 1.5f;
@@ -1625,13 +1982,22 @@ constexpr uint64_t kOpenCheckIntervalMs = 20;
 // to kSwipePeerTickIntervalMs (100) in the shared header. Ten wakes a second on
 // this event alone, none of them a timer, are the price of a live controller.
 constexpr uint64_t kPeerHeartbeatMs = kSwipePeerTickIntervalMs;
+// Startup-only retry for a host whose renderer event could not be created: the
+// readiness check runs once per wakeup for this many heartbeats, then the input
+// thread parks. It is never a steady poll (2 s, once per activation).
+constexpr int kRendererWaitRetries = 20;
 
-// The input thread's root-symbol retry interval (StartUI_'s PrepareRootElement).
-// It is also the wait planner's bootstrap deadline: while the answer is neither
-// ready nor terminally refused, the thread has to come back for the probe, so a
-// module that loads late is still noticed. See kRootPendingDeadlineMs for the
-// budget this retry runs inside.
+// The input thread's module-wait interval for StartUI_.dll. It is also the wait
+// planner's bootstrap deadline: while the answer is neither ready nor terminally
+// refused, the thread comes back to see whether the module has loaded.
+// kRootPendingDeadlineMs bounds that wait; HookSymbols itself is attempted once.
 constexpr uint64_t kRootProbeMs = 100;
+
+// A fallback for a channel whose capability event could not be created: while
+// the peer is unadvertised and the bridge has no capability, come back at this
+// cadence to read the word. With the event present this deadline is never
+// armed; capability changes wake the thread directly.
+constexpr uint64_t kCapabilityProbeMs = 100;
 
 // The fallback poll under the cloak event. A WinEvent can be missed (a dropped
 // message, a hook installed after the transition); a menu left in the wrong
@@ -1993,6 +2359,9 @@ std::atomic<bool> g_stopDismissCallback{false};
 // returns at once until the role actually initialised.
 bool g_initialised = false;
 
+// First tick of RoleBeforeUninit, for the one unload-duration line at the end.
+uint64_t g_unloadStartTick = 0;
+
 // Signalled when the counted entry count reaches zero. Created before the first
 // lease, waited on at unload. See ModuleEntryLease.
 HANDLE g_moduleEntriesGone = nullptr;
@@ -2017,10 +2386,69 @@ std::atomic<DWORD> g_hidThreadId{0};
 // the compositor or the dispatcher is counted from before it can run.
 // ---------------------------------------------------------------------------
 std::atomic<int> g_moduleEntryCount{0};
+// Set by the first UI-turn lease ever constructed: a dispatcher turn or the
+// settle batch. Those release inside a destructor whose tail needs the empty
+// drain turn when no window exists. The root hook uses the admission lock
+// below, not this count. The first turn logs once, so a trace shows the guard's
+// flag is live.
+std::atomic<bool> g_uiTurnEverUsed{false};
 
+// The root hook's admission gate. The hook takes it shared; unload takes it
+// exclusive before it chooses a teardown, waits for an in-flight hook, and holds
+// it through the teardown so a late hook cannot register. It is a lock, not a
+// counted lease: an admission hook must not depend on a teardown that has not
+// run yet.
+SRWLOCK g_rootAdmissionLock = SRWLOCK_INIT;
+
+class RootAdmissionShared {
+  public:
+    RootAdmissionShared() {
+        if (TryAcquireSRWLockShared(&g_rootAdmissionLock)) {
+            held_ = true;
+            return;
+        }
+        // The only exclusive writer is the unload, which sets g_unloading before
+        // it takes the lock. Returning without it is the late-hook path; the
+        // flag check in the hook then registers nothing. A failed try with the
+        // flag clear is not expected, so wait for the shared lock.
+        if (!g_unloading.load(std::memory_order_relaxed)) {
+            AcquireSRWLockShared(&g_rootAdmissionLock);
+            held_ = true;
+        }
+    }
+    ~RootAdmissionShared() {
+        if (held_) {
+            ReleaseSRWLockShared(&g_rootAdmissionLock);
+        }
+    }
+    RootAdmissionShared(const RootAdmissionShared&) = delete;
+    RootAdmissionShared& operator=(const RootAdmissionShared&) = delete;
+
+  private:
+    bool held_ = false;
+};
+
+class RootAdmissionExclusive {
+  public:
+    RootAdmissionExclusive() {
+        AcquireSRWLockExclusive(&g_rootAdmissionLock);
+    }
+    ~RootAdmissionExclusive() {
+        ReleaseSRWLockExclusive(&g_rootAdmissionLock);
+    }
+    RootAdmissionExclusive(const RootAdmissionExclusive&) = delete;
+    RootAdmissionExclusive& operator=(const RootAdmissionExclusive&) = delete;
+};
+
+// A UI-turn lease: one dispatcher turn or the settle batch. Both increment the
+// same count and release it the same way. Only this kind sets the no-window
+// guard, because only its destructor tail needs the drain barrier.
 class ModuleEntryLease {
   public:
     ModuleEntryLease() {
+        if (!g_uiTurnEverUsed.exchange(true, std::memory_order_release)) {
+            TraceLog(L"module ui turn entry first used");
+        }
         g_moduleEntryCount.fetch_add(1, std::memory_order_seq_cst);
     }
     ~ModuleEntryLease() {
@@ -2089,6 +2517,19 @@ void LoadGestureStartSpeed() {
     TraceLog(L"settle start speed=%d%%", percent);
 }
 
+// The release threshold as a percentage of the panel's travel. One value for
+// every axis; Wh_ModInit and Wh_ModSettingsChanged write it, and the release
+// decision reads it once.
+std::atomic<int> g_commitDistancePercent{kCommitDistancePercentDefault};
+
+void LoadCommitDistance() {
+    const int percent = std::clamp(Wh_GetIntSetting(L"CommitDistancePercent"),
+                                   kCommitDistancePercentMin,
+                                   kCommitDistancePercentMax);
+    g_commitDistancePercent.store(percent, std::memory_order_relaxed);
+    TraceLog(L"gesture commit distance=%d%%", percent);
+}
+
 // ---------------------------------------------------------------------------
 // Composition state
 //
@@ -2123,12 +2564,12 @@ std::shared_ptr<ModuleEntryLease> g_settleLease;
 // The panel controller
 //
 // One object owns the panel's motion: the scalar the composition expression
-// reads, the target the current motion is heading for, the last measured or
-// committed speed in Progress per millisecond, and the phase that says which
-// motion owns the value. The animation record (samples, start, duration) and the
-// coast's line are the controller's evidence: the base value is only a target
-// while a motion runs, and `TakeProgressNow` is the one reader that turns that
-// evidence into where the panel actually is.
+// reads and the phase that says which motion owns the value. The animation record
+// (samples, start, duration) and the coast's line are the controller's evidence:
+// the base value is only a start while a motion runs, and `TakeProgressNow` is
+// the one reader that turns that evidence into where the panel actually is. The
+// end value and the seam speed live in the arguments and in the animation
+// record; no duplicate member mirrors them.
 //
 // The four intents are the only way an input adapter changes the panel. M1 keeps
 // the touch adapter as the only caller; the non-touch paths still use their old
@@ -2161,8 +2602,6 @@ struct PanelController {
     std::atomic<float> progress{kProgressRest};
     std::atomic<bool> coasting{false};
     // Guarded by g_compositionMutex, like the animation record below.
-    float target = kProgressRest;
-    float velocity = 0.0f;  // Progress per millisecond, signed along the axis
     PanelPhase phase = PanelPhase::Idle;
     float samples[kSettleMaxFrames] = {};
     int frames = 0;
@@ -2355,11 +2794,6 @@ NO_DESTROY wux::FrameworkElement g_sizeRoot{nullptr};     // UI thread only
 
 std::atomic<bool> g_dismissSettling{false};
 std::atomic<uint32_t> g_dismissSerial{0};
-// Set whenever this mod starts a close itself: the committed dismiss and the
-// cancelled reveal both set it when their settle starts. ServiceRootVisibility
-// must not read the still-open window as a reopen while the close is in flight.
-// 0 means no close of this mod is pending.
-std::atomic<uint64_t> g_suppressRestoreUntil{0};
 
 // ---------------------------------------------------------------------------
 // The gesture close
@@ -2369,11 +2803,15 @@ std::atomic<uint64_t> g_suppressRestoreUntil{0};
 // it does for a keyboard close, and the next Windows press opens the menu. The
 // settle runs first, so the panel is off screen when the window hides.
 //
-// A new pull that starts during the settle cancels the close: the armed dismiss
-// is dropped before the bridge is asked, so no Dismiss runs and the menu stays
-// open. The pull generation is sampled at the release and checked once when the
-// dismiss would run; the cancel is published the moment the pull begins, not at
-// the dismiss deadline. This is one scheduled dismiss, not a request file.
+// A new pull that qualifies during the settle cancels the close: the armed
+// dismiss is dropped before the bridge is asked, so no Dismiss runs and the menu
+// stays open. The pull generation is sampled at the release and checked once when
+// the dismiss would run; a close that a pull interrupts is cancelled at the
+// qualified report, not at the dismiss deadline. That path serves every close this
+// mod still owns — keyboard, Start button, click-away and gesture — because every
+// one of them is a command the bridge holds in an armed timer until its deadline
+// (see CancelCloseForQualifiedPull). This is one scheduled dismiss, not a request
+// file.
 // ---------------------------------------------------------------------------
 enum class CloseKind {
     None,
@@ -2381,10 +2819,67 @@ enum class CloseKind {
     RevealCancel,
 };
 
-// A pull is a contact that starts in the taskbar edge band and becomes a reveal
-// candidate (BeginEdgeCandidate). The counter names the pull generation: a close
-// released under one generation is dropped when a later pull exists by the time
-// its dismiss would run.
+// ---------------------------------------------------------------------------
+// The close record
+// ---------------------------------------------------------------------------
+//
+// A close is an identity, not an age. The suppression window used to answer "is
+// a close in flight?" from a clock, `tick < accepted + 600 ms`, and every reader
+// — the down's admission, the follow's activation, both idle holds, the unhealed
+// rule — got a duration instead of a state. A hide that arrived late was then
+// healed open by a window that had already expired, and a settle that never
+// started kept the panel unreadable for the whole window.
+//
+// One record, written and read only by the input thread, answers for both close
+// families (the intent close and the gesture close):
+//
+// - `serial` is monotonic per accepted close;
+// - `acceptedTick` is when the ownership was taken;
+// - `openTick`/`openGeneration` are the menu it was accepted against, read from
+//   the open record at that instant. They are diagnostics: a landing is
+//   identified by its dismiss command and its open generation, never by this
+//   record;
+// - `phase` is the state every reader asks about;
+// - `repairAt` is the bound the suppression window already carried, and the only
+//   clock the record has: a close whose landing has not arrived by then ends as a
+//   repair (`RepairExpiredClose`).
+//
+// The tick fields are data. No reader derives its answer from them: a duration is
+// not a state, and the measured close lands 562-593 ms after the ownership
+// (docs/limits.md) — 7 ms inside the 600 ms window at the worst — so a window can
+// expire under a close that is still performing, and a close that never started
+// can hold one open.
+enum class ClosePhase {
+    Settling,      // the retract runs; this side has not published its dismiss
+    AwaitingHide,  // the dismiss is published; the shell's hide is ahead
+    Done,          // no close of this mod owns the panel
+};
+
+struct CloseRecord {
+    ClosePhase phase = ClosePhase::Done;
+    uint32_t serial = 0;
+    uint64_t acceptedTick = 0;
+    uint32_t openTick = 0;
+    uint64_t openGeneration = 0;
+    uint64_t repairAt = 0;
+    CloseKind kind = CloseKind::None;
+};
+
+CloseRecord g_close;         // input thread only
+uint32_t g_closeSerial = 0;  // input thread only
+
+// The transitions are defined with the close state itself, after everything they
+// touch. The gesture path accepts its close before its settle starts, so the ones
+// it calls are declared here.
+void TakeCloseOwnership(CloseKind kind, uint64_t tickMs, bool contactStillDown);
+void EndClose(const wchar_t* reason);
+void ReleaseExecutorOwnership();
+
+// A pull is a contact that becomes a reveal candidate (BeginEdgeCandidate): it
+// starts in the taskbar edge band, or it grabs the surface a close still shows.
+// The counter names the pull generation: a close released under one generation is
+// dropped when a later pull exists by the time its dismiss would run. A refused
+// grab does not advance it: no pull owns anything then.
 uint32_t g_pullSerial = 0;  // input thread only
 
 // The one dismiss slot. `g_pendingTapPull` is the pull generation sampled when
@@ -2398,10 +2893,14 @@ uint32_t g_pendingTapPull = 0;
 // Reports which of the two close schedules a cancel actually dropped: the local
 // gesture deadline (`g_pendingTapTick`) and the executor dismiss command. The
 // name says what it counts; `CancelCloseSchedules` is the one caller that acts on
-// both, and the local-slot-only path is a separate operation.
+// both, and the local-slot-only path is a separate operation. `commandSeq` is the
+// revoked command's sequence: the bridge may already have read the record and be
+// inside the shell's `Dismiss` call, so the close it belongs to can still land and
+// the canceller's recovery ticket has to name it.
 struct CloseScheduleCancel {
     bool slot = false;
     bool command = false;
+    LONG64 commandSeq = 0;
 };
 
 // Clearing one schedule and cancelling both are different operations: a landing
@@ -2421,6 +2920,11 @@ void ScheduleCloseTap(CloseKind kind, uint64_t delayMs) {
 }
 
 std::atomic<HWND> g_coreHwnd{nullptr};
+// The mod's own message-only window on the XAML UI thread. It is the unload's
+// one rendezvous: the teardown and the destroy messages are sent to it, and the
+// CoreWindow is only read for the cloak and bounds. Created from
+// PrepareRootElement before Loaded; never subclassing a shell window.
+std::atomic<HWND> g_uiRendezvousHwnd{nullptr};
 // Resolved in Wh_ModInit. A runtime resolve keeps the mod loadable without
 // dwmapi.dll in the import table.
 std::atomic<DwmGetWindowAttribute_t> g_dwmGetWindowAttribute{nullptr};
@@ -2639,17 +3143,18 @@ std::atomic<uint64_t> g_pendingDismissExecAt{0};
 std::atomic<LONG64> g_pendingShowExec{0};
 std::atomic<uint64_t> g_pendingShowUntil{0};
 LONG64 g_lastIntentSeq = 0;  // input thread only; seeded by OpenIpcChannel
-// An open intent that cancelled a close whose window was still on screen. The
-// window keeps showing (the local dismiss slot and the executor command are
-// dropped), but the dismiss can already be inside the shell's Dismiss call when
-// the press lands. That close still lands, so `win close observed` reissues the
-// same open once.
+// An explicit open request — a press, or the qualified band pull a retract
+// refused — that cancelled a close whose window was still on screen. The window
+// keeps showing (the local dismiss slot and the executor command are dropped),
+// but the dismiss can already be inside the shell's Dismiss call when the request
+// lands. That close still lands, so `win close observed` reissues the same open
+// once.
 //
 // The ticket is bound to the close it belongs to, not to "a landing": openTick is
 // the low 32 bits of the tick the menu's open record published, captured when the
 // cancel ran; dismissSeq is the executor command it revoked (0 when the close had
 // none yet). A landing for a different menu can therefore never serve it. Set by
-// the open-intent cancel path, cleared by a new close, an external takeover, a
+// either explicit open request, cleared by a new close, an external takeover, a
 // terminal answer for its sequence, or the landing that consumes it.
 struct CloseCancelTicket {
     bool pending = false;
@@ -2657,9 +3162,9 @@ struct CloseCancelTicket {
     LONG64 dismissSeq = 0;
     // The instant after which the revoked dismiss can no longer land: its
     // scheduled deadline plus the publisher's budget plus the confirmation
-    // probe. A landing after that is not this press's close — the command either
-    // ran (and its own landing or confirmation has already spoken) or it was
-    // cancelled before entering the shell.
+    // probe. A landing after that is not this request's close — the command
+    // either ran (and its own landing or confirmation has already spoken) or it
+    // was cancelled before entering the shell.
     uint64_t expireAt = 0;
 };
 CloseCancelTicket g_intentCancel;  // input thread only
@@ -2937,9 +3442,9 @@ void PublishPanelOwnership();
 extern bool g_commitNeedsProgressReset;
 
 // Defined with the gesture state below: both close families open the same
-// ownership state (no session drives Progress, and the suppression window is
-// open) through this one helper.
-void TakeCloseOwnership(uint64_t tickMs, bool contactStillDown);
+// ownership state (no session drives Progress, and one accepted close record)
+// through this one helper, before their settle's first frame.
+void TakeCloseOwnership(CloseKind kind, uint64_t tickMs, bool contactStillDown);
 
 // Defined with the visibility service below: the one close-landing body, run by a
 // cloak transition and by the executor's confirmation when the window is already
@@ -2962,6 +3467,12 @@ const wchar_t* CloseKindName(CloseKind kind);
 // Defined with the cloaked-window cache below; the debug `state` command reads
 // the window's cloak state on demand.
 bool StartWindowIsOpen();
+
+// Defined with the reveal mapping below: the finger's absolute mapped Progress
+// and the panel trail it meets. The qualified pull reads it at the cancel report
+// to keep the retract's offset for the takeover.
+float RevealProgressDip(const GestureGeometry& geometry, float distance, float x,
+                        float y, float& panelTrailOut);
 
 // ---------------------------------------------------------------------------
 // Composition helpers
@@ -3065,8 +3576,6 @@ bool ShowAtRest() {
         g_panel.coasting.store(false, std::memory_order_relaxed);
         g_state.InsertScalar(L"Progress", kProgressRest);
         g_panel.progress.store(kProgressRest, std::memory_order_relaxed);
-        g_panel.target = kProgressRest;
-        g_panel.velocity = 0.0f;
         g_panel.phase = PanelPhase::Idle;
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Composition reset failed: %08X %s", e.code(),
@@ -3103,8 +3612,6 @@ bool InsertProgress(float progress) {
         }
         g_state.InsertScalar(L"Progress", progress);
         g_panel.progress.store(progress, std::memory_order_relaxed);
-        g_panel.target = progress;
-        g_panel.velocity = 0.0f;
         g_panel.phase = PanelPhase::Drag;
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Progress update failed: %08X %s", e.code(),
@@ -3170,7 +3677,6 @@ bool AnimateProgressTo(float to, std::chrono::milliseconds duration,
         g_state.StartAnimation(L"Progress", animation);
         g_panel.progress.store(std::clamp(to, 0.0f, 1.0f),
                             std::memory_order_relaxed);
-        g_panel.target = std::clamp(to, 0.0f, 1.0f);
         g_panel.phase = PanelPhase::Settle;
         // This animation replaces whatever owned Progress: an older batch's
         // completion must not stop it, and no dismiss settle is still running.
@@ -3203,14 +3709,23 @@ bool AnimateProgressTo(float to, std::chrono::milliseconds duration,
 
 // Where the linear coast is at qpcNow: from + (to - from) * elapsed / duration.
 // Exact, because the animation has no easing and its start time is known here.
-float CoastValueAt(uint64_t qpcNow) {
+// `slopeOut`, when given, is the line's signed speed in Progress per ms; it is 0
+// once the line has run out. Caller holds g_compositionMutex.
+float CoastValueAt(uint64_t qpcNow, float* slopeOut = nullptr) {
+    const uint64_t duration = static_cast<uint64_t>(kCoastDuration.count());
+    if (slopeOut) {
+        *slopeOut = (g_panel.coastTo - g_panel.coastFrom) /
+                    static_cast<float>(duration);
+    }
     if (qpcNow <= g_panel.coastStartQpc) {
         return g_panel.coastFrom;
     }
 
-    const uint64_t duration = static_cast<uint64_t>(kCoastDuration.count());
     const uint64_t elapsed = qpcNow - g_panel.coastStartQpc;
     if (elapsed >= duration) {
+        if (slopeOut) {
+            *slopeOut = 0.0f;
+        }
         return g_panel.coastTo;
     }
 
@@ -3222,17 +3737,20 @@ float CoastValueAt(uint64_t qpcNow) {
 // g_panel.samples, equally spaced and linear, so the value is one interpolation
 // between two of them. Once the duration has passed the answer is the last
 // sample, which is the target the animation was handed and where the panel
-// actually is. Caller holds g_compositionMutex.
-float SettleValueAt(uint64_t qpcNow) {
+// actually is. `slopeOut`, when given, is the slope of that interpolation in
+// Progress per ms — the two samples' difference over their spacing — and 0 once
+// the curve has reached its end. Caller holds g_compositionMutex.
+float SettleValueAt(uint64_t qpcNow, float* slopeOut = nullptr) {
+    if (slopeOut) {
+        *slopeOut = 0.0f;
+    }
     if (g_panel.frames < 2 || g_panel.durationMs == 0) {
         return std::clamp(g_panel.progress.load(std::memory_order_relaxed), 0.0f,
                           1.0f);
     }
-    if (qpcNow <= g_panel.startQpc) {
-        return std::clamp(g_panel.samples[0], 0.0f, 1.0f);
-    }
 
-    const uint64_t elapsed = qpcNow - g_panel.startQpc;
+    const uint64_t elapsed =
+        qpcNow > g_panel.startQpc ? qpcNow - g_panel.startQpc : 0;
     if (elapsed >= g_panel.durationMs) {
         return std::clamp(g_panel.samples[g_panel.frames - 1], 0.0f, 1.0f);
     }
@@ -3245,6 +3763,12 @@ float SettleValueAt(uint64_t qpcNow) {
     const float value =
         g_panel.samples[index] +
         (g_panel.samples[index + 1] - g_panel.samples[index]) * fraction;
+    if (slopeOut) {
+        const double spacing =
+            static_cast<double>(g_panel.durationMs) / (g_panel.frames - 1);
+        *slopeOut = static_cast<float>(
+            (g_panel.samples[index + 1] - g_panel.samples[index]) / spacing);
+    }
     return std::clamp(value, 0.0f, 1.0f);
 }
 
@@ -3274,6 +3798,9 @@ float TakeProgressNow(const wchar_t* caller) {
     if (!g_state) {
         // No renderer, so no animation can be on screen and the resting value is
         // the only answer that cannot be a stale target.
+        TraceLog(L"motion sample caller=%s phase=%s p=%.3f v=%.3f qpc=%llu",
+                caller, L"none", kProgressRest, 0.0f,
+                static_cast<unsigned long long>(qpcNow));
         return kProgressRest;
     }
 
@@ -3286,13 +3813,26 @@ float TakeProgressNow(const wchar_t* caller) {
         // behind (ShowAtRest, StopCoast, the take itself and every direct insert
         // write the value first). With no renderer there is no recording at all,
         // and the resting value 1 is the only answer that cannot be a target.
-        return std::clamp(g_panel.progress.load(std::memory_order_relaxed), 0.0f,
-                          1.0f);
+        const float resting =
+            std::clamp(g_panel.progress.load(std::memory_order_relaxed), 0.0f,
+                       1.0f);
+        TraceLog(L"motion sample caller=%s phase=%s p=%.3f v=%.3f qpc=%llu",
+                caller, L"rest", resting, 0.0f,
+                static_cast<unsigned long long>(qpcNow));
+        return resting;
     }
 
+    float slope = 0.0f;
     const float value =
-        std::clamp(coasting ? CoastValueAt(qpcNow) : SettleValueAt(qpcNow),
+        std::clamp(coasting ? CoastValueAt(qpcNow, &slope)
+                            : SettleValueAt(qpcNow, &slope),
                    0.0f, 1.0f);
+    // What the takeover read, at the instant it read it: `p` is the value pinned
+    // below, `v` the signed slope in Progress per ms, `qpc` the one clock read the
+    // value came from. One line per call, under the same lock as the take.
+    TraceLog(L"motion sample caller=%s phase=%s p=%.3f v=%.3f qpc=%llu", caller,
+            coasting ? L"coast" : L"settle", value, slope,
+            static_cast<unsigned long long>(qpcNow));
     // A settle taken over at its very start is the shape of a dead open: the
     // animation that should lift the panel is stopped a few milliseconds in and
     // the hidden rest is pinned as the base. Rare and diagnostic.
@@ -3321,8 +3861,6 @@ float TakeProgressNow(const wchar_t* caller) {
     g_panel.frames = 0;
     g_panel.durationMs = 0;
     g_panel.coasting.store(false, std::memory_order_relaxed);
-    g_panel.target = value;
-    g_panel.velocity = 0.0f;
     g_panel.phase = PanelPhase::Idle;
     RevokeDismissBatchLocked();
     InvalidateDismissBatchLocked();
@@ -3385,7 +3923,6 @@ bool ProgressMotionActive() {
         if (g_panel.phase == PanelPhase::Settle ||
             g_panel.phase == PanelPhase::Coast) {
             g_panel.phase = PanelPhase::Idle;
-            g_panel.velocity = 0.0f;
         }
         return false;
     }
@@ -3395,7 +3932,6 @@ bool ProgressMotionActive() {
     if (elapsed >= g_panel.durationMs) {
         if (g_panel.phase == PanelPhase::Settle) {
             g_panel.phase = PanelPhase::Idle;
-            g_panel.velocity = 0.0f;
         }
         return false;
     }
@@ -3446,9 +3982,6 @@ bool StartCoast(float from, float to) {
     g_panel.coastTo = to;
     g_panel.coastStartQpc = qpcNow;
     g_panel.coasting.store(true, std::memory_order_relaxed);
-    g_panel.target = to;
-    g_panel.velocity =
-        (to - from) / static_cast<float>(kCoastDuration.count());
     g_panel.phase = PanelPhase::Coast;
     return true;
 }
@@ -3481,7 +4014,6 @@ bool StopCoast(float& value) {
         InvalidateDismissBatchLocked();
         g_state.InsertScalar(L"Progress", value);
         g_panel.progress.store(value, std::memory_order_relaxed);
-        g_panel.target = value;
         g_panel.phase = PanelPhase::Drag;
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Progress coast stop failed: %08X %s", e.code(),
@@ -3501,14 +4033,12 @@ bool StopCoast(float& value) {
 // The four intents. Each records what the controller is doing before the motion
 // itself starts, so a diagnostic can name the phase without reconstructing it
 // from the animation record. A caller never waits for a previous motion: the
-// value the panel has now is the value the animation was handed.
+// value the panel has now is the value the animation was handed. The end value
+// and the seam speed are the caller's arguments and the log's; nothing is kept
+// on the controller besides the phase.
 void PanelController::Begin(const float* position) {
     {
         std::lock_guard lock(g_compositionMutex);
-        if (position) {
-            target = std::clamp(*position, 0.0f, 1.0f);
-        }
-        velocity = 0.0f;
         phase = PanelPhase::Drag;
     }
     if (position) {
@@ -3525,7 +4055,6 @@ bool PanelController::Move(float position) {
         return false;
     }
     std::lock_guard lock(g_compositionMutex);
-    target = value;
     phase = PanelPhase::Drag;
     return true;
 }
@@ -3533,8 +4062,6 @@ bool PanelController::Move(float position) {
 void PanelController::End(float to, float endVelocity) {
     {
         std::lock_guard lock(g_compositionMutex);
-        target = std::clamp(to, 0.0f, 1.0f);
-        velocity = endVelocity;
         phase = PanelPhase::Settle;
     }
     TraceLog(L"panel intent=end progress=%.3f velocity=%.2f target=%.0f",
@@ -3548,8 +4075,6 @@ void PanelController::End(float to, float endVelocity) {
 void PanelController::Commit(float to) {
     {
         std::lock_guard lock(g_compositionMutex);
-        target = std::clamp(to, 0.0f, 1.0f);
-        velocity = 0.0f;
         phase = PanelPhase::Settle;
     }
     TraceLog(L"panel intent=commit progress=%.3f target=%.0f",
@@ -3567,7 +4092,8 @@ void PanelController::Commit(float to) {
 // One generator, two parameter sets. The style setting only picks the damping
 // ratio; everything below runs once for both:
 //
-// - Open and close are exact mirrors, because the spring works in normalized
+// - The gesture open and close are exact mirrors, because the spring works in
+//   normalized
 //   travel: y(0) = 0, y(inf) = 1, and y'(0) = y0 is the scaled release speed
 //   divided by the travel left. The sign of the settle direction cancels there,
 //   because (to - from) carries it; the spring always relaxes toward its target.
@@ -3621,11 +4147,12 @@ float SpeedTowardDip(float progressPerMs, float from, float to, float distance) 
 
 // One generator, two consumers. `BuildSpringSamples` fills the polyline for a
 // damped-spring move from `start` to `target`; the gesture outcomes and the
-// keyboard open use it directly, and the shell-triggered close uses it to build
-// the keyboard open's curve and plays that backwards. One formula, so the open,
-// the gesture close and the shell-triggered close cannot drift apart.
+// keyboard open use it directly, and the shell-triggered close builds the
+// keyboard open's curve and applies it in the closing direction. One formula, so
+// the open, the gesture close and the shell-triggered close cannot drift apart.
 //
-// - Open and close are exact mirrors, because the spring works in normalized
+// - The gesture open and close are exact mirrors, because the spring works in
+//   normalized
 //   travel: y(0) = 0, y(inf) = 1, and y'(0) = y0 is the scaled release speed
 //   divided by the travel left. The sign of the settle direction cancels there,
 //   because (to - from) carries it; the spring always relaxes toward its target.
@@ -3793,14 +4320,15 @@ bool BeginGestureSettle(float from, float to, float velocity,
 }
 
 // The three shell-triggered closes — the Windows key, the Start button and a
-// click-away — use the keyboard open's curve played from the live position to 0:
-// the same spring generated for 0 -> 1 and sampled backwards
-// (value(i) = start * openY(steps - i)), no seam speed, and the open's own
-// full-travel duration. The close therefore starts almost still and accelerates
-// into the edge. The gesture close is not this: it keeps following the finger
-// and settles with its release spring (`BeginGestureSettle`).
-bool BeginMirrorCloseSettle(float from, std::chrono::milliseconds& duration,
-                            uint32_t* serialOut = nullptr) {
+// click-away — use the keyboard open's spring in the closing direction: value(i)
+// = start * (1 - openY(i)), with the final sample at 0. The close therefore moves
+// from its first frames and decelerates into the edge; playing the open samples
+// backwards put the fast head at the tail and produced a freeze followed by a
+// snap. The same full-travel duration, style and dismiss lead are kept. The
+// gesture close is not this: it keeps following the finger and settles with its
+// release spring (`BeginGestureSettle`).
+bool BeginShellCloseSettle(float from, std::chrono::milliseconds& duration,
+                           uint32_t* serialOut = nullptr) {
     const float start = std::clamp(from, 0.0f, 1.0f);
     g_panel.Commit(0.0f);
 
@@ -3824,7 +4352,7 @@ bool BeginMirrorCloseSettle(float from, std::chrono::milliseconds& duration,
                                          openSamples);
     float samples[kSettleMaxFrames] = {};
     for (int i = 0; i <= steps; ++i) {
-        samples[i] = std::clamp(start * openSamples[steps - i], 0.0f, 1.0f);
+        samples[i] = std::clamp(start * (1.0f - openSamples[i]), 0.0f, 1.0f);
     }
     samples[steps] = 0.0f;
 
@@ -3845,29 +4373,28 @@ const wchar_t* CloseKindName(CloseKind kind) {
 // The tail every close shares: ownership and the dismiss armed for the end of
 // the settle. The dismiss and the reveal cancel both come through here.
 void ArmGestureClose(CloseKind kind, std::chrono::milliseconds duration) {
-    // A finger that has just lifted is already leaving the panel, so this close
-    // does not have to mute a contact that will keep reporting.
-    TakeCloseOwnership(GetTickCount64(), false);
     ScheduleCloseTap(kind, static_cast<uint64_t>(duration.count()));
 }
 
 // The commit decision both gesture families make at release. The travel at
 // release and the session average are the whole-gesture tests this mod was
 // measured against; only the settle's seam reads the end speed. One function so
-// the dismiss and the reveal cannot drift apart on the thresholds.
+// the dismiss and the reveal cannot drift apart on the thresholds. The travel
+// threshold is the `CommitDistancePercent` setting, the same value on every
+// axis; a fast flick still commits through the average-velocity rule.
 //
 // `travelDip` is the release travel away from the start, `elapsedMs` the session
 // length, and `distance` the panel travel the threshold is a fraction of.
 bool ReleaseCommits(bool allowCommit, float travelDip, uint64_t elapsedMs,
-                    float distance, int32_t axis) {
+                    float distance) {
     if (!allowCommit || !(distance > 0.0f)) {
         return false;
     }
     const float averageVelocity =
         travelDip / static_cast<float>(elapsedMs > 0 ? elapsedMs : 1);
-    const float threshold = IsHorizontalAxis(axis)
-                                ? kCommitDistanceFraction
-                                : kCommitDistanceFractionVertical;
+    const float threshold =
+        static_cast<float>(g_commitDistancePercent.load(
+            std::memory_order_relaxed)) / 100.0f;
     return travelDip > threshold * distance ||
            averageVelocity > kCommitVelocity;
 }
@@ -3880,17 +4407,28 @@ struct GestureClose {
     bool started = false;
 };
 
-// The close every gesture path runs, from the value the coast left. A close
-// exists only once its settle started: the suppression, the closing direction and
-// the armed dismiss follow that animation, never a failed one. The dismiss is armed
-// for the end of the settle, so the panel is off screen when the shell hides the
+// The close every gesture path runs, from the value the coast left. The close is
+// accepted before its settle's first frame: the record, the closing direction and
+// the consumed contacts are in place for the whole retract, so no frame and no
+// report can see a panel leaving with no close behind it. The dismiss is armed for
+// the end of the settle, so the panel is off screen when the shell hides the
 // window. The committed dismiss wraps this call in its settle batch; the reveal
 // cancel calls it directly.
+//
+// A settle that fails leaves an accepted close with no retract, so the record ends
+// as a refusal (the caller's AbandonClose restores the panel). A finger that has
+// just lifted is already leaving the panel, so this close does not mute a contact
+// that will keep reporting.
 GestureClose BeginGestureClose(float from, float velocity, CloseKind kind,
                                uint32_t* serialOut = nullptr) {
     GestureClose close;
+    TakeCloseOwnership(kind, GetTickCount64(), false);
     std::chrono::milliseconds duration{0};
     if (!BeginGestureSettle(from, 0.0f, velocity, duration, serialOut)) {
+        // No retract: the record ends and the ownership it published goes back,
+        // so the next press reads the cloak instead of a close that never ran.
+        EndClose(L"no-settle");
+        ReleaseExecutorOwnership();
         return close;
     }
     close.started = true;
@@ -3900,14 +4438,12 @@ GestureClose BeginGestureClose(float from, float velocity, CloseKind kind,
 
 // Puts the panel back for a close that provably never started.
 //
-// A close exists only once its settle starts: ArmGestureClose publishes the
-// closing direction and arms the dismiss after BeginGestureSettle returned true. A
-// close that never started therefore published no direction and armed no dismiss, so
-// there is nothing to recall here; the restore is the whole operation. This is
-// the only path that
-// may restore a panel after a failed close, and the log names the visible
-// outcome: the missing settle line already says the close never started, and
-// this line says what the panel did instead.
+// A close that never started has no retract, no armed dismiss and no published
+// direction: its record ended with the failed settle (`close ended ...
+// reason=no-settle`), so there is nothing to recall here and the restore is the
+// whole operation. This is the only path that may restore a panel after a failed
+// close, and the log names the visible outcome: the missing settle line already
+// says the close never started, and this line says what the panel did instead.
 bool AbandonClose(CloseKind kind) {
     TraceLog(L"close abandoned kind=%s", CloseKindName(kind));
     return ShowAtRest();
@@ -3948,7 +4484,7 @@ struct DismissCloseResult {
 // either asks for it or drops the close. No deferral file exists.
 //
 // Committed dismiss: the settle batch observes the settle, the shared close tail
-// arms the dismiss. The settle itself, the log line, the suppression window and
+// arms the dismiss. The settle itself, the log line, the close record and
 // the closing direction all come from BeginGestureClose, so this path and the reveal
 // cancel cannot diverge.
 //
@@ -3989,8 +4525,9 @@ DismissCloseResult BeginDismissSettle(float from, float velocity) {
             BeginGestureClose(from, velocity, CloseKind::Dismiss, &serial);
         if (!close.started) {
             // No animation, so the batch holds nothing and no handler may be
-            // registered: a close that never settled must not clear a flag, and
-            // it published no direction and armed no dismiss.
+            // registered: the accepted close already ended with the failed
+            // settle (`close ended ... reason=no-settle`), so it armed no dismiss
+            // and published no direction to keep.
             {
                 std::lock_guard lock(g_compositionMutex);
                 InvalidateDismissBatchLocked();
@@ -3999,9 +4536,9 @@ DismissCloseResult BeginDismissSettle(float from, float velocity) {
             return result;
         }
 
-        // From here on the close exists: its settle runs, its closing direction
-        // is published and its dismiss is scheduled. Nothing below may restore the
-        // panel.
+        // From here on the close runs: its record was accepted and its closing
+        // direction published before the settle's first frame, and its dismiss is
+        // scheduled. Nothing below may restore the panel.
         result.start = DismissClose::StartedUnobserved;
 
         // The counted entry is taken before the batch is ended, so a completion
@@ -4149,10 +4686,11 @@ DismissCloseResult BeginDismissSettle(float from, float velocity) {
 //
 // Kept in the shipping build. Both directions run through the one section in
 // swipe_ipc_shared.h and its events, so no file is involved and nothing polls:
-//   Local\SwipeFor10Start_SingleMod_Intent  kind, trigger, method, flags, open
-//                                           (bridge -> here)
-//   Local\SwipeFor10Start_SingleMod_Exec    show, dismiss, cancel (here -> bridge)
+//   Local\SwipeFor10Start_SingleMod3_Intent  kind, trigger, method, flags, open
+//                                            (bridge -> here)
+//   Local\SwipeFor10Start_SingleMod3_Exec    show, dismiss, cancel (here -> bridge)
 //   ..._State.openSeq                "this is a new menu"               (here)
+//   ..._State.intentTaken            "this sequence is being acted on" (here)
 //   ..._State.peerTick/peerState     "a controller is here"             (here)
 //   ..._State.peerEpoch              "which activation answers"         (here)
 //
@@ -4271,6 +4809,14 @@ void PublishPeerGone(const wchar_t* why) {
     SetPeerGone(why, true);
 }
 
+// The bridge's executor capability, read from the one shared word. A mapped
+// section is not an executor: the bridge publishes 1 only when its window, its
+// worker, the verified layout and the launcher primitives all exist. The Start
+// side drives nothing and advertises nothing while this is false.
+bool BridgeCapabilityNow() {
+    return g_ipc.state != nullptr && SwipeIpcExecCapable(&g_ipc);
+}
+
 // Publishes availability from the consumer that is about to serve the intents,
 // never from init: an `alive` written before that thread runs is a promise of a
 // service that does not exist yet, and a press in that window would be swallowed
@@ -4311,6 +4857,14 @@ bool PublishPeerReady(const wchar_t* why) {
         // Without the intent event the bridge can publish a decision nobody
         // wakes for. That is not a consumer, so it is not announced.
         TraceLog(L"ipc peer not published reason=no-intent-event");
+        return false;
+    }
+    if (!BridgeCapabilityNow()) {
+        // A section with no capability is a bridge that cannot execute: the
+        // Start side must not advertise a controller the bridge would swallow a
+        // press for. This is a defence in depth; the input loop already checks
+        // the word before it calls here.
+        TraceLog(L"ipc peer not published reason=no-capability");
         return false;
     }
     bool published = false;
@@ -4397,6 +4951,14 @@ constexpr uint64_t kBridgeAckTimeoutMs = 400;
 constexpr uint64_t kDismissConfirmGraceMs = 300;
 
 bool RequestBridgeShow(uint32_t method, uint32_t flags) {
+    if (!BridgeCapabilityNow()) {
+        // The one place a show can be published. A caller that races a capability
+        // drop gets no command, and the panel is not claimed for one.
+        TraceLog(L"exec show request skipped seq=none method=%u "
+                L"reason=no-capability",
+                method);
+        return false;
+    }
     if (!g_ipc.state || !g_ipc.execEvent) {
         TraceLog(L"exec show request skipped seq=none method=%u reason=%s",
                 method, g_ipc.state ? L"no-executor" : L"no-channel");
@@ -4449,6 +5011,15 @@ uint32_t ExecDismissMethodForIntent(int32_t intentMethod, int32_t intentTrigger)
 }
 
 bool RequestBridgeDismiss(uint32_t method, uint64_t executeAt, uint64_t open) {
+    if (!BridgeCapabilityNow()) {
+        // A close command is only meaningful while the executor that will run it
+        // exists. A drop mid-settle is handled by the loss reset, not by arming a
+        // command nobody will execute.
+        TraceLog(L"exec dismiss request skipped seq=none method=%u "
+                L"reason=no-capability",
+                method);
+        return false;
+    }
     if (!g_ipc.state || !g_ipc.execEvent) {
         TraceLog(L"exec dismiss request skipped seq=none method=%u reason=%s",
                 method, g_ipc.state ? L"no-executor" : L"no-channel");
@@ -4513,6 +5084,47 @@ LONG64 CancelPendingDismiss(const wchar_t* reason) {
     TraceLog(L"exec cancel request target=%lld reason=%s",
             static_cast<long long>(target), reason);
     return target;
+}
+
+// The two facts about a close's dismiss that a canceller must read *before* it
+// clears the slots, because the cancel is what destroys them: the deadline the
+// bridge was told to run the command at, and the command whose call already
+// returned with its hide still unconfirmed. Either one means a `Dismiss` may
+// still be inside the shell and the close can still land.
+struct DismissBeforeCancel {
+    uint64_t executeAt = 0;
+    LONG64 confirm = 0;
+};
+
+DismissBeforeCancel ReadDismissBeforeCancel() {
+    DismissBeforeCancel before;
+    before.executeAt = g_pendingDismissExecAt.load(std::memory_order_relaxed);
+    before.confirm = g_pendingDismissConfirm;
+    return before;
+}
+
+// The one close-cancel recovery rule, shared by both paths that can abort a close
+// this mod still owns: the open intent (a press) and the qualified pull. A cancel
+// cannot recall a `Dismiss` already inside the shell, so when the revoked command
+// can still hide the window, the close's landing owes this open exactly once.
+//
+// The ticket names the menu (the open tick read now) and the command, and
+// `expireAt` bounds it by that command's own deadline plus the ack budget and the
+// confirmation probe. A local-only cancel (`cancelled == 0`, no executed dismiss)
+// arms nothing: no dismiss is inside the shell, so a later hide of this same menu
+// is not this cancel's close and must not request a show.
+void ArmCloseCancelTicket(LONG64 cancelled, const DismissBeforeCancel& before) {
+    const LONG64 ticketSeq = cancelled != 0 ? cancelled : before.confirm;
+    const uint64_t now = GetTickCount64();
+    const uint64_t expireAt =
+        ticketSeq != 0
+            ? ((cancelled != 0 && before.executeAt != 0) ? before.executeAt : now) +
+                  kBridgeAckTimeoutMs + kDismissConfirmGraceMs
+            : 0;
+    g_intentCancel =
+        ticketSeq != 0
+            ? CloseCancelTicket{true, g_ipcOpenTickLow, ticketSeq, expireAt}
+            : CloseCancelTicket{};
 }
 
 // A fresh open ends every dismiss of the menu it replaced. A command still in the
@@ -5349,20 +5961,57 @@ HidGestureSession g_hidSession;  // input thread only
 // against what the renderer actually shows.
 struct HidRevealSession {
     bool edgeCandidate = false;
-    // The candidate arrived while a close owned the panel. It is measured (its
-    // travel, its end-speed window and its release record) but it writes no
-    // Progress and leaves the close's dismiss armed, so the retract is the only
-    // motion; the close's landing releases it and the open adopts it.
-    bool deferred = false;
+    // The candidate arrived while a close owned the panel, and its down hit the
+    // surface the retract still shows (or the band): it is the grab that close
+    // granted. It is measured but writes no Progress and leaves the close's
+    // dismiss armed, and it gets exactly one transfer attempt at
+    // kAdoptTravelDip. A refused transfer consumes the contact: it keeps no open
+    // right until it lifts, and no landing or later open revives it. A taken
+    // transfer clears this flag and becomes the live follow; a band down the
+    // retract had no panel left for — or one whose close had already ended —
+    // spends it as the explicit open request and becomes a follow too, at the
+    // entry.
+    bool granted = false;
     // The one open claim of this contact. It is set when the qualified pull
     // first reaches kAdoptTravelDip and attempts the claim, whatever the
     // outcome: a tap never sets it because a tap never reaches the threshold,
     // and a refused claim is not retried on later reports. An open the shell
     // performs anyway is adopted instead.
-    bool openClaimAttempted = false;
+    bool claimAttempted = false;
+    // The pull cancelled a close and took the retract over while the panel was
+    // still on screen. Such a takeover continues from the position the panel has,
+    // never from the entry the open reserves: the panel is already presented, and
+    // the entry floor is what made an interrupted retract finish and then pop
+    // back out. Set once, by CancelCloseForQualifiedPull.
+    bool liveTakeover = false;
+    // The take is already done. The grab that took the retract over pinned the
+    // position on its transfer report and nothing animates over it, so the follow
+    // binds to `liveStart` instead of taking a second time: a second take would
+    // read the same value, log a second `motion sample`, and hand the follow a
+    // seam the spring had already moved. Cleared by the one activation that
+    // binds; every other start takes as it always did.
+    bool liveBound = false;
+    // The chased positions of a live takeover: `liveOffset` is the finger's
+    // mapping minus the panel's position at the takeover, so every later target
+    // is `mapped - liveOffset` (the panel keeps the relationship it took over
+    // instead of being driven toward the finger's absolute coordinate), and
+    // `liveStart` is the position it took over — the release compares against it
+    // because a pull that came in to interrupt must not close on short travel.
+    // Both are read by the takeover on the same report that sets them; a takeover
+    // the throttle or a lost renderer defers would subtract an offset the panel
+    // has since left, which is a transient the landing repairs.
+    float liveOffset = 0.0f;
+    float liveStart = 0.0f;
     bool active = false;
     float edgeStartX = 0.0f;  // first report, kept for the edge-band test
     float edgeStartY = 0.0f;
+    // The down that created this grab landed in the band, not on the surface the
+    // retract still showed. It travels with the down point because it is the
+    // down's own admission-time classification: the refusal at the travel
+    // threshold reads it to decide whether the attempt is the explicit open
+    // request (the press's cancel body, then the pull's follow). Only meaningful
+    // while `granted`.
+    bool grantDownInBand = false;
     float distance = 0.0f;
     float panelTrail = 0.0f;
     float travel = 0.0f;
@@ -5393,6 +6042,18 @@ struct HidRevealSession {
 
 HidRevealSession g_reveal;  // input thread only
 
+// The author of an open a contact may later join. A down the band admitted is
+// the open claim: the shell's own edge gesture opens from that band, with or
+// without our show request, so that down owns the open it caused. A down a close
+// granted is the grab of its retract. Nothing else authors an open — a down on
+// the open panel is the dismiss, and a down anywhere else is not this gesture —
+// so adoption and promotion ask this record instead of guessing from travel.
+enum class HidDownAuthor {
+    None,
+    Band,
+    Grab,
+};
+
 // The current contact's first and last positioned point, screen DIP, whether or
 // not a session owns it. The reveal candidate is admitted on the down, but the
 // shell can open the menu under a contact that started a little further in than
@@ -5406,6 +6067,11 @@ HidRevealSession g_reveal;  // input thread only
 struct HidContactOrigin {
     bool valid = false;
     bool startedOpen = false;  // the menu was open when this contact went down
+    // The author of the open this contact may be adopted into, decided by the
+    // down's own admission (`BeginEdgeCandidate`) and never re-read later: a
+    // layout change can move the band, and a travel measured after the fact is
+    // not a grant. `None` is a down that is not this gesture.
+    HidDownAuthor author = HidDownAuthor::None;
     float downX = 0.0f;
     float downY = 0.0f;
     float x = 0.0f;  // last positioned point
@@ -5461,12 +6127,6 @@ void SampleOriginPoint(float x, float y, uint64_t qpcMs) {
 struct RevealLateRelease {
     bool valid = false;
     uint64_t releaseQpc = 0;  // QPC; kLateRevealWindowMs bounds the age
-    // A pull that lifted while a close still owned the panel. Its record only
-    // becomes consumable when that close lands, so the age is measured from
-    // `readyQpc` (the landing) instead of the release: the pull waited for the
-    // close it must not fight, and the open that follows is still its own.
-    bool deferred = false;
-    uint64_t readyQpc = 0;    // QPC of the close's landing, 0 while none
     float travel = 0.0f;      // DIP away from the edge at the release
     // Mapped Progress the follow would have written; diagnostic only, never a
     // start value. The settle starts from the position the panel actually shows.
@@ -5530,6 +6190,23 @@ void ForgetTrackedContact() {
     g_trackedContact = HidContactTrack{};
 }
 
+// Ends a contact a close consumed, on evidence rather than on silence. The
+// decoder calls it when the report proves a different contact (another device,
+// a different asserted Contact Identifier, a different asserted node), before
+// it follows that new contact: the latch and the mute must not make the new
+// down a continuation of the consumed one. The lift report ends the consumed
+// contact through the ordinary `contacts <= 0` path, which clears the same
+// fields.
+void EndConsumedContact() {
+    g_hidSession.suppress = false;
+    g_contactDown = false;
+    g_contactTick = 0;
+    g_contactOrigin = HidContactOrigin{};
+    g_openCheckValid = false;
+    EndContactTiming();
+    ForgetTrackedContact();
+}
+
 // Screen size in DIP, rewritten by FeedHidReport before every state-machine
 // step. The right and bottom edge bands are measured from it.
 float g_screenDipWidth = 0.0f;   // input thread only
@@ -5545,7 +6222,7 @@ uint64_t g_edgeLogTick = 0;              // input thread only, diagnostic
 constexpr bool g_debugEdge = false;
 
 // ---------------------------------------------------------------------------
-// A close suppresses the panel
+// A close owns the panel
 // ---------------------------------------------------------------------------
 //
 // A gesture close and a keyboard close must leave the mod in one state, or the
@@ -5556,43 +6233,86 @@ constexpr bool g_debugEdge = false;
 //
 // The ownership state is:
 //
-// - the suppression window is open, so the reopen poll does not restore the
-//   resting value and no drag starts until the shell has hidden the window;
+// - one accepted close record (`g_close`), so a reader asks the record and never
+//   a clock: the panel is not usable until the close ends, and the end is an
+//   event (the landing, a cancel, an external takeover, a repair), not an
+//   expiry;
 // - no gesture session owns Progress. `contactStillDown` mutes the rest of that
 //   contact (its reports would otherwise start a new session, and its release
 //   would settle an open); a gesture close arrives from its own release, where
 //   the contact is already ending, so nothing is muted there. The mute is read
 //   from the contact latch, so it covers the finger whether the dismiss session
 //   or the reveal owned it;
+// - every contact already on the glass is consumed by the close: the reveal
+//   flags go with the mute, so no pull that predates this close can interrupt it
+//   or be revived at its landing. Only the contact's sample history survives;
 // - the 1 ms timer period is released: no session is left that needs it.
 //
-// One helper, called by both families. It changes no dismiss slot: the
-// keyboard close drops the armed dismiss at its caller, the gesture close arms
-// one. The name answers only whether the close-suppression window is still open
-// (`tickMs < g_suppressRestoreUntil`); the settle owns Progress, and
-// CloseCancellableByPull() answers whether a pull may still abort the close. A
-// pull that arrives while the suppression is true is deferred, never a second
-// owner.
-bool CloseInFlight(uint64_t tickMs) {
-    return tickMs < g_suppressRestoreUntil.load(std::memory_order_relaxed);
+// `CloseInFlight` answers the record's phase and nothing else. A contact that
+// arrives while it is true is a grab of the surface still on screen or a refusal
+// (`BeginEdgeCandidate`); the grab's one transfer attempt is
+// `CancelCloseForQualifiedPull`, and a refused transfer consumes it.
+bool CloseInFlight() {
+    return g_close.phase != ClosePhase::Done;
 }
 
-// Whether a pull may abort the close it lands in. Only a gesture close still has
-// a close this mod can cancel: its executor command is armed for the end of the
-// settle, so dropping it aborts the close before the bridge is asked. That is
-// the accepted cancel path, and it is one owner because the same call clears
-// the suppression and the follow takes the panel from its live position.
-// Every other close — a keyboard close, a Start-button or click-away close
-// (both arrive as the bridge's close intent), or a gesture close whose dismiss
-// already went out — has its dismiss in the shell's or the bridge's hand. A
-// pull cannot abort that, so it is deferred and the close lands first.
-bool CloseCancellableByPull() {
-    return g_pendingTapTick != 0;
+// "A hide may still land": a dismiss this side published is still queued, armed,
+// or executed with its hide unconfirmed. This is a different question from
+// `CloseInFlight`: the repair deadline can end the record while a slow launcher's
+// command is still ahead, and the command is the hide's identity either way. The
+// one reader that must not restore a panel under it is the unhealed heal — the
+// settle it would start is what the coming hide interrupts — and the wait is
+// bounded by the executor's own answers (its deadline plus the budget, then the
+// confirmation probe).
+bool CloseHideMayLand() {
+    return g_pendingDismissExec.load(std::memory_order_relaxed) != 0 ||
+           g_pendingDismissConfirm != 0;
 }
 
-void TakeCloseOwnership(uint64_t tickMs, bool contactStillDown) {
-    g_suppressRestoreUntil.store(tickMs + kRestoreSuppressMs,
-                                 std::memory_order_relaxed);
+const wchar_t* ClosePhaseName(ClosePhase phase) {
+    switch (phase) {
+        case ClosePhase::Settling:
+            return L"settling";
+        case ClosePhase::AwaitingHide:
+            return L"awaiting-hide";
+        case ClosePhase::Done:
+            return L"done";
+    }
+    return L"done";
+}
+
+// The one acceptance, for both families, before the settle's first frame. It
+// changes no dismiss slot: the intent close publishes its command after the
+// settle is planned, and the gesture close arms its local slot after the settle
+// starts.
+void TakeCloseOwnership(CloseKind kind, uint64_t tickMs,
+                        bool contactStillDown) {
+    // A newer close decides the menu: the record of a close that has not ended
+    // cannot speak for this one. Its dismiss command was already revoked by the
+    // caller, so this is the ending, not a repair.
+    EndClose(L"superseded");
+    g_close.serial = ++g_closeSerial;
+    g_close.phase = ClosePhase::Settling;
+    g_close.acceptedTick = tickMs;
+    g_close.repairAt = tickMs + kRestoreSuppressMs;
+    g_close.kind = kind;
+    // The menu this close belongs to, for the record and its lines. A failed read
+    // leaves zeros: the record names no menu, and nothing downstream decides by
+    // these fields (the dismiss command carries its own open generation).
+    uint64_t openGeneration = 0;
+    uint64_t openTick = 0;
+    if (SwipeIpcReadOpen(&g_ipc, &openGeneration, &openTick)) {
+        g_close.openGeneration = openGeneration;
+        g_close.openTick = static_cast<uint32_t>(openTick);
+    } else {
+        g_close.openGeneration = 0;
+        g_close.openTick = 0;
+    }
+    TraceLog(L"close accepted serial=%u kind=%s open=%u gen=%llu repair=%llu",
+            g_close.serial, CloseKindName(kind), g_close.openTick,
+            static_cast<unsigned long long>(g_close.openGeneration),
+            static_cast<unsigned long long>(g_close.repairAt));
+
     SwipeIpcSetControllerTouch(&g_ipc, false);
     // A new close decides the menu: an earlier close's confirmation, retained or
     // not, can no longer land this one's hide.
@@ -5612,9 +6332,8 @@ void TakeCloseOwnership(uint64_t tickMs, bool contactStillDown) {
     g_intentCancel = CloseCancelTicket{};
 
     // A new close decides the menu, so a release record left by an earlier pull
-    // is moot: its open either already came or never will. The record of a pull
-    // that lands during *this* close is written after this line, so it is not
-    // touched here.
+    // is moot: its open either already came or never will. A contact admitted
+    // during this close is a grab, and a grab's release leaves no record at all.
     g_lateRelease = RevealLateRelease{};
 
     // The mute belongs to the contact, not to the session that happened to own
@@ -5623,34 +6342,72 @@ void TakeCloseOwnership(uint64_t tickMs, bool contactStillDown) {
     // the reveal flags left the finger live, so its next report could start a
     // dismiss session on the reopened menu and its release could settle an open.
     //
-    // A reveal that is still driving the panel is the exception: it is the pull
-    // that may open the menu this close makes room for, so it becomes a deferred
-    // candidate (measured, never written) instead of a muted contact. The next
-    // open releases it, exactly as it releases a pull that landed during the
-    // close; the takeover owns the screen until then.
+    // Every contact already on the glass is consumed by the close: it cannot
+    // interrupt it and cannot reopen it. There is no exemption for a pull that
+    // was driving the panel — that pull predates the close, and the landing is
+    // not its to reopen. The mute holds its reports until it lifts; the reveal
+    // flags go, so the landing finds no candidate to revive. Only the samples
+    // stay, and they cannot be adopted: the mute refuses adoption too.
     const bool contactLive =
         g_contactDown || g_hidSession.active || g_reveal.edgeCandidate;
-    const bool liveReveal =
-        contactStillDown && (g_reveal.active || g_reveal.deferred);
-    if (contactStillDown && contactLive && !liveReveal) {
+    if (contactStillDown && contactLive) {
         g_hidSession.suppress = true;
     }
 
     g_hidSession.active = false;
-    // A live reveal keeps its candidate and its deferral; a keyboard close must
-    // not leave it owning the panel, and its release must not settle an open.
-    // Only the active flag is cleared; the measurements the release line prints
-    // stay readable. A pull deferred by an earlier close is superseded only when
-    // there is no live reveal to carry over.
-    if (!liveReveal) {
-        g_reveal.deferred = false;
-        g_reveal.edgeCandidate = false;
-    }
+    g_reveal.granted = false;
+    g_reveal.edgeCandidate = false;
     g_reveal.active = false;
     EndContactTiming();
     // Nothing owns the panel edge any more, so a settled measurement may move it
     // even though the finger is still on the glass.
     PublishPanelOwnership();
+}
+
+// The dismiss is published: the retract may still be running, but the hide is now
+// the shell's to perform, and the record says which half of the close is
+// outstanding.
+void NoteCloseDismissPublished() {
+    if (g_close.phase == ClosePhase::Settling) {
+        g_close.phase = ClosePhase::AwaitingHide;
+    }
+}
+
+// The one ending. It retires the record and logs the phase it ended in; what the
+// ending owes beyond that — the published direction, the dismiss slots, the
+// recovery ticket, the panel's position — belongs to the caller, because the
+// endings are not one thing: a landing has already cleared them, a pull cancel
+// has published the open, and a repair must leave a command that may still hide
+// the window identified. Retiring the record never clears a dismiss command: that
+// command and its open generation are the landing's identity.
+void EndClose(const wchar_t* reason) {
+    if (g_close.phase == ClosePhase::Done) {
+        return;
+    }
+    const uint64_t now = GetTickCount64();
+    TraceLog(L"close ended serial=%u kind=%s phase=%s reason=%s age=%llums",
+            g_close.serial, CloseKindName(g_close.kind),
+            ClosePhaseName(g_close.phase), reason,
+            static_cast<unsigned long long>(now > g_close.acceptedTick
+                                                ? now - g_close.acceptedTick
+                                                : 0));
+    g_close.phase = ClosePhase::Done;
+}
+
+// The repair bound. A close whose landing never came ends here, and the ending is
+// a repair, not an expiry: the ownership goes back to the cloak (the direction is
+// unowned, so the bridge's next toggle reads the cloak and the internal state
+// again, and the unhealed rule may bring the panel back) and the record says so in
+// one line. It does not pretend the hide is over — the dismiss command and the
+// recovery ticket still identify it, so a hide that lands afterwards is still read
+// as this close's, and the heal waits for that command to answer
+// (`CloseHideMayLand`).
+void RepairExpiredClose(uint64_t tickMs) {
+    if (g_close.phase == ClosePhase::Done || tickMs < g_close.repairAt) {
+        return;
+    }
+    EndClose(L"repair-deadline");
+    ReleaseExecutorOwnership();
 }
 
 // The coast runs on the finger's own speed, smoothed over the last three
@@ -5901,7 +6658,8 @@ void ResetActivationState() {
     g_hidSession = HidGestureSession{};
     g_reveal = HidRevealSession{};
 
-    g_suppressRestoreUntil.store(0, std::memory_order_relaxed);
+    g_close = CloseRecord{};
+    g_closeSerial = 0;
     g_measureDeferred.store(false, std::memory_order_relaxed);
     g_panelOwned.store(false, std::memory_order_relaxed);
     g_dismissSettling.store(false, std::memory_order_relaxed);
@@ -6192,6 +6950,28 @@ bool PanelContainsPress(const GestureGeometry& geometry, float x, float y) {
            y <= geometry.bottom + kPanelBandSlopDip;
 }
 
+// Whether the point lies inside the panel rectangle's cross range: the axis the
+// gesture does not slide along. A progress number answers where a point sits
+// along the gesture relative to the panel's trail edge; it cannot answer this
+// one, because it is the other coordinate, and a point perpendicular to and
+// entirely outside the panel maps to a perfectly plausible progress. The same
+// 2 DIP the rect's own border needs is allowed. A panel that was never measured
+// places no point (the trail test and the band still decide), as in
+// PanelContainsPress.
+bool PanelCrossContains(const GestureGeometry& geometry, float x, float y) {
+    if (!geometry.panel) {
+        return true;
+    }
+    const bool horizontal = IsHorizontalAxis(geometry.axis());
+    // On a horizontal axis the panel slides along x, so the rect's cross range is
+    // its top and bottom; on a vertical one it is its left and right.
+    const float position = horizontal ? y : x;
+    const float low = horizontal ? geometry.top : geometry.left;
+    const float high = horizontal ? geometry.bottom : geometry.right;
+    return position >= low - kPanelBandSlopDip &&
+           position <= high + kPanelBandSlopDip;
+}
+
 // Input thread only: the only reader of the snapshot. The write side reads
 // `g_geometry` under the same lock, because it is the thread that writes it.
 //
@@ -6344,6 +7124,11 @@ bool VerticalDismissAllowed(const GestureGeometry& geometry, int32_t axis,
 // leaves the panel to the path that can still open it.
 bool PublishOpenClaim(const GestureGeometry& geometry, bool touch,
                       float& entryOut) {
+    if (!BridgeCapabilityNow()) {
+        // No executor, no claim: writing the entry would move a panel nothing
+        // can present, and the shell's own gesture must remain the owner.
+        return false;
+    }
     const float entry = std::clamp(RevealEntryProgress(geometry), 0.0f, 1.0f);
     InsertProgress(entry);
     g_intentOpenActive.store(true, std::memory_order_relaxed);
@@ -6370,17 +7155,25 @@ bool PublishOpenClaim(const GestureGeometry& geometry, bool touch,
 // report that reaches the travel threshold; a tap anywhere in the band never
 // gets there.
 //
-// `deferred` names a contact that arrived while a close owned the panel. It is
-// the pull that opens the *next* menu, so it changes nothing about this close:
-// it neither claims nor cancels one, which is what keeps the close's dismiss
-// armed and its retract the only motion. `ActivateRevealFollow`
-// refuses while the close is in flight, so the session stays a candidate that is
-// measured but never written.
+// `granted` names a contact that arrived while a close owned the panel: the
+// grab the close granted. It changes nothing about this close — it neither
+// claims nor cancels one, which is what keeps the close's dismiss armed and its
+// retract the only motion — and it never activates as a plain takeover:
+// `ActivateRevealFollow` refuses while the close is in flight and the grant
+// keeps the contact out after it too. Its one transfer attempt is
+// `CancelCloseForQualifiedPull`, at the same travel threshold the open claim
+// uses. `downInBand` is the down's own hit test, carried next to the down point:
+// a band pull the retract refuses at the threshold — or one whose close has
+// already ended — is the same open request a press makes, because the finger
+// asked for the same menu the key asks for; the finger keeps driving it, so the
+// pull follows where the press would settle.
 void StartRevealFollow(float downX, float downY, uint64_t downTick,
-                       uint64_t tickMs, bool deferred = false) {
+                       uint64_t tickMs, bool granted = false,
+                       bool downInBand = false) {
     g_reveal = HidRevealSession{};
     g_reveal.edgeCandidate = true;
-    g_reveal.deferred = deferred;
+    g_reveal.granted = granted;
+    g_reveal.grantDownInBand = downInBand;
     g_reveal.edgeStartX = downX;
     g_reveal.edgeStartY = downY;
     g_reveal.startTick = downTick;
@@ -6392,36 +7185,269 @@ void StartRevealFollow(float downX, float downY, uint64_t downTick,
     ResetEndVelocity();
 }
 
-// A qualified pull may still abort a close this mod owns: the finger has
-// crossed kAdoptTravelDip while the close's own dismiss was still armed, so no
-// Dismiss has been requested and the menu can stay open. It must not run on
-// contact-down: a contact that never enters the band or never travels would
-// otherwise keep a menu the user was closing.
-bool CancelCloseForQualifiedPull(uint64_t tickMs) {
-    if (!CloseInFlight(tickMs) || !CloseCancellableByPull()) {
-        return false;
+// The end of a grab that has no open right left: its transfer was refused. That
+// refusal is the only ending that reaches here — a landing retires no grant,
+// because the contact it granted may still be on its way to its own 24 DIP
+// report. The contact is consumed exactly as one whose down
+// was refused at admission: the mute makes every later report inert, and only its
+// lift report or a report that proves a different contact ends it
+// (`hid consumed ended ... reason=new-contact|device`). The reveal session and
+// the contact's 1 ms timing go with it; the latch, the origin and the tracked
+// identity stay, because those are the evidence the two endings are read from.
+// Ownership is republished so the layout deferral does not outlive the session.
+void ConsumeGrabContact() {
+    g_hidSession.suppress = true;
+    g_reveal = HidRevealSession{};
+    EndContactTiming();
+    PublishPanelOwnership();
+}
+
+// The cancel an explicit open request performs on a close this mod still owns.
+// A press whose intent arrives while the close's window still shows and a
+// qualified band pull the retract refused are the same request, so they share
+// this one body: both schedules are dropped, the suppression and the pending open
+// flag are cleared, the open direction is published, and the one recovery ticket
+// is armed for a dismiss that may already be inside the shell. The tails differ
+// because only one request has a finger: a press settles the panel back
+// (`SettlePressOpen`), while a pull hands it to the follow.
+//
+// Returns whether the window still showed at the end of the cancel. A hidden
+// window has no panel to settle or follow: the retract's hide arrived first, and
+// the pull's tail requests the ordinary show instead.
+bool CancelCloseForOpenRequest() {
+    // Read before the cancel destroys them: either fact means a Dismiss may
+    // already be inside the shell.
+    const DismissBeforeCancel dismissed = ReadDismissBeforeCancel();
+    const LONG64 cancelled = CancelPendingDismiss(L"open-intent");
+    // The controller owns an open from this line, whichever shape the request
+    // has; the bridge reads this direction for the next toggle.
+    SwipeIpcSetControllerDirection(&g_ipc, kSwipeDirectionOpen);
+    // The local dismiss slot is dropped before the executor command can fire;
+    // the command itself was cancelled above. The window is not hidden by this
+    // cancel, so the panel stays on screen at its live position, and the close
+    // this request answers ends here: the open owns the panel from this line.
+    ClearLocalCloseTap();
+    EndClose(L"open-cancel");
+    g_commitNeedsProgressReset = false;
+    g_intentOpenActive.store(false, std::memory_order_relaxed);
+    ForgetPendingDismiss();
+    // A dismiss that already entered the shell's Dismiss call cannot be recalled
+    // by the cancel above; if it still hides the window, the close's landing
+    // reissues this open once. The ticket is armed by the one rule both
+    // cancelling paths share (ArmCloseCancelTicket): it names the menu and the
+    // command, so no other landing can serve it, and a local-only cancel arms
+    // nothing.
+    ArmCloseCancelTicket(cancelled, dismissed);
+    return StartWindowIsOpen();
+}
+
+// The press's tail after that body. A press has no finger to bind to, so the
+// panel the retract left is settled back from its live position, or put at rest
+// when there is nothing left to travel. The pull's tail is the follow
+// (`ActivateRevealFollow`), which starts at the reveal entry because a panel the
+// retract carried off screen has no live position to bind to.
+float SettlePressOpen() {
+    const float live = TakeProgressNow(L"intent-open-cancel");
+    std::chrono::milliseconds duration{0};
+    if (!BeginGestureSettle(live, 1.0f, 0.0f, duration)) {
+        ShowAtRest();
     }
-    if (!CancelCloseSchedules(L"pull").slot) {
-        return false;
+    return live;
+}
+
+// What a grab's one transfer attempt ended as. `Taken` handed the panel to the
+// follow on this same report. `Open` is the band down that became the explicit
+// open request because the retract had nothing left to take — it was already at
+// or below the entry, or the close it was granted against had ended: what is left
+// to cancel is cancelled (nothing, when the close is over), and the finger
+// follows the panel from the entry, or waits for the ordinary show when the
+// window has hidden. `Refused` is every other answer and `reason` names it in
+// the trace.
+enum class GrabTransfer {
+    Taken,
+    Open,
+    Refused,
+};
+
+struct GrabTransferResult {
+    GrabTransfer outcome = GrabTransfer::Refused;
+    const wchar_t* reason = nullptr;
+    // For Open: whether the window still showed when the attempt ran. A shown
+    // window is followed on the same report from where its panel shows, which is
+    // never below the entry; a hidden one gets the ordinary show claim and
+    // `entry` is where that follow binds. The recovery ticket a cancel arms is
+    // read by the landing, not passed back here.
+    bool windowOpen = false;
+    float entry = 0.0f;
+};
+
+// The band pull's explicit open. Two reasons reach it and they are one request:
+// the retract refused the pull at or below the entry (`offsurface`) while the
+// close was still ours, and the close the grant was for has already ended
+// (`no-close`). The menu the finger asked for is closed in both, and the owner's
+// rule is that a finger is never swallowed where the key works.
+//
+// The first shape revokes the close through the press's own cancel body: both
+// schedules dropped, the pending command cancelled, the suppression cleared, the
+// recovery ticket armed. A close that is already over has nothing to revoke, so
+// that body would write nothing: no ticket is armed, no pending entry is cleared,
+// and only the open direction is published. Both shapes then take the ordinary
+// open. A hidden window gets the one claim (entry, touch, show), and the follow
+// binds at that entry when the window uncloaks; an open already on its way is
+// that same open, so no second show is requested for it. A window that still
+// shows is followed on the same report from the panel's live position, which is
+// never below the entry.
+GrabTransferResult BandPullOpen(const GestureGeometry& geometry,
+                                const wchar_t* reason, bool closeInFlight) {
+    GrabTransferResult open;
+    open.outcome = GrabTransfer::Open;
+    open.reason = reason;
+    open.entry = std::clamp(RevealEntryProgress(geometry), 0.0f, 1.0f);
+    if (closeInFlight) {
+        open.windowOpen = CancelCloseForOpenRequest();
+    } else {
+        open.windowOpen = StartWindowIsOpen();
+        // The controller owns an open from this line, whichever shape the
+        // request has; the bridge reads this direction for the next toggle.
+        SwipeIpcSetControllerDirection(&g_ipc, kSwipeDirectionOpen);
     }
-    g_suppressRestoreUntil.store(0, std::memory_order_relaxed);
+    if (!open.windowOpen &&
+        !g_intentOpenActive.load(std::memory_order_relaxed)) {
+        // The claim writes the entry, the pending entry, the direction and the
+        // touch, and requests the show. The contact keeps its candidate if the
+        // request is refused, so an open the shell performs anyway is adopted.
+        PublishOpenClaim(geometry, true, open.entry);
+    }
+    return open;
+}
+
+// A qualified grab spends its one opportunity here, and this is the only abort
+// of a close that remains. `Taken` means the grab took the retract over;
+// `Refused` names the reason it could not:
+//
+// - `g_pendingDismissConfirm` must be empty. That slot names a dismiss whose call
+//   returned with its hide unconfirmed, so the hide can land at any moment and
+//   there is no schedule left to drop. It is not a statement about the close's
+//   window, so it is checked wherever the close stands;
+// - a layout with no distance can map no pull, so it consumes the contact;
+// - the close must still own the panel. The close record is the ownership state,
+//   not a timeout to judge the pull by, and a close that has
+//   ended has no retract to reverse. A band down is not refused there: the menu it
+//   asked for is closed, and a press in that same moment opens it, so the attempt
+//   becomes the ordinary `Open`. A down on the surface the retract had shown, or
+//   in the area it has already left, is not that request and stays `no-close`;
+// - the panel must still be on screen. A retract that is already at or below the
+//   entry has no live position to take over. A down in the band is the exception:
+//   it is the same request a press makes in that same moment, and a press opens
+//   the menu, so the attempt becomes `Open` through the press's own cancel body.
+//   A down on the surface the retract had shown, or in the area it has already
+//   left, is not that request and stays `offsurface`;
+// - a published dismiss is revocable only while its deadline is still ahead. At
+//   or past `executeAt` the bridge may already be inside the shell's `Dismiss`
+//   call, and no cancel recalls a call that has entered;
+// - something must actually be cancelled (the local gesture deadline or the
+//   executor command), otherwise there is no close to abort.
+//
+// Every refusal consumes the contact: the spent attempt leaves it with no open
+// right until it lifts, and nothing — not the landing, not a later open — gives
+// it another chance. `Open` does not: that contact has a finger, and it becomes
+// the pull that opens the menu — the follow takes the panel over at the entry
+// (or on the ordinary show when the retract's window had already hidden).
+//
+// The executor command is revocable at any point before the bridge dispatches it,
+// which is what lets a keyboard, Start-button or click-away close be interrupted:
+// its dismiss is published immediately for the end of the settle, but the bridge
+// holds it in an armed timer. Cancelling it publishes `exec cancel` and arms the
+// same recovery ticket an explicit open request arms, because the bridge may
+// already be inside the `Dismiss` call. The pull then takes the still-open menu
+// over from where the retract left it: one take, pinned here, and the follow
+// binds to it on the same report (`liveBound`) instead of taking again. No settle
+// stands between them, so no frame of this reversal belongs to an animation the
+// finger did not ask for.
+//
+// It must not run on contact-down: a contact that never enters the band or never
+// travels would otherwise keep a menu the user was closing.
+GrabTransferResult CancelCloseForQualifiedPull(const GestureGeometry& geometry,
+                                               float x, float y,
+                                               uint64_t tickMs) {
+    if (g_pendingDismissConfirm != 0) {
+        return {GrabTransfer::Refused, L"dismiss-entered"};
+    }
+    const float distance = geometry.distance();
+    if (!(distance > 0.0f)) {
+        return {GrabTransfer::Refused, L"geometry"};
+    }
+    // The close this grant was for is over. Nothing is left to reverse, and the
+    // contact is not the retract's any more: a band down is a pull on a closed
+    // menu, which is the ordinary open claim; a down on the surface the retract
+    // had shown keeps no open right.
+    if (!CloseInFlight()) {
+        if (!g_reveal.grantDownInBand) {
+            return {GrabTransfer::Refused, L"no-close"};
+        }
+        return BandPullOpen(geometry, L"no-close", false);
+    }
+    // Nothing left to reverse: the panel is at or below the entry, the first
+    // progress at which any of it is on screen, so its retract is over and only
+    // the hidden travel is left, and cancelling here would start the open from an
+    // invisible position.
+    const float entry = RevealEntryProgress(geometry);
+    if ((PeekProgressNow() - entry) * distance <= kProgressEpsilonDip) {
+        if (!g_reveal.grantDownInBand) {
+            return {GrabTransfer::Refused, L"offsurface"};
+        }
+        // The band down is the same request a press makes, and the owner's
+        // finger is not swallowed where the key works. The close is cancelled
+        // through the press's own body, but the tail is not the press's: this
+        // request has a finger, so the grant is spent and the follow takes the
+        // panel over at the entry. A window the retract already hid has no panel
+        // to follow, so the ordinary open is requested and the follow binds at
+        // that entry when the show arrives.
+        return BandPullOpen(geometry, L"offsurface", true);
+    }
+    const DismissBeforeCancel dismissed = ReadDismissBeforeCancel();
+    // The deadline is in the same tick domain as this report. At or past it the
+    // bridge dispatches, and a `Dismiss` already entered cannot be recalled: the
+    // transfer would promise a reversal nothing can deliver. The grab loses the
+    // race and is consumed; the close finishes its own dismiss.
+    if (dismissed.executeAt != 0 && tickMs >= dismissed.executeAt) {
+        return {GrabTransfer::Refused, L"dispatch"};
+    }
+    const CloseScheduleCancel dropped = CancelCloseSchedules(L"pull");
+    if (!dropped.slot && !dropped.command) {
+        return {GrabTransfer::Refused, L"no-schedule"};
+    }
+    // The schedules are gone, so this close will never ask for its dismiss: the
+    // record ends here and the pull owns the panel.
+    EndClose(L"pull-cancel");
     g_closeCancelledTick = tickMs;
     // The close is gone and the menu stays open, so the controller owns an open
     // again. The direction must follow: closing with a shown menu would turn
     // the next press into a second reopen.
     SwipeIpcSetControllerDirection(&g_ipc, kSwipeDirectionOpen);
+    ArmCloseCancelTicket(dropped.commandSeq, dismissed);
+    // The menu stays on screen, so neither the restore owed by a retracted panel
+    // nor the show-in-flight entry applies any more: the follow takes the live
+    // position.
+    g_commitNeedsProgressReset = false;
+    g_intentOpenActive.store(false, std::memory_order_relaxed);
+    // The one take of this contact, and the only one: it stops the retract and
+    // writes the value as the new base, so the first frame this path can
+    // composite is the position the retract had. Nothing settles it towards the
+    // open rest — the follow binds to this exact value on the same report
+    // (`liveBound`), and the chase starts from the finger's own next sample.
     const float live = TakeProgressNow(L"pull");
-    const float distance = ReadGestureGeometry().distance();
-    if (distance > 0.0f &&
-        (1.0f - live) * distance < kProgressEpsilonDip) {
-        ShowAtRest();
-    } else {
-        std::chrono::milliseconds duration{0};
-        if (BeginGestureSettle(live, 1.0f, 0.0f, duration)) {
-            g_commitNeedsProgressReset = false;
-        }
-    }
-    return true;
+    // The takeover continues from here. The offset is the gap between the finger's
+    // mapping at this report and the position the panel actually has; the follow
+    // chases `mapped - offset` for the rest of the contact, so a half-closed panel
+    // is not first driven toward the finger's absolute coordinate.
+    float panelTrail = 0.0f;
+    const float mapped = RevealProgressDip(geometry, distance, x, y, panelTrail);
+    g_reveal.liveTakeover = true;
+    g_reveal.liveBound = true;
+    g_reveal.liveStart = live;
+    g_reveal.liveOffset = mapped - live;
+    return {GrabTransfer::Taken};
 }
 
 // The one open claim of a band contact. Admission records the contact; the
@@ -6433,10 +7459,17 @@ bool CancelCloseForQualifiedPull(uint64_t tickMs) {
 // executor can present the open, and asking again on every later report would
 // turn one failed request into a stream of them. An open the shell performs
 // anyway is adopted by this same contact.
+//
+// A contact admitted during a close is the grab that close granted, and this is
+// the one opportunity it spends: the transfer of the retract. No outcome is
+// retried — a taken transfer hands the panel to the follow, a band down the
+// retract had no panel left for spends the grant as the explicit open request and
+// follows it too, and every refusal consumes the contact for the rest of its
+// life.
 void TryClaimRevealOpen(const GestureGeometry& geometry, float x, float y,
                         uint64_t tickMs) {
     HidRevealSession& reveal = g_reveal;
-    if (!reveal.edgeCandidate || reveal.active || reveal.openClaimAttempted) {
+    if (!reveal.edgeCandidate || reveal.active || reveal.claimAttempted) {
         return;
     }
     const float travel = RevealTravelDip(geometry.axis(), reveal.edgeStartX,
@@ -6444,39 +7477,63 @@ void TryClaimRevealOpen(const GestureGeometry& geometry, float x, float y,
     if (!(travel >= kAdoptTravelDip)) {
         return;
     }
-    reveal.openClaimAttempted = true;
-    TraceLog(L"reveal pull qualified travel=%.0f axis=%d", travel,
+    reveal.claimAttempted = true;
+    if (reveal.granted) {
+        // The grab's attempt is this retract, and nothing else. A taken transfer
+        // pinned the position, and the follow binds to it on this same report
+        // (`liveBound`); this contact's one take is that one. A band down that
+        // finds no retract left — the panel at or below the entry, or the close
+        // already ended — spends the grant as the explicit open request
+        // (`grab=open`), and the follow takes the entry; every other answer names
+        // its reason and consumes the contact — no open right until it lifts,
+        // every later report inert, no release record.
+        const GrabTransferResult transfer =
+            CancelCloseForQualifiedPull(geometry, x, y, tickMs);
+        if (transfer.outcome == GrabTransfer::Taken) {
+            reveal.granted = false;
+            // The pull owns whatever opens next: a new generation and no release
+            // record from the previous pull.
+            g_pullSerial++;
+            g_lateRelease = RevealLateRelease{};
+            TraceLog(L"reveal pull qualified travel=%.0f axis=%d grab=taken",
+                    travel, geometry.axis());
+        } else if (transfer.outcome == GrabTransfer::Open) {
+            // The grant is spent and the finger follows the open: the same
+            // report's UpdateRevealSession starts the other kind of start — a
+            // panel below the entry chases the finger from the entry — and
+            // nothing settles. A window that was already hidden got the ordinary
+            // show instead; this contact binds at that entry when the open
+            // promotes it. One line for both reasons that reach it: the retract
+            // refused the pull at or below the entry (`offsurface`), or its
+            // close had already ended (`no-close`).
+            reveal.granted = false;
+            g_pullSerial++;
+            g_lateRelease = RevealLateRelease{};
+            TraceLog(L"reveal pull qualified travel=%.0f axis=%d grab=open "
+                    L"window=%s entry=%.3f reason=%s",
+                    travel, geometry.axis(),
+                    transfer.windowOpen ? L"open" : L"hidden", transfer.entry,
+                    transfer.reason);
+        } else {
+            ConsumeGrabContact();
+            TraceLog(L"reveal pull qualified travel=%.0f axis=%d grab=refused "
+                    L"reason=%s",
+                    travel, geometry.axis(), transfer.reason);
+        }
+        return;
+    }
+    TraceLog(L"reveal pull qualified travel=%.0f axis=%d grab=none", travel,
             geometry.axis());
     // The pull owns whatever opens next: a new generation and no release record
     // from the previous pull. These are the admission's old ownership side
-    // effects; they run at the qualified pull so a tap leaves them alone, and
-    // before the close test so an aborted close cannot leave the old record.
+    // effects; they run at the qualified pull so a tap leaves them alone.
     g_pullSerial++;
     g_lateRelease = RevealLateRelease{};
-    // A close this mod can still abort is aborted here and only here. This is
-    // the qualified moment; contact-down must not cancel a close.
-    if (CancelCloseForQualifiedPull(tickMs)) {
-        // The close is gone; the follow takes the still-open menu over from
-        // this report.
-        reveal.deferred = false;
-        return;
-    }
-    if (reveal.deferred) {
-        // A close that cannot be aborted owns the panel. The landing releases
-        // the deferral and reopens for a qualified pull.
-        return;
-    }
     // The cloak answers "open?": a window already showing is a panel the follow
     // takes over on this same report, and an open this side already requested is
     // on its way. Neither may be answered with a second show.
     if (StartWindowIsOpen() ||
         g_intentOpenActive.load(std::memory_order_relaxed)) {
-        return;
-    }
-    // A close that began after admission and cannot be aborted still owns the
-    // panel: this pull waits for its landing (BeginLandingOpen) instead.
-    if (CloseInFlight(tickMs)) {
-        reveal.deferred = true;
         return;
     }
     if (g_pendingTapTick != 0) {
@@ -6500,10 +7557,12 @@ void TryClaimRevealOpen(const GestureGeometry& geometry, float x, float y,
 // does not depend on where the finger was when the menu was first seen open. One
 // mapping for the follow's samples and for the window replayed out of the
 // contact's own reports, so the two series cannot disagree about where the
-// finger is. A live takeover starts at the visible entry and then chases this
-// value at the planner's rate, so the part of it that happened while the menu
-// was cloaked is closed over time instead of being skipped or subtracted;
-// travel, commit and the speed window keep reading the mapped value as it is.
+// finger is. A takeover of a hidden panel starts at the visible entry and then
+// chases this value at the planner's rate, so the part of it that happened while
+// the menu was cloaked is closed over time instead of being skipped or
+// subtracted; a takeover of a panel that is already presented chases it minus the
+// offset the interrupted retract had. Travel, commit and the speed window keep
+// reading the mapped value as it is.
 float RevealProgressDip(const GestureGeometry& geometry, float distance, float x,
                         float y, float& panelTrailOut) {
     const int32_t axis = geometry.axis();
@@ -6540,9 +7599,11 @@ void SeedRevealEndVelocity(const GestureGeometry& geometry, float distance) {
 }
 
 // Takes Progress over for a contact whose menu is now open. The panel's position
-// is taken, never the animation's target; the trail mapping is read from this
-// snapshot and every later report drives Progress from the finger. One place, so
-// the admission's first sample and the adoption's first sample cannot differ.
+// is taken once and never from the animation's target — by this call, or by the
+// grab's transfer, which took it before binding (`liveBound`) — the trail mapping
+// is read from this snapshot and every later report drives Progress from the
+// finger. One place, so the admission's first sample and the adoption's first
+// sample cannot differ.
 //
 // The follow starts where the panel becomes visible and then chases the finger.
 // The shell uncloaks the menu 60-250 ms after the pull starts (or after the
@@ -6569,19 +7630,23 @@ void SeedRevealEndVelocity(const GestureGeometry& geometry, float distance) {
 // The trail mapping still measures the finger for `travel`, the commit test,
 // `max=` and the end-speed window; only the value written to Progress chases. A
 // panel that was already on screen (a pull that cancels a close makes the follow
-// take a live retract over) starts at its live value, so the chase begins from
-// where it is.
+// take a live retract over) starts at the position the transfer pinned, so the
+// chase begins from where it is and the reversal never passes through a settle.
 bool ActivateRevealFollow(const GestureGeometry& geometry, float x, float y,
-                          uint64_t sampleQpc, uint64_t tickMs) {
+                          uint64_t sampleQpc) {
     HidRevealSession& reveal = g_reveal;
-    if (CloseInFlight(tickMs)) {
-        // A close owns the panel: its retract is the only motion, and the pull
-        // that will open the next menu must not write Progress under it. The
-        // session keeps its candidate, its clocks and its release history; the
-        // close's landing releases the deferral and the open adopts it.
+    if (reveal.granted) {
+        // A grab is transferred only by its own qualified pull
+        // (CancelCloseForQualifiedPull), which clears the flag before the follow
+        // takes over. No plain takeover may start it: the menu that follows a
+        // landing is not the grab's.
         return false;
     }
-    reveal.deferred = false;
+    if (CloseInFlight()) {
+        // A close owns the panel: its retract is the only motion, and no contact
+        // may write Progress under it.
+        return false;
+    }
     const float distance = geometry.distance();
     if (!(distance > 0.0f)) {
         // A new root is being installed under the contact, so this contact no
@@ -6610,28 +7675,57 @@ bool ActivateRevealFollow(const GestureGeometry& geometry, float x, float y,
     const float mapped =
         RevealProgressDip(geometry, distance, x, y, panelTrail);
     reveal.panelTrail = panelTrail;
-    reveal.target = mapped;
 
     // A cancel or dismiss animation from a previous gesture may still own
     // Progress; the follow must drive the scalar from this sample on, and the
     // takeover pins the position the panel has now so no frame between the two
-    // writes shows the old animation's target. A scheduled dismiss that is still
+    // writes shows the old animation's target. A grab already did that in its
+    // transfer, and this call binds to it. A scheduled dismiss that is still
     // ahead is not touched here: it re-checks the pull generation once, so a pull
     // that began first drops the close.
-    const float entry = RevealEntryProgress(geometry);
-    const float live = TakeProgressNow(L"activate");
-    // A hidden panel's visible value is the entry, never the recorded open rest
-    // (1) of a process that has not shown it yet; a panel already above the entry
-    // keeps its live position, and one below it is off screen, so the entry is
-    // the honest start there too.
-    const float visible = live >= 1.0f ? entry : std::max(live, entry);
+    //
+    // Two starts, because two panels meet the finger here. A hidden panel is met
+    // at `RevealEntryProgress` — the smallest progress at which any of it is on
+    // screen — and the chase begins after that entry has been held for the first
+    // presentation. A panel that is already presented is met where it is: the
+    // pull cancelled a close, so the retract stopped mid-flight, and flooring it
+    // to the entry is what made an interrupted close finish retracting and then
+    // pop back out. That takeover also keeps the finger-to-panel offset it took
+    // over, and its chase starts at this sample because there is nothing to
+    // present.
+    float visible = 0.0f;
+    if (reveal.liveTakeover) {
+        // The grab's transfer already took and pinned the position on its own
+        // report, and nothing has moved the panel since, so this call binds to
+        // that take: one `motion sample caller=pull` for the whole reversal. A
+        // second take would read the same value and make the follow's seam a
+        // spring nobody asked for. A live takeover that is somehow not bound
+        // still takes, as every other start does.
+        const bool bound = reveal.liveBound;
+        reveal.liveBound = false;
+        const float taken =
+            bound ? reveal.liveStart : TakeProgressNow(L"activate");
+        visible = std::clamp(taken, 0.0f, 1.0f);
+        reveal.target = mapped - reveal.liveOffset;
+        reveal.activationGap = mapped - taken;
+        reveal.chaseQpc = sampleQpc;
+    } else {
+        const float live = TakeProgressNow(L"activate");
+        const float entry = RevealEntryProgress(geometry);
+        // A hidden panel's visible value is the entry, never the recorded open
+        // rest (1) of a process that has not shown it yet; a panel already above
+        // the entry keeps its live position, and one below it is off screen, so
+        // the entry is the honest start there too.
+        visible = live >= 1.0f ? entry : std::max(live, entry);
+        reveal.target = mapped;
+        reveal.activationGap = mapped - visible;
+        // The chase clock starts after the entry has been held for the first
+        // presentation, so the first visible frame is the edge and not the
+        // chase's first steps. Until then `chaseQpc` lies ahead of the sample
+        // time and the step bound is zero.
+        reveal.chaseQpc = sampleQpc + kRevealEntryHoldMs;
+    }
     reveal.visible = visible;
-    reveal.activationGap = mapped - visible;
-    // The chase clock starts after the entry has been held for the first
-    // presentation, so the first visible frame is the edge and not the chase's
-    // first steps. Until then `chaseQpc` lies ahead of the sample time and the
-    // step bound is zero.
-    reveal.chaseQpc = sampleQpc + kRevealEntryHoldMs;
     // The first frame after this call is the first one that can be composited,
     // so the visible start is written now. When nothing animated, the base was
     // already that value and this insert writes the same one; when the base was
@@ -6652,9 +7746,14 @@ bool ActivateRevealFollow(const GestureGeometry& geometry, float x, float y,
 
     // Diagnostic: where the follow starts and the gap it inherited. The chase
     // closes that gap at the planner's rate; the line says how much of it there
-    // was, not a value that is subtracted from every insert.
-    TraceLog(L"reveal takeover from=%.3f offset=%.3f", visible,
-            reveal.activationGap);
+    // was, not a value that is subtracted from every insert. `live=` names the
+    // start rule: the entry (0) or the position an interrupted retract had (1).
+    // The two can read the same number — the bottom docked entry is 0.348 — so
+    // the field is what tells them apart. `offset=` is the inherited chase gap for
+    // an entry start and the finger-to-panel offset for a live one, where the
+    // chase starts with no gap to close.
+    TraceLog(L"reveal takeover from=%.3f offset=%.3f live=%d", visible,
+            reveal.activationGap, reveal.liveTakeover ? 1 : 0);
     // The opening contact now owns the panel through the follow. The entry the
     // touch show reserved belongs to the reveal takeover, not to a later keyboard
     // settle. `controllerTouch` stays set for the whole contact: the shell's
@@ -6694,15 +7793,16 @@ bool ClearLocalCloseTap() {
 // both"; the local-only operation above is a different thing.
 CloseScheduleCancel CancelCloseSchedules(const wchar_t* reason) {
     CloseScheduleCancel dropped;
-    dropped.command = CancelPendingDismiss(reason) != 0;
+    dropped.commandSeq = CancelPendingDismiss(reason);
+    dropped.command = dropped.commandSeq != 0;
     dropped.slot = ClearLocalCloseTap();
     return dropped;
 }
 
-// A dismiss that is still settling does not block a candidate: the edge contact
-// during its retract is the pull that can still cancel the close if it began
-// before the dismiss, and refusing it would let the dismiss take the menu away
-// under the finger.
+// A down during a close is decided here and only here: the grab grant is the
+// point's own position against the surface still on screen (or the band), never
+// a travel measured later. A refused point is muted for its lifetime; a granted
+// grab spends its one opportunity at the travel threshold.
 bool BeginEdgeCandidate(const GestureGeometry& geometry, float x, float y,
                         uint64_t tickMs) {
     float low = 0.0f;
@@ -6711,28 +7811,40 @@ bool BeginEdgeCandidate(const GestureGeometry& geometry, float x, float y,
     const int32_t axis = geometry.axis();
     const float position = AxisScreenPosition(axis, x, y);
     const bool inBand = haveBand && position >= low && position <= high;
-    // The live position and the restore the state owes, for the `reason=open`
-    // refusal: the window reporting itself open is not proof that the menu is
-    // usable, and the two numbers are what tell a healthy refusal from the
-    // unhealed pair (window uncloaked, panel at the hidden rest).
-    const float progress = inBand ? PeekProgressNow() : -1.0f;
+    // A close this mod started owns the panel until the shell has hidden the
+    // window. A down in that window grabs the surface the retract still shows —
+    // the point's mapped progress is at or above the panel's live one, or it is
+    // in the band — and nothing else: the area the retract has already left is
+    // refused, and a contact there can never open this menu. It writes no
+    // Progress and leaves the close's dismiss armed.
+    const bool closeInFlight = CloseInFlight();
+    if (!BridgeCapabilityNow()) {
+        // No executor: a thumb in the band is the shell's own edge gesture, not
+        // this mod's. No candidate, no author, no Progress write. The line is
+        // per contact (the caller only runs this on the first report).
+        if (inBand || closeInFlight) {
+            TraceLog(L"reveal admit x=%.0f y=%.0f axis=%d band=%.0f,%.0f ok=0 "
+                    L"reason=no-capability",
+                    x, y, axis, haveBand ? low : -1.0f,
+                    haveBand ? high : -1.0f);
+        }
+        return false;
+    }
+    // The live position and the restore the state owes, for the grab's hit test
+    // and the `reason=open` refusal: the window reporting itself open is not
+    // proof that the menu is usable, and the two numbers are what tell a healthy
+    // refusal from the unhealed pair (window uncloaked, panel at the hidden rest).
+    const float progress = (inBand || closeInFlight) ? PeekProgressNow() : -1.0f;
     const bool restoreOwed = g_commitNeedsProgressReset;
 
     // The line speaks once per contact, and only for a contact that landed in
-    // the band: a tap anywhere else is not this gesture and stays as quiet as it
-    // was. A contact that starts inside the band and is refused names the test
-    // that refused it, which is what a pull that never followed the finger reads.
+    // the band or during a close: a tap anywhere else is not this gesture and
+    // stays as quiet as it was. A contact that is refused names the test that
+    // refused it, which is what a pull that never followed the finger reads.
     const wchar_t* reason = L"admitted";
     bool admitted = false;
-    // A close this mod started owns the panel until the shell has hidden the
-    // window. A pull that lands in that window is the pull that opens the menu
-    // this close makes room for: it is tracked, never refused and never muted,
-    // and it writes no Progress. Treating it as a candidate of *this* panel is
-    // what produced two owners: the follow took the retract over, the shell hid
-    // the window under it, and the reopen replayed the open.
-    const bool closeInFlight = CloseInFlight(tickMs);
     do {
-        if (!inBand) {
+        if (!inBand && !closeInFlight) {
             break;  // a press outside the band is not this gesture
         }
         if (!RendererReady()) {
@@ -6748,9 +7860,30 @@ bool BeginEdgeCandidate(const GestureGeometry& geometry, float x, float y,
             break;
         }
         if (closeInFlight) {
-            StartRevealFollow(x, y, tickMs, tickMs, true);
+            if (!inBand) {
+                // Axis-free by construction: the mapping the follow writes decides
+                // whether this point is on the panel that is still on screen. The
+                // panel's trail edge sits where its own progress puts it, so a
+                // point is on the surface when its mapped progress is at or below
+                // the live one; above it, the retract has already left that area.
+                // The cross axis has no progress: the point must also lie inside
+                // the rect's cross range, or a point perpendicular to and
+                // entirely outside the panel would pass on its axial coordinate
+                // alone. Both failures are the same answer — this point is not on
+                // the surface the retract still shows.
+                float downTrail = 0.0f;
+                const float downProgress = RevealProgressDip(
+                    geometry, geometry.distance(), x, y, downTrail);
+                const float slack = kProgressEpsilonDip / geometry.distance();
+                if (!PanelCrossContains(geometry, x, y) ||
+                    downProgress > progress + slack) {
+                    reason = L"offsurface";
+                    break;
+                }
+            }
+            StartRevealFollow(x, y, tickMs, tickMs, true, inBand);
             admitted = true;
-            reason = L"deferred";
+            reason = L"grab";
             break;
         }
         if (StartWindowIsOpenThrottled(tickMs)) {
@@ -6776,11 +7909,36 @@ bool BeginEdgeCandidate(const GestureGeometry& geometry, float x, float y,
         admitted = true;
     } while (false);
 
+    // A close consumes every contact it does not grant. A point it refused (the
+    // vacated area, or a point off the panel's cross range) or could not judge (no
+    // renderer, a stale layout, no distance) has no open right, and the mute makes
+    // that true for the rest of the contact's life: no report of it becomes a
+    // gesture, and no later open adopts it. The lift clears the mute with the
+    // contact.
+    if (closeInFlight && !admitted) {
+        g_hidSession.suppress = true;
+    }
+
+    // The down's own decision is also the author of any open this contact may
+    // later join, and it is recorded once, here. The band is the open claim's
+    // test, and it stays the author even when this pass could not admit (a
+    // renderer, layout or distance refusal): the shell's own gesture opens from
+    // that band, and the open it performs is adopted through this record. A
+    // granted grab authors the retract it may take over. A refused down gets no
+    // author, so no travel measured later can turn it into a follow.
     if (inBand) {
+        g_contactOrigin.author = HidDownAuthor::Band;
+    } else if (closeInFlight && admitted) {
+        g_contactOrigin.author = HidDownAuthor::Grab;
+    }
+
+    if (inBand || closeInFlight) {
         TraceLog(L"reveal admit x=%.0f y=%.0f axis=%d band=%.0f,%.0f ok=%d "
                 L"reason=%s progress=%.3f restore=%d",
                 x, y, axis, haveBand ? low : -1.0f, haveBand ? high : -1.0f,
                 admitted ? 1 : 0, reason, progress, restoreOwed ? 1 : 0);
+    }
+    if (inBand) {
         // A contact in the band may open the menu without this mod asking: the
         // shell's own gesture starts from a strip wider than any band this mod
         // admits, and a pull that is refused here (or lifts before the claim)
@@ -6811,7 +7969,12 @@ void DriveRevealFollow(const GestureGeometry& geometry, float x, float y,
     const float mapped =
         RevealProgressDip(geometry, reveal.distance, x, y, panelTrail);
     reveal.panelTrail = panelTrail;
-    reveal.target = mapped;
+    // The chase target is the finger's mapped position, less the offset a live
+    // takeover kept from the interrupted retract (0 for every ordinary follow).
+    // Travel, `max=`, the commit tests and the end-speed window below keep
+    // reading `mapped` itself: they measure the finger.
+    const float follow = mapped - reveal.liveOffset;
+    reveal.target = follow;
 
     // A report ends the coast: pin where it got to, then chase from there, so the
     // panel continues from the position the coast actually reached instead of
@@ -6823,8 +7986,8 @@ void DriveRevealFollow(const GestureGeometry& geometry, float x, float y,
         reveal.visible = std::clamp(coastValue, 0.0f, 1.0f);
     }
 
-    // The visible position chases the finger's absolute position and never passes
-    // it. The bound is a speed, not a per-report distance: the same
+    // The visible position chases the finger's target and never passes it. The
+    // bound is a speed, not a per-report distance: the same
     // kSettleSpeedDipPerMs (2.2 DIP/ms) every keyboard open and every settle
     // uses, so closing a gap looks like the panel opening at the system's own
     // speed. A 600 DIP gap takes ~273 ms of chasing (30 ms more with the entry
@@ -6842,7 +8005,7 @@ void DriveRevealFollow(const GestureGeometry& geometry, float x, float y,
         const float stepLimit =
             kSettleSpeedDipPerMs * static_cast<float>(stepMs) / reveal.distance;
         const float step =
-            std::clamp(mapped - reveal.visible, -stepLimit, stepLimit);
+            std::clamp(follow - reveal.visible, -stepLimit, stepLimit);
         reveal.visible = std::clamp(reveal.visible + step, 0.0f, 1.0f);
         reveal.chaseQpc = sampleQpc;
     }
@@ -6875,17 +8038,13 @@ void UpdateRevealSession(const GestureGeometry& geometry, float x, float y,
     reveal.lastAliveQpc = sampleQpc;
 
     if (!reveal.active) {
-        if (reveal.deferred) {
-            if (CloseInFlight(tickMs)) {
-                // The close owns the panel. This contact is measured only: no
-                // Progress, no coast, no release settle. Its own reports keep the
-                // liveness clock and its history fresh so the open that follows
-                // can adopt it from its down point.
-                return;
-            }
-            // The close landed: this pull is released and the ordinary takeover
-            // below decides, exactly as it would for a pull on a closed menu.
-            reveal.deferred = false;
+        if (reveal.granted) {
+            // This contact is a grab of a retract, and its only transfer is its
+            // own qualified pull. It is measured only — no Progress, no coast,
+            // no release settle — and a spent opportunity leaves it inert until
+            // it lifts. No takeover starts here, and the landing does not
+            // release it into one.
+            return;
         }
         if (!StartWindowIsOpenThrottled(tickMs)) {
             return;
@@ -6894,8 +8053,8 @@ void UpdateRevealSession(const GestureGeometry& geometry, float x, float y,
         // landed on a panel off its rest (the unhealed case) must not acquire
         // Progress. The same 24 DIP the open claim and the adoption use
         // qualifies it; a contact that already qualified before keeps its
-        // claim (openClaimAttempted) even as it comes back toward the edge.
-        if (!reveal.openClaimAttempted) {
+        // claim (claimAttempted) even as it comes back toward the edge.
+        if (!reveal.claimAttempted) {
             const float travel =
                 RevealTravelDip(geometry.axis(), reveal.edgeStartX,
                                 reveal.edgeStartY, x, y);
@@ -6903,7 +8062,7 @@ void UpdateRevealSession(const GestureGeometry& geometry, float x, float y,
                 return;
             }
         }
-        if (!ActivateRevealFollow(geometry, x, y, sampleQpc, tickMs)) {
+        if (!ActivateRevealFollow(geometry, x, y, sampleQpc)) {
             return;
         }
     }
@@ -6921,17 +8080,34 @@ void UpdateRevealSession(const GestureGeometry& geometry, float x, float y,
 // edge (the visible entry through the cloak), not the absolute mapped position it
 // never displayed.
 //
-// Three tests keep a tap a tap: the contact must have started while the menu was
-// closed (a contact on the open panel is a dismiss), it must have moved
-// `kAdoptTravelDip` along the opening axis (a tap does not move), and no session
-// may already own it. The adoption runs from the open transition's own service
-// pass and from the report path, so a flick whose lift arrives before the cloak
-// event is still adopted.
+// Adoption needs an author, and the contact's own down is the only one: a down
+// the band admitted claims the open, and a down a close granted is the grab of its
+// retract (`g_contactOrigin.author`, recorded in BeginEdgeCandidate). A contact
+// with no author is not this gesture — it landed on the panel, which is the
+// dismiss, or on the desktop — and travel measured after the fact can never turn
+// it into a follow. A down on the panel is refused twice over: by its author and
+// by `startedOpen`.
+//
+// The other tests keep a tap a tap: the contact must have moved `kAdoptTravelDip`
+// along the opening axis (a tap does not move), and no session may already own it.
+// The adoption runs from the open transition's own service pass and from the
+// report path, so a flick whose lift arrives before the cloak event is still
+// adopted.
 bool AdoptRevealContact(const GestureGeometry& geometry, uint64_t tickMs) {
+    if (!BridgeCapabilityNow()) {
+        return false;
+    }
     if (g_reveal.edgeCandidate || g_reveal.active || g_hidSession.active ||
         g_hidSession.suppress || !g_contactOrigin.valid ||
+        g_contactOrigin.author == HidDownAuthor::None ||
         g_contactOrigin.startedOpen || !RendererReady() ||
         !GeometryLayoutCurrent(geometry)) {
+        return false;
+    }
+    // A close owns the panel until its landing, and the only grab it grants is
+    // decided on the contact's own down (`BeginEdgeCandidate`). A travel measured
+    // after the fact is not a grant, so no contact is adopted into a retract.
+    if (CloseInFlight()) {
         return false;
     }
 
@@ -6943,21 +8119,16 @@ bool AdoptRevealContact(const GestureGeometry& geometry, uint64_t tickMs) {
         return false;
     }
 
+    // The band is printed, not tested: the author was decided on the contact's
+    // own down, and a layout that moved since then must not re-judge it.
     float low = 0.0f;
     float high = 0.0f;
     const bool haveBand = RevealBandDip(geometry, low, high);
-    // A contact that began while a close owned the panel is the pull that opens
-    // the next menu, not a takeover of this one: it is tracked as a deferred
-    // candidate and promoted at the open the close makes room for.
-    const bool closeInFlight = CloseInFlight(tickMs);
     StartRevealFollow(g_contactOrigin.downX, g_contactOrigin.downY,
-                      g_contactOrigin.downTick, tickMs, closeInFlight);
-    if (closeInFlight) {
-        return false;
-    }
+                      g_contactOrigin.downTick, tickMs);
     const uint64_t sampleQpc = QpcMsNow();
     if (!ActivateRevealFollow(geometry, g_contactOrigin.x, g_contactOrigin.y,
-                              sampleQpc, tickMs)) {
+                              sampleQpc)) {
         return false;
     }
     DriveRevealFollow(geometry, g_contactOrigin.x, g_contactOrigin.y,
@@ -6972,12 +8143,19 @@ bool AdoptRevealContact(const GestureGeometry& geometry, uint64_t tickMs) {
 // The open found a finger that is still down and already pulling. A candidate is
 // promoted here, at the open: it would activate on its next report anyway, and
 // waiting for that report is exactly the race that lost the seam when the finger
-// lifted first. A contact with no candidate is adopted from its own down point.
+// lifted first. A candidate is an admitted band down (or a spent grab), so its
+// author is its own admission. A contact with no author is adopted from its own
+// down point only when that down was admitted for this open (`AdoptRevealContact`).
 // Either way the follow owns Progress from this frame, which is the only
 // suppression the open decision may use.
 void PromoteRevealContact(const GestureGeometry& geometry, uint64_t tickMs) {
     if (g_reveal.active) {
         return;  // a follow already owns the panel
+    }
+    if (g_reveal.granted) {
+        // A grab is transferred only by its own qualified pull; the open this
+        // transition performs is not the menu that grant was for.
+        return;
     }
 
     if (g_reveal.edgeCandidate) {
@@ -6994,7 +8172,7 @@ void PromoteRevealContact(const GestureGeometry& geometry, uint64_t tickMs) {
         }
         const uint64_t sampleQpc = QpcMsNow();
         if (ActivateRevealFollow(geometry, g_contactOrigin.x,
-                                 g_contactOrigin.y, sampleQpc, tickMs)) {
+                                 g_contactOrigin.y, sampleQpc)) {
             DriveRevealFollow(geometry, g_contactOrigin.x, g_contactOrigin.y,
                               sampleQpc);
         }
@@ -7027,9 +8205,8 @@ bool ConsumeLateRevealRelease(const GestureGeometry& geometry) {
     }
 
     const uint64_t qpcNow = QpcMsNow();
-    const uint64_t ageFrom = record.readyQpc != 0 ? record.readyQpc
-                                                  : record.releaseQpc;
-    const uint64_t age = qpcNow > ageFrom ? qpcNow - ageFrom : 0;
+    const uint64_t age =
+        qpcNow > record.releaseQpc ? qpcNow - record.releaseQpc : 0;
     if (age > kLateRevealWindowMs || record.pullSerial != g_pullSerial) {
         record = RevealLateRelease{};
         return false;
@@ -7053,9 +8230,9 @@ bool ConsumeLateRevealRelease(const GestureGeometry& geometry) {
     // The same reading covers a
     // panel that was already on screen when the state was read: then it is
     // the live position, not 0. `TakeProgressNow()` is the one reader that turns
-    // an animation's recorded base into a position, and the caller already
-    // refuses the record while a close is still running, so this cannot take an
-    // animation over. The rest sentinel of a process that has not shown this
+    // an animation's recorded base into a position. A close clears the record
+    // when it takes ownership, so this cannot take a close's animation over. The
+    // rest sentinel of a process that has not shown this
     // panel yet is the off-screen rest, and `TakeVisibleProgressNow` is where that
     // rule lives. This path keeps starting at 0 while the live follow starts at
     // the entry: a settle spends time crossing the hidden travel, a follow spends
@@ -7125,11 +8302,24 @@ void ReleaseRevealSession(const GestureGeometry& geometry) {
         return;
     }
 
+    // Whether this contact was the grab a close granted. Its one opportunity is
+    // spent either way, so its release carries nothing into the next menu: no
+    // late-open record, and no landing revival.
+    const bool grab = reveal.granted;
     reveal.edgeCandidate = false;
+    reveal.granted = false;
     // The opening contact is gone: the shell's click-away from it can no longer
     // arrive, and a real click-away is a trigger again.
     SwipeIpcSetControllerTouch(&g_ipc, false);
     if (!reveal.active) {
+        if (grab) {
+            // A refused grab's release is not a pull that waits for an open: the
+            // retract it could not take is the only menu it was ever granted, so
+            // there is nothing to carry. The qualified line already named the
+            // refusal.
+            EndContactTiming();
+            return;
+        }
         // The contact is gone and the menu never appeared under it. A tap is not
         // worth a line (it never moved); a pull that travelled says the shell
         // never opened the menu, so there was nothing to follow — and it carries
@@ -7154,12 +8344,9 @@ void ReleaseRevealSession(const GestureGeometry& geometry) {
             const float position = RevealProgressDip(
                 geometry, distance, g_contactOrigin.x, g_contactOrigin.y,
                 panelTrail);
+            g_lateRelease = RevealLateRelease{};
             g_lateRelease.valid = true;
             g_lateRelease.releaseQpc = releaseQpc;
-            // A pull that lifted while a close was still in flight waited for
-            // that close: its record becomes consumable at the landing, not now.
-            g_lateRelease.deferred = g_reveal.deferred;
-            g_lateRelease.readyQpc = 0;
             g_lateRelease.travel = travel;
             g_lateRelease.position = position;
             g_lateRelease.velocity = velocity;
@@ -7181,15 +8368,24 @@ void ReleaseRevealSession(const GestureGeometry& geometry) {
 
     // The commit decision keeps the whole-gesture tests this mod was measured
     // against: the travel at release and the session average. Only the seam reads
-    // the end of the gesture.
+    // the end of the gesture. The one addition is the pull that interrupted a
+    // close (`liveHeld` below): it is judged on the panel it saved, not on travel
+    // it never had to make.
     const uint64_t elapsed = reveal.lastTick > reveal.startTick
                                  ? reveal.lastTick - reveal.startTick
                                  : 0;
     const float travel = std::max(0.0f, reveal.travel);
     const float distance = reveal.distance;
     const float progress = std::clamp(reveal.progress, 0.0f, 1.0f);
+    // A pull that took a live retract over came in to interrupt, not to close:
+    // its own travel can be short (it only had to cross 24 DIP), so it commits as
+    // long as the panel is at or above the position it took over. Everything
+    // else keeps the ordinary travel/average test.
+    const bool liveHeld =
+        reveal.liveTakeover && progress >= reveal.liveStart;
     const bool commit =
-        ReleaseCommits(true, travel, elapsed, distance, geometry.axis());
+        ReleaseCommits(true, travel, elapsed, distance) ||
+        liveHeld;
 
     // The release line is written after the animation starts: the file write
     // costs time on the input thread, and every millisecond before the
@@ -7216,10 +8412,10 @@ void ReleaseRevealSession(const GestureGeometry& geometry) {
         // finishes the slide instead of snapping.
         const bool started = BeginGestureOpen(from, endVelocity);
         TraceLog(L"open follow travel=%.0f max=%.0f progress=%.2f behind=%.3f "
-                L"offset=%.3f vel=%.2f commit=%d panel=%.0f n=%d",
+                L"offset=%.3f vel=%.2f commit=%d live=%d panel=%.0f n=%d",
                 travel, reveal.maxTravel, progress, behind,
                 reveal.activationGap, releaseSpeed, commit ? 1 : 0,
-                reveal.panelTrail, reveal.samples);
+                reveal.liveTakeover ? 1 : 0, reveal.panelTrail, reveal.samples);
         if (!started) {
             ShowAtRest();
         }
@@ -7227,7 +8423,7 @@ void ReleaseRevealSession(const GestureGeometry& geometry) {
     }
 
     // Short reveal: the same settle, the same log line, the same close direction,
-    // the same suppression window and the same armed dismiss as the committed
+    // the same close record and the same armed dismiss as the committed
     // dismiss, from the same release speed. Both close paths read identically
     // from any finger position.
     //
@@ -7238,9 +8434,10 @@ void ReleaseRevealSession(const GestureGeometry& geometry) {
     const GestureClose close =
         BeginGestureClose(from, endVelocity, CloseKind::RevealCancel);
     TraceLog(L"open follow travel=%.0f max=%.0f progress=%.2f behind=%.3f "
-            L"offset=%.3f vel=%.2f commit=%d panel=%.0f n=%d",
+            L"offset=%.3f vel=%.2f commit=%d live=%d panel=%.0f n=%d",
             travel, reveal.maxTravel, progress, behind, reveal.activationGap,
-            releaseSpeed, commit ? 1 : 0, reveal.panelTrail, reveal.samples);
+            releaseSpeed, commit ? 1 : 0, reveal.liveTakeover ? 1 : 0,
+            reveal.panelTrail, reveal.samples);
     if (close.started) {
         g_commitNeedsProgressReset = true;
         return;
@@ -7274,11 +8471,10 @@ void BeginHidSession(const GestureGeometry& geometry, float x, float y,
         return;
     }
 
-    // A close this mod started is still in flight: the panel is leaving, the
-    // shell's Hide is ahead, and a session here would drag Progress back to rest
-    // and flash the menu while it is being hidden.
-    if (g_dismissSettling.load(std::memory_order_relaxed) ||
-        tickMs < g_suppressRestoreUntil.load(std::memory_order_relaxed)) {
+    // A close this mod accepted still owns the panel: it is leaving, the shell's
+    // Hide is ahead, and a session here would drag Progress back to rest and
+    // flash the menu while it is being hidden.
+    if (g_dismissSettling.load(std::memory_order_relaxed) || CloseInFlight()) {
         if (tickMs > g_skipLogTick + 1000) {
             g_skipLogTick = tickMs;
             TraceLog(L"dismiss skipped settling");
@@ -7365,12 +8561,11 @@ void BeginHidSession(const GestureGeometry& geometry, float x, float y,
     // pinned value, so a takeover mid-settle has no jump. After a commit the base
     // value can still be 0, because the settle callback may not have run yet, so
     // restore the resting value before the first sample drives the scalar. The
-    // restore is skipped while a close this mod started is still in flight:
+    // restore is skipped while a close this mod accepted still owns the panel:
     // inserting 1 there flashed the fully open panel until the shell hid the
     // window. The flag stays set so the next open restores the scalar.
     session.startProgress = TakeProgressNow(L"hid-begin");
-    if (g_commitNeedsProgressReset &&
-        tickMs >= g_suppressRestoreUntil.load(std::memory_order_relaxed)) {
+    if (g_commitNeedsProgressReset && !CloseInFlight()) {
         g_commitNeedsProgressReset = false;
         session.startProgress = kProgressRest;
     }
@@ -7401,8 +8596,7 @@ void ReleaseHidSession(const GestureGeometry& geometry, bool allowCommit,
     const float finalDelta = std::max(0.0f, session.curDelta);
     const float distance = geometry.distance();
     const bool commit =
-        ReleaseCommits(allowCommit, finalDelta, elapsed, distance,
-                       geometry.axis());
+        ReleaseCommits(allowCommit, finalDelta, elapsed, distance);
 
     const uint64_t releaseQpc = QpcMsNow();
     EndContactTiming();
@@ -7436,13 +8630,12 @@ void ReleaseHidSession(const GestureGeometry& geometry, bool allowCommit,
     }
 
     session.active = false;
-    // A close started by the shell (a click outside, a Windows-key press) hides
-    // the window while this contact is still up. Animating Progress back to rest
-    // then replays the panel over a window that is being hidden, which is the
-    // flash the user reported. Leave Progress to the close.
-    if (g_dismissSettling.load(std::memory_order_relaxed) ||
-        GetTickCount64() <
-            g_suppressRestoreUntil.load(std::memory_order_relaxed)) {
+    // A close of this mod's owns the panel (a Win key, a Start button, a
+    // click-away or a gesture): the panel is leaving and the shell's Hide is
+    // ahead. Animating Progress back to rest then replays the panel over a window
+    // that is being hidden, which is the flash the user reported. Leave Progress
+    // to the close.
+    if (g_dismissSettling.load(std::memory_order_relaxed) || CloseInFlight()) {
         TraceLog(L"cancel animation skipped (close in flight)");
         return;
     }
@@ -7566,14 +8759,12 @@ void OnHidSampleStep(const GestureGeometry& geometry, int contacts, float xDip,
     // contact, so a retried admission cannot move the down point.
     if (!g_contactOrigin.valid) {
         g_contactOrigin.valid = true;
-        // A close in flight is not an open panel. A finger that lands during the
-        // retract is the user taking the menu back, so adoption must read it as
-        // a pull from its own down point once it has travelled
-        // kAdoptTravelDip, exactly as it does with the menu closed. Reading the
-        // shown-but-leaving window as open refused that pull: it stayed inert,
-        // the armed dismiss hid the menu under it, and the reopen replayed the open.
-        const bool closeInFlight =
-            tickMs < g_suppressRestoreUntil.load(std::memory_order_relaxed);
+        // A close that owns the panel is not an open panel. A contact that lands
+        // during the retract is decided by its own down (`BeginEdgeCandidate`): a
+        // grab of the surface still on screen, or a refusal that mutes it. Either
+        // way it did not start on an open menu, so adoption must not read the
+        // shown-but-leaving window as one.
+        const bool closeInFlight = CloseInFlight();
         const bool windowOpen =
             !closeInFlight && StartWindowIsOpenThrottled(tickMs);
         // The same reading covers the other uncloaked-but-empty window: a close
@@ -7608,13 +8799,13 @@ void OnHidSampleStep(const GestureGeometry& geometry, int contacts, float xDip,
     const bool newContact = !g_contactDown;
 
     // A contact that lands while a close is in flight does not cancel it here.
-    // The close is aborted only when this contact becomes a qualified pull
-    // (CancelCloseForQualifiedPull, called from TryClaimRevealOpen), so a tap
-    // that never enters the band or never travels leaves the close alone. A
-    // close that cannot be aborted is deferred and the landing releases it.
+    // Its down decides whether it is a grab at all (BeginEdgeCandidate), and a
+    // grab aborts the close only when it reaches the travel threshold
+    // (CancelCloseForQualifiedPull, called from TryClaimRevealOpen). A tap that
+    // never travels leaves the close alone, and a refused grab is consumed by it.
 
     if (session.suppress) {
-        // A close muted this contact: its reports are not a gesture, but the
+        // A close consumed this contact: its reports are not a gesture, but the
         // contact is still on the glass, so the latch must not expire under it.
         // The lift report clears both.
         g_contactDown = true;
@@ -7648,9 +8839,14 @@ void OnHidSampleStep(const GestureGeometry& geometry, int contacts, float xDip,
         // Admission only recorded the contact. The open request belongs to the
         // first positioned report that reaches the travel threshold, and it must
         // run before UpdateRevealSession: ActivateRevealFollow expects a window
-        // that is already open and would never request one.
+        // that is already open and would never request one. The check is repeated
+        // because the claim ends the session on this same report when the grab's
+        // transfer is refused or becomes the open request: the follow must not
+        // read a session that has just been consumed.
         TryClaimRevealOpen(geometry, xDip, yDip, tickMs);
-        UpdateRevealSession(geometry, xDip, yDip, tickMs);
+        if (g_reveal.edgeCandidate) {
+            UpdateRevealSession(geometry, xDip, yDip, tickMs);
+        }
         return;
     }
 
@@ -7731,8 +8927,7 @@ void OnHidSample(int contacts, float xDip, float yDip, uint64_t tickMs) {
 // idle tick runs while the stream is silent, so it starts the coast, and it is
 // also the tick that ends the session 10-15 ms later: that release stops the
 // coast and plans the close from its value.
-void MaybeCoast(const GestureGeometry& geometry, uint64_t tickMs,
-                uint64_t qpcNow) {
+void MaybeCoast(const GestureGeometry& geometry, uint64_t qpcNow) {
     if (g_panel.coasting.load(std::memory_order_relaxed)) {
         // Nothing interrupted this coast: pin the value it was heading to. The
         // animation is over at this point, and its base value is the report
@@ -7748,9 +8943,9 @@ void MaybeCoast(const GestureGeometry& geometry, uint64_t tickMs,
         return;
     }
 
-    // A close this mod started still owns Progress, and a menu that is already
-    // closing has no finger motion left to continue.
-    if (tickMs < g_suppressRestoreUntil.load(std::memory_order_relaxed)) {
+    // A close that owns the panel still owns Progress, and a menu that is
+    // already closing has no finger motion left to continue.
+    if (CloseInFlight()) {
         return;
     }
 
@@ -7814,15 +9009,16 @@ void MaybeCoast(const GestureGeometry& geometry, uint64_t tickMs,
 // - A touch show is in flight: the shell is uncloaking the window and the
 //   digitizer may go quiet for that whole window. The uncloak (or the show's
 //   refusal) is the event that ends it.
-// - A close is in flight and a contact owns the panel: the key press and the
-//   shell's hide pause the digitizer too, and the landing is the event that
-//   releases the deferral.
-bool IdleReleaseHeld(uint64_t tickMs) {
+// - A close owns the panel and a contact owns the panel edge: the key press and
+//   the shell's hide pause the digitizer too, and the close's end — its landing,
+//   its cancel, its repair, or the contact's own lift — is the event that ends
+//   it.
+bool IdleReleaseHeld() {
     const bool touchShowInFlight =
         SwipeIpcControllerTouch(&g_ipc) ||
         g_intentOpenActive.load(std::memory_order_relaxed);
     const bool holdThroughClose =
-        CloseInFlight(tickMs) && (g_reveal.edgeCandidate || g_reveal.active);
+        CloseInFlight() && (g_reveal.edgeCandidate || g_reveal.active);
     return touchShowInFlight || holdThroughClose;
 }
 
@@ -7844,17 +9040,11 @@ void CheckHidIdleRelease(uint64_t tickMs) {
 
     // A release record that no open consumed inside its window is dead: drop it
     // here so it cannot be read long after the gesture, and so the next keyboard
-    // open finds none. The deadline is the record's readiness, not its release:
-    // a pull that lifted while a close owned the panel is not consumable until
-    // that close lands, so starting the window at the release would kill it
-    // before the landing it waits for. While it is still deferred, the landing
-    // (or the qualified pull that cancels the close) owns its fate.
-    const uint64_t recordQpc =
-        g_lateRelease.readyQpc != 0 ? g_lateRelease.readyQpc
-                                    : g_lateRelease.releaseQpc;
-    if (g_lateRelease.valid && !g_lateRelease.deferred &&
-        (qpcNow < recordQpc ||
-         qpcNow - recordQpc > kLateRevealWindowMs)) {
+    // open finds none. The window is measured from the release; nothing extends
+    // it, and no landing consumes a record.
+    if (g_lateRelease.valid &&
+        (qpcNow < g_lateRelease.releaseQpc ||
+         qpcNow - g_lateRelease.releaseQpc > kLateRevealWindowMs)) {
         g_lateRelease = RevealLateRelease{};
     }
 
@@ -7866,7 +9056,7 @@ void CheckHidIdleRelease(uint64_t tickMs) {
     // panel standing still for the whole gap. Starting it here makes that tick
     // start the coast and then hand it to the release, which stops it and settles
     // from its value, exactly as on the clean path.
-    MaybeCoast(geometry, tickMs, qpcNow);
+    MaybeCoast(geometry, qpcNow);
 
     // The settled measurement's deadline: the layout watch needs a second layout
     // pass, and one may never come after the open storyboard finishes. The
@@ -7909,7 +9099,9 @@ void CheckHidIdleRelease(uint64_t tickMs) {
     // owning the panel is held through that gap, and its real lift is a report
     // that releases it explicitly. Both holds are IdleReleaseHeld's, and its
     // comment says why the wait planner reads the same predicate.
-    const bool held = IdleReleaseHeld(tickMs);
+    // A close that owns the panel holds Progress, and the idle must not release
+    // a contact that is owning it.
+    const bool held = IdleReleaseHeld();
     const bool sessionIdle =
         session.active && qpcNow >= session.lastAliveQpc &&
         qpcNow - session.lastAliveQpc >= kIdleReleaseMs;
@@ -7921,14 +9113,21 @@ void CheckHidIdleRelease(uint64_t tickMs) {
         g_reveal.edgeCandidate && qpcNow >= g_reveal.lastAliveQpc &&
         qpcNow - g_reveal.lastAliveQpc >= kCandidateIdleHoldMs;
     if (revealIdle && !held) {
+        // A released contact that a close consumed keeps its mute: this watchdog
+        // is not the evidence that ends it — a lift report or a proven new
+        // contact is. A grant that outlived its close has no mute, and is
+        // released here like any other candidate.
+        const bool consumed = session.suppress;
         ReleaseRevealSession(geometry);
-        // This watchdog is the missing lift (a slow digitizer is the other
-        // reading). The next report is a new down, not a continuation whose
-        // original admission point this latch still holds.
-        g_contactDown = false;
-        g_contactOrigin = HidContactOrigin{};
-        g_openCheckValid = false;
-        ForgetTrackedContact();
+        if (!consumed) {
+            // This watchdog is the missing lift (a slow digitizer is the other
+            // reading). The next report is a new down, not a continuation whose
+            // original admission point this latch still holds.
+            g_contactDown = false;
+            g_contactOrigin = HidContactOrigin{};
+            g_openCheckValid = false;
+            ForgetTrackedContact();
+        }
     }
 
     // The tracked identity carries its own evidence clock, independent of the
@@ -7942,10 +9141,23 @@ void CheckHidIdleRelease(uint64_t tickMs) {
     // admitted or not. An identity that expires with the latch clear is the case
     // this clock exists for, and it is the one worth a line: no lift and no latch
     // cleanup could ever have released it.
+    //
+    // A consumed contact is the exception, and the reason this clock is read
+    // here: silence through a close is the shell's hide, not a lift. While a
+    // close owns the panel neither clock runs at all, and a Contact Identifier
+    // never lets silence end the mute: the decoder ends it when a report names
+    // a different identifier. A node index or the coordinate-only path can end
+    // it in a report, but not through silence — the node can be handed on, and
+    // holding it after a lost lift would swallow the next swipe — so those keep
+    // the 18 ms fallback once the close has ended.
+    //
     // No session may own the contact here: a live session's reports carry the
     // points (or the asserted tip) that refresh this clock, and its own idle
     // release runs first in this tick.
-    if (!session.active && !g_reveal.edgeCandidate &&
+    const bool closeInFlight = CloseInFlight();
+    const bool holdLatch =
+        closeInFlight || (session.suppress && g_trackedContact.hasIdentifier);
+    if (!session.active && !g_reveal.edgeCandidate && !holdLatch &&
         g_trackedContact.slot >= 0 &&
         tickMs > g_trackedContact.lastEvidenceTick &&
         tickMs - g_trackedContact.lastEvidenceTick >= kIdleReleaseMs) {
@@ -7956,14 +9168,16 @@ void CheckHidIdleRelease(uint64_t tickMs) {
         ForgetTrackedContact();
     }
 
-    // A contact that holds no session is not tracked per report, so the same
-    // silence that ends a gesture ends the "this contact already started"
-    // latch. Without it a lost lift would swallow the next edge swipe. The
-    // mute a keyboard close installed belongs to that contact too: with the
-    // contact gone there is nothing left to suppress, and the next contact must
-    // start normally instead of being ignored until some later lift.
-    if (!session.active && !g_reveal.edgeCandidate && g_contactDown &&
-        tickMs > g_contactTick && tickMs - g_contactTick >= kIdleReleaseMs) {
+    // A contact that holds no session is not tracked per report, so silence is
+    // the only evidence that its lift was lost; without this expiry that lost
+    // lift would swallow the next edge swipe. It does not run through a close
+    // (the digitizer's quiet is the shell's hide) and it does not run for a
+    // consumed contact whose name can prove the next one — that report ends the
+    // mute in the decoder, with its own line. On a device that cannot prove it,
+    // this is the fallback the next swipe has.
+    if (!session.active && !g_reveal.edgeCandidate && !holdLatch &&
+        g_contactDown && tickMs > g_contactTick &&
+        tickMs - g_contactTick >= kIdleReleaseMs) {
         g_contactDown = false;
         g_contactOrigin = HidContactOrigin{};
         session.suppress = false;
@@ -7977,7 +9191,9 @@ void CheckHidIdleRelease(uint64_t tickMs) {
 // The dismiss both close paths arm. It runs on the input thread at the end of
 // the settle. A pull that started after the release owns the menu again, so the
 // dismiss is dropped and no Dismiss request reaches the bridge; the pull
-// generation sampled at the arm decides the drop.
+// generation sampled at the arm decides the drop. A close whose dismiss is
+// dropped here or cannot be published ends its record at this call: the close
+// will never ask for its hide.
 void RunPendingCloseTap(uint64_t tickMs) {
     if (g_pendingTapTick == 0 || tickMs < g_pendingTapTick) {
         return;
@@ -7987,8 +9203,11 @@ void RunPendingCloseTap(uint64_t tickMs) {
     const uint32_t pull = g_pendingTapPull;
 
     if (g_pullSerial != pull || g_reveal.active ||
-        (g_reveal.edgeCandidate && !g_reveal.deferred)) {
+        (g_reveal.edgeCandidate && !g_reveal.granted)) {
+        // A newer pull owns the menu; the open it claims has already published
+        // the open direction, so this ending retires the record and nothing else.
         CancelCloseSchedules(L"superseded");
+        EndClose(L"superseded");
         return;
     }
 
@@ -7999,10 +9218,12 @@ void RunPendingCloseTap(uint64_t tickMs) {
     // A Win press during the retract cancels this dismiss (the open intent drops
     // the slot), so a window already closed here was hidden by something else: an
     // external takeover or the shell's own close. The dismiss would only ask the
-    // shell to close a window that is already closed.
+    // shell to close a window that is already closed, and this close is over.
     if (!StartWindowIsOpen()) {
         TraceLog(L"close dismiss skipped kind=%s (already closed)",
                 CloseKindName(kind));
+        EndClose(L"window-closed");
+        ReleaseExecutorOwnership();
         return;
     }
 
@@ -8021,13 +9242,15 @@ void RunPendingCloseTap(uint64_t tickMs) {
     SwipeIpcReadOpen(&g_ipc, &openGeneration, &openTick);
     if (!RequestBridgeDismiss(1, GetTickCount64(), openGeneration)) {
         // Nothing can run this dismiss: the window would stay shown over a
-        // retracted panel. Give the ownership up now, and the unhealed rule
-        // restores the panel once the suppression window ends.
+        // retracted panel. The close ends as a refusal, the ownership goes back
+        // now, and the unhealed rule restores the panel.
+        EndClose(L"no-executor");
         ReleaseExecutorOwnership();
         TraceLog(L"close dismiss skipped kind=%s reason=no-executor",
                 CloseKindName(kind));
         return;
     }
+    NoteCloseDismissPublished();
     TraceLog(L"close dismiss kind=%s", CloseKindName(kind));
 }
 
@@ -8319,18 +9542,29 @@ void PostUiOpenWatchRelease(uint32_t closedGeneration,
 
 // M3: one intent handler for the bridge's four triggers. The controller never
 // branches on the trigger: open sets the entry and asks the bridge for Show,
-// close runs the one mirrored close and asks for Dismiss, external drops the
+// close runs the one shell-close settle and asks for Dismiss, external drops the
 // pull and resyncs. The bridge's executor acks through execAck.
 //
-// The record is passed in, not re-read. The landing reconciliation examined a
-// snapshot before it applied anything; re-reading there could consume a newer
-// record (an open published while the external was being examined) and then
-// claim the external that was seen had been applied.
+// The record is claimed before it is copied, and the copy is proved by the
+// record's sequence after the claim: an abort makes the counter odd, so that read
+// fails. The claim word is written by this same input thread, so it is not a
+// second proof. The publisher aborts an untaken record before it replays, so a
+// record whose copy no longer holds is dropped, never applied. The ack is written
+// only after the branch published the resulting controller direction.
 void ApplyBridgeIntentRecord(const SwipeIpcIntent& intent) {
     if (intent.seq == 0 || intent.seq == g_lastIntentSeq) {
         return;
     }
     g_lastIntentSeq = intent.seq;
+    if (!BridgeCapabilityNow()) {
+        // The bridge published this record before its capability dropped, or a
+        // stale activation left it behind. Nothing may settle for an executor
+        // that no longer exists; answer so the publisher releases the record.
+        TraceLog(L"intent drop seq=%lld reason=no-capability",
+                static_cast<long long>(intent.seq));
+        SwipeIpcAnswerIntent(&g_ipc, intent.seq, kSwipeAckRefused, 0, 0, E_ABORT);
+        return;
+    }
     const wchar_t* kind = intent.kind == kSwipeIntentOpen
                               ? L"open"
                               : (intent.kind == kSwipeIntentClose ? L"close"
@@ -8355,12 +9589,12 @@ void ApplyBridgeIntentRecord(const SwipeIpcIntent& intent) {
     if (intent.kind == kSwipeIntentExternal) {
         // External ownership wins: both close schedules are revoked and the
         // cancel-recovery ticket is dropped, so nothing of ours can still hide
-        // the window or reissue an open the shell did not ask for. The
-        // suppression goes too: this takeover's close is the shell's, and the
-        // poll must classify its landing as external (drop the pull, no reopen).
+        // the window or reissue an open the shell did not ask for. The close
+        // record ends too: this takeover's close is the shell's, and the poll must
+        // classify its landing as external (drop the pull, no reopen).
         const CloseScheduleCancel dropped = CancelCloseSchedules(L"external");
         g_intentCancel = CloseCancelTicket{};
-        g_suppressRestoreUntil.store(0, std::memory_order_relaxed);
+        EndClose(L"external");
         g_intentOpenActive.store(false, std::memory_order_relaxed);
         ForgetPendingDismiss();
         if (g_hidSession.active) {
@@ -8380,67 +9614,19 @@ void ApplyBridgeIntentRecord(const SwipeIpcIntent& intent) {
         TraceLog(L"intent external drop trigger=%s slot=%d command=%d", trigger,
                 dropped.slot ? 1 : 0, dropped.command ? 1 : 0);
     } else if (intent.kind == kSwipeIntentOpen) {
-        // The deadline the cancelled command was scheduled for, read before the
-        // cancel clears it, and the dismiss whose call already returned but whose
-        // hide has not been confirmed. Both are read before the cancel: either
-        // one means a dismiss may be inside the shell.
-        const uint64_t dismissedAt =
-            g_pendingDismissExecAt.load(std::memory_order_relaxed);
-        const LONG64 executedDismiss = g_pendingDismissConfirm;
-        const LONG64 cancelled = CancelPendingDismiss(L"open-intent");
-        // The controller owns an open from this line, whichever shape the press
-        // has; the bridge reads this direction for the next toggle.
-        SwipeIpcSetControllerDirection(&g_ipc, kSwipeDirectionOpen);
         const GestureGeometry geometry = ReadGestureGeometry();
         if (StartWindowIsOpen()) {
-            // The close this press answers has not hidden the window yet, so the
-            // press cancels it. The local dismiss slot is dropped before the
-            // executor command can fire, and that command is cancelled above;
-            // the panel is taken where the
-            // retract left it and settles back up with the pull-cancel's own
-            // curve. The window never hides, so no show is requested and no entry
-            // is applied: the menu is on screen at its live position.
-            ClearLocalCloseTap();
-            g_suppressRestoreUntil.store(0, std::memory_order_relaxed);
-            g_commitNeedsProgressReset = false;
-            g_intentOpenActive.store(false, std::memory_order_relaxed);
-            ForgetPendingDismiss();
-            // A dismiss that already entered the shell's Dismiss call cannot be
-            // recalled by the cancel above; if it still hides the window, the
-            // close's landing reissues this open once. The ticket names the menu
-            // and the command, so no other landing can serve it.
-            //
-            // The ticket is armed only for a command that was published:
-            //   - `cancelled != 0`: the record was still queued or armed and may
-            //     already have entered `Dismiss`;
-            //   - `executedDismiss != 0`: the call returned, its executed ack
-            //     cleared the pending slot, and the hide may still land.
-            // A local-only cancel (`cancelled == 0`, no executed dismiss) armed
-            // nothing: no dismiss is inside the shell, so a later hide of this
-            // same menu is not this press's close and must not request Show.
-            //
-            // The deadline bounds the ticket. A still-published command can run up
-            // to its deadline, then take the ack budget and the confirmation probe;
-            // a command whose call returned is measured from this press, because
-            // its hide is imminent.
-            const LONG64 ticketSeq =
-                cancelled != 0 ? cancelled : executedDismiss;
-            const uint64_t now = GetTickCount64();
-            const uint64_t expireAt =
-                ticketSeq != 0
-                    ? ((cancelled != 0 && dismissedAt != 0) ? dismissedAt : now) +
-                          kBridgeAckTimeoutMs + kDismissConfirmGraceMs
-                    : 0;
-            g_intentCancel =
-                ticketSeq != 0
-                    ? CloseCancelTicket{true, g_ipcOpenTickLow, ticketSeq,
-                                        expireAt}
-                    : CloseCancelTicket{};
-            const float live = TakeProgressNow(L"intent-open-cancel");
-            std::chrono::milliseconds duration{0};
-            if (!BeginGestureSettle(live, 1.0f, 0.0f, duration)) {
-                ShowAtRest();
-            }
+            // The close this request answers has not hidden the window yet, so
+            // the request cancels it. The cancel body is shared with the band pull
+            // the retract refused: the local dismiss slot is dropped before the
+            // executor command can fire, that command is cancelled, the close
+            // record ends, the open direction is published, and the recovery
+            // ticket is armed for a dismiss that may already be inside the shell.
+            // The tail is the press's own: a press has no finger, so the panel is
+            // settled back up from where the retract left it. The window never
+            // hides, so no show is requested and no entry is applied.
+            CancelCloseForOpenRequest();
+            const float live = SettlePressOpen();
             TraceLog(L"intent open cancel from=%.3f ticket=%d ticket_open=%u "
                     L"ticket_seq=%lld ticket_expire=%llu",
                     live, g_intentCancel.pending ? 1 : 0,
@@ -8449,8 +9635,10 @@ void ApplyBridgeIntentRecord(const SwipeIpcIntent& intent) {
                     static_cast<unsigned long long>(g_intentCancel.expireAt));
         } else {
             // The window is already hidden: the close this press answers has
-            // landed, so its command (already cancelled above) and any retained
+            // landed, so its command (cancelled here) and any retained
             // confirmation end before the new open claims the panel.
+            CancelPendingDismiss(L"open-intent");
+            SwipeIpcSetControllerDirection(&g_ipc, kSwipeDirectionOpen);
             ForgetPendingDismiss();
             const float entry =
                 std::clamp(RevealEntryProgress(geometry), 0.0f, 1.0f);
@@ -8482,18 +9670,20 @@ void ApplyBridgeIntentRecord(const SwipeIpcIntent& intent) {
         // confirmation and the generation are void from here.
         ForgetPendingDismiss();
         // The close owns the panel now: one close mechanism, the same ownership
-        // the gesture and keyboard closes take. It sets the restore suppression
-        // so the visibility poll cannot "heal" the retracted panel while the
-        // bridge's dismiss is still on its way, and it mutes a contact still on
-        // the glass.
-        TakeCloseOwnership(GetTickCount64(), g_contactDown);
+        // the gesture and keyboard closes take, accepted before the settle's
+        // first frame. The record is what keeps the visibility poll from
+        // "healing" the retracted panel while the bridge's dismiss is still on
+        // its way, and it mutes a contact still on the glass.
+        TakeCloseOwnership(CloseKind::Dismiss, GetTickCount64(), g_contactDown);
         const float from = TakeProgressNow(L"intent-close");
         std::chrono::milliseconds duration{0};
-        if (!BeginMirrorCloseSettle(from, duration)) {
-            // No settle, so there is no close to own: the panel returns to rest
-            // and the controller states its release in one place.
+        if (!BeginShellCloseSettle(from, duration)) {
+            // No settle, so there is no retract: the panel returns to rest, the
+            // record ends as a refusal and the controller states its release in
+            // one place.
             ShowAtRest();
             g_commitNeedsProgressReset = false;
+            EndClose(L"no-settle");
             ReleaseExecutorOwnership();
             ackState = kSwipeAckRefused;
             ackHr = E_FAIL;
@@ -8506,13 +9696,15 @@ void ApplyBridgeIntentRecord(const SwipeIpcIntent& intent) {
             if (RequestBridgeDismiss(
                     ExecDismissMethodForIntent(intent.method, intent.trigger),
                     executeAt, intent.open)) {
+                NoteCloseDismissPublished();
                 ackDuration = static_cast<int32_t>(duration.count());
                 TraceLog(L"intent close from=%.3f dur=%lld", from,
                         static_cast<long long>(duration.count()));
             } else {
                 // Nothing will hide this window. The settle already retracted the
-                // panel; the ownership goes back now and the unhealed rule
-                // restores the panel after the suppression window.
+                // panel; the record ends as a refusal, the ownership goes back
+                // now and the unhealed rule restores the panel.
+                EndClose(L"no-executor");
                 ReleaseExecutorOwnership();
                 ackState = kSwipeAckRefused;
                 ackHr = E_FAIL;
@@ -8521,13 +9713,41 @@ void ApplyBridgeIntentRecord(const SwipeIpcIntent& intent) {
             }
         }
     }
+    // The answer is the bridge's "direction visible" signal: every branch above
+    // publishes the resulting direction (open, closing, unowned) before this
+    // call. Do not move it above a direction publication.
     SwipeIpcAnswerIntent(&g_ipc, intent.seq, ackState, ackDuration, ackEntry,
                          static_cast<int32_t>(ackHr));
 }
 
+// Answers a sequence this activation claimed but cannot apply. The publisher's
+// timeout keeps its slot until this answer, so a revoked record must not be
+// dropped silently: state=superseded says no action ran. If the bridge aborted
+// the record after the claim, that answer is the proof for one native replay
+// (`reason=revoked-before-copy`); otherwise it only releases the queue.
+void AnswerRevokedIntent(LONG64 sequence) {
+    TraceLog(L"intent revoked seq=%lld", static_cast<long long>(sequence));
+    SwipeIpcAnswerIntent(&g_ipc, sequence, kSwipeAckSuperseded, 0, 0, S_OK);
+}
+
+// The input thread's one intent turn. The claim is written before the record is
+// copied, so a publisher whose ack times out can see that the controller may
+// already hold a copy. The record read after the claim is the proof: an abort
+// after the claim makes the counter odd and that read fails, so the controller
+// never acts on a record the bridge has already revoked. Only a claimed sequence
+// applied under this activation is acknowledged; a claimed one this activation
+// cannot apply is answered as superseded, never silently.
 void ApplyBridgeIntent() {
+    const LONG64 sequence = SwipeIpcIntentSequence(&g_ipc);
+    if (sequence == 0 || sequence == g_lastIntentSeq) {
+        return;
+    }
+    SwipeIpcTakeIntent(&g_ipc, sequence);
     SwipeIpcIntent intent{};
-    if (!SwipeIpcReadIntent(&g_ipc, &intent)) {
+    if (!SwipeIpcReadIntent(&g_ipc, &intent) || intent.seq != sequence) {
+        TraceLog(L"intent drop seq=%lld reason=record-moved",
+                static_cast<long long>(sequence));
+        AnswerRevokedIntent(sequence);
         return;
     }
     ApplyBridgeIntentRecord(intent);
@@ -8538,9 +9758,9 @@ void ApplyBridgeIntent() {
 // in the same step, and the pending open entry is dropped. The published
 // direction then follows the window's cloak on the next transition, which is the
 // one source of truth for a panel the controller no longer drives. A failed
-// dismiss leaves the panel retracted with the window still shown; the
-// suppression window still expires, and the unhealed rule then brings the panel
-// back instead of leaving an invisible menu attached to a shown window.
+// dismiss leaves the panel retracted with the window still shown; its close record
+// ends with the failure, and the unhealed rule then brings the panel back instead
+// of leaving an invisible menu attached to a shown window.
 void ReleaseExecutorOwnership() {
     SwipeIpcSetControllerDirection(&g_ipc, kSwipeDirectionUnowned);
     SwipeIpcSetControllerTouch(&g_ipc, false);
@@ -8708,6 +9928,10 @@ void ApplyExecAck() {
                 g_intentCancel = CloseCancelTicket{};
             }
             ForgetConfirmedDismiss();
+            // The hide is not coming: the close ends as a terminal repair, and
+            // its record must not keep the panel unreadable for the rest of the
+            // window.
+            EndClose(L"repair");
             ReleaseExecutorOwnership();
             TraceLog(L"exec dismiss %s command=%lld state=%u hr=%08X visible=%d",
                     unconfirmed ? L"unconfirmed" : L"failed",
@@ -8801,6 +10025,9 @@ void CheckExecAckTimeout(uint64_t now) {
                         static_cast<long long>(dismiss));
             }
             ForgetConfirmedDismiss();
+            // No dismiss of this close can still run: the record ends as a
+            // terminal repair before the ownership goes back.
+            EndClose(L"repair");
             ReleaseExecutorOwnership();
             TraceLog(L"exec ack timeout seq=%lld kind=dismiss open=%d (resync "
                     L"from cloak)",
@@ -8824,6 +10051,7 @@ void CheckExecAckTimeout(uint64_t now) {
             static_cast<unsigned long long>(
                 g_pendingDismissConfirmGeneration));
     ForgetPendingDismiss();
+    EndClose(L"repair");
     ReleaseExecutorOwnership();
 }
 
@@ -8831,9 +10059,10 @@ void CheckExecAckTimeout(uint64_t now) {
 // the cloak event and the intent event are both waited on, so an intent that
 // arrived with the landing is read here before the landing acts. Only `external`
 // is reconciled here — an open or close intent is the user
-// talking to a menu, and the landing's own pull/cancel rules already own that
-// case. ApplyBridgeIntent consumes the record, so the event's later wake finds
-// nothing new.
+// talking to a menu, and the cancel/recovery rules already own that case.
+// The snapshot above only identifies the external; the claim is taken before it
+// is applied and the record is re-read after the claim, so an external the bridge
+// aborted in between is not applied.
 void ReconcileSupersedingIntentBeforeLanding() {
     SwipeIpcIntent intent{};
     if (!SwipeIpcReadIntent(&g_ipc, &intent) || intent.seq == 0 ||
@@ -8841,6 +10070,14 @@ void ReconcileSupersedingIntentBeforeLanding() {
         return;
     }
     if (intent.kind != kSwipeIntentExternal) {
+        return;
+    }
+    SwipeIpcTakeIntent(&g_ipc, intent.seq);
+    SwipeIpcIntent current{};
+    if (!SwipeIpcReadIntent(&g_ipc, &current) || current.seq != intent.seq) {
+        TraceLog(L"intent reconcile drop seq=%lld reason=record-moved",
+                static_cast<long long>(intent.seq));
+        AnswerRevokedIntent(intent.seq);
         return;
     }
     TraceLog(L"intent reconcile seq=%lld kind=external (before landing recovery)",
@@ -8851,63 +10088,37 @@ void ReconcileSupersedingIntentBeforeLanding() {
     ApplyBridgeIntentRecord(intent);
 }
 
-// The one landing-open transaction. Both reasons a close's landing can serve an
-// open end here: a pull that was down (or lifted inside the late window) when the
-// close landed, and an open intent that cancelled a close whose dismiss still
-// ran. Entry, progress, the pending flag, the controller state and the show
-// request are one sequence; the caller chooses the reason and the log line.
-//
-// Touch ownership follows the *finger*, not the reason. Only a contact that is
-// still down owns the opening panel (`pullDown`); a release record means the
-// contact already lifted, and marking the shared touch word for it made the
-// bridge swallow the next real desktop click as `reason=touch-owner` on a menu
-// no finger was touching.
-bool BeginLandingOpen(bool pullReopen, bool pullDown, bool lateFresh) {
+// The one landing-open transaction. It serves the one open a landing can still
+// owe: an explicit open request — a press, or the qualified band pull a retract
+// refused — that cancelled a close whose dismiss ran anyway. Entry, progress, the
+// pending flag, the controller state and the show request are one sequence. The
+// landing serves no touch open — no contact, hover or carried travel turns a
+// landed close into a Show — and the request is not a finger, so the controller's
+// touch word stays clear.
+bool BeginLandingOpen() {
     if (!RendererReady() || StartWindowIsOpen() ||
         g_intentOpenActive.load(std::memory_order_relaxed)) {
         return false;
     }
     const GestureGeometry geometry = ReadGestureGeometry();
     float entry = 0.0f;
-    if (!PublishOpenClaim(geometry, pullDown, entry)) {
+    if (!PublishOpenClaim(geometry, false, entry)) {
         // The landing cannot present anything: the panel stays retracted with the
         // window hidden, and the controller claims nothing. The next open
         // (the shell's own or a later pull) starts from the entry again.
-        TraceLog(L"landing open failed entry=%.3f pull=%d reason=no-executor",
-                entry, pullReopen ? 1 : 0);
+        TraceLog(L"landing open failed entry=%.3f reason=no-executor", entry);
         return false;
     }
-    if (pullReopen) {
-        TraceLog(L"reveal reopen after close pull=%d late=%d entry=%.3f",
-                pullDown ? 1 : 0, lateFresh ? 1 : 0, entry);
-    } else {
-        TraceLog(L"intent open recovered entry=%.3f", entry);
-    }
+    TraceLog(L"intent open recovered entry=%.3f", entry);
     return true;
 }
 
-// The pull that may reopen Start when a close lands. A contact merely resting in
-// the band during the retract is not that pull: its last positioned report must
-// have moved away from the edge by kAdoptTravelDip, the same qualification the
-// open claim uses. An active follow qualifies by construction: it has driven the
-// panel. A qualified late release is a separate record and does not come through
-// here.
-bool RevealPullQualified(const GestureGeometry& geometry) {
-    if (g_reveal.active) {
-        return true;
-    }
-    if (!g_reveal.edgeCandidate || !g_contactOrigin.valid) {
-        return false;
-    }
-    return RevealTravelDip(geometry.axis(), g_reveal.edgeStartX,
-                           g_reveal.edgeStartY, g_contactOrigin.x,
-                           g_contactOrigin.y) >= kAdoptTravelDip;
-}
-
 // The close-landing body. Its usual caller is the cloak transition: the window
-// went from shown to hidden and this classifies the close, releases a pull that
-// waited for it, and resets the controller. The executor's confirmation probe is
-// the second caller: it can find the window already hidden with no transition
+// went from shown to hidden and this classifies the close and resets the
+// controller. It retires no grab: a grant is spent by the contact at its own
+// travel threshold, and until then the contact is on its way there. The
+// executor's confirmation probe is the second caller: it can find the window
+// already hidden with no transition
 // left to arrive (the dismiss ran on a window something else had hidden, a
 // native hide won the race, or the transition was lost). The body is shared on
 // purpose — one landing, one set of generation and ticket rules — but the log
@@ -8920,20 +10131,21 @@ void LandClosedMenu(uint64_t tickMs, const wchar_t* reason) {
     // timer has the lower index: the landing can be served before the
     // `external` intent that came with it is processed, and processing it
     // afterwards does not revoke a Show this branch already issued. The
-    // already-published superseding intent is reconciled first, and it clears
-    // the suppression and the recovery ticket as any external takeover does.
+    // already-published superseding intent is reconciled first, and it ends the
+    // close record and the recovery ticket as any external takeover does.
     ReconcileSupersedingIntentBeforeLanding();
-    // Whether the hide that just landed belongs to a close this mod
-    // started. The suppression *window* is not the evidence: it is 600 ms,
-    // and a maximum-duration close (520 ms settle + the 30 ms lead +
-    // launcher dispatch + cloak delivery) measured 579-594 ms, so a busy
-    // launcher can pass it and a genuine pull held through that close would
-    // be dropped as an external takeover. The command is the identity: a
-    // dismiss of ours is queued/armed, or executed and awaiting its
-    // confirmation, for exactly the menu this landing closes. Every path
-    // that revokes it (a cancel, a failure, an external intent) clears those
-    // slots first, so this cannot claim someone else's close. A close whose
-    // command an open intent revoked is added below through its ticket.
+    // Whether the hide that just landed belongs to a close this mod started. The
+    // close record is not the evidence: it ends with this landing and says
+    // nothing about who asked for the hide, and its repair bound is 600 ms while
+    // a maximum-duration close (520 ms settle + the 30 ms lead + launcher
+    // dispatch + cloak delivery) measured 579-594 ms — a busy launcher can pass
+    // any such bound, and a genuine pull held through that close would be
+    // dropped as an external takeover. The command is the identity: a dismiss of
+    // ours is queued/armed, or executed and awaiting its confirmation, for
+    // exactly the menu this landing closes. Every path that revokes it (a cancel,
+    // a failure, an external intent) clears those slots first, so this cannot
+    // claim someone else's close. A close whose command an open intent revoked is
+    // added below through its ticket.
     //
     // The command is only ours while the open generation it was stamped with is
     // still the section's current one. A retained confirmation from a menu that a
@@ -8959,7 +10171,7 @@ void LandClosedMenu(uint64_t tickMs, const wchar_t* reason) {
     // The ticket also has a deadline: after the revoked command's own
     // deadline plus the ack budget and the confirmation probe, the dismiss can
     // no longer be inside the shell, so a landing after that is some other
-    // close of the same menu, not this press's.
+    // close of the same menu, not this request's.
     const bool ticketCurrent =
         g_intentCancel.pending && g_intentCancel.openTick == g_ipcOpenTickLow;
     const bool ticketLive =
@@ -8977,7 +10189,7 @@ void LandClosedMenu(uint64_t tickMs, const wchar_t* reason) {
     g_intentCancel = CloseCancelTicket{};
     // A close whose command an open intent revoked can still land. The
     // ticket names that command and the menu it belongs to, so the landing
-    // is still this mod's close and its pull is released, not dropped.
+    // is still this mod's close, not an external one.
     const bool closeOurs = closeCommand || intentCancelLost;
     if (closeOurs && confirmCommand && g_pendingDismissConfirmRetained) {
         // The confirmation the cloak refused to settle has now been carried by
@@ -8988,31 +10200,11 @@ void LandClosedMenu(uint64_t tickMs, const wchar_t* reason) {
                 static_cast<unsigned long long>(
                     g_pendingDismissConfirmGeneration));
     }
-    // The close has landed, so its suppression no longer applies. Without
-    // this a Win press right after the hide opened the window with Progress
-    // still at 0, and the panel was invisible until the next open.
-    g_suppressRestoreUntil.store(0, std::memory_order_relaxed);
-    if (closeOurs) {
-        // A pull that arrived during the close is the pull that opens the
-        // menu this hide made room for. The landing is the one moment its
-        // deferral can end: the retract is over, nothing else writes
-        // Progress, and the open's own poll either promotes the contact from
-        // its down point (still down) or consumes the release record it left
-        // (already lifted).
-        if (g_reveal.deferred) {
-            g_reveal.deferred = false;
-            TraceLog(L"reveal defer released candidate=%d down=%d",
-                    g_reveal.edgeCandidate ? 1 : 0,
-                    g_contactOrigin.valid ? 1 : 0);
-        }
-        // The release record of a pull that lifted during this close becomes
-        // consumable now: its end speed was measured at the lift, and the
-        // window it must arrive in starts at the landing, not at the lift.
-        if (g_lateRelease.valid && g_lateRelease.deferred) {
-            g_lateRelease.deferred = false;
-            g_lateRelease.readyQpc = QpcMsNow();
-        }
-    } else {
+    // The close has landed, so the record ends and its suppression no longer
+    // applies. Without this a Win press right after the hide opened the window
+    // with Progress still at 0, and the panel was invisible until the next open.
+    EndClose(closeOurs ? L"landing" : L"external");
+    if (!closeOurs) {
         // A close this mod did not start: an external takeover owns the
         // screen. The pull is dropped, not deferred — the takeover's window
         // is not a menu to reopen — and the rest of the contact stays inert
@@ -9022,7 +10214,7 @@ void LandClosedMenu(uint64_t tickMs, const wchar_t* reason) {
             g_contactDown || g_hidSession.active || g_reveal.active ||
             g_reveal.edgeCandidate;
         if (g_reveal.active || g_reveal.edgeCandidate ||
-            g_reveal.deferred) {
+            g_reveal.granted) {
             g_reveal = HidRevealSession{};
             TraceLog(L"reveal dropped (window closed by shell)");
         }
@@ -9037,6 +10229,14 @@ void LandClosedMenu(uint64_t tickMs, const wchar_t* reason) {
         }
         g_lateRelease = RevealLateRelease{};
     }
+    // A grant is deliberately not retired here. A grab spends it at its own 24
+    // DIP report, and until that report the contact is still on its way to it: a
+    // landing is not evidence that it gave up. The unspent grant therefore
+    // survives this close — `granted`, `edgeCandidate` and the panel ownership it
+    // holds all stay — and that contact's crossing then finds the close over
+    // (`no-close`) and, for a band down, asks for the open like any pull on a
+    // closed menu. Only a refusal consumes it (`ConsumeGrabContact`), and so does
+    // the external classification above, whose window is nobody's to reopen.
     // The closed menu shows no panel, and the layout of the next open is a
     // new epoch: a measurement still in flight belongs to the menu that just
     // went away. The request id is captured before the epoch moves, so the
@@ -9045,13 +10245,20 @@ void LandClosedMenu(uint64_t tickMs, const wchar_t* reason) {
         g_openGeneration.load(std::memory_order_relaxed);
     const SettledMeasureRequest closing = SnapshotMeasureRequest();
     AdvanceOpenGeneration();
+    // The landing's own decision, in trace form: `muted=1` says a contact was
+    // consumed and is still on the glass with no open right — the one mute a
+    // close sets at its start, at a refused down, or at a refused grab. A grant
+    // this close never saw spent is not a mute: that contact still has its open
+    // to claim. A consumed contact is never adopted, so a landing can no longer
+    // log a touch reopen.
+    const int muted = g_hidSession.suppress ? 1 : 0;
     if (reason) {
         // A close the confirmation probe had to finish: no cloak event carried
         // it, so the cause is named. The word `observed` stays, because the
         // close is as real as any the transition reports.
-        TraceLog(L"win close observed reason=%s", reason);
+        TraceLog(L"win close observed reason=%s muted=%d", reason, muted);
     } else {
-        TraceLog(L"win close observed");
+        TraceLog(L"win close observed muted=%d", muted);
     }
     SwipeIpcSetControllerDirection(&g_ipc, kSwipeDirectionUnowned);
     SwipeIpcSetControllerTouch(&g_ipc, false);
@@ -9063,34 +10270,12 @@ void LandClosedMenu(uint64_t tickMs, const wchar_t* reason) {
     // just ended; the UI thread releases them.
     PostUiOpenWatchRelease(closedGeneration, closing);
 
-    // A pull that was down when this close landed is the pull that takes the
-    // menu back — but only a qualified one. A finger merely resting in the
-    // band during the retract is not a pull, and the retract is not
-    // permission to reopen the menu it just closed. The qualification is the
-    // same signed inward travel the open claim uses; a release record left
-    // by a real pull (lateFresh) stays valid on its own.
-    const uint64_t closeQpc = QpcMsNow();
-    const bool pullDown =
-        g_contactDown && RevealPullQualified(ReadGestureGeometry());
-    // The window starts when the record became consumable: readyQpc for a
-    // pull that waited for this landing, releaseQpc for one that lifted on
-    // the closed menu. The release time stays the age the adopt line
-    // reports, never the deadline of a record that became usable late.
-    const uint64_t readyQpc =
-        g_lateRelease.readyQpc != 0 ? g_lateRelease.readyQpc
-                                    : g_lateRelease.releaseQpc;
-    const bool lateFresh =
-        g_lateRelease.valid && !g_lateRelease.deferred &&
-        readyQpc != 0 && closeQpc >= readyQpc &&
-        closeQpc - readyQpc <= kLateRevealWindowMs;
-    // The reason is computed first, then one transaction runs: the pull keeps
-    // its precedence over the cancel-recovery, and only the pull marks the
-    // contact as the panel's owner.
-    const bool pullReopen = pullDown || lateFresh;
-    if (pullReopen) {
-        BeginLandingOpen(true, pullDown, lateFresh);
-    } else if (intentCancelLost) {
-        BeginLandingOpen(false, false, false);
+    // The one open a landing can still owe is the explicit request's
+    // obligation: a press or a band pull that cancelled a close whose dismiss ran
+    // anyway. Nothing else — no contact still down, no carried travel, no release
+    // record — turns a landed close into a Show.
+    if (intentCancelLost) {
+        BeginLandingOpen();
     }
     // The window is hidden from this point on. A cloak wake that was already
     // queued for the same hide reads this and finds no transition to run, so
@@ -9141,6 +10326,11 @@ bool ServiceRootVisibility(uint64_t tickMs, bool viaFallback) {
     }
     const bool open = sample == CloakState::Open;
     const bool wasOpen = g_rootWasOpen;
+    // The panel is only this mod's to animate while the bridge can execute. A
+    // shell that opens or closes without that capability keeps its own
+    // storyboard; the Start side records the state and publishes the generation
+    // but starts no settle and no takeover.
+    const bool capable = BridgeCapabilityNow();
     // The open state this call is a sample of. A request stops being waited for
     // the moment the state matches it; every observation keeps a short settle
     // watch so the unhealed repair below still gets its polls after the open's
@@ -9157,24 +10347,37 @@ bool ServiceRootVisibility(uint64_t tickMs, bool viaFallback) {
             g_visibilityPollUntil = watch;
         }
     }
-    const bool justOpened = open && !wasOpen;
-    // A close this mod started reports the window open until the shell has run
+    // A close that owns the panel reports the window open until the shell has run
     // the Hide its dismiss caused. Reading that as a reopen restored Progress 1
-    // while the close was still in flight, so a follow that began in that window
+    // while the retract was still running, so a follow that began in that window
     // flashed the panel fully open and the window then vanished.
-    const bool closeInFlight = CloseInFlight(tickMs);
+    const bool closeInFlight = CloseInFlight();
+    const bool justOpened = open && !wasOpen;
     if (justOpened) {
-        // An open the shell really performed while this mod still held a close in
-        // flight. The window is shown again, so the close is over: its Hide either
-        // already ran (and this is the next open) or was superseded. The
-        // suppression is dropped here so the one open path below runs, and the
-        // settle starts from the position the panel has now instead of from 0, so
-        // the retract's last frame is continued rather than replayed.
+        // An open the shell really performed while this mod still owned a close.
+        // The window is shown again, so the close is over: its Hide either already
+        // ran (and this is the next open) or was superseded. The record ends here
+        // so the one open path below runs, and the settle starts from the position
+        // the panel has now instead of from 0, so the retract's last frame is
+        // continued rather than replayed.
         const bool openDuringClose = closeInFlight;
         if (openDuringClose) {
             TraceLog(L"win open during close progress=%.3f", PeekProgressNow());
-            g_suppressRestoreUntil.store(0, std::memory_order_relaxed);
-            g_reveal.deferred = false;
+            // The shell showed the window while this close was retracting it.
+            // The close is over, and the controller takes the new open: both
+            // close schedules go (the local gesture deadline and the executor
+            // dismiss), the old close's recovery ticket is dropped with the
+            // record, and the direction says the next toggle is a close. Without
+            // this the direction stayed `closing` and a pending local dismiss
+            // could fire against the new menu's generation.
+            CancelCloseSchedules(L"open");
+            g_intentCancel = CloseCancelTicket{};
+            SwipeIpcSetControllerDirection(&g_ipc, kSwipeDirectionOpen);
+            SwipeIpcSetControllerTouch(&g_ipc, false);
+            EndClose(L"open");
+            // The finger that was grabbing the retract is not the owner of this
+            // window: its grant died with the close. The open proceeds as the
+            // shell's own and settles from the panel's live position below.
         }
         // A fresh menu, so every executor command written for the previous one is
         // void from this point on, whatever its own deadline says. The
@@ -9193,6 +10396,17 @@ bool ServiceRootVisibility(uint64_t tickMs, bool viaFallback) {
         // the previous one is stale from this point on, and a request that was
         // still live is cancelled by the epoch check in its turn.
         AdvanceOpenGeneration();
+
+        if (!capable) {
+            // The shell opened on its own while this side has no executor. The
+            // generation is recorded, but no takeover, settle or measurement
+            // starts: the panel belongs to the shell's storyboard until the
+            // bridge publishes a capability again.
+            g_intentOpenActive.store(false, std::memory_order_relaxed);
+            g_commitNeedsProgressReset = false;
+            g_rootWasOpen = open;
+            return true;
+        }
 
         // The shell opens the menu from a strip wider than any fixed band this
         // mod can admit, so a pull that began inside the taskbar's thickness can
@@ -9234,28 +10448,37 @@ bool ServiceRootVisibility(uint64_t tickMs, bool viaFallback) {
         const bool lateAdopted =
             !gestureOwnsProgress && ConsumeLateRevealRelease(geometry);
 
-        // The keyboard open is the gesture open from rest: one curve for every
-        // open, so a Windows press and an edge pull cannot look different, and
-        // the travel plans the duration exactly as it does there. An open that
-        // overlapped a close still on its way out starts from where the panel is:
-        // starting it at 0 would rewind the retract it just superseded.
+        // The keyboard open is the gesture open from rest, but only when this
+        // activation asked the shell to show the menu. A shell-initiated show -
+        // the press was passed, or capability arrived with the shell's own Show -
+        // is already at rest when the cloak event runs; animating it from 0 would
+        // rewind the panel and flash. That open adopts the resting value and
+        // publishes no ownership. A show requested by an open intent, a touch
+        // claim or a reveal keeps its entry; an open that overlapped a close still
+        // starts from where the panel is.
         if (!gestureOwnsProgress && !lateAdopted) {
-            // The settle needs the measured travel, from the snapshot the follow
-            // reads. The measurement request below runs after this poll, so an
-            // open that lands before the first publish still has Distance 0: a
-            // settle planned from it would run the 160 ms floor. Restore the
-            // resting value instead and let the shell's own storyboard run.
-            if (geometry.distance() > 0.0f) {
-                const bool intentEntry =
-                    g_intentOpenActive.exchange(false, std::memory_order_relaxed);
-                const float intentFrom =
-                    g_intentOpenEntry.load(std::memory_order_relaxed);
+            const bool intentEntry =
+                g_intentOpenActive.exchange(false, std::memory_order_relaxed);
+            const float intentFrom =
+                g_intentOpenEntry.load(std::memory_order_relaxed);
+            const bool unowned = !intentEntry && !openDuringClose;
+            if (unowned) {
+                // The shell performed this open on its own. The panel is already
+                // presented at the resting value, so there is no settle to run.
+                ShowAtRest();
+                g_commitNeedsProgressReset = false;
+                TraceLog(L"win open adopted reason=unowned");
+            } else if (geometry.distance() > 0.0f) {
+                // The settle needs the measured travel, from the snapshot the
+                // follow reads. The measurement request below runs after this
+                // poll, so an open that lands before the first publish still has
+                // Distance 0: a settle planned from it would run the 160 ms floor.
+                // Restore the resting value instead and let the shell's own
+                // storyboard run.
                 const float from = intentEntry
                                        ? intentFrom
-                                       : (openDuringClose
-                                              ? TakeVisibleProgressNow(
-                                                    L"win-during-close")
-                                              : 0.0f);
+                                       : TakeVisibleProgressNow(
+                                             L"win-during-close");
                 std::chrono::milliseconds duration{0};
                 if (BeginGestureSettle(from, 1.0f, 0.0f, duration)) {
                     // The animation now owns Progress, so no later path needs to
@@ -9264,11 +10487,8 @@ bool ServiceRootVisibility(uint64_t tickMs, bool viaFallback) {
                     if (intentEntry) {
                         TraceLog(L"win open intent from=%.3f dur=%llu", from,
                                 static_cast<unsigned long long>(duration.count()));
-                    } else if (openDuringClose) {
-                        TraceLog(L"win open during close from=%.3f dur=%llu", from,
-                                static_cast<unsigned long long>(duration.count()));
                     } else {
-                        TraceLog(L"win open dur=%llu",
+                        TraceLog(L"win open during close from=%.3f dur=%llu", from,
                                 static_cast<unsigned long long>(duration.count()));
                     }
                 }
@@ -9277,8 +10497,8 @@ bool ServiceRootVisibility(uint64_t tickMs, bool viaFallback) {
                 // The open landed and there is no settle to start from the
                 // intended entry, so the entry is spent. Leaving the flag set
                 // would hold the idle release (a contact still down when the
-                // menu appeared would never be released, and the landing's own
-                // open test treats the flag as "an entry is pending").
+                // menu appeared would never be released), and `BeginLandingOpen`
+                // treats the flag as "an entry is pending".
                 g_intentOpenActive.store(false, std::memory_order_relaxed);
                 TraceLog(L"win open restore (no geometry)");
             }
@@ -9291,6 +10511,9 @@ bool ServiceRootVisibility(uint64_t tickMs, bool viaFallback) {
         const SettledMeasureRequest request = StartMeasureRequest(
             !g_hidSession.active && !g_reveal.edgeCandidate);
         PostGeometryMeasurement(request, false);
+    } else if (!capable) {
+        // No executor: a close that lands is the shell's, and a shown window is
+        // not this side's to heal. The state is still recorded below.
     } else if (!open && g_rootWasOpen) {
         LandClosedMenu(tickMs, nullptr);
     } else if (open) {
@@ -9322,13 +10545,17 @@ bool ServiceRootVisibility(uint64_t tickMs, bool viaFallback) {
         const float live = PeekProgressNow();
         const bool offScreen =
             distance > 0.0f && live < RevealEntryProgress(geometry);
-        // A close still in flight owns this window: its Hide is ahead, and
-        // restoring the panel there is the flash the suppression window exists to
-        // prevent. Only a window whose close is over can be unhealed.
-        const bool closeInFlight =
-            tickMs < g_suppressRestoreUntil.load(std::memory_order_relaxed);
-        if (offScreen && !closeInFlight && !ProgressMotionActive() &&
-            !g_reveal.active && !g_hidSession.active) {
+        // A close that owns this window keeps its Hide ahead, and restoring the
+        // panel there is the flash the close record exists to prevent: only a
+        // window whose close is over can be unhealed. A close whose repair bound
+        // ended the record but whose dismiss may still land is not over either —
+        // the settle this heal would start is exactly what the coming hide
+        // interrupts — so that question is asked by its own predicate.
+        const bool closeOwnsPanel = CloseInFlight();
+        const bool hideMayLand = CloseHideMayLand();
+        if (offScreen && !closeOwnsPanel && !hideMayLand &&
+            !ProgressMotionActive() && !g_reveal.active &&
+            !g_hidSession.active) {
             if (tickMs > g_unhealedLogTick &&
                 tickMs - g_unhealedLogTick >= 1000) {
                 g_unhealedLogTick = tickMs;
@@ -9406,6 +10633,15 @@ uint64_t NextInputDeadlineMs(uint64_t nowTick, uint64_t nowQpc) {
         consider(kRootProbeMs);
     }
 
+    // The capability word normally wakes the thread through its event. A
+    // channel whose event could not be created still needs a bounded way to see
+    // the first 1 and the drop; this is a bootstrap only, because the deadline
+    // disappears once the peer is advertised and the 100 ms heartbeat is running.
+    if (!g_ipc.capabilityEvent && !BridgeCapabilityNow() &&
+        g_rootHookReady.load(std::memory_order_acquire) && RendererReady()) {
+        consider(kCapabilityProbeMs);
+    }
+
     const bool coasting = g_panel.coasting.load(std::memory_order_relaxed);
     // The coast's own end: when no report and no release stopped it, this is the
     // wake that pins the value it reached.
@@ -9414,7 +10650,7 @@ uint64_t NextInputDeadlineMs(uint64_t nowTick, uint64_t nowQpc) {
                     static_cast<uint64_t>(kCoastDuration.count()));
     }
 
-    if (!IdleReleaseHeld(nowTick)) {
+    if (!IdleReleaseHeld()) {
         // The coast starts 8 ms after the last point, so the panel is already
         // moving when the release is planned 10 ms later. The release itself is
         // the 18 ms silence, and the candidate's watchdog is its longer window.
@@ -9440,8 +10676,15 @@ uint64_t NextInputDeadlineMs(uint64_t nowTick, uint64_t nowQpc) {
             considerQpc(g_reveal.lastAliveQpc + kCandidateIdleHoldMs);
         }
         // The latch and the identity clocks expire on the same 18 ms silence as
-        // a session, and only while no session owns the contact.
-        if (!g_hidSession.active && !g_reveal.edgeCandidate) {
+        // a session, and only while no session owns the contact. They are not
+        // armed while they could not act: a close that owns the panel holds both
+        // (the quiet is the shell's hide), and a consumed contact whose name can
+        // prove the next one is ended by that report, not by a clock. A deadline
+        // that cannot act would spin the thread at the timer's smallest delay.
+        const bool holdLatch =
+            CloseInFlight() ||
+            (g_hidSession.suppress && g_trackedContact.hasIdentifier);
+        if (!g_hidSession.active && !g_reveal.edgeCandidate && !holdLatch) {
             if (g_contactDown) {
                 considerTick(g_contactTick + kIdleReleaseMs);
             }
@@ -9449,6 +10692,13 @@ uint64_t NextInputDeadlineMs(uint64_t nowTick, uint64_t nowQpc) {
                 considerTick(g_trackedContact.lastEvidenceTick + kIdleReleaseMs);
             }
         }
+    }
+
+    // The close's repair bound: the one deadline the record has, and the wake
+    // that ends a close whose landing never came. Armed only while the record
+    // owns the panel, so nothing wakes for a close that has ended.
+    if (CloseInFlight()) {
+        considerTick(g_close.repairAt);
     }
 
     // The close tap's deadline: the end of the settle it was armed for.
@@ -9505,6 +10755,9 @@ uint64_t NextInputDeadlineMs(uint64_t nowTick, uint64_t nowQpc) {
 // tick did; what changed is that nothing calls it while nothing is due.
 void ServiceDeadlineWork(uint64_t tickMs) {
     RunPendingCloseTap(tickMs);
+    // The close's repair bound is a deadline like the others: a close whose
+    // landing never came ends here instead of holding the panel.
+    RepairExpiredClose(tickMs);
     CheckHidIdleRelease(tickMs);
     CheckExecAckTimeout(tickMs);
     if (g_visibilityPollUntil != 0) {
@@ -9522,6 +10775,36 @@ void ServiceDeadlineWork(uint64_t tickMs) {
             g_lastVisibilityPollTick = tickMs;
             ServiceRootVisibility(tickMs, true);
         }
+    }
+}
+
+// One transition when the bridge's capability drops while this activation still
+// owns a panel. The peer is withdrawn by the caller; this releases everything
+// the controller was driving and puts the panel at the rest the cloak shows, so
+// a half-open scalar does not survive into the shell's own state. The input
+// thread is the only caller, the same thread that writes Progress.
+void ResetDrivenStateForCapabilityLoss() {
+    CancelCloseSchedules(L"capability");
+    EndClose(L"capability");
+    ForgetPendingDismiss();
+    g_pendingShowExec.store(0, std::memory_order_relaxed);
+    g_pendingShowUntil.store(0, std::memory_order_relaxed);
+    g_intentCancel = CloseCancelTicket{};
+    ReleaseExecutorOwnership();
+    if (g_hidSession.active) {
+        g_hidSession.active = false;
+        EndContactTiming();
+    }
+    g_reveal = HidRevealSession{};
+    g_contactOrigin = HidContactOrigin{};
+    g_lateRelease = RevealLateRelease{};
+    g_commitNeedsProgressReset = false;
+    if (RendererReady()) {
+        // The cloak, not the last animation target, decides which rest is
+        // current: 1 for a menu still on screen, 0 for a hidden one.
+        const float rest = StartWindowIsOpen() ? 1.0f : 0.0f;
+        InsertProgress(rest);
+        g_panel.phase = PanelPhase::Idle;
     }
 }
 
@@ -9598,6 +10881,65 @@ void FeedContactPoint(HidDevice& device, long rawX, long rawY, USHORT reportId,
     g_hidSession.lastRawY = rawY;
 }
 
+// Whether this report asserts a real contact at all. A button device asserts it
+// per slot; the coordinate-only fallback has only its Contact Count or a
+// non-origin position to say so. A hover (in range, tip up) asserts nothing.
+bool ReportAssertsContact(const HidDevice& device, const HidContactSlot* slots,
+                          int slotCount, HidField countField,
+                          ULONG topLevelCount) {
+    if (device.coordinatePath) {
+        if (countField == HidField::Ok) {
+            return topLevelCount > 0;
+        }
+        for (int i = 0; i < slotCount; ++i) {
+            if (slots[i].hasPosition && !slots[i].atOrigin) {
+                return true;
+            }
+        }
+        return false;
+    }
+    for (int i = 0; i < slotCount; ++i) {
+        if (SlotContactState(slots[i]) == HidContactState::Contact) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Whether a report that does not name the tracked contact proves a different
+// one. This is the evidence that ends a contact a close consumed: silence is
+// the shell's hide, not a lift, so the decoder cannot wait for the idle window
+// there. Another device cannot be the consumed contact. On the same device a
+// different asserted Contact Identifier, or a different asserted node when the
+// report names none of the tracked contact, is a new contact by the decoder's
+// own identity rule. This evidence ends the mute in a report; it does not let
+// the mute survive silence, because a node can be handed to the next finger.
+bool ReportProvesNewContact(const HidDevice& device, const HidContactSlot* slots,
+                            int slotCount, HidField countField,
+                            ULONG topLevelCount) {
+    if (!ReportAssertsContact(device, slots, slotCount, countField,
+                              topLevelCount)) {
+        return false;
+    }
+    if (g_trackedContact.device != device.handle) {
+        return true;
+    }
+    if (!g_trackedContact.hasIdentifier) {
+        // The node was not named (the caller decided that); an asserted node is
+        // a different one.
+        return true;
+    }
+    for (int i = 0; i < slotCount; ++i) {
+        if (SlotContactState(slots[i]) == HidContactState::Contact &&
+            slots[i].hasIdentifier) {
+            // The tracked identifier was not named (the caller decided that);
+            // this is a different one.
+            return true;
+        }
+    }
+    return false;
+}
+
 void FeedHidReport(HidDevice& device, const BYTE* report,
                    ULONG reportLength, uint64_t tickMs) {
     if (!device.ready || !device.preparsed) {
@@ -9664,158 +11006,186 @@ void FeedHidReport(HidDevice& device, const BYTE* report,
     // fields finds nothing declared here and is dropped, instead of feeding a
     // zero that would synthesize a lift.
     if (g_trackedContact.slot >= 0) {
-        if (g_trackedContact.device != device.handle) {
-            return;
-        }
+        do {
+            if (g_trackedContact.device != device.handle) {
+                // A consumed contact ends on evidence, and another device's
+                // asserted contact is evidence: this report cannot be the finger
+                // the close consumed. A hover on the other device is not.
+                if (!g_hidSession.suppress ||
+                    !ReportProvesNewContact(device, slots, slotCount, countField,
+                                            topLevelCount)) {
+                    return;
+                }
+                TraceLog(L"hid consumed ended slot=%d id=%lu reason=device",
+                        g_trackedContact.slot, g_trackedContact.identifier);
+                EndConsumedContact();
+                break;
+            }
 
-        int trackedSlot = -1;
-        if (g_trackedContact.hasIdentifier) {
-            // The identifier decides: a slot that now carries a different one is
-            // another contact, even at the index the tracked contact last used.
-            // An unused slot can keep or zero its identifier, so a slot that
-            // positively asserts contact wins over one that merely carries the
-            // name; when two assert it, the tracked slot is the one taken and the
-            // ambiguity is logged once.
-            int firstMatch = -1;
-            int trackedMatch = -1;
-            int assertedMatch = -1;
-            int assertedCount = 0;
-            for (int i = 0; i < slotCount; ++i) {
-                if (!slots[i].hasIdentifier ||
-                    slots[i].identifier != g_trackedContact.identifier) {
-                    continue;
-                }
-                if (firstMatch < 0) {
-                    firstMatch = i;
-                }
-                if (i == g_trackedContact.slot) {
-                    trackedMatch = i;
-                }
-                if (SlotContactState(slots[i]) == HidContactState::Contact) {
-                    assertedCount++;
-                    if (assertedMatch < 0 || i == g_trackedContact.slot) {
-                        assertedMatch = i;
+            int trackedSlot = -1;
+            if (g_trackedContact.hasIdentifier) {
+                // The identifier decides: a slot that now carries a different one is
+                // another contact, even at the index the tracked contact last used.
+                // An unused slot can keep or zero its identifier, so a slot that
+                // positively asserts contact wins over one that merely carries the
+                // name; when two assert it, the tracked slot is the one taken and the
+                // ambiguity is logged once.
+                int firstMatch = -1;
+                int trackedMatch = -1;
+                int assertedMatch = -1;
+                int assertedCount = 0;
+                for (int i = 0; i < slotCount; ++i) {
+                    if (!slots[i].hasIdentifier ||
+                        slots[i].identifier != g_trackedContact.identifier) {
+                        continue;
+                    }
+                    if (firstMatch < 0) {
+                        firstMatch = i;
+                    }
+                    if (i == g_trackedContact.slot) {
+                        trackedMatch = i;
+                    }
+                    if (SlotContactState(slots[i]) == HidContactState::Contact) {
+                        assertedCount++;
+                        if (assertedMatch < 0 || i == g_trackedContact.slot) {
+                            assertedMatch = i;
+                        }
                     }
                 }
-            }
-            if (assertedMatch >= 0) {
-                trackedSlot = assertedMatch;
-                if (assertedCount > 1 && !g_duplicateContactIdLogged) {
-                    g_duplicateContactIdLogged = true;
-                    TraceLog(L"hid contact id=%lu declared down in %d slots; "
-                            L"using=%d",
-                            g_trackedContact.identifier, assertedCount,
-                            trackedSlot);
+                if (assertedMatch >= 0) {
+                    trackedSlot = assertedMatch;
+                    if (assertedCount > 1 && !g_duplicateContactIdLogged) {
+                        g_duplicateContactIdLogged = true;
+                        TraceLog(L"hid contact id=%lu declared down in %d slots; "
+                                L"using=%d",
+                                g_trackedContact.identifier, assertedCount,
+                                trackedSlot);
+                    }
+                } else {
+                    // Nothing asserts contact: the tracked slot is the best evidence
+                    // left, else the first slot that carries the name.
+                    trackedSlot = trackedMatch >= 0 ? trackedMatch : firstMatch;
                 }
-            } else {
-                // Nothing asserts contact: the tracked slot is the best evidence
-                // left, else the first slot that carries the name.
-                trackedSlot = trackedMatch >= 0 ? trackedMatch : firstMatch;
             }
-        }
-        if (trackedSlot < 0 && g_trackedContact.slot < slotCount &&
-            slots[g_trackedContact.slot].declared) {
-            // No identifier names the contact in this report: the node index it
-            // was last seen in is the only name left. A slot that does declare a
-            // different identifier is another contact, not a silent return of
-            // this one.
-            const HidContactSlot& candidate = slots[g_trackedContact.slot];
-            const bool namesAnother =
-                g_trackedContact.hasIdentifier && candidate.hasIdentifier &&
-                candidate.identifier != g_trackedContact.identifier;
-            if (!namesAnother) {
-                trackedSlot = g_trackedContact.slot;
+            if (trackedSlot < 0 && g_trackedContact.slot < slotCount &&
+                slots[g_trackedContact.slot].declared) {
+                // No identifier names the contact in this report: the node index it
+                // was last seen in is the only name left. A slot that does declare a
+                // different identifier is another contact, not a silent return of
+                // this one.
+                const HidContactSlot& candidate = slots[g_trackedContact.slot];
+                const bool namesAnother =
+                    g_trackedContact.hasIdentifier && candidate.hasIdentifier &&
+                    candidate.identifier != g_trackedContact.identifier;
+                if (!namesAnother) {
+                    trackedSlot = g_trackedContact.slot;
+                }
             }
-        }
-        if (trackedSlot < 0) {
-            if (g_trackedContact.slot >= slotCount) {
-                // The device table recycled this handle into a device with fewer
-                // contact nodes: the index the contact was last seen on cannot
-                // name anything in this report any more.
+            if (trackedSlot < 0) {
+                // A consumed contact is the one case where this report may be the
+                // next down rather than silence about this one: its own name is
+                // the evidence that ends it. A report that names nothing stays
+                // inert, and the idle fallback in CheckHidIdleRelease covers a
+                // device whose name cannot answer.
+                if (g_hidSession.suppress &&
+                    ReportProvesNewContact(device, slots, slotCount, countField,
+                                           topLevelCount)) {
+                    TraceLog(L"hid consumed ended slot=%d id=%lu "
+                            L"reason=new-contact",
+                            g_trackedContact.slot,
+                            g_trackedContact.identifier);
+                    EndConsumedContact();
+                    break;
+                }
+                if (g_trackedContact.slot >= slotCount) {
+                    // The device table recycled this handle into a device with fewer
+                    // contact nodes: the index the contact was last seen on cannot
+                    // name anything in this report any more.
+                    ForgetTrackedContact();
+                }
+                // This report says nothing about the tracked contact. It is not a
+                // lift: only the contact's own declared tip-up or in-range clear is,
+                // and the idle window ends a contact that really went away.
+                return;
+            }
+
+            const HidContactSlot& slot = slots[trackedSlot];
+            // A name is not evidence. This report names the tracked contact, but it
+            // may carry neither a point nor an asserted tip, and such a report must
+            // not hold the tracker: after a refused admission the latch is clear, so
+            // no lift and no latch cleanup could ever release this identity.
+            // `lastEvidenceTick` therefore moves only where the report proves the
+            // contact — an asserting tip or in-range bit below, or a point this path
+            // feeds — and a name-only report updates the slot and the name
+            // (diagnostics, and the identity the expiry line prints) and nothing
+            // else.
+            // A contact the report names is named by that name from here on, so a
+            // later slot reassignment cannot transfer the gesture.
+            if (slot.hasIdentifier) {
+                g_trackedContact.hasIdentifier = true;
+                g_trackedContact.identifier = slot.identifier;
+            }
+            g_trackedContact.slot = trackedSlot;
+
+            const HidContactState state = SlotContactState(slot);
+            if (state == HidContactState::NotContact) {
+                // The tracked contact ended: its declared tip went up (a pen lift) or
+                // its declared in-range bit cleared. No other slot in this report
+                // restarts it. `Unknown` never ends it: a report that carries no
+                // contact field for the slot cannot speak for the contact.
+                TraceLog(L"hid tracked notcontact field=%d tip=%d tipdown=%d range=%d "
+                        L"rangedown=%d id=%d count=%d coord=%d report=%u pos=%d",
+                        static_cast<int>(slot.buttons.field),
+                        slot.buttons.tipDeclared ? 1 : 0,
+                        slot.buttons.tipDown ? 1 : 0,
+                        slot.buttons.inRangeDeclared ? 1 : 0,
+                        slot.buttons.inRangeDown ? 1 : 0,
+                        slot.hasIdentifier ? 1 : 0,
+                        countField == HidField::Ok ? topLevelCount : -1,
+                        device.coordinatePath ? 1 : 0, reportId,
+                        slot.hasPosition ? 1 : 0);
                 ForgetTrackedContact();
+                OnHidSample(0, 0.0f, 0.0f, tickMs);
+                return;
             }
-            // This report says nothing about the tracked contact. It is not a
-            // lift: only the contact's own declared tip-up or in-range clear is,
-            // and the idle window ends a contact that really went away.
-            return;
-        }
-
-        const HidContactSlot& slot = slots[trackedSlot];
-        // A name is not evidence. This report names the tracked contact, but it
-        // may carry neither a point nor an asserted tip, and such a report must
-        // not hold the tracker: after a refused admission the latch is clear, so
-        // no lift and no latch cleanup could ever release this identity.
-        // `lastEvidenceTick` therefore moves only where the report proves the
-        // contact — an asserting tip or in-range bit below, or a point this path
-        // feeds — and a name-only report updates the slot and the name
-        // (diagnostics, and the identity the expiry line prints) and nothing
-        // else.
-        // A contact the report names is named by that name from here on, so a
-        // later slot reassignment cannot transfer the gesture.
-        if (slot.hasIdentifier) {
-            g_trackedContact.hasIdentifier = true;
-            g_trackedContact.identifier = slot.identifier;
-        }
-        g_trackedContact.slot = trackedSlot;
-
-        const HidContactState state = SlotContactState(slot);
-        if (state == HidContactState::NotContact) {
-            // The tracked contact ended: its declared tip went up (a pen lift) or
-            // its declared in-range bit cleared. No other slot in this report
-            // restarts it. `Unknown` never ends it: a report that carries no
-            // contact field for the slot cannot speak for the contact.
-            TraceLog(L"hid tracked notcontact field=%d tip=%d tipdown=%d range=%d "
-                    L"rangedown=%d id=%d count=%d coord=%d report=%u pos=%d",
-                    static_cast<int>(slot.buttons.field),
-                    slot.buttons.tipDeclared ? 1 : 0,
-                    slot.buttons.tipDown ? 1 : 0,
-                    slot.buttons.inRangeDeclared ? 1 : 0,
-                    slot.buttons.inRangeDown ? 1 : 0,
-                    slot.hasIdentifier ? 1 : 0,
-                    countField == HidField::Ok ? topLevelCount : -1,
-                    device.coordinatePath ? 1 : 0, reportId,
-                    slot.hasPosition ? 1 : 0);
-            ForgetTrackedContact();
-            OnHidSample(0, 0.0f, 0.0f, tickMs);
-            return;
-        }
-        // A coordinate-only device cannot assert its contact, so the old
-        // fallback's lift rule decides here too, even after the contact is
-        // tracked: Contact Count 0 is the lift (the position fields often keep
-        // their last value), and a zero pair is the no-position report its lift
-        // looks like, not a point at the screen corner.
-        if (device.coordinatePath && countField == HidField::Ok &&
-            topLevelCount == 0) {
-            ForgetTrackedContact();
-            OnHidSample(0, 0.0f, 0.0f, tickMs);
-            return;
-        }
-        if (!slot.hasPosition) {
-            // A contact that is asserted but carries no point in this report is
-            // still down. It refreshes the liveness clock without feeding a
-            // position: silence used to end a contact that was being asserted,
-            // and the same finger could then start a second gesture. The
-            // identifier alone is not evidence: a device whose unused slots keep
-            // or zero their ids would keep a stale finger alive and every other
-            // device out.
-            if (state == HidContactState::Contact) {
-                g_trackedContact.lastEvidenceTick = tickMs;  // asserted, not named
-                NoteContactAlive(tickMs);
+            // A coordinate-only device cannot assert its contact, so the old
+            // fallback's lift rule decides here too, even after the contact is
+            // tracked: Contact Count 0 is the lift (the position fields often keep
+            // their last value), and a zero pair is the no-position report its lift
+            // looks like, not a point at the screen corner.
+            if (device.coordinatePath && countField == HidField::Ok &&
+                topLevelCount == 0) {
+                ForgetTrackedContact();
+                OnHidSample(0, 0.0f, 0.0f, tickMs);
+                return;
             }
+            if (!slot.hasPosition) {
+                // A contact that is asserted but carries no point in this report is
+                // still down. It refreshes the liveness clock without feeding a
+                // position: silence used to end a contact that was being asserted,
+                // and the same finger could then start a second gesture. The
+                // identifier alone is not evidence: a device whose unused slots keep
+                // or zero their ids would keep a stale finger alive and every other
+                // device out.
+                if (state == HidContactState::Contact) {
+                    g_trackedContact.lastEvidenceTick = tickMs;  // asserted, not named
+                    NoteContactAlive(tickMs);
+                }
+                return;
+            }
+            if (device.coordinatePath && slot.atOrigin) {
+                // A zero pair on the count/position path is its no-position report:
+                // there is no point to feed and therefore none to count as evidence.
+                return;
+            }
+            // A point this path is about to feed is the other half of the evidence
+            // rule; it is written before the feed, so a feed that ends the contact
+            // cannot leave a clock behind on a forgotten identity.
+            g_trackedContact.lastEvidenceTick = tickMs;
+            FeedContactPoint(device, slot.rawX, slot.rawY, reportId,
+                             collections[trackedSlot], tickMs);
             return;
-        }
-        if (device.coordinatePath && slot.atOrigin) {
-            // A zero pair on the count/position path is its no-position report:
-            // there is no point to feed and therefore none to count as evidence.
-            return;
-        }
-        // A point this path is about to feed is the other half of the evidence
-        // rule; it is written before the feed, so a feed that ends the contact
-        // cannot leave a clock behind on a forgotten identity.
-        g_trackedContact.lastEvidenceTick = tickMs;
-        FeedContactPoint(device, slot.rawX, slot.rawY, reportId,
-                         collections[trackedSlot], tickMs);
-        return;
+        } while (false);
     }
 
     if (!anyDeclared) {
@@ -9879,7 +11249,9 @@ void FeedHidReport(HidDevice& device, const BYTE* report,
         }
         // This fallback has only positions, so the contact is named by its node
         // index: an identifier with nothing asserting the contact would name a
-        // stale one.
+        // stale one. A node can be handed to the next finger on this path, so the
+        // name cannot prove a new contact; a consumed contact ends on the idle
+        // fallback instead.
         g_trackedContact.device = device.handle;
         g_trackedContact.slot = chosen;
         g_trackedContact.hasIdentifier = false;
@@ -10081,21 +11453,24 @@ void ProbeRootSymbolFromInputThread();
 // discipline as the executor's fixed class: `ERROR_CLASS_ALREADY_EXISTS` is a
 // failure, never adopted, and a failed unregister keeps the unload trying
 // instead of returning success into an image the class still points at.
+// A proof that cannot be obtained blocks the unload. Defined with the Start
+// unload helpers; forward-declared for the input thread's class teardown.
+[[noreturn]] void BlockUnload(const wchar_t* reason);
+
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 void UnregisterHidWindowClass(HINSTANCE instance) {
-    for (;;) {
-        if (UnregisterClassW(kHidWindowClass, instance)) {
-            TraceLog(L"hid window class unregistered");
-            return;
-        }
-        const DWORD error = GetLastError();
-        if (error == ERROR_CLASS_DOES_NOT_EXIST) {
-            TraceLog(L"hid window class already gone");
-            return;
-        }
-        TraceLog(L"hid window class unregister failed err=%u", error);
-        Sleep(1000);
+    if (UnregisterClassW(kHidWindowClass, instance)) {
+        TraceLog(L"hid window class unregistered");
+        return;
     }
+    const DWORD error = GetLastError();
+    if (error == ERROR_CLASS_DOES_NOT_EXIST) {
+        TraceLog(L"hid window class already gone");
+        return;
+    }
+    // The class still points at this image's window procedure. No safe return;
+    // one block, not a retry loop.
+    BlockUnload(L"hid window class unregister failed");
 }
 
 DWORD WINAPI HidInputThread(LPVOID) {
@@ -10168,11 +11543,11 @@ DWORD WINAPI HidInputThread(LPVOID) {
     }
 
     // Object 0 is the stop event, then the deadline timer and the cloak event,
-    // then the intent, exec-ack and renderer events, then the message queue. The
-    // stop event does not depend on the window: the unload sets it even if this
-    // thread has not published the HWND yet, and it is checked again after every
-    // message batch, because a queued message can win the wait over a
-    // just-signalled event.
+    // then the intent, exec-ack, capability and renderer events, then the
+    // message queue. The stop event does not depend on the window: the unload
+    // sets it even if this thread has not published the HWND yet, and it is
+    // checked again after every message batch, because a queued message can win
+    // the wait over a just-signalled event.
     HANDLE waits[8] = {};
     DWORD waitCount = 0;
     if (g_hidStopEvent) {
@@ -10186,6 +11561,9 @@ DWORD WINAPI HidInputThread(LPVOID) {
     }
     if (g_ipc.execAckEvent) {
         waits[waitCount++] = g_ipc.execAckEvent;
+    }
+    if (g_ipc.capabilityEvent) {
+        waits[waitCount++] = g_ipc.capabilityEvent;
     }
     if (g_rendererEvent) {
         waits[waitCount++] = g_rendererEvent;
@@ -10218,7 +11596,13 @@ DWORD WINAPI HidInputThread(LPVOID) {
     // once Setup attaches the root — still from the consumer itself, never from
     // the loading thread.
     bool peerAnnounced = false;
+    bool capabilitySeen = BridgeCapabilityNow();
+    bool capabilityWaitLogged = false;
     bool rendererWaitLogged = false;
+    // The bounded startup retry and its one park line, both only reached when the
+    // renderer event could not be created. They are not the peer heartbeat.
+    int rendererWaitRetries = 0;
+    bool rendererParkLogged = false;
     // Whether this activation has taken its first visibility sample since the
     // peer service became available. The state is a sample, not an event's
     // payload: without the seed, a menu that was already on screen at attach
@@ -10226,17 +11610,39 @@ DWORD WINAPI HidInputThread(LPVOID) {
     bool visibilitySeeded = false;
     // The root hook is resolved here and not by the LoadLibraryExW notification:
     // the first symbol load blocks for Windhawk's PDB fetch, and this thread is
-    // the mod's own. A pending result leaves the peer unpublished.
+    // the mod's own. Until the symbol is ready and refused is clear, the peer
+    // stays unpublished.
     ProbeRootSymbolFromInputThread();
-    if (g_rootHookReady.load(std::memory_order_acquire) && RendererReady()) {
+    if (g_rootHookReady.load(std::memory_order_acquire) && RendererReady() &&
+        capabilitySeen) {
         peerAnnounced = PublishPeerReady(L"consumer");
     }
     while (running) {
         // The module appears after this thread starts in the measured host, so
         // the bootstrap deadline (NextInputDeadlineMs) is what brings this thread
-        // back to look. The call is throttled while the result is pending and
-        // stops as soon as ready or refused is set.
+        // back to look. The probe stops as soon as ready or refused is set, and
+        // the one symbol attempt happens on the first pass that finds the module.
         ProbeRootSymbolFromInputThread();
+        // The bridge's capability is a continuing promise. A gain is what lets
+        // this side advertise; a loss withdraws the peer before any press can be
+        // swallowed for an executor that is gone, and releases the panel it was
+        // driving at the rest the cloak shows.
+        const bool capableNow = BridgeCapabilityNow();
+        if (capabilitySeen && !capableNow) {
+            capabilitySeen = false;
+            capabilityWaitLogged = false;
+            TraceLog(L"ipc capability lost");
+            if (peerAnnounced) {
+                SetPeerGone(L"capability-lost", false);
+                peerAnnounced = false;
+            }
+            visibilitySeeded = false;
+            ResetDrivenStateForCapabilityLoss();
+        } else if (!capabilitySeen && capableNow) {
+            capabilitySeen = true;
+            capabilityWaitLogged = false;
+            TraceLog(L"ipc capability gained");
+        }
         // Readiness is a continuing capability, not a one-time announcement. A
         // root that is torn down, replaced or invalidated by a failed scalar
         // write must withdraw the peer first; the bridge then passes the press
@@ -10249,8 +11655,17 @@ DWORD WINAPI HidInputThread(LPVOID) {
             visibilitySeeded = false;
         }
         if (!peerAnnounced &&
-            g_rootHookReady.load(std::memory_order_acquire) && RendererReady()) {
+            g_rootHookReady.load(std::memory_order_acquire) && RendererReady() &&
+            capableNow) {
             peerAnnounced = PublishPeerReady(L"consumer");
+        }
+        if (!peerAnnounced && !capabilityWaitLogged &&
+            g_rootHookReady.load(std::memory_order_acquire) && RendererReady() &&
+            !capableNow) {
+            // One line per wait: the root and renderer are ready, but the
+            // bridge has no executor. No advertisement, no touch settle.
+            capabilityWaitLogged = true;
+            TraceLog(L"ipc peer withheld reason=no-capability");
         }
         if (!peerAnnounced && !rendererWaitLogged &&
             g_rootHookReady.load(std::memory_order_acquire) &&
@@ -10313,14 +11728,30 @@ DWORD WINAPI HidInputThread(LPVOID) {
             fallbackPeriod = 0;
         }
 
-        // Nothing armed for the deadline means nothing will wake this thread at
-        // it: no event, no timer. That includes the root bootstrap, which has
-        // neither a peer heartbeat nor a renderer wait yet. Bound the wait by the
-        // deadline itself; a successfully armed timer keeps the pure event wait.
+        // Only an advertised peer has an idle heartbeat. The root bootstrap has
+        // its own deadline (NextInputDeadlineMs), and a renderer that has not
+        // attached is woken by g_rendererEvent when it does. With no event to
+        // wait on, a startup retry runs for a bounded number of wakeups and then
+        // the thread parks with no timer: nothing exists that could change the
+        // fact it is waiting on. An unadvertised renderer is never polled.
+        bool rendererRetry = false;
+        if (!g_peerPublished.load(std::memory_order_relaxed) && !g_rendererEvent) {
+            const bool rendererPending =
+                !peerAnnounced &&
+                g_rootHookReady.load(std::memory_order_acquire) &&
+                !RendererReady();
+            if (rendererPending) {
+                if (rendererWaitRetries < kRendererWaitRetries) {
+                    ++rendererWaitRetries;
+                    rendererRetry = true;
+                } else if (!rendererParkLogged) {
+                    rendererParkLogged = true;
+                    TraceLog(L"ipc peer withheld reason=no-renderer-event");
+                }
+            }
+        }
         DWORD waitMs = (g_peerPublished.load(std::memory_order_relaxed) ||
-                        (!peerAnnounced &&
-                         g_rootHookReady.load(std::memory_order_acquire) &&
-                         !RendererReady()))
+                        rendererRetry)
                            ? static_cast<DWORD>(kPeerHeartbeatMs)
                            : INFINITE;
         if (deadlineMs != 0 && !timerArmed) {
@@ -10383,6 +11814,11 @@ DWORD WINAPI HidInputThread(LPVOID) {
                 ApplyExecAck();
                 continue;
             }
+            if (signalled == g_ipc.capabilityEvent) {
+                // The event is only a wake: the loop's next pass reads the
+                // steady word and publishes or withdraws from it.
+                continue;
+            }
             if (signalled == g_rendererEvent) {
                 // The renderer just became usable or unusable. Withdraw before
                 // any interception can happen; republish only when the replacement
@@ -10393,7 +11829,7 @@ DWORD WINAPI HidInputThread(LPVOID) {
                     visibilitySeeded = false;
                 } else if (!peerAnnounced &&
                            g_rootHookReady.load(std::memory_order_acquire) &&
-                           RendererReady()) {
+                           RendererReady() && BridgeCapabilityNow()) {
                     peerAnnounced = PublishPeerReady(L"renderer");
                 }
                 continue;
@@ -12445,19 +13881,26 @@ void ReleaseScrollableElementIfGeneration(uint32_t maxGeneration) {
 }
 
 // The HWND is needed for the DWM cloaked query that decides whether the menu
-// is open, and for the window bounds the input thread tests against.
+// is open and for the window bounds the input thread tests against. A failed
+// re-capture keeps the previous live window: the cloak read still needs one.
 void CaptureCoreWindowHandle() {
-    g_coreHwnd.store(nullptr, std::memory_order_relaxed);
+    HWND previous = g_coreHwnd.load(std::memory_order_relaxed);
 
     try {
         wucore::CoreWindow coreWindow =
             wucore::CoreWindow::GetForCurrentThread();
         if (!coreWindow) {
+            if (!previous || !IsWindow(previous)) {
+                g_coreHwnd.store(nullptr, std::memory_order_relaxed);
+            }
             return;
         }
 
         void* windowAbi = winrt::get_abi(coreWindow);
         if (!windowAbi) {
+            if (!previous || !IsWindow(previous)) {
+                g_coreHwnd.store(nullptr, std::memory_order_relaxed);
+            }
             return;
         }
 
@@ -12465,6 +13908,9 @@ void CaptureCoreWindowHandle() {
         if (FAILED(static_cast<IUnknown*>(windowAbi)->QueryInterface(
                 kCoreWindowInteropIid, &interop)) ||
             !interop) {
+            if (!previous || !IsWindow(previous)) {
+                g_coreHwnd.store(nullptr, std::memory_order_relaxed);
+            }
             return;
         }
 
@@ -12475,9 +13921,16 @@ void CaptureCoreWindowHandle() {
             getWindowHandle(interop, &hwnd);
         }
         static_cast<IUnknown*>(interop)->Release();
-        g_coreHwnd.store(hwnd, std::memory_order_relaxed);
+        if (hwnd) {
+            g_coreHwnd.store(hwnd, std::memory_order_relaxed);
+        } else if (!previous || !IsWindow(previous)) {
+            g_coreHwnd.store(nullptr, std::memory_order_relaxed);
+        }
     } catch (...) {
         // No HWND means no cloaked query, so no gesture starts.
+        if (!previous || !IsWindow(previous)) {
+            g_coreHwnd.store(nullptr, std::memory_order_relaxed);
+        }
     }
 }
 
@@ -12895,11 +14348,55 @@ bool Setup(wux::FrameworkElement const& root) {
 using PrepareRootElement_t = void* (*)(void*, void*, bool);
 PrepareRootElement_t PrepareRootElement_Original = nullptr;
 
+// Defined with the unload helpers. The window is created only on the recorded UI
+// thread, from this hook and before Loaded is registered.
+bool EnsureUiRendezvousWindow();
+
 void* PrepareRootElement_Hook(void* frame, void* perFrameData, bool flag) {
+    // The first touch of this image is the admission lock itself. The unload
+    // either holds the exclusive writer and this hook registers nothing, or the
+    // hook holds it shared and the unload waits for every return below.
+    RootAdmissionShared admission;
+    if (g_unloading.load(std::memory_order_relaxed)) {
+        // No module state is touched. The shell still gets its own root.
+        return PrepareRootElement_Original
+                   ? PrepareRootElement_Original(frame, perFrameData, flag)
+                   : nullptr;
+    }
     void* result = PrepareRootElement_Original
                        ? PrepareRootElement_Original(frame, perFrameData, flag)
                        : nullptr;
     if (!result || g_unloading.load(std::memory_order_relaxed)) {
+        return result;
+    }
+
+    // This hook is the first code that can register a XAML handler (Loaded) on
+    // the new root, before Setup runs. Record the UI thread and create this
+    // module's own rendezvous window on it here, before any registration: an
+    // unload in that window can then run the teardown on the owner thread.
+    g_uiThreadId.store(GetCurrentThreadId(), std::memory_order_relaxed);
+    CaptureCoreWindowHandle();
+    if (!EnsureUiRendezvousWindow()) {
+        // A replacement root installs no handlers here, so the previous root's
+        // renderer must not stay advertised. The first attach has nothing to
+        // withdraw and stays quiet beyond the existing line.
+        const bool hadRenderer = g_root || g_dispatcher || RendererReady();
+        if (hadRenderer) {
+            static bool withdrawLogged = false;
+            ResetRenderer();
+            if (!withdrawLogged) {
+                withdrawLogged = true;
+                TraceLog(L"root renderer withdrawn "
+                        L"reason=no-rendezvous-window");
+            }
+        }
+        static bool rendezvousFailureLogged = false;
+        if (!rendezvousFailureLogged) {
+            rendezvousFailureLogged = true;
+            Wh_Log(L"UI rendezvous window could not be created; the root gets "
+                   L"no renderer and the unload has no window to drain");
+            TraceLog(L"root registration skipped reason=no-rendezvous-window");
+        }
         return result;
     }
 
@@ -12920,9 +14417,10 @@ void* PrepareRootElement_Hook(void* frame, void* perFrameData, bool flag) {
         // gesture state before installing the fresh renderer.
         ResetRenderer();
 
-        // The dispatcher is UI-thread state and the only way to revoke a
-        // delegate registered below if Setup never runs. Capture it here, under
-        // the same mutex every reader takes, before the first registration.
+        // The dispatcher is UI-thread state the renderer uses for counted turns.
+        // The unload now revokes through the rendezvous window, not through this
+        // dispatcher; capture it here, under the same mutex every reader takes,
+        // before the first registration.
         try {
             wucore::CoreDispatcher dispatcher = root.Dispatcher();
             if (dispatcher) {
@@ -12940,6 +14438,15 @@ void* PrepareRootElement_Hook(void* frame, void* perFrameData, bool flag) {
             alreadyLoaded = root.IsLoaded();
         } catch (winrt::hresult_error const& e) {
             Wh_Log(L"IsLoaded check failed: %08X", e.code());
+        }
+
+        // The first registration is below. Re-read the stop immediately before
+        // it: the shared admission lock already keeps the unload waiting, and
+        // this check keeps a hook that saw the flag late from adding a delegate
+        // at all.
+        if (g_unloading.load(std::memory_order_relaxed)) {
+            TraceLog(L"root registration skipped reason=unloading");
+            return result;
         }
 
         if (alreadyLoaded) {
@@ -13007,26 +14514,26 @@ void* PrepareRootElement_Hook(void* frame, void* perFrameData, bool flag) {
 // The image the notification saw, and the image an install currently owns.
 // `Seen` is written by the `LoadLibraryExW` notification and read by the input
 // thread; `HookModule` is the one-attempt claim that keeps two install paths
-// from loading symbols at once. A failed attempt clears the claim so the input
-// thread can retry the same image.
+// from resolving the same image at once. A refused result is terminal for the
+// session; it never clears the claim for a retry.
 std::atomic<HMODULE> g_startUIModuleSeen{nullptr};
 std::atomic<HMODULE> g_startUIHookModule{nullptr};
 std::atomic<bool> g_loadHookMatchLogged{false};
 
-// The input thread's retry schedule for the root symbol. The first symbol load
-// also starts Windhawk's PDB fetch, which can take tens of seconds on a cold
-// cache; a false result before it finishes is `pending`, not a refusal. 120 s is
-// two full downloads at the measured ~600 KB/s for the 35 MB reference PDB, plus
-// the symbol parse, and still bounded before a user concludes the feature is
-// broken. Input thread only; a fresh image starts them at zero.
+// The input thread's module wait for the root symbol. The module may load late;
+// the wait is bounded by kRootPendingDeadlineMs, and once the module is present
+// the one HookSymbols call is made. A false result is terminal, never a pending
+// retry. Input thread only; a fresh image starts these at zero.
 //
-// `kRootProbeMs` is the retry interval and, through NextInputDeadlineMs, the wait
-// planner's bootstrap deadline: while the answer is neither ready nor refused,
-// the thread has to come back for the probe.
+// `kRootProbeMs` is the module-poll interval and, through NextInputDeadlineMs,
+// the wait planner's bootstrap deadline: while the module has not appeared, the
+// thread has to come back to see whether it has loaded.
 constexpr uint64_t kRootPendingDeadlineMs = 120000;
 uint64_t g_rootProbeNextTick = 0;
 uint64_t g_rootProbeFirstTick = 0;
-int g_rootProbeAttempts = 0;
+// Set before the one HookSymbols call. A false result is terminal for the
+// session, never a retry.
+std::atomic<bool> g_startUIAttempted{false};
 
 // Serialises the symbol install against the stop. Wh_ModBeforeUninit takes it
 // before it sets g_disabled, so an install either finishes first or sees the
@@ -13035,15 +14542,12 @@ int g_rootProbeAttempts = 0;
 SRWLOCK g_startUIHookLock = SRWLOCK_INIT;
 
 // Attempts the root hook. This must never run on a thread the shell owns: the
-// first call starts Windhawk's PDB fetch and blocks for its duration, and
-// blocking the loader thread makes the menu host look hung to the shell's
-// watchdog, which then restarts it and the fetch starts over. The input thread
-// drives every attempt (the init probe only runs when StartUI_ is already
-// loaded, which is the warm case).
+// call starts Windhawk's PDB fetch and blocks for its duration, and blocking
+// the loader thread makes the menu host look hung to the shell's watchdog.
+// The input thread makes the one attempt after StartUI_.dll is present.
 //
-// Returns true only when this call installed the hook, so a caller applies the
-// queued hook operations only for an install it owns. A false result is
-// `pending`: the caller decides when it becomes a refusal.
+// Returns true only when this call installed the hook. A false result is
+// terminal for the session: the caller refuses the root hook and never retries.
 bool InstallStartUIHooks(HMODULE module) {
     if (!module) {
         return false;
@@ -13052,8 +14556,7 @@ bool InstallStartUIHooks(HMODULE module) {
     AcquireSRWLockExclusive(&g_startUIHookLock);
     // The lock is the stop barrier BeforeUninit takes, so a stop and this
     // install cannot interleave. The claim also marks the image this call is
-    // resolving, so a refused result is retried later rather than resolved twice
-    // at once.
+    // resolving; a refused result is terminal, never a second attempt.
     HMODULE expected = nullptr;
     if (!g_startUIHookModule.compare_exchange_strong(expected, module)) {
         ReleaseSRWLockExclusive(&g_startUIHookLock);
@@ -13088,8 +14591,8 @@ bool InstallStartUIHooks(HMODULE module) {
     const uintptr_t resolved =
         reinterpret_cast<uintptr_t>(PrepareRootElement_Original);
     if (!hooked || !resolved) {
-        // Pending, not refused: while the engine is fetching or parsing the PDB
-        // this is the expected answer, and the input thread retries.
+        // The one attempt failed. The caller writes the terminal refusal; there
+        // is no retry to clear this claim for.
         g_startUIHookModule.store(nullptr, std::memory_order_release);
         ReleaseSRWLockExclusive(&g_startUIHookLock);
         return false;
@@ -13144,16 +14647,42 @@ void RecordLoadedStartUIModule() {
     }
 }
 
-// Resolves the root hook from the mod's own input thread. Called on every loop
-// tick: immediate when the module is first known, then throttled while the
-// result is pending. The shell keeps pumping for the whole fetch because no
-// symbol work ever runs on its threads.
+// Resolves the root hook from the mod's own input thread. The thread polls only
+// for the module to load; once it is present this makes one HookSymbols attempt.
+// A false result is terminal for the session. The shell keeps pumping for the
+// whole fetch because no symbol work ever runs on its threads.
 void ProbeRootSymbolFromInputThread() {
     if (g_rootHookReady.load(std::memory_order_acquire) ||
         g_rootHookRefused.load(std::memory_order_acquire) ||
         g_disabled.load(std::memory_order_relaxed)) {
         return;
     }
+
+    const uint64_t now = GetTickCount64();
+    if (g_rootProbeFirstTick == 0) {
+        g_rootProbeFirstTick = now;
+    }
+    if (now - g_rootProbeFirstTick >= kRootPendingDeadlineMs) {
+        g_rootHookRefused.store(true, std::memory_order_release);
+        TraceLog(L"startui root symbol unresolved name=StartUI::App::"
+                L"PrepareRootElement attempts=%d waited=%llums "
+                L"deadline=%llums",
+                g_startUIAttempted.load(std::memory_order_acquire) ? 1 : 0,
+                static_cast<unsigned long long>(now - g_rootProbeFirstTick),
+                static_cast<unsigned long long>(kRootPendingDeadlineMs));
+        Wh_Log(L"StartUI::App::PrepareRootElement could not be resolved in "
+               L"StartUI_.dll within the %llu ms module wait; the root hook is "
+               L"refused and the controller advertises no service",
+               static_cast<unsigned long long>(kRootPendingDeadlineMs));
+        PublishPeerGone(L"root-hook-refused");
+        return;
+    }
+
+    if (now < g_rootProbeNextTick) {
+        return;
+    }
+    g_rootProbeNextTick = now + kRootProbeMs;
+
     HMODULE module = g_startUIModuleSeen.load(std::memory_order_acquire);
     if (!module) {
         module = GetModuleHandleW(kStartUIModuleName);
@@ -13163,16 +14692,11 @@ void ProbeRootSymbolFromInputThread() {
         g_startUIModuleSeen.store(module, std::memory_order_release);
     }
 
-    const uint64_t now = GetTickCount64();
-    const bool first = g_rootProbeFirstTick == 0;
-    if (!first && now < g_rootProbeNextTick) {
+    // One attempt per module per install. The claim is set before the blocking
+    // call; a second pass never asks the engine for symbols again.
+    if (g_startUIAttempted.exchange(true, std::memory_order_acq_rel)) {
         return;
     }
-    g_rootProbeNextTick = now + kRootProbeMs;
-    if (first) {
-        g_rootProbeFirstTick = now;
-    }
-
     if (InstallStartUIHooks(module)) {
         // The install applied its own queued hook under the lock.
         return;
@@ -13182,27 +14706,15 @@ void ProbeRootSymbolFromInputThread() {
         return;
     }
 
-    g_rootProbeAttempts++;
-    const uint64_t waited = GetTickCount64() - g_rootProbeFirstTick;
-    if (waited >= kRootPendingDeadlineMs) {
-        g_rootHookRefused.store(true, std::memory_order_release);
-        TraceLog(L"startui root symbol deadline attempts=%d waited=%llums "
-                L"deadline=%llums",
-                g_rootProbeAttempts, static_cast<unsigned long long>(waited),
-                static_cast<unsigned long long>(kRootPendingDeadlineMs));
-        TraceLog(L"startui root symbol unresolved name=StartUI::App::"
-                L"PrepareRootElement (symbol, signature or hook refused)");
-        Wh_Log(L"StartUI::App::PrepareRootElement could not be resolved in "
-               L"StartUI_.dll within the %llu ms pending deadline; the root "
-               L"hook is refused and the controller advertises no service",
-               static_cast<unsigned long long>(kRootPendingDeadlineMs));
-        PublishPeerGone(L"root-hook-refused");
-        return;
-    }
-    TraceLog(L"startui root symbol pending attempt=%d waited=%llums "
-            L"deadline=%llums",
-            g_rootProbeAttempts, static_cast<unsigned long long>(waited),
-            static_cast<unsigned long long>(kRootPendingDeadlineMs));
+    g_rootHookRefused.store(true, std::memory_order_release);
+    TraceLog(L"startui root symbol unresolved name=StartUI::App::"
+            L"PrepareRootElement attempts=1 waited=%llums",
+            static_cast<unsigned long long>(GetTickCount64() -
+                                            g_rootProbeFirstTick));
+    Wh_Log(L"StartUI::App::PrepareRootElement could not be resolved in "
+           L"StartUI_.dll on the one attempt this session makes; the root hook "
+           L"is refused and the controller advertises no service");
+    PublishPeerGone(L"root-hook-refused");
 }
 
 // ---------------------------------------------------------------------------
@@ -13327,8 +14839,6 @@ void ResetComposition() {
             g_state.InsertScalar(L"Progress", kProgressRest);
             g_panel.progress.store(kProgressRest, std::memory_order_relaxed);
         }
-        g_panel.target = kProgressRest;
-        g_panel.velocity = 0.0f;
         g_panel.phase = PanelPhase::Idle;
         if (g_visual) {
             g_visual.StopAnimation(L"Translation");
@@ -13415,114 +14925,288 @@ void TeardownUi() {
     g_settleLease.reset();
 }
 
-// Posts the one teardown turn and waits for its completion, or runs it inline
-// when the unload already runs on the captured UI thread. The dispatcher is
-// kept through this turn. A missing dispatcher with registrations still live
-// has no safe answer: the loop reports and keeps waiting rather than freeing a
-// delegate that can still run.
-void TeardownUiOnUiThread() {
-    const DWORD uiThread = g_uiThreadId.load(std::memory_order_relaxed);
-    if (uiThread == 0 || uiThread == GetCurrentThreadId()) {
-        TeardownUi();
-        return;
-    }
-
-    wucore::CoreDispatcher dispatcher = CopyDispatcher();
-    if (!dispatcher) {
-        const bool anythingRegistered =
-            g_uiRegistrationCount.load(std::memory_order_acquire) != 0 ||
-            g_dismissBatchToken.value != 0;
-        if (!anythingRegistered) {
-            return;
-        }
-        ULONGLONG nextReport = 0;
-        for (;;) {
-            const ULONGLONG now = GetTickCount64();
-            if (now >= nextReport) {
-                nextReport = now + 5000;
-                TraceLog(L"unload teardown waiting: no dispatcher, entries=%d",
-                        g_moduleEntryCount.load(std::memory_order_relaxed));
-            }
-            Sleep(1000);
-        }
-    }
-
-    HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!done) {
-        ULONGLONG nextReport = 0;
-        for (;;) {
-            const ULONGLONG now = GetTickCount64();
-            if (now >= nextReport) {
-                nextReport = now + 5000;
-                TraceLog(L"unload teardown waiting: no completion event");
-            }
-            Sleep(1000);
-        }
-    }
-
-    try {
-        dispatcher.RunAsync(wucore::CoreDispatcherPriority::Normal, [done]() {
-            try {
-                TeardownUi();
-            } catch (...) {
-                // Never let an exception escape the dispatcher callback. The
-                // event still releases the unload, which then waits for the
-                // counted entries.
-            }
-            SetEvent(done);
-        });
-    } catch (winrt::hresult_error const& e) {
-        TraceLog(L"unload teardown queue failed: %08X %s", e.code(),
-                e.message().c_str());
-        CloseHandle(done);
-        for (;;) {
-            TraceLog(L"unload teardown waiting: dispatch refused");
-            Sleep(5000);
-        }
-    } catch (...) {
-        CloseHandle(done);
-        for (;;) {
-            TraceLog(L"unload teardown waiting: dispatch failed");
-            Sleep(5000);
-        }
-    }
-
-    WaitForSingleObject(done, INFINITE);
-    CloseHandle(done);
+// A proof that cannot be obtained blocks the unload. This is the last resort,
+// not a retry: the wrong-thread and non-pumping conditions that used to reach
+// it are removed below, and one log line is the whole diagnostic. There is no
+// successful return with a mod-owned callback still reachable.
+[[noreturn]] void BlockUnload(const wchar_t* reason) {
+    TraceLog(L"unload blocked reason=%s", reason);
+    Wh_Log(L"Unload blocked: %s; the module image cannot be freed safely",
+           reason);
+    Sleep(INFINITE);
+    __builtin_unreachable();
 }
 
-// Waits until no counted module entry can still run. The event is set by the
-// last lease release, so this is completion signalling, not a poll for zero.
-// The wait has no deadline: returning under a live delegate would free the
-// image its code still runs in.
-void WaitForModuleEntries() {
-    ULONGLONG nextReport = 0;
+// The unload's rendezvous is this module's own message-only window, created on
+// the XAML UI thread by PrepareRootElement before Loaded. No shell window is
+// subclassed and no shell procedure is replaced. The private messages run only
+// on this window: teardown returns after TeardownUi and its delegate thunks,
+// drain is an empty turn, and destroy tears the window down on its owner.
+constexpr wchar_t kUiRendezvousClassName[] =
+    L"WindhawkLegacyStartSwipeUiRendezvous";
+constexpr UINT kUiTeardownMessage = WM_APP + 0x62;
+constexpr UINT kUiDestroyMessage = WM_APP + 0x63;
+constexpr UINT kUiDrainMessage = WM_APP + 0x64;
+constexpr WPARAM kUiTeardownMagic = 0x53575455;  // "SWTU"
+constexpr WPARAM kUiDestroyMagic = 0x53575458;   // "SWTX"
+constexpr WPARAM kUiDrainMagic = 0x53575452;     // "SWTR"
+
+bool g_uiRendezvousClassRegistered = false;
+HINSTANCE g_uiRendezvousClassInstance = nullptr;
+
+struct UiTeardownCall {
+    bool ran;
+};
+
+// Caller-owned acknowledgement for the drain turn. The handler sets it only for
+// an accepted message from this activation's published window.
+struct UiDrainCall {
+    bool ran;
+};
+
+LRESULT CALLBACK UiRendezvousProc(HWND hwnd, UINT message, WPARAM wParam,
+                                  LPARAM lParam) {
+    if (message == kUiTeardownMessage) {
+        auto* call = reinterpret_cast<UiTeardownCall*>(lParam);
+        if (wParam != kUiTeardownMagic ||
+            hwnd != g_uiRendezvousHwnd.load(std::memory_order_acquire)) {
+            TraceLog(L"ui rendezvous teardown ignored hwnd=%p", hwnd);
+            return 0;
+        }
+        try {
+            TeardownUi();
+        } catch (...) {
+            // A callback must not unwind into the shell's message loop.
+        }
+        if (call) {
+            call->ran = true;
+        }
+        return 0;
+    }
+    if (message == kUiDrainMessage) {
+        auto* call = reinterpret_cast<UiDrainCall*>(lParam);
+        if (wParam != kUiDrainMagic ||
+            hwnd != g_uiRendezvousHwnd.load(std::memory_order_acquire)) {
+            TraceLog(L"ui rendezvous drain ignored hwnd=%p", hwnd);
+            return 0;
+        }
+        if (call) {
+            call->ran = true;
+        }
+        return 0;
+    }
+    if (message == kUiDestroyMessage) {
+        if (wParam != kUiDestroyMagic ||
+            hwnd != g_uiRendezvousHwnd.load(std::memory_order_acquire)) {
+            TraceLog(L"ui rendezvous destroy ignored hwnd=%p", hwnd);
+            return 0;
+        }
+        if (!DestroyWindow(hwnd)) {
+            TraceLog(L"ui rendezvous destroy failed err=%u", GetLastError());
+        }
+        return 0;
+    }
+    if (message == WM_NCDESTROY) {
+        if (g_uiRendezvousHwnd.load(std::memory_order_acquire) == hwnd) {
+            g_uiRendezvousHwnd.store(nullptr, std::memory_order_release);
+        }
+    }
+    return DefWindowProcW(hwnd, message, wParam, lParam);
+}
+
+// Creates the one window on the recorded XAML UI thread. Called directly from
+// the PrepareRootElement hook on that thread before Loaded is registered; never
+// from the unload thread. A class left by an earlier image is a failure, not
+// something to adopt: its procedure would point into unmapped code.
+bool EnsureUiRendezvousWindow() {
+    // Only PrepareRootElement_Hook calls this, on the UI thread, after it has
+    // recorded that thread. The owner is the caller by construction; no separate
+    // off-thread test is needed here.
+    const DWORD uiThread = GetCurrentThreadId();
+    HWND existing = g_uiRendezvousHwnd.load(std::memory_order_acquire);
+    if (existing) {
+        if (IsWindow(existing)) {
+            return true;
+        }
+        g_uiRendezvousHwnd.store(nullptr, std::memory_order_release);
+    }
+    if (!g_uiRendezvousClassRegistered) {
+        WNDCLASSEXW windowClass{};
+        windowClass.cbSize = sizeof(windowClass);
+        windowClass.lpfnWndProc = UiRendezvousProc;
+        windowClass.hInstance = reinterpret_cast<HINSTANCE>(&__ImageBase);
+        windowClass.lpszClassName = kUiRendezvousClassName;
+        if (!RegisterClassExW(&windowClass)) {
+            TraceLog(L"ui rendezvous class failed err=%u", GetLastError());
+            return false;
+        }
+        g_uiRendezvousClassRegistered = true;
+        g_uiRendezvousClassInstance = windowClass.hInstance;
+    }
+    HWND window = CreateWindowExW(0, kUiRendezvousClassName, L"", 0, 0, 0, 0,
+                                  0, HWND_MESSAGE, nullptr,
+                                  g_uiRendezvousClassInstance, nullptr);
+    if (!window) {
+        TraceLog(L"ui rendezvous create failed err=%u", GetLastError());
+        return false;
+    }
+    g_uiRendezvousHwnd.store(window, std::memory_order_release);
+    TraceLog(L"ui rendezvous hwnd=%p tid=%u", window,
+            static_cast<unsigned>(uiThread));
+    return true;
+}
+
+void UnregisterUiRendezvousClass() {
+    if (!g_uiRendezvousClassRegistered) {
+        return;
+    }
+    if (UnregisterClassW(kUiRendezvousClassName, g_uiRendezvousClassInstance)) {
+        TraceLog(L"ui rendezvous class unregistered");
+    } else {
+        const DWORD error = GetLastError();
+        if (error == ERROR_CLASS_DOES_NOT_EXIST) {
+            TraceLog(L"ui rendezvous class already gone");
+        } else {
+            // The class still points at this image's window procedure. There is
+            // no safe free; one block instead of a retry loop.
+            BlockUnload(L"ui rendezvous class unregister failed");
+        }
+    }
+    g_uiRendezvousClassRegistered = false;
+    g_uiRendezvousClassInstance = nullptr;
+}
+
+// Destroys the one window synchronously on its owner thread, then unregisters
+// the class under the same instance. A destroyed window means this activation's
+// window is gone, not that the UI thread is gone; the caller has already proved
+// the counts.
+void DestroyUiRendezvousWindow() {
+    HWND hwnd = g_uiRendezvousHwnd.load(std::memory_order_acquire);
+    if (hwnd) {
+        if (IsWindow(hwnd)) {
+            SendMessageW(hwnd, kUiDestroyMessage, kUiDestroyMagic, 0);
+        }
+        if (g_uiRendezvousHwnd.load(std::memory_order_acquire) == hwnd) {
+            if (!IsWindow(hwnd)) {
+                g_uiRendezvousHwnd.store(nullptr, std::memory_order_release);
+                TraceLog(L"ui rendezvous gone without destroy hwnd=%p", hwnd);
+            } else {
+                BlockUnload(L"ui rendezvous window still alive");
+            }
+        }
+    }
+    UnregisterUiRendezvousClass();
+}
+
+// Runs the teardown on the UI thread that owns the XAML root. Returns the window
+// used for the later drain, or null when the teardown ran inline or no window
+// could run it. A missing window is not a proof that the UI thread is gone: the
+// caller still requires the entry and registration counts to say that nothing
+// can call back. No dispatcher and no completion event are involved.
+HWND TeardownUiOnUiThread() {
+    const DWORD uiThread = g_uiThreadId.load(std::memory_order_relaxed);
+    if (uiThread != 0 && uiThread == GetCurrentThreadId()) {
+        TeardownUi();
+        return nullptr;
+    }
+
+    // No UI thread was ever recorded: no XAML registration can exist, because
+    // PrepareRootElement records the thread before it registers Loaded.
+    if (uiThread == 0 &&
+        g_uiRegistrationCount.load(std::memory_order_acquire) == 0) {
+        TeardownUi();
+        return nullptr;
+    }
+
+    HWND hwnd = g_uiRendezvousHwnd.load(std::memory_order_acquire);
+    if (!hwnd || !IsWindow(hwnd)) {
+        if (g_uiRegistrationCount.load(std::memory_order_acquire) == 0) {
+            // No window can run the teardown, but no handler is registered
+            // either. The counts below still decide whether the image is free.
+            TraceLog(L"unload teardown without a UI window");
+            return nullptr;
+        }
+        BlockUnload(L"teardown has no UI window");
+    }
+
+    UiTeardownCall call{false};
+    SendMessageW(hwnd, kUiTeardownMessage, kUiTeardownMagic,
+                 reinterpret_cast<LPARAM>(&call));
+    if (call.ran) {
+        return hwnd;
+    }
+    if (IsWindow(hwnd)) {
+        BlockUnload(L"teardown message refused");
+    }
+    // The window died before the teardown could run. This says nothing about
+    // the UI thread or its registrations; the caller proves those.
+    TraceLog(L"unload teardown window gone");
+    return nullptr;
+}
+
+// Waits for UI-turn leases alone: a dispatcher turn or the settle batch. The
+// root hook uses the admission lock instead, so this wait cannot hold a
+// teardown that has not run yet. The event is auto-reset and a pending signal
+// from an earlier zero is not trusted: the count is the predicate. No timeout
+// and no polling.
+void WaitForModuleEntriesOnly() {
+    const bool haveEvent = g_moduleEntriesGone != nullptr;
     for (;;) {
         if (g_moduleEntryCount.load(std::memory_order_acquire) == 0) {
             return;
         }
-        const ULONGLONG now = GetTickCount64();
-        if (now >= nextReport) {
-            nextReport = now + 5000;
-            TraceLog(L"unload waiting for module entries=%d",
-                    g_moduleEntryCount.load(std::memory_order_relaxed));
+        if (!haveEvent) {
+            BlockUnload(L"module entry event missing");
         }
-        if (g_moduleEntriesGone) {
-            WaitForSingleObject(g_moduleEntriesGone, 1000);
+        const int pending = g_moduleEntryCount.load(std::memory_order_acquire);
+        TraceLog(L"unload waiting for ui turns count=%d", pending);
+        WaitForSingleObject(g_moduleEntriesGone, INFINITE);
+    }
+}
+
+// Requires the UI-turn count and every XAML registration to be gone. On the
+// off-owner path the count is waited for first; on the owner path a non-zero
+// count is a self-deadlock and blocks instead. `waitForEntries` is false only
+// for an unload that already runs on the UI owner.
+void RequireNoModuleCallbacks(bool waitForEntries) {
+    if (waitForEntries) {
+        WaitForModuleEntriesOnly();
+    } else if (g_moduleEntryCount.load(std::memory_order_acquire) != 0) {
+        BlockUnload(L"unload on ui thread with pending entries");
+    }
+    if (g_uiRegistrationCount.load(std::memory_order_acquire) != 0) {
+        BlockUnload(L"xaml revokes remain");
+    }
+}
+
+// Sends one more synchronous empty turn when a window exists, so the UI thread
+// cannot still be inside an earlier callback or delegate destructor. Returns
+// whether this activation's window accepted and ran the turn. A window that is
+// gone or refused it cannot provide that barrier; the counts are re-checked
+// either way, and the caller blocks when an off-owner drain did not run.
+bool DrainUiThread(HWND hwnd) {
+    UiDrainCall call{false};
+    if (hwnd) {
+        if (!IsWindow(hwnd)) {
+            TraceLog(L"unload drain window gone; no acknowledgement");
         } else {
-            Sleep(1000);
+            SendMessageW(hwnd, kUiDrainMessage, kUiDrainMagic,
+                         reinterpret_cast<LPARAM>(&call));
         }
     }
+    RequireNoModuleCallbacks(true);
+    return call.ran;
 }
 
 BOOL RoleInit() {
     SetTraceFileName(L"renderer.log");
     RefreshTraceSetting();
     TraceLog(L"mod init");
-    Wh_Log(L"Legacy Start Swipe 0.7.0 initializing (start role)");
+    Wh_Log(L"Swipe for 10Start %s initializing (start role)", kModVersion);
 
     LoadAnimationStyle();
     LoadGestureStartSpeed();
+    LoadCommitDistance();
     // The stop event the input thread's wait watches. Created before the thread
     // exists, so the unload has a signal that does not depend on the window.
     g_hidStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -13651,6 +15335,8 @@ void RoleBeforeUninit() {
     if (!g_initialised) {
         return;
     }
+    g_unloadStartTick = GetTickCount64();
+    TraceLog(L"unload begin tid=%u", GetCurrentThreadId());
 
     // Stop hook registration and code that can run on its own thread before
     // Windhawk removes the hooks (Wh_SetFunctionHook/Wh_ApplyHookOperations
@@ -13702,17 +15388,9 @@ void RoleBeforeUninit() {
             TraceLog(L"unload hid thread joined");
         } else {
             // A wait that fails on a valid handle is not expected; there is
-            // still no safe return while the thread can run module code.
-            ULONGLONG nextReport = 0;
-            for (;;) {
-                const ULONGLONG now = GetTickCount64();
-                if (now >= nextReport) {
-                    nextReport = now + 5000;
-                    TraceLog(L"unload hid thread join failed err=%u",
-                            static_cast<unsigned>(GetLastError()));
-                }
-                Sleep(1000);
-            }
+            // still no safe return while the thread can run module code. One
+            // block, not a retry loop.
+            BlockUnload(L"hid thread join failed");
         }
     } else {
         TraceLog(L"unload hid thread joined");
@@ -13723,6 +15401,12 @@ void RoleUninit() {
     if (!g_initialised) {
         return;
     }
+
+    // An uninit that skipped BeforeUninit must still close admission before it
+    // takes the exclusive admission lock: a hook that fails its shared try may
+    // otherwise read the flag as clear, block on the lock and deadlock against
+    // the teardown send. The normal path already set it there.
+    g_unloading = true;
 
     // The bridge's interception precondition fails here, before anything below
     // is freed: from this point no intent is consumed, so no trigger may be
@@ -13740,35 +15424,74 @@ void RoleUninit() {
             CloseHandle(g_hidThread);
             g_hidThread = nullptr;
             TraceLog(L"unload hid thread joined (uninit)");
+        } else {
+            BlockUnload(L"hid thread join failed (uninit)");
         }
     }
 
-    // 3. One UI teardown turn: revoke the XAML handlers and the settle batch,
-    //    restore resting progress and neutral translation, drop the UI-owned
-    //    objects. Waiting for the turn is the proof the revokes ran.
-    TeardownUiOnUiThread();
-
-    // 4. Wait for a batch completion the compositor had already dispatched.
-    //    The count is the proof its code is gone; the IPC view and handles stay
-    //    until it returns.
-    WaitForModuleEntries();
-
-    // 5. A XAML revoke that failed leaves a delegate attached to the root it
-    //    closes over. There is no safe free of that root or of this image, so
-    //    the unload reports and keeps waiting; it never returns success with a
-    //    mod-owned callback still reachable.
+    // 3. Root admission exclusive: waits for any in-flight root hook, then holds
+    //    the writer through the teardown so a hook that arrives after the flag
+    //    registers nothing. This replaces the count-only wait: a gesture close's
+    //    UiTurn lease must not be waited on before the teardown that revokes it.
+    DWORD uiOwner = 0;
+    bool inlineUnload = false;
+    HWND uiWindow = nullptr;
     {
-        ULONGLONG nextReport = 0;
-        while (g_uiRegistrationCount.load(std::memory_order_acquire) != 0) {
-            const ULONGLONG now = GetTickCount64();
-            if (now >= nextReport) {
-                nextReport = now + 5000;
-                TraceLog(L"unload waiting for xaml revokes=%d",
-                        g_uiRegistrationCount.load(std::memory_order_relaxed));
-            }
-            Sleep(1000);
+        RootAdmissionExclusive admission;
+        TraceLog(L"unload root admission exclusive");
+        uiOwner = g_uiThreadId.load(std::memory_order_relaxed);
+        inlineUnload =
+            uiOwner != 0 && uiOwner == GetCurrentThreadId();
+        if (inlineUnload) {
+            TraceLog(L"unload inline on ui thread entries=%d",
+                    g_moduleEntryCount.load(std::memory_order_acquire));
         }
+
+        // One synchronous UI turn: revoke the XAML handlers and the settle
+        // batch, restore resting progress and neutral translation, drop the
+        // UI-owned objects. SendMessage returns only after TeardownUi has
+        // returned, so no dispatcher lambda or its delegate thunk outlives it.
+        uiWindow = TeardownUiOnUiThread();
     }
+
+    // 4a. Without a window there is no empty-turn barrier. If any UI-turn lease
+    //     was ever used (a dispatcher turn or the settle batch), two zero reads
+    //     cannot prove the last destructor returned, so the unload blocks
+    //     instead of freeing under a destructor still running. The root hook's
+    //     shared admission lock does not set this flag: a hook that failed to
+    //     create the window and registered nothing can still complete. The
+    //     never-attached case (no hook, no entries) also completes.
+    if (!inlineUnload && !uiWindow &&
+        g_uiTurnEverUsed.load(std::memory_order_acquire)) {
+        BlockUnload(L"no window to drain module entries");
+    }
+
+    // 4b. After the teardown, require both counts: no counted entry and no
+    //     registered XAML handler. On the owner thread a non-zero count is a
+    //     self-deadlock (the turn holding it can only run here), so it blocks;
+    //     off the owner the count is the predicate.
+    RequireNoModuleCallbacks(!inlineUnload);
+
+    // 5. One more synchronous empty turn when a window exists, so the UI thread
+    //    has left every callback and delegate destructor it was inside. The
+    //    counts are re-checked after it; a window that is gone cannot skip them.
+    if (inlineUnload) {
+        // TeardownUi ran on this thread and the counts above are zero; no turn
+        // is needed and none can be sent anywhere.
+    } else if (uiWindow) {
+        if (!DrainUiThread(uiWindow)) {
+            BlockUnload(L"ui drain not acknowledged");
+        }
+        TraceLog(L"unload ui drained ack=1");
+    } else {
+        // No UI-turn lease and no window: either never attached, or the
+        // admission hook failed before it registered anything.
+        TraceLog(L"unload teardown without a window; no ui turn");
+    }
+
+    // 6. The window and then its class: the class must not outlive the image,
+    //    and the window must be gone before the class is unregistered.
+    DestroyUiRendezvousWindow();
 
     ClearScrollerRetry();
     SwipeIpcClose(&g_ipc);
@@ -13785,8 +15508,13 @@ void RoleUninit() {
         CloseHandle(g_moduleEntriesGone);
         g_moduleEntriesGone = nullptr;
     }
+    TraceLog(L"unload done elapsed=%llums",
+            static_cast<unsigned long long>(
+                g_unloadStartTick != 0 && GetTickCount64() >= g_unloadStartTick
+                    ? GetTickCount64() - g_unloadStartTick
+                    : 0));
     g_initialised = false;
-    Wh_Log(L"Legacy Start Swipe uninitialized (start role)");
+    Wh_Log(L"Swipe for 10Start uninitialized (start role)");
 }
 
 // A settings change only refreshes the atomics: the next settle reads them, no
@@ -13797,6 +15525,7 @@ void RoleSettingsChanged() {
     }
     LoadAnimationStyle();
     LoadGestureStartSpeed();
+    LoadCommitDistance();
     RefreshTraceSetting();
 }
 
@@ -13810,87 +15539,81 @@ const SwipeModRole Role = {RoleInit, RoleAfterInit, RoleBeforeUninit,
 namespace bridge {
 
 void EnsureExecutorWindow();
-DWORD NoteLauncherThread(const wchar_t* source);
+DWORD NoteLauncherThread(const wchar_t* source, bool adopt);
 void EnsureExecutorOnLauncherThread(const wchar_t* source);
 void* LauncherNow(uint64_t* stateOut, void** outerOut = nullptr);
-void PublishBridgeIntent(int32_t kind, int32_t trigger, uint32_t method,
-                         uint32_t flags);
+LONG64 PublishBridgeIntent(int32_t kind, int32_t trigger, uint32_t method,
+                           uint32_t flags);
 
 // twinui.pcshell.dll is resolved by public symbol, not by address. The hook
 // array in InstallExplorerHooks carries every name inline: each is the exact
-// DIA undecorated name for 10.0.26100.9949, read from twinui.pcshell.pdb with
-// the same undecorator the Windhawk symbol API matches, and a name is a literal
-// because the store's symbol extractor reads only a literal. The decorated
-// spellings are in docs/re/ and are not used.
+// DIA undecorated name for 10.0.26100.10068 (fixed; the display string still
+// reads 9949), read from twinui.pcshell.pdb with the same undecorator the
+// Windhawk symbol API matches, and a name is a literal because the store's
+// symbol extractor reads only a literal. The decorated spellings are in
+// docs/re/ and are not used.
 
-// The reference RVAs, for the resolution log only. A different value is reported
-// and the symbol is still used: the name is the contract, the address is
-// evidence.
-constexpr uintptr_t kRvaShow = 0x254C90;
-constexpr uintptr_t kRvaHideStartAndCortana = 0x24BCB0;
-constexpr uintptr_t kRvaOnStartShown = 0x141DF0;
-constexpr uintptr_t kRvaOnStartHidden = 0x65E70;
-constexpr uintptr_t kRvaOnHotkeyInvoke = 0x14195C;
-constexpr uintptr_t kRvaOnStartButtonPressed = 0x492C90;
-constexpr uintptr_t kRvaDismiss = 0x25D670;
-constexpr uintptr_t kRvaShowStartView = 0x141AF0;
-constexpr uintptr_t kRvaLauncherSlot = 0x948E80;
-constexpr uintptr_t kRvaLauncherIsVisible = 0x1F9B40;
-constexpr uintptr_t kRvaDismissStartAndCortana = 0x4991C0;
-constexpr uintptr_t kRvaDismissSynchronously = 0x48F7C0;
-constexpr uintptr_t kRvaActiveZBand = 0x24FC50;
+// The reference RVAs, for the resolution log and the layout identity. A
+// different value on an unknown version means the layout is not proven.
+constexpr uintptr_t kRvaShow = 0x2516B0;
+constexpr uintptr_t kRvaHideStartAndCortana = 0x2485E0;
+constexpr uintptr_t kRvaOnStartShown = 0xF71C0;
+constexpr uintptr_t kRvaOnStartHidden = 0x692B0;
+constexpr uintptr_t kRvaOnHotkeyInvoke = 0xF6D2C;
+constexpr uintptr_t kRvaOnStartButtonPressed = 0x4934E0;
+constexpr uintptr_t kRvaDismiss = 0x25A060;
+constexpr uintptr_t kRvaShowStartView = 0xF6EC0;
+constexpr uintptr_t kRvaLauncherSlot = 0x95F0E8;
+constexpr uintptr_t kRvaLauncherIsVisible = 0x1F6790;
+constexpr uintptr_t kRvaDismissStartAndCortana = 0x499A10;
+constexpr uintptr_t kRvaDismissSynchronously = 0x48FF20;
+constexpr uintptr_t kRvaActiveZBand = 0x24C550;
 
 // The private offsets below were read from one image: twinui.pcshell.dll fixed
-// file version 10.0.26100.9974, with all 13 named symbols at the reference
+// file version 10.0.26100.10068, with all 13 named symbols at the reference
 // RVAs. A name alone is not the layout: a rebuild can keep every name and move
 // a member or a vtable slot, and the failure mode is an Explorer crash. The
 // offset-dependent capability is therefore enabled only when this exact
 // identity is present; anything else is a native pass-through, never a
-// null/sentinel probe.
+// null/sentinel probe. On this image the live read gives launcher
+// `outer + 0x18`, state `launcher + 0x160`, `InternalState 5` while shown, and
+// state vtable `+0x40` = the resolved DismissStartAndCortana.
 constexpr uint64_t kTwinuiReferenceVersion =
     (static_cast<uint64_t>(10) << 48) |
-    (static_cast<uint64_t>(26100) << 16) | 9974;
+    (static_cast<uint64_t>(26100) << 16) | 10068;
 std::atomic<bool> g_launcherLayoutVerified{false};
 
-// The fixed file version of a loaded module, or 0 when it cannot be read.
-// version.dll is resolved at runtime, so the build gains no import.
+// The fixed file version of the mapped image, or 0 when it cannot be read.
+// The resource is read from `module` itself, never from the file on disk: a
+// serviced file and the still-mapped image can differ, and the private RVAs
+// describe the mapping the hooks will actually call. version.dll is resolved at
+// runtime, so the build gains no import.
 uint64_t ModuleFixedFileVersion(HMODULE module) {
-    using GetSize_t = DWORD(WINAPI*)(LPCWSTR, LPDWORD);
-    using GetInfo_t = BOOL(WINAPI*)(LPCWSTR, DWORD, DWORD, LPVOID);
-    using Query_t = BOOL(WINAPI*)(LPVOID, LPCWSTR, LPVOID*, PUINT);
+    using Query_t = BOOL(WINAPI*)(LPCVOID, LPCWSTR, LPVOID*, PUINT);
     static HMODULE versionDll = LoadLibraryW(L"version.dll");
-    static GetSize_t getSize =
-        versionDll ? reinterpret_cast<GetSize_t>(
-                         GetProcAddress(versionDll,
-                                        "GetFileVersionInfoSizeW"))
-                   : nullptr;
-    static GetInfo_t getInfo =
-        versionDll ? reinterpret_cast<GetInfo_t>(
-                         GetProcAddress(versionDll, "GetFileVersionInfoW"))
-                   : nullptr;
     static Query_t query =
         versionDll ? reinterpret_cast<Query_t>(
                          GetProcAddress(versionDll, "VerQueryValueW"))
                    : nullptr;
-    if (!getSize || !getInfo || !query) {
+    if (!module || !query) {
         return 0;
     }
-    WCHAR path[MAX_PATH] = {};
-    if (!GetModuleFileNameW(module, path, ARRAYSIZE(path))) {
+    const HRSRC resource = FindResourceW(
+        module, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
+    if (!resource) {
         return 0;
     }
-    DWORD handle = 0;
-    const DWORD size = getSize(path, &handle);
-    if (size == 0) {
+    const HGLOBAL loaded = LoadResource(module, resource);
+    if (!loaded) {
         return 0;
     }
-    std::vector<BYTE> data(size);
-    if (!getInfo(path, 0, size, data.data())) {
+    const void* data = LockResource(loaded);
+    if (!data) {
         return 0;
     }
     VS_FIXEDFILEINFO* info = nullptr;
     UINT length = 0;
-    if (!query(data.data(), L"\\", reinterpret_cast<void**>(&info), &length) ||
+    if (!query(data, L"\\", reinterpret_cast<void**>(&info), &length) ||
         !info || length < sizeof(VS_FIXEDFILEINFO) ||
         info->dwSignature != 0xFEEF04BD) {
         return 0;
@@ -13919,6 +15642,14 @@ constexpr uint32_t kDismissMethodWin = 1;
 constexpr uint32_t kDismissMethodWinTab = 5;
 constexpr uint32_t kDismissMethodStartButton = 6;
 constexpr uint32_t kDismissMethodClickAway = 7;
+
+// The entry a press arrived through: the primitive the queue's fallback must
+// repeat when the press cannot be served as an intent.
+constexpr int32_t kPressEntryHotkey = 0;
+constexpr int32_t kPressEntryButton = 1;
+constexpr int32_t kPressEntryShow = 2;
+constexpr int32_t kPressEntryDismiss = 3;
+constexpr int32_t kPressEntryHide = 4;
 
 // The executor's allowlist uses the one shared vocabulary
 // (SwipeShowAllowed/SwipeDismissAllowed): a show carries method 1, 11 or 16 with
@@ -13959,6 +15690,44 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;
 constexpr wchar_t kExecClassName[] = L"WindhawkSwipeFor10Start.Executor";
 bool g_execClassRegistered = false;
 HINSTANCE g_execClassInstance = nullptr;
+
+// The executor window's admission lock. Creation takes it shared around the
+// disabled/class/window checks, class registration and CreateWindowExW; the
+// unload takes it exclusive before the window and class teardown. The shared
+// side is a try: the only writer is the unload, so a late entry returns instead
+// of blocking the launcher thread while the unload sends it a message.
+SRWLOCK g_execAdmissionLock = SRWLOCK_INIT;
+
+class ExecAdmissionShared {
+  public:
+    ExecAdmissionShared() {
+        held_ = TryAcquireSRWLockShared(&g_execAdmissionLock) != 0;
+    }
+    ~ExecAdmissionShared() {
+        if (held_) {
+            ReleaseSRWLockShared(&g_execAdmissionLock);
+        }
+    }
+    bool held() const { return held_; }
+    ExecAdmissionShared(const ExecAdmissionShared&) = delete;
+    ExecAdmissionShared& operator=(const ExecAdmissionShared&) = delete;
+
+  private:
+    bool held_ = false;
+};
+
+class ExecAdmissionExclusive {
+  public:
+    ExecAdmissionExclusive() {
+        AcquireSRWLockExclusive(&g_execAdmissionLock);
+    }
+    ~ExecAdmissionExclusive() {
+        ReleaseSRWLockExclusive(&g_execAdmissionLock);
+    }
+    ExecAdmissionExclusive(const ExecAdmissionExclusive&) = delete;
+    ExecAdmissionExclusive& operator=(const ExecAdmissionExclusive&) = delete;
+};
+
 constexpr UINT kExecMessage = WM_APP + 0x5A;
 // The private shutdown and latch messages. A generic WM_CLOSE says only "some
 // window should close"; the teardown is a request this activation made about
@@ -13967,14 +15736,43 @@ constexpr UINT kExecMessage = WM_APP + 0x5A;
 // where the timer and the slot live.
 constexpr UINT kExecTeardownMessage = WM_APP + 0x5B;
 constexpr UINT kExecLatchMessage = WM_APP + 0x5C;
+// The intent ack travels worker -> launcher window: the worker is the only
+// thread that can wait on the channel's ack event, and the queue belongs to the
+// launcher thread. This is a notification, not a second record.
+constexpr UINT kExecIntentAckMessage = WM_APP + 0x5D;
 constexpr WPARAM kExecTeardownMagic = 0x53575444;  // "SWTD"
 constexpr WPARAM kExecLatchMagic = 0x53574C41;     // "SWLA"
+constexpr WPARAM kExecIntentAckMagic = 0x53574141;  // "SWAA"
 constexpr UINT_PTR kExecDismissTimer = 0x5358;
 constexpr UINT_PTR kExecProbeTimer = 0x5359;
 constexpr UINT_PTR kPressLatchTimer = 0x535A;
 constexpr UINT_PTR kExecDismissProbeTimer = 0x535B;
+constexpr UINT_PTR kPressAckTimer = 0x535C;
+// The open-generation gate for a press that follows a show: a bounded one-shot
+// that reads the section's open record instead of the cloak.
+constexpr UINT_PTR kPressOpenGenTimer = 0x535D;
+constexpr uint64_t kPressOpenGenPollMs = 20;
+constexpr uint64_t kPressOpenGenMaxWaitMs = 900;
 constexpr uint64_t kPressLatchTimeoutMs = 400;
 constexpr uint64_t kPressLatchRetryMs = 100;
+// One outstanding press. The ack normally arrives in the consumer's own turn
+// (single-digit milliseconds); the bound is the point at which the press is
+// served by the shell's own primitive instead. The queue wait is the total a
+// press may spend behind older presses (four entries, each at most the ack bound)
+// before its own decision is served by the shell for the same reason.
+constexpr uint64_t kPressAckTimeoutMs = 1000;
+// While a timed-out press is reserved (not taken, peer still alive), the
+// publisher re-checks its claim at this cadence. The peer's own staleness window
+// is the outer bound: once the controller stops ticking it cannot take the
+// record and the native replay is safe.
+constexpr uint64_t kPressReservePollMs = 100;
+constexpr uint64_t kPressQueueWaitMs = 1500;
+// The queue-age bound pauses behind a claimed press, so it is not an absolute
+// cap. A press that waited behind a frozen or killed activation is dropped once
+// this total passes, not run natively: its direction is minutes old and the
+// shell has long since moved on.
+constexpr uint64_t kPressQueueStaleMs = kPressQueueWaitMs + kPressAckTimeoutMs;
+constexpr int kPressQueueCapacity = 4;
 // The controller's own budget for one command (its kBridgeAckTimeoutMs): a show
 // is answered within 400 ms of its publication, a dismiss within 400 ms of the
 // deadline it was given. A dispatch that starts after that is stale — the
@@ -13993,11 +15791,11 @@ constexpr UINT kExecDismissConfirmMs = 300;
 // dismiss that never comes. A failed worker startup leaves it false and the
 // shell's own path serves every trigger.
 std::atomic<bool> g_execReady{false};
-// Set by WM_NCDESTROY on the launcher thread when the published window is
-// destroyed. The unload resets it before posting the teardown and waits on it
-// without a deadline, so the window and its timers are gone before the class is
-// unregistered and the channel closed.
-HANDLE g_execWindowGone = nullptr;
+// The published capability: the worker, the window on the recorded launcher
+// thread, the verified layout and the primitives that window will call. It is
+// the bridge's own copy of the shared word; every lifecycle point publishes it
+// through PublishExecutorCapability and the Start side reads only the word.
+std::atomic<bool> g_execCapable{false};
 // The hidden event does not publish the latched open from its own stack. A show
 // that ran at the hidden event's own tick was swallowed by the completing hide
 // (measured on the auto-hidden layout: `own state event=hidden`, show and
@@ -14050,30 +15848,29 @@ constexpr uint32_t kExecDismissRetryMs = 10;
 // State
 // ---------------------------------------------------------------------------
 
-// The twinui.pcshell.dll image the notification saw, the image an install
-// currently owns, and the resolution outcome. The bridge's worker probes the
-// recorded module; a false result while Windhawk's PDB fetch runs is pending,
-// not a refusal.
-std::atomic<HMODULE> g_explorerModuleSeen{nullptr};
+// The image an install currently owns and the resolution outcome. The worker
+// probes the module by name with a loader reference; no load notification is
+// needed.
+// The loader reference acquired for the one symbol attempt. Worker thread writes
+// it before the install; RoleUninit reads it after the worker join and releases
+// it once. It keeps the mapping alive across the resource read and HookSymbols.
+HMODULE g_explorerModuleRef = nullptr;
 std::atomic<HMODULE> g_explorerSymbolClaim{nullptr};
 std::atomic<bool> g_explorerSymbolsReady{false};
 std::atomic<bool> g_explorerSymbolsRefused{false};
-std::atomic<bool> g_explorerLoadLogged{false};
 std::atomic<bool> g_afterInit{false};
 std::atomic<bool> g_disabled{false};
 // Serialises the symbol install against the stop: Wh_ModBeforeUninit takes it
 // before it sets g_disabled, so a fetch that is still running either finishes
 // first or the install sees the stop and adds nothing.
 SRWLOCK g_explorerSymbolLock = SRWLOCK_INIT;
-// The worker's retry schedule. Worker thread only; a fresh image starts these at
-// zero. The deadline covers the 33 MB twinui.pcshell.pdb
-// (the measured download took 180 s) and one retry after a failed parse; it is
-// printed on every pending line.
+// The worker's one symbol attempt. `HookSymbols` blocks on Windhawk's PDB fetch
+// (measured up to 571 s on this machine), so the worker makes that call once per
+// module per install. A false result is terminal for the session: retrying after
+// the fetch already failed turns one long stall into a storm and keeps every press
+// waiting on symbol work. The per-role trace says the outcome once.
 constexpr uint64_t kExecSymbolProbeMs = 100;
-constexpr uint64_t kExecSymbolPendingDeadlineMs = 240000;
-uint64_t g_execProbeNextTick = 0;
-uint64_t g_execProbeFirstTick = 0;
-int g_execProbeAttempts = 0;
+std::atomic<bool> g_explorerSymbolAttempted{false};
 // Set only after Wh_SetFunctionHook accepted the close-decision hook, so no
 // close is ever arbitrated on a build where that hook was refused.
 std::atomic<bool> g_closeHookEnabled{false};
@@ -14081,6 +15878,9 @@ std::atomic<bool> g_closeHookEnabled{false};
 // Set at the end of RoleInit; a fresh image starts false. The later callbacks
 // return at once until the role actually initialised.
 bool g_initialised = false;
+
+// First tick of RoleBeforeUninit, for the one unload-duration line at the end.
+uint64_t g_unloadStartTick = 0;
 
 // ---------------------------------------------------------------------------
 // Logging (state transitions only, never per frame)
@@ -14102,11 +15902,11 @@ HRESULT Show_Hook(void* self, uint8_t a, uint8_t b, uint32_t c) {
     TraceLog(L"show a=%u b=%u c=%u tid=%u", static_cast<unsigned int>(a),
             static_cast<unsigned int>(b), static_cast<unsigned int>(c),
             GetCurrentThreadId());
-    // The manager's Show runs on the launcher thread. It is the touch-first
-    // path's first launcher entry: creating the window here keeps a band open
-    // working when no Win/Start-button hook ran yet. The gate adopts the thread
-    // only when no entry has been seen, and never creates a second window on a
-    // thread that is not that one.
+    // The manager's Show is the bootstrap. It runs on whichever thread the shell
+    // called it on (normally the launcher thread); recording that thread and
+    // creating the window here is what lets a touch-first open work. It is not a
+    // general "any pumping thread" test: a non-pumping caller can reach this hook
+    // after its own ShowStartView passed natively.
     EnsureExecutorOnLauncherThread(L"show");
 
     return Show_Original ? Show_Original(self, a, b, c) : S_OK;
@@ -14330,13 +16130,10 @@ struct OwnSnapshot {
     uint32_t state;
 };
 
-// Reads the cloak truth before a decision and adopts it. A divergence is logged
-// once, with both values; the shell is always right. An unready state (the
-// constructor's 0x100 sentinel, a detached interface, or a pointer there is no
-// reason to trust) is refused here, and the hook that asked passes the call to
-// the shell: deciding from an unread state would be a guess about the direction.
-OwnSnapshot OwnSync(void* launcher) {
-    void* state = OwnStateOf(launcher);
+// Reads the cloak truth and adopts it, from the IXamlLauncherState interface a
+// hook already holds. OwnSync is the launcher-object form; both share this body
+// so the resync and the readiness floor cannot disagree between entries.
+OwnSnapshot OwnSyncState(void* state) {
     const uint64_t raw =
         static_cast<uint64_t>(reinterpret_cast<uintptr_t>(state));
     if (!LauncherStateReady(raw)) {
@@ -14361,6 +16158,23 @@ OwnSnapshot OwnSync(void* launcher) {
     }
     return OwnSnapshot{true, shellOpen, internal};
 }
+
+// Reads the cloak truth before a decision and adopts it. A divergence is logged
+// once, with both values; the shell is always right. An unready state (the
+// constructor's 0x100 sentinel, a detached interface, or a pointer there is no
+// reason to trust) is refused here, and the hook that asked passes the call to
+// the shell: deciding from an unread state would be a guess about the direction.
+OwnSnapshot OwnSync(void* launcher) {
+    return OwnSyncState(OwnStateOf(launcher));
+}
+
+// The one toggle decision, defined below with the press latch and the press
+// queue. The Hide entry owns the click-away Hide and reaches it from here; every
+// other entry calls it directly.
+void DispatchToggle(const OwnSnapshot& own, int32_t trigger, uint32_t showMethod,
+                    uint32_t dismissMethod, uint32_t flags,
+                    uint32_t admittingEpoch, int32_t entry,
+                    bool pointer = false);
 
 // The same adoption after a close the executor passed or served. It reads the
 // state the hook received, which is the IXamlLauncherState interface.
@@ -14447,18 +16261,80 @@ bool PeerAliveNow() {
     return SwipeIpcPeerAlive(&g_ipc, kSwipePeerStaleMs);
 }
 
+// The peer's explicit state, without the heartbeat age. A stale tick must not
+// release a press the controller already claimed: the process may be paused
+// between two heartbeats, not gone. Only the withdrawal of `alive` is that proof.
+bool PeerStateAliveNow() {
+    return g_ipc.state != nullptr &&
+           SwipeIpcPeerState(&g_ipc) == kSwipePeerAlive;
+}
+
 // The activation that answers right now. 0 on a section with no attach yet.
 uint32_t PeerEpochNow() {
     return g_ipc.state ? SwipeIpcPeerEpoch(&g_ipc) : 0;
 }
 
+// How old the last heartbeat is, in milliseconds. Only the ack timeout's
+// diagnostic reads it: the liveness decision is PeerAliveNow's, which pairs the
+// state with the tick so a just-started activation is not read through the
+// previous one's words.
+uint32_t PeerTickAgeMs() {
+    if (!g_ipc.state) {
+        return 0xFFFFFFFFu;
+    }
+    return static_cast<uint32_t>(GetTickCount64()) -
+           SwipeIpcPeerTick(&g_ipc);
+}
+
 // The executor half of the gate: the worker that turns a command into a
 // launcher call. Without it, a command the controller publishes would have no
 // thread to run it.
-bool BridgeCanServe() {
+bool ExecutorWorkerReady() {
     return g_ipc.state != nullptr &&
            g_execReady.load(std::memory_order_acquire) &&
            !g_disabled.load(std::memory_order_relaxed);
+}
+
+// The full capability the Start side is told about. A started worker is not
+// enough: the window must exist on the recorded launcher thread, the layout must
+// be the verified identity, and the primitives that window calls must be
+// resolved. Every one of these is read as a capability, never assumed from a
+// mapped channel.
+bool ExecutorCapabilityNow() {
+    if (!ExecutorWorkerReady() ||
+        !g_launcherLayoutVerified.load(std::memory_order_acquire)) {
+        return false;
+    }
+    if (!g_execWindow.load(std::memory_order_acquire)) {
+        return false;
+    }
+    const DWORD launcher = g_launcherThread.load(std::memory_order_relaxed);
+    if (launcher == 0 || g_execThreadId == 0 || g_execThreadId != launcher) {
+        return false;
+    }
+    return g_dismiss && g_showStartView && g_launcherSlot &&
+           g_launcherIsVisible;
+}
+
+// Publishes the capability word and wakes the Start side. The word is written
+// even when the value did not change, so an unload clear can never be skipped;
+// the one log line is emitted only on a transition. One mechanism, one shape.
+void PublishExecutorCapability(const wchar_t* reason) {
+    if (!g_ipc.state) {
+        return;
+    }
+    const bool capable = ExecutorCapabilityNow();
+    const bool was = g_execCapable.exchange(capable, std::memory_order_acq_rel);
+    SwipeIpcPublishExecCapable(&g_ipc, capable);
+    if (was != capable) {
+        TraceLog(L"exec capable=%d reason=%s window=%p tid=%u launcher=%u "
+                L"layout=%d worker=%d",
+                capable ? 1 : 0, reason,
+                g_execWindow.load(std::memory_order_relaxed), g_execThreadId,
+                g_launcherThread.load(std::memory_order_relaxed),
+                g_launcherLayoutVerified.load(std::memory_order_relaxed) ? 1 : 0,
+                g_execReady.load(std::memory_order_relaxed) ? 1 : 0);
+    }
 }
 
 // The window this activation dispatches through, on the calling thread. A window
@@ -14472,9 +16348,19 @@ bool ExecutorWindowOnThisThread() {
     return g_execThreadId == GetCurrentThreadId();
 }
 
+// Only the two decision entries are listed here. They never bootstrap a
+// service: HandleOwnTrigger has already required a live peer and a started
+// worker, and the manager's Show is the entry that creates a window with
+// neither. A Dismiss/ShowStartView on an unknown thread never adopts and passes
+// natively.
+bool LauncherTriggerMayAdopt(const wchar_t* trigger) {
+    return wcscmp(trigger, L"win") == 0 ||
+           wcscmp(trigger, L"startbutton") == 0;
+}
+
 // The recorded launcher thread, without adopting one. A Hide that reaches a
 // thread this mod has not proven is never made the executor's thread by being
-// the first entry it ran on: only the four decision entries adopt.
+// the first entry it ran on: only the proven entries adopt.
 bool OnRecordedLauncherThread() {
     const DWORD known = g_launcherThread.load(std::memory_order_relaxed);
     return known != 0 && known == GetCurrentThreadId();
@@ -14484,31 +16370,40 @@ bool OnRecordedLauncherThread() {
 // first: without a live controller an intent has no consumer, so deciding would
 // only delay the shell's own toggle. Then a started worker, then this thread: a
 // hook on another thread must not read the latch or the armed dismiss. The window
-// is created here, on a known launcher entry, and never from the library-load
-// hook or the worker's wait loop. Creating it takes no wait, so this is safe
-// inside the hook.
+// is created here, on a known launcher entry. Creating it takes no wait, so this
+// is safe inside the hook.
 //
 // `epochOut` is the activation the admission was decided under. The latch stores
 // this value, not a fresh read: a restart between this decision and the latch
 // creation would otherwise label an old press with the new activation's epoch,
 // and the serve would accept it.
+bool PressQueueHeld();
+
 bool BridgeCanServeOnLauncherThread(const wchar_t* trigger,
                                     uint32_t* epochOut) {
     if (epochOut) {
         *epochOut = 0;
     }
     if (!PeerAliveNow()) {
-        // No controller: the caller forwards to the shell. One line per press
-        // names the trigger and says why nothing was decided.
-        TraceLog(L"own pass trigger=%s reason=no-peer", trigger);
-        return false;
+        // A stale tick normally goes native: the controller cannot answer this
+        // press. With an older press outstanding or queued, a native pass would
+        // run this press ahead of that older one; let the hook reach admission,
+        // which reconciles the old record or queues this press. The queue is
+        // launcher-local, so it is read only on the recorded thread.
+        if (OnRecordedLauncherThread() && PressQueueHeld()) {
+            TraceLog(L"own pass trigger=%s reason=peer-stale-queued", trigger);
+        } else {
+            // No controller and nothing held: the caller forwards to the shell.
+            TraceLog(L"own pass trigger=%s reason=no-peer", trigger);
+            return false;
+        }
     }
     const uint32_t epoch = PeerEpochNow();
-    if (!BridgeCanServe()) {
+    if (!ExecutorWorkerReady()) {
         TraceLog(L"own pass trigger=%s reason=no-executor", trigger);
         return false;
     }
-    if (NoteLauncherThread(trigger) == 0) {
+    if (NoteLauncherThread(trigger, LauncherTriggerMayAdopt(trigger)) == 0) {
         // The thread test comes before the window test, so a hook on another
         // thread cannot reach the launcher-local fields through an existing
         // window.
@@ -14518,6 +16413,17 @@ bool BridgeCanServeOnLauncherThread(const wchar_t* trigger,
     EnsureExecutorWindow();
     if (!ExecutorWindowOnThisThread()) {
         TraceLog(L"own pass trigger=%s reason=no-window", trigger);
+        return false;
+    }
+    // The window may have been created on this very call, so the capability is
+    // published here before the decision: the Start side needs the word to
+    // advertise, and this press is the first proof the executor can serve.
+    PublishExecutorCapability(L"press");
+    if (!ExecutorCapabilityNow()) {
+        // A started worker with no verified layout or no callable primitive is
+        // not an executor. The press stays native; the Start side is not told a
+        // capability it does not have.
+        TraceLog(L"own pass trigger=%s reason=no-capability", trigger);
         return false;
     }
     if (epochOut) {
@@ -14534,8 +16440,16 @@ bool BridgeCanServeOnLauncherThread(const wchar_t* trigger,
 // over the controller's retracted panel.
 bool HideCanServeClose(const wchar_t** reason) {
     if (!PeerAliveNow()) {
-        *reason = L"no-peer";
-        return false;
+        // Same rule as the decision gate: a native close would pass over an
+        // older press. With one outstanding or queued, let the close reach the
+        // dispatcher, which reconciles or queues it. The queue is launcher-local;
+        // read it only on the recorded thread.
+        if (OnRecordedLauncherThread() && PressQueueHeld()) {
+            TraceLog(L"exec hide peer-stale-queued");
+        } else {
+            *reason = L"no-peer";
+            return false;
+        }
     }
     if (!g_callersVerified.load(std::memory_order_relaxed)) {
         // The caller wrappers are the only thing that tells a lock screen from
@@ -14544,7 +16458,7 @@ bool HideCanServeClose(const wchar_t** reason) {
         *reason = L"callers-unverified";
         return false;
     }
-    if (!BridgeCanServe()) {
+    if (!ExecutorWorkerReady()) {
         *reason = L"no-executor";
         return false;
     }
@@ -14558,6 +16472,14 @@ bool HideCanServeClose(const wchar_t** reason) {
         *reason = L"no-window";
         return false;
     }
+    // Re-publish before the close decision: a window exists, but the symbols may
+    // still be pending or the layout unverified, and the Start side must hear
+    // the loss before this close is turned into a command.
+    PublishExecutorCapability(L"hide");
+    if (!ExecutorCapabilityNow()) {
+        *reason = L"no-capability";
+        return false;
+    }
     if (!g_dismiss) {
         // The primitive probe is a capability: without the callable Dismiss the
         // command has no executor even though the worker runs.
@@ -14567,8 +16489,45 @@ bool HideCanServeClose(const wchar_t** reason) {
     return true;
 }
 
+// A method-7 Hide from the ActiveZBand scope is a click-away only while a real
+// pointer button is down. The same z-band change is produced by Alt+Tab, a
+// foreground switch and a taskbar activation, which carry no button and must not
+// reopen a close. A click on the taskbar itself is excluded by the window under
+// the cursor: activating another app is not a click on the menu's owner surface.
+bool ClickAwayPointerNow() {
+    // The logical primary button: a left-handed mouse swaps the physical buttons,
+    // and the desktop-click reopen must follow the primary one.
+    const int primary =
+        GetSystemMetrics(SM_SWAPBUTTON) != 0 ? VK_RBUTTON : VK_LBUTTON;
+    if ((GetAsyncKeyState(primary) & 0x8000) == 0) {
+        return false;
+    }
+    POINT point{};
+    if (!GetCursorPos(&point)) {
+        return false;
+    }
+    const HWND under = WindowFromPoint(point);
+    if (!under) {
+        return false;
+    }
+    // The clock, a tray icon and the taskbar background are children of the
+    // tray's top-level window; take the root so every one of them is excluded,
+    // including a secondary bar's Shell_SecondaryTrayWnd.
+    const HWND root = GetAncestor(under, GA_ROOT);
+    if (!root) {
+        return false;
+    }
+    wchar_t className[64]{};
+    if (GetClassNameW(root, className, ARRAYSIZE(className)) == 0) {
+        return false;
+    }
+    return wcscmp(className, L"Shell_TrayWnd") != 0 &&
+           wcscmp(className, L"Shell_SecondaryTrayWnd") != 0;
+}
+
 // XamlLauncherState::HideStartAndCortana(void* self, uint32_t method)
-// twinui.pcshell.dll 26100.9949, RVA 0x24BCB0. The function reads the dismiss
+// twinui.pcshell.dll fixed version 26100.10068, RVA 0x2485E0. The function reads
+// the dismiss
 // method in edx, writes the transient state at [self+0x28] and calls the
 // manager's Hide through [self+0x38]; it returns nothing.
 void HideStartAndCortana_Hook(void* self, uint32_t method) {
@@ -14595,6 +16554,43 @@ void HideStartAndCortana_Hook(void* self, uint32_t method) {
             TraceLog(L"exec swallow hide caller=%s method=%u state=%u depth=%d "
                     L"reason=own-show",
                     OwnCallerName(execCaller), method, execState, t_execCall);
+            return;
+        }
+        if (execCaller == OwnCaller::ClickAway &&
+            method == kDismissMethodClickAway) {
+            // The shell can deliver a click-away while our own Dismiss is on the
+            // stack (the state has already left 5 for the hide). A Win press on
+            // this same stack takes the one dispatcher and latches the reopen;
+            // the click-away is the same trigger, so it must not take the native
+            // Hide instead. The two suppressions are the click-away's own: the
+            // opening window is not a target, and a touch-owned panel belongs to
+            // the finger that opened it.
+            if (execState == 1 || execState == 3) {
+                TraceLog(L"intent ignore trigger=clickaway caller=%s method=%u "
+                        L"state=%u depth=%d reason=opening",
+                        OwnCallerName(execCaller), method, execState, t_execCall);
+                return;
+            }
+            if (SwipeIpcControllerTouch(&g_ipc)) {
+                TraceLog(L"intent ignore trigger=clickaway caller=%s method=%u "
+                        L"state=%u depth=%d reason=touch-owner",
+                        OwnCallerName(execCaller), method, execState, t_execCall);
+                return;
+            }
+            const OwnSnapshot clickOwn = OwnSyncState(self);
+            if (!clickOwn.ready) {
+                TraceLog(L"intent pass clickaway method=%u reason=state-not-ready",
+                        method);
+                callOriginal();
+                OwnResyncFromState(self);
+                return;
+            }
+            TraceLog(L"own hide clickaway state=%u depth=%d reason=executor",
+                    execState, t_execCall);
+            DispatchToggle(clickOwn, kSwipeTriggerClickAway,
+                           kSwipeShowMethodStartButton, method, 0,
+                           PeerEpochNow(), kPressEntryHide,
+                           ClickAwayPointerNow());
             return;
         }
         TraceLog(L"exec pass hide caller=%s method=%u state=%u depth=%d "
@@ -14646,11 +16642,14 @@ void HideStartAndCortana_Hook(void* self, uint32_t method) {
         return;
     }
 
-    // Every other Hide reaching this hook is a close trigger — the click-away,
-    // the shell's Windows key when the decision hook passed it, or a Start-button
-    // path — not a duplicate of a close the controller already runs. It is
-    // published even while the controller owns the panel; the controller decides
-    // whether it is a new close or a reopen.
+    // A click-away and an ordinary caller's Hide are different entries. The
+    // click-away goes through the one dispatcher below (a close on a settled
+    // panel, a reopen while the controller is closing); every other Hide that
+    // reaches this point is a close trigger — the shell's Windows key when the
+    // decision hook passed it, or a Start-button path — not a duplicate of a
+    // close the controller already runs. It is published even while the
+    // controller owns the panel; the controller decides whether it is a new close
+    // or a reopen.
     //
     // The one exception is the opening touch: when a contact at the band pulls
     // the menu out, the shell sees that same contact outside the freshly shown
@@ -14684,9 +16683,35 @@ void HideStartAndCortana_Hook(void* self, uint32_t method) {
         return;
     }
 
-    const int32_t trigger = caller == OwnCaller::ClickAway
-                                ? kSwipeTriggerClickAway
-                                : kSwipeTriggerWin;
+    // The click-away is not a close by definition. It reaches the same toggle
+    // decision as the Windows key and the Start button, so a click whose panel the
+    // controller is already closing is the reopen that stops the close, and a
+    // click on a settled panel is the close it has always been (method 7 stays the
+    // click-away evidence). A click with no panel to close and no close to reverse
+    // — a callback after the menu has landed — passes to the shell.
+    if (caller == OwnCaller::ClickAway) {
+        const OwnSnapshot clickOwn = OwnSyncState(self);
+        if (!clickOwn.ready) {
+            TraceLog(L"intent pass clickaway method=%u reason=state-not-ready",
+                    method);
+            callOriginal();
+            OwnResyncFromState(self);
+            return;
+        }
+        // A click with no panel and no close is decided by the same dispatcher as
+        // an immediate or a queued one: its no-panel branch calls the original
+        // under the executor guard, once, with the same line either way.
+        // `showMethod` is the Start button's Show(11); the click's ShowStartView
+        // reopens through the executor. The close keeps 7 as evidence in the
+        // intent; the Start side maps it to the executor's 6.
+        DispatchToggle(clickOwn, kSwipeTriggerClickAway,
+                       kSwipeShowMethodStartButton,
+                       kDismissMethodClickAway, 0, PeerEpochNow(),
+                       kPressEntryHide, ClickAwayPointerNow());
+        return;
+    }
+
+    const int32_t trigger = kSwipeTriggerWin;
     // The close intent's method is forwarded to the executor. 7 is click-away
     // *evidence*, so only the caller scope that proves the source may carry it;
     // an ordinary caller's method-7 Hide is the shell's own close and passes.
@@ -14701,10 +16726,21 @@ void HideStartAndCortana_Hook(void* self, uint32_t method) {
         OwnResyncFromState(self);
         return;
     }
-    PublishBridgeIntent(kSwipeIntentClose, trigger, method, 0);
-    TraceLog(L"intent close trigger=%s caller=%s method=%u state=%u depth=%d",
-            trigger == kSwipeTriggerClickAway ? L"clickaway" : L"win",
-            OwnCallerName(caller), method, currentState, t_execCall);
+    // An ordinary Hide is the shell's own close decision, not a user toggle, so
+    // it keeps its close kind; but it enters the same FIFO as every other
+    // publication. Without that, it could overwrite an outstanding press's single
+    // intent record before the Start side read it.
+    const OwnSnapshot own = OwnSyncState(self);
+    if (!own.ready) {
+        TraceLog(L"intent pass close trigger=win caller=%s method=%u "
+                L"reason=state-not-ready",
+                OwnCallerName(caller), method);
+        callOriginal();
+        OwnResyncFromState(self);
+        return;
+    }
+    DispatchToggle(own, kSwipeTriggerWin, 0, method, 0, PeerEpochNow(),
+                   kPressEntryHide);
 }
 // ---------------------------------------------------------------------------
 // The decision hooks: Windows key, Start button, and the two state events
@@ -14733,6 +16769,72 @@ bool IntentShouldClose(const OwnSnapshot& own, int32_t direction) {
 }
 
 // ---------------------------------------------------------------------------
+// The press queue: one outstanding decision at a time
+// ---------------------------------------------------------------------------
+//
+// The channel has one intent record and one event. Two presses that both decide
+// before the Start side consumes the first overwrite each other and read the same
+// direction, so the second cannot reverse the first: one of the user's presses is
+// silently lost. Every admitted press is therefore one entry in a small FIFO on
+// the launcher thread. The first is published at once; each next is published
+// only after the intent ack for the one before it (or that ack's bounded wait
+// expires), so its direction is the one the controller published while applying
+// the earlier press. The hook never waits: the ack arrives on its event, the
+// worker posts it to the executor window, and the decision runs there.
+//
+// The queue is bounded, and so is each wait. A press the queue cannot serve runs
+// the shell's own original primitive for that press under the executor guard
+// (`t_execCall`), so the shell is never left without its toggle; the line says
+// which entry and why. An external takeover clears the queue: those intents are
+// not this mod's.
+struct QueuedPress {
+    int32_t trigger = kSwipeTriggerWin;
+    // The primitive the shell called and the arguments the fallback repeats. The
+    // two methods are the entry's own vocabulary, not necessarily the action this
+    // press publishes: a reopen from Dismiss(6) publishes Show(11), and its
+    // fallback must still call Dismiss(6).
+    int32_t entry = kPressEntryHotkey;
+    uint32_t showMethod = 0;
+    uint32_t dismissMethod = 0;
+    uint32_t flags = 0;
+    uint32_t admittingEpoch = 0;
+    uint64_t admittedTick = 0;
+    // When this press became the head with no normal press executing. The 1500 ms
+    // queue bound counts from here, not from admission behind an older press; 0
+    // means the head's bound is paused. Launcher thread only.
+    uint64_t servableTick = 0;
+    // A click-away's real-pointer evidence: the button was down when the shell
+    // delivered method 7. A z-band change from Alt+Tab, a taskbar activation or a
+    // foreground switch carries no pointer and must not reopen a close.
+    bool pointer = false;
+};
+
+const wchar_t* PressEntryName(int32_t entry) {
+    switch (entry) {
+        case kPressEntryButton:
+            return L"button";
+        case kPressEntryShow:
+            return L"show";
+        case kPressEntryDismiss:
+            return L"dismiss";
+        case kPressEntryHide:
+            return L"hide";
+        default:
+            return L"hotkey";
+    }
+}
+
+// Defined after the original pointers; the queue's fallback is the only caller.
+void RunPressOriginal(const QueuedPress& press, const wchar_t* reason);
+// Publishes one decision and makes it the outstanding press. 0 means nothing was
+// published and the caller must serve the press with its own primitive.
+LONG64 PublishPressIntent(int32_t kind, const QueuedPress& press,
+                          const wchar_t* source);
+// Drains the queue while nothing is outstanding. Called after an ack, a latch or
+// a fallback; it never blocks.
+void ServeNextPress(const wchar_t* reason);
+
+// ---------------------------------------------------------------------------
 // The press latch: a press that lands while the shell is already hiding
 // ---------------------------------------------------------------------------
 //
@@ -14741,23 +16843,121 @@ bool IntentShouldClose(const OwnSnapshot& own, int32_t direction) {
 // nothing. Neither the cancel path (the dismiss is already issued) nor a new
 // show can serve the press, so it is latched here and served as the same open
 // intent once the hide has landed (OnStartHidden, or the closed cloak for a
-// landing the event missed). One slot; a newer press replaces the older one and
-// says so. The wait is bounded by the hide, not by a fixed delay.
+// landing the event missed). The slot is counted; a newer press is appended and
+// the serve publishes the first open, then the remainder in order. The wait is
+// bounded by the hide, not by a fixed delay.
+
+// The latch keeps every press that arrived while the hide was in flight. The
+// first press is the reopen the landing owes; every further press is one more
+// toggle that must stay ordered. A newer press is appended, never allowed to
+// replace an older one, so two presses during a hide publish an open and then
+// the opposite direction once the open has been acknowledged.
+constexpr int kPressLatchCapacity = kPressQueueCapacity;
 
 struct PressLatch {
     bool pending = false;
-    uint64_t tick = 0;
-    int32_t kind = kSwipeIntentOpen;
-    int32_t trigger = kSwipeTriggerWin;
-    uint32_t method = 0;
-    uint32_t flags = 0;
-    // The Start activation that was answering when the press was latched. A
-    // serve against a different epoch is a serve into a controller that never
-    // saw this press, so the slot is invalidated instead.
-    uint32_t epoch = 0;
+    uint64_t tick = 0;  // the first press's admission; the bound starts here
+    int32_t count = 0;
+    QueuedPress presses[kPressLatchCapacity];
 };
 
 PressLatch g_pressLatch;  // launcher thread only
+// The open generation an open press was published against. The next press is
+// held until the START SECTION publishes a different generation, so a close
+// cannot be published into the open it belongs to. Not IsVisible, not the queue
+// depth; the section's open record is the controller's own statement that the
+// new menu exists. Launcher thread only.
+bool g_pressOpenGenPending = false;
+bool g_pressOpenGenHeld = false;
+uint64_t g_pressOpenGenBefore = 0;
+uint64_t g_pressOpenGenDeadline = 0;
+
+// The section's current open generation, or 0 when no open has been published.
+uint64_t CurrentOpenGeneration() {
+    uint64_t generation = 0;
+    uint64_t tick = 0;
+    if (!SwipeIpcReadOpen(&g_ipc, &generation, &tick)) {
+        return 0;
+    }
+    return generation;
+}
+
+// True once the controller has published a different menu open. A generation of
+// 0 is not a menu, so it never advances the gate.
+bool OpenGenerationAdvanced() {
+    const uint64_t generation = CurrentOpenGeneration();
+    return generation != 0 && generation != g_pressOpenGenBefore;
+}
+
+void BeginPressOpenGeneration(uint64_t before) {
+    g_pressOpenGenPending = true;
+    g_pressOpenGenHeld = false;
+    g_pressOpenGenBefore = before;
+    g_pressOpenGenDeadline = 0;  // starts when the following press is held
+}
+
+void ClearPressOpenGeneration() {
+    g_pressOpenGenPending = false;
+    g_pressOpenGenHeld = false;
+    g_pressOpenGenBefore = 0;
+    g_pressOpenGenDeadline = 0;
+}
+
+// One bounded re-check. False means no window or SetTimer refused; the caller
+// clears the gate and serves the held press rather than parking it.
+bool ArmPressOpenGenTimer() {
+    HWND window = g_execWindow.load(std::memory_order_relaxed);
+    return window && SetTimer(window, kPressOpenGenTimer,
+                              static_cast<UINT>(kPressOpenGenPollMs),
+                              nullptr) != 0;
+}
+
+// The gate's one check, taken when a close has been decided (or re-checked at the
+// queue head). False means the close may be published: the controller has
+// published a different menu open, the bound expired, or the timer could not be
+// armed. True means it stays parked, and a timer will ask again. The bound starts
+// at the first hold, not at the open's publication: a late ack must not shorten
+// the menu's budget.
+bool OpenGenerationGateHolds() {
+    if (!g_pressOpenGenPending) {
+        return false;
+    }
+    const uint64_t now = GetTickCount64();
+    if (g_pressOpenGenDeadline == 0) {
+        g_pressOpenGenDeadline = now + kPressOpenGenMaxWaitMs;
+    }
+    const uint64_t wait =
+        now - (g_pressOpenGenDeadline - kPressOpenGenMaxWaitMs);
+    if (OpenGenerationAdvanced()) {
+        TraceLog(L"own press open gen ready gen=%llu wait=%llu",
+                static_cast<unsigned long long>(CurrentOpenGeneration()),
+                static_cast<unsigned long long>(wait));
+        ClearPressOpenGeneration();
+        return false;
+    }
+    if (now >= g_pressOpenGenDeadline) {
+        // The controller never published the new menu this close belongs to. The
+        // close is served anyway: a press the user made must not vanish, and the
+        // Start side answers a close that names no live menu as superseded.
+        TraceLog(L"own press open gen expired before=%llu wait=%llu",
+                static_cast<unsigned long long>(g_pressOpenGenBefore),
+                static_cast<unsigned long long>(wait));
+        ClearPressOpenGeneration();
+        return false;
+    }
+    if (!ArmPressOpenGenTimer()) {
+        // No executor window, or the timer could not be armed. A hold with no
+        // guaranteed callback would park the queue past its 900 ms bound, so the
+        // close is served on this turn instead.
+        TraceLog(L"own press open gen timer failed err=%u before=%llu wait=%llu",
+                GetLastError(),
+                static_cast<unsigned long long>(g_pressOpenGenBefore),
+                static_cast<unsigned long long>(wait));
+        ClearPressOpenGeneration();
+        return false;
+    }
+    return true;
+}
 // Why the timer that will serve g_pressLatch was armed: the hidden event's
 // deferral ("hidden") or the 400 ms fallback ("timeout"). The serve line names
 // it. Launcher thread only, like the latch.
@@ -14769,12 +16969,16 @@ const wchar_t* g_pressServeReason = L"timeout";
 constexpr uint64_t kPressLatchMaxWaitMs = 1200;
 
 bool ServeLatchedPress(const wchar_t* reason);
+// Adds one press to the regular FIFO, preserving order. Defined with the queue;
+// the latch's remainder uses it after the first owed press is published.
+bool QueuePress(const QueuedPress& press, const wchar_t* source);
 
 void DropPressLatch(const wchar_t* reason, const wchar_t* detail) {
     if (!g_pressLatch.pending) {
         return;
     }
-    TraceLog(L"own press latch dropped reason=%s %s wait=%llu", reason, detail,
+    TraceLog(L"own press latch dropped reason=%s %s owed=%d wait=%llu", reason,
+            detail, g_pressLatch.count,
             static_cast<unsigned long long>(GetTickCount64() -
                                             g_pressLatch.tick));
     g_pressLatch = PressLatch{};
@@ -14799,8 +17003,7 @@ bool ShellHideInFlight(const OwnSnapshot& own) {
     return own.state == 9 || own.state == 11;
 }
 
-void LatchPress(const OwnSnapshot& own, int32_t trigger, uint32_t method,
-                uint32_t flags, uint32_t admittingEpoch) {
+void LatchPress(const OwnSnapshot& own, const QueuedPress& press) {
     const uint64_t now = GetTickCount64();
     HWND window = g_execWindow.load(std::memory_order_relaxed);
     if (!window) {
@@ -14808,21 +17011,48 @@ void LatchPress(const OwnSnapshot& own, int32_t trigger, uint32_t method,
         // run on. A slot with no guaranteed callback is not armed at all.
         TraceLog(L"own press latch dropped reason=no-window state=%u",
                 own.state);
+        RunPressOriginal(press, L"no-window");
         return;
     }
-    if (g_pressLatch.pending) {
-        TraceLog(L"own press latch replaced old_tick=%llu old_wait=%llu state=%u",
-                static_cast<unsigned long long>(g_pressLatch.tick),
-                static_cast<unsigned long long>(now - g_pressLatch.tick),
-                own.state);
+    if (g_pressLatch.pending &&
+        now > g_pressLatch.tick && now - g_pressLatch.tick > kPressLatchMaxWaitMs) {
+        // The older latch is past its bound; it is not this press's hide any
+        // more. Dropping it here, before appending, keeps the new press's bound
+        // its own.
+        DropPressLatch(L"expired", L"new-press");
     }
-    g_pressLatch = PressLatch{true,            now,  kSwipeIntentOpen,
-                              trigger,         method, flags,
-                              admittingEpoch};
-    TraceLog(L"own press latched state=%u trigger=%s tick=%llu epoch=%u "
-            L"(hide in flight)",
-            own.state, PressTriggerName(trigger),
-            static_cast<unsigned long long>(now), g_pressLatch.epoch);
+    if (g_pressLatch.pending) {
+        if (g_pressLatch.count >= kPressLatchCapacity) {
+            // The arriving press is the one that cannot be held. Running it now
+            // would execute it before the presses already owed, so it is dropped
+            // with the debt in its line.
+            TraceLog(L"own press latch dropped trigger=%s entry=%s "
+                    L"reason=latch-full owed=%d state=%u",
+                    PressTriggerName(press.trigger),
+                    PressEntryName(press.entry), g_pressLatch.count, own.state);
+            return;
+        }
+        g_pressLatch.presses[g_pressLatch.count++] = press;
+        TraceLog(L"own press latch owed count=%d state=%u trigger=%s entry=%s "
+                L"epoch=%u",
+                g_pressLatch.count, own.state,
+                PressTriggerName(press.trigger), PressEntryName(press.entry),
+                press.admittingEpoch);
+        // The first press armed the fallback timer and the hidden event arms the
+        // serve, so an appended press needs no second arm. Re-arming here would
+        // push a pending serve out by the full fallback again.
+        return;
+    }
+    g_pressLatch = PressLatch{};
+    g_pressLatch.pending = true;
+    g_pressLatch.tick = now;
+    g_pressLatch.count = 1;
+    g_pressLatch.presses[0] = press;
+    TraceLog(L"own press latched state=%u trigger=%s entry=%s tick=%llu "
+            L"epoch=%u owed=1 (hide or dismiss call in flight)",
+            own.state, PressTriggerName(press.trigger),
+            PressEntryName(press.entry),
+            static_cast<unsigned long long>(now), press.admittingEpoch);
     g_pressServeReason = L"timeout";
     if (SetTimer(window, kPressLatchTimer, kPressLatchTimeoutMs, nullptr) == 0) {
         // The hidden event is a second serve point, but it is not a guaranteed
@@ -14830,6 +17060,7 @@ void LatchPress(const OwnSnapshot& own, int32_t trigger, uint32_t method,
         // the only promise, so a latch that cannot arm it is dropped.
         TraceLog(L"own press latch timer failed err=%u", GetLastError());
         DropPressLatch(L"timer-failed", L"latch");
+        RunPressOriginal(press, L"latch-timer");
     }
 }
 
@@ -14894,14 +17125,15 @@ bool ServeLatchedPress(const wchar_t* reason) {
         DropPressLatch(L"expired", reason);
         return false;
     }
-    if (!PeerAliveNow() || !BridgeCanServe()) {
+    if (!PeerAliveNow() || !ExecutorCapabilityNow()) {
         DropPressLatch(L"peer-gone", reason);
         return false;
     }
     const uint32_t epoch = PeerEpochNow();
-    if (epoch != g_pressLatch.epoch) {
-        wchar_t detail[64] = {};
-        swprintf_s(detail, L"latch_epoch=%u now=%u", g_pressLatch.epoch, epoch);
+    if (epoch != g_pressLatch.presses[0].admittingEpoch) {
+        wchar_t detail[80] = {};
+        swprintf_s(detail, L"latch_epoch=%u now=%u",
+                   g_pressLatch.presses[0].admittingEpoch, epoch);
         DropPressLatch(L"peer-changed", detail);
         return false;
     }
@@ -14928,79 +17160,1166 @@ bool ServeLatchedPress(const wchar_t* reason) {
     const PressLatch latch = g_pressLatch;
     g_pressLatch = PressLatch{};
     const uint64_t wait = GetTickCount64() - latch.tick;
-    PublishBridgeIntent(kSwipeIntentOpen, latch.trigger, latch.method,
-                        latch.flags);
-    TraceLog(L"own press served wait=%llu state=%u trigger=%s reason=%s "
-            L"epoch=%u",
+    const QueuedPress& first = latch.presses[0];
+    // The served open is a published intent like any other: it becomes the
+    // outstanding press, so the remainder waits behind its ack and the first
+    // press that follows is the opposite direction. A failed publication runs the
+    // first press's own primitive, and the remainder still keeps its order.
+    // The generation the open is published against. The following press, latched
+    // remainder or not, is held until the controller publishes a different one.
+    const uint64_t openBefore = CurrentOpenGeneration();
+    const LONG64 sequence = PublishPressIntent(kSwipeIntentOpen, first, L"latch");
+    if (sequence <= 0) {
+        RunPressOriginal(first, L"latch-publish");
+    } else {
+        BeginPressOpenGeneration(openBefore);
+    }
+    for (int i = 1; i < latch.count; ++i) {
+        QueuePress(latch.presses[i], L"latch");
+    }
+    TraceLog(L"own press served wait=%llu state=%u trigger=%s entry=%s "
+            L"reason=%s epoch=%u owed=%d",
             static_cast<unsigned long long>(wait), own.state,
-            PressTriggerName(latch.trigger), reason, latch.epoch);
+            PressTriggerName(first.trigger), PressEntryName(first.entry), reason,
+            epoch, latch.count);
+    if (sequence <= 0) {
+        // Nothing is outstanding, so the remainder's turns start now.
+        ServeNextPress(L"latch");
+    }
     return true;
 }
 
-// The one toggle dispatcher for the three physical entries: the bare Windows
-// press, the Start button's open (ShowStartView method 11) and its close
-// (Dismiss method 6). `showMethod`/`dismissMethod` are the methods this entry
-// uses for each action; the action the direction chose keeps its own method. The
-// click-away is directional and never comes through here.
-//
-// The Start button used to publish a close from Dismiss(6) without asking the
-// direction, so a press during a retract entered as a second close while the
-// controller said the close was still in flight and the owner's press did
-// nothing. Both button entries now run the same rule as the Win key.
-//
-// Supersession lives here, not in one entry: any newer press whose panel is not
-// hiding makes the older latched reopen obsolete, whichever primitive carried it.
-// A physical Start-button close on a shown panel used to leave the old slot for
-// the hidden event to serve.
-bool DispatchToggle(const OwnSnapshot& own, int32_t trigger, uint32_t showMethod,
-                    uint32_t dismissMethod, uint32_t flags,
-                    uint32_t admittingEpoch) {
-    if (g_pressLatch.pending && !ShellHideInFlight(own)) {
-        // The landing event was missed and this newer press is the one the user
-        // means.
-        DropPressLatch(L"superseded", L"newer-press");
+// ---------------------------------------------------------------------------
+// The queue's state and its one published press
+// ---------------------------------------------------------------------------
+
+QueuedPress g_pressQueue[kPressQueueCapacity];  // launcher thread only
+int g_pressQueueHead = 0;
+int g_pressQueueCount = 0;
+
+struct OutstandingPress {
+    bool pending = false;
+    LONG64 seq = 0;
+    uint64_t publishedTick = 0;
+    QueuedPress press{};
+    // True for an external takeover's barrier: it holds subsequent publications
+    // until Start reconciles the takeover, and its timeout has no press to
+    // replay.
+    bool external = false;
+    // The bridge aborted this record (the counter went odd). A later superseded
+    // ack then proves Start copied nothing, so the press still owes its one
+    // native execution.
+    bool aborted = false;
+    // The Start activation alive when the record was published. A different one
+    // at the watchdog means the activation that could have applied this record is
+    // gone: the replacement seeds past it (OpenIpcChannel) and will never answer,
+    // so the record is reconciled by the epoch, not by waiting for an ack.
+    uint32_t publishedEpoch = 0;
+    // The take proves the controller has the record; it does not prove the
+    // resulting direction is published. While this is true the press waits for
+    // its ack (or a changed epoch) and the queue is not served from the take
+    // alone.
+    bool consumedAwaitingAck = false;
+};
+OutstandingPress g_pressOutstanding;  // launcher thread only
+
+// Whether an older press still owns the queue. The hook gates use this to keep a
+// stale-period press out of the native path when it would overtake that press.
+bool PressQueueHeld() {
+    return g_pressOutstanding.pending || g_pressQueueCount > 0;
+}
+
+// Removes every queued press and the outstanding one. The outstanding intent may
+// still be applied by the Start side (no scheme recalls a record), but nothing
+// here waits for a press that an external takeover has made obsolete. Launcher
+// thread only.
+void DropPressQueue(const wchar_t* reason) {
+    int dropped = 0;
+    ClearPressOpenGeneration();
+    HWND gateWindow = g_execWindow.load(std::memory_order_relaxed);
+    if (gateWindow) {
+        KillTimer(gateWindow, kPressOpenGenTimer);
+    }
+    while (g_pressQueueCount > 0) {
+        const QueuedPress& press = g_pressQueue[g_pressQueueHead];
+        TraceLog(L"own press dropped trigger=%s entry=%s reason=%s wait=%llu",
+                PressTriggerName(press.trigger), PressEntryName(press.entry),
+                reason,
+                static_cast<unsigned long long>(GetTickCount64() -
+                                                press.admittedTick));
+        g_pressQueueHead = (g_pressQueueHead + 1) % kPressQueueCapacity;
+        --g_pressQueueCount;
+        ++dropped;
+    }
+    if (g_pressOutstanding.pending) {
+        HWND window = g_execWindow.load(std::memory_order_relaxed);
+        if (window) {
+            KillTimer(window, kPressAckTimer);
+        }
+        if (g_pressOutstanding.external) {
+            TraceLog(L"own external dropped seq=%lld reason=%s wait=%llu",
+                    static_cast<long long>(g_pressOutstanding.seq), reason,
+                    static_cast<unsigned long long>(
+                        GetTickCount64() - g_pressOutstanding.publishedTick));
+        } else {
+            TraceLog(L"own press dropped trigger=%s entry=%s reason=%s "
+                    L"seq=%lld wait=%llu",
+                    PressTriggerName(g_pressOutstanding.press.trigger),
+                    PressEntryName(g_pressOutstanding.press.entry), reason,
+                    static_cast<long long>(g_pressOutstanding.seq),
+                    static_cast<unsigned long long>(
+                        GetTickCount64() -
+                        g_pressOutstanding.publishedTick));
+        }
+        g_pressOutstanding = OutstandingPress{};
+        ++dropped;
+    }
+    if (dropped > 1) {
+        TraceLog(L"own press queue cleared count=%d reason=%s", dropped, reason);
+    }
+}
+
+// Arms the one-shot that lets a press which queued behind a consumed (taken,
+// unacked) intent reach its queue-age bound. The ack event is the primary wake;
+// this is the bound's guaranteed callback. False means no window or SetTimer
+// refused.
+bool ArmConsumedPressPoll() {
+    HWND window = g_execWindow.load(std::memory_order_relaxed);
+    return window && SetTimer(window, kPressAckTimer,
+                              static_cast<UINT>(kPressReservePollMs),
+                              nullptr) != 0;
+}
+
+// Adds one press to the FIFO. The arriving press on a full queue is dropped with
+// the depth in the line: it is the one that cannot be held, and running it now
+// would execute it ahead of the presses already queued. Launcher thread only.
+bool QueuePress(const QueuedPress& press, const wchar_t* source) {
+    if (g_pressQueueCount >= kPressQueueCapacity) {
+        TraceLog(L"own press dropped trigger=%s entry=%s reason=queue-full q=%d "
+                L"outstanding=%d source=%s",
+                PressTriggerName(press.trigger), PressEntryName(press.entry),
+                g_pressQueueCount, g_pressOutstanding.pending ? 1 : 0, source);
+        return false;
+    }
+    const int tail = (g_pressQueueHead + g_pressQueueCount) % kPressQueueCapacity;
+    g_pressQueue[tail] = press;
+    ++g_pressQueueCount;
+    // A press that arrives as the head starts its own bound now, unless a normal
+    // press is executing: that press's direction is still in flight, and aging
+    // the next one out natively would run it ahead of that direction. An external
+    // barrier is not an executing press, so the held presses keep their bound
+    // behind it.
+    const bool executing =
+        g_pressOutstanding.pending && !g_pressOutstanding.external;
+    if (g_pressQueueCount == 1 && !executing) {
+        g_pressQueue[tail].servableTick = GetTickCount64();
+    }
+    TraceLog(L"own press queued trigger=%s entry=%s q=%d outstanding=%d "
+            L"seq=%lld source=%s",
+            PressTriggerName(press.trigger), PressEntryName(press.entry),
+            g_pressQueueCount, g_pressOutstanding.pending ? 1 : 0,
+            static_cast<long long>(g_pressOutstanding.seq), source);
+    if (g_pressOutstanding.pending && g_pressOutstanding.consumedAwaitingAck &&
+        !ArmConsumedPressPoll()) {
+        // The ack event is still the primary release; without this poll the peer
+        // and epoch would only be re-checked on the next admission.
+        TraceLog(L"own press poll timer failed err=%u q=%d", GetLastError(),
+                g_pressQueueCount);
+    }
+    return true;
+}
+
+// Puts an already-dequeued press back at the head of the FIFO. The dequeue freed
+// its slot, so this cannot fail, and the press keeps its admission tick: the
+// queue-wait bound counts from when the user pressed. Launcher thread only.
+void RequeuePressFront(const QueuedPress& press) {
+    g_pressQueueHead =
+        (g_pressQueueHead + kPressQueueCapacity - 1) % kPressQueueCapacity;
+    g_pressQueue[g_pressQueueHead] = press;
+    g_pressQueue[g_pressQueueHead].servableTick = GetTickCount64();
+    ++g_pressQueueCount;
+}
+
+// A replay is this press's one native execution. Past the same absolute bound
+// the queue uses, the direction is stale: the press is dropped instead of
+// toggling the menu long after the user asked. Launcher thread only.
+bool ReplayPastBound(const QueuedPress& press) {
+    if (press.admittedTick == 0) {
+        return false;
+    }
+    const uint64_t now = GetTickCount64();
+    return now > press.admittedTick &&
+           now - press.admittedTick > kPressQueueStaleMs;
+}
+
+void DropPastBoundReplay(const QueuedPress& press) {
+    const uint64_t now = GetTickCount64();
+    TraceLog(L"own press dropped trigger=%s entry=%s reason=stale wait=%llu",
+            PressTriggerName(press.trigger), PressEntryName(press.entry),
+            static_cast<unsigned long long>(
+                now > press.admittedTick ? now - press.admittedTick : 0));
+}
+
+// Drops a queued press that has outlived the absolute bound. The queue-age
+// bound is paused behind a claimed press and is not an absolute cap; after a
+// freeze or a hard kill the old press must not toggle the menu minutes later.
+// Launcher thread only.
+bool DropStaleQueuedPress() {
+    if (g_pressQueueCount == 0) {
+        return false;
+    }
+    const QueuedPress& head = g_pressQueue[g_pressQueueHead];
+    const uint64_t now = GetTickCount64();
+    if (now <= head.admittedTick ||
+        now - head.admittedTick <= kPressQueueStaleMs) {
+        return false;
+    }
+    TraceLog(L"own press dropped trigger=%s entry=%s reason=stale wait=%llu "
+            L"q=%d",
+            PressTriggerName(head.trigger), PressEntryName(head.entry),
+            static_cast<unsigned long long>(now - head.admittedTick),
+            g_pressQueueCount - 1);
+    g_pressQueueHead = (g_pressQueueHead + 1) % kPressQueueCapacity;
+    --g_pressQueueCount;
+    if (g_pressQueueCount > 0) {
+        g_pressQueue[g_pressQueueHead].servableTick = now;
+    }
+    return true;
+}
+
+// Dequeues the head press and runs the shell's own primitive for it, under the
+// executor guard. Used for the queue-age fallback while the outstanding slot is
+// unreachable, and when the poll that enforces that bound cannot be armed. A
+// press past the absolute bound is dropped, never run natively.
+void ServeQueuedOriginal(const wchar_t* reason) {
+    if (DropStaleQueuedPress()) {
+        return;
+    }
+    if (g_pressQueueCount == 0) {
+        return;
+    }
+    const QueuedPress press = g_pressQueue[g_pressQueueHead];
+    g_pressQueueHead = (g_pressQueueHead + 1) % kPressQueueCapacity;
+    --g_pressQueueCount;
+    if (g_pressQueueCount > 0) {
+        g_pressQueue[g_pressQueueHead].servableTick = GetTickCount64();
+    }
+    const uint64_t ageStart =
+        press.servableTick != 0 ? press.servableTick : press.admittedTick;
+    TraceLog(L"own press fallback trigger=%s entry=%s reason=%s wait=%llu q=%d",
+            PressTriggerName(press.trigger), PressEntryName(press.entry), reason,
+            static_cast<unsigned long long>(GetTickCount64() - ageStart),
+            g_pressQueueCount);
+    RunPressOriginal(press, reason);
+}
+
+// Runs the oldest queued press natively once it has outlived the queue bound.
+// True means one press was dequeued and served or dropped. A head whose bound is
+// paused (0) is behind an executing press and is never aged out by the bound:
+// ordering outranks it. The absolute cap is checked even when the bound is
+// paused, so a press behind a frozen activation is dropped instead of running
+// minutes later.
+bool AgeOutQueuedPress() {
+    bool dropped = false;
+    while (DropStaleQueuedPress()) {
+        dropped = true;
+    }
+    if (g_pressQueueCount == 0) {
+        return dropped;
+    }
+    const QueuedPress& head = g_pressQueue[g_pressQueueHead];
+    if (head.servableTick == 0) {
+        return dropped;
+    }
+    const uint64_t now = GetTickCount64();
+    if (now <= head.servableTick ||
+        now - head.servableTick <= kPressQueueWaitMs) {
+        return dropped;
+    }
+    ServeQueuedOriginal(L"queue-wait");
+    return true;
+}
+
+// Releases the head's queue-age bound after the outstanding slot is free: the
+// next press's 1500 ms counts from here, not from the time it spent behind the
+// press that was executing. Launcher thread only.
+void ResumePressQueueAge() {
+    if (g_pressQueueCount > 0) {
+        g_pressQueue[g_pressQueueHead].servableTick = GetTickCount64();
+    }
+}
+
+// Publishes one decision and makes it the outstanding press. The ack timer is
+// armed before the record is published: a timer that cannot be armed means the
+// wait has no bound, so the press is not published and the caller serves it with
+// the shell's own primitive instead. Returns the published sequence, or 0.
+LONG64 PublishPressIntent(int32_t kind, const QueuedPress& press,
+                          const wchar_t* source) {
+    HWND window = g_execWindow.load(std::memory_order_relaxed);
+    if (!window) {
+        TraceLog(L"own press publish refused trigger=%s reason=no-window",
+                PressTriggerName(press.trigger));
+        return 0;
+    }
+    if (SetTimer(window, kPressAckTimer,
+                 static_cast<UINT>(kPressAckTimeoutMs), nullptr) == 0) {
+        TraceLog(L"own press publish refused trigger=%s reason=no-timer err=%u",
+                PressTriggerName(press.trigger), GetLastError());
+        return 0;
+    }
+    const uint32_t method =
+        kind == kSwipeIntentClose ? press.dismissMethod : press.showMethod;
+    // The activation the record is published for. Read before the publication: a
+    // restart after it leaves this epoch behind, and the watchdog reconciles the
+    // record instead of waiting for an ack the replacement will never send.
+    const uint32_t publishedEpoch = PeerEpochNow();
+    const LONG64 sequence =
+        PublishBridgeIntent(kind, press.trigger, method, press.flags);
+    if (sequence <= 0) {
+        KillTimer(window, kPressAckTimer);
+        TraceLog(L"own press publish refused trigger=%s reason=no-channel",
+                PressTriggerName(press.trigger));
+        return 0;
+    }
+    g_pressOutstanding = OutstandingPress{};
+    g_pressOutstanding.pending = true;
+    g_pressOutstanding.seq = sequence;
+    g_pressOutstanding.publishedTick = GetTickCount64();
+    g_pressOutstanding.press = press;
+    g_pressOutstanding.publishedEpoch = publishedEpoch;
+    // The next press's queue-age bound is paused while this one executes: its
+    // 1500 ms restarts when this press's slot is released.
+    if (g_pressQueueCount > 0) {
+        g_pressQueue[g_pressQueueHead].servableTick = 0;
+    }
+    TraceLog(L"own press published trigger=%s entry=%s seq=%lld kind=%s q=%d "
+            L"source=%s",
+            PressTriggerName(press.trigger), PressEntryName(press.entry),
+            static_cast<long long>(sequence),
+            kind == kSwipeIntentClose ? L"close" : L"open",
+            g_pressQueueCount, source);
+    return sequence;
+}
+
+// One press's turn. The direction is read here, not at admission, so every press
+// behind an outstanding one is decided from the direction the controller
+// published while applying the press before it. `admission` is the hook's own
+// snapshot for the immediate press; a queued press reacquires it on this thread.
+// Returns false when the press was put back at the head of the queue: it is a
+// close parked on the open-generation gate, and the gate's timer owns its turn.
+bool ServePress(const QueuedPress& press, const OwnSnapshot* admission) {
+    const uint64_t now = GetTickCount64();
+    if (now > press.admittedTick &&
+        now - press.admittedTick > kPressQueueStaleMs) {
+        // The absolute cap also covers a press dequeued just before the head
+        // check saw it. Its direction is stale; drop it without a native run.
+        TraceLog(L"own press dropped trigger=%s entry=%s reason=stale wait=%llu",
+                PressTriggerName(press.trigger), PressEntryName(press.entry),
+                static_cast<unsigned long long>(now - press.admittedTick));
+        return true;
+    }
+    // The bound counts from when this press became the servable head, not from
+    // its admission behind a press that was still executing.
+    const uint64_t ageStart =
+        press.servableTick != 0 ? press.servableTick : press.admittedTick;
+    if (now > ageStart && now - ageStart > kPressQueueWaitMs) {
+        TraceLog(L"own press fallback trigger=%s entry=%s reason=queue-wait "
+                L"wait=%llu",
+                PressTriggerName(press.trigger), PressEntryName(press.entry),
+                static_cast<unsigned long long>(now - ageStart));
+        RunPressOriginal(press, L"queue-wait");
+        return true;
+    }
+    if (!PeerAliveNow() || PeerEpochNow() != press.admittingEpoch ||
+        !ExecutorCapabilityNow()) {
+        TraceLog(L"own press fallback trigger=%s entry=%s reason=peer-gone "
+                L"wait=%llu",
+                PressTriggerName(press.trigger), PressEntryName(press.entry),
+                static_cast<unsigned long long>(now - press.admittedTick));
+        RunPressOriginal(press, L"peer-gone");
+        return true;
+    }
+    uint64_t state = 0;
+    void* launcher = LauncherNow(&state);
+    if (!launcher) {
+        TraceLog(L"own press fallback trigger=%s entry=%s reason=not-ready "
+                L"state=0x%llX",
+                PressTriggerName(press.trigger), PressEntryName(press.entry),
+                static_cast<unsigned long long>(state));
+        RunPressOriginal(press, L"not-ready");
+        return true;
+    }
+    const OwnSnapshot own = admission ? *admission : OwnSync(launcher);
+    if (!own.ready) {
+        TraceLog(L"own press fallback trigger=%s entry=%s "
+                L"reason=state-not-ready",
+                PressTriggerName(press.trigger), PressEntryName(press.entry));
+        RunPressOriginal(press, L"state-not-ready");
+        return true;
+    }
+    if (g_pressLatch.pending) {
+        // The latch is earlier presses the landing still owes, not a stale slot
+        // for this one to replace. Appending keeps the count and the order: the
+        // serve publishes the first open and the remainder follows it.
+        LatchPress(own, press);
+        return true;
     }
     // One sample of the controller's direction drives both the decision and its
     // line. Reading it twice could log a direction the decision never used.
     const int32_t direction = SwipeIpcControllerDirection(&g_ipc);
-    const int32_t kind = IntentShouldClose(own, direction) ? kSwipeIntentClose
-                                                           : kSwipeIntentOpen;
-    // The one admission check. The method and flags below are the ones the
-    // action will publish, not necessarily the ones the shell called with: a
-    // reopen from Dismiss(6) asks for Show(11), and a close from Show(11) asks
-    // for Dismiss(6). A combination outside the shared vocabulary goes to the
-    // original; the executor's whitelist would only refuse it after the press
-    // was already swallowed.
-    const uint32_t method =
-        kind == kSwipeIntentClose ? dismissMethod : showMethod;
-    const bool supported = kind == kSwipeIntentClose
-                               ? SwipeDismissAllowed(method)
-                               : SwipeShowAllowed(method, flags);
-    if (!supported) {
-        TraceLog(L"own pass trigger=%s state=%u open=%d kind=%s method=%u "
-                L"flags=%u reason=unsupported",
-                PressTriggerName(trigger), own.state, own.open ? 1 : 0,
-                kind == kSwipeIntentClose ? L"close" : L"open", method, flags);
-        return false;
+    int32_t kind = kSwipeIntentOpen;
+    if (press.entry == kPressEntryHide &&
+        press.trigger != kSwipeTriggerClickAway) {
+        // An ordinary Hide is the shell's close decision, not a toggle: it keeps
+        // its close kind even while the controller publishes closing. It is
+        // serialised, but not re-decided.
+        kind = kSwipeIntentClose;
+    } else if (press.trigger == kSwipeTriggerClickAway) {
+        // A click-away is the shell's dismissal, not a toggle. Only a real
+        // pointer down makes it the reopen that interrupts a close; a z-band
+        // change from Alt+Tab, a taskbar activation or a foreground switch
+        // carries no pointer and is a close (or a pass), never a reopen.
+        if (direction == kSwipeDirectionClosing && press.pointer) {
+            kind = kSwipeIntentOpen;
+        } else if (own.open || own.state == 1 || own.state == 3 ||
+                   own.state == 5) {
+            kind = kSwipeIntentClose;
+        } else {
+            // One policy for an immediate and a queued click: the shell's own
+            // Hide(7) runs under the executor guard, once, with the same line.
+            // Reporting success without it would drop the shell's close.
+            TraceLog(L"own press pass trigger=clickaway entry=hide "
+                    L"reason=no-panel state=%u dir=%d",
+                    own.state, direction);
+            RunPressOriginal(press, L"no-panel");
+            return true;
+        }
+    } else {
+        kind = IntentShouldClose(own, direction) ? kSwipeIntentClose
+                                                 : kSwipeIntentOpen;
     }
-    // One decision line for every trigger. The method below is the one the
-    // action will use, not the one the shell called with: a reopen from
+    // The one admission check. The method below is the one the action will
+    // publish, not necessarily the one the shell called with: a reopen from
     // Dismiss(6) asks for Show(11), and a close from Show(11) asks for
-    // Dismiss(6).
-    TraceLog(L"own toggle decide trigger=%s state=%u open=%d kind=%s dir=%d",
-            PressTriggerName(trigger), own.state, own.open ? 1 : 0,
-            kind == kSwipeIntentClose ? L"close" : L"open", direction);
-    if (kind == kSwipeIntentOpen &&
-        (ShellHideInFlight(own) || g_pendingDismissSeq != 0)) {
-        // The hide or the armed dismiss has already taken the window; the open
-        // is served at the landing instead of being published into a no-op show.
-        LatchPress(own, trigger, showMethod, flags, admittingEpoch);
+    // Dismiss(6). A close intent's method is evidence about the producing shell
+    // path, not the executor's call: the click-away's 7 is admitted here and
+    // mapped to 6 by the Start side, which is where the executor vocabulary is
+    // checked again. An unsupported combination is served by the original, never
+    // published and refused later.
+    const uint32_t method =
+        kind == kSwipeIntentClose ? press.dismissMethod : press.showMethod;
+    const bool supported = kind == kSwipeIntentClose
+                               ? SwipeCloseIntentAllowed(method)
+                               : SwipeShowAllowed(method, press.flags);
+    if (!supported) {
+        TraceLog(L"own pass trigger=%s entry=%s state=%u open=%d kind=%s "
+                L"method=%u flags=%u reason=unsupported",
+                PressTriggerName(press.trigger), PressEntryName(press.entry),
+                own.state, own.open ? 1 : 0,
+                kind == kSwipeIntentClose ? L"close" : L"open", method,
+                press.flags);
+        RunPressOriginal(press, L"unsupported");
         return true;
     }
-    PublishBridgeIntent(kind, trigger,
-                        kind == kSwipeIntentClose ? dismissMethod : showMethod,
-                        flags);
+    if (kind == kSwipeIntentClose && OpenGenerationGateHolds()) {
+        // The menu this close belongs to is not in the section's open record yet.
+        // Publishing now would name the previous menu, and the Start side's
+        // fresh-open rule would end the close. The press goes back to the head of
+        // the queue, and the gate's timer serves it when the new generation
+        // exists (or when the bound expires, or when the timer cannot be armed).
+        g_pressOpenGenHeld = true;
+        RequeuePressFront(press);
+        TraceLog(L"own press held trigger=%s entry=%s reason=open-gen before=%llu "
+                L"q=%d",
+                PressTriggerName(press.trigger), PressEntryName(press.entry),
+                static_cast<unsigned long long>(g_pressOpenGenBefore),
+                g_pressQueueCount);
+        return false;
+    }
+    // One decision line for every trigger, written when the press actually
+    // decides. A press queued behind another therefore logs its own direction,
+    // which is the one the earlier press published.
+    TraceLog(L"own toggle decide trigger=%s entry=%s state=%u open=%d kind=%s "
+            L"dir=%d q=%d ptr=%d",
+            PressTriggerName(press.trigger), PressEntryName(press.entry),
+            own.state, own.open ? 1 : 0,
+            kind == kSwipeIntentClose ? L"close" : L"open", direction,
+            g_pressQueueCount, press.pointer ? 1 : 0);
+    if (kind == kSwipeIntentOpen &&
+        (ShellHideInFlight(own) || t_execCall > 0)) {
+        // The shell is already hiding, or our own `Dismiss` call is live on this
+        // stack (`t_execCall`): only then has the close left the controller's
+        // reach. An armed-but-not-dispatched timer is still revocable — the open
+        // published now reaches the Start side, which cancels that command and
+        // settles the panel back from its live position — so it is published, not
+        // latched. A show from either of these states is served at the landing
+        // instead of being published into a no-op.
+        LatchPress(own, press);
+        return true;
+    }
+    if (kind == kSwipeIntentOpen && direction != kSwipeDirectionClosing) {
+        // A fresh menu: the shell read closed, so the controller's show publishes
+        // a new open generation. The close that follows is gated on that
+        // generation, captured before the intent can be served. A reopen from
+        // `closing` is the same menu restored, publishes no new generation, and
+        // arms nothing (the latch above is the show-after-hide case, which does
+        // publish one).
+        const uint64_t openBefore = CurrentOpenGeneration();
+        if (PublishPressIntent(kind, press, L"press") <= 0) {
+            RunPressOriginal(press, L"publish");
+        } else {
+            BeginPressOpenGeneration(openBefore);
+        }
+        return true;
+    }
+    if (PublishPressIntent(kind, press, L"press") <= 0) {
+        RunPressOriginal(press, L"publish");
+    }
     return true;
+}
+
+// Drains the queue while nothing is outstanding. A latch, a drop and a fallback
+// leave no ack to wait for, so the next press is served on this same turn; a
+// published press stops the loop at its ack.
+void ServeNextPress(const wchar_t* reason) {
+    if (g_pressOpenGenHeld) {
+        // A close is parked at the head of the queue waiting for the menu it
+        // belongs to. Re-check it here, without a dequeue line per poll; the
+        // check re-arms the timer or clears the gate.
+        if (g_pressQueueCount == 0) {
+            ClearPressOpenGeneration();
+        } else if (OpenGenerationGateHolds()) {
+            return;
+        }
+    }
+    while (!g_pressOutstanding.pending && g_pressQueueCount > 0) {
+        if (DropStaleQueuedPress()) {
+            continue;
+        }
+        const QueuedPress press = g_pressQueue[g_pressQueueHead];
+        g_pressQueueHead = (g_pressQueueHead + 1) % kPressQueueCapacity;
+        --g_pressQueueCount;
+        if (g_pressQueueCount > 0) {
+            // The next press is the head now; its own bound starts here.
+            g_pressQueue[g_pressQueueHead].servableTick = GetTickCount64();
+        }
+        TraceLog(L"own press dequeued trigger=%s entry=%s q=%d reason=%s "
+                L"wait=%llu",
+                PressTriggerName(press.trigger), PressEntryName(press.entry),
+                g_pressQueueCount, reason,
+                static_cast<unsigned long long>(GetTickCount64() -
+                                                press.admittedTick));
+        if (!ServePress(press, nullptr)) {
+            // The press is back at the head, parked on the open-generation gate.
+            return;
+        }
+    }
+}
+
+// Keeps the outstanding slot when Start claimed the record during admission
+// reconciliation, or when an external barrier's record cannot be proved gone.
+// A take proves a validated copy may be in hand; the controller will publish its
+// direction and answer. Serving the queue here would let the next press choose
+// before that direction exists, so this is the timeout's claimed case without a
+// timer: only the ack, a changed epoch, or the withdrawn state releases it.
+// Launcher thread only.
+void HoldOutstandingAtAdmission(const OutstandingPress& press,
+                                const wchar_t* reason, uint32_t epochNow,
+                                uint64_t wait, bool claimed) {
+    g_pressOutstanding.consumedAwaitingAck = true;
+    if (press.external) {
+        TraceLog(L"own external barrier seq=%lld wait=%llu epoch=%u->%u "
+                L"claimed=%d decision=reserved reason=%s",
+                static_cast<long long>(press.seq),
+                static_cast<unsigned long long>(wait), press.publishedEpoch,
+                epochNow, claimed ? 1 : 0, reason);
+    } else {
+        TraceLog(L"own press abandoned seq=%lld trigger=%s entry=%s "
+                L"wait=%llu epoch=%u->%u decision=consumed awaiting=ack "
+                L"reason=%s",
+                static_cast<long long>(press.seq),
+                PressTriggerName(press.press.trigger),
+                PressEntryName(press.press.entry),
+                static_cast<unsigned long long>(wait), press.publishedEpoch,
+                epochNow, reason);
+    }
+    AgeOutQueuedPress();
+    if (g_pressQueueCount > 0 && !ArmConsumedPressPoll()) {
+        // The arriving press is not queued yet; QueuePress arms the poll again
+        // for the bound it starts.
+        TraceLog(L"own press poll timer failed err=%u seq=%lld q=%d",
+                GetLastError(), static_cast<long long>(press.seq),
+                g_pressQueueCount);
+    }
+}
+
+// A publication from a healthy replacement proves the activation that owned the
+// outstanding record is gone (or was replaced) before it answered. The watchdog
+// applies the same rule at its bound; this is the timer-free path, for a watchdog
+// that could not be armed or an unarmed external barrier. Same epoch and a live
+// state is the hard case: release needs proof that Start can no longer apply the
+// record, so the claim is read, the record is aborted, and the claim is read
+// again. A claim found here or after the abort keeps the slot awaiting its ack
+// and nothing is served. An external barrier has no original to replay; an
+// unabortable record is not proof it is gone, so the barrier stays reserved. A
+// normal press is consumed when it was claimed, otherwise aborted and replayed
+// only when the abort succeeded and no claim landed. Returns true when the slot
+// was reconciled; the caller must then re-read the launcher, because the replay
+// or drain may have changed it. False means the slot still belongs to the
+// controller.
+bool ReconcileOutstandingAtAdmission(const wchar_t* reason, uint32_t epochNow) {
+    const OutstandingPress press = g_pressOutstanding;
+    const uint64_t wait = GetTickCount64() - press.publishedTick;
+    const bool epochChanged =
+        press.publishedEpoch != 0 && epochNow != press.publishedEpoch;
+    const LONG64 taken = SwipeIpcTakenIntent(&g_ipc);
+    if (taken == press.seq && !epochChanged && PeerStateAliveNow()) {
+        // The caller read no claim before this call and Start claimed and
+        // validated the copy during it.
+        HoldOutstandingAtAdmission(press, L"claimed-at-admission", epochNow,
+                                   wait, true);
+        return false;
+    }
+    bool replay = false;
+    if (!press.external) {
+        const bool revoked = SwipeIpcAbortIntent(&g_ipc, press.seq);
+        if (revoked) {
+            g_pressOutstanding.aborted = true;
+        }
+        const LONG64 takenAfter = SwipeIpcTakenIntent(&g_ipc);
+        if (takenAfter == press.seq && !epochChanged && PeerStateAliveNow()) {
+            // The claim landed between the read above and the abort. The record
+            // may now be unreachable to the controller's copy re-check, but the
+            // copy is in hand and will answer; the slot waits for that answer.
+            HoldOutstandingAtAdmission(press, L"claim-after-abort", epochNow,
+                                       wait, true);
+            return false;
+        }
+        replay = revoked && takenAfter != press.seq;
+    } else if (!epochChanged && PeerStateAliveNow()) {
+        // The takeover is native and has no original to replay, so the abort is
+        // the only proof that Start can no longer apply this record. The claim
+        // is re-read after it: a take before the abort leaves a validated copy
+        // that will answer, and a record that moved cannot be aborted at all.
+        // Both keep the barrier reserved; only an aborted record with no claim
+        // after the re-read releases it.
+        const bool revoked = SwipeIpcAbortIntent(&g_ipc, press.seq);
+        if (revoked) {
+            g_pressOutstanding.aborted = true;
+        }
+        const LONG64 takenAfter = SwipeIpcTakenIntent(&g_ipc);
+        if (takenAfter == press.seq) {
+            HoldOutstandingAtAdmission(press, L"claim-after-abort", epochNow,
+                                       wait, true);
+            return false;
+        }
+        if (!revoked) {
+            HoldOutstandingAtAdmission(press, L"record-moved", epochNow, wait,
+                                       false);
+            return false;
+        }
+    }
+    g_pressOutstanding = OutstandingPress{};
+    HWND window = g_execWindow.load(std::memory_order_relaxed);
+    if (window) {
+        KillTimer(window, kPressAckTimer);
+    }
+    const bool lateReplay = replay && ReplayPastBound(press.press);
+    if (press.external) {
+        TraceLog(L"own external barrier seq=%lld wait=%llu epoch=%u->%u "
+                L"decision=released reason=%s",
+                static_cast<long long>(press.seq),
+                static_cast<unsigned long long>(wait), press.publishedEpoch,
+                epochNow, reason);
+    } else {
+        TraceLog(L"own press abandoned seq=%lld trigger=%s entry=%s wait=%llu "
+                L"epoch=%u->%u decision=%s reason=%s",
+                static_cast<long long>(press.seq),
+                PressTriggerName(press.press.trigger),
+                PressEntryName(press.press.entry),
+                static_cast<unsigned long long>(wait), press.publishedEpoch,
+                epochNow,
+                replay ? (lateReplay ? L"dropped" : L"replay") : L"consumed",
+                lateReplay ? L"stale" : reason);
+    }
+    if (replay && !lateReplay) {
+        RunPressOriginal(press.press, L"abandoned");
+    }
+    ResumePressQueueAge();
+    ServeNextPress(L"abandoned");
+    return true;
+}
+
+// One admitted press. FIFO placement comes first: only a press that can be served
+// now needs a launcher snapshot (the hook's own, or one re-read after a
+// reconciliation). A press behind an outstanding one or a queued head is queued
+// without a read and takes its snapshot in ServePress when it becomes the head. A
+// press that cannot be queued is dropped, never executed out of order; nothing
+// waits on the launcher hook.
+void AdmitPress(const QueuedPress& press, const OwnSnapshot& own) {
+    bool reconciled = false;
+    if (g_pressOutstanding.pending) {
+        // A replacement or a withdrawn peer proves the record's activation is
+        // gone. A stale tick alone does not release a claimed record: the
+        // controller may be paused between heartbeats with its validated copy in
+        // hand. An unclaimed record is still reconciled by a stale tick, because
+        // it is then aborted under the timeout's rule.
+        const uint32_t epochNow = PeerEpochNow();
+        const bool epochChanged =
+            g_pressOutstanding.publishedEpoch != 0 &&
+            epochNow != g_pressOutstanding.publishedEpoch;
+        const bool peerGone = !PeerStateAliveNow();
+        const bool claimed =
+            SwipeIpcTakenIntent(&g_ipc) == g_pressOutstanding.seq;
+        const bool staleUnclaimed = !claimed && !PeerAliveNow();
+        if (epochChanged || peerGone || staleUnclaimed) {
+            reconciled = ReconcileOutstandingAtAdmission(
+                epochChanged ? L"epoch-changed"
+                             : (peerGone ? L"peer-gone" : L"stale-unclaimed"),
+                epochNow);
+        }
+    }
+    // A claim found during the reconciliation keeps the slot, and the replay or
+    // drain may have published an older queued press. Either way this press is
+    // not the head: queue it without a snapshot and let its serve read the
+    // launcher at its turn.
+    if (g_pressOutstanding.pending || g_pressQueueCount > 0) {
+        QueuePress(press, L"press");
+        return;
+    }
+    OwnSnapshot current = own;
+    if (reconciled) {
+        // The replay or the drain may have run a native toggle after this hook's
+        // snapshot. Re-read the launcher before deciding this press, or the
+        // arriving toggle can repeat the replay's direction. No older press is
+        // left, so a failed read may run this press's original now.
+        uint64_t state = 0;
+        void* launcher = LauncherNow(&state);
+        if (!launcher) {
+            TraceLog(L"own press pass trigger=%s entry=%s "
+                    L"reason=state-after-replay state=0x%llX",
+                    PressTriggerName(press.trigger),
+                    PressEntryName(press.entry),
+                    static_cast<unsigned long long>(state));
+            RunPressOriginal(press, L"state-after-replay");
+            return;
+        }
+        current = OwnSync(launcher);
+        if (!current.ready) {
+            TraceLog(L"own press pass trigger=%s entry=%s "
+                    L"reason=state-after-replay state=%u",
+                    PressTriggerName(press.trigger),
+                    PressEntryName(press.entry), current.state);
+            RunPressOriginal(press, L"state-after-replay");
+            return;
+        }
+    }
+    // A held close is requeued by ServePress and served by the gate's timer; its
+    // false return needs no action here.
+    ServePress(press, &current);
+}
+
+// The intent ack for the outstanding press. The worker posts this to the
+// executor window; the record is read here, on the launcher thread, and the next
+// press is published with the direction the controller has by now.
+void HandlePressAck() {
+    SwipeIpcIntentAck ack{};
+    if (!SwipeIpcReadIntentAck(&g_ipc, &ack)) {
+        return;
+    }
+    if (!g_pressOutstanding.pending || ack.intent != g_pressOutstanding.seq) {
+        // An answer for an external takeover or a superseded record is not this
+        // press's. The outstanding press keeps its bound.
+        return;
+    }
+    const OutstandingPress press = g_pressOutstanding;
+    // A record the bridge aborted, answered superseded, was copied by nobody:
+    // the one execution is still owed to the original. An executed ack means
+    // Start acted, so no replay follows.
+    const bool replayed = !press.external && press.aborted &&
+                          ack.state == kSwipeAckSuperseded;
+    g_pressOutstanding = OutstandingPress{};
+    HWND window = g_execWindow.load(std::memory_order_relaxed);
+    if (window) {
+        KillTimer(window, kPressAckTimer);
+    }
+    if (press.external) {
+        TraceLog(L"own external ack seq=%lld state=%d wait=%llu "
+                L"decision=reconciled",
+                static_cast<long long>(ack.intent), ack.state,
+                static_cast<unsigned long long>(GetTickCount64() -
+                                                press.publishedTick));
+    } else {
+        TraceLog(L"own press ack seq=%lld state=%d trigger=%s entry=%s "
+                L"wait=%llu",
+                static_cast<long long>(ack.intent), ack.state,
+                PressTriggerName(press.press.trigger),
+                PressEntryName(press.press.entry),
+                static_cast<unsigned long long>(GetTickCount64() -
+                                                press.publishedTick));
+    }
+    if (replayed) {
+        // The abort landed before Start's copy, and its superseded answer is the
+        // proof: no intent ran and the shell never saw this press. Run the one
+        // native execution before the queue advances, unless it is past the
+        // absolute bound: that direction is stale and is dropped.
+        if (ReplayPastBound(press.press)) {
+            DropPastBoundReplay(press.press);
+        } else {
+            RunPressOriginal(press.press, L"revoked-before-copy");
+        }
+    }
+    ResumePressQueueAge();
+    ServeNextPress(L"ack");
+}
+
+// Keeps an external barrier and gives the queue-age bound its wake. The ack
+// event is the primary release; this poll re-checks the peer, the epoch and the
+// bound for a barrier that must stand past the watchdog's 1000 ms turn. False
+// means no wake could be armed; the caller then gives the held presses their
+// natively served turns.
+bool ReserveExternalBarrier(const OutstandingPress& press, const wchar_t* peer,
+                            uint32_t peerAge, uint32_t epochNow, uint64_t wait,
+                            bool claimed, const wchar_t* reason) {
+    g_pressOutstanding.consumedAwaitingAck = true;
+    TraceLog(L"own external ack timeout seq=%lld wait=%llu peer=%s age=%u "
+            L"epoch=%u claimed=%d decision=reserved reason=%s",
+            static_cast<long long>(press.seq),
+            static_cast<unsigned long long>(wait), peer, peerAge, epochNow,
+            claimed ? 1 : 0, reason);
+    AgeOutQueuedPress();
+    HWND window = g_execWindow.load(std::memory_order_relaxed);
+    if (!window ||
+        SetTimer(window, kPressAckTimer,
+                 static_cast<UINT>(kPressReservePollMs), nullptr) == 0) {
+        TraceLog(L"own external reserve timer failed err=%u seq=%lld",
+                GetLastError(), static_cast<long long>(press.seq));
+        while (g_pressQueueCount > 0) {
+            ServeQueuedOriginal(L"timer-failed");
+        }
+        return false;
+    }
+    return true;
+}
+
+// The ack did not arrive inside its bound. A missing ack is not proof that the
+// controller did nothing: the close may have landed and only its notification
+// been late, and replaying the original then reopens the menu. The timeout reads
+// the ack once more, the consumer's `intentTaken` claim and the shared record:
+//
+// - a late ack is the answer and only advances the queue;
+// - any claim for this sequence proves the controller may still apply it. The
+//   press waits for its ack; the queue is not served and the next press's
+//   queue-age bound is paused, so no later press can choose a direction before
+//   this one publishes its own. Only the ack, a changed epoch, or a peer whose
+//   state is gone (not a stale heartbeat) releases it;
+// - `taken != seq` is resolved by aborting the record: the counter is stepped to
+//   its odd state, so no consumer can copy or claim it afterwards. The claim is
+//   then re-read. No claim: the original is the one execution. A claim in that
+//   window: the controller may already hold a validated copy, so the slot is kept
+//   awaiting its ack and nothing is replayed;
+// - a record that has already moved cannot be aborted, so nothing is replayed.
+//
+// A different peer epoch means the activation that was asked is gone. The
+// replacement seeded past the record and will never answer, so a taken press is
+// consumed without its ack, an untaken record is aborted and replayed under the
+// same rule, and the external barrier is released.
+//
+// The peer words are evidence in the line; the abort and the claim are the proof.
+// A crash after the take loses that press rather than duplicating it.
+void HandlePressAckTimeout() {
+    if (!g_pressOutstanding.pending) {
+        // No slot needs the poll. A repeating reserve timer that outlived its
+        // slot stops here instead of waking the launcher thread every 100 ms.
+        HWND window = g_execWindow.load(std::memory_order_relaxed);
+        if (window) {
+            KillTimer(window, kPressAckTimer);
+        }
+        return;
+    }
+    const OutstandingPress press = g_pressOutstanding;
+    SwipeIpcIntentAck ack{};
+    if (SwipeIpcReadIntentAck(&g_ipc, &ack) && ack.intent == press.seq) {
+        // The answer won the race with the timer. It is the same path as an
+        // ordinary ack, not a replay — unless the bridge aborted the record and
+        // Start answered superseded, which proves nothing was copied.
+        const bool replayed = !press.external && press.aborted &&
+                              ack.state == kSwipeAckSuperseded;
+        g_pressOutstanding = OutstandingPress{};
+        HWND window = g_execWindow.load(std::memory_order_relaxed);
+        if (window) {
+            KillTimer(window, kPressAckTimer);
+        }
+        if (press.external) {
+            TraceLog(L"own external ack late seq=%lld state=%d wait=%llu "
+                    L"decision=reconciled",
+                    static_cast<long long>(ack.intent), ack.state,
+                    static_cast<unsigned long long>(GetTickCount64() -
+                                                    press.publishedTick));
+        } else {
+            TraceLog(L"own press ack late seq=%lld state=%d trigger=%s "
+                    L"entry=%s wait=%llu",
+                    static_cast<long long>(ack.intent), ack.state,
+                    PressTriggerName(press.press.trigger),
+                    PressEntryName(press.press.entry),
+                    static_cast<unsigned long long>(GetTickCount64() -
+                                                    press.publishedTick));
+        }
+        if (replayed) {
+            if (ReplayPastBound(press.press)) {
+                DropPastBoundReplay(press.press);
+            } else {
+                RunPressOriginal(press.press, L"revoked-before-copy");
+            }
+        }
+        ResumePressQueueAge();
+        ServeNextPress(L"late-ack");
+        return;
+    }
+
+    const bool haveChannel = g_ipc.state != nullptr;
+    const bool peerAlive = PeerAliveNow();
+    const uint32_t peerAge = PeerTickAgeMs();
+    const wchar_t* peer =
+        !haveChannel ? L"absent" : (peerAlive ? L"alive" : L"stale");
+    const LONG64 taken = SwipeIpcTakenIntent(&g_ipc);
+    const uint32_t epochNow = PeerEpochNow();
+    const bool epochChanged =
+        press.publishedEpoch != 0 && epochNow != press.publishedEpoch;
+    const uint64_t wait = GetTickCount64() - press.publishedTick;
+    if (press.external) {
+        // The takeover itself is native and has no original to replay. Its
+        // barrier is cleared by its ack, by a changed activation that can no
+        // longer answer it, or by its peer. A claimed barrier is held through a
+        // stale heartbeat. A stale heartbeat with no claim at the first read is
+        // not proof either: Start may claim before the abort, so the release
+        // uses the admission path's evidence — abort the record, re-read the
+        // claim, and release only when the abort succeeded and no claim landed.
+        // A claim in between, or a record that cannot be aborted, reserves the
+        // barrier; the withdrawn state releases it on its own.
+        if (epochChanged) {
+            g_pressOutstanding = OutstandingPress{};
+            HWND window = g_execWindow.load(std::memory_order_relaxed);
+            if (window) {
+                KillTimer(window, kPressAckTimer);
+            }
+            TraceLog(L"own external barrier seq=%lld wait=%llu peer=%s age=%u "
+                    L"epoch=%u->%u decision=released reason=epoch-changed",
+                    static_cast<long long>(press.seq),
+                    static_cast<unsigned long long>(wait), peer, peerAge,
+                    press.publishedEpoch, epochNow);
+            ResumePressQueueAge();
+            ServeNextPress(L"epoch");
+            return;
+        }
+        const bool claimed = taken == press.seq;
+        if (peerAlive || (claimed && PeerStateAliveNow())) {
+            ReserveExternalBarrier(press, peer, peerAge, epochNow, wait, claimed,
+                                   peerAlive ? L"peer-alive" : L"claimed");
+            return;
+        }
+        const wchar_t* releaseReason = nullptr;
+        bool claimedNow = claimed;
+        if (!PeerStateAliveNow()) {
+            releaseReason = L"peer-gone";
+        } else {
+            const bool revoked = SwipeIpcAbortIntent(&g_ipc, press.seq);
+            if (revoked) {
+                g_pressOutstanding.aborted = true;
+            }
+            const LONG64 takenAfter = SwipeIpcTakenIntent(&g_ipc);
+            claimedNow = takenAfter == press.seq;
+            if (!PeerStateAliveNow()) {
+                releaseReason = L"peer-gone";
+            } else if (claimedNow) {
+                ReserveExternalBarrier(press, peer, peerAge, epochNow, wait,
+                                       true, L"claim-after-abort");
+                return;
+            } else if (!revoked) {
+                ReserveExternalBarrier(press, peer, peerAge, epochNow, wait,
+                                       false, L"record-moved");
+                return;
+            } else {
+                releaseReason = L"stale-unclaimed";
+            }
+        }
+        g_pressOutstanding = OutstandingPress{};
+        HWND window = g_execWindow.load(std::memory_order_relaxed);
+        if (window) {
+            KillTimer(window, kPressAckTimer);
+        }
+        TraceLog(L"own external barrier seq=%lld wait=%llu peer=%s age=%u "
+                L"epoch=%u claimed=%d decision=released reason=%s",
+                static_cast<long long>(press.seq),
+                static_cast<unsigned long long>(wait), peer, peerAge,
+                epochNow, claimedNow ? 1 : 0, releaseReason);
+        ResumePressQueueAge();
+        ServeNextPress(L"timeout");
+        return;
+    }
+    if (taken == press.seq) {
+        if (epochChanged) {
+            // The old activation claimed the record and then vanished. The
+            // replacement seeded past it, so no ack is coming and the press is
+            // consumed without one.
+            g_pressOutstanding = OutstandingPress{};
+            HWND window = g_execWindow.load(std::memory_order_relaxed);
+            if (window) {
+                KillTimer(window, kPressAckTimer);
+            }
+            TraceLog(L"own press ack timeout seq=%lld trigger=%s entry=%s "
+                    L"wait=%llu taken=%lld peer=%s age=%u epoch=%u->%u "
+                    L"decision=consumed reason=epoch-changed",
+                    static_cast<long long>(press.seq),
+                    PressTriggerName(press.press.trigger),
+                    PressEntryName(press.press.entry),
+                    static_cast<unsigned long long>(wait),
+                    static_cast<long long>(taken), peer, peerAge,
+                    press.publishedEpoch, epochNow);
+            ResumePressQueueAge();
+            ServeNextPress(L"epoch");
+            return;
+        }
+        if (!g_pressOutstanding.consumedAwaitingAck) {
+            // The take precedes the direction publication. Until the ack says
+            // the direction is visible, the next press must not decide from the
+            // old one; this slot keeps waiting without serving the queue.
+            g_pressOutstanding.consumedAwaitingAck = true;
+            TraceLog(L"own press ack timeout seq=%lld trigger=%s entry=%s "
+                    L"wait=%llu taken=%lld peer=%s age=%u epoch=%u "
+                    L"decision=consumed awaiting=ack",
+                    static_cast<long long>(press.seq),
+                    PressTriggerName(press.press.trigger),
+                    PressEntryName(press.press.entry),
+                    static_cast<unsigned long long>(wait),
+                    static_cast<long long>(taken), peer, peerAge, epochNow);
+        }
+        if (!PeerStateAliveNow()) {
+            // The activation that claimed it is gone (the state was withdrawn),
+            // not merely between heartbeats. The press may already have run, so
+            // there is no replay; the queue is released.
+            g_pressOutstanding = OutstandingPress{};
+            HWND window = g_execWindow.load(std::memory_order_relaxed);
+            if (window) {
+                KillTimer(window, kPressAckTimer);
+            }
+            TraceLog(L"own press ack timeout seq=%lld trigger=%s entry=%s "
+                    L"wait=%llu taken=%lld peer=%s age=%u epoch=%u "
+                    L"decision=consumed reason=peer-gone",
+                    static_cast<long long>(press.seq),
+                    PressTriggerName(press.press.trigger),
+                    PressEntryName(press.press.entry),
+                    static_cast<unsigned long long>(wait),
+                    static_cast<long long>(taken), peer, peerAge, epochNow);
+            ResumePressQueueAge();
+            ServeNextPress(L"timeout");
+            return;
+        }
+        AgeOutQueuedPress();
+        if (g_pressQueueCount > 0 && !ArmConsumedPressPoll()) {
+            // The ack is still the release. Without this poll the peer and epoch
+            // are only re-checked on the next admission; never drain here, because
+            // the claimed press may still publish the direction.
+            TraceLog(L"own press poll timer failed err=%u seq=%lld q=%d",
+                    GetLastError(), static_cast<long long>(press.seq),
+                    g_pressQueueCount);
+        }
+        return;
+    }
+    // Not taken. The replay is proved by the abort, not by the peer: the abort
+    // makes the record unreachable, so a claim that lands afterwards cannot copy
+    // it. A record that already moved cannot be aborted and is never replayed.
+    const bool revoked = SwipeIpcAbortIntent(&g_ipc, press.seq);
+    if (revoked) {
+        g_pressOutstanding.aborted = true;
+    }
+    const LONG64 takenAfter = SwipeIpcTakenIntent(&g_ipc);
+    if (!revoked) {
+        g_pressOutstanding = OutstandingPress{};
+        HWND window = g_execWindow.load(std::memory_order_relaxed);
+        if (window) {
+            KillTimer(window, kPressAckTimer);
+        }
+        TraceLog(L"own press ack timeout seq=%lld trigger=%s entry=%s wait=%llu "
+                L"taken=%lld peer=%s age=%u epoch=%u->%u "
+                L"decision=superseded reason=record-moved",
+                static_cast<long long>(press.seq),
+                PressTriggerName(press.press.trigger),
+                PressEntryName(press.press.entry),
+                static_cast<unsigned long long>(wait),
+                static_cast<long long>(taken), peer, peerAge,
+                press.publishedEpoch, epochNow);
+        ResumePressQueueAge();
+        ServeNextPress(L"timeout");
+        return;
+    }
+    if (takenAfter == press.seq) {
+        // The claim landed between this turn's first read and the abort. The
+        // controller may already hold a validated copy: it will apply and ack.
+        // Keeping the slot is the whole point — serving the next press now would
+        // let it choose a direction before this one published its own.
+        if (!g_pressOutstanding.consumedAwaitingAck) {
+            g_pressOutstanding.consumedAwaitingAck = true;
+            TraceLog(L"own press ack timeout seq=%lld trigger=%s entry=%s "
+                    L"wait=%llu taken=%lld peer=%s age=%u epoch=%u "
+                    L"decision=consumed awaiting=ack reason=claim-after-abort",
+                    static_cast<long long>(press.seq),
+                    PressTriggerName(press.press.trigger),
+                    PressEntryName(press.press.entry),
+                    static_cast<unsigned long long>(wait),
+                    static_cast<long long>(takenAfter), peer, peerAge, epochNow);
+        }
+        if (g_pressQueueCount > 0 && !ArmConsumedPressPoll()) {
+            TraceLog(L"own press poll timer failed err=%u seq=%lld q=%d",
+                    GetLastError(), static_cast<long long>(press.seq),
+                    g_pressQueueCount);
+        }
+        return;
+    }
+    g_pressOutstanding = OutstandingPress{};
+    HWND window = g_execWindow.load(std::memory_order_relaxed);
+    if (window) {
+        KillTimer(window, kPressAckTimer);
+    }
+    const bool lateReplay = ReplayPastBound(press.press);
+    TraceLog(L"own press ack timeout seq=%lld trigger=%s entry=%s wait=%llu "
+            L"taken=%lld peer=%s age=%u epoch=%u->%u decision=%s reason=%s",
+            static_cast<long long>(press.seq),
+            PressTriggerName(press.press.trigger),
+            PressEntryName(press.press.entry),
+            static_cast<unsigned long long>(wait),
+            static_cast<long long>(taken), peer, peerAge, press.publishedEpoch,
+            epochNow, lateReplay ? L"dropped" : L"replay",
+            lateReplay ? L"stale"
+                       : (epochChanged ? L"epoch-changed" : L"revoked"));
+    if (!lateReplay) {
+        RunPressOriginal(press.press, L"no-ack");
+    }
+    ResumePressQueueAge();
+    ServeNextPress(L"timeout");
+}
+
+// The one toggle dispatcher for the three physical entries: the bare Windows
+// press, the Start button (ShowStartView method 11, Dismiss method 6, or its
+// OnStartButtonPressed toggle) and the click-away. `showMethod`/`dismissMethod`
+// are the methods this entry uses for each action; the action the direction
+// chooses keeps its own method.
+//
+// The Start button used to publish a close from Dismiss(6) without asking the
+// direction, so a press during a retract entered as a second close while the
+// controller said the close was still in flight and the owner's press did
+// nothing. Every entry now runs the same rule, and two presses that arrive before
+// the consumer runs no longer overwrite one intent record: the second waits for
+// the first's ack.
+//
+// A newer press does not supersede a latch: it is appended, because the latch
+// is a count of toggles the user already asked for.
+void DispatchToggle(const OwnSnapshot& own, int32_t trigger, uint32_t showMethod,
+                    uint32_t dismissMethod, uint32_t flags,
+                    uint32_t admittingEpoch, int32_t entry, bool pointer) {
+    const QueuedPress press{trigger, entry, showMethod, dismissMethod, flags,
+                            admittingEpoch, GetTickCount64(), 0, pointer};
+    AdmitPress(press, own);
 }
 
 using OnHotkeyInvoke_t = HRESULT (*)(void*, uint32_t);
@@ -15071,11 +18390,9 @@ HRESULT OnHotkeyInvoke_Hook(void* self, uint32_t flags) {
         return OnHotkeyInvoke_Original ? OnHotkeyInvoke_Original(self, flags)
                                        : S_OK;
     }
-    if (!DispatchToggle(own, kSwipeTriggerWin, kDismissMethodWin,
-                        kDismissMethodWin, flags, admittingEpoch)) {
-        return OnHotkeyInvoke_Original ? OnHotkeyInvoke_Original(self, flags)
-                                       : S_OK;
-    }
+    DispatchToggle(own, kSwipeTriggerWin, kDismissMethodWin,
+                   kDismissMethodWin, flags, admittingEpoch,
+                   kPressEntryHotkey);
     return S_OK;
 }
 using OnStartButtonPressed_t = HRESULT (*)(void*, uint32_t, uint32_t);
@@ -15106,13 +18423,8 @@ HRESULT OnStartButtonPressed_Hook(void* self, uint32_t showMethod,
                                                    dismissMethod)
                    : S_OK;
     }
-    if (!DispatchToggle(own, kSwipeTriggerStartButton, showMethod,
-                        dismissMethod, 0, admittingEpoch)) {
-        return OnStartButtonPressed_Original
-                   ? OnStartButtonPressed_Original(self, showMethod,
-                                                   dismissMethod)
-                   : S_OK;
-    }
+    DispatchToggle(own, kSwipeTriggerStartButton, showMethod,
+                   dismissMethod, 0, admittingEpoch, kPressEntryButton);
     return S_OK;
 }
 
@@ -15194,14 +18506,27 @@ HRESULT Dismiss_Hook(void* launcher, uint32_t method) {
     // this primitive with method 6 and must reach the controller even while the
     // controller owns the panel. Its reopen form asks for Show(11) instead.
     if (method == kDismissMethodStartButton) {
-        if (!DispatchToggle(own, kSwipeTriggerStartButton, 11, method, 0,
-                            admittingEpoch)) {
-            return Dismiss_Original ? Dismiss_Original(launcher, method)
-                                    : E_FAIL;
-        }
+        DispatchToggle(own, kSwipeTriggerStartButton, 11, method, 0,
+                       admittingEpoch, kPressEntryDismiss);
         return S_OK;
     }
     if (SwipeIpcControllerDirection(&g_ipc) != kSwipeDirectionUnowned) {
+        if (method == kDismissMethodWinTab) {
+            // Win+Tab is the shell's own takeover. The controller owns the panel,
+            // but this close is not ours to animate or hold: the original shows
+            // Task View, and the external record retires whatever dismiss the
+            // controller still had pending for a menu it no longer owns. Without
+            // this the takeover was swallowed here and Task View never appeared.
+            TraceLog(L"exec pass dismiss method=%u caller=wintab state=%u "
+                    L"reason=external",
+                    method, own.state);
+            PublishBridgeIntent(kSwipeIntentExternal, kSwipeTriggerOverride,
+                                method, 0);
+            const HRESULT hr =
+                Dismiss_Original ? Dismiss_Original(launcher, method) : E_FAIL;
+            OwnResyncFromState(OwnStateOf(launcher));
+            return hr;
+        }
         TraceLog(L"exec swallow dismiss method=%u state=%u reason=owning",
                 method, own.state);
         return S_OK;
@@ -15240,12 +18565,8 @@ HRESULT ShowStartView_Hook(void* launcher, uint32_t method, uint32_t flags) {
     // controller while the controller owns a close, so it is decided here before
     // the duplicate suppression. Its close form asks for Dismiss(6).
     if (method == 11) {
-        if (!DispatchToggle(own, kSwipeTriggerStartButton, method, 6, flags,
-                            admittingEpoch)) {
-            return ShowStartView_Original
-                       ? ShowStartView_Original(launcher, method, flags)
-                       : E_FAIL;
-        }
+        DispatchToggle(own, kSwipeTriggerStartButton, method, 6, flags,
+                       admittingEpoch, kPressEntryShow);
         return S_OK;
     }
     if (SwipeIpcControllerDirection(&g_ipc) != kSwipeDirectionUnowned) {
@@ -15262,37 +18583,71 @@ HRESULT ShowStartView_Hook(void* launcher, uint32_t method, uint32_t flags) {
 
 
 
+// Runs the shell's own primitive for one press, under the executor guard so the
+// nested Hide/Show it performs passes through the primitive hooks instead of
+// being decided again. This is the queue's fallback: a press whose decision
+// cannot be served still toggles the shell exactly once. The launcher is
+// reacquired on this thread; no pointer borrowed at admission is used across the
+// wait. `entry` names the primitive the press actually entered through, so a
+// reopen from Dismiss(6) falls back to Dismiss(6), not to a toggle it never
+// called.
+void RunPressOriginal(const QueuedPress& press, const wchar_t* reason) {
+    uint64_t state = 0;
+    void* outer = nullptr;
+    void* launcher = LauncherNow(&state, &outer);
+    TraceLog(L"own press fallback trigger=%s entry=%s reason=%s launcher=%p "
+            L"state=0x%llX",
+            PressTriggerName(press.trigger), PressEntryName(press.entry), reason,
+            launcher, static_cast<unsigned long long>(state));
+    if (!launcher) {
+        // Nothing to call: the launcher is gone. The line above is the record.
+        return;
+    }
+    ++t_execCall;
+    switch (press.entry) {
+        case kPressEntryHotkey:
+            if (OnHotkeyInvoke_Original && outer) {
+                OnHotkeyInvoke_Original(outer, press.flags);
+            }
+            break;
+        case kPressEntryButton:
+            if (OnStartButtonPressed_Original) {
+                OnStartButtonPressed_Original(launcher, press.showMethod,
+                                              press.dismissMethod);
+            }
+            break;
+        case kPressEntryShow:
+            if (ShowStartView_Original) {
+                ShowStartView_Original(launcher, press.showMethod, press.flags);
+            }
+            break;
+        case kPressEntryDismiss:
+            if (Dismiss_Original) {
+                Dismiss_Original(launcher, press.dismissMethod);
+            }
+            break;
+        case kPressEntryHide:
+            if (HideStartAndCortana_Original) {
+                HideStartAndCortana_Original(OwnStateOf(launcher),
+                                             press.dismissMethod);
+            }
+            break;
+        default:
+            break;
+    }
+    --t_execCall;
+}
+
 // ---------------------------------------------------------------------------
 // Launcher symbols
 // ---------------------------------------------------------------------------
 
-// The notification only records the image. Resolution runs on the executor
-// worker: HookSymbols starts Windhawk's PDB fetch for twinui.pcshell.pdb (33 MB)
-// and blocks until it finishes, and doing that on a thread Explorer owns would
-// freeze the shell -- the same failure the Start side measured and fixed.
-using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
-LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
-
-HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file,
-                                   DWORD flags) {
-    HMODULE module = LoadLibraryExW_Original
-                         ? LoadLibraryExW_Original(fileName, file, flags)
-                         : nullptr;
-
-    // Filter on the returned module, not on the requested name: the call may
-    // have asked for another file and still brought twinui in, and a refused or
-    // redirected request must not look like a load. This mod never force-loads
-    // twinui.
-    if (module && module == GetModuleHandleW(kTwinuiModuleName)) {
-        g_explorerModuleSeen.store(module, std::memory_order_release);
-        if (!g_explorerLoadLogged.exchange(true)) {
-            TraceLog(L"exec launcher module seen module=%p", module);
-        }
-    }
-
-    return module;
-}
-
+// Resolution runs on the executor worker: HookSymbols starts Windhawk's PDB
+// fetch for twinui.pcshell.pdb (33 MB) and blocks until it finishes, and doing
+// that on a thread Explorer owns would freeze the shell -- the same failure the
+// Start side measured and fixed. The worker finds the current mapping by name
+// with a loader reference; a late load is therefore seen without a
+// LoadLibraryExW hook.
 // The proven caller wrappers: a thread-local category around the original call,
 // restoring the previous value. They never decide anything and always call the
 // original; the Hide hook reads the category.
@@ -15331,22 +18686,61 @@ HRESULT ActiveZBand_Hook(void* self, unsigned long a, unsigned long b,
                                 : E_FAIL;
 }
 
-// One resolution attempt. Returns true only when this call installed every hook;
-// a false result while the PDB fetch runs is pending, and the worker retries.
-bool InstallExplorerHooks(HMODULE module) {
+// One resolution attempt. `Settled` means the one attempt finished (hooks
+// installed, with the layout gate deciding the capability); `VersionRefused`
+// means the image itself is not the reference and no symbol work was started;
+// `Unresolved` means the attempt failed and no second one exists.
+enum class ExplorerHookOutcome {
+    Settled,
+    VersionRefused,
+    Unresolved,
+};
+
+ExplorerHookOutcome InstallExplorerHooks(HMODULE module) {
     if (!module) {
-        return false;
+        return ExplorerHookOutcome::Unresolved;
     }
 
     AcquireSRWLockExclusive(&g_explorerSymbolLock);
     HMODULE expected = nullptr;
     if (!g_explorerSymbolClaim.compare_exchange_strong(expected, module)) {
         ReleaseSRWLockExclusive(&g_explorerSymbolLock);
-        return false;
+        return ExplorerHookOutcome::Unresolved;
     }
     if (g_disabled.load(std::memory_order_relaxed)) {
         ReleaseSRWLockExclusive(&g_explorerSymbolLock);
-        return false;
+        return ExplorerHookOutcome::Unresolved;
+    }
+
+    // The fixed file version is checked before HookSymbols, not after: the call
+    // blocks on Windhawk's PDB fetch, and the private RVAs describe one file
+    // version only. An unsupported build is refused here, so it never downloads
+    // a PDB, installs a hook or probes a guessed layout. The terminal line has
+    // the same shape as the post-fetch refusal and names the skip.
+    const uint64_t version = ModuleFixedFileVersion(module);
+    if (version != kTwinuiReferenceVersion) {
+        g_launcherLayoutVerified.store(false, std::memory_order_release);
+        g_explorerSymbolsRefused.store(true, std::memory_order_release);
+        TraceLog(L"exec launcher layout unverified version=%u.%u.%u.%u matches=0 "
+                L"native=1 reason=version skipped=version",
+                static_cast<unsigned>((version >> 48) & 0xFFFF),
+                static_cast<unsigned>((version >> 32) & 0xFFFF),
+                static_cast<unsigned>((version >> 16) & 0xFFFF),
+                static_cast<unsigned>(version & 0xFFFF));
+        Wh_Log(L"twinui.pcshell.dll fixed version %u.%u.%u.%u is not the "
+               L"verified reference %u.%u.%u.%u; symbols were not requested and "
+               L"every press stays native",
+               static_cast<unsigned>((version >> 48) & 0xFFFF),
+               static_cast<unsigned>((version >> 32) & 0xFFFF),
+               static_cast<unsigned>((version >> 16) & 0xFFFF),
+               static_cast<unsigned>(version & 0xFFFF),
+               static_cast<unsigned>((kTwinuiReferenceVersion >> 48) & 0xFFFF),
+               static_cast<unsigned>((kTwinuiReferenceVersion >> 32) & 0xFFFF),
+               static_cast<unsigned>((kTwinuiReferenceVersion >> 16) & 0xFFFF),
+               static_cast<unsigned>(kTwinuiReferenceVersion & 0xFFFF));
+        ReleaseSRWLockExclusive(&g_explorerSymbolLock);
+        PublishExecutorCapability(L"symbols-refused");
+        return ExplorerHookOutcome::VersionRefused;
     }
     TraceLog(L"exec launcher symbols begin module=%p", module);
 
@@ -15411,7 +18805,7 @@ bool InstallExplorerHooks(HMODULE module) {
         !ActiveZBand_Original || !g_launcherSlot || !g_launcherIsVisible) {
         g_explorerSymbolClaim.store(nullptr, std::memory_order_release);
         ReleaseSRWLockExclusive(&g_explorerSymbolLock);
-        return false;
+        return ExplorerHookOutcome::Unresolved;
     }
 
     const uintptr_t base = reinterpret_cast<uintptr_t>(module);
@@ -15457,7 +18851,6 @@ bool InstallExplorerHooks(HMODULE module) {
             reinterpret_cast<uintptr_t>(symbol.address) - base;
         matches += rva == symbol.expectedRva ? 1 : 0;
     }
-    const uint64_t version = ModuleFixedFileVersion(module);
     const bool layoutVerified =
         matches == static_cast<int>(ARRAYSIZE(resolved)) &&
         version == kTwinuiReferenceVersion;
@@ -15482,6 +18875,7 @@ bool InstallExplorerHooks(HMODULE module) {
     // makes this call refuse before HookSymbols.
     Wh_ApplyHookOperations();
     TraceLog(L"exec launcher hooks applied tid=%u", GetCurrentThreadId());
+    PublishExecutorCapability(L"symbols");
     ReleaseSRWLockExclusive(&g_explorerSymbolLock);
 
     for (const ResolvedSymbol& symbol : resolved) {
@@ -15516,83 +18910,52 @@ bool InstallExplorerHooks(HMODULE module) {
            L"RVAs); launcher hooks installed layout=%d",
            reinterpret_cast<void*>(base), matches,
            static_cast<int>(ARRAYSIZE(resolved)), layoutVerified ? 1 : 0);
-    return true;
+    return ExplorerHookOutcome::Settled;
 }
 
-// Records an already-loaded twinui. Called from init and AfterInit; it never
-// resolves anything (that is the worker's job, so the shell's thread is never
-// blocked by the PDB fetch).
-void NoteLoadedExplorerModule() {
-    if (g_disabled.load(std::memory_order_relaxed) ||
-        g_explorerSymbolsReady.load(std::memory_order_acquire) ||
-        g_explorerSymbolsRefused.load(std::memory_order_acquire)) {
-        return;
-    }
-    HMODULE twinui = GetModuleHandleW(kTwinuiModuleName);
-    if (twinui) {
-        g_explorerModuleSeen.store(twinui, std::memory_order_release);
-    }
-}
-
-// Resolves the launcher symbols from the executor worker. Called on every wait
-// timeout: immediate when the module is first known, then throttled while the
-// result is pending. Never called on a thread Explorer owns.
+// Resolves the launcher symbols from the executor worker. One call per module
+// per install: HookSymbols blocks on the PDB fetch, and once it returns false
+// the session has no launcher hooks; a retry would only repeat the stall. The
+// worker is not the press path, so no trigger waits on this call.
 void ProbeExplorerSymbolsFromWorker() {
     if (!g_afterInit.load(std::memory_order_relaxed) ||
         g_disabled.load(std::memory_order_relaxed) ||
+        g_explorerSymbolAttempted.load(std::memory_order_acquire) ||
         g_explorerSymbolsReady.load(std::memory_order_acquire) ||
         g_explorerSymbolsRefused.load(std::memory_order_acquire)) {
         return;
     }
-    HMODULE module = g_explorerModuleSeen.load(std::memory_order_acquire);
+    HMODULE module = g_explorerModuleRef;
     if (!module) {
-        module = GetModuleHandleW(kTwinuiModuleName);
-        if (!module) {
+        // By name, so this is the mapping currently loaded, and with a loader
+        // reference held across the resource read and HookSymbols. A missing
+        // module leaves the attempt unclaimed: the worker stays pending.
+        if (!GetModuleHandleExW(0, kTwinuiModuleName, &module) || !module) {
             return;
         }
-        g_explorerModuleSeen.store(module, std::memory_order_release);
+        g_explorerModuleRef = module;
     }
 
-    const uint64_t now = GetTickCount64();
-    const bool first = g_execProbeFirstTick == 0;
-    if (!first && now < g_execProbeNextTick) {
+    // Claim the one attempt before the blocking call. A concurrent caller (there
+    // is none but the unload) sees the claim and does not start a second fetch.
+    g_explorerSymbolAttempted.store(true, std::memory_order_release);
+    const ExplorerHookOutcome outcome = InstallExplorerHooks(module);
+    if (outcome != ExplorerHookOutcome::Unresolved) {
+        // Settled: the layout gate, not a retry, decides whether the capability
+        // is on. VersionRefused: the terminal line was already written under the
+        // lock and no symbol work was started.
         return;
     }
-    g_execProbeNextTick = now + kExecSymbolProbeMs;
-    if (first) {
-        g_execProbeFirstTick = now;
-    }
-
-    if (InstallExplorerHooks(module)) {
-        // The install applied its own queued hooks under the lock.
+    if (g_disabled.load(std::memory_order_relaxed)) {
         return;
     }
-    if (g_explorerSymbolsReady.load(std::memory_order_acquire) ||
-        g_disabled.load(std::memory_order_relaxed)) {
-        return;
-    }
-
-    g_execProbeAttempts++;
-    const uint64_t waited = GetTickCount64() - g_execProbeFirstTick;
-    if (waited >= kExecSymbolPendingDeadlineMs) {
-        g_explorerSymbolsRefused.store(true, std::memory_order_release);
-        TraceLog(L"exec launcher symbols deadline attempts=%d waited=%llums "
-                L"deadline=%llums",
-                g_execProbeAttempts, static_cast<unsigned long long>(waited),
-                static_cast<unsigned long long>(
-                    kExecSymbolPendingDeadlineMs));
-        TraceLog(L"exec launcher symbols unresolved name=twinui.pcshell.dll "
-                L"(symbol, signature or hook refused)");
-        Wh_Log(L"twinui.pcshell.dll symbols could not be resolved within the "
-               L"%llu ms pending deadline; no launcher hook is installed and "
-               L"every press stays native",
-               static_cast<unsigned long long>(kExecSymbolPendingDeadlineMs));
-        return;
-    }
-    TraceLog(L"exec launcher symbols pending attempt=%d waited=%llums "
-            L"deadline=%llums",
-            g_execProbeAttempts, static_cast<unsigned long long>(waited),
-            static_cast<unsigned long long>(kExecSymbolPendingDeadlineMs));
+    g_explorerSymbolsRefused.store(true, std::memory_order_release);
+    PublishExecutorCapability(L"symbols-refused");
+    TraceLog(L"exec launcher symbols unresolved attempts=1 "
+            L"name=twinui.pcshell.dll (symbol, signature or hook refused)");
+    Wh_Log(L"twinui.pcshell.dll symbols could not be resolved on the one "
+           L"attempt this session makes; no launcher hook is installed and "
+           L"every press stays native");
 }
 
 // ---------------------------------------------------------------------------
@@ -15942,6 +19305,7 @@ void ExecuteDismiss(const SwipeIpcExecCommand& command) {
         return;
     }
     ++t_execCall;
+    const uint64_t enterAt = start::QpcMsNow();
     const HRESULT hr =
         g_dismiss ? g_dismiss(launcher, command.method)
                   : E_FAIL;
@@ -15949,6 +19313,15 @@ void ExecuteDismiss(const SwipeIpcExecCommand& command) {
     // checked again by the confirmation probe: success is not yet a hide.
     const ProbeVisibility visible = LauncherVisibleNow(launcher);
     --t_execCall;
+    // Written here, after the call returned, because log I/O must not delay the
+    // entry; `at` is the one timestamp taken immediately before it. The `hr=`
+    // line below cannot date the entry against the Start side's `motion sample`;
+    // this line can.
+    TraceLog(L"exec dismiss enter seq=%llu gen=%llu epoch=%llu at=%llu",
+            static_cast<unsigned long long>(command.seq),
+            static_cast<unsigned long long>(command.open),
+            static_cast<unsigned long long>(epoch),
+            static_cast<unsigned long long>(enterAt));
     TraceLog(L"exec dismiss seq=%lld outer=%p launcher=%p state=0x%llX hr=%08X "
             L"visible=%s",
             static_cast<long long>(command.seq), outer, launcher,
@@ -16128,26 +19501,24 @@ LRESULT CALLBACK ExecutorWindowProc(HWND window, UINT message, WPARAM wParam,
         KillTimer(window, kExecProbeTimer);
         KillTimer(window, kPressLatchTimer);
         KillTimer(window, kExecDismissProbeTimer);
+        KillTimer(window, kPressAckTimer);
+        KillTimer(window, kPressOpenGenTimer);
         DestroyWindow(window);
-        // The acknowledgement is set after DestroyWindow returns, not from
-        // WM_NCDESTROY inside it: the class's window count is decremented when
-        // the call completes, and the unload must not unregister the class
-        // between the two.
-        if (g_execWindowGone) {
-            SetEvent(g_execWindowGone);
-        }
+        // DestroyWindow returns after WM_NCDESTROY and the class's window count
+        // are complete. SendMessage from the unload thread returns after this
+        // handler, so no completion event is needed.
         return 0;
     }
     if (message == WM_NCDESTROY) {
         // The destructor of the one published window. Any other window of this
         // class (there is none: the class is owned and unregistered) must not
-        // answer for it. The class acknowledgement is set by the teardown above
-        // after DestroyWindow returns.
+        // answer for it.
         const bool identified =
             g_execWindow.load(std::memory_order_acquire) == window;
         if (identified) {
             g_execWindow.store(nullptr, std::memory_order_release);
         }
+        PublishExecutorCapability(L"window-gone");
         TraceLog(L"exec window gone hwnd=%p identified=%d tid=%u", window,
                 identified ? 1 : 0, GetCurrentThreadId());
         return 0;
@@ -16169,6 +19540,14 @@ LRESULT CALLBACK ExecutorWindowProc(HWND window, UINT message, WPARAM wParam,
             // The hidden event ran on another thread; the slot and its timer
             // belong to this one.
             ArmLatchedServe();
+        }
+        return 0;
+    }
+    if (message == kExecIntentAckMessage) {
+        if (wParam == kExecIntentAckMagic) {
+            // The worker saw the intent ack event; the queue and its bound are
+            // owner-thread state.
+            HandlePressAck();
         }
         return 0;
     }
@@ -16256,21 +19635,34 @@ LRESULT CALLBACK ExecutorWindowProc(HWND window, UINT message, WPARAM wParam,
         }
         return 0;
     }
+    if (message == WM_TIMER && wParam == kPressAckTimer) {
+        KillTimer(window, kPressAckTimer);
+        HandlePressAckTimeout();
+        return 0;
+    }
+    if (message == WM_TIMER && wParam == kPressOpenGenTimer) {
+        KillTimer(window, kPressOpenGenTimer);
+        ServeNextPress(L"open-gen");
+        return 0;
+    }
     return DefWindowProcW(window, message, wParam, lParam);
 }
 
-// The launcher thread is the thread that runs OnHotkeyInvoke (measured tid=7108
-// and 11096 after an explorer restart); Dismiss, ShowStartView and the manager's
-// Show are that same thread's own calls. The first of these entries adopts the
-// thread; a later one on a different thread logs the mismatch and creates
-// nothing, because a window on any other thread never pumps this thread's
-// messages. The library-load hook is deliberately not an entry: it runs on
-// whichever thread loaded twinui, and the taskbar thread is the one measured as
-// an explorer fail-fast for a show.
-DWORD NoteLauncherThread(const wchar_t* source) {
+// The manager's Show is the bootstrap: it records the thread the shell called it
+// on and creates the executor window there, with no peer and no worker to gate
+// it. The Win and Start-button hooks cannot bootstrap: both run only after a
+// live peer and a started worker, so they never create a window for a service
+// that is not already answering. Dismiss/ShowStartView never adopt; a
+// non-pumping COM/taskbar caller passes natively, and if its internal manager
+// Show then runs on that thread, that Show is the adopter.
+DWORD NoteLauncherThread(const wchar_t* source, bool adopt) {
     const DWORD tid = GetCurrentThreadId();
     DWORD known = g_launcherThread.load(std::memory_order_relaxed);
     if (known == 0) {
+        if (!adopt) {
+            TraceLog(L"exec launcher thread not adopted source=%s", source);
+            return 0;
+        }
         if (g_launcherThread.compare_exchange_strong(known, tid)) {
             TraceLog(L"exec launcher thread tid=%u source=%s", tid, source);
             known = tid;
@@ -16284,21 +19676,33 @@ DWORD NoteLauncherThread(const wchar_t* source) {
     return tid;
 }
 
-// The manager's Show is the shell's own open on the launcher thread, and it is
-// the first launcher entry of a touch-first open. It is an adoption point like
-// the decision entries: the thread test comes before anything is created, so a
-// Show on a thread this mod has not recorded cannot create the executor there.
+// The manager's Show is the bootstrap that creates a window with no peer. It
+// records the thread it runs on (normally the launcher thread; a non-pumping
+// caller can supply it if its own ShowStartView passed natively and the shell
+// called this Show there). A Show on a thread this mod has already recorded on
+// another entry is a mismatch and creates nothing.
 void EnsureExecutorOnLauncherThread(const wchar_t* source) {
     if (ExecutorWindowOnThisThread()) {
         return;  // already created on this thread
     }
-    if (NoteLauncherThread(source) == 0) {
+    if (NoteLauncherThread(source, true) == 0) {
         return;  // not the launcher thread: never create a window here
     }
     EnsureExecutorWindow();
 }
 
 void EnsureExecutorWindow() {
+    if (g_disabled.load(std::memory_order_relaxed) ||
+        g_execWindow.load(std::memory_order_relaxed)) {
+        return;
+    }
+    // Admission: the creation path's checks, class registration and window
+    // creation are all under this shared hold. A try failure is the unload's
+    // exclusive writer; the flag it set is the reason not to create now.
+    ExecAdmissionShared admission;
+    if (!admission.held()) {
+        return;
+    }
     if (g_disabled.load(std::memory_order_relaxed) ||
         g_execWindow.load(std::memory_order_relaxed)) {
         return;
@@ -16331,6 +19735,9 @@ void EnsureExecutorWindow() {
     // sees is never a window without its thread.
     g_execThreadId = GetCurrentThreadId();
     g_execWindow.store(window, std::memory_order_release);
+    // A created window on the recorded thread is the last missing piece when the
+    // symbols are already resolved; publish before any decision can read it.
+    PublishExecutorCapability(L"window");
     // The assertion the owner-thread report is for: a created window must be on
     // the launcher thread, never on the thread that happened to call a hook.
     const DWORD launcherThread = g_launcherThread.load(std::memory_order_relaxed);
@@ -16363,8 +19770,8 @@ bool CreateExecutorWindowOnUiThread(DWORD timeoutMs) {
     const DWORD target = g_launcherThread.load(std::memory_order_relaxed);
     if (target == 0) {
         // No launcher entry has run yet. A touch-first open falls back to the
-        // shell's own gesture; the first OnHotkeyInvoke, Dismiss, ShowStartView
-        // or manager Show creates the window.
+        // shell's own gesture; the manager's Show is the bootstrap that records
+        // the thread and creates the window.
         return false;
     }
     if (target == GetCurrentThreadId()) {
@@ -16384,6 +19791,9 @@ bool CreateExecutorWindowOnUiThread(DWORD timeoutMs) {
            !(g_execStopEvent &&
              WaitForSingleObject(g_execStopEvent, 0) == WAIT_OBJECT_0) &&
            GetTickCount64() - start < timeoutMs) {
+        // Finite by construction: timeoutMs, and the stop event also ends it.
+        // This is a bounded wait for the launcher thread to pump the one-shot
+        // hook, not a periodic worker tick.
         Sleep(5);
     }
     UnhookWindowsHookEx(hook);
@@ -16404,6 +19814,7 @@ DWORD WINAPI ExecutorWorkerProc(LPVOID) {
     struct ReadyOnExit {
         ~ReadyOnExit() {
             g_execReady.store(false, std::memory_order_release);
+            PublishExecutorCapability(L"worker-exit");
         }
     } readyOnExit;
 
@@ -16422,34 +19833,46 @@ DWORD WINAPI ExecutorWorkerProc(LPVOID) {
     // reads g_disabled, which BeforeUninit sets before it signals the stop.
     if (!g_disabled.load(std::memory_order_relaxed)) {
         g_execReady.store(true, std::memory_order_release);
+        PublishExecutorCapability(L"worker");
         TraceLog(L"exec worker ready tid=%u window=%p", GetCurrentThreadId(),
                 g_execWindow.load(std::memory_order_relaxed));
     }
 
-    HANDLE events[2] = {g_execStopEvent, g_ipc.execEvent};
+    // The worker waits on three things: the stop, a Start-side executor command,
+    // and the intent acknowledgement. The ack is a notification only: the worker
+    // cannot read the queue or the direction (those are launcher-thread state),
+    // so it posts a private message and the window's owner decides. This keeps
+    // the worker's wait event-driven; there is no poll for the ack.
+    HANDLE events[3] = {};
+    DWORD waitCount = 0;
+    events[waitCount++] = g_execStopEvent;
+    if (g_ipc.execEvent) {
+        events[waitCount++] = g_ipc.execEvent;
+    }
+    if (g_ipc.intentAckEvent) {
+        events[waitCount++] = g_ipc.intentAckEvent;
+    }
     for (;;) {
         // The only deadline this worker owns is the launcher symbol probe. HookSymbols
         // blocks on Windhawk's PDB fetch for twinui.pcshell.pdb, and running that on
         // a thread Explorer owns freezes the shell, so the install is scheduled from
         // here; the command event still wakes the loop at once.
         //
-        // The probe is throttled by `g_execProbeNextTick` while an attempt is
-        // pending, and it is over for good once the symbols resolved or the 240 s
-        // budget refused them: at that point this wait has no timeout at all and the
-        // worker sleeps on its two events. The executor's own timers — the dismiss
-        // delay, the visibility confirmation and the press latch — are message
-        // timers on the launcher thread's window, which the worker never services,
-        // so they add no wake here; they are listed in the AGENTS contract so a
-        // later change does not turn this into a poll again.
+        // Before the one symbol attempt, the timeout only waits for
+        // twinui.pcshell.dll to be present; after it, the result is ready or
+        // refused for the session and this wait has no timeout at all. The
+        // executor's own timers — the dismiss delay, the visibility confirmation,
+        // the press latch and the press ack bound — are message timers on the
+        // launcher thread's window, which the worker never services, so they add
+        // no wake here; they are listed in the AGENTS contract so a later change
+        // does not turn this into a poll again.
         DWORD waitMs = INFINITE;
-        if (!g_explorerSymbolsReady.load(std::memory_order_acquire) &&
+        if (!g_explorerSymbolAttempted.load(std::memory_order_acquire) &&
+            !g_explorerSymbolsReady.load(std::memory_order_acquire) &&
             !g_explorerSymbolsRefused.load(std::memory_order_acquire)) {
-            const uint64_t now = GetTickCount64();
-            waitMs = g_execProbeNextTick > now
-                         ? static_cast<DWORD>(g_execProbeNextTick - now)
-                         : static_cast<DWORD>(kExecSymbolProbeMs);
+            waitMs = static_cast<DWORD>(kExecSymbolProbeMs);
         }
-        const DWORD wait = WaitForMultipleObjects(2, events, FALSE, waitMs);
+        const DWORD wait = WaitForMultipleObjects(waitCount, events, FALSE, waitMs);
         if (wait == WAIT_OBJECT_0) {
             return 0;
         }
@@ -16461,12 +19884,27 @@ DWORD WINAPI ExecutorWorkerProc(LPVOID) {
             ProbeExplorerSymbolsFromWorker();
             continue;
         }
-        if (wait != WAIT_OBJECT_0 + 1) {
+        if (wait < WAIT_OBJECT_0 || wait >= WAIT_OBJECT_0 + waitCount) {
+            TraceLog(L"exec worker wait ended unexpectedly result=%u", wait);
+            return 0;
+        }
+        const HANDLE signalled = events[wait - WAIT_OBJECT_0];
+        if (signalled == g_ipc.intentAckEvent) {
+            HWND window = g_execWindow.load(std::memory_order_relaxed);
+            if (window &&
+                !PostMessageW(window, kExecIntentAckMessage,
+                              kExecIntentAckMagic, 0)) {
+                TraceLog(L"exec ack post failed err=%u", GetLastError());
+            }
+            continue;
+        }
+        if (signalled != g_ipc.execEvent) {
             TraceLog(L"exec worker wait ended unexpectedly result=%u", wait);
             return 0;
         }
         HWND window = g_execWindow.load(std::memory_order_relaxed);
         for (int i = 0; i < 50 && !window; ++i) {
+            // Finite: at most 50 ms for a window creation already in flight.
             Sleep(1);
             window = g_execWindow.load(std::memory_order_relaxed);
         }
@@ -16510,6 +19948,8 @@ void StartExecutorWorker() {
 // callback, so this join cannot be held up by the launcher thread's own work.
 // A worker that does not exit is a bug that blocks the unload; there is no safe
 // return while it can still post into module code.
+[[noreturn]] void BlockBridgeUnload(const wchar_t* reason);
+
 void JoinExecutorWorker() {
     if (!g_execWorker) {
         return;
@@ -16521,23 +19961,27 @@ void JoinExecutorWorker() {
         g_execWorkerId = 0;
         return;
     }
-    ULONGLONG nextReport = 0;
-    for (;;) {
-        const ULONGLONG now = GetTickCount64();
-        if (now >= nextReport) {
-            nextReport = now + 5000;
-            TraceLog(L"exec worker join failed err=%u tid=%u", GetLastError(),
-                    g_execWorkerId);
-        }
-        Sleep(1000);
-    }
+    BlockBridgeUnload(L"executor worker join failed");
 }
 
-// Destroys the one published window on its owner thread and waits for
-// WM_NCDESTROY. Called after the worker is joined, so no new post can arrive.
-// DestroyWindow is asynchronous only across threads: the teardown message makes
-// the owner run it, and WM_NCDESTROY signals the event. On the owner thread it
-// runs inline. A window that does not go away has no safe successful unload.
+// A proof that cannot be obtained blocks the unload. The window is created by
+// the manager's Show (or by a targeted WH_GETMESSAGE hook for an already
+// recorded launcher thread), never from Dismiss/ShowStartView, so the
+// non-pumping owner that used to make this wait forever is removed. A genuine
+// failure still has no safe return.
+[[noreturn]] void BlockBridgeUnload(const wchar_t* reason) {
+    TraceLog(L"unload blocked reason=%s", reason);
+    Wh_Log(L"Unload blocked: %s; the module image cannot be freed safely",
+           reason);
+    Sleep(INFINITE);
+    __builtin_unreachable();
+}
+
+// Destroys the one published window synchronously on its owner thread.
+// SendMessage returns only after the private teardown handler has run
+// DestroyWindow and WM_NCDESTROY; no completion event is needed. A destroyed
+// window means this activation's window is gone, not that the owner thread is
+// gone; a window that does not answer blocks.
 void DestroyExecutorWindow() {
     HWND window = g_execWindow.load(std::memory_order_acquire);
     if (!window) {
@@ -16546,99 +19990,69 @@ void DestroyExecutorWindow() {
     if (g_execThreadId == GetCurrentThreadId()) {
         DestroyWindow(window);
     } else {
-        if (!g_execWindowGone) {
-            TraceLog(L"exec window gone event missing hwnd=%p", window);
-            for (;;) {
-                Sleep(5000);
-            }
-        }
-        ResetEvent(g_execWindowGone);
-        if (!PostMessageW(window, kExecTeardownMessage, kExecTeardownMagic, 0)) {
-            if (!g_execWindow.load(std::memory_order_acquire)) {
-                return;  // it died before the message
-            }
-            ULONGLONG nextReport = 0;
-            for (;;) {
-                const ULONGLONG now = GetTickCount64();
-                if (now >= nextReport) {
-                    nextReport = now + 5000;
-                    TraceLog(L"exec window teardown post failed err=%u hwnd=%p",
-                            GetLastError(), window);
-                }
-                Sleep(1000);
-            }
-        }
-        if (WaitForSingleObject(g_execWindowGone, INFINITE) != WAIT_OBJECT_0) {
-            ULONGLONG nextReport = 0;
-            for (;;) {
-                const ULONGLONG now = GetTickCount64();
-                if (now >= nextReport) {
-                    nextReport = now + 5000;
-                    TraceLog(L"exec window teardown wait failed err=%u hwnd=%p",
-                            GetLastError(), window);
-                }
-                Sleep(1000);
-            }
-        }
-        TraceLog(L"exec window destroyed tid=%u",
+        TraceLog(L"exec window teardown send hwnd=%p tid=%u", window,
                 static_cast<unsigned>(g_execThreadId));
+        TraceLog(L"exec window teardown wait hwnd=%p tid=%u", window,
+                static_cast<unsigned>(g_execThreadId));
+        SendMessageW(window, kExecTeardownMessage, kExecTeardownMagic, 0);
     }
-    if (g_execWindow.load(std::memory_order_acquire)) {
-        // DestroyWindow refused or the owner never published the destruction.
-        // Freeing the class or the image under it is not an option.
-        HWND remaining = g_execWindow.load(std::memory_order_acquire);
-        ULONGLONG nextReport = 0;
-        for (;;) {
-            const ULONGLONG now = GetTickCount64();
-            if (now >= nextReport) {
-                nextReport = now + 5000;
-                TraceLog(L"exec window still published hwnd=%p tid=%u",
-                        remaining, static_cast<unsigned>(g_execThreadId));
-            }
-            Sleep(1000);
+    if (g_execWindow.load(std::memory_order_acquire) == window) {
+        if (!IsWindow(window)) {
+            // The owner went away between the lookup and the send. No procedure
+            // in this image can run there now.
+            g_execWindow.store(nullptr, std::memory_order_release);
+            TraceLog(L"exec window gone without teardown hwnd=%p", window);
+        } else {
+            BlockBridgeUnload(L"executor window still published");
         }
     }
+    TraceLog(L"exec window destroyed tid=%u",
+            static_cast<unsigned>(g_execThreadId));
 }
 
 // Unregisters the fixed class under the instance that registered it. The window
-// is gone by now, so no procedure can still run. A failure other than "already
-// gone" leaves the WndProc reachable through the class, so the unload keeps
-// trying instead of returning into an image the class still points at.
+// is gone by now, so no procedure can still run. One checked call: a failure
+// other than "already gone" leaves the WndProc reachable through the class and
+// blocks the unload once instead of returning into that image.
 void UnregisterExecutorClass() {
     if (!g_execClassRegistered) {
         return;
     }
-    for (;;) {
-        if (UnregisterClassW(kExecClassName, g_execClassInstance)) {
-            TraceLog(L"exec window class unregistered");
-            break;
-        }
+    if (UnregisterClassW(kExecClassName, g_execClassInstance)) {
+        TraceLog(L"exec window class unregistered");
+    } else {
         const DWORD error = GetLastError();
         if (error == ERROR_CLASS_DOES_NOT_EXIST) {
             TraceLog(L"exec window class already gone");
-            break;
+        } else {
+            // The class still points at this image's WndProc. There is no safe
+            // free; one block instead of a retry loop.
+            BlockBridgeUnload(L"executor class unregister failed");
         }
-        TraceLog(L"exec window class unregister failed err=%u", error);
-        Sleep(1000);
     }
     g_execClassRegistered = false;
     g_execClassInstance = nullptr;
 }
 
-void PublishBridgeIntent(int32_t kind, int32_t trigger, uint32_t method,
-                         uint32_t flags) {
+LONG64 PublishBridgeIntent(int32_t kind, int32_t trigger, uint32_t method,
+                           uint32_t flags) {
     if (!g_ipc.state) {
-        return;
+        return 0;
     }
     if (kind == kSwipeIntentExternal) {
         // External ownership supersedes every reopen this mod still holds: the
-        // takeover is closing or replacing the menu, and a latched open would
-        // fire into it.
+        // takeover is closing or replacing the menu, and a latched open or a
+        // queued press would fire into it.
         DropPressLatch(L"external", L"intent");
+        DropPressQueue(L"external");
     }
     uint64_t open = 0;
     uint64_t openTick = 0;
     SwipeIpcReadOpen(&g_ipc, &open, &openTick);
+    // Captured before the record goes out: a restart after this leaves this
+    // epoch behind, and the barrier is released by the epoch instead of waiting
+    // for an ack from an activation that seeded past the record.
+    const uint32_t publishedEpoch = PeerEpochNow();
     const LONG64 sequence =
         SwipeIpcPublishIntent(&g_ipc, kind, trigger, method, flags, open);
     TraceLog(L"intent kind=%s trigger=%s seq=%lld open=%llu method=%u flags=%u",
@@ -16653,13 +20067,48 @@ void PublishBridgeIntent(int32_t kind, int32_t trigger, uint32_t method,
                                                             : L"override")),
             static_cast<long long>(sequence),
             static_cast<unsigned long long>(open), method, flags);
+    if (kind == kSwipeIntentExternal && sequence > 0) {
+        // The takeover itself is native and immediate. What follows it is not:
+        // until Start answers this record, a press would overwrite the one slot
+        // with an intent the takeover has already made obsolete. The barrier is a
+        // state, not a timer: it stands whether or not the watchdog could be
+        // armed, and only its ack or a peer that can no longer answer clears it.
+        g_pressOutstanding = OutstandingPress{};
+        g_pressOutstanding.pending = true;
+        g_pressOutstanding.seq = sequence;
+        g_pressOutstanding.publishedTick = GetTickCount64();
+        g_pressOutstanding.external = true;
+        g_pressOutstanding.publishedEpoch = publishedEpoch;
+        HWND window = g_execWindow.load(std::memory_order_relaxed);
+        if (window && SetTimer(window, kPressAckTimer,
+                               static_cast<UINT>(kPressAckTimeoutMs),
+                               nullptr) != 0) {
+            TraceLog(L"own external barrier seq=%lld armed",
+                    static_cast<long long>(sequence));
+        } else {
+            // No watchdog: the ack event still clears the barrier through the
+            // worker, and a later admission releases it once the peer is stale.
+            TraceLog(L"own external barrier seq=%lld unarmed err=%u",
+                    static_cast<long long>(sequence), GetLastError());
+        }
+    }
+    return sequence;
 }
 
 
 BOOL RoleInit() {
     SetTraceFileName(L"bridge.log");
     RefreshTraceSetting();
-    Wh_Log(L"Legacy Start Swipe 0.7.0 initializing (explorer role)");
+    Wh_Log(L"Swipe for 10Start %s initializing (explorer role)", kModVersion);
+
+    // A re-enable starts with no press of the previous activation. The queue,
+    // its outstanding record and the latch belong to that activation's window and
+    // its channel; none of them may be served into the new one.
+    g_pressQueueHead = 0;
+    g_pressQueueCount = 0;
+    g_pressOutstanding = OutstandingPress{};
+    g_pressLatch = PressLatch{};
+    ClearPressOpenGeneration();
 
     // The channel to the Start side. Opening it here means the section and its
     // events exist before the first Hide, and a Start mod that attaches later
@@ -16676,42 +20125,15 @@ BOOL RoleInit() {
                static_cast<unsigned>(ipcError));
     } else {
         TraceLog(L"ipc open created=%d", created ? 1 : 0);
-    }
-
-    // The acknowledgement event for the window's destruction. Created before
-    // any window can exist; the unload resets it before it posts the teardown
-    // and waits on it without a deadline.
-    g_execWindowGone = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_execWindowGone) {
-        TraceLog(L"exec window gone event failed err=%u", GetLastError());
+        // A section can outlive the activation that filled it. Clear the previous
+        // activation's capability before this one starts a worker; the Start side
+        // must not read a stale 1 as an executor that exists.
+        PublishExecutorCapability(L"init");
     }
 
     if (g_ipc.state) {
         StartExecutorWorker();
     }
-
-    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
-    auto loadLibraryExW = kernelBase
-                              ? reinterpret_cast<LoadLibraryExW_t>(
-                                    GetProcAddress(kernelBase,
-                                                   "LoadLibraryExW"))
-                              : nullptr;
-    if (!loadLibraryExW) {
-        Wh_Log(L"LoadLibraryExW not found; twinui.pcshell.dll hooks may not "
-               L"be installed");
-    } else if (!Wh_SetFunctionHook(
-                   reinterpret_cast<void*>(loadLibraryExW),
-                   reinterpret_cast<void*>(LoadLibraryExW_Hook),
-                   reinterpret_cast<void**>(&LoadLibraryExW_Original))) {
-        Wh_Log(L"Failed to hook LoadLibraryExW; twinui.pcshell.dll hooks may "
-               L"not be installed");
-    } else {
-        Wh_Log(L"Hooked LoadLibraryExW");
-    }
-
-    // Record the image if it is already loaded; resolution happens on the
-    // executor worker so the PDB fetch never blocks Explorer's thread.
-    NoteLoadedExplorerModule();
 
     g_initialised = true;
     return TRUE;
@@ -16722,7 +20144,6 @@ void RoleAfterInit() {
         return;
     }
     g_afterInit = true;
-    NoteLoadedExplorerModule();
     Wh_ApplyHookOperations();
 }
 
@@ -16730,6 +20151,8 @@ void RoleBeforeUninit() {
     if (!g_initialised) {
         return;
     }
+    g_unloadStartTick = GetTickCount64();
+    TraceLog(L"unload begin tid=%u", GetCurrentThreadId());
     // This must be set before Windhawk removes the hooks. Every hook and the
     // executor's WndProc reads it: a close or a dispatch that enters after this
     // point skips the channel. The lock is what makes the flag authoritative
@@ -16743,6 +20166,7 @@ void RoleBeforeUninit() {
     // posted for a channel that is about to be unmapped, and the worker's own
     // wait sees the stop before the Exec event.
     g_execReady.store(false, std::memory_order_release);
+    PublishExecutorCapability(L"unload");
     if (g_execStopEvent) {
         SetEvent(g_execStopEvent);
     }
@@ -16752,6 +20176,11 @@ void RoleUninit() {
     if (!g_initialised) {
         return;
     }
+
+    // Symmetric with the Start side: an uninit that skipped BeforeUninit still
+    // closes interception before the window and class go. The normal path set
+    // this there already.
+    g_disabled = true;
 
     // The posting worker first. It never calls the launcher synchronously, so
     // the join does not depend on the launcher thread; it sees the stop event
@@ -16763,18 +20192,36 @@ void RoleUninit() {
     JoinExecutorWorker();
 
     // Then the one window, on its owner thread, with the worker already joined:
-    // no new post can arrive and no timer can survive the destruction.
-    DestroyExecutorWindow();
+    // no new post can arrive and no timer can survive the destruction. The
+    // exclusive admission holds a creation that already passed its flag check;
+    // a late creation's shared try fails and returns. The launcher-thread
+    // GetMessage hook also uses the shared try, so the teardown SendMessage
+    // cannot deadlock against this writer.
+    {
+        ExecAdmissionExclusive admission;
+        TraceLog(L"exec unload admission exclusive");
+        DestroyExecutorWindow();
 
-    // The class is unregistered only after the window is gone, under the same
-    // instance that registered it. A class that outlives the image would point
-    // at an unmapped WndProc.
-    UnregisterExecutorClass();
-
-    if (g_execWindowGone) {
-        CloseHandle(g_execWindowGone);
-        g_execWindowGone = nullptr;
+        // The class is unregistered only after the window is gone, under the same
+        // instance that registered it. A class that outlives the image would
+        // point at an unmapped WndProc.
+        UnregisterExecutorClass();
     }
+
+    // The loader reference taken for the one symbol attempt is no longer
+    // needed: the worker is joined, the window is gone and no path reads the
+    // launcher mapping again. One release for the one acquisition.
+    if (g_explorerModuleRef) {
+        FreeLibrary(g_explorerModuleRef);
+        g_explorerModuleRef = nullptr;
+        TraceLog(L"exec launcher module released");
+    }
+
+    // No executor exists past the window teardown. Write the clear one last time
+    // before the section is closed, so the Start side never reads this
+    // activation's 1 into the next one.
+    PublishExecutorCapability(L"uninit");
+
     if (g_execStopEvent) {
         CloseHandle(g_execStopEvent);
         g_execStopEvent = nullptr;
@@ -16786,8 +20233,13 @@ void RoleUninit() {
         TraceLog(L"ipc close");
     }
 
+    TraceLog(L"unload done elapsed=%llums",
+            static_cast<unsigned long long>(
+                g_unloadStartTick != 0 && GetTickCount64() >= g_unloadStartTick
+                    ? GetTickCount64() - g_unloadStartTick
+                    : 0));
     g_initialised = false;
-    Wh_Log(L"Legacy Start Swipe uninitialized (explorer role)");
+    Wh_Log(L"Swipe for 10Start uninitialized (explorer role)");
 }
 
 // The explorer role reads no setting: the one settings block belongs to the
@@ -16883,3 +20335,5 @@ void Wh_ModSettingsChanged() {
         g_modRole->modSettingsChanged();
     }
 }
+
+
