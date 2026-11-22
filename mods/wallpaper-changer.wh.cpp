@@ -75,10 +75,8 @@ setting.
 picker: a paged thumbnail grid with folder navigation and search, themes and a tray icon. This mod is
 a gallery instead. You browse one wallpaper at a time, large, with the keyboard or by dragging, and
 the selector and the effect are one motion: the card you pick grows from where it was on screen until
-it is the wallpaper, and the overlay stays until the desktop really shows it. That costs more (a
-Direct2D scene and a monitor-size decode on every change, about 33 MB at 4K), which a compact picker
-should not carry. If you want search, themes or a tray icon, Simple Wallpaper Switcher is the better
-fit.
+it is the wallpaper, and the overlay stays until the desktop really shows it. If you want search,
+themes or a tray icon, Simple Wallpaper Switcher is the better fit.
 
 ## Styles
 
@@ -166,8 +164,8 @@ rescans the folder.
 
 - Supported images: JPG, JPEG, PNG, BMP and WebP (WebP needs the Windows WebP codec). The folder is
   scanned each time the selector opens, up to 5000 images.
-- The mod runs as a Windhawk tool mod, in its own `windhawk.exe` process, so nothing it does can
-  affect Explorer, the taskbar or the desktop.
+- The mod runs as a Windhawk tool mod, in its own `windhawk.exe` process, so a crash in it cannot
+  take down Explorer, the taskbar or the desktop.
 - Previews are decoded with the Windows imaging components in that process, on a background
   thread. Images above roughly 150 megapixels show "No preview" instead of being decoded.
 - Nothing runs in the background while the selector is closed, apart from the hotkey itself and, for
@@ -1660,7 +1658,6 @@ static void ApplyWallpaperAsync(std::wstring path, std::optional<RECT> only,
     StopApply();
     g_applySuperseded = false;
     g_applyThread.emplace([path = std::move(path), only, jobs = std::move(jobs), notify] {
-        SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);  // pixels, as the shell reports them
         const bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
         try {
             if (jobs.empty() || !PlayTransition(jobs, path, only, notify)) ApplyWallpaper(path, only);
@@ -3002,8 +2999,6 @@ struct UiStart {
 
 static DWORD WINAPI UiThreadProc(LPVOID param) {
     auto* start = static_cast<UiStart*>(param);
-    // The code works in real pixels (monitor rectangles, per-monitor DPI), whatever the host process is.
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     const bool com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED));
 
     HWND hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kWindowClass,
