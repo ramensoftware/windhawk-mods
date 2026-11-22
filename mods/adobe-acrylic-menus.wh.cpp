@@ -93,7 +93,7 @@ Adobe Dark Menus and is intended to be used independently.
 
 **Lightroom Classic Preferences with optional dialog acrylic**
 
-![Acrylic Preferences dialog on the Interface tab](https://raw.githubusercontent.com/marvintrvl/windhawk-mods/d1ea0c2d1fbc6502a347c3964b84f94420e960c7/images/adobe-acrylic-menus/lightroom-acrylic-preferences.png)
+![Acrylic Preferences dialog on the Interface tab](https://raw.githubusercontent.com/marvintrvl/windhawk-mods/7d36372859b311b0ac7926ccc2acdf5f5496cf51/images/adobe-acrylic-menus/lightroom-acrylic-preferences.webp)
 
 Original Adobe Dark Menus copyright (c) 2026 SABER. Used under the MIT license;
 the complete license is included in this source file.
