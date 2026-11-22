@@ -5,8 +5,7 @@
 // @version         1.0.0
 // @author          sultansaad-dev
 // @github          https://github.com/sultansaad-dev
-// @include         explorer.exe
-// @architecture    x86-64
+// @include         windhawk.exe
 // @compilerOptions -lgdiplus -ld2d1 -ldwrite -lole32 -loleaut32 -lruntimeobject -lshcore -lwindowsapp -luuid -lshell32 -lshlwapi -luser32 -lgdi32
 // ==/WindhawkMod==
 
@@ -50,6 +49,16 @@ of your games or videos (use **Persistent mode** if you want it in a game).
 There's a lot more in the **Settings** tab to play around with: size, width,
 corner roundness, animation speed, hover delays, colours, the visualizer
 style and more. Tweak it however you like, everything applies straight away.
+
+## Good to know
+- Some players, like YouTube in a browser, don't let Windows move the position
+  or toggle playback. For those, the skip buttons, the progress bar and
+  play/pause send the player's own keyboard shortcuts (J/K/L and number keys on
+  YouTube, arrows and space elsewhere) to that app's window in the background,
+  only when you click them.
+- Similar mods: Dynamic Island Media Player, Dynamic Island for Windows, SMTC
+  Now Playing Desktop Widgets and Island Media Controls. This one is different
+  because it stays fully hidden until you hover the top edge, then drops down.
 */
 // ==/WindhawkModReadme==
 
@@ -165,6 +174,7 @@ style and more. Tweak it however you like, everything applies straight away.
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -330,7 +340,7 @@ struct MediaSnapshot {
 };
 
 static std::mutex g_mediaMutex;
-static MediaSnapshot g_media;
+[[clang::no_destroy]] static MediaSnapshot g_media;
 
 static std::atomic<bool> g_stop{false};
 // 1 prev, 2 play/pause, 3 next, 4 back 10s, 5 forward 10s, 7 jump to
@@ -340,8 +350,10 @@ static std::atomic<double> g_seekTo{0};
 static std::mutex g_wakeMutex;
 static std::condition_variable g_wakeCv;
 
-static std::thread g_uiThread;
-static std::thread g_mediaThread;
+// Not destroyed at process exit: if the process ends without the mod being
+// unloaded, a still-joinable std::thread destructor would call terminate().
+[[clang::no_destroy]] static std::optional<std::thread> g_uiThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_mediaThread;
 static HWND g_hwnd = nullptr;
 static ULONG_PTR g_gdiplusToken = 0;
 
@@ -560,38 +572,164 @@ static std::shared_ptr<Bitmap> LoadArt(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Keyboard seeking for players that don't let Windows change the position
-// (YouTube and most browser videos). We find the window whose title contains
-// the track title, which is the browser tab that's playing, and press the
-// player's own skip keys.
+// Keyboard fallback for players that don't let Windows change the position or
+// toggle playback (YouTube and most browser videos). We find the player's
+// window and post its own keyboard shortcuts to it. All of this runs on the
+// media thread, one command at a time, so nothing outlives the mod.
 
-struct FindTitleCtx {
+// Waits up to ms milliseconds, returning early (false) if the mod is stopping.
+static bool WaitOrStop(int ms) {
+    std::unique_lock<std::mutex> lock(g_wakeMutex);
+    return !g_wakeCv.wait_for(lock, std::chrono::milliseconds(ms),
+                              [] { return g_stop.load(); });
+}
+
+// Reads a window title without sending it a message, so a hung window can't
+// block us.
+static int ReadWindowTitle(HWND hwnd, WCHAR* buf, int cch) {
+    using InternalGetWindowText_t = int(WINAPI*)(HWND, LPWSTR, int);
+    static auto pInternalGetWindowText =
+        (InternalGetWindowText_t)GetProcAddress(GetModuleHandleW(L"user32.dll"),
+                                                "InternalGetWindowText");
+    buf[0] = L'\0';
+    if (!pInternalGetWindowText) {
+        return 0;
+    }
+    return pInternalGetWindowText(hwnd, buf, cch);
+}
+
+// "Spotify.exe", "Chrome" or "C:\...\vlc.exe" -> "spotify.exe" style name.
+static std::wstring ExeNameForAumid(const std::wstring& aumid) {
+    std::wstring exe = aumid;
+    size_t slash = exe.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) {
+        exe = exe.substr(slash + 1);
+    }
+    if (exe.empty() || exe.find(L'!') != std::wstring::npos) {
+        return L"";  // Store app IDs don't map to an exe name.
+    }
+    if (exe.size() < 4 || _wcsicmp(exe.c_str() + exe.size() - 4, L".exe") != 0) {
+        exe += L".exe";
+    }
+    return exe;
+}
+
+// Process IDs of the app that owns the media session.
+static std::vector<DWORD> PidsForAumid(const std::wstring& aumid) {
+    std::vector<DWORD> pids;
+    std::wstring exe = ExeNameForAumid(aumid);
+    if (exe.empty()) {
+        return pids;
+    }
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) {
+        return pids;
+    }
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            if (_wcsicmp(pe.szExeFile, exe.c_str()) == 0) {
+                pids.push_back(pe.th32ProcessID);
+            }
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+    return pids;
+}
+
+// Browser tab titles can start with a notification count, like "(3) Title".
+static std::wstring StripNotificationCount(const std::wstring& t) {
+    if (t.size() > 3 && t[0] == L'(') {
+        size_t close = t.find(L") ");
+        if (close != std::wstring::npos && close <= 6) {
+            bool digits = close > 1;
+            for (size_t i = 1; i < close; i++) {
+                if (!iswdigit(t[i]) && t[i] != L'+') {
+                    digits = false;
+                }
+            }
+            if (digits) {
+                return t.substr(close + 2);
+            }
+        }
+    }
+    return t;
+}
+
+struct FindPlayerCtx {
     std::wstring needle;
+    const std::vector<DWORD>* pids;
     HWND found = nullptr;
+    HWND anyMain = nullptr;  // Any main window of the app, for "open app".
 };
 
-static BOOL CALLBACK FindTitleProc(HWND hwnd, LPARAM lp) {
-    auto* ctx = (FindTitleCtx*)lp;
-    if (!IsWindowVisible(hwnd) || hwnd == g_hwnd) {
+static BOOL CALLBACK FindPlayerProc(HWND hwnd, LPARAM lp) {
+    auto* ctx = (FindPlayerCtx*)lp;
+    if (!IsWindowVisible(hwnd) || hwnd == g_hwnd || GetWindow(hwnd, GW_OWNER)) {
         return TRUE;
     }
-    WCHAR buf[512];
-    if (GetWindowTextW(hwnd, buf, ARRAYSIZE(buf)) > 0 &&
-        wcsstr(buf, ctx->needle.c_str())) {
+    WCHAR title[512];
+    if (ReadWindowTitle(hwnd, title, ARRAYSIZE(title)) <= 0) {
+        return TRUE;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+
+    if (!ctx->pids->empty()) {
+        // Only windows that belong to the app playing the media.
+        if (std::find(ctx->pids->begin(), ctx->pids->end(), pid) ==
+            ctx->pids->end()) {
+            return TRUE;
+        }
+        if (!ctx->anyMain) {
+            ctx->anyMain = hwnd;
+        }
+        if (!ctx->needle.empty() && wcsstr(title, ctx->needle.c_str())) {
+            ctx->found = hwnd;
+            return FALSE;
+        }
+        return TRUE;
+    }
+
+    // The app couldn't be identified (Firefox reports a hash, for example):
+    // only consider browser windows whose title starts with the track title.
+    WCHAR cls[64];
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) ||
+        (wcscmp(cls, L"Chrome_WidgetWin_1") != 0 &&
+         wcscmp(cls, L"MozillaWindowClass") != 0)) {
+        return TRUE;
+    }
+    std::wstring t = StripNotificationCount(title);
+    if (!ctx->needle.empty() && t.compare(0, ctx->needle.size(), ctx->needle) == 0) {
         ctx->found = hwnd;
         return FALSE;
     }
     return TRUE;
 }
 
-static HWND FindPlayerWindow(const std::wstring& title) {
-    if (title.size() < 3) {
+// Finds the window that's playing this track. With mainFallback, returns any
+// main window of the app if no title matches (used by the "open app" button).
+static HWND FindPlayerWindow(const std::wstring& title,
+                             const std::vector<DWORD>& pids,
+                             bool mainFallback = false) {
+    FindPlayerCtx ctx;
+    ctx.needle = title.size() >= 3 ? title.substr(0, 40) : L"";
+    ctx.pids = &pids;
+    if (ctx.needle.empty() && !mainFallback) {
         return nullptr;
     }
-    FindTitleCtx ctx;
-    ctx.needle = title.substr(0, 40);
-    EnumWindows(FindTitleProc, (LPARAM)&ctx);
+    EnumWindows(FindPlayerProc, (LPARAM)&ctx);
+    if (!ctx.found && mainFallback) {
+        return ctx.anyMain;
+    }
     return ctx.found;
+}
+
+static bool IsYouTubeWindow(HWND hwnd) {
+    WCHAR title[512];
+    ReadWindowTitle(hwnd, title, ARRAYSIZE(title));
+    return wcsstr(title, L"YouTube") != nullptr;
 }
 
 // Posts a key press straight to the window, without bringing it to the front.
@@ -609,135 +747,67 @@ static void PostKey(HWND hwnd, WORD vk) {
     PostMessage(hwnd, WM_KEYUP, vk, up);
 }
 
-static void KeyboardSeek(std::wstring title, bool forward) {
-    std::thread([title, forward] {
-        HWND player = FindPlayerWindow(title);
-        if (!player) {
-            Wh_Log(L"Keyboard seek: player window not found");
+// YouTube: J / L jump 10 seconds. Other players: arrow keys, pressed twice
+// since most of them jump 5 seconds per press.
+static void KeyboardSeekBy(HWND player, bool forward) {
+    bool youtube = IsYouTubeWindow(player);
+    WORD vk = youtube ? (forward ? 'L' : 'J') : (forward ? VK_RIGHT : VK_LEFT);
+    int presses = youtube ? 1 : 2;
+    for (int i = 0; i < presses; i++) {
+        PostKey(player, vk);
+        if (!WaitOrStop(40)) {
             return;
         }
-        WCHAR buf[512] = L"";
-        GetWindowTextW(player, buf, ARRAYSIZE(buf));
-        // YouTube: J / L jump 10 seconds. Other players: arrow keys, pressed
-        // twice since most of them jump 5 seconds per press.
-        bool youtube = wcsstr(buf, L"YouTube") != nullptr;
-        WORD vk = youtube ? (forward ? 'L' : 'J')
-                          : (forward ? VK_RIGHT : VK_LEFT);
-        int presses = youtube ? 1 : 2;
-        for (int i = 0; i < presses; i++) {
-            PostKey(player, vk);
-            Sleep(40);
-        }
-    }).detach();
-}
-
-// Jump to any point using the player's keys, for apps that don't let Windows
-// change the position. YouTube: number keys jump to 0%, 10% ... 90%, then L
-// steps 10 seconds at a time. Other players: arrow keys, 5 seconds each.
-static void KeyboardSeekTo(std::wstring title, double from, double to,
-                           double dur) {
-    std::thread([title, from, to, dur] {
-        HWND player = FindPlayerWindow(title);
-        if (!player) {
-            return;
-        }
-        WCHAR buf[512] = L"";
-        GetWindowTextW(player, buf, ARRAYSIZE(buf));
-        if (wcsstr(buf, L"YouTube") && dur > 1) {
-            int d = std::clamp((int)(to / dur * 10), 0, 9);
-            double base = d * dur / 10.0;
-            PostKey(player, (WORD)('0' + d));
-            Sleep(80);
-            int n = (int)std::lround((to - base) / 10.0);
-            for (int i = 0; i < n && i < 60; i++) {
-                PostKey(player, 'L');
-                Sleep(25);
-            }
-        } else {
-            int n = (int)std::lround((to - from) / 5.0);
-            WORD vk = n > 0 ? VK_RIGHT : VK_LEFT;
-            n = (std::min)(std::abs(n), 120);
-            for (int i = 0; i < n; i++) {
-                PostKey(player, vk);
-                Sleep(20);
-            }
-        }
-    }).detach();
-}
-
-static void KeyboardPlayPause(std::wstring title) {
-    std::thread([title] {
-        HWND player = FindPlayerWindow(title);
-        if (!player) {
-            return;
-        }
-        WCHAR buf[512] = L"";
-        GetWindowTextW(player, buf, ARRAYSIZE(buf));
-        // YouTube: K toggles play/pause. Most other players: space.
-        PostKey(player, wcsstr(buf, L"YouTube") ? 'K' : VK_SPACE);
-    }).detach();
-}
-
-struct FindPidCtx {
-    DWORD pid;
-    HWND found = nullptr;
-};
-
-static BOOL CALLBACK FindPidProc(HWND hwnd, LPARAM lp) {
-    auto* ctx = (FindPidCtx*)lp;
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == ctx->pid && IsWindowVisible(hwnd) && !GetWindow(hwnd, GW_OWNER) &&
-        GetWindowTextLengthW(hwnd) > 0) {
-        ctx->found = hwnd;
-        return FALSE;
     }
-    return TRUE;
+}
+
+// Jump to any point. YouTube: number keys jump to 0%, 10% ... 90%, then L
+// steps 10 seconds at a time. Other players: arrow keys, 5 seconds each.
+static void KeyboardSeekTo(HWND player, double from, double to, double dur) {
+    if (IsYouTubeWindow(player) && dur > 1) {
+        int d = std::clamp((int)(to / dur * 10), 0, 9);
+        double base = d * dur / 10.0;
+        PostKey(player, (WORD)('0' + d));
+        if (!WaitOrStop(80)) {
+            return;
+        }
+        int n = (int)std::lround((to - base) / 10.0);
+        for (int i = 0; i < n && i < 60; i++) {
+            PostKey(player, 'L');
+            if (!WaitOrStop(25)) {
+                return;
+            }
+        }
+    } else {
+        int n = (int)std::lround((to - from) / 5.0);
+        WORD vk = n > 0 ? VK_RIGHT : VK_LEFT;
+        n = (std::min)(std::abs(n), 120);
+        for (int i = 0; i < n; i++) {
+            PostKey(player, vk);
+            if (!WaitOrStop(20)) {
+                return;
+            }
+        }
+    }
+}
+
+// YouTube: K toggles play/pause. Most other players: space.
+static void KeyboardPlayPause(HWND player) {
+    PostKey(player, IsYouTubeWindow(player) ? 'K' : VK_SPACE);
 }
 
 // Brings the app that's playing to the front.
-static void FocusPlayer(std::wstring title, std::wstring aumid) {
-    std::thread([title, aumid] {
-        HWND player = FindPlayerWindow(title);
-        if (!player && !aumid.empty()) {
-            // Fall back to the app's main window, e.g. Spotify while paused.
-            std::wstring exe = aumid;
-            size_t slash = exe.find_last_of(L"\\/");
-            if (slash != std::wstring::npos) {
-                exe = exe.substr(slash + 1);
-            }
-            if (exe.size() < 4 ||
-                _wcsicmp(exe.c_str() + exe.size() - 4, L".exe") != 0) {
-                exe += L".exe";
-            }
-            HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-            if (snap != INVALID_HANDLE_VALUE) {
-                PROCESSENTRY32W pe{};
-                pe.dwSize = sizeof(pe);
-                if (Process32FirstW(snap, &pe)) {
-                    do {
-                        if (_wcsicmp(pe.szExeFile, exe.c_str()) == 0) {
-                            FindPidCtx ctx{pe.th32ProcessID};
-                            EnumWindows(FindPidProc, (LPARAM)&ctx);
-                            if (ctx.found) {
-                                player = ctx.found;
-                                break;
-                            }
-                        }
-                    } while (Process32NextW(snap, &pe));
-                }
-                CloseHandle(snap);
-            }
-        }
-        if (!player) {
-            Wh_Log(L"Open player: window not found");
-            return;
-        }
-        if (IsIconic(player)) {
-            ShowWindow(player, SW_RESTORE);
-        }
-        SetForegroundWindow(player);
-    }).detach();
+static void FocusPlayer(const std::wstring& title,
+                        const std::vector<DWORD>& pids) {
+    HWND player = FindPlayerWindow(title, pids, /*mainFallback=*/true);
+    if (!player) {
+        Wh_Log(L"Open player: window not found");
+        return;
+    }
+    if (IsIconic(player)) {
+        ShowWindow(player, SW_RESTORE);
+    }
+    SetForegroundWindow(player);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -762,6 +832,19 @@ static void MediaThreadProc() {
 
     GlobalSystemMediaTransportControlsSessionManager mgr{nullptr};
     std::map<std::wstring, std::shared_ptr<Bitmap>> iconCache;
+    // Process IDs of the app playing, refreshed every few seconds.
+    std::wstring pidsAumid;
+    std::vector<DWORD> pids;
+    SteadyClock::time_point pidsTime{};
+    auto pidsFor = [&](const std::wstring& id) -> const std::vector<DWORD>& {
+        auto t = SteadyClock::now();
+        if (id != pidsAumid || t - pidsTime > std::chrono::seconds(5)) {
+            pids = PidsForAumid(id);
+            pidsAumid = id;
+            pidsTime = t;
+        }
+        return pids;
+    };
     std::wstring lastKey;
     std::shared_ptr<Bitmap> art;
     Color accent(255, 60, 60, 72);
@@ -810,7 +893,12 @@ static void MediaThreadProc() {
                         if (!ok) {
                             auto p = session.TryGetMediaPropertiesAsync().get();
                             if (p) {
-                                KeyboardPlayPause(p.Title().c_str());
+                                std::wstring id =
+                                    session.SourceAppUserModelId().c_str();
+                                if (HWND w = FindPlayerWindow(p.Title().c_str(),
+                                                              pidsFor(id))) {
+                                    KeyboardPlayPause(w);
+                                }
                             }
                         }
                     }
@@ -833,6 +921,12 @@ static void MediaThreadProc() {
                 std::wstring title = props ? props.Title().c_str() : L"";
                 std::wstring artist = props ? props.Artist().c_str() : L"";
                 std::wstring aumid = session.SourceAppUserModelId().c_str();
+                const std::vector<DWORD>& appPids = pidsFor(aumid);
+
+                // "Open app" button.
+                if (cmd == 6) {
+                    FocusPlayer(title, appPids);
+                }
 
                 auto tl = session.GetTimelineProperties();
                 double rawPos =
@@ -889,7 +983,9 @@ static void MediaThreadProc() {
                     if (done) {
                         pos = target;
                     } else {
-                        KeyboardSeek(title, cmd == 5);
+                        if (HWND w = FindPlayerWindow(title, appPids)) {
+                            KeyboardSeekBy(w, cmd == 5);
+                        }
                         pos = target;
                     }
                 }
@@ -906,7 +1002,9 @@ static void MediaThreadProc() {
                         done = false;
                     }
                     if (!done) {
-                        KeyboardSeekTo(title, pos, target, dur);
+                        if (HWND w = FindPlayerWindow(title, appPids)) {
+                            KeyboardSeekTo(w, pos, target, dur);
+                        }
                     }
                     pos = target;
                 }
@@ -953,7 +1051,7 @@ static void MediaThreadProc() {
 
                 // Looked up outside the lock: it talks to other windows.
                 bool keySeek = !(canSeek && dur > 1) &&
-                               FindPlayerWindow(title) != nullptr;
+                               FindPlayerWindow(title, appPids) != nullptr;
 
                 std::lock_guard<std::mutex> lock(g_mediaMutex);
                 g_media.hasSession = true;
@@ -1026,7 +1124,7 @@ struct IPeakMeter : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE QueryHardwareSupport(DWORD* mask) = 0;
 };
 
-static winrt::com_ptr<IPeakMeter> g_meter;
+[[clang::no_destroy]] static winrt::com_ptr<IPeakMeter> g_meter;
 static DWORD g_meterTick = 0;
 
 static float GetAudioPeak() {
@@ -1328,16 +1426,16 @@ static void DrawIconGlyph(Graphics& g,
 // Text goes through DirectWrite instead of GDI+, because DirectWrite falls
 // back to other fonts for characters Segoe UI doesn't have. That's what makes
 // fancy Unicode names, symbols and emoji show up instead of empty boxes.
-static winrt::com_ptr<ID2D1Factory> g_d2d;
-static winrt::com_ptr<IDWriteFactory> g_dwrite;
-static winrt::com_ptr<ID2D1DCRenderTarget> g_dcrt;
+[[clang::no_destroy]] static winrt::com_ptr<ID2D1Factory> g_d2d;
+[[clang::no_destroy]] static winrt::com_ptr<IDWriteFactory> g_dwrite;
+[[clang::no_destroy]] static winrt::com_ptr<ID2D1DCRenderTarget> g_dcrt;
 
 struct QueuedText {
     winrt::com_ptr<IDWriteTextLayout> layout;
     float x, y;
     Color color;
 };
-static std::vector<QueuedText> g_textQueue;
+[[clang::no_destroy]] static std::vector<QueuedText> g_textQueue;
 
 static void EnsureTextFactories() {
     if (!g_d2d) {
@@ -2146,26 +2244,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             for (int i = 0; i < g_ui.buttonCount; i++) {
                 if (g_ui.buttons[i].r.Contains(p)) {
-                    int cmd = g_ui.buttons[i].cmd;
-                    bool useKeys = false;
-                    std::wstring title;
-                    {
-                        std::lock_guard<std::mutex> lock(g_mediaMutex);
-                        useKeys = false;
-                        title = g_media.title;
-                    }
-                    if (cmd == 6) {
-                        std::wstring aumid;
-                        {
-                            std::lock_guard<std::mutex> lock(g_mediaMutex);
-                            aumid = g_media.aumid;
-                        }
-                        FocusPlayer(title, aumid);
-                    } else if (useKeys) {
-                        KeyboardSeek(title, cmd == 5);
-                    } else {
-                        SendMediaCommand(cmd);
-                    }
+                    SendMediaCommand(g_ui.buttons[i].cmd);
                     break;
                 }
             }
@@ -2245,47 +2324,9 @@ static void UiThreadProc() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Startup: the mod loads into explorer.exe. Only the explorer process that owns
-// the taskbar runs the bar, so folder windows in other explorer processes
-// don't create duplicates.
+// Tool mod callbacks: the mod runs in its own windhawk.exe process.
 
-static std::thread g_starterThread;
-
-static bool IsTaskbarProcess() {
-    HWND tray = FindWindow(L"Shell_TrayWnd", nullptr);
-    if (!tray) {
-        return false;
-    }
-    DWORD pid = 0;
-    GetWindowThreadProcessId(tray, &pid);
-    return pid == GetCurrentProcessId();
-}
-
-static void StarterThreadProc() {
-    // Explorer may still be starting up: wait for the taskbar for up to a
-    // minute.
-    for (int i = 0; i < 600 && !g_stop; i++) {
-        HWND tray = FindWindow(L"Shell_TrayWnd", nullptr);
-        if (tray) {
-            if (!IsTaskbarProcess()) {
-                Wh_Log(L"Not the taskbar's explorer process, staying idle");
-                return;
-            }
-            break;
-        }
-        Sleep(100);
-    }
-    if (g_stop || !IsTaskbarProcess()) {
-        Wh_Log(L"Taskbar not found in this process, staying idle");
-        return;
-    }
-
-    Wh_Log(L"Taskbar process found, starting the bar");
-    g_mediaThread = std::thread(MediaThreadProc);
-    g_uiThread = std::thread(UiThreadProc);
-}
-
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Now Playing... starting");
     LoadSettings();
 
@@ -2296,38 +2337,217 @@ BOOL Wh_ModInit() {
     }
 
     g_stop = false;
-    g_starterThread = std::thread(StarterThreadProc);
+    g_mediaThread.emplace(MediaThreadProc);
+    g_uiThread.emplace(UiThreadProc);
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     // The UI thread reloads settings itself, so it never reads them mid-change.
     if (g_hwnd) {
         PostMessage(g_hwnd, WM_APP_SETTINGS, 0, 0);
-    } else {
-        LoadSettings();
     }
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Now Playing... stopping");
     g_stop = true;
     g_wakeCv.notify_all();
-    if (g_starterThread.joinable()) {
-        g_starterThread.join();
-    }
     if (g_hwnd) {
         PostMessage(g_hwnd, WM_CLOSE, 0, 0);
     }
-    if (g_uiThread.joinable()) {
-        g_uiThread.join();
+    // The UI thread also closes itself on its next timer tick once g_stop is
+    // set, in case the window didn't exist yet when we posted WM_CLOSE.
+    if (g_uiThread && g_uiThread->joinable()) {
+        g_uiThread->join();
     }
-    if (g_mediaThread.joinable()) {
-        g_mediaThread.join();
+    g_uiThread.reset();
+    if (g_mediaThread && g_mediaThread->joinable()) {
+        g_mediaThread->join();
     }
+    g_mediaThread.reset();
     {
         std::lock_guard<std::mutex> lock(g_mediaMutex);
         g_media = MediaSnapshot{};
     }
     GdiplusShutdown(g_gdiplusToken);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
