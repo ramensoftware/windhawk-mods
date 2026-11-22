@@ -197,7 +197,7 @@ page](https://github.com/mario0318/SnapSentry/issues).
   $description: Turn off to delete for good.
 - removeExactDuplicates: false
   $name: Remove identical recent screenshots
-  $description: Took the same screenshot twice within ten minutes? The extra copy goes to the Recycle Bin, but not after a popup button click. Only with Image.
+  $description: Took the same screenshot twice within ten minutes? The extra copy goes to the Recycle Bin, but with the popup on, only when the countdown runs out. Only with Image.
 
 # ---- The popup ----
 - showActionPopup: false
