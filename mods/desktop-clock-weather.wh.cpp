@@ -5,6 +5,7 @@
 // @version         1.0.3
 // @author          DineroOne
 // @license         MIT
+// @github          https://github.com/DineroOne
 // @include         explorer.exe
 // @compilerOptions -lgdi32 -lgdiplus -lwinhttp -luser32
 // ==/WindhawkMod==
