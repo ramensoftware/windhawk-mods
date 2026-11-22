@@ -968,7 +968,7 @@ static void __stdcall _sws_IconPainter_Callback(
         }
         else
         {
-            if (pWindowList[params->index].hIcon && sws_IsSharedIcon(pWindowList[params->index].hIcon))
+            if (pWindowList[params->index].hIcon && !sws_IsSharedIcon(pWindowList[params->index].hIcon))
             {
                 DestroyIcon(pWindowList[params->index].hIcon);
                 pWindowList[params->index].hIcon = NULL;
@@ -1761,7 +1761,7 @@ void sws_WindowSwitcherLayoutWindow_Erase(sws_WindowSwitcherLayoutWindow* _this)
 
 void sws_WindowSwitcherLayoutWindow_Clear(sws_WindowSwitcherLayoutWindow* _this)
 {
-    if (_this->hIcon && sws_DefAppIcon && sws_IsSharedIcon(_this->hIcon))
+    if (_this->hIcon && !sws_IsSharedIcon(_this->hIcon))
     {
         DestroyIcon(_this->hIcon);
     }
@@ -4341,7 +4341,7 @@ static DWORD CALLBACK _sws_WindowSwitcher_AsyncGetAppIconProcedure(sws_WindowSwi
         }
         if (!ok)
         {
-            ok = PostMessageW(_this->hWnd, SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG, (ULONG_PTR)pItem, NULL);
+            ok = PostMessageW(_this->hWnd, SWS_WINDOWSWITCHER_ASYNCGETAPPICON_CB_MSG, (ULONG_PTR)pItem, 0);
             if (!ok)
             {
                 free(pItem);
