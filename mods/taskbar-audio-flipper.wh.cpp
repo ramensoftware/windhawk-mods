@@ -2,7 +2,7 @@
 // @id              taskbar-audio-flipper
 // @name            Taskbar Audio Flipper
 // @description     A taskbar widget that switches between your speakers, headsets and microphones with a click, and turns a webcam on and off
-// @version         1.3.0
+// @version         1.5.0
 // @author          Lucidic15
 // @github          https://github.com/Lucidic15
 // @include         explorer.exe
@@ -32,7 +32,7 @@ On the Output and Input sections:
   as a mute button, like the Windows 11 volume flyout. The output's has a volume mixer too: each
   app using the output, with its icon (click it to mute the app) and volume, and a gear for
   Windows' volume mixer settings. **More volume settings** at the bottom opens Windows' Sound
-  settings.
+  settings. To do without it, turn off **Show volume flyout on hover** in the menu.
 - **Left-click**: switch to the next device.
 - **Scroll**: turn the volume (or microphone level) up or down.
 - **Middle-click**: mute / unmute.
@@ -44,10 +44,18 @@ Anywhere on the widget, **right-click** for the menu. The **Output**, **Input** 
 their section, and the settings for it: picking a device directly, which devices are in the click
 rotation, whether to switch the communications device too, and links to the Windows settings.
 
-**Position** in the mod's settings puts the widget left of the notification area, of the Wi-Fi,
-volume and battery icons, or of the clock, where the taskbar makes room for it. It can also go at
-the left end of the taskbar, over it: that's free when the taskbar's icons are centered and the
-Widgets button is off.
+**Icons only**, in the menu, shows just the sections' icons, without the names, volume levels and
+bars. Switching the output or input then shows its name in a popup for a moment (**Show popup on
+change**, in the Output or Input submenu, turns that off).
+
+**Position**, in the menu or the mod's settings (whichever you changed last), puts the widget left
+of the notification area, of the Wi-Fi, volume and battery icons, or of the clock, where the
+taskbar makes room for it. It can also go at the left end of the taskbar, over it, right of the
+Widgets button: that's free when the taskbar's icons are centered.
+
+**Change icons…**, at the end of the menu, picks other glyphs from the Windows icon font for the
+widget's icons (each kind of device, muted, and the webcam), and for the icons of Taskbar Snipper
+and Taskbar RDP Launcher when they're running.
 
 Devices are shown with the name they have in the Windows Sound control panel, and a Fluent icon for
 their kind (speakers, headphones, headset, monitor or microphone) in the taskbar's color, like the
@@ -99,7 +107,7 @@ change). Use the app or the mod, not both: each shows its own widget.
 /*
 - position: tray
   $name: Position
-  $description: Where on the taskbar the widget goes. At the left end, it's over the taskbar, which is free when its icons are centered and the Widgets button is off. The Taskbar Snipper and Taskbar RDP Launcher widgets in the same position sit beside it.
+  $description: Where on the taskbar the widget goes. At the left end, it's over the taskbar, right of the Widgets button, which is free when the taskbar's icons are centered. The widget's right-click menu can change this too; whichever you changed last is used. The Taskbar Snipper and Taskbar RDP Launcher widgets in the same position sit beside it.
   $options:
   - tray: Left of the notification area
   - systemIcons: Left of the Wi-Fi, volume and battery icons
@@ -129,6 +137,7 @@ change). Use the app or the mod, not both: each shows its own widget.
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Text.h>
@@ -138,6 +147,7 @@ change). Use the app or the mod, not both: each shows its own widget.
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
@@ -154,6 +164,7 @@ change). Use the app or the mod, not both: each shows its own widget.
 #include <map>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -209,17 +220,6 @@ std::vector<std::wstring> Split(const std::wstring& text, wchar_t separator) {
         }
         start = end + 1;
     }
-}
-
-std::wstring Join(const std::vector<std::wstring>& parts, const std::wstring& separator) {
-    std::wstring joined;
-    for (size_t i = 0; i < parts.size(); i++) {
-        if (i > 0) {
-            joined += separator;
-        }
-        joined += parts[i];
-    }
-    return joined;
 }
 
 std::wstring Utf8ToWide(const std::string& text) {
@@ -1149,6 +1149,191 @@ UINT TaskbarCreatedMessage() {
     return message;
 }
 
+// ---------------------------------------------------------------------------
+// The widget's icons, which can be given other glyphs. Each mod keeps its own in its storage;
+// Change icons… in any of the widgets' menus opens one picker for the icons of every widget running
+// in Explorer. The widgets find each other by their owner windows, which carry kWindowProperty, and
+// ask each other for their icons, and set them, with WM_COPYDATA.
+
+namespace WidgetIcons {
+
+// An icon of the widget's that can be given another glyph.
+struct Icon {
+    const wchar_t* id;    // Its name in the mod's storage, and between the widgets.
+    const wchar_t* name;  // What the picker calls it.
+    wchar_t glyph;        // Its own glyph, unless another is chosen.
+};
+
+constexpr size_t kMaxIcons = 16;
+constexpr const wchar_t* kWindowProperty = L"TaskbarWidgets.Icons";
+
+// What the widgets send each other's owner windows, as WM_COPYDATA's dwData, with UTF-16 text.
+constexpr ULONG_PTR kQuery = 0x54574951;  // Asks for the widget's icons, which come back as kList.
+constexpr ULONG_PTR kList = 0x5457494C;   // The widget's name and order, then its icons, a line each.
+constexpr ULONG_PTR kSet = 0x54574953;    // An icon's ID and its new glyph (0 for its own).
+
+// A glyph of the Windows icon font, whose characters are all in Unicode's private use area.
+bool IsGlyph(int glyph) {
+    return glyph >= 0xE000 && glyph <= 0xF8FF;
+}
+
+const wchar_t* g_widgetName = L"";
+int g_widgetOrder = 0;
+std::span<const Icon> g_icons;
+std::atomic<wchar_t> g_glyphs[kMaxIcons];  // The icons' glyphs now, read on any thread.
+
+std::wstring StorageName(const Icon& icon) {
+    return std::wstring(L"Icon.") + icon.id;
+}
+
+// Takes on the widget's icons, with the glyphs chosen for them (as the mod starts).
+void Load(const wchar_t* widgetName, int widgetOrder, std::span<const Icon> icons) {
+    g_widgetName = widgetName;
+    g_widgetOrder = widgetOrder;
+    g_icons = icons.first(std::min(icons.size(), kMaxIcons));
+    for (size_t i = 0; i < g_icons.size(); i++) {
+        int glyph = Storage::GetInt(StorageName(g_icons[i]).c_str(), 0);
+        g_glyphs[i] = IsGlyph(glyph) ? (wchar_t)glyph : g_icons[i].glyph;
+    }
+}
+
+// The icon's glyph now, as text for XAML or GDI+.
+std::wstring Glyph(size_t icon) {
+    return std::wstring(1, icon < g_icons.size() ? g_glyphs[icon].load() : L' ');
+}
+
+// Gives the icon another glyph, or its own back (0), and keeps it. False without such an icon.
+bool Set(std::wstring_view id, int glyph) {
+    for (size_t i = 0; i < g_icons.size(); i++) {
+        if (id != g_icons[i].id) {
+            continue;
+        }
+        if (IsGlyph(glyph) && glyph != g_icons[i].glyph) {
+            Storage::SetInt(StorageName(g_icons[i]).c_str(), glyph);
+            g_glyphs[i] = (wchar_t)glyph;
+        } else {
+            Storage::Delete(StorageName(g_icons[i]).c_str());
+            g_glyphs[i] = g_icons[i].glyph;
+        }
+        return true;
+    }
+    return false;
+}
+
+// A widget's icons, as the picker shows them.
+struct PickerIcon {
+    std::wstring id;
+    std::wstring name;
+    wchar_t glyph = 0;    // Its own.
+    wchar_t current = 0;  // The one it has now.
+};
+
+struct PickerWidget {
+    HWND window = nullptr;  // Its owner window, to set its icons.
+    std::wstring name;
+    int order = 0;
+    std::vector<PickerIcon> icons;
+};
+
+std::vector<std::wstring_view> SplitText(std::wstring_view text, wchar_t separator) {
+    std::vector<std::wstring_view> parts;
+    while (true) {
+        size_t end = text.find(separator);
+        parts.push_back(text.substr(0, end));
+        if (end == std::wstring_view::npos) {
+            return parts;
+        }
+        text.remove_prefix(end + 1);
+    }
+}
+
+// A whole number, or -1 if the text isn't one.
+int ParseNumber(std::wstring_view text) {
+    if (text.empty() || text.size() > 6) {
+        return -1;
+    }
+    int value = 0;
+    for (wchar_t c : text) {
+        if (c < L'0' || c > L'9') {
+            return -1;
+        }
+        value = value * 10 + (c - L'0');
+    }
+    return value;
+}
+
+// Whether the window is one of this Explorer's: the widgets only listen to each other.
+bool InThisProcess(HWND window) {
+    DWORD process = 0;
+    return window && GetWindowThreadProcessId(window, &process) && process == GetCurrentProcessId();
+}
+
+void Send(HWND to, HWND from, ULONG_PTR kind, const std::wstring& text) {
+    COPYDATASTRUCT data{kind, (DWORD)(text.size() * sizeof(wchar_t)), (void*)text.data()};
+    DWORD_PTR ignored = 0;
+    SendMessageTimeoutW(to, WM_COPYDATA, (WPARAM)from, (LPARAM)&data, SMTO_NORMAL | SMTO_ABORTIFHUNG, 2000, &ignored);
+}
+
+std::vector<PickerWidget>* g_collecting = nullptr;  // While asking the widgets for their icons.
+
+// Answers WM_COPYDATA sent to the owner window (self), on the app's thread. changed is set when one
+// of the widget's icons was given another glyph.
+LRESULT OnCopyData(HWND self, HWND from, const COPYDATASTRUCT& data, bool& changed) {
+    if (!InThisProcess(from) || data.cbData % sizeof(wchar_t) != 0 || (data.cbData && !data.lpData)) {
+        return FALSE;
+    }
+    std::wstring_view text((const wchar_t*)data.lpData, data.cbData / sizeof(wchar_t));
+    switch (data.dwData) {
+        case kQuery: {
+            std::wstring list = std::wstring(g_widgetName) + L"\t" + std::to_wstring(g_widgetOrder);
+            for (size_t i = 0; i < g_icons.size(); i++) {
+                list += std::wstring(L"\n") + g_icons[i].id + L"\t" + g_icons[i].name + L"\t" + std::to_wstring((int)g_icons[i].glyph) +
+                        L"\t" + std::to_wstring((int)g_glyphs[i].load());
+            }
+            Send(from, self, kList, list);
+            return TRUE;
+        }
+        case kList: {
+            if (!g_collecting) {
+                return FALSE;
+            }
+            std::vector<std::wstring_view> lines = SplitText(text, L'\n');
+            std::vector<std::wstring_view> head = SplitText(lines[0], L'\t');
+            if (head.size() != 2) {
+                return FALSE;
+            }
+            PickerWidget widget;
+            widget.window = from;
+            widget.name = head[0];
+            widget.order = ParseNumber(head[1]);
+            for (size_t i = 1; i < lines.size() && widget.icons.size() < kMaxIcons; i++) {
+                std::vector<std::wstring_view> fields = SplitText(lines[i], L'\t');
+                int glyph = fields.size() == 4 ? ParseNumber(fields[2]) : -1;
+                int current = fields.size() == 4 ? ParseNumber(fields[3]) : -1;
+                if (IsGlyph(glyph) && IsGlyph(current)) {
+                    widget.icons.push_back({std::wstring(fields[0]), std::wstring(fields[1]), (wchar_t)glyph, (wchar_t)current});
+                }
+            }
+            if (!widget.icons.empty()) {
+                g_collecting->push_back(std::move(widget));
+            }
+            return TRUE;
+        }
+        case kSet: {
+            std::vector<std::wstring_view> fields = SplitText(text, L'\t');
+            int glyph = fields.size() == 2 ? ParseNumber(fields[1]) : -1;
+            if (glyph != 0 && !IsGlyph(glyph)) {
+                return FALSE;
+            }
+            changed = Set(fields[0], glyph);
+            return changed;
+        }
+    }
+    return FALSE;
+}
+
+}  // namespace WidgetIcons
+
 // A hidden top-level window of the app's thread: it owns the app's dialogs, and hears when a
 // Windows setting or the devices change, which a window for messages only doesn't.
 class OwnerWindow {
@@ -1156,16 +1341,21 @@ public:
     std::function<void()> onSettingChange;
     std::function<void(WPARAM event)> onDeviceChange;
     std::function<void()> onTaskbarCreated;  // Explorer made the taskbar (as it started, say).
+    std::function<void()> onIconsChanged;    // The icon picker gave one of the widget's icons another glyph.
 
     bool Create(const wchar_t* className) {
         if (const wchar_t* registered = RegisterForwardingClass<OwnerWindow>(className)) {
             CreateWindowExW(WS_EX_TOOLWINDOW, registered, L"", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, ModuleInstance(), this);
+        }
+        if (hwnd_) {
+            SetPropW(hwnd_, WidgetIcons::kWindowProperty, (HANDLE)1);  // For the other widgets to find.
         }
         return hwnd_ != nullptr;
     }
 
     ~OwnerWindow() {
         if (hwnd_) {
+            RemovePropW(hwnd_, WidgetIcons::kWindowProperty);
             DestroyWindow(hwnd_);
         }
     }
@@ -1179,6 +1369,13 @@ public:
             onDeviceChange(wParam);
         } else if (message == TaskbarCreatedMessage() && onTaskbarCreated) {
             onTaskbarCreated();
+        } else if (message == WM_COPYDATA && lParam) {
+            bool changed = false;
+            result = WidgetIcons::OnCopyData(hwnd_, (HWND)wParam, *(const COPYDATASTRUCT*)lParam, changed);
+            if (changed && onIconsChanged) {
+                onIconsChanged();
+            }
+            return true;
         }
         return false;
     }
@@ -1467,15 +1664,47 @@ enum class Slot {
     Tray,         // Left of the notification area.
     SystemIcons,  // Left of the Wi-Fi, volume and battery icons.
     Clock,        // Left of the clock.
-    Left,         // The left end of the taskbar, over it (free when its icons are centered and the Widgets button is off).
+    Left,         // The left end of the taskbar, over it, right of the Widgets button (free when its icons are centered).
 };
 
+// The slots, as the Position setting and the widget's menu name them.
+struct SlotChoice {
+    Slot slot;
+    const wchar_t* setting;
+    const wchar_t* label;
+};
+
+constexpr SlotChoice kSlotChoices[] = {
+    {Slot::Tray, L"tray", L"Left of the notification area"},
+    {Slot::SystemIcons, L"systemIcons", L"Left of the Wi-Fi, volume and battery icons"},
+    {Slot::Clock, L"clock", L"Left of the clock"},
+    {Slot::Left, L"left", L"At the left end of the taskbar"},
+};
+
+// The slot chosen from the widget's menu, until the Position setting is changed; then the setting's.
 Slot ReadSlot() {
-    auto value = WindhawkUtils::StringSetting::make(L"position");
-    return wcscmp(value, L"systemIcons") == 0 ? Slot::SystemIcons
-           : wcscmp(value, L"clock") == 0     ? Slot::Clock
-           : wcscmp(value, L"left") == 0      ? Slot::Left
-                                              : Slot::Tray;
+    std::wstring setting = WindhawkUtils::StringSetting::make(L"position").get();
+    int chosen = Storage::GetInt(L"Position", -1);
+    if (chosen >= 0 && chosen <= (int)Slot::Left && Storage::GetString(L"PositionSetting") == setting) {
+        return (Slot)chosen;
+    }
+    if (chosen != -1) {
+        // The setting was changed after the slot was chosen: the setting wins.
+        Storage::Delete(L"Position");
+        Storage::Delete(L"PositionSetting");
+    }
+    for (const SlotChoice& choice : kSlotChoices) {
+        if (setting == choice.setting) {
+            return choice.slot;
+        }
+    }
+    return Slot::Tray;
+}
+
+// Keeps the slot chosen from the widget's menu, with the setting it was chosen over.
+void ChooseSlot(Slot slot) {
+    Storage::SetInt(L"Position", (int)slot);
+    Storage::SetString(L"PositionSetting", WindhawkUtils::StringSetting::make(L"position").get());
 }
 
 std::wstring PanelName(Slot slot) {
@@ -1598,6 +1827,8 @@ constexpr UINT kAttachedMessage = WM_APP + 0x300;     // The widget is in the ta
 constexpr UINT kClickMessage = WM_APP + 0x301;        // wParam: the part. lParam: the MouseButton.
 constexpr UINT kWheelMessage = WM_APP + 0x302;        // wParam: the part. lParam: notches (up is positive).
 constexpr UINT kMenuCommandMessage = WM_APP + 0x304;  // wParam: the command chosen in the menu.
+constexpr UINT kChangeIconsMessage = WM_APP + 0x305;  // Change icons… was chosen in the menu.
+constexpr UINT kChooseIconMessage = WM_APP + 0x306;   // wParam: the widget and icon in the picker. lParam: the glyph (0 for its own).
 
 enum class MouseButton { Left, Middle, Right };
 
@@ -1724,6 +1955,8 @@ void ForgetMenu(bool hide) {
     g_menuClicks->clear();
 }
 
+void ForgetIconPicker(bool hide);  // Below.
+
 class WidgetHost {
 public:
     // Puts the view's elements into the slot (once the taskbar's layout is ready, trying again
@@ -1741,6 +1974,7 @@ public:
     void Detach() {
         StopRetrying();
         ForgetMenu(true);
+        ForgetIconPicker(true);
         TakeOut();
         Forget();
     }
@@ -1750,6 +1984,8 @@ public:
     void Forget() {
         StopRetrying();
         ForgetMenu(false);
+        ForgetIconPicker(false);
+        StopFollowingWidgetsButton();
         g_menuTarget = nullptr;
         element_ = nullptr;
         if (view_) {
@@ -1758,6 +1994,16 @@ public:
     }
 
     wux::FrameworkElement Element() const { return element_; }
+
+    Slot CurrentSlot() const { return slot_; }
+
+    // Moves the widget to another slot, chosen from its menu, to stay there.
+    void MoveTo(Slot slot) {
+        if (slot != slot_ && taskbar_) {
+            ChooseSlot(slot);
+            Attach(taskbar_, slot, view_);
+        }
+    }
 
     // Whether there's another widget on the left (direction -1) or right (1) in the slot.
     bool CanMove(int direction) {
@@ -1788,12 +2034,20 @@ public:
 
 private:
     void TakeOut() {
+        StopFollowingWidgetsButton();
         try {
             if (element_) {
                 if (auto panel = wuxm::VisualTreeHelper::GetParent(element_).try_as<wuxc::StackPanel>()) {
                     uint32_t index = 0;
                     if (panel.Children().IndexOf(element_, index)) {
                         panel.Children().RemoveAt(index);
+                    }
+                    if (slot_ == Slot::Left && panel.Children().Size() > 0) {
+                        // Back to the left end for the widgets left in it; those that follow the
+                        // Widgets button place it past the button again.
+                        wux::Thickness margin = panel.Margin();
+                        margin.Left = 0;
+                        panel.Margin(margin);
                     }
                     RemovePanelIfEmpty(panel);
                 }
@@ -1829,6 +2083,9 @@ private:
                 }
             }
             panel.Children().InsertAt(index, element_);
+            if (slot_ == Slot::Left) {
+                FollowWidgetsButton();
+            }
             g_bridge->SetDispatcher(element_.Dispatcher(), taskbar_);
             PostToApp(kAttachedMessage, 0, 0);
         } catch (...) {
@@ -1872,10 +2129,78 @@ private:
         }
     }
 
+    // At the left end, the slot's panel goes right of the Widgets button (the weather), which is
+    // there while the taskbar's icons are centered and Widgets is on. It's placed again after each
+    // layout of the taskbar, as the button comes and goes, and its width changes with the weather.
+    // The other widgets in the panel place it too, at the same place.
+    void FollowWidgetsButton() {
+        layoutRevoker_ = element_.LayoutUpdated(winrt::auto_revoke, [this](auto const&, auto const&) { PlacePastWidgetsButton(); });
+        PlacePastWidgetsButton();
+    }
+
+    void StopFollowingWidgetsButton() {
+        layoutRevoker_.revoke();
+        widgetsButton_ = nullptr;
+    }
+
+    void PlacePastWidgetsButton() {
+        try {
+            auto panel = element_ ? wuxm::VisualTreeHelper::GetParent(element_).try_as<wuxc::StackPanel>() : nullptr;
+            auto grid = panel ? wuxm::VisualTreeHelper::GetParent(panel).try_as<wuxc::Grid>() : nullptr;
+            if (!grid) {
+                return;
+            }
+            double left = widgetsButton_ ? WidgetsButtonEnd(widgetsButton_, grid) : 0;
+            if (left <= 0) {
+                widgetsButton_ = FindWidgetsButton(grid, grid, 3);
+                left = widgetsButton_ ? WidgetsButtonEnd(widgetsButton_, grid) : 0;
+            }
+            wux::Thickness margin = panel.Margin();
+            if (std::abs(margin.Left - left) >= 0.5) {
+                margin.Left = left;
+                panel.Margin(margin);
+            }
+        } catch (...) {
+        }
+    }
+
+    // Where the Widgets button ends in the grid, when it's shown at the left end; otherwise 0. With the
+    // taskbar's icons on the left, it's elsewhere, and one the taskbar has put aside is far off to
+    // the left.
+    static double WidgetsButtonEnd(wux::FrameworkElement const& button, wuxc::Grid const& grid) {
+        try {
+            if (button.Visibility() != wux::Visibility::Visible || button.ActualWidth() <= 0) {
+                return 0;
+            }
+            double start = button.TransformToVisual(grid).TransformPoint(winrt::Windows::Foundation::Point{0, 0}).X;
+            return start >= 0 && start < grid.ActualWidth() / 2 ? start + button.ActualWidth() : 0;
+        } catch (...) {
+            return 0;  // Out of the taskbar's layout.
+        }
+    }
+
+    // The Widgets button shown at the left end, among the elements of its name.
+    static wux::FrameworkElement FindWidgetsButton(wux::DependencyObject const& parent, wuxc::Grid const& grid, int depth) {
+        int count = depth > 0 ? wuxm::VisualTreeHelper::GetChildrenCount(parent) : 0;
+        for (int i = 0; i < count; i++) {
+            auto child = wuxm::VisualTreeHelper::GetChild(parent, i);
+            if (auto element = child.try_as<wux::FrameworkElement>();
+                element && element.Name() == L"AugmentedEntryPointButton" && WidgetsButtonEnd(element, grid) > 0) {
+                return element;
+            }
+            if (auto found = FindWidgetsButton(child, grid, depth - 1)) {
+                return found;
+            }
+        }
+        return nullptr;
+    }
+
     HWND taskbar_ = nullptr;
     Slot slot_ = Slot::Tray;
     View* view_ = nullptr;
     wux::FrameworkElement element_{nullptr};
+    wux::FrameworkElement::LayoutUpdated_revoker layoutRevoker_;
+    wux::FrameworkElement widgetsButton_{nullptr};  // The Widgets button, once found, at the left end.
     UINT_PTR retryTimer_ = 0;
     static inline WidgetHost* retrying_ = nullptr;
     int attempts_ = 0;
@@ -2180,13 +2505,16 @@ void AddMenuEntries(winrt::Windows::Foundation::Collections::IVector<wuxc::MenuF
     }
 }
 
-// Commands of the widget's own, for moving it among the others in its slot.
+// Commands of the widget's own: moving it among the others in its slot, the widgets' icons, and
+// putting it in another slot (down from kFirstSlotCommand, one for each of kSlotChoices).
 constexpr int kMoveLeftCommand = -1;
 constexpr int kMoveRightCommand = -2;
+constexpr int kChangeIconsCommand = -3;
+constexpr int kFirstSlotCommand = -10;
 
-// Opens the menu where the widget was last right-clicked, with Move left and Move right when other
-// widgets share its slot. The chosen item goes to the app once the menu has closed, so what it
-// does (a screenshot, say) doesn't have the menu in it.
+// Opens the menu where the widget was last right-clicked, with Position, Move left and Move right
+// when other widgets share its slot, and Change icons…. The chosen item goes to the app once the
+// menu has closed, so what it does (a screenshot, say) doesn't have the menu in it.
 void ShowMenu(const std::vector<MenuEntry>& entries) {
     auto target = g_menuTarget && g_menuTarget.XamlRoot() ? g_menuTarget : g_host->Element();
     if (!target || !target.XamlRoot()) {
@@ -2196,8 +2524,25 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
     auto chosen = std::make_shared<int>(0);
     wuxc::MenuFlyout menu;
     AddMenuEntries(menu.Items(), entries, chosen);
+    menu.Items().Append(wuxc::MenuFlyoutSeparator());
+    wuxc::MenuFlyoutSubItem position;
+    position.Text(L"Position");
+    for (size_t i = 0; i < std::size(kSlotChoices); i++) {
+        wuxc::MenuFlyoutItem item{nullptr};
+        if (kSlotChoices[i].slot == g_host->CurrentSlot()) {
+            wuxc::ToggleMenuFlyoutItem toggle;
+            toggle.IsChecked(true);
+            item = toggle;
+        } else {
+            item = wuxc::MenuFlyoutItem();
+        }
+        item.Text(kSlotChoices[i].label);
+        int command = kFirstSlotCommand - (int)i;
+        g_menuClicks->push_back(item.Click(winrt::auto_revoke, [chosen, command](auto const&, auto const&) { *chosen = command; }));
+        position.Items().Append(item);
+    }
+    menu.Items().Append(position);
     if (g_host->CanMove(-1) || g_host->CanMove(1)) {
-        menu.Items().Append(wuxc::MenuFlyoutSeparator());
         for (int command : {kMoveLeftCommand, kMoveRightCommand}) {
             wuxc::MenuFlyoutItem item;
             item.Text(command == kMoveLeftCommand ? L"Move left" : L"Move right");
@@ -2206,13 +2551,21 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
             menu.Items().Append(item);
         }
     }
+    wuxc::MenuFlyoutItem icons;
+    icons.Text(L"Change icons…");
+    g_menuClicks->push_back(icons.Click(winrt::auto_revoke, [chosen](auto const&, auto const&) { *chosen = kChangeIconsCommand; }));
+    menu.Items().Append(icons);
     g_menuClosed = menu.Closed([chosen](auto const& sender, auto const&) {
         if (g_menu == sender) {
             ForgetMenu(false);  // This handler too, which runs to its end.
         }
         if (*chosen == kMoveLeftCommand || *chosen == kMoveRightCommand) {
             g_host->Move(*chosen == kMoveLeftCommand ? -1 : 1);
-        } else if (*chosen) {
+        } else if (*chosen == kChangeIconsCommand) {
+            PostToApp(kChangeIconsMessage, 0, 0);
+        } else if (*chosen <= kFirstSlotCommand && kFirstSlotCommand - *chosen < (int)std::size(kSlotChoices)) {
+            g_host->MoveTo(kSlotChoices[kFirstSlotCommand - *chosen].slot);
+        } else if (*chosen > 0) {
             PostToApp(kMenuCommandMessage, *chosen, 0);
         }
     });
@@ -2224,7 +2577,359 @@ void ShowMenu(const std::vector<MenuEntry>& entries) {
     menu.ShowAt(target, options);
 }
 
+// ---- The icon picker: the icons of every widget running, and the icon font's glyphs to give them
+
+// The Windows icon font's glyphs, from its own list of its characters (read once).
+const std::vector<wchar_t>& FontGlyphs() {
+    static const std::vector<wchar_t> glyphs = [] {
+        std::vector<wchar_t> found;
+        HDC dc = CreateCompatibleDC(nullptr);
+        HFONT font = CreateFontW(-32, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 DEFAULT_QUALITY, DEFAULT_PITCH, L"Segoe Fluent Icons");
+        if (dc && font) {
+            HGDIOBJ previous = SelectObject(dc, font);
+            if (DWORD size = GetFontUnicodeRanges(dc, nullptr)) {
+                std::vector<BYTE> buffer(size);
+                auto set = (GLYPHSET*)buffer.data();
+                if (GetFontUnicodeRanges(dc, set)) {
+                    for (DWORD i = 0; i < set->cRanges; i++) {
+                        int low = set->ranges[i].wcLow;
+                        for (int c = low; c < low + set->ranges[i].cGlyphs; c++) {
+                            if (WidgetIcons::IsGlyph(c)) {
+                                found.push_back((wchar_t)c);
+                            }
+                        }
+                    }
+                }
+            }
+            SelectObject(dc, previous);
+        }
+        if (font) {
+            DeleteObject(font);
+        }
+        if (dc) {
+            DeleteDC(dc);
+        }
+        return found;
+    }();
+    return glyphs;
+}
+
+// A flyout over the widget with every running widget's icons: choose one, then a glyph for it from
+// the font's, or type its code. Each choice goes to the app at once, which passes it to the icon's
+// widget.
+class IconPicker {
+public:
+    void Show(std::vector<WidgetIcons::PickerWidget> widgets, wux::FrameworkElement const& target) {
+        Forget(true);
+        widgets_ = std::move(widgets);
+        if (widgets_.empty()) {
+            return;
+        }
+        wuxc::StackPanel panel;
+        panel.Width(420);
+        auto title = Text(L"Icons", 14);
+        title.FontWeight(winrt::Windows::UI::Text::FontWeight{600});
+        panel.Children().Append(title);
+        auto hint = Text(L"Choose an icon, then a glyph for it.", 12);
+        hint.Opacity(0.75);
+        hint.Margin(wux::ThicknessHelper::FromLengths(0, 2, 0, 0));
+        panel.Children().Append(hint);
+        for (size_t w = 0; w < widgets_.size(); w++) {
+            auto name = Text(widgets_[w].name, 12);
+            name.Opacity(0.75);
+            name.Margin(wux::ThicknessHelper::FromLengths(0, 12, 0, 4));
+            panel.Children().Append(name);
+            wuxc::VariableSizedWrapGrid tiles;
+            tiles.Orientation(wuxc::Orientation::Horizontal);
+            tiles.ItemWidth(70);
+            tiles.ItemHeight(62);
+            for (size_t i = 0; i < widgets_[w].icons.size(); i++) {
+                tiles.Children().Append(MakeTile(w, i));
+            }
+            panel.Children().Append(tiles);
+        }
+
+        // The chosen icon, its glyph's code, and its own glyph back.
+        wuxc::Grid row;
+        row.Margin(wux::ThicknessHelper::FromLengths(0, 12, 0, 6));
+        for (auto width : {wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star), wux::GridLengthHelper::Auto(),
+                           wux::GridLengthHelper::Auto()}) {
+            wuxc::ColumnDefinition column;
+            column.Width(width);
+            row.ColumnDefinitions().Append(column);
+        }
+        selected_ = Text(L"", 12);
+        selected_.VerticalAlignment(wux::VerticalAlignment::Center);
+        selected_.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+        row.Children().Append(selected_);
+        code_ = wuxc::TextBox();
+        code_.Width(84);
+        code_.MaxLength(6);
+        code_.PlaceholderText(L"Code");
+        code_.Margin(wux::ThicknessHelper::FromLengths(8, 0, 0, 0));
+        wux::Automation::AutomationProperties::SetName(code_, L"Glyph code");
+        wuxc::Grid::SetColumn(code_, 1);
+        codeKey_ = code_.KeyDown(winrt::auto_revoke, [this](auto const&, wux::Input::KeyRoutedEventArgs const& args) {
+            if (args.Key() == winrt::Windows::System::VirtualKey::Enter) {
+                args.Handled(true);
+                ChooseCode();
+            }
+        });
+        row.Children().Append(code_);
+        wuxc::Button reset;
+        reset.Content(winrt::box_value(L"Default"));
+        reset.Margin(wux::ThicknessHelper::FromLengths(8, 0, 0, 0));
+        wuxc::Grid::SetColumn(reset, 2);
+        resetClick_ = reset.Click(winrt::auto_revoke, [this](auto const&, auto const&) {
+            if (auto icon = Selected()) {
+                Choose(icon->glyph);
+            }
+        });
+        row.Children().Append(reset);
+        panel.Children().Append(row);
+
+        // The font's glyphs. Its own collection holds them, so nothing of the mod's stays in XAML.
+        grid_ = wuxc::GridView();
+        grid_.Height(180);
+        grid_.SelectionMode(wuxc::ListViewSelectionMode::Single);
+        grid_.IsItemClickEnabled(true);
+        grid_.ItemTemplate(wux::Markup::XamlReader::Load(L"<DataTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\">"
+                                                         L"<FontIcon Glyph=\"{Binding}\" FontFamily=\"Segoe Fluent Icons\" FontSize=\"20\" "
+                                                         L"Width=\"32\" Height=\"32\"/></DataTemplate>")
+                               .as<wux::DataTemplate>());
+        for (wchar_t glyph : FontGlyphs()) {
+            grid_.Items().Append(winrt::box_value(winrt::hstring(&glyph, 1)));
+        }
+        itemClick_ = grid_.ItemClick(winrt::auto_revoke, [this](auto const&, wuxc::ItemClickEventArgs const& args) {
+            winrt::hstring glyph = winrt::unbox_value_or<winrt::hstring>(args.ClickedItem(), L"");
+            if (glyph.size() == 1) {
+                Choose(glyph[0]);
+            }
+        });
+        panel.Children().Append(grid_);
+
+        flyout_ = wuxc::Flyout();
+        flyout_.ShouldConstrainToRootBounds(false);  // Above the taskbar, outside its XAML.
+        flyout_.Content(panel);
+        closed_ = flyout_.Closed(winrt::auto_revoke, [this](auto const&, auto const&) { Forget(false); });
+        Select(0, 0);
+        wuxc::Primitives::FlyoutShowOptions options;
+        options.Placement(wuxc::Primitives::FlyoutPlacementMode::Top);
+        flyout_.ShowAt(target, options);
+    }
+
+    // Lets go of it, hiding it first if asked, with the mod's handlers taken off: as it closes, or
+    // the widget goes.
+    void Forget(bool hide) {
+        closed_.revoke();
+        if (hide && flyout_) {
+            try {
+                flyout_.Hide();
+            } catch (...) {
+            }
+        }
+        codeKey_.revoke();
+        resetClick_.revoke();
+        itemClick_.revoke();
+        tiles_.clear();
+        flyout_ = nullptr;
+        grid_ = nullptr;
+        code_ = nullptr;
+        selected_ = nullptr;
+        widgets_.clear();
+    }
+
+private:
+    struct Tile {
+        size_t widget = 0;
+        size_t icon = 0;
+        wuxc::Primitives::ToggleButton button{nullptr};
+        wuxc::FontIcon glyph{nullptr};
+        wuxc::Primitives::ButtonBase::Click_revoker click;
+    };
+
+    static wuxc::TextBlock Text(const std::wstring& text, double size) {
+        wuxc::TextBlock block;
+        block.Text(text);
+        block.FontSize(size);
+        return block;
+    }
+
+    static std::wstring HexCode(wchar_t glyph) {
+        std::wstring code;
+        for (int shift = 12; shift >= 0; shift -= 4) {
+            code += L"0123456789ABCDEF"[(glyph >> shift) & 0xF];
+        }
+        return code;
+    }
+
+    wuxc::Primitives::ToggleButton MakeTile(size_t widget, size_t icon) {
+        const WidgetIcons::PickerIcon& item = widgets_[widget].icons[icon];
+        wuxc::StackPanel content;
+        auto glyph = MakeGlyph(std::wstring(1, item.current).c_str(), 20);
+        glyph.HorizontalAlignment(wux::HorizontalAlignment::Center);
+        content.Children().Append(glyph);
+        auto name = Text(item.name, 11);
+        name.HorizontalAlignment(wux::HorizontalAlignment::Center);
+        name.TextTrimming(wux::TextTrimming::CharacterEllipsis);
+        name.MaxWidth(60);
+        name.Margin(wux::ThicknessHelper::FromLengths(0, 4, 0, 0));
+        content.Children().Append(name);
+        wuxc::Primitives::ToggleButton button;
+        button.Width(66);
+        button.Height(58);
+        button.Padding(wux::ThicknessHelper::FromLengths(3, 4, 3, 4));
+        button.Content(content);
+        wuxc::ToolTipService::SetToolTip(button, winrt::box_value(winrt::hstring(item.name)));
+        wux::Automation::AutomationProperties::SetName(button, item.name);
+        Tile tile;
+        tile.widget = widget;
+        tile.icon = icon;
+        tile.button = button;
+        tile.glyph = glyph;
+        tile.click = button.Click(winrt::auto_revoke, [this, widget, icon](auto const&, auto const&) { Select(widget, icon); });
+        tiles_.push_back(std::move(tile));
+        return button;
+    }
+
+    WidgetIcons::PickerIcon* Selected() {
+        if (selectedWidget_ >= widgets_.size() || selectedIcon_ >= widgets_[selectedWidget_].icons.size()) {
+            return nullptr;
+        }
+        return &widgets_[selectedWidget_].icons[selectedIcon_];
+    }
+
+    void Select(size_t widget, size_t icon) {
+        selectedWidget_ = widget;
+        selectedIcon_ = icon;
+        for (Tile& tile : tiles_) {
+            tile.button.IsChecked(tile.widget == widget && tile.icon == icon);
+        }
+        ShowSelected();
+    }
+
+    // The chosen icon's name and glyph, picked out among the font's.
+    void ShowSelected() {
+        WidgetIcons::PickerIcon* icon = Selected();
+        if (!icon) {
+            return;
+        }
+        selected_.Text(icon->name + L" (" + widgets_[selectedWidget_].name + L")");
+        code_.Text(HexCode(icon->current));
+        const std::vector<wchar_t>& glyphs = FontGlyphs();
+        auto found = std::find(glyphs.begin(), glyphs.end(), icon->current);
+        if (found == glyphs.end()) {
+            grid_.SelectedIndex(-1);
+            return;
+        }
+        int index = (int)(found - glyphs.begin());
+        grid_.SelectedIndex(index);
+        grid_.ScrollIntoView(grid_.Items().GetAt(index));
+    }
+
+    // Gives the chosen icon the glyph, and tells the app, which passes it to the icon's widget.
+    void Choose(wchar_t glyph) {
+        WidgetIcons::PickerIcon* icon = Selected();
+        if (!icon || !WidgetIcons::IsGlyph(glyph)) {
+            return;
+        }
+        icon->current = glyph;
+        for (Tile& tile : tiles_) {
+            if (tile.widget == selectedWidget_ && tile.icon == selectedIcon_) {
+                tile.glyph.Glyph(std::wstring(1, glyph));
+            }
+        }
+        ShowSelected();
+        PostToApp(kChooseIconMessage, (selectedWidget_ << 8) | selectedIcon_, glyph == icon->glyph ? 0 : glyph);
+    }
+
+    // The glyph whose code was typed: "E7C8", "U+E7C8" or "0xE7C8".
+    void ChooseCode() {
+        std::wstring text(code_.Text());
+        for (const wchar_t* prefix : {L"U+", L"u+", L"0x", L"0X"}) {
+            if (text.starts_with(prefix)) {
+                text.erase(0, 2);
+            }
+        }
+        wchar_t* end = nullptr;
+        unsigned long code = text.empty() ? 0 : wcstoul(text.c_str(), &end, 16);
+        if (end && *end == 0 && WidgetIcons::IsGlyph((int)code)) {
+            Choose((wchar_t)code);
+        } else {
+            ShowSelected();  // Back to the glyph it has.
+        }
+    }
+
+    std::vector<WidgetIcons::PickerWidget> widgets_;
+    size_t selectedWidget_ = 0;
+    size_t selectedIcon_ = 0;
+    std::vector<Tile> tiles_;
+    wuxc::Flyout flyout_{nullptr};
+    wuxc::GridView grid_{nullptr};
+    wuxc::TextBox code_{nullptr};
+    wuxc::TextBlock selected_{nullptr};
+    wuxc::Primitives::FlyoutBase::Closed_revoker closed_;
+    wux::UIElement::KeyDown_revoker codeKey_;
+    wuxc::Primitives::ButtonBase::Click_revoker resetClick_;
+    wuxc::ListViewBase::ItemClick_revoker itemClick_;
+};
+
+[[clang::no_destroy]] std::optional<IconPicker> g_iconPicker{std::in_place};  // Not destroyed: see g_bridge.
+
+void ForgetIconPicker(bool hide) {
+    if (g_iconPicker) {
+        g_iconPicker->Forget(hide);
+    }
+}
+
+// Opens the icon picker where the widget was last right-clicked, with the icons the app gathered.
+void ShowIconPicker(std::vector<WidgetIcons::PickerWidget> widgets) {
+    auto target = g_menuTarget && g_menuTarget.XamlRoot() ? g_menuTarget : g_host->Element();
+    if (target && target.XamlRoot() && g_iconPicker) {
+        g_iconPicker->Show(std::move(widgets), target);
+    }
+}
+
 }  // namespace TaskbarXaml
+
+namespace WidgetIcons {
+
+std::vector<PickerWidget> g_pickerWidgets;  // The widgets in the picker last opened (on the app's thread).
+
+BOOL CALLBACK FindWidget(HWND window, LPARAM found) {
+    if (GetPropW(window, kWindowProperty) && InThisProcess(window)) {
+        ((std::vector<HWND>*)found)->push_back(window);
+    }
+    return TRUE;
+}
+
+// Asks every widget running in this Explorer for its icons, this one's too, and opens the picker
+// with them. On the app's thread: owner is the app's owner window, where the answers come.
+void OpenPicker(HWND owner) {
+    std::vector<HWND> windows;
+    EnumWindows(FindWidget, (LPARAM)&windows);
+    std::vector<PickerWidget> widgets;
+    g_collecting = &widgets;
+    for (HWND window : windows) {
+        Send(window, owner, kQuery, L"");
+    }
+    g_collecting = nullptr;
+    std::stable_sort(widgets.begin(), widgets.end(), [](const PickerWidget& a, const PickerWidget& b) { return a.order < b.order; });
+    g_pickerWidgets = widgets;
+    TaskbarXaml::g_bridge->Post([widgets]() { TaskbarXaml::ShowIconPicker(widgets); });
+}
+
+// Passes a glyph chosen in the picker (0 for the icon's own) to the icon's widget.
+void Choose(HWND owner, WPARAM which, LPARAM glyph) {
+    size_t widget = which >> 8;
+    size_t icon = which & 0xFF;
+    if (widget < g_pickerWidgets.size() && icon < g_pickerWidgets[widget].icons.size()) {
+        Send(g_pickerWidgets[widget].window, owner, kSet, g_pickerWidgets[widget].icons[icon].id + L"\t" + std::to_wstring((int)glyph));
+    }
+}
+
+}  // namespace WidgetIcons
 
 // Worker threads (switching the webcam) whose results come back to the UI thread as messages.
 // Finished ones are closed as new ones start.
@@ -2978,28 +3683,38 @@ const wchar_t* const kGlyphTvMonitor = L"\uE7F4";
 const wchar_t* const kGlyphMicrophone = L"\uE720";
 const wchar_t* const kGlyphVideo = L"\uE714";
 
+// The widget's icons in kIcons, whose glyphs can be changed.
+constexpr size_t kSpeakersIcon = 0;
+constexpr size_t kHeadphonesIcon = 1;
+constexpr size_t kHeadsetIcon = 2;
+constexpr size_t kDisplayIcon = 3;
+constexpr size_t kMicrophoneIcon = 4;
+constexpr size_t kMutedOutputIcon = 5;
+constexpr size_t kMutedInputIcon = 6;
+constexpr size_t kWebcamIcon = 7;
+
 // The glyph for a muted (or missing) output or input: a struck-through speaker or microphone.
-const wchar_t* MutedGlyph(EDataFlow flow) {
-    return flow == eCapture ? kGlyphMicOff : kGlyphMute;
+std::wstring MutedGlyph(EDataFlow flow) {
+    return WidgetIcons::Glyph(flow == eCapture ? kMutedInputIcon : kMutedOutputIcon);
 }
 
 // The glyph for the output's or input's kind, or the muted one when there's no device. Inputs of
 // other kinds (line in, S/PDIF, Remote Audio) are microphones, and outputs of other kinds speakers.
-const wchar_t* GlyphFor(EDataFlow flow, const std::optional<AudioStatus>& status) {
+std::wstring GlyphFor(EDataFlow flow, const std::optional<AudioStatus>& status) {
     if (!status) {
         return MutedGlyph(flow);
     }
     switch (status->device.kind) {
         case DeviceKind::Headphones:
-            return kGlyphHeadphone;
+            return WidgetIcons::Glyph(kHeadphonesIcon);
         case DeviceKind::Headset:
-            return kGlyphHeadset;
+            return WidgetIcons::Glyph(kHeadsetIcon);
         case DeviceKind::Display:
-            return kGlyphTvMonitor;
+            return WidgetIcons::Glyph(kDisplayIcon);
         case DeviceKind::Microphone:
-            return kGlyphMicrophone;
+            return WidgetIcons::Glyph(kMicrophoneIcon);
         default:
-            return flow == eCapture ? kGlyphMicrophone : kGlyphSpeakers;
+            return WidgetIcons::Glyph(flow == eCapture ? kMicrophoneIcon : kSpeakersIcon);
     }
 }
 
@@ -3034,7 +3749,7 @@ gp::RectF DrawGlyphAtSize(gp::Graphics& graphics, const wchar_t* glyph, float em
 void DrawDeviceIcon(gp::Graphics& graphics, EDataFlow flow, const std::optional<AudioStatus>& status, const gp::RectF& bounds,
                     const gp::Color& color) {
     bool muted = status && status->muted;
-    DrawGlyphAtSize(graphics, muted ? MutedGlyph(flow) : GlyphFor(flow, status), bounds.Height * 0.75f, bounds, color);
+    DrawGlyphAtSize(graphics, (muted ? MutedGlyph(flow) : GlyphFor(flow, status)).c_str(), bounds.Height * 0.75f, bounds, color);
 }
 
 // ---------------------------------------------------------------------------
@@ -3187,8 +3902,10 @@ WebcamChange SetWebcamEnabled(const std::wstring& instanceId, bool enable, HWND 
 struct Settings {
     bool switchCommunications = true;       // Also make the new output the default communications device.
     bool switchInputCommunications = true;  // Also make the new input the default communications device.
-    bool showPopup = true;                  // Show the popup when the output changes (while the widget isn't showing it).
+    bool showPopup = true;                  // Show a popup when the output (or input) changes, while the widget isn't showing its name.
     bool volumeDing = true;                 // Play the Windows "Default Beep" after changing the output volume.
+    bool iconsOnly = false;                 // The sections show their icons, without names and volumes.
+    bool hoverFlyout = true;                // Hovering the output or input opens its volume flyout.
     bool showOutput = true;
     bool showInput = false;
     bool showWebcam = false;
@@ -3225,7 +3942,7 @@ struct Settings {
 
     // Names a webcam; an empty name goes back to the device's own name.
     void SetWebcamNickname(const std::wstring& instanceId, std::wstring nickname) {
-        // Settings are stored one per line, so keep names to a single line.
+        // Each name is a stored value of its own, so keep it to a single line.
         for (wchar_t& c : nickname) {
             if (c == L'\r' || c == L'\n' || c == L'\t') {
                 c = L' ';
@@ -3256,38 +3973,117 @@ struct Settings {
         switchInputCommunications = Storage::GetInt(L"SwitchInputCommunications", switchInputCommunications) != 0;
         showPopup = Storage::GetInt(L"ShowPopup", showPopup) != 0;
         volumeDing = Storage::GetInt(L"VolumeDing", volumeDing) != 0;
+        iconsOnly = Storage::GetInt(L"IconsOnly", iconsOnly) != 0;
+        hoverFlyout = Storage::GetInt(L"HoverFlyout", hoverFlyout) != 0;
         showOutput = Storage::GetInt(L"ShowOutput", showOutput) != 0;
         showInput = Storage::GetInt(L"ShowInput", showInput) != 0;
         showWebcam = Storage::GetInt(L"ShowWebcam", showWebcam) != 0;
         webcamId = Storage::GetString(L"WebcamId");
         webcamName = Storage::GetString(L"WebcamName");
-        for (const std::wstring& id : Split(Storage::GetString(L"Excluded"), L'\n')) {
-            SetExcluded(id, true);
+        int excludedCount = Storage::GetInt(L"ExcludedCount", -1);
+        if (excludedCount < 0) {
+            // Saved before 1.5.0, each list in one value. Once they're saved in the new form, the
+            // old values go; if saving fails, the count goes, so they're read again next time.
+            LoadOldLists();
+            if (Save()) {
+                Storage::Delete(L"Excluded");
+                Storage::Delete(L"WebcamNicknames");
+            } else {
+                Storage::Delete(L"ExcludedCount");
+            }
+            return;
         }
-        for (const std::wstring& line : Split(Storage::GetString(L"WebcamNicknames"), L'\n')) {
-            AddNicknameLine(line);
+        for (int i = 0; i < excludedCount; i++) {
+            std::wstring id = Storage::GetString(EntryName(L"Excluded", i).c_str());
+            if (!id.empty()) {
+                SetExcluded(id, true);
+            }
+        }
+        int nicknameCount = Storage::GetInt(L"WebcamNicknameCount", 0);
+        for (int i = 0; i < nicknameCount; i++) {
+            std::wstring id = Storage::GetString(EntryName(L"WebcamNickname", i, L"Id").c_str());
+            if (!id.empty()) {
+                SetWebcamNickname(id, Storage::GetString(EntryName(L"WebcamNickname", i, L"Name").c_str()));
+            }
         }
     }
 
     bool Save() const {
-        std::vector<std::wstring> nicknameLines;
-        for (const auto& [id, nickname] : webcamNicknames) {
-            nicknameLines.push_back(id + L"\t" + nickname);
-        }
         bool saved = Storage::SetInt(L"SwitchCommunications", switchCommunications);
         saved = Storage::SetInt(L"SwitchInputCommunications", switchInputCommunications) && saved;
         saved = Storage::SetInt(L"ShowPopup", showPopup) && saved;
         saved = Storage::SetInt(L"VolumeDing", volumeDing) && saved;
+        saved = Storage::SetInt(L"IconsOnly", iconsOnly) && saved;
+        saved = Storage::SetInt(L"HoverFlyout", hoverFlyout) && saved;
         saved = Storage::SetInt(L"ShowOutput", showOutput) && saved;
         saved = Storage::SetInt(L"ShowInput", showInput) && saved;
         saved = Storage::SetInt(L"ShowWebcam", showWebcam) && saved;
         saved = Storage::SetString(L"WebcamId", webcamId) && saved;
         saved = Storage::SetString(L"WebcamName", webcamName) && saved;
-        saved = Storage::SetString(L"Excluded", Join(excluded, L"\n")) && saved;
-        return Storage::SetString(L"WebcamNicknames", Join(nicknameLines, L"\n")) && saved;
+        for (int i = 0; i < (int)excluded.size(); i++) {
+            saved = Storage::SetString(EntryName(L"Excluded", i).c_str(), excluded[i]) && saved;
+        }
+        saved = SaveCount(L"Excluded", (int)excluded.size(), {L""}) && saved;
+        for (int i = 0; i < (int)webcamNicknames.size(); i++) {
+            saved = Storage::SetString(EntryName(L"WebcamNickname", i, L"Id").c_str(), webcamNicknames[i].first) && saved;
+            saved = Storage::SetString(EntryName(L"WebcamNickname", i, L"Name").c_str(), webcamNicknames[i].second) && saved;
+        }
+        return SaveCount(L"WebcamNickname", (int)webcamNicknames.size(), {L"Id", L"Name"}) && saved;
     }
 
 private:
+    // The lists are kept one value per entry, numbered from 0, with a count: a stored value can't
+    // hold line breaks in portable Windhawk, which keeps the mod's storage in an INI file.
+    static std::wstring EntryName(const wchar_t* list, int index, const wchar_t* field = L"") {
+        return list + std::to_wstring(index) + field;
+    }
+
+    // Saves a list's count, then deletes the entries a longer list left past it.
+    static bool SaveCount(const wchar_t* list, int count, std::initializer_list<const wchar_t*> fields) {
+        std::wstring countName = std::wstring(list) + L"Count";
+        int previous = Storage::GetInt(countName.c_str(), 0);
+        bool saved = Storage::SetInt(countName.c_str(), count);
+        for (int i = count; i < previous; i++) {
+            for (const wchar_t* field : fields) {
+                Storage::Delete(EntryName(list, i, field).c_str());
+            }
+        }
+        return saved;
+    }
+
+    // Before 1.5.0 each list was one value, its entries on separate lines. Portable Windhawk 1.7
+    // saved those line breaks as spaces (1.6 and earlier kept only the first line), so a space
+    // separates entries too: neither endpoint IDs nor device instance IDs contain one, and a
+    // webcam's ID starts after the last space or line break before the tab that ends it
+    // ("<instance ID><tab><name>" for each webcam).
+    void LoadOldLists() {
+        std::wstring excludedIds = Storage::GetString(L"Excluded");
+        std::replace(excludedIds.begin(), excludedIds.end(), L' ', L'\n');
+        for (const std::wstring& id : Split(excludedIds, L'\n')) {
+            SetExcluded(id, true);
+        }
+        std::wstring nicknames = Storage::GetString(L"WebcamNicknames");
+        std::wstring id;
+        size_t start = 0;
+        while (true) {
+            size_t tab = nicknames.find(L'\t', start);
+            std::wstring part = nicknames.substr(start, tab == std::wstring::npos ? std::wstring::npos : tab - start);
+            if (tab == std::wstring::npos) {
+                if (!id.empty()) {
+                    SetWebcamNickname(id, part);
+                }
+                return;
+            }
+            // The part before a tab is the previous webcam's name (if any) and this webcam's ID.
+            size_t cut = part.find_last_of(L" \n");
+            if (!id.empty() && cut != std::wstring::npos) {
+                SetWebcamNickname(id, part.substr(0, cut));
+            }
+            id = cut == std::wstring::npos ? part : part.substr(cut + 1);
+            start = tab + 1;
+        }
+    }
+
     // AudioFlipper.exe's settings.txt has "key=value" lines.
     void Import() {
         std::wstring path = KnownFolder(FOLDERID_RoamingAppData) + L"\\AudioFlipper\\settings.txt";
@@ -3355,6 +4151,8 @@ struct WebcamStatus {
 struct WidgetContent {
     bool showOutput = false;
     bool showInput = false;
+    bool iconsOnly = false;    // The sections' icons, without their names and volumes.
+    bool hoverFlyout = true;   // Hovering the output or input opens its volume flyout.
     std::optional<AudioStatus> output;
     std::optional<AudioStatus> input;
     std::optional<WebcamStatus> webcam;  // Nothing hides the webcam section.
@@ -3464,7 +4262,7 @@ wuxc::Grid MakeIconAndText(wux::UIElement const& icon, wux::FrameworkElement con
     return grid;
 }
 
-const wchar_t* DeviceGlyph(EDataFlow flow, const std::optional<AudioStatus>& status) {
+std::wstring DeviceGlyph(EDataFlow flow, const std::optional<AudioStatus>& status) {
     return status && status->muted ? MutedGlyph(flow) : GlyphFor(flow, status);
 }
 
@@ -3498,6 +4296,7 @@ public:
         for (AudioSection* section : {&output_, &input_}) {
             section->part.Forget();
             section->icon = nullptr;
+            section->lines = nullptr;
             section->name = nullptr;
             section->level = nullptr;
             section->bar = nullptr;
@@ -3506,7 +4305,9 @@ public:
         }
         webcam_.part.Forget();
         webcam_.icon = nullptr;
+        webcam_.glyph = nullptr;
         webcam_.slash = nullptr;
+        webcam_.lines = nullptr;
         webcam_.name = nullptr;
         webcam_.state = nullptr;
         row_ = nullptr;
@@ -3522,7 +4323,8 @@ public:
         ShowAudio(input_, eCapture, content_.showInput, content_.input, colors);
         ShowWebcam(colors);
         if (flyout_) {
-            bool shown = flyoutPart_ == kOutputPart ? content_.showOutput : content_.showInput;
+            // It goes with its section, or once it's turned off.
+            bool shown = content_.hoverFlyout && (flyoutPart_ == kOutputPart ? content_.showOutput : content_.showInput);
             if (shown) {
                 ShowFlyoutStatus();
             } else {
@@ -3535,6 +4337,7 @@ private:
     struct AudioSection {
         TaskbarXaml::Part part;
         wuxc::FontIcon icon{nullptr};
+        wuxc::StackPanel lines{nullptr};  // The name, level and bar, beside the icon.
         wuxc::TextBlock name{nullptr};
         wuxc::TextBlock level{nullptr};
         wuxc::Grid bar{nullptr};
@@ -3545,7 +4348,9 @@ private:
     struct WebcamSection {
         TaskbarXaml::Part part;
         wuxc::Grid icon{nullptr};
+        wuxc::FontIcon glyph{nullptr};
         wux::Shapes::Line slash{nullptr};
+        wuxc::StackPanel lines{nullptr};  // The name and state, beside the icon.
         wuxc::TextBlock name{nullptr};
         wuxc::TextBlock state{nullptr};
     };
@@ -3589,6 +4394,7 @@ private:
         wuxc::Grid::SetColumn(section.bar, 1);
         second.Children().Append(section.bar);
         lines.Children().Append(second);
+        section.lines = lines;
         auto border = section.part.Make(part, MakeIconAndText(section.icon, lines), part == kOutputPart ? L"Output" : L"Input");
         // Sized to fit the device's name, like the weather widget sizes itself to its text.
         border.MaxWidth(256);
@@ -3600,8 +4406,16 @@ private:
         return border;
     }
 
+    // Icons only: the icon alone, with room on either side, as the taskbar's buttons have.
+    void ShowIconOnly(wux::FrameworkElement const& icon, wux::UIElement const& lines) {
+        bool iconsOnly = content_.iconsOnly;
+        lines.Visibility(iconsOnly ? wux::Visibility::Collapsed : wux::Visibility::Visible);
+        icon.Margin(wux::ThicknessHelper::FromLengths(8, 0, iconsOnly ? 8 : 0, 0));
+    }
+
     void ShowAudio(AudioSection& section, EDataFlow flow, bool shown, const std::optional<AudioStatus>& status, const ThemeColors& colors) {
         section.part.Border().Visibility(shown ? wux::Visibility::Visible : wux::Visibility::Collapsed);
+        ShowIconOnly(section.icon, section.lines);
         section.icon.Glyph(DeviceGlyph(flow, status));
         section.name.Text(DeviceName(flow, status));
         bool hasLevel = status.has_value();
@@ -3626,7 +4440,8 @@ private:
         webcam_.icon.Height(24);
         webcam_.icon.Margin(wux::ThicknessHelper::FromLengths(8, 0, 0, 0));
         webcam_.icon.VerticalAlignment(wux::VerticalAlignment::Center);
-        webcam_.icon.Children().Append(TaskbarXaml::MakeGlyph(kGlyphVideo, 18));
+        webcam_.glyph = TaskbarXaml::MakeGlyph(WidgetIcons::Glyph(kWebcamIcon).c_str(), 18);
+        webcam_.icon.Children().Append(webcam_.glyph);
         webcam_.slash = wux::Shapes::Line();
         webcam_.slash.X1(4);
         webcam_.slash.Y1(4);
@@ -3644,6 +4459,7 @@ private:
         webcam_.state.Opacity(0.75);
         lines.Children().Append(webcam_.name);
         lines.Children().Append(webcam_.state);
+        webcam_.lines = lines;
         auto border = webcam_.part.Make(kWebcamPart, MakeIconAndText(webcam_.icon, lines), L"Webcam");
         border.MaxWidth(216);  // Longer names are cut short.
         webcam_.part.onHover = [this](bool) { StopHoverTimer(); };
@@ -3657,6 +4473,8 @@ private:
         if (!webcam) {
             return;
         }
+        ShowIconOnly(webcam_.icon, webcam_.lines);
+        webcam_.glyph.Glyph(WidgetIcons::Glyph(kWebcamIcon));
         webcam_.icon.Opacity(webcam->busy ? 0.43 : 1.0);
         webcam_.slash.Stroke(Brush(colors.foreground));
         webcam_.slash.Visibility(webcam->enabled ? wux::Visibility::Collapsed : wux::Visibility::Visible);
@@ -3666,7 +4484,8 @@ private:
 
     // ---- The volume flyout, shown above the output or input section while hovering it, like the
     // Windows 11 volume flyout: the device's name, a volume slider, and the device icon as a mute
-    // button. It opens after a moment of hovering, and closes once the mouse moves away from it.
+    // button. It opens after a moment of hovering (unless it's turned off), and closes once the
+    // mouse moves away from it.
 
     void OnSectionHover(int part, bool entered) {
         if (flyout_ && part == flyoutPart_) {
@@ -3674,7 +4493,7 @@ private:
         }
         StopHoverTimer();
         hoveredPart_ = entered ? part : -1;
-        if (!entered || (flyout_ && flyoutPart_ == part)) {
+        if (!entered || !content_.hoverFlyout || (flyout_ && flyoutPart_ == part)) {
             return;
         }
         if (!hoverTimer_) {
@@ -4123,6 +4942,7 @@ private:
             SendContent();
         };
         owner_.onTaskbarCreated = []() { AttachIfMissing(); };
+        owner_.onIconsChanged = [this]() { SendContent(); };
         owner_.onDeviceChange = [this](WPARAM event) {
             // Windows tells every top-level window when a device is added or removed, or turned on
             // or off (as Device Manager does).
@@ -4132,6 +4952,8 @@ private:
         };
         content_.showOutput = settings_.showOutput;
         content_.showInput = settings_.showInput;
+        content_.iconsOnly = settings_.iconsOnly;
+        content_.hoverFlyout = settings_.hoverFlyout;
         RefreshStatus(false);
         RefreshWebcam();
         // The widget may be in the taskbar already, or will say when it is.
@@ -4216,9 +5038,11 @@ private:
     }
 
     // Reads the default output and input with their volumes, updating the widget when anything
-    // changed. The popup is for the output: it's shown when asked to, or when the output was changed
-    // elsewhere, but only while the widget isn't showing the output already.
-    void RefreshStatus(bool showPopup) {
+    // changed. A popup says which device is in use once it has changed, from the widget (switched,
+    // with the flow switched) or elsewhere, while the widget isn't showing its name: the output's
+    // while its section is hidden or shows just its icon, the input's while its section shows just
+    // its icon.
+    void RefreshStatus(bool switched, EDataFlow switchedFlow = eRender) {
         // A device that can't be read just now keeps its last status.
         bool outputFailed = false;
         bool inputFailed = false;
@@ -4231,6 +5055,7 @@ private:
             input = lastInput_;
         }
         bool outputChanged = hasRefreshed_ && (output ? output->device.id : L"") != (lastOutput_ ? lastOutput_->device.id : L"");
+        bool inputChanged = hasRefreshed_ && lastInput_ && (input ? input->device.id : L"") != lastInput_->device.id;
         if (!hasRefreshed_ || output != lastOutput_ || input != lastInput_) {
             content_.output = output;
             content_.input = input;
@@ -4239,23 +5064,29 @@ private:
         lastOutput_ = output;
         lastInput_ = input;
         hasRefreshed_ = true;
-        if ((showPopup || outputChanged) && settings_.showPopup && !settings_.showOutput) {
-            ShowStatusPopup(output);
+        if (!settings_.showPopup) {
+            return;
+        }
+        if (((switched && switchedFlow == eRender) || outputChanged) && (!settings_.showOutput || settings_.iconsOnly)) {
+            ShowStatusPopup(eRender, output);
+        } else if (((switched && switchedFlow == eCapture) || inputChanged) && settings_.showInput && settings_.iconsOnly) {
+            ShowStatusPopup(eCapture, input);
         }
     }
 
-    void ShowStatusPopup(const std::optional<AudioStatus>& output) {
-        if (!output) {
-            popup_.ShowMessage(L"No output device", L"Enable an output in Windows Sound settings.");
+    void ShowStatusPopup(EDataFlow flow, const std::optional<AudioStatus>& device) {
+        if (!device) {
+            popup_.ShowMessage(flow == eRender ? L"No output device" : L"No input device",
+                               flow == eRender ? L"Enable an output in Windows Sound settings." : L"Enable a microphone in Windows Sound settings.");
             return;
         }
         MessagePopup::Content content;
-        content.title = output->device.name;
-        content.level = output->Percent();
-        content.levelMuted = output->muted;
-        AudioStatus status = *output;
-        content.icon = [status](gp::Graphics& graphics, const gp::RectF& bounds, const gp::Color& color) {
-            DrawDeviceIcon(graphics, eRender, status, bounds, color);
+        content.title = device->device.name;
+        content.level = device->Percent();
+        content.levelMuted = device->muted;
+        AudioStatus status = *device;
+        content.icon = [flow, status](gp::Graphics& graphics, const gp::RectF& bounds, const gp::Color& color) {
+            DrawDeviceIcon(graphics, flow, status, bounds, color);
         };
         popup_.Show(content, 1800);
     }
@@ -4322,7 +5153,7 @@ private:
             popup_.ShowMessage(flow == eRender ? L"Couldn't switch output" : L"Couldn't switch input", L"Windows didn't allow it.");
             return;
         }
-        RefreshStatus(flow == eRender);
+        RefreshStatus(true, flow);
     }
 
     // The chosen webcam's name: the one given in AudioFlipper, or its own.
@@ -4415,6 +5246,12 @@ private:
                 if (auto menu = std::move(menu_)) {
                     menu->Run((int)wParam);
                 }
+                return;
+            case TaskbarXaml::kChangeIconsMessage:
+                WidgetIcons::OpenPicker(owner_.Handle());
+                return;
+            case TaskbarXaml::kChooseIconMessage:
+                WidgetIcons::Choose(owner_.Handle(), wParam, lParam);
                 return;
             case kVolumeMessage:
                 if (std::optional<EDataFlow> flow = FlowOfPart((int)wParam)) {
@@ -4509,11 +5346,12 @@ private:
                 settings_.volumeDing = !settings_.volumeDing;
                 Save();
             }, settings_.volumeDing);
-            submenu.Add(L"Show popup on change", [this]() {
-                settings_.showPopup = !settings_.showPopup;
-                Save();
-            }, settings_.showPopup);
         }
+        // One switch for both: the input's popup is for Icons only.
+        submenu.Add(L"Show popup on change", [this]() {
+            settings_.showPopup = !settings_.showPopup;
+            Save();
+        }, settings_.showPopup);
 
         submenu.AddSeparator();
         // The classic Sound control panel (Playback or Recording tab), where a device can be renamed via
@@ -4571,6 +5409,19 @@ private:
         AddAudioMenu(menu, eRender);
         AddAudioMenu(menu, eCapture);
         AddWebcamMenu(menu);
+        menu.AddSeparator();
+        menu.Add(L"Icons only", [this]() {
+            settings_.iconsOnly = !settings_.iconsOnly;
+            Save();
+            content_.iconsOnly = settings_.iconsOnly;
+            SendContent();
+        }, settings_.iconsOnly);
+        menu.Add(L"Show volume flyout on hover", [this]() {
+            settings_.hoverFlyout = !settings_.hoverFlyout;
+            Save();
+            content_.hoverFlyout = settings_.hoverFlyout;
+            SendContent();
+        }, settings_.hoverFlyout);
         TaskbarXaml::g_bridge->Post([entries = menu.Entries()]() { TaskbarXaml::ShowMenu(entries); });
     }
 
@@ -4601,6 +5452,18 @@ void OnTaskbarStarted(HWND taskbar) {
     }
 }
 
+// The widget's icons that can be given other glyphs: kSpeakersIcon and the others.
+const WidgetIcons::Icon kIcons[] = {
+    {L"Speakers", L"Speakers", kGlyphSpeakers[0]},
+    {L"Headphones", L"Headphones", kGlyphHeadphone[0]},
+    {L"Headset", L"Headset", kGlyphHeadset[0]},
+    {L"Display", L"Display", kGlyphTvMonitor[0]},
+    {L"Microphone", L"Microphone", kGlyphMicrophone[0]},
+    {L"MutedOutput", L"Muted output", kGlyphMute[0]},
+    {L"MutedInput", L"Muted input", kGlyphMicOff[0]},
+    {L"Webcam", L"Webcam", kGlyphVideo[0]},
+};
+
 void AttachToTaskbar() {
     if (HWND taskbar = OwnTaskbar()) {
         TaskbarXaml::RunOnWindowThread(taskbar, [taskbar]() { AttachWidget(taskbar); });
@@ -4620,6 +5483,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     TaskbarXaml::g_onTaskbarStarted = OnTaskbarStarted;
+    WidgetIcons::Load(L"Taskbar Audio Flipper", kWidgetOrder, kIcons);
     return g_uiThread.Start([]() -> std::shared_ptr<void> {
         auto app = std::make_shared<AfApp>();
         if (!app->Start()) {
@@ -4651,6 +5515,7 @@ void Wh_ModUninit() {
         TaskbarXaml::RunOnWindowThread(taskbar, []() {
             TaskbarXaml::g_host->Detach();
             TaskbarXaml::g_menuClicks.reset();
+            TaskbarXaml::g_iconPicker.reset();
             TaskbarXaml::g_host.reset();
             g_view.reset();
             TaskbarXaml::g_bridge.reset();

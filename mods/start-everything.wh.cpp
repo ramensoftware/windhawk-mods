@@ -2,7 +2,7 @@
 // @id              start-everything
 // @name            Everything & Power Tools in the Start Menu
 // @description     Replace Windows 11 search with Everything-powered files, apps and settings in a separate search window.
-// @version         2.1
+// @version         2.2.1
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @include         StartMenuExperienceHost.exe
@@ -19,11 +19,31 @@
 
 A native replacement for Windows 11 search, powered by voidtools Everything. Press Win+S, click the taskbar search icon, or start typing in Start to search files, apps, and settings in a separate window styled after your Start menu. Windows Search stays out of the way: its window is never shown, and it cannot start the Edge WebView2 process behind its Bing-backed search panel.
 
-Version **2.1** includes independent Apps-panel updates, Quick Tools cards, services management, and searchable installed-only programs with friendly names and package icons.
+Version **2.2** adds progressive result loading, native Everything ordering, Windows pinning and App settings actions, and automatic whole-number conversions. Version 2.1.1 separated installed-app management from ordinary search and improved opening-key handling for keyboard remappers.
 
 ![Everything & Power Tools in the Start Menu](https://raw.githubusercontent.com/bardelyne/start-everything/main/img.png)
 
 *Version 2.0: the separate search window with a folder preview.*
+
+## Version 2.2 Changes
+
+- Automatically sizes the first Apps and Files batches to the panel heights and text size, then appends 40 more near the bottom without clearing the list. `/all` also appends 40 more. The former initial-result settings are no longer needed.
+- Warms app icons on the background catalog worker before the first search window opens.
+- Shows files for an empty search and follows Everything's current sort order, or its saved sort preference when no search window is available. File results retain that order across scrolling batches. Updating Everything's run history is a separate opt-in setting, off by default.
+- Keeps the Files counter consistent with browsable rows. Known exclusions and duplicates reduce the total; a leading ≈ marks estimates while more pages remain, and the final count is exact when the list ends.
+- Matches Cyrillic and other Unicode app names without depending on the process locale, including mixed-case names and Ё/ё.
+- Keeps typing in Start's own editable fields, including pinned-folder names, instead of opening search while renaming.
+- Adds Windows-provided Pin/Unpin actions to eligible app and file menus. Desktop apps can use their original shortcut when the app-ID menu omits an action. Pinning keeps search open. Windows menu actions are discovered in the background so shell extensions and shortcut scans do not block the search window.
+- Opens the selected supported app's Advanced options page directly through App settings.
+- Automatically shows decimal, hexadecimal, binary and octal conversions for standalone whole-number queries, with exact 64-bit magnitudes and signed output.
+- Adds App settings and pin-lookup status translations in all 50 interface languages and improves the Swedish package-bundle label.
+
+## Version 2.1.1 Changes
+
+- Keeps ordinary search focused on launchable apps and Windows Settings, avoiding duplicate installed-only entries.
+- Adds `/all` for managing desktop registrations and all current-user packages, including hidden components. Uninstall uses the exact product registration or package version, asks for confirmation, and respects protected components.
+- Loads the first 20 inventory entries and appends 20 more near the bottom, preserving existing cards and your scroll position. Filters and the command name are customizable.
+- Lets keyboard remappers process opening keys before search captures them, preserving their replacement keys and Unicode text. Automated remapper tests pass; testing with EPKL itself remains pending.
 
 ## Version 2.1 Changes
 
@@ -51,14 +71,17 @@ Version **2.1** includes independent Apps-panel updates, Quick Tools cards, serv
 
 - **Instant voidtools Everything IPC**: Queries Everything directly through its Win32 IPC interface for fast results across millions of files. The mod keeps no index of its own.
 - **Smart Apps and Windows Settings Search**: Instant fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Windows Settings, Control Panel applets, and Windows tools. Settings names and keywords come from Windows' own local search database and navigation metadata, cached in memory and refreshed with the app index when the Windows catalog changes. Additional Windows tools stay available, and an audited built-in list is used if native data is missing or incompatible. No Windows Search indexing service or extra database software is required. Shell icons are rendered at your display's exact pixel size.
-- **Installed-only Programs**: Search also includes named installed programs and user packages, including entries without registered shortcuts, such as suites, runtimes and language packs. An **Installed app · No launcher found** label distinguishes them from Settings results. Package entries use their installed logos and friendlier application names when available; their original technical names remain searchable. Entries without an icon use Windows' default executable icon, while Settings results use a gear. Right-click for **Open file location** and **Copy path** when Windows provides an existing installation folder, plus **Copy name**. **Uninstall** uses that exact program registration or package and asks for confirmation; **Manage in Installed apps** appears only when direct removal is unavailable. Selecting an entry without a launcher opens its installation folder when known; otherwise it opens these actions. When a shortcut is missing, an executable can still be recognized by an exact product/filename match in its local installation folder. Detection requires a unique Windows GUI executable with matching version metadata; installers, uninstallers and ambiguous candidates are not used. Other entries retain the **No launcher found** label, which does not claim the program is incapable of running. Installation events invalidate cached metadata; typing uses the current in-memory catalog. Hidden system components, framework/resource packages and update-only registrations are excluded. Matching launchable entries stay merged, with their installed product name available as a search alias. Differently named shortcuts are also matched by their executable name and registered installation folder; the real shortcut keeps its icon, activation target and arguments. Distinct executables or installations are kept separate.
-- **Reusable Apps Cards**: Ordinary app, Settings and installed-only results reuse attached card slots as you type. Text, icons and menu targets update in place; unused slots collapse. The pool grows as needed up to **Max App Results** and resets when settings change. Rich Quick Tools cards keep their own layouts.
+- **Installed App Management**: Type `/all` for registered desktop programs and every current-user package, including frameworks, resources and hidden Windows components. This list comes directly from uninstall registrations and the package catalog, without AppsFolder launch entries. It never launches a program: click or press Enter to open its management menu. Right-click offers **Uninstall** when Windows permits it, with confirmation, plus **Open file location**, **Copy path** and **Copy name** where available. Protected components are read-only. Search within the list with `/all office`; browse all matches by scrolling; the list starts with 20 entries and appends 40 more near the bottom. Ordinary search excludes installed-only records, and registered metadata continues to provide aliases for real launchers. Missing launchers can still be recovered through a unique, verified GUI executable in the product folder.
+- **Reusable Apps Cards**: App and Settings results reuse attached card slots as you type. Text, icons and menu targets update in place; unused slots collapse. The first batch adapts to the panel height and text size; scrolling near the bottom adds 40 more. The installed inventory uses the same reusable cards and grows only for its loaded batches. Rich Quick Tools cards keep their own layouts.
+- **Scrolling File Results**: The first batch adapts to the panel height and text size, with 40 more loaded near the bottom. Everything is queried in bounded pages; later results append without clearing earlier rows or moving your selection. Apps and Files load more independently. Changing the query starts a fresh batch and returns its results to the top. Controls and memory grow as you browse more matches; there is no fixed total-result limit.
+- **Everything Controls File Order**: Choose the file sort in Everything, such as Name, Date Modified or Run Count. The mod reads that window's current order through Everything's public IPC; if the window is closed, it uses the saved preference from that instance's standard INI file. Opening or reopening search picks up the preference and keeps it fixed while you type and load more pages. The mod preserves Everything's order instead of applying its own match/recency/run-count ranking or capping run counts at 50. Existing path exclusions still apply. Sort preferences are read once per search-window session. Unknown sorts, unavailable settings, older IPC and optional sorts without a fast index fall back to name order, keeping broad searches responsive. Custom command-line configuration-file locations are not detected automatically. See the [Everything SDK](https://www.voidtools.com/support/everything/sdk/) and [sort documentation](https://www.voidtools.com/support/everything/sdk/everything_setsort/).
+- **Files Before Typing**: Empty search shows the first file batch alongside suggested apps. Everything's chosen order decides what appears; Run Count descending can put frequently opened files first. To record successful file opens in Everything, enable **Files & Preview → Update Everything Run History** and Everything's own run-history option. The mod option is **off by default**. Recorded counts and dates remain in Everything after disabling this option or the mod; this is separate from app-favorite learning. The mod does not open an Everything window, change its preferences, or fetch the entire index.
 - **Silent App-list Updates**: Windows registry, Store/MSIX package and Start-menu shortcut notifications refresh the catalog after changes settle. Install/update/remove events bypass the installed-metadata cache. Reopening search keeps a safety refresh with a five-second minimum; otherwise unchanged installation metadata is reused for up to 30 seconds. A native background worker builds a replacement catalog and loads icons while app matching continues against the last complete snapshot. No network requests or periodic polling are needed for these listeners.
-- **Background Catalog Warmup**: After the taskbar is available, app, Settings and installed-program metadata load on a background worker. First search reuses that catalog. The search window and its XAML UI remain deferred until needed.
+- **Background Catalog and Icon Warmup**: After the taskbar is available, app, Settings and installed-program metadata load on a background worker, followed by app icons and configured custom-command image icons. First search reuses that work without waiting for icon I/O. Visible missing icons take priority over the remaining background queue. Opening search before warmup finishes or moving to another display scale can still show temporary fallback icons. The in-memory icon cache stays bounded, and the search window and its XAML UI remain deferred until needed.
 - **Independent App Results**: App results update without waiting for Everything's file search. Cached icons appear immediately; missing icons fill in afterward. File results arrive separately and preserve the app selection.
-- **Windows Services**: Use `/services` to find services by name or description and manage them from the right-click menu.
+- **Windows Services**: Use `/services` to find services by name or description and manage them from the right-click menu. Scroll near the bottom to load 40 more matches at a time, preserving the existing rows. Live status updates keep the expanded batch visible.
 - **Online Utility Cards**: Use `/weather` for your approximate local weather, `/money 100 USD > EUR` for currency conversion, `/crypto BTC` for a crypto spot price, or `/speedtest` for a connection test with a circular speed meter. Data loads separately from local search. See [Online Cards](#online-cards).
-- **Learns Your Favorites**: Apps and custom commands you open from here more often move up among results that match equally well. A clearly better match always stays on top. Can be turned off in the settings, which also forgets what was learned.
+- **Learns Your Favorites**: Apps and custom commands you open from here more often move up among results that match equally well. A clearly better match always stays on top. Learned counts work in installed and portable Windhawk, including after case-insensitive Unicode matching changes. Turning learning off also forgets what was learned.
 - **Separate Animated Search Window**: Search follows Start's size, taskbar alignment, colors, and rounded corners, with opening and closing animations that follow the taskbar edge (bottom, top, left, or right) and respect Windows' animation setting. It stays out of the taskbar and Alt+Tab. Typing in Start switches immediately without an opening animation and carries the opening text into search. The search bar uses Windows' own search icon.
 - **Windows Search Out of the Way**: `SearchHost.exe` keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.
 - **Search Entry Points**: Open search directly with Win+S, the taskbar search icon, Start’s search bar, or an optional custom shortcut. Pressing Win or clicking Start opens Start normally; begin typing to switch into search.
@@ -67,10 +90,10 @@ Version **2.1** includes independent Apps-panel updates, Quick Tools cards, serv
 - **Optional Files Panel**: Hide the Files panel and pause Everything file queries. With automatic sizing, search becomes half as wide. Apps, settings, custom commands, and utilities remain available.
 - **Custom Menu Size**: Set your own menu width and height, or turn the toggle off to follow Start's size. Dimensions follow Windows display scaling and stay within the screen's available area.
 - **Inline Calculator**: Type a sum (e.g. `100 * 5`, `sqrt(144)`, `15% * 200`, `2^10`) and the result shows above the apps; large and small results show in scientific notation too (`= 99000`, `= 9.9e4`). Press Enter to copy it.
-- **Unit Converter**: Type `100 km` to see it in the usual units of its kind, all on one line first, or `100 km → mi` (also `in`, `->`, `=`) for just one; `255 hex` or `0xFF` for other bases. It knows length, mass, temperature, speed, area, volume, data, data rate, time, pressure, energy, power, angle and frequency, with `.` or `,` as the decimal point, and each kind has its color. A number alone, or one in a name (`2024 report`, `3d`), is left to the search. Add units it does not know in the settings, and have them convert back too (Reciprocal).
+- **Unit Converter**: Type `100 km` to see it in the usual units of its kind, all on one line first, or `100 km → mi` (also `in`, `->`, `=`) for just one; `1234`, `255 hex` or `0xFF` for other bases. It knows length, mass, temperature, speed, area, volume, data, data rate, time, pressure, energy, power, angle and frequency, with `.` or `,` as the decimal point, and each kind has its color. A whole number alone adds one conversion card while matching apps and files remain available. Numbers in names (`2024 report`, `3d`) remain ordinary searches. Add units it does not know in the settings, and have them convert back too (Reciprocal).
 - **Network Interface Inspector**: Type `/ip` to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
 - **Live Hardware Cards**: Type `/usage` for CPU, memory, each GPU, disk activity and network traffic, with colored graphs covering the last 60 seconds. Readings update once a second while the command is visible and stay entirely on your PC.
-- **Full Right-Click Context Menu**: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy name (files/folders), Copy path, Open file location, or Uninstall (apps). Escape closes the menu; typing closes it and continues the query.
+- **Full Right-Click Context Menu**: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy name (files/folders), Copy path, Open file location, or Uninstall (apps). Eligible items also offer Windows Pin/Unpin actions and supported application packages offer App settings. Escape closes the menu; typing closes it and continues the query.
 - **Native Properties Dialogs**: Properties opens through `explorer.exe`, the same dialog as in File Explorer.
 - **File Preview**: Images, muted media, PDF pages, SVGs, text/document excerpts, and file properties beside search. The card adapts its alignment and resize direction to the search window’s height. See [File Preview](#file-preview) for formats, copying, and folder sizes.
 - **Drag and Drop**: Drag a file or folder into File Explorer, the desktop, or another app. It is always a copy, never a move. Previews stay hidden during the drag. A successful drop closes search; Escape cancels.
@@ -78,7 +101,7 @@ Version **2.1** includes independent Apps-panel updates, Quick Tools cards, serv
 - **Opens in Front**: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
 - **Explicit Web Search**: Trigger web searches on demand using the `?` prefix (e.g. `?query`). Includes customizable keyword shortcuts such as `?yt` (YouTube), `?gh` (GitHub), `?w` (Wikipedia), and `?r` (Reddit).
 - **Start Menu Styler Compatibility**: Reads Start's rendered `AcrylicBorder`, search box, headers, footer, and opened context menus from its live visual tree using public XAML properties. Supported custom glass brushes also copy their actual composition effect definitions, including tint alpha, blur, saturation, and luminosity, without theme presets. Unchanged materials reuse bounded caches of effect definitions without keeping Start's composition objects alive. The last captured effect definitions are saved in this mod's own Windhawk storage on unload, separated by Windows session and restricted to the current Start process and matching live brush identities. This preserves already captured glass across updates and off/on cycles without retaining GPU resources or reconnecting another mod's brushes. New live captures replace saved definitions. Automatic text/icon contrast or a fixed text color keeps labels readable; see [Automatic Text and Icon Contrast](#automatic-text-and-icon-contrast).
-- **Keyboard Input**: Opening text and context-menu typing carry into search. Chinese, Japanese, and Korean opening keys use Windows' native input path once the search box is ready for IME composition. Focus uses standard foreground APIs without attaching thread input.
+- **Keyboard Input**: Opening text and context-menu typing carry into search. Chinese, Japanese, and Korean opening keys use Windows' native input path once the search box is ready for IME composition. Keyboard remappers such as EPKL/AutoHotkey can process opening keys first; keys they consume are not translated a second time. Focus uses standard foreground APIs without attaching thread input.
 - **Accidental Open Prevention**: Enter only triggers actions when an item is selected in the active panel, preventing unintended opening of files.
 
 ## Settings Sections
@@ -88,8 +111,8 @@ The mod's Settings page groups related options together:
 | Section | Options |
 | :--- | :--- |
 | **Appearance** | Display language, text size and color, keyboard shortcut hints, and custom menu dimensions |
-| **Apps & Search** | App result limit, favorite learning, search delay, and an optional keyboard shortcut |
-| **Files & Preview** | Files panel, file result limit, previews, animation, and excluded paths |
+| **Apps & Search** | Favorite learning, search delay, and an optional keyboard shortcut |
+| **Files & Preview** | Files panel, previews, animation, Everything run history, and excluded paths |
 | **Quick Tools** | Localized command names, past/upcoming weather days, extra locations, and saved currency/crypto cards |
 | **Online Cards** | Offline mode, automatic or manual weather location, temperature units, and default quote currency |
 | **Web Search** | Default search engine and keyword shortcuts |
@@ -130,7 +153,7 @@ In Windhawk, open the mod's **Settings → Custom Commands** and add an entry:
 - **Hide Terminal**: Run without showing the shell console (default off). Apps opened by the command can still show their own windows, and Run as administrator can still display Windows' permission prompt.
 - **Command**: Enter the command for the selected shell. The mod does not guess the shell from the command text. Blank names or commands are ignored. If the selected shell is missing or the Custom shell arguments are invalid, search stays open and shows the reason.
 
-Commands appear alongside installed apps in search results and empty-search suggestions, within **Max App Results**. They share the favorite system: frequently launched entries move up, and equal-use suggestions sort alphabetically. Turning off **Learn Favorite Apps** stops learning and clears history for both apps and commands. Right-click for **Run**, **Run as administrator**, or **Copy command**. Settings changes apply without reopening search. Up to 100 entries are supported.
+Commands appear alongside apps in search results and empty-search suggestions. The first batch adapts to the panel height; scroll to load more matches. They share the favorite system: frequently launched entries move up, and equal-use suggestions sort alphabetically. Turning off **Learn Favorite Apps** stops learning and clears history for both apps and commands. Right-click for **Run**, **Run as administrator**, or **Copy command**. Settings changes apply without reopening search. Up to 100 entries are supported.
 
 A name may start with `/`, such as `/backup`. Single-word custom `/commands` share names with Quick Tools and their active compatibility aliases. If the same name belongs to two entries, typing it shows a red conflict card instead of running either one. Names without `/` remain ordinary search entries. A slash name does not add argument forwarding: the saved script runs exactly as configured.
 
@@ -148,7 +171,7 @@ Use a full executable path if it is installed somewhere else. WSL requires an in
 
 ## Quick Tools
 
-Open **Settings → Quick Tools** to rename the weather, currency, crypto, IP, hardware-usage and speed-test commands. Enter the word after `/`, in your own language. A leading slash is optional in the setting. For example, setting Weather Command Name to `météo` makes `/météo` and `/météo London` work. The layout remains left-to-right, but command names can contain non-Latin letters.
+Open **Settings → Quick Tools** to rename the weather, currency, crypto, IP, hardware-usage, services and installed-inventory commands. Enter the word after `/`, in your own language. A leading slash is optional in the setting. For example, setting Weather Command Name to `météo` makes `/météo` and `/météo London` work. The layout remains left-to-right, but command names can contain non-Latin letters.
 
 Names are case-insensitive, cannot contain spaces, and must be distinct. Blank or invalid names use their defaults. If two commands share a name, typing that name shows a red warning card; give them separate names in settings to continue. English compatibility aliases remain only while their primary command name is unchanged. The examples below use the default names.
 
@@ -160,6 +183,8 @@ Names are case-insensitive, cannot contain spaces, and must be distinct. Blank o
 - **Speed test:** opens a ready card; press **Run** or Enter to start. The command name defaults to `speedtest`, with `/speed` as an alias while that name is unchanged.
 
 Saved cards fill in individually as their requests complete. Conversions sharing a pair reuse one downloaded rate, and a failed entry does not prevent the other cards from appearing. The selected card stays selected as other cards finish loading.
+
+Standalone whole-number values automatically show a single card containing decimal, hexadecimal, binary and octal forms. This also works with `0x`, `0b` and `0o` prefixes, an optional sign, and existing explicit requests such as `1234 hex`. Conversion is exact for magnitudes up to `18446744073709551615` (64 bits), without passing through floating-point values. Negative values retain a minus sign in each base, for example `-10 = -0xA = -0b1010 = -0o12`; no two's-complement width is assumed. Fractions and out-of-range values do not produce base-conversion cards. Enter copies the hexadecimal value. App and file matching continues alongside the card.
 
 ## Online Cards
 
@@ -196,6 +221,16 @@ Press Enter or click a completed card to copy the converted numeric value; a wea
 Results are cached in memory: weather for 10 minutes, currency pairs for an hour, and crypto pairs for 30 seconds. Location lookups are reused for six hours. Changing only the amount reuses a cached pair and calculates locally. Old data is marked **Cached** while a refresh is needed or has failed. Failed requests back off for a minute. Providers are contacted after a 450 ms typing pause, on a separate worker, so they do not delay app results or file results. Further typing replaces pending lookups and prevents old responses from replacing the current results. There is no periodic background polling.
 
 **Privacy and connectivity:** providers see your public IP as part of the connection. For weather, the location service returns an approximate city and Open-Meteo receives the requested city or coordinates. A city name paused on while typing can be sent as a location lookup. Currency and crypto providers receive only the requested pair, without the amount. No normal search text, account credentials, cookies, or telemetry are sent. Automatic location and downloaded results are not saved to disk. **Online Cards → Offline Mode** is enabled on a fresh install; turning it off opts in to these features. Turning it on disables provider requests. Public services can be unavailable or rate limited, and the free Open-Meteo service is intended for noncommercial use. Weather data is credited to Open-Meteo and location names to GeoNames.
+
+## Installed programs and packages
+
+Use `/all` to manage all named desktop uninstall registrations and the packages registered for the current Windows user. This includes frameworks, resource packages, bundles and hidden system components. It does not enumerate other users or add launch shortcuts from `shell:AppsFolder`.
+
+Add a name, publisher or package identity to filter, for example `/all office` or `/all Microsoft.VCLibs`. Results are alphabetical when unfiltered. The list starts with 20 products and appends up to 40 more as you scroll near the bottom. Existing cards and the scroll position stay in place. A tall viewport can request another batch to fill its available space. There are no navigation pages; this management list retains its separate 20-product starting batch. Changing the filter returns to the first 20 entries and scrolls to the top. **Quick Tools → Installed Inventory Command Name** renames `/all`; the renamed command takes the same optional search terms.
+
+Package rows identify main, framework, resource, bundle and optional packages, with resource identifiers such as `split.scale-150` or `split.language-de` when Windows provides them. Publisher, version and architecture distinguish installations further. These labels do not change which components Windows allows you to uninstall. Technical package identities are searchable only in this management list. If `/all` is already used by a custom command or another Quick Tool, rename either command in settings; the conflict warning prevents either action from running accidentally.
+
+Clicking a product or pressing Enter opens its management menu. There is no app **Open**, **Run** or administrator-launch action in this list. **Uninstall** asks for confirmation and uses the exact registry registration or listed package version. Protected components have no uninstall action. Available installation folders can be opened or copied, and product names can be copied. The list uses the existing background catalog and change listeners; searching it performs no file search, network request or fresh inventory scan.
 
 ## Windows Services
 
@@ -294,14 +329,16 @@ To add another way to open search, go to **Settings → Apps & Search**, turn on
 | **Type while a context menu is open** | Close the menu and continue editing the query |
 | **Right-Click** | Open the result's context menu |
 
-Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start Menu. Use Create desktop shortcut first, then right-click the shortcut on your desktop and select Pin to Taskbar or Pin to Start.
+Pinning and App settings: Result menus offer Windows-provided Pin to Start, Pin to taskbar or the corresponding Unpin actions when the shell makes them available for that item. Labels and enabled state come from Windows, and availability is checked again when you choose an action. For desktop apps whose app-ID menu omits Start pinning, the original Start-menu shortcut supplies the missing action, preserving its arguments and identity. Pin and Unpin close the context menu while keeping search open. Windows policy and item type still determine which actions appear. Supported application packages also offer App settings, which opens their own Advanced options page through Windows Settings' native navigation; framework/resource packages without app entries do not get this action. The installed inventory can offer App settings without offering a launch or pin action.
+
+Both Apps and Files context menus open and close without animations. While Windows checks available pinning and App settings actions, a disabled **Checking pins…** row appears. It disappears when the lookup finishes, and the available actions appear immediately.
 
 ## Quick Tools and Utilities
 
 | Command | Description | Example | Enter Action |
 | :--- | :--- | :--- | :--- |
 | `<sum>` | Calculation | `100 * 5`<br>`√(144)`<br>`15% × 200` | Copies the result |
-| `<number> hex`, `0xFF`, `0b1010` | The number in other bases (digits grouped: `0b111 1111 1111`) | `2047 hex`<br>`0x7FF` | Copies the hex value |
+| `<whole number>`, `<number> hex`, `0xFF`, `0b1010` | The number in other bases (digits grouped: `0b111 1111 1111`) | `1234`<br>`2047 hex`<br>`0x7FF` | Copies the hex value |
 | `<number> <unit>` | The number in the usual units of its kind, all on one line first | `100 km`<br>`32 f`<br>`1,5 kg` | Copies the selected one |
 | `<number> <unit> → <unit>` | Just that conversion (also `to`, `in`, `->`, `=`) | `100 km → mi`<br>`100 mbps → MB/s` | Copies the result |
 | `/ip` | Lists all active Wi-Fi, Ethernet, and VPN adapters with IP, subnet, gateway, and adapter name | `/ip` | Copies selected IP address to clipboard |
@@ -407,9 +444,6 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
   $name: Appearance
 
 - search:
-  - maxAppResults: 6
-    $name: Max App Results
-    $description: Number of application matches to display in the Apps column (default 6).
   - learnFavorites: true
     $name: Learn Favorite Apps
     $description: Apps and custom commands you open from here more often move up among results that match equally well. Turning this off stops counting and forgets learned usage for both apps and commands; turn it on again to start over.
@@ -598,18 +632,22 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
   - hideFilesPanel: false
     $name: Hide Files Panel
     $description: Hide the Files column and pause file searches. In automatic sizing, the search window becomes half as wide.
-  - maxFileResults: 12
-    $name: Max File Results
-    $description: Number of file matches to display in the Files column (default 12).
   - filePreview: true
     $name: File Preview
     $description: Show a preview of the selected file beside search - its thumbnail (pictures, video frames, PDF pages, SVG), or the start of a text file or document - with its details (type, size, dates, and per kind dimensions, length, artist, version or author) and its path. Click the name, a detail value, or the path to copy it; text previews also allow selecting and copying text. To show folder sizes, enable Index folder size in Everything > Tools > Options > Indexes.
   - animatePreview: true
     $name: Play Videos and Animations
     $description: In the file preview, play videos and animated GIF and WebP images - muted, on a loop - and turn through a PDF's first pages.
+  - recordRunHistory: false
+    $name: Update Everything Run History
+    $description: >
+      Count successful file opens from this search in Everything's saved run
+      history. Also requires run history enabled in Everything. This changes
+      Everything's persistent run counts and dates; disabling the mod does not
+      undo those records. Off by default.
   - filterNoisyPaths: true
     $name: Filter Noisy Paths
-    $description: Filter out deep build caches, version control internals, and temporary directories from file search results unless no other matches exist.
+    $description: Filter deep build caches, version control internals, and temporary directories from every result page. Explicitly searching for an excluded path keyword can still include that path.
   - excludedPaths:
       - "\\node_modules\\"
       - "\\.git\\"
@@ -652,6 +690,9 @@ Version 2.0 organizes settings into collapsible sections. Windhawk does not tran
   - servicesName: services
     $name: Services Command Name
     $description: Search Windows services by name or description. Right-click a result to start, stop or restart it, copy its name/details, or open Windows Services. Operations request administrator approval when needed. Works offline; startup settings are not changed.
+  - installedName: all
+    $name: Installed Inventory Command Name
+    $description: Use /all to manage registered desktop programs and all current-user packages, including frameworks and hidden components. Add a name to filter, for example /all office. Entries open management actions instead of launching apps. Enter a single word here to rename /all; choose a different name if another tool or custom command already uses it. Works offline; protected components are read-only.
   - weatherPastDays: "2"
     $name: Past Weather Days
     $description: Recent days shown before Today, inside each location's weather card.
@@ -1010,9 +1051,16 @@ enum class Key {
     ServiceRestart,
     NoServices,
     CopyDetails,
-    NotLaunchable,
     ManageInstalled,
     InstalledApp,
+    InstalledApps,
+    MainPackage,
+    FrameworkPackage,
+    ResourcePackage,
+    PackageBundle,
+    OptionalPackage,
+    AppSettings,
+    CheckingPins,
     Count
 };
 struct Locale {
@@ -1158,9 +1206,16 @@ inline constexpr Locale kLocales[] = {
         L"Restart", // ServiceRestart
         L"No matching services", // NoServices
         L"Copy details", // CopyDetails
-        L"No launcher found", // NotLaunchable
         L"Manage in Installed apps", // ManageInstalled
         L"Installed app", // InstalledApp
+        L"Installed apps", // InstalledApps
+        L"Main package", // MainPackage
+        L"Framework package", // FrameworkPackage
+        L"Resource package", // ResourcePackage
+        L"Package bundle", // PackageBundle
+        L"Optional package", // OptionalPackage
+        L"App settings", // AppSettings
+        L"Checking pins…", // CheckingPins
     }},
     {L"af", {
         L"Soek enigiets", // SearchAnything
@@ -1300,9 +1355,16 @@ inline constexpr Locale kLocales[] = {
         L"Herbegin", // ServiceRestart
         L"Geen ooreenstemmende dienste nie", // NoServices
         L"Kopieer besonderhede", // CopyDetails
-        L"Geen beginpunt gevind", // NotLaunchable
         L"Bestuur in Geïnstalleerde programme", // ManageInstalled
         L"Geïnstalleerde toepassing", // InstalledApp
+        L"Geïnstalleerde toepassings", // InstalledApps
+        L"Hoofpakket", // MainPackage
+        L"Raamwerkpakket", // FrameworkPackage
+        L"Hulpbronpakket", // ResourcePackage
+        L"Pakketbundel", // PackageBundle
+        L"Opsionele pakket", // OptionalPackage
+        L"Toepassinginstellings", // AppSettings
+        L"Vasspeldopsies word nagegaan…", // CheckingPins
     }},
     {L"bg", {
         L"Търсене навсякъде", // SearchAnything
@@ -1442,9 +1504,16 @@ inline constexpr Locale kLocales[] = {
         L"Рестартиране", // ServiceRestart
         L"Няма съответстващи услуги", // NoServices
         L"Копиране на подробности", // CopyDetails
-        L"Не е намерен начин за стартиране", // NotLaunchable
         L"Управление в инсталираните приложения", // ManageInstalled
         L"Инсталирано приложение", // InstalledApp
+        L"Инсталирани приложения", // InstalledApps
+        L"Основен пакет", // MainPackage
+        L"Пакет на рамкова среда", // FrameworkPackage
+        L"Пакет с ресурси", // ResourcePackage
+        L"Комплект пакети", // PackageBundle
+        L"Допълнителен пакет", // OptionalPackage
+        L"Настройки на приложението", // AppSettings
+        L"Проверка на опциите за закачане…", // CheckingPins
     }},
     {L"bn", {
         L"সবকিছু খুঁজুন", // SearchAnything
@@ -1584,9 +1653,16 @@ inline constexpr Locale kLocales[] = {
         L"পুনরায় চালু করুন", // ServiceRestart
         L"কোনো মিলযুক্ত পরিষেবা নেই", // NoServices
         L"বিস্তারিত কপি করুন", // CopyDetails
-        L"চালু করার উপায় পাওয়া যায়নি", // NotLaunchable
         L"ইনস্টল করা অ্যাপে পরিচালনা করুন", // ManageInstalled
         L"ইনস্টল করা অ্যাপ", // InstalledApp
+        L"ইনস্টল করা অ্যাপ", // InstalledApps
+        L"মূল প্যাকেজ", // MainPackage
+        L"ফ্রেমওয়ার্ক প্যাকেজ", // FrameworkPackage
+        L"রিসোর্স প্যাকেজ", // ResourcePackage
+        L"প্যাকেজ বান্ডল", // PackageBundle
+        L"ঐচ্ছিক প্যাকেজ", // OptionalPackage
+        L"অ্যাপের সেটিংস", // AppSettings
+        L"পিন করার বিকল্প যাচাই করা হচ্ছে…", // CheckingPins
     }},
     {L"bs", {
         L"Pretraži sve", // SearchAnything
@@ -1726,9 +1802,16 @@ inline constexpr Locale kLocales[] = {
         L"Ponovo pokreni", // ServiceRestart
         L"Nema odgovarajućih servisa", // NoServices
         L"Kopiraj detalje", // CopyDetails
-        L"Nije pronađen pokretač", // NotLaunchable
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
+        L"Instalirane aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket radnog okvira", // FrameworkPackage
+        L"Paket resursa", // ResourcePackage
+        L"Skup paketa", // PackageBundle
+        L"Opcionalni paket", // OptionalPackage
+        L"Postavke aplikacije", // AppSettings
+        L"Provjera opcija zakačivanja…", // CheckingPins
     }},
     {L"ca", {
         L"Cerca qualsevol cosa", // SearchAnything
@@ -1868,9 +1951,16 @@ inline constexpr Locale kLocales[] = {
         L"Reinicia", // ServiceRestart
         L"No hi ha serveis coincidents", // NoServices
         L"Copia els detalls", // CopyDetails
-        L"No s’ha trobat cap iniciador", // NotLaunchable
         L"Gestiona a Aplicacions instal·lades", // ManageInstalled
         L"Aplicació instal·lada", // InstalledApp
+        L"Aplicacions instal·lades", // InstalledApps
+        L"Paquet principal", // MainPackage
+        L"Paquet de marc de treball", // FrameworkPackage
+        L"Paquet de recursos", // ResourcePackage
+        L"Conjunt de paquets", // PackageBundle
+        L"Paquet opcional", // OptionalPackage
+        L"Configuració de l’aplicació", // AppSettings
+        L"S’estan comprovant les opcions de fixació…", // CheckingPins
     }},
     {L"cs", {
         L"Hledat vše", // SearchAnything
@@ -2010,9 +2100,16 @@ inline constexpr Locale kLocales[] = {
         L"Restartovat", // ServiceRestart
         L"Žádné odpovídající služby", // NoServices
         L"Kopírovat podrobnosti", // CopyDetails
-        L"Spouštěč nenalezen", // NotLaunchable
         L"Spravovat v nainstalovaných aplikacích", // ManageInstalled
         L"Nainstalovaná aplikace", // InstalledApp
+        L"Nainstalované aplikace", // InstalledApps
+        L"Hlavní balíček", // MainPackage
+        L"Balíček frameworku", // FrameworkPackage
+        L"Balíček prostředků", // ResourcePackage
+        L"Sada balíčků", // PackageBundle
+        L"Volitelný balíček", // OptionalPackage
+        L"Nastavení aplikace", // AppSettings
+        L"Zjišťování možností připnutí…", // CheckingPins
     }},
     {L"da", {
         L"Søg efter alt", // SearchAnything
@@ -2152,9 +2249,16 @@ inline constexpr Locale kLocales[] = {
         L"Genstart", // ServiceRestart
         L"Ingen matchende tjenester", // NoServices
         L"Kopiér detaljer", // CopyDetails
-        L"Ingen startgenvej fundet", // NotLaunchable
         L"Administrer i Installerede apps", // ManageInstalled
         L"Installeret app", // InstalledApp
+        L"Installerede apps", // InstalledApps
+        L"Hovedpakke", // MainPackage
+        L"Frameworkpakke", // FrameworkPackage
+        L"Ressourcepakke", // ResourcePackage
+        L"Pakkesamling", // PackageBundle
+        L"Valgfri pakke", // OptionalPackage
+        L"Appindstillinger", // AppSettings
+        L"Kontrollerer muligheder for fastgørelse…", // CheckingPins
     }},
     {L"de", {
         L"Alles durchsuchen", // SearchAnything
@@ -2294,9 +2398,16 @@ inline constexpr Locale kLocales[] = {
         L"Neu starten", // ServiceRestart
         L"Keine passenden Dienste", // NoServices
         L"Details kopieren", // CopyDetails
-        L"Kein Programmstarter gefunden", // NotLaunchable
         L"In installierten Apps verwalten", // ManageInstalled
         L"Installierte App", // InstalledApp
+        L"Installierte Apps", // InstalledApps
+        L"Hauptpaket", // MainPackage
+        L"Frameworkpaket", // FrameworkPackage
+        L"Ressourcenpaket", // ResourcePackage
+        L"Paketbündel", // PackageBundle
+        L"Optionales Paket", // OptionalPackage
+        L"App-Einstellungen", // AppSettings
+        L"Anheftoptionen werden geprüft…", // CheckingPins
     }},
     {L"el", {
         L"Αναζήτηση παντού", // SearchAnything
@@ -2436,9 +2547,16 @@ inline constexpr Locale kLocales[] = {
         L"Επανεκκίνηση", // ServiceRestart
         L"Δεν βρέθηκαν αντίστοιχες υπηρεσίες", // NoServices
         L"Αντιγραφή λεπτομερειών", // CopyDetails
-        L"Δεν βρέθηκε εκκινητής", // NotLaunchable
         L"Διαχείριση στις εγκατεστημένες εφαρμογές", // ManageInstalled
         L"Εγκατεστημένη εφαρμογή", // InstalledApp
+        L"Εγκατεστημένες εφαρμογές", // InstalledApps
+        L"Κύριο πακέτο", // MainPackage
+        L"Πακέτο πλαισίου", // FrameworkPackage
+        L"Πακέτο πόρων", // ResourcePackage
+        L"Δέσμη πακέτων", // PackageBundle
+        L"Προαιρετικό πακέτο", // OptionalPackage
+        L"Ρυθμίσεις εφαρμογής", // AppSettings
+        L"Έλεγχος επιλογών καρφιτσώματος…", // CheckingPins
     }},
     {L"es", {
         L"Buscar cualquier cosa", // SearchAnything
@@ -2578,9 +2696,16 @@ inline constexpr Locale kLocales[] = {
         L"Reiniciar", // ServiceRestart
         L"No hay servicios coincidentes", // NoServices
         L"Copiar detalles", // CopyDetails
-        L"No se encontró un iniciador", // NotLaunchable
         L"Administrar en Aplicaciones instaladas", // ManageInstalled
         L"Aplicación instalada", // InstalledApp
+        L"Aplicaciones instaladas", // InstalledApps
+        L"Paquete principal", // MainPackage
+        L"Paquete de framework", // FrameworkPackage
+        L"Paquete de recursos", // ResourcePackage
+        L"Conjunto de paquetes", // PackageBundle
+        L"Paquete opcional", // OptionalPackage
+        L"Configuración de la aplicación", // AppSettings
+        L"Comprobando opciones de anclaje…", // CheckingPins
     }},
     {L"et", {
         L"Otsi kõike", // SearchAnything
@@ -2720,9 +2845,16 @@ inline constexpr Locale kLocales[] = {
         L"Taaskäivita", // ServiceRestart
         L"Vastavaid teenuseid pole", // NoServices
         L"Kopeeri üksikasjad", // CopyDetails
-        L"Käivitajat ei leitud", // NotLaunchable
         L"Halda installitud rakendustes", // ManageInstalled
         L"Installitud rakendus", // InstalledApp
+        L"Installitud rakendused", // InstalledApps
+        L"Põhipakett", // MainPackage
+        L"Raamistikupakett", // FrameworkPackage
+        L"Ressursipakett", // ResourcePackage
+        L"Paketikogum", // PackageBundle
+        L"Valikuline pakett", // OptionalPackage
+        L"Rakenduse sätted", // AppSettings
+        L"Kinnitamisvalikute kontrollimine…", // CheckingPins
     }},
     {L"fi", {
         L"Hae mitä tahansa", // SearchAnything
@@ -2862,9 +2994,16 @@ inline constexpr Locale kLocales[] = {
         L"Käynnistä uudelleen", // ServiceRestart
         L"Ei vastaavia palveluita", // NoServices
         L"Kopioi tiedot", // CopyDetails
-        L"Käynnistintä ei löytynyt", // NotLaunchable
         L"Hallitse asennetuissa sovelluksissa", // ManageInstalled
         L"Asennettu sovellus", // InstalledApp
+        L"Asennetut sovellukset", // InstalledApps
+        L"Pääpaketti", // MainPackage
+        L"Sovelluskehyspaketti", // FrameworkPackage
+        L"Resurssipaketti", // ResourcePackage
+        L"Pakettikokoelma", // PackageBundle
+        L"Valinnainen paketti", // OptionalPackage
+        L"Sovelluksen asetukset", // AppSettings
+        L"Tarkistetaan kiinnitysvaihtoehtoja…", // CheckingPins
     }},
     {L"fil", {
         L"Maghanap ng anuman", // SearchAnything
@@ -3004,9 +3143,16 @@ inline constexpr Locale kLocales[] = {
         L"I-restart", // ServiceRestart
         L"Walang tumutugmang serbisyo", // NoServices
         L"Kopyahin ang mga detalye", // CopyDetails
-        L"Walang nakitang panglunsad", // NotLaunchable
         L"Pamahalaan sa Mga naka-install na app", // ManageInstalled
         L"Naka-install na app", // InstalledApp
+        L"Mga naka-install na app", // InstalledApps
+        L"Pangunahing pakete", // MainPackage
+        L"Pakete ng framework", // FrameworkPackage
+        L"Pakete ng resource", // ResourcePackage
+        L"Kalipunan ng mga pakete", // PackageBundle
+        L"Opsyonal na pakete", // OptionalPackage
+        L"Mga setting ng app", // AppSettings
+        L"Sinusuri ang mga opsyon sa pag-pin…", // CheckingPins
     }},
     {L"fr", {
         L"Tout rechercher", // SearchAnything
@@ -3146,9 +3292,16 @@ inline constexpr Locale kLocales[] = {
         L"Redémarrer", // ServiceRestart
         L"Aucun service correspondant", // NoServices
         L"Copier les détails", // CopyDetails
-        L"Aucun lanceur trouvé", // NotLaunchable
         L"Gérer dans Applications installées", // ManageInstalled
         L"Application installée", // InstalledApp
+        L"Applications installées", // InstalledApps
+        L"Paquet principal", // MainPackage
+        L"Paquet de framework", // FrameworkPackage
+        L"Paquet de ressources", // ResourcePackage
+        L"Ensemble de paquets", // PackageBundle
+        L"Paquet facultatif", // OptionalPackage
+        L"Paramètres de l’application", // AppSettings
+        L"Vérification des options d’épinglage…", // CheckingPins
     }},
     {L"hi", {
         L"कुछ भी खोजें", // SearchAnything
@@ -3288,9 +3441,16 @@ inline constexpr Locale kLocales[] = {
         L"पुनः प्रारंभ करें", // ServiceRestart
         L"कोई मेल खाती सेवा नहीं", // NoServices
         L"विवरण कॉपी करें", // CopyDetails
-        L"लॉन्चर नहीं मिला", // NotLaunchable
         L"इंस्टॉल किए गए ऐप्स में प्रबंधित करें", // ManageInstalled
         L"इंस्टॉल किया गया ऐप", // InstalledApp
+        L"इंस्टॉल किए गए ऐप", // InstalledApps
+        L"मुख्य पैकेज", // MainPackage
+        L"फ़्रेमवर्क पैकेज", // FrameworkPackage
+        L"संसाधन पैकेज", // ResourcePackage
+        L"पैकेज बंडल", // PackageBundle
+        L"वैकल्पिक पैकेज", // OptionalPackage
+        L"ऐप सेटिंग्स", // AppSettings
+        L"पिन करने के विकल्प जाँचे जा रहे हैं…", // CheckingPins
     }},
     {L"hr", {
         L"Pretraži sve", // SearchAnything
@@ -3430,9 +3590,16 @@ inline constexpr Locale kLocales[] = {
         L"Ponovno pokreni", // ServiceRestart
         L"Nema odgovarajućih servisa", // NoServices
         L"Kopiraj pojedinosti", // CopyDetails
-        L"Pokretač nije pronađen", // NotLaunchable
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
+        L"Instalirane aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket programskog okvira", // FrameworkPackage
+        L"Paket resursa", // ResourcePackage
+        L"Skup paketa", // PackageBundle
+        L"Neobavezni paket", // OptionalPackage
+        L"Postavke aplikacije", // AppSettings
+        L"Provjera mogućnosti prikvačivanja…", // CheckingPins
     }},
     {L"hu", {
         L"Keresés mindenben", // SearchAnything
@@ -3572,9 +3739,16 @@ inline constexpr Locale kLocales[] = {
         L"Újraindítás", // ServiceRestart
         L"Nincs megfelelő szolgáltatás", // NoServices
         L"Részletek másolása", // CopyDetails
-        L"Nem található indító", // NotLaunchable
         L"Kezelés a telepített alkalmazásoknál", // ManageInstalled
         L"Telepített alkalmazás", // InstalledApp
+        L"Telepített alkalmazások", // InstalledApps
+        L"Fő csomag", // MainPackage
+        L"Keretrendszercsomag", // FrameworkPackage
+        L"Erőforráscsomag", // ResourcePackage
+        L"Csomagköteg", // PackageBundle
+        L"Választható csomag", // OptionalPackage
+        L"Alkalmazásbeállítások", // AppSettings
+        L"Rögzítési lehetőségek ellenőrzése…", // CheckingPins
     }},
     {L"hy", {
         L"Որոնել ամեն ինչ", // SearchAnything
@@ -3714,9 +3888,16 @@ inline constexpr Locale kLocales[] = {
         L"Վերագործարկել", // ServiceRestart
         L"Համապատասխան ծառայություններ չկան", // NoServices
         L"Պատճենել մանրամասները", // CopyDetails
-        L"Գործարկիչ չի գտնվել", // NotLaunchable
         L"Կառավարել տեղադրված հավելվածներում", // ManageInstalled
         L"Տեղադրված հավելված", // InstalledApp
+        L"Տեղադրված հավելվածներ", // InstalledApps
+        L"Հիմնական փաթեթ", // MainPackage
+        L"Հենքի փաթեթ", // FrameworkPackage
+        L"Ռեսուրսների փաթեթ", // ResourcePackage
+        L"Փաթեթների հավաքածու", // PackageBundle
+        L"Լրացուցիչ փաթեթ", // OptionalPackage
+        L"Հավելվածի կարգավորումներ", // AppSettings
+        L"Ամրացման տարբերակների ստուգում…", // CheckingPins
     }},
     {L"id", {
         L"Cari apa saja", // SearchAnything
@@ -3856,9 +4037,16 @@ inline constexpr Locale kLocales[] = {
         L"Mulai ulang", // ServiceRestart
         L"Tidak ada layanan yang cocok", // NoServices
         L"Salin detail", // CopyDetails
-        L"Peluncur tidak ditemukan", // NotLaunchable
         L"Kelola di Aplikasi terinstal", // ManageInstalled
         L"Aplikasi terinstal", // InstalledApp
+        L"Aplikasi terinstal", // InstalledApps
+        L"Paket utama", // MainPackage
+        L"Paket kerangka kerja", // FrameworkPackage
+        L"Paket sumber daya", // ResourcePackage
+        L"Bundel paket", // PackageBundle
+        L"Paket opsional", // OptionalPackage
+        L"Pengaturan aplikasi", // AppSettings
+        L"Memeriksa opsi penyematan…", // CheckingPins
     }},
     {L"is", {
         L"Leita að hverju sem er", // SearchAnything
@@ -3998,9 +4186,16 @@ inline constexpr Locale kLocales[] = {
         L"Endurræsa", // ServiceRestart
         L"Engar samsvarandi þjónustur", // NoServices
         L"Afrita upplýsingar", // CopyDetails
-        L"Ræsir fannst ekki", // NotLaunchable
         L"Stjórna í Uppsett forrit", // ManageInstalled
         L"Uppsett forrit", // InstalledApp
+        L"Uppsett forrit", // InstalledApps
+        L"Aðalpakki", // MainPackage
+        L"Rammapakki", // FrameworkPackage
+        L"Tilfangapakki", // ResourcePackage
+        L"Pakkasafn", // PackageBundle
+        L"Valfrjáls pakki", // OptionalPackage
+        L"Stillingar forrits", // AppSettings
+        L"Athuga festingar…", // CheckingPins
     }},
     {L"it", {
         L"Cerca qualsiasi cosa", // SearchAnything
@@ -4140,9 +4335,16 @@ inline constexpr Locale kLocales[] = {
         L"Riavvia", // ServiceRestart
         L"Nessun servizio corrispondente", // NoServices
         L"Copia dettagli", // CopyDetails
-        L"Nessun programma di avvio trovato", // NotLaunchable
         L"Gestisci in App installate", // ManageInstalled
         L"App installata", // InstalledApp
+        L"App installate", // InstalledApps
+        L"Pacchetto principale", // MainPackage
+        L"Pacchetto framework", // FrameworkPackage
+        L"Pacchetto risorse", // ResourcePackage
+        L"Gruppo di pacchetti", // PackageBundle
+        L"Pacchetto facoltativo", // OptionalPackage
+        L"Impostazioni app", // AppSettings
+        L"Verifica delle opzioni di aggiunta…", // CheckingPins
     }},
     {L"ja", {
         L"すべてを検索", // SearchAnything
@@ -4282,9 +4484,16 @@ inline constexpr Locale kLocales[] = {
         L"再起動", // ServiceRestart
         L"一致するサービスがありません", // NoServices
         L"詳細をコピー", // CopyDetails
-        L"起動方法が見つかりません", // NotLaunchable
         L"インストールされているアプリで管理", // ManageInstalled
         L"インストール済みアプリ", // InstalledApp
+        L"インストールされているアプリ", // InstalledApps
+        L"メインパッケージ", // MainPackage
+        L"フレームワークパッケージ", // FrameworkPackage
+        L"リソースパッケージ", // ResourcePackage
+        L"パッケージバンドル", // PackageBundle
+        L"オプションパッケージ", // OptionalPackage
+        L"アプリの設定", // AppSettings
+        L"ピン留めの選択肢を確認中…", // CheckingPins
     }},
     {L"ka", {
         L"ყველაფრის ძებნა", // SearchAnything
@@ -4424,9 +4633,16 @@ inline constexpr Locale kLocales[] = {
         L"ხელახლა გაშვება", // ServiceRestart
         L"შესაბამისი სერვისები ვერ მოიძებნა", // NoServices
         L"დეტალების კოპირება", // CopyDetails
-        L"გამშვები ვერ მოიძებნა", // NotLaunchable
         L"მართვა დაინსტალირებულ აპებში", // ManageInstalled
         L"დაყენებული აპი", // InstalledApp
+        L"დაინსტალირებული აპები", // InstalledApps
+        L"მთავარი პაკეტი", // MainPackage
+        L"პლატფორმის პაკეტი", // FrameworkPackage
+        L"რესურსების პაკეტი", // ResourcePackage
+        L"პაკეტების ნაკრები", // PackageBundle
+        L"არასავალდებულო პაკეტი", // OptionalPackage
+        L"აპის პარამეტრები", // AppSettings
+        L"ჩამაგრების პარამეტრების შემოწმება…", // CheckingPins
     }},
     {L"ko", {
         L"모든 항목 검색", // SearchAnything
@@ -4566,9 +4782,16 @@ inline constexpr Locale kLocales[] = {
         L"다시 시작", // ServiceRestart
         L"일치하는 서비스 없음", // NoServices
         L"세부 정보 복사", // CopyDetails
-        L"실행 경로를 찾지 못함", // NotLaunchable
         L"설치된 앱에서 관리", // ManageInstalled
         L"설치된 앱", // InstalledApp
+        L"설치된 앱", // InstalledApps
+        L"기본 패키지", // MainPackage
+        L"프레임워크 패키지", // FrameworkPackage
+        L"리소스 패키지", // ResourcePackage
+        L"패키지 번들", // PackageBundle
+        L"선택적 패키지", // OptionalPackage
+        L"앱 설정", // AppSettings
+        L"고정 옵션 확인 중…", // CheckingPins
     }},
     {L"lt", {
         L"Ieškoti visko", // SearchAnything
@@ -4708,9 +4931,16 @@ inline constexpr Locale kLocales[] = {
         L"Paleisti iš naujo", // ServiceRestart
         L"Atitinkančių tarnybų nėra", // NoServices
         L"Kopijuoti išsamią informaciją", // CopyDetails
-        L"Paleidimo priemonė nerasta", // NotLaunchable
         L"Tvarkyti įdiegtose programose", // ManageInstalled
         L"Įdiegta programa", // InstalledApp
+        L"Įdiegtos programėlės", // InstalledApps
+        L"Pagrindinis paketas", // MainPackage
+        L"Sistemos bibliotekų paketas", // FrameworkPackage
+        L"Išteklių paketas", // ResourcePackage
+        L"Paketų rinkinys", // PackageBundle
+        L"Pasirenkamas paketas", // OptionalPackage
+        L"Programėlės parametrai", // AppSettings
+        L"Tikrinamos prisegimo parinktys…", // CheckingPins
     }},
     {L"lv", {
         L"Meklēt visu", // SearchAnything
@@ -4850,9 +5080,16 @@ inline constexpr Locale kLocales[] = {
         L"Restartēt", // ServiceRestart
         L"Nav atbilstošu pakalpojumu", // NoServices
         L"Kopēt informāciju", // CopyDetails
-        L"Palaidējs nav atrasts", // NotLaunchable
         L"Pārvaldīt instalētajās programmās", // ManageInstalled
         L"Instalēta programma", // InstalledApp
+        L"Instalētās programmas", // InstalledApps
+        L"Galvenā pakotne", // MainPackage
+        L"Ietvara pakotne", // FrameworkPackage
+        L"Resursu pakotne", // ResourcePackage
+        L"Pakotņu kopa", // PackageBundle
+        L"Neobligāta pakotne", // OptionalPackage
+        L"Programmas iestatījumi", // AppSettings
+        L"Tiek pārbaudītas piespraušanas iespējas…", // CheckingPins
     }},
     {L"mk", {
         L"Пребарај сè", // SearchAnything
@@ -4992,9 +5229,16 @@ inline constexpr Locale kLocales[] = {
         L"Рестартирај", // ServiceRestart
         L"Нема соодветни услуги", // NoServices
         L"Копирај детали", // CopyDetails
-        L"Не е пронајден стартер", // NotLaunchable
         L"Управувај во инсталираните апликации", // ManageInstalled
         L"Инсталирана апликација", // InstalledApp
+        L"Инсталирани апликации", // InstalledApps
+        L"Главен пакет", // MainPackage
+        L"Пакет на рамковна околина", // FrameworkPackage
+        L"Пакет со ресурси", // ResourcePackage
+        L"Збирка пакети", // PackageBundle
+        L"Изборен пакет", // OptionalPackage
+        L"Поставки за апликацијата", // AppSettings
+        L"Проверка на опциите за прикачување…", // CheckingPins
     }},
     {L"ms", {
         L"Cari apa sahaja", // SearchAnything
@@ -5134,9 +5378,16 @@ inline constexpr Locale kLocales[] = {
         L"Mula semula", // ServiceRestart
         L"Tiada perkhidmatan yang sepadan", // NoServices
         L"Salin butiran", // CopyDetails
-        L"Pelancar tidak ditemukan", // NotLaunchable
         L"Urus dalam Aplikasi dipasang", // ManageInstalled
         L"Aplikasi dipasang", // InstalledApp
+        L"Aplikasi dipasang", // InstalledApps
+        L"Pakej utama", // MainPackage
+        L"Pakej rangka kerja", // FrameworkPackage
+        L"Pakej sumber", // ResourcePackage
+        L"Himpunan pakej", // PackageBundle
+        L"Pakej pilihan", // OptionalPackage
+        L"Tetapan aplikasi", // AppSettings
+        L"Menyemak pilihan pin…", // CheckingPins
     }},
     {L"nb", {
         L"Søk etter alt", // SearchAnything
@@ -5276,9 +5527,16 @@ inline constexpr Locale kLocales[] = {
         L"Start på nytt", // ServiceRestart
         L"Ingen samsvarende tjenester", // NoServices
         L"Kopier detaljer", // CopyDetails
-        L"Ingen oppstartssnarvei funnet", // NotLaunchable
         L"Administrer i Installerte apper", // ManageInstalled
         L"Installert app", // InstalledApp
+        L"Installerte apper", // InstalledApps
+        L"Hovedpakke", // MainPackage
+        L"Rammeverkspakke", // FrameworkPackage
+        L"Ressurspakke", // ResourcePackage
+        L"Pakkesamling", // PackageBundle
+        L"Valgfri pakke", // OptionalPackage
+        L"Appinnstillinger", // AppSettings
+        L"Kontrollerer festealternativer…", // CheckingPins
     }},
     {L"nl", {
         L"Alles doorzoeken", // SearchAnything
@@ -5418,9 +5676,16 @@ inline constexpr Locale kLocales[] = {
         L"Opnieuw starten", // ServiceRestart
         L"Geen overeenkomende services", // NoServices
         L"Details kopiëren", // CopyDetails
-        L"Geen startpunt gevonden", // NotLaunchable
         L"Beheren in Geïnstalleerde apps", // ManageInstalled
         L"Geïnstalleerde app", // InstalledApp
+        L"Geïnstalleerde apps", // InstalledApps
+        L"Hoofdpakket", // MainPackage
+        L"Frameworkpakket", // FrameworkPackage
+        L"Bronnenpakket", // ResourcePackage
+        L"Pakketbundel", // PackageBundle
+        L"Optioneel pakket", // OptionalPackage
+        L"App-instellingen", // AppSettings
+        L"Vastmaakopties controleren…", // CheckingPins
     }},
     {L"pl", {
         L"Szukaj wszystkiego", // SearchAnything
@@ -5560,9 +5825,16 @@ inline constexpr Locale kLocales[] = {
         L"Uruchom ponownie", // ServiceRestart
         L"Brak pasujących usług", // NoServices
         L"Kopiuj szczegóły", // CopyDetails
-        L"Nie znaleziono programu uruchamiającego", // NotLaunchable
         L"Zarządzaj w Zainstalowanych aplikacjach", // ManageInstalled
         L"Zainstalowana aplikacja", // InstalledApp
+        L"Zainstalowane aplikacje", // InstalledApps
+        L"Pakiet główny", // MainPackage
+        L"Pakiet platformy", // FrameworkPackage
+        L"Pakiet zasobów", // ResourcePackage
+        L"Zestaw pakietów", // PackageBundle
+        L"Pakiet opcjonalny", // OptionalPackage
+        L"Ustawienia aplikacji", // AppSettings
+        L"Sprawdzanie opcji przypinania…", // CheckingPins
     }},
     {L"pt-br", {
         L"Pesquisar qualquer coisa", // SearchAnything
@@ -5702,9 +5974,16 @@ inline constexpr Locale kLocales[] = {
         L"Reiniciar", // ServiceRestart
         L"Nenhum serviço correspondente", // NoServices
         L"Copiar detalhes", // CopyDetails
-        L"Nenhum inicializador encontrado", // NotLaunchable
         L"Gerenciar em Aplicativos instalados", // ManageInstalled
         L"Aplicativo instalado", // InstalledApp
+        L"Aplicativos instalados", // InstalledApps
+        L"Pacote principal", // MainPackage
+        L"Pacote de framework", // FrameworkPackage
+        L"Pacote de recursos", // ResourcePackage
+        L"Conjunto de pacotes", // PackageBundle
+        L"Pacote opcional", // OptionalPackage
+        L"Configurações do aplicativo", // AppSettings
+        L"Verificando opções de fixação…", // CheckingPins
     }},
     {L"pt-pt", {
         L"Pesquisar tudo", // SearchAnything
@@ -5844,9 +6123,16 @@ inline constexpr Locale kLocales[] = {
         L"Reiniciar", // ServiceRestart
         L"Nenhum serviço correspondente", // NoServices
         L"Copiar detalhes", // CopyDetails
-        L"Nenhum iniciador encontrado", // NotLaunchable
         L"Gerir em Aplicações instaladas", // ManageInstalled
         L"Aplicação instalada", // InstalledApp
+        L"Aplicações instaladas", // InstalledApps
+        L"Pacote principal", // MainPackage
+        L"Pacote de framework", // FrameworkPackage
+        L"Pacote de recursos", // ResourcePackage
+        L"Conjunto de pacotes", // PackageBundle
+        L"Pacote opcional", // OptionalPackage
+        L"Definições da aplicação", // AppSettings
+        L"A verificar opções de afixação…", // CheckingPins
     }},
     {L"ro", {
         L"Caută orice", // SearchAnything
@@ -5986,9 +6272,16 @@ inline constexpr Locale kLocales[] = {
         L"Repornire", // ServiceRestart
         L"Nu există servicii corespunzătoare", // NoServices
         L"Copiază detaliile", // CopyDetails
-        L"Nu s-a găsit un lansator", // NotLaunchable
         L"Gestionează în Aplicații instalate", // ManageInstalled
         L"Aplicație instalată", // InstalledApp
+        L"Aplicații instalate", // InstalledApps
+        L"Pachet principal", // MainPackage
+        L"Pachet de framework", // FrameworkPackage
+        L"Pachet de resurse", // ResourcePackage
+        L"Colecție de pachete", // PackageBundle
+        L"Pachet opțional", // OptionalPackage
+        L"Setări aplicație", // AppSettings
+        L"Se verifică opțiunile de fixare…", // CheckingPins
     }},
     {L"ru", {
         L"Искать всё", // SearchAnything
@@ -6128,9 +6421,16 @@ inline constexpr Locale kLocales[] = {
         L"Перезапустить", // ServiceRestart
         L"Нет подходящих служб", // NoServices
         L"Копировать сведения", // CopyDetails
-        L"Способ запуска не найден", // NotLaunchable
         L"Управление в установленных приложениях", // ManageInstalled
         L"Установленное приложение", // InstalledApp
+        L"Установленные приложения", // InstalledApps
+        L"Основной пакет", // MainPackage
+        L"Пакет платформы", // FrameworkPackage
+        L"Пакет ресурсов", // ResourcePackage
+        L"Набор пакетов", // PackageBundle
+        L"Дополнительный пакет", // OptionalPackage
+        L"Параметры приложения", // AppSettings
+        L"Проверка вариантов закрепления…", // CheckingPins
     }},
     {L"sk", {
         L"Hľadať všetko", // SearchAnything
@@ -6270,9 +6570,16 @@ inline constexpr Locale kLocales[] = {
         L"Reštartovať", // ServiceRestart
         L"Žiadne zodpovedajúce služby", // NoServices
         L"Kopírovať podrobnosti", // CopyDetails
-        L"Spúšťač sa nenašiel", // NotLaunchable
         L"Spravovať v nainštalovaných aplikáciách", // ManageInstalled
         L"Nainštalovaná aplikácia", // InstalledApp
+        L"Nainštalované aplikácie", // InstalledApps
+        L"Hlavný balík", // MainPackage
+        L"Balík frameworku", // FrameworkPackage
+        L"Balík prostriedkov", // ResourcePackage
+        L"Súprava balíkov", // PackageBundle
+        L"Voliteľný balík", // OptionalPackage
+        L"Nastavenia aplikácie", // AppSettings
+        L"Zisťovanie možností pripnutia…", // CheckingPins
     }},
     {L"sl", {
         L"Išči vse", // SearchAnything
@@ -6412,9 +6719,16 @@ inline constexpr Locale kLocales[] = {
         L"Znova zaženi", // ServiceRestart
         L"Ni ustreznih storitev", // NoServices
         L"Kopiraj podrobnosti", // CopyDetails
-        L"Zaganjalnik ni bil najden", // NotLaunchable
         L"Upravljaj v nameščenih aplikacijah", // ManageInstalled
         L"Nameščena aplikacija", // InstalledApp
+        L"Nameščene aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket ogrodja", // FrameworkPackage
+        L"Paket virov", // ResourcePackage
+        L"Zbirka paketov", // PackageBundle
+        L"Izbirni paket", // OptionalPackage
+        L"Nastavitve aplikacije", // AppSettings
+        L"Preverjanje možnosti pripenjanja…", // CheckingPins
     }},
     {L"sq", {
         L"Kërko gjithçka", // SearchAnything
@@ -6554,9 +6868,16 @@ inline constexpr Locale kLocales[] = {
         L"Rinis", // ServiceRestart
         L"Nuk ka shërbime që përputhen", // NoServices
         L"Kopjo hollësitë", // CopyDetails
-        L"Nuk u gjet nisës", // NotLaunchable
         L"Menaxho te aplikacionet e instaluara", // ManageInstalled
         L"Aplikacion i instaluar", // InstalledApp
+        L"Aplikacionet e instaluara", // InstalledApps
+        L"Paketa kryesore", // MainPackage
+        L"Paketë platforme", // FrameworkPackage
+        L"Paketë burimesh", // ResourcePackage
+        L"Grup paketash", // PackageBundle
+        L"Paketë opsionale", // OptionalPackage
+        L"Cilësimet e aplikacionit", // AppSettings
+        L"Po kontrollohen mundësitë e fiksimit…", // CheckingPins
     }},
     {L"sr-latn", {
         L"Pretraži sve", // SearchAnything
@@ -6696,9 +7017,16 @@ inline constexpr Locale kLocales[] = {
         L"Ponovo pokreni", // ServiceRestart
         L"Nema odgovarajućih usluga", // NoServices
         L"Kopiraj detalje", // CopyDetails
-        L"Pokretač nije pronađen", // NotLaunchable
         L"Upravljaj instaliranim aplikacijama", // ManageInstalled
         L"Instalirana aplikacija", // InstalledApp
+        L"Instalirane aplikacije", // InstalledApps
+        L"Glavni paket", // MainPackage
+        L"Paket radnog okvira", // FrameworkPackage
+        L"Paket resursa", // ResourcePackage
+        L"Skup paketa", // PackageBundle
+        L"Opcioni paket", // OptionalPackage
+        L"Podešavanja aplikacije", // AppSettings
+        L"Provera opcija kačenja…", // CheckingPins
     }},
     {L"sv", {
         L"Sök efter allt", // SearchAnything
@@ -6838,9 +7166,16 @@ inline constexpr Locale kLocales[] = {
         L"Starta om", // ServiceRestart
         L"Inga matchande tjänster", // NoServices
         L"Kopiera information", // CopyDetails
-        L"Ingen startgenväg hittades", // NotLaunchable
         L"Hantera i Installerade appar", // ManageInstalled
         L"Installerad app", // InstalledApp
+        L"Installerade appar", // InstalledApps
+        L"Huvudpaket", // MainPackage
+        L"Ramverkspaket", // FrameworkPackage
+        L"Resurspaket", // ResourcePackage
+        L"Paketsamling", // PackageBundle
+        L"Valfritt paket", // OptionalPackage
+        L"Appinställningar", // AppSettings
+        L"Kontrollerar fästalternativ…", // CheckingPins
     }},
     {L"sw", {
         L"Tafuta chochote", // SearchAnything
@@ -6980,9 +7315,16 @@ inline constexpr Locale kLocales[] = {
         L"Anzisha upya", // ServiceRestart
         L"Hakuna huduma zinazolingana", // NoServices
         L"Nakili maelezo", // CopyDetails
-        L"Kizindua hakikupatikana", // NotLaunchable
         L"Dhibiti katika Programu zilizosakinishwa", // ManageInstalled
         L"Programu iliyosakinishwa", // InstalledApp
+        L"Programu zilizosakinishwa", // InstalledApps
+        L"Kifurushi kikuu", // MainPackage
+        L"Kifurushi cha mfumo", // FrameworkPackage
+        L"Kifurushi cha rasilimali", // ResourcePackage
+        L"Kundi la vifurushi", // PackageBundle
+        L"Kifurushi cha hiari", // OptionalPackage
+        L"Mipangilio ya programu", // AppSettings
+        L"Inakagua chaguo za kubandika…", // CheckingPins
     }},
     {L"ta", {
         L"அனைத்தையும் தேடுங்கள்", // SearchAnything
@@ -7122,9 +7464,16 @@ inline constexpr Locale kLocales[] = {
         L"மீண்டும் தொடங்கு", // ServiceRestart
         L"பொருந்தும் சேவைகள் இல்லை", // NoServices
         L"விவரங்களை நகலெடு", // CopyDetails
-        L"தொடங்கும் வழி கிடைக்கவில்லை", // NotLaunchable
         L"நிறுவப்பட்ட பயன்பாடுகளில் நிர்வகி", // ManageInstalled
         L"நிறுவப்பட்ட செயலி", // InstalledApp
+        L"நிறுவப்பட்ட பயன்பாடுகள்", // InstalledApps
+        L"முதன்மைத் தொகுப்பு", // MainPackage
+        L"கட்டமைப்புத் தொகுப்பு", // FrameworkPackage
+        L"வளத் தொகுப்பு", // ResourcePackage
+        L"தொகுப்புகளின் தொகுதி", // PackageBundle
+        L"விருப்பத் தொகுப்பு", // OptionalPackage
+        L"பயன்பாட்டு அமைப்புகள்", // AppSettings
+        L"பொருத்தும் விருப்பங்கள் சரிபார்க்கப்படுகின்றன…", // CheckingPins
     }},
     {L"te", {
         L"ఏదైనా వెతకండి", // SearchAnything
@@ -7264,9 +7613,16 @@ inline constexpr Locale kLocales[] = {
         L"పునఃప్రారంభించు", // ServiceRestart
         L"సరిపోలే సేవలు లేవు", // NoServices
         L"వివరాలను కాపీ చేయి", // CopyDetails
-        L"ప్రారంభించే మార్గం కనుగొనబడలేదు", // NotLaunchable
         L"ఇన్\u200cస్టాల్ చేసిన యాప్\u200cలలో నిర్వహించు", // ManageInstalled
         L"ఇన్\u200cస్టాల్ చేసిన యాప్", // InstalledApp
+        L"ఇన్\u200cస్టాల్ చేసిన యాప్\u200cలు", // InstalledApps
+        L"ప్రధాన ప్యాకేజీ", // MainPackage
+        L"ఫ్రేమ్\u200cవర్క్ ప్యాకేజీ", // FrameworkPackage
+        L"వనరుల ప్యాకేజీ", // ResourcePackage
+        L"ప్యాకేజీల సమూహం", // PackageBundle
+        L"ఐచ్ఛిక ప్యాకేజీ", // OptionalPackage
+        L"యాప్ సెట్టింగ్\u200cలు", // AppSettings
+        L"పిన్ చేసే ఎంపికలను తనిఖీ చేస్తోంది…", // CheckingPins
     }},
     {L"th", {
         L"ค้นหาทุกอย่าง", // SearchAnything
@@ -7406,9 +7762,16 @@ inline constexpr Locale kLocales[] = {
         L"เริ่มใหม่", // ServiceRestart
         L"ไม่พบบริการที่ตรงกัน", // NoServices
         L"คัดลอกรายละเอียด", // CopyDetails
-        L"ไม่พบตัวเรียกใช้", // NotLaunchable
         L"จัดการในแอปที่ติดตั้ง", // ManageInstalled
         L"แอปที่ติดตั้ง", // InstalledApp
+        L"แอปที่ติดตั้ง", // InstalledApps
+        L"แพ็กเกจหลัก", // MainPackage
+        L"แพ็กเกจเฟรมเวิร์ก", // FrameworkPackage
+        L"แพ็กเกจทรัพยากร", // ResourcePackage
+        L"ชุดแพ็กเกจ", // PackageBundle
+        L"แพ็กเกจเสริม", // OptionalPackage
+        L"การตั้งค่าแอป", // AppSettings
+        L"กำลังตรวจสอบตัวเลือกการปักหมุด…", // CheckingPins
     }},
     {L"tr", {
         L"Her şeyi ara", // SearchAnything
@@ -7548,9 +7911,16 @@ inline constexpr Locale kLocales[] = {
         L"Yeniden başlat", // ServiceRestart
         L"Eşleşen hizmet yok", // NoServices
         L"Ayrıntıları kopyala", // CopyDetails
-        L"Başlatıcı bulunamadı", // NotLaunchable
         L"Yüklü uygulamalarda yönet", // ManageInstalled
         L"Yüklü uygulama", // InstalledApp
+        L"Yüklü uygulamalar", // InstalledApps
+        L"Ana paket", // MainPackage
+        L"Çerçeve paketi", // FrameworkPackage
+        L"Kaynak paketi", // ResourcePackage
+        L"Paket grubu", // PackageBundle
+        L"İsteğe bağlı paket", // OptionalPackage
+        L"Uygulama ayarları", // AppSettings
+        L"Sabitleme seçenekleri denetleniyor…", // CheckingPins
     }},
     {L"uk", {
         L"Шукати все", // SearchAnything
@@ -7690,9 +8060,16 @@ inline constexpr Locale kLocales[] = {
         L"Перезапустити", // ServiceRestart
         L"Немає відповідних служб", // NoServices
         L"Копіювати відомості", // CopyDetails
-        L"Спосіб запуску не знайдено", // NotLaunchable
         L"Керувати у встановлених програмах", // ManageInstalled
         L"Установлена програма", // InstalledApp
+        L"Інстальовані програми", // InstalledApps
+        L"Основний пакет", // MainPackage
+        L"Пакет платформи", // FrameworkPackage
+        L"Пакет ресурсів", // ResourcePackage
+        L"Набір пакетів", // PackageBundle
+        L"Додатковий пакет", // OptionalPackage
+        L"Параметри програми", // AppSettings
+        L"Перевірка варіантів закріплення…", // CheckingPins
     }},
     {L"vi", {
         L"Tìm kiếm mọi thứ", // SearchAnything
@@ -7832,9 +8209,16 @@ inline constexpr Locale kLocales[] = {
         L"Khởi động lại", // ServiceRestart
         L"Không có dịch vụ phù hợp", // NoServices
         L"Sao chép chi tiết", // CopyDetails
-        L"Không tìm thấy trình khởi chạy", // NotLaunchable
         L"Quản lý trong Ứng dụng đã cài đặt", // ManageInstalled
         L"Ứng dụng đã cài đặt", // InstalledApp
+        L"Ứng dụng đã cài đặt", // InstalledApps
+        L"Gói chính", // MainPackage
+        L"Gói nền tảng", // FrameworkPackage
+        L"Gói tài nguyên", // ResourcePackage
+        L"Bộ gói", // PackageBundle
+        L"Gói tùy chọn", // OptionalPackage
+        L"Cài đặt ứng dụng", // AppSettings
+        L"Đang kiểm tra tùy chọn ghim…", // CheckingPins
     }},
     {L"zh-hans", {
         L"搜索所有内容", // SearchAnything
@@ -7974,9 +8358,16 @@ inline constexpr Locale kLocales[] = {
         L"重新启动", // ServiceRestart
         L"没有匹配的服务", // NoServices
         L"复制详细信息", // CopyDetails
-        L"未找到启动入口", // NotLaunchable
         L"在已安装的应用中管理", // ManageInstalled
         L"已安装的应用", // InstalledApp
+        L"已安装的应用", // InstalledApps
+        L"主程序包", // MainPackage
+        L"框架程序包", // FrameworkPackage
+        L"资源程序包", // ResourcePackage
+        L"程序包捆绑包", // PackageBundle
+        L"可选程序包", // OptionalPackage
+        L"应用设置", // AppSettings
+        L"正在检查固定选项…", // CheckingPins
     }},
     {L"zh-hant", {
         L"搜尋所有內容", // SearchAnything
@@ -8116,9 +8507,16 @@ inline constexpr Locale kLocales[] = {
         L"重新啟動", // ServiceRestart
         L"沒有符合的服務", // NoServices
         L"複製詳細資料", // CopyDetails
-        L"找不到啟動方式", // NotLaunchable
         L"在已安裝的應用程式中管理", // ManageInstalled
         L"已安裝的應用程式", // InstalledApp
+        L"已安裝的應用程式", // InstalledApps
+        L"主要套件", // MainPackage
+        L"架構套件", // FrameworkPackage
+        L"資源套件", // ResourcePackage
+        L"套件組合", // PackageBundle
+        L"選用套件", // OptionalPackage
+        L"應用程式設定", // AppSettings
+        L"正在檢查釘選選項…", // CheckingPins
     }},
 };
 inline std::atomic<const Locale*> g_locale{&kLocales[0]};
@@ -8195,6 +8593,7 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Administrator", Key::Administrator},
         {L"Album", Key::Album},
         {L"Angle", Key::Angle},
+        {L"App settings", Key::AppSettings},
         {L"Application", Key::Application},
         {L"Apps", Key::Apps},
         {L"Area", Key::Area},
@@ -8207,6 +8606,7 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Camera", Key::Camera},
         {L"Check files or refine your query", Key::Refine},
         {L"Check your Wi-Fi, Ethernet, or VPN connection", Key::CheckNetwork},
+        {L"Checking pins…", Key::CheckingPins},
         {L"Close", Key::Close},
         {L"Command Prompt", Key::CommandPrompt},
         {L"Company", Key::Company},
@@ -8247,17 +8647,20 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Files and folders will appear here", Key::FilesAppear},
         {L"Folder", Key::Folder},
         {L"Frame rate", Key::FrameRate},
+        {L"Framework package", Key::FrameworkPackage},
         {L"Frequency", Key::Frequency},
         {L"Gateway", Key::Gateway},
         {L"Give each Quick Tool and custom /command a different name in settings.", Key::CommandNameConflictHint},
         {L"Hardware usage", Key::HardwareUsage},
         {L"Installed app", Key::InstalledApp},
+        {L"Installed apps", Key::InstalledApps},
         {L"Internet speed test", Key::SpeedTest},
         {L"It is not installed for this account, or it is part of Windows.", Key::ProtectedApp},
         {L"Items", Key::Items},
         {L"Latency", Key::Latency},
         {L"Length", Key::Length},
         {L"Loading…", Key::OnlineLoading},
+        {L"Main package", Key::MainPackage},
         {L"Manage in Installed apps", Key::ManageInstalled},
         {L"Mass", Key::Mass},
         {L"Matches", Key::Matches},
@@ -8268,7 +8671,6 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Network traffic", Key::NetworkTraffic},
         {L"Next", Key::Next},
         {L"No active network interfaces", Key::NoNetwork},
-        {L"No launcher found", Key::NotLaunchable},
         {L"No matching applications", Key::NoApps},
         {L"No matching files", Key::NoFiles},
         {L"No matching services", Key::NoServices},
@@ -8278,6 +8680,8 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Open file location", Key::OpenLocation},
         {L"Open in terminal", Key::Terminal},
         {L"Open {0}", Key::OpenService},
+        {L"Optional package", Key::OptionalPackage},
+        {L"Package bundle", Key::PackageBundle},
         {L"Pages", Key::Pages},
         {L"Paused", Key::ServicePaused},
         {L"Pending…", Key::ServicePending},
@@ -8289,6 +8693,7 @@ inline std::wstring Label(std::wstring_view english) {
         {L"Pressure", Key::Pressure},
         {L"Properties", Key::Properties},
         {L"Ready", Key::TestReady},
+        {L"Resource package", Key::ResourcePackage},
         {L"Restart", Key::ServiceRestart},
         {L"Run", Key::Run},
         {L"Run as administrator", Key::RunAdmin},
@@ -8371,7 +8776,7 @@ inline HMODULE GetCurrentModuleHandle() {
 // whenever Everything is running.
 //
 // Two query messages exist. QUERY2 is preferred: it carries a sort order and
-// returns size, dates, attributes and run count, which the ranker needs.
+// returns the file metadata used by the panel.
 // QUERYW is the original and is kept as a fallback for older builds -- it
 // returns names and paths only, in whatever order the Everything window
 // happens to be sorted by.
@@ -8388,6 +8793,34 @@ inline HMODULE GetCurrentModuleHandle() {
 
 #include <string>
 #include <vector>
+
+// <search-text>
+namespace searchtext {
+inline std::wstring Lower(std::wstring s) {
+    // Keep the usual ASCII query cheap. towlower in the default C locale
+    // leaves uppercase Cyrillic (and other non-ASCII names) unchanged.
+    bool unicode = false;
+    for (auto& c : s) {
+        if (c >= L'A' && c <= L'Z')
+            c += L'a' - L'A';
+        else if (c >= 0x80)
+            unicode = true;
+    }
+    if (!unicode || s.size() > static_cast<size_t>(INT_MAX))
+        return s;
+    const int length = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_LOWERCASE, s.data(), static_cast<int>(s.size()),
+                                     nullptr, 0, nullptr, nullptr, 0);
+    if (length <= 0)
+        return s;
+    std::wstring lower(static_cast<size_t>(length), L'\0');
+    if (LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_LOWERCASE, s.data(), static_cast<int>(s.size()), lower.data(),
+                      length, nullptr, nullptr, 0) != length)
+        return s;
+    return lower;
+}
+
+}  // namespace searchtext
+// </search-text>
 
 namespace everything {
 
@@ -8435,18 +8868,187 @@ inline constexpr DWORD kReqSupported =
     kReqDateModified | kReqDateAccessed | kReqAttributes | kReqRunCount |
     kReqDateRun;
 
-// What the panel shows, plus what the ranker sorts on.
+// Only request fields used by the file panel. Everything owns ordering.
 inline constexpr DWORD kDefaultRequestFlags = kReqName | kReqPath | kReqSize |
                                               kReqDateModified |
-                                              kReqAttributes | kReqRunCount;
+                                              kReqAttributes;
 
-// Sort orders. Name-ascending is the only one guaranteed instant; the others
-// are fast only when the matching fast-sort is enabled in Everything's
-// options, which cannot be assumed on a user machine. So the client asks for
-// name-ascending and the ranking happens here.
+// Public QUERY2 sort values. The preference comes from Everything itself.
 inline constexpr DWORD kSortNameAscending = 1;
 inline constexpr DWORD kSortDateModifiedDescending = 14;
 inline constexpr DWORD kSortRunCountDescending = 20;
+
+inline std::atomic<uint64_t> g_sortPreferenceSession{1};
+inline void RefreshSortPreferences() { g_sortPreferenceSession.fetch_add(1); }
+namespace preferences {
+inline bool ValidSort(DWORD value) {
+    return value >= 1 && value <= 26;
+}
+inline std::optional<DWORD> ReadValue(HWND hwnd, WPARAM property, LPARAM parameter = 0) {
+    DWORD_PTR result = 0;
+    if (!hwnd || !SendMessageTimeoutW(hwnd, WM_USER, property, parameter, SMTO_BLOCK | SMTO_ABORTIFHUNG, 30, &result))
+        return std::nullopt;
+    return static_cast<DWORD>(result);
+}
+inline std::wstring SortToken(std::wstring text) {
+    std::wstring token;
+    for (wchar_t c : searchtext::Lower(std::move(text))) {
+        if (c != L' ' && c != L'-' && c != L'_' && c != L'\t')
+            token += c;
+    }
+    return token;
+}
+inline std::optional<DWORD> ParseSort(const std::wstring& text, bool ascending) {
+    const auto token = SortToken(text);
+    static constexpr const wchar_t* names[] = {L"name",
+                                               L"path",
+                                               L"size",
+                                               L"extension",
+                                               L"type",
+                                               L"datecreated",
+                                               L"datemodified",
+                                               L"attributes",
+                                               L"filelistfilename",
+                                               L"runcount",
+                                               L"daterecentlychanged",
+                                               L"dateaccessed",
+                                               L"daterun"};
+    for (size_t i = 0; i < ARRAYSIZE(names); ++i)
+        if (token == names[i])
+            return static_cast<DWORD>(i * 2 + 1 + (ascending ? 0 : 1));
+    // Everything 1.4 documented these INI values before property-name strings.
+    static constexpr DWORD legacy[] = {1, 3, 7, 9, 13, 11, 23, 15, 21, 19, 25, 17};
+    unsigned index = 0;
+    if (token.empty() || token.size() > 2)
+        return std::nullopt;
+    for (wchar_t c : token) {
+        if (c < L'0' || c > L'9')
+            return std::nullopt;
+        index = index * 10 + c - L'0';
+    }
+    if (index >= ARRAYSIZE(legacy))
+        return std::nullopt;
+    return legacy[index] + (ascending ? 0 : 1);
+}
+inline std::optional<DWORD> ReadIniSort(const std::wstring& file) {
+    wchar_t sort[128]{}, direction[8]{};
+    const auto length = GetPrivateProfileStringW(L"Everything", L"sort", L"", sort, ARRAYSIZE(sort), file.c_str());
+    if (!length || length >= ARRAYSIZE(sort) - 1)
+        return std::nullopt;
+    GetPrivateProfileStringW(L"Everything", L"sort_ascending", L"1", direction, ARRAYSIZE(direction), file.c_str());
+    if (wcscmp(direction, L"0") && wcscmp(direction, L"1"))
+        return std::nullopt;
+    return ParseSort(sort, direction[0] == L'1');
+}
+inline std::optional<std::wstring> InstanceSuffix(HWND server) {
+    wchar_t cls[256]{};
+    GetClassNameW(server, cls, ARRAYSIZE(cls));
+    const std::wstring_view name(cls), prefix = L"EVERYTHING_TASKBAR_NOTIFICATION_(";
+    if (name == L"EVERYTHING_TASKBAR_NOTIFICATION")
+        return std::wstring{};
+    if (!name.starts_with(prefix) || name.back() != L')')
+        return std::nullopt;
+    const auto instance = name.substr(prefix.size(), name.size() - prefix.size() - 1);
+    if (instance.empty() || instance.find_first_of(L"\\/:*?\"<>|") != instance.npos)
+        return std::nullopt;
+    return L"-" + std::wstring(instance);
+}
+inline std::wstring SettingsFile(HWND server) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(server, &pid);
+    const auto instance = InstanceSuffix(server);
+    if (!pid || !instance)
+        return {};
+    const auto& suffix = *instance;
+    std::wstring folder;
+    const auto appData = ReadValue(server, 404);
+    if (appData && *appData == 1) {
+        const DWORD required = GetEnvironmentVariableW(L"APPDATA", nullptr, 0);
+        if (required && required <= 32768) {
+            std::wstring roaming(required, L'\0');
+            const DWORD size = GetEnvironmentVariableW(L"APPDATA", roaming.data(), required);
+            if (size && size < required) {
+                roaming.resize(size);
+                folder = roaming + L"\\Everything";
+            }
+        }
+    } else {
+        HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (process) {
+            std::wstring image(512, L'\0');
+            DWORD size = static_cast<DWORD>(image.size());
+            BOOL read = QueryFullProcessImageNameW(process, 0, image.data(), &size);
+            while (!read && GetLastError() == ERROR_INSUFFICIENT_BUFFER && image.size() < 32768) {
+                image.resize(std::min<size_t>(image.size() * 2, 32768));
+                size = static_cast<DWORD>(image.size());
+                read = QueryFullProcessImageNameW(process, 0, image.data(), &size);
+            }
+            if (read && size < image.size() && image[0]) {
+                folder.assign(image.data(), size);
+                const auto slash = folder.find_last_of(L"\\/");
+                if (slash == folder.npos)
+                    folder.clear();
+                else
+                    folder.resize(slash);
+            }
+            CloseHandle(process);
+        }
+    }
+    if (folder.size() > 2 && folder[1] == L':' && (folder[2] == L'\\' || folder[2] == L'/') &&
+        GetDriveTypeW((folder.substr(0, 3)).c_str()) != DRIVE_REMOTE) {
+        return folder + L"\\Everything" + suffix + L".ini";
+    }
+    return {};
+}
+inline DWORD RequestedSort(HWND server) {
+    if (!server)
+        return kSortNameAscending;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(server, &pid);
+    const auto instance = InstanceSuffix(server);
+    if (!pid || !instance)
+        return kSortNameAscending;
+    const auto& suffix = *instance;
+    const auto cls = L"EVERYTHING" + (suffix.empty() ? std::wstring{} : L"_(" + suffix.substr(1) + L")");
+    // GET_SORT (510), documented in the official SDK's everything_ipc.h,
+    // reads a search window. Match its PID to the selected IPC instance.
+    HWND hidden = nullptr;
+    for (HWND window = nullptr; (window = FindWindowExW(nullptr, window, cls.c_str(), nullptr));) {
+        DWORD owner = 0;
+        GetWindowThreadProcessId(window, &owner);
+        if (owner != pid)
+            continue;
+        if (!IsWindowVisible(window)) {
+            if (!hidden)
+                hidden = window;
+            continue;
+        }
+        const auto value = ReadValue(window, 510);
+        if (value && ValidSort(*value))
+            return *value;
+        break;
+    }
+    if (hidden)
+        if (const auto value = ReadValue(hidden, 510); value && ValidSort(*value))
+            return *value;
+    // No search window exists while Everything is running only in the tray.
+    // Read its saved preference without creating a window or changing settings.
+    const auto file = SettingsFile(server);
+    if (!file.empty())
+        if (auto value = ReadIniSort(file))
+            return *value;
+    return kSortNameAscending;
+}
+inline DWORD PreferredSort(HWND server) {
+    const DWORD sort = RequestedSort(server);
+    // The SDK documents these sorts as always fast, without an optional index.
+    if (sort <= 2 || (sort >= 19 && sort <= 22) || sort >= 25)
+        return sort;
+    // EVERYTHING_IPC_IS_FAST_SORT. Avoid a slow broad query timing out.
+    const auto fast = ReadValue(server, 410, sort);
+    return fast && *fast ? sort : kSortNameAscending;
+}
+}  // namespace preferences
 
 #pragma pack(push, 1)
 struct QueryHeaderW {
@@ -8533,6 +9135,26 @@ inline HWND FindIpcWindow() {
         }
     }
     return nullptr;
+}
+
+// Official SDK INC_RUN_COUNTW message: Everything owns file run history.
+inline std::atomic<bool> g_recordRunHistory{false};
+void RecordFileOpen(const std::wstring& path) {
+    if (!g_recordRunHistory.load(std::memory_order_relaxed))
+        return;
+    if (path.size() < 3 || path.size() > 32767 || (path[1] != L':' && !path.starts_with(L"\\\\")))
+        return;
+    HWND server = FindIpcWindow();
+    if (!server)
+        return;
+    const auto settings = preferences::SettingsFile(server);
+    if (settings.empty() || GetPrivateProfileIntW(L"Everything", L"run_history_enabled", 0, settings.c_str()) != 1)
+        return;
+    COPYDATASTRUCT data{24, static_cast<DWORD>((path.size() + 1) * sizeof(wchar_t)),
+                        const_cast<wchar_t*>(path.c_str())};
+    DWORD_PTR result = 0;
+    SendMessageTimeoutW(server, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&data), SMTO_BLOCK | SMTO_ABORTIFHUNG, 100,
+                        &result);
 }
 
 namespace detail {
@@ -8700,7 +9322,9 @@ inline bool ParseReply(const void* data, DWORD size, std::vector<Result>* out,
 // Synchronous query. Creates a hidden window, sends the request, and pumps
 // until the reply arrives or the timeout expires.
 class Client {
-   public:
+       mutable DWORD preferredSort_ = 0;
+    mutable uint64_t preferredSortSession_ = 0;
+public:
     // Each thread that queries has a client of its own, under a class name of
     // its own: the search thread's and the preview thread's (FolderFacts).
     explicit Client(const wchar_t* className = kReplyClass) : className_(className) {}
@@ -8742,13 +9366,13 @@ class Client {
                std::vector<Result>* out, DWORD* totalMatches,
                DWORD timeoutMs = 500,
                DWORD requestFlags = kDefaultRequestFlags,
-               DWORD sortType = kSortNameAscending) {
+               DWORD sortType = kSortNameAscending, DWORD offset = 0) {
         HWND everything = FindIpcWindow();
         if (!everything || !hwnd_) {
             return false;
         }
 
-        if (SendQuery2(everything, text, maxResults, requestFlags, sortType) &&
+        if (SendQuery2(everything, text, maxResults, requestFlags, sortType, offset) &&
             Await(timeoutMs)) {
             *out = std::move(results_);
             if (totalMatches) {
@@ -8758,9 +9382,8 @@ class Client {
         }
 
         // Older Everything builds answer FALSE to QUERY2. Names and paths
-        // still come back through the original message; the ranker then has
-        // only the name to score on.
-        if (!SendQueryLegacy(everything, text, maxResults) ||
+        // still come back through the original message in native name order.
+        if (!SendQueryLegacy(everything, text, maxResults, offset) ||
             !Await(timeoutMs)) {
             return false;
         }
@@ -8769,6 +9392,20 @@ class Client {
             *totalMatches = total_;
         }
         return true;
+    }
+
+    DWORD PreferredSort() const {
+        const auto session = g_sortPreferenceSession.load();
+        if (preferredSort_ && preferredSortSession_ == session) return preferredSort_;
+        const HWND server = FindIpcWindow();
+        if (!server) return kSortNameAscending;
+        preferredSort_ = preferences::PreferredSort(server);
+        preferredSortSession_ = session;
+        return preferredSort_;
+    }
+    bool QueryPage(const std::wstring& text, DWORD maxResults, DWORD offset,
+                   std::vector<Result>* out, DWORD* totalMatches,DWORD sort=kSortNameAscending) {
+        return Query(text,maxResults,out,totalMatches,500,kDefaultRequestFlags,sort,offset);
     }
 
    private:
@@ -8787,7 +9424,7 @@ class Client {
     }
 
     bool SendQuery2(HWND everything, const std::wstring& text,
-                    DWORD maxResults, DWORD requestFlags, DWORD sortType) {
+                    DWORD maxResults, DWORD requestFlags, DWORD sortType, DWORD offset) {
         Reset(true);
         std::vector<BYTE> buffer(sizeof(Query2HeaderW) +
                                  (text.size() + 1) * sizeof(wchar_t));
@@ -8795,7 +9432,7 @@ class Client {
         q->reply_hwnd = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd_));
         q->reply_copydata_message = expecting_;
         q->search_flags = 0;
-        q->offset = 0;
+        q->offset = offset;
         q->max_results = maxResults;
         q->request_flags = requestFlags & kReqSupported;
         q->sort_type = sortType;
@@ -8805,7 +9442,7 @@ class Client {
     }
 
     bool SendQueryLegacy(HWND everything, const std::wstring& text,
-                         DWORD maxResults) {
+                         DWORD maxResults, DWORD offset) {
         Reset(false);
         std::vector<BYTE> buffer(sizeof(QueryHeaderW) +
                                  (text.size() + 1) * sizeof(wchar_t));
@@ -8813,7 +9450,7 @@ class Client {
         q->reply_hwnd = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd_));
         q->reply_copydata_message = expecting_;
         q->search_flags = 0;
-        q->offset = 0;
+        q->offset = offset;
         q->max_results = maxResults;
         memcpy(buffer.data() + sizeof(QueryHeaderW), text.c_str(),
                (text.size() + 1) * sizeof(wchar_t));
@@ -8901,38 +9538,10 @@ class Client {
 
 }  // namespace everything
 // ===========================================================================
-// Component: Everything Relevance Ranker
+// Component: Everything File Exclusions
 // ===========================================================================
-// Relevance ordering for Everything results.
-//
-// Everything is asked for results sorted by name ascending, because that is
-// the only sort it guarantees is instant -- every other sort is fast only if
-// the user happens to have the matching fast-sort enabled in Tools ->
-// Options -> Indexes, which a mod cannot assume. Name-ascending is useless as
-// a presentation order, though: a search for "code" leads with
-// "-abstract-code-quality-task" out of a Gradle docs folder.
-//
-// So the client over-fetches a pool and this reorders it.
-//
-// The ordering is a lexicographic key rather than a sum of weights. A sum
-// reads naturally but behaves badly here: the first attempt added small
-// bonuses for recency and run count on top of a match score, and because
-// thousands of results tie on the match score and most have a run count of
-// zero, the top eight for "code" came back as eight different folders all
-// literally named "Code", ordered by nothing meaningful. A key makes the
-// tie-breaks explicit and total: how well the name matched, then how often
-// the user has opened it, then how recently it changed.
-//
-// Known limitation: the pool is the alphabetically first N matches, so
-// ranking can only reorder what that window happened to catch. A very
-// recently edited file whose name sorts late loses to worse matches that sort
-// early, and for a query with thousands of hits the window is a small
-// fraction of them. Fixing it properly needs a sort Everything can do
-// server-side, which means date-modified-descending -- fast only when the
-// user has that fast-sort enabled, and silently slow when they have not. The
-// honest options are to keep this, or to probe the cost of the date sort once
-// at startup and use it when it turns out to be cheap. Not decided yet.
-
+// Preserve Everything's native result order. Only user-selected path
+// exclusions are applied locally, with bounded incremental provider pages.
 
 #include <windows.h>
 
@@ -8941,73 +9550,32 @@ class Client {
 #include <tuple>
 #include <vector>
 
-
-namespace ranker {
-
-// How many results to ask Everything for before ranking. The pool has to be
-// much larger than what is displayed or ranking has nothing to work with: at
-// a pool of 10, a name-ascending query for "code" only ever sees names
-// starting with punctuation.
-//
-// Measured on this machine (best of 3, ms, blocking wait):
-//
-//   query          total     8    50   200   300   500  1000
-//   c             589945  11.3  11.7  16.6  48.6  65.7 145.6
-//   code            8365  30.1  28.4  32.8  39.3  44.3  51.4
-//   readme          2434  29.6  28.0  32.8  37.6  39.2  50.3
-//   (no matches)       0  22.6  23.0  23.5  27.1  24.6  25.2
-//
-// So about 23 ms is a fixed cost inside Everything that no pool size avoids,
-// and 200 is the largest pool that stays close to it for every query
-// including a single letter. 300 is already 48 ms on "c" and 1000 is far too
-// slow to run per keystroke.
+namespace filefilter {
+// Everything owns ranking, history and sorting. This layer only retains the
+// user's path exclusions while preserving the provider's order.
 inline constexpr DWORD kDefaultPool = 200;
-
 inline std::wstring ToLower(std::wstring s) {
-    std::transform(s.begin(), s.end(), s.begin(),
-                   [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
-    return s;
+    return searchtext::Lower(std::move(s));
 }
-
 namespace detail {
-
 inline std::wstring TrimSlashes(std::wstring_view s) {
-    while (!s.empty() && (s.front() == L'\\' || s.front() == L'/')) s.remove_prefix(1);
-    while (!s.empty() && (s.back() == L'\\' || s.back() == L'/')) s.remove_suffix(1);
+    while (!s.empty() && (s.front() == L'\\' || s.front() == L'/'))
+        s.remove_prefix(1);
+    while (!s.empty() && (s.back() == L'\\' || s.back() == L'/'))
+        s.remove_suffix(1);
     return std::wstring(s);
-}
-
-// Match quality, coarse buckets, lower is better. This is the primary key and
-// the only signal available when Everything is too old for QUERY2.
-enum MatchClass : int {
-    kExactName = 0,
-    kNamePrefix = 1,
-    kNameWordStart = 2,
-    kNameSubstring = 3,
-    kPathOnly = 4,
-};
-
-inline int Classify(const std::wstring& nameLower, const std::wstring& q) {
-    size_t pos = nameLower.find(q);
-    if (pos == std::wstring::npos) {
-        return kPathOnly;
-    }
-    if (pos == 0) {
-        return nameLower.size() == q.size() ? kExactName : kNamePrefix;
-    }
-    wchar_t prev = nameLower[pos - 1];
-    bool wordStart = prev == L' ' || prev == L'-' || prev == L'_' ||
-                     prev == L'.' || prev == L'(' || prev == L'[';
-    return wordStart ? kNameWordStart : kNameSubstring;
 }
 
 // Checks if an item belongs to any excluded noisy path pattern.
 // Handles directory paths with or without trailing slashes, full item paths,
 // and skips penalization if the user explicitly typed the keyword in their query.
-inline bool IsNoise(const std::wstring& pathLower, const std::wstring& nameLower, bool isFolder,
+inline bool IsNoise(const std::wstring& pathLower,
+                    const std::wstring& nameLower,
+                    bool isFolder,
                     const std::wstring& qLower,
                     const std::vector<std::wstring>* customNoise = nullptr) {
-    if (!customNoise || customNoise->empty()) return false;
+    if (!customNoise || customNoise->empty())
+        return false;
 
     // Normalised directory path with trailing backslash
     std::wstring dir = pathLower;
@@ -9022,7 +9590,8 @@ inline bool IsNoise(const std::wstring& pathLower, const std::wstring& nameLower
     }
 
     for (const auto& n : *customNoise) {
-        if (n.empty()) continue;
+        if (n.empty())
+            continue;
 
         // If the query explicitly targets this noise pattern, don't penalize it
         std::wstring raw = TrimSlashes(n);
@@ -9045,96 +9614,26 @@ inline bool IsNoise(const std::wstring& pathLower, const std::wstring& nameLower
     return false;
 }
 
-inline ULONGLONG AsTicks(const FILETIME& ft) {
-    ULARGE_INTEGER v{};
-    v.LowPart = ft.dwLowDateTime;
-    v.HighPart = ft.dwHighDateTime;
-    return v.QuadPart;
-}
-
-// Sort key. Descending fields are stored pre-negated so the comparison is a
-// plain ascending tuple compare -- writing the descending fields by swapping
-// this and other inside std::tie does work, but it is the kind of expression
-// nobody can check at a glance.
-struct Key {
-    int matchClass;         // ascending: better match first
-    ULONGLONG runsDesc;     // negated run count: more opens first
-    ULONGLONG modifiedDesc; // negated timestamp: more recent first
-    size_t index;           // keeps the order total and reproducible
-
-    bool operator<(const Key& o) const {
-        return std::tie(matchClass, runsDesc, modifiedDesc, index) <
-               std::tie(o.matchClass, o.runsDesc, o.modifiedDesc, o.index);
-    }
-};
-
-// Turns a "higher is better" value into a sort key.
-inline ULONGLONG Descending(ULONGLONG v) {
-    return ~0ull - v;
-}
-
 }  // namespace detail
-
-// Reorders a pool in place and truncates it to limit. Returns how many of the
-// results kept are clean (not under an excluded path); when that is zero, all
-// that was left was noise and the pool holds it.
-inline size_t Rank(std::vector<everything::Result>* pool,
-                   const std::wstring& query, size_t limit,
-                   const std::vector<std::wstring>* excludedPaths = nullptr) {
-    if (!pool || pool->empty()) {
+inline size_t Filter(std::vector<everything::Result>* pool,
+                     const std::wstring& query,
+                     size_t limit,
+                     const std::vector<std::wstring>* excludedPaths = nullptr) {
+    if (!pool || pool->empty())
         return 0;
-    }
-    const std::wstring q = ToLower(query);
-
-    std::vector<detail::Key> keys;
-    keys.reserve(pool->size());
-    for (size_t i = 0; i < pool->size(); i++) {
-        const everything::Result& r = (*pool)[i];
-        int cls = detail::Classify(ToLower(r.name), q);
-        // Demote noisy locations by 100 so all non-noise matches rank above them.
-        if (detail::IsNoise(ToLower(r.path), ToLower(r.name), r.isFolder, q, excludedPaths)) {
-            cls += 100;
-        }
-        // Everything only counts opens that went through Everything itself,
-        // so this is sparse -- but where it is set it is the strongest
-        // evidence available that the user wants this particular file. Capped
-        // so one heavily used file cannot dominate a whole class.
-        ULONGLONG runs = r.runCount > 50 ? 50 : r.runCount;
-        keys.push_back({cls, detail::Descending(runs),
-                        detail::Descending(detail::AsTicks(r.dateModified)), i});
-    }
-
-    std::sort(keys.begin(), keys.end());
-
-    // If we have clean (non-noisy) matches, do not pollute remaining slots with noisy items!
-    bool hasCleanMatches = !keys.empty() && keys.front().matchClass < 100;
-
-    std::vector<everything::Result> ranked;
-    ranked.reserve(keys.size() < limit ? keys.size() : limit);
-    for (size_t i = 0; i < keys.size() && ranked.size() < limit; i++) {
-        if (hasCleanMatches && keys[i].matchClass >= 100) {
-            break;
-        }
-        ranked.push_back(std::move((*pool)[keys[i].index]));
-    }
-    *pool = std::move(ranked);
-    return hasCleanMatches ? pool->size() : 0;
+    const auto q = ToLower(query);
+    const auto noise = [&](const everything::Result& item) {
+        return detail::IsNoise(ToLower(item.path), ToLower(item.name), item.isFolder, q, excludedPaths);
+    };
+    std::erase_if(*pool, noise);
+    if (pool->size() > limit)
+        pool->resize(limit);
+    return pool->size();
 }
-
-// The excluded paths as Everything search terms, appended to the query, for
-// when Rank alone cannot help: it can only demote what the query returned,
-// the first kDefaultPool matches by name, and for a broad query those can all
-// be noise (a one-letter search starts with "-x-..." folders under .gradle).
-//
-// `!path:"<pattern>"` rules out the pattern anywhere in the full path, as
-// IsNoise does -- but only single-folder patterns are sent. Measured on this
-// machine for "c" (700k matches, 19 ms as typed), one like \.gradle\ adds
-// about 10 ms, while one spanning folders like \appdata\local\temp\ adds 60-80
-// ms, all six of the defaults together about 380 ms. Those stay with IsNoise,
-// which applies every pattern exactly to whatever comes back. A pattern the
-// query itself names is left out, as IsNoise leaves it undemoted.
-inline std::wstring WithExclusions(const std::wstring& query,
-                                   const std::vector<std::wstring>* excludedPaths) {
+// A broad result page can contain only excluded folders. Ask Everything to
+// exclude simple directory patterns on the first-page fallback; multi-folder
+// exclusions remain local to avoid making every query expensive.
+inline std::wstring WithExclusions(const std::wstring& query, const std::vector<std::wstring>* excludedPaths) {
     if (!excludedPaths || excludedPaths->empty()) {
         return query;
     }
@@ -9142,20 +9641,119 @@ inline std::wstring WithExclusions(const std::wstring& query,
     std::wstring out = query;
     for (const auto& n : *excludedPaths) {
         std::wstring raw = detail::TrimSlashes(n);
-        if (raw.empty() || raw.find(L'\\') != std::wstring::npos ||
-            q.find(raw) != std::wstring::npos) {
+        if (raw.empty() || raw.find(L'\\') != std::wstring::npos || q.find(raw) != std::wstring::npos) {
             continue;
         }
         std::wstring term;
         for (wchar_t c : n) {
-            if (c != L'"') term.push_back(c);
+            if (c != L'"')
+                term.push_back(c);
         }
         out += L" !path:\"" + term + L"\"";
     }
     return out;
 }
 
-}  // namespace ranker
+}  // namespace filefilter
+
+// <file-result-pages>
+// Keep only one provider page ahead of the rows the user requested.
+// Later pages append; they never reorder a previously displayed result.
+namespace filepages {
+class Session {
+   public:
+    void Reset(std::wstring query, bool filter, std::vector<std::wstring> excluded) {
+        query_ = std::move(query);
+        providerQuery_ = query_;
+        excluded_ = std::move(excluded);
+        filter_ = filter;
+        offset_ = total_ = 0;
+        next_ = 0;
+        skipped_ = 0;
+        first_ = true;
+        done_ = false;
+        pending_.clear();
+        seen_.clear();
+    }
+    template <class Fetch, class Current>
+    bool Take(size_t wanted, std::vector<everything::Result>* added, Fetch fetch, Current current) {
+        static const std::vector<std::wstring> noNoise;
+        const auto* noise = filter_ ? &excluded_ : &noNoise;
+        unsigned pages = 0;
+        while (added->size() < wanted && current()) {
+            if (next_ == pending_.size()) {
+                if (done_ || pages++ == 4)
+                    break;
+                std::vector<everything::Result> page;
+                DWORD total = 0;
+                if (!fetch(providerQuery_, filefilter::kDefaultPool, offset_, &page, &total) || !current())
+                    return false;
+                if (page.size() > filefilter::kDefaultPool)
+                    return false;
+                DWORD count = static_cast<DWORD>(page.size());
+                const size_t clean = filefilter::Filter(&page, query_, page.size(), noise);
+                if (first_ && clean < std::min(wanted, size_t(filefilter::kDefaultPool)) && total > count) {
+                    const auto filtered = filefilter::WithExclusions(query_, noise);
+                    if (filtered != providerQuery_) {
+                        std::vector<everything::Result> alternative;
+                        DWORD alternativeTotal = 0;
+                        if (!current())
+                            return false;
+                        if (fetch(filtered, filefilter::kDefaultPool, 0, &alternative, &alternativeTotal) &&
+                            current()) {
+                            const auto raw = alternative.size();
+                            if (raw > filefilter::kDefaultPool)
+                                return false;
+                            if (filefilter::Filter(&alternative, query_, raw, noise) > clean) {
+                                providerQuery_ = filtered;
+                                page = std::move(alternative);
+                                count = static_cast<DWORD>(raw);
+                                total = alternativeTotal;
+                            }
+                        }
+                    }
+                }
+                first_ = false;
+                total_ = total;
+                skipped_ += count - page.size();
+                const uint64_t end = uint64_t(offset_) + count;
+                done_ = !count || end >= total || end > MAXDWORD;
+                offset_ = static_cast<DWORD>(std::min(end, uint64_t(MAXDWORD)));
+                pending_ = std::move(page);
+                next_ = 0;
+                continue;
+            }
+            auto item = std::move(pending_[next_++]);
+            if (seen_.insert(item.path + L"\\" + item.name).second)
+                added->push_back(std::move(item));
+            else
+                ++skipped_;
+        }
+        return current();
+    }
+    bool More() const { return next_ < pending_.size() || !done_; }
+    DWORD Total() const {
+        // Everything counts matches before our exclusions and deduplication.
+        // Refine the total as pages arrive; at EOF the emitted count is exact,
+        // even if the provider's index changed during pagination.
+        const uint64_t shown = seen_.size();
+        const uint64_t estimate = total_ > skipped_ ? uint64_t(total_) - skipped_ : 0;
+        const uint64_t total = More() ? std::max(shown, estimate) : shown;
+        return static_cast<DWORD>(std::min(total, uint64_t(MAXDWORD)));
+    }
+
+   private:
+    std::wstring query_, providerQuery_;
+    std::vector<std::wstring> excluded_;
+    std::vector<everything::Result> pending_;
+    std::set<std::wstring> seen_;
+    DWORD offset_ = 0, total_ = 0;
+    size_t next_ = 0;
+    uint64_t skipped_ = 0;
+    bool filter_ = false, first_ = true, done_ = false;
+};
+}  // namespace filepages
+// </file-result-pages>
 // ===========================================================================
 // Component: Shell Icon Utilities
 // ===========================================================================
@@ -10404,6 +11002,10 @@ struct Record {
     HKEY registryHive = nullptr;
     REGSAM registryView = 0;
     std::wstring launcher;
+    bool inventoryOnly = false; // hidden components and non-application packages
+    std::vector<std::wstring> inventoryAliases;
+    std::wstring architecture;
+    std::wstring packageType, resourceId;
 };
 struct Key {
     HKEY value = nullptr;
@@ -10695,15 +11297,14 @@ std::vector<Record> ReadPrograms(const std::atomic<bool>* cancel = nullptr) {
                     continue;
                 Record record;
                 record.name = String(entry.value, L"DisplayName");
-                if (!Visible(record.name, Number(entry.value, L"SystemComponent"),
-                             String(entry.value, L"ParentKeyName"),
-                             String(entry.value, L"ReleaseType")))
-                    continue;
+                if (record.name.empty()) continue;
+                record.inventoryOnly = !Visible(record.name, Number(entry.value, L"SystemComponent"),
+                    String(entry.value, L"ParentKeyName"), String(entry.value, L"ReleaseType"));
                 record.publisher = String(entry.value, L"Publisher");
                 record.version = String(entry.value, L"DisplayVersion");
                 record.icon = CleanIcon(String(entry.value, L"DisplayIcon"));
                 record.location = Location(String(entry.value, L"InstallLocation"));
-                record.launcher = FindLauncher(record);
+                if (!record.inventoryOnly) record.launcher = FindLauncher(record);
                 if (record.location.empty() && !record.launcher.empty())
                     record.location = ParentFolder(record.launcher);
                 record.registryKey = name;
@@ -10805,26 +11406,34 @@ std::vector<Record> ReadPackages(const std::atomic<bool>* cancel = nullptr) {
         namespace model = winrt::Windows::ApplicationModel;
         winrt::Windows::Management::Deployment::PackageManager manager;
         std::set<std::wstring> seen;
-        for (const auto& package : manager.FindPackagesForUser(L""))
+        using PackageTypes = winrt::Windows::Management::Deployment::PackageTypes;
+        const auto types = PackageTypes::Main | PackageTypes::Framework | PackageTypes::Resource |
+            PackageTypes::Bundle | PackageTypes::Optional;
+        for (const auto& package : manager.FindPackagesForUserWithPackageTypes(L"", types))
             try {
                 if (cancel && cancel->load())
                     return {};
-                if (package.IsFramework() || package.IsResourcePackage() || package.IsBundle() ||
-                    package.SignatureKind() == model::PackageSignatureKind::System)
-                    continue;
                 Record record;
+                const bool framework=package.IsFramework(),resource=package.IsResourcePackage(),bundle=package.IsBundle();
+                record.inventoryOnly = framework || resource || bundle ||
+                    package.SignatureKind() == model::PackageSignatureKind::System;
+                bool optional=false;
+                try { optional=package.IsOptional(); } catch (...) {}
+                record.packageType=bundle?L"Package bundle":resource?L"Resource package":framework?L"Framework package":
+                    optional?L"Optional package":L"Main package";
+                if(resource)try { record.resourceId=package.Id().ResourceId().c_str(); } catch (...) {}
                 record.family = package.Id().FamilyName().c_str();
-                if (!seen.insert(record.family).second)
+                record.packageFullName = package.Id().FullName().c_str();
+                if (!seen.insert(record.packageFullName).second)
                     continue;
-                record.id = L"package:" + record.family;
-                record.name = package.DisplayName().c_str();
+                record.id = L"package:" + record.packageFullName;
+                try { record.name = package.DisplayName().c_str(); } catch (...) {}
                 if (record.name.empty() || record.name.starts_with(L"ms-resource:"))
                     record.name = package.Id().Name().c_str();
-                record.packageFullName = package.Id().FullName().c_str();
                 const auto originalName = record.name;
                 try {
                     record.location = Location(package.InstalledLocation().Path().c_str());
-                    const auto friendly =
+                    const auto friendly = record.inventoryOnly ? std::wstring() :
                         VisualName(package.InstalledLocation().Path().c_str(),
                                    package.Id().Name().c_str(), record.packageFullName);
                     if (!friendly.empty() &&
@@ -10832,9 +11441,20 @@ std::vector<Record> ReadPackages(const std::atomic<bool>* cancel = nullptr) {
                         record.name = friendly;
                 } catch (...) {
                 }
-                if (originalName != record.name)
+                if (originalName != record.name && _wcsicmp(originalName.c_str(), package.Id().Name().c_str()))
                     record.aliases.push_back(originalName);
-                record.publisher = package.PublisherDisplayName().c_str();
+                record.inventoryAliases.push_back(package.Id().Name().c_str());
+                record.inventoryAliases.push_back(record.packageFullName);
+                using Architecture = winrt::Windows::System::ProcessorArchitecture;
+                switch (package.Id().Architecture()) {
+                    case Architecture::X86: record.architecture=L"x86"; break;
+                    case Architecture::X64: record.architecture=L"x64"; break;
+                    case Architecture::Arm: record.architecture=L"ARM"; break;
+                    case Architecture::Arm64: record.architecture=L"ARM64"; break;
+                    case Architecture::Neutral: record.architecture=L"neutral"; break;
+                    default: break;
+                }
+                try { record.publisher = package.PublisherDisplayName().c_str(); } catch (...) {}
                 const auto version = package.Id().Version();
                 record.version =
                     std::to_wstring(version.Major) + L"." + std::to_wstring(version.Minor) + L"." +
@@ -10884,6 +11504,7 @@ struct App {
     std::wstring nameLower;        // precomputed, so filtering never allocates
     std::wstring targetPath;       // file path, AUMID, or ms-settings: URI
     std::wstring targetPathLower;  // precomputed lowercase target path
+    std::wstring shortcutPath;     // original link, when the shell exposes it
     std::wstring linkTarget;       // the program an app-ID entry's shortcut runs, if the shell knows it
     std::wstring exeNameLower;     // executable / command name (e.g. "cmd", "wt", "calc")
     std::wstring acronym;          // acronym from name words (e.g. "cp" for Command Prompt)
@@ -10894,10 +11515,10 @@ struct App {
     std::wstring area;             // Settings category or Control Panel area
     std::wstring areaLower;
     std::wstring settingArguments; // Native Settings page/target activation
-    bool installedOnly=false;
+    bool installedOnly=false,inventoryOnly=false;
     bool targetExists=false,linkExists=false;
-    std::wstring installedId,installedPublisher,installedVersion,installedIcon,shellIdentity,installedPackage;
-    std::wstring installedLocation,installedFamily,installedKey;
+    std::wstring installedId,installedName,installedPublisher,installedVersion,installedIcon,shellIdentity,installedPackage;
+    std::wstring installedLocation,installedFamily,installedKey,installedArchitecture,installedPackageType,installedResourceId;
     HKEY installedHive=nullptr;
     REGSAM installedView=0;
 };
@@ -10942,52 +11563,126 @@ inline int MatchTier(int score) {
     return score < 10 ? 0 : score < 30 ? 1 : score < 80 ? 2 : score < 120 ? 3 : 4;
 }
 
-// One line per entry: count, a tab, the app name or namespaced command key.
+inline std::wstring ToLower(std::wstring s);
+constexpr wchar_t kUsageSingleLineName[] = L"appLaunchCounts.v2";
+inline void MergeUsage(UsageCounts& usage, std::wstring name, int count) {
+    if (count <= 0 || name.empty())
+        return;
+    auto& saved = usage[ToLower(std::move(name))];
+    saved = std::min(kUsageCap, saved + std::min(count, kUsageCap));
+}
 inline UsageCounts LoadUsage() {
     UsageCounts usage;
     std::vector<wchar_t> buffer(64 * 1024);
-    size_t length = Wh_GetStringValue(kUsageValueName, buffer.data(), buffer.size());
-    std::wstring text(buffer.data(), length);
+    size_t length = Wh_GetStringValue(kUsageSingleLineName, buffer.data(), buffer.size());
+    const bool modern = length != 0;
+    if (!modern)
+        length = Wh_GetStringValue(kUsageValueName, buffer.data(), buffer.size());
+    if (length >= buffer.size())
+        return usage;
+    const std::wstring text(buffer.data(), length);
     size_t pos = 0;
     while (pos < text.size()) {
-        size_t end = text.find(L'\n', pos);
-        if (end == std::wstring::npos) {
+        size_t end = text.find(modern ? wchar_t(0x1E) : L'\n', pos);
+        if (end == text.npos)
             end = text.size();
-        }
-        size_t tab = text.find(L'\t', pos);
-        if (tab != std::wstring::npos && tab < end) {
-            int count = _wtoi(text.substr(pos, tab - pos).c_str());
-            std::wstring name = text.substr(tab + 1, end - tab - 1);
-            if (count > 0 && !name.empty()) {
-                usage[name] = std::min(count, kUsageCap);
+        const auto tab = text.find(L'\t', pos);
+        if (tab != text.npos && tab < end && tab - pos <= 4) {
+            int count = 0;
+            bool valid = tab != pos;
+            for (wchar_t c : std::wstring_view(text).substr(pos, tab - pos)) {
+                if (c < L'0' || c > L'9')
+                    valid = false;
+                else
+                    count = count * 10 + c - L'0';
             }
+            std::wstring name;
+            for (size_t i = tab + 1; valid && i < end; ++i) {
+                wchar_t c = text[i];
+                if (modern && c == L'\\') {
+                    if (++i == end) {
+                        valid = false;
+                        break;
+                    }
+                    switch (text[i]) {
+                        case L'\\':
+                            c = L'\\';
+                            break;
+                        case L'n':
+                            c = L'\n';
+                            break;
+                        case L'r':
+                            c = L'\r';
+                            break;
+                        case L'e':
+                            c = 0x1E;
+                            break;
+                        default:
+                            valid = false;
+                            break;
+                    }
+                }
+                name.push_back(c);
+            }
+            if (valid)
+                MergeUsage(usage, std::move(name), count);
         }
         pos = end + 1;
     }
     return usage;
 }
-
+inline void ClearUsage() {
+    Wh_DeleteValue(kUsageValueName);
+    Wh_DeleteValue(kUsageSingleLineName);
+}
 inline void SaveUsage(const UsageCounts& usage) {
+    if (usage.empty()) {
+        ClearUsage();
+        return;
+    }
     std::vector<std::pair<int, std::wstring>> sorted;
-    sorted.reserve(usage.size());
-    for (const auto& [name, count] : usage) {
-        sorted.emplace_back(count, name);
-    }
-    std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
-    if (sorted.size() > kUsageKept) {
+    for (const auto& [name, count] : usage)
+        if (count > 0 && !name.empty())
+            sorted.emplace_back(std::min(count, kUsageCap), name);
+    std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) {
+        return a.first != b.first ? a.first > b.first : a.second < b.second;
+    });
+    if (sorted.size() > kUsageKept)
         sorted.resize(kUsageKept);
-    }
     std::wstring text;
     for (const auto& [count, name] : sorted) {
-        text += std::to_wstring(count) + L'\t' + name + L'\n';
+        std::wstring row = std::to_wstring(count) + L'\t';
+        for (wchar_t c : name) {
+            switch (c) {
+                case L'\\':
+                    row += L"\\\\";
+                    break;
+                case L'\n':
+                    row += L"\\n";
+                    break;
+                case L'\r':
+                    row += L"\\r";
+                    break;
+                case 0x1E:
+                    row += L"\\e";
+                    break;
+                default:
+                    row.push_back(c);
+                    break;
+            }
+        }
+        row.push_back(0x1E);  // A record separator, never an INI line break.
+        if (row.size() <= 32760 - text.size())
+            text += row;
     }
-    Wh_SetStringValue(kUsageValueName, text.c_str());
+    // One write per launch, bounded for portable INI storage. Keep the legacy
+    // value until the replacement succeeds so a failed write loses no counts.
+    if (Wh_SetStringValue(kUsageSingleLineName, text.c_str()))
+        Wh_DeleteValue(kUsageValueName);
 }
 
 inline std::wstring ToLower(std::wstring s) {
-    std::transform(s.begin(), s.end(), s.begin(),
-                   [](wchar_t c) { return static_cast<wchar_t>(towlower(c)); });
-    return s;
+    return searchtext::Lower(std::move(s));
 }
 
 inline std::wstring CommandUsageKey(const std::wstring& name) {
@@ -11018,11 +11713,13 @@ inline std::wstring ResolveAppParsingPath(const std::wstring& parse) {
     return parse;
 }
 
+inline bool IsShellShortcut(std::wstring_view path) {
+    return path.size() >= 4 &&
+           CompareStringOrdinal(path.data() + path.size() - 4, 4, L".lnk", 4, TRUE) == CSTR_EQUAL;
+}
+
 inline std::wstring ResolveLnkTarget(const std::wstring& lnkPath) {
-    if (lnkPath.size() < 4) return L"";
-    std::wstring ext = lnkPath.substr(lnkPath.size() - 4);
-    for (auto& c : ext) c = static_cast<wchar_t>(towlower(c));
-    if (ext != L".lnk") return L"";
+    if (!IsShellShortcut(lnkPath)) return L"";
 
     IShellLinkW* psl = nullptr;
     if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&psl)))) {
@@ -11383,6 +12080,32 @@ inline std::wstring CatalogFilePath(std::wstring path) {
     if(!count || count>=std::size(absolute))return {};
     path=ToLower(absolute);while(path.size()>3 && path.back()==L'\\')path.pop_back();return path;
 }
+inline void AttachInstalledMetadata(App& app,const installed::Record& record) {
+    app.installedId=record.id;app.installedName=record.name;app.installedPublisher=record.publisher;
+    app.installedVersion=record.version;app.installedIcon=record.icon;
+    app.installedPackage=record.packageFullName;app.inventoryOnly=record.inventoryOnly;
+    app.installedLocation=record.location;app.installedFamily=record.family;app.installedKey=record.registryKey;
+    app.installedArchitecture=record.architecture;
+    app.installedPackageType=record.packageType;app.installedResourceId=record.resourceId;
+    app.installedHive=record.registryHive;app.installedView=record.registryView;
+}
+inline std::vector<App> InstalledInventory(const std::vector<installed::Record>& records) {
+    std::vector<App> inventory;inventory.reserve(records.size());
+    std::set<std::wstring> seen;
+    for(const auto& record:records) {
+        if(record.name.empty() || record.id.empty() || !seen.insert(record.id).second)continue;
+        App app;app.name=record.name;app.nameLower=ToLower(record.name);app.installedOnly=true;
+        app.targetPath=L"ms-settings:appsfeatures";
+        AttachInstalledMetadata(app,record);
+        for(const auto& alias:record.aliases)if(!alias.empty())app.aliases.push_back(ToLower(alias));
+        for(const auto& alias:record.inventoryAliases)if(!alias.empty())app.aliases.push_back(ToLower(alias));
+        if(!record.publisher.empty())app.aliases.push_back(ToLower(record.publisher));
+        std::wistringstream words(app.nameLower);std::wstring word;
+        while(words>>word)if(!word.empty()){app.words.push_back(word);app.acronym.push_back(word.front());}
+        inventory.push_back(std::move(app));
+    }
+    return inventory;
+}
 inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::Record>& records) {
     const auto launchCount=apps.size();std::set<std::wstring> added;
     // Resolve existing shortcut paths once per catalog build. This is only an
@@ -11396,7 +12119,7 @@ inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::
             executableNames[i]=installed::LauncherName(filename.substr(0,filename.size()-4));
     }
     for(const auto& record:records) {
-        if(record.name.empty() || !added.insert(record.id).second)continue;
+        if(record.name.empty() || record.inventoryOnly || !added.insert(record.id).second)continue;
         const auto name=ToLower(record.name);bool represented=false;
         const auto familyOf=[](const App& app) {
             const auto& identity=app.shellIdentity.empty()?app.targetPath:app.shellIdentity;
@@ -11421,7 +12144,9 @@ inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::
             }
         }
         for(size_t i=0;i<launchCount;++i) {
-            auto& app=apps[i];if(app.isSetting || app.installedOnly)continue;
+            auto& app=apps[i];
+            if(app.isSetting || app.installedOnly ||
+                (!app.installedId.empty() && app.installedId!=record.id))continue;
             bool same=name==app.nameLower;
             if(!productTarget.empty())same=same || targets[i]==productTarget;
             if(!record.launcher.empty())same=same || _wcsicmp(record.launcher.c_str(),(app.linkTarget.empty()?app.targetPath:app.linkTarget).c_str())==0;
@@ -11438,24 +12163,19 @@ inline void AppendInstalled(std::vector<App>& apps,const std::vector<installed::
             }
             represented=true;
         }
-        if(represented)continue;
+        if(represented || record.launcher.empty())continue;
         App app;app.name=record.name;app.nameLower=name;app.installedOnly=true;
         // Until a verified application is found, use a management destination.
         // Never run an icon/uninstaller path as the installed product.
         app.targetPath=L"ms-settings:appsfeatures";
-        app.installedId=record.id;app.installedPublisher=record.publisher;
-        app.installedVersion=record.version;app.installedIcon=record.icon;
-        app.installedPackage=record.packageFullName;
-        app.installedLocation=record.location;app.installedFamily=record.family;app.installedKey=record.registryKey;
-        app.installedHive=record.registryHive;app.installedView=record.registryView;
-        if(!record.launcher.empty()) {
-            ITEMIDLIST* pidl=nullptr;
-            if(SUCCEEDED(SHParseDisplayName(record.launcher.c_str(),nullptr,&pidl,0,nullptr)) && pidl) {
-                app.pidl.reset(pidl);app.installedOnly=false;app.targetPath=record.launcher;
-                app.targetPathLower=ToLower(app.targetPath);app.exeNameLower=ToLower(ExtractExeName(app.targetPath));
-                app.targetExists=true;PopulateAppAliases(app);
-            }
+        AttachInstalledMetadata(app,record);
+        ITEMIDLIST* pidl=nullptr;
+        if(SUCCEEDED(SHParseDisplayName(record.launcher.c_str(),nullptr,&pidl,0,nullptr)) && pidl) {
+            app.pidl.reset(pidl);app.installedOnly=false;app.targetPath=record.launcher;
+            app.targetPathLower=ToLower(app.targetPath);app.exeNameLower=ToLower(ExtractExeName(app.targetPath));
+            app.targetExists=true;PopulateAppAliases(app);
         }
+        if(app.installedOnly)continue;
         for(const auto& alias:record.aliases)if(!alias.empty())app.aliases.push_back(ToLower(alias));
         std::wistringstream words(name);std::wstring word;
         while(words>>word)if(!word.empty()){app.words.push_back(word);app.acronym.push_back(word.front());}
@@ -11468,6 +12188,41 @@ inline const std::wstring& IconIdentity(const App& app) {
 inline bool SameResult(const App& a,const App& b) {
     if(a.installedOnly || b.installedOnly)return a.installedOnly && b.installedOnly && a.installedId==b.installedId;
     return a.nameLower==b.nameLower;
+}
+enum class SearchScope { Normal, Installed };
+inline bool InSearchScope(const App& app,SearchScope scope) {
+    return scope==SearchScope::Installed ? !app.isSetting && !app.installedId.empty() : !app.installedOnly && !app.inventoryOnly;
+}
+inline std::vector<Match> MatchCatalog(const std::vector<App>& apps,const std::wstring& query,
+    size_t limit,const UsageCounts* usage,SearchScope scope) {
+    if(query.empty() && scope==SearchScope::Normal)return {};
+    const auto q=ToLower(query);
+    std::vector<Match> hits;
+    for(const auto& app:apps) {
+        if(!InSearchScope(app,scope))continue;
+        const int score=q.empty()?0:ScoreApp(app,q);
+        if(score>=0)hits.push_back({&app,score,score-(scope==SearchScope::Normal?UsageBonus(usage,app.nameLower):0)});
+    }
+    std::stable_sort(hits.begin(),hits.end(),[&](const Match& a,const Match& b) {
+        if(a.score!=b.score && MatchTier(a.score)!=MatchTier(b.score))return a.score<b.score;
+        if(a.rank!=b.rank)return a.rank<b.rank;
+        if(a.score!=b.score)return a.score<b.score;
+        return scope==SearchScope::Installed ? a.app->nameLower<b.app->nameLower : a.app->name.size()<b.app->name.size();
+    });
+    int best=hits.empty()?0:hits.front().score;
+    for(const auto& hit:hits)best=std::min(best,hit.score);
+    const int cutoff=best<80?80:best+12;
+    std::vector<Match> shown;shown.reserve(std::min(limit,hits.size()));
+    for(const auto& hit:hits) {
+        if(shown.size()>=limit)break;
+        if(hit.score>=cutoff)continue;
+        // InstalledInventory already guarantees unique registration identities.
+        const bool seen=scope==SearchScope::Normal && std::any_of(shown.begin(),shown.end(),[&](const Match& kept) {
+            return SameResult(*kept.app,*hit.app);
+        });
+        if(!seen)shown.push_back(hit);
+    }
+    return shown;
 }
 // Existence probes must not connect to UNC shares, disconnected mapped drives,
 // shell identities or URI targets while rebuilding the complete catalog.
@@ -11489,19 +12244,22 @@ class Index {
         IShellItem* folder = nullptr;
         HRESULT hr = SHCreateItemFromParsingName(L"shell:AppsFolder", nullptr,
                                                  IID_PPV_ARGS(&folder));
-        if (FAILED(hr) || !folder) {
-            return false;
-        }
-
         IEnumShellItems* e = nullptr;
-        hr = folder->BindToHandler(nullptr, BHID_EnumItems, IID_PPV_ARGS(&e));
-        folder->Release();
-        if (FAILED(hr) || !e) {
+        if (SUCCEEDED(hr) && folder) {
+            hr = folder->BindToHandler(nullptr, BHID_EnumItems, IID_PPV_ARGS(&e));
+            folder->Release();
+        }
+        const bool shellAvailable=SUCCEEDED(hr) && e;
+        // Keep a complete published catalog if a later shell refresh fails.
+        // A first inventory build can still work without AppsFolder.
+        if(!shellAvailable && hasLaunchCatalog_) {
+            if(e)e->Release();
             return false;
         }
 
         IShellItem* item = nullptr;
-        while (!cancelled() && e->Next(1, &item, nullptr) == S_OK && item) {
+        HRESULT enumeration=S_FALSE;
+        while (e && !cancelled() && (enumeration=e->Next(1, &item, nullptr)) == S_OK && item) {
             if (cancelled()) {
                 item->Release();
                 e->Release();
@@ -11516,6 +12274,7 @@ class Index {
             }
             LPWSTR fsPath = nullptr;
             if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &fsPath)) && fsPath) {
+                if (IsShellShortcut(fsPath)) a.shortcutPath = fsPath;
                 std::wstring resolved = ResolveLnkTarget(fsPath);
                 if (!resolved.empty()) {
                     a.targetPath = resolved;
@@ -11588,8 +12347,8 @@ class Index {
             item->Release();
             item = nullptr;
         }
-        e->Release();
-        if (cancelled()) return false;
+        if(e)e->Release();
+        if (cancelled() || FAILED(enumeration)) return false;
 
         // Supplement launch entries on this background thread. Cache product
         // metadata across frequent shell refreshes, rather than per keystroke.
@@ -11598,6 +12357,7 @@ class Index {
             catch(...){Wh_Log(L"installed apps: retained previous metadata after refresh failure");}
         }
         AppendInstalled(fresh,installed_);
+        auto inventory=InstalledInventory(installed_);
         if (cancelled()) return false;
 
         // Refresh native data only on this background thread, never per keystroke.
@@ -11679,6 +12439,8 @@ class Index {
 
         std::lock_guard<std::mutex> lock(mutex_);
         apps_ = std::move(fresh);
+        inventory_ = std::move(inventory);
+        hasLaunchCatalog_=shellAvailable;
         return true;
     }
 
@@ -11689,6 +12451,7 @@ class Index {
         // Published snapshots never call Rebuild again. Copying their private
         // metadata caches needs no lock shared with the matching worker.
         next->nativeSettings_=nativeSettings_;next->installed_=installed_;
+        next->hasLaunchCatalog_=hasLaunchCatalog_;
         next->installedWhen_=inventoryChanged?0:installedWhen_;
         return next->Rebuild(cancel)?next:nullptr;
     }
@@ -11698,71 +12461,10 @@ class Index {
         return apps_.size();
     }
 
-    std::vector<Match> Search(const std::wstring& query, size_t limit, const UsageCounts* usage) const {
-        std::vector<Match> hits;
-        if (query.empty()) {
-            return hits;
-        }
-        const std::wstring q = ToLower(query);
-
+    std::vector<Match> Search(const std::wstring& query, size_t limit, const UsageCounts* usage,
+                              SearchScope scope=SearchScope::Normal) const {
         std::lock_guard<std::mutex> lock(mutex_);
-        for (const App& a : apps_) {
-            int score = ScoreApp(a, q);
-            if (score >= 0) {
-                hits.push_back({&a, score, score - UsageBonus(usage, a.nameLower)});
-            }
-        }
-
-        std::stable_sort(hits.begin(), hits.end(),
-                         [](const Match& x, const Match& y) {
-                             if (MatchTier(x.score) != MatchTier(y.score)) {
-                                 return x.score < y.score;
-                             }
-                             if (x.rank != y.rank) {
-                                 return x.rank < y.rank;
-                             }
-                             if (x.score != y.score) {
-                                 return x.score < y.score;
-                             }
-                             return x.app->name.size() < y.app->name.size();
-                         });
-
-        // What is shown:
-        //  - one entry per name: many things are indexed twice, typically a
-        //    Settings page and the Control Panel applet or app behind it
-        //    (Display, Sound, Device Manager), and a second row with the same
-        //    name only takes a slot from something else;
-        //  - with a real match (below the fuzzy tiers at 80), no fuzzy ones:
-        //    "calc" is Calculator, not Local Computer Policy;
-        //  - with only fuzzy or typo matches, just those close to the best.
-        // By the score itself: use reorders what is shown, never what is.
-        const int kFuzzy = 80;
-        int best = hits.empty() ? 0 : hits.front().score;
-        for (const Match& m : hits) {
-            best = std::min(best, m.score);
-        }
-        const int cutoff = best < kFuzzy ? kFuzzy : best + 12;
-        std::vector<Match> shown;
-        shown.reserve(std::min(limit, hits.size()));
-        for (const Match& m : hits) {
-            if (shown.size() >= limit) {
-                break;
-            }
-            if (m.score >= cutoff) {
-                continue;
-            }
-            bool seen = false;
-            for (const Match& kept : shown) {
-                    if (SameResult(*kept.app,*m.app)) {
-                    seen = true;
-                    break;
-                }
-            }
-            if (!seen) {
-                shown.push_back(m);
-            }
-        }
-        return shown;
+        return MatchCatalog(scope==SearchScope::Installed?inventory_:apps_,query,limit,usage,scope);
     }
 
     // Empty search shows installed apps, with learned favorites first. Turning
@@ -11802,8 +12504,10 @@ class Index {
     settings::NativeCatalog nativeSettings_;
     std::vector<installed::Record> installed_;
     ULONGLONG installedWhen_=0;
+    bool hasLaunchCatalog_=false;
     mutable std::mutex mutex_;
     std::vector<App> apps_;
+    std::vector<App> inventory_;
 };
 
 // Native catalog and icon I/O have their own owner. Matching only reads an
@@ -11829,7 +12533,7 @@ class WarmIndex {
         std::function<std::vector<BYTE>(const std::wstring&, int)> commandIcon;
         std::function<void(const std::wstring&, const std::vector<BYTE>&, uint64_t)> iconReady;
     };
-    bool Start(Handlers handlers = {}) noexcept try {
+    bool Start(Handlers handlers = {}, int pixels = 24) noexcept try {
         std::lock_guard lock(mutex_);
         if (started_)
             return true;
@@ -11839,6 +12543,7 @@ class WarmIndex {
         started_ = true;
         refresh_ = true;
         handlers_ = std::move(handlers);
+        pixels_ = std::clamp(pixels,16,256);
         try {
             thread_ = std::thread([this] { Run(); });
         } catch (...) {
@@ -11902,7 +12607,7 @@ class WarmIndex {
                 }))
                 continue;
             jobs_.push_back(std::move(job));
-            if (jobs_.size() == 64)
+            if (jobs_.size() == 128)
                 break;
         }
         wake_.notify_all();
@@ -11972,7 +12677,7 @@ class WarmIndex {
                     job.owner = prefetch_;
                     job.app = job.owner->At(next_++);
                     job.pixels = pixels_;
-                    if (!job.app || (job.app->isSetting && !job.app->pidl))
+                    if (!job.app || job.app->installedOnly || (job.app->isSetting && !job.app->pidl))
                         continue;
                     job.key = AppKey(*job.app, job.pixels);
                 }
@@ -12004,6 +12709,10 @@ class WarmIndex {
                     std::lock_guard lock(mutex_);
                     if (!stopped_ && candidate) {
                         current_ = std::move(candidate);
+                        // The catalog is useful before any search window exists.
+                        // Warm its icons now, not when the matching worker starts.
+                        prefetch_ = current_;
+                        next_ = 0;
                         builtAt_ = GetTickCount64();
                         ++version_;
                         publish = true;
@@ -12945,6 +13654,11 @@ static UINT SearchWindowAppearanceMessage() {
     static UINT id = RegisterWindowMessageW(L"StartEverything_SearchWindowAppearance");
     return id;
 }
+static UINT StartTextFocusMessage() {
+    static UINT id = RegisterWindowMessageW(L"StartEverything_StartTextFocus");
+    return id;
+}
+constexpr wchar_t kStartTextEditingProperty[] = L"StartEverything_StartTextEditing";
 static UINT_PTR SearchAppearanceTimerId() {
     static const int identity = 0;
     return reinterpret_cast<UINT_PTR>(&identity);
@@ -13141,6 +13855,8 @@ uint32_t SearchTextOverride();
 void InvalidateSearchContrastContainer(wux::FrameworkElement const& root);
 void PrepareSearchResultContrastColors();
 void SearchContrastScrolled(wuxc::ScrollViewer const& scroll);
+void CheckInstalledScroll(wuxc::ScrollViewer const& scroll);
+void CheckFileScroll(wuxc::ScrollViewer const& scroll);
 void SearchContainerContrastTick();
 void ApplySearchContainerContrast();
 void PauseSearchContainerContrast();
@@ -13677,7 +14393,7 @@ static void RunFileDrag(HWND host, std::wstring path) {
 // open and in front, where the user has just confirmed it, and only for a
 // package that is not part of Windows. Shows an error under the package's
 // own name when removal fails.
-static bool AcceptPackageRemoval(std::wstring family) {
+static bool AcceptPackageRemoval(std::wstring family,std::wstring fullName = {}) {
     while (!family.empty() && family.back() == L'\0') {
         family.pop_back();
     }
@@ -13689,13 +14405,14 @@ static bool AcceptPackageRemoval(std::wstring family) {
     GetWindowThreadProcessId(GetForegroundWindow(), &foregroundPid);
     const size_t underscore = family.rfind(L'_');
     if (!search || IsCloaked(search) || !searchPid || foregroundPid != searchPid || family.size() > 128 ||
-        underscore == std::wstring::npos || family.size() - underscore - 1 != 13 ||
+        underscore == std::wstring::npos || family.size() - underscore - 1 != 13 || fullName.size()>255 ||
+        fullName.find_first_not_of(L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_")!=std::wstring::npos ||
         family.find_first_not_of(L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_") !=
             std::wstring::npos) {
         Wh_Log(L"[Explorer] uninstall: refused %ls", family.c_str());
         return false;
     }
-    SpawnTrackedLaunch([family] {
+    SpawnTrackedLaunch([family,fullName] {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
         std::wstring name = family;
         std::wstring error;
@@ -13704,7 +14421,9 @@ static bool AcceptPackageRemoval(std::wstring family) {
             winrt::Windows::Management::Deployment::PackageManager manager;
             bool found = false;
             for (auto const& package : manager.FindPackagesForUser(L"", family)) {
-                if (package.IsFramework() || package.SignatureKind() == appmodel::PackageSignatureKind::System) {
+                if(!fullName.empty() && fullName!=package.Id().FullName().c_str())continue;
+                if (package.IsFramework() || package.IsResourcePackage() || package.IsBundle() ||
+                    package.SignatureKind() == appmodel::PackageSignatureKind::System) {
                     continue;  // part of Windows: never removed from here
                 }
                 found = true;
@@ -13720,6 +14439,7 @@ static bool AcceptPackageRemoval(std::wstring family) {
                         error = winrt::hresult_error(code).message().c_str();
                     }
                 }
+                if(!fullName.empty())break;
             }
             if (!found) {
                 error = i18n::Text(i18n::Key::ProtectedApp);
@@ -14516,10 +15236,10 @@ struct CustomConversion {
 std::atomic<int> g_textScale{100};
 
 namespace commands {
-enum class Kind { None, Weather, Currency, Crypto, Ip, Speed, Usage, Services, Conflict };
+enum class Kind { None, Weather, Currency, Crypto, Ip, Speed, Usage, Services, Installed, Conflict };
 struct Names {
     std::wstring weather = L"weather", currency = L"money", crypto = L"crypto", ip = L"ip";
-    std::wstring speed = L"speedtest", usage = L"usage", services = L"services";
+    std::wstring speed = L"speedtest", usage = L"usage", services = L"services", installed = L"all";
 };
 std::wstring Trim(std::wstring_view text) {
     const auto first = text.find_first_not_of(L" \t\r\n");
@@ -14548,7 +15268,7 @@ std::wstring Normalize(std::wstring_view value) {
 }
 Names Resolve(Names input) {
     Names defaults;
-    auto fields = {&Names::weather, &Names::currency, &Names::crypto, &Names::ip, &Names::speed, &Names::usage, &Names::services};
+    auto fields = {&Names::weather, &Names::currency, &Names::crypto, &Names::ip, &Names::speed, &Names::usage, &Names::services, &Names::installed};
     for (auto field : fields) {
         auto name = Normalize(input.*field);
         input.*field = name.empty() ? defaults.*field : std::move(name);
@@ -14562,6 +15282,7 @@ const std::wstring& Name(const Names& names, Kind kind) {
     if (kind == Kind::Speed) return names.speed;
     if (kind == Kind::Usage) return names.usage;
     if (kind == Kind::Services) return names.services;
+    if (kind == Kind::Installed) return names.installed;
     return names.ip;
 }
 struct Match { Kind kind = Kind::None; std::wstring args; };
@@ -14571,7 +15292,7 @@ Match Parse(std::wstring_view query, const Names& names) {
     const auto end = text.find_first_of(L" \t\r\n");
     const auto token = std::wstring_view(text).substr(1, end == std::wstring::npos ? text.size() - 1 : end - 1);
     auto kind = Kind::None;
-    for (auto candidate : {Kind::Weather, Kind::Currency, Kind::Crypto, Kind::Ip, Kind::Speed, Kind::Usage, Kind::Services}) {
+    for (auto candidate : {Kind::Weather, Kind::Currency, Kind::Crypto, Kind::Ip, Kind::Speed, Kind::Usage, Kind::Services, Kind::Installed}) {
         if (Equal(token, Name(names, candidate))) {
             if (kind != Kind::None) { kind = Kind::Conflict; break; }
             kind = candidate;
@@ -14581,7 +15302,8 @@ Match Parse(std::wstring_view query, const Names& names) {
     if (kind == Kind::None && Equal(names.currency, L"money") && (Equal(token, L"currency") || Equal(token, L"fx"))) kind = Kind::Currency;
     if (kind == Kind::None && Equal(names.crypto, L"crypto") && Equal(token, L"price")) kind = Kind::Crypto;
     if (kind == Kind::None && Equal(names.speed, L"speedtest") && Equal(token, L"speed")) kind = Kind::Speed;
-    return {kind, end == std::wstring::npos ? std::wstring() : Trim(std::wstring_view(text).substr(end))};
+    auto args=end == std::wstring::npos ? std::wstring() : Trim(std::wstring_view(text).substr(end));
+    return {kind,std::move(args)};
 }
 template<class CustomCommands>
 Match Parse(std::wstring_view query, const Names& names, const CustomCommands& custom) {
@@ -14611,8 +15333,6 @@ struct Settings {
     std::vector<CustomCommand> customCommands;
     std::vector<CustomConversion> unitConversions;
     std::vector<std::wstring> excludedPaths;
-    int maxAppResults = 6;
-    int maxFileResults = 12;
     int searchDebounceMs = 0;
     int menuWidth = 660;
     int menuHeight = 660;
@@ -14665,7 +15385,8 @@ void LoadSettings() {
     auto speedName = WindhawkUtils::StringSetting::make(L"commands.speedName");
     auto usageName = WindhawkUtils::StringSetting::make(L"commands.usageName");
     auto servicesName = WindhawkUtils::StringSetting::make(L"commands.servicesName");
-    g_settings.commandNames = commands::Resolve({weatherName.get(), moneyName.get(), cryptoName.get(), ipName.get(), speedName.get(), usageName.get(), servicesName.get()});
+    auto installedName = WindhawkUtils::StringSetting::make(L"commands.installedName");
+    g_settings.commandNames = commands::Resolve({weatherName.get(), moneyName.get(), cryptoName.get(), ipName.get(), speedName.get(), usageName.get(), servicesName.get(), installedName.get()});
     auto savedList = [](const wchar_t* setting, int limit) {
         std::vector<std::wstring> list;
         for (int i = 0; i < limit; ++i) {
@@ -14777,7 +15498,7 @@ void LoadSettings() {
     for (int i = 0;; ++i) {
         auto val = WindhawkUtils::StringSetting::make(L"files.excludedPaths[%d]", i);
         if (!*val.get()) break;
-        std::wstring s = tools::ToLower(tools::Trim(val.get()));
+        std::wstring s = filefilter::ToLower(tools::Trim(val.get()));
         for (auto& ch : s) {
             if (ch == L'/') ch = L'\\';
         }
@@ -14807,12 +15528,6 @@ void LoadSettings() {
         }
     }
 
-    int maxApps = Wh_GetIntSetting(L"search.maxAppResults");
-    g_settings.maxAppResults = (maxApps > 0) ? std::clamp(maxApps, 1, 30) : 6;
-
-    int maxFiles = Wh_GetIntSetting(L"files.maxFileResults");
-    g_settings.maxFileResults = (maxFiles > 0) ? std::clamp(maxFiles, 1, 50) : 12;
-
     g_settings.searchDebounceMs = std::clamp(Wh_GetIntSetting(L"search.searchDebounceMs"), 0, 1000);
 
     g_settings.useCustomMenuSize = Wh_GetIntSetting(L"appearance.useCustomMenuSize") != 0;
@@ -14832,17 +15547,17 @@ void LoadSettings() {
     // turn (g_forgetUsage).
     g_settings.learnFavorites = Wh_GetIntSetting(L"search.learnFavorites") != 0;
     g_settings.hideFilesPanel = Wh_GetIntSetting(L"files.hideFilesPanel") != 0;
+    everything::g_recordRunHistory = Wh_GetIntSetting(L"files.recordRunHistory") != 0;
     g_settings.filePreview = Wh_GetIntSetting(L"files.filePreview") != 0;
     g_settings.animatePreview = Wh_GetIntSetting(L"files.animatePreview") != 0;
     if (!g_settings.learnFavorites) {
-        Wh_DeleteValue(apps::kUsageValueName);
+        apps::ClearUsage();
         g_forgetUsage.store(true);
     }
 
     g_settingsRevision.fetch_add(1);
-    Wh_Log(L"=== settings: defSearch=%ls shortcuts=%zu maxApps=%d maxFiles=%d debounce=%d hints=%d filterNoise=%d excluded=%zu ===",
+    Wh_Log(L"=== settings: defSearch=%ls shortcuts=%zu debounce=%d hints=%d filterNoise=%d excluded=%zu ===",
         g_settings.defaultSearchUrl.c_str(), g_settings.webShortcuts.size(),
-        g_settings.maxAppResults, g_settings.maxFileResults,
         g_settings.searchDebounceMs,
         g_settings.showKeyHints ? 1 : 0,
         g_settings.filterNoisyPaths ? 1 : 0,
@@ -15198,12 +15913,106 @@ void AddPointerHandler(wux::UIElement const& element, wux::RoutedEvent const& ev
 void NoteContextMenuClosed(wf::IInspectable const& sender);
 
 static bool g_subclassed = false;
+// Run on Start's UI thread at its XAML focus notification. The input hook
+// in Explorer reads only the resulting window property, never XAML or UIA.
+bool StartElementAcceptsText(wux::DependencyObject node) try {
+    for (int depth = 0; node && depth < 16; ++depth, node = wuxm::VisualTreeHelper::GetParent(node)) {
+        if (auto box = node.try_as<wuxc::TextBox>()) return !box.IsReadOnly();
+        if (auto box = node.try_as<wuxc::RichEditBox>()) return !box.IsReadOnly();
+        if (node.try_as<wuxc::PasswordBox>()) return true;
+    }
+    return false;
+} catch (...) { return false; }
+
+void PublishStartTextFocus(HWND core, wux::DependencyObject const& focused) {
+    if (g_quit.load()) return;
+    const bool editing = StartElementAcceptsText(focused);
+    if (g_quit.load()) return;
+    if (editing)
+        SetPropW(core, kStartTextEditingProperty, reinterpret_cast<HANDLE>(1));
+    else
+        RemovePropW(core, kStartTextEditingProperty);
+}
+
+void RefreshStartTextFocus(HWND core) try {
+    if (g_quit.load() || GetWindowThreadProcessId(core, nullptr) != GetCurrentThreadId()) return;
+    auto window = wux::Window::Current();
+    auto content = window ? window.Content() : nullptr;
+    auto root = content ? content.XamlRoot() : nullptr;
+    auto focused = root ? wuxi::FocusManager::GetFocusedElement(root) :
+                          (window ? wuxi::FocusManager::GetFocusedElement() : nullptr);
+    PublishStartTextFocus(core, focused.try_as<wux::DependencyObject>());
+} catch (...) { RemovePropW(core, kStartTextEditingProperty); }
+
+[[clang::no_destroy]] wuxi::FocusManager::GettingFocus_revoker g_startTextGettingFocus;
+[[clang::no_destroy]] wuxi::FocusManager::LostFocus_revoker g_startTextLostFocus;
+std::atomic<HWND> g_startTextFocusWindow{nullptr};
+std::atomic<DWORD> g_startTextFocusThread{0};
+
+void StopStartTextFocus(HWND core) {
+    if (const DWORD owner = g_startTextFocusThread.load(); owner && owner != GetCurrentThreadId()) {
+        // XAML revokers belong to Start's UI thread. Subclass removal below
+        // also waits on that thread, so revoke there without retaining this DLL.
+        SendMessageW(core, StartTextFocusMessage(), 1, 0);
+        RemovePropW(core, kStartTextEditingProperty);
+        return;
+    }
+    g_startTextGettingFocus.revoke();
+    g_startTextLostFocus.revoke();
+    g_startTextFocusWindow = nullptr;
+    g_startTextFocusThread = 0;
+    RemovePropW(core, kStartTextEditingProperty);
+}
+
+void ObserveStartTextFocus(HWND core) try {
+    if (g_quit.load()) return;
+    if (g_startTextFocusWindow != core) {
+        if (g_startTextFocusWindow) StopStartTextFocus(g_startTextFocusWindow);
+        g_startTextFocusThread = GetCurrentThreadId();
+        auto getting = wuxi::FocusManager::GettingFocus(winrt::auto_revoke,
+            [core](auto const&, wuxi::GettingFocusEventArgs const& args) noexcept {
+                try {
+                    if (g_quit.load()) return;
+                    // GettingFocus is synchronous; do not wait for asynchronous
+                    // GotFocus before protecting the first letter in an editor.
+                    PublishStartTextFocus(core, args.Cancel() ? args.OldFocusedElement() : args.NewFocusedElement());
+                    // Re-read final focus after any later handler redirects or
+                    // cancels this transition. Never change Start's focus itself.
+                    PostMessageW(core, StartTextFocusMessage(), 0, 0);
+                } catch (...) {}
+            });
+        auto lost = wuxi::FocusManager::LostFocus(winrt::auto_revoke,
+            [core](auto const&, auto const&) noexcept { RefreshStartTextFocus(core); });
+        if (g_quit.load()) {
+            g_startTextFocusThread = 0;
+            return;
+        }
+        g_startTextGettingFocus = std::move(getting);
+        g_startTextLostFocus = std::move(lost);
+        g_startTextFocusWindow = core;
+    }
+    RefreshStartTextFocus(core);
+} catch (...) {
+    if (!g_startTextFocusWindow) g_startTextFocusThread = 0;
+    RemovePropW(core, kStartTextEditingProperty);
+}
+
 void TeardownStartMenuBridge(HWND core);
 static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     if (uMsg && uMsg == GetTeardownMessage()) {
         TeardownStartMenuBridge(hWnd);
         return kTeardownDone;
     }
+    if (uMsg && uMsg == StartTextFocusMessage()) {
+        if (wParam == 1) {
+            StopStartTextFocus(hWnd);
+            return 1;
+        }
+        ObserveStartTextFocus(hWnd);
+        return 0;
+    }
+    if (uMsg == WM_ACTIVATE)
+        PostMessageW(hWnd, StartTextFocusMessage(), 0, 0);
     if (uMsg == WM_TIMER && wParam == SearchAppearanceTimerId()) {
         HWND host = FindWindowW(kSearchWindowClass, nullptr);
         if (!g_quit.load() && host &&
@@ -15225,9 +16034,10 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-// Start owns only this appearance/activation bridge, never the search UI.
+// Start owns the appearance, native-text-focus and activation bridge, not search UI.
 void TeardownStartMenuBridge(HWND core) {
     if (!core) return;
+    StopStartTextFocus(core);
     KillTimer(core, SearchAppearanceTimerId());
     if (g_subclassed) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(core, StartMenuSubclassProc);
@@ -15393,6 +16203,7 @@ void SubclassStartMenuWindow() {
                 Wh_Log(L"subclass: hooked CoreWindow HWND %p", ours);
             }
         }
+        PostMessageW(ours, StartTextFocusMessage(), 0, 0);
     }
 }
 
@@ -15478,8 +16289,9 @@ struct Row {
     std::wstring footerText, cardSignature;
     std::optional<SpeedView> speed;
     std::optional<UsageView> usage;
-    bool installedOnly=false;
-    std::wstring installedLocation,installedFamily,installedKey;
+    bool installedOnly=false,installedProtected=false;
+    size_t installedTotal=0;
+    std::wstring installedName,installedLocation,installedFamily,installedKey,installedPackage;
     HKEY installedHive=nullptr;
     REGSAM installedView=0;
     std::wstring serviceName;
@@ -15537,6 +16349,38 @@ wuxmi::WriteableBitmap IconBitmap(const std::vector<BYTE>& pixels) {
 }
 
 std::vector<Row> g_appRows;
+inline constexpr size_t kInstalledBatchSize=20;
+inline constexpr size_t kScrollBatchSize=40;
+// Predict a small first batch from logical viewport/row sizes, with two rows
+// ready beyond the visible edge. Actual layout still fills unusually tall or
+// themed views through the normal bounded scroll requests.
+size_t InitialResultCount(double viewport,double rowHeight) {
+    if(!std::isfinite(viewport)||!std::isfinite(rowHeight)||viewport<=0||rowHeight<=0)return 20;
+    return static_cast<size_t>(std::clamp(std::ceil(viewport/rowHeight)+2,4.0,256.0));
+}
+std::atomic<size_t> g_initialAppResults{20},g_initialFileResults{20};
+std::wstring g_installedBatchQuery; // guarded by g_queryMutex
+size_t g_installedVisibleLimit=kInstalledBatchSize,g_installedTotal=0;
+bool InstalledNearEnd(double offset,double viewport,double extent) {
+    if(!std::isfinite(offset)||!std::isfinite(viewport)||!std::isfinite(extent)||
+        offset<0||viewport<=0||extent<=0)return false;
+    // Fill a tall viewport, or prefetch a little before the scrollbar ends.
+    return extent<=viewport || (offset>0 && offset+viewport>=extent-std::min(128.0,viewport*0.25));
+}
+bool RequestMoreInstalled(const std::wstring& query,size_t visible,uint64_t renderedRevision) {
+    if(!visible)return false;
+    {
+        std::lock_guard lock(g_queryMutex);
+        // The next request cannot overtake an in-flight batch or a UI that
+        // still shows the previous query. No scanning occurs on this thread.
+        if(g_searchQuit || renderedRevision!=g_queryRevision || query!=g_pendingQuery ||
+            query!=g_installedBatchQuery || visible!=std::min(g_installedVisibleLimit,g_installedTotal) ||
+            g_installedVisibleLimit>=g_installedTotal)return false;
+        g_installedVisibleLimit+=std::min(kScrollBatchSize,g_installedTotal-g_installedVisibleLimit);
+        ++g_queryRevision;g_queryDirty=true;
+    }
+    g_queryWake.notify_all();return true;
+}
 std::vector<Row> g_fileRows;
 std::wstring g_appsQuery;
 uint64_t g_appsRevision = 0, g_filesRevision = 0;  // g_resultsMutex
@@ -15546,17 +16390,82 @@ struct FileSearchRequest {
     uint64_t revision = 0;
     std::wstring query;
     bool enabled = false;
-    int limit = 0;
+    size_t limit = 0;
     bool filterNoise = false;
     std::vector<std::wstring> excludedPaths;
 };
 std::optional<FileSearchRequest> g_fileQuery;  // g_queryMutex; latest only
+std::optional<FileSearchRequest> g_fileTemplate;
+
+// <result-batches>
+// Only a scroll request grows a batch. Pagination does not change the typed
+// query revision, restart tools, or make the other panel repeat its search.
+struct ResultBatch {
+    uint64_t revision = 0;
+    size_t requested = 0, published = 0;
+    bool more = false, pending = false;
+    void Begin(uint64_t current, size_t initial) {
+        if (revision != current) {
+            revision = current;
+            requested = std::max(initial, requested);
+            published = 0;
+            more = false;
+            pending = true;
+        }
+    }
+    bool Request(uint64_t current, size_t visible) {
+        if (current != revision || pending || !more || visible != published ||
+            requested > std::numeric_limits<size_t>::max() - kScrollBatchSize)
+            return false;
+        requested += kScrollBatchSize;
+        pending = true;
+        return true;
+    }
+    void Complete(size_t count, bool hasMore) {
+        published = count;
+        more = hasMore;
+        pending = false;
+    }
+};
+ResultBatch g_appsBatch, g_filesBatch;  // g_queryMutex
+uint64_t g_filesContentRevision = 0;    // g_resultsMutex
+bool g_fileTotalExact = true;           // g_resultsMutex
+bool RequestMoreApps(const std::wstring& query, size_t visible, uint64_t revision) {
+    {
+        std::lock_guard lock(g_queryMutex);
+        if (g_searchQuit || revision != g_queryRevision || query != g_pendingQuery ||
+            !g_appsBatch.Request(revision, visible))
+            return false;
+        g_queryDirty = true;
+    }
+    g_queryWake.notify_all();
+    return true;
+}
+bool RequestMoreFiles(const std::wstring& query, size_t visible, uint64_t revision) {
+    {
+        std::lock_guard lock(g_queryMutex);
+        if (g_searchQuit || revision != g_queryRevision || query != g_pendingQuery || !g_fileTemplate ||
+            !g_fileTemplate->enabled || !g_filesBatch.Request(revision, visible))
+            return false;
+        g_fileQuery = *g_fileTemplate;
+        g_fileQuery->limit = g_filesBatch.requested;
+    }
+    g_fileQueryWake.notify_one();
+    return true;
+}
+// </result-batches>
 
 // Publish only the current request. The revision also rejects stale results
 // when the user types A -> B -> A, or changes settings with the same text.
-bool PublishAppResults(uint64_t revision, const std::wstring& query, std::vector<Row> rows) {
+bool PublishAppResults(uint64_t revision, const std::wstring& query, std::vector<Row> rows,
+                       bool more=false,size_t expectedLimit=0) {
     std::scoped_lock lock(g_queryMutex, g_resultsMutex);
     if (g_searchQuit.load() || revision != g_queryRevision) return false;
+    // A live tool refresh must not replace a newer scrolling batch for the
+    // same query while its larger request is being prepared.
+    if(expectedLimit && (g_appsBatch.revision!=revision ||
+                         g_appsBatch.requested!=expectedLimit))return false;
+    if(g_appsBatch.revision==revision)g_appsBatch.Complete(rows.size(),more);
     g_appRows = std::move(rows);
     g_appsQuery = query;
     g_appsRevision = revision;
@@ -15564,12 +16473,15 @@ bool PublishAppResults(uint64_t revision, const std::wstring& query, std::vector
     return true;
 }
 
-bool PublishFileResults(uint64_t revision, std::vector<Row> rows, DWORD total) {
+bool PublishFileResults(uint64_t revision, std::vector<Row> rows, DWORD total,bool more=false,bool totalExact=true) {
     std::scoped_lock lock(g_queryMutex, g_resultsMutex);
     if (g_searchQuit.load() || revision != g_queryRevision || revision != g_appsRevision) return false;
+    if(g_filesBatch.revision==revision)g_filesBatch.Complete(rows.size(),more);
     g_fileRows = std::move(rows);
     g_filesRevision = revision;
+    ++g_filesContentRevision;
     g_totalMatches.store(total);
+    g_fileTotalExact=totalExact;
     return true;
 }
 
@@ -15588,12 +16500,42 @@ std::vector<std::wstring> g_commandUsageRequests; // g_queryMutex; drained by th
 
 // Opens what was clicked.
 //
+HRESULT ExecuteSearchShell(SHELLEXECUTEINFOW& info) {
+    if (ShellExecuteExW(&info)) return S_OK;
+    const DWORD error = GetLastError();
+    return error ? HRESULT_FROM_WIN32(error) : E_FAIL;
+}
+
+bool StopShellLaunchFallback(HRESULT result) {
+    return SUCCEEDED(result) || result == HRESULT_FROM_WIN32(ERROR_CANCELLED) ||
+           result == E_ABORT || result == E_ACCESSDENIED;
+}
+
+bool OpenShellShortcut(const std::wstring& path, bool asAdmin) {
+    // Let Windows apply the original link's arguments, Start in and elevation.
+    SHELLEXECUTEINFOW info{sizeof(info)};
+    info.fMask = SEE_MASK_NOASYNC;
+    info.lpVerb = asAdmin ? L"runas" : nullptr;
+    info.lpFile = path.c_str();
+    info.nShow = SW_SHOWNORMAL;
+    const HRESULT result = ExecuteSearchShell(info);
+    if (FAILED(result)) {
+        Wh_Log(L"shortcut launch ended (%08X): %ls", static_cast<unsigned>(result), path.c_str());
+    }
+    return SUCCEEDED(result);
+}
+
 // ShellExecute rather than CreateProcess: these are paths of any kind, and
 // the shell decides what opening one means. This process runs at the user's
 // own integrity in Explorer, so what opens is what the user would have opened.
-void OpenResult(std::wstring path, bool asAdmin = false) {
-    SpawnTrackedLaunch([path = std::move(path), asAdmin] {
+void OpenResult(std::wstring path, bool asAdmin = false, bool recordHistory = false) {
+    SpawnTrackedLaunch([path = std::move(path), asAdmin, recordHistory] {
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (apps::IsShellShortcut(path)) {
+            if (OpenShellShortcut(path, asAdmin) && recordHistory) everything::RecordFileOpen(path);
+            if (SUCCEEDED(comHr)) CoUninitialize();
+            return;
+        }
         wchar_t userProfile[MAX_PATH] = {};
         if (!GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH) || !userProfile[0]) {
             PWSTR kf = nullptr;
@@ -15634,7 +16576,7 @@ void OpenResult(std::wstring path, bool asAdmin = false) {
         info.nShow = SW_SHOWNORMAL;
         if (!ShellExecuteExW(&info)) {
             Wh_Log(L"open failed (%lu): %ls (admin=%d)", GetLastError(), path.c_str(), asAdmin ? 1 : 0);
-        }
+        } else if(recordHistory)everything::RecordFileOpen(path);
         if (SUCCEEDED(comHr)) {
             CoUninitialize();
         }
@@ -16019,9 +16961,358 @@ inline std::wstring RemovablePackageFamily(const std::wstring& appId) {
 
 }  // namespace uninstall
 
+// Public shell/app-model APIs only. Discovery never invokes a command. Menus
+// are created on demand, not while matching apps or building result cards.
+namespace shellactions {
+enum class Pin { Start, Unstart, Taskbar, Untaskbar };
+struct Command {
+    Pin kind;
+    std::wstring verb, label;
+    bool enabled = true;
+    std::wstring target;
+};
+std::wstring Lower(std::wstring value) {
+    return searchtext::Lower(std::move(value));
+}
+std::optional<Pin> PinKind(std::wstring_view verb) {
+    const auto key = Lower(std::wstring(verb));
+    if (key == L"pintostartscreen" || key == L"startpin" || key == L"pintostart")
+        return Pin::Start;
+    if (key == L"unpinfromstartscreen" || key == L"unpinfromstart" || key == L"startunpin")
+        return Pin::Unstart;
+    if (key == L"taskbarpin" || key == L"pintotaskbar")
+        return Pin::Taskbar;
+    if (key == L"taskbarunpin" || key == L"unpinfromtaskbar")
+        return Pin::Untaskbar;
+    return std::nullopt;
+}
+std::wstring MenuLabel(std::wstring_view text) {
+    std::wstring result;
+    for (size_t i = 0; i < text.size() && text[i] != L'\t'; ++i) {
+        if (text[i] == L'&') {
+            if (i + 1 < text.size() && text[i + 1] == L'&')
+                ++i;
+            else
+                continue;
+        }
+        result += text[i];
+    }
+    return result;
+}
+class Menu {
+    winrt::com_ptr<IContextMenu> context_;
+    HMENU menu_ = nullptr;
+    static constexpr UINT first_ = 1, last_ = 0x7fff;
+
+   public:
+    explicit Menu(winrt::com_ptr<IContextMenu> context) : context_(std::move(context)) {
+        if (context_ && (menu_ = CreatePopupMenu())) {
+            if (FAILED(context_->QueryContextMenu(menu_, 0, first_, last_, CMF_NORMAL)))
+                context_ = nullptr;
+        }
+    }
+    ~Menu() {
+        if (menu_)
+            DestroyMenu(menu_);
+    }
+    Menu(Menu const&) = delete;
+    Menu& operator=(Menu const&) = delete;
+    std::vector<Command> Pins() const {
+        std::vector<Command> result;
+        if (!context_ || !menu_)
+            return result;
+        for (int i = 0, n = std::min(GetMenuItemCount(menu_), 256); i < n; ++i) {
+            wchar_t label[512]{}, verb[256]{};
+            MENUITEMINFOW info{sizeof(info)};
+            info.fMask = MIIM_ID | MIIM_STRING | MIIM_STATE | MIIM_FTYPE;
+            info.dwTypeData = label;
+            info.cch = std::size(label);
+            if (!GetMenuItemInfoW(menu_, i, TRUE, &info) || (info.fType & MFT_SEPARATOR) || info.wID < first_ ||
+                info.wID > last_)
+                continue;
+            const auto status = context_->GetCommandString(info.wID - first_, GCS_VERBW, nullptr,
+                                                           reinterpret_cast<LPSTR>(verb), std::size(verb));
+            verb[std::size(verb) - 1] = 0;
+            label[std::size(label) - 1] = 0;
+            if (FAILED(status))
+                continue;
+            auto kind = PinKind(verb);
+            if (!kind || !label[0] ||
+                std::any_of(result.begin(), result.end(), [&](auto const& cmd) { return cmd.kind == *kind; }))
+                continue;
+            result.push_back({*kind, verb, MenuLabel(label), (info.fState & (MFS_DISABLED | MFS_GRAYED)) == 0});
+        }
+        return result;
+    }
+    HRESULT Invoke(std::wstring_view verb, HWND owner) const {
+        if (!PinKind(verb))
+            return E_ACCESSDENIED;
+        const auto wanted = Lower(std::wstring(verb));
+        // Resolve the canonical verb again; menu IDs are scoped to this query
+        // and must never be reused from a previous opening or another item.
+        for (int i = 0, n = context_ && menu_ ? std::min(GetMenuItemCount(menu_), 256) : 0; i < n; ++i) {
+            MENUITEMINFOW info{sizeof(info)};
+            info.fMask = MIIM_ID | MIIM_STATE;
+            wchar_t current[256]{};
+            if (!GetMenuItemInfoW(menu_, i, TRUE, &info) || info.wID < first_ || info.wID > last_)
+                continue;
+            const auto status = context_->GetCommandString(info.wID - first_, GCS_VERBW, nullptr,
+                                                           reinterpret_cast<LPSTR>(current), std::size(current));
+            current[std::size(current) - 1] = 0;
+            if (FAILED(status) || Lower(current) != wanted)
+                continue;
+            if (info.fState & (MFS_DISABLED | MFS_GRAYED))
+                return E_ACCESSDENIED;
+            CMINVOKECOMMANDINFOEX invoke{sizeof(invoke)};
+            invoke.fMask = CMIC_MASK_UNICODE;
+            invoke.hwnd = owner;
+            invoke.lpVerb = MAKEINTRESOURCEA(info.wID - first_);
+            invoke.lpVerbW = MAKEINTRESOURCEW(info.wID - first_);
+            invoke.nShow = SW_SHOWNORMAL;
+            return context_->InvokeCommand(reinterpret_cast<LPCMINVOKECOMMANDINFO>(&invoke));
+        }
+        return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+    }
+};
+std::unique_ptr<Menu> Open(const std::wstring& target, HWND owner) {
+    if (target.empty() || target.size() > 32767)
+        return {};
+    PIDLIST_ABSOLUTE absolute = nullptr;
+    if (FAILED(SHParseDisplayName(target.c_str(), nullptr, &absolute, 0, nullptr)) || !absolute)
+        return {};
+    struct Free {
+        PIDLIST_ABSOLUTE value;
+        ~Free() { CoTaskMemFree(value); }
+    } free{absolute};
+    winrt::com_ptr<IShellFolder> parent;
+    PCUITEMID_CHILD child = nullptr;
+    if (FAILED(SHBindToParent(absolute, IID_PPV_ARGS(parent.put()), &child)))
+        return {};
+    winrt::com_ptr<IContextMenu> context;
+    if (FAILED(parent->GetUIObjectOf(owner, 1, &child, IID_IContextMenu, nullptr, context.put_void())))
+        return {};
+    return std::make_unique<Menu>(std::move(context));
+}
+// AppsFolder can omit Start pinning even when the desktop app's original
+// shortcut supports it. Preserve that shortcut's arguments and app identity.
+std::wstring FindShortcutIn(const std::wstring& directory,
+                            const std::wstring& identity,
+                            const std::wstring& executable,
+                            size_t& remaining,
+                            std::wstring& fallback,
+                            unsigned depth = 0) {
+    if (!remaining || depth > 16)
+        return {};
+    WIN32_FIND_DATAW data{};
+    HANDLE find =
+        FindFirstFileExW((directory + L"\\*").c_str(), FindExInfoBasic, &data, FindExSearchNameMatch, nullptr, 0);
+    if (find == INVALID_HANDLE_VALUE)
+        return {};
+    struct Close {
+        HANDLE value;
+        ~Close() { FindClose(value); }
+    } close{find};
+    do {
+        if (!remaining)
+            break;
+        --remaining;
+        if (!wcscmp(data.cFileName, L".") || !wcscmp(data.cFileName, L"..") ||
+            (data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+            continue;
+        const auto path = directory + L"\\" + data.cFileName;
+        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (auto match = FindShortcutIn(path, identity, executable, remaining, fallback, depth + 1); !match.empty())
+                return match;
+            continue;
+        }
+        if (!Lower(path).ends_with(L".lnk"))
+            continue;
+        winrt::com_ptr<IShellLinkW> link;
+        if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(link.put()))))
+            continue;
+        auto file = link.try_as<IPersistFile>();
+        if (!file || FAILED(file->Load(path.c_str(), STGM_READ)))
+            continue;
+        auto properties = link.try_as<IPropertyStore>();
+        PROPVARIANT id{};
+        constexpr PROPERTYKEY appId = {{0x9f4c2855, 0x9f79, 0x4b39, {0xa8, 0xd0, 0xe1, 0xd4, 0x2d, 0xe1, 0xd5, 0xf3}},
+                                       5};
+        const bool hasId = properties && SUCCEEDED(properties->GetValue(appId, &id)) && id.vt == VT_LPWSTR &&
+                           id.pwszVal && id.pwszVal[0];
+        const bool matches = hasId && CompareStringOrdinal(id.pwszVal, -1, identity.c_str(), -1, TRUE) == CSTR_EQUAL;
+        PropVariantClear(&id);
+        if (hasId) {
+            if (matches)
+                return path;
+            continue;
+        }
+        // With no explicit ID, only an exact executable match is eligible.
+        // Never match just a filename, display name, or directory prefix.
+        wchar_t target[MAX_PATH]{};
+        if (fallback.empty() && !executable.empty() &&
+            SUCCEEDED(link->GetPath(target, std::size(target), nullptr, SLGP_RAWPATH)) &&
+            CompareStringOrdinal(target, -1, executable.c_str(), -1, TRUE) == CSTR_EQUAL)
+            fallback = path;
+    } while (remaining && FindNextFileW(find, &data));
+    return {};
+}
+std::wstring ShortcutTarget(const std::wstring& target) {
+    constexpr std::wstring_view prefix = L"shell:AppsFolder\\";
+    if (!target.starts_with(prefix))
+        return {};
+    const auto identity = target.substr(prefix.size());
+    if (identity.empty() || identity.find_first_of(L"\\/:!") != identity.npos)
+        return {};
+    winrt::com_ptr<IShellItem2> item;
+    if (FAILED(SHCreateItemFromParsingName(target.c_str(), nullptr, IID_PPV_ARGS(item.put()))))
+        return {};
+    constexpr PROPERTYKEY linkTarget = {{0xb9b4b3fc, 0x2b51, 0x4a42, {0xb5, 0xd8, 0x32, 0x41, 0x46, 0xaf, 0xcf, 0x25}},
+                                        2};
+    PWSTR value = nullptr;
+    std::wstring executable, fallback;
+    if (SUCCEEDED(item->GetString(linkTarget, &value)) && value) {
+        executable = value;
+        CoTaskMemFree(value);
+    }
+    size_t remaining = 4096;
+    for (auto folder : {&FOLDERID_Programs, &FOLDERID_CommonPrograms}) {
+        PWSTR root = nullptr;
+        if (FAILED(SHGetKnownFolderPath(*folder, KF_FLAG_DONT_VERIFY, nullptr, &root)) || !root)
+            continue;
+        const std::wstring directory = root;
+        CoTaskMemFree(root);
+        if (directory.size() < 3 || directory[1] != L':' || directory[2] != L'\\')
+            continue;
+        const wchar_t drive[] = {directory[0], L':', L'\\', 0};
+        if (GetDriveTypeW(drive) != DRIVE_FIXED)
+            continue;
+        if (auto match = FindShortcutIn(directory, identity, executable, remaining, fallback); !match.empty())
+            return match;
+    }
+    return fallback;
+}
+std::vector<Command> MergePins(std::vector<Command> primary, const std::vector<Command>& fallback) {
+    for (auto const& command : fallback) {
+        const bool start = command.kind == Pin::Start || command.kind == Pin::Unstart;
+        if (std::none_of(primary.begin(), primary.end(), [&](auto const& current) {
+                return start == (current.kind == Pin::Start || current.kind == Pin::Unstart);
+            }))
+            primary.push_back(command);
+    }
+    return primary;
+}
+std::vector<Command> Pins(const std::wstring& target, HWND owner) {
+    auto menu = Open(target, owner);
+    auto result = menu ? menu->Pins() : std::vector<Command>{};
+    for (auto& command : result)
+        command.target = target;
+    const bool hasStart = std::any_of(result.begin(), result.end(), [](auto const& command) {
+        return command.kind == Pin::Start || command.kind == Pin::Unstart;
+    });
+    if (!hasStart) {
+        const auto shortcut = ShortcutTarget(target);
+        if (!shortcut.empty()) {
+            auto other = Open(shortcut, owner);
+            auto fallback = other ? other->Pins() : std::vector<Command>{};
+            for (auto& command : fallback)
+                command.target = shortcut;
+            result = MergePins(std::move(result), fallback);
+        }
+    }
+    return result;
+}
+HRESULT InvokePin(const std::wstring& target, std::wstring_view verb, HWND owner) {
+    auto menu = Open(target, owner);
+    return menu ? menu->Invoke(verb, owner) : E_FAIL;
+}
+std::wstring Target(const std::wstring& path, bool isFile) {
+    if (path.empty())
+        return {};
+    if (isFile || path.starts_with(L"shell:AppsFolder\\") || (path.size() > 2 && path[1] == L':') ||
+        path.starts_with(L"\\\\"))
+        return path;
+    return L"shell:AppsFolder\\" + path;
+}
+// A family alone is not proof that Advanced options exists: frameworks,
+// resources and infrastructure packages commonly have no application IDs.
+std::wstring SettingsArguments(const std::wstring& identity, const std::wstring& fullName = {}) {
+    auto bang = identity.find(L'!');
+    const auto family = identity.substr(0, bang);
+    if (family.empty() || family.size() > 128 || !std::all_of(family.begin(), family.end(), [](wchar_t ch) {
+            return (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') || (ch >= L'0' && ch <= L'9') ||
+                   ch == L'.' || ch == L'-' || ch == L'_';
+        }))
+        return {};
+    UINT32 count = 0, length = 0;
+    if (GetPackagesByPackageFamily(family.c_str(), &count, nullptr, &length, nullptr) != ERROR_INSUFFICIENT_BUFFER ||
+        !count || count > 1024 || !length || length > 1024 * 1024)
+        return {};
+    std::vector<PWSTR> names(count);
+    std::vector<wchar_t> buffer(length);
+    if (GetPackagesByPackageFamily(family.c_str(), &count, names.data(), &length, buffer.data()) != ERROR_SUCCESS)
+        return {};
+    for (UINT32 i = 0; i < count; ++i) {
+        if (!fullName.empty() && fullName != names[i])
+            continue;
+        PACKAGE_INFO_REFERENCE reference{};
+        if (OpenPackageInfoByFullName(names[i], 0, &reference) != ERROR_SUCCESS)
+            continue;
+        struct Close {
+            PACKAGE_INFO_REFERENCE value;
+            ~Close() { ClosePackageInfo(value); }
+        } close{reference};
+        UINT32 bytes = 0, apps = 0;
+        if (GetPackageApplicationIds(reference, &bytes, nullptr, &apps) != ERROR_INSUFFICIENT_BUFFER || !apps ||
+            apps > 4096 || bytes < apps * sizeof(PCWSTR) || bytes > 1024 * 1024)
+            continue;
+        std::vector<BYTE> appBuffer(bytes);
+        if (GetPackageApplicationIds(reference, &bytes, appBuffer.data(), &apps) != ERROR_SUCCESS || !apps ||
+            apps > appBuffer.size() / sizeof(PCWSTR))
+            continue;
+        // The appsfeatures-app URI ignores its family query on current Windows.
+        // Settings accepts this family through its own advanced-page link.
+        const auto arguments =
+            L"page=SettingsPageInstalledApps&target=SystemSettings_StorageSense_HiddenAppAdvancedPageLink&parameter=" +
+            family + L"&invoke=true";
+        if (bang == identity.npos)
+            return arguments;
+        const auto ids = reinterpret_cast<PCWSTR const*>(appBuffer.data());
+        for (UINT32 n = 0; n < apps; ++n)
+            if (CompareStringOrdinal(ids[n], -1, identity.c_str(), -1, TRUE) == CSTR_EQUAL)
+                return arguments;
+    }
+    return {};
+}
+HRESULT LaunchSettings(const std::wstring& arguments) {
+    if (arguments.empty())
+        return E_INVALIDARG;
+    winrt::com_ptr<IApplicationActivationManager> manager;
+    HRESULT result = CoCreateInstance(CLSID_ApplicationActivationManager, nullptr, CLSCTX_INPROC_SERVER,
+                                      IID_PPV_ARGS(manager.put()));
+    if (SUCCEEDED(result)) {
+        DWORD pid = 0;
+        result = manager->ActivateApplication(
+            L"windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel", arguments.c_str(),
+            AO_NONE, &pid);
+    }
+    return result;
+}
+}  // namespace shellactions
+
+void OpenAppSettings(std::wstring arguments) {
+    SpawnTrackedLaunch([arguments=std::move(arguments)]{
+        const HRESULT com=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
+        try {
+            const auto result=shellactions::LaunchSettings(arguments);
+            if(FAILED(result))Wh_Log(L"App settings activation failed: %08X",static_cast<unsigned>(result));
+        } catch (...) {Wh_Log(L"App settings activation failed: %08X",static_cast<unsigned>(winrt::to_hresult()));}
+        if(SUCCEEDED(com))CoUninitialize();
+    });
+}
+
 // Removes a packaged app directly in Explorer (AcceptPackageRemoval).
-bool RequestPackageRemoval(const std::wstring& family) {
-    return AcceptPackageRemoval(family);
+bool RequestPackageRemoval(const std::wstring& family,const std::wstring& fullName = {}) {
+    return AcceptPackageRemoval(family,fullName);
 }
 
 // Starts a program's uninstaller from Explorer (DismissSearchForLaunch), so it
@@ -18395,7 +19686,7 @@ void OpenSelectedFile(int index, bool asAdmin) {
     if (asAdmin && !CanElevatePath(path)) {
         asAdmin = false;
     }
-    DismissSearchForLaunch([path = path, asAdmin] { OpenResult(path, asAdmin); });
+    DismissSearchForLaunch([path = path, asAdmin] { OpenResult(path, asAdmin, true); });
     Wh_Log(L"open file: index %d ('%ls'), asAdmin=%d", index, path.c_str(), asAdmin ? 1 : 0);
 }
 
@@ -18456,9 +19747,7 @@ void LaunchSelectedApp(int index, bool asAdmin) {
     }
     const auto& row = g_currentAppRows[index];
     if(row.installedOnly) {
-        if(!installed::Location(row.installedLocation).empty())
-            DismissSearchForLaunch([path=row.installedLocation]{OpenResult(path,false);});
-        else {SetAppSelection(index,true);OpenSelectedContextMenu();}
+        SetAppSelection(index,true);OpenSelectedContextMenu();
         return;
     }
     if (row.speedStart) { StartInternetSpeedTest(); return; }
@@ -18521,7 +19810,9 @@ void LaunchSelectedApp(int index, bool asAdmin) {
 std::wstring g_shownQuery;
 uint64_t g_shownAppsRevision = 0, g_shownFilesRevision = 0;  // XAML thread
 uint64_t g_shownAppsContentRevision = 0;
+uint64_t g_shownFilesContentRevision = 0;
 DWORD g_shownFilesTotal = 0;
+bool g_shownFilesTotalExact = true;
 
 // Whether the rows on screen are not yet the results for what is typed.
 bool ResultsPending() {
@@ -19142,7 +20433,20 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     appsScroll.Content(apps);
     g_appsScroll = appsScroll;
     KeepHandler(appsScroll,appsScroll.ViewChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,auto const&) {
-        SearchContrastScrolled(sender.as<wuxc::ScrollViewer>());
+        auto scroll=sender.as<wuxc::ScrollViewer>();
+        SearchContrastScrolled(scroll);CheckInstalledScroll(scroll);
+    }));
+    KeepHandler(appsScroll,appsScroll.PointerWheelChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,wux::Input::PointerRoutedEventArgs const& args) {
+        if(args.GetCurrentPoint(sender.as<wux::UIElement>()).Properties().MouseWheelDelta()<0)
+            CheckInstalledScroll(sender.as<wuxc::ScrollViewer>());
+    }));
+    KeepHandler(appsScroll,appsScroll.SizeChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,auto const&) {
+        CheckInstalledScroll(sender.as<wuxc::ScrollViewer>());
+    }));
+    // Scroll extents may still be stale during SizeChanged. Recheck only
+    // after XAML completes layout, including an appended inventory batch.
+    KeepHandler(appsScroll,appsScroll.LayoutUpdated(winrt::auto_revoke,[](wf::IInspectable const&,auto const&) {
+        if(g_appsScroll)CheckInstalledScroll(g_appsScroll);
     }));
     appsScroll.IsTabStop(false);
     appsScroll.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
@@ -19203,7 +20507,18 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     filesScroll.Content(files);
     g_filesScroll = filesScroll;
     KeepHandler(filesScroll,filesScroll.ViewChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,auto const&) {
-        SearchContrastScrolled(sender.as<wuxc::ScrollViewer>());
+        auto scroll=sender.as<wuxc::ScrollViewer>();
+        SearchContrastScrolled(scroll);CheckFileScroll(scroll);
+    }));
+    KeepHandler(filesScroll,filesScroll.PointerWheelChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,wux::Input::PointerRoutedEventArgs const& args) {
+        if(args.GetCurrentPoint(sender.as<wux::UIElement>()).Properties().MouseWheelDelta()<0)
+            CheckFileScroll(sender.as<wuxc::ScrollViewer>());
+    }));
+    KeepHandler(filesScroll,filesScroll.SizeChanged(winrt::auto_revoke,[](wf::IInspectable const& sender,auto const&) {
+        CheckFileScroll(sender.as<wuxc::ScrollViewer>());
+    }));
+    KeepHandler(filesScroll,filesScroll.LayoutUpdated(winrt::auto_revoke,[](auto const&,auto const&) {
+        if(g_filesScroll)CheckFileScroll(g_filesScroll);
     }));
     filesScroll.IsTabStop(false);
     filesScroll.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
@@ -19368,6 +20683,38 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     Wh_Log(L"results list failed %08X", static_cast<unsigned>(winrt::to_hresult()));
 }
 
+// Only the UI reads XAML geometry. Workers consume the small atomic counts.
+void UpdateInitialResultCounts() try {
+    const double rowHeight=std::max<double>(kIconDisplay,Fs(32))+16;
+    auto update=[rowHeight](wuxc::ScrollViewer const& scroll,std::atomic<size_t>& count) {
+        if(!scroll)return;
+        double height=scroll.ViewportHeight();
+        if(!std::isfinite(height)||height<=0)height=scroll.ActualHeight();
+        if(std::isfinite(height)&&height>0)count=InitialResultCount(height,rowHeight);
+    };
+    update(g_appsScroll,g_initialAppResults);
+    update(g_filesScroll,g_initialFileResults);
+} catch (...) {}
+
+// UI-thread scroll notification; all matching and paging stay on their workers.
+void CheckInstalledScroll(wuxc::ScrollViewer const& scroll) try {
+    if(!scroll || scroll!=g_appsScroll)return;
+    UpdateInitialResultCounts();
+    if(!g_isOverlayVisible.load())return;
+    if(!InstalledNearEnd(scroll.VerticalOffset(),scroll.ViewportHeight(),scroll.ExtentHeight()))return;
+    if(!g_currentAppRows.empty() && g_currentAppRows.front().installedOnly) {
+        if(g_currentAppRows.front().installedTotal>g_currentAppRows.size())
+            RequestMoreInstalled(g_shownQuery,g_currentAppRows.size(),g_shownAppsRevision);
+    } else RequestMoreApps(g_shownQuery,g_currentAppRows.size(),g_shownAppsRevision);
+} catch (...) {}
+void CheckFileScroll(wuxc::ScrollViewer const& scroll) try {
+    if(!scroll || scroll!=g_filesScroll)return;
+    UpdateInitialResultCounts();
+    if(!g_isOverlayVisible.load() || !FilesPanelVisible())return;
+    if(InstalledNearEnd(scroll.VerticalOffset(),scroll.ViewportHeight(),scroll.ExtentHeight()))
+        RequestMoreFiles(g_shownQuery,g_currentFileRows.size(),g_shownFilesRevision);
+} catch (...) {}
+
 // The XAML thread keeps the displayed files until a current replacement is
 // ready. An apps-only pass reads their count, without copying their icons or
 // invalidating their controls while Everything is still answering.
@@ -19376,7 +20723,9 @@ struct SearchRenderSnapshot {
     std::wstring query;
     uint64_t appsRevision = 0, filesRevision = 0;
     uint64_t appsContentRevision = 0;
+    uint64_t filesContentRevision = 0;
     DWORD total = 0;
+    bool totalExact = true;
     size_t fileCount = 0;
     bool appsChanged = false, filesChanged = false;
 };
@@ -19405,24 +20754,33 @@ std::optional<SearchRenderSnapshot> ReadSearchRenderSnapshot(bool appsOnly, bool
     snapshot.appsChanged = force || g_appsRevision != g_shownAppsRevision ||
         g_appsContentRevision != g_shownAppsContentRevision;
     snapshot.filesChanged = !appsOnly &&
-        (force || (filesReady && g_filesRevision != g_shownFilesRevision));
+        (force || (filesReady && (g_filesRevision != g_shownFilesRevision ||
+                                 g_filesContentRevision != g_shownFilesContentRevision)));
     if (!snapshot.appsChanged && !snapshot.filesChanged) return std::nullopt;
-    snapshot.apps = g_appRows;
+    if(snapshot.appsChanged)snapshot.apps = g_appRows;
     snapshot.query = g_appsQuery;
     snapshot.appsRevision = g_appsRevision;
     snapshot.appsContentRevision = g_appsContentRevision;
     snapshot.filesRevision = g_shownFilesRevision;
+    snapshot.filesContentRevision = g_shownFilesContentRevision;
     snapshot.total = g_shownFilesTotal;
+    snapshot.totalExact = g_shownFilesTotalExact;
     snapshot.fileCount = g_currentFileRows.size();
     if (snapshot.filesChanged) {
         snapshot.files = filesReady ? g_fileRows : g_currentFileRows;
         snapshot.fileCount = snapshot.files.size();
         if (filesReady) {
             snapshot.filesRevision = g_filesRevision;
+            snapshot.filesContentRevision = g_filesContentRevision;
             snapshot.total = g_totalMatches.load();
+            snapshot.totalExact = g_fileTotalExact;
         }
     }
     return snapshot;
+}
+
+std::wstring FileTotalText(DWORD total,bool exact) {
+    return (exact?std::wstring{}:L"\u2248")+std::to_wstring(total);
 }
 
 // Replace a fallback icon without rebuilding a card or resetting selection.
@@ -19706,7 +21064,7 @@ wuxc::Grid BuildInstalledBadge() {
     note.ColumnDefinitions().Append(iconColumn);note.ColumnDefinitions().Append(textColumn);
     note.Margin(wux::ThicknessHelper::FromLengths(0,2,0,0));
     auto mark=SearchFontIcon();mark.Glyph(L"\uE946");ScaleFont(mark,11);mark.Margin(wux::ThicknessHelper::FromLengths(0,0,4,0));note.Children().Append(mark);
-    auto label=SearchTextBlock();label.Text(std::wstring(i18n::Text(i18n::Key::InstalledApp))+L" \u00B7 "+i18n::Text(i18n::Key::NotLaunchable));
+    auto label=SearchTextBlock();label.Text(i18n::Text(i18n::Key::InstalledApp));
     ScaleFont(label,10);label.Opacity(0.75);label.TextWrapping(wux::TextWrapping::Wrap);label.MaxLines(2);
     wuxc::Grid::SetColumn(label,1);note.Children().Append(label);
     return note;
@@ -19781,31 +21139,315 @@ void ApplyAppIcon(const wuxc::Button& button, const std::vector<BYTE>& pixels) {
     layout.Children().SetAt(0, image);
 }
 
+// The shell supplies labels/state. Keep only strings in XAML event handlers;
+void PrepareCopiedMenu(wuxc::MenuFlyout const& menu);
+// command IDs and COM objects are resolved afresh when the user chooses one.
+void DisableMenuAnimations(wuxc::MenuFlyout const& menu) {
+    menu.AreOpenCloseAnimationsEnabled(false);
+}
 
+void DisableMenuTransitions(wuxcp::Popup const& popup, wuxc::MenuFlyoutPresenter const& presenter) {
+    if (auto transitions = popup.ChildTransitions(); transitions && transitions.Size())
+        popup.ChildTransitions(wuxma::TransitionCollection{});
+    if (auto transitions = presenter.Transitions(); transitions && transitions.Size())
+        presenter.Transitions(wuxma::TransitionCollection{});
+}
 
+namespace shellmenus {
+struct Result {
+    std::wstring target, settings;
+    std::vector<shellactions::Command> pins;
+};
+struct Job {
+    uint64_t id;
+    HWND owner;
+    std::wstring target, package, fullName;
+};
+static std::mutex mutex;
+static std::condition_variable wake;
+[[clang::no_destroy]] static std::optional<std::thread> worker;
+static std::vector<Job> jobs;
+static std::map<uint64_t, Result> completed;
+static uint64_t active = 0;
+static bool stopping = false, canceledActive = false;
+UINT Message() {
+    static const UINT message = RegisterWindowMessageW(L"StartEverything.ShellMenuReady");
+    return message;
+}
+void Run() {
+    const HRESULT apartment = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    for (;;) {
+        Job job;
+        {
+            std::unique_lock lock(mutex);
+            wake.wait(lock, [] { return stopping || !jobs.empty(); });
+            if (stopping)
+                break;
+            job = std::move(jobs.front());
+            jobs.erase(jobs.begin());
+            active = job.id;
+            canceledActive = false;
+        }
+        Result result;
+        result.target = job.target;
+        if (SUCCEEDED(apartment))
+            try {
+                // No search HWND is given to extensions during discovery. Results
+                // contain strings only; all XAML access stays on the owning thread.
+                if (!job.target.empty())
+                    result.pins = shellactions::Pins(job.target, nullptr);
+                if (!job.package.empty())
+                    result.settings = shellactions::SettingsArguments(job.package, job.fullName);
+            } catch (...) {
+                Wh_Log(L"Windows app action discovery failed: %08X", unsigned(winrt::to_hresult()));
+            }
+        bool notify = false;
+        {
+            std::lock_guard lock(mutex);
+            if (!stopping && !canceledActive) {
+                completed.emplace(job.id, std::move(result));
+                notify = true;
+            }
+            active = 0;
+        }
+        if (notify)
+            PostMessageW(job.owner, Message(), 0, 0);
+    }
+    if (SUCCEEDED(apartment))
+        CoUninitialize();
+}
+uint64_t Enqueue(HWND owner, std::wstring target, std::wstring package, std::wstring fullName, uint64_t id) {
+    if (!owner || !Message())
+        return 0;
+    std::lock_guard lock(mutex);
+    if (stopping || jobs.size() >= 32)
+        return 0;
+    try {
+        if (!worker)
+            worker.emplace(Run);
+        jobs.push_back({id, owner, std::move(target), std::move(package), std::move(fullName)});
+        wake.notify_one();
+        return id;
+    } catch (...) {
+        return 0;
+    }
+}
+void Cancel(uint64_t id) {
+    std::lock_guard lock(mutex);
+    std::erase_if(jobs, [=](auto const& job) { return job.id == id; });
+    completed.erase(id);
+    if (active == id)
+        canceledActive = true;
+}
+std::map<uint64_t, Result> Take() {
+    std::lock_guard lock(mutex);
+    auto result = std::move(completed);
+    completed.clear();
+    return result;
+}
+void Start() {
+    std::lock_guard lock(mutex);
+    stopping = false;
+}
+void Stop() {
+    {
+        std::lock_guard lock(mutex);
+        stopping = true;
+        jobs.clear();
+    }
+    wake.notify_all();
+    if (worker && worker->joinable())
+        worker->join();
+    worker.reset();
+    std::lock_guard lock(mutex);
+    completed.clear();
+    active = 0;
+}
+}  // namespace shellmenus
 
-void AddAppUninstallItem(wuxc::MenuFlyout const& flyout, winrt::weak_ref<wuxc::Button> weakBtn,
-    std::wstring family, std::optional<uninstall::Command> uninstaller, std::wstring appTitle,
-    std::function<bool()> stillCurrent = {}) {
+struct PendingShellMenu {
+    winrt::weak_ref<wuxc::MenuFlyout> flyout;
+    std::function<bool()> current;
+    std::shared_ptr<void> closed;
+    wuxc::MenuFlyoutItem loading{nullptr};
+    wuxc::MenuFlyoutSeparator separator{nullptr};
+};
+static uint64_t g_nextShellMenu = 0;
+[[clang::no_destroy]] static std::map<uint64_t, PendingShellMenu> g_pendingShellMenus;  // UI thread only
+
+void RemoveShellMenuLoading(wuxc::MenuFlyout const& flyout, PendingShellMenu const& pending) {
+    for (auto const& item : {pending.loading.try_as<wuxc::MenuFlyoutItemBase>(),
+                             pending.separator.try_as<wuxc::MenuFlyoutItemBase>()}) {
+        uint32_t index = 0;
+        if (item && flyout.Items().IndexOf(item, index))
+            flyout.Items().RemoveAt(index);
+    }
+}
+
+void AppendShellMenuItems(wuxc::MenuFlyout const& flyout,
+                          shellmenus::Result const& result,
+                          std::function<bool()> stillCurrent = {}) try {
+    const auto& chosenTarget = result.target;
+    const auto& pins = result.pins;
+    const auto& settings = result.settings;
+    if (pins.empty() && settings.empty())
+        return;
+    if (flyout.Items().Size())
+        flyout.Items().Append(wuxc::MenuFlyoutSeparator());
+    for (auto const& command : pins) {
+        wuxc::MenuFlyoutItem entry;
+        entry.Text(command.label);
+        entry.IsEnabled(command.enabled);
+        auto icon = SearchFontIcon();
+        icon.Glyph(command.kind == shellactions::Pin::Unstart || command.kind == shellactions::Pin::Untaskbar
+                       ? L"\uE77A"
+                       : L"\uE718");
+        entry.Icon(icon);
+        KeepHandler(
+            entry, entry.Click(winrt::auto_revoke, [target = command.target.empty() ? chosenTarget : command.target,
+                                                    verb = command.verb, stillCurrent](auto const&, auto const&) {
+                if (stillCurrent && !stillCurrent())
+                    return;
+                try {
+                    const auto result = shellactions::InvokePin(target, verb, g_searchWindowWindow.load());
+                    if (FAILED(result))
+                        Wh_Log(L"Windows pin action unavailable or failed: %08X", static_cast<unsigned>(result));
+                } catch (...) {
+                    Wh_Log(L"Windows pin action failed: %08X", static_cast<unsigned>(winrt::to_hresult()));
+                }
+            }));
+        flyout.Items().Append(entry);
+    }
+    if (!settings.empty()) {
+        wuxc::MenuFlyoutItem entry;
+        entry.Text(i18n::Text(i18n::Key::AppSettings));
+        auto icon = SearchFontIcon();
+        icon.Glyph(L"\uE713");
+        entry.Icon(icon);
+        KeepHandler(entry, entry.Click(winrt::auto_revoke, [settings, stillCurrent](auto const&, auto const&) {
+            if (stillCurrent && !stillCurrent())
+                return;
+            DismissSearchForLaunch([settings] { OpenAppSettings(settings); });
+        }));
+        flyout.Items().Append(entry);
+    }
+} catch (...) {
+    Wh_Log(L"Windows app actions unavailable: %08X", static_cast<unsigned>(winrt::to_hresult()));
+}
+
+void CompleteShellMenuItems() {
+    for (auto& [id, result] : shellmenus::Take()) {
+        const auto found = g_pendingShellMenus.find(id);
+        if (found == g_pendingShellMenus.end())
+            continue;
+        auto pending = std::move(found->second);
+        g_pendingShellMenus.erase(found);
+        if (auto flyout = pending.flyout.get()) {
+            RemoveShellMenuLoading(flyout, pending);
+            if (!pending.current || pending.current()) {
+                AppendShellMenuItems(flyout, result, std::move(pending.current));
+                PrepareCopiedMenu(flyout);
+            }
+        }
+    }
+}
+void AddShellMenuItems(wuxc::MenuFlyout const& flyout,
+                       const std::wstring& target,
+                       const std::wstring& packageIdentity = {},
+                       const std::wstring& packageFullName = {},
+                       std::function<bool()> stillCurrent = {}) try {
+    if (stillCurrent && !stillCurrent())
+        return;
+    const std::wstring chosenTarget = target, chosenPackage = packageIdentity, chosenFullName = packageFullName;
+    for (auto it = g_pendingShellMenus.begin(); it != g_pendingShellMenus.end();) {
+        const auto previous = it->second.flyout.get();
+        if (!previous || previous == flyout) {
+            if (previous)
+                RemoveShellMenuLoading(previous, it->second);
+            shellmenus::Cancel(it->first);
+            it = g_pendingShellMenus.erase(it);
+        } else
+            ++it;
+    }
+    const auto id = ++g_nextShellMenu;
+    auto closed = flyout.Closed(winrt::auto_revoke, [id](auto const& sender, auto const&) {
+        if (auto found = g_pendingShellMenus.find(id); found != g_pendingShellMenus.end())
+            RemoveShellMenuLoading(sender.template as<wuxc::MenuFlyout>(), found->second);
+        shellmenus::Cancel(id);
+        g_pendingShellMenus.erase(id);
+    });
+    PendingShellMenu pending{winrt::make_weak(flyout), std::move(stillCurrent),
+                            std::make_shared<decltype(closed)>(std::move(closed))};
+    if (flyout.Items().Size())
+        pending.separator = wuxc::MenuFlyoutSeparator{};
+    pending.loading = wuxc::MenuFlyoutItem{};
+    pending.loading.Text(i18n::Text(i18n::Key::CheckingPins));
+    pending.loading.IsEnabled(false);
+    auto icon = SearchFontIcon();
+    icon.Glyph(L"\uE718");
+    pending.loading.Icon(icon);
+    // Keep a local snapshot across item changes: XAML can reenter and close or
+    // repopulate the flyout while its collection-change handlers run.
+    g_pendingShellMenus.emplace(id, pending);
+    try {
+        if (pending.separator)
+            flyout.Items().Append(pending.separator);
+        flyout.Items().Append(pending.loading);
+        if (!g_pendingShellMenus.contains(id) || (pending.current && !pending.current()) ||
+            !shellmenus::Enqueue(g_searchWindowWindow.load(), chosenTarget, chosenPackage, chosenFullName, id)) {
+            RemoveShellMenuLoading(flyout, pending);
+            g_pendingShellMenus.erase(id);
+        }
+    } catch (...) {
+        shellmenus::Cancel(id);
+        RemoveShellMenuLoading(flyout, pending);
+        g_pendingShellMenus.erase(id);
+        throw;
+    }
+} catch (...) {
+    Wh_Log(L"Windows app action request unavailable: %08X", unsigned(winrt::to_hresult()));
+}
+
+void StopShellMenuItems() {
+    shellmenus::Stop();
+    for (auto const& [id, pending] : g_pendingShellMenus)
+        if (auto flyout = pending.flyout.get())
+            RemoveShellMenuLoading(flyout, pending);
+    g_pendingShellMenus.clear();
+    MSG message{};
+    const HWND owner = g_searchWindowWindow.load();
+    const UINT ready = shellmenus::Message();
+    if (owner && ready)
+        while (PeekMessageW(&message, owner, ready, ready, PM_REMOVE)) {
+        }
+}
+
+void AddAppUninstallItem(wuxc::MenuFlyout const& flyout,
+                         winrt::weak_ref<wuxc::Button> weakBtn,
+                         std::wstring family,
+                         std::optional<uninstall::Command> uninstaller,
+                         std::wstring appTitle,
+                         std::function<bool()> stillCurrent = {},
+                         std::wstring packageFullName = {}) {
     wuxc::MenuFlyoutItem uninstallItem;
     uninstallItem.Text(i18n::Text(i18n::Key::Uninstall));
     auto uninstallIcon = SearchFontIcon();
     uninstallIcon.Glyph(L"\uE74D");
     uninstallItem.Icon(uninstallIcon);
-    KeepHandler(uninstallItem, uninstallItem.Click(winrt::auto_revoke, [weakBtn, family, uninstaller, appTitle, stillCurrent](
+    KeepHandler(uninstallItem, uninstallItem.Click(winrt::auto_revoke, [weakBtn, family, uninstaller, appTitle, stillCurrent,packageFullName](
                                                        wf::IInspectable const&, wux::RoutedEventArgs const&) {
         if(stillCurrent && !stillCurrent())return;
         auto btn = weakBtn.get();
         if (!btn) return;
         // After the menu has closed: one flyout at a time.
-        btn.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Low, wuc::DispatchedHandler{[weakBtn, family, uninstaller, appTitle, stillCurrent] {
+        btn.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Low, wuc::DispatchedHandler{[weakBtn, family, uninstaller, appTitle, stillCurrent,packageFullName] {
             if(stillCurrent && !stillCurrent())return;
             auto anchor = weakBtn.get();
             if (!anchor) return;
-            ConfirmUninstall(anchor, uninstaller ? uninstaller->name : appTitle, [family, uninstaller, appTitle, stillCurrent] {
+            ConfirmUninstall(anchor, uninstaller ? uninstaller->name : appTitle, [family, uninstaller, appTitle, stillCurrent,packageFullName] {
                 if(stillCurrent && !stillCurrent())return;
                 if (!family.empty()) {
-                    if (RequestPackageRemoval(family)) {
+                    if (RequestPackageRemoval(family,packageFullName)) {
                         DismissSearch();
                     }
                 } else if (uninstaller) {
@@ -19867,15 +21509,17 @@ void AttachAppCardMenu(wuxc::Button const& button, std::shared_ptr<Row> const& b
         auto flyout = sender.as<wuxc::MenuFlyout>();
         flyout.Items().Clear();
         if(item.installedOnly) {
-            const auto family=uninstall::RemovableFamily(item.installedFamily);
-            const auto uninstaller=family.empty()?uninstall::FindRegisteredUninstaller(
-                item.installedHive,item.installedView,item.installedKey,item.title):std::nullopt;
+            AddShellMenuItems(flyout,{},item.installedFamily,item.installedPackage,
+                [binding,identity=item.cardSignature]{return binding->installedOnly&&binding->cardSignature==identity;});
+            const auto family=item.installedProtected?std::wstring():uninstall::RemovableFamily(item.installedFamily);
+            const auto uninstaller=family.empty()&&!item.installedProtected?uninstall::FindRegisteredUninstaller(
+                item.installedHive,item.installedView,item.installedKey,item.installedName.empty()?item.title:item.installedName):std::nullopt;
             if(!family.empty() || uninstaller) {
                 AddAppUninstallItem(flyout,weakBtn,family,uninstaller,item.title,
                     [binding,title=item.title,identity=item.cardSignature] {
                         return binding->title==title && binding->cardSignature==identity;
-                    });
-            } else {
+                    },item.installedPackage);
+            } else if(!item.installedProtected) {
                 wuxc::MenuFlyoutItem manage;manage.Text(i18n::Text(i18n::Key::ManageInstalled));
                 auto icon=SearchFontIcon();icon.Glyph(L"\uE8A7");manage.Icon(icon);
                 KeepHandler(manage,manage.Click(winrt::auto_revoke,[](wf::IInspectable const&,wux::RoutedEventArgs const&){DismissSearchForLaunch([]{OpenResult(L"ms-settings:appsfeatures",false);});}));
@@ -20057,7 +21701,7 @@ void AttachAppCardMenu(wuxc::Button const& button, std::shared_ptr<Row> const& b
                     std::wstring family = viaAppId ? uninstall::RemovablePackageFamily(locTarget) : std::wstring();
                     std::optional<uninstall::Command> uninstaller;
                     if(family.empty() && !item.installedKey.empty()) {
-                        uninstaller=uninstall::FindRegisteredUninstaller(item.installedHive,item.installedView,item.installedKey,item.title);
+                        uninstaller=uninstall::FindRegisteredUninstaller(item.installedHive,item.installedView,item.installedKey,item.installedName.empty()?item.title:item.installedName);
                     } else if (family.empty()) {
                         std::wstring program = filePath;
                         if (std::wstring target = apps::ResolveLnkTarget(program); !target.empty()) {
@@ -20070,10 +21714,18 @@ void AttachAppCardMenu(wuxc::Button const& button, std::shared_ptr<Row> const& b
                         flyout.Items().Append(sep3);
 
                         AddAppUninstallItem(flyout,weakBtn,family,uninstaller,appTitle,
-                        [binding,title=item.title,target=item.openPath] {return binding->title==title && binding->openPath==target;});
+                        [binding,title=item.title,target=item.openPath,package=item.installedPackage] {
+                            return binding->title==title && binding->openPath==target && binding->installedPackage==package;
+                        },item.installedPackage);
                     }
                 }
             }
+            if(!isCommandItem&&!isWebItem&&!isSettingItem&&!item.openPath.empty())
+                AddShellMenuItems(flyout,shellactions::Target(item.openPath,item.isFile),
+                    !item.isFile&&item.openPath.find(L'!')!=item.openPath.npos?item.openPath:item.installedFamily,{},
+                    [binding,target=item.openPath,identity=item.cardSignature]{
+                        return !binding->installedOnly&&binding->openPath==target&&binding->cardSignature==identity;
+                    });
         }
 
     }));
@@ -20097,7 +21749,7 @@ bool g_plainPoolAttached=false;
 uint64_t g_plainPoolSettings=0;
 
 bool PlainAppRow(const Row& row) {
-    return row.appIndex>=0 && row.sectionTitle.empty() && row.serviceName.empty() &&
+    return row.appIndex>=0 && (row.sectionTitle.empty() || row.installedOnly) && row.serviceName.empty() &&
         row.copyText.empty() && row.commandLine.empty() && row.customGlyph.empty() &&
         row.customIconText.empty() && !row.infoOnly && !row.isError && row.weatherDays.empty() && !row.speed && !row.usage;
 }
@@ -20139,7 +21791,9 @@ void UpdatePlainAppCard(PlainAppCard& slot,const Row& row) {
     const bool changed=card.appIndex<0 || card.title!=row.title || card.openPath!=row.openPath ||
         card.iconKey!=row.iconKey || card.cardSignature!=row.cardSignature || card.isSetting!=row.isSetting ||
         slot.binding->installedLocation!=row.installedLocation || slot.binding->installedFamily!=row.installedFamily ||
-        slot.binding->installedKey!=row.installedKey || slot.binding->installedHive!=row.installedHive || slot.binding->installedView!=row.installedView;
+        slot.binding->installedKey!=row.installedKey || slot.binding->installedHive!=row.installedHive || slot.binding->installedView!=row.installedView ||
+        slot.binding->installedProtected!=row.installedProtected || slot.binding->installedName!=row.installedName ||
+        slot.binding->installedPackage!=row.installedPackage;
     if(changed && g_contextMenuOpen)DismissSearchContextMenu();
     if(changed || card.hasBitmap!=!row.icon.empty()) {
         auto bitmap=IconBitmap(row.icon);
@@ -20173,9 +21827,7 @@ void DetachPlainAppPool() {
 }
 bool RenderPlainApps(const std::vector<Row>& rows,bool force) {
     if(rows.empty() || !std::all_of(rows.begin(),rows.end(),PlainAppRow))return false;
-    size_t limit;
-    {std::lock_guard lock(g_settingsMutex);limit=static_cast<size_t>(std::clamp(g_settings.maxAppResults,1,30));}
-    if(rows.size()>limit)return false;
+    const size_t limit=std::max(g_initialAppResults.load(),rows.size()); // Only requested batches reach the UI.
     const auto settingsRevision=g_settingsRevision.load();
     if(!g_plainAppPool || g_plainPoolSettings!=settingsRevision || g_plainAppPool->size()>limit) {
         DetachPlainAppPool();g_plainAppPool.emplace();g_plainPoolSettings=settingsRevision;
@@ -20207,6 +21859,22 @@ bool RenderPlainApps(const std::vector<Row>& rows,bool force) {
 
 
 // Runs on the XAML thread. The high-priority apps pass never builds file rows.
+// <file-cards>
+size_t FileAppendStart(const std::vector<Row>& previous,const std::vector<Row>& next,
+                       uint64_t oldRevision,uint64_t newRevision,bool force) {
+    if(force || oldRevision!=newRevision || previous.empty() || next.size()<previous.size())return 0;
+    return std::equal(previous.begin(),previous.end(),next.begin(),[](const Row& a,const Row& b) {
+        return a.openPath==b.openPath && a.title==b.title && a.isFolder==b.isFolder;
+    })?previous.size():0;
+}
+template<class MakeRow>
+void AppendFileCards(const std::vector<Row>& rows,size_t begin,MakeRow makeRow) {
+    for(size_t i=begin;i<rows.size();++i) {
+        auto button=makeRow(rows[i]);
+        g_resultsList.Children().Append(button);g_fileButtonsOpt->push_back(button);
+    }
+}
+// </file-cards>
 void RenderResults(bool appsOnly = false, bool force = false) try {
     if (g_searchWindowSliding && (!appsOnly || g_isHiding.load())) {
         g_renderAfterSlide = true;
@@ -20224,15 +21892,20 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
     auto snapshot = ReadSearchRenderSnapshot(appsOnly, force);
     if (!snapshot) return;
     auto& files = snapshot->files;
-    const auto& appNames = snapshot->apps;
+    const auto& appNames = snapshot->appsChanged?snapshot->apps:g_currentAppRows;
     const auto appsRevision = snapshot->appsRevision, filesRevision = snapshot->filesRevision;
     const bool appsChanged = snapshot->appsChanged, filesChanged = snapshot->filesChanged;
     const int previousAppSelection=appsChanged?RefreshedAppSelection(g_shownQuery,snapshot->query,g_currentAppRows,appNames,g_selectedApp,force):-1;
     const bool retainFileSelection=!force && appsChanged && g_shownQuery==snapshot->query && g_filesColumnActive;
     DWORD total = snapshot->total;
+    bool totalExact = snapshot->totalExact;
     size_t fileCount = snapshot->fileCount;
+    const bool resetInstalledScroll=appsChanged && g_shownQuery!=snapshot->query;
+    const bool resetFileScroll=filesChanged && g_shownFilesRevision!=filesRevision;
+    const size_t existingFiles=filesChanged?FileAppendStart(g_currentFileRows,files,g_shownFilesRevision,filesRevision,force):0;
+    const bool appendFiles=existingFiles!=0;
     g_shownQuery = snapshot->query;
-    if(!filesVisible) { files.clear(); fileCount=0; total=0; }
+    if(!filesVisible) { files.clear(); fileCount=0; total=0; totalExact=true; }
     if (fileCount == 0 && appNames.empty() && g_ourBox && g_ourBox.Text().empty()) {
         g_enterWaiting = false;
         g_currentAppRows.clear();
@@ -20243,14 +21916,18 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
         g_shownAppsRevision = appsRevision;
         g_shownAppsContentRevision = snapshot->appsContentRevision;
         if (filesChanged) g_shownFilesRevision = filesRevision;
+        if (filesChanged) g_shownFilesContentRevision = snapshot->filesContentRevision;
         if (filesChanged) g_shownFilesTotal = total;
+        if (filesChanged) g_shownFilesTotalExact = totalExact;
         UpdateSearchResultsLayout(true);
         Wh_Log(L"render: nothing to show; menu restored");
         return;
     }
 
-    if (filesChanged) g_resultsList.Children().Clear();
+    if (filesChanged && !appendFiles) g_resultsList.Children().Clear();
     if (appsChanged) g_currentAppRows = appNames;
+    if(resetInstalledScroll && g_appsScroll)g_appsScroll.ChangeView(nullptr,0.0,nullptr,true);
+    if(resetFileScroll && g_filesScroll)g_filesScroll.ChangeView(nullptr,0.0,nullptr,true);
 
     const bool suggestions=g_searchWindowWindow.load() && g_shownQuery.empty();
     // Update bottom status bar
@@ -20260,7 +21937,9 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
         wuxc::ToolTipService::SetToolTip(g_footerStatus,nullptr);
         if (!appNames.empty() && !appNames[0].sectionTitle.empty()) {
             auto status = appNames[0].sectionTitle;
-            if (appNames[0].onlinePending || !appNames[0].infoOnly) status += L" \u2022 " +
+            if(appNames[0].installedOnly) status+=L" \u00B7 "+std::wstring(i18n::Text(i18n::Key::Shown))+L": "+
+                std::to_wstring(appNames.size())+L" / "+std::to_wstring(appNames[0].installedTotal);
+            else if (appNames[0].onlinePending || !appNames[0].infoOnly) status += L" \u2022 " +
                 std::wstring(i18n::Text(appNames[0].onlinePending ? i18n::Key::OnlineLoading : i18n::Key::CopyHint));
             g_footerStatus.Text(winrt::hstring{status});
         } else if (suggestions) {
@@ -20286,7 +21965,7 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
         } else {
             std::wstring statusStr;
             if (everything::FindIpcWindow()) {
-                statusStr = L"Everything \u2022 "+std::wstring(i18n::Text(i18n::Key::Matches))+L": "+std::to_wstring(total);
+                statusStr = L"Everything \u2022 "+std::wstring(i18n::Text(i18n::Key::Matches))+L": "+FileTotalText(total,totalExact);
                 if (!appNames.empty() || fileCount) {
                     statusStr += L" ("+std::wstring(i18n::Text(i18n::Key::Apps))+L": "+std::to_wstring(appNames.size())+L", "+i18n::Text(i18n::Key::Files)+L": "+std::to_wstring(fileCount)+L")";
                 }
@@ -20392,7 +22071,7 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
             target.Child(makeHeader(i18n::Text(suggestions ? i18n::Key::SuggestedApps : i18n::Key::Apps), L"\uE71D", static_cast<int>(appNames.size())));
         }
     }
-    std::wstring filesBadge = std::to_wstring(fileCount) + L" / " + std::to_wstring(total);
+    std::wstring filesBadge = std::to_wstring(fileCount) + L" / " + FileTotalText(total,totalExact);
     if (auto target = g_filesHeaderContent ? g_filesHeaderContent : g_filesHeaderHolder; target && filesChanged) {
         target.Child(makeHeader(i18n::Text(i18n::Key::Files), L"\uE8B7", static_cast<int>(fileCount), filesBadge));
     }
@@ -20812,7 +22491,7 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
             const auto weakButton = winrt::make_weak(button);
             KeepHandler(button, button.Click(winrt::auto_revoke, [target, drag](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                 if (std::exchange(drag->suppressClick, false) || g_dragging.load()) return;
-                DismissSearchForLaunch([target] { OpenResult(target); });
+                DismissSearchForLaunch([target] { OpenResult(target, false, true); });
             }));
             AddPointerHandler(button, wux::UIElement::PointerPressedEvent(),
                               [drag, weakButton](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const& e) {
@@ -20860,14 +22539,15 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
                     }
                 }
                 auto flyout = sender.as<wuxc::MenuFlyout>();
-                if (flyout.Items().Size() > 0) return;
+                // Pin/Unpin state can change while this card remains attached.
+                flyout.Items().Clear();
                 wuxc::MenuFlyoutItem openItem;
                 openItem.Text(i18n::Text(i18n::Key::Open));
                 auto openIcon = SearchFontIcon();
                 openIcon.Glyph(L"\uE8A7");
                 openItem.Icon(openIcon);
                 KeepHandler(openItem, openItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    DismissSearchForLaunch([target] { OpenResult(target); });
+                    DismissSearchForLaunch([target] { OpenResult(target, false, true); });
                 }));
                 flyout.Items().Append(openItem);
 
@@ -20878,7 +22558,7 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
                     adminIcon.Glyph(L"\uE7EF");
                     adminItem.Icon(adminIcon);
                     KeepHandler(adminItem, adminItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        DismissSearchForLaunch([target] { OpenResult(target, true /* asAdmin */); });
+                        DismissSearchForLaunch([target] { OpenResult(target, true, true); });
                     }));
                     flyout.Items().Append(adminItem);
                 }
@@ -20990,6 +22670,12 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
                 }));
                 flyout.Items().Append(propItem);
 
+                AddShellMenuItems(flyout,target,{},{},[weakButton,target]{
+                    auto current=weakButton.get();if(!current||!g_fileButtonsOpt)return false;
+                    for(size_t i=0;i<g_fileButtonsOpt->size()&&i<g_currentFileRows.size();++i)
+                        if((*g_fileButtonsOpt)[i]==current)return g_currentFileRows[i].openPath==target;
+                    return false;
+                });
             }));
             InitializeCopiedMenu(menu);
         button.ContextFlyout(menu);
@@ -21001,7 +22687,7 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
     if (filesChanged) {
         g_currentFileRows = files;
         if (!g_fileButtonsOpt) g_fileButtonsOpt.emplace();
-        g_fileButtonsOpt->clear();
+        if(!appendFiles)g_fileButtonsOpt->clear();
         if (files.empty()) {
             wuxc::Border emptyCard;
             emptyCard.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
@@ -21042,14 +22728,12 @@ void RenderResults(bool appsOnly = false, bool force = false) try {
             emptyCard.Child(emptyStack);
             g_resultsList.Children().Append(emptyCard);
         } else {
-            for (const Row& file : files) {
-                wuxc::Button row = makeFileRow(file);
-                g_resultsList.Children().Append(row);
-                g_fileButtonsOpt->push_back(row);
-            }
+            AppendFileCards(files,existingFiles,makeFileRow);
         }
         g_shownFilesRevision = filesRevision;
+        g_shownFilesContentRevision = snapshot->filesContentRevision;
         g_shownFilesTotal = total;
+        g_shownFilesTotalExact = totalExact;
     }
 
     InvalidateSearchContrastContainer(g_appsHeaderHolder);
@@ -21259,10 +22943,13 @@ void RequestRender() {
 
 
 void QueueQuery(std::wstring text) {
+    UpdateInitialResultCounts();
     {
         std::lock_guard<std::mutex> lock(g_queryMutex);
         g_pendingQuery = std::move(text);
         ++g_queryRevision;
+        g_appsBatch={};g_filesBatch={};g_fileTemplate.reset();
+        g_installedBatchQuery.clear();g_installedVisibleLimit=kInstalledBatchSize;g_installedTotal=0;
         g_queryDirty.store(true);
     }
     g_queryWake.notify_all();
@@ -21279,9 +22966,8 @@ void QueueQuery(std::wstring text) {
 // rather than paths: AUMIDs and known-folder GUIDs cannot be re-parsed back
 // into something SHGetFileInfo understands.
 //
-// Measured at roughly 9.7ms per app in the broker, so this runs on the search
-// thread and is cached by name. Six visible rows make it about 60ms once, and
-// nothing after that.
+// Shell icon loading runs on the background catalog owner, including before
+// the first search opens. Matching reads its cache without waiting for I/O.
 bool FetchInstalledPackageIconMta(const std::wstring& fullName, int size, std::vector<BYTE>* out) {
     try {
         if (fullName.empty() || !out || size < 1 || size > 256)
@@ -21517,7 +23203,25 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
         Wh_Log(L"Settings target activation failed (%08X): %ls", static_cast<unsigned>(hr), settingArguments.c_str());
     }
 
-    bool launched = false;
+    if (apps::IsShellShortcut(path)) {
+        OpenShellShortcut(path, asAdmin);
+        if (SUCCEEDED(comHr)) CoUninitialize();
+        return;
+    }
+
+    // Cancellation and access denial end this request, including when the
+    // target itself required elevation during a normal Open.
+    const auto launch = [&](SHELLEXECUTEINFOW& info, PCWSTR method) {
+        const HRESULT result = ExecuteSearchShell(info);
+        if (SUCCEEDED(result)) {
+            Wh_Log(L"launched app (%ls): %ls", method, name.c_str());
+        } else {
+            Wh_Log(L"app launch failed (%ls, %08X): %ls", method,
+                   static_cast<unsigned>(result), name.c_str());
+        }
+        return StopShellLaunchFallback(result);
+    };
+    bool launchFinished = false;
 
     wchar_t userProfile[MAX_PATH] = {};
     if (!GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH) || !userProfile[0]) {
@@ -21559,27 +23263,27 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
     if (!path.empty()) {
         if (path.starts_with(L"ms-settings:") || path.starts_with(L"windowsdefender:") ||
             path.starts_with(L"http:") || path.starts_with(L"https:")) {
-            if (HINSTANCE hInst = ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-                reinterpret_cast<INT_PTR>(hInst) > 32) {
-                Wh_Log(L"launched URI setting: %ls", path.c_str());
-                launched = true;
-            } else {
-                Wh_Log(L"URI launch failed (%ld): %ls", reinterpret_cast<INT_PTR>(hInst), path.c_str());
-            }
+            SHELLEXECUTEINFOW info{sizeof(info)};
+            info.fMask = SEE_MASK_NOASYNC;
+            info.lpVerb = asAdmin ? L"runas" : L"open";
+            info.lpFile = path.c_str();
+            info.nShow = SW_SHOWNORMAL;
+            launchFinished = launch(info, L"URI");
         } else if (path.starts_with(L"control ")) {
-            std::wstring params = path.substr(8);
-            if (HINSTANCE hInst = ShellExecuteW(nullptr, asAdmin ? L"runas" : L"open", L"control.exe", params.c_str(), nullptr, SW_SHOWNORMAL);
-                reinterpret_cast<INT_PTR>(hInst) > 32) {
-                Wh_Log(L"launched control applet: %ls", path.c_str());
-                launched = true;
-            }
+            SHELLEXECUTEINFOW info{sizeof(info)};
+            info.fMask = SEE_MASK_NOASYNC;
+            info.lpVerb = asAdmin ? L"runas" : L"open";
+            info.lpFile = L"control.exe";
+            info.lpParameters = path.c_str() + 8;
+            info.nShow = SW_SHOWNORMAL;
+            launchFinished = launch(info, L"Control Panel");
         }
     }
 
     // 1. If path is a real file on disk or executable in PATH (e.g. C:\Windows\System32\cmd.exe, ncpa.cpl, services.msc, cleanmgr.exe):
     bool isFileOnDisk = false;
     std::wstring extraParams;
-    if (!launched && !path.empty() && path.find(L"http") != 0 && !path.starts_with(L"ms-settings:")) {
+    if (!launchFinished && !path.empty() && path.find(L"http") != 0 && !path.starts_with(L"ms-settings:")) {
         DWORD attr = GetFileAttributesW(path.c_str());
         if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
             isFileOnDisk = true;
@@ -21628,80 +23332,23 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
         }
         info.lpDirectory = workDir;
         info.nShow = SW_SHOWNORMAL;
-        if (ShellExecuteExW(&info)) {
-            Wh_Log(L"launched app (by file path): %ls (admin=%d, dir=%ls)", name.c_str(), asAdmin ? 1 : 0, workDir ? workDir : L"(null)");
-            launched = true;
-        } else {
-            Wh_Log(L"app file launch failed (%lu): %ls, trying fallback", GetLastError(), path.c_str());
-        }
+        launchFinished = launch(info, L"file path");
     }
 
-    // 2. If not launched yet and we have a PIDL:
-    if (!launched && pidl) {
-        if (asAdmin) {
-            // Try IContextMenu verb "runas"
-            IShellItem* item = nullptr;
-            if (SUCCEEDED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&item))) && item) {
-                IContextMenu* menu = nullptr;
-                if (SUCCEEDED(item->BindToHandler(nullptr, BHID_SFUIObject, IID_PPV_ARGS(&menu))) && menu) {
-                    CMINVOKECOMMANDINFOEX ici{};
-                    ici.cbSize = sizeof(ici);
-                    ici.fMask = CMIC_MASK_UNICODE;
-                    ici.lpVerb = "runas";
-                    ici.lpVerbW = L"runas";
-                    ici.lpDirectoryW = workDir;
-                    ici.nShow = SW_SHOWNORMAL;
-                    HRESULT hr = menu->InvokeCommand(reinterpret_cast<CMINVOKECOMMANDINFO*>(&ici));
-                    menu->Release();
-                    item->Release();
-                    if (SUCCEEDED(hr)) {
-                        Wh_Log(L"launched app (by IContextMenu runas): %ls", name.c_str());
-                        launched = true;
-                    } else {
-                        Wh_Log(L"IContextMenu runas failed (%08X) for %ls", static_cast<unsigned>(hr), name.c_str());
-                    }
-                } else if (item) {
-                    item->Release();
-                }
-            }
-
-            if (!launched) {
-                // Fallback: ShellExecuteExW with SEE_MASK_IDLIST and "runas"
-                SHELLEXECUTEINFOW info{};
-                info.cbSize = sizeof(info);
-                info.fMask = SEE_MASK_IDLIST | SEE_MASK_NOASYNC;
-                info.lpIDList = pidl;
-                info.lpVerb = L"runas";
-                info.lpDirectory = workDir;
-                info.nShow = SW_SHOWNORMAL;
-                if (ShellExecuteExW(&info)) {
-                    Wh_Log(L"launched app (by PIDL runas): %ls", name.c_str());
-                    launched = true;
-                } else {
-                    Wh_Log(L"app PIDL runas failed (%lu): %ls", GetLastError(), name.c_str());
-                }
-            }
-        }
-
-        if (!launched) {
-            SHELLEXECUTEINFOW info{};
-            info.cbSize = sizeof(info);
-            info.fMask = SEE_MASK_IDLIST | SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
-            info.lpIDList = pidl;
-            info.lpVerb = L"open";
-            info.lpDirectory = workDir;
-            info.nShow = SW_SHOWNORMAL;
-            if (ShellExecuteExW(&info)) {
-                Wh_Log(L"launched app (by PIDL open): %ls", name.c_str());
-                launched = true;
-            } else {
-                Wh_Log(L"app PIDL open failed (%lu): %ls", GetLastError(), name.c_str());
-            }
-        }
+    // 2. Ask the shell to launch the same app by its shell identity.
+    if (!launchFinished && pidl) {
+        SHELLEXECUTEINFOW info{sizeof(info)};
+        info.fMask = SEE_MASK_NOASYNC |
+            (asAdmin ? SEE_MASK_INVOKEIDLIST : SEE_MASK_IDLIST | SEE_MASK_FLAG_NO_UI);
+        info.lpIDList = pidl;
+        info.lpVerb = asAdmin ? L"runas" : L"open";
+        info.lpDirectory = workDir;
+        info.nShow = SW_SHOWNORMAL;
+        launchFinished = launch(info, L"shell identity");
     }
 
-    // 3. Fallback direct ShellExecuteExW for any remaining commands without PIDL:
-    if (!launched && !path.empty()) {
+    // 3. Let the shell resolve a remaining target that the file check could not resolve.
+    if (!launchFinished && !isFileOnDisk && !path.empty()) {
         SHELLEXECUTEINFOW info{};
         info.cbSize = sizeof(info);
         info.fMask = SEE_MASK_NOASYNC | (asAdmin ? 0 : SEE_MASK_FLAG_NO_UI);
@@ -21709,12 +23356,7 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
         info.lpFile = path.c_str();
         info.lpDirectory = workDir;
         info.nShow = SW_SHOWNORMAL;
-        if (ShellExecuteExW(&info)) {
-            Wh_Log(L"launched app (by direct fallback): %ls (admin=%d)", path.c_str(), asAdmin ? 1 : 0);
-            launched = true;
-        } else {
-            Wh_Log(L"app direct fallback launch failed (%lu): %ls", GetLastError(), path.c_str());
-        }
+        launch(info, L"direct fallback");
     }
 
     if (SUCCEEDED(comHr)) {
@@ -21724,10 +23366,9 @@ void LaunchAppAsync(std::wstring name, std::wstring path, ITEMIDLIST* pidl, bool
 
 // ---------------------------------------------------------------------------
 // Calculator and unit converter, with no command: whatever is typed that is a
-// sum (2^10), a number with a unit (100 km), a conversion (100 km to mi) or a
-// number in another base (0xFF, 255 hex) is worked out above the apps -- and
-// only that: a number alone, or one in a file name ("2024 report", "3d"), is
-// left to the search.
+// sum (2^10), a number with a unit (100 km), a conversion (100 km to mi) or
+// a whole number (1234, 0xFF, 255 hex) is worked out above matching apps.
+// Numbers in file names ("2024 report", "3d") remain ordinary searches.
 //
 // It knows units itself (kUnits), so nothing has to be set up: any unit
 // converts to any other of its kind, through the kind's base unit (base =
@@ -21931,7 +23572,7 @@ inline wchar_t DecimalPoint() {
 // "1,000.5" the last one is), thousands grouped by spaces ("1 000"), the
 // other mark ("1,000" in English) or several of one ("1.000.000"), an
 // exponent ("1e3"). How many characters it took, or 0.
-inline size_t ParseNumber(const std::wstring& text, double* value) {
+inline size_t ParseNumber(const std::wstring& text, double* value, std::string* normalized = nullptr) {
     size_t i = 0;
     std::wstring span;  // digits and marks, spaces left out
     if (i < text.size() && (text[i] == L'-' || text[i] == L'+')) {
@@ -21997,6 +23638,7 @@ inline size_t ParseNumber(const std::wstring& text, double* value) {
         }
     }
     *value = strtod(ascii.c_str(), nullptr);
+    if (normalized) *normalized = std::move(ascii);
     return i;
 }
 
@@ -22151,12 +23793,87 @@ inline std::wstring Grouped(const std::wstring& digits, size_t size) {
     return out;
 }
 
-// A whole number in other bases: 2047 = 0x7FF = 0b111 1111 1111 = 0o3777.
-inline void RadixRows(double number, std::vector<Row>* rows) {
-    if (number < 0 || number > 9007199254740992.0 || number != std::floor(number)) {
-        return;
+struct IntegerValue {
+    uint64_t magnitude = 0;
+    bool negative = false;
+};
+
+// Exact sign-and-magnitude parsing for every input base. Decimal notation is
+// normalized by ParseNumber first, preserving existing locale/grouping rules.
+// Fractions must resolve to whole numbers; no floating-point rounding is used.
+inline bool ParseInteger(std::wstring_view text, IntegerValue* value, bool decimalNotation = false) {
+    if (text.empty() || text.size() > 4096) return false;
+    const bool negative = text.front() == L'-' || text.front() == L'\u2212';
+    if (negative || text.front() == L'+') text.remove_prefix(1);
+    if (text.empty()) return false;
+    unsigned radix = 10;
+    if (text.size() >= 2 && text[0] == L'0') {
+        const auto mark = static_cast<wchar_t>(towlower(text[1]));
+        radix = mark == L'x' ? 16 : mark == L'b' ? 2 : mark == L'o' ? 8 : 10;
+        if (radix != 10) text.remove_prefix(2);
     }
-    const unsigned long long n = static_cast<unsigned long long>(number);
+    if (text.empty()) return false;
+    uint64_t n = 0;
+    const auto append = [&](unsigned digit) {
+        if (digit >= radix || n > (std::numeric_limits<uint64_t>::max() - digit) / radix) return false;
+        n = n * radix + digit;
+        return true;
+    };
+    if (radix != 10 || !decimalNotation) {
+        for (auto ch : text) {
+            if (ch >= L'A' && ch <= L'F') ch += L'a' - L'A';
+            const unsigned digit = ch >= L'0' && ch <= L'9' ? ch - L'0' :
+                ch >= L'a' && ch <= L'f' ? ch - L'a' + 10 : 99;
+            if (!append(digit)) return false;
+        }
+    } else {
+        std::wstring digits;
+        size_t at = 0;
+        while (at < text.size() && text[at] >= L'0' && text[at] <= L'9') digits += text[at++];
+        int fractional = 0;
+        if (at < text.size() && text[at] == L'.') {
+            ++at;
+            while (at < text.size() && text[at] >= L'0' && text[at] <= L'9') {
+                digits += text[at++];
+                ++fractional;
+            }
+        }
+        if (digits.empty()) return false;
+        int exponent = 0;
+        if (at < text.size() && (text[at] == L'e' || text[at] == L'E')) {
+            ++at;
+            const bool minus = at < text.size() && text[at] == L'-';
+            if (at < text.size() && (minus || text[at] == L'+')) ++at;
+            const auto start = at;
+            while (at < text.size() && text[at] >= L'0' && text[at] <= L'9')
+                exponent = std::min(8192, exponent * 10 + (text[at++] - L'0'));
+            if (at == start) return false;
+            if (minus) exponent = -exponent;
+        }
+        if (at != text.size()) return false;
+        const auto first = digits.find_first_not_of(L'0');
+        if (first == digits.npos) { *value = {}; return true; }
+        digits.erase(0, first);
+        int power = exponent - fractional;
+        if (power < 0) {
+            const auto removed = static_cast<size_t>(-power);
+            if (removed > digits.size() ||
+                digits.find_first_not_of(L'0', digits.size() - removed) != digits.npos) return false;
+            digits.resize(digits.size() - removed);
+            power = 0;
+        }
+        if (digits.size() + static_cast<size_t>(power) > 20) return false;
+        for (auto ch : digits) if (!append(ch - L'0')) return false;
+        while (power-- > 0) if (!append(0)) return false;
+    }
+    *value = {n, negative && n != 0};
+    return true;
+}
+
+// A whole number in other bases: 2047 = 0x7FF = 0b111 1111 1111 = 0o3777.
+// A minus sign is retained in each base rather than implying a bit width.
+inline void RadixRows(IntegerValue number, std::vector<Row>* rows) {
+    const auto n = static_cast<unsigned long long>(number.magnitude);
     wchar_t hex[32], oct[32];
     swprintf_s(hex, L"%llX", n);
     swprintf_s(oct, L"%llo", n);
@@ -22164,34 +23881,13 @@ inline void RadixRows(double number, std::vector<Row>* rows) {
     for (unsigned long long v = n; v || bin.empty(); v >>= 1) {
         bin.insert(bin.begin(), (v & 1) ? L'1' : L'0');
     }
-    const std::wstring hexText = std::wstring(L"0x") + (wcslen(hex) > 8 ? Grouped(hex, 4) : hex);
-    rows->push_back(MakeRow(Format(number) + L" = " + hexText + L" (Hex) = 0b" + Grouped(bin, 4) + L" (Bin) = 0o" + oct +
+    const std::wstring sign = number.negative && n ? L"-" : L"";
+    const std::wstring hexCopy = sign + L"0x" + hex;
+    const std::wstring hexText = sign + L"0x" + (wcslen(hex) > 8 ? Grouped(hex, 4) : hex);
+    rows->push_back(MakeRow(sign + std::to_wstring(n) + L" = " + hexText + L" (Hex) = " + sign + L"0b" + Grouped(bin, 4) + L" (Bin) = " + sign + L"0o" + oct +
                                 L" (Oct)",
-                            std::wstring(i18n::Text(i18n::Key::BaseRadix)) + kDot + std::wstring(i18n::Text(i18n::Key::CopyHint))+L" \u2022 0x"+hex,
-                            std::wstring(L"0x") + hex, kConvertGlyph, KindColor(L"Base Radix")));
-}
-
-// A number written in another base: 0xFF, 0b1010, 0o17.
-inline bool ParseBased(const std::wstring& text, double* value) {
-    if (text.size() < 3 || text[0] != L'0') {
-        return false;
-    }
-    const wchar_t mark = static_cast<wchar_t>(towlower(text[1]));
-    const int radix = mark == L'x' ? 16 : mark == L'b' ? 2 : mark == L'o' ? 8 : 0;
-    if (!radix) {
-        return false;
-    }
-    unsigned long long n = 0;
-    for (size_t i = 2; i < text.size(); ++i) {
-        const wchar_t ch = static_cast<wchar_t>(towlower(text[i]));
-        const int digit = iswdigit(ch) ? ch - L'0' : (ch >= L'a' && ch <= L'f') ? ch - L'a' + 10 : 99;
-        if (digit >= radix || n > (1ULL << 53)) {
-            return false;
-        }
-        n = n * radix + digit;
-    }
-    *value = static_cast<double>(n);
-    return true;
+                            std::wstring(i18n::Text(i18n::Key::BaseRadix)) + kDot + std::wstring(i18n::Text(i18n::Key::CopyHint))+L" \u2022 "+hexCopy,
+                            hexCopy, kConvertGlyph, KindColor(L"Base Radix")));
 }
 
 // Asks for other bases: "hex", "to binary", "in oct".
@@ -22293,9 +23989,26 @@ inline std::vector<Row> Rows(const std::wstring& input) {
     if (arg.find_first_of(L"0123456789") == std::wstring::npos) {
         return rows;  // "e", "pi": words, not sums
     }
+    IntegerValue integer;
+    if (ParseInteger(arg, &integer)) {
+        RadixRows(integer, &rows);
+        return rows;
+    }
+    auto unsignedArg = std::wstring_view(arg);
+    if (!unsignedArg.empty() && (unsignedArg.front() == L'-' || unsignedArg.front() == L'+' || unsignedArg.front() == L'\u2212'))
+        unsignedArg.remove_prefix(1);
+    // Do not reinterpret a malformed/overflowing based literal as a rounded
+    // floating-point expression. Based arithmetic still uses the calculator.
+    if (unsignedArg.size() >= 2 && unsignedArg.front() == L'0' &&
+        std::wstring_view(L"xXbBoO").find(unsignedArg[1]) != std::wstring_view::npos &&
+        unsignedArg.find_first_of(L"+-*/^()%") == std::wstring_view::npos) return rows;
     double number = 0;
-    if (ParseBased(arg, &number)) {
-        RadixRows(number, &rows);
+    std::string normalized;
+    const size_t used = ParseNumber(arg, &number, &normalized);
+    const std::wstring rest = tools::Trim(arg.substr(used));
+    if (used && (used == arg.size() || BaseWords(rest))) {
+        if ((used != arg.size() || !LooksLikeName(arg)) &&
+            ParseInteger(std::wstring(normalized.begin(), normalized.end()), &integer, true)) RadixRows(integer, &rows);
         return rows;
     }
     std::vector<CustomConversion> customs;
@@ -22303,13 +24016,7 @@ inline std::vector<Row> Rows(const std::wstring& input) {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         customs = g_settings.unitConversions;
     }
-    const size_t used = ParseNumber(arg, &number);
     if (used && used < arg.size()) {
-        const std::wstring rest = tools::Trim(arg.substr(used));
-        if (BaseWords(rest)) {
-            RadixRows(number, &rows);
-            return rows;
-        }
         // A one-letter unit right after the number is a name: 3d, 4k, 5g.
         const bool spaced = arg[used] == L' ';
         if ((spaced || rest.size() > 1) && ConversionRows(number, rest, customs, &rows)) {
@@ -24571,7 +26278,7 @@ std::vector<Row> Rows(const std::wstring& args, size_t limit, const std::vector<
     });
     std::vector<Row> rows;
     for (const auto& [rank, entry] : matches) {
-        if (rows.size() >= std::clamp<size_t>(limit, 1, 100))
+        if (rows.size() >= std::max<size_t>(limit, 1))
             break;
         Row row;
         row.title = entry->display;
@@ -24705,6 +26412,8 @@ void Run() {
     std::wstring acting;
     ULONGLONG next = 0;
     uint64_t lastRevision = ~uint64_t{0};
+    size_t lastLimit = 0;
+    bool lastMore = false;
     std::wstring lastRows;
     std::map<std::wstring, std::wstring> descriptions;
     while (!g_searchQuit) {
@@ -24757,7 +26466,8 @@ void Run() {
             next = 0;
         }
         const bool visible = request && g_visible && Current(*request);
-        if (visible && (GetTickCount64() >= next || request->revision != lastRevision)) {
+        if (visible && (GetTickCount64() >= next || request->revision != lastRevision ||
+                        request->limit != lastLimit)) {
             try {
                 auto entries = Enumerate();
                 ScHandle manager(OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT));
@@ -24786,15 +26496,22 @@ void Run() {
                 g_loaded = true;
                 g_error = ERROR_GEN_FAILURE;
             }
-            auto rows = Initial(request->args, request->limit);
+            auto rows = Initial(request->args, request->limit + 1);
+            const bool more = rows.size() > request->limit;
+            if (more)
+                rows.resize(request->limit);
             std::wstring signature;
             for (const auto& row : rows)
                 signature += row.title + L"\n" + row.subtitle + L"\n" + row.cardSignature;
-            if (request->revision != lastRevision || signature != lastRows) {
-                if (PublishAppResults(request->revision, request->query, std::move(rows)))
+            if (request->revision != lastRevision || request->limit != lastLimit ||
+                more != lastMore || signature != lastRows) {
+                if (PublishAppResults(request->revision, request->query, std::move(rows),
+                                      more, request->limit))
                     RequestRender();
                 lastRows = std::move(signature);
                 lastRevision = request->revision;
+                lastLimit = request->limit;
+                lastMore = more;
             }
             next = GetTickCount64() + 1000;
         }
@@ -24862,82 +26579,81 @@ void FileSearchThreadMain() {
         everything::Client client;
         const bool ready = client.Init();
         icons::FileIconCache iconCache(IconPixels());
-        uint64_t iconRevision = 0;
+        uint64_t iconRevision = 0, sessionRevision = 0;
+        DWORD sort = everything::kSortNameAscending;
+        filepages::Session pages;
+        std::vector<Row> rows;
         while (!g_searchQuit.load()) {
             FileSearchRequest request;
             {
                 std::unique_lock lock(g_queryMutex);
                 if (!g_fileQuery && iconCache.HasPending()) {
                     lock.unlock();
-                    if (iconCache.FetchPending()) {
+                    if (iconCache.FetchPending())
                         PublishLateFileIcons(iconCache.TakeLate(), iconRevision);
-                    }
                     continue;
                 }
                 g_fileQueryWake.wait(lock, [] { return g_searchQuit.load() || g_fileQuery.has_value(); });
-                if (g_searchQuit.load()) break;
+                if (g_searchQuit.load())
+                    break;
                 request = std::move(*g_fileQuery);
                 g_fileQuery.reset();
-                if (request.revision != g_queryRevision) continue;
+                if (request.revision != g_queryRevision)
+                    continue;
             }
-            const auto started = std::chrono::steady_clock::now();
-            std::vector<everything::Result> pool;
-            DWORD total = 0;
-            bool ok = true;
-            if (request.enabled) {
-                ok = ready && client.Query(request.query, ranker::kDefaultPool, &pool, &total);
-                if (ok) {
-                    const size_t limit = static_cast<size_t>(request.limit);
-                    static const std::vector<std::wstring> noNoise;
-                    const auto* noise = request.filterNoise ? &request.excludedPaths : &noNoise;
-                    const size_t clean = ranker::Rank(&pool, request.query, limit, noise);
-                    if (clean < limit && total > ranker::kDefaultPool) {
-                        const auto filtered = ranker::WithExclusions(request.query, noise);
-                        // A newer app query takes precedence over an optional second file query.
-                        bool current;
-                        { std::lock_guard lock(g_queryMutex); current = request.revision == g_queryRevision; }
-                        if (current && filtered != request.query) {
-                            std::vector<everything::Result> more;
-                            DWORD moreTotal = 0;
-                            if (client.Query(filtered, ranker::kDefaultPool, &more, &moreTotal) &&
-                                ranker::Rank(&more, request.query, limit, noise) > clean) {
-                                pool = std::move(more);
-                                total = moreTotal;
-                            }
-                        }
-                    }
-                }
-            }
-            {
+            const auto current = [&] {
                 std::lock_guard lock(g_queryMutex);
-                if (g_searchQuit.load() || request.revision != g_queryRevision) continue;
+                return !g_searchQuit.load() && request.revision == g_queryRevision;
+            };
+            if (sessionRevision != request.revision) {
+                sessionRevision = request.revision;
+                rows.clear();
+                pages.Reset(request.query, request.filterNoise, request.excludedPaths);
+                if (request.enabled && ready)
+                    sort = client.PreferredSort();
             }
-            if (!ok) { pool.clear(); total = 0; }
+            std::vector<everything::Result> added;
+            bool ok = true;
+            if (request.enabled && request.limit > rows.size()) {
+                ok = ready &&
+                     pages.Take(
+                         request.limit - rows.size(), &added,
+                         [&](const std::wstring& query, DWORD limit, DWORD offset, std::vector<everything::Result>* out,
+                             DWORD* total) { return client.QueryPage(query, limit, offset, out, total, sort); },
+                         current);
+            }
+            if (!current())
+                continue;
+            // An unavailable next page keeps the rows already shown. A failed
+            // batch stops automatic requests until the query is retried.
+            if (ok)
+                for (const auto& file : added) {
+                    Row row;
+                    row.title = file.name;
+                    row.subtitle = file.path;
+                    row.isFolder = file.isFolder;
+                    row.openPath = file.path;
+                    if (!row.openPath.empty() && row.openPath.back() != L'\\')
+                        row.openPath += L'\\';
+                    row.openPath += file.name;
+                    rows.push_back(std::move(row));
+                }
             iconCache.SetSize(IconPixels());
             iconCache.NewResults(std::chrono::milliseconds(25));
             iconRevision = request.revision;
-            std::vector<Row> rows;
-            for (const auto& file : pool) {
-                Row row;
-                row.title = file.name;
-                row.subtitle = file.path;
-                row.isFolder = file.isFolder;
-                row.openPath = file.path;
-                if (!row.openPath.empty() && row.openPath.back() != L'\\') row.openPath += L'\\';
-                row.openPath += file.name;
-                if (const auto* pixels = iconCache.Get(row.openPath, file.isFolder)) row.icon = *pixels;
-                rows.push_back(std::move(row));
-            }
-            if (PublishFileResults(request.revision, std::move(rows), total)) {
+            for (auto& row : rows)
+                if (const auto* pixels = iconCache.Get(row.openPath, row.isFolder))
+                    row.icon = *pixels;
+            const DWORD total = request.enabled ? pages.Total() : 0;
+            if (PublishFileResults(request.revision, rows, total, request.enabled && ok && pages.More(),
+                                   !request.enabled || (ok && !pages.More()))) {
                 RequestFileRender();
-                const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - started).count();
-                Wh_Log(L"search files: %u matches, %zu rows (%lld ms), ok=%d", total, pool.size(),
-                       static_cast<long long>(ms), ok);
+                Wh_Log(L"search files: %u matches, %zu shown, %zu added, ok=%d", total, rows.size(), added.size(), ok);
             }
         }
     }
-    if (SUCCEEDED(comHr)) CoUninitialize();
+    if (SUCCEEDED(comHr))
+        CoUninitialize();
 }
 
 void SearchThreadMain() {
@@ -25017,7 +26733,7 @@ void SearchThreadMain() {
                     apps::UsageCounts* usage = learnedUsage();
                     apps::RecordUsage(usage,app->nameLower);
                     std::wstring name = app->name;
-                    std::wstring targetPath = app->targetPath;
+                    std::wstring targetPath = app->shortcutPath.empty() ? app->targetPath : app->shortcutPath;
                     std::wstring settingArguments = app->settingArguments;
                     ITEMIDLIST* pidlClone = app->pidl ? ILClone(app->pidl.get()) : nullptr;
                     lock.unlock();
@@ -25093,8 +26809,8 @@ void SearchThreadMain() {
         }
 
         std::wstring qTrim = tools::Trim(query);
-        bool isIpCommand = false, isConflictCommand = false, isUsageCommand = false, validUsageCommand = false, isServicesCommand=false;
-        std::wstring serviceArgs;
+        bool isIpCommand = false, isConflictCommand = false, isUsageCommand = false, validUsageCommand = false, isServicesCommand=false,isInstalledCommand=false;
+        std::wstring serviceArgs,installedArgs;
         bool isExplicitWeb = query.starts_with(L"?");
         std::wstring webQuery;
         ResolvedWebQuery explicitWeb;
@@ -25106,8 +26822,8 @@ void SearchThreadMain() {
             explicitWeb = ResolveWebSearch(webQuery);
         }
 
-        int maxFiles = 12;
-        int maxApps = 6;
+        int maxFiles = static_cast<int>(g_initialFileResults.load());
+        int maxApps = static_cast<int>(g_initialAppResults.load());
         bool filterNoise = true;
         std::vector<std::wstring> excludedPaths;
         std::vector<CustomCommand> customCommands;
@@ -25115,8 +26831,6 @@ void SearchThreadMain() {
         online::Batch onlineBatch;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
-            maxFiles = g_settings.maxFileResults;
-            maxApps = g_settings.maxAppResults;
             filterNoise = g_settings.filterNoisyPaths;
             excludedPaths = g_settings.excludedPaths;
             customCommands = g_settings.customCommands;
@@ -25125,7 +26839,9 @@ void SearchThreadMain() {
             isConflictCommand = command.kind == commands::Kind::Conflict;
             isUsageCommand = command.kind == commands::Kind::Usage;
             isServicesCommand = command.kind == commands::Kind::Services;
+            isInstalledCommand = command.kind == commands::Kind::Installed;
             if(isServicesCommand)serviceArgs=command.args;
+            if(isInstalledCommand)installedArgs=command.args;
             validUsageCommand = command.args.empty();
             onlineRequest = online::Parse(query, g_settings.weatherLocation, g_settings.weatherUnits,
                 g_settings.quoteCurrency, g_settings.onlineCards, g_settings.commandNames,
@@ -25135,6 +26851,13 @@ void SearchThreadMain() {
                 g_settings.commandNames, g_settings.weatherLocations, g_settings.currencyList, g_settings.cryptoList);
         }
         const bool isOnline = onlineRequest.kind != online::Kind::None;
+        {
+            std::lock_guard lock(g_queryMutex);
+            if(revision!=g_queryRevision)continue;
+            g_appsBatch.Begin(revision,static_cast<size_t>(maxApps));
+            maxApps=static_cast<int>(std::min(g_appsBatch.requested,size_t(INT_MAX-1)));
+        }
+        const size_t appLookahead=static_cast<size_t>(maxApps)+1;
         bool fetchOnline = false;
         // Match apps before scheduling any file work.
         auto usage=learnedUsage();
@@ -25143,7 +26866,7 @@ void SearchThreadMain() {
 
         if (isConflictCommand) appRows.push_back(online::ConflictRow());
         else if (isUsageCommand) appRows = hardware::Initial(query, validUsageCommand);
-        else if (isServicesCommand) appRows = services::Initial(serviceArgs,static_cast<size_t>(maxApps));
+        else if (isServicesCommand) appRows = services::Initial(serviceArgs,appLookahead);
         else if (isOnline) {
             auto initial = online::BeginBatch(onlineBatch);
             appRows = std::move(initial.rows);
@@ -25195,31 +26918,50 @@ void SearchThreadMain() {
         } else {
             // A sum, a conversion or another base typed: worked out above the
             // apps (calc).
-            for (Row& r : calc::Rows(qTrim)) {
+            for (Row& r : isInstalledCommand?std::vector<Row>():calc::Rows(qTrim)) {
                 r.appIndex = nextAppIndex++;
                 appRows.push_back(std::move(r));
             }
-            auto matches=query.empty() ? appIndex->Suggest(static_cast<size_t>(maxApps),usage)
-                                       : appIndex->Search(query,static_cast<size_t>(maxApps),usage);
-            for (const apps::Match& m : matches) {
+            auto matches=isInstalledCommand ? appIndex->Search(installedArgs,std::numeric_limits<size_t>::max(),nullptr,apps::SearchScope::Installed)
+                : query.empty() ? appIndex->Suggest(appLookahead,usage)
+                                : appIndex->Search(query,appLookahead,usage);
+            size_t matchEnd=matches.size();
+            if(isInstalledCommand){
+                std::lock_guard lock(g_queryMutex);
+                if(g_queryRevision!=revision)continue;
+                if(g_installedBatchQuery!=query){g_installedBatchQuery=query;g_installedVisibleLimit=kInstalledBatchSize;}
+                g_installedTotal=matches.size();
+                matchEnd=std::min(matches.size(),g_installedVisibleLimit);
+            }
+            for(size_t matchIndex=0;matchIndex<matchEnd;++matchIndex) {
+                const auto& m=matches[matchIndex];
                 if (!m.app) {
                     continue;
                 }
                 Row row;
-                row.title = m.app->name;
+                row.title = isInstalledCommand&&!m.app->installedName.empty()?m.app->installedName:m.app->name;
                 row.matchScore = m.score;
                 row.matchRank = m.rank;
                 bool isSettingItem = m.app->isSetting;
                 row.isSetting = isSettingItem;
-                row.installedOnly=m.app->installedOnly;
+                row.installedOnly=isInstalledCommand || m.app->installedOnly;
+                row.installedProtected=m.app->inventoryOnly;row.installedName=m.app->installedName;
+                row.installedPackage=m.app->installedPackage;
                 row.installedLocation=m.app->installedLocation;row.installedFamily=m.app->installedFamily;row.installedKey=m.app->installedKey;
                 row.installedHive=m.app->installedHive;row.installedView=m.app->installedView;
+                if(isInstalledCommand){row.sectionTitle=i18n::Text(i18n::Key::InstalledApps);row.installedTotal=matches.size();}
 
                 bool canAdmin = true;
                 bool isFileTarget = false;
-                if(m.app->installedOnly) {
+                if(row.installedOnly) {
                     row.subtitle=m.app->installedPublisher;
                     if(!m.app->installedVersion.empty())row.subtitle+=(row.subtitle.empty()?L"":L" \u00B7 ")+m.app->installedVersion;
+                    if(!m.app->installedArchitecture.empty())row.subtitle+=(row.subtitle.empty()?L"":L" \u00B7 ")+m.app->installedArchitecture;
+                    if(!m.app->installedPackageType.empty()) {
+                        auto kind=i18n::Label(m.app->installedPackageType);
+                        if(!m.app->installedResourceId.empty())kind+=L" \u00B7 "+m.app->installedResourceId;
+                        row.subtitle=kind+(row.subtitle.empty()?L"":L"\n"+row.subtitle);
+                    }
                     row.cardSignature=L"installed:"+m.app->installedId;
                     canAdmin=false;
                 } else if (isSettingItem) {
@@ -25244,7 +26986,7 @@ void SearchThreadMain() {
                 }
                 row.canRunAsAdmin = canAdmin;
                 row.isFile = isFileTarget;
-                row.openPath = m.app->targetPath;
+                row.openPath = row.installedOnly?L"ms-settings:appsfeatures":m.app->targetPath;
                 row.appIndex = nextAppIndex++;
 
                 row.iconKey=apps::WarmIndex::AppKey(*m.app,iconPixels);
@@ -25253,21 +26995,38 @@ void SearchThreadMain() {
                     iconJobs.push_back({appIndex,m.app,row.iconKey,L"",iconPixels,0});
                 appRows.push_back(std::move(row));
             }
+            if(isInstalledCommand && appRows.empty()) {
+                Row row;row.sectionTitle=i18n::Text(i18n::Key::InstalledApps);
+                row.title=i18n::Text(i18n::Key::NoApps);row.customGlyph=L"\uE8A7";
+                row.infoOnly=true;row.canRunAsAdmin=false;appRows.push_back(std::move(row));
+            }
 
         }
 
-        if (!isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand && !isServicesCommand && !isExplicitWeb && !customCommands.empty()) {
+        if (!isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand && !isServicesCommand && !isInstalledCommand && !isExplicitWeb && !customCommands.empty()) {
             AddCustomCommandRows(&appRows, customCommands, query,
-                                 static_cast<size_t>(maxApps), settingsRevision,
+                                 appLookahead, settingsRevision,
                                  iconPixels, &commandIconCache, usage);
         }
 
+        bool moreApps=false;
+        if(isServicesCommand) {
+            moreApps=appRows.size()>static_cast<size_t>(maxApps);
+            if(moreApps)appRows.resize(static_cast<size_t>(maxApps));
+        } else if(!isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand &&
+           !isInstalledCommand && !isExplicitWeb) {
+            const size_t tools=std::count_if(appRows.begin(),appRows.end(),[](const Row& row){return row.matchScore<0;});
+            const size_t shown=tools+static_cast<size_t>(maxApps);
+            moreApps=appRows.size()>shown;
+            if(moreApps)appRows.resize(shown);
+        }
         for(auto& row:appRows) {
             if(row.commandIcon.empty() || row.iconKey.empty())continue;
             if(auto cached=g_appsWarmup->Cached(row.iconKey,settingsRevision))row.icon=std::move(*cached);
             else iconJobs.push_back({{},nullptr,row.iconKey,CustomCommandIconPath(row.commandIcon),iconPixels,settingsRevision});
         }
-        if (!PublishAppResults(revision, query, std::move(appRows))) continue;
+        if (!PublishAppResults(revision, query, std::move(appRows),moreApps,
+                               isServicesCommand?static_cast<size_t>(maxApps):0)) continue;
         RequestRender();
         g_appsWarmup->Prioritize(std::move(iconJobs));
         if (fetchOnline) online::Schedule(std::move(onlineBatch));
@@ -25279,19 +27038,21 @@ void SearchThreadMain() {
         {
             std::lock_guard lock(g_queryMutex);
             if (g_searchQuit.load() || revision != g_queryRevision) continue;
+            if(g_fileTemplate && g_fileTemplate->revision==revision)continue;
             FileSearchRequest request;
             request.revision = revision;
             request.query = isExplicitWeb ? explicitWeb.queryTerm : query;
-            request.enabled = filesVisible && !isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand && !isServicesCommand && !request.query.empty();
-            request.limit = maxFiles;
+            request.enabled = filesVisible && !isConflictCommand && !isOnline && !isIpCommand && !isUsageCommand && !isServicesCommand && !isInstalledCommand;
+            g_filesBatch.Begin(revision,static_cast<size_t>(maxFiles));
+            request.limit = g_filesBatch.requested;
             request.filterNoise = filterNoise;
             request.excludedPaths = std::move(excludedPaths);
+            g_fileTemplate=request;
             g_fileQuery = std::move(request);
         }
         g_fileQueryWake.notify_one();
     }
 }
-
 
 void StartAppsWarmup() {
     if (!g_appsWarmup) g_appsWarmup.emplace();
@@ -25299,7 +27060,19 @@ void StartAppsWarmup() {
     callbacks.catalogReady=[]{
         // Pair the notification with the query wait's mutex so a catalog
         // published between its predicate check and sleep cannot lose a wake.
-        std::lock_guard lock(g_queryMutex);g_queryWake.notify_all();
+        {std::lock_guard lock(g_queryMutex);g_queryWake.notify_all();}
+        std::vector<apps::WarmIndex::IconJob> jobs;
+        const int pixels=IconPixels();
+        {
+            std::lock_guard lock(g_settingsMutex);
+            const auto generation=g_settingsRevision.load();
+            for(const auto& command:g_settings.customCommands) {
+                const auto path=CustomCommandIconPath(command.icon);
+                if(command.command.empty() || path.empty() || path.find_first_of(L"\\/:")==path.npos)continue;
+                jobs.push_back({{},nullptr,std::to_wstring(pixels)+L":command:"+path,path,pixels,generation});
+            }
+        }
+        if(!jobs.empty())g_appsWarmup->Prioritize(std::move(jobs));
     };
     callbacks.appIcon = [](const apps::App* app, int size) {
         std::vector<BYTE> pixels;
@@ -25311,7 +27084,7 @@ void StartAppsWarmup() {
     callbacks.iconReady=[](const std::wstring& key,const std::vector<BYTE>& pixels,uint64_t generation) {
         if(!g_searchQuit.load() && !g_quit.load() && (!generation || generation==g_settingsRevision.load()))PublishLateAppIcon(key,pixels);
     };
-    g_appsWarmup->Start(std::move(callbacks));
+    g_appsWarmup->Start(std::move(callbacks),IconPixels());
 }
 void StopAppsWarmup() {
     if (!g_appsWarmup) return;
@@ -25572,163 +27345,175 @@ bool DeliverNativeSearchKey(SearchWindowInput const& input) {
     return SendInput(1, &event, sizeof(event)) == 1;
 }
 
-LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param) try {
+LRESULT CALLBACK SearchWindowKeyboardProc(int code, WPARAM message, LPARAM param) {
     if (code != HC_ACTION || g_searchWindowInputStop.load())
         return CallNextHookEx(nullptr, code, message, param);
+    // Other hooks already saw the physical key before this IME handoff.
+    // Deliver our replay to Windows without notifying those hooks again.
     const auto& key = *reinterpret_cast<const KBDLLHOOKSTRUCT*>(param);
-    if (key.dwExtraInfo == kSearchWindowImeReplayTag)
-        return CallNextHookEx(nullptr, code, message, param);
-    const UINT vk = key.vkCode;
-    if (vk >= 256) return CallNextHookEx(nullptr, code, message, param);
-    const bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
-    const bool wasDown = (g_searchWindowKeyState[vk] & 0x80) != 0;
-    BYTE toggle = g_searchWindowKeyState[vk] & 1;
-    if (vk == VK_CAPITAL && down && !wasDown) toggle ^= 1;
-    g_searchWindowKeyState[vk] = (down ? 0x80 : 0) | toggle;
-    g_searchWindowKeyState[VK_SHIFT] = (g_searchWindowKeyState[VK_LSHIFT] | g_searchWindowKeyState[VK_RSHIFT]) & 0x80;
-    g_searchWindowKeyState[VK_CONTROL] = (g_searchWindowKeyState[VK_LCONTROL] | g_searchWindowKeyState[VK_RCONTROL]) & 0x80;
-    g_searchWindowKeyState[VK_MENU] = (g_searchWindowKeyState[VK_LMENU] | g_searchWindowKeyState[VK_RMENU]) & 0x80;
-    if (!down) {
-        if (std::exchange(g_searchWindowNativeKeyDown[vk], false)) {
-            g_searchWindowSwallowed[vk] = false;
-            HWND target = g_searchWindowWindow.load();
-            const HWND foreground = GetForegroundWindow();
-            // A physical release must still reach Windows if the user has
-            // switched away after a replayed key-down. Do not swallow it and
-            // leave the key logically pressed in another application.
-            const bool inHost = target && foreground &&
-                (foreground == target || GetAncestor(foreground, GA_ROOTOWNER) == target);
-            if (!inHost && foreground != CachedStartWindow() && !IsSearchHostWindow(foreground))
-                return CallNextHookEx(nullptr, code, message, param);
-            if (!target) target = g_hExplorerHelperWnd.load();
-            auto input = NativeSearchKey(key, false, true, g_searchWindowImeCaptureLayout ?
-                g_searchWindowImeCaptureLayout : SearchWindowInputLayout(foreground));
-            if (target && QueueSearchWindowInput(target, std::move(input))) return 1;
+    if (key.dwExtraInfo == kSearchWindowImeReplayTag) return 0;
+    // Give keyboard remappers (for example EPKL/AutoHotkey) first refusal.
+    // They may replace a physical key with injected input. Capture only the
+    // surviving event, and never call the remaining hook chain twice.
+    const LRESULT downstream = CallNextHookEx(nullptr, code, message, param);
+    if (downstream) return downstream;
+    try {
+        const UINT vk = key.vkCode;
+        if (vk >= 256) return downstream;
+        const bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+        const bool wasDown = (g_searchWindowKeyState[vk] & 0x80) != 0;
+        BYTE toggle = g_searchWindowKeyState[vk] & 1;
+        if (vk == VK_CAPITAL && down && !wasDown) toggle ^= 1;
+        g_searchWindowKeyState[vk] = (down ? 0x80 : 0) | toggle;
+        g_searchWindowKeyState[VK_SHIFT] = (g_searchWindowKeyState[VK_LSHIFT] | g_searchWindowKeyState[VK_RSHIFT]) & 0x80;
+        g_searchWindowKeyState[VK_CONTROL] = (g_searchWindowKeyState[VK_LCONTROL] | g_searchWindowKeyState[VK_RCONTROL]) & 0x80;
+        g_searchWindowKeyState[VK_MENU] = (g_searchWindowKeyState[VK_LMENU] | g_searchWindowKeyState[VK_RMENU]) & 0x80;
+        if (!down) {
+            if (std::exchange(g_searchWindowNativeKeyDown[vk], false)) {
+                g_searchWindowSwallowed[vk] = false;
+                HWND target = g_searchWindowWindow.load();
+                const HWND foreground = GetForegroundWindow();
+                // A physical release must still reach Windows if the user has
+                // switched away after a replayed key-down. Do not swallow it and
+                // leave the key logically pressed in another application.
+                const bool inHost = target && foreground &&
+                    (foreground == target || GetAncestor(foreground, GA_ROOTOWNER) == target);
+                if (!inHost && foreground != CachedStartWindow() && !IsSearchHostWindow(foreground))
+                    return downstream;
+                if (!target) target = g_hExplorerHelperWnd.load();
+                auto input = NativeSearchKey(key, false, true, g_searchWindowImeCaptureLayout ?
+                    g_searchWindowImeCaptureLayout : SearchWindowInputLayout(foreground));
+                if (target && QueueSearchWindowInput(target, std::move(input))) return 1;
+            }
+            if (std::exchange(g_searchWindowSwallowed[vk], false)) return 1;
+            return downstream;
         }
-        if (std::exchange(g_searchWindowSwallowed[vk], false)) return 1;
-        return CallNextHookEx(nullptr, code, message, param);
-    }
-    // Let Windows deliver a registered hotkey. In particular, a bare key or
-    // Shift-only binding must not be consumed by Start's typing buffer first.
-    if (AlternativeShortcutMatches(g_alternativeShortcutActive.load(),vk,g_searchWindowKeyState)) {
-        g_searchWindowSwallowed[vk]=false;
-        return CallNextHookEx(nullptr,code,message,param);
-    }
-    HWND host = g_searchWindowWindow.load();
-    HWND inputTarget = host ? host : g_hExplorerHelperWnd.load();
-    HWND foreground = GetForegroundWindow();
-    const bool inHost = host && (foreground == host || GetAncestor(foreground,GA_ROOTOWNER)==host);
-    const bool menuActive=g_contextMenuOpen.load() && host && foreground &&
-        (inHost || GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr));
-    if(menuActive) {
-        const bool modified=(g_searchWindowKeyState[VK_CONTROL] | g_searchWindowKeyState[VK_MENU] |
-                             g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80;
-        if(vk==VK_ESCAPE && !modified) {
-            if(g_searchWindowSwallowed[vk] || PostMessageW(host,kSearchWindowDismissMenuMessage,0,0)) {
-                g_searchWindowSwallowed[vk]=true; return 1;
+        // Let Windows deliver a registered hotkey. In particular, a bare key or
+        // Shift-only binding must not be consumed by Start's typing buffer first.
+        if (AlternativeShortcutMatches(g_alternativeShortcutActive.load(),vk,g_searchWindowKeyState)) {
+            g_searchWindowSwallowed[vk]=false;
+            return downstream;
+        }
+        HWND host = g_searchWindowWindow.load();
+        HWND inputTarget = host ? host : g_hExplorerHelperWnd.load();
+        HWND foreground = GetForegroundWindow();
+        const bool inHost = host && (foreground == host || GetAncestor(foreground,GA_ROOTOWNER)==host);
+        const bool menuActive=g_contextMenuOpen.load() && host && foreground &&
+            (inHost || GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr));
+        if(menuActive) {
+            const bool modified=(g_searchWindowKeyState[VK_CONTROL] | g_searchWindowKeyState[VK_MENU] |
+                                 g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80;
+            if(vk==VK_ESCAPE && !modified) {
+                if(g_searchWindowSwallowed[vk] || PostMessageW(host,kSearchWindowDismissMenuMessage,0,0)) {
+                    g_searchWindowSwallowed[vk]=true; return 1;
+                }
+            }
+            // Arrows, Enter and Tab navigate the menu. Printable text and
+            // Backspace continue below, closing the menu and editing search.
+            if(vk==VK_RETURN || vk==VK_TAB || vk==VK_UP || vk==VK_DOWN ||
+               vk==VK_LEFT || vk==VK_RIGHT || vk==VK_HOME || vk==VK_END ||
+               vk==VK_PRIOR || vk==VK_NEXT) return downstream;
+        }
+        if(inHost && vk==VK_ESCAPE && g_searchWindowSwallowed[vk]) return 1;
+        const bool inStart = foreground && foreground == CachedStartWindow();
+        // Native Start editors (notably the pinned-folder name) keep typing,
+        // paste, remapped Unicode and IME keys instead of opening our search.
+        const bool inShell = foreground &&
+            ((inStart && !GetPropW(foreground, kStartTextEditingProperty)) || IsSearchHostWindow(foreground));
+        const bool missingNativeFocus = host && foreground == host && g_isOverlayVisible.load() &&
+            !g_dragging.load() && !menuActive && !SearchWindowHasNativeFocus(host);
+        const bool handoff = g_searchWindowBuffered.load() || !g_searchWindowInputReady.load() ||
+                             g_searchWindowDeadKey || missingNativeFocus;
+        const bool menuTyping=g_searchWindowMenuTyping.load() && host && foreground &&
+            GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr);
+        if (!inputTarget || (!inShell && !menuActive && !menuTyping && !(host && foreground == host && handoff))) {
+            if (!inHost) ClearSearchWindowDeadKey();
+            g_searchWindowImeCaptureLayout = nullptr;
+            g_searchWindowSwallowed[vk] = false;
+            return downstream;
+        }
+        const bool ctrl = (g_searchWindowKeyState[VK_CONTROL] & 0x80) != 0;
+        const bool alt = (g_searchWindowKeyState[VK_MENU] & 0x80) != 0;
+        const bool altGr = (g_searchWindowKeyState[VK_RMENU] & 0x80) != 0;
+        const bool win = (g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80;
+        // Capture the opening paste before native Start closes and loses the chord.
+        // The UI thread calls TextBox.PasteFromClipboard; the hook never reads the
+        // clipboard, and a focused search box keeps its normal editing shortcuts.
+        const bool paste = ctrl && !alt && !win && vk == 'V' && !menuActive && !menuTyping;
+        if (!paste && (((ctrl || alt) && !altGr) || win))
+            return downstream;
+
+        // An IME must see opening keys before character translation. Once focus
+        // has settled, subsequent physical keys use the normal native input path.
+        // The destination thread can still report its previous layout while the
+        // first captured IME key is waiting for focus and profile activation.
+        HKL inputLayout = !inShell && g_searchWindowImeCaptureLayout &&
+            (g_searchWindowBuffered.load() || !g_searchWindowInputReady.load()) ?
+            g_searchWindowImeCaptureLayout : SearchWindowInputLayout(foreground);
+        const bool editingKey = (vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
+            (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping);
+        const UINT mappedCharacter = MapVirtualKeyExW(vk, MAPVK_VK_TO_CHAR, inputLayout) & 0xffff;
+        const bool textKey = vk == VK_PROCESSKEY || (mappedCharacter >= 0x20 && mappedCharacter != 0x7f);
+        if (!paste && SearchUsesIme(inputLayout) && vk != VK_PACKET && (textKey || editingKey)) {
+            auto input = NativeSearchKey(key, true, wasDown, inputLayout);
+            const bool wasMenuTyping = g_searchWindowMenuTyping.load();
+            if (menuActive) g_searchWindowMenuTyping = true;
+            if (QueueSearchWindowInput(inputTarget, std::move(input))) {
+                g_searchWindowImeCaptureLayout = inputLayout;
+                g_searchWindowNativeKeyDown[vk] = true;
+                g_searchWindowSwallowed[vk] = true;
+                return 1;
+            }
+            g_searchWindowMenuTyping = wasMenuTyping;
+            return downstream;
+        }
+        SearchWindowInput input;
+        if (paste) {
+            ClearSearchWindowDeadKey();
+            input.kind = SearchWindowInput::Paste;
+        } else if ((vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
+            (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping)) {
+            ClearSearchWindowDeadKey();
+            input.kind = vk == VK_BACK ? SearchWindowInput::Backspace :
+                         vk == VK_RETURN ? SearchWindowInput::Enter : SearchWindowInput::Escape;
+        } else {
+            HKL layout = g_searchWindowDeadKey ? g_searchWindowDeadLayout : inputLayout;
+            wchar_t chars[8]{};
+            int count;
+            if (vk == VK_PACKET) {
+                chars[0] = static_cast<wchar_t>(key.scanCode);
+                count = 1;
+            } else {
+                // A stateless translation preserves Shift, Caps Lock, AltGr and
+                // the active layout without changing native text input. Only a
+                // dead-key sequence uses this dedicated thread's compose state.
+                count = ToUnicodeEx(vk, key.scanCode, g_searchWindowKeyState, chars,
+                                    ARRAYSIZE(chars), g_searchWindowDeadKey ? 0 : 4, layout);
+            }
+            if (count < 0) {
+                if (!g_searchWindowDeadKey)
+                    ToUnicodeEx(vk, key.scanCode, g_searchWindowKeyState, chars, ARRAYSIZE(chars), 0, layout);
+                g_searchWindowDeadKey = true;
+                g_searchWindowDeadLayout = layout;
+                input.kind = SearchWindowInput::Show;
+            } else if (count > 0 && chars[0] >= 0x20 && chars[0] != 0x7f) {
+                g_searchWindowDeadKey = false;
+                input.text.assign(chars, std::min(count, static_cast<int>(ARRAYSIZE(chars))));
+            } else {
+                return downstream;
             }
         }
-        // Arrows, Enter and Tab navigate the menu. Printable text and
-        // Backspace continue below, closing the menu and editing search.
-        if(vk==VK_RETURN || vk==VK_TAB || vk==VK_UP || vk==VK_DOWN ||
-           vk==VK_LEFT || vk==VK_RIGHT || vk==VK_HOME || vk==VK_END ||
-           vk==VK_PRIOR || vk==VK_NEXT) return CallNextHookEx(nullptr,code,message,param);
-    }
-    if(inHost && vk==VK_ESCAPE && g_searchWindowSwallowed[vk]) return 1;
-    const bool inShell = foreground && (foreground == CachedStartWindow() || IsSearchHostWindow(foreground));
-    const bool missingNativeFocus = host && foreground == host && g_isOverlayVisible.load() &&
-        !g_dragging.load() && !menuActive && !SearchWindowHasNativeFocus(host);
-    const bool handoff = g_searchWindowBuffered.load() || !g_searchWindowInputReady.load() ||
-                         g_searchWindowDeadKey || missingNativeFocus;
-    const bool menuTyping=g_searchWindowMenuTyping.load() && host && foreground &&
-        GetWindowThreadProcessId(foreground,nullptr)==GetWindowThreadProcessId(host,nullptr);
-    if (!inputTarget || (!inShell && !menuActive && !menuTyping && !(host && foreground == host && handoff))) {
-        if (!inHost) ClearSearchWindowDeadKey();
-        g_searchWindowImeCaptureLayout = nullptr;
-        g_searchWindowSwallowed[vk] = false;
-        return CallNextHookEx(nullptr, code, message, param);
-    }
-    const bool ctrl = (g_searchWindowKeyState[VK_CONTROL] & 0x80) != 0;
-    const bool alt = (g_searchWindowKeyState[VK_MENU] & 0x80) != 0;
-    const bool altGr = (g_searchWindowKeyState[VK_RMENU] & 0x80) != 0;
-    const bool win = (g_searchWindowKeyState[VK_LWIN] | g_searchWindowKeyState[VK_RWIN]) & 0x80;
-    // Capture the opening paste before native Start closes and loses the chord.
-    // The UI thread calls TextBox.PasteFromClipboard; the hook never reads the
-    // clipboard, and a focused search box keeps its normal editing shortcuts.
-    const bool paste = ctrl && !alt && !win && vk == 'V' && !menuActive && !menuTyping;
-    if (!paste && (((ctrl || alt) && !altGr) || win))
-        return CallNextHookEx(nullptr, code, message, param);
-
-    // An IME must see opening keys before character translation. Once focus
-    // has settled, subsequent physical keys use the normal native input path.
-    // The destination thread can still report its previous layout while the
-    // first captured IME key is waiting for focus and profile activation.
-    HKL inputLayout = !inShell && g_searchWindowImeCaptureLayout &&
-        (g_searchWindowBuffered.load() || !g_searchWindowInputReady.load()) ?
-        g_searchWindowImeCaptureLayout : SearchWindowInputLayout(foreground);
-    const bool editingKey = (vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
-        (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping);
-    const UINT mappedCharacter = MapVirtualKeyExW(vk, MAPVK_VK_TO_CHAR, inputLayout) & 0xffff;
-    const bool textKey = vk == VK_PROCESSKEY || (mappedCharacter >= 0x20 && mappedCharacter != 0x7f);
-    if (!paste && SearchUsesIme(inputLayout) && vk != VK_PACKET && (textKey || editingKey)) {
-        auto input = NativeSearchKey(key, true, wasDown, inputLayout);
-        const bool wasMenuTyping = g_searchWindowMenuTyping.load();
-        if (menuActive) g_searchWindowMenuTyping = true;
-        if (QueueSearchWindowInput(inputTarget, std::move(input))) {
-            g_searchWindowImeCaptureLayout = inputLayout;
-            g_searchWindowNativeKeyDown[vk] = true;
-            g_searchWindowSwallowed[vk] = true;
-            return 1;
+        const bool wasMenuTyping=g_searchWindowMenuTyping.load();
+        if(menuActive) g_searchWindowMenuTyping=true;
+        if (!QueueSearchWindowInput(inputTarget, std::move(input))) {
+            if(menuActive) g_searchWindowMenuTyping=wasMenuTyping;
+            return downstream;
         }
-        g_searchWindowMenuTyping = wasMenuTyping;
-        return CallNextHookEx(nullptr, code, message, param);
+        g_searchWindowSwallowed[vk] = true;
+        return 1;
+    } catch (...) {
+        return downstream;
     }
-    SearchWindowInput input;
-    if (paste) {
-        ClearSearchWindowDeadKey();
-        input.kind = SearchWindowInput::Paste;
-    } else if ((vk == VK_BACK || vk == VK_RETURN || vk == VK_ESCAPE) &&
-        (g_searchWindowBuffered.load() || g_searchWindowDeadKey || inHost || menuActive || menuTyping)) {
-        ClearSearchWindowDeadKey();
-        input.kind = vk == VK_BACK ? SearchWindowInput::Backspace :
-                     vk == VK_RETURN ? SearchWindowInput::Enter : SearchWindowInput::Escape;
-    } else {
-        HKL layout = g_searchWindowDeadKey ? g_searchWindowDeadLayout : inputLayout;
-        wchar_t chars[8]{};
-        int count;
-        if (vk == VK_PACKET) {
-            chars[0] = static_cast<wchar_t>(key.scanCode);
-            count = 1;
-        } else {
-            // A stateless translation preserves Shift, Caps Lock, AltGr and
-            // the active layout without changing native text input. Only a
-            // dead-key sequence uses this dedicated thread's compose state.
-            count = ToUnicodeEx(vk, key.scanCode, g_searchWindowKeyState, chars,
-                                ARRAYSIZE(chars), g_searchWindowDeadKey ? 0 : 4, layout);
-        }
-        if (count < 0) {
-            if (!g_searchWindowDeadKey)
-                ToUnicodeEx(vk, key.scanCode, g_searchWindowKeyState, chars, ARRAYSIZE(chars), 0, layout);
-            g_searchWindowDeadKey = true;
-            g_searchWindowDeadLayout = layout;
-            input.kind = SearchWindowInput::Show;
-        } else if (count > 0 && chars[0] >= 0x20 && chars[0] != 0x7f) {
-            g_searchWindowDeadKey = false;
-            input.text.assign(chars, std::min(count, static_cast<int>(ARRAYSIZE(chars))));
-        } else {
-            return CallNextHookEx(nullptr, code, message, param);
-        }
-    }
-    const bool wasMenuTyping=g_searchWindowMenuTyping.load();
-    if(menuActive) g_searchWindowMenuTyping=true;
-    if (!QueueSearchWindowInput(inputTarget, std::move(input))) {
-        if(menuActive) g_searchWindowMenuTyping=wasMenuTyping;
-        return CallNextHookEx(nullptr, code, message, param);
-    }
-    g_searchWindowSwallowed[vk] = true;
-    return 1;
-} catch (...) {
-    return CallNextHookEx(nullptr, code, message, param);
 }
 
 DWORD WINAPI SearchWindowInputThreadProc(void*) {
@@ -26732,51 +28517,88 @@ void LoadSearchMaterialStorage() noexcept {
     }
     try {
         DWORD session = 0;
-        if (!ProcessIdToSessionId(GetCurrentProcessId(), &session)) return;
+        if (!ProcessIdToSessionId(GetCurrentProcessId(), &session))
+            return;
         std::swprintf(g_searchMaterialStorage, std::size(g_searchMaterialStorage),
                       L"appearanceMaterialCache.v2.session.%lu", session);
         auto saved = std::make_unique<SearchSavedMaterials>();
-        const size_t bytes = Wh_GetBinaryValue(g_searchMaterialStorage, saved.get(), sizeof(*saved));
+        size_t bytes = Wh_GetBinaryValue(g_searchMaterialStorage, saved.get(), sizeof(*saved));
+        // Portable Windhawk limits each binary value to 16,383 bytes. Version
+        // three stores the small header and each validated graph separately.
+        if (bytes == offsetof(SearchSavedMaterials, entries) && saved->version == 3 &&
+            saved->count <= std::size(saved->entries)) {
+            bool complete = true;
+            for (uint32_t i = 0; i < saved->count; ++i) {
+                const auto key = std::wstring(g_searchMaterialStorage) + L".entry." + std::to_wstring(i);
+                if (Wh_GetBinaryValue(key.c_str(), &saved->entries[i], sizeof(SearchSavedMaterial)) !=
+                    sizeof(SearchSavedMaterial)) {
+                    complete = false;
+                    break;
+                }
+            }
+            if (complete) {
+                saved->version = 2;  // same in-memory record and validation rules
+                bytes += saved->count * sizeof(SearchSavedMaterial);
+            }
+        }
         const uint64_t created = SearchMaterialProcessCreated();
         bool valid = bytes >= offsetof(SearchSavedMaterials, entries) && saved->version == 2 &&
-            saved->graphSize == sizeof(SearchEffectGraph) && saved->process == GetCurrentProcessId() &&
-            created && saved->created == created && saved->count <= std::size(saved->entries) &&
-            bytes == offsetof(SearchSavedMaterials, entries) + saved->count * sizeof(SearchSavedMaterial);
+                     saved->graphSize == sizeof(SearchEffectGraph) && saved->process == GetCurrentProcessId() &&
+                     created && saved->created == created && saved->count <= std::size(saved->entries) &&
+                     bytes == offsetof(SearchSavedMaterials, entries) + saved->count * sizeof(SearchSavedMaterial);
         if (valid) {
             valid = saved->checksum == SearchMaterialChecksum(*saved);
             for (uint32_t i = 0; valid && i < saved->count; ++i) {
                 auto const& entry = saved->entries[i];
-                valid = entry.owner && entry.weak && entry.runtimeClass && entry.composition &&
-                        !entry.reserved && !entry.padding && ValidSearchEffectGraph(entry.graph);
+                valid = entry.owner && entry.weak && entry.runtimeClass && entry.composition && !entry.reserved &&
+                        !entry.padding && ValidSearchEffectGraph(entry.graph);
             }
         }
         std::lock_guard lock(g_searchMaterialMutex);
-        if (valid) g_searchSavedMaterials = *saved;
-        else g_searchSavedMaterials = {};
+        if (valid)
+            g_searchSavedMaterials = *saved;
+        else
+            g_searchSavedMaterials = {};
         g_searchSavedMaterials.process = GetCurrentProcessId();
         g_searchSavedMaterials.created = created;
-        for (auto& entry : g_searchSavedMaterials.entries) entry.used = 0;
+        for (auto& entry : g_searchSavedMaterials.entries)
+            entry.used = 0;
         g_searchSavedMaterialsDirty = false;
-        if (bytes && !valid) Wh_DeleteValue(g_searchMaterialStorage);
-    } catch (...) { Wh_Log(L"material continuity cache unavailable"); }
+        if (bytes && !valid)
+            Wh_DeleteValue(g_searchMaterialStorage);
+    } catch (...) {
+        Wh_Log(L"material continuity cache unavailable");
+    }
 }
 
 void SaveSearchMaterialStorage() noexcept {
     try {
         // Unload only: no storage reads or writes during appearance polling.
         std::lock_guard lock(g_searchMaterialMutex);
-        if (!g_searchSavedMaterialsDirty || !g_searchSavedMaterials.created || !g_searchMaterialStorage[0]) return;
-        g_searchSavedMaterials.checksum = SearchMaterialChecksum(g_searchSavedMaterials);
-        const size_t bytes = offsetof(SearchSavedMaterials, entries) +
-                             g_searchSavedMaterials.count * sizeof(SearchSavedMaterial);
-        if (Wh_SetBinaryValue(g_searchMaterialStorage, &g_searchSavedMaterials, bytes))
-            g_searchSavedMaterialsDirty = false;
-        else Wh_Log(L"material continuity cache could not be saved");
-    } catch (...) { Wh_Log(L"material continuity save failed"); }
+        if (!g_searchSavedMaterialsDirty || !g_searchSavedMaterials.created || !g_searchMaterialStorage[0])
+            return;
+        static_assert(sizeof(SearchSavedMaterial) <= 16383);
+        for (uint32_t i = 0; i < g_searchSavedMaterials.count; ++i) {
+            const auto key = std::wstring(g_searchMaterialStorage) + L".entry." + std::to_wstring(i);
+            if (!Wh_SetBinaryValue(key.c_str(), &g_searchSavedMaterials.entries[i], sizeof(SearchSavedMaterial)))
+                return;  // Header remains uncommitted; retry on the next save.
+        }
+        auto header = std::make_unique<SearchSavedMaterials>(g_searchSavedMaterials);
+        header->version = 3;
+        header->checksum = SearchMaterialChecksum(*header);
+        if (!Wh_SetBinaryValue(g_searchMaterialStorage, header.get(), offsetof(SearchSavedMaterials, entries))) {
+            Wh_Log(L"material continuity cache could not be saved");
+            return;
+        }
+        g_searchSavedMaterialsDirty = false;
+    } catch (...) {
+        Wh_Log(L"material continuity save failed");
+    }
 }
 
 void RememberSearchMaterial(wuxm::XamlCompositionBrushBase const& brush,
-                            searchcomp::CompositionBrush const& composition, SearchEffectGraph const& graph) {
+                            searchcomp::CompositionBrush const& composition,
+                            SearchEffectGraph const& graph) {
     if (g_quit || !ValidSearchEffectGraph(graph)) return;
     SearchSavedMaterial key;
     if (!SearchMaterialOwnerKey(brush, key)) return;
@@ -29852,6 +31674,7 @@ wux::Style CopiedMenuPresenterStyle() {
 
     // Keep context menus compact regardless of the search window/theme corners.
     set(wuxc::Control::CornerRadiusProperty(), winrt::box_value(wux::CornerRadius{8, 8, 8, 8}));
+    set(wux::UIElement::TransitionsProperty(), wuxma::TransitionCollection{});
 
     if (surface.flags & 8) {
         set(wuxc::Control::BorderThicknessProperty(), winrt::box_value(SearchThickness(surface.thickness)));
@@ -29871,12 +31694,10 @@ wux::Style CopiedMenuPresenterStyle() {
 }
 
 void ApplyOpenMenuPresenters() try {
-    if (!g_searchAppearanceValid || !g_resultsHost || !g_resultsHost.XamlRoot())
+    if (!g_resultsHost || !g_resultsHost.XamlRoot())
         return;
     EnableThreadPopupHostBackdrop();
     auto style = CopiedMenuPresenterStyle();
-    if (!style)
-        return;
     for (auto popup : wuxm::VisualTreeHelper::GetOpenPopupsForXamlRoot(g_resultsHost.XamlRoot())) {
         if (popup == g_previewPopup)
             continue;
@@ -29885,8 +31706,9 @@ void ApplyOpenMenuPresenters() try {
             if (!node || depth > 16)
                 return;
             if (auto presenter = node.try_as<wuxc::MenuFlyoutPresenter>()) {
-                if (presenter.Style() != style)
+                if (style && presenter.Style() != style)
                     presenter.Style(style);
+                DisableMenuTransitions(popup, presenter);
                 return;
             }
             const int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
@@ -29986,6 +31808,7 @@ void PrepareCopiedMenu(wuxc::MenuFlyout const& menu) try {
 void InitializeCopiedMenu(wuxc::MenuFlyout const& menu) {
     if (!g_searchWindowWindow.load())
         return;
+    DisableMenuAnimations(menu);
     PrepareCopiedMenu(menu);
     // Registered after the population handler, so every item and nested branch
     // is ready before the flyout can draw. Windows forwards this same presenter
@@ -30462,6 +32285,7 @@ void SearchWindowShow(std::wstring const& text, bool append) {
         g_searchWindowClosing = false;
         g_isHiding = false;
         if (fresh) {
+            everything::RefreshSortPreferences();
             StopSearchWindowSlide();
             SearchWindowChooseBounds();
             g_ourBox.Text(L"");
@@ -30529,6 +32353,7 @@ void SearchWindowShow(std::wstring const& text, bool append) {
 }
 
 LRESULT CALLBACK SearchWindowWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) try {
+    if (const UINT ready = shellmenus::Message(); ready && message == ready) { CompleteShellMenuItems(); return 0; }
     if (message == kSearchContainerContrastReady) {
         ApplySearchContainerContrast();
         return 0;
@@ -30815,6 +32640,7 @@ bool SearchWindowPreTranslate(MSG* message) {
 }
 
 bool SearchWindowInitialize() {
+    shellmenus::Start();
     try {
         SearchWindowTrace(L"initializing Windows 11 search window");
         WNDCLASSEXW wc{sizeof(wc)};
@@ -30887,10 +32713,14 @@ bool SearchWindowInitialize() {
         {
             std::lock_guard lock(g_queryMutex);
             g_fileQuery.reset();
+            g_fileTemplate.reset();
+            g_appsBatch={};
+            g_filesBatch={};
         }
         g_shownAppsRevision = g_shownFilesRevision = 0;
-        g_shownAppsContentRevision = 0;
+        g_shownAppsContentRevision = g_shownFilesContentRevision = 0;
         g_shownFilesTotal = 0;
+        g_shownFilesTotalExact = true;
         g_renderPending = g_fileRenderPending = g_appIconRenderPending = false;
         g_fileSearchThread.emplace(FileSearchThreadMain);
         g_searchThread.emplace(SearchThreadMain);
@@ -30905,6 +32735,7 @@ bool SearchWindowInitialize() {
 }
 
 void SearchWindowTeardown() {
+    StopShellMenuItems();
     if (!g_searchWindowWindow.load())
         return;
     SearchWindowTrace(L"tearing down");
@@ -30967,6 +32798,9 @@ void SearchWindowTeardown() {
     {
         std::lock_guard lock(g_queryMutex);
         g_fileQuery.reset();
+        g_fileTemplate.reset();
+        g_appsBatch={};
+        g_filesBatch={};
         g_launchRequest.reset();
         online::g_request.reset();
     }

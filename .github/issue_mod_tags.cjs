@@ -186,11 +186,21 @@ function stripHtmlComments(body) {
 }
 
 /**
+ * The handles that the Markdown text mentions. As on GitHub, a mention isn't in
+ * code, a link, or a URL, and its handle isn't preceded by a word character, nor
+ * followed by one, a slash, or a dot and a word character.
+ *
  * @param {string} text
  * @returns {Set<string>} Lowercase handles.
  */
 function mentionedHandles(text) {
-  return new Set([...text.matchAll(/@([A-Za-z0-9-]+)/g)].map((match) => match[1].toLowerCase()));
+  const prose = text
+    // Code blocks, fenced, where an unclosed fence runs to the end, or indented.
+    .replace(/^ {0,3}(`{3,}|~{3,})[\s\S]*?(?:^ {0,3}\1|(?![\s\S]))|^(?: {4}|\t).*/gm, ' ')
+    // Code spans, links, and URLs.
+    .replace(/(`+)[\s\S]*?\1|!?\[[^\]]*\](?:\([^)]*\)|\[[^\]]*\])|(?:https?:\/\/|www\.)\S+/gi, ' ');
+  const mentions = prose.matchAll(/(?<![A-Za-z0-9_])@([A-Za-z0-9][A-Za-z0-9-]*)(?![A-Za-z0-9_/-]|\.[A-Za-z0-9_])/g);
+  return new Set([...mentions].map((match) => match[1].toLowerCase()));
 }
 
 /**
@@ -695,10 +705,11 @@ function modAuthorMarker(mod) {
 function modAuthorComment(mod, mention) {
   // Some mod names have brackets, which would end the link text.
   const linkText = mod.name.replace(/[\\[\]]/g, '\\$&');
-  const author = mention ? `@${mod.handle}` : mod.handle;
+  const author = mention ? `@${mod.handle}` : `[${mod.handle}](https://github.com/${mod.handle})`;
   return (
-    `This issue is about [${linkText}](https://windhawk.net/mods/${mod.id}) by ${author}. ` +
-    'As the mod\'s author, you can manage it by commenting with these commands, ' +
+    `Mod: [${linkText}](https://windhawk.net/mods/${mod.id})\n` +
+    `Mod author: ${author}\n\n` +
+    'The mod author can manage this issue by commenting with these commands, ' +
     `each on a line of its own:\n\n${COMMANDS_TABLE}`
   );
 }
@@ -918,8 +929,9 @@ async function requestMod({ github, core, owner, repo, issueNumber }) {
 
 /**
  * Posts the comment for the mod's author, unless it was posted for the mod
- * already, or the author opened the issue. The author is tagged in it unless the
- * body mentions them, which notified them already.
+ * already, the author opened the issue, or the author is OWN_MODS_AUTHOR. The
+ * author is tagged in it unless the body mentions them, which notified them
+ * already.
  *
  * @param {object} params
  * @param {Github} params.github
@@ -931,11 +943,12 @@ async function requestMod({ github, core, owner, repo, issueNumber }) {
  * @param {CatalogMod} params.mod
  */
 async function tagModAuthor({ github, core, owner, repo, issueNumber, issue, mod }) {
-  if (!mod.handle || mod.handle.toLowerCase() === issue.author.toLowerCase()) {
+  const handle = mod.handle.toLowerCase();
+  if (!handle || handle === OWN_MODS_AUTHOR || handle === issue.author.toLowerCase()) {
     return;
   }
 
-  const mentioned = mentionedHandles(stripHtmlComments(issue.body)).has(mod.handle.toLowerCase());
+  const mentioned = mentionedHandles(stripHtmlComments(issue.body)).has(handle);
   const body = modAuthorComment(mod, !mentioned);
   if (await commentOnce({ github, owner, repo, issueNumber, marker: modAuthorMarker(mod), body })) {
     core.info(`Posted the comment for @${mod.handle}${mentioned ? ', who is mentioned in the body' : ''}`);

@@ -2,7 +2,7 @@
 // @id              restore-legacy-network-tray
 // @name            Restore legacy network tray
 // @description     Restores the classic network tray icon on Win10 taskbar running under Win11 24H2+
-// @version         1.0
+// @version         1.1
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @license         MIT
@@ -39,8 +39,14 @@ https://winclassic.net/post/40623
 
 namespace {
 
+// URL и хеш выбираются по архитектуре сборки мода.
+#if defined(_M_ARM64) || defined(__aarch64__)
+constexpr wchar_t kDownloadUrl[] =
+    L"https://msdl.microsoft.com/download/symbols/pnidui.dll/3E6C0AFB210000/pnidui.dll";
+#else
 constexpr wchar_t kDownloadUrl[] =
     L"https://msdl.microsoft.com/download/symbols/pnidui.dll/C506D2E820b000/pnidui.dll";
+#endif
 
 // Must be set to the SHA-256 of the exact file at kDownloadUrl, as a
 // 64-character hex string (the mod logs the hash of any file it downloads
@@ -48,7 +54,11 @@ constexpr wchar_t kDownloadUrl[] =
 // If this is left empty, verification fails closed: the mod will not load
 // or activate anything. This is intentional, so that emptying the constant
 // by mistake can't silently turn the check off.
+#if defined(_M_ARM64) || defined(__aarch64__)
+constexpr wchar_t kExpectedSha256Hex[] = L"6362ef8e41c0fb04b131564364b282e0f2a9defd109cf020e35101d6ccfc3121";
+#else
 constexpr wchar_t kExpectedSha256Hex[] = L"0f929cf218142a2aab06d31d7fac4db5c419faf153a41c7f24d7c72ef338c76e";
+#endif
 
 constexpr wchar_t kFileName[] = L"pnidui.dll";
 

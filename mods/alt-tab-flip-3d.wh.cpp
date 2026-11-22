@@ -1,14 +1,13 @@
 // ==WindhawkMod==
 // @id              alt-tab-flip-3d
-// @name            Alt+Tab Flip 3D (Vista Style)
-// @name:pt-BR      Alt+Tab Flip 3D (estilo Vista)
-// @description     Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows
-// @description:pt-BR Substitui o Alt+Tab por uma pilha 3D fluida de janelas ao vivo, no estilo Flip 3D do Windows Vista
-// @version         1.7.2
+// @name            Alt+Tab Flip 3D
+// @description     Replaces Alt+Tab with fluid switchers of live windows, from the Windows Vista Flip 3D stack to Cover Flow, a radial wheel and more
+// @description:pt-BR Substitui o Alt+Tab por alternadores fluidos de janelas ao vivo, da pilha Flip 3D do Windows Vista ao Cover Flow, uma roda radial e muito mais
+// @version         1.8.0
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
-// @donateUrl       https://livepix.gg/caliberda
+// @donateUrl       https://github.com/sponsors/cesarkali
 // @include         windhawk.exe
 // @include         explorer.exe
 // @compilerOptions -ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs -lshcore -lshell32 -lgdi32 -ladvapi32
@@ -17,9 +16,9 @@
 
 // ==WindhawkModReadme==
 /*
-# Alt+Tab Flip 3D (Vista Style)
+# Alt+Tab Flip 3D
 
-![Flip 3D style](https://i.imgur.com/mRzfHq2.gif)
+![The animation styles, one after the other](https://i.imgur.com/C5OVLxA.gif)
 
 **English** | [Português](#português)
 
@@ -31,12 +30,12 @@ stack, one behind the other, showing their **live content**. Keep Alt held and
 flip through them; release Alt and the chosen window flies back into place.
 
 Made in Brazil by **caliberda** · bugs and ideas: [an issue on
-GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram [@cesar.kali](https://www.instagram.com/cesar.kali) ·
+GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram [@cesar.kali](https://www.instagram.com/cesar.kali) ·
 [caliberda.com.br](https://caliberda.com.br)
 
 ## Animation styles
 
-![All animation styles](https://i.imgur.com/CYIiLdx.png)
+![All animation styles](https://i.imgur.com/38YT826.png)
 
 * **Flip 3D**: the Windows Vista stack, receding up and to the left.
 * **Cascade**: a deck of windows tilted backwards, receding upwards.
@@ -72,6 +71,10 @@ Simpler 2D styles, for those who want something closer to the default:
 * **Icons and titles**: a row of large icons with their titles.
 * **Vertical list**: a compact list of icons and titles.
 * **Classic (Windows XP)**: the old icon grid with the title in a box below.
+* **Radial wheel**: the windows' icons around a ring, with the app's name and
+  the title in the middle. Tab goes around it clockwise, and moving the mouse
+  towards a slice picks it, like the weapon wheel of a game. The wheel fits
+  any screen, and grows with the number of windows.
 * **Native Windows Alt+Tab**: the mod leaves Alt+Tab alone.
 
 The switcher opens on the monitor where the mouse cursor is (or, optionally,
@@ -89,6 +92,7 @@ monitor*).
 | Alt+Shift+Tab             | Previous window                               |
 | Ctrl+Alt+Tab              | Open the stack and keep it open (optional)    |
 | Arrow keys, mouse wheel   | Flip forward / backward                       |
+| Move the mouse            | Select the slice it points at (radial wheel)  |
 | Release Alt, Enter, Space | Switch to the window in front                 |
 | Click a window            | Switch to that window                         |
 | Middle-click a window     | Close that window (optional)                  |
@@ -154,14 +158,21 @@ above. Only one of them can take over Alt+Tab.
 * Minimized windows show their last content, like the taskbar previews (this
   can be turned off). Windows that refuse to be captured are shown as a card
   with the app icon.
+* On a monitor with HDR on, windows with HDR content (videos, games, photos)
+  keep their full brightness in the switcher, like in the native Alt+Tab
+  (*HDR* setting).
 * With the *Dim only* background, the real windows stay visible behind the
   stack. The wallpaper backgrounds hide them, like the original Flip 3D.
+* The *Mica* and *Mica Alt* backgrounds are the materials of Windows 11 apps,
+  made from the wallpaper in the Windows mode (light or dark). With them, a
+  low *Background dimming* (or 0) looks closest to the apps.
 * If the switcher can't start (e.g. no GPU device), the native Alt+Tab keeps
   working. If the graphics driver is updated or reset, the switcher starts
   over by itself.
 * On laptops with two GPUs, the switcher draws on the one the screen is
   connected to. On slower PCs, the *Frame rate limit* and *Live window
-  content* settings make it lighter.
+  content* settings make it lighter. The limit can also be a number of your
+  own (*Custom*).
 
 ## Contact
 
@@ -170,8 +181,8 @@ new versions bring fixes and what users ask for. Write in English,
 Portuguese or your own language.
 
 * **Bugs and ideas: an issue on GitHub**, the best way: [report a
-  bug](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) or [suggest an
-  idea](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A).
+  bug](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) or [suggest an
+  idea](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A).
   It mentions me (@cesarkali), so I see it, and GitHub tells you when the
   version with the fix or the idea comes out.
 * **Instagram [@cesar.kali](https://www.instagram.com/cesar.kali)**: to talk to me
@@ -196,12 +207,12 @@ passando por elas; solte o Alt e a janela escolhida volta voando para o lugar.
 
 Feito no Brasil por **caliberda** · pode falar comigo em português · bugs e
 ideias: [uma issue no
-GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram
+GitHub](https://github.com/ramensoftware/windhawk-mods/issues/new?title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) · Instagram
 [@cesar.kali](https://www.instagram.com/cesar.kali) · [caliberda.com.br](https://caliberda.com.br)
 
 ### Estilos de animação
 
-![Todos os estilos de animação](https://i.imgur.com/CYIiLdx.png)
+![Todos os estilos de animação](https://i.imgur.com/38YT826.png)
 
 * **Flip 3D**: a pilha do Windows Vista, indo para cima e para a esquerda.
 * **Cascata**: um baralho de janelas inclinado para trás, subindo.
@@ -236,6 +247,10 @@ Estilos 2D mais simples, para quem quer algo mais perto do padrão:
 * **Lista vertical**: uma lista compacta de ícones e títulos.
 * **Clássico (Windows XP)**: a grade de ícones antiga com o título numa caixa
   embaixo.
+* **Roda radial**: os ícones das janelas em volta de um anel, com o nome do
+  app e o título no meio. O Tab gira no sentido horário, e mexer o mouse na
+  direção de uma fatia escolhe ela, como a roda de armas de um jogo. A roda se
+  ajusta a qualquer tela e cresce com o número de janelas.
 * **Alt+Tab nativo do Windows**: o mod deixa o Alt+Tab em paz.
 
 O alternador abre no monitor onde está o cursor do mouse (ou, se preferir,
@@ -253,6 +268,7 @@ monitores*).
 | Alt+Shift+Tab                | Janela anterior                            |
 | Ctrl+Alt+Tab                 | Abre a pilha e a mantém aberta (opcional)  |
 | Setas, roda do mouse         | Avança / volta na pilha                    |
+| Mexer o mouse                | Escolhe a fatia apontada (roda radial)     |
 | Soltar Alt, Enter, Espaço    | Muda para a janela da frente               |
 | Clicar numa janela           | Muda para essa janela                      |
 | Clique do meio numa janela   | Fecha essa janela (opcional)               |
@@ -323,14 +339,22 @@ acima. Só um deles consegue assumir o Alt+Tab.
 * Janelas minimizadas mostram o último conteúdo, como as miniaturas da barra de
   tarefas (dá para desligar). Janelas que bloqueiam captura aparecem como um
   cartão com o ícone do app.
+* Num monitor com HDR ligado, janelas com conteúdo HDR (vídeos, jogos, fotos)
+  mantêm o brilho todo no alternador, como no Alt+Tab nativo (configuração
+  *HDR*).
 * Com o fundo *Apenas escurecer*, as janelas reais continuam visíveis atrás da
   pilha. Os fundos com papel de parede as escondem, como no Flip 3D original.
+* Os fundos *Mica* e *Mica Alt* são os materiais dos apps do Windows 11,
+  feitos a partir do papel de parede no modo do Windows (claro ou escuro).
+  Com eles, um *Escurecimento do fundo* baixo (ou 0) fica mais parecido com os
+  apps.
 * Se o alternador não conseguir iniciar (ex.: sem dispositivo de GPU), o Alt+Tab
   nativo continua funcionando. Se o driver de vídeo for atualizado ou
   reiniciado, o alternador recomeça sozinho.
 * Em notebooks com duas placas de vídeo, o alternador desenha na placa ligada
   à tela. Em PCs mais fracos, as configurações *Limite de quadros por segundo*
-  e *Conteúdo ao vivo das janelas* deixam ele mais leve.
+  e *Conteúdo ao vivo das janelas* deixam ele mais leve. O limite também pode
+  ser um número seu (*Personalizado*).
 
 ### Contato
 
@@ -339,8 +363,8 @@ mod: as novas versões trazem correções e o que os usuários pedem. Pode
 escrever em português.
 
 * **Bugs e ideias: uma issue no GitHub**, o melhor caminho: [relatar um
-  bug](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) ou [sugerir uma
-  ideia](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BAlt%2BTab%20Flip%203D%20%28Vista%20Style%29%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A).
+  bug](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-bug&title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A) ou [sugerir uma
+  ideia](https://github.com/ramensoftware/windhawk-mods/issues/new?labels=mod-enhancement&title=%5BAlt%2BTab%20Flip%203D%5D%20&body=Mod%20author%3A%20%40cesarkali%0A%0A).
   Ela já me marca (@cesarkali), então eu vejo, e o GitHub avisa você quando
   sair a versão com a correção ou a ideia.
 * **Instagram [@cesar.kali](https://www.instagram.com/cesar.kali)**: para conversar
@@ -385,6 +409,7 @@ escrever em português.
   - icons: Icons and titles
   - list: Vertical list
   - classic: Classic (Windows XP)
+  - radial: Radial wheel (icons around a ring)
   - native: Native Windows Alt+Tab
   $options:pt-BR:
   - flip3d: Flip 3D (pilha do Vista)
@@ -410,6 +435,7 @@ escrever em português.
   - icons: Ícones e títulos
   - list: Lista vertical
   - classic: Clássico (Windows XP)
+  - radial: Roda radial (ícones em volta de um anel)
   - native: Alt+Tab nativo do Windows
 - monitor: cursor
   $name: Monitor
@@ -591,6 +617,7 @@ escrever em português.
   - icons: Icons and titles
   - list: Vertical list
   - classic: Classic (Windows XP)
+  - radial: Radial wheel (icons around a ring)
   $options:pt-BR:
   - same: O mesmo do Alt+Tab
   - flip3d: Flip 3D (pilha do Vista)
@@ -616,6 +643,7 @@ escrever em português.
   - icons: Ícones e títulos
   - list: Lista vertical
   - classic: Clássico (Windows XP)
+  - radial: Roda radial (ícones em volta de um anel)
 - stickyShortcut: true
   $name: Ctrl+Alt+Tab keeps the switcher open
   $name:pt-BR: Ctrl+Alt+Tab mantém o alternador aberto
@@ -661,6 +689,7 @@ escrever em português.
       - icons: Icons and titles
       - list: Vertical list
       - classic: Classic (Windows XP)
+      - radial: Radial wheel (icons around a ring)
       $options:pt-BR:
       - same: O mesmo do Alt+Tab ou do Win+Tab (a tecla usada junto)
       - flip3d: Flip 3D (pilha do Vista)
@@ -686,6 +715,7 @@ escrever em português.
       - icons: Ícones e títulos
       - list: Lista vertical
       - classic: Clássico (Windows XP)
+      - radial: Roda radial (ícones em volta de um anel)
   $name: Extra shortcuts
   $name:pt-BR: Atalhos extras
   $description: Shortcuts with an animation style of their own, one per item. Win+Ctrl+Tab stays with Windows until it's added here; adding Ctrl+Alt+Tab also turns it on. Both keep the switcher open after the keys are released
@@ -738,23 +768,27 @@ escrever em português.
 - background: blur
   $name: Background
   $name:pt-BR: Fundo
-  $description: What is shown behind the stack. "Live desktop" shows the real desktop, icons included, with animated wallpapers (Wallpaper Engine, Lively Wallpaper and similar) still playing. It can't be blurred. The iTab styles with a glossy black floor have a background of their own
-  $description:pt-BR: O que aparece atrás da pilha. "Área de trabalho ao vivo" mostra a área de trabalho de verdade, com os ícones, e os papéis de parede animados (Wallpaper Engine, Lively Wallpaper e parecidos) continuam tocando. Ela não pode ser desfocada. Os estilos iTab com chão preto brilhante têm um fundo próprio
+  $description: What is shown behind the stack. Mica and Mica Alt are the materials of Windows 11 apps, made from the wallpaper and following the Windows mode (light or dark); Mica Alt keeps more of the wallpaper's color. "Live desktop" shows the real desktop, icons included, with animated wallpapers (Wallpaper Engine, Lively Wallpaper and similar) still playing. It can't be blurred. The iTab styles with a glossy black floor have a background of their own
+  $description:pt-BR: O que aparece atrás da pilha. Mica e Mica Alt são os materiais dos apps do Windows 11, feitos a partir do papel de parede e seguindo o modo do Windows (claro ou escuro); o Mica Alt mantém mais da cor do papel de parede. "Área de trabalho ao vivo" mostra a área de trabalho de verdade, com os ícones, e os papéis de parede animados (Wallpaper Engine, Lively Wallpaper e parecidos) continuam tocando. Ela não pode ser desfocada. Os estilos iTab com chão preto brilhante têm um fundo próprio
   $options:
   - blur: Blurred wallpaper
   - wallpaper: Wallpaper
+  - mica: Mica
+  - micaAlt: Mica Alt
   - desktop: Live desktop (animated wallpapers)
   - dim: Dim only
   $options:pt-BR:
   - blur: Papel de parede desfocado
   - wallpaper: Papel de parede
+  - mica: Mica
+  - micaAlt: Mica Alt
   - desktop: Área de trabalho ao vivo (papéis de parede animados)
   - dim: Apenas escurecer
 - blurAmount: 20
   $name: Background blur strength
   $name:pt-BR: Intensidade do desfoque do fundo
-  $description: Used by the blurred wallpaper background (1-100, default 20)
-  $description:pt-BR: Usado pelo fundo com papel de parede desfocado (1-100, padrão 20)
+  $description: Used by the blurred wallpaper background (1-100, default 20). Mica and Mica Alt have a blur of their own
+  $description:pt-BR: Usado pelo fundo com papel de parede desfocado (1-100, padrão 20). Mica e Mica Alt têm um desfoque próprio
 - dimOpacity: 25
   $name: Background dimming (%)
   $name:pt-BR: Escurecimento do fundo (%)
@@ -763,8 +797,8 @@ escrever em português.
 - showTitle: true
   $name: Show window title
   $name:pt-BR: Mostrar título da janela
-  $description: Shows the icon and title of the window in front
-  $description:pt-BR: Mostra o ícone e o título da janela da frente
+  $description: Shows the icon and title of the window in front. In the radial wheel, the title under the app's name
+  $description:pt-BR: Mostra o ícone e o título da janela da frente. Na roda radial, o título embaixo do nome do app
 - titlePosition: bottom
   $name: Title position
   $name:pt-BR: Posição do título
@@ -831,12 +865,24 @@ escrever em português.
   - "90": About 90 FPS
   - "60": About 60 FPS
   - "30": About 30 FPS
+  - custom: Custom (the number below)
   $options:pt-BR:
   - screen: Taxa de atualização da tela
   - screenPlus20: Taxa de atualização da tela + 20 FPS
   - "90": Cerca de 90 FPS
   - "60": Cerca de 60 FPS
   - "30": Cerca de 30 FPS
+  - custom: Personalizado (o número abaixo)
+- customFrameRate: 144
+  $name: Custom frame rate (FPS)
+  $name:pt-BR: Quadros por segundo personalizados (FPS)
+  $description: Used when the frame rate limit is "Custom", on every screen (30-720, default 144). Above a screen's refresh rate, it works like "+ 20 FPS"
+  $description:pt-BR: Usado quando o limite de quadros por segundo é "Personalizado", em todas as telas (30-720, padrão 144). Acima da taxa de atualização de uma tela, funciona como o "+ 20 FPS"
+- hdr: true
+  $name: HDR
+  $name:pt-BR: HDR
+  $description: On a monitor with HDR on (Settings > System > Display > Use HDR), windows with HDR content (videos, games, photos) keep their full brightness in the switcher, like in the native Alt+Tab. It takes more graphics memory; when off, they're shown at SDR brightness. Monitors without HDR aren't affected
+  $description:pt-BR: Num monitor com HDR ligado (Configurações > Sistema > Tela > Usar HDR), janelas com conteúdo HDR (vídeos, jogos, fotos) mantêm o brilho todo no alternador, como no Alt+Tab nativo. Usa mais memória de vídeo; desligado, elas aparecem com o brilho de SDR. Monitores sem HDR não mudam
 - middleClickClose: true
   $name: Middle-click closes a window
   $name:pt-BR: Clique do meio fecha a janela
@@ -869,10 +915,11 @@ escrever em português.
 #include <dcomp.h>
 #include <dwmapi.h>
 #include <dwrite.h>
-#include <dxgi1_3.h>
+#include <dxgi1_6.h>
 #include <inspectable.h>
 #include <propsys.h>
 #include <shellscalingapi.h>
+#include <shlobj.h>
 #include <shobjidl.h>
 #include <tlhelp32.h>
 #include <wincodec.h>
@@ -889,6 +936,7 @@ escrever em português.
 #include <cmath>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -1016,6 +1064,16 @@ constexpr double kCloseAnimationSeconds = 0.22;
 constexpr double kSlideAnimationSeconds = 0.32;
 // Smaller close buttons (on far-away cards) aren't shown.
 constexpr float kMinCloseButtonRadius = 4;
+// The size of the large icons (see LoadLargeIcons), at 100% scaling: the
+// largest an icon is drawn at (the radial style's selected one).
+constexpr float kLargeIconSize = 64;
+// Reading large icons waits on files and the shell. A session gives them
+// this long (seconds) before it opens; the rest are read during its frames,
+// this long in each, and swapped in as they come.
+constexpr double kLargeIconOpenBudget = 0.015;
+constexpr double kLargeIconFrameBudget = 0.004;
+
+constexpr float kPi = 3.14159265f;
 
 // Overlay window timers.
 // Checks that the window switched to is in front and restored (see
@@ -1065,11 +1123,23 @@ enum class AnimationStyle {
     IconRow,
     List,
     Classic,
+    // The windows' icons on the slices of a wheel (see ComputeRadialLayout),
+    // picked with Tab or by moving the mouse (see UpdateRadialStick).
+    Radial,
     // The mod leaves Alt+Tab alone, and keeps no hooks or graphics devices.
     Native,
 };
 enum class MonitorMode { Cursor, ActiveWindow };
-enum class BackgroundMode { BlurredWallpaper, Wallpaper, LiveDesktop, Dim };
+// Mica and Mica Alt: the materials of Windows 11 apps, made from the
+// wallpaper (see UpdateBackground).
+enum class BackgroundMode {
+    BlurredWallpaper,
+    Wallpaper,
+    Mica,
+    MicaAlt,
+    LiveDesktop,
+    Dim,
+};
 enum class TitlePosition { Bottom, BelowWindow };
 enum class LiveContent { All, Selected, None };
 enum class VirtualDesktops { SameAsWindows, Current, All };
@@ -1122,6 +1192,10 @@ struct Settings {
     // 0: the screen's refresh rate, plus fpsAboveScreen.
     int maxFps;
     int fpsAboveScreen;
+    // maxFps is a number of the user's (the "Custom" limit), kept even above
+    // the screen's refresh rate.
+    bool customFps;
+    bool hdr;
     bool middleClickClose;
     bool closeButton;
     bool hideBars;
@@ -1166,6 +1240,7 @@ Settings LoadSettings() {
         {L"icons", AnimationStyle::IconRow},
         {L"list", AnimationStyle::List},
         {L"classic", AnimationStyle::Classic},
+        {L"radial", AnimationStyle::Radial},
         {L"native", AnimationStyle::Native},
     };
     // "same", or a style that can't be used for a shortcut (native), is
@@ -1277,8 +1352,8 @@ Settings LoadSettings() {
     s.flipSpeed = std::clamp(Wh_GetIntSetting(L"flipSpeed"), 25, 400) / 100.0f;
     s.showDelayMs = std::clamp(Wh_GetIntSetting(L"showDelay"), 0, 1000);
     s.showOnSecondTab = Wh_GetIntSetting(L"showOnSecondTab") != 0;
-    s.tiltRadians = std::clamp(Wh_GetIntSetting(L"tiltAngle"), 0, 70) *
-                    3.14159265f / 180.0f;
+    s.tiltRadians =
+        std::clamp(Wh_GetIntSetting(L"tiltAngle"), 0, 70) * kPi / 180.0f;
     s.stackSpacing =
         std::clamp(Wh_GetIntSetting(L"stackSpacing"), 40, 250) / 100.0f;
     s.windowSize =
@@ -1289,6 +1364,10 @@ Settings LoadSettings() {
     const auto background = WindhawkUtils::StringSetting::make(L"background");
     if (wcscmp(background, L"wallpaper") == 0) {
         s.background = BackgroundMode::Wallpaper;
+    } else if (wcscmp(background, L"mica") == 0) {
+        s.background = BackgroundMode::Mica;
+    } else if (wcscmp(background, L"micaAlt") == 0) {
+        s.background = BackgroundMode::MicaAlt;
     } else if (wcscmp(background, L"desktop") == 0) {
         s.background = BackgroundMode::LiveDesktop;
     } else if (wcscmp(background, L"dim") == 0) {
@@ -1321,8 +1400,12 @@ Settings LoadSettings() {
                     : wcscmp(liveContent, L"none") == 0   ? LiveContent::None
                                                           : LiveContent::All;
     const auto frameRate = WindhawkUtils::StringSetting::make(L"frameRate");
-    s.maxFps = std::clamp(_wtoi(frameRate), 0, 240);
+    s.customFps = wcscmp(frameRate, L"custom") == 0;
+    s.maxFps = s.customFps
+                   ? std::clamp(Wh_GetIntSetting(L"customFrameRate"), 30, 720)
+                   : std::clamp(_wtoi(frameRate), 0, 240);
     s.fpsAboveScreen = wcscmp(frameRate, L"screenPlus20") == 0 ? 20 : 0;
+    s.hdr = Wh_GetIntSetting(L"hdr") != 0;
     s.middleClickClose = Wh_GetIntSetting(L"middleClickClose") != 0;
     s.closeButton = Wh_GetIntSetting(L"closeButton") != 0;
     s.hideBars = Wh_GetIntSetting(L"hideBars") != 0;
@@ -1417,11 +1500,20 @@ HoldKey HoldKeyFor(Shortcut shortcut) {
     }
 }
 
+// The 2D styles. All but the radial one lay out cells in a panel (see
+// ComputePanelLayout).
 bool IsPanelStyle(AnimationStyle style) {
     return style == AnimationStyle::Windows11 ||
            style == AnimationStyle::Thumbnails ||
            style == AnimationStyle::IconRow || style == AnimationStyle::List ||
-           style == AnimationStyle::Classic;
+           style == AnimationStyle::Classic || style == AnimationStyle::Radial;
+}
+
+// 2D styles without thumbnails: the windows are seen only while flying in
+// and out.
+bool IsIconStyle(AnimationStyle style) {
+    return style == AnimationStyle::IconRow || style == AnimationStyle::List ||
+           style == AnimationStyle::Classic || style == AnimationStyle::Radial;
 }
 
 // Styles whose windows form one solid shape (a cube, a ball). The window size
@@ -1446,10 +1538,18 @@ bool HasBlackFloor(AnimationStyle style) {
     return style == AnimationStyle::ITab || style == AnimationStyle::ITabTitle;
 }
 
-// iTab styles whose caption has the app's name under the title.
+// Styles showing the app's name: the iTab styles with it under the title,
+// and the radial style, in the middle of the wheel.
 bool ShowsAppName(AnimationStyle style) {
     return style == AnimationStyle::ITab ||
-           style == AnimationStyle::ITabBackground;
+           style == AnimationStyle::ITabBackground ||
+           style == AnimationStyle::Radial;
+}
+
+// Styles drawing icons larger than window icons usually are (32 pixels at
+// 100% scaling), which need their large version (see LoadLargeIcons).
+bool ShowsLargeIcons(AnimationStyle style) {
+    return style == AnimationStyle::Radial || style == AnimationStyle::IconRow;
 }
 
 double NowSeconds() {
@@ -2193,6 +2293,31 @@ std::wstring GetWindowProcessPath(HWND hwnd) {
     return gotPath ? std::wstring(path, size) : std::wstring();
 }
 
+// Windhawk 1.7 runs the switcher as a 32-bit program on 64-bit Windows,
+// where Windows reads its System32 paths from SysWOW64: 64-bit programs'
+// files may be missing there or differ. Their System32 is reached as
+// Sysnative then.
+std::wstring NativeSystemPath(const std::wstring& path) {
+    static const std::wstring windows = [] {
+        BOOL wow64 = FALSE;
+        WCHAR folder[MAX_PATH];
+        if (!IsWow64Process(GetCurrentProcess(), &wow64) || !wow64 ||
+            !GetSystemWindowsDirectoryW(folder, ARRAYSIZE(folder))) {
+            return std::wstring();
+        }
+        return std::wstring(folder) + L"\\";
+    }();
+    constexpr std::wstring_view kSystem32 = L"System32\\";
+    const size_t prefix = windows.size() + kSystem32.size();
+    if (windows.empty() || path.size() <= prefix ||
+        _wcsnicmp(path.c_str(), windows.c_str(), windows.size()) != 0 ||
+        _wcsnicmp(path.c_str() + windows.size(), kSystem32.data(),
+                  kSystem32.size()) != 0) {
+        return path;
+    }
+    return windows + L"Sysnative\\" + path.substr(prefix);
+}
+
 // Whether the window belongs to one of the excluded apps, by process name or
 // window class name.
 bool IsExcludedApp(HWND hwnd, const std::vector<std::wstring>& excluded) {
@@ -2262,7 +2387,7 @@ std::wstring GetAppName(HWND hwnd) {
         }
     }
 
-    const std::wstring path = GetWindowProcessPath(hwnd);
+    const std::wstring path = NativeSystemPath(GetWindowProcessPath(hwnd));
     if (path.empty()) {
         return {};
     }
@@ -2507,15 +2632,44 @@ D2D1_COLOR_F GetAccentColor() {
                         ((color >> 8) & 0xff) / 255.0f, (color & 0xff) / 255.0f);
 }
 
+// The accent color, light enough to stand out on the switcher's dark panels
+// and slices: a dark accent is brightened, keeping its hue, and a black or
+// gray one (Windows allows a black accent) becomes a light gray.
+D2D1_COLOR_F VisibleAccent(D2D1_COLOR_F color) {
+    const float luminance =
+        0.2126f * color.r + 0.7152f * color.g + 0.0722f * color.b;
+    if (luminance >= 0.3f) {
+        return color;
+    }
+    const float high = std::max({color.r, color.g, color.b});
+    const float low = std::min({color.r, color.g, color.b});
+    if (high - low < 0.12f) {
+        // Not white: white icons would get lost on it.
+        return D2D1::ColorF(0.74f, 0.74f, 0.76f);
+    }
+    const float scale = 0.85f / high;
+    return D2D1::ColorF(color.r * scale, color.g * scale, color.b * scale);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // The switcher (UI thread).
 
-// The GPU the monitor is connected to. On laptops with two GPUs, rendering on
-// the other one means every frame is copied between them.
-com_ptr<IDXGIAdapter1> FindMonitorAdapter(HMONITOR monitor) {
-    com_ptr<IDXGIFactory1> factory;
-    if (!monitor || FAILED(CreateDXGIFactory1(IID_PPV_ARGS(factory.put())))) {
+// The GPU the monitor is connected to, and optionally its output for that
+// monitor, from the given DXGI factory or a new one. On laptops with two
+// GPUs, rendering on the other one means every frame is copied between them.
+com_ptr<IDXGIAdapter1> FindMonitorAdapter(
+    HMONITOR monitor,
+    com_ptr<IDXGIOutput>* monitorOutput = nullptr,
+    IDXGIFactory1* factory = nullptr) {
+    com_ptr<IDXGIFactory1> newFactory;
+    if (!monitor) {
         return nullptr;
+    }
+    if (!factory) {
+        if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(newFactory.put())))) {
+            return nullptr;
+        }
+        factory = newFactory.get();
     }
     com_ptr<IDXGIAdapter1> adapter;
     for (UINT i = 0; SUCCEEDED(factory->EnumAdapters1(i, adapter.put()));
@@ -2525,6 +2679,9 @@ com_ptr<IDXGIAdapter1> FindMonitorAdapter(HMONITOR monitor) {
              j++) {
             DXGI_OUTPUT_DESC desc;
             if (SUCCEEDED(output->GetDesc(&desc)) && desc.Monitor == monitor) {
+                if (monitorOutput) {
+                    *monitorOutput = output;
+                }
                 return adapter;
             }
             output = nullptr;
@@ -2542,6 +2699,114 @@ bool GetMonitorAdapterLuid(HMONITOR monitor, LUID* luid) {
     }
     *luid = desc.AdapterLuid;
     return true;
+}
+
+// Whether Windows shows the monitor in HDR ("Use HDR" is on for it). The
+// factory must be current (see UpdateHdr): one keeps what it saw when made.
+bool IsHdrMonitor(HMONITOR monitor, IDXGIFactory1* factory) {
+    com_ptr<IDXGIOutput> output;
+    if (!FindMonitorAdapter(monitor, &output, factory) || !output) {
+        return false;
+    }
+    auto output6 = output.try_as<IDXGIOutput6>();
+    DXGI_OUTPUT_DESC1 desc;
+    return output6 && SUCCEEDED(output6->GetDesc1(&desc)) &&
+           desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020;
+}
+
+// The brightness Windows gives SDR content on an HDR monitor (its "SDR
+// content brightness"), in scRGB: 1 is 80 nits.
+float GetSdrWhiteLevel(HMONITOR monitor) {
+    MONITORINFOEXW info{};
+    info.cbSize = sizeof(info);
+    UINT32 pathCount = 0;
+    UINT32 modeCount = 0;
+    if (!GetMonitorInfoW(monitor, &info) ||
+        GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount,
+                                    &modeCount) != ERROR_SUCCESS) {
+        return 1;
+    }
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(),
+                           &modeCount, modes.data(),
+                           nullptr) != ERROR_SUCCESS) {
+        return 1;
+    }
+    for (UINT32 i = 0; i < pathCount; i++) {
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+        source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        source.header.size = sizeof(source);
+        source.header.adapterId = paths[i].sourceInfo.adapterId;
+        source.header.id = paths[i].sourceInfo.id;
+        if (DisplayConfigGetDeviceInfo(&source.header) != ERROR_SUCCESS ||
+            wcscmp(source.viewGdiDeviceName, info.szDevice) != 0) {
+            continue;
+        }
+        DISPLAYCONFIG_SDR_WHITE_LEVEL white{};
+        white.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL;
+        white.header.size = sizeof(white);
+        white.header.adapterId = paths[i].targetInfo.adapterId;
+        white.header.id = paths[i].targetInfo.id;
+        if (DisplayConfigGetDeviceInfo(&white.header) == ERROR_SUCCESS &&
+            white.SDRWhiteLevel > 0) {
+            // In thousandths of 80 nits.
+            return white.SDRWhiteLevel / 1000.0f;
+        }
+        break;
+    }
+    return 1;
+}
+
+// Whether the window is full screen like a game or a video: it covers its
+// whole monitor, and has no frame and isn't maximized (a maximized window's
+// frame goes past its monitor's edges too, e.g. with the taskbar hidden).
+// Also which monitor.
+bool IsFullScreenWindow(HWND hwnd, HMONITOR* monitor = nullptr) {
+    if (!hwnd || IsZoomed(hwnd) ||
+        (GetWindowLongPtrW(hwnd, GWL_STYLE) & (WS_CAPTION | WS_THICKFRAME))) {
+        return false;
+    }
+    HMONITOR windowMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+    MONITORINFO info{sizeof(info)};
+    RECT rect;
+    if (!windowMonitor || !GetMonitorInfoW(windowMonitor, &info) ||
+        !GetWindowRect(hwnd, &rect) || rect.left > info.rcMonitor.left ||
+        rect.top > info.rcMonitor.top || rect.right < info.rcMonitor.right ||
+        rect.bottom < info.rcMonitor.bottom) {
+        return false;
+    }
+    if (monitor) {
+        *monitor = windowMonitor;
+    }
+    return true;
+}
+
+// Sets a color matrix effect to scale * value + offset on the colors.
+void SetColorMatrix(ID2D1Effect* effect, float scale, float offset) {
+    effect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX,
+                     D2D1::Matrix5x4F(scale, 0, 0, 0,  //
+                                      0, scale, 0, 0,  //
+                                      0, 0, scale, 0,  //
+                                      0, 0, 0, 1,      //
+                                      offset, offset, offset, 0));
+}
+
+// Sets a gamma transfer effect to amplitude * value ^ exponent + offset on
+// the colors.
+void SetGammaTransfer(ID2D1Effect* effect,
+                      float amplitude,
+                      float exponent,
+                      float offset) {
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_AMPLITUDE, amplitude);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_EXPONENT, exponent);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_OFFSET, offset);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_AMPLITUDE, amplitude);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_EXPONENT, exponent);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_OFFSET, offset);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_AMPLITUDE, amplitude);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_EXPONENT, exponent);
+    effect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_OFFSET, offset);
 }
 
 struct EffectChain {
@@ -2563,8 +2828,8 @@ struct Item {
     com_ptr<ID2D1Bitmap1> placeholder;
 
     // Minimized and hidden windows can't be captured directly. Their DWM
-    // thumbnail (the last content, as in the taskbar previews) is shown in an
-    // off-screen proxy window, which is captured instead.
+    // thumbnail (the last content, as in the taskbar previews) is shown in a
+    // proxy window out of sight (see ProxyPlace), which is captured instead.
     HWND proxy = nullptr;
     HTHUMBNAIL thumbnail = nullptr;
 
@@ -2596,6 +2861,12 @@ struct Item {
     float Width() const { return (float)(rect.right - rect.left); }
     float Height() const { return (float)(rect.bottom - rect.top); }
 };
+
+// Where a proxy window is put. Some PCs refuse to capture it off-screen
+// (#6179), so it's then put almost entirely past an outer edge of the
+// switcher's monitor, with one row or column of pixels on it, under every
+// window (and the taskbar, at the bottom).
+enum class ProxyPlace { OffScreen, MonitorEdge };
 
 struct DrawEntry {
     Item* item;
@@ -2638,6 +2909,7 @@ class Switcher {
     void MoveDeviceToMonitor();
     void HandleDeviceLost();
     void UpdateFrameRate();
+    void UpdateHdr();
     void StopRestoreCheck();
     void CheckRestored();
     bool EnsureSwapChain(UINT width, UINT height);
@@ -2652,6 +2924,7 @@ class Switcher {
     int HitTest(D2D1_POINT_2F point, CloseButton* button) const;
     CloseButton CloseButtonForQuad(const Quad& quad) const;
     CloseButton CloseButtonForCell(const D2D1_RECT_F& cell) const;
+    void MoveTargetTo(int index);
     void CloseItem(int index);
     void RemoveClosedItems(double now);
     void UpdateHover();
@@ -2661,12 +2934,20 @@ class Switcher {
     std::unique_ptr<Item> MakeItem(HWND hwnd, bool hidden);
     void CollectWindows();
     void OnToggleMonitors();
-    bool CreateProxy(Item& item);
+    bool FindEdgeProxyRect(SIZE size, RECT* rect) const;
+    bool CreateProxy(Item& item, ProxyPlace place);
     void StartCaptures();
     void StartCaptures(const std::vector<Item*>& items);
     bool FirstFramesReady();
     void StartCapture(Item& item);
+    bool TryCapture(Item& item, HWND source);
+    wgdx::DirectXPixelFormat CaptureFormat() const;
     void StopCapture(Item& item);
+    HRESULT CreateFrameTexture(UINT width,
+                               UINT height,
+                               com_ptr<ID3D11Texture2D>& texture,
+                               com_ptr<ID2D1Bitmap1>& bitmap);
+    HRESULT ConvertHdrFrame(Item& item, UINT width, UINT height);
     bool PollFrames(Item& item);
     void Teardown();
 
@@ -2701,6 +2982,19 @@ class Switcher {
     D2D1_RECT_F SelectionCell(float* opacity) const;
     void DrawPanelBack(float t);
     void DrawPanelFront(float t);
+    void ComputeRadialLayout();
+    float RadialAngle(int index) const;
+    float RadialSelection(int index) const;
+    float RingScale() const;
+    D2D1::Matrix3x2F SliceTransform(int index) const;
+    int RadialSliceAt(D2D1_POINT_2F point) const;
+    CloseButton CloseButtonForSlice(int index) const;
+    void UpdateRadialStick();
+    void WatchRawMouse(bool on);
+    void OnRawInput(HRAWINPUT handle);
+    void DrawRadialBack(float t);
+    void DrawRadialFront(float t);
+    bool EnsureRadialTexts(int index);
     bool EnsureLabelFormat();
     void DrawLabel(Item& item,
                    const D2D1_RECT_F& rect,
@@ -2713,14 +3007,28 @@ class Switcher {
     void RefreshIcons();
     com_ptr<IWICBitmap> ReadIconPixels(HICON icon);
     com_ptr<IWICBitmap> ReadAppIconPixels(HWND hwnd);
+    com_ptr<IWICBitmap> ReadIconPixelsAt(HICON icon, int size);
+    com_ptr<IWICBitmap> ReadLargeIconPixels(HWND hwnd, HICON icon);
+    int LargeIconPixels() const;
+    bool LoadLargeIcons(const std::vector<HWND>& windows,
+                        double deadline = HUGE_VAL);
+    void LoadSessionLargeIcons(double budget);
+    bool AnyShortcutStyle(bool (*test)(AnimationStyle)) const;
     com_ptr<ID2D1Bitmap1> CreateIconBitmap(IWICBitmap* pixels);
     com_ptr<ID2D1Bitmap1> CreatePlaceholder(const Item& item);
-    com_ptr<ID2D1Bitmap1> CreateTargetBitmap(UINT width, UINT height);
+    com_ptr<ID2D1Bitmap1> CreateTargetBitmap(
+        UINT width,
+        UINT height,
+        DXGI_FORMAT format = DXGI_FORMAT_B8G8R8A8_UNORM);
     com_ptr<ID2D1Bitmap1> DecodeWallpaper(const std::wstring& path,
                                           UINT width,
                                           UINT height,
                                           DESKTOP_WALLPAPER_POSITION position,
                                           D2D1_RECT_F* rect);
+    com_ptr<ID2D1Bitmap1> CreateMica(ID2D1Bitmap1* wallpaper,
+                                     UINT width,
+                                     UINT height,
+                                     bool light);
     void UpdateBackground();
 
     int SelectedIndex() const;
@@ -2764,8 +3072,37 @@ class Switcher {
     double m_nextFrameAt = 0;
     // Waits for the next frame (see UpdateFrameRate).
     HANDLE m_frameTimer = nullptr;
+    // The refresh rate and frame rate last logged, so a change (another
+    // monitor, new settings) is logged once.
+    double m_loggedRefresh = 0;
+    double m_loggedFrameInterval = 0;
     // The last frame's result, so a repeating error is logged once.
     HRESULT m_lastRenderError = S_OK;
+
+    // HDR (see UpdateHdr): the session's monitor shows HDR, and its white for
+    // SDR content in scRGB (1 is 80 nits). The swap chain is in scRGB, unless
+    // that failed (see m_hdrFailed).
+    bool m_hdr = false;
+    float m_sdrWhite = 1;
+    bool m_swapHdr = false;
+    // Set when HDR couldn't be set up; cleared with a new device or new
+    // settings, so a device lost at that moment (a driver update) doesn't
+    // turn HDR off for good.
+    bool m_hdrFailed = false;
+    // Tells whether the switcher's monitor shows HDR (see UpdateHdr).
+    com_ptr<IDXGIFactory1> m_hdrFactory;
+    // HDR: the frame drawn in SDR's terms, the texture every captured frame
+    // goes through, and the effects (see UpdateHdr) turning a captured frame
+    // (scRGB) into SDR's terms (scaled and clamped, lifted, encoded) and the
+    // drawn frame back into scRGB (lifted, decoded).
+    com_ptr<ID2D1Bitmap1> m_sceneBitmap;
+    com_ptr<ID3D11Texture2D> m_hdrFrameTexture;
+    com_ptr<ID2D1Bitmap1> m_hdrFrame;
+    com_ptr<ID2D1Effect> m_clampScRgb;
+    com_ptr<ID2D1Effect> m_liftScRgb;
+    com_ptr<ID2D1Effect> m_fromScRgb;
+    com_ptr<ID2D1Effect> m_liftScene;
+    com_ptr<ID2D1Effect> m_toScRgb;
 
     // A minimized window being switched to, checked until it's restored (see
     // CheckRestored).
@@ -2779,8 +3116,15 @@ class Switcher {
         HICON source = nullptr;  // The window icon it was made from, if any.
         com_ptr<IWICBitmap> pixels;
         com_ptr<ID2D1Bitmap1> bitmap;
+        // The size (pixels) its large version was looked for at (see
+        // LoadLargeIcons), 0 before; the pixels are that version when it was
+        // found.
+        int largeSize = 0;
     };
     std::unordered_map<HWND, CachedIcon> m_iconCache;
+    // The session's windows still miss large icons (see
+    // LoadSessionLargeIcons).
+    bool m_largeIconsPending = false;
 
     // Background.
     com_ptr<ID2D1Bitmap1> m_background;
@@ -2815,6 +3159,9 @@ class Switcher {
     // when their first frames arrived, or at this time at the latest.
     bool m_capturing = false;
     double m_captureDeadline = 0;
+    // Proxies were last captured at the monitor's edge only (see ProxyPlace),
+    // so that's tried first.
+    bool m_edgeProxies = false;
     double m_lastFrame = 0;
     double m_altReleasedAt = 0;
     Tween m_open;
@@ -2855,6 +3202,8 @@ class Switcher {
         int closeRequests;
         int hoverIndex;
         bool hoverOnButton;
+        float stickX;
+        float stickY;
         bool operator==(const FrameKey&) const = default;
     };
     FrameKey m_lastFrameKey{};
@@ -2892,6 +3241,40 @@ class Switcher {
     D2D1_RECT_F m_caption{};
     float m_labelFontSize = 0;
     com_ptr<IDWriteTextFormat> m_labelFormat;
+
+    // Radial style (see ComputeRadialLayout): the wheel's outer and inner
+    // radius, the gap between its slices, the angle of each slice, the size
+    // of their icons, and the radius of the disk in the middle. One slice's
+    // shape, pointing right from the center, is turned into each place; the
+    // pointer runs around the disk to the selected slice.
+    float m_ringOuter = 0, m_ringInner = 0, m_ringGap = 0;
+    float m_ringSpan = 0, m_ringIcon = 0, m_ringDisk = 0;
+    com_ptr<ID2D1PathGeometry> m_sliceShape;
+    com_ptr<ID2D1PathGeometry> m_pointerShape;
+    com_ptr<ID2D1PathGeometry> m_stickShape;
+    com_ptr<ID2D1StrokeStyle> m_roundStroke;
+    com_ptr<ID2D1RadialGradientBrush> m_diskFill;
+    // The opening of the last frame, which turns and grows the wheel.
+    float m_ringOpen = 0;
+    // The mouse stick (see UpdateRadialStick): the cursor's last position,
+    // and the motion since the session opened or Tab was last pressed, as a
+    // direction (limited in length) and in full.
+    POINT m_stickCursor{};
+    bool m_stickCursorKnown = false;
+    float m_stickX = 0, m_stickY = 0;
+    float m_stickMoveX = 0, m_stickMoveY = 0;
+    // The mouse's own motion since the last frame (raw input, see
+    // WatchRawMouse), which goes on where the cursor stops at the screen's
+    // edges.
+    bool m_rawMouse = false;
+    float m_rawX = 0, m_rawY = 0;
+    // The app's name and the title in the middle of the wheel, laid out for
+    // the item at m_ringTextIndex.
+    int m_ringTextIndex = -1;
+    com_ptr<IDWriteTextFormat> m_ringNameFormat;
+    com_ptr<IDWriteTextFormat> m_ringTitleFormat;
+    com_ptr<IDWriteTextLayout> m_ringNameLayout;
+    com_ptr<IDWriteTextLayout> m_ringTitleLayout;
 };
 
 Switcher* g_switcher;
@@ -3220,18 +3603,38 @@ void Switcher::ReleaseDeviceResources() {
     m_appNameFormat = nullptr;
     m_reflectionFade = nullptr;
     m_floorLight = nullptr;
+    // The shapes belong to the factory, which goes with the device.
+    m_sliceShape = nullptr;
+    m_pointerShape = nullptr;
+    m_stickShape = nullptr;
+    m_roundStroke = nullptr;
+    m_diskFill = nullptr;
+    m_ringTextIndex = -1;
+    m_ringNameLayout = nullptr;
+    m_ringTitleLayout = nullptr;
+    m_ringNameFormat = nullptr;
+    m_ringTitleFormat = nullptr;
     m_background = nullptr;
     m_backgroundKey.clear();
     // The bitmaps belong to the device, the icons' pixels don't.
     for (auto& [hwnd, entry] : m_iconCache) {
         entry.bitmap = nullptr;
     }
+    m_clampScRgb = nullptr;
+    m_liftScRgb = nullptr;
+    m_fromScRgb = nullptr;
+    m_liftScene = nullptr;
+    m_toScRgb = nullptr;
+    m_hdrFrame = nullptr;
+    m_hdrFrameTexture = nullptr;
+    m_sceneBitmap = nullptr;
     if (m_ctx) {
         m_ctx->SetTarget(nullptr);
     }
     m_targetBitmap = nullptr;
     m_swapChain = nullptr;
     m_swapWidth = m_swapHeight = 0;
+    m_swapHdr = false;
     m_dcompVisual = nullptr;
     m_dcompTarget = nullptr;
     m_dcompDevice = nullptr;
@@ -3262,6 +3665,7 @@ bool Switcher::DeviceRemoved() const {
 // tried again regularly.
 void Switcher::RecreateDevice(HMONITOR monitor) {
     ReleaseDeviceResources();
+    m_hdrFailed = false;
     if (CreateDeviceResources(monitor)) {
         g_ready = true;
         KillTimer(m_hwnd, kDeviceRetryTimerId);
@@ -3337,13 +3741,22 @@ void Switcher::UpdateFrameRate() {
     // Without a limit, or with one the screen doesn't reach, the limit is the
     // refresh rate itself. Present normally waits for the refresh, and then
     // this never waits. But some drivers (with vertical sync forced off)
-    // return at once, and frames the screen never shows would be drawn.
+    // return at once, and frames the screen never shows would be drawn. A
+    // custom limit is kept as it is, like "+ 20 FPS" above the refresh rate.
     const bool limited =
-        m_settings.maxFps > 0 && m_settings.maxFps < refresh * 0.95;
+        m_settings.maxFps > 0 &&
+        (m_settings.customFps || m_settings.maxFps < refresh * 0.95);
     m_frameInterval =
         1.0 / (limited ? m_settings.maxFps
                        : refresh + m_settings.fpsAboveScreen);
     m_refreshInterval = 1.0 / refresh;
+    if (refresh != m_loggedRefresh ||
+        m_frameInterval != m_loggedFrameInterval) {
+        m_loggedRefresh = refresh;
+        m_loggedFrameInterval = m_frameInterval;
+        Wh_Log(L"Frame rate: up to %.0f FPS, screen at %.0f Hz",
+               1 / m_frameInterval, refresh);
+    }
     // The time to the next frame is waited with a precise timer. Waiting for
     // the compositor instead is uneven with screens of different refresh
     // rates (two frames on one refresh, none on the next), and can't go
@@ -3359,15 +3772,126 @@ void Switcher::UpdateFrameRate() {
     }
 }
 
+// On a monitor with HDR on, windows with HDR content (videos, games, photos)
+// keep their brightness, like in the native Alt+Tab. Everything is drawn in
+// SDR's terms as usual, in half floats: values from 0 to 1 are SDR's colors,
+// gamma-encoded, and brighter parts of the captured windows go above 1. Each
+// captured frame (scRGB, linear, SDR white at m_sdrWhite) is divided by the
+// SDR white and encoded (see ConvertHdrFrame), and the drawn frame is decoded
+// and multiplied back into scRGB (see RenderFrame), so the windows come out
+// exactly as they were. Looked up when a session's captures start, since
+// Windows' HDR can be switched any time.
+//
+// The decoding follows the sRGB curve, as Windows shows SDR content on an HDR
+// monitor, so the wallpaper and the rest drawn by the switcher look the same
+// as on the desktop: ((value + a) / (1 + a)) ^ 2.4, minus its value at 0 (c),
+// scaled so 1 stays 1. It goes on above 1, which the sRGB curve itself
+// doesn't; it differs from it only in the darkest tones, by less than 0.1% of
+// white. Both ways take two effects: a color matrix for what's inside the
+// power, and a gamma transfer.
+//
+// Colors beyond sRGB's are negative in scRGB, and have no power: they're
+// clamped to 0 first. The clamp keeps 0 to 1 only, so the frame is scaled
+// down by kHdrHeadroom before it, and scaled back by the gamma's amplitude.
+void Switcher::UpdateHdr() {
+    // The brightest kept, in SDR whites (at least 10000 nits).
+    constexpr float kHdrHeadroom = 128;
+    constexpr float a = 0.055f;
+    constexpr float exponent = 2.4f;
+    const float c = std::pow(a / (1 + a), exponent);
+
+    const bool wasHdr = m_hdr;
+    const float wasSdrWhite = m_sdrWhite;
+    HMONITOR monitor = MonitorFromRect(&m_monitor, MONITOR_DEFAULTTOPRIMARY);
+    m_hdr = false;
+    if (m_settings.hdr && !m_hdrFailed) {
+        // A factory tells when the displays or their HDR state changed since
+        // it was made (IsCurrent); only then is it made again.
+        if (!m_hdrFactory || !m_hdrFactory->IsCurrent()) {
+            m_hdrFactory = nullptr;
+            CreateDXGIFactory1(IID_PPV_ARGS(m_hdrFactory.put()));
+        }
+        m_hdr = m_hdrFactory && IsHdrMonitor(monitor, m_hdrFactory.get());
+    }
+    m_sdrWhite = m_hdr ? GetSdrWhiteLevel(monitor) : 1;
+    if (m_hdr && !m_fromScRgb) {
+        if (FAILED(m_ctx->CreateEffect(CLSID_D2D1ColorMatrix,
+                                       m_clampScRgb.put())) ||
+            FAILED(m_ctx->CreateEffect(CLSID_D2D1ColorMatrix,
+                                       m_liftScRgb.put())) ||
+            FAILED(m_ctx->CreateEffect(CLSID_D2D1GammaTransfer,
+                                       m_fromScRgb.put())) ||
+            FAILED(m_ctx->CreateEffect(CLSID_D2D1ColorMatrix,
+                                       m_liftScene.put())) ||
+            FAILED(m_ctx->CreateEffect(CLSID_D2D1GammaTransfer,
+                                       m_toScRgb.put()))) {
+            Wh_Log(L"HDR effects failed, HDR off");
+            m_clampScRgb = nullptr;
+            m_liftScRgb = nullptr;
+            m_fromScRgb = nullptr;
+            m_liftScene = nullptr;
+            m_toScRgb = nullptr;
+            m_hdr = false;
+            m_hdrFailed = true;
+        } else {
+            m_clampScRgb->SetValue(D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT,
+                                   (BOOL)TRUE);
+            m_liftScRgb->SetInputEffect(0, m_clampScRgb.get());
+            m_fromScRgb->SetInputEffect(0, m_liftScRgb.get());
+            m_toScRgb->SetInputEffect(0, m_liftScene.get());
+        }
+    }
+    if (m_hdr) {
+        // Encoding: y = x / (white * headroom), clamped; then
+        // value = (1 + a) * (headroom * ((1 - c) * y + c / headroom))
+        //         ^ (1 / 2.4) - a.
+        SetColorMatrix(m_clampScRgb.get(), 1 / (m_sdrWhite * kHdrHeadroom), 0);
+        SetColorMatrix(m_liftScRgb.get(), 1 - c, c / kHdrHeadroom);
+        SetGammaTransfer(m_fromScRgb.get(),
+                         (1 + a) * std::pow(kHdrHeadroom, 1 / exponent),
+                         1 / exponent, -a);
+        // Decoding: x = white * (((value + a) / (1 + a)) ^ 2.4 - c) / (1 - c).
+        SetColorMatrix(m_liftScene.get(), 1, a);
+        SetGammaTransfer(m_toScRgb.get(),
+                         m_sdrWhite / (std::pow(1 + a, exponent) * (1 - c)),
+                         exponent, -m_sdrWhite * c / (1 - c));
+    }
+    // The effects' own buffers (perspective, shadows) keep values above 1.
+    // Without HDR, they're left as they come (8 bits).
+    D2D1_RENDERING_CONTROLS controls;
+    m_ctx->GetRenderingControls(&controls);
+    if (m_hdr !=
+        (controls.bufferPrecision == D2D1_BUFFER_PRECISION_16BPC_FLOAT)) {
+        controls.bufferPrecision = m_hdr ? D2D1_BUFFER_PRECISION_16BPC_FLOAT
+                                         : D2D1_BUFFER_PRECISION_8BPC_UNORM;
+        m_ctx->SetRenderingControls(&controls);
+    }
+
+    if (m_hdr && (!wasHdr || m_sdrWhite != wasSdrWhite)) {
+        Wh_Log(L"HDR on, SDR white at %d nits",
+               (int)std::lround(m_sdrWhite * 80));
+    } else if (!m_hdr && wasHdr) {
+        Wh_Log(L"HDR off");
+    }
+}
+
 bool Switcher::EnsureSwapChain(UINT width, UINT height) {
-    if (m_swapChain && m_swapWidth == width && m_swapHeight == height) {
+    // HDR: half floats in scRGB, which Windows shows brighter than SDR white
+    // where the values go above it.
+    const bool hdr = m_hdr && !m_hdrFailed;
+    if (m_swapChain && m_swapWidth == width && m_swapHeight == height &&
+        m_swapHdr == hdr) {
         return true;
     }
 
     m_ctx->SetTarget(nullptr);
     m_targetBitmap = nullptr;
+    m_sceneBitmap = nullptr;
     m_swapChain = nullptr;
     m_swapWidth = m_swapHeight = 0;
+    m_swapHdr = false;
+    const DXGI_FORMAT format =
+        hdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM;
 
     com_ptr<IDXGIAdapter> adapter;
     com_ptr<IDXGIFactory2> factory;
@@ -3379,7 +3903,7 @@ bool Switcher::EnsureSwapChain(UINT width, UINT height) {
     DXGI_SWAP_CHAIN_DESC1 desc{};
     desc.Width = width;
     desc.Height = height;
-    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.Format = format;
     desc.SampleDesc.Count = 1;
     desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     desc.BufferCount = 2;
@@ -3388,7 +3912,29 @@ bool Switcher::EnsureSwapChain(UINT width, UINT height) {
     desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
     HRESULT hr = factory->CreateSwapChainForComposition(
         m_d3dDevice.get(), &desc, nullptr, m_swapChain.put());
+    if (SUCCEEDED(hr) && hdr) {
+        com_ptr<IDXGISwapChain3> swapChain3;
+        hr = m_swapChain->QueryInterface(IID_PPV_ARGS(swapChain3.put()));
+        if (SUCCEEDED(hr)) {
+            hr = swapChain3->SetColorSpace1(
+                DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709);
+        }
+        // The frame is drawn here first (see UpdateHdr).
+        if (SUCCEEDED(hr)) {
+            m_sceneBitmap = CreateTargetBitmap(width, height, format);
+            hr = m_sceneBitmap ? S_OK : E_FAIL;
+        }
+    }
     if (FAILED(hr)) {
+        m_sceneBitmap = nullptr;
+        m_swapChain = nullptr;
+        if (hdr) {
+            // Not tried again until there's a new device or new settings.
+            // The windows' content, in SDR's terms, is then drawn as is.
+            Wh_Log(L"HDR swap chain failed, HDR off: 0x%08X", (UINT)hr);
+            m_hdrFailed = true;
+            return EnsureSwapChain(width, height);
+        }
         Wh_Log(L"CreateSwapChainForComposition failed: 0x%08X", (UINT)hr);
         return false;
     }
@@ -3398,8 +3944,7 @@ bool Switcher::EnsureSwapChain(UINT width, UINT height) {
     if (SUCCEEDED(hr)) {
         D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
             D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                              D2D1_ALPHA_MODE_PREMULTIPLIED));
+            D2D1::PixelFormat(format, D2D1_ALPHA_MODE_PREMULTIPLIED));
         hr = m_ctx->CreateBitmapFromDxgiSurface(surface.get(), &props,
                                                 m_targetBitmap.put());
     }
@@ -3412,12 +3957,14 @@ bool Switcher::EnsureSwapChain(UINT width, UINT height) {
     if (FAILED(hr)) {
         Wh_Log(L"Swap chain setup failed: 0x%08X", (UINT)hr);
         m_targetBitmap = nullptr;
+        m_sceneBitmap = nullptr;
         m_swapChain = nullptr;
         return false;
     }
 
     m_swapWidth = width;
     m_swapHeight = height;
+    m_swapHdr = hdr;
     return true;
 }
 
@@ -3433,6 +3980,7 @@ void Switcher::Shutdown() {
     m_iconCache.clear();
     m_dwriteFactory = nullptr;
     m_wicFactory = nullptr;
+    m_hdrFactory = nullptr;
     if (m_hwnd) {
         DestroyWindow(m_hwnd);
         m_hwnd = nullptr;
@@ -3537,6 +4085,10 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
             OnMiddleClick({(short)LOWORD(lParam), (short)HIWORD(lParam)});
             return 0;
 
+        case WM_INPUT:
+            OnRawInput((HRAWINPUT)lParam);
+            break;  // DefWindowProc frees the input.
+
         case WM_APP_START:
             OnStart(wParam);
             return 0;
@@ -3602,6 +4154,7 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
 
         case WM_APP_SETTINGS:
             m_settings = LoadSettings();
+            m_hdrFailed = false;
             // A session in progress keeps the style of its shortcut.
             if (m_state != State::Idle) {
                 m_settings.style =
@@ -3807,10 +4360,11 @@ void Switcher::OnStart(WPARAM flags) {
 }
 
 // Used when the keyboard hook can't see the keys (e.g. an elevated window has
-// the focus). Like the native switcher, the switcher then takes the keyboard
-// focus, so the rest of the session goes through the hook again. A tiny
-// window off the screen takes it, not the overlay: animated wallpaper apps
-// pause while a full-screen window has the focus.
+// the focus), and over full-screen games (see ShowOverlay). Like the native
+// switcher, the switcher then takes the keyboard focus, so the rest of the
+// session goes through the hook again. A tiny window off the screen takes it,
+// not the overlay: animated wallpaper apps pause while a full-screen window
+// has the focus.
 void Switcher::TakeFocus() {
     if (!m_focusWnd) {
         return;
@@ -3818,7 +4372,9 @@ void Switcher::TakeFocus() {
     SetWindowPos(m_focusWnd, HWND_TOP, GetSystemMetrics(SM_XVIRTUALSCREEN) - 100,
                  GetSystemMetrics(SM_YVIRTUALSCREEN), 1, 1,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    // Receiving the hotkey allows this process to change the foreground.
+    // Receiving the hotkey, or input, allows this process to change the
+    // foreground.
+    SendDummyKeyPress();
     m_hasFocus = SetForegroundWindow(m_focusWnd) != FALSE;
     if (!m_hasFocus) {
         Wh_Log(L"Couldn't take the focus");
@@ -3974,6 +4530,10 @@ void Switcher::OnStep(int step) {
         return;
     }
     m_target += step;
+    // The radial style's mouse stick starts over from here.
+    m_stickX = m_stickY = 0;
+    m_stickMoveX = m_stickMoveY = 0;
+    m_rawX = m_rawY = 0;
     if (m_state == State::Pending) {
         m_scroll = (double)m_target;
         // Looking for a window further away: no need to wait (see Run).
@@ -3989,15 +4549,7 @@ void Switcher::OnCommit(int index) {
     }
 
     if (index >= 0 && !m_items.empty()) {
-        // Bring the chosen item to the front the shortest way.
-        const int count = (int)m_items.size();
-        int delta = index - SelectedIndex();
-        if (delta > count / 2) {
-            delta -= count;
-        } else if (delta < -count / 2) {
-            delta += count;
-        }
-        m_target += delta;
+        MoveTargetTo(index);
     }
 
     if (m_state == State::Pending) {
@@ -4012,6 +4564,18 @@ void Switcher::OnCommit(int index) {
     }
 
     BeginClose(true);
+}
+
+// Brings the item at index to the front (selects it), the shortest way.
+void Switcher::MoveTargetTo(int index) {
+    const int count = (int)m_items.size();
+    int delta = index - SelectedIndex();
+    if (delta > count / 2) {
+        delta -= count;
+    } else if (delta < -count / 2) {
+        delta += count;
+    }
+    m_target += delta;
 }
 
 void Switcher::OnCancel() {
@@ -4068,6 +4632,13 @@ void Switcher::OnMiddleClick(POINT pt) {
 // The item under a point (overlay coordinates), or -1. Also returns where that
 // item's close button is.
 int Switcher::HitTest(D2D1_POINT_2F point, CloseButton* button) const {
+    if (m_settings.style == AnimationStyle::Radial) {
+        const int index = RadialSliceAt(point);
+        if (index >= 0) {
+            *button = CloseButtonForSlice(index);
+        }
+        return index;
+    }
     if (IsPanelStyle(m_settings.style)) {
         for (size_t i = 0; i < m_cells.size(); i++) {
             const D2D1_RECT_F& cell = m_cells[i];
@@ -4473,11 +5044,42 @@ void Switcher::OnToggleMonitors() {
     }
 }
 
-bool Switcher::CreateProxy(Item& item) {
-    item.proxy = CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
-        kProxyClassName, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, g_module,
-        nullptr);
+BOOL CALLBACK CountMonitorsProc(HMONITOR, HDC, LPRECT, LPARAM data) {
+    (*(int*)data)++;
+    return TRUE;
+}
+
+// A place for a proxy of this size with one row or column of pixels on the
+// switcher's monitor, and the rest on no monitor: past its bottom edge (under
+// the taskbar, usually), or else its right, left or top one.
+bool Switcher::FindEdgeProxyRect(SIZE size, RECT* rect) const {
+    const RECT& m = m_monitor;
+    const RECT candidates[] = {
+        {m.left, m.bottom - 1, m.left + size.cx, m.bottom - 1 + size.cy},
+        {m.right - 1, m.top, m.right - 1 + size.cx, m.top + size.cy},
+        {m.left + 1 - size.cx, m.top, m.left + 1, m.top + size.cy},
+        {m.left, m.top + 1 - size.cy, m.left + size.cx, m.top + 1},
+    };
+    for (const RECT& candidate : candidates) {
+        int monitors = 0;
+        EnumDisplayMonitors(nullptr, &candidate, CountMonitorsProc,
+                            (LPARAM)&monitors);
+        if (monitors == 1) {
+            *rect = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Switcher::CreateProxy(Item& item, ProxyPlace place) {
+    // Off-screen, it doesn't need a surface of its own. At the edge, it has
+    // one, like any window, in case that's what the capture is missing.
+    const DWORD exStyle =
+        WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
+        (place == ProxyPlace::OffScreen ? WS_EX_NOREDIRECTIONBITMAP : 0);
+    item.proxy = CreateWindowExW(exStyle, kProxyClassName, L"", WS_POPUP, 0, 0,
+                                 1, 1, nullptr, nullptr, g_module, nullptr);
     if (!item.proxy) {
         return false;
     }
@@ -4504,15 +5106,21 @@ bool Switcher::CreateProxy(Item& item) {
         return false;
     }
 
-    // To the left of all monitors, where nobody can see or click it.
-    const int x = GetSystemMetrics(SM_XVIRTUALSCREEN) - size.cx - 100;
-    const int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    return SetWindowPos(item.proxy, HWND_BOTTOM, x, y, size.cx, size.cy,
-                        SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    RECT rect;
+    if (place == ProxyPlace::OffScreen) {
+        // To the left of all monitors, where nobody can see or click it.
+        rect.left = GetSystemMetrics(SM_XVIRTUALSCREEN) - size.cx - 100;
+        rect.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    } else if (!FindEdgeProxyRect(size, &rect)) {
+        return false;
+    }
+    return SetWindowPos(item.proxy, HWND_BOTTOM, rect.left, rect.top, size.cx,
+                        size.cy, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
 void Switcher::StartCaptures() {
     m_capturing = true;
+    UpdateHdr();
     std::vector<Item*> items;
     for (auto& item : m_items) {
         items.push_back(item.get());
@@ -4541,19 +5149,40 @@ bool Switcher::FirstFramesReady() {
 
 // A window that can't be captured is left with its icon.
 void Switcher::StartCapture(Item& item) {
-    HWND source = item.hwnd;
-    if (item.minimized || item.hidden) {
-        if (item.minimized && !m_settings.minimizedContent) {
-            return;
-        }
-        if (!CreateProxy(item)) {
-            Wh_Log(L"Proxy failed for %p", item.hwnd);
+    if (!item.minimized && !item.hidden) {
+        if (!TryCapture(item, item.hwnd)) {
             StopCapture(item);
-            return;
         }
-        source = item.proxy;
+        return;
+    }
+    if (item.minimized && !m_settings.minimizedContent) {
+        return;
     }
 
+    // Where proxies were last captured comes first.
+    ProxyPlace places[] = {ProxyPlace::OffScreen, ProxyPlace::MonitorEdge};
+    if (m_edgeProxies) {
+        std::swap(places[0], places[1]);
+    }
+    for (ProxyPlace place : places) {
+        const bool edge = place == ProxyPlace::MonitorEdge;
+        if (!CreateProxy(item, place)) {
+            Wh_Log(L"Proxy failed for %p%s", item.hwnd,
+                   edge ? L" at the monitor's edge" : L"");
+        } else if (TryCapture(item, item.proxy)) {
+            if (edge != m_edgeProxies) {
+                Wh_Log(L"Proxies are captured %s now",
+                       edge ? L"at the monitor's edge" : L"off-screen");
+                m_edgeProxies = edge;
+            }
+            return;
+        }
+        StopCapture(item);
+    }
+}
+
+// Whether the capture started. If not, the caller stops what's left of it.
+bool Switcher::TryCapture(Item& item, HWND source) {
     // Logged with the error, so a report tells which step failed.
     PCWSTR step = L"CreateForWindow";
     try {
@@ -4568,14 +5197,12 @@ void Switcher::StartCapture(Item& item) {
 
         const auto size = item.captureItem.Size();
         if (size.Width <= 0 || size.Height <= 0) {
-            StopCapture(item);
-            return;
+            return false;
         }
 
         step = L"CreateFreeThreaded";
         item.framePool = wgc::Direct3D11CaptureFramePool::CreateFreeThreaded(
-            m_captureDevice, wgdx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
-            2, size);
+            m_captureDevice, CaptureFormat(), 2, size);
         item.poolSize = size;
         step = L"CreateCaptureSession";
         item.session = item.framePool.CreateCaptureSession(item.captureItem);
@@ -4593,12 +5220,19 @@ void Switcher::StartCapture(Item& item) {
 
         step = L"StartCapture";
         item.session.StartCapture();
+        return true;
     } catch (const winrt::hresult_error& e) {
         Wh_Log(L"Capture failed for %p%s at %s: 0x%08X", item.hwnd,
                item.proxy ? L" (through its proxy)" : L"", step,
                (UINT)e.code());
-        StopCapture(item);
+        return false;
     }
+}
+
+// HDR: half floats in scRGB, which keep what's brighter than SDR white.
+wgdx::DirectXPixelFormat Switcher::CaptureFormat() const {
+    return m_hdr ? wgdx::DirectXPixelFormat::R16G16B16A16Float
+                 : wgdx::DirectXPixelFormat::B8G8R8A8UIntNormalized;
 }
 
 void Switcher::StopCapture(Item& item) {
@@ -4623,6 +5257,65 @@ void Switcher::StopCapture(Item& item) {
         DestroyWindow(item.proxy);
         item.proxy = nullptr;
     }
+}
+
+// A texture for captured frames, in their format, and a bitmap showing it.
+// Both are set only if both could be made.
+HRESULT Switcher::CreateFrameTexture(UINT width,
+                                     UINT height,
+                                     com_ptr<ID3D11Texture2D>& texture,
+                                     com_ptr<ID2D1Bitmap1>& bitmap) {
+    const DXGI_FORMAT format =
+        m_hdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM;
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = width;
+    desc.Height = height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = format;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    com_ptr<ID3D11Texture2D> newTexture;
+    com_ptr<ID2D1Bitmap1> newBitmap;
+    HRESULT hr = m_d3dDevice->CreateTexture2D(&desc, nullptr, newTexture.put());
+    if (SUCCEEDED(hr)) {
+        const D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_NONE,
+            D2D1::PixelFormat(format, D2D1_ALPHA_MODE_PREMULTIPLIED));
+        hr = m_ctx->CreateBitmapFromDxgiSurface(
+            newTexture.as<IDXGISurface>().get(), &props, newBitmap.put());
+    }
+    if (SUCCEEDED(hr)) {
+        texture = newTexture;
+        bitmap = newBitmap;
+    }
+    return hr;
+}
+
+// HDR: turns the captured frame (scRGB, in the shared texture) into the
+// window's content in SDR's terms (see UpdateHdr).
+HRESULT Switcher::ConvertHdrFrame(Item& item, UINT width, UINT height) {
+    if (!item.content || item.content->GetPixelSize().width != width ||
+        item.content->GetPixelSize().height != height) {
+        item.content =
+            CreateTargetBitmap(width, height, DXGI_FORMAT_R16G16B16A16_FLOAT);
+        if (!item.content) {
+            return E_FAIL;
+        }
+    }
+
+    const D2D1_RECT_F frame{0, 0, (float)width, (float)height};
+    m_clampScRgb->SetInput(0, m_hdrFrame.get());
+    m_ctx->SetTarget(item.content.get());
+    m_ctx->BeginDraw();
+    m_ctx->DrawImage(m_fromScRgb.get(), nullptr, &frame,
+                     D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
+                     D2D1_COMPOSITE_MODE_SOURCE_COPY);
+    const HRESULT hr = m_ctx->EndDraw();
+    m_ctx->SetTarget(nullptr);
+    return hr;
 }
 
 // Takes the newest frame of the window, if a new one came. Returns whether
@@ -4660,46 +5353,43 @@ bool Switcher::PollFrames(Item& item) {
         const UINT height = std::min((UINT)std::max(contentSize.Height, 1),
                                      sourceDesc.Height);
 
+        // The frame is copied to the window's own texture, which its content
+        // shows. With HDR, it goes to a texture shared by every window
+        // instead, grown to fit the largest, and is then turned into the
+        // window's content.
         D3D11_TEXTURE2D_DESC desc{};
-        if (item.texture) {
-            item.texture->GetDesc(&desc);
-        }
-        if (!item.texture || desc.Width != width || desc.Height != height) {
-            desc = {};
-            desc.Width = width;
-            desc.Height = height;
-            desc.MipLevels = 1;
-            desc.ArraySize = 1;
-            desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-            desc.SampleDesc.Count = 1;
-            desc.Usage = D3D11_USAGE_DEFAULT;
-            desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-
-            com_ptr<ID3D11Texture2D> texture;
-            com_ptr<ID2D1Bitmap1> content;
-            winrt::check_hresult(
-                m_d3dDevice->CreateTexture2D(&desc, nullptr, texture.put()));
-            D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
-                D2D1_BITMAP_OPTIONS_NONE,
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                                  D2D1_ALPHA_MODE_PREMULTIPLIED));
-            winrt::check_hresult(m_ctx->CreateBitmapFromDxgiSurface(
-                texture.as<IDXGISurface>().get(), &props, content.put()));
-            item.texture = texture;
-            item.content = content;
+        if (m_hdr) {
+            if (m_hdrFrameTexture) {
+                m_hdrFrameTexture->GetDesc(&desc);
+            }
+            if (desc.Width < width || desc.Height < height) {
+                winrt::check_hresult(CreateFrameTexture(
+                    std::max(width, desc.Width), std::max(height, desc.Height),
+                    m_hdrFrameTexture, m_hdrFrame));
+            }
+        } else {
+            if (item.texture) {
+                item.texture->GetDesc(&desc);
+            }
+            if (!item.texture || desc.Width != width || desc.Height != height) {
+                winrt::check_hresult(CreateFrameTexture(
+                    width, height, item.texture, item.content));
+            }
         }
 
         const D3D11_BOX box{0, 0, 0, width, height, 1};
-        m_d3dContext->CopySubresourceRegion(item.texture.get(), 0, 0, 0, 0,
-                                            source.get(), 0, &box);
+        m_d3dContext->CopySubresourceRegion(
+            m_hdr ? m_hdrFrameTexture.get() : item.texture.get(), 0, 0, 0, 0,
+            source.get(), 0, &box);
         latest.Close();
+        if (m_hdr) {
+            winrt::check_hresult(ConvertHdrFrame(item, width, height));
+        }
 
         if (contentSize.Width != item.poolSize.Width ||
             contentSize.Height != item.poolSize.Height) {
-            item.framePool.Recreate(
-                m_captureDevice,
-                wgdx::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2,
-                contentSize);
+            item.framePool.Recreate(m_captureDevice, CaptureFormat(), 2,
+                                    contentSize);
             item.poolSize = contentSize;
         }
         return true;
@@ -4721,13 +5411,28 @@ void Switcher::Teardown() {
     m_titleLayout = nullptr;
     m_titleIndex = -1;
     m_capturing = false;
+    // As large as the largest window: not kept while idle. The effect holds
+    // on to it too.
+    if (m_clampScRgb) {
+        m_clampScRgb->SetInput(0, nullptr);
+    }
+    m_hdrFrame = nullptr;
+    m_hdrFrameTexture = nullptr;
     m_filter = {};
     m_desktops = nullptr;
+    m_largeIconsPending = false;
+    WatchRawMouse(false);
 }
 
 void Switcher::ShowOverlay() {
     const UINT width = (UINT)(m_monitor.right - m_monitor.left);
     const UINT height = (UINT)(m_monitor.bottom - m_monitor.top);
+    // Moved to the session's monitor while still hidden, so nothing is
+    // presented while it's on the previous session's monitor: that could
+    // keep a session on a faster monitor at the slower one's frame rate
+    // (#6934).
+    SetWindowPos(m_hwnd, HWND_TOPMOST, m_monitor.left, m_monitor.top, width,
+                 height, SWP_NOACTIVATE);
     if (!EnsureSwapChain(width, height)) {
         HandleDeviceLost();
         return;
@@ -4743,6 +5448,20 @@ void Switcher::ShowOverlay() {
     if (!m_capturing) {
         StartCaptures();
     }
+    // App names and large icons, usually found after an earlier session
+    // already. Before the cards below, which show the icons. Large icons
+    // that take longer come during the first frames.
+    if (ShowsAppName(m_settings.style)) {
+        std::vector<HWND> windows;
+        for (const auto& item : m_items) {
+            windows.push_back(item->hwnd);
+        }
+        LookUpAppNames(windows);
+    }
+    m_largeIconsPending = false;
+    if (ShowsLargeIcons(m_settings.style)) {
+        LoadSessionLargeIcons(kLargeIconOpenBudget);
+    }
     // Windows still without a picture show a card with their icon. Made only
     // now, so a quick Alt+Tab, which never shows the stack, doesn't pay for
     // them.
@@ -4751,16 +5470,15 @@ void Switcher::ShowOverlay() {
             item->placeholder = CreatePlaceholder(*item);
         }
     }
-    // Usually found after an earlier session already.
-    if (ShowsAppName(m_settings.style)) {
-        std::vector<HWND> windows;
-        for (const auto& item : m_items) {
-            windows.push_back(item->hwnd);
-        }
-        LookUpAppNames(windows);
-    }
-    m_accent = GetAccentColor();
+    m_accent = VisibleAccent(GetAccentColor());
     m_redraw = true;
+    // The mouse stick counts the motion from here on.
+    m_stickCursorKnown = false;
+    m_stickX = m_stickY = 0;
+    m_stickMoveX = m_stickMoveY = 0;
+    m_rawX = m_rawY = 0;
+    WatchRawMouse(m_settings.style == AnimationStyle::Radial);
+    m_ringOpen = 0;
 
     m_open = {0, 1, NowSeconds(), m_settings.animationDurationMs / 1000.0,
               false};
@@ -4775,6 +5493,17 @@ void Switcher::ShowOverlay() {
     }
     SetWindowPos(m_hwnd, HWND_TOPMOST, m_monitor.left, m_monitor.top, width,
                  height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+    // A full-screen game in front keeps drawing, and Windows gives the GPU to
+    // the app with the focus first: the switcher would run at half its frame
+    // rate or less (Counter-Strike 2). It takes the focus then, like the
+    // native Alt+Tab. Only for a window it lists, not the desktop.
+    if (!m_hasFocus && IsFullScreenWindow(m_previousForeground) &&
+        std::any_of(m_items.begin(), m_items.end(), [&](const auto& item) {
+            return item->hwnd == m_previousForeground;
+        })) {
+        TakeFocus();
+    }
 }
 
 void Switcher::BeginClose(bool commit) {
@@ -4845,10 +5574,40 @@ HWND ActivationTarget(HWND hwnd) {
     return popup;
 }
 
+// A full-screen window that stays always on top while it's in front (SDL's
+// full-screen windows do, e.g. Counter-Strike 2's) keeps covering the window
+// switched to, which only gets the focus. It's put right under that window,
+// which also takes its always-on-top away; SDL sets it again when the game is
+// in front again. Only borderless full-screen windows (see
+// IsFullScreenWindow), so windows pinned on top by the user keep their pin.
+// Asynchronously, so a busy game can't hold the switcher up.
+void LowerFullScreenWindow(HWND left, HWND target) {
+    HMONITOR monitor;
+    if (!left || left == target || !IsWindow(left) ||
+        !(GetWindowLongPtrW(left, GWL_EXSTYLE) & WS_EX_TOPMOST) ||
+        (GetWindowLongPtrW(target, GWL_EXSTYLE) & WS_EX_TOPMOST) ||
+        !IsFullScreenWindow(left, &monitor)) {
+        return;
+    }
+    // A minimized window comes back where it was, which may be this monitor.
+    if (!IsIconic(target) &&
+        MonitorFromWindow(target, MONITOR_DEFAULTTONEAREST) != monitor) {
+        return;
+    }
+    WCHAR className[64] = L"";
+    GetClassNameW(left, className, ARRAYSIZE(className));
+    Wh_Log(L"Full-screen window %p (%s, style %08X) put under %p", left,
+           className, (UINT)GetWindowLongPtrW(left, GWL_STYLE), target);
+    SetWindowPos(left, target, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
+                     SWP_ASYNCWINDOWPOS);
+}
+
 void Switcher::ActivateWindow(HWND hwnd) {
     if (!IsWindow(hwnd)) {
         return;
     }
+    LowerFullScreenWindow(m_previousForeground, hwnd);
 
     // Input first, which allows this process to change the foreground. A
     // restore asked for before that can leave the window activated but still
@@ -4988,7 +5747,7 @@ void Switcher::ComputeLayout() {
             m_frontY = m_height * 0.08f;
             m_stepX = m_width * 0.30f * spacing;  // Ring radius.
             m_stepY = 0;
-            m_stepZ = 2 * 3.14159265f / std::max(count, 5);  // Angle per window.
+            m_stepZ = 2 * kPi / std::max(count, 5);  // Angle per window.
             break;
 
         case AnimationStyle::Grid: {
@@ -5055,6 +5814,10 @@ void Switcher::ComputeLayout() {
             ComputePanelLayout();
             break;
 
+        case AnimationStyle::Radial:
+            ComputeRadialLayout();
+            break;
+
         case AnimationStyle::Rolodex:
             m_boxWidth = m_width * 0.36f;
             m_boxHeight = m_height * 0.30f;
@@ -5074,7 +5837,7 @@ void Switcher::ComputeLayout() {
             m_frontY = -m_height * 0.02f;
             m_stepX = m_boxWidth / 2;  // Half the cube's side.
             m_stepY = 0;
-            m_stepZ = 3.14159265f / 2;  // Angle per window.
+            m_stepZ = kPi / 2;  // Angle per window.
             break;
 
         case AnimationStyle::Sphere: {
@@ -5094,9 +5857,9 @@ void Switcher::ComputeLayout() {
             constexpr float kMaxLatitude = 1.15f;
             m_stepZ = std::min(
                 std::clamp(m_boxWidth * 0.95f / m_stepX, 0.3f, 1.0f),
-                2 * std::sqrt(3.14159265f * kMaxLatitude / count));
+                2 * std::sqrt(kPi * kMaxLatitude / count));
             // Latitude per window: one step per turn.
-            m_stepY = m_stepZ * m_stepZ / (2 * 3.14159265f);
+            m_stepY = m_stepZ * m_stepZ / (2 * kPi);
             break;
         }
 
@@ -5335,6 +6098,18 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
             pose.opacity = 0;
             break;
 
+        case AnimationStyle::Radial: {
+            // The window shrinks into its slice, where its icon shows up.
+            const float angle = RadialAngle(index);
+            const float middle = (m_ringOuter + m_ringInner) / 2;
+            pose.x = middle * std::cos(angle);
+            pose.y = middle * std::sin(angle);
+            pose.scale =
+                m_ringIcon * 1.5f / std::max(item.Width(), item.Height());
+            pose.opacity = 0;
+            break;
+        }
+
         case AnimationStyle::Rolodex: {
             // A wheel around a horizontal axis: earlier windows roll over the
             // top, later ones under the bottom.
@@ -5414,7 +6189,7 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
                 // Leaving the front: lifted over the deck in an arc, then
                 // slid in at the back.
                 const float progress = -rel;
-                const float arc = std::sin(progress * 3.14159265f);
+                const float arc = std::sin(progress * kPi);
                 const float back = (float)std::max(count - 1, 1);
                 pose.x = m_frontX + arc * m_width * 0.16f;
                 pose.y = m_frontY + progress * back * m_stepY -
@@ -5829,6 +6604,10 @@ D2D1_RECT_F Switcher::SelectionCell(float* opacity) const {
 
 // Panel and selection background, drawn under the thumbnails.
 void Switcher::DrawPanelBack(float t) {
+    if (m_settings.style == AnimationStyle::Radial) {
+        DrawRadialBack(t);
+        return;
+    }
     if (m_cells.empty()) {
         return;
     }
@@ -5908,6 +6687,10 @@ void Switcher::DrawLabel(Item& item,
 
 // Icons, titles and the selection border, drawn over the thumbnails.
 void Switcher::DrawPanelFront(float t) {
+    if (m_settings.style == AnimationStyle::Radial) {
+        DrawRadialFront(t);
+        return;
+    }
     if (m_cells.empty() || m_items.empty()) {
         return;
     }
@@ -5963,6 +6746,615 @@ void Switcher::DrawPanelFront(float t) {
                   {m_caption.left + pad, m_caption.top, m_caption.right - pad,
                    m_caption.bottom},
                   false, D2D1::ColorF(0, 0, 0, labelOpacity));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Radial style.
+
+// The wheel turns this much (radians, clockwise) into place while opening,
+// and back while closing.
+constexpr float kRingOpeningTurn = 0.45f;
+// The mouse stick (see UpdateRadialStick), in pixels at 100% scaling: the
+// motion that points at a slice, and the most that's kept, so a turn to
+// another direction answers quickly.
+constexpr float kStickDeadZone = 22;
+constexpr float kStickReach = 80;
+
+// The slot of a wheel with `count` slices of `span` radians, clockwise from
+// the top, in the direction (dx, dy) from its center.
+int RadialSlot(float dx, float dy, float span, int count) {
+    const float turn = std::atan2(dy, dx) + kPi / 2;
+    return PositiveMod((long long)std::floor(turn / span + 0.5f), count);
+}
+
+// Lays out the radial style: a ring with one slice per window, clockwise
+// from the top (the window in front), around a disk with the selected
+// window's app name and title. The ring follows the shorter side of the
+// monitor, so it fits any screen shape, and grows with more windows, with a
+// wider hole, where the slices are narrowest.
+void Switcher::ComputeRadialLayout() {
+    m_cells.clear();
+    m_thumbnails.clear();
+    m_iconRects.clear();
+    m_labelRects.clear();
+    m_caption = {};
+    m_ringTextIndex = -1;
+    m_ringNameLayout = nullptr;
+    m_ringTitleLayout = nullptr;
+    m_ringNameFormat = nullptr;
+    m_ringTitleFormat = nullptr;
+    m_sliceShape = nullptr;
+    m_pointerShape = nullptr;
+    m_stickShape = nullptr;
+    m_diskFill = nullptr;
+
+    const int count = std::max((int)m_items.size(), 1);
+    const float side = std::min(m_width, m_height);
+    const float more = std::clamp((count - 4) / 16.0f, 0.0f, 1.0f);
+    const float outer = std::round(side * Lerp(0.30f, 0.40f, more));
+    const float inner = std::round(outer * Lerp(0.43f, 0.52f, more));
+    m_ringOuter = outer;
+    m_ringInner = inner;
+    m_ringGap = std::max(3.0f, std::round(side * 0.0065f));
+    m_ringDisk = inner - m_ringGap * 2.2f;
+    m_ringSpan = 2 * kPi / count;
+    const float middle = (outer + inner) / 2;
+    m_ringIcon = std::round(
+        std::max(std::min({(outer - inner) * 0.42f,
+                           (middle * m_ringSpan - m_ringGap) * 0.5f,
+                           52 * m_dpiScale}),
+                 10.0f));
+    // With room for the selected slice, which moves out a little.
+    const float reach = outer * 1.05f + m_ringGap * 1.5f;
+    m_panel = {m_width / 2 - reach, m_height / 2 - reach, m_width / 2 + reach,
+               m_height / 2 + reach};
+
+    if (!m_d2dFactory) {
+        return;
+    }
+    if (!m_roundStroke) {
+        const D2D1_STROKE_STYLE_PROPERTIES properties =
+            D2D1::StrokeStyleProperties(
+                D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
+                D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND);
+        m_d2dFactory->CreateStrokeStyle(&properties, nullptr, 0,
+                                        m_roundStroke.put());
+    }
+
+    // One slice, pointing right: two arcs, and two edges, each half a gap
+    // from the line between this slice and the next. Its corners are rounded
+    // by circles touching an edge and an arc.
+    com_ptr<ID2D1GeometrySink> sink;
+    if (FAILED(m_d2dFactory->CreatePathGeometry(m_sliceShape.put())) ||
+        FAILED(m_sliceShape->Open(sink.put()))) {
+        m_sliceShape = nullptr;
+        return;
+    }
+    auto addArc = [&](D2D1_POINT_2F to, float radius,
+                      D2D1_SWEEP_DIRECTION sweep) {
+        const D2D1_ARC_SEGMENT arc{to, {radius, radius}, 0, sweep,
+                                   D2D1_ARC_SIZE_SMALL};
+        sink->AddArc(&arc);
+    };
+    constexpr auto kClockwise = D2D1_SWEEP_DIRECTION_CLOCKWISE;
+    if (count == 1) {
+        // A whole ring.
+        sink->SetFillMode(D2D1_FILL_MODE_ALTERNATE);
+        for (float radius : {outer, inner}) {
+            sink->BeginFigure({radius, 0}, D2D1_FIGURE_BEGIN_FILLED);
+            addArc({-radius, 0}, radius, kClockwise);
+            addArc({radius, 0}, radius, kClockwise);
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+        }
+    } else {
+        const float offset = m_ringGap / 2;
+        const float corner =
+            std::max(0.0f, std::min({side * 0.012f, (outer - inner) * 0.18f,
+                                     (inner * m_ringSpan - m_ringGap) * 0.3f}));
+        struct Corners {
+            D2D1_POINT_2F edgeOuter, arcOuter, edgeInner, arcInner;
+        };
+        // The edge at -half a slice (sign -1) or +half (sign 1), with its
+        // inside towards the slice's middle.
+        auto cornersOf = [&](float sign) {
+            const float angle = sign * m_ringSpan / 2;
+            const D2D1_POINT_2F along{std::cos(angle), std::sin(angle)};
+            const D2D1_POINT_2F inside{sign * std::sin(angle),
+                                       -sign * std::cos(angle)};
+            auto at = [&](float a, float b) {
+                return D2D1_POINT_2F{along.x * a + inside.x * b,
+                                     along.y * a + inside.y * b};
+            };
+            const float away = offset + corner;
+            const float outerAlong = std::sqrt(std::max(
+                0.0f, (outer - corner) * (outer - corner) - away * away));
+            const float innerAlong = std::sqrt(std::max(
+                0.0f, (inner + corner) * (inner + corner) - away * away));
+            const D2D1_POINT_2F outerCenter = at(outerAlong, away);
+            const D2D1_POINT_2F innerCenter = at(innerAlong, away);
+            const float toOuter = outer / (outer - corner);
+            const float toInner = inner / (inner + corner);
+            return Corners{at(outerAlong, offset),
+                           {outerCenter.x * toOuter, outerCenter.y * toOuter},
+                           at(innerAlong, offset),
+                           {innerCenter.x * toInner, innerCenter.y * toInner}};
+        };
+        const Corners first = cornersOf(-1);
+        const Corners second = cornersOf(1);
+        sink->BeginFigure(first.edgeOuter, D2D1_FIGURE_BEGIN_FILLED);
+        addArc(first.arcOuter, corner, kClockwise);
+        addArc(second.arcOuter, outer, kClockwise);
+        addArc(second.edgeOuter, corner, kClockwise);
+        sink->AddLine(second.edgeInner);
+        addArc(second.arcInner, corner, kClockwise);
+        addArc(first.arcInner, inner, D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE);
+        addArc(first.edgeInner, corner, kClockwise);
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    }
+    if (FAILED(sink->Close())) {
+        m_sliceShape = nullptr;
+    }
+
+    // Arcs centered on the right: the pointer, in the dark lane around the
+    // disk, and the mouse stick's mark, inside the disk's edge.
+    auto makeArc = [&](com_ptr<ID2D1PathGeometry>& shape, float radius,
+                       float half) {
+        com_ptr<ID2D1GeometrySink> arcSink;
+        if (FAILED(m_d2dFactory->CreatePathGeometry(shape.put())) ||
+            FAILED(shape->Open(arcSink.put()))) {
+            shape = nullptr;
+            return;
+        }
+        arcSink->BeginFigure(
+            {radius * std::cos(half), -radius * std::sin(half)},
+            D2D1_FIGURE_BEGIN_HOLLOW);
+        const D2D1_ARC_SEGMENT arc{{radius * std::cos(half),
+                                    radius * std::sin(half)},
+                                   {radius, radius},
+                                   0,
+                                   kClockwise,
+                                   D2D1_ARC_SIZE_SMALL};
+        arcSink->AddArc(&arc);
+        arcSink->EndFigure(D2D1_FIGURE_END_OPEN);
+        if (FAILED(arcSink->Close())) {
+            shape = nullptr;
+        }
+    };
+    makeArc(m_pointerShape, inner - m_ringGap * 1.55f,
+            std::min(m_ringSpan * 0.38f, 0.6f));
+    makeArc(m_stickShape, m_ringDisk - m_ringGap * 0.8f, 0.28f);
+}
+
+// The direction of the middle of the slice at index, in radians (0 points
+// right, clockwise; the first slice is at the top).
+float Switcher::RadialAngle(int index) const {
+    return -kPi / 2 + index * m_ringSpan;
+}
+
+// How much the item at index is the selected one, from 0 to 1, eased. The
+// selection glides from slice to slice with the flip animation.
+float Switcher::RadialSelection(int index) const {
+    const int count = (int)m_items.size();
+    if (count <= 1) {
+        return count ? 1.0f : 0.0f;
+    }
+    float distance = PositiveMod((float)(index - m_scroll), (float)count);
+    distance = std::min(distance, count - distance);
+    const float s = std::clamp(1 - distance, 0.0f, 1.0f);
+    return s * s * (3 - 2 * s);
+}
+
+// The wheel grows in while it opens, and again a little after a window
+// closed and the slices were made over (see RemoveClosedItems).
+float Switcher::RingScale() const {
+    const float slide = (float)std::clamp(
+        (NowSeconds() - m_slideStart) / kSlideAnimationSeconds, 0.0, 1.0);
+    return Lerp(0.86f, 1.0f, m_ringOpen) *
+           Lerp(0.96f, 1.0f, EaseOutQuart(slide));
+}
+
+// From the slice's shape (pointing right from the center) to the slice at
+// index: turned into its place, with the opening turn, and, if selected,
+// moved out and made a little larger.
+D2D1::Matrix3x2F Switcher::SliceTransform(int index) const {
+    const float selected = RadialSelection(index);
+    const float angle =
+        RadialAngle(index) - (1 - m_ringOpen) * kRingOpeningTurn;
+    const float scale = RingScale() * (1 + 0.035f * selected);
+    // A single window's slice is the whole ring: it stays centered.
+    const float out =
+        m_items.size() > 1 ? m_ringGap * 1.3f * selected : 0.0f;
+    return D2D1::Matrix3x2F::Scale(scale, scale) *
+           D2D1::Matrix3x2F::Rotation(angle * 180 / kPi) *
+           D2D1::Matrix3x2F::Translation(m_width / 2 + out * std::cos(angle),
+                                         m_height / 2 + out * std::sin(angle));
+}
+
+// The slice under a point (overlay coordinates), or -1. A gap belongs to the
+// nearest slice, so the mouse never falls between two.
+int Switcher::RadialSliceAt(D2D1_POINT_2F point) const {
+    const int count = (int)m_items.size();
+    const float dx = point.x - m_width / 2;
+    const float dy = point.y - m_height / 2;
+    const float distance = std::hypot(dx, dy);
+    if (!count || distance < m_ringInner - m_ringGap ||
+        distance > m_ringOuter + m_ringGap * 2) {
+        return -1;
+    }
+    return RadialSlot(dx, dy, m_ringSpan, count);
+}
+
+// In the slice's outer corner on its clockwise side, clear of the icon.
+CloseButton Switcher::CloseButtonForSlice(int index) const {
+    CloseButton button;
+    const float outerArc = m_ringOuter * m_ringSpan - m_ringGap;
+    button.radius =
+        std::min({std::round(11 * m_dpiScale),
+                  (m_ringOuter - m_ringInner) * 0.14f, outerArc * 0.16f});
+    if (button.radius < kMinCloseButtonRadius) {
+        button.radius = 0;
+        return button;
+    }
+    const float radius = m_ringOuter - button.radius * 1.7f;
+    const float angle =
+        m_items.size() > 1
+            ? std::max(0.0f, m_ringSpan / 2 -
+                                 (button.radius * 1.7f + m_ringGap / 2) /
+                                     radius)
+            : 0.5f;
+    button.center = SliceTransform(index).TransformPoint(
+        {radius * std::cos(angle), radius * std::sin(angle)});
+    return button;
+}
+
+// The radial style's mouse stick, like a game's weapon wheel: moving the
+// mouse points at a slice, which gets selected, wherever the cursor is, also
+// against a screen's edge (raw input, see OnRawInput). Only motion counts: a
+// cursor left alone selects nothing, and after Tab the stick starts over
+// (see OnStep). Over a slice, once the mouse really moved, the cursor picks
+// that one.
+void Switcher::UpdateRadialStick() {
+    POINT cursor;
+    if (m_items.size() < 2 || !GetCursorPos(&cursor)) {
+        return;
+    }
+    if (!m_stickCursorKnown) {
+        m_stickCursor = cursor;
+        m_stickCursorKnown = true;
+        m_rawX = m_rawY = 0;
+        return;
+    }
+    float dx = (float)(cursor.x - m_stickCursor.x);
+    float dy = (float)(cursor.y - m_stickCursor.y);
+    // The cursor stops at the screen's edges, the mouse doesn't: on an axis
+    // the cursor didn't move on, the mouse's own motion counts. Elsewhere the
+    // cursor's does, with the pointer speed and acceleration of Windows.
+    if (dx == 0) {
+        dx = m_rawX;
+    }
+    if (dy == 0) {
+        dy = m_rawY;
+    }
+    m_rawX = m_rawY = 0;
+    if (dx == 0 && dy == 0) {
+        return;
+    }
+    m_stickCursor = cursor;
+    m_stickMoveX += dx;
+    m_stickMoveY += dy;
+    m_stickX += dx;
+    m_stickY += dy;
+    const float reach = kStickReach * m_dpiScale;
+    const float deadZone = kStickDeadZone * m_dpiScale;
+    const float length = std::hypot(m_stickX, m_stickY);
+    if (length > reach) {
+        m_stickX *= reach / length;
+        m_stickY *= reach / length;
+    }
+
+    // As far as the dead zone, so a hand resting on the mouse picks nothing.
+    int index = -1;
+    if (std::hypot(m_stickMoveX, m_stickMoveY) >= deadZone &&
+        PtInRect(&m_monitor, cursor)) {
+        index = RadialSliceAt({(float)(cursor.x - m_monitor.left),
+                               (float)(cursor.y - m_monitor.top)});
+    }
+    if (index >= 0) {
+        // Moving on from a slice goes on from its direction.
+        const float angle = RadialAngle(index);
+        m_stickX = reach * std::cos(angle);
+        m_stickY = reach * std::sin(angle);
+    } else if (std::hypot(m_stickX, m_stickY) >= deadZone) {
+        index = RadialSlot(m_stickX, m_stickY, m_ringSpan,
+                           (int)m_items.size());
+    }
+    if (index >= 0 && index != SelectedIndex()) {
+        MoveTargetTo(index);
+    }
+}
+
+// The mouse's own motion reaches the overlay while the radial style is open
+// (see UpdateRadialStick), though it never has the focus.
+void Switcher::WatchRawMouse(bool on) {
+    if (on == m_rawMouse) {
+        return;
+    }
+    RAWINPUTDEVICE device{};
+    device.usUsagePage = 0x01;  // Generic desktop controls.
+    device.usUsage = 0x02;      // Mouse.
+    device.dwFlags = on ? RIDEV_INPUTSINK : RIDEV_REMOVE;
+    device.hwndTarget = on ? m_hwnd : nullptr;
+    if (RegisterRawInputDevices(&device, 1, sizeof(device)) || !on) {
+        m_rawMouse = on;
+    }
+}
+
+// Relative motion only: for devices that give positions (pen tablets, remote
+// desktop), the cursor's motion is the one that counts.
+void Switcher::OnRawInput(HRAWINPUT handle) {
+    if (!m_rawMouse || m_state != State::Open) {
+        return;
+    }
+    RAWINPUT input;
+    UINT size = sizeof(input);
+    if (GetRawInputData(handle, RID_INPUT, &input, &size,
+                        sizeof(RAWINPUTHEADER)) == (UINT)-1 ||
+        input.header.dwType != RIM_TYPEMOUSE ||
+        (input.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)) {
+        return;
+    }
+    m_rawX += (float)input.data.mouse.lLastX;
+    m_rawY += (float)input.data.mouse.lLastY;
+}
+
+// The wheel, under the windows flying in and out: the slices, the selected
+// one in the accent color and moved out, and the disk in the middle, with
+// the pointer running around it to the selected slice.
+void Switcher::DrawRadialBack(float t) {
+    const int count = (int)m_items.size();
+    if (!count || !m_sliceShape || t < 0.003f) {
+        return;
+    }
+    const D2D1_COLOR_F accent = m_accent;
+    const D2D1_COLOR_F edge{Lerp(accent.r, 1, 0.45f), Lerp(accent.g, 1, 0.45f),
+                            Lerp(accent.b, 1, 0.45f), 1};
+    const float edgeWidth = std::max(1.0f, m_ringGap * 0.28f);
+    auto drawSlice = [&](int index) {
+        const float s = RadialSelection(index);
+        const D2D1::Matrix3x2F transform = SliceTransform(index);
+        m_ctx->SetTransform(&transform);
+        if (s > 0.01f) {
+            // A soft glow around the selected slice, under it.
+            m_brush->SetColor(
+                D2D1::ColorF(accent.r, accent.g, accent.b, 0.10f * s * t));
+            m_ctx->DrawGeometry(m_sliceShape.get(), m_brush.get(),
+                                m_ringGap * 2.6f, m_roundStroke.get());
+            m_brush->SetColor(
+                D2D1::ColorF(accent.r, accent.g, accent.b, 0.20f * s * t));
+            m_ctx->DrawGeometry(m_sliceShape.get(), m_brush.get(),
+                                m_ringGap * 1.4f, m_roundStroke.get());
+        }
+        // Dimmed while its app is closing it.
+        const float dim = m_items[index]->closeRequestedAt ? 0.6f : 1.0f;
+        m_brush->SetColor(D2D1::ColorF(Lerp(0.20f, accent.r, s) * dim,
+                                       Lerp(0.20f, accent.g, s) * dim,
+                                       Lerp(0.21f, accent.b, s) * dim,
+                                       Lerp(0.9f, 0.96f, s) * t));
+        m_ctx->FillGeometry(m_sliceShape.get(), m_brush.get());
+        m_brush->SetColor(D2D1::ColorF(Lerp(1, edge.r, s), Lerp(1, edge.g, s),
+                                       Lerp(1, edge.b, s),
+                                       Lerp(0.07f, 0.9f, s) * t));
+        m_ctx->DrawGeometry(m_sliceShape.get(), m_brush.get(), edgeWidth,
+                            m_roundStroke.get());
+    };
+    // The selected slices (two while the selection moves) last, over their
+    // neighbors, the more selected one on top.
+    int lit[2] = {-1, -1};
+    int litCount = 0;
+    for (int i = 0; i < count; i++) {
+        if (RadialSelection(i) > 0 && litCount < 2) {
+            lit[litCount++] = i;
+        } else {
+            drawSlice(i);
+        }
+    }
+    if (litCount == 2 && RadialSelection(lit[0]) > RadialSelection(lit[1])) {
+        std::swap(lit[0], lit[1]);
+    }
+    for (int i = 0; i < litCount; i++) {
+        drawSlice(lit[i]);
+    }
+
+    // The dark lane of the pointer, and the disk inside it, lit from above.
+    const float scale = RingScale();
+    const D2D1::Matrix3x2F diskTransform =
+        D2D1::Matrix3x2F::Scale(scale, scale) *
+        D2D1::Matrix3x2F::Translation(m_width / 2, m_height / 2);
+    m_ctx->SetTransform(&diskTransform);
+    const float lane = m_ringInner - m_ringGap * 0.9f;
+    m_brush->SetColor(D2D1::ColorF(0.02f, 0.02f, 0.025f, 0.88f * t));
+    m_ctx->FillEllipse(D2D1::Ellipse({0, 0}, lane, lane), m_brush.get());
+    if (!m_diskFill) {
+        const D2D1_GRADIENT_STOP stops[] = {
+            {0, D2D1::ColorF(0.27f, 0.27f, 0.28f, 1)},
+            {1, D2D1::ColorF(0.14f, 0.14f, 0.15f, 1)},
+        };
+        com_ptr<ID2D1GradientStopCollection> collection;
+        if (SUCCEEDED(m_ctx->CreateGradientStopCollection(
+                stops, ARRAYSIZE(stops), collection.put()))) {
+            m_ctx->CreateRadialGradientBrush(
+                D2D1::RadialGradientBrushProperties(
+                    {0, -m_ringDisk * 0.35f}, {0, 0}, m_ringDisk * 1.3f,
+                    m_ringDisk * 1.3f),
+                D2D1::BrushProperties(), collection.get(), m_diskFill.put());
+        }
+    }
+    const D2D1_ELLIPSE disk = D2D1::Ellipse({0, 0}, m_ringDisk, m_ringDisk);
+    if (m_diskFill) {
+        m_diskFill->SetOpacity(0.96f * t);
+        m_ctx->FillEllipse(disk, m_diskFill.get());
+    }
+    m_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.09f * t));
+    m_ctx->DrawEllipse(disk, m_brush.get(), 1);
+
+    if (count > 1 && m_pointerShape) {
+        // Follows the selection's animation, so it runs between slices.
+        const float angle = -kPi / 2 + (float)m_scroll * m_ringSpan -
+                            (1 - m_ringOpen) * kRingOpeningTurn;
+        const D2D1::Matrix3x2F pointerTransform =
+            D2D1::Matrix3x2F::Rotation(angle * 180 / kPi) * diskTransform;
+        m_ctx->SetTransform(&pointerTransform);
+        m_brush->SetColor(D2D1::ColorF(accent.r, accent.g, accent.b, t));
+        m_ctx->DrawGeometry(m_pointerShape.get(), m_brush.get(),
+                            m_ringGap * 0.8f, m_roundStroke.get());
+    }
+    const D2D1::Matrix3x2F identity = D2D1::Matrix3x2F::Identity();
+    m_ctx->SetTransform(&identity);
+}
+
+// The app's name and the title of the item at index, laid out to fit the
+// disk in the middle of the wheel: up to two lines each, cut with an
+// ellipsis. Without an app name, the title takes its place.
+bool Switcher::EnsureRadialTexts(int index) {
+    if (index == m_ringTextIndex) {
+        return m_ringNameLayout || m_ringTitleLayout;
+    }
+    const float fontSize = std::round(
+        std::clamp(m_ringDisk * 0.15f, 13 * m_dpiScale, 22 * m_dpiScale));
+    const float titleSize = std::round(fontSize * 0.74f);
+    auto makeFormat = [&](com_ptr<IDWriteTextFormat>& format, PCWSTR family,
+                          DWRITE_FONT_WEIGHT weight, float size) {
+        if (format) {
+            return true;
+        }
+        if (FAILED(m_dwriteFactory->CreateTextFormat(
+                family, nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL, size, L"", format.put()))) {
+            format = nullptr;
+            return false;
+        }
+        format->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+        format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        const DWRITE_TRIMMING trimming{DWRITE_TRIMMING_GRANULARITY_CHARACTER,
+                                       0, 0};
+        com_ptr<IDWriteInlineObject> ellipsis;
+        m_dwriteFactory->CreateEllipsisTrimmingSign(format.get(),
+                                                    ellipsis.put());
+        format->SetTrimming(&trimming, ellipsis.get());
+        return true;
+    };
+    if (!makeFormat(m_ringNameFormat, L"Segoe UI Variable Display",
+                    DWRITE_FONT_WEIGHT_SEMI_BOLD, fontSize) ||
+        !makeFormat(m_ringTitleFormat, L"Segoe UI Variable Text",
+                    DWRITE_FONT_WEIGHT_NORMAL, titleSize)) {
+        return false;
+    }
+
+    m_ringTextIndex = index;
+    m_ringNameLayout = nullptr;
+    m_ringTitleLayout = nullptr;
+    const Item& item = *m_items[index];
+    // Looked up before the session opened (see LookUpAppNames).
+    const auto it = m_appNames.find(item.hwnd);
+    std::wstring name = it != m_appNames.end() ? it->second : L"";
+    std::wstring title = m_settings.showTitle ? item.title : L"";
+    if (name.empty()) {
+        std::swap(name, title);
+    } else if (title == name) {
+        title.clear();
+    }
+    // A line is about 1.33 times the font size: room for two.
+    const float width = m_ringDisk * 1.5f;
+    if (!name.empty()) {
+        m_dwriteFactory->CreateTextLayout(
+            name.c_str(), (UINT32)name.size(), m_ringNameFormat.get(), width,
+            fontSize * 2.7f, m_ringNameLayout.put());
+    }
+    if (!title.empty()) {
+        m_dwriteFactory->CreateTextLayout(
+            title.c_str(), (UINT32)title.size(), m_ringTitleFormat.get(), width,
+            titleSize * 2.7f, m_ringTitleLayout.put());
+    }
+    return m_ringNameLayout || m_ringTitleLayout;
+}
+
+// Over the windows flying in and out: the icons on the slices, the mouse
+// stick's mark, and the selected window's app name and title in the disk.
+void Switcher::DrawRadialFront(float t) {
+    const int count = (int)m_items.size();
+    if (!count || t < 0.003f) {
+        return;
+    }
+    const float scale = RingScale();
+    const float middle = (m_ringOuter + m_ringInner) / 2;
+    for (int i = 0; i < count; i++) {
+        const Item& item = *m_items[i];
+        if (!item.icon) {
+            continue;
+        }
+        const D2D1_POINT_2F center =
+            SliceTransform(i).TransformPoint({middle, 0});
+        const float half =
+            m_ringIcon * scale * (1 + 0.16f * RadialSelection(i)) / 2;
+        const D2D1_RECT_F icon{center.x - half, center.y - half,
+                               center.x + half, center.y + half};
+        m_ctx->DrawBitmap(item.icon.get(), icon,
+                          t * (item.closeRequestedAt ? 0.5f : 1.0f),
+                          D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+    }
+
+    const float deadZone = kStickDeadZone * m_dpiScale;
+    const float stick = std::hypot(m_stickX, m_stickY);
+    if (m_stickShape && stick > deadZone / 2) {
+        const float strength =
+            std::clamp((stick - deadZone / 2) / deadZone, 0.0f, 1.0f);
+        const D2D1::Matrix3x2F transform =
+            D2D1::Matrix3x2F::Scale(scale, scale) *
+            D2D1::Matrix3x2F::Rotation(std::atan2(m_stickY, m_stickX) * 180 /
+                                       kPi) *
+            D2D1::Matrix3x2F::Translation(m_width / 2, m_height / 2);
+        m_ctx->SetTransform(&transform);
+        m_brush->SetColor(D2D1::ColorF(1, 1, 1, 0.75f * strength * t));
+        m_ctx->DrawGeometry(m_stickShape.get(), m_brush.get(),
+                            std::max(2.0f, m_ringGap * 0.45f),
+                            m_roundStroke.get());
+        const D2D1::Matrix3x2F identity = D2D1::Matrix3x2F::Identity();
+        m_ctx->SetTransform(&identity);
+    }
+
+    // Visible while settled, faded out while the selection moves.
+    const double nearest = std::round(m_scroll);
+    const float settle =
+        1 - std::clamp((float)std::fabs(m_scroll - nearest) * 3, 0.0f, 1.0f);
+    const float opacity = t * t * settle;
+    if (opacity < 0.01f ||
+        !EnsureRadialTexts(PositiveMod((long long)nearest, count))) {
+        return;
+    }
+    DWRITE_TEXT_METRICS name{}, title{};
+    if (m_ringNameLayout) {
+        m_ringNameLayout->GetMetrics(&name);
+    }
+    if (m_ringTitleLayout) {
+        m_ringTitleLayout->GetMetrics(&title);
+    }
+    const float gap = m_ringNameLayout && m_ringTitleLayout
+                          ? std::round(m_ringDisk * 0.05f)
+                          : 0.0f;
+    const float left = std::round(m_width / 2 - m_ringDisk * 0.75f);
+    float top =
+        std::round(m_height / 2 - (name.height + gap + title.height) / 2);
+    if (m_ringNameLayout) {
+        m_brush->SetColor(D2D1::ColorF(1, 1, 1, opacity));
+        m_ctx->DrawTextLayout({left, top - name.top}, m_ringNameLayout.get(),
+                              m_brush.get());
+        top += name.height + gap;
+    }
+    if (m_ringTitleLayout) {
+        m_brush->SetColor(D2D1::ColorF(0.78f, 0.78f, 0.80f, opacity));
+        m_ctx->DrawTextLayout({left, top - title.top}, m_ringTitleLayout.get(),
+                              m_brush.get());
     }
 }
 
@@ -6413,9 +7805,19 @@ void Switcher::RenderFrame() {
         BeginClose(true);
     }
     RemoveClosedItems(now);
+    const bool radial = m_settings.style == AnimationStyle::Radial;
+    if (radial && m_state == State::Open) {
+        UpdateRadialStick();
+    }
+    // Large icons that didn't fit in the time the opening gave them (see
+    // ShowOverlay): a frame's share at a time.
+    if (m_largeIconsPending && m_state == State::Open) {
+        LoadSessionLargeIcons(kLargeIconFrameBudget);
+    }
 
-    // Critically damped spring towards the target.
-    const double omega = 15.0 * m_settings.flipSpeed;
+    // Critically damped spring towards the target. The wheel's selection,
+    // led by the mouse, answers faster.
+    const double omega = 15.0 * m_settings.flipSpeed * (radial ? 1.6 : 1.0);
     constexpr double kStep = 1.0 / 480;
     for (double remaining = dt; remaining > 0; remaining -= kStep) {
         const double h = std::min(remaining, kStep);
@@ -6442,13 +7844,19 @@ void Switcher::RenderFrame() {
     // Without new frames taken from it, a capture stops producing them, so
     // windows that aren't kept live cost nothing once they have a picture.
     const int selected = SelectedIndex();
+    // Styles without thumbnails show the windows only while they fly in and
+    // out: once open, their frames aren't needed.
+    const bool shown = !IsIconStyle(m_settings.style) || t < 1 ||
+                       m_state != State::Open;
     bool newContent = false;
     int closeRequests = 0;
     for (int i = 0; i < (int)m_items.size(); i++) {
         Item& item = *m_items[i];
         const bool live =
-            m_settings.liveContent == LiveContent::All ||
-            (m_settings.liveContent == LiveContent::Selected && i == selected);
+            shown &&
+            (m_settings.liveContent == LiveContent::All ||
+             (m_settings.liveContent == LiveContent::Selected &&
+              i == selected));
         if (live || !item.content) {
             newContent |= PollFrames(item);
         }
@@ -6456,6 +7864,7 @@ void Switcher::RenderFrame() {
             closeRequests++;
         }
     }
+    m_ringOpen = t;
     BuildDrawList(t);
     UpdateHover();
 
@@ -6471,7 +7880,9 @@ void Switcher::RenderFrame() {
                        m_items.size(),
                        closeRequests,
                        m_hoverIndex,
-                       m_hoverOnButton};
+                       m_hoverOnButton,
+                       m_stickX,
+                       m_stickY};
     if (!m_redraw && !newContent && m_closingItems.empty() &&
         key == m_lastFrameKey) {
         if (FAILED(DwmFlush())) {
@@ -6485,7 +7896,8 @@ void Switcher::RenderFrame() {
     m_redraw = false;
     m_lastFrameKey = key;
 
-    m_ctx->SetTarget(m_targetBitmap.get());
+    // HDR: drawn in SDR's terms first (see UpdateHdr).
+    m_ctx->SetTarget(m_swapHdr ? m_sceneBitmap.get() : m_targetBitmap.get());
     m_ctx->BeginDraw();
     m_ctx->Clear(D2D1::ColorF(0, 0, 0, 0));
 
@@ -6532,6 +7944,13 @@ void Switcher::RenderFrame() {
         DrawTitle(t);
     }
 
+    if (m_swapHdr) {
+        m_ctx->SetTarget(m_targetBitmap.get());
+        m_liftScene->SetInput(0, m_sceneBitmap.get());
+        m_ctx->DrawImage(m_toScRgb.get(),
+                         D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
+                         D2D1_COMPOSITE_MODE_SOURCE_COPY);
+    }
     HRESULT hr = m_ctx->EndDraw();
     m_ctx->SetTarget(nullptr);
     if (SUCCEEDED(hr)) {
@@ -6578,7 +7997,9 @@ com_ptr<ID2D1Bitmap1> Switcher::GetIconBitmap(HWND hwnd) {
         }
     }
     if (!entry.pixels) {
+        // Already at the large size.
         entry.pixels = ReadAppIconPixels(hwnd);
+        entry.largeSize = entry.pixels ? LargeIconPixels() : 0;
     }
     if (entry.pixels) {
         entry.bitmap = CreateIconBitmap(entry.pixels.get());
@@ -6605,32 +8026,43 @@ void Switcher::RefreshIcons() {
                   [](const auto& entry) { return !IsWindow(entry.first); });
     std::erase_if(m_appNames,
                   [](const auto& entry) { return !IsWindow(entry.first); });
-    for (int i = 0; i < kShortcutCount; i++) {
-        if (m_settings.shortcutOn[i] &&
-            ShowsAppName(m_settings.shortcutStyle[i])) {
-            std::vector<HWND> windows;
-            for (const auto& [hwnd, entry] : m_iconCache) {
-                windows.push_back(hwnd);
-            }
-            LookUpAppNames(windows);
-            break;
-        }
+    std::vector<HWND> windows;
+    for (const auto& [hwnd, entry] : m_iconCache) {
+        windows.push_back(hwnd);
+    }
+    if (AnyShortcutStyle(ShowsAppName)) {
+        LookUpAppNames(windows);
     }
 
     for (auto& [hwnd, entry] : m_iconCache) {
         HICON icon = GetWindowIcon(hwnd);
         if (icon && icon != entry.source) {
+            // A new icon: its large version is looked for again below.
             if (auto pixels = ReadIconPixels(icon)) {
                 entry = {icon, pixels, CreateIconBitmap(pixels.get())};
             }
         } else if (!icon && !entry.pixels) {
             // Still no window icon; the app may have finished starting.
             entry.pixels = ReadAppIconPixels(hwnd);
+            entry.largeSize = entry.pixels ? LargeIconPixels() : 0;
             if (entry.pixels) {
                 entry.bitmap = CreateIconBitmap(entry.pixels.get());
             }
         }
     }
+    if (AnyShortcutStyle(ShowsLargeIcons)) {
+        LoadLargeIcons(windows);
+    }
+}
+
+// Whether a shortcut that's on uses a style passing the test.
+bool Switcher::AnyShortcutStyle(bool (*test)(AnimationStyle)) const {
+    for (int i = 0; i < kShortcutCount; i++) {
+        if (m_settings.shortcutOn[i] && test(m_settings.shortcutStyle[i])) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Copies an image into memory, in the format of the bitmaps. Unlike a bitmap,
@@ -6672,7 +8104,7 @@ com_ptr<IWICBitmap> Switcher::ReadAppIconPixels(HWND hwnd) {
                                          IID_PPV_ARGS(imageFactory.put())))) {
         return nullptr;
     }
-    const int size = (int)std::round(64 * m_dpiScale);
+    const int size = LargeIconPixels();
     HBITMAP hbitmap = nullptr;
     if (FAILED(imageFactory->GetImage({size, size}, SIIGBF_ICONONLY,
                                       &hbitmap))) {
@@ -6690,6 +8122,160 @@ com_ptr<IWICBitmap> Switcher::ReadAppIconPixels(HWND hwnd) {
     return pixels;
 }
 
+// An icon's pixels, made smaller if it's larger than size (in pixels), with
+// a filter that keeps it sharp. Premultiplied first, so the transparent
+// pixels around it don't darken its edges.
+com_ptr<IWICBitmap> Switcher::ReadIconPixelsAt(HICON icon, int size) {
+    com_ptr<IWICBitmap> source;
+    UINT width = 0, height = 0;
+    if (FAILED(m_wicFactory->CreateBitmapFromHICON(icon, source.put())) ||
+        FAILED(source->GetSize(&width, &height)) || !width || !height) {
+        return nullptr;
+    }
+    com_ptr<IWICBitmap> pixels = CopyPixels(m_wicFactory.get(), source.get());
+    const UINT longest = std::max(width, height);
+    if (!pixels || (int)longest <= size) {
+        return pixels;
+    }
+    com_ptr<IWICBitmapScaler> scaler;
+    if (FAILED(m_wicFactory->CreateBitmapScaler(scaler.put())) ||
+        FAILED(scaler->Initialize(pixels.get(),
+                                  std::max(1u, size * width / longest),
+                                  std::max(1u, size * height / longest),
+                                  WICBitmapInterpolationModeFant))) {
+        return pixels;
+    }
+    com_ptr<IWICBitmap> scaled = CopyPixels(m_wicFactory.get(), scaler.get());
+    return scaled ? scaled : pixels;
+}
+
+// Programs that run other programs (scripts, Java, consoles, control panel
+// parts, packaged apps): their own icon isn't their windows'.
+bool IsHostProgram(const std::wstring& path) {
+    static constexpr PCWSTR kHosts[] = {
+        L"rundll32.exe",   L"dllhost.exe",     L"mmc.exe",
+        L"java.exe",       L"javaw.exe",       L"python.exe",
+        L"pythonw.exe",    L"wscript.exe",     L"cscript.exe",
+        L"mshta.exe",      L"powershell.exe",  L"pwsh.exe",
+        L"conhost.exe",    L"openconsole.exe", L"applicationframehost.exe",
+    };
+    const size_t slash = path.find_last_of(L'\\');
+    const std::wstring name =
+        ToLower(slash == std::wstring::npos ? path : path.substr(slash + 1));
+    return std::any_of(std::begin(kHosts), std::end(kHosts),
+                       [&](PCWSTR host) { return name == host; });
+}
+
+// The large version of a window's icon, at the size the largest icons are
+// drawn at: the same icon read again from the file it came from, at 256
+// pixels (most apps' largest size), made smaller with care; or, for an icon
+// the window made itself, its app's icon (by its AppUserModelID, or its
+// program's, unless the program runs other ones).
+com_ptr<IWICBitmap> Switcher::ReadLargeIconPixels(HWND hwnd, HICON icon) {
+    const int size = LargeIconPixels();
+    constexpr int kLargestIcon = 256;
+    HICON large = nullptr;
+    ICONINFOEXW info{};
+    info.cbSize = sizeof(info);
+    if (icon && GetIconInfoExW(icon, &info)) {
+        if (info.hbmColor) {
+            DeleteObject(info.hbmColor);
+        }
+        if (info.hbmMask) {
+            DeleteObject(info.hbmMask);
+        }
+        const PCWSTR resource = info.szResName[0] ? info.szResName
+                                : info.wResID ? MAKEINTRESOURCEW(info.wResID)
+                                              : nullptr;
+        // Only a full path: the file the icon was loaded from.
+        if (resource && wcschr(info.szModName, L'\\')) {
+            const std::wstring file = NativeSystemPath(info.szModName);
+            if (HMODULE module = LoadLibraryExW(
+                    file.c_str(), nullptr,
+                    LOAD_LIBRARY_AS_DATAFILE |
+                        LOAD_LIBRARY_AS_IMAGE_RESOURCE)) {
+                large = (HICON)LoadImageW(module, resource, IMAGE_ICON,
+                                          kLargestIcon, kLargestIcon,
+                                          LR_DEFAULTCOLOR);
+                FreeLibrary(module);
+            }
+        }
+    }
+    if (!large) {
+        if (auto pixels = ReadAppIconPixels(hwnd)) {
+            return pixels;
+        }
+        const std::wstring path =
+            NativeSystemPath(GetWindowProcessPath(hwnd));
+        if (path.empty() || IsHostProgram(path) ||
+            SHDefExtractIconW(path.c_str(), 0, 0, &large, nullptr,
+                              kLargestIcon) != S_OK ||
+            !large) {
+            return nullptr;
+        }
+    }
+    com_ptr<IWICBitmap> pixels = ReadIconPixelsAt(large, size);
+    DestroyIcon(large);
+    return pixels;
+}
+
+// The size the large icons are made at (pixels), for the session's monitor.
+int Switcher::LargeIconPixels() const {
+    return (int)std::round(kLargeIconSize * m_dpiScale);
+}
+
+// Window icons are usually 32 pixels at 100% scaling, blurry where they're
+// drawn larger (see ShowsLargeIcons). This looks for the large version of
+// these windows' icons where it wasn't looked for at the session monitor's
+// size or a larger one yet (one made larger still looks right smaller), until
+// `deadline` (in NowSeconds() time). It reads files, so it's
+// done after a session (see RefreshIcons), and for a moment when a session
+// opens (see LoadSessionLargeIcons). Returns whether none is left.
+bool Switcher::LoadLargeIcons(const std::vector<HWND>& windows,
+                              double deadline) {
+    const int size = LargeIconPixels();
+    for (HWND hwnd : windows) {
+        const auto it = m_iconCache.find(hwnd);
+        if (it == m_iconCache.end() || it->second.largeSize >= size) {
+            continue;
+        }
+        if (NowSeconds() > deadline) {
+            return false;
+        }
+        CachedIcon& entry = it->second;
+        entry.largeSize = size;
+        com_ptr<IWICBitmap> pixels = ReadLargeIconPixels(hwnd, entry.source);
+        com_ptr<ID2D1Bitmap1> bitmap;
+        if (pixels) {
+            bitmap = CreateIconBitmap(pixels.get());
+        }
+        if (bitmap) {
+            entry.pixels = pixels;
+            entry.bitmap = bitmap;
+        }
+    }
+    return true;
+}
+
+// The large icons of the session's windows (see LoadLargeIcons), for at most
+// `budget` seconds; the items get the ones found. The rest come in the next
+// frames (see RenderFrame), or after the session.
+void Switcher::LoadSessionLargeIcons(double budget) {
+    std::vector<HWND> windows;
+    for (const auto& item : m_items) {
+        windows.push_back(item->hwnd);
+    }
+    m_largeIconsPending = !LoadLargeIcons(windows, NowSeconds() + budget);
+    for (auto& item : m_items) {
+        const auto it = m_iconCache.find(item->hwnd);
+        if (it != m_iconCache.end() && it->second.bitmap &&
+            it->second.bitmap.get() != item->icon.get()) {
+            item->icon = it->second.bitmap;
+            m_redraw = true;
+        }
+    }
+}
+
 com_ptr<ID2D1Bitmap1> Switcher::CreateIconBitmap(IWICBitmap* pixels) {
     com_ptr<ID2D1Bitmap1> bitmap;
     if (FAILED(m_ctx->CreateBitmapFromWicBitmap(pixels, nullptr,
@@ -6699,12 +8285,13 @@ com_ptr<ID2D1Bitmap1> Switcher::CreateIconBitmap(IWICBitmap* pixels) {
     return bitmap;
 }
 
-com_ptr<ID2D1Bitmap1> Switcher::CreateTargetBitmap(UINT width, UINT height) {
+com_ptr<ID2D1Bitmap1> Switcher::CreateTargetBitmap(UINT width,
+                                                   UINT height,
+                                                   DXGI_FORMAT format) {
     com_ptr<ID2D1Bitmap1> bitmap;
     const D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
         D2D1_BITMAP_OPTIONS_TARGET,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                          D2D1_ALPHA_MODE_PREMULTIPLIED));
+        D2D1::PixelFormat(format, D2D1_ALPHA_MODE_PREMULTIPLIED));
     if (FAILED(m_ctx->CreateBitmap({width, height}, nullptr, 0, &props,
                                    bitmap.put()))) {
         return nullptr;
@@ -6893,6 +8480,19 @@ std::wstring GetTranscodedWallpaperPath() {
     return path;
 }
 
+// Whether Windows is in light mode (Settings > Personalization > Colors),
+// which the system's own parts follow, Alt+Tab included.
+bool SystemUsesLightTheme() {
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    return RegGetValueW(HKEY_CURRENT_USER,
+                        L"Software\\Microsoft\\Windows\\CurrentVersion\\"
+                        L"Themes\\Personalize",
+                        L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr,
+                        &value, &size) == ERROR_SUCCESS &&
+           value != 0;
+}
+
 // Whether the desktop background is a solid color, with no picture.
 bool IsSolidColorBackground() {
     DWORD type = 0;
@@ -6903,6 +8503,98 @@ bool IsSolidColorBackground() {
                         L"BackgroundType", RRF_RT_REG_DWORD, nullptr, &type,
                         &size) == ERROR_SUCCESS &&
            type == 1;
+}
+
+// Mica or Mica Alt (see BackgroundMode), made like the backdrop of Windows 11
+// apps (WinUI's Mica): the wallpaper blurred until only its colors are left,
+// given the brightness of the theme's tint color (a luminosity blend), then
+// turned partly to the tint's gray (a color blend, which Mica Alt skips in
+// dark mode, keeping more of the wallpaper's color). Made at a quarter of the
+// size, which such a blur can't tell apart.
+com_ptr<ID2D1Bitmap1> Switcher::CreateMica(ID2D1Bitmap1* wallpaper,
+                                           UINT width,
+                                           UINT height,
+                                           bool light) {
+    const bool alt = m_settings.background == BackgroundMode::MicaAlt;
+    // The tint's gray and opacity, as in WinUI (Mica Alt: its base colors).
+    const float tint = alt ? (light ? 0xDA : 0x0A) / 255.0f
+                           : (light ? 0xF3 : 0x20) / 255.0f;
+    const float tintOpacity = light ? 0.5f : (alt ? 0.0f : 0.8f);
+    const UINT smallWidth = std::max(width / 4, 1u);
+    const UINT smallHeight = std::max(height / 4, 1u);
+
+    com_ptr<ID2D1Bitmap1> reduced =
+        CreateTargetBitmap(smallWidth, smallHeight);
+    com_ptr<ID2D1Bitmap1> tinted = CreateTargetBitmap(smallWidth, smallHeight);
+    com_ptr<ID2D1Bitmap1> result = CreateTargetBitmap(width, height);
+    com_ptr<ID2D1Effect> border, blur, luminosityColor, luminosity, tintColor,
+        color;
+    if (!reduced || !tinted || !result ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1Border, border.put())) ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1GaussianBlur, blur.put())) ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1Flood, luminosityColor.put())) ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1Blend, luminosity.put())) ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1Flood, tintColor.put())) ||
+        FAILED(m_ctx->CreateEffect(CLSID_D2D1Blend, color.put()))) {
+        return nullptr;
+    }
+    // Draws into a bitmap of ours; false if that failed.
+    auto drawInto = [&](ID2D1Bitmap1* target, auto&& draw) {
+        m_ctx->SetTarget(target);
+        m_ctx->BeginDraw();
+        m_ctx->Clear(D2D1::ColorF(0, 0, 0, 1));
+        draw();
+        const HRESULT hr = m_ctx->EndDraw();
+        m_ctx->SetTarget(nullptr);
+        return SUCCEEDED(hr);
+    };
+
+    const D2D1_RECT_F smallRect{0, 0, (float)smallWidth, (float)smallHeight};
+    if (!drawInto(reduced.get(), [&] {
+            m_ctx->DrawBitmap(wallpaper, smallRect, 1,
+                              D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+        })) {
+        return nullptr;
+    }
+
+    // Mirrored edges, so the blur doesn't darken them.
+    border->SetInput(0, reduced.get());
+    border->SetValue(D2D1_BORDER_PROP_EDGE_MODE_X,
+                     (UINT32)D2D1_BORDER_EDGE_MODE_MIRROR);
+    border->SetValue(D2D1_BORDER_PROP_EDGE_MODE_Y,
+                     (UINT32)D2D1_BORDER_EDGE_MODE_MIRROR);
+    blur->SetInputEffect(0, border.get());
+    blur->SetValue(D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
+                   std::min(smallWidth, smallHeight) * 0.074f);
+    blur->SetValue(D2D1_GAUSSIANBLUR_PROP_BORDER_MODE,
+                   (UINT32)D2D1_BORDER_MODE_HARD);
+    blur->SetValue(D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION,
+                   kGaussianBlurOptimizationQuality);
+    // Input 0 is the one below, input 1 the one blended over it.
+    luminosityColor->SetValue(D2D1_FLOOD_PROP_COLOR,
+                              D2D1::Vector4F(tint, tint, tint, 1));
+    luminosity->SetInputEffect(0, blur.get());
+    luminosity->SetInputEffect(1, luminosityColor.get());
+    luminosity->SetValue(D2D1_BLEND_PROP_MODE,
+                         (UINT32)D2D1_BLEND_MODE_LUMINOSITY);
+    tintColor->SetValue(D2D1_FLOOD_PROP_COLOR,
+                        D2D1::Vector4F(tint * tintOpacity, tint * tintOpacity,
+                                       tint * tintOpacity, tintOpacity));
+    color->SetInputEffect(0, luminosity.get());
+    color->SetInputEffect(1, tintColor.get());
+    color->SetValue(D2D1_BLEND_PROP_MODE, (UINT32)D2D1_BLEND_MODE_COLOR);
+    if (!drawInto(tinted.get(), [&] { m_ctx->DrawImage(color.get()); })) {
+        return nullptr;
+    }
+
+    const D2D1_RECT_F rect{0, 0, (float)width, (float)height};
+    if (!drawInto(result.get(), [&] {
+            m_ctx->DrawBitmap(tinted.get(), rect, 1,
+                              D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+        })) {
+        return nullptr;
+    }
+    return result;
 }
 
 void Switcher::UpdateBackground() {
@@ -6971,6 +8663,9 @@ void Switcher::UpdateBackground() {
     const bool solidColor = path.empty() && IsSolidColorBackground();
     const std::wstring transcoded =
         solidColor ? std::wstring() : GetTranscodedWallpaperPath();
+    const bool mica = m_settings.background == BackgroundMode::Mica ||
+                      m_settings.background == BackgroundMode::MicaAlt;
+    const bool light = mica && SystemUsesLightTheme();
 
     // The wallpaper files are often replaced in place, so include their time.
     const std::wstring key =
@@ -6981,7 +8676,8 @@ void Switcher::UpdateBackground() {
         std::to_wstring(m_monitor.top) + L"|" +
         std::to_wstring(color) + L"|" + std::to_wstring((int)position) + L"|" +
         std::to_wstring((int)m_settings.background) + L"|" +
-        std::to_wstring(m_settings.blurAmount);
+        std::to_wstring(m_settings.blurAmount) + L"|" +
+        std::to_wstring((int)light);
     if (key == m_backgroundKey) {
         return;
     }
@@ -7026,6 +8722,12 @@ void Switcher::UpdateBackground() {
         return;
     }
 
+    if (mica) {
+        com_ptr<ID2D1Bitmap1> material =
+            CreateMica(composed.get(), width, height, light);
+        m_background = material ? material : composed;
+        return;
+    }
     if (m_settings.background != BackgroundMode::BlurredWallpaper) {
         m_background = composed;
         return;

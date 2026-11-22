@@ -2,7 +2,7 @@
 // @id              taskbar-start-button-colorizer
 // @name            Start button colorizer
 // @description     Recolor the Start button icon on the taskbar with a color preset or with hue, saturation, brightness and opacity effects, and change its size (Windows 11 only)
-// @version         1.1
+// @version         1.1.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -595,10 +595,13 @@ void ApplyStartButtonStyle(FrameworkElement startButton) {
 }
 
 bool ApplyStyle(XamlRoot xamlRoot) {
+    // On newer builds, the taskbar frame is the content itself.
     FrameworkElement child = xamlRoot.Content().try_as<FrameworkElement>();
-    if (!child ||
-        !(child = FindChildByClassName(child, L"Taskbar.TaskbarFrame")) ||
-        !(child = FindChildByName(child, L"RootGrid")) ||
+    if (child && winrt::get_class_name(child) != L"Taskbar.TaskbarFrame") {
+        child = FindChildByClassName(child, L"Taskbar.TaskbarFrame");
+    }
+
+    if (!child || !(child = FindChildByName(child, L"RootGrid")) ||
         !(child = FindChildByName(child, L"TaskbarFrameRepeater"))) {
         return false;
     }
