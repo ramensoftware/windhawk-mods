@@ -1,14 +1,15 @@
 // ==WindhawkMod==
 // @id              aegis-capsule
 // @name            aegisCapsule
+// @name:tr-TR      aegisCapsule
 // @description     Direct2D & WASAPI top-bar status capsule for Windows 10/11 with media controls, voice recording, Pomodoro timer, quick notes, and hardware telemetry.
+// @description:tr-TR Windows 10/11 için medya kontrolleri, ses kaydedici, Pomodoro sayacı, hızlı notlar ve donanım telemetrisi içeren Direct2D & WASAPI üst çubuk kapsülü.
 // @version         0.1.0
 // @author          MrSpy00
 // @github          https://github.com/MrSpy00
 // @homepage        https://github.com/MrSpy00/aegisCapsule
-// @include         explorer.exe
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lavrt -lsetupapi -lwinhttp -lpdh -lwinmm
+// @compilerOptions -lole32 -loleaut32 -luuid -lshcore -ld2d1 -ldwrite -ldwmapi -lgdi32 -luser32 -lshell32 -lruntimeobject -lwindowscodecs -lwinhttp -lpdh
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -16,103 +17,108 @@
 /*
 # aegisCapsule v0.1.0
 
-*Dynamic Liquid Glass Companion & Productivity Capsule for Windows Desktop*  
-*Windows Masaüstü için Yeni Nesil Dinamik Liquid Glass Kapsülü ve Üretkenlik Asistanı*
+*Dynamic Liquid Glass Companion & Productivity Capsule for Windows Desktop*
+
+## English Description & Features
+
+**aegisCapsule** is a hardware-accelerated (Direct2D / DirectWrite) dynamic capsule companion for Windows, featuring frosted Liquid Glass optics, media controls, a WASAPI voice recorder, quick notes, a Pomodoro timer, and a living wellness assistant.
+
+### Key Capabilities
+- **Liquid Glass Optical Engine:** Multi-layer frosted glass sheen, animated caustic light waves, ambient accent glow, and dual-rim highlights.
+- **Full-Screen Auto-Hide:** Automatically hides when full-screen games or video players are active.
+- **Windows Toast Notifications:** Displays Windows toast alerts inside the expanding capsule. Requires Windows Privacy setting *"Let apps access your notifications"* to be enabled.
+- **Living Assistant & Wellness:** Continuous PC uptime tracking, hydration reminders (15–120 min presets), 20-20-20 eye-strain breaks, and posture stretch alerts.
+- **Smart Voice Recorder:** One-click WASAPI microphone recording saved as WAV in your Desktop `aegisCapsule_Recordings` folder (or custom folder) with live waveform visualization.
+- **Quick Notes & Scratchpad:** Instant clipboard note capture stored inside Windhawk's mod storage directory.
+- **Pomodoro Focus Timer:** 15/25/45/60 min focus intervals, breaks, and live circular progress ring.
+- **Real-Time Weather Hub (`wttr.in`):** Fetches weather JSON over HTTPS from `https://wttr.in/<city>?format=j1`. Sends only your configured city (or uses IP-based geolocation when city is blank) every `WeatherUpdateMinutes` (default 10 min). Can be turned off anytime via **Weather module** in settings.
+- **7-Tab Expanded Dashboard:** Briefing, Calendar, Weather, Hardware/Game Overlay (FPS, CPU, RAM, GPU, Disk), Notes, Pomodoro, and Living Assistant.
+- **Full Bilingual Support:** Seamless English and Turkish localization across all cards, alerts, and menus.
+
+### Disclosures & Attribution
+- **System Toast Suppression (Optional):** When *Suppress Windows Native Toast Popups* is enabled, the mod writes `0` to `HKCU\Software\Microsoft\Windows\CurrentVersion\PushNotifications\ToastEnabled` (Windows' global notification switch) after backing up your previous value, and restores your previous value when disabled or unloaded. If the process terminates unexpectedly, the previous value is restored on next startup.
+- **Attribution & Difference from `dynamic-island-for-windows`:** Portions of the Direct2D island layout, spring physics, and privacy/audio scaffolding are adapted from [Dynamic Island for Windows](https://github.com/devcode90/Dynamic-Island-for-Windows) by Himanshu (`devcode90`, MIT License). `aegisCapsule` extends that foundation with a 7-tab productivity dashboard, WASAPI WAV voice recorder, Windhawk-stored quick notes, Pomodoro focus timer, wellness reminders, bilingual TR/EN UI, and optional system toast suppression.
 
 ---
 
-## 🇹🇷 Türkçe Açıklama & Özellikler
+## Türkçe Açıklama & Özellikler
 
-**aegisCapsule**, Apple Vision Pro estetiği ve Liquid Glass optik teknolojisi ile geliştirilmiş, donanım hızlandırmalı (Direct2D/DirectWrite), ultra akıcı ve çok amaçlı bir dinamik masaüstü kapsülüdür. 60-240 FPS aralığında neredeyse sıfır CPU kullanımıyla çalışır.
-
-### ✨ Temel Özellikler
-- **💎 Liquid Glass Optik Motoru:** Çok katmanlı sıvı damla cam yansımaları, hareketli kaustik ışık dalgaları, çevresel ambiyans aydınlatması ve kristal berraklığında kenar kırılmaları.
-- **🎮 Tam Ekran Otomatik Gizleme (Full-Screen Auto-Hide):** Oyunlarda, tam ekran video oynatıcılarda (YouTube, Netflix, VLC) ve tam ekran uygulamalarda kapsül kendiliğinden tamamen kapanır; masaüstüne dönüldüğünde pürüzsüzce geri gelir.
-- **📢 Dinamik Bildirim Genişlemesi:** Ekran alıntısı, bildirim veya kopyalama işlemlerinde kapsül metnin uzunluğuna göre sağa-sola dinamik olarak genişler; yazılar asla kesilmez.
-- **🔕 Sistem Bildirimlerini Gizleme (Opsiyonel):** Windows'un standart açılır bildirim pencerelerini susturup tüm bildirimleri yalnızca kapsülde zarifçe gösterme desteği.
-- **🌿 Sağlık & Yaşam Asistanı (Living Wellness):** Sürekli PC açık kalma sayacı, ayarlanabilir ve hazır süreli su içme hatırlatıcıları (15/30/45/60/90/120 dk), 20-20-20 göz dinlendirme ve saatlik esneme molaları.
-- **🎙️ Akıllı Ses Kaydedici:** Kapsül üzerinden tek tıkla mikrofon kaydı başlatma, canlı dalga formu görselleştirmesi ve masaüstüne yüksek kaliteli WAV kaydı.
-- **📝 Hızlı Notlar & Karalama:** Panodaki metinleri veya notları anında kapsüle kaydetme ve görüntüleme.
-- **🍅 Pomodoro Odak Sayacı:** 15/25/45/60 dakikalık odaklanma seansları, kısa/uzun molalar ve dairesel ilerleme halkası.
-- **⛅ Canlı Hava Durumu & Atmosfer:** Şehir, sıcaklık, hissedilen, rüzgar, nem ve durum ikonları.
-- **📊 7 Sekmeli Gelişmiş Dashboard:** Yaşayan Asistan & Günlük Özet, Takvim & Saat, Hava Durumu, Donanım & Oyun Overlay, Hızlı Notlar, Pomodoro, Sağlık Asistanı.
-- **🖱️ Doğal Kaydırma (Natural Scroll):** Fare tekerleği aşağı = Sonraki Sekme, yukarı = Önceki Sekme.
-- **🌐 Çift Dilli Yapı:** Hem 🇹🇷 Türkçe hem 🇬🇧 İngilizce tam arayüz ve sağ tık menü desteği.
-
----
-
-## 🇬🇧 English Description & Features
-
-**aegisCapsule** is an ultra-fluid, hardware-accelerated dynamic capsule companion for Windows, featuring Apple Vision Pro aesthetics, pristine Liquid Glass optics, and an intelligent living assistant.
-
-### ✨ Key Capabilities
-- **💎 Liquid Glass Optical Engine:** Multi-layer liquid droplet glass refractions, animated caustic light waves, ambient accent glow, and crisp dual-rim specular highlights.
-- **🎮 Full-Screen Auto-Hide:** Automatically hides completely when games, full-screen video players (YouTube, Netflix, VLC), or full-screen apps are active. Restores seamlessly upon returning to desktop.
-- **📢 Dynamic Island Notification Expansion:** Dynamically adjusts capsule width to fit notifications, screenshot alerts, and clipboard events with zero clipping.
-- **🔕 Suppress Native Toast Popups (Optional):** Suppress default Windows toast banners so all alerts display exclusively inside the capsule island.
-- **🌿 Living Assistant & Wellness:** Continuous PC uptime tracking, customizable hydration intervals (15/30/45/60/90/120 min presets), 20-20-20 eye strain breaks, and posture stretch alerts.
-- **🎙️ Smart Voice Recorder:** One-click WASAPI microphone recording saving crystal-clear WAV audio to Desktop with live animated audio waveforms.
-- **📝 Quick Notes & Scratchpad:** Instant clipboard note capturing and storage directly on the capsule.
-- **🍅 Pomodoro Productivity Timer:** 15/25/45/60 min focus intervals, short/long breaks, and live circular progress rings.
-- **⛅ Real-Time Weather Hub:** Location-aware temperature, feels-like, wind speed, humidity, and condition glyphs.
-- **📊 7-Tab Expanded Dashboard:** Living Companion & Daily Briefing, Calendar, Weather, Hardware/Game Overlay (FPS, CPU, RAM, GPU, Disk), Notes, Pomodoro, Living Assistant.
-- **🖱️ Natural Wheel Scroll:** Mouse wheel down = next tab, mouse wheel up = previous tab.
-- **🌐 Full Bilingual Support:** Seamless 🇹🇷 Turkish and 🇬🇧 English localization across all cards, alerts, and settings.
+**aegisCapsule**, Direct2D/DirectWrite tabanlı donanım hızlandırmalı, Liquid Glass optik efektli masaüstü kapsülüdür. Medya kontrolleri, WASAPI ses kaydedici, hızlı notlar, Pomodoro sayacı, sağlık/yaşam asistanı, `wttr.in` üzerinden hava durumu ve donanım telemetrisi içerir.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+
 - General:
   - Language: auto
-    $name: "Language / Dil Seçimi"
-    $description: "Display language for all dashboard cards, health assistant, alerts, and menus. / Tüm panel kartları, sağlık asistanı, uyarılar ve menüler için dil seçimi."
+    $name: "Language"
+    $name:tr-TR: "Dil Seçimi"
+    $description: "Display language for all dashboard cards, health assistant, alerts, and menus."
+    $description:tr-TR: "Tüm panel kartları, sağlık asistanı, uyarılar ve menüler için dil seçimi."
     $options:
-      - auto: "🌐 Auto (Match Windows System) / Otomatik (Windows Sistem Dili)"
+      - auto: "🌐 Auto (Match Windows System)"
       - tr: "🇹🇷 Türkçe (Turkish)"
       - en: "🇬🇧 English (İngilizce)"
   - SuppressSystemToasts: false
-    $name: "Suppress Windows Native Toast Popups / Windows Sistem Bildirim Barlarını Gizle"
-    $description: "Hide default Windows toast banners so all notifications display exclusively in the aegisCapsule island. / Windows'un açılır bildirim pencerelerini gizler; tüm bildirimler yalnızca kapsülde gösterilir."
-  $name: "General & Language / Genel & Dil"
+    $name: "Suppress Windows Native Toast Popups"
+    $name:tr-TR: "Windows Sistem Bildirim Barlarını Gizle"
+    $description: "Modifies Windows global ToastEnabled registry setting (backs up and restores your previous value on disable/unload)."
+    $description:tr-TR: "Windows genel ToastEnabled kayıt defteri ayarını değiştirir (kapatılınca/kaldırılınca önceki değeri geri yükler)."
+  $name: "General & Language"
+  $name:tr-TR: "Genel & Dil"
 - Appearance:
   - Position: top-center
-    $name: "Position / Konum"
-    $description: "Where aegisCapsule should appear on your screen. / Kapsülün ekranda nerede görüneceğini seçin."
+    $name: "Position"
+    $name:tr-TR: "Konum"
+    $description: "Where aegisCapsule should appear on your screen."
+    $description:tr-TR: "Kapsülün ekranda nerede görüneceğini seçin."
     $options:
-      - top-center: "Top Center / Üst Orta"
-      - top-left: "Top Left / Üst Sol"
-      - top-right: "Top Right / Üst Sağ"
-      - bottom-center: "Bottom Center / Alt Orta"
-      - bottom-left: "Bottom Left / Alt Sol"
-      - bottom-right: "Bottom Right / Alt Sağ"
-      - center: "Screen Center / Ekran Ortası"
+      - top-center: "Top Center"
+      - top-left: "Top Left"
+      - top-right: "Top Right"
+      - bottom-center: "Bottom Center"
+      - bottom-left: "Bottom Left"
+      - bottom-right: "Bottom Right"
+      - center: "Screen Center"
   - TargetMonitor: primary
-    $name: "Target Monitor / Hedef Monitör"
-    $description: "Select the screen to display the capsule. / Kapsülün gösterileceği monitörü seçin."
+    $name: "Target Monitor"
+    $name:tr-TR: "Hedef Monitör"
+    $description: "Select the screen to display the capsule."
+    $description:tr-TR: "Kapsülün gösterileceği monitörü seçin."
     $options:
-      - 'primary': "Primary Monitor / Ana Monitör"
-      - '1': "Display 1 / Monitör 1"
-      - '2': "Display 2 / Monitör 2"
-      - '3': "Display 3 / Monitör 3"
-      - '4': "Display 4 / Monitör 4"
-      - '5': "Display 5 / Monitör 5"
-      - 'follow': "Follow Mouse (Active Monitor) / Fareyi Takip Et"
+      - 'primary': "Primary Monitor"
+      - '1': "Display 1"
+      - '2': "Display 2"
+      - '3': "Display 3"
+      - '4': "Display 4"
+      - '5': "Display 5"
+      - 'follow': "Follow Mouse (Active Monitor)"
   - FullScreenDetection: true
-    $name: "Full-screen Auto-Hide / Tam Ekran Otomatik Gizleme"
-    $description: "Automatically hide capsule completely during full-screen games, movies, and apps. / Oyun veya film gibi tam ekran uygulamalarda kapsülü tamamen gizler."
+    $name: "Full-screen Auto-Hide"
+    $name:tr-TR: "Tam Ekran Otomatik Gizleme"
+    $description: "Automatically hide capsule completely during full-screen games, movies, and apps."
+    $description:tr-TR: "Oyun veya film gibi tam ekran uygulamalarda kapsülü tamamen gizler."
   - OffsetX: 0
-    $name: "Offset X (px) / X Ekseni Kaydırma"
-    $description: "Horizontal fine-tuning in pixels. / Yatay konum ince ayarı (piksel)."
+    $name: "Offset X (px)"
+    $name:tr-TR: "X Ekseni Kaydırma"
+    $description: "Horizontal fine-tuning in pixels."
+    $description:tr-TR: "Yatay konum ince ayarı (piksel)."
   - OffsetY: 0
-    $name: "Offset Y (px) / Y Ekseni Kaydırma"
-    $description: "Vertical fine-tuning in pixels. / Dikey konum ince ayarı (piksel)."
+    $name: "Offset Y (px)"
+    $name:tr-TR: "Y Ekseni Kaydırma"
+    $description: "Vertical fine-tuning in pixels."
+    $description:tr-TR: "Dikey konum ince ayarı (piksel)."
   - EdgeMargin: 8
-    $name: "Screen Edge Margin (px) / Ekran Kenar Boşluğu"
-    $description: "Distance from the edge of the monitor. / Ekran kenarından uzaklık."
+    $name: "Screen Edge Margin (px)"
+    $name:tr-TR: "Ekran Kenar Boşluğu"
+    $description: "Distance from the edge of the monitor."
+    $description:tr-TR: "Ekran kenarından uzaklık."
   - SizeScale: '1.0'
-    $name: "Overall Size Scale / Genel Boyut Ölçeği"
-    $description: "Adjust global UI size scale multiplier. / Genel arayüz boyut ölçeği çarpanı."
+    $name: "Overall Size Scale"
+    $name:tr-TR: "Genel Boyut Ölçeği"
+    $description: "Adjust global UI size scale multiplier."
+    $description:tr-TR: "Genel arayüz boyut ölçeği çarpanı."
     $options:
       - '0.5': "0.5x (Mini)"
       - '0.6': "0.6x"
@@ -127,379 +133,485 @@
       - '1.8': "1.8x"
       - '2.0': "2.0x (Extra Large)"
   - CornerStyle: pill
-    $name: "Corner Roundness & Shape / Kenar Yuvarlaklığı & Şekil"
-    $description: "Choose how round or sharp the capsule edges appear. / Kapsül kenarlarının biçimini seçin."
+    $name: "Corner Roundness & Shape"
+    $name:tr-TR: "Kenar Yuvarlaklığı & Şekil"
+    $description: "Choose how round or sharp the capsule edges appear."
+    $description:tr-TR: "Kapsül kenarlarının biçimini seçin."
     $options:
-      - pill: "Full Pill (Continuous Round Capsule) / Tam Hap (Yuvarlak Kapsül)"
-      - squircle: "Vision Squircle (Smooth Rounded Rectangle) / Vision Squircle (Yumuşak Dikdörtgen)"
-      - modern-box: "Modern Box (8px Corner Radius) / Modern Kutu (8px)"
-      - sharp: "Sharp Box (0px Corner Radius) / Keskin Kutu (0px)"
-      - custom: "Custom Radius / Özel Yarıçap"
+      - pill: "Full Pill (Continuous Round Capsule)"
+      - squircle: "Vision Squircle (Smooth Rounded Rectangle)"
+      - modern-box: "Modern Box (8px Corner Radius)"
+      - sharp: "Sharp Box (0px Corner Radius)"
+      - custom: "Custom Radius"
   - CustomCornerRadius: 18
-    $name: "Custom Corner Radius (px) / Özel Köşe Yarıçapı"
-    $description: "Applied when Corner Roundness is set to Custom. / Şekil 'Özel' seçildiğinde geçerlidir."
+    $name: "Custom Corner Radius (px)"
+    $name:tr-TR: "Özel Köşe Yarıçapı"
+    $description: "Applied when Corner Roundness is set to Custom."
+    $description:tr-TR: "Şekil 'Özel' seçildiğinde geçerlidir."
   - IdleDisplayMode: '0'
-    $name: "Default Idle Display Style / Varsayılan Bekleme Modu Görünümü"
-    $description: "Choose what the capsule shows by default when collapsed. / Kapsül beklemedeyken varsayılan olarak ne göstereceğini seçin."
+    $name: "Default Idle Display Style"
+    $name:tr-TR: "Varsayılan Bekleme Modu Görünümü"
+    $description: "Choose what the capsule shows by default when collapsed."
+    $description:tr-TR: "Kapsül beklemedeyken varsayılan olarak ne göstereceğini seçin."
     $options:
-      - '0': "Smart Dynamic (Auto-adapts to Pomodoro / Weather) / Akıllı Dinamik"
-      - '1': "Clock & Weather Duo (Centered 50/50 Classic) / Saat ve Hava Durumu"
-      - '2': "Clock Only (Minimalist Large Time) / Sadece Saat"
-      - '3': "System Telemetry HUD (Clock + CPU + RAM) / Sistem Durum Bilgisi"
-      - '4': "Weather & Atmosphere Focus / Hava Durumu Odaklı"
-      - '5': "Live Pomodoro Focus / Canlı Pomodoro Sayacı"
+      - '0': "Smart Dynamic (Auto-adapts to Pomodoro"
+      - '1': "Clock & Weather Duo (Centered 50/50 Classic)"
+      - '2': "Clock Only (Minimalist Large Time)"
+      - '3': "System Telemetry HUD (Clock + CPU + RAM)"
+      - '4': "Weather & Atmosphere Focus"
+      - '5': "Live Pomodoro Focus"
   - IdleTextScale: 100
-    $name: "Collapsed Idle Font Scale (%) / Kapalı Kapsül Yazı Boyutu (%)"
-    $description: "Adjust the text and clock size in the collapsed capsule (50% to 200%). / Kapalı kapsül içindeki yazı ve saat boyutunu ölçekleyin (%50 - %200)."
+    $name: "Collapsed Idle Font Scale (%)"
+    $name:tr-TR: "Kapalı Kapsül Yazı Boyutu (%)"
+    $description: "Adjust the text and clock size in the collapsed capsule (50% to 200%)."
+    $description:tr-TR: "Kapalı kapsül içindeki yazı ve saat boyutunu ölçekleyin (%50 - %200)."
   - IdleClockShowSeconds: false
-    $name: "Show Seconds in Clock / Saatte Saniyeleri Göster"
-    $description: "Display seconds in the minimal clock format (e.g. 14:32:08). / Minimal saatte saniyeleri göster (Örn. 14:32:08)."
+    $name: "Show Seconds in Clock"
+    $name:tr-TR: "Saatte Saniyeleri Göster"
+    $description: "Display seconds in the minimal clock format (e.g. 14:32:08)."
+    $description:tr-TR: "Minimal saatte saniyeleri göster (Örn. 14:32:08)."
   - IdleClockTimeFormat: auto
-    $name: "Clock Time Format / Saat Zaman Formatı"
-    $description: "Choose between 24-Hour, 12-Hour (AM/PM), or System Locale default. / 24 Saat, 12 Saat (ÖÖ/ÖS) veya Sistem varsayılanı."
+    $name: "Clock Time Format"
+    $name:tr-TR: "Saat Zaman Formatı"
+    $description: "Choose between 24-Hour, 12-Hour (AM/PM), or System Locale default."
+    $description:tr-TR: "24 Saat, 12 Saat (ÖÖ/ÖS) veya Sistem varsayılanı."
     $options:
-      - auto: "Auto (System Locale Default) / Otomatik (Sistem Dili)"
-      - 24h: "24-Hour (14:30) / 24 Saatlik"
-      - 12h: "12-Hour (2:30 PM) / 12 Saatlik"
+      - auto: "Auto (System Locale Default)"
+      - 24h: "24-Hour (14:30)"
+      - 12h: "12-Hour (2:30 PM)"
   - IdleClockBold: true
-    $name: "Bold Idle Typography / Kalın Yazı Tipi"
-    $description: "Use SemiBold font weight for crisp visibility in the minimal capsule. / Kapalı kapsülde daha net okunabilirlik için yarı kalın yazı tipi kullan."
+    $name: "Bold Idle Typography"
+    $name:tr-TR: "Kalın Yazı Tipi"
+    $description: "Use SemiBold font weight for crisp visibility in the minimal capsule."
+    $description:tr-TR: "Kapalı kapsülde daha net okunabilirlik için yarı kalın yazı tipi kullan."
   - CollapsedWidth: 200
-    $name: "Collapsed Idle Width (px) / Kapalı Kapsül Genişliği"
-    $description: "Width of the minimal idle capsule before size scaling. Default is 200. / Standart kapalı kapsül genişliği."
+    $name: "Collapsed Idle Width (px)"
+    $name:tr-TR: "Kapalı Kapsül Genişliği"
+    $description: "Width of the minimal idle capsule before size scaling. Default is 200."
+    $description:tr-TR: "Standart kapalı kapsül genişliği."
   - CollapsedHeight: 38
-    $name: "Collapsed Idle Height (px) / Kapalı Kapsül Yüksekliği"
-    $description: "Height of the minimal idle capsule before size scaling. Default is 38. / Standart kapalı kapsül yüksekliği."
+    $name: "Collapsed Idle Height (px)"
+    $name:tr-TR: "Kapalı Kapsül Yüksekliği"
+    $description: "Height of the minimal idle capsule before size scaling. Default is 38."
+    $description:tr-TR: "Standart kapalı kapsül yüksekliği."
   - ExpandedWidth: 480
-    $name: "Expanded Dashboard Width (px) / Açık Dashboard Genişliği"
-    $description: "Width of the expanded dashboard before size scaling. Default is 480. / Genişletilmiş panel genişliği."
+    $name: "Expanded Dashboard Width (px)"
+    $name:tr-TR: "Açık Dashboard Genişliği"
+    $description: "Width of the expanded dashboard before size scaling. Default is 480."
+    $description:tr-TR: "Genişletilmiş panel genişliği."
   - ExpandedHeight: 190
-    $name: "Expanded Dashboard Height (px) / Açık Dashboard Yüksekliği"
-    $description: "Height of the expanded dashboard before size scaling. Default is 190. / Genişletilmiş panel yüksekliği."
+    $name: "Expanded Dashboard Height (px)"
+    $name:tr-TR: "Açık Dashboard Yüksekliği"
+    $description: "Height of the expanded dashboard before size scaling. Default is 190."
+    $description:tr-TR: "Genişletilmiş panel yüksekliği."
   - AutoHideIdleSeconds: '0'
-    $name: "Auto-hide idle capsule / Boşta Otomatik Gizleme"
-    $description: "Hide the idle capsule after inactivity. 0 keeps it always visible. / Hareketsizlik sonrası kapsülü gizleme süresi."
+    $name: "Auto-hide idle capsule"
+    $name:tr-TR: "Boşta Otomatik Gizleme"
+    $description: "Hide the idle capsule after inactivity. 0 keeps it always visible."
+    $description:tr-TR: "Hareketsizlik sonrası kapsülü gizleme süresi."
     $options:
-      - '-1': "Hide instantly / Anında Gizle"
-      - '0': "Never hide (Always visible) / Asla Gizleme (Sürekli Görünür)"
-      - '3': "Hide after 3 seconds / 3 saniye sonra gizle"
-      - '5': "Hide after 5 seconds / 5 saniye sonra gizle"
-      - '10': "Hide after 10 seconds / 10 saniye sonra gizle"
-      - '15': "Hide after 15 seconds / 15 saniye sonra gizle"
-      - '30': "Hide after 30 seconds / 30 saniye sonra gizle"
-  - UnhideOnHover: true
-    $name: "Unhide on hover / Üzerine Gelince Göster"
-    $description: "Allow a hidden capsule to reappear when hovering near its anchor. / Fare yaklaştığında gizli kapsülü açar."
+      - '-1': "Hide instantly"
+      - '0': "Never hide (Always visible)"
+      - '3': "Hide after 3 seconds"
+      - '5': "Hide after 5 seconds"
+      - '10': "Hide after 10 seconds"
+      - '15': "Hide after 15 seconds"
+      - '30': "Hide after 30 seconds"
   - ExpandOnHover: true
-    $name: "Expand on hover / Üzerine Gelince Genişlet"
-    $description: "Expand the capsule automatically when hovered. / Fare üzerine gelince paneli otomatik açar."
+    $name: "Expand on hover"
+    $name:tr-TR: "Üzerine Gelince Genişlet"
+    $description: "Expand the capsule automatically when hovered."
+    $description:tr-TR: "Fare üzerine gelince paneli otomatik açar."
   - AlwaysOnTop: true
-    $name: "Always on top / Her Zaman Üstte"
-    $description: "Keeps aegisCapsule above all other windows. / Kapsülü tüm pencerelerin üstünde tutar."
+    $name: "Always on top"
+    $name:tr-TR: "Her Zaman Üstte"
+    $description: "Keeps aegisCapsule above all other windows."
+    $description:tr-TR: "Kapsülü tüm pencerelerin üstünde tutar."
   - AutoDpiScale: true
-    $name: "Auto DPI scaling / Otomatik DPI Ölçekleme"
-    $description: "Automatically scales font sizes and metrics to match monitor DPI. / Monitör DPI değerine göre otomatik ölçekler."
-  - ClickThroughIdle: false
-    $name: "Click-through when idle / Boştayken Tıklamayı İlet"
-    $description: "Let mouse clicks pass through the minimal idle capsule. / Kapalıyken tıklamaların arkadaki pencereye geçmesini sağlar."
-  $name: "Appearance & Placement / Görünüm & Konum"
+    $name: "Auto DPI scaling"
+    $name:tr-TR: "Otomatik DPI Ölçekleme"
+    $description: "Automatically scales font sizes and metrics to match monitor DPI."
+    $description:tr-TR: "Monitör DPI değerine göre otomatik ölçekler."
 - Optics:
   - LiquidGlass: true
-    $name: "Liquid Glass Optical Engine / Liquid Glass Optik Motoru"
-    $description: "Master switch for multi-layer frosted glass, caustics, and refraction. / Çok katmanlı buzlu cam ve kırılma efektleri."
+    $name: "Liquid Glass Optical Engine"
+    $name:tr-TR: "Liquid Glass Optik Motoru"
+    $description: "Master switch for multi-layer frosted glass, caustics, and refraction."
+    $description:tr-TR: "Çok katmanlı buzlu cam ve kırılma efektleri."
   - LiquidGlassIntensity: 80
-    $name: "Liquid Glass Intensity / Cam Efekti Yoğunluğu"
-    $description: "0 to 100. Controls the prominence of the glass sheen. / 0-100 arası cam parlaklık yoğunluğu."
+    $name: "Liquid Glass Intensity"
+    $name:tr-TR: "Cam Efekti Yoğunluğu"
+    $description: "0 to 100. Controls the prominence of the glass sheen."
+    $description:tr-TR: "0-100 arası cam parlaklık yoğunluğu."
   - GlassSheen: true
-    $name: "Frosted Glass Gradient Sheen / Gradyan Cam Parlaması"
-    $description: "Renders a smooth vertical ambient light sheen across the capsule face. / Kapsül yüzeyinde dikey ışık parlaması."
+    $name: "Frosted Glass Gradient Sheen"
+    $name:tr-TR: "Gradyan Cam Parlaması"
+    $description: "Renders a smooth vertical ambient light sheen across the capsule face."
+    $description:tr-TR: "Kapsül yüzeyinde dikey ışık parlaması."
   - GlassCaustics: true
-    $name: "Animated Caustic Light Wave / Hareketli Kaustik Işık Dalgası"
-    $description: "Renders an ultra-subtle animated sinusoidal light shimmer. / Yüzeyde akıcı sinüzoidal ışık dalgası oluşturur."
+    $name: "Animated Caustic Light Wave"
+    $name:tr-TR: "Hareketli Kaustik Işık Dalgası"
+    $description: "Renders an ultra-subtle animated sinusoidal light shimmer."
+    $description:tr-TR: "Yüzeyde akıcı sinüzoidal ışık dalgası oluşturur."
   - GlassSpecular: true
-    $name: "1px Top Specular Highlight / Üst Kenar Yansıma Çizgisi"
-    $description: "Adds a crisp, elegant top rim reflection line. / Üst kenara zarif 1px yansıma çizgisi ekler."
+    $name: "1px Top Specular Highlight"
+    $name:tr-TR: "Üst Kenar Yansıma Çizgisi"
+    $description: "Adds a crisp, elegant top rim reflection line."
+    $description:tr-TR: "Üst kenara zarif 1px yansıma çizgisi ekler."
   - GlassRefractionRim: true
-    $name: "Edge Refraction Border / Kenar Kırılma Sınırı"
-    $description: "Simulates optical refraction along the outer capsule perimeter. / Kapsül kenarlarında optik kırılma sınırı çizer."
+    $name: "Edge Refraction Border"
+    $name:tr-TR: "Kenar Kırılma Sınırı"
+    $description: "Simulates optical refraction along the outer capsule perimeter."
+    $description:tr-TR: "Kapsül kenarlarında optik kırılma sınırı çizer."
   - AccentGlow: true
-    $name: "Ambient Accent Glow / Çevresel Vurgu Işığı"
-    $description: "Dynamic breathing ambient colored halo behind the capsule. / Kapsül arkasında nefes alan renkli ambiyans halesi."
+    $name: "Ambient Accent Glow"
+    $name:tr-TR: "Çevresel Vurgu Işığı"
+    $description: "Dynamic breathing ambient colored halo behind the capsule."
+    $description:tr-TR: "Kapsül arkasında nefes alan renkli ambiyans halesi."
   - AccentGlowIntensity: 80
-    $name: "Accent Glow Intensity / Vurgu Işığı Yoğunluğu"
-    $description: "0 to 100. Controls the brightness of the ambient glow. / Çevresel ışığın parlaklığı (0-100)."
+    $name: "Accent Glow Intensity"
+    $name:tr-TR: "Vurgu Işığı Yoğunluğu"
+    $description: "0 to 100. Controls the brightness of the ambient glow."
+    $description:tr-TR: "Çevresel ışığın parlaklığı (0-100)."
   - AccentGlowRadius: 28
-    $name: "Accent Glow Radius (px) / Vurgu Işığı Yarıçapı"
-    $description: "Spread distance of the ambient colored halo. / Renk halesinin yayılma mesafesi (px)."
+    $name: "Accent Glow Radius (px)"
+    $name:tr-TR: "Vurgu Işığı Yarıçapı"
+    $description: "Spread distance of the ambient colored halo."
+    $description:tr-TR: "Renk halesinin yayılma mesafesi (px)."
   - SoftShadow: true
-    $name: "Multi-Pass Soft Drop Shadow / Yumuşak Gölge"
-    $description: "Progressive soft atmospheric drop shadow beneath the capsule. / Kapsül altında yumuşak atmosferik gölge oluşturur."
+    $name: "Multi-Pass Soft Drop Shadow"
+    $name:tr-TR: "Yumuşak Gölge"
+    $description: "Progressive soft atmospheric drop shadow beneath the capsule."
+    $description:tr-TR: "Kapsül altında yumuşak atmosferik gölge oluşturur."
   - ShadowSoftness: 70
-    $name: "Shadow Softness / Gölge Yumuşaklığı"
-    $description: "0 to 100. Controls shadow blur and depth. / Gölge derinliği ve yumuşaklığı (0-100)."
-  $name: "Optics & Liquid Glass / Optik & Liquid Glass"
+    $name: "Shadow Softness"
+    $name:tr-TR: "Gölge Yumuşaklığı"
+    $description: "0 to 100. Controls shadow blur and depth."
+    $description:tr-TR: "Gölge derinliği ve yumuşaklığı (0-100)."
+  $name: "Optics & Liquid Glass"
+  $name:tr-TR: "Optik & Liquid Glass"
 - Assistant:
   - EnableWellnessReminders: true
-    $name: "Living Capsule & Wellness Alerts / Yaşayan Kapsül & Sağlık Uyarıları"
-    $description: "Periodic smart health reminders for hydration, eye rest, and posture. / Su içme, 20-20-20 göz dinlendirme ve mola hatırlatıcıları."
+    $name: "Living Capsule & Wellness Alerts"
+    $name:tr-TR: "Yaşayan Kapsül & Sağlık Uyarıları"
+    $description: "Periodic smart health reminders for hydration, eye rest, and posture."
+    $description:tr-TR: "Su içme, 20-20-20 göz dinlendirme ve mola hatırlatıcıları."
   - HydrationPreset: '45'
-    $name: "Hydration Reminder Timing / Su İçme Hatırlatıcı Aralığı"
-    $description: "Choose a preset interval or custom timing. / Hazır süre seçin veya özel dakika girin."
+    $name: "Hydration Reminder Timing"
+    $name:tr-TR: "Su İçme Hatırlatıcı Aralığı"
+    $description: "Choose a preset interval or custom timing."
+    $description:tr-TR: "Hazır süre seçin veya özel dakika girin."
     $options:
-      - '15': "15 min / 15 dakika"
-      - '30': "30 min / 30 dakika"
-      - '45': "45 min (Standard) / 45 dakika (Standart)"
-      - '60': "60 min (1 Hour) / 1 Saat"
-      - '90': "90 min (1.5 Hours) / 1.5 Saat"
-      - '120': "120 min (2 Hours) / 2 Saat"
-      - 'custom': "Custom Minutes (below) / Özel Dakika"
+      - '15': "15 min"
+      - '30': "30 min"
+      - '45': "45 min (Standard)"
+      - '60': "60 min (1 Hour)"
+      - '90': "90 min (1.5 Hours)"
+      - '120': "120 min (2 Hours)"
+      - 'custom': "Custom Minutes (below)"
   - HydrationIntervalMinutes: 45
-    $name: "Hydration Custom Minutes / Su İçme Özel Dakika (Özel Seçildiğinde)"
-    $description: "Custom interval in minutes (5-360 min). / Özel su içme periyodu (5-360 dk)."
+    $name: "Hydration Custom Minutes"
+    $name:tr-TR: "Su İçme Özel Dakika (Özel Seçildiğinde)"
+    $description: "Custom interval in minutes (5-360 min)."
+    $description:tr-TR: "Özel su içme periyodu (5-360 dk)."
   - EyeRestReminder: true
-    $name: "20-20-20 Eye Strain Break / 20-20-20 Göz Dinlendirme Kuralı"
-    $description: "Reminds you to look 20 feet away for 20 seconds. / Düzenli aralıklarla 20 saniye uzağa bakma molası verir."
+    $name: "20-20-20 Eye Strain Break"
+    $name:tr-TR: "20-20-20 Göz Dinlendirme Kuralı"
+    $description: "Reminds you to look 20 feet away for 20 seconds."
+    $description:tr-TR: "Düzenli aralıklarla 20 saniye uzağa bakma molası verir."
   - EyeRestMinutes: 20
-    $name: "Eye Rest Interval (min) / Göz Dinlendirme Süresi (dk)"
-    $description: "Interval in minutes (10-60 min). / Göz dinlendirme periyodu (dakika)."
+    $name: "Eye Rest Interval (min)"
+    $name:tr-TR: "Göz Dinlendirme Süresi (dk)"
+    $description: "Interval in minutes (10-60 min)."
+    $description:tr-TR: "Göz dinlendirme periyodu (dakika)."
   - PostureReminder: true
-    $name: "Posture & Walk Reminder / Duruş & Yürüyüş Hatırlatıcısı"
-    $description: "Reminds you to stretch and check posture. / Duruş düzeltme ve esneme uyarısı gösterir."
+    $name: "Posture & Walk Reminder"
+    $name:tr-TR: "Duruş & Yürüyüş Hatırlatıcısı"
+    $description: "Reminds you to stretch and check posture."
+    $description:tr-TR: "Duruş düzeltme ve esneme uyarısı gösterir."
   - PosturePreset: '60'
-    $name: "Posture Reminder Timing / Duruş & Esneme Süresi"
-    $description: "Choose a preset interval or custom timing. / Hazır süre seçin veya özel dakika girin."
+    $name: "Posture Reminder Timing"
+    $name:tr-TR: "Duruş & Esneme Süresi"
+    $description: "Choose a preset interval or custom timing."
+    $description:tr-TR: "Hazır süre seçin veya özel dakika girin."
     $options:
-      - '30': "30 min / 30 dakika"
-      - '45': "45 min / 45 dakika"
-      - '60': "60 min (1 Hour) / 1 Saat"
-      - '90': "90 min (1.5 Hours) / 1.5 Saat"
-      - '120': "120 min (2 Hours) / 2 Saat"
-      - 'custom': "Custom Minutes (below) / Özel Dakika"
+      - '30': "30 min"
+      - '45': "45 min"
+      - '60': "60 min (1 Hour)"
+      - '90': "90 min (1.5 Hours)"
+      - '120': "120 min (2 Hours)"
+      - 'custom': "Custom Minutes (below)"
   - PostureIntervalMinutes: 60
-    $name: "Posture Custom Minutes / Duruş Özel Dakika (Özel Seçildiğinde)"
-    $description: "Custom interval in minutes (15-360 min). / Özel duruş esneme periyodu (15-360 dk)."
+    $name: "Posture Custom Minutes"
+    $name:tr-TR: "Duruş Özel Dakika (Özel Seçildiğinde)"
+    $description: "Custom interval in minutes (15-360 min)."
+    $description:tr-TR: "Özel duruş esneme periyodu (15-360 dk)."
   - UptimeAlertHours: 2
-    $name: "Continuous PC Uptime Alert (hours) / Sürekli Kullanım Uyarısı (saat)"
-    $description: "Alert when at PC for extended hours (1-12 hours, 0 to disable). / Bilgisayar başında uzun süre kalındığında uyarı verir (0 = kapalı)."
-  $name: "Living Assistant & Health / Akıllı Asistan & Sağlık"
+    $name: "Continuous PC Uptime Alert (hours)"
+    $name:tr-TR: "Sürekli Kullanım Uyarısı (saat)"
+    $description: "Alert when at PC for extended hours (1-12 hours, 0 to disable)."
+    $description:tr-TR: "Bilgisayar başında uzun süre kalındığında uyarı verir (0 = kapalı)."
+  $name: "Living Assistant & Health"
+  $name:tr-TR: "Akıllı Asistan & Sağlık"
 - Tools:
   - PomodoroWorkMinutes: 25
-    $name: "Pomodoro Focus Duration (min) / Pomodoro Çalışma Süresi (dk)"
-    $description: "Work session duration in minutes (10-60). / Odaklanma çalışma periyodu süresi."
+    $name: "Pomodoro Focus Duration (min)"
+    $name:tr-TR: "Pomodoro Çalışma Süresi (dk)"
+    $description: "Work session duration in minutes (10-60)."
+    $description:tr-TR: "Odaklanma çalışma periyodu süresi."
   - PomodoroBreakMinutes: 5
-    $name: "Pomodoro Break Duration (min) / Pomodoro Mola Süresi (dk)"
-    $description: "Short break duration in minutes (2-15). / Kısa mola süresi."
+    $name: "Pomodoro Break Duration (min)"
+    $name:tr-TR: "Pomodoro Mola Süresi (dk)"
+    $description: "Short break duration in minutes (2-15)."
+    $description:tr-TR: "Kısa mola süresi."
   - VoiceRecordingFolder: ""
-    $name: "Voice Recording Folder / Ses Kayıt Klasörü"
-    $description: "Custom folder for voice notes (blank defaults to Desktop/aegisCapsule_Recordings). / Ses kayıtlarının kaydedileceği özel klasör."
-  $name: "Productivity & Tools / Üretkenlik & Araçlar"
+    $name: "Voice Recording Folder"
+    $name:tr-TR: "Ses Kayıt Klasörü"
+    $description: "Custom folder for voice notes (blank defaults to Desktop/aegisCapsule_Recordings)."
+    $description:tr-TR: "Ses kayıtlarının kaydedileceği özel klasör."
+  $name: "Productivity & Tools"
+  $name:tr-TR: "Üretkenlik & Araçlar"
 - Themes:
   - AccentColorMode: auto
-    $name: "Accent Color Mode / Vurgu Rengi Modu"
-    $description: "How the glowing accent color is chosen. / Vurgu renginin nasıl belirleneceğini seçin."
+    $name: "Accent Color Mode"
+    $name:tr-TR: "Vurgu Rengi Modu"
+    $description: "How the glowing accent color is chosen."
+    $description:tr-TR: "Vurgu renginin nasıl belirleneceğini seçin."
     $options:
-      - auto: "Auto (from album art / dynamic) / Otomatik (Albüm kapağından)"
-      - system: "Windows System Accent / Windows Sistem Vurgusu"
-      - custom: "Custom Hex Color / Özel Hex Rengi"
+      - auto: "Auto (from album art"
+      - system: "Windows System Accent"
+      - custom: "Custom Hex Color"
   - CustomAccentHex: "#4cc9f0"
-    $name: "Custom Accent Hex / Özel Vurgu Hex Kodu"
-    $description: "Hex color for accent mode (#RRGGBB or #RRGGBBAA). / Özel renk hex kodu."
+    $name: "Custom Accent Hex"
+    $name:tr-TR: "Özel Vurgu Hex Kodu"
+    $description: "Hex color for accent mode (#RRGGBB or #RRGGBBAA)."
+    $description:tr-TR: "Özel renk hex kodu."
   - PillBgColor: "#0D0D0F"
-    $name: "Capsule Background Color / Kapsül Arka Plan Rengi"
-    $description: "Hex color for background (#RRGGBB or #RRGGBBAA). / Arka plan hex rengi."
+    $name: "Capsule Background Color"
+    $name:tr-TR: "Kapsül Arka Plan Rengi"
+    $description: "Hex color for background (#RRGGBB or #RRGGBBAA)."
+    $description:tr-TR: "Arka plan hex rengi."
   - TextPrimaryColor: "#F7F7F7"
-    $name: "Primary Text Color / Ana Metin Rengi"
-    $description: "Hex color for track titles and primary metrics. / Başlık ve ana metin rengi."
+    $name: "Primary Text Color"
+    $name:tr-TR: "Ana Metin Rengi"
+    $description: "Hex color for track titles and primary metrics."
+    $description:tr-TR: "Başlık ve ana metin rengi."
   - TextSecondaryColor: "#888888"
-    $name: "Secondary Text Color / İkincil Metin Rengi"
-    $description: "Hex color for artist names and muted labels. / Sanatçı ve ikincil etiket rengi."
+    $name: "Secondary Text Color"
+    $name:tr-TR: "İkincil Metin Rengi"
+    $description: "Hex color for artist names and muted labels."
+    $description:tr-TR: "Sanatçı ve ikincil etiket rengi."
   - TintIntensity: 72
-    $name: "Background Tint Depth / Arka Plan Ton Derinliği"
-    $description: "0 to 100. Controls the depth of the dark base tint. / Koyu baz ton derinliği."
+    $name: "Background Tint Depth"
+    $name:tr-TR: "Arka Plan Ton Derinliği"
+    $description: "0 to 100. Controls the depth of the dark base tint."
+    $description:tr-TR: "Koyu baz ton derinliği."
   - PillOpacity: 96
-    $name: "Capsule Transparency / Kapsül Saydamlığı"
-    $description: "10 to 100. Lower values make the capsule glass more translucent. / Kapsül cam saydamlığı (10-100)."
-  $name: "Colors & Theming / Renkler & Temalar"
+    $name: "Capsule Transparency"
+    $name:tr-TR: "Kapsül Saydamlığı"
+    $description: "10 to 100. Lower values make the capsule glass more translucent."
+    $description:tr-TR: "Kapsül cam saydamlığı (10-100)."
+  $name: "Colors & Theming"
+  $name:tr-TR: "Renkler & Temalar"
 - Performance:
   - AnimationSpeed: normal
-    $name: "Animation Speed / Animasyon Hızı"
-    $description: "Transition speed multiplier. / Geçiş hızı çarpanı."
+    $name: "Animation Speed"
+    $name:tr-TR: "Animasyon Hızı"
+    $description: "Transition speed multiplier."
+    $description:tr-TR: "Geçiş hızı çarpanı."
     $options:
-      - slow: "Slow (0.65x) / Yavaş"
-      - normal: "Normal (1.0x) / Normal"
-      - fast: "Fast (1.35x) / Hızlı"
-      - instant: "Instant (5.0x Snappy) / Anlık"
+      - slow: "Slow (0.65x)"
+      - normal: "Normal (1.0x)"
+      - fast: "Fast (1.35x)"
+      - instant: "Instant (5.0x Snappy)"
   - SpringStyle: bouncy
-    $name: "Spring Physics Dynamic / Yay Fiziği Karakteri"
-    $description: "Motion curve for capsule expansions and morphs. / Kapsül açılma ve şekil değiştirme yay eğrisi."
+    $name: "Spring Physics Dynamic"
+    $name:tr-TR: "Yay Fiziği Karakteri"
+    $description: "Motion curve for capsule expansions and morphs."
+    $description:tr-TR: "Kapsül açılma ve şekil değiştirme yay eğrisi."
     $options:
-      - bouncy: "Bouncy (Apple Vision fluid bounce) / Akıcı Yaylı"
-      - smooth: "Smooth (Critically damped gentle glide) / Yumuşak Kayma"
-      - snappy: "Snappy (High tension responsive snap) / Seri & Atik"
-      - stiff: "Stiff (Minimal overshoot) / Sert"
+      - bouncy: "Bouncy (Apple Vision fluid bounce)"
+      - smooth: "Smooth (Critically damped gentle glide)"
+      - snappy: "Snappy (High tension responsive snap)"
+      - stiff: "Stiff (Minimal overshoot)"
   - FrameRateTarget: '60'
-    $name: "Target Refresh Rate / Hedef Yenileme Hızı"
-    $description: "Maximum render loop refresh rate. / Maksimum kare hızı (FPS)."
+    $name: "Target Refresh Rate"
+    $name:tr-TR: "Hedef Yenileme Hızı"
+    $description: "Maximum render loop refresh rate."
+    $description:tr-TR: "Maksimum kare hızı (FPS)."
     $options:
-      - '30': "30 FPS (Power Saver) / 30 FPS (Güç Tasarrufu)"
-      - '60': "60 FPS (Standard Smooth) / 60 FPS (Standart Akıcı)"
-      - '120': "120 FPS (High Refresh) / 120 FPS (Yüksek Akıcılık)"
-      - '144': "144 FPS (Ultra Refresh) / 144 FPS (Ultra)"
-      - '240': "240 FPS (Extreme Esports) / 240 FPS (Ekstrem)"
+      - '30': "30 FPS (Power Saver)"
+      - '60': "60 FPS (Standard Smooth)"
+      - '120': "120 FPS (High Refresh)"
+      - '144': "144 FPS (Ultra Refresh)"
+      - '240': "240 FPS (Extreme Esports)"
   - LowPowerMode: false
-    $name: "Adaptive Power Saver / Uyarlanabilir Güç Tasarrufu"
-    $description: "Automatically throttles idle rendering when on battery. / Pildeyken render hızını otomatik düşürür."
-  $name: "Physics & Performance / Fizik & Performans"
+    $name: "Adaptive Power Saver"
+    $name:tr-TR: "Uyarlanabilir Güç Tasarrufu"
+    $description: "Automatically throttles idle rendering when on battery."
+    $description:tr-TR: "Pildeyken render hızını otomatik düşürür."
+  $name: "Physics & Performance"
+  $name:tr-TR: "Fizik & Performans"
 - Modules:
   - NotificationAutoExpand: true
-    $name: "Auto-Expand Notification Pill / Bildirimde Barı Otomatik Genişlet"
-    $description: "Dynamically widen capsule bar horizontally to display full text without truncation. / Bildirimlerde kayan yazı yerine barı sağa sola uzatıp tam metni gösterir."
+    $name: "Auto-Expand Notification Pill"
+    $name:tr-TR: "Bildirimde Barı Otomatik Genişlet"
+    $description: "Dynamically widen capsule bar horizontally to display full text without truncation."
+    $description:tr-TR: "Bildirimlerde kayan yazı yerine barı sağa sola uzatıp tam metni gösterir."
   - Media: true
-    $name: "Media module / Medya Modülü"
-    $description: "Shows album art, song info, scrubber, and playback controls. / Şarkı bilgisi, albüm kapağı ve medya kontrolleri."
+    $name: "Media module"
+    $name:tr-TR: "Medya Modülü"
+    $description: "Shows album art, song info, scrubber, and playback controls."
+    $description:tr-TR: "Şarkı bilgisi, albüm kapağı ve medya kontrolleri."
   - Notification: true
-    $name: "Notification module / Bildirim Modülü"
-    $description: "Shows rich Windows toast notifications and banner popups. / Windows bildirimleri ve uyarılar."
-  - Clipboard: true
-    $name: "Clipboard module / Pano Modülü"
-    $description: "Shows a quick preview of copied text or screenshot images. / Kopyalanan metin ve ekran görüntüsü önizlemesi."
-  - Battery: true
-    $name: "Battery module / Pil Modülü"
-    $description: "Shows alerts when battery is low or charger is connected. / Düşük pil ve şarj durumu uyarıları."
-  - Progress: true
-    $name: "Progress module / İlerleme Modülü"
-    $description: "Shows a progress ring for active downloads or tasks. / İndirme ve aktarımlar için ilerleme halkası."
-  - Volume: true
-    $name: "Volume OSD module / Ses OSD Modülü"
-    $description: "Shows instant volume bar and mute status on system volume change. / Ses seviyesi değiştiğinde anlık OSD çubuğu."
+    $name: "Notification module"
+    $name:tr-TR: "Bildirim Modülü"
+    $description: "Shows rich Windows toast notifications and banner popups."
+    $description:tr-TR: "Windows bildirimleri ve uyarılar."
   - CapsLock: true
-    $name: "Caps/Num Lock OSD module / Tuş Kilidi OSD Modülü"
-    $description: "Shows status indicator when Caps Lock or Num Lock is toggled. / Caps Lock / Num Lock basıldığında durum göstergesi."
-  - Device: true
-    $name: "Device connection OSD / Aygıt Bağlantı OSD"
-    $description: "Shows alert when USB or Bluetooth devices are plugged in. / USB ve Bluetooth cihaz bağlantı bildirimleri."
+    $name: "Caps/Num Lock OSD module"
+    $name:tr-TR: "Tuş Kilidi OSD Modülü"
+    $description: "Shows status indicator when Caps Lock or Num Lock is toggled."
+    $description:tr-TR: "Caps Lock / Num Lock basıldığında durum göstergesi."
   - GameOverlay: false
-    $name: "Enable Game Overlay Mode / Oyun Overlay Modu"
-    $description: "Replaces the clock with live stats like FPS, CPU, GPU, and RAM. / FPS, CPU, GPU ve RAM kullanımını gösterir."
+    $name: "Enable Game Overlay Mode"
+    $name:tr-TR: "Oyun Overlay Modu"
+    $description: "Replaces the clock with live stats like FPS, CPU, GPU, and RAM."
+    $description:tr-TR: "FPS, CPU, GPU ve RAM kullanımını gösterir."
   - ShowMetricText: true
-    $name: "Show labels in metric chips / Metrik Etiketlerini Göster"
-    $description: "Adds text labels (like 'CPU') inside metric bars. / Metrik çubuklarında yazı etiketlerini gösterir."
+    $name: "Show labels in metric chips"
+    $name:tr-TR: "Metrik Etiketlerini Göster"
+    $description: "Adds text labels (like 'CPU') inside metric bars."
+    $description:tr-TR: "Metrik çubuklarında yazı etiketlerini gösterir."
   - ShowMetricsInIdle: false
-    $name: "Show micro-metrics in idle / Kapalı Kapsülde CPU/RAM Göster"
-    $description: "Displays small CPU and RAM chips in the collapsed idle capsule. / Kapalı hap görünümünde küçük CPU/RAM çipi gösterir."
+    $name: "Show micro-metrics in idle"
+    $name:tr-TR: "Kapalı Kapsülde CPU/RAM Göster"
+    $description: "Displays small CPU and RAM chips in the collapsed idle capsule."
+    $description:tr-TR: "Kapalı hap görünümünde küçük CPU/RAM çipi gösterir."
+  - WeatherEnabled: true
+    $name: "Weather module (wttr.in)"
+    $name:tr-TR: "Hava Durumu Modülü (wttr.in)"
+    $description: "Fetches weather data from wttr.in over HTTPS. Turn off to disable all external weather requests."
+    $description:tr-TR: "wttr.in üzerinden HTTPS ile hava durumu verisi çeker. Dış ağ isteklerini durdurmak için kapatın."
   - WeatherCity: ""
-    $name: "Weather City (Optional) / Hava Durumu Şehri (İsteğe Bağlı)"
-    $description: "Enter your city (e.g. London, Istanbul). Leave blank for auto IP. / Şehir adı yazın. Boş bırakırsanız otomatik konum kullanılır."
+    $name: "Weather City (Optional)"
+    $name:tr-TR: "Hava Durumu Şehri (İsteğe Bağlı)"
+    $description: "Enter your city (e.g. London, Istanbul). Leave blank for auto IP."
+    $description:tr-TR: "Şehir adı yazın. Boş bırakırsanız otomatik konum kullanılır."
   - WeatherFahrenheit: false
-    $name: "Use Fahrenheit / Fahrenheit Kullan"
-    $description: "Display weather temperature in Fahrenheit. / Sıcaklığı Fahrenheit cinsinden gösterir."
+    $name: "Use Fahrenheit"
+    $name:tr-TR: "Fahrenheit Kullan"
+    $description: "Display weather temperature in Fahrenheit."
+    $description:tr-TR: "Sıcaklığı Fahrenheit cinsinden gösterir."
   - NotificationDuration: "4.0"
-    $name: "Notification Duration (sec) / Bildirim Gösterim Süresi (sn)"
-    $description: "How long to display new notifications. / Bildirimlerin ekranda kalma süresi."
+    $name: "Notification Duration (sec)"
+    $name:tr-TR: "Bildirim Gösterim Süresi (sn)"
+    $description: "How long to display new notifications."
+    $description:tr-TR: "Bildirimlerin ekranda kalma süresi."
     $options:
       - '2.0': "2.0s"
       - '3.0': "3.0s"
       - '4.0': "4.0s"
       - '6.0': "6.0s"
       - '8.0': "8.0s"
-  - ClipboardDuration: "2.5"
-    $name: "Clipboard Duration (sec) / Pano Gösterim Süresi (sn)"
-    $description: "How long to display clipboard popups. / Pano kopyalama bildiriminin süresi."
-    $options:
-      - '1.5': "1.5s"
-      - '2.5': "2.5s"
-      - '4.0': "4.0s"
-  - VolumeDuration: "1.8"
-    $name: "Volume Duration (sec) / Ses Gösterim Süresi (sn)"
-    $description: "How long to display volume popups. / Ses OSD süresi."
   - CapsLockDuration: "1.5"
-    $name: "Caps Lock Duration (sec) / Tuş Kilidi Süresi (sn)"
-    $description: "How long to display Caps/Num Lock popups. / Tuş kilidi OSD süresi."
-  - DeviceDuration: "3.0"
-    $name: "Device Duration (sec) / Cihaz Bildirim Süresi (sn)"
-    $description: "How long to display device alerts. / Aygıt bağlantı bildirimi süresi."
-  $name: "Modules & Features / Modüller & Özellikler"
+    $name: "Caps Lock Duration (sec)"
+    $name:tr-TR: "Tuş Kilidi Süresi (sn)"
+    $description: "How long to display Caps/Num Lock popups."
+    $description:tr-TR: "Tuş kilidi OSD süresi."
 - FineTuning:
-  - SplitGap: 12
-    $name: "Split pill gap (px) / Ayrık Kapsül Boşluğu"
-    $description: "Gap between two pills in Split mode. / Ayrık modda iki hap arası boşluk (px)."
   - HoverScalePercent: 102
-    $name: "Hover scale (%) / Fare Üzerindeyken Büyüme Oranı (%)"
-    $description: "Pill scale on hover/pinned (100 = 1.0x, 105 = 1.05x). / Fare üzerindeyken büyüme yüzdesi."
+    $name: "Hover scale (%)"
+    $name:tr-TR: "Fare Üzerindeyken Büyüme Oranı (%)"
+    $description: "Pill scale on hover/pinned (100 = 1.0x, 105 = 1.05x)."
+    $description:tr-TR: "Fare üzerindeyken büyüme yüzdesi."
   - NudgeOffsetPx: 8
-    $name: "Nudge distance (px) / Bildirim Zıplama Mesafesi (px)"
-    $description: "Vertical bounce distance on new event (0 disables). / Yeni bildirim geldiğinde dikey sekme mesafesi."
+    $name: "Nudge distance (px)"
+    $name:tr-TR: "Bildirim Zıplama Mesafesi (px)"
+    $description: "Vertical bounce distance on new event (0 disables)."
+    $description:tr-TR: "Yeni bildirim geldiğinde dikey sekme mesafesi."
   - WaveformBarCount: 22
-    $name: "Waveform bar count / Dalga Çubuğu Sayısı"
-    $description: "Number of bars in audio waveform (8-32). / Ses dalgasındaki çubuk sayısı."
+    $name: "Waveform bar count"
+    $name:tr-TR: "Dalga Çubuğu Sayısı"
+    $description: "Number of bars in audio waveform (8-32)."
+    $description:tr-TR: "Ses dalgasındaki çubuk sayısı."
   - WaveformGapPx: '2.5'
-    $name: "Waveform bar gap (px) / Dalga Çubukları Arası Boşluk"
-    $description: "Gap between waveform bars. / Dalga çubukları arasındaki mesafe."
+    $name: "Waveform bar gap (px)"
+    $name:tr-TR: "Dalga Çubukları Arası Boşluk"
+    $description: "Gap between waveform bars."
+    $description:tr-TR: "Dalga çubukları arasındaki mesafe."
   - ProgressRingThickness: '2.8'
-    $name: "Progress ring thickness (px) / İlerleme Halkası Kalınlığı"
-    $description: "Thickness of progress ring stroke. / İlerleme halkasının çizgi kalınlığı."
+    $name: "Progress ring thickness (px)"
+    $name:tr-TR: "İlerleme Halkası Kalınlığı"
+    $description: "Thickness of progress ring stroke."
+    $description:tr-TR: "İlerleme halkasının çizgi kalınlığı."
   - PaginationDotSize: '2.5'
-    $name: "Pagination dot radius (px) / Sayfa Noktası Yarıçapı"
-    $description: "Radius of pagination dots. / Panel geçiş noktalarının boyutu."
+    $name: "Pagination dot radius (px)"
+    $name:tr-TR: "Sayfa Noktası Yarıçapı"
+    $description: "Radius of pagination dots."
+    $description:tr-TR: "Panel geçiş noktalarının boyutu."
   - PrivacyDotSize: '3.8'
-    $name: "Privacy dot radius (px) / Gizlilik Noktası Yarıçapı"
-    $description: "Radius of mic/camera privacy dots. / Mikrofon ve kamera gizlilik noktalarının boyutu."
+    $name: "Privacy dot radius (px)"
+    $name:tr-TR: "Gizlilik Noktası Yarıçapı"
+    $description: "Radius of mic/camera privacy dots."
+    $description:tr-TR: "Mikrofon ve kamera gizlilik noktalarının boyutu."
   - TopHighlightOpacity: 35
-    $name: "Top highlight opacity (%) / Üst Yansıma Saydamlığı (%)"
-    $description: "Opacity of 1px top rim highlight (0-100). / Üst kenar yansımasının opaklığı."
+    $name: "Top highlight opacity (%)"
+    $name:tr-TR: "Üst Yansıma Saydamlığı (%)"
+    $description: "Opacity of 1px top rim highlight (0-100)."
+    $description:tr-TR: "Üst kenar yansımasının opaklığı."
   - RimThickness: '0.9'
-    $name: "Refraction rim thickness (px) / Kırılma Kenarlığı Kalınlığı"
-    $description: "Stroke thickness of outer refraction border. / Dış kırılma kenarlığının kalınlığı."
+    $name: "Refraction rim thickness (px)"
+    $name:tr-TR: "Kırılma Kenarlığı Kalınlığı"
+    $description: "Stroke thickness of outer refraction border."
+    $description:tr-TR: "Dış kırılma kenarlığının kalınlığı."
   - ShadowSpreadPx: 10
-    $name: "Shadow spread (px) / Gölge Yayılımı (px)"
-    $description: "Maximum spread of soft drop shadow (0-24). / Gölgenin yayılma genişliği."
+    $name: "Shadow spread (px)"
+    $name:tr-TR: "Gölge Yayılımı (px)"
+    $description: "Maximum spread of soft drop shadow (0-24)."
+    $description:tr-TR: "Gölgenin yayılma genişliği."
   - ShadowYOffsetPx: 4
-    $name: "Shadow Y offset (px) / Gölge Dikey Kaydırma"
-    $description: "Vertical offset of drop shadow (0-12). / Gölgenin dikey uzaklığı."
+    $name: "Shadow Y offset (px)"
+    $name:tr-TR: "Gölge Dikey Kaydırma"
+    $description: "Vertical offset of drop shadow (0-12)."
+    $description:tr-TR: "Gölgenin dikey uzaklığı."
   - CausticsSpeed: '1.3'
-    $name: "Caustics animation speed / Kaustik Animasyon Hızı"
-    $description: "Speed multiplier for glass caustics wave. / Cam yüzeyindeki ışık dalgası hareket hızı."
-  - ContentFadeOnResize: true
-    $name: "Content fade on resize / Boyut Değişirken İçeriği Yumuşat"
-    $description: "Fade pill content alpha during morph. / Şekil değişirken içerik saydamlığını yumuşatır."
+    $name: "Caustics animation speed"
+    $name:tr-TR: "Kaustik Animasyon Hızı"
+    $description: "Speed multiplier for glass caustics wave."
+    $description:tr-TR: "Cam yüzeyindeki ışık dalgası hareket hızı."
   - UseDwmBlurBehind: false
-    $name: "DWM blur behind / DWM Gerçek Arka Plan Bulanıklığı"
-    $description: "Enable real backdrop blur via DwmEnableBlurBehindWindow. / DWM üzerinden gerçek arka plan bulanıklığı uygular."
+    $name: "DWM blur behind"
+    $name:tr-TR: "DWM Gerçek Arka Plan Bulanıklığı"
+    $description: "Enable real backdrop blur via DwmEnableBlurBehindWindow."
+    $description:tr-TR: "DWM üzerinden gerçek arka plan bulanıklığı uygular."
   - WeatherUpdateMinutes: 10
-    $name: "Weather update interval (min) / Hava Durumu Güncelleme Aralığı (dk)"
-    $description: "Weather fetch interval in minutes (5-60). / Hava durumu verisi çekme sıklığı."
-  $name: "Fine Tuning & Advanced / İnce Ayarlar & Gelişmiş"
+    $name: "Weather update interval (min)"
+    $name:tr-TR: "Hava Durumu Güncelleme Aralığı (dk)"
+    $description: "Weather fetch interval in minutes (5-60)."
+    $description:tr-TR: "Hava durumu verisi çekme sıklığı."
+  $name: "Fine Tuning & Advanced"
+  $name:tr-TR: "İnce Ayarlar & Gelişmiş"
 */
 // ==/WindhawkModSettings==
-
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#ifndef UNICODE
-#define UNICODE
-#endif
-#ifndef _UNICODE
-#define _UNICODE
-#endif
 
 #include <windows.h>
 #include <unknwn.h>
 #include <dwmapi.h>
 #include <shellapi.h>
-#include <setupapi.h>
-#include <dbt.h>
+#include <shlobj.h>
 #include <d2d1.h>
 #include <dwrite.h>
 #include <wincodec.h>
 #include <shcore.h>
+#include <shellscalingapi.h>
 #include <windowsx.h>
 #include <audioclient.h>
-#include <audiopolicy.h>
 #include <endpointvolume.h>
 #include <mmdeviceapi.h>
 #include <mmreg.h>
 #include <objbase.h>
 #include <wrl/client.h>
-#include <uiautomation.h>
 #include <winhttp.h>
 #include <pdh.h>
 #include <pdhmsg.h>
@@ -512,6 +624,7 @@
 #include <cstdint>
 #include <cwchar>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <sstream>
@@ -633,11 +746,9 @@ struct Settings {
     float expandedWidth = 480.0f;
     float expandedHeight = 190.0f;
     int autoHideIdleSeconds = 0;
-    bool unhideOnHover = true;
     bool alwaysOnTop = true;
     bool expandOnHover = true;
     bool autoDpiScale = true;
-    bool clickThroughIdle = false;
 
     // Optics & Liquid Glass
     bool liquidGlass = true;
@@ -688,25 +799,17 @@ struct Settings {
     bool notificationAutoExpand = true;
     bool media = true;
     bool notification = true;
-    bool clipboard = true;
-    bool battery = true;
-    bool progress = true;
-    bool volume = true;
     bool capsLock = true;
-    bool device = true;
     bool gameOverlay = false;
     bool showMetricText = true;
     bool showMetricsInIdle = false;
+    bool weatherEnabled = true;
     std::wstring weatherCity;
     bool weatherFahrenheit = false;
     float notificationDuration = 4.0f;
-    float clipboardDuration = 2.5f;
-    float volumeDuration = 1.8f;
     float capsLockDuration = 1.5f;
-    float deviceDuration = 3.0f;
 
     // Fine Tuning & Advanced
-    float splitGap = 12.0f;
     float hoverScalePercent = 1.02f;
     float nudgeOffsetPx = 8.0f;
     int waveformBarCount = 22;
@@ -719,7 +822,6 @@ struct Settings {
     float shadowSpreadPx = 10.0f;
     float shadowYOffsetPx = 4.0f;
     float causticsSpeed = 1.3f;
-    bool contentFadeOnResize = true;
     bool useDwmBlurBehind = false;
     int weatherUpdateMinutes = 10;
 };
@@ -1007,17 +1109,15 @@ D2D1_COLOR_F ColorFromHex(std::wstring text, D2D1_COLOR_F fallback) {
     return fallback;
 }
 
-float GetPrimaryMonitorDpiScale() {
-    POINT pt = {0, 0};
-    HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+HMONITOR GetAnchorMonitor();
+
+float GetAnchorMonitorDpiScale() {
+    HMONITOR monitor = GetAnchorMonitor();
     UINT dpiX = 96, dpiY = 96;
-    using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
-    static auto pGetDpiForMonitor = reinterpret_cast<GetDpiForMonitor_t>(
-        GetProcAddress(GetModuleHandleW(L"shcore.dll"), "GetDpiForMonitor"));
-    if (pGetDpiForMonitor) {
-        pGetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, &dpiX, &dpiY);
+    if (monitor && SUCCEEDED(GetDpiForMonitor(monitor, static_cast<MONITOR_DPI_TYPE>(0), &dpiX, &dpiY)) && dpiX > 0) {
+        return dpiX / 96.0f;
     }
-    return dpiX / 96.0f;
+    return 1.0f;
 }
 
 float CalculateCornerRadius(float height, const Settings& settings) {
@@ -1135,10 +1235,7 @@ void LoadSettings() {
         } else if (EqualsNoCase(langStr, L"en") || EqualsNoCase(langStr, L"2") || EqualsNoCase(langStr, L"english")) {
             next.language = Language::English;
         } else {
-            const int langInt = Wh_GetIntSetting(L"General.Language");
-            if (langInt == 1) next.language = Language::Turkish;
-            else if (langInt == 2) next.language = Language::English;
-            else next.language = Language::Auto;
+            next.language = Language::Auto;
         }
     }
 
@@ -1165,9 +1262,9 @@ void LoadSettings() {
     next.offsetX = Wh_GetIntSetting(L"Appearance.OffsetX");
     next.offsetY = Wh_GetIntSetting(L"Appearance.OffsetY");
     const int marginSetting = Wh_GetIntSetting(L"Appearance.EdgeMargin");
-    next.edgeMargin = marginSetting != 0 ? marginSetting : 8;
+    next.edgeMargin = marginSetting >= 0 ? marginSetting : 8;
 
-    // Size Scale
+    // Size Scale (monitor DPI applied dynamically per anchor monitor)
     const std::wstring scale = GetStringSettingCopy(L"Appearance.SizeScale");
     if (!scale.empty()) {
         wchar_t* end = nullptr;
@@ -1175,9 +1272,6 @@ void LoadSettings() {
         if (end != scale.c_str() && parsedScale > 0.1f && parsedScale < 10.0f) {
             next.sizeScale = parsedScale;
         }
-    }
-    if (Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0) {
-        next.sizeScale *= GetPrimaryMonitorDpiScale();
     }
 
     // Corner Style & Radius
@@ -1198,7 +1292,8 @@ void LoadSettings() {
 
     // Default Idle Display Style
     const int localIdleMode = Wh_GetIntValue(L"IdleDisplayModeOverride", -1);
-    next.idleDisplayMode = localIdleMode >= 0 ? localIdleMode : Wh_GetIntSetting(L"Appearance.IdleDisplayMode");
+    const std::wstring idleModeStr = GetStringSettingCopy(L"Appearance.IdleDisplayMode");
+    next.idleDisplayMode = localIdleMode >= 0 ? localIdleMode : (idleModeStr.empty() ? 0 : _wtoi(idleModeStr.c_str()));
 
     // Idle Typography & Clock Customization
     const int idleScaleSetting = Wh_GetIntSetting(L"Appearance.IdleTextScale");
@@ -1227,16 +1322,14 @@ void LoadSettings() {
     // Auto-Hide & Interactions
     const std::wstring hideSec = GetStringSettingCopy(L"Appearance.AutoHideIdleSeconds");
     next.autoHideIdleSeconds = hideSec.empty() ? 0 : _wtoi(hideSec.c_str());
-    next.unhideOnHover = Wh_GetIntSetting(L"Appearance.UnhideOnHover") != 0;
     next.alwaysOnTop = Wh_GetIntSetting(L"Appearance.AlwaysOnTop") != 0;
     const int localExpandOnHover = Wh_GetIntValue(L"ExpandOnHoverOverride", -1);
     next.expandOnHover = localExpandOnHover >= 0 ? (localExpandOnHover != 0) : (Wh_GetIntSetting(L"Appearance.ExpandOnHover") != 0);
     next.autoDpiScale = Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0;
-    next.clickThroughIdle = Wh_GetIntSetting(L"Appearance.ClickThroughIdle") != 0;
 
     // Optics & Liquid Glass
     const int localLiquidGlass = Wh_GetIntValue(L"LiquidGlassOverride", -1);
-    next.liquidGlass = localLiquidGlass >= 0 ? (localLiquidGlass != 0) : (Wh_GetIntSetting(L"Optics.LiquidGlass") != 0 || Wh_GetIntSetting(L"Themes.LiquidGlass") != 0);
+    next.liquidGlass = localLiquidGlass >= 0 ? (localLiquidGlass != 0) : (Wh_GetIntSetting(L"Optics.LiquidGlass") != 0);
     const int glassIntensitySetting = Wh_GetIntSetting(L"Optics.LiquidGlassIntensity");
     const int localGlassIntensity = Wh_GetIntValue(L"LiquidGlassIntensityOverride", -1);
     next.liquidGlassIntensity = Clamp((localGlassIntensity >= 0 ? localGlassIntensity : (glassIntensitySetting ? glassIntensitySetting : 80)) / 100.0f, 0.0f, 1.0f);
@@ -1247,7 +1340,7 @@ void LoadSettings() {
     next.glassRefractionRim = Wh_GetIntSetting(L"Optics.GlassRefractionRim") != 0;
 
     const int localAccentGlow = Wh_GetIntValue(L"AccentGlowOverride", -1);
-    next.accentGlow = localAccentGlow >= 0 ? (localAccentGlow != 0) : (Wh_GetIntSetting(L"Optics.AccentGlow") != 0 || Wh_GetIntSetting(L"Themes.AccentGlow") != 0);
+    next.accentGlow = localAccentGlow >= 0 ? (localAccentGlow != 0) : (Wh_GetIntSetting(L"Optics.AccentGlow") != 0);
     const int glowIntensitySetting = Wh_GetIntSetting(L"Optics.AccentGlowIntensity");
     const int glowRadiusOverride = Wh_GetIntValue(L"AccentGlowRadiusOverride", -1);
     next.accentGlowIntensity = Clamp((glowIntensitySetting ? glowIntensitySetting : 80) / 100.0f, 0.0f, 1.0f);
@@ -1377,16 +1470,12 @@ void LoadSettings() {
     next.notificationAutoExpand = Wh_GetIntSetting(L"Modules.NotificationAutoExpand") != 0;
     next.media = Wh_GetIntSetting(L"Modules.Media") != 0;
     next.notification = Wh_GetIntSetting(L"Modules.Notification") != 0;
-    next.clipboard = Wh_GetIntSetting(L"Modules.Clipboard") != 0;
-    next.battery = Wh_GetIntSetting(L"Modules.Battery") != 0;
-    next.progress = Wh_GetIntSetting(L"Modules.Progress") != 0;
-    next.volume = Wh_GetIntSetting(L"Modules.Volume") != 0;
     next.capsLock = Wh_GetIntSetting(L"Modules.CapsLock") != 0;
-    next.device = Wh_GetIntSetting(L"Modules.Device") != 0;
     next.gameOverlay = Wh_GetIntSetting(L"Modules.GameOverlay") != 0;
     next.showMetricText = Wh_GetIntSetting(L"Modules.ShowMetricText") != 0;
     const int localShowMetricsInIdle = Wh_GetIntValue(L"ShowMetricsInIdleOverride", -1);
     next.showMetricsInIdle = localShowMetricsInIdle >= 0 ? (localShowMetricsInIdle != 0) : (Wh_GetIntSetting(L"Modules.ShowMetricsInIdle") != 0);
+    next.weatherEnabled = Wh_GetIntSetting(L"Modules.WeatherEnabled") != 0;
     next.weatherCity = GetStringSettingCopy(L"Modules.WeatherCity");
     next.weatherFahrenheit = Wh_GetIntSetting(L"Modules.WeatherFahrenheit") != 0;
 
@@ -1395,31 +1484,14 @@ void LoadSettings() {
         float d = wcstof(notifDur.c_str(), nullptr);
         if (d > 0.5f && d < 30.0f) next.notificationDuration = d;
     }
-    const std::wstring clipDur = GetStringSettingCopy(L"Modules.ClipboardDuration");
-    if (!clipDur.empty()) {
-        float d = wcstof(clipDur.c_str(), nullptr);
-        if (d > 0.5f && d < 30.0f) next.clipboardDuration = d;
-    }
-    const std::wstring volDur = GetStringSettingCopy(L"Modules.VolumeDuration");
-    if (!volDur.empty()) {
-        float d = wcstof(volDur.c_str(), nullptr);
-        if (d > 0.5f && d < 30.0f) next.volumeDuration = d;
-    }
     const std::wstring capsDur = GetStringSettingCopy(L"Modules.CapsLockDuration");
     if (!capsDur.empty()) {
         float d = wcstof(capsDur.c_str(), nullptr);
         if (d > 0.5f && d < 30.0f) next.capsLockDuration = d;
     }
-    const std::wstring devDur = GetStringSettingCopy(L"Modules.DeviceDuration");
-    if (!devDur.empty()) {
-        float d = wcstof(devDur.c_str(), nullptr);
-        if (d > 0.5f && d < 30.0f) next.deviceDuration = d;
-    }
 
     // Fine Tuning & Advanced
     {
-        int v = Wh_GetIntSetting(L"FineTuning.SplitGap");
-        next.splitGap = Clamp(v ? static_cast<float>(v) : 12.0f, 4.0f, 32.0f);
         int hs = Wh_GetIntSetting(L"FineTuning.HoverScalePercent");
         next.hoverScalePercent = Clamp((hs ? hs : 102) / 100.0f, 1.0f, 1.15f);
         int nudge = Wh_GetIntSetting(L"FineTuning.NudgeOffsetPx");
@@ -1461,11 +1533,6 @@ void LoadSettings() {
         if (!cs.empty()) {
             float f = wcstof(cs.c_str(), nullptr);
             if (f >= 0.0f && f <= 5.0f) next.causticsSpeed = f;
-        }
-        {
-            std::wstring cf = GetStringSettingCopy(L"FineTuning.ContentFadeOnResize");
-            if (cf.empty()) next.contentFadeOnResize = true;
-            else next.contentFadeOnResize = Wh_GetIntSetting(L"FineTuning.ContentFadeOnResize") != 0;
         }
         next.useDwmBlurBehind = Wh_GetIntSetting(L"FineTuning.UseDwmBlurBehind") != 0;
         int wum = Wh_GetIntSetting(L"FineTuning.WeatherUpdateMinutes");
@@ -1651,13 +1718,17 @@ bool CheckIsFullScreenActive(HMONITOR targetMonitor) {
 }
 
 std::wstring GetNotesFilePath() {
-    wchar_t appData[MAX_PATH] = {};
-    if (GetEnvironmentVariableW(L"APPDATA", appData, ARRAYSIZE(appData)) > 0) {
-        std::wstring dir = std::wstring(appData) + L"\\aegisCapsule";
+    wchar_t storagePath[MAX_PATH] = {};
+    if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath)) > 0 && storagePath[0] != L'\0') {
+        std::wstring dir = storagePath;
         CreateDirectoryW(dir.c_str(), nullptr);
         return dir + L"\\notes.txt";
     }
-    return L"C:\\aegisCapsule_notes.txt";
+    wchar_t tempDir[MAX_PATH] = {};
+    if (GetTempPathW(ARRAYSIZE(tempDir), tempDir) > 0) {
+        return std::wstring(tempDir) + L"aegisCapsule_notes.txt";
+    }
+    return L"aegisCapsule_notes.txt";
 }
 
 void LoadQuickNotes() {
@@ -1747,13 +1818,21 @@ std::wstring GetRecordingsDirectory() {
         CreateDirectoryW(s.voiceRecordingFolder.c_str(), nullptr);
         return s.voiceRecordingFolder;
     }
-    wchar_t userProfile[MAX_PATH] = {};
-    if (GetEnvironmentVariableW(L"USERPROFILE", userProfile, ARRAYSIZE(userProfile)) > 0) {
-        std::wstring dir = std::wstring(userProfile) + L"\\Desktop\\aegisCapsule_Recordings";
+    PWSTR desktopPath = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &desktopPath)) && desktopPath) {
+        std::wstring dir = std::wstring(desktopPath) + L"\\aegisCapsule_Recordings";
+        CoTaskMemFree(desktopPath);
         CreateDirectoryW(dir.c_str(), nullptr);
         return dir;
     }
-    return L"C:\\aegisCapsule_Recordings";
+    if (desktopPath) CoTaskMemFree(desktopPath);
+    wchar_t tempDir[MAX_PATH] = {};
+    if (GetTempPathW(ARRAYSIZE(tempDir), tempDir) > 0) {
+        std::wstring dir = std::wstring(tempDir) + L"aegisCapsule_Recordings";
+        CreateDirectoryW(dir.c_str(), nullptr);
+        return dir;
+    }
+    return L"aegisCapsule_Recordings";
 }
 
 DWORD WINAPI RecordingThreadProc(LPVOID) {
@@ -1948,23 +2027,8 @@ std::vector<IslandKind> ChooseActivities(const SharedState& state, const Setting
         return chosen;
     }
 
-    if (settings.device && state.device.active && state.device.expiresAt > now) {
-        chosen.push_back(IslandKind::Device);
-        return chosen;
-    }
-
     if (settings.capsLock && state.capsLock.active && state.capsLock.expiresAt > now) {
         chosen.push_back(IslandKind::CapsLock);
-        return chosen;
-    }
-
-    if (settings.volume && state.volume.active && state.volume.expiresAt > now) {
-        chosen.push_back(IslandKind::Volume);
-        return chosen;
-    }
-
-    if (settings.battery && state.battery.active && state.battery.expiresAt > now) {
-        chosen.push_back(IslandKind::BatteryLow);
         return chosen;
     }
 
@@ -1973,17 +2037,8 @@ std::vector<IslandKind> ChooseActivities(const SharedState& state, const Setting
         return chosen;
     }
 
-    if (settings.clipboard && state.clipboard.active && state.clipboard.expiresAt > now) {
-        chosen.push_back(IslandKind::Clipboard);
-        return chosen;
-    }
-
     if (settings.media && state.media.available) {
         chosen.push_back(IslandKind::Media);
-    }
-
-    if (settings.progress && state.progress.active) {
-        chosen.push_back(IslandKind::Progress);
     }
 
     if (chosen.empty()) {
@@ -2559,20 +2614,52 @@ void SetSystemMasterVolume(float level) {
     }
 }
 
-void SetSystemToastSuppression(bool suppress) {
-    HKEY hKey = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications",
-                        0, nullptr, 0, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
-        DWORD val = suppress ? 0 : 1;
-        RegSetValueExW(hKey, L"ToastEnabled", 0, REG_DWORD, reinterpret_cast<const BYTE*>(&val), sizeof(val));
-        RegCloseKey(hKey);
+static std::mutex g_httpMutex;
+static HINTERNET g_activeHttpSession = nullptr;
+static HINTERNET g_activeHttpConnect = nullptr;
+static HINTERNET g_activeHttpRequest = nullptr;
+
+void AbortActiveHttp() {
+    std::lock_guard lock(g_httpMutex);
+    if (g_activeHttpRequest) { WinHttpCloseHandle(g_activeHttpRequest); g_activeHttpRequest = nullptr; }
+    if (g_activeHttpConnect) { WinHttpCloseHandle(g_activeHttpConnect); g_activeHttpConnect = nullptr; }
+    if (g_activeHttpSession) { WinHttpCloseHandle(g_activeHttpSession); g_activeHttpSession = nullptr; }
+}
+
+void ApplySystemToastSuppression(bool suppress) {
+    static constexpr wchar_t kPushKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications";
+    if (suppress) {
+        if (Wh_GetIntValue(L"ToastSuppressionActive", 0) == 0) {
+            DWORD prev = 1;
+            DWORD size = sizeof(prev);
+            RegGetValueW(HKEY_CURRENT_USER, kPushKey, L"ToastEnabled", RRF_RT_DWORD, nullptr, &prev, &size);
+            Wh_SetIntValue(L"ToastEnabledPrev", static_cast<int>(prev));
+            Wh_SetIntValue(L"ToastSuppressionActive", 1);
+        }
+        HKEY hKey = nullptr;
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, kPushKey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+            DWORD val = 0;
+            RegSetValueExW(hKey, L"ToastEnabled", 0, REG_DWORD, reinterpret_cast<const BYTE*>(&val), sizeof(val));
+            RegCloseKey(hKey);
+        }
+    } else if (Wh_GetIntValue(L"ToastSuppressionActive", 0) != 0) {
+        DWORD prev = static_cast<DWORD>(Wh_GetIntValue(L"ToastEnabledPrev", 1));
+        HKEY hKey = nullptr;
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, kPushKey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+            RegSetValueExW(hKey, L"ToastEnabled", 0, REG_DWORD, reinterpret_cast<const BYTE*>(&prev), sizeof(prev));
+            RegCloseKey(hKey);
+        }
+        Wh_SetIntValue(L"ToastSuppressionActive", 0);
     }
 }
 
 bool HttpGet(const std::wstring& host, const std::wstring& path, std::string& responseBody) {
+    if (!g_running) return false;
     HINTERNET hSession = WinHttpOpen(L"aegisCapsule/0.1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                                      WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) return false;
+
+    WinHttpSetTimeouts(hSession, 5000, 5000, 5000, 8000);
 
     HINTERNET hConnect = WinHttpConnect(hSession, host.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!hConnect) {
@@ -2589,8 +2676,18 @@ bool HttpGet(const std::wstring& host, const std::wstring& path, std::string& re
         return false;
     }
 
-    DWORD timeout = 8000;
-    WinHttpSetOption(hRequest, WINHTTP_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
+    {
+        std::lock_guard lock(g_httpMutex);
+        if (!g_running) {
+            WinHttpCloseHandle(hRequest);
+            WinHttpCloseHandle(hConnect);
+            WinHttpCloseHandle(hSession);
+            return false;
+        }
+        g_activeHttpSession = hSession;
+        g_activeHttpConnect = hConnect;
+        g_activeHttpRequest = hRequest;
+    }
 
     bool success = false;
     if (WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
@@ -2598,19 +2695,22 @@ bool HttpGet(const std::wstring& host, const std::wstring& path, std::string& re
         WinHttpReceiveResponse(hRequest, nullptr)) {
         DWORD size = 0;
         responseBody.clear();
-        while (WinHttpQueryDataAvailable(hRequest, &size) && size > 0) {
+        while (g_running && WinHttpQueryDataAvailable(hRequest, &size) && size > 0) {
             std::vector<char> buffer(size);
             DWORD read = 0;
             if (WinHttpReadData(hRequest, buffer.data(), size, &read) && read > 0) {
                 responseBody.append(buffer.data(), read);
             }
         }
-        success = !responseBody.empty();
+        success = g_running && !responseBody.empty();
     }
 
-    WinHttpCloseHandle(hRequest);
-    WinHttpCloseHandle(hConnect);
-    WinHttpCloseHandle(hSession);
+    {
+        std::lock_guard lock(g_httpMutex);
+        if (g_activeHttpRequest == hRequest) { WinHttpCloseHandle(hRequest); g_activeHttpRequest = nullptr; }
+        if (g_activeHttpConnect == hConnect) { WinHttpCloseHandle(hConnect); g_activeHttpConnect = nullptr; }
+        if (g_activeHttpSession == hSession) { WinHttpCloseHandle(hSession); g_activeHttpSession = nullptr; }
+    }
     return success;
 }
 
@@ -2636,7 +2736,7 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
     
     // Root Action 2: Pin / Expand / Game switches
     const int pinned = Wh_GetIntValue(L"PinnedExpanded", 0);
-    AppendMenuW(menu, MF_STRING | (pinned ? MF_CHECKED : 0), 2, tr ? (pinned ? L"📌 Kapsülü Açık Sabitle: AÇIK ✓" : L"📌 Kapsülü Açık Sabitle: KAPALI") : (pinned ? L"📌 Pinned Expanded: ON ✓" : L"📌 Pinned Expanded: OFF"));
+    AppendMenuW(menu, MF_STRING | (pinned ? MF_CHECKED : 0), 2, tr ? (pinned ? L"📌 Kapsülü Açık Sabitle: AÇIK" : L"📌 Kapsülü Açık Sabitle: KAPALI") : (pinned ? L"📌 Pinned Expanded: ON" : L"📌 Pinned Expanded: OFF"));
 
     const int gameOverlayPinned = Wh_GetIntValue(L"GameOverlayPinned", 0);
     AppendMenuW(menu, MF_STRING | (gameOverlayPinned ? MF_CHECKED : 0), 3, tr ? (gameOverlayPinned ? L"🎮 Oyun Overlay Modu: AÇIK ✓" : L"🎮 Oyun Overlay Modu: KAPALI") : (gameOverlayPinned ? L"🎮 Game Overlay Mode: ON ✓" : L"🎮 Game Overlay Mode: OFF"));
@@ -2876,8 +2976,10 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             TriggerCustomAlert(L"Living Assistant", tr ? L"Duruş & Esneme 🧘" : L"Posture & Stretch 🧘", tr ? L"Ayağa kalkın, omuzlarınızı geriye alın ve derin bir nefes alıp esneyin." : L"Stand up, roll your shoulders, and do a quick 30s stretch.", 6.0);
             break;
         case 77: {
-            std::lock_guard lock(g_stateMutex);
-            g_state.quickNotes.clear();
+            {
+                std::lock_guard lock(g_stateMutex);
+                g_state.quickNotes.clear();
+            }
             std::wstring path = GetNotesFilePath();
             DeleteFileW(path.c_str());
             TriggerCustomAlert(L"Quick Notes", tr ? L"Tüm Notlar Temizlendi 🗑️" : L"Notes Cleared 🗑️", tr ? L"Tüm notlarınız başarıyla silindi." : L"All notes have been removed.", 3.0);
@@ -2909,34 +3011,42 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             break;
         }
         case 90: {
-            std::lock_guard lock(g_stateMutex);
-            g_state.pomodoro.state = PomodoroState::Stopped;
-            g_state.pomodoro.remainingSeconds = 15 * 60;
-            g_state.pomodoro.totalSeconds = 15 * 60;
+            {
+                std::lock_guard lock(g_stateMutex);
+                g_state.pomodoro.state = PomodoroState::Stopped;
+                g_state.pomodoro.remainingSeconds = 15 * 60;
+                g_state.pomodoro.totalSeconds = 15 * 60;
+            }
             TriggerCustomAlert(L"Pomodoro Timer", tr ? L"15 Dk Odak Ayarlandı ⏱️" : L"15 Min Focus Set ⏱️", tr ? L"Pomodoro seansı 15 dakikaya ayarlandı." : L"Pomodoro session set to 15 minutes.", 3.0);
             break;
         }
         case 91: {
-            std::lock_guard lock(g_stateMutex);
-            g_state.pomodoro.state = PomodoroState::Stopped;
-            g_state.pomodoro.remainingSeconds = 25 * 60;
-            g_state.pomodoro.totalSeconds = 25 * 60;
+            {
+                std::lock_guard lock(g_stateMutex);
+                g_state.pomodoro.state = PomodoroState::Stopped;
+                g_state.pomodoro.remainingSeconds = 25 * 60;
+                g_state.pomodoro.totalSeconds = 25 * 60;
+            }
             TriggerCustomAlert(L"Pomodoro Timer", tr ? L"25 Dk Standart Odak ⏱️" : L"25 Min Focus Set ⏱️", tr ? L"Standart 25 dakikalık seans ayarlandı." : L"Standard Pomodoro session set to 25 minutes.", 3.0);
             break;
         }
         case 92: {
-            std::lock_guard lock(g_stateMutex);
-            g_state.pomodoro.state = PomodoroState::Stopped;
-            g_state.pomodoro.remainingSeconds = 45 * 60;
-            g_state.pomodoro.totalSeconds = 45 * 60;
+            {
+                std::lock_guard lock(g_stateMutex);
+                g_state.pomodoro.state = PomodoroState::Stopped;
+                g_state.pomodoro.remainingSeconds = 45 * 60;
+                g_state.pomodoro.totalSeconds = 45 * 60;
+            }
             TriggerCustomAlert(L"Pomodoro Timer", tr ? L"45 Dk Derin Çalışma ⏱️" : L"45 Min Focus Set ⏱️", tr ? L"45 dakikalık derin odaklanma seansı ayarlandı." : L"Deep work session set to 45 minutes.", 3.0);
             break;
         }
         case 93: {
-            std::lock_guard lock(g_stateMutex);
-            g_state.pomodoro.state = PomodoroState::Stopped;
-            g_state.pomodoro.remainingSeconds = 60 * 60;
-            g_state.pomodoro.totalSeconds = 60 * 60;
+            {
+                std::lock_guard lock(g_stateMutex);
+                g_state.pomodoro.state = PomodoroState::Stopped;
+                g_state.pomodoro.remainingSeconds = 60 * 60;
+                g_state.pomodoro.totalSeconds = 60 * 60;
+            }
             TriggerCustomAlert(L"Pomodoro Timer", tr ? L"60 Dk Genişletilmiş Odak ⏱️" : L"60 Min Focus Set ⏱️", tr ? L"60 dakikalık uzun çalışma seansı ayarlandı." : L"Extended deep work session set to 60 minutes.", 3.0);
             break;
         }
@@ -5469,7 +5579,7 @@ class Renderer {
     void DrawClipboard(const SharedState& state, D2D1_RECT_F rect, const Settings& settings) {
         if (rect.bottom - rect.top < 24.0f || rect.right - rect.left < 100.0f) return;
         const double now = NowSeconds();
-        const float ttl = settings.clipboardDuration > 0.1f ? settings.clipboardDuration : 2.5f;
+        const float ttl = 2.5f;
         const float remaining = Clamp(static_cast<float>(state.clipboard.expiresAt - now), 0.0f, ttl);
         const float progress = remaining / ttl;
         bool tr = IsTurkish(settings.language);
@@ -5941,7 +6051,7 @@ class Renderer {
         
         if (width >= 2.0f && height >= 2.0f) {
             if (secondary) {
-                const float gap = settings.splitGap * settings.sizeScale;
+                const float gap = 12.0f * settings.sizeScale;
                 const float maxH = std::max(primary.height, secondary->height);
                 const float pTop = top + (maxH - primary.height) * 0.5f;
                 const float sTop = top + (maxH - secondary->height) * 0.5f;
@@ -5961,6 +6071,10 @@ class Renderer {
         }
 
         hr = target_->EndDraw();
+        if (hr == D2DERR_RECREATE_TARGET) {
+            target_.Reset();
+            return false;
+        }
         if (FAILED(hr)) return false;
 
         POINT src = {0, 0};
@@ -5971,10 +6085,20 @@ class Renderer {
     }
 };
 
-void DispatchMediaCommand(int action, int64_t targetTicks = -1) {
-    std::thread([action, targetTicks]() {
+static std::atomic<int> g_mediaCmdAction{-1};
+static std::atomic<int64_t> g_mediaCmdTicks{-1};
+static HANDLE g_mediaCmdEvent = nullptr;
+static HANDLE g_mediaCmdThread = nullptr;
+
+DWORD WINAPI MediaCmdThreadProc(LPVOID) {
+    try { winrt::init_apartment(); } catch (...) {}
+    while (g_running) {
+        if (g_mediaCmdEvent) WaitForSingleObject(g_mediaCmdEvent, 1000);
+        if (!g_running) break;
+        int action = g_mediaCmdAction.exchange(-1);
+        if (action < 0) continue;
+        int64_t targetTicks = g_mediaCmdTicks.load();
         try {
-            winrt::init_apartment();
             auto sessionManager = winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
             if (sessionManager) {
                 auto session = sessionManager.GetCurrentSession();
@@ -5986,7 +6110,14 @@ void DispatchMediaCommand(int action, int64_t targetTicks = -1) {
                 }
             }
         } catch (...) {}
-    }).detach();
+    }
+    return 0;
+}
+
+void DispatchMediaCommand(int action, int64_t targetTicks = -1) {
+    g_mediaCmdTicks.store(targetTicks);
+    g_mediaCmdAction.store(action);
+    if (g_mediaCmdEvent) SetEvent(g_mediaCmdEvent);
 }
 
 LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -6225,33 +6356,37 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
 // Background Worker Threads
 
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+
 DWORD WINAPI RenderThreadProc(LPVOID) {
+    HINSTANCE hModInst = reinterpret_cast<HINSTANCE>(&__ImageBase);
     Settings initSettings = GetSettingsSnapshot();
+    float initEffScale = initSettings.autoDpiScale ? (initSettings.sizeScale * GetAnchorMonitorDpiScale()) : initSettings.sizeScale;
     RECT work = GetAnchorWorkRect();
-    const int initialW = static_cast<int>(std::ceil(initSettings.collapsedWidth * initSettings.sizeScale + kRenderPadX * 2.0f));
-    const int initialH = static_cast<int>(std::ceil(initSettings.collapsedHeight * initSettings.sizeScale + kRenderPadY * 2.0f));
+    const int initialW = static_cast<int>(std::ceil(initSettings.collapsedWidth * initEffScale + kRenderPadX * 2.0f));
+    const int initialH = static_cast<int>(std::ceil(initSettings.collapsedHeight * initEffScale + kRenderPadY * 2.0f));
     int initialX = work.left + (work.right - work.left - initialW) / 2;
     int initialY = work.top + initSettings.edgeMargin;
-
-    // Clean unregister previous class if lingering
-    UnregisterClassW(kWindowClass, GetModuleHandleW(nullptr));
 
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = OverlayWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.hInstance = hModInst;
     wc.lpszClassName = kWindowClass;
     wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"RegisterClassExW failed: %u", GetLastError());
+        return 1;
+    }
 
     g_hwnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         kWindowClass, L"aegisCapsule",
         WS_POPUP, initialX, initialY, initialW, initialH,
-        nullptr, nullptr, wc.hInstance, nullptr);
+        nullptr, nullptr, hModInst, nullptr);
 
     if (!g_hwnd) {
-        UnregisterClassW(kWindowClass, GetModuleHandleW(nullptr));
+        UnregisterClassW(kWindowClass, hModInst);
         return 1;
     }
 
@@ -6259,23 +6394,20 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
     EnableBlurBehind(g_hwnd);
     ShowWindow(g_hwnd, SW_SHOWNOACTIVATE);
     UpdateWindow(g_hwnd);
-    g_shellHookMessage = RegisterWindowMessageW(L"SHELLHOOK");
-    RegisterShellHookWindow(g_hwnd);
 
     Renderer renderer;
     if (!renderer.Initialize(g_hwnd)) {
-        DeregisterShellHookWindow(g_hwnd);
         DestroyWindow(g_hwnd);
         g_hwnd = nullptr;
-        UnregisterClassW(kWindowClass, GetModuleHandleW(nullptr));
+        UnregisterClassW(kWindowClass, hModInst);
         return 1;
     }
 
     SpringValue widthSpring;
     SpringValue heightSpring;
     SpringValue nudgeSpring;
-    widthSpring.Reset(initSettings.collapsedWidth * initSettings.sizeScale);
-    heightSpring.Reset(initSettings.collapsedHeight * initSettings.sizeScale);
+    widthSpring.Reset(initSettings.collapsedWidth * initEffScale);
+    heightSpring.Reset(initSettings.collapsedHeight * initEffScale);
     nudgeSpring.Reset(0.0f);
 
     double lastTime = NowSeconds();
@@ -6300,6 +6432,9 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
         lastTime = now;
 
         Settings settings = GetSettingsSnapshot();
+        if (settings.autoDpiScale) {
+            settings.sizeScale *= GetAnchorMonitorDpiScale();
+        }
         SharedState state;
         {
             std::lock_guard lock(g_stateMutex);
@@ -6409,29 +6544,37 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
         }
 
         // Pomodoro Timer Tick
+        int pomoAlertType = 0; // 1 = work done, 2 = break done
         {
             std::lock_guard lock(g_stateMutex);
             if (g_state.pomodoro.state == PomodoroState::Working || g_state.pomodoro.state == PomodoroState::Break) {
                 if (now - g_state.pomodoro.lastTick >= 1.0) {
                     int elapsed = static_cast<int>(now - g_state.pomodoro.lastTick);
-                    g_state.pomodoro.lastTick = now;
+                    g_state.pomodoro.lastTick += elapsed;
                     g_state.pomodoro.remainingSeconds -= elapsed;
                     if (g_state.pomodoro.remainingSeconds <= 0) {
-                        bool tr = IsTurkish(settings.language);
                         if (g_state.pomodoro.state == PomodoroState::Working) {
                             g_state.pomodoro.completedSessions++;
                             g_state.pomodoro.state = PomodoroState::Break;
                             g_state.pomodoro.remainingSeconds = settings.pomodoroBreakMinutes * 60;
                             g_state.pomodoro.totalSeconds = settings.pomodoroBreakMinutes * 60;
-                            TriggerCustomAlert(L"Pomodoro Focus", tr ? L"Odaklanma Seansı Bitti! 🎉" : L"Session Complete! 🎉", tr ? L"Mola zamanı. Harika iş çıkardınız!" : L"Time for a break. Great work!", 6.0);
+                            pomoAlertType = 1;
                         } else {
                             g_state.pomodoro.state = PomodoroState::Working;
                             g_state.pomodoro.remainingSeconds = settings.pomodoroWorkMinutes * 60;
                             g_state.pomodoro.totalSeconds = settings.pomodoroWorkMinutes * 60;
-                            TriggerCustomAlert(L"Pomodoro Focus", tr ? L"Mola Bitti 🍅" : L"Break Finished 🍅", tr ? L"Tekrar odaklanmaya hazır mısınız? Başlayalım!" : L"Ready to focus again? Let's go!", 6.0);
+                            pomoAlertType = 2;
                         }
                     }
                 }
+            }
+        }
+        if (pomoAlertType != 0) {
+            bool tr = IsTurkish(settings.language);
+            if (pomoAlertType == 1) {
+                TriggerCustomAlert(L"Pomodoro Focus", tr ? L"Odaklanma Seansı Bitti! 🎉" : L"Session Complete! 🎉", tr ? L"Mola zamanı. Harika iş çıkardınız!" : L"Time for a break. Great work!", 6.0);
+            } else {
+                TriggerCustomAlert(L"Pomodoro Focus", tr ? L"Mola Bitti 🍅" : L"Break Finished 🍅", tr ? L"Tekrar odaklanmaya hazır mısınız? Başlayalım!" : L"Ready to focus again? Let's go!", 6.0);
             }
         }
 
@@ -6473,8 +6616,11 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
         }
 
         int targetFps = settings.targetFps;
-        if (settings.lowPowerMode && !isHover && !state.media.playing) {
-            targetFps = 30;
+        bool isMorphing = (std::fabs(curW - primary.width) > 0.5f || std::fabs(curH - primary.height) > 0.5f || std::fabs(curNudge) > 0.5f);
+        if (!expand && !isHover && !isMorphing && !state.media.playing && !isAlert && primaryKind == IslandKind::Idle) {
+            targetFps = std::min(targetFps, 20);
+        } else if (settings.lowPowerMode && !isHover && !state.media.playing) {
+            targetFps = std::min(targetFps, 30);
         }
         int frameMs = std::max(1, 1000 / targetFps);
         if (g_stopEvent && WaitForSingleObject(g_stopEvent, frameMs) == WAIT_OBJECT_0) break;
@@ -6482,11 +6628,10 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
     }
 
     if (g_hwnd) {
-        DeregisterShellHookWindow(g_hwnd);
         DestroyWindow(g_hwnd);
         g_hwnd = nullptr;
     }
-    UnregisterClassW(kWindowClass, GetModuleHandleW(nullptr));
+    UnregisterClassW(kWindowClass, hModInst);
     ResetPositionOverlayCache();
     return 0;
 }
@@ -6641,16 +6786,48 @@ DWORD WINAPI AudioThreadProc(LPVOID) {
 DWORD WINAPI WeatherThreadProc(LPVOID) {
     int backoffMins = 0;
     while (g_running) {
+        bool weatherEnabled = true;
         std::wstring cityQuery;
         bool isFahrenheit = false;
         {
             std::lock_guard lock(g_settingsMutex);
+            weatherEnabled = g_settings.weatherEnabled;
             cityQuery = g_settings.weatherCity;
             isFahrenheit = g_settings.weatherFahrenheit;
         }
 
+        if (!weatherEnabled) {
+            if (g_stopEvent && g_settingsChangedEvent) {
+                HANDLE events[] = { g_stopEvent, g_settingsChangedEvent };
+                DWORD waitRes = WaitForMultipleObjects(2, events, FALSE, 60000);
+                if (waitRes == WAIT_OBJECT_0) break;
+            } else {
+                Sleep(1000);
+            }
+            continue;
+        }
+
+        auto UrlEncodeWide = [](const std::wstring& input) -> std::wstring {
+            if (input.empty()) return L"";
+            int u8len = WideCharToMultiByte(CP_UTF8, 0, input.c_str(), static_cast<int>(input.size()), nullptr, 0, nullptr, nullptr);
+            if (u8len <= 0) return L"";
+            std::string utf8(u8len, 0);
+            WideCharToMultiByte(CP_UTF8, 0, input.c_str(), static_cast<int>(input.size()), &utf8[0], u8len, nullptr, nullptr);
+            std::wstring encoded;
+            for (unsigned char c : utf8) {
+                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+                    encoded.push_back(static_cast<wchar_t>(c));
+                } else {
+                    wchar_t hex[4];
+                    swprintf_s(hex, L"%%%02X", c);
+                    encoded += hex;
+                }
+            }
+            return encoded;
+        };
+
         std::wstring path = L"/";
-        if (!cityQuery.empty()) path += cityQuery;
+        if (!cityQuery.empty()) path += UrlEncodeWide(cityQuery);
         path += isFahrenheit ? L"?format=j1&u" : L"?format=j1&m";
 
         auto Utf8ToWide = [](const std::string& str) -> std::wstring {
@@ -6871,11 +7048,21 @@ DWORD WINAPI NotificationThreadProc(LPVOID) {
     if (!accessGranted) return 1;
 
     uint32_t lastSeenId = 0;
+    bool seededExisting = false;
     while (g_running) {
         try {
             auto notifications = listener.GetNotificationsAsync(winrt::Windows::UI::Notifications::NotificationKinds::Toast).get();
             if (notifications) {
                 uint32_t count = notifications.Size();
+                if (!seededExisting) {
+                    for (uint32_t i = 0; i < count; ++i) {
+                        auto notif = notifications.GetAt(i);
+                        if (notif && notif.Id() > lastSeenId) {
+                            lastSeenId = notif.Id();
+                        }
+                    }
+                    seededExisting = true;
+                } else {
                 for (uint32_t i = 0; i < count; ++i) {
                     auto notif = notifications.GetAt(i);
                     if (!notif) continue;
@@ -6926,7 +7113,9 @@ DWORD WINAPI NotificationThreadProc(LPVOID) {
                         g_state.notification = snap;
                     }
                     TriggerNudge();
+                    if (!g_running) break;
                     break;
+                }
                 }
             }
         } catch (...) {}
@@ -6976,16 +7165,15 @@ void UpdateSystemMetrics() {
         sysDir[2] = L'\\'; sysDir[3] = L'\0'; // ensure trailing backslash
         diskRoot = sysDir;
     }
-    using GetDiskFreeSpaceExW_t = BOOL(WINAPI*)(LPCWSTR, void*, void*, void*);
-    static auto pGetDiskFreeSpaceExW = reinterpret_cast<GetDiskFreeSpaceExW_t>(
-        GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetDiskFreeSpaceExW"));
-    if (pGetDiskFreeSpaceExW && pGetDiskFreeSpaceExW(diskRoot, &freeBytes, &totalBytes, nullptr) && totalBytes > 0) {
+    if (GetDiskFreeSpaceExW(diskRoot, reinterpret_cast<PULARGE_INTEGER>(&freeBytes), reinterpret_cast<PULARGE_INTEGER>(&totalBytes), nullptr) && totalBytes > 0) {
         int freePct = static_cast<int>(freeBytes * 100 / totalBytes);
         std::lock_guard lock(g_stateMutex);
         g_state.system.diskFreePercent = freePct;
     }
 
-    int gpu = GetGpuUsage();
+    Settings s = GetSettingsSnapshot();
+    bool needGpu = s.gameOverlay || g_idleTab.load() == 3 || Wh_GetIntValue(L"GameOverlayPinned", 0) != 0;
+    int gpu = needGpu ? GetGpuUsage() : 0;
     {
         std::lock_guard lock(g_stateMutex);
         g_state.system.gpuPercent = gpu;
@@ -7025,14 +7213,16 @@ BOOL WhTool_ModInit() {
     if (!g_settingsChangedEvent) g_settingsChangedEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     else ResetEvent(g_settingsChangedEvent);
 
+    if (!g_mediaCmdEvent) g_mediaCmdEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    else ResetEvent(g_mediaCmdEvent);
+
     LoadSettings();
     Settings initSettings = GetSettingsSnapshot();
-    if (initSettings.suppressSystemToasts) {
-        SetSystemToastSuppression(true);
-    }
+    ApplySystemToastSuppression(initSettings.suppressSystemToasts);
 
     g_renderThread = CreateThread(nullptr, 0, RenderThreadProc, nullptr, 0, &g_renderThreadId);
     g_mediaThread = CreateThread(nullptr, 0, MediaThreadProc, nullptr, 0, nullptr);
+    g_mediaCmdThread = CreateThread(nullptr, 0, MediaCmdThreadProc, nullptr, 0, nullptr);
     g_audioThread = CreateThread(nullptr, 0, AudioThreadProc, nullptr, 0, nullptr);
     g_weatherThread = CreateThread(nullptr, 0, WeatherThreadProc, nullptr, 0, nullptr);
     g_assistantThread = CreateThread(nullptr, 0, AssistantThreadProc, nullptr, 0, nullptr);
@@ -7044,9 +7234,19 @@ BOOL WhTool_ModInit() {
 }
 
 void WhTool_ModSettingsChanged() {
+    static constexpr const wchar_t* kOverrides[] = {
+        L"LanguageOverride", L"CornerStyleOverride", L"IdleDisplayModeOverride",
+        L"IdleClockSecondsOverride", L"ExpandOnHoverOverride", L"LiquidGlassOverride",
+        L"LiquidGlassIntensityOverride", L"AccentGlowOverride", L"AccentGlowRadiusOverride",
+        L"HydrationIntervalOverride", L"EyeRestIntervalOverride", L"PostureIntervalOverride",
+        L"UptimeAlertOverride", L"PillOpacityOverride", L"ColorTheme", L"ShowMetricsInIdleOverride"
+    };
+    for (const wchar_t* key : kOverrides) {
+        Wh_SetIntValue(key, -1);
+    }
     LoadSettings();
     Settings currentSettings = GetSettingsSnapshot();
-    SetSystemToastSuppression(currentSettings.suppressSystemToasts);
+    ApplySystemToastSuppression(currentSettings.suppressSystemToasts);
     if (g_hwnd) EnableBlurBehind(g_hwnd);
     if (g_settingsChangedEvent) SetEvent(g_settingsChangedEvent);
     g_layoutDirty = true;
@@ -7054,11 +7254,12 @@ void WhTool_ModSettingsChanged() {
 
 void WhTool_ModUninit() {
     g_running = false;
+    AbortActiveHttp();
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_settingsChangedEvent) SetEvent(g_settingsChangedEvent);
+    if (g_mediaCmdEvent) SetEvent(g_mediaCmdEvent);
 
-    // Restore Windows native toast popups on unload
-    SetSystemToastSuppression(false);
+    ApplySystemToastSuppression(false);
 
     if (g_renderThreadId) {
         PostThreadMessageW(g_renderThreadId, WM_QUIT, 0, 0);
@@ -7070,7 +7271,7 @@ void WhTool_ModUninit() {
     StopVoiceRecording();
 
     HANDLE threads[] = {
-        g_renderThread, g_mediaThread, g_audioThread, g_weatherThread,
+        g_renderThread, g_mediaThread, g_mediaCmdThread, g_audioThread, g_weatherThread,
         g_assistantThread, g_recordingThread, g_keyboardThread
 #if AEGIS_CAPSULE_HAS_USER_NOTIFICATION_LISTENER
         , g_notificationThread
@@ -7079,7 +7280,7 @@ void WhTool_ModUninit() {
 
     for (HANDLE& t : threads) {
         if (t) {
-            WaitForSingleObject(t, 2000);
+            WaitForSingleObject(t, INFINITE);
             CloseHandle(t);
             t = nullptr;
         }
@@ -7087,6 +7288,7 @@ void WhTool_ModUninit() {
     g_renderThread = nullptr;
     g_renderThreadId = 0;
     g_mediaThread = nullptr;
+    g_mediaCmdThread = nullptr;
     g_audioThread = nullptr;
     g_weatherThread = nullptr;
     g_assistantThread = nullptr;
@@ -7105,51 +7307,193 @@ void WhTool_ModUninit() {
         CloseHandle(g_settingsChangedEvent);
         g_settingsChangedEvent = nullptr;
     }
+    if (g_mediaCmdEvent) {
+        CloseHandle(g_mediaCmdEvent);
+        g_mediaCmdEvent = nullptr;
+    }
     if (g_gpuQuery) {
         PdhCloseQuery(g_gpuQuery);
         g_gpuQuery = NULL;
     }
 }
 
-void StartMod() {
-    bool expected = false;
-    if (!g_modInitialized.compare_exchange_strong(expected, true)) {
-        return;
-    }
-    WhTool_ModInit();
-}
-
-void StopMod() {
-    bool expected = true;
-    if (!g_modInitialized.compare_exchange_strong(expected, false)) {
-        return;
-    }
-    WhTool_ModUninit();
-}
-
 } // namespace
 
-// Windhawk Entry Points
+// ============================================================================
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and change these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"aegisCapsule: Initializing module...");
-    StartMod();
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    Wh_Log(L"aegisCapsule: ModAfterInit called.");
-    // Windhawk calls AfterInit after all hooks are applied. StartMod() is safe to call
-    // again here — g_modInitialized (atomic) prevents double initialization.
-    StartMod();
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"aegisCapsule: Settings updated.");
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
     WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"aegisCapsule: Shutting down module.");
-    StopMod();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
