@@ -2365,7 +2365,10 @@ HMODULE LoadVerified(const std::wstring& path, const std::string& sha256) {
             Wh_Log(L"%s does not have the expected content; not loaded", path.c_str());
             return nullptr;
         }
-        return LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);      // the file is still held open
+        // Absolute path, and the imports of the two files are searched in System32 only: <storage>\bin is shared by every
+        // user's Explorer, so a DLL another user puts there must not be found by name. (u7dui.dll, which the page
+        // delay-loads, is already loaded by the time the page is, and a name that is loaded is not searched again.)
+        return LoadLibraryExW(path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);      // the file is still held open
     } catch (...) {
         return nullptr;
     }
