@@ -27,12 +27,12 @@ to those `Edit` controls.
 | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/ctrl-backspace-fix-for-win32-text-boxes_after.gif) |
 
 ## Features & behavior
-* Supports wrapped `Edit` controls used in .NET WinForms and Delphi VCL
-  applications.
-* Handles Unicode whitespace, punctuation, and symbols when calculating word
-  boundaries.
-* Groups consecutive Japanese kana (Hiragana & Katakana) by script when deleting
-  words.
+* Supports wrapped `Edit` controls used in .NET WinForms and Delphi VCL apps.
+* Handles Unicode whitespace, punctuation, and symbols for word-wise deletion.
+* Groups consecutive Japanese kana (Hiragana & Katakana) by script for word-wise
+  deletion.
+* Groups consecutive Korean Hangul (syllables & jamo) as words for word-wise
+  deletion.
 * Steps back one character at a time through Chinese, Japanese, and Korean
   ideographs.
 * Deletes masked text before the caret as a single block in password fields to
@@ -44,9 +44,12 @@ to those `Edit` controls.
 * In masked text boxes, pressing `Ctrl+Backspace` deletes the placeholder
   characters, breaking the input mask and preventing further input into those
   missing slots.
-* Custom-drawn text boxes, such as those in Qt applications, are unaffected
-  because they do not utilize standard Win32 `Edit` controls. Most custom-drawn
-  UI frameworks already handle their own previous-word deletion functionality.
+* In legacy ANSI apps on CJK system locales, pressing `Ctrl+Backspace` on
+  multi-byte text deletes the wrong range because this mod calculates word
+  boundaries using Unicode offsets.
+* Custom-drawn text boxes, such as those in Qt apps, are unaffected because they
+  do not utilize standard Win32 `Edit` controls. Most custom-drawn UI frameworks
+  already handle their own previous-word deletion functionality.
 */
 // ==/WindhawkModReadme==
 
@@ -55,6 +58,7 @@ to those `Edit` controls.
 #include <algorithm>
 #include <cwchar>
 #include <string>
+#include <string_view>
 
 enum class CharClass
 {
@@ -66,6 +70,12 @@ enum class CharClass
     Alphanumeric
 };
 
+// Helper: Identify prolonged sound marks shared across Japanese kana
+bool IsProlongedSoundMark(WCHAR wch)
+{
+    return wch == L'\u30FC' || wch == L'\uFF70';
+}
+
 // Helper: Determine the character class to calculate word boundaries
 CharClass GetCharClass(WCHAR wch)
 {
@@ -75,8 +85,16 @@ CharClass GetCharClass(WCHAR wch)
         return CharClass::Alphanumeric;
     }
 
-    // Treat prolonged sound marks as part of a katakana word
-    if (wch == L'\u30FC' || wch == L'\uFF70')
+    // Treat Hangul syllables and jamo as part of a word
+    if ((wch >= L'\uAC00' && wch <= L'\uD7A3') ||
+        (wch >= L'\u1100' && wch <= L'\u11FF') ||
+        (wch >= L'\u3130' && wch <= L'\u318F'))
+    {
+        return CharClass::Alphanumeric;
+    }
+
+    // Treat prolonged and voiced/semi-voiced sound marks as katakana
+    if (IsProlongedSoundMark(wch) || wch == L'\uFF9E' || wch == L'\uFF9F')
     {
         return CharClass::Katakana;
     }
@@ -117,8 +135,90 @@ CharClass GetCharClass(WCHAR wch)
         }
     }
 
-    // Everything else is grouped as a word
+    // Treat everything else as part of a word
     return CharClass::Alphanumeric;
+}
+
+// Helper: Determine the character class at a UTF-16 index with surrogate pairs
+CharClass GetCharClassAt(std::wstring_view text, int iPos, int& cchCharLen)
+{
+    if (iPos > 0 && IS_SURROGATE_PAIR(text[iPos - 1], text[iPos]))
+    {
+        cchCharLen = 2;
+        char32_t codePoint = 0x10000 +
+            ((static_cast<char32_t>(text[iPos - 1]) - 0xD800) << 10) +
+            (static_cast<char32_t>(text[iPos]) - 0xDC00);
+        if (codePoint >= 0x20000 && codePoint <= 0x3FFFF)
+        {
+            return CharClass::Ideograph;
+        }
+        if (codePoint >= 0x1F000 && codePoint <= 0x1FAFF)
+        {
+            return CharClass::Punctuation;
+        }
+        return CharClass::Alphanumeric;
+    }
+    cchCharLen = 1;
+    return GetCharClass(text[iPos]);
+}
+
+// Helper: Calculate the starting index of the previous word
+DWORD FindPreviousWordStart(std::wstring_view text, DWORD dwSelStart)
+{
+    auto dwClampedSelStart =
+        std::min<DWORD>(dwSelStart, static_cast<DWORD>(text.size()));
+    auto iPos = static_cast<int>(dwClampedSelStart) - 1;
+
+    // Step back through all whitespace characters
+    while (iPos >= 0 && GetCharClass(text[iPos]) == CharClass::Whitespace)
+    {
+        iPos--;
+    }
+
+    if (iPos < 0)
+    {
+        return 0;
+    }
+
+    // Identify the character class to delete
+    int cchCharLen = 1;
+    CharClass targetCharClass = GetCharClassAt(text, iPos, cchCharLen);
+
+    // Attach trailing prolonged sound marks to a preceding hiragana word
+    if (IsProlongedSoundMark(text[iPos]))
+    {
+        while (iPos > 0 && IsProlongedSoundMark(text[iPos - 1]))
+        {
+            iPos--;
+        }
+
+        if (iPos > 0 && GetCharClass(text[iPos - 1]) == CharClass::Hiragana)
+        {
+            targetCharClass = CharClass::Hiragana;
+        }
+    }
+
+    iPos -= cchCharLen;
+
+    if (targetCharClass == CharClass::Ideograph)
+    {
+        return static_cast<DWORD>(iPos + 1);
+    }
+
+    // Step back through all characters of the same class
+    while (iPos >= 0)
+    {
+        CharClass prevCharClass = GetCharClassAt(text, iPos, cchCharLen);
+        if (prevCharClass != targetCharClass &&
+            !(targetCharClass == CharClass::Hiragana &&
+                IsProlongedSoundMark(text[iPos])))
+        {
+            break;
+        }
+        iPos -= cchCharLen;
+    }
+
+    return static_cast<DWORD>(iPos + 1);
 }
 
 // Helper: Calculate the previous word boundary and delete the text block
@@ -164,36 +264,9 @@ void DeletePreviousWord(HWND hWnd)
             return;
         }
 
-        auto dwClampedSelStart =
-            std::min<DWORD>(dwSelStart, static_cast<DWORD>(cchTextCopied));
-        auto iPos = static_cast<int>(dwClampedSelStart) - 1;
-
-        // Step back through all whitespace characters
-        while (iPos >= 0 &&
-            GetCharClass(windowText[iPos]) == CharClass::Whitespace)
-        {
-            iPos--;
-        }
-
-        if (iPos >= 0)
-        {
-            // Identify the character class to delete
-            CharClass targetCharClass = GetCharClass(windowText[iPos]);
-            iPos--;
-
-            if (targetCharClass != CharClass::Ideograph)
-            {
-                // Step back through all characters of the same class
-                while (iPos >= 0 &&
-                    GetCharClass(windowText[iPos]) == targetCharClass)
-                {
-                    iPos--;
-                }
-            }
-        }
-
         // Calculate the final text selection boundary
-        dwNewSelStart = static_cast<DWORD>(iPos + 1);
+        dwNewSelStart = FindPreviousWordStart(std::wstring_view(
+            windowText.data(), cchTextCopied), dwSelStart);
     }
 
     // Pause re-drawing to hide the text selection flicker
@@ -212,32 +285,33 @@ void DeletePreviousWord(HWND hWnd)
 bool IsEditControl(HWND hWnd)
 {
     WCHAR szClassName[64];
-    if (GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)))
+    if (!GetClassNameW(hWnd, szClassName, ARRAYSIZE(szClassName)))
     {
-        if (_wcsicmp(szClassName, L"Edit") == 0)
-        {
-            return true;
-        }
-
-        // Query the UI framework to reveal a wrapped Edit control
-        // Common class names for such controls:
-        // - WindowsForms10.EDIT.* | .NET WinForms
-        // - TEdit, TMemo, T*Edit  | Delphi VCL
-        LRESULT lResult = SendMessageW(hWnd, WM_GETDLGCODE, 0, 0);
-        if (lResult & DLGC_HASSETSEL)
-        {
-            // Exclude specific text controls from the Ctrl+Backspace fix
-            _wcsupr_s(szClassName, ARRAYSIZE(szClassName));
-            return (wcsstr(szClassName, L"RICHEDIT") == nullptr &&
-                wcsstr(szClassName, L"SCINTILLA") == nullptr);
-        }
-
-        // Fallback for .NET WinForms wrapped Edit controls
-        // Required for those within PropertyGrid controls that swallow the
-        // WM_GETDLGCODE query.
-        return _wcsnicmp(szClassName, L"WindowsForms10.EDIT.", 20) == 0;
+        return false;
     }
-    return false;
+
+    if (_wcsicmp(szClassName, L"Edit") == 0)
+    {
+        return true;
+    }
+
+    // Query the UI framework to reveal a wrapped Edit control
+    // Common class names for such controls:
+    // - WindowsForms10.EDIT.* | .NET WinForms
+    // - TEdit, TMemo, T*Edit  | Delphi VCL
+    LRESULT lResult = SendMessageW(hWnd, WM_GETDLGCODE, 0, 0);
+    if (lResult & DLGC_HASSETSEL)
+    {
+        // Exclude specific text controls from the Ctrl+Backspace fix
+        _wcsupr_s(szClassName, ARRAYSIZE(szClassName));
+        return (wcsstr(szClassName, L"RICHEDIT") == nullptr &&
+            wcsstr(szClassName, L"SCINTILLA") == nullptr);
+    }
+
+    // Fallback for .NET WinForms wrapped Edit controls
+    // Required for those within PropertyGrid controls that swallow the
+    // WM_GETDLGCODE query.
+    return _wcsnicmp(szClassName, L"WindowsForms10.EDIT.", 20) == 0;
 }
 
 // Helper: Validate the Ctrl+Backspace hotkey on a target Edit control
