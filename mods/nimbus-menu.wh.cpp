@@ -2185,6 +2185,7 @@ static int SndOutOf(const std::wstring& id) {
     return -1;
 }
 
+static std::vector<std::wstring> SndMutedList();
 // Every output that's on, and the apps playing on each (a paused app stays where it was last).
 static void SndLoad() {
     std::unordered_map<std::wstring, ComPtr<IWICBitmapSource>> icons;  // (kept by path: not extracted again on every read)
@@ -2212,6 +2213,7 @@ static void SndLoad() {
     UINT n = 0;
     col->GetCount(&n);
     DWORD self = GetCurrentProcessId();
+    auto mutedList = SndMutedList();
     struct Seen {
         DWORD pid;
         int out;
@@ -2287,6 +2289,10 @@ static void SndLoad() {
             it->sess.push_back({oi, sv});
             BOOL muted = FALSE;
             sv->GetMute(&muted);
+            if (!muted && std::find(mutedList.begin(), mutedList.end(), it->v.path + L"|" + o.id) != mutedList.end()) {
+                sv->SetMute(TRUE, nullptr);  // (taken off this output, and started after Nimbus)
+                muted = TRUE;
+            }
             seen.push_back({pid, oi, st == AudioSessionStateActive, muted != FALSE});
         }
     }
@@ -2310,6 +2316,8 @@ static void SndLoad() {
 
 static bool SndIsCopy(const SndApp& a, int oi) { return oi >= 0 && oi < (int)g_snd.outs.size() && SndCopyAt(a.v.pid, g_snd.outs[oi].id) >= 0; }
 static std::vector<std::wstring> SndList(const wchar_t* name);
+static HWND SndMsgWnd();
+static void SndKeepUpArm();
 // The first time Nimbus moves an app: what Windows had for it (put back when going back to Simple).
 static void SndRememberRoute(const SndApp& a) {
     auto v = SndList(L"sound.routed");
@@ -2358,6 +2366,7 @@ static void SndMuteOn(const SndApp& a, int oi, bool mute) {
     if (mute && it == v.end()) v.push_back(key);
     else if (!mute && it != v.end()) v.erase(it);
     SndMutedSave(v);
+    if (mute) SndKeepUpArm();  // (an app started later gets the mute too)
 }
 
 // Every app session on every output: (pid, app path, output id, its volume control).
@@ -2426,10 +2435,15 @@ static bool SndPutBack() {
             }
         if (!done) mutedLeft.push_back(m);
     }
+    // (an app that's gone from the PC won't run again: its entries go)
+    auto gone = [](const std::wstring& path) { return !path.empty() && GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES; };
+    mutedLeft.erase(std::remove_if(mutedLeft.begin(), mutedLeft.end(), [&](const std::wstring& m) { return gone(m.substr(0, m.rfind(L'|'))); }),
+                    mutedLeft.end());
     for (auto& r : routed) {
         size_t bar = r.rfind(L'|');
         if (bar == std::wstring::npos) continue;
         std::wstring path = r.substr(0, bar), before = r.substr(bar + 1);
+        if (gone(path)) continue;
         auto it = std::find_if(all.begin(), all.end(), [&](const SndSess& x) { return x.path == path; });
         if (it != all.end()) SndRoute(it->pid, before);
         else routedLeft.push_back(r);
@@ -2442,12 +2456,27 @@ static bool SndPutBack() {
     return !mutedLeft.empty() || !routedLeft.empty();
 }
 constexpr UINT_PTR TIMER_SND_PUTBACK = 37;  // (on the message window, while something waits for its app)
-static HWND SndMsgWnd();
+static int g_sndChecks = 0;
+// Every 30 s while something waits: in Complete, the panel's mutes for apps started since; in Simple, what's
+// left to put back. Stops when nothing waits, or after a day (what's left is tried again at the next start).
+static bool SndKeepUp() {
+    if (++g_sndChecks > 2880) return false;
+    if (SoundFull()) {
+        if (SndMutedList().empty()) return false;
+        SndMutesApply(true);
+        return true;
+    }
+    return SndPutBack();
+}
+static void SndKeepUpArm() {
+    g_sndChecks = 0;
+    if (SndMsgWnd()) SetTimer(SndMsgWnd(), TIMER_SND_PUTBACK, 30000, nullptr);
+}
 // Back to the simple panel: copies off, and what Nimbus changed goes back (only that: an output chosen in
 // Windows' own mixer stays).
 static void SndResetAll() {
     SndCopiesStopAll(GetTickCount() + 2000);
-    if (SndPutBack() && SndMsgWnd()) SetTimer(SndMsgWnd(), TIMER_SND_PUTBACK, 30000, nullptr);
+    if (SndPutBack()) SndKeepUpArm();
     g_snd.note.clear();
     Wh_Log(L"sound: back to the simple panel");
 }
@@ -5352,6 +5381,7 @@ struct StartRow {
     StartRowKind kind;
     StartItem* item = nullptr;
     int power = 0;
+    bool hidden = false;                  // scrolled out of view: the keyboard can go there (and scroll to it), the mouse can't
     std::function<void()> fn;             // RowFn: what a click does
     std::function<void(float)> slide;     // RowSlide: set from 0..1
     float x0 = 0, x1 = 0;                 // RowSlide: the track
@@ -6984,7 +7014,7 @@ static void StartKeepVisible() {
     if (s.kbFocus < 0 || s.kbFocus >= (int)s.rows.size()) return;
     const StartRow& row = s.rows[s.kbFocus];
     if (StartIsTabRow(row.kind) || row.kind == RowPower || row.kind == RowOrg) return;
-    float top = 0, bottom = 1e9f;
+    float top = 0, bottom = 1e9f;  // (a hidden row's box is whole, so this scrolls it into view)
     for (auto& r : s.rows) {
         if (StartIsTabRow(r.kind)) top = std::max(top, r.rc.bottom);
         if (r.kind == RowPower) bottom = std::min(bottom, r.rc.top);
@@ -7055,7 +7085,7 @@ static int StartRowAt(int x, int y) {
     x -= (int)std::lround(g_start.offX);
     for (int i = 0; i < (int)g_start.rows.size(); i++) {
         const auto& r = g_start.rows[i].rc;
-        if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) return i;
+        if (!g_start.rows[i].hidden && x >= r.left && x < r.right && y >= r.top && y < r.bottom) return i;
     }
     return -1;
 }
@@ -13639,8 +13669,19 @@ static void StartStatusTab(const StartPaint& p) {
         r.bottom = std::min(r.bottom, p.bottom);
         return true;
     };
+    // (out of view: a row only the keyboard sees, in the same place in the list, so its index stays the same)
+    auto unseen = [&](D2D1_RECT_F r, StartRowKind kind, int power = 0) {
+        StartRow row{r, kind};
+        row.power = power;
+        row.hidden = true;
+        s.rows.push_back(std::move(row));
+    };
     auto button = [&](D2D1_RECT_F r, std::function<void()> fn) {
-        if (!live || !clipped(r)) return false;
+        if (!live) return false;
+        if (!clipped(r)) {
+            unseen(r, RowFn);
+            return false;
+        }
         int idx = (int)s.rows.size();
         StartRow row{r, RowFn};
         row.fn = std::move(fn);
@@ -13659,7 +13700,11 @@ static void StartStatusTab(const StartPaint& p) {
         rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + w * v, cy), SS(8), SS(8)), tint.Get());
         rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x + w * v, cy), SS(5.5f), SS(5.5f)), p.text);
         D2D1_RECT_F hr = D2D1::RectF(x - SS(8), y, x + w + SS(8), y + SS(32));
-        if (!live || !clipped(hr)) return;
+        if (!live) return;
+        if (!clipped(hr)) {
+            unseen(hr, RowSlide);
+            return;
+        }
         StartRow row{hr, RowSlide};
         row.slide = std::move(set);
         row.x0 = x;
@@ -13697,6 +13742,7 @@ static void StartStatusTab(const StartPaint& p) {
             LoadStartSecOrder();
         };
         if (idx >= 0) s.rows.push_back(std::move(row));
+        else unseen(rr, RowFn);
         if (s.hover == idx) rt->FillRoundedRectangle(D2D1::RoundedRect(rr, SS(8), SS(8)), p.cardHi);
         text(reset, s.small.Get(), rr.left, rr.top, rr.right - rr.left - SS(8), SS(26), p.text, DWRITE_TEXT_ALIGNMENT_TRAILING);
         y += SS(34);
@@ -13874,7 +13920,8 @@ static void StartStatusTab(const StartPaint& p) {
                     float x = L - SS(4) + (t % cols) * cell, ty = y + (t / cols) * cell;
                     D2D1_RECT_F r = D2D1::RectF(x + SS(2), ty + SS(2), x + cell - SS(2), ty + cell - SS(2));
                     D2D1_RECT_F hr = r;
-                    if (live && clipped(hr)) {
+                    if (live && !clipped(hr)) unseen(r, RowTray, ti);
+                    else if (live) {
                         int idx = (int)s.rows.size();
                         s.rows.push_back({hr, RowTray, nullptr, ti});
                         if (s.hover == idx) rt->FillRoundedRectangle(D2D1::RoundedRect(r, SS(9), SS(9)), p.cardHi);
@@ -13986,6 +14033,7 @@ static void StartStatusTab(const StartPaint& p) {
             StartRow row{hr, RowSec};
             row.power = k;
             if (idx >= 0) s.rows.push_back(std::move(row));
+            else unseen(r, RowSec, k);
             bool dragged = s.secDrag.active && s.secDrag.sec == k;
             if (s.hover == idx || dragged) {
                 ComPtr<ID2D1SolidColorBrush> edge;
@@ -15049,8 +15097,12 @@ static void StatusInit() {
     NotifInit();
     LoadNotes();
     // The complete sound panel's mutes come back with the mod; in Simple, what's left goes back.
-    if (SoundFull()) SndMutesApply(true);
-    else if (SndPutBack() && g_msgWnd) SetTimer(g_msgWnd, TIMER_SND_PUTBACK, 30000, nullptr);
+    if (SoundFull()) {
+        SndMutesApply(true);
+        if (!SndMutedList().empty()) SndKeepUpArm();
+    } else if (SndPutBack()) {
+        SndKeepUpArm();
+    }
 }
 
 static void StatusUninit() {
@@ -17712,7 +17764,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             } else if (wp == TIMER_PLAYER_VIS) {
                 PlayerVisStep();
             } else if (wp == TIMER_SND_PUTBACK) {
-                if (SoundFull() || !SndPutBack()) KillTimer(hwnd, TIMER_SND_PUTBACK);
+                if (!SndKeepUp()) KillTimer(hwnd, TIMER_SND_PUTBACK);
             } else if (wp == TIMER_APPLY) {
                 // A change in the settings window (several quick ones apply once).
                 KillTimer(hwnd, TIMER_APPLY);
