@@ -53,6 +53,7 @@ Captures system audio (WASAPI Loopback or microphone input) and integrates with 
 - **Native Windows OSD**: Showing the custom volume flyout does not suppress the built-in Windows volume OSD; both may appear together.
 - **Microphone mode**: Setting Audio Capture Source to Microphone causes Windows to show the microphone-in-use indicator on Explorer.
 - **Presets**: Selecting Preset 1–6 overrides individual layout size settings; keeping `Save Current Settings` active overwrites that slot on settings changes.
+- **DPI / Pixel Units**: Size and offset settings use raw physical pixels (not DPI-scaled); on 125%–150% display scaling, increase panel and flyout dimensions accordingly.
 */
 // ==/WindhawkModReadme==
 
@@ -770,9 +771,8 @@ static void LoadSettings() {
 
     auto readColor = [](const wchar_t* key, DWORD def) -> DWORD {
         PCWSTR s = Wh_GetStringSetting(key);
-        DWORD  v = def;
-        if (s && wcslen(s) > 0) v = 0xFF000000 | wcstoul(s, nullptr, 16);
-        if (s) Wh_FreeStringSetting(s);
+        DWORD  v = (s[0] != L'\0') ? (0xFF000000 | wcstoul(s, nullptr, 16)) : def;
+        Wh_FreeStringSetting(s);
         return v;
     };
     g_Settings.color1 = readColor(L"Color1", 0xFF00CCFF);
@@ -968,7 +968,7 @@ static std::atomic<int> g_volumeFlyoutType{0}; // 0=Volume, 1=Caps Lock, 2=Num L
 static std::atomic<bool> g_volumeFlyoutActive{false}; // true=On, false=Off
 
 static HHOOK g_keyboardHook = nullptr;
-static DWORD g_hookThreadId = 0;
+static std::atomic<DWORD> g_hookThreadId{0};
 
 static HMODULE GetOwnModuleHandle() {
     HMODULE hMod = nullptr;
@@ -1223,6 +1223,7 @@ static mutex                g_iconCacheMutex;
 // VOLUME NOTIFICATIONS
 // =========================================================================
 static void RegisterVolumeNotification(HWND hwnd) {
+    (void)hwnd;
     IMMDeviceEnumerator* pEnum = nullptr;
     static const GUID CLSID_MMDevEnum =
         {0xBCDE0395,0xE52F,0x467C,{0x8E,0x3D,0xC4,0x57,0x92,0x91,0x69,0x2E}};
@@ -1898,29 +1899,33 @@ static void AudioCaptureThread() {
                     }
 
                     if (frames > 0) {
-                        lock_guard<mutex> lk(g_ringMutex);
-                        for (UINT32 i = 0; i < frames; i++) {
-                            float s = 0.0f;
-                            if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT) && pData) {
-                                if (isFloat) {
-                                    float* fp = (float*)pData + (size_t)i * chCount;
-                                    for (int c = 0; c < ch; c++) s += fp[c];
-                                } else if (isPCM16) {
-                                    short* sp = (short*)pData + (size_t)i * chCount;
-                                    for (int c = 0; c < ch; c++) s += sp[c] / 32768.0f;
-                                } else if (isPCM32) {
-                                    int* ip = (int*)pData + (size_t)i * chCount;
-                                    for (int c = 0; c < ch; c++) s += ip[c] / 2147483648.0f;
-                                }
-                                s /= chF;
-                                if (std::abs(s) > 0.005f && g_lowFPSMode.load(memory_order_relaxed)) {
-                                    if (g_hVisWnd && IsWindow(g_hVisWnd)) {
-                                        PostMessageW(g_hVisWnd, WM_APP + 25, 0, 0);
+                        bool needWake = false;
+                        {
+                            lock_guard<mutex> lk(g_ringMutex);
+                            for (UINT32 i = 0; i < frames; i++) {
+                                float s = 0.0f;
+                                if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT) && pData) {
+                                    if (isFloat) {
+                                        float* fp = (float*)pData + (size_t)i * chCount;
+                                        for (int c = 0; c < ch; c++) s += fp[c];
+                                    } else if (isPCM16) {
+                                        short* sp = (short*)pData + (size_t)i * chCount;
+                                        for (int c = 0; c < ch; c++) s += sp[c] / 32768.0f;
+                                    } else if (isPCM32) {
+                                        int* ip = (int*)pData + (size_t)i * chCount;
+                                        for (int c = 0; c < ch; c++) s += ip[c] / 2147483648.0f;
+                                    }
+                                    s /= chF;
+                                    if (std::abs(s) > 0.005f && g_lowFPSMode.load(memory_order_relaxed)) {
+                                        needWake = true;
                                     }
                                 }
+                                g_ringBuf[g_ringWrite] = s;
+                                g_ringWrite = (g_ringWrite + 1) & (RING_SIZE - 1);
                             }
-                            g_ringBuf[g_ringWrite] = s;
-                            g_ringWrite = (g_ringWrite + 1) & (RING_SIZE - 1);
+                        }
+                        if (needWake && g_hVisWnd && IsWindow(g_hVisWnd)) {
+                            PostMessageW(g_hVisWnd, WM_APP + 25, 0, 0);
                         }
                     }
                     pCC->ReleaseBuffer(frames);
@@ -2714,6 +2719,7 @@ static void DrawButton(Graphics& g, const Button& btn, Color color) {
 }
 
 static void FillUpperRoundedBar(Graphics& g, Brush* brush, float x, float y, float w, float h, float r) {
+    (void)r;
     if (h <= 0.0f || w <= 0.0f) return;
     float diameter = w;
     if (h <= diameter) {
@@ -2725,6 +2731,7 @@ static void FillUpperRoundedBar(Graphics& g, Brush* brush, float x, float y, flo
 }
 
 static void FillLowerRoundedBar(Graphics& g, Brush* brush, float x, float y, float w, float h, float r) {
+    (void)r;
     if (h <= 0.0f || w <= 0.0f) return;
     float diameter = w;
     if (h <= diameter) {
@@ -5445,7 +5452,7 @@ static void CleanupModGdiplusResources() {
 }
 
 static void HookThreadProc() {
-    g_hookThreadId = GetCurrentThreadId();
+    g_hookThreadId.store(GetCurrentThreadId(), memory_order_relaxed);
     HMODULE hMod = GetOwnModuleHandle();
     g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hMod, 0);
     if (!g_keyboardHook) {
@@ -5464,7 +5471,7 @@ static void HookThreadProc() {
         UnhookWindowsHookEx(g_keyboardHook);
         g_keyboardHook = nullptr;
     }
-    g_hookThreadId = 0;
+    g_hookThreadId.store(0, memory_order_relaxed);
 }
 
 static void VisThread() {
@@ -5655,8 +5662,9 @@ static void VisThread() {
     }
 
     // Cleanup
-    if (g_hookThreadId != 0) {
-        PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0);
+    DWORD hookTid = g_hookThreadId.load(memory_order_relaxed);
+    if (hookTid != 0) {
+        PostThreadMessage(hookTid, WM_QUIT, 0, 0);
     }
     if (g_hookThread && g_hookThread->joinable()) {
         g_hookThread->join();
@@ -5743,8 +5751,9 @@ void Wh_ModUninit() {
     g_mediaRunning = false;
     g_mediaUpdateCv.notify_all();
 
-    if (g_hookThreadId != 0) {
-        PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0);
+    DWORD hookTid = g_hookThreadId.load(memory_order_relaxed);
+    if (hookTid != 0) {
+        PostThreadMessage(hookTid, WM_QUIT, 0, 0);
     }
 
     if (g_hVisWnd && IsWindow(g_hVisWnd)) {
