@@ -583,6 +583,38 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/a86034e6042bc1337a5c10f3a596ff06d346027a/mods/taskbar-notification-bell-badge.wh.cpp"
       }
     },
+    "taskbar-weather": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795320601968,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795320601968,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "DavidHiFi",
+        "compilerOptions": "-lwinhttp -lgdiplus -lgdi32 -luser32 -ld2d1 -ldwrite",
+        "description": "Current weather on the taskbar with a details card on hover. No Widgets, browser or API key needed",
+        "github": "https://github.com/DavidHiFi",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Taskbar Weather",
+        "version": "1.5.2"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/5834",
+      "source": {
+        "sha256": "b1247fac45f44a2b3d009bdfab32da271655d3d52cc47c44b46a498f21264a9d",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/30f0ece20ce9ac15ba7c8ca0aa79238d6064ad1c/mods/taskbar-weather.wh.cpp"
+      }
+    },
     "taskbar-wireless-battery-widget": {
       "details": {
         "defaultSorting": 0,
@@ -670,35 +702,6 @@
       "source": {
         "sha256": "abc07bad6c8019ceeda2082c33a5fb22c12c7ac1d03b403fbafb41b0b596d740",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1ab68558cc75dd2a732870144c3a3af22ccfab0a/mods/volu-macos-volume-hud.wh.cpp"
-      }
-    },
-    "wallpaper-changer": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795316996496,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795316996496,
-        "users": 0
-      },
-      "metadata": {
-        "author": "David Ravelo",
-        "compilerOptions": "-lole32 -lshell32 -luser32 -lgdi32 -luuid -ld2d1 -ldwrite -lwindowscodecs",
-        "description": "Change your wallpaper from a visual selector opened with a hotkey. Three styles, collections from your folders.",
-        "github": "https://github.com/DavidRaveloU",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "Wallpaper Changer",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7804",
-      "source": {
-        "sha256": "4fb8819cba04cc55f826973aa706f3aec73daeb5a127146adebb9e0363a602b0",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/8e145266ec178aafe0ecc237332b24d5ee9618f4/mods/wallpaper-changer.wh.cpp"
       }
     },
     "win11-ime-tray-icon-fix": {

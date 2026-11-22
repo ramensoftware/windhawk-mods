@@ -1,0 +1,9843 @@
+// ==WindhawkMod==
+// @id              start-menu-groups
+// @name            Start Menu Groups
+// @description     Replace the Windows 11 Start menu "Category" view with your own groups, apps and layout
+// @version         1.0.0
+// @author          DanRotaru
+// @github          https://github.com/DanRotaru
+// @donateUrl       https://buymeacoffee.com/widget/page/danrotaru
+// @homepage        https://dan13.me/
+// @include         StartMenuExperienceHost.exe
+// @include         explorer.exe
+// @architecture    x86-64
+// @compilerOptions -ladvapi32 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -luser32
+// @license         MIT
+// ==/WindhawkMod==
+
+// clang-format off
+
+// ==WindhawkModReadme==
+/*
+# Start Menu Groups
+
+Add your own **app groups** to the **Windows 11 Start menu**, before or after the Pinned section (or in place of the built‑in **All → View: Category** grid), using the same look as Start: rounded tiles with an icon preview, an overflow cluster for the remaining apps and the group name underneath.
+
+![Start Menu Groups demo](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/start-menu-groups/screenshots/start-menu.gif)
+
+Designed for the Windows 11 Start menu (`StartMenuExperienceHost.exe`).
+
+## Features
+
+- **Your own groups** — create any number of groups and put any Start menu app in them, desktop and Store apps alike. An app can be in several groups.
+- **Apps, programs and websites** — each item is a Start app (picked by name or app ID), a program, file or folder (full path with optional arguments), or a website opened in the default browser.
+- **Custom names and icons** — every item can have its own label and icon: an `.ico`, `.exe`, `.dll` or image file, an image link (such as a website's favicon), a Fluent icon by its code (e.g. `E774`) or an emoji.
+- **Native look** — rounded tiles, borders and colors match Start's own category view and follow the Windows light / dark theme.
+- **Resizable tiles** — give each group its own tile size, from 1 × 1 up to 6 × 4 (24 apps). Bigger tiles take more cells of the group grid. A 1 × 1 tile is a single app on its own, without a group.
+- **Overflow cluster** — when a group has more apps than fit, the last cell shows the rest as small icons; click it to open the whole group.
+- **Right‑click menu** — right‑click an app in a group for **Edit**, **Run as administrator**, **Open file location**, **Pin to taskbar**, **App settings** and **Uninstall**, like Start's own apps.
+- **Size presets** — Default, Small and Large presets for the tiles, icons and names, plus control over gaps, corner radius, colors and group names.
+- **Placement** — show the groups before or after Pinned, after Recommended / Recent, or after the All section, with an optional section title.
+- **Hide Start's sections** — optionally hide Start's own Pinned, Recommended and All sections and use only your groups.
+- **Settings window** — right‑click the groups in Start → **Customize Start Groups** for a visual editor with drag & drop (see [Settings window](#settings-window)).
+- **Import / export** — all settings can be exported to and imported from a JSON file.
+
+## Screenshots
+
+The settings window, with drag & drop editing of groups and apps:
+
+![Settings window](https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/start-menu-groups/screenshots/settings-window.gif)
+
+## Setting it up
+
+Everything is configured on the mod's **Settings** tab in Windhawk, in
+sections:
+
+* **Groups** — add a group with *Add new item*, give it a name, a tile size and its items. For a Start app, enter the app's name exactly as it appears in Start (for example `Calculator`, `Visual Studio Code`; case doesn't matter), or its app ID (AUMID, such as `Microsoft.WindowsCalculator_8wekyb3d8bbwe!App`). For a program, its full path (a program, file or folder) and optional arguments; for a website, its address. Reorder groups with the arrows.
+* **Behavior** — where the groups appear, the section title, app names and tooltips, sorting, empty groups, the number of columns when a group is opened, and hiding Start's own sections.
+* **Tiles**, **Icons**, **Group names** — sizes, gaps and colors. The defaults match Start's own category view.
+
+Changes apply to Start as soon as you click **Save settings**.
+
+## Settings window
+
+Right‑click the groups in Start → **Customize Start Groups** (also added to Start's own right‑click menu, after *Start settings*) opens a settings window with the same settings, but easier to edit:
+
+* **Groups** — shows the groups the way Start does. Drag apps to reorder them or move them to another group, drag a tile to reorder the groups, drag a tile's corner to resize it, and drag apps from the All Apps list onto a tile to add them. The selected group and app are edited below the groups. Right‑click a tile to rename, duplicate or delete it.
+* **Customization** — the size preset (Default, Small, Large), gaps, corner radius, colors and group names.
+* **Behavior** — placement, section title, app names, tooltips, sorting and columns.
+* **Built‑in sections** — hide Start's own Pinned, Recommended and All sections.
+
+Start apps are picked by name with suggestions from the apps in Start; programs have a file picker. Groups and items can be duplicated, and an app can be added on its own, without a group. **Import** / **Export** at the bottom of the navigation pane save all settings to, or load them from, a JSON file.
+
+The window is hosted by File Explorer — the mod also loads into `explorer.exe` for this, and does nothing else there — because the Start menu process can't host one. It edits the same settings as Windhawk. Windhawk keeps them in a protected registry key, so **Save** shows an administrator (UAC) prompt for Windows PowerShell, which imports the new settings, and Start updates right after. The import checks that the settings file is exactly the one the window wrote, so no other program can change what gets saved. If the settings were changed in Windhawk while the window was open, **Save** asks before replacing them. The portable version of Windhawk isn't supported by the window.
+
+## Tile size and apps in the tile
+
+Each group has two size settings:
+
+* **Tile size** — width × height of the tile, in app spots. 2 × 2 is the size of one of Start's own tiles; 1 × 1 is an app on its own, without a group.
+* **Apps in the tile** — apps per row × rows of apps, at most the tile size. *Default* fills the tile with one app per spot; the rest go in the overflow cluster.
+
+A group can also hide its app names, its group name, or its tile background (no background, border or padding — just the apps, e.g. for a single app on its own).
+
+## Colors
+
+Colors are `#RRGGBB` or `#AARRGGBB`. Leave a color empty to follow the Windows theme and match Start.
+
+## Network access
+
+The mod doesn't connect to the internet by itself, and the default settings don't contact any server: the default websites show a globe icon.
+
+An icon set to an image link (`http://` or `https://`, such as a website's favicon) is downloaded from that address by Windows' XAML image loader: a normal web request for the image, which sends your IP address and a user agent to that server. It happens when Start builds the tiles (when the mod loads, on a theme or settings change, and when a group is opened), and when the settings window shows the item. To avoid it, leave the icon empty or use a local file, a Fluent icon code or an emoji.
+
+## Compatibility
+
+The mod reaches Start's UI directly, without XAML diagnostics, so it works alongside mods and tools that use them, such as Windows 11 Start Menu Styler.
+
+## Language
+
+The groups are placed next to Start's pinned list, found by its element name, so they show in any display language. Two things go by Start's English titles: hiding Start's sections (*Pinned*, *Recommended* / *Recent*, *All*), and adding *Customize Start Groups* after *Start settings* in Start's own right‑click menu. In other languages, open the settings window by right‑clicking the groups instead.
+
+## Default configuration
+
+Out of the box the mod adds these groups before the Pinned section, under an **Apps** heading:
+
+* **Group 1** — Microsoft Store, Settings, Notepad, Weather
+* **Group 2** — Camera, Paint, Calculator, Calendar
+* **Favorites** — Photos, Terminal, Notepad, Get Help (group name hidden)
+* **Group 3** (3 × 3) — Sound Recorder, Voice access, Task Manager, Movies & TV, File Explorer, Sticky Notes
+* **System** (3 × 1) — Control Panel, Services, Run (group name hidden)
+* **Websites** (3 × 2) — YouTube, ChatGPT, Example, Google, Reddit, dan13.me
+
+Empty groups are hidden. None of Start's own sections are hidden by default. Everything is configurable in the mod settings.
+*/
+// ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- groups:
+  - - name: "Group 1"
+      $name: Group name
+    - span: 2x2
+      $name: Tile size
+      $description: >-
+        Width × height of the tile, in app spots: 2 × 2 is the size of one
+        of Start's own tiles. 1 × 1 is an app on its own, without a group.
+      $options:
+        - 1x1: 1 × 1
+        - 1x2: 1 × 2
+        - 1x3: 1 × 3
+        - 1x4: 1 × 4
+        - 1x5: 1 × 5
+        - 1x6: 1 × 6
+        - 2x1: 2 × 1
+        - 3x1: 3 × 1
+        - 4x1: 4 × 1
+        - 5x1: 5 × 1
+        - 6x1: 6 × 1
+        - 2x2: 2 × 2
+        - 3x2: 3 × 2
+        - 3x3: 3 × 3
+        - 4x2: 4 × 2
+        - 4x4: 4 × 4
+        - 6x2: 6 × 2
+        - 6x4: 6 × 4
+    - tileSize: auto
+      $name: Apps in the tile
+      $description: >-
+        Apps per row × rows of apps, at most the tile size. Default fills
+        the tile: one app per spot. The rest go in the overflow cluster.
+      $options:
+        - auto: Default (fills the tile)
+        - 1x1: 1 × 1 (1 app)
+        - 1x2: 1 × 2 (2 apps)
+        - 1x3: 1 × 3 (3 apps)
+        - 1x4: 1 × 4 (4 apps)
+        - 1x5: 1 × 5 (5 apps)
+        - 1x6: 1 × 6 (6 apps)
+        - 2x1: 2 × 1 (2 apps)
+        - 2x2: 2 × 2 (4 apps)
+        - 2x3: 2 × 3 (6 apps)
+        - 2x4: 2 × 4 (8 apps)
+        - 3x1: 3 × 1 (3 apps)
+        - 3x2: 3 × 2 (6 apps)
+        - 3x3: 3 × 3 (9 apps)
+        - 3x4: 3 × 4 (12 apps)
+        - 4x1: 4 × 1 (4 apps)
+        - 4x2: 4 × 2 (8 apps)
+        - 4x3: 4 × 3 (12 apps)
+        - 4x4: 4 × 4 (16 apps)
+        - 5x1: 5 × 1 (5 apps)
+        - 5x2: 5 × 2 (10 apps)
+        - 5x3: 5 × 3 (15 apps)
+        - 5x4: 5 × 4 (20 apps)
+        - 6x1: 6 × 1 (6 apps)
+        - 6x2: 6 × 2 (12 apps)
+        - 6x3: 6 × 3 (18 apps)
+        - 6x4: 6 × 4 (24 apps)
+    - hideAppNames: false
+      $name: Hide app names
+      $description: >-
+        Hide the app names in this group's tile (when "Show app names" is
+        on in Behavior)
+    - hideLabel: false
+      $name: Hide the group name
+      $description: The name under the tile (when group names are shown)
+    - hideBackground: false
+      $name: Hide the tile's background
+      $description: >-
+        No background, border or padding: just the apps, e.g. for a single
+        app on its own
+    - items:
+      - - type: app
+          $name: Type
+          $options:
+            - app: Start app
+            - program: Program
+            - website: Website
+        - app: Microsoft Store
+          $name: Start app
+          $description: >-
+            For "Start app": the app's name exactly as Start shows it (case
+            doesn't matter), or its app ID (AUMID)
+        - label: ""
+          $name: Label
+          $description: Name shown in the tooltip. Empty = the app's or program's own name.
+        - path: ""
+          $name: Program path or website
+          $description: >-
+            For "Program": full path to the program, file, or folder. For
+            "Website": its address, e.g. https://example.com
+        - args: ""
+          $name: Arguments
+        - icon: ""
+          $name: Icon
+          $description: >-
+            An .ico, .exe, .dll or image file, an image link, a Fluent icon by
+            its code (e.g. E774) or an emoji. Empty = the default icon.
+      - - type: app
+        - app: "Settings"
+      - - type: app
+        - app: "Notepad"
+      - - type: app
+        - app: "Weather"
+      $name: Items
+  - - name: "Group 2"
+    - span: 2x2
+    - items:
+      - - type: app
+        - app: "Camera"
+      - - type: app
+        - app: "Paint"
+      - - type: app
+        - app: "Calculator"
+      - - type: app
+        - app: "Calendar"
+  - - name: "Favorites"
+    - span: 2x2
+    - hideLabel: true
+    - items:
+      - - type: app
+        - app: "Photos"
+      - - type: app
+        - app: "Terminal"
+      - - type: app
+        - app: "Notepad"
+      - - type: app
+        - app: "Get Help"
+  - - name: "Group 3"
+    - span: 3x3
+    - items:
+      - - type: app
+        - app: "Sound Recorder"
+      - - type: app
+        - app: "Voice access"
+      - - type: app
+        - app: "Task Manager"
+      - - type: app
+        - app: "Movies & TV"
+      - - type: app
+        - app: "File Explorer"
+      - - type: app
+        - app: "Sticky Notes"
+  - - name: "System"
+    - span: 3x1
+    - hideLabel: true
+    - items:
+      - - type: app
+        - app: "Control Panel"
+      - - type: app
+        - app: "Services"
+      - - type: app
+        - app: "Run"
+  - - name: "Websites"
+    - span: 3x2
+    - items:
+      - - type: website
+        - label: "YouTube"
+        - path: "https://youtube.com/"
+      - - type: website
+        - label: "ChatGPT"
+        - path: "https://chatgpt.com/"
+      - - type: website
+        - label: "Example"
+        - path: "https://example.com/"
+      - - type: website
+        - label: "Google"
+        - path: "https://google.com/"
+      - - type: website
+        - label: "Reddit"
+        - path: "https://reddit.com/"
+      - - type: website
+        - label: "dan13.me"
+        - path: "https://dan13.me/?utm_source=start-menu-groups-link"
+  $name: Groups
+  $description: >-
+    Your groups, in display order. Easier to edit in the settings window:
+    right-click the groups in Start, then "Customize Start Groups".
+- behavior:
+  - placement: beforePinned
+    $name: Where to show the groups
+    $options:
+      - beforePinned: Before the Pinned section
+      - afterPinned: After the Pinned section
+      - afterRecent: After the Recommended / Recent section
+      - afterAll: After the All section
+  - hideEmptyGroups: true
+    $name: Hide empty groups
+  - hideAppTooltips: false
+    $name: Hide app tooltips
+    $description: >-
+      The app's full name when hovering over it in Start, for apps whose
+      name is cut off ("...") or hidden
+  - sortAppsByName: false
+    $name: Sort apps alphabetically
+    $description: Ignore the order the apps are listed in
+  - sectionTitle: Apps
+    $name: Section title
+    $description: Heading shown above the groups, styled like "Pinned". Empty = no heading.
+  - showAppLabels: true
+    $name: Show app names
+    $description: Show each app's name under its icon inside the tiles
+  - expandedColumns: 4
+    $name: Columns when a group is opened
+    $description: 2 to 5
+  - hidePinned: false
+    $name: Hide the Pinned section
+    $description: Start's own Pinned apps
+  - hideRecommended: false
+    $name: Hide the Recommended section
+    $description: Start's own Recommended / Recent section
+  - hideAllApps: false
+    $name: Hide the All section
+    $description: Start's own list of all apps (grid, list or category view)
+  $name: Behavior
+- tiles:
+  - size: 154
+    $name: Tile size
+    $description: Width and height of a group tile. Start's own tiles are 154.
+  - gapX: 30
+    $name: Horizontal gap between tiles
+  - gapY: 20
+    $name: Vertical gap between rows
+  - padding: 8
+    $name: Padding inside a tile
+  - cornerRadius: 8
+    $name: Corner radius
+  - borderThickness: 1
+    $name: Border thickness
+  - background: ""
+    $name: Background color
+    $description: "#RRGGBB or #AARRGGBB. Empty = match Start."
+  - border: ""
+    $name: Border color
+    $description: "#RRGGBB or #AARRGGBB. Empty = match Start."
+  $name: Tiles
+- icons:
+  - size: 32
+    $name: Icon size
+  - gap: 5
+    $name: Gap between apps
+    $description: Space between the icons inside a tile
+  - paddingX: 4
+    $name: App padding (horizontal)
+    $description: Space inside each app, left and right of its icon and name
+  - paddingY: 4
+    $name: App padding (vertical)
+    $description: Space inside each app, above its icon and below its name
+  - overflowCluster: true
+    $name: Overflow cluster
+    $description: When a group has more apps than fit, show the rest as small icons in the last cell
+  $name: Icons
+- labels:
+  - show: true
+    $name: Show group names
+  - fontSize: 12
+    $name: Font size
+  - spacing: 12
+    $name: Space between tile and name
+  - color: ""
+    $name: Color
+    $description: "#RRGGBB or #AARRGGBB. Empty = match Start."
+  $name: Group names
+*/
+// ==/WindhawkModSettings==
+
+// clang-format on
+
+#include <windhawk_utils.h>
+
+#include <dwmapi.h>
+#include <shlobj.h>
+#include <shlwapi.h>
+#include <shobjidl.h>
+#include <wincrypt.h>
+
+#include <algorithm>
+#include <deque>
+#include <atomic>
+#include <cmath>
+#include <ctime>
+#include <functional>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <new>
+#include <string>
+#include <thread>
+#include <unordered_map>
+#include <vector>
+
+#undef GetCurrentTime
+
+#include <winrt/Windows.Data.Json.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.Imaging.h>
+#include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Input.h>
+#include <winrt/Windows.UI.ViewManagement.h>
+#include <winrt/Windows.UI.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Documents.h>
+#include <winrt/Windows.UI.Xaml.Hosting.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
+#include <winrt/Windows.UI.Xaml.Media.Imaging.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Shapes.h>
+#include <winrt/Windows.UI.Xaml.h>
+#include <winrt/base.h>
+
+using namespace winrt::Windows::UI::Xaml;
+namespace wf = winrt::Windows::Foundation;
+namespace wgi = winrt::Windows::Graphics::Imaging;
+namespace wuc = winrt::Windows::UI::Core;
+namespace xc = winrt::Windows::UI::Xaml::Controls;
+namespace xcp = winrt::Windows::UI::Xaml::Controls::Primitives;
+namespace xm = winrt::Windows::UI::Xaml::Media;
+namespace xmi = winrt::Windows::UI::Xaml::Media::Imaging;
+
+// ---------------------------------------------------------------------------
+// Settings & config model
+// ---------------------------------------------------------------------------
+
+struct LayoutConfig {
+    // Defaults match Start's built-in category view (in DIPs).
+    double tileSize = 154;
+    double tileSpacingX = 30;
+    double tileSpacingY = 20;
+    double tilePadding = 8;
+    double iconSize = 32;
+    double iconSpacing = 5;
+    double appPaddingX = 4;  // inside each app's button
+    double appPaddingY = 4;
+    double cornerRadius = 8;
+    double labelFontSize = 12;
+    double labelSpacing = 12;
+    double borderThickness = 1;
+    int flyoutColumns = 4;
+    bool showLabels = true;
+    bool hideEmptyGroups = true;
+    bool showAppTooltips = true;  // the app's name on hover
+    bool sortAppsByName = false;
+    bool showOverflowCluster = true;
+    bool showAppLabels = true;
+    std::wstring tileBackground;  // "" = automatic for theme
+    std::wstring tileBorder;
+    std::wstring labelColor;
+    std::wstring sectionTitle = L"Apps";
+};
+
+// A resolved, launchable tile entry.
+struct AppEntry {
+    std::wstring id;    // AUMID / AppsFolder parsing name (Start apps)
+    std::wstring name;  // shown in tooltips and the expanded group
+    std::wstring path;  // program path (programs); empty for Start apps
+    std::wstring args;  // program arguments
+    std::wstring iconSource;  // shell parsing name the icon is taken from
+    std::wstring key;         // unique key for the icon cache
+    bool website = false;     // `path` is a web address
+    // Its group and item in the settings (Start's groups), for "Edit".
+    int settingsGroup = -1;
+    int settingsItem = -1;
+};
+
+// A group item as configured.
+struct ItemSetting {
+    std::wstring type = L"app";  // "app" or "program"
+    std::wstring app;            // Start app name or AUMID
+    std::wstring label;          // optional display name override
+    std::wstring path;           // program path
+    std::wstring args;           // program arguments
+    std::wstring icon;           // optional icon file (.ico/.exe/.dll/.png)
+};
+
+// A group's tile: its size and the grid its apps are laid out in. Sizes
+// count app spots: a cell of the group grid (the size of one of Start's own
+// tiles) is 2 × 2 spots, and the grid is laid out in half cells, one per
+// spot. The app grid is set separately, at most the size of the tile.
+struct GroupLayout {
+    int iconColumns = 2;
+    int iconRows = 2;
+    int spanHalfColumns = 2;  // spots across = half cells
+    int spanHalfRows = 2;     // spots down = half rows
+};
+
+// Width of a tile spanning `halves` half cells: half cells are
+// (tileSize + gap) / 2 wide, and the tile leaves out the trailing gap.
+double TileWidth(int halves, double tileSize, double gap) {
+    return halves * (tileSize + gap) / 2 - gap;
+}
+
+// Half cells that fit a row `width` wide. A row may be up to 5% wider than
+// the space: the Viewbox around the grid then shrinks it a little, so e.g. a
+// narrow 1 × 2 tile still goes next to the others instead of on a new row
+// when it's just short of fitting.
+constexpr double kRowOverflow = 1.05;
+
+int FitHalves(double width, double half, double gap) {
+    return width > 0 ? (int)std::floor((width * kRowOverflow + gap) / half)
+                     : 0;
+}
+
+// Width of the frame holding a row of `halves` half cells: the tiles and
+// the gaps between them, plus 1 px so layout rounding can't make the grid a
+// hair narrower than `halves` cells and drop the last one. (More slack would
+// only make the Viewbox shrink the row.)
+double RowFrameWidth(int halves, double half, double gap) {
+    return halves * half - gap + 1;
+}
+
+struct GroupSetting {
+    std::wstring name;
+    GroupLayout layout;
+    bool showAppNames = true;
+    bool showLabel = true;       // the name under the tile
+    bool showBackground = true;  // off: no background, border or padding
+    std::vector<ItemSetting> items;
+};
+
+// Read on the Windhawk thread, snapshotted by workers under the mutex.
+struct ModSettings {
+    LayoutConfig layout;
+    std::vector<GroupSetting> groups;
+    // Where the groups go among Start's sections: afterPinned, beforePinned,
+    // afterRecent or afterAll.
+    std::wstring placement = L"beforePinned";
+    std::vector<std::wstring> pinnedHeaders;
+    std::vector<std::wstring> recommendedHeaders;
+    std::vector<std::wstring> allHeaders;
+    std::vector<std::wstring> startSettingsTexts;  // Start's menu item
+    // Start's own sections.
+    bool showPinned = true;
+    bool showRecommended = true;
+    bool showAllApps = true;
+};
+std::mutex g_settingsMutex;
+ModSettings g_settings;
+
+struct Group {
+    std::wstring name;
+    GroupLayout layout;
+    bool showAppNames = true;
+    bool showLabel = true;       // the name under the tile
+    bool showBackground = true;  // off: no background, border or padding
+    std::vector<AppEntry> apps;
+};
+
+// The tile sizes offered: "<spots across>x<spots down>".
+constexpr PCWSTR kTileSizes[] = {
+    L"1x1", L"1x2", L"1x3", L"1x4", L"1x5", L"1x6",
+    L"2x1", L"3x1", L"4x1", L"5x1", L"6x1",
+    L"2x2", L"3x2", L"3x3", L"4x2", L"4x4", L"6x2", L"6x4"};
+// App grids: up to 6 apps per row and 4 rows, within the tile's size.
+// Saved as "tileSize", the setting's name from before tiles had a size of
+// their own.
+constexpr int kMaxGridColumns = 6, kMaxGridRows = 6;
+// The default app grid: one app per spot of the tile, whatever its size.
+constexpr PCWSTR kAutoGrid = L"auto";
+
+constexpr PCWSTR kAppGridHint =
+    L"Apps per row \u00D7 rows of apps, at most the tile size. Default "
+    L"fills the tile, one app per spot, and follows its size. The rest go "
+    L"in the overflow cluster.";
+
+constexpr PCWSTR kTileSizeHint =
+    L"Width \u00D7 height, in app spots: 2 \u00D7 2 is the size of one "
+    L"of Start's own tiles.";
+
+// "Columns when a group is opened".
+constexpr int kMinExpandedColumns = 2, kMaxExpandedColumns = 5;
+
+constexpr PCWSTR kShowNamesHint =
+    L"Each app's name under its icon in this tile. Needs \"Show app "
+    L"names\" on in Behavior.";
+
+bool IsTileSize(std::wstring const& s) {
+    return std::any_of(std::begin(kTileSizes), std::end(kTileSizes),
+                       [&](PCWSTR t) { return s == t; });
+}
+
+// "3x2" -> 3, 2. False when it isn't "<number>x<number>".
+bool ParseAxB(std::wstring const& s, int& a, int& b) {
+    size_t x = s.find(L'x');
+    if (x == std::wstring::npos) {
+        return false;
+    }
+    a = _wtoi(s.c_str());
+    b = _wtoi(s.c_str() + x + 1);
+    return a > 0 && b > 0;
+}
+
+std::wstring AxB(int a, int b) {
+    return std::to_wstring(a) + L"x" + std::to_wstring(b);
+}
+
+// An app grid made to fit a tile size: fewer columns or rows if needed.
+// Unknown grids fill the tile.
+// "auto" (the default) and unknown grids fill the tile, and keep following
+// its size.
+std::wstring FitGrid(std::wstring const& grid, std::wstring const& size) {
+    int w = 2, h = 2, c, r;
+    if (IsTileSize(size)) {
+        ParseAxB(size, w, h);
+    }
+    if (grid == kAutoGrid || !ParseAxB(grid, c, r)) {
+        return kAutoGrid;
+    }
+    return AxB(std::min(c, w), std::min(r, h));
+}
+
+// A tile size and app grid -> the tile's layout. Unknown sizes are 2 x 2.
+GroupLayout MakeLayout(std::wstring const& size, std::wstring const& grid) {
+    GroupLayout l;
+    int w = 2, h = 2;
+    if (IsTileSize(size)) {
+        ParseAxB(size, w, h);
+    }
+    l.spanHalfColumns = w;
+    l.spanHalfRows = h;
+    if (!ParseAxB(FitGrid(grid, size), l.iconColumns, l.iconRows)) {
+        l.iconColumns = std::min(w, kMaxGridColumns);  // auto: one app per spot
+        l.iconRows = std::min(h, kMaxGridRows);
+    }
+    return l;
+}
+
+// A group's saved tile size. Settings from before tiles had a size of
+// their own have none: the smallest size that holds the app grid.
+std::wstring ResolveTileSize(std::wstring const& size,
+                             std::wstring const& grid) {
+    if (IsTileSize(size)) {
+        return size;
+    }
+    int c = 2, r = 2;
+    ParseAxB(grid, c, r);
+    std::wstring best = L"2x2";
+    int bestArea = INT_MAX;
+    for (PCWSTR t : kTileSizes) {
+        int w, h;
+        ParseAxB(t, w, h);
+        if (w >= c && h >= r && w * h < bestArea) {
+            bestArea = w * h;
+            best = t;
+        }
+    }
+    return best;
+}
+
+// Height of a tile spanning `halfRows` half rows of the group grid: a row
+// is a tile, its name and the gap below; the tile leaves out the last two.
+double TileHeight(int halfRows, double tileSize, double gap, double labelH) {
+    return halfRows * (tileSize + gap + labelH) / 2 - gap - labelH;
+}
+
+// A tile whose name isn't shown also takes the space the name would have
+// (it's taller); a one spot wide one also half the gap on its right, so
+// that a single app is about square, like an app in Start's Pinned. (Not
+// on its left: it would stick out past the start of its row.)
+// `outsetX` is how far it reaches into the gap on the left (none).
+struct TileBox {
+    double width, height, outsetX;
+};
+
+TileBox TileBoxFor(int halves,
+                   int halfRows,
+                   double tileSize,
+                   double gapX,
+                   double gapY,
+                   double labelH,
+                   bool nameShown) {
+    TileBox b{TileWidth(halves, tileSize, gapX),
+              TileHeight(halfRows, tileSize, gapY, labelH), 0};
+    if (!nameShown) {
+        b.height += labelH;
+        if (halves == 1) {
+            b.width += gapX / 2;
+        }
+    }
+    return b;
+}
+
+// How a tile's apps are drawn. The tile keeps the same padding on all
+// sides. A short tile (one spot high) has no room for the set padding
+// around an icon and its name: the apps' own vertical padding goes first,
+// then the icons get smaller. The names stay.
+// App names follow the icon size (set by the size preset), in proportion:
+// 11 px with the default 32 px icons, 22 px with the Large preset's 64 px.
+double AppNameFontSize(double iconSize) {
+    return std::clamp(std::round(11 * iconSize / 32), 9.0, 24.0);
+}
+
+// The opened group: its icons are at least the default size and follow
+// the preset's, and its cells and names grow with them.
+struct FlyoutLook {
+    double icon, cell, font, textWidth;
+};
+
+FlyoutLook FlyoutLookFor(double iconSize) {
+    double icon = std::clamp(iconSize, 32.0, 64.0);
+    double k = icon / 32;
+    double cell = std::round(96 * k);
+    return {icon, cell, std::round(12 * k), cell - 12 * k};
+}
+
+struct TileFit {
+    double iconSize;
+    double padX, padY;  // the tile's padding
+    double appPadY;     // each app's top and bottom padding
+    double nameGap;     // between an icon and its name
+};
+
+TileFit FitTile(double iconSize,
+                double tileW,
+                double tileH,
+                double padding,
+                double gap,
+                GroupLayout const& l,
+                double appPadX,
+                double appPadY,
+                bool names) {
+    // A tile one spot high is short: its names sit closer to the icons.
+    const double nameGap = l.spanHalfRows == 1 ? 1 : 4;
+    const double nameH = names ? nameGap + AppNameFontSize(iconSize) * 1.4 : 0;
+    const int rows = std::max(1, l.iconRows);
+    const int cols = std::max(1, l.iconColumns);
+    TileFit f{iconSize, 0, 0, appPadY, nameGap};
+    // Just enough padding for one icon in a narrow tile.
+    f.padX = std::clamp((tileW - iconSize - 2 * appPadX) / 2, 0.0, padding);
+    double need = iconSize + 2 * appPadY + nameH;
+    f.padY = f.padX;
+    double rowH = (tileH - 2 * f.padY - (rows - 1) * gap) / rows;
+    if (rowH < need) {
+        f.appPadY = std::clamp((rowH - iconSize - nameH) / 2, 0.0, appPadY);
+    }
+    double cw = (tileW - 2 * f.padX - (cols - 1) * gap) / cols - 2 * appPadX;
+    double ch = rowH - 2 * f.appPadY - nameH;
+    double fit = std::floor(std::min(cw, ch));
+    f.iconSize = fit >= iconSize ? iconSize : std::max(12.0, fit);
+    return f;
+}
+
+struct IconPixels {
+    int width = 0;
+    int height = 0;
+    std::vector<uint8_t> bgra;
+};
+
+struct Model {
+    LayoutConfig layout;
+    std::vector<Group> groups;
+    std::vector<AppEntry> allApps;  // every Start app (settings window picker)
+    std::unordered_map<std::wstring, std::shared_ptr<IconPixels>> icons;
+};
+
+std::mutex g_iconCacheMutex;
+std::map<std::pair<std::wstring, int>, std::shared_ptr<IconPixels>>
+    g_iconCache;
+
+// ---------------------------------------------------------------------------
+// Globals for the UI side (UI thread only unless noted)
+// ---------------------------------------------------------------------------
+
+std::atomic<bool> g_unloading{false};
+// The model of the groups in Start. Not XAML, but released on the UI thread
+// with everything else (Detach / UninstallStartUi), never at process exit.
+[[clang::no_destroy]] std::shared_ptr<Model> g_model;  // UI thread
+
+// Everything below holds XAML objects of Start's UI thread. They're released
+// there, by Detach and UninstallStartUi; [[clang::no_destroy]] keeps the
+// CRT from releasing them again at process exit, off the UI thread and after
+// XAML has shut down (Wh_ModUninit doesn't run then).
+struct Attachment {
+    // The pinned list's row in Start's header grid: the groups go around it.
+    winrt::weak_ref<FrameworkElement> target;
+    winrt::weak_ref<xc::Panel> parent;
+    FrameworkElement host{nullptr};
+    // Row inserted into Start's "TopLevelHeader" grid, or (afterAll) the
+    // All list whose footer holds the groups, below that grid's rows.
+    winrt::weak_ref<xc::Grid> rowGrid;
+    int insertedRow = -1;
+    winrt::weak_ref<xc::ListViewBase> footerList;
+    winrt::weak_ref<xc::TextBlock> pinnedHeader;  // style source for heading
+    winrt::event_token themeToken{};
+    // Start's own sections hidden by the "Show the ... section" settings,
+    // with the visibility to restore.
+    std::vector<std::pair<winrt::weak_ref<UIElement>, Visibility>> hidden;
+    // Unloaded handlers on the elements we're attached to: Start rebuilds
+    // parts of its tree (e.g. when switching the "All" view), and the
+    // attachment must then be checked again.
+    std::vector<std::pair<winrt::weak_ref<FrameworkElement>, winrt::event_token>>
+        unloadedTokens;
+    // The group grid, and the half cells per row it's currently set to.
+    winrt::weak_ref<xc::VariableSizedWrapGrid> wrap;
+    winrt::weak_ref<xc::Border> wrapFrame;
+    int columns = 0;
+    // The half cells per row the tiles were built for: a tile wider than
+    // that is built narrower (see RebuildHostContent). 0: not known yet.
+    int builtHalves = 0;
+    // The "Where to show the groups" setting it was attached for (before a
+    // fallback), to move the groups when it changes.
+    std::wstring placement;
+    winrt::event_token sizeToken{};
+};
+[[clang::no_destroy]] Attachment g_attach;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+double Clamp(double v, double lo, double hi) {
+    return v < lo ? lo : (v > hi ? hi : v);
+}
+
+bool ParseColor(const std::wstring& s, winrt::Windows::UI::Color& out) {
+    if (s.size() < 7 || s[0] != L'#') {
+        return false;
+    }
+    unsigned long v = wcstoul(s.c_str() + 1, nullptr, 16);
+    if (s.size() == 7) {
+        out = {255, (uint8_t)(v >> 16), (uint8_t)(v >> 8), (uint8_t)v};
+        return true;
+    }
+    if (s.size() == 9) {
+        out = {(uint8_t)(v >> 24), (uint8_t)(v >> 16), (uint8_t)(v >> 8),
+               (uint8_t)v};
+        return true;
+    }
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// Shell: app enumeration, icons, launching (worker threads)
+// ---------------------------------------------------------------------------
+
+std::wstring ExpandEnv(const std::wstring& s) {
+    if (s.find(L'%') == std::wstring::npos) {
+        return s;
+    }
+    WCHAR buf[2048];
+    DWORD n = ExpandEnvironmentStringsW(s.c_str(), buf, ARRAYSIZE(buf));
+    return n && n <= ARRAYSIZE(buf) ? std::wstring(buf) : s;
+}
+
+AppEntry MakeStartAppEntry(std::wstring id, std::wstring name) {
+    AppEntry e;
+    e.iconSource = L"shell:AppsFolder\\" + id;
+    e.key = L"a:" + id;
+    e.id = std::move(id);
+    e.name = std::move(name);
+    return e;
+}
+
+std::vector<AppEntry> EnumerateStartApps() {
+    std::vector<AppEntry> apps;
+    winrt::com_ptr<IShellItem> folder;
+    if (FAILED(SHGetKnownFolderItem(FOLDERID_AppsFolder, KF_FLAG_DEFAULT,
+                                    nullptr, IID_PPV_ARGS(folder.put())))) {
+        return apps;
+    }
+    winrt::com_ptr<IEnumShellItems> items;
+    if (FAILED(folder->BindToHandler(nullptr, BHID_EnumItems,
+                                     IID_PPV_ARGS(items.put())))) {
+        return apps;
+    }
+    winrt::com_ptr<IShellItem> item;
+    while (!g_unloading && items->Next(1, item.put(), nullptr) == S_OK) {
+        PWSTR name = nullptr;
+        PWSTR id = nullptr;
+        if (SUCCEEDED(item->GetDisplayName(SIGDN_NORMALDISPLAY, &name)) &&
+            SUCCEEDED(item->GetDisplayName(SIGDN_PARENTRELATIVEPARSING, &id))) {
+            apps.push_back(MakeStartAppEntry(id, name));
+        }
+        CoTaskMemFree(name);
+        CoTaskMemFree(id);
+        item = nullptr;
+    }
+    return apps;
+}
+
+// `source` is any shell parsing name: shell:AppsFolder\<AUMID>, an .exe,
+// .ico, .dll, .lnk or image file. The shell picks the right icon/thumbnail.
+std::shared_ptr<IconPixels> ExtractAppIcon(const std::wstring& source,
+                                           int size) {
+    const std::wstring& id = source;  // cache key
+    {
+        std::lock_guard lock(g_iconCacheMutex);
+        auto it = g_iconCache.find({id, size});
+        if (it != g_iconCache.end()) {
+            return it->second;
+        }
+    }
+
+    std::shared_ptr<IconPixels> result;
+    std::wstring path = ExpandEnv(source);
+    winrt::com_ptr<IShellItemImageFactory> factory;
+    HBITMAP bmp = nullptr;
+    if (SUCCEEDED(SHCreateItemFromParsingName(path.c_str(), nullptr,
+                                              IID_PPV_ARGS(factory.put()))) &&
+        SUCCEEDED(factory->GetImage({size, size}, SIIGBF_ICONONLY, &bmp))) {
+        BITMAP bm{};
+        GetObjectW(bmp, sizeof(bm), &bm);
+        if (bm.bmWidth > 0 && bm.bmHeight > 0) {
+            BITMAPINFO bi{};
+            bi.bmiHeader.biSize = sizeof(bi.bmiHeader);
+            bi.bmiHeader.biWidth = bm.bmWidth;
+            bi.bmiHeader.biHeight = -bm.bmHeight;
+            bi.bmiHeader.biPlanes = 1;
+            bi.bmiHeader.biBitCount = 32;
+            bi.bmiHeader.biCompression = BI_RGB;
+            auto px = std::make_shared<IconPixels>();
+            px->width = bm.bmWidth;
+            px->height = bm.bmHeight;
+            px->bgra.resize((size_t)bm.bmWidth * bm.bmHeight * 4);
+            HDC dc = GetDC(nullptr);
+            int lines = GetDIBits(dc, bmp, 0, bm.bmHeight, px->bgra.data(),
+                                  &bi, DIB_RGB_COLORS);
+            ReleaseDC(nullptr, dc);
+            if (lines > 0) {
+                bool anyAlpha = false;
+                for (size_t i = 3; i < px->bgra.size(); i += 4) {
+                    if (px->bgra[i]) {
+                        anyAlpha = true;
+                        break;
+                    }
+                }
+                if (!anyAlpha) {
+                    for (size_t i = 3; i < px->bgra.size(); i += 4) {
+                        px->bgra[i] = 255;
+                    }
+                } else {
+                    // The bitmap is shown as premultiplied BGRA, but the
+                    // shell often returns straight alpha. Straight alpha shows
+                    // as a light halo around antialiased edges. A color
+                    // channel above its alpha can't be premultiplied, so that
+                    // means straight alpha: premultiply it here.
+                    bool straight = false;
+                    for (size_t i = 0; i + 3 < px->bgra.size(); i += 4) {
+                        uint8_t a = px->bgra[i + 3];
+                        if (px->bgra[i] > a || px->bgra[i + 1] > a ||
+                            px->bgra[i + 2] > a) {
+                            straight = true;
+                            break;
+                        }
+                    }
+                    if (straight) {
+                        for (size_t i = 0; i + 3 < px->bgra.size(); i += 4) {
+                            unsigned a = px->bgra[i + 3];
+                            for (int c = 0; c < 3; c++) {
+                                px->bgra[i + c] =
+                                    (uint8_t)((px->bgra[i + c] * a + 127) / 255);
+                            }
+                        }
+                    }
+                }
+                result = px;
+            }
+        }
+        DeleteObject(bmp);
+    }
+
+    // Failures aren't cached: the shell may simply not be ready yet.
+    if (result) {
+        std::lock_guard lock(g_iconCacheMutex);
+        g_iconCache[{id, size}] = result;
+    }
+    return result;
+}
+
+// --- Worker threads -----------------------------------------------------------
+// Slow work (launching, the shell, icons, saving) runs on worker threads. Each
+// one's handle is kept, and Wh_ModUninit waits for all of them, with no time
+// limit, so no code of the mod is still running when it's unloaded. Long
+// waits in a worker also wait on g_stopEvent, set when the mod unloads.
+
+std::mutex g_workersMutex;
+std::vector<HANDLE> g_workers;  // under g_workersMutex
+HANDLE g_stopEvent = nullptr;   // manual reset; set by Wh_ModBeforeUninit
+
+// Waits up to `ms`; false if the mod is unloading.
+bool WaitOrStop(DWORD ms) {
+    return WaitForSingleObject(g_stopEvent, ms) == WAIT_TIMEOUT;
+}
+
+DWORD WINAPI WorkerThread(LPVOID param) {
+    std::unique_ptr<std::function<void()>> fn(
+        static_cast<std::function<void()>*>(param));
+    HRESULT hr =
+        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    try {
+        (*fn)();
+    } catch (...) {
+        Wh_Log(L"Worker failed: %08X", winrt::to_hresult());
+    }
+    fn.reset();
+    if (SUCCEEDED(hr)) {
+        CoUninitialize();
+    }
+    return 0;
+}
+
+void RunWorker(std::function<void()> fn) {
+    std::lock_guard lock(g_workersMutex);
+    if (g_unloading) {
+        return;
+    }
+    // Forget the ones that are done.
+    std::erase_if(g_workers, [](HANDLE h) {
+        if (WaitForSingleObject(h, 0) == WAIT_OBJECT_0) {
+            CloseHandle(h);
+            return true;
+        }
+        return false;
+    });
+    auto* param = new std::function<void()>(std::move(fn));
+    HANDLE h = CreateThread(nullptr, 0, WorkerThread, param, 0, nullptr);
+    if (!h) {
+        delete param;
+        return;
+    }
+    g_workers.push_back(h);
+}
+
+// Waits for every worker to finish (Wh_ModUninit, after g_unloading is set,
+// so no new ones start).
+void JoinWorkers() {
+    for (;;) {
+        std::vector<HANDLE> handles;
+        {
+            std::lock_guard lock(g_workersMutex);
+            handles.swap(g_workers);
+        }
+        if (handles.empty()) {
+            return;
+        }
+        for (HANDLE h : handles) {
+            WaitForSingleObject(h, INFINITE);
+            CloseHandle(h);
+        }
+    }
+}
+
+// --- Running code on Start's UI thread ----------------------------------------
+// A message-only window of the mod on Start's UI thread (see InstallStartUi):
+// workers post to it, and its timer looks for Start's sections. Destroying it
+// (UninstallStartUi) drops whatever is still queued, so nothing of the mod
+// runs on that thread after the mod unloads.
+
+constexpr UINT kRunOnUiMsg = WM_APP + 30;  // lParam: std::function<void()>*
+constexpr UINT kUninstallMsg = WM_APP + 31;  // sent by Wh_ModUninit
+std::atomic<HWND> g_uiWnd{nullptr};
+
+// The mod's own flyouts in Start (opened groups, menus), to close them when
+// the mod unloads (UI thread).
+[[clang::no_destroy]] std::vector<winrt::weak_ref<xcp::FlyoutBase>> g_flyouts;
+
+void TrackFlyout(xcp::FlyoutBase const& fly) {
+    if (g_flyouts.size() > 64) {
+        std::erase_if(g_flyouts, [](auto& w) { return !w.get(); });
+    }
+    g_flyouts.push_back(winrt::make_weak(fly));
+}
+
+// Runs `fn` on Start's UI thread, later. Dropped if the mod is unloading.
+void PostToUi(std::function<void()> fn) {
+    HWND wnd = g_uiWnd;
+    if (!wnd || g_unloading) {
+        return;
+    }
+    auto* param = new std::function<void()>(std::move(fn));
+    if (!PostMessageW(wnd, kRunOnUiMsg, 0, (LPARAM)param)) {
+        delete param;
+    }
+}
+
+// A web address (http, https): a website's address or icon link.
+bool IsWebAddress(std::wstring const& s) {
+    return _wcsnicmp(s.c_str(), L"http://", 7) == 0 ||
+           _wcsnicmp(s.c_str(), L"https://", 8) == 0;
+}
+
+// "https://www.example.com/page" -> "www.example.com", a website's default
+// name.
+std::wstring WebsiteHost(std::wstring const& url) {
+    size_t start = url.find(L"://");
+    start = start == std::wstring::npos ? 0 : start + 3;
+    size_t end = url.find_first_of(L"/?#", start);
+    std::wstring host = url.substr(start, end == std::wstring::npos
+                                              ? std::wstring::npos
+                                              : end - start);
+    return host.empty() ? url : host;
+}
+
+// An icon given as text instead of a file: a Segoe Fluent Icons glyph by its
+// code ("E774", "U+E774", "\\uE774" or "0xE774"), or an emoji (any short
+// text with something other than plain letters, e.g. pasted). `glyph`: in
+// the icon font.
+bool ParseTextIcon(std::wstring const& s, std::wstring& text, bool& glyph) {
+    std::wstring v = s;
+    while (!v.empty() && iswspace(v.front())) {
+        v.erase(0, 1);
+    }
+    while (!v.empty() && iswspace(v.back())) {
+        v.pop_back();
+    }
+    if (v.empty()) {
+        return false;
+    }
+    std::wstring hex = v;
+    for (PCWSTR prefix : {L"\\u", L"U+", L"u+", L"0x", L"0X"}) {
+        if (hex.rfind(prefix, 0) == 0) {
+            hex = hex.substr(wcslen(prefix));
+            break;
+        }
+    }
+    if ((hex.size() == 4 || hex.size() == 5) &&
+        std::all_of(hex.begin(), hex.end(), iswxdigit)) {
+        unsigned cp = (unsigned)wcstoul(hex.c_str(), nullptr, 16);
+        glyph = cp >= 0xE000 && cp <= 0xF8FF;
+        if (cp > 0xFFFF) {
+            cp -= 0x10000;
+            text = {(wchar_t)(0xD800 + (cp >> 10)),
+                    (wchar_t)(0xDC00 + (cp & 0x3FF))};
+        } else {
+            text = std::wstring(1, (wchar_t)cp);
+        }
+        return true;
+    }
+    // A pasted glyph, an emoji or a few symbols; not a path or address.
+    bool special = std::any_of(v.begin(), v.end(),
+                               [](wchar_t c) { return c > 0x7F; });
+    if (v.size() <= 8 && special &&
+        v.find_first_of(L"\\/:.") == std::wstring::npos) {
+        glyph = std::all_of(v.begin(), v.end(), [](wchar_t c) {
+            return c >= 0xE000 && c <= 0xF8FF;
+        });
+        text = v;
+        return true;
+    }
+    return false;
+}
+
+bool IsTextIcon(std::wstring const& s) {
+    std::wstring text;
+    bool glyph;
+    return ParseTextIcon(s, text, glyph);
+}
+
+// Start closes when the app it opens comes to the front. Windows lets an
+// app do that only with the foreground window's consent: a new process
+// usually gets it, but an app that's already running (e.g. Notepad opening
+// another window) doesn't, and Start then stays open. Start is the
+// foreground window here, so it hands that right on before launching.
+void AllowLaunchedAppToFront() {
+    AllowSetForegroundWindow(ASFW_ANY);
+}
+
+// Start's window: the CoreWindow of this process (StartMenuExperienceHost).
+HWND FindStartWindow() {
+    struct Find {
+        DWORD pid;
+        HWND found;
+    } f{GetCurrentProcessId(), nullptr};
+    EnumWindows(
+        [](HWND hwnd, LPARAM lp) -> BOOL {
+            auto* f = (Find*)lp;
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hwnd, &pid);
+            WCHAR cls[64];
+            if (pid == f->pid && GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
+                wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
+                f->found = hwnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        (LPARAM)&f);
+    return f.found;
+}
+
+bool IsStartOpen(HWND start) {
+    if (!start || !IsWindowVisible(start)) {
+        return false;
+    }
+    BOOL cloaked = FALSE;
+    DwmGetWindowAttribute(start, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+    return !cloaked;  // Start is cloaked while closed
+}
+
+// Whether a key or mouse button is held down.
+bool AnyKeyDown() {
+    for (int vk = 1; vk < 256; vk++) {
+        if (GetAsyncKeyState(vk) & 0x8000) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Start doesn't always close after launching an app: it stays open when
+// the app doesn't come to the front (e.g. Notepad, already running, opening
+// another window). So if it's still open a moment after a launch, close it
+// like the Start key does. Up to `seconds` (longer for an administrator
+// prompt), and only while the normal desktop is in front (not the secure
+// desktop of the prompt).
+void CloseStartAfterLaunch(int seconds = 2) {
+    RunWorker([seconds] {
+        HWND start = FindStartWindow();
+        if (!start) {
+            return;
+        }
+        // Not sooner: Start closing by itself (its animation) can take a
+        // moment, and the Start key would then open it again.
+        for (int waited = 0; waited < seconds * 1000; waited += 250) {
+            if (!WaitOrStop(250)) {
+                return;  // the mod is unloading
+            }
+            if (!IsStartOpen(start)) {
+                return;  // closed by itself
+            }
+            HWND fg = GetForegroundWindow();
+            DWORD fgPid = 0;
+            if (fg) {
+                GetWindowThreadProcessId(fg, &fgPid);
+            }
+            // Only while Start itself is in front (else it's closing on its
+            // own, or a prompt is up), and no key is held down, which the
+            // Win key press would turn into a Win+key shortcut.
+            if (waited < 500 || fgPid != GetCurrentProcessId() ||
+                AnyKeyDown()) {
+                continue;
+            }
+            if (!IsStartOpen(start)) {
+                return;
+            }
+            INPUT in[2] = {};
+            in[0].type = in[1].type = INPUT_KEYBOARD;
+            in[0].ki.wVk = in[1].ki.wVk = VK_LWIN;
+            in[1].ki.dwFlags = KEYEVENTF_KEYUP;
+            SendInput(2, in, sizeof(INPUT));
+            return;
+        }
+    });
+}
+
+void ShellOpen(std::wstring target, std::wstring args = L"") {
+    AllowLaunchedAppToFront();
+    RunWorker([target = ExpandEnv(target), args = ExpandEnv(args)] {
+        // Programs start in their own folder, like a shortcut would (not
+        // web addresses).
+        std::wstring dir;
+        if (size_t slash = target.find_last_of(L"\\/");
+            slash != std::wstring::npos && target.rfind(L"shell:", 0) != 0 &&
+            target.find(L"://") == std::wstring::npos) {
+            dir = target.substr(0, slash);
+        }
+        SHELLEXECUTEINFOW sei{sizeof(sei)};
+        sei.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC;
+        sei.lpVerb = L"open";
+        sei.lpFile = target.c_str();
+        sei.lpParameters = args.empty() ? nullptr : args.c_str();
+        sei.lpDirectory = dir.empty() ? nullptr : dir.c_str();
+        sei.nShow = SW_SHOWNORMAL;
+        if (!ShellExecuteExW(&sei)) {
+            Wh_Log(L"Launch failed for %s: %u", target.c_str(),
+                   GetLastError());
+        }
+    });
+}
+
+void LaunchApp(const AppEntry& app) {
+    CloseStartAfterLaunch();
+    if (app.website) {
+        ShellOpen(app.path);  // the default browser
+    } else if (!app.path.empty()) {
+        ShellOpen(app.path, app.args);
+    } else if (app.id.find(L'!') != std::wstring::npos) {
+        // A Store app: activated like Explorer does, which also brings an
+        // already running one to the front.
+        AllowLaunchedAppToFront();
+        RunWorker([id = app.id, args = ExpandEnv(app.args)] {
+            winrt::com_ptr<IApplicationActivationManager> mgr;
+            DWORD pid = 0;
+            HRESULT hr = CoCreateInstance(CLSID_ApplicationActivationManager,
+                                          nullptr, CLSCTX_LOCAL_SERVER,
+                                          IID_PPV_ARGS(mgr.put()));
+            if (SUCCEEDED(hr)) {
+                hr = mgr->ActivateApplication(
+                    id.c_str(), args.empty() ? nullptr : args.c_str(),
+                    AO_NONE, &pid);
+            }
+            if (FAILED(hr)) {
+                Wh_Log(L"Activating %s failed: %08X", id.c_str(), hr);
+                ShellOpen(L"shell:AppsFolder\\" + id, args);
+            }
+        });
+    } else {
+        ShellOpen(L"shell:AppsFolder\\" + app.id, app.args);
+    }
+}
+
+// --- An app's right-click menu in Start ---------------------------------------
+// Run as administrator, Open file location and Uninstall are Windows' own
+// actions for the app: the verbs of its item in the Apps folder
+// (shell:AppsFolder), offered only where Windows offers them too. For a
+// program (a path), the file itself.
+
+// The AppsFolder item's context menu, ready to invoke. `menu` gets its
+// items (destroy it).
+winrt::com_ptr<IContextMenu> AppsFolderContextMenu(std::wstring const& id,
+                                                   HMENU menu) {
+    winrt::com_ptr<IShellItem> apps;
+    winrt::com_ptr<IShellFolder> folder;
+    if (FAILED(SHGetKnownFolderItem(FOLDERID_AppsFolder, KF_FLAG_DEFAULT,
+                                    nullptr, IID_PPV_ARGS(apps.put()))) ||
+        FAILED(apps->BindToHandler(nullptr, BHID_SFObject,
+                                   IID_PPV_ARGS(folder.put())))) {
+        return nullptr;
+    }
+    PIDLIST_RELATIVE pidl = nullptr;
+    if (FAILED(folder->ParseDisplayName(nullptr, nullptr,
+                                        const_cast<PWSTR>(id.c_str()),
+                                        nullptr, &pidl, nullptr))) {
+        return nullptr;
+    }
+    winrt::com_ptr<IContextMenu> cm;
+    PCUITEMID_CHILD child = (PCUITEMID_CHILD)pidl;
+    HRESULT hr = folder->GetUIObjectOf(nullptr, 1, &child, IID_IContextMenu,
+                                       nullptr, cm.put_void());
+    CoTaskMemFree(pidl);
+    if (FAILED(hr) || FAILED(cm->QueryContextMenu(menu, 0, 1, 0x7FFF,
+                                                  CMF_NORMAL))) {
+        return nullptr;
+    }
+    return cm;
+}
+
+// The verbs Windows offers for a Start app (lowercase), cached.
+std::mutex g_appVerbsMutex;
+std::unordered_map<std::wstring, std::vector<std::wstring>> g_appVerbs;
+
+std::vector<std::wstring> AppShellVerbs(std::wstring const& id) {
+    {
+        std::lock_guard lock(g_appVerbsMutex);
+        if (auto it = g_appVerbs.find(id); it != g_appVerbs.end()) {
+            return it->second;
+        }
+    }
+    std::vector<std::wstring> verbs;
+    HMENU menu = CreatePopupMenu();
+    if (auto cm = AppsFolderContextMenu(id, menu)) {
+        int n = GetMenuItemCount(menu);
+        for (int i = 0; i < n; i++) {
+            UINT cmd = GetMenuItemID(menu, i);
+            WCHAR verb[128] = {};
+            if (cmd >= 1 && cmd <= 0x7FFF &&
+                SUCCEEDED(cm->GetCommandString(cmd - 1, GCS_VERBW, nullptr,
+                                               (LPSTR)verb,
+                                               ARRAYSIZE(verb))) &&
+                verb[0]) {
+                CharLowerW(verb);
+                verbs.push_back(verb);
+            }
+        }
+    }
+    DestroyMenu(menu);
+    std::lock_guard lock(g_appVerbsMutex);
+    g_appVerbs[id] = verbs;
+    return verbs;
+}
+
+void InvokeAppShellVerb(std::wstring id, std::string verb) {
+    AllowLaunchedAppToFront();
+    RunWorker([id, verb] {
+        HMENU menu = CreatePopupMenu();
+        if (auto cm = AppsFolderContextMenu(id, menu)) {
+            std::wstring verbW(verb.begin(), verb.end());
+            CMINVOKECOMMANDINFOEX ici{sizeof(ici)};
+            ici.fMask = CMIC_MASK_UNICODE | CMIC_MASK_ASYNCOK;
+            ici.lpVerb = verb.c_str();
+            ici.lpVerbW = verbW.c_str();
+            ici.nShow = SW_SHOWNORMAL;
+            HRESULT hr = cm->InvokeCommand((CMINVOKECOMMANDINFO*)&ici);
+            if (FAILED(hr)) {
+                Wh_Log(L"%S on %s failed: %08X", verb.c_str(), id.c_str(), hr);
+            }
+        }
+        DestroyMenu(menu);
+    });
+}
+
+// Pinning to the taskbar is offered (and done) by Windows only in File
+// Explorer, so Start asks this mod's part there (the settings host, see
+// HostWndProc) to pin or unpin, with a WM_COPYDATA of "<verb>\n<app id>".
+constexpr ULONG_PTR kTaskbarVerbData = 0x534D4731;  // "SMG1"
+PCWSTR HostClassName();
+
+bool IsTaskbarVerb(std::string const& verb) {
+    return verb == "taskbarpin" || verb == "taskbarunpin";
+}
+
+void InvokeTaskbarVerb(std::wstring id, std::string verb) {
+    RunWorker([id, verb] {
+        HWND host =
+            FindWindowExW(HWND_MESSAGE, nullptr, HostClassName(), nullptr);
+        if (!host) {
+            InvokeAppShellVerb(id, verb);  // Windows may not allow it here
+            return;
+        }
+        std::wstring payload(verb.begin(), verb.end());
+        payload += L"\n" + id;
+        COPYDATASTRUCT cds{kTaskbarVerbData,
+                           (DWORD)(payload.size() * sizeof(WCHAR)),
+                           (PVOID)payload.data()};
+        DWORD_PTR result = 0;
+        SendMessageTimeoutW(host, WM_COPYDATA, 0, (LPARAM)&cds,
+                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 3000, &result);
+    });
+}
+
+// The menu of an app button in Start (in a tile or an opened group).
+// Items Windows doesn't offer for the app are hidden when it opens.
+void RequestSettingsWindow(int group, int item);
+
+xc::MenuFlyout BuildAppMenu(AppEntry const& app) {
+    xc::MenuFlyout menu;
+    auto add = [&](PCWSTR glyph, PCWSTR text, std::function<void()> fn) {
+        xc::MenuFlyoutItem mi;
+        mi.Text(text);
+        xc::FontIcon icon;
+        icon.Glyph(glyph);
+        mi.Icon(icon);
+        mi.Click([fn](auto&&, auto&&) { fn(); });
+        menu.Items().Append(mi);
+        return mi;
+    };
+    bool program = !app.path.empty() && !app.website;
+    // Edit: the settings window, with this app selected.
+    add(L"\uE70F", L"Edit", [group = app.settingsGroup,
+                             item = app.settingsItem] {
+        RequestSettingsWindow(group, item);
+    });
+    xc::MenuFlyoutSeparator sepRun;
+    menu.Items().Append(sepRun);
+    auto runAs = add(L"\uE7EF", L"Run as administrator", [app, program] {
+        CloseStartAfterLaunch(15);  // after the administrator prompt
+        if (program) {
+            RunWorker([path = ExpandEnv(app.path), args = ExpandEnv(app.args)] {
+                SHELLEXECUTEINFOW sei{sizeof(sei)};
+                sei.fMask = SEE_MASK_NOASYNC;
+                sei.lpVerb = L"runas";
+                sei.lpFile = path.c_str();
+                sei.lpParameters = args.empty() ? nullptr : args.c_str();
+                sei.nShow = SW_SHOWNORMAL;
+                ShellExecuteExW(&sei);
+            });
+        } else {
+            InvokeAppShellVerb(app.id, "runas");
+        }
+    });
+    auto location = add(L"\uE838", L"Open file location", [app, program] {
+        CloseStartAfterLaunch();
+        if (program) {
+            RunWorker([path = ExpandEnv(app.path)] {
+                if (PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str())) {
+                    SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+                    ILFree(pidl);
+                }
+            });
+        } else {
+            InvokeAppShellVerb(app.id, "openfilelocation");
+        }
+    });
+    xc::MenuFlyoutSeparator sepPin;
+    menu.Items().Append(sepPin);
+    // Pin to / Unpin from taskbar: unpin when Windows says it's pinned,
+    // else pin (which Windows offers only in Explorer, so it's done there).
+    auto pin = add(L"\uE718", L"Pin to taskbar",
+                   [app] { InvokeTaskbarVerb(app.id, "taskbarpin"); });
+    auto unpin = add(L"\uE77A", L"Unpin from taskbar",
+                     [app] { InvokeTaskbarVerb(app.id, "taskbarunpin"); });
+    // App settings: the app's page in Settings (Store apps only, as in
+    // Start), found by its package family name.
+    bool packaged = !program && app.id.find(L'!') != std::wstring::npos;
+    auto settings = add(L"\uE713", L"App settings", [app] {
+        std::wstring family = app.id.substr(0, app.id.find(L'!'));
+        ShellOpen(L"ms-settings:appsfeatures-app?" + family);
+    });
+    settings.Visibility(packaged ? Visibility::Visible : Visibility::Collapsed);
+    // Windows asks before uninstalling (or opens its uninstall page).
+    auto uninstall = add(L"\uE74D", L"Uninstall",
+                         [app] { InvokeAppShellVerb(app.id, "uninstall"); });
+    menu.Opening([app, program, packaged, runAs, location, pin, unpin,
+                  uninstall, sepRun, sepPin](auto&&, auto&&) {
+        bool admin = !app.website, folder = !app.website, remove = false;
+        bool canPin = false, canUnpin = false;
+        if (!program && !app.website) {
+            auto verbs = AppShellVerbs(app.id);
+            auto has = [&](PCWSTR v) {
+                return std::find(verbs.begin(), verbs.end(), v) != verbs.end();
+            };
+            admin = has(L"runas");
+            folder = has(L"openfilelocation");
+            remove = has(L"uninstall");
+            canUnpin = has(L"taskbarunpin");
+            canPin = !canUnpin;
+        }
+        auto show = [](xc::MenuFlyoutItem const& mi, bool on) {
+            mi.Visibility(on ? Visibility::Visible : Visibility::Collapsed);
+        };
+        show(runAs, admin);
+        show(location, folder);
+        show(pin, canPin);
+        show(unpin, canUnpin);
+        show(uninstall, remove);
+        // A separator only before a section with something shown in it.
+        auto shown = [](bool on) {
+            return on ? Visibility::Visible : Visibility::Collapsed;
+        };
+        sepRun.Visibility(shown(admin || folder));
+        sepPin.Visibility(
+            shown(canPin || canUnpin || packaged || remove));
+    });
+    // Pinned or not changes with the click: ask Windows again next time.
+    for (auto mi : {pin, unpin}) {
+        mi.Click([id = app.id](auto&&, auto&&) {
+            std::lock_guard lock(g_appVerbsMutex);
+            g_appVerbs.erase(id);
+        });
+    }
+    TrackFlyout(menu);
+    return menu;
+}
+
+// ---------------------------------------------------------------------------
+// Config loading (worker thread)
+// ---------------------------------------------------------------------------
+
+std::shared_ptr<Model> LoadModel() {
+    auto model = std::make_shared<Model>();
+    std::vector<GroupSetting> catSettings;
+    {
+        std::lock_guard lock(g_settingsMutex);
+        model->layout = g_settings.layout;
+        catSettings = g_settings.groups;
+    }
+    auto& L = model->layout;
+
+    // Resolve each configured entry (display name or AUMID) to a Start app.
+    std::vector<AppEntry> all = EnumerateStartApps();
+    std::unordered_map<std::wstring, size_t> byId, byName;
+    auto lower = [](std::wstring s) {
+        CharLowerBuffW(s.data(), (DWORD)s.size());
+        return s;
+    };
+    for (size_t i = 0; i < all.size(); i++) {
+        byId.emplace(lower(all[i].id), i);
+        byName.emplace(lower(all[i].name), i);
+    }
+    // An app can be in several groups (or twice in one), as on the
+    // settings board.
+    for (size_t gi = 0; gi < catSettings.size(); gi++) {
+        const auto& cs = catSettings[gi];
+        Group cat;
+        cat.name = cs.name;
+        cat.layout = cs.layout;
+        cat.showAppNames = cs.showAppNames;
+        // A one-spot (1 x 1) tile holds a single app and shows just the
+        // app: no name under it and no background (as in the settings
+        // window).
+        bool single = cs.layout.spanHalfColumns == 1 &&
+                      cs.layout.spanHalfRows == 1;
+        cat.showLabel = cs.showLabel && !single;
+        cat.showBackground = cs.showBackground && !single;
+        for (size_t ii = 0; ii < cs.items.size(); ii++) {
+            const auto& item = cs.items[ii];
+            AppEntry entry;
+            if (item.type == L"website") {
+                // A web page, opened in the default browser. Its icon is a
+                // file, an image link (e.g. a favicon) or, without one, a
+                // globe (see MakeAppIcon).
+                if (item.path.empty()) {
+                    continue;
+                }
+                entry.website = true;
+                entry.path = item.path;
+                entry.name = item.label.empty() ? WebsiteHost(item.path)
+                                                : item.label;
+                entry.key = L"w:" + item.path;
+            } else if (item.type == L"program") {
+                if (item.path.empty()) {
+                    continue;
+                }
+                entry.path = item.path;
+                entry.args = item.args;
+                entry.name = item.label;
+                if (entry.name.empty()) {
+                    // File name without extension.
+                    std::wstring file = item.path.substr(
+                        item.path.find_last_of(L"\\/") + 1);
+                    entry.name = file.substr(0, file.find_last_of(L'.'));
+                }
+                entry.iconSource = item.path;
+                entry.key = L"p:" + item.path + L"|" + item.args;
+            } else {
+                std::wstring key = lower(item.app);
+                size_t index;
+                if (auto n = byName.find(key); n != byName.end()) {
+                    index = n->second;
+                } else if (auto d = byId.find(key); d != byId.end()) {
+                    index = d->second;
+                } else {
+                    Wh_Log(L"App not found in Start: %s", item.app.c_str());
+                    continue;
+                }
+                entry = all[index];
+                entry.args = item.args;
+                if (!item.label.empty()) {
+                    entry.name = item.label;
+                }
+            }
+            if (!item.icon.empty()) {
+                entry.iconSource = item.icon;
+                entry.key += L"|i:" + item.icon;
+            }
+            entry.settingsGroup = (int)gi;
+            entry.settingsItem = (int)ii;
+            cat.apps.push_back(std::move(entry));
+        }
+        model->groups.push_back(std::move(cat));
+    }
+
+    if (L.sortAppsByName) {
+        for (auto& cat : model->groups) {
+            std::sort(cat.apps.begin(), cat.apps.end(), [](auto& x, auto& y) {
+                return _wcsicmp(x.name.c_str(), y.name.c_str()) < 0;
+            });
+        }
+    }
+    if (L.hideEmptyGroups) {
+        std::erase_if(model->groups,
+                      [](const Group& c) { return c.apps.empty(); });
+    }
+
+    // Icons, rasterized at physical pixel size.
+    UINT dpi = GetDpiForSystem();
+    int px = (int)Clamp(L.iconSize * dpi / 96.0, 16, 256);
+    for (auto& cat : model->groups) {
+        for (auto& app : cat.apps) {
+            if (g_unloading) {
+                return nullptr;
+            }
+            // Image links are loaded by XAML (MakeAppIcon).
+            if (!model->icons.count(app.key) && !IsWebAddress(app.iconSource) &&
+                !app.iconSource.empty() && !IsTextIcon(app.iconSource)) {
+                model->icons[app.key] = ExtractAppIcon(app.iconSource, px);
+            }
+        }
+    }
+    model->allApps = std::move(all);
+    return model;
+}
+
+// ---------------------------------------------------------------------------
+// UI building (UI thread)
+// ---------------------------------------------------------------------------
+
+void RebuildHostContent();
+
+[[clang::no_destroy]] std::unordered_map<std::wstring, xm::ImageSource>
+    g_imageSources;  // UI thread
+
+xm::ImageSource GetImageSource(const Model& model, const std::wstring& id) {
+    auto cached = g_imageSources.find(id);
+    if (cached != g_imageSources.end()) {
+        return cached->second;
+    }
+    xm::ImageSource result{nullptr};
+    auto it = model.icons.find(id);
+    if (it != model.icons.end() && it->second) {
+        auto& px = *it->second;
+        uint32_t n = (uint32_t)px.bgra.size();
+        winrt::Windows::Storage::Streams::Buffer buf(n);
+        memcpy(buf.data(), px.bgra.data(), n);
+        buf.Length(n);
+        auto sb = wgi::SoftwareBitmap::CreateCopyFromBuffer(
+            buf, wgi::BitmapPixelFormat::Bgra8, px.width, px.height,
+            wgi::BitmapAlphaMode::Premultiplied);
+        xmi::SoftwareBitmapSource src;
+        src.SetBitmapAsync(sb);
+        result = src;
+    }
+    g_imageSources.insert_or_assign(id, result);
+    return result;
+}
+
+xm::Brush MakeBrush(const std::wstring& spec,
+                    winrt::Windows::UI::Color fallback) {
+    winrt::Windows::UI::Color c = fallback;
+    ParseColor(spec, c);
+    return xm::SolidColorBrush(c);
+}
+
+xc::Image MakeIcon(const Model& model, const std::wstring& id, double size);
+
+// A text icon (ParseTextIcon) at `size`: a glyph of the icon font, or an
+// emoji in color.
+FrameworkElement MakeTextIcon(std::wstring const& text,
+                              bool glyph,
+                              double size) {
+    xc::Grid box;
+    box.Width(size);
+    box.Height(size);
+    if (glyph) {
+        xc::FontIcon icon;
+        icon.Glyph(text);
+        icon.FontFamily(
+            xm::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets"));
+        icon.FontSize(std::round(size * 0.8));
+        box.Children().Append(icon);
+    } else {
+        xc::TextBlock t;
+        t.Text(text);
+        t.FontFamily(xm::FontFamily(L"Segoe UI Emoji"));
+        t.IsColorFontEnabled(true);
+        t.FontSize(std::round(size * 0.72));
+        t.TextAlignment(TextAlignment::Center);
+        t.HorizontalAlignment(HorizontalAlignment::Center);
+        t.VerticalAlignment(VerticalAlignment::Center);
+        t.TextLineBounds(TextLineBounds::Tight);
+        box.Children().Append(t);
+    }
+    return box;
+}
+
+// An image link (e.g. a website's favicon), loaded by XAML; `fallback`
+// (a glyph) only if it can't be loaded.
+FrameworkElement MakeLinkIcon(std::wstring const& url,
+                              PCWSTR fallback,
+                              double size) {
+    xc::Grid box;
+    box.Width(size);
+    box.Height(size);
+    xc::FontIcon icon;
+    icon.Glyph(fallback);
+    icon.FontSize(std::round(size * 0.75));
+    icon.Visibility(Visibility::Collapsed);
+    box.Children().Append(icon);
+    try {
+        xmi::BitmapImage bmp;
+        bmp.DecodePixelWidth((int)std::lround(size * 2));
+        bmp.UriSource(wf::Uri(url));
+        xc::Image img;
+        img.Width(size);
+        img.Height(size);
+        img.Stretch(xm::Stretch::Uniform);
+        img.Source(bmp);
+        winrt::weak_ref<xc::FontIcon> weakIcon = icon;
+        img.ImageFailed([weakIcon](auto&&, auto&&) {
+            if (auto i = weakIcon.get()) {
+                i.Visibility(Visibility::Visible);
+            }
+        });
+        box.Children().Append(img);
+    } catch (...) {
+        icon.Visibility(Visibility::Visible);
+    }
+    return box;
+}
+
+// An app's icon: a text icon (glyph or emoji), an image link, or from the
+// shell (MakeIcon); a website without one, a globe.
+FrameworkElement MakeAppIcon(const Model& model,
+                             const AppEntry& app,
+                             double size) {
+    std::wstring text;
+    bool glyph = false;
+    if (ParseTextIcon(app.iconSource, text, glyph)) {
+        return MakeTextIcon(text, glyph, size);
+    }
+    if (IsWebAddress(app.iconSource)) {
+        return MakeLinkIcon(app.iconSource,
+                            app.website ? L"\uE774" : L"\uF0E2", size);
+    }
+    if (app.website && app.iconSource.empty()) {
+        xc::Grid box;
+        box.Width(size);
+        box.Height(size);
+        xc::FontIcon globe;
+        globe.Glyph(L"\uE774");
+        globe.FontSize(std::round(size * 0.75));
+        box.Children().Append(globe);
+        return box;
+    }
+    return MakeIcon(model, app.key, size);
+}
+
+xc::Image MakeIcon(const Model& model, const std::wstring& id, double size) {
+    xc::Image img;
+    img.Width(size);
+    img.Height(size);
+    img.Stretch(xm::Stretch::Uniform);
+    if (auto src = GetImageSource(model, id)) {
+        img.Source(src);
+    }
+    return img;
+}
+
+// An app's name as its button's tooltip, for when it isn't fully shown:
+// while `name` is cut off ("..."), or always when no name is shown.
+void SetAppTooltip(xc::Button const& btn,
+                   xc::TextBlock const& name,
+                   std::wstring const& text,
+                   LayoutConfig const& L) {
+    if (!L.showAppTooltips) {
+        return;
+    }
+    if (!name) {
+        xc::ToolTipService::SetToolTip(btn, winrt::box_value(text));
+        return;
+    }
+    // Known once laid out; it changes with the size of the tile.
+    winrt::weak_ref<xc::Button> weakBtn = btn;
+    name.IsTextTrimmedChanged([weakBtn, text](xc::TextBlock const& tb,
+                                              auto&&) {
+        if (auto b = weakBtn.get()) {
+            xc::ToolTipService::SetToolTip(
+                b, tb.IsTextTrimmed() ? winrt::box_value(text) : nullptr);
+        }
+    });
+}
+
+xc::Button MakeFlatButton() {
+    xc::Button b;
+    b.Background(xm::SolidColorBrush(winrt::Windows::UI::Colors::Transparent()));
+    b.BorderThickness(ThicknessHelper::FromUniformLength(0));
+    b.Padding(ThicknessHelper::FromUniformLength(0));
+    b.HorizontalAlignment(HorizontalAlignment::Stretch);
+    b.VerticalAlignment(VerticalAlignment::Stretch);
+    b.HorizontalContentAlignment(HorizontalAlignment::Center);
+    b.VerticalContentAlignment(VerticalAlignment::Center);
+    b.CornerRadius(CornerRadiusHelper::FromUniformRadius(4));
+    return b;
+}
+
+// The opened group's sizes: app cells, spacing and the popup's padding.
+constexpr double kFlyoutGap = 4, kFlyoutPad = 16;
+
+double FlyoutWidth(int cols, double cell) {
+    return cols * cell + (cols - 1) * kFlyoutGap + 2 * kFlyoutPad +
+           2;  // + the presenter's border
+}
+
+xc::Flyout BuildGroupFlyout(const Model& model, const Group& cat, int cols) {
+    const FlyoutLook look = FlyoutLookFor(model.layout.iconSize);
+    xc::Flyout fly;
+    // Start can only draw inside its own window, so keep the popup within
+    // its bounds (it's shifted in instead of being cut off at the edge), and
+    // open it aligned with the tile rather than centered over it.
+    fly.ShouldConstrainToRootBounds(true);
+    fly.Placement(xcp::FlyoutPlacementMode::BottomEdgeAlignedLeft);
+    // Flyouts have a default max width (~456) that would cut wide grids.
+    Style presenterStyle(winrt::xaml_typename<xc::FlyoutPresenter>());
+    presenterStyle.Setters().Append(
+        Setter(FrameworkElement::MaxWidthProperty(), winrt::box_value(10000.0)));
+    presenterStyle.Setters().Append(Setter(
+        xc::Control::PaddingProperty(),
+        winrt::box_value(ThicknessHelper::FromUniformLength(kFlyoutPad))));
+    fly.FlyoutPresenterStyle(presenterStyle);
+    TrackFlyout(fly);
+
+    xc::StackPanel root;
+    root.Spacing(12);
+    xc::TextBlock title;
+    title.Text(cat.name);
+    title.FontSize(20);
+    title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    title.Margin(ThicknessHelper::FromLengths(4, 0, 0, 0));
+    // A long name is cut short instead of widening the popup.
+    title.TextWrapping(TextWrapping::NoWrap);
+    title.TextTrimming(TextTrimming::CharacterEllipsis);
+    title.MaxWidth(cols * look.cell + (cols - 1) * kFlyoutGap - 4);
+    root.Children().Append(title);
+
+    xc::Grid grid;
+    grid.ColumnSpacing(kFlyoutGap);
+    grid.RowSpacing(kFlyoutGap);
+    for (int c = 0; c < cols; c++) {
+        xc::ColumnDefinition cd;
+        cd.Width(GridLengthHelper::FromPixels(look.cell));
+        grid.ColumnDefinitions().Append(cd);
+    }
+    int rows = ((int)cat.apps.size() + cols - 1) / cols;
+    for (int r = 0; r < rows; r++) {
+        xc::RowDefinition rd;
+        rd.Height(GridLengthHelper::Auto());
+        grid.RowDefinitions().Append(rd);
+    }
+
+    for (size_t i = 0; i < cat.apps.size(); i++) {
+        const auto& app = cat.apps[i];
+        auto btn = MakeFlatButton();
+        btn.Padding(ThicknessHelper::FromLengths(4, 10, 4, 8));
+        xc::StackPanel sp;
+        sp.Spacing(6);
+        auto img = MakeAppIcon(model, app, look.icon);
+        img.HorizontalAlignment(HorizontalAlignment::Center);
+        sp.Children().Append(img);
+        xc::TextBlock tb;
+        tb.Text(app.name);
+        tb.FontSize(look.font);
+        tb.TextAlignment(TextAlignment::Center);
+        tb.TextWrapping(TextWrapping::Wrap);
+        tb.MaxLines(2);
+        tb.TextTrimming(TextTrimming::CharacterEllipsis);
+        tb.Width(look.textWidth);
+        sp.Children().Append(tb);
+        btn.Content(sp);
+        SetAppTooltip(btn, tb, app.name, model.layout);
+        winrt::weak_ref<xc::Flyout> weakFly = fly;
+        btn.Click([app, weakFly](auto&&, auto&&) {
+            if (auto f = weakFly.get()) {
+                f.Hide();
+            }
+            LaunchApp(app);
+        });
+        btn.ContextFlyout(BuildAppMenu(app));
+        xc::Grid::SetRow(btn, (int)(i / cols));
+        xc::Grid::SetColumn(btn, (int)(i % cols));
+        grid.Children().Append(btn);
+    }
+
+    xc::ScrollViewer sv;
+    sv.MaxHeight(480);
+    sv.VerticalScrollBarVisibility(xc::ScrollBarVisibility::Auto);
+    sv.Content(grid);
+    root.Children().Append(sv);
+    fly.Content(root);
+    return fly;
+}
+
+FrameworkElement BuildTile(const Model& model,
+                           const Group& cat,
+                           bool dark) {
+    const auto& L = model.layout;
+    const auto& C = cat.layout;
+    // This tile's icon grid; the icons keep the global size and the tile
+    // grows by whole cells of the group grid to hold them.
+    const int previewColumns = std::max(1, C.iconColumns);
+    const int previewRows = std::max(1, C.iconRows);
+    const int spanHalves = std::max(1, C.spanHalfColumns);
+    const int spanHalfRows = std::max(1, C.spanHalfRows);
+    // A tile spanning several spots also covers the gaps between them (and,
+    // vertically, the name row of the cells it covers).
+    const double labelH =
+        L.showLabels ? L.labelSpacing + L.labelFontSize * 1.4 : 0;
+    const bool nameShown = L.showLabels && cat.showLabel;
+    const TileBox box = TileBoxFor(spanHalves, spanHalfRows, L.tileSize,
+                                   L.tileSpacingX, L.tileSpacingY, labelH,
+                                   nameShown);
+    const double tileW = box.width;
+    const double tileH = box.height;
+    // Without a background, no padding either: just the apps.
+    const TileFit tf = FitTile(L.iconSize, tileW, tileH,
+                               cat.showBackground ? L.tilePadding : 0,
+                               L.iconSpacing, C, L.appPaddingX,
+                               L.appPaddingY,
+                               L.showAppLabels && cat.showAppNames);
+    const double iconSize = tf.iconSize;
+    const double padX = tf.padX;
+
+    xc::StackPanel outer;
+    outer.Spacing(L.labelSpacing);
+    outer.Width(tileW);
+    outer.Margin(ThicknessHelper::FromLengths(-box.outsetX, 0, 0, 0));
+
+    xc::Border tile;
+    tile.Width(tileW);
+    tile.Height(tileH);
+    // Without a background, the rounding of the app inside (a flat button),
+    // so the tile doesn't cut its corners.
+    tile.CornerRadius(CornerRadiusHelper::FromUniformRadius(
+        cat.showBackground ? L.cornerRadius : 4));
+    tile.Padding(ThicknessHelper::FromLengths(padX, tf.padY, padX, tf.padY));
+    if (cat.showBackground) {
+        tile.BorderThickness(
+            ThicknessHelper::FromUniformLength(L.borderThickness));
+        tile.Background(MakeBrush(
+            L.tileBackground, dark ? winrt::Windows::UI::Color{0x0D, 255, 255, 255}
+                                   : winrt::Windows::UI::Color{0xB3, 255, 255, 255}));
+        tile.BorderBrush(MakeBrush(
+            L.tileBorder, dark ? winrt::Windows::UI::Color{0x0F, 255, 255, 255}
+                               : winrt::Windows::UI::Color{0x0F, 0, 0, 0}));
+    } else {
+        tile.Background(xm::SolidColorBrush(
+            winrt::Windows::UI::Colors::Transparent()));
+    }
+
+    // The opened group, built when it opens: Start can only draw inside the
+    // visible menu, but a popup may extend past it (its window is larger),
+    // and gets cut there. So it gets only as many columns as fit the groups
+    // area and is shifted left to stay inside it.
+    // Weak capture: handlers live inside the tile's own subtree.
+    auto showFlyout = [weakTile = winrt::weak_ref<xc::Border>(tile), cat] {
+        auto t = weakTile.get();
+        auto model = g_model;
+        if (!t || !model) {
+            return;
+        }
+        int cols = std::max(1, model->layout.flyoutColumns);
+        double x = 0, y = t.ActualHeight();
+        auto host = g_attach.host;
+        if (host && host.XamlRoot() && t.ActualWidth() > 0) {
+            try {
+                auto toRoot = t.TransformToVisual(nullptr);
+                auto tl = toRoot.TransformPoint({0, 0});
+                auto br = toRoot.TransformPoint(
+                    {(float)t.ActualWidth(), (float)t.ActualHeight()});
+                double scale = (br.X - tl.X) / t.ActualWidth();
+                auto hostTl = host.TransformToVisual(nullptr).TransformPoint(
+                    {0, 0});
+                double left = hostTl.X;
+                double right = left + host.ActualWidth();
+                double cell = FlyoutLookFor(model->layout.iconSize).cell;
+                while (cols > 1 && FlyoutWidth(cols, cell) > right - left) {
+                    cols--;
+                }
+                double fx = std::clamp((double)tl.X, left,
+                                       std::max(left, right - FlyoutWidth(cols, cell)));
+                if (scale > 0) {
+                    x = (fx - tl.X) / scale;
+                }
+            } catch (...) {
+            }
+        }
+        auto fly = BuildGroupFlyout(*model, cat, cols);
+        xcp::FlyoutShowOptions opts;
+        opts.Position(winrt::Windows::Foundation::Point{(float)x, (float)y});
+        opts.Placement(xcp::FlyoutPlacementMode::BottomEdgeAlignedLeft);
+        fly.ShowAt(t, opts);
+    };
+
+    xc::Grid grid;
+    grid.RowSpacing(L.iconSpacing);
+    grid.ColumnSpacing(L.iconSpacing);
+    for (int c = 0; c < previewColumns; c++) {
+        xc::ColumnDefinition cd;
+        cd.Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+        grid.ColumnDefinitions().Append(cd);
+    }
+    for (int r = 0; r < previewRows; r++) {
+        xc::RowDefinition rd;
+        rd.Height(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+        grid.RowDefinitions().Append(rd);
+    }
+
+    int cells = previewColumns * previewRows;
+    int count = (int)cat.apps.size();
+    bool overflow = L.showOverflowCluster && count > cells && cells > 1;
+    int singles = overflow ? cells - 1 : std::min(count, cells);
+    const auto appPadding = ThicknessHelper::FromLengths(
+        L.appPaddingX, tf.appPadY, L.appPaddingX, tf.appPadY);
+
+    for (int i = 0; i < singles; i++) {
+        const auto& app = cat.apps[i];
+        auto btn = MakeFlatButton();
+        btn.Padding(appPadding);
+        xc::TextBlock nameText{nullptr};
+        if (L.showAppLabels && cat.showAppNames) {
+            // Icon with the app's name underneath, sized to the cell.
+            xc::StackPanel cell;
+            cell.Spacing(tf.nameGap);
+            auto img = MakeAppIcon(model, app, iconSize);
+            img.HorizontalAlignment(HorizontalAlignment::Center);
+            cell.Children().Append(img);
+            xc::TextBlock name;
+            nameText = name;
+            name.Text(app.name);
+            name.FontSize(AppNameFontSize(L.iconSize));
+            name.TextAlignment(TextAlignment::Center);
+            name.TextTrimming(TextTrimming::CharacterEllipsis);
+            name.TextWrapping(TextWrapping::NoWrap);
+            name.MaxWidth(
+                std::max(24.0, (tileW - 2 * padX -
+                                (previewColumns - 1) * L.iconSpacing) /
+                                       previewColumns -
+                                   2 * L.appPaddingX));
+            cell.Children().Append(name);
+            btn.Content(cell);
+        } else {
+            btn.Content(MakeAppIcon(model, app, iconSize));
+        }
+        SetAppTooltip(btn, nameText, app.name, L);
+        btn.Click([app](auto&&, auto&&) { LaunchApp(app); });
+        btn.ContextFlyout(BuildAppMenu(app));
+        xc::Grid::SetRow(btn, i / previewColumns);
+        xc::Grid::SetColumn(btn, i % previewColumns);
+        grid.Children().Append(btn);
+    }
+
+    if (overflow) {
+        auto btn = MakeFlatButton();
+        btn.Padding(appPadding);
+        xc::Grid mini;
+        double small = std::floor((iconSize - 4) / 2);
+        mini.RowSpacing(4);
+        mini.ColumnSpacing(4);
+        mini.HorizontalAlignment(HorizontalAlignment::Center);
+        mini.VerticalAlignment(VerticalAlignment::Center);
+        for (int k = 0; k < 2; k++) {
+            xc::ColumnDefinition cd;
+            cd.Width(GridLengthHelper::Auto());
+            mini.ColumnDefinitions().Append(cd);
+            xc::RowDefinition rd;
+            rd.Height(GridLengthHelper::Auto());
+            mini.RowDefinitions().Append(rd);
+        }
+        for (int k = 0; k < 4 && singles + k < count; k++) {
+            auto img = MakeAppIcon(model, cat.apps[singles + k], small);
+            xc::Grid::SetRow(img, k / 2);
+            xc::Grid::SetColumn(img, k % 2);
+            mini.Children().Append(img);
+        }
+        btn.Content(mini);
+        xc::ToolTipService::SetToolTip(
+            btn, winrt::box_value(winrt::hstring(
+                     L"+" + std::to_wstring(count - singles) + L" more")));
+        btn.Click([showFlyout](auto&&, auto&&) { showFlyout(); });
+        xc::Grid::SetRow(btn, (cells - 1) / previewColumns);
+        xc::Grid::SetColumn(btn, (cells - 1) % previewColumns);
+        grid.Children().Append(btn);
+    }
+
+    tile.Child(grid);
+    // The expanded view opens only from the overflow cluster (the "folder" in
+    // the last cell), which exists only when there are more apps than cells.
+    // Taps must still stop here: otherwise they bubble on into Start's
+    // AllAppsGrid, which reacts by moving focus and light-dismisses the
+    // flyout the overflow button just opened.
+    tile.Tapped([](auto&&, Input::TappedRoutedEventArgs const& e) {
+        e.Handled(true);
+    });
+    outer.Children().Append(tile);
+
+    if (nameShown) {
+        xc::TextBlock label;
+        label.Text(cat.name);
+        label.FontSize(L.labelFontSize);
+        label.TextAlignment(TextAlignment::Center);
+        label.HorizontalAlignment(HorizontalAlignment::Center);
+        label.TextTrimming(TextTrimming::CharacterEllipsis);
+        winrt::Windows::UI::Color lc;
+        if (ParseColor(L.labelColor, lc)) {
+            label.Foreground(xm::SolidColorBrush(lc));
+        }
+        outer.Children().Append(label);
+    }
+
+    return outer;
+}
+
+void ReloadAsync();
+void RequestSettingsWindow(int group = -1, int item = -1);
+
+xc::MenuFlyoutItem MakeCustomizeMenuItem();
+
+// The menu of the groups area (right-click between the tiles): the same as
+// Start's own menu with this mod's item (see AddToStartMenu), so Start has
+// one menu, wherever it's opened.
+xc::MenuFlyout BuildContextMenu() {
+    xc::MenuFlyout menu;
+    auto add = [&](PCWSTR glyph, PCWSTR text, std::function<void()> fn) {
+        xc::MenuFlyoutItem mi;
+        mi.Text(text);
+        xc::FontIcon icon;
+        icon.Glyph(glyph);
+        mi.Icon(icon);
+        mi.Click([fn](auto&&, auto&&) { fn(); });
+        menu.Items().Append(mi);
+    };
+    add(L"\uE713", L"Start settings",
+        [] { ShellOpen(L"ms-settings:personalization-start"); });
+    // The same item as added to Start's menu, with its tag: the code that
+    // adds it there (AddToStartMenu) sees this menu has it already.
+    menu.Items().Append(MakeCustomizeMenuItem());
+    TrackFlyout(menu);
+    return menu;
+}
+
+// --- Start's own sections (Pinned / Recommended / All) ----------------------
+
+bool TextInList(std::wstring_view text, std::vector<std::wstring> const& list) {
+    for (const auto& h : list) {
+        if (h.size() == text.size() &&
+            CompareStringOrdinal(h.data(), (int)h.size(), text.data(),
+                                 (int)text.size(), TRUE) == CSTR_EQUAL) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool SubtreeHasText(DependencyObject const& root,
+                    std::vector<std::wstring> const& texts,
+                    int depth) {
+    if (auto tb = root.try_as<xc::TextBlock>()) {
+        return TextInList(tb.Text(), texts);
+    }
+    if (depth <= 0) {
+        return false;
+    }
+    int n = xm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < n; i++) {
+        if (SubtreeHasText(xm::VisualTreeHelper::GetChild(root, i), texts,
+                           depth - 1)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void RestoreSections() {
+    for (auto& [weak, vis] : g_attach.hidden) {
+        if (auto el = weak.get()) {
+            el.Visibility(vis);
+        }
+    }
+    g_attach.hidden.clear();
+}
+
+void HideSectionElement(UIElement const& el) {
+    if (!el) {
+        return;
+    }
+    g_attach.hidden.emplace_back(winrt::make_weak(el), el.Visibility());
+    el.Visibility(Visibility::Collapsed);
+}
+
+// Start's Pinned, Recommended and All headers are rows of the header grid we
+// insert our row into. A section is its header row plus the rows after it, up
+// to the next section header (or our row, which ends the Pinned section). The
+// All section also covers the app list itself: the items panel of the
+// GridView the header grid belongs to.
+void ApplySectionVisibility() {
+    RestoreSections();
+    auto grid = g_attach.rowGrid.get();
+    if (!grid || !g_attach.host ||
+        (g_attach.insertedRow < 0 && !g_attach.footerList.get())) {
+        return;
+    }
+    bool show[3];
+    std::vector<std::wstring> headers[3];
+    {
+        std::lock_guard lock(g_settingsMutex);
+        show[0] = g_settings.showPinned;
+        show[1] = g_settings.showRecommended;
+        show[2] = g_settings.showAllApps;
+        headers[0] = g_settings.pinnedHeaders;
+        headers[1] = g_settings.recommendedHeaders;
+        headers[2] = g_settings.allHeaders;
+    }
+    if (show[0] && show[1] && show[2]) {
+        return;
+    }
+    // Our row; in the footer, below all of the grid's rows.
+    const int ins = g_attach.insertedRow >= 0 ? g_attach.insertedRow
+                                              : (int)grid.RowDefinitions().Size() + 1;
+
+    // Row of each section's header (-1 = not found).
+    int headerRow[3] = {-1, -1, -1};
+    for (auto child : grid.Children()) {
+        if (child == g_attach.host) {
+            continue;
+        }
+        auto fe = child.try_as<FrameworkElement>();
+        if (!fe) {
+            continue;
+        }
+        int r = xc::Grid::GetRow(fe);
+        for (int s = 0; s < 3; s++) {
+            if (headerRow[s] < 0 && SubtreeHasText(child, headers[s], 10)) {
+                headerRow[s] = r;
+            }
+        }
+    }
+    if (headerRow[0] < 0) {
+        if (auto pinned = g_attach.target.get()) {
+            headerRow[0] = xc::Grid::GetRow(pinned);  // the pinned list
+        }
+    }
+    auto sectionOf = [&](int r) {
+        int best = -1;
+        for (int s = 0; s < 3; s++) {
+            int h = headerRow[s];
+            bool sameSide = r < ins ? h < ins : h > ins;
+            if (h >= 0 && h <= r && sameSide &&
+                (best < 0 || h > headerRow[best])) {
+                best = s;
+            }
+        }
+        return best;
+    };
+
+    for (auto child : grid.Children()) {
+        auto fe = child.try_as<FrameworkElement>();
+        if (!fe || child == g_attach.host) {
+            continue;
+        }
+        int r = xc::Grid::GetRow(fe);
+        int span = xc::Grid::GetRowSpan(fe);
+        if (r < ins && r + span - 1 >= ins) {
+            continue;  // Spans our row too (e.g. a background).
+        }
+        int s = sectionOf(r);
+        if (s >= 0 && !show[s]) {
+            HideSectionElement(fe);
+        }
+    }
+
+    if (!show[2]) {
+        // The header sits in the list's own ScrollViewer, a few levels down.
+        int depth = 0;
+        for (auto p = xm::VisualTreeHelper::GetParent(grid); p && depth < 30;
+             p = xm::VisualTreeHelper::GetParent(p), depth++) {
+            if (auto list = p.try_as<xc::ListViewBase>()) {
+                HideSectionElement(list.ItemsPanelRoot());
+                break;
+            }
+        }
+    }
+
+    for (int s = 0; s < 3; s++) {
+        if (!show[s] && headerRow[s] < 0) {
+            Wh_Log(L"Section %d header not found", s);
+        }
+    }
+}
+
+// A row holds as many tiles as fit, and at least as many as roughly fill a
+// default-width Start menu, which holds 3 default tiles (154
+// wide, 30 apart) like Start's own category view: 3 default, 4 small or 2
+// large tiles. They're scaled down a little if they don't quite fit.
+constexpr double kReferenceRowWidth = 3 * 154 + 2 * 30;
+
+// The width the groups get in Start, saved for the settings window (another
+// process) so its preview lays the tiles out in rows like Start does.
+constexpr PCWSTR kStartRowWidthValue = L"startRowWidth";
+
+// Whole tiles that fit a default-width Start menu (rounded down, so big
+// tiles, as with the Large preset, don't make the row wider than Start).
+int MinAutoColumns(LayoutConfig const& L) {
+    double cell = L.tileSize + L.tileSpacingX;
+    int n = (int)std::floor((kReferenceRowWidth + L.tileSpacingX) / cell +
+                            0.05);
+    return std::max(n, 1);
+}
+
+// Half cells per row for the host's width.
+int RowHalves(LayoutConfig const& L, double width) {
+    double half = (L.tileSize + L.tileSpacingX) / 2;
+    return std::max(FitHalves(width, half, L.tileSpacingX),
+                    2 * MinAutoColumns(L));
+}
+
+// Whether a tile is wider than `halves` (0 = no limit known).
+bool AnyWiderThan(Model const& m, int halves) {
+    return std::any_of(m.groups.begin(), m.groups.end(), [&](auto const& c) {
+        return halves > 0 && c.layout.spanHalfColumns > halves;
+    });
+}
+
+// Sets the tiles per row for the host's current width.
+void ApplyColumns() {
+    auto wrap = g_attach.wrap.get();
+    auto frame = g_attach.wrapFrame.get();
+    if (!wrap || !frame || !g_model || !g_attach.host) {
+        return;
+    }
+    const auto& L = g_model->layout;
+    // Counted in half cells, so a narrow (1 × 2) tile still goes on a row
+    // that has room for half a cell but not a whole one.
+    double half = (L.tileSize + L.tileSpacingX) / 2;
+    double width = g_attach.host.ActualWidth();
+    static int published = -1;
+    int rounded = (int)std::lround(width);
+    if (rounded > 0 && rounded != published) {
+        published = rounded;
+        Wh_SetIntValue(kStartRowWidthValue, rounded);
+    }
+    int halves = RowHalves(L, width);
+    // A tile wider than the row is built as wide as the row (rather than
+    // making the row wider, and the whole of it shrunk to fit Start): built
+    // again when the row's width changes what that is.
+    if (width > 0 && halves != g_attach.builtHalves &&
+        (AnyWiderThan(*g_model, halves) ||
+         AnyWiderThan(*g_model, g_attach.builtHalves) ||
+         g_attach.builtHalves == 0)) {
+        if (AnyWiderThan(*g_model, halves) ||
+            AnyWiderThan(*g_model, g_attach.builtHalves)) {
+            g_attach.builtHalves = halves;  // once per change
+            // Not from inside this layout pass.
+            PostToUi([] { RebuildHostContent(); });
+            return;
+        }
+        g_attach.builtHalves = halves;
+    }
+    if (halves == g_attach.columns) {
+        return;
+    }
+    g_attach.columns = halves;
+    wrap.MaximumRowsOrColumns(halves);
+    // A single spot wide tile without a name reaches half a gap further
+    // (TileBoxFor): in the last column, past the row; room for it.
+    bool narrowWide = std::any_of(
+        g_model->groups.begin(), g_model->groups.end(), [&](auto const& c) {
+            return c.layout.spanHalfColumns == 1 &&
+                   !(L.showLabels && c.showLabel);
+        });
+    frame.Width(RowFrameWidth(halves, half, L.tileSpacingX) +
+                (narrowWide ? L.tileSpacingX / 2 : 0));
+}
+
+void RebuildHostContent() {
+    auto host = g_attach.host;
+    if (!host || !g_model) {
+        return;
+    }
+    auto target = g_attach.target.get();
+    bool dark = target ? target.ActualTheme() == ElementTheme::Dark : true;
+    const auto& L = g_model->layout;
+
+    g_imageSources.clear();
+
+    xc::VariableSizedWrapGrid wrap;
+    wrap.Orientation(xc::Orientation::Horizontal);
+    wrap.ItemWidth((L.tileSize + L.tileSpacingX) / 2);  // half cells
+    double labelH = L.showLabels ? L.labelSpacing + L.labelFontSize * 1.4 : 0;
+    wrap.ItemHeight((L.tileSize + labelH + L.tileSpacingY) / 2);  // half rows
+    wrap.HorizontalAlignment(HorizontalAlignment::Left);
+    // Pull the trailing spacing out so the first/last tiles align to edges:
+    // the frame is exactly as wide as the tiles of a row and their gaps.
+    wrap.Margin(ThicknessHelper::FromLengths(0, 0, -L.tileSpacingX, 0));
+    xc::Border frame;
+    frame.HorizontalAlignment(HorizontalAlignment::Left);
+    frame.Child(wrap);
+    // The row is laid out at full size and scaled down as a whole when it's
+    // wider than the space (instead of wrapping to fewer tiles per row).
+    xc::Viewbox fit;
+    fit.Stretch(xm::Stretch::Uniform);
+    fit.StretchDirection(xc::StretchDirection::DownOnly);
+    fit.HorizontalAlignment(HorizontalAlignment::Left);
+    fit.Child(frame);
+    g_attach.wrap = wrap;
+    g_attach.wrapFrame = frame;
+    g_attach.columns = 0;
+    // The row's width, once the host has been laid out.
+    double hostWidth = host.ActualWidth();
+    int rowHalves = hostWidth > 0 ? RowHalves(L, hostWidth) : 0;
+    g_attach.builtHalves = rowHalves;
+
+    for (const auto& groupIn : g_model->groups) {
+        // No wider than the row: see ApplyColumns.
+        Group cat = groupIn;
+        if (rowHalves > 0 && cat.layout.spanHalfColumns > rowHalves) {
+            cat.layout.spanHalfColumns = rowHalves;
+        }
+        auto tile = BuildTile(*g_model, cat, dark);
+        tile.HorizontalAlignment(HorizontalAlignment::Left);
+        tile.VerticalAlignment(VerticalAlignment::Top);
+        if (cat.layout.spanHalfColumns > 1) {
+            xc::VariableSizedWrapGrid::SetColumnSpan(
+                tile, cat.layout.spanHalfColumns);
+        }
+        if (cat.layout.spanHalfRows > 1) {
+            xc::VariableSizedWrapGrid::SetRowSpan(tile,
+                                                  cat.layout.spanHalfRows);
+        }
+        wrap.Children().Append(tile);
+    }
+
+    // Section heading, styled like Start's own "Pinned" heading.
+    xc::StackPanel content;
+    if (!L.sectionTitle.empty()) {
+        xc::TextBlock heading;
+        heading.Text(L.sectionTitle);
+        heading.FontSize(14);
+        heading.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        if (auto pinned = g_attach.pinnedHeader.get()) {
+            heading.FontSize(pinned.FontSize());
+            heading.FontWeight(pinned.FontWeight());
+            heading.FontFamily(pinned.FontFamily());
+            heading.Foreground(pinned.Foreground());
+        }
+        heading.Margin(ThicknessHelper::FromLengths(0, 0, 0, 16));
+        content.Children().Append(heading);
+    }
+    content.Children().Append(fit);
+
+    if (auto sv = host.try_as<xc::ScrollViewer>()) {
+        sv.Content(content);
+    } else if (auto border = host.try_as<xc::Border>()) {
+        border.Child(content);
+    }
+
+    // Checked after every layout pass, not just on SizeChanged: the grid can
+    // be built before the host has its final width and then never see the
+    // host resize. ApplyColumns returns early when nothing changed.
+    ApplyColumns();
+    if (!g_attach.sizeToken) {
+        g_attach.sizeToken =
+            host.LayoutUpdated([](auto&&, auto&&) { ApplyColumns(); });
+    }
+
+    // Right-click anywhere on the groups (tiles, icons, names).
+    host.ContextFlyout(BuildContextMenu());
+
+    ApplySectionVisibility();
+}
+
+// Space above and below the groups, like between Start's own sections.
+constexpr double kGapTop = 24;
+constexpr double kGapBottom = 8;
+
+void Detach() {
+    auto target = g_attach.target.get();
+    RestoreSections();
+    for (auto& [weak, token] : g_attach.unloadedTokens) {
+        if (auto el = weak.get()) {
+            el.Unloaded(token);
+        }
+    }
+    g_attach.unloadedTokens.clear();
+    if (g_attach.host && g_attach.sizeToken) {
+        g_attach.host.LayoutUpdated(g_attach.sizeToken);
+    }
+    if (target && g_attach.themeToken) {
+        target.ActualThemeChanged(g_attach.themeToken);
+    }
+    if (auto parent = g_attach.parent.get(); parent && g_attach.host) {
+        uint32_t idx;
+        if (parent.Children().IndexOf(g_attach.host, idx)) {
+            parent.Children().RemoveAt(idx);
+        }
+    }
+    if (auto list = g_attach.footerList.get();
+        list && g_attach.host && list.Footer() == g_attach.host) {
+        list.Footer(nullptr);
+    }
+    // Undo the inserted grid row: shift Start's rows back up.
+    if (auto grid = g_attach.rowGrid.get(); grid && g_attach.insertedRow >= 0) {
+        int ins = g_attach.insertedRow;
+        for (auto child : grid.Children()) {
+            auto c = child.try_as<FrameworkElement>();
+            if (!c) {
+                continue;
+            }
+            int r = xc::Grid::GetRow(c);
+            int span = xc::Grid::GetRowSpan(c);
+            if (r > ins) {
+                xc::Grid::SetRow(c, r - 1);
+            } else if (r < ins && r + span - 1 >= ins) {
+                xc::Grid::SetRowSpan(c, span - 1);
+            }
+        }
+        if ((int)grid.RowDefinitions().Size() > ins) {
+            grid.RowDefinitions().RemoveAt(ins);
+        }
+    }
+    g_attach = Attachment{};
+    g_imageSources.clear();
+}
+
+void ReloadAsync();
+void RequestScan();
+
+// --- Keeping the attachment valid ---------------------------------------------
+// Start rebuilds parts of its tree at runtime, e.g. when the "All" view is
+// switched between Grid / List / Group. The elements the groups are attached
+// to then get Unloaded; the check runs later (posted, coalesced), once Start
+// is done changing its tree, and looks at what's actually there by then. If
+// the groups' place is gone, they're removed, and the next scan of Start's
+// tree (RequestScan) attaches them to the new one.
+
+bool g_validateQueued = false;  // UI thread only
+
+void ValidateAttachment() {
+    if (!g_attach.host || g_unloading) {
+        return;
+    }
+    auto target = g_attach.target.get();
+    bool stale = !target;
+    if (!stale) {
+        if (g_attach.insertedRow >= 0) {
+            auto grid = g_attach.rowGrid.get();
+            uint32_t idx;
+            stale = !grid || xm::VisualTreeHelper::GetParent(target) != grid ||
+                    !grid.Children().IndexOf(g_attach.host, idx) ||
+                    !grid.IsLoaded();
+        } else {
+            auto list = g_attach.footerList.get();
+            stale = !list || list.Footer() != g_attach.host ||
+                    !xm::VisualTreeHelper::GetParent(target) ||
+                    !target.IsLoaded();
+        }
+    }
+    if (!stale) {
+        // Start may have re-created the app list's panel; hide it again.
+        ApplySectionVisibility();
+        return;
+    }
+    Wh_Log(L"Start's layout changed, attaching again");
+    Detach();
+    RequestScan();
+}
+
+void ScheduleValidate() {
+    if (g_validateQueued || !g_attach.host) {
+        return;
+    }
+    g_validateQueued = true;
+    PostToUi([] {
+        g_validateQueued = false;
+        ValidateAttachment();
+    });
+}
+
+void WatchUnloaded(FrameworkElement const& el) {
+    if (!el) {
+        return;
+    }
+    auto token = el.Unloaded([](auto&&, auto&&) { ScheduleValidate(); });
+    g_attach.unloadedTokens.emplace_back(winrt::make_weak(el), token);
+}
+
+// Loads config + icons off the UI thread, then swaps the model in.
+std::atomic<int> g_reloadGeneration{0};
+
+void ReloadAsync() {
+    int gen = ++g_reloadGeneration;
+    RunWorker([gen] {
+        auto model = LoadModel();
+        if (!model || g_unloading || gen != g_reloadGeneration) {
+            return;
+        }
+        PostToUi([model] {
+            g_model = model;
+            RebuildHostContent();
+        });
+    });
+}
+
+// --- Placing the groups -------------------------------------------------------
+// Start's Pinned / Recommended / All headers and lists are rows of one Grid
+// ("TopLevelHeader"). It's found from the "Pinned" header text, or else from
+// the names of Start's pinned header and list (in any display language), see
+// FindPinnedHeader. The groups go in a row of their own there.
+
+bool IsPinnedHeaderText(std::wstring_view text) {
+    std::lock_guard lock(g_settingsMutex);
+    for (const auto& h : g_settings.pinnedHeaders) {
+        if (h.size() == text.size() &&
+            CompareStringOrdinal(h.data(), (int)h.size(), text.data(),
+                                 (int)text.size(), TRUE) == CSTR_EQUAL) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void LogAncestors(FrameworkElement el) {
+    int depth = 0;
+    for (DependencyObject p = el; p && depth < 14;
+         p = xm::VisualTreeHelper::GetParent(p), depth++) {
+        auto fe = p.try_as<FrameworkElement>();
+        uint32_t children = 0;
+        if (auto panel = p.try_as<xc::Panel>()) {
+            children = panel.Children().Size();
+        }
+        Wh_Log(L"[ancestor %d] %s name=%s h=%.0f children=%u", depth,
+               winrt::get_class_name(p).c_str(),
+               fe ? fe.Name().c_str() : L"", fe ? fe.ActualHeight() : 0.0,
+               children);
+    }
+}
+
+bool SubtreeHasName(DependencyObject root, std::wstring_view name, int depth) {
+    if (auto fe = root.try_as<FrameworkElement>(); fe && fe.Name() == name) {
+        return true;
+    }
+    if (depth <= 0) {
+        return false;
+    }
+    int n = xm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < n; i++) {
+        if (SubtreeHasName(xm::VisualTreeHelper::GetChild(root, i), name,
+                           depth - 1)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+xc::Grid FindHeaderGrid(FrameworkElement el, FrameworkElement* branchOut);
+
+// Start's Pinned / Recent / All headers are rows of one Grid
+// ("TopLevelHeader", the header of the AllAppsGrid GridView). Insert a new
+// Auto row where the "Where to show the groups" setting says (before or
+// after the Pinned section, or before the All header), so Start's own layout
+// pushes everything below down and it all scrolls together. After All, the
+// groups go in the GridView's footer instead, below the whole app list.
+bool AttachInHeaderGrid(FrameworkElement header) {
+    FrameworkElement branch{nullptr};  // child of `grid` containing header
+    auto grid = FindHeaderGrid(header, &branch);
+    if (!grid) {
+        Wh_Log(L"No header grid found above the Pinned header");
+        return false;
+    }
+
+    // The row to insert after: the one holding the pinned list itself.
+    FrameworkElement pinned{nullptr};
+    for (auto c : grid.Children()) {
+        if (SubtreeHasName(c, L"StartMenuPinnedList", 6) ||
+            SubtreeHasName(c, L"PinnedList", 6)) {
+            pinned = c.try_as<FrameworkElement>();
+            break;
+        }
+    }
+    if (!pinned) {
+        pinned = branch;
+    }
+    int row = xc::Grid::GetRow(pinned) + xc::Grid::GetRowSpan(pinned) - 1;
+    if ((int)grid.RowDefinitions().Size() <= row) {
+        Wh_Log(L"Header grid has %u rows, pinned list is in row %d",
+               grid.RowDefinitions().Size(), row);
+        return false;
+    }
+
+    std::wstring placement;
+    std::vector<std::wstring> allHeaders;
+    {
+        std::lock_guard lock(g_settingsMutex);
+        placement = g_settings.placement;
+        allHeaders = g_settings.allHeaders;
+    }
+    const std::wstring requestedPlacement = placement;
+
+    // afterAll: the footer of the All list, which the header grid is the
+    // header of. Falls back to after Pinned if there's no free footer.
+    xc::ListViewBase footerList{nullptr};
+    if (placement == L"afterAll") {
+        int depth = 0;
+        for (auto p = xm::VisualTreeHelper::GetParent(grid); p && depth < 30;
+             p = xm::VisualTreeHelper::GetParent(p), depth++) {
+            if (auto list = p.try_as<xc::ListViewBase>()) {
+                if (!list.Footer()) {
+                    footerList = list;
+                }
+                break;
+            }
+        }
+        if (!footerList) {
+            Wh_Log(L"No free footer on the All list, showing after Pinned");
+            placement = L"afterPinned";
+        }
+    }
+
+    // Where the row goes: before Pinned, at its header's row; after
+    // Recommended / Recent, at the All header's row (the end without one);
+    // else after the pinned list.
+    int ins = row + 1;
+    if (placement == L"beforePinned") {
+        ins = std::min(xc::Grid::GetRow(branch), xc::Grid::GetRow(pinned));
+    } else if (placement == L"afterRecent") {
+        ins = (int)grid.RowDefinitions().Size();
+        for (auto c : grid.Children()) {
+            auto fe = c.try_as<FrameworkElement>();
+            int r = fe ? xc::Grid::GetRow(fe) : -1;
+            if (r > row && r < ins && SubtreeHasText(c, allHeaders, 10)) {
+                ins = r;
+            }
+        }
+    }
+
+    if (g_attach.host) {
+        Detach();
+    }
+
+    xc::Border host;
+    host.Name(L"WindhawkStartMenuGroups");
+    // Align with the "Pinned" title like Start's own sections do: its left
+    // inset inside the header grid, mirrored on the right.
+    double inset = pinned.Margin().Left;
+    try {
+        auto pt = header.TransformToVisual(grid).TransformPoint({0, 0});
+        if (pt.X > 0 && pt.X < grid.ActualWidth() / 3) {
+            inset = pt.X;
+        }
+    } catch (...) {
+    }
+    host.Margin({inset, kGapTop, inset, kGapBottom});
+    host.HorizontalAlignment(HorizontalAlignment::Stretch);
+
+    if (footerList) {
+        footerList.Footer(host);
+        g_attach.target = pinned;
+        g_attach.host = host;
+        g_attach.rowGrid = grid;
+        g_attach.insertedRow = -1;
+        g_attach.footerList = footerList;
+        g_attach.placement = requestedPlacement;
+        if (auto tb = header.try_as<xc::TextBlock>()) {
+            g_attach.pinnedHeader = tb;
+        }
+        g_attach.themeToken = pinned.ActualThemeChanged(
+            [](auto&&, auto&&) { RebuildHostContent(); });
+        WatchUnloaded(grid);
+        WatchUnloaded(pinned);
+        if (g_model) {
+            RebuildHostContent();
+        } else {
+            ReloadAsync();
+        }
+        Wh_Log(L"Inserted groups as the footer of the All list");
+        return true;
+    }
+
+    for (auto child : grid.Children()) {
+        auto c = child.try_as<FrameworkElement>();
+        if (!c) {
+            continue;
+        }
+        int r = xc::Grid::GetRow(c);
+        int span = xc::Grid::GetRowSpan(c);
+        if (r >= ins) {
+            xc::Grid::SetRow(c, r + 1);
+        } else if (r + span - 1 >= ins) {
+            xc::Grid::SetRowSpan(c, span + 1);
+        }
+    }
+    xc::RowDefinition rd;
+    rd.Height(GridLengthHelper::Auto());
+    grid.RowDefinitions().InsertAt(ins, rd);
+
+    xc::Grid::SetRow(host, ins);
+    xc::Grid::SetColumn(host, 0);
+    xc::Grid::SetColumnSpan(
+        host, std::max<int>(1, grid.ColumnDefinitions().Size()));
+    grid.Children().Append(host);
+
+    g_attach.target = pinned;
+    g_attach.parent = grid.as<xc::Panel>();
+    g_attach.host = host;
+    g_attach.rowGrid = grid;
+    g_attach.insertedRow = ins;
+    g_attach.placement = requestedPlacement;
+    if (auto tb = header.try_as<xc::TextBlock>()) {
+        g_attach.pinnedHeader = tb;
+    }
+    g_attach.themeToken = pinned.ActualThemeChanged(
+        [](auto&&, auto&&) { RebuildHostContent(); });
+    WatchUnloaded(grid);
+    WatchUnloaded(pinned);
+
+    if (g_model) {
+        RebuildHostContent();
+    } else {
+        ReloadAsync();
+    }
+    Wh_Log(L"Inserted groups as row %d of %s (%u rows)", ins,
+           grid.Name().c_str(), grid.RowDefinitions().Size());
+    return true;
+}
+
+// The header grid above `el` ("TopLevelHeader"), and its child that
+// contains `el`.
+xc::Grid FindHeaderGrid(FrameworkElement el, FrameworkElement* branchOut) {
+    FrameworkElement branch = el;
+    for (int depth = 0; branch && depth < 10; depth++) {
+        auto p = xm::VisualTreeHelper::GetParent(branch);
+        if (!p) {
+            break;
+        }
+        if (auto g = p.try_as<xc::Grid>();
+            g && (g.Name() == L"TopLevelHeader" ||
+                  g.RowDefinitions().Size() >= 3)) {
+            if (branchOut) {
+                *branchOut = branch;
+            }
+            return g;
+        }
+        branch = p.try_as<FrameworkElement>();
+    }
+    return nullptr;
+}
+
+// The first TextBlock with text in `root` (depth-limited).
+xc::TextBlock FindTextBlock(DependencyObject const& root, int depth) {
+    if (auto tb = root.try_as<xc::TextBlock>(); tb && !tb.Text().empty()) {
+        return tb;
+    }
+    if (depth <= 0) {
+        return nullptr;
+    }
+    int n = xm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < n; i++) {
+        if (auto tb =
+                FindTextBlock(xm::VisualTreeHelper::GetChild(root, i), depth - 1)) {
+            return tb;
+        }
+    }
+    return nullptr;
+}
+
+// The Pinned header from the pinned list, without its text (so in any
+// display language): the text in the header grid's row just above the list.
+xc::TextBlock PinnedHeaderAbove(FrameworkElement pinnedList) {
+    FrameworkElement branch{nullptr};
+    auto grid = FindHeaderGrid(pinnedList, &branch);
+    if (!grid || !branch) {
+        return nullptr;
+    }
+    int listRow = xc::Grid::GetRow(branch);
+    UIElement best{nullptr};
+    int bestRow = -1;
+    for (auto c : grid.Children()) {
+        auto fe = c.try_as<FrameworkElement>();
+        if (!fe || fe.Name() == L"WindhawkStartMenuGroups") {
+            continue;
+        }
+        int r = xc::Grid::GetRow(fe);
+        if (r < listRow && r > bestRow) {
+            bestRow = r;
+            best = c;
+        }
+    }
+    return best ? FindTextBlock(best, 10) : nullptr;
+}
+
+// Looks through Start's tree for the Pinned header: its "Pinned" text, or
+// else by the names of Start's elements, which aren't translated: the header
+// row ("PinnedListHeaderGrid"), or the pinned list ("StartMenuPinnedList")
+// and the header above it. Our own groups are skipped (a group may be named
+// "Pinned").
+xc::TextBlock FindPinnedHeader(DependencyObject const& root) {
+    xc::TextBlock byText{nullptr};
+    FrameworkElement headerGrid{nullptr};
+    FrameworkElement pinnedList{nullptr};
+    std::vector<DependencyObject> stack{root};
+    for (int visited = 0; !stack.empty() && visited < 50000; visited++) {
+        auto node = stack.back();
+        stack.pop_back();
+        if (auto fe = node.try_as<FrameworkElement>()) {
+            auto name = fe.Name();
+            if (name == L"WindhawkStartMenuGroups") {
+                continue;
+            }
+            if (!headerGrid && name == L"PinnedListHeaderGrid") {
+                headerGrid = fe;
+            }
+            if (!pinnedList &&
+                (name == L"StartMenuPinnedList" || name == L"PinnedList")) {
+                pinnedList = fe;
+            }
+        }
+        if (auto tb = node.try_as<xc::TextBlock>()) {
+            if (!byText && IsPinnedHeaderText(tb.Text())) {
+                byText = tb;
+            }
+            continue;
+        }
+        int n = xm::VisualTreeHelper::GetChildrenCount(node);
+        for (int i = n - 1; i >= 0; i--) {
+            stack.push_back(xm::VisualTreeHelper::GetChild(node, i));
+        }
+    }
+    // The first one that's in Start's header grid.
+    xc::TextBlock candidates[] = {
+        byText, headerGrid ? FindTextBlock(headerGrid, 6) : nullptr,
+        pinnedList ? PinnedHeaderAbove(pinnedList) : nullptr};
+    for (auto const& tb : candidates) {
+        if (tb && FindHeaderGrid(tb, nullptr)) {
+            return tb;
+        }
+    }
+    return nullptr;
+}
+
+// --- "Customize Start Groups" in Start's own right-click menu ----------
+// Start's menu (with "Start settings") is a MenuFlyout. When it's open (see
+// CheckOpenMenus), our item is inserted after "Start settings". The menu is
+// reused, so the item is added once; it's removed when the mod unloads.
+
+constexpr PCWSTR kMenuItemTag = L"WindhawkStartMenuGroups";
+
+struct AddedMenuItem {
+    wf::Collections::IVector<xc::MenuFlyoutItemBase> items{nullptr};
+    wf::Collections::IVector<wf::IInspectable> objects{nullptr};
+    xc::MenuFlyoutItem item{nullptr};
+};
+[[clang::no_destroy]] std::vector<AddedMenuItem> g_addedMenuItems;  // UI thread
+
+bool IsOurMenuItem(wf::IInspectable const& obj) {
+    auto mi = obj.try_as<xc::MenuFlyoutItem>();
+    return mi && winrt::unbox_value_or<winrt::hstring>(mi.Tag(), L"") ==
+                     kMenuItemTag;
+}
+
+bool IsStartSettingsItem(wf::IInspectable const& obj) {
+    auto mi = obj.try_as<xc::MenuFlyoutItem>();
+    if (!mi) {
+        return false;
+    }
+    std::lock_guard lock(g_settingsMutex);
+    return TextInList(mi.Text(), g_settings.startSettingsTexts);
+}
+
+xc::MenuFlyoutItem MakeCustomizeMenuItem() {
+    xc::MenuFlyoutItem item;
+    item.Text(L"Customize Start Groups");
+    item.Tag(winrt::box_value(winrt::hstring(kMenuItemTag)));
+    xc::FontIcon icon;
+    icon.Glyph(L"\uF0E2");  // GridView, like the settings window's title
+    item.Icon(icon);
+    item.Click([](auto&&, auto&&) { RequestSettingsWindow(); });
+    return item;
+}
+
+// Inserts our item after "Start settings", if the menu has that item.
+template <typename Vector>
+bool InsertCustomizeItem(Vector const& items, AddedMenuItem& added) {
+    int at = -1;
+    for (uint32_t i = 0; i < items.Size(); i++) {
+        auto obj = items.GetAt(i);
+        if (IsOurMenuItem(obj)) {
+            return false;  // added the last time the menu was shown
+        }
+        if (at < 0 && IsStartSettingsItem(obj)) {
+            at = (int)i;
+        }
+    }
+    if (at < 0) {
+        return false;
+    }
+    added.item = MakeCustomizeMenuItem();
+    items.InsertAt(at + 1, added.item);
+    return true;
+}
+
+void AddToStartMenu(xc::MenuFlyoutPresenter const& presenter) {
+    AddedMenuItem added;
+    // A MenuFlyout shows its Items through the presenter's ItemsSource.
+    if (auto items = presenter.ItemsSource()
+                         .try_as<wf::Collections::IVector<
+                             xc::MenuFlyoutItemBase>>()) {
+        if (InsertCustomizeItem(items, added)) {
+            added.items = items;
+        }
+    } else if (!presenter.ItemsSource()) {
+        auto objects = presenter.Items().as<
+            wf::Collections::IVector<wf::IInspectable>>();
+        if (InsertCustomizeItem(objects, added)) {
+            added.objects = objects;
+        }
+    }
+    if (added.item) {
+        g_addedMenuItems.push_back(std::move(added));
+        Wh_Log(L"Added Customize Start Groups to Start's menu");
+    }
+}
+
+void RemoveFromStartMenus() {
+    for (auto& added : g_addedMenuItems) {
+        try {
+            uint32_t i;
+            if (added.items && added.items.IndexOf(added.item, i)) {
+                added.items.RemoveAt(i);
+            } else if (added.objects && added.objects.IndexOf(added.item, i)) {
+                added.objects.RemoveAt(i);
+            }
+        } catch (...) {
+        }
+    }
+    g_addedMenuItems.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Start's UI thread
+// ---------------------------------------------------------------------------
+// Start's UI is a CoreWindow ("Windows.UI.Core.CoreWindow") with system XAML.
+// The mod gets on its thread when that window is created (the
+// CreateWindowInBand hooks) or, if Start is already running, through a
+// thread hook (RunFromWindowThread), and creates a message-only window there
+// (InstallStartUi). Its timer looks through Start's tree for the Pinned header
+// until the groups are attached, and checks for Start's right-click menu
+// while Start is open. (No XAML diagnostics: a process allows one
+// diagnostics client, which other mods and tools need.)
+
+constexpr UINT_PTR kScanTimerId = 1;
+constexpr UINT_PTR kMenuTimerId = 2;
+constexpr UINT kScanIntervalMs = 200;
+
+// UI thread only:
+HWND g_coreWnd = nullptr;
+bool g_startWasOpen = false;
+DWORD g_lastScanTick = 0;
+int g_failedScans = 0;
+int g_menuChecks = 0;
+
+// Right-click handlers on Start's root element, to look for its menu as soon
+// as it opens.
+struct RootHandlers {
+    winrt::weak_ref<UIElement> root;
+    wf::IInspectable rightTapped{nullptr};
+    wf::IInspectable contextRequested{nullptr};
+};
+[[clang::no_destroy]] RootHandlers g_rootHandlers;
+
+void RequestScan() {
+    g_lastScanTick = 0;
+    g_failedScans = 0;
+}
+
+std::vector<xcp::Popup> OpenPopups() {
+    std::vector<xcp::Popup> out;
+    auto window = Window::Current();
+    if (!window) {
+        return out;
+    }
+    for (auto p : xm::VisualTreeHelper::GetOpenPopups(window)) {
+        out.push_back(p);
+    }
+    if (auto content = window.Content()) {
+        try {
+            if (auto root = content.XamlRoot()) {
+                for (auto p :
+                     xm::VisualTreeHelper::GetOpenPopupsForXamlRoot(root)) {
+                    if (std::find(out.begin(), out.end(), p) == out.end()) {
+                        out.push_back(p);
+                    }
+                }
+            }
+        } catch (...) {
+        }
+    }
+    return out;
+}
+
+xc::MenuFlyoutPresenter FindMenuPresenter(DependencyObject const& el,
+                                          int depth) {
+    if (!el) {
+        return nullptr;
+    }
+    if (auto p = el.try_as<xc::MenuFlyoutPresenter>()) {
+        return p;
+    }
+    if (depth <= 0) {
+        return nullptr;
+    }
+    int n = xm::VisualTreeHelper::GetChildrenCount(el);
+    for (int i = 0; i < n; i++) {
+        if (auto p = FindMenuPresenter(xm::VisualTreeHelper::GetChild(el, i),
+                                       depth - 1)) {
+            return p;
+        }
+    }
+    return nullptr;
+}
+
+// Adds our item to Start's right-click menu if it's open.
+void CheckOpenMenus() {
+    for (auto const& popup : OpenPopups()) {
+        if (!popup.IsOpen()) {
+            continue;
+        }
+        if (auto presenter = FindMenuPresenter(popup.Child(), 3)) {
+            AddToStartMenu(presenter);
+        }
+    }
+}
+
+void OnRootRightClick() {
+    // The menu opens right after this event: look a few times, quickly.
+    g_menuChecks = 10;
+    if (HWND wnd = g_uiWnd) {
+        SetTimer(wnd, kMenuTimerId, 30, nullptr);
+    }
+}
+
+void RemoveRootHandlers() {
+    if (auto root = g_rootHandlers.root.get()) {
+        try {
+            if (g_rootHandlers.rightTapped) {
+                root.RemoveHandler(UIElement::RightTappedEvent(),
+                                   g_rootHandlers.rightTapped);
+            }
+            if (g_rootHandlers.contextRequested) {
+                root.RemoveHandler(UIElement::ContextRequestedEvent(),
+                                   g_rootHandlers.contextRequested);
+            }
+        } catch (...) {
+        }
+    }
+    g_rootHandlers = RootHandlers{};
+}
+
+void WatchRootForMenus(UIElement const& root) {
+    if (!root || g_rootHandlers.root.get() == root) {
+        return;
+    }
+    RemoveRootHandlers();
+    g_rootHandlers.root = root;
+    g_rootHandlers.rightTapped = winrt::box_value(
+        winrt::Windows::UI::Xaml::Input::RightTappedEventHandler(
+            [](auto&&, auto&&) { OnRootRightClick(); }));
+    g_rootHandlers.contextRequested = winrt::box_value(
+        wf::TypedEventHandler<
+            UIElement,
+            winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs>(
+            [](auto&&, auto&&) { OnRootRightClick(); }));
+    // Also when Start has handled the event itself (it opens its menu).
+    root.AddHandler(UIElement::RightTappedEvent(), g_rootHandlers.rightTapped,
+                    true);
+    root.AddHandler(UIElement::ContextRequestedEvent(),
+                    g_rootHandlers.contextRequested, true);
+}
+
+// Looks for the Pinned header and attaches the groups there.
+void ScanStartTree() {
+    auto window = Window::Current();
+    auto root = window ? window.Content() : nullptr;
+    if (!root) {
+        return;
+    }
+    WatchRootForMenus(root);
+    auto header = FindPinnedHeader(root);
+    if (!header || !header.IsLoaded()) {
+        g_failedScans++;
+        return;
+    }
+    if (AttachInHeaderGrid(header)) {
+        g_failedScans = 0;
+        return;
+    }
+    // Start may still be building its sections: tried again later.
+    if (g_failedScans++ == 0) {
+        LogAncestors(header);
+    }
+}
+
+void OnScanTimer() {
+    if (g_unloading) {
+        return;
+    }
+    try {
+        bool open = IsStartOpen(g_coreWnd);
+        if (open) {
+            CheckOpenMenus();
+            if (!g_startWasOpen && g_attach.host) {
+                ValidateAttachment();  // each time Start opens
+            }
+        }
+        g_startWasOpen = open;
+        if (!g_attach.host) {
+            // Every tick while Start is open, else once a second; slower
+            // after many tries (e.g. a Start layout the mod doesn't know).
+            DWORD now = GetTickCount();
+            DWORD every = g_failedScans > 50 ? (open ? 2000 : 10000)
+                                             : (open ? 0 : 1000);
+            if (g_lastScanTick == 0 || now - g_lastScanTick >= every) {
+                g_lastScanTick = now ? now : 1;
+                ScanStartTree();
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Scan failed: %08X", winrt::to_hresult());
+    }
+}
+
+PCWSTR UiWindowClassName() {
+    static std::wstring name = std::wstring(L"WindhawkStartUi_") + WH_MOD_ID;
+    return name.c_str();
+}
+
+void UninstallStartUi();
+
+LRESULT CALLBACK UiWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == kRunOnUiMsg) {
+        std::unique_ptr<std::function<void()>> fn(
+            reinterpret_cast<std::function<void()>*>(lp));
+        if (!g_unloading) {
+            try {
+                (*fn)();
+            } catch (...) {
+                Wh_Log(L"UI task failed: %08X", winrt::to_hresult());
+            }
+        }
+        return 0;
+    }
+    if (msg == kUninstallMsg) {
+        UninstallStartUi();
+        return 0;
+    }
+    if (msg == WM_TIMER && wp == kScanTimerId) {
+        OnScanTimer();
+        return 0;
+    }
+    if (msg == WM_TIMER && wp == kMenuTimerId) {
+        if (--g_menuChecks <= 0) {
+            KillTimer(hWnd, kMenuTimerId);
+        }
+        try {
+            if (!g_unloading) {
+                CheckOpenMenus();
+            }
+        } catch (...) {
+        }
+        return 0;
+    }
+    return DefWindowProcW(hWnd, msg, wp, lp);
+}
+
+HMODULE ThisModule() {
+    HMODULE self = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&ThisModule, &self);
+    return self;
+}
+
+// On Start's UI thread (`coreWnd`'s): the message window and its timer.
+void InstallStartUi(HWND coreWnd) {
+    if (g_uiWnd || g_unloading) {
+        return;
+    }
+    WNDCLASSEXW wc{sizeof(wc)};
+    wc.lpfnWndProc = UiWndProc;
+    wc.hInstance = ThisModule();
+    wc.lpszClassName = UiWindowClassName();
+    RegisterClassExW(&wc);
+    HWND wnd = CreateWindowExW(0, UiWindowClassName(), L"", 0, 0, 0, 0, 0,
+                               HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
+    if (!wnd) {
+        Wh_Log(L"Creating the UI window failed: %u", GetLastError());
+        return;
+    }
+    g_coreWnd = coreWnd;
+    g_uiWnd = wnd;
+    RequestScan();
+    SetTimer(wnd, kScanTimerId, kScanIntervalMs, nullptr);
+    Wh_Log(L"Watching Start's UI");
+}
+
+// On Start's UI thread: removes everything the mod added to Start, and the
+// message window, dropping whatever is still queued for it.
+void UninstallStartUi() {
+    HWND wnd = g_uiWnd.exchange(nullptr);
+    if (!wnd) {
+        return;
+    }
+    KillTimer(wnd, kScanTimerId);
+    KillTimer(wnd, kMenuTimerId);
+    try {
+        for (auto& weak : g_flyouts) {
+            if (auto fly = weak.get()) {
+                fly.Hide();
+            }
+        }
+    } catch (...) {
+    }
+    g_flyouts.clear();
+    try {
+        RemoveRootHandlers();
+        RemoveFromStartMenus();
+        Detach();
+    } catch (...) {
+        Wh_Log(L"Cleanup failed: %08X", winrt::to_hresult());
+    }
+    g_model = nullptr;
+    g_imageSources.clear();
+    MSG msg;
+    while (PeekMessageW(&msg, wnd, kRunOnUiMsg, kRunOnUiMsg, PM_REMOVE)) {
+        delete reinterpret_cast<std::function<void()>*>(msg.lParam);
+    }
+    DestroyWindow(wnd);
+    UnregisterClassW(UiWindowClassName(), ThisModule());
+    g_coreWnd = nullptr;
+}
+
+// Runs `proc` on `hWnd`'s thread and waits for it.
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
+
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         PVOID procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    auto* param = (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+    RUN_FROM_WINDOW_THREAD_PARAM param{proc, procParam};
+    SendMessageW(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+    UnhookWindowsHookEx(hook);
+    return true;
+}
+
+void OnWindowCreated(HWND hWnd, LPCWSTR className) {
+    bool textual = ((ULONG_PTR)className & ~(ULONG_PTR)0xFFFF) != 0;
+    if (g_unloading || !textual ||
+        _wcsicmp(className, L"Windows.UI.Core.CoreWindow") != 0) {
+        return;
+    }
+    // Created on its own thread, so this runs right here.
+    RunFromWindowThread(
+        hWnd, [](PVOID p) { InstallStartUi((HWND)p); }, hWnd);
+}
+
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                           LPCWSTR lpClassName,
+                                           LPCWSTR lpWindowName,
+                                           DWORD dwStyle,
+                                           int X,
+                                           int Y,
+                                           int nWidth,
+                                           int nHeight,
+                                           HWND hWndParent,
+                                           HMENU hMenu,
+                                           HINSTANCE hInstance,
+                                           PVOID lpParam,
+                                           DWORD dwBand);
+CreateWindowInBand_t CreateWindowInBand_Original;
+
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
+                                    LPCWSTR lpClassName,
+                                    LPCWSTR lpWindowName,
+                                    DWORD dwStyle,
+                                    int X,
+                                    int Y,
+                                    int nWidth,
+                                    int nHeight,
+                                    HWND hWndParent,
+                                    HMENU hMenu,
+                                    HINSTANCE hInstance,
+                                    PVOID lpParam,
+                                    DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand);
+    if (hWnd) {
+        OnWindowCreated(hWnd, lpClassName);
+    }
+    return hWnd;
+}
+
+using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                             LPCWSTR lpClassName,
+                                             LPCWSTR lpWindowName,
+                                             DWORD dwStyle,
+                                             int X,
+                                             int Y,
+                                             int nWidth,
+                                             int nHeight,
+                                             HWND hWndParent,
+                                             HMENU hMenu,
+                                             HINSTANCE hInstance,
+                                             PVOID lpParam,
+                                             DWORD dwBand,
+                                             DWORD dwTypeFlags);
+CreateWindowInBandEx_t CreateWindowInBandEx_Original;
+
+HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
+                                      LPCWSTR lpClassName,
+                                      LPCWSTR lpWindowName,
+                                      DWORD dwStyle,
+                                      int X,
+                                      int Y,
+                                      int nWidth,
+                                      int nHeight,
+                                      HWND hWndParent,
+                                      HMENU hMenu,
+                                      HINSTANCE hInstance,
+                                      PVOID lpParam,
+                                      DWORD dwBand,
+                                      DWORD dwTypeFlags) {
+    HWND hWnd = CreateWindowInBandEx_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
+    if (hWnd) {
+        OnWindowCreated(hWnd, lpClassName);
+    }
+    return hWnd;
+}
+
+// ---------------------------------------------------------------------------
+// Windhawk entry points
+// ---------------------------------------------------------------------------
+
+std::wstring GetString(PCWSTR name, int i = -1, int j = -1) {
+    std::wstring s =
+        WindhawkUtils::StringSetting(Wh_GetStringSetting(name, i, j)).get();
+    // Trim surrounding whitespace.
+    size_t b = s.find_first_not_of(L" \t");
+    size_t e = s.find_last_not_of(L" \t");
+    return b == std::wstring::npos ? L"" : s.substr(b, e - b + 1);
+}
+
+double GetNumber(PCWSTR name, double lo, double hi) {
+    return Clamp(Wh_GetIntSetting(name), lo, hi);
+}
+
+void LoadSettings() {
+    ModSettings s;
+    auto& L = s.layout;
+    // Tiles
+    L.tileSize = GetNumber(L"tiles.size", 60, 600);
+    L.tileSpacingX = GetNumber(L"tiles.gapX", 0, 200);
+    L.tileSpacingY = GetNumber(L"tiles.gapY", 0, 200);
+    L.tilePadding = GetNumber(L"tiles.padding", 0, 100);
+    L.cornerRadius = GetNumber(L"tiles.cornerRadius", 0, 100);
+    L.borderThickness = GetNumber(L"tiles.borderThickness", 0, 10);
+    L.tileBackground = GetString(L"tiles.background");
+    L.tileBorder = GetString(L"tiles.border");
+    // Icons
+    L.iconSize = GetNumber(L"icons.size", 12, 256);
+    L.iconSpacing = GetNumber(L"icons.gap", 0, 100);
+    L.appPaddingX = GetNumber(L"icons.paddingX", 0, 60);
+    L.appPaddingY = GetNumber(L"icons.paddingY", 0, 60);
+    L.showOverflowCluster = Wh_GetIntSetting(L"icons.overflowCluster") != 0;
+    // Group names
+    L.showLabels = Wh_GetIntSetting(L"labels.show") != 0;
+    L.labelFontSize = GetNumber(L"labels.fontSize", 8, 40);
+    L.labelSpacing = GetNumber(L"labels.spacing", 0, 100);
+    L.labelColor = GetString(L"labels.color");
+    L.sectionTitle = GetString(L"behavior.sectionTitle");
+    L.showAppLabels = Wh_GetIntSetting(L"behavior.showAppLabels") != 0;
+    // Behavior
+    L.hideEmptyGroups =
+        Wh_GetIntSetting(L"behavior.hideEmptyGroups") != 0;
+    L.showAppTooltips = Wh_GetIntSetting(L"behavior.hideAppTooltips") == 0;
+    L.sortAppsByName = Wh_GetIntSetting(L"behavior.sortAppsByName") != 0;
+    L.flyoutColumns = (int)GetNumber(L"behavior.expandedColumns",
+                                     kMinExpandedColumns, kMaxExpandedColumns);
+    s.placement = GetString(L"behavior.placement");
+    if (s.placement != L"afterPinned" && s.placement != L"afterRecent" &&
+        s.placement != L"afterAll") {
+        s.placement = L"beforePinned";  // the default
+    }
+    // "hide" settings, so a missing value (0) keeps Start as it is.
+    s.showPinned = Wh_GetIntSetting(L"behavior.hidePinned") == 0;
+    s.showRecommended = Wh_GetIntSetting(L"behavior.hideRecommended") == 0;
+    s.showAllApps = Wh_GetIntSetting(L"behavior.hideAllApps") == 0;
+
+    for (int i = 0;; i++) {
+        std::wstring name = GetString(L"groups[%d].name", i);
+        if (name.empty()) {
+            break;
+        }
+        GroupSetting cat{name, {}, {}};
+        {
+            std::wstring grid = GetString(L"groups[%d].tileSize", i);
+            cat.layout = MakeLayout(
+                ResolveTileSize(GetString(L"groups[%d].span", i), grid), grid);
+        }
+        // Stored inverted: groups saved before they existed show them.
+        cat.showAppNames =
+            Wh_GetIntSetting(L"groups[%d].hideAppNames", i) == 0;
+        cat.showLabel = Wh_GetIntSetting(L"groups[%d].hideLabel", i) == 0;
+        cat.showBackground =
+            Wh_GetIntSetting(L"groups[%d].hideBackground", i) == 0;
+        for (int j = 0;; j++) {
+            ItemSetting item;
+            item.type = GetString(L"groups[%d].items[%d].type", i, j);
+            item.app = GetString(L"groups[%d].items[%d].app", i, j);
+            item.label = GetString(L"groups[%d].items[%d].label", i, j);
+            item.path = GetString(L"groups[%d].items[%d].path", i, j);
+            item.args = GetString(L"groups[%d].items[%d].args", i, j);
+            item.icon = GetString(L"groups[%d].items[%d].icon", i, j);
+            if (item.app.empty() && item.path.empty()) {
+                break;
+            }
+            if (item.type != L"program" && item.type != L"website") {
+                item.type = L"app";
+            }
+            cat.items.push_back(std::move(item));
+        }
+        s.groups.push_back(std::move(cat));
+    }
+
+    // Start's section titles and menu item, as Start shows them in English.
+    // (The groups are placed without them too, from the pinned list; see
+    // FindPinnedHeader.)
+    s.pinnedHeaders = {L"Pinned"};
+    s.recommendedHeaders = {L"Recommended", L"Recent"};
+    s.allHeaders = {L"All"};
+    s.startSettingsTexts = {L"Start settings"};
+
+
+    std::lock_guard lock(g_settingsMutex);
+    g_settings = std::move(s);
+}
+
+// ===========================================================================
+// Settings window
+//
+// Same design as the Explorer Command Bar mod: a Win32 window hosting a XAML
+// island, with a navigation pane, card-style settings pages and a
+// Save / Discard footer. It edits this mod's Windhawk settings directly
+// (HKLM\SOFTWARE\Windhawk\Engine\Mods\<id>\Settings); since that key is
+// protected, saving goes through an elevated import (one UAC prompt, see
+// WriteModSettings). Windhawk then calls Wh_ModSettingsChanged, so Start
+// updates right away.
+//
+// The window is a Windows.UI.Xaml island on the mod's own thread in File
+// Explorer (Start's process can't host one), see StartSettingsHost.
+// ===========================================================================
+
+struct EditItem {
+    std::wstring type = L"app";
+    std::wstring app, label, path, args, icon;
+};
+
+struct EditGroup {
+    std::wstring name;
+    std::wstring tileSize = L"2x2";  // spots, one of kTileSizes
+    std::wstring appGrid = kAutoGrid;  // apps, "auto" or within tileSize
+    bool showAppNames = true;
+    bool showLabel = true;       // the name under the tile
+    bool showBackground = true;  // off: no background, border or padding
+    std::vector<EditItem> items;
+};
+
+// An app without a group: saved as a one-spot (1 x 1) tile with just that
+// app, and shown as the app alone (no name, no background). In the window
+// it's an app, not a group: no group settings, 1 x 1 isn't offered as a
+// group's size, and removing its app removes it. "Add to group" makes it a
+// group, "Remove from group" (a group's only app) makes one again.
+bool IsSingleApp(EditGroup const& g) {
+    return g.tileSize == L"1x1";
+}
+
+std::wstring NewGroupName(std::vector<EditGroup> const& groups) {
+    std::wstring name = L"New group";
+    for (int n = 2; std::any_of(groups.begin(), groups.end(),
+                                [&](auto& c) { return c.name == name; });
+         n++) {
+        name = L"New group " + std::to_wstring(n);
+    }
+    return name;
+}
+
+std::wstring ItemTitle(EditItem const& item);
+
+// An app on its own (see IsSingleApp).
+EditGroup MakeSingleApp(EditItem item) {
+    EditGroup g;
+    g.name = ItemTitle(item);
+    g.tileSize = L"1x1";
+    g.appGrid = kAutoGrid;
+    g.showLabel = false;
+    g.showBackground = false;
+    g.items.push_back(std::move(item));
+    return g;
+}
+
+// An app on its own made a group (2 x 2, with its name and background).
+void MakeGroupOf(EditGroup& g, std::wstring const& name) {
+    g.name = name;
+    g.tileSize = L"2x2";
+    g.appGrid = kAutoGrid;
+    g.showLabel = true;
+    g.showBackground = true;
+}
+
+// A new tile size; made bigger than a single app, the group gets its name
+// and background shown (as a single app it had neither).
+void SetTileSize(EditGroup& g, std::wstring const& size) {
+    bool wasSingle = IsSingleApp(g);
+    g.tileSize = size;
+    g.appGrid = FitGrid(g.appGrid, size);
+    if (wasSingle && !IsSingleApp(g)) {
+        g.showLabel = true;
+        g.showBackground = true;
+    }
+}
+bool ShowsLabel(EditGroup const& g) {
+    return g.showLabel && !IsSingleApp(g);
+}
+bool ShowsBackground(EditGroup const& g) {
+    return g.showBackground && !IsSingleApp(g);
+}
+
+GroupLayout LayoutOf(EditGroup const& g) {
+    return MakeLayout(g.tileSize, g.appGrid);
+}
+
+struct EditSettings {
+    std::vector<EditGroup> groups;
+    // Behavior
+    std::wstring placement = L"beforePinned";
+    bool hideEmpty = true;
+    bool showTooltips = true;
+    bool sortByName = false;
+    int expandedColumns = 4;
+    bool hidePinned = false, hideRecommended = false, hideAllApps = false;
+    // Tiles
+    int tileSize = 154, gapX = 30, gapY = 20, padding = 8;
+    int cornerRadius = 8, borderThickness = 1;
+    std::wstring background, border;
+    // Icons
+    int iconSize = 32, iconGap = 5, appPadX = 4, appPadY = 4;
+    bool overflowCluster = true;
+    // Labels
+    bool labelsShow = true;
+    int fontSize = 12, labelSpacing = 12;
+    std::wstring labelColor;
+    std::wstring sectionTitle = L"Apps";
+    bool showAppLabels = true;
+};
+
+std::vector<std::wstring> SplitLines(const std::wstring& text) {
+    std::vector<std::wstring> lines;
+    std::wstring cur;
+    auto flush = [&] {
+        size_t b = cur.find_first_not_of(L" \t");
+        size_t e = cur.find_last_not_of(L" \t");
+        if (b != std::wstring::npos) {
+            lines.push_back(cur.substr(b, e - b + 1));
+        }
+        cur.clear();
+    };
+    for (WCHAR c : text) {
+        if (c == L'\r' || c == L'\n') {
+            flush();
+        } else {
+            cur += c;
+        }
+    }
+    flush();
+    return lines;
+}
+
+EditSettings ReadEditSettings() {
+    EditSettings s;
+    for (int i = 0;; i++) {
+        std::wstring name = GetString(L"groups[%d].name", i);
+        if (name.empty()) {
+            break;
+        }
+        EditGroup cat;
+        cat.name = name;
+        cat.appGrid = GetString(L"groups[%d].tileSize", i);
+        cat.tileSize = ResolveTileSize(GetString(L"groups[%d].span", i),
+                                       cat.appGrid);
+        cat.appGrid = FitGrid(cat.appGrid, cat.tileSize);
+        cat.showAppNames =
+            Wh_GetIntSetting(L"groups[%d].hideAppNames", i) == 0;
+        cat.showLabel = Wh_GetIntSetting(L"groups[%d].hideLabel", i) == 0;
+        cat.showBackground =
+            Wh_GetIntSetting(L"groups[%d].hideBackground", i) == 0;
+        for (int j = 0;; j++) {
+            EditItem item;
+            item.type = GetString(L"groups[%d].items[%d].type", i, j);
+            item.app = GetString(L"groups[%d].items[%d].app", i, j);
+            item.label = GetString(L"groups[%d].items[%d].label", i, j);
+            item.path = GetString(L"groups[%d].items[%d].path", i, j);
+            item.args = GetString(L"groups[%d].items[%d].args", i, j);
+            item.icon = GetString(L"groups[%d].items[%d].icon", i, j);
+            if (item.app.empty() && item.path.empty()) {
+                break;
+            }
+            if (item.type != L"program" && item.type != L"website") {
+                item.type = L"app";
+            }
+            cat.items.push_back(std::move(item));
+        }
+        s.groups.push_back(std::move(cat));
+    }
+    s.placement = GetString(L"behavior.placement");
+    if (s.placement != L"afterPinned" && s.placement != L"afterRecent" &&
+        s.placement != L"afterAll") {
+        // The default; also for the old "replaceCategoryView".
+        s.placement = L"beforePinned";
+    }
+    s.hideEmpty = Wh_GetIntSetting(L"behavior.hideEmptyGroups") != 0;
+    s.showTooltips = Wh_GetIntSetting(L"behavior.hideAppTooltips") == 0;
+    s.sortByName = Wh_GetIntSetting(L"behavior.sortAppsByName") != 0;
+    s.expandedColumns =
+        std::clamp(Wh_GetIntSetting(L"behavior.expandedColumns"),
+                   kMinExpandedColumns, kMaxExpandedColumns);
+    s.hidePinned = Wh_GetIntSetting(L"behavior.hidePinned") != 0;
+    s.hideRecommended = Wh_GetIntSetting(L"behavior.hideRecommended") != 0;
+    s.hideAllApps = Wh_GetIntSetting(L"behavior.hideAllApps") != 0;
+    s.tileSize = Wh_GetIntSetting(L"tiles.size");
+    s.gapX = Wh_GetIntSetting(L"tiles.gapX");
+    s.gapY = Wh_GetIntSetting(L"tiles.gapY");
+    s.padding = Wh_GetIntSetting(L"tiles.padding");
+    s.cornerRadius = Wh_GetIntSetting(L"tiles.cornerRadius");
+    s.borderThickness = Wh_GetIntSetting(L"tiles.borderThickness");
+    s.background = GetString(L"tiles.background");
+    s.border = GetString(L"tiles.border");
+    s.iconSize = Wh_GetIntSetting(L"icons.size");
+    s.iconGap = Wh_GetIntSetting(L"icons.gap");
+    s.appPadX = Wh_GetIntSetting(L"icons.paddingX");
+    s.appPadY = Wh_GetIntSetting(L"icons.paddingY");
+    s.overflowCluster = Wh_GetIntSetting(L"icons.overflowCluster") != 0;
+    s.labelsShow = Wh_GetIntSetting(L"labels.show") != 0;
+    s.fontSize = Wh_GetIntSetting(L"labels.fontSize");
+    s.labelSpacing = Wh_GetIntSetting(L"labels.spacing");
+    s.labelColor = GetString(L"labels.color");
+    s.sectionTitle = GetString(L"behavior.sectionTitle");
+    s.showAppLabels = Wh_GetIntSetting(L"behavior.showAppLabels") != 0;
+    return s;
+}
+
+// --- Field descriptions (drive both the pages and the registry export) ----
+
+// Preset: the tile size presets, not a setting of its own (value points to
+// the EditSettings; the preset shown is the one matching the values).
+enum class FieldKind { Bool, Int, String, Choice, Preset };
+
+struct Field {
+    PCWSTR key;
+    PCWSTR glyph;
+    PCWSTR title;
+    PCWSTR description;
+    FieldKind kind;
+    void* value;
+    int min = 0, max = 0;
+    std::vector<std::pair<std::wstring, std::wstring>> options;  // value, text
+    bool inverted = false;  // Bool: saved as the opposite ("hide..." keys)
+    // Not shown in the window: kept (saved, imported, set by the size
+    // presets) at its value, but no longer offered to change.
+    bool hidden = false;
+};
+
+Field Hidden(Field f) {
+    f.hidden = true;
+    return f;
+}
+
+struct SettingsPage {
+    PCWSTR tag;
+    PCWSTR glyph;
+    PCWSTR title;
+    PCWSTR description;
+    std::vector<Field> fields;
+};
+
+Field BoolF(PCWSTR key, PCWSTR glyph, PCWSTR title, PCWSTR desc, bool* v) {
+    return {key, glyph, title, desc, FieldKind::Bool, v};
+}
+// A switch shown as "Show ..." for a setting saved as "hide...".
+Field ShowF(PCWSTR key, PCWSTR glyph, PCWSTR title, PCWSTR desc, bool* v) {
+    Field f{key, glyph, title, desc, FieldKind::Bool, v};
+    f.inverted = true;
+    return f;
+}
+Field IntF(PCWSTR key, PCWSTR glyph, PCWSTR title, PCWSTR desc, int* v,
+           int min, int max) {
+    return {key, glyph, title, desc, FieldKind::Int, v, min, max};
+}
+Field StrF(PCWSTR key, PCWSTR glyph, PCWSTR title, PCWSTR desc,
+           std::wstring* v) {
+    return {key, glyph, title, desc, FieldKind::String, v};
+}
+Field ChoiceF(PCWSTR key, PCWSTR glyph, PCWSTR title, PCWSTR desc,
+              std::wstring* v,
+              std::vector<std::pair<std::wstring, std::wstring>> options) {
+    Field f{key, glyph, title, desc, FieldKind::Choice, v};
+    f.options = std::move(options);
+    return f;
+}
+// Dimension presets offered at the top of the Customization page.
+struct SizePreset {
+    PCWSTR name;
+    int tileSize, gapX, gapY, padding, cornerRadius;
+    int iconSize, iconGap, appPadX, appPadY, fontSize, labelSpacing;
+};
+
+// Large is everything of Default doubled; Small about 3/4 of it. (App
+// names and the opened group follow the icon size, see AppNameFontSize.)
+constexpr SizePreset kSizePresets[] = {
+    {L"Default", 154, 30, 20, 8, 8, 32, 5, 4, 4, 12, 12},
+    {L"Small", 120, 20, 16, 6, 8, 24, 4, 4, 4, 11, 8},
+    {L"Large", 308, 60, 40, 16, 16, 64, 10, 8, 8, 24, 24},
+};
+
+bool MatchesPreset(EditSettings const& s, SizePreset const& p) {
+    return s.tileSize == p.tileSize && s.gapX == p.gapX && s.gapY == p.gapY &&
+           s.padding == p.padding && s.cornerRadius == p.cornerRadius &&
+           s.iconSize == p.iconSize && s.iconGap == p.iconGap &&
+           s.appPadX == p.appPadX && s.appPadY == p.appPadY &&
+           s.fontSize == p.fontSize && s.labelSpacing == p.labelSpacing;
+}
+
+void ApplyPreset(EditSettings& s, SizePreset const& p) {
+    s.tileSize = p.tileSize;
+    s.gapX = p.gapX;
+    s.gapY = p.gapY;
+    s.padding = p.padding;
+    s.cornerRadius = p.cornerRadius;
+    s.iconSize = p.iconSize;
+    s.iconGap = p.iconGap;
+    s.appPadX = p.appPadX;
+    s.appPadY = p.appPadY;
+    s.fontSize = p.fontSize;
+    s.labelSpacing = p.labelSpacing;
+}
+
+// The preset the settings are: the one they match, else (a gap or name
+// size changed since) the one with the nearest tile size.
+int CurrentPreset(EditSettings const& s) {
+    int best = 0;
+    for (int i = 0; i < (int)ARRAYSIZE(kSizePresets); i++) {
+        if (MatchesPreset(s, kSizePresets[i])) {
+            return i;
+        }
+        if (std::abs(kSizePresets[i].tileSize - s.tileSize) <
+            std::abs(kSizePresets[best].tileSize - s.tileSize)) {
+            best = i;
+        }
+    }
+    return best;
+}
+
+// "2 × 1": a tile size's cells, width × height.
+std::wstring TileSizeText(std::wstring const& size) {
+    auto l = MakeLayout(size, L"");
+    return std::to_wstring(l.spanHalfColumns) + L" \u00D7 " +
+           std::to_wstring(l.spanHalfRows);
+}
+
+// App grid choices for a tile size: value, "3 × 2 (6 apps)". Only grids
+// that fit the tile.
+std::vector<std::pair<std::wstring, std::wstring>> AppGridOptions(
+    std::wstring const& size) {
+    auto l = MakeLayout(size, kAutoGrid);
+    auto text = [](int c, int r) {
+        return std::to_wstring(c) + L" \u00D7 " + std::to_wstring(r) + L" (" +
+               std::to_wstring(c * r) + (c * r == 1 ? L" app)" : L" apps)");
+    };
+    // First: the default, which follows the tile size.
+    std::vector<std::pair<std::wstring, std::wstring>> out{
+        {kAutoGrid, L"Default: " + text(l.iconColumns, l.iconRows)}};
+    for (int c = 1; c <= std::min(l.spanHalfColumns, kMaxGridColumns); c++) {
+        for (int r = 1; r <= std::min(l.spanHalfRows, kMaxGridRows); r++) {
+            out.push_back({AxB(c, r), text(c, r)});
+        }
+    }
+    return out;
+}
+
+// Tile size choices: value, "2 × 1".
+std::vector<std::pair<std::wstring, std::wstring>> TileSizeOptions() {
+    std::vector<std::pair<std::wstring, std::wstring>> out;
+    for (PCWSTR t : kTileSizes) {
+        if (std::wstring_view(t) != L"1x1") {  // an app without a group
+            out.push_back({t, TileSizeText(t)});
+        }
+    }
+    return out;
+}
+
+std::vector<SettingsPage> DescribePages(EditSettings& s) {
+    constexpr PCWSTR kColorHint =
+        L"#RRGGBB or #AARRGGBB. Empty = match Start.";
+    std::vector<SettingsPage> pages;
+    // Customization: the look of the groups. Sizes inside a tile (tile size,
+    // padding, border, icons and the gaps between them) aren't offered on
+    // their own any more; the size preset sets them, and they're kept as
+    // they are otherwise (hidden fields).
+    pages.push_back(
+        {L"customization", L"\uE790", L"Customization",
+         L"The look of the groups: their size, spacing, colors and names.",
+         {
+             Field{nullptr, L"\uE8A9", L"Size preset",
+                   L"The size of the tiles, their icons and names, and the "
+                   L"gaps between them, all at once. The gaps, corner radius "
+                   L"and group names can still be changed below.",
+                   FieldKind::Preset, &s},
+             IntF(L"tiles.gapX", L"\uE89F", L"Horizontal gap", nullptr,
+                  &s.gapX, 0, 120),
+             IntF(L"tiles.gapY", L"\uE8A0", L"Vertical gap", nullptr, &s.gapY,
+                  0, 120),
+             IntF(L"tiles.cornerRadius", L"\uE91F", L"Corner radius", nullptr,
+                  &s.cornerRadius, 0, 40),
+             StrF(L"tiles.background", L"\uE790", L"Background color",
+                  kColorHint, &s.background),
+             StrF(L"tiles.border", L"\uE790", L"Border color", kColorHint,
+                  &s.border),
+             BoolF(L"labels.show", L"\uE8D2", L"Show group names", nullptr,
+                   &s.labelsShow),
+             IntF(L"labels.fontSize", L"\uE8E9", L"Group name font size",
+                  nullptr, &s.fontSize, 8, 32),
+             IntF(L"labels.spacing", L"\uE8A0",
+                  L"Space between tile and name", nullptr, &s.labelSpacing, 0,
+                  60),
+             StrF(L"labels.color", L"\uE790", L"Group name color", kColorHint,
+                  &s.labelColor),
+             Hidden(IntF(L"tiles.size", L"", L"Tile size", nullptr,
+                         &s.tileSize, 60, 400)),
+             Hidden(IntF(L"tiles.padding", L"", L"Padding inside a tile",
+                         nullptr, &s.padding, 0, 60)),
+             Hidden(IntF(L"tiles.borderThickness", L"", L"Border thickness",
+                         nullptr, &s.borderThickness, 0, 6)),
+             Hidden(IntF(L"icons.size", L"", L"Icon size", nullptr,
+                         &s.iconSize, 16, 96)),
+             Hidden(IntF(L"icons.gap", L"", L"Gap between apps", nullptr,
+                         &s.iconGap, 0, 60)),
+             Hidden(IntF(L"icons.paddingX", L"", L"App padding (horizontal)",
+                         nullptr, &s.appPadX, 0, 40)),
+             Hidden(IntF(L"icons.paddingY", L"", L"App padding (vertical)",
+                         nullptr, &s.appPadY, 0, 40)),
+             Hidden(BoolF(L"icons.overflowCluster", L"", L"Overflow cluster",
+                          nullptr, &s.overflowCluster)),
+         }});
+    pages.push_back(
+        {L"behavior", L"\uE713", L"Behavior",
+         L"Where the groups appear and how apps are arranged.",
+         {
+             ChoiceF(L"behavior.placement", L"\uE8A1",
+                     L"Where to show the groups",
+                     L"Applied when the settings are saved", &s.placement,
+                     {{L"beforePinned", L"Before the Pinned section (default)"},
+                      {L"afterPinned", L"After the Pinned section"},
+                      {L"afterRecent",
+                       L"After the Recommended / Recent section"},
+                      {L"afterAll", L"After the All section"}}),
+             StrF(L"behavior.sectionTitle", L"\uE8D2", L"Section title",
+                  L"Heading above the groups, styled like \"Pinned\". "
+                  L"Empty = no heading.",
+                  &s.sectionTitle),
+             BoolF(L"behavior.showAppLabels", L"\uE8C1", L"Show app names",
+                   L"Show each app's name under its icon inside the tiles",
+                   &s.showAppLabels),
+             BoolF(L"behavior.hideEmptyGroups", L"\uE7B3",
+                   L"Hide empty groups", nullptr, &s.hideEmpty),
+             ShowF(L"behavior.hideAppTooltips", L"\uE8BD",
+                   L"Show app tooltips",
+                   L"The app's full name when hovering over it in Start, "
+                   L"for apps whose name is cut off (\"...\") or hidden",
+                   &s.showTooltips),
+             BoolF(L"behavior.sortAppsByName", L"\uE8CB",
+                   L"Sort apps alphabetically",
+                   L"Ignore the order the items are listed in",
+                   &s.sortByName),
+             IntF(L"behavior.expandedColumns", L"\uE8A9",
+                  L"Columns when a group is opened", nullptr,
+                  &s.expandedColumns, kMinExpandedColumns,
+                  kMaxExpandedColumns),
+         }});
+    pages.push_back(
+        {L"builtin", L"\uE7B3", L"Built-in sections",
+         L"Start's own sections, around the groups.",
+         {
+             BoolF(L"behavior.hidePinned", L"\uE718",
+                   L"Hide the Pinned section",
+                   L"Start's own Pinned apps.",
+                   &s.hidePinned),
+             BoolF(L"behavior.hideRecommended", L"\uE823",
+                   L"Hide the Recommended section",
+                   L"Start's own Recommended / Recent section.",
+                   &s.hideRecommended),
+             BoolF(L"behavior.hideAllApps", L"\uE71D",
+                   L"Hide the All section",
+                   L"Start's own list of all apps (grid, list or category "
+                   L"view).",
+                   &s.hideAllApps),
+         }});
+    return pages;
+}
+
+// --- Registry export --------------------------------------------------------
+
+struct RegEntry {
+    std::wstring name;
+    bool isString = false;
+    std::wstring text;
+    DWORD number = 0;
+    bool isBool = false;  // only for the exported file
+    bool operator==(RegEntry const&) const = default;
+};
+
+RegEntry StrEntry(std::wstring name, std::wstring const& value) {
+    RegEntry e;
+    e.name = std::move(name);
+    e.isString = true;
+    for (WCHAR c : value) {
+        if (c != L'\r' && c != L'\n') {
+            e.text += c;
+        }
+    }
+    return e;
+}
+
+RegEntry NumEntry(std::wstring name, int value) {
+    RegEntry e;
+    e.name = std::move(name);
+    e.number = (DWORD)value;
+    return e;
+}
+
+std::vector<RegEntry> BuildRegEntries(EditSettings& s) {
+    std::vector<RegEntry> out;
+    int ci = 0;
+    for (auto const& cat : s.groups) {
+        if (cat.name.empty()) {
+            continue;
+        }
+        std::wstring cp = L"groups[" + std::to_wstring(ci++) + L"]";
+        out.push_back(StrEntry(cp + L".name", cat.name));
+        out.push_back(StrEntry(cp + L".span", cat.tileSize));
+        out.push_back(StrEntry(cp + L".tileSize", cat.appGrid));
+        out.push_back(NumEntry(cp + L".hideAppNames", !cat.showAppNames));
+        out.push_back(NumEntry(cp + L".hideLabel", !cat.showLabel));
+        out.push_back(NumEntry(cp + L".hideBackground", !cat.showBackground));
+        int ii = 0;
+        for (auto const& item : cat.items) {
+            if (item.app.empty() && item.path.empty()) {
+                continue;
+            }
+            std::wstring ip = cp + L".items[" + std::to_wstring(ii++) + L"]";
+            out.push_back(StrEntry(ip + L".type", item.type));
+            out.push_back(StrEntry(ip + L".app", item.app));
+            out.push_back(StrEntry(ip + L".label", item.label));
+            out.push_back(StrEntry(ip + L".path", item.path));
+            out.push_back(StrEntry(ip + L".args", item.args));
+            out.push_back(StrEntry(ip + L".icon", item.icon));
+        }
+    }
+    for (auto& page : DescribePages(s)) {
+        for (auto& f : page.fields) {
+            switch (f.kind) {
+                case FieldKind::Bool: {
+                    auto e = NumEntry(f.key, *(bool*)f.value != f.inverted);
+                    e.isBool = true;
+                    out.push_back(std::move(e));
+                    break;
+                }
+                case FieldKind::Preset:
+                    break;
+                case FieldKind::Int:
+                    out.push_back(NumEntry(f.key, *(int*)f.value));
+                    break;
+                case FieldKind::String:
+                case FieldKind::Choice:
+                    out.push_back(StrEntry(f.key, *(std::wstring*)f.value));
+                    break;
+            }
+        }
+    }
+    return out;
+}
+
+constexpr WCHAR kModRegistryPath[] =
+    L"SOFTWARE\\Windhawk\\Engine\\Mods\\" WH_MOD_ID;
+
+std::wstring EscapeRegString(std::wstring const& v) {
+    std::wstring r;
+    for (WCHAR c : v) {
+        if (c == L'\\' || c == L'"') {
+            r += L'\\';
+        }
+        r += c;
+    }
+    return r;
+}
+
+// The engine's SettingsChangeTime of this mod (0 if not found): Windhawk
+// bumps it whenever the settings are saved, there or here.
+DWORD ReadSettingsChangeTime() {
+    DWORD changeTime = 0, size = sizeof(changeTime);
+    RegGetValueW(HKEY_LOCAL_MACHINE, kModRegistryPath, L"SettingsChangeTime",
+                 RRF_RT_REG_DWORD, nullptr, &changeTime, &size);
+    return changeTime;
+}
+
+// A settings value this mod declares (or used to), so one the window may
+// delete when it's no longer used (a removed group or item).
+bool IsOwnSettingName(std::wstring_view name) {
+    for (std::wstring_view prefix :
+         {L"groups[", L"behavior.", L"tiles.", L"icons.", L"labels.",
+          L"advanced."}) {
+        if (name.size() > prefix.size() &&
+            _wcsnicmp(name.data(), prefix.data(), prefix.size()) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// SHA-256 of `data`, as uppercase hex; empty on failure.
+std::wstring Sha256Hex(void const* data, DWORD size) {
+    std::wstring hex;
+    HCRYPTPROV prov = 0;
+    HCRYPTHASH hash = 0;
+    if (CryptAcquireContextW(&prov, nullptr, nullptr, PROV_RSA_AES,
+                             CRYPT_VERIFYCONTEXT)) {
+        if (CryptCreateHash(prov, CALG_SHA_256, 0, 0, &hash)) {
+            BYTE digest[32];
+            DWORD len = sizeof(digest);
+            if (CryptHashData(hash, (BYTE const*)data, size, 0) &&
+                CryptGetHashParam(hash, HP_HASHVAL, digest, &len, 0)) {
+                static constexpr WCHAR kHex[] = L"0123456789ABCDEF";
+                for (DWORD i = 0; i < len; i++) {
+                    hex += kHex[digest[i] >> 4];
+                    hex += kHex[digest[i] & 0xF];
+                }
+            }
+            CryptDestroyHash(hash);
+        }
+        CryptReleaseContext(prov, 0);
+    }
+    return hex;
+}
+
+struct SaveResult {
+    std::wstring error;  // empty: saved
+    DWORD changeTime = 0;
+};
+
+// Windhawk keeps mod settings in a protected HKLM key, so the new values are
+// imported elevated. Bumping SettingsChangeTime makes the engine call
+// Wh_ModSettingsChanged, exactly like a change made in Windhawk.
+//
+// The .reg file is written to the user's temp folder, where any process of
+// the user could change it before the elevated import. So the elevated step
+// (PowerShell, one UAC prompt) reads the file once, checks its SHA-256
+// against the one computed here (passed on its command line, visible in the
+// prompt's details), writes those same bytes to a new file in
+// %SystemRoot%\Temp, which standard users can't change, and imports that.
+SaveResult WriteModSettings(std::vector<RegEntry> const& entries, HWND owner) {
+    SaveResult result;
+    HKEY modKey;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kModRegistryPath, 0, KEY_READ,
+                      &modKey) != ERROR_SUCCESS) {
+        result.error =
+            L"This mod's settings weren't found in the registry. Saving "
+            L"from this window needs the installed (not portable) version "
+            L"of Windhawk.";
+        return result;
+    }
+    DWORD changeTime = 0, size = sizeof(changeTime);
+    RegGetValueW(modKey, nullptr, L"SettingsChangeTime", RRF_RT_REG_DWORD,
+                 nullptr, &changeTime, &size);
+    // Values of removed groups and items. Only the mod's own settings.
+    std::vector<std::wstring> stale;
+    HKEY settingsKey;
+    if (RegOpenKeyExW(modKey, L"Settings", 0, KEY_READ, &settingsKey) ==
+        ERROR_SUCCESS) {
+        for (DWORD i = 0;; i++) {
+            WCHAR name[1024];
+            DWORD len = ARRAYSIZE(name);
+            LSTATUS st = RegEnumValueW(settingsKey, i, name, &len, nullptr,
+                                       nullptr, nullptr, nullptr);
+            if (st != ERROR_SUCCESS) {
+                if (st == ERROR_MORE_DATA) {
+                    continue;
+                }
+                break;
+            }
+            bool used = std::any_of(
+                entries.begin(), entries.end(), [&](RegEntry const& e) {
+                    return _wcsicmp(e.name.c_str(), name) == 0;
+                });
+            if (!used && IsOwnSettingName(name)) {
+                stale.push_back(name);
+            }
+        }
+        RegCloseKey(settingsKey);
+    }
+    RegCloseKey(modKey);
+
+    DWORD newTime = std::max((DWORD)time(nullptr), changeTime + 1);
+    std::wstring key = std::wstring(L"HKEY_LOCAL_MACHINE\\") + kModRegistryPath;
+    std::wstring text = L"Windows Registry Editor Version 5.00\r\n\r\n";
+    text += L"[" + key + L"\\Settings]\r\n";
+    for (auto const& e : entries) {
+        text += L"\"" + EscapeRegString(e.name) + L"\"=";
+        if (e.isString) {
+            text += L"\"" + EscapeRegString(e.text) + L"\"";
+        } else {
+            WCHAR num[16];
+            swprintf(num, ARRAYSIZE(num), L"dword:%08x", e.number);
+            text += num;
+        }
+        text += L"\r\n";
+    }
+    for (auto const& n : stale) {
+        text += L"\"" + EscapeRegString(n) + L"\"=-\r\n";
+    }
+    WCHAR timeText[32];
+    swprintf(timeText, ARRAYSIZE(timeText), L"dword:%08x", newTime);
+    text += L"\r\n[" + key + L"]\r\n\"SettingsChangeTime\"=" + timeText +
+            L"\r\n";
+
+    // The file's bytes: UTF-16 with a byte order mark, as reg.exe expects.
+    std::vector<BYTE> bytes(2 + text.size() * sizeof(WCHAR));
+    bytes[0] = 0xFF;
+    bytes[1] = 0xFE;
+    memcpy(bytes.data() + 2, text.data(), text.size() * sizeof(WCHAR));
+    std::wstring hash = Sha256Hex(bytes.data(), (DWORD)bytes.size());
+    if (hash.empty()) {
+        result.error = L"Preparing the settings failed.";
+        return result;
+    }
+
+    WCHAR tempDir[MAX_PATH];
+    GUID guid;
+    WCHAR guidText[64];
+    if (!GetTempPathW(ARRAYSIZE(tempDir), tempDir) ||
+        FAILED(CoCreateGuid(&guid)) ||
+        !StringFromGUID2(guid, guidText, ARRAYSIZE(guidText))) {
+        result.error = L"The temporary folder wasn't found.";
+        return result;
+    }
+    std::wstring regFile = std::wstring(tempDir) +
+                           L"windhawk-start-menu-groups-" + guidText + L".reg";
+    HANDLE f = CreateFileW(regFile.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
+                           nullptr, CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY,
+                           nullptr);
+    if (f == INVALID_HANDLE_VALUE) {
+        result.error = L"Couldn't write " + regFile + L".";
+        return result;
+    }
+    DWORD written = 0;
+    BOOL ok = WriteFile(f, bytes.data(), (DWORD)bytes.size(), &written,
+                        nullptr) &&
+              written == bytes.size();
+    CloseHandle(f);
+    if (!ok) {
+        DeleteFileW(regFile.c_str());
+        result.error = L"Couldn't write " + regFile + L".";
+        return result;
+    }
+
+    // In a single-quoted PowerShell string, ' is written ''.
+    std::wstring quoted;
+    for (WCHAR c : regFile) {
+        quoted += c;
+        if (c == L'\'') {
+            quoted += L'\'';
+        }
+    }
+    std::wstring script =
+        L"try{$b=[IO.File]::ReadAllBytes('" + quoted + L"')}catch{exit 4};"
+        L"$h=[BitConverter]::ToString([Security.Cryptography.SHA256]::"
+        L"Create().ComputeHash($b)).Replace('-','');"
+        L"if($h -ne '" + hash + L"'){exit 3};"
+        L"$t=Join-Path $env:SystemRoot ('Temp\\windhawk-start-menu-groups-'+"
+        L"[guid]::NewGuid().ToString()+'.reg');"
+        L"try{[IO.File]::WriteAllBytes($t,$b)}catch{exit 5};"
+        L"& (Join-Path $env:SystemRoot 'System32\\reg.exe') import $t *>$null;"
+        L"$c=$LASTEXITCODE;"
+        L"Remove-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue;"
+        L"exit $c";
+    WCHAR sysDir[MAX_PATH];
+    GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir));
+    std::wstring powershell =
+        std::wstring(sysDir) + L"\\WindowsPowerShell\\v1.0\\powershell.exe";
+    std::wstring params =
+        L"-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle "
+        L"Hidden -Command \"" +
+        script + L"\"";
+    SHELLEXECUTEINFOW sei{sizeof(sei)};
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+    sei.hwnd = owner;
+    sei.lpVerb = L"runas";
+    sei.lpFile = powershell.c_str();
+    sei.lpParameters = params.c_str();
+    sei.nShow = SW_HIDE;
+    // Blocks while the UAC prompt is up.
+    if (!ShellExecuteExW(&sei)) {
+        DWORD e = GetLastError();
+        result.error =
+            e == ERROR_CANCELLED
+                ? L"The administrator prompt was canceled. Windhawk keeps mod "
+                  L"settings in a protected registry key, so saving needs "
+                  L"administrator approval."
+                : L"Starting the import failed (error " + std::to_wstring(e) +
+                      L").";
+    } else if (sei.hProcess) {
+        HANDLE waits[] = {sei.hProcess, g_stopEvent};
+        DWORD w = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+        DWORD exitCode = 1;
+        if (w == WAIT_OBJECT_0) {
+            GetExitCodeProcess(sei.hProcess, &exitCode);
+        }
+        CloseHandle(sei.hProcess);
+        if (w != WAIT_OBJECT_0) {
+            result.error = L"The mod was unloaded while saving.";
+        } else if (exitCode == 3) {
+            result.error =
+                L"The settings file was changed by another program before "
+                L"it could be imported, so nothing was saved.";
+        } else if (exitCode != 0) {
+            result.error = L"Importing the settings failed (exit code " +
+                           std::to_wstring(exitCode) + L").";
+        }
+    }
+    DeleteFileW(regFile.c_str());
+    if (result.error.empty()) {
+        result.changeTime = newTime;
+    }
+    return result;
+}
+
+// --- The window -------------------------------------------------------------
+
+// {3cbcf1bf-2f76-4e9c-96ab-e84b37972554}
+struct DECLSPEC_NOVTABLE IDesktopWindowXamlSourceNative : IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE AttachToWindow(HWND parentWnd) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_WindowHandle(HWND* hWnd) = 0;
+};
+constexpr IID IID_IDesktopWindowXamlSourceNative = {
+    0x3cbcf1bf,
+    0x2f76,
+    0x4e9c,
+    {0x96, 0xab, 0xe8, 0x4b, 0x37, 0x97, 0x25, 0x54}};
+
+// {e3dcd8c7-3057-4692-99c3-7b7720afda31}
+struct DECLSPEC_NOVTABLE IDesktopWindowXamlSourceNative2
+    : IDesktopWindowXamlSourceNative {
+    virtual HRESULT STDMETHODCALLTYPE PreTranslateMessage(const MSG* message,
+                                                          BOOL* result) = 0;
+};
+constexpr IID IID_IDesktopWindowXamlSourceNative2 = {
+    0xe3dcd8c7,
+    0x3057,
+    0x4692,
+    {0x99, 0xc3, 0x7b, 0x77, 0x20, 0xaf, 0xda, 0x31}};
+
+// The settings window lives in File Explorer (Start can't host XAML islands,
+// InitializeForCurrentThread / DesktopWindowXamlSource fail there with
+// ERROR_NOT_SUPPORTED). These run on the mod's settings thread in Explorer.
+// XAML objects of the settings thread: released there when it ends
+// (SettingsHostThread), never by the CRT at process exit.
+[[clang::no_destroy]] winrt::Windows::UI::Xaml::Hosting::WindowsXamlManager
+    g_xamlManager{nullptr};
+std::vector<AppEntry> g_pickerApps;  // Start apps for the app picker
+bool g_isExplorer = false;
+
+constexpr UINT kSaveDoneMsg = WM_APP + 10;
+constexpr UINT kCloseNowMsg = WM_APP + 11;
+constexpr UINT kRunLaterMsg = WM_APP + 13;
+constexpr UINT kAppsLoadedMsg = WM_APP + 14;  // lParam: std::vector<AppEntry>*
+constexpr UINT_PTR kIconTimerId = 1;
+std::atomic<bool> g_pickerAppsLoading{false};
+
+// The Windows Settings app's logo as an icon, `px` square; null if missing.
+HICON SettingsLogoIcon(int px) {
+    WCHAR path[MAX_PATH];
+    if (!GetWindowsDirectoryW(path, MAX_PATH)) {
+        return nullptr;
+    }
+    wcscat_s(path, L"\\ImmersiveControlPanel\\images\\"
+                   L"logo.targetsize-256_altform-unplated.png");
+    winrt::com_ptr<IShellItemImageFactory> factory;
+    HBITMAP bmp = nullptr;
+    if (FAILED(SHCreateItemFromParsingName(path, nullptr,
+                                           IID_PPV_ARGS(factory.put()))) ||
+        FAILED(factory->GetImage({px, px}, SIIGBF_RESIZETOFIT, &bmp)) ||
+        !bmp) {
+        return nullptr;
+    }
+    BITMAP bm{};
+    GetObjectW(bmp, sizeof(bm), &bm);
+    HBITMAP mask = CreateBitmap(bm.bmWidth, bm.bmHeight, 1, 1, nullptr);
+    ICONINFO ii{};
+    ii.fIcon = TRUE;
+    ii.hbmColor = bmp;
+    ii.hbmMask = mask;
+    HICON icon = CreateIconIndirect(&ii);
+    DeleteObject(mask);
+    DeleteObject(bmp);
+    return icon;
+}
+
+// The settings window's icons (settings thread).
+bool g_windowIconsMade = false;
+HICON g_iconBig = nullptr;
+HICON g_iconSmall = nullptr;
+
+void DestroyWindowIcons() {
+    for (HICON* icon : {&g_iconBig, &g_iconSmall}) {
+        if (*icon) {
+            DestroyIcon(*icon);
+            *icon = nullptr;
+        }
+    }
+    g_windowIconsMade = false;
+}
+
+// The settings window's taskbar identity: its own app ID (so it isn't one
+// of File Explorer's windows on the taskbar) and the Settings gear icon.
+void SetSettingsWindowIdentity(HWND hwnd) {
+    // PKEY_AppUserModel_ID
+    constexpr PROPERTYKEY kAppIdKey = {
+        {0x9F4C2855, 0x9F79, 0x4B39,
+         {0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3}},
+        5};
+    winrt::com_ptr<IPropertyStore> store;
+    if (SUCCEEDED(SHGetPropertyStoreForWindow(hwnd,
+                                              IID_PPV_ARGS(store.put())))) {
+        PROPVARIANT pv{};
+        pv.vt = VT_LPWSTR;
+        pv.pwszVal = const_cast<PWSTR>(L"Windhawk.StartMenuGroups.Settings");
+        store->SetValue(kAppIdKey, pv);
+        store->Commit();
+    }
+    // Made once, destroyed when the settings thread ends (DestroyWindowIcons).
+    if (!g_windowIconsMade) {
+        g_windowIconsMade = true;
+        g_iconBig = SettingsLogoIcon(GetSystemMetrics(SM_CXICON));
+        g_iconSmall = SettingsLogoIcon(GetSystemMetrics(SM_CXSMICON));
+        if (!g_iconBig || !g_iconSmall) {
+            // Fallback: the Settings app's icon from its executable.
+            WCHAR exe[MAX_PATH];
+            if (GetWindowsDirectoryW(exe, MAX_PATH)) {
+                wcscat_s(exe, L"\\ImmersiveControlPanel\\SystemSettings.exe");
+                HICON b = nullptr, sm = nullptr;
+                if (ExtractIconExW(exe, 0, &b, &sm, 1)) {
+                    if (!g_iconBig) {
+                        g_iconBig = b;
+                    } else if (b) {
+                        DestroyIcon(b);
+                    }
+                    if (!g_iconSmall) {
+                        g_iconSmall = sm;
+                    } else if (sm) {
+                        DestroyIcon(sm);
+                    }
+                }
+            }
+        }
+    }
+    if (g_iconBig) {
+        SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)g_iconBig);
+    }
+    if (g_iconSmall) {
+        SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)g_iconSmall);
+    }
+}
+
+bool IsDarkMode() {
+    DWORD light = 1, size = sizeof(light);
+    RegGetValueW(HKEY_CURRENT_USER,
+                 L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\"
+                 L"Personalize",
+                 L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light,
+                 &size);
+    return light == 0;
+}
+
+xm::SolidColorBrush Brush(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
+    return xm::SolidColorBrush(winrt::Windows::UI::Color{a, r, g, b});
+}
+
+wf::IInspectable Box(std::wstring_view s) {
+    return winrt::box_value(winrt::hstring(s));
+}
+
+constexpr PCWSTR kDonateUrl = L"https://buymeacoffee.com/widget/page/danrotaru";
+
+void OpenUrl(std::wstring url) {
+    RunWorker([url = std::move(url)] {
+        ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr,
+                      SW_SHOWNORMAL);
+    });
+}
+
+// Weak references to the settings window's elements are kept as
+// FrameworkElement and cast back: weak_ref<xc::Border> and the like failed to
+// resolve in File Explorer's island (the icons never loaded, renaming a
+// group did nothing), weak_ref<FrameworkElement> works.
+using WeakElement = winrt::weak_ref<FrameworkElement>;
+
+template <typename T>
+T Resolve(WeakElement const& weak) {
+    auto fe = weak.get();
+    return fe ? fe.try_as<T>() : T{nullptr};
+}
+
+class SettingsWindow {
+   public:
+    bool Create();
+    HWND Hwnd() const { return m_hwnd; }
+    // Shows a group's item (from "Edit" in Start) on the Groups page.
+    void ShowItem(int group, int item);
+    LRESULT HandleMessage(HWND, UINT, WPARAM, LPARAM);
+
+    // Lets the island handle Tab, arrow keys and accelerators.
+    bool PreTranslate(MSG const* msg) {
+        if (!m_source) {
+            return false;
+        }
+        winrt::com_ptr<IDesktopWindowXamlSourceNative2> native;
+        if (FAILED(winrt::get_unknown(m_source)->QueryInterface(
+                IID_IDesktopWindowXamlSourceNative2, native.put_void()))) {
+            return false;
+        }
+        BOOL handled = FALSE;
+        native->PreTranslateMessage(msg, &handled);
+        return handled != FALSE;
+    }
+
+   private:
+    // Building blocks
+    xc::TextBlock Text(std::wstring const& text,
+                       double size = 14,
+                       bool secondary = false);
+    xc::FontIcon Glyph(PCWSTR glyph, double size = 16);
+    xc::Border Card(FrameworkElement const& content);
+    xc::Grid SettingRow(PCWSTR glyph,
+                        std::wstring const& title,
+                        PCWSTR description,
+                        FrameworkElement const& control);
+    xc::Button IconButton(PCWSTR glyph,
+                          std::wstring const& tip,
+                          std::function<void()> onClick);
+    xc::Button TextButton(PCWSTR glyph,
+                          std::wstring const& text,
+                          std::function<void()> onClick);
+    // `refresh` receives a function that reloads the control from the value.
+    FrameworkElement FieldControl(Field const& f,
+                                  std::function<void()>* refresh);
+    xc::Button ResetButton(std::function<void()> onReset);
+    // `field` with a short explanation underneath.
+    FrameworkElement WithHint(FrameworkElement const& field,
+                              std::wstring const& hint);
+    std::vector<std::function<void()>> m_resetUpdaters;  // fields page
+    EditSettings m_defaults;  // pointed to by DescribePages(m_defaults)
+
+    // Structure
+    UIElement BuildRoot();
+    void ApplyTheme();
+    void ShowPage(std::wstring const& tag);
+    FrameworkElement BuildFieldsPage(SettingsPage const& page);
+    void BuildItemEditor();
+
+    // Groups board: the groups drawn like in Start, edited by drag
+    // and drop. Built from the settings being edited (m_model).
+    struct BoardSurface;
+    enum class DragKind { App, Group, Resize, NewApp };
+    struct DragState {
+        bool pressed = false;
+        bool active = false;  // moved far enough to be a drag
+        DragKind kind = DragKind::App;
+        int cat = -1;
+        int item = -1;
+        std::wstring app;  // NewApp: Start app name
+        wf::Point start{};
+        std::shared_ptr<BoardSurface> surface;
+        FrameworkElement source{nullptr};
+        FrameworkElement ghost{nullptr};
+        xc::Border indicator{nullptr};
+        xc::TextBlock ghostText{nullptr};
+        double scale = 1;       // zoom of the board (it's shrunk to fit)
+        wf::Rect tileBounds{};  // Resize: the tile, in surface coordinates
+        double startW = 0;      // Resize: the tile's size at the start
+        double startH = 0;
+        std::wstring originalSize;  // Resize: to restore when canceled
+        std::wstring newSize;       // Resize result
+        std::function<void()> doubleClick;  // run when the press ends
+        Input::Pointer pointer{nullptr};    // captured when the drag starts
+        wf::Point grab{};  // pointer position within the ghost
+        int targetCat = -1;
+        int targetIndex = -1;
+        // Group drag of a single app (see BuildBoardTile): dropped on the
+        // middle of another tile, its app goes into that group.
+        bool intoGroup = false;
+    };
+    FrameworkElement BuildBoardPage();
+    void RebuildBoard();
+    FrameworkElement BuildBoardTile(int ci,
+                                    std::shared_ptr<BoardSurface> const& surf);
+    FrameworkElement BuildBoardApp(EditItem const& item,
+                                   double iconSize,
+                                   bool showName,
+                                   double nameGap = 4);
+    void ShowOverflowFlyout(int ci, FrameworkElement const& anchor);
+    void RebuildFlyout();
+    void RefreshPalette();
+    void LoadIconsLater();
+    void LoadIconBatch(int gen, int count);
+    void MakeDraggable(FrameworkElement const& el,
+                       std::shared_ptr<BoardSurface> const& surf,
+                       DragKind kind,
+                       int cat,
+                       int item,
+                       std::wstring app = L"",
+                       std::function<void()> onDoubleClick = nullptr);
+    void HookSurface(std::shared_ptr<BoardSurface> const& surf);
+    void BeginInlineEdit(FrameworkElement const& anchor,
+                         std::wstring const& value,
+                         double fontSize,
+                         std::function<void(std::wstring)> commit);
+    void UpdateBoardHeading();
+    void EditBoardHeading();
+    void UpdateDrag(wf::Point p);
+    void StartDragVisuals();
+    struct AppGhostLook {
+        double width = 0, height = 0;
+        Thickness padding{};
+        double spacing = 4;
+        double fontSize = 11;
+        int maxLines = 1;
+        bool showText = true;
+        bool centered = true;
+    };
+    FrameworkElement AppGhost(FrameworkElement const& icon,
+                              std::wstring const& name,
+                              AppGhostLook const& look);
+    void EndDrag(bool drop);
+    void ApplyDrop(DragState const& d);
+    void ShowRenameFlyout(int ci, FrameworkElement const& anchor);
+    xc::MenuFlyout TileMenu(int ci, FrameworkElement const& tile);
+    xc::MenuFlyout AppMenu(int ci, int ii);
+    void RefreshGroupsUi();
+    // Details panel of the board page: the selected group and app.
+    FrameworkElement BuildBoardDetails();
+    void LoadBoardDetails();
+    void LoadBoardGroupFields();
+    void SelectBoardItem(int ci, int ii);
+    void ScheduleBoardRebuild(bool palette);
+    void RefreshBoardAfterEdit();
+    void SelectBoardGroup(int ci);
+    void RemoveGroupKeepApp(int ci);
+    void UpdateBoardSelection();
+    void DuplicateSelected();
+    void DeleteSelected();
+    void Later(std::function<void()> fn);
+
+    void OnChanged();
+    void UpdateFooter();
+
+    // Actions
+    void AddGroup();
+    void DuplicateGroup();
+    void DeleteGroup();
+    void AddItem(std::wstring const& type);  // "app", "program", "website"
+    void DuplicateItem();
+    void DeleteItem();
+    void ExportSettings();
+    void ImportSettings();
+    std::wstring Browse(PCWSTR title, bool icons);
+    void Save(bool closeAfter, bool overwrite = false);
+    void Discard();
+    void RequestClose();
+    // The App settings card, scrolled to when an app is clicked or edited.
+    winrt::weak_ref<xc::Border> m_appCard;
+    winrt::weak_ref<xc::ScrollViewer> m_pageScroll;  // the page's scrolling
+    void ScrollToAppSettings();
+    void ShowUnsavedChangesDialog();
+    void ShowConfirmDialog(std::wstring const& title,
+                           std::wstring const& text,
+                           std::wstring const& action,
+                           std::function<void()> onAction);
+    void RemoveSelectedGroup();
+    xc::ContentDialog m_closeDialog{nullptr};
+
+    EditGroup* SelectedGroup();
+    EditItem* SelectedItem();
+
+    HWND m_hwnd = nullptr;
+    HWND m_island = nullptr;
+    winrt::Windows::UI::Xaml::Hosting::DesktopWindowXamlSource m_source{
+        nullptr};
+    bool m_dark = true;
+
+    xc::Grid m_root{nullptr};
+    xc::ListView m_nav{nullptr};
+    xc::ContentControl m_pageHost{nullptr};
+    xc::TextBlock m_status{nullptr};
+    xc::Button m_saveButton{nullptr};
+    xc::Button m_discardButton{nullptr};
+
+    // Selection and the item editor (on the board page's details panel)
+    xc::StackPanel m_editor{nullptr};
+    xc::TextBlock m_appCaption{nullptr};  // the selected app's name
+    xc::ToggleSwitch GroupToggle(PCWSTR header, bool EditGroup::*field);
+    xc::Button AddAppButton();
+    void FillAppGridCombo(xc::ComboBox const& combo,
+                          std::vector<std::wstring>& values,
+                          EditGroup const* cat);
+    int m_selCat = -1;
+    int m_selItem = -1;
+    bool m_refreshing = false;
+
+    // Groups board
+    std::shared_ptr<BoardSurface> m_board;
+    xc::Border m_boardHost{nullptr};
+    winrt::weak_ref<xc::VariableSizedWrapGrid> m_boardWrap;
+    winrt::weak_ref<xc::Border> m_boardFrame;
+    // Start's width for the groups (saved by Start, see ApplyColumns), and
+    // the dashed outline showing it on the board.
+    double m_startRowWidth = 0;
+    // The Apps list next to the board: as many columns as the room the
+    // board leaves (see LayoutAppsPanel).
+    double m_boardNaturalWidth = 0;
+    winrt::weak_ref<xc::Border> m_boardCard;
+    winrt::weak_ref<xc::Grid> m_appsPanel;
+    winrt::weak_ref<winrt::Windows::UI::Xaml::Shapes::Rectangle> m_startOutline;
+    void FitBoardRow();
+    int m_boardHalves = 0;  // half cells per row of the board
+    // The board's row: as in Start, with room for a single spot wide tile
+    // without a name, which reaches half a gap further (TileBoxFor).
+    double BoardRowWidth(int halves) {
+        auto const& s = m_model;
+        bool narrowWide = std::any_of(
+            s.groups.begin(), s.groups.end(), [&](EditGroup const& c) {
+                return LayoutOf(c).spanHalfColumns == 1 &&
+                       !(s.labelsShow && ShowsLabel(c));
+            });
+        return RowFrameWidth(halves, (s.tileSize + s.gapX) / 2.0, s.gapX) +
+               (narrowWide ? s.gapX / 2.0 : 0);
+    }
+    // A group's layout on the board: no wider than its row, as in Start.
+    GroupLayout BoardLayoutOf(EditGroup const& g) {
+        GroupLayout l = LayoutOf(g);
+        if (m_boardHalves > 0 && l.spanHalfColumns > m_boardHalves) {
+            l.spanHalfColumns = m_boardHalves;
+        }
+        return l;
+    }
+    // Drop target of a Start app on the board's empty space: a new group.
+    static constexpr int kNewGroupTarget = -2;
+    void LayoutAppsPanel();
+    std::shared_ptr<BoardSurface> m_flyoutSurface;
+    xc::Border m_flyoutHost{nullptr};
+    int m_flyoutCat = -1;
+    winrt::weak_ref<xc::Flyout> m_overflowFlyout;  // the opened group
+    void HandDragToBoard(wf::Point p);
+    xc::StackPanel m_paletteList{nullptr};
+    xc::TextBox m_paletteSearch{nullptr};
+    // The All Apps list as built: for which search and list of apps, and
+    // its cells (index into g_pickerApps), updated in place.
+    struct PaletteCell {
+        xc::Border cell;
+        xc::TextBlock name;
+        size_t app;
+    };
+    std::vector<PaletteCell> m_paletteCells;
+    std::wstring m_paletteQuery;
+    size_t m_paletteAppCount = 0;
+    bool m_paletteBuilt = false;
+    std::deque<std::pair<xc::Border, std::wstring>>
+        m_pendingIcons;
+    int m_iconGeneration = 0;
+    std::vector<std::function<void()>> m_later;  // see Later()
+    xc::Border m_boardHeadingHost{nullptr};
+    winrt::weak_ref<FrameworkElement> m_lastClickEl;
+    ULONGLONG m_lastClickTime = 0;
+    int m_boardSelCat = -1;  // group with the accent border
+    int m_labelClickCat = -1;  // last clicked group name (double click)
+    // Details panel (board page).
+    xc::TextBox m_boardCatName{nullptr};
+    xc::ComboBox m_boardTileSize{nullptr};
+    xc::ToggleSwitch m_boardCatShowNames{nullptr};
+    xc::ToggleSwitch m_boardCatShowLabel{nullptr};
+    xc::ToggleSwitch m_boardCatShowBackground{nullptr};
+    xc::ComboBox m_boardAppGrid{nullptr};
+    std::vector<std::wstring> m_boardAppGridValues;
+    std::vector<std::wstring> m_boardTileSizeValues;
+    std::vector<xc::Control> m_boardCatControls;   // enabled with a group
+    std::vector<xc::Control> m_boardItemControls;  // enabled with an app
+    // Board page toolbar: acts on the selected app, or else the group.
+    xc::Button m_boardAddApp{nullptr};
+    xc::Button m_boardDup{nullptr};
+    xc::Button m_boardDel{nullptr};
+    int m_detailsCat = -2, m_detailsItem = -2;     // what the panel shows
+    bool m_boardRebuildQueued = false;
+    bool m_paletteRebuildQueued = false;
+    ULONGLONG m_labelClickTime = 0;
+    DragState m_drag;
+
+    EditSettings m_model;
+    std::vector<RegEntry> m_savedEntries;
+    // Windhawk's SettingsChangeTime when the settings were read: a newer one
+    // at Save means they were changed in Windhawk meanwhile.
+    DWORD m_loadedChangeTime = 0;
+    std::vector<std::wstring> m_pageTags;
+    std::wstring m_page;
+    bool m_dirty = false;
+    bool m_saving = false;
+    bool m_closeAfterSave = false;
+};
+
+SettingsWindow* g_settingsWindow = nullptr;  // settings thread only
+bool g_settingsClassRegistered = false;
+
+PCWSTR SettingsClassName() {
+    static std::wstring name =
+        std::wstring(L"WindhawkSettings_") + WH_MOD_ID;
+    return name.c_str();
+}
+
+LRESULT CALLBACK SettingsWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_NCCREATE) {
+        SetWindowLongPtrW(hWnd, GWLP_USERDATA,
+                          (LONG_PTR)((CREATESTRUCTW*)lp)->lpCreateParams);
+    }
+    auto* w = (SettingsWindow*)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
+    LRESULT r;
+    try {
+        r = w ? w->HandleMessage(hWnd, msg, wp, lp)
+              : DefWindowProcW(hWnd, msg, wp, lp);
+    } catch (...) {
+        Wh_Log(L"Settings window error %08X", winrt::to_hresult());
+        r = DefWindowProcW(hWnd, msg, wp, lp);
+    }
+    if (msg == WM_NCDESTROY && w) {
+        SetWindowLongPtrW(hWnd, GWLP_USERDATA, 0);
+        if (g_settingsWindow == w) {
+            g_settingsWindow = nullptr;
+        }
+        delete w;
+    }
+    return r;
+}
+
+bool SettingsWindow::Create() {
+    m_loadedChangeTime = ReadSettingsChangeTime();
+    m_model = ReadEditSettings();
+    m_savedEntries = BuildRegEntries(m_model);
+    // Known before the pages are built, so they're built once, in the right
+    // colors (ApplyTheme rebuilds the page only when the theme changes).
+    m_dark = IsDarkMode();
+
+    HMODULE self;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&SettingsWndProc, &self);
+
+    POINT pt{};
+    GetCursorPos(&pt);
+    HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi{sizeof(mi)};
+    GetMonitorInfoW(mon, &mi);
+    RECT work = mi.rcWork;
+    // The system DPI is fine for the initial size; WM_DPICHANGED fixes up a
+    // move to a monitor with a different scale.
+    UINT dpi = GetDpiForSystem();
+    // Wide enough for the board (as wide as Start, which saves its width)
+    // and two columns of All Apps next to it: the navigation pane, the
+    // page's and the board card's padding, the gap, the apps and slack.
+    int startWidth = Wh_GetIntValue(kStartRowWidthValue, 0);
+    if (startWidth <= 0) {
+        startWidth = (int)kReferenceRowWidth;
+    }
+    int wantDips = std::max(1140, startWidth + 232 + 64 + 48 + 24 + 24 + 2 * 92 +
+                                      26 + 48);
+    int ww = std::min(MulDiv(wantDips, dpi, 96), (int)(work.right - work.left));
+    int wh = std::min(MulDiv(820, dpi, 96), (int)(work.bottom - work.top));
+
+    m_hwnd = CreateWindowExW(
+        0, SettingsClassName(), L"Start Menu Groups Settings",
+        WS_OVERLAPPEDWINDOW, work.left + (work.right - work.left - ww) / 2,
+        work.top + (work.bottom - work.top - wh) / 2, ww, wh, nullptr, nullptr,
+        self, this);
+    if (!m_hwnd) {
+        Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
+        return false;
+    }
+
+    // A taskbar button of its own, not grouped with File Explorer (whose
+    // process hosts the window): its own app ID, and the Windows Settings
+    // gear as its icon (as the Taskbar Fluent Media Player mod does).
+    SetSettingsWindowIdentity(m_hwnd);
+
+    try {
+        if (!g_xamlManager) {
+            g_xamlManager = winrt::Windows::UI::Xaml::Hosting::
+                WindowsXamlManager::InitializeForCurrentThread();
+        }
+        m_source = winrt::Windows::UI::Xaml::Hosting::DesktopWindowXamlSource();
+        winrt::com_ptr<IDesktopWindowXamlSourceNative> native;
+        winrt::check_hresult(winrt::get_unknown(m_source)->QueryInterface(
+            IID_IDesktopWindowXamlSourceNative, native.put_void()));
+        winrt::check_hresult(native->AttachToWindow(m_hwnd));
+        winrt::check_hresult(native->get_WindowHandle(&m_island));
+        m_source.Content(BuildRoot());
+        RECT rc;
+        GetClientRect(m_hwnd, &rc);
+        SetWindowPos(m_island, nullptr, 0, 0, rc.right, rc.bottom,
+                     SWP_SHOWWINDOW | SWP_NOZORDER);
+    } catch (...) {
+        HRESULT hr = winrt::to_hresult();
+        Wh_Log(L"Creating the settings UI failed: %08X", hr);
+        WCHAR text[256];
+        swprintf(text, ARRAYSIZE(text),
+                 L"The settings window couldn't be created (error %08X).\n\n"
+                 L"The settings can still be changed on the mod's Settings "
+                 L"tab in Windhawk.",
+                 (unsigned)hr);
+        MessageBoxW(m_hwnd, text, L"Start Menu Groups",
+                    MB_ICONERROR | MB_SETFOREGROUND);
+        DestroyWindow(m_hwnd);
+        return false;
+    }
+
+    ApplyTheme();
+    ShowWindow(m_hwnd, SW_SHOWNORMAL);
+    SetForegroundWindow(m_hwnd);
+    return true;
+}
+
+LRESULT SettingsWindow::HandleMessage(HWND hWnd,
+                                      UINT msg,
+                                      WPARAM wp,
+                                      LPARAM lp) {
+    switch (msg) {
+        case WM_SIZE:
+            if (m_island) {
+                SetWindowPos(m_island, nullptr, 0, 0, LOWORD(lp), HIWORD(lp),
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            return 0;
+        case WM_GETMINMAXINFO: {
+            UINT dpi = GetDpiForWindow(hWnd);
+            auto* info = (MINMAXINFO*)lp;
+            info->ptMinTrackSize.x = MulDiv(820, dpi ? dpi : 96, 96);
+            info->ptMinTrackSize.y = MulDiv(540, dpi ? dpi : 96, 96);
+            return 0;
+        }
+        case WM_DPICHANGED: {
+            auto* r = (RECT*)lp;
+            SetWindowPos(hWnd, nullptr, r->left, r->top, r->right - r->left,
+                         r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
+            return 0;
+        }
+        case WM_ERASEBKGND: {
+            // The island's color until it has drawn, instead of white.
+            RECT rc;
+            GetClientRect(hWnd, &rc);
+            HBRUSH brush = CreateSolidBrush(m_dark ? RGB(0x20, 0x20, 0x20)
+                                                   : RGB(0xF3, 0xF3, 0xF3));
+            FillRect((HDC)wp, &rc, brush);
+            DeleteObject(brush);
+            return 1;
+        }
+        case WM_TIMER:
+            if (wp == kIconTimerId) {
+                LoadIconBatch(m_iconGeneration, 6);
+            }
+            return 0;
+        case kAppsLoadedMsg: {
+            std::unique_ptr<std::vector<AppEntry>> apps(
+                (std::vector<AppEntry>*)lp);
+            g_pickerAppsLoading = false;
+            g_pickerApps = std::move(*apps);
+            // Icons and suggestions of the shown page need the apps.
+            m_paletteBuilt = false;  // a new list of apps
+            if (m_page == L"board") {
+                RebuildBoard();
+                RefreshPalette();
+            }
+            return 0;
+        }
+        case WM_SETFOCUS:
+            if (m_island) {
+                SetFocus(m_island);
+            }
+            return 0;
+        case WM_SETTINGCHANGE:
+            if (lp && wcscmp((PCWSTR)lp, L"ImmersiveColorSet") == 0) {
+                ApplyTheme();
+            }
+            break;
+        case WM_CLOSE:
+            RequestClose();
+            return 0;
+        case kCloseNowMsg:
+            DestroyWindow(hWnd);
+            return 0;
+        case kRunLaterMsg: {
+            auto queue = std::move(m_later);
+            m_later.clear();
+            for (auto& fn : queue) {
+                fn();
+            }
+            return 0;
+        }
+        case kSaveDoneMsg: {
+            std::unique_ptr<SaveResult> result((SaveResult*)lp);
+            auto const& error = result->error;
+            m_saving = false;
+            if (error.empty()) {
+                m_loadedChangeTime = result->changeTime;
+                m_savedEntries = BuildRegEntries(m_model);
+                OnChanged();
+                m_status.Text(L"Saved. Start has been updated.");
+                if (m_closeAfterSave) {
+                    DestroyWindow(hWnd);
+                    return 0;
+                }
+            } else {
+                m_status.Text(error);
+                UpdateFooter();
+            }
+            return 0;
+        }
+        case WM_DESTROY:
+            if (m_source) {
+                try {
+                    m_source.Close();
+                } catch (...) {
+                }
+                m_source = nullptr;
+            }
+            m_island = nullptr;
+            return 0;
+    }
+    return DefWindowProcW(hWnd, msg, wp, lp);
+}
+
+void SettingsWindow::ApplyTheme() {
+    bool wasDark = m_dark;
+    m_dark = IsDarkMode();
+    BOOL darkCaption = m_dark;
+    DwmSetWindowAttribute(m_hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */,
+                          &darkCaption, sizeof(darkCaption));
+    COLORREF caption = m_dark ? RGB(0x20, 0x20, 0x20) : RGB(0xF3, 0xF3, 0xF3);
+    DwmSetWindowAttribute(m_hwnd, 35 /* DWMWA_CAPTION_COLOR */, &caption,
+                          sizeof(caption));
+    if (m_root) {
+        m_root.RequestedTheme(m_dark ? ElementTheme::Dark : ElementTheme::Light);
+        m_root.Background(m_dark ? Brush(255, 0x20, 0x20, 0x20)
+                                 : Brush(255, 0xF3, 0xF3, 0xF3));
+        // Re-render the current page with the new card colors.
+        if (!m_page.empty() && m_dark != wasDark) {
+            ShowPage(m_page);
+        }
+    }
+}
+
+// --- Building blocks --------------------------------------------------------
+
+xc::TextBlock SettingsWindow::Text(std::wstring const& text,
+                                   double size,
+                                   bool secondary) {
+    xc::TextBlock t;
+    t.Text(text);
+    t.FontSize(size);
+    t.TextWrapping(TextWrapping::Wrap);
+    if (secondary) {
+        t.Opacity(0.72);
+    }
+    return t;
+}
+
+xc::FontIcon SettingsWindow::Glyph(PCWSTR glyph, double size) {
+    xc::FontIcon icon;
+    icon.Glyph(glyph);
+    icon.FontSize(size);
+    icon.FontFamily(xm::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets"));
+    return icon;
+}
+
+xc::Border SettingsWindow::Card(FrameworkElement const& content) {
+    xc::Border b;
+    b.Background(m_dark ? Brush(0x0D, 255, 255, 255)
+                        : Brush(0xB3, 255, 255, 255));
+    b.BorderBrush(m_dark ? Brush(0x19, 0, 0, 0) : Brush(0x0F, 0, 0, 0));
+    b.BorderThickness(ThicknessHelper::FromUniformLength(1));
+    b.CornerRadius(CornerRadiusHelper::FromUniformRadius(4));
+    b.Padding(ThicknessHelper::FromLengths(16, 12, 16, 12));
+    b.Margin(ThicknessHelper::FromLengths(0, 0, 0, 4));
+    b.MinHeight(66);
+    b.Child(content);
+    return b;
+}
+
+xc::Grid SettingsWindow::SettingRow(PCWSTR glyph,
+                                    std::wstring const& title,
+                                    PCWSTR description,
+                                    FrameworkElement const& control) {
+    xc::Grid g;
+    g.ColumnSpacing(16);
+    for (auto w : {GridLengthHelper::Auto(),
+                   GridLengthHelper::FromValueAndType(1, GridUnitType::Star),
+                   GridLengthHelper::Auto()}) {
+        xc::ColumnDefinition cd;
+        cd.Width(w);
+        g.ColumnDefinitions().Append(cd);
+    }
+    auto icon = Glyph(glyph ? glyph : L"\uE713", 18);
+    icon.VerticalAlignment(VerticalAlignment::Center);
+    g.Children().Append(icon);
+
+    xc::StackPanel text;
+    text.VerticalAlignment(VerticalAlignment::Center);
+    text.Children().Append(Text(title, 14));
+    if (description) {
+        text.Children().Append(Text(description, 12, true));
+    }
+    xc::Grid::SetColumn(text, 1);
+    g.Children().Append(text);
+
+    control.VerticalAlignment(VerticalAlignment::Center);
+    xc::Grid::SetColumn(control, 2);
+    g.Children().Append(control);
+    return g;
+}
+
+xc::Button SettingsWindow::IconButton(PCWSTR glyph,
+                                      std::wstring const& tip,
+                                      std::function<void()> onClick) {
+    xc::Button b;
+    b.Content(Glyph(glyph, 14));
+    b.Padding(ThicknessHelper::FromLengths(10, 7, 10, 7));
+    xc::ToolTipService::SetToolTip(b, Box(tip));
+    b.Click([onClick](auto&&, auto&&) { onClick(); });
+    return b;
+}
+
+xc::Button SettingsWindow::TextButton(PCWSTR glyph,
+                                      std::wstring const& text,
+                                      std::function<void()> onClick) {
+    xc::Button b;
+    xc::StackPanel sp;
+    sp.Orientation(xc::Orientation::Horizontal);
+    sp.Spacing(8);
+    if (glyph) {
+        sp.Children().Append(Glyph(glyph, 14));
+    }
+    sp.Children().Append(Text(text, 14));
+    b.Content(sp);
+    b.Click([onClick](auto&&, auto&&) { onClick(); });
+    return b;
+}
+
+FrameworkElement SettingsWindow::FieldControl(Field const& f,
+                                              std::function<void()>* refresh) {
+    switch (f.kind) {
+        case FieldKind::Bool: {
+            auto* v = (bool*)f.value;
+            xc::ToggleSwitch t;
+            t.IsOn(*v);
+            t.MinWidth(0);
+            t.OnContent(Box(L"On"));
+            t.OffContent(Box(L"Off"));
+            t.Toggled([this, v, t](auto&&, auto&&) {
+                *v = t.IsOn();
+                OnChanged();
+            });
+            *refresh = [v, t] { t.IsOn(*v); };
+            return t;
+        }
+        case FieldKind::Int: {
+            auto* v = (int*)f.value;
+            xc::StackPanel sp;
+            sp.Orientation(xc::Orientation::Horizontal);
+            sp.Spacing(12);
+            xc::Slider slider;
+            slider.Width(200);
+            slider.Minimum(f.min);
+            slider.Maximum(f.max);
+            slider.StepFrequency(1);
+            slider.Value(*v);
+            slider.VerticalAlignment(VerticalAlignment::Center);
+            xc::TextBox box;
+            box.Width(72);
+            box.Text(std::to_wstring(*v));
+            int lo = f.min, hi = f.max;
+            auto syncing = std::make_shared<bool>(false);
+            slider.ValueChanged([this, v, box, syncing](auto&&,
+                                                         auto const& e) {
+                if (*syncing) {
+                    return;
+                }
+                *syncing = true;
+                *v = (int)std::lround(e.NewValue());
+                box.Text(std::to_wstring(*v));
+                *syncing = false;
+                OnChanged();
+            });
+            box.LostFocus([this, v, box, slider, lo, hi, syncing](auto&&,
+                                                                  auto&&) {
+                int n = (int)Clamp(_wtoi(box.Text().c_str()), lo, hi);
+                *syncing = true;
+                *v = n;
+                box.Text(std::to_wstring(n));
+                slider.Value(n);
+                *syncing = false;
+                OnChanged();
+            });
+            sp.Children().Append(slider);
+            sp.Children().Append(box);
+            *refresh = [v, box, slider, syncing] {
+                *syncing = true;
+                slider.Value(*v);
+                box.Text(std::to_wstring(*v));
+                *syncing = false;
+            };
+            return sp;
+        }
+        case FieldKind::String: {
+            auto* v = (std::wstring*)f.value;
+            xc::TextBox box;
+            box.Width(240);
+            box.Text(*v);
+            box.TextChanged([this, v, box](auto&&, auto&&) {
+                *v = box.Text();
+                OnChanged();
+            });
+            *refresh = [v, box] { box.Text(*v); };
+            return box;
+        }
+        case FieldKind::Choice: {
+            auto* v = (std::wstring*)f.value;
+            xc::ComboBox combo;
+            combo.MinWidth(240);
+            int sel = 0;
+            for (size_t i = 0; i < f.options.size(); i++) {
+                combo.Items().Append(Box(f.options[i].second));
+                if (f.options[i].first == *v) {
+                    sel = (int)i;
+                }
+            }
+            combo.SelectedIndex(sel);
+            auto values = std::make_shared<std::vector<std::wstring>>();
+            for (auto& o : f.options) {
+                values->push_back(o.first);
+            }
+            combo.SelectionChanged([this, v, combo, values](auto&&, auto&&) {
+                int i = combo.SelectedIndex();
+                if (i >= 0 && i < (int)values->size()) {
+                    *v = (*values)[i];
+                    OnChanged();
+                }
+            });
+            *refresh = [v, combo, values] {
+                for (size_t i = 0; i < values->size(); i++) {
+                    if ((*values)[i] == *v) {
+                        combo.SelectedIndex((int)i);
+                    }
+                }
+            };
+            return combo;
+        }
+        case FieldKind::Preset: {
+            auto* s = (EditSettings*)f.value;
+            xc::ComboBox combo;
+            combo.MinWidth(240);
+            for (auto const& p : kSizePresets) {
+                combo.Items().Append(Box(p.name));
+            }
+            constexpr int count = (int)ARRAYSIZE(kSizePresets);
+            auto syncing = std::make_shared<bool>(false);
+            // Shows the preset of the current values.
+            auto sync = [s, combo, syncing] {
+                int want = CurrentPreset(*s);
+                if (combo.SelectedIndex() != want) {
+                    *syncing = true;
+                    combo.SelectedIndex(want);
+                    *syncing = false;
+                }
+            };
+            sync();
+            combo.SelectionChanged([this, s, combo, syncing](auto&&, auto&&) {
+                int i = combo.SelectedIndex();
+                if (*syncing || i < 0 || i >= count) {
+                    return;
+                }
+                ApplyPreset(*s, kSizePresets[i]);
+                OnChanged();
+                // Rebuild the page so the other fields show the new values
+                // (not from within this handler, the combo box is on it).
+                Later([this] { ShowPage(m_page); });
+            });
+            *refresh = sync;
+            return combo;
+        }
+    }
+    *refresh = [] {};
+    return xc::TextBlock();
+}
+
+xc::Button SettingsWindow::ResetButton(std::function<void()> onReset) {
+    xc::Button b;
+    b.Content(Glyph(L"", 14));  // Undo
+    b.Padding(ThicknessHelper::FromLengths(8, 6, 8, 6));
+    b.Background(xm::SolidColorBrush(winrt::Windows::UI::Colors::Transparent()));
+    b.BorderThickness(ThicknessHelper::FromUniformLength(0));
+    b.VerticalAlignment(VerticalAlignment::Center);
+    xc::ToolTipService::SetToolTip(b, Box(L"Reset to default"));
+    b.Click([onReset](auto&&, auto&&) { onReset(); });
+    return b;
+}
+
+FrameworkElement SettingsWindow::WithHint(FrameworkElement const& field,
+                                          std::wstring const& hint) {
+    xc::StackPanel sp;
+    sp.Spacing(4);
+    sp.Children().Append(field);
+    auto text = Text(hint, 12, true);
+    text.Margin(ThicknessHelper::FromLengths(2, 0, 0, 0));
+    sp.Children().Append(text);
+    return sp;
+}
+
+bool FieldValueEquals(Field const& a, Field const& b) {
+    switch (a.kind) {
+        case FieldKind::Bool:
+            return *(bool*)a.value == *(bool*)b.value;
+        case FieldKind::Int:
+            return *(int*)a.value == *(int*)b.value;
+        default:
+            return SplitLines(*(std::wstring*)a.value) ==
+                   SplitLines(*(std::wstring*)b.value);
+    }
+}
+
+void CopyFieldValue(Field const& to, Field const& from) {
+    switch (to.kind) {
+        case FieldKind::Bool:
+            *(bool*)to.value = *(bool*)from.value;
+            break;
+        case FieldKind::Int:
+            *(int*)to.value = *(int*)from.value;
+            break;
+        default:
+            *(std::wstring*)to.value = *(std::wstring*)from.value;
+            break;
+    }
+}
+
+// --- Structure --------------------------------------------------------------
+
+UIElement SettingsWindow::BuildRoot() {
+    m_root = xc::Grid();
+    // Delete on the Groups page removes the selected app, or else the
+    // selected group (as the toolbar's Delete does). Not while typing in a
+    // field, where it deletes text; also when something handled it already
+    // (e.g. the navigation list having the focus).
+    m_root.AddHandler(
+        UIElement::KeyDownEvent(),
+        winrt::box_value(Input::KeyEventHandler(
+            [this](wf::IInspectable const&,
+                   Input::KeyRoutedEventArgs const& e) {
+                if (e.Key() != winrt::Windows::System::VirtualKey::Delete ||
+                    m_page != L"board" || m_closeDialog || !m_root ||
+                    !m_root.XamlRoot()) {
+                    return;
+                }
+                auto focused =
+                    Input::FocusManager::GetFocusedElement(m_root.XamlRoot());
+                if (focused && (focused.try_as<xc::TextBox>() ||
+                                focused.try_as<xc::AutoSuggestBox>() ||
+                                focused.try_as<xc::ComboBox>() ||
+                                focused.try_as<xc::PasswordBox>())) {
+                    return;
+                }
+                e.Handled(true);
+                Later([this] { DeleteSelected(); });
+            })),
+        true);
+    xc::ColumnDefinition paneCol;
+    paneCol.Width(GridLengthHelper::FromPixels(232));
+    m_root.ColumnDefinitions().Append(paneCol);
+    xc::ColumnDefinition contentCol;
+    contentCol.Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+    m_root.ColumnDefinitions().Append(contentCol);
+
+    // Navigation pane.
+    xc::Grid pane;
+    pane.Padding(ThicknessHelper::FromLengths(8, 16, 8, 16));
+    xc::RowDefinition r0, r1, r2;
+    r0.Height(GridLengthHelper::Auto());
+    r1.Height(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+    r2.Height(GridLengthHelper::Auto());
+    pane.RowDefinitions().Append(r0);
+    pane.RowDefinitions().Append(r1);
+    pane.RowDefinitions().Append(r2);
+
+    xc::StackPanel title;
+    title.Orientation(xc::Orientation::Horizontal);
+    title.Spacing(12);
+    title.Margin(ThicknessHelper::FromLengths(12, 0, 0, 20));
+    auto titleText = Text(L"Start Menu Groups", 18);
+    titleText.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    title.Children().Append(titleText);
+    pane.Children().Append(title);
+
+    m_nav = xc::ListView();
+    m_nav.SelectionMode(xc::ListViewSelectionMode::Single);
+    xc::Grid::SetRow(m_nav, 1);
+    auto addNav = [&](PCWSTR tag, PCWSTR glyph, PCWSTR text) {
+        xc::ListViewItem item;
+        xc::StackPanel sp;
+        sp.Orientation(xc::Orientation::Horizontal);
+        sp.Spacing(14);
+        sp.Children().Append(Glyph(glyph, 16));
+        sp.Children().Append(Text(text, 14));
+        item.Content(sp);
+        item.Height(40);
+        m_nav.Items().Append(item);
+        m_pageTags.push_back(tag);
+    };
+    addNav(L"board", L"\uF0E2", L"Groups");
+    for (auto& page : DescribePages(m_model)) {
+        addNav(page.tag, page.glyph, page.title);
+    }
+    m_nav.SelectionChanged([this](auto&&, auto&&) {
+        int i = m_nav.SelectedIndex();
+        if (i >= 0 && i < (int)m_pageTags.size()) {
+            ShowPage(m_pageTags[i]);
+        }
+    });
+    pane.Children().Append(m_nav);
+
+    // Pane footer: Import / Export, Donate and the credit line, as in the
+    // Explorer Command Bar mod.
+    auto stretch = [](xc::Button b) {
+        b.HorizontalAlignment(HorizontalAlignment::Stretch);
+        b.HorizontalContentAlignment(HorizontalAlignment::Center);
+        return b;
+    };
+    xc::Grid transfer;
+    transfer.ColumnSpacing(8);
+    for (int k = 0; k < 2; k++) {
+        xc::ColumnDefinition cd;
+        cd.Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+        transfer.ColumnDefinitions().Append(cd);
+    }
+    auto importButton =
+        stretch(TextButton(nullptr, L"Import", [this] { ImportSettings(); }));
+    xc::ToolTipService::SetToolTip(importButton,
+                                   Box(L"Import settings from a file"));
+    transfer.Children().Append(importButton);
+    auto exportButton =
+        stretch(TextButton(nullptr, L"Export", [this] { ExportSettings(); }));
+    xc::ToolTipService::SetToolTip(exportButton,
+                                   Box(L"Export all settings to a file"));
+    xc::Grid::SetColumn(exportButton, 1);
+    transfer.Children().Append(exportButton);
+
+    auto donateButton =
+        stretch(TextButton(nullptr, L"Donate", [] { OpenUrl(kDonateUrl); }));
+    xc::ToolTipService::SetToolTip(
+        donateButton, Box(L"Support the development of this mod"));
+
+    // An inline Hyperlink can crash File Explorer's XAML when clicked, so the
+    // author link is a HyperlinkButton next to the text.
+    xc::StackPanel credit;
+    credit.Orientation(xc::Orientation::Horizontal);
+    credit.HorizontalAlignment(HorizontalAlignment::Center);
+    auto creditText = Text(L"", 12, true);
+    creditText.TextWrapping(TextWrapping::NoWrap);
+    creditText.VerticalAlignment(VerticalAlignment::Center);
+    winrt::Windows::UI::Xaml::Documents::Run createdWith;
+#ifdef WH_MOD_VERSION
+    createdWith.Text(L"v" WH_MOD_VERSION L" | Created with ");
+#else
+    createdWith.Text(L"Created with ");
+#endif
+    creditText.Inlines().Append(createdWith);
+    winrt::Windows::UI::Xaml::Documents::Run heart;
+    heart.Text(L"\u2665");
+    heart.Foreground(Brush(255, 0xF0, 0x4A, 0x5E));
+    creditText.Inlines().Append(heart);
+    winrt::Windows::UI::Xaml::Documents::Run by;
+    by.Text(L" by\u00A0");
+    creditText.Inlines().Append(by);
+    credit.Children().Append(creditText);
+    xc::HyperlinkButton authorLink;
+    xc::TextBlock authorName;
+    authorName.Text(L"DanRotaru");
+    authorName.FontSize(12);
+    authorName.TextDecorations(
+        winrt::Windows::UI::Text::TextDecorations::Underline);
+    authorLink.Content(authorName);
+    authorLink.Padding(ThicknessHelper::FromUniformLength(0));
+    authorLink.MinHeight(0);
+    authorLink.VerticalAlignment(VerticalAlignment::Center);
+    xc::ToolTipService::SetToolTip(authorLink, Box(L"Developer homepage"));
+    authorLink.Click([](auto&&, auto&&) {
+        OpenUrl(L"https://dan13.me/?utm_source=start-menu-groups");
+    });
+    credit.Children().Append(authorLink);
+
+    xc::StackPanel paneFooter;
+    paneFooter.Spacing(8);
+    paneFooter.Margin(ThicknessHelper::FromLengths(8, 12, 8, 0));
+    paneFooter.Children().Append(transfer);
+    paneFooter.Children().Append(donateButton);
+    credit.Margin(ThicknessHelper::FromLengths(0, 4, 0, 0));
+    paneFooter.Children().Append(credit);
+    xc::Grid::SetRow(paneFooter, 2);
+    pane.Children().Append(paneFooter);
+
+    m_root.Children().Append(pane);
+
+    // Content area: page + footer.
+    xc::Grid content;
+    xc::Grid::SetColumn(content, 1);
+    xc::RowDefinition c0, c1;
+    c0.Height(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+    c1.Height(GridLengthHelper::Auto());
+    content.RowDefinitions().Append(c0);
+    content.RowDefinitions().Append(c1);
+
+    m_pageHost = xc::ContentControl();
+    m_pageHost.HorizontalContentAlignment(HorizontalAlignment::Stretch);
+    m_pageHost.VerticalContentAlignment(VerticalAlignment::Stretch);
+    content.Children().Append(m_pageHost);
+
+    xc::Grid footer;
+    footer.Padding(ThicknessHelper::FromLengths(32, 12, 32, 12));
+    footer.ColumnSpacing(8);
+    for (auto w : {GridLengthHelper::FromValueAndType(1, GridUnitType::Star),
+                   GridLengthHelper::Auto(), GridLengthHelper::Auto()}) {
+        xc::ColumnDefinition cd;
+        cd.Width(w);
+        footer.ColumnDefinitions().Append(cd);
+    }
+    m_status = Text(L"", 12, true);
+    m_status.VerticalAlignment(VerticalAlignment::Center);
+    footer.Children().Append(m_status);
+    m_discardButton =
+        TextButton(nullptr, L"Discard changes", [this] { Discard(); });
+    xc::Grid::SetColumn(m_discardButton, 1);
+    footer.Children().Append(m_discardButton);
+    m_saveButton = TextButton(L"\uE74E", L"Save", [this] { Save(false); });
+    try {
+        if (auto style = Application::Current().Resources().TryLookup(
+                Box(L"AccentButtonStyle"))) {
+            m_saveButton.Style(style.as<Style>());
+        }
+    } catch (...) {
+    }
+    xc::Grid::SetColumn(m_saveButton, 2);
+    footer.Children().Append(m_saveButton);
+    xc::Grid::SetRow(footer, 1);
+    content.Children().Append(footer);
+
+    m_root.Children().Append(content);
+
+    m_nav.SelectedIndex(0);
+    UpdateFooter();
+    return m_root;
+}
+
+void SettingsWindow::ShowPage(std::wstring const& tag) {
+    m_page = tag;
+    m_resetUpdaters.clear();
+    xc::ScrollViewer sv;
+    sv.VerticalScrollBarVisibility(xc::ScrollBarVisibility::Auto);
+    sv.Padding(ThicknessHelper::FromLengths(32, 24, 32, 16));
+    m_board = nullptr;
+    m_boardHost = nullptr;
+    // Controls of the other pages (they're built again with their page).
+    m_editor = nullptr;
+    m_appCaption = nullptr;
+    m_appCard = nullptr;
+    m_boardCatName = nullptr;
+    m_boardTileSize = nullptr;
+    m_boardCatShowNames = nullptr;
+    m_boardCatShowLabel = nullptr;
+    m_boardCatShowBackground = nullptr;
+    m_boardAppGrid = nullptr;
+    m_boardCatControls.clear();
+    m_boardItemControls.clear();
+    m_detailsCat = m_detailsItem = -2;
+    m_paletteList = nullptr;
+    m_paletteSearch = nullptr;
+    m_paletteCells.clear();
+    m_paletteBuilt = false;
+    m_boardHeadingHost = nullptr;
+    m_pendingIcons.clear();
+    m_iconGeneration++;  // stop applying icons to the old page
+    if (tag == L"board") {
+        sv.Content(BuildBoardPage());
+    } else {
+        for (auto& page : DescribePages(m_model)) {
+            if (tag == page.tag) {
+                sv.Content(BuildFieldsPage(page));
+            }
+        }
+    }
+    m_pageHost.Content(sv);
+    m_pageScroll = sv;
+}
+
+FrameworkElement SettingsWindow::BuildFieldsPage(SettingsPage const& page) {
+    xc::StackPanel sp;
+    sp.MaxWidth(1000);
+    auto title = Text(page.title, 28);
+    title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    sp.Children().Append(title);
+    auto desc = Text(page.description, 14, true);
+    desc.Margin(ThicknessHelper::FromLengths(0, 4, 0, 20));
+    sp.Children().Append(desc);
+    m_resetUpdaters.clear();
+    // The same page described over the defaults, to compare and reset.
+    std::vector<Field> defaults;
+    for (auto& p : DescribePages(m_defaults)) {
+        if (std::wstring_view(p.tag) == page.tag) {
+            defaults = p.fields;
+        }
+    }
+    for (size_t i = 0; i < page.fields.size(); i++) {
+        Field f = page.fields[i];
+        if (f.hidden) {
+            continue;
+        }
+        auto refresh = std::make_shared<std::function<void()>>();
+        auto control = FieldControl(f, refresh.get());
+
+        xc::StackPanel right;
+        right.Orientation(xc::Orientation::Horizontal);
+        right.Spacing(4);
+        if (f.kind == FieldKind::Preset) {
+            // No reset button; follows the values edited elsewhere.
+            m_resetUpdaters.push_back([refresh] { (*refresh)(); });
+        } else if (i < defaults.size()) {
+            Field d = defaults[i];
+            auto reset = ResetButton([this, f, d, refresh] {
+                CopyFieldValue(f, d);
+                (*refresh)();
+                OnChanged();
+            });
+            // Shown only while the value differs from the default.
+            auto update = [f, d, reset] {
+                reset.Visibility(FieldValueEquals(f, d) ? Visibility::Collapsed
+                                                        : Visibility::Visible);
+            };
+            update();
+            m_resetUpdaters.push_back(update);
+            right.Children().Append(reset);
+        }
+        right.Children().Append(control);
+        sp.Children().Append(
+            Card(SettingRow(f.glyph, f.title, f.description, right)));
+    }
+    return sp;
+}
+
+// --- Selection and the item editor -------------------------------------
+
+EditGroup* SettingsWindow::SelectedGroup() {
+    return m_selCat >= 0 && m_selCat < (int)m_model.groups.size()
+               ? &m_model.groups[m_selCat]
+               : nullptr;
+}
+
+EditItem* SettingsWindow::SelectedItem() {
+    auto* cat = SelectedGroup();
+    return cat && m_selItem >= 0 && m_selItem < (int)cat->items.size()
+               ? &cat->items[m_selItem]
+               : nullptr;
+}
+
+// Icons in the settings window (settings thread only).
+[[clang::no_destroy]] std::unordered_map<std::wstring, xm::ImageSource>
+    g_settingsIcons;  // settings thread
+
+xm::ImageSource SettingsIcon(std::wstring const& source,
+                             HWND hwnd,
+                             double size = 24) {
+    if (source.empty()) {
+        return nullptr;
+    }
+    UINT dpi = hwnd ? GetDpiForWindow(hwnd) : 0;
+    int px = (int)std::lround(size * (dpi ? dpi : 96) / 96.0);
+    std::wstring key = source + L"|" + std::to_wstring(px);
+    if (auto it = g_settingsIcons.find(key); it != g_settingsIcons.end()) {
+        return it->second;
+    }
+    xm::ImageSource result{nullptr};
+    if (auto pixels = ExtractAppIcon(source, px)) {
+        uint32_t n = (uint32_t)pixels->bgra.size();
+        winrt::Windows::Storage::Streams::Buffer buf(n);
+        memcpy(buf.data(), pixels->bgra.data(), n);
+        buf.Length(n);
+        auto bitmap = wgi::SoftwareBitmap::CreateCopyFromBuffer(
+            buf, wgi::BitmapPixelFormat::Bgra8, pixels->width, pixels->height,
+            wgi::BitmapAlphaMode::Premultiplied);
+        xmi::SoftwareBitmapSource src;
+        src.SetBitmapAsync(bitmap);
+        result = src;
+    }
+    if (result) {  // a failure is tried again next time
+        g_settingsIcons.insert_or_assign(key, result);
+    }
+    return result;
+}
+
+// The Start app an item refers to (by name or app ID), if installed.
+AppEntry const* FindPickerApp(std::wstring const& nameOrId) {
+    for (auto const& a : g_pickerApps) {
+        if (_wcsicmp(a.name.c_str(), nameOrId.c_str()) == 0 ||
+            _wcsicmp(a.id.c_str(), nameOrId.c_str()) == 0) {
+            return &a;
+        }
+    }
+    return nullptr;
+}
+
+// Same icon resolution as the tiles in Start.
+// The icon of an item without one of its own.
+PCWSTR ItemGlyph(EditItem const& item) {
+    return item.type == L"program"   ? L"\uE756"   // command prompt
+           : item.type == L"website" ? L"\uE774"  // globe
+                                     : L"\uF0E2";  // grid (a Start app)
+}
+
+std::wstring ItemIconSource(EditItem const& item) {
+    if (!item.icon.empty()) {
+        return item.icon;
+    }
+    if (item.type == L"program") {
+        return item.path;
+    }
+    if (item.type == L"website") {
+        return L"";  // a globe
+    }
+    if (auto const* app = FindPickerApp(item.app)) {
+        return app->iconSource;
+    }
+    return L"";
+}
+
+// An icon (24×24 by default), or the given glyph when there's none (yet).
+FrameworkElement IconOrGlyph(std::wstring const& source,
+                             PCWSTR glyph,
+                             HWND hwnd,
+                             double size = 24) {
+    std::wstring text;
+    bool isGlyph = false;
+    if (ParseTextIcon(source, text, isGlyph)) {
+        return MakeTextIcon(text, isGlyph, size);
+    }
+    if (IsWebAddress(source)) {
+        return MakeLinkIcon(source, glyph, size);
+    }
+    if (auto src = SettingsIcon(source, hwnd, size)) {
+        xc::Image img;
+        img.Width(size);
+        img.Height(size);
+        img.Source(src);
+        return img;
+    }
+    xc::FontIcon icon;
+    icon.Glyph(glyph);
+    icon.FontSize(std::round(size * 2 / 3));
+    icon.Width(size);
+    icon.Height(size);
+    return icon;
+}
+
+std::wstring ItemTitle(EditItem const& item) {
+    if (!item.label.empty()) {
+        return item.label;
+    }
+    if (item.type == L"program") {
+        std::wstring file = item.path.substr(item.path.find_last_of(L"\\/") + 1);
+        return file.empty() ? L"(new program)" : file;
+    }
+    if (item.type == L"website") {
+        return item.path.empty() ? L"(new website)" : WebsiteHost(item.path);
+    }
+    return item.app.empty() ? L"(new app)" : item.app;
+}
+
+void SettingsWindow::BuildItemEditor() {
+    if (!m_editor) {
+        return;
+    }
+    m_editor.Children().Clear();
+    EditItem* item = SelectedItem();
+    if (m_appCaption) {
+        m_appCaption.Text(item ? ItemTitle(*item) : L"");
+    }
+    if (!item) {
+        m_editor.Children().Append(
+            Text(SelectedGroup()
+                     ? L"Select an app to edit it, or add a Start app, a "
+                       L"program or a website."
+                     : L"Create or select a group first.",
+                 14, true));
+        return;
+    }
+    const std::wstring type = item->type;
+    const bool program = type == L"program";
+    const bool website = type == L"website";
+    // Edits of the selected item go through this, which re-resolves the
+    // pointer since the vector may have changed in between.
+    // Only real changes count: filling the fields fires TextChanged too, and
+    // that must not touch the list.
+    auto edit = [this](std::function<void(EditItem&)> fn) {
+        if (auto* it = SelectedItem()) {
+            EditItem before = *it;
+            fn(*it);
+            if (it->type == before.type && it->app == before.app &&
+                it->label == before.label && it->path == before.path &&
+                it->args == before.args && it->icon == before.icon) {
+                return;
+            }
+            if (m_appCaption) {
+                m_appCaption.Text(ItemTitle(*it));
+            }
+            OnChanged();
+            if (m_page == L"board") {
+                // Board only: the Start apps panel would reload all its
+                // icons on every keystroke.
+                ScheduleBoardRebuild(false);
+            }
+        }
+    };
+
+    // A field as a card, like the settings pages (and Explorer Command
+    // Bar's): icon, title and description, a control on the right, and/or
+    // one below at full width.
+    auto card = [this](PCWSTR glyph, PCWSTR title, PCWSTR description,
+                       FrameworkElement right, FrameworkElement below) {
+        xc::StackPanel content;
+        content.Spacing(10);
+        xc::StackPanel empty;
+        content.Children().Append(
+            SettingRow(glyph, title, description,
+                       right ? right : empty.as<FrameworkElement>()));
+        if (below) {
+            // Lined up with the title, after the icon.
+            below.Margin(ThicknessHelper::FromLengths(34, 0, 0, 0));
+            content.Children().Append(below);
+        }
+        m_editor.Children().Append(Card(content));
+    };
+
+    // The app's fields have no reset buttons (an empty field is the
+    // default: the app's own name, icon, and so on).
+    // A text box bound to a field of the item.
+    auto textBox = [edit](std::wstring const& value, PCWSTR placeholder,
+                          std::function<void(EditItem&, std::wstring)> setter) {
+        xc::TextBox box;
+        box.PlaceholderText(placeholder);
+        box.Text(value);
+        box.TextChanged([edit, box, setter](auto&&, auto&&) {
+            std::wstring v(box.Text());
+            edit([setter, v](EditItem& it) { setter(it, v); });
+        });
+        return box;
+    };
+    // A text box with Browse… after it.
+    auto withBrowse = [this](xc::TextBox box, PCWSTR title,
+                                         bool icons) -> FrameworkElement {
+        xc::Grid row;
+        row.ColumnSpacing(8);
+        xc::ColumnDefinition a, b;
+        a.Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+        b.Width(GridLengthHelper::Auto());
+        row.ColumnDefinitions().Append(a);
+        row.ColumnDefinitions().Append(b);
+        row.Children().Append(box);
+        auto browse = TextButton(L"\uE8DA", L"Browse\u2026",
+                                 [this, box, icons, title] {
+                                     std::wstring p = Browse(title, icons);
+                                     if (!p.empty()) {
+                                         box.Text(p);
+                                     }
+                                 });
+        xc::Grid::SetColumn(browse, 1);
+        row.Children().Append(browse);
+        return row;
+    };
+
+    // Name
+    auto nameCard = [&] {
+        auto label = textBox(
+            item->label,
+            website   ? L"Empty = the website's address"
+            : program ? L"Empty = the program's file name"
+                      : L"Empty = the app's name",
+            [](EditItem& it, std::wstring v) { it.label = v; });
+        card(L"\uE8D2", L"Name",
+             L"Shown under the icon, in the tooltip and in the opened group.",
+             nullptr, label);
+    };
+
+    // Type
+    xc::ComboBox typeBox;
+    typeBox.MinWidth(200);
+    typeBox.Items().Append(Box(L"Start app"));
+    typeBox.Items().Append(Box(L"Program"));
+    typeBox.Items().Append(Box(L"Website"));
+    typeBox.SelectedIndex(website ? 2 : program ? 1 : 0);
+    typeBox.SelectionChanged([this, typeBox, edit](auto&&, auto&&) {
+        int i = typeBox.SelectedIndex();
+        std::wstring t = i == 2 ? L"website" : i == 1 ? L"program" : L"app";
+        edit([t](EditItem& it) { it.type = t; });
+        // Show the fields of the new type.
+        Later([this] { BuildItemEditor(); });
+    });
+    card(L"\uE8FD", L"Type",
+         L"A Start app is found by its name, a program by its path, and a "
+         L"website opens in the default browser.",
+         typeBox, nullptr);
+
+    if (type == L"app") {
+        // Start app, with suggestions from the apps in Start.
+        xc::AutoSuggestBox app;
+        app.PlaceholderText(L"Type to search the apps in Start");
+        app.Text(item->app);
+        app.QueryIcon(xc::SymbolIcon(xc::Symbol::Find));
+        app.TextChanged([edit](xc::AutoSuggestBox const& sender,
+                               xc::AutoSuggestBoxTextChangedEventArgs const&
+                                   e) {
+            std::wstring text(sender.Text());
+            if (e.Reason() ==
+                xc::AutoSuggestionBoxTextChangeReason::UserInput) {
+                auto list = winrt::single_threaded_vector<wf::IInspectable>();
+                if (!text.empty()) {
+                    for (auto& a : g_pickerApps) {
+                        if (StrStrIW(a.name.c_str(), text.c_str())) {
+                            // Icon + name; the name rides along in Tag.
+                            xc::StackPanel row;
+                            row.Orientation(xc::Orientation::Horizontal);
+                            row.Spacing(12);
+                            auto icon = IconOrGlyph(a.iconSource, L"\uF0E2",
+                                                    GetActiveWindow());
+                            icon.VerticalAlignment(VerticalAlignment::Center);
+                            row.Children().Append(icon);
+                            xc::TextBlock name;
+                            name.Text(a.name);
+                            name.VerticalAlignment(VerticalAlignment::Center);
+                            row.Children().Append(name);
+                            row.Tag(Box(a.name));
+                            list.Append(row);
+                            if (list.Size() >= 12) {
+                                break;
+                            }
+                        }
+                    }
+                }
+                sender.ItemsSource(list);
+            }
+            edit([text](EditItem& it) { it.app = text; });
+        });
+        app.SuggestionChosen([](xc::AutoSuggestBox const& sender,
+                                xc::AutoSuggestBoxSuggestionChosenEventArgs const&
+                                    e) {
+            if (auto row = e.SelectedItem().try_as<FrameworkElement>()) {
+                sender.Text(winrt::unbox_value<winrt::hstring>(row.Tag()));
+            }
+        });
+        // Suggestions are elements, not strings: set the text ourselves.
+        app.UpdateTextOnSelect(false);
+        card(L"\uF0E2", L"Start app",
+             L"The app's name as Start shows it (case doesn't matter), or its "
+             L"app ID (AUMID). Pick one from the suggestions.",
+             nullptr, app);
+    } else if (program) {
+        auto path = textBox(item->path, L"C:\\Path\\To\\Program.exe",
+                            [](EditItem& it, std::wstring v) { it.path = v; });
+        card(L"\uE756", L"Program",
+             L"Full path to a program, file or folder. Environment variables "
+             L"such as %USERPROFILE% work.",
+             nullptr, withBrowse(path, L"Program", false));
+    } else {
+        // A website: its name first, then its address.
+        nameCard();
+        auto url = textBox(item->path, L"https://example.com",
+                           [](EditItem& it, std::wstring v) { it.path = v; });
+        card(L"\uE774", L"Website",
+             L"The address to open in the default browser.", nullptr,
+             url);
+    }
+
+    if (!website) {
+        nameCard();
+    }
+
+    // Arguments (not for a website)
+    if (!website) {
+        auto args = textBox(item->args, L"Optional",
+                            [](EditItem& it, std::wstring v) { it.args = v; });
+        card(L"\uE943", L"Arguments",
+             program ? L"Command-line arguments passed to the program when "
+                       L"it's launched."
+                     : L"Arguments passed to the app when it's launched, if "
+                       L"it accepts any.",
+             nullptr, args);
+    }
+
+    // Icon
+    auto icon = textBox(item->icon,
+                        website ? L"Empty = a globe" : L"Empty = its own icon",
+                        [](EditItem& it, std::wstring v) { it.icon = v; });
+    card(L"\uE8B9", L"Icon",
+         website ? L"An .ico, .png or other image file, an image link such "
+                   L"as the website's favicon "
+                   L"(https://example.com/favicon.ico), a Fluent icon by its "
+                   L"code (e.g. E774) or an emoji."
+                 : L"An .ico, .exe, .dll or image file, an image link, a "
+                   L"Fluent icon by its code (e.g. E774) or an emoji.",
+         nullptr, withBrowse(icon, L"Icon", true));
+}
+
+// --- Groups board ---------------------------------------------------------
+// The groups drawn the way Start draws them, from the settings being
+// edited, and edited with the mouse: drag apps to reorder them or move them
+// to another group, drag a tile (by its background) to reorder the
+// groups, drag a tile's corner to resize it, and drag Start apps from the
+// side panel onto a tile to add them. Dragging uses pointer capture instead of
+// XAML drag and drop, which relies on OLE drag and drop in the island's host.
+
+struct SettingsWindow::BoardSurface {
+    xc::Grid root{nullptr};       // drag coordinates are relative to it
+    xc::Canvas overlay{nullptr};  // drag ghost and drop indicator
+    struct Cell {
+        FrameworkElement el{nullptr};
+        int cat = -1;
+        int index = -1;  // item index; for the overflow cluster, the first
+        bool cluster = false;  // hidden item
+    };
+    struct Tile {
+        FrameworkElement el{nullptr};
+        int cat = -1;
+        FrameworkElement highlight{nullptr};  // accent border when selected
+    };
+    std::vector<Cell> cells;
+    std::vector<Tile> tiles;
+    // The box around each group's name (by group index), which the
+    // rename text box replaces.
+    std::map<int, xc::Border> labelHosts;
+};
+
+wf::Rect BoundsIn(FrameworkElement const& el, UIElement const& root) {
+    try {
+        return el.TransformToVisual(root).TransformBounds(
+            {0, 0, (float)el.ActualWidth(), (float)el.ActualHeight()});
+    } catch (...) {
+        return {};
+    }
+}
+
+bool RectContains(wf::Rect const& r, wf::Point const& p) {
+    return r.Width > 0 && p.X >= r.X && p.X < r.X + r.Width && p.Y >= r.Y &&
+           p.Y < r.Y + r.Height;
+}
+
+winrt::Windows::UI::Color AccentColor() {
+    try {
+        return winrt::Windows::UI::ViewManagement::UISettings().GetColorValue(
+            winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+    } catch (...) {
+        return {255, 0x00, 0x78, 0xD4};
+    }
+}
+
+// Popups don't inherit the window's theme in an island.
+void ThemeFlyout(xc::Flyout const& fly, bool dark) {
+    Style style(winrt::xaml_typename<xc::FlyoutPresenter>());
+    style.Setters().Append(Setter(FrameworkElement::RequestedThemeProperty(),
+                                  winrt::box_value(dark ? ElementTheme::Dark
+                                                        : ElementTheme::Light)));
+    style.Setters().Append(
+        Setter(FrameworkElement::MaxWidthProperty(), winrt::box_value(10000.0)));
+    fly.FlyoutPresenterStyle(style);
+}
+
+void ThemeMenu(xc::MenuFlyout const& menu, bool dark) {
+    Style style(winrt::xaml_typename<xc::MenuFlyoutPresenter>());
+    style.Setters().Append(Setter(FrameworkElement::RequestedThemeProperty(),
+                                  winrt::box_value(dark ? ElementTheme::Dark
+                                                        : ElementTheme::Light)));
+    menu.MenuFlyoutPresenterStyle(style);
+}
+
+// A subtle background while the pointer is over the element.
+void AddHover(xc::Border const& b, bool dark) {
+    WeakElement weak = b;
+    b.PointerEntered([weak, dark](auto&&, auto&&) {
+        if (auto x = Resolve<xc::Border>(weak)) {
+            x.Background(dark ? Brush(0x15, 255, 255, 255)
+                              : Brush(0x0C, 0, 0, 0));
+        }
+    });
+    b.PointerExited([weak](auto&&, auto&&) {
+        if (auto x = Resolve<xc::Border>(weak)) {
+            x.Background(Brush(0, 0, 0, 0));
+        }
+    });
+}
+
+// Half cells per row on the board, as in Start (see ApplyColumns): as many
+// as fit `width` (Start's), at least those of a default-width Start menu.
+int BoardHalves(EditSettings const& s, double width) {
+    double half = (s.tileSize + s.gapX) / 2;
+    int min = std::max(
+        1, (int)std::floor((kReferenceRowWidth + s.gapX) / (s.tileSize + s.gapX) +
+                           0.05));
+    int fit = FitHalves(width, half, s.gapX);
+    // Wider tiles are drawn as wide as the row, as in Start.
+    return std::max(fit, 2 * min);
+}
+
+// Start apps on the groups board: a grid of icon + name cells.
+constexpr double kPaletteCellWidth = 92;
+constexpr double kPaletteCellHeight = 84;
+constexpr double kBoardColumnGap = 24;  // between the board and the Apps list
+// The Apps list's scroll bar, and its border and padding (4 + 1 a side).
+constexpr double kAppsListChrome = 10;
+constexpr double kAppsPanelSlack = 16 + kAppsListChrome;
+
+double BoardLabelHeight(EditSettings const& s) {
+    return s.labelsShow ? s.labelSpacing + s.fontSize * 1.4 : 0;
+}
+
+// Runs `fn` once the current event is done (e.g. after a pointer or menu
+// event whose element `fn` removes). Queued with a window message: dispatcher
+// callbacks aren't reliable in this XAML island.
+void SettingsWindow::Later(std::function<void()> fn) {
+    m_later.push_back(std::move(fn));
+    if (m_later.size() == 1) {
+        PostMessageW(m_hwnd, kRunLaterMsg, 0, 0);
+    }
+}
+
+FrameworkElement SettingsWindow::BuildBoardPage() {
+    m_board = std::make_shared<BoardSurface>();
+    xc::Grid root;
+    m_board->root = root;
+
+    xc::StackPanel page;
+    auto title = Text(L"Groups", 28);
+    title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    page.Children().Append(title);
+    auto desc = Text(
+        L"Your groups as Start shows them. Drag apps to reorder them or "
+        L"to move them to another group, drag a group by its tile to "
+        L"reorder the groups, and drag the corner of a tile to "
+        L"resize it. Drag an app from the All Apps list onto a group to add "
+        L"it. Double-click a name or the heading to rename it. "
+        L"Click an app or a group to edit it below. Right-click "
+        L"for more.",
+        14, true);
+    desc.Margin(ThicknessHelper::FromLengths(0, 4, 0, 16));
+    page.Children().Append(desc);
+    if (m_model.sortByName) {
+        auto note = Text(
+            L"Apps are sorted alphabetically (Behavior page), so Start "
+            L"ignores their order within a group.",
+            12, true);
+        note.Margin(ThicknessHelper::FromLengths(0, -8, 0, 12));
+        page.Children().Append(note);
+    }
+
+
+    xc::StackPanel bar;
+    bar.Orientation(xc::Orientation::Horizontal);
+    bar.Spacing(8);
+    bar.Margin(ThicknessHelper::FromLengths(0, 0, 0, 12));
+    bar.Children().Append(
+        TextButton(L"", L"New group", [this] { AddGroup(); }));
+
+    m_boardAddApp = AddAppButton();
+    bar.Children().Append(m_boardAddApp);
+    m_boardDup = TextButton(L"\uE8C8", L"Duplicate group",
+                            [this] { DuplicateSelected(); });
+    bar.Children().Append(m_boardDup);
+    m_boardDel =
+        TextButton(L"\uE74D", L"Delete group", [this] { DeleteSelected(); });
+    bar.Children().Append(m_boardDel);
+    page.Children().Append(bar);
+
+    // The board, on a background like Start's.
+    xc::Border boardCard;
+    boardCard.Background(m_dark ? Brush(255, 0x2B, 0x2B, 0x2B)
+                                : Brush(255, 0xEC, 0xEC, 0xEC));
+    boardCard.BorderBrush(m_dark ? Brush(0x19, 0, 0, 0) : Brush(0x0F, 0, 0, 0));
+    boardCard.BorderThickness(ThicknessHelper::FromUniformLength(1));
+    boardCard.CornerRadius(CornerRadiusHelper::FromUniformRadius(8));
+    boardCard.Padding(ThicknessHelper::FromLengths(24, 20, 24, 8));
+    xc::StackPanel boardContent;
+    m_boardHeadingHost = xc::Border();
+    m_boardHeadingHost.HorizontalAlignment(HorizontalAlignment::Left);
+    m_boardHeadingHost.Margin(ThicknessHelper::FromLengths(0, 0, 0, 16));
+    boardContent.Children().Append(m_boardHeadingHost);
+    UpdateBoardHeading();
+    m_boardHost = xc::Border();
+    // Tiles per row follow the board's width, as in Start: checked after every
+    // layout pass (FitBoardRow returns early when nothing changed), since the
+    // board can be built before the host has its final width.
+    m_boardHost.LayoutUpdated([this](auto&&, auto&&) { FitBoardRow(); });
+    // A click on the board's empty space (tiles handle their own clicks)
+    // clears the selection: Add app then makes a group of its own.
+    m_boardHost.Background(Brush(0, 0, 0, 0));  // to get the clicks
+    m_boardHost.PointerPressed([this](auto&&,
+                                      Input::PointerRoutedEventArgs const& e) {
+        if (e.Handled() || m_drag.pressed) {
+            return;
+        }
+        SelectBoardItem(-1, -1);
+    });
+    boardContent.Children().Append(m_boardHost);
+
+    // On the right: all Start apps, searchable; drag one onto a group to
+    // add it (see RefreshPalette).
+    xc::Grid apps;
+    apps.Width(2 * kPaletteCellWidth + kAppsPanelSlack);
+    apps.RowSpacing(8);
+    for (auto h : {GridLengthHelper::Auto(), GridLengthHelper::Auto(),
+                   GridLengthHelper::Auto()}) {
+        xc::RowDefinition rd;
+        rd.Height(h);
+        apps.RowDefinitions().Append(rd);
+    }
+    auto appsTitle = Text(L"All Apps", 14);
+    appsTitle.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    appsTitle.Margin(ThicknessHelper::FromLengths(0, 0, 0, 8));
+    apps.Children().Append(appsTitle);
+    m_paletteSearch = xc::TextBox();
+    m_paletteSearch.PlaceholderText(L"Search apps");
+    m_paletteSearch.TextChanged([this](auto&&, auto&&) { RefreshPalette(); });
+    xc::Grid::SetRow(m_paletteSearch, 1);
+    apps.Children().Append(m_paletteSearch);
+    m_paletteList = xc::StackPanel();
+    xc::ScrollViewer appsScroll;
+    appsScroll.VerticalScrollBarVisibility(xc::ScrollBarVisibility::Auto);
+    appsScroll.Content(m_paletteList);
+    appsScroll.Height(320);
+    // A subtle border around the list, like a card.
+    xc::Border appsFrame;
+    appsFrame.BorderThickness(ThicknessHelper::FromUniformLength(1));
+    appsFrame.BorderBrush(m_dark ? Brush(0x30, 255, 255, 255)
+                                 : Brush(0x30, 0, 0, 0));
+    appsFrame.Background(m_dark ? Brush(0x08, 255, 255, 255)
+                                : Brush(0x08, 0, 0, 0));
+    appsFrame.CornerRadius(CornerRadiusHelper::FromUniformRadius(6));
+    appsFrame.Padding(ThicknessHelper::FromUniformLength(4));
+    appsFrame.Child(appsScroll);
+    xc::Grid::SetRow(appsFrame, 2);
+    apps.Children().Append(appsFrame);
+    // As tall as the board next to it (at least a few rows of apps).
+    winrt::weak_ref<xc::ScrollViewer> weakScroll = appsScroll;
+    winrt::weak_ref<xc::TextBox> weakSearch = m_paletteSearch;
+    boardContent.SizeChanged([weakScroll, weakSearch](auto&&,
+                                                     winrt::Windows::UI::Xaml::SizeChangedEventArgs
+                                                         const& e) {
+        auto sv = weakScroll.get();
+        auto search = weakSearch.get();
+        if (!sv || !search) {
+            return;
+        }
+        double used = 30 + 8 + search.ActualHeight() + 8 + kAppsListChrome;
+        sv.Height(std::max(240.0, e.NewSize().Height - used));
+    });
+
+    xc::Grid boardColumns;
+    boardColumns.ColumnSpacing(kBoardColumnGap);
+    xc::ColumnDefinition bc0, bc1;
+    // The board at its own width (smaller only if the window is too
+    // narrow), the Apps list taking the rest.
+    bc0.Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+    bc1.Width(GridLengthHelper::Auto());
+    boardColumns.ColumnDefinitions().Append(bc0);
+    boardColumns.ColumnDefinitions().Append(bc1);
+    boardContent.VerticalAlignment(VerticalAlignment::Top);
+    boardColumns.Children().Append(boardContent);
+    apps.VerticalAlignment(VerticalAlignment::Top);
+    xc::Grid::SetColumn(apps, 1);
+    boardColumns.Children().Append(apps);
+    boardCard.Child(boardColumns);
+    m_boardCard = boardCard;
+    m_appsPanel = apps;
+    boardCard.SizeChanged([this](auto&&, auto&&) { LayoutAppsPanel(); });
+    page.Children().Append(boardCard);
+
+    // Configuration of the selected group and app, full width below.
+    auto details = BuildBoardDetails();
+    details.Margin(ThicknessHelper::FromLengths(0, 16, 0, 0));
+    page.Children().Append(details);
+
+    root.Children().Append(page);
+    xc::Canvas overlay;
+    overlay.IsHitTestVisible(false);
+    m_board->overlay = overlay;
+    root.Children().Append(overlay);
+    HookSurface(m_board);
+
+    // The group shown below is the selected one; give it its border.
+    m_boardSelCat = m_selCat;
+    RebuildBoard();
+    RefreshPalette();
+    LoadBoardDetails();
+    return root;
+}
+
+// The section heading ("Groups"), renamed by double-clicking it.
+void SettingsWindow::UpdateBoardHeading() {
+    if (!m_boardHeadingHost) {
+        return;
+    }
+    bool empty = m_model.sectionTitle.empty();
+    auto heading =
+        Text(empty ? L"No heading (double-click to add one)"
+                   : m_model.sectionTitle,
+             14, empty);
+    heading.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    heading.TextWrapping(TextWrapping::NoWrap);
+    heading.DoubleTapped([this](auto&&, auto&&) { EditBoardHeading(); });
+    m_boardHeadingHost.Child(heading);
+}
+
+// The heading becomes a text box in its place. Enter or clicking away saves,
+// Esc cancels.
+void SettingsWindow::EditBoardHeading() {
+    auto host = m_boardHeadingHost;
+    if (!host || host.Child().try_as<xc::TextBox>()) {
+        return;
+    }
+    xc::TextBox box;
+    box.Text(m_model.sectionTitle);
+    box.PlaceholderText(L"No heading");
+    box.FontSize(14);
+    box.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    box.MinWidth(220);
+    // Strong references, dropped when done (breaks the handler cycle).
+    auto state = std::make_shared<std::pair<xc::TextBox, bool>>(box, false);
+    ULONGLONG shown = GetTickCount64();
+    auto finish = [this, state](bool save) {
+        auto& [b, done] = *state;
+        if (done || !b) {
+            return;
+        }
+        done = true;
+        std::wstring v(b.Text());
+        b = nullptr;
+        if (save && v != m_model.sectionTitle) {
+            m_model.sectionTitle = v;
+            OnChanged();
+        }
+        // Not from within the box's own event.
+        Later([this] { UpdateBoardHeading(); });
+    };
+    box.KeyDown([finish](auto&&, Input::KeyRoutedEventArgs const& e) {
+        if (e.Key() == winrt::Windows::System::VirtualKey::Enter) {
+            e.Handled(true);
+            finish(true);
+        } else if (e.Key() == winrt::Windows::System::VirtualKey::Escape) {
+            e.Handled(true);
+            finish(false);
+        }
+    });
+    box.LostFocus([finish, state, shown](auto&&, auto&&) {
+        // The double click that started the edit can take the focus right
+        // away; take it back instead of ending the edit.
+        if (GetTickCount64() - shown < 400) {
+            if (auto& b = state->first) {
+                b.Focus(FocusState::Programmatic);
+            }
+            return;
+        }
+        finish(true);
+    });
+    box.Loaded([state](auto&&, auto&&) {
+        if (auto& b = state->first) {
+            b.Focus(FocusState::Programmatic);
+            b.SelectAll();
+        }
+    });
+    host.Child(box);
+}
+
+// Swaps the text in `host` for a text box. Enter or leaving the box saves,
+// Esc cancels.
+void SettingsWindow::BeginInlineEdit(FrameworkElement const& anchor,
+                                     std::wstring const& value,
+                                     double fontSize,
+                                     std::function<void(std::wstring)> commit) {
+    // A text box floating above the name; the name itself stays as it is.
+    // Enter or clicking away saves, Esc cancels.
+    if (!anchor) {
+        return;
+    }
+    xc::Flyout fly;
+    ThemeFlyout(fly, m_dark);
+    fly.Placement(xcp::FlyoutPlacementMode::Top);
+    xc::TextBox box;
+    box.Text(value);
+    box.FontSize(std::max(fontSize, 14.0));
+    box.MinWidth(220);
+    auto canceled = std::make_shared<bool>(false);
+    auto holder = std::make_shared<xc::Flyout>(fly);
+    // PreviewKeyDown: the flyout would take Esc for itself.
+    box.PreviewKeyDown([holder, canceled](auto&&,
+                                          Input::KeyRoutedEventArgs const& e) {
+        auto key = e.Key();
+        if (key == winrt::Windows::System::VirtualKey::Enter ||
+            key == winrt::Windows::System::VirtualKey::Escape) {
+            e.Handled(true);
+            *canceled = key == winrt::Windows::System::VirtualKey::Escape;
+            if (*holder) {
+                holder->Hide();
+            }
+        }
+    });
+    fly.Opened([box](auto&&, auto&&) {
+        box.Focus(FocusState::Programmatic);
+        box.SelectAll();
+    });
+    fly.Closed([this, box, canceled, commit, holder](auto&&, auto&&) {
+        *holder = nullptr;  // no longer needed, breaks the reference cycle
+        if (!*canceled) {
+            std::wstring v(box.Text());
+            Later([commit, v] { commit(v); });
+        }
+    });
+    fly.Content(box);
+    fly.ShowAt(anchor);
+}
+
+void SettingsWindow::RebuildBoard() {
+    if (!m_board || !m_boardHost) {
+        return;
+    }
+    m_board->cells.clear();
+    m_board->labelHosts.clear();
+    m_board->tiles.clear();
+    auto const& s = m_model;
+    if (s.groups.empty()) {
+        auto empty =
+            Text(L"No groups yet. Click New group to add one.", 14, true);
+        empty.Margin(ThicknessHelper::FromLengths(0, 0, 0, 16));
+        m_boardHost.Child(empty);
+        return;
+    }
+    double cell = s.tileSize + s.gapX;
+    // Rows as in Start: for the width Start last had, or a default-width
+    // Start menu's until it has been opened with the mod.
+    m_startRowWidth = Wh_GetIntValue(kStartRowWidthValue, 0);
+    if (m_startRowWidth <= 0) {
+        m_startRowWidth = kReferenceRowWidth;
+    }
+    int halves = BoardHalves(s, m_startRowWidth);
+    m_boardHalves = halves;
+    xc::VariableSizedWrapGrid wrap;
+    wrap.Orientation(xc::Orientation::Horizontal);
+    wrap.ItemWidth(cell / 2);  // half cells, as in Start
+    wrap.ItemHeight((s.tileSize + BoardLabelHeight(s) + s.gapY) /
+                    2);  // half rows, as in Start
+    wrap.MaximumRowsOrColumns(halves);
+    wrap.HorizontalAlignment(HorizontalAlignment::Left);
+    wrap.Margin(ThicknessHelper::FromLengths(0, 0, -s.gapX, 0));
+    for (int ci = 0; ci < (int)s.groups.size(); ci++) {
+        auto tile = BuildBoardTile(ci, m_board);
+        auto lay = BoardLayoutOf(s.groups[ci]);
+        if (lay.spanHalfColumns > 1) {
+            xc::VariableSizedWrapGrid::SetColumnSpan(tile,
+                                                     lay.spanHalfColumns);
+        }
+        if (lay.spanHalfRows > 1) {
+            xc::VariableSizedWrapGrid::SetRowSpan(tile, lay.spanHalfRows);
+        }
+        wrap.Children().Append(tile);
+    }
+    // Same layout as in Start (see RebuildHostContent), shrunk to fit.
+    xc::Border frame;
+    frame.Width(BoardRowWidth(halves));
+    frame.HorizontalAlignment(HorizontalAlignment::Left);
+    frame.Child(wrap);
+    m_boardWrap = wrap;
+    m_boardFrame = frame;
+    // A dashed outline of Start's width around the tiles: what doesn't fit
+    // in it, Start shrinks to fit.
+    constexpr double kOutlinePad = 8;
+    frame.Margin(ThicknessHelper::FromUniformLength(kOutlinePad));
+    winrt::Windows::UI::Xaml::Shapes::Rectangle outline;
+    // Around the tiles, the same padding on both sides; at least Start's
+    // width (the area grows with a row that's wider).
+    outline.HorizontalAlignment(HorizontalAlignment::Stretch);
+    outline.VerticalAlignment(VerticalAlignment::Stretch);
+    outline.Stroke(m_dark ? Brush(0x60, 255, 255, 255) : Brush(0x60, 0, 0, 0));
+    outline.StrokeThickness(1);
+    xm::DoubleCollection dashes;
+    dashes.Append(4);
+    dashes.Append(3);
+    outline.StrokeDashArray(dashes);
+    outline.RadiusX(6);
+    outline.RadiusY(6);
+    outline.IsHitTestVisible(false);
+    xc::ToolTipService::SetToolTip(outline, Box(L"Start's width"));
+    m_startOutline = outline;
+    xc::Grid area;
+    area.HorizontalAlignment(HorizontalAlignment::Left);
+    area.MinWidth(m_startRowWidth + 2 * kOutlinePad);
+    m_boardNaturalWidth =
+        std::max(m_startRowWidth, BoardRowWidth(halves)) +
+        2 * kOutlinePad;
+    LayoutAppsPanel();
+    area.Children().Append(outline);
+    area.Children().Append(frame);
+    xc::Viewbox fit;
+    fit.Stretch(xm::Stretch::Uniform);
+    fit.StretchDirection(xc::StretchDirection::DownOnly);
+    fit.HorizontalAlignment(HorizontalAlignment::Left);
+    fit.Child(area);
+    m_boardHost.Child(fit);
+    // The details panel follows: a new selection reloads it, otherwise just
+    // the group fields (names and sizes can change on the board).
+    if (m_selCat >= (int)m_model.groups.size()) {
+        m_selCat = (int)m_model.groups.size() - 1;
+    }
+    if (m_selItem >= 0 && !SelectedItem()) {
+        m_selItem = -1;
+    }
+    if (m_selCat != m_detailsCat || m_selItem != m_detailsItem) {
+        LoadBoardDetails();
+    } else {
+        LoadBoardGroupFields();
+    }
+}
+
+void SettingsWindow::FitBoardRow() {
+    auto wrap = m_boardWrap.get();
+    auto frame = m_boardFrame.get();
+    if (!wrap || !frame || !m_boardHost) {
+        return;
+    }
+    int halves = BoardHalves(m_model, m_startRowWidth);
+    if (halves != wrap.MaximumRowsOrColumns()) {
+        double half = (m_model.tileSize + m_model.gapX) / 2;
+        wrap.MaximumRowsOrColumns(halves);
+        frame.Width(BoardRowWidth(halves));
+    }
+}
+
+// Sizes the Apps list to the room the board leaves in its card: as many
+// columns of apps as fit, at least one.
+void SettingsWindow::LayoutAppsPanel() {
+    auto card = m_boardCard.get();
+    auto apps = m_appsPanel.get();
+    if (!card || !apps || card.ActualWidth() <= 0) {
+        return;
+    }
+    auto pad = card.Padding();
+    double room = card.ActualWidth() - pad.Left - pad.Right -
+                  kBoardColumnGap - m_boardNaturalWidth - kAppsPanelSlack;
+    int columns = std::max(1, (int)std::floor(room / kPaletteCellWidth));
+    double width = columns * kPaletteCellWidth + kAppsPanelSlack;
+    if (std::abs(apps.Width() - width) > 0.5) {
+        apps.Width(width);
+    }
+}
+
+FrameworkElement SettingsWindow::BuildBoardApp(EditItem const& item,
+                                               double iconSize,
+                                               bool showName,
+                                               double nameGap) {
+    auto icon =
+        IconOrGlyph(ItemIconSource(item),
+                    ItemGlyph(item), m_hwnd,
+                    iconSize);
+    icon.HorizontalAlignment(HorizontalAlignment::Center);
+    icon.VerticalAlignment(VerticalAlignment::Center);
+    if (!showName) {
+        return icon;
+    }
+    xc::StackPanel sp;
+    sp.Spacing(nameGap);
+    sp.VerticalAlignment(VerticalAlignment::Center);
+    sp.Children().Append(icon);
+    xc::TextBlock name;
+    name.Text(ItemTitle(item));
+    name.FontSize(AppNameFontSize(m_model.iconSize));
+    name.TextAlignment(TextAlignment::Center);
+    name.TextTrimming(TextTrimming::CharacterEllipsis);
+    name.TextWrapping(TextWrapping::NoWrap);
+    sp.Children().Append(name);
+    return sp;
+}
+
+FrameworkElement SettingsWindow::BuildBoardTile(
+    int ci,
+    std::shared_ptr<BoardSurface> const& surf) {
+    auto const& s = m_model;
+    auto const& cat = s.groups[ci];
+    auto lay = BoardLayoutOf(cat);
+    double labelH = BoardLabelHeight(s);
+    bool nameShown = s.labelsShow && ShowsLabel(cat);
+    bool background = ShowsBackground(cat);
+    TileBox box = TileBoxFor(lay.spanHalfColumns, lay.spanHalfRows, s.tileSize,
+                             s.gapX, s.gapY, labelH, nameShown);
+    double tileW = box.width;
+    double tileH = box.height;
+    TileFit tf = FitTile(s.iconSize, tileW, tileH,
+                         background ? s.padding : 0, s.iconGap, lay,
+                         s.appPadX, s.appPadY,
+                         s.showAppLabels && cat.showAppNames);
+    double padX = tf.padX;
+    bool showNames = s.showAppLabels && cat.showAppNames;
+    double iconSize = tf.iconSize;
+
+    xc::StackPanel outer;
+    outer.Spacing(s.labelSpacing);
+    outer.Width(tileW);
+    outer.Margin(ThicknessHelper::FromLengths(-box.outsetX, 0, 0, 0));
+    outer.HorizontalAlignment(HorizontalAlignment::Left);
+    outer.VerticalAlignment(VerticalAlignment::Top);
+
+    xc::Grid tileGrid;
+    tileGrid.Width(tileW);
+    tileGrid.Height(tileH);
+    xc::Border tile;
+    // Without a background, the rounding of the apps inside, so the tile
+    // doesn't cut their (selection) border at the corners.
+    double tileRadius = background ? s.cornerRadius : 4;
+    tile.CornerRadius(CornerRadiusHelper::FromUniformRadius(tileRadius));
+    tile.Padding(ThicknessHelper::FromLengths(padX, tf.padY, padX, tf.padY));
+    if (background) {
+        tile.BorderThickness(
+            ThicknessHelper::FromUniformLength(s.borderThickness));
+        tile.Background(MakeBrush(
+            s.background, m_dark ? winrt::Windows::UI::Color{0x0D, 255, 255, 255}
+                                 : winrt::Windows::UI::Color{0xB3, 255, 255, 255}));
+        tile.BorderBrush(MakeBrush(
+            s.border, m_dark ? winrt::Windows::UI::Color{0x0F, 255, 255, 255}
+                             : winrt::Windows::UI::Color{0x0F, 0, 0, 0}));
+    } else {
+        // Transparent, not null: it can still be dragged by its empty area.
+        tile.Background(Brush(0, 0, 0, 0));
+    }
+
+    xc::Grid grid;
+    grid.RowSpacing(s.iconGap);
+    grid.ColumnSpacing(s.iconGap);
+    for (int c = 0; c < lay.iconColumns; c++) {
+        xc::ColumnDefinition cd;
+        cd.Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+        grid.ColumnDefinitions().Append(cd);
+    }
+    for (int r = 0; r < lay.iconRows; r++) {
+        xc::RowDefinition rd;
+        rd.Height(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+        grid.RowDefinitions().Append(rd);
+    }
+    int cells = lay.iconColumns * lay.iconRows;
+    int count = (int)cat.items.size();
+    bool overflow = s.overflowCluster && count > cells && cells > 1;
+    int singles = overflow ? cells - 1 : std::min(count, cells);
+
+    for (int i = 0; i < singles; i++) {
+        auto const& item = cat.items[i];
+        xc::Border cellEl;
+        cellEl.Background(Brush(0, 0, 0, 0));
+        cellEl.CornerRadius(CornerRadiusHelper::FromUniformRadius(4));
+        cellEl.Padding(ThicknessHelper::FromLengths(s.appPadX, tf.appPadY,
+                                                    s.appPadX, tf.appPadY));
+        cellEl.Child(BuildBoardApp(item, iconSize, showNames, tf.nameGap));
+        // Always 1 px (thinner than a tile's) and transparent unless
+        // selected, so selecting an app doesn't shift it.
+        cellEl.BorderBrush(ci == m_selCat && i == m_selItem
+                               ? xm::SolidColorBrush(AccentColor())
+                               : Brush(0, 0, 0, 0));
+        cellEl.BorderThickness(ThicknessHelper::FromUniformLength(1));
+        xc::ToolTipService::SetToolTip(cellEl, Box(ItemTitle(item)));
+        cellEl.ContextFlyout(AppMenu(ci, i));
+        AddHover(cellEl, m_dark);
+        // A single app without a background fills its whole tile, which
+        // then has nothing else to drag it by: dragging the app moves the
+        // group (a click still selects the app).
+        bool single = !background && cat.items.size() == 1;
+        MakeDraggable(cellEl, surf, single ? DragKind::Group : DragKind::App,
+                      ci, i);
+        xc::Grid::SetRow(cellEl, i / lay.iconColumns);
+        xc::Grid::SetColumn(cellEl, i % lay.iconColumns);
+        grid.Children().Append(cellEl);
+        surf->cells.push_back({cellEl, ci, i, false});
+    }
+
+    if (overflow) {
+        auto more = MakeFlatButton();
+        more.Padding(ThicknessHelper::FromLengths(s.appPadX, tf.appPadY,
+                                                  s.appPadX, tf.appPadY));
+        xc::Grid mini;
+        double small = std::floor((iconSize - 4) / 2.0);
+        mini.RowSpacing(4);
+        mini.ColumnSpacing(4);
+        mini.HorizontalAlignment(HorizontalAlignment::Center);
+        mini.VerticalAlignment(VerticalAlignment::Center);
+        for (int k = 0; k < 2; k++) {
+            xc::ColumnDefinition cd;
+            cd.Width(GridLengthHelper::Auto());
+            mini.ColumnDefinitions().Append(cd);
+            xc::RowDefinition rd;
+            rd.Height(GridLengthHelper::Auto());
+            mini.RowDefinitions().Append(rd);
+        }
+        for (int k = 0; k < 4 && singles + k < count; k++) {
+            auto const& it = cat.items[singles + k];
+            auto img = IconOrGlyph(ItemIconSource(it),
+                                   ItemGlyph(it),
+                                   m_hwnd, small);
+            xc::Grid::SetRow(img, k / 2);
+            xc::Grid::SetColumn(img, k % 2);
+            mini.Children().Append(img);
+        }
+        more.Content(mini);
+        xc::ToolTipService::SetToolTip(
+            more, Box(L"+" + std::to_wstring(count - singles) +
+                      L" more. Click to see all of them and reorder them."));
+        WeakElement weakMore = more;
+        more.Click([this, ci, weakMore](auto&&, auto&&) {
+            if (auto b = weakMore.get()) {
+                ShowOverflowFlyout(ci, b);
+            }
+        });
+        xc::Grid::SetRow(more, (cells - 1) / lay.iconColumns);
+        xc::Grid::SetColumn(more, (cells - 1) % lay.iconColumns);
+        grid.Children().Append(more);
+        surf->cells.push_back({more, ci, singles, true});
+    }
+
+    if (count == 0) {
+        auto hint = Text(L"Drop apps here", 12, true);
+        hint.TextAlignment(TextAlignment::Center);
+        hint.HorizontalAlignment(HorizontalAlignment::Center);
+        hint.VerticalAlignment(VerticalAlignment::Center);
+        hint.IsHitTestVisible(false);
+        xc::Grid::SetColumnSpan(hint, lay.iconColumns);
+        xc::Grid::SetRowSpan(hint, lay.iconRows);
+        grid.Children().Append(hint);
+    }
+    tile.Child(grid);
+    tileGrid.Children().Append(tile);
+    MakeDraggable(tile, surf, DragKind::Group, ci, -1);
+
+    // Resize handle in the bottom-right corner.
+    xc::Border handle;
+    handle.Width(22);
+    handle.Height(22);
+    handle.HorizontalAlignment(HorizontalAlignment::Right);
+    handle.VerticalAlignment(VerticalAlignment::Bottom);
+    handle.Background(Brush(0, 0, 0, 0));
+    // A rounded corner stroke following the tile's corner, like the resize
+    // handle of Windows 11 widgets: down the right edge, around the corner,
+    // along the bottom.
+    {
+        namespace xs = winrt::Windows::UI::Xaml::Shapes;
+        const float edge = 17, r = 6, run = 1.5f;  // in the 22 x 22 handle
+        xm::PathFigure fig;
+        fig.StartPoint({edge, edge - r - run});
+        fig.IsFilled(false);
+        xm::LineSegment down;
+        down.Point({edge, edge - r});
+        fig.Segments().Append(down);
+        xm::ArcSegment arc;
+        arc.Point({edge - r, edge});
+        arc.Size({r, r});
+        arc.SweepDirection(xm::SweepDirection::Clockwise);
+        fig.Segments().Append(arc);
+        xm::LineSegment along;
+        along.Point({edge - r - run, edge});
+        fig.Segments().Append(along);
+        xm::PathGeometry geo;
+        geo.Figures().Append(fig);
+        xs::Path grip;
+        grip.Data(geo);
+        grip.Stroke(m_dark ? Brush(0x99, 255, 255, 255) : Brush(0x80, 0, 0, 0));
+        grip.StrokeThickness(2.5);
+        grip.StrokeStartLineCap(xm::PenLineCap::Round);
+        grip.StrokeEndLineCap(xm::PenLineCap::Round);
+        handle.Child(grip);
+    }
+    xc::ToolTipService::SetToolTip(handle, Box(L"Drag to resize"));
+    MakeDraggable(handle, surf, DragKind::Resize, ci, -1);
+    if (!IsSingleApp(cat)) {  // an app on its own has no size of its own
+        tileGrid.Children().Append(handle);
+    }
+
+    // Accent border of the selected (or resized) group.
+    xc::Border highlight;
+    highlight.BorderBrush(xm::SolidColorBrush(AccentColor()));
+    highlight.BorderThickness(ThicknessHelper::FromUniformLength(2));
+    highlight.CornerRadius(
+        CornerRadiusHelper::FromUniformRadius(std::max(tileRadius, 2.0)));
+    highlight.IsHitTestVisible(false);
+    highlight.Visibility(ci == m_boardSelCat && m_selItem < 0
+                             ? Visibility::Visible
+                             : Visibility::Collapsed);
+    tileGrid.Children().Append(highlight);
+
+    tileGrid.ContextFlyout(TileMenu(ci, tileGrid));
+    surf->tiles.push_back({tileGrid, ci, highlight});
+    outer.Children().Append(tileGrid);
+
+    if (nameShown) {
+        xc::TextBlock label;
+        label.Text(cat.name);
+        label.FontSize(s.fontSize);
+        label.TextAlignment(TextAlignment::Center);
+        label.HorizontalAlignment(HorizontalAlignment::Center);
+        label.TextTrimming(TextTrimming::CharacterEllipsis);
+        winrt::Windows::UI::Color lc;
+        if (ParseColor(s.labelColor, lc)) {
+            label.Foreground(xm::SolidColorBrush(lc));
+        }
+        label.ContextFlyout(TileMenu(ci, tileGrid));
+        xc::Border labelHost;
+        labelHost.HorizontalAlignment(HorizontalAlignment::Center);
+        // Transparent, not null: the whole box takes clicks, not just the
+        // glyphs of the text.
+        labelHost.Background(Brush(0, 0, 0, 0));
+        labelHost.Child(label);
+        surf->labelHosts[ci] = labelHost;
+        // A click on a group's name isn't one on the empty board (which
+        // clears the selection).
+        labelHost.PointerPressed(
+            [](auto&&, Input::PointerRoutedEventArgs const& e) { e.Handled(true); });
+        double fontSize = s.fontSize;
+        // Not draggable (the tile is). A double click is detected here from
+        // two releases, rather than relying on DoubleTapped.
+        labelHost.PointerReleased(
+            [this, ci, fontSize](auto&&, Input::PointerRoutedEventArgs const&) {
+                ULONGLONG now = GetTickCount64();
+                bool second = m_labelClickCat == ci &&
+                              now - m_labelClickTime <= GetDoubleClickTime();
+                m_labelClickCat = second ? -1 : ci;
+                m_labelClickTime = now;
+                if (!second || m_drag.active || !m_board ||
+                    ci >= (int)m_model.groups.size()) {
+                    return;
+                }
+                auto it = m_board->labelHosts.find(ci);
+                if (it == m_board->labelHosts.end()) {
+                    return;
+                }
+                BeginInlineEdit(it->second, m_model.groups[ci].name,
+                                fontSize, [this, ci](std::wstring v) {
+                                    if (ci < (int)m_model.groups.size() &&
+                                        !v.empty() &&
+                                        v != m_model.groups[ci].name) {
+                                        m_model.groups[ci].name = v;
+                                        OnChanged();
+                                    }
+                                    RebuildBoard();
+                                    RefreshPalette();
+                                });
+            });
+        outer.Children().Append(labelHost);
+    }
+    return outer;
+}
+
+void SettingsWindow::ShowOverflowFlyout(int ci,
+                                        FrameworkElement const& anchor) {
+    if (ci < 0 || ci >= (int)m_model.groups.size()) {
+        return;
+    }
+    xc::Flyout fly;
+    ThemeFlyout(fly, m_dark);
+    auto surf = std::make_shared<BoardSurface>();
+    xc::Grid root;
+    root.RequestedTheme(m_dark ? ElementTheme::Dark : ElementTheme::Light);
+    surf->root = root;
+    xc::StackPanel content;
+    content.Spacing(8);
+    auto title = Text(m_model.groups[ci].name, 20);
+    title.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    content.Children().Append(title);
+    content.Children().Append(
+        Text(L"Drag the apps to reorder them. Click one to edit it below, "
+             L"right-click for more.",
+             12, true));
+    m_flyoutHost = xc::Border();
+    content.Children().Append(m_flyoutHost);
+    root.Children().Append(content);
+    xc::Canvas overlay;
+    overlay.IsHitTestVisible(false);
+    surf->overlay = overlay;
+    root.Children().Append(overlay);
+    m_flyoutSurface = surf;
+    m_flyoutCat = ci;
+    m_overflowFlyout = fly;
+    HookSurface(surf);
+    RebuildFlyout();
+    fly.Content(root);
+    fly.Closed([this](auto&&, auto&&) {
+        m_flyoutSurface = nullptr;
+        m_flyoutHost = nullptr;
+        m_flyoutCat = -1;
+        // Show the new order in the tile.
+        Later([this] { RebuildBoard(); });
+    });
+    fly.ShowAt(anchor);
+}
+
+// The opened group, like Start's expanded view: every app, in order.
+void SettingsWindow::RebuildFlyout() {
+    auto surf = m_flyoutSurface;
+    if (!surf || !m_flyoutHost || m_flyoutCat < 0 ||
+        m_flyoutCat >= (int)m_model.groups.size()) {
+        return;
+    }
+    surf->cells.clear();
+    surf->tiles.clear();
+    int ci = m_flyoutCat;
+    auto const& cat = m_model.groups[ci];
+    int cols = std::clamp(m_model.expandedColumns, kMinExpandedColumns,
+                          kMaxExpandedColumns);
+    const FlyoutLook look = FlyoutLookFor(m_model.iconSize);  // as in Start
+    xc::Grid grid;
+    grid.ColumnSpacing(4);
+    grid.RowSpacing(4);
+    for (int c = 0; c < cols; c++) {
+        xc::ColumnDefinition cd;
+        cd.Width(GridLengthHelper::FromPixels(look.cell));
+        grid.ColumnDefinitions().Append(cd);
+    }
+    int rows = ((int)cat.items.size() + cols - 1) / cols;
+    for (int r = 0; r < rows; r++) {
+        xc::RowDefinition rd;
+        rd.Height(GridLengthHelper::Auto());
+        grid.RowDefinitions().Append(rd);
+    }
+    for (int i = 0; i < (int)cat.items.size(); i++) {
+        auto const& item = cat.items[i];
+        xc::Border cellEl;
+        cellEl.Background(Brush(0, 0, 0, 0));
+        cellEl.CornerRadius(CornerRadiusHelper::FromUniformRadius(4));
+        cellEl.Padding(ThicknessHelper::FromLengths(4, 10, 4, 8));
+        xc::StackPanel sp;
+        sp.Spacing(6);
+        auto icon = IconOrGlyph(ItemIconSource(item),
+                                ItemGlyph(item),
+                                m_hwnd, look.icon);
+        icon.HorizontalAlignment(HorizontalAlignment::Center);
+        sp.Children().Append(icon);
+        xc::TextBlock name;
+        name.Text(ItemTitle(item));
+        name.FontSize(look.font);
+        name.TextAlignment(TextAlignment::Center);
+        name.TextWrapping(TextWrapping::Wrap);
+        name.MaxLines(2);
+        name.TextTrimming(TextTrimming::CharacterEllipsis);
+        name.Width(look.textWidth);
+        sp.Children().Append(name);
+        cellEl.Child(sp);
+        xc::ToolTipService::SetToolTip(cellEl, Box(ItemTitle(item)));
+        // Selected like on the board: a 1 px border, transparent otherwise.
+        cellEl.BorderThickness(ThicknessHelper::FromUniformLength(1));
+        cellEl.BorderBrush(ci == m_selCat && i == m_selItem
+                               ? xm::SolidColorBrush(AccentColor())
+                               : Brush(0, 0, 0, 0));
+        cellEl.ContextFlyout(AppMenu(ci, i));
+        AddHover(cellEl, m_dark);
+        MakeDraggable(cellEl, surf, DragKind::App, ci, i);
+        xc::Grid::SetRow(cellEl, i / cols);
+        xc::Grid::SetColumn(cellEl, i % cols);
+        grid.Children().Append(cellEl);
+        surf->cells.push_back({cellEl, ci, i, false});
+    }
+    surf->tiles.push_back({grid, ci, nullptr});
+    xc::ScrollViewer sv;
+    sv.MaxHeight(480);
+    sv.VerticalScrollBarVisibility(xc::ScrollBarVisibility::Auto);
+    sv.Content(grid);
+    m_flyoutHost.Child(sv);
+}
+
+// The All Apps list. Edits to the groups only change the groups an app's
+// tooltip names: those update the cells in place, since building the list
+// again would reload every icon (and flicker). It's built again only for a
+// new search or a new list of apps.
+void SettingsWindow::RefreshPalette() {
+    if (!m_paletteList || !m_board) {
+        return;
+    }
+    std::wstring query =
+        m_paletteSearch ? std::wstring(m_paletteSearch.Text()) : L"";
+    auto lower = [](std::wstring v) {
+        CharLowerBuffW(v.data(), (DWORD)v.size());
+        return v;
+    };
+    // The group each Start app is in already.
+    std::unordered_map<std::wstring, std::wstring> placed;
+    for (auto const& c : m_model.groups) {
+        for (auto const& it : c.items) {
+            if (it.type == L"app" && !it.app.empty()) {
+                placed.emplace(lower(it.app), c.name);
+            }
+        }
+    }
+    auto groupOf = [&](AppEntry const& a) -> std::wstring const* {
+        auto where = placed.find(lower(a.name));
+        if (where == placed.end()) {
+            where = placed.find(lower(a.id));
+        }
+        return where != placed.end() ? &where->second : nullptr;
+    };
+    auto mark = [](xc::Border const& cell, xc::TextBlock const& name,
+                   AppEntry const& a, std::wstring const* group) {
+        xc::ToolTipService::SetToolTip(
+            cell, Box(a.name + (group ? L"\nIn " + *group : std::wstring()) +
+                      L"\nDrag onto a group to add it"));
+    };
+
+    if (m_paletteBuilt && query == m_paletteQuery &&
+        g_pickerApps.size() == m_paletteAppCount) {
+        for (auto const& c : m_paletteCells) {
+            if (c.app < g_pickerApps.size()) {
+                auto const& a = g_pickerApps[c.app];
+                mark(c.cell, c.name, a, groupOf(a));
+            }
+        }
+        return;
+    }
+    m_paletteBuilt = true;
+    m_paletteQuery = query;
+    m_paletteAppCount = g_pickerApps.size();
+    m_paletteCells.clear();
+    m_paletteList.Children().Clear();
+    m_pendingIcons.clear();
+    xc::VariableSizedWrapGrid grid;
+    grid.Orientation(xc::Orientation::Horizontal);
+    grid.ItemWidth(kPaletteCellWidth);
+    grid.ItemHeight(kPaletteCellHeight);
+    int shown = 0;
+    for (size_t ai = 0; ai < g_pickerApps.size(); ai++) {
+        auto const& a = g_pickerApps[ai];
+        if (!query.empty() && !StrStrIW(a.name.c_str(), query.c_str())) {
+            continue;
+        }
+        shown++;
+        xc::Border cell;
+        cell.Width(kPaletteCellWidth - 4);
+        cell.Height(kPaletteCellHeight - 4);
+        cell.Background(Brush(0, 0, 0, 0));
+        cell.CornerRadius(CornerRadiusHelper::FromUniformRadius(4));
+        cell.Padding(ThicknessHelper::FromLengths(4, 8, 4, 4));
+        xc::StackPanel sp;
+        sp.Spacing(6);
+        xc::Border iconHost;
+        iconHost.Width(32);
+        iconHost.Height(32);
+        iconHost.HorizontalAlignment(HorizontalAlignment::Center);
+        // The first icons are created right here, like the board's; the rest
+        // load a few at a time, so the page opens right away.
+        // Icons load from a timer, after the page has been drawn.
+        iconHost.Child(IconOrGlyph(L"", L"\uF0E2", m_hwnd, 32));
+        m_pendingIcons.push_back({iconHost, a.iconSource});
+        sp.Children().Append(iconHost);
+        xc::TextBlock name;
+        name.Text(a.name);
+        name.FontSize(11);
+        name.TextAlignment(TextAlignment::Center);
+        name.TextWrapping(TextWrapping::Wrap);
+        name.MaxLines(2);
+        name.TextTrimming(TextTrimming::CharacterEllipsis);
+        sp.Children().Append(name);
+        cell.Child(sp);
+        mark(cell, name, a, groupOf(a));
+        m_paletteCells.push_back({cell, name, ai});
+        AddHover(cell, m_dark);
+        MakeDraggable(cell, m_board, DragKind::NewApp, -1, -1, a.name);
+        grid.Children().Append(cell);
+    }
+    m_paletteList.Children().Append(grid);
+    if (shown == 0) {
+        m_paletteList.Children().Append(
+            Text(g_pickerAppsLoading ? L"Loading apps\u2026" : L"No apps found.",
+                 12, true));
+    }
+    LoadIconsLater();
+}
+
+// Loads the pending Start app icons on this (the window's) thread, where
+// the shell extracts them reliably: the first ones (the visible rows) right
+// away, the rest a batch at a time through Later(), so the page stays
+// responsive.
+void SettingsWindow::LoadIconsLater() {
+    ++m_iconGeneration;
+    if (m_pendingIcons.empty()) {
+        KillTimer(m_hwnd, kIconTimerId);
+    } else {
+        SetTimer(m_hwnd, kIconTimerId, 10, nullptr);
+    }
+}
+
+void SettingsWindow::LoadIconBatch(int gen, int count) {
+    if (gen != m_iconGeneration) {
+        return;  // the palette has been rebuilt since
+    }
+    for (int n = 0; n < count && !m_pendingIcons.empty(); n++) {
+        auto [host, source] = m_pendingIcons.front();
+        m_pendingIcons.pop_front();
+        host.Child(IconOrGlyph(source, L"\uF0E2", m_hwnd, 32));
+    }
+    if (m_pendingIcons.empty()) {
+        KillTimer(m_hwnd, kIconTimerId);
+    }
+}
+
+// --- Dragging ---------------------------------------------------------------
+
+void SettingsWindow::MakeDraggable(FrameworkElement const& el,
+                                   std::shared_ptr<BoardSurface> const& surf,
+                                   DragKind kind,
+                                   int cat,
+                                   int item,
+                                   std::wstring app,
+                                   std::function<void()> onDoubleClick) {
+    winrt::weak_ref<FrameworkElement> weak = el;
+    std::weak_ptr<BoardSurface> weakSurf = surf;
+    el.PointerPressed([this, weak, weakSurf, kind, cat, item, app,
+                       onDoubleClick](auto&&,
+                                      Input::PointerRoutedEventArgs const& e) {
+        auto el = weak.get();
+        auto surf = weakSurf.lock();
+        if (m_drag.pressed && !m_drag.active) {
+            m_drag = DragState{};  // a press whose release went elsewhere
+        }
+        if (!el || !surf || !surf->root || m_drag.pressed ||
+            !e.GetCurrentPoint(el).Properties().IsLeftButtonPressed()) {
+            return;
+        }
+        e.Handled(true);
+        if ((surf == m_board || surf == m_flyoutSurface) && cat >= 0) {
+            // The app pressed (also a single app that drags its group).
+            SelectBoardItem(cat, kind == DragKind::App ||
+                                         (kind == DragKind::Group && item >= 0)
+                                     ? item
+                                     : -1);
+        }
+        std::function<void()> doubleClick;
+        if (onDoubleClick) {
+            ULONGLONG now = GetTickCount64();
+            if (m_lastClickEl.get() == el &&
+                now - m_lastClickTime <= GetDoubleClickTime()) {
+                m_lastClickEl = nullptr;
+                doubleClick = onDoubleClick;
+            } else {
+                m_lastClickEl = el;
+                m_lastClickTime = now;
+            }
+        }
+        m_drag = DragState{};
+        // A double click acts when the button is released: a text box shown
+        // while it's still down would lose the focus to the release.
+        m_drag.doubleClick = doubleClick;
+        m_drag.pressed = true;
+        m_drag.kind = kind;
+        m_drag.cat = cat;
+        m_drag.item = item;
+        m_drag.app = app;
+        m_drag.surface = surf;
+        m_drag.source = el;
+        m_drag.start = e.GetCurrentPoint(surf->root).Position();
+        // Captured once it's really a drag (see UpdateDrag): capturing on
+        // every press would keep XAML from recognizing double taps.
+        m_drag.pointer = e.Pointer();
+    });
+}
+
+// The pointer events of a drag, captured by the surface's root.
+void SettingsWindow::HookSurface(std::shared_ptr<BoardSurface> const& surf) {
+    auto root = surf->root;
+    std::weak_ptr<BoardSurface> weakSurf = surf;
+    auto mine = [this, weakSurf] {
+        auto s = weakSurf.lock();
+        return m_drag.pressed && s && m_drag.surface == s;
+    };
+    root.PointerMoved(
+        [this, mine](auto&&, Input::PointerRoutedEventArgs const& e) {
+            if (!mine()) {
+                return;
+            }
+            e.Handled(true);
+            UpdateDrag(e.GetCurrentPoint(m_drag.surface->root).Position());
+        });
+    // Also when something below already handled the release: a click that
+    // didn't become a drag isn't captured, and its release would otherwise
+    // never get here.
+    root.AddHandler(
+        UIElement::PointerReleasedEvent(),
+        winrt::box_value(Input::PointerEventHandler(
+        [this, mine](wf::IInspectable const&,
+                     Input::PointerRoutedEventArgs const& e) {
+            if (!mine()) {
+                return;
+            }
+            e.Handled(true);
+            auto root = m_drag.surface->root;
+            auto doubleClick = m_drag.doubleClick;
+            if (doubleClick) {
+                EndDrag(false);
+                root.ReleasePointerCapture(e.Pointer());
+                Later(doubleClick);
+                return;
+            }
+            UpdateDrag(e.GetCurrentPoint(root).Position());
+            // A click (no drag) on an app on the board: show its settings.
+            bool appClick = !m_drag.active && m_drag.surface == m_board &&
+                            (m_drag.kind == DragKind::App ||
+                             (m_drag.kind == DragKind::Group &&
+                              m_drag.item >= 0));
+            EndDrag(m_drag.active);
+            root.ReleasePointerCapture(e.Pointer());
+            if (appClick) {
+                Later([this] { ScrollToAppSettings(); });
+            }
+        })),
+        true);
+    root.PointerCaptureLost([this, mine](auto&&, auto&&) {
+        if (mine()) {
+            EndDrag(false);
+        }
+    });
+}
+
+// What follows the pointer while an app is dragged: its icon and name.
+// What follows the pointer while an app is dragged: a copy of the cell it
+// was taken from, at the same size (and board zoom), text trimmed alike.
+FrameworkElement SettingsWindow::AppGhost(FrameworkElement const& icon,
+                                          std::wstring const& name,
+                                          AppGhostLook const& look) {
+    xc::Border b;
+    b.Width(look.width);
+    b.Height(look.height);
+    b.Background(m_dark ? Brush(0x15, 255, 255, 255) : Brush(0x0C, 0, 0, 0));
+    b.CornerRadius(CornerRadiusHelper::FromUniformRadius(4));
+    b.Padding(look.padding);
+    xc::StackPanel sp;
+    sp.Spacing(look.spacing);
+    sp.VerticalAlignment(look.centered ? VerticalAlignment::Center
+                                       : VerticalAlignment::Top);
+    icon.HorizontalAlignment(HorizontalAlignment::Center);
+    sp.Children().Append(icon);
+    if (look.showText) {
+        xc::TextBlock text;
+        text.Text(name);
+        text.FontSize(look.fontSize);
+        text.TextAlignment(TextAlignment::Center);
+        text.TextTrimming(TextTrimming::CharacterEllipsis);
+        if (look.maxLines > 1) {
+            text.TextWrapping(TextWrapping::Wrap);
+            text.MaxLines(look.maxLines);
+        } else {
+            text.TextWrapping(TextWrapping::NoWrap);
+        }
+        text.Width(std::max(1.0, look.width - look.padding.Left -
+                                     look.padding.Right));
+        sp.Children().Append(text);
+    }
+    b.Child(sp);
+    return b;
+}
+
+void SettingsWindow::StartDragVisuals() {
+    auto& d = m_drag;
+    auto surf = d.surface;
+    if (!surf || !surf->overlay) {
+        return;
+    }
+    // The board is shrunk to fit; measure how much from a tile.
+    for (auto const& t : surf->tiles) {
+        double w = t.el.ActualWidth();
+        if (w <= 0) {
+            continue;
+        }
+        auto b = BoundsIn(t.el, surf->root);
+        if (t.cat == d.cat) {
+            d.tileBounds = b;
+            d.startW = w;
+            d.startH = t.el.ActualHeight();
+        }
+        d.scale = b.Width / w;
+    }
+    if (d.scale <= 0) {
+        d.scale = 1;
+    }
+    if (d.kind == DragKind::Resize && d.cat >= 0 &&
+        d.cat < (int)m_model.groups.size()) {
+        d.originalSize = m_model.groups[d.cat].tileSize;
+        d.newSize = d.originalSize;
+    }
+
+    d.indicator = xc::Border();
+    d.indicator.BorderBrush(xm::SolidColorBrush(AccentColor()));
+    d.indicator.CornerRadius(CornerRadiusHelper::FromUniformRadius(4));
+    d.indicator.Visibility(Visibility::Collapsed);
+    d.indicator.IsHitTestVisible(false);
+    surf->overlay.Children().Append(d.indicator);
+
+    auto const& cats = m_model.groups;
+    FrameworkElement ghost{nullptr};
+    double iconSize = m_model.iconSize * d.scale;
+    switch (d.kind) {
+        case DragKind::App:
+            if (d.cat >= 0 && d.cat < (int)cats.size() && d.item >= 0 &&
+                d.item < (int)cats[d.cat].items.size()) {
+                auto const& item = cats[d.cat].items[d.item];
+                AppGhostLook look;
+                bool board = surf == m_board;
+                double k = board ? d.scale : 1;  // the board is zoomed
+                look.width = d.source.ActualWidth() * k;
+                look.height = d.source.ActualHeight() * k;
+                if (board) {
+                    // As in BuildBoardTile / BuildBoardApp.
+                    look.fontSize = AppNameFontSize(m_model.iconSize) * k;
+                    look.spacing = 4 * k;
+                    look.showText = m_model.showAppLabels &&
+                                    cats[d.cat].showAppNames;
+                } else {
+                    // As in RebuildFlyout.
+                    look.padding = ThicknessHelper::FromLengths(4, 10, 4, 8);
+                    look.spacing = 6;
+                    look.fontSize = 12;
+                    look.maxLines = 2;
+                    look.centered = false;
+                }
+                ghost = AppGhost(
+                    IconOrGlyph(ItemIconSource(item),
+                                ItemGlyph(item),
+                                m_hwnd, board ? iconSize : 32),
+                    ItemTitle(item), look);
+            }
+            break;
+        case DragKind::NewApp: {
+            auto const* a = FindPickerApp(d.app);
+            // As in RefreshPalette.
+            AppGhostLook look;
+            look.width = d.source.ActualWidth();
+            look.height = d.source.ActualHeight();
+            look.padding = ThicknessHelper::FromLengths(4, 8, 4, 4);
+            look.spacing = 6;
+            look.maxLines = 2;
+            look.centered = false;
+            ghost = AppGhost(IconOrGlyph(a ? a->iconSource : L"", L"\uF0E2",
+                                         m_hwnd, 32),
+                             d.app, look);
+            break;
+        }
+        case DragKind::Group:
+        case DragKind::Resize: {
+            xc::Border b;
+            b.Background(m_dark ? Brush(0xF0, 0x2B, 0x2B, 0x2B)
+                                : Brush(0xF0, 0xFF, 0xFF, 0xFF));
+            b.BorderBrush(m_dark ? Brush(0x30, 255, 255, 255)
+                                 : Brush(0x20, 0, 0, 0));
+            b.BorderThickness(ThicknessHelper::FromUniformLength(1));
+            b.CornerRadius(CornerRadiusHelper::FromUniformRadius(6));
+            b.Padding(ThicknessHelper::FromLengths(10, 5, 10, 5));
+            d.ghostText = Text(d.kind == DragKind::Group &&
+                                       d.cat >= 0 && d.cat < (int)cats.size()
+                                   ? cats[d.cat].name
+                                   : L"",
+                               12);
+            d.ghostText.TextWrapping(TextWrapping::NoWrap);
+            b.Child(d.ghostText);
+            ghost = b;
+            break;
+        }
+    }
+    if (ghost) {
+        ghost.IsHitTestVisible(false);
+        if ((d.kind == DragKind::App || d.kind == DragKind::NewApp) &&
+            d.source) {
+            ghost.Opacity(0.85);
+            // Where the cell was grabbed stays under the pointer.
+            auto sb = BoundsIn(d.source, surf->root);
+            d.grab = {d.start.X - sb.X, d.start.Y - sb.Y};
+        } else {
+            d.grab = {-14, -14};
+        }
+        d.ghost = ghost;
+        surf->overlay.Children().Append(ghost);
+    }
+    if (d.source && d.kind != DragKind::Resize) {
+        d.source.Opacity(0.4);
+    }
+}
+
+// An app dragged out of the opened group: the group closes and the drag
+// goes on over the board (to another group, or empty space for a group of
+// its own). `p` is in the opened group's coordinates.
+void SettingsWindow::HandDragToBoard(wf::Point p) {
+    auto& d = m_drag;
+    auto from = d.surface;
+    auto board = m_board;
+    if (!from || !board || !board->root || !from->root) {
+        return;
+    }
+    wf::Point bp, start;
+    try {
+        auto toBoard = from->root.TransformToVisual(board->root);
+        bp = toBoard.TransformPoint(p);
+        start = toBoard.TransformPoint(d.start);
+    } catch (...) {
+        return;
+    }
+    if (from->overlay) {
+        from->overlay.Children().Clear();
+    }
+    d.ghost = nullptr;
+    d.indicator = nullptr;
+    d.ghostText = nullptr;
+    d.surface = board;
+    d.start = start;
+    StartDragVisuals();  // on the board, while the app's cell still exists
+    if (d.pointer) {
+        board->root.CapturePointer(d.pointer);
+    }
+    if (auto f = m_overflowFlyout.get()) {
+        f.Hide();
+    }
+    UpdateDrag(bp);
+}
+
+void SettingsWindow::UpdateDrag(wf::Point p) {
+    auto& d = m_drag;
+    auto surf = d.surface;
+    if (!surf) {
+        return;
+    }
+    // Out of the opened group (with a little margin): on over the board.
+    if (d.active && d.kind == DragKind::App && surf == m_flyoutSurface &&
+        m_board && surf->root) {
+        double w = surf->root.ActualWidth(), h = surf->root.ActualHeight();
+        if (p.X < -8 || p.Y < -8 || p.X > w + 8 || p.Y > h + 8) {
+            HandDragToBoard(p);
+            return;
+        }
+    }
+    if (d.doubleClick) {
+        return;  // the second click of a double click doesn't drag
+    }
+    if (!d.active) {
+        float dx = p.X - d.start.X, dy = p.Y - d.start.Y;
+        if (dx * dx + dy * dy < 36) {
+            return;
+        }
+        d.active = true;
+        // Captured by the surface, which stays while the board is rebuilt
+        // (a live resize rebuilds the tile being dragged).
+        if (d.pointer) {
+            surf->root.CapturePointer(d.pointer);
+        }
+        StartDragVisuals();
+    }
+    if (d.ghost) {
+        xc::Canvas::SetLeft(d.ghost, p.X - d.grab.X);
+        xc::Canvas::SetTop(d.ghost, p.Y - d.grab.Y);
+    }
+    auto show = [&](wf::Rect r, bool outline) {
+        auto ind = d.indicator;
+        if (!ind) {
+            return;
+        }
+        if (r.Width <= 0 || r.Height <= 0) {
+            ind.Visibility(Visibility::Collapsed);
+            return;
+        }
+        ind.Visibility(Visibility::Visible);
+        ind.Width(r.Width);
+        ind.Height(r.Height);
+        xc::Canvas::SetLeft(ind, r.X);
+        xc::Canvas::SetTop(ind, r.Y);
+        if (outline) {
+            ind.Background(nullptr);
+            ind.BorderThickness(ThicknessHelper::FromUniformLength(2));
+        } else {
+            ind.Background(xm::SolidColorBrush(AccentColor()));
+            ind.BorderThickness(ThicknessHelper::FromUniformLength(0));
+        }
+    };
+    auto const& s = m_model;
+    d.targetCat = -1;
+    d.targetIndex = -1;
+    switch (d.kind) {
+        case DragKind::App:
+        case DragKind::NewApp: {
+            for (auto const& t : surf->tiles) {
+                auto b = BoundsIn(t.el, surf->root);
+                if (!RectContains(b, p) || t.cat < 0 ||
+                    t.cat >= (int)s.groups.size()) {
+                    continue;
+                }
+                d.targetCat = t.cat;
+                d.targetIndex = (int)s.groups[t.cat].items.size();
+                wf::Rect ind = b;
+                bool outline = true;
+                // Before or after the app under the pointer.
+                for (auto const& c : surf->cells) {
+                    if (c.cat != t.cat) {
+                        continue;
+                    }
+                    auto cb = BoundsIn(c.el, surf->root);
+                    if (!RectContains(cb, p)) {
+                        continue;
+                    }
+                    bool after = !c.cluster && p.X > cb.X + cb.Width / 2;
+                    d.targetIndex = c.index + (after ? 1 : 0);
+                    ind = {after ? cb.X + cb.Width - 1.5f : cb.X - 1.5f,
+                           cb.Y + 4, 3, std::max(0.0f, cb.Height - 8)};
+                    outline = false;
+                    break;
+                }
+                show(ind, outline);
+                break;
+            }
+            // A Start app on the board's empty space: a new group with it.
+            if (d.targetCat < 0 &&
+                (d.kind == DragKind::NewApp || d.kind == DragKind::App) &&
+                surf == m_board && m_boardHost) {
+                auto b = BoundsIn(m_boardHost, surf->root);
+                if (RectContains(b, p)) {
+                    d.targetCat = kNewGroupTarget;
+                    show(b, true);
+                }
+            }
+            break;
+        }
+        case DragKind::Group: {
+            d.intoGroup = false;
+            bool singleApp = d.item >= 0 && d.cat >= 0 &&
+                             d.cat < (int)s.groups.size() &&
+                             s.groups[d.cat].items.size() == 1;
+            for (auto const& t : surf->tiles) {
+                auto b = BoundsIn(t.el, surf->root);
+                if (!RectContains(b, p)) {
+                    continue;
+                }
+                // A single app over the middle of another tile: into it.
+                if (singleApp && t.cat != d.cat &&
+                    p.X > b.X + b.Width / 4 && p.X < b.X + b.Width * 3 / 4) {
+                    d.targetCat = t.cat;
+                    d.intoGroup = true;
+                    show(b, true);
+                    break;
+                }
+                bool before = p.X < b.X + b.Width / 2;
+                d.targetCat = t.cat;
+                d.targetIndex = before ? t.cat : t.cat + 1;
+                float gap = (float)(s.gapX * d.scale / 2);
+                show({before ? b.X - gap - 1.5f : b.X + b.Width + gap - 1.5f,
+                      b.Y, 3, b.Height},
+                     false);
+                break;
+            }
+            // Between tiles (in a gap, or under a tile where its name is):
+            // the nearest tile of that row decides, before or after it.
+            if (d.targetCat < 0) {
+                float labelBand =
+                    (float)((BoardLabelHeight(s) + s.gapY) * d.scale);
+                float gapAbove = (float)(s.gapY * d.scale / 2);
+                float bestDist = 1e9f;
+                wf::Rect best{};
+                int bestCat = -1;
+                for (auto const& t : surf->tiles) {
+                    if (t.cat < 0 || t.cat >= (int)s.groups.size()) {
+                        continue;
+                    }
+                    auto b = BoundsIn(t.el, surf->root);
+                    if (p.Y < b.Y - gapAbove ||
+                        p.Y > b.Y + b.Height + labelBand) {
+                        continue;  // another row
+                    }
+                    float dist = p.X < b.X                ? b.X - p.X
+                                 : p.X > b.X + b.Width ? p.X - b.X - b.Width
+                                                       : 0;
+                    if (dist < bestDist) {
+                        bestDist = dist;
+                        best = b;
+                        bestCat = t.cat;
+                    }
+                }
+                if (bestCat >= 0) {
+                    bool before = p.X < best.X + best.Width / 2;
+                    d.targetCat = bestCat;
+                    d.targetIndex = before ? bestCat : bestCat + 1;
+                    float gap = (float)(s.gapX * d.scale / 2);
+                    show({before ? best.X - gap - 1.5f
+                                 : best.X + best.Width + gap - 1.5f,
+                          best.Y, 3, best.Height},
+                         false);
+                }
+            }
+            break;
+        }
+        case DragKind::Resize: {
+            // The pointer drags the tile's bottom-right corner, and the
+            // tile snaps to the nearest offered size, in app spots (half
+            // cells). Only its size changes; its app grid only gets smaller
+            // if it no longer fits (on drop). The tile is re-laid out live
+            // as the size snaps.
+            double labelH = BoardLabelHeight(s);
+            double w = d.startW + (p.X - d.start.X) / d.scale;
+            double h = d.startH + (p.Y - d.start.Y) / d.scale;
+            double spotW = (s.tileSize + s.gapX) / 2;
+            double spotH = (s.tileSize + s.gapY + labelH) / 2;
+            double c = Clamp((w + s.gapX) / spotW, 1, 6);
+            double r = Clamp((h + s.gapY + labelH) / spotH, 1, 6);
+            std::wstring size = d.newSize;
+            double best = 1e9;
+            for (PCWSTR t : kTileSizes) {
+                if (std::wstring_view(t) == L"1x1") {
+                    continue;  // an app without a group, not a group size
+                }
+                auto l = MakeLayout(t, L"");
+                double dist = std::hypot(l.spanHalfColumns - c,
+                                         l.spanHalfRows - r);
+                if (dist < best) {
+                    best = dist;
+                    size = t;
+                }
+            }
+            d.targetCat = d.cat;
+            if (d.ghostText) {
+                d.ghostText.Text(TileSizeText(size));
+            }
+            if (size != d.newSize && d.cat >= 0 &&
+                d.cat < (int)m_model.groups.size()) {
+                d.newSize = size;
+                m_model.groups[d.cat].tileSize = size;
+                RebuildBoard();
+            }
+            break;
+        }
+    }
+    if (d.targetCat < 0 && d.targetCat != kNewGroupTarget) {
+        show({}, false);
+    }
+}
+
+void SettingsWindow::EndDrag(bool drop) {
+    DragState d = m_drag;
+    m_drag = DragState{};
+    if (d.surface && d.surface->overlay) {
+        d.surface->overlay.Children().Clear();
+    }
+    if (d.source) {
+        d.source.Opacity(1);
+    }
+    if (d.kind == DragKind::Resize && d.active && d.cat >= 0 &&
+        d.cat < (int)m_model.groups.size()) {
+        // The size was applied live; keep it, or put it back if canceled.
+        auto& cat = m_model.groups[d.cat];
+        if (!drop && !d.originalSize.empty() &&
+            cat.tileSize != d.originalSize) {
+            cat.tileSize = d.originalSize;
+            RebuildBoard();
+        } else if (drop && cat.tileSize != d.originalSize) {
+            // Applied from the size it had before the drag.
+            std::wstring size = cat.tileSize;
+            cat.tileSize = d.originalSize;
+            SetTileSize(cat, size);
+            OnChanged();
+            RebuildBoard();
+            LoadBoardGroupFields();
+        }
+        return;
+    }
+    if (!drop || !d.active) {
+        return;
+    }
+    // Applied after this pointer event: rebuilding the board removes the
+    // element that has the pointer capture.
+    Later([this, d] { ApplyDrop(d); });
+}
+
+void SettingsWindow::ApplyDrop(DragState const& d) {
+    auto& cats = m_model.groups;
+    auto validCat = [&](int c) { return c >= 0 && c < (int)cats.size(); };
+    bool changed = false;
+    switch (d.kind) {
+        case DragKind::App:
+        case DragKind::NewApp: {
+            if (d.kind == DragKind::App && d.targetCat == kNewGroupTarget) {
+                // Out of its group to empty space: a group of its own.
+                if (!validCat(d.cat) || d.item < 0 ||
+                    d.item >= (int)cats[d.cat].items.size()) {
+                    break;
+                }
+                EditGroup g = MakeSingleApp(cats[d.cat].items[d.item]);
+                cats[d.cat].items.erase(cats[d.cat].items.begin() + d.item);
+                cats.push_back(std::move(g));
+                m_selCat = (int)cats.size() - 1;
+                m_selItem = 0;
+                m_boardSelCat = m_selCat;
+                changed = true;
+                break;
+            }
+            if (d.kind == DragKind::NewApp && d.targetCat == kNewGroupTarget) {
+                // A group of its own: one spot, without a name or a
+                // background, so it looks like a single app.
+                EditGroup g;
+                auto const* a = FindPickerApp(d.app);
+                g.name = a ? a->name : d.app;
+                g.tileSize = L"1x1";
+                g.appGrid = kAutoGrid;
+                g.showLabel = false;
+                g.showBackground = false;
+                EditItem item;
+                item.type = L"app";
+                item.app = d.app;
+                g.items.push_back(std::move(item));
+                cats.push_back(std::move(g));
+                m_selCat = (int)cats.size() - 1;
+                m_selItem = 0;
+                m_boardSelCat = m_selCat;
+                changed = true;
+                break;
+            }
+            if (!validCat(d.targetCat)) {
+                break;
+            }
+            // Onto an app without a group: the two make a group.
+            if (IsSingleApp(cats[d.targetCat])) {
+                MakeGroupOf(cats[d.targetCat], NewGroupName(cats));
+            }
+            int sc = d.cat, si = d.item;
+            EditItem item;
+            if (d.kind == DragKind::NewApp) {
+                // Always a new item: an app can be in several groups, or
+                // more than once in one.
+                sc = -1;
+                item.type = L"app";
+                item.app = d.app;
+            }
+            if (sc >= 0) {
+                if (!validCat(sc) || si < 0 ||
+                    si >= (int)cats[sc].items.size()) {
+                    break;
+                }
+                item = cats[sc].items[si];
+                cats[sc].items.erase(cats[sc].items.begin() + si);
+            }
+            int ti = d.targetIndex;
+            if (sc == d.targetCat && ti > si) {
+                ti--;
+            }
+            auto& dest = cats[d.targetCat].items;
+            ti = std::clamp(ti, 0, (int)dest.size());
+            dest.insert(dest.begin() + ti, std::move(item));
+            m_selCat = d.targetCat;
+            m_selItem = ti;
+            SelectBoardGroup(m_selCat);
+            changed = true;
+            break;
+        }
+        case DragKind::Group: {
+            int from = d.cat, to = d.targetIndex;
+            if (d.intoGroup) {
+                // A single app into another group: its own group goes.
+                if (!validCat(from) || !validCat(d.targetCat) ||
+                    from == d.targetCat || cats[from].items.empty()) {
+                    break;
+                }
+                EditItem item = cats[from].items.front();
+                // Onto an app without a group: the two make a group.
+                if (IsSingleApp(cats[d.targetCat])) {
+                    MakeGroupOf(cats[d.targetCat], NewGroupName(cats));
+                }
+                auto& dest = cats[d.targetCat].items;
+                dest.push_back(std::move(item));
+                int target = d.targetCat;
+                int index = (int)dest.size() - 1;
+                cats.erase(cats.begin() + from);
+                if (from < target) {
+                    target--;
+                }
+                m_selCat = target;
+                m_selItem = index;
+                SelectBoardGroup(m_selCat);
+                changed = true;
+                break;
+            }
+            if (!validCat(from) || to < 0 || to > (int)cats.size()) {
+                break;
+            }
+            if (to > from) {
+                to--;
+            }
+            if (to == from) {
+                break;
+            }
+            EditGroup moved = std::move(cats[from]);
+            cats.erase(cats.begin() + from);
+            bool single = IsSingleApp(moved);
+            cats.insert(cats.begin() + to, std::move(moved));
+            m_selCat = to;
+            m_selItem = single ? 0 : -1;  // an app on its own stays the app
+            SelectBoardGroup(m_selCat);
+            changed = true;
+            break;
+        }
+        case DragKind::Resize:
+            break;  // applied live, see EndDrag
+    }
+    if (!changed) {
+        return;
+    }
+    OnChanged();
+    if (d.surface && d.surface == m_flyoutSurface) {
+        RebuildFlyout();  // the board follows when the flyout closes
+        LoadBoardDetails();
+    } else {
+        RebuildBoard();
+        if (d.kind == DragKind::NewApp || d.kind == DragKind::App) {
+            RefreshPalette();
+        }
+    }
+}
+
+// --- Menus ------------------------------------------------------------------
+
+void SettingsWindow::ShowRenameFlyout(int ci, FrameworkElement const& anchor) {
+    if (ci < 0 || ci >= (int)m_model.groups.size()) {
+        return;
+    }
+    xc::Flyout fly;
+    ThemeFlyout(fly, m_dark);
+    xc::StackPanel sp;
+    sp.Spacing(8);
+    xc::TextBox box;
+    box.Header(Box(L"Group name"));
+    box.Width(240);
+    box.Text(m_model.groups[ci].name);
+    sp.Children().Append(box);
+    auto holder = std::make_shared<xc::Flyout>(fly);
+    fly.Closed([holder](auto&&, auto&&) { *holder = nullptr; });
+    auto commit = [this, ci, box, holder] {
+        std::wstring name(box.Text());
+        if (ci < (int)m_model.groups.size() && !name.empty() &&
+            name != m_model.groups[ci].name) {
+            m_model.groups[ci].name = name;
+            OnChanged();
+            Later([this] {
+                RebuildBoard();
+                RefreshPalette();
+            });
+        }
+        if (*holder) {
+            holder->Hide();
+        }
+    };
+    box.KeyDown([commit](auto&&, Input::KeyRoutedEventArgs const& e) {
+        if (e.Key() == winrt::Windows::System::VirtualKey::Enter) {
+            e.Handled(true);
+            commit();
+        }
+    });
+    auto ok = TextButton(nullptr, L"Rename", commit);
+    ok.HorizontalAlignment(HorizontalAlignment::Right);
+    sp.Children().Append(ok);
+    fly.Content(sp);
+    fly.Opened([box](auto&&, auto&&) {
+        box.Focus(FocusState::Programmatic);
+        box.SelectAll();
+    });
+    fly.ShowAt(anchor);
+}
+
+xc::MenuFlyout SettingsWindow::TileMenu(int ci, FrameworkElement const& tile) {
+    xc::MenuFlyout menu;
+    ThemeMenu(menu, m_dark);
+    winrt::weak_ref<FrameworkElement> weakTile = tile;
+    auto add = [&](PCWSTR glyph, PCWSTR text, std::function<void()> fn) {
+        xc::MenuFlyoutItem mi;
+        mi.Text(text);
+        xc::FontIcon icon;
+        icon.Glyph(glyph);
+        mi.Icon(icon);
+        mi.Click([this, fn](auto&&, auto&&) { Later(fn); });
+        menu.Items().Append(mi);
+    };
+    add(L"", L"Rename…", [this, ci, weakTile] {
+        if (auto t = weakTile.get()) {
+            ShowRenameFlyout(ci, t);
+        }
+    });
+    xc::MenuFlyoutSubItem sizes;
+    sizes.Text(L"Tile size");
+    xc::FontIcon sizeIcon;
+    sizeIcon.Glyph(L"");
+    sizes.Icon(sizeIcon);
+    std::wstring current = m_model.groups[ci].tileSize;
+    for (auto const& [value, text] : TileSizeOptions()) {
+        xc::ToggleMenuFlyoutItem t;
+        t.Text(text);
+        t.IsChecked(value == current);
+        std::wstring v = value;
+        t.Click([this, ci, v](auto&&, auto&&) {
+            Later([this, ci, v] {
+                if (ci < (int)m_model.groups.size() &&
+                    m_model.groups[ci].tileSize != v) {
+                    SetTileSize(m_model.groups[ci], v);
+                    OnChanged();
+                    RebuildBoard();
+                    LoadBoardGroupFields();
+                }
+            });
+        });
+        sizes.Items().Append(t);
+    }
+    menu.Items().Append(sizes);
+    xc::MenuFlyoutSubItem grids;
+    grids.Text(L"Apps in the tile");
+    xc::FontIcon gridIcon;
+    gridIcon.Glyph(L"");
+    grids.Icon(gridIcon);
+    std::wstring currentGrid = m_model.groups[ci].appGrid;
+    for (auto const& [value, text] :
+         AppGridOptions(m_model.groups[ci].tileSize)) {
+        xc::ToggleMenuFlyoutItem t;
+        t.Text(text);
+        t.IsChecked(value == currentGrid);
+        std::wstring v = value;
+        t.Click([this, ci, v](auto&&, auto&&) {
+            Later([this, ci, v] {
+                if (ci < (int)m_model.groups.size() &&
+                    m_model.groups[ci].appGrid != v) {
+                    m_model.groups[ci].appGrid = v;
+                    OnChanged();
+                    RebuildBoard();
+                    LoadBoardGroupFields();
+                }
+            });
+        });
+        grids.Items().Append(t);
+    }
+    menu.Items().Append(grids);
+    add(L"", L"Duplicate", [this, ci] {
+        if (ci < (int)m_model.groups.size()) {
+            m_selCat = ci;
+            DuplicateGroup();
+        }
+    });
+    // A group of a single app: Remove from group dissolves the group,
+    // leaving the app on its own.
+    if (ci < (int)m_model.groups.size() &&
+        m_model.groups[ci].items.size() == 1 &&
+        !IsSingleApp(m_model.groups[ci])) {
+        add(L"\uE8E6", L"Remove from group",
+            [this, ci] { RemoveGroupKeepApp(ci); });
+    }
+    add(L"", L"Delete", [this, ci] {
+        if (ci < (int)m_model.groups.size()) {
+            m_selCat = ci;
+            DeleteGroup();
+        }
+    });
+    return menu;
+}
+
+xc::MenuFlyout SettingsWindow::AppMenu(int ci, int ii) {
+    xc::MenuFlyout menu;
+    ThemeMenu(menu, m_dark);
+    auto add = [&](auto& items, PCWSTR glyph, std::wstring const& text,
+                   std::function<void()> fn) {
+        xc::MenuFlyoutItem mi;
+        mi.Text(text);
+        if (glyph) {
+            xc::FontIcon icon;
+            icon.Glyph(glyph);
+            mi.Icon(icon);
+        }
+        mi.Click([this, fn](auto&&, auto&&) { Later(fn); });
+        items.Append(mi);
+    };
+    auto valid = [this, ci, ii] {
+        return ci < (int)m_model.groups.size() &&
+               ii < (int)m_model.groups[ci].items.size();
+    };
+    auto items = menu.Items();
+    add(items, L"", L"Edit…", [this, ci, ii] {
+        // Selects it: its settings are below the board.
+        if (ci < (int)m_model.groups.size() &&
+            ii < (int)m_model.groups[ci].items.size()) {
+            SelectBoardItem(ci, ii);
+            ScrollToAppSettings();
+        }
+    });
+    // Move left / right: one place earlier or later in the group.
+    auto moveBy = [this, ci, ii, valid](int delta) {
+        if (!valid()) {
+            return;
+        }
+        auto& list = m_model.groups[ci].items;
+        int j = ii + delta;
+        if (j < 0 || j >= (int)list.size()) {
+            return;
+        }
+        std::swap(list[ii], list[j]);
+        m_selCat = ci;
+        m_selItem = j;
+        OnChanged();
+        RefreshBoardAfterEdit();
+    };
+    int count = ci < (int)m_model.groups.size()
+                    ? (int)m_model.groups[ci].items.size()
+                    : 0;
+    if (ii > 0) {
+        add(items, L"\uE72B", L"Move left", [moveBy] { moveBy(-1); });
+    }
+    if (ii + 1 < count) {
+        add(items, L"\uE72A", L"Move right", [moveBy] { moveBy(1); });
+    }
+    bool single = ci < (int)m_model.groups.size() &&
+                  IsSingleApp(m_model.groups[ci]);
+    // An app without a group: Add to group makes it a group (2 x 2).
+    if (single) {
+        add(items, L"\uF0E2", L"Add to group", [this, ci, valid] {
+            if (!valid() || !IsSingleApp(m_model.groups[ci])) {
+                return;
+            }
+            MakeGroupOf(m_model.groups[ci], NewGroupName(m_model.groups));
+            m_selCat = ci;
+            m_selItem = 0;
+            m_boardSelCat = ci;
+            OnChanged();
+            RefreshBoardAfterEdit();
+        });
+    }
+    // Move to another group (not an app without one); an app without a
+    // group then doesn't stay behind empty.
+    bool anyGroup = false;
+    for (int j = 0; j < (int)m_model.groups.size(); j++) {
+        anyGroup |= j != ci && !IsSingleApp(m_model.groups[j]);
+    }
+    if (anyGroup) {
+        xc::MenuFlyoutSubItem moveTo;
+        moveTo.Text(L"Move to");
+        xc::FontIcon moveIcon;
+        moveIcon.Glyph(L"");
+        moveTo.Icon(moveIcon);
+        auto moveItems = moveTo.Items();
+        for (int j = 0; j < (int)m_model.groups.size(); j++) {
+            if (j == ci || IsSingleApp(m_model.groups[j])) {
+                continue;
+            }
+            add(moveItems, nullptr, m_model.groups[j].name,
+                [this, ci, ii, j, valid] {
+                    if (!valid() || j >= (int)m_model.groups.size()) {
+                        return;
+                    }
+                    auto& from = m_model.groups[ci].items;
+                    EditItem item = from[ii];
+                    from.erase(from.begin() + ii);
+                    m_model.groups[j].items.push_back(std::move(item));
+                    int target = j;
+                    if (IsSingleApp(m_model.groups[ci]) &&
+                        m_model.groups[ci].items.empty()) {
+                        m_model.groups.erase(m_model.groups.begin() + ci);
+                        if (ci < target) {
+                            target--;
+                        }
+                    }
+                    m_selCat = target;
+                    m_selItem = -1;
+                    OnChanged();
+                    RebuildBoard();
+                    RebuildFlyout();
+                    RefreshPalette();
+                    LoadBoardDetails();
+                });
+        }
+        items.Append(moveTo);
+    }
+    add(items, L"", L"Duplicate", [this, ci, ii, valid] {
+        if (!valid()) {
+            return;
+        }
+        // The copy goes right after it and becomes the selection.
+        m_selCat = ci;
+        m_selItem = ii;
+        DuplicateItem();
+    });
+    // A group's only app: Remove from group dissolves the group, leaving
+    // the app on its own.
+    if (!single && count == 1) {
+        add(items, L"\uE8E6", L"Remove from group",
+            [this, ci] { RemoveGroupKeepApp(ci); });
+    }
+    add(items, L"", L"Remove", [this, ci, ii, valid] {
+        if (!valid()) {
+            return;
+        }
+        // A single app's group goes with it (see DeleteItem).
+        if (IsSingleApp(m_model.groups[ci]) &&
+            m_model.groups[ci].items.size() == 1) {
+            m_selCat = ci;
+            m_selItem = -1;
+            RemoveSelectedGroup();
+            return;
+        }
+        auto& from = m_model.groups[ci].items;
+        from.erase(from.begin() + ii);
+        m_selItem = -1;
+        OnChanged();
+        RebuildBoard();
+        RebuildFlyout();
+        RefreshPalette();
+        LoadBoardDetails();
+    });
+    return menu;
+}
+
+// Dissolves a group of a single app, keeping the app on its own.
+void SettingsWindow::RemoveGroupKeepApp(int ci) {
+    if (ci < 0 || ci >= (int)m_model.groups.size() ||
+        m_model.groups[ci].items.size() != 1 ||
+        IsSingleApp(m_model.groups[ci])) {
+        return;
+    }
+    auto& g = m_model.groups[ci];
+    g = MakeSingleApp(g.items.front());
+    m_selCat = ci;
+    m_selItem = 0;
+    m_boardSelCat = ci;
+    OnChanged();
+    RefreshBoardAfterEdit();
+}
+
+void SettingsWindow::SelectBoardGroup(int ci) {
+    m_boardSelCat = ci;
+    UpdateBoardSelection();
+}
+
+// Accent borders: on the selected app, or on its group when no app is
+// selected, so it's clear what Duplicate and Delete act on.
+void SettingsWindow::UpdateBoardSelection() {
+    if (!m_board) {
+        return;
+    }
+    for (auto const& t : m_board->tiles) {
+        if (t.highlight) {
+            t.highlight.Visibility(t.cat == m_boardSelCat && m_selItem < 0
+                                       ? Visibility::Visible
+                                       : Visibility::Collapsed);
+        }
+    }
+    for (auto const& surf : {m_board, m_flyoutSurface}) {
+        if (!surf) {
+            continue;
+        }
+        for (auto const& c : surf->cells) {
+            if (auto b = c.el.try_as<xc::Border>(); b && !c.cluster) {
+                b.BorderBrush(c.cat == m_selCat && c.index == m_selItem
+                                  ? xm::SolidColorBrush(AccentColor())
+                                  : Brush(0, 0, 0, 0));
+            }
+        }
+    }
+}
+
+// --- Board details panel ------------------------------------------------------
+
+FrameworkElement SettingsWindow::BuildBoardDetails() {
+    m_boardCatControls.clear();
+    m_boardItemControls.clear();
+    xc::StackPanel sp;
+    sp.Spacing(12);
+
+    auto heading = [&](PCWSTR text) {
+        auto t = Text(text, 16);
+        t.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        sp.Children().Append(t);
+    };
+
+    // Group
+    heading(L"Group");
+    m_boardCatName = xc::TextBox();
+    m_boardCatName.Header(Box(L"Name"));
+    m_boardCatName.TextChanged([this](auto&&, auto&&) {
+        auto* cat = SelectedGroup();
+        if (m_refreshing || !cat || !m_boardCatName) {
+            return;
+        }
+        std::wstring name(m_boardCatName.Text());
+        if (name == cat->name) {
+            return;
+        }
+        cat->name = name;
+        OnChanged();
+        ScheduleBoardRebuild(false);
+    });
+    auto addApp = AddAppButton();
+    auto dupCat =
+        TextButton(L"", L"Duplicate", [this] { DuplicateGroup(); });
+    auto delCat =
+        TextButton(L"", L"Delete", [this] { DeleteGroup(); });
+    for (xc::Control c : {xc::Control(addApp), xc::Control(dupCat),
+                          xc::Control(delCat)}) {
+        m_boardCatControls.push_back(c);
+    }
+
+    // Name, with the group's buttons on the same row (level with the box).
+    xc::Grid nameRow;
+    nameRow.ColumnSpacing(8);
+    {
+        xc::ColumnDefinition c0, c1;
+        c0.Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+        c1.Width(GridLengthHelper::Auto());
+        nameRow.ColumnDefinitions().Append(c0);
+        nameRow.ColumnDefinitions().Append(c1);
+    }
+    nameRow.Children().Append(m_boardCatName);
+    xc::StackPanel catButtons;
+    catButtons.Orientation(xc::Orientation::Horizontal);
+    catButtons.Spacing(8);
+    catButtons.VerticalAlignment(VerticalAlignment::Bottom);
+    for (auto b : {addApp, dupCat, delCat}) {
+        catButtons.Children().Append(b);
+    }
+    xc::Grid::SetColumn(catButtons, 1);
+    nameRow.Children().Append(catButtons);
+    sp.Children().Append(WithHint(
+        nameRow, L"Shown under the tile and as the title of the opened group."));
+    m_boardCatControls.push_back(m_boardCatName);
+
+    m_boardTileSize = xc::ComboBox();
+    m_boardTileSize.Header(Box(L"Tile size"));
+    m_boardTileSize.HorizontalAlignment(HorizontalAlignment::Stretch);
+    m_boardTileSizeValues.clear();
+    for (auto const& [value, text] : TileSizeOptions()) {
+        m_boardTileSize.Items().Append(Box(text));
+        m_boardTileSizeValues.push_back(value);
+    }
+    m_boardTileSize.SelectionChanged([this](auto&&, auto&&) {
+        auto* cat = SelectedGroup();
+        int i = m_boardTileSize ? m_boardTileSize.SelectedIndex() : -1;
+        if (m_refreshing || !cat || i < 0 ||
+            i >= (int)m_boardTileSizeValues.size() ||
+            cat->tileSize == m_boardTileSizeValues[i]) {
+            return;
+        }
+        SetTileSize(*cat, m_boardTileSizeValues[i]);
+        OnChanged();
+        ScheduleBoardRebuild(false);
+        // The app grids offered follow the size.
+        Later([this] { LoadBoardGroupFields(); });
+    });
+    auto tileField = WithHint(
+        m_boardTileSize, std::wstring(kTileSizeHint) +
+                             L" You can also drag the tile's corner.");
+    m_boardCatControls.push_back(m_boardTileSize);
+    m_boardAppGrid = xc::ComboBox();
+    m_boardAppGrid.Header(Box(L"Apps in the tile"));
+    m_boardAppGrid.HorizontalAlignment(HorizontalAlignment::Stretch);
+    m_boardAppGridValues.clear();  // filled for the selected group
+    m_boardAppGrid.SelectionChanged([this](auto&&, auto&&) {
+        auto* cat = SelectedGroup();
+        int i = m_boardAppGrid ? m_boardAppGrid.SelectedIndex() : -1;
+        if (m_refreshing || !cat || i < 0 ||
+            i >= (int)m_boardAppGridValues.size() ||
+            cat->appGrid == m_boardAppGridValues[i]) {
+            return;
+        }
+        cat->appGrid = m_boardAppGridValues[i];
+        OnChanged();
+        ScheduleBoardRebuild(false);
+    });
+    auto gridField = WithHint(m_boardAppGrid, kAppGridHint);
+    m_boardCatControls.push_back(m_boardAppGrid);
+    m_boardCatShowNames =
+        GroupToggle(L"Show app names", &EditGroup::showAppNames);
+    auto namesField = WithHint(m_boardCatShowNames, kShowNamesHint);
+    m_boardCatControls.push_back(m_boardCatShowNames);
+    m_boardCatShowLabel = GroupToggle(L"Show group name", &EditGroup::showLabel);
+    auto labelField = WithHint(
+        m_boardCatShowLabel,
+        L"The name under the tile. Needs \"Show group names\" on in "
+        L"Customization.");
+    m_boardCatControls.push_back(m_boardCatShowLabel);
+    m_boardCatShowBackground =
+        GroupToggle(L"Show background", &EditGroup::showBackground);
+    auto backgroundField = WithHint(
+        m_boardCatShowBackground,
+        L"Off: no background, border or padding, just the apps.");
+    m_boardCatControls.push_back(m_boardCatShowBackground);
+
+    // Fields side by side, in equal columns.
+    auto fieldRow = [&](std::initializer_list<FrameworkElement> fields) {
+        xc::Grid row;
+        row.ColumnSpacing(16);
+        int col = 0;
+        for (auto field : fields) {
+            xc::ColumnDefinition cd;
+            cd.Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+            row.ColumnDefinitions().Append(cd);
+            field.VerticalAlignment(VerticalAlignment::Top);
+            xc::Grid::SetColumn(field, col++);
+            row.Children().Append(field);
+        }
+        sp.Children().Append(row);
+    };
+    // The tile's size and apps; then what it shows.
+    fieldRow({tileField, gridField});
+    fieldRow({namesField, labelField, backgroundField});
+
+    // The app section goes in its own column.
+    xc::StackPanel appSp;
+    appSp.Spacing(12);
+
+    // App: its name above the heading (as in Explorer Command Bar's
+    // settings), the fields as cards below (BuildItemEditor).
+    xc::Grid appHeader;
+    xc::ColumnDefinition h0, h1;
+    h0.Width(GridLengthHelper::FromValueAndType(1, GridUnitType::Star));
+    h1.Width(GridLengthHelper::Auto());
+    appHeader.ColumnDefinitions().Append(h0);
+    appHeader.ColumnDefinitions().Append(h1);
+    xc::StackPanel appTitles;
+    appTitles.VerticalAlignment(VerticalAlignment::Bottom);
+    m_appCaption = Text(L"", 12, true);
+    appTitles.Children().Append(m_appCaption);
+    auto appTitle = Text(L"App", 20);
+    appTitle.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+    appTitles.Children().Append(appTitle);
+    appHeader.Children().Append(appTitles);
+    xc::StackPanel appBar;
+    appBar.Orientation(xc::Orientation::Horizontal);
+    appBar.VerticalAlignment(VerticalAlignment::Bottom);
+    appBar.Spacing(4);
+    for (auto b : {IconButton(L"", L"Duplicate",
+                              [this] { DuplicateItem(); }),
+                   IconButton(L"", L"Remove", [this] { DeleteItem(); })}) {
+        appBar.Children().Append(b);
+        m_boardItemControls.push_back(b);
+    }
+    xc::Grid::SetColumn(appBar, 1);
+    appHeader.Children().Append(appBar);
+    appSp.Children().Append(appHeader);
+
+    // The selected item's editor (BuildItemEditor).
+    m_editor = xc::StackPanel();
+    appSp.Children().Append(m_editor);
+
+    // The group's settings and the app's, each in its own card, one under
+    // the other.
+    xc::StackPanel sections;
+    sections.Spacing(16);
+    sections.Children().Append(Card(sp));
+    // The app's fields are cards of their own, on the page.
+    xc::Border appCard;
+    appCard.Margin(ThicknessHelper::FromLengths(0, 8, 0, 0));
+    appCard.Child(appSp);
+    m_appCard = appCard;
+    sections.Children().Append(appCard);
+    return sections;
+}
+
+// A switch of the selected group (`field` of EditGroup), on the details
+// panel.
+xc::ToggleSwitch SettingsWindow::GroupToggle(PCWSTR header,
+                                             bool EditGroup::*field) {
+    xc::ToggleSwitch t;
+    t.Header(Box(header));
+    t.MinWidth(0);
+    t.OnContent(Box(L"On"));
+    t.OffContent(Box(L"Off"));
+    t.IsOn(true);
+    t.Toggled([this, t, field](auto&&, auto&&) {
+        auto* cat = SelectedGroup();
+        if (m_refreshing || !cat || cat->*field == t.IsOn()) {
+            return;
+        }
+        cat->*field = t.IsOn();
+        OnChanged();
+        ScheduleBoardRebuild(false);
+    });
+    return t;
+}
+
+// Fills an "Apps in the tile" list with the grids that fit the group's
+// tile and selects its grid. Call with m_refreshing set.
+void SettingsWindow::FillAppGridCombo(xc::ComboBox const& combo,
+                                      std::vector<std::wstring>& values,
+                                      EditGroup const* cat) {
+    auto options = AppGridOptions(cat ? cat->tileSize : L"2x2");
+    bool same = options.size() == values.size();
+    for (size_t i = 0; same && i < options.size(); i++) {
+        same = options[i].first == values[i];
+    }
+    if (!same) {
+        combo.Items().Clear();
+        values.clear();
+        for (auto const& [value, text] : options) {
+            combo.Items().Append(Box(text));
+            values.push_back(value);
+        }
+    }
+    int sel = -1;
+    for (size_t i = 0; cat && i < values.size(); i++) {
+        if (values[i] == cat->appGrid) {
+            sel = (int)i;
+        }
+    }
+    if (combo.SelectedIndex() != sel) {
+        combo.SelectedIndex(sel);
+    }
+}
+
+// "Add app" with a menu (chevron): a Start app or a program, added to the
+// selected group. On the board's toolbar and in the group's settings.
+xc::Button SettingsWindow::AddAppButton() {
+    xc::MenuFlyout menu;
+    ThemeMenu(menu, m_dark);
+    auto add = [&](PCWSTR glyph, PCWSTR text, std::wstring type) {
+        xc::MenuFlyoutItem mi;
+        mi.Text(text);
+        xc::FontIcon icon;
+        icon.Glyph(glyph);
+        mi.Icon(icon);
+        mi.Click([this, type](auto&&, auto&&) {
+            Later([this, type] { AddItem(type); });
+        });
+        menu.Items().Append(mi);
+    };
+    add(L"\uF0E2", L"Start app", L"app");
+    add(L"\uE756", L"Program", L"program");
+    add(L"\uE774", L"Website", L"website");
+    menu.Placement(xcp::FlyoutPlacementMode::BottomEdgeAlignedLeft);
+    xc::Button addApp;
+    xc::StackPanel content;
+    content.Orientation(xc::Orientation::Horizontal);
+    content.Spacing(8);
+    content.Children().Append(Glyph(L"\uE710", 14));
+    content.Children().Append(Text(L"Add app", 14));
+    auto chevron = Glyph(L"\uE70D", 10);
+    chevron.VerticalAlignment(VerticalAlignment::Center);
+    chevron.Margin(ThicknessHelper::FromLengths(4, 0, 0, 0));
+    content.Children().Append(chevron);
+    addApp.Content(content);
+    addApp.Flyout(menu);
+    xc::ToolTipService::SetToolTip(
+        addApp, Box(L"Add a Start app, a program or a website to the selected group (or, with none selected, as a group of its own)"));
+    return addApp;
+}
+
+// The selected group's fields, without touching a field being typed in.
+void SettingsWindow::LoadBoardGroupFields() {
+    if (!m_boardCatName) {
+        return;
+    }
+    // An app without a group has no group settings: shown as none selected.
+    auto* cat = SelectedGroup();
+    if (cat && IsSingleApp(*cat)) {
+        cat = nullptr;
+    }
+    m_refreshing = true;
+    std::wstring name = cat ? cat->name : L"";
+    if (std::wstring(m_boardCatName.Text()) != name) {
+        m_boardCatName.Text(name);
+    }
+    int sel = -1;
+    for (size_t i = 0; cat && i < m_boardTileSizeValues.size(); i++) {
+        if (m_boardTileSizeValues[i] == cat->tileSize) {
+            sel = (int)i;
+        }
+    }
+    if (m_boardTileSize && m_boardTileSize.SelectedIndex() != sel) {
+        m_boardTileSize.SelectedIndex(sel);
+    }
+    for (auto [t, field] :
+         {std::pair{m_boardCatShowNames, &EditGroup::showAppNames},
+          std::pair{m_boardCatShowLabel, &EditGroup::showLabel},
+          std::pair{m_boardCatShowBackground, &EditGroup::showBackground}}) {
+        bool on = cat ? cat->*field : true;
+        if (t && t.IsOn() != on) {
+            t.IsOn(on);
+        }
+    }
+    if (m_boardAppGrid) {
+        FillAppGridCombo(m_boardAppGrid, m_boardAppGridValues, cat);
+    }
+    m_refreshing = false;
+    for (auto& c : m_boardCatControls) {
+        c.IsEnabled(cat != nullptr);
+    }
+}
+
+// Reloads the whole panel for the current selection.
+void SettingsWindow::LoadBoardDetails() {
+    if (!m_boardCatName) {
+        return;
+    }
+    m_detailsCat = m_selCat;
+    m_detailsItem = m_selItem;
+    LoadBoardGroupFields();
+    for (auto& c : m_boardItemControls) {
+        c.IsEnabled(SelectedItem() != nullptr);
+    }
+    bool hasGroup = SelectedGroup() != nullptr;
+    bool hasItem = SelectedItem() != nullptr;
+    // Add app works without a group too (it makes one).
+    for (auto b : {m_boardDup, m_boardDel}) {
+        if (b) {
+            b.IsEnabled(hasGroup);
+        }
+    }
+    if (m_boardAddApp) {
+        m_boardAddApp.IsEnabled(true);
+    }
+    // "Duplicate app" / "Delete app" with an app selected, else "... group".
+    auto setLabel = [](xc::Button const& b, std::wstring const& text) {
+        if (auto sp = b ? b.Content().try_as<xc::StackPanel>() : nullptr) {
+            uint32_t n = sp.Children().Size();
+            if (n > 0) {
+                if (auto t = sp.Children().GetAt(n - 1).try_as<xc::TextBlock>()) {
+                    t.Text(text);
+                }
+            }
+        }
+    };
+    setLabel(m_boardDup, hasItem ? L"Duplicate app" : L"Duplicate group");
+    setLabel(m_boardDel, hasItem ? L"Delete app" : L"Delete group");
+    if (m_boardDup) {
+        xc::ToolTipService::SetToolTip(
+            m_boardDup, Box(hasItem ? L"Duplicate the selected app"
+                                    : L"Duplicate the selected group"));
+    }
+    if (m_boardDel) {
+        xc::ToolTipService::SetToolTip(
+            m_boardDel, Box(hasItem ? L"Remove the selected app"
+                                    : L"Delete the selected group"));
+    }
+    BuildItemEditor();
+}
+
+void SettingsWindow::SelectBoardItem(int ci, int ii) {
+    bool same = ci == m_selCat && ii == m_selItem;
+    m_selCat = ci;
+    m_selItem = ii;
+    SelectBoardGroup(ci);
+    if (!same) {
+        LoadBoardDetails();
+    }
+}
+
+// Rebuilds the board (and the Start apps panel) once the current event is
+// done; edits typed into the details panel call this on every change.
+void SettingsWindow::ScheduleBoardRebuild(bool palette) {
+    m_paletteRebuildQueued = m_paletteRebuildQueued || palette;
+    if (m_boardRebuildQueued) {
+        return;
+    }
+    m_boardRebuildQueued = true;
+    Later([this] {
+        m_boardRebuildQueued = false;
+        bool palette = m_paletteRebuildQueued;
+        m_paletteRebuildQueued = false;
+        RebuildBoard();
+        if (palette) {
+            RefreshPalette();
+        }
+    });
+}
+
+// After an item action (add, move, duplicate, remove) on the board page.
+void SettingsWindow::RefreshBoardAfterEdit() {
+    if (m_page != L"board") {
+        return;
+    }
+    m_boardSelCat = m_selCat;
+    RebuildBoard();
+    RebuildFlyout();  // the opened group, if any
+    RefreshPalette();
+    LoadBoardDetails();
+}
+
+// After adding, duplicating or deleting a group: refreshes the board.
+void SettingsWindow::RefreshGroupsUi() {
+    if (m_page == L"board") {
+        m_boardSelCat = m_selCat;
+        RebuildBoard();
+        RefreshPalette();
+        LoadBoardDetails();
+    }
+}
+
+// --- Actions ----------------------------------------------------------------
+
+void SettingsWindow::AddGroup() {
+    std::wstring name = L"New group";
+    for (int n = 2; std::any_of(m_model.groups.begin(),
+                                m_model.groups.end(),
+                                [&](auto& c) { return c.name == name; });
+         n++) {
+        name = L"New group " + std::to_wstring(n);
+    }
+    EditGroup cat;
+    cat.name = name;
+    m_model.groups.push_back(std::move(cat));
+    m_selCat = (int)m_model.groups.size() - 1;
+    m_selItem = -1;
+    RefreshGroupsUi();
+    OnChanged();
+}
+
+void SettingsWindow::DuplicateGroup() {
+    auto* cat = SelectedGroup();
+    if (!cat) {
+        return;
+    }
+    EditGroup copy = *cat;
+    std::wstring base = cat->name + L" (copy)";
+    copy.name = base;
+    for (int n = 2; std::any_of(m_model.groups.begin(),
+                                m_model.groups.end(),
+                                [&](auto& c) { return c.name == copy.name; });
+         n++) {
+        copy.name = base.substr(0, base.size() - 1) + L" " +
+                    std::to_wstring(n) + L")";
+    }
+    m_model.groups.insert(m_model.groups.begin() + m_selCat + 1,
+                              std::move(copy));
+    m_selCat++;
+    m_selItem = -1;
+    RefreshGroupsUi();
+    OnChanged();
+}
+
+void SettingsWindow::DeleteGroup() {
+    auto* cat = SelectedGroup();
+    if (!cat) {
+        return;
+    }
+    if (!cat->items.empty()) {
+        // Asked first, in a dialog like the rest of the window; the group
+        // is looked up again after, in case the selection changed.
+        int index = m_selCat;
+        std::wstring name = cat->name;
+        size_t count = cat->items.size();
+        ShowConfirmDialog(
+            L"Delete this group?",
+            L"\u201C" + name + L"\u201D and its " + std::to_wstring(count) +
+                (count == 1 ? L" app" : L" apps") + L" will be removed.",
+            L"Delete", [this, index, name] {
+                if (index < (int)m_model.groups.size() &&
+                    m_model.groups[index].name == name) {
+                    m_selCat = index;
+                    RemoveSelectedGroup();
+                }
+            });
+        return;
+    }
+    RemoveSelectedGroup();
+}
+
+void SettingsWindow::RemoveSelectedGroup() {
+    if (!SelectedGroup()) {
+        return;
+    }
+    m_model.groups.erase(m_model.groups.begin() + m_selCat);
+    m_selCat = std::min(m_selCat, (int)m_model.groups.size() - 1);
+    m_selItem = -1;
+    RefreshGroupsUi();
+    OnChanged();
+}
+
+void SettingsWindow::AddItem(std::wstring const& type) {
+    auto* cat = SelectedGroup();
+    if (!cat || IsSingleApp(*cat)) {  // none, or an app without a group
+        // No group selected: a group of its own, a single app (one spot,
+        // without a name or a background).
+        std::wstring name = L"New group";
+        for (int n = 2; std::any_of(m_model.groups.begin(),
+                                    m_model.groups.end(),
+                                    [&](auto& c) { return c.name == name; });
+             n++) {
+            name = L"New group " + std::to_wstring(n);
+        }
+        EditGroup g;
+        g.name = name;
+        g.tileSize = L"1x1";
+        g.appGrid = kAutoGrid;
+        g.showLabel = false;
+        g.showBackground = false;
+        m_model.groups.push_back(std::move(g));
+        m_selCat = (int)m_model.groups.size() - 1;
+        cat = &m_model.groups.back();
+    }
+    EditItem item;
+    item.type = type;
+    cat->items.push_back(item);
+    m_selItem = (int)cat->items.size() - 1;
+    BuildItemEditor();
+    OnChanged();
+    RefreshBoardAfterEdit();
+}
+
+void SettingsWindow::DuplicateItem() {
+    auto* cat = SelectedGroup();
+    auto* item = SelectedItem();
+    if (!item) {
+        return;
+    }
+    if (IsSingleApp(*cat)) {
+        // An app without a group: a copy of its own, after it.
+        cat = nullptr;
+        m_model.groups.insert(m_model.groups.begin() + m_selCat + 1,
+                              MakeSingleApp(*item));
+        m_selCat++;
+        m_selItem = 0;
+        m_boardSelCat = m_selCat;
+        OnChanged();
+        RefreshBoardAfterEdit();
+        return;
+    }
+    EditItem copy = *item;
+    cat->items.insert(cat->items.begin() + m_selItem + 1, std::move(copy));
+    m_selItem++;
+    BuildItemEditor();
+    OnChanged();
+    RefreshBoardAfterEdit();
+}
+
+// Board toolbar: the selected app if there is one, or else its group.
+void SettingsWindow::DuplicateSelected() {
+    if (SelectedItem()) {
+        DuplicateItem();
+    } else {
+        DuplicateGroup();
+    }
+}
+
+void SettingsWindow::DeleteSelected() {
+    if (SelectedItem()) {
+        DeleteItem();
+    } else {
+        DeleteGroup();
+    }
+}
+
+void SettingsWindow::DeleteItem() {
+    auto* cat = SelectedGroup();
+    if (!SelectedItem()) {
+        return;
+    }
+    // A single app's group (1 x 1): the group goes with it, rather than
+    // being left empty.
+    if (IsSingleApp(*cat) && cat->items.size() == 1) {
+        RemoveSelectedGroup();
+        return;
+    }
+    cat->items.erase(cat->items.begin() + m_selItem);
+    m_selItem = std::min(m_selItem, (int)cat->items.size() - 1);
+    BuildItemEditor();
+    OnChanged();
+    RefreshBoardAfterEdit();
+}
+
+std::wstring SettingsWindow::Browse(PCWSTR title, bool icons) {
+    winrt::com_ptr<IFileOpenDialog> dlg;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(dlg.put())))) {
+        return L"";
+    }
+    COMDLG_FILTERSPEC iconFilters[] = {
+        {L"Icons and programs", L"*.ico;*.exe;*.dll;*.png;*.jpg;*.bmp"},
+        {L"All files", L"*.*"}};
+    COMDLG_FILTERSPEC programFilters[] = {
+        {L"Programs", L"*.exe;*.bat;*.cmd;*.lnk;*.msc;*.ps1"},
+        {L"All files", L"*.*"}};
+    if (icons) {
+        dlg->SetFileTypes(ARRAYSIZE(iconFilters), iconFilters);
+    } else {
+        dlg->SetFileTypes(ARRAYSIZE(programFilters), programFilters);
+    }
+    dlg->SetTitle(title);
+    // Don't resolve shortcuts: a .lnk is a fine program target.
+    FILEOPENDIALOGOPTIONS opts = 0;
+    dlg->GetOptions(&opts);
+    dlg->SetOptions(opts | FOS_NODEREFERENCELINKS | FOS_FORCEFILESYSTEM);
+    if (FAILED(dlg->Show(m_hwnd))) {
+        return L"";
+    }
+    winrt::com_ptr<IShellItem> result;
+    PWSTR path = nullptr;
+    std::wstring out;
+    if (SUCCEEDED(dlg->GetResult(result.put())) &&
+        SUCCEEDED(result->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+        out = path;
+        CoTaskMemFree(path);
+    }
+    return out;
+}
+
+// --- Import / export ----------------------------------------------------------
+// The exported file is JSON, one Windhawk setting key per line, e.g.
+// "groups[0].items[1].app": "Notepad". Importing also accepts nested
+// objects and arrays laid out like the mod's settings.
+
+namespace wdj = winrt::Windows::Data::Json;
+using FlatSettings = std::map<std::wstring, std::wstring>;
+
+std::wstring BuildSettingsJson(std::vector<RegEntry> const& entries) {
+    std::wstring json = L"{\n";
+    for (size_t i = 0; i < entries.size(); i++) {
+        auto const& e = entries[i];
+        json += L"  ";
+        json += wdj::JsonValue::CreateStringValue(e.name).Stringify();
+        json += L": ";
+        if (e.isString) {
+            json += wdj::JsonValue::CreateStringValue(e.text).Stringify();
+        } else if (e.isBool) {
+            json += e.number ? L"true" : L"false";
+        } else {
+            json += std::to_wstring((int)e.number);
+        }
+        json += i + 1 < entries.size() ? L",\n" : L"\n";
+    }
+    return json + L"}\n";
+}
+
+void FlattenJson(wdj::IJsonValue const& value,
+                 std::wstring const& path,
+                 FlatSettings& out) {
+    switch (value.ValueType()) {
+        case wdj::JsonValueType::Object:
+            for (auto const& pair : value.GetObject()) {
+                std::wstring key(pair.Key());
+                FlattenJson(pair.Value(), path.empty() ? key : path + L"." + key,
+                            out);
+            }
+            break;
+        case wdj::JsonValueType::Array: {
+            auto array = value.GetArray();
+            for (uint32_t i = 0; i < array.Size(); i++) {
+                FlattenJson(array.GetAt(i),
+                            path + L"[" + std::to_wstring(i) + L"]", out);
+            }
+            break;
+        }
+        case wdj::JsonValueType::String:
+            out[path] = std::wstring(value.GetString());
+            break;
+        case wdj::JsonValueType::Number:
+            out[path] = std::to_wstring((long long)std::llround(value.GetNumber()));
+            break;
+        case wdj::JsonValueType::Boolean:
+            out[path] = value.GetBoolean() ? L"1" : L"0";
+            break;
+        case wdj::JsonValueType::Null:
+            out[path] = L"";
+            break;
+    }
+}
+
+std::wstring FlatString(FlatSettings const& f, std::wstring const& key) {
+    auto it = f.find(key);
+    return it != f.end() ? it->second : std::wstring();
+}
+
+int FlatInt(FlatSettings const& f, std::wstring const& key, int fallback) {
+    auto it = f.find(key);
+    if (it == f.end()) {
+        return fallback;
+    }
+    std::wstring v = it->second;
+    CharLowerBuffW(v.data(), (DWORD)v.size());
+    if (v == L"true" || v == L"yes" || v == L"on") {
+        return 1;
+    }
+    if (v == L"false" || v == L"no" || v == L"off") {
+        return 0;
+    }
+    WCHAR* end = nullptr;
+    long n = wcstol(v.c_str(), &end, 10);
+    return v.empty() || *end ? fallback : (int)n;
+}
+
+// Reads exported settings over `s`. The groups are replaced if the file
+// has any; other settings missing from the file keep their values.
+bool ImportSettingsJson(std::wstring const& text,
+                        EditSettings& s,
+                        std::wstring& error) {
+    wdj::JsonValue value{nullptr};
+    if (!wdj::JsonValue::TryParse(text, value) ||
+        value.ValueType() != wdj::JsonValueType::Object) {
+        error = L"The file isn't a valid JSON object.";
+        return false;
+    }
+    FlatSettings f;
+    FlattenJson(value, L"", f);
+
+    int recognized = 0;
+    for (auto& page : DescribePages(s)) {
+        for (auto& field : page.fields) {
+            if (field.kind == FieldKind::Preset) {
+                continue;
+            }
+            std::wstring key = field.key;
+            if (!f.count(key)) {
+                continue;
+            }
+            recognized++;
+            switch (field.kind) {
+                case FieldKind::Bool: {
+                    auto* v = (bool*)field.value;
+                    *v = (FlatInt(f, key, *v != field.inverted) != 0) !=
+                         field.inverted;
+                    break;
+                }
+                case FieldKind::Int: {
+                    auto* v = (int*)field.value;
+                    *v = (int)Clamp(FlatInt(f, key, *v), field.min, field.max);
+                    break;
+                }
+                case FieldKind::Choice: {
+                    std::wstring v = FlatString(f, key);
+                    if (std::any_of(field.options.begin(), field.options.end(),
+                                    [&](auto& o) { return o.first == v; })) {
+                        *(std::wstring*)field.value = v;
+                    }
+                    break;
+                }
+                default:
+                    *(std::wstring*)field.value = FlatString(f, key);
+                    break;
+            }
+        }
+    }
+
+    std::vector<EditGroup> cats;
+    for (int i = 0;; i++) {
+        std::wstring cp = L"groups[" + std::to_wstring(i) + L"]";
+        std::wstring name = FlatString(f, cp + L".name");
+        if (name.empty()) {
+            break;
+        }
+        EditGroup cat;
+        cat.name = name;
+        cat.appGrid = FlatString(f, cp + L".tileSize");
+        cat.tileSize =
+            ResolveTileSize(FlatString(f, cp + L".span"), cat.appGrid);
+        cat.appGrid = FitGrid(cat.appGrid, cat.tileSize);
+        cat.showAppNames = FlatInt(f, cp + L".hideAppNames", 0) == 0;
+        cat.showLabel = FlatInt(f, cp + L".hideLabel", 0) == 0;
+        cat.showBackground = FlatInt(f, cp + L".hideBackground", 0) == 0;
+        for (int j = 0;; j++) {
+            std::wstring ip = cp + L".items[" + std::to_wstring(j) + L"]";
+            EditItem item;
+            item.type = FlatString(f, ip + L".type");
+            item.app = FlatString(f, ip + L".app");
+            item.label = FlatString(f, ip + L".label");
+            item.path = FlatString(f, ip + L".path");
+            item.args = FlatString(f, ip + L".args");
+            item.icon = FlatString(f, ip + L".icon");
+            if (item.app.empty() && item.path.empty()) {
+                break;
+            }
+            if (item.type != L"program" && item.type != L"website") {
+                item.type = L"app";
+            }
+            cat.items.push_back(std::move(item));
+        }
+        cats.push_back(std::move(cat));
+    }
+
+    if (recognized == 0 && cats.empty()) {
+        error = L"The file doesn't contain Start Menu Groups settings.";
+        return false;
+    }
+    if (!cats.empty()) {
+        s.groups = std::move(cats);
+    }
+    return true;
+}
+
+bool WriteUtf8File(std::wstring const& path, std::wstring const& text) {
+    int n = WideCharToMultiByte(CP_UTF8, 0, text.data(), (int)text.size(),
+                                nullptr, 0, nullptr, nullptr);
+    std::string utf8(n, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text.data(), (int)text.size(), utf8.data(),
+                        n, nullptr, nullptr);
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
+                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    DWORD written = 0;
+    BOOL ok = WriteFile(h, utf8.data(), (DWORD)utf8.size(), &written, nullptr);
+    CloseHandle(h);
+    return ok && written == utf8.size();
+}
+
+// Empty if the file can't be read or is larger than 1 MB.
+std::wstring ReadUtf8File(std::wstring const& path) {
+    HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                           nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL,
+                           nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        return L"";
+    }
+    LARGE_INTEGER size{};
+    std::string data;
+    if (GetFileSizeEx(h, &size) && size.QuadPart > 0 &&
+        size.QuadPart <= 1024 * 1024) {
+        data.resize((size_t)size.QuadPart);
+        DWORD read = 0;
+        if (!ReadFile(h, data.data(), (DWORD)data.size(), &read, nullptr)) {
+            data.clear();
+        }
+        data.resize(read);
+    }
+    CloseHandle(h);
+    size_t skip = data.rfind("\xEF\xBB\xBF", 0) == 0 ? 3 : 0;  // BOM
+    int n = MultiByteToWideChar(CP_UTF8, 0, data.data() + skip,
+                                (int)(data.size() - skip), nullptr, 0);
+    std::wstring text(n, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, data.data() + skip,
+                        (int)(data.size() - skip), text.data(), n);
+    return text;
+}
+
+constexpr COMDLG_FILTERSPEC kSettingsFileFilters[] = {
+    {L"Start Menu Groups settings (JSON)", L"*.json"},
+    {L"All files", L"*.*"},
+};
+
+void SettingsWindow::ExportSettings() {
+    winrt::com_ptr<IFileSaveDialog> dlg;
+    if (FAILED(CoCreateInstance(CLSID_FileSaveDialog, nullptr,
+                                CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(dlg.put())))) {
+        return;
+    }
+    dlg->SetFileTypes(ARRAYSIZE(kSettingsFileFilters), kSettingsFileFilters);
+    dlg->SetDefaultExtension(L"json");
+    dlg->SetFileName(L"start-menu-groups-settings.json");
+    dlg->SetTitle(L"Export settings");
+    FILEOPENDIALOGOPTIONS opts = 0;
+    dlg->GetOptions(&opts);
+    dlg->SetOptions(opts | FOS_OVERWRITEPROMPT | FOS_FORCEFILESYSTEM);
+    if (FAILED(dlg->Show(m_hwnd)) || g_unloading) {
+        return;
+    }
+    winrt::com_ptr<IShellItem> result;
+    PWSTR path = nullptr;
+    if (FAILED(dlg->GetResult(result.put())) ||
+        FAILED(result->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+        return;
+    }
+    std::wstring file = path;
+    CoTaskMemFree(path);
+    if (WriteUtf8File(file, BuildSettingsJson(BuildRegEntries(m_model)))) {
+        m_status.Text(L"Settings exported to " + file);
+    } else {
+        m_status.Text(L"Couldn't export the settings: writing " + file +
+                      L" failed (error " + std::to_wstring(GetLastError()) +
+                      L").");
+    }
+}
+
+void SettingsWindow::ImportSettings() {
+    winrt::com_ptr<IFileOpenDialog> dlg;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(dlg.put())))) {
+        return;
+    }
+    dlg->SetFileTypes(ARRAYSIZE(kSettingsFileFilters), kSettingsFileFilters);
+    dlg->SetTitle(L"Import settings");
+    FILEOPENDIALOGOPTIONS opts = 0;
+    dlg->GetOptions(&opts);
+    dlg->SetOptions(opts | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST);
+    if (FAILED(dlg->Show(m_hwnd)) || g_unloading) {
+        return;
+    }
+    winrt::com_ptr<IShellItem> result;
+    PWSTR path = nullptr;
+    if (FAILED(dlg->GetResult(result.put())) ||
+        FAILED(result->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+        return;
+    }
+    std::wstring file = path;
+    CoTaskMemFree(path);
+
+    std::wstring text = ReadUtf8File(file);
+    std::wstring error;
+    EditSettings imported = m_model;
+    if (text.empty()) {
+        error = L"The file couldn't be read, or it's empty or larger than "
+                L"1 MB.";
+    } else if (ImportSettingsJson(text, imported, error)) {
+        m_model = std::move(imported);
+        m_selCat = m_model.groups.empty() ? -1 : 0;
+        m_selItem = -1;
+        ShowPage(m_page.empty() ? L"board" : m_page);
+        OnChanged();
+        m_status.Text(L"Settings imported. Review them, then click Save to "
+                      L"apply them.");
+        return;
+    }
+    m_status.Text(L"Couldn't import the settings: " + error);
+}
+
+void SettingsWindow::OnChanged() {
+    for (auto& update : m_resetUpdaters) {
+        update();
+    }
+    m_dirty = BuildRegEntries(m_model) != m_savedEntries;
+    UpdateFooter();
+}
+
+void SettingsWindow::UpdateFooter() {
+    if (!m_saveButton) {
+        return;
+    }
+    m_saveButton.IsEnabled(m_dirty && !m_saving);
+    m_discardButton.IsEnabled(m_dirty && !m_saving);
+    if (m_saving) {
+        m_status.Text(L"Saving\u2026 confirm the administrator prompt.");
+    } else if (m_dirty) {
+        m_status.Text(L"Unsaved changes");
+    } else if (m_status.Text().empty() ||
+               m_status.Text() == L"Unsaved changes") {
+        m_status.Text(L"Saving asks for administrator approval, since "
+                      L"Windhawk keeps mod settings in a protected location.");
+    }
+}
+
+void SettingsWindow::Save(bool closeAfter, bool overwrite) {
+    if (m_saving) {
+        return;
+    }
+    // Changed in Windhawk since this window read them: saving would replace
+    // those changes, so ask first.
+    if (!overwrite && ReadSettingsChangeTime() != m_loadedChangeTime) {
+        ShowConfirmDialog(
+            L"Settings changed in Windhawk",
+            L"The mod's settings were changed in Windhawk after this window "
+            L"opened. Saving replaces those changes with the ones made here. "
+            L"To keep them instead, cancel and use Discard to load them.",
+            L"Save anyway",
+            [this, closeAfter] { Save(closeAfter, true); });
+        return;
+    }
+    m_saving = true;
+    m_closeAfterSave = closeAfter;
+    UpdateFooter();
+    auto entries = BuildRegEntries(m_model);
+    HWND hwnd = m_hwnd;
+    // The UAC prompt and the import block; keep the window's thread free.
+    RunWorker([entries = std::move(entries), hwnd] {
+        auto* result = new SaveResult(WriteModSettings(entries, hwnd));
+        if (!PostMessageW(hwnd, kSaveDoneMsg, 0, (LPARAM)result)) {
+            delete result;
+        }
+    });
+}
+
+void SettingsWindow::Discard() {
+    m_loadedChangeTime = ReadSettingsChangeTime();
+    m_model = ReadEditSettings();
+    m_savedEntries = BuildRegEntries(m_model);
+    m_selCat = m_model.groups.empty() ? -1 : 0;
+    m_selItem = -1;
+    m_dirty = false;
+    m_status.Text(L"");
+    ShowPage(m_page.empty() ? L"board" : m_page);
+    UpdateFooter();
+}
+
+void SettingsWindow::RequestClose() {
+    if (m_saving) {
+        return;
+    }
+    if (!m_dirty) {
+        DestroyWindow(m_hwnd);
+        return;
+    }
+    if (!m_closeDialog) {
+        ShowUnsavedChangesDialog();
+    }
+}
+
+// From "Edit" on an app in Start: the Groups page with the app selected and
+// its settings scrolled to. Indices are those of the saved settings; ones
+// that don't fit what's being edited just show the page.
+void SettingsWindow::ShowItem(int group, int item) {
+    if (group < 0 || group >= (int)m_model.groups.size() || item < 0 ||
+        item >= (int)m_model.groups[group].items.size()) {
+        return;
+    }
+    m_selCat = group;
+    m_selItem = item;
+    m_boardSelCat = group;
+    if (m_page != L"board") {
+        for (size_t i = 0; i < m_pageTags.size(); i++) {
+            if (m_pageTags[i] == L"board") {
+                m_nav.SelectedIndex((int)i);  // builds the page
+            }
+        }
+    } else {
+        RebuildBoard();
+        RefreshPalette();
+        LoadBoardDetails();
+    }
+    // Once the page is laid out.
+    Later([this] { Later([this] { ScrollToAppSettings(); }); });
+}
+
+// Scrolls the page down to the App settings, at the end of the page.
+void SettingsWindow::ScrollToAppSettings() {
+    if (m_page != L"board") {
+        return;
+    }
+    auto sv = m_pageScroll.get();
+    if (!sv) {
+        return;
+    }
+    // To the end of the page, where the App settings are.
+    try {
+        sv.UpdateLayout();  // the card was just filled for the new app
+        double end = sv.ScrollableHeight();
+        sv.ChangeView(nullptr,
+                      winrt::box_value(end).as<wf::IReference<double>>(),
+                      nullptr, false);
+    } catch (...) {
+    }
+}
+
+// A question as a dialog inside the window (like "Save your changes?"):
+// `action` (the accent button) or Cancel. One dialog at a time.
+void SettingsWindow::ShowConfirmDialog(std::wstring const& title,
+                                       std::wstring const& text,
+                                       std::wstring const& action,
+                                       std::function<void()> onAction) {
+    if (m_closeDialog) {
+        return;
+    }
+    try {
+        xc::ContentDialog dialog;
+        dialog.XamlRoot(m_root.XamlRoot());
+        dialog.RequestedTheme(m_dark ? ElementTheme::Dark : ElementTheme::Light);
+        dialog.Title(Box(title));
+        dialog.Content(Box(text));
+        dialog.PrimaryButtonText(action);
+        dialog.CloseButtonText(L"Cancel");
+        dialog.DefaultButton(xc::ContentDialogButton::Primary);
+        m_closeDialog = dialog;
+        dialog.ShowAsync().Completed(
+            [this, onAction](
+                wf::IAsyncOperation<xc::ContentDialogResult> const& op,
+                wf::AsyncStatus status) {
+                if (g_settingsWindow != this) {
+                    return;  // the window is gone
+                }
+                m_closeDialog = nullptr;
+                if (status == wf::AsyncStatus::Completed &&
+                    op.GetResults() == xc::ContentDialogResult::Primary) {
+                    Later(onAction);
+                }
+            });
+    } catch (...) {
+        Wh_Log(L"Showing a dialog failed: %08X", winrt::to_hresult());
+        m_closeDialog = nullptr;
+    }
+}
+
+// "Save your changes?" as a dialog inside the window, styled like the rest
+// of it: Save, Don't save, Cancel.
+void SettingsWindow::ShowUnsavedChangesDialog() {
+    try {
+        xc::ContentDialog dialog;
+        dialog.XamlRoot(m_root.XamlRoot());
+        dialog.RequestedTheme(m_dark ? ElementTheme::Dark : ElementTheme::Light);
+        dialog.Title(Box(L"Save your changes?"));
+        dialog.Content(Box(L"Your changes to the Start Menu Groups settings "
+                           L"haven't been saved yet."));
+        dialog.PrimaryButtonText(L"Save");
+        dialog.SecondaryButtonText(L"Don't save");
+        dialog.CloseButtonText(L"Cancel");
+        dialog.DefaultButton(xc::ContentDialogButton::Primary);
+        m_closeDialog = dialog;
+        dialog.ShowAsync().Completed(
+            [this](wf::IAsyncOperation<xc::ContentDialogResult> const& op,
+                   wf::AsyncStatus status) {
+                if (g_settingsWindow != this) {
+                    return;  // the window is gone
+                }
+                m_closeDialog = nullptr;
+                if (status != wf::AsyncStatus::Completed) {
+                    return;
+                }
+                switch (op.GetResults()) {
+                    case xc::ContentDialogResult::Primary:
+                        Save(true);
+                        break;
+                    case xc::ContentDialogResult::Secondary:
+                        DestroyWindow(m_hwnd);
+                        break;
+                    default:
+                        break;  // Cancel: keep editing
+                }
+            });
+    } catch (...) {
+        Wh_Log(L"Showing the save dialog failed: %08X", winrt::to_hresult());
+        m_closeDialog = nullptr;
+    }
+}
+
+void RegisterSettingsWindowClass() {
+    HMODULE self;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&SettingsWndProc, &self);
+    WNDCLASSEXW wc{sizeof(wc)};
+    wc.lpfnWndProc = SettingsWndProc;
+    wc.hInstance = self;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.lpszClassName = SettingsClassName();
+    g_settingsClassRegistered = RegisterClassExW(&wc) != 0;
+    if (!g_settingsClassRegistered) {
+        Wh_Log(L"RegisterClassEx failed: %u", GetLastError());
+    }
+}
+
+void UnregisterSettingsWindowClass() {
+    if (!g_settingsClassRegistered) {
+        return;
+    }
+    HMODULE self;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&SettingsWndProc, &self);
+    UnregisterClassW(SettingsClassName(), self);
+    g_settingsClassRegistered = false;
+}
+
+// Runs on the settings thread in File Explorer.
+void OpenSettingsWindow(int group, int item) {
+    if (g_settingsWindow && IsWindow(g_settingsWindow->Hwnd())) {
+        HWND h = g_settingsWindow->Hwnd();
+        if (IsIconic(h)) {
+            ShowWindow(h, SW_RESTORE);
+        }
+        SetForegroundWindow(h);
+        g_settingsWindow->ShowItem(group, item);
+        return;
+    }
+    if (!g_settingsClassRegistered) {
+        return;
+    }
+    auto* w = new SettingsWindow();
+    g_settingsWindow = w;
+    if (!w->Create()) {
+        // If the window existed, destroying it already deleted the object
+        // and cleared g_settingsWindow (WM_NCDESTROY). Otherwise free it.
+        if (g_settingsWindow == w) {
+            delete w;
+        }
+        g_settingsWindow = nullptr;
+        return;
+    }
+    w->ShowItem(group, item);
+    // The Start apps (for the picker, the app icons and the Start apps
+    // panel) are listed in the background, the window shows right away.
+    if (g_pickerApps.empty() && !g_pickerAppsLoading) {
+        g_pickerAppsLoading = true;
+        HWND hwnd = w->Hwnd();
+        RunWorker([hwnd] {
+            auto apps =
+                std::make_unique<std::vector<AppEntry>>(EnumerateStartApps());
+            std::sort(apps->begin(), apps->end(), [](auto& a, auto& b) {
+                return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0;
+            });
+            if (PostMessageW(hwnd, kAppsLoadedMsg, 0, (LPARAM)apps.get())) {
+                apps.release();
+            } else {
+                g_pickerAppsLoading = false;  // the window is gone
+            }
+        });
+    }
+}
+
+void CloseSettingsWindow() {
+    if (g_settingsWindow && IsWindow(g_settingsWindow->Hwnd())) {
+        DestroyWindow(g_settingsWindow->Hwnd());
+    }
+    g_settingsWindow = nullptr;
+}
+
+// --- Settings host in File Explorer ----------------------------------------
+//
+// A message-only window on a dedicated STA thread in explorer.exe. Start finds
+// it by class name and posts kOpenSettingsMsg; the window is then created on
+// this thread, whose message loop also feeds the island its keyboard input.
+
+constexpr UINT kOpenSettingsMsg = WM_APP + 20;
+HANDLE g_hostThread = nullptr;
+HANDLE g_hostReady = nullptr;  // set once the thread has its message queue
+DWORD g_hostThreadId = 0;
+
+PCWSTR HostClassName() {
+    static std::wstring name =
+        std::wstring(L"WindhawkSettingsHost_") + WH_MOD_ID;
+    return name.c_str();
+}
+
+// Whether `id` (an app ID) is one of the Start apps in the user's groups,
+// given by app ID or by name. Pin / unpin requests are only done for those:
+// the host window takes messages from Start (a lower integrity level), so it
+// takes them from other programs too, and Windows doesn't let programs pin
+// apps by themselves.
+bool IsAppInGroups(std::wstring const& id) {
+    std::vector<std::wstring> apps;
+    {
+        std::lock_guard lock(g_settingsMutex);
+        for (auto const& g : g_settings.groups) {
+            for (auto const& item : g.items) {
+                if (item.type == L"app" && !item.app.empty()) {
+                    apps.push_back(item.app);
+                }
+            }
+        }
+    }
+    auto listed = [&](std::wstring const& s) {
+        return std::any_of(apps.begin(), apps.end(), [&](auto const& a) {
+            return _wcsicmp(a.c_str(), s.c_str()) == 0;
+        });
+    };
+    if (listed(id)) {
+        return true;
+    }
+    for (auto const& app : EnumerateStartApps()) {
+        if (_wcsicmp(app.id.c_str(), id.c_str()) == 0) {
+            return listed(app.name);
+        }
+    }
+    return false;
+}
+
+LRESULT CALLBACK HostWndProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp) {
+    // Pin / unpin an app on the taskbar, for Start (see InvokeTaskbarVerb).
+    // Only these two verbs, and only for apps in the user's groups.
+    if (msg == WM_COPYDATA) {
+        auto* cds = (COPYDATASTRUCT const*)lp;
+        if (!cds || cds->dwData != kTaskbarVerbData || !cds->lpData ||
+            cds->cbData > 4096) {
+            return FALSE;
+        }
+        std::wstring payload((PCWSTR)cds->lpData,
+                             cds->cbData / sizeof(WCHAR));
+        size_t sep = payload.find(L'\n');
+        if (sep == std::wstring::npos) {
+            return FALSE;
+        }
+        std::string verb(payload.begin(), payload.begin() + sep);
+        std::wstring id = payload.substr(sep + 1);
+        if (!IsTaskbarVerb(verb) || id.empty()) {
+            return FALSE;
+        }
+        RunWorker([id, verb] {
+            if (IsAppInGroups(id)) {
+                InvokeAppShellVerb(id, verb);
+            } else {
+                Wh_Log(L"Ignored %S for %s: not in the groups", verb.c_str(),
+                       id.c_str());
+            }
+        });
+        return TRUE;
+    }
+    if (msg == kOpenSettingsMsg) {
+        try {
+            OpenSettingsWindow((int)wp - 1, (int)lp - 1);
+        } catch (...) {
+            Wh_Log(L"Opening the settings window failed: %08X",
+                   winrt::to_hresult());
+        }
+        return 0;
+    }
+    return DefWindowProcW(hWnd, msg, wp, lp);
+}
+
+DWORD WINAPI SettingsHostThread(LPVOID) {
+    winrt::init_apartment(winrt::apartment_type::single_threaded);
+
+    // The thread's message queue, so StopSettingsHost can post WM_QUIT.
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent(g_hostReady);
+
+    HMODULE self = ThisModule();
+    RegisterSettingsWindowClass();
+    WNDCLASSEXW wc{sizeof(wc)};
+    wc.lpfnWndProc = HostWndProc;
+    wc.hInstance = self;
+    wc.lpszClassName = HostClassName();
+    RegisterClassExW(&wc);
+
+    // Only one File Explorer process hosts the window.
+    HWND host = nullptr;
+    if (!g_unloading &&
+        !FindWindowExW(HWND_MESSAGE, nullptr, HostClassName(), nullptr)) {
+        host = CreateWindowExW(0, HostClassName(), L"", 0, 0, 0, 0, 0,
+                               HWND_MESSAGE, nullptr, self, nullptr);
+    }
+    if (host) {
+        // Start runs at a lower integrity level; let its requests through.
+        ChangeWindowMessageFilterEx(host, kOpenSettingsMsg, MSGFLT_ALLOW,
+                                    nullptr);
+        ChangeWindowMessageFilterEx(host, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
+        Wh_Log(L"Settings host ready");
+    }
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (g_settingsWindow && g_settingsWindow->PreTranslate(&msg)) {
+            continue;
+        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    CloseSettingsWindow();
+    if (host) {
+        DestroyWindow(host);
+    }
+    UnregisterClassW(HostClassName(), self);
+    UnregisterSettingsWindowClass();
+    DestroyWindowIcons();
+    g_settingsIcons.clear();
+    if (g_xamlManager) {
+        try {
+            g_xamlManager.Close();
+        } catch (...) {
+        }
+        g_xamlManager = nullptr;
+    }
+    g_pickerApps.clear();
+    winrt::uninit_apartment();
+    return 0;
+}
+
+void StartSettingsHost() {
+    g_hostReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_hostThread = CreateThread(nullptr, 0, SettingsHostThread, nullptr, 0,
+                                &g_hostThreadId);
+}
+
+// Ends the settings thread and waits for it (no time limit).
+void StopSettingsHost() {
+    if (g_hostThread) {
+        // Its queue must exist for WM_QUIT to be posted.
+        HANDLE waits[] = {g_hostReady, g_hostThread};
+        WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+        PostThreadMessageW(g_hostThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_hostThread, INFINITE);
+        CloseHandle(g_hostThread);
+        g_hostThread = nullptr;
+        g_hostThreadId = 0;
+    }
+    if (g_hostReady) {
+        CloseHandle(g_hostReady);
+        g_hostReady = nullptr;
+    }
+}
+
+// The thread showing the "settings window isn't available" message, to close
+// it if the mod unloads meanwhile.
+std::atomic<DWORD> g_infoBoxThreadId{0};
+
+void CloseInfoBox() {
+    if (DWORD tid = g_infoBoxThreadId) {
+        EnumThreadWindows(
+            tid,
+            [](HWND hwnd, LPARAM) -> BOOL {
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                return TRUE;
+            },
+            0);
+    }
+}
+
+// Called in Start (context menu): ask File Explorer to show the window.
+void RequestSettingsWindow(int group, int item) {
+    HWND host = FindWindowExW(HWND_MESSAGE, nullptr, HostClassName(), nullptr);
+    if (!host) {
+        Wh_Log(L"Settings host not found in File Explorer");
+        // Not on Start's UI thread, which a message box would block.
+        RunWorker([] {
+            g_infoBoxThreadId = GetCurrentThreadId();
+            if (!g_unloading) {
+                MessageBoxW(nullptr,
+                            L"The settings window is provided by this mod's "
+                            L"File Explorer part, which isn't running.\n\n"
+                            L"Make sure the mod is enabled and explorer.exe "
+                            L"isn't excluded in its Advanced settings in "
+                            L"Windhawk.",
+                            L"Start Menu Groups",
+                            MB_ICONINFORMATION | MB_SETFOREGROUND);
+            }
+            g_infoBoxThreadId = 0;
+        });
+        return;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(host, &pid);
+    // Start is in the foreground and may hand that right on to Explorer.
+    AllowSetForegroundWindow(pid);
+    // The app to select: group and item index + 1 (0 = none).
+    PostMessageW(host, kOpenSettingsMsg, (WPARAM)(group + 1),
+                 (LPARAM)(item + 1));
+}
+
+BOOL Wh_ModInit() {
+    Wh_Log(L">");
+
+    g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    LoadSettings();
+
+    WCHAR exe[MAX_PATH];
+    GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe));
+    g_isExplorer = _wcsicmp(PathFindFileNameW(exe), L"explorer.exe") == 0;
+    if (g_isExplorer) {
+        // File Explorer only hosts the settings window.
+        StartSettingsHost();
+        return TRUE;
+    }
+
+    // Start's window, when Start (re)creates it.
+    HMODULE user32 =
+        LoadLibraryExW(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (user32) {
+        if (auto p = (CreateWindowInBand_t)GetProcAddress(
+                user32, "CreateWindowInBand")) {
+            WindhawkUtils::SetFunctionHook(p, CreateWindowInBand_Hook,
+                                           &CreateWindowInBand_Original);
+        }
+        if (auto p = (CreateWindowInBandEx_t)GetProcAddress(
+                user32, "CreateWindowInBandEx")) {
+            WindhawkUtils::SetFunctionHook(p, CreateWindowInBandEx_Hook,
+                                           &CreateWindowInBandEx_Original);
+        }
+    }
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (g_isExplorer) {
+        return;
+    }
+    // Start is already running: get on its UI thread now.
+    if (HWND coreWnd = FindStartWindow()) {
+        RunFromWindowThread(
+            coreWnd, [](PVOID p) { InstallStartUi((HWND)p); }, coreWnd);
+    }
+}
+
+void Wh_ModBeforeUninit() {
+    g_unloading = true;
+    SetEvent(g_stopEvent);
+}
+
+void Wh_ModUninit() {
+    Wh_Log(L">");
+    g_unloading = true;
+    SetEvent(g_stopEvent);
+    CloseInfoBox();
+    if (g_isExplorer) {
+        StopSettingsHost();
+    }
+    // No worker posts to Start's UI thread any more (g_unloading), and none
+    // is left running mod code.
+    JoinWorkers();
+    if (HWND wnd = g_uiWnd) {
+        // On Start's UI thread, synchronously: everything the mod added to
+        // Start is removed, and nothing of it stays queued there.
+        SendMessageW(wnd, kUninstallMsg, 0, 0);
+    }
+    CloseHandle(g_stopEvent);
+    g_stopEvent = nullptr;
+}
+
+void Wh_ModSettingsChanged() {
+    Wh_Log(L">");
+    LoadSettings();
+    if (g_isExplorer) {
+        return;  // the settings window reads them when it opens
+    }
+    PostToUi([] {
+        std::wstring placement;
+        {
+            std::lock_guard lock(g_settingsMutex);
+            placement = g_settings.placement;
+        }
+        // A new "Where to show the groups": attached again, there.
+        if (g_attach.host && g_attach.placement != placement) {
+            Wh_Log(L"Moving the groups: %s", placement.c_str());
+            Detach();
+            RequestScan();
+        }
+        ReloadAsync();
+    });
+}

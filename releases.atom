@@ -2,12 +2,123 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-21T17:02:34.000Z</updated>
+    <updated>2026-11-22T04:03:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Edge No Bleed 1.0.0]]></title>
+        <id>https://windhawk.net/mods/edge-no-bleed#94fec81390dbd142801006fee21a3b72bc08271f</id>
+        <link href="https://windhawk.net/mods/edge-no-bleed"/>
+        <updated>2026-11-22T04:03:31.000Z</updated>
+        <content type="html"><![CDATA[<h1>Edge No Bleed</h1>
+<p>Eliminates the persistent 1-2px margin gap where desktop wallpaper bleeds through along screen edges behind maximized windows.</p>
+<h2>The Problem</h2>
+<p>On Windows 10 and 11, users running dark-mode themes, IDEs, terminals, and browsers frequently notice a razor-thin 1-2px strip of desktop wallpaper leaking through along the edges of maximized windows (especially at the bottom or side monitor borders).</p>
+<h3>Why This Happens</h3>
+<ul>
+<li><strong>DWM Frame Padding &amp; Fractional DPI Rounding:</strong> Windows calculates maximized client coordinates by converting logical device-independent units into physical screen pixels. At fractional display scaling factors (such as 125%, 150%, or 175%), rounding calculations frequently leave a 1-2 physical pixel deficit against the work area, exposing bright desktop wallpaper pixels.</li>
+<li><strong>Invisible Margin Bounds:</strong> Normal Win32 maximized frames hang invisible resize margins off-screen, but custom-chrome and modern applications (such as Chromium, Electron, and Windows Terminal) size their own frames and can fall short of physical display boundaries.</li>
+</ul>
+<h2>How It Works</h2>
+<p><code>Edge No Bleed</code> runs as a dedicated tool mod within Windhawk without injecting invasive hooks into third-party processes. It monitors window position and state changes via out-of-context WinEvents on a dedicated message-loop worker thread:</p>
+<ol>
+<li>When a window is maximized, the mod measures its true visible frame bounds using <code>DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)</code> against the monitor's work area (<code>MONITORINFO::rcWork</code>).</li>
+<li>If a 1-2px fractional rounding gap is detected, the mod expands the window frame via <code>SetWindowPos</code> by the exact measured discrepancy, sealing the edge flush against the screen.</li>
+<li>If an auto-hide taskbar is active on that edge, the mod detects it via <code>SHAppBarMessage(ABM_GETAUTOHIDEBAREX)</code> and preserves the 1px mouse-hover reveal strip.</li>
+</ol>
+<h2>Comparison With Other Mods</h2>
+<ul>
+<li><strong>Maximized Window Margins:</strong> That mod intentionally adds large margins (10px to 200px, macOS-style) by shrinking the system work area with AppBars. <code>Edge No Bleed</code> does the opposite: it eliminates unwanted 1-2px fractional DPI gaps so maximized windows sit completely flush.</li>
+<li><strong>Classic Maximized Windows Fix:</strong> That mod is exclusively designed for the legacy Classic 3D Theme on Windows 10/11 using region clipping (<code>SetWindowRgn</code>). <code>Edge No Bleed</code> targets standard modern DWM themes and dark-mode setups.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Dev-StudioCode</name>
+            <uri>https://github.com/Dev-StudioCode</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Groups 1.0.0]]></title>
+        <id>https://windhawk.net/mods/start-menu-groups#0d9d966af10c36b77bb8960c82ad9ae89bdcccd2</id>
+        <link href="https://windhawk.net/mods/start-menu-groups"/>
+        <updated>2026-11-22T04:03:24.000Z</updated>
+        <content type="html"><![CDATA[<h1>Start Menu Groups</h1>
+<p>Add your own <strong>app groups</strong> to the <strong>Windows 11 Start menu</strong>, before or after the Pinned section (or in place of the built‑in <strong>All → View: Category</strong> grid), using the same look as Start: rounded tiles with an icon preview, an overflow cluster for the remaining apps and the group name underneath.</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/start-menu-groups/screenshots/start-menu.gif" alt="Start Menu Groups demo"></p>
+<p>Designed for the Windows 11 Start menu (<code>StartMenuExperienceHost.exe</code>).</p>
+<h2>Features</h2>
+<ul>
+<li><strong>Your own groups</strong> — create any number of groups and put any Start menu app in them, desktop and Store apps alike. An app can be in several groups.</li>
+<li><strong>Apps, programs and websites</strong> — each item is a Start app (picked by name or app ID), a program, file or folder (full path with optional arguments), or a website opened in the default browser.</li>
+<li><strong>Custom names and icons</strong> — every item can have its own label and icon: an <code>.ico</code>, <code>.exe</code>, <code>.dll</code> or image file, an image link (such as a website's favicon), a Fluent icon by its code (e.g. <code>E774</code>) or an emoji.</li>
+<li><strong>Native look</strong> — rounded tiles, borders and colors match Start's own category view and follow the Windows light / dark theme.</li>
+<li><strong>Resizable tiles</strong> — give each group its own tile size, from 1 × 1 up to 6 × 4 (24 apps). Bigger tiles take more cells of the group grid. A 1 × 1 tile is a single app on its own, without a group.</li>
+<li><strong>Overflow cluster</strong> — when a group has more apps than fit, the last cell shows the rest as small icons; click it to open the whole group.</li>
+<li><strong>Right‑click menu</strong> — right‑click an app in a group for <strong>Edit</strong>, <strong>Run as administrator</strong>, <strong>Open file location</strong>, <strong>Pin to taskbar</strong>, <strong>App settings</strong> and <strong>Uninstall</strong>, like Start's own apps.</li>
+<li><strong>Size presets</strong> — Default, Small and Large presets for the tiles, icons and names, plus control over gaps, corner radius, colors and group names.</li>
+<li><strong>Placement</strong> — show the groups before or after Pinned, after Recommended / Recent, or after the All section, with an optional section title.</li>
+<li><strong>Hide Start's sections</strong> — optionally hide Start's own Pinned, Recommended and All sections and use only your groups.</li>
+<li><strong>Settings window</strong> — right‑click the groups in Start → <strong>Customize Start Groups</strong> for a visual editor with drag &amp; drop (see <a href="#settings-window">Settings window</a>).</li>
+<li><strong>Import / export</strong> — all settings can be exported to and imported from a JSON file.</li>
+</ul>
+<h2>Screenshots</h2>
+<p>The settings window, with drag &amp; drop editing of groups and apps:</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/start-menu-groups/screenshots/settings-window.gif" alt="Settings window"></p>
+<h2>Setting it up</h2>
+<p>Everything is configured on the mod's <strong>Settings</strong> tab in Windhawk, in
+sections:</p>
+<ul>
+<li><strong>Groups</strong> — add a group with <em>Add new item</em>, give it a name, a tile size and its items. For a Start app, enter the app's name exactly as it appears in Start (for example <code>Calculator</code>, <code>Visual Studio Code</code>; case doesn't matter), or its app ID (AUMID, such as <code>Microsoft.WindowsCalculator_8wekyb3d8bbwe!App</code>). For a program, its full path (a program, file or folder) and optional arguments; for a website, its address. Reorder groups with the arrows.</li>
+<li><strong>Behavior</strong> — where the groups appear, the section title, app names and tooltips, sorting, empty groups, the number of columns when a group is opened, and hiding Start's own sections.</li>
+<li><strong>Tiles</strong>, <strong>Icons</strong>, <strong>Group names</strong> — sizes, gaps and colors. The defaults match Start's own category view.</li>
+</ul>
+<p>Changes apply to Start as soon as you click <strong>Save settings</strong>.</p>
+<h2>Settings window</h2>
+<p>Right‑click the groups in Start → <strong>Customize Start Groups</strong> (also added to Start's own right‑click menu, after <em>Start settings</em>) opens a settings window with the same settings, but easier to edit:</p>
+<ul>
+<li><strong>Groups</strong> — shows the groups the way Start does. Drag apps to reorder them or move them to another group, drag a tile to reorder the groups, drag a tile's corner to resize it, and drag apps from the All Apps list onto a tile to add them. The selected group and app are edited below the groups. Right‑click a tile to rename, duplicate or delete it.</li>
+<li><strong>Customization</strong> — the size preset (Default, Small, Large), gaps, corner radius, colors and group names.</li>
+<li><strong>Behavior</strong> — placement, section title, app names, tooltips, sorting and columns.</li>
+<li><strong>Built‑in sections</strong> — hide Start's own Pinned, Recommended and All sections.</li>
+</ul>
+<p>Start apps are picked by name with suggestions from the apps in Start; programs have a file picker. Groups and items can be duplicated, and an app can be added on its own, without a group. <strong>Import</strong> / <strong>Export</strong> at the bottom of the navigation pane save all settings to, or load them from, a JSON file.</p>
+<p>The window is hosted by File Explorer — the mod also loads into <code>explorer.exe</code> for this, and does nothing else there — because the Start menu process can't host one. It edits the same settings as Windhawk. Windhawk keeps them in a protected registry key, so <strong>Save</strong> shows an administrator (UAC) prompt for Windows PowerShell, which imports the new settings, and Start updates right after. The import checks that the settings file is exactly the one the window wrote, so no other program can change what gets saved. If the settings were changed in Windhawk while the window was open, <strong>Save</strong> asks before replacing them. The portable version of Windhawk isn't supported by the window.</p>
+<h2>Tile size and apps in the tile</h2>
+<p>Each group has two size settings:</p>
+<ul>
+<li><strong>Tile size</strong> — width × height of the tile, in app spots. 2 × 2 is the size of one of Start's own tiles; 1 × 1 is an app on its own, without a group.</li>
+<li><strong>Apps in the tile</strong> — apps per row × rows of apps, at most the tile size. <em>Default</em> fills the tile with one app per spot; the rest go in the overflow cluster.</li>
+</ul>
+<p>A group can also hide its app names, its group name, or its tile background (no background, border or padding — just the apps, e.g. for a single app on its own).</p>
+<h2>Colors</h2>
+<p>Colors are <code>#RRGGBB</code> or <code>#AARRGGBB</code>. Leave a color empty to follow the Windows theme and match Start.</p>
+<h2>Network access</h2>
+<p>The mod doesn't connect to the internet by itself, and the default settings don't contact any server: the default websites show a globe icon.</p>
+<p>An icon set to an image link (<code>http://</code> or <code>https://</code>, such as a website's favicon) is downloaded from that address by Windows' XAML image loader: a normal web request for the image, which sends your IP address and a user agent to that server. It happens when Start builds the tiles (when the mod loads, on a theme or settings change, and when a group is opened), and when the settings window shows the item. To avoid it, leave the icon empty or use a local file, a Fluent icon code or an emoji.</p>
+<h2>Compatibility</h2>
+<p>The mod reaches Start's UI directly, without XAML diagnostics, so it works alongside mods and tools that use them, such as Windows 11 Start Menu Styler.</p>
+<h2>Language</h2>
+<p>The groups are placed next to Start's pinned list, found by its element name, so they show in any display language. Two things go by Start's English titles: hiding Start's sections (<em>Pinned</em>, <em>Recommended</em> / <em>Recent</em>, <em>All</em>), and adding <em>Customize Start Groups</em> after <em>Start settings</em> in Start's own right‑click menu. In other languages, open the settings window by right‑clicking the groups instead.</p>
+<h2>Default configuration</h2>
+<p>Out of the box the mod adds these groups before the Pinned section, under an <strong>Apps</strong> heading:</p>
+<ul>
+<li><strong>Group 1</strong> — Microsoft Store, Settings, Notepad, Weather</li>
+<li><strong>Group 2</strong> — Camera, Paint, Calculator, Calendar</li>
+<li><strong>Favorites</strong> — Photos, Terminal, Notepad, Get Help (group name hidden)</li>
+<li><strong>Group 3</strong> (3 × 3) — Sound Recorder, Voice access, Task Manager, Movies &amp; TV, File Explorer, Sticky Notes</li>
+<li><strong>System</strong> (3 × 1) — Control Panel, Services, Run (group name hidden)</li>
+<li><strong>Websites</strong> (3 × 2) — YouTube, ChatGPT, Example, Google, Reddit, dan13.me</li>
+</ul>
+<p>Empty groups are hidden. None of Start's own sections are hidden by default. Everything is configurable in the mod settings.</p>
+]]></content>
+        <author>
+            <name>DanRotaru</name>
+            <uri>https://github.com/DanRotaru</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Text Capitalization 0.3.1]]></title>
         <id>https://windhawk.net/mods/text-capitalization#35ca0f0f9418c63d941b20cdef3bff966cb0d791</id>
@@ -1434,124 +1545,6 @@ scaling.</p>
         <author>
             <name>NDruce</name>
             <uri>https://github.com/NDruce</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer: No Help 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-no-help#80cb448b9b93e1d9af4c234fdfdd9d393d6f555f</id>
-        <link href="https://windhawk.net/mods/explorer-no-help"/>
-        <updated>2026-11-18T03:01:35.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer: No Help</h1>
-<p>For Windows 10 File Explorer (the ribbon one).</p>
-<p>Before:
-<img src="https://raw.githubusercontent.com/vt-idiot/windhawk-mods/refs/heads/reeeeeeeee/before.png" alt="Before"></p>
-<p>After:
-<img src="https://raw.githubusercontent.com/vt-idiot/windhawk-mods/refs/heads/reeeeeeeee/after.png" alt="After"></p>
-<ul>
-<li><strong>Hide Help button</strong>: Explorer's ribbon ships pre-compiled inside
-<code>SystemResources\ExplorerFrame.dll.mun</code> (resource <code>UIFILE/EXPLORER_RIBBON</code>).
-When the ribbon framework loads it, this mod hands back a patched copy with
-the <code>tabs_help</code> block (the <code>?</code> button) removed, the same result as if
-Microsoft had compiled the ribbon without a help button. Nothing on disk is
-touched.</li>
-<li><strong>Block F1</strong>: swallows bare F1 inside explorer.exe (folder windows, desktop,
-taskbar). Ctrl/Shift/Alt+F1 still go through, so Ctrl+F1 still collapses
-the ribbon. F1 in every other app is left alone.</li>
-</ul>
-<p>Restart Explorer after enabling the mod or toggling the Help button setting.
-The F1 setting takes effect immediately.</p>
-<p>If anything about the ribbon binary doesn't look exactly as expected, the
-patch bails out and logs why, and Explorer gets the original ribbon.</p>
-<p>Special thanks to d0gkiller87, whose <a href="https://windhawk.net/mods/f1-blocker">F1 Blocker</a>
-the F1 part copies, and to DarkShadow44’s reverse-engineering notes on UIRibbon.</p>
-]]></content>
-        <author>
-            <name>vt-idiot</name>
-            <uri>https://github.com/vt-idiot</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AI Text Assistant (?fix, ?formal, ?emojify, ?undo) 2.4.0]]></title>
-        <id>https://windhawk.net/mods/ai-inline-text-fixer#7476c81a7b59669ec34953c168b213bc782e60ac</id>
-        <link href="https://windhawk.net/mods/ai-inline-text-fixer"/>
-        <updated>2026-11-18T02:00:09.000Z</updated>
-        <content type="html"><![CDATA[<h1>AI Text Assistant (<code>?fix</code>, <code>?formal</code>, <code>?emojify</code>, <code>?undo</code>, ...)</h1>
-<p>Transform, polish, or rewrite your text anywhere in Windows simply by typing a quick command at the end of any text box.</p>
-<p>Works across chat apps, emails, web browsers, documents, social media, and forms.</p>
-<p><img src="https://raw.githubusercontent.com/NarayanChetri/Files/main/AI%20assistant.gif" alt="AI Text Assistant Demo"></p>
-<hr>
-<h3>Instant Commands (Type at the end of your text)</h3>
-<table>
-<thead>
-<tr>
-<th>Command</th>
-<th>What it does</th>
-<th>Example input</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>?fix</code></td>
-<td>Fixes spelling, grammar, punctuation, and clarity</td>
-<td><code>She dont has no time for that ?fix</code></td>
-</tr>
-<tr>
-<td><code>?formal</code></td>
-<td>Rewrites in a professional, polite business tone</td>
-<td><code>cant make it to the meeting today ?formal</code></td>
-</tr>
-<tr>
-<td><code>?casual</code></td>
-<td>Rewrites in a friendly, conversational tone</td>
-<td><code>I am writing to inquire regarding your plans ?casual</code></td>
-</tr>
-<tr>
-<td><code>?short</code></td>
-<td>Makes your message concise, crisp, and to the point</td>
-<td><code>Due to the fact that it is raining heavily outside right now ?short</code></td>
-</tr>
-<tr>
-<td><code>?emojify</code></td>
-<td>Enriches your text with expressive, fitting emojis</td>
-<td><code>Super excited for the weekend party ?emojify</code></td>
-</tr>
-<tr>
-<td><code>?undo</code></td>
-<td>Instantly reverts back to your original text</td>
-<td><code>?undo</code></td>
-</tr>
-</tbody>
-</table>
-<p><em>(You can type commands with or without a space, e.g., <code>?fix</code> or <code>? fix</code>).</em></p>
-<hr>
-<h3>Instant Undo &amp; Cancellation</h3>
-<ul>
-<li><strong>During AI generation</strong>: Press <strong>Esc</strong> at any time to immediately cancel and keep your original text untouched.</li>
-<li><strong>After AI generation</strong>: If you don't like the AI's result, simply type <strong><code>?undo</code></strong> (or <code>? undo</code>) in the text field to immediately revert back to your original text.</li>
-</ul>
-<hr>
-<h2>Free API Key Setup (No credit card required)</h2>
-<p>Get a free key from either provider below and paste it into the mod settings:</p>
-<ul>
-<li><strong>Google Gemini (Recommended)</strong>: <a href="https://aistudio.google.com/app/apikey">Get free Gemini API Key</a></li>
-<li><strong>Groq</strong>: <a href="https://console.groq.com/keys">Get free Groq API Key</a></li>
-</ul>
-<p><strong>Auto-Verification</strong>: As soon as you paste your key and save settings, the mod automatically tests the connection in the background and confirms it is working.</p>
-<hr>
-<h2>Safety &amp; Privacy</h2>
-<ul>
-<li><strong>What Data is Sent</strong>: When you type an active trigger (e.g. <code>?fix</code>, <code>?formal</code>), the text content of the active field (whatever Select All selects, up to the configured <code>max_chars</code> limit, 4,000 characters by default) is sent over an encrypted HTTPS connection directly to your chosen AI provider (<code>generativelanguage.googleapis.com</code> for Google Gemini, or <code>api.groq.com</code> for Groq). When you add or change an API key in settings, a brief connection test request sending the word <code>&quot;Hi&quot;</code> is performed to verify your key.</li>
-<li><strong>Provider Terms &amp; Data Handling</strong>: Because this mod uses your own direct API key with the provider, each provider's respective privacy policy and terms of service apply. For example, on Google Gemini's free tier, Google's terms state that submitted content may be used to improve products and may be reviewed by human reviewers. Groq's data retention and privacy policies apply when using Groq.</li>
-<li><strong>Clipboard History &amp; Cloud Sync</strong>: Reading the field uses <code>Ctrl+C</code>, so each time you use a command, the field's full text is added to your clipboard history (<code>Win+V</code>) and, if clipboard sync is set to automatic, synced to your other devices. However, during the replacement paste and when restoring your previous clipboard content, the mod applies Windows exclusion formats (<code>ExcludeClipboardContentFromMonitorProcessing</code>, <code>CanIncludeInClipboardHistory</code>, and <code>CanUploadToCloudClipboard</code>) so that intermediate changes and restored clipboard data are not duplicated into clipboard history or synced across devices.</li>
-<li><strong>Accidental Typing Protection</strong>: While the AI processes your request, keyboard input in the target window is safely paused so typed keystrokes do not interfere with processing. You can cancel any in-flight request at any time by pressing <code>Esc</code>. If you switch to another window or app while the AI is thinking, input in your other window is never blocked.</li>
-<li><strong>Terminal Protection</strong>: Command prompts and terminal windows (PowerShell, Command Prompt, Windows Terminal, ConHost, MinTTY, PuTTY, ConEmu) are excluded by class and process so shortcuts and triggers never interfere with console sessions.</li>
-<li><strong>Document Protection</strong>: Fields longer than the configured maximum character limit (<code>max_chars</code>) are left untouched to protect large open files and documents.</li>
-<li><strong>Dedicated Background Process</strong>: This mod runs safely as a dedicated Windhawk tool mod, isolating network and keyboard handling from <code>explorer.exe</code> to protect your taskbar and desktop stability.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Narayan</name>
-            <uri>https://github.com/NarayanChetri</uri>
         </author>
     </entry>
 </feed>

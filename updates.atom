@@ -2,12 +2,168 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-22T03:01:40.000Z</updated>
+    <updated>2026-11-22T04:03:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Edge No Bleed 1.0.0]]></title>
+        <id>https://windhawk.net/mods/edge-no-bleed#94fec81390dbd142801006fee21a3b72bc08271f</id>
+        <link href="https://windhawk.net/mods/edge-no-bleed"/>
+        <updated>2026-11-22T04:03:31.000Z</updated>
+        <content type="html"><![CDATA[<h1>Edge No Bleed</h1>
+<p>Eliminates the persistent 1-2px margin gap where desktop wallpaper bleeds through along screen edges behind maximized windows.</p>
+<h2>The Problem</h2>
+<p>On Windows 10 and 11, users running dark-mode themes, IDEs, terminals, and browsers frequently notice a razor-thin 1-2px strip of desktop wallpaper leaking through along the edges of maximized windows (especially at the bottom or side monitor borders).</p>
+<h3>Why This Happens</h3>
+<ul>
+<li><strong>DWM Frame Padding &amp; Fractional DPI Rounding:</strong> Windows calculates maximized client coordinates by converting logical device-independent units into physical screen pixels. At fractional display scaling factors (such as 125%, 150%, or 175%), rounding calculations frequently leave a 1-2 physical pixel deficit against the work area, exposing bright desktop wallpaper pixels.</li>
+<li><strong>Invisible Margin Bounds:</strong> Normal Win32 maximized frames hang invisible resize margins off-screen, but custom-chrome and modern applications (such as Chromium, Electron, and Windows Terminal) size their own frames and can fall short of physical display boundaries.</li>
+</ul>
+<h2>How It Works</h2>
+<p><code>Edge No Bleed</code> runs as a dedicated tool mod within Windhawk without injecting invasive hooks into third-party processes. It monitors window position and state changes via out-of-context WinEvents on a dedicated message-loop worker thread:</p>
+<ol>
+<li>When a window is maximized, the mod measures its true visible frame bounds using <code>DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)</code> against the monitor's work area (<code>MONITORINFO::rcWork</code>).</li>
+<li>If a 1-2px fractional rounding gap is detected, the mod expands the window frame via <code>SetWindowPos</code> by the exact measured discrepancy, sealing the edge flush against the screen.</li>
+<li>If an auto-hide taskbar is active on that edge, the mod detects it via <code>SHAppBarMessage(ABM_GETAUTOHIDEBAREX)</code> and preserves the 1px mouse-hover reveal strip.</li>
+</ol>
+<h2>Comparison With Other Mods</h2>
+<ul>
+<li><strong>Maximized Window Margins:</strong> That mod intentionally adds large margins (10px to 200px, macOS-style) by shrinking the system work area with AppBars. <code>Edge No Bleed</code> does the opposite: it eliminates unwanted 1-2px fractional DPI gaps so maximized windows sit completely flush.</li>
+<li><strong>Classic Maximized Windows Fix:</strong> That mod is exclusively designed for the legacy Classic 3D Theme on Windows 10/11 using region clipping (<code>SetWindowRgn</code>). <code>Edge No Bleed</code> targets standard modern DWM themes and dark-mode setups.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Dev-StudioCode</name>
+            <uri>https://github.com/Dev-StudioCode</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Groups 1.0.0]]></title>
+        <id>https://windhawk.net/mods/start-menu-groups#0d9d966af10c36b77bb8960c82ad9ae89bdcccd2</id>
+        <link href="https://windhawk.net/mods/start-menu-groups"/>
+        <updated>2026-11-22T04:03:24.000Z</updated>
+        <content type="html"><![CDATA[<h1>Start Menu Groups</h1>
+<p>Add your own <strong>app groups</strong> to the <strong>Windows 11 Start menu</strong>, before or after the Pinned section (or in place of the built‑in <strong>All → View: Category</strong> grid), using the same look as Start: rounded tiles with an icon preview, an overflow cluster for the remaining apps and the group name underneath.</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/start-menu-groups/screenshots/start-menu.gif" alt="Start Menu Groups demo"></p>
+<p>Designed for the Windows 11 Start menu (<code>StartMenuExperienceHost.exe</code>).</p>
+<h2>Features</h2>
+<ul>
+<li><strong>Your own groups</strong> — create any number of groups and put any Start menu app in them, desktop and Store apps alike. An app can be in several groups.</li>
+<li><strong>Apps, programs and websites</strong> — each item is a Start app (picked by name or app ID), a program, file or folder (full path with optional arguments), or a website opened in the default browser.</li>
+<li><strong>Custom names and icons</strong> — every item can have its own label and icon: an <code>.ico</code>, <code>.exe</code>, <code>.dll</code> or image file, an image link (such as a website's favicon), a Fluent icon by its code (e.g. <code>E774</code>) or an emoji.</li>
+<li><strong>Native look</strong> — rounded tiles, borders and colors match Start's own category view and follow the Windows light / dark theme.</li>
+<li><strong>Resizable tiles</strong> — give each group its own tile size, from 1 × 1 up to 6 × 4 (24 apps). Bigger tiles take more cells of the group grid. A 1 × 1 tile is a single app on its own, without a group.</li>
+<li><strong>Overflow cluster</strong> — when a group has more apps than fit, the last cell shows the rest as small icons; click it to open the whole group.</li>
+<li><strong>Right‑click menu</strong> — right‑click an app in a group for <strong>Edit</strong>, <strong>Run as administrator</strong>, <strong>Open file location</strong>, <strong>Pin to taskbar</strong>, <strong>App settings</strong> and <strong>Uninstall</strong>, like Start's own apps.</li>
+<li><strong>Size presets</strong> — Default, Small and Large presets for the tiles, icons and names, plus control over gaps, corner radius, colors and group names.</li>
+<li><strong>Placement</strong> — show the groups before or after Pinned, after Recommended / Recent, or after the All section, with an optional section title.</li>
+<li><strong>Hide Start's sections</strong> — optionally hide Start's own Pinned, Recommended and All sections and use only your groups.</li>
+<li><strong>Settings window</strong> — right‑click the groups in Start → <strong>Customize Start Groups</strong> for a visual editor with drag &amp; drop (see <a href="#settings-window">Settings window</a>).</li>
+<li><strong>Import / export</strong> — all settings can be exported to and imported from a JSON file.</li>
+</ul>
+<h2>Screenshots</h2>
+<p>The settings window, with drag &amp; drop editing of groups and apps:</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/start-menu-groups/screenshots/settings-window.gif" alt="Settings window"></p>
+<h2>Setting it up</h2>
+<p>Everything is configured on the mod's <strong>Settings</strong> tab in Windhawk, in
+sections:</p>
+<ul>
+<li><strong>Groups</strong> — add a group with <em>Add new item</em>, give it a name, a tile size and its items. For a Start app, enter the app's name exactly as it appears in Start (for example <code>Calculator</code>, <code>Visual Studio Code</code>; case doesn't matter), or its app ID (AUMID, such as <code>Microsoft.WindowsCalculator_8wekyb3d8bbwe!App</code>). For a program, its full path (a program, file or folder) and optional arguments; for a website, its address. Reorder groups with the arrows.</li>
+<li><strong>Behavior</strong> — where the groups appear, the section title, app names and tooltips, sorting, empty groups, the number of columns when a group is opened, and hiding Start's own sections.</li>
+<li><strong>Tiles</strong>, <strong>Icons</strong>, <strong>Group names</strong> — sizes, gaps and colors. The defaults match Start's own category view.</li>
+</ul>
+<p>Changes apply to Start as soon as you click <strong>Save settings</strong>.</p>
+<h2>Settings window</h2>
+<p>Right‑click the groups in Start → <strong>Customize Start Groups</strong> (also added to Start's own right‑click menu, after <em>Start settings</em>) opens a settings window with the same settings, but easier to edit:</p>
+<ul>
+<li><strong>Groups</strong> — shows the groups the way Start does. Drag apps to reorder them or move them to another group, drag a tile to reorder the groups, drag a tile's corner to resize it, and drag apps from the All Apps list onto a tile to add them. The selected group and app are edited below the groups. Right‑click a tile to rename, duplicate or delete it.</li>
+<li><strong>Customization</strong> — the size preset (Default, Small, Large), gaps, corner radius, colors and group names.</li>
+<li><strong>Behavior</strong> — placement, section title, app names, tooltips, sorting and columns.</li>
+<li><strong>Built‑in sections</strong> — hide Start's own Pinned, Recommended and All sections.</li>
+</ul>
+<p>Start apps are picked by name with suggestions from the apps in Start; programs have a file picker. Groups and items can be duplicated, and an app can be added on its own, without a group. <strong>Import</strong> / <strong>Export</strong> at the bottom of the navigation pane save all settings to, or load them from, a JSON file.</p>
+<p>The window is hosted by File Explorer — the mod also loads into <code>explorer.exe</code> for this, and does nothing else there — because the Start menu process can't host one. It edits the same settings as Windhawk. Windhawk keeps them in a protected registry key, so <strong>Save</strong> shows an administrator (UAC) prompt for Windows PowerShell, which imports the new settings, and Start updates right after. The import checks that the settings file is exactly the one the window wrote, so no other program can change what gets saved. If the settings were changed in Windhawk while the window was open, <strong>Save</strong> asks before replacing them. The portable version of Windhawk isn't supported by the window.</p>
+<h2>Tile size and apps in the tile</h2>
+<p>Each group has two size settings:</p>
+<ul>
+<li><strong>Tile size</strong> — width × height of the tile, in app spots. 2 × 2 is the size of one of Start's own tiles; 1 × 1 is an app on its own, without a group.</li>
+<li><strong>Apps in the tile</strong> — apps per row × rows of apps, at most the tile size. <em>Default</em> fills the tile with one app per spot; the rest go in the overflow cluster.</li>
+</ul>
+<p>A group can also hide its app names, its group name, or its tile background (no background, border or padding — just the apps, e.g. for a single app on its own).</p>
+<h2>Colors</h2>
+<p>Colors are <code>#RRGGBB</code> or <code>#AARRGGBB</code>. Leave a color empty to follow the Windows theme and match Start.</p>
+<h2>Network access</h2>
+<p>The mod doesn't connect to the internet by itself, and the default settings don't contact any server: the default websites show a globe icon.</p>
+<p>An icon set to an image link (<code>http://</code> or <code>https://</code>, such as a website's favicon) is downloaded from that address by Windows' XAML image loader: a normal web request for the image, which sends your IP address and a user agent to that server. It happens when Start builds the tiles (when the mod loads, on a theme or settings change, and when a group is opened), and when the settings window shows the item. To avoid it, leave the icon empty or use a local file, a Fluent icon code or an emoji.</p>
+<h2>Compatibility</h2>
+<p>The mod reaches Start's UI directly, without XAML diagnostics, so it works alongside mods and tools that use them, such as Windows 11 Start Menu Styler.</p>
+<h2>Language</h2>
+<p>The groups are placed next to Start's pinned list, found by its element name, so they show in any display language. Two things go by Start's English titles: hiding Start's sections (<em>Pinned</em>, <em>Recommended</em> / <em>Recent</em>, <em>All</em>), and adding <em>Customize Start Groups</em> after <em>Start settings</em> in Start's own right‑click menu. In other languages, open the settings window by right‑clicking the groups instead.</p>
+<h2>Default configuration</h2>
+<p>Out of the box the mod adds these groups before the Pinned section, under an <strong>Apps</strong> heading:</p>
+<ul>
+<li><strong>Group 1</strong> — Microsoft Store, Settings, Notepad, Weather</li>
+<li><strong>Group 2</strong> — Camera, Paint, Calculator, Calendar</li>
+<li><strong>Favorites</strong> — Photos, Terminal, Notepad, Get Help (group name hidden)</li>
+<li><strong>Group 3</strong> (3 × 3) — Sound Recorder, Voice access, Task Manager, Movies &amp; TV, File Explorer, Sticky Notes</li>
+<li><strong>System</strong> (3 × 1) — Control Panel, Services, Run (group name hidden)</li>
+<li><strong>Websites</strong> (3 × 2) — YouTube, ChatGPT, Example, Google, Reddit, dan13.me</li>
+</ul>
+<p>Empty groups are hidden. None of Start's own sections are hidden by default. Everything is configurable in the mod settings.</p>
+]]></content>
+        <author>
+            <name>DanRotaru</name>
+            <uri>https://github.com/DanRotaru</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Mac OS 27 Finder Bar 1.1.1]]></title>
+        <id>https://windhawk.net/mods/mac-os-27-finder-bar#f25af3d2731fb9672e90d7538cc8c71b12c0ddb6</id>
+        <link href="https://windhawk.net/mods/mac-os-27-finder-bar"/>
+        <updated>2026-11-22T04:03:19.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Stacked notifications: in the floating layout, notifications from three apps or more are stacked, with the newest in front. The stack follows the theme, and the front card hides the cards behind it, which show only at the bottom edge.</li>
+<li>The mouse wheel turns the stack to the next notification.</li>
+<li>Dragging the front card aside dismisses it and shows the next one.</li>
+<li>A click spreads the cards into the list with a spring animation; &quot;Show less&quot; stacks them again.</li>
+<li>Scrolling the notification list, with the wheel or by dragging, is smooth. Cards pile up at the top and bottom edges instead of being cut off, as on Android.</li>
+<li>The bell turns red when a notification arrives, like the microphone and camera icons. This replaces the red dot.</li>
+<li>Notifications and notice pills are now separate switches. &quot;Receive app notifications&quot; (formerly &quot;Windows notifications&quot;) is in the Notifications button group, and with the pills off, notifications still go to the bell. &quot;Only the bar shows notifications&quot; needs the pills, so it shows only when both are on.</li>
+<li>Selection gradient: an optional second selection color blends the bar's selection pill and the menus' selection from one color to the other.</li>
+<li>New &quot;Test notifications&quot; button in Menu Bar Settings. Each click sends a test notification from a different app.</li>
+<li>Fix: the notifications panel now catches the mouse wheel and clicks over very clear glass. Before, they went to the window below.</li>
+<li>README: demo of the stacked notifications.</li>
+<li>&quot;Clear&quot; in the notifications panel slides the cards out one after another before removing them.</li>
+<li>The bar slides up and down when it hides and shows (with the handle and with &quot;Hide when a window is maximized&quot;).</li>
+<li>With &quot;Hide when a window is maximized&quot;, pointing at the top edge shows the bar over the window until the pointer leaves, as on macOS.</li>
+<li>Settings backup: export the Menu Bar Settings to a file and import them again.</li>
+<li>Num Lock and Scroll Lock pills, like Caps Lock.</li>
+<li>Restart, Shut Down and Sign Out ask in a glass dialog.</li>
+<li>Fix: the notice pill set to follow the bar had no glass with the Glass background and &quot;live&quot;.</li>
+<li>Fix: with the handle on, leaving full screen no longer shows the bar.</li>
+<li>Fix: after the active app is minimized or closed, the bar goes back to &quot;Finder&quot;.</li>
+<li>Fix: moving between the bar's menus no longer flickers the app's window.</li>
+<li>Fix: a full-screen video on another display now hides that display's bar.</li>
+<li>Fix: optional updates (drivers, previews) are no longer counted as pending.</li>
+<li>Fix: Windows' own volume, network and power icons no longer show in the bar's tray.</li>
+<li>Fix: video thumbnails (YouTube) are cropped instead of stretched.</li>
+<li>Fix: connected Bluetooth LE devices (mice, keyboards) now show in the Bluetooth menu and pill.</li>
+<li>Fix: clicking the bell or Now Playing on another display while the panel is open.</li>
+<li>Fix: &quot;System Settings&quot; is now &quot;Ajustes do Sistema&quot; in Portuguese.</li>
+<li>Now Playing: the cover is enlarged once in high quality, and video thumbnails show whole over a blurred copy of themselves instead of a cropped, stretched middle.</li>
+<li>The bar slides in more smoothly with the handle; windows move down once it's in place.</li>
+<li>Fix: resting the pointer on a bar button could hide the bar or make it reload over and over on setups with displays at different scales.</li>
+<li>Settings backup: the import replaces all the bar's settings, and the copy now includes &quot;This window&quot;'s look and the weather widget's glass.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Thiago Silva</name>
+            <uri>https://github.com/brideinflame-rgb</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Border Switch 1.2.6]]></title>
         <id>https://windhawk.net/mods/windows-border-switch#c7efc6a870f85a9bcdf3573d16482340d68f8ca9</id>
@@ -411,56 +567,6 @@ an update for each Explorer build.</p>
         <author>
             <name>Shifting Whistler</name>
             <uri>https://github.com/shifting-whistler</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Context Menu Items 1.14.0]]></title>
-        <id>https://windhawk.net/mods/remove-context-menu-items#0307abbf9e62434de8ef54a82113c932e264ad3a</id>
-        <link href="https://windhawk.net/mods/remove-context-menu-items"/>
-        <updated>2026-11-21T16:00:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed filtering for Windows 10 taskbar menus</li>
-</ul>
-]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Touchpad Relaxed Hand Tracking 1.2.0]]></title>
-        <id>https://windhawk.net/mods/touchpad-relaxed-hand-tracking#bccd6babe55b52d78e9caecec8b027cf2ad0b31f</id>
-        <link href="https://windhawk.net/mods/touchpad-relaxed-hand-tracking"/>
-        <updated>2026-11-21T16:00:25.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Improved click stability:</strong> more assertive tap-hold drag action and pointer position while clicking.</li>
-<li><strong>Scroll output live switch hotkey and memory (optional):</strong> press Win, or Win + modifiers, during a scroll to use the other output method (wheel or touch) for that action. The mod will remember the last choice <strong>for each program</strong>.</li>
-<li><strong>Scroll inertia stops on any key press</strong>, as Windows' own does (Ctrl no longer zooms a page that is still scrolling).</li>
-<li><strong>Thumb recognition with fewer fingers:</strong> in any tracking mode, a thumb resting well under the other fingers is recognized and left out, so it no longer moves the pointer with them.</li>
-<li><strong>Speed multiplier moving fingers correction:</strong> a resting thumb was counting as a moving finger. Not anymore, only when it also moves (but still do not steer the pointer).</li>
-<li><strong>Resizable diagnostics overlay</strong>: its window dragging and resizing respond only to native taps to avoid lag.</li>
-</ul>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Coin & Stock Monitor 1.3.0]]></title>
-        <id>https://windhawk.net/mods/coin-stock-monitor#1eba3bf6eab6dde86968cfc1cb8ab382f5728655</id>
-        <link href="https://windhawk.net/mods/coin-stock-monitor"/>
-        <updated>2026-11-21T16:00:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Preserves the existing 1.2.1 setting keys and saved values while adding Color preset and Background controls under Appearance.</li>
-<li>Adds coordinated color presets with matching Solid backgrounds; new Custom defaults use Slate colors.</li>
-<li>Combines background mode and sizing into Transparent, Solid - full area, and Solid - fit text. Horizontal padding scales at every DPI; Fit text follows content size and left/right alignment.</li>
-<li>Uses antialiased text in Solid mode and retains color-key-safe text in Transparent mode.</li>
-</ul>
-]]></content>
-        <author>
-            <name>jayll1303</name>
-            <uri>https://github.com/jayll1303</uri>
         </author>
     </entry>
 </feed>

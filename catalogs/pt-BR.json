@@ -6305,6 +6305,31 @@
         "version": "1.0"
       }
     },
+    "edge-no-bleed": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795320211000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795320211000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Dev-StudioCode",
+        "compilerOptions": "-ldwmapi",
+        "description": "Eliminates 1-2px screen edge gaps where desktop wallpaper bleeds behind maximized windows.",
+        "github": "https://github.com/Dev-StudioCode",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Edge No Bleed",
+        "version": "1.0.0"
+      }
+    },
     "edge-snap-throw": {
       "details": {
         "defaultSorting": 1218,
@@ -11337,7 +11362,7 @@
         "ratingUsers": 67,
         "reviews": 0,
         "trendingSorting": 29.65728530479428,
-        "updated": 1794805353000,
+        "updated": 1795320199000,
         "users": 1254
       },
       "metadata": {
@@ -11352,7 +11377,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Mac OS 27 Finder Bar",
-        "version": "1.1.0"
+        "version": "1.1.1"
       }
     },
     "macos-enter-rename": {
@@ -17042,6 +17067,37 @@
       "metadataEnglish": {
         "description": "Adds a \"Manage Categories\" item to the Windows 11 Start menu's right-click menu, for customising app categories. Also hides empty category tiles from the Start menu (optional).",
         "name": "Start Menu Category Manager"
+      }
+    },
+    "start-menu-groups": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795320204000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795320204000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "DanRotaru",
+        "compilerOptions": "-ladvapi32 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -luser32",
+        "description": "Replace the Windows 11 Start menu \"Category\" view with your own groups, apps and layout",
+        "donateUrl": "https://buymeacoffee.com/widget/page/danrotaru",
+        "github": "https://github.com/DanRotaru",
+        "homepage": "https://dan13.me/",
+        "include": [
+          "StartMenuExperienceHost.exe",
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Start Menu Groups",
+        "version": "1.0.0"
       }
     },
     "start-menu-open-location": {

@@ -1,3 +1,38 @@
+## 1.1.1 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f25af3d2731fb9672e90d7538cc8c71b12c0ddb6/mods/mac-os-27-finder-bar.wh.cpp))
+
+* Stacked notifications: in the floating layout, notifications from three apps or more are stacked, with the newest in front. The stack follows the theme, and the front card hides the cards behind it, which show only at the bottom edge.
+* The mouse wheel turns the stack to the next notification.
+* Dragging the front card aside dismisses it and shows the next one.
+* A click spreads the cards into the list with a spring animation; "Show less" stacks them again.
+* Scrolling the notification list, with the wheel or by dragging, is smooth. Cards pile up at the top and bottom edges instead of being cut off, as on Android.
+* The bell turns red when a notification arrives, like the microphone and camera icons. This replaces the red dot.
+* Notifications and notice pills are now separate switches. "Receive app notifications" (formerly "Windows notifications") is in the Notifications button group, and with the pills off, notifications still go to the bell. "Only the bar shows notifications" needs the pills, so it shows only when both are on.
+* Selection gradient: an optional second selection color blends the bar's selection pill and the menus' selection from one color to the other.
+* New "Test notifications" button in Menu Bar Settings. Each click sends a test notification from a different app.
+* Fix: the notifications panel now catches the mouse wheel and clicks over very clear glass. Before, they went to the window below.
+* README: demo of the stacked notifications.
+* "Clear" in the notifications panel slides the cards out one after another before removing them.
+* The bar slides up and down when it hides and shows (with the handle and with "Hide when a window is maximized").
+* With "Hide when a window is maximized", pointing at the top edge shows the bar over the window until the pointer leaves, as on macOS.
+* Settings backup: export the Menu Bar Settings to a file and import them again.
+* Num Lock and Scroll Lock pills, like Caps Lock.
+* Restart, Shut Down and Sign Out ask in a glass dialog.
+* Fix: the notice pill set to follow the bar had no glass with the Glass background and "live".
+* Fix: with the handle on, leaving full screen no longer shows the bar.
+* Fix: after the active app is minimized or closed, the bar goes back to "Finder".
+* Fix: moving between the bar's menus no longer flickers the app's window.
+* Fix: a full-screen video on another display now hides that display's bar.
+* Fix: optional updates (drivers, previews) are no longer counted as pending.
+* Fix: Windows' own volume, network and power icons no longer show in the bar's tray.
+* Fix: video thumbnails (YouTube) are cropped instead of stretched.
+* Fix: connected Bluetooth LE devices (mice, keyboards) now show in the Bluetooth menu and pill.
+* Fix: clicking the bell or Now Playing on another display while the panel is open.
+* Fix: "System Settings" is now "Ajustes do Sistema" in Portuguese.
+* Now Playing: the cover is enlarged once in high quality, and video thumbnails show whole over a blurred copy of themselves instead of a cropped, stretched middle.
+* The bar slides in more smoothly with the handle; windows move down once it's in place.
+* Fix: resting the pointer on a bar button could hide the bar or make it reload over and over on setups with displays at different scales.
+* Settings backup: the import replaces all the bar's settings, and the copy now includes "This window"'s look and the weather widget's glass.
+
 ## 1.1.0 ([Nov 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ecdb02582e9b7ac40ba466ebce21381d4249e2dc/mods/mac-os-27-finder-bar.wh.cpp))
 
 * New **Custom liquid glass** theme (from Siri Plus Launchpad): your color at the top, fading into clear glass, with a fine line of light along the bottom edge. It works for the panels, the bar's background or both. The color (presets or any color), the strength and how far down the color goes are set in Menu Bar Settings.
