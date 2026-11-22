@@ -99,7 +99,7 @@ This mod is under active development, with additional quality-of-life improvemen
 #include <climits>
 #include <cmath>
 #include <cstdint>
-#include <cwctype>  // [windhawk-reviewer] iswalpha / iswalnum / towlower: include their header directly
+#include <cwctype>  // [keep] include <cwctype> directly
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -107,15 +107,13 @@ This mod is under active development, with additional quality-of-life improvemen
 #include <unordered_set>
 #include <vector>
 
-#include <windhawk_utils.h>  // [windhawk-reviewer] WindhawkUtils::SetFunctionHook / StringSetting
+#include <windhawk_utils.h>  // [keep] typed hook / string-setting helpers
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
 
-// ---------------------------------------------------------------------------
 // Constants / globals
-// ---------------------------------------------------------------------------
 
 constexpr WCHAR kGutterClass[] = L"WhNotepadProGutter";
 constexpr WCHAR kMinimapClass[] = L"WhNotepadProMinimap";
@@ -123,43 +121,39 @@ constexpr WCHAR kPropEditor[] = L"WhNotepadPro.Editor";
 constexpr WCHAR kPropTop[] = L"WhNotepadPro.Top";
 constexpr UINT_PTR kEditSubclassId = 0x4E505245;
 constexpr UINT_PTR kTopSubclassId = 0x4E505254;
-constexpr UINT kSysCmdId = 0xA1F0;           // WM_SYSCOMMAND id (low 4 bits must be 0)
-constexpr UINT_PTR kTickTimer = 1;           // runs on the gutter window (16 ms while busy, 250 ms idle)
-// [windhawk-reviewer] kDiscoverTimer (a 750 ms EnumChildWindows rescan of every Notepad window) was
-// removed on purpose: the CreateWindowExW hook and the initial enumeration in AttachTop already
-// find every editor. Don't bring the poll back without a case those two miss.
-// [windhawk-reviewer] Adaptive tick rate: the per-editor timer used to be a fixed 16 ms (60 Hz) for as
-// long as Notepad was open. See SetTickRate() / WakeTick() / SettleTickRate().
-constexpr UINT kTickFastMs = 16;          // typing, scrolling, dragging, or something still settling
-constexpr UINT kTickSlowMs = 250;         // idle backstop (also background tabs and minimized windows)
-constexpr ULONGLONG kTickGraceMs = 300;   // stay fast this long after the last wake-up event
-constexpr ULONGLONG kTickStartMs = 1000;  // ... and this long after an editor was attached
+constexpr UINT kSysCmdId = 0xA1F0;
+constexpr UINT_PTR kTickTimer = 1;
+// [keep] adaptive tick rate instead of a fixed 16 ms timer (see SetTickRate)
+constexpr UINT kTickFastMs = 16;
+constexpr UINT kTickSlowMs = 250;
+constexpr ULONGLONG kTickGraceMs = 300;
+constexpr ULONGLONG kTickStartMs = 1000;
 constexpr WCHAR kMenuText[] = L"Line Numbers";
-constexpr UINT kSysCmdMinimapId = 0xA1E0;    // WM_SYSCOMMAND id for the minimap toggle
+constexpr UINT kSysCmdMinimapId = 0xA1E0;
 constexpr WCHAR kMenuTextMinimap[] = L"Minimap";
 
-// Editor background, only used if copying it from the screen fails (see PaintGutter).
+// Fallback editor background, used when copying it from the screen fails.
 constexpr COLORREF kEditorGuessDark = RGB(0x27, 0x27, 0x27);
 constexpr COLORREF kEditorGuessLight = RGB(0xF9, 0xF9, 0xF9);
 
 // Change markers
-constexpr size_t kMkMaxChars = 2000000;  // no markers for documents bigger than this
-constexpr int kMkBarDip = 3;             // thickness of the colored bar at the gutter's left edge
-constexpr int kMkStripDip = 6;           // gutter width when only the markers are shown
-constexpr ULONGLONG kMkFollowMs = 1500;  // after a document appears its baseline follows the text
-                                         // for this long (loading), unless the user edits first
+constexpr size_t kMkMaxChars = 2000000;
+constexpr int kMkBarDip = 3;
+constexpr int kMkStripDip = 6;
+// The marker baseline follows the document for this long while it loads, unless the user edits.
+constexpr ULONGLONG kMkFollowMs = 1500;
 
 // Minimap tuning
-constexpr double kMmWidthRatio = 0.10;  // width as a fraction of the editor's client width
-constexpr int kMmMinDip = 60;           // ... but never narrower than this (DIPs)
-constexpr int kMmMaxDip = 160;          // ... or wider than this
-constexpr int kMmStepDip = 4;           // width changes in steps of this size (fewer relayouts)
-constexpr int kMmMinTextDip = 300;      // hide the minimap if less than this is left for text
-constexpr int kMmCols = 100;            // text columns that span the minimap's full width
+constexpr double kMmWidthRatio = 0.10;
+constexpr int kMmMinDip = 60;
+constexpr int kMmMaxDip = 160;
+constexpr int kMmStepDip = 4;
+constexpr int kMmMinTextDip = 300;
+constexpr int kMmCols = 100;
 
 struct Palette {
     COLORREF bg, text, current, separator;
-    COLORREF mkAdd, mkMod, mkDel;  // change markers: added / modified / removed lines
+    COLORREF mkAdd, mkMod, mkDel;
 };
 constexpr Palette kDark = {RGB(0x2C, 0x2C, 0x2C), RGB(0x85, 0x85, 0x85),
                            RGB(0xFF, 0xFF, 0xFF), RGB(0x3E, 0x3E, 0x3E),
@@ -170,39 +164,36 @@ constexpr Palette kLight = {RGB(0xF8, 0xF8, 0xF8), RGB(0x8A, 0x8A, 0x8A),
 
 std::atomic<bool> g_enabled{true};
 std::atomic<bool> g_minimapEnabled{true};
-std::atomic<bool> g_mmOnlyScroll{false};  // setting: show the minimap only if a vscroll is needed
-std::atomic<bool> g_mmClickLine{true};    // setting: a click jumps to the line under the cursor
+std::atomic<bool> g_mmOnlyScroll{false};
+std::atomic<bool> g_mmClickLine{true};
 std::atomic<int> g_themeEpoch{0};
-std::atomic<int> g_highlightStyle{0};  // 0 none, 1 underline, 2 bold, 3 both
+std::atomic<int> g_highlightStyle{0};
 std::atomic<bool> g_unloading{false};
 UINT g_runMsg = 0;
 
-// [windhawk-reviewer] window classes are registered with the mod's own module (not the exe), and the
-// gutter / minimap windows are only created when their class registered (see Wh_ModInit). A stale class
-// left by an earlier instance of the mod would otherwise be picked up by CreateWindowExW, and its
-// window procedure points into an unloaded image.
+// [keep] classes use the mod's own module; windows are skipped if registration failed
 HINSTANCE g_hInst = nullptr;
 std::atomic<bool> g_gutterClassOk{false};
 std::atomic<bool> g_minimapClassOk{false};
 
-std::mutex g_mutex;  // guards g_editors, g_tops
+std::mutex g_mutex;
 
-// Cache for "how many paragraph breaks precede character index N".
+// Cache of paragraph breaks before a character index.
 struct CrCache {
     bool valid = false;
     LONG pos = 0;
     LONG count = 0;
 };
 
-// One visual row of the editor, as last measured (client pixels).
+// One measured visual row (client pixels).
 struct SnapRow {
-    LONG idx;  // first character index
-    LONG end;  // one past the last character of the row
-    int y;     // row top
-    int x;     // x of the first character
+    LONG idx;
+    LONG end;
+    int y;
+    int x;
 };
 
-// What the minimap last painted, so it only repaints when something visible changed.
+// Last painted minimap state, so it repaints only on visible changes.
 struct MmSig {
     double top = 0, view = 0;
     LONG nLines = 0;
@@ -219,11 +210,11 @@ static bool SigSame(const MmSig& a, const MmSig& b) {
 struct EditorCtx {
     HWND edit = nullptr;
     HWND gutter = nullptr;
-    bool active = false;  // line numbers on: left margin reserved
+    bool active = false;
     bool addedClipSiblings = false;
-    bool captured = false;  // origMargins / clip style captured (shared by gutter + minimap)
+    bool captured = false;
     DWORD origMargins = 0;
-    bool rectFallback = false;  // EM_SETMARGINS ignored -> use EM_SETRECT
+    bool rectFallback = false;
     int insetFailures = 0;
     int gutterW = 0;
 
@@ -238,9 +229,6 @@ struct EditorCtx {
     int themeEpoch = -1;
     int tickCount = 0;
     bool inTick = false;
-
-    // [windhawk-reviewer] the always-0 `textMode` was removed together with its dead EM_GETTEXTRANGE
-    // paths (ReadText / CountBreaksText): line breaks are counted from the row geometry only.
 
     bool textDirty = true;
     LONG textLen = -1, lineCount = -1;
@@ -257,66 +245,66 @@ struct EditorCtx {
 
     // Syntax highlighting
     DWORD uiThread = 0;
-    bool shown = false;       // visible editor (set by Tick)
-    int lang = -2;            // -2 unknown, -1 none, >=0 index into Langs()
+    bool shown = false;
+    int lang = -2;
     int synTick = 0;
     bool docStale = true;
-    std::wstring docText;     // document copy, same character indexes as the editor
-    std::vector<uint8_t> cls; // SynClass per character
+    std::wstring docText;
+    std::vector<uint8_t> cls;
     std::vector<SnapRow> snap;
     int snapPitch = 18;
-    double baseOff = 0;       // baseline offset below a row's top, px
+    double baseOff = 0;
     bool offValid = false;
 
     // Minimap
     HWND minimap = nullptr;
-    bool mmActive = false;  // minimap on: right margin reserved, window shown
+    bool mmActive = false;
     int mmW = 0;
     RECT mmPlacement = {};
     bool mmHot = false, mmDrag = false, mmTracking = false;
-    int mmGrab = 0;               // px from the slider's top to the mouse while dragging
-    bool mmDragPending = false;   // a drag position waits to be applied by the next timer tick
-    int mmDragY = 0;              // ... the latest mouse y (minimap client coordinates)
-    double mmDragV = 0;           // viewport size (lines) frozen for the duration of a drag
-    LONG mmEndRows = -1, mmEndY = -1;  // editor state after the last "scroll to end" request
+    int mmGrab = 0;
+    bool mmDragPending = false;
+    int mmDragY = 0;
+    double mmDragV = 0;
+    LONG mmEndRows = -1, mmEndY = -1;
     int mmEndH = -1;
-    bool docOk = false;           // docText is a valid copy of the document
-    unsigned docRev = 0;          // bumped whenever docText is replaced or cleared
-    unsigned mmBuiltRev = ~0u;    // docRev that mmStart was built from
-    std::vector<uint32_t> mmStart;  // start index (in docText) of every logical line
+    bool docOk = false;
+    unsigned docRev = 0;
+    unsigned mmBuiltRev = ~0u;
+    std::vector<uint32_t> mmStart;
     bool mmSigValid = false;
     MmSig mmSig;
-    bool inMsg = false;  // inside a tick that was triggered by an editor message (not the timer)
-    int settle = 0;      // timer ticks left in which the gutter re-checks after a text edit
+    bool inMsg = false;
+    int settle = 0;
 
     // Change markers
-    bool numsShown = true;      // line numbers drawn (false: only the marker strip is shown)
-    bool mkOn = false;          // markers active for the current document
-    bool mkNameOk = false;      // the title names a saved file (not an "Untitled" tab)
+    bool numsShown = true;
+    bool mkOn = false;
+    bool mkNameOk = false;
     bool mkNameKnown = false;
     std::wstring mkName, mkPendingName;
-    bool mkHave = false;        // a baseline exists
-    bool mkFrozen = false;      // the baseline no longer follows the text
-    bool mkEmptyBase = false;   // the document was empty when the baseline froze: no markers
-    bool mkUserEdit = false;    // the user typed / pasted / undid something
-    bool mkReload = false;      // the document was replaced (loaded)
+    bool mkHave = false;
+    bool mkFrozen = false;
+    bool mkEmptyBase = false;
+    bool mkUserEdit = false;
+    bool mkReload = false;
     ULONGLONG mkFollowUntil = 0;
     std::wstring mkBase;
     std::vector<uint64_t> mkBaseHash;
-    std::vector<uint8_t> mkState;   // per current line: 0 unchanged, 1 added, 2 modified
-    std::vector<uint32_t> mkDel;    // sorted: lines were removed right before these line indices
-    unsigned mkRev = ~0u;           // docRev the markers were computed for
-    bool mkDirty = false;           // the markers changed: the gutter needs a repaint
-    bool mkExactFailed = false;     // [windhawk-reviewer] an expensive exact diff gave up for this baseline
-    int mkExactSkips = 0;           // [windhawk-reviewer] runs since then (every 32nd retries)
+    std::vector<uint8_t> mkState;
+    std::vector<uint32_t> mkDel;
+    unsigned mkRev = ~0u;
+    bool mkDirty = false;
+    bool mkExactFailed = false;  // [keep] exact diff gave up for this baseline
+    int mkExactSkips = 0;  // [keep] runs since then (every 32nd retries)
 
-    int synSettle = 0;       // timer ticks left in which the syntax row snapshot is re-checked
-    uint64_t snapHash = 0;   // fingerprint of the snapshot, to see whether a re-check changed it
-    int docRetry = 0;        // failed document reads retried since the last text change
+    int synSettle = 0;
+    uint64_t snapHash = 0;
+    int docRetry = 0;
 
-    // Syntax tracking (independent of the line-number gutter)
+    // Syntax tracking, independent of the gutter
     LONG synLen = -1, synLines = -1;
-    LONG docSynLen = -2;  // synLen at the time docText was read (staleness check)
+    LONG docSynLen = -2;
     ULONGLONG synChangeTick = 0;
     bool synSigValid = false;
     LONG synFirst = 0;
@@ -324,17 +312,16 @@ struct EditorCtx {
     DWORD synSelS = 0, synSelE = 0;
     int synW = 0, synH = 0;
 
-    // [windhawk-reviewer] row-geometry calibration: these used to be shared globals (g_cal*) that every
-    // thread painting an editor wrote without synchronization; now per editor (keyed by pixel font size).
+    // [keep] row calibration moved from shared globals into the editor
     int calKey = 0;
-    int calPitch = 0;   // distance between visual rows, px
-    int calOrigin = 0;  // y of row 0 when not scrolled, px
+    int calPitch = 0;
+    int calOrigin = 0;
     bool calPitchValid = false;
     bool calOriginValid = false;
 
-    // [windhawk-reviewer] adaptive tick rate, see SetTickRate()
-    UINT tickMs = 0;          // current period of kTickTimer in ms (0 = timer not running)
-    ULONGLONG fastUntil = 0;  // GetTickCount64() until which the timer stays fast after a wake-up
+    // [keep] adaptive tick rate state
+    UINT tickMs = 0;
+    ULONGLONG fastUntil = 0;
 };
 
 struct TopCtx {
@@ -344,9 +331,7 @@ struct TopCtx {
 std::vector<EditorCtx*> g_editors;
 std::vector<TopCtx*> g_tops;
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 struct RunParam {
     void (*proc)(void*);
@@ -364,7 +349,7 @@ static LRESULT CALLBACK RunHookProc(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-// Runs proc on the thread that owns hwnd (needed for SetWindowSubclass etc.).
+// Runs proc on the window's owning thread.
 static bool RunFromWindowThread(HWND hwnd, void (*proc)(void*), void* arg) {
     DWORD tid = GetWindowThreadProcessId(hwnd, nullptr);
     if (!tid) return false;
@@ -381,7 +366,7 @@ static bool RunFromWindowThread(HWND hwnd, void (*proc)(void*), void* arg) {
 }
 
 static bool IsRichEditName(PCWSTR name) {
-    return name && _wcsnicmp(name, L"RichEdit", 8) == 0;  // RichEditD2DPT, RICHEDIT50W, ...
+    return name && _wcsnicmp(name, L"RichEdit", 8) == 0;
 }
 
 static int CountDigits(LONG n) {
@@ -394,7 +379,7 @@ static int CountDigits(LONG n) {
 }
 
 static bool SystemAppsUseDark() {
-    // ShouldAppsUseDarkMode is uxtheme ordinal 132 (undocumented).
+    // uxtheme ordinal 132 = ShouldAppsUseDarkMode (undocumented).
     HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
     if (ux) {
         using Fn = bool(WINAPI*)();
@@ -408,8 +393,7 @@ static bool SystemAppsUseDark() {
     return v == 0;
 }
 
-// Order: window's immersive-dark attribute (Notepad's own theme), editor text
-// color, then the system "apps" theme.
+// Dark-mode order: window's dark attribute, editor text color, then the system apps theme.
 static bool IsDarkTheme(EditorCtx* c) {
     HWND top = GetAncestor(c->edit, GA_ROOT);
     BOOL dwmDark = FALSE;
@@ -421,17 +405,14 @@ static bool IsDarkTheme(EditorCtx* c) {
     if (c->textColorKnown) {
         int lum = (30 * GetRValue(c->textColor) + 59 * GetGValue(c->textColor) +
                    11 * GetBValue(c->textColor)) / 100;
-        return lum >= 128;  // light text => dark editor
+        return lum >= 128;
     }
     return SystemAppsUseDark();
 }
 
-// ---------------------------------------------------------------------------
 // Editor queries
-// ---------------------------------------------------------------------------
 
-// Caret/char position in editor client coordinates. Handles both RichEdit
-// (POINTL via wParam) and Edit-style (packed return value) behavior.
+// Caret/char position in client coordinates, for both RichEdit and Edit return styles.
 static bool PosFromChar(HWND edit, LONG idx, POINT* out) {
     POINTL pt = {LONG_MIN, LONG_MIN};
     LRESULT r = SendMessageW(edit, EM_POSFROMCHAR, (WPARAM)&pt, idx);
@@ -446,28 +427,20 @@ static bool PosFromChar(HWND edit, LONG idx, POINT* out) {
     return true;
 }
 
-// [windhawk-reviewer] ReadText() removed: it was only used by the dead CountBreaksText().
-
 static bool IsBreakChar(WCHAR ch) {
     return ch == L'\r' || ch == L'\n' || ch == 0x2029;
 }
 
-// [windhawk-reviewer] CountBreaksText() removed: dead code (textMode was always 0).
-
-// A visual row `idx` (row number v > 0) starts a new paragraph if the previous
-// row ended with a paragraph break. Without reading text we infer this from
-// geometry: the previous row either (a) is empty (just the break, span == 1; some
-// builds report a length of 1 for such rows, so it is special-cased), or (b) its
-// text is shorter than the distance to this row (the gap is the break char).
+// A row starts a new paragraph if the previous row ended with a break, inferred from geometry.
 static bool RowStartsParagraphByGap(HWND edit, LONG v, LONG idx) {
     LONG pidx = (LONG)SendMessageW(edit, EM_LINEINDEX, v - 1, 0);
     if (pidx < 0) return true;
-    if (idx - pidx <= 1) return true;  // empty line
+    if (idx - pidx <= 1) return true;
     LONG plen = (LONG)SendMessageW(edit, EM_LINELENGTH, pidx, 0);
     return idx > pidx + plen;
 }
 
-// Paragraph breaks in [from, to) ("\r\n" counts once), derived from the row geometry.
+// Paragraph breaks in [from, to), counted from row geometry.
 static LONG CountBreaksRows(HWND edit, LONG from, LONG to) {
     LONG lines = (LONG)SendMessageW(edit, EM_GETLINECOUNT, 0, 0);
     LONG v = (LONG)SendMessageW(edit, EM_LINEFROMCHAR, from, 0);
@@ -482,32 +455,25 @@ static LONG CountBreaksRows(HWND edit, LONG from, LONG to) {
 }
 
 static LONG CountBreaks(EditorCtx* c, LONG from, LONG to) {
-    // [windhawk-reviewer] the dead textMode / CountBreaksText dispatch was removed (textMode was always 0)
     return CountBreaksRows(c->edit, from, to);
 }
 
-// [windhawk-reviewer] Line-count shortcut. Counting paragraph breaks from the row geometry costs 2-3
-// SendMessage calls per visual row and was redone after every edit (on the order of 100,000 calls for
-// a keystroke near the end of a large file). When the document copy is current, the minimap's line
-// table (mmStart) already maps a character index to its logical line with one upper_bound, so use
-// that. It is built here on demand (no editor messages, works with the minimap off); without a
-// current copy (plain file with the minimap and markers off, very large file, copy stale after an edit)
-// the row-walking count below is still the fallback.
-static LONG MmLineOf(const EditorCtx* c, LONG idx);  // defined with the minimap model
+// [keep] line-count shortcut: use the minimap line table when the document copy is current, else walk rows
+static LONG MmLineOf(const EditorCtx* c, LONG idx);
 static void BuildMmLines(EditorCtx* c);
 
 static bool LineModelUsable(EditorCtx* c) {
     if (!c->docOk || c->docStale) return false;
     GETTEXTLENGTHEX gtl = {GTL_NUMCHARS, 1200 /*CP_UNICODE*/};
     LONG len = (LONG)SendMessageW(c->edit, EM_GETTEXTLENGTHEX, (WPARAM)&gtl, 0);
-    if (c->docSynLen != len) return false;  // the copy is not of the text that is in the editor now
+    if (c->docSynLen != len) return false;
     if (c->mmBuiltRev != c->docRev) BuildMmLines(c);
     return !c->mmStart.empty();
 }
 
-// Number of paragraph breaks in [0, idx), walking from the cached anchor.
+// Paragraph breaks in [0, idx), walking from the cached anchor.
 static LONG BreaksBefore(EditorCtx* c, CrCache& cache, LONG idx) {
-    if (LineModelUsable(c)) {  // [windhawk-reviewer] one lookup instead of walking the rows
+    if (LineModelUsable(c)) {  // [keep] one lookup instead of walking rows
         LONG line = MmLineOf(c, idx);
         cache.valid = true;
         cache.pos = idx;
@@ -531,11 +497,9 @@ static LONG BreaksBefore(EditorCtx* c, CrCache& cache, LONG idx) {
     return result;
 }
 
-// ---------------------------------------------------------------------------
 // Font / metrics
-// ---------------------------------------------------------------------------
 
-// Mirrors the editor's font (face, size, zoom, DPI). Returns true if changed.
+// Mirrors the editor's font (face, size, zoom, DPI); returns true if changed.
 static bool UpdateFont(EditorCtx* c) {
     CHARFORMAT2W cf{};
     cf.cbSize = sizeof(cf);
@@ -593,14 +557,12 @@ static int MeasureGutterWidth(EditorCtx* c, int digits) {
     return sz.cx + MulDiv(8, dpi, 96) /*left pad*/ + MulDiv(10, dpi, 96) /*right pad + divider*/;
 }
 
-// ---------------------------------------------------------------------------
-// Layout: reserve space inside the editor and place the gutter on top of it
-// ---------------------------------------------------------------------------
+// Layout: reserve space inside the editor and place the gutter on top
 
 static bool InsetHonored(EditorCtx* c, int minX) {
     POINT sp{};
     SendMessageW(c->edit, EM_GETSCROLLPOS, 0, (LPARAM)&sp);
-    if (sp.x != 0) return true;  // horizontally scrolled: can't tell
+    if (sp.x != 0) return true;
     POINT pt{};
     if (!PosFromChar(c->edit, 0, &pt)) return true;
     return pt.x >= minX;
@@ -614,22 +576,20 @@ static void ApplyRect(EditorCtx* c, int leftInset, int rightInset) {
     SendMessageW(c->edit, EM_SETRECT, 0, (LPARAM)&r);
 }
 
-// The editor only repaints the dirty region after a margin change, so pixels from the
-// previous layout can linger in the new left margin. Repaint everything.
+// Repaint everything: stale pixels can linger in the new margin.
 static void ForceEditorRedraw(EditorCtx* c) {
     RedrawWindow(c->edit, nullptr, nullptr,
                  RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_UPDATENOW);
 }
 
-// Left inset = line-number gutter (when on), right inset = minimap (when on).
+// Left inset = gutter, right inset = minimap (when on).
 static void ApplyInset(EditorCtx* c) {
     int origLeft = (int)LOWORD(c->origMargins);
     int origRight = (int)HIWORD(c->origMargins);
     int left = c->active ? c->gutterW : 0;
     int right = c->mmActive ? c->mmW : 0;
     if (c->rectFallback) {
-        // Some builds ignore EM_SETMARGINS; use the formatting rect instead
-        // (it is fixed, so WM_SIZE re-applies it).
+        // Fallback for builds that ignore EM_SETMARGINS: use the formatting rect.
         SendMessageW(c->edit, EM_SETMARGINS, EC_LEFTMARGIN | EC_RIGHTMARGIN,
                      MAKELPARAM(origLeft, origRight));
         ApplyRect(c, left, right);
@@ -656,13 +616,12 @@ static void Reposition(EditorCtx* c) {
     c->sigValid = false;
 }
 
-// Remembers the editor's own margins and makes it skip painting over our sibling windows.
-// Shared by the gutter and the minimap; undone by ReleaseOrReapply once neither needs it.
+// Remembers the editor's margins and skips painting under our windows; shared by gutter and minimap.
 static void CaptureOriginals(EditorCtx* c) {
     if (c->captured) return;
     LONG_PTR st = GetWindowLongPtrW(c->edit, GWL_STYLE);
     if (!(st & WS_CLIPSIBLINGS)) {
-        // Lets the editor's painting skip the regions covered by the gutter / minimap.
+        // Lets the editor skip painting under the gutter / minimap.
         SetWindowLongPtrW(c->edit, GWL_STYLE, st | WS_CLIPSIBLINGS);
         c->addedClipSiblings = true;
     }
@@ -670,8 +629,7 @@ static void CaptureOriginals(EditorCtx* c) {
     c->captured = true;
 }
 
-// Called after one of the two features switched off: if the other one is still on, re-apply
-// the margins without it; otherwise give the editor its original layout back.
+// Re-applies margins for the remaining feature, or restores the editor's original layout.
 static void ReleaseOrReapply(EditorCtx* c) {
     if (c->active || c->mmActive) {
         ApplyInset(c);
@@ -694,7 +652,7 @@ static void Activate(EditorCtx* c) {
     CaptureOriginals(c);
     c->active = true;
     c->textDirty = true;
-    c->gutterW = 0;  // forces recompute in Tick
+    c->gutterW = 0;
     c->sigValid = false;
 }
 
@@ -707,9 +665,7 @@ static void Deactivate(EditorCtx* c) {
     if (was && IsWindow(c->edit)) ReleaseOrReapply(c);
 }
 
-// ---------------------------------------------------------------------------
 // Syntax highlighting (1/2): language detection, lexer, document snapshot
-// ---------------------------------------------------------------------------
 
 enum SynClass : uint8_t {
     kcDefault,
@@ -723,25 +679,23 @@ enum SynClass : uint8_t {
     kcCount
 };
 
-constexpr size_t kSyntaxMaxChars = 3000000;  // larger documents are left uncolored
+constexpr size_t kSyntaxMaxChars = 3000000;
 
 enum LangFlags {
-    fLineSlash = 1,    // // comments
-    fLineHash = 2,     // # comments
-    fBlockC = 4,       // /* */ comments
-    fTriple = 8,       // ''' and """ strings
-    fBacktick = 16,    // `template` strings
-    fPreproc = 32,     // #directive at line start
-    fAnnot = 64,       // @Annotation / @decorator
-    fJsonKeys = 128,   // "key": colored as a type
-    fDigitSep = 256    // 1'000'000
+    fLineSlash = 1,
+    fLineHash = 2,
+    fBlockC = 4,
+    fTriple = 8,
+    fBacktick = 16,
+    fPreproc = 32,
+    fAnnot = 64,
+    fJsonKeys = 128,
+    fDigitSep = 256
 };
 
 struct LangCfg {
-    const WCHAR* exts;  // space separated, lower case
+    const WCHAR* exts;
     int flags;
-    // [windhawk-reviewer] the raw keywords / types / constants pointers were removed: nothing read them
-    // after BuildSet() had turned them into the kw / ty / cn sets.
     std::unordered_set<std::wstring_view> kw, ty, cn;
 };
 
@@ -850,8 +804,7 @@ static bool IsDigitCh(WCHAR c) {
     return c >= L'0' && c <= L'9';
 }
 
-// Classifies every character of the document. Multi-line comments/strings are
-// handled here, so the draw hook only has to look classes up.
+// Classifies every character (multi-line comments/strings too) so the draw hook only looks classes up.
 static void Tokenize(const LangCfg& L, const std::wstring& t, std::vector<uint8_t>& cls) {
     const size_t n = t.size();
     cls.assign(n, kcDefault);
@@ -898,7 +851,7 @@ static void Tokenize(const LangCfg& L, const std::wstring& t, std::vector<uint8_
             continue;
         }
 
-        // Preprocessor directive (#include, #define, #region, ...)
+        // Preprocessor directive
         if ((L.flags & fPreproc) && c == L'#' && atStart) {
             size_t e = i + 1;
             while (e < n && (t[e] == L' ' || t[e] == L'\t')) e++;
@@ -1010,11 +963,7 @@ static void Tokenize(const LangCfg& L, const std::wstring& t, std::vector<uint8_
     }
 }
 
-// [windhawk-reviewer] g_lastExpected (a global only ReadDocText used) is now a local in ReadDocText.
-
-// The editor numbers characters with a line break counting as ONE character (CRLF is a
-// single paragraph mark), while EM_GETTEXTEX hands back CRLF text. Everything in the
-// syntax code (row indexes, selection, token classes) must use the editor's numbering.
+// The editor counts a line break as ONE character (CRLF = one paragraph mark); syntax code uses that numbering.
 static void CollapseBreaks(std::wstring& t) {
     size_t w = 0;
     for (size_t i = 0; i < t.size(); i++) {
@@ -1031,7 +980,7 @@ static void CollapseBreaks(std::wstring& t) {
     t.resize(w);
 }
 
-// Length implied by the row geometry: start of the last row + its length.
+// Length implied by row geometry: start of the last row + its length.
 static LONG ExpectedEditorLength(EditorCtx* c) {
     LONG lines = (LONG)SendMessageW(c->edit, EM_GETLINECOUNT, 0, 0);
     if (lines <= 0) return 0;
@@ -1040,9 +989,9 @@ static LONG ExpectedEditorLength(EditorCtx* c) {
     return idx + (LONG)SendMessageW(c->edit, EM_LINELENGTH, idx, 0);
 }
 
-// Reads the whole document in the editor's own index space.
+// Reads the whole document in the editor's index space.
 static bool ReadDocText(EditorCtx* c, LONG len, std::wstring& out) {
-    // [windhawk-reviewer] was the global g_lastExpected; editor-space length implied by the row geometry
+    // [keep] was the global g_lastExpected
     const LONG lastExpected = ExpectedEditorLength(c);
 
     // Path 1: whole text in one call, then normalise line breaks.
@@ -1058,7 +1007,7 @@ static bool ReadDocText(EditorCtx* c, LONG len, std::wstring& out) {
         return true;
     }
 
-    // Path 2: assemble from rows, placing each row at its EM_LINEINDEX position.
+    // Path 2: assemble from rows at their EM_LINEINDEX positions.
     out.clear();
     LONG lines = (LONG)SendMessageW(c->edit, EM_GETLINECOUNT, 0, 0);
     std::vector<WCHAR> buf;
@@ -1077,11 +1026,11 @@ static bool ReadDocText(EditorCtx* c, LONG len, std::wstring& out) {
     return std::abs((long)out.size() - (long)lastExpected) <= 1;
 }
 
-// Language from the file name in the window title; none for unsaved ("Untitled") tabs.
-static std::wstring DocName(HWND edit);  // defined with the change markers below
+// Language from the file name in the title; none for "Untitled" tabs.
+static std::wstring DocName(HWND edit);
 
 static int DetectLang(HWND edit) {
-    // [windhawk-reviewer] reuse DocName()'s title parsing instead of repeating it here
+    // [keep] reuse DocName() for the title parsing
     std::wstring t = DocName(edit);
     size_t dot = t.rfind(L'.');
     if (dot == std::wstring::npos || dot + 1 >= t.size() || t.size() - dot > 9) return -1;
@@ -1103,12 +1052,9 @@ static int DetectLang(HWND edit) {
     return -1;
 }
 
-// ---------------------------------------------------------------------------
-// Change markers: what changed in the document since it was opened
-// ---------------------------------------------------------------------------
+// Change markers: what changed since the document was opened
 
-// [windhawk-reviewer] removed the leftover DIFFBEGIN / DIFFEND markers around the diff code
-// Hash of every line (lines are separated by '\r', the editor's paragraph mark).
+// Hash of every line (lines are separated by the editor paragraph mark).
 static void HashLines(const std::wstring& t, std::vector<uint64_t>& h) {
     h.clear();
     const uint64_t kBasis = 1469598103934665603ULL;
@@ -1122,15 +1068,15 @@ static void HashLines(const std::wstring& t, std::vector<uint64_t>& h) {
         x ^= (uint64_t)(uint16_t)ch;
         x *= 1099511628211ULL;
     }
-    h.push_back(x);  // the last line, possibly empty
+    h.push_back(x);
 }
 
 struct LineDiff {
-    std::vector<uint8_t> aDel;  // line of the baseline is gone
-    std::vector<uint8_t> bIns;  // line of the current text is new
-    // [windhawk-reviewer] don't retry an exact diff that already gave up (see DiffRange)
-    bool skipBigExact = false;    // in: an expensive exact diff already gave up for this baseline
-    bool bigExactFailed = false;  // out: an expensive exact diff gave up during this run
+    std::vector<uint8_t> aDel;
+    std::vector<uint8_t> bIns;
+    // [keep] skip exact-diff retries after a failure (see DiffRange)
+    bool skipBigExact = false;
+    bool bigExactFailed = false;
 };
 
 static void MarkAll(LineDiff& out, int a0, int a1, int b0, int b1) {
@@ -1138,14 +1084,14 @@ static void MarkAll(LineDiff& out, int a0, int a1, int b0, int b1) {
     for (int j = b0; j < b1; j++) out.bIns[(size_t)j] = 1;
 }
 
-// Myers' O(ND) diff of A[a0,a1) against B[b0,b1). Gives up (false) beyond maxD edits.
+// Myers' O(ND) diff of A against B; returns false beyond maxD edits.
 static bool MyersRange(const uint64_t* A, int a0, int a1, const uint64_t* B, int b0, int b1,
                        int maxD, LineDiff& out) {
     const int n = a1 - a0, m = b1 - b0;
     const int D = std::min(maxD, n + m);
     const int off = D + 1;
     std::vector<int> V((size_t)(2 * D + 3), 0);
-    std::vector<std::vector<int>> trace;  // window [-(d+1), d+1] of V at the start of round d
+    std::vector<std::vector<int>> trace;
     int found = -1;
     for (int d = 0; d <= D && found < 0; d++) {
         std::vector<int> snap((size_t)(2 * d + 3));
@@ -1189,9 +1135,9 @@ static bool MyersRange(const uint64_t* A, int a0, int a1, const uint64_t* B, int
         }
         if (d > 0) {
             if (x == prevx)
-                out.bIns[(size_t)(b0 + prevy)] = 1;  // a line of B was inserted
+                out.bIns[(size_t)(b0 + prevy)] = 1;
             else
-                out.aDel[(size_t)(a0 + prevx)] = 1;  // a line of A was deleted
+                out.aDel[(size_t)(a0 + prevx)] = 1;
         }
         x = prevx;
         y = prevy;
@@ -1209,29 +1155,23 @@ static void DiffRange(const uint64_t* A, int a0, int a1, const uint64_t* B, int 
         a1--;
         b1--;
     }
-    if (a0 == a1 || b0 == b1) {  // pure insertion or deletion
+    if (a0 == a1 || b0 == b1) {
         MarkAll(out, a0, a1, b0, b1);
         return;
     }
     const int n = a1 - a0, m = b1 - b0;
-    // Work budget of about 4e7 steps: small documents get exact diffs, huge ones a bounded effort.
+    // Work budget ~4e7 steps: exact diffs for small documents, bounded effort for huge ones.
     const int cap = (int)std::clamp<int64_t>(40000000LL / (n + m), 64, 3000);
-    // [windhawk-reviewer] MyersRange keeps a snapshot of V for every round, i.e. about D*D ints: ~36 MB
-    // at the 3,000-round cap, allocated on the UI thread and thrown away when it gives up. That used to
-    // repeat on every edit. Once an expensive (D > 1000, > ~4 MB) attempt has failed for this baseline
-    // it is skipped (the anchor fallback below takes over); MarkerTick lets one in every 32 runs retry,
-    // so the exact diff comes back when the document moves closer to its baseline.
+    // [keep] skip the expensive exact diff after it failed (MarkerTick retries every 32nd run)
     const bool expensive = std::min(cap, n + m) > 1000;
     if (!(expensive && out.skipBigExact)) {
         if (MyersRange(A, a0, a1, B, b0, b1, cap, out)) return;
         if (expensive) out.bigExactFailed = true;
     }
 
-    // Too many differences for an exact diff (e.g. a replace-all across the file): anchor on the
-    // lines that occur exactly once on both sides, keep the longest in-order chain of those, and
-    // diff the gaps between them.
+    // Too many differences: anchor on lines unique to both sides, keep the longest in-order chain, diff the gaps.
     if (depth < 24) {
-        std::unordered_map<uint64_t, int> ua, ub;  // line -> position, or -1 if it repeats
+        std::unordered_map<uint64_t, int> ua, ub;
         for (int i = a0; i < a1; i++) {
             auto it = ua.find(A[i]);
             if (it == ua.end()) ua[A[i]] = i; else it->second = -1;
@@ -1279,9 +1219,7 @@ static void DiffRange(const uint64_t* A, int a0, int a1, const uint64_t* B, int 
     MarkAll(out, a0, a1, b0, b1);
 }
 
-// Turns the edit script into per-line states. In a hunk that both removes and adds lines, the
-// new lines that replace old ones are "modified", the surplus new lines are "added", and surplus
-// removed lines leave a "removed" notch just before the next line.
+// Turns the edit script into line states: "modified", "added", or a "removed" notch.
 static void BuildMarkers(const LineDiff& d, int nOld, int nNew, std::vector<uint8_t>& state,
                          std::vector<uint32_t>& del) {
     state.assign((size_t)nNew, 0);
@@ -1291,7 +1229,7 @@ static void BuildMarkers(const LineDiff& d, int nOld, int nNew, std::vector<uint
         bool delA = i < nOld && d.aDel[(size_t)i];
         bool insB = j < nNew && d.bIns[(size_t)j];
         if (!delA && !insB) {
-            if (i >= nOld || j >= nNew) break;  // cannot happen for a consistent script
+            if (i >= nOld || j >= nNew) break;
             i++;
             j++;
             continue;
@@ -1311,18 +1249,15 @@ static void BuildMarkers(const LineDiff& d, int nOld, int nNew, std::vector<uint
     }
 }
 
-// "Untitled" tabs (and anything without a name) get no markers: typing into a new document
-// would turn every line green.
+// Untitled tabs get no markers (typing would turn every line green).
 static bool IsSavedName(const std::wstring& n) {
     if (n.empty() || _wcsnicmp(n.c_str(), L"untitled", 8) == 0) return false;
-    // A saved document is a file name with an extension ("notes.txt"). Anything else that can
-    // show up in the title ("Notepad", an "Untitled" in another language, ...) is a document
-    // that was never saved.
+    // A saved document is a file name with an extension.
     size_t dot = n.rfind(L'.');
     return dot != std::wstring::npos && dot + 1 < n.size();
 }
 
-// The document name from the window title ("*name - Notepad" -> "name").
+// Document name from the window title ("*name - Notepad" -> "name").
 static std::wstring DocName(HWND edit) {
     HWND top = GetAncestor(edit, GA_ROOT);
     if (!top) return L"";
@@ -1340,7 +1275,7 @@ static std::wstring DocName(HWND edit) {
     return t;
 }
 
-// Forget the baseline and the markers; a new one is captured from the next document refresh.
+// Forgets the baseline and markers; a new baseline is captured on the next refresh.
 static void MarkerResetState(EditorCtx* c) {
     c->mkHave = c->mkFrozen = c->mkUserEdit = c->mkReload = c->mkEmptyBase = false;
     c->mkBase.clear();
@@ -1349,19 +1284,17 @@ static void MarkerResetState(EditorCtx* c) {
     c->mkDel.clear();
     c->mkRev = ~0u;
     c->mkDirty = true;
-    c->mkExactFailed = false;  // [windhawk-reviewer] a new baseline gets a fresh try at the exact diff
+    c->mkExactFailed = false;  // [keep] fresh exact-diff try for a new baseline
 }
 
-// Runs whenever the title is re-read. A different name means a different document, but the
-// title is shared by the whole window and can lag behind a tab switch, so a new name must be
-// seen twice in a row before it counts.
+// Title re-read: a new name must be seen twice in a row, since the title can lag behind a tab switch.
 static void MarkerNameTick(EditorCtx* c) {
     std::wstring nm = DocName(c->edit);
     if (c->mkNameKnown && nm == c->mkName) {
         c->mkPendingName.clear();
         return;
     }
-    if (nm != c->mkPendingName) {  // a new name (or the first one): wait for a second read
+    if (nm != c->mkPendingName) {
         c->mkPendingName = nm;
         return;
     }
@@ -1372,9 +1305,9 @@ static void MarkerNameTick(EditorCtx* c) {
     MarkerResetState(c);
 }
 
-// Called from SyntaxTick after the document copy was refreshed.
+// Called from SyntaxTick after the document copy refreshes.
 static void MarkerTick(EditorCtx* c, ULONGLONG now) {
-    if (c->mkReload) {  // the document was replaced (opened / reloaded): start over
+    if (c->mkReload) {
         bool keepName = c->mkNameOk;
         MarkerResetState(c);
         c->mkNameOk = keepName;
@@ -1397,14 +1330,14 @@ static void MarkerTick(EditorCtx* c, ULONGLONG now) {
         c->mkFollowUntil = now + kMkFollowMs;
     } else if (!c->mkFrozen) {
         if (c->mkUserEdit || now > c->mkFollowUntil) {
-            c->mkFrozen = true;  // from here on every difference is a change
+            c->mkFrozen = true;
         } else {
-            // Still loading: the baseline is whatever the document finally turns out to be.
+            // Still loading: the baseline becomes whatever the document ends up as.
             c->mkBase = c->docText;
             HashLines(c->mkBase, c->mkBaseHash);
         }
     }
-    if (c->mkFrozen && c->mkBase.empty()) {  // started as an empty document: treat like "Untitled"
+    if (c->mkFrozen && c->mkBase.empty()) {
         c->mkEmptyBase = true;
         c->mkOn = false;
         c->mkState.clear();
@@ -1420,13 +1353,13 @@ static void MarkerTick(EditorCtx* c, ULONGLONG now) {
     LineDiff d;
     d.aDel.assign(base.size(), 0);
     d.bIns.assign(cur.size(), 0);
-    // [windhawk-reviewer] remember when the expensive exact diff gave up, and don't redo it on every edit
+    // [keep] remember a failed expensive exact diff instead of redoing it on every edit
     d.skipBigExact = c->mkExactFailed && (++c->mkExactSkips % 32) != 0;
     DiffRange(base.data(), 0, (int)base.size(), cur.data(), 0, (int)cur.size(), d, 0);
     if (d.bigExactFailed)
         c->mkExactFailed = true;
     else if (!d.skipBigExact)
-        c->mkExactFailed = false;  // the exact diff worked (or was not needed): back to normal
+        c->mkExactFailed = false;
     std::vector<uint8_t> st;
     std::vector<uint32_t> del;
     BuildMarkers(d, (int)base.size(), (int)cur.size(), st, del);
@@ -1453,10 +1386,10 @@ static void RefreshSyntax(EditorCtx* c, LONG len, ULONGLONG now) {
             c->docOk = false;
             c->docRev++;
             c->sigValid = false;
-            InvalidateRect(c->edit, nullptr, FALSE);  // repaint plain (or newly colored)
+            InvalidateRect(c->edit, nullptr, FALSE);
         }
     }
-    // The document copy is needed for syntax colors (known language) and for the minimap.
+    // The document copy is needed for syntax colors and the minimap.
     if ((size_t)len > kSyntaxMaxChars || (c->lang < 0 && !c->mmActive && !c->mkOn)) {
         if (!c->docText.empty() || c->docOk) {
             c->docText.clear();
@@ -1465,12 +1398,11 @@ static void RefreshSyntax(EditorCtx* c, LONG len, ULONGLONG now) {
             c->docOk = false;
             c->docRev++;
         }
-        c->docStale = true;  // read afresh once somebody needs it again
+        c->docStale = true;
         c->docSynLen = -2;
         return;
     }
-    // Plain files (no language) are only read for the minimap; leave that to the timer tick so
-    // that no extra editor traffic happens in the middle of a keystroke.
+    // Plain files are read only for the minimap, on the timer tick, so a keystroke adds no extra editor traffic.
     if (c->docStale && !(c->lang < 0 && c->inMsg) &&
         (len <= 200000 || now - c->synChangeTick > 150)) {
         c->docStale = false;
@@ -1478,7 +1410,7 @@ static void RefreshSyntax(EditorCtx* c, LONG len, ULONGLONG now) {
             if (c->lang >= 0)
                 Tokenize(Langs()[(size_t)c->lang], c->docText, c->cls);
             else
-                c->cls.clear();  // no language: the minimap draws everything in the text color
+                c->cls.clear();
             c->docOk = true;
             c->docRev++;
             c->docSynLen = len;
@@ -1488,23 +1420,18 @@ static void RefreshSyntax(EditorCtx* c, LONG len, ULONGLONG now) {
             c->cls.clear();
             c->docOk = false;
             c->docRev++;
-            // A failed read is usually the editor's line table still catching up with an edit (the
-            // read is checked against it). Ask for another try on the next tick instead of leaving
-            // the document uncolored until some other change comes along.
+            // A failed read is usually the line table lagging behind an edit; retry on the next tick.
             if (c->docRetry < 60) {
                 c->docRetry++;
                 c->docStale = true;
             }
         }
-        // Lines below an edit (e.g. a newly opened /* ... */) may have changed color.
+        // Lines below an edit may have changed color.
         if (c->lang >= 0) InvalidateRect(c->edit, nullptr, FALSE);
     }
 }
 
-// Measures the rows around the viewport (one screen above and below, so rows that
-// scroll into view between two ticks are already known). Positions are in client
-// pixels. EM_POSFROMCHAR is wrong for the first row and for an empty trailing line,
-// so those are re-derived from their neighbours.
+// Measures rows around the viewport; re-derives the first and empty trailing rows, where EM_POSFROMCHAR is wrong.
 static void BuildSnapshot(EditorCtx* c) {
     HWND edit = c->edit;
     LONG lineCount = (LONG)SendMessageW(edit, EM_GETLINECOUNT, 0, 0);
@@ -1579,15 +1506,14 @@ static void BuildSnapshot(EditorCtx* c) {
     c->snapHash = hsh;
 }
 
-// Runs every tick for every editor, whether or not the line-number gutter is on:
-// keeps the language, document copy, token classes and row snapshot current.
+// Runs every tick for every editor: keeps language, document copy, token classes and row snapshot current.
 static void SyntaxTick(EditorCtx* c) {
     if (!IsWindow(c->edit)) return;
-    if (!IsWindowVisible(c->edit)) {  // background tab
+    if (!IsWindowVisible(c->edit)) {
         c->shown = false;
         return;
     }
-    if (!c->shown) {  // became visible: re-detect the language from the title
+    if (!c->shown) {
         c->shown = true;
         c->lang = -2;
         c->synTick = 0;
@@ -1604,7 +1530,7 @@ static void SyntaxTick(EditorCtx* c) {
         c->docStale = true;
         c->synChangeTick = now;
         c->synSigValid = false;
-        c->synSettle = 8;  // the editor may still be laying the change out (undo, paste, ...)
+        c->synSettle = 8;
         c->docRetry = 0;
     }
 
@@ -1627,7 +1553,7 @@ static void SyntaxTick(EditorCtx* c) {
     if (!c->synSigValid || first != c->synFirst || scroll.y != c->synScroll.y ||
         s != c->synSelS || e != c->synSelE || cr.right != c->synW || cr.bottom != c->synH) {
         rebuilt = true;
-        // Only the selection moved? Then the rows are where they were and nothing needs a repaint.
+        // Only the selection moved: rows are unchanged, no repaint needed.
         bool viewSame = c->synSigValid && first == c->synFirst && scroll.y == c->synScroll.y &&
                         cr.right == c->synW && cr.bottom == c->synH;
         c->synSigValid = true;
@@ -1638,17 +1564,11 @@ static void SyntaxTick(EditorCtx* c) {
         c->synW = cr.right;
         c->synH = cr.bottom;
         BuildSnapshot(c);
-        // The colors are matched against this snapshot while the editor paints. If the editor
-        // already painted for the new view before the snapshot caught up (a single big jump, e.g.
-        // from the minimap, has no follow-up scroll events to trigger another paint), the text
-        // would stay plain. Ask for one more paint now that the snapshot matches.
+        // Repaint once more so the colors match the new snapshot after a big jump.
         if (!viewSame) InvalidateRect(c->edit, nullptr, FALSE);
     }
 
-    // After a text change (undo of a deleted line, paste, ...) the editor can finish laying the
-    // text out after our tick ran, so the row positions we measured may already be stale and the
-    // changed lines would not match any row, i.e. stay uncolored until something else (a scroll)
-    // forces a new measurement. Keep re-measuring for a moment; repaint only if it changed.
+    // After a text change the editor may finish layout late: keep re-measuring briefly, repaint only if it changed.
     if (c->synSettle > 0 && !c->inMsg) {
         c->synSettle--;
         if (!rebuilt) {
@@ -1659,30 +1579,21 @@ static void SyntaxTick(EditorCtx* c) {
     }
 }
 
-// [windhawk-reviewer] removed the empty "Per-editor controller" section header
-
-// ---------------------------------------------------------------------------
-// Minimap (1/2): document model, geometry, layout
-//
-// The minimap shows one thin row per *logical* line (a wrapped line counts once) and
-// scrolls along with the editor when the document is taller than the minimap, like the
-// one in VS Code. A slider marks the part of the document that is on screen.
-// ---------------------------------------------------------------------------
+// Minimap (1/2): document model, geometry, layout (one row per logical line, slider marks the visible part)
 
 struct MmGeo {
-    LONG nLines = 1;           // lines in minimap space
-    double top = 0, view = 1;  // viewport: first line, number of lines
-    int pitch = 3, bh = 2;     // px per line, px height of the drawn block
-    int cap = 1;               // lines that fit into the minimap's height
-    int contentPx = 0;         // height of the drawn content
-    int sliderPx = 0;          // slider height
-    int sliderTop = 0;         // slider top, minimap client y
-    double mmTop = 0;          // first line drawn at the top (fractional)
-    bool haveModel = false;    // false: no document copy, lines are visual rows
+    LONG nLines = 1;
+    double top = 0, view = 1;
+    int pitch = 3, bh = 2;
+    int cap = 1;
+    int contentPx = 0;
+    int sliderPx = 0;
+    int sliderTop = 0;
+    double mmTop = 0;
+    bool haveModel = false;
 };
 
-// Visual rows: total, first visible, last visible (row whose top is inside the viewport).
-// EM_POSFROMCHAR is reliable for every row but the first, which is never probed here.
+// Visual rows: total, first visible, last visible (EM_POSFROMCHAR is reliable except for the first row).
 static void ViewRows(EditorCtx* c, LONG& rows, LONG& first, LONG& last) {
     HWND edit = c->edit;
     rows = (LONG)SendMessageW(edit, EM_GETLINECOUNT, 0, 0);
@@ -1692,17 +1603,13 @@ static void ViewRows(EditorCtx* c, LONG& rows, LONG& first, LONG& last) {
     first = std::clamp<LONG>(first, 0, rows - 1);
     RECT cr;
     GetClientRect(edit, &cr);
-    // [windhawk-reviewer] The binary search used to run from `first` to the last row of the document,
-    // so most probes hit rows far below the screen, which can make RichEdit lay out text nobody sees.
-    // The last visible row is at most first + cr.bottom / minPitch + 1, so the search starts capped
-    // there. minPitch is a deliberately low guess for the row height; if every probe up to the cap is
-    // still visible (rows denser than guessed) the cap is widened, so the result never depends on it.
+    // [keep] cap the search near the screen; widen the cap if every probe is still visible
     const LONG minPitch = std::max<LONG>(4, c->fontPx / 2);
     LONG lo = first;
     LONG hi = std::min<LONG>(rows - 1, first + cr.bottom / minPitch + 1);
     for (;;) {
         const LONG bound = hi;
-        while (lo < hi) {  // binary search: rows are ordered top to bottom
+        while (lo < hi) {
             LONG mid = lo + (hi - lo + 1) / 2;
             LONG idx = (LONG)SendMessageW(edit, EM_LINEINDEX, mid, 0);
             POINT pt{};
@@ -1711,13 +1618,13 @@ static void ViewRows(EditorCtx* c, LONG& rows, LONG& first, LONG& last) {
             else
                 hi = mid - 1;
         }
-        if (lo < bound || bound >= rows - 1) break;  // stopped inside the cap (or it is the end)
-        hi = std::min<LONG>(rows - 1, bound + (bound - first) + 1);  // the cap is still visible: widen
+        if (lo < bound || bound >= rows - 1) break;
+        hi = std::min<LONG>(rows - 1, bound + (bound - first) + 1);
     }
     last = lo;
 }
 
-// "Scrollbar appears" == the document does not fit: something is above or below the view.
+// "Scrollbar appears" == the document does not fit.
 static bool EditorScrollable(EditorCtx* c) {
     LONG rows, first, last;
     ViewRows(c, rows, first, last);
@@ -1731,7 +1638,7 @@ static void BuildMmLines(EditorCtx* c) {
     const std::wstring& t = c->docText;
     c->mmStart.push_back(0);
     for (size_t i = 0; i < t.size(); i++)
-        if (t[i] == L'\r') c->mmStart.push_back((uint32_t)i + 1);  // editor numbering: CRLF == 1 char
+        if (t[i] == L'\r') c->mmStart.push_back((uint32_t)i + 1);
 }
 
 static LONG MmLineOf(const EditorCtx* c, LONG idx) {
@@ -1756,15 +1663,11 @@ static bool MmCompute(EditorCtx* c, int H, MmGeo& g) {
         g.top = (double)t;
         g.view = (double)(b - t + 1);
     } else {
-        g.nLines = rows;  // very large document: no content, but the slider still works
+        g.nLines = rows;
         g.top = (double)first;
         g.view = (double)(last - first + 1);
     }
-    // While dragging, keep the viewport size measured at the start of the drag. The size we
-    // measure changes by a line or two with the scroll position (wrapped lines, the end of the
-    // document), and it sets the slider's size and travel. If the mapping from mouse position to
-    // scroll position depended on it, the editor's own movement would shift the mapping under the
-    // mouse, and near the bottom the view could flip back and forth between two positions.
+    // While dragging, keep the viewport size from the drag start so the mouse-to-scroll mapping stays stable.
     if (c->mmDrag && c->mmDragV > 0) g.view = c->mmDragV;
 
     g.pitch = std::max(2, MulDiv(3, dpi, 96));
@@ -1780,20 +1683,18 @@ static bool MmCompute(EditorCtx* c, int H, MmGeo& g) {
     return true;
 }
 
-// Scrolls so that logical line `line` (minimap space) becomes the first visible line.
+// Scrolls so that a logical line (minimap space) becomes the first visible line.
 static void MmScrollToTopLine(EditorCtx* c, const MmGeo& g, LONG line) {
     line = std::clamp<LONG>(line, 0, g.nLines - 1);
     LONG idx = g.haveModel ? (LONG)c->mmStart[(size_t)line]
                            : (LONG)SendMessageW(c->edit, EM_LINEINDEX, line, 0);
     if (idx < 0) return;
-    LONG v = (LONG)SendMessageW(c->edit, EM_LINEFROMCHAR, idx, 0);  // visual row of that line
+    LONG v = (LONG)SendMessageW(c->edit, EM_LINEFROMCHAR, idx, 0);
     LONG first = (LONG)SendMessageW(c->edit, EM_GETFIRSTVISIBLELINE, 0, 0);
     if (v != first) SendMessageW(c->edit, EM_LINESCROLL, 0, (LPARAM)(v - first));
 }
 
-// Scrolls to the very end. The viewport size we measure counts a half-visible bottom row, so a
-// computed top line can be one row too early and leave the last line just out of view. Ask for
-// more than enough and let the editor stop at its own maximum scroll position.
+// Scrolls to the very end: asks for more than enough and lets the editor stop at its maximum.
 static void MmScrollToEnd(EditorCtx* c) {
     LONG rows = (LONG)SendMessageW(c->edit, EM_GETLINECOUNT, 0, 0);
     if (rows <= 0) return;
@@ -1801,8 +1702,7 @@ static void MmScrollToEnd(EditorCtx* c) {
     GetClientRect(c->edit, &cr);
     POINT sp{};
     SendMessageW(c->edit, EM_GETSCROLLPOS, 0, (LPARAM)&sp);
-    // Dragging along the bottom edge asks for "the end" over and over; once the editor is there
-    // (same scroll position, line count and size as after our last request) there is nothing to do.
+    // Skips repeated "scroll to end" requests once the editor is already there.
     if (c->mmEndRows == rows && c->mmEndH == cr.bottom && c->mmEndY == sp.y) return;
     SendMessageW(c->edit, EM_LINESCROLL, 0, (LPARAM)rows);
     SendMessageW(c->edit, EM_GETSCROLLPOS, 0, (LPARAM)&sp);
@@ -1811,26 +1711,21 @@ static void MmScrollToEnd(EditorCtx* c) {
     c->mmEndY = sp.y;
 }
 
-// [windhawk-reviewer] this comment used to sit above MmScrollToTopLine() by mistake.
-// Scrolls the editor so that the slider's top edge lands on minimap y = yTop. The slider
-// travels over [0, contentPx - sliderPx], which maps linearly onto the whole document, so
-// dragging stays stable even while the minimap itself scrolls.
+// [keep] comment moved here from MmScrollToTopLine
+// Scrolls so the slider's top edge lands on minimap y = yTop; slider travel maps linearly onto the whole document.
 static void MmScrollTo(EditorCtx* c, const MmGeo& g, int yTop) {
     double V = std::min<double>(g.view, (double)g.nLines);
     if ((double)g.nLines <= V) return;
     int travel = g.contentPx - g.sliderPx;
     double f = travel > 0 ? std::clamp((double)yTop / travel, 0.0, 1.0) : 0.0;
-    if (f >= 1.0) {  // slider at the very bottom
+    if (f >= 1.0) {
         MmScrollToEnd(c);
         return;
     }
     MmScrollToTopLine(c, g, (LONG)std::lround(f * ((double)g.nLines - V)));
 }
 
-// Mouse moves only record the wanted slider position; this applies the latest one. It runs from
-// the ~60 Hz timer tick, so a fast mouse (hundreds of move events a second) can't flood the
-// editor with far-away scrolls, each of which has to lay out and repaint a different part of the
-// document.
+// Mouse moves only record the slider position; the ~60 Hz tick applies the latest one.
 static void MmApplyPendingDrag(EditorCtx* c, int H) {
     if (!c->mmDragPending) return;
     c->mmDragPending = false;
@@ -1839,22 +1734,19 @@ static void MmApplyPendingDrag(EditorCtx* c, int H) {
     if (MmCompute(c, H, g)) MmScrollTo(c, g, c->mmDragY - c->mmGrab);
 }
 
-// "Jump to the clicked line": what is drawn under the cursor is where you land, with that line
-// centered in the editor. Unlike the slider mapping above this is not proportional to the whole
-// file, so on a long document it can only reach lines the minimap is currently showing.
+// Jump to the clicked line, centered; only reaches lines the minimap currently shows.
 static void MmJumpToLine(EditorCtx* c, const MmGeo& g, LONG line) {
     double V = std::min<double>(g.view, (double)g.nLines);
     if ((double)g.nLines <= V) return;
-    double top = (double)line - V / 2.0 + 0.5;  // center the line in the viewport
-    if (top >= (double)g.nLines - V) {          // within the last page
+    double top = (double)line - V / 2.0 + 0.5;
+    if (top >= (double)g.nLines - V) {
         MmScrollToEnd(c);
         return;
     }
     MmScrollToTopLine(c, g, std::max<LONG>(0, (LONG)std::lround(top)));
 }
 
-// Width follows the editor's width, in steps so a live resize doesn't re-wrap the text
-// on every single pixel.
+// Width follows the editor's width in steps, so live resizes don't re-wrap on every pixel.
 static int MinimapWidth(int clientW, int dpi) {
     int minW = MulDiv(kMmMinDip, dpi, 96);
     int maxW = MulDiv(kMmMaxDip, dpi, 96);
@@ -1868,7 +1760,7 @@ static void MinimapReposition(EditorCtx* c, const RECT& cr) {
     if (!parent || !c->minimap) return;
     POINT p{0, 0};
     MapWindowPoints(c->edit, parent, &p, 1);
-    // Right edge of the editor's client area, i.e. just left of the native scrollbar.
+    // Right edge of the editor's client area, just left of the scrollbar.
     RECT want = {p.x + cr.right - c->mmW, p.y, p.x + cr.right, p.y + cr.bottom};
     bool visible = IsWindowVisible(c->minimap);
     if (visible && EqualRect(&want, &c->mmPlacement)) return;
@@ -1881,10 +1773,10 @@ static void MinimapReposition(EditorCtx* c, const RECT& cr) {
 static void ActivateMinimap(EditorCtx* c) {
     CaptureOriginals(c);
     c->mmActive = true;
-    c->mmW = 0;  // forces the width to be applied by MinimapTick
+    c->mmW = 0;
     c->mmSigValid = false;
     c->mmBuiltRev = ~0u;
-    if (!c->docOk) c->docStale = true;  // make sure a document copy gets read
+    if (!c->docOk) c->docStale = true;
 }
 
 static void DeactivateMinimap(EditorCtx* c) {
@@ -1902,8 +1794,7 @@ static void DeactivateMinimap(EditorCtx* c) {
     if (was && IsWindow(c->edit)) ReleaseOrReapply(c);
 }
 
-// Minimap half of the tick. Decides whether the minimap is shown right now, keeps its width,
-// position and model current, and invalidates it when something visible changed.
+// Minimap half of the tick: visibility, width, position and model; invalidates on visible changes.
 static void MinimapTick(EditorCtx* c) {
     RECT cr;
     GetClientRect(c->edit, &cr);
@@ -1911,7 +1802,7 @@ static void MinimapTick(EditorCtx* c) {
     if (dpi <= 0) dpi = 96;
 
     int mw = MinimapWidth(cr.right, dpi);
-    // Not enough room left for the text -> hide (a little hysteresis against flicker).
+    // Hide when too little room is left for the text (with hysteresis).
     int need = MulDiv(kMmMinTextDip + (c->mmActive ? 0 : 20), dpi, 96);
     bool show = cr.right - (c->active ? c->gutterW : 0) - mw >= need;
     if (show && g_mmOnlyScroll.load()) show = EditorScrollable(c);
@@ -1955,17 +1846,17 @@ static void MinimapTick(EditorCtx* c) {
     }
 }
 
-// Gutter half of the tick; only runs while line numbers are on.
+// Gutter half of the tick; runs only while line numbers are on.
 static void GutterTick(EditorCtx* c, bool fontChanged) {
-    // Line numbers shown or hidden since the last tick? (The marker strip stays either way.)
+    // Were line numbers shown or hidden since the last tick? (The marker strip stays.)
     bool nums = g_enabled.load();
     if (nums != c->numsShown) {
         c->numsShown = nums;
-        c->textDirty = true;  // recount the lines when the numbers come back
-        c->gutterW = 0;       // forces the new width to be applied below
+        c->textDirty = true;
+        c->gutterW = 0;
         c->sigValid = false;
     }
-    if (c->mkDirty) {  // the change markers moved
+    if (c->mkDirty) {
         c->mkDirty = false;
         c->sigValid = false;
     }
@@ -1984,12 +1875,11 @@ static void GutterTick(EditorCtx* c, bool fontChanged) {
     if (c->textDirty) {
         c->viewCache.valid = false;
         c->caretCache.valid = false;
-        // For very large files debounce the full recount while typing.
+        // Debounce the full recount while typing in very large files.
         if (!c->numsShown) {
-            c->textDirty = false;  // no numbers to size, nothing to count
+            c->textDirty = false;
         } else if ((len <= 4000000 && lines <= 50000) || now - c->lastChangeTick > 200) {
-            // [windhawk-reviewer] with a current document copy the line count is just the size of the
-            // line table; the row-walking recount is only the fallback (see LineModelUsable)
+            // [keep] line count = line table size when the document copy is current (see LineModelUsable)
             c->totalLogical = LineModelUsable(c) ? (LONG)c->mmStart.size() : CountBreaks(c, 0, len) + 1;
             c->textDirty = false;
         }
@@ -2003,7 +1893,7 @@ static void GutterTick(EditorCtx* c, bool fontChanged) {
         w = MeasureGutterWidth(c, digits);
     } else {
         int dpi = (int)GetDpiForWindow(c->edit);
-        w = MulDiv(kMkStripDip, dpi > 0 ? dpi : 96, 96);  // just the marker strip
+        w = MulDiv(kMkStripDip, dpi > 0 ? dpi : 96, 96);
     }
     if (w != c->gutterW || fontChanged) {
         c->gutterW = w;
@@ -2035,55 +1925,42 @@ static void GutterTick(EditorCtx* c, bool fontChanged) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// [windhawk-reviewer] Adaptive tick rate
-//
-// The tick used to run from a fixed 16 ms timer for as long as Notepad was open (one per tab,
-// including hidden tabs and minimized windows), which keeps the CPU out of its low-power states.
-// Now the timer only runs fast while something can change or is still settling and otherwise
-// falls back to a slow backstop. Editor messages (typing, scrolling, size, show, selection) and the
-// minimap's mouse input call WakeTick(); every Tick() re-picks the rate when it ends.
-// ---------------------------------------------------------------------------
+// [keep] adaptive tick rate: fast only while busy, slow backstop otherwise; WakeTick() speeds it up
 
-// ms == 0 stops the timer. SetTimer with the same id replaces the running timer.
+// ms == 0 stops the timer; SetTimer with the same id replaces it.
 static void SetTickRate(EditorCtx* c, UINT ms) {
     if (!c->gutter || c->tickMs == ms) return;
     c->tickMs = ms;
     if (ms) {
-        if (!SetTimer(c->gutter, kTickTimer, ms, nullptr)) c->tickMs = 0;  // retry on the next call
+        if (!SetTimer(c->gutter, kTickTimer, ms, nullptr)) c->tickMs = 0;
     } else {
         KillTimer(c->gutter, kTickTimer);
     }
 }
 
-// Something happened that the next ticks must pick up quickly: run fast for a short while.
+// Something happened: run fast for a short while.
 static void WakeTick(EditorCtx* c) {
     c->fastUntil = GetTickCount64() + kTickGraceMs;
     SetTickRate(c, kTickFastMs);
 }
 
-// Is there still work that only the timer tick does? Every condition here drains by itself (or
-// ends with the user's input), so the timer cannot get stuck on the fast rate.
+// Work only the timer tick does; every condition drains by itself, so the timer cannot get stuck fast.
 static bool TickBusy(EditorCtx* c, ULONGLONG now) {
-    if (c->mmDrag || c->mmDragPending) return true;  // a minimap drag is applied by the tick
-    if (GetCapture() == c->edit) return true;        // mouse selection in progress
-    // The settle counters only count down in ticks that actually reach them.
+    if (c->mmDrag || c->mmDragPending) return true;
+    if (GetCapture() == c->edit) return true;
+    // Settle counters only drain in ticks that reach them.
     if (c->settle > 0 && (c->active || c->mmActive)) return true;
     if (c->synSettle > 0 && c->lang >= 0) return true;
-    // Marker baseline still follows a document that is loading.
+    // Marker baseline still follows a loading document.
     if (c->mkOn && c->mkHave && !c->mkFrozen && now < c->mkFollowUntil) return true;
-    // Document copy still to be read (docStale / docRetry). Mirrors the conditions under which
-    // RefreshSyntax really reads it, so an unneeded copy doesn't keep the timer fast forever.
+    // Document copy still to be read; mirrors RefreshSyntax so an unneeded copy doesn't keep the timer fast.
     if (c->docStale && (c->lang >= 0 || c->mmActive || c->mkOn) &&
         (size_t)c->synLen <= kSyntaxMaxChars)
         return true;
     return false;
 }
 
-// Picks the timer rate once a tick is over: fast while busy (or shortly after a wake-up), slow
-// otherwise. Hidden editors (background tabs) and minimized windows only need the slow backstop.
-// NOTE: hidden editors keep a slow visibility poll instead of stopping the timer completely,
-// because Notepad may hide a whole tab host without sending WM_SHOWWINDOW to the editor itself.
+// Picks the rate after a tick: fast while busy, slow otherwise (hidden editors keep a slow poll; WM_SHOWWINDOW isn't reliable).
 static void SettleTickRate(EditorCtx* c) {
     if (!c->gutter) return;
     ULONGLONG now = GetTickCount64();
@@ -2103,21 +1980,19 @@ static void Tick(EditorCtx* c) {
         EditorCtx* c;
         ~Guard() { c->inTick = false; }
     } guard{c};
-    // [windhawk-reviewer] re-pick the timer rate on every way out of this tick
+    // [keep] re-pick the timer rate on every exit of this tick
     struct RateGuard {
         EditorCtx* c;
         ~RateGuard() { SettleTickRate(c); }
     } rateGuard{c};
 
-    // [windhawk-reviewer] minimized windows: IsWindowVisible stays true for them, so skip the tick.
+    // [keep] skip the tick while minimized (IsWindowVisible stays true)
     {
         HWND topWnd = GetAncestor(c->edit, GA_ROOT);
         if (topWnd && IsIconic(topWnd)) return;
     }
 
-    // [windhawk-reviewer] At the slow rate one tick stands in for ~15 fast ones: make the periodic
-    // checks (title / language every 15 ticks, theme and inset self-test every 30) run on every slow
-    // tick, so they keep their ~0.25-0.5 s latency instead of stretching to several seconds.
+    // [keep] at the slow rate run the periodic title/theme checks on every tick
     if (c->tickMs >= kTickSlowMs && !c->inMsg) {
         c->synTick = 14;
         c->tickCount = 29;
@@ -2125,7 +2000,7 @@ static void Tick(EditorCtx* c) {
 
     SyntaxTick(c);
 
-    bool wantGutter = g_enabled.load() || c->mkOn;  // markers keep the gutter alive without numbers
+    bool wantGutter = g_enabled.load() || c->mkOn;
     if (wantGutter != c->active) {
         if (wantGutter)
             Activate(c);
@@ -2136,7 +2011,7 @@ static void Tick(EditorCtx* c) {
     if (!wantMinimap && c->mmActive) DeactivateMinimap(c);
     if (!c->gutter || (!c->active && !wantMinimap)) return;
 
-    if (!IsWindowVisible(c->edit)) {  // e.g. background tab
+    if (!IsWindowVisible(c->edit)) {
         if (IsWindowVisible(c->gutter)) ShowWindow(c->gutter, SW_HIDE);
         if (c->minimap && IsWindowVisible(c->minimap)) ShowWindow(c->minimap, SW_HIDE);
         c->lastPlacement = {};
@@ -2156,9 +2031,9 @@ static void Tick(EditorCtx* c) {
             c->dark = d;
             c->sigValid = false;
             c->mmSigValid = false;
-            c->settle = std::max(c->settle, 40);  // the editor repaints in the new theme a bit later
+            c->settle = std::max(c->settle, 40);
         }
-        // Self-test: is the editor really honoring our left inset?
+        // Self-test: does the editor honor our left inset?
         if (!c->rectFallback && c->gutterW > 0 && !InsetHonored(c, c->gutterW)) {
             if (++c->insetFailures >= 3) {
                 c->rectFallback = true;
@@ -2169,9 +2044,7 @@ static void Tick(EditorCtx* c) {
         }
     }
 
-    // The editor may still be laying out a freshly edited line when our message-driven tick runs
-    // (and the gutter sits above the editor, so it can repaint before the editor does). Keep
-    // re-checking for a moment after each edit so the gutter never stays on stale row positions.
+    // Keep re-checking briefly after an edit so the gutter never keeps stale row positions.
     if (c->settle > 0 && !c->inMsg) {
         c->settle--;
         c->sigValid = false;
@@ -2181,39 +2054,29 @@ static void Tick(EditorCtx* c) {
     if (wantMinimap && !c->inMsg) MinimapTick(c);
 }
 
-// ---------------------------------------------------------------------------
-// Painting (double-buffered, so no flicker/tearing)
-// ---------------------------------------------------------------------------
+// Painting (double-buffered)
 
-// Row geometry learned from rows whose position the editor reports correctly. Kept per editor
-// (EditorCtx::cal*), keyed by the pixel font size (so zoom/DPI changes reset it).
-// [windhawk-reviewer] these used to be shared g_cal* globals written by every painting thread; two
-// windows (or two zoom levels) overwrote each other's values.
+// Row geometry learned from reliable rows; per editor, keyed by pixel font size so zoom/DPI changes reset it.
+// [keep] calibration is per editor now (was shared g_cal* globals)
 
 static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
     HWND edit = c->edit;
     LONG lineCount = (LONG)SendMessageW(edit, EM_GETLINECOUNT, 0, 0);
     LONG first = (LONG)SendMessageW(edit, EM_GETFIRSTVISIBLELINE, 0, 0);
-    LONG v = first > 0 ? first - 1 : 0;  // one extra row for pixel-smooth scrolling
+    LONG v = first > 0 ? first - 1 : 0;
     RECT cr;
     GetClientRect(edit, &cr);
 
     LONG idx = (LONG)SendMessageW(edit, EM_LINEINDEX, v, 0);
     if (idx < 0) return;
-    LONG breaks = BreaksBefore(c, c->viewCache, idx);  // paragraph breaks before row v
+    LONG breaks = BreaksBefore(c, c->viewCache, idx);
 
     DWORD cs = 0, ce = 0;
     SendMessageW(edit, EM_GETSEL, (WPARAM)&cs, (LPARAM)&ce);
-    LONG countedCaretLine = BreaksBefore(c, c->caretCache, (LONG)ce) + 1;  // by counting breaks
+    LONG countedCaretLine = BreaksBefore(c, c->caretCache, (LONG)ce) + 1;
 
     int padR = MulDiv(10, (int)GetDpiForWindow(edit), 96);
-    // Pass 1: collect visible rows (char index, y, label; label 0 = wrapped continuation).
-    //
-    // EM_POSFROMCHAR is unreliable in this editor for:
-    //   * the whole first row (y comes back about one row too high; probing the
-    //     second character doesn't help), and
-    //   * the end-of-text position on a trailing empty line (y of the previous row).
-    // Every other row is accurate. Rows flagged !rel are repaired in pass 1b.
+    // Pass 1: collect visible rows; EM_POSFROMCHAR is wrong for the first and a trailing empty row (!rel, fixed in 1b).
     struct Row {
         LONG idx;
         LONG v;
@@ -2221,12 +2084,11 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
         LONG label;
         bool rel;
         int x;
-        LONG line;  // logical line of this row (also for wrapped continuation rows)
+        LONG line;
     };
-    // Length in the editor's own character numbering (a CRLF counts as one character).
+    // Length in the editor's numbering (CRLF = one character).
     LONG docLen = ExpectedEditorLength(c);
-    // Second opinion on where the text ends: the editor's own character count. A trailing empty
-    // line starts exactly at the end of the text, whatever EM_LINELENGTH says about it.
+    // Second opinion on where the text ends: the editor's character count.
     GETTEXTLENGTHEX gtlLive = {GTL_NUMCHARS, 1200 /*CP_UNICODE*/};
     LONG liveLen = (LONG)SendMessageW(edit, EM_GETTEXTLENGTHEX, (WPARAM)&gtlLive, 0);
     if (liveLen > 0) docLen = std::min(docLen, liveLen);
@@ -2239,17 +2101,14 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
         if (!PosFromChar(edit, i, &pt)) break;
         if (pt.y > cr.bottom) break;
 
-        // A row starts a logical line when the previous char is a paragraph
-        // break; wrapped continuation rows don't, so they stay blank.
+        // A row starts a logical line when the previous char is a break; wrapped rows stay blank.
         bool isStart = (i == 0);
         if (!isStart) isStart = RowStartsParagraphByGap(edit, v, i);
         if (!firstRow && isStart) breaks++;
         firstRow = false;
 
         bool rel = (i > 0 && i < docLen);
-        // Two different rows can never share a y: a row that does not sit below the previous one
-        // got the previous row's position back (the empty line created by pressing Enter at the
-        // end of the text). Treat it as unreliable so it is re-derived from its neighbours.
+        // A row not below the previous one got its position back (Enter at the end): unreliable.
         if (rel && !rowList.empty() && rowList.back().v == v - 1 && pt.y <= rowList.back().y)
             rel = false;
         rowList.push_back({i, v, pt.y, isStart ? breaks + 1 : 0, rel, (int)pt.x, breaks + 1});
@@ -2280,7 +2139,7 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
         } else {
             TEXTMETRICW t{};
             GetTextMetricsW(dc, &t);
-            pitch = t.tmHeight + t.tmExternalLeading;  // estimate until we can measure
+            pitch = t.tmHeight + t.tmExternalLeading;
         }
 
         rowPitch = pitch;
@@ -2308,8 +2167,7 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
             } else if (c->calOriginValid) {
                 rowList[k].y = c->calOrigin + (int)rowList[k].v * pitch - sp.y;
             } else {
-                // Nothing learned yet: guess the top inset (16 DIP unless the editor
-                // reports a non-zero formatting-rect top).
+                // Nothing learned yet: guess the top inset (16 DIP unless the formatting rect says otherwise).
                 RECT fr{};
                 SendMessageW(edit, EM_GETRECT, 0, (LPARAM)&fr);
                 int dpi = (int)GetDpiForWindow(edit);
@@ -2319,17 +2177,14 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
         }
     }
 
-    // Highlighted line: take it from the rows we are about to draw, so the highlight
-    // is consistent with the labels. Find the row containing the caret, then walk
-    // back to the row that starts its logical line. If the caret is scrolled out of
-    // view (or its line starts above the view), use the break-count value instead.
+    // Highlighted line: taken from the rows being drawn; if the caret is out of view, use the break-count value.
     int caretRow = -1;
     for (int k = 0; k < (int)rowList.size(); k++) {
         if (rowList[k].idx <= (LONG)ce) caretRow = k;
         else break;
     }
     if (caretRow >= 0 && caretRow == (int)rowList.size() - 1) {
-        // Last listed row: only valid if the caret is actually inside that row.
+        // Last listed row: valid only if the caret is inside it.
         LONG li = rowList[caretRow].idx;
         LONG ll = (LONG)SendMessageW(edit, EM_LINELENGTH, li, 0);
         if ((LONG)ce > li + ll) caretRow = -1;
@@ -2344,8 +2199,7 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
         }
     }
 
-    // Change markers: a thin bar along the gutter's left edge for added / modified lines (all rows
-    // of a wrapped line share its bar) and a small notch where lines were removed.
+    // Change markers: a bar on the gutter's left edge for added/modified lines, a notch where lines were removed.
     if (c->mkOn && !c->mkState.empty() && rowPitch > 0) {
         int mdpi = (int)GetDpiForWindow(edit);
         if (mdpi <= 0) mdpi = 96;
@@ -2372,12 +2226,12 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
                 Polygon(dc, pts, 3);
             };
             for (const Row& r : rowList) {
-                if (r.label <= 0) continue;  // only rows that start a logical line
+                if (r.label <= 0) continue;
                 if (std::binary_search(c->mkDel.begin(), c->mkDel.end(),
                                        (uint32_t)std::max<LONG>(r.line - 1, 0)))
                     notch(r.y);
             }
-            // Lines removed at the very end of the text: just below the last row.
+            // Lines removed at the very end: just below the last row.
             if (std::binary_search(c->mkDel.begin(), c->mkDel.end(), (uint32_t)c->mkState.size())) {
                 for (const Row& r : rowList)
                     if (r.v == lineCount - 1) {
@@ -2391,8 +2245,7 @@ static void DrawNumbers(EditorCtx* c, HDC dc, int w, const Palette& pal) {
         }
     }
 
-    // Pass 2: draw. The current line always uses the highlight color; the setting
-    // optionally adds an underline and/or bold.
+    // Pass 2: draw; the current line uses the highlight color, optionally underlined and/or bold.
     int style = g_highlightStyle.load();
     bool wantUnderline = (style == 1 || style == 3);
     bool wantBold = (style == 2 || style == 3) && c->fontBold;
@@ -2430,11 +2283,7 @@ static void PaintGutter(EditorCtx* c, HDC hdc, const RECT& rc) {
     HBITMAP bmp = CreateCompatibleBitmap(hdc, w, h);
     HGDIOBJ oldBmp = SelectObject(mem, bmp);
 
-    // With line numbers on the gutter is a panel of its own: background and separator. With only
-    // the marker strip showing it must not look like a panel at all, so it takes the editor's own
-    // background: the strip sits over the editor's left margin, and the blank margin right next
-    // to it is copied in (that keeps whatever tint the window background has). The marker bars
-    // are drawn on top.
+    // Numbers on: the gutter is its own panel; markers only: take the editor's background (copied from the screen).
     bool copied = false;
     if (!c->numsShown && c->gutter) {
         HDC scr = GetDC(nullptr);
@@ -2444,7 +2293,7 @@ static void PaintGutter(EditorCtx* c, HDC hdc, const RECT& rc) {
             int gdpi = (int)GetDpiForWindow(c->gutter);
             int gap = MulDiv(2, gdpi > 0 ? gdpi : 96, 96);
             copied = BitBlt(mem, 0, 0, w, h, scr, o.x + w + gap, o.y, SRCCOPY) != 0;
-            if (copied && GetPixel(mem, 0, h / 2) == RGB(0, 0, 0)) copied = false;  // got nothing
+            if (copied && GetPixel(mem, 0, h / 2) == RGB(0, 0, 0)) copied = false;
             ReleaseDC(nullptr, scr);
         }
     }
@@ -2486,9 +2335,9 @@ static LRESULT CALLBACK GutterProc(HWND h, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_ERASEBKGND:
             return 1;
         case WM_NCHITTEST:
-            return HTTRANSPARENT;  // clicks / wheel go to the editor underneath
+            return HTTRANSPARENT;
         case WM_TIMER:
-            if (wParam == kTickTimer && c && !g_unloading.load()) Tick(c);  // inMsg is false here
+            if (wParam == kTickTimer && c && !g_unloading.load()) Tick(c);
             return 0;
         case WM_PAINT: {
             PAINTSTRUCT ps;
@@ -2508,11 +2357,8 @@ static LRESULT CALLBACK GutterProc(HWND h, UINT msg, WPARAM wParam, LPARAM lPara
     return DefWindowProcW(h, msg, wParam, lParam);
 }
 
-// ---------------------------------------------------------------------------
 // Minimap (2/2): painting and mouse handling
-// ---------------------------------------------------------------------------
 
-// [windhawk-reviewer] EffClass() was an identity function and was removed.
 static D2D1_COLOR_F SynColor(bool dark, int k);
 
 struct MmCanvas {
@@ -2540,7 +2386,7 @@ static void MmFill(MmCanvas& cv, int x0, int y0, int x1, int y1, uint32_t col) {
         std::fill(cv.bits + (size_t)y * cv.w + x0, cv.bits + (size_t)y * cv.w + x1, col);
 }
 
-// Blends `col` over the existing pixels; alpha is 0..255.
+// Blends col over the existing pixels; alpha is 0..255.
 static void MmBlend(MmCanvas& cv, int x0, int y0, int x1, int y1, uint32_t col, int alpha) {
     x0 = std::max(x0, 0);
     y0 = std::max(y0, 0);
@@ -2558,8 +2404,7 @@ static void MmBlend(MmCanvas& cv, int x0, int y0, int x1, int y1, uint32_t col, 
     }
 }
 
-// Draws one logical line [s, e) of the document as runs of same-colored blocks. Spaces leave
-// gaps, tabs count as 4 columns, and columns map onto the minimap's inner width.
+// Draws one logical line as runs of same-colored blocks (spaces leave gaps, tabs = 4 columns).
 static void MmDrawLine(EditorCtx* c, MmCanvas& cv, uint32_t s, uint32_t e, int y, int bh, int x0,
                        int inner, const uint32_t* clsPx) {
     const std::wstring& t = c->docText;
@@ -2606,7 +2451,7 @@ static void PaintMinimap(EditorCtx* c, HDC hdc, const RECT& rc) {
     BITMAPINFO bmi{};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = w;
-    bmi.bmiHeader.biHeight = -h;  // top-down
+    bmi.bmiHeader.biHeight = -h;
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
@@ -2621,7 +2466,7 @@ static void PaintMinimap(EditorCtx* c, HDC hdc, const RECT& rc) {
 
     MmCanvas cv{bits, w, h};
     MmFill(cv, 0, 0, w, h, PxOf(pal.bg));
-    MmFill(cv, 0, 0, 1, h, PxOf(pal.separator));  // divider on the side facing the text
+    MmFill(cv, 0, 0, 1, h, PxOf(pal.separator));
 
     MmGeo g;
     if (IsWindow(c->edit) && MmCompute(c, h, g)) {
@@ -2630,7 +2475,7 @@ static void PaintMinimap(EditorCtx* c, HDC hdc, const RECT& rc) {
         COLORREF text = c->textColorKnown ? c->textColor
                                           : (c->dark ? RGB(0xD4, 0xD4, 0xD4) : RGB(0x33, 0x33, 0x33));
 
-        // One color per token class (the same colors as the editor), softened toward the background.
+        // One color per token class, softened toward the background.
         uint32_t clsPx[kcCount];
         for (int k = 0; k < kcCount; k++) {
             COLORREF fg = text;
@@ -2653,13 +2498,13 @@ static void PaintMinimap(EditorCtx* c, HDC hdc, const RECT& rc) {
                 int y = yOff + (int)(k - k0) * g.pitch;
                 if (y >= h) break;
                 uint32_t s = c->mmStart[(size_t)k];
-                uint32_t e = (k + 1 < g.nLines) ? c->mmStart[(size_t)k + 1] - 1 : docLen;  // minus the '\r'
+                uint32_t e = (k + 1 < g.nLines) ? c->mmStart[(size_t)k + 1] - 1 : docLen;
                 e = std::min(e, docLen);
                 if (e > s) MmDrawLine(c, cv, s, e, y, g.bh, padL, inner, clsPx);
             }
         }
 
-        // The slider: a translucent band over the part of the document that is on screen.
+        // The slider: a translucent band over the visible part.
         int alpha = (c->mmDrag || c->mmHot) ? 64 : 40;
         MmBlend(cv, 1, g.sliderTop, w, g.sliderTop + g.sliderPx, PxOf(text), alpha);
     }
@@ -2691,8 +2536,8 @@ static LRESULT CALLBACK MinimapProc(HWND h, UINT msg, WPARAM wParam, LPARAM lPar
         }
         case WM_LBUTTONDOWN: {
             if (!c || !IsWindow(c->edit)) break;
-            WakeTick(c);  // [windhawk-reviewer] tick-rate fix: a click / drag needs the fast timer
-            SetFocus(c->edit);  // keep typing in the editor
+            WakeTick(c);  // [keep] click/drag needs the fast timer
+            SetFocus(c->edit);
             RECT rc;
             GetClientRect(h, &rc);
             MmGeo g;
@@ -2700,23 +2545,21 @@ static LRESULT CALLBACK MinimapProc(HWND h, UINT msg, WPARAM wParam, LPARAM lPar
                 int y = GET_Y_LPARAM(lParam);
                 bool onSlider = y >= g.sliderTop && y < g.sliderTop + g.sliderPx;
                 if (!onSlider && g_mmClickLine.load()) {
-                    // Click-to-line: the inverse of how PaintMinimap places lines (same whole-pixel
-                    // scroll offset), so you land on exactly the line drawn under the cursor.
+                    // Click-to-line: inverse of PaintMinimap's placement, so you land on the line under the cursor.
                     const LONG k0 = (LONG)std::floor(g.mmTop);
                     const int yOff = -(int)std::lround((g.mmTop - (double)k0) * g.pitch);
                     LONG line = k0 + (LONG)(std::max(0, y - yOff) / g.pitch);
                     MmJumpToLine(c, g, std::clamp<LONG>(line, 0, g.nLines - 1));
                     InvalidateRect(h, nullptr, FALSE);
-                    return 0;  // a plain jump; dragging the slider itself still works
+                    return 0;
                 }
-                // Grab the slider where it was hit; otherwise (proportional mode) center it on
-                // the click and keep dragging from there.
+                // Grab the slider where hit; otherwise (proportional mode) center it on the click and keep dragging.
                 c->mmGrab = onSlider ? y - g.sliderTop : g.sliderPx / 2;
                 c->mmDrag = true;
-                c->mmEndRows = -1;  // forget earlier "scroll to end" bookkeeping
+                c->mmEndRows = -1;
                 c->mmDragV = g.view;
                 SetCapture(h);
-                MmScrollTo(c, g, y - c->mmGrab);  // the first position is applied right away
+                MmScrollTo(c, g, y - c->mmGrab);
                 InvalidateRect(h, nullptr, FALSE);
             }
             return 0;
@@ -2732,9 +2575,9 @@ static LRESULT CALLBACK MinimapProc(HWND h, UINT msg, WPARAM wParam, LPARAM lPar
                 InvalidateRect(h, nullptr, FALSE);
             }
             if (c->mmDrag && (wParam & MK_LBUTTON) && IsWindow(c->edit)) {
-                c->mmDragY = GET_Y_LPARAM(lParam);  // applied by the next timer tick
+                c->mmDragY = GET_Y_LPARAM(lParam);
                 c->mmDragPending = true;
-                WakeTick(c);  // [windhawk-reviewer] tick-rate fix: apply the drag on the fast timer
+                WakeTick(c);  // [keep] apply the drag on the fast timer
             }
             return 0;
         }
@@ -2742,7 +2585,7 @@ static LRESULT CALLBACK MinimapProc(HWND h, UINT msg, WPARAM wParam, LPARAM lPar
             if (c && c->mmDrag) {
                 RECT rc;
                 GetClientRect(h, &rc);
-                MmApplyPendingDrag(c, rc.bottom);  // land exactly where the button was released
+                MmApplyPendingDrag(c, rc.bottom);
                 c->mmDrag = false;
                 c->mmDragV = 0;
                 if (GetCapture() == h) ReleaseCapture();
@@ -2764,7 +2607,7 @@ static LRESULT CALLBACK MinimapProc(HWND h, UINT msg, WPARAM wParam, LPARAM lPar
                 InvalidateRect(h, nullptr, FALSE);
             }
             return 0;
-        case WM_MOUSEWHEEL:  // scrolling over the minimap scrolls the document
+        case WM_MOUSEWHEEL:
             if (c && IsWindow(c->edit)) return SendMessageW(c->edit, WM_MOUSEWHEEL, wParam, lParam);
             break;
         case WM_NCDESTROY:
@@ -2775,14 +2618,12 @@ static LRESULT CALLBACK MinimapProc(HWND h, UINT msg, WPARAM wParam, LPARAM lPar
     return DefWindowProcW(h, msg, wParam, lParam);
 }
 
-// ---------------------------------------------------------------------------
 // System menu toggles + top-level window subclass
-// ---------------------------------------------------------------------------
 
 static void ToggleEnabled() {
     bool n = !g_enabled.load();
     g_enabled = n;
-    Wh_SetIntValue(L"Enabled", n ? 1 : 0);  // persisted; each editor's tick applies it
+    Wh_SetIntValue(L"Enabled", n ? 1 : 0);
 }
 
 static void ToggleMinimap() {
@@ -2822,7 +2663,7 @@ static LRESULT CALLBACK TopSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM 
     switch (msg) {
         case WM_INITMENUPOPUP: {
             LRESULT r = DefSubclassProc(h, msg, wParam, lParam);
-            if (HIWORD(lParam)) {  // window (system) menu: refresh the checkmark
+            if (HIWORD(lParam)) {
                 CheckMenuItem(GetSystemMenu(h, FALSE), kSysCmdId,
                               MF_BYCOMMAND | (g_enabled.load() ? MF_CHECKED : MF_UNCHECKED));
                 CheckMenuItem(GetSystemMenu(h, FALSE), kSysCmdMinimapId,
@@ -2840,7 +2681,7 @@ static LRESULT CALLBACK TopSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM 
                 return 0;
             }
             break;
-        case WM_ACTIVATE:  // pick up a toggle made in another Notepad process
+        case WM_ACTIVATE:
             if (LOWORD(wParam) != WA_INACTIVE) {
                 g_enabled = Wh_GetIntValue(L"Enabled", 1) != 0;
                 g_minimapEnabled = Wh_GetIntValue(L"MinimapEnabled", 1) != 0;
@@ -2849,9 +2690,8 @@ static LRESULT CALLBACK TopSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM 
         case WM_SETTINGCHANGE:
         case WM_THEMECHANGED:
         case WM_DWMCOLORIZATIONCOLORCHANGED:
-            g_themeEpoch++;  // live theme updates
+            g_themeEpoch++;
             break;
-        // [windhawk-reviewer] the WM_TIMER / kDiscoverTimer editor rescan was removed (see the constants).
         case WM_NCDESTROY: {
             RemoveWindowSubclass(h, TopSubclassProc, kTopSubclassId);
             RemovePropW(h, kPropTop);
@@ -2890,8 +2730,6 @@ static void AttachTop(HWND top) {
                         kSysCmdMinimapId, kMenuTextMinimap);
         }
     }
-    // [windhawk-reviewer] no 750 ms discovery timer anymore: the CreateWindowExW hook plus this
-    // one-time enumeration of existing child windows find every editor.
     EnumChildWindows(top, DiscoverProc, 0);
 }
 
@@ -2899,12 +2737,11 @@ static void DetachTop(TopCtx* t) {
     {
         std::lock_guard<std::mutex> lk(g_mutex);
         auto it = std::find(g_tops.begin(), g_tops.end(), t);
-        if (it == g_tops.end()) return;  // already gone
+        if (it == g_tops.end()) return;
         g_tops.erase(it);
     }
     HWND top = t->hwnd;
     if (IsWindow(top)) {
-        // [windhawk-reviewer] (there is no kDiscoverTimer to kill anymore)
         RemoveSysItem(GetSystemMenu(top, FALSE));
         RemoveWindowSubclass(top, TopSubclassProc, kTopSubclassId);
         RemovePropW(top, kPropTop);
@@ -2912,9 +2749,7 @@ static void DetachTop(TopCtx* t) {
     delete t;
 }
 
-// ---------------------------------------------------------------------------
 // Editor attach / subclass
-// ---------------------------------------------------------------------------
 
 static LRESULT CALLBACK EditSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM lParam,
                                          UINT_PTR, DWORD_PTR ref);
@@ -2928,7 +2763,7 @@ static void DetachEditor(EditorCtx* c, bool windowDestroyed) {
     }
     if (c->gutter) {
         KillTimer(c->gutter, kTickTimer);
-        SetWindowLongPtrW(c->gutter, GWLP_USERDATA, 0);  // no dangling ctx
+        SetWindowLongPtrW(c->gutter, GWLP_USERDATA, 0);
         DestroyWindow(c->gutter);
         c->gutter = nullptr;
     }
@@ -2939,8 +2774,8 @@ static void DetachEditor(EditorCtx* c, bool windowDestroyed) {
         c->minimap = nullptr;
     }
     if (!windowDestroyed && IsWindow(c->edit)) {
-        Deactivate(c);          // restores the left margin ...
-        DeactivateMinimap(c);   // ... and the right one; the last of the two restores the style
+        Deactivate(c);
+        DeactivateMinimap(c);
         RemoveWindowSubclass(c->edit, EditSubclassProc, kEditSubclassId);
         RemovePropW(c->edit, kPropEditor);
     }
@@ -2949,15 +2784,12 @@ static void DetachEditor(EditorCtx* c, bool windowDestroyed) {
     delete c;
 }
 
-// Called from editor messages. The gutter's Activate() (which captures the editor's
-// original margins) must only run from the timer, once Notepad has finished setting
-// the control up; here we only advance the gutter if it is already active.
+// Called from editor messages; Activate() must only run from the timer, so here we only advance an active gutter.
 static void TickNow(EditorCtx* c) {
-    // [windhawk-reviewer] every message-driven tick (edit, scroll, size, show) speeds the timer up
-    // again; this is how EditSubclassProc calls SetTickRate(c, 16).
+    // [keep] message-driven ticks also speed the timer up
     WakeTick(c);
     bool prev = c->inMsg;
-    c->inMsg = true;  // minimap work and plain-file document reads wait for the timer tick
+    c->inMsg = true;
     if (c->active || c->mmActive)
         Tick(c);
     else
@@ -2980,7 +2812,7 @@ static LRESULT CALLBACK EditSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM
             if (wParam == VK_DELETE || GetKeyState(VK_CONTROL) < 0) {
                 c->textDirty = c->docStale = true;
                 c->settle = 8;
-                c->synSettle = 8;  // Ctrl+Z / Ctrl+Y / Ctrl+V ...
+                c->synSettle = 8;
             }
             if (wParam == VK_RETURN || wParam == VK_BACK || wParam == VK_DELETE) {
                 c->settle = 8;
@@ -3003,16 +2835,15 @@ static LRESULT CALLBACK EditSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM
         case EM_STREAMIN:
         case WM_IME_COMPOSITION: {
             c->textDirty = c->docStale = true;
-            c->settle = 8;  // ~130 ms of follow-up checks, see Tick
+            c->settle = 8;
             c->synSettle = 8;
-            // Loading a document replaces the text: the change markers start over. Anything else
-            // in this group is the user editing, which freezes the baseline.
+            // Loading replaces the text, so markers start over; anything else is a user edit that freezes the baseline.
             if (msg == WM_SETTEXT || msg == EM_SETTEXTEX || msg == EM_STREAMIN)
                 c->mkReload = true;
             else
                 c->mkUserEdit = true;
             LRESULT r = DefSubclassProc(h, msg, wParam, lParam);
-            TickNow(c);  // resize gutter / refresh colors in the same message, no visible lag
+            TickNow(c);
             return r;
         }
         case WM_VSCROLL:
@@ -3020,12 +2851,12 @@ static LRESULT CALLBACK EditSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM
         case EM_LINESCROLL:
         case EM_SCROLL:
         case EM_SETSCROLLPOS:
-        case EM_SETTARGETDEVICE:  // Notepad's word-wrap toggle
+        case EM_SETTARGETDEVICE:
         case EM_SETZOOM: {
             LRESULT r = DefSubclassProc(h, msg, wParam, lParam);
             c->sigValid = false;
             c->synSigValid = false;
-            TickNow(c);  // fresh row positions for the gutter and the syntax hook right away
+            TickNow(c);
             return r;
         }
         case WM_SIZE:
@@ -3038,9 +2869,7 @@ static LRESULT CALLBACK EditSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM
             TickNow(c);
             return r;
         }
-        // [windhawk-reviewer] tick-rate fix: these move the caret / selection without any of the
-        // messages above, so wake the timer for the current-line highlight and the syntax snapshot
-        // (otherwise a mouse click would show up only on the next slow tick).
+        // [keep] selection moves also wake the timer (else a click shows up only on the next slow tick)
         case WM_LBUTTONDOWN:
         case WM_LBUTTONUP:
         case WM_LBUTTONDBLCLK:
@@ -3052,7 +2881,7 @@ static LRESULT CALLBACK EditSubclassProc(HWND h, UINT msg, WPARAM wParam, LPARAM
         }
         case WM_MOUSEMOVE: {
             LRESULT r = DefSubclassProc(h, msg, wParam, lParam);
-            if (wParam & MK_LBUTTON) WakeTick(c);  // drag-selecting; plain hovering needs no tick
+            if (wParam & MK_LBUTTON) WakeTick(c);
             return r;
         }
     }
@@ -3078,19 +2907,18 @@ void AttachEditor(HWND edit) {
         g_editors.push_back(c);
     }
 
-    // Hidden sibling window stacked above the editor; it also hosts the poll timer.
-    // [windhawk-reviewer] only created if the class registered; uses the mod's own module handle.
+    // Hidden sibling window above the editor; it also hosts the poll timer.
+    // [keep] only created if the class registered; uses the mod's module handle
     if (g_gutterClassOk.load())
         c->gutter = CreateWindowExW(WS_EX_NOPARENTNOTIFY, kGutterClass, L"",
                                     WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 0, 0, parent, nullptr,
                                     g_hInst, c);
-    // [windhawk-reviewer] start fast for a short warm-up (Activate() needs a few early ticks);
-    // Tick() then picks the rate itself, see SetTickRate().
+    // [keep] start fast for a warm-up; Tick() then picks the rate
     c->fastUntil = GetTickCount64() + kTickStartMs;
     SetTickRate(c, kTickFastMs);
 
-    // Second hidden sibling, on the right-hand side; only shown while the minimap is on.
-    // [windhawk-reviewer] same here: skipped when the minimap class did not register.
+    // Second hidden sibling on the right; shown only while the minimap is on.
+    // [keep] skipped if the minimap class did not register
     if (g_minimapClassOk.load())
         c->minimap = CreateWindowExW(WS_EX_NOPARENTNOTIFY, kMinimapClass, L"",
                                      WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 0, 0, parent, nullptr,
@@ -3103,29 +2931,20 @@ void AttachEditor(HWND edit) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Syntax highlighting (2/2): Direct2D DrawGlyphRun hook
-//
-// Notepad's editor (riched20.dll) draws text with ID2D1RenderTarget::DrawGlyphRun.
-// We intercept those calls, work out which document characters the glyphs are, and
-// redraw the run in pieces with per-token brushes. The document is never modified.
-// ---------------------------------------------------------------------------
+// Syntax highlighting (2/2): Direct2D DrawGlyphRun hook that recolors riched20 text runs without touching the document.
 
 using GlyphFn = void(STDMETHODCALLTYPE*)(void*, D2D1_POINT_2F, const DWRITE_GLYPH_RUN*, void*,
                                          DWRITE_MEASURING_MODE);
-// [windhawk-reviewer] The raw vtable helpers (ComAddRef / ComRelease, CreateBrushFn / GetDpiFn /
-// GetTransformFn and the vt[8] / vt[31] / vt[52] / font-face slot 11 calls) were replaced by typed COM
-// calls below. Only the hooked DrawGlyphRun slot (29) is still addressed by index (GlyphHook::Install).
 
 struct ModRange {
     uintptr_t base, end;
     bool riched;
 };
 struct FaceMap {
-    IDWriteFontFace* face;  // [windhawk-reviewer] typed (was void*)
-    std::unordered_map<UINT16, WCHAR> rev;  // glyph index -> character
+    IDWriteFontFace* face;  // [keep] typed (was void*)
+    std::unordered_map<UINT16, WCHAR> rev;
 };
-static std::mutex g_synMutex;  // guards g_ranges, g_faces
+static std::mutex g_synMutex;
 static std::vector<ModRange> g_ranges;
 static std::vector<FaceMap*> g_faces;
 
@@ -3155,9 +2974,8 @@ static bool CallerIsRiched(void* ra) {
     return riched;
 }
 
-// Turns glyph indices back into characters using the font's cmap (IDWriteFontFace::
-// GetGlyphIndices). Unknown glyphs become 0xFFFF.
-// [windhawk-reviewer] typed COM calls instead of raw vtable slots (AddRef / Release / slot 11).
+// Maps glyph indices back to characters via the font's cmap; unknown glyphs become 0xFFFF.
+// [keep] typed COM calls instead of raw vtable slots
 static bool DecodeRun(const DWRITE_GLYPH_RUN* run, std::wstring& S) {
     std::lock_guard<std::mutex> lk(g_synMutex);
     IDWriteFontFace* face = run->fontFace;
@@ -3175,14 +2993,14 @@ static bool DecodeRun(const DWRITE_GLYPH_RUN* run, std::wstring& S) {
         }
         fm = new FaceMap();
         fm->face = face;
-        face->AddRef();  // keep the pointer valid / unique while cached
+        face->AddRef();
         std::vector<UINT32> cps;
         for (UINT32 cp = 0x20; cp <= 0x7E; cp++) cps.push_back(cp);
         for (UINT32 cp = 0xA0; cp <= 0x17F; cp++) cps.push_back(cp);
         std::vector<UINT16> gl(cps.size(), 0);
         if (SUCCEEDED(face->GetGlyphIndices(cps.data(), (UINT32)cps.size(), gl.data()))) {
             for (size_t i = 0; i < cps.size(); i++)
-                if (gl[i]) fm->rev.emplace(gl[i], (WCHAR)cps[i]);  // first mapping wins
+                if (gl[i]) fm->rev.emplace(gl[i], (WCHAR)cps[i]);
         }
         g_faces.push_back(fm);
     }
@@ -3210,7 +3028,7 @@ static D2D1_COLOR_F SynColor(bool dark, int k) {
     const int* c = dark ? kD[k] : kL[k];
     int rgb[3] = {c[0], c[1], c[2]};
     if (k == kcComment) {
-        // Same muted gray as the line numbers (the ones that are not the current line).
+        // Same muted gray as the non-current line numbers.
         COLORREF g = dark ? kDark.text : kLight.text;
         rgb[0] = GetRValue(g);
         rgb[1] = GetGValue(g);
@@ -3224,7 +3042,7 @@ static D2D1_COLOR_F SynColor(bool dark, int k) {
     return col;
 }
 
-// The visible, syntax-enabled editor on the calling thread (if any).
+// The visible, syntax-enabled editor on the calling thread, if any.
 static EditorCtx* CurrentEditor() {
     DWORD tid = GetCurrentThreadId();
     std::lock_guard<std::mutex> lk(g_mutex);
@@ -3235,18 +3053,14 @@ static EditorCtx* CurrentEditor() {
     return nullptr;
 }
 
-// Finds S (0xFFFF = wildcard) inside one row of the document, preferring the
-// occurrence closest to the estimated column.
+// Finds S (0xFFFF = wildcard) in a row, preferring the match closest to the estimated column.
 static LONG FindInRow(const EditorCtx* c, const SnapRow& r, const std::wstring& S, double estCol) {
     LONG n = (LONG)S.size();
     LONG end = std::min<LONG>(r.end, (LONG)c->docText.size());
     LONG best = -1;
     double bestD = 1e18;
     LONG start = std::max<LONG>(r.idx, 0);
-    // [windhawk-reviewer] With word wrap off a row is a whole logical line, and every glyph run used to
-    // scan all of it (a minified one-line JSON file = the entire file per run, on every paint). Rows up
-    // to kFindFullRowMax characters are still scanned completely, exactly as before; only longer
-    // rows are searched in a window of +-kFindWindow characters around the estimated column.
+    // [keep] rows over 4096 chars search only a +-1024 window around the estimated column
     constexpr LONG kFindFullRowMax = 4096;
     constexpr LONG kFindWindow = 1024;
     if (end - start > kFindFullRowMax) {
@@ -3274,9 +3088,6 @@ static LONG FindInRow(const EditorCtx* c, const SnapRow& r, const std::wstring& 
     return best;
 }
 
-// [windhawk-reviewer] EffClass() removed (it just returned its argument). Comments get their own
-// muted gray in SynColor.
-
 // Returns true if the run was drawn (in colored pieces) by us.
 static bool TryColorRun(void* self, D2D1_POINT_2F o, const DWRITE_GLYPH_RUN* run, void* brush,
                         DWRITE_MEASURING_MODE mode, GlyphFn orig) {
@@ -3288,7 +3099,7 @@ static bool TryColorRun(void* self, D2D1_POINT_2F o, const DWRITE_GLYPH_RUN* run
     const LONG n = (LONG)S.size();
 
     // Device-pixel position of the run's baseline origin.
-    // [windhawk-reviewer] typed COM calls instead of raw vtable slots 52 (GetDpi) / 31 (GetTransform).
+    // [keep] typed COM calls instead of vtable slots 52 / 31
     auto* rt = static_cast<ID2D1RenderTarget*>(self);
     float dpiX = 96.f, dpiY = 96.f;
     rt->GetDpi(&dpiX, &dpiY);
@@ -3300,12 +3111,11 @@ static bool TryColorRun(void* self, D2D1_POINT_2F o, const DWRITE_GLYPH_RUN* run
     double advPx = run->glyphAdvances[0] * scale;
 
     if (!c->offValid) {
-        c->baseOff = 0.85 * run->fontEmSize * scale;  // baseline below row top; refined below
+        c->baseOff = 0.85 * run->fontEmSize * scale;
         c->offValid = true;
     }
 
-    // 1) Pick the row whose top best matches this baseline and verify the text,
-    //    tolerating a row or two of error.
+    // 1) Pick the row whose top best matches this baseline and verify the text.
     const std::vector<SnapRow>& rows = c->snap;
     double target = yPx - c->baseOff;
     int k = -1;
@@ -3334,13 +3144,13 @@ static bool TryColorRun(void* self, D2D1_POINT_2F o, const DWRITE_GLYPH_RUN* run
                     found = p;
                     foundRow = r;
                 }
-                if (oi == 0) break;  // matched in the predicted row
+                if (oi == 0) break;
             }
         }
         trusted = (foundRow == k) || (matches == 1 && n >= 4);
     }
 
-    // 2) Fallback: search every measured row (this also recovers from a bad offset).
+    // 2) Fallback: search every measured row (also recovers from a bad offset).
     if (found < 0 && n >= 2) {
         int matches = 0;
         double bestD = 1e18;
@@ -3362,11 +3172,7 @@ static bool TryColorRun(void* self, D2D1_POINT_2F o, const DWRITE_GLYPH_RUN* run
     if (found < 0) return false;
     if (trusted) c->baseOff = yPx - rows[(size_t)foundRow].y;
 
-    // Leave selected text to the editor (its own selection colors). The selection is read live:
-    // the editor repaints the lines whose selection just changed before our tick has noticed
-    // it, so a cached copy still describes the old selection, and lines that were just
-    // unselected would be left uncolored until something else forced another repaint. A caret
-    // (empty selection) is not a selection.
+    // Leave selected text to the editor; the selection is read live (the editor repaints before our tick).
     DWORD selS = 0, selE = 0;
     SendMessageW(c->edit, EM_GETSEL, (WPARAM)&selS, (LPARAM)&selE);
     if (selS != selE && found < (LONG)selE && found + n > (LONG)selS) return false;
@@ -3384,7 +3190,7 @@ static bool TryColorRun(void* self, D2D1_POINT_2F o, const DWRITE_GLYPH_RUN* run
     if (!any) return false;
 
     // Draw the run in segments of equal token class.
-    ID2D1SolidColorBrush* brushes[kcCount] = {};  // [windhawk-reviewer] typed (was void* + vtable slot 8)
+    ID2D1SolidColorBrush* brushes[kcCount] = {};  // [keep] typed (was void*)
     bool dark = c->dark;
     float x = o.x;
     LONG i = 0;
@@ -3439,11 +3245,11 @@ static std::vector<void*> g_hooked;
 static void HookSlot(void** vtbl, int slot, void* hook, void** orig) {
     void* target = vtbl[slot];
     for (void* h : g_hooked)
-        if (h == target) return;  // implementation shared with an already-hooked class
+        if (h == target) return;
     if (Wh_SetFunctionHook(target, hook, orig)) g_hooked.push_back(target);
 }
 
-// One instantiation per concrete render-target class (each has its own original).
+// One instantiation per render-target class (each has its own original).
 template <int V>
 struct GlyphHook {
     static inline GlyphFn orig = nullptr;
@@ -3457,11 +3263,9 @@ struct GlyphHook {
     }
 };
 
-// Create throw-away instances of each concrete render-target class just to read
-// their vtables; the code they point at is shared by every real instance.
+// Create throw-away render targets just to read their vtables; the code is shared by every real instance.
 static void InstallD2DHooks() {
-    // [windhawk-reviewer] System32 only: a bare LoadLibraryW name uses the default search order, and
-    // neither d2d1.dll nor d3d11.dll is a KnownDLL, so a copy next to the exe could be loaded instead.
+    // [keep] load from System32 only (not KnownDLLs, so a local copy could win)
     HMODULE d2d = LoadLibraryExW(L"d2d1.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!d2d) {
         return;
@@ -3485,8 +3289,8 @@ static void InstallD2DHooks() {
     rp.usage = D2D1_RENDER_TARGET_USAGE_NONE;
     rp.minLevel = D2D1_FEATURE_LEVEL_DEFAULT;
 
-    // 0: ID2D1DeviceContext (most likely for a modern, GPU-composed control)
-    HMODULE d3d = LoadLibraryExW(L"d3d11.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);  // [windhawk-reviewer] see above
+    // 0: ID2D1DeviceContext (most likely for a GPU-composed control)
+    HMODULE d3d = LoadLibraryExW(L"d3d11.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);  // [keep] System32 only
     using D3D11CreateDevice_t = HRESULT(WINAPI*)(IDXGIAdapter*, D3D_DRIVER_TYPE, HMODULE, UINT,
                                                  const D3D_FEATURE_LEVEL*, UINT, UINT,
                                                  ID3D11Device**, D3D_FEATURE_LEVEL*,
@@ -3568,9 +3372,7 @@ static void InstallD2DHooks() {
     f1->Release();
 }
 
-// ---------------------------------------------------------------------------
 // Hooks / entry points
-// ---------------------------------------------------------------------------
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
 CreateWindowExW_t CreateWindowExW_Original;
@@ -3590,8 +3392,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD ex, LPCWSTR cls, LPCWSTR name, DWORD styl
 }
 
 static void LoadSettings() {
-    // [windhawk-reviewer] WindhawkUtils::StringSetting (RAII) instead of Wh_GetStringSetting /
-    // Wh_FreeStringSetting. Wh_GetStringSetting never returns NULL, so the NULL checks are gone.
+    // [keep] StringSetting RAII helper; no NULL checks needed
     int v = 0;
     {
         auto st = WindhawkUtils::StringSetting::make(L"lineNumberSettings.HighlightStyle");
@@ -3603,7 +3404,7 @@ static void LoadSettings() {
     g_mmOnlyScroll = Wh_GetIntSetting(L"minimapSettings.MinimapOnlyWithScrollbar") != 0;
 
     auto cb = WindhawkUtils::StringSetting::make(L"minimapSettings.ClickBehavior");
-    g_mmClickLine = wcscmp(cb.get(), L"proportional") != 0;  // "line" is the default
+    g_mmClickLine = wcscmp(cb.get(), L"proportional") != 0;
 }
 
 BOOL Wh_ModInit() {
@@ -3613,9 +3414,7 @@ BOOL Wh_ModInit() {
     g_minimapEnabled = Wh_GetIntValue(L"MinimapEnabled", 1) != 0;
     g_runMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
-    // [windhawk-reviewer] register the window classes with this mod's own module (not the exe's),
-    // and remember whether that worked: AttachEditor skips creating the gutter / minimap windows
-    // when a class failed to register. Falls back to the exe's handle if the lookup fails.
+    // [keep] register classes with the mod's module and remember success; falls back to the exe's handle
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                 GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                             (LPCWSTR)&Wh_ModInit, &g_hInst) ||
@@ -3637,7 +3436,7 @@ BOOL Wh_ModInit() {
     mc.lpszClassName = kMinimapClass;
     g_minimapClassOk = RegisterClassW(&mc) != 0;
 
-    // [windhawk-reviewer] WindhawkUtils::SetFunctionHook (typed) instead of void* casts.
+    // [keep] typed SetFunctionHook instead of void* casts
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
                                    &CreateWindowExW_Original);
     return TRUE;
@@ -3656,7 +3455,7 @@ static BOOL CALLBACK EnumTopProc(HWND h, LPARAM) {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    g_themeEpoch++;  // forces a repaint of every gutter
+    g_themeEpoch++;
 }
 
 // Mod loaded into an already-running Notepad: attach to existing windows.
@@ -3664,22 +3463,19 @@ void Wh_ModAfterInit() {
     EnumWindows(EnumTopProc, 0);
 }
 
-// Full teardown: restore margins, styles, system menu, window procs; free GDI objects.
+// Full teardown: restore margins, styles, menu, window procs; free GDI objects.
 void Wh_ModUninit() {
     g_unloading = true;
     {
         std::lock_guard<std::mutex> lk(g_synMutex);
         for (FaceMap* f : g_faces) {
-            f->face->Release();  // [windhawk-reviewer] typed COM call (was ComRelease)
+            f->face->Release();  // [keep] typed COM call
             delete f;
         }
         g_faces.clear();
     }
 
-    // [windhawk-reviewer] unload race: only the HWNDs are copied while the lock is held. The old code
-    // copied the context pointers, released the lock and then read c->edit / t->hwnd; if a tab or
-    // window closed in between, its WM_NCDESTROY had already deleted that context. The context is now
-    // looked up again on the window's own thread (GetPropW), where it cannot be deleted underneath us.
+    // [keep] copy HWNDs under the lock, look contexts up via GetPropW on the window's thread (unload race)
     std::vector<HWND> editors;
     std::vector<HWND> tops;
     {
@@ -3705,8 +3501,7 @@ void Wh_ModUninit() {
                 },
                 h);
     }
-    // [windhawk-reviewer] unregister with the same module handle the classes were registered with,
-    // and only the ones this instance registered.
+    // [keep] unregister only the classes this instance registered, with the same module handle
     if (g_gutterClassOk.load()) UnregisterClassW(kGutterClass, g_hInst);
     if (g_minimapClassOk.load()) UnregisterClassW(kMinimapClass, g_hInst);
 }
