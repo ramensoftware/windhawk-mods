@@ -1,5 +1,35 @@
 {
   "mods": {
+    "autoclean": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795331350764,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795331350764,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Ashix",
+        "compilerOptions": "-ladvapi32 -lole32 -loleaut32 -lshell32 -lshlwapi -lshcore -luser32 -lgdi32 -lgdiplus -ldwmapi -lwtsapi32 -luuid",
+        "description": "Event-driven background Temp folder and Recycle Bin cleaner with AI agent protection, oldest-first pruning, mouse shortcuts, and OLED toasts",
+        "donateUrl": "https://ko-fi.com/kashix",
+        "github": "https://github.com/k-ashix",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "AutoClean",
+        "twitter": "https://x.com/k_ashix",
+        "version": "2.2026.2211"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7707",
+      "source": {
+        "sha256": "c1cf3c66cc0b2cf473f72dd52d5d16f535ac0ea0f2fa251bdabdd648b81eebc0",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/75db1c317282a3fdc157091742dfd61ed6edf904/mods/autoclean.wh.cpp"
+      }
+    },
     "batteryhub-custom-taskbar-integration": {
       "details": {
         "defaultSorting": 0,
@@ -680,38 +710,6 @@
       "source": {
         "sha256": "abc07bad6c8019ceeda2082c33a5fb22c12c7ac1d03b403fbafb41b0b596d740",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1ab68558cc75dd2a732870144c3a3af22ccfab0a/mods/volu-macos-volume-hud.wh.cpp"
-      }
-    },
-    "win11-ime-tray-icon-fix": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795277173823,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795277173823,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "yumeyao",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
-        "description": "Moves the input indicator to the left of the notification area so its width change cannot shift the tray icons.",
-        "github": "https://github.com/yumeyao",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "MIT",
-        "name": "Windows 11 IME Tray Icon Fix",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7448",
-      "source": {
-        "sha256": "e6d4b1b015eba51ba5830c2f7a7f2abb6aeb47778e056584803a0c2262853013",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/ac5e1620cbfdd6b69dac498805e468c5453e1fcc/mods/win11-ime-tray-icon-fix.wh.cpp"
       }
     },
     "windows-11-lock-screen-styler": {

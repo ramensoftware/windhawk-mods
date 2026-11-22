@@ -9177,7 +9177,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794556899000,
+        "updated": 1795331048000,
         "users": 79
       },
       "metadata": {
@@ -9194,7 +9194,7 @@
           "ShellExperienceHost.exe"
         ],
         "name": "Floating Taskbar",
-        "version": "2.1.14"
+        "version": "2.1.15"
       }
     },
     "fluent-radial-menu": {
@@ -16851,7 +16851,7 @@
         "ratingUsers": 86,
         "reviews": 2,
         "trendingSorting": 12.547360722026545,
-        "updated": 1795136599000,
+        "updated": 1795331043000,
         "users": 1920
       },
       "metadata": {
@@ -16864,7 +16864,7 @@
         ],
         "license": "MIT",
         "name": "Spotlight Launcher",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "standard-title-bar-colors": {
@@ -22769,6 +22769,34 @@
         ],
         "name": "Windows 11 HomeGroup Page Restorer",
         "version": "1.0.0"
+      }
+    },
+    "win11-ime-tray-icon-fix": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795331039000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795331039000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "yumeyao",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "Moves the input indicator to the left of the notification area so its width change cannot shift the tray icons.",
+        "github": "https://github.com/yumeyao",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows 11 IME Tray Icon Fix",
+        "version": "1.0"
       }
     },
     "win11-old-taskmgr": {

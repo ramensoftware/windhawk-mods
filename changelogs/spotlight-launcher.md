@@ -1,3 +1,17 @@
+## 1.3.0 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b256288a57106c8f21f050e787ee7c4d95ed88d4/mods/spotlight-launcher.wh.cpp))
+
+* **Write in your own language.** The bar takes input from the Windows language bar and its input
+  method, so Chinese, Japanese, Korean and every other IME work: type the reading, see the
+  composition underlined in the search field with the candidate list under the caret, and the
+  characters you pick land in the search. Nothing is searched until you accept a candidate, and the
+  text goes into the field you are editing - the search, the path bar, a custom entry or the entry
+  manager.
+* **The Windows key as the shortcut.** Pick **Win** under Shortcuts and pressing the Windows key
+  opens the bar. The Windows Start menu is kept closed so only one panel appears; the candidate
+  list, the result list and the rest of the bar work the same as with any other shortcut.
+* **Shortcut help follows the setting.** The F1 sheet and the settings page show the Windows key as
+  the shortcut when that is what you picked.
+
 ## 1.2.0 ([Nov 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5326f7de9026c3f96e05533c51e1ab382eff70ea/mods/spotlight-launcher.wh.cpp))
 
 * **Run the tools on your PATH.** Type a program's exact name - `git`, `python`, `cargo`, `code` - and

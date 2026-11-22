@@ -2,12 +2,53 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-22T05:00:09.000Z</updated>
+    <updated>2026-11-22T07:03:59.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 IME Tray Icon Fix 1.0]]></title>
+        <id>https://windhawk.net/mods/win11-ime-tray-icon-fix#da10276a4b482d9f59064f0f892081f37d4baffe</id>
+        <link href="https://windhawk.net/mods/win11-ime-tray-icon-fix"/>
+        <updated>2026-11-22T07:03:59.000Z</updated>
+        <content type="html"><![CDATA[<h1>Windows 11 IME Tray Icon Fix</h1>
+<h2>Default Stock Layout And The Bug</h2>
+<p><img src="https://raw.githubusercontent.com/yumeyao/windhawk-ime-tray-fix/refs/heads/master/doc/before-fix.gif" alt="Before Fix"></p>
+<pre><code class="language-text">  Screen Left  &lt;-----------------------------------------------------  Screen Right Edge
+  [Chevron ^]  |  [SysPager (Tray Icons)]  |  [IME Indicator]  |  [Clock]  |  [Show Desktop]
+</code></pre>
+<p>The notification area (<code>TrayNotifyWnd</code>) is <strong>anchored to the right edge</strong> of the screen, while child windows are laid out left-to-right. Notice that the <strong>IME Indicator sits right in the middle</strong>, between the third-party tray icons (<code>SysPager</code>) and the clock.</p>
+<p>When <strong>&quot;Let me set a different input method for each app window&quot;</strong> is enabled in a multilingual setup (e.g., English, Chinese, Japanese):</p>
+<ol>
+<li>While typing in an app, the indicator often displays <strong>2 glyphs</strong> (e.g., <code>CH</code> + <code>中</code> or <code>JP</code> + <code>あ</code>), occupying a wider slot.</li>
+<li>When you click a tray icon (such as Steam or WiFi), <code>WM_LBUTTONDOWN</code> immediately shifts focus to <code>explorer.exe</code>.</li>
+<li>The shell defaults to English, shrinking the indicator down to <strong>1 glyph</strong> (<code>ENG</code>).</li>
+<li>Because the clock on the right is pinned to the right edge, the shrunk width forces <strong>everything to the left of the indicator (<code>SysPager</code> and <code>Chevron ^</code>) to slide rightward</strong>.</li>
+<li>When <code>WM_LBUTTONUP</code> fires, the icon you aimed at has moved, and your click lands on whichever neighboring icon slid under your cursor.</li>
+</ol>
+<h2>The Fix</h2>
+<p><img src="https://raw.githubusercontent.com/yumeyao/windhawk-ime-tray-fix/refs/heads/master/doc/after-fix.gif" alt="After Fix"></p>
+<pre><code class="language-text">[IME Indicator]  |  [Chevron ^]  |  [SysPager (Tray Icons)]  |  [Clock]  |  [Show Desktop]
+</code></pre>
+<p>The indicator takes the first slot and everything that used to sit left of it moves right by the indicator's width. Thus, every band is now to the right of the indicator, sits at a fixed distance from the right edge and never moves.</p>
+<h5>Mimicking Docked Language Bar?</h5>
+<p>Yes. But the docked language bar is broken in win10 (unstable, and won't work in remote desktop - even if you enable this option in both sides, and the latest MSPY doesn't support it unless you turn on &quot;Use the old version of MSPY&quot;) and is completely removed in win11.</p>
+<h2>Notes and known limitations</h2>
+<ul>
+<li>This mod is separated from <a href="https://windhawk.net/mods/win10-ime-tray-icon-fix">the Win 10 fix</a> because the UI technology (XAML vs Win32) is completely different. So they share no common code.</li>
+<li>No alternative modes. You can adjust width / hide icon using the official (m417z) mods &quot;Taskbar height and icon size&quot; and &quot;Taskbar tray system icon tweaks&quot;.</li>
+<li>This mod alters the grid columns (indice), which might be changed by other mods too (Styler). The co-existence itself is fine, but recording the correct state (for editing settings / turning on or off  on-the-fly) across multiple mods is techniclaly impossible. It's recommended to use one mod alone, if you need both, create a custom style theme with the icons swapped.</li>
+<li>Source code and reverse engineering credit goes to AI bot (hy4). Heavily guided to follow the framework of the official mods above, with AI-hallucinated overhead (it added a repeating timer) dropped. But not fully revised (don't want to learn XAML 🙂).</li>
+<li><code>SystemTrayFrameGrid</code> can be a <code>Grid</code> or a <code>StackPanel</code>. Verified on Windows 11 24H2 LTSC (<code>Grid</code>) and 26H2 (<code>StackPanel</code>). Other versions should work as the mechanism is identical and the Windhawk should handle the injection properly, remain untested though.</li>
+</ul>
+]]></content>
+        <author>
+            <name>yumeyao</name>
+            <uri>https://github.com/yumeyao</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[SMTC Now Playing Desktop Widgets 1.0.11]]></title>
         <id>https://windhawk.net/mods/smtc-now-playing-widgets#f9c2d2b7d92dd48c22becca49e1511d7f4134cd9</id>
@@ -1394,74 +1435,6 @@ Optional apps added through the inclusion list also need to be 64-bit.</p>
         <author>
             <name>xh1le</name>
             <uri>https://github.com/xh1le</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Fluent Radial Menu 0.9.0]]></title>
-        <id>https://windhawk.net/mods/fluent-radial-menu#f214aa6b6da1e0c23cfe21d161701fddc96acbe7</id>
-        <link href="https://windhawk.net/mods/fluent-radial-menu"/>
-        <updated>2026-11-19T00:01:27.000Z</updated>
-        <content type="html"><![CDATA[<h1>Fluent Radial Menu</h1>
-<p>Fluent Radial Menu adds a circular launcher to Windows 11. It comes with
-three pages of apps, folders, Windows shortcuts, and screen capture tools.</p>
-<p><img src="https://i.imgur.com/fj0r5vV.gif" alt="Fluent Radial Menu in action"></p>
-<h2>Getting started</h2>
-<ol>
-<li>Enable the mod in Windhawk and press <strong>Ctrl+Alt+Space</strong> to open the wheel
-at the pointer. To change the shortcut, set <strong>Activation shortcut</strong> in the
-mod's Windhawk settings and click <strong>Save settings</strong>.</li>
-<li>Click a wedge to run its action. Scroll to switch pages or press <strong>Esc</strong>
-to dismiss the wheel. You can also use the arrow keys, <strong>Enter</strong>, and
-<strong>Page Up</strong> or <strong>Page Down</strong>.</li>
-<li>Press <strong>F2</strong> while the wheel is open, or right-click it and choose
-<strong>Edit radial menu</strong>, to open the built-in editor.</li>
-</ol>
-<p>The wheel stays closed while the foreground app is fullscreen.</p>
-<h2>Screen capture tools</h2>
-<p>Choose <strong>Color picker</strong> on the first page to open the capture toolbar at the
-top center of the display under the pointer. Use the toolbar to switch to
-<strong>Copy text from screen</strong>. In the color picker, the magnifier shows the exact pixel
-under the pointer, its <strong>#RRGGBB</strong> value, and its screen coordinates. Click
-to copy that color, or drag around text in the text tool. A confirmation
-appears after copying. Press <strong>Esc</strong> to cancel. Text recognition runs locally
-using Windows OCR and the recognition languages installed for your account.</p>
-<p>To add either tool to an existing layout, select a wedge in <strong>Actions</strong> and
-choose it from <strong>Action type</strong>.</p>
-<h2>Make it yours</h2>
-<ul>
-<li><strong>Actions</strong> lets you choose an installed app, folder, file, website,
-Windows settings page, keyboard shortcut, command, or capture tool. Select <strong>Custom…</strong>
-to browse for a local target. Choose the original app icon, a built-in
-symbol, or an icon file. Drag a wedge in the preview to move or swap it.</li>
-<li><strong>Pages</strong> lets you add, rename, reorder, or duplicate up to eight pages
-with eight slots each.</li>
-<li><strong>Appearance</strong> controls the theme, accent, size, transparency, blur, and
-labels. <strong>Motion &amp; activation</strong> controls the profile shortcut, positioning,
-and animation. It can follow Windows' reduced motion setting.</li>
-<li><strong>Apply</strong> saves your changes. <strong>Test on desktop</strong> opens the applied wheel
-with actions disabled.</li>
-</ul>
-<h2>Share or back up a layout</h2>
-<p><strong>Export profile</strong> saves the current editor layout and settings as JSON.
-<strong>Import profile</strong> opens a profile in the editor. Review its actions and
-select <strong>Apply</strong> when you are ready to use it. Shared profiles reference apps,
-folders, and custom icon files by path, so those may need to be updated on
-another PC. The built-in icons travel with the profile.</p>
-<p>A shortcut set in Windhawk takes priority over the profile shortcut. Clear
-the Windhawk field to use the profile shortcut again. In <strong>Motion &amp; activation</strong>,
-focus <strong>Profile shortcut</strong> and press the middle button or either side button
-to record it. Hold any modifiers you want to include, then click <strong>Apply</strong>.
-A mouse shortcut toggles the wheel. <strong>Hold keyboard shortcut to select</strong> applies
-to keyboard activation. Check the Windhawk mod log if Windows cannot register
-a new shortcut.</p>
-<p>On 64-bit Windows, the menu opens native system apps from either Windhawk
-host. In the 32-bit file picker, enter <strong>%WINDIR%\Sysnative</strong> in the address
-bar to browse the native System32 folder. The editor saves those selections
-as System32 paths so the same profile works in the 64-bit host.</p>
-]]></content>
-        <author>
-            <name>Fenryr</name>
-            <uri>https://github.com/soldier93HUN</uri>
         </author>
     </entry>
 </feed>
