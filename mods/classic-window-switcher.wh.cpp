@@ -2752,7 +2752,6 @@ void sws_WindowSwitcher_Paint(sws_WindowSwitcher* _this, DWORD dwFlags)
             RGBQUAD rgbEnd = { b, g, r, 0xFF };
             RGBQUAD rgbFinal;
 
-
             sws_tshwnd* tshWnd = NULL;
             if (pWindowList)
             {
