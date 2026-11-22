@@ -32,7 +32,7 @@ It only adds to start tracking and for the speed multiplier: **never moves the p
 
 ## 4 and 3 finger tracking
 
-The options to start with four or three fingers conflict with the respective Windows swipes. **Disable them in Settings → Bluetooth & devices → Touchpad → Four-finger gestures (or Three) → Swipes: Nothing**. Otherwise Windows simultaneously triggers the swipe. Four and three-finger taps can keep their actions. If the [Three Finger Drag](https://windhawk.net/mods/three-finger-drag) is installed, both mods will respond also respond.
+The options to start with four or three fingers conflict with the respective Windows swipes. **Disable them in Settings → Bluetooth & devices → Touchpad → Four-finger gestures (or Three) → Swipes: Nothing**. Otherwise Windows simultaneously triggers the swipe. Four and three-finger taps can keep their actions. If [Three Finger Drag](https://windhawk.net/mods/three-finger-drag) is installed, both mods will also respond.
 
 ## 2-finger tracking
 
@@ -341,7 +341,7 @@ constexpr double kPinchMm = 0.2;
 // Frames processed back to back would give a near-zero interval and spike the measured speed.
 constexpr double kMinFrameSec = 0.005;
 
-std::atomic<double> g_multMore{1.5};
+std::atomic<double> g_multMore{2.0};
 std::atomic<DWORD> g_lastReportTick;
 std::atomic<DWORD> g_pinchTick;
 std::atomic<double> g_multLess{1.0};
@@ -608,7 +608,7 @@ bool ParseHotkey(PCWSTR text, UINT& mods, UINT& key) {
 }
 
 void LoadSettings() {
-    g_multMore = ReadMultiplier(L"multiplierMore", 1.5);
+    g_multMore = ReadMultiplier(L"multiplierMore", 2.0);
     g_multLess = ReadMultiplier(L"multiplierLess", 1.0);
     g_armTwo = Wh_GetIntSetting(L"armTwo");
     UINT mods = 0;
@@ -3428,7 +3428,8 @@ void ProcessFrame() {
             if (!g_state.fewSince) {
                 g_state.fewSince = now | 1;
             }
-            if (now - g_state.fewSince >= kFewHoldMs) {
+            // Signed: with now even, fewSince is now + 1, one ms ahead.
+            if ((LONG)(now - g_state.fewSince) >= (LONG)kFewHoldMs) {
                 g_state.fewMoving = true;
             }
         } else {
