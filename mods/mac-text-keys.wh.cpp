@@ -29,12 +29,18 @@ Holding **Shift** as well extends the selection, as expected.
 ## Notes
 - The mod runs in a dedicated background `windhawk.exe` process and uses a
   global low-level keyboard hook, so it works in every application.
+- The remapping applies everywhere, not only in text fields. For example,
+  Alt+Left/Right no longer go Back/Forward in browsers, File Explorer and
+  Settings, and Ctrl+Left/Right lose app-specific meanings (such as jumping to
+  the edge of a data region in Excel). Use the "Excluded programs" setting for
+  apps where you want the original behavior.
 - Windows running as administrator are not affected unless Windhawk itself
   runs elevated (a Windows security restriction).
 - Ctrl+Alt combinations (including AltGr) and combinations with the Win key
   are left untouched.
-- Use the "Excluded programs" setting to disable the remapping in specific
-  applications (e.g. games, remote desktop clients).
+- Modifiers produced by remapping tools that inject input (e.g. PowerToys
+  Keyboard Manager, AutoHotkey) are not recognized. Remaps done through the
+  scancode map (e.g. SharpKeys) work.
 */
 // ==/WindhawkModReadme==
 
@@ -50,10 +56,13 @@ Holding **Shift** as well extends the selection, as expected.
   - ""
   $name: Excluded programs
   $description: >-
-    Executable names (e.g. mstsc.exe) where the remapping is disabled.
+    Executable names (e.g. mstsc.exe) where the remapping is disabled. The
+    process of the foreground window is matched, so UWP apps hosted by
+    ApplicationFrameHost.exe can't be excluded by their own executable name.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <windows.h>
 
 #include <string>
@@ -78,15 +87,12 @@ void LoadSettings() {
 
     g_settings.excludedPrograms.clear();
     for (int i = 0;; i++) {
-        PCWSTR program = Wh_GetStringSetting(L"excludedPrograms[%d]", i);
-        bool hasValue = *program;
-        if (hasValue) {
-            g_settings.excludedPrograms.push_back(program);
-        }
-        Wh_FreeStringSetting(program);
-        if (!hasValue) {
+        auto program =
+            WindhawkUtils::StringSetting::make(L"excludedPrograms[%d]", i);
+        if (!*program.get()) {
             break;
         }
+        g_settings.excludedPrograms.push_back(program.get());
     }
 
     ReleaseSRWLockExclusive(&g_settingsLock);
@@ -95,11 +101,9 @@ void LoadSettings() {
 ////////////////////////////////////////////////////////////////////////////////
 // Keyboard remapping
 
-// Marks input injected by this mod.
-constexpr ULONG_PTR kInjectedMagic = 0x4D41434B;  // "MACK"
-
-// An unassigned virtual key, sent around Alt release/press so that Windows
-// doesn't treat it as a lone Alt tap (which would activate the menu bar).
+// An unassigned virtual key, sent around injected modifier changes so that
+// Windows doesn't treat them as a lone Alt tap (which would activate the menu
+// bar) or as the Alt+Shift / Ctrl+Shift input language hotkey.
 constexpr WORD kMaskVk = 0xE8;
 
 HHOOK g_keyboardHook;
@@ -111,13 +115,23 @@ struct {
     bool lctrl, rctrl, lalt, ralt, lwin, rwin;
 } g_phys;
 
-// Arrow keys whose key-down was swallowed, so their key-up must be swallowed
-// too.
-bool g_swallowKeyUp[256];
+// Per arrow key: whether a key-down was swallowed / passed through since the
+// last key-up. The key-up is swallowed only if no key-down was passed through,
+// so that the key never stays logically pressed.
+bool g_keyDownSwallowed[256];
+bool g_keyDownPassed[256];
 
-// Set after we re-pressed Alt with injected input. The next physical Alt
-// release must be preceded by a mask key to avoid activating the menu bar.
-bool g_altNeedsMask;
+// The hook doesn't see releases made on the secure desktop / lock screen or in
+// elevated windows, so drop tracked modifiers that are no longer down.
+void ResyncModifiers() {
+    auto down = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
+    g_phys.lctrl = g_phys.lctrl && down(VK_LCONTROL);
+    g_phys.rctrl = g_phys.rctrl && down(VK_RCONTROL);
+    g_phys.lalt = g_phys.lalt && down(VK_LMENU);
+    g_phys.ralt = g_phys.ralt && down(VK_RMENU);
+    g_phys.lwin = g_phys.lwin && down(VK_LWIN);
+    g_phys.rwin = g_phys.rwin && down(VK_RWIN);
+}
 
 bool IsExtendedKey(WORD vk) {
     switch (vk) {
@@ -127,8 +141,6 @@ bool IsExtendedKey(WORD vk) {
         case VK_END:
         case VK_LEFT:
         case VK_RIGHT:
-        case VK_UP:
-        case VK_DOWN:
             return true;
     }
     return false;
@@ -141,7 +153,6 @@ void AddKey(std::vector<INPUT>& inputs, WORD vk, bool down) {
     input.ki.wScan = (WORD)MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
     input.ki.dwFlags = (down ? 0 : KEYEVENTF_KEYUP) |
                        (IsExtendedKey(vk) ? KEYEVENTF_EXTENDEDKEY : 0);
-    input.ki.dwExtraInfo = kInjectedMagic;
     inputs.push_back(input);
 }
 
@@ -210,12 +221,14 @@ void SendLineNavigation(WORD arrowVk) {
     WORD targetVk = arrowVk == VK_LEFT ? VK_HOME : VK_END;
 
     std::vector<INPUT> inputs;
+    AddMask(inputs);
     if (g_phys.lctrl) AddKey(inputs, VK_LCONTROL, false);
     if (g_phys.rctrl) AddKey(inputs, VK_RCONTROL, false);
     AddKey(inputs, targetVk, true);
     AddKey(inputs, targetVk, false);
     if (g_phys.lctrl) AddKey(inputs, VK_LCONTROL, true);
     if (g_phys.rctrl) AddKey(inputs, VK_RCONTROL, true);
+    AddMask(inputs);
     Send(inputs);
 }
 
@@ -231,9 +244,9 @@ void SendWordNavigation(WORD arrowVk) {
     AddKey(inputs, VK_LCONTROL, false);
     if (g_phys.lalt) AddKey(inputs, VK_LMENU, true);
     if (g_phys.ralt) AddKey(inputs, VK_RMENU, true);
+    // Also makes the later physical Alt release not count as a lone Alt tap.
+    AddMask(inputs);
     Send(inputs);
-
-    g_altNeedsMask = true;
 }
 
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
@@ -255,62 +268,46 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     switch (vk) {
         case VK_LCONTROL: g_phys.lctrl = isDown; break;
         case VK_RCONTROL: g_phys.rctrl = isDown; break;
+        case VK_LMENU:    g_phys.lalt = isDown;  break;
+        case VK_RMENU:    g_phys.ralt = isDown;  break;
         case VK_LWIN:     g_phys.lwin = isDown;  break;
         case VK_RWIN:     g_phys.rwin = isDown;  break;
-
-        case VK_LMENU:
-        case VK_RMENU:
-            if (vk == VK_LMENU) {
-                g_phys.lalt = isDown;
-            } else {
-                g_phys.ralt = isDown;
-            }
-
-            if (!isDown && g_altNeedsMask) {
-                if (!g_phys.lalt && !g_phys.ralt) {
-                    g_altNeedsMask = false;
-                }
-
-                // Replace the release with mask + release, so that the
-                // injected Alt press followed by this release isn't seen as a
-                // lone Alt tap.
-                std::vector<INPUT> inputs;
-                AddMask(inputs);
-                AddKey(inputs, (WORD)vk, false);
-                Send(inputs);
-                return 1;
-            }
-            break;
 
         case VK_LEFT:
         case VK_RIGHT: {
             if (!isDown) {
-                if (g_swallowKeyUp[vk]) {
-                    g_swallowKeyUp[vk] = false;
+                bool swallow =
+                    g_keyDownSwallowed[vk] && !g_keyDownPassed[vk];
+                g_keyDownSwallowed[vk] = false;
+                g_keyDownPassed[vk] = false;
+                if (swallow) {
                     return 1;
                 }
                 break;
             }
 
+            ResyncModifiers();
+
             bool ctrl = g_phys.lctrl || g_phys.rctrl;
             bool alt = g_phys.lalt || g_phys.ralt;
             bool win = g_phys.lwin || g_phys.rwin;
 
+            bool remap = false;
+
             // Leave Win combos and Ctrl+Alt (incl. AltGr) untouched.
-            if (win || (ctrl && alt) || (!ctrl && !alt)) {
-                break;
+            if (!win && ctrl != alt) {
+                AcquireSRWLockShared(&g_settingsLock);
+                remap = ctrl ? g_settings.lineNavigation
+                             : g_settings.wordNavigation;
+                ReleaseSRWLockShared(&g_settingsLock);
+
+                if (remap && IsForegroundProgramExcluded()) {
+                    remap = false;
+                }
             }
 
-            AcquireSRWLockShared(&g_settingsLock);
-            bool lineNavigation = g_settings.lineNavigation;
-            bool wordNavigation = g_settings.wordNavigation;
-            ReleaseSRWLockShared(&g_settingsLock);
-
-            if ((ctrl && !lineNavigation) || (alt && !wordNavigation)) {
-                break;
-            }
-
-            if (IsForegroundProgramExcluded()) {
+            if (!remap) {
+                g_keyDownPassed[vk] = true;
                 break;
             }
 
@@ -320,7 +317,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 SendWordNavigation((WORD)vk);
             }
 
-            g_swallowKeyUp[vk] = true;
+            g_keyDownSwallowed[vk] = true;
             return 1;
         }
     }
@@ -395,6 +392,13 @@ void WhTool_ModUninit() {
 // https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 //
 // The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -405,7 +409,13 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
@@ -416,8 +426,10 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -434,7 +446,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
