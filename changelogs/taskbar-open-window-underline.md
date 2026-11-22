@@ -1,3 +1,11 @@
+## 3.0 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2214e334e52e6413067f7a482297194134e08ac5/mods/taskbar-open-window-underline.wh.cpp))
+
+* The experimental icon underline has been removed. It now lives in its own mod, [Taskbar App State Indicators](https://windhawk.net/mods/taskbar-app-state-indicators), which marks taskbar icons for open, maximized and minimized windows and works with hidden labels. The README points there too. If you only used the icon underline, you can disable this mod after installing Taskbar App State Indicators.
+* The Label underline "Enabled" toggle has been removed; it only existed to use the icon underline on its own.
+* The settings are no longer split into sections. They are listed in this order: What to underline, Underline style, Buttons with several windows, Count the foreground window as shown, Treat cloaked windows as not shown, Hide the running indicator, Refresh delay.
+* Code that only served the icon underline has been cleaned out; the label underline behaves as before.
+* Note: the setting keys moved again, so all options return to their defaults after updating and need to be set again.
+
 ## 2.2 ([Nov 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/760ce4fac59ca52beb92cb59e5297f386bd6607b/mods/taskbar-open-window-underline.wh.cpp))
 
 * Settings are now grouped into **General**, **Label underline** and **Icon underline**. General holds the options that apply to both underlines: what to underline, buttons with several windows, the foreground and cloaked-window options, the refresh delay and hiding the running indicator.

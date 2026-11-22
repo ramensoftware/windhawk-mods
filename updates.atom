@@ -2,12 +2,78 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-22T20:01:13.000Z</updated>
+    <updated>2026-11-22T21:03:00.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Sharp Taskbar Icons After Remote Desktop 1.0]]></title>
+        <id>https://windhawk.net/mods/rdp-icon-refresh#bab10f73f69576c9cbd26dc6e0c9f866dfb7c321</id>
+        <link href="https://windhawk.net/mods/rdp-icon-refresh"/>
+        <updated>2026-11-22T21:03:00.000Z</updated>
+        <content type="html"><![CDATA[<h1>Sharp Taskbar Icons After Remote Desktop</h1>
+<p>Connecting with Remote Desktop from a device with a different display scale (for example
+the Microsoft Remote Desktop app on a phone, at 200–300%) switches the session to that
+scale, and Explorer renders the tray icons for it. When you come back to the local screen,
+Explorer doesn't render them again from the programs' icons — it rescales the copies it
+already made, so they stay blurry until the program or Explorer is restarted.</p>
+<p><img src="https://raw.githubusercontent.com/Solomag/windhawk-assets/main/rdp-icon-refresh/before-after.png" alt="Tray icons after a Remote Desktop session, before and after the refresh"></p>
+<p>This mod asks Explorer to render the icons again. For the tray it uses the copy of each
+icon that Explorer itself keeps for the tray button; as a fallback (for icons it can't
+find there), it remembers the icon each program gives the tray, by watching the
+<code>WM_COPYDATA</code> messages that <code>Shell_NotifyIcon</code> sends to the taskbar and Explorer's
+answers to them. When the session returns to the local console, it waits until the
+scale has stayed the same for a few seconds (Explorer may pass through an intermediate
+scale, and turns tray requests down while it rebuilds the taskbar) and then:</p>
+<ul>
+<li>asks Explorer to render every tray icon again (<code>NIM_MODIFY</code> with the icon Explorer
+itself keeps for that tray button, or the program's own icon handle for icons that
+aren't in the tray toolbars — what happens when the program is restarted, but
+without restarting anything). Explorer's copy is used because many programs destroy
+the handle they give the tray right after giving it;</li>
+<li>asks the taskbar to re-read the icon of every top-level window (<code>HSHELL_REDRAW</code>
+through the taskbar's shell hook message). Buttons of pinned programs that aren't
+running are not refreshed.</li>
+</ul>
+<p>If Explorer turns most tray icons down because it is still busy, or the scale changes
+again, the tray is refreshed again (for about a minute after returning).</p>
+<p>While the remote session is active, the mod checks the taskbar's scale every few
+seconds. If it never differed from the local screen's scale, nothing is done. The
+Windhawk log shows the scales and how many icons were refreshed.</p>
+<p>Icons that existed before the mod was enabled are handled too: their copies are read
+from the tray at refresh time. The exception is an icon a program registered by GUID
+before the mod was loaded: Explorer only accepts it by its GUID, which the mod learns
+when the program registers or updates the icon. Nothing is sent to other programs.</p>
+<p>Made for the Windows 10 taskbar (tested on Windows 10 22H2), and for Windows 11 versions
+whose taskbar still behaves like it; not tested on the newer Windows 11 taskbar. The
+newer Windows 11 (XAML) notification area has no tray toolbars, so there only icons
+registered while the mod was running are refreshed.</p>
+]]></content>
+        <author>
+            <name>Solo_mag</name>
+            <uri>https://github.com/Solomag</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Open Window Underline 3.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-open-window-underline#2214e334e52e6413067f7a482297194134e08ac5</id>
+        <link href="https://windhawk.net/mods/taskbar-open-window-underline"/>
+        <updated>2026-11-22T21:02:55.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The experimental icon underline has been removed. It now lives in its own mod, <a href="https://windhawk.net/mods/taskbar-app-state-indicators">Taskbar App State Indicators</a>, which marks taskbar icons for open, maximized and minimized windows and works with hidden labels. The README points there too. If you only used the icon underline, you can disable this mod after installing Taskbar App State Indicators.</li>
+<li>The Label underline &quot;Enabled&quot; toggle has been removed; it only existed to use the icon underline on its own.</li>
+<li>The settings are no longer split into sections. They are listed in this order: What to underline, Underline style, Buttons with several windows, Count the foreground window as shown, Treat cloaked windows as not shown, Hide the running indicator, Refresh delay.</li>
+<li>Code that only served the icon underline has been cleaned out; the label underline behaves as before.</li>
+<li>Note: the setting keys moved again, so all options return to their defaults after updating and need to be set again.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[ZoneShift - Per-App Timezone Spoofer 1.0.0]]></title>
         <id>https://windhawk.net/mods/zoneshift#5ffe64b9a51c9ea00a038ef3b7c018694838eff7</id>
@@ -731,73 +797,6 @@ sections:</p>
         <author>
             <name>Deen-0x</name>
             <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Siri Plus Launchpad 1.3.0]]></title>
-        <id>https://windhawk.net/mods/siri-plus-launchpad#039477d3c35bbc563d7fb23074499391aaa47425</id>
-        <link href="https://windhawk.net/mods/siri-plus-launchpad"/>
-        <updated>2026-11-22T01:02:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Themes reorganized</strong>: Glass (clear glass, as in the Mac OS 27 Finder Bar), Liquid glass and Custom glass, plus Light, Siri, Dark and OLED. Each theme keeps its own customization right under it in Appearance, the panel only shows what applies to the chosen theme and mode, and <em>Restore theme defaults</em> brings a theme back to how the mod comes.</li>
-<li><strong>Glass buttons</strong>: buttons, tabs, shortcut keys, menu icons and the settings controls drawn as clear, polished glass (can be turned off).</li>
-<li><strong>Animated backlight</strong> (off by default): a colored glow around the bar, the results box, the menus and the buttons, with 1 to 5 colors turning around them and an intensity setting.</li>
-<li><strong>Chrome details</strong>: an animated chrome border around the bar, the box and the menus (on by default only on OLED) and a chrome ring on the settings button under the mouse. They work on every theme: graphite on light surfaces, and still in Fullscreen. Both can be turned off.</li>
-<li><strong>Every selection in every theme</strong>: Glass, Colored, Frosted color and Two colors blended, with their colors, for the menus <strong>and the search results</strong> (the result under the mouse and the one Enter opens), instead of a dim veil.</li>
-<li><strong>OLED starts deep black</strong>: no glass effect and no backlight by default.</li>
-<li><strong>Text size of the results</strong>: 80 to 160 % (Apps and icons); rows grow with bigger text.</li>
-<li><strong>The settings window's own look</strong>: follow the theme, or a light or dark glass of its own with its own blur and transparency (Backup and defaults).</li>
-<li><strong>macOS-style alerts</strong>: backup and restore messages and confirmations (also &quot;already exists, replace it?&quot;) are drawn inside the launcher, in the settings window's look, instead of Windows message boxes.</li>
-<li><strong>Floating mode</strong>:
-<ul>
-<li>The results box can open on mouse over.</li>
-<li>Files and Clipboard stay open with nothing typed: recent searches, copied items, or a line saying there are none yet.</li>
-<li>Applications gets the app tabs (All, the categories and your own tabs) in a row under the categories, and the first row of recent or most used apps, as in Original Siri.</li>
-<li>Several selected apps can be put in a tab, added to a tab or removed from it at once.</li>
-</ul>
-</li>
-<li><strong>Search ignores accents</strong> (on by default, can be turned off): &quot;acao&quot; also finds &quot;ação&quot; and the other way around, in apps, files, actions and the other categories.</li>
-<li><strong>Phone category (Phone Link)</strong>, off by default, in its own settings section:
-<ul>
-<li>The linked phone (battery and connection) and its notifications as they arrive.</li>
-<li>Shortcuts to Messages, Calls, Photos and Send files.</li>
-<li>Notifications can be cleared one by one or all at once, and they scroll inside the box when there are more than it shows (1 to 10).</li>
-<li>Ctrl+5 opens it in Original Siri.</li>
-<li>Everything is read on this PC only; nothing in Phone Link is changed.</li>
-</ul>
-</li>
-<li><strong>Fixed</strong>: Glass and Liquid glass no longer look smudged; they blur the background themselves in every mode.</li>
-<li><strong>Fixed</strong>: lowering the glass transparency no longer turns the glass smoky.</li>
-<li><strong>Fixed</strong>: Light performance mode no longer looks yellowish over light wallpapers.</li>
-<li><strong>Fixed</strong>: the Glass effect option now works on Dark and OLED.</li>
-<li><strong>Fixed</strong>: Liquid glass now bends all four edges.</li>
-<li><strong>Fixed</strong>: in lists with a remove button (Clipboard, Phone), the hover highlight no longer covers the button or the scroll bar.</li>
-<li><strong>Fixed</strong>: the Phone tab was missing in Floating and Window modes.</li>
-<li><strong>Fixed</strong>: the &quot;Recent searches&quot; title was cut off in translated languages.</li>
-<li><strong>Fixed</strong>: folders and tabs could be lost on PCs with very many apps in portable Windhawk.</li>
-<li><strong>Fixed</strong>: a Ctrl+click on empty space could crash Explorer.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Thiago Silva</name>
-            <uri>https://github.com/brideinflame-rgb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Adobe Dark Menus 1.2.0]]></title>
-        <id>https://windhawk.net/mods/adobe-dark-menus#010db23e5452d774a1da74265b441c8a33fb5564</id>
-        <link href="https://windhawk.net/mods/adobe-dark-menus"/>
-        <updated>2026-11-22T00:00:39.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The Effect submenu of the After Effects right-click menu now opens as one dark column that scrolls, like the Effect menu on the menu bar.</li>
-<li>Added a Scroll Long Menus with the Mouse Wheel setting, on by default: the mouse wheel now scrolls a menu taller than the screen.</li>
-<li>Added a Darken Photoshop Message Boxes setting, on by default: Photoshop's message boxes, such as the prompt to save changes, are now dark.</li>
-<li>Title Bar Color and Title Bar Text Color now say they need Windows 11, and sit right after Border Color in the settings.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Saber Naeemi</name>
-            <uri>https://github.com/sabergraphics</uri>
         </author>
     </entry>
 </feed>
