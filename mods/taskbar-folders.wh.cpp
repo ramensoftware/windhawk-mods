@@ -2163,6 +2163,7 @@ struct FolderButton {
     DWORD threadId = 0;
     std::wstring folderId;
     winrt::event_token enteredToken{};
+    winrt::event_token loadedToken{};
     winrt::weak_ref<wux::FrameworkElement> iconPanel;
     winrt::weak_ref<wux::Controls::Image> icon;
     wux::Media::ImageSource originalSource{nullptr};
@@ -2257,8 +2258,40 @@ static wux::Media::ImageSource MakeImageSource(const tbf::Bgra& image) {
     return bitmap;
 }
 
+// Thread du conteneur uniquement. Au démarrage d'explorer.exe, le premier
+// UpdateVisualStates arrive avant l'application du modèle XAML du bouton :
+// IconPanel et Image#Icon n'existent pas encore, on les recherche tant qu'ils manquent.
+static bool ResolveIconParts(FolderButton& state, const wux::FrameworkElement& element) {
+    if (state.icon.get()) {
+        return true;
+    }
+    auto iconPanel = state.iconPanel.get();
+    if (!iconPanel) {
+        iconPanel = FindChildByName(element, L"IconPanel");
+        if (!iconPanel) {
+            return false;
+        }
+        // L'infobulle du bouton de Windows 11 est aussi portée par l'IconPanel.
+        const auto toolTipProperty = wux::Controls::ToolTipService::ToolTipProperty();
+        state.iconPanel = winrt::make_weak(iconPanel);
+        state.originalIconPanelToolTip = iconPanel.ReadLocalValue(toolTipProperty);
+        wux::Controls::ToolTipService::SetToolTip(iconPanel, winrt::Windows::Foundation::IInspectable{nullptr});
+    }
+    auto image = FindChildByName(iconPanel, L"Icon").try_as<wux::Controls::Image>();
+    if (!image) {
+        return false;
+    }
+    state.icon = winrt::make_weak(image);
+    state.originalSource = image.Source();
+    return true;
+}
+
 // Thread du conteneur uniquement.
 static void ApplyFolderVisuals(FolderButton& state) {
+    auto element = state.element.get();
+    if (!element || !ResolveIconParts(state, element)) {
+        return;
+    }
     auto image = state.icon.get();
     auto grid = FindMiniGrid(state.folderId);
     if (!image || !grid || grid->image.Empty()) {
@@ -2276,10 +2309,8 @@ static void ApplyFolderVisuals(FolderButton& state) {
     image.Source(source);
     state.appliedSource = source;
     state.appliedGeneration = grid->generation;
-    if (auto element = state.element.get()) {
-        if (auto folder = FindFolder(state.folderId)) {
-            wux::Automation::AutomationProperties::SetHelpText(element, folder->name);
-        }
+    if (auto folder = FindFolder(state.folderId)) {
+        wux::Automation::AutomationProperties::SetHelpText(element, folder->name);
     }
 }
 
@@ -2288,6 +2319,9 @@ static void ReleaseFolderButton(FolderButton& state) {
     auto element = state.element.get();
     if (element && state.enteredToken) {
         element.PointerEntered(state.enteredToken);
+    }
+    if (element && state.loadedToken) {
+        element.Loaded(state.loadedToken);
     }
     if (auto image = state.icon.get()) {
         if (state.appliedSource && image.Source() == state.appliedSource) {
@@ -2303,6 +2337,7 @@ static void ReleaseFolderButton(FolderButton& state) {
         RestoreLocalValue(iconPanel, toolTipProperty, state.originalIconPanelToolTip);
     }
     state.enteredToken = {};
+    state.loadedToken = {};
     state.appliedSource = nullptr;
     state.appliedGeneration = 0;
 }
@@ -2332,23 +2367,29 @@ static std::shared_ptr<FolderButton> AttachFolderButton(const wux::FrameworkElem
         });
 
     // L'infobulle du bouton de Windows 11 est portée par le ToolTipService XAML
-    // du bouton et de son IconPanel : on la coupe sur les deux.
+    // du bouton et de son IconPanel (coupée par ResolveIconParts) : on la coupe sur les deux.
     const auto toolTipProperty = wux::Controls::ToolTipService::ToolTipProperty();
-    const winrt::Windows::Foundation::IInspectable noToolTip{nullptr};
     state->originalButtonToolTip = element.ReadLocalValue(toolTipProperty);
-    wux::Controls::ToolTipService::SetToolTip(element, noToolTip);
+    wux::Controls::ToolTipService::SetToolTip(element, winrt::Windows::Foundation::IInspectable{nullptr});
 
-    if (auto iconPanel = FindChildByName(element, L"IconPanel")) {
-        state->iconPanel = winrt::make_weak(iconPanel);
-        state->originalIconPanelToolTip = iconPanel.ReadLocalValue(toolTipProperty);
-        wux::Controls::ToolTipService::SetToolTip(iconPanel, noToolTip);
-        if (auto image = FindChildByName(iconPanel, L"Icon").try_as<wux::Controls::Image>()) {
-            state->icon = winrt::make_weak(image);
-            state->originalSource = image.Source();
-        }
-    }
-    if (!state->icon.get()) {
-        Wh_Log(L"[XAML] Image#Icon not found for %s: keeping the static icon", folderId.c_str());
+    if (!ResolveIconParts(*state, element)) {
+        // Modèle pas encore appliqué : on réessaie au chargement du bouton
+        // (puis à chaque UpdateVisualStates) au lieu d'attendre un survol.
+        Wh_Log(L"[XAML] Image#Icon not ready for %s: waiting for the button to load", folderId.c_str());
+        state->loadedToken = element.Loaded(
+            [weak](winrt::Windows::Foundation::IInspectable const&, wux::RoutedEventArgs const&) {
+                try {
+                    auto self = weak.lock();
+                    if (!self || g_unloading) {
+                        return;
+                    }
+                    ApplyFolderVisuals(*self);
+                    if (!self->icon.get()) {
+                        Wh_Log(L"[XAML] Image#Icon still missing for %s after Loaded", self->folderId.c_str());
+                    }
+                } catch (...) {
+                }
+            });
     }
 
     std::lock_guard lock(g_buttonsMutex);
