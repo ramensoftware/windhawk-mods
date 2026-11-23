@@ -43,6 +43,8 @@ else in the mod keeps working.
 #include <uxtheme.h>
 #include <winevt.h>
 #include <gdiplus.h>
+#include <regex>
+#include <string>
 #include <vector>
 
 #ifndef WM_POPUPSYSTEMMENU
@@ -518,7 +520,7 @@ constexpr UINT NCF_MAX_ENABLED   = 0x2000;
 constexpr UINT NCF_ICON          = 0x10000;
 constexpr UINT NCF_SYSMENU       = 0x0080;
 
-static size_t g_windowDataHwndOffset = 0;
+static size_t g_windowDataHwndOffset = SIZE_MAX;
 
 using IsImmersiveWindow_t = bool(*)(const void *pWindowData);
 IsImmersiveWindow_t CWindowData_IsImmersiveWindow;
@@ -528,37 +530,36 @@ static void *CWindowData_IsGhostWindow;
 using GetCurrentStyle_t = UINT(*)(const void *pWindowData, bool);
 GetCurrentStyle_t GetCurrentStyle_orig;
 
-static bool FindHwndOffsetInIsGhostWindow(const BYTE *code, size_t *pOffset)
+static size_t OffsetFromAssemblyRegex(void *func,
+                                      size_t defaultOffset,
+                                      const std::regex &regex,
+                                      int limit)
 {
-    constexpr size_t kScanSize = 0x40;
-
-    for (size_t i = 0; i + 7 <= kScanSize; i++)
+    BYTE *p = (BYTE *)func;
+    for (int i = 0; i < limit; i++)
     {
-        size_t offset = 0;
-
-        if (code[i] == 0x48 && code[i + 1] == 0x8B &&
-            (code[i + 2] == 0x49 || code[i + 2] == 0x41))
+        WH_DISASM_RESULT result;
+        if (!Wh_Disasm(p, &result))
         {
-            offset = code[i + 3];
-        }
-        else if (code[i] == 0x48 && code[i + 1] == 0x8B &&
-                 (code[i + 2] == 0x89 || code[i + 2] == 0x81))
-        {
-            offset = *(const DWORD *)(code + i + 3);
-        }
-        else
-        {
-            continue;
+            break;
         }
 
-        if (offset != 0 && offset < 0x1000 && (offset % sizeof(void *)) == 0)
+        p += result.length;
+
+        std::string s(result.text);
+        if (s == "ret")
         {
-            *pOffset = offset;
-            return true;
+            break;
+        }
+
+        std::smatch match;
+        if (std::regex_match(s, match, regex))
+        {
+            return (size_t)std::stoull(match[1].str(), nullptr, 16);
         }
     }
 
-    return false;
+    return defaultOffset;
 }
 
 static HWND GetWindowDataHwnd(const void *pWindowData)
@@ -618,8 +619,7 @@ static BOOL DwmModInit()
         },
         {
             {
-                L"public: bool __cdecl CWindowData::IsGhostWindow(void)const ",
-                L"private: bool __cdecl CWindowData::IsGhostWindow(void)const ",
+                L"public: bool __cdecl CWindowData::IsGhostWindow(struct HWND__ * *)const ",
             },
             (void **)&CWindowData_IsGhostWindow,
             nullptr,
@@ -632,8 +632,17 @@ static BOOL DwmModInit()
         return FALSE;
     }
 
-    if (!FindHwndOffsetInIsGhostWindow((const BYTE *)CWindowData_IsGhostWindow,
-                                       &g_windowDataHwndOffset))
+    g_windowDataHwndOffset = OffsetFromAssemblyRegex(
+        CWindowData_IsGhostWindow, SIZE_MAX,
+#if defined(_M_X64)
+        std::regex(R"(mov \w+, \[rcx\+0x([0-9a-f]+)\])", std::regex_constants::icase),
+#elif defined(_M_ARM64)
+        std::regex(R"(ldr\s+\w+, \[x0, #0x([0-9a-f]+)\])", std::regex_constants::icase),
+#else
+#error "Unsupported architecture"
+#endif
+        10);
+    if (g_windowDataHwndOffset == SIZE_MAX)
     {
         Wh_Log(L"Failed to find HWND offset in CWindowData");
         return FALSE;
@@ -789,9 +798,9 @@ void Wh_ModUninit()
     {
         if (IsWindow(hWnd))
         {
-            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
             SendMessageW(hWnd, WM_SETICON, ICON_SMALL, 0);
             SendMessageW(hWnd, WM_SETICON, ICON_BIG, 0);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
             DestroyTitlebarIcons(hWnd);
         }
     }
