@@ -2727,7 +2727,7 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
 static bool HookTaskbarDllSymbols() {
     HMODULE h = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!h) return false;
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
@@ -2739,17 +2739,17 @@ static bool HookTaskbarDllSymbols() {
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
          &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
     };
-    if (!WindhawkUtils::HookSymbols(h, hooks, ARRAYSIZE(hooks))) return false;
+    if (!WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) return false;
 
     // Only needed for the monitor on a second taskbar. If these are missing the first taskbar
     // still works, so a failure here is not fatal.
-    WindhawkUtils::SYMBOL_HOOK secondaryHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllSecondaryHooks[] = {
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CSecondaryTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
          &CSecondaryTaskBand_GetTaskbarHost_Original},
     };
-    if (!WindhawkUtils::HookSymbols(h, secondaryHooks, ARRAYSIZE(secondaryHooks)))
+    if (!WindhawkUtils::HookSymbols(h, taskbarDllSecondaryHooks, ARRAYSIZE(taskbarDllSecondaryHooks)))
         Wh_Log(L"CSecondaryTaskBand symbols not found: the monitor can't be shown on a second taskbar");
     return true;
 }
