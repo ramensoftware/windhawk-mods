@@ -14,7 +14,7 @@
 /*
 # Desktop Clock & Weather
 
-![Illustration of the widget (mockup)](https://raw.githubusercontent.com/DineroOne/windhawk-desktop-clock-weather/main/widget-mockup.png)
+![Illustration of the widget (mockup)](https://raw.githubusercontent.com/DineroOne/windhawk-desktop-clock-weather/main/screenshot-small.png)
 
 The widget is drawn directly on the desktop: **above the wallpaper but below icons and folders**,
 so it never intercepts clicks.
