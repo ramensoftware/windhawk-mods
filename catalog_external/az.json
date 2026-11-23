@@ -608,6 +608,34 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3fded2a8922236ec21cde4fff3d70724b37c6209/mods/twinkle-brightness.wh.cpp"
       }
     },
+    "volume-key-step": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795411462779,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795411462779,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Artistro08",
+        "compilerOptions": "-lole32",
+        "description": "Choose how much each volume key press raises or lowers the volume",
+        "github": "https://github.com/artistro08",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Volume Key Step",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7854",
+      "source": {
+        "sha256": "0f4574b2856d9882baf69641cbbea3d7a2729ffd488f08833c69db7302456cd8",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/81879c640468b04eb36377210b4b50d72e70222a/mods/volume-key-step.wh.cpp"
+      }
+    },
     "win7-user-account-page-restorer": {
       "details": {
         "defaultSorting": 0,
