@@ -88,8 +88,8 @@ tint is off, so the number you see is the level the switch brings back.
   - StartLevel: 40
     $name: Extra dim level on start (%)
     $description: "Dimming applied at startup, and the level the Extra dim toggle restores."
-#! $min: 5
-#! $max: 100
+    #! $min: 5
+    #! $max: 100
   - RememberValues: true
     $name: Remember changes
     $description: "Keep the levels and toggles you set across restarts and reboots. When on, remembered values win over the startup level."
@@ -119,18 +119,18 @@ tint is off, so the number you see is the level the switch brings back.
   - CustomAccentColor: "#4285F4"
     $name: Custom accent color
     $description: "Custom color value when Accent color is set to Custom (for example #4285F4)."
-#! $format: colorRgb
-#! $showIf: {AccentColor: custom}
+    #! $format: colorRgb
+    #! $showIf: {AccentColor: custom}
   - Opacity: 96
     $name: Panel opacity (%)
     $description: "Transparency of the panel background. Text and controls stay fully opaque."
-#! $min: 70
-#! $max: 100
+    #! $min: 70
+    #! $max: 100
   - PanelScale: 100
     $name: Panel scale (%)
     $description: "Overall size of the panel, on top of the monitor's own scaling."
-#! $min: 80
-#! $max: 140
+    #! $min: 80
+    #! $max: 140
 - Placement:
   - Position: right
     $name: Screen position
@@ -154,13 +154,13 @@ tint is off, so the number you see is the level the switch brings back.
   - HorizontalOffset: 0
     $name: Horizontal offset (pixels)
     $description: "Fine-tune the horizontal position."
-#! $min: -2000
-#! $max: 2000
+    #! $min: -2000
+    #! $max: 2000
   - VerticalOffset: 0
     $name: Vertical offset (pixels)
     $description: "Fine-tune the vertical position."
-#! $min: -2000
-#! $max: 2000
+    #! $min: -2000
+    #! $max: 2000
   - CloseOnFocusLoss: true
     $name: Close when the panel loses focus
     $description: "Close the panel when you click somewhere else, the way a shell flyout behaves."
@@ -171,18 +171,18 @@ tint is off, so the number you see is the level the switch brings back.
   - DefaultLevel: 40
     $name: Default dim level (%)
     $description: "Level the Extra dim toggle restores when it is switched back on."
-#! $min: 5
-#! $max: 100
+    #! $min: 5
+    #! $max: 100
   - Step: 10
     $name: Step (%)
     $description: "How much one wheel notch, arrow key or hotkey press changes a level."
-#! $min: 1
-#! $max: 25
+    #! $min: 1
+    #! $max: 25
   - Maximum: 90
     $name: Maximum dim level (%)
     $description: "Ceiling for the slider. At 100% the screen is nearly black, which makes it hard to find the controls again."
-#! $min: 30
-#! $max: 100
+    #! $min: 30
+    #! $max: 100
   - Method: overlay
     $name: Dimming method
     $description: "Overlay draws a click-through layer over each display. Gamma lowers the display gamma ramp, which also reaches exclusive fullscreen."
@@ -208,12 +208,12 @@ tint is off, so the number you see is the level the switch brings back.
   - Color: "#FFB56B"
     $name: Warm tint color
     $description: "Color of the warm layer, for example #FFB56B for a soft amber."
-#! $format: colorRgb
+    #! $format: colorRgb
   - DefaultStrength: 0
     $name: Starting tint strength (%)
     $description: "Strength the Warm tint toggle restores. Zero leaves it off at startup."
-#! $min: 0
-#! $max: 60
+    #! $min: 0
+    #! $max: 60
 - Shortcuts:
   - PanelHotkey: ctrl+alt+shift+d
     $name: Open the panel
