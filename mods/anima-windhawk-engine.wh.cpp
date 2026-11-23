@@ -2,7 +2,7 @@
 // @id              anima-windhawk-engine
 // @name            AnimaWindhawkEngine
 // @description     A mod, inspired by AnimaEngine, that doesn't make you pay for it.
-// @version         0.1-alpha
+// @version         0.1
 // @author          TuBeo5866
 // @github          https://github.com/tubeo5866
 // @donateUrl       https://ko-fi.com/tubeo5866
