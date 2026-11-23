@@ -34,6 +34,14 @@ A packaged app's own dynamic icon can be covered by its themed package icon.
 The default active sampling interval is 80 ms. Increase it in Settings to
 sample less frequently. A sharp background boundary can cause brief flicker.
 
+**App icons**
+
+![App icon variants switching as the window moves](https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/30bf07f5435b1cdcedbba3fda84d6ee295572809/images/app-icons.gif)
+
+**Tray, clock and date**
+
+![Tray icons and individual date digits adapting across a window edge](https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/30bf07f5435b1cdcedbba3fda84d6ee295572809/images/tray-clock-date.gif)
+
 ## 中文说明
 
 适用于 Intel 或 AMD x64 电脑上的 Windows 11 透明任务栏。把亮色窗口拖到深色桌面上的时钟后方，
