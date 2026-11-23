@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              anima-windhawk-engine
 // @name            AnimaWindhawkEngine
-// @description     A mod, inspired by AnimaEngine, that doesn't make you pay for it.
-// @version         0.1
+// @description     Displays images, animated GIFs and short clips as draggable desktop widgets.
+// @version         0.1-alpha
 // @author          TuBeo5866
-// @github          https://github.com/TuBeo5866
+// @github          https://github.com/tubeo5866
 // @donateUrl       https://ko-fi.com/tubeo5866
 // @homepage        https://tubb3ll.xyz
 // @include         windhawk.exe
-// @compilerOptions -lkernel32 -lktmw32 -lruntimeobject -lwindowsapp -ldwmapi -luuid -lgdiplus -lgdi32 -lshell32 -luser32 -lcomctl32 -lcomdlg32 -lole32 -lurlmon -luxtheme -lwininet -lshlwapi -lcrypt32 -ladvapi32
+// @compilerOptions -lkernel32 -lruntimeobject -lwindowsapp -ldwmapi -luuid -lgdiplus -lgdi32 -lshell32 -luser32 -lcomctl32 -lcomdlg32 -lole32 -lurlmon -luxtheme -lwininet -lshlwapi -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -18,44 +18,39 @@
 
 # AnimaWindhawkEngine
 
-💸 Don't have money to buy AnimaEngine but wanna try it? This is for you.
+💸 Don't have money to buy AnimaEngine but wanna try it? This mod is for you: a desktop media companion
 
 ## What's this?
 
-**AnimaWindhawkEngine** is an open-source desktop mod built with the [Windhawk](https://windhawk.net/) Engine that turns any images into free-floating "desktop media". Import it, and every image inside becomes its own living media, right on your desktop.
+**AnimaWindhawkEngine** is an open-source desktop mod built with [Windhawk](https://windhawk.net/) Engine that turns any images into free-floating "desktop media". Import it, and every image inside becomes its own living right on your desktop.
 
 ## Features
 
-Just like AnimaEngine, plus:
-- **Global hotkey** — open the Media Manager from anywhere with a configurable key combo (default: Win + Alt + P).
-- **Hot-reload** — add, remove, or change images and hit Reload without restarting Windhawk.
-- **Position memory** — remembered per image entry so every image wakes up exactly where you left it.
-- **No AI background remover** — use ChatGPT, Gemini, other AI assistants, or other 3rd-party tools to do so.
+Like AnimaEngine, this mod lets you place animated media on your desktop. It
+- runs through Windhawk without Steam
+- keeps the setup lightweight by leaving out the AI background remover
+- can group media by folder
 
 
 ## Where's the workshop? AWHE Browser here!
 
-The **AWHE Browser** (AnimaWindhawkEngine Browser) is a built-in image discovery panel inside the Media Manager window. It lets you browse, preview, and install community-made media directly from this repository.
+The **AWHE Browser** (AnimaWindhawkEngine Browser) is a built-in image discovery panel inside the Media Manager window. It lets you browse, preview and install community-made media directly from this repository.
 
-- **Browse** — scroll through the community image grid, each shown with its preview thumbnail, name, and author
-- **Install** — hit Download on any image, and it lands straight into your configured images folder and reloads automatically
+- **Browse** — scroll through the community image grid, each shown with its preview thumbnail, name and author
+- **Install** — hit Download on any image and it lands straight into your configured images folder and reloads automatically
 - **Submit** — made something cool? Publish it for everyone via a pull request (see below)
 
 ## Usage
 
-Just like AnimaEngine, DesktopPets, MatrixPets, Shimeji, DeskPins and *other desktop companion* apps:
-- **Move an image**: left-click and drag it (unless it's locked or click-through).
-- **Per-image menu**: right-click an image for its own options (manager, always-on-top, click-through, lock, pause, bring to front, hide).
-- **Media Manager**: open from the tray icon or an image's right-click menu to browse all images as thumbnails and tweak any of them.
-
-You must have:
-- [Windhawk](https://windhawk.net/) installed.
-- Electricity
+1. Open the manager from the tray icon or press **Win + Alt + P** (the default shortcut).
+2. Click the arrow beside **Import media…** and choose **from images** to pick files or **from folder** to add a folder.
+3. Select an item in the sidebar to adjust its scale, rotation, or opacity. Drag it into place on your desktop.
+4. Done! Your changes are saved automatically.
 
 ## Publish your own images!
 
 Find it great for everyone? Make a **pull request**!
-(For updating images, just do the same)
+(For updating images just do the same)
 
 **Step 1**: Fork this repository.
 **Step 2**: Put these files in your forked repository:
@@ -120,10 +115,12 @@ The manager window is heavily made and based on by [Mac Island & Dock](https://w
 */
 // ==/WindhawkModReadme==
 
+// Source code is published under the GNU General Public License v3.0.
 
+#include <atomic>
 #include <windows.h>
 #include <windowsx.h>
-#include <ktmw32.h>
+
 #undef GetCurrentTime
 #include <unknwn.h>
 #include <winrt/base.h>
@@ -174,25 +171,14 @@ The manager window is heavily made and based on by [Mac Island & Dock](https://w
 #include <algorithm>
 
 
-
-struct ImageOverride {
-    std::wstring fileName;
-    bool enabled      = true;
-    int  alwaysOnTop  = -1;
-    int  clickThrough = -1;
-    int  lockPosition = -1;
-    int  scalePercent    = 100;
-    int  rotationDegrees = 0;
-    int  opacityPercent  = 100;
-    int  posX = -1;
-    int  posY = -1;
-};
+// ============================================================================
+// Settings model
+// ============================================================================
 
 struct GlobalSettings {
-    bool useFolderMode   = false;
-    std::wstring imagesFolder;
     bool scanSubfolders  = false;
     std::vector<std::wstring> imagePaths;
+    // -------------------
     bool alwaysOnTop     = true;
     bool clickThrough    = false;
     bool lockPosition    = false;
@@ -202,18 +188,21 @@ struct GlobalSettings {
     bool paused          = false;
     int  maxFps          = 20;
     bool trayIcon          = true;
-    std::vector<ImageOverride> overrides;
+
 };
 
 static GlobalSettings g_settings;
 
+// ============================================================================
+// Runtime item model
+// ============================================================================
 
 struct PetItem {
     std::wstring filePath;
     std::wstring registryKey;
     std::wstring folderKey;
     std::wstring fileName;
-    Gdiplus::Image* image    = nullptr;
+    Gdiplus::Image* image    = nullptr; // aliases decodedFrames when non-empty
     std::vector<Gdiplus::Bitmap*> decodedFrames;
     UINT  frameCount         = 1;
     std::vector<UINT> frameDelaysMs;
@@ -223,6 +212,7 @@ struct PetItem {
     int monitorHz = 60;
     ULONGLONG lastFrameTick  = 0;
     HWND  hwnd               = nullptr;
+    // thumbnail bitmap for manager (96×96 HBITMAP, lazily created)
     HBITMAP hThumb           = nullptr;
     int  baseWidth  = 1;
     int  baseHeight = 1;
@@ -244,20 +234,27 @@ struct PetItem {
 
 static std::vector<PetItem> g_items;
 
+// ============================================================================
+// Forward declarations
+// ============================================================================
 static void RenderItem(PetItem& it);
 static void ApplyTopmost(PetItem& it);
 static void ApplyClickThrough(PetItem& it);
-static void ReloadAll(bool rereadSettings = true,bool importWindhawk = false);
+static void ReloadAll(bool rereadSettings = true);
 static void ApplyTrayIcon();
 static void ApplyTimer();
-static void SaveGlobalSettings(const GlobalSettings&);
-static void OpenPetManager(int focusIndex = -1);
+
+static void OpenPetManager(int focusIndex = -1);  // -1 = no pre-selection
 static void ShowWelcomeGuide(bool recordFirstRun = false);
 static void SaveStoredPosition(const std::wstring& fileName, int x, int y);
 static void ForgetStoredPosition(const std::wstring& fileName);
 
+// ============================================================================
+// Thread / window handles
+// ============================================================================
 
 static UINT g_taskbarCreatedMsg = 0;
+static std::atomic_bool workerQuitting{false};
 static HWND    g_hCtrlWnd         = nullptr;
 static HWND    g_hManagerWnd      = nullptr;
 static DWORD   g_threadId         = 0;
@@ -275,43 +272,58 @@ static const UINT kTrayMsg      = WM_APP + 1;
 static const UINT kTrayUid      = 1;
 static const UINT WM_APP_QUIT   = WM_APP + 2;
 static const UINT WM_APP_RELOAD            = WM_APP + 3;
+// Like WM_APP_RELOAD but skips ReadGlobalSettings — used when the manager UI
+// has already updated g_settings in-memory and we just need to respawn pets.
 static const UINT WM_APP_RELOAD_ITEMS_ONLY = WM_APP + 5;
+// Posted to controller: open manager, lParam = pet index (-1 = none)
 static const UINT WM_APP_OPEN_MANAGER        = WM_APP + 4;
-static const UINT WM_WS_FETCH_DONE           = WM_APP + 6;
-static const UINT WM_WS_INSTALL_DONE         = WM_APP + 7;
+// Workshop messages (posted to g_hManagerWnd from worker threads)
+static const UINT WM_WS_FETCH_DONE           = WM_APP + 6;  // wParam=0 ok, 1=error
+static const UINT WM_WS_INSTALL_DONE         = WM_APP + 7;  // wParam=itemIndex, lParam=0 ok 1=err
 
+// Workshop view modes
 enum class WorkshopView { Grid = 0, List = 1, TwoCol = 2 };
 
+// One entry fetched from GitHub
 struct WorkshopItem {
-    std::wstring slug;
+    std::wstring slug;          // folder name under workshop/pets/
     std::wstring name;
     std::wstring author;
     std::wstring description;
     std::wstring version;
-    std::wstring file;
-    std::wstring previewFile;
+    std::wstring file;          // image filename (e.g. "cat.gif")
+    std::wstring previewFile;   // usually "preview.png"
     std::vector<std::wstring> tags;
-    std::wstring localPreviewPath;
-    std::wstring localImagePath;
+    // Runtime state
+    std::wstring localPreviewPath;  // cached preview image on disk (empty = not yet)
+    std::wstring localImagePath;    // installed image path (empty = not installed)
     bool         installed     = false;
     bool         installing    = false;
-    HBITMAP      hPreviewBmp   = nullptr;
+    HBITMAP      hPreviewBmp   = nullptr;  // loaded from localPreviewPath, scaled to thumb
 };
 
 static std::vector<WorkshopItem> g_workshopItems;
-static std::wstring              g_workshopError;
+static std::wstring              g_workshopError;        // non-empty = last fetch failed
 static bool                      g_workshopFetching = false;
 static bool                      g_workshopFetched  = false;
 static WorkshopView              g_workshopView     = WorkshopView::Grid;
-static std::wstring              g_workshopFilter;
+static std::wstring              g_workshopFilter;       // lowercase search text
 
+// Placeholder repo — replace with real URL once the repo exists.
 static const wchar_t kWorkshopRepoOwner[] = L"tubeo5866";
 static const wchar_t kWorkshopRepoName[]  = L"anima-windhawk-engine";
+// raw.githubusercontent.com base for file downloads
+// https://raw.githubusercontent.com/<owner>/<repo>/main/workshop/pets/<slug>/<file>
 
+// Welcome guide command to open the Workshop page.
 #define IDC_NAV_WORKSHOP 261
 
+// Hot-key ID registered with RegisterHotKey (Win+Alt+P → open manager)
 #define HOTKEY_OPEN_MANAGER     1
 
+// ============================================================================
+// Menu command IDs
+// ============================================================================
 enum ItemMenuCmd {
     kCmdOpenManager = 1,
     kCmdToggleAlwaysOnTop,
@@ -324,6 +336,7 @@ enum ItemMenuCmd {
     kCmdReloadAll,
 };
 
+// Commands for the "⋮" per-pet sidebar menu
 enum PetMenuCmd {
     kPetMenuEnable       = 500,
     kPetMenuDisable,
@@ -344,13 +357,9 @@ enum PetMenuCmd {
 
 enum TrayMenuCmd { kCmdOpenManagerTray = 101, kCmdQuit };
 
-
-static int ParseTriState(PCWSTR s) {
-    if (!s || !*s) return -1;
-    if (_wcsicmp(s, L"on")  == 0) return 1;
-    if (_wcsicmp(s, L"off") == 0) return 0;
-    return -1;
-}
+// ============================================================================
+// Small helpers
+// ============================================================================
 
 static std::wstring GetFileNameFromPath(const std::wstring& path) {
     size_t pos = path.find_last_of(L"\\/");
@@ -393,409 +402,171 @@ static bool ScanFolder(const std::wstring& folder, bool recurse, std::vector<std
     return complete;
 }
 
+// ============================================================================
+// Remembered positions
+// ============================================================================
 
-static constexpr wchar_t kConfigPath[] = L"SOFTWARE\\AnimaWindhawkEngine";
-static constexpr REGSAM kConfigView = KEY_WOW64_64KEY;
-static constexpr wchar_t kSettingsPath[] = L"SOFTWARE\\AnimaWindhawkEngine\\Configurations";
-static constexpr wchar_t kImagesPath[] = L"SOFTWARE\\AnimaWindhawkEngine\\Loaded_Images";
-static HKEY imagesRoot = nullptr;
-static HKEY configRoot = nullptr;
+static std::wstring userPrefix, userFiles;
+static bool configWritable=false;
 static std::vector<std::wstring> imageOrder;
-struct RegistryKey {
-    HKEY key{};
-    ~RegistryKey() { if (key) RegCloseKey(key); }
-};
-static bool configWritable = false;
-
-static std::wstring AppDataDirectory() {
-    wchar_t path[MAX_PATH]{};
-    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, path))) return {};
-    return std::wstring(path) + L"\\AnimaWindhawkEngine";
-}
-
-static LSTATUS SetPathList(HKEY key, const std::vector<std::wstring>& paths, PCWSTR name=L"ImagePaths") {
-    std::vector<wchar_t> data;
-    for (const auto& path : paths) {
-        if (path.empty()) continue;
-        data.insert(data.end(),path.begin(),path.end());
-        data.push_back(0);
-    }
-    if (data.empty()) data.push_back(0);
-    data.push_back(0);
-    if (data.size()>MAXDWORD/sizeof(wchar_t)) return ERROR_INVALID_DATA;
-    return RegSetValueExW(key,name,0,REG_MULTI_SZ,
-                          reinterpret_cast<const BYTE*>(data.data()),(DWORD)(data.size()*sizeof(wchar_t)));
-}
-
-static void ConfigWriteResult(PCWSTR name,LSTATUS result) {
-    if (result!=ERROR_SUCCESS)
-        Wh_Log(L"[Config] Could not save %s under HKCU\\%s (error %ld).",name,kConfigPath,result);
-}
-
-static void WriteConfig(PCWSTR name,DWORD type,const void* data,DWORD size) {
-    ConfigWriteResult(name,configWritable ? RegSetValueExW(configRoot,name,0,type,
-        static_cast<const BYTE*>(data),size) : ERROR_ACCESS_DENIED);
-}
-
-static DWORD ConfigNumber(PCWSTR name,DWORD fallback) {
-    DWORD value{},size=sizeof(value);
-    return configRoot && RegGetValueW(configRoot,nullptr,name,RRF_RT_REG_DWORD,nullptr,&value,&size)==ERROR_SUCCESS
-        ? value : fallback;
-}
-
-static std::vector<std::wstring> LegacySection(const std::wstring& file,PCWSTR section) {
-    std::vector<wchar_t> buffer(1024);
-    while (GetPrivateProfileSectionW(section,buffer.data(),(DWORD)buffer.size(),file.c_str())==buffer.size()-2)
-        buffer.resize(buffer.size()*2);
-    std::vector<std::wstring> entries;
-    for (auto p=buffer.data(); *p; p+=wcslen(p)+1) entries.emplace_back(p);
-    return entries;
-}
-
-static bool MissingValue(HKEY key,PCWSTR name) {
-    return RegQueryValueExW(key,name,nullptr,nullptr,nullptr,nullptr)==ERROR_FILE_NOT_FOUND;
-}
-
-static LSTATUS CopyMachineValues(HKEY source,HKEY dest) {
-    DWORD maxName{},maxData{};
-    LSTATUS status=RegQueryInfoKeyW(source,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,
-                                    nullptr,&maxName,&maxData,nullptr,nullptr);
-    if (status!=ERROR_SUCCESS) return status;
-    std::vector<wchar_t> name(maxName+1);
-    std::vector<BYTE> data(std::max<DWORD>(maxData,1));
-    for (DWORD index=0;;) {
-        DWORD chars=(DWORD)name.size(),bytes=(DWORD)data.size(),type{};
-        status=RegEnumValueW(source,index,name.data(),&chars,nullptr,&type,data.data(),&bytes);
-        if (status==ERROR_NO_MORE_ITEMS) return ERROR_SUCCESS;
-        if (status==ERROR_MORE_DATA) {
-            name.resize(std::max<size_t>(name.size(),16384));
-            data.resize(std::max<size_t>(data.size(),bytes));
-            continue;
-        }
-        if (status!=ERROR_SUCCESS) return status;
-        status=RegSetValueExW(dest,name.data(),0,type,data.data(),bytes);
-        if (status!=ERROR_SUCCESS) return status;
-        ++index;
-    }
-}
-
-static LSTATUS ImportLegacyConfig(HANDLE transaction) {
-    HKEY root{};
-    DWORD disposition{};
-    LSTATUS status=RegCreateKeyTransactedW(HKEY_CURRENT_USER,kConfigPath,0,nullptr,0,
-        KEY_READ|KEY_WRITE|kConfigView,nullptr,&root,&disposition,transaction,nullptr);
-    if (status!=ERROR_SUCCESS) return status;
-    struct Closer { HKEY key; ~Closer() { RegCloseKey(key); } } closeRoot{root};
-    DWORD migrated{}, size=sizeof(migrated);
-    if (RegGetValueW(root,nullptr,L"IniMigrated",RRF_RT_REG_DWORD,nullptr,&migrated,&size)==ERROR_SUCCESS && migrated)
-        return ERROR_SUCCESS;
-    if (disposition==REG_CREATED_NEW_KEY) {
-        HKEY machine{};
-        status=RegOpenKeyExW(HKEY_LOCAL_MACHINE,kConfigPath,0,KEY_READ|kConfigView,&machine);
-        if (status==ERROR_SUCCESS) {
-            Closer closeMachine{machine};
-            DWORD complete{}, bytes=sizeof(complete);
-            if (RegGetValueW(machine,nullptr,L"IniMigrated",RRF_RT_REG_DWORD,nullptr,&complete,&bytes)==ERROR_SUCCESS && complete) {
-                status=CopyMachineValues(machine,root);
-                if (status!=ERROR_SUCCESS) return status;
-                HKEY oldPositions{},newPositions{};
-                status=RegOpenKeyExW(machine,L"Positions",0,KEY_READ|kConfigView,&oldPositions);
-                if (status==ERROR_FILE_NOT_FOUND) return ERROR_SUCCESS;
-                if (status!=ERROR_SUCCESS) return status;
-                Closer closeOld{oldPositions};
-                status=RegCreateKeyTransactedW(root,L"Positions",0,nullptr,0,KEY_WRITE|kConfigView,
-                                               nullptr,&newPositions,nullptr,transaction,nullptr);
-                if (status!=ERROR_SUCCESS) return status;
-                Closer closeNew{newPositions};
-                return CopyMachineValues(oldPositions,newPositions);
-            }
-        } else if (status!=ERROR_FILE_NOT_FOUND && status!=ERROR_PATH_NOT_FOUND) {
-            Wh_Log(L"[Config] Previous machine configuration is unavailable (%ld). Importing this user's INI settings.",status);
-        }
-    }
-    auto dir=AppDataDirectory();
-    if (dir.empty()) return ERROR_PATH_NOT_FOUND;
-    for (PCWSTR name : {L"positions.ini", L"welcome.ini", L"repo-info.ini"}) {
-        const auto path=dir+L"\\"+name;
-        HANDLE file=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
-                                nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
-        if (file!=INVALID_HANDLE_VALUE) { CloseHandle(file); continue; }
-        DWORD error=GetLastError();
-        if (error!=ERROR_FILE_NOT_FOUND && error!=ERROR_PATH_NOT_FOUND) return error;
-    }
-    auto ini=dir+L"\\positions.ini";
-    auto positions=LegacySection(ini,L"Positions");
-    if (!positions.empty()) {
-        HKEY key{};
-        status=RegCreateKeyTransactedW(root,L"Positions",0,nullptr,0,KEY_READ|KEY_WRITE|kConfigView,
-                                        nullptr,&key,nullptr,transaction,nullptr);
-        if (status!=ERROR_SUCCESS) return status;
-        Closer closePositions{key};
-        for (const auto& entry : positions) {
-            auto eq=entry.rfind(L'=');
-            if (eq==entry.npos || !eq) continue;
-            auto name=entry.substr(0,eq);
-            POINT point{};
-            if (!MissingValue(key,name.c_str()) || swscanf(entry.c_str()+eq+1,L"%ld,%ld",&point.x,&point.y)!=2) continue;
-            status=RegSetValueExW(key,name.c_str(),0,REG_BINARY,reinterpret_cast<const BYTE*>(&point),sizeof(point));
-            if (status!=ERROR_SUCCESS) return status;
-        }
-    }
-    if (MissingValue(root,L"ImagePaths")) {
-        std::map<unsigned long,std::wstring> ordered;
-        for (const auto& entry : LegacySection(ini,L"Paths")) {
-            wchar_t* end=nullptr;
-            unsigned long i=wcstoul(entry.c_str(),&end,10);
-            if (end!=entry.c_str() && *end==L'=' && end[1]) ordered[i]=end+1;
-        }
-        std::vector<std::wstring> paths;
-        for (const auto& pair : ordered) paths.push_back(pair.second);
-        if (!paths.empty() && (status=SetPathList(root,paths))!=ERROR_SUCCESS) return status;
-    }
-    if (MissingValue(root,L"ManagerHotkey") && !LegacySection(ini,L"AppUI").empty()) {
-        DWORD keys[]={GetPrivateProfileIntW(L"AppUI",L"HotkeyMods",MOD_WIN|MOD_ALT|MOD_NOREPEAT,ini.c_str()),
-                      GetPrivateProfileIntW(L"AppUI",L"HotkeyVk",'P',ini.c_str())};
-        status=RegSetValueExW(root,L"ManagerHotkey",0,REG_BINARY,reinterpret_cast<const BYTE*>(keys),sizeof(keys));
-        if (status!=ERROR_SUCCESS) return status;
-    }
-    wchar_t value[64]{};
-    if (MissingValue(root,L"WelcomeShown") && GetPrivateProfileStringW(L"Welcome",L"Shown",L"",value,64,(dir+L"\\welcome.ini").c_str())) {
-        DWORD shown=wcstol(value,nullptr,10)!=0;
-        status=RegSetValueExW(root,L"WelcomeShown",0,REG_DWORD,reinterpret_cast<const BYTE*>(&shown),sizeof(shown));
-        if (status!=ERROR_SUCCESS) return status;
-    }
-    if (MissingValue(root,L"RepositoryCommit") && GetPrivateProfileStringW(L"Repository",L"Commit",L"",value,64,(dir+L"\\repo-info.ini").c_str())) {
-        status=RegSetValueExW(root,L"RepositoryCommit",0,REG_SZ,reinterpret_cast<const BYTE*>(value),(DWORD)((wcslen(value)+1)*sizeof(wchar_t)));
-        if (status!=ERROR_SUCCESS) return status;
-    }
-    migrated=1;
-    return RegSetValueExW(root,L"IniMigrated",0,REG_DWORD,reinterpret_cast<const BYTE*>(&migrated),sizeof(migrated));
-}
-
-static LSTATUS MigrateLayout(HANDLE transaction) {
-    RegistryKey root, settings, images, oldPositions, positions;
-    auto create=[&](HKEY parent,PCWSTR path,RegistryKey& result) {
-        return RegCreateKeyTransactedW(parent,path,0,nullptr,0,KEY_READ|KEY_WRITE|kConfigView,
-            nullptr,&result.key,nullptr,transaction,nullptr);
-    };
-    LSTATUS status=create(HKEY_CURRENT_USER,kConfigPath,root);
-    if (status!=ERROR_SUCCESS) return status;
-    if ((status=create(root.key,L"Configurations",settings))!=ERROR_SUCCESS ||
-        (status=create(root.key,L"Loaded_Images",images))!=ERROR_SUCCESS) return status;
-    for (PCWSTR name : {L"WelcomeShown",L"ManagerHotkey",L"RepositoryCommit",L"IniMigrated",L"ImagePaths"}) {
-        DWORD type{},bytes{};
-        status=RegQueryValueExW(root.key,name,nullptr,&type,nullptr,&bytes);
-        if (status==ERROR_FILE_NOT_FOUND) continue;
-        if (status!=ERROR_SUCCESS) return status;
-        std::vector<BYTE> data(bytes+1);
-        status=RegQueryValueExW(root.key,name,nullptr,&type,data.data(),&bytes);
-        if (status!=ERROR_SUCCESS) return status;
-        if (MissingValue(settings.key,name)) {
-            status=RegSetValueExW(settings.key,name,0,type,data.data(),bytes);
-            if (status!=ERROR_SUCCESS) return status;
-        }
-        if ((status=RegDeleteValueW(root.key,name))!=ERROR_SUCCESS) return status;
-    }
-    status=RegOpenKeyTransactedW(root.key,L"Positions",0,KEY_READ|kConfigView,&oldPositions.key,transaction,nullptr);
-    if (status==ERROR_FILE_NOT_FOUND) return ERROR_SUCCESS;
-    if (status!=ERROR_SUCCESS) return status;
-    if ((status=create(settings.key,L"LegacyPositions",positions))!=ERROR_SUCCESS ||
-        (status=CopyMachineValues(oldPositions.key,positions.key))!=ERROR_SUCCESS) return status;
-    RegCloseKey(oldPositions.key); oldPositions.key=nullptr;
-    return RegDeleteKeyTransactedW(root.key,L"Positions",kConfigView,0,transaction,nullptr);
-}
+struct LibraryFolder { std::wstring key,path; bool expanded; };
+static std::vector<LibraryFolder> libraryFolders;
 
 static void OpenConfig() {
     HANDLE token{};
-    if (OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token)) {
-        DWORD bytes{};
-        GetTokenInformation(token,TokenUser,nullptr,0,&bytes);
-        std::vector<BYTE> data(bytes);
-        LPWSTR sid{};
-        if (bytes && GetTokenInformation(token,TokenUser,data.data(),bytes,&bytes) &&
-            ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(data.data())->User.Sid,&sid)) {
-            Wh_Log(L"[Config] Registry path: HKEY_USERS\\%s\\%s (HKCU of the tool process, 64-bit view)",sid,kConfigPath);
-            LocalFree(sid);
-        }
-        CloseHandle(token);
-    }
-    LSTATUS status=RegOpenKeyExW(HKEY_CURRENT_USER,kSettingsPath,0,KEY_READ|kConfigView,&configRoot);
-    if (!configRoot || !ConfigNumber(L"IniMigrated",0)) {
-        HANDLE tx=CreateTransaction(nullptr,nullptr,0,0,0,0,nullptr);
-        if (tx!=INVALID_HANDLE_VALUE) {
-            status=ImportLegacyConfig(tx);
-            if (status==ERROR_SUCCESS) status=MigrateLayout(tx);
-            if (status==ERROR_SUCCESS && !CommitTransaction(tx)) status=GetLastError();
-            CloseHandle(tx);
-        } else status=GetLastError();
-        if (status!=ERROR_SUCCESS) {
-            ConfigWriteResult(L"registry migration",status);
-            if (!configRoot) RegOpenKeyExW(HKEY_CURRENT_USER,kConfigPath,0,KEY_READ|kConfigView,&configRoot);
-            return;
-        }
-    }
-    if (configRoot) { RegCloseKey(configRoot); configRoot=nullptr; }
-    status=RegOpenKeyExW(HKEY_CURRENT_USER,kSettingsPath,0,KEY_READ|KEY_WRITE|kConfigView,&configRoot);
-    if (status==ERROR_SUCCESS)
-        status=RegCreateKeyExW(HKEY_CURRENT_USER,kImagesPath,0,nullptr,0,KEY_READ|KEY_WRITE|kConfigView,nullptr,&imagesRoot,nullptr);
-    configWritable=status==ERROR_SUCCESS;
-    if (!configWritable) {
-        ConfigWriteResult(L"open registry for writing",status);
-        if (!configRoot) RegOpenKeyExW(HKEY_CURRENT_USER,kSettingsPath,0,KEY_READ|kConfigView,&configRoot);
-        RegOpenKeyExW(HKEY_CURRENT_USER,kImagesPath,0,KEY_READ|kConfigView,&imagesRoot);
-    }
-}
-
-static std::wstring StringAt(HKEY key,PCWSTR subkey,PCWSTR name) {
+    if (!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token)) return;
     DWORD bytes{};
-    if (!key || RegGetValueW(key,subkey,name,RRF_RT_REG_SZ,nullptr,nullptr,&bytes)!=ERROR_SUCCESS) return {};
-    std::vector<wchar_t> data(bytes/sizeof(wchar_t)+1);
-    return RegGetValueW(key,subkey,name,RRF_RT_REG_SZ,nullptr,data.data(),&bytes)==ERROR_SUCCESS ? data.data() : L"";
-}
-static void SaveNumber(PCWSTR name,DWORD value) { WriteConfig(name,REG_DWORD,&value,sizeof(value)); }
-
-struct LibraryFolder {
-    std::wstring key, path;
-    bool expanded;
-};
-static std::vector<LibraryFolder> libraryFolders;
-
-static std::vector<std::wstring> Subkeys(HKEY parent) {
-    std::vector<std::wstring> names;
-    wchar_t name[256];
-    for (DWORD i=0;;++i) {
-        DWORD chars=256;
-        auto result=RegEnumKeyExW(parent,i,name,&chars,nullptr,nullptr,nullptr,nullptr);
-        if (result!=ERROR_SUCCESS) {
-            if (result!=ERROR_NO_MORE_ITEMS) ConfigWriteResult(L"Enumerate folders",result);
-            break;
+    GetTokenInformation(token,TokenUser,nullptr,0,&bytes);
+    std::vector<BYTE> data(bytes);
+    LPWSTR sid{};
+    if (bytes && GetTokenInformation(token,TokenUser,data.data(),bytes,&bytes) &&
+        ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(data.data())->User.Sid,&sid)) {
+        userPrefix=std::wstring(sid)+L"\\";
+        wchar_t root[32768];
+        if (Wh_GetModStoragePath(root,std::size(root))) {
+            userFiles=std::wstring(root)+L"\\"+sid;
+            if (!CreateDirectoryW(userFiles.c_str(),nullptr) && GetLastError()!=ERROR_ALREADY_EXISTS) userFiles.clear();
+            auto attrs=GetFileAttributesW(userFiles.c_str());
+            if (attrs==INVALID_FILE_ATTRIBUTES || !(attrs&FILE_ATTRIBUTE_DIRECTORY) || (attrs&FILE_ATTRIBUTE_REPARSE_POINT)) userFiles.clear();
         }
-        names.emplace_back(name,chars);
+        LocalFree(sid);
+        configWritable=true;
     }
-    return names;
+    CloseHandle(token);
 }
+static std::wstring Setting(const std::wstring& name) { return userPrefix+L"Configurations\\"+name; }
+static std::wstring Record(const std::wstring& key,const std::wstring& field) { return userPrefix+L"Loaded_Images\\"+key+L"\\"+field; }
+static std::wstring ReadString(const std::wstring& key) {
+    if (!configWritable) return {};
+    std::wstring value(32768,L'\0');
+    value.resize(Wh_GetStringValue(key.c_str(),value.data(),value.size()));
+    return value;
+}
+static bool PutString(const std::wstring& key,const std::wstring& value) {
+    if (configWritable && Wh_SetStringValue(key.c_str(),value.c_str())) return true;
+    Wh_Log(L"Could not save %s",key.c_str()); return false;
+}
+static std::wstring ReadText(PCWSTR name) { return ReadString(Setting(name)); }
+static bool SaveText(PCWSTR name,const std::wstring& value) { return PutString(Setting(name),value); }
+static int Number(const std::wstring& key,int fallback) {
+    return configWritable ? Wh_GetIntValue(key.c_str(),fallback) : fallback;
+}
+static bool PutNumber(const std::wstring& key,int value) {
+    if (configWritable && Wh_SetIntValue(key.c_str(),value)) return true;
+    Wh_Log(L"Could not save %s",key.c_str()); return false;
+}
+static DWORD ConfigNumber(PCWSTR name,DWORD fallback) { return Number(Setting(name),fallback); }
+static bool SaveNumber(PCWSTR name,DWORD value) { return PutNumber(Setting(name),value); }
+static std::wstring ListBank(const std::wstring& list,int bank) { return list+(bank ? L".B." : L".A."); }
+static std::vector<std::wstring> ReadList(const std::wstring& list) {
+    std::vector<std::wstring> values;
+    auto bank=ListBank(list,Number(list,0));
+    int count=Number(bank+L"Count",0);
+    for (int i=0;i<count && i<100000;++i) {
+        auto value=ReadString(bank+std::to_wstring(i));
+        if (!value.empty()) values.push_back(std::move(value));
+    }
+    return values;
+}
+static bool StoreList(const std::wstring& list,const std::vector<std::wstring>& values) {
+    if (!configWritable || values.size()>100000) return false;
+    int next=!Number(list,0);
+    auto bank=ListBank(list,next);
+    for (size_t i=0;i<values.size();++i)
+        if (!PutString(bank+std::to_wstring(i),values[i])) return false;
+    return PutNumber(bank+L"Count",static_cast<int>(values.size())) && PutNumber(list,next);
+}
+static std::wstring FolderList() { return userPrefix+L"Loaded_Images\\Folders.Index"; }
+static std::wstring ImageList() { return Setting(L"ImageOrder"); }
 static void ReadLibraryFolders() {
     libraryFolders.clear();
-    RegistryKey folders;
-    if (!imagesRoot || RegOpenKeyExW(imagesRoot,L"Folders",0,KEY_READ,&folders.key)!=ERROR_SUCCESS) return;
-    for (const auto& name : Subkeys(folders.key)) {
-        auto path=StringAt(folders.key,name.c_str(),L"Path");
-        if (path.empty()) continue;
-        DWORD expanded=1,size=sizeof(expanded);
-        RegGetValueW(folders.key,name.c_str(),L"Expanded",RRF_RT_REG_DWORD,nullptr,&expanded,&size);
-        libraryFolders.push_back({L"Folders\\"+name,path,expanded!=0});
+    for (auto& key : ReadList(FolderList())) {
+        auto path=ReadString(Record(key,L"Path"));
+        if (!path.empty()) libraryFolders.push_back({key,path,Number(Record(key,L"Expanded"),1)!=0});
     }
 }
-static bool RemoveLibraryFolder(const std::wstring& folderKey) {
-    if (!configWritable) return false;
-    RegistryKey folders;
-    auto status=RegOpenKeyExW(imagesRoot,L"Folders",0,KEY_READ|KEY_WRITE|DELETE|kConfigView,&folders.key);
-    if (status==ERROR_SUCCESS)
-        status=RegDeleteTreeW(folders.key,GetFileNameFromPath(folderKey).c_str());
-    ConfigWriteResult(L"Remove library folder",status);
-    return status==ERROR_SUCCESS;
+static void DeleteImageRecord(const std::wstring& key) {
+    for (PCWSTR field : {L"Path",L"Position",L"Enabled",L"AlwaysOnTop",L"ClickThrough",L"LockPosition",
+                         L"ScalePercent",L"OpacityPercent",L"RotationDegrees",L"FpsLimit",L"Paused",L"Removed"})
+        Wh_DeleteValue(Record(key,field).c_str());
+}
+static bool RemoveLibraryFolder(const std::wstring& key) {
+    auto folders=ReadList(FolderList());
+    folders.erase(std::remove(folders.begin(),folders.end(),key),folders.end());
+    if (!StoreList(FolderList(),folders)) return false;
+    auto index=Record(key,L"Images.Index");
+    for (auto& child : ReadList(index)) DeleteImageRecord(child);
+    for (int i=0;i<2;++i) {
+        auto bank=ListBank(index,i);
+        int count=Number(bank+L"Count",0);
+        for (int n=0;n<count && n<100000;++n) Wh_DeleteValue((bank+std::to_wstring(n)).c_str());
+        Wh_DeleteValue((bank+L"Count").c_str());
+    }
+    Wh_DeleteValue(index.c_str());
+    Wh_DeleteValue(Record(key,L"Expanded").c_str());
+    Wh_DeleteValue(Record(key,L"Path").c_str());
+    return true;
+}
+static std::wstring RecordName(const std::wstring& leaf) {
+    std::wstring name;
+    for (wchar_t ch : leaf) {
+        if (ch==L'%' || ch==L'=' || ch==L'[' || ch==L']') {
+            wchar_t escaped[6]; swprintf_s(escaped,L"%%%04X",static_cast<unsigned>(ch));
+            name+=escaped;
+        } else name+=ch;
+    }
+    return name;
+}
+static std::wstring FreeRecord(const std::wstring& base) {
+    for (unsigned n=1;;++n) {
+        auto key=n==1 ? base : base+L" ("+std::to_wstring(n)+L")";
+        if (ReadString(Record(key,L"Path")).empty()) return key;
+    }
 }
 static bool RegisterLibraryFolder(const std::wstring& path) {
     if (!configWritable || path.empty()) return false;
-    for (const auto& folder : libraryFolders)
-        if (!_wcsicmp(path.c_str(),folder.path.c_str())) return true;
-    auto base=GetFileNameFromPath(path);
-    if (base.empty()) base=L"Drive "+path.substr(0,1);
-    for (unsigned i=1;;++i) {
-        auto suffix=i==1 ? std::wstring{} : L" ("+std::to_wstring(i)+L")";
-        auto name=L"Folders\\"+base.substr(0,255-suffix.size())+suffix;
-        RegistryKey folder;
-        DWORD disposition{};
-        auto status=RegCreateKeyExW(imagesRoot,name.c_str(),0,nullptr,0,KEY_READ|KEY_WRITE,nullptr,&folder.key,&disposition);
-        if (status!=ERROR_SUCCESS) { ConfigWriteResult(L"Folders",status); return false; }
-        if (disposition!=REG_CREATED_NEW_KEY) continue;
-        status=RegSetValueExW(folder.key,L"Path",0,REG_SZ,reinterpret_cast<const BYTE*>(path.c_str()),(DWORD)((path.size()+1)*sizeof(wchar_t)));
-        if (status!=ERROR_SUCCESS) {
-            RegDeleteKeyExW(imagesRoot,name.c_str(),kConfigView,0);
-            ConfigWriteResult(L"Folder path",status);
-            return false;
-        }
-        libraryFolders.push_back({name,path,true});
-        return true;
-    }
+    for (auto& f : libraryFolders) if (!_wcsicmp(path.c_str(),f.path.c_str())) return true;
+    auto name=GetFileNameFromPath(path);
+    if (name.empty()) name=L"Drive "+path.substr(0,1);
+    auto key=FreeRecord(L"Folders\\"+RecordName(name));
+    auto keys=ReadList(FolderList()); keys.push_back(key);
+    if (!PutString(Record(key,L"Path"),path) || !StoreList(FolderList(),keys)) return false;
+    libraryFolders.push_back({key,path,true});
+    return true;
 }
-
-static std::wstring ImageKey(const std::wstring& path,const std::vector<std::wstring>& used,const std::wstring& folderKey={}) {
-    if (!imagesRoot || path.empty()) return {};
-    RegistryKey folder;
-    HKEY parent=imagesRoot;
-    std::wstring prefix;
-    if (!folderKey.empty()) {
-        if (RegOpenKeyExW(imagesRoot,folderKey.c_str(),0,KEY_READ|(configWritable ? KEY_WRITE : 0),&folder.key)!=ERROR_SUCCESS) return {};
-        parent=folder.key;
-        prefix=folderKey+L"\\";
+static std::wstring ImageKey(const std::wstring& path,const std::vector<std::wstring>& used,const std::wstring& folder={}) {
+    if (!configWritable || path.empty()) return {};
+    auto keys=folder.empty() ? imageOrder : ReadList(Record(folder,L"Images.Index"));
+    for (auto& key : keys)
+        if (std::find(used.begin(),used.end(),key)==used.end() && !_wcsicmp(ReadString(Record(key,L"Path")).c_str(),path.c_str())) return key;
+    auto key=FreeRecord((folder.empty() ? L"" : folder+L"\\")+RecordName(GetFileNameFromPath(path)));
+    if (!PutString(Record(key,L"Path"),path)) return {};
+    if (!folder.empty()) {
+        keys.push_back(key);
+        if (!StoreList(Record(folder,L"Images.Index"),keys)) return {};
     }
-    const auto base=GetFileNameFromPath(path);
-    if (base.empty()) return {};
-    wchar_t existing[256];
-    DWORD index=0, chars=256;
-    LSTATUS status;
-    while ((status=RegEnumKeyExW(parent,index++,existing,&chars,nullptr,nullptr,nullptr,nullptr))==ERROR_SUCCESS) {
-        if ((!folderKey.empty() || _wcsicmp(existing,L"Folders")!=0) &&
-            std::find(used.begin(),used.end(),prefix+existing)==used.end() &&
-            !_wcsicmp(StringAt(parent,existing,L"Path").c_str(),path.c_str())) return prefix+existing;
-        chars=256;
-    }
-    if (status!=ERROR_NO_MORE_ITEMS || !configWritable) return {};
-    for (unsigned i=1;;++i) {
-        std::wstring suffix=i==1 ? L"" : L" ("+std::to_wstring(i)+L")";
-        auto name=base.substr(0,255-suffix.size())+suffix;
-        RegistryKey image;
-        DWORD disposition{};
-        status=RegCreateKeyExW(parent,name.c_str(),0,nullptr,0,KEY_READ|KEY_WRITE|kConfigView,
-            nullptr,&image.key,&disposition);
-        if (status!=ERROR_SUCCESS) { ConfigWriteResult(name.c_str(),status); return {}; }
-        if (disposition!=REG_CREATED_NEW_KEY) continue;
-        status=RegSetValueExW(image.key,L"Path",0,REG_SZ,reinterpret_cast<const BYTE*>(path.c_str()),(DWORD)((path.size()+1)*sizeof(wchar_t)));
-        if (status!=ERROR_SUCCESS) {
-            RegDeleteKeyExW(parent,name.c_str(),kConfigView,0);
-            ConfigWriteResult(L"Path",status);
-            return {};
-        }
-        POINT point{};
-        DWORD bytes=sizeof(point);
-        if (RegGetValueW(configRoot,L"LegacyPositions",base.c_str(),RRF_RT_REG_BINARY,nullptr,&point,&bytes)==ERROR_SUCCESS && bytes==sizeof(point))
-            ConfigWriteResult(L"Position",RegSetValueExW(image.key,L"Position",0,REG_BINARY,reinterpret_cast<BYTE*>(&point),bytes));
-        return prefix+name;
-    }
+    return key;
 }
 static bool ReadStoredPosition(const std::wstring& key,POINT& point) {
-    DWORD bytes=sizeof(point);
-    return imagesRoot && !key.empty() && RegGetValueW(imagesRoot,key.c_str(),L"Position",RRF_RT_REG_BINARY,nullptr,&point,&bytes)==ERROR_SUCCESS && bytes==sizeof(point);
+    return configWritable && !key.empty() && Wh_GetBinaryValue(Record(key,L"Position").c_str(),&point,sizeof(point))==sizeof(point);
 }
 static void SaveStoredPosition(const std::wstring& key,int x,int y) {
     POINT point{x,y};
-    if (!configWritable || key.empty()) return;
-    RegistryKey image;
-    auto status=RegOpenKeyExW(imagesRoot,key.c_str(),0,KEY_SET_VALUE|kConfigView,&image.key);
-    if (status==ERROR_FILE_NOT_FOUND || status==ERROR_PATH_NOT_FOUND) return;
-    if (status==ERROR_SUCCESS)
-        status=RegSetValueExW(image.key,L"Position",0,REG_BINARY,reinterpret_cast<const BYTE*>(&point),sizeof(point));
-    ConfigWriteResult(L"Position",status);
+    if (configWritable && !key.empty() && !ReadString(Record(key,L"Path")).empty())
+        Wh_SetBinaryValue(Record(key,L"Position").c_str(),&point,sizeof(point));
 }
 static void ForgetStoredPosition(const std::wstring& key) {
-    if (!configWritable || key.empty()) return;
-    auto status=RegDeleteKeyValueW(imagesRoot,key.c_str(),L"Position");
-    if (status!=ERROR_FILE_NOT_FOUND) ConfigWriteResult(L"Position",status);
+    if (configWritable && !key.empty()) Wh_DeleteValue(Record(key,L"Position").c_str());
 }
 static void SyncImageState(PetItem& item,bool load) {
-    if ((!load && !configWritable) || !imagesRoot || item.registryKey.empty()) return;
-    RegistryKey key;
-    auto status=RegOpenKeyExW(imagesRoot,item.registryKey.c_str(),0,KEY_READ|(configWritable ? KEY_SET_VALUE : 0)|kConfigView,&key.key);
-    if (status!=ERROR_SUCCESS) { ConfigWriteResult(item.registryKey.c_str(),status); return; }
-    auto sync=[&](PCWSTR name,auto& field,int low,int high) {
-        DWORD value=static_cast<DWORD>(field),bytes=sizeof(value);
+    if (!configWritable || item.registryKey.empty()) return;
+    auto sync=[&](PCWSTR field,auto& value,int low,int high) {
+        auto key=Record(item.registryKey,field);
         if (load) {
-            auto result=RegGetValueW(key.key,nullptr,name,RRF_RT_REG_DWORD,nullptr,&value,&bytes);
-            if (result==ERROR_SUCCESS) { field=std::clamp(static_cast<int>(value),low,high); return; }
-            if (result!=ERROR_FILE_NOT_FOUND) return;
+            int saved=Number(key,INT_MIN);
+            if (saved!=INT_MIN) { value=std::clamp(saved,low,high); return; }
         }
-        if (configWritable) ConfigWriteResult(name,RegSetValueExW(key.key,name,0,REG_DWORD,reinterpret_cast<BYTE*>(&value),sizeof(value)));
+        PutNumber(key,static_cast<int>(value));
     };
     sync(L"Enabled",item.enabled,0,1);
     sync(L"AlwaysOnTop",item.alwaysOnTop,0,1);
@@ -808,16 +579,20 @@ static void SyncImageState(PetItem& item,bool load) {
     if (item.frameCount>1) sync(L"Paused",item.paused,0,1);
 }
 
+// Workshop infrastructure
+// ============================================================================
 
+// Cache Workshop downloads under the per-user mod storage directory.
 static std::wstring GetWorkshopDir() {
-    wchar_t la[MAX_PATH] = {};
-    GetEnvironmentVariableW(L"LOCALAPPDATA", la, MAX_PATH);
-    std::wstring d = std::wstring(la) + L"\\AnimaWindhawkEngine\\workshop";
-    CreateDirectoryW((std::wstring(la) + L"\\AnimaWindhawkEngine").c_str(), nullptr);
-    CreateDirectoryW(d.c_str(), nullptr);
-    return d;
+    if (userFiles.empty()) return {};
+    auto path=userFiles+L"\\workshop";
+    if (!CreateDirectoryW(path.c_str(),nullptr) && GetLastError()!=ERROR_ALREADY_EXISTS) return {};
+    auto attrs=GetFileAttributesW(path.c_str());
+    if (attrs==INVALID_FILE_ATTRIBUTES || !(attrs&FILE_ATTRIBUTE_DIRECTORY) || (attrs&FILE_ATTRIBUTE_REPARSE_POINT)) return {};
+    return path;
 }
 
+// Minimal JSON string-value extractor (no deps, handles simple flat JSON).
 static std::wstring JsonGetString(const std::string& json, const char* key) {
     std::string k = std::string("\"") + key + "\"";
     size_t p = json.find(k);
@@ -828,6 +603,7 @@ static std::wstring JsonGetString(const std::string& json, const char* key) {
     size_t end   = start;
     while (end < json.size() && (json[end] != '"' || (end > 0 && json[end-1] == '\\'))) end++;
     std::string val = json.substr(start, end - start);
+    // UTF-8 → wstring
     int wlen = MultiByteToWideChar(CP_UTF8, 0, val.c_str(), -1, nullptr, 0);
     std::wstring out(wlen, 0);
     MultiByteToWideChar(CP_UTF8, 0, val.c_str(), -1, &out[0], wlen);
@@ -835,6 +611,7 @@ static std::wstring JsonGetString(const std::string& json, const char* key) {
     return out;
 }
 
+// Extract a JSON string array e.g. ["a","b","c"]
 static std::vector<std::wstring> JsonGetStringArray(const std::string& json, const char* key) {
     std::string k = std::string("\"") + key + "\"";
     size_t p = json.find(k);
@@ -860,22 +637,46 @@ static std::vector<std::wstring> JsonGetStringArray(const std::string& json, con
     return out;
 }
 
+// Build raw.githubusercontent.com URL for a file in the workshop
+static bool SafeWorkshopName(const std::wstring& name) {
+    if (name.empty() || name.size()>200 || name.front()==L'.' || name.back()==L'.' ||
+        name.find(L"..")!=name.npos ||
+        name.find_first_not_of(L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")!=name.npos) return false;
+    auto stem=name.substr(0,name.find(L'.'));
+    for (auto& c : stem) if (c>=L'a' && c<=L'z') c-=L'a'-L'A';
+    if (stem==L"CON" || stem==L"NUL" || stem==L"AUX" || stem==L"PRN") return false;
+    return !(stem.size()==4 && (stem.substr(0,3)==L"COM" || stem.substr(0,3)==L"LPT") && stem[3]>=L'0' && stem[3]<=L'9');
+}
+static std::wstring WorkshopChild(const std::wstring& parent,const std::wstring& name) {
+    if (parent.empty() || !SafeWorkshopName(name)) return {};
+    auto path=parent+L"\\"+name;
+    wchar_t full[32768];
+    DWORD len=GetFullPathNameW(path.c_str(),std::size(full),full,nullptr);
+    if (!len || len>=std::size(full) || _wcsicmp(full,path.c_str())) return {};
+    DWORD attrs=GetFileAttributesW(full);
+    return attrs!=INVALID_FILE_ATTRIBUTES && (attrs&FILE_ATTRIBUTE_REPARSE_POINT) ? L"" : path;
+}
 static std::wstring WorkshopRawUrl(const std::wstring& slug, const std::wstring& file) {
     return std::wstring(L"https://raw.githubusercontent.com/")
          + kWorkshopRepoOwner + L"/" + kWorkshopRepoName
          + L"/main/workshop/pets/" + slug + L"/" + file;
 }
 
+// Raw URL for workshop/index.json — the slug list, no API needed.
 static std::wstring WorkshopIndexUrl() {
     return std::wstring(L"https://raw.githubusercontent.com/")
          + kWorkshopRepoOwner + L"/" + kWorkshopRepoName
          + L"/main/workshop/index.json";
 }
 
+// Simple blocking HTTP GET using WinINet — returns body as UTF-8 string.
 static std::string HttpGet(const std::wstring& url) {
     HINTERNET hInet = InternetOpenW(L"AnimaWindhawkEngine/1.0",
                                     INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
     if (!hInet) return {};
+    DWORD timeout=15000;
+    for (auto option : {INTERNET_OPTION_CONNECT_TIMEOUT,INTERNET_OPTION_RECEIVE_TIMEOUT})
+        InternetSetOptionW(hInet,option,&timeout,sizeof(timeout));
     HINTERNET hConn = InternetOpenUrlW(hInet, url.c_str(), nullptr, 0,
                                        INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE |
                                        INTERNET_FLAG_SECURE, 0);
@@ -883,19 +684,23 @@ static std::string HttpGet(const std::wstring& url) {
     if (hConn) {
         char buf[4096];
         DWORD read = 0;
-        while (InternetReadFile(hConn, buf, sizeof(buf), &read) && read)
-            body.append(buf, read);
+        while (InternetReadFile(hConn,buf,sizeof(buf),&read) && read) {
+            if (body.size()+read>1024*1024) { body.clear(); break; }
+            body.append(buf,read);
+        }
         InternetCloseHandle(hConn);
     }
     InternetCloseHandle(hInet);
     return body;
 }
 
+// Download a URL to a local file path (blocking).
 static bool HttpDownloadFile(const std::wstring& url, const std::wstring& dest) {
     HRESULT hr = URLDownloadToFileW(nullptr, url.c_str(), dest.c_str(), 0, nullptr);
     return SUCCEEDED(hr);
 }
 
+// Keep this value in sync with the @version metadata above.
 static const wchar_t* kModVersion = WH_MOD_VERSION;
 static std::wstring g_repoCommit = L"unknown";
 static std::wstring g_windowsBuild = L"unknown";
@@ -904,10 +709,8 @@ static bool ValidCommit(const std::wstring& sha) {
         sha.find_first_not_of(L"0123456789abcdefABCDEF") == std::wstring::npos;
 }
 static void LoadBuildInfo() {
-    wchar_t hash[64]{};
-    DWORD bytes=sizeof(hash);
-    if (configRoot) RegGetValueW(configRoot,nullptr,L"RepositoryCommit",RRF_RT_REG_SZ|RRF_ZEROONFAILURE,nullptr,hash,&bytes);
-    if (ValidCommit(hash)) g_repoCommit = std::wstring(hash).substr(0,8);
+    auto hash=ReadText(L"RepositoryCommit");
+    if (ValidCommit(hash)) g_repoCommit=hash.substr(0,8);
     HKEY key;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
                      0, KEY_READ | KEY_WOW64_64KEY, &key) == ERROR_SUCCESS) {
@@ -922,6 +725,9 @@ static void LoadBuildInfo() {
     }
 }
 
+// ---- Workshop fetch thread ----
+// Fetches the list of pets from GitHub API, then downloads meta.json + preview
+// for each.  Posts WM_WS_FETCH_DONE to g_hManagerWnd when done.
 struct WorkshopFetchResult {
     std::vector<WorkshopItem> items;
     std::wstring              error;
@@ -931,10 +737,13 @@ struct WorkshopFetchResult {
 static DWORD WINAPI WorkshopFetchThread(LPVOID param) {
     auto* res = new WorkshopFetchResult();
     std::wstring wsDir = GetWorkshopDir();
+    // Existing background worker: no network request on the manager UI thread.
     std::wstring sha = JsonGetString(HttpGet(L"https://api.github.com/repos/" +
         std::wstring(kWorkshopRepoOwner) + L"/" + kWorkshopRepoName + L"/commits/HEAD"), "sha");
     if (ValidCommit(sha)) res->commit = sha.substr(0,8);
 
+    // Step 1: fetch workshop/index.json from raw.githubusercontent.com (no rate limit)
+    // Format: ["slug1", "slug2", ...]
     std::string listing = HttpGet(WorkshopIndexUrl());
     if (listing.empty()) {
         res->error = L"Could not reach the workshop index. Check your internet connection.";
@@ -942,6 +751,7 @@ static DWORD WINAPI WorkshopFetchThread(LPVOID param) {
         return 0;
     }
 
+    // Parse flat JSON string array — extract every quoted value inside [ ... ]
     std::vector<std::wstring> slugs;
     {
         size_t arrStart = listing.find('[');
@@ -955,8 +765,9 @@ static DWORD WINAPI WorkshopFetchThread(LPVOID param) {
                 if (!s.empty()) {
                     int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0);
                     if (n > 1) {
-                        std::wstring ws(n - 1, L'\0');
+                        std::wstring ws(n, L'\0');
                         MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &ws[0], n);
+                        ws.resize(n-1);
                         slugs.push_back(std::move(ws));
                     }
                 }
@@ -971,22 +782,29 @@ static DWORD WINAPI WorkshopFetchThread(LPVOID param) {
         return 0;
     }
 
+    // Step 2: for each slug, download meta.json and preview
     for (auto& slug : slugs) {
         WorkshopItem item;
         item.slug = slug;
 
-        std::wstring petDir = wsDir + L"\\" + slug;
+        // Cache dirs per pet
+        std::wstring petDir=WorkshopChild(wsDir,slug);
+        if (petDir.empty()) continue;
         CreateDirectoryW(petDir.c_str(), nullptr);
 
-        std::wstring metaPath = petDir + L"\\meta.json";
+        // meta.json
+        auto metaPath=WorkshopChild(petDir,L"meta.json");
+        if (metaPath.empty()) continue;
         if (GetFileAttributesW(metaPath.c_str()) == INVALID_FILE_ATTRIBUTES)
             HttpDownloadFile(WorkshopRawUrl(slug, L"meta.json"), metaPath);
 
+        // Parse meta.json
         {
             HANDLE hf = CreateFileW(metaPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
                                     nullptr, OPEN_EXISTING, 0, nullptr);
             if (hf != INVALID_HANDLE_VALUE) {
                 DWORD sz = GetFileSize(hf, nullptr);
+                if (!sz || sz>1024*1024) { CloseHandle(hf); continue; }
                 std::string buf(sz, '\0');
                 DWORD rd; ReadFile(hf, &buf[0], sz, &rd, nullptr);
                 CloseHandle(hf);
@@ -1002,12 +820,19 @@ static DWORD WINAPI WorkshopFetchThread(LPVOID param) {
         if (item.name.empty()) item.name = slug;
         if (item.previewFile.empty()) item.previewFile = L"preview.png";
 
-        std::wstring prevPath = petDir + L"\\" + item.previewFile;
+        // preview image
+        auto prevPath=WorkshopChild(petDir,item.previewFile);
+        auto instPath=WorkshopChild(petDir,item.file);
+        if (instPath.empty() || prevPath.empty() || !HasSupportedExt(item.file) ||
+            !HasSupportedExt(item.previewFile) || !_wcsicmp(PathFindExtensionW(item.previewFile.c_str()),L".mp4")) continue;
         if (GetFileAttributesW(prevPath.c_str()) == INVALID_FILE_ATTRIBUTES)
             HttpDownloadFile(WorkshopRawUrl(slug, item.previewFile), prevPath);
         item.localPreviewPath = prevPath;
 
-        std::wstring instPath = petDir + L"\\" + item.file;
+        // Mark as installed only if the file exists on disk AND is registered
+        // in imagePaths — a file sitting in the cache without an imagePaths
+        // entry means the pet isn't actually active in the manager.
+
         if (GetFileAttributesW(instPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
             item.localImagePath = instPath;
         }
@@ -1019,19 +844,18 @@ static DWORD WINAPI WorkshopFetchThread(LPVOID param) {
     return 0;
 }
 
+// ---- Workshop install thread ----
 struct WorkshopInstallParam {
     int         index;
     std::wstring slug;
     std::wstring file;
-    std::wstring destDir;
 };
 
 static DWORD WINAPI WorkshopInstallThread(LPVOID param) {
     auto* p = (WorkshopInstallParam*)param;
     std::wstring url  = WorkshopRawUrl(p->slug, p->file);
-    std::wstring dest = p->destDir + L"\\" + p->file;
-    CreateDirectoryW(p->destDir.c_str(), nullptr);
-    bool ok = HttpDownloadFile(url, dest);
+    auto dest=WorkshopChild(WorkshopChild(GetWorkshopDir(),p->slug),p->file);
+    bool ok=!dest.empty() && HasSupportedExt(p->file) && HttpDownloadFile(url,dest);
     int idx = p->index;
     delete p;
     if (g_hCtrlWnd)
@@ -1069,8 +893,7 @@ static void Workshop_StartInstall(int idx) {
     if (it.installing || g_workshopFetching) return;
     it.installing = true;
     auto* p = new WorkshopInstallParam{
-        idx, it.slug, it.file,
-        GetWorkshopDir() + L"\\" + it.slug
+        idx, it.slug, it.file
     };
     if (!StartWorkshopWorker(WorkshopInstallThread,p)) {
         it.installing=false;
@@ -1079,13 +902,16 @@ static void Workshop_StartInstall(int idx) {
     }
 }
 
-static void SaveImagePaths(const std::vector<std::wstring>& paths,const std::wstring& removedKey = {});
+static void SaveImagePaths(const std::vector<std::wstring>& paths,const std::wstring& removedKey = {});  // defined below
 
+// Remove a pack from imagePaths (and save) without deleting the cached file,
+// so re-installing is instant.  Called from the UI thread.
 static void Workshop_Uninstall(int idx) {
     if (idx < 0 || idx >= (int)g_workshopItems.size()) return;
     auto& it = g_workshopItems[idx];
     if (!it.installed || it.installing) return;
 
+    // Remove every matching entry from imagePaths
     auto& paths = g_settings.imagePaths;
     paths.erase(
         std::remove_if(paths.begin(), paths.end(), [&](const std::wstring& p) {
@@ -1096,10 +922,12 @@ static void Workshop_Uninstall(int idx) {
     SaveImagePaths(paths);
 
     it.installed = false;
+    // Trigger the pet list to reload so the removed pet disappears immediately
     if (g_hManagerWnd)
-        PostThreadMessageW(g_threadId, WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
+        PostMessageW(g_hCtrlWnd,WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
 }
 
+// Load preview bitmap for an item (scaled to thumbW×thumbH).
 static HBITMAP Workshop_LoadPreview(const std::wstring& path, int thumbW, int thumbH) {
     if (path.empty() || GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES)
         return nullptr;
@@ -1111,11 +939,13 @@ static HBITMAP Workshop_LoadPreview(const std::wstring& path, int thumbW, int th
     HBITMAP hBmp = CreateCompatibleBitmap(hdc, thumbW, thumbH);
     HBITMAP old  = (HBITMAP)SelectObject(memDC, hBmp);
 
+    // Fill background
     HBRUSH bg = CreateSolidBrush(RGB(30, 30, 44));
     RECT r = {0, 0, thumbW, thumbH};
     FillRect(memDC, &r, bg);
     DeleteObject(bg);
 
+    // Draw scaled, centred, preserving aspect ratio
     float sw = (float)src->GetWidth(), sh = (float)src->GetHeight();
     float scale = std::min((float)thumbW / sw, (float)thumbH / sh);
     int dw = (int)(sw * scale), dh = (int)(sh * scale);
@@ -1134,6 +964,7 @@ static HBITMAP Workshop_LoadPreview(const std::wstring& path, int thumbW, int th
     return hBmp;
 }
 
+// Returns items matching g_workshopFilter (case-insensitive on name/author/tags).
 static std::vector<int> Workshop_FilteredIndices() {
     std::vector<int> out;
     for (int i = 0; i < (int)g_workshopItems.size(); i++) {
@@ -1151,76 +982,29 @@ static std::vector<int> Workshop_FilteredIndices() {
     return out;
 }
 
-static void ReadPathList(PCWSTR name,std::vector<std::wstring>& out) {
-    out.clear();
-    if (!configRoot) return;
-    DWORD bytes{};
-    LSTATUS status=RegGetValueW(configRoot,nullptr,name,RRF_RT_REG_MULTI_SZ,nullptr,nullptr,&bytes);
-    while (status==ERROR_SUCCESS || status==ERROR_MORE_DATA) {
-        std::vector<wchar_t> data(bytes/sizeof(wchar_t)+2,0);
-        DWORD capacity=bytes;
-        status=RegGetValueW(configRoot,nullptr,name,RRF_RT_REG_MULTI_SZ,nullptr,data.data(),&capacity);
-        if (status==ERROR_MORE_DATA) {
-            status=RegGetValueW(configRoot,nullptr,name,RRF_RT_REG_MULTI_SZ,nullptr,nullptr,&bytes);
-            continue;
-        }
-        if (status==ERROR_SUCCESS)
-            for (const wchar_t* path=data.data(); *path; path+=wcslen(path)+1) out.emplace_back(path);
-        break;
-    }
-}
-
+// ---------------------------------------------------------------------------
+// Publish the ordered IDs after saving all new records.
 static void SaveImagePaths(const std::vector<std::wstring>& paths,const std::wstring& removedKey) {
     if (!configWritable) return;
-    std::vector<std::wstring> keys,used;
+    std::vector<std::wstring> used,keys;
     if (!removedKey.empty()) used.push_back(removedKey);
-    for (const auto& path : paths) {
-        if (path.empty()) continue;
-        std::wstring key;
-        for (const auto& old : imageOrder) {
-            if (std::find(used.begin(),used.end(),old)==used.end() &&
-                !_wcsicmp(StringAt(imagesRoot,old.c_str(),L"Path").c_str(),path.c_str())) {
-                key=old;
-                break;
-            }
-        }
-        if (key.empty()) key=ImageKey(path,used);
+    for (auto& path : paths) {
+        auto key=ImageKey(path,used);
         if (key.empty()) return;
-        used.push_back(key);
-        keys.push_back(key);
+        used.push_back(key); keys.push_back(key);
     }
-    auto status=SetPathList(configRoot,keys,L"ImageOrder");
-    ConfigWriteResult(L"ImageOrder",status);
-    if (status!=ERROR_SUCCESS) return;
-    for (const auto& old : imageOrder)
-        if (std::find(keys.begin(),keys.end(),old)==keys.end())
-            ConfigWriteResult(old.c_str(),RegDeleteKeyExW(imagesRoot,old.c_str(),kConfigView,0));
+    if (!StoreList(ImageList(),keys)) return;
+    for (auto& key : imageOrder)
+        if (std::find(keys.begin(),keys.end(),key)==keys.end()) DeleteImageRecord(key);
     imageOrder=std::move(keys);
-    RegDeleteValueW(configRoot,L"ImagePaths");
 }
 static void LoadImagePaths(std::vector<std::wstring>& out) {
-    if (!configRoot || MissingValue(configRoot,L"ImageOrder")) {
-        ReadPathList(L"ImagePaths",out);
-        return;
-    }
-    std::vector<std::wstring> saved;
-    ReadPathList(L"ImageOrder",saved);
-    out.clear();
-    imageOrder.clear();
-    for (const auto& key : saved) {
-        if (key.empty() || key.find(L'\\')!=key.npos) continue;
-        auto path=StringAt(imagesRoot,key.c_str(),L"Path");
+    out.clear(); imageOrder.clear();
+    for (auto& key : ReadList(ImageList())) {
+        auto path=ReadString(Record(key,L"Path"));
         if (!path.empty()) { out.push_back(path); imageOrder.push_back(key); }
     }
 }
-
-static const ImageOverride* FindOverride(const GlobalSettings& s, const std::wstring& fileName) {
-    for (auto& ov : s.overrides)
-        if (!ov.fileName.empty() && _wcsicmp(ov.fileName.c_str(), fileName.c_str()) == 0)
-            return &ov;
-    return nullptr;
-}
-
 static std::vector<UINT> GetFrameDelays(Gdiplus::Image* img, UINT frameCount) {
     std::vector<UINT> delays(frameCount, 100);
     UINT size = img->GetPropertyItemSize(PropertyTagFrameDelay);
@@ -1239,6 +1023,9 @@ static std::vector<UINT> GetFrameDelays(Gdiplus::Image* img, UINT frameCount) {
     return delays;
 }
 
+// ============================================================================
+// Thumbnail helper  (square HBITMAP, drawn directly in the sidebar's owner-draw paint)
+// ============================================================================
 
 static HBITMAP CreateThumb(PetItem& it, int sz = 96) {
     if (!it.image) return nullptr;
@@ -1258,6 +1045,7 @@ static HBITMAP CreateThumb(PetItem& it, int sz = 96) {
     HBITMAP hOld  = (HBITMAP)SelectObject(memDC, hBmp);
 
     if (bits) {
+        // Fill checkerboard background so transparency is visible
         BYTE* px = (BYTE*)bits;
         for (int y = 0; y < sz; y++) {
             for (int x = 0; x < sz; x++) {
@@ -1271,6 +1059,7 @@ static HBITMAP CreateThumb(PetItem& it, int sz = 96) {
             }
         }
 
+        // Draw first frame of the image scaled into sz×sz
         int iw = it.baseWidth, ih = it.baseHeight;
         float ratio = std::min((float)sz / iw, (float)sz / ih);
         int dw = std::max(1, (int)(iw * ratio));
@@ -1290,6 +1079,9 @@ static HBITMAP CreateThumb(PetItem& it, int sz = 96) {
     return hBmp;
 }
 
+// ============================================================================
+// Rendering  (unchanged from v1.0)
+// ============================================================================
 
 static void RenderItem(PetItem& it) {
     if (!it.hwnd || !it.image) return;
@@ -1377,21 +1169,28 @@ static void ApplyClickThrough(PetItem& it) {
     SetWindowLongPtrW(it.hwnd, GWL_EXSTYLE, ex);
 }
 
+// ============================================================================
+// Manager window  — helpers to read/write controls
+// ============================================================================
 
+// Index of the pet currently shown in the right panel (-1 = none)
 static int g_managerSel = -1;
+// Window icon for the manager (destroyed with the window)
 static HICON g_hManagerIcon = nullptr;
 enum class ManagerTheme { Dark = 0, Light = 1, System = 2 };
 static ManagerTheme g_managerTheme = ManagerTheme::Dark;
 static COLORREF g_accentChoices[5] = {
-    RGB(0x7E, 0x57, 0xC2),
-    RGB(0x5B, 0xA8, 0xE0),
-    RGB(0x4C, 0xC0, 0x8A),
-    RGB(0xE0, 0x6B, 0x6B),
-    RGB(0xE0, 0xA6, 0x4C),
+    RGB(0x7E, 0x57, 0xC2),  // purple (default)
+    RGB(0x5B, 0xA8, 0xE0),  // blue
+    RGB(0x4C, 0xC0, 0x8A),  // green
+    RGB(0xE0, 0x6B, 0x6B),  // red
+    RGB(0xE0, 0xA6, 0x4C),  // orange
 };
 static int g_accentIndex = 0;
+// Index 5 = "use system accent color" (not in g_accentChoices[] array)
 static const int kAccentIndexSystem = 5;
 
+// Read the Windows Dwm/UxTheme accent color from the registry.
 static COLORREF GetSystemAccentColor() {
     DWORD color = 0xFF6200EE, size = sizeof(color);
     HKEY hKey;
@@ -1401,22 +1200,29 @@ static COLORREF GetSystemAccentColor() {
         RegQueryValueExW(hKey, L"AccentColor", nullptr, nullptr, (LPBYTE)&color, &size);
         RegCloseKey(hKey);
     }
+    // DWM stores it as ABGR; convert to COLORREF (BGR in low 24 bits → RGB swap).
     BYTE r = (BYTE)(color & 0xFF);
     BYTE g2 = (BYTE)((color >> 8) & 0xFF);
     BYTE b = (BYTE)((color >> 16) & 0xFF);
     return RGB(r, g2, b);
 }
 
+// Manager open hotkey (default: Win+Alt+P).
+// g_hotkeyMods uses the RegisterHotKey MOD_* flags; 0 means "disabled".
 static UINT g_hotkeyMods = MOD_WIN | MOD_ALT | MOD_NOREPEAT;
 static UINT g_hotkeyVk   = 'P';
-static bool   g_hotkeyCapturing = false;
-static HHOOK  g_hKeyHook        = nullptr;
-static bool   g_winKeyDown      = false;
-static bool   g_ctrlKeyDown     = false;
-static unsigned g_altKeysDown = 0;
-static bool   g_shiftKeyDown    = false;
+static bool   g_hotkeyCapturing = false;  // true while waiting for the user to press a new combo
+static HHOOK  g_hKeyHook        = nullptr; // low-level keyboard hook active only during capture
+static bool   g_winKeyDown      = false;   // tracked inside LLKeyProc; GetAsyncKeyState is unreliable for modifier keys in LL hooks
+static bool   g_ctrlKeyDown     = false;   // same — VK_CONTROL/VK_LCONTROL/VK_RCONTROL
+static unsigned g_altKeysDown = 0; // bit 0: left Alt, bit 1: right Alt
+static bool   g_shiftKeyDown    = false;   // same — VK_SHIFT/VK_LSHIFT/VK_RSHIFT
 
+// ----------------------------------------------------------------------------
+// Hotkey helpers
+// ----------------------------------------------------------------------------
 
+// Build a human-readable string like "Win + Alt + P" from mods + vk.
 static std::wstring HotkeyToString(UINT mods, UINT vk) {
     if (mods == 0 && vk == 0) return L"(none)";
     std::wstring s;
@@ -1424,17 +1230,26 @@ static std::wstring HotkeyToString(UINT mods, UINT vk) {
     if (mods & MOD_CONTROL) s += L"Ctrl + ";
     if (mods & MOD_ALT)     s += L"Alt + ";
     if (mods & MOD_SHIFT)   s += L"Shift + ";
+    // MapVirtualKeyW → scan code, then GetKeyNameTextW for a locale-aware name.
+    // Do NOT pass the extended-key bit for regular keys (letters, digits, F-keys)
+    // — only extended keys (numpad /, arrows, ins/del/home/end etc.) need it.
+    // Also mask off any top bits; the lParam format wants bits 16-23 = scan code,
+    // bit 24 = extended, bits 25-31 = 0.
     UINT sc = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
     LONG lParam = (LONG)(sc << 16);
+    // Mark extended bit for keys that need it so GetKeyNameTextW names them correctly.
     switch (vk) {
     case VK_INSERT: case VK_DELETE: case VK_HOME:  case VK_END:
     case VK_PRIOR:  case VK_NEXT:   case VK_LEFT:  case VK_RIGHT:
     case VK_UP:     case VK_DOWN:   case VK_DIVIDE: case VK_NUMLOCK:
     case VK_RCONTROL: case VK_RMENU:
-        lParam |= (1 << 24);
+        lParam |= (1 << 24);  // extended key bit
         break;
     }
     wchar_t buf[64] = {};
+    // GetKeyNameTextW can return "Alt" for letter scan codes when the system
+    // keyboard state still has Alt down (e.g. immediately after capture).
+    // Guard: if the result is "Alt" but vk is not VK_MENU, discard it.
     bool nameOk = sc && GetKeyNameTextW(lParam, buf, 64) && buf[0] &&
                   !(wcscmp(buf, L"Alt") == 0 && vk != VK_MENU) &&
                   !(wcscmp(buf, L"Ctrl") == 0 && vk != VK_CONTROL) &&
@@ -1442,6 +1257,10 @@ static std::wstring HotkeyToString(UINT mods, UINT vk) {
     if (nameOk) {
         s += buf;
     } else {
+        // Reliable fallbacks in priority order:
+        // 1. Letters A-Z and digits 0-9 — just use the VK directly.
+        // 2. VkKeyScan printable result for other VKs.
+        // 3. Hex as last resort.
         if ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9')) {
             s += (wchar_t)vk;
         } else if (vk >= VK_F1 && vk <= VK_F24) {
@@ -1457,6 +1276,7 @@ static std::wstring HotkeyToString(UINT mods, UINT vk) {
     return s;
 }
 
+// Keep the shortcut on the controller so it also works after the manager closes.
 static void ReapplyHotkey() {
     if (g_hCtrlWnd) {
         UnregisterHotKey(g_hCtrlWnd, HOTKEY_OPEN_MANAGER);
@@ -1464,39 +1284,51 @@ static void ReapplyHotkey() {
     }
 }
 
+// Store both halves of the shortcut in a single registry write.
 static void SaveHotkey() {
     DWORD keys[]={g_hotkeyMods,g_hotkeyVk};
-    WriteConfig(L"ManagerHotkey",REG_BINARY,keys,sizeof(keys));
+    if (configWritable) Wh_SetBinaryValue(Setting(L"ManagerHotkey").c_str(),keys,sizeof(keys));
 }
 static void LoadHotkey() {
     DWORD keys[2]{}, bytes=sizeof(keys);
-    if (configRoot && RegGetValueW(configRoot,nullptr,L"ManagerHotkey",RRF_RT_REG_BINARY,nullptr,keys,&bytes)==ERROR_SUCCESS && bytes==sizeof(keys)) {
+    if (configWritable && Wh_GetBinaryValue(Setting(L"ManagerHotkey").c_str(),keys,bytes)==sizeof(keys)) {
+        if (keys[1] && !(keys[0]&(MOD_ALT|MOD_CONTROL|MOD_WIN)) && (keys[1]<VK_F1 || keys[1]>VK_F24)) return;
         g_hotkeyMods=keys[0];
         g_hotkeyVk=keys[1];
     }
 }
 
-static void StartKeyCapture();
+// Install / remove the low-level keyboard hook used during capture.
+static void StartKeyCapture();   // forward declaration
 static void StopKeyCapture();
 
+// Low-level keyboard hook — active only while g_hotkeyCapturing is true.
+// Sees every key before the shell or RegisterHotKey intercepts it, so
+// Win+[letter], Win+Ctrl+[letter], etc. all arrive here.
 static LRESULT CALLBACK LLKeyProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode != HC_ACTION)
+    if (nCode != HC_ACTION || !g_hotkeyCapturing || GetForegroundWindow()!=g_hManagerWnd)
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
 
     auto* ks   = (KBDLLHOOKSTRUCT*)lParam;
     UINT  vk   = ks->vkCode;
     bool  down = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
 
+    // ----------------------------------------------------------------
+    // Track every modifier ourselves — GetAsyncKeyState is unreliable
+    // inside a low-level hook because the kernel hasn't updated the
+    // async key-state table yet when the hook fires.
+    // ----------------------------------------------------------------
     switch (vk) {
     case VK_LWIN:     case VK_RWIN:
         g_winKeyDown   = down;
+        // Always swallow Win events during capture so Start Menu never opens.
         if (g_hotkeyCapturing) return 1;
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
 
     case VK_CONTROL:  case VK_LCONTROL: case VK_RCONTROL:
         g_ctrlKeyDown  = down;
         if (!g_hotkeyCapturing) return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        return 1;
+        return 1;  // swallow modifier-only events during capture
 
     case VK_SHIFT:    case VK_LSHIFT:   case VK_RSHIFT:
         g_shiftKeyDown = down;
@@ -1512,9 +1344,11 @@ static LRESULT CALLBACK LLKeyProc(int nCode, WPARAM wParam, LPARAM lParam) {
     }
     }
 
+    // From here: a non-modifier key event.
     if (!g_hotkeyCapturing || !down)
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
 
+    // Escape cancels capture.
     if (vk == VK_ESCAPE) {
         g_hotkeyCapturing = false;
         StopKeyCapture();
@@ -1523,18 +1357,20 @@ static LRESULT CALLBACK LLKeyProc(int nCode, WPARAM wParam, LPARAM lParam) {
         return 1;
     }
 
+    // Commit — use only hook-tracked state, never GetAsyncKeyState.
     UINT mods = MOD_NOREPEAT;
     if (g_altKeysDown)             mods |= MOD_ALT;
     if (g_ctrlKeyDown)             mods |= MOD_CONTROL;
     if (g_shiftKeyDown)            mods |= MOD_SHIFT;
     if (g_winKeyDown)              mods |= MOD_WIN;
 
+    // Reject bare letters and digits with no real modifier — they would eat
+    // normal typing whenever a window is focused.
     bool hasRealMod = (mods & (MOD_WIN | MOD_ALT | MOD_CONTROL)) != 0;
-    bool isBareTypeable = !hasRealMod &&
-                          ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9'));
-    if (isBareTypeable) {
+    if (!hasRealMod && (vk<VK_F1 || vk>VK_F24)) {
+        // Stay in capture mode; update display to tell the user.
         if (g_hManagerWnd) PostMessageW(g_hManagerWnd, WM_APP + 20, 0, 0);
-        return 1;
+        return 1;  // swallow but don't commit
     }
 
     g_hotkeyCapturing = false;
@@ -1544,7 +1380,7 @@ static LRESULT CALLBACK LLKeyProc(int nCode, WPARAM wParam, LPARAM lParam) {
     ReapplyHotkey();
     SaveHotkey();
     if (g_hManagerWnd) PostMessageW(g_hManagerWnd, WM_APP + 20, 0, 0);
-    return 1;
+    return 1;  // swallow the key
 }
 
 static void StartKeyCapture() {
@@ -1560,11 +1396,12 @@ static void StopKeyCapture() {
         UnhookWindowsHookEx(g_hKeyHook);
         g_hKeyHook = nullptr;
     }
+    // Reset all tracked modifier state — meaningless outside the hook.
     g_altKeysDown=0;
     g_winKeyDown = g_ctrlKeyDown = g_shiftKeyDown = false;
 }
 static bool SystemPrefersLightTheme() {
-    DWORD value = 1, size = sizeof(value);
+    DWORD value = 1, size = sizeof(value);  // default: dark (AppsUseLightTheme=0)
     HKEY hKey;
     if (RegOpenKeyExW(HKEY_CURRENT_USER,
             L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
@@ -1597,7 +1434,9 @@ static void RunImageMenuAction(int idx,int cmd) {
         ForgetStoredPosition(pet.registryKey);
         break;
     case kPetMenuClone: {
-        if (!g_settings.useFolderMode) {
+        // Duplicate the path entry and do a live reload
+        if (pet.folderKey.empty()) {
+            // Find the original path and append a copy
             for (auto& p : g_settings.imagePaths) {
                 if (p == pet.filePath) {
                     g_settings.imagePaths.push_back(p);
@@ -1606,17 +1445,19 @@ static void RunImageMenuAction(int idx,int cmd) {
                 }
             }
         }
-        PostThreadMessageW(g_threadId, WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
+        PostMessageW(g_hCtrlWnd,WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
         break;
     }
     case kPetMenuReload:
-        PostThreadMessageW(g_threadId, WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
+        // Force re-decode of this image only by triggering a full reload.
+        PostMessageW(g_hCtrlWnd,WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
         break;
     case kPetMenuDelete:
+        // Remove from explicit path list and reload
         if (!pet.folderKey.empty()) {
             DWORD removed=1;
             if (configWritable && !pet.registryKey.empty())
-                ConfigWriteResult(L"Removed",RegSetKeyValueW(imagesRoot,pet.registryKey.c_str(),L"Removed",REG_DWORD,&removed,sizeof(removed)));
+                PutNumber(Record(pet.registryKey,L"Removed"),removed);
         } else {
             auto& paths = g_settings.imagePaths;
             auto key=std::find(imageOrder.begin(),imageOrder.end(),pet.registryKey);
@@ -1625,7 +1466,7 @@ static void RunImageMenuAction(int idx,int cmd) {
             else if (auto found=std::find(paths.begin(),paths.end(),pet.filePath); found!=paths.end()) paths.erase(found);
             SaveImagePaths(paths,pet.registryKey);
         }
-        PostThreadMessageW(g_threadId, WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
+        PostMessageW(g_hCtrlWnd,WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
         break;
     }
 
@@ -1638,6 +1479,7 @@ using controls::StackPanel;
 using controls::TextBlock;
 using controls::Button;
 
+// Created and released on the engine's STA, which also owns the pet collection.
 static hosting::WindowsXamlManager managerRuntime{nullptr};
 static hosting::DesktopWindowXamlSource managerSource{nullptr};
 static winrt::com_ptr<IDesktopWindowXamlSourceNative2> managerInput;
@@ -1667,6 +1509,7 @@ static bool LightManager() {
 static auto ManagerAccent() {
     return managerRoot.Resources().Lookup(winrt::box_value(L"AnimaAccent")).as<xaml::Media::SolidColorBrush>();
 }
+// The shared marker lives above the list and footer, in sidebar coordinates.
 struct NavigationMotion {
     xaml::FrameworkElement anchor{nullptr};
     double x{}, y{}, height{16}, startX{}, startY{}, startHeight{}, targetX{}, targetY{};
@@ -1894,6 +1737,7 @@ template<class F> static void Choice(StackPanel parent,const wchar_t* title,
     controls::Grid::SetColumn(choices,1);
     row.Children().Append(choices);
 }
+// A field-width flyout uses the same selection marker as the sidebar.
 template<class F> static void Dropdown(StackPanel parent,const wchar_t* title,const wchar_t* description,
         std::initializer_list<const wchar_t*> options,int selected,F run) {
     auto row = SettingRow(parent,title,description);
@@ -1965,7 +1809,7 @@ template<class F> static void Dropdown(StackPanel parent,const wchar_t* title,co
     field.Flyout(menu);
 }
 static void ReloadItems() {
-    PostThreadMessageW(g_threadId, WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
+    PostMessageW(g_hCtrlWnd,WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
 }
 static void AddImages() {
     wchar_t files[32768]{};
@@ -1981,8 +1825,6 @@ static void AddImages() {
     if (!*next) g_settings.imagePaths.push_back(first);
     else for (; *next; next += wcslen(next) + 1)
         g_settings.imagePaths.push_back(first + L"\\" + next);
-    g_settings.useFolderMode = false;
-    SaveNumber(L"UseFolderMode",0);
     SaveImagePaths(g_settings.imagePaths);
     ReloadItems();
 }
@@ -2386,7 +2228,7 @@ static void WorkshopPage(StackPanel body) {
     body.Children().Append(cards);
     WorkshopCards(cards);
 }
-static constexpr wchar_t managerRunKey[]=L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+
 static ULONGLONG CurrentLogon() {
     HANDLE token{};
     if (!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token)) return 0;
@@ -2396,35 +2238,49 @@ static ULONGLONG CurrentLogon() {
     CloseHandle(token);
     return ok ? (static_cast<ULONGLONG>(static_cast<DWORD>(stats.AuthenticationId.HighPart))<<32)|stats.AuthenticationId.LowPart : 0;
 }
-static bool ManagerAtSignIn() {
-    DWORD size{};
-    return RegGetValueW(HKEY_CURRENT_USER,managerRunKey,L"AnimaWindhawkEngine",RRF_RT_REG_SZ,nullptr,nullptr,&size)==ERROR_SUCCESS;
-}
-static LSTATUS SetManagerStartup(bool enabled) {
-    if (!enabled) return RegDeleteKeyValueW(HKEY_CURRENT_USER,managerRunKey,L"AnimaWindhawkEngine");
-    std::wstring host(32768,L'\0');
-    DWORD length=GetModuleFileNameW(nullptr,host.data(),(DWORD)host.size());
-    if (!length || length>=host.size()) return ERROR_BAD_PATHNAME;
-    host.resize(length);
-    auto launcher=host.substr(0,host.find_last_of(L"\\")+1)+L"windhawk.exe";
-    if (GetFileAttributesW(launcher.c_str())==INVALID_FILE_ATTRIBUTES) return ERROR_FILE_NOT_FOUND;
-    std::wstring command=L"\""+launcher+L"\" -tray-only";
-    if (StringAt(HKEY_CURRENT_USER,managerRunKey,L"AnimaWindhawkEngine")==command) return ERROR_SUCCESS;
-    return RegSetKeyValueW(HKEY_CURRENT_USER,managerRunKey,L"AnimaWindhawkEngine",REG_SZ,
-        command.c_str(),(DWORD)((command.size()+1)*sizeof(wchar_t)));
-}
+static bool ManagerAtSignIn() { return ConfigNumber(L"OpenAtLogon",0)!=0; }
 static bool FirstManagerStartThisLogon() {
     auto id=CurrentLogon();
-    std::wstring marker=L"Volatile Environment\\AnimaWindhawkEngine-"+std::to_wstring(id);
-    RegistryKey key;
-    DWORD disposition{};
-    return id && RegCreateKeyExW(HKEY_CURRENT_USER,marker.c_str(),0,nullptr,REG_OPTION_VOLATILE,KEY_QUERY_VALUE,nullptr,&key.key,&disposition)==ERROR_SUCCESS &&
-        disposition==REG_CREATED_NEW_KEY;
+    if (!id) return false;
+    auto value=std::to_wstring(id);
+    return ReadText(L"ManagerLogon")!=value && SaveText(L"ManagerLogon",value);
+}
+// Adopt only the exact startup command written by the private build.
+static void MigrateStartupOption() {
+    constexpr auto run=L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    wchar_t oldCommand[32768]{},host[32768];
+    DWORD bytes=sizeof(oldCommand);
+    if (!configWritable || RegGetValueW(HKEY_CURRENT_USER,run,L"AnimaWindhawkEngine",
+        RRF_RT_REG_SZ,nullptr,oldCommand,&bytes)!=ERROR_SUCCESS) return;
+    DWORD n=GetModuleFileNameW(nullptr,host,std::size(host));
+    if (!n || n>=std::size(host)) return;
+    std::wstring dir(host,n);
+    auto split=dir.find_last_of(L"\\");
+    if (split==dir.npos) return;
+    auto expected=L"\""+dir.substr(0,split+1)+L"windhawk.exe\" -tray-only";
+    if (_wcsicmp(oldCommand,expected.c_str())) return;
+    if (Number(Setting(L"OpenAtLogon"),-1)<0 && !SaveNumber(L"OpenAtLogon",1)) return;
+    auto status=RegDeleteKeyValueW(HKEY_CURRENT_USER,run,L"AnimaWindhawkEngine");
+    if (status!=ERROR_SUCCESS) Wh_Log(L"Could not remove previous startup entry (%ld)",status);
 }
 static void OpenManagerAtSignIn() {
     if (!ManagerAtSignIn()) return;
-    ConfigWriteResult(L"Manager startup",SetManagerStartup(true));
-    if (FirstManagerStartThisLogon()) PostThreadMessageW(g_threadId,WM_APP_OPEN_MANAGER,static_cast<WPARAM>(-1),0);
+    if (FirstManagerStartThisLogon()) PostMessageW(g_hCtrlWnd,WM_APP_OPEN_MANAGER,static_cast<WPARAM>(-1),0);
+}
+static std::wstring DecoderPath() { return ReadText(L"FFmpegPath"); }
+static void ChooseDecoder() {
+    wchar_t file[32768]{};
+    OPENFILENAMEW pick{sizeof(pick)};
+    pick.hwndOwner=g_hManagerWnd;
+    pick.lpstrFilter=L"FFmpeg executable\0ffmpeg.exe\0\0";
+    pick.lpstrFile=file; pick.nMaxFile=std::size(file);
+    pick.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR;
+    if (!GetOpenFileNameW(&pick)) return;
+    if (_wcsicmp(GetFileNameFromPath(file).c_str(),L"ffmpeg.exe")) {
+        MessageBoxW(g_hManagerWnd,L"Choose ffmpeg.exe.",L"Media decoder",MB_ICONINFORMATION);
+        return;
+    }
+    if (SaveText(L"FFmpegPath",file)) ReloadItems();
 }
 static void AppPage(StackPanel body) {
     auto colors = Group(body,L"Appearance");
@@ -2440,18 +2296,18 @@ static void AppPage(StackPanel body) {
     });
     auto startup = Group(body,L"Startup");
     Toggle(startup,L"Launch this manager at sign-in",ManagerAtSignIn(),[](bool on) {
-        auto err=SetManagerStartup(on);
-        if (on && err==ERROR_SUCCESS) FirstManagerStartThisLogon();
-        if (err!=ERROR_SUCCESS) {
-            MessageBoxW(g_hManagerWnd,L"Windows could not update the startup setting.",L"AnimaWindhawkEngine",MB_ICONWARNING);
-            RenderPage();
-        }
+        if (!SaveNumber(L"OpenAtLogon",on)) { RenderPage(); return; }
+        if (on) FirstManagerStartThisLogon();
     });
     Toggle(startup,L"Tray icon",g_settings.trayIcon,[](bool on) {
         g_settings.trayIcon=on;
         SaveNumber(L"TrayIcon",on);
         ApplyTrayIcon();
     });
+    auto decoder=Group(body,L"Media decoder");
+    auto path=DecoderPath();
+    decoder.Children().Append(Label(path.empty() ? L"Choose FFmpeg for WebP, APNG and MP4." : path));
+    Action(decoder,L"Choose ffmpeg.exe",[] { ChooseDecoder(); });
     auto keys = Group(body,L"Manager hotkey");
     auto shortcut = g_hotkeyCapturing ? std::wstring(L"Press a shortcut, or Escape to cancel.") : HotkeyToString(g_hotkeyMods,g_hotkeyVk);
     auto shortcutRow = SettingRow(keys,L"Open manager",shortcut.c_str());
@@ -2481,7 +2337,7 @@ static void RenderPage() {
     if (!managerRoot) return;
     auto body = Named<StackPanel>(L"Body");
     body.Children().Clear();
-    if (!configWritable) body.Children().Append(Label(L"Changes cannot be saved to your user registry. See the Windhawk log for the access or migration error."));
+    if (!configWritable) body.Children().Append(Label(L"Changes cannot be saved to Windhawk storage. See the Windhawk log for the access or migration error."));
     const wchar_t* title = L"Media";
     switch (page) {
     case Page::Pet:
@@ -2511,7 +2367,9 @@ static void Navigate(Page next,bool mediaChanged=false) {
         }
     }
 }
-static HANDLE managerManifest = INVALID_HANDLE_VALUE;
+// The executable belongs to Windhawk. Supply the unpackaged XAML declaration
+// through a private activation context while creating the desktop island.
+static HANDLE managerManifest = INVALID_HANDLE_VALUE; // owned by the engine STA
 
 static HANDLE LoadManagerManifest() {
     static constexpr char xml[] = R"MANIFEST(<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -2785,7 +2643,7 @@ static void BuildManager(HWND hwnd) {
             auto& folder=libraryFolders.at(-index-1);
             folder.expanded=!folder.expanded;
             DWORD value=folder.expanded;
-            if (configWritable) ConfigWriteResult(L"Expanded",RegSetKeyValueW(imagesRoot,folder.key.c_str(),L"Expanded",REG_DWORD,&value,sizeof(value)));
+            if (configWritable) PutNumber(Record(folder.key,L"Expanded"),value);
             PostMessageW(g_hManagerWnd,WM_APP+34,0,0);
             return;
         }
@@ -2812,6 +2670,14 @@ static void CloseManagerIsland() {
 static LRESULT CALLBACK ManagerWndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
     try {
         switch (msg) {
+        case WM_ACTIVATE:
+            if (LOWORD(wp)==WA_INACTIVE && g_hotkeyCapturing) {
+                g_hotkeyCapturing=false;
+                StopKeyCapture();
+                ReapplyHotkey();
+                PostMessageW(hwnd,WM_APP+20,0,0);
+            }
+            break;
         case WM_TIMER: if (wp==kNavTimer) { StepNavPill(hwnd); return 0; } break;
         case WM_CREATE: BuildManager(hwnd); return 0;
         case WM_APP+34: if (managerRoot) PetList(); return 0;
@@ -2883,41 +2749,24 @@ static LRESULT CALLBACK ManagerWndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp) {
 }
 
 
+// ============================================================================
+// Manager window icon  (fetched once from the internet, cached on disk)
+// ============================================================================
+//
+// The icon is downloaded once from the author's GitHub and cached on disk.
+// If the download fails the window just gets no custom icon — nothing breaks.
 
 static HICON LoadManagerIcon() {
-    std::wstring directory=AppDataDirectory();
-    if (directory.empty()) return nullptr;
-    CreateDirectoryW(directory.c_str(),nullptr);
-    std::wstring iconPath=directory+L"\\icon.png";
-
-    if (GetFileAttributesW(iconPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        const wchar_t* kUrl =
-            L"https://raw.githubusercontent.com/TuBeo5866/tubeo5866.github.io"
-            L"/refs/heads/main/files/icon.png";
-
-        HRESULT hr = URLDownloadToFileW(nullptr, kUrl, iconPath.c_str(), 0, nullptr);
-        if (FAILED(hr)) {
-            Wh_Log(L"Icon download failed (hr=0x%08X) — window will use default icon", hr);
-            return nullptr;
-        }
-    }
-
-    Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromFile(iconPath.c_str());
-    if (!bmp || bmp->GetLastStatus() != Gdiplus::Ok) {
-        delete bmp;
-        Wh_Log(L"Icon load failed — window will use default icon");
-        return nullptr;
-    }
-
-    HICON hIcon = nullptr;
-    bmp->GetHICON(&hIcon);
-    delete bmp;
-    return hIcon;
+    return CopyIcon(LoadIconW(nullptr,MAKEINTRESOURCEW(32512)));
 }
 
+// ============================================================================
+// Open (or focus) the manager window
+// ============================================================================
 
 static void OpenPetManager(int focusIndex) {
     if (g_hManagerWnd) {
+        // Already open — just focus it and, optionally, select a pet
         ShowWindow(g_hManagerWnd, SW_RESTORE);
         SetForegroundWindow(g_hManagerWnd);
         if (focusIndex >= 0)
@@ -2945,6 +2794,8 @@ static void OpenPetManager(int focusIndex) {
         return;
     }
 
+    // Load (and cache) the window icon — done after window creation so a slow
+    // first-time download doesn't block the window from appearing.
     if (!g_hManagerIcon)
         g_hManagerIcon = LoadManagerIcon();
     if (g_hManagerIcon) {
@@ -2960,6 +2811,9 @@ static void OpenPetManager(int focusIndex) {
         PostMessageW(g_hManagerWnd, WM_APP_OPEN_MANAGER, (WPARAM)focusIndex, 0);
 }
 
+// ============================================================================
+// Item window
+// ============================================================================
 
 static LRESULT CALLBACK ItemWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     PetItem* it = (PetItem*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
@@ -3010,6 +2864,7 @@ static LRESULT CALLBACK ItemWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         return 0;
     case WM_RBUTTONUP: {
         if (!it) return 0;
+        // Find index
         int idx = -1;
         for (int i = 0; i < (int)g_items.size(); i++)
             if (&g_items[i] == it) { idx = i; break; }
@@ -3074,7 +2929,7 @@ static LRESULT CALLBACK ItemWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             ForgetStoredPosition(it->registryKey);
             break;
         case kCmdReloadAll:
-            PostThreadMessageW(g_threadId, WM_APP_RELOAD, 0, 0);
+            PostMessageW(g_hCtrlWnd,WM_APP_RELOAD, 0, 0);
             break;
         }
         return 0;
@@ -3098,111 +2953,113 @@ static HWND CreateItemWindow(PetItem& it) {
     return hwnd;
 }
 
+// ============================================================================
+// Settings loading
+// ============================================================================
 
-static void SaveGlobalSettings(const GlobalSettings& s) {
-    if (!configWritable) return;
-    SaveNumber(L"TrayIcon",s.trayIcon);
-    SaveNumber(L"UseFolderMode",s.useFolderMode);
-    SaveNumber(L"ScanSubfolders",s.scanSubfolders);
-    SaveNumber(L"AlwaysOnTop",s.alwaysOnTop);
-    SaveNumber(L"ClickThrough",s.clickThrough);
-    SaveNumber(L"LockPosition",s.lockPosition);
-    SaveNumber(L"ScalePercent",s.scalePercent);
-    SaveNumber(L"OpacityPercent",s.opacityPercent);
-    SaveNumber(L"RotationDegrees",s.rotationDegrees);
-    SaveNumber(L"Paused",s.paused);
-    SaveNumber(L"MaxFps",s.maxFps);
-    WriteConfig(L"ImagesFolder",REG_SZ,s.imagesFolder.c_str(),(DWORD)((s.imagesFolder.size()+1)*sizeof(wchar_t)));
-}
-static void ReadGlobalSettings(GlobalSettings& s,bool importWindhawk) {
-    s.useFolderMode    = Wh_GetIntSetting(L"UseFolderMode") != 0;
-
-    PCWSTR folder = Wh_GetStringSetting(L"ImagesFolder");
-    s.imagesFolder = folder ? folder : L"";
-    Wh_FreeStringSetting(folder);
-
-    s.scanSubfolders   = Wh_GetIntSetting(L"ScanSubfolders") != 0;
-
-    s.imagePaths.clear();
-    for (int i = 0;; i++) {
-        PCWSTR p = Wh_GetStringSetting(L"ImagePaths[%d]", i);
-        bool has = p && *p;
-        if (!has) { Wh_FreeStringSetting(p); break; }
-        s.imagePaths.emplace_back(p);
-        Wh_FreeStringSetting(p);
+// One-time, read-only import of the private build's current HKCU format.
+static void ImportPreviousLibrary() {
+    if (!configWritable || ConfigNumber(L"LibraryInitialized",0)) return;
+    HKEY root{};
+    auto status=RegOpenKeyExW(HKEY_CURRENT_USER,L"SOFTWARE\\AnimaWindhawkEngine",0,KEY_READ|KEY_WOW64_64KEY,&root);
+    if (status==ERROR_FILE_NOT_FOUND || status==ERROR_PATH_NOT_FOUND) { SaveNumber(L"LibraryInitialized",1); return; }
+    if (status!=ERROR_SUCCESS) return;
+    bool ok=true;
+    auto copy=[&](const std::wstring& source,PCWSTR field,const std::wstring& dest,DWORD type) {
+        DWORD size{};
+        auto rc=RegGetValueW(root,source.c_str(),field,type,nullptr,nullptr,&size);
+        if (rc==ERROR_FILE_NOT_FOUND || rc==ERROR_PATH_NOT_FOUND) return;
+        if (rc!=ERROR_SUCCESS || size>65536) { ok=false; return; }
+        std::vector<DWORD> data(size/sizeof(DWORD)+1,0);
+        if (RegGetValueW(root,source.c_str(),field,type,nullptr,data.data(),&size)!=ERROR_SUCCESS) { ok=false; return; }
+        if (type==RRF_RT_REG_SZ) ok=PutString(dest,reinterpret_cast<PCWSTR>(data.data())) && ok;
+        else if (type==RRF_RT_REG_DWORD && size==sizeof(DWORD)) ok=PutNumber(dest,data[0]) && ok;
+        else if (type==RRF_RT_REG_BINARY && size==8) ok=Wh_SetBinaryValue(dest.c_str(),data.data(),size) && ok;
+    };
+    auto children=[&](const std::wstring& source) {
+        std::vector<std::wstring> names;
+        HKEY parent{};
+        auto rc=RegOpenKeyExW(root,source.c_str(),0,KEY_READ,&parent);
+        if (rc==ERROR_FILE_NOT_FOUND || rc==ERROR_PATH_NOT_FOUND) return names;
+        if (rc!=ERROR_SUCCESS) { ok=false; return names; }
+        wchar_t name[256];
+        for (DWORD i=0;;++i) {
+            DWORD len=std::size(name);
+            rc=RegEnumKeyExW(parent,i,name,&len,nullptr,nullptr,nullptr,nullptr);
+            if (rc==ERROR_NO_MORE_ITEMS) break;
+            if (rc!=ERROR_SUCCESS) { ok=false; break; }
+            names.emplace_back(name,len);
+        }
+        RegCloseKey(parent);
+        return names;
+    };
+    for (auto field : {L"WelcomeShown",L"ManagerTheme",L"Accent",L"WorkshopLayout",L"TrayIcon",L"QuitNoticeShown",L"ScanSubfolders",L"MaxFps",L"AlwaysOnTop",L"ClickThrough",L"LockPosition",L"ScalePercent",L"OpacityPercent",L"RotationDegrees",L"Paused"})
+        copy(L"Configurations",field,Setting(field),RRF_RT_REG_DWORD);
+    copy(L"Configurations",L"ManagerHotkey",Setting(L"ManagerHotkey"),RRF_RT_REG_BINARY);
+    copy(L"Configurations",L"RepositoryCommit",Setting(L"RepositoryCommit"),RRF_RT_REG_SZ);
+    auto image=[&](const std::wstring& src,const std::wstring& key) {
+        copy(src,L"Path",Record(key,L"Path"),RRF_RT_REG_SZ);
+        copy(src,L"Position",Record(key,L"Position"),RRF_RT_REG_BINARY);
+        for (auto field : {L"Enabled",L"AlwaysOnTop",L"ClickThrough",L"LockPosition",L"ScalePercent",L"OpacityPercent",L"RotationDegrees",L"Paused",L"FpsLimit",L"Removed"})
+            copy(src,field,Record(key,field),RRF_RT_REG_DWORD);
+    };
+    std::vector<std::wstring> single,folders;
+    DWORD bytes{};
+    auto rc=RegGetValueW(root,L"Configurations",L"ImageOrder",RRF_RT_REG_MULTI_SZ,nullptr,nullptr,&bytes);
+    if (rc==ERROR_SUCCESS && bytes<=16*1024*1024) {
+        std::vector<wchar_t> data(bytes/sizeof(wchar_t)+2,0);
+        if (RegGetValueW(root,L"Configurations",L"ImageOrder",RRF_RT_REG_MULTI_SZ,nullptr,data.data(),&bytes)==ERROR_SUCCESS) {
+            for (PCWSTR name=data.data();*name;name+=wcslen(name)+1) {
+                if (wcschr(name,L'\\')) continue;
+                auto key=RecordName(name);
+                image(std::wstring(L"Loaded_Images\\")+name,key);
+                single.push_back(key);
+            }
+        } else ok=false;
+    } else if (rc!=ERROR_FILE_NOT_FOUND && rc!=ERROR_PATH_NOT_FOUND) ok=false;
+    for (auto& name : children(L"Loaded_Images\\Folders")) {
+        auto src=L"Loaded_Images\\Folders\\"+name;
+        auto key=L"Folders\\"+RecordName(name);
+        copy(src,L"Path",Record(key,L"Path"),RRF_RT_REG_SZ);
+        copy(src,L"Expanded",Record(key,L"Expanded"),RRF_RT_REG_DWORD);
+        std::vector<std::wstring> items;
+        for (auto& child : children(src)) {
+            auto item=key+L"\\"+RecordName(child);
+            image(src+L"\\"+child,item);
+            items.push_back(item);
+        }
+        ok=StoreList(Record(key,L"Images.Index"),items) && ok;
+        folders.push_back(key);
     }
-    auto windhawkPaths=s.imagePaths;
+    RegCloseKey(root);
+    if (ok) ok=StoreList(ImageList(),single) && StoreList(FolderList(),folders);
+    if (!ok) {
+        configWritable=false;
+        Wh_Log(L"Private library import was incomplete; restart to retry.");
+    } else SaveNumber(L"LibraryInitialized",1);
+}
+
+static void ReadGlobalSettings(GlobalSettings& s) {
+    s=GlobalSettings{};
     LoadImagePaths(s.imagePaths);
-    bool hasOrder=configRoot && !MissingValue(configRoot,L"ImageOrder");
-    if (!windhawkPaths.empty() && (importWindhawk || !hasOrder)) s.imagePaths=std::move(windhawkPaths);
-    if (!hasOrder || importWindhawk) SaveImagePaths(s.imagePaths);
-    s.alwaysOnTop      = Wh_GetIntSetting(L"Global_AlwaysOnTop") != 0;
-    s.clickThrough     = Wh_GetIntSetting(L"Global_ClickThrough") != 0;
-    s.lockPosition     = Wh_GetIntSetting(L"Global_LockPosition") != 0;
-    s.scalePercent     = Wh_GetIntSetting(L"Global_ScalePercent");
-    s.rotationDegrees  = Wh_GetIntSetting(L"Global_RotationDegrees");
-    s.opacityPercent   = Wh_GetIntSetting(L"Global_OpacityPercent");
-    s.paused           = Wh_GetIntSetting(L"Global_Paused") != 0;
-    s.maxFps           = Wh_GetIntSetting(L"MaxFps");
-    s.trayIcon         = Wh_GetIntSetting(L"TrayIcon") != 0;
-
-    if (s.opacityPercent <= 0) s.opacityPercent = 100;
-    if (s.scalePercent <= 0) s.scalePercent = 100;
-    if (s.maxFps       <= 0) s.maxFps       = 20;
-
-    if (!importWindhawk && configRoot) {
-        s.trayIcon=ConfigNumber(L"TrayIcon",s.trayIcon)!=0;
-        s.useFolderMode=ConfigNumber(L"UseFolderMode",s.useFolderMode)!=0;
-        s.scanSubfolders=ConfigNumber(L"ScanSubfolders",s.scanSubfolders)!=0;
-        s.alwaysOnTop=ConfigNumber(L"AlwaysOnTop",s.alwaysOnTop)!=0;
-        s.clickThrough=ConfigNumber(L"ClickThrough",s.clickThrough)!=0;
-        s.lockPosition=ConfigNumber(L"LockPosition",s.lockPosition)!=0;
-        s.scalePercent=ConfigNumber(L"ScalePercent",s.scalePercent);
-        s.opacityPercent=ConfigNumber(L"OpacityPercent",s.opacityPercent);
-        s.rotationDegrees=ConfigNumber(L"RotationDegrees",s.rotationDegrees);
-        s.paused=ConfigNumber(L"Paused",s.paused)!=0;
-        s.maxFps=ConfigNumber(L"MaxFps",s.maxFps);
-        if (!MissingValue(configRoot,L"ImagesFolder")) s.imagesFolder=StringAt(configRoot,nullptr,L"ImagesFolder");
-    }
-    s.maxFps=std::max(1,s.maxFps);
-    SaveGlobalSettings(s);
-    s.overrides.clear();
-    for (int i = 0;; i++) {
-        PCWSTR name = Wh_GetStringSetting(L"ImageOverrides[%d].FileName", i);
-        bool hasName = name && *name;
-        if (!hasName) { Wh_FreeStringSetting(name); break; }
-
-        ImageOverride ov;
-        ov.fileName = name;
-        Wh_FreeStringSetting(name);
-
-        ov.enabled = Wh_GetIntSetting(L"ImageOverrides[%d].Enabled", i) != 0;
-
-        PCWSTR aot = Wh_GetStringSetting(L"ImageOverrides[%d].AlwaysOnTop", i);
-        ov.alwaysOnTop = ParseTriState(aot); Wh_FreeStringSetting(aot);
-
-        PCWSTR ct = Wh_GetStringSetting(L"ImageOverrides[%d].ClickThrough", i);
-        ov.clickThrough = ParseTriState(ct); Wh_FreeStringSetting(ct);
-
-        PCWSTR lp = Wh_GetStringSetting(L"ImageOverrides[%d].LockPosition", i);
-        ov.lockPosition = ParseTriState(lp); Wh_FreeStringSetting(lp);
-
-        ov.scalePercent    = Wh_GetIntSetting(L"ImageOverrides[%d].ScalePercent",    i);
-        ov.rotationDegrees = Wh_GetIntSetting(L"ImageOverrides[%d].RotationDegrees", i);
-        ov.opacityPercent  = Wh_GetIntSetting(L"ImageOverrides[%d].OpacityPercent",  i);
-        ov.posX            = Wh_GetIntSetting(L"ImageOverrides[%d].PosX", i);
-        ov.posY            = Wh_GetIntSetting(L"ImageOverrides[%d].PosY", i);
-
-        s.overrides.push_back(ov);
-    }
+    s.trayIcon=ConfigNumber(L"TrayIcon",s.trayIcon)!=0;
+    s.alwaysOnTop=ConfigNumber(L"AlwaysOnTop",s.alwaysOnTop)!=0;
+    s.clickThrough=ConfigNumber(L"ClickThrough",s.clickThrough)!=0;
+    s.lockPosition=ConfigNumber(L"LockPosition",s.lockPosition)!=0;
+    s.scanSubfolders=ConfigNumber(L"ScanSubfolders",s.scanSubfolders)!=0;
+    s.scalePercent=std::clamp<int>(ConfigNumber(L"ScalePercent",s.scalePercent),1,500);
+    s.opacityPercent=std::clamp<int>(ConfigNumber(L"OpacityPercent",s.opacityPercent),10,100);
+    s.rotationDegrees=std::clamp<int>(ConfigNumber(L"RotationDegrees",s.rotationDegrees),0,359);
+    s.maxFps=std::clamp<int>(ConfigNumber(L"MaxFps",s.maxFps),1,1000);
+    s.paused=ConfigNumber(L"Paused",s.paused)!=0;
 }
-
 
 static bool NeedsMediaDecoder(const std::wstring& path) {
     const wchar_t* ext = PathFindExtensionW(path.c_str());
     if (!_wcsicmp(ext, L".webp") || !_wcsicmp(ext, L".apng") ||
         !_wcsicmp(ext, L".mp4")) return true;
     if (_wcsicmp(ext, L".png")) return false;
+    // APNG is often named .png: inspect chunk headers, not compressed pixels.
     HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) return false;
@@ -3227,6 +3084,7 @@ static bool NeedsMediaDecoder(const std::wstring& path) {
     return animated;
 }
 
+// Windows CRT argument quoting; CreateProcess is called directly, never cmd.exe.
 static std::wstring MediaQuote(const std::wstring& arg) {
     std::wstring out = L"\"";
     size_t slashes = 0;
@@ -3253,628 +3111,10 @@ struct MediaTempFrames {
     }
 };
 
-static HANDLE g_ffmpegSetupProcess = nullptr;
-static HANDLE g_ffmpegSetupJob = nullptr;
-static bool g_ffmpegSetupAttempted = false;
-static bool g_ffmpegSetupStopping = false;
-static ULONGLONG g_ffmpegSetupStarted = 0;
-static std::wstring g_ffmpegSetupTemp;
-static std::wstring g_ffmpegSetupStage;
-static std::wstring g_ffmpegSetupError;
-
-static bool g_ffmpegMediaBlocked = false;
-static void StartFFmpegSetup(const std::wstring& exe);
-static void ShowFFmpegSetupToast();
-
-enum class FFmpegToastState { Progress, Success, Failure };
-static FFmpegToastState g_ffmpegToastState = FFmpegToastState::Progress;
-static std::wstring g_ffmpegToastTitle = L"FFmpeg setup";
-static std::wstring g_ffmpegToastBody;
-static std::wstring g_ffmpegLastFailure;
-static DWORD g_ffmpegProgressOffset = 0;
-static std::string g_ffmpegProgressPending;
-static ULONGLONG g_ffmpegProgressPoll = 0;
-
-static void SetFFmpegSetupStatus(FFmpegToastState state, const std::wstring& title,
-                                 const std::wstring& body) {
-    g_ffmpegToastState = state;
-    g_ffmpegToastTitle = title;
-    g_ffmpegToastBody = body;
-    Wh_Log(L"[FFmpeg] %s", body.c_str());
-    ShowFFmpegSetupToast();
-}
-
-static void ReadFFmpegSetupProgress(bool force = false) {
-    if (g_ffmpegSetupTemp.empty()) return;
-    ULONGLONG now = GetTickCount64();
-    if (!force && now - g_ffmpegProgressPoll < 250) return;
-    g_ffmpegProgressPoll = now;
-    HANDLE f = CreateFileW((g_ffmpegSetupTemp + L"\\progress.log").c_str(), GENERIC_READ,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) return;
-    LARGE_INTEGER offset; offset.QuadPart = g_ffmpegProgressOffset;
-    if (SetFilePointerEx(f, offset, nullptr, FILE_BEGIN)) {
-        char bytes[4096]; DWORD got = 0;
-        while (g_ffmpegProgressOffset < 65536 && ReadFile(f, bytes, sizeof(bytes), &got, nullptr) && got) {
-            g_ffmpegProgressOffset += got;
-            g_ffmpegProgressPending.append(bytes, got);
-            size_t end;
-            while ((end = g_ffmpegProgressPending.find('\n')) != std::string::npos) {
-                std::string line = g_ffmpegProgressPending.substr(0, end);
-                g_ffmpegProgressPending.erase(0, end + 1);
-                if (!line.empty() && line.back() == '\r') line.pop_back();
-                if (line.empty()) continue;
-                int count = MultiByteToWideChar(CP_UTF8, 0, line.data(), (int)line.size(), nullptr, 0);
-                if (count <= 0) continue;
-                std::wstring status(count, L'\0');
-                MultiByteToWideChar(CP_UTF8, 0, line.data(), (int)line.size(), &status[0], count);
-                SetFFmpegSetupStatus(FFmpegToastState::Progress, L"Setting up FFmpeg", status);
-            }
-        }
-    }
-    CloseHandle(f);
-}
-
-static HANDLE g_nativeToastProcess = nullptr, g_nativeToastJob = nullptr;
-static HANDLE g_nativeToastRetry = nullptr, g_nativeToastOpen = nullptr, g_nativeToastStop = nullptr;
-static bool g_nativeToastAttempted = false;
-static std::wstring g_nativeToastDir, g_nativeToastShortcut, g_nativeToastLastPayload;
-static const wchar_t kToastAppId[] = L"AnimaWindhawkEngine.FFmpeg";
-static std::wstring PSString(const std::wstring& value);
-
-static std::wstring ToastEncoded(const std::wstring& script) {
-    DWORD count = 0;
-    if (!CryptBinaryToStringW((const BYTE*)script.data(), (DWORD)(script.size()*sizeof(wchar_t)),
-        CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, nullptr, &count)) return {};
-    std::wstring result(count, L'\0');
-    if (!CryptBinaryToStringW((const BYTE*)script.data(), (DWORD)(script.size()*sizeof(wchar_t)),
-        CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, &result[0], &count)) return {};
-    while (!result.empty() && !result.back()) result.pop_back();
-    return result;
-}
-
-static bool ToastRegString(const std::wstring& key, const wchar_t* name, const std::wstring& value) {
-    HKEY h = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, key.c_str(), 0, nullptr, 0, KEY_SET_VALUE, nullptr, &h, nullptr)) return false;
-    LONG result = RegSetValueExW(h, name, 0, REG_SZ, (const BYTE*)value.c_str(), (DWORD)((value.size()+1)*sizeof(wchar_t)));
-    RegCloseKey(h); return result == ERROR_SUCCESS;
-}
-
-static bool RegisterNativeToast(const std::wstring& powershell, const std::wstring& retryName,
-                                const std::wstring& openName) {
-    auto signalCommand = [&](const std::wstring& event) {
-        std::wstring script = L"try{$e=[Threading.EventWaitHandle]::OpenExisting(" + PSString(event) +
-            L");$e.Set()|Out-Null;$e.Dispose()}catch{}";
-        return MediaQuote(powershell) + L" -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + ToastEncoded(script);
-    };
-    std::wstring retryCmd = signalCommand(retryName), openCmd = signalCommand(openName);
-    for (auto pair : {std::make_pair(L"anima-windhawk-ffmpeg-retry", retryCmd),
-                      std::make_pair(L"anima-windhawk-manager", openCmd)}) {
-        std::wstring key = L"Software\\Classes\\" + std::wstring(pair.first);
-        if (!ToastRegString(key, nullptr, L"URL:AnimaWindhawkEngine") ||
-            !ToastRegString(key, L"URL Protocol", L"") ||
-            !ToastRegString(key + L"\\shell\\open\\command", nullptr, pair.second)) return false;
-    }
-    std::wstring appKey = L"Software\\Classes\\AppUserModelId\\" + std::wstring(kToastAppId);
-    if (!ToastRegString(appKey, L"DisplayName", L"AnimaWindhawkEngine") ||
-        !ToastRegString(appKey, L"CustomActivator", L"{EFDCFD6B-B481-4190-8B67-30B470795A18}")) return false;
-    HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    bool uninit = SUCCEEDED(init);
-    IShellLinkW* link = nullptr;
-    const CLSID shellLink = {0x00021401,0x0000,0x0000,{0xc0,0x00,0x00,0x00,0x00,0x00,0x00,0x46}};
-    HRESULT hr = CoCreateInstance(shellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link));
-    if (SUCCEEDED(hr)) {
-        hr = link->SetPath(powershell.c_str());
-        std::wstring args = openCmd.substr(MediaQuote(powershell).size()+1);
-        if (SUCCEEDED(hr)) hr = link->SetArguments(args.c_str());
-        if (SUCCEEDED(hr)) hr = link->SetDescription(L"AnimaWindhawkEngine notifications and manager");
-        IPropertyStore* props = nullptr;
-        if (SUCCEEDED(hr)) hr = link->QueryInterface(IID_PPV_ARGS(&props));
-        if (SUCCEEDED(hr)) {
-            const PROPERTYKEY appIdKey = {{0x9f4c2855,0x9f79,0x4b39,{0xa8,0xd0,0xe1,0xd4,0x2d,0xe1,0xd5,0xf3}},5};
-            const PROPERTYKEY activatorKey = {appIdKey.fmtid,26};
-            GUID stub = {0xefdcfd6b,0xb481,0x4190,{0x8b,0x67,0x30,0xb4,0x70,0x79,0x5a,0x18}};
-            PROPVARIANT value = {}; value.vt = VT_LPWSTR; value.pwszVal = const_cast<PWSTR>(kToastAppId);
-            hr = props->SetValue(appIdKey, value);
-            value.vt = VT_CLSID; value.puuid = &stub;
-            if (SUCCEEDED(hr)) hr = props->SetValue(activatorKey, value);
-            if (SUCCEEDED(hr)) hr = props->Commit();
-            props->Release();
-        }
-        IPersistFile* file = nullptr;
-        if (SUCCEEDED(hr)) hr = link->QueryInterface(IID_PPV_ARGS(&file));
-        if (SUCCEEDED(hr)) { hr = file->Save(g_nativeToastShortcut.c_str(), TRUE); file->Release(); }
-        link->Release();
-    }
-    if (uninit) CoUninitialize();
-    return SUCCEEDED(hr);
-}
-
-static void StopNativeToasts() {
-    if (g_nativeToastStop) SetEvent(g_nativeToastStop);
-    if (g_nativeToastProcess && WaitForSingleObject(g_nativeToastProcess, 5000) != WAIT_OBJECT_0) {
-        if (g_nativeToastJob) TerminateJobObject(g_nativeToastJob, 1);
-        WaitForSingleObject(g_nativeToastProcess, INFINITE);
-    }
-    for (HANDLE h : {g_nativeToastProcess,g_nativeToastJob,g_nativeToastRetry,g_nativeToastOpen,g_nativeToastStop})
-        if (h) CloseHandle(h);
-    g_nativeToastProcess=g_nativeToastJob=g_nativeToastRetry=g_nativeToastOpen=g_nativeToastStop=nullptr;
-    if (!g_nativeToastDir.empty()) {
-        for (auto name : {L"notice.xml",L"notice.tmp",L"error.txt"}) DeleteFileW((g_nativeToastDir+L"\\"+name).c_str());
-        RemoveDirectoryW(g_nativeToastDir.c_str()); g_nativeToastDir.clear();
-    }
-    if (!g_nativeToastShortcut.empty()) { DeleteFileW(g_nativeToastShortcut.c_str()); g_nativeToastShortcut.clear(); }
-    if (g_nativeToastAttempted) {
-        RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Classes\\anima-windhawk-ffmpeg-retry");
-        RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Classes\\anima-windhawk-manager");
-        RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\Classes\\AppUserModelId\\AnimaWindhawkEngine.FFmpeg");
-    }
-}
-
-static bool StartNativeToasts() {
-    if (g_nativeToastProcess) return true;
-    if (g_nativeToastAttempted || g_ffmpegSetupStopping) return false;
-    g_nativeToastAttempted = true;
-    auto fail = []() { Wh_Log(L"[FFmpeg] Native notification initialization failed (Win32 %lu). Setup logs remain available.",GetLastError()); StopNativeToasts(); return false; };
-    wchar_t temp[MAX_PATH], unique[MAX_PATH], system[MAX_PATH], programs[MAX_PATH];
-    DWORD n = GetTempPathW(MAX_PATH,temp);
-    if (!n || n>=MAX_PATH || !GetTempFileNameW(temp,L"AWN",0,unique)) return fail();
-    DeleteFileW(unique);
-    if (!CreateDirectoryW(unique,nullptr)) return fail();
-    g_nativeToastDir=unique;
-    n=GetSystemDirectoryW(system,MAX_PATH);
-    if (!n || n>=MAX_PATH || FAILED(SHGetFolderPathW(nullptr,CSIDL_PROGRAMS,nullptr,0,programs))) return fail();
-    g_nativeToastShortcut=std::wstring(programs)+L"\\AnimaWindhawkEngine Notifications.lnk";
-    std::wstring powershell=std::wstring(system)+L"\\WindowsPowerShell\\v1.0\\powershell.exe";
-    std::wstring prefix=L"Local\\AWHE.Toast."+std::to_wstring(GetCurrentProcessId());
-    std::wstring retryName=prefix+L".Retry",openName=prefix+L".Open",stopName=prefix+L".Stop";
-    HANDLE token=nullptr; DWORD tokenBytes=0;
-    if(!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&token))return fail();
-    GetTokenInformation(token,TokenUser,nullptr,0,&tokenBytes);
-    std::vector<BYTE> tokenData(tokenBytes);
-    bool tokenOk=tokenBytes && GetTokenInformation(token,TokenUser,tokenData.data(),tokenBytes,&tokenBytes);
-    CloseHandle(token);
-    LPWSTR sid=nullptr;
-    if(!tokenOk || !ConvertSidToStringSidW(((TOKEN_USER*)tokenData.data())->User.Sid,&sid))return fail();
-    std::wstring sddl=L"D:P(A;;GA;;;SY)(A;;GA;;;"+std::wstring(sid)+L")S:(ML;;NW;;;ME)";
-    LocalFree(sid);
-    PSECURITY_DESCRIPTOR descriptor=nullptr;
-    if(!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(),SDDL_REVISION_1,&descriptor,nullptr))return fail();
-    SECURITY_ATTRIBUTES security={sizeof(security),descriptor,FALSE};
-    g_nativeToastRetry=CreateEventW(&security,FALSE,FALSE,retryName.c_str());
-    g_nativeToastOpen=CreateEventW(&security,FALSE,FALSE,openName.c_str());
-    g_nativeToastStop=CreateEventW(&security,TRUE,FALSE,stopName.c_str());
-    LocalFree(descriptor);
-    if (!g_nativeToastRetry || !g_nativeToastOpen || !g_nativeToastStop ||
-        !RegisterNativeToast(powershell,retryName,openName)) return fail();
-    std::wstring script=L"$work="+PSString(g_nativeToastDir)+L";$stopName="+PSString(stopName)+L";\n"+LR"NATIVE(
-$ErrorActionPreference='Stop'
-try {
-    [Windows.UI.Notifications.ToastNotificationManager,Windows.UI.Notifications,ContentType=WindowsRuntime] | Out-Null
-    [Windows.UI.Notifications.ToastNotification,Windows.UI.Notifications,ContentType=WindowsRuntime] | Out-Null
-    [Windows.UI.Notifications.NotificationData,Windows.UI.Notifications,ContentType=WindowsRuntime] | Out-Null
-    [Windows.Data.Xml.Dom.XmlDocument,Windows.Data.Xml.Dom.XmlDocument,ContentType=WindowsRuntime] | Out-Null
-    $app='AnimaWindhawkEngine.FFmpeg'
-    $notifier=[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($app)
-    if ($notifier.Setting.ToString() -ne 'Enabled') { throw ('Notifications are disabled: '+$notifier.Setting) }
-    $stop=[Threading.EventWaitHandle]::OpenExisting($stopName)
-    $last='';$lastKind='';$sequence=[uint32]0
-    while (!$stop.WaitOne(250)) {
-        $path=Join-Path $work 'notice.xml'
-        if (!(Test-Path -LiteralPath $path)) { continue }
-        try { $text=[IO.File]::ReadAllText($path);$notice=[xml]$text } catch { continue }
-        if ($text -eq $last) { continue }
-        $last=$text;$kind=[string]$notice.notice.kind
-        $data=[Windows.UI.Notifications.NotificationData]::new()
-        $data.Values.Add('title',[string]$notice.notice.title)
-        $data.Values.Add('status',[string]$notice.notice.body)
-        $sequence++;$data.SequenceNumber=$sequence
-        if ($kind -eq '0' -and $lastKind -eq '0') {
-            # A dismissed progress notification stays dismissed. No repeated popups.
-            $notifier.Update($data,'setup','ffmpeg') | Out-Null
-        } else {
-            $actions='';$progress=''
-            if ($kind -eq '2') {
-                $actions='<actions><action content="Retry FFmpeg setup" activationType="protocol" arguments="anima-windhawk-ffmpeg-retry:"/></actions>'
-            } elseif ($kind -eq '0') {
-                $progress='<progress title="FFmpeg setup" value="indeterminate" status="Working..."/>'
-            }
-            $xml=[Windows.Data.Xml.Dom.XmlDocument]::new()
-            $xml.LoadXml('<toast activationType="protocol" launch="anima-windhawk-manager:"><visual><binding template="ToastGeneric"><text>{title}</text><text>{status}</text>'+$progress+'</binding></visual>'+$actions+'<audio silent="true"/></toast>')
-            $toast=[Windows.UI.Notifications.ToastNotification]::new($xml)
-            $toast.Tag='setup';$toast.Group='ffmpeg';$toast.Data=$data
-            $toast.ExpirationTime=[DateTimeOffset]::Now.AddHours(12)
-            $notifier.Show($toast)
-        }
-        $lastKind=$kind
-    }
-} catch {
-    try { [IO.File]::WriteAllText((Join-Path $work 'error.txt'),$_.Exception.Message) } catch {}
-} finally {
-    try { [Windows.UI.Notifications.ToastNotificationManager]::History.Remove('setup','ffmpeg','AnimaWindhawkEngine.FFmpeg') } catch {}
-    if ($stop) { $stop.Dispose() }
-}
-)NATIVE";
-    std::wstring encoded=ToastEncoded(script);
-    if (encoded.empty()) return fail();
-    std::wstring cmd=MediaQuote(powershell)+L" -NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand "+encoded;
-    g_nativeToastJob=CreateJobObjectW(nullptr,nullptr);
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits={};
-    limits.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    if (!g_nativeToastJob || !SetInformationJobObject(g_nativeToastJob,JobObjectExtendedLimitInformation,&limits,sizeof(limits))) return fail();
-    STARTUPINFOW si={};si.cb=sizeof(si);PROCESS_INFORMATION pi={};
-    if (!CreateProcessW(powershell.c_str(),&cmd[0],nullptr,nullptr,FALSE,CREATE_NO_WINDOW|CREATE_SUSPENDED,nullptr,
-        g_nativeToastDir.c_str(),&si,&pi)) return fail();
-    if (!AssignProcessToJobObject(g_nativeToastJob,pi.hProcess) || ResumeThread(pi.hThread)==DWORD(-1)) {
-        TerminateProcess(pi.hProcess,1);WaitForSingleObject(pi.hProcess,INFINITE);
-        CloseHandle(pi.hThread);CloseHandle(pi.hProcess);return fail();
-    }
-    CloseHandle(pi.hThread);g_nativeToastProcess=pi.hProcess;
-    Wh_Log(L"[FFmpeg] Native Windows notifications initialized");return true;
-}
-
-static std::wstring ToastXmlEscape(const std::wstring& text) {
-    std::wstring result;
-    for(wchar_t c:text) {
-        switch(c) {
-        case L'&':result+=L"&amp;";break;
-        case L'<':result+=L"&lt;";break;
-        case L'>':result+=L"&gt;";break;
-        case L'"':result+=L"&quot;";break;
-        case L'\'':result+=L"&apos;";break;
-        default:if(c>=32 || c==L'\n' || c==L'\r' || c==L'\t')result+=c;
-        }
-    }
-    return result;
-}
-
-static void ShowFFmpegSetupToast() {
-    if (g_ffmpegSetupStopping || !StartNativeToasts()) return;
-    std::wstring xml=L"<notice kind=\""+std::to_wstring((int)g_ffmpegToastState)+L"\"><title>"+
-        ToastXmlEscape(g_ffmpegToastTitle)+L"</title><body>"+ToastXmlEscape(g_ffmpegToastBody)+L"</body></notice>";
-    if(xml==g_nativeToastLastPayload)return;
-    int count=WideCharToMultiByte(CP_UTF8,0,xml.data(),(int)xml.size(),nullptr,0,nullptr,nullptr);
-    if(count<=0)return;
-    std::string bytes(count,0);WideCharToMultiByte(CP_UTF8,0,xml.data(),(int)xml.size(),&bytes[0],count,nullptr,nullptr);
-    std::wstring temp=g_nativeToastDir+L"\\notice.tmp",dest=g_nativeToastDir+L"\\notice.xml";
-    HANDLE f=CreateFileW(temp.c_str(),GENERIC_WRITE,0,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
-    if(f==INVALID_HANDLE_VALUE)return;
-    DWORD written=0;bool ok=WriteFile(f,bytes.data(),(DWORD)bytes.size(),&written,nullptr) && written==bytes.size();
-    CloseHandle(f);
-    if(ok && MoveFileExW(temp.c_str(),dest.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))g_nativeToastLastPayload=xml;
-}
-
-static void PollNativeToasts() {
-    if(g_nativeToastRetry && WaitForSingleObject(g_nativeToastRetry,0)==WAIT_OBJECT_0 &&
-        !g_ffmpegSetupProcess && g_ffmpegMediaBlocked && !g_ffmpegSetupStopping) {
-        wchar_t local[MAX_PATH];
-        if(SUCCEEDED(SHGetFolderPathW(nullptr,CSIDL_LOCAL_APPDATA,nullptr,0,local))) {
-            Wh_Log(L"[FFmpeg] Retry requested from Windows notification");
-            g_ffmpegSetupError.clear();g_ffmpegSetupAttempted=false;
-            StartFFmpegSetup(std::wstring(local)+L"\\AnimaWindhawkEngine\\ffmpeg.exe");
-        }
-    }
-    if(g_nativeToastOpen && WaitForSingleObject(g_nativeToastOpen,0)==WAIT_OBJECT_0)OpenPetManager();
-    if(g_nativeToastProcess && WaitForSingleObject(g_nativeToastProcess,0)==WAIT_OBJECT_0) {
-        HANDLE f=CreateFileW((g_nativeToastDir+L"\\error.txt").c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
-        std::wstring error=L"Notification host exited. Check Windows notification settings.";
-        if(f!=INVALID_HANDLE_VALUE) {
-            char buf[4096];DWORD got=0;
-            if(ReadFile(f,buf,sizeof(buf),&got,nullptr)&&got) {
-                int n=MultiByteToWideChar(CP_UTF8,0,buf,got,nullptr,0);
-                if(n>0){error.resize(n);MultiByteToWideChar(CP_UTF8,0,buf,got,&error[0],n);}
-            }
-            CloseHandle(f);
-        }
-        Wh_Log(L"[FFmpeg] Native notifications: %s",error.c_str());StopNativeToasts();
-    }
-}
-
-static void FailFFmpegSetup() {
-    bool newlyBlocked = !g_ffmpegMediaBlocked;
-    g_ffmpegMediaBlocked = true;
-    if (g_ffmpegLastFailure != g_ffmpegSetupError || g_ffmpegToastState != FFmpegToastState::Failure) {
-        g_ffmpegLastFailure = g_ffmpegSetupError;
-        SetFFmpegSetupStatus(FFmpegToastState::Failure, L"FFmpeg setup failed",
-            L"Could not download, extract or install FFmpeg. WebP, APNG and MP4 are unavailable. Use Retry below.");
-        Wh_Log(L"[FFmpeg] Failure details: %s", g_ffmpegSetupError.c_str());
-    } else ShowFFmpegSetupToast();
-    if (newlyBlocked) PostThreadMessageW(g_threadId, WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
-}
-
-static std::wstring PSString(const std::wstring& value) {
-    std::wstring result = L"'";
-    for (wchar_t c : value) { result += c; if (c == L'\'') result += c; }
-    return result + L"'";
-}
-
-static void CleanupFFmpegSetup() {
-    if (g_ffmpegSetupProcess) {
-        CloseHandle(g_ffmpegSetupProcess); g_ffmpegSetupProcess = nullptr;
-    }
-    if (g_ffmpegSetupJob) { CloseHandle(g_ffmpegSetupJob); g_ffmpegSetupJob = nullptr; }
-    if (!g_ffmpegSetupStage.empty()) {
-        DeleteFileW(g_ffmpegSetupStage.c_str()); g_ffmpegSetupStage.clear();
-    }
-    if (!g_ffmpegSetupTemp.empty()) {
-        for (auto name : {L"7zr.exe", L"ffmpeg.7z", L"ffmpeg.exe", L"installed.flag", L"error.txt", L"progress.log"})
-            DeleteFileW((g_ffmpegSetupTemp + L"\\" + name).c_str());
-        RemoveDirectoryW(g_ffmpegSetupTemp.c_str());
-        g_ffmpegSetupTemp.clear();
-    }
-}
-
-static void StopFFmpegSetup() {
-    g_ffmpegSetupStopping = true;
-    StopNativeToasts();
-    if (g_ffmpegSetupProcess) {
-        Wh_Log(L"[FFmpeg] Setup cancelled: mod is shutting down");
-        if (g_ffmpegSetupJob) TerminateJobObject(g_ffmpegSetupJob, 1);
-        WaitForSingleObject(g_ffmpegSetupProcess, INFINITE);
-    }
-    CleanupFFmpegSetup();
-}
-
-static void StartFFmpegSetup(const std::wstring& exe) {
-    if (g_ffmpegSetupAttempted || g_ffmpegSetupStopping) return;
-    DWORD attributes=GetFileAttributesW(exe.c_str());
-    if (attributes!=INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY)) {
-        if (g_ffmpegMediaBlocked) {
-            g_ffmpegMediaBlocked=false;
-            g_ffmpegSetupError.clear();
-            SetFFmpegSetupStatus(FFmpegToastState::Success,L"FFmpeg is ready",L"Using the installed ffmpeg.exe.");
-            PostThreadMessageW(g_threadId,WM_APP_RELOAD_ITEMS_ONLY,0,0);
-        }
-        return;
-    }
-    DWORD error=GetLastError();
-    g_ffmpegSetupAttempted=true;
-    if (attributes!=INVALID_FILE_ATTRIBUTES) {
-        g_ffmpegSetupError=L"The ffmpeg.exe installation path is a directory.";
-        return;
-    }
-    if (error!=ERROR_FILE_NOT_FOUND && error!=ERROR_PATH_NOT_FOUND) {
-        g_ffmpegSetupError=L"Cannot inspect ffmpeg.exe (Windows error "+std::to_wstring(error)+L").";
-        return;
-    }
-    g_ffmpegLastFailure.clear();
-    g_ffmpegProgressOffset = 0;
-    g_ffmpegProgressPending.clear();
-    g_ffmpegProgressPoll = 0;
-    SetFFmpegSetupStatus(FFmpegToastState::Progress, L"Setting up FFmpeg",
-        g_ffmpegMediaBlocked ? L"Retrying FFmpeg setup..." : L"Starting FFmpeg setup...");
-    Wh_Log(L"[FFmpeg] Installation target: %s", exe.c_str());
-    wchar_t temp[MAX_PATH], unique[MAX_PATH], system[MAX_PATH];
-    DWORD n = GetTempPathW(MAX_PATH, temp);
-    if (!n || n >= MAX_PATH || !GetTempFileNameW(temp, L"AWF", 0, unique)) {
-        g_ffmpegSetupError = L"Cannot create the FFmpeg setup temporary folder."; return;
-    }
-    DeleteFileW(unique);
-    if (!CreateDirectoryW(unique, nullptr)) {
-        g_ffmpegSetupError = L"Cannot create the FFmpeg setup temporary folder."; return;
-    }
-    g_ffmpegSetupTemp = unique;
-    std::wstring installDir = exe.substr(0, exe.find_last_of(L"\\/"));
-    g_ffmpegSetupStage = installDir + L"\\ffmpeg-" + GetFileNameFromPath(unique) + L".new.exe";
-    std::wstring script = L"$work=" + PSString(g_ffmpegSetupTemp) +
-        L"; $dest=" + PSString(exe) + L"; $stage=" + PSString(g_ffmpegSetupStage) + LR"PS(
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$base = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.7z'
-$headers = @{ 'User-Agent' = 'AnimaWindhawkEngine-FFmpegSetup'; 'Cache-Control' = 'no-cache' }
-function Report([string]$message) {
-    # Progress reporting must never make an otherwise valid installation fail.
-    try { [IO.File]::AppendAllText((Join-Path $work 'progress.log'), $message + "`n", [Text.UTF8Encoding]::new($false)) } catch {}
-}
-function TextGet([string]$url) {
-    $response = Invoke-WebRequest -UseBasicParsing -Uri $url -Headers $headers -TimeoutSec 30
-    $content = $response.Content
-    # Windows PowerShell can return binary Content for .ver/.sha256 responses.
-    # Decode bytes before invoking string methods; casting bytes to string is not decoding.
-    if ($content -is [byte[]]) {
-        $text = [Text.Encoding]::UTF8.GetString($content)
-    } elseif ($content -is [string]) {
-        $text = $content
-    } else {
-        throw ('Unexpected HTTP content type for ' + $url)
-    }
-    return $text.TrimStart([char]0xFEFF).Trim()
-}
-function Download([string]$url, [string]$path) {
-    Invoke-WebRequest -UseBasicParsing -Uri $url -Headers $headers -TimeoutSec 300 -OutFile $path
-    if (!(Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0) {
-        throw 'Downloaded file is empty.'
-    }
-    Report ('Downloaded ' + [IO.Path]::GetFileName($path) + ' (' + [Math]::Round((Get-Item -LiteralPath $path).Length / 1MB, 1) + ' MiB).')
-}
-function HashCheck([string]$path, [string]$expected) {
-    if ($expected -notmatch '^[0-9a-fA-F]{64}$') { throw 'Invalid SHA-256 metadata.' }
-    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $expected) {
-        throw 'SHA-256 verification failed; nothing was installed. Retry after restarting the mod.'
-    }
-}
-try {
-    if ([IO.File]::Exists($dest)) { exit 0 }
-    Report 'Checking the latest FFmpeg release...'
-    $version = TextGet ($base + '.ver')
-    if ($version -notmatch '^[0-9]+(\.[0-9]+){1,3}$') { throw 'Invalid FFmpeg release version.' }
-    Report ('Latest FFmpeg release: ' + $version)
-    # GitHub's release asset URL pins 7zr to the same release as its digest.
-    Report 'Checking the latest 7-Zip release...'
-    $release = (TextGet 'https://api.github.com/repos/ip7z/7zip/releases/latest') | ConvertFrom-Json
-    $asset = @($release.assets | Where-Object { $_.name -eq '7zr.exe' })
-    if ($asset.Count -ne 1) { throw 'Latest 7-Zip release has no unique 7zr.exe asset.' }
-    $url = [string]$asset[0].browser_download_url
-    if ($url -notmatch '^https://github\.com/ip7z/7zip/releases/download/[0-9.]+/7zr\.exe$') {
-        throw 'Unexpected 7zr download URL.'
-    }
-    $digest = [string]$asset[0].digest
-    if ($digest -notmatch '^sha256:([0-9a-fA-F]{64})$') { throw '7zr SHA-256 is unavailable.' }
-    $sevenHash = $Matches[1]
-    $seven = Join-Path $work '7zr.exe'
-    Report ('Downloading 7zr.exe (7-Zip ' + $release.tag_name + ')...')
-    Download $url $seven
-    Report 'Verifying the 7zr.exe SHA-256 checksum...'
-    HashCheck $seven $sevenHash
-    $archive = Join-Path $work 'ffmpeg.7z'
-    Report 'Fetching the FFmpeg archive checksum...'
-    $archiveHash = ((TextGet ($base + '.sha256')) -split '\s+')[0]
-    Report 'Downloading FFmpeg essentials. This may take a few minutes...'
-    Download $base $archive
-    Report 'Verifying the FFmpeg archive SHA-256 checksum...'
-    HashCheck $archive $archiveHash
-    # The rolling URL may change during download. Never mislabel the installed build.
-    if ((TextGet ($base + '.ver')) -ne $version) { throw 'FFmpeg release changed during download. Use Retry FFmpeg setup to try again.' }
-    # Flatten only ffmpeg.exe from the archive's versioned bin directory.
-    Report 'Extracting ffmpeg.exe with 7zr...'
-    & $seven e $archive ('-o' + $work) '-r' 'ffmpeg.exe' '-y' '-bd' '-bso0' '-bsp0' '-bse0'
-    if ($LASTEXITCODE -ne 0) { throw '7zr could not extract FFmpeg.' }
-    $candidate = Join-Path $work 'ffmpeg.exe'
-    if (!(Test-Path -LiteralPath $candidate -PathType Leaf)) { throw 'Archive did not contain ffmpeg.exe.' }
-    Report 'Checking that ffmpeg.exe can run...'
-    & $candidate '-hide_banner' '-version' *> $null
-    if ($LASTEXITCODE -ne 0) { throw 'Downloaded FFmpeg cannot run on this Windows installation.' }
-    Report 'Copying ffmpeg.exe to the installation folder...'
-    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($dest)) | Out-Null
-    [IO.File]::Copy($candidate, $stage, $true)
-    Report 'Installing the verified FFmpeg executable...'
-    try { [IO.File]::Move($stage, $dest) }
-    catch [IO.IOException] { if ([IO.File]::Exists($dest)) { exit 0 }; throw }
-    [IO.File]::WriteAllText((Join-Path $work 'installed.flag'), $version)
-    exit 0
-} catch {
-    [IO.File]::WriteAllText((Join-Path $work 'error.txt'), $_.Exception.Message)
-    exit 1
-} finally {
-    Report 'Cleaning up temporary setup files...'
-    foreach ($name in @('7zr.exe', 'ffmpeg.7z', 'ffmpeg.exe')) {
-        Remove-Item -LiteralPath (Join-Path $work $name) -Force -ErrorAction SilentlyContinue
-    }
-    Remove-Item -LiteralPath $stage -Force -ErrorAction SilentlyContinue
-}
-)PS";
-    DWORD chars = 0;
-    DWORD bytes = (DWORD)(script.size() * sizeof(wchar_t));
-    bool encoded = CryptBinaryToStringW((const BYTE*)script.data(), bytes,
-        CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, nullptr, &chars) != FALSE;
-    std::wstring base64(chars, L'\0');
-    if (encoded) encoded = CryptBinaryToStringW((const BYTE*)script.data(), bytes,
-        CRYPT_STRING_BASE64 | CRYPT_STRING_NOCRLF, &base64[0], &chars) != FALSE;
-    while (!base64.empty() && !base64.back()) base64.pop_back();
-    n = GetSystemDirectoryW(system, MAX_PATH);
-    if (!encoded || !n || n >= MAX_PATH) {
-        g_ffmpegSetupError = L"Cannot prepare automatic FFmpeg setup."; CleanupFFmpegSetup(); return;
-    }
-    std::wstring powershell = std::wstring(system) + L"\\WindowsPowerShell\\v1.0\\powershell.exe";
-    std::wstring cmd = MediaQuote(powershell) + L" -NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " + base64;
-    g_ffmpegSetupJob = CreateJobObjectW(nullptr, nullptr);
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = {};
-    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    if (!g_ffmpegSetupJob || !SetInformationJobObject(g_ffmpegSetupJob,
-        JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
-        g_ffmpegSetupError = L"Cannot initialize the FFmpeg setup job."; CleanupFFmpegSetup(); return;
-    }
-    STARTUPINFOW si = {}; si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW; si.wShowWindow = SW_HIDE;
-    PROCESS_INFORMATION pi = {};
-    if (!CreateProcessW(powershell.c_str(), &cmd[0], nullptr, nullptr, FALSE,
-        CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, g_ffmpegSetupTemp.c_str(), &si, &pi)) {
-        g_ffmpegSetupError = L"Cannot start Windows PowerShell for automatic FFmpeg setup.";
-        CleanupFFmpegSetup(); return;
-    }
-    g_ffmpegSetupProcess = pi.hProcess;
-    bool started = AssignProcessToJobObject(g_ffmpegSetupJob, pi.hProcess) &&
-                   ResumeThread(pi.hThread) != DWORD(-1);
-    CloseHandle(pi.hThread);
-    if (!started) {
-        TerminateProcess(pi.hProcess, 1); WaitForSingleObject(pi.hProcess, INFINITE);
-        g_ffmpegSetupError = L"Cannot start the FFmpeg setup job."; CleanupFFmpegSetup(); return;
-    }
-    g_ffmpegSetupStarted = GetTickCount64();
-    ShowFFmpegSetupToast();
-}
-
-static void EnsureFFmpegOnEnable() {
-    if (g_ffmpegSetupAttempted || g_ffmpegSetupStopping) return;
-    wchar_t local[MAX_PATH];
-    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, local))) {
-        g_ffmpegSetupError = L"Cannot locate Local AppData for startup FFmpeg setup.";
-        FailFFmpegSetup();
-        return;
-    }
-    std::wstring exe = std::wstring(local) + L"\\AnimaWindhawkEngine\\ffmpeg.exe";
-    StartFFmpegSetup(exe);
-    if (!g_ffmpegSetupError.empty()) FailFFmpegSetup();
-}
-
-static void PollFFmpegSetup() {
-    PollNativeToasts();
-    if (!g_ffmpegSetupProcess) {
-        if (!g_ffmpegSetupError.empty()) FailFFmpegSetup();
-        return;
-    }
-    ReadFFmpegSetupProgress();
-    if (WaitForSingleObject(g_ffmpegSetupProcess, 0) != WAIT_OBJECT_0) {
-        if (GetTickCount64() - g_ffmpegSetupStarted < 10 * 60 * 1000) return;
-        TerminateJobObject(g_ffmpegSetupJob, 1);
-        WaitForSingleObject(g_ffmpegSetupProcess, INFINITE);
-        g_ffmpegSetupError = L"Automatic FFmpeg setup timed out. Use Retry FFmpeg setup to try again.";
-    }
-    ReadFFmpegSetupProgress(true);
-    DWORD code = 1; GetExitCodeProcess(g_ffmpegSetupProcess, &code);
-    bool installed = GetFileAttributesW((g_ffmpegSetupTemp + L"\\installed.flag").c_str()) != INVALID_FILE_ATTRIBUTES;
-    if (code != 0 && g_ffmpegSetupError.empty()) {
-        HANDLE f = CreateFileW((g_ffmpegSetupTemp + L"\\error.txt").c_str(), GENERIC_READ,
-            FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (f != INVALID_HANDLE_VALUE) {
-            char text[4096]; DWORD got = 0;
-            if (ReadFile(f, text, sizeof(text), &got, nullptr) && got) {
-                int len = MultiByteToWideChar(CP_UTF8, 0, text, got, nullptr, 0);
-                g_ffmpegSetupError.resize(len);
-                if (len) MultiByteToWideChar(CP_UTF8, 0, text, got, &g_ffmpegSetupError[0], len);
-            }
-            CloseHandle(f);
-        }
-        if (g_ffmpegSetupError.empty()) g_ffmpegSetupError = L"Automatic FFmpeg setup failed. Use Retry FFmpeg setup to try again.";
-    }
-    bool failed = !g_ffmpegSetupError.empty();
-    CleanupFFmpegSetup();
-    if (failed) {
-        FailFFmpegSetup();
-        ShowFFmpegSetupToast();
-    } else {
-        g_ffmpegMediaBlocked = false;
-        SetFFmpegSetupStatus(FFmpegToastState::Success, L"FFmpeg is ready",
-            installed ? L"FFmpeg installed successfully. Reloading your saved media..."
-                      : L"The installed FFmpeg is ready to use.");
-        PostThreadMessageW(g_threadId, WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
-    }
-}
-
 static bool LoadDecodedMedia(PetItem& it, size_t& totalBytes, std::wstring& error) {
-    wchar_t local[MAX_PATH];
-    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_LOCAL_APPDATA, nullptr, 0, local))) {
-        g_ffmpegSetupError = L"Cannot locate Local AppData.";
-        FailFFmpegSetup(); return false;
-    }
-    std::wstring exe = std::wstring(local) + L"\\AnimaWindhawkEngine\\ffmpeg.exe";
-    StartFFmpegSetup(exe);
-    if (!g_ffmpegSetupError.empty()) {
-        FailFFmpegSetup();
-        return false;
-    }
-    if (g_ffmpegMediaBlocked) {
-        ShowFFmpegSetupToast();
-        return false;
-    }
-    DWORD attrs = GetFileAttributesW(exe.c_str());
-    if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY)) {
-        if (!g_ffmpegSetupProcess) {
-            g_ffmpegSetupError = L"FFmpeg is missing. Use Retry FFmpeg setup.";
-            FailFFmpegSetup();
-        }
+    auto exe=DecoderPath();
+    if (exe.empty() || GetFileAttributesW(exe.c_str())==INVALID_FILE_ATTRIBUTES) {
+        error=L"Choose an installed ffmpeg.exe in App settings to load this format.";
         return false;
     }
     wchar_t temp[MAX_PATH], unique[MAX_PATH];
@@ -3887,6 +3127,8 @@ static bool LoadDecodedMedia(PetItem& it, size_t& totalBytes, std::wstring& erro
         error = L"Cannot create temporary frame directory."; return false;
     }
     MediaTempFrames frames; frames.dir = unique;
+    // Decode only local media, no audio or network protocols. Do not shell-expand
+    // filenames. 301st frame is a sentinel to reject overlong input, never truncate.
     std::wstring cmd = MediaQuote(exe) +
         L" -hide_banner -loglevel error -nostdin -y -protocol_whitelist file,pipe"
         L" -threads 2 -i " + MediaQuote(it.filePath) +
@@ -3896,6 +3138,7 @@ static bool LoadDecodedMedia(PetItem& it, size_t& totalBytes, std::wstring& erro
         MediaQuote(frames.dir + L"\\frame-%04d.png");
     STARTUPINFOW si = {}; si.cb = sizeof(si);
     PROCESS_INFORMATION pi = {};
+    // Closing the job on timeout/unload also terminates the decoder.
     HANDLE job = CreateJobObjectW(nullptr, nullptr);
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = {};
     limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
@@ -3988,6 +3231,9 @@ static void RemoveTrayIcon() {
 
 static void ApplyTrayIcon() {
     if (g_settings.trayIcon && !g_trayIconAdded) {
+        // Lazily load the manager icon if it hasn't been loaded yet
+        // (e.g. when ApplyTrayIcon is called from ReloadAll before any
+        // manager window has been opened).
         if (!g_hManagerIcon)
             g_hManagerIcon = LoadManagerIcon();
 
@@ -4006,7 +3252,9 @@ static void ApplyTrayIcon() {
     }
 }
 
-static void ReloadAll(bool rereadSettings,bool importWindhawk) {
+static void ReloadAll(bool rereadSettings) {
+    // Close manager if open (it will re-open if user wants)
+    // Actually keep manager open but signal it to refresh
     bool managerWasOpen = g_hManagerWnd != nullptr;
 
     std::wstring selectedKey;
@@ -4021,19 +3269,19 @@ static void ReloadAll(bool rereadSettings,bool importWindhawk) {
         else positions[item.registryKey]=pos;
     }
     DestroyAllItems();
+    // Only re-read from Windhawk settings when triggered externally (e.g. mod
+    // reload, tray "Reload all").  When triggered from the manager UI the live
+    // g_settings is already up-to-date and must NOT be overwritten, otherwise
+    // in-memory changes (like a freshly added image path) get wiped.
     if (rereadSettings)
-        ReadGlobalSettings(g_settings,importWindhawk);
+        ReadGlobalSettings(g_settings);
     ApplyTrayIcon();
 
     ReadLibraryFolders();
-    bool legacyFolder=g_settings.useFolderMode && !g_settings.imagesFolder.empty();
-    bool migrated=legacyFolder && RegisterLibraryFolder(g_settings.imagesFolder);
     std::vector<std::pair<std::wstring,std::wstring>> files;
-    if (!legacyFolder || migrated) {
-        for (const auto& path : g_settings.imagePaths)
-            if (HasSupportedExt(path) && GetFileAttributesW(path.c_str())!=INVALID_FILE_ATTRIBUTES)
-                files.emplace_back(path,L"");
-    }
+    for (const auto& path : g_settings.imagePaths)
+        if (HasSupportedExt(path) && GetFileAttributesW(path.c_str())!=INVALID_FILE_ATTRIBUTES)
+            files.emplace_back(path,L"");
     std::set<std::wstring> emptyFolders;
     auto scan=[&](const std::wstring& path,const std::wstring& key) {
         std::vector<std::wstring> paths;
@@ -4042,7 +3290,6 @@ static void ReloadAll(bool rereadSettings,bool importWindhawk) {
         for (auto& file : paths) files.emplace_back(std::move(file),key);
     };
     for (const auto& folder : libraryFolders) scan(folder.path,folder.key);
-    if (legacyFolder && !migrated) scan(g_settings.imagesFolder,L"");
     g_items.reserve(files.size());
 
     static std::vector<std::wstring> warnedVideos;
@@ -4054,8 +3301,9 @@ static void ReloadAll(bool rereadSettings,bool importWindhawk) {
     const int inset=std::min({80,screenWidth-1,screenHeight-1});
     const int cascadeSlots=1+(std::min(screenWidth,screenHeight)-1-inset)/40;
     for (const auto& [path,folderKey] : files) {
+        if (workerQuitting) return;
         std::wstring fn = GetFileNameFromPath(path);
-        const ImageOverride* ov = FindOverride(g_settings, fn);
+
 
         PetItem it;
         it.isGif = !_wcsicmp(PathFindExtensionW(path.c_str()),L".gif");
@@ -4065,19 +3313,8 @@ static void ReloadAll(bool rereadSettings,bool importWindhawk) {
         it.folderKey=folderKey;
         if (!folderKey.empty()) {
             it.registryKey=ImageKey(path,usedKeys,folderKey);
-            if (migrated && !it.registryKey.empty() && _wcsicmp(g_settings.imagesFolder.c_str(),StringAt(imagesRoot,folderKey.c_str(),L"Path").c_str())==0) {
-                for (const auto& old : Subkeys(imagesRoot)) {
-                    if (_wcsicmp(StringAt(imagesRoot,old.c_str(),L"Path").c_str(),path.c_str())) continue;
-                    RegistryKey from,to;
-                    if (RegOpenKeyExW(imagesRoot,old.c_str(),0,KEY_READ,&from.key)==ERROR_SUCCESS &&
-                        RegOpenKeyExW(imagesRoot,it.registryKey.c_str(),0,KEY_READ|KEY_WRITE,&to.key)==ERROR_SUCCESS &&
-                        MissingValue(to.key,L"Enabled"))
-                        ConfigWriteResult(L"Folder image migration",CopyMachineValues(from.key,to.key));
-                    break;
-                }
-            }
-            DWORD removed{},size=sizeof(removed);
-            if (!it.registryKey.empty() && RegGetValueW(imagesRoot,it.registryKey.c_str(),L"Removed",RRF_RT_REG_DWORD,nullptr,&removed,&size)==ERROR_SUCCESS && removed) continue;
+            if (Number(Record(it.registryKey,L"Removed"),0)) continue;
+            // A missing decoder must preserve the saved folder.
             emptyFolders.erase(folderKey);
         }
         if (NeedsMediaDecoder(path)) {
@@ -4109,19 +3346,18 @@ static void ReloadAll(bool rereadSettings,bool importWindhawk) {
                 ? GetFrameDelays(img, it.frameCount) : std::vector<UINT>{100};
         }
 
-        it.alwaysOnTop  = (ov && ov->alwaysOnTop  != -1) ? ov->alwaysOnTop  == 1 : g_settings.alwaysOnTop;
-        it.clickThrough = (ov && ov->clickThrough  != -1) ? ov->clickThrough == 1 : g_settings.clickThrough;
-        it.lockPosition = (ov && ov->lockPosition  != -1) ? ov->lockPosition == 1 : g_settings.lockPosition;
-        it.scalePercent    = std::clamp((ov && ov->scalePercent > 0) ? ov->scalePercent : g_settings.scalePercent,1,500);
-        it.rotationDegrees = ov ? ov->rotationDegrees : g_settings.rotationDegrees;
-        it.opacityPercent  = (ov && ov->opacityPercent > 0) ? ov->opacityPercent : g_settings.opacityPercent;
-        it.paused = it.frameCount > 1 ? g_settings.paused : true;
-        it.enabled = !ov || ov->enabled;
+        it.alwaysOnTop=g_settings.alwaysOnTop;
+        it.clickThrough=g_settings.clickThrough;
+        it.lockPosition=g_settings.lockPosition;
+        it.scalePercent=g_settings.scalePercent;
+        it.rotationDegrees=g_settings.rotationDegrees;
+        it.opacityPercent=g_settings.opacityPercent;
+        it.paused=it.frameCount<=1 || g_settings.paused;
 
         if (folderKey.empty()) {
             for (const auto& key : imageOrder) {
                 if (std::find(usedKeys.begin(),usedKeys.end(),key)==usedKeys.end() &&
-                    !_wcsicmp(StringAt(imagesRoot,key.c_str(),L"Path").c_str(),path.c_str())) {
+                    !_wcsicmp(ReadString(Record(key,L"Path")).c_str(),path.c_str())) {
                     it.registryKey=key;
                     break;
                 }
@@ -4133,9 +3369,6 @@ static void ReloadAll(bool rereadSettings,bool importWindhawk) {
         POINT storedPos{};
         const int offset=inset+40*static_cast<int>(g_items.size()%cascadeSlots);
         POINT fallback{offset,offset};
-        if (ov && ov->posX>=0) fallback.x=ov->posX;
-        if (ov && ov->posY>=0) fallback.y=ov->posY;
-        if (!MonitorFromPoint(fallback,MONITOR_DEFAULTTONULL)) fallback={offset,offset};
         bool hasStoredPos=ReadStoredPosition(it.registryKey,storedPos);
         POINT position=hasStoredPos ? storedPos : fallback;
         auto live=positions.find(it.registryKey);
@@ -4161,12 +3394,12 @@ static void ReloadAll(bool rereadSettings,bool importWindhawk) {
         [&](const LibraryFolder& folder) {
             return emptyFolders.count(folder.key) && RemoveLibraryFolder(folder.key);
         }),libraryFolders.end());
-    if (migrated) { g_settings.useFolderMode=false; SaveNumber(L"UseFolderMode",0); }
     Wh_Log(L"Loaded %zu media items across %zu folders and the individual image list",g_items.size(),libraryFolders.size());
     ApplyTimer();
-    if (!failures.empty()) MessageBoxW(g_hManagerWnd, failures.c_str(),
+    if (!workerQuitting && !failures.empty()) MessageBoxW(g_hManagerWnd, failures.c_str(),
         L"Some media could not be imported", MB_OK | MB_ICONWARNING);
 
+    // Notify manager window to refresh thumbnails
     if (managerWasOpen && g_hManagerWnd) {
         g_managerSel=-1;
         for (int i=0;!selectedKey.empty() && i<(int)g_items.size();++i)
@@ -4183,10 +3416,12 @@ static void ShowAllHidden() {
 
 
 
+// One-time, modeless guide: uses the worker's message loop so pets keep animating.
 static HWND g_hWelcomeWnd = nullptr;
-static HICON g_hWelcomeIcon = nullptr;
+static HICON g_hWelcomeIcon = nullptr;  // owned copy; manager may close independently
 static const wchar_t kWelcomeWndClass[] = L"AnimaWindhawkEngine_Welcome";
 static const UINT kShowWelcome = WM_APP + 30;
+// Keep the worker message loop running while the startup notice is visible.
 static HWND readyDialog=nullptr;
 static INT_PTR CALLBACK ReadyDialogProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM) {
     if (msg==WM_INITDIALOG) {
@@ -4294,6 +3529,7 @@ static void BuildWelcome(HWND hwnd) {
     if (g_hotkeyVk) hint=L"Open the manager with "+HotkeyToString(g_hotkeyMods,g_hotkeyVk)+L". ";
     hint+=L"You can also use the tray icon or right-click an image. Change the shortcut in App settings.";
     root.FindName(L"Shortcut").as<TextBlock>().Text(hint);
+    // Post actions so the source can close after the XAML click has returned.
     auto bind=[&](PCWSTR name,int command) {
         root.FindName(name).as<controls::Primitives::ButtonBase>().Click([hwnd,command](auto&&,auto&&) {
             PostMessageW(hwnd,WM_COMMAND,MAKEWPARAM(command,BN_CLICKED),0);
@@ -4394,6 +3630,8 @@ static void ShowWelcomeGuide(bool recordFirstRun) {
         nullptr,nullptr,GetModuleHandleW(nullptr),nullptr);
     if (oldDpi) SetThreadDpiAwarenessContext(oldDpi);
     if (!g_hWelcomeWnd) { Wh_Log(L"Could not create welcome guide"); return; }
+    // Same artwork and disk cache as the manager, with independent ownership.
+    // This also works on first run before the manager has ever been opened.
     g_hWelcomeIcon = g_hManagerIcon ? CopyIcon(g_hManagerIcon) : LoadManagerIcon();
     if (g_hWelcomeIcon) {
         SendMessageW(g_hWelcomeWnd, WM_SETICON, ICON_BIG, (LPARAM)g_hWelcomeIcon);
@@ -4403,10 +3641,13 @@ static void ShowWelcomeGuide(bool recordFirstRun) {
     UpdateWindow(g_hWelcomeWnd);
     if (recordFirstRun) {
         DWORD shown=1;
-        WriteConfig(L"WelcomeShown",REG_DWORD,&shown,sizeof(shown));
+        SaveNumber(L"WelcomeShown",shown);
     }
 }
 
+// ============================================================================
+// Controller window
+// ============================================================================
 
 static HANDLE disableProcess{};
 static bool quitRequested=false;
@@ -4466,7 +3707,7 @@ static void QuitFromTray(HWND hwnd) {
         if (error==ERROR_CANCELLED) { quitRequested=false; return; }
     } else if (error==ERROR_FILE_NOT_FOUND || error==ERROR_PATH_NOT_FOUND) {
         Wh_Log(L"[Quit] Windhawk CLI unavailable. Stopping this session.");
-        PostThreadMessageW(g_threadId,WM_APP_QUIT,0,0);
+        PostMessageW(g_hCtrlWnd,WM_APP_QUIT,0,0);
         return;
     }
     Wh_Log(L"[Quit] Could not start Windhawk CLI (%lu)",error);
@@ -4475,13 +3716,36 @@ static void QuitFromTray(HWND hwnd) {
                 L"Could not disable the mod",MB_OK|MB_ICONWARNING);
 }
 
+static BOOL CALLBACK CloseWorkerDialog(HWND hwnd,LPARAM) {
+    wchar_t cls[32]{};
+    if (GetClassNameW(hwnd,cls,std::size(cls)) && !wcscmp(cls,L"#32770") && hwnd!=readyDialog)
+        PostMessageW(hwnd,WM_CLOSE,0,0);
+    return TRUE;
+}
+static int pendingReload=0;
+static bool managerRequested=false;
+static int requestedIndex=-1;
 static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+    case WM_APP_QUIT:
+        workerQuitting=true;
+        EndMenu();
+        EnumThreadWindows(GetCurrentThreadId(),CloseWorkerDialog,0);
+        PostQuitMessage(0);
+        return 0;
+    case WM_APP_RELOAD:
+    case WM_APP_RELOAD_ITEMS_ONLY:
+        pendingReload=std::max(pendingReload,msg==WM_APP_RELOAD ? 2 : 1);
+        return 0;
+    case WM_APP_OPEN_MANAGER:
+        managerRequested=true;
+        requestedIndex=(int)wParam;
+        return 0;
     case WM_WS_FETCH_DONE: {
         auto* res = (WorkshopFetchResult*)lParam;
         if (!res->commit.empty()) {
             g_repoCommit = res->commit;
-            WriteConfig(L"RepositoryCommit",REG_SZ,g_repoCommit.c_str(),(DWORD)((g_repoCommit.size()+1)*sizeof(wchar_t)));
+            SaveText(L"RepositoryCommit",g_repoCommit);
 
         }
         g_workshopFetching = false;
@@ -4510,13 +3774,14 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             if (ok) {
                 it.installed      = true;
                 it.localImagePath = GetWorkshopDir() + L"\\" + it.slug + L"\\" + it.file;
+                // Add to the global path list and reload
                 bool already = false;
                 for (auto& p : g_settings.imagePaths)
                     if (p == it.localImagePath) { already = true; break; }
                 if (!already) {
                     g_settings.imagePaths.push_back(it.localImagePath);
                     SaveImagePaths(g_settings.imagePaths);
-                    PostThreadMessageW(g_threadId, WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
+                    PostMessageW(g_hCtrlWnd,WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
                 }
             }
         }
@@ -4546,7 +3811,7 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
                 CloseHandle(disableProcess);
                 disableProcess=nullptr;
                 if (code==0) {
-                    PostThreadMessageW(g_threadId,WM_APP_QUIT,0,0);
+                    PostMessageW(g_hCtrlWnd,WM_APP_QUIT,0,0);
                 } else {
                     Wh_Log(L"[Quit] Windhawk CLI returned %lu (elevated retry: %d)",code,elevatedDisableAttempt);
                     if (code==12 && !elevatedDisableAttempt) {
@@ -4560,7 +3825,7 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
                     quitRequested=false;
                 }
             }
-            PollFFmpegSetup();
+
             ULONGLONG now = GetTickCount64();
             for (auto& it : g_items) {
                 if (it.frameCount <= 1 || it.paused || it.frameDelaysMs.empty()) continue;
@@ -4581,10 +3846,12 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
 
     case kTrayMsg: {
         UINT evt = (UINT)lParam;
+        // Single left-click — open the manager directly.
         if (evt == WM_LBUTTONUP) {
             OpenPetManager(-1);
             return 0;
         }
+        // Right-click — show the context menu.
         if (evt == WM_RBUTTONUP) {
             HMENU m = CreatePopupMenu();
             AppendMenuW(m, MF_STRING, kCmdOpenManagerTray, L"Open Pet Manager…");
@@ -4602,8 +3869,11 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
     }
     }
 
+    // Explorer restarted the shell — re-add the tray icon unconditionally.
+    // Shell_NotifyIcon icons are destroyed when Explorer restarts, so we must
+    // call NIM_ADD again even though g_trayIconAdded was already true.
     if (g_taskbarCreatedMsg != 0 && msg == g_taskbarCreatedMsg) {
-        g_trayIconAdded = false;
+        g_trayIconAdded = false;   // force NIM_ADD instead of NIM_MODIFY
         ApplyTrayIcon();
         return 0;
     }
@@ -4611,9 +3881,13 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
+// ============================================================================
+// Worker thread
+// ============================================================================
 
 static DWORD WINAPI WorkerThreadProc(LPVOID) {
     const HRESULT apartment = RoInitialize(RO_INIT_SINGLETHREADED);
+    // Ensure comctl32 v6
     INITCOMMONCONTROLSEX icc = {sizeof(icc), ICC_LISTVIEW_CLASSES | ICC_BAR_CLASSES};
     InitCommonControlsEx(&icc);
 
@@ -4624,67 +3898,42 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
                                   L"AnimaWindhawkEngineController", WS_POPUP,
                                   0, 0, 0, 0, nullptr, nullptr,
                                   GetModuleHandleW(nullptr), nullptr);
+    if (g_threadReadyEvent) SetEvent(g_threadReadyEvent);
+    if (!g_hCtrlWnd) {
+        if (SUCCEEDED(apartment)) RoUninitialize();
+        return 1;
+    }
+    // Register the shell broadcast sent whenever Explorer recreates the taskbar.
+    // We handle it in ControllerWndProc to re-add the tray icon after a reboot
+    // or an Explorer restart wipes all notification-area icons.
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
+    // Load the user's saved hotkey (or default Win+Alt+P) then register it.
     OpenConfig();
+    ImportPreviousLibrary();
+    MigrateStartupOption();
     g_managerTheme=static_cast<ManagerTheme>(std::min<DWORD>(2,ConfigNumber(L"ManagerTheme",0)));
     g_accentIndex=std::min<DWORD>(kAccentIndexSystem,ConfigNumber(L"Accent",0));
     g_workshopView=static_cast<WorkshopView>(std::min<DWORD>(2,ConfigNumber(L"WorkshopLayout",0)));
     LoadHotkey();
-    if (configWritable) {
-        if (MissingValue(configRoot,L"ManagerHotkey")) SaveHotkey();
-        if (MissingValue(configRoot,L"ManagerTheme")) SaveNumber(L"ManagerTheme",(DWORD)g_managerTheme);
-        if (MissingValue(configRoot,L"Accent")) SaveNumber(L"Accent",g_accentIndex);
-        if (MissingValue(configRoot,L"WorkshopLayout")) SaveNumber(L"WorkshopLayout",(DWORD)g_workshopView);
-    }
     if (g_hotkeyVk)
         RegisterHotKey(g_hCtrlWnd, HOTKEY_OPEN_MANAGER, g_hotkeyMods, g_hotkeyVk);
 
-    ReloadAll();
-    OpenManagerAtSignIn();
-    EnsureFFmpegOnEnable();
+    if (!workerQuitting) ReloadAll();
+    if (!workerQuitting) { OpenManagerAtSignIn(); ShowReadyDialog(); }
 
-    if (g_threadReadyEvent) SetEvent(g_threadReadyEvent);
-    if (g_hCtrlWnd) ShowReadyDialog();
-
-    while (GetMessageW(&msg, nullptr, 0, 0)) {
-        if (msg.hwnd == nullptr && msg.message == WM_APP_QUIT) {
-            for (const auto& item : g_items) {
-                RECT rect{};
-                if (item.hwnd && GetWindowRect(item.hwnd,&rect))
-                    SaveStoredPosition(item.registryKey,rect.left,rect.top);
-            }
-            for (HANDLE worker : workshopWorkers) {
-                WaitForSingleObject(worker,INFINITE);
-                CloseHandle(worker);
-            }
-            workshopWorkers.clear();
-            MSG result{};
-            while (PeekMessageW(&result,g_hCtrlWnd,WM_WS_FETCH_DONE,WM_WS_INSTALL_DONE,PM_REMOVE))
-                DispatchMessageW(&result);
-            for (auto& item : g_workshopItems) if (item.hPreviewBmp) DeleteObject(item.hPreviewBmp);
-            if (disableProcess) { CloseHandle(disableProcess); disableProcess=nullptr; }
-            StopFFmpegSetup();
-            if (readyDialog) DestroyWindow(readyDialog);
-            if (g_hWelcomeWnd) DestroyWindow(g_hWelcomeWnd);
-            RemoveTrayIcon();
-            if (g_hManagerWnd) { DestroyWindow(g_hManagerWnd); g_hManagerWnd = nullptr; }
-            DestroyAllItems();
-            if (g_hCtrlWnd) { DestroyWindow(g_hCtrlWnd); g_hCtrlWnd=nullptr; }
-            if (managerRuntime) { managerRuntime.Close(); managerRuntime=nullptr; }
-            break;
-        }
-        if (msg.hwnd == nullptr && msg.message == WM_APP_RELOAD) {
-            ReloadAll(true,msg.wParam!=0);
+    while (!workerQuitting) {
+        if (pendingReload) {
+            int reload=pendingReload;
+            pendingReload=0;
+            ReloadAll(reload==2);
             continue;
         }
-        if (msg.hwnd == nullptr && msg.message == WM_APP_RELOAD_ITEMS_ONLY) {
-            ReloadAll(false);
+        if (managerRequested) {
+            managerRequested=false;
+            OpenPetManager(requestedIndex);
             continue;
         }
-        if (msg.hwnd == nullptr && msg.message == WM_APP_OPEN_MANAGER) {
-            OpenPetManager((int)msg.wParam);
-            continue;
-        }
+        if (GetMessageW(&msg,nullptr,0,0)<=0) break;
         if (readyDialog && (msg.hwnd==readyDialog || IsChild(readyDialog,msg.hwnd)) &&
             IsDialogMessageW(readyDialog,&msg)) continue;
         BOOL handled=FALSE;
@@ -4696,18 +3945,42 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    for (const auto& item : g_items) {
+        RECT rect{};
+        if (item.hwnd && GetWindowRect(item.hwnd,&rect))
+            SaveStoredPosition(item.registryKey,rect.left,rect.top);
+    }
+    for (HANDLE worker : workshopWorkers) {
+        WaitForSingleObject(worker,INFINITE);
+        CloseHandle(worker);
+    }
+    workshopWorkers.clear();
+    MSG result{};
+    while (PeekMessageW(&result,g_hCtrlWnd,WM_WS_FETCH_DONE,WM_WS_INSTALL_DONE,PM_REMOVE))
+        DispatchMessageW(&result);
+    for (auto& item : g_workshopItems) if (item.hPreviewBmp) DeleteObject(item.hPreviewBmp);
+    if (disableProcess) { CloseHandle(disableProcess); disableProcess=nullptr; }
+
+    if (readyDialog) DestroyWindow(readyDialog);
+    if (g_hWelcomeWnd) DestroyWindow(g_hWelcomeWnd);
+    RemoveTrayIcon();
+    if (g_hManagerWnd) { DestroyWindow(g_hManagerWnd); g_hManagerWnd = nullptr; }
+    DestroyAllItems();
+    if (g_hCtrlWnd) { DestroyWindow(g_hCtrlWnd); g_hCtrlWnd=nullptr; }
+    if (managerRuntime) { managerRuntime.Close(); managerRuntime=nullptr; }
     if (managerManifest != INVALID_HANDLE_VALUE) {
         ReleaseActCtx(managerManifest);
         managerManifest = INVALID_HANDLE_VALUE;
     }
-    if (imagesRoot) { RegCloseKey(imagesRoot); imagesRoot=nullptr; }
     imageOrder.clear();
-    if (configRoot) { RegCloseKey(configRoot); configRoot=nullptr; }
     configWritable=false;
     if (SUCCEEDED(apartment)) RoUninitialize();
     return 0;
 }
 
+// ============================================================================
+// Mod entry points
+// ============================================================================
 
 BOOL WhTool_ModInit() {
     Wh_Log(L"AnimaWindhawkEngine v1.1: init");
@@ -4747,9 +4020,10 @@ BOOL WhTool_ModInit() {
     RegisterClassExW(&wcWelcome);
 
     g_threadReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_threadReadyEvent) return FALSE;
     g_hThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_threadId);
-    if (!g_hThread) { Wh_Log(L"Failed to start worker thread"); return FALSE; }
-    WaitForSingleObject(g_threadReadyEvent, 5000);
+    if (!g_hThread) { CloseHandle(g_threadReadyEvent); g_threadReadyEvent=nullptr; Wh_Log(L"Failed to start worker thread"); return FALSE; }
+    if (WaitForSingleObject(g_threadReadyEvent,5000)==WAIT_OBJECT_0 && !g_hCtrlWnd) { CloseHandle(g_hThread); g_hThread=nullptr; CloseHandle(g_threadReadyEvent); g_threadReadyEvent=nullptr; return FALSE; }
 
     return TRUE;
 }
@@ -4759,7 +4033,8 @@ void WhTool_ModUninit() {
     Wh_Log(L"AnimaWindhawkEngine v1.1: uninit");
 
     if (g_hThread) {
-        PostThreadMessageW(g_threadId, WM_APP_QUIT, 0, 0);
+        workerQuitting=true;
+        if (g_hCtrlWnd) PostMessageW(g_hCtrlWnd,WM_APP_QUIT, 0, 0);
         WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
         g_hThread = nullptr;
@@ -4779,10 +4054,23 @@ void WhTool_ModUninit() {
 
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"AnimaWindhawkEngine v1.1: settings changed");
-    if (g_threadId) PostThreadMessageW(g_threadId, WM_APP_RELOAD, 1, 0);
+    if (g_hCtrlWnd) PostMessageW(g_hCtrlWnd,WM_APP_RELOAD, 1, 0);
 }
 
 
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
