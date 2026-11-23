@@ -20,6 +20,8 @@ Shows live system usage **inside** the Windows 11 taskbar (it is a XAML element 
 taskbar itself, not a separate window), so it moves by itself when tray icons appear or
 disappear.
 
+![TrafficMonitor for Taskbar](https://raw.githubusercontent.com/xSHIMURAx/TrafficMonitor-for-Taskbar/main/Screenshot/TrafficMonitor.png)
+
 ## Settings panel
 
 **Right-click the monitor in the taskbar and choose "Settings"** (or turn on the
@@ -68,6 +70,14 @@ the taskbar here.
 * If the mod does not start, open Windhawk's log: usually the symbol download for
   `taskbar.dll` failed. Exit Windhawk from the tray, open it again and wait until
   "Loading symbols" finishes.
+
+## Related mods
+Other Windhawk mods that show system information in the taskbar, in case one of them fits you
+better: **Taskbar System Info** (`taskbar-system-info`), **Taskbar Clock Customization**
+(`taskbar-clock-customization`), **Taskbar Network Speed Indicator** (`net-speed-taskbar`) and
+**Taskbar Live HUD** (`taskbar-live-hud-radar`). This mod is a port of the TrafficMonitor app:
+its focus is network traffic, with daily history, import / export of the original app's files,
+color alerts and profiles, and two skins.
 
 ## Credits
 The technique used to find the taskbar's XAML tree and insert an element next to the
