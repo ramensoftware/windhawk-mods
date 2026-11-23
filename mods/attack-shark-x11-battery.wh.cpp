@@ -55,15 +55,18 @@ The protocol is documented in
 /*
 - iconStyle: number
   $name: Icon style
-  $name:es-ES: Estilo del ícono
+  $name:es-ES: Estilo del icono
   $options:
   - number: Battery percentage (number)
   - mouse: Mouse that fills up with the battery level
+  $options:es-ES:
+  - number: Porcentaje de batería (número)
+  - mouse: Ratón que se llena con el nivel de batería
 - lowThreshold: 20
   $name: Low battery threshold (%)
   $name:es-ES: Umbral de batería baja (%)
-  $description: At or below this value the number turns red
-  $description:es-ES: En este valor o por debajo, el número se pone rojo
+  $description: At or below this value the icon turns red
+  $description:es-ES: En este valor o por debajo, el icono se pone rojo
 - notifyLow: true
   $name: Notify on low battery
   $name:es-ES: Avisar con batería baja
@@ -75,6 +78,7 @@ The protocol is documented in
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <windows.h>
 
 #include <dbt.h>
@@ -203,10 +207,10 @@ static int g_lastIconSize = 0;
 
 static Settings ReadSettings() {
     Settings s;
-    PCWSTR style = Wh_GetStringSetting(L"iconStyle");
+    WindhawkUtils::StringSetting style =
+        WindhawkUtils::StringSetting::make(L"iconStyle");
     s.iconStyle =
         wcscmp(style, L"mouse") == 0 ? IconStyle::kMouse : IconStyle::kNumber;
-    Wh_FreeStringSetting(style);
     int low = Wh_GetIntSetting(L"lowThreshold");
     s.lowThreshold = (low > 0 && low < 100) ? low : 20;
     s.notifyLow = Wh_GetIntSetting(L"notifyLow") != 0;
