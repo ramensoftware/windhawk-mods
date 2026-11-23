@@ -21547,15 +21547,17 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             }
             return 0;
         }
-        // Explorer applies the exclusion before forwarding, so its messages
-        // never enter the direct registration's Tab replay path.
-        if (!forwardedHotkey && g_settings.excludeXboxMode && IsXboxModeOrForeground()) {
+        // Explorer applies the exclusion before forwarding Tab shortcuts.
+        const bool directBacktick = !forwardedHotkey &&
+            (wParam == SWS_HOTKEY_ALTBACKTICK || wParam == SWS_HOTKEY_ALTBACKTICK_UK);
+        if (directBacktick && g_settings.excludeXboxMode && IsXboxModeOrForeground()) {
+            const WORD key = wParam == SWS_HOTKEY_ALTBACKTICK ? VK_OEM_3 : VK_OEM_8;
             SWS_UnregisterHotkeys();
             INPUT inputs[2] = {};
             inputs[0].type = INPUT_KEYBOARD;
-            inputs[0].ki.wVk = VK_TAB;
+            inputs[0].ki.wVk = key;
             inputs[1].type = INPUT_KEYBOARD;
-            inputs[1].ki.wVk = VK_TAB;
+            inputs[1].ki.wVk = key;
             inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
             SendInput(2, inputs, sizeof(INPUT));
             SetTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID, 500, NULL);
