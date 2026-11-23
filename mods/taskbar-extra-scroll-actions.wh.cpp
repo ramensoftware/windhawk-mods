@@ -3738,9 +3738,11 @@ DWORD WINAPI ThreadProc(void*) {
         // Follow the pointer while a screen is dimmed; sleep otherwise.
         DWORD wait = INFINITE;
         if (!screens.empty()) {
-            POINT pt = {};
-            bool moved = !GetCursorPos(&pt) || pt.x != lastPt.x ||
-                         pt.y != lastPt.y;
+            // GetCursorPos fails while the input desktop isn't the user's
+            // (the PC is locked, a UAC prompt is up): that counts as still.
+            POINT pt = lastPt;
+            bool moved = GetCursorPos(&pt) &&
+                         (pt.x != lastPt.x || pt.y != lastPt.y);
             lastPt = pt;
             pollMs = (moved || woken) ? kPollMinMs
                                       : std::min(pollMs * 2, kPollMaxMs);
@@ -6128,7 +6130,6 @@ DWORD GetProcessIdFromTaskListButton(wux::UIElement element) {
 // --- Tooltip (XAML popup, taskbar thread) ---
 
 struct TooltipState {
-    wux::Controls::Primitives::Popup popup = nullptr;
     winrt::weak_ref<wux::FrameworkElement> taskbarFrame;
     bool vertical = false;
     // The cursor's monitor in XAML root coordinates.
@@ -6137,10 +6138,11 @@ struct TooltipState {
     double cursorY = 0.0;
 };
 
-// Released on the taskbar thread by HideTooltip (CleanupOnOwnerThread). Never
-// destroyed at DLL unload, which runs on another thread, where releasing XAML
-// objects could crash Explorer.
-[[clang::no_destroy]] TooltipState g_tooltip;
+// The tooltip popup. Released on the taskbar thread by HideTooltip
+// (CleanupOnOwnerThread), and never destroyed at DLL unload, which runs on
+// another thread, where releasing a XAML object could crash Explorer.
+[[clang::no_destroy]] wux::Controls::Primitives::Popup g_tooltipPopup{nullptr};
+TooltipState g_tooltip;
 
 // Set on the taskbar thread while the tooltip popup opens, which is when XAML
 // creates the window of a windowed popup (see CreateWindowExW_Hook).
@@ -6221,10 +6223,10 @@ double GetRotationAngle(wux::UIElement element) {
 }
 
 void UpdateTooltipPosition() {
-    if (!g_tooltip.popup) {
+    if (!g_tooltipPopup) {
         return;
     }
-    auto popup = g_tooltip.popup;
+    auto popup = g_tooltipPopup;
     auto border = popup.Child().try_as<wux::FrameworkElement>();
     double tooltipWidth = border ? border.ActualWidth() : 0;
     double tooltipHeight = border ? border.ActualHeight() : 0;
@@ -6316,7 +6318,7 @@ void ShowTooltip(wux::FrameworkElement taskbarFrame,
                    (xamlRootContent && GetRotationAngle(xamlRootContent) != 0.0);
     }
 
-    if (!g_tooltip.popup) {
+    if (!g_tooltipPopup) {
         wux::Controls::Border border;
         border.IsHitTestVisible(false);
         border.Padding(wux::ThicknessHelper::FromLengths(12, 6, 12, 6));
@@ -6334,7 +6336,7 @@ void ShowTooltip(wux::FrameworkElement taskbarFrame,
         }
         popup.Child(border);
         border.SizeChanged([](auto&&, auto&&) { UpdateTooltipPosition(); });
-        g_tooltip.popup = popup;
+        g_tooltipPopup = popup;
     }
 
     // Only the main taskbar keeps its frame (element-relative placement); a
@@ -6346,7 +6348,7 @@ void ShowTooltip(wux::FrameworkElement taskbarFrame,
     g_tooltip.cursorX = cursorX;
     g_tooltip.cursorY = cursorY;
 
-    auto popup = g_tooltip.popup;
+    auto popup = g_tooltipPopup;
     auto border = popup.Child().try_as<wux::Controls::Border>();
     if (!border) {
         return;
@@ -6385,8 +6387,8 @@ void ShowTooltip(wux::FrameworkElement taskbarFrame,
 }
 
 void OnTooltipHideTimer() {
-    if (g_tooltip.popup) {
-        g_tooltip.popup.IsOpen(false);
+    if (g_tooltipPopup) {
+        g_tooltipPopup.IsOpen(false);
     }
 }
 
@@ -6396,10 +6398,10 @@ void HideTooltip() {
     if (hCtrl) {
         KillTimer(hCtrl, Controller::kTimerPerAppTooltip);
     }
-    if (g_tooltip.popup) {
-        g_tooltip.popup.IsOpen(false);
+    if (g_tooltipPopup) {
+        g_tooltipPopup.IsOpen(false);
     }
-    g_tooltip.popup = nullptr;
+    g_tooltipPopup = nullptr;
     g_tooltip.taskbarFrame = nullptr;
     g_tooltip.vertical = false;
     g_tooltip.monitorRect = {};
@@ -6598,7 +6600,7 @@ int WINAPI TaskListButton_OnPointerExited_Hook(void* pThis, void* pArgs) {
 // Only keeps the tooltip next to the pointer (as in the original mod).
 TaskListButton_PointerHandler_t TaskListButton_OnPointerMoved_Original;
 int WINAPI TaskListButton_OnPointerMoved_Hook(void* pThis, void* pArgs) {
-    if (!g_tooltip.popup || !g_tooltip.popup.IsOpen()) {
+    if (!g_tooltipPopup || !g_tooltipPopup.IsOpen()) {
         return TaskListButton_OnPointerMoved_Original(pThis, pArgs);
     }
     auto element = GetTaskListButton(pThis);
@@ -7842,14 +7844,12 @@ SettingsPtr LoadSettings() {
     auto s = std::make_shared<Settings>();
 
     for (int i = 0;; i++) {
-        PCWSTR scrollAction =
-            Wh_GetStringSetting(L"ScrollActions[%d].scrollAction", i);
-        PCWSTR scrollArea =
-            Wh_GetStringSetting(L"ScrollActions[%d].scrollArea", i);
-        bool hasEntry = *scrollAction || *scrollArea;
+        auto scrollAction = WindhawkUtils::StringSetting::make(
+            L"ScrollActions[%d].scrollAction", i);
+        auto scrollArea = WindhawkUtils::StringSetting::make(
+            L"ScrollActions[%d].scrollArea", i);
+        bool hasEntry = *scrollAction.get() || *scrollArea.get();
         if (!hasEntry) {
-            Wh_FreeStringSetting(scrollAction);
-            Wh_FreeStringSetting(scrollArea);
             break;
         }
 
@@ -7866,7 +7866,6 @@ SettingsPtr LoadSettings() {
         } else if (wcscmp(scrollAction, L"volumeChange") == 0) {
             entry.scrollAction = ScrollAction::volumeChange;
         }
-        Wh_FreeStringSetting(scrollAction);
 
         entry.scrollArea = ScrollArea::taskbar;
         if (wcscmp(scrollArea, L"notificationArea") == 0) {
@@ -7876,11 +7875,10 @@ SettingsPtr LoadSettings() {
         } else if (wcscmp(scrollArea, L"none") == 0) {
             entry.scrollArea = ScrollArea::none;
         }
-        Wh_FreeStringSetting(scrollArea);
 
-        PCWSTR additionalScrollRegions = Wh_GetStringSetting(
+        auto additionalScrollRegions = WindhawkUtils::StringSetting::make(
             L"ScrollActions[%d].additionalScrollRegions", i);
-        for (auto regionStr : SplitStringView(additionalScrollRegions, L",")) {
+        for (auto regionStr : SplitStringView(additionalScrollRegions.get(), L",")) {
             regionStr = TrimStringView(regionStr);
             if (regionStr.empty()) {
                 continue;
@@ -7889,7 +7887,6 @@ SettingsPtr LoadSettings() {
                 entry.additionalScrollRegions.push_back(*region);
             }
         }
-        Wh_FreeStringSetting(additionalScrollRegions);
 
         entry.scrollStep = std::clamp(
             Wh_GetIntSetting(L"ScrollActions[%d].scrollStep", i), 1, 100);
@@ -7909,7 +7906,8 @@ SettingsPtr LoadSettings() {
         s->scrollActions.push_back(std::move(entry));
     }
 
-    PCWSTR method = Wh_GetStringSetting(L"laptopBrightnessMethod");
+    auto method =
+        WindhawkUtils::StringSetting::make(L"laptopBrightnessMethod");
     s->laptopMethod = LaptopMethod::Auto;
     if (wcscmp(method, L"ioctl") == 0) {
         s->laptopMethod = LaptopMethod::Ioctl;
@@ -7918,15 +7916,13 @@ SettingsPtr LoadSettings() {
     } else if (wcscmp(method, L"powerScheme") == 0) {
         s->laptopMethod = LaptopMethod::PowerScheme;
     }
-    Wh_FreeStringSetting(method);
 
     s->darkOverlayEnabled = Wh_GetIntSetting(L"softwareDimmingEnabled");
     s->maxOverlayAlpha =
         std::clamp(Wh_GetIntSetting(L"maxOverlayAlpha"), 0, 255);
-    PCWSTR curve = Wh_GetStringSetting(L"darkOverlayCurve");
+    auto curve = WindhawkUtils::StringSetting::make(L"darkOverlayCurve");
     s->darkCurve = wcscmp(curve, L"linear") == 0 ? DarkCurve::Linear
                                                   : DarkCurve::Perceptual;
-    Wh_FreeStringSetting(curve);
     s->autoResetDarkOverlay = Wh_GetIntSetting(L"autoResetDarkOverlay");
     s->hideOverlayFromCapture = Wh_GetIntSetting(L"hideOverlayFromCapture");
     s->darkenCursor = Wh_GetIntSetting(L"darkenCursor");
@@ -7939,7 +7935,8 @@ SettingsPtr LoadSettings() {
 
     s->customOsdEnabled = Wh_GetIntSetting(L"customOsdEnabled");
 
-    PCWSTR volumeIndicator = Wh_GetStringSetting(L"volumeIndicator");
+    auto volumeIndicator =
+        WindhawkUtils::StringSetting::make(L"volumeIndicator");
     s->volumeIndicator = VolumeIndicator::Win11;
     if (wcscmp(volumeIndicator, L"modern") == 0) {
         s->volumeIndicator = VolumeIndicator::Modern;
@@ -7948,7 +7945,6 @@ SettingsPtr LoadSettings() {
     } else if (wcscmp(volumeIndicator, L"none") == 0) {
         s->volumeIndicator = VolumeIndicator::None;
     }
-    Wh_FreeStringSetting(volumeIndicator);
 
     s->middleClickToMute = Wh_GetIntSetting(L"middleClickToMute");
     s->ctrlScrollVolumeChange = Wh_GetIntSetting(L"ctrlScrollVolumeChange");
@@ -7960,14 +7956,14 @@ SettingsPtr LoadSettings() {
         s->volumeChangeStep = 2;
     }
 
-    PCWSTR fullScreenScrolling = Wh_GetStringSetting(L"fullScreenScrolling");
+    auto fullScreenScrolling =
+        WindhawkUtils::StringSetting::make(L"fullScreenScrolling");
     s->fullScreenScrolling = FullScreenScrolling::disabled;
     if (wcscmp(fullScreenScrolling, L"withIndicator") == 0) {
         s->fullScreenScrolling = FullScreenScrolling::withIndicator;
     } else if (wcscmp(fullScreenScrolling, L"withoutIndicator") == 0) {
         s->fullScreenScrolling = FullScreenScrolling::withoutIndicator;
     }
-    Wh_FreeStringSetting(fullScreenScrolling);
 
     s->perApp.enabled = Wh_GetIntSetting(L"perAppVolume.enabled");
     s->perApp.keys.shift = Wh_GetIntSetting(L"perAppVolume.modifierKeys.shift");
@@ -7982,15 +7978,15 @@ SettingsPtr LoadSettings() {
     s->perApp.terseFormat = Wh_GetIntSetting(L"perAppVolume.terseFormat");
     s->perApp.noAutomaticMuteToggle =
         Wh_GetIntSetting(L"perAppVolume.noAutomaticMuteToggle");
-    PCWSTR tooltipColor = Wh_GetStringSetting(L"perAppVolume.tooltipColor");
-    if (auto color = PerApp::ParseHexColor(tooltipColor)) {
+    auto tooltipColor =
+        WindhawkUtils::StringSetting::make(L"perAppVolume.tooltipColor");
+    if (auto color = PerApp::ParseHexColor(tooltipColor.get())) {
         s->perApp.hasTooltipColor = true;
         s->perApp.tooltipColor = *color;
-    } else if (*tooltipColor) {
+    } else if (*tooltipColor.get()) {
         Wh_Log(L"Invalid tooltip color (expected #RRGGBB or #AARRGGBB): %s",
-               tooltipColor);
+               tooltipColor.get());
     }
-    Wh_FreeStringSetting(tooltipColor);
 
     s->debugOsd = Wh_GetIntSetting(L"debugOsd");
     s->oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
