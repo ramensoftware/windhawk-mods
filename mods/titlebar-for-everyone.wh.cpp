@@ -417,11 +417,11 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
 }
 
 BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
-    RemovePropW(hWnd, L"TB4E_Processed");
     DWORD pid;
     GetWindowThreadProcessId(hWnd, &pid);
     // Unsubclass all windows belonging to this process
     if (pid == GetCurrentProcessId()) {
+        RemovePropW(hWnd, L"TB4E_Processed");
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
         SetWinUICustomControlsVisibility(hWnd, true);
         if (lParam == 1) {
