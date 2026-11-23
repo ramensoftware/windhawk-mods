@@ -25,8 +25,6 @@ behind the clock on a dark desktop: digits over the window can turn black
 while digits over the desktop stay white. The date is evaluated separately,
 one character at a time.
 
-![Clock digits over a dark and a light window](https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/main/images/clock-contrast.png)
-
 The mod adapts supported monochrome tray glyphs and the input indicator, selects
 light or dark themes for Start, Search, Task View, Widgets and app buttons, and
 switches packaged app icons when matching light and dark assets are available.
