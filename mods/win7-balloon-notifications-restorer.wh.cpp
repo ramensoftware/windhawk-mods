@@ -58,7 +58,7 @@
 # Windows Vista/7/8.1 Balloon Notifications Restorer
 
 This mod tries to convert supported Windows 10 and Windows 11 toast notifications
-into classic notification-area balloons inspired by Windows Vista, 7 and 8.1. This modification has been tested on Windows 11 24H2.
+into classic notification-area balloons inspired by Windows Vista, 7 and 8.1.
 
 ![Classic balloon notification](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/notification.png)
 
@@ -94,6 +94,7 @@ The Explorer registry-query hook is inspired by
 #include <windows.h>
 #include <gdiplus.h>
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <objbase.h>
@@ -2919,62 +2920,19 @@ bool installHook(HMODULE wpncore)
         return true;
     }
 
-    WH_FIND_SYMBOL_OPTIONS options{};
-    options.optionsSize = sizeof(options);
-
-    WH_FIND_SYMBOL symbol{};
-    HANDLE find = Wh_FindFirstSymbol(wpncore, &options, &symbol);
-    if (!find)
-    {
-        Wh_Log(L"[balloon] notification platform symbols unavailable");
-        return false;
-    }
-
-    struct SymbolSearchScope
-    {
-        HANDLE handle;
-        void close()
-        {
-            if (handle)
-            {
-                Wh_FindCloseSymbol(handle);
-                handle = nullptr;
-            }
-        }
-        ~SymbolSearchScope() { close(); }
-    } symbolSearch{find};
-
     void *deliver = nullptr;
-    do
-    {
-        if (!symbol.symbolDecorated)
-        {
-            continue;
-        }
+    WindhawkUtils::SYMBOL_HOOK wpncoreDllHooks[] = {
+        {{L"private: void __cdecl SessionManager::ProcessToastDelivery(class Notification *,struct INotificationHandler *,class TransientNotificationDetails *,unsigned short const *)"}, &deliver},
+        {{L"public: virtual long __cdecl Notification::get_Payload(struct IStream * *)"}, &g_getPayload},
+        {{L"public: virtual long __cdecl Notification::get_NotificationType(unsigned short * *)"}, &g_getNotificationType},
+        {{L"public: virtual long __cdecl Notification::get_HandlerKey(unsigned short * *)"}, &g_getHandlerKey},
+    };
 
-        if (wcscmp(symbol.symbolDecorated, kSymbolProcessToastDelivery) == 0)
-        {
-            deliver = symbol.address;
-        }
-        else if (wcscmp(symbol.symbolDecorated, kSymbolGetPayload) == 0)
-        {
-            g_getPayload = reinterpret_cast<NotificationGetPayloadFn>(symbol.address);
-        }
-        else if (wcscmp(symbol.symbolDecorated, kSymbolGetNotificationType) == 0)
-        {
-            g_getNotificationType =
-                reinterpret_cast<NotificationGetStringFn>(symbol.address);
-        }
-        else if (wcscmp(symbol.symbolDecorated, kSymbolGetHandlerKey) == 0)
-        {
-            g_getHandlerKey = reinterpret_cast<NotificationGetStringFn>(symbol.address);
-        }
-    } while (Wh_FindNextSymbol(find, &symbol));
-    symbolSearch.close();
-
-    if (!deliver || !g_getPayload || !g_getNotificationType || !g_getHandlerKey)
+    if (!WindhawkUtils::HookSymbols(wpncore, wpncoreDllHooks,
+                                    ARRAYSIZE(wpncoreDllHooks)) ||
+        !deliver || !g_getPayload || !g_getNotificationType || !g_getHandlerKey)
     {
-        Wh_Log(L"[balloon] platform interception requires additional symbols");
+        Wh_Log(L"[balloon] platform symbols unavailable or incomplete");
         return false;
     }
 
