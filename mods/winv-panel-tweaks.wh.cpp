@@ -7,9 +7,8 @@
 // @github          https://github.com/jayll1303
 // @license         MIT
 // @include         TextInputHost.exe
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore
+// @include         windhawk.exe
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshcore -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -67,10 +66,10 @@ model, re-applying it whenever the page resets them. The same script adds the
 Pinned button and hides the unpinned rows. Tweaks therefore show up the next
 time the panel opens after the mod is enabled.
 
-The pinned view shortcut is registered as a global hotkey from explorer.exe,
-because TextInputHost.exe isn't allowed to register one. When it's pressed,
-the mod presses Win+V and the panel that opens switches to the pinned view.
-This is the only thing the mod does in explorer.exe.
+The pinned view shortcut is registered as a global hotkey from a small
+windhawk.exe process the mod starts for it, because TextInputHost.exe isn't
+allowed to register one. When it's pressed, the mod presses Win+V and the
+panel that opens switches to the pinned view.
 
 That page ships with Windows but Microsoft can update it separately. If it
 changes in a way the mod doesn't recognize, the mod leaves it alone and the
@@ -126,6 +125,7 @@ Source and research notes: https://github.com/jayll1303/WindowsClipboardMods
 #include <algorithm>
 #include <atomic>
 #include <cfloat>
+#include <cwctype>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -269,13 +269,12 @@ void LoadSettings() {
         L"{hidden:[" + hidden + L"]," + sizeConfig + L",pinnedButton:true}";
 
     UINT modifiers = 0, vk = 0;
-    PCWSTR hotkey = Wh_GetStringSetting(L"pinnedHotkey");
-    if (*hotkey && !ParseHotkey(hotkey, &modifiers, &vk)) {
-        Wh_Log(L"Invalid pinned view shortcut: %s", hotkey);
+    auto hotkey = WindhawkUtils::StringSetting::make(L"pinnedHotkey");
+    if (*hotkey.get() && !ParseHotkey(hotkey.get(), &modifiers, &vk)) {
+        Wh_Log(L"Invalid pinned view shortcut: %s", hotkey.get());
     }
-    Wh_Log(L"Pinned view shortcut: %s (modifiers %X, key %X)", hotkey,
+    Wh_Log(L"Pinned view shortcut: %s (modifiers %X, key %X)", hotkey.get(),
            modifiers, vk);
-    Wh_FreeStringSetting(hotkey);
     g_hotkeyModifiers = modifiers;
     g_hotkeyVk = vk;
 
@@ -683,8 +682,9 @@ void WINAPI ReleaseWebViewOnPanelThread(PVOID param) {
 // both by ResetControlSize and, later, when the shell places the panel.
 
 // When the pinned view shortcut last opened the panel (GetTickCount64), or 0.
-// The shortcut lives in explorer.exe and the panel in TextInputHost.exe, so
-// the time is kept in a small named shared memory block that both open.
+// The shortcut lives in the mod's tool process and the panel in
+// TextInputHost.exe, so the time is kept in a small named shared memory block
+// that both open.
 HANDLE g_pinnedViewRequestMapping;
 LONG64 volatile* g_pinnedViewRequestTime;
 
@@ -722,8 +722,11 @@ void SetPinnedViewRequest() {
 }
 
 // True if the panel that is opening was opened by the pinned view shortcut.
+// The window is short so that a request the panel never acted on (the
+// synthesized Win+V can be dropped, e.g. when an elevated window is in front)
+// doesn't apply to a later, unrelated opening.
 bool ConsumePinnedViewRequest() {
-    constexpr ULONGLONG kMaxDelayMs = 2000;
+    constexpr ULONGLONG kMaxDelayMs = 500;
     if (!g_pinnedViewRequestTime) {
         return false;
     }
@@ -794,11 +797,25 @@ void WINAPI ResetControlSize_Hook(void* pThis, wf::Size size) {
 
     try {
         TrackPanelWebView(pThis);
+    } catch (...) {
+        Wh_Log(L"TrackPanelWebView error %08X", winrt::to_hresult());
+    }
+}
+
+// TryShow runs each time the panel opens (ResetControlSize also runs when the
+// available size changes), so the view is set only here: a size change while
+// the panel is open keeps the view the user chose.
+using TryShow_t = void(WINAPI*)(void* pThis);
+TryShow_t TryShow_Original;
+void WINAPI TryShow_Hook(void* pThis) {
+    TryShow_Original(pThis);
+
+    try {
         if (auto webView = g_webView.get(); webView && !g_unloading) {
             RunScript(webView, PinnedViewScript(ConsumePinnedViewRequest()));
         }
     } catch (...) {
-        Wh_Log(L"TrackPanelWebView error %08X", winrt::to_hresult());
+        Wh_Log(L"TryShow error %08X", winrt::to_hresult());
     }
 }
 
@@ -869,6 +886,11 @@ bool HookInputApp(HMODULE module) {
             &ResetControlSize_Original,
             ResetControlSize_Hook,
         },
+        {
+            {LR"(private: void __cdecl WindowsInternal::ComposableShell::Experiences::TextInputUndocked::InputApp::ExpressiveSuggestionUIPage::TryShow(void))"},
+            &TryShow_Original,
+            TryShow_Hook,
+        },
     };
     // clang-format on
     if (!WindhawkUtils::HookSymbols(module, inputAppDllHooks,
@@ -937,22 +959,15 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 //
 // TextInputHost.exe can't have a global shortcut: RegisterHotKey fails there
 // with ERROR_ACCESS_DENIED, and a low-level keyboard hook installs but is
-// never called. So the mod also runs in explorer.exe and registers the
-// shortcut there, in the Explorer process that owns the taskbar
-// (Shell_TrayWnd), as Windhawk's Keyboard Shortcut Actions mod does. Folder
-// windows running in their own explorer.exe therefore don't compete for it,
-// and it comes back when Explorer restarts.
-//
-// Unlike that mod, the shortcut isn't registered on the taskbar window: on
-// Windows 11 25H2 it registered there, but its WM_HOTKEY never reached a
-// subclass of the window (the taskbar's message loop seems to handle hotkeys
-// itself). It is registered on a thread of the mod's own instead.
+// never called. So the shortcut runs in the mod's own tool process (a
+// windhawk.exe started for this mod, see the end of the file), where it is
+// registered with RegisterHotKey on a thread of its own.
 //
 // Pressing it records the time in the shared pinned view request and presses
-// Win+V for the user, which opens the panel as usual; the next
-// ResetControlSize in TextInputHost.exe then switches the page to the pinned
-// view. A shortcut that another program or the shell has already registered
-// can't be used, and the log says so.
+// Win+V for the user, which opens the panel as usual; the next TryShow in
+// TextInputHost.exe then switches the page to the pinned view. A shortcut that
+// another program or the shell has already registered can't be used, and the
+// log says so.
 
 constexpr int kHotkeyId = 1;
 constexpr UINT kReloadHotkeyMsg = WM_APP + 1;
@@ -975,10 +990,19 @@ void AddKey(std::vector<INPUT>& inputs, WORD vk, bool up) {
     inputs.push_back(input);
 }
 
+// An unassigned virtual-key code, pressed before Alt is released so that the
+// foreground app doesn't take the release as a lone Alt press and open its
+// menu bar (the shortcut's own key was taken by RegisterHotKey).
+constexpr WORD kMaskKey = 0xE8;
+
 // Presses Win+V for the user: the shortcut's other modifiers are released
 // first, and Win is held only if the user isn't holding it already.
 void OpenPinnedView() {
     std::vector<INPUT> inputs;
+    if (IsKeyDown(VK_MENU)) {
+        AddKey(inputs, kMaskKey, false);
+        AddKey(inputs, kMaskKey, true);
+    }
     for (WORD vk : {VK_LSHIFT, VK_RSHIFT, VK_LCONTROL, VK_RCONTROL, VK_LMENU,
                     VK_RMENU}) {
         if (IsKeyDown(vk)) {
@@ -1080,54 +1104,6 @@ void StopHotkeyThread() {
     g_hotkeyThread = nullptr;
 }
 
-bool CurrentProcessHasTaskbar() {
-    bool found = false;
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            DWORD processId = 0;
-            if (!GetWindowThreadProcessId(hWnd, &processId) ||
-                processId != GetCurrentProcessId()) {
-                return TRUE;
-            }
-            WCHAR className[32];
-            if (!GetClassName(hWnd, className, ARRAYSIZE(className)) ||
-                _wcsicmp(className, L"Shell_TrayWnd") != 0) {
-                return TRUE;
-            }
-            *reinterpret_cast<bool*>(lParam) = true;
-            return FALSE;
-        },
-        reinterpret_cast<LPARAM>(&found));
-    return found;
-}
-
-// The taskbar is usually created after the mod is loaded into a starting
-// Explorer.
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t CreateWindowExW_Original;
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
-                                 LPCWSTR lpClassName,
-                                 LPCWSTR lpWindowName,
-                                 DWORD dwStyle,
-                                 int X,
-                                 int Y,
-                                 int nWidth,
-                                 int nHeight,
-                                 HWND hWndParent,
-                                 HMENU hMenu,
-                                 HINSTANCE hInstance,
-                                 LPVOID lpParam) {
-    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
-                                         dwStyle, X, Y, nWidth, nHeight,
-                                         hWndParent, hMenu, hInstance, lpParam);
-    if (hWnd && !IS_INTRESOURCE(lpClassName) &&
-        _wcsicmp(lpClassName, L"Shell_TrayWnd") == 0) {
-        Wh_Log(L"Taskbar window created: %p", hWnd);
-        StartHotkeyThread();
-    }
-    return hWnd;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Running code on the panel's UI thread.
 
@@ -1156,7 +1132,8 @@ bool RunFromWindowThread(HWND hWnd,
 
     HHOOK hook = SetWindowsHookEx(
         WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+        // WINAPI is needed for the 32-bit build.
+        [](int nCode, WPARAM wParam, LPARAM lParam) WINAPI -> LRESULT {
             if (nCode == HC_ACTION) {
                 const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
@@ -1211,22 +1188,16 @@ void RunOnPanelThread(RunFromWindowThreadProc_t proc, PVOID param) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// explorer.exe only hosts the pinned view shortcut; TextInputHost.exe hosts
-// everything else.
-bool g_inExplorer;
+// The mod runs in two processes: TextInputHost.exe, which draws the panel and
+// gets everything else, and its own tool process, which owns the pinned view
+// shortcut.
+bool g_isPanelProcess;
 
-BOOL Wh_ModInit() {
+BOOL PanelModInit() {
     Wh_Log(L">");
 
     LoadSettings();
     OpenPinnedViewRequest();
-
-    g_inExplorer = IsModuleNamed(nullptr, L"explorer.exe");
-    if (g_inExplorer) {
-        WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
-                                       &CreateWindowExW_Original);
-        return TRUE;
-    }
 
     HMODULE inputApp = GetModuleHandle(L"InputApp.dll");
     HMODULE textInput = GetModuleHandle(L"TextInput.dll");
@@ -1246,17 +1217,10 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
+void PanelModAfterInit() {
     Wh_Log(L">");
-    if (g_inExplorer) {
-        // The taskbar may already exist, e.g. when the mod is enabled.
-        if (CurrentProcessHasTaskbar()) {
-            StartHotkeyThread();
-        }
-        return;
-    }
 
-    // The modules may have loaded after the checks in Wh_ModInit, but before
+    // The modules may have loaded after the checks in PanelModInit, but before
     // the LoadLibraryExW hook took effect.
     if (!g_inputAppHooked) {
         if (HMODULE inputApp = GetModuleHandle(L"InputApp.dll")) {
@@ -1270,15 +1234,22 @@ void Wh_ModAfterInit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+void PanelModSettingsChanged() {
     Wh_Log(L">");
     LoadSettings();
-    if (g_inExplorer) {
-        ReloadHotkey();
-        return;
-    }
     std::wstring script = CurrentScript();
     RunOnPanelThread(ApplyScriptOnPanelThread, &script);
+}
+
+void PanelModUninit() {
+    Wh_Log(L">");
+    g_unloading = true;
+
+    // Blocks until the panel's thread has revoked the NavigationCompleted
+    // handler, so no mod code is left attached to the WebView.
+    std::wstring restoreScript = BuildScript(kRestorePageConfig);
+    RunOnPanelThread(ReleaseWebViewOnPanelThread, &restoreScript);
+    ClosePinnedViewRequest();
 }
 
 void Wh_ModBeforeUninit() {
@@ -1286,17 +1257,227 @@ void Wh_ModBeforeUninit() {
     g_unloading = true;
 }
 
-void Wh_ModUninit() {
+// The tool process: its hotkey thread's message loop keeps it alive.
+BOOL WhTool_ModInit() {
+    Wh_Log(L">");
+    LoadSettings();
+    OpenPinnedViewRequest();
+    StartHotkeyThread();
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L">");
+    LoadSettings();
+    ReloadHotkey();
+}
+
+void WhTool_ModUninit() {
     Wh_Log(L">");
     g_unloading = true;
-
-    if (g_inExplorer) {
-        StopHotkeyThread();
-    } else {
-        // Blocks until the panel's thread has revoked the NavigationCompleted
-        // handler, so no mod code is left attached to the WebView.
-        std::wstring restoreScript = BuildScript(kRestorePageConfig);
-        RunOnPanelThread(ReleaseWebViewOnPanelThread, &restoreScript);
-    }
+    StopHotkeyThread();
     ClosePinnedViewRequest();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    // TextInputHost.exe part.
+    if (IsModuleNamed(nullptr, L"TextInputHost.exe")) {
+        g_isPanelProcess = true;
+        return PanelModInit();
+    }
+
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    // TextInputHost.exe part.
+    if (g_isPanelProcess) {
+        PanelModAfterInit();
+        return;
+    }
+
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    // TextInputHost.exe part.
+    if (g_isPanelProcess) {
+        PanelModSettingsChanged();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    // TextInputHost.exe part.
+    if (g_isPanelProcess) {
+        PanelModUninit();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
