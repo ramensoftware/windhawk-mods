@@ -1,62 +1,24 @@
 // ==WindhawkMod==
 // @id              usagi-taskbar-island
 // @name            Usagi Taskbar Island
-// @description     Modular Fluent Design taskbar island for Windows 11 (Media Player & WireGuard VPN toggle with Split Tunneling).
-// @description:ru-RU Модульный островок в стиле Fluent Design для панели задач Windows 11 (медиаплеер и кнопка WireGuard VPN с раздельным туннелированием).
+// @description     Modular Fluent Design taskbar island for Windows 11 (Media Bar, Mini-Player Popup, VK Music Bridge, and WireGuard VPN toggle).
+// @description:ru-RU Модульный островок в стиле Fluent Design для панели задач Windows 11 (медиаплеер, мини-плеер, мост ВК Музыки и кнопка WireGuard VPN).
 // @version         1.0.0
 // @author          usagi
 // @github          https://github.com/usagi-dead
 // @license         MIT
-// @include         *
-// @exclude         audiodg.exe
-// @exclude         svchost.exe
-// @exclude         dwm.exe
-// @exclude         csrss.exe
-// @exclude         smss.exe
-// @exclude         wininit.exe
-// @exclude         winlogon.exe
-// @exclude         services.exe
-// @exclude         lsass.exe
-// @exclude         fontdrvhost.exe
-// @exclude         conhost.exe
-// @exclude         sihost.exe
-// @exclude         ctfmon.exe
-// @exclude         taskhostw.exe
-// @exclude         dllhost.exe
-// @exclude         WmiPrvSE.exe
-// @exclude         spoolsv.exe
-// @exclude         RuntimeBroker.exe
-// @exclude         backgroundTaskHost.exe
-// @exclude         SearchHost.exe
-// @exclude         ShellExperienceHost.exe
-// @exclude         StartMenuExperienceHost.exe
-// @exclude         LockApp.exe
-// @exclude         SystemSettings.exe
-// @exclude         TextInputHost.exe
-// @exclude         smartscreen.exe
-// @exclude         consent.exe
-// @exclude         WerFault.exe
-// @exclude         SecurityHealthService.exe
-// @exclude         SecurityHealthSystray.exe
-// @exclude         MsMpEng.exe
-// @exclude         NisSrv.exe
-// @exclude         NVDisplay.Container.exe
-// @exclude         GameInputRedistService.exe
-// @exclude         windhawk.exe
-// @exclude         windhawk-ui.exe
-// @exclude         wireguard.exe
-// @exclude         *\Windows\System32\DriverStore\*
-// @exclude         *\Windows\SystemApps\*
-// @exclude         *\Program Files\Microsoft GameInput\*
+// @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lshlwapi -lshcore -ladvapi32 -lws2_32 -liphlpapi
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lshell32 -lshlwapi -lshcore -ladvapi32 -lws2_32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Usagi Taskbar Island
 
-A modular Fluent Design island for the **Windows 11 taskbar**, combining a customizable **Media Bar + Mini-Player Popup** and a passwordless **WireGuard VPN toggle** with per-app **Split Tunneling**.
+![Usagi Taskbar Island Preview](https://raw.githubusercontent.com/usagi-dead/usagi-taskbar-island/main/screenshots/preview.png)
+
+A modular Fluent Design island for the **Windows 11 taskbar**, combining a customizable **Media Bar + Mini-Player Popup** and a **WireGuard VPN toggle**.
 
 [Русская документация ниже](#русская-документация)
 
@@ -78,93 +40,86 @@ A modular Fluent Design island for the **Windows 11 taskbar**, combining a custo
   - Adaptive cover art preserving aspect ratio (`1:1`, `16:9`, portrait), interactive seek bar with timestamps, Shuffle / Repeat / Library controls, and an active media-source switcher pill bar.
   - Opens directly above the player (clamped inside screen work area) or anchored to any fixed screen corner/edge.
 - **WireGuard VPN Toggle (`VpnConnection`, `VpnAppearance`):**
-  - One-click **passwordless** (no UAC prompt) VPN connect/disconnect powered by on-demand Windows Task Scheduler tasks (`WindhawkVPN_Start` & `WindhawkVPN_Stop`), compatible with WireGuard and AmneziaWG tunnel services.
+  - Left-click to toggle WireGuard or AmneziaWG tunnels (uses a standard UAC prompt by default, or optional one-click **passwordless** toggling via Windows Task Scheduler).
   - 11 built-in vector SVG icons (`shield_solid`, `shield`, `shield_check_solid`, `globe`, `world`, `cloud_check`, etc.), independent per-state icon HEX/RGB/`auto` colors, customizable status text, status indicator dot, and optional tray notifications.
-- **Split Tunneling (`SplitTunneling`):**
-  - Lightweight Winsock bypass (`connect` / `WSAConnect` / `sendto` / `WSASendTo` / `bind`) routing selected apps or folders directly through your physical adapter outside the VPN tunnel, with optional IPv6 blocking to prevent IPv6 leaks.
 - **VK Music Integration (`vk-music-bridge.user.js`):**
-  - Optional local loopback bridge (`127.0.0.1:49321`) syncing Shuffle, Repeat (`Off` / `Playlist` / `One Track`), and Add/Remove from Library with VK (`vk.com`, `vk.ru`, `music.vk.com`) in Firefox/Chrome/Edge/etc.
+  - **Optional (disabled by default)** loopback bridge (`127.0.0.1:49321`) syncing Shuffle, Repeat (`Off` / `Playlist` / `One Track`), and Add/Remove from Library with VK (`vk.com`, `vk.ru`, `music.vk.com`) when configured with a shared secret token.
+
+> **Need per-app Split Tunneling?** Split Tunneling is available as a separate mod (**WireGuard Split Tunneling**) so this taskbar mod runs exclusively inside `explorer.exe` and the standalone split-tunneling mod can cover both 32-bit and 64-bit apps.
 
 ---
 
 ## Requirements
 
-- **Windows 11 (x64)** with **Windhawk**.
+- **Windows 11 (x64 / ARM64)** with **Windhawk**.
 - **Optional (for VPN module):** [WireGuard for Windows](https://www.wireguard.com/install/) (or AmneziaWG) and your local `.conf` tunnel profile. If you only want the Media Player, turn off `Island -> Enable VPN button module`.
-- **Optional (for VK Music Shuffle/Repeat/Library sync):** A browser userscript manager such as **Violentmonkey** or **Tampermonkey** with the companion userscript.
+- **Optional (for VK Music Shuffle/Repeat/Library sync):** A browser userscript manager such as **Violentmonkey** or **Tampermonkey** with the companion userscript and a shared secret token.
 
 ---
 
 ## Setup Guides
 
-### 1. WireGuard VPN (Passwordless Toggle — No UAC)
-1. Install WireGuard and keep your tunnel `.conf` file in a permanent location (for example, `C:\WireGuard\my-vpn.conf`). *(Ensure the filename matches a valid WireGuard tunnel name without special characters).*
+### 1. WireGuard VPN & Optional Passwordless Toggle
+1. Install WireGuard and store your tunnel `.conf` file in an administrator-protected folder (for example, `C:\Program Files\WireGuard\Data\Configurations\my-vpn.conf` or another folder not writable by standard programs).
 2. Open **Mod Settings -> VPN - Connection & Behavior**:
    - Verify **Path to `wireguard.exe`** (default: `C:\Program Files\WireGuard\wireguard.exe`).
    - Set **Path to `.conf` file** to your `.conf` path.
    - Click **Save settings**.
-3. **Right-click** the VPN button on the taskbar and select **"Setup / update passwordless toggle (1 time)"** (or click the VPN button once and approve UAC). Approve the single UAC prompt to register `WindhawkVPN_Start` and `WindhawkVPN_Stop` in Windows Task Scheduler.
-4. All subsequent left-clicks toggle VPN silently without UAC prompts. If you later move or rename your `.conf` file, run that context-menu item once more.
+3. By default, clicking the VPN button toggles the tunnel using a normal UAC elevation prompt without creating anything persistent.
+4. *(Optional — Passwordless Toggle)* Right-click the VPN button and select **"Setup / update passwordless toggle (1 time)"**. After you approve one UAC prompt, the mod creates two Windows Task Scheduler tasks (`WindhawkVPN_Start` and `WindhawkVPN_Stop`) running `/installtunnelservice "<conf>"` and `/uninstalltunnelservice <name>` with `/sc ONCE /rl HIGHEST`.
+   - **Important persistence & security note:** These two scheduled tasks remain registered in Windows Task Scheduler even after the mod is disabled or uninstalled, and any process in your user session can trigger them to start/stop that `.conf` elevated. Make sure the `.conf` file is protected against non-admin writes.
+   - **How to remove the tasks:** Right-click the VPN button and choose **"Remove passwordless tasks (cleanup)"**, or run the following commands in an elevated Command Prompt / PowerShell:
+     - `schtasks /delete /tn WindhawkVPN_Start /f`
+     - `schtasks /delete /tn WindhawkVPN_Stop /f`
 
-### 2. Split Tunneling (App Bypass)
-1. Open **Mod Settings -> Split Tunneling** and enable **Enable Split Tunneling**.
-2. Add rules to **Excluded applications**:
-   - Exact executable name: `firefox.exe`
-   - Process stem: `steam`
-   - Folder prefix: `C:\Games\` (applies to executables launched from inside that folder)
-   - Make sure **Enabled** is checked for each entry.
-3. Click **Save settings** and **restart** any newly added applications so Windhawk's hook activates inside them.
-4. *(Optional Security Tip)* Because Split Tunneling uses `@include *` with system exclusions, if Windows Smart App Control / Code Integrity logs blocked unsigned DLL loads in unrelated third-party apps, you can open Windhawk's **Advanced** tab for this mod and restrict the **Custom process inclusion list** strictly to `explorer.exe` plus your excluded apps.
-
-### 3. VK Music Bridge (Shuffle, Repeat & Library)
-Standard Windows media controls (SMTC) do not expose VK's Shuffle, Repeat, or Add-to-Library state. To enable two-way sync:
-1. Ensure `MediaBar -> Style, controls & VK Bridge -> Enable VK Music HTTP Bridge` is enabled (`true`, port `49321` by default).
-2. Install **Violentmonkey** or **Tampermonkey** in your browser.
-3. Install the companion userscript: [vk-music-bridge.user.js](https://raw.githubusercontent.com/usagi-dead/usagi-taskbar-island/main/vk-music-bridge.user.js).
-4. Refresh open VK tabs (`F5`). Only the actively playing tab reports state (`localStorage` leader election).
+### 2. VK Music Bridge (Optional, Off by Default)
+Standard Windows media controls (SMTC) do not expose VK's Shuffle, Repeat, or Add-to-Library state. To enable optional two-way sync:
+1. Open **Mod Settings -> MediaBar -> Style, controls & VK Bridge**:
+   - Enable **Enable VK Music HTTP Bridge** (disabled by default).
+   - Enter a random secret phrase in **VK Bridge Secret Token** (the local server in `explorer.exe` listens on `127.0.0.1:<port>` only while both the toggle is enabled and the token is non-empty, sends no wildcard CORS headers, and rejects requests with missing or mismatched `token`).
+   - Click **Save settings**.
+2. Install **Violentmonkey** or **Tampermonkey** in your browser and install [vk-music-bridge.user.js](https://raw.githubusercontent.com/usagi-dead/usagi-taskbar-island/main/vk-music-bridge.user.js).
+3. Open your userscript manager menu on a VK tab (`Set VK Bridge token`), paste the exact same secret token, and refresh VK tabs (`F5`). Only the actively playing tab reports state (`localStorage` leader election).
 
 ---
 
 ## Controls & Quick Tips
 - **Left-click track cover/title:** Open / close the Mini-Player popup.
 - **Right-click Media Bar:** Full playback context menu (Play/Pause, Next/Prev, Stop, -/+5s, Shuffle, Repeat submenu, Library toggle, active media source selector).
-- **Right-click VPN button:** Connect/Disconnect, Setup passwordless task, Open WireGuard GUI, Open `.conf` file.
+- **Right-click VPN button:** Connect/Disconnect, Setup/update passwordless tasks, Remove passwordless tasks (cleanup), Open WireGuard GUI, Open `.conf` file.
 - **Multi-monitor:** Default is **Monitor `1` (Primary)**. If you use a second monitor, change `Island -> Monitor number` to `2`, or switch `Monitor display mode` to `All monitors`.
 
 ---
 
 ## Русская документация
 
-Модульный островок в стиле **Fluent Design** для **панели задач Windows 11**. Объединяет компактный **Медиаплеер** со всплывающим окном полного просмотра и кнопку **WireGuard VPN** с переключением без UAC и раздельным туннелированием (Split Tunneling).
+Модульный островок в стиле **Fluent Design** для **панели задач Windows 11**. Объединяет компактный **Медиаплеер** со всплывающим окном полного просмотра и кнопку **WireGuard VPN** (работает строго внутри `explorer.exe`).
+
+> **Нужно раздельное туннелирование (Split Tunneling)?** Оно вынесено в отдельный мод **WireGuard Split Tunneling**, чтобы не загружать этот мод во все процессы системы и поддерживать как 64-битные, так и 32-битные приложения.
 
 ### Основные возможности
 - **Островок (`Island`):** единая капсула или раздельные кнопки (Плеер и VPN отдельно), выбор монитора (`1`, `2`, или все мониторы), позиция на панели (`Левый край`, `Центр`, `Правый край`, `Трей`), стиль фона (`Прозрачный`, `Сплошной`, `Acrylic`), скругление углов, рамка и объёмная тень `ThemeShadow`.
 - **Медиаплеер на панели (`MediaBar`):** обложка (квадратная или адаптивная `1:1`/`16:9`), название и исполнитель (с плавной бегущей строкой), гибкое включение/отключение любых кнопок и точные отступы, нативный hover Win11, действие колеса мыши, контекстное меню ПКМ и понятные названия приложений (`Firefox`, `Chrome`, `Edge` и др. вместо ID).
 - **Окно полного просмотра (`MiniPlayer`):** безрамочное окно **Translucent** / **Acrylic** / **Сплошное**, большая адаптивная обложка, прогресс-бар с перемоткой, переключение между запущенными источниками медиа, кнопки `Перемешать`, `Повтор` и `В библиотеку`.
-- **Кнопка WireGuard VPN (`VpnConnection`, `VpnAppearance`):** переключение туннеля в 1 клик без окна UAC через Планировщик заданий (`WindhawkVPN_Start` / `WindhawkVPN_Stop`), совместимость с WireGuard и AmneziaWG, 11 векторных SVG-иконок с отдельным цветом под каждый статус (`#RRGGBB` или `"auto"`), текст, точка-индикатор и уведомления.
-- **Раздельное туннелирование (`SplitTunneling`):** направляет выбранные программы или папки напрямую в интернет через физический сетевой адаптер мимо VPN (с опциональной блокировкой IPv6 от утечек).
-- **Мост ВК Музыки (`vk-music-bridge.user.js`):** локальный HTTP-мост (`127.0.0.1:49321`) для двусторонней синхронизации `Перемешать`, `Повтор` (`Выкл` / `Плейлист` / `Один трек`) и `Добавить/убрать из библиотеки` на `vk.com`, `vk.ru` и `music.vk.com`.
+- **Кнопка WireGuard VPN (`VpnConnection`, `VpnAppearance`):** переключение туннелей WireGuard / AmneziaWG по ЛКМ (через стандартный UAC или опционально без UAC через Планировщик заданий), 11 векторных SVG-иконок с отдельным цветом под каждый статус (`#RRGGBB` или `"auto"`), текст, точка-индикатор и уведомления.
+- **Мост ВК Музыки (`vk-music-bridge.user.js`):** опциональный (выключен по умолчанию) локальный HTTP-мост на `127.0.0.1:49321` с обязательной проверкой секретного токена для синхронизации `Перемешать`, `Повтор` и `В библиотеку` на `vk.com`, `vk.ru` и `music.vk.com`.
 
 ### Что понадобится для настройки
 
-#### 1. WireGuard VPN (переключение без UAC)
-1. Установите [WireGuard для Windows](https://www.wireguard.com/install/) (или AmneziaWG) и положите свой `.conf` файл в постоянную папку (например, `C:\WireGuard\my-vpn.conf`). Если вам нужен только медиаплеер — просто отключите `Island -> Включить модуль кнопки VPN`.
-2. Откройте настройки мода **VPN — Подключение и поведение**:
-   - Проверьте **Путь к `wireguard.exe`** (по умолчанию `C:\Program Files\WireGuard\wireguard.exe`).
-   - Введите полный путь в поле **Путь к файлу `.conf`**.
-   - Нажмите **Сохранить настройки**.
-3. Нажмите **ПКМ** по кнопке VPN на панели задач и выберите **«Настроить / обновить запуск без UAC (1 раз)»**, один раз подтвердив UAC. После этого переключение VPN по ЛКМ будет происходить мгновенно без запросов прав администратора.
+#### 1. WireGuard VPN и опциональный запуск без UAC
+1. Установите [WireGuard для Windows](https://www.wireguard.com/install/) (или AmneziaWG) и положите `.conf` файл в папку, защищённую от записи обычными программами (например, `C:\WireGuard\my-vpn.conf` с правами только для администратора). Если вам нужен только медиаплеер — просто отключите `Island -> Включить модуль кнопки VPN`.
+2. Откройте настройки мода **VPN — Подключение и поведение**, проверьте **Путь к `wireguard.exe`** и укажите **Путь к файлу `.conf`**.
+3. По умолчанию клик по VPN запускает туннель через стандартный запрос UAC и не создаёт никаких записей в системе.
+4. *(По желанию — запуск без UAC)* Нажмите **ПКМ** по кнопке VPN и выберите **«Настроить / обновить запуск без UAC (1 раз)»**. Будут созданы две задачи Планировщика заданий Windows: `WindhawkVPN_Start` и `WindhawkVPN_Stop` (`/sc ONCE /rl HIGHEST`).
+   - **Важно:** созданные задачи **остаются в системе даже после отключения или удаления мода**, а любая программа пользователя может запустить их для подключения указанного `.conf` с повышенными правами — поэтому храните `.conf` в папке с правами администратора.
+   - **Как полностью удалить задачи:** выберите **«Удалить задачи без UAC (очистка)»** в меню ПКМ по кнопке VPN или выполните от имени администратора:
+     - `schtasks /delete /tn WindhawkVPN_Start /f`
+     - `schtasks /delete /tn WindhawkVPN_Stop /f`
 
-#### 2. Раздельное туннелирование (Split Tunneling)
-1. В разделе **Split Tunneling** включите **Включить раздельное туннелирование**.
-2. В списке **Исключённые приложения** добавьте нужные процессы: имя exe (`firefox.exe`), имя без расширения (`steam`) или путь к папке (`C:\Games\`), и отметьте **Включено**.
-3. Сохраните настройки и **перезапустите** добавленные программы.
-4. *(По желанию)* На вкладке **Дополнительно** (Advanced) настроек Windhawk можно указать свой список включения процессов (`explorer.exe` и ваши приложения из Split Tunneling), чтобы не загружать DLL мода в посторонние процессы.
-
-#### 3. Синхронизация с ВК Музыкой (`vk-music-bridge.user.js`)
-1. Убедитесь, что включена опция `Включить мост ВК Музыки` (порт `49321`).
-2. Установите в браузер расширение **Violentmonkey** или **Tampermonkey**.
-3. Установите скрипт [vk-music-bridge.user.js](https://raw.githubusercontent.com/usagi-dead/usagi-taskbar-island/main/vk-music-bridge.user.js) и обновите вкладки с VK (`F5`).
+#### 2. Синхронизация с ВК Музыкой (опционально, выключено по умолчанию)
+1. В разделе **MediaBar -> Стиль, кнопки и мост ВК Музыки** включите **Включить мост ВК Музыки** и задайте произвольный **Секретный токен моста ВК** (без непустого токена сервер не запускается; CORS-заголовки для любых сайтов не отдаются).
+2. Установите **Violentmonkey** или **Tampermonkey** и скрипт [vk-music-bridge.user.js](https://raw.githubusercontent.com/usagi-dead/usagi-taskbar-island/main/vk-music-bridge.user.js).
+3. В меню юзерскрипта на вкладке ВК выберите **`Set VK Bridge token`**, вставьте тот же токен и обновите вкладку (`F5`).
 */
 // ==/WindhawkModReadme==
 
@@ -408,12 +363,19 @@ Standard Windows media controls (SMTC) do not expose VK's Shuffle, Repeat, or Ad
       - "none": "Отключено"
       - "track": "Следующий / Предыдущий трек"
       - "session": "Переключить источник (сессию)"
-    - enableVkBridge: true
+    - enableVkBridge: false
       $name: Enable VK Music HTTP Bridge (Shuffle, Repeat, Library)
       $name:ru-RU: Включить мост ВК Музыки (Шафл, Повтор, Библиотека)
+      $description: Disabled by default. When enabled with a secret token below, explorer.exe listens on 127.0.0.1 for requests from vk-music-bridge.user.js.
+      $description:ru-RU: По умолчанию выключено. При включении и указанном токене explorer.exe слушает порт на 127.0.0.1 для запросов от vk-music-bridge.user.js.
     - vkBridgePort: 49321
       $name: VK Bridge local port
       $name:ru-RU: Локальный порт моста ВК Музыки
+    - vkBridgeToken: ""
+      $name: VK Bridge secret token
+      $name:ru-RU: Секретный токен моста ВК Музыки
+      $description: Required when VK Bridge is enabled. Set the exact same secret string in vk-music-bridge.user.js (server rejects unauthenticated requests with 403 Forbidden).
+      $description:ru-RU: Обязателен при включённом мосте ВК. Укажите такую же секретную строку в меню скрипта vk-music-bridge.user.js (иначе запросы отклоняются с 403 Forbidden).
     $name: Style, controls & VK Bridge
     $name:ru-RU: Стиль, управление и мост ВК
   $name: Media Bar — Taskbar Player
@@ -707,39 +669,11 @@ Standard Windows media controls (SMTC) do not expose VK's Shuffle, Repeat, or Ad
     $name:ru-RU: Цвет индикатора — Выключен (HEX или R G B)
   $name: VPN Button Appearance
   $name:ru-RU: VPN — Внешний вид кнопки
-
-- SplitTunneling:
-  - enabled: false
-    $name: Enable Split Tunneling
-    $name:ru-RU: Включить раздельное туннелирование
-    $description: "Excluded enabled apps will bypass the VPN via your physical network adapter. Restart newly added apps after saving."
-    $description:ru-RU: "Включённые ниже приложения будут выходить в сеть напрямую мимо VPN через физический адаптер. Новые приложения нужно перезапустить."
-  - blockIpv6: true
-    $name: Block IPv6 in excluded apps (prevents IPv6 leaks)
-    $name:ru-RU: Блокировать IPv6 у исключений (защита от утечек)
-  - excludedApps:
-    - - process: ""
-        $name: Process or folder path
-        $name:ru-RU: Процесс или папка
-        $description: "Process name (e.g. firefox.exe), stem (firefox), or folder path (C:\\Games\\)."
-        $description:ru-RU: "Имя процесса (firefox.exe), имя без .exe (firefox) или путь к папке (C:\\Games\\)."
-      - enabled: false
-        $name: Enabled
-        $name:ru-RU: Включено
-    $name: Excluded applications (bypass VPN)
-    $name:ru-RU: Исключённые приложения (мимо VPN)
-  $name: Split Tunneling
-  $name:ru-RU: Раздельное туннелирование (Split Tunneling)
 */
 // ==/WindhawkModSettings==
 
-// windhawk_api.h is force-included by Windhawk before line 1 and pulls in <windows.h>.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-W#warnings"
 #include <winsock2.h>
-#pragma clang diagnostic pop
 #include <ws2tcpip.h>
-#include <iphlpapi.h>
 
 #undef GetCurrentTime
 #include <winrt/base.h>
@@ -764,6 +698,9 @@ Standard Windows media controls (SMTC) do not expose VK's Shuffle, Repeat, or Ad
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 
 #include <windows.h>
+#include <ole2.h>
+#include <oleauto.h>
+#include <taskschd.h>
 #include <winsvc.h>
 #include <shellapi.h>
 #include <shlwapi.h>
@@ -777,18 +714,12 @@ Standard Windows media controls (SMTC) do not expose VK's Shuffle, Repeat, or Ad
 #include <cmath>
 #include <cstdio>
 #include <cwctype>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
-
-#ifndef IP_UNICAST_IF
-#define IP_UNICAST_IF 31
-#endif
-#ifndef IPV6_UNICAST_IF
-#define IPV6_UNICAST_IF 31
-#endif
 
 using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
@@ -847,19 +778,16 @@ struct MediaSnapshot {
     std::wstring             activeAumid;
     std::wstring             activeAppName;
     int64_t                  positionTicks = 0;
+    int64_t                  timelineBasePosTicks = 0;
+    ULONGLONG                timelineAnchorTickMs = 0;
     int64_t                  durationTicks = 0;
     bool                     shuffleEnabled = false;
     RepeatMode               repeatMode = RepeatMode::Off;
     bool                     inLibrary = false;
     bool                     vkBridgeConnected = false;
-    std::vector<BYTE>        thumbnailBytes;
+    std::shared_ptr<const std::vector<BYTE>> thumbnailBytes;
     uint64_t                 thumbnailHash = 0;
     std::vector<SessionInfo> sessions;
-};
-
-struct ExcludedAppRule {
-    std::wstring process;
-    bool enabled = true;
 };
 
 struct IslandSettings {
@@ -920,8 +848,9 @@ struct IslandSettings {
     bool         mediaHoverAnimation   = true;
     bool         mediaEnableCtxMenu    = true;
     std::wstring mediaWheelAction      = L"none";
-    bool         enableVkBridge        = true;
+    bool         enableVkBridge        = false;
     int          vkBridgePort          = 49321;
+    std::wstring vkBridgeToken         = L"";
 
     // Mini-Player Popup
     bool         mediaEnableMiniPlayer   = true;
@@ -987,11 +916,6 @@ struct IslandSettings {
     winrt::Windows::UI::Color colorConnected{0xFF, 0x2E, 0xCC, 0x71};
     winrt::Windows::UI::Color colorTransitioning{0xFF, 0xF3, 0x9C, 0x12};
     winrt::Windows::UI::Color colorDisconnected{0x90, 0x95, 0xA5, 0xA6};
-
-    // Split Tunneling
-    bool splitEnabled = false;
-    bool blockIpv6    = true;
-    std::vector<ExcludedAppRule> excludedApps;
 };
 
 struct VpnModuleUI {
@@ -1082,12 +1006,22 @@ struct MiniPlayerUI {
     winrt::Windows::UI::Xaml::Shapes::Path nextPath{nullptr};
     winrt::Windows::UI::Xaml::Shapes::Path repeatAllPath{nullptr};
     winrt::Windows::UI::Xaml::Shapes::Path repeatOnePath{nullptr};
+    DispatcherTimer seekTimer{nullptr};
+    winrt::event_token seekTickToken{};
     uint64_t   lastThumbHash = 0;
     size_t     lastSessionSig = 0;
     bool       isSeeking = false;
     double     seekRatio = 0.0;
 
     void Reset() {
+        if (seekTimer) {
+            try { seekTimer.Stop(); } catch (...) {}
+            if (seekTickToken.value) {
+                try { seekTimer.Tick(seekTickToken); } catch (...) {}
+                seekTickToken = {};
+            }
+            seekTimer = nullptr;
+        }
         repeatOnePath = nullptr;
         repeatAllPath = nullptr;
         nextPath = nullptr;
@@ -1152,12 +1086,6 @@ std::wstring  g_preferredSessionAumid;
 std::wstring  g_pendingTargetSessionAumid;
 std::unordered_map<std::wstring, std::wstring> g_appNameCache;
 
-bool              g_isExplorer = false;
-std::wstring      g_procFullPathLower;
-std::wstring      g_procFileNameLower;
-std::atomic<bool> g_splitBypassActive{false};
-std::atomic<bool> g_blockIpv6{true};
-
 std::atomic<VpnState>  g_vpnState{VpnState::Disconnected};
 std::atomic<VpnState>  g_lastStableState{VpnState::Disconnected};
 std::atomic<bool>      g_unloading{false};
@@ -1166,6 +1094,7 @@ std::atomic<bool>      g_rebuildRequested{false};
 std::atomic<bool>      g_needsUiUpdate{false};
 std::atomic<int>       g_pendingMediaCmd{0};
 std::atomic<int64_t>   g_pendingSeekTicks{0};
+std::atomic<bool>      g_mediaPropsDirty{true};
 std::atomic<bool>      g_miniPlayerOpen{false};
 HWND                   g_miniPlayerAnchorHwnd = nullptr;
 
@@ -1403,60 +1332,6 @@ bool TryParseCustomColor(std::wstring_view raw, winrt::Windows::UI::Color& out) 
     return TryParseColor(s, out);
 }
 
-void InitCurrentProcessInfo() {
-    wchar_t path[MAX_PATH]{};
-    DWORD len = GetModuleFileNameW(nullptr, path, MAX_PATH);
-    if (len > 0 && len < MAX_PATH) {
-        g_procFullPathLower = ToLower(path);
-        const wchar_t* name = PathFindFileNameW(path);
-        g_procFileNameLower = name ? ToLower(name) : L"";
-        g_isExplorer = (_wcsicmp(name ? name : L"", L"explorer.exe") == 0);
-    }
-}
-
-bool MatchesProcessRule(std::wstring_view rawRule,
-                        std::wstring_view fullPathLower,
-                        std::wstring_view fileNameLower) {
-    std::wstring rule = ToLower(StripQuotes(std::wstring(rawRule)));
-    if (rule.empty()) return false;
-
-    for (auto& ch : rule) {
-        if (ch == L'/') ch = L'\\';
-    }
-
-    if (rule.find(L'\\') != std::wstring::npos) {
-        if (fullPathLower == rule) return true;
-        if (fullPathLower.size() > rule.size() &&
-            fullPathLower.compare(0, rule.size(), rule) == 0) {
-            return rule.back() == L'\\' || fullPathLower[rule.size()] == L'\\';
-        }
-        return false;
-    }
-
-    if (fileNameLower == rule) return true;
-
-    std::wstring_view procStem = fileNameLower;
-    if (procStem.size() > 4 && procStem.substr(procStem.size() - 4) == L".exe") {
-        procStem.remove_suffix(4);
-    }
-    std::wstring_view ruleStem = rule;
-    if (ruleStem.size() > 4 && ruleStem.substr(ruleStem.size() - 4) == L".exe") {
-        ruleStem.remove_suffix(4);
-    }
-    return !procStem.empty() && procStem == ruleStem;
-}
-
-bool IsCurrentProcessExcluded(const IslandSettings& s) {
-    if (!s.splitEnabled) return false;
-    for (const auto& rule : s.excludedApps) {
-        if (!rule.enabled) continue;
-        if (MatchesProcessRule(rule.process, g_procFullPathLower, g_procFileNameLower)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 IslandSettings ReadSettingsFromWindhawk() {
     auto ReadRawStr = [](const wchar_t* key) -> std::wstring {
         PCWSTR raw = Wh_GetStringSetting(key);
@@ -1471,35 +1346,10 @@ IslandSettings ReadSettingsFromWindhawk() {
 
     IslandSettings s;
 
-    // Split Tunneling (read first so non-explorer processes can exit early if unneeded)
-    s.splitEnabled = Wh_GetIntSetting(L"SplitTunneling.enabled") != 0;
-    s.blockIpv6    = Wh_GetIntSetting(L"SplitTunneling.blockIpv6") != 0;
-
-    int emptyStreak = 0;
-    for (int i = 0; i < 256; ++i) {
-        PCWSTR procRaw = Wh_GetStringSetting(L"SplitTunneling.excludedApps[%d].process", i);
-        std::wstring proc = procRaw ? Trim(procRaw) : L"";
-        Wh_FreeStringSetting(procRaw);
-
-        int enabledVal = Wh_GetIntSetting(L"SplitTunneling.excludedApps[%d].enabled", i);
-        if (proc.empty() && enabledVal == 0) {
-            if (++emptyStreak >= 3) break;
-            continue;
-        }
-        emptyStreak = 0;
-        if (!proc.empty()) {
-            s.excludedApps.push_back({std::move(proc), enabledVal != 0});
-        }
-    }
-
     // Connection paths
     s.wgExePath  = StripQuotes(ReadStr(L"VpnConnection.wireguardExePath", L"C:\\Program Files\\WireGuard\\wireguard.exe"));
     s.configPath = StripQuotes(ReadRawStr(L"VpnConnection.configPath"));
     s.tunnelName = ExtractTunnelNameFromPath(s.configPath);
-
-    if (!g_isExplorer) {
-        return s;
-    }
 
     // Island Container
     s.enableMediaPlayer = Wh_GetIntSetting(L"Island.enableMediaPlayer") != 0;
@@ -1562,6 +1412,7 @@ IslandSettings ReadSettingsFromWindhawk() {
     s.mediaWheelAction    = ReadStr(L"MediaBar.Style.mouseWheelAction", L"none");
     s.enableVkBridge      = Wh_GetIntSetting(L"MediaBar.Style.enableVkBridge") != 0;
     s.vkBridgePort        = std::clamp(Wh_GetIntSetting(L"MediaBar.Style.vkBridgePort"), 1024, 65535);
+    s.vkBridgeToken       = Trim(ReadRawStr(L"MediaBar.Style.vkBridgeToken"));
 
     // Mini-Player Popup
     s.mediaEnableMiniPlayer    = Wh_GetIntSetting(L"MiniPlayer.enabled") != 0;
@@ -1627,200 +1478,13 @@ IslandSettings ReadSettingsFromWindhawk() {
 
 void ReloadSettings() {
     IslandSettings next = ReadSettingsFromWindhawk();
-    const bool excluded = IsCurrentProcessExcluded(next);
-    const bool blockV6  = next.blockIpv6;
-    {
-        std::lock_guard<std::mutex> lock(g_settingsMutex);
-        g_settings = std::move(next);
-    }
-    g_splitBypassActive.store(excluded);
-    g_blockIpv6.store(blockV6);
+    std::lock_guard<std::mutex> lock(g_settingsMutex);
+    g_settings = std::move(next);
 }
 
 IslandSettings GetSettingsSnapshot() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     return g_settings;
-}
-
-// ===========================================================================
-// SPLIT TUNNELING ENGINE (non-explorer processes)
-// ===========================================================================
-struct PhysicalAdapterInfo {
-    DWORD ifIndex = 0;
-    DWORD ipv4Addr = 0;
-    bool  vpnActive = false;
-};
-
-PhysicalAdapterInfo GetPhysicalAdapterInfo() {
-    static std::atomic<DWORD>     cachedIfIndex{0};
-    static std::atomic<DWORD>     cachedIp{0};
-    static std::atomic<bool>      cachedVpnActive{false};
-    static std::atomic<ULONGLONG> lastCheck{0};
-
-    const ULONGLONG now = GetTickCount64();
-    if (now - lastCheck.load() < 3000) {
-        return {cachedIfIndex.load(), cachedIp.load(), cachedVpnActive.load()};
-    }
-
-    ULONG bufLen = 32768;
-    std::vector<BYTE> buffer(bufLen);
-    auto* pAddresses = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
-    const ULONG flags = GAA_FLAG_INCLUDE_GATEWAYS | GAA_FLAG_SKIP_ANYCAST |
-                        GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
-
-    DWORD ret = GetAdaptersAddresses(AF_INET, flags, nullptr, pAddresses, &bufLen);
-    if (ret == ERROR_BUFFER_OVERFLOW) {
-        buffer.resize(bufLen);
-        pAddresses = reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer.data());
-        ret = GetAdaptersAddresses(AF_INET, flags, nullptr, pAddresses, &bufLen);
-    }
-    if (ret != NO_ERROR) {
-        return {cachedIfIndex.load(), cachedIp.load(), cachedVpnActive.load()};
-    }
-
-    std::wstring tunnelLower;
-    {
-        std::lock_guard<std::mutex> lock(g_settingsMutex);
-        tunnelLower = ToLower(g_settings.tunnelName);
-    }
-
-    bool  foundVpn = false;
-    DWORD physIfIndex = 0;
-    DWORD physIp = 0;
-
-    for (auto* curr = pAddresses; curr != nullptr; curr = curr->Next) {
-        if (curr->OperStatus != IfOperStatusUp) continue;
-
-        std::wstring desc = curr->Description ? ToLower(curr->Description) : L"";
-        std::wstring friendly = curr->FriendlyName ? ToLower(curr->FriendlyName) : L"";
-        const bool isVpnAdapter =
-            desc.find(L"wireguard") != std::wstring::npos ||
-            desc.find(L"wintun") != std::wstring::npos ||
-            desc.find(L"amnezia") != std::wstring::npos ||
-            desc.find(L"tap-") != std::wstring::npos ||
-            (!tunnelLower.empty() && friendly == tunnelLower);
-
-        if (isVpnAdapter) {
-            foundVpn = true;
-            continue;
-        }
-
-        if (physIfIndex != 0) continue;
-        if (curr->IfType == IF_TYPE_SOFTWARE_LOOPBACK || curr->IfType == IF_TYPE_TUNNEL) continue;
-        if (!curr->FirstGatewayAddress) continue;
-
-        for (auto* ua = curr->FirstUnicastAddress; ua != nullptr; ua = ua->Next) {
-            if (ua->Address.lpSockaddr && ua->Address.lpSockaddr->sa_family == AF_INET) {
-                const auto* sin = reinterpret_cast<const sockaddr_in*>(ua->Address.lpSockaddr);
-                const DWORD ip = sin->sin_addr.s_addr;
-                if (ip != 0 && ip != htonl(INADDR_LOOPBACK)) {
-                    physIfIndex = curr->IfIndex;
-                    physIp = ip;
-                    break;
-                }
-            }
-        }
-    }
-
-    cachedIfIndex.store(physIfIndex);
-    cachedIp.store(physIp);
-    cachedVpnActive.store(foundVpn);
-    lastCheck.store(now);
-    return {physIfIndex, physIp, foundVpn};
-}
-
-bool ApplySplitTunnelToSocket(SOCKET s, const sockaddr* name) {
-    if (!g_splitBypassActive.load() || !name) return true;
-
-    const auto info = GetPhysicalAdapterInfo();
-    if (!info.vpnActive || info.ifIndex == 0) {
-        return true;
-    }
-
-    if (name->sa_family == AF_INET) {
-        const auto* dest = reinterpret_cast<const sockaddr_in*>(name);
-        const DWORD dstHost = ntohl(dest->sin_addr.s_addr);
-        if ((dstHost >> 24) == 127 || dstHost == 0) {
-            return true;
-        }
-
-        const DWORD netIfIndex = htonl(info.ifIndex);
-        setsockopt(s, IPPROTO_IP, IP_UNICAST_IF,
-                   reinterpret_cast<const char*>(&netIfIndex), sizeof(netIfIndex));
-
-        sockaddr_in currentBind{};
-        int namelen = sizeof(currentBind);
-        if (getsockname(s, reinterpret_cast<sockaddr*>(&currentBind), &namelen) != 0 ||
-            currentBind.sin_addr.s_addr == 0) {
-            sockaddr_in bindAddr{};
-            bindAddr.sin_family = AF_INET;
-            bindAddr.sin_addr.s_addr = info.ipv4Addr;
-            bindAddr.sin_port = 0;
-            bind(s, reinterpret_cast<const sockaddr*>(&bindAddr), sizeof(bindAddr));
-        }
-        return true;
-    }
-
-    if (name->sa_family == AF_INET6) {
-        const auto* dest6 = reinterpret_cast<const sockaddr_in6*>(name);
-        if (IN6_IS_ADDR_LOOPBACK(&dest6->sin6_addr) || IN6_IS_ADDR_LINKLOCAL(&dest6->sin6_addr)) {
-            return true;
-        }
-        if (g_blockIpv6.load()) {
-            WSASetLastError(WSAEHOSTUNREACH);
-            return false;
-        }
-    }
-
-    return true;
-}
-
-using connect_t    = int(WSAAPI*)(SOCKET, const sockaddr*, int);
-using WSAConnect_t = int(WSAAPI*)(SOCKET, const sockaddr*, int, LPWSABUF, LPWSABUF, LPQOS, LPQOS);
-using sendto_t     = int(WSAAPI*)(SOCKET, const char*, int, int, const sockaddr*, int);
-using WSASendTo_t  = int(WSAAPI*)(SOCKET, LPWSABUF, DWORD, LPDWORD, DWORD, const sockaddr*, int, LPWSAOVERLAPPED, LPWSAOVERLAPPED_COMPLETION_ROUTINE);
-
-connect_t    connect_Original    = nullptr;
-WSAConnect_t WSAConnect_Original = nullptr;
-sendto_t     sendto_Original     = nullptr;
-WSASendTo_t  WSASendTo_Original  = nullptr;
-
-int WSAAPI connect_Hook(SOCKET s, const sockaddr* name, int namelen) {
-    if (!ApplySplitTunnelToSocket(s, name)) return SOCKET_ERROR;
-    return connect_Original(s, name, namelen);
-}
-
-int WSAAPI WSAConnect_Hook(SOCKET s, const sockaddr* name, int namelen,
-                           LPWSABUF lpCallerData, LPWSABUF lpCalleeData, LPQOS lpSQOS, LPQOS lpGQOS) {
-    if (!ApplySplitTunnelToSocket(s, name)) return SOCKET_ERROR;
-    return WSAConnect_Original(s, name, namelen, lpCallerData, lpCalleeData, lpSQOS, lpGQOS);
-}
-
-int WSAAPI sendto_Hook(SOCKET s, const char* buf, int len, int flags, const sockaddr* to, int tolen) {
-    if (!ApplySplitTunnelToSocket(s, to)) return SOCKET_ERROR;
-    return sendto_Original(s, buf, len, flags, to, tolen);
-}
-
-int WSAAPI WSASendTo_Hook(SOCKET s, LPWSABUF lpBuffers, DWORD dwBufferCount, LPDWORD lpNumberOfBytesSent,
-                          DWORD dwFlags, const sockaddr* lpTo, int iTolen,
-                          LPWSAOVERLAPPED lpOverlapped, LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine) {
-    if (!ApplySplitTunnelToSocket(s, lpTo)) return SOCKET_ERROR;
-    return WSASendTo_Original(s, lpBuffers, dwBufferCount, lpNumberOfBytesSent,
-                              dwFlags, lpTo, iTolen, lpOverlapped, lpCompletionRoutine);
-}
-
-bool HookWinsockForSplitTunneling() {
-    HMODULE hWs2 = LoadLibraryExW(L"ws2_32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!hWs2) return false;
-    Wh_SetFunctionHook(reinterpret_cast<void*>(GetProcAddress(hWs2, "connect")),
-                       reinterpret_cast<void*>(connect_Hook), reinterpret_cast<void**>(&connect_Original));
-    Wh_SetFunctionHook(reinterpret_cast<void*>(GetProcAddress(hWs2, "WSAConnect")),
-                       reinterpret_cast<void*>(WSAConnect_Hook), reinterpret_cast<void**>(&WSAConnect_Original));
-    Wh_SetFunctionHook(reinterpret_cast<void*>(GetProcAddress(hWs2, "sendto")),
-                       reinterpret_cast<void*>(sendto_Hook), reinterpret_cast<void**>(&sendto_Original));
-    Wh_SetFunctionHook(reinterpret_cast<void*>(GetProcAddress(hWs2, "WSASendTo")),
-                       reinterpret_cast<void*>(WSASendTo_Hook), reinterpret_cast<void**>(&WSASendTo_Original));
-    return true;
 }
 
 // ===========================================================================
@@ -2048,6 +1712,14 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         offset = bytes[7];
         offsetOk = true;
     }
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    const DWORD* p = reinterpret_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
+    if (IsReadableMemoryRange(p, sizeof(DWORD) * 4) &&
+        p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+        offset = (p[3] >> 12) & 0xFF;
+        offsetOk = true;
+    }
 #endif
 
     const void* hostElemPtrAddr = reinterpret_cast<const BYTE*>(taskbarHostSharedPtr[0]) + offset;
@@ -2130,138 +1802,91 @@ VpnState QueryVpnServiceState(const std::wstring& tunnelName) {
     return result;
 }
 
-bool RunProcessHidden(const wchar_t* exe, const std::wstring& args, DWORD& exitCode) {
-    std::wstring cmdLine = std::wstring(L"\"") + exe + L"\" " + args;
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE;
-    PROCESS_INFORMATION pi{};
-
-    if (!CreateProcessW(nullptr, cmdLine.data(), nullptr, nullptr, FALSE,
-                        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-        return false;
+struct BstrGuard {
+    BSTR ptr = nullptr;
+    BstrGuard() = default;
+    explicit BstrGuard(const wchar_t* s) : ptr(s ? SysAllocString(s) : nullptr) {}
+    ~BstrGuard() {
+        if (ptr) SysFreeString(ptr);
     }
+    BstrGuard(const BstrGuard&) = delete;
+    BstrGuard& operator=(const BstrGuard&) = delete;
+};
 
-    bool completed = false;
-    if (g_stopEvent) {
-        HANDLE waitHandles[] = {g_stopEvent, pi.hProcess};
-        const DWORD waitRes = WaitForMultipleObjects(2, waitHandles, FALSE, 5000);
-        if (waitRes == WAIT_OBJECT_0 + 1) {
-            completed = GetExitCodeProcess(pi.hProcess, &exitCode) != FALSE;
-        }
-    } else {
-        const DWORD waitRes = WaitForSingleObject(pi.hProcess, 5000);
-        if (waitRes == WAIT_OBJECT_0) {
-            completed = GetExitCodeProcess(pi.hProcess, &exitCode) != FALSE;
-        }
-    }
+bool TryRunScheduledTaskCom(const wchar_t* taskName,
+                            const std::wstring& expectedExe,
+                            const std::wstring& expectedArgSubstr) {
+    if (!taskName || expectedExe.empty() || expectedArgSubstr.empty()) return false;
 
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    return completed;
-}
+    static constexpr GUID kClsidTaskScheduler = {
+        0x0f87369f, 0xa4e5, 0x4cfc, {0xbd, 0x3e, 0x73, 0xe6, 0x15, 0x45, 0x72, 0xdd}};
+    static constexpr GUID kIidTaskService = {
+        0x2faba4c7, 0x4da9, 0x4013, {0x96, 0x97, 0x20, 0xcc, 0x3f, 0xd4, 0x0f, 0x85}};
+    static constexpr GUID kIidExecAction = {
+        0x4c3d624d, 0xfd6b, 0x49a3, {0xb9, 0xb7, 0x09, 0xcb, 0x3c, 0xd3, 0xf0, 0x47}};
 
-bool RunProcessCaptureOutput(const wchar_t* exe, const std::wstring& args,
-                             std::string& outBytes, DWORD& exitCode) {
-    outBytes.clear();
+    winrt::com_ptr<ITaskService> service;
+    HRESULT hr = CoCreateInstance(
+        kClsidTaskScheduler, nullptr, CLSCTX_INPROC_SERVER,
+        kIidTaskService, service.put_void());
+    if (FAILED(hr) || !service) return false;
 
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
+    VARIANT vEmpty;
+    VariantInit(&vEmpty);
+    hr = service->Connect(vEmpty, vEmpty, vEmpty, vEmpty);
+    if (FAILED(hr)) return false;
 
-    HANDLE readPipe = nullptr;
-    HANDLE writePipe = nullptr;
-    if (!CreatePipe(&readPipe, &writePipe, &sa, 0)) {
-        return false;
-    }
-    SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
+    BstrGuard rootPath(L"\\");
+    winrt::com_ptr<ITaskFolder> rootFolder;
+    hr = service->GetFolder(rootPath.ptr, rootFolder.put());
+    if (FAILED(hr) || !rootFolder) return false;
 
-    std::wstring cmdLine = std::wstring(L"\"") + exe + L"\" " + args;
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
-    si.wShowWindow = SW_HIDE;
-    si.hStdOutput = writePipe;
-    si.hStdError = writePipe;
+    BstrGuard taskPath(taskName);
+    winrt::com_ptr<IRegisteredTask> task;
+    hr = rootFolder->GetTask(taskPath.ptr, task.put());
+    if (FAILED(hr) || !task) return false;
 
-    PROCESS_INFORMATION pi{};
-    if (!CreateProcessW(nullptr, cmdLine.data(), nullptr, nullptr, TRUE,
-                        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-        CloseHandle(writePipe);
-        CloseHandle(readPipe);
-        return false;
-    }
+    winrt::com_ptr<ITaskDefinition> def;
+    hr = task->get_Definition(def.put());
+    if (FAILED(hr) || !def) return false;
 
-    // Close write end in parent so ReadFile sees EOF once child exits.
-    CloseHandle(writePipe);
+    winrt::com_ptr<IActionCollection> actions;
+    hr = def->get_Actions(actions.put());
+    if (FAILED(hr) || !actions) return false;
 
-    char chunk[1024];
-    DWORD bytesRead = 0;
-    while (!g_unloading.load() && ReadFile(readPipe, chunk, sizeof(chunk), &bytesRead, nullptr) && bytesRead > 0) {
-        outBytes.append(chunk, bytesRead);
-    }
+    LONG count = 0;
+    if (FAILED(actions->get_Count(&count)) || count <= 0) return false;
 
-    bool completed = false;
-    if (g_stopEvent) {
-        HANDLE waitHandles[] = {g_stopEvent, pi.hProcess};
-        const DWORD waitRes = WaitForMultipleObjects(2, waitHandles, FALSE, 4000);
-        if (waitRes == WAIT_OBJECT_0 + 1) {
-            completed = GetExitCodeProcess(pi.hProcess, &exitCode) != FALSE;
-        }
-    } else {
-        if (WaitForSingleObject(pi.hProcess, 4000) == WAIT_OBJECT_0) {
-            completed = GetExitCodeProcess(pi.hProcess, &exitCode) != FALSE;
+    const std::wstring exeLower = ToLower(expectedExe);
+    const std::wstring argLower = ToLower(expectedArgSubstr);
+    bool matched = false;
+
+    for (LONG i = 1; i <= count; ++i) {
+        winrt::com_ptr<IAction> action;
+        if (FAILED(actions->get_Item(i, action.put())) || !action) continue;
+
+        winrt::com_ptr<IExecAction> execAction;
+        if (FAILED(action->QueryInterface(kIidExecAction, execAction.put_void())) || !execAction) continue;
+
+        BstrGuard pathBstr;
+        BstrGuard argsBstr;
+        execAction->get_Path(&pathBstr.ptr);
+        execAction->get_Arguments(&argsBstr.ptr);
+
+        const std::wstring pathStr = pathBstr.ptr ? ToLower(pathBstr.ptr) : L"";
+        const std::wstring argsStr = argsBstr.ptr ? ToLower(argsBstr.ptr) : L"";
+        if (pathStr.find(exeLower) != std::wstring::npos &&
+            argsStr.find(argLower) != std::wstring::npos) {
+            matched = true;
+            break;
         }
     }
 
-    CloseHandle(readPipe);
-    CloseHandle(pi.hThread);
-    CloseHandle(pi.hProcess);
-    return completed;
-}
+    if (!matched) return false;
 
-std::wstring DecodeTaskXmlToLower(const std::string& bytes) {
-    if (bytes.empty()) return {};
-
-    std::wstring decoded;
-    const bool hasUtf16Bom = bytes.size() >= 2 &&
-                             static_cast<unsigned char>(bytes[0]) == 0xFF &&
-                             static_cast<unsigned char>(bytes[1]) == 0xFE;
-    const bool looksUtf16 = hasUtf16Bom || (bytes.size() >= 4 && bytes[1] == '\0' && bytes[3] == '\0');
-
-    if (looksUtf16) {
-        const size_t offset = hasUtf16Bom ? 2 : 0;
-        const size_t wcharCount = (bytes.size() - offset) / sizeof(wchar_t);
-        decoded.resize(wcharCount);
-        memcpy(decoded.data(), bytes.data() + offset, wcharCount * sizeof(wchar_t));
-    } else {
-        int needed = MultiByteToWideChar(CP_UTF8, 0, bytes.data(), static_cast<int>(bytes.size()), nullptr, 0);
-        if (needed > 0) {
-            decoded.resize(static_cast<size_t>(needed));
-            MultiByteToWideChar(CP_UTF8, 0, bytes.data(), static_cast<int>(bytes.size()),
-                                decoded.data(), needed);
-        }
-    }
-
-    return ToLower(std::move(decoded));
-}
-
-bool ScheduledTaskMatchesConfig(const wchar_t* taskName,
-                                const std::wstring& expectedExe,
-                                const std::wstring& expectedArgSubstr) {
-    std::string xmlBytes;
-    DWORD exitCode = 1;
-    const std::wstring queryArgs = std::wstring(L"/query /tn \"") + taskName + L"\" /xml";
-    if (!RunProcessCaptureOutput(L"schtasks.exe", queryArgs, xmlBytes, exitCode) || exitCode != 0) {
-        return false;
-    }
-
-    const std::wstring xmlLower = DecodeTaskXmlToLower(xmlBytes);
-    if (xmlLower.empty()) return false;
-
-    return xmlLower.find(ToLower(expectedExe)) != std::wstring::npos &&
-           xmlLower.find(ToLower(expectedArgSubstr)) != std::wstring::npos;
+    winrt::com_ptr<IRunningTask> running;
+    hr = task->Run(vEmpty, running.put());
+    return SUCCEEDED(hr);
 }
 
 void SetupPasswordlessTasks(const IslandSettings& s) {
@@ -2275,7 +1900,17 @@ void SetupPasswordlessTasks(const IslandSettings& s) {
         L"\" /tr \"\\\"" + s.wgExePath + L"\\\" /uninstalltunnelservice " + s.tunnelName +
         L"\" /sc ONCE /st 00:00 /rl HIGHEST /f";
 
-    ShellExecuteW(nullptr, L"runas", L"cmd.exe", cmd.c_str(), nullptr, SW_HIDE);
+    HWND owner = FindWindowW(L"Shell_TrayWnd", nullptr);
+    ShellExecuteW(owner, L"runas", L"cmd.exe", cmd.c_str(), nullptr, SW_HIDE);
+}
+
+void RemovePasswordlessTasks() {
+    const std::wstring cmd =
+        L"/c schtasks /delete /tn \"" + std::wstring(kTaskStartName) +
+        L"\" /f & schtasks /delete /tn \"" + std::wstring(kTaskStopName) + L"\" /f";
+
+    HWND owner = FindWindowW(L"Shell_TrayWnd", nullptr);
+    ShellExecuteW(owner, L"runas", L"cmd.exe", cmd.c_str(), nullptr, SW_HIDE);
 }
 
 void RequestVpnToggle() {
@@ -2378,6 +2013,16 @@ constexpr std::wstring_view kSvgMediaCheck =
 MediaSnapshot GetMediaSnapshot() {
     std::lock_guard<std::mutex> lock(g_mediaMutex);
     return g_mediaSnapshot;
+}
+
+int64_t ComputeCurrentPositionTicks(const MediaSnapshot& m) {
+    if (!m.hasMedia || m.durationTicks <= 0) return 0;
+    int64_t pos = m.timelineBasePosTicks;
+    if (m.isPlaying && m.timelineAnchorTickMs != 0) {
+        const ULONGLONG elapsedMs = GetTickCount64() - m.timelineAnchorTickMs;
+        pos += static_cast<int64_t>(elapsedMs) * 10000LL;
+    }
+    return std::clamp<int64_t>(pos, 0, m.durationTicks);
 }
 
 void RequestMediaCommand(MediaCommand cmd) {
@@ -2548,8 +2193,11 @@ void ApplyMiniPlayerArtToBrush(ImageBrush const& brush,
                 const double initSide = std::min(maxW, maxH);
                 artBox.Width(initSide);
                 artBox.Height(initSide);
-                bmp.ImageOpened([artBox, maxW, maxH](auto const& sender, auto const&) {
+                winrt::weak_ref<FrameworkElement> weakBox = winrt::make_weak(artBox);
+                bmp.ImageOpened([weakBox, maxW, maxH](auto const& sender, auto const&) {
                     if (g_unloading.load()) return;
+                    auto box = weakBox.get();
+                    if (!box) return;
                     try {
                         if (auto b = sender.template try_as<winrt::Windows::UI::Xaml::Media::Imaging::BitmapImage>()) {
                             const int pw = b.PixelWidth();
@@ -2565,8 +2213,8 @@ void ApplyMiniPlayerArtToBrush(ImageBrush const& brush,
                                     h = maxH;
                                     w = std::clamp(std::round(maxH * ratio), 100.0, maxW);
                                 }
-                                artBox.Width(w);
-                                artBox.Height(h);
+                                box.Width(w);
+                                box.Height(h);
                             }
                         }
                     } catch (...) {}
@@ -2608,8 +2256,14 @@ void ApplyAlbumArtToBrush(ImageBrush const& brush,
             artBox.Width(targetHeight);
             if (artBackdrop) artBackdrop.Width(targetHeight);
             if (artRect) artRect.Width(targetHeight);
-            bmp.ImageOpened([artBox, artBackdrop, artRect, targetHeight, maxWidth](auto const& sender, auto const&) {
+            winrt::weak_ref<FrameworkElement> weakBox = winrt::make_weak(artBox);
+            winrt::weak_ref<FrameworkElement> weakBackdrop = winrt::make_weak(artBackdrop);
+            winrt::weak_ref<FrameworkElement> weakRect = winrt::make_weak(artRect);
+            bmp.ImageOpened([weakBox, weakBackdrop, weakRect, targetHeight, maxWidth](auto const& sender, auto const&) {
                 if (g_unloading.load()) return;
+                auto box = weakBox.get();
+                auto backdrop = weakBackdrop.get();
+                auto rect = weakRect.get();
                 try {
                     if (auto b = sender.template try_as<winrt::Windows::UI::Xaml::Media::Imaging::BitmapImage>()) {
                         const int pw = b.PixelWidth();
@@ -2618,9 +2272,9 @@ void ApplyAlbumArtToBrush(ImageBrush const& brush,
                             const double w = std::clamp(
                                 std::round(targetHeight * static_cast<double>(pw) / static_cast<double>(ph)),
                                 targetHeight, maxWidth);
-                            if (artBox) artBox.Width(w);
-                            if (artBackdrop) artBackdrop.Width(w);
-                            if (artRect) artRect.Width(w);
+                            if (box) box.Width(w);
+                            if (backdrop) backdrop.Width(w);
+                            if (rect) rect.Width(w);
                         }
                     }
                 } catch (...) {}
@@ -2753,17 +2407,6 @@ std::wstring BuildTooltipText(const IslandSettings& s, VpnState st) {
         : s.tunnelName;
     std::wstring tip = L"Usagi Taskbar Island — WireGuard (" + tunnelDisplay + L")\n" +
         (ru ? L"Статус: " : L"Status: ") + statusStr;
-    if (s.splitEnabled) {
-        int activeCount = 0;
-        for (const auto& rule : s.excludedApps) {
-            if (rule.enabled) ++activeCount;
-        }
-        tip += ru
-            ? (L"\nSplit Tunneling: вкл (" + std::to_wstring(activeCount) + L" искл.)")
-            : (L"\nSplit Tunneling: on (" + std::to_wstring(activeCount) + L" excluded)");
-    } else {
-        tip += ru ? L"\nSplit Tunneling: выкл" : L"\nSplit Tunneling: off";
-    }
     if (ru) {
         tip += s.enableContextMenu
             ? L"\nЛКМ: вкл/выкл • ПКМ: меню"
@@ -2810,8 +2453,10 @@ Border MakeTransportButton(double size,
     if (secondaryPath) iconHost.Children().Append(secondaryPath);
     btn.Child(iconHost);
 
-    btn.PointerEntered([btn, filledIdle](auto const&, auto const&) {
+    btn.PointerEntered([filledIdle](auto const& sender, auto const&) {
         if (g_unloading.load()) return;
+        auto btn = sender.template try_as<Border>();
+        if (!btn) return;
         const bool light = IsSystemLightTheme();
         btn.Background(MakeBrush(light
             ? winrt::Windows::UI::Color{static_cast<BYTE>(filledIdle ? 0x2A : 0x99), 0xFF, 0xFF, 0xFF}
@@ -2821,8 +2466,10 @@ Border MakeTransportButton(double size,
             : winrt::Windows::UI::Color{0x22, 0xFF, 0xFF, 0xFF}));
     });
 
-    btn.PointerExited([btn, filledIdle, idleBorder](auto const&, auto const&) {
+    btn.PointerExited([filledIdle, idleBorder](auto const& sender, auto const&) {
         if (g_unloading.load()) return;
+        auto btn = sender.template try_as<Border>();
+        if (!btn) return;
         const bool light = IsSystemLightTheme();
         const winrt::Windows::UI::Color restoreBg = filledIdle
             ? (light ? winrt::Windows::UI::Color{0x18, 0x00, 0x00, 0x00}
@@ -2832,42 +2479,46 @@ Border MakeTransportButton(double size,
         btn.BorderBrush(MakeBrush(idleBorder));
     });
 
-    btn.PointerPressed([btn](auto const& sender, Input::PointerRoutedEventArgs const& e) {
+    btn.PointerPressed([](auto const& sender, Input::PointerRoutedEventArgs const& e) {
         if (g_unloading.load()) return;
         const auto kind = e.GetCurrentPoint(nullptr).Properties().PointerUpdateKind();
         const bool allowLeft = (kind == winrt::Windows::UI::Input::PointerUpdateKind::LeftButtonPressed ||
                                 kind == winrt::Windows::UI::Input::PointerUpdateKind::Other);
         if (!allowLeft) return;
 
-        if (auto el = sender.template try_as<UIElement>()) {
-            el.CapturePointer(e.Pointer());
+        auto btn = sender.template try_as<Border>();
+        if (btn) {
+            btn.CapturePointer(e.Pointer());
+            const bool light = IsSystemLightTheme();
+            btn.Background(MakeBrush(light
+                ? winrt::Windows::UI::Color{0x55, 0xFF, 0xFF, 0xFF}
+                : winrt::Windows::UI::Color{0x0C, 0xFF, 0xFF, 0xFF}));
         }
-        const bool light = IsSystemLightTheme();
-        btn.Background(MakeBrush(light
-            ? winrt::Windows::UI::Color{0x55, 0xFF, 0xFF, 0xFF}
-            : winrt::Windows::UI::Color{0x0C, 0xFF, 0xFF, 0xFF}));
         e.Handled(true);
     });
 
-    btn.PointerReleased([btn, cmd, filledIdle](auto const& sender, Input::PointerRoutedEventArgs const& e) {
+    btn.PointerReleased([cmd, filledIdle](auto const& sender, Input::PointerRoutedEventArgs const& e) {
         if (g_unloading.load()) return;
         const auto kind = e.GetCurrentPoint(nullptr).Properties().PointerUpdateKind();
         const bool isLeft = (kind == winrt::Windows::UI::Input::PointerUpdateKind::LeftButtonReleased ||
                              kind == winrt::Windows::UI::Input::PointerUpdateKind::Other);
 
         bool inside = false;
-        if (auto el = sender.template try_as<UIElement>()) {
-            el.ReleasePointerCapture(e.Pointer());
-            const auto pos = e.GetCurrentPoint(el).Position();
-            const auto sz = el.RenderSize();
+        auto btn = sender.template try_as<Border>();
+        if (btn) {
+            btn.ReleasePointerCapture(e.Pointer());
+            const auto pos = e.GetCurrentPoint(btn).Position();
+            const auto sz = btn.RenderSize();
             inside = (pos.X >= 0 && pos.X <= sz.Width && pos.Y >= 0 && pos.Y <= sz.Height);
         }
         if (!isLeft) return;
 
-        const bool light = IsSystemLightTheme();
-        btn.Background(MakeBrush(light
-            ? winrt::Windows::UI::Color{static_cast<BYTE>(filledIdle ? 0x2A : 0x99), 0xFF, 0xFF, 0xFF}
-            : winrt::Windows::UI::Color{static_cast<BYTE>(filledIdle ? 0x2C : 0x18), 0xFF, 0xFF, 0xFF}));
+        if (btn) {
+            const bool light = IsSystemLightTheme();
+            btn.Background(MakeBrush(light
+                ? winrt::Windows::UI::Color{static_cast<BYTE>(filledIdle ? 0x2A : 0x99), 0xFF, 0xFF, 0xFF}
+                : winrt::Windows::UI::Color{static_cast<BYTE>(filledIdle ? 0x2C : 0x18), 0xFF, 0xFF, 0xFF}));
+        }
 
         if (inside) {
             RequestMediaCommand(cmd);
@@ -3065,8 +2716,9 @@ void RefreshMiniPlayerUI(const IslandSettings& s, const MediaSnapshot& media) {
         if (media.thumbnailHash != g_miniPlayer.lastThumbHash) {
             const double innerW = std::max(120.0, static_cast<double>(s.miniPlayerWidth - s.miniPlayerPadX * 2));
             const double maxH = static_cast<double>(s.miniPlayerArtMaxHeight);
-            if (!media.thumbnailBytes.empty() && g_miniPlayer.artBrush && g_miniPlayer.artRect) {
-                ApplyMiniPlayerArtToBrush(g_miniPlayer.artBrush, media.thumbnailBytes,
+            if (media.thumbnailBytes && !media.thumbnailBytes->empty() &&
+                g_miniPlayer.artBrush && g_miniPlayer.artRect) {
+                ApplyMiniPlayerArtToBrush(g_miniPlayer.artBrush, *media.thumbnailBytes,
                                           s.miniPlayerAdaptiveArt, innerW, maxH, g_miniPlayer.artBox);
                 g_miniPlayer.artRect.Visibility(Visibility::Visible);
                 if (g_miniPlayer.fallbackNote) g_miniPlayer.fallbackNote.Visibility(Visibility::Collapsed);
@@ -3130,8 +2782,9 @@ void RefreshMiniPlayerUI(const IslandSettings& s, const MediaSnapshot& media) {
                 : L"0:00");
         }
         if (!g_miniPlayer.isSeeking) {
+            const int64_t curPos = ComputeCurrentPositionTicks(media);
             const double ratio = (media.durationTicks > 0)
-                ? std::clamp(static_cast<double>(media.positionTicks) /
+                ? std::clamp(static_cast<double>(curPos) /
                              static_cast<double>(media.durationTicks), 0.0, 1.0)
                 : 0.0;
             UpdateSeekBarVisuals(ratio, media.durationTicks);
@@ -3416,10 +3069,11 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
             seekHitArea.SizeChanged([](auto const&, auto const&) {
                 if (!g_miniPlayerOpen.load() || g_unloading.load()) return;
                 const MediaSnapshot m = GetMediaSnapshot();
+                const int64_t curPos = ComputeCurrentPositionTicks(m);
                 const double r = g_miniPlayer.isSeeking
                     ? g_miniPlayer.seekRatio
                     : (m.durationTicks > 0
-                        ? static_cast<double>(m.positionTicks) / static_cast<double>(m.durationTicks)
+                        ? static_cast<double>(curPos) / static_cast<double>(m.durationTicks)
                         : 0.0);
                 UpdateSeekBarVisuals(r, m.durationTicks);
             });
@@ -3689,7 +3343,12 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
         }
 
         const bool enableOpenAnim = s.miniPlayerAnimation;
-        flyout.Opened([card, animTransform, enableOpenAnim, animStartY](auto const&, auto const&) {
+        winrt::weak_ref<Border> weakCard = winrt::make_weak(card);
+        winrt::weak_ref<CompositeTransform> weakTransform = winrt::make_weak(animTransform);
+        flyout.Opened([weakCard, weakTransform, enableOpenAnim, animStartY](auto const&, auto const&) {
+            auto card = weakCard.get();
+            if (!card) return;
+            auto animTransform = weakTransform.get();
             try {
                 auto node = card.template try_as<DependencyObject>();
                 for (int i = 0; i < 12 && node; ++i) {
@@ -3763,6 +3422,23 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
 
         g_miniPlayerOpen.store(true);
         g_miniPlayerAnchorHwnd = anchorHwnd;
+        if (s.miniPlayerShowSeekBar) {
+            try {
+                DispatcherTimer seekTimer;
+                seekTimer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(500)));
+                g_miniPlayer.seekTickToken = seekTimer.Tick([](auto const&, auto const&) {
+                    if (!g_miniPlayerOpen.load() || g_miniPlayer.isSeeking || g_unloading.load()) return;
+                    const MediaSnapshot m = GetMediaSnapshot();
+                    if (!m.hasMedia || !m.isPlaying || m.durationTicks <= 0) return;
+                    const int64_t curPos = ComputeCurrentPositionTicks(m);
+                    const double ratio = std::clamp(
+                        static_cast<double>(curPos) / static_cast<double>(m.durationTicks), 0.0, 1.0);
+                    UpdateSeekBarVisuals(ratio, m.durationTicks);
+                });
+                seekTimer.Start();
+                g_miniPlayer.seekTimer = seekTimer;
+            } catch (...) {}
+        }
         RefreshMiniPlayerUI(s, media);
         RefreshMediaHoverForHwnd(anchorHwnd);
 
@@ -3780,7 +3456,6 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
         } else {
             flyout.ShowAt(target, opts);
         }
-        if (g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
     } catch (...) {
         CloseMiniPlayerOnUiThread();
     }
@@ -4055,10 +3730,11 @@ void RefreshHostUI(IslandHost& host, const IslandSettings& s) {
                 }
 
                 if (s.mediaShowAlbumArt && media.thumbnailHash != host.media.lastThumbHash) {
-                    if (!media.thumbnailBytes.empty() && host.media.artBrush && host.media.artRect) {
+                    if (media.thumbnailBytes && !media.thumbnailBytes->empty() &&
+                        host.media.artBrush && host.media.artRect) {
                         const double artH = static_cast<double>(s.mediaArtSize);
                         ApplyAlbumArtToBrush(
-                            host.media.artBrush, media.thumbnailBytes, 64,
+                            host.media.artBrush, *media.thumbnailBytes, 64,
                             s.mediaAdaptiveArtWidth, artH, static_cast<double>(s.mediaArtMaxWidth),
                             host.media.artBox, host.media.artBackdrop, host.media.artRect);
                         host.media.artRect.Visibility(Visibility::Visible);
@@ -4129,6 +3805,15 @@ void ShowVpnContextMenu(FrameworkElement const& target) {
             SetupPasswordlessTasks(GetSettingsSnapshot());
         });
         menu.Items().Append(syncTasksItem);
+
+        MenuFlyoutItem removeTasksItem;
+        removeTasksItem.Text(ru
+            ? L"Удалить задачи без UAC (очистка)"
+            : L"Remove passwordless tasks (cleanup)");
+        removeTasksItem.Click([](auto const&, auto const&) {
+            RemovePasswordlessTasks();
+        });
+        menu.Items().Append(removeTasksItem);
 
         MenuFlyoutItem openWgItem;
         openWgItem.Text(ru ? L"Открыть WireGuard" : L"Open WireGuard");
@@ -4310,8 +3995,9 @@ VpnModuleUI BuildVpnModuleUI(HWND hostHwnd, const IslandSettings& s) {
     slot.Children().Append(capsule);
 
     const bool enableContextMenu = s.enableContextMenu;
+    winrt::weak_ref<Border> weakPill = winrt::make_weak(buttonPill);
 
-    slot.PointerEntered([hostHwnd, buttonPill](auto const&, auto const&) {
+    slot.PointerEntered([hostHwnd, weakPill](auto const&, auto const&) {
         if (g_unloading.load()) return;
         if (IslandHost* h = FindHostByHwnd(hostHwnd)) {
             if (h->media.isHovered || h->media.isPressed) {
@@ -4320,28 +4006,34 @@ VpnModuleUI BuildVpnModuleUI(HWND hostHwnd, const IslandSettings& s) {
                 UpdateMediaHoverVisual(h->media, GetSettingsSnapshot(), hostHwnd);
             }
         }
+        auto pill = weakPill.get();
+        if (!pill) return;
         const bool light = IsSystemLightTheme();
-        buttonPill.Background(MakeBrush(light
+        pill.Background(MakeBrush(light
             ? winrt::Windows::UI::Color{0x99, 0xFF, 0xFF, 0xFF}
             : winrt::Windows::UI::Color{0x15, 0xFF, 0xFF, 0xFF}));
-        buttonPill.BorderBrush(MakeBrush(light
+        pill.BorderBrush(MakeBrush(light
             ? winrt::Windows::UI::Color{0x12, 0x00, 0x00, 0x00}
             : winrt::Windows::UI::Color{0x20, 0xFF, 0xFF, 0xFF}));
     });
 
-    slot.PointerExited([buttonPill, transparentColor](auto const&, auto const&) {
+    slot.PointerExited([weakPill, transparentColor](auto const&, auto const&) {
         if (g_unloading.load()) return;
-        buttonPill.Background(MakeBrush(transparentColor));
-        buttonPill.BorderBrush(MakeBrush(transparentColor));
+        if (auto pill = weakPill.get()) {
+            pill.Background(MakeBrush(transparentColor));
+            pill.BorderBrush(MakeBrush(transparentColor));
+        }
     });
 
-    slot.PointerCanceled([buttonPill, transparentColor](auto const&, auto const&) {
+    slot.PointerCanceled([weakPill, transparentColor](auto const&, auto const&) {
         if (g_unloading.load()) return;
-        buttonPill.Background(MakeBrush(transparentColor));
-        buttonPill.BorderBrush(MakeBrush(transparentColor));
+        if (auto pill = weakPill.get()) {
+            pill.Background(MakeBrush(transparentColor));
+            pill.BorderBrush(MakeBrush(transparentColor));
+        }
     });
 
-    slot.PointerPressed([buttonPill, enableContextMenu](auto const& sender, Input::PointerRoutedEventArgs const& e) {
+    slot.PointerPressed([weakPill, enableContextMenu](auto const& sender, Input::PointerRoutedEventArgs const& e) {
         if (g_unloading.load()) return;
         const auto kind = e.GetCurrentPoint(nullptr).Properties().PointerUpdateKind();
         const bool allowRight = enableContextMenu &&
@@ -4353,14 +4045,16 @@ VpnModuleUI BuildVpnModuleUI(HWND hostHwnd, const IslandSettings& s) {
         if (auto el = sender.template try_as<UIElement>()) {
             el.CapturePointer(e.Pointer());
         }
-        const bool light = IsSystemLightTheme();
-        buttonPill.Background(MakeBrush(light
-            ? winrt::Windows::UI::Color{0x55, 0xFF, 0xFF, 0xFF}
-            : winrt::Windows::UI::Color{0x0A, 0xFF, 0xFF, 0xFF}));
+        if (auto pill = weakPill.get()) {
+            const bool light = IsSystemLightTheme();
+            pill.Background(MakeBrush(light
+                ? winrt::Windows::UI::Color{0x55, 0xFF, 0xFF, 0xFF}
+                : winrt::Windows::UI::Color{0x0A, 0xFF, 0xFF, 0xFF}));
+        }
         e.Handled(true);
     });
 
-    slot.PointerReleased([buttonPill, enableContextMenu](auto const& sender, Input::PointerRoutedEventArgs const& e) {
+    slot.PointerReleased([weakPill, enableContextMenu](auto const& sender, Input::PointerRoutedEventArgs const& e) {
         if (g_unloading.load()) return;
         const auto kind = e.GetCurrentPoint(nullptr).Properties().PointerUpdateKind();
         const bool isRight = (kind == winrt::Windows::UI::Input::PointerUpdateKind::RightButtonReleased);
@@ -4379,10 +4073,12 @@ VpnModuleUI BuildVpnModuleUI(HWND hostHwnd, const IslandSettings& s) {
 
         if (!isLeft && !isRight) return;
 
-        const bool light = IsSystemLightTheme();
-        buttonPill.Background(MakeBrush(light
-            ? winrt::Windows::UI::Color{0x99, 0xFF, 0xFF, 0xFF}
-            : winrt::Windows::UI::Color{0x15, 0xFF, 0xFF, 0xFF}));
+        if (auto pill = weakPill.get()) {
+            const bool light = IsSystemLightTheme();
+            pill.Background(MakeBrush(light
+                ? winrt::Windows::UI::Color{0x99, 0xFF, 0xFF, 0xFF}
+                : winrt::Windows::UI::Color{0x15, 0xFF, 0xFF, 0xFF}));
+        }
 
         if (inside) {
             if (isLeft) {
@@ -4649,7 +4345,8 @@ MediaModuleUI BuildMediaModuleUI(HWND hostHwnd, const IslandSettings& s) {
                 e.Handled(true);
             });
 
-            clickArea.PointerReleased([hostHwnd, slot](auto const& sender, Input::PointerRoutedEventArgs const& e) {
+            winrt::weak_ref<Grid> weakTarget = winrt::make_weak(slot);
+            clickArea.PointerReleased([hostHwnd, weakTarget](auto const& sender, Input::PointerRoutedEventArgs const& e) {
                 if (g_unloading.load()) return;
                 const auto kind = e.GetCurrentPoint(nullptr).Properties().PointerUpdateKind();
                 const bool isLeft = (kind == winrt::Windows::UI::Input::PointerUpdateKind::LeftButtonReleased ||
@@ -4668,7 +4365,9 @@ MediaModuleUI BuildMediaModuleUI(HWND hostHwnd, const IslandSettings& s) {
                     UpdateMediaHoverVisual(h->media, GetSettingsSnapshot(), hostHwnd);
                 }
                 if (inside) {
-                    ShowMiniPlayerFlyout(hostHwnd, slot);
+                    if (auto targetSlot = weakTarget.get()) {
+                        ShowMiniPlayerFlyout(hostHwnd, targetSlot);
+                    }
                 }
                 e.Handled(true);
             });
@@ -5248,12 +4947,7 @@ void ExecuteToggleOnWorkerThread(const IslandSettings& s,
         ? (L"/uninstalltunnelservice " + s.tunnelName)
         : s.configPath;
 
-    bool ranTask = false;
-    if (ScheduledTaskMatchesConfig(taskName, s.wgExePath, expectedArg)) {
-        DWORD exitCode = 1;
-        const std::wstring runArgs = std::wstring(L"/run /tn \"") + taskName + L"\"";
-        ranTask = RunProcessHidden(L"schtasks.exe", runArgs, exitCode) && (exitCode == 0);
-    }
+    const bool ranTask = TryRunScheduledTaskCom(taskName, s.wgExePath, expectedArg);
 
     if (!ranTask && !g_unloading.load()) {
         Wh_Log(L"Task %s missing, mismatched, or failed; falling back to UAC runas", taskName);
@@ -5263,6 +4957,7 @@ void ExecuteToggleOnWorkerThread(const IslandSettings& s,
 
         SHELLEXECUTEINFOW sei{};
         sei.cbSize = sizeof(sei);
+        sei.hwnd = FindWindowW(L"Shell_TrayWnd", nullptr);
         sei.lpVerb = L"runas";
         sei.lpFile = s.wgExePath.c_str();
         sei.lpParameters = wgParams.c_str();
@@ -5270,13 +4965,15 @@ void ExecuteToggleOnWorkerThread(const IslandSettings& s,
         sei.fMask = SEE_MASK_NOCLOSEPROCESS;
 
         if (ShellExecuteExW(&sei) && sei.hProcess) {
+            bool stopped = false;
             if (g_stopEvent) {
                 HANDLE waitHandles[] = {g_stopEvent, sei.hProcess};
-                WaitForMultipleObjects(2, waitHandles, FALSE, 6000);
+                stopped = (WaitForMultipleObjects(2, waitHandles, FALSE, 6000) == WAIT_OBJECT_0);
             } else {
                 WaitForSingleObject(sei.hProcess, 6000);
             }
             CloseHandle(sei.hProcess);
+            if (stopped || g_unloading.load()) return;
         }
     }
 
@@ -5358,6 +5055,7 @@ void SyncMountedIslands(const IslandSettings& s, bool forceRebuild) {
 }
 
 DWORD WINAPI WorkerThreadProc(void*) {
+    const HRESULT comHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     HWND      notifOwnerHwnd = nullptr;
     bool      notifActive = false;
     ULONGLONG notifExpireTick = 0;
@@ -5420,6 +5118,9 @@ DWORD WINAPI WorkerThreadProc(void*) {
     }
 
     DismissBalloonNotification(notifOwnerHwnd, notifActive);
+    if (SUCCEEDED(comHr)) {
+        CoUninitialize();
+    }
     return 0;
 }
 
@@ -5447,6 +5148,50 @@ winrt::Windows::Media::MediaPlaybackAutoRepeatMode ToWinrtRepeatMode(RepeatMode 
     return M::None;
 }
 
+std::string WideToUtf8Bridge(const std::wstring& ws) {
+    if (ws.empty()) return {};
+    const int needed = WideCharToMultiByte(
+        CP_UTF8, 0, ws.data(), static_cast<int>(ws.size()), nullptr, 0, nullptr, nullptr);
+    if (needed <= 0) return {};
+    std::string out(static_cast<size_t>(needed), '\0');
+    WideCharToMultiByte(
+        CP_UTF8, 0, ws.data(), static_cast<int>(ws.size()), out.data(), needed, nullptr, nullptr);
+    return out;
+}
+
+std::string UrlDecodePercentOnly(std::string_view sv) {
+    auto hexVal = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    std::string out;
+    out.reserve(sv.size());
+    for (size_t i = 0; i < sv.size(); ++i) {
+        if (sv[i] == '%' && i + 2 < sv.size()) {
+            const int hi = hexVal(sv[i + 1]);
+            const int lo = hexVal(sv[i + 2]);
+            if (hi >= 0 && lo >= 0) {
+                out.push_back(static_cast<char>((hi << 4) | lo));
+                i += 2;
+                continue;
+            }
+        }
+        out.push_back(sv[i]);
+    }
+    return out;
+}
+
+bool ConstantTimeEquals(std::string_view a, std::string_view b) {
+    if (a.size() != b.size()) return false;
+    unsigned char diff = 0;
+    for (size_t i = 0; i < a.size(); ++i) {
+        diff |= static_cast<unsigned char>(a[i]) ^ static_cast<unsigned char>(b[i]);
+    }
+    return diff == 0;
+}
+
 DWORD WINAPI VkBridgeThreadProc(void*) {
     WSADATA wsa{};
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
@@ -5470,7 +5215,8 @@ DWORD WINAPI VkBridgeThreadProc(void*) {
         }
 
         const IslandSettings s = GetSettingsSnapshot();
-        if (!s.enableMediaPlayer || !s.enableVkBridge) {
+        const std::string expectedToken = WideToUtf8Bridge(s.vkBridgeToken);
+        if (!s.enableMediaPlayer || !s.enableVkBridge || expectedToken.empty()) {
             closeListen();
             g_vkLastSeenTick.store(0);
             g_vkV2SeenTick.store(0);
@@ -5522,8 +5268,9 @@ DWORD WINAPI VkBridgeThreadProc(void*) {
         SOCKET cli = accept(listenSock, reinterpret_cast<sockaddr*>(&cliAddr), &cliLen);
         if (cli == INVALID_SOCKET) continue;
 
-        DWORD rcvTimeout = 200;
-        setsockopt(cli, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&rcvTimeout), sizeof(rcvTimeout));
+        DWORD sockTimeout = 200;
+        setsockopt(cli, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&sockTimeout), sizeof(sockTimeout));
+        setsockopt(cli, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&sockTimeout), sizeof(sockTimeout));
         u_long blockMode = 0;
         ioctlsocket(cli, FIONBIO, &blockMode);
 
@@ -5535,19 +5282,43 @@ DWORD WINAPI VkBridgeThreadProc(void*) {
         if (lineEnd == std::string_view::npos) lineEnd = req.find('\n');
         const std::string_view firstLine = (lineEnd != std::string_view::npos) ? req.substr(0, lineEnd) : req;
 
-        const bool isOptions = (firstLine.rfind("OPTIONS ", 0) == 0);
         const bool isGet = (firstLine.rfind("GET ", 0) == 0);
+        int statusCode = 403;
+        std::string body = "forbidden";
 
-        std::string body = "none";
-        if (isGet) {
+        if (!isGet) {
+            statusCode = 405;
+            body = "method not allowed";
+        } else {
+            const size_t q = firstLine.find('?');
+            const size_t sp = (q != std::string_view::npos) ? firstLine.find(' ', q) : std::string_view::npos;
+            const std::string_view query = (q == std::string_view::npos)
+                ? std::string_view{}
+                : ((sp != std::string_view::npos) ? firstLine.substr(q + 1, sp - q - 1)
+                                                  : firstLine.substr(q + 1));
+
+            auto getStrParam = [&](std::string_view key, std::string& outVal) -> bool {
+                const std::string needle = std::string(key) + "=";
+                size_t pos = 0;
+                while (pos < query.size()) {
+                    if (query.substr(pos).rfind(needle, 0) == 0) {
+                        const size_t valStart = pos + needle.size();
+                        const size_t valEnd = query.find('&', valStart);
+                        const std::string_view raw = (valEnd != std::string_view::npos)
+                            ? query.substr(valStart, valEnd - valStart)
+                            : query.substr(valStart);
+                        outVal = UrlDecodePercentOnly(raw);
+                        return true;
+                    }
+                    const size_t amp = query.find('&', pos);
+                    if (amp == std::string_view::npos) break;
+                    pos = amp + 1;
+                }
+                return false;
+            };
+
             auto getParam = [&](std::string_view key, int& outVal) -> bool {
                 const std::string needle = std::string(key) + "=";
-                const size_t q = firstLine.find('?');
-                if (q == std::string_view::npos) return false;
-                const size_t sp = firstLine.find(' ', q);
-                const std::string_view query = (sp != std::string_view::npos)
-                    ? firstLine.substr(q + 1, sp - q - 1)
-                    : firstLine.substr(q + 1);
                 size_t pos = 0;
                 while (pos < query.size()) {
                     if (query.substr(pos).rfind(needle, 0) == 0) {
@@ -5569,89 +5340,86 @@ DWORD WINAPI VkBridgeThreadProc(void*) {
                 return false;
             };
 
-            const ULONGLONG now = GetTickCount64();
-            int reqVer = 0;
-            getParam("v", reqVer);
-            if (reqVer >= 2) {
-                g_vkV2SeenTick.store(now);
-            }
-            const ULONGLONG v2Seen = g_vkV2SeenTick.load();
-            const bool ignoreLegacy = (reqVer < 2) && (v2Seen != 0) && ((now - v2Seen) < 3000);
+            std::string providedToken;
+            if (getStrParam("token", providedToken) && ConstantTimeEquals(providedToken, expectedToken)) {
+                statusCode = 200;
+                body = "none";
 
-            if (!ignoreLegacy) {
-                int hasAudio = 0, shuf = 0, rep = 0, liked = 0;
-                const bool parsedHas = getParam("has", hasAudio);
-                if (!parsedHas || hasAudio != 0) {
-                    const ULONGLONG prevSeen = g_vkLastSeenTick.exchange(now);
-                    if (prevSeen == 0 && g_mediaWakeEvent) {
-                        SetEvent(g_mediaWakeEvent);
-                    }
+                const ULONGLONG now = GetTickCount64();
+                int reqVer = 0;
+                getParam("v", reqVer);
+                if (reqVer >= 2) {
+                    g_vkV2SeenTick.store(now);
+                }
+                const ULONGLONG v2Seen = g_vkV2SeenTick.load();
+                const bool ignoreLegacy = (reqVer < 2) && (v2Seen != 0) && ((now - v2Seen) < 3000);
 
-                    const bool hasPendingCmd = (g_vkPendingCmd.load() != 0);
-                    const ULONGLONG lastCmd = g_vkLastCmdTick.load();
-                    const bool settleWindow = hasPendingCmd || (lastCmd != 0 && (now - lastCmd) < 550);
+                if (!ignoreLegacy) {
+                    int hasAudio = 0, shuf = 0, rep = 0, liked = 0;
+                    const bool parsedHas = getParam("has", hasAudio);
+                    if (!parsedHas || hasAudio != 0) {
+                        const ULONGLONG prevSeen = g_vkLastSeenTick.exchange(now);
+                        if (prevSeen == 0 && g_mediaWakeEvent) {
+                            SetEvent(g_mediaWakeEvent);
+                        }
 
-                    if (getParam("s", shuf) && !settleWindow) {
-                        const bool b = (shuf != 0);
-                        if (g_vkShuffle.exchange(b) != b && g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
-                    }
-                    if (getParam("r", rep) && !settleWindow) {
-                        const int r = std::clamp(rep, 0, 2);
-                        if (g_vkRepeat.exchange(r) != r && g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
-                    }
-                    if (getParam("l", liked)) {
-                        g_vkBridgeExtended.store(true);
-                        if (!settleWindow) {
-                            const bool b = (liked != 0);
-                            if (g_vkLiked.exchange(b) != b && g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
+                        const bool hasPendingCmd = (g_vkPendingCmd.load() != 0);
+                        const ULONGLONG lastCmd = g_vkLastCmdTick.load();
+                        const bool settleWindow = hasPendingCmd || (lastCmd != 0 && (now - lastCmd) < 550);
+
+                        if (getParam("s", shuf) && !settleWindow) {
+                            const bool b = (shuf != 0);
+                            if (g_vkShuffle.exchange(b) != b && g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
+                        }
+                        if (getParam("r", rep) && !settleWindow) {
+                            const int r = std::clamp(rep, 0, 2);
+                            if (g_vkRepeat.exchange(r) != r && g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
+                        }
+                        if (getParam("l", liked)) {
+                            g_vkBridgeExtended.store(true);
+                            if (!settleWindow) {
+                                const bool b = (liked != 0);
+                                if (g_vkLiked.exchange(b) != b && g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
+                            }
+                        }
+                    } else {
+                        if (g_vkLastSeenTick.exchange(0) != 0 && g_mediaWakeEvent) {
+                            SetEvent(g_mediaWakeEvent);
                         }
                     }
-                } else {
-                    if (g_vkLastSeenTick.exchange(0) != 0 && g_mediaWakeEvent) {
-                        SetEvent(g_mediaWakeEvent);
-                    }
-                }
 
-                const int cmd = g_vkPendingCmd.exchange(0);
-                if (cmd != 0) {
-                    g_vkLastCmdTick.store(GetTickCount64());
-                }
-                const bool ext = g_vkBridgeExtended.load();
-                switch (cmd) {
-                    case 1: body = "shuffle"; break;
-                    case 2: body = "repeat"; break;
-                    case 3: body = "add"; break;
-                    case 4: body = ext ? "repeat:0" : "repeat"; break;
-                    case 5: body = ext ? "repeat:1" : "repeat"; break;
-                    case 6: body = ext ? "repeat:2" : "repeat"; break;
-                    default: body = "none"; break;
+                    const int cmd = g_vkPendingCmd.exchange(0);
+                    if (cmd != 0) {
+                        g_vkLastCmdTick.store(GetTickCount64());
+                    }
+                    const bool ext = g_vkBridgeExtended.load();
+                    switch (cmd) {
+                        case 1: body = "shuffle"; break;
+                        case 2: body = "repeat"; break;
+                        case 3: body = "add"; break;
+                        case 4: body = ext ? "repeat:0" : "repeat"; break;
+                        case 5: body = ext ? "repeat:1" : "repeat"; break;
+                        case 6: body = ext ? "repeat:2" : "repeat"; break;
+                        default: body = "none"; break;
+                    }
                 }
             }
         }
 
+        const char* statusText = (statusCode == 200) ? "200 OK"
+                               : (statusCode == 405) ? "405 Method Not Allowed"
+                                                     : "403 Forbidden";
         char hdr[512]{};
-        if (isOptions) {
-            const int hlen = std::snprintf(hdr, sizeof(hdr),
-                "HTTP/1.1 204 No Content\r\n"
-                "Access-Control-Allow-Origin: *\r\n"
-                "Access-Control-Allow-Private-Network: true\r\n"
-                "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
-                "Access-Control-Max-Age: 86400\r\n"
-                "Connection: close\r\n\r\n");
-            if (hlen > 0) send(cli, hdr, hlen, 0);
-        } else {
-            const int hlen = std::snprintf(hdr, sizeof(hdr),
-                "HTTP/1.1 200 OK\r\n"
-                "Content-Type: text/plain; charset=utf-8\r\n"
-                "Content-Length: %zu\r\n"
-                "Access-Control-Allow-Origin: *\r\n"
-                "Access-Control-Allow-Private-Network: true\r\n"
-                "Cache-Control: no-store\r\n"
-                "Connection: close\r\n\r\n",
-                body.size());
-            if (hlen > 0) send(cli, hdr, hlen, 0);
-            if (!body.empty()) send(cli, body.data(), static_cast<int>(body.size()), 0);
-        }
+        const int hlen = std::snprintf(hdr, sizeof(hdr),
+            "HTTP/1.1 %s\r\n"
+            "Content-Type: text/plain; charset=utf-8\r\n"
+            "Content-Length: %zu\r\n"
+            "Cache-Control: no-store\r\n"
+            "Connection: close\r\n\r\n",
+            statusText,
+            body.size());
+        if (hlen > 0) send(cli, hdr, hlen, 0);
+        if (!body.empty()) send(cli, body.data(), static_cast<int>(body.size()), 0);
         closesocket(cli);
     }
 
@@ -5738,6 +5506,33 @@ winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession Select
     return firstAny;
 }
 
+template <typename AsyncT>
+bool WaitWinrtAsync(AsyncT const& op, DWORD timeoutMs = 2000) {
+    if (!op) return false;
+    const DWORD sliceMs = 50;
+    DWORD elapsed = 0;
+    while (elapsed < timeoutMs) {
+        if (g_unloading.load()) {
+            try { op.Cancel(); } catch (...) {}
+            return false;
+        }
+        if (g_stopEvent && WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
+            try { op.Cancel(); } catch (...) {}
+            return false;
+        }
+        const auto status = op.wait_for(std::chrono::milliseconds(sliceMs));
+        if (status == winrt::Windows::Foundation::AsyncStatus::Completed) {
+            return true;
+        }
+        if (status != winrt::Windows::Foundation::AsyncStatus::Started) {
+            return false;
+        }
+        elapsed += sliceMs;
+    }
+    try { op.Cancel(); } catch (...) {}
+    return false;
+}
+
 DWORD WINAPI MediaWorkerThreadProc(void*) {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
     {
@@ -5746,17 +5541,65 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
         using PlaybackStatus = winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus;
 
         SessionManager sessionMgr{nullptr};
+        winrt::event_token mgrSessionsToken{};
+        winrt::event_token mgrCurrentToken{};
+        bool hasMgrTokens = false;
+
+        Session subscribedSession{nullptr};
+        winrt::event_token sessPropsToken{};
+        winrt::event_token sessPlaybackToken{};
+        winrt::event_token sessTimelineToken{};
+        bool hasSessTokens = false;
+
+        auto revokeSessionEvents = [&]() {
+            if (subscribedSession && hasSessTokens) {
+                try { subscribedSession.MediaPropertiesChanged(sessPropsToken); } catch (...) {}
+                try { subscribedSession.PlaybackInfoChanged(sessPlaybackToken); } catch (...) {}
+                try { subscribedSession.TimelinePropertiesChanged(sessTimelineToken); } catch (...) {}
+            }
+            hasSessTokens = false;
+            sessPropsToken = {};
+            sessPlaybackToken = {};
+            sessTimelineToken = {};
+            subscribedSession = nullptr;
+        };
+
+        auto revokeMgrEvents = [&]() {
+            revokeSessionEvents();
+            if (sessionMgr && hasMgrTokens) {
+                try { sessionMgr.SessionsChanged(mgrSessionsToken); } catch (...) {}
+                try { sessionMgr.CurrentSessionChanged(mgrCurrentToken); } catch (...) {}
+            }
+            hasMgrTokens = false;
+            mgrSessionsToken = {};
+            mgrCurrentToken = {};
+            sessionMgr = nullptr;
+        };
+
         std::wstring lastAumid;
         std::wstring cachedTrackKey;
-        std::vector<BYTE> cachedThumbBytes;
+        std::wstring cachedTitle;
+        std::wstring cachedArtist;
+        std::shared_ptr<const std::vector<BYTE>> cachedThumbBytes;
         uint64_t cachedThumbHash = 0;
-        uint32_t pollCounter = 0;
         bool firstIter = true;
+        bool lastVkConnected = false;
+        ULONGLONG lastVkConnectedAt = 0;
 
         while (!g_unloading.load()) {
             const IslandSettings s = GetSettingsSnapshot();
-            const DWORD activePollMs = g_miniPlayerOpen.load() ? 350 : 500;
-            const DWORD timeoutMs = firstIter ? 0 : (s.enableMediaPlayer ? activePollMs : 1000);
+            DWORD timeoutMs = INFINITE;
+            if (firstIter) {
+                timeoutMs = 0;
+            } else if (!s.enableMediaPlayer) {
+                timeoutMs = INFINITE;
+            } else if (!sessionMgr) {
+                timeoutMs = 2000;
+            } else if (lastVkConnected) {
+                const ULONGLONG now = GetTickCount64();
+                const ULONGLONG elapsed = (now >= lastVkConnectedAt) ? (now - lastVkConnectedAt) : 0;
+                timeoutMs = (elapsed >= 5100) ? 200 : static_cast<DWORD>(5100 - elapsed);
+            }
             firstIter = false;
 
             HANDLE waitHandles[] = {g_stopEvent, g_mediaWakeEvent};
@@ -5767,7 +5610,9 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
 
             const IslandSettings latest = GetSettingsSnapshot();
             if (!latest.enableMediaPlayer) {
+                revokeMgrEvents();
                 g_pendingMediaCmd.store(0);
+                g_mediaPropsDirty.store(true);
                 bool hadMedia = false;
                 {
                     std::lock_guard<std::mutex> lock(g_mediaMutex);
@@ -5780,8 +5625,12 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                 }
                 lastAumid.clear();
                 cachedTrackKey.clear();
-                cachedThumbBytes.clear();
+                cachedTitle.clear();
+                cachedArtist.clear();
+                cachedThumbBytes.reset();
                 cachedThumbHash = 0;
+                lastVkConnected = false;
+                lastVkConnectedAt = 0;
                 if (hadMedia) {
                     RefreshAllHostsUi(latest);
                 }
@@ -5790,11 +5639,30 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
 
             if (!sessionMgr) {
                 try {
-                    sessionMgr = SessionManager::RequestAsync().get();
+                    auto op = SessionManager::RequestAsync();
+                    if (WaitWinrtAsync(op, 2000)) {
+                        sessionMgr = op.GetResults();
+                    }
                 } catch (...) {
                     sessionMgr = nullptr;
                 }
                 if (g_unloading.load()) break;
+
+                if (sessionMgr && !hasMgrTokens) {
+                    try {
+                        mgrSessionsToken = sessionMgr.SessionsChanged([](auto const&, auto const&) {
+                            if (!g_unloading.load() && g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
+                        });
+                        mgrCurrentToken = sessionMgr.CurrentSessionChanged([](auto const&, auto const&) {
+                            g_mediaPropsDirty.store(true);
+                            if (!g_unloading.load() && g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
+                        });
+                        hasMgrTokens = true;
+                        g_mediaPropsDirty.store(true);
+                    } catch (...) {
+                        revokeMgrEvents();
+                    }
+                }
             }
 
             std::wstring preferredAumid;
@@ -5821,6 +5689,7 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                 }
             }
 
+            bool forcePropsRefresh = false;
             const int cmdVal = g_pendingMediaCmd.exchange(0);
             if (cmdVal != 0) {
                 const auto cmd = static_cast<MediaCommand>(cmdVal);
@@ -5834,6 +5703,7 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                     }
                     preferredAumid = target;
                     session = SelectActiveSession(sessionMgr, preferredAumid, lastAumid, sessions);
+                    forcePropsRefresh = true;
                 } else if (cmd == MediaCommand::SwitchNextSession && sessions.size() > 1) {
                     std::wstring curAumid;
                     if (session) {
@@ -5853,30 +5723,35 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                     }
                     preferredAumid = nextAumid;
                     session = SelectActiveSession(sessionMgr, preferredAumid, lastAumid, sessions);
+                    forcePropsRefresh = true;
                 } else if (session) {
                     std::wstring curAumid;
                     try { curAumid = std::wstring(session.SourceAppUserModelId()); } catch (...) {}
                     const std::wstring curAppName = ResolveAppDisplayName(curAumid);
                     const ULONGLONG vkSeen = g_vkLastSeenTick.load();
                     const bool useVkBridge = latest.enableVkBridge &&
+                                             !latest.vkBridgeToken.empty() &&
                                              (vkSeen != 0) &&
                                              ((GetTickCount64() - vkSeen) < 5000) &&
                                              IsBrowserSession(curAumid, curAppName);
                     try {
                         if (cmd == MediaCommand::Prev) {
-                            session.TrySkipPreviousAsync().get();
+                            WaitWinrtAsync(session.TrySkipPreviousAsync(), 2000);
+                            forcePropsRefresh = true;
                         } else if (cmd == MediaCommand::PlayPause) {
                             auto info = session.GetPlaybackInfo();
                             const bool playing = info && info.PlaybackStatus() == PlaybackStatus::Playing;
                             if (playing) {
-                                session.TryPauseAsync().get();
+                                WaitWinrtAsync(session.TryPauseAsync(), 2000);
                             } else {
-                                session.TryPlayAsync().get();
+                                WaitWinrtAsync(session.TryPlayAsync(), 2000);
                             }
                         } else if (cmd == MediaCommand::Next) {
-                            session.TrySkipNextAsync().get();
+                            WaitWinrtAsync(session.TrySkipNextAsync(), 2000);
+                            forcePropsRefresh = true;
                         } else if (cmd == MediaCommand::Stop) {
-                            session.TryStopAsync().get();
+                            WaitWinrtAsync(session.TryStopAsync(), 2000);
+                            forcePropsRefresh = true;
                         } else if (cmd == MediaCommand::Seek || cmd == MediaCommand::Rewind5 || cmd == MediaCommand::Forward5) {
                             if (auto tl = session.GetTimelineProperties()) {
                                 const int64_t startT = tl.StartTime().count();
@@ -5910,7 +5785,7 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                                         targetAbs = std::max(targetAbs, startT);
                                     }
                                 }
-                                session.TryChangePlaybackPositionAsync(targetAbs).get();
+                                WaitWinrtAsync(session.TryChangePlaybackPositionAsync(targetAbs), 2000);
                             }
                         } else if (cmd == MediaCommand::ToggleShuffle) {
                             if (useVkBridge) {
@@ -5922,7 +5797,7 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                                 if (auto info = session.GetPlaybackInfo()) {
                                     if (auto sh = info.IsShuffleActive()) cur = sh.Value();
                                 }
-                                session.TryChangeShuffleActiveAsync(!cur).get();
+                                WaitWinrtAsync(session.TryChangeShuffleActiveAsync(!cur), 2000);
                             }
                         } else if (cmd == MediaCommand::CycleRepeat ||
                                    cmd == MediaCommand::SetRepeatOff ||
@@ -5958,7 +5833,7 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                                 } else if (cmd == MediaCommand::SetRepeatOne) {
                                     nextMode = RepeatMode::One;
                                 }
-                                session.TryChangeAutoRepeatModeAsync(ToWinrtRepeatMode(nextMode)).get();
+                                WaitWinrtAsync(session.TryChangeAutoRepeatModeAsync(ToWinrtRepeatMode(nextMode)), 2000);
                             }
                         } else if (cmd == MediaCommand::ToggleLike) {
                             if (useVkBridge) {
@@ -5973,7 +5848,32 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                 if (g_stopEvent && WaitForSingleObject(g_stopEvent, 90) == WAIT_OBJECT_0) {
                     break;
                 }
+                if (g_unloading.load()) break;
                 session = SelectActiveSession(sessionMgr, preferredAumid, lastAumid, sessions);
+            }
+
+            const bool sessionChanged = (session != subscribedSession);
+            if (sessionChanged) {
+                revokeSessionEvents();
+                g_mediaPropsDirty.store(true);
+                if (session) {
+                    try {
+                        subscribedSession = session;
+                        sessPropsToken = subscribedSession.MediaPropertiesChanged([](auto const&, auto const&) {
+                            g_mediaPropsDirty.store(true);
+                            if (!g_unloading.load() && g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
+                        });
+                        sessPlaybackToken = subscribedSession.PlaybackInfoChanged([](auto const&, auto const&) {
+                            if (!g_unloading.load() && g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
+                        });
+                        sessTimelineToken = subscribedSession.TimelinePropertiesChanged([](auto const&, auto const&) {
+                            if (!g_unloading.load() && g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
+                        });
+                        hasSessTokens = true;
+                    } catch (...) {
+                        revokeSessionEvents();
+                    }
+                }
             }
 
             MediaSnapshot nextSnap;
@@ -5991,10 +5891,13 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
 
                 const ULONGLONG vkSeen = g_vkLastSeenTick.load();
                 const bool vkConnected = latest.enableVkBridge &&
+                                         !latest.vkBridgeToken.empty() &&
                                          (vkSeen != 0) &&
                                          ((GetTickCount64() - vkSeen) < 5000) &&
                                          IsBrowserSession(aumid, appName);
                 nextSnap.vkBridgeConnected = vkConnected;
+                lastVkConnected = vkConnected;
+                lastVkConnectedAt = vkSeen;
 
                 try {
                     auto info = session.GetPlaybackInfo();
@@ -6035,67 +5938,93 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                             }
                             nextSnap.durationTicks = endT - startT;
                             nextSnap.positionTicks = std::clamp<int64_t>(posT - startT, 0, nextSnap.durationTicks);
+                            nextSnap.timelineBasePosTicks = nextSnap.positionTicks;
+                            nextSnap.timelineAnchorTickMs = GetTickCount64();
                         }
                     }
                 } catch (...) {}
 
-                try {
-                    auto props = session.TryGetMediaPropertiesAsync().get();
-                    if (g_unloading.load()) break;
-                    if (props) {
-                        nextSnap.title = std::wstring(props.Title());
-                        nextSnap.artist = std::wstring(props.Artist());
-                        nextSnap.hasMedia = (!nextSnap.title.empty() || !nextSnap.artist.empty());
+                const bool propsDirty =
+                    g_mediaPropsDirty.exchange(false) || forcePropsRefresh || sessionChanged || cachedTrackKey.empty();
+                if (propsDirty) {
+                    try {
+                        auto propsOp = session.TryGetMediaPropertiesAsync();
+                        if (WaitWinrtAsync(propsOp, 2000)) {
+                            if (g_unloading.load()) break;
+                            if (auto props = propsOp.GetResults()) {
+                                cachedTitle = std::wstring(props.Title());
+                                cachedArtist = std::wstring(props.Artist());
 
-                        const std::wstring trackKey = aumid + L"\x1f" + nextSnap.title + L"\x1f" + nextSnap.artist;
-                        const bool trackChanged = (trackKey != cachedTrackKey);
-                        if (trackChanged) {
-                            cachedTrackKey = trackKey;
-                            cachedThumbBytes.clear();
-                            cachedThumbHash = 0;
-                        }
-
-                        if (nextSnap.hasMedia) {
-                            const bool shouldFetchThumb =
-                                trackChanged || cachedThumbBytes.empty() || (pollCounter % 4 == 0);
-                            if (shouldFetchThumb) {
-                                std::vector<BYTE> fetchedBytes;
-                                uint64_t fetchedHash = 0;
-                                if (auto thumbRef = props.Thumbnail()) {
-                                    try {
-                                        auto stream = thumbRef.OpenReadAsync().get();
-                                        if (stream) {
-                                            const UINT64 sz = stream.Size();
-                                            if (sz > 0 && sz < 4 * 1024 * 1024) {
-                                                winrt::Windows::Storage::Streams::DataReader reader(stream);
-                                                reader.LoadAsync(static_cast<UINT32>(sz)).get();
-                                                fetchedBytes.resize(static_cast<size_t>(sz));
-                                                reader.ReadBytes(winrt::array_view<BYTE>(fetchedBytes));
-                                                reader.DetachStream();
-                                                fetchedHash = HashBytesFnv1a(fetchedBytes);
-                                            }
-                                        }
-                                    } catch (...) {
-                                        fetchedBytes.clear();
-                                        fetchedHash = 0;
-                                    }
+                                const std::wstring trackKey = aumid + L"\x1f" + cachedTitle + L"\x1f" + cachedArtist;
+                                const bool trackChanged = (trackKey != cachedTrackKey);
+                                if (trackChanged) {
+                                    cachedTrackKey = trackKey;
+                                    cachedThumbBytes.reset();
+                                    cachedThumbHash = 0;
                                 }
-                                cachedThumbBytes = std::move(fetchedBytes);
-                                cachedThumbHash = fetchedHash;
+
+                                if (!cachedTitle.empty() || !cachedArtist.empty()) {
+                                    std::vector<BYTE> fetchedBytes;
+                                    uint64_t fetchedHash = 0;
+                                    if (auto thumbRef = props.Thumbnail()) {
+                                        try {
+                                            auto streamOp = thumbRef.OpenReadAsync();
+                                            if (WaitWinrtAsync(streamOp, 2000)) {
+                                                if (auto stream = streamOp.GetResults()) {
+                                                    const UINT64 sz = stream.Size();
+                                                    if (sz > 0 && sz < 4 * 1024 * 1024) {
+                                                        winrt::Windows::Storage::Streams::DataReader reader(stream);
+                                                        auto loadOp = reader.LoadAsync(static_cast<UINT32>(sz));
+                                                        if (WaitWinrtAsync(loadOp, 2000)) {
+                                                            loadOp.GetResults();
+                                                            fetchedBytes.resize(static_cast<size_t>(sz));
+                                                            reader.ReadBytes(winrt::array_view<BYTE>(fetchedBytes));
+                                                            fetchedHash = HashBytesFnv1a(fetchedBytes);
+                                                        }
+                                                        reader.DetachStream();
+                                                    }
+                                                }
+                                            }
+                                        } catch (...) {
+                                            fetchedBytes.clear();
+                                            fetchedHash = 0;
+                                        }
+                                    }
+                                    if (fetchedHash != 0) {
+                                        if (fetchedHash != cachedThumbHash || !cachedThumbBytes) {
+                                            cachedThumbBytes = std::make_shared<const std::vector<BYTE>>(std::move(fetchedBytes));
+                                            cachedThumbHash = fetchedHash;
+                                        }
+                                    } else {
+                                        cachedThumbBytes.reset();
+                                        cachedThumbHash = 0;
+                                    }
+                                } else {
+                                    cachedThumbBytes.reset();
+                                    cachedThumbHash = 0;
+                                }
                             }
-                            nextSnap.thumbnailBytes = cachedThumbBytes;
-                            nextSnap.thumbnailHash = cachedThumbHash;
                         }
-                    }
-                } catch (...) {}
+                    } catch (...) {}
+                }
+
+                nextSnap.title = cachedTitle;
+                nextSnap.artist = cachedArtist;
+                nextSnap.hasMedia = (!nextSnap.title.empty() || !nextSnap.artist.empty());
+                if (nextSnap.hasMedia) {
+                    nextSnap.thumbnailBytes = cachedThumbBytes;
+                    nextSnap.thumbnailHash = cachedThumbHash;
+                }
             } else {
                 lastAumid.clear();
                 cachedTrackKey.clear();
-                cachedThumbBytes.clear();
+                cachedTitle.clear();
+                cachedArtist.clear();
+                cachedThumbBytes.reset();
                 cachedThumbHash = 0;
+                lastVkConnected = false;
+                lastVkConnectedAt = 0;
             }
-
-            ++pollCounter;
 
             bool changed = false;
             {
@@ -6128,7 +6057,10 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                      nextSnap.durationTicks != g_mediaSnapshot.durationTicks);
 
                 changed = coreChanged || timeChanged;
-                if (changed || nextSnap.positionTicks != g_mediaSnapshot.positionTicks) {
+                if (changed ||
+                    nextSnap.positionTicks != g_mediaSnapshot.positionTicks ||
+                    nextSnap.timelineBasePosTicks != g_mediaSnapshot.timelineBasePosTicks ||
+                    nextSnap.timelineAnchorTickMs != g_mediaSnapshot.timelineAnchorTickMs) {
                     g_mediaSnapshot = std::move(nextSnap);
                 }
             }
@@ -6137,6 +6069,8 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                 RefreshAllHostsUi(latest);
             }
         }
+
+        revokeMgrEvents();
     }
     winrt::uninit_apartment();
     return 0;
@@ -6188,28 +6122,18 @@ BOOL Wh_ModInit() {
     g_vkV2SeenTick.store(0);
     g_vkLastCmdTick.store(0);
     g_vkBridgeExtended.store(false);
+    g_mediaPropsDirty.store(true);
 
-    InitCurrentProcessInfo();
     ReloadSettings();
 
-    if (g_isExplorer) {
-        if (!HookTaskbarDllSymbols()) {
-            Wh_Log(L"Failed to hook taskbar.dll symbols");
-            return FALSE;
-        }
-        return TRUE;
+    if (!HookTaskbarDllSymbols()) {
+        Wh_Log(L"Failed to hook taskbar.dll symbols");
+        return FALSE;
     }
-
-    if (g_splitBypassActive.load()) {
-        return HookWinsockForSplitTunneling() ? TRUE : FALSE;
-    }
-
-    return FALSE;
+    return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isExplorer) return;
-
     {
         std::lock_guard<std::mutex> lock(g_mediaMutex);
         g_mediaSnapshot = {};
@@ -6230,6 +6154,7 @@ void Wh_ModAfterInit() {
     g_mediaThread = CreateThread(nullptr, 0, MediaWorkerThreadProc, nullptr, 0, nullptr);
     g_vkBridgeThread = CreateThread(nullptr, 0, VkBridgeThreadProc, nullptr, 0, nullptr);
 
+    g_mediaPropsDirty.store(true);
     g_rebuildRequested.store(true);
     if (g_wakeEvent) SetEvent(g_wakeEvent);
     if (g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
@@ -6238,15 +6163,12 @@ void Wh_ModAfterInit() {
 void Wh_ModSettingsChanged() {
     ReloadSettings();
 
-    if (!g_isExplorer) {
-        return;
-    }
-
     const IslandSettings s = GetSettingsSnapshot();
     const VpnState st = QueryVpnServiceState(s.tunnelName);
     g_vpnState.store(st);
     g_lastStableState.store(st == VpnState::Connected ? VpnState::Connected : VpnState::Disconnected);
 
+    g_mediaPropsDirty.store(true);
     g_rebuildRequested.store(true);
     g_needsUiUpdate.store(true);
     if (g_wakeEvent) SetEvent(g_wakeEvent);
@@ -6255,23 +6177,20 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     g_unloading.store(true);
-    g_splitBypassActive.store(false);
-
-    if (!g_isExplorer) return;
 
     if (g_stopEvent) SetEvent(g_stopEvent);
     if (g_workerThread) {
-        WaitForSingleObject(g_workerThread, 5000);
+        WaitForSingleObject(g_workerThread, INFINITE);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
     }
     if (g_mediaThread) {
-        WaitForSingleObject(g_mediaThread, 5000);
+        WaitForSingleObject(g_mediaThread, INFINITE);
         CloseHandle(g_mediaThread);
         g_mediaThread = nullptr;
     }
     if (g_vkBridgeThread) {
-        WaitForSingleObject(g_vkBridgeThread, 5000);
+        WaitForSingleObject(g_vkBridgeThread, INFINITE);
         CloseHandle(g_vkBridgeThread);
         g_vkBridgeThread = nullptr;
     }
