@@ -706,6 +706,7 @@ typedef struct _sws_WindowSwitcherLayoutWindow
     WCHAR* wszAUMID;
     HDPA dpaGroupedWnds;
     WCHAR wszAppName[MAX_PATH];
+    BOOL bAppNameUnavailable;
 } sws_WindowSwitcherLayoutWindow;
 
 // sws_IconPainter.c
@@ -1492,14 +1493,17 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
             if (window->dwCount > 1)
             {
                 long long a1 = sws_milliseconds_now();
-                WCHAR wszTitleTemp[MAX_PATH];
-                if (*window->wszAppName)
+                WCHAR wszAppNameTemp[MAX_PATH];
+                if (window->bAppNameUnavailable)
                 {
-                    wcscpy_s(wszTitleTemp, MAX_PATH, window->wszAppName);
+                    sws_WindowHelpers_GetWindowText(window->hWnd, wszAppNameTemp, MAX_PATH);
+                }
+                else if (*window->wszAppName)
+                {
+                    wcscpy_s(wszAppNameTemp, MAX_PATH, window->wszAppName);
                 }
                 else
                 {
-                    BOOL bShouldCacheAppName = FALSE;
                     BOOL bAUMIDOk = FALSE;
                     if (window->wszAUMID)
                     {
@@ -1510,8 +1514,7 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
                             if (SUCCEEDED(pItem->GetDisplayName(SIGDN_NORMALDISPLAY, &pDisplayName)) && pDisplayName)
                             {
                                 bAUMIDOk = TRUE;
-                                bShouldCacheAppName = TRUE;
-                                wcscpy_s(wszTitleTemp, MAX_PATH, pDisplayName);
+                                wcscpy_s(wszAppNameTemp, MAX_PATH, pDisplayName);
                                 CoTaskMemFree(pDisplayName);
                             }
                             pItem->Release();
@@ -1531,33 +1534,38 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
                                     CoTaskMemFree(wszOutText);
                                     if (SUCCEEDED(pIShellItem2->GetString(PKEY_Software_ProductName, &wszOutText)))
                                     {
-                                        bShouldCacheAppName = TRUE;
-                                        wcscpy_s(wszTitleTemp, MAX_PATH, wszOutText);
+                                        wcscpy_s(wszAppNameTemp, MAX_PATH, wszOutText);
                                         CoTaskMemFree(wszOutText);
                                     }
                                     else
                                     {
-                                        sws_WindowHelpers_GetWindowText(window->hWnd, wszTitleTemp, MAX_PATH);
+                                        sws_WindowHelpers_GetWindowText(window->hWnd, wszAppNameTemp, MAX_PATH);
+                                        window->bAppNameUnavailable = TRUE;
                                     }
                                 }
                                 else
                                 {
-                                    bShouldCacheAppName = TRUE;
-                                    wcscpy_s(wszTitleTemp, MAX_PATH, wszOutText);
+                                    wcscpy_s(wszAppNameTemp, MAX_PATH, wszOutText);
                                     CoTaskMemFree(wszOutText);
                                 }
                             }
                             else
                             {
-                                sws_WindowHelpers_GetWindowText(window->hWnd, wszTitleTemp, MAX_PATH);
+                                sws_WindowHelpers_GetWindowText(window->hWnd, wszAppNameTemp, MAX_PATH);
+                                window->bAppNameUnavailable = TRUE;
                             }
                             pIShellItem2->Release();
                         }
+                        else
+                        {
+                            sws_WindowHelpers_GetWindowText(window->hWnd, wszAppNameTemp, MAX_PATH);
+                            window->bAppNameUnavailable = TRUE;
+                        }
                     }
 
-                    if (bShouldCacheAppName)
+                    if (!window->bAppNameUnavailable)
                     {
-                        wcscpy_s(window->wszAppName, MAX_PATH, wszTitleTemp);
+                        wcscpy_s(window->wszAppName, MAX_PATH, wszAppNameTemp);
                     }
                 }
 
@@ -1574,7 +1582,7 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
                             pos = titleText.find(L"%s");
                             if (pos != std::wstring::npos)
                             {
-                                titleText.replace(pos, 2, wszTitleTemp);
+                                titleText.replace(pos, 2, wszAppNameTemp);
                                 wcsncpy_s(wszTitle, MAX_PATH, titleText.c_str(), _TRUNCATE);
                                 Wh_Log(L"Perf-SHCreateItemInKnownFolder %lld", sws_milliseconds_now() - a1);
                                 return;
@@ -1583,7 +1591,7 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
                     }
                 }
 
-                _snwprintf_s(wszTitle, MAX_PATH, _TRUNCATE, L"%s - %u running windows", wszTitleTemp, window->dwCount);
+                _snwprintf_s(wszTitle, MAX_PATH, _TRUNCATE, L"%s - %u running windows", wszAppNameTemp, window->dwCount);
             }
             else
             {
