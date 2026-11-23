@@ -2,7 +2,7 @@
 // @id              change-more-fonts
 // @name            Change More Fonts
 // @description     Use an installed font for Windows 11 text in Explorer, Start, Settings, and other shell surfaces.
-// @version         1.0.0
+// @version         1.1.0
 // @author          xh1le
 // @github          https://github.com/xh1le
 // @license         MIT
@@ -70,6 +70,31 @@ To try a different app, add its executable under this mod's **Advanced >
 Process inclusion list**. The app needs to use GDI or system DirectWrite for
 its text. Use the per-mod exclusion list to skip apps.
 
+Turn on **Replace only listed fonts** to use **Also replace these fonts** as an
+allowlist alongside **Font replacement rules**. This takes priority over
+**Replace all eligible fonts**. **Keep these fonts** and the built-in font
+protections still apply.
+
+Add a row to **Font replacement rules** to give a source family its own
+replacement. For example, set `Segoe UI` to `Arial` and `Consolas` to
+`Cascadia Mono`. Enable **Include monospace fonts** for a rule with a monospace
+source. The first rule for each source wins. If a renderer can't find that
+row's replacement, it keeps the original font. Rules use the active process's
+weight settings and apply wherever the mod is active.
+Choose replacement families that differ from your source families. Cached
+GDI drawing and DirectWrite font fallback keep a configured replacement
+family so it can be used without being replaced again.
+
+## Use different fonts in different apps
+
+Add a row under **Process overrides** and enter an executable name such as
+`SystemSettings.exe`. Choose **Custom font settings** or **Turn off replacement**.
+A blank family and weight -1 inherit the global values. Weight 0 keeps the
+original weight. The first matching row wins. An override for `explorer.exe`
+also applies to the desktop and taskbar hosted by that process. To target an app
+outside the built-in list, add it to Windhawk's **Advanced > Process inclusion
+list** as well.
+
 ## Compatibility
 
 Run one font replacement mod at a time. If you use Explorer Font Changer,
@@ -97,6 +122,15 @@ off and restarting the affected app restores its usual font.
 
 The mod runs in 64-bit processes on Windows 11 and changes fonts in memory.
 Optional apps added through the inclusion list also need to be 64-bit.
+### Font didn't change?
+
+Copy the family name from **Windows Settings > Personalization > Fonts** and
+save the mod settings again after installing a font. If only some text changes,
+open the mod's logs in Windhawk. Look for the requested family and the GDI and
+DirectWrite status for the affected process. If the log shows the expected
+family and an active renderer, reopen the affected app to refresh existing text.
+Check **Process overrides** and **Keep these fonts** if the original font persists.
+
 */
 // ==/WindhawkModReadme==
 
@@ -131,6 +165,9 @@ Optional apps added through the inclusion list also need to be 64-bit.
   - ReplaceAllFonts: false
     $name: Replace all eligible fonts
     $description: Includes document fonts such as Arial and Calibri in the apps this mod targets.
+  - ReplaceListedOnly: false
+    $name: Replace only listed fonts
+    $description: Use the list below and any font replacement rules. Takes priority over Replace all eligible fonts.
   - ReplaceMonospace: false
     $name: Include monospace fonts
     $description: Applies to monospace families on your list or when you replace all eligible fonts.
@@ -141,6 +178,38 @@ Optional apps added through the inclusion list also need to be 64-bit.
     $name: Keep these fonts
     $description: Enter family names separated by commas. This list takes priority over the replacement lists.
   $name: Fonts to replace
+- FontReplacementRules:
+  - - Mode: replace
+      $name: Rule status
+      $options:
+      - replace: Replace this family
+      - disabled: Skip this rule
+    - SourceFamily: ""
+      $name: Original font family
+      $description: Enter an exact family name such as Segoe UI.
+    - ReplacementFamily: ""
+      $name: Replacement font family
+      $description: Enter an installed family such as Arial.
+  $name: Font replacement rules
+  $description: Set a different replacement for a specific source family. The first matching row wins.
+- ProcessOverrides:
+  - - Process: ""
+      $name: Executable name
+      $description: Enter a name such as SystemSettings.exe. The first matching row wins.
+    - Mode: inherit
+      $name: Font settings for this process
+      $options:
+      - inherit: Use global settings
+      - custom: Custom font settings
+      - disabled: Turn off replacement
+    - FontFamily: ""
+      $name: Font family
+      $description: Leave blank to use the global font family.
+    - FontWeight: -1
+      $name: Font weight
+      $description: Use -1 for the global weight, 0 to keep the original weight, or 100 to 900 to set a weight.
+  $name: Process overrides
+  $description: Set a different font or turn off replacement for individual executables.
 */
 // ==/WindhawkModSettings==
 
@@ -152,7 +221,9 @@ Optional apps added through the inclusion list also need to be 64-bit.
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <climits>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -169,6 +240,8 @@ namespace {
 using Microsoft::WRL::ComPtr;
 
 constexpr wchar_t kDefaultFamily[] = L"Tahoma";
+constexpr int kGdiSampleWeights[] = {100, 200, 300, 350, 400, 500,
+                                     600, 700, 800, 900, 1000};
 
 constexpr const wchar_t* kDefaultReplaceFamilies[] = {
     // Windows 11 / Windows 10 shell families.
@@ -281,16 +354,27 @@ struct Settings {
     bool disableGdiDrawing = false;
     bool disableDirectWrite = false;
     bool replaceAllFonts = false;
+    bool replaceListedOnly = false;
     bool replaceMonospace = false;
     std::vector<std::wstring> additionalFamilies;
     std::vector<std::wstring> extraExcludedFamilies;
 };
 
+struct ReplacementFont {
+    std::wstring family;
+    std::wstring dwFamily;
+    std::array<std::wstring, std::size(kGdiSampleWeights)> gdiFaces;
+};
+
+struct FontReplacementRule {
+    std::wstring source;
+    ReplacementFont replacement;
+};
+
 struct Runtime {
     Settings settings;
-    std::wstring dwFamily;
-    std::wstring gdiFaceBase;
-    std::wstring gdiFaceBold;
+    ReplacementFont defaultFont;
+    std::vector<FontReplacementRule> fontRules;
     bool dwValid = false;
     bool gdiValid = false;
     std::vector<std::wstring> replaceFamilies;
@@ -580,20 +664,81 @@ bool IsProtectedFamily(const std::wstring& lowerName, BYTE charset,
            IsExcludedFamily(lowerName, rt);
 }
 
-bool IsTargetFamily(std::wstring_view name, const Runtime& rt) {
+bool IsTargetFamily(std::wstring_view name, const ReplacementFont& font) {
     return !name.empty() &&
-           (EqualsCI(name, rt.settings.fontFamily) ||
-            EqualsCI(name, rt.dwFamily) || EqualsCI(name, rt.gdiFaceBase) ||
-            EqualsCI(name, rt.gdiFaceBold));
+           (EqualsCI(name, font.family) ||
+            EqualsCI(name, font.dwFamily) ||
+            std::any_of(font.gdiFaces.begin(), font.gdiFaces.end(),
+                        [name](const auto& face) { return EqualsCI(name, face); }));
 }
 
-bool IsReplaceListed(const std::wstring& lowerName, const Runtime& rt) {
-    for (const auto& family : rt.replaceFamilies) {
-        if (EqualsCI(lowerName, family)) {
-            return true;
+const ReplacementFont* FindRuleReplacement(std::wstring_view family,
+                                           const Runtime& rt) {
+    for (const auto& rule : rt.fontRules) {
+        if (EqualsCI(family, rule.source)) {
+            return &rule.replacement;
         }
     }
-    return false;
+    return nullptr;
+}
+
+const ReplacementFont* SelectReplacement(std::wstring_view family,
+                                         const Runtime& rt, bool latePass) {
+    const auto* ruleFont = FindRuleReplacement(family, rt);
+    // DrawText and DirectWrite fallback can see the result of an earlier
+    // substitution. Keep configured destinations on those later passes.
+    if (ruleFont && !latePass) {
+        return ruleFont;
+    }
+    for (const auto& rule : rt.fontRules) {
+        if (IsTargetFamily(family, rule.replacement)) {
+            return nullptr;
+        }
+    }
+    bool isDefaultFont = IsTargetFamily(family, rt.defaultFont);
+    if (ruleFont) {
+        return isDefaultFont ? nullptr : ruleFont;
+    }
+    bool listed = std::any_of(rt.replaceFamilies.begin(), rt.replaceFamilies.end(),
+                             [family](const auto& name) { return EqualsCI(family, name); });
+    if (listed || (!rt.settings.replaceListedOnly &&
+                   (rt.settings.replaceAllFonts || isDefaultFont))) {
+        return &rt.defaultFont;
+    }
+    return nullptr;
+}
+
+const std::wstring& GdiFaceForWeight(const ReplacementFont& font, int weight) {
+    weight = weight == FW_DONTCARE ? FW_NORMAL : std::clamp(weight, 100, 1000);
+    auto begin = std::begin(kGdiSampleWeights);
+    auto above = std::lower_bound(begin, std::end(kGdiSampleWeights), weight);
+    if (above != begin && weight - above[-1] < *above - weight) {
+        above--;
+    }
+    return font.gdiFaces[above - begin];
+}
+
+int GdiSourceWeight(std::wstring_view family, int requestedWeight) {
+    if ((requestedWeight != FW_DONTCARE && requestedWeight != FW_NORMAL) ||
+        !family.starts_with(L"segoe ui") ||
+        std::none_of(std::begin(kDefaultReplaceFamilies),
+                     std::end(kDefaultReplaceFamilies),
+                     [family](auto known) { return EqualsCI(family, known); })) {
+        return requestedWeight;
+    }
+    if (family.ends_with(L" semibold")) {
+        return FW_SEMIBOLD;
+    }
+    if (family.ends_with(L" bold")) {
+        return FW_BOLD;
+    }
+    if (family.ends_with(L" semilight")) {
+        return 350;
+    }
+    if (family.ends_with(L" light")) {
+        return FW_LIGHT;
+    }
+    return requestedWeight;
 }
 
 int ChooseGdiWeight(int originalWeight, const Runtime& rt) {
@@ -615,14 +760,21 @@ DWRITE_FONT_WEIGHT ChooseDWriteWeight(DWRITE_FONT_WEIGHT originalWeight,
 
 void LogInitInfo(const Runtime& rt, const std::wstring& processName) {
     Wh_Log(L"Change More Fonts in %s", processName.c_str());
-    Wh_Log(L"Requested family='%s' weight=%d forceBaseWeight=%d replaceAll=%d",
+    Wh_Log(L"Requested family='%s' weight=%d forceBaseWeight=%d",
            rt.settings.fontFamily.c_str(), rt.settings.fontWeight,
-           rt.settings.forceBaseWeight ? 1 : 0,
-           rt.settings.replaceAllFonts ? 1 : 0);
-    Wh_Log(L"DirectWrite family='%s' valid=%d", rt.dwFamily.c_str(),
-           rt.dwValid ? 1 : 0);
-    Wh_Log(L"GDI base face='%s' bold face='%s' valid=%d",
-           rt.gdiFaceBase.c_str(), rt.gdiFaceBold.c_str(), rt.gdiValid ? 1 : 0);
+           rt.settings.forceBaseWeight ? 1 : 0);
+    Wh_Log(L"DirectWrite family='%s' active=%d", rt.defaultFont.dwFamily.c_str(),
+           rt.dwValid && !rt.settings.disableMod && !rt.settings.disableDirectWrite);
+    Wh_Log(L"GDI regular face='%s' bold face='%s' active=%d",
+           GdiFaceForWeight(rt.defaultFont, FW_NORMAL).c_str(),
+           GdiFaceForWeight(rt.defaultFont, FW_BOLD).c_str(),
+           rt.gdiValid && !rt.settings.disableMod && !rt.settings.disableGdi);
+    for (const auto& rule : rt.fontRules) {
+        Wh_Log(L"Rule '%s' -> '%s' (GDI='%s', DirectWrite='%s')",
+               rule.source.c_str(), rule.replacement.family.c_str(),
+               GdiFaceForWeight(rule.replacement, FW_NORMAL).c_str(),
+               rule.replacement.dwFamily.c_str());
+    }
     Wh_Log(
         L"Known limits: DWM title bars, WebView2 content and layout ranges "
         L"with custom font collections lacking the target family.");
@@ -675,7 +827,7 @@ int CALLBACK GdiEnumProc(const LOGFONTW* logFont,
     return 1;
 }
 
-bool VerifyGdiFace(const std::wstring& face, int weight) {
+int GetRealizedGdiWeight(HDC dc, const std::wstring& face, int weight) {
     LOGFONTW logFont = {};
     logFont.lfHeight = -16;
     logFont.lfWeight = weight;
@@ -689,97 +841,69 @@ bool VerifyGdiFace(const std::wstring& face, int weight) {
         font = CreateFontIndirectW(&logFont);
     }
     if (!font) {
-        return false;
+        return -1;
     }
 
-    bool ok = false;
-    HDC dc = CreateCompatibleDC(nullptr);
-    if (dc) {
-        HGDIOBJ old = SelectObject(dc, font);
-        if (old && old != HGDI_ERROR) {
-            wchar_t selected[LF_FACESIZE] = {};
-            if (GetTextFaceW(dc, LF_FACESIZE, selected) > 0) {
-                ok = EqualsCI(selected, face);
-            }
-            SelectObject(dc, old);
+    int realizedWeight = -1;
+    HGDIOBJ old = SelectObject(dc, font);
+    if (old && old != HGDI_ERROR) {
+        wchar_t selected[LF_FACESIZE] = {};
+        TEXTMETRICW metrics{};
+        if (GetTextFaceW(dc, LF_FACESIZE, selected) > 0 &&
+            EqualsCI(selected, face) && GetTextMetricsW(dc, &metrics)) {
+            realizedWeight = metrics.tmWeight;
         }
-        DeleteDC(dc);
+        SelectObject(dc, old);
     }
     DeleteObject(font);
-    return ok;
+    return realizedWeight;
 }
 
-std::wstring ChooseGdiFace(const std::vector<GdiCandidate>& candidates,
-                           int targetWeight,
-                           const std::wstring& family,
-                           bool* found) {
-    std::vector<const GdiCandidate*> ordered;
+std::wstring ChooseGdiFace(HDC dc, const std::vector<GdiCandidate>& candidates,
+                           int targetWeight, const std::wstring& family) {
+    int weight = GetRealizedGdiWeight(dc, family, targetWeight);
+    std::wstring best = weight >= 0 ? family : L"";
+    int bestDistance = weight >= 0 ? std::abs(weight - targetWeight) : INT_MAX;
     for (const auto& candidate : candidates) {
-        if (!candidate.italic) {
-            ordered.push_back(&candidate);
+        if (!bestDistance) {
+            break;
+        }
+        if (candidate.italic || EqualsCI(candidate.name, family)) {
+            continue;
+        }
+        weight = GetRealizedGdiWeight(dc, candidate.name, targetWeight);
+        if (weight >= 0 && std::abs(weight - targetWeight) < bestDistance) {
+            best = candidate.name;
+            bestDistance = std::abs(weight - targetWeight);
         }
     }
-    if (ordered.empty()) {
-        *found = false;
-        return {};
-    }
-
-    std::sort(
-        ordered.begin(), ordered.end(),
-        [&](const GdiCandidate* a, const GdiCandidate* b) {
-            auto score = [&](const GdiCandidate* c) {
-                long long value =
-                    static_cast<long long>(std::abs(c->weight - targetWeight)) *
-                    100;
-                if (!EqualsCI(c->name, family)) {
-                    value += 10;
-                }
-                value += static_cast<long long>(c->name.size());
-                return value;
-            };
-            return score(a) < score(b);
-        });
-
-    for (const auto* candidate : ordered) {
-        if (VerifyGdiFace(candidate->name, targetWeight)) {
-            *found = true;
-            return candidate->name;
-        }
-    }
-
-    *found = false;
-    return {};
+    return best;
 }
 
-void ResolveGdiFaces(Runtime& rt) {
-    rt.gdiValid = false;
-    rt.gdiFaceBase.clear();
-    rt.gdiFaceBold.clear();
-
-    if (rt.settings.fontFamily.size() > LF_FACESIZE - 1) {
+bool ResolveGdiFaces(ReplacementFont& font) {
+    if (font.family.size() > LF_FACESIZE - 1) {
         Wh_Log(L"Font family is too long for GDI (max %d): %s", LF_FACESIZE - 1,
-               rt.settings.fontFamily.c_str());
-        return;
+               font.family.c_str());
+        return false;
     }
 
     HDC dc = CreateCompatibleDC(nullptr);
     if (!dc) {
         Wh_Log(L"CreateCompatibleDC failed; GDI replacement disabled");
-        return;
+        return false;
     }
 
     GdiEnumContext context;
-    context.familyLower = ToLower(rt.settings.fontFamily);
+    context.familyLower = ToLower(font.family);
     LOGFONTW filter = {};
     filter.lfCharSet = DEFAULT_CHARSET;
     EnumFontFamiliesExW(dc, &filter, GdiEnumProc,
                         reinterpret_cast<LPARAM>(&context), 0);
 
     if (context.candidates.empty()) {
-        Wh_Log(L"No GDI face matching '%s' was found; GDI replacement disabled",
-               rt.settings.fontFamily.c_str());
+        Wh_Log(L"No GDI face matching '%s' was found", font.family.c_str());
         DeleteDC(dc);
-        return;
+        return false;
     }
 
     for (size_t i = 0; i < context.candidates.size() && i < 20; i++) {
@@ -788,27 +912,25 @@ void ResolveGdiFaces(Runtime& rt) {
                context.candidates[i].italic ? 1 : 0);
     }
 
-    int baseWeight = rt.settings.fontWeight ? rt.settings.fontWeight : FW_NORMAL;
-    bool baseFound = false;
-    auto base = ChooseGdiFace(context.candidates, baseWeight,
-                              rt.settings.fontFamily, &baseFound);
-    if (!baseFound) {
-        Wh_Log(L"Could not verify a GDI face for weight %d", baseWeight);
+    auto regular = ChooseGdiFace(dc, context.candidates, FW_NORMAL,
+                                 font.family);
+    if (regular.empty()) {
+        Wh_Log(L"Could not verify a GDI face for '%s'",
+               font.family.c_str());
         DeleteDC(dc);
-        return;
+        return false;
     }
 
-    bool boldFound = false;
-    auto bold = ChooseGdiFace(context.candidates, 700, rt.settings.fontFamily,
-                              &boldFound);
-    if (!boldFound) {
-        bold = base;
+    for (size_t i = 0; i < font.gdiFaces.size(); i++) {
+        int weight = kGdiSampleWeights[i];
+        auto face = weight == FW_NORMAL
+                        ? regular
+                        : ChooseGdiFace(dc, context.candidates, weight,
+                                        font.family);
+        font.gdiFaces[i] = face.empty() ? regular : std::move(face);
     }
-
-    rt.gdiFaceBase = std::move(base);
-    rt.gdiFaceBold = std::move(bold);
-    rt.gdiValid = true;
     DeleteDC(dc);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -897,43 +1019,29 @@ std::wstring StripWeightSuffix(std::wstring name) {
     return name;
 }
 
-bool ResolveDWriteFamily(Runtime& rt) {
-    rt.dwValid = false;
-    rt.dwFamily.clear();
-    if (!g_dwFactory || rt.settings.fontFamily.empty()) {
-        return false;
-    }
-
-    IDWriteFontCollection* collection = nullptr;
-    if (FAILED(g_dwFactory->GetSystemFontCollection(&collection, FALSE)) ||
-        !collection) {
-        Wh_Log(
-            L"GetSystemFontCollection failed; DirectWrite replacement "
-            L"disabled");
+bool ResolveDWriteFamily(ReplacementFont& target, IDWriteFontCollection* collection,
+                         int fontWeight) {
+    if (!collection) {
         return false;
     }
 
     std::wstring resolved;
     bool found =
-        FindDWriteFamilyExact(collection, rt.settings.fontFamily, &resolved);
+        FindDWriteFamilyExact(collection, target.family, &resolved);
 
     if (!found) {
-        auto stripped = StripWeightSuffix(rt.settings.fontFamily);
-        if (!EqualsCI(stripped, rt.settings.fontFamily)) {
+        auto stripped = StripWeightSuffix(target.family);
+        if (!EqualsCI(stripped, target.family)) {
             found = FindDWriteFamilyExact(collection, stripped, &resolved);
         }
     }
 
     if (!found) {
-        Wh_Log(
-            L"DirectWrite family '%s' was not found; DirectWrite replacement "
-            L"disabled",
-            rt.settings.fontFamily.c_str());
-        collection->Release();
+        Wh_Log(L"DirectWrite family '%s' was not found", target.family.c_str());
         return false;
     }
 
-    int baseWeight = rt.settings.fontWeight ? rt.settings.fontWeight : FW_NORMAL;
+    int baseWeight = fontWeight ? fontWeight : FW_NORMAL;
     IDWriteTextFormat* testFormat = nullptr;
     HRESULT hr = g_dwFactory->CreateTextFormat(
         resolved.c_str(), nullptr, static_cast<DWRITE_FONT_WEIGHT>(baseWeight),
@@ -948,7 +1056,6 @@ bool ResolveDWriteFamily(Runtime& rt) {
     if (FAILED(hr) || !testFormat) {
         Wh_Log(L"DirectWrite CreateTextFormat failed for '%s' (hr=0x%08X)",
                resolved.c_str(), static_cast<unsigned>(hr));
-        collection->Release();
         return false;
     }
     testFormat->Release();
@@ -987,9 +1094,7 @@ bool ResolveDWriteFamily(Runtime& rt) {
         }
     }
 
-    rt.dwFamily = std::move(resolved);
-    rt.dwValid = true;
-    collection->Release();
+    target.dwFamily = std::move(resolved);
     return true;
 }
 
@@ -997,24 +1102,50 @@ bool ResolveDWriteFamily(Runtime& rt) {
 // Settings and runtime construction
 // ---------------------------------------------------------------------------
 
-Settings LoadSettings() {
-    Settings settings;
+std::wstring ReadFontFamily(PCWSTR key) {
+    auto parts = SplitList(ReadStringSetting(key));
+    // If a fallback list was pasted, use its first family.
+    return parts.empty() ? L"" : std::move(parts.front());
+}
 
-    {
-        auto family = Trim(ReadStringSetting(L"General.FontFamily"));
-        // The mod expects one family. If a fallback list was pasted, use its
-        // first entry rather than failing to resolve the whole string.
-        auto parts = SplitList(family);
-        if (!parts.empty()) {
-            family = std::move(parts[0]);
+int NormalizeFontWeight(int weight) {
+    return weight == 0 ? 0 : std::clamp(weight, 100, 900);
+}
+
+void ApplyProcessOverride(Settings& settings, std::wstring_view processName) {
+    for (size_t i = 0; !processName.empty(); i++) {
+        auto prefix = L"ProcessOverrides[" + std::to_wstring(i) + L"].";
+        auto mode = ReadStringSetting((prefix + L"Mode").c_str());
+        if (mode.empty()) {
+            break;
         }
-        if (!family.empty()) {
-            settings.fontFamily = std::move(family);
+        auto process = Trim(ReadStringSetting((prefix + L"Process").c_str()));
+        if (!EqualsCI(process, processName)) {
+            continue;
         }
+        if (mode == L"disabled") {
+            settings.disableMod = true;
+        } else if (mode == L"custom") {
+            auto family = ReadFontFamily((prefix + L"FontFamily").c_str());
+            if (!family.empty()) {
+                settings.fontFamily = std::move(family);
+            }
+            int weight = Wh_GetIntSetting((prefix + L"FontWeight").c_str());
+            if (weight >= 0) {
+                settings.fontWeight = NormalizeFontWeight(weight);
+            }
+        }
+        break;
     }
+}
 
-    int weight = Wh_GetIntSetting(L"General.FontWeight");
-    settings.fontWeight = weight == 0 ? 0 : std::clamp(weight, 100, 900);
+Settings LoadSettings(std::wstring_view processName) {
+    Settings settings;
+    auto family = ReadFontFamily(L"General.FontFamily");
+    if (!family.empty()) {
+        settings.fontFamily = std::move(family);
+    }
+    settings.fontWeight = NormalizeFontWeight(Wh_GetIntSetting(L"General.FontWeight"));
     settings.forceBaseWeight =
         Wh_GetIntSetting(L"General.ForceBaseWeight") != 0;
     settings.disableMod = Wh_GetIntSetting(L"General.DisableMod") != 0;
@@ -1027,6 +1158,8 @@ Settings LoadSettings() {
 
     settings.replaceAllFonts =
         Wh_GetIntSetting(L"Exclusions.ReplaceAllFonts") != 0;
+    settings.replaceListedOnly =
+        Wh_GetIntSetting(L"Exclusions.ReplaceListedOnly") != 0;
     settings.replaceMonospace =
         Wh_GetIntSetting(L"Exclusions.ReplaceMonospace") != 0;
 
@@ -1035,17 +1168,21 @@ Settings LoadSettings() {
     settings.extraExcludedFamilies =
         SplitList(ReadStringSetting(L"Exclusions.ExcludedFonts"));
 
+    ApplyProcessOverride(settings, processName);
     return settings;
 }
 
-std::shared_ptr<Runtime> BuildRuntime() {
+std::shared_ptr<Runtime> BuildRuntime(std::wstring_view processName,
+                                      bool refreshFonts) {
     InternalScope internalScope;
 
     auto runtime = std::make_shared<Runtime>();
-    runtime->settings = LoadSettings();
+    runtime->settings = LoadSettings(processName);
 
-    for (auto family : kDefaultReplaceFamilies) {
-        AddUnique(runtime->replaceFamilies, family);
+    if (!runtime->settings.replaceListedOnly) {
+        for (auto family : kDefaultReplaceFamilies) {
+            AddUnique(runtime->replaceFamilies, family);
+        }
     }
     for (auto& family : runtime->settings.additionalFamilies) {
         AddUnique(runtime->replaceFamilies, family);
@@ -1054,8 +1191,39 @@ std::shared_ptr<Runtime> BuildRuntime() {
         AddUnique(runtime->excludedFamilies, family);
     }
 
-    ResolveGdiFaces(*runtime);
-    ResolveDWriteFamily(*runtime);
+    ComPtr<IDWriteFontCollection> collection;
+    if (g_dwFactory && FAILED(g_dwFactory->GetSystemFontCollection(
+                           collection.GetAddressOf(), refreshFonts))) {
+        Wh_Log(L"Could not read the DirectWrite system font collection");
+    }
+    auto resolveFont = [&](ReplacementFont& font) {
+        runtime->gdiValid |= ResolveGdiFaces(font);
+        runtime->dwValid |= ResolveDWriteFamily(font, collection.Get(),
+                                               runtime->settings.fontWeight);
+    };
+    runtime->defaultFont.family = runtime->settings.fontFamily;
+    resolveFont(runtime->defaultFont);
+
+    for (size_t i = 0;; i++) {
+        auto prefix = L"FontReplacementRules[" + std::to_wstring(i) + L"].";
+        auto mode = ReadStringSetting((prefix + L"Mode").c_str());
+        if (mode.empty()) {
+            break;
+        }
+        if (mode != L"replace") {
+            continue;
+        }
+        auto source = Trim(ReadStringSetting((prefix + L"SourceFamily").c_str()));
+        auto family = ReadFontFamily((prefix + L"ReplacementFamily").c_str());
+        if (family.empty() ||
+            IsProtectedFamily(ToLower(source), DEFAULT_CHARSET, false, *runtime) ||
+            FindRuleReplacement(source, *runtime)) {
+            continue;
+        }
+        ReplacementFont font{std::move(family)};
+        resolveFont(font);
+        runtime->fontRules.push_back({std::move(source), std::move(font)});
+    }
     return runtime;
 }
 
@@ -1085,20 +1253,24 @@ void ApplyGdiFaceDecision(const Runtime& rt,
                           bool fixedPitch,
                           int& weight,
                           std::wstring& newFace,
-                          bool& changed) {
+                          bool& changed,
+                          bool latePass = false) {
     changed = false;
     std::wstring lower = ToLower(Trim(face));
     if (IsProtectedFamily(lower, charset, fixedPitch, rt)) {
         return;
     }
 
-    if (!IsTargetFamily(lower, rt) && !rt.settings.replaceAllFonts &&
-        !IsReplaceListed(lower, rt)) {
+    const auto* font = SelectReplacement(lower, rt, latePass);
+    if (!font) {
         return;
     }
 
-    int newWeight = ChooseGdiWeight(weight, rt);
-    const auto& replacement = newWeight >= 700 ? rt.gdiFaceBold : rt.gdiFaceBase;
+    int newWeight = ChooseGdiWeight(GdiSourceWeight(lower, weight), rt);
+    const auto& replacement = GdiFaceForWeight(*font, newWeight);
+    if (replacement.empty()) {
+        return;
+    }
     if (!EqualsCI(replacement, face)) {
         newFace = replacement;
         changed = true;
@@ -1109,7 +1281,7 @@ void ApplyGdiFaceDecision(const Runtime& rt,
     }
 }
 
-bool ApplyToLogFontW(const Runtime& rt, LOGFONTW* logFont) {
+bool ApplyToLogFontW(const Runtime& rt, LOGFONTW* logFont, bool latePass = false) {
     if (!logFont) {
         return false;
     }
@@ -1120,7 +1292,7 @@ bool ApplyToLogFontW(const Runtime& rt, LOGFONTW* logFont) {
     bool changed = false;
     ApplyGdiFaceDecision(rt, face, logFont->lfCharSet,
                          (logFont->lfPitchAndFamily & FIXED_PITCH) != 0, weight,
-                         newFace, changed);
+                         newFace, changed, latePass);
     if (!changed) {
         return false;
     }
@@ -1158,7 +1330,7 @@ class ScopedDrawFont {
             return;
         }
         try {
-            if (!ApplyToLogFontW(rt, &logFont)) {
+            if (!ApplyToLogFontW(rt, &logFont, true)) {
                 return;
             }
         } catch (...) {
@@ -1266,6 +1438,7 @@ HFONT WINAPI CreateFontIndirectW_Hook(const LOGFONTW* logFont) {
             return g_origCreateFontIndirectW(logFont);
         }
         LOGFONTW copy = *logFont;
+        InternalScope scope;
         ApplyToLogFontW(*rt, &copy);
         return g_origCreateFontIndirectW(&copy);
     } catch (...) {
@@ -1284,6 +1457,7 @@ HFONT WINAPI CreateFontIndirectA_Hook(const LOGFONTA* logFont) {
             return g_origCreateFontIndirectA(logFont);
         }
         LOGFONTA copy = *logFont;
+        InternalScope scope;
         ApplyToLogFontA(*rt, &copy);
         return g_origCreateFontIndirectA(&copy);
     } catch (...) {
@@ -1317,6 +1491,7 @@ HFONT WINAPI CreateFontIndirectExW_Hook(const ENUMLOGFONTEXDVW* logFont) {
         if (!CopyExtendedLogFont(*logFont, copy)) {
             return g_origCreateFontIndirectExW(logFont);
         }
+        InternalScope scope;
         ApplyToLogFontW(*rt, &copy.elfEnumLogfontEx.elfLogFont);
         return g_origCreateFontIndirectExW(&copy);
     } catch (...) {
@@ -1338,6 +1513,7 @@ HFONT WINAPI CreateFontIndirectExA_Hook(const ENUMLOGFONTEXDVA* logFont) {
         if (!CopyExtendedLogFont(*logFont, copy)) {
             return g_origCreateFontIndirectExA(logFont);
         }
+        InternalScope scope;
         ApplyToLogFontA(*rt, &copy.elfEnumLogfontEx.elfLogFont);
         return g_origCreateFontIndirectExA(&copy);
     } catch (...) {
@@ -1379,6 +1555,7 @@ HFONT WINAPI CreateFontW_Hook(int height,
         std::wstring newFace;
         int newWeight = weight;
         bool changed = false;
+        InternalScope scope;
         ApplyGdiFaceDecision(*rt, face, static_cast<BYTE>(charset),
                              (pitchAndFamily & FIXED_PITCH) != 0, newWeight,
                              newFace, changed);
@@ -1446,6 +1623,7 @@ HFONT WINAPI CreateFontA_Hook(int height,
         std::wstring newFace;
         int newWeight = weight;
         bool changed = false;
+        InternalScope scope;
         ApplyGdiFaceDecision(*rt, face, static_cast<BYTE>(charset),
                              (pitchAndFamily & FIXED_PITCH) != 0, newWeight,
                              newFace, changed);
@@ -1513,31 +1691,41 @@ MapCharacters_t g_origMapCharacters = nullptr;
 MapCharacters1_t g_origMapCharacters1 = nullptr;
 SetFontFamilyName_t g_origSetFontFamilyName = nullptr;
 
-bool IsSymbolSegment(const std::wstring& segment) {
-    auto lower = ToLower(Trim(segment));
-    return IsSymbolName(lower) || IsProtectedScriptName(lower);
-}
-
-bool ShouldReplaceDWriteFamily(const std::wstring& family, const Runtime& rt) {
+const ReplacementFont* SelectDWriteReplacement(std::wstring_view family,
+                                                const Runtime& rt,
+                                                bool latePass = false) {
     auto segments = SplitList(family);
     if (segments.empty()) {
-        return false;
+        return nullptr;
     }
-    // If a XAML font-family fallback list contains an icon/emoji face, keep
-    // the whole list. DWrite will use its normal fallback chain.
+    // Keep the whole fallback list when a later entry is protected or kept.
     for (size_t i = 1; i < segments.size(); i++) {
-        if (IsSymbolSegment(segments[i])) {
-            return false;
+        const auto lower = ToLower(segments[i]);
+        if (IsSymbolName(lower) || IsProtectedScriptName(lower) ||
+            IsExcludedFamily(lower, rt)) {
+            return nullptr;
         }
     }
 
     auto lower = ToLower(segments.front());
     if (IsProtectedFamily(lower, DEFAULT_CHARSET, false, rt)) {
-        return false;
+        return nullptr;
     }
 
-    return IsTargetFamily(lower, rt) || rt.settings.replaceAllFonts ||
-           IsReplaceListed(lower, rt);
+    const auto* font = SelectReplacement(lower, rt, latePass);
+    return font && !font->dwFamily.empty() ? font : nullptr;
+}
+
+std::shared_ptr<const Runtime> GetDirectWriteRuntime(PCWSTR family) {
+    if (t_internal || !family || !*family) {
+        return nullptr;
+    }
+    auto rt = GetRuntimeSnapshot();
+    if (!rt || rt->settings.disableMod || rt->settings.disableDirectWrite ||
+        !rt->dwValid) {
+        return nullptr;
+    }
+    return rt;
 }
 
 std::atomic<bool> g_loggedDwSuccess{false};
@@ -1596,33 +1784,26 @@ CreateTextFormat_Hook(IDWriteFactory* self,
                                       style, stretch, size, locale, textFormat);
     }
     try {
-        auto rt = GetRuntimeSnapshot();
-        if (!rt || rt->settings.disableMod || rt->settings.disableDirectWrite ||
-            !rt->dwValid || rt->dwFamily.empty()) {
+        auto rt = GetDirectWriteRuntime(familyName);
+        const auto* font = rt ? SelectDWriteReplacement(familyName, *rt) : nullptr;
+        if (!font) {
             return g_origCreateTextFormat(self, familyName, collection, weight,
                                           style, stretch, size, locale,
                                           textFormat);
         }
 
-        std::wstring family = familyName;
-
-        if (!ShouldReplaceDWriteFamily(family, *rt)) {
-            return g_origCreateTextFormat(self, familyName, collection, weight,
-                                          style, stretch, size, locale,
-                                          textFormat);
-        }
-
+        InternalScope scope;
         DWRITE_FONT_WEIGHT newWeight = ChooseDWriteWeight(weight, *rt);
         auto* targetCollection =
-            SelectDWriteCollection(collection, rt->dwFamily.c_str());
-        HRESULT hr = g_origCreateTextFormat(self, rt->dwFamily.c_str(),
+            SelectDWriteCollection(collection, font->dwFamily.c_str());
+        HRESULT hr = g_origCreateTextFormat(self, font->dwFamily.c_str(),
                                             targetCollection, newWeight, style,
                                             stretch, size, locale, textFormat);
         if (SUCCEEDED(hr)) {
             if (!g_loggedDwSuccess) {
                 g_loggedDwSuccess = true;
                 Wh_Log(L"DirectWrite created a format for '%s' as '%s' (weight %d -> %d)",
-                       family.c_str(), rt->dwFamily.c_str(),
+                       familyName, font->dwFamily.c_str(),
                        static_cast<int>(weight), static_cast<int>(newWeight));
             }
             return hr;
@@ -1634,7 +1815,7 @@ CreateTextFormat_Hook(IDWriteFactory* self,
                                    stretch, size, locale, textFormat);
         if (SUCCEEDED(retryHr)) {
             Wh_Log(L"DirectWrite fallback to original family '%s' (hr=0x%08X)",
-                   family.c_str(), static_cast<unsigned>(hr));
+                   familyName, static_cast<unsigned>(hr));
             return retryHr;
         }
         return hr;
@@ -1658,27 +1839,21 @@ CreateTextFormat6_Hook(IDWriteFactory6* self,
                                        axisCount, size, locale, textFormat);
     }
     try {
-        auto rt = GetRuntimeSnapshot();
-        if (!rt || rt->settings.disableMod || rt->settings.disableDirectWrite ||
-            !rt->dwValid || rt->dwFamily.empty()) {
+        auto rt = GetDirectWriteRuntime(familyName);
+        const auto* font = rt ? SelectDWriteReplacement(familyName, *rt) : nullptr;
+        if (!font) {
             return g_origCreateTextFormat6(self, familyName, collection,
                                            axisValues, axisCount, size, locale,
                                            textFormat);
         }
 
-        std::wstring family = familyName;
-        if (!ShouldReplaceDWriteFamily(family, *rt)) {
-            return g_origCreateTextFormat6(self, familyName, collection,
-                                           axisValues, axisCount, size, locale,
-                                           textFormat);
-        }
-
+        InternalScope scope;
         auto axes = ChooseDWriteAxes(axisValues, axisCount, *rt);
 
         auto* targetCollection =
-            SelectDWriteCollection(collection, rt->dwFamily.c_str());
+            SelectDWriteCollection(collection, font->dwFamily.c_str());
         HRESULT hr = g_origCreateTextFormat6(
-            self, rt->dwFamily.c_str(), targetCollection, axes.data(),
+            self, font->dwFamily.c_str(), targetCollection, axes.data(),
             static_cast<UINT32>(axes.size()), size, locale, textFormat);
         if (SUCCEEDED(hr)) {
             return hr;
@@ -1689,7 +1864,7 @@ CreateTextFormat6_Hook(IDWriteFactory6* self,
                                     axisCount, size, locale, textFormat);
         if (SUCCEEDED(retryHr)) {
             Wh_Log(L"DirectWrite6 fallback to original family '%s'",
-                   family.c_str());
+                   familyName);
             return retryHr;
         }
         return hr;
@@ -1701,22 +1876,10 @@ CreateTextFormat6_Hook(IDWriteFactory6* self,
 
 // XAML can create a default text format, then select the face for each
 // actual text run through font fallback without using the format's family.
-std::shared_ptr<const Runtime> GetMappingRuntime(PCWSTR family) {
-    if (t_internal || !family || !*family) {
-        return nullptr;
-    }
-    auto rt = GetRuntimeSnapshot();
-    if (!rt || rt->settings.disableMod || rt->settings.disableDirectWrite ||
-        !rt->dwValid || !ShouldReplaceDWriteFamily(family, *rt)) {
-        return nullptr;
-    }
-    return rt;
-}
-
 ComPtr<IDWriteFontCollection> GetMappingCollection(
-    IDWriteFontCollection* collection, const Runtime& rt) {
+    IDWriteFontCollection* collection, const ReplacementFont& font) {
     ComPtr<IDWriteFontCollection> result =
-        SelectDWriteCollection(collection, rt.dwFamily.c_str());
+        SelectDWriteCollection(collection, font.dwFamily.c_str());
     if (!result) {
         g_dwFactory->GetSystemFontCollection(result.GetAddressOf(), FALSE);
     }
@@ -1737,23 +1900,24 @@ HRESULT STDMETHODCALLTYPE MapCharacters_Hook(
     DWRITE_FONT_STRETCH stretch, UINT32* mappedLength, IDWriteFont** mappedFont,
     FLOAT* scale) {
     try {
-        if (auto rt = GetMappingRuntime(family);
-            rt && length && mappedLength && mappedFont && scale) {
+        auto rt = GetDirectWriteRuntime(family);
+        const auto* font = rt ? SelectDWriteReplacement(family, *rt, true) : nullptr;
+        if (font && length && mappedLength && mappedFont && scale) {
             InternalScope scope;
-            auto target = GetMappingCollection(collection, *rt);
+            auto target = GetMappingCollection(collection, *font);
             ComPtr<IDWriteFont> candidate;
             UINT32 candidateLength = 0;
             FLOAT candidateScale = 1.0f;
             if (target && SUCCEEDED(g_origMapCharacters(
                               self, source, position, length, target.Get(),
-                              rt->dwFamily.c_str(), ChooseDWriteWeight(weight, *rt),
+                              font->dwFamily.c_str(), ChooseDWriteWeight(weight, *rt),
                               style, stretch, &candidateLength,
                               candidate.GetAddressOf(), &candidateScale)) &&
                 candidate && candidateLength) {
                 ComPtr<IDWriteFontFamily> actual;
                 if (SUCCEEDED(candidate->GetFontFamily(actual.GetAddressOf()))) {
                     auto name = GetFamilyName(actual.Get());
-                    if (IsTargetFamily(name, *rt)) {
+                    if (IsTargetFamily(name, *font)) {
                         LogMappedFamily(family, name);
                         *mappedLength = candidateLength;
                         *scale = candidateScale;
@@ -1778,25 +1942,26 @@ HRESULT STDMETHODCALLTYPE MapCharacters1_Hook(
     UINT32 axisCount, UINT32* mappedLength, FLOAT* scale,
     IDWriteFontFace5** mappedFace) {
     try {
-        if (auto rt = GetMappingRuntime(family);
-            rt && length && (!axisCount || axisValues) && mappedLength &&
+        auto rt = GetDirectWriteRuntime(family);
+        const auto* font = rt ? SelectDWriteReplacement(family, *rt, true) : nullptr;
+        if (font && length && (!axisCount || axisValues) && mappedLength &&
             mappedFace && scale) {
             InternalScope scope;
-            auto target = GetMappingCollection(collection, *rt);
+            auto target = GetMappingCollection(collection, *font);
             auto axes = ChooseDWriteAxes(axisValues, axisCount, *rt);
             ComPtr<IDWriteFontFace5> candidate;
             UINT32 candidateLength = 0;
             FLOAT candidateScale = 1.0f;
             if (target && SUCCEEDED(g_origMapCharacters1(
                               self, source, position, length, target.Get(),
-                              rt->dwFamily.c_str(), axes.data(),
+                              font->dwFamily.c_str(), axes.data(),
                               static_cast<UINT32>(axes.size()), &candidateLength,
                               &candidateScale, candidate.GetAddressOf())) &&
                 candidate && candidateLength) {
                 ComPtr<IDWriteLocalizedStrings> names;
                 if (SUCCEEDED(candidate->GetFamilyNames(names.GetAddressOf()))) {
                     auto name = GetLocalizedFamilyName(names.Get());
-                    if (IsTargetFamily(name, *rt)) {
+                    if (IsTargetFamily(name, *font)) {
                         LogMappedFamily(family, name);
                         *mappedLength = candidateLength;
                         *scale = candidateScale;
@@ -1817,7 +1982,9 @@ HRESULT STDMETHODCALLTYPE MapCharacters1_Hook(
 HRESULT STDMETHODCALLTYPE SetFontFamilyName_Hook(
     IDWriteTextLayout* self, const WCHAR* family, DWRITE_TEXT_RANGE range) {
     try {
-        if (auto rt = GetMappingRuntime(family); rt && range.length) {
+        auto rt = GetDirectWriteRuntime(family);
+        const auto* font = rt ? SelectDWriteReplacement(family, *rt) : nullptr;
+        if (font && range.length) {
             // Check every collection used by the affected text range before
             // replacing a family name, since a custom collection may lack it.
             UINT64 end = static_cast<UINT64>(range.startPosition) + range.length;
@@ -1828,7 +1995,7 @@ HRESULT STDMETHODCALLTYPE SetFontFamilyName_Hook(
                 if (FAILED(self->GetFontCollection(
                         static_cast<UINT32>(position), collection.GetAddressOf(),
                         &collectionRange)) ||
-                    !SelectDWriteCollection(collection.Get(), rt->dwFamily.c_str())) {
+                    !SelectDWriteCollection(collection.Get(), font->dwFamily.c_str())) {
                     break;
                 }
                 UINT64 next = static_cast<UINT64>(collectionRange.startPosition) +
@@ -1839,11 +2006,12 @@ HRESULT STDMETHODCALLTYPE SetFontFamilyName_Hook(
                 position = next;
             }
             if (position >= end) {
-                HRESULT hr = g_origSetFontFamilyName(self, rt->dwFamily.c_str(), range);
+                InternalScope scope;
+                HRESULT hr = g_origSetFontFamilyName(self, font->dwFamily.c_str(), range);
                 if (SUCCEEDED(hr)) {
                     if (!g_loggedDwLayout.exchange(true, std::memory_order_relaxed)) {
                         Wh_Log(L"DirectWrite set a layout range from '%s' to '%s'",
-                               family, rt->dwFamily.c_str());
+                               family, font->dwFamily.c_str());
                     }
                     return hr;
                 }
@@ -1946,8 +2114,17 @@ void InstallDirectWriteHooks(const Runtime& rt) {
 
     ComPtr<IDWriteTextFormat> testFormat;
     ComPtr<IDWriteTextLayout> testLayout;
+    const auto* testFamily = &rt.defaultFont.dwFamily;
+    if (testFamily->empty()) {
+        for (const auto& rule : rt.fontRules) {
+            if (!rule.replacement.dwFamily.empty()) {
+                testFamily = &rule.replacement.dwFamily;
+                break;
+            }
+        }
+    }
     if (SUCCEEDED(g_dwFactory->CreateTextFormat(
-            rt.dwFamily.c_str(), nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+            testFamily->c_str(), nullptr, DWRITE_FONT_WEIGHT_NORMAL,
             DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f,
             L"en-us", testFormat.GetAddressOf())) &&
         SUCCEEDED(g_dwFactory->CreateTextLayout(
@@ -2041,7 +2218,7 @@ BOOL Wh_ModInit() {
 
     std::shared_ptr<const Runtime> runtime;
     try {
-        runtime = BuildRuntime();
+        runtime = BuildRuntime(processName, false);
     } catch (...) {
         Wh_Log(L"Exception while resolving fonts; mod will stay pass-through");
         return TRUE;
@@ -2070,9 +2247,10 @@ void Wh_ModSettingsChanged() {
     if (!g_dwFactory) {
         CreateDWriteFactory();
     }
+    auto processName = GetProcessBaseName();
     std::shared_ptr<Runtime> runtime;
     try {
-        runtime = BuildRuntime();
+        runtime = BuildRuntime(processName, true);
     } catch (...) {
         Wh_Log(
             L"Exception while rebuilding settings; keeping the previous "
@@ -2080,7 +2258,7 @@ void Wh_ModSettingsChanged() {
         return;
     }
     PublishRuntime(runtime);
-    LogInitInfo(*runtime, GetProcessBaseName());
+    LogInitInfo(*runtime, processName);
     const bool hadGdiHooks = g_gdiHooksInstalled;
     const bool hadDwHooks = g_dwHooksInstalled;
     InstallGdiHooks(*runtime);
