@@ -1,3 +1,7 @@
+## 0.24.1 ([Nov 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/63d4c4446923e66196601f466bfa7e844e93245f/mods/snap-sentry.wh.cpp))
+
+* Shorter, simpler descriptions for every setting. The details are still in the readme
+
 ## 0.24.0 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bdcfeae3c89b790c4ede7aefb587e06ba091bd23/mods/snap-sentry.wh.cpp))
 
 * Optional small picture of the screenshot in the notification

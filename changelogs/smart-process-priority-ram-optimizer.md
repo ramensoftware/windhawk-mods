@@ -1,3 +1,11 @@
+## 1.1.1 ([Nov 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/796dc6024cf28ef0f8046323f1b4a184a6781ffb/mods/smart-process-priority-ram-optimizer.wh.cpp))
+
+- Enhance game detection for full-screen and registered Windows games
+- Automatically reduce RAM usage of inactive browser tabs
+- Protect modern online gaming and voice traffic (Discord)
+- Prevent OBS Studio from being trimmed in the background
+- Improve power plan switching stability
+
 ## 1.1.0 ([Nov 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/87f4f812edb83933de2b471578fe6f03ab1dd669/mods/smart-process-priority-ram-optimizer.wh.cpp))
 
 - Support custom power plan GUID and Ultimate Performance with strict AC check

@@ -18,6 +18,15 @@
       "parentId": null,
       "timestamp": 1793007647,
       "votes": 0
+    },
+    {
+      "authorName": "dirg3music",
+      "content": "Honestly my favorite windhawk mod, close second being taskbar auto-hide instant show. Ever since Rectify11 stopped development after the 24h2 release of Windows i've been looking for a solid replacement for it's modernization, mainly system-wide dark mode, of win32 elements. This fits that usecase perfectly and if you, the dev, are reading this: please don't stop improving on this. It's damn near perfect for me and I know i'm not the only one who has wanted something like this for years. You're doing a great job with this and i hope you don't get discouraged by negative reviews because you really do have something special here.",
+      "id": 150,
+      "modVersion": "1.0.4",
+      "parentId": null,
+      "timestamp": 1795448501,
+      "votes": 0
     }
   ]
 }

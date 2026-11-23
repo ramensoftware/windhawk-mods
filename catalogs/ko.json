@@ -16668,12 +16668,12 @@
         "ratingUsers": 71,
         "reviews": 0,
         "trendingSorting": 8.081365041136895,
-        "updated": 1794855911000,
+        "updated": 1795471502000,
         "users": 2042
       },
       "metadata": {
         "author": "gilnett",
-        "compilerOptions": "-lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32 -lpowrprof -liphlpapi",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32 -lpowrprof -liphlpapi",
         "description": "Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.",
         "donateUrl": "https://buymeacoffee.com/gilnett",
         "github": "https://github.com/gilnett",
@@ -16682,7 +16682,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Smart Process Priority & RAM Optimizer",
-        "version": "1.1.0"
+        "version": "1.1.1"
       }
     },
     "smooth-desktop-icons-auto-hide": {
@@ -16876,7 +16876,7 @@
         "ratingUsers": 19,
         "reviews": 1,
         "trendingSorting": -0.1002501173777822,
-        "updated": 1795313091000,
+        "updated": 1795471496000,
         "users": 147
       },
       "metadata": {
@@ -16889,7 +16889,7 @@
         ],
         "license": "GPL-3.0",
         "name": "SnapSentry",
-        "version": "0.24.0"
+        "version": "0.24.1"
       }
     },
     "snipping-tool-pen-text": {
@@ -23208,7 +23208,7 @@
         "rating": 9,
         "ratingBreakdown": [9, 10, 21, 22, 147],
         "ratingUsers": 209,
-        "reviews": 2,
+        "reviews": 3,
         "trendingSorting": 1.4410065655558184,
         "updated": 1792148509000,
         "users": 3914
@@ -24027,7 +24027,7 @@
         "ratingUsers": 10,
         "reviews": 0,
         "trendingSorting": 5.06476490947316,
-        "updated": 1794457972000,
+        "updated": 1795471490000,
         "users": 120
       },
       "metadata": {
@@ -24035,7 +24035,7 @@
           "x86-64"
         ],
         "author": "babamohammed",
-        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lgdiplus -lgdi32 -luser32 -ldwmapi -lshell32 -lole32 -luuid -lpropsys -loleaut32 -lshlwapi -lcomctl32 -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lwinhttp -lbcrypt -lwlanapi -lsetupapi -lruntimeobject",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lgdiplus -lgdi32 -luser32 -ldwmapi -lshell32 -lole32 -luuid -lpropsys -loleaut32 -lshlwapi -lcomctl32 -lpsapi -ladvapi32 -liphlpapi -lws2_32 -lwinhttp -lbcrypt -lwlanapi -lsetupapi -lruntimeobject -lpowrprof -luxtheme",
         "description": "This mod recreates Windows 7/8/8.1-inspired taskbars on Windows 10 and Windows 11",
         "github": "https://github.com/babamohammed2022",
         "include": [
@@ -24043,7 +24043,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "Windows 7/8/8.1 Taskbar Recreation",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "win95-nt4-menubars": {

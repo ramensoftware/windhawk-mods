@@ -29,6 +29,37 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4b120b2bf65bbe07e66560d0a408bd5e2ef67540/mods/acrylic-media-pill.wh.cpp"
       }
     },
+    "adaptive-tray-contrast": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795471852872,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795471852872,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "amd64"
+        ],
+        "author": "StillDialing",
+        "compilerOptions": "-lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32",
+        "description": "Adjust tray glyphs, clock and date characters, taskbar button themes and supported app icons to their local backgrounds.",
+        "github": "https://github.com/StillDialing",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Adaptive tray contrast",
+        "version": "0.3.15"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7868",
+      "source": {
+        "sha256": "141d57e41b65153f43609353ef211545f73a2359ae6c4b6de4f9abc82c68665d",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/7b67ea24652c0452c6ba9b4bb8b84ce00531b715/mods/adaptive-tray-contrast.wh.cpp"
+      }
+    },
     "aleph-canvas": {
       "details": {
         "defaultSorting": 0,
@@ -219,6 +250,104 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4b23515094a8a13273ebccf7a9399aec126cbb9c/mods/desktop-weather-overlay.wh.cpp"
       }
     },
+    "desktop-window-keys": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795471852872,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795471852872,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Anqarium",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -ldwmapi -lgdi32",
+        "description": "Move the active window between virtual desktops (Ctrl+Win+Shift+Left/Right) and pin it to all desktops (Up/Down)",
+        "github": "https://github.com/Anqarium",
+        "homepage": "https://github.com/Anqarium/desktop-window-keys",
+        "include": [
+          "windhawk.exe",
+          "windhawk-mod.exe",
+          "windhawk-mod-uiaccess.exe"
+        ],
+        "name": "Desktop Window Keys",
+        "version": "0.3.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7886",
+      "source": {
+        "sha256": "5845b6995f6845cb30db32ca532563119544b39c89b715db37ab19c6aff89689",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4398b4841ab98d76e16b35d93af4f2e561e62ea3/mods/desktop-window-keys.wh.cpp"
+      }
+    },
+    "enable-preview-pane-for-downloads": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795471852872,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795471852872,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86",
+          "x86-64"
+        ],
+        "author": "javierpetrucci",
+        "compilerOptions": "-lole32 -lshlwapi -lurlmon",
+        "description": "Lets the File Explorer preview pane show selected file types (PDF by default) that are marked as downloaded from the Internet, without removing the mark",
+        "github": "https://github.com/javierpetrucci",
+        "homepage": "https://github.com/javierpetrucci/windhawk-enable-preview-pane-for-downloads",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Enable Preview Pane for Downloaded Files",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7819",
+      "source": {
+        "sha256": "6e28fbf0a925c7e65a6620b144a612f5926cc3cea60bbb6d88a88e01a5f94b20",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/dd138b042b15b3ed83862a98cdbbea275107a466/mods/enable-preview-pane-for-downloads.wh.cpp"
+      }
+    },
+    "explorer-extras": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795471852872,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795471852872,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "AristideBH",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -ladvapi32 -lgdi32 -lcomctl32 -lpropsys -lmsimg32",
+        "description": "Additions for File Explorer, one switch per feature: Columns (Miller columns), a details and preview pane (PDF, text, Markdown, images, video, sound), colour labels (tags), and a toolbar with tighter gaps, a resizable search box and round corners.",
+        "donateUrl": "https://ko-fi.com/aristidebh",
+        "github": "https://github.com/AristideBH",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Extras",
+        "version": "1.0.20"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7530",
+      "source": {
+        "sha256": "61e9f168dae00dd30a04c2e3384b026e728f252055ee8f9c08cc9535d5a8f4ca",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/cf8ec0615049fbdcc338edd3b42c1cb87f41cbc4/mods/explorer-extras.wh.cpp"
+      }
+    },
     "explorer-font-size-changer": {
       "details": {
         "defaultSorting": 0,
@@ -339,6 +468,38 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/721a9137674f8c731562f377925c9027c7af0a6d/mods/explorer-tabs-session-saver-revamped.wh.cpp"
       }
     },
+    "extra-dim": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795471852872,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795471852872,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DpakB",
+        "compilerOptions": "-luser32 -lgdi32 -lshell32 -ladvapi32 -lole32",
+        "description": "Extra dim below the minimum brightness, plus a warm evening tint, in a fluent flyout with a tray icon and global hotkeys.",
+        "donateUrl": "https://buymeacoffee.com/dpakb",
+        "github": "https://github.com/DeepakBalaraman",
+        "homepage": "https://dpakb.com",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Extra Dim",
+        "twitter": "https://twitter.com/dpakb_",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7874",
+      "source": {
+        "sha256": "41fff36ad8fe032c8834c1bcb7ea15902395e17ea8e1e3d6deac63bd208c8059",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/34ed18bc0a5327eb98f23a85ad851e849b2f9fe3/mods/extra-dim.wh.cpp"
+      }
+    },
     "lockscreen-background": {
       "details": {
         "defaultSorting": 0,
@@ -373,6 +534,51 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
       }
     },
+    "multiwm-companion": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795471852872,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795471852872,
+        "users": 0
+      },
+      "metadata": {
+        "author": "meteoni",
+        "compilerOptions": "-ldwmapi",
+        "description": "Opens new windows directly in the slot MultiWM will give them, so they don't appear elsewhere first and jump.",
+        "exclude": [
+          "windhawk.exe",
+          "windhawk-mod.exe",
+          "windhawk-mod-uiaccess.exe",
+          "ShellExperienceHost.exe",
+          "StartMenuExperienceHost.exe",
+          "SearchHost.exe",
+          "LockApp.exe",
+          "SystemSettings.exe",
+          "TextInputHost.exe",
+          "Widgets.exe",
+          "ctfmon.exe",
+          "GameBarPresenceWriter.exe",
+          "backgroundTaskHost.exe",
+          "SecurityHealthSystray.exe"
+        ],
+        "github": "https://github.com/Meteoni",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "MultiWM Companion",
+        "version": "0.3.2"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7880",
+      "source": {
+        "sha256": "77fd430c0b37e65269c9d6abee9c066aed1517030831ab8b313d169980f50235",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/9989e5c525e7812affc4373d7b9285679f07f99c/mods/multiwm-companion.wh.cpp"
+      }
+    },
     "notepad-pro": {
       "details": {
         "defaultSorting": 0,
@@ -402,6 +608,42 @@
       "source": {
         "sha256": "44fc9db3c5423241f9ce27f8d41e4f44c9e3f53bf08423d8ffb8d79ab7a176b6",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d769b0296ae25cf5462fdaab6991aadddc590bf4/mods/notepad-pro.wh.cpp"
+      }
+    },
+    "quick-link-menu": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795471852872,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795471852872,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "CTravkin",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lcomctl32 -lruntimeobject -lole32 -loleaut32 -lshell32 -lshlwapi -ladvapi32 -liphlpapi -luuid -ldwrite",
+        "description": "Кастомизация и расширение возможностей меню Win+X (правый клик по кнопке «Пуск»)",
+        "github": "https://github.com/CTravkin",
+        "homepage": "https://ctravkin.ru",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Quick Link Menu",
+        "version": "1.1.2"
+      },
+      "metadataEnglish": {
+        "description": "Customize the Win+X menu and add more commands (right-click the Start button)"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7869",
+      "source": {
+        "sha256": "9530df80d8102d851dd7b530dc2cc75c24e0585d49073cc41709a2f9a89b4c58",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/22c97ed54ca9899c0e2cbc66ac117255e7a415ea/mods/quick-link-menu.wh.cpp"
       }
     },
     "same-app-window-cycler": {
@@ -525,6 +767,35 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/10467409bdc9c514819149ce7e797d5db31ce907/mods/taskbar-app-volume-mixer.wh.cpp"
       }
     },
+    "taskbar-audio-media-suite": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795471852872,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795471852872,
+        "users": 0
+      },
+      "metadata": {
+        "author": "MrSpy00",
+        "compilerOptions": "-lole32 -loleaut32 -ldwmapi -lgdi32 -luser32 -lwtsapi32 -lwindowsapp -lruntimeobject -lshcore -lgdiplus -lshell32 -luuid -lkernel32",
+        "description": "Integrated taskbar audio spectrum visualizer, media info/controls, and media/volume flyouts with 8 styles and 6 color modes.",
+        "github": "https://github.com/MrSpy00",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Taskbar Audio & Media Suite",
+        "version": "0.1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7833",
+      "source": {
+        "sha256": "86ccb4cdd5677c1c9efdcd09386e924efc3e9541c6c5f7744b040ebcee20b840",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/14cf534db315314c0f8954750c966049036530e3/mods/taskbar-audio-media-suite.wh.cpp"
+      }
+    },
     "taskbar-disable-per-monitor": {
       "details": {
         "defaultSorting": 0,
@@ -626,28 +897,25 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795320601968,
+        "updated": 1795471852872,
         "users": 0
       },
       "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
         "author": "DavidHiFi",
-        "compilerOptions": "-lwinhttp -lgdiplus -lgdi32 -luser32 -ld2d1 -ldwrite",
+        "compilerOptions": "-lwinhttp -lgdiplus -lgdi32 -luser32 -ld2d1 -ldwrite -lshell32",
         "description": "Current weather on the taskbar with a details card on hover. No Widgets, browser or API key needed",
         "github": "https://github.com/DavidHiFi",
         "include": [
-          "explorer.exe"
+          "windhawk.exe"
         ],
         "license": "MIT",
         "name": "Taskbar Weather",
-        "version": "1.5.2"
+        "version": "1.6.1"
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/5834",
       "source": {
-        "sha256": "b1247fac45f44a2b3d009bdfab32da271655d3d52cc47c44b46a498f21264a9d",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/30f0ece20ce9ac15ba7c8ca0aa79238d6064ad1c/mods/taskbar-weather.wh.cpp"
+        "sha256": "789d28c43e8cdc92e178160d6331af8485ffdbc0457757a2a941da36beb4b64d",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/eb8cc7f8e45c20eb6fd4026a350afb74d6fb70f4/mods/taskbar-weather.wh.cpp"
       }
     },
     "taskbar-wireless-battery-widget": {
@@ -768,6 +1036,40 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d6c26ce332b2eb14e42ee941a895f082e3207cf2/mods/ultimate-minimize-animation.wh.cpp"
       }
     },
+    "uninstall-here": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795471852872,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795471852872,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Luiz Bizzio",
+        "compilerOptions": "-ladvapi32 -lole32 -loleaut32 -lruntimeobject -lmsi -lshell32 -luser32 -luuid -lversion -lwintrust -lcrypt32",
+        "description": "Uninstall desktop apps directly from Start without opening Settings or Control Panel.",
+        "donateUrl": "https://github.com/sponsors/luizbizzio",
+        "github": "https://github.com/luizbizzio",
+        "homepage": "https://github.com/luizbizzio/uninstall-here",
+        "include": [
+          "StartMenuExperienceHost.exe"
+        ],
+        "license": "Apache-2.0",
+        "name": "Uninstall Here",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7876",
+      "source": {
+        "sha256": "1fcb5008cad3fd3ee8829a5d714fe11044dca7dcae75d20924162a68fe96dd61",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6b835b34f325f586d4c5fc5516b9b5358b01f39a/mods/uninstall-here.wh.cpp"
+      }
+    },
     "volume-key-step": {
       "details": {
         "defaultSorting": 0,
@@ -804,7 +1106,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795370788861,
+        "updated": 1795471852872,
         "users": 0
       },
       "metadata": {
@@ -823,8 +1125,8 @@
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7751",
       "source": {
-        "sha256": "fce9059585da932cd31113f4479f90e46360b390d338f5116c8940fb031eeb38",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/fa498fd213319bfb9c206317039ab53762c999be/mods/win7-user-account-page-restorer.wh.cpp"
+        "sha256": "d2be891703476323e82c83bcac24625862f27780e68080bf42cf9a311a3deda6",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/5e396031f6c3bf3854eeabfe98bfb1c521c847e0/mods/win7-user-account-page-restorer.wh.cpp"
       }
     },
     "windows-11-lock-screen-styler": {

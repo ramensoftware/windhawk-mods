@@ -2,12 +2,70 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-23T09:03:31.000Z</updated>
+    <updated>2026-11-23T22:05:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Smart Process Priority & RAM Optimizer 1.1.1]]></title>
+        <id>https://windhawk.net/mods/smart-process-priority-ram-optimizer#796dc6024cf28ef0f8046323f1b4a184a6781ffb</id>
+        <link href="https://windhawk.net/mods/smart-process-priority-ram-optimizer"/>
+        <updated>2026-11-23T22:05:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Enhance game detection for full-screen and registered Windows games</li>
+<li>Automatically reduce RAM usage of inactive browser tabs</li>
+<li>Protect modern online gaming and voice traffic (Discord)</li>
+<li>Prevent OBS Studio from being trimmed in the background</li>
+<li>Improve power plan switching stability</li>
+</ul>
+]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[SnapSentry 0.24.1]]></title>
+        <id>https://windhawk.net/mods/snap-sentry#63d4c4446923e66196601f466bfa7e844e93245f</id>
+        <link href="https://windhawk.net/mods/snap-sentry"/>
+        <updated>2026-11-23T22:04:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Shorter, simpler descriptions for every setting. The details are still in the readme</li>
+</ul>
+]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8/8.1 Taskbar Recreation 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win81-taskbar-recreation#c86494e9b9ffc0213556e43966e47f34be4f6837</id>
+        <link href="https://windhawk.net/mods/win81-taskbar-recreation"/>
+        <updated>2026-11-23T22:04:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved the appearance of the main skins</li>
+<li>Added more skins (credits to WinBoeing777, MLC_YT and Allison for the references and testing)</li>
+<li>Improved hover effects and the Start button’s appearance when the menu is open</li>
+<li>Improved the interface of the Metro language flyout (credits to AdministratoX)</li>
+<li>Improved handling of the native taskbar to reduce overlaps with the recreated taskbar</li>
+<li>Improved responsiveness of the taskbar and the Customize page for notification icons</li>
+<li>Improved multi-monitor support, vertical layouts, and Aero Peek (best-effort)</li>
+<li>Updated the network, volume, and battery menus, with support for additional languages</li>
+<li>Improved Open-Shell compatibility and Windows key behavior</li>
+<li>Mitigated a defect with the battery flyout</li>
+<li>Added an auto-hide feature</li>
+<li>Added balloon notifications</li>
+<li>Applied general fixes and stability improvements</li>
+</ul>
+]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove Shortcut Arrow Icons 2.0.1]]></title>
         <id>https://windhawk.net/mods/remove-shortcut-arrows#7a68f9db4ab7ce1f00951688c7381b9b3cc99de3</id>
@@ -834,96 +892,6 @@ the shortcut when that is what you picked.</li>
         <author>
             <name>yumeyao</name>
             <uri>https://github.com/yumeyao</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SMTC Now Playing Desktop Widgets 1.0.11]]></title>
-        <id>https://windhawk.net/mods/smtc-now-playing-widgets#f9c2d2b7d92dd48c22becca49e1511d7f4134cd9</id>
-        <link href="https://windhawk.net/mods/smtc-now-playing-widgets"/>
-        <updated>2026-11-22T05:00:09.000Z</updated>
-        <content type="html"><![CDATA[<h1>SMTC Now Playing Desktop Widgets</h1>
-<p>Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows 11 desktop using the native Windows System Media Transport Controls (SMTC) API.</p>
-<p><img src="https://raw.githubusercontent.com/minster586/windhawk-assets/main/img.webp" alt="SMTC Now Playing Desktop Widgets Preview"></p>
-<p>When album art is unavailable, the widgets display an embedded default image.</p>
-<h2>Themes</h2>
-<ul>
-<li><strong>Standard</strong>: Wide horizontal Acrylic card with rounded album art, bold track/artist text, 5 outlined playback controls, and a progress bar with timestamps.</li>
-<li><strong>Album</strong>: Full-bleed dimmed album art square with centered track/artist text, corner timestamps, and a bottom-edge progress bar.</li>
-<li><strong>Cardstock</strong>: Vertical portrait Acrylic card with full-brightness album art, centered track/artist, and progress bar. Automatically shrinks uniformly when playback controls are disabled.</li>
-<li><strong>Simplified</strong>: Sleek single-row horizontal Acrylic bar with compact art, track/artist text, 5 outlined playback controls, and a clean progress bar without timestamps.</li>
-</ul>
-<h2>Usage</h2>
-<ul>
-<li><strong>Move Widgets</strong>: Left-click and drag any widget across any monitor (unless &quot;Lock Position&quot; is enabled for that instance). Coordinates save automatically.</li>
-<li><strong>Display-Only Mode</strong>: Enable &quot;Disable Playback Controls&quot; on any instance to hide all transport buttons and disable progress bar seeking.</li>
-</ul>
-]]></content>
-        <author>
-            <name>minster586</name>
-            <uri>https://github.com/minster586</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Hello Auto OK 0.1.3]]></title>
-        <id>https://windhawk.net/mods/windows-hello-auto-ok#d32f034946b86a639d2ade33e0af860e7bf02286</id>
-        <link href="https://windhawk.net/mods/windows-hello-auto-ok"/>
-        <updated>2026-11-22T05:00:04.000Z</updated>
-        <content type="html"><![CDATA[<h1>Windows Hello Auto OK</h1>
-<p>Confirms the ready OK button in standard Windows Hello biometric dialogs,
-regardless of the requesting application or interface language.</p>
-<p><img src="https://raw.githubusercontent.com/hermanzamula/windhawk-windows-hello-auto-ok/main/docs/preview.gif" alt="Animated preview"></p>
-<p><em>Illustrated demo using an English interface and the display name User.</em></p>
-<p>Detection uses AutomationId, control types, visibility and enabled state.
-It never matches captions, translated messages, account names or websites.
-Visible dialogs owned by the Windows CredentialUIBroker are monitored directly,
-only while the Hello dialog itself is the foreground window. Visible credential input fields prevent
-automatic confirmation.</p>
-<p>This removes Windows Hello's manual confirmation step: a program requesting
-verification can be approved as soon as Windows recognizes you, provided its
-Hello dialog is active. Background dialogs are never confirmed automatically.</p>
-<p>The mod runs inside CredentialUIBroker.exe, with no helper process or UAC launcher.
-It reacts to window events and checks readiness only while its dialog is active.
-No credential values, account names, or biometric data are read.</p>
-<p>This is an experimental release. Its readiness check describes the standard
-Windows Hello UI structure, not an independent biometric-success API. Windows
-still performs authentication. Custom application dialogs and future changes
-to the system UI may require an update.</p>
-]]></content>
-        <author>
-            <name>hermanzamula</name>
-            <uri>https://github.com/hermanzamula</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Edge No Bleed 1.0.0]]></title>
-        <id>https://windhawk.net/mods/edge-no-bleed#94fec81390dbd142801006fee21a3b72bc08271f</id>
-        <link href="https://windhawk.net/mods/edge-no-bleed"/>
-        <updated>2026-11-22T04:03:31.000Z</updated>
-        <content type="html"><![CDATA[<h1>Edge No Bleed</h1>
-<p>Eliminates the persistent 1-2px margin gap where desktop wallpaper bleeds through along screen edges behind maximized windows.</p>
-<h2>The Problem</h2>
-<p>On Windows 10 and 11, users running dark-mode themes, IDEs, terminals, and browsers frequently notice a razor-thin 1-2px strip of desktop wallpaper leaking through along the edges of maximized windows (especially at the bottom or side monitor borders).</p>
-<h3>Why This Happens</h3>
-<ul>
-<li><strong>DWM Frame Padding &amp; Fractional DPI Rounding:</strong> Windows calculates maximized client coordinates by converting logical device-independent units into physical screen pixels. At fractional display scaling factors (such as 125%, 150%, or 175%), rounding calculations frequently leave a 1-2 physical pixel deficit against the work area, exposing bright desktop wallpaper pixels.</li>
-<li><strong>Invisible Margin Bounds:</strong> Normal Win32 maximized frames hang invisible resize margins off-screen, but custom-chrome and modern applications (such as Chromium, Electron, and Windows Terminal) size their own frames and can fall short of physical display boundaries.</li>
-</ul>
-<h2>How It Works</h2>
-<p><code>Edge No Bleed</code> runs as a dedicated tool mod within Windhawk without injecting invasive hooks into third-party processes. It monitors window position and state changes via out-of-context WinEvents on a dedicated message-loop worker thread:</p>
-<ol>
-<li>When a window is maximized, the mod measures its true visible frame bounds using <code>DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)</code> against the monitor's work area (<code>MONITORINFO::rcWork</code>).</li>
-<li>If a 1-2px fractional rounding gap is detected, the mod expands the window frame via <code>SetWindowPos</code> by the exact measured discrepancy, sealing the edge flush against the screen.</li>
-<li>If an auto-hide taskbar is active on that edge, the mod detects it via <code>SHAppBarMessage(ABM_GETAUTOHIDEBAREX)</code> and preserves the 1px mouse-hover reveal strip.</li>
-</ol>
-<h2>Comparison With Other Mods</h2>
-<ul>
-<li><strong>Maximized Window Margins:</strong> That mod intentionally adds large margins (10px to 200px, macOS-style) by shrinking the system work area with AppBars. <code>Edge No Bleed</code> does the opposite: it eliminates unwanted 1-2px fractional DPI gaps so maximized windows sit completely flush.</li>
-<li><strong>Classic Maximized Windows Fix:</strong> That mod is exclusively designed for the legacy Classic 3D Theme on Windows 10/11 using region clipping (<code>SetWindowRgn</code>). <code>Edge No Bleed</code> targets standard modern DWM themes and dark-mode setups.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
         </author>
     </entry>
 </feed>
