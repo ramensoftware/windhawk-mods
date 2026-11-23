@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.24.0
+// @version         0.24.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -175,80 +175,79 @@ page](https://github.com/mario0318/SnapSentry/issues).
 - clipboardMode: image
   $name: What to copy to the clipboard
   $options:
-  - image: Image, the picture itself (best if you also delete)
-  - file: File, for pasting into File Explorer (never deleted)
-  - path: Path, the file's location as text (never deleted)
+  - image: Image, the picture itself
+  - file: File, to paste into a folder
+  - path: Path, where the file is, as text
   - none: None, leave the clipboard alone
 - pathFormat: plain
-  $name: Path format
-  $description: Only used when What to copy is Path. File link is clickable, and Markdown shows the picture when pasted into notes or a bug report.
+  $name: How to write the path
+  $description: Only used with Path.
   $options:
-  - plain: Plain path
-  - quoted: Quoted path
-  - uri: File link
-  - markdown: Markdown image
+  - plain: Plain, just the path
+  - quoted: Quoted, the path in quotes
+  - uri: File link, a clickable link
+  - markdown: Markdown, shows the picture in notes and bug reports
 
 # ---- Deleting the screenshot ----
 - deleteFile: false
   $name: Delete the screenshot after copying
-  $description: Off by default, since deleting is the part you cannot undo. Removes the file once the copy has succeeded. Only applies when copying the picture or nothing, because copying the file or its location has to leave it in place. When copying the picture, a multi-frame image, such as a multi-page TIFF or animated GIF, is kept rather than deleted, since only its first frame can go on the clipboard.
+  $description: Only with Image or None. With Image, animated or multi-page images are kept.
 - recycle: true
   $name: Delete to the Recycle Bin
-  $description: Ordinary automatic deletion and the popup buttons send files to the Recycle Bin so you can get them back. Turn this off for permanent deletion. Identical recent screenshots always use the Recycle Bin regardless of this choice.
+  $description: Turn off to delete for good.
 - removeExactDuplicates: false
   $name: Remove identical recent screenshots
-  $description: In Image clipboard mode, recycles an exact byte-for-byte repeat among up to 64 images handled in the last ten minutes, only on the automatic action and after its copy succeeds. Duplicates always go to the Recycle Bin, even if ordinary deletion is set to permanent or Delete the screenshot after copying is off. A failed recycle keeps the file. The earlier copy must still have identical contents when cleanup runs. Normal auto-delete usually removes earlier copies before a duplicate arrives. The comparison resets on settings changes or watcher restarts and never scans older files.
+  $description: Took the same screenshot twice within ten minutes? The extra copy goes to the Recycle Bin, but with the popup on, only when the countdown runs out. Only with Image.
 
 # ---- The popup ----
 - showActionPopup: false
-  $name: Show a popup with buttons after each screenshot
-  $description: Each screenshot brings up a notification with Delete, Copy and delete, and Keep buttons (each can be turned off below), or a plain dialog if the notification cannot be set up on this machine. If you have turned SnapSentry's notifications off in Windows, it stays quiet instead, still copying but never prompting and never deleting. A multi-page or animated image is copied and kept rather than deleted, since only its first frame can go on the clipboard, and afterwards a short notice says so when the notification is available. While it is on, a temporary registry entry gives the notification its name and buttons. Windows discards it at sign-out, and SnapSentry removes it when you turn this off or disable the mod. Windows may keep SnapSentry listed under Settings > System > Notifications. Left off, SnapSentry copies and leaves nothing behind.
+  $name: Ask what to do after each screenshot
+  $description: Shows a notification with buttons to delete or keep it. While it's on, a temporary registry entry gives the notification its name. Windows may keep SnapSentry listed in its notification settings.
 - delaySeconds: 5
-  $name: Seconds to wait before the automatic action
-  $description: The countdown before the automatic action runs. With the popup on, 0 waits for you to click instead, giving up after 10 minutes so it cannot wait forever. With the popup off, 0 acts as soon as the copy is done. A countdown no longer holds up the next screenshot, which is copied straight away. Popups appear one at a time. Maximum 3600.
+  $name: Seconds before the automatic choice
+  $description: With the popup on, 0 waits for your click (up to 10 minutes). Maximum 3600.
 - popupPreview: false
-  $name: Show a preview in the notification
-  $description: Adds a picture of the screenshot to the notification. A small copy is saved in SnapSentry's storage folder while the notification is up and deleted when it closes. That folder is in Windhawk's data folder, outside your user profile. The plain dialog never shows a preview.
+  $name: Show a preview
+  $description: A small picture of the screenshot in the notification. While it's up, a temporary copy sits in Windhawk's data folder, which every account on the PC shares.
 - popupShowFolder: false
-  $name: Show the folder in the popup
-  $description: Shows which folder the screenshot is in, under its name, in the notification and the dialog.
+  $name: Show the folder
+  $description: Shows where the screenshot was saved.
 - popupClick: copy
-  $name: Clicking the notification itself
-  $description: What happens when you click the notification rather than one of its buttons. None of these delete the screenshot.
+  $name: Clicking the notification
+  $description: Never deletes anything.
   $options:
-  - copy: Copy as usual and keep the file
-  - open: Open the screenshot, copy as usual and keep the file
-  - folder: Show it in File Explorer, copy as usual and keep the file
-  - keep: Keep the file and don't copy
+  - copy: Copy, copy it and keep the file
+  - open: Open, open the screenshot and copy it
+  - folder: Folder, show it in File Explorer and copy it
+  - keep: Keep, keep it without copying
 - popupDeleteButton: true
-  $name: Delete button in the notification
-  $description: Never shown when copying the file or its location, since those have to leave the file in place.
+  $name: Delete button
 - popupCopyDeleteButton: true
-  $name: Copy and delete button in the notification
+  $name: Copy and delete button
 - popupKeepButton: true
-  $name: Keep button in the notification
-  $description: With every button turned off, the notification just shows the screenshot, and Windows hides it after about 25 seconds like any other notification. If the countdown or a click hasn't decided by then, the screenshot is copied and kept. The plain dialog always shows every button.
+  $name: Keep button
+  $description: With no buttons, the notification just shows the screenshot. If the countdown doesn't decide first, it is copied and kept.
 - popupHighlight: none
-  $name: Highlighted choice
-  $description: Colors one notification button on Windows 11, green for Keep and red for a button that deletes. In the plain dialog it is the choice that Enter picks, so highlighting a button that deletes means Enter deletes there.
+  $name: Highlighted button
+  $description: Colors one button on Windows 11. In the fallback dialog, Enter picks it.
   $options:
-  - none: None, and Enter picks Keep in the dialog
+  - none: None
   - keep: Keep
   - copydelete: Copy and delete
   - delete: Delete
 
 # ---- Renaming ----
 - renameFromWindow: false
-  $name: Rename screenshots after the active window
-  $description: Names each screenshot after the window that was in front when the file appeared, plus a timestamp, so you can find it later without opening it. The file stays in the same folder.
+  $name: Name screenshots after the window
+  $description: Uses the window you were looking at, plus the time.
 - renameTimeOnly: false
   $name: Name by time only
-  $description: With renaming on, leaves the window or program name out and names each file with just the timestamp, such as 2026-11-03 07-43-31. Handy when a script or another tool watches the folder.
+  $description: With renaming on, leaves out the window name, for example 2026-11-03 07-43-31.
 - captureSessions: false
   $name: Capture sessions
-  $description: Adds a SnapSentry tray icon. Start a session, take screenshots, then review their order and captions and export a contact sheet and Markdown packet. Session screenshots are always kept, including when ordinary deletion or duplicate removal is enabled. Sessions are limited to 64 images. Disabling the mod discards only the review list, never the images.
+  $description: Adds a tray icon. Take a batch of screenshots, put them in order, add captions and export them together. Session screenshots are never deleted.
 - sessionHotkey: F8
-  $name: Session hotkey
+  $name: Session shortcut
   $options:
   - F1: Ctrl+Alt+F1
   - F2: Ctrl+Alt+F2
@@ -261,15 +260,15 @@ page](https://github.com/mario0318/SnapSentry/issues).
   - F9: Ctrl+Alt+F9
   - F10: Ctrl+Alt+F10
   - F11: Ctrl+Alt+F11
-  $description: Starts the first session, finishes recording, or reopens the existing review. Use Start session or the tray menu for a new session. The tray menu is available if the shortcut is already in use.
+  $description: Starts a session or opens its review. The tray menu works too.
 
 # ---- Advanced ----
 - folder: ""
-  $name: Folder to watch (leave empty for Screenshots)
-  $description: Empty watches your Windows Screenshots folder, wherever it is. To watch somewhere else, paste the full path to that folder here, for example C:\Users\You\Pictures\Captures or %USERPROFILE%\Pictures\ShareX. Anything arriving in the folder you choose is handled the same way, so with deletion on, other images saved there are deleted too.
+  $name: Folder to watch
+  $description: Leave empty for your Screenshots folder, or paste a full path such as %USERPROFILE%\Pictures\ShareX. Every new image saved here is treated as a screenshot, so don't pick your Downloads folder.
 - logDetails: false
-  $name: Verbose logging (may include file paths)
-  $description: Off keeps file paths out of the log. Turn this on only while troubleshooting.
+  $name: Detailed log
+  $description: For troubleshooting. The log will include file paths.
 */
 // ==/WindhawkModSettings==
 
