@@ -8,6 +8,7 @@
 // @twitter         https://twitter.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         ctfmon.exe
+// @include         LockApp.exe
 // @compilerOptions -lwtsapi32
 // @license         MIT
 // ==/WindhawkMod==
@@ -18,12 +19,15 @@
 * This mod allows pinning any window on top of immersive UI components (Action Center, Start Menu, search, volume HUD, taskbar flyouts, etc.), fullscreen UWP apps, games in borderless or optimized fullscreen mode, Task Manager, and any other ordinary "Always On Top" windows.
 * Press the configured hotkey (default: `Win+Ctrl+Shift+T`) to toggle the super-topmost state of the current foreground window.
 * This mod absolutely requires the UIAccess privilege, so it may not work with a portable Windhawk installation running without admin.
-* Known issue: It won't work with UWP windows.
+    * The mod runs inside `ctfmon.exe`. This mod won't work if `ctfmon.exe` is disabled by debloating tools. Also, the mod process will show up in Task Manager as second `CTF Loader` process.
+* Known issue: It won't work with UWP windows and layered windows (`WS_EX_LAYERED`).
 * Fullscreen games might minimize when focusing the topmost window. You will need a workaround, such as the [Ignore Focus Loss](https://windhawk.net/mods/ignore-focus-loss) mod.
 ## ⚠ Important security notice ⚠
 * Windows set as super-topmost by this mod may **show on top of Windows 10/11's default lock screen, which might expose sensitive information or allow logon bypass.**
 * This mod tries its best to avoid this issue by temporarily restoring all super-topmost windows to the original state while locked, but it could go wrong (e.g., the mod process dies with super-topmost windows left).
-* If this concerns you, either do not use this mod, or disable the lock screen entirely ([use the NoLockScreen registry/GPO](https://www.elevenforum.com/t/enable-or-disable-lock-screen-in-windows-11.1287/) or rename `LockApp.exe`)
+* If this concerns you, either do not use this mod, or disable the lock screen entirely ([use the NoLockScreen registry/GPO](https://www.elevenforum.com/t/enable-or-disable-lock-screen-in-windows-11.1287/)) and/or enable the mod's mitigation in the options page.
+
+![Animated Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/supertopmost.webp)
 ## Hotkey
 Change the hotkey in the mod's settings. Write any modifiers and exactly one
 key, joined by `+`, for example `Ctrl+Alt+M`, `Win+Shift+F9` or `Pause`.
@@ -43,12 +47,17 @@ already own it. Turn on logging in the mod's Advanced tab to see why.
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
-/* 
+/*
 - hotkey: "Win+Ctrl+Shift+T"
   $name: Hotkey
   $name:ko-KR: 핫키
   $description: Refer to the mod details for the hotkey syntax.
   $description:ko-KR: 모드 설명에서 핫키 구문을 참조하세요.
+- noLockApp: false
+  $name: Disable the modern lock screen experience to mitigate the security risk
+  $name:ko-KR: 보안 위협을 완화하기 위해 신형 잠금 화면 경험 비활성화
+  $description: Prevents LockApp.exe from launching, to mitigate the security risk described in the mod details page. Lock screen implementation in LogonUI.exe will be used instead, and some modern lock screen features might be missing.
+  $description:ko-KR: 모드 설명 페이지에서 설명된 보안 위협을 완화하기 위해 LockApp.exe가 실행되는 것을 차단합니다. LogonUI.exe의 잠금 화면 구현이 대신 사용되며, 일부 신형 잠금 화면 기능을 사용할 수 없을 수도 있습니다.
 */
 // ==/WindhawkModSettings==
 
@@ -64,6 +73,7 @@ already own it. Turn on logging in the mod's Advanced tab to see why.
 #include <windhawk_utils.h>
 #include <optional>
 #include <vector>
+#include <string_view>
 #include <wtsapi32.h>
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
@@ -279,19 +289,33 @@ void ToggleAllManagedWindows(HWND hOverlay, bool setSuperTopMost) {
     SetWindowPos(hOverlay, setSuperTopMost ? HWND_NOTOPMOST : HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     for (StWindow stWnd : g_stWindows) {
         if (IsWindow(stWnd.hWnd)) {
-            SetParent(stWnd.hWnd, hOverlay);
+            if (!IsHungAppWindow(stWnd.hWnd)) {
+                SetParent(stWnd.hWnd, hOverlay);
+            }
+        } else {
+            std::erase_if(g_stWindows, [&](StWindow stWnd2) {
+                return stWnd.hWnd == stWnd2.hWnd;
+            });
         }
     }
     SetWindowPos(hOverlay, setSuperTopMost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
     for (StWindow stWnd : g_stWindows) {
         if (IsWindow(stWnd.hWnd)) {
-            SetParent(stWnd.hWnd, NULL);
-            if (!setSuperTopMost) {
-                SetWindowPos(stWnd.hWnd, stWnd.wasTopmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            if (!IsHungAppWindow(stWnd.hWnd)) {
+                SetParent(stWnd.hWnd, NULL);
+                if (!setSuperTopMost) {
+                    SetWindowPos(stWnd.hWnd, stWnd.wasTopmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
+                }
             }
+        } else {
+            std::erase_if(g_stWindows, [&](StWindow stWnd2) {
+                return stWnd.hWnd == stWnd2.hWnd;
+            });
         }
     }
 }
+
+bool g_isLocked = false;
 
 LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
@@ -299,13 +323,21 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             Wh_Log(L"OverlayWndProc WM_CREATE");
             if (!WTSRegisterSessionNotification(hWnd, NOTIFY_FOR_THIS_SESSION)) {
                 Wh_Log(L"WTSRegisterSessionNotification failed, GLE=%d", GetLastError());
+                return -1;
             }
             return 0;
         case WM_HOTKEY:
+            if (g_isLocked) {
+                // All non-Winlogon hotkeys are disabled while locked but just to be safe
+                return 0;
+            }
             switch (wParam) {
                 case HK_DIRECT: {
                     Wh_Log(L"HK_DIRECT");
                     HWND hwndForeground = GetForegroundWindow();
+                    if (IsHungAppWindow(hwndForeground)) {
+                        return 0;
+                    }
                     DWORD dwBand = ZBID_DEFAULT;
                     if (GetWindowBand(hwndForeground, &dwBand)) {
                         bool isOnUIAccessBand = dwBand == ZBID_UIACCESS;
@@ -313,26 +345,48 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                             // We can't touch bands other than those two so ignore windows on other bands
                             return 0;
                         }
-                        // UIAccess processes can freely set their windows' band between ZBID_DESKTOP and ZBID_UIACCESS simply by setting their topmost flag
-                        // SetParent only works with parent window on the same band, so start by making our temp window belong in the same band
-                        // Then move the parent window to the desired band with the topmost trick, then restore the SetParent'd window's original parent (desktop)
-                        // The window still retains the modified band!
-                        bool wasTopmost = (GetWindowLongW(hwndForeground, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-                        SetWindowPos(hWnd, isOnUIAccessBand ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-                        SetParent(hwndForeground, hWnd);
-                        SetWindowPos(hWnd, isOnUIAccessBand ? HWND_NOTOPMOST : HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-                        SetParent(hwndForeground, NULL);
-                        if (isOnUIAccessBand) { // 'was'OnUIAccessBand
-                            std::erase_if(g_stWindows, [=](StWindow stWnd) {
+
+                        LONG exStyle = GetWindowLongW(hwndForeground, GWL_EXSTYLE);
+                        bool wasTopmost = isOnUIAccessBand ? false : (exStyle & WS_EX_TOPMOST) != 0;
+                        if ((exStyle & WS_EX_LAYERED) != 0) {
+                            // Not compatible with SetParent
+                            return 0;
+                        }
+
+                        wchar_t className[256];
+                        GetClassNameW(hWnd, className, 256);
+                        bool isShellWindow = hwndForeground == GetShellWindow() || !wcscmp(className, L"WorkerW") || !wcscmp(className, L"Shell_TrayWnd") || !wcscmp(className, L"Shell_SecondaryTrayWnd");
+                        if (isShellWindow) {
+                            return 0;
+                        }
+
+                        bool ignore = false;
+                        if (isOnUIAccessBand) {
+                            std::erase_if(g_stWindows, [&](StWindow stWnd) {
                                 if (stWnd.hWnd == hwndForeground) {
-                                    SetWindowPos(hwndForeground, stWnd.wasTopmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                                    wasTopmost = stWnd.wasTopmost;
                                     return true;
                                 }
+                                ignore = true;
                                 return false;
                             });
                         } else {
                             g_stWindows.push_back({ hwndForeground, wasTopmost });
                         }
+                        if (ignore) {
+                            // Ignore UIAccess windows that wasn't touched by this mod
+                            return 0;
+                        }
+
+                        // UIAccess processes can freely set their windows' band between ZBID_DESKTOP and ZBID_UIACCESS simply by setting their topmost flag
+                        // SetParent only works with parent window on the same band, so start by making our temp window belong in the same band
+                        // Then move the parent window to the desired band with the topmost method, then restore the SetParent'd window's original parent (desktop)
+                        // The window still retains the modified band!
+                        SetWindowPos(hWnd, isOnUIAccessBand ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                        SetParent(hwndForeground, hWnd);
+                        SetWindowPos(hWnd, isOnUIAccessBand ? HWND_NOTOPMOST : HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                        SetParent(hwndForeground, NULL);
+                        SetWindowPos(hwndForeground, wasTopmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
                     }
                 }
             }
@@ -341,10 +395,12 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             switch (wParam) {
                 case WTS_SESSION_LOCK:
                     Wh_Log(L"Locked");
+                    g_isLocked = true;
                     ToggleAllManagedWindows(hWnd, false);
                     break;
                 case WTS_SESSION_UNLOCK:
                     Wh_Log(L"Unlocked");
+                    g_isLocked = false;
                     ToggleAllManagedWindows(hWnd, true);
                     break;
             }
@@ -382,26 +438,20 @@ HWND CreateOverlayWindow() {
 HANDLE g_stopEvent;
 
 DWORD WINAPI HotkeyThreadProc(LPVOID lpParameter) {
-    if (!g_stopEvent) {
-        return 1;
-    }
-
     if (!SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
     {
         SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
     }
+    SetThreadDpiHostingBehavior(DPI_HOSTING_BEHAVIOR_MIXED);
 
     HWND overlayWnd = CreateOverlayWindow();
-    LoadSettings(overlayWnd);
 
-    // Unfortunately, monitor off APIs are all asynchronous and there is no reliable way to determine when the monitor is actually off
-    // If we immediately restore the gamma right after calling the API, the screen will briefly flash back to normal brightness before turning off
-    // On the other side, waiting enough seconds and setting the gamma ramps after screens are turned off, has random failures that causes the screen to be stuck at black
-    // So just show an black overlay window between the fade and the monitor off to cover up the potential flash, and hide the overlay after a fixed amount of time
     MSG msg;
     if (overlayWnd) {
+        LoadSettings(overlayWnd);
         HANDLE waitHandles[1] = { g_stopEvent };
-        while (TRUE) {
+        bool shouldExit = false;
+        while (!shouldExit) {
             DWORD result = MsgWaitForMultipleObjects(
                 1,
                 waitHandles,
@@ -410,16 +460,14 @@ DWORD WINAPI HotkeyThreadProc(LPVOID lpParameter) {
                 QS_ALLINPUT
             );
             if (result == WAIT_OBJECT_0) {
-                UnregisterHotKey(overlayWnd, HK_DIRECT);
                 DestroyWindow(overlayWnd);
-                UnregisterClassW(OVERLAY_WIN_CLASS, HINST_THISCOMPONENT);
-                return 0;
+                shouldExit = true;
+                break;
             } else if (result == WAIT_OBJECT_0 + 1) {
                 while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
                     if (msg.message == WM_QUIT) {
-                        UnregisterHotKey(overlayWnd, HK_DIRECT);
-                        UnregisterClassW(OVERLAY_WIN_CLASS, HINST_THISCOMPONENT);
-                        return 0;
+                        shouldExit = true;
+                        break;
                     }
                     TranslateMessage(&msg);
                     DispatchMessageW(&msg);
@@ -495,6 +543,15 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    wchar_t exeName[MAX_PATH];
+    GetModuleFileNameW(NULL, exeName, MAX_PATH);
+    if (wcsstr(_wcsupr(exeName), L"\\LOCKAPP.EXE") != NULL) {
+        if (Wh_GetIntSetting(L"noLockApp")) {
+            ExitProcess(0);
+        }
+        return FALSE;
+    }
+
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
@@ -597,7 +654,10 @@ void Wh_ModAfterInit() {
     sei.lpFile = currentProcessPath;
     sei.nShow = SW_SHOWNORMAL;
     sei.lpParameters = commandLine;
-    ShellExecuteExW(&sei);
+    sei.fMask = SEE_MASK_FLAG_NO_UI;
+    if (!ShellExecuteExW(&sei)) {
+        Wh_Log(L"ShellExecuteExW failed, GLE=%u", GetLastError());
+    }
 }
 
 void Wh_ModSettingsChanged() {
