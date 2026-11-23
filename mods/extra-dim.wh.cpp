@@ -57,21 +57,31 @@ tint is off, so the number you see is the level the switch brings back.
 - Under the overlay the pointer stays bright, because Windows draws it above
   every window. **Dim the mouse pointer too**, under Settings > Dim, swaps the
   system cursors for darkened copies while dimming is on and puts them back
-  afterwards. Gamma dims the pointer already.
+  afterwards. Gamma dims the pointer already. A run that ends without its
+  shutdown leaves the swap behind, and the next start undoes it before anything
+  else.
+- The layer sits with ordinary topmost windows, so what Windows raises above them
+  is not covered: the Alt+Tab switcher, shell flyouts that go topmost. Gamma does
+  reach those, because it dims the scanout rather than the desktop.
+- Gamma is the lighter of the two at the same percentage. Drivers limit how far
+  the ramp may go, so the two methods look their most alike at low levels and
+  drift apart as the level rises.
 - Windows never dims the secure desktop, so the UAC prompt and the sign-in screen
   stay bright. That's the platform, not the mod.
 - Levels, toggles, the method and the display choice are remembered unless you
-  switch that off.
-- Everything is stored under `HKCU\Software\DpakB\ExtraDim`. The mod doesn't read
-  or write Windows' Night light setting, and sends nothing anywhere.
+  switch that off. The method and display chosen in the panel are kept beside the
+  setting they replaced, so changing that setting in Windhawk wins them back.
+- Everything is stored in the mod's own Windhawk storage, one set per user
+  account. The mod doesn't read or write Windows' Night light setting, and sends
+  nothing anywhere.
 
 ## Settings
 
 - **Startup** - start dimmed, the level to start at, remember changes.
 - **Appearance** - theme, accent color, panel opacity, panel scale.
 - **Placement** - corner, monitor, fine offsets, close on focus loss, tray icon.
-- **Dim** - default level, step, maximum, method, all displays, exclude from
-  captures, keep the panel bright, smooth changes, dim the pointer.
+- **Dim** - step, maximum, method, all displays, exclude from captures, keep the
+  panel bright, smooth changes, dim the pointer.
 - **Tint** - color and starting strength.
 - **Shortcuts** - one chord per action, written as on a keyboard: `ctrl+alt+d`.
   A chord needs Ctrl, Alt, Shift or Win; a lone key is ignored unless it is an
@@ -87,7 +97,7 @@ tint is off, so the number you see is the level the switch brings back.
     $description: "Apply the extra dim level below as soon as the mod loads."
   - StartLevel: 40
     $name: Extra dim level on start (%)
-    $description: "Dimming applied at startup, and the level the Extra dim toggle restores."
+    $description: "Dimming applied at startup, and the level the slider starts from."
     #! $min: 5
     #! $max: 100
   - RememberValues: true
@@ -168,11 +178,6 @@ tint is off, so the number you see is the level the switch brings back.
     $name: Show a tray icon
     $description: "Keep an icon in the notification area while the mod is loaded: a click opens or closes the panel, a right click has the controls."
 - Dim:
-  - DefaultLevel: 40
-    $name: Default dim level (%)
-    $description: "Level the Extra dim toggle restores when it is switched back on."
-    #! $min: 5
-    #! $max: 100
   - Step: 10
     $name: Step (%)
     $description: "How much one wheel notch, arrow key or hotkey press changes a level."
@@ -224,17 +229,18 @@ tint is off, so the number you see is the level the switch brings back.
   - ToggleTintHotkey: ctrl+alt+t
     $name: Toggle warm tint
     $description: "Chord that switches the warm tint on and off, for example ctrl+alt+t. Leave empty to disable."
-  - DimUpHotkey: ctrl+alt+up
+  - DimUpHotkey: ctrl+alt+shift+up
     $name: Dim more
-    $description: "Chord that raises the dim level by the step. Leave empty to disable."
-  - DimDownHotkey: ctrl+alt+down
+    $description: "Chord that raises the dim level by the step, for example ctrl+alt+shift+up. Leave empty to disable."
+  - DimDownHotkey: ctrl+alt+shift+down
     $name: Dim less
-    $description: "Chord that lowers the dim level by the step. Leave empty to disable."
+    $description: "Chord that lowers the dim level by the step, for example ctrl+alt+shift+down. Leave empty to disable."
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <windowsx.h>
+#include <sddl.h>
 #include <shellapi.h>
 
 #include <algorithm>
@@ -302,23 +308,10 @@ std::wstring Lower(std::wstring text) {
     return text;
 }
 
-// A small integer formatter, so nothing depends on the C runtime's locale.
+// Integers are formatted by the standard library, which is locale-independent
+// for the numeric conversion.
 std::wstring Number(int value) {
-    wchar_t buffer[16];
-    int index = ARRAYSIZE(buffer);
-    buffer[--index] = L'\0';
-    const bool negative = value < 0;
-    unsigned int magnitude =
-        negative ? static_cast<unsigned int>(-(value + 1)) + 1u
-                 : static_cast<unsigned int>(value);
-    do {
-        buffer[--index] = static_cast<wchar_t>(L'0' + magnitude % 10u);
-        magnitude /= 10u;
-    } while (magnitude != 0 && index > 1);
-    if (negative) {
-        buffer[--index] = L'-';
-    }
-    return std::wstring(buffer + index);
+    return std::to_wstring(value);
 }
 
 std::wstring Percent(int value) {
@@ -1425,11 +1418,15 @@ struct Settings {
     bool closeOnFocusLoss = true;
     bool showTrayIcon = true;
 
-    int defaultLevel = 40;
     int step = 10;
     int maximum = 90;
     int method = kMethodOverlay;
     bool allDisplays = true;
+    // What Windhawk says, before the panel's own chips are taken into account.
+    // The chip remembers the setting it replaced, so a later change in Windhawk
+    // is noticed and wins again.
+    int settingMethod = kMethodOverlay;
+    bool settingAllDisplays = true;
     bool excludeCapture = true;
     bool keepPanelBright = false;
     bool smooth = true;
@@ -1468,9 +1465,9 @@ Settings LoadSettings() {
     }
     s.customAccent = GetStringSetting(L"Appearance.CustomAccentColor");
     const int opacity = Wh_GetIntSetting(L"Appearance.Opacity");
-    s.opacity = ClampInt(opacity == 0 ? 96 : opacity, 40, 100);
+    s.opacity = ClampInt(opacity == 0 ? 96 : opacity, 70, 100);
     const int panelScale = Wh_GetIntSetting(L"Appearance.PanelScale");
-    s.panelScale = ClampInt(panelScale == 0 ? 100 : panelScale, 70, 200);
+    s.panelScale = ClampInt(panelScale == 0 ? 100 : panelScale, 80, 140);
 
     s.position = GetStringSetting(L"Placement.Position");
     if (s.position.empty()) {
@@ -1478,17 +1475,14 @@ Settings LoadSettings() {
     }
     s.primaryMonitor = GetStringSetting(L"Placement.Monitor") == L"primary";
     s.offsetX =
-        ClampInt(Wh_GetIntSetting(L"Placement.HorizontalOffset"), -4000, 4000);
+        ClampInt(Wh_GetIntSetting(L"Placement.HorizontalOffset"), -2000, 2000);
     s.offsetY =
-        ClampInt(Wh_GetIntSetting(L"Placement.VerticalOffset"), -4000, 4000);
+        ClampInt(Wh_GetIntSetting(L"Placement.VerticalOffset"), -2000, 2000);
     s.closeOnFocusLoss = BoolSetting(L"Placement.CloseOnFocusLoss", true);
     s.showTrayIcon = BoolSetting(L"Placement.ShowTrayIcon", true);
 
     // A settings file written before a group existed reads back as zero, so
     // every numeric falls through to its documented default.
-    const int defaultLevel = Wh_GetIntSetting(L"Dim.DefaultLevel");
-    s.defaultLevel =
-        ClampInt(defaultLevel == 0 ? 40 : defaultLevel, 1, 100);
     const int step = Wh_GetIntSetting(L"Dim.Step");
     s.step = ClampInt(step == 0 ? 10 : step, 1, 25);
     const int maximum = Wh_GetIntSetting(L"Dim.Maximum");
@@ -1503,10 +1497,13 @@ Settings LoadSettings() {
 
     s.tintColor = ParseColorText(
         GetStringSetting(L"Tint.Color"), Rgb(255, 181, 107));
+    // Zero is a legal strength here, so the string form is what tells a value
+    // the user set to zero from a group that isn't in the settings file yet.
     const std::wstring tintDefault = GetStringSetting(L"Tint.DefaultStrength");
-    s.tintDefault = ClampInt(
-        tintDefault.empty() ? 0 : Wh_GetIntSetting(L"Tint.DefaultStrength"), 0,
-        60);
+    s.tintDefault = tintDefault.empty()
+                        ? 0
+                        : ClampInt(Wh_GetIntSetting(L"Tint.DefaultStrength"),
+                                   0, 60);
 
     if (!ParseHotkeyText(GetStringSetting(L"Shortcuts.PanelHotkey"),
                          s.panelHotkey)) {
@@ -1522,16 +1519,13 @@ Settings LoadSettings() {
     }
     if (!ParseHotkeyText(GetStringSetting(L"Shortcuts.DimUpHotkey"),
                          s.dimUpHotkey)) {
-        ParseHotkeyText(L"ctrl+alt+up", s.dimUpHotkey);
+        ParseHotkeyText(L"ctrl+alt+shift+up", s.dimUpHotkey);
     }
     if (!ParseHotkeyText(GetStringSetting(L"Shortcuts.DimDownHotkey"),
                          s.dimDownHotkey)) {
-        ParseHotkeyText(L"ctrl+alt+down", s.dimDownHotkey);
+        ParseHotkeyText(L"ctrl+alt+shift+down", s.dimDownHotkey);
     }
 
-    if (s.maximum < s.defaultLevel) {
-        s.defaultLevel = s.maximum;
-    }
     if (s.startLevel > s.maximum) {
         s.startLevel = s.maximum;
     }
@@ -1614,34 +1608,65 @@ void ResolvePalette() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Remembered levels
+// Remembered state
+//
+// The Windhawk settings say where to start; this storage says where the user
+// left the two toggles and the two choices the panel can change on its own. It
+// is the mod's own Windhawk storage, so it is removed with the mod instead of
+// leaving a key behind in the registry.
+//
+// A tool mod's storage is shared by every account on the machine, while the
+// settings it sits beside are per-user. The user's SID is therefore part of
+// every value name, so two people who sign in on the same PC keep their own
+// levels rather than inheriting each other's.
 
-// The Windhawk settings say where to start; this small key says where the user
-// left the two toggles. It is deliberately separate so that saving a level
-// never rewrites the mod's settings file.
-constexpr WCHAR kStoreKey[] = L"Software\\DpakB\\ExtraDim";
+std::wstring g_storeSuffix;
+
+void StoreInit() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        Wh_Log(L"Couldn't open the process token: %u", GetLastError());
+        return;
+    }
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    if (size) {
+        std::vector<BYTE> buffer(size);
+        if (GetTokenInformation(token, TokenUser, buffer.data(), size, &size)) {
+            const auto* user = reinterpret_cast<const TOKEN_USER*>(buffer.data());
+            LPWSTR sid = nullptr;
+            if (ConvertSidToStringSidW(user->User.Sid, &sid)) {
+                g_storeSuffix = L"_";
+                g_storeSuffix += sid;
+                LocalFree(sid);
+            }
+        }
+    }
+    CloseHandle(token);
+}
+
+std::wstring StoreName(PCWSTR name) {
+    return std::wstring(name) + g_storeSuffix;
+}
 
 int StoreGetInt(PCWSTR name, int fallback) {
-    DWORD value = 0;
-    DWORD size = sizeof(value);
-    if (RegGetValueW(HKEY_CURRENT_USER, kStoreKey, name, RRF_RT_REG_DWORD,
-                     nullptr, &value, &size) != ERROR_SUCCESS) {
-        return fallback;
-    }
-    return static_cast<int>(value);
+    return Wh_GetIntValue(StoreName(name).c_str(), fallback);
 }
 
 void StoreSetInt(PCWSTR name, int value) {
-    HKEY key = nullptr;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, kStoreKey, 0, nullptr, 0,
-                        KEY_SET_VALUE, nullptr, &key, nullptr) !=
-        ERROR_SUCCESS) {
-        return;
-    }
-    const DWORD dword = static_cast<DWORD>(value);
-    RegSetValueExW(key, name, 0, REG_DWORD,
-                   reinterpret_cast<const BYTE*>(&dword), sizeof(dword));
-    RegCloseKey(key);
+    Wh_SetIntValue(StoreName(name).c_str(), value);
+}
+
+void StoreDelete(PCWSTR name) {
+    Wh_DeleteValue(StoreName(name).c_str());
+}
+
+size_t StoreGetBinary(PCWSTR name, void* buffer, size_t size) {
+    return Wh_GetBinaryValue(StoreName(name).c_str(), buffer, size);
+}
+
+void StoreSetBinary(PCWSTR name, const void* buffer, size_t size) {
+    Wh_SetBinaryValue(StoreName(name).c_str(), buffer, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1962,11 +1987,52 @@ struct GammaDisplay {
 std::vector<GammaDisplay> g_gammaDisplays;
 int g_gammaKey = -1;  // Guards against re-applying an unchanged ramp.
 
+// A display's name is not a legal value name on its own, so only its letters
+// and digits are kept: \\.\DISPLAY1 becomes Gamma__DISPLAY1.
+std::wstring GammaValueName(const std::wstring& device) {
+    std::wstring name = L"Gamma_";
+    for (const wchar_t c : device) {
+        if (iswalnum(c)) {
+            name += c;
+        }
+    }
+    return name;
+}
+
+// Puts a display's own ramp back, and lets go of the copy kept for a run that
+// ends without its shutdown, so no later run has anything left to undo.
+void GammaRestore(GammaDisplay& display) {
+    if (!display.dc || !display.saved) {
+        return;
+    }
+    SetDeviceGammaRamp(display.dc, display.original);
+    StoreDelete(GammaValueName(display.device).c_str());
+}
+
+// A ramp applied when the process was killed, or when the session ended before
+// the worker shut down, is still on the display. It is put back here, before
+// anything takes a fresh copy, or the dimmed ramp would be recorded as the
+// display's own and each run would stack another on top.
+void GammaRecoverStored() {
+    for (const MonitorInfo& monitor : CollectMonitors(true)) {
+        WORD ramp[3][256];
+        const std::wstring name = GammaValueName(monitor.device);
+        if (StoreGetBinary(name.c_str(), ramp, sizeof(ramp)) != sizeof(ramp)) {
+            continue;
+        }
+        HDC dc = CreateDCW(L"DISPLAY", monitor.device.c_str(), nullptr, nullptr);
+        if (dc) {
+            SetDeviceGammaRamp(dc, ramp);
+            DeleteDC(dc);
+        }
+        Wh_Log(L"Put back a gamma ramp a previous run left behind");
+        StoreDelete(name.c_str());
+    }
+}
+
 void GammaRelease() {
     for (GammaDisplay& display : g_gammaDisplays) {
-        if (display.dc && display.saved) {
-            SetDeviceGammaRamp(display.dc, display.original);
-        }
+        GammaRestore(display);
         if (display.dc) {
             DeleteDC(display.dc);
         }
@@ -1992,9 +2058,7 @@ void GammaSync() {
     }
     for (GammaDisplay& display : g_gammaDisplays) {
         if (display.dc) {
-            if (display.saved) {
-                SetDeviceGammaRamp(display.dc, display.original);
-            }
+            GammaRestore(display);
             DeleteDC(display.dc);
         }
     }
@@ -2021,6 +2085,11 @@ void GammaSync() {
             DeleteDC(display.dc);
             continue;
         }
+        // A copy is left in the mod's storage as well as in memory: a run that
+        // dies with a ramp applied would otherwise leave the dimmed ramp as the
+        // next run's idea of what the display originally looked like.
+        StoreSetBinary(GammaValueName(display.device).c_str(), display.original,
+                       sizeof(display.original));
         kept.push_back(display);
     }
     g_gammaDisplays.swap(kept);
@@ -2036,9 +2105,7 @@ void GammaApply(float dim, float tint) {
             return;
         }
         for (GammaDisplay& display : g_gammaDisplays) {
-            if (display.dc && display.saved) {
-                SetDeviceGammaRamp(display.dc, display.original);
-            }
+            GammaRestore(display);
         }
         g_gammaKey = -1;
         return;
@@ -2065,7 +2132,6 @@ void GammaApply(float dim, float tint) {
         return;
     }
 
-    bool any = false;
     int failures = 0;
     for (GammaDisplay& display : g_gammaDisplays) {
         if (!display.dc) {
@@ -2082,15 +2148,16 @@ void GammaApply(float dim, float tint) {
                     static_cast<WORD>(value + 0.5f);
             }
         }
-        if (SetDeviceGammaRamp(display.dc, ramp)) {
-            any = true;
-        } else {
+        if (!SetDeviceGammaRamp(display.dc, ramp)) {
             failures++;
         }
     }
     g_gammaKey = key;
-    if (!any && failures > 0) {
-        Wh_Log(L"The display refused the gamma ramp; falling back to overlay");
+    if (failures > 0) {
+        // One display refusing is enough to give up on the method: a desktop
+        // that is dimmed on one monitor and untouched on the next reads as a
+        // fault, while the layer dims all of them.
+        Wh_Log(L"A display refused the gamma ramp; falling back to overlay");
         g_gammaFailed = true;
         GammaRelease();
     }
@@ -2340,6 +2407,28 @@ int PointerTarget() {
     return static_cast<int>(lround(g_dimShown));
 }
 
+constexpr PCWSTR kPointerSwappedValue = L"PointerSwapped";
+
+// Reloading the user's own scheme is what undoes a swap the mod never got to
+// undo itself. It is also better than copying the saved pictures back: it
+// brings back animated and multi-size cursors, and any scheme, size or colour
+// change the user made while the dim was on.
+void PointerReloadScheme() {
+    SystemParametersInfoW(SPI_SETCURSORS, 0, nullptr, 0);
+}
+
+// A run that ended without its shutdown left the darkened cursors behind. The
+// scheme is reloaded from the record that run left, before anything copies the
+// cursors as its idea of the user's own.
+void PointerRecoverStored() {
+    if (StoreGetInt(kPointerSwappedValue, 0) == 0) {
+        return;
+    }
+    Wh_Log(L"Putting the pointer back after a run that didn't finish");
+    PointerReloadScheme();
+    StoreDelete(kPointerSwappedValue);
+}
+
 void RestorePointer() {
     if (g_pointerLevel >= 0) {
         for (const SystemCursor& entry : g_cursorSet) {
@@ -2357,7 +2446,12 @@ void RestorePointer() {
         }
     }
     g_cursorSet.clear();
+    const bool swapped = g_pointerLevel >= 0;
     g_pointerLevel = -1;
+    if (swapped) {
+        PointerReloadScheme();
+        StoreDelete(kPointerSwappedValue);
+    }
 }
 
 void SyncPointer(int level) {
@@ -2402,7 +2496,13 @@ void SyncPointer(int level) {
             DestroyIcon(dimmed);
         }
     }
+    const bool wasSwapped = g_pointerLevel >= 0;
     g_pointerLevel = replaced > 0 ? level : -1;
+    if (replaced > 0 && !wasSwapped) {
+        // Recorded so a run that never reaches its shutdown is undone by the
+        // next one rather than leaving the pointer dark for the session.
+        StoreSetInt(kPointerSwappedValue, 1);
+    }
     if (replaced == 0) {
         Wh_Log(L"The cursor set refused to change");
     }
@@ -2514,8 +2614,10 @@ void SetDimLevel(int level, bool animate) {
 }
 
 void NudgeDim(int delta) {
+    // A nudge while the dim is off switches it back on at the level it kept,
+    // rather than jumping a whole step past a level that was never showing.
     if (!g_dimOn) {
-        SetDimLevel(g_dimLevel > 0 ? g_dimLevel : g_settings.defaultLevel, true);
+        SetDimLevel(g_dimLevel, true);
         TrayRefreshTooltip();
         return;
     }
@@ -3697,14 +3799,24 @@ HitResult HitTest(POINT point) {
     return result;
 }
 
-// Switching the displays or the method is a preference, not a level, so it is
-// written to the small state key and read back on the next start.
+// Switching the displays or the method from the panel is a preference of its
+// own, so it is stored - beside the Windhawk setting value it replaced, so that
+// changing that setting later takes the panel's choice back out of the picture.
 void SetAllDisplays(bool all) {
     if (g_settings.allDisplays == all) {
         return;
     }
+    if (!g_settings.rememberValues || all == g_settings.settingAllDisplays) {
+        // Picking the value the setting already has is not an override, so the
+        // record goes instead of pinning the choice the panel was moved away
+        // from: the setting answers for it again, here and after a restart.
+        StoreDelete(L"AllDisplays");
+        StoreDelete(L"AllDisplaysBase");
+    } else {
+        StoreSetInt(L"AllDisplaysBase", g_settings.settingAllDisplays ? 1 : 0);
+        StoreSetInt(L"AllDisplays", all ? 1 : 0);
+    }
     g_settings.allDisplays = all;
-    StoreSetInt(L"AllDisplays", all ? 1 : 0);
     g_topologyDirty = true;
     OverlayDestroyAll();
     GammaRelease();
@@ -3716,8 +3828,16 @@ void SetDimMethod(int method) {
     if (g_settings.method == method) {
         return;
     }
+    if (!g_settings.rememberValues || method == g_settings.settingMethod) {
+        // Back on the setting's own value, so the record would only be a stale
+        // override pinning the method the panel was moved away from.
+        StoreDelete(L"Method");
+        StoreDelete(L"MethodBase");
+    } else {
+        StoreSetInt(L"MethodBase", g_settings.settingMethod);
+        StoreSetInt(L"Method", method);
+    }
     g_settings.method = method;
-    StoreSetInt(L"Method", method);
     // A driver that refused a ramp once is asked again now that the user has
     // said, explicitly, that this is the method they want.
     g_gammaFailed = false;
@@ -4022,7 +4142,7 @@ void PaintPanelSurface() {
     // times the panel scale, so the flyout is the same physical size on a 100%
     // and on a 150% screen.
     g_uiScale = static_cast<float>(DpiForWorkArea()) / 96.0f *
-                (static_cast<float>(ClampInt(g_settings.panelScale, 70, 200)) /
+                (static_cast<float>(ClampInt(g_settings.panelScale, 80, 140)) /
                  100.0f);
     Render();
     if (g_surface.Valid()) {
@@ -4353,6 +4473,21 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                 g_trayIgnoreUntil = NowMs() + 300.0;
                 CloseFlyout();
             }
+            // The default handler is what hands the keyboard to the window that
+            // was just activated. Returning here leaves Esc and the arrow keys
+            // going to whatever had the focus before the panel opened.
+            break;
+        case WM_QUERYENDSESSION:
+            return TRUE;
+        case WM_ENDSESSION:
+            // The session is ending and the process is about to be torn down,
+            // so the screen, the pointer and the levels are handed back now
+            // rather than left to a shutdown that will not run.
+            if (wParam) {
+                SaveRememberedLevels();
+                RestorePointer();
+                GammaRelease();
+            }
             return 0;
         case WM_DISPLAYCHANGE:
             // The monitors, their resolution or the primary display moved, so
@@ -4385,6 +4520,10 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                 Repaint();
             } else if (wParam == SPI_SETDESKWALLPAPER || wParam == 0) {
                 ResolvePalette();
+                // The tray icon is drawn in the accent colour, so it is redrawn
+                // too rather than keeping the previous accent until the next
+                // settings change.
+                TrayRefresh();
                 RefreshFrame();
             }
             return 0;
@@ -4472,11 +4611,11 @@ bool RegisterClassHelper(WNDPROC proc, PCWSTR name) {
     windowClass.hbrBackground = nullptr;
     windowClass.lpszClassName = name;
     if (!RegisterClassExW(&windowClass)) {
-        const DWORD error = GetLastError();
-        if (error != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(L"RegisterClassExW(%s) failed: %u", name, error);
-            return false;
-        }
+        // A class that is already registered belongs to another instance in
+        // this process; a tool mod runs alone, so it is a failure, not a
+        // situation to carry on from.
+        Wh_Log(L"RegisterClassExW(%s) failed: %u", name, GetLastError());
+        return false;
     }
     return true;
 }
@@ -4523,9 +4662,13 @@ bool CreateWindows() {
 }
 
 void DestroyWindows() {
+    // The screen and the pointer are handed back first, because the tray icon is
+    // a cross-process call that can stall against a busy Explorer, and a
+    // shutdown that stalls must not leave a ramp or darkened cursors applied.
+    RestorePointer();
+    GammaRelease();
     TrayHalt();
     OverlayDestroyAll();
-    GammaRelease();
     if (g_overlayBrush) {
         DeleteObject(g_overlayBrush);
         g_overlayBrush = nullptr;
@@ -4549,20 +4692,46 @@ void DestroyWindows() {
 //
 // The Windhawk settings say what the mod should look like and where it starts.
 // Nothing in here is written back: the only two choices the panel changes for
-// itself - the displays and the dim method - go to the small state key, so the
+// itself - the displays and the dim method - go to the mod's own storage, so the
 // settings file is never rewritten behind Windhawk's back.
 
 void ApplySettings() {
     g_settings = LoadSettings();
+    // What Windhawk says is kept apart from what the panel last chose, so a
+    // change made in Windhawk can be told from a change made in the panel.
+    g_settings.settingAllDisplays = g_settings.allDisplays;
+    g_settings.settingMethod = g_settings.method;
 
-    const int storedAllDisplays = StoreGetInt(L"AllDisplays", -1);
-    if (storedAllDisplays >= 0) {
-        g_settings.allDisplays = storedAllDisplays != 0;
-    }
-    const int storedMethod = StoreGetInt(L"Method", -1);
-    if (storedMethod >= 0) {
-        g_settings.method =
-            storedMethod == kMethodGamma ? kMethodGamma : kMethodOverlay;
+    if (g_settings.rememberValues) {
+        // A panel choice only answers for the setting value it replaced. Once
+        // that setting reads differently, the choice is stale and is dropped
+        // rather than winning over the setting for good.
+        const int storedAllDisplays =
+            StoreGetInt(L"AllDisplaysBase", -1) ==
+                    (g_settings.settingAllDisplays ? 1 : 0)
+                ? StoreGetInt(L"AllDisplays", -1)
+                : -1;
+        if (storedAllDisplays >= 0) {
+            g_settings.allDisplays = storedAllDisplays != 0;
+        }
+        const int storedMethod =
+            StoreGetInt(L"MethodBase", -1) == g_settings.settingMethod
+                ? StoreGetInt(L"Method", -1)
+                : -1;
+        if (storedMethod == kMethodGamma || storedMethod == kMethodOverlay) {
+            g_settings.method = storedMethod;
+        }
+    } else {
+        // Nothing is remembered, so nothing an earlier run wrote is left to be
+        // found again if the switch is turned back on later.
+        StoreDelete(L"Method");
+        StoreDelete(L"MethodBase");
+        StoreDelete(L"AllDisplays");
+        StoreDelete(L"AllDisplaysBase");
+        StoreDelete(L"DimOn");
+        StoreDelete(L"DimLevel");
+        StoreDelete(L"TintOn");
+        StoreDelete(L"TintLevel");
     }
 
     ResolvePalette();
@@ -4630,6 +4799,15 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         return 1;
     }
 
+    // The storage and the settings come first. The remembered values are read
+    // against the Startup group, so taking them before the settings would read
+    // them against the defaults and quietly ignore the whole group.
+    StoreInit();
+    g_settings = LoadSettings();
+    // Anything a previous run left on the display or the pointer is undone
+    // before either is copied as this run's idea of the original.
+    GammaRecoverStored();
+    PointerRecoverStored();
     LoadRememberedLevels();
     ApplySettings();
     // The first frame is painted while the window is still hidden; Present is
@@ -4647,9 +4825,6 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
 
     SaveRememberedLevels();
-    // However the mod is unloaded, the user's own cursors go back before the
-    // process does.
-    RestorePointer();
     DestroyWindows();
     UnregisterWindowClasses();
     g_fonts.Clear();
