@@ -538,7 +538,7 @@ BOOL Wh_ModInit() {
     if (!g_startTileData) {
         return FALSE;
     }
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK startTileDataDllHooks[] = {
         {{L"?Execute@SettingsUninstallVerb@Private@UnifiedTile@Shell@WindowsInternal@@UEAAJPEAUIVerbExecutionArgs@345@@Z"},
          &g_originalExecute, ExecuteHook},
         {{L"?RuntimeClassInitialize@SettingsUninstallVerb@Private@UnifiedTile@Shell@WindowsInternal@@QEAAJPEAUIVerbEnumerationArgs@345@PEAUIVerbStringHelperStatics@2345@PEAUHSTRING__@@2_NPEBG@Z"},
@@ -554,8 +554,10 @@ BOOL Wh_ModInit() {
          &g_originalStateRepository, StateRepositoryHook, true},
     };
     const WH_HOOK_SYMBOLS_OPTIONS options{sizeof(options), nullptr, TRUE, nullptr};
-    const bool hooked = WindhawkUtils::HookSymbols(g_startTileData, hooks, ARRAYSIZE(hooks), &options) &&
-                        (g_originalAppResolver || g_originalTileStore || g_originalStateRepository);
+    const bool hooked =
+        WindhawkUtils::HookSymbols(g_startTileData, startTileDataDllHooks,
+                                   ARRAYSIZE(startTileDataDllHooks), &options) &&
+        (g_originalAppResolver || g_originalTileStore || g_originalStateRepository);
     Wh_Log(L"Uninstall Here: %ls",
            hooked ? L"Start menu hooks installed." : L"Start menu symbols are unavailable on this build.");
     return hooked;
