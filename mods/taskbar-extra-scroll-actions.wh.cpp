@@ -21,76 +21,6 @@
 //     scroll anywhere, full screen scrolling, middle-click mute
 //   - taskbar-volume-control-per-app v1.1.4 (m417z): per-app volume on task
 //     buttons
-//
-// 1.6.0:
-//   - The Dark Overlay now darkens the mouse pointer too. The pointer isn't
-//     part of the screen image: the graphics card lays it on top of the
-//     finished frame (hardware cursor plane), so no window can cover it, not
-//     even one drawn by dwm.exe. While the pointer is over a screen below 0%,
-//     the standard pointers (animated ones included) are replaced with copies
-//     darkened exactly like that screen (gamma space on SDR screens, linear
-//     light on HDR screens). They're written to a temp folder at that
-//     screen's DPI and your pointer size and loaded like a pointer scheme,
-//     so they keep the exact size and sharpness of your own pointers
-//     (Windows scales cursors made in memory as if they were 32 px ones).
-//     Leaving the screen, going back to 0% or unloading the mod reloads your
-//     pointer scheme and deletes the files; if Explorer stops while they are
-//     darkened, the next start restores them. All of it runs on a thread of
-//     its own, at most one rebuild per 100 ms while scrolling.
-//   - HDR screens: the pointer also follows this mod's SDR brightness. The mod
-//     sets it in the DWM only (DwmpSDRToHDRBoost), while Windows shows the
-//     pointer at the Settings app's SDR white level, so at 0% (80 nits) the
-//     pointer stayed up to 6 times brighter than the screen (480 nits), and
-//     the Dark Overlay darkening kept that ratio. The pointer is now scaled by
-//     mod level / Settings level wherever that makes it darker, at any
-//     brightness, on top of the overlay darkening.
-//   - The Dark Overlay now also covers the taskbar thumbnail previews, Start,
-//     the notification center and the other shell popups: it's created in the
-//     ZBID_SYSTEM_TOOLS window band, above them, instead of among normal
-//     topmost windows. An option goes back to the 1.5.5 behavior.
-//   - The brightness / microphone indicator is darkened by the Dark Overlay
-//     too: it's kept right below the overlay of its screen instead of above
-//     it (same band). An option keeps it above the overlay, as before.
-//   - A window that comes above the overlay is covered again as soon as it is
-//     shown or activated, instead of up to 250 ms later.
-//   - The mod only runs in explorer.exe (and the volume indicator helper
-//     processes). When another process was added to its inclusion list, e.g.
-//     dwm.exe, it ran the whole taskbar logic there (hooks, brightness worker,
-//     scroll-anywhere mouse hook); it now unloads itself from such processes.
-//
-// 1.5.5:
-//   - Per-app volume: modifier + scroll works straight away, also while an app
-//     running as administrator has the focus. The modifiers were read with
-//     GetAsyncKeyState, which Windows blanks for Explorer while an admin
-//     window is in front, so it only worked after a modifier + click had made
-//     the taskbar the active window. They are now read from the wheel/click
-//     message itself (GetKeyState). Scroll-anywhere combos over the taskbar
-//     and the virtual desktop switch use the same reliable key state.
-//   - Per-app volume, from taskbar-volume-control-per-app 1.2: middle-click a
-//     task button to mute the app (optional), custom tooltip color, tooltip
-//     placement for vertical taskbars and the overflow flyout, and a
-//     click-through tooltip window above thumbnail previews (it used to take
-//     the pointer away from the button, and full-screen scrolling treated it
-//     as a full-screen window). The tooltip is never released at unload.
-//   - Per-app modifier + click only reacts to the left button, so modifier +
-//     right-click opens the task button's menu again instead of muting.
-//   - Additional scroll regions: right-to-left taskbars were off by one pixel
-//     (from taskbar-scroll-actions 1.3).
-//   - Full-screen scrolling now respects "System volume on the taskbar
-//     requires Ctrl", like normal taskbar scrolling.
-//   - Leaving the Dark Overlay no longer drops the backlight to 0% when the
-//     hardware was raised elsewhere while the overlay was kept.
-//   - Turning HDR off and on, or starting to watch a screen, no longer counts
-//     as an outside brightness change (no false Dark Overlay reset).
-//   - Laptop backlight, Auto method: if the driver accepts IOCTL writes but
-//     ignores them, the mod switches to WMI / power plan instead of doing
-//     nothing.
-//   - Unload: windows, timers and state are cleaned up on the taskbar thread
-//     before the brightness worker stops, so a scroll can't race the worker's
-//     shutdown.
-//   - The indicator window is created per-monitor DPI aware, like the Dark
-//     Overlay. Clean -Wall -Wextra build.
-//
 
 // ==WindhawkModReadme==
 /*
@@ -158,15 +88,40 @@ Each entry can have its own scroll-anywhere modifier combination. Full-screen
 scrolling works when a full-screen window covers a visible taskbar; with an
 auto-hidden taskbar, only the thin strip at the screen edge reacts.
 
+## How it differs from similar mods
+
+* **[Taskbar Scroll Actions](https://windhawk.net/mods/taskbar-scroll-actions)**
+  switches virtual desktops and changes the monitor brightness and the
+  microphone volume. This mod does all of that, and adds brightness below 0%
+  (the Dark Overlay), SDR brightness on HDR screens, a master brightness, more
+  laptop backlight methods, its own indicator, and a scroll-anywhere modifier
+  combination per entry.
+* **[Taskbar Volume Control](https://windhawk.net/mods/taskbar-volume-control)**
+  and **[Taskbar Volume Control Per-App](https://windhawk.net/mods/taskbar-volume-control-per-app)**
+  change the system and per-app volume. This mod includes both, as actions of
+  the same scroll setup.
+
+Use one of these mods at a time: they all react to scrolling over the taskbar.
+
 ## Debugging
 
-Enable **Debug logging** and open Windhawk's log output. Every scroll logs the
-screen, its type (internal/external, HDR), the backend used, the level
-before → after, the Dark Overlay alpha, worker write timings, and the reason for
-every automatic Dark Overlay reset. **Debug info on the indicator** adds the same
-details as an extra line on the on-screen indicator.
+Turn on logging for this mod in Windhawk (the mod's **Advanced** tab) and open
+Windhawk's log output. Every scroll logs the screen, its type
+(internal/external, HDR), the backend used, the level before → after, the Dark
+Overlay alpha, worker write timings, and the reason for every automatic Dark
+Overlay reset. **Debug info on the indicator** adds the same details as an extra
+line on the on-screen indicator.
 
 ## Notes
+
+When the mod is disabled, the Dark Overlay and the pointers are removed, and
+the SDR brightness of HDR screens goes back to the Windows Settings level.
+
+The darkened pointer replaces the standard pointers for every app while the
+pointer is over a darkened screen, then reloads your pointer scheme. Mods and
+tools that change the pointers themselves (pointer themes, idle fade, and the
+like) can overwrite the darkened pointers, and lose their own pointers when the
+scheme is reloaded.
 
 Some touchpads don't send scroll events over the taskbar. The pinch-to-zoom
 gesture often works instead.
@@ -310,7 +265,7 @@ middle-click mute) and
   $description: >-
     Puts the overlay in a window band above the taskbar thumbnail previews,
     Start, the notification center and the other shell popups. Off: a normal
-    topmost window, as in 1.5.5.
+    topmost window.
 - storeCurrentSdrToHdrBrightness: true
   $name: Remember SDR brightness per HDR screen
   $description: >-
@@ -390,11 +345,6 @@ middle-click mute) and
   - noAutomaticMuteToggle: false
     $name: No automatic mute toggle for apps
   $name: Per-app volume (Windows 11 taskbar)
-- debugLogging: false
-  $name: Debug logging
-  $description: >-
-    Logs every brightness / Dark Overlay decision. View it in Windhawk's log
-    output.
 - debugOsd: false
   $name: Debug info on the indicator
 - oldTaskbarOnWin11: false
@@ -425,6 +375,7 @@ middle-click mute) and
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -551,7 +502,6 @@ struct Settings {
     int volumeChangeStep = 2;
     FullScreenScrolling fullScreenScrolling = FullScreenScrolling::withIndicator;
     PerAppSettings perApp;
-    bool debugLogging = false;
     bool debugOsd = false;
     bool oldTaskbarOnWin11 = false;
 
@@ -600,15 +550,6 @@ void SetCfg(SettingsPtr p) {
     ReleaseSRWLockExclusive(&g_settingsLock);
 }
 
-std::atomic<bool> g_debugLog;
-
-// Verbose logging, only when "Debug logging" is enabled.
-#define DLog(...)                                         \
-    do {                                                  \
-        if (g_debugLog.load(std::memory_order_relaxed)) { \
-            Wh_Log(__VA_ARGS__);                          \
-        }                                                 \
-    } while (0)
 
 // -----------------------------------------------------------------------------
 // Globals
@@ -2032,6 +1973,9 @@ DwmpSDRToHDRBoost_t GetBoostFunction() {
     return pFunc;
 }
 
+// Set once the mod has changed the SDR brightness of a screen.
+std::atomic<bool> g_written;
+
 // raw: SDR white level in thousandths of 80 nits (1000 = 80 nits).
 bool Write(HMONITOR hMon, int raw) {
     auto pFunc = GetBoostFunction();
@@ -2040,7 +1984,22 @@ bool Write(HMONITOR hMon, int raw) {
     }
     double boost = std::max(raw / 1000.0, 1.0001);
     pFunc(hMon, boost);
+    g_written = true;
     return true;
+}
+
+// Puts the SDR brightness of every HDR screen back to its Windows Settings
+// level (which DwmpSDRToHDRBoost doesn't change), so that disabling the mod
+// leaves the screens as Windows Settings shows them.
+void RestoreSettingsLevels() {
+    if (!g_written.exchange(false)) {
+        return;
+    }
+    for (const auto& screen : Topo::Query()) {
+        if (screen.hdr && screen.sdrWhite) {
+            Write(screen.hMon, (int)screen.sdrWhite);
+        }
+    }
 }
 
 }  // namespace Sdr
@@ -2349,7 +2308,7 @@ void ProcessRequests() {
             slot->lastRead = v;
             slot->lastPollTick = GetTickCount();
         }
-        DLog(L"Worker: read %s = %d", DomainName(rq->domain), v);
+        Wh_Log(L"Worker: read %s = %d", DomainName(rq->domain), v);
         if (rq->hDone) {
             SetEvent(rq->hDone);
         }
@@ -2386,9 +2345,9 @@ void ProcessWrites() {
             job.slot->needSettle = job.slot->domain != kSdr;
         }
         job.slot->lastWriteTick = GetTickCount();
-        DLog(L"Worker: write %s = %d %s (%lu ms)",
-             DomainName(job.slot->domain), job.value, ok ? L"ok" : L"FAILED",
-             elapsed);
+        Wh_Log(L"Worker: write %s = %d %s (%lu ms)",
+               DomainName(job.slot->domain), job.value, ok ? L"ok" : L"FAILED",
+               elapsed);
         if (!ok) {
             Wh_Log(L"Brightness write failed (%s = %d)",
                    DomainName(job.slot->domain), job.value);
@@ -2466,9 +2425,9 @@ void ProcessPolls() {
         }
 
         if (external) {
-            DLog(L"Worker: external %s change detected: %d -> %d",
-                 DomainName(s.domain), s.lastWrite >= 0 ? s.lastWrite : s.lastRead,
-                 r);
+            Wh_Log(L"Worker: external %s change detected: %d -> %d",
+                   DomainName(s.domain), s.lastWrite >= 0 ? s.lastWrite : s.lastRead,
+                   r);
             s.lastWrite = -1;
             PostToUi(
                 new HwMsg{MsgKind::External, s.screenId, s.domain, r, 0});
@@ -2565,8 +2524,8 @@ void Wake() {
 //
 // A hidden window on the taskbar thread that owns all of this mod's windows
 // (Dark Overlays, OSD) and timers. Everything is created and destroyed on that
-// thread, which fixes the v1.4 crashes on unload (timers firing into an
-// unloaded DLL, windows that could not be destroyed from another thread).
+// thread, so that nothing is left on unload (timers firing into an unloaded
+// DLL, windows that can't be destroyed from another thread).
 // -----------------------------------------------------------------------------
 
 namespace Controller {
@@ -3526,13 +3485,15 @@ int BaseSize() {
     return (int)v;
 }
 
+// The darkened pointer files live in the mod's storage directory, which
+// Windhawk removes with the mod.
 std::wstring PointerDir() {
-    WCHAR temp[MAX_PATH + 1];
-    DWORD n = GetTempPathW(ARRAYSIZE(temp), temp);
-    if (!n || n > MAX_PATH) {
+    WCHAR path[MAX_PATH];
+    if (!Wh_GetModStoragePath(path, ARRAYSIZE(path))) {
         return {};
     }
-    return std::wstring(temp) + L"WhTaskbarExtraScroll_Pointers";
+    CreateDirectoryW(path, nullptr);  // may not exist yet
+    return std::wstring(path) + L"\\Pointers";
 }
 
 void DeletePointerFiles() {
@@ -3575,7 +3536,7 @@ void Restore() {
     t_applied = false;
     t_current = {};
     Wh_SetIntValue(kStorageDarkened, 0);
-    DLog(L"Pointer: scheme restored");
+    Wh_Log(L"Pointer: scheme restored");
 }
 
 // Only called while none of the pointers is replaced: the fallback for
@@ -3632,7 +3593,7 @@ void LoadSources(int size) {
         if (ok) {
             t_sources.push_back(std::move(s));
         } else {
-            DLog(L"Pointer %s: no image, left as is", slot.regName);
+            Wh_Log(L"Pointer %s: no image, left as is", slot.regName);
         }
     }
 }
@@ -3704,9 +3665,9 @@ void Apply(const Want& want) {
         Wh_Log(L"Pointer: couldn't replace the pointers (folder %s)",
                dir.c_str());
     }
-    DLog(L"Pointer: darkened to %.2f%% (%s, %d px, %d/%zu pointers)",
-         want.level * 100.0 / kLevelOne, want.hdr ? L"linear, HDR" : L"SDR",
-         want.size, replaced, t_sources.size());
+    Wh_Log(L"Pointer: darkened to %.2f%% (%s, %d px, %d/%zu pointers)",
+           want.level * 100.0 / kLevelOne, want.hdr ? L"linear, HDR" : L"SDR",
+           want.size, replaced, t_sources.size());
 }
 
 Want Evaluate(const std::vector<DimScreen>& screens) {
@@ -3736,6 +3697,14 @@ DWORD WINAPI ThreadProc(void*) {
     t_dir = PointerDir();
     DeletePointerFiles();  // left over by a previous session
     std::vector<DimScreen> screens;
+    // While a screen is darkened the pointer is polled, every 40 ms while it
+    // moves, backing off to 200 ms while it stays still. A change of the
+    // screens or of their darkness wakes the thread right away.
+    constexpr DWORD kPollMinMs = 40;
+    constexpr DWORD kPollMaxMs = 200;
+    DWORD pollMs = kPollMinMs;
+    POINT lastPt = {LONG_MIN, LONG_MIN};
+    bool woken = true;
     while (!g_stop) {
         AcquireSRWLockExclusive(&g_lock);
         screens = g_screens;
@@ -3763,7 +3732,16 @@ DWORD WINAPI ThreadProc(void*) {
         }
 
         // Follow the pointer while a screen is dimmed; sleep otherwise.
-        DWORD wait = screens.empty() ? INFINITE : 40;
+        DWORD wait = INFINITE;
+        if (!screens.empty()) {
+            POINT pt = {};
+            bool moved = !GetCursorPos(&pt) || pt.x != lastPt.x ||
+                         pt.y != lastPt.y;
+            lastPt = pt;
+            pollMs = (moved || woken) ? kPollMinMs
+                                      : std::min(pollMs * 2, kPollMaxMs);
+            wait = pollMs;
+        }
         Want want = Evaluate(screens);
         if (!want.on) {
             if (t_applied) {
@@ -3781,7 +3759,7 @@ DWORD WINAPI ThreadProc(void*) {
                 Apply(want);
             }
         }
-        WaitForSingleObject(g_wakeEvent, wait);
+        woken = WaitForSingleObject(g_wakeEvent, wait) == WAIT_OBJECT_0;
     }
     if (t_applied) {
         Restore();
@@ -3936,8 +3914,8 @@ void Create(Win& w, const Settings& cfg) {
         Wh_Log(L"Dark Overlay: CreateWindowEx failed (%lu)", GetLastError());
         return;
     }
-    DLog(L"Dark Overlay window created (%s)",
-         inBand ? L"system tools band, above shell popups"
+    Wh_Log(L"Dark Overlay window created (%s)",
+           inBand ? L"system tools band, above shell popups"
                 : L"normal topmost window");
     SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
     ApplyCaptureAffinity(hWnd, cfg);
@@ -3970,9 +3948,9 @@ void PublishToCursor(bool reapply = false) {
                 (int)std::lround(factor * CursorDim::kLevelOne);
             if (level < CursorDim::kLevelOne * 995 / 1000) {
                 screens.push_back({s.rc, std::max(level, 1), s.hdr});
-                DLog(L"Pointer on %s: %.2f%%%s", s.gdiName.c_str(),
-                     factor * 100.0,
-                     s.hdr ? (sdrRatio < 1.0 ? L" (HDR: SDR level of the mod "
+                Wh_Log(L"Pointer on %s: %.2f%%%s", s.gdiName.c_str(),
+                       factor * 100.0,
+                       s.hdr ? (sdrRatio < 1.0 ? L" (HDR: SDR level of the mod "
                                                L"below the Settings one)"
                                              : L" (HDR)")
                            : L"");
@@ -4001,8 +3979,8 @@ void SetDepth(const Topo::Screen& screen, int depth) {
         Create(w, *cfg);
         w.cur = 0.0f;
     }
-    DLog(L"Dark Overlay %s: depth %d -> alpha %d", screen.gdiName.c_str(),
-         depth, w.target);
+    Wh_Log(L"Dark Overlay %s: depth %d -> alpha %d", screen.gdiName.c_str(),
+           depth, w.target);
     StartAnimation();
     PublishToCursor();
 }
@@ -4634,12 +4612,12 @@ void ApplyScroll(ScrollAction action,
     }
 
     int level = CurrentLevel(st, d);
-    DLog(L"Brightness %s [%s%s, %s]: %d -> %d (clicks %d, hw %d -> %d, dark "
-         L"%d)",
-         Topo::ShortName(screen).c_str(),
-         screen.internal ? L"internal" : L"external",
-         screen.hdr ? L" HDR" : L"", DomName(d), before, level, clicks, hw,
-         newHw, newDark);
+    Wh_Log(L"Brightness %s [%s%s, %s]: %d -> %d (clicks %d, hw %d -> %d, dark "
+           L"%d)",
+           Topo::ShortName(screen).c_str(),
+           screen.internal ? L"internal" : L"external",
+           screen.hdr ? L" HDR" : L"", DomName(d), before, level, clicks, hw,
+           newHw, newDark);
 
     if (showOsd) {
         ShowOsd(screen, st, d, level, *cfg);
@@ -4851,7 +4829,9 @@ bool RegisterClasses() {
         {kDarkClassName, DefWindowProcW, (HBRUSH)GetStockObject(BLACK_BRUSH)},
         {kOsdClassName, Osd::WndProc, nullptr},
     };
-    for (const auto& c : classes) {
+    bool registered[ARRAYSIZE(classes)] = {};
+    for (size_t i = 0; i < ARRAYSIZE(classes); i++) {
+        const auto& c = classes[i];
         WNDCLASSEXW wc{};
         wc.cbSize = sizeof(wc);
         wc.lpfnWndProc = c.proc;
@@ -4859,12 +4839,25 @@ bool RegisterClasses() {
         wc.lpszClassName = c.name;
         wc.hbrBackground = c.bg;
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        if (!RegisterClassExW(&wc) &&
-            GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-            Wh_Log(L"RegisterClassEx(%s) failed (%lu)", c.name,
-                   GetLastError());
-            return false;
+        if (RegisterClassExW(&wc)) {
+            registered[i] = true;
+            continue;
         }
+        DWORD error = GetLastError();
+        // An existing class can only come from an earlier instance of the mod
+        // that couldn't unregister it. Its window procedure would point into
+        // that unloaded image, so it can't be used, unless it's the
+        // DefWindowProc class of the overlays, which never calls into a mod.
+        if (error == ERROR_CLASS_ALREADY_EXISTS && c.proc == DefWindowProcW) {
+            continue;
+        }
+        Wh_Log(L"RegisterClassEx(%s) failed (%lu)", c.name, error);
+        for (size_t j = 0; j < i; j++) {
+            if (registered[j]) {
+                UnregisterClassW(classes[j].name, hInst);
+            }
+        }
+        return false;
     }
     g_classesRegistered = true;
     return true;
@@ -4875,9 +4868,11 @@ void UnregisterClasses() {
         return;
     }
     HINSTANCE hInst = ThisModule();
-    UnregisterClassW(kClassName, hInst);
-    UnregisterClassW(kDarkClassName, hInst);
-    UnregisterClassW(kOsdClassName, hInst);
+    for (PCWSTR name : {kClassName, kDarkClassName, kOsdClassName}) {
+        if (!UnregisterClassW(name, hInst)) {
+            Wh_Log(L"UnregisterClass(%s) failed (%lu)", name, GetLastError());
+        }
+    }
     g_classesRegistered = false;
 }
 
@@ -6579,8 +6574,8 @@ int WINAPI TaskListButton_OnPointerWheelChanged_Hook(void* pThis, void* pArgs) {
     float change = (float)delta * step * (0.01f / WHEEL_DELTA);
     auto result =
         AdjustAppVolume(processId, change, cfg->perApp.noAutomaticMuteToggle);
-    DLog(L"Per-app volume: PID %u, delta %.0f -> %d%%", processId, delta,
-         result ? result->volume : -1);
+    Wh_Log(L"Per-app volume: PID %u, delta %.0f -> %d%%", processId, delta,
+           result ? result->volume : -1);
     ShowResultTooltip(element, args, result, cfg->perApp);
     MarkModifiersUsedForScroll(cfg->perApp.keys);
     g_wheelHandled = true;
@@ -6719,70 +6714,99 @@ bool HookTaskbarDllSymbols() {
     return g_taskbarDllHooked;
 }
 
-bool HookTaskbarViewDllSymbols(HMODULE module) {
+// Appends the per-app volume hooks of Taskbar.View.dll / ExplorerExtensions.dll.
+// They're optional so that a missing one doesn't fail the other hooks resolved
+// in the same HookSymbols call; FinishTaskbarViewDllHooks checks them all.
+void AppendTaskbarViewDllHooks(std::vector<WindhawkUtils::SYMBOL_HOOK>& hooks) {
     // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerWheelChanged(void *))"},
             &TaskListButton_OnPointerWheelChanged_Original,
             TaskListButton_OnPointerWheelChanged_Hook,
+            true,
         },
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerExited(void *))"},
             &TaskListButton_OnPointerExited_Original,
             TaskListButton_OnPointerExited_Hook,
+            true,
         },
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))"},
             &TaskListButton_OnPointerMoved_Original,
             TaskListButton_OnPointerMoved_Hook,
+            true,
         },
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerPressed(void *))"},
             &TaskListButton_OnPointerPressed_Original,
             TaskListButton_OnPointerPressed_Hook,
+            true,
         },
         {
             {LR"(struct winrt::Taskbar::TaskListWindowViewModel __cdecl TryGetItemFromContainer<struct winrt::Taskbar::TaskListWindowViewModel>(struct winrt::Windows::UI::Xaml::UIElement const &))"},
             &TryGetItemFromContainer_TaskListWindowViewModel_Original,
+            nullptr,
+            true,
         },
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskListWindowViewModel>::get_TaskItem(void * *))"},
             &TaskListWindowViewModel_get_TaskItem_Original,
+            nullptr,
+            true,
         },
         {
             {LR"(struct winrt::Taskbar::TaskListGroupViewModel __cdecl TryGetItemFromContainer<struct winrt::Taskbar::TaskListGroupViewModel>(struct winrt::Windows::UI::Xaml::UIElement const &))"},
             &TryGetItemFromContainer_TaskListGroupViewModel_Original,
+            nullptr,
+            true,
         },
         {
             {LR"(public: bool __cdecl winrt::Taskbar::implementation::TaskListGroupViewModel::IsMultiWindow(void)const )"},
             &TaskListGroupViewModel_IsMultiWindow_Original,
+            nullptr,
+            true,
         },
         {
             {LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskGroup<struct winrt::WindowsUdk::UI::Shell::ITaskGroup>::IsRunning(void)const )"},
             &ITaskGroup_IsRunning_Original,
             ITaskGroup_IsRunning_Hook,
+            true,
         },
     };
+    for (auto& hook : symbolHooks) {
+        hooks.push_back(std::move(hook));
+    }
+}
 
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
+void FinishTaskbarViewDllHooks(bool symbolsLoaded) {
+    if (!symbolsLoaded) {
         Wh_Log(L"Per-app volume disabled: couldn't load Taskbar.View.dll "
                L"symbols (Windhawk's symbol download failed, or this Windows "
                L"build renamed them)");
-        return false;
+        return;
     }
     bool allResolved =
-        g_taskbarDllHooked && CTaskGroup_GetNumItems &&
-        CWindowTaskItem_GetWindow && CImmersiveTaskItem_GetAppWindow &&
-        CImmersiveTaskItem_vftable && CImmersiveTaskItem_vftable_ITaskItem &&
-        TaskItem_ReportClicked_Original && TaskGroup_ReportClicked_Original &&
+        g_taskbarDllHooked &&
+        CTaskGroup_GetNumItems &&
+        CWindowTaskItem_GetWindow &&
+        CImmersiveTaskItem_GetAppWindow &&
+        CImmersiveTaskItem_vftable &&
+        CImmersiveTaskItem_vftable_ITaskItem &&
+        TaskItem_ReportClicked_Original &&
+        TaskGroup_ReportClicked_Original &&
         TryGetItemFromContainer_TaskListWindowViewModel_Original &&
         TaskListWindowViewModel_get_TaskItem_Original &&
         TryGetItemFromContainer_TaskListGroupViewModel_Original &&
-        TaskListGroupViewModel_IsMultiWindow_Original;
+        TaskListGroupViewModel_IsMultiWindow_Original &&
+        TaskListButton_OnPointerWheelChanged_Original &&
+        TaskListButton_OnPointerExited_Original &&
+        TaskListButton_OnPointerMoved_Original &&
+        TaskListButton_OnPointerPressed_Original &&
+        ITaskGroup_IsRunning_Original;
     g_active = allResolved;
     Wh_Log(L"Per-app volume %s", allResolved ? L"ready" : L"disabled");
-    return allResolved;
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
@@ -6796,16 +6820,6 @@ HMODULE GetTaskbarViewModuleHandle() {
 bool IsWanted() {
     auto cfg = Cfg();
     return cfg->perApp.enabled && g_nExplorerVersion >= WIN_VERSION_11_21H2;
-}
-
-void HandleLoadedModuleIfTaskbarView(HMODULE module) {
-    if (IsWanted() && g_taskbarDllHooked && !g_taskbarViewDllLoaded &&
-        GetTaskbarViewModuleHandle() == module &&
-        !g_taskbarViewDllLoaded.exchange(true)) {
-        if (HookTaskbarViewDllSymbols(module)) {
-            Wh_ApplyHookOperations();
-        }
-    }
 }
 
 }  // namespace PerApp
@@ -6864,8 +6878,8 @@ void InvokeScrollAction([[maybe_unused]] HWND hWnd,
     }
 
     int clicks = delta / WHEEL_DELTA;
-    DLog(L"Entry %d: %d clicks (delta %d, suppress %d, anywhere %d)",
-         entryIndex, clicks, delta, suppressIndicator, fromScrollAnywhere);
+    Wh_Log(L"Entry %d: %d clicks (delta %d, suppress %d, anywhere %d)",
+           entryIndex, clicks, delta, suppressIndicator, fromScrollAnywhere);
 
     if (clicks != 0 && entry.throttleMs > 0) {
         if (GetTickCount() - g_lastActionTime < (DWORD)entry.throttleMs) {
@@ -7081,9 +7095,9 @@ LRESULT CALLBACK InputSiteWindowProc_Hook(HWND hWnd,
                 PerApp::g_wheelHandled = false;
                 LRESULT result =
                     InputSiteWindowProc_Original(hWnd, uMsg, wParam, lParam);
-                DLog(L"Per-app: wheel passed to the taskbar buttons (%s)",
-                     PerApp::g_wheelHandled ? L"a task button handled it"
-                                            : L"not over a task button");
+                Wh_Log(L"Per-app: wheel passed to the taskbar buttons (%s)",
+                       PerApp::g_wheelHandled ? L"a task button handled it"
+                                              : L"not over a task button");
                 return result;
             }
             if (OnMouseWheel(hRootWnd, wParam, lParam)) {
@@ -7151,6 +7165,9 @@ void HookInputSiteOfTaskbar(HWND hWnd) {
     }
 }
 
+bool IsMouseHookNeeded(const Settings& cfg);
+void ScrollAnywhereThreadInit();
+
 void HandleIdentifiedTaskbarWindow(HWND hWnd) {
     g_hTaskbarWnd = hWnd;
     g_dwTaskbarThreadId = GetWindowThreadProcessId(hWnd, nullptr);
@@ -7160,6 +7177,11 @@ void HandleIdentifiedTaskbarWindow(HWND hWnd) {
     }
     HookInputSiteOfTaskbar(hWnd);
     CreateControllerFromAnyThread();
+    // The low-level hooks are only installed in the explorer.exe that has the
+    // taskbar, not in Explorer's other processes (folder windows, COM servers).
+    if (IsMouseHookNeeded(*Cfg())) {
+        ScrollAnywhereThreadInit();
+    }
 }
 
 void HandleIdentifiedSecondaryTaskbarWindow(HWND hWnd) {
@@ -7242,8 +7264,8 @@ HWND CreateTooltipPopupWindow(DWORD dwExStyle,
             Y, nWidth, nHeight, nullptr, hMenu, hInstance, lpParam,
             kZbidSystemTools);
         if (!hWnd) {
-            DLog(L"Per-app tooltip: CreateWindowInBand failed (%lu)",
-                 GetLastError());
+            Wh_Log(L"Per-app tooltip: CreateWindowInBand failed (%lu)",
+                   GetLastError());
         }
     }
     if (!hWnd) {
@@ -7354,7 +7376,8 @@ int WINAPI VolumeSystemTrayIconDataModel_OnIconClicked_Hook(void* pThis,
     return VolumeSystemTrayIconDataModel_OnIconClicked_Original(pThis, param1);
 }
 
-bool HookSystemTraySymbols(HMODULE module) {
+void AppendSystemTrayHooks(HMODULE module,
+                           std::vector<WindhawkUtils::SYMBOL_HOOK>& hooks) {
     // In SystemTray.dll the implementation was inlined into the produce<>
     // COM thunk, so hook that.
     bool isSystemTrayDll = module == GetModuleHandle(L"SystemTray.dll");
@@ -7369,11 +7392,9 @@ bool HookSystemTraySymbols(HMODULE module) {
             true,
         },
     };
-    if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
-        Wh_Log(L"HookSymbols failed (middle-click to mute)");
-        return false;
+    for (auto& hook : symbolHooks) {
+        hooks.push_back(std::move(hook));
     }
-    return true;
 }
 
 HMODULE GetSystemTrayModuleHandle() {
@@ -7402,15 +7423,41 @@ bool ShouldHookSystemTraySymbols() {
     return g_nWinVersion >= WIN_VERSION_11_22H2 && Cfg()->middleClickToMute;
 }
 
-void HandleLoadedModuleIfSystemTray(HMODULE module, LPCWSTR lpLibFileName) {
-    if (ShouldHookSystemTraySymbols() && !g_systemTrayModuleHooked &&
-        GetSystemTrayModuleHandle() == module &&
-        !g_systemTrayModuleHooked.exchange(true)) {
-        Wh_Log(L"Loaded %s", lpLibFileName);
-        if (HookSystemTraySymbols(module)) {
-            Wh_ApplyHookOperations();
-        }
+// Hooks the symbols that the per-app volume and the middle-click mute features
+// need in this module, if it's one of theirs. Both can target the same module
+// (Taskbar.View.dll before 2604, or ExplorerExtensions.dll), and each
+// HookSymbols call resolves the module's symbols again, so all the hooks of a
+// module are resolved in a single call. Each feature's module is handled once.
+bool HookTaskbarModuleSymbols(HMODULE module) {
+    const bool tray = !g_systemTrayModuleHooked &&
+                      ShouldHookSystemTraySymbols() &&
+                      GetSystemTrayModuleHandle() == module &&
+                      !g_systemTrayModuleHooked.exchange(true);
+    const bool perApp = !g_taskbarViewDllLoaded && PerApp::g_taskbarDllHooked &&
+                        PerApp::IsWanted() &&
+                        PerApp::GetTaskbarViewModuleHandle() == module &&
+                        !g_taskbarViewDllLoaded.exchange(true);
+    if (!tray && !perApp) {
+        return false;
     }
+
+    std::vector<WindhawkUtils::SYMBOL_HOOK> hooks;
+    if (perApp) {
+        PerApp::AppendTaskbarViewDllHooks(hooks);
+    }
+    if (tray) {
+        AppendSystemTrayHooks(module, hooks);
+    }
+    const bool loaded =
+        WindhawkUtils::HookSymbols(module, hooks.data(), hooks.size());
+    if (perApp) {
+        PerApp::FinishTaskbarViewDllHooks(loaded);
+    }
+    if (tray &&
+        (!loaded || !VolumeSystemTrayIconDataModel_OnIconClicked_Original)) {
+        Wh_Log(L"Middle-click to mute unavailable: symbol not found");
+    }
+    return loaded;
 }
 
 // -----------------------------------------------------------------------------
@@ -7470,8 +7517,10 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
     if (module) {
         HandleLoadedModuleIfExplorerPatcher(module);
-        HandleLoadedModuleIfSystemTray(module, lpLibFileName);
-        PerApp::HandleLoadedModuleIfTaskbarView(module);
+        if (HookTaskbarModuleSymbols(module)) {
+            Wh_Log(L"Loaded %s", lpLibFileName);
+            Wh_ApplyHookOperations();
+        }
     }
     return module;
 }
@@ -7481,6 +7530,9 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 // -----------------------------------------------------------------------------
 
 HANDLE g_scrollAnywhereThread;
+// Guards g_scrollAnywhereThread: the thread is started from the taskbar thread
+// (when the taskbar is found) and restarted from the engine thread (settings).
+std::mutex g_scrollAnywhereThreadLock;
 
 // The entry whose scroll-anywhere combo exactly matches held, or -1.
 int FindEntryIndexForModifiers(const Settings& cfg, const ModifierKeys& held) {
@@ -7752,7 +7804,8 @@ DWORD WINAPI ScrollAnywhereThread(LPVOID lpParameter) {
 }
 
 void ScrollAnywhereThreadInit() {
-    if (g_scrollAnywhereThread) {
+    std::lock_guard<std::mutex> lock(g_scrollAnywhereThreadLock);
+    if (g_scrollAnywhereThread || g_unloading) {
         return;
     }
     HANDLE hReadyEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
@@ -7768,6 +7821,7 @@ void ScrollAnywhereThreadInit() {
 }
 
 void ScrollAnywhereThreadUninit() {
+    std::lock_guard<std::mutex> lock(g_scrollAnywhereThreadLock);
     if (g_scrollAnywhereThread) {
         PostThreadMessage(GetThreadId(g_scrollAnywhereThread), WM_APP, 0, 0);
         WaitForSingleObject(g_scrollAnywhereThread, INFINITE);
@@ -7934,7 +7988,6 @@ SettingsPtr LoadSettings() {
     }
     Wh_FreeStringSetting(tooltipColor);
 
-    s->debugLogging = Wh_GetIntSetting(L"debugLogging");
     s->debugOsd = Wh_GetIntSetting(L"debugOsd");
     s->oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
 
@@ -7973,6 +8026,14 @@ bool HelperProcessNeedsHook(const Settings& cfg) {
 }
 
 void CleanupOnOwnerThread() {
+    // On the taskbar thread, where WM_NCDESTROY also erases from
+    // g_secondaryTaskbarWindows, so the set isn't changed while it's iterated.
+    if (g_hTaskbarWnd) {
+        UnsubclassTaskbarWindow(g_hTaskbarWnd);
+        for (HWND hSecondaryWnd : g_secondaryTaskbarWindows) {
+            UnsubclassTaskbarWindow(hSecondaryWnd);
+        }
+    }
     Bright::FlushSdrSaves();
     Overlay::DestroyAll();
     Osd::Destroy();
@@ -7990,7 +8051,6 @@ BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     SetCfg(LoadSettings());
-    g_debugLog = Cfg()->debugLogging;
 
     if (!WindowsVersionInit()) {
         Wh_Log(L"Unsupported Windows version");
@@ -8051,17 +8111,15 @@ BOOL Wh_ModInit() {
         g_nExplorerVersion = WIN_VERSION_10_20H1;
     }
 
-    if (ShouldHookSystemTraySymbols()) {
-        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
-            g_systemTrayModuleHooked = true;
-            HookSystemTraySymbols(systemTrayModule);
-        }
+    if (PerApp::IsWanted()) {
+        PerApp::HookTaskbarDllSymbols();
     }
-
-    if (PerApp::IsWanted() && PerApp::HookTaskbarDllSymbols()) {
-        if (HMODULE taskbarViewModule = PerApp::GetTaskbarViewModuleHandle()) {
-            g_taskbarViewDllLoaded = true;
-            PerApp::HookTaskbarViewDllSymbols(taskbarViewModule);
+    // The modules that are already loaded. When one module serves both
+    // features, the second call finds it handled.
+    for (HMODULE module :
+         {GetSystemTrayModuleHandle(), PerApp::GetTaskbarViewModuleHandle()}) {
+        if (module) {
+            HookTaskbarModuleSymbols(module);
         }
     }
 
@@ -8106,25 +8164,17 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    if (ShouldHookSystemTraySymbols() && !g_systemTrayModuleHooked) {
-        if (HMODULE systemTrayModule = GetSystemTrayModuleHandle()) {
-            if (!g_systemTrayModuleHooked.exchange(true)) {
-                if (HookSystemTraySymbols(systemTrayModule)) {
-                    Wh_ApplyHookOperations();
-                }
-            }
+    // Modules loaded since Wh_ModInit, in case of a race with the
+    // LoadLibraryExW hook.
+    bool hooked = false;
+    for (HMODULE module :
+         {GetSystemTrayModuleHandle(), PerApp::GetTaskbarViewModuleHandle()}) {
+        if (module && HookTaskbarModuleSymbols(module)) {
+            hooked = true;
         }
     }
-
-    if (PerApp::IsWanted() && PerApp::g_taskbarDllHooked &&
-        !g_taskbarViewDllLoaded) {
-        if (HMODULE taskbarViewModule = PerApp::GetTaskbarViewModuleHandle()) {
-            if (!g_taskbarViewDllLoaded.exchange(true)) {
-                if (PerApp::HookTaskbarViewDllSymbols(taskbarViewModule)) {
-                    Wh_ApplyHookOperations();
-                }
-            }
-        }
+    if (hooked) {
+        Wh_ApplyHookOperations();
     }
 
     // Try again in case of a race with the LoadLibraryExW hook.
@@ -8138,10 +8188,6 @@ void Wh_ModAfterInit() {
             HandleIdentifiedTaskbarWindow(hWnd);
         }
     }
-
-    if (IsMouseHookNeeded(*Cfg())) {
-        ScrollAnywhereThreadInit();
-    }
 }
 
 void Wh_ModUninit() {
@@ -8153,15 +8199,9 @@ void Wh_ModUninit() {
     g_unloading = true;
     ScrollAnywhereThreadUninit();
 
-    if (g_hTaskbarWnd) {
-        UnsubclassTaskbarWindow(g_hTaskbarWnd);
-        for (HWND hSecondaryWnd : g_secondaryTaskbarWindows) {
-            UnsubclassTaskbarWindow(hSecondaryWnd);
-        }
-    }
-
-    // Destroy windows/timers/COM objects on the thread that owns them. Run it
-    // through the taskbar window (the controller destroys itself in there).
+    // Unsubclass the taskbar windows and destroy windows/timers/COM objects on
+    // the thread that owns them. Run it through the taskbar window (the
+    // controller destroys itself in there).
     // This runs first: once it returns, the taskbar thread is outside this
     // mod's code and, with g_unloading set, never re-enters the brightness
     // code, so nothing can hand work to the worker while it stops.
@@ -8179,6 +8219,9 @@ void Wh_ModUninit() {
 
     // Results it still posts are dropped (no controller any more).
     Worker::Stop();
+
+    // Only if the mod changed the SDR brightness of a screen.
+    Sdr::RestoreSettingsLevels();
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
@@ -8207,8 +8250,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     // new configuration (it decides which hooks it needs at startup).
     ScrollAnywhereThreadUninit();
     SetCfg(next);
-    g_debugLog = next->debugLogging;
-    if (IsMouseHookNeeded(*next)) {
+    if (g_hTaskbarWnd && IsMouseHookNeeded(*next)) {
         ScrollAnywhereThreadInit();
     }
 
