@@ -4,7 +4,7 @@
 // @name:zh-CN 任务栏自适应变色
 // @description Adjust tray glyphs, clock and date characters, taskbar button themes and supported app icons to their local backgrounds.
 // @description:zh-CN 根据各自背后的画面调整托盘图标、时间和日期字符、任务栏按钮主题及受支持的应用图标。
-// @version 0.3.13
+// @version 0.3.15
 // @author StillDialing
 // @github https://github.com/StillDialing
 // @include explorer.exe
@@ -78,6 +78,7 @@ sample less frequently. A sharp background boundary can cause brief flicker.
 #include <cwchar>
 #include <cwctype>
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -123,6 +124,7 @@ void* g_secondarySite;
 void* g_frameHeight;
 std::atomic<bool> g_unloading;
 std::atomic<HWND> g_samplerWindow;
+std::mutex g_samplerLifecycle;
 HMODULE g_module;
 UINT g_controlMessage;
 constexpr UINT kPollMs = 80;
@@ -180,7 +182,6 @@ struct Glyph {
 };
 
 struct DualIconPaths {
-    bool resolved = false;
     bool valid = false;
     std::wstring darkBgPath;   // Icon for dark background (altform-unplated / theme-dark)
     std::wstring lightBgPath;  // Icon for light background (altform-lightunplated / theme-light)
@@ -308,18 +309,17 @@ struct Tray {
     std::vector<Glyph> glyphs;
     size_t lastCount = static_cast<size_t>(-1);
     ULONGLONG nextDiscovery = 0;
-    bool logInputTree = true;
 };
 
 // Accessed only on the primary taskbar's UI thread.
 std::vector<Tray>& Trays() {
-    static auto* trays = new std::vector<Tray>;
-    return *trays;
+    [[clang::no_destroy]] static std::vector<Tray> trays;
+    return trays;
 }
 
 std::unordered_map<std::wstring, DualIconPaths>& DualIconCache() {
-    static auto* cache = new std::unordered_map<std::wstring, DualIconPaths>;
-    return *cache;
+    static std::unordered_map<std::wstring, DualIconPaths> cache;
+    return cache;
 }
 
 std::wstring ToLower(std::wstring_view s) {
@@ -511,7 +511,6 @@ DualIconPaths ResolveDualIcons(std::wstring const& autoId, double scale) {
         return it->second;
     }
     DualIconPaths result;
-    result.resolved = true;
 
     constexpr std::wstring_view kPrefix = L"Appid: ";
     std::wstring_view view(autoId);
@@ -1716,7 +1715,6 @@ bool UpdateTray(Tray& tray) {
         }
         tray.root = winrt::make_weak(root);
         tray.nextDiscovery = 0;
-        tray.logInputTree = true;
     }
     const auto now = GetTickCount64();
     bool layoutChanged = now >= tray.nextDiscovery;
@@ -1731,7 +1729,6 @@ bool UpdateTray(Tray& tray) {
             if (!b.seen) RestoreButton(b);
             return !b.seen;
         });
-        tray.logInputTree = false;
         for (auto& glyph : tray.glyphs) {
             if (!glyph.present) {
                 Restore(glyph);
@@ -1851,7 +1848,7 @@ void RestoreAll() {
         } catch (...) {
         }
     }
-    Trays().clear();
+    std::vector<Tray>().swap(Trays());
 }
 
 LRESULT CALLBACK SamplerProc(HWND window, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -1874,12 +1871,14 @@ LRESULT CALLBACK SamplerProc(HWND window, UINT msg, WPARAM wParam, LPARAM lParam
 }
 
 void StartOnTaskbarThread() {
+    std::lock_guard lock(g_samplerLifecycle);
     if (g_samplerWindow.load() || g_unloading.load()) {
         return;
     }
     HWND sampler = CreateWindowExW(0, kSamplerClass, L"", 0, 0, 0, 0, 0,
                                    HWND_MESSAGE, nullptr, g_module, nullptr);
-    if (!sampler || !SetTimer(sampler, kSampleTimer, kPollMs, nullptr)) {
+    const UINT interval = g_activePollMs.load();
+    if (!sampler || !SetTimer(sampler, kSampleTimer, interval, nullptr)) {
         if (sampler) {
             DestroyWindow(sampler);
         }
@@ -1887,7 +1886,7 @@ void StartOnTaskbarThread() {
         return;
     }
     g_samplerWindow = sampler;
-    g_interval = kPollMs;
+    g_interval = interval;
 }
 
 void StartForWindow(HWND window) {
@@ -1929,7 +1928,7 @@ void Wh_ModSettingsChanged() {
 
 BOOL Wh_ModInit() {
     Wh_ModSettingsChanged();
-    Wh_Log(L"Adaptive tray contrast v0.3.13 loaded");
+    Wh_Log(L"Adaptive tray contrast v" WH_MOD_VERSION L" loaded");
     g_controlMessage = RegisterWindowMessageW(L"Windhawk.AdaptiveTrayContrast.Control");
     auto module = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!module || !g_controlMessage ||
@@ -1971,8 +1970,14 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
-    g_unloading = true;
-    if (HWND sampler = g_samplerWindow.load()) {
+    HWND sampler;
+    {
+        std::lock_guard lock(g_samplerLifecycle);
+        g_unloading = true;
+        sampler = g_samplerWindow.load();
+    }
+    // Close on the owner thread without holding the startup lock.
+    if (sampler) {
         SendMessageW(sampler, WM_CLOSE, 0, 0);
     }
     UnregisterClassW(kSamplerClass, g_module);
