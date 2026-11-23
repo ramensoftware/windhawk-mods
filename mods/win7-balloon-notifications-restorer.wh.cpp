@@ -7,8 +7,66 @@
 // @github          https://github.com/babamohammed2022
 // @license         MIT
 // @architecture    x86-64
-// @include         *
-// @include         svchost.exe
+// @include         explorer.exe
+// @include         powershell.exe
+// @include         pwsh.exe
+// @include         windowsterminal.exe
+// @include         discord.exe
+// @include         discordcanary.exe
+// @include         discordptb.exe
+// @include         vesktop.exe
+// @include         whatsapp.exe
+// @include         whatsapp.root.exe
+// @include         telegram.exe
+// @include         signal.exe
+// @include         slack.exe
+// @include         teams.exe
+// @include         ms-teams.exe
+// @include         msteams.exe
+// @include         zoom.exe
+// @include         zoom workplace.exe
+// @include         skype.exe
+// @include         chrome.exe
+// @include         msedge.exe
+// @include         firefox.exe
+// @include         brave.exe
+// @include         opera.exe
+// @include         vivaldi.exe
+// @include         vivaldi_proxy.exe
+// @include         chromium.exe
+// @include         waterfox.exe
+// @include         librewolf.exe
+// @include         floorp.exe
+// @include         zen.exe
+// @include         palemoon.exe
+// @include         basilisk.exe
+// @include         torbrowser.exe
+// @include         mullvadbrowser.exe
+// @include         duckduckgo.exe
+// @include         arc.exe
+// @include         thorium.exe
+// @include         avast_secure_browser.exe
+// @include         avgbrowser.exe
+// @include         maxthon.exe
+// @include         thunderbird.exe
+// @include         outlook.exe
+// @include         olk.exe
+// @include         hxoutlook.exe
+// @include         spotify.exe
+// @include         steam.exe
+// @include         epicgameslauncher.exe
+// @include         battle.net.exe
+// @include         xboxapp.exe
+// @include         phoneexperiencehost.exe
+// @include         todo.exe
+// @include         notion.exe
+// @include         obsidian.exe
+// @include         dropbox.exe
+// @include         onedrive.exe
+// @include         googledrivefs.exe
+// @include         code.exe
+// @include         code - insiders.exe
+// @include         devenv.exe
 // @exclude         MusNotificationUx.exe
 // @exclude         MusNotification.exe
 // @exclude         MoUsoCoreWorker.exe
@@ -50,7 +108,7 @@
 // @exclude         git.exe
 // @exclude         git-remote-https.exe
 // @exclude         conhost.exe
-// @compilerOptions -lole32 -lshlwapi -lshell32 -lversion -lgdiplus -lruntimeobject
+// @compilerOptions -lole32 -lshlwapi -lshell32 -lversion -lgdiplus -lruntimeobject 
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -69,20 +127,17 @@ into classic notification-area balloons inspired by Windows Vista, 7 and 8.1.
   for legacy balloon notifications; an existing Windows legacy balloon policy
   is also recognized.
 
-Supported notifications are converted on a best-effort basis. Apps can be
-excluded using Windhawk's advanced process exclusions; the notification-service
-fallback may still process their notifications.
+Supported notifications are converted on a best-effort basis for selected
+applications, including Discord, WhatsApp, Telegram, PowerShell, Chrome, Edge,
+Firefox, Brave, Opera, Vivaldi, Teams, Slack and Outlook. Executable names vary by app version, and
+inclusion does not guarantee compatibility. Other applications can be added
+using Windhawk's advanced process inclusion settings.
 
 The mod tries to turn supported toast content into notification-area requests.
 The notification area determines how those requests are displayed.
 
-## Symbols
-
-The notification-service fallback uses undocumented symbols in `wpncore.dll`,
-including `SessionManager::ProcessToastDelivery`. Windhawk can retrieve matching
-symbols from the [Microsoft public symbol server](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/microsoft-public-symbols).
-
-Symbol availability and compatibility may vary between Windows builds.
+Tested on Windows 11 24H2 with Windows 8.1 Taskbar Recreation using a
+PowerShell notification.
 
 ## Credits
 
@@ -94,7 +149,6 @@ The Explorer registry-query hook is inspired by
 #include <windows.h>
 #include <gdiplus.h>
 #include <windhawk_api.h>
-#include <windhawk_utils.h>
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <objbase.h>
@@ -143,10 +197,8 @@ constexpr UINT kCleanupIntervalMs = 2001;
 
 constexpr size_t kTraySlotCount = 8;
 constexpr size_t kDeliveryQueueDepth = 8;
-constexpr size_t kRecentToasts = 8;
 
 constexpr size_t kXmlBufferChars = 16384;
-constexpr size_t kPayloadBufferBytes = 64 * 1024;
 
 constexpr DWORD kBalloonRequestMagic = 0x54524E59;
 constexpr DWORD kBalloonRequestVersion = 3;
@@ -154,67 +206,11 @@ constexpr DWORD kSuppressSoundFlag = 0x0001;
 
 constexpr DWORD kEngineStartTimeoutMs = 5001;
 constexpr DWORD kHostProbeTimeoutMs = 1000;
-constexpr DWORD kWatcherMaxDelayMs = 25601;
 
-constexpr ULONGLONG kRepeatWindowMs = 5001;
-constexpr ULONGLONG kProgressRepeatWindowMs = 60001;
 constexpr ULONGLONG kSlotIdleTimeoutMs = 120001;
 constexpr ULONGLONG kBalloonCloseDelayMs = 501;
 constexpr ULONGLONG kPolicyCacheLifetimeMs = 10001;
 
-constexpr PCWSTR kExcludedImages[] = {
-    L"windhawk.exe",
-    L"shellexperiencehost.exe",
-    L"startmenuexperiencehost.exe",
-    L"textinputhost.exe",
-    L"searchui.exe",
-    L"searchapp.exe",
-    L"searchhost.exe",
-    L"sihost.exe",
-    L"csrss.exe",
-    L"wininit.exe",
-    L"lsass.exe",
-    L"services.exe",
-    L"smss.exe",
-    L"musnotificationux.exe",
-    L"musnotification.exe",
-    L"mousocoreworker.exe",
-    L"usoclient.exe",
-    L"wuauclt.exe",
-    L"dwm.exe",
-    L"winlogon.exe",
-    L"fontdrvhost.exe",
-    L"audiodg.exe",
-    L"logonui.exe",
-    L"consent.exe",
-    L"credentialuibroker.exe",
-    L"lsaiso.exe",
-    L"ngciso.exe",
-    L"bioiso.exe",
-    L"securityhealthservice.exe",
-    L"msmpeng.exe",
-    L"nissrv.exe",
-    L"useroobebroker.exe",
-    L"smartscreen.exe",
-    L"werfault.exe",
-    L"ctfmon.exe",
-    L"runtimebroker.exe",
-    L"windhawk-ui.exe",
-    L"windhawk-mod.exe",
-    L"git.exe",
-    L"git-remote-https.exe",
-    L"conhost.exe",
-};
-
-constexpr PCWSTR kBlockedSenders[] = {
-    L"windowsupdate",
-    L"windows.update",
-    L"windows-update",
-    L"musnotification",
-    L"usoclient",
-    L"mousocoreworker",
-    L"wuauclt",
-};
 }
 
 
@@ -633,18 +629,6 @@ class ProcessImage
         name_ = separator ? separator + 1 : path_;
         queryDescription();
         return true;
-    }
-
-    bool isExcluded() const
-    {
-        for (PCWSTR candidate : config::kExcludedImages)
-        {
-            if (text::equalsIgnoreCase(name_, candidate))
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     bool isExplorer() const
@@ -1320,6 +1304,51 @@ bool isValid(const BalloonRequest *request, DWORD bytes)
            request->version == config::kBalloonRequestVersion;
 }
 
+// https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-queryfullprocessimagenamew
+// https://learn.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-pathisnetworkpathw
+void resolveRequestIdentity(BalloonRequest &request)
+{
+    request.exePath[0] = L'\0';
+    if (!request.pid)
+    {
+        return;
+    }
+
+    DWORD senderSession = 0;
+    DWORD hostSession = 0;
+    if (!ProcessIdToSessionId(request.pid, &senderSession) ||
+        !ProcessIdToSessionId(GetCurrentProcessId(), &hostSession) ||
+        senderSession != hostSession)
+    {
+        request.pid = 0;
+        return;
+    }
+
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, request.pid);
+    if (!process)
+    {
+        request.pid = 0;
+        return;
+    }
+    struct ProcessHandle
+    {
+        HANDLE value;
+        ~ProcessHandle() { CloseHandle(value); }
+    } owner{process};
+
+    WCHAR image[MAX_PATH]{};
+    DWORD length = ARRAYSIZE(image);
+    if (!QueryFullProcessImageNameW(process, 0, image, &length) || length < 4 ||
+        !((image[0] >= L'A' && image[0] <= L'Z') ||
+          (image[0] >= L'a' && image[0] <= L'z')) ||
+        image[1] != L':' || image[2] != L'\\' || PathIsNetworkPathW(image))
+    {
+        request.pid = 0;
+        return;
+    }
+    text::copyTruncated(request.exePath, image);
+}
+
 void ensureTerminated(BalloonRequest &request)
 {
     request.title[ARRAYSIZE(request.title) - 1] = L'\0';
@@ -1394,36 +1423,12 @@ void activateProcess(DWORD processId)
     }
 
 
-    const DWORD targetThread = GetWindowThreadProcessId(window, nullptr);
-    const DWORD foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), nullptr);
-    const DWORD currentThread = GetCurrentThreadId();
-
-    if (foregroundThread && foregroundThread != currentThread)
-    {
-        AttachThreadInput(currentThread, foregroundThread, TRUE);
-    }
-    if (targetThread && targetThread != currentThread)
-    {
-        AttachThreadInput(currentThread, targetThread, TRUE);
-    }
-
-    AllowSetForegroundWindow(processId);
     BringWindowToTop(window);
     SetForegroundWindow(window);
-
-    if (targetThread && targetThread != currentThread)
-    {
-        AttachThreadInput(currentThread, targetThread, FALSE);
-    }
-    if (foregroundThread && foregroundThread != currentThread)
-    {
-        AttachThreadInput(currentThread, foregroundThread, FALSE);
-    }
 }
 }
 
 
-using ChangeWindowMessageFilterExFn = BOOL(WINAPI *)(HWND, UINT, DWORD, void *);
 
 class TrayEngine
 {
@@ -1483,7 +1488,7 @@ class TrayEngine
     LRESULT handleCopyData(const COPYDATASTRUCT &data);
     void handleTrayCallback(UINT event, UINT id);
     void deliverNext();
-    void present(const BalloonRequest &request);
+    bool present(const BalloonRequest &request);
     void reapExpired(bool force);
     void resetAfterTaskbarCreated();
     Slot *acquireSlot(PCWSTR exePath);
@@ -1523,11 +1528,6 @@ class Runtime
         {
             return false;
         }
-        if (image().isExcluded())
-        {
-            return false;
-        }
-
         stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!stopEvent_)
         {
@@ -1772,20 +1772,6 @@ DWORD TrayEngine::run(HANDLE ready)
         return 1;
     }
 
-    if (isHost_)
-    {
-
-        HMODULE user32 = GetModuleHandleW(L"user32.dll");
-        auto changeFilter =
-            user32 ? reinterpret_cast<ChangeWindowMessageFilterExFn>(
-                         GetProcAddress(user32, "ChangeWindowMessageFilterEx"))
-                   : nullptr;
-        if (changeFilter)
-        {
-            changeFilter(window, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
-        }
-    }
-
     window_.store(window, std::memory_order_release);
     Wh_Log(L"[balloon] notification window active (host=%d)", isHost_ ? 1 : 0);
     readyScope.signal();
@@ -1881,7 +1867,8 @@ LRESULT TrayEngine::handleCopyData(const COPYDATASTRUCT &data)
 
     BalloonRequest copy = *request;
     ipc::ensureTerminated(copy);
-    return enqueue(copy) ? 1 : 0;
+    ipc::resolveRequestIdentity(copy);
+    return present(copy) ? 1 : 0;
 }
 
 void TrayEngine::handleTrayCallback(UINT event, UINT id)
@@ -1938,11 +1925,11 @@ void TrayEngine::deliverNext()
     }
 }
 
-void TrayEngine::present(const BalloonRequest &request)
+bool TrayEngine::present(const BalloonRequest &request)
 {
     if (!window())
     {
-        return;
+        return false;
     }
 
     Slot &slot = *acquireSlot(request.exePath);
@@ -1980,7 +1967,7 @@ void TrayEngine::present(const BalloonRequest &request)
             icon::destroyOwned(appLarge);
             Wh_Log(L"[balloon] tray icon registration failed: %s", request.exePath);
             releaseSlot(slot);
-            return;
+            return false;
         }
 
         slot.added = true;
@@ -2018,7 +2005,8 @@ void TrayEngine::present(const BalloonRequest &request)
                                                                : L"Notification"));
     text::copyTruncated(balloon.szInfo, request.body[0] ? request.body : L" ");
 
-    if (Shell_NotifyIconW(NIM_MODIFY, &balloon))
+    const bool accepted = Shell_NotifyIconW(NIM_MODIFY, &balloon) != FALSE;
+    if (accepted)
     {
         slot.balloonActive = true;
         Wh_Log(L"[balloon] shell accepted the balloon request");
@@ -2030,6 +2018,7 @@ void TrayEngine::present(const BalloonRequest &request)
     }
 
     SetTimer(window(), config::kCleanupTimerId, config::kCleanupIntervalMs, nullptr);
+    return accepted;
 }
 
 void TrayEngine::reapExpired(bool force)
@@ -2177,90 +2166,32 @@ bool deliver(BalloonRequest &request)
     request.magic = config::kBalloonRequestMagic;
     request.version = config::kBalloonRequestVersion;
 
-    TrayEngine &engine = runtime().tray();
-    if (engine.isHost())
-    {
-        if (!policy::legacyBalloonsEnabled() || !engine.start())
-        {
-            return false;
-        }
-        return engine.enqueue(request);
-    }
-
     HWND host = FindWindowW(config::kHostWindowClass, nullptr);
-    if (host)
+    HWND shell = GetShellWindow();
+    DWORD hostPid = 0;
+    DWORD shellPid = 0;
+    if (!host || !shell || !GetWindowThreadProcessId(host, &hostPid) ||
+        !GetWindowThreadProcessId(shell, &shellPid) || !hostPid || hostPid != shellPid)
     {
-        COPYDATASTRUCT data{};
-        data.dwData = config::kBalloonRequestMagic;
-        data.cbData = static_cast<DWORD>(sizeof(request));
-        data.lpData = &request;
-
-        DWORD_PTR result = 0;
-        if (SendMessageTimeoutW(host, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&data),
-                                SMTO_ABORTIFHUNG | SMTO_BLOCK, config::kHostProbeTimeoutMs,
-                                &result))
-        {
-            return result != 0;
-        }
-        Wh_Log(L"[balloon] host delivery did not complete within the wait period");
-    }
-
-    if (!policy::legacyBalloonsEnabled() || !engine.start())
-    {
+        Wh_Log(L"[balloon] host verification failed: hostPid=%lu shellPid=%lu", hostPid, shellPid);
         return false;
     }
-    return engine.enqueue(request);
-}
-}
 
+    COPYDATASTRUCT data{};
+    data.dwData = config::kBalloonRequestMagic;
+    data.cbData = static_cast<DWORD>(sizeof(request));
+    data.lpData = &request;
 
-class RecentToasts
-{
-  public:
-    bool isRecent(DWORD key, bool hasProgress)
+    DWORD_PTR result = 0;
+    if (!SendMessageTimeoutW(host, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&data),
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, config::kHostProbeTimeoutMs,
+                             &result))
     {
-        const ULONGLONG window =
-            hasProgress ? config::kProgressRepeatWindowMs : config::kRepeatWindowMs;
-        const ULONGLONG now = GetTickCount64();
-        bool repeat = false;
-
-        std::lock_guard<std::recursive_mutex> lock(mutex_);
-        for (auto &entry : entries_)
-        {
-            if (entry.key == key && entry.time != 0 && now - entry.time < window)
-            {
-                entry.time = now;
-                repeat = true;
-                break;
-            }
-        }
-        return repeat;
+        Wh_Log(L"[balloon] host delivery did not complete within the wait period");
+        return false;
     }
-
-    void remember(DWORD key)
-    {
-        std::lock_guard<std::recursive_mutex> lock(mutex_);
-        entries_[next_].key = key;
-        entries_[next_].time = GetTickCount64();
-        next_ = (next_ + 1) % entries_.size();
-    }
-
-  private:
-    struct Entry
-    {
-        ULONGLONG time = 0;
-        DWORD key = 0;
-    };
-
-    std::array<Entry, config::kRecentToasts> entries_{};
-    size_t next_ = 0;
-    std::recursive_mutex mutex_;
-};
-
-RecentToasts &recentToasts()
-{
-    static RecentToasts instance;
-    return instance;
+    return result != 0;
+}
 }
 
 
@@ -2269,18 +2200,11 @@ namespace conversion
 enum class Result
 {
     Converted,
-    Duplicate,
     NotConverted,
 };
 
 Result convert(const ToastContent &content, PCWSTR exePath, PCWSTR appName, DWORD processId)
 {
-    const DWORD key = toast::dedupeKey(content);
-    if (recentToasts().isRecent(key, content.hasProgress))
-    {
-        return Result::Duplicate;
-    }
-
     BalloonRequest request{};
     request.pid = processId;
     request.flags = content.silent ? config::kSuppressSoundFlag : 0;
@@ -2295,8 +2219,7 @@ Result convert(const ToastContent &content, PCWSTR exePath, PCWSTR appName, DWOR
         return Result::NotConverted;
     }
 
-    recentToasts().remember(key);
-    Wh_Log(L"[balloon] request queued for delivery");
+    Wh_Log(L"[balloon] shell accepted the notification request");
     return Result::Converted;
 }
 }
@@ -2345,15 +2268,15 @@ HRESULT onNotifierShow(void *notifier, void *notification, void *arg3, void *arg
     try
     {
         Wh_Log(L"[balloon] application notification received");
-        thread_local WCHAR xml[config::kXmlBufferChars];
-        if (winrt::toastXml(notification, xml, ARRAYSIZE(xml)))
+        auto xml = std::make_unique<WCHAR[]>(config::kXmlBufferChars);
+        if (winrt::toastXml(notification, xml.get(), config::kXmlBufferChars))
         {
-            const auto content = toast::parse(xml);
+            const auto content = toast::parse(xml.get());
             if (content)
             {
                 handled = conversion::convert(*content, runtime().image().path(),
                                               runtime().image().description(),
-                                              GetCurrentProcessId()) != conversion::Result::NotConverted;
+                                              GetCurrentProcessId()) == conversion::Result::Converted;
             }
         }
         else
@@ -2638,361 +2561,6 @@ bool isShowHooked()
 }
 
 
-namespace platform
-{
-namespace
-{
-using NotificationGetStringFn = HRESULT (*)(void *, WCHAR **);
-using NotificationGetPayloadFn = HRESULT (*)(void *, IStream **);
-using ProcessToastDeliveryFn = void (*)(void *, void *, void *, void *, PCWSTR);
-
-constexpr WCHAR kSymbolProcessToastDelivery[] =
-    L"?ProcessToastDelivery@SessionManager@@AEAAXPEAVNotification@@PEAUINotificationHandler@@"
-    L"PEAVTransientNotificationDetails@@PEBG@Z";
-constexpr WCHAR kSymbolGetPayload[] =
-    L"?get_Payload@Notification@@UEAAJPEAPEAUIStream@@@Z";
-constexpr WCHAR kSymbolGetNotificationType[] =
-    L"?get_NotificationType@Notification@@UEAAJPEAPEAG@Z";
-constexpr WCHAR kSymbolGetHandlerKey[] =
-    L"?get_HandlerKey@Notification@@UEAAJPEAPEAG@Z";
-
-std::atomic<bool> g_active{false};
-NotificationGetStringFn g_getNotificationType = nullptr;
-NotificationGetStringFn g_getHandlerKey = nullptr;
-NotificationGetPayloadFn g_getPayload = nullptr;
-ProcessToastDeliveryFn g_originalDelivery = nullptr;
-
-bool isBlockedSender(PCWSTR sender)
-{
-    for (PCWSTR term : config::kBlockedSenders)
-    {
-        if (wcsstr(sender, term))
-        {
-            return true;
-        }
-    }
-    return false;
-}
-}
-
-bool readPayload(IStream *stream, WCHAR *out, size_t capacity)
-{
-    if (!stream || !out || capacity == 0)
-    {
-        return false;
-    }
-    out[0] = L'\0';
-
-    thread_local BYTE raw[config::kPayloadBufferBytes];
-
-    LARGE_INTEGER zero{};
-    ULARGE_INTEGER originalPosition{};
-    if (FAILED(stream->Seek(zero, STREAM_SEEK_CUR, &originalPosition)))
-    {
-        return false;
-    }
-
-    struct RestorePosition
-    {
-        IStream *stream;
-        ULARGE_INTEGER position;
-
-        ~RestorePosition()
-        {
-            LARGE_INTEGER offset{};
-            offset.QuadPart = static_cast<LONGLONG>(position.QuadPart);
-            stream->Seek(offset, STREAM_SEEK_SET, nullptr);
-        }
-    } restore{stream, originalPosition};
-
-    if (FAILED(stream->Seek(zero, STREAM_SEEK_SET, nullptr)))
-    {
-        return false;
-    }
-
-    ULONG total = 0;
-    while (total < sizeof(raw))
-    {
-        ULONG got = 0;
-        if (FAILED(stream->Read(raw + total, static_cast<ULONG>(sizeof(raw) - total), &got)) ||
-            got == 0)
-        {
-            break;
-        }
-        total += got;
-    }
-
-    if (total < 4)
-    {
-        return false;
-    }
-
-    const BYTE *data = raw;
-    ULONG size = total;
-
-    if (size >= 2 && data[0] == 0xFF && data[1] == 0xFE)
-    {
-        data += 2;
-        size -= 2;
-    }
-    else if (size >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF)
-    {
-        data += 3;
-        size -= 3;
-        const int written = MultiByteToWideChar(
-            CP_UTF8, 0, reinterpret_cast<const char *>(data), static_cast<int>(size), out,
-            static_cast<int>(capacity) - 1);
-        out[written > 0 ? written : 0] = L'\0';
-        return out[0] != L'\0';
-    }
-    else if (size >= 2 && data[1] != 0x00)
-    {
-        const int written = MultiByteToWideChar(
-            CP_UTF8, 0, reinterpret_cast<const char *>(data), static_cast<int>(size), out,
-            static_cast<int>(capacity) - 1);
-        out[written > 0 ? written : 0] = L'\0';
-        return out[0] != L'\0';
-    }
-
-    const size_t chars =
-        std::min(static_cast<size_t>(size / sizeof(WCHAR)), capacity - 1);
-    memcpy(out, data, chars * sizeof(WCHAR));
-    out[chars] = L'\0';
-    return out[0] != L'\0';
-}
-
-void resolveDisplayName(PCWSTR aumid, WCHAR *out, size_t capacity)
-{
-    out[0] = L'\0';
-    if (!aumid || !aumid[0])
-    {
-        return;
-    }
-
-    WCHAR key[512];
-    text::copyTruncated(key, L"AppUserModelId\\");
-    const size_t used = wcslen(key);
-    text::copyTruncated(key + used, ARRAYSIZE(key) - used, aumid);
-
-    WCHAR value[256]{};
-    DWORD size = sizeof(value);
-    if (RegGetValueW(HKEY_CLASSES_ROOT, key, L"DisplayName", RRF_RT_REG_SZ, nullptr, value,
-                     &size) == ERROR_SUCCESS &&
-        value[0])
-    {
-        if (value[0] == L'@')
-        {
-            WCHAR resolved[256]{};
-            if (SUCCEEDED(SHLoadIndirectString(value, resolved, ARRAYSIZE(resolved), nullptr)) &&
-                resolved[0])
-            {
-                text::copyTruncated(out, capacity, resolved);
-                return;
-            }
-        }
-        else
-        {
-            text::copyTruncated(out, capacity, value);
-            return;
-        }
-    }
-
-    text::copyTruncated(out, capacity, aumid);
-    WCHAR *bang = wcschr(out, L'!');
-    if (bang)
-    {
-        *bang = L'\0';
-    }
-}
-
-bool convert(void *notification)
-{
-    if (!notification || !g_getPayload || !g_getNotificationType)
-    {
-        return false;
-    }
-    if (!policy::conversionAllowed())
-    {
-        return false;
-    }
-
-    WCHAR *type = nullptr;
-    if (FAILED(g_getNotificationType(notification, &type)) || !type)
-    {
-        return false;
-    }
-
-    const bool isToast = text::equalsIgnoreCase(type, L"toast");
-    CoTaskMemFree(type);
-    if (!isToast)
-    {
-        return false;
-    }
-
-    if (!g_getHandlerKey)
-    {
-        return false;
-    }
-
-    WCHAR *sender = nullptr;
-    if (FAILED(g_getHandlerKey(notification, &sender)) || !sender || !sender[0])
-    {
-        if (sender)
-        {
-            CoTaskMemFree(sender);
-        }
-        return false;
-    }
-
-    WCHAR senderLower[512]{};
-    if (wcslen(sender) >= ARRAYSIZE(senderLower))
-    {
-        CoTaskMemFree(sender);
-        return false;
-    }
-
-    text::copyTruncated(senderLower, sender);
-    CoTaskMemFree(sender);
-    _wcslwr_s(senderLower, ARRAYSIZE(senderLower));
-
-    if (isBlockedSender(senderLower))
-    {
-        return false;
-    }
-
-    IStream *stream = nullptr;
-    if (FAILED(g_getPayload(notification, &stream)) || !stream)
-    {
-        return false;
-    }
-    com::StreamOwner streamOwner(stream);
-
-    thread_local WCHAR xml[config::kXmlBufferChars];
-    if (!readPayload(stream, xml, ARRAYSIZE(xml)))
-    {
-        return false;
-    }
-
-    const auto content = toast::parse(xml);
-    if (!content)
-    {
-        return false;
-    }
-
-    WCHAR appName[96]{};
-    resolveDisplayName(senderLower, appName, ARRAYSIZE(appName));
-
-    const auto result = conversion::convert(*content, L"", appName, 0);
-    if (result == conversion::Result::Converted)
-    {
-        Wh_Log(L"[balloon] platform request queued: %s", appName);
-        return true;
-    }
-    return result == conversion::Result::Duplicate;
-}
-
-void processToastDeliveryHook(void *pThis, void *notification, void *handler, void *details,
-                              PCWSTR arg)
-{
-    if (!g_originalDelivery)
-    {
-        Wh_Log(L"[balloon] original platform delivery unavailable");
-        return;
-    }
-    try
-    {
-        if (convert(notification))
-        {
-            return;
-        }
-    }
-    catch (...)
-    {
-        Wh_Log(L"[balloon] service conversion raised a C++ exception; original call continues");
-    }
-    g_originalDelivery(pThis, notification, handler, details, arg);
-}
-
-bool installHook(HMODULE wpncore)
-{
-    if (g_active.load())
-    {
-        return true;
-    }
-
-    void *deliver = nullptr;
-    WindhawkUtils::SYMBOL_HOOK wpncoreDllHooks[] = {
-        {{L"private: void __cdecl SessionManager::ProcessToastDelivery(class Notification *,struct INotificationHandler *,class TransientNotificationDetails *,unsigned short const *)"}, &deliver},
-        {{L"public: virtual long __cdecl Notification::get_Payload(struct IStream * *)"}, &g_getPayload},
-        {{L"public: virtual long __cdecl Notification::get_NotificationType(unsigned short * *)"}, &g_getNotificationType},
-        {{L"public: virtual long __cdecl Notification::get_HandlerKey(unsigned short * *)"}, &g_getHandlerKey},
-    };
-
-    if (!WindhawkUtils::HookSymbols(wpncore, wpncoreDllHooks,
-                                    ARRAYSIZE(wpncoreDllHooks)) ||
-        !deliver || !g_getPayload || !g_getNotificationType || !g_getHandlerKey)
-    {
-        Wh_Log(L"[balloon] platform symbols unavailable or incomplete");
-        return false;
-    }
-
-    if (!Wh_SetFunctionHook(deliver, reinterpret_cast<void *>(&processToastDeliveryHook),
-                            reinterpret_cast<void **>(&g_originalDelivery)))
-    {
-        Wh_Log(L"[balloon] platform interception registration failed");
-        return false;
-    }
-
-    if (!Wh_ApplyHookOperations())
-    {
-        Wh_Log(L"[balloon] platform interception activation failed; requesting rollback");
-        if (!Wh_RemoveFunctionHook(deliver))
-        {
-            Wh_Log(L"[balloon] platform interception rollback could not be registered");
-        }
-        else if (!Wh_ApplyHookOperations())
-        {
-            Wh_Log(L"[balloon] platform interception rollback could not be applied");
-        }
-        return false;
-    }
-
-    g_active.store(true);
-    Wh_Log(L"[balloon] platform interception ready: address=%p", deliver);
-    return true;
-}
-
-DWORD WINAPI watchWorker(LPVOID)
-{
-    try
-    {
-        for (DWORD delay = 0; delay <= config::kWatcherMaxDelayMs;
-             delay = delay ? (delay - 1) * 2 + 1 : 201)
-        {
-            if (delay && WaitForSingleObject(runtime().stopEvent(), delay) != WAIT_TIMEOUT)
-            {
-                return 0;
-            }
-
-            HMODULE wpncore = GetModuleHandleW(L"wpncore.dll");
-            if (wpncore)
-            {
-                installHook(wpncore);
-                return 0;
-            }
-        }
-        return 0;
-    }
-    catch (...)
-    {
-        Wh_Log(L"[balloon] background worker raised a C++ exception");
-        return 0;
-    }
-}
-
-}
-
-
 namespace lifecycle
 {
 BOOL initialize()
@@ -3003,14 +2571,19 @@ BOOL initialize()
         return FALSE;
     }
 
+    if (rt.image().isServiceHost())
+    {
+        rt.close();
+        return FALSE;
+    }
+
     if (rt.image().isExplorer())
     {
         register_explorer_registry_interceptor();
     }
 
-    if (rt.image().isServiceHost())
+    if (rt.image().isExplorer())
     {
-        Wh_Log(L"[balloon] service process initialized");
         return TRUE;
     }
 
@@ -3038,13 +2611,7 @@ void afterInitialize()
         rt.tray().start();
     }
 
-    if (rt.image().isServiceHost())
-    {
-        rt.startWatcher(&platform::watchWorker, L"platform");
-        return;
-    }
-
-    if (!interception::isShowHooked())
+    if (!rt.image().isExplorer() && !interception::isShowHooked())
     {
         rt.startWatcher(&interception::deferredWorker, L"API");
     }
