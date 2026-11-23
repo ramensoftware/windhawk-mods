@@ -19,8 +19,12 @@
 Adds a system tray icon that shows the battery percentage of the **Attack Shark
 X11** wireless mouse, connected through its 2.4 GHz receiver (USB `1D57:FA60`).
 
-* The number changes color: green (above 50%), yellow, red (at or below the
-  low battery threshold) and blue while charging.
+![Icon styles on a dark and a light taskbar: 75%, 42%, 12% (low), charging, no signal and no data](https://raw.githubusercontent.com/xtrimdr/windhawk-mods/assets/attack-shark-x11-battery/preview.png)
+
+* Two icon styles: the battery percentage as a number, or a mouse that fills
+  up with the battery level.
+* The icon changes color: green (above 50%), yellow, red (at or below the low
+  battery threshold) and blue while charging.
 * If the mouse stops sending data (for example, because it went to sleep), the
   last known value stays in gray.
 * Hover the icon to see the percentage and the charging state.
@@ -49,6 +53,12 @@ The protocol is documented in
 
 // ==WindhawkModSettings==
 /*
+- iconStyle: number
+  $name: Icon style
+  $name:es-ES: Estilo del ícono
+  $options:
+  - number: Battery percentage (number)
+  - mouse: Mouse that fills up with the battery level
 - lowThreshold: 20
   $name: Low battery threshold (%)
   $name:es-ES: Umbral de batería baja (%)
@@ -102,7 +112,13 @@ struct BatteryState {
     bool deviceOpen = false;
 };
 
+enum class IconStyle {
+    kNumber,
+    kMouse,
+};
+
 struct Settings {
+    IconStyle iconStyle = IconStyle::kNumber;
     int lowThreshold = 20;
     bool notifyLow = true;
     bool notifyFull = false;
@@ -188,6 +204,10 @@ static int g_lastIconSize = 0;
 
 static Settings ReadSettings() {
     Settings s;
+    PCWSTR style = Wh_GetStringSetting(L"iconStyle");
+    s.iconStyle =
+        wcscmp(style, L"mouse") == 0 ? IconStyle::kMouse : IconStyle::kNumber;
+    Wh_FreeStringSetting(style);
     int low = Wh_GetIntSetting(L"lowThreshold");
     s.lowThreshold = (low > 0 && low < 100) ? low : 20;
     s.notifyLow = Wh_GetIntSetting(L"notifyLow") != 0;
@@ -403,11 +423,18 @@ static UINT GetTaskbarDpi() {
     return dpi ? dpi : GetDpiForSystem();
 }
 
-static HICON CreateNumberIcon(const wchar_t* text, COLORREF color, int size) {
+// Draws white shapes on black with `draw` at `scale` times the icon size, and
+// returns the coverage of each icon pixel (0-255). Drawing larger and
+// averaging gives antialiased edges to plain GDI shapes.
+template <typename DrawFn>
+static std::vector<BYTE> RenderCoverage(int size, int scale, DrawFn draw) {
+    std::vector<BYTE> coverage;
+    int big = size * scale;
+
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = size;
-    bi.bmiHeader.biHeight = -size;  // top-down
+    bi.bmiHeader.biWidth = big;
+    bi.bmiHeader.biHeight = -big;  // top-down
     bi.bmiHeader.biPlanes = 1;
     bi.bmiHeader.biBitCount = 32;
     bi.bmiHeader.biCompression = BI_RGB;
@@ -415,55 +442,84 @@ static HICON CreateNumberIcon(const wchar_t* text, COLORREF color, int size) {
     HDC screen = GetDC(nullptr);
     HDC mem = CreateCompatibleDC(screen);
     void* bits = nullptr;
-    HBITMAP color32 =
+    HBITMAP bmp =
         CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
     ReleaseDC(nullptr, screen);
-    if (!mem || !color32 || !bits) {
-        if (color32) {
-            DeleteObject(color32);
+    if (!mem || !bmp || !bits) {
+        if (bmp) {
+            DeleteObject(bmp);
         }
         if (mem) {
             DeleteDC(mem);
         }
+        return coverage;
+    }
+
+    HGDIOBJ oldBmp = SelectObject(mem, bmp);
+    memset(bits, 0, big * big * 4);
+    draw(mem, big);
+    GdiFlush();
+
+    coverage.resize(size * size);
+    auto* px = (const BYTE*)bits;
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            int sum = 0;
+            for (int sy = 0; sy < scale; sy++) {
+                const BYTE* row = px + ((y * scale + sy) * big + x * scale) * 4;
+                for (int sx = 0; sx < scale; sx++, row += 4) {
+                    // Max of the channels, in case the text is drawn with
+                    // subpixel colors.
+                    BYTE m = row[0] > row[1] ? row[0] : row[1];
+                    sum += m > row[2] ? m : row[2];
+                }
+            }
+            coverage[y * size + x] = (BYTE)(sum / (scale * scale));
+        }
+    }
+
+    SelectObject(mem, oldBmp);
+    DeleteObject(bmp);
+    DeleteDC(mem);
+    return coverage;
+}
+
+// Turns a coverage mask into an icon of the given color (premultiplied
+// alpha).
+static HICON CoverageToIcon(const std::vector<BYTE>& coverage,
+                            int size,
+                            COLORREF color) {
+    if (coverage.size() != (size_t)(size * size)) {
         return nullptr;
     }
 
-    HGDIOBJ oldBmp = SelectObject(mem, color32);
-    memset(bits, 0, size * size * 4);
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = size;
+    bi.bmiHeader.biHeight = -size;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
 
-    size_t len = wcslen(text);
-    LOGFONTW lf{};
-    lf.lfHeight = -(len >= 3 ? size * 17 / 20 : size * 19 / 20);
-    lf.lfWeight = FW_BOLD;
-    lf.lfQuality = ANTIALIASED_QUALITY;  // grayscale, no ClearType
-    // "100" doesn't fit with Segoe UI, use the condensed Bahnschrift variant.
-    wcscpy(lf.lfFaceName, len >= 3 ? L"Bahnschrift Condensed" : L"Segoe UI");
-    HFONT font = CreateFontIndirectW(&lf);
-    HGDIOBJ oldFont = SelectObject(mem, font);
+    void* bits = nullptr;
+    HBITMAP color32 =
+        CreateDIBSection(nullptr, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!color32 || !bits) {
+        if (color32) {
+            DeleteObject(color32);
+        }
+        return nullptr;
+    }
 
-    SetBkMode(mem, TRANSPARENT);
-    SetTextColor(mem, RGB(255, 255, 255));
-    RECT rc{0, 0, size, size};
-    DrawTextW(mem, text, -1, &rc,
-              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
-    GdiFlush();
-
-    // The white-on-black text is used as an alpha mask, then painted with the
-    // requested color using premultiplied alpha.
     BYTE cr = GetRValue(color), cg = GetGValue(color), cb = GetBValue(color);
     auto* px = (BYTE*)bits;
     for (int i = 0; i < size * size; i++, px += 4) {
-        BYTE a = px[0] > px[1] ? (px[0] > px[2] ? px[0] : px[2])
-                               : (px[1] > px[2] ? px[1] : px[2]);
+        BYTE a = coverage[i];
         px[0] = (BYTE)(cb * a / 255);
         px[1] = (BYTE)(cg * a / 255);
         px[2] = (BYTE)(cr * a / 255);
         px[3] = a;
     }
-
-    SelectObject(mem, oldFont);
-    DeleteObject(font);
-    SelectObject(mem, oldBmp);
 
     HBITMAP mask = CreateBitmap(size, size, 1, 1, nullptr);
     ICONINFO ii{};
@@ -474,8 +530,104 @@ static HICON CreateNumberIcon(const wchar_t* text, COLORREF color, int size) {
 
     DeleteObject(mask);
     DeleteObject(color32);
-    DeleteDC(mem);
     return icon;
+}
+
+static void DrawNumber(HDC dc, int size, const wchar_t* text) {
+    size_t len = wcslen(text);
+    LOGFONTW lf{};
+    lf.lfHeight = -(len >= 3 ? size * 17 / 20 : size * 19 / 20);
+    lf.lfWeight = FW_BOLD;
+    lf.lfQuality = ANTIALIASED_QUALITY;  // grayscale, no ClearType
+    // "100" doesn't fit with Segoe UI, use the condensed Bahnschrift variant.
+    wcscpy(lf.lfFaceName, len >= 3 ? L"Bahnschrift Condensed" : L"Segoe UI");
+    HFONT font = CreateFontIndirectW(&lf);
+    HGDIOBJ oldFont = SelectObject(dc, font);
+
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, RGB(255, 255, 255));
+    RECT rc{0, 0, size, size};
+    DrawTextW(dc, text, -1, &rc,
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
+
+    SelectObject(dc, oldFont);
+    DeleteObject(font);
+}
+
+// A mouse outline (body and button split) that fills up from the bottom with
+// the battery level. `percent` < 0 draws only the outline.
+static void DrawMouse(HDC dc, int size, int percent) {
+    int w = size * 60 / 100;
+    int h = size * 94 / 100;
+    int left = (size - w) / 2;
+    int top = (size - h) / 2;
+    int right = left + w;
+    int bottom = top + h;
+    int t = size * 10 / 100;  // stroke width
+    if (t < 1) {
+        t = 1;
+    }
+    int buttonsY = top + h * 42 / 100;
+
+    HBRUSH white = (HBRUSH)GetStockObject(WHITE_BRUSH);
+
+    HRGN outer = CreateRoundRectRgn(left, top, right + 1, bottom + 1, w, w);
+    HRGN inner = CreateRoundRectRgn(left + t, top + t, right - t + 1,
+                                    bottom - t + 1, w - 2 * t, w - 2 * t);
+    HRGN ring = CreateRectRgn(0, 0, 0, 0);
+    CombineRgn(ring, outer, inner, RGN_DIFF);
+    FillRgn(dc, ring, white);
+
+    // Button split: a horizontal line and a vertical line above it.
+    HRGN split = CreateRectRgn(left, buttonsY - t / 2, right, buttonsY - t / 2 + t);
+    HRGN vertical = CreateRectRgn(size / 2 - t / 2, top, size / 2 - t / 2 + t,
+                                  buttonsY);
+    CombineRgn(split, split, vertical, RGN_OR);
+    CombineRgn(split, split, inner, RGN_AND);
+    FillRgn(dc, split, white);
+
+    // The battery level fills the body below the buttons, from the bottom up.
+    // The buttons are always drawn as an outline.
+    if (percent > 0) {
+        int areaTop = buttonsY - t / 2 + t;
+        int areaBottom = bottom - t;
+        int fillTop = areaBottom - (areaBottom - areaTop) *
+                                       (percent > 100 ? 100 : percent) / 100;
+        HRGN fill = CreateRectRgn(left, fillTop, right + 1, bottom + 1);
+        CombineRgn(fill, fill, inner, RGN_AND);
+        FillRgn(dc, fill, white);
+        DeleteObject(fill);
+    }
+
+    DeleteObject(vertical);
+    DeleteObject(split);
+    DeleteObject(ring);
+    DeleteObject(inner);
+    DeleteObject(outer);
+}
+
+// `percent` < 0 means unknown.
+static HICON CreateBatteryIcon(IconStyle style,
+                               int percent,
+                               COLORREF color,
+                               int size) {
+    std::vector<BYTE> coverage;
+    if (style == IconStyle::kMouse) {
+        coverage = RenderCoverage(size, 4, [percent](HDC dc, int big) {
+            DrawMouse(dc, big, percent);
+        });
+    } else {
+        wchar_t text[8];
+        if (percent < 0) {
+            wcscpy(text, L"--");
+        } else {
+            swprintf(text, ARRAYSIZE(text), L"%d", percent);
+        }
+        coverage = RenderCoverage(size, 1, [&text](HDC dc, int big) {
+            DrawNumber(dc, big, text);
+        });
+    }
+    return CoverageToIcon(coverage, size, color);
 }
 
 static void ShowBalloon(HWND hwnd,
@@ -542,10 +694,16 @@ static void UpdateTrayIcon(HWND hwnd, bool forceAdd) {
         size = 16;
     }
 
-    bool unchanged = g_iconAdded && g_lastText == text && g_lastTip == tip &&
+    // The cache key also includes the style, since the same text can be drawn
+    // as a number or as a mouse.
+    std::wstring key = (set.iconStyle == IconStyle::kMouse ? L"mouse:" : L"num:");
+    key += text;
+    bool unchanged = g_iconAdded && g_lastText == key && g_lastTip == tip &&
                      g_lastColor == color && g_lastIconSize == size;
     if (forceAdd || !unchanged) {
-        HICON icon = CreateNumberIcon(text, color, size);
+        HICON icon = CreateBatteryIcon(set.iconStyle,
+                                       st.percent < 0 ? -1 : st.percent, color,
+                                       size);
 
         NOTIFYICONDATAW nid{};
         nid.cbSize = sizeof(nid);
@@ -571,7 +729,7 @@ static void UpdateTrayIcon(HWND hwnd, bool forceAdd) {
             DestroyIcon(g_currentIcon);
         }
         g_currentIcon = icon;
-        g_lastText = text;
+        g_lastText = key;
         g_lastTip = tip;
         g_lastColor = color;
         g_lastIconSize = size;
