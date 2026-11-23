@@ -37,6 +37,19 @@ with a soft glow that follows each icon's shape.
 - **File Explorer is unchanged.** Arrows, shields, labels and highlights
   there stay exactly as Windows draws them.
 
+## How it differs from similar mods
+
+- **Hide Desktop Icon Text and Shortcut Arrows** (kivsak): that mod hides
+  every label except folder names, and removes arrows by editing Explorer's
+  shared icon list, which also affects File Explorer until Explorer restarts.
+  This mod hides only shortcut labels (or all labels), and removes arrows on
+  the desktop only, at draw time, so everything reverts when it's disabled.
+- **Desktop Icon Selection Style**: that mod restyles the hover/selection
+  plate. This mod removes the plate and draws a glow shaped like the icon
+  instead. Both hook the same drawing, so don't enable the icon glow
+  together with that mod.
+- **Administrator-shield hiding** isn't offered by any other mod.
+
 ## Known limitations
 
 - Labels are matched by their displayed text, so a non-shortcut item showing
