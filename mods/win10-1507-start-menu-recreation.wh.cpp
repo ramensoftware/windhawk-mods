@@ -22759,7 +22759,7 @@ void WhTool_ModUninit() {
 // Dispatch the complete implementation, not just its paint routines. A skin
 // change needs a full reload because the 8.1 bridge owns a helper process.
 static bool g_selected81 = false;
-static bool g_idleModernHost = false;
+static bool g_idleToolHost = false;
 static bool Is81Selected() {
     auto setting = WindhawkUtils::StringSetting::make(L"menuSkin");
     return wcscmp(setting.get(),L"win81") == 0;
@@ -22772,20 +22772,16 @@ BOOL Wh_ModInit() {
                g_selected81 ? L"win81" : L"win10");
     if (g_selected81) return Menu81::Wh_ModInit();
     if (!Menu81::IsExplorerProcess()) {
-        // Windhawk 2.0 launches this legacy tool-mod host regardless of the
-        // selected skin. The 1507 implementation lives only in Explorer, but
-        // returning FALSE here makes the host report a misleading failure.
-        // Accept only our own modern host and keep it idle using the same
-        // entry-point hook as the legacy tool implementation above.
-        const wchar_t* name = wcsrchr(processPath, L'\\');
-        name = name ? name + 1 : processPath;
-        if (_wcsicmp(name, L"windhawk-mod.exe") != 0) return FALSE;
+        // The legacy tool-mod launcher identifies the helper by -tool-mod
+        // and the mod ID on both Windhawk 1.7.3 and compatible 2.0 hosts.
+        // The 1507 menu runs in Explorer, so this helper has no menu to run.
+        // Do not depend on a particular host executable name.
         int count = 0;
         LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &count);
         if (!argv) return FALSE;
         bool ownHost = false;
         for (int i = 1; i + 1 < count; ++i) {
-            if (wcscmp(argv[i], L"-windhawk-tool-mod") == 0 &&
+            if (wcscmp(argv[i], L"-tool-mod") == 0 &&
                 wcscmp(argv[i + 1], WH_MOD_ID) == 0) { ownHost = true; break; }
         }
         LocalFree(argv);
@@ -22797,7 +22793,7 @@ BOOL Wh_ModInit() {
             Wh_Log(L"[Lifecycle] idle 1507 host entry hook failed");
             return FALSE;
         }
-        g_idleModernHost = true;
+        g_idleToolHost = true;
         Wh_Log(L"[Lifecycle] idle 1507 tool host initialized");
         return TRUE;
     }
@@ -22819,7 +22815,7 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
         *reload=TRUE;
         return TRUE;
     }
-    if (g_idleModernHost) return TRUE;
+    if (g_idleToolHost) return TRUE;
     if (g_selected81) Menu81::Wh_ModSettingsChanged();
     else Menu1507::Wh_ModSettingsChanged();
     return TRUE;
@@ -22828,7 +22824,7 @@ void Wh_ModBeforeUninit() {
     if (g_selected81 && Menu81::g_isExplorer) Menu81::ExplorerModUninit();
 }
 void Wh_ModUninit() {
-    if (g_idleModernHost) {
+    if (g_idleToolHost) {
         Wh_Log(L"[Lifecycle] idle 1507 tool host exiting");
         ExitProcess(0);
     }
