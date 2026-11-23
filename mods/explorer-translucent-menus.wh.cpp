@@ -4,7 +4,7 @@
 // @name:zh-CN      Explorer 上下文菜单半透明
 // @description     Translucent materials and optional borderless classic context menus for File Explorer
 // @description:zh-CN 对 Explorer 经典上下文菜单应用半透明材质和可选无边框
-// @version         1.3.0
+// @version         1.3.2
 // @author          alkali210
 // @github          https://github.com/alkali210
 // @include         explorer.exe
@@ -61,7 +61,7 @@ use **Shift+F10**. Select **Native** to disable all hooks. For a temporary bypas
 enable **Hold Ctrl to bypass** in the settings, then hold **Ctrl** before opening
 a menu.
 
-## Materials
+## Materials and Tint
 
 | Material | Tint opacity |
 | --- | --- |
@@ -76,11 +76,25 @@ a menu.
 Tint opacity changes the material, not text or icons. Theme selection controls
 the light or dark palette.
 
+**Match text and symbols to menu theme** is on by default. When **Menu theme**
+is explicitly set to Light or Dark, menu text and symbols (including title bar
+system command glyphs) use that palette even if another customization mixes
+light and dark foreground colors. This includes Shell-drawn captions on the
+desktop context menu, with distinct colors for disabled commands.
+**Follow Windows** or turning this option off keeps native foreground colors.
+Menu item icons are not recolored.
+
+## Hover highlight
+
 **Hover highlight color** accepts `#RRGGBB` (for example, `#FF6A00`).
 The default `auto` keeps the existing light and dark colors; invalid values
 also use those colors. Opacity is adjustable separately.
 The corner radius and inset are measured in device-independent pixels (DIP).
 These settings have no effect when highlight opacity is 0 (native highlight).
+
+When upgrading from a version without these groups, re-enter any custom
+material, tint, theme, highlight, or click animation values. Windhawk stores
+grouped settings under new keys. Settings outside the groups carry over.
 
 ## Appearance
 
@@ -94,22 +108,31 @@ animation and on later repaints.
 
 Enable **Apply material to title bar menu** to also style File Explorer's
 window menu, opened by right-clicking the title bar or pressing `Alt+Space`.
-This option is off by default. It uses the same material, theme, border,
-corner, highlight, and mouse click animation settings as context menus.
-Opening animations and keyboard command activation remain native.
+It uses the same material, theme, border, corner, highlight, and mouse click
+animation settings as context menus. Opening animations and keyboard command
+activation remain native.
 
 Enable **Apply material to file information tooltips** to give File Explorer's
 file-list and desktop icon InfoTips the same material, tint, theme, corners,
 and border setting.
-The option is off by default. Windows still supplies the text, layout, hover
-delay, and animations. A tooltip keeps its material through the native fade-out.
-Navigation, toolbar, and taskbar tooltips are unchanged.
+Windows still supplies the text, layout, hover delay, and animations. A
+tooltip keeps its material through the native fade-out.
+
+Enable **Apply material to navigation pane label tooltips** to style the full
+label that appears when you hover over a truncated name in File Explorer's
+navigation pane. Windows still controls when and where the label opens and
+how it dismisses. Other navigation, toolbar, and taskbar tooltips are unchanged.
+
+These three options are enabled by default on new installs and can be turned
+off independently.
+
 Unloading or reloading the mod clears its state from existing tooltip windows
 before they can be reused.
 
 ### Menu item click animation
 
-**Menu item click animation** offers three choices after mouse selection:
+Under **Hover highlight**, **Menu item click animation** offers three choices
+after mouse selection:
 
 | Choice | Behavior after clicking a command |
 | --- | --- |
@@ -176,6 +199,7 @@ To continue using those mods in other applications while avoiding their Explorer
 exclude `explorer.exe` from their targets.
 
 This mod leaves Explorer's main window backdrop untouched and can complement ExplorerBlurMica.
+If the selected menu theme is opposite to the system color theme, and ExplorerBlurMica is used, then a mismatch between menu symbols (arrows, dots) and text may be observed in the explorer main window.
 
 Compatible with WinUI Context Menu Animation (disable Fade-in and enable
 Translucent Windows compatibility mode).
@@ -204,6 +228,8 @@ are not emitted even if the mod is loaded.
 
 For file-list and desktop icon InfoTips, look for `fileInfoTips=1` at
 initialization and a `File InfoTip` line when a tooltip receives the material.
+For truncated navigation labels, look for `navigationTooltips=1` and a
+`Navigation label tooltip` line.
 The `Material ... applied=1` log means DWM accepted the backdrop settings;
 it does not confirm that the native tooltip background was cleared.
 
@@ -219,65 +245,75 @@ This implementation is distributed under GPL-3.0-or-later.
 
 // ==WindhawkModSettings==
 /*
-- backgroundEffect: acrylic
-  $name: Background material
-  $description: Applies only to classic Explorer popup menus. Native disables all modifications.
-  $options:
-  - none: Native
-  - solid: Solid
-  - transparent: Transparent
-  - acrylic: Acrylic (adjustable tint)
-  - modern-acrylic: Modern Acrylic
-  - system: System Acrylic
-  - mica: Mica
-  - mica-alt: Mica Alt
-- theme: auto
-  $name: Menu theme
-  $description: Select the palette for modified menus.
-  $options:
-  - auto: Follow Windows
-  - light: Light
-  - dark: Dark
-- tintOpacity: 35
-  $name: Tint opacity
-  $description: 0-100. Applies to Acrylic and Transparent.
-- lightTint: "#F5F5F5"
-  $name: Light tint color
-  $description: "#RRGGBB color for Solid, Transparent, Acrylic and Modern Acrylic in the light theme."
-- darkTint: "#202020"
-  $name: Dark tint color
-  $description: "#RRGGBB color for Solid, Transparent, Acrylic and Modern Acrylic in the dark theme."
-- highlightOpacity: 28
-  $name: Hover highlight opacity
-  $description: 1-100 for the custom highlight. Set to 0 to use the native highlight.
-- highlightColor: auto
-  $name: Hover highlight color
-  $description: "#RRGGBB for both themes, or auto for the default light and dark colors. Applies only to the custom highlight."
-- highlightRadius: 4
-  $name: Hover highlight corner radius
-  $description: Non-negative DIP, scaled with display DPI. Set to 0 for square corners.
-- highlightInset: 0
-  $name: Hover highlight inset
-  $description: Non-negative DIP on all sides, scaled with display DPI. A large inset can hide the highlight.
-- selectionFade: replay
-  $name: Menu item click animation
-  $description: Applies to modified menus only. Native can briefly show a black background; Replay fades a snapshot of the composited item. Menu opening animations are unchanged.
-  $options:
-  - native: Windows animation (may show black background)
-  - instant: Close immediately
-  - replay: Recreate fade animation
+- materialsAndTint:
+    - backgroundEffect: acrylic
+      $name: Background material
+      $description: Applies only to classic Explorer popup menus. Native disables all modifications.
+      $options:
+      - none: Native
+      - solid: Solid
+      - transparent: Transparent
+      - acrylic: Acrylic (adjustable tint)
+      - modern-acrylic: Modern Acrylic
+      - system: System Acrylic
+      - mica: Mica
+      - mica-alt: Mica Alt
+    - theme: auto
+      $name: Menu theme
+      $description: Select the palette for modified menus.
+      $options:
+      - auto: Follow Windows
+      - light: Light
+      - dark: Dark
+    - matchMenuForeground: true
+      $name: Match text and symbols to menu theme
+      $description: Use the selected Light or Dark palette for menu text and system symbols, including title bar menu glyphs. Follow Windows keeps native colors. Menu item icons are unchanged.
+    - tintOpacity: 35
+      $name: Tint opacity
+      $description: 0-100. Applies to Acrylic and Transparent.
+    - lightTint: "#F5F5F5"
+      $name: Light tint color
+      $description: "#RRGGBB color for Solid, Transparent, Acrylic and Modern Acrylic in the light theme."
+    - darkTint: "#202020"
+      $name: Dark tint color
+      $description: "#RRGGBB color for Solid, Transparent, Acrylic and Modern Acrylic in the dark theme."
+  $name: Materials and Tint
+- hoverHighlight:
+    - highlightOpacity: 28
+      $name: Hover highlight opacity
+      $description: 1-100 for the custom highlight. Set to 0 to use the native highlight.
+    - highlightColor: auto
+      $name: Hover highlight color
+      $description: "#RRGGBB for both themes, or auto for the default light and dark colors. Applies only to the custom highlight."
+    - highlightRadius: 4
+      $name: Hover highlight corner radius
+      $description: Non-negative DIP, scaled with display DPI. Set to 0 for square corners.
+    - highlightInset: 0
+      $name: Hover highlight inset
+      $description: Non-negative DIP on all sides, scaled with display DPI. A large inset can hide the highlight.
+    - selectionFade: replay
+      $name: Menu item click animation
+      $description: Applies to modified menus only. Native can briefly show a black background; Replay fades a snapshot of the composited item. Menu opening animations are unchanged.
+      $options:
+      - native: Windows animation (may show black background)
+      - instant: Close immediately
+      - replay: Recreate fade animation
+  $name: Hover highlight
 - roundedCorners: true
   $name: Rounded corners
-  $description: Request small rounded corners for modified menus and file information tooltips.
+  $description: Request small rounded corners for modified menus and tooltips.
 - hideMenuBorder: true
   $name: Hide menu border
-  $description: Suppress the outline on modified menus and file information tooltips without changing their size.
-- styleWindowMenu: false
+  $description: Suppress the outline on modified menus and tooltips without changing their size.
+- styleWindowMenu: true
   $name: Apply material to title bar menu
   $description: Apply the same appearance and mouse click animation settings to File Explorer's title bar menu (right-click or Alt+Space).
-- styleFileInfoTips: false
+- styleFileInfoTips: true
   $name: Apply material to file information tooltips
-  $description: Use the menu material, tint, theme, corners and border setting for file-list and desktop icon tooltips. Other tooltips are unchanged.
+  $description: Use the menu material, tint, theme, corners and border setting for file-list and desktop icon tooltips.
+- styleNavigationTooltips: true
+  $name: Apply material to navigation pane label tooltips
+  $description: Style the full labels that appear when hovering over truncated item names in File Explorer's navigation pane. Other navigation and toolbar tooltips are unchanged.
 - repairIcons: true
   $name: Repair legacy icon transparency
   $description: Convert copied legacy RGB icons to premultiplied alpha without modifying the source bitmaps.
@@ -300,6 +336,7 @@ This implementation is distributed under GPL-3.0-or-later.
 #include <atomic>
 #include <cmath>
 #include <cwchar>
+#include <memory>
 #include <new>
 
 #include <windhawk_utils.h>
@@ -399,6 +436,7 @@ struct Settings {
     COLORREF lightTint = RGB(245, 245, 245);
     COLORREF darkTint = RGB(32, 32, 32);
     int theme = 0;  // 0=auto, 1=light, 2=dark
+    bool matchMenuForeground = true;
     int highlightOpacity = 28;
     COLORREF highlightColor = CLR_INVALID;  // Default color for the popup theme.
     int highlightRadius = 4;
@@ -408,7 +446,11 @@ struct Settings {
     bool hideMenuBorder = false;
     bool styleWindowMenu = false;
     bool styleFileInfoTips = false;
+    bool styleNavigationTooltips = false;
     SelectionFade selectionFade = SelectionFade::Replay;
+
+    bool MatchMenuForeground() const { return matchMenuForeground && theme != 0; }
+    bool StyleTooltips() const { return styleFileInfoTips || styleNavigationTooltips; }
 };
 Settings
     g_settings{};  // Immutable while hooks are active; settings cause reload.
@@ -428,6 +470,8 @@ decltype(&DrawThemeBackground) g_drawThemeBackground = nullptr;
 decltype(&DrawThemeBackgroundEx) g_drawThemeBackgroundEx = nullptr;
 decltype(&DrawThemeText) g_drawThemeText = nullptr;
 decltype(&DrawThemeTextEx) g_drawThemeTextEx = nullptr;
+decltype(&CreateCompatibleDC) g_createCompatibleDC = nullptr;
+decltype(&DeleteDC) g_deleteDC = nullptr;
 decltype(&DrawTextW) g_drawText = nullptr;
 decltype(&FillRect) g_fillRect = nullptr;
 decltype(&BitBlt) g_bitBlt = nullptr;
@@ -1069,9 +1113,7 @@ bool EffectsAllowed(PCWSTR* reason = nullptr) {
     return enabled ? true : reject(L"transparency disabled");
 }
 
-bool UsesDarkMenus() {
-    if (g_settings.theme)
-        return g_settings.theme == 2;
+bool SystemUsesDarkMenus() {
     DWORD light = 1;
     DWORD size = sizeof(light);
     RegGetValueW(
@@ -1079,6 +1121,10 @@ bool UsesDarkMenus() {
         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
         L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
     return !light;
+}
+
+bool UsesDarkMenus() {
+    return g_settings.theme ? g_settings.theme == 2 : SystemUsesDarkMenus();
 }
 
 // Only recognize the shell's own owner-draw PROPERTY. Never dereference its
@@ -2071,6 +2117,43 @@ LRESULT CALLBACK MenuPopupSubclass(HWND hwnd,
     return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 
+struct ShellTextPaint {
+    HDC target = nullptr;
+    HDC inlineDCs[4];
+    std::unique_ptr<HDC[]> extraDCs;
+    size_t dcCount = 0;
+    size_t dcCapacity = ARRAYSIZE(inlineDCs);
+    bool dark = false;
+
+    HDC* DCs() { return extraDCs ? extraDCs.get() : inlineDCs; }
+
+    size_t FindDC(HDC dc) {
+        const HDC* dcs = DCs();
+        for (size_t i = 0; i < dcCount; ++i) {
+            if (dcs[i] == dc)
+                return i;
+        }
+        return dcCount;
+    }
+
+    void AddDC(HDC dc) {
+        if (dcCount == dcCapacity) {
+            SelectionReplayErrorGuard errorGuard;
+            const size_t capacity = dcCapacity * 2;
+            std::unique_ptr<HDC[]> grown(new (std::nothrow) HDC[capacity]);
+            if (!grown)
+                return;
+            const HDC* dcs = DCs();
+            for (size_t i = 0; i < dcCount; ++i)
+                grown[i] = dcs[i];
+            extraDCs.swap(grown);
+            dcCapacity = capacity;
+        }
+        DCs()[dcCount++] = dc;
+    }
+};
+thread_local ShellTextPaint* t_shellTextPaint = nullptr;
+
 LRESULT CALLBACK MenuOwnerSubclass(HWND hwnd,
                                    UINT message,
                                    WPARAM wParam,
@@ -2080,15 +2163,19 @@ LRESULT CALLBACK MenuOwnerSubclass(HWND hwnd,
     auto scope = reinterpret_cast<MenuScope*>(data);
     if (scope != t_scope || !scope->allowed)
         return DefSubclassProc(hwnd, message, wParam, lParam);
+    ShellTextPaint textPaint;
     struct DrawingContext {
         MenuScope* scope;
         HWND oldWindow;
         const DRAWITEMSTRUCT* oldItem;
+        ShellTextPaint* oldTextPaint;
         ~DrawingContext() {
             scope->paintingWindow = oldWindow;
             scope->drawingItem = oldItem;
+            t_shellTextPaint = oldTextPaint;
         }
-    } context{scope, scope->paintingWindow, scope->drawingItem};
+    } context{scope, scope->paintingWindow, scope->drawingItem, t_shellTextPaint};
+    t_shellTextPaint = nullptr;
     scope->paintingWindow = nullptr;
     scope->drawingItem = nullptr;
     if (message == WM_DRAWITEM && lParam) {
@@ -2102,6 +2189,11 @@ LRESULT CALLBACK MenuOwnerSubclass(HWND hwnd,
                     scope->paintingWindow = popup.hwnd;
                     scope->drawingItem =
                         &item;  // Valid until DefSubclassProc returns.
+                    if (g_settings.MatchMenuForeground()) {
+                        textPaint.target = item.hDC;
+                        textPaint.dark = popup.dark;
+                        t_shellTextPaint = &textPaint;
+                    }
                     break;
                 }
             }
@@ -2126,14 +2218,19 @@ bool MatchPaintTarget(const MenuScope& scope, HDC dc, HWND& hwnd,
 
 // Require a positive DC association, never the last observed popup. A memory
 // DC must match the exact synchronous Shell or native popup drawing target.
-Popup* DrawingPopupForDC(HDC dc) {
+Popup* DrawingPopupForDC(HDC dc, const DRAWITEMSTRUCT** drawItem = nullptr) {
     MenuScope* scope = t_scope;
     if (!scope || !scope->allowed || g_stopping.load(std::memory_order_relaxed))
         return nullptr;
     HWND hwnd;
-    const DRAWITEMSTRUCT* item;
-    if (!MatchPaintTarget(*scope, dc, hwnd, item))
+    const DRAWITEMSTRUCT* item = nullptr;
+    if (!MatchPaintTarget(*scope, dc, hwnd, item)) {
+        if (drawItem)
+            return nullptr;
         hwnd = WindowFromDC(dc);
+    } else if (drawItem) {
+        *drawItem = item;
+    }
     if (!hwnd || !IsClassicPopup(hwnd))
         return nullptr;
     Popup* popup = scope->Find(hwnd);
@@ -2142,15 +2239,55 @@ Popup* DrawingPopupForDC(HDC dc) {
                : nullptr;
 }
 
+HDC WINAPI CreateCompatibleDCHook(HDC source) {
+    auto* paint = t_shellTextPaint;
+    // Shell creates a DIB DC from the exact WM_DRAWITEM DC, not a UxTheme
+    // buffered paint from that DC. Never infer ownership from a generic memory DC.
+    if (!paint || paint->target != source || t_textDepth ||
+        g_stopping.load(std::memory_order_relaxed)) {
+        [[clang::musttail]] return g_createCompatibleDC(source);
+    }
+    CallGuard call;
+    HDC dc = g_createCompatibleDC(source);
+    if (dc)
+        paint->AddDC(dc);
+    return dc;
+}
+
+BOOL WINAPI DeleteDCHook(HDC dc) {
+    if (auto* paint = t_shellTextPaint; paint && dc) {
+        const size_t index = paint->FindDC(dc);
+        if (index != paint->dcCount) {
+            CallGuard call;
+            BOOL deleted = g_deleteDC(dc);
+            if (deleted) {
+                --paint->dcCount;
+                if (index != paint->dcCount)
+                    paint->DCs()[index] = paint->DCs()[paint->dcCount];
+            }
+            return deleted;
+        }
+    }
+    [[clang::musttail]] return g_deleteDC(dc);
+}
+
+const ShellTextPaint* ShellTextPaintForDC(HDC dc) {
+    auto* paint = t_shellTextPaint;
+    return paint && dc && !t_textDepth &&
+                   !g_stopping.load(std::memory_order_relaxed) &&
+                   paint->FindDC(dc) != paint->dcCount
+               ? paint : nullptr;
+}
+
+bool IsMenuTheme(HTHEME theme) {
+    wchar_t name[64]{};
+    return SUCCEEDED(g_getThemeClass(theme, name, ARRAYSIZE(name))) &&
+           _wcsicmp(name, L"Menu") == 0;
+}
+
 Popup* DrawingPopup(HTHEME theme, HDC dc) {
     Popup* popup = DrawingPopupForDC(dc);
-    if (!popup)
-        return nullptr;
-    wchar_t name[64]{};
-    if (FAILED(g_getThemeClass(theme, name, ARRAYSIZE(name))) ||
-        _wcsicmp(name, L"Menu") != 0)
-        return nullptr;
-    return popup;
+    return popup && IsMenuTheme(theme) ? popup : nullptr;
 }
 
 struct IconSurface {
@@ -2413,6 +2550,31 @@ bool PaintInfoTipBackground(HTHEME theme, HDC dc, int part, int state,
                   area.bottom - area.top, BLACKNESS) != FALSE;
 }
 
+COLORREF MenuTextColor(bool dark, bool disabled) {
+    return dark ? (disabled ? RGB(155, 155, 155) : RGB(245, 245, 245))
+                : (disabled ? RGB(120, 120, 120) : RGB(25, 25, 25));
+}
+
+void SetMenuTextColor(DTTOPTS& options, bool dark, int state) {
+    if (options.dwFlags & DTT_STATEID)
+        state = options.iStateId;
+    options.dwFlags |= DTT_TEXTCOLOR;
+    options.crText = MenuTextColor(dark, state == MPI_DISABLED || state == MPI_DISABLEDHOT);
+}
+
+HTHEME MenuBackgroundTheme(HTHEME theme, HDC dc, int part) {
+    if (part < MENU_POPUPCHECK || part > kPopupItemFocusable)
+        return theme;
+    const Popup* popup = DrawingPopup(theme, dc);
+    if (!popup)
+        return theme;
+    if (part == MENU_POPUPCHECK || part == MENU_POPUPCHECKBACKGROUND ||
+        part == MENU_POPUPSUBMENU ||
+        (part >= MENU_SYSTEMCLOSE && part <= MENU_SYSTEMRESTORE))
+        return g_settings.MatchMenuForeground() ? popup->palette : theme;
+    return popup->palette;
+}
+
 HRESULT WINAPI DrawThemeBackgroundHook(HTHEME theme,
                                        HDC dc,
                                        int part,
@@ -2430,11 +2592,8 @@ HRESULT WINAPI DrawThemeBackgroundHook(HTHEME theme,
         return S_OK;
     if (ClearBackground(theme, dc, part, state, rect, clip))
         return S_OK;
-    if (part >= MENU_POPUPCHECK && part <= kPopupItemFocusable) {
-        if (Popup* popup = DrawingPopup(theme, dc))
-            theme = popup->palette;
-    }
-    return g_drawThemeBackground(theme, dc, part, state, rect, clip);
+    return g_drawThemeBackground(MenuBackgroundTheme(theme, dc, part), dc,
+                                 part, state, rect, clip);
 }
 
 HRESULT WINAPI DrawThemeBackgroundExHook(HTHEME theme,
@@ -2466,14 +2625,11 @@ HRESULT WINAPI DrawThemeBackgroundExHook(HTHEME theme,
             theme, dc, part, state, rect,
             opts && (opts->dwFlags & DTBG_CLIPRECT) ? &opts->rcClip : nullptr))
         return S_OK;
-    if (part >= MENU_POPUPCHECK && part <= kPopupItemFocusable) {
-        if (Popup* popup = DrawingPopup(theme, dc))
-            theme = popup->palette;
-    }
-    return g_drawThemeBackgroundEx(theme, dc, part, state, rect, opts);
+    return g_drawThemeBackgroundEx(MenuBackgroundTheme(theme, dc, part), dc,
+                                   part, state, rect, opts);
 }
 
-bool DrawCompositedText(HTHEME theme,
+bool DrawCompositedText(HTHEME& theme,
                         HDC dc,
                         int part,
                         int state,
@@ -2482,15 +2638,31 @@ bool DrawCompositedText(HTHEME theme,
                         DWORD flags,
                         RECT* rect,
                         const DTTOPTS* options,
+                        bool composite,
                         HRESULT* result) {
     if (!rect || IsRectEmpty(rect) || (flags & DT_CALCRECT) ||
         (part != MENU_POPUPITEM && part != kPopupItemFocusable) ||
         (options && (options->dwSize != sizeof(*options) ||
-                     (options->dwFlags & (DTT_CALCRECT | DTT_CALLBACK)))))
+                     (options->dwFlags & DTT_CALCRECT))))
         return false;
-    Popup* popup = DrawingPopup(theme, dc);
+    const Popup* popup = DrawingPopup(theme, dc);
     if (!popup)
         return false;
+    const bool matching = g_settings.MatchMenuForeground();
+    if (matching)
+        theme = popup->palette;
+    if (!composite)
+        return false;
+    if (options && (options->dwFlags & DTT_CALLBACK)) {
+        if (!matching)
+            return false;
+        DTTOPTS adjusted = *options;
+        SetMenuTextColor(adjusted, popup->dark, state);
+        TextGuard guard;
+        *result = g_drawThemeTextEx(theme, dc, part, state, text, length,
+                                    flags, rect, &adjusted);
+        return true;
+    }
     TextGuard textGuard;
     // Top-down DIB is required by DTT_COMPOSITED. Clear only the temporary
     // buffer; EndBufferedPaint alpha-blends the glyphs over the existing menu.
@@ -2507,11 +2679,9 @@ bool DrawCompositedText(HTHEME theme,
     if (options)
         opts = *options;
     opts.dwSize = sizeof(opts);
-    opts.dwFlags |= DTT_COMPOSITED | DTT_TEXTCOLOR;
-    bool disabled = state == MPI_DISABLED || state == MPI_DISABLEDHOT;
-    opts.crText = popup->dark
-                      ? (disabled ? RGB(155, 155, 155) : RGB(245, 245, 245))
-                      : (disabled ? RGB(120, 120, 120) : RGB(25, 25, 25));
+    opts.dwFlags |= DTT_COMPOSITED;
+    if (matching)
+        SetMenuTextColor(opts, popup->dark, state);
     HGDIOBJ font = GetCurrentObject(dc, OBJ_FONT);
     if (font)
         SelectObject(bufferDC, font);
@@ -2538,8 +2708,8 @@ HRESULT WINAPI DrawThemeTextHook(HTHEME theme,
     CallGuard call;
     RECT bounds = rect ? *rect : RECT{};
     HRESULT result;
-    if (!flags2 && DrawCompositedText(theme, dc, part, state, text, length,
-                                      flags, &bounds, nullptr, &result))
+    if (DrawCompositedText(theme, dc, part, state, text, length,
+                           flags, &bounds, nullptr, !flags2, &result))
         return result;
     return g_drawThemeText(theme, dc, part, state, text, length, flags, flags2,
                            rect);
@@ -2559,9 +2729,23 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
             theme, dc, part, state, text, length, flags, rect, options);
     }
     CallGuard call;
+    // Explorer owner-draw composites captions into its own DIB. Change the
+    // color there, retaining its callback, font and alpha blend.
+    const auto* paint = ShellTextPaintForDC(dc);
+    if (paint && !(flags & DT_CALCRECT) &&
+        (part == MENU_POPUPITEM || part == kPopupItemFocusable) &&
+        options && options->dwSize == sizeof(*options) &&
+        (options->dwFlags & DTT_COMPOSITED) && !(options->dwFlags & DTT_CALCRECT) &&
+        IsMenuTheme(theme)) {
+        DTTOPTS adjusted = *options;
+        SetMenuTextColor(adjusted, paint->dark, state);
+        TextGuard guard;
+        return g_drawThemeTextEx(theme, dc, part, state, text, length, flags, rect,
+                                 &adjusted);
+    }
     HRESULT result;
     if (DrawCompositedText(theme, dc, part, state, text, length, flags, rect,
-                           options, &result))
+                           options, true, &result))
         return result;
     return g_drawThemeTextEx(theme, dc, part, state, text, length, flags, rect,
                              options);
@@ -2922,18 +3106,17 @@ DrawTextHook(HDC dc, PCWSTR text, int length, RECT* rect, UINT flags) {
         state = TTSS_NORMAL;
         color = paint->dark ? RGB(245, 245, 245) : RGB(25, 25, 25);
     } else {
-        Popup* popup = t_scope && t_scope->drawingItem &&
-                               t_scope->drawingItem->hDC == dc
-                           ? DrawingPopupForDC(dc) : nullptr;
-        if (!popup)
+        const DRAWITEMSTRUCT* item;
+        const bool matching = g_settings.MatchMenuForeground();
+        const Popup* popup = DrawingPopupForDC(dc, &item);
+        if (!popup || !item ||
+            (!matching && item != t_scope->drawingItem))
             return g_drawText(dc, text, length, rect, flags);
-        bool disabled = t_scope->drawingItem->itemState & (ODS_DISABLED | ODS_GRAYED);
+        bool disabled = item->itemState & (ODS_DISABLED | ODS_GRAYED);
         theme = popup->palette;
         part = MENU_POPUPITEM;
         state = disabled ? MPI_DISABLED : MPI_NORMAL;
-        color = popup->dark
-                    ? (disabled ? RGB(155, 155, 155) : RGB(245, 245, 245))
-                    : (disabled ? RGB(120, 120, 120) : RGB(25, 25, 25));
+        color = matching ? MenuTextColor(popup->dark, disabled) : GetTextColor(dc);
     }
 
     TextGuard textGuard;
@@ -3165,7 +3348,7 @@ bool IsDesktopHost(HWND hwnd) {
 constexpr PCWSTR kInfoTipStateProperty = L"ExplorerTranslucentMenus.InfoTipState";
 UINT g_detachInfoTipMessage;
 
-HWND InfoTipFileView(HWND hwnd, bool& noCurrentTool) {
+HWND InfoTipSource(HWND hwnd, bool& noCurrentTool) {
     HWND owner = GetWindow(hwnd, GW_OWNER);
     if (GetWindowLongPtrW(hwnd, GWL_STYLE) & TTS_BALLOON)
         return nullptr;
@@ -3176,12 +3359,22 @@ HWND InfoTipFileView(HWND hwnd, bool& noCurrentTool) {
     }
     HWND target = (tool.uFlags & TTF_IDISHWND)
         ? reinterpret_cast<HWND>(tool.uId) : tool.hwnd;
-    if (GetWindowThreadProcessId(target, nullptr) != GetCurrentThreadId() ||
-        !WindowClassIs(GetAncestor(target, GA_PARENT), L"SHELLDLL_DefView"))
+    if (GetWindowThreadProcessId(target, nullptr) != GetCurrentThreadId())
         return nullptr;
 
     HWND root = GetAncestor(target, GA_ROOT);
     if (owner && owner != root)
+        return nullptr;
+
+    HWND parent = GetAncestor(target, GA_PARENT);
+    if (g_settings.styleNavigationTooltips && owner && IsWindowMenuOwner(owner) &&
+        WindowClassIs(parent, L"NamespaceTreeControl") &&
+        WindowClassIs(target, WC_TREEVIEWW) &&
+        !(GetWindowLongPtrW(target, GWL_STYLE) & TVS_INFOTIP) &&
+        TreeView_GetToolTips(target) == hwnd)
+        return target;
+
+    if (!g_settings.styleFileInfoTips || !WindowClassIs(parent, L"SHELLDLL_DefView"))
         return nullptr;
     if (owner && IsWindowMenuOwner(owner) && WindowClassIs(target, L"DirectUIHWND"))
         return target;
@@ -3255,7 +3448,7 @@ LRESULT CALLBACK InfoTipSubclass(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
     if (!detach && !hide && (!state || !state->busy) &&
         !g_stopping.load(std::memory_order_relaxed)) {
         bool noCurrentTool = false;
-        source = InfoTipFileView(hwnd, noCurrentTool);
+        source = InfoTipSource(hwnd, noCurrentTool);
         // Querying a control sends a synchronous message. Read the property
         // again in case that dispatch detached the subclass.
         auto* current = static_cast<InfoTipState*>(GetPropW(hwnd, kInfoTipStateProperty));
@@ -3305,8 +3498,10 @@ LRESULT CALLBACK InfoTipSubclass(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
                 !state->detached;
             state->busy = false;
             if (state->styled) {
-                ETM_LOG(L"File InfoTip hwnd=%p view=%p material=%s", hwnd, source,
-                        MaterialName(g_settings.material));
+                ETM_LOG(L"%s hwnd=%p view=%p material=%s",
+                        WindowClassIs(source, WC_TREEVIEWW) ? L"Navigation label tooltip"
+                                                           : L"File InfoTip",
+                        hwnd, source, MaterialName(g_settings.material));
             } else {
                 state->Reset();
                 state->source = source;  // Keep this presentation native.
@@ -3351,7 +3546,7 @@ BOOL CALLBACK VisitExplorerSurfaces(HWND hwnd, LPARAM attach) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 hwnd, WindowMenuOwnerSubclass);
     }
-    if (g_settings.styleFileInfoTips && IsLocalWindow(hwnd) &&
+    if (g_settings.StyleTooltips() && IsLocalWindow(hwnd) &&
         WindowClassIs(hwnd, TOOLTIPS_CLASSW)) {
         if (attach) {
             AttachInfoTip(hwnd);
@@ -3373,7 +3568,7 @@ HWND WINAPI CreateWindowExWHook(DWORD exStyle, PCWSTR className,
         (!IS_INTRESOURCE(className) &&
          !(g_settings.styleWindowMenu &&
            _wcsicmp(className, kExplorerWindowClass) == 0) &&
-         !(g_settings.styleFileInfoTips &&
+         !(g_settings.StyleTooltips() &&
            _wcsicmp(className, TOOLTIPS_CLASSW) == 0))) {
         [[clang::musttail]] return g_createWindowEx(
             exStyle, className, windowName, style, x, y, width, height, parent,
@@ -3389,7 +3584,7 @@ HWND WINAPI CreateWindowExWHook(DWORD exStyle, PCWSTR className,
         if (!g_stopping.load(std::memory_order_relaxed)) {
             if (g_settings.styleWindowMenu && IsWindowMenuOwner(hwnd))
                 AttachWindowMenuOwner(hwnd);
-            else if (g_settings.styleFileInfoTips && WindowClassIs(hwnd, TOOLTIPS_CLASSW))
+            else if (g_settings.StyleTooltips() && WindowClassIs(hwnd, TOOLTIPS_CLASSW))
                 AttachInfoTip(hwnd);
         }
         ReleaseSRWLockShared(&g_surfaceSubclassLock);
@@ -3414,7 +3609,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     g_settings.material =
-        ParseMaterial(WindhawkUtils::StringSetting::make(L"backgroundEffect"));
+        ParseMaterial(WindhawkUtils::StringSetting::make(L"materialsAndTint.backgroundEffect"));
     if (g_settings.material == Material::Native) {
         ETM_LOG(L"Native mode: no hooks registered, no window effects changed");
         return TRUE;
@@ -3437,7 +3632,7 @@ BOOL Wh_ModInit() {
         ETM_LOG(L"Menu theme identification unavailable");
         return FALSE;
     }
-    g_settings.tintOpacity = Wh_GetIntSetting(L"tintOpacity");
+    g_settings.tintOpacity = Wh_GetIntSetting(L"materialsAndTint.tintOpacity");
     HMODULE user = GetModuleHandleW(L"user32.dll");
     g_setComposition = reinterpret_cast<CompositionAttribute_t>(
         GetProcAddress(user, "SetWindowCompositionAttribute"));
@@ -3449,23 +3644,25 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     g_settings.lightTint = ParseRgbColor(
-        WindhawkUtils::StringSetting::make(L"lightTint"), RGB(245, 245, 245));
+        WindhawkUtils::StringSetting::make(L"materialsAndTint.lightTint"), RGB(245, 245, 245));
     g_settings.darkTint = ParseRgbColor(
-        WindhawkUtils::StringSetting::make(L"darkTint"), RGB(32, 32, 32));
-    auto themeSetting = WindhawkUtils::StringSetting::make(L"theme");
+        WindhawkUtils::StringSetting::make(L"materialsAndTint.darkTint"), RGB(32, 32, 32));
+    auto themeSetting = WindhawkUtils::StringSetting::make(L"materialsAndTint.theme");
     g_settings.theme = !_wcsicmp(themeSetting, L"dark")    ? 2
                        : !_wcsicmp(themeSetting, L"light") ? 1
                                                            : 0;
+    g_settings.matchMenuForeground =
+        Wh_GetIntSetting(L"materialsAndTint.matchMenuForeground") != 0;
     g_settings.highlightOpacity =
-        ClampPercent(Wh_GetIntSetting(L"highlightOpacity"));
+        ClampPercent(Wh_GetIntSetting(L"hoverHighlight.highlightOpacity"));
     g_settings.highlightColor = ParseRgbColor(
-        WindhawkUtils::StringSetting::make(L"highlightColor"), CLR_INVALID);
-    int highlightRadius = Wh_GetIntSetting(L"highlightRadius");
-    int highlightInset = Wh_GetIntSetting(L"highlightInset");
+        WindhawkUtils::StringSetting::make(L"hoverHighlight.highlightColor"), CLR_INVALID);
+    int highlightRadius = Wh_GetIntSetting(L"hoverHighlight.highlightRadius");
+    int highlightInset = Wh_GetIntSetting(L"hoverHighlight.highlightInset");
     g_settings.highlightRadius = highlightRadius < 0 ? 0 : highlightRadius;
     g_settings.highlightInset = highlightInset < 0 ? 0 : highlightInset;
     g_settings.selectionFade = ParseSelectionFade(
-        WindhawkUtils::StringSetting::make(L"selectionFade"));
+        WindhawkUtils::StringSetting::make(L"hoverHighlight.selectionFade"));
     g_settings.repairIcons = Wh_GetIntSetting(L"repairIcons") != 0;
     g_settings.removeIconBackground =
         Wh_GetIntSetting(L"removeIconBackground") != 0;
@@ -3473,7 +3670,8 @@ BOOL Wh_ModInit() {
     g_settings.hideMenuBorder = Wh_GetIntSetting(L"hideMenuBorder") != 0;
     g_settings.styleWindowMenu = Wh_GetIntSetting(L"styleWindowMenu") != 0;
     g_settings.styleFileInfoTips = Wh_GetIntSetting(L"styleFileInfoTips") != 0;
-    if (g_settings.styleFileInfoTips) {
+    g_settings.styleNavigationTooltips = Wh_GetIntSetting(L"styleNavigationTooltips") != 0;
+    if (g_settings.StyleTooltips()) {
         g_detachInfoTipMessage =
             RegisterWindowMessageW(L"ExplorerTranslucentMenus.DetachInfoTip." WH_MOD_ID);
         if (!g_detachInfoTipMessage)
@@ -3504,18 +3702,24 @@ BOOL Wh_ModInit() {
         !WindhawkUtils::SetFunctionHook(AlphaBlend, AlphaBlendHook,
                                         &g_alphaBlend))
         return FALSE;
+    if (g_settings.MatchMenuForeground() &&
+        (!WindhawkUtils::SetFunctionHook(CreateCompatibleDC, CreateCompatibleDCHook,
+                                         &g_createCompatibleDC) ||
+         !WindhawkUtils::SetFunctionHook(DeleteDC, DeleteDCHook, &g_deleteDC)))
+        return FALSE;
     if (g_settings.hideMenuBorder &&
         !WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute,
                                         DwmSetWindowAttributeHook,
                                         &g_dwmSetWindowAttribute))
         return FALSE;
-    if ((g_settings.styleWindowMenu || g_settings.styleFileInfoTips) &&
+    if ((g_settings.styleWindowMenu || g_settings.StyleTooltips()) &&
         !WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExWHook,
                                         &g_createWindowEx))
         return FALSE;
-    ETM_LOG(L"Initialized on Windows build %lu material=%s titleBarMenu=%d fileInfoTips=%d",
+    ETM_LOG(L"Initialized on Windows build %lu material=%s titleBarMenu=%d fileInfoTips=%d navigationTooltips=%d",
             version.dwBuildNumber, MaterialName(g_settings.material),
-            g_settings.styleWindowMenu, g_settings.styleFileInfoTips);
+            g_settings.styleWindowMenu, g_settings.styleFileInfoTips,
+            g_settings.styleNavigationTooltips);
     return TRUE;
 }
 
