@@ -21848,56 +21848,26 @@ static int ForegroundElevationState() {
     CloseHandle(process);
     return ok ? (elevation.TokenIsElevated ? 1 : 0) : -1;
 }
-// The tool-mod helper is launched by Windhawk, not by the shell. Validate its
-// ready window, process image, user and session before forwarding. This is not
-// an authenticated IPC protocol; a same-user process could spoof a window.
-static bool SameProcessUser(HANDLE process) {
-    HANDLE rawCurrent=nullptr,rawOther=nullptr;
-    if (!OpenProcessToken(GetCurrentProcess(),TOKEN_QUERY,&rawCurrent)) return false;
-    UniqueHandle currentToken(rawCurrent);
-    if (!OpenProcessToken(process,TOKEN_QUERY,&rawOther)) return false;
-    UniqueHandle otherToken(rawOther);
-    try {
-        auto getUser=[](HANDLE token,std::vector<BYTE>& buffer) {
-            DWORD bytes=0;GetTokenInformation(token,TokenUser,nullptr,0,&bytes);
-            if (!bytes || bytes>1024*1024) return false;
-            buffer.resize(bytes);
-            return GetTokenInformation(token,TokenUser,buffer.data(),bytes,&bytes)!=FALSE;
-        };
-        std::vector<BYTE> a,b;
-        return getUser(currentToken.get(),a) && getUser(otherToken.get(),b) &&
-            EqualSid(reinterpret_cast<TOKEN_USER*>(a.data())->User.Sid,
-                     reinterpret_cast<TOKEN_USER*>(b.data())->User.Sid);
-    } catch (const std::bad_alloc&) {
-        Wh_Log(L"[Bridge] unable to allocate token information");
-        return false;
-    }
+// This is a best-effort window lookup, not an authenticated IPC protocol.
+// FindWindowW searches the current desktop; verify readiness and ownership.
+static bool BridgeFindTool(HWND& menu, DWORD& pid) {
+    menu = FindWindowW(StartMenuWindow::kWindowClassName, nullptr);
+    pid = 0;
+    if (!menu || GetPropW(menu, kHybridReadyProperty) != reinterpret_cast<HANDLE>(1) ||
+        !GetWindowThreadProcessId(menu, &pid) || !pid) return false;
+    DWORD owner = 0;
+    return IsWindow(menu) && GetWindowThreadProcessId(menu, &owner) && owner == pid &&
+        GetPropW(menu, kHybridReadyProperty) == reinterpret_cast<HANDLE>(1);
 }
-static bool BridgeFindTool(HWND& menu,DWORD& pid) {
-    menu=FindWindowW(StartMenuWindow::kWindowClassName,nullptr);pid=0;
-    if (!menu || GetPropW(menu,kHybridReadyProperty)!=reinterpret_cast<HANDLE>(1) ||
-        !GetWindowThreadProcessId(menu,&pid) || !pid) return false;
-    UniqueHandle process(OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,pid));
-    if (!process || WaitForSingleObject(process.get(),0)!=WAIT_TIMEOUT) return false;
-    DWORD ownSession=0,toolSession=0;
-    if (!ProcessIdToSessionId(GetCurrentProcessId(),&ownSession) ||
-        !ProcessIdToSessionId(pid,&toolSession) || ownSession!=toolSession) return false;
-    wchar_t image[MAX_PATH]{};DWORD length=ARRAYSIZE(image);
-    if (!QueryFullProcessImageNameW(process.get(),0,image,&length)) return false;
-    const wchar_t* name=wcsrchr(image,L'\\');
-    if (_wcsicmp(name?name+1:image,L"windhawk.exe")!=0 || !SameProcessUser(process.get())) return false;
-    DWORD owner=0;
-    return IsWindow(menu) && GetWindowThreadProcessId(menu,&owner) && owner==pid &&
-        GetPropW(menu,kHybridReadyProperty)==reinterpret_cast<HANDLE>(1);
-}
-static bool BridgeSendToggle() {
-    HWND menu=nullptr;DWORD pid=0;
-    if (!BridgeFindTool(menu,pid)) return false;
-    BOOL permitted=AllowSetForegroundWindow(pid);
-    DWORD error=permitted?ERROR_SUCCESS:GetLastError();
-    const BOOL posted=PostMessageW(menu,WM_APP_BRIDGE_TOGGLE,0,0);
-    Wh_Log(L"[Bridge] foreground permission=%d err=%u post=%d",permitted,error,posted);
-    return posted!=FALSE;
+static bool BridgeSendToggle(HWND menu, DWORD pid) {
+    DWORD owner = 0;
+    if (!IsWindow(menu) || !GetWindowThreadProcessId(menu, &owner) || owner != pid ||
+        GetPropW(menu, kHybridReadyProperty) != reinterpret_cast<HANDLE>(1)) return false;
+    BOOL permitted = AllowSetForegroundWindow(pid);
+    DWORD error = permitted ? ERROR_SUCCESS : GetLastError();
+    const BOOL posted = PostMessageW(menu, WM_APP_BRIDGE_TOGGLE, 0, 0);
+    Wh_Log(L"[Bridge] foreground permission=%d err=%u post=%d", permitted, error, posted);
+    return posted != FALSE;
 }
 static HRESULT WINAPI ShowStartViewHook(void* self, int method, int flags) {
     if (!g_stopRequested.load()) {
@@ -21922,9 +21892,10 @@ static HRESULT WINAPI ShowStartViewHook(void* self, int method, int flags) {
             //   been invoked at all, and the helper debounces (250 ms) any
             //   duplicate toggle.
             HWND toolWindow=nullptr; DWORD toolPid=0;
-            const bool ownTool=fgPid && BridgeFindTool(toolWindow,toolPid) && fgPid==toolPid;
+            const bool foundTool=BridgeFindTool(toolWindow,toolPid);
+            const bool ownTool=foundTool && fgPid && fgPid==toolPid;
             const bool relay = (method!=1) || elevation==1 || ownTool;
-            if (relay && BridgeSendToggle()) {
+            if (relay && foundTool && BridgeSendToggle(toolWindow,toolPid)) {
                 Wh_Log(L"[HybridBridge] native Start relayed, method=%d elevation=%d",method,elevation);
                 return S_OK;
             }
@@ -22096,7 +22067,9 @@ static LRESULT CALLBACK ShellThreadGetMsgProc(int code, WPARAM wParam, LPARAM lP
     if (code == HC_ACTION && wParam == PM_REMOVE) {
         MSG* msg = reinterpret_cast<MSG*>(lParam);
         if (msg->message == WM_SYSCOMMAND && (msg->wParam & 0xFFF0) == SC_TASKLIST) {
-            const bool relayed = BridgeSendToggle();
+            HWND toolWindow = nullptr; DWORD toolPid = 0;
+            const bool relayed = BridgeFindTool(toolWindow, toolPid) &&
+                                 BridgeSendToggle(toolWindow, toolPid);
             {
                 wchar_t fgCls[64]{}; HWND fg = GetForegroundWindow();
                 if (fg) GetClassNameW(fg, fgCls, ARRAYSIZE(fgCls));
@@ -22770,6 +22743,13 @@ void Wh_ModUninit() {
 
 } // namespace Menu81
 
+// Global legacy-tool marker recognized by Windhawk 2.0. The 1.7 launcher
+// continues to use Menu81::WhTool_ModInit through its existing lifecycle.
+// Windhawk exports global functions and checks for _Z14WhTool_ModInitv.
+BOOL WhTool_ModInit() {
+    return Menu81::WhTool_ModInit();
+}
+
 // Dispatch the complete implementation, not just its paint routines. A skin
 // change needs a full reload because the 8.1 bridge owns a helper process.
 static bool g_selected81 = false;
@@ -22779,6 +22759,10 @@ static bool Is81Selected() {
 }
 BOOL Wh_ModInit() {
     g_selected81=Is81Selected();
+    WCHAR processPath[MAX_PATH]{};
+    if (GetModuleFileNameW(nullptr, processPath, ARRAYSIZE(processPath)))
+        Wh_Log(L"[Lifecycle] process=%s skin=%s", processPath,
+               g_selected81 ? L"win81" : L"win10");
     if (g_selected81) return Menu81::Wh_ModInit();
     if (!Menu81::IsExplorerProcess()) return FALSE;
     int argc=0;
