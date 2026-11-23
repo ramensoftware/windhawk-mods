@@ -2665,13 +2665,23 @@ static void StopTimer() {
     g_timer = nullptr;
 }
 
-static void StartTimer() {
+// Returns false (and leaves no timer) when XAML is not ready yet, e.g. while Explorer is still
+// starting up: the caller retries later instead of letting the exception reach Explorer.
+static bool StartTimer() {
     StopTimer();
-    g_timer = DispatcherTimer();
-    g_timer.Interval(winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(250)});
-    g_tickToken = g_timer.Tick([](winrt::Windows::Foundation::IInspectable const&,
-                                  winrt::Windows::Foundation::IInspectable const&) { OnTick(); });
-    g_timer.Start();
+    try {
+        g_timer = DispatcherTimer();
+        g_timer.Interval(winrt::Windows::Foundation::TimeSpan{std::chrono::milliseconds(250)});
+        g_tickToken = g_timer.Tick([](winrt::Windows::Foundation::IInspectable const&,
+                                      winrt::Windows::Foundation::IInspectable const&) { OnTick(); });
+        g_timer.Start();
+        return true;
+    } catch (...) {
+        Wh_Log(L"StartTimer: XAML not ready yet");
+        g_tickToken = {};
+        g_timer = nullptr;
+        return false;
+    }
 }
 
 static void ApplyRuntimeSettings(const Settings& c) {
@@ -2688,7 +2698,7 @@ static void ApplyRuntimeSettings(const Settings& c) {
 static void StartOnThread() {
     g_tick = 0;
     g_lastThemeLight = -1;
-    StartTimer();
+    if (!StartTimer()) return;
     try {
         SyncTaskbars();
     } catch (...) {
@@ -2715,6 +2725,8 @@ static void StopOnThread() {
 static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     TrayUI_StartTaskbar_Original(pThis);
     if (g_unloading) return;
+    // Explorer is still starting up: the init thread starts the monitor once XAML is ready.
+    if (!g_timer) return;
     Wh_Log(L"TrayUI::StartTaskbar called, re-initializing");
     HWND h = FindTaskbarWnd();
     if (!h) return;
@@ -5258,15 +5270,16 @@ void Wh_ModAfterInit() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_worker = std::thread(WorkerProc);
     g_initThread = std::thread([]() {
-        HWND h = nullptr;
-        for (int i = 0; i < 80 && !g_unloading; i++) {
-            h = FindTaskbarWnd();
-            if (h) break;
-            Sleep(250);
+        // Retry until the taskbar window exists and XAML is ready (slow at Explorer startup).
+        for (int i = 0; i < 120 && !g_unloading; i++) {
+            HWND h = FindTaskbarWnd();
+            if (h) {
+                g_taskbarWnd = h;
+                RunFromWindowThread(h, [](void*) { StartOnThread(); }, nullptr);
+                if (g_timer) break;
+            }
+            Sleep(500);
         }
-        if (!h || g_unloading) return;
-        g_taskbarWnd = h;
-        RunFromWindowThread(h, [](void*) { StartOnThread(); }, nullptr);
     });
 }
 
