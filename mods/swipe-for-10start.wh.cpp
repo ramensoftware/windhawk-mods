@@ -14804,14 +14804,12 @@ bool InstallStartUIHooks(HMODULE module) {
     }
     TraceLog(L"root install begin module=%p", module);
 
-    // StartUI_.dll. The collection's file-name index knows the component as
-    // startui.dll; this array is named for the image actually hooked, and the
-    // index may raise a review item that the maintainer decides.
+    // StartUI_.dll; the collection's file-name index knows it as startui.dll.
     //
     // The entry's name is the exact undecorated spelling, read from the
     // reference StartUI.pdb (10.0.22621.3733) with the same DIA undecorator the
     // Windhawk symbol API matches against.
-    WindhawkUtils::SYMBOL_HOOK startUIHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK startuiDllHooks[] = {
         {
             {L"private: static class Windows::UI::Xaml::UIElement ^ __cdecl "
              L"StartUI::App::PrepareRootElement(class Windows::UI::Xaml::"
@@ -14822,7 +14820,7 @@ bool InstallStartUIHooks(HMODULE module) {
     };
     const uintptr_t base = reinterpret_cast<uintptr_t>(module);
     const bool hooked = WindhawkUtils::HookSymbols(
-        module, startUIHooks, ARRAYSIZE(startUIHooks));
+        module, startuiDllHooks, ARRAYSIZE(startuiDllHooks));
     const uintptr_t resolved =
         reinterpret_cast<uintptr_t>(PrepareRootElement_Original);
     if (!hooked || !resolved) {
