@@ -1,12 +1,14 @@
 // ==WindhawkMod==
 // @id adaptive-tray-contrast
 // @name Adaptive tray contrast
-// @description Choose black or white independently for each system tray glyph based on its live background.
+// @name:zh-CN 任务栏自适应变色
+// @description Adjust tray glyphs, clock and date characters, taskbar button themes and supported app icons to their local backgrounds.
+// @description:zh-CN 根据各自背后的画面调整托盘图标、时间和日期字符、任务栏按钮主题及受支持的应用图标。
 // @version 0.3.13
 // @author StillDialing
 // @github https://github.com/StillDialing
 // @include explorer.exe
-// @architecture x86-64
+// @architecture amd64
 // @compilerOptions -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32
 // ==/WindhawkMod==
 
@@ -18,12 +20,43 @@
 /*
 # Adaptive tray contrast
 
-在 Windows 11 的透明任务栏右侧，按图标所在位置的实际画面自动选择黑字或白字，
-并自动为任务栏上自带深/浅色双套图标的商店/MSIX 应用切换对应版本的图标。
-模组只接管识别出的单色系统图标、文字以及具备双套官方图标的 MSIX 应用，
-保留彩色托盘图片、彩色电池图层与普通软件图标。
+For transparent taskbars on Windows 11 x64 (Intel or AMD). Drag a light window
+behind the clock on a dark desktop: digits over the window can turn black
+while digits over the desktop stay white. The date is evaluated separately,
+one character at a time.
+
+![Clock digits over a dark and a light window](https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/main/images/clock-contrast.png)
+
+The mod adapts supported monochrome tray glyphs and the input indicator, selects
+light or dark themes for Start, Search, Task View, Widgets and app buttons, and
+switches packaged app icons when matching light and dark assets are available.
+Colored tray artwork and the colored battery layer retain their colors.
+A packaged app's own dynamic icon can be covered by its themed package icon.
+
+The default active sampling interval is 80 ms. Increase it in Settings to
+sample less frequently. A sharp background boundary can cause brief flicker.
+
+## 中文说明
+
+适用于 Intel 或 AMD x64 电脑上的 Windows 11 透明任务栏。把亮色窗口拖到深色桌面上的时钟后方，
+同一行数字会按各自背后的明暗显示黑色或白色，日期也逐字符独立判断。
+
+模组还会调整受支持的单色托盘图标、输入法指示器，以及开始、搜索、任务视图、小组件和应用按钮的主题。
+自带深浅两套资源的打包应用可以切换图标，这可能盖住应用自行设置的动态图标。
+彩色托盘图案和电池的彩色部分保留原色。默认每 80 毫秒采样一次，可在设置中调长间隔。
+深浅交界处偶尔会短暂闪烁。
 */
 // ==/WindhawkModReadme==
+
+// ==WindhawkModSettings==
+/*
+- samplingInterval: 80
+  $name: Active sampling interval (milliseconds)
+  $name:zh-CN: 活动采样间隔（毫秒）
+  $description: Adjust between 40 and 2000. Larger values reduce sampling and respond more slowly.
+  $description:zh-CN: 可设置为 40 至 2000，数值越大，采样越少，响应越慢。
+*/
+// ==/WindhawkModSettings==
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -87,6 +120,7 @@ std::atomic<HWND> g_samplerWindow;
 HMODULE g_module;
 UINT g_controlMessage;
 constexpr UINT kPollMs = 80;
+std::atomic<UINT> g_activePollMs{kPollMs};
 constexpr UINT kIdlePollMs = 240;
 constexpr UINT_PTR kSampleTimer = 1;
 constexpr wchar_t kSamplerClass[] = L"Windhawk.AdaptiveTrayContrast.Sampler";
@@ -101,7 +135,14 @@ struct ClockCharacter {
 
 using ClockColors = std::vector<int>;
 
+struct Contrast {
+    double black = 0;
+    double white = 0;
+    bool valid = false;
+};
+
 struct Glyph {
+    Contrast cachedContrast;
     winrt::weak_ref<FrameworkElement> element;
     DependencyProperty property{nullptr};
     IInspectable original{nullptr};
@@ -140,6 +181,7 @@ struct DualIconPaths {
 };
 
 struct ThemeButton {
+    Contrast cachedMarginContrast;
     winrt::weak_ref<FrameworkElement> element;
     IInspectable original{nullptr};
     ElementTheme last = ElementTheme::Default;
@@ -252,6 +294,8 @@ void RestoreButton(ThemeButton& button) {
 }
 
 struct Tray {
+    std::vector<uint32_t> previousPixels;
+    RECT previousRegion{};
     std::vector<ThemeButton> buttons;
     HWND window{};
     winrt::weak_ref<FrameworkElement> root;
@@ -862,12 +906,6 @@ int RelativeLuminance(uint32_t pixel) {
                                    0.0722 * linear[pixel & 255]) + 0.5);
 }
 
-struct Contrast {
-    double black = 0;
-    double white = 0;
-    bool valid = false;
-};
-
 Contrast ScoreContrast(std::array<int, 256> const& histogram, int count) {
     if (count < 8) {
         return {};
@@ -1061,6 +1099,17 @@ public:
         GdiFlush();
         pixels_ = static_cast<const uint32_t*>(data);
         return true;
+    }
+
+    bool MatchesPreviousFrame(Tray& tray) const {
+        const auto count = static_cast<size_t>(width_) * (rect_.bottom - rect_.top);
+        if (EqualRect(&rect_, &tray.previousRegion) && tray.previousPixels.size() == count &&
+            std::equal(tray.previousPixels.begin(), tray.previousPixels.end(), pixels_)) {
+            return true;
+        }
+        tray.previousPixels.assign(pixels_, pixels_ + count);
+        tray.previousRegion = rect_;
+        return false;
     }
 
     Contrast ClockCellContrast(RECT cell) const {
@@ -1257,7 +1306,7 @@ bool MeasureClockCharacters(Glyph& glyph, Controls::TextBlock const& text) {
 }
 
 ClockColors ClockPaint(Glyph& glyph, DesktopStrip const& strip,
-                      LONG clockRight) {
+                      LONG clockRight, bool refresh) {
     try {
         auto element = glyph.element.get();
         auto text = element ? element.try_as<Controls::TextBlock>() : nullptr;
@@ -1275,6 +1324,7 @@ ClockColors ClockPaint(Glyph& glyph, DesktopStrip const& strip,
             }
             return {};
         }
+        if (!refresh && !glyph.clockColors.empty()) return glyph.clockColors;
         ClockColors colors(glyph.clockText.size(), -1);
         bool sampled = false;
         const double scale = text.XamlRoot().RasterizationScale();
@@ -1611,14 +1661,15 @@ void DiscoverButtons(Tray& tray, DependencyObject const& node, int depth = 0) {
     for (int i = 0; i < count; ++i) DiscoverButtons(tray, Media::VisualTreeHelper::GetChild(node, i), depth + 1);
 }
 
-void ThemeButtons(Tray& tray, DesktopStrip const& strip) {
+void ThemeButtons(Tray& tray, DesktopStrip const& strip, bool refresh) {
     for (auto& button : tray.buttons) {
         auto element = button.element.get();
         if (!element || IsRectEmpty(&button.bounds)) continue;
         // Sample the top margin above the artwork and the running indicator.
         RECT margin = button.bounds;
         margin.bottom = margin.top + std::max(1L, (margin.bottom - margin.top) / 10);
-        const auto contrast = strip.ClockCellContrast(margin);
+        if (refresh) button.cachedMarginContrast = strip.ClockCellContrast(margin);
+        const auto contrast = button.cachedMarginContrast;
         if (!contrast.valid || std::abs(contrast.black - contrast.white) < 0.3) continue;
         const bool darkBg = contrast.white > contrast.black;
         const auto theme = darkBg ? ElementTheme::Dark : ElementTheme::Light;
@@ -1662,7 +1713,8 @@ bool UpdateTray(Tray& tray) {
         tray.logInputTree = true;
     }
     const auto now = GetTickCount64();
-    if (now >= tray.nextDiscovery) {
+    bool layoutChanged = now >= tray.nextDiscovery;
+    if (layoutChanged) {
         for (auto& glyph : tray.glyphs) {
             glyph.present = false;
         }
@@ -1691,17 +1743,22 @@ bool UpdateTray(Tray& tray) {
     for (auto& button : tray.buttons) {
         auto element = button.element.get();
         if (element && button.isTaskList) SyncButtonIcon(button, element);
+        const RECT oldBounds = button.bounds;
         button.bounds = {};
         if (element && element.Visibility() == Visibility::Visible &&
             ScreenBounds(element, tray.window, button.bounds))
             UnionRect(&region, &region, &button.bounds);
+        layoutChanged |= !EqualRect(&oldBounds, &button.bounds);
     }
     LONG clockRight = visible.left;
     for (auto& glyph : tray.glyphs) {
         auto element = glyph.element.get();
+        const RECT oldBounds = glyph.bounds;
+        const bool wasPresent = glyph.present;
         glyph.present = element && element.Visibility() == Visibility::Visible &&
                         element.Opacity() > 0 &&
                         ScreenBounds(element, tray.window, glyph.bounds);
+        layoutChanged |= wasPresent != glyph.present || !EqualRect(&oldBounds, &glyph.bounds);
         if (glyph.present) {
             if (glyph.clock) {
                 clockRight = std::max(clockRight, glyph.bounds.right);
@@ -1721,15 +1778,18 @@ bool UpdateTray(Tray& tray) {
     }
     DesktopStrip strip;
     if (strip.Capture(region)) {
-        ThemeButtons(tray, strip);
+        const bool refresh = !strip.MatchesPreviousFrame(tray) || layoutChanged;
+        if (refresh) tray.previousRegion = {};  // Retry if a XAML operation below throws.
+        ThemeButtons(tray, strip, refresh);
         for (auto& glyph : tray.glyphs) {
             if (glyph.present) {
-                auto contrast = strip.BackgroundContrast(glyph.bounds, tray.glyphs);
+                if (refresh) glyph.cachedContrast = strip.BackgroundContrast(glyph.bounds, tray.glyphs);
                 const auto clockPaint = glyph.clock
-                    ? ClockPaint(glyph, strip, clockRight) : ClockColors{};
-                ApplySample(glyph, contrast, clockPaint);
+                    ? ClockPaint(glyph, strip, clockRight, refresh) : ClockColors{};
+                ApplySample(glyph, glyph.cachedContrast, clockPaint);
             }
         }
+        tray.previousRegion = region;
     }
     return true;
 }
@@ -1791,7 +1851,8 @@ void RestoreAll() {
 LRESULT CALLBACK SamplerProc(HWND window, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_TIMER && wParam == kSampleTimer) {
         if (!g_unloading.load()) {
-            const UINT interval = Tick() ? kPollMs : kIdlePollMs;
+            const UINT active = g_activePollMs.load();
+            const UINT interval = Tick() ? active : std::max(active, kIdlePollMs);
             if (interval != g_interval && SetTimer(window, kSampleTimer, interval, nullptr)) {
                 g_interval = interval;
             }
@@ -1856,7 +1917,12 @@ void WINAPI StartHook(void* object) {
 
 }  // namespace
 
+void Wh_ModSettingsChanged() {
+    g_activePollMs = static_cast<UINT>(std::clamp(Wh_GetIntSetting(L"samplingInterval"), 40, 2000));
+}
+
 BOOL Wh_ModInit() {
+    Wh_ModSettingsChanged();
     Wh_Log(L"Adaptive tray contrast v0.3.13 loaded");
     g_controlMessage = RegisterWindowMessageW(L"Windhawk.AdaptiveTrayContrast.Control");
     auto module = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -1905,4 +1971,3 @@ void Wh_ModBeforeUninit() {
     }
     UnregisterClassW(kSamplerClass, g_module);
 }
-
