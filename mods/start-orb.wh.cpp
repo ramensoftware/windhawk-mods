@@ -872,7 +872,7 @@ bool HookTaskbarDllSymbols() {
         Wh_Log(L"Could not load taskbar.dll");
         return false;
     }
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CTaskBand_ITaskListWndSite_vftable},
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CSecondaryTaskBand_ITaskListWndSite_vftable},
@@ -883,7 +883,7 @@ bool HookTaskbarDllSymbols() {
          &CSecondaryTaskBand_GetTaskbarHost_Original},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &std__Ref_count_base__Decref_Original},
     };
-    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
