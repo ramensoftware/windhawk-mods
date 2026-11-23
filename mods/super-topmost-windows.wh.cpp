@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              set-super-topmost
+// @id              super-topmost-windows
 // @name            Super Topmost Windows
 // @description     Show ordinary windows on top of almost all apps and games
 // @version         1.0
