@@ -14,6 +14,12 @@
 # Volume Key Step
 Windows raises or lowers the volume by 2% per volume key press. This mod lets you
 pick any step from 1% to 100%. The Windows volume flyout still shows as usual.
+
+The step also applies to anything else that steps the volume through Explorer, such as
+scrolling with the Windows 11 indicator in the Taskbar Volume Control mod.
+
+At least one audio device (speaker or mic) must be connected when Explorer starts. If
+none was, reload the mod after connecting one.
 */
 // ==/WindhawkModReadme==
 
@@ -65,20 +71,34 @@ HRESULT STDMETHODCALLTYPE VolumeStepDown_Hook(IAudioEndpointVolume* self, LPCGUI
 
 VolumeStep** EndpointVolumeVtable() {
     ComPtr<IMMDeviceEnumerator> enumerator;
-    ComPtr<IMMDevice> device;
+    ComPtr<IMMDeviceCollection> devices;
     ComPtr<IAudioEndpointVolume> volume;
+    UINT count = 0;
 
     if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&enumerator))) ||
-        FAILED(enumerator->GetDefaultAudioEndpoint(eRender, eConsole, &device)) ||
-        FAILED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_INPROC_SERVER, nullptr, &volume))) {
+        FAILED(enumerator->EnumAudioEndpoints(eAll, DEVICE_STATE_ACTIVE, &devices)) ||
+        FAILED(devices->GetCount(&count))) {
+        return nullptr;
+    }
+
+    for (UINT i = 0; i < count && !volume; i++) {
+        ComPtr<IMMDevice> device;
+        if (SUCCEEDED(devices->Item(i, &device))) {
+            device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_INPROC_SERVER, nullptr, &volume);
+        }
+    }
+
+    if (!volume) {
         return nullptr;
     }
 
     auto vtable = *reinterpret_cast<VolumeStep***>(volume.Get());
 
-    HMODULE audio_module;
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                       reinterpret_cast<LPCWSTR>(vtable[kVolumeStepUpSlot]), &audio_module);
+    HMODULE pinned_audio_module;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+                            reinterpret_cast<LPCWSTR>(vtable[kVolumeStepUpSlot]), &pinned_audio_module)) {
+        return nullptr;
+    }
 
     return vtable;
 }
@@ -97,7 +117,7 @@ BOOL Wh_ModInit() {
     }
 
     if (!vtable) {
-        Wh_Log(L"No default audio output device found");
+        Wh_Log(L"No active audio device found");
         return FALSE;
     }
 
