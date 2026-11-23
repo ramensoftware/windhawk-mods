@@ -14,482 +14,52 @@
 /*
 # Ultimate Minimize Animation
 
-The "ultimate" macOS-style window animation mod: seventeen effects that every
-animation can use, taskbar-position awareness (bottom **and** top taskbars,
-including the "Taskbar on top" Windhawk mod), multi-monitor support, a spring
-bounce on restore, app launch animations, auto-hide taskbar unhiding, close
-animations for normal **and** special windows, and an Alt+Tab switch animation.
+macOS-style window animations: seventeen effects for minimizing, restoring,
+launching and closing windows, and for the popups and menus apps hide. Any
+effect can be used for any of them, or a random one each time.
 
-Definitely not inspired from MacOS.
+## Highlights
 
-## 🚀 What's New in V4 (Precision Edition)
+- **Genie and Scale** into the window's own taskbar button, on bottom and top
+  taskbars (including the "Taskbar on top for Windows 11" mod), on every monitor,
+  and with an auto-hidden taskbar, which slides in for the animation.
+- **Change your mind mid-animation.** Restore a window while it is still
+  minimizing, or minimize it while it is still restoring, and the animation turns
+  around from where it is, like on macOS. Any effect can reverse.
+- **The window looks like itself.** It keeps its shadow while it animates (when
+  Windows draws window shadows), Mica and acrylic windows are captured as they
+  look on screen, and rounded corners stay rounded.
+- **Smooth on any screen.** Frames follow the monitor's exact refresh rate (60,
+  144, 165, 240 Hz...), the first frame is on screen before the clock starts, and
+  a frame that can't fit one refresh makes the animation step every second
+  refresh evenly instead of stuttering.
+- **Close animations** for normal windows (the X button, Alt+F4, the taskbar's
+  Close) and for special windows: popups, tooltips, menus, tool windows and,
+  optionally, child windows.
+- **App launch** and **Alt+Tab switch** animations, and a springy **restore
+  bounce**.
+- Everything is drawn on the CPU and shown with GDI, with no Direct2D or
+  Direct3D, and the work is shared between cores for large windows.
 
-V4 is built on V3.9 and keeps everything it fixed, with the same setting keys.
+## How it differs from similar mods
 
-**Change your mind mid-animation.** Restore a window while it is still
-minimizing (or minimize it while it is still restoring) and the running animation
-turns around from where it is, like macOS. V3.9 popped the window back in at once
-while the minimize ghost kept falling over it. Every effect reverses, and any
-number of quick toggles land on the state you asked for last.
+- **[MacOS Minimize Animation](https://windhawk.net/mods/macos-minimize-animation)**
+  plays the genie for minimize, restore, launch and close. This mod started as a
+  fork of it, and adds 16 more effects in every selector, mid-flight reversal,
+  the drawn window shadow, special-window animations and the Alt+Tab animation,
+  with a different genie renderer and frame pacer.
+- **[Windows Animations](https://windhawk.net/mods/windows-animations)** has many
+  of the same particle and distortion effects (several came from it, see the
+  credits). This mod adds Black Hole, Glass, Fluid, Scale, Pop, Fade Up and Poof,
+  aims the minimize at the taskbar button, and lets any effect play for any
+  event, special windows included. Windows Animations has effects this mod
+  doesn't (Scorch, Splinter, Stipple).
+- **[Genie Animation Mod](https://windhawk.net/mods/genie-minimize-animation)**
+  is a simple genie minimize.
 
-**One Genie.** The two genies of V3 (Modern and Classic) looked alike because they
-are two ways of drawing the same shape. V4 has one Genie, drawn by the analytic
-scanline renderer (derrunk's True Genie, the faster of the two: 0.5-0.9 ms a frame
-where the Direct2D Modern engine needed 6.5-7.5 ms and ran at half rate on a
-240 Hz screen). New **Genie bend phase** setting; the tip width setting now
-applies to it. Mipmap levels are blended (trilinear), so there is no visible band
-where the shrinking window switches to a smaller level. The old `genie_modern` /
-`genie_classic` values both select the Genie.
+Use only one of these mods at a time: they animate the same windows.
 
-**Clean start, even motion.**
-- The animation clock starts on the frame that is on screen. In V3.9 the first
-  frame waited 2-4 refreshes for the compositor while time already ran, so the
-  first visible step of every animation was 2-4x bigger than the others.
-- Frames stay on a vblank grid at the monitor's exact refresh rate (240.000 /
-  165.000 / 59.94 Hz from the display configuration, not a rounded integer); a
-  late frame snaps back to the grid instead of losing it.
-- When a frame cannot fit one refresh (a huge window at 240 Hz), the animation
-  steps every 2 refreshes - an even 120 fps - instead of alternating 1-2-1-2.
-
-**Task Manager animates whole.** Only its left menu used to animate; the rest
-vanished. Windows' DPI conversion returned a wrong corner for Task Manager (a
-system-DPI-aware window hosting modern XAML panels), and the snapshot covered the
-left 42 % of the window. V4 maps the frame from the window's own rectangle and
-checks the result on all four sides; the taskbar target of such apps uses the same
-mapping.
-
-**Nothing pops.**
-- **The window keeps its shadow** while it animates (when Windows draws window
-  shadows): it follows the genie row by row, moves with Swell / Pop / Scale and
-  fades with the other effects. The shape was measured on Windows 11, not guessed.
-  New setting: *Window shadow during animations*.
-- **Mica / acrylic windows** (Notepad, Task Manager...) are captured as they are on
-  screen instead of see-through or black.
-- A capture missing a fifth of the window (content the capture API cannot read)
-  is replaced by a screen grab instead of vanishing without an animation.
-- The restore bounce is one spring model that ends exactly at rest.
-
-**Four new effects** (in every effect selector):
-- **Scale** - macOS's other minimize effect: the window shrinks straight into its
-  taskbar button.
-- **Fluid** - the window turns into a droplet that pours into the taskbar button
-  (after kivsak's Fluid Window Engine).
-- **Glass** - the window breaks into irregular shards that spin and fall.
-- **Pixel Melt** - the window drips down like wet paint (after ReDrag's Windows
-  Animations).
-- **Cyber Glitch** now splits its colour channels on torn rows.
-
-**Smaller**
-- A labelled taskbar button ("never combine") receives the genie on its icon, not
-  in the middle of its label.
-- Special windows: never below 8 px (a 1 x 1 helper window of Windhawk's used to
-  "animate"); popups without a redirection surface (the taskbar's hover tooltips)
-  are captured from the screen at once, and tiny popups hold their thread for at
-  most 8 ms instead of 34 ms.
-- The mod's own ghost windows skip the close path when they are destroyed (V3.9
-  ran every one through it, which filled the close log).
-- Telemetry shows where the click time goes (capture, setup, frame 0, the
-  compositor's flush), the first gap apart from the steady-state frames, the
-  cadence and the number of reversals; a launch is labelled `launch`.
-- Removed with the Direct2D engine: the *Modern genie tile count* and *Modern
-  genie renderer* settings, and every use of Direct2D, Direct3D and
-  DirectComposition (the presentation cost measured 0.1-0.7 ms a frame: rendering
-  is what costs, and that is on the CPU).
-
-## 🩹 What's New in V3.9 (Fixes Edition)
-
-Same effects and the same settings as V3.8: this release fixes what a full review
-of the V3.8 code found, and brings in the robustness work of the macOS Minimize
-Animation fork 3.2.1.
-
-**Effects that were cut short or clipped**
-- **Long close effects were cut off.** The closing window is held while its effect
-  plays, but the hold lasted the *Close duration* setting (+ 750 ms), while Thanos
-  Snap, Square Shatter, Perlin Dissolve, Ink Splash, Glitch, Mirage, TV Off, Poof
-  and Swell play 1.2-2.6x longer. With a longer close duration (Thanos at 500 ms
-  and up) an application's last window was destroyed mid-effect and the effect
-  vanished with the process. The hold now follows the effect's real length.
-- **Square Shatter shards stopped at an invisible wall.** The canvas around the
-  window was smaller than the farthest a shard flies (its sideways spread was not
-  counted), so shards were cut at a rectangle mid-screen while still half visible.
-  Thanos Snap dust drifting up, and aimed Thanos / Shatter streams passing beside
-  the taskbar button, had the same problem on a smaller scale.
-- **Perlin Dissolve** dropped whole blocks at a monitor edge on its first frame
-  (a window partly off screen); the blocks are now cut at the edge instead.
-
-**Close and Alt+Tab**
-- **Borderless windows you close yourself get the close effect again.** V3.8 sent
-  every caption-less, frameless window without a system menu to the special-window
-  path (meant for splash screens) - including borderless games and launchers closed
-  with Alt+F4 or from the taskbar. That path never holds the application, so when it
-  was the last window the effect died with the process. A window that receives a
-  close request (X, Alt+F4, the taskbar's Close) now always takes the close path; a
-  splash screen that simply vanishes still plays the special effect.
-- **No Alt+Tab animation after Alt+F4.** Closing a hide-to-tray application with
-  Alt+F4 changed the foreground while Alt was still down, which looked like an
-  Alt+Tab and played the switch animation on the next window. A session now only
-  starts from a window that is still on screen and not closing.
-- **Alt+Tab to a minimized window** could, in a narrow race, play the switch fade
-  instead of the restore effect. A window the mod is already hiding for an animation
-  is skipped.
-
-**Robustness (from the macOS Minimize Animation fork 3.2.1)**
-- A window larger than 64 megapixels, or one parked entirely off screen, plays the
-  system animation instead of asking for a multi-hundred-MB snapshot.
-- Every animation canvas is clipped to the desktop: a window partly off screen no
-  longer allocates (and uploads) the invisible part.
-- Out of memory while setting up an effect ends that animation cleanly instead of
-  raising an exception inside the application.
-- The DirectComposition presenter (Modern genie, GPU option) no longer releases the
-  shared GPU device under a second animation when the device is lost.
-
-**Smaller**
-- Destroying child controls costs less: the special-window class exclusion list is
-  only consulted when it has entries.
-- Telemetry labels special-window animations as `special`.
-
-## 🎆 What's New in V3.8 (Effects Edition)
-
-**One effect catalog, every selector.** Each of the three effect selectors -
-**Minimize / restore / launch**, **Close** and **Special windows** - lists every
-effect, plus **Random**:
-
-| Effect | Look |
-|---|---|
-| Genie: Modern | the Direct2D mesh genie into the taskbar button |
-| Genie: Classic | the scanline genie with bilinear AA and mipmaps |
-| Black Hole | the spiral wormhole vortex |
-| **Square Shatter** | the window bursts into square shards |
-| **Thanos Snap** | a disintegration wave turns the window to dust |
-| **Perlin Dissolve** | an acid-burn noise dissolve |
-| **Cyber Glitch** | digital tearing and break-up, a teleport |
-| **Retro TV Off** | a CRT power-down: squash, beam, dot |
-| **Ink Splash** | an organic ink blot swallows the window |
-| **Mirage** | a wavy heat-shimmer fade |
-| **Swell** | expand and fade |
-| **Pop** | a quick bubble shrink (made for small popups) |
-| **Fade Up** | the Fluent flyout dismiss |
-| **Poof** | a puff of dust drifting up |
-
-- Restore and launch play the minimize effect **in reverse**: shards fly back
-  together, dust reassembles, the TV turns back on. A window always restores with
-  the effect it minimized with, even with Random on.
-- **Genie as a close effect** funnels into the app's taskbar button; on a special
-  window it funnels into the spot the popup opened from.
-- In-place effects need no dock, so they also animate on **left / right
-  taskbars**; a genie on a side taskbar falls back to Swell.
-- With **Aim at the taskbar** on, Thanos Snap and Square Shatter fly into the
-  taskbar button on minimize and out of it on restore.
-- Particle effects take longer than the duration setting by design (about 2.4x
-  for Shatter / Perlin, 2.6x for Thanos), so one duration feels right for every
-  effect.
-
-**Special windows are back - and wider than V3.5.** V1 to V3.5 played the close
-animation on small popups, info bubbles and dropdowns; V3.6 dropped them. V3.8
-brings them back as their own feature, with their own effect (default **Pop**)
-and duration, and goes further: tool windows, tooltips, menus drawn by apps,
-splash screens and **child windows** (a docked panel, an MDI document, a task
-pane, a find bar) are included, at any size. A special window:
-
-- animates when it is hidden *or* destroyed (Chromium and WPF reuse popups by
-  hiding them), once, and a popup shown again at once cancels its ghost;
-- never holds the application (V3.5 froze the popup's thread for the whole
-  wormhole), and a burst is rate-limited (4 at once, 8 per second);
-- keeps its place in the z-order: its ghost never paints over a window that was
-  in front of it;
-- replaces Windows' own fade for `AnimateWindow` popups (comctl32 tooltips)
-  instead of stacking on top of it.
-
-Child windows animate on an explicit close (`DestroyWindow`) only - hiding a
-child (every tab switch) does not, unless **Also when child windows are hidden**
-is on. Content hosts that browsers recreate during navigation, and File
-Explorer's own child windows, never animate.
-
-**Alt+Tab switch.** The window you switch to scales up from 94% and fades in
-over 200 ms, drawn from a live DWM thumbnail (the content keeps moving).
-Cancelling Alt+Tab and switching to a minimized window (the restore effect plays
-instead) do not trigger it.
-
-**Modern genie on DirectComposition (experimental, off by default).** On a high
-refresh-rate display the Modern genie spent most of each frame copying the
-Direct2D result back to memory and up again (`UpdateLayeredWindow`). With
-**Modern genie renderer** set to a GPU option, the same Direct2D drawing goes to
-a DirectComposition swap chain on a D3D11 device: no copies, vblank-locked
-presents. D3D11 and DirectComposition are loaded only on first use; a cold
-process uses the classic path for its first animation while the device warms
-up; any failure falls back to the classic path.
-
-**Smaller fixes**
-- The close-path log (`close hwnd=...`) is off unless **Log close decisions** is
-  on; a new **Log special-window decisions** shows why a window did or did not
-  animate.
-- Splash screens (no caption, no frame, no system menu) now take the special
-  effect instead of the main close effect.
-
-## 🎯 What's New in V3.7 (Precision & Performance Edition)
-
-**V3.7.1:** new **Close animation duration (ms)** setting (50-2000, default 250).
-The Black Hole close used to share the minimize / restore duration; it now has its
-own, and the hold on the closing window follows it.
-
-No new effects: the same three engines and the same settings, made faster, smoother,
-sharper and more correct. Every raster change below was checked against the V3.6
-code with a differential test (identical output, byte for byte, where the picture
-is meant to be unchanged).
-
-**Smoother**
-- **Drift-free frame pacing.** V3.6 waited "one interval minus render time" from the
-  start of every frame, so each timer wake-up's lateness was added to the period and
-  the animation slowly walked out of phase with the display (measured: 58.5 fps on a
-  60 Hz screen, 220 fps on 240 Hz, 172 ms of drift over 400 frames). Frames are now
-  scheduled on absolute deadlines (frame *k* is due at *t0 + k x interval*); a frame
-  that overruns re-bases instead of bursting. Measured drift: under 1 ms.
-- The 1 ms system timer resolution is no longer held at all on any Windows that has
-  the high-resolution timer (only the fallback pins it).
-- Animation threads now service their message queue every frame, so a cross-thread
-  `SendMessage` to a ghost (accessibility tools, shell broadcasts) no longer blocks
-  its sender for the length of the animation; the click-time wait for the first
-  frame does the same.
-
-**Faster on the click**
-- **Zero-copy snapshots.** V3.6 allocated a second bitmap and copied the whole
-  snapshot into it under the global lock at every minimize (about 32 MB for a 4K
-  window), and copied it back at every restore. A finished minimize now hands the
-  bitmap itself to the restore cache and a restore adopts it: no copies, no second
-  allocation.
-- **The taskbar lookup overlaps the capture** instead of being added to it, and it
-  is about twice as fast (below).
-- Classic builds its mip pyramid **after** the first frame is on screen (falling
-  animations never sample it in frame 0) and fills it **in parallel** (4K pyramid:
-  8.2 ms -> 2.5 ms, and only 0.03 ms of it stays on the first-frame path); Black Hole
-  no longer makes a full-size second copy of the snapshot before its first frame.
-
-**Faster per frame**
-- **Classic** hands rows to its workers in small chunks from a shared counter
-  (work-stealing) instead of fixed bands, so a slow or busy core cannot stall the
-  frame. The worker pool is **rationed across processes** with a named semaphore: a
-  Win+M storm of many Classic genies no longer launches dozens of high-priority
-  threads.
-- **Black Hole** is multi-core: block destinations (the `sinf`/`cosf` per block) are
-  computed in parallel, then blocks are binned into 64-row destination bands and
-  blended per band in their original order - the output is identical to V3.6, and
-  3-4x faster per frame (measured on 12 logical processors: 17.3 ms -> 4.3 ms at
-  1080p, 18.8 ms -> 4.8 ms at 1440p).
-
-**Sharper**
-- **Modern: mip-filtered mesh.** A single bilinear brush shimmers when the window is
-  squeezed far below its size. Modern now samples from a mip pyramid (the same one
-  Classic has had since 3.3), picking the level per mesh row for that row's
-  minification. An un-minified window is unchanged.
-- **Real window corners.** DWM rounds the corners at composition; the captured
-  surface is square. The snapshot now gets the same rounding (8 px, or 4 px for
-  small-round windows, scaled to DPI; none when maximized, on Windows 10 or when the
-  app opted out), 4x4 supersampled and premultiplied-safe, for all three engines.
-  Modern's silhouette starts from that real radius instead of a fixed 12 px, so the
-  first and last frame no longer pop and a maximized window no longer gets nibbled
-  corners.
-- **Black Hole restore bounce** is bilinear instead of nearest-neighbour
-  (`StretchBlt` with `COLORONCOLOR`), so the pop no longer stair-steps text.
-
-**Targeting**
-- **Language-independent taskbar targeting.** On Windows 11 a taskbar button's
-  UI Automation id is its application id, exe path or AppUserModelID. The lookup
-  now asks Explorer only for real task buttons (class
-  `Taskbar.TaskListButtonAutomationPeer`: Start, Search, Task View and every tray
-  icon never leave Explorer) and matches the window's AppUserModelID / package id /
-  image path against that id, with the localized-name scoring as a fallback. It no
-  longer depends on English button names, and it can no longer pick a tray icon
-  whose name happens to contain the app's name.
-- **Searches only where the buttons are.** Explorer's UI Automation `FindAll` costs
-  almost the same however few elements it returns, because it walks the XAML tree;
-  from the taskbar root that includes the whole system tray. The task buttons are
-  plain children of the `TaskbarFrame` element, so the lookup finds that element
-  and searches only its children, with the name, id and rectangle of every button
-  returned by one cached request. Measured on the live Windows 11 taskbar: 53-67 ms
-  per cold lookup in V3.6, 24-31 ms now, with identical coordinates - well inside
-  the 80 ms a first minimize may wait for it. (The old whole-tray search remains
-  the fallback for shells without a `TaskbarFrame`.)
-- **Stale-slot detection by layout.** A cached dock position stays trusted while the
-  set of windows that own a taskbar button (and the taskbar alignment) is unchanged,
-  and is refreshed in the background as soon as it changes. V3.6 simply re-resolved
-  every two seconds.
-
-**Correctness**
-- **Black Hole could leave a window invisible.** On a close that is not held (for
-  example closing from a taskbar thumbnail), the real window was cloaked and then
-  also faded to alpha 0 from inside the render loop; if the close was refused
-  ("Save changes?" -> Cancel), the window came back uncloaked but fully transparent.
-  The redundant fade is gone.
-- **DPI-unaware and system-aware applications.** DWM's extended frame is always in
-  physical pixels while `GetWindowRect`, monitor rects and the ghost are in the
-  process' virtualized space. V3.6 mixed them, shifting the snapshot and misplacing
-  the animation for such apps on scaled monitors. They are now mapped into one space
-  (and cross-checked), and per-monitor-aware processes (Explorer and every modern
-  app) take an untouched fast path.
-- **Launch animation hides the window with a DWM cloak** instead of
-  `WS_EX_LAYERED` + alpha 0, which Tauri / Slint / winit and flip-model windows
-  silently undid (the window flashed before the genie). Kept as the fallback for the
-  first Firefox-family window (a cloak there can make Gecko open a second window),
-  for windows the app cloaked itself, and for windows DWM will not cloak.
-- **Closing Chrome / Edge / Electron** from the foreground now grabs the screen
-  first: at close time `PrintWindow` can return only the title-bar band.
-- **Screen-grab eligibility** compares visible frames instead of window rectangles
-  (the invisible resize border made every snapped neighbour "overlap"), ignores
-  minimized windows that stay `WS_VISIBLE`, and ignores Explorer's transparent XAML
-  island host.
-- Explorer's own surfaces (lock / power transitions, flyouts, its taskbar tab proxy
-  for browser windows) no longer play a wormhole: inside `explorer.exe` only File
-  Explorer windows count as application windows.
-- `WM_SHOWWINDOW` counts as proof of life for the close guard (show paths that are
-  neither `ShowWindow` nor `SetWindowPos`).
-
-**Lighter in every process**
-- **No Direct2D until it is used.** `d2d1.dll` is no longer linked or loaded at
-  startup; the factory is created on the first Modern animation.
-- Chromium / Electron helper processes (`--type=renderer|gpu-process|utility|...`)
-  and session-0 services load nothing and hook nothing.
-- Destroying a window no longer takes the global cache lock for child controls, or
-  at all in a process that has never animated anything.
-
-**Diagnostics.** New **Log performance telemetry** setting (off by default): one
-line per animation with click -> snapshot time (and the time spent waiting for the
-taskbar lookup), click -> first-frame latency, frame count, late frames, longest
-frame period, and render / present cost. Nothing is logged per frame.
-
-## 🔧 What's New in V3.6 (Correctness & Robustness Edition)
-
-Same three engines, same look - a long list of real bugs fixed, plus the small
-robustness pieces the other genie mods got right:
-
-- **Classic genie keeps its alpha:** the scanline rasterizer now carries the
-  premultiplied alpha channel through the mip pyramid, the bilinear sampler and
-  the edge coverage. Windows 11 rounded corners no longer render as black
-  wedges and translucent (Mica / acrylic) windows stay see-through - in
-  Classic as well as Modern. A bilinear weight typo (`wy` for `wx` on the
-  bottom row) that caused a faint shimmer is fixed too.
-- **No more end-of-restore blink:** the real window is revealed *before* the
-  ghost is destroyed (as every ancestor of this mod did), so there is never a
-  composed frame with neither on screen.
-- **Modern engine:** the dirty-clear rectangle no longer mixes canvas and
-  screen coordinates (it used to clear most of the canvas every frame), the
-  1 px bottom-row clip is gone, `dock_offset_y` is honored (it was silently
-  overridden by the taskbar rect), a divide-by-zero in the lamp curve is
-  guarded, a software Direct2D target is tried when the hardware one fails,
-  and if Direct2D is unavailable altogether the animation falls back to the
-  Classic engine instead of vanishing.
-- **Black Hole:** the canvas gets a rotation margin so spiralling blocks are no
-  longer clipped at the window edge, the ghost is non-activating like the other
-  engines, and the bounce blit no longer runs a halftone filter over the alpha
-  channel.
-- **Every engine:** allocation failures (huge windows, GDI exhaustion) are
-  checked and unwound instead of dereferencing NULL; only the dirty rectangle
-  is handed to the compositor each frame (`UpdateLayeredWindowIndirect`); the
-  genie ghost is slotted directly *below* the taskbar in z-order so the funnel
-  tip flows under the icons rather than over them; the frame pacer reads the
-  refresh rate of the monitor the animation plays on, not the primary's.
-- **Capture:** screen `BitBlt` fallbacks are only used when nothing overlaps
-  the window (and never for a cloaked window on the restore path, which used
-  to capture the wallpaper); a capture that fails outright aborts the
-  animation cleanly instead of playing an opaque black rectangle; terminal
-  detection uses exact process names (`cmd`, `wt`, `conhost`...) instead of
-  substrings; the window is repainted before an uncached restore capture.
-- **Close path:** the closing thread is only held when the ghost would die
-  with it (the window's own thread, last visible window of its process) -
-  Explorer's taskbar no longer freezes for a close from a thumbnail; the hold
-  pumps sent messages so nothing can deadlock against it; an application that
-  closes asynchronously no longer pops back on screen for a beat after the
-  wormhole; a refused close ("Save changes?" -> Cancel) is uncloaked as soon
-  as its prompt appears; hidden windows with a stale guard re-arm.
-- **Hide-to-tray stash:** the full-window `PrintWindow` that used to run on
-  *every* hide of *every* top-level window (popup menus, tooltips, combo
-  dropdowns, IME windows) is now gated on a real close candidate (root,
-  unowned or captioned, not hung, same thread), throttled, bounded in count and
-  bytes, and honors the exclusion list.
-- **Targeting:** the per-window dock position expires and is refreshed in the
-  background instead of being pinned forever (stale after a taskbar reflow);
-  a UI Automation miss no longer poisons the cache with the fallback guess and
-  is negatively cached for 10 s per process; a cursor resting on the tray
-  during a keyboard minimize no longer becomes the permanent target; side
-  taskbars are detected as such (they used to register as "top").
-- **Hooks:** `DefWindowProcA` / `SendMessageA` are hooked so ANSI applications
-  (Delphi, VB6, old MFC) animate too; `SW_FORCEMINIMIZE` and restore-to-
-  maximized are recognised; `WM_NCDESTROY` cleans up caches for windows that
-  never route `WM_DESTROY` through `DefWindowProc`; `AnimateWindow(AW_HIDE)`,
-  `ShowWindowAsync(SW_HIDE)` and `SetWindowPlacement(SW_HIDE)` stash a
-  snapshot like `ShowWindow(SW_HIDE)` does; hidden or already-iconic windows
-  are never animated; excluded programs are rejected *before* the window is
-  cloaked or the taskbar is focused, so they no longer blink or lose focus.
-- **Auto-hide taskbar:** the taskbar is only revealed (and focus only borrowed)
-  when it is actually hidden and the cursor is not already over it; focus is
-  handed back only if the taskbar still owns it; the deferred minimize no
-  longer blocks the worker in a synchronous `SendMessage`; the engines wait for
-  the taskbar to slide in before reading its rect (top taskbars aimed off
-  screen).
-- **Lifetime:** the exclusion list matches `my.app.exe` (name was cut at the
-  first dot), an empty process name is never cached, the ex-style restore
-  only clears the bit the mod set, the snapshot cache is capped at 64 MB and
-  keeps entries for 15 minutes instead of 60 seconds, the unload join budget
-  covers a full animation, and the Direct2D factory is not released under a
-  thread that failed to join.
-
-## ⚡ What's New in V3.5 (Performance & Reliability Edition)
-
-Same animations, same settings - substantially less work per frame:
-
-- **Row-exact Modern mesh:** the genie mesh is generated from two curve
-  evaluations per row instead of one per vertex, mesh bounds fall out of the
-  same pass, and the Direct2D layer is bounded to the mesh instead of the whole
-  canvas. Verified pixel-equivalent to sub-millipixel accuracy.
-- **Instant capture:** the window snapshot path (the code that runs the moment
-  you click minimize) was rewritten from per-pixel bounds tests plus up to three
-  full-image passes into a single clipped pass.
-- **Compositor-rate frame pacing:** animations render one frame per displayed
-  frame instead of two, timed by a high-resolution timer at the true refresh
-  rate.
-- **Multi-core Classic genie:** the True Genie scanline rasterizer once again
-  renders in parallel bands on a worker pool (derrunk's design) - measured 2.7x
-  faster on 4K-class windows, from missing 60 Hz to comfortable headroom.
-- **Deterministic Black Hole close:** the close is held until the wormhole
-  finishes, guarded by a cross-process, self-expiring window-property stamp -
-  one close, one animation, even for apps that close asynchronously.
-- **Lighter footprint:** 1 ms system timer resolution is now held only while an
-  animation is on screen (not for the mod's whole lifetime in every process),
-  window caches validate owner PIDs and sweep dead handles, and a 64-to-32-bit
-  truncation of every DefWindowProcW result was fixed.
-
-## ✨ What's New in V3.3.x
-
-- **🚀 App Launch Animation (Experimental):** Plays a rising genie when an application
-  window first opens.
-- **👁️ Auto-Hide Taskbar Unhide:** Briefly reveals an auto-hidden taskbar during minimize
-  so the genie has a visible dock icon to flow into, then smoothly returns afterwards.
-- **📐 Customizable Funnel Dock Width:** New setting `modern_funnel_width` allows
-  customizing the exact pixel width of the genie neck entering the dock (8–120 px).
-- **🎛️ Dynamic Mesh Quality Scaling:** `tile_count` directly scales Direct2D mesh
-  tessellation and curvature resolution from 8 (ultra-fast) to 96 (ultra-fine cinema).
-- **🌟 Authentic True Genie Scanline Engine (Classic):** Authentic Perlin smootherstep ($C^2$)
-  continuous curve analytical rasterization with fixed-point 16.16 bilinear interpolation,
-  subpixel edge coverage (`Premul`), and 4-level mip pyramids (`BuildMips`) for zero shimmering on 4K.
-- **🍎 macOS Sequoia Dynamic Silhouette Physics:** Direct2D outline geometry
-  dynamically scales its corner radius ($12\text{ px} \to 2\text{ px}$) as the window
-  funnels into the dock, preventing blunt tip distortion and creating a seamless organic curve.
-- **🌀 Isotropic 2D Spring Bounce:** Restore animations feature dynamic horizontal
-  and vertical overshoot spring oscillation with expanded 2D dirty-rect clearance.
-- **🖥️ Full Multi-Monitor & Top Taskbar Auto-Detection:** Automatically maps and
-  animates into primary and secondary taskbars, including top-dock setups (with full
-  support for "Taskbar on top for Windows 11").
-- **🏎️ High-Resolution Frame Pacer:** QPC-timed waitable-timer pacer tuned for
-  high-refresh rate displays (120Hz, 144Hz, 165Hz, 240Hz, 360Hz) and Variable Refresh Rate
-  (G-Sync / FreeSync) displays.
-- **💾 Memory-Efficient Snapshot Cache:** Automated aging sweeps and smart memory management
-  cut background snapshot RAM consumption by up to 75% across multi-monitor setups.
-- **🌊 Time-Gated Tail Dissolve:** Polynomial curve keeps the window solid while necking down,
-  smoothly dissolving into the dock icon only at the final moment.
-- **🛡️ Mid-Flight Restore & Window Visibility Guard:** Checks `IsIconic(hWnd)` before
-  cloaking or minimizing, preventing windows from ever becoming stuck invisible if restored
-  mid-animation.
-
-## Effects (V4)
+## Effects
 
 | Effect | Look |
 |---|---|
@@ -515,7 +85,7 @@ Same animations, same settings - substantially less work per frame:
 
 The mod **auto-detects** whether the taskbar sits at the bottom or the top of
 each monitor by reading the taskbar window rect - so it works out of the box
-with the ["Taskbar on top for Windows 11"](https://windhawk.net/mods/taskbar-on-top-fork)
+with the ["Taskbar on top for Windows 11"](https://windhawk.net/mods/taskbar-on-top)
 mod. The Genie, Scale and Fluid aim into a top taskbar exactly like they do a
 bottom one. If auto-detection ever gets it wrong, override it with the
 **Taskbar position** setting.
@@ -529,10 +99,7 @@ bottom one. If auto-detection ever gets it wrong, override it with the
 - **Black Hole close** - with **Animate window close** on, closing a window
   (X button / Alt+F4) swallows it into the wormhole instead of the instant
   vanish.
-- Everything the base mod had: window-only premultiplied-alpha capture (Mica /
-  acrylic windows are taken from the screen when they are uncovered), UI
-  Automation taskbar-button targeting with per-window and per-process X/Y caches,
-  first-frame sync, excluded programs, and safe unload.
+- **Excluded programs** - a list of apps that keep the system animations.
 
 ## Known issues
 
@@ -550,7 +117,7 @@ bottom one. If auto-detection ever gets it wrong, override it with the
   close animation (their content is not reachable through `PrintWindow`), so
   closing them plays the system animation.
 - Taskbar-button targeting matches the window's application id / executable path
-  against the button's id (V3.7); only when no id matches does it fall back to
+  against the button's id; only when no id matches does it fall back to
   scoring the buttons' accessible names, which are localized, so a mis-targeted
   genie remains possible for such windows.
 - The app-launch animation is experimental (see its setting description).
@@ -561,23 +128,26 @@ bottom one. If auto-detection ever gets it wrong, override it with the
 
 ## Credits
 
-- **Abdullah Masood** - the original MacOS Minimize Animation mod and the classic genie renderer.
-- **Potassiumuncher** - the Direct2D genie engine of V3 (lamp curve, mesh warp, capture fixes);
-  its look lives on in the V4 Genie.
-- **kivsak** - the Black Hole wormhole, the spring bounce, the dock Y targeting ideas; in V4 the
-  Fluid droplet and the Scale and Glass effect ideas (Fluid Window Engine Pro 2.0.1).
-- **derrunk** - authentic True Genie Perlin smootherstep scanline engine, bilinear AA, and mipmaps:
-  the V4 Genie, including its bend-phase setting.
-- **ReDrag** - in V3.8 the Square Shatter, Thanos Snap, Perlin Dissolve, Cyber Glitch, Retro TV Off,
-  Ink Splash, Mirage and Swell effects and the Alt+Tab switch design (Windows Animations 1.3.7, MIT);
-  before that the async UI Automation timeout architecture, smart capture patterns, and stability hardening;
-  in V3.7 also the absolute-deadline frame pacer, the DWM corner-radius rules and corner mask, the
-  screen-grab eligibility rules, the helper-process early-out and the taskbar layout-signature idea
-  (from Windows Animations 1.3.7); in V4 Pixel Melt and the design of mid-flight min / restore
-  reversal (`RetargetLiveMinRestore`).
-- **MrCrustyToast** and **Abdullah Masood** (macOS Minimize Animation fork 3.1.7 - 3.2.0) - the DWM-cloak
-  launch hide with its Gecko / app-cloak fallbacks, the foreground close screen grab, and the
-  `explorer.exe` shell-surface rule.
+- **Abdullah Masood** - the original MacOS Minimize Animation mod and the classic
+  genie renderer.
+- **Potassiumuncher** - the Direct2D genie engine of earlier versions (lamp curve,
+  mesh warp, capture fixes); its look lives on in the Genie.
+- **kivsak** - the Black Hole wormhole, the spring bounce and the dock targeting
+  ideas; the Fluid droplet and the Scale and Glass effect ideas (Fluid Window
+  Engine Pro).
+- **derrunk** - the True Genie scanline engine (Perlin smootherstep curve,
+  bilinear anti-aliasing, mipmaps), which the Genie is built on, including its
+  bend phase.
+- **ReDrag** - from [Windows Animations](https://windhawk.net/mods/windows-animations)
+  (MIT): the Square Shatter, Thanos Snap, Perlin Dissolve, Cyber Glitch, Retro TV
+  Off, Ink Splash, Mirage, Swell and Pixel Melt effects, the Alt+Tab switch
+  design, the design of mid-flight minimize / restore reversal, the
+  absolute-deadline frame pacer, the DWM corner-radius rules and corner mask, the
+  screen-grab rules, the helper-process early-out, the taskbar layout-signature
+  idea, and the asynchronous UI Automation, capture and stability work.
+- **MrCrustyToast** and **Abdullah Masood** (MacOS Minimize Animation 3.1.7 -
+  3.2.0) - the DWM-cloak launch hide with its fallbacks, the foreground close
+  screen grab, and the `explorer.exe` shell-surface rule.
 - **lolstijl** - the original genie mod this genre grew from.
 */
 // ==/WindhawkModReadme==
@@ -645,7 +215,7 @@ bottom one. If auto-detection ever gets it wrong, override it with the
     $description: Width of the window neck where it enters the taskbar button (8-120 px).
   - bounce_strength: 50
     $name: Restore bounce strength (0-100)
-    $description: Springy overshoot at the end of a genie, Scale or Black Hole restore. 0 disables it.
+    $description: Springy overshoot at the end of a Genie or Black Hole restore. 0 disables it.
   - bounce_duration_ms: 200
     $name: Restore bounce duration (ms)
     $description: How long the restore bounce lasts. Clamped to 0-1000.
@@ -723,12 +293,14 @@ bottom one. If auto-detection ever gets it wrong, override it with the
   - tool_windows: true
     $name: Include tool windows
     $description: Windows with the tool-window style (palettes, tooltips, many notification popups).
-  - child_windows: true
+  - child_windows: false
     $name: Include child windows
     $description: >-
       A child window (a docked panel, an MDI document, a task pane, a find bar)
-      animates when the application closes it. Content hosts that browsers recreate
-      while navigating, and File Explorer's own child windows, never animate.
+      animates when the application closes it. Off by default: applications also
+      destroy short-lived child windows, such as the edit box of a file rename.
+      Content hosts that browsers recreate while navigating, and File Explorer's
+      own child windows, never animate.
   - child_hide: false
     $name: Also when child windows are hidden
     $description: >-
@@ -817,23 +389,6 @@ bottom one. If auto-detection ever gets it wrong, override it with the
     WindowsTerminal.exe - with or without .exe, or a full path). This matches the
     process that OWNS the window, wherever the animation is triggered from, which
     Windhawk's own process exclusion list cannot do.
-- diagnostics:
-  - performance_telemetry: false
-    $name: Log performance telemetry
-    $description: >-
-      One compact line per animation in the Windhawk log: where the click time went
-      (capture, taskbar lookup, setup, first-frame wait), frames, late frames, the
-      cadence (frames shown for 1 / 2 / 3+ refreshes), render and present cost.
-      Nothing is logged per frame.
-  - close_log: false
-    $name: Log close decisions
-    $description: One log line per close event explaining which rule skipped or started it.
-  - special_log: false
-    $name: Log special-window decisions
-    $description: >-
-      One log line per disappearing special-window candidate with its class, styles
-      and the verdict. Use it to find classes for "Excluded window classes".
-  $name: Diagnostics
 */
 // ==/WindhawkModSettings==
 
@@ -843,6 +398,7 @@ bottom one. If auto-detection ever gets it wrong, override it with the
 
 #include <new>
 #include <windows.h>
+#include <windhawk_utils.h>
 #if defined(__x86_64__) || defined(__i386__)
 #define MAC_HAVE_SSE2 1
 #include <emmintrin.h>
@@ -860,15 +416,12 @@ bottom one. If auto-detection ever gets it wrong, override it with the
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <thread>
 #include <cwctype>
 #include <climits>
 #include <memory>
 #include <uiautomation.h>
 #include <shellapi.h>
-#include <shlobj.h>
 #include <propsys.h>
-#include <appmodel.h>
 #include <mmsystem.h>
 
 #ifndef DWMWA_EXTENDED_FRAME_BOUNDS
@@ -903,7 +456,6 @@ bottom one. If auto-detection ever gets it wrong, override it with the
 #endif
 
 #define PI 3.14159265358979323846f
-#define COMPAT_TASKBAR_HEIGHT 70
 #define COMPAT_ICON_SIZE      33
 #define MAX_SNAPSHOT_CACHE 8
 #define MAX_SNAPSHOT_BYTES (64ull * 1024 * 1024)
@@ -927,11 +479,6 @@ bottom one. If auto-detection ever gets it wrong, override it with the
 // to the system animation rather than spawning a render thread (plus, for
 // Classic, a worker pool) per window.
 #define MAX_CONCURRENT_ANIMS 8
-// Unload join budget. Every render loop polls g_unloading once per frame and
-// leaves within a frame or two, so this only has to cover a frame, a teardown and
-// a UI Automation worker parked in COM - not a whole animation (effects can last
-// up to 5 s since 3.8).
-#define UNLOAD_JOIN_BUDGET_MS 4000
 // Largest snapshot or animation canvas, in pixels: 64 MP (256 MB at 32 bpp).
 // Two 8K monitors side by side still fit; it only stops pathological sizes (a
 // window tens of thousands of pixels wide, or parked far off screen), which then
@@ -957,38 +504,37 @@ struct BHBlock {
     int x, y;       // top-left corner in snapshot
 };
 
-typedef LRESULT (WINAPI *DefWindowProcW_t)(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+using DefWindowProcW_t = decltype(&DefWindowProcW);
 DefWindowProcW_t DefWindowProcW_Original = nullptr;
 
-typedef LRESULT (WINAPI *DefWindowProcA_t)(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+using DefWindowProcA_t = decltype(&DefWindowProcA);
 DefWindowProcA_t DefWindowProcA_Original = nullptr;
 
-typedef BOOL (WINAPI *ShowWindow_t)(HWND hWnd, int nCmdShow);
+using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_Original = nullptr;
 
-typedef BOOL (WINAPI *ShowWindowAsync_t)(HWND hWnd, int nCmdShow);
+using ShowWindowAsync_t = decltype(&ShowWindowAsync);
 ShowWindowAsync_t ShowWindowAsync_Original = nullptr;
 
-typedef BOOL (WINAPI *SetWindowPlacement_t)(HWND hWnd, const WINDOWPLACEMENT* lpwndpl);
+using SetWindowPlacement_t = decltype(&SetWindowPlacement);
 SetWindowPlacement_t SetWindowPlacement_Original = nullptr;
 
-typedef BOOL (WINAPI *CloseWindow_t)(HWND hWnd);
+using CloseWindow_t = decltype(&CloseWindow);
 CloseWindow_t CloseWindow_Original = nullptr;
 
-typedef BOOL (WINAPI *SetWindowPos_t)(HWND hWnd, HWND hWndInsertAfter, int X, int Y,
-                                      int cx, int cy, UINT uFlags);
+using SetWindowPos_t = decltype(&SetWindowPos);
 SetWindowPos_t SetWindowPos_Original = nullptr;
 
-typedef LRESULT (WINAPI *SendMessageW_t)(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+using SendMessageW_t = decltype(&SendMessageW);
 SendMessageW_t SendMessageW_Original = nullptr;
 
-typedef LRESULT (WINAPI *SendMessageA_t)(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+using SendMessageA_t = decltype(&SendMessageA);
 SendMessageA_t SendMessageA_Original = nullptr;
 
-typedef BOOL (WINAPI *DestroyWindow_t)(HWND hWnd);
+using DestroyWindow_t = decltype(&DestroyWindow);
 DestroyWindow_t DestroyWindow_Original = nullptr;
 
-typedef BOOL (WINAPI *AnimateWindow_t)(HWND hWnd, DWORD dwTime, DWORD dwFlags);
+using AnimateWindow_t = decltype(&AnimateWindow);
 AnimateWindow_t AnimateWindow_Original = nullptr;
 
 // DPI helper typedef
@@ -997,11 +543,11 @@ static GetDpiForMonitor_t g_pfnGetDpiForMonitor = nullptr;
 static HMODULE g_hShcore = nullptr;
 
 // -------------------------------------------------------------------------
-// Telemetry (Diagnostics setting). Off by default. When on, one line per
-// animation is written in MacGenieFinishAnimation; nothing is logged per frame
-// and every probe below is a branch on a per-animation bool when off.
+// Telemetry: one line per animation, written in MacGenieFinishAnimation, and
+// nothing per frame. Windhawk's logging switch for the mod controls the output
+// (Wh_Log costs nothing while logging is off); the probes are only a few
+// QueryPerformanceCounter calls per animation.
 // -------------------------------------------------------------------------
-static std::atomic<bool> g_telemetry{false};
 
 struct MacGenieTelemetry {
     LONGLONG qpcFreq = 0;
@@ -1050,10 +596,6 @@ struct MacGenieAnimData {
     int bhTwist;
     int bhQuality;
     int funnelWidth;
-    int prevBandTop;
-    int prevBandBottom;
-    int prevBandLeft;
-    int prevBandRight;
     BOOL requestedUnhide;
     HWND hNextApp;
     int unhideDurationMs;
@@ -1079,7 +621,6 @@ struct MacGenieAnimData {
     HWND hInsertAfter;      // special: the window that was above the source (its z-slot)
     BOOL ghostTopmost;      // special: the source was topmost
     BOOL aim;               // in-place particles aim at the taskbar dock
-    BOOL telOn;
     MacGenieTelemetry tel;
     // V4: mid-flight reversal. A hook that sees a restore while this minimize
     // plays (or a minimize while this restore plays) does the native state change
@@ -1125,6 +666,10 @@ static std::unordered_map<std::wstring, ULONGLONG> g_ProcessUiaNegativeUntil;
 struct ProcNameEntry { DWORD pid; std::wstring name; std::wstring path; };
 static std::unordered_map<HWND, ProcNameEntry> g_ProcessNameCache;
 static std::unordered_set<HWND> g_AnimActive;
+// Restores (and launches) that have left g_AnimData but are still in
+// g_AnimActive, with their effect: a minimize that arrives in that window plays
+// no animation, but must still remember the effect for the next restore.
+static std::unordered_map<HWND, int> g_FinishingRisingFx;
 // V4: the running reversible animation of a window (minimize / restore /
 // launch), so a hook can turn it around. Guarded by g_CacheMutex; an entry is
 // removed by MacGenieFinishAnimation before the data is freed.
@@ -1136,7 +681,7 @@ static std::unordered_set<HWND> g_LaunchSeen;
 // Windows the launch path made layered (alpha 0) and their original ex-style,
 // so an unload mid-launch can put them back.
 static std::unordered_map<HWND, LONG_PTR> g_LaunchLayered;
-// The close-animation guard lives in a window property (L"GenieCloseAnim"), not
+// The close-animation guard lives in a window property (L"UltimateGenieCloseAnim"), not
 // in a per-process map: one close routinely fires hooks in more than one process
 // (Explorer sending WM_CLOSE cross-process, plus the app's own DefWindowProc
 // chain), and window properties are the only state all of them share. The
@@ -1159,7 +704,6 @@ static std::mutex g_CacheMutex;
 static std::atomic<bool> g_cachesTouched{false};
 static std::mutex g_WorkerThreadsMutex;
 static std::vector<HANDLE> g_WorkerThreads;
-static bool g_joinTimedOut = false;                // set by JoinWorkerThreads
 
 // --- SETTINGS ---
 static std::atomic<int> g_durationMs{250};
@@ -1239,7 +783,7 @@ static std::atomic<int>  g_particleBlock{5};
 static std::atomic<bool> g_specialEnabled{true};
 static std::atomic<int>  g_specialDurationMs{160};
 static std::atomic<bool> g_specialToolWindows{true};
-static std::atomic<bool> g_specialChildWindows{true};
+static std::atomic<bool> g_specialChildWindows{false};
 static std::atomic<bool> g_specialChildHide{false};
 static std::atomic<int>  g_specialMinSize{0};
 static std::vector<std::wstring> g_SpecialExcludedClasses;   // lower-case; guarded by g_CacheMutex
@@ -1250,8 +794,6 @@ static std::atomic<int>  g_specialActive{0};                 // special ghosts i
 static std::atomic<bool> g_switchEnabled{true};
 static std::atomic<int>  g_switchDurationMs{200};
 static std::atomic<int>  g_switchStartScale{94};
-static std::atomic<bool> g_closeLog{false};
-static std::atomic<bool> g_specialLog{false};
 
 // Forward declaration
 static void MacGenieUndoRisingHide(HWND hWnd, LONG_PTR originalExStyle, BOOL cloakHidden);
@@ -1276,24 +818,20 @@ static bool StartWorkerThread(LPTHREAD_START_ROUTINE proc, void* param) {
     return true;
 }
 
-// Joins every registered worker within one overall budget. Every loop in the
-// mod polls g_unloading, so the wait normally returns in a frame or two; the
-// budget only matters for a UIA worker parked inside COM. If it does run out,
-// g_joinTimedOut tells Wh_ModUninit not to release resources a straggler may
-// still be using.
+// Joins every registered worker. Windhawk unloads the module right after
+// Wh_ModUninit, so no worker may still be running by then: the wait has no
+// timeout. It still ends: every loop in the mod polls g_unloading, and the UI
+// Automation calls of a taskbar lookup carry their own connection (1 s) and
+// transaction (2 s) timeouts.
 static void JoinWorkerThreads() {
     std::vector<HANDLE> threads;
     {
         std::lock_guard<std::mutex> lock(g_WorkerThreadsMutex);
         threads.swap(g_WorkerThreads);
     }
-    const ULONGLONG deadline = GetTickCount64() + UNLOAD_JOIN_BUDGET_MS;
     for (size_t i = 0; i < threads.size(); i += MAXIMUM_WAIT_OBJECTS) {
         const DWORD count = (DWORD)std::min<size_t>(MAXIMUM_WAIT_OBJECTS, threads.size() - i);
-        ULONGLONG now = GetTickCount64();
-        DWORD remaining = (now < deadline) ? (DWORD)(deadline - now) : 0;
-        DWORD r = WaitForMultipleObjects(count, threads.data() + i, TRUE, remaining);
-        if (r == WAIT_TIMEOUT || r == WAIT_FAILED) g_joinTimedOut = true;
+        WaitForMultipleObjects(count, threads.data() + i, TRUE, INFINITE);
     }
     for (HANDLE h : threads) CloseHandle(h);
 }
@@ -1466,11 +1004,6 @@ static void MipsFillRows(const std::vector<MipLevel>& mips, int lvl, int y0, int
     }
 }
 
-// Single-threaded convenience: plan + fill everything (Modern engine, tests).
-[[maybe_unused]] static void BuildMips(const DWORD* src, int W, int H, std::vector<MipLevel>& mips) {
-    MipsPlan(src, W, H, mips);
-    for (int l = 1; l < (int)mips.size(); l++) MipsFillRows(mips, l, 0, mips[l].h);
-}
 
 // -------------------------------------------------------------------------
 // Parallel row pool. One implementation behind every multi-core loop in the mod
@@ -1583,8 +1116,10 @@ static void PoolRun(ParallelPool* p, PoolFn fn, void* ctx, int begin, int end,
 static void PoolShutdown(ParallelPool* p) {
     p->quit = 1;
     for (int i = 0; i < p->nWorkers; i++) SetEvent(p->slots[i].hGo);
+    // The workers exit as soon as they see quit, and the module must not be
+    // unloaded under them, so the wait has no timeout.
     for (int i = 0; i < p->nWorkers; i++) {
-        WaitForSingleObject(p->slots[i].hThread, 500);
+        WaitForSingleObject(p->slots[i].hThread, INFINITE);
         CloseHandle(p->slots[i].hThread);
         CloseHandle(p->slots[i].hGo);
     }
@@ -1611,7 +1146,7 @@ static void MipsFillParallel(ParallelPool* pool, const std::vector<MipLevel>& mi
 // Settings Loader
 // -------------------------------------------------------------------------
 static int MacFxParse(PCWSTR s, int def, bool allowSameAsClose) {
-    if (!s || !*s) return def;
+    if (!*s) return def;
     if (wcscmp(s, L"random") == 0) return FX_RANDOM;
     if (allowSameAsClose && wcscmp(s, L"same_as_close") == 0) return FX_SAME_AS_CLOSE;
     // 3.x keys: the two genies are one in V4.
@@ -1623,10 +1158,7 @@ static int MacFxParse(PCWSTR s, int def, bool allowSameAsClose) {
 }
 
 static int MacGetFxSetting(PCWSTR name, int def, bool allowSameAsClose) {
-    PCWSTR s = Wh_GetStringSetting(name);
-    const int v = MacFxParse(s, def, allowSameAsClose);
-    Wh_FreeStringSetting(s);
-    return v;
+    return MacFxParse(WindhawkUtils::StringSetting::make(name), def, allowSameAsClose);
 }
 
 // Trimmed, lower-cased copy of a list entry. For programs: reduced to the file
@@ -1688,9 +1220,8 @@ void MacGenieLoadSettings() {
     g_blackholeTwist.store(MacClampInt(Wh_GetIntSetting(L"effects.blackhole_twist"), 0, 50), std::memory_order_relaxed);
     // A string setting, since a setting with $options must be a string.
     {
-        PCWSTR q = Wh_GetStringSetting(L"effects.blackhole_quality");
-        int quality = (q && *q) ? _wtoi(q) : 2;
-        Wh_FreeStringSetting(q);
+        auto q = WindhawkUtils::StringSetting::make(L"effects.blackhole_quality");
+        const int quality = *q.get() ? _wtoi(q) : 2;
         g_blackholeQuality.store(MacClampInt(quality, 1, 3), std::memory_order_relaxed);
     }
     g_windowShadow.store(Wh_GetIntSetting(L"effects.window_shadow") != 0, std::memory_order_relaxed);
@@ -1703,7 +1234,7 @@ void MacGenieLoadSettings() {
     // Taskbar
     g_multiMonitor.store(Wh_GetIntSetting(L"taskbar.multi_monitor") != 0, std::memory_order_relaxed);
     {
-        PCWSTR tpos = Wh_GetStringSetting(L"taskbar.taskbar_position");
+        auto tpos = WindhawkUtils::StringSetting::make(L"taskbar.taskbar_position");
         if (wcscmp(tpos, L"top") == 0) {
             g_taskbarSetting.store(TB_SET_TOP, std::memory_order_relaxed);
         } else if (wcscmp(tpos, L"bottom") == 0) {
@@ -1711,41 +1242,33 @@ void MacGenieLoadSettings() {
         } else {
             g_taskbarSetting.store(TB_AUTO, std::memory_order_relaxed);
         }
-        Wh_FreeStringSetting(tpos);
     }
     g_dockOffsetY.store(MacClampInt(Wh_GetIntSetting(L"taskbar.dock_offset_y"), -100, 100), std::memory_order_relaxed);
     g_unhideEnabled.store(Wh_GetIntSetting(L"taskbar.unhide_taskbar") != 0, std::memory_order_relaxed);
     g_unhideDurationMs.store(MacClampInt(Wh_GetIntSetting(L"taskbar.unhide_duration_ms"), 0, 5000),
                              std::memory_order_relaxed);
 
-    // Diagnostics
-    g_telemetry.store(Wh_GetIntSetting(L"diagnostics.performance_telemetry") != 0, std::memory_order_relaxed);
-    g_closeLog.store(Wh_GetIntSetting(L"diagnostics.close_log") != 0, std::memory_order_relaxed);
-    g_specialLog.store(Wh_GetIntSetting(L"diagnostics.special_log") != 0, std::memory_order_relaxed);
-
     // Exclusion entries are normalised once here, so matching compares plain
     // base names: "Foo.exe", "foo", " foo.exe " and "C:\Apps\Foo.exe" all mean
     // the same thing, and "my.app.exe" keeps its inner dot.
     std::vector<std::wstring> excluded;
     for (int i = 0;; i++) {
-        PCWSTR prog = Wh_GetStringSetting(L"excluded_programs[%d]", i);
-        const bool has = *prog;
+        auto prog = WindhawkUtils::StringSetting::make(L"excluded_programs[%d]", i);
+        const bool has = *prog.get();
         if (has) {
             std::wstring s = MacGenieNormalizeEntry(prog, true);
             if (!s.empty()) excluded.push_back(std::move(s));
         }
-        Wh_FreeStringSetting(prog);
         if (!has) break;
     }
     std::vector<std::wstring> classes;
     for (int i = 0;; i++) {
-        PCWSTR cls = Wh_GetStringSetting(L"special.excluded_classes[%d]", i);
-        const bool has = *cls;
+        auto cls = WindhawkUtils::StringSetting::make(L"special.excluded_classes[%d]", i);
+        const bool has = *cls.get();
         if (has) {
             std::wstring s = MacGenieNormalizeEntry(cls, false);
             if (!s.empty()) classes.push_back(std::move(s));
         }
-        Wh_FreeStringSetting(cls);
         if (!has) break;
     }
     {
@@ -1799,9 +1322,9 @@ static int MacFxResolve(int ctx, HWND hWnd) {
     int bag = 0;
     switch (ctx) {
     case CTX_RESTORE: {
-        const INT_PTR stored = hWnd ? (INT_PTR)GetPropW(hWnd, L"GenieFx") : 0;
+        const INT_PTR stored = hWnd ? (INT_PTR)GetPropW(hWnd, L"UltimateGenieFx") : 0;
         if (stored > 0 && stored <= FX_COUNT) {
-            RemovePropW(hWnd, L"GenieFx");
+            RemovePropW(hWnd, L"UltimateGenieFx");
             return (int)stored - 1;
         }
         sel = g_fxMinimize.load(std::memory_order_relaxed);
@@ -1828,7 +1351,7 @@ static int MacFxResolve(int ctx, HWND hWnd) {
 }
 
 static void MacFxRememberForRestore(HWND hWnd, int fx) {
-    if (hWnd && fx >= 0 && fx < FX_COUNT) SetPropW(hWnd, L"GenieFx", (HANDLE)(INT_PTR)(fx + 1));
+    if (hWnd && fx >= 0 && fx < FX_COUNT) SetPropW(hWnd, L"UltimateGenieFx", (HANDLE)(INT_PTR)(fx + 1));
 }
 
 // The context's duration setting scaled by the effect's pacing.
@@ -2024,7 +1547,7 @@ static inline uint32_t MacAlphaBlendPixels(uint32_t dst, uint32_t src_premult) {
     return (outA << 24) | (outR << 16) | (outG << 8) | outB;
 }
 
-// V4: one spring model for every bounce (the genie / Black Hole / Scale restore).
+// One spring model for every bounce (the Genie and Black Hole restores).
 // An underdamped spring released at its rest position with some velocity:
 //   x(t) = A * exp(-zeta * w0 * t) * sin(wd * t),  wd = w0 * sqrt(1 - zeta^2),
 // with t normalised to the bounce duration. 3.9's ad-hoc curve was this spring
@@ -2330,8 +1853,7 @@ static void MacGeniePaceFrame(MacGenieFramePacer* pacer) {
 //    composited (the first-frame flush), and only then does time start, so
 //    frame 1 is exactly one refresh into the animation. 3.9 started the clock
 //    before frame 0, and the 2-4 refreshes frame 0 took to appear made the first
-//    visible step 2-4x bigger than the others in every animation (your log:
-//    late=1, period-max 9-17 ms).
+//    visible step 2-4x bigger than the others in every animation.
 //  - A reversal remaps time so the picture continues from the same shape:
 //    falling at progress p becomes rising at 1 - p, and back.
 // -------------------------------------------------------------------------
@@ -2388,7 +1910,7 @@ static bool MacAnimApplyReversal(MacAnimClock* c, MacGenieAnimData* d, double an
         d->cacheSnapshotOnFinish = TRUE;
         d->ctx = CTX_MINIMIZE;
     }
-    if (d->telOn) d->tel.reversals++;
+    d->tel.reversals++;
     return true;
 }
 
@@ -2405,9 +1927,8 @@ static void MacGenieDrainMessages() {
     }
 }
 
-// Telemetry probes. All of them are no-ops unless the per-animation flag is set.
-static inline LONGLONG MacTelMark(const MacGenieAnimData* d) {
-    if (!d->telOn) return 0;
+// Telemetry probes.
+static inline LONGLONG MacTelMark() {
     LARGE_INTEGER q;
     QueryPerformanceCounter(&q);
     return q.QuadPart;
@@ -2415,7 +1936,6 @@ static inline LONGLONG MacTelMark(const MacGenieAnimData* d) {
 
 static void MacTelFrame(MacGenieAnimData* d, LONGLONG frameStart, LONGLONG renderEnd,
                         LONGLONG presentEnd) {
-    if (!d->telOn) return;
     MacGenieTelemetry& t = d->tel;
     const double f = (double)t.qpcFreq / 1000.0;   // ticks per ms
     if (f <= 0.0) return;
@@ -2444,29 +1964,27 @@ static void MacTelFrame(MacGenieAnimData* d, LONGLONG frameStart, LONGLONG rende
 }
 
 static void MacTelFirstFrame(MacGenieAnimData* d) {
-    if (d->telOn && !d->tel.qFirstFrame) d->tel.qFirstFrame = MacTelMark(d);
+    if (!d->tel.qFirstFrame) d->tel.qFirstFrame = MacTelMark();
 }
 
 // V4 latency stages: the render thread is set up (ghost, canvas, pool, precalc),
 // and frame 0 has been handed to the compositor (before the first-frame flush).
 static void MacTelSetupDone(MacGenieAnimData* d) {
-    if (d->telOn && !d->tel.qSetupDone) d->tel.qSetupDone = MacTelMark(d);
+    if (!d->tel.qSetupDone) d->tel.qSetupDone = MacTelMark();
 }
 
 static void MacTelFrame0Shown(MacGenieAnimData* d) {
-    if (d->telOn && !d->tel.qFrame0Shown) d->tel.qFrame0Shown = MacTelMark(d);
+    if (!d->tel.qFrame0Shown) d->tel.qFrame0Shown = MacTelMark();
 }
 
 static void MacTelBeginThread(MacGenieAnimData* d, const wchar_t* engine,
                               const MacGenieFramePacer* pacer) {
-    if (!d->telOn) return;
     d->tel.engine = engine;
     d->tel.intervalMs = pacer ? pacer->intervalMs : 0.0;
-    if (!d->tel.qThreadStart) d->tel.qThreadStart = MacTelMark(d);
+    if (!d->tel.qThreadStart) d->tel.qThreadStart = MacTelMark();
 }
 
 static void MacTelLog(const MacGenieAnimData* d) {
-    if (!d->telOn) return;
     const MacGenieTelemetry& t = d->tel;
     const double f = (double)t.qpcFreq / 1000.0;
     if (f <= 0.0) return;
@@ -2602,7 +2120,7 @@ static bool MacGenieSpecialCancelled(const MacGenieAnimData* d) {
     if (!d->special) return false;
     const HWND h = d->hRealWnd;
     if (!IsWindow(h) || !IsWindowVisible(h)) return false;
-    return GetPropW(h, L"GenieSpecialAnim") == NULL;
+    return GetPropW(h, L"UltimateGenieSpecialAnim") == NULL;
 }
 
 // -------------------------------------------------------------------------
@@ -3753,6 +3271,15 @@ static void MacGenieFinishAnimation(MacGenieAnimData* data) {
         auto it = g_AnimData.find(data->hRealWnd);
         if (it != g_AnimData.end() && it->second == data) g_AnimData.erase(it);
         pendingDir = InterlockedExchange(&data->wantDir, -1);
+        if (data->isRising && !data->isClosing) {
+            if (pendingDir == 0) {
+                // A minimize came as this restore ended, too late to turn it
+                // around: the window is minimized natively, so remember the
+                // effect for its next restore here.
+                MacFxRememberForRestore(data->hRealWnd, data->fx);
+            }
+            g_FinishingRisingFx[data->hRealWnd] = data->fx;
+        }
     }
     if (!data->isClosing) {
         if (data->isRising) {
@@ -3804,16 +3331,16 @@ static void MacGenieFinishAnimation(MacGenieAnimData* data) {
             // than sent: V3 parked this worker in SendMessageTimeout against
             // an application thread that may be busy, and a bypass property
             // cannot even be set on an elevated window from a medium-IL
-            // process. The GenieBypass property stays for the in-process
+            // process. The UltimateGenieBypass property stays for the in-process
             // hooks; g_AnimActive still holds the window as a second guard.
-            SetPropW(data->hRealWnd, L"GenieBypass", (HANDLE)1);
+            SetPropW(data->hRealWnd, L"UltimateGenieBypass", (HANDLE)1);
             if (ShowWindowAsync_Original) ShowWindowAsync_Original(data->hRealWnd, SW_MINIMIZE);
             else ShowWindowAsync(data->hRealWnd, SW_MINIMIZE);
             for (int i = 0; i < 50 && IsWindow(data->hRealWnd) && !IsIconic(data->hRealWnd) &&
                             !g_unloading.load(std::memory_order_relaxed); i++) {
                 Sleep(10);
             }
-            RemovePropW(data->hRealWnd, L"GenieBypass");
+            RemovePropW(data->hRealWnd, L"UltimateGenieBypass");
         }
         if (IsWindow(data->hRealWnd)) {
             MacGenieSetCloak(data->hRealWnd, FALSE);
@@ -3828,6 +3355,7 @@ static void MacGenieFinishAnimation(MacGenieAnimData* data) {
     } else {
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         g_AnimActive.erase(data->hRealWnd);
+        g_FinishingRisingFx.erase(data->hRealWnd);
     }
 
     // Release the thread that is holding the close. Done last, and outside the
@@ -4408,7 +3936,7 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
 
     MacGenieFramePacer framePacer;
     MacGenieCreateFramePacer(&framePacer, data->hMon);
-    if (data->telOn) data->tel.intervalMs = framePacer.intervalMs;
+    data->tel.intervalMs = framePacer.intervalMs;
 
     BOOL firstFrame = TRUE;
     int prevY0 = 0, prevY1 = 0;
@@ -4524,7 +4052,7 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
 
         // Small bands stay on this thread: the hand-off costs more than it saves.
         PoolRun(&pool, ClassicBandJob, &fctx, shY0, shY1, 16, 128);
-        const LONGLONG telRenderEnd = MacTelMark(data);
+        const LONGLONG telRenderEnd = MacTelMark();
 
         POINT ptDst = { minX, minY };
         SIZE  sz    = { totalW, totalH };
@@ -4536,7 +4064,7 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
             MacGenieShowGhostForData(hGhost, data, true);
             MacTelFrame0Shown(data);
         }
-        MacTelFrame(data, qpcFrameStart.QuadPart, telRenderEnd, MacTelMark(data));
+        MacTelFrame(data, qpcFrameStart.QuadPart, telRenderEnd, MacTelMark());
 
         if (lastFrame) {
             DwmFlush();
@@ -4568,7 +4096,7 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
 
         if (!paced) MacGeniePaceFrame(&framePacer);
     }
-    if (data->telOn) data->tel.strideMax = framePacer.strideMax;
+    data->tel.strideMax = framePacer.strideMax;
 
     // Wind the render pool down before the surface and mips it references go
     // away, and give its budget slots back.
@@ -4925,7 +4453,7 @@ DWORD WINAPI MacGenieBlackHoleThread(LPVOID lpParam) {
 
     MacGenieFramePacer framePacer;
     MacGenieCreateFramePacer(&framePacer, data->hMon);
-    if (data->telOn) data->tel.intervalMs = framePacer.intervalMs;
+    data->tel.intervalMs = framePacer.intervalMs;
     MacAnimClock clock;
     MacAnimClockInit(&clock);
     LARGE_INTEGER qpcNow;
@@ -5025,7 +4553,7 @@ DWORD WINAPI MacGenieBlackHoleThread(LPVOID lpParam) {
                 curMaxY = MacMax(curMaxY, bDstY + curH + shadow.reachBottom);
             }
         }
-        const LONGLONG telRenderEnd = MacTelMark(data);
+        const LONGLONG telRenderEnd = MacTelMark();
 
         // Rows touched this frame or cleared from the last one.
         const int dirtyTop = MacMax(0, MacMin(prevMinY, curMinY));
@@ -5042,7 +4570,7 @@ DWORD WINAPI MacGenieBlackHoleThread(LPVOID lpParam) {
             MacGenieShowGhostForData(hGhost, data, false);
             MacTelFrame0Shown(data);
         }
-        MacTelFrame(data, qpcFrameStart.QuadPart, telRenderEnd, MacTelMark(data));
+        MacTelFrame(data, qpcFrameStart.QuadPart, telRenderEnd, MacTelMark());
 
         if (lastFrame) {
             DwmFlush();
@@ -5078,7 +4606,7 @@ DWORD WINAPI MacGenieBlackHoleThread(LPVOID lpParam) {
 
         if (!paced) MacGeniePaceFrame(&framePacer);
     }
-    if (data->telOn) data->tel.strideMax = framePacer.strideMax;
+    data->tel.strideMax = framePacer.strideMax;
 
     PoolShutdown(&pool);
     MacGenieReleaseBudgetSlot(hBudget, budgetSlots);
@@ -7176,7 +6704,7 @@ DWORD WINAPI MacGenieFxThread(LPVOID lpParam) {
     const double dur = (double)MacMax(50, data->durationMs);
     MacGenieFramePacer framePacer;
     MacGenieCreateFramePacer(&framePacer, data->hMon);
-    if (data->telOn) data->tel.intervalMs = framePacer.intervalMs;
+    data->tel.intervalMs = framePacer.intervalMs;
     MacAnimClock clock;
     MacAnimClockInit(&clock);
     LARGE_INTEGER qpcNow;
@@ -7220,7 +6748,7 @@ DWORD WINAPI MacGenieFxThread(LPVOID lpParam) {
             }
         }
         GdiFlush();
-        const LONGLONG telRenderEnd = MacTelMark(data);
+        const LONGLONG telRenderEnd = MacTelMark();
 
         RECT dirty = prevBB;
         if (!FxIsEmpty(bb)) {
@@ -7237,7 +6765,7 @@ DWORD WINAPI MacGenieFxThread(LPVOID lpParam) {
             MacGenieShowGhostForData(hGhost, data, underTaskbar);
             MacTelFrame0Shown(data);
         }
-        MacTelFrame(data, qpcFrameStart.QuadPart, telRenderEnd, MacTelMark(data));
+        MacTelFrame(data, qpcFrameStart.QuadPart, telRenderEnd, MacTelMark());
 
         if (lastFrame) {
             DwmFlush();
@@ -7260,7 +6788,7 @@ DWORD WINAPI MacGenieFxThread(LPVOID lpParam) {
         }
         if (!paced) MacGeniePaceFrame(&framePacer);
     }
-    if (data->telOn) data->tel.strideMax = framePacer.strideMax;
+    data->tel.strideMax = framePacer.strideMax;
 
     PoolShutdown(&pool);
     MacGenieReleaseBudgetSlot(hBudget, budgetSlots);
@@ -7691,8 +7219,7 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
                         HANDLE* outCloseWait = nullptr,
                         int* outDurationMs = nullptr) {
     MacGenieTelemetry tel;
-    const bool telOn = g_telemetry.load(std::memory_order_relaxed);
-    if (telOn) {
+    {
         LARGE_INTEGER f, q;
         QueryPerformanceFrequency(&f);
         QueryPerformanceCounter(&q);
@@ -7903,17 +7430,12 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     data->hNextApp = hNextApp;
     data->unhideDurationMs = g_unhideDurationMs.load(std::memory_order_relaxed);
     data->deferredMinimize = deferredMinimize;
-    data->prevBandTop = -1;
-    data->prevBandBottom = -2;
-    data->prevBandLeft = 0;
-    data->prevBandRight = 0;
     data->pBits = nullptr;
     data->hBitmap = NULL;
     data->revealDone = FALSE;
     data->dockOffsetY = g_dockOffsetY.load(std::memory_order_relaxed);
     data->taskbarFocusBorrowed = requestedUnhide;
     data->cacheSnapshotOnFinish = (!rising && !isClosing);
-    data->telOn = telOn;
     data->wantDir = -1;
     data->isLaunch = t_macLaunchStart;
     data->shadow = g_windowShadow.load(std::memory_order_relaxed) && MacGenieWindowHasDwmShadow(hWnd);
@@ -7921,8 +7443,7 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     // of the auto-hide reveal (that window is not minimized until the end).
     data->reversible = !isClosing && !deferredMinimize;
     // The real corner radius of this window in this thread's coordinate space
-    // (0 = square). It both rounds a freshly captured snapshot and seeds the
-    // Modern engine's silhouette.
+    // (0 = square). It rounds a freshly captured snapshot.
     data->cornerRadiusPx = (float)MacGenieWindowCornerRadiusPx(hWnd, hMon, originalExStyle);
 
     HDC hScreenDC = GetDC(NULL);
@@ -8137,10 +7658,8 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
     }
 
     LPTHREAD_START_ROUTINE renderProc = MacFxThreadFor(fx);
-    // (Modern creates the Direct2D factory lazily on its own thread and falls
-    // back to the Classic engine, which needs GDI alone, if that fails.)
 
-    if (telOn) {
+    {
         LARGE_INTEGER q;
         QueryPerformanceCounter(&q);
         tel.qCaptureDone = q.QuadPart;
@@ -8206,7 +7725,7 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
 // V1-V3.5 played the close animation on these (their only gates were "not a
 // child, not a tool window, at least 40 px"); 3.6's MacGenieIsCloseCandidate
 // removed them. They come back on their own path, which never touches the main
-// close path (MacGenieTryCloseAnimation) or its GenieCloseAnim guard:
+// close path (MacGenieTryCloseAnimation) or its UltimateGenieCloseAnim guard:
 //  - a window that is not a normal application window (MacGenieIsCloseCandidate
 //    false) animates with the special effect when it is hidden OR destroyed,
 //    whichever comes first (Chromium and WPF reuse popups by hiding them);
@@ -8222,7 +7741,7 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
 #define SPECIAL_MAX_ACTIVE 4
 #define SPECIAL_RATE_PER_SEC 8.0
 #define SPECIAL_FIRST_FRAME_WAIT_MS 34
-// V4: tiny popups (taskbar tooltips: 96-129 x 52 px in your log) wait at most
+// Tiny popups (taskbar tooltips are about 96-129 x 52 px) wait at most
 // this long - Explorer's taskbar thread spent 10-17 ms per tooltip in 3.9.
 #define SPECIAL_TINY_POPUP_HEIGHT 64
 #define SPECIAL_TINY_FIRST_FRAME_WAIT_MS 8
@@ -8246,7 +7765,6 @@ static bool MacGenieSpecialTakeToken() {
 }
 
 static void MacSpecialLog(HWND hWnd, const wchar_t* cls, LONG_PTR style, LONG_PTR ex, const wchar_t* verdict) {
-    if (!g_specialLog.load(std::memory_order_relaxed)) return;
     Wh_Log(L"special hwnd=%p class=%s style=%08X ex=%08X: %s", (void*)hWnd, cls ? cls : L"?",
            (unsigned)(style & 0xFFFFFFFF), (unsigned)(ex & 0xFFFFFFFF), verdict);
 }
@@ -8415,14 +7933,14 @@ static bool MacGenieTrySpecialClose(HWND hWnd, bool fromDestroy) {
     // The top-level window it lives in (itself for a popup).
     HWND root = child ? GetAncestor(hWnd, GA_ROOT) : hWnd;
     if (!root || IsIconic(root) || MacGenieIsAnyCloaked(root)) return false;
-    if (GetPropW(root, L"GenieCloseAnim")) {
+    if (GetPropW(root, L"UltimateGenieCloseAnim")) {
         MacSpecialLog(hWnd, cls, style, ex, L"skipped, part of a main window's close");
         return false;
     }
     if (!child) {
         HWND owner = GetWindow(hWnd, GW_OWNER);
         // (A hidden owner is fine: tray apps own their notification popups with one.)
-        if (owner && GetPropW(owner, L"GenieCloseAnim")) {
+        if (owner && GetPropW(owner, L"UltimateGenieCloseAnim")) {
             MacSpecialLog(hWnd, cls, style, ex, L"skipped, owner is closing");
             return false;
         }
@@ -8435,7 +7953,7 @@ static bool MacGenieTrySpecialClose(HWND hWnd, bool fromDestroy) {
             return false;   // already invisible (the app faded it itself)
         }
     }
-    const DWORD stamp = (DWORD)(ULONG_PTR)GetPropW(hWnd, L"GenieSpecialAnim");
+    const DWORD stamp = (DWORD)(ULONG_PTR)GetPropW(hWnd, L"UltimateGenieSpecialAnim");
     if (stamp && (DWORD)GetTickCount64() - stamp < 50) return false;   // re-entry of the same close
     if (!child && IsHungAppWindow(hWnd)) return false;
     if (MacGenieIsExcluded(hWnd)) {
@@ -8470,8 +7988,7 @@ static bool MacGenieTrySpecialClose(HWND hWnd, bool fromDestroy) {
     }
 
     MacGenieTelemetry tel;
-    const bool telOn = g_telemetry.load(std::memory_order_relaxed);
-    if (telOn) {
+    {
         LARGE_INTEGER f, q;
         QueryPerformanceFrequency(&f);
         QueryPerformanceCounter(&q);
@@ -8527,13 +8044,10 @@ static bool MacGenieTrySpecialClose(HWND hWnd, bool fromDestroy) {
     data->bhTwist = g_blackholeTwist.load(std::memory_order_relaxed);
     data->bhQuality = (MacMax(w, h) < 900) ? 3 : g_blackholeQuality.load(std::memory_order_relaxed);
     data->funnelWidth = MacClampInt(MacMin(g_modernFunnelWidth.load(std::memory_order_relaxed), w / 4), 8, 120);
-    data->prevBandTop = -1;
-    data->prevBandBottom = -2;
     data->cacheSnapshotOnFinish = FALSE;
     data->cornerRadiusPx = child ? 0.0f : (float)MacGenieWindowCornerRadiusPx(hWnd, hMon, ex);
     data->hInsertAfter = GetWindow(root, GW_HWNDPREV);
     data->ghostTopmost = (GetWindowLongPtrW(root, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-    data->telOn = telOn;
     if (kFxInfo[fx].docked) {
         int ax, ay;
         DockPos pos;
@@ -8547,7 +8061,7 @@ static bool MacGenieTrySpecialClose(HWND hWnd, bool fromDestroy) {
         data->dockPos = DOCK_BOTTOM;
     }
     MacGenieApplyRoundedCornerMask((DWORD*)bits, w, h, (int)data->cornerRadiusPx);
-    if (telOn) {
+    {
         LARGE_INTEGER q;
         QueryPerformanceCounter(&q);
         tel.qCaptureDone = q.QuadPart;
@@ -8560,11 +8074,11 @@ static bool MacGenieTrySpecialClose(HWND hWnd, bool fromDestroy) {
                          &data->hFirstFrameShown, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
         data->hFirstFrameShown = NULL;
     }
-    SetPropW(hWnd, L"GenieSpecialAnim", (HANDLE)(ULONG_PTR)((DWORD)GetTickCount64() | 1));
+    SetPropW(hWnd, L"UltimateGenieSpecialAnim", (HANDLE)(ULONG_PTR)((DWORD)GetTickCount64() | 1));
     g_specialActive.fetch_add(1, std::memory_order_relaxed);
     if (!StartWorkerThread(MacFxThreadFor(fx), data)) {
         g_specialActive.fetch_sub(1, std::memory_order_relaxed);
-        RemovePropW(hWnd, L"GenieSpecialAnim");
+        RemovePropW(hWnd, L"UltimateGenieSpecialAnim");
         if (data->hFirstFrameShown) CloseHandle(data->hFirstFrameShown);
         if (hFirstShown) CloseHandle(hFirstShown);
         DeleteObject(hBmp);
@@ -8726,10 +8240,8 @@ static DWORD WINAPI MacSwitchAnimThread(LPVOID lp) {
                 if (last || g_unloading.load(std::memory_order_relaxed) || !IsWindow(hWnd)) break;
                 DwmFlush();
             }
-            if (g_telemetry.load(std::memory_order_relaxed)) {
-                Wh_Log(L"[perf] switch alt+tab hwnd=%p src=%dx%d | frames=%d in %.0fms period-max=%.1fms",
-                       (void*)hWnd, gw, gh, telFrames, telLastMs, telPeriodMax);
-            }
+            Wh_Log(L"[perf] switch alt+tab hwnd=%p src=%dx%d | frames=%d in %.0fms period-max=%.1fms",
+                   (void*)hWnd, gw, gh, telFrames, telLastMs, telPeriodMax);
         }
     }
     if (IsWindow(hWnd)) MacGenieSetCloak(hWnd, FALSE);
@@ -8821,7 +8333,7 @@ static void CALLBACK MacSwitchTrackerProc(HWINEVENTHOOK, DWORD event, HWND hWnd,
             // and played the switch animation on whatever window got the focus.
             // (Only a YOUNG close guard counts: after a refused close the guard
             // stays on the living window until its next close or show.)
-            const DWORD guard = src ? (DWORD)(ULONG_PTR)GetPropW(src, L"GenieCloseAnim") : 0;
+            const DWORD guard = src ? (DWORD)(ULONG_PTR)GetPropW(src, L"UltimateGenieCloseAnim") : 0;
             const bool closing = guard && (DWORD)GetTickCount64() - guard < CLOSE_GUARD_REARM_MS;
             if (src && src != hWnd && IsWindow(src) && IsWindowVisible(src) && !IsIconic(src) &&
                 !MacGenieIsAnyCloaked(src) && !closing) {
@@ -9231,10 +8743,19 @@ static bool MacGenieTryMinimizeAnim(HWND hWnd, bool allowUnhide) {
     // a redundant SW_MINIMIZE) have nothing to animate; V3's ShowWindow and
     // SC_MINIMIZE paths lacked this and ghosted a blank capture.
     if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return false;
-    if (GetPropW(hWnd, L"GenieBypass")) return false;
+    if (GetPropW(hWnd, L"UltimateGenieBypass")) return false;
     {
         std::lock_guard<std::mutex> lock(g_CacheMutex);
-        if (g_AnimActive.count(hWnd)) return false;   // our own deferred minimize, or a rising anim in flight
+        if (g_AnimActive.count(hWnd)) {
+            // Our own deferred minimize, or a restore that is finishing: no
+            // animation, but a finishing restore's effect is kept for the next
+            // restore of the window.
+            auto finishing = g_FinishingRisingFx.find(hWnd);
+            if (finishing != g_FinishingRisingFx.end()) {
+                MacFxRememberForRestore(hWnd, finishing->second);
+            }
+            return false;
+        }
     }
     if (!MacGenieShouldAnimate(hWnd)) return false;
     if (MacGenieIsExcluded(hWnd)) return false;
@@ -9319,7 +8840,7 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 // which gate rejected a close. Windhawk only surfaces these when mod logging is
 // switched on.
 #define MAC_CLOSE_LOG(reason) \
-    do { if (g_closeLog.load(std::memory_order_relaxed)) Wh_Log(L"close hwnd=%p: " reason, (void*)hWnd); } while (0)
+    Wh_Log(L"close hwnd=%p: " reason, (void*)hWnd)
 
 // Hold the closing thread until the wormhole has played out.
 //
@@ -9393,11 +8914,11 @@ static bool MacGenieCloseShouldHold(HWND hWnd) {
 // nonzero is forced with |1 (a <=1ms error against a 1500ms window).
 static void MacGenieStampCloseGuard(HWND hWnd) {
     DWORD stamp = (DWORD)GetTickCount64() | 1;
-    SetPropW(hWnd, L"GenieCloseAnim", (HANDLE)(ULONG_PTR)stamp);
+    SetPropW(hWnd, L"UltimateGenieCloseAnim", (HANDLE)(ULONG_PTR)stamp);
 }
 
 static DWORD MacGenieCloseGuardAgeMs(HWND hWnd) {
-    DWORD stamp = (DWORD)(ULONG_PTR)GetPropW(hWnd, L"GenieCloseAnim");
+    DWORD stamp = (DWORD)(ULONG_PTR)GetPropW(hWnd, L"UltimateGenieCloseAnim");
     if (!stamp) return MAXDWORD;
     return (DWORD)GetTickCount64() - stamp;   // unsigned math survives wrap
 }
@@ -9412,14 +8933,14 @@ static DWORD MacGenieCloseGuardAgeMs(HWND hWnd) {
 // the wormhole. A window in one of our own animations is never disarmed.
 static void MacGenieDisarmCloseGuardOnShow(HWND hWnd) {
     // V3.8: a special window shown again stops its ghost (MacGenieSpecialCancelled).
-    if (hWnd && GetPropW(hWnd, L"GenieSpecialAnim")) RemovePropW(hWnd, L"GenieSpecialAnim");
-    if (!hWnd || !GetPropW(hWnd, L"GenieCloseAnim")) return;
+    if (hWnd && GetPropW(hWnd, L"UltimateGenieSpecialAnim")) RemovePropW(hWnd, L"UltimateGenieSpecialAnim");
+    if (!hWnd || !GetPropW(hWnd, L"UltimateGenieCloseAnim")) return;
     if (IsWindowVisible(hWnd)) return;
     {
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         if (g_AnimActive.count(hWnd)) return;
     }
-    RemovePropW(hWnd, L"GenieCloseAnim");
+    RemovePropW(hWnd, L"UltimateGenieCloseAnim");
     // The earlier close may have cloaked it; a re-shown window must be seen.
     MacGenieSetCloak(hWnd, FALSE);
     MacGenieSetDwmTransitions(hWnd, TRUE);
@@ -9536,7 +9057,7 @@ static void MacGenieTryCloseAnimation(HWND hWnd, bool fromDestroy = false) {
                 MAC_CLOSE_LOG(L"skipped, already animated - window hidden, close still in flight");
                 return;
             }
-            RemovePropW(hWnd, L"GenieCloseAnim");
+            RemovePropW(hWnd, L"UltimateGenieCloseAnim");
         } else {
         // A DestroyWindow trigger is by definition the tail end of a close, not
         // a user starting a new one - the re-arm horizon never applies to it.
@@ -9550,7 +9071,7 @@ static void MacGenieTryCloseAnimation(HWND hWnd, bool fromDestroy = false) {
             MAC_CLOSE_LOG(L"skipped, already animated for this close");
             return;
         }
-        RemovePropW(hWnd, L"GenieCloseAnim");
+        RemovePropW(hWnd, L"UltimateGenieCloseAnim");
         // Visible well past the horizon: the earlier close was refused and the
         // user is closing again - a genuinely new close, animate it.
         }
@@ -9594,7 +9115,7 @@ static void MacGenieTryCloseAnimation(HWND hWnd, bool fromDestroy = false) {
             if (IsWindow(hWnd)) MacGenieStampCloseGuard(hWnd);
         } else {
             MAC_CLOSE_LOG(L"StartMacGenieAnim refused the stashed snapshot");
-            RemovePropW(hWnd, L"GenieCloseAnim");
+            RemovePropW(hWnd, L"UltimateGenieCloseAnim");
         }
         return;
     }
@@ -9621,7 +9142,7 @@ static void MacGenieTryCloseAnimation(HWND hWnd, bool fromDestroy = false) {
         MacGenieStartCloseSurvivorWatch(hWnd);
     } else {
         MAC_CLOSE_LOG(L"StartMacGenieAnim refused to start");
-        RemovePropW(hWnd, L"GenieCloseAnim");
+        RemovePropW(hWnd, L"UltimateGenieCloseAnim");
     }
 }
 
@@ -9685,9 +9206,9 @@ static LRESULT MacGenieDefWindowProcCommon(HWND hWnd, UINT Msg, WPARAM wParam, L
         // entry; and a process that never animated anything has no entries at
         // all, so it never even takes the mutex.
         if (!(GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_CHILD)) {
-            RemovePropW(hWnd, L"GenieCloseAnim");
-            if (GetPropW(hWnd, L"GenieFx")) RemovePropW(hWnd, L"GenieFx");
-            if (GetPropW(hWnd, L"GenieSpecialAnim")) RemovePropW(hWnd, L"GenieSpecialAnim");
+            RemovePropW(hWnd, L"UltimateGenieCloseAnim");
+            if (GetPropW(hWnd, L"UltimateGenieFx")) RemovePropW(hWnd, L"UltimateGenieFx");
+            if (GetPropW(hWnd, L"UltimateGenieSpecialAnim")) RemovePropW(hWnd, L"UltimateGenieSpecialAnim");
             if (g_cachesTouched.load(std::memory_order_relaxed)) {
                 std::lock_guard<std::mutex> lock(g_CacheMutex);
                 MacGenieForgetWindowLocked(hWnd);
@@ -9882,28 +9403,25 @@ BOOL Wh_ModInit() {
     if (g_hShcore) {
         g_pfnGetDpiForMonitor = (GetDpiForMonitor_t)GetProcAddress(g_hShcore, "GetDpiForMonitor");
     }
-    // (V4 uses no Direct2D, Direct3D or DirectComposition at all: every engine
-    // renders on the CPU with GDI presentation.)
 
-    struct HookSpec { const wchar_t* name; void* target; void* hook; void** original; };
-    const HookSpec hooks[] = {
-        { L"DefWindowProcW",     (void*)DefWindowProcW,     (void*)DefWindowProcW_Hook,     (void**)&DefWindowProcW_Original },
-        { L"DefWindowProcA",     (void*)DefWindowProcA,     (void*)DefWindowProcA_Hook,     (void**)&DefWindowProcA_Original },
-        { L"ShowWindow",         (void*)ShowWindow,         (void*)ShowWindow_Hook,         (void**)&ShowWindow_Original },
-        { L"ShowWindowAsync",    (void*)ShowWindowAsync,    (void*)ShowWindowAsync_Hook,    (void**)&ShowWindowAsync_Original },
-        { L"SetWindowPlacement", (void*)SetWindowPlacement, (void*)SetWindowPlacement_Hook, (void**)&SetWindowPlacement_Original },
-        { L"CloseWindow",        (void*)CloseWindow,        (void*)CloseWindow_Hook,        (void**)&CloseWindow_Original },
-        { L"SetWindowPos",       (void*)SetWindowPos,       (void*)SetWindowPos_Hook,       (void**)&SetWindowPos_Original },
-        { L"SendMessageW",       (void*)SendMessageW,       (void*)SendMessageW_Hook,       (void**)&SendMessageW_Original },
-        { L"SendMessageA",       (void*)SendMessageA,       (void*)SendMessageA_Hook,       (void**)&SendMessageA_Original },
-        { L"DestroyWindow",      (void*)DestroyWindow,      (void*)DestroyWindow_Hook,      (void**)&DestroyWindow_Original },
-        { L"AnimateWindow",      (void*)AnimateWindow,      (void*)AnimateWindow_Hook,      (void**)&AnimateWindow_Original },
-    };
-    for (const HookSpec& h : hooks) {
-        if (!Wh_SetFunctionHook(h.target, h.hook, h.original)) {
-            Wh_Log(L"Failed to hook %s", h.name);
+    // WindhawkUtils::SetFunctionHook checks at compile time that each hook has
+    // the exact type of its target, calling convention included.
+    auto hook = [](PCWSTR name, auto target, auto detour, auto original) {
+        if (!WindhawkUtils::SetFunctionHook(target, detour, original)) {
+            Wh_Log(L"Failed to hook %s", name);
         }
-    }
+    };
+    hook(L"DefWindowProcW", DefWindowProcW, DefWindowProcW_Hook, &DefWindowProcW_Original);
+    hook(L"DefWindowProcA", DefWindowProcA, DefWindowProcA_Hook, &DefWindowProcA_Original);
+    hook(L"ShowWindow", ShowWindow, ShowWindow_Hook, &ShowWindow_Original);
+    hook(L"ShowWindowAsync", ShowWindowAsync, ShowWindowAsync_Hook, &ShowWindowAsync_Original);
+    hook(L"SetWindowPlacement", SetWindowPlacement, SetWindowPlacement_Hook, &SetWindowPlacement_Original);
+    hook(L"CloseWindow", CloseWindow, CloseWindow_Hook, &CloseWindow_Original);
+    hook(L"SetWindowPos", SetWindowPos, SetWindowPos_Hook, &SetWindowPos_Original);
+    hook(L"SendMessageW", SendMessageW, SendMessageW_Hook, &SendMessageW_Original);
+    hook(L"SendMessageA", SendMessageA, SendMessageA_Hook, &SendMessageA_Original);
+    hook(L"DestroyWindow", DestroyWindow, DestroyWindow_Hook, &DestroyWindow_Original);
+    hook(L"AnimateWindow", AnimateWindow, AnimateWindow_Hook, &AnimateWindow_Original);
     // Alt+Tab: the shell's explorer.exe tracks sessions (no-op elsewhere); an
     // application already on screen starts listening for its windows now.
     MacSwitchStartTracker();
@@ -9929,11 +9447,8 @@ void Wh_ModUninit() {
         g_pfnGetDpiForMonitor = nullptr;
     }
 
-    // If a worker did not join in time it may still be inside Direct2D; a
-    // leaked factory beats a use-after-free in the host process.
-    if (!g_joinTimedOut) {
-        MacSwitchUnmap();
-    }
+    // Every worker has exited (Wh_ModBeforeUninit joined them).
+    MacSwitchUnmap();
 
     // Safety sweep: uncloak and restore DWM transitions for any window that was in-flight
     std::vector<HWND> activeHwnds;
@@ -9951,8 +9466,8 @@ void Wh_ModUninit() {
         if (IsWindow(hWnd)) {
             MacGenieSetCloak(hWnd, FALSE);
             MacGenieSetDwmTransitions(hWnd, TRUE);
-            RemovePropW(hWnd, L"GenieCloseAnim");
-            RemovePropW(hWnd, L"GenieBypass");
+            RemovePropW(hWnd, L"UltimateGenieCloseAnim");
+            RemovePropW(hWnd, L"UltimateGenieBypass");
         }
     }
     // Windows the launch path had made layered/transparent: put them back
@@ -9980,6 +9495,7 @@ void Wh_ModUninit() {
     g_ProcessUiaNegativeUntil.clear();
     g_ProcessNameCache.clear();
     g_LaunchSeen.clear();
+    g_FinishingRisingFx.clear();
     for (auto& pair : g_PendingClose) DeleteObject(pair.second.hBmp);
     g_PendingClose.clear();
     g_PendingCloseBytes = 0;
