@@ -10,7 +10,7 @@
 // @include         StartMenuExperienceHost.exe
 // @architecture    x86-64
 // @compilerOptions -ladvapi32 -lole32 -loleaut32 -lruntimeobject -lmsi -lshell32 -luser32 -luuid -lversion -lwintrust -lcrypt32
-// @license         MIT
+// @license         Apache-2.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
