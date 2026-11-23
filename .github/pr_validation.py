@@ -98,13 +98,6 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
         'void WhTool_ModSettingsChanged(BOOL* bReload)',
     ],
     'WhTool_ModEntryPoint': ['void WhTool_ModEntryPoint()'],
-    'WhToolLauncher_ModInit': ['BOOL WhToolLauncher_ModInit(BOOL* bLaunch)'],
-    'WhToolLauncher_ModAfterInit': ['void WhToolLauncher_ModAfterInit()'],
-    'WhToolLauncher_ModBeforeUninit': ['void WhToolLauncher_ModBeforeUninit()'],
-    'WhToolLauncher_ModUninit': ['void WhToolLauncher_ModUninit()'],
-    'WhToolLauncher_ModSettingsChanged': [
-        'void WhToolLauncher_ModSettingsChanged(BOOL* bReload)'
-    ],
 }
 
 
@@ -937,6 +930,30 @@ class ModMetadataValidator:
             if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
             and x not in ('windhawk-ui.exe', 'windhawk-cli.exe')
         }
+        includes_tool_mod_header = re.search(
+            r'^[ \t]*#[ \t]*include[ \t]*<windhawk_tool_mod\.h>',
+            self.mod_source,
+            re.MULTILINE,
+        )
+        defines_hybrid_tool_mod = re.search(
+            r'^[ \t]*#[ \t]*define[ \t]+WH_TOOL_MOD_HYBRID\b',
+            self.mod_source,
+            re.MULTILINE,
+        )
+        if (
+            includes_tool_mod_header
+            and not defines_hybrid_tool_mod
+            and windhawk_includes
+            and includes - windhawk_includes
+        ):
+            prop.add_error(
+                'A mod which includes windhawk_tool_mod.h and @@ Windhawk'
+                ' processes together with other processes must define'
+                ' WH_TOOL_MOD_HYBRID before the include. Windhawk launches the'
+                ' dedicated process of such a mod, and without the define, each'
+                ' of the other processes launches one too.'
+            )
+
         defines_tool_mod_init = (
             re.search(r'\bWhTool_ModInit\s*\([^)]*\)\s*\{', self.mod_source)
             is not None
