@@ -47,7 +47,8 @@ fullscreen are left alone.
 ## Requirements
 - MultiWM installed and running, in Automatic mode. In Manual mode this mod does
   nothing.
-- Update MultiWM and the companion together; mismatched versions may give no hints.
+- A matching MultiWM release (see the version chart below). Try to update MultiWM
+  and the companion together: mismatched versions may give no hints.
 
 ## Compatibility
 Don't combine with other mods that move windows before they appear, such as
@@ -55,6 +56,12 @@ Window Centralizer or Center New Windows: both would move the same window.
 
 ## Troubleshooting
 Enable logging for this mod in Windhawk to see each placement decision.
+
+## Version chart 
+
+| Companion | MultiWM |
+| --------- | ------- |
+| 0.3.2     | 1.16.1+ |
 */
 // ==/WindhawkModReadme==
 
@@ -2645,7 +2652,7 @@ void Wh_ModUninit() {
 //   "files": [
 //     {
 //       "path": "src/companion/multiwm-companion.cpp",
-//       "hash": "19df96e99a7d39629a8830758fadd51e270d2b4f9ee271d0c533d8b1a0d94a0e",
+//       "hash": "1ca5005a072283ecef9e485ef9b5484c04fa138842bd7785070b5681e12fde56",
 //       "bom": false
 //     },
 //     {
