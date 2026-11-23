@@ -90,9 +90,21 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
         'BOOL Wh_ModSettingsChanged(BOOL* bReload)',
     ],
     'WhTool_ModInit': ['BOOL WhTool_ModInit()'],
+    'WhTool_ModAfterInit': ['void WhTool_ModAfterInit()'],
+    'WhTool_ModBeforeUninit': ['void WhTool_ModBeforeUninit()'],
     'WhTool_ModUninit': ['void WhTool_ModUninit()'],
-    'WhTool_ModSettingsChanged': ['void WhTool_ModSettingsChanged()'],
+    'WhTool_ModSettingsChanged': [
+        'void WhTool_ModSettingsChanged()',
+        'void WhTool_ModSettingsChanged(BOOL* bReload)',
+    ],
     'WhTool_ModEntryPoint': ['void WhTool_ModEntryPoint()'],
+    'WhToolLauncher_ModInit': ['BOOL WhToolLauncher_ModInit(BOOL* bLaunch)'],
+    'WhToolLauncher_ModAfterInit': ['void WhToolLauncher_ModAfterInit()'],
+    'WhToolLauncher_ModBeforeUninit': ['void WhToolLauncher_ModBeforeUninit()'],
+    'WhToolLauncher_ModUninit': ['void WhToolLauncher_ModUninit()'],
+    'WhToolLauncher_ModSettingsChanged': [
+        'void WhToolLauncher_ModSettingsChanged(BOOL* bReload)'
+    ],
 }
 
 
@@ -2095,9 +2107,12 @@ def validate_callback_signatures(path: Path, mod_source: str):
 
         # Match: optional specifiers + return type + callback name + ( params ).
         # Requiring a bare identifier before the name naturally skips function
-        # calls (e.g. "= Wh_Mod..." or "(Wh_Mod...").
+        # calls (e.g. "= Wh_Mod..." or "(Wh_Mod..."), except after a keyword,
+        # such as "else Wh_Mod...", so keywords aren't taken for a return type.
         pattern = (
-            r'((?:\b(?:static|extern(?:\s+"C")?|inline)\s+)*)\b(\w+)\s+'
+            r'((?:\b(?:static|extern(?:\s+"C")?|inline)\s+)*)'
+            r'\b(?!(?:return|else|do|case|throw|co_await|co_return|co_yield)\b)'
+            r'(\w+)\s+'
             + re.escape(callback_name)
             + r'\s*\(([^)]*)\)'
         )
@@ -2137,22 +2152,28 @@ def validate_callback_signatures(path: Path, mod_source: str):
             )
 
 
-def validate_tool_mod_callback_scopes(path: Path, mod_source: str):
-    """Validate that the WhTool_* callbacks are defined in the global namespace,
-    where windhawk_tool_mod.h and Windhawk 2.0 look them up by name."""
-    callback_names = '|'.join(
-        re.escape(x) for x in CALLBACK_SIGNATURES if x.startswith('WhTool_')
-    )
+def validate_callback_scopes(path: Path, mod_source: str):
+    """Validate that the callbacks are defined in the global namespace and
+    outside of extern "C" blocks, since Windhawk and windhawk_tool_mod.h look
+    them up by their global C++ names. A definition elsewhere is allowed beside
+    a global one of the same name, which it can only be a helper for."""
+    extern_c_scope = 'extern "C"'
+    callback_names = '|'.join(re.escape(x) for x in CALLBACK_SIGNATURES)
     token_re = re.compile(
         r'\b(?:inline\s+)?namespace\b\s*(?P<namespace>[\w:]*)\s*\{'
+        # The code lines shorten the "C" literal to a quote.
+        r'|(?P<extern_c>\bextern\s*"\s*\{)'
         r'|\b\w+\s+(?P<qualifier>(?:\w+::)+)?(?P<callback>' + callback_names + r')'
         r'\s*\([^()]*\)\s*\{'
         r'|[{}]'
     )
     code = '\n'.join(get_code_lines(mod_source))
 
-    # For each open brace, the namespace it opens, or None.
+    # For each open brace, the namespace it opens, extern_c_scope, or None.
     scopes: list[Optional[str]] = []
+    global_callbacks: set[str] = set()
+    # (callback, namespaces, in_extern_c, line) for each definition elsewhere.
+    misplaced: list[tuple[str, list[str], bool, int]] = []
     for match in token_re.finditer(code):
         if match.group() == '}':
             if scopes:
@@ -2160,24 +2181,50 @@ def validate_tool_mod_callback_scopes(path: Path, mod_source: str):
             continue
 
         if match.group('callback'):
-            namespaces = [x for x in scopes if x is not None]
+            callback = match.group('callback')
+            namespaces = [x for x in scopes if x not in (None, extern_c_scope)]
             if match.group('qualifier'):
                 namespaces.append(match.group('qualifier').removesuffix('::'))
-            if namespaces:
-                qualified_name = '::'.join([*namespaces, match.group('callback')])
-                add_error(
-                    path,
-                    1 + code.count('\n', 0, match.start('callback')),
-                    f'{qualified_name} must be defined in the global namespace:'
-                    ' windhawk_tool_mod.h calls the WhTool_* callbacks by their'
-                    ' global names, and Windhawk 2.0 uses a global WhTool_ModInit'
-                    ' to recognize a tool mod',
-                )
+            in_extern_c = extern_c_scope in scopes
+            if namespaces or in_extern_c:
+                line = 1 + code.count('\n', 0, match.start('callback'))
+                misplaced.append((callback, namespaces, in_extern_c, line))
+            else:
+                global_callbacks.add(callback)
             scopes.append(None)
         elif match.group('namespace') is not None:
             scopes.append(match.group('namespace') or '(anonymous namespace)')
+        elif match.group('extern_c'):
+            scopes.append(extern_c_scope)
         else:
             scopes.append(None)
+
+    for callback, namespaces, in_extern_c, line in misplaced:
+        if callback in global_callbacks:
+            continue
+
+        requirements = []
+        if namespaces:
+            requirements.append('in the global namespace')
+        if in_extern_c:
+            requirements.append('outside of an extern "C" block')
+
+        if callback.startswith('Wh_'):
+            reason = f'Windhawk looks up {callback} by its global C++ name'
+        else:
+            reason = (
+                f'windhawk_tool_mod.h looks up {callback} by its global C++ name'
+            )
+            if callback == 'WhTool_ModInit':
+                reason += ', and Windhawk 2.0 uses it to recognize a tool mod'
+
+        qualified_name = '::'.join([*namespaces, callback])
+        add_error(
+            path,
+            line,
+            f'{qualified_name} must be defined {" and ".join(requirements)}:'
+            f' {reason}',
+        )
 
 
 def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]):
@@ -2194,7 +2241,7 @@ def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]):
     validate_line_lengths(path, mod_source)
     validate_code_compactness(path, mod_source)
     validate_callback_signatures(path, mod_source)
-    validate_tool_mod_callback_scopes(path, mod_source)
+    validate_callback_scopes(path, mod_source)
 
 
 def test_run():
