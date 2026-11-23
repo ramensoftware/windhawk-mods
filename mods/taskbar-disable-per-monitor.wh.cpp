@@ -481,6 +481,15 @@ void UpdateCloak(HWND hWnd) {
         return;
     }
 
+    // Explorer's own cloak from before the mod loaded is read once, so it can
+    // be restored later.
+    if (modCloak && !GetProp(hWnd, kExplorerCloakProp)) {
+        DWORD cloaked = 0;
+        DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+        SetProp(hWnd, kExplorerCloakProp,
+                (HANDLE)(ULONG_PTR)((cloaked & DWM_CLOAKED_APP) ? 2 : 1));
+    }
+
     BOOL cloak = modCloak || (ULONG_PTR)GetProp(hWnd, kExplorerCloakProp) == 2;
     HRESULT hr = DwmSetWindowAttribute_Original(hWnd, DWMWA_CLOAK, &cloak,
                                                 sizeof(cloak));
@@ -524,7 +533,8 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
                                           cbAttribute);
 }
 
-UINT GetRecomputeWorkAreasMsg();
+UINT GetApplyStateMsg();
+void UpdateAllCloaks();
 void RecomputeWorkAreasOnTaskbarThread();
 
 // Taskbar windows can move to another monitor (display changes), so the cloak
@@ -546,7 +556,8 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
         RemoveProp(hWnd, kMonitorProp);
     }
 
-    if (uMsg == GetRecomputeWorkAreasMsg()) {
+    if (uMsg == GetApplyStateMsg()) {
+        UpdateAllCloaks();
         RecomputeWorkAreasOnTaskbarThread();
         return 0;
     }
@@ -741,20 +752,36 @@ void* FindRecomputeAllWorkareasThis() {
     return nullptr;
 }
 
-// Sent to the primary taskbar window, so that the work areas are recomputed on
-// its thread.
-UINT GetRecomputeWorkAreasMsg() {
-    static UINT msg = RegisterWindowMessage(
-        L"Windhawk_taskbar-disable-per-monitor_recompute");
+// Sent to the primary taskbar window, so that the cloak pass and the work area
+// recomputation run on its thread, where every taskbar window and popup lives
+// (the subclass proc and the hooks update them there too).
+UINT GetApplyStateMsg() {
+    static UINT msg =
+        RegisterWindowMessage(L"Windhawk_taskbar-disable-per-monitor_apply");
     return msg;
 }
 
-void RecomputeWorkAreas() {
+void ApplyStateOnTaskbarThreads() {
     ForEachCurrentProcessTopLevelWnd([](HWND hWnd) {
         if (ClassNameIs(hWnd, {L"Shell_TrayWnd"})) {
-            SendMessage(hWnd, GetRecomputeWorkAreasMsg(), 0, 0);
+            SendMessage(hWnd, GetApplyStateMsg(), 0, 0);
         }
     });
+}
+
+// Fallback when RecomputeAllWorkareas can't be called: toggling auto-hide and
+// restoring it right away makes explorer recompute the work areas. The setting
+// ends up as it was.
+void ToggleAutoHideToRecomputeWorkAreas() {
+    APPBARDATA abd = {sizeof(abd)};
+    UINT state = (UINT)SHAppBarMessage(ABM_GETSTATE, &abd);
+
+    abd.lParam = state ^ ABS_AUTOHIDE;
+    SHAppBarMessage(ABM_SETSTATE, &abd);
+    abd.lParam = state;
+    SHAppBarMessage(ABM_SETSTATE, &abd);
+
+    Wh_Log(L"Recomputed the work areas by toggling auto-hide");
 }
 
 void RecomputeWorkAreasOnTaskbarThread() {
@@ -765,8 +792,7 @@ void RecomputeWorkAreasOnTaskbarThread() {
     if (g_recomputeAllWorkareasThis) {
         CTray_RecomputeAllWorkareas(g_recomputeAllWorkareasThis);
     } else {
-        Wh_Log(L"Can't recompute the work areas now, they're updated on the "
-               L"next taskbar or display change");
+        ToggleAutoHideToRecomputeWorkAreas();
     }
 }
 
@@ -784,8 +810,7 @@ void ApplyState() {
         }
     });
 
-    UpdateAllCloaks();
-    RecomputeWorkAreas();
+    ApplyStateOnTaskbarThreads();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -902,8 +927,7 @@ void Wh_ModUninit() {
     {
         std::lock_guard<std::mutex> lock(g_applyMutex);
 
-        UpdateAllCloaks();
-        RecomputeWorkAreas();
+        ApplyStateOnTaskbarThreads();
 
         ForEachCurrentProcessTopLevelWnd([](HWND hWnd) {
             if (GetProp(hWnd, kSubclassedProp)) {
