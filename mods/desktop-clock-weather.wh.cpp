@@ -2,12 +2,12 @@
 // @id              desktop-clock-weather
 // @name            Desktop Clock & Weather
 // @description     Time, weekday, date and weekly weather on the desktop - behind icons, not clickable
-// @version         1.0.5
+// @version         1.0.6
 // @author          DineroOne
 // @license         MIT
 // @github          https://github.com/DineroOne
 // @include         explorer.exe
-// @compilerOptions -lgdi32 -lgdiplus -lwinhttp -luser32
+// @compilerOptions -lgdi32 -lgdiplus -lwinhttp -luser32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -25,26 +25,19 @@ Set the city name in the settings; coordinates are found automatically.
 
 Everything (position, size, font, colors, shadow, background, date format, etc.) is configurable in the settings tab.
 
-## Why this is a separate mod
-Desktop Live Overlay is a general-purpose desktop overlay with configurable text patterns and system metrics.
-This mod focuses on a structured 3-7 day forecast grid with weather icons, high/low temperatures and
-precipitation probability, alongside separately configurable time, weekday, date and weather elements.
-That forecast-oriented layout is the reason for keeping it separate.
+The optional **Adjust font color to wallpaper** switch picks a light or a dark text color automatically,
+depending on how bright the wallpaper is behind the widget. It reads the wallpaper file locally; nothing is sent anywhere.
 
 ## Network use
 
-Weather is the only feature that uses the network, and only after you enter a city in the settings,
-keep **Show weather** enabled and include `weather` in the element order. The mod sends HTTPS requests
-to two Open-Meteo hosts:
+Weather is the only feature that uses the network, and only after you enter a city in the settings.
+The mod then sends HTTPS requests to two Open-Meteo hosts:
 
-- `geocoding-api.open-meteo.com` - when the city or language changes, to turn the city name into coordinates
-  (the city name and a two-letter language code are sent).
-- `api.open-meteo.com` - at startup and then every N minutes (30 by default), to get the current temperature
-  and forecast (the coordinates and selected temperature unit are sent).
+- `geocoding-api.open-meteo.com` - once whenever the city changes, to turn the city name into coordinates (the city name and the language code are sent).
+- `api.open-meteo.com` - at start and then every N minutes (30 by default, see **Update weather every**), to get the forecast (the coordinates are sent).
 
-After a failed request, the mod retries after about 60 seconds. Like any web server, Open-Meteo can see
-your IP address with each request. No API key, account or other personal data is sent. No weather requests
-are made while the city setting is empty, **Show weather** is off, or `weather` is omitted from the element order.
+Like any web server, Open-Meteo can see your IP address. No API key, account or other personal data is sent.
+No requests are made while the city setting is empty or **Show weather** is off.
 */
 // ==/WindhawkModReadme==
 
@@ -136,6 +129,13 @@ are made while the city setting is empty, **Show weather** is off, or `weather` 
   $name: Date color
 - weatherColor: "#FFFFFF"
   $name: Weather color
+- adaptColor: false
+  $name: Adjust font color to wallpaper
+  $description: Chooses one of the two text colors below automatically, depending on how bright the wallpaper is behind the widget. While it is on, it replaces the individual text colors above.
+- adaptLightText: "#FFFFFF"
+  $name: Text color on dark wallpaper
+- adaptDarkText: "#1E1E1E"
+  $name: Text color on light wallpaper
 - textOpacity: 100
   $name: Text opacity (0-100)
 - shadow: true
@@ -213,6 +213,8 @@ struct Settings {
     std::wstring timeFont, weekdayFont, dateFont, weatherFont, order = L"time,weekday,date,weather";
     std::wstring timeColor = L"#FFFFFF", weekdayColor = L"#FFD36B", dateColor = L"#FFFFFF", weatherColor = L"#FFFFFF";
     std::wstring shadowColor = L"#000000", bgColor = L"#000000";
+    std::wstring adaptLightText = L"#FFFFFF", adaptDarkText = L"#1E1E1E";
+    bool adaptColor = false;
     std::wstring city, tempUnit = L"celsius", weatherLayout = L"horizontal";
     int marginX = 40, marginY = 40, monitor = 0, scale = 100;
     int timeSize = 96, weekdaySize = 36, dateSize = 24, weatherSize = 18, iconSize = 30;
@@ -233,16 +235,10 @@ struct Weather {
 static CRITICAL_SECTION g_cs;
 static Settings g_s;
 static Weather g_w;
-static HANDLE g_evStop, g_evRefresh, g_thWx;
-static HWINEVENTHOOK g_winEventHook = nullptr;
+static HANDLE g_evStop, g_evRefresh, g_thUi, g_thWx;
 static std::atomic<HWND> g_hwnd{nullptr};
-static HWND g_host = nullptr;
-static UINT g_runFromWindowThreadMsg = 0;
-static ULONG_PTR g_gdiplusToken = 0;
-static std::atomic<bool> g_unloading{false};
-static std::atomic<bool> g_uiCreating{false};
-static std::atomic<LONG> g_activeWinEventCallbacks{0};
-static std::atomic<bool> g_dirty{true};
+static PVOID volatile g_req = nullptr;  // in-flight WinHTTP request; closed by Wh_ModUninit to abort it
+static volatile LONG g_dirty = 1;
 static LONG g_lastKey = -1;
 static const wchar_t kClass[] = L"WhDesktopClockWeatherWnd";
 
@@ -273,6 +269,9 @@ static void LoadSettings() {
     s.weatherColor = GetS(L"weatherColor");
     s.shadowColor = GetS(L"shadowColor");
     s.bgColor = GetS(L"bgColor");
+    s.adaptLightText = GetS(L"adaptLightText");
+    s.adaptDarkText = GetS(L"adaptDarkText");
+    s.adaptColor = GetI(L"adaptColor") != 0;
     s.city = GetS(L"city");
     s.tempUnit = GetS(L"tempUnit");
     s.weatherLayout = GetS(L"weatherLayout");
@@ -364,152 +363,39 @@ static const wchar_t* IconFor(int c) {
 
 // ───────────────────────── HTTP + JSON (Open-Meteo) ─────────────────────────
 
-struct HttpAsyncContext {
-    HANDLE done = nullptr;
-    HANDLE closing = nullptr;
-    std::string* output = nullptr;
-    std::vector<char> buffer;
-    bool success = false;
-    std::atomic<bool> finished{false};
-};
-
-static void FinishHttpRequest(HttpAsyncContext* ctx, bool success) {
-    if (!ctx) return;
-    bool expected = false;
-    if (!ctx->finished.compare_exchange_strong(expected, true)) return;
-    ctx->success = success;
-    SetEvent(ctx->done);
-}
-
-static void CALLBACK HttpStatusCallback(HINTERNET handle, DWORD_PTR context,
-                                        DWORD status, LPVOID info, DWORD infoLength) {
-    auto* ctx = reinterpret_cast<HttpAsyncContext*>(context);
-    if (!ctx) return;
-
-    switch (status) {
-        case WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE:
-            if (!WinHttpReceiveResponse(handle, nullptr) && GetLastError() != ERROR_IO_PENDING)
-                FinishHttpRequest(ctx, false);
-            break;
-
-        case WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE: {
-            DWORD code = 0, size = sizeof(code);
-            if (!WinHttpQueryHeaders(handle,
-                    WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                    WINHTTP_HEADER_NAME_BY_INDEX, &code, &size, WINHTTP_NO_HEADER_INDEX) || code != 200) {
-                FinishHttpRequest(ctx, false);
-                break;
-            }
-            if (!WinHttpQueryDataAvailable(handle, nullptr) && GetLastError() != ERROR_IO_PENDING)
-                FinishHttpRequest(ctx, false);
-            break;
-        }
-
-        case WINHTTP_CALLBACK_STATUS_DATA_AVAILABLE: {
-            if (infoLength < sizeof(DWORD)) {
-                FinishHttpRequest(ctx, false);
-                break;
-            }
-            DWORD available = *reinterpret_cast<DWORD*>(info);
-            constexpr size_t kMaxResponse = 262144;
-            size_t remaining = kMaxResponse - ctx->output->size();
-            if (available == 0 || remaining < 16384) {
-                FinishHttpRequest(ctx, !ctx->output->empty());
-                break;
-            }
-            // Keep the asynchronous read buffer comfortably above WinHTTP's
-            // internal 8 KB buffer to avoid synchronous callback recursion.
-            DWORD toRead = static_cast<DWORD>(std::min<size_t>(
-                std::max<size_t>(available, 16384), remaining));
-            ctx->buffer.resize(toRead);
-            if (!WinHttpReadData(handle, ctx->buffer.data(), toRead, nullptr) && GetLastError() != ERROR_IO_PENDING)
-                FinishHttpRequest(ctx, false);
-            break;
-        }
-
-        case WINHTTP_CALLBACK_STATUS_READ_COMPLETE:
-            if (infoLength && info) {
-                ctx->output->append(static_cast<const char*>(info), infoLength);
-            }
-            if (infoLength == 0 || ctx->output->size() >= 262144) {
-                FinishHttpRequest(ctx, !ctx->output->empty());
-                break;
-            }
-            if (!WinHttpQueryDataAvailable(handle, nullptr) && GetLastError() != ERROR_IO_PENDING)
-                FinishHttpRequest(ctx, false);
-            break;
-
-        case WINHTTP_CALLBACK_STATUS_REQUEST_ERROR:
-            FinishHttpRequest(ctx, false);
-            break;
-
-        case WINHTTP_CALLBACK_STATUS_HANDLE_CLOSING:
-            SetEvent(ctx->closing);
-            break;
-    }
-}
-
 static bool HttpGet(const wchar_t* host, const std::wstring& path, std::string& out) {
     if (WaitForSingleObject(g_evStop, 0) == WAIT_OBJECT_0) return false;
-
-    HttpAsyncContext ctx;
-    ctx.done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    ctx.closing = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    ctx.output = &out;
-    if (!ctx.done || !ctx.closing) {
-        if (ctx.done) CloseHandle(ctx.done);
-        if (ctx.closing) CloseHandle(ctx.closing);
-        return false;
-    }
-
-    HINTERNET session = WinHttpOpen(L"WindhawkDesktopClockWeather/1.0",
-        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
-        WINHTTP_NO_PROXY_BYPASS, WINHTTP_FLAG_ASYNC);
-    if (!session) {
-        CloseHandle(ctx.done);
-        CloseHandle(ctx.closing);
-        return false;
-    }
-
-    WinHttpSetTimeouts(session, 4000, 4000, 4000, 6000);
-    auto oldCallback = WinHttpSetStatusCallback(session, HttpStatusCallback,
-        WINHTTP_CALLBACK_FLAG_ALL_COMPLETIONS | WINHTTP_CALLBACK_FLAG_HANDLES, 0);
-    if (oldCallback == WINHTTP_INVALID_STATUS_CALLBACK) {
-        WinHttpCloseHandle(session);
-        CloseHandle(ctx.done);
-        CloseHandle(ctx.closing);
-        return false;
-    }
-
-    HINTERNET connection = WinHttpConnect(session, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
-    HINTERNET request = connection ? WinHttpOpenRequest(connection, L"GET", path.c_str(), nullptr,
-        WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr;
-
-    bool completed = false;
-    if (request) {
-        DWORD_PTR contextValue = reinterpret_cast<DWORD_PTR>(&ctx);
-        bool contextSet = WinHttpSetOption(request, WINHTTP_OPTION_CONTEXT_VALUE,
-            &contextValue, sizeof(contextValue)) != FALSE;
-        if (contextSet) {
-            BOOL sent = WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                WINHTTP_NO_REQUEST_DATA, 0, 0, contextValue);
-            if (sent || GetLastError() == ERROR_IO_PENDING) {
-                HANDLE waits[] = {g_evStop, ctx.done};
-                DWORD waitResult = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
-                completed = waitResult == WAIT_OBJECT_0 + 1 && ctx.success;
+    bool ok = false;
+    HINTERNET ses = WinHttpOpen(L"WindhawkDesktopClockWeather/1.0", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!ses) return false;
+    WinHttpSetTimeouts(ses, 4000, 4000, 4000, 6000);
+    HINTERNET con = WinHttpConnect(ses, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
+    HINTERNET req = con ? WinHttpOpenRequest(con, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
+                                             WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr;
+    if (req) InterlockedExchangePointer(&g_req, req);
+    if (req && WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+        WinHttpReceiveResponse(req, nullptr)) {
+        DWORD code = 0, sz = sizeof(code);
+        WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX,
+                            &code, &sz, WINHTTP_NO_HEADER_INDEX);
+        if (code == 200) {
+            ok = true;
+            DWORD avail = 0;
+            while (WinHttpQueryDataAvailable(req, &avail) && avail && out.size() < 262144) {
+                std::string buf(avail, '\0');
+                DWORD got = 0;
+                if (!WinHttpReadData(req, buf.data(), avail, &got) || !got) break;
+                out.append(buf.data(), got);
             }
         }
-        // In asynchronous mode closing the request cancels outstanding operations.
-        WinHttpCloseHandle(request);
-        if (contextSet) WaitForSingleObject(ctx.closing, INFINITE);
     }
-
-    if (connection) WinHttpCloseHandle(connection);
-    WinHttpCloseHandle(session);
-    CloseHandle(ctx.done);
-    CloseHandle(ctx.closing);
-    return completed && !out.empty();
+    if (req && InterlockedExchangePointer(&g_req, nullptr) == req) WinHttpCloseHandle(req);  // otherwise an abort already closed it
+    if (con) WinHttpCloseHandle(con);
+    WinHttpCloseHandle(ses);
+    return ok && !out.empty();
 }
+
 static bool NumAfter(const std::string& j, const char* key, size_t from, double& v) {
     std::string k = std::string("\"") + key + "\":";
     size_t p = j.find(k, from);
@@ -571,7 +457,7 @@ static double Num(const std::string& s) {
     return e == s.c_str() ? NAN : v;
 }
 
-static std::wstring g_geoCity, g_geoPlace, g_geoLang;
+static std::wstring g_geoCity, g_geoPlace;
 static double g_lat = 0, g_lon = 0;
 static bool g_geoOk = false;
 
@@ -589,21 +475,15 @@ static std::string LangCode(const Settings& s) {
 static bool FetchWeather(const Settings& s) {
     auto fail = [&](const wchar_t* msg) {
         EnterCriticalSection(&g_cs);
-        g_w.valid = false;
-        g_w.days.clear();
-        g_w.place.clear();
-        g_w.hasCur = false;
-        g_w.status = msg;
+        if (!g_w.valid) g_w.status = msg;
         LeaveCriticalSection(&g_cs);
         return false;
     };
     if (s.city.empty()) return fail(L"Weather: set a city in settings");
 
-    const std::string lang = LangCode(s);
-    const std::wstring langWide = Widen(lang);
-    if (!g_geoOk || g_geoCity != s.city || g_geoLang != langWide) {
+    if (!g_geoOk || g_geoCity != s.city) {
         std::string body;
-        std::string path = "/v1/search?name=" + UrlEnc(Narrow(s.city)) + "&count=1&format=json&language=" + lang;
+        std::string path = "/v1/search?name=" + UrlEnc(Narrow(s.city)) + "&count=1&format=json&language=" + LangCode(s);
         if (!HttpGet(L"geocoding-api.open-meteo.com", Widen(path), body)) return fail(L"Weather: no connection");
         size_t r = body.find("\"results\":[");
         double la = 0, lo = 0;
@@ -611,7 +491,7 @@ static bool FetchWeather(const Settings& s) {
             return fail(L"Weather: city not found");
         std::wstring nm;
         if (!JsonStr(body, "name", r, nm) || nm.empty()) nm = s.city;
-        g_lat = la; g_lon = lo; g_geoPlace = nm; g_geoCity = s.city; g_geoLang = langWide; g_geoOk = true;
+        g_lat = la; g_lon = lo; g_geoPlace = nm; g_geoCity = s.city; g_geoOk = true;
     }
 
     char q[512];
@@ -656,20 +536,6 @@ static bool FetchWeather(const Settings& s) {
     return true;
 }
 
-static bool WeatherIsInOrder(const std::wstring& order) {
-    std::wstring token;
-    for (size_t i = 0; i <= order.size(); ++i) {
-        wchar_t c = i < order.size() ? order[i] : L',';
-        if (c == L',' || c == L' ' || c == L';') {
-            if (token == L"weather") return true;
-            token.clear();
-        } else {
-            token += (c >= L'A' && c <= L'Z') ? static_cast<wchar_t>(c + 32) : c;
-        }
-    }
-    return false;
-}
-
 static DWORD WINAPI WeatherThread(LPVOID) {
     for (;;) {
         Settings s;
@@ -678,21 +544,19 @@ static DWORD WINAPI WeatherThread(LPVOID) {
         LeaveCriticalSection(&g_cs);
 
         DWORD wait = INFINITE;
-        if (s.showWeather && WeatherIsInOrder(s.order)) {
-            if (!g_hwnd || GetSystemMetrics(SM_SHUTTINGDOWN)) {
-                wait = INFINITE; // UI creation signals g_evRefresh; shutdown signals g_evStop.
-            } else {
-                bool ok = FetchWeather(s); // An empty city only updates the on-screen prompt; it makes no request.
-                wait = s.city.empty() ? INFINITE : (ok ? static_cast<DWORD>(s.updateMinutes) * 60000 : 60000);
-                HWND h = g_hwnd.load();
-                if (h) PostMessageW(h, WM_APP_RENDER, 0, 0);
-            }
+        if (s.showWeather && (!g_hwnd || GetSystemMetrics(SM_SHUTTINGDOWN))) {
+            wait = 3000;  // no window yet, or not the shell explorer.exe, or shutting down: no network use
+        } else if (s.showWeather) {
+            bool ok = FetchWeather(s);
+            wait = ok ? (DWORD)s.updateMinutes * 60000 : (s.city.empty() ? INFINITE : 60000);
+            HWND h = g_hwnd;
+            if (h) PostMessageW(h, WM_APP_RENDER, 0, 0);
         }
         HANDLE hs[2] = {g_evStop, g_evRefresh};
-        DWORD result = WaitForMultipleObjects(2, hs, FALSE, wait);
-        if (result == WAIT_OBJECT_0) return 0;
+        if (WaitForMultipleObjects(2, hs, FALSE, wait) == WAIT_OBJECT_0) return 0;
     }
 }
+
 // ───────────────────────── rendering ─────────────────────────
 
 struct MonList { std::vector<MONITORINFO> v; };
@@ -740,6 +604,146 @@ static std::vector<std::wstring> ParseOrder(const std::wstring& in) {
     return r;
 }
 
+// ───────────────────────── wallpaper brightness (for "Adjust font color to wallpaper") ─────────────────────────
+
+static const int kTw = 192, kTh = 108;  // luminance map of the wallpaper, 192x108 samples
+struct WpMap { std::wstring key; int iw = 0, ih = 0; std::vector<float> luma; };
+static WpMap g_wp;
+static bool g_wpLight = false;  // last decision, kept for hysteresis
+
+static std::wstring RegStr(const wchar_t* sub, const wchar_t* name) {
+    wchar_t b[MAX_PATH * 2] = {};
+    DWORD sz = sizeof(b) - sizeof(wchar_t);
+    if (RegGetValueW(HKEY_CURRENT_USER, sub, name, RRF_RT_REG_SZ, nullptr, b, &sz) != ERROR_SUCCESS) return L"";
+    return b;
+}
+
+static float Luma(float r, float g, float b) { return (0.2126f * r + 0.7152f * g + 0.0722f * b) / 255.f; }
+
+// Fallback: brightness of the pixels actually on screen behind the widget. Without CAPTUREBLT the layered
+// widget itself is left out of the copy, but windows covering the desktop are not.
+// Returns -1 when the capture fails.
+static float ScreenBrightness(const RECT& wr) {
+    const int w = wr.right - wr.left, h = wr.bottom - wr.top;
+    if (w < 4 || h < 4) return -1.f;
+    HDC scr = GetDC(nullptr);
+    HDC mem = CreateCompatibleDC(scr);
+    HBITMAP bmp = CreateCompatibleBitmap(scr, w, h);
+    float res = -1.f;
+    if (bmp) {
+        HGDIOBJ old = SelectObject(mem, bmp);
+        if (BitBlt(mem, 0, 0, w, h, scr, wr.left, wr.top, SRCCOPY)) {
+            BITMAPINFO bi = {};
+            bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+            bi.bmiHeader.biWidth = w;
+            bi.bmiHeader.biHeight = -h;
+            bi.bmiHeader.biPlanes = 1;
+            bi.bmiHeader.biBitCount = 32;
+            bi.bmiHeader.biCompression = BI_RGB;
+            std::vector<DWORD> px((size_t)w * h);
+            if (GetDIBits(mem, bmp, 0, h, px.data(), &bi, DIB_RGB_COLORS) == h) {
+                const int N = 12;
+                float sum = 0;
+                for (int j = 0; j < N; j++)
+                    for (int i = 0; i < N; i++) {
+                        DWORD c = px[(size_t)(h * (j + 0.5f) / N) * w + (size_t)(w * (i + 0.5f) / N)];
+                        sum += Luma((float)((c >> 16) & 255), (float)((c >> 8) & 255), (float)(c & 255));
+                    }
+                res = sum / (N * N);
+            }
+        }
+        SelectObject(mem, old);
+        DeleteObject(bmp);
+    }
+    DeleteDC(mem);
+    ReleaseDC(nullptr, scr);
+    return res;
+}
+
+// Decodes the wallpaper file into a small luminance map; cached until the file changes.
+static void LoadWallpaper(const std::wstring& path) {
+    std::wstring key = path;
+    WIN32_FILE_ATTRIBUTE_DATA fa = {};
+    if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fa))
+        key += L"|" + std::to_wstring(fa.ftLastWriteTime.dwLowDateTime) + L"|" + std::to_wstring(fa.nFileSizeLow);
+    if (key == g_wp.key) return;
+    g_wp = WpMap();
+    g_wp.key = key;  // stored even on failure, so a bad file is not retried every second
+    Wh_Log(L"Wallpaper: %s", path.c_str());
+    Bitmap src(path.c_str(), FALSE);
+    if (src.GetLastStatus() != Ok || src.GetWidth() == 0 || src.GetHeight() == 0) {
+        Wh_Log(L"Wallpaper cannot be decoded by GDI+, using the screen pixels instead");
+        return;
+    }
+    g_wp.iw = (int)src.GetWidth();
+    g_wp.ih = (int)src.GetHeight();
+    Bitmap th(kTw, kTh, PixelFormat32bppARGB);
+    {
+        Graphics g(&th);
+        g.SetInterpolationMode(InterpolationModeHighQualityBilinear);
+        g.DrawImage(&src, Rect(0, 0, kTw, kTh), 0, 0, g_wp.iw, g_wp.ih, UnitPixel);
+    }
+    g_wp.luma.resize((size_t)kTw * kTh);
+    for (int y = 0; y < kTh; y++)
+        for (int x = 0; x < kTw; x++) {
+            Color c;
+            th.GetPixel(x, y, &c);
+            g_wp.luma[(size_t)y * kTw + x] = Luma(c.GetR(), c.GetG(), c.GetB());
+        }
+}
+
+// Average brightness (0..1) of the wallpaper behind screen rectangle `wr`.
+// `m` is the rectangle the wallpaper is laid out on (the monitor, or the whole desktop for "span").
+// style = WallpaperStyle registry value: 0 center/tile, 2 stretch, 6 fit, 10 fill, 22 span.
+static float SampleBrightness(const std::vector<float>& map, int iw, int ih, int style, bool tile,
+                              const RECT& wr, const RECT& m, float bg) {
+    const float mw = (float)(m.right - m.left), mh = (float)(m.bottom - m.top);
+    float sx, sy;
+    if (style == 2) { sx = mw / iw; sy = mh / ih; }
+    else if (style == 6) { sx = sy = std::min(mw / iw, mh / ih); }
+    else if (style == 0) { sx = sy = 1.f; }
+    else { sx = sy = std::max(mw / iw, mh / ih); }  // fill, span, unknown
+    const float ox = tile ? 0.f : (mw - iw * sx) / 2, oy = tile ? 0.f : (mh - ih * sy) / 2;
+    const int N = 12;
+    float sum = 0;
+    for (int j = 0; j < N; j++)
+        for (int i = 0; i < N; i++) {
+            float px = wr.left + (wr.right - wr.left) * (i + 0.5f) / N - m.left;
+            float py = wr.top + (wr.bottom - wr.top) * (j + 0.5f) / N - m.top;
+            float u = (px - ox) / (iw * sx), v = (py - oy) / (ih * sy);
+            if (tile) {
+                u -= std::floor(u);
+                v -= std::floor(v);
+            }
+            if (u < 0 || u >= 1 || v < 0 || v >= 1) sum += bg;  // outside the picture: desktop background color
+            else sum += map[(size_t)(v * kTh) * kTw + (size_t)(u * kTw)];
+        }
+    return sum / (N * N);
+}
+
+// Returns -1 when the wallpaper cannot be read.
+static float WallpaperBrightness(const RECT& wr, const RECT& mon, const RECT& virt) {
+    // Prefer the pixels Windows is actually displaying behind this widget.
+    // This avoids mismatches caused by wallpaper fit/fill/span modes, theme
+    // slideshow paths, per-monitor layouts, and other shell wallpaper effects.
+    const float screen = ScreenBrightness(wr);
+    if (screen >= 0.f) return screen;
+
+    // If screen capture is unavailable, estimate brightness from the wallpaper
+    // file using the configured layout as a fallback.
+    int r = 0, g = 0, b = 0;
+    swscanf(RegStr(L"Control Panel\\Colors", L"Background").c_str(), L"%d %d %d", &r, &g, &b);
+    const float bg = Luma((float)r, (float)g, (float)b);
+    const std::wstring path = RegStr(L"Control Panel\\Desktop", L"WallPaper");
+    if (path.empty()) return bg;
+
+    LoadWallpaper(path);
+    if (g_wp.luma.empty()) return bg;
+    const int style = _wtoi(RegStr(L"Control Panel\\Desktop", L"WallpaperStyle").c_str());
+    const bool tile = _wtoi(RegStr(L"Control Panel\\Desktop", L"TileWallpaper").c_str()) != 0 && style == 0;
+    return SampleBrightness(g_wp.luma, g_wp.iw, g_wp.ih, style, tile, wr, style == 22 ? virt : mon, bg);
+}
+
 static void Render() {
     HWND hw = g_hwnd;
     if (!hw || !IsWindow(hw) || GetSystemMetrics(SM_SHUTTINGDOWN)) return;  // no GDI+ work while the session ends
@@ -750,7 +754,7 @@ static void Render() {
     s = g_s;
     w = g_w;
     LeaveCriticalSection(&g_cs);
-    g_dirty.store(false);
+    InterlockedExchange(&g_dirty, 0);
 
     const float k = std::clamp(s.scale, 25, 400) / 100.0f;
     const wchar_t* loc = nullptr;
@@ -926,6 +930,50 @@ static void Render() {
     int W = std::clamp((int)std::ceil(Wc + 2 * pad + sd) + 2, 4, 4000);
     int H = std::clamp((int)std::ceil(y + 2 * pad + sd) + 2, 4, 4000);
 
+    // position on screen (applied after drawing)
+    MonList ml;
+    EnumDisplayMonitors(nullptr, nullptr, MonEnum, (LPARAM)&ml);
+    bool placed = false;
+    int px = 0, py = 0;
+    RECT monRc = {};
+    if (!ml.v.empty()) {
+        size_t idx = (size_t)std::max(0, s.monitor);
+        if (idx >= ml.v.size()) idx = 0;
+        RECT rc = ml.v[idx].rcWork;
+        monRc = ml.v[idx].rcMonitor;
+        int mx = s.marginX, my = s.marginY;
+        const std::wstring& p = s.position;
+        if (p.find(L"left") != std::wstring::npos) px = rc.left + mx;
+        else if (p.find(L"right") != std::wstring::npos) px = rc.right - mx - W;
+        else px = (rc.left + rc.right - W) / 2;
+        if (p.find(L"top") != std::wstring::npos) py = rc.top + my;
+        else if (p.find(L"bottom") != std::wstring::npos) py = rc.bottom - my - H;
+        else py = (rc.top + rc.bottom - H) / 2;
+        placed = true;
+    }
+
+    // "Adjust font color to wallpaper": light text on a dark wallpaper, dark text on a light one
+    std::wstring shadowCol = s.shadowColor;
+    if (s.adaptColor && placed) {
+        RECT wr = {px, py, px + W, py + H};
+        RECT virt;
+        virt.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        virt.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        virt.right = virt.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        virt.bottom = virt.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        float b = WallpaperBrightness(wr, monRc, virt);
+        if (b > 0.55f) g_wpLight = true;        // hysteresis: no flicker around the threshold
+        else if (b >= 0 && b < 0.45f) g_wpLight = false;
+        static int lastLogged = -1;
+        if ((int)g_wpLight != lastLogged) {
+            lastLogged = (int)g_wpLight;
+            Wh_Log(L"Adjust font color: wallpaper brightness %d%%, using %s text", (int)(b * 100), g_wpLight ? L"dark" : L"light");
+        }
+        const Color tc = MakeColor(g_wpLight ? s.adaptDarkText : s.adaptLightText, s.textOpacity);
+        for (auto& op : ops) op.c = tc;
+        if (g_wpLight) shadowCol = L"#FFFFFF";  // a black shadow under dark text only smudges it
+    }
+
     // DIB section for UpdateLayeredWindow
     HDC scr = GetDC(nullptr);
     BITMAPINFO bi = {};
@@ -965,7 +1013,7 @@ static void Render() {
             }
         }
 
-        SolidBrush shBr(MakeColor(s.shadowColor, s.shadowOpacity * s.textOpacity / 100));
+        SolidBrush shBr(MakeColor(shadowCol, s.shadowOpacity * s.textOpacity / 100));
         for (auto& op : ops) {
             if (sd > 0) g.DrawString(op.t.c_str(), -1, op.f, PointF(op.x + pad + sd, op.y + pad + sd), &sf, &shBr);
             SolidBrush br(op.c);
@@ -979,22 +1027,8 @@ static void Render() {
     UpdateLayeredWindow(hw, scr, nullptr, &sz, mem, &src, 0, &bf, ULW_ALPHA);
 
     // position
-    MonList ml;
-    EnumDisplayMonitors(nullptr, nullptr, MonEnum, (LPARAM)&ml);
-    if (!ml.v.empty()) {
-        size_t idx = (size_t)std::max(0, s.monitor);
-        if (idx >= ml.v.size()) idx = 0;
-        RECT rc = ml.v[idx].rcWork;
-        int mx = s.marginX, my = s.marginY;
-        const std::wstring& p = s.position;
-        int x, yy;
-        if (p.find(L"left") != std::wstring::npos) x = rc.left + mx;
-        else if (p.find(L"right") != std::wstring::npos) x = rc.right - mx - W;
-        else x = (rc.left + rc.right - W) / 2;
-        if (p.find(L"top") != std::wstring::npos) yy = rc.top + my;
-        else if (p.find(L"bottom") != std::wstring::npos) yy = rc.bottom - my - H;
-        else yy = (rc.top + rc.bottom - H) / 2;
-        POINT pt = {x, yy};
+    if (placed) {
+        POINT pt = {px, py};
         HWND host = GetParent(hw);
         if (host) ScreenToClient(host, &pt);
         SetWindowPos(hw, nullptr, pt.x, pt.y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -1013,18 +1047,15 @@ static void Tick() {
     EnterCriticalSection(&g_cs);
     sec = g_s.showSeconds;
     LeaveCriticalSection(&g_cs);
-    if (g_dirty.load() || TimeKey(st, sec) != g_lastKey) Render();
+    if (g_dirty || TimeKey(st, sec) != g_lastKey) Render();
 }
 
 static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
         case WM_TIMER: Tick(); return 0;
-        case WM_APP_RENDER: g_dirty.store(true); Render(); return 0;
+        case WM_APP_RENDER: InterlockedExchange(&g_dirty, 1); Render(); return 0;
         case WM_NCHITTEST: return HTTRANSPARENT;
         case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
-        case WM_NCDESTROY:
-            if (g_hwnd.load() == h) g_hwnd.store(nullptr);
-            return DefWindowProcW(h, m, w, l);
     }
     return DefWindowProcW(h, m, w, l);
 }
@@ -1034,27 +1065,14 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 // True once the desktop icon list exists, i.e. the shell has finished creating the desktop.
 static bool DesktopReady(HWND pm) {
     HWND dv = FindWindowExW(pm, nullptr, L"SHELLDLL_DefView", nullptr);
-    for (HWND ww = nullptr; !dv && (ww = FindWindowExW(nullptr, ww, L"WorkerW", nullptr)) != nullptr;) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(ww, &pid);
-        if (pid == GetCurrentProcessId())
-            dv = FindWindowExW(ww, nullptr, L"SHELLDLL_DefView", nullptr);
-    }
+    for (HWND ww = nullptr; !dv && (ww = FindWindowExW(nullptr, ww, L"WorkerW", nullptr)) != nullptr;)
+        dv = FindWindowExW(ww, nullptr, L"SHELLDLL_DefView", nullptr);
     return dv && FindWindowExW(dv, nullptr, L"SysListView32", nullptr);
 }
 
 static BOOL CALLBACK FindWorkerProc(HWND h, LPARAM l) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(h, &pid);
-    if (pid != GetCurrentProcessId()) return TRUE;
-    if (FindWindowExW(h, nullptr, L"SHELLDLL_DefView", nullptr)) {
-        HWND candidate = FindWindowExW(nullptr, h, L"WorkerW", nullptr);
-        if (candidate) {
-            DWORD candidatePid = 0;
-            GetWindowThreadProcessId(candidate, &candidatePid);
-            if (candidatePid == GetCurrentProcessId()) *(HWND*)l = candidate;
-        }
-    }
+    if (FindWindowExW(h, nullptr, L"SHELLDLL_DefView", nullptr))
+        *(HWND*)l = FindWindowExW(nullptr, h, L"WorkerW", nullptr);
     return TRUE;
 }
 
@@ -1091,163 +1109,54 @@ static bool FindHost(HWND& host, HWND& after) {
     return TryFindHost(pm, host, after);
 }
 
-using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
-
-static HMODULE GetCurrentModuleHandle() {
-    HMODULE module = nullptr;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            kClass, &module)) return nullptr;
-    return module;
-}
-
-struct RunFromWindowThreadParam {
-    RunFromWindowThreadProc_t proc;
-    void* procParam;
-    bool executed = false;
-};
-
-static LRESULT CALLBACK RunFromWindowThreadHook(int code, WPARAM wParam, LPARAM lParam) {
-    if (code == HC_ACTION) {
-        const CWPSTRUCT* message = reinterpret_cast<const CWPSTRUCT*>(lParam);
-        if (message->message == g_runFromWindowThreadMsg) {
-            auto* param = reinterpret_cast<RunFromWindowThreadParam*>(message->lParam);
-            if (param && param->proc && !param->executed) {
-                param->executed = true;
-                param->proc(param->procParam);
-            }
-        }
-    }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
-static bool RunFromWindowThread(HWND window, RunFromWindowThreadProc_t proc, void* procParam) {
-    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
-    if (!threadId || !g_runFromWindowThreadMsg) return false;
-    if (threadId == GetCurrentThreadId()) {
-        proc(procParam);
-        return true;
-    }
-
-    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, RunFromWindowThreadHook,
-        GetCurrentModuleHandle(), threadId);
-    if (!hook) {
-        // A thread-specific hook in the same process can also use a null HMODULE.
-        hook = SetWindowsHookExW(WH_CALLWNDPROC, RunFromWindowThreadHook, nullptr, threadId);
-    }
-    if (!hook) {
-        Wh_Log(L"SetWindowsHookEx failed: %lu", GetLastError());
-        return false;
-    }
-
-    RunFromWindowThreadParam param{proc, procParam};
-    // SendMessage is intentionally synchronous: param is stack-allocated and must
-    // remain alive until the shell-thread callback has completed.
-    SendMessageW(window, g_runFromWindowThreadMsg, 0, reinterpret_cast<LPARAM>(&param));
-    UnhookWindowsHookEx(hook);
-    return param.executed;
-}
-
-struct UiCreateParams { HWND host; HWND after; bool created = false; };
-
-static void WINAPI CreateUiOnShellThread(void* raw) {
-    auto* params = static_cast<UiCreateParams*>(raw);
-    HINSTANCE module = GetCurrentModuleHandle();
-    if (!module) return;
-
-    // If Explorer recreated its desktop host, the old child window has already
-    // received WM_NCDESTROY. Release its class and GDI+ session before recreating.
-    if (g_gdiplusToken) {
-        UnregisterClassW(kClass, module);
-        GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-    }
-
-    GdiplusStartupInput input;
-    if (GdiplusStartup(&g_gdiplusToken, &input, nullptr) != Ok) {
-        g_gdiplusToken = 0;
-        return;
-    }
-
+static DWORD WINAPI UiThread(LPVOID) {
+    if (WaitForSingleObject(g_evStop, 3000) == WAIT_OBJECT_0) return 0;  // let explorer finish starting first
+    GdiplusStartupInput gi;
+    ULONG_PTR tok = 0;
+    if (GdiplusStartup(&tok, &gi, nullptr) != Ok) return 0;
+    HINSTANCE hi = GetModuleHandleW(nullptr);
     WNDCLASSW wc = {};
     wc.lpfnWndProc = WndProc;
-    wc.hInstance = module;
+    wc.hInstance = hi;
     wc.lpszClassName = kClass;
-    if (!RegisterClassW(&wc)) {
-        Wh_Log(L"RegisterClassW failed: %lu", GetLastError());
-        GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-        return;
-    }
+    RegisterClassW(&wc);
 
-    HWND window = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE |
-        WS_EX_NOPARENTNOTIFY, kClass, L"", WS_CHILD | WS_VISIBLE,
-        0, 0, 1, 1, params->host, nullptr, module, nullptr);
-    if (!window) {
-        Wh_Log(L"CreateWindowEx failed: %lu", GetLastError());
-        UnregisterClassW(kClass, module);
-        GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-        return;
-    }
-
-    g_host = params->host;
-    g_hwnd.store(window);
-    SetWindowPos(window, params->after, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    SetTimer(window, 1, 1000, nullptr);
-    g_dirty.store(true);
-    Render();
-    params->created = true;
-    SetEvent(g_evRefresh);
-}
-
-static void WINAPI DestroyUiOnShellThread(void*) {
-    HWND window = g_hwnd.load();
-    if (window && IsWindow(window)) {
-        KillTimer(window, 1);
-        DestroyWindow(window);
-    }
-    g_hwnd.store(nullptr);
-    HINSTANCE module = GetCurrentModuleHandle();
-    UnregisterClassW(kClass, module);
-    if (g_gdiplusToken) {
-        GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-    }
-    g_host = nullptr;
-}
-
-static void TryCreateUi() {
-    if (g_unloading.load() || g_hwnd.load()) return;
-    bool expected = false;
-    if (!g_uiCreating.compare_exchange_strong(expected, true)) return;
-
-    if (!g_unloading.load() && !g_hwnd.load()) {
+    int tries = 0;
+    while (WaitForSingleObject(g_evStop, 0) != WAIT_OBJECT_0) {
         HWND host = nullptr, after = nullptr;
-        if (FindHost(host, after)) {
-            UiCreateParams params{host, after};
-            RunFromWindowThread(host, CreateUiOnShellThread, &params);
+        if (!FindHost(host, after)) {
+            DWORD ms = tries++ < 120 ? 1000 : 10000;  // the desktop may appear late during logon
+            if (WaitForSingleObject(g_evStop, ms) == WAIT_OBJECT_0) break;
+            continue;
         }
-    }
-    g_uiCreating.store(false);
-}
+        HWND h = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_NOPARENTNOTIFY, kClass, L"",
+                                 WS_CHILD | WS_VISIBLE, 0, 0, 1, 1, host, nullptr, hi, nullptr);
+        if (!h) {
+            Wh_Log(L"CreateWindowEx failed: %lu", GetLastError());
+            if (WaitForSingleObject(g_evStop, 5000) == WAIT_OBJECT_0) break;
+            continue;
+        }
+        g_hwnd = h;
+        SetWindowPos(h, after, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        SetTimer(h, 1, 1000, nullptr);
+        InterlockedExchange(&g_dirty, 1);
+        Render();
 
-static void CALLBACK DesktopWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
-        LONG idObject, LONG idChild, DWORD, DWORD) {
-    g_activeWinEventCallbacks.fetch_add(1);
-    if (!g_unloading.load() && event == EVENT_OBJECT_CREATE &&
-        idObject == OBJID_WINDOW && idChild == CHILDID_SELF && hwnd) {
-        wchar_t className[64] = {};
-        if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) &&
-            (wcscmp(className, L"Progman") == 0 ||
-             wcscmp(className, L"WorkerW") == 0 ||
-             wcscmp(className, L"SHELLDLL_DefView") == 0 ||
-             wcscmp(className, L"SysListView32") == 0)) {
-            TryCreateUi();
+        while (IsWindow(h)) {
+            DWORD r = MsgWaitForMultipleObjects(1, &g_evStop, FALSE, INFINITE, QS_ALLINPUT);
+            if (r == WAIT_OBJECT_0) { DestroyWindow(h); break; }
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
         }
+        g_hwnd = nullptr;
+        break;  // the desktop is gone (shell exiting): never recreate the window or poke the shell again
     }
-    g_activeWinEventCallbacks.fetch_sub(1);
+    UnregisterClassW(kClass, hi);
+    GdiplusShutdown(tok);
+    return 0;
 }
 
 // ───────────────────────── Windhawk entry points ─────────────────────────
@@ -1257,53 +1166,11 @@ BOOL Wh_ModInit() {
     LoadSettings();
     g_evStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_evRefresh = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_evStop || !g_evRefresh) {
-        if (g_evStop) CloseHandle(g_evStop);
-        if (g_evRefresh) CloseHandle(g_evRefresh);
-        DeleteCriticalSection(&g_cs);
-        return FALSE;
-    }
-
-    g_runFromWindowThreadMsg = RegisterWindowMessageW(
-        L"Windhawk_RunFromWindowThread_desktop-clock-weather");
-    if (!g_runFromWindowThreadMsg) {
-        CloseHandle(g_evStop);
-        CloseHandle(g_evRefresh);
-        DeleteCriticalSection(&g_cs);
-        return FALSE;
-    }
-
+    g_thUi = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
     g_thWx = CreateThread(nullptr, 0, WeatherThread, nullptr, 0, nullptr);
-    if (!g_thWx) {
-        CloseHandle(g_evStop);
-        CloseHandle(g_evRefresh);
-        DeleteCriticalSection(&g_cs);
-        return FALSE;
-    }
-
-    g_winEventHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_CREATE,
-        GetCurrentModuleHandle(), DesktopWinEventProc, GetCurrentProcessId(), 0,
-        WINEVENT_INCONTEXT);
-    if (!g_winEventHook) {
-        Wh_Log(L"SetWinEventHook failed: %lu", GetLastError());
-        SetEvent(g_evStop);
-        WaitForSingleObject(g_thWx, INFINITE);
-        CloseHandle(g_thWx);
-        g_thWx = nullptr;
-        CloseHandle(g_evStop);
-        CloseHandle(g_evRefresh);
-        DeleteCriticalSection(&g_cs);
-        return FALSE;
-    }
     return TRUE;
 }
 
-// Windhawk calls this after all mods have initialized. If the desktop already
-// exists, create the widget immediately; otherwise the WinEvent hook catches
-// the later creation of Progman/WorkerW/SHELLDLL_DefView without polling.
-void Wh_ModAfterInit() {
-    TryCreateUi();
-}
 void Wh_ModSettingsChanged() {
     Settings old;
     EnterCriticalSection(&g_cs);
@@ -1316,7 +1183,7 @@ void Wh_ModSettingsChanged() {
     LeaveCriticalSection(&g_cs);
 
     if (old.city != now.city || old.tempUnit != now.tempUnit || old.showWeather != now.showWeather ||
-        old.locale != now.locale || old.updateMinutes != now.updateMinutes || old.order != now.order) {
+        old.locale != now.locale || old.updateMinutes != now.updateMinutes) {
         SetEvent(g_evRefresh);
     }
     HWND h = g_hwnd;
@@ -1324,40 +1191,11 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    g_unloading.store(true);
-    if (g_winEventHook) {
-        UnhookWinEvent(g_winEventHook);
-        g_winEventHook = nullptr;
-    }
-    // Wait for callbacks and a possible in-flight shell-thread creation to finish.
-    while (g_activeWinEventCallbacks.load() != 0 || g_uiCreating.load()) Sleep(1);
     SetEvent(g_evStop);
-
-    // The asynchronous WinHTTP request observes g_evStop and closes its request
-    // handle before the worker exits, so no callback can outlive this module.
-    if (g_thWx) { WaitForSingleObject(g_thWx, INFINITE); CloseHandle(g_thWx); g_thWx = nullptr; }
-
-    HWND host = g_host;
-    if (host && IsWindow(host) && g_gdiplusToken) {
-        if (!RunFromWindowThread(host, DestroyUiOnShellThread, nullptr)) {
-            Wh_Log(L"Could not dispatch widget cleanup; sending WM_CLOSE to the child window");
-            HWND window = g_hwnd.load();
-            if (window && IsWindow(window)) SendMessageW(window, WM_CLOSE, 0, 0);
-            UnregisterClassW(kClass, GetCurrentModuleHandle());
-            GdiplusShutdown(g_gdiplusToken);
-            g_gdiplusToken = 0;
-            g_host = nullptr;
-        }
-    } else if (g_gdiplusToken) {
-        // The shell host may already have been destroyed during logoff/shutdown.
-        // If the child is still alive, WM_CLOSE is processed by its owning thread.
-        HWND window = g_hwnd.load();
-        if (window && IsWindow(window)) SendMessageW(window, WM_CLOSE, 0, 0);
-        UnregisterClassW(kClass, GetCurrentModuleHandle());
-        GdiplusShutdown(g_gdiplusToken);
-        g_gdiplusToken = 0;
-    }
-
+    HINTERNET pending = (HINTERNET)InterlockedExchangePointer(&g_req, nullptr);  // abort an in-flight HTTP request
+    if (pending) WinHttpCloseHandle(pending);
+    if (g_thUi) { WaitForSingleObject(g_thUi, INFINITE); CloseHandle(g_thUi); }
+    if (g_thWx) { WaitForSingleObject(g_thWx, INFINITE); CloseHandle(g_thWx); }
     CloseHandle(g_evStop);
     CloseHandle(g_evRefresh);
     DeleteCriticalSection(&g_cs);
