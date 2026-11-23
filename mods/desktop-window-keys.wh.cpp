@@ -132,10 +132,12 @@ static const IID IID_IVirtualDesktopPinnedApps = {
 // and VirtualDesktopAccessor (ceb6488): SwitchDesktopAndMoveForegroundView sits at 10,
 // so SwitchDesktopWithAnimation is at 22. Do not guess indices for other builds: a
 // wrong slot calls an unrelated method with mismatched arguments.
-// 22621/22631 from .3085 (entry [5]) shares the 24H2 IIDs but has no
-// SwitchDesktopAndMoveForegroundView, so SwitchDesktopWithAnimation is at 21
-// (MScholtes/VirtualDesktop VirtualDesktop11.cs, a725cbd; slot counted from the
-// interface declaration, IUnknown occupies 0-2). Not yet tried on a real 23H2 machine.
+// 22621/22631 from .3085 (entry [5]) shares the 24H2 IIDs, so QueryService succeeds
+// with either entry and a wrong setting is not detected. Its SwitchDesktopWithAnimation
+// would be at 21 (no SwitchDesktopAndMoveForegroundView; MScholtes/VirtualDesktop
+// VirtualDesktop11.cs, a725cbd), but that was never tried on a real 23H2 machine, so it
+// stays -1 (plain SwitchDesktop) until verified. Slot 22 is used only on build 26100+
+// (see GetSwitchWithAnimationIndex): on 23H2 it is GetLastActiveDesktop.
 struct VersionIIDs {
   IID managerInternal;  // IVirtualDesktopManagerInternal
   IID virtualDesktop;   // IVirtualDesktop
@@ -167,7 +169,7 @@ static const VersionIIDs g_versionIIDs[] = {
     // [5] Windows 11 (Build 22621/22631 from .3085, current 23H2)
     {{0x53F5CA0B, 0x158F, 0x4124, {0x90, 0x0C, 0x05, 0x71, 0x58, 0x06, 0x0B, 0x27}},
      {0x3F07F4BE, 0xB107, 0x441A, {0xAF, 0x0F, 0x39, 0xD8, 0x25, 0x29, 0x07, 0x2C}},
-     false, 21},
+     false, -1},
 };
 
 // Default to Windows 11 24H2.
@@ -246,7 +248,8 @@ struct PinBadge {
   bool zOrderDenied;  // target has a higher integrity level (UIPI): shown only while it is in front
 };
 static std::vector<PinBadge> g_badges;  // hotkey thread only
-static HWINEVENTHOOK g_badgeHooks[2] = {};
+static constexpr int kBadgeHookCount = 5;
+static HWINEVENTHOOK g_badgeHooks[kBadgeHookCount] = {};
 
 enum HotkeyIds { HK_MOVE_PREV = 1, HK_MOVE_NEXT = 2, HK_PIN = 3, HK_UNPIN = 4 };
 
@@ -365,6 +368,24 @@ bool ReinitializeVirtualDesktopAPI() {
   return InitializeVirtualDesktopAPI();
 }
 
+// The COM proxies point at the old explorer.exe after it restarts.
+bool IsServerGone(HRESULT hr) {
+  return hr == RPC_E_DISCONNECTED || hr == HRESULT_FROM_WIN32(RPC_S_SERVER_UNAVAILABLE) ||
+         hr == HRESULT_FROM_WIN32(RPC_S_CALL_FAILED);
+}
+
+// Direct proxy calls (view collection, pinned apps) do not go through CallManagerInternal,
+// so they reconnect on their own: retry once after the server was gone. Callers must
+// re-check g_pPinnedApps afterwards, since a reconnect replaces it.
+HRESULT GetViewForHwnd(HWND hwnd, IApplicationView** view) {
+  if (!g_pViewCollection) return E_POINTER;
+  HRESULT hr = g_pViewCollection->GetViewForHwnd(hwnd, view);
+  if (IsServerGone(hr) && ReinitializeVirtualDesktopAPI() && g_pViewCollection) {
+    hr = g_pViewCollection->GetViewForHwnd(hwnd, view);
+  }
+  return hr;
+}
+
 // VTable call for methods returning a value, with the optional HMONITOR parameter
 // (varies by Windows version). Reinitializes once in case explorer.exe restarted.
 template <typename TResult>
@@ -451,9 +472,31 @@ int FindDesktopIndex(IObjectArray* desktops, UINT count, const GUID& desktopId) 
   return -1;
 }
 
+// The real Windows build number. RtlGetVersion is not affected by the compatibility manifest.
+DWORD GetWindowsBuild() {
+  using RtlGetVersion_t = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
+  HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+  auto pRtlGetVersion = ntdll ? reinterpret_cast<RtlGetVersion_t>(GetProcAddress(ntdll, "RtlGetVersion")) : nullptr;
+  RTL_OSVERSIONINFOW info = {sizeof(info)};
+  return pRtlGetVersion && pRtlGetVersion(&info) == 0 ? info.dwBuildNumber : 0;
+}
+
+// The animated-switch slot of the selected entry, or -1 when it does not match the
+// real build. The 24H2 slot (22) is GetLastActiveDesktop on 23H2: the Windows Version
+// setting can be wrong (or outdated after an upgrade) without any error, and calling
+// the wrong slot corrupts memory.
+int GetSwitchWithAnimationIndex() {
+  int index = g_versionIIDs[g_windowsVersionIndex].switchWithAnimationIndex;
+  if (index == 22 && GetWindowsBuild() < 26100) {
+    Wh_Log(L"Animated switch slot is for 24H2 but this is an older build; using plain switch");
+    return -1;
+  }
+  return index;
+}
+
 // Switches with the system slide animation when the build's VTable slot is known.
 bool SwitchToDesktop(IVirtualDesktop* desktop) {
-  int animationIndex = g_versionIIDs[g_windowsVersionIndex].switchWithAnimationIndex;
+  int animationIndex = GetSwitchWithAnimationIndex();
   HRESULT hr = CallManagerInternalWithArg(animationIndex >= 0 ? animationIndex : VTABLE_SWITCH_DESKTOP, desktop);
   if (FAILED(hr)) Wh_Log(L"SwitchToDesktop failed: 0x%08X", hr);
   return SUCCEEDED(hr);
@@ -559,10 +602,10 @@ void FocusWindow(HWND hwnd) {
   SetForegroundWindow(hwnd);
 }
 
-// Move the active window to the previous (direction = -1) or next (+1) desktop,
-// wrapping around at both ends.
 void RemoveBadge(HWND target);
 
+// Move the active window to the previous (direction = -1) or next (+1) desktop,
+// wrapping around at both ends.
 bool MoveActiveWindowByOffset(int direction) {
   if (!InitializeVirtualDesktopAPI()) return false;
 
@@ -600,8 +643,7 @@ bool MoveActiveWindowByOffset(int direction) {
   }
 
   IApplicationView* view = nullptr;
-  bool success = SUCCEEDED(g_pViewCollection->GetViewForHwnd(hwnd, &view)) && view &&
-                 MoveViewToDesktop(view, target);
+  bool success = SUCCEEDED(GetViewForHwnd(hwnd, &view)) && view && MoveViewToDesktop(view, target);
   SAFE_RELEASE(view);
 
   if (success) {
@@ -645,14 +687,23 @@ COLORREF GetAccentColor() {
 // runs on the hotkey thread.
 //=============================================================================
 
+// True only when the window is pinned; false also when it could not be determined.
 bool IsWindowPinned(HWND hwnd) {
-  if (!g_pPinnedApps || !g_pViewCollection) return false;
-  IApplicationView* view = nullptr;
-  if (FAILED(g_pViewCollection->GetViewForHwnd(hwnd, &view)) || !view) return false;
-  BOOL pinned = FALSE;
-  bool ok = SUCCEEDED(g_pPinnedApps->IsViewPinned(view, &pinned));
-  view->Release();
-  return ok && pinned;
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    if (!g_pPinnedApps || !g_pViewCollection) return false;
+    IApplicationView* view = nullptr;
+    if (FAILED(GetViewForHwnd(hwnd, &view)) || !view) return false;
+    if (!g_pPinnedApps) {  // GetViewForHwnd reconnected and the pin service is gone
+      view->Release();
+      return false;
+    }
+    BOOL pinned = FALSE;
+    HRESULT hr = g_pPinnedApps->IsViewPinned(view, &pinned);
+    view->Release();
+    if (SUCCEEDED(hr)) return pinned != FALSE;
+    if (!IsServerGone(hr) || !ReinitializeVirtualDesktopAPI()) return false;
+  }
+  return false;
 }
 
 PinBadge* FindBadge(HWND target) {
@@ -766,11 +817,19 @@ void CALLBACK BadgeWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idOb
 void StartBadgeTracking() {
   if (g_badgeHooks[0]) return;
   constexpr DWORD kFlags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
-  g_badgeHooks[0] = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, nullptr, BadgeWinEventProc,
-                                    0, 0, kFlags);
-  g_badgeHooks[1] = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_UNCLOAKED, nullptr, BadgeWinEventProc,
-                                    0, 0, kFlags);
-  if (!g_badgeHooks[0] || !g_badgeHooks[1]) Wh_Log(L"SetWinEventHook failed: %lu", GetLastError());
+  // Only the events the callback uses; a single wide range would also deliver name,
+  // value, state and focus changes of every window in the system.
+  static constexpr DWORD kBadgeEvents[kBadgeHookCount][2] = {
+      {EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND},
+      {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND},
+      {EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE},
+      {EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE},
+      {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED},
+  };
+  for (int i = 0; i < kBadgeHookCount; ++i) {
+    g_badgeHooks[i] = SetWinEventHook(kBadgeEvents[i][0], kBadgeEvents[i][1], nullptr, BadgeWinEventProc, 0, 0, kFlags);
+    if (!g_badgeHooks[i]) Wh_Log(L"SetWinEventHook %d failed: %lu", i, GetLastError());
+  }
   if (HWND msgWnd = g_hMsgWnd.load()) SetTimer(msgWnd, kBadgeCheckTimerId, kBadgeCheckIntervalMs, nullptr);
 }
 
@@ -817,11 +876,14 @@ void ShowBadge(HWND target) {
 
 // Safety net for what the event hooks do not report: unpinning from Task View and
 // windows that vanished without a destroy event.
+// IsWindowPinned makes cross-process COM calls that pump messages, so a destroy event
+// can remove a badge in the middle of this loop: iterate over a copy and remove by HWND
+// (a no-op when the badge is already gone), never by a stored index.
 void OnBadgeCheckTimer() {
-  for (size_t i = g_badges.size(); i-- > 0;) {
-    if (!IsWindow(g_badges[i].target) || !IsWindowPinned(g_badges[i].target)) {
-      RemoveBadgeAt(i);
-    }
+  std::vector<HWND> targets;
+  for (const auto& badge : g_badges) targets.push_back(badge.target);
+  for (HWND target : targets) {
+    if (!IsWindow(target) || !IsWindowPinned(target)) RemoveBadge(target);
   }
 }
 
@@ -860,18 +922,29 @@ bool SetActiveWindowPinned(bool pin) {
     return false;
   }
 
-  IApplicationView* view = nullptr;
-  if (FAILED(g_pViewCollection->GetViewForHwnd(hwnd, &view)) || !view) {
-    Wh_Log(L"No application view for the active window (hwnd=0x%p)", hwnd);
-    return false;
-  }
+  // Retry once after explorer.exe restarted: the pin calls go straight to the proxy.
+  HRESULT hr = E_FAIL;
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    IApplicationView* view = nullptr;
+    if (FAILED(GetViewForHwnd(hwnd, &view)) || !view) {
+      Wh_Log(L"No application view for the active window (hwnd=0x%p)", hwnd);
+      return false;
+    }
+    if (!g_pPinnedApps) {  // a reconnect inside GetViewForHwnd lost the pin service
+      view->Release();
+      Wh_Log(L"Pin service not available");
+      return false;
+    }
 
-  BOOL isPinned = FALSE;
-  HRESULT hr = g_pPinnedApps->IsViewPinned(view, &isPinned);
-  if (SUCCEEDED(hr) && (isPinned != FALSE) != pin) {
-    hr = pin ? g_pPinnedApps->PinView(view) : g_pPinnedApps->UnpinView(view);
+    BOOL isPinned = FALSE;
+    hr = g_pPinnedApps->IsViewPinned(view, &isPinned);
+    if (SUCCEEDED(hr) && (isPinned != FALSE) != pin) {
+      hr = pin ? g_pPinnedApps->PinView(view) : g_pPinnedApps->UnpinView(view);
+    }
+    view->Release();
+
+    if (!IsServerGone(hr) || !ReinitializeVirtualDesktopAPI()) break;
   }
-  view->Release();
 
   if (FAILED(hr)) {
     Wh_Log(L"Failed to %s window: 0x%08X", pin ? L"pin" : L"unpin", hr);
