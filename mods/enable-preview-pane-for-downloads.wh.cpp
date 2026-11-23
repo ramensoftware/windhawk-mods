@@ -42,9 +42,10 @@ not "allow", the answer is changed to "allow" only if all of these are true:
 * The action is `URLACTION_SHELL_PREVIEW`. No other security action is changed.
 * The file is on a local fixed, removable or RAM drive (`C:\...`). Network
   shares (`\\server\...`) and mapped network drives are never exempted.
-* The path has no alternate data stream, and the file itself is not a symbolic
-  link or another type of reparse point. Cloud placeholder files, such as
-  OneDrive files, are allowed.
+* The path has no alternate data stream, the file itself is not a symbolic
+  link or another type of reparse point, and no folder in the path is a
+  directory symbolic link. Cloud placeholder files, such as OneDrive files,
+  and directory junctions are allowed.
 * The extension is in the list from the settings.
 * The security manager maps the file to the Internet zone (zone 3). Files in
   the Restricted Sites zone, or in any other zone, are left alone.
@@ -84,10 +85,16 @@ that you are comfortable previewing from untrusted sources.
 
 ## Notes and limitations
 
+* Windows blocks these previews because they can leak credentials. A file
+  that refers to a remote resource (`\\server\...`) can make the preview
+  handler connect to that server and send it the user's NTLM hash. PDFs can
+  do this, and `pdf` is the default. See Microsoft's
+  [note on the change](https://support.microsoft.com/help/5070960). With the
+  mod, previewing a listed file can leak the hash this way, just like opening
+  it would.
 * The preview handler registered for the type (for example the PDF previewer
-  of Microsoft Edge, Adobe Acrobat or SumatraPDF) parses the file. A
-  vulnerable preview handler can be exploited by a malicious file, which is
-  one reason Windows blocks these previews.
+  of Microsoft Edge, Adobe Acrobat or SumatraPDF) also parses the file, so a
+  vulnerable preview handler can be exploited by a malicious file.
 * A preview handler can opt in to previewing untrusted files with the
   `AutomaticallyPreviewUntrustedFiles` value on its CLSID key. Windows then
   shows the preview without this mod. The PDF previewer of Microsoft Edge does
@@ -100,11 +107,11 @@ that you are comfortable previewing from untrusted sources.
   programs. To cover one, add it under `Details` -> `Advanced` ->
   `Custom process inclusion list`. This was tested with the Open dialog of a
   program added to that list.
-* Only the file itself is checked for reparse points, not the folders in its
-  path. A file reached through a directory junction or a directory symbolic
-  link is exempted like any other local file, even when a directory symbolic
-  link points to a network share. Hard links are the same file. File Explorer doesn't preview file symbolic links at all, with or
-  without the mod.
+* Files reached through a directory symbolic link are never exempted, because
+  the link can point to a network share. Directory junctions can only point to
+  local folders, so they are allowed. Hard links are the same file. File
+  Explorer doesn't preview file symbolic links at all, with or without the
+  mod.
 * The mod overrides the "disallow" answer for the listed types even when it
   comes from a Group Policy setting for the Internet zone.
 * This targets the standard URL security manager of Windows (`urlmon.dll`). If
@@ -139,8 +146,6 @@ that you are comfortable previewing from untrusted sources.
 
 #include <cstring>
 #include <cwchar>
-#include <memory>
-#include <new>
 #include <string>
 #include <vector>
 
@@ -281,6 +286,56 @@ bool MatchesSettings(const WCHAR* path) {
     return extMatch && pathMatch;
 }
 
+// Reads the directory entry of a file or folder. The item is not opened, and a
+// reparse point is not followed.
+bool GetDirectoryEntry(const WCHAR* path, WIN32_FIND_DATAW* findData) {
+    HANDLE find = FindFirstFileExW(path, FindExInfoBasic, findData,
+                                   FindExSearchNameMatch, nullptr, 0);
+    if (find == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    FindClose(find);
+    return true;
+}
+
+// Returns true if no folder in an "X:\..." path is a directory symbolic link,
+// which can point to a network share. The folders are checked from the drive
+// root down, and the check stops at the first link, so nothing behind it is
+// accessed.
+bool HasNoSymbolicLinkFolders(const WCHAR* path) {
+    std::wstring folder(path, 3);
+    const WCHAR* name = path + 3;
+    for (;;) {
+        const WCHAR* end = name;
+        while (*end && *end != L'\\' && *end != L'/') {
+            end++;
+        }
+        if (!*end) {
+            // The last component is the file itself.
+            return true;
+        }
+
+        size_t length = end - name;
+        if (length == 0 || (length == 1 && name[0] == L'.') ||
+            (length == 2 && name[0] == L'.' && name[1] == L'.')) {
+            return false;
+        }
+
+        folder.append(name, length);
+        WIN32_FIND_DATAW findData;
+        if (!GetDirectoryEntry(folder.c_str(), &findData)) {
+            return false;
+        }
+        if ((findData.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) &&
+            findData.dwReserved0 == IO_REPARSE_TAG_SYMLINK) {
+            return false;
+        }
+
+        folder += L'\\';
+        name = end + 1;
+    }
+}
+
 // Returns true if the path is a plain file on a local drive.
 bool IsLocalPlainFile(const WCHAR* path) {
     // Only "X:\..." paths. UNC paths, device paths and relative paths are
@@ -306,14 +361,14 @@ bool IsLocalPlainFile(const WCHAR* path) {
             return false;
     }
 
-    // Reads the directory entry only, the file is not opened.
-    WIN32_FIND_DATAW findData;
-    HANDLE find = FindFirstFileExW(path, FindExInfoBasic, &findData,
-                                   FindExSearchNameMatch, nullptr, 0);
-    if (find == INVALID_HANDLE_VALUE) {
+    if (!HasNoSymbolicLinkFolders(path)) {
         return false;
     }
-    FindClose(find);
+
+    WIN32_FIND_DATAW findData;
+    if (!GetDirectoryEntry(path, &findData)) {
+        return false;
+    }
 
     if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
         return false;
@@ -338,19 +393,14 @@ std::wstring GetLocalPath(LPCWSTR url) {
         return url;
     }
 
-    // URLs can hold long paths, so the buffer is on the heap.
-    constexpr DWORD kBufferChars = 32768;
-    std::unique_ptr<WCHAR[]> buffer(new (std::nothrow) WCHAR[kBufferChars]);
-    if (!buffer) {
+    PWSTR path = nullptr;
+    if (FAILED(PathCreateFromUrlAlloc(url, &path, 0)) || !path) {
         return std::wstring();
     }
 
-    DWORD chars = kBufferChars;
-    if (FAILED(PathCreateFromUrlW(url, buffer.get(), &chars, 0))) {
-        return std::wstring();
-    }
-
-    return std::wstring(buffer.get());
+    std::wstring result(path);
+    LocalFree(path);
+    return result;
 }
 
 using ProcessUrlAction_t = HRESULT(STDMETHODCALLTYPE*)(
