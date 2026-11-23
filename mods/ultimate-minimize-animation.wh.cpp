@@ -608,8 +608,9 @@ struct MacGenieAnimData {
     // back - but only if the taskbar still owns it when the animation ends.
     BOOL taskbarFocusBorrowed;
     // Radius (in this process' coordinate space) of the window's DWM-rounded
-    // corners; 0 = square (maximized, Win10, DONOTROUND). Drives the Modern
-    // engine's silhouette so the first/last frame matches the real window.
+    // corners; 0 = square (maximized, Win10, DONOTROUND). Rounds the snapshot
+    // and sets Fluid's final corner radius, so the first/last frame matches the
+    // real window.
     float cornerRadiusPx;
     // Snapshot is handed to the restore cache by the falling engine at the end
     // instead of being copied into a second bitmap at the start.
