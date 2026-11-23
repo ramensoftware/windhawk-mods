@@ -3,13 +3,13 @@
 // @name            Attack Shark X11 Battery
 // @name:es-ES      Batería del Attack Shark X11
 // @description     Shows the battery level of the Attack Shark X11 wireless mouse in the system tray
-// @description:es-ES Muestra la batería del mouse inalámbrico Attack Shark X11 en la bandeja del sistema
+// @description:es-ES Muestra la batería del ratón inalámbrico Attack Shark X11 en la bandeja del sistema
 // @version         1.0
 // @author          xtrimdr
 // @github          https://github.com/xtrimdr
 // @license         MIT
-// @include         explorer.exe
-// @compilerOptions -lsetupapi -lgdi32 -lshell32 -luser32
+// @include         windhawk.exe
+// @compilerOptions -lsetupapi -lhid -lgdi32 -lshell32 -luser32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -17,7 +17,7 @@
 # Attack Shark X11 Battery
 
 Adds a system tray icon that shows the battery percentage of the **Attack Shark
-X11** wireless mouse (2.4 GHz receiver, USB `1D57:FA60`).
+X11** wireless mouse, connected through its 2.4 GHz receiver (USB `1D57:FA60`).
 
 * The number changes color: green (above 50%), yellow, red (at or below the
   low battery threshold) and blue while charging.
@@ -28,6 +28,9 @@ X11** wireless mouse (2.4 GHz receiver, USB `1D57:FA60`).
 
 Texts are shown in Spanish when Windows is set to Spanish, otherwise in English.
 
+The mod also matches the mouse connected by cable (USB `1D57:FA55`), but that
+mode is untested.
+
 ## How it works
 
 The mouse sends a battery report on its own every ~2 seconds through interface
@@ -35,7 +38,9 @@ The mouse sends a battery report on its own every ~2 seconds through interface
 to these reports; it never sends anything to the mouse or the receiver, so it
 can't change the mouse configuration.
 
-If the receiver is unplugged, the mod keeps retrying and reconnects on its own.
+The mod runs in its own `windhawk.exe` process, not inside Explorer. If the
+receiver is unplugged, the mod picks it up again as soon as it's plugged back
+in.
 
 The protocol is documented in
 [attack-shark-x11-driver](https://github.com/HarukaYamamoto0/attack-shark-x11-driver).
@@ -46,16 +51,24 @@ The protocol is documented in
 /*
 - lowThreshold: 20
   $name: Low battery threshold (%)
+  $name:es-ES: Umbral de batería baja (%)
   $description: At or below this value the number turns red
+  $description:es-ES: En este valor o por debajo, el número se pone rojo
 - notifyLow: true
   $name: Notify on low battery
+  $name:es-ES: Avisar con batería baja
   $description: Shows a Windows notification when the battery reaches the threshold
+  $description:es-ES: Muestra una notificación de Windows cuando la batería llega al umbral
 - notifyFull: false
   $name: Notify when charging finishes
+  $name:es-ES: Avisar cuando termina de cargar
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+
+#include <dbt.h>
+#include <hidsdi.h>  // Includes hidpi.h after the types it needs.
 #include <setupapi.h>
 #include <shellapi.h>
 
@@ -64,20 +77,17 @@ The protocol is documented in
 #include <cwctype>
 #include <mutex>
 #include <string>
-
-// {4D1E55B2-F16F-11CF-88CB-001111000030}
-static const GUID kHidInterfaceGuid = {
-    0x4d1e55b2,
-    0xf16f,
-    0x11cf,
-    {0x88, 0xcb, 0x00, 0x11, 0x11, 0x00, 0x00, 0x30}};
+#include <vector>
 
 constexpr UINT WM_APP_TRAY = WM_APP + 1;
 constexpr UINT WM_APP_UPDATE = WM_APP + 2;
+constexpr UINT WM_APP_SETTINGS_CHANGED = WM_APP + 3;
 constexpr UINT_PTR kStaleTimerId = 1;
 constexpr ULONGLONG kStaleAfterMs = 15000;
+// Slow rescan in case a device arrival notification is missed.
+constexpr DWORD kFallbackRescanMs = 60000;
 constexpr UINT kTrayIconId = 1;
-constexpr wchar_t kWindowClass[] = L"WhAttackSharkX11BatteryWnd";
+constexpr wchar_t kWindowClass[] = L"Windhawk_AttackSharkX11Battery_" WH_MOD_ID;
 
 enum BatteryStatus : BYTE {
     kStatusNormal = 0x01,
@@ -118,10 +128,10 @@ struct Texts {
 
 static const Texts kTextsEn = {
     L"Attack Shark X11",
-    L"Waiting for the mouse...",
+    L"Waiting for data...",
     L"Receiver not connected",
     L"Receiver not connected (last value)",
-    L"No signal from the mouse (last value)",
+    L"No signal (last value)",
     L"Charging",
     L"Fully charged",
     L"On battery",
@@ -132,15 +142,15 @@ static const Texts kTextsEn = {
 
 static const Texts kTextsEs = {
     L"Attack Shark X11",
-    L"Esperando datos del mouse...",
+    L"Esperando datos...",
     L"Receptor no conectado",
     L"Receptor no conectado (último valor)",
-    L"Sin señal del mouse (último valor)",
+    L"Sin señal (último valor)",
     L"Cargando",
     L"Carga completa",
     L"Con batería",
     L"Attack Shark X11: batería baja",
-    L"Queda %d%% de batería. Ponelo a cargar.",
+    L"Queda %d%% de batería. Conéctalo al cargador.",
     L"Terminó de cargar.",
 };
 
@@ -157,59 +167,78 @@ static const Texts& T() {
 
 static std::mutex g_stateMutex;
 static BatteryState g_state;
-static Settings g_settings;
 
 static HANDLE g_stopEvent = nullptr;
+static HANDLE g_rescanEvent = nullptr;
 static HANDLE g_uiThread = nullptr;
 static HANDLE g_hidThread = nullptr;
 static std::atomic<HWND> g_hwnd{nullptr};
 
 // Only accessed from the UI thread.
+static Settings g_settings;
 static UINT g_taskbarCreatedMsg = 0;
 static HICON g_currentIcon = nullptr;
 static bool g_iconAdded = false;
 static bool g_notifiedLow = false;
 static BYTE g_lastStatus = 0;
+static std::wstring g_lastText;
+static std::wstring g_lastTip;
+static COLORREF g_lastColor = 0;
+static int g_lastIconSize = 0;
 
-static void LoadSettings() {
+static Settings ReadSettings() {
     Settings s;
     int low = Wh_GetIntSetting(L"lowThreshold");
     s.lowThreshold = (low > 0 && low < 100) ? low : 20;
     s.notifyLow = Wh_GetIntSetting(L"notifyLow") != 0;
     s.notifyFull = Wh_GetIntSetting(L"notifyFull") != 0;
-
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    g_settings = s;
+    return s;
 }
 
-// wParam = 1 resets the low battery notification (settings changed).
-static void NotifyUi(WPARAM resetNotifications = 0) {
+static void NotifyUi() {
     HWND hwnd = g_hwnd.load();
     if (hwnd) {
-        PostMessageW(hwnd, WM_APP_UPDATE, resetNotifications, 0);
+        PostMessageW(hwnd, WM_APP_UPDATE, 0, 0);
     }
+}
+
+static HMODULE GetModModule() {
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (PCWSTR)&GetModModule, &module);
+    return module;
 }
 
 // ---------------------------------------------------------------------------
 // HID reading
 // ---------------------------------------------------------------------------
 
+static bool ContainsNoCase(const std::wstring& haystack, const wchar_t* needle) {
+    size_t n = wcslen(needle);
+    for (size_t i = 0; i + n <= haystack.size(); i++) {
+        if (_wcsnicmp(haystack.c_str() + i, needle, n) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Interface 2, collection 3 is the one with usage page 0x0A, where the mouse
 // sends its battery reports. PID FA60 is the 2.4 GHz receiver, FA55 is the
 // mouse connected by cable.
-static bool IsTargetPath(std::wstring path) {
-    for (auto& c : path) {
-        c = (wchar_t)towlower(c);
-    }
-    bool vidPid = path.find(L"vid_1d57&pid_fa60") != std::wstring::npos ||
-                  path.find(L"vid_1d57&pid_fa55") != std::wstring::npos;
-    return vidPid && path.find(L"&mi_02") != std::wstring::npos &&
-           path.find(L"&col03") != std::wstring::npos;
+static bool IsTargetPath(const std::wstring& path) {
+    bool vidPid = ContainsNoCase(path, L"vid_1d57&pid_fa60") ||
+                  ContainsNoCase(path, L"vid_1d57&pid_fa55");
+    return vidPid && ContainsNoCase(path, L"&mi_02") &&
+           ContainsNoCase(path, L"&col03");
 }
 
 static std::wstring FindDevicePath() {
     std::wstring result;
-    HDEVINFO devs = SetupDiGetClassDevsW(&kHidInterfaceGuid, nullptr, nullptr,
+    GUID hidGuid;
+    HidD_GetHidGuid(&hidGuid);
+    HDEVINFO devs = SetupDiGetClassDevsW(&hidGuid, nullptr, nullptr,
                                          DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (devs == INVALID_HANDLE_VALUE) {
         return result;
@@ -217,8 +246,8 @@ static std::wstring FindDevicePath() {
 
     SP_DEVICE_INTERFACE_DATA ifData{};
     ifData.cbSize = sizeof(ifData);
-    for (DWORD i = 0; SetupDiEnumDeviceInterfaces(
-             devs, nullptr, &kHidInterfaceGuid, i, &ifData);
+    for (DWORD i = 0;
+         SetupDiEnumDeviceInterfaces(devs, nullptr, &hidGuid, i, &ifData);
          i++) {
         DWORD needed = 0;
         SetupDiGetDeviceInterfaceDetailW(devs, &ifData, nullptr, 0, &needed,
@@ -226,25 +255,32 @@ static std::wstring FindDevicePath() {
         if (needed == 0) {
             continue;
         }
-        auto* detail = (SP_DEVICE_INTERFACE_DETAIL_DATA_W*)HeapAlloc(
-            GetProcessHeap(), HEAP_ZERO_MEMORY, needed);
-        if (!detail) {
-            continue;
-        }
+        std::vector<BYTE> buffer(needed);
+        auto* detail = (SP_DEVICE_INTERFACE_DETAIL_DATA_W*)buffer.data();
         detail->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W);
         if (SetupDiGetDeviceInterfaceDetailW(devs, &ifData, detail, needed,
                                              nullptr, nullptr) &&
             IsTargetPath(detail->DevicePath)) {
             result = detail->DevicePath;
-        }
-        HeapFree(GetProcessHeap(), 0, detail);
-        if (!result.empty()) {
             break;
         }
     }
 
     SetupDiDestroyDeviceInfoList(devs);
     return result;
+}
+
+static DWORD GetInputReportLength(HANDLE dev) {
+    DWORD length = 0;
+    PHIDP_PREPARSED_DATA preparsed = nullptr;
+    if (HidD_GetPreparsedData(dev, &preparsed)) {
+        HIDP_CAPS caps{};
+        if (HidP_GetCaps(preparsed, &caps) == HIDP_STATUS_SUCCESS) {
+            length = caps.InputReportByteLength;
+        }
+        HidD_FreePreparsedData(preparsed);
+    }
+    return length;
 }
 
 static void HandleReport(const BYTE* buf, DWORD len) {
@@ -286,18 +322,25 @@ static void SetDeviceOpen(bool open) {
 // Reads reports until the mod is unloaded or a read fails (receiver
 // unplugged).
 static void ReadLoop(HANDLE dev) {
+    DWORD reportLength = GetInputReportLength(dev);
+    if (reportLength == 0) {
+        Wh_Log(L"Couldn't get the input report length");
+        return;
+    }
+    std::vector<BYTE> buf(reportLength);
+
     HANDLE readEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!readEvent) {
         return;
     }
-    BYTE buf[64];
     while (true) {
         OVERLAPPED ov{};
         ov.hEvent = readEvent;
         ResetEvent(readEvent);
         DWORD read = 0;
-        if (!ReadFile(dev, buf, sizeof(buf), nullptr, &ov) &&
+        if (!ReadFile(dev, buf.data(), reportLength, nullptr, &ov) &&
             GetLastError() != ERROR_IO_PENDING) {
+            Wh_Log(L"ReadFile failed: %u", GetLastError());
             break;
         }
         HANDLE waits[] = {g_stopEvent, readEvent};
@@ -308,15 +351,18 @@ static void ReadLoop(HANDLE dev) {
             break;
         }
         if (!GetOverlappedResult(dev, &ov, &read, FALSE)) {
+            Wh_Log(L"Read failed: %u", GetLastError());
             break;
         }
-        HandleReport(buf, read);
+        HandleReport(buf.data(), read);
     }
     CloseHandle(readEvent);
 }
 
 static DWORD WINAPI HidThreadProc(LPVOID) {
+    HANDLE waits[] = {g_stopEvent, g_rescanEvent};
     while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
+        ResetEvent(g_rescanEvent);
         std::wstring path = FindDevicePath();
         if (!path.empty()) {
             HANDLE dev = CreateFileW(
@@ -329,10 +375,20 @@ static DWORD WINAPI HidThreadProc(LPVOID) {
                 CloseHandle(dev);
                 SetDeviceOpen(false);
                 Wh_Log(L"Receiver closed");
+                // Give the device a moment before looking for it again.
+                if (WaitForSingleObject(g_stopEvent, 1000) != WAIT_TIMEOUT) {
+                    break;
+                }
+                continue;
             }
+            Wh_Log(L"CreateFile failed: %u", GetLastError());
         }
-        // Retry every 3 seconds (receiver unplugged, etc.).
-        WaitForSingleObject(g_stopEvent, 3000);
+        // Wait for a HID device arrival (signaled by the UI thread), with a
+        // slow periodic rescan as a fallback.
+        if (WaitForMultipleObjects(2, waits, FALSE, kFallbackRescanMs) ==
+            WAIT_OBJECT_0) {
+            break;
+        }
     }
     return 0;
 }
@@ -341,13 +397,13 @@ static DWORD WINAPI HidThreadProc(LPVOID) {
 // Tray icon
 // ---------------------------------------------------------------------------
 
-static HICON CreateNumberIcon(const wchar_t* text, COLORREF color) {
-    UINT dpi = GetDpiForSystem();
-    int size = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
-    if (size <= 0) {
-        size = 16;
-    }
+static UINT GetTaskbarDpi() {
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    UINT dpi = taskbar ? GetDpiForWindow(taskbar) : 0;
+    return dpi ? dpi : GetDpiForSystem();
+}
 
+static HICON CreateNumberIcon(const wchar_t* text, COLORREF color, int size) {
     BITMAPINFO bi{};
     bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bi.bmiHeader.biWidth = size;
@@ -422,13 +478,16 @@ static HICON CreateNumberIcon(const wchar_t* text, COLORREF color) {
     return icon;
 }
 
-static void ShowBalloon(HWND hwnd, const wchar_t* title, const wchar_t* text) {
+static void ShowBalloon(HWND hwnd,
+                        const wchar_t* title,
+                        const wchar_t* text,
+                        DWORD infoFlags) {
     NOTIFYICONDATAW nid{};
     nid.cbSize = sizeof(nid);
     nid.hWnd = hwnd;
     nid.uID = kTrayIconId;
     nid.uFlags = NIF_INFO;
-    nid.dwInfoFlags = NIIF_WARNING;
+    nid.dwInfoFlags = infoFlags;
     wcsncpy(nid.szInfoTitle, title, ARRAYSIZE(nid.szInfoTitle) - 1);
     wcsncpy(nid.szInfo, text, ARRAYSIZE(nid.szInfo) - 1);
     Shell_NotifyIconW(NIM_MODIFY, &nid);
@@ -436,12 +495,11 @@ static void ShowBalloon(HWND hwnd, const wchar_t* title, const wchar_t* text) {
 
 static void UpdateTrayIcon(HWND hwnd, bool forceAdd) {
     BatteryState st;
-    Settings set;
     {
         std::lock_guard<std::mutex> lock(g_stateMutex);
         st = g_state;
-        set = g_settings;
     }
+    const Settings& set = g_settings;
     const Texts& t = T();
 
     bool fresh = st.percent >= 0 &&
@@ -479,32 +537,45 @@ static void UpdateTrayIcon(HWND hwnd, bool forceAdd) {
                  statusText);
     }
 
-    HICON icon = CreateNumberIcon(text, color);
+    int size = GetSystemMetricsForDpi(SM_CXSMICON, GetTaskbarDpi());
+    if (size <= 0) {
+        size = 16;
+    }
 
-    NOTIFYICONDATAW nid{};
-    nid.cbSize = sizeof(nid);
-    nid.hWnd = hwnd;
-    nid.uID = kTrayIconId;
-    nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP;
-    nid.uCallbackMessage = WM_APP_TRAY;
-    nid.hIcon = icon;
-    wcsncpy(nid.szTip, tip, ARRAYSIZE(nid.szTip) - 1);
+    bool unchanged = g_iconAdded && g_lastText == text && g_lastTip == tip &&
+                     g_lastColor == color && g_lastIconSize == size;
+    if (forceAdd || !unchanged) {
+        HICON icon = CreateNumberIcon(text, color, size);
 
-    if (forceAdd || !g_iconAdded) {
-        Shell_NotifyIconW(NIM_DELETE, &nid);
-        g_iconAdded = Shell_NotifyIconW(NIM_ADD, &nid);
-        if (g_iconAdded) {
-            nid.uVersion = NOTIFYICON_VERSION_4;
-            Shell_NotifyIconW(NIM_SETVERSION, &nid);
+        NOTIFYICONDATAW nid{};
+        nid.cbSize = sizeof(nid);
+        nid.hWnd = hwnd;
+        nid.uID = kTrayIconId;
+        nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP;
+        nid.uCallbackMessage = WM_APP_TRAY;
+        nid.hIcon = icon;
+        wcsncpy(nid.szTip, tip, ARRAYSIZE(nid.szTip) - 1);
+
+        if (forceAdd || !g_iconAdded) {
+            Shell_NotifyIconW(NIM_DELETE, &nid);
+            g_iconAdded = Shell_NotifyIconW(NIM_ADD, &nid);
+            if (g_iconAdded) {
+                nid.uVersion = NOTIFYICON_VERSION_4;
+                Shell_NotifyIconW(NIM_SETVERSION, &nid);
+            }
+        } else {
+            Shell_NotifyIconW(NIM_MODIFY, &nid);
         }
-    } else {
-        Shell_NotifyIconW(NIM_MODIFY, &nid);
-    }
 
-    if (g_currentIcon) {
-        DestroyIcon(g_currentIcon);
+        if (g_currentIcon) {
+            DestroyIcon(g_currentIcon);
+        }
+        g_currentIcon = icon;
+        g_lastText = text;
+        g_lastTip = tip;
+        g_lastColor = color;
+        g_lastIconSize = size;
     }
-    g_currentIcon = icon;
 
     // Notifications.
     if (fresh) {
@@ -516,11 +587,11 @@ static void UpdateTrayIcon(HWND hwnd, bool forceAdd) {
             g_notifiedLow = true;
             wchar_t msg[96];
             swprintf(msg, ARRAYSIZE(msg), t.lowBody, st.percent);
-            ShowBalloon(hwnd, t.lowTitle, msg);
+            ShowBalloon(hwnd, t.lowTitle, msg, NIIF_WARNING);
         }
         if (set.notifyFull && g_lastStatus == kStatusCharging &&
             st.status == kStatusFull) {
-            ShowBalloon(hwnd, t.title, t.fullBody);
+            ShowBalloon(hwnd, t.title, t.fullBody, NIIF_INFO);
         }
         g_lastStatus = st.status;
     }
@@ -539,6 +610,23 @@ static void RemoveTrayIcon(HWND hwnd) {
     }
 }
 
+static bool IsTargetDeviceArrival(WPARAM event, LPARAM data) {
+    if (event != DBT_DEVICEARRIVAL || !data) {
+        return false;
+    }
+    auto* header = (const DEV_BROADCAST_HDR*)data;
+    if (header->dbch_devicetype != DBT_DEVTYP_DEVICEINTERFACE ||
+        header->dbch_size < sizeof(DEV_BROADCAST_DEVICEINTERFACE_W)) {
+        return false;
+    }
+    auto* info = (const DEV_BROADCAST_DEVICEINTERFACE_W*)header;
+    size_t capacity =
+        (header->dbch_size - offsetof(DEV_BROADCAST_DEVICEINTERFACE_W, dbcc_name)) /
+        sizeof(wchar_t);
+    return IsTargetPath(std::wstring(info->dbcc_name,
+                                     wcsnlen(info->dbcc_name, capacity)));
+}
+
 static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
         // Explorer recreated the taskbar, the icon has to be added again.
@@ -551,128 +639,338 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             UpdateTrayIcon(hwnd, true);
             return 0;
         case WM_APP_UPDATE:
-            if (wp) {
+        case WM_TIMER:
+        case WM_DISPLAYCHANGE:
+        case WM_DPICHANGED:
+        case WM_SETTINGCHANGE:
+            UpdateTrayIcon(hwnd, false);
+            return 0;
+        case WM_APP_SETTINGS_CHANGED: {
+            Settings old = g_settings;
+            g_settings = ReadSettings();
+            // Show the low battery notification again only if a setting it
+            // depends on changed.
+            if (old.lowThreshold != g_settings.lowThreshold ||
+                old.notifyLow != g_settings.notifyLow) {
                 g_notifiedLow = false;
             }
             UpdateTrayIcon(hwnd, false);
             return 0;
-        case WM_TIMER:
-        case WM_DISPLAYCHANGE:
-        case WM_DPICHANGED:
-            UpdateTrayIcon(hwnd, false);
-            return 0;
+        }
+        case WM_DEVICECHANGE:
+            if (IsTargetDeviceArrival(wp, lp)) {
+                SetEvent(g_rescanEvent);
+            }
+            return TRUE;
+        case WM_POWERBROADCAST:
+            if (wp == PBT_APMRESUMEAUTOMATIC) {
+                SetEvent(g_rescanEvent);
+            }
+            return TRUE;
         case WM_APP_TRAY:
-            return 0;
-        case WM_CLOSE:
-            DestroyWindow(hwnd);
             return 0;
         case WM_DESTROY:
             KillTimer(hwnd, kStaleTimerId);
             RemoveTrayIcon(hwnd);
-            PostQuitMessage(0);
             return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-// Only the explorer.exe process that hosts the shell (the taskbar) shows the
-// icon. File Explorer windows may run in separate explorer.exe processes.
-static bool WaitUntilShellProcess() {
-    while (true) {
-        HWND shell = GetShellWindow();
-        if (shell) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(shell, &pid);
-            return pid == GetCurrentProcessId();
-        }
-        if (WaitForSingleObject(g_stopEvent, 1000) != WAIT_TIMEOUT) {
-            return false;
-        }
-    }
-}
-
 static DWORD WINAPI UiThreadProc(LPVOID) {
-    if (!WaitUntilShellProcess()) {
-        Wh_Log(L"Not the shell process, the icon won't be shown");
-        return 0;
-    }
-
-    g_hidThread = CreateThread(nullptr, 0, HidThreadProc, nullptr, 0, nullptr);
-
-    HINSTANCE inst = GetModuleHandleW(nullptr);
+    HMODULE module = GetModModule();
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = WndProc;
-    wc.hInstance = inst;
+    wc.hInstance = module;
     wc.lpszClassName = kWindowClass;
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"RegisterClassEx failed: %u", GetLastError());
+        return 0;
+    }
 
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
 
     HWND hwnd = CreateWindowExW(0, kWindowClass, L"Attack Shark X11 Battery", 0,
-                                0, 0, 0, 0, nullptr, nullptr, inst, nullptr);
+                                0, 0, 0, 0, nullptr, nullptr, module, nullptr);
     if (!hwnd) {
         Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
-        UnregisterClassW(kWindowClass, inst);
+        UnregisterClassW(kWindowClass, module);
         return 0;
     }
     ChangeWindowMessageFilterEx(hwnd, g_taskbarCreatedMsg, MSGFLT_ALLOW,
                                 nullptr);
+
+    DEV_BROADCAST_DEVICEINTERFACE_W filter{};
+    filter.dbcc_size = sizeof(filter);
+    filter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+    HidD_GetHidGuid(&filter.dbcc_classguid);
+    HDEVNOTIFY devNotify =
+        RegisterDeviceNotificationW(hwnd, &filter, DEVICE_NOTIFY_WINDOW_HANDLE);
+    if (!devNotify) {
+        Wh_Log(L"RegisterDeviceNotification failed: %u", GetLastError());
+    }
+
     g_hwnd = hwnd;
     NotifyUi();
 
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+    // The loop ends when the stop event is set, so shutdown doesn't depend on
+    // posting a message to the window.
+    bool running = true;
+    while (running) {
+        DWORD w = MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE,
+                                            QS_ALLINPUT);
+        if (w == WAIT_OBJECT_0) {
+            break;
+        }
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                running = false;
+                break;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
     }
 
     g_hwnd = nullptr;
-    UnregisterClassW(kWindowClass, inst);
+    if (devNotify) {
+        UnregisterDeviceNotification(devNotify);
+    }
+    DestroyWindow(hwnd);
+    UnregisterClassW(kWindowClass, module);
     return 0;
 }
 
 // ---------------------------------------------------------------------------
-// Windhawk callbacks
+// Tool mod callbacks
 // ---------------------------------------------------------------------------
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
-    LoadSettings();
+    g_settings = ReadSettings();
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent) {
+    g_rescanEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent || !g_rescanEvent) {
+        Wh_Log(L"CreateEvent failed");
         return FALSE;
     }
+    // g_settings is written before the UI thread starts and only used by it
+    // afterwards.
     g_uiThread = CreateThread(nullptr, 0, UiThreadProc, nullptr, 0, nullptr);
-    return g_uiThread != nullptr;
+    g_hidThread = CreateThread(nullptr, 0, HidThreadProc, nullptr, 0, nullptr);
+    if (!g_uiThread || !g_hidThread) {
+        Wh_Log(L"CreateThread failed");
+        SetEvent(g_stopEvent);
+        return FALSE;
+    }
+    return TRUE;
 }
 
-void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
-    if (g_stopEvent) {
-        SetEvent(g_stopEvent);
-    }
+void WhTool_ModSettingsChanged() {
     HWND hwnd = g_hwnd.load();
     if (hwnd) {
-        PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        PostMessageW(hwnd, WM_APP_SETTINGS_CHANGED, 0, 0);
     }
-    if (g_uiThread) {
-        WaitForSingleObject(g_uiThread, 5000);
-        CloseHandle(g_uiThread);
-        g_uiThread = nullptr;
+}
+
+void WhTool_ModUninit() {
+    Wh_Log(L"Uninit");
+    SetEvent(g_stopEvent);
+    // The process is dedicated to this mod, so if a thread doesn't exit in
+    // time, ending the process is a safe fallback.
+    for (HANDLE* thread : {&g_uiThread, &g_hidThread}) {
+        if (*thread) {
+            if (WaitForSingleObject(*thread, 5000) != WAIT_OBJECT_0) {
+                Wh_Log(L"Thread did not exit in time");
+                ExitProcess(1);
+            }
+            CloseHandle(*thread);
+            *thread = nullptr;
+        }
     }
-    if (g_hidThread) {
-        WaitForSingleObject(g_hidThread, 5000);
-        CloseHandle(g_hidThread);
-        g_hidThread = nullptr;
+    CloseHandle(g_rescanEvent);
+    g_rescanEvent = nullptr;
+    CloseHandle(g_stopEvent);
+    g_stopEvent = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
     }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
     }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
-    NotifyUi(1);
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
