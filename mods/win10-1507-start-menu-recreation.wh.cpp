@@ -22415,7 +22415,7 @@ static DWORD WINAPI ToolMonitorProc(void*) {
     }
     return 0;
 }
-BOOL WhTool_ModInit() {
+BOOL ToolRuntimeInit() {
     g_isHybridTool=true;
     g_stopRequested=false;
     g_settingsChangedPending=false;
@@ -22437,13 +22437,13 @@ BOOL WhTool_ModInit() {
     }
     return TRUE;
 }
-void WhTool_ModSettingsChanged() {
+void ToolRuntimeSettingsChanged() {
     g_settingsChangedPending=true;
     const DWORD tid=g_uiThreadId.load();
     if (tid && !PostThreadMessageW(tid,WM_APP_SETTINGS_CHANGED,0,0))
         Wh_Log(L"[Settings] PostThreadMessage failed: %u",GetLastError());
 }
-void WhTool_ModUninit() {
+void ToolRuntimeUninit() {
     if (g_toolRuntimeStopped) return;
     g_toolRuntimeStopped=true;
     g_toolStopping=true;g_stopRequested=true;
@@ -22542,9 +22542,9 @@ void ExplorerModUninit() {
 // The mod will load and run in a dedicated windhawk.exe process.
 //
 // Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
+// * ToolRuntimeInit
+// * ToolRuntimeSettingsChanged
+// * ToolRuntimeUninit
 //
 // Currently, other callbacks are not supported.
 //
@@ -22626,7 +22626,7 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        if (!WhTool_ModInit()) {
+        if (!ToolRuntimeInit()) {
             ExitProcess(1);
         }
 
@@ -22722,7 +22722,7 @@ void Wh_ModSettingsChanged() {
         return;
     }
 
-    WhTool_ModSettingsChanged();
+    ToolRuntimeSettingsChanged();
 }
 
 void Wh_ModUninit() {
@@ -22736,7 +22736,7 @@ void Wh_ModUninit() {
         return;
     }
 
-    WhTool_ModUninit();
+    ToolRuntimeUninit();
     ExitProcess(0);
 }
 
@@ -22744,10 +22744,16 @@ void Wh_ModUninit() {
 } // namespace Menu81
 
 // Global legacy-tool marker recognized by Windhawk 2.0. The 1.7 launcher
-// continues to use Menu81::WhTool_ModInit through its existing lifecycle.
+// continues to use the Menu81 runtime through its existing lifecycle.
 // Windhawk exports global functions and checks for _Z14WhTool_ModInitv.
 BOOL WhTool_ModInit() {
-    return Menu81::WhTool_ModInit();
+    return Menu81::ToolRuntimeInit();
+}
+void WhTool_ModSettingsChanged() {
+    Menu81::ToolRuntimeSettingsChanged();
+}
+void WhTool_ModUninit() {
+    Menu81::ToolRuntimeUninit();
 }
 
 // Dispatch the complete implementation, not just its paint routines. A skin
