@@ -2,7 +2,7 @@
 // @id              titlebar-for-everyone
 // @name            Titlebar For Everyone
 // @description     Force native title bars and frames for various programs
-// @version         0.5
+// @version         0.6
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -58,6 +58,7 @@
 * WPF apps
     * Visual Studio (tested: 2022, 2026)
     * PowerToys Workspaces
+    * Known issues: after a Visual Studio launch, an invisible update notification may block mouse and keyboard input. Please press Esc key to get out of such state for now.
 * Office apps
     * Word, Excel, PowerPoint, OneNote, Access, Outlook, and Publisher
     * Tested: 2010 and LTSC 2021 (Win10 mode)
@@ -373,7 +374,11 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
             SetWinUICustomControlsVisibility(hWnd, false);
         // Steam
         } else if (wcscmp(className, L"SDL_app") == 0) {
-            isTarget = true;
+            wchar_t title[256];
+            GetWindowText(hWnd, title, 256);
+            if (wcsncmp(title, L"Steam Big Picture", 17) != 0) {
+                isTarget = true;
+            }
         // Microsoft 365 Copilot
         } else if (wcscmp(className, L"OfficeApp-Frame") == 0) {
             isTarget = true;
@@ -627,9 +632,10 @@ bool PrepareSteamIndexHtml() {
                 "return (s, t, f) => {"
                     "try {"
                         "const u = new URL(s);"
-                        "const a = typeof t === 'string' && t.startsWith('desktopoverlay_'),"
-                            "b = u.searchParams.has('pid') && u.searchParams.get('pid') !== '0';"
-                        "if (a || b) return o(s, t, f);" // exclude in-game overlay windows
+                        "const a = typeof t === 'string' && (t.startsWith('desktopoverlay_') || t.startsWith('BPM_') || t.startsWith('MainMenu_')),"
+                            "b = u.searchParams.has('pid') && u.searchParams.get('pid') !== '0', c = u.searchParams.has('vrOverlayKey');"
+                        // "console.log('TB4E window.open', u, t);"
+                        "if (a || b || c) return o(s, t, f);" // exclude in-game overlay windows, Big Picture windows, and SteamVR windows
                         "u.searchParams.set('browserType', '3');"
                         "return o(u.toString(), t, f);"
                     "} catch {"
