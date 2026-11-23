@@ -14,7 +14,7 @@
 /*
 # Desktop Clock & Weather
 
-![Illustration of the widget (mockup)](https://raw.githubusercontent.com/DineroOne/windhawk-desktop-clock-weather/main/screenshot-small.png)
+![Illustration of the widget (mockup)](https://raw.githubusercontent.com/DineroOne/windhawk-desktop-clock-weather/main/widget-mockup.png)
 
 The widget is drawn directly on the desktop: **above the wallpaper but below icons and folders**,
 so it never intercepts clicks.
@@ -626,6 +626,27 @@ static float Luma(float r, float g, float b) { return (0.2126f * r + 0.7152f * g
 static float ScreenBrightness(const RECT& wr) {
     const int w = wr.right - wr.left, h = wr.bottom - wr.top;
     if (w < 4 || h < 4) return -1.f;
+
+    // Ignore screen pixels covered by application windows. Otherwise a bright
+    // window over the widget could be mistaken for bright wallpaper. Returning
+    // -1 keeps the last decision until the desktop is visible again.
+    const int N = 12;
+    for (int j = 0; j < N; j++)
+        for (int i = 0; i < N; i++) {
+            POINT pt = {
+                wr.left + (int)((wr.right - wr.left) * (i + 0.5f) / N),
+                wr.top + (int)((wr.bottom - wr.top) * (j + 0.5f) / N)
+            };
+            HWND under = WindowFromPoint(pt);
+            HWND root = under ? GetAncestor(under, GA_ROOT) : nullptr;
+            if (!root) root = under;
+            if (!root) continue;
+            wchar_t cls[64] = {};
+            GetClassNameW(root, cls, (int)(sizeof(cls) / sizeof(cls[0])));
+            if (wcscmp(cls, L"Progman") != 0 && wcscmp(cls, L"WorkerW") != 0)
+                return -2.f;  // distinct from capture failure
+        }
+
     HDC scr = GetDC(nullptr);
     HDC mem = CreateCompatibleDC(scr);
     HBITMAP bmp = CreateCompatibleBitmap(scr, w, h);
@@ -728,6 +749,7 @@ static float WallpaperBrightness(const RECT& wr, const RECT& mon, const RECT& vi
     // slideshow paths, per-monitor layouts, and other shell wallpaper effects.
     const float screen = ScreenBrightness(wr);
     if (screen >= 0.f) return screen;
+    if (screen == -2.f) return -1.f;  // covered by a window: keep prior decision
 
     // If screen capture is unavailable, estimate brightness from the wallpaper
     // file using the configured layout as a fallback.
