@@ -355,6 +355,10 @@ middle-click mute) and
 
 #include <windhawk_utils.h>
 
+// For the vectors that collect the entries of the SYMBOL_HOOK arrays below,
+// to resolve each module's hooks in one HookSymbols call.
+using COMBINED_SH = WindhawkUtils::SYMBOL_HOOK;
+
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <audiopolicy.h>
@@ -6717,7 +6721,7 @@ bool HookTaskbarDllSymbols() {
 // Appends the per-app volume hooks of Taskbar.View.dll / ExplorerExtensions.dll.
 // They're optional so that a missing one doesn't fail the other hooks resolved
 // in the same HookSymbols call; FinishTaskbarViewDllHooks checks them all.
-void AppendTaskbarViewDllHooks(std::vector<WindhawkUtils::SYMBOL_HOOK>& hooks) {
+void AppendTaskbarViewDllHooks(std::vector<COMBINED_SH>& hooks) {
     // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
@@ -7377,7 +7381,7 @@ int WINAPI VolumeSystemTrayIconDataModel_OnIconClicked_Hook(void* pThis,
 }
 
 void AppendSystemTrayHooks(HMODULE module,
-                           std::vector<WindhawkUtils::SYMBOL_HOOK>& hooks) {
+                           std::vector<COMBINED_SH>& hooks) {
     // In SystemTray.dll the implementation was inlined into the produce<>
     // COM thunk, so hook that.
     bool isSystemTrayDll = module == GetModuleHandle(L"SystemTray.dll");
@@ -7441,7 +7445,7 @@ bool HookTaskbarModuleSymbols(HMODULE module) {
         return false;
     }
 
-    std::vector<WindhawkUtils::SYMBOL_HOOK> hooks;
+    std::vector<COMBINED_SH> hooks;
     if (perApp) {
         PerApp::AppendTaskbarViewDllHooks(hooks);
     }
