@@ -2,13 +2,12 @@
 // @id              taskbar-weather
 // @name            Taskbar Weather
 // @description     Current weather on the taskbar with a details card on hover. No Widgets, browser or API key needed
-// @version         1.5.2
+// @version         1.6.0
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @license         MIT
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -lwinhttp -lgdiplus -lgdi32 -luser32 -ld2d1 -ldwrite
+// @include         windhawk.exe
+// @compilerOptions -lwinhttp -lgdiplus -lgdi32 -luser32 -ld2d1 -ldwrite -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -69,6 +68,8 @@ are filled in; clear them to stop all requests.
   Widgets (it shows its own weather in the same place). With a left-aligned
   taskbar, raise the left offset so the label clears the Start button.
 - Only the main taskbar shows the weather.
+- The mod runs in its own background process, not inside Explorer, so a
+  problem in the mod can't take the taskbar down with it.
 - If a request fails, the last reading stays and the card says when it was
   fetched. A reading is marked as stale once it is older than 30 minutes, or
   twice the update interval if that is longer.
@@ -1195,19 +1196,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-// Only a taskbar owned by this process. With "Launch folder windows in a
-// separate process", other explorer.exe processes load the mod too, and they
-// must not attach a label to the shell's taskbar from outside.
-HWND FindOwnTaskbar() {
-    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    DWORD pid = 0;
-    if (!taskbar || !GetWindowThreadProcessId(taskbar, &pid) ||
-        pid != GetCurrentProcessId()) {
-        return nullptr;
-    }
-    return taskbar;
-}
-
 void EnsureWeatherWindow() {
     if (WaitForSingleObject(stopEvent, 0) == WAIT_OBJECT_0) {
         return;
@@ -1217,7 +1205,9 @@ void EnsureWeatherWindow() {
         Layout(window);
         return;
     }
-    HWND taskbar = FindOwnTaskbar();
+    // The label is a child of the taskbar owned by this tool process: it
+    // moves and hides with the taskbar, and goes away when Explorer restarts.
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     RECT bounds{};
     // Vertical taskbars aren't supported, so skip them.
     if (!taskbar || !GetClientRect(taskbar, &bounds) || bounds.bottom < 24 ||
@@ -1234,8 +1224,8 @@ void EnsureWeatherWindow() {
     Wh_Log(L"Weather label created");
     lastContentWidth = -1;
     Relayout();
-    // The first request waits for the label, so processes without a taskbar
-    // never call Open-Meteo.
+    // The first request waits for the label, so nothing is fetched while
+    // there's no taskbar.
     if (LocationConfigured()) {
         SetEvent(refreshEvent);
     }
@@ -1313,6 +1303,11 @@ DWORD WINAPI UiWorker(void*) {
             nullptr, instance, nullptr);
     }
     if (controllerWindow) {
+        // Explorer can run at a lower integrity level than this process.
+        if (taskbarCreatedMessage) {
+            ChangeWindowMessageFilterEx(controllerWindow, taskbarCreatedMessage,
+                                        MSGFLT_ALLOW, nullptr);
+        }
         // Click-through and never activated, so the card cannot take focus.
         cardWindow = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW |
@@ -1388,7 +1383,7 @@ DWORD WINAPI FetchWorker(void*) {
 
 }  // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     LoadSettings();
     if (LocationConfigured()) {
         LoadCachedReading();
@@ -1397,7 +1392,7 @@ BOOL Wh_ModInit() {
     }
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       reinterpret_cast<LPCWSTR>(&Wh_ModInit),
+                       reinterpret_cast<LPCWSTR>(&WhTool_ModInit),
                        reinterpret_cast<HMODULE*>(&instance));
     GdiplusStartupInput input;
     if (GdiplusStartup(&graphicsToken, &input, nullptr) != Ok) {
@@ -1408,7 +1403,7 @@ BOOL Wh_ModInit() {
     if (stopEvent && refreshEvent) {
         uiThread = CreateThread(nullptr, 0, UiWorker, nullptr, 0, nullptr);
     }
-    // No fetch loop without a location: changing settings reloads the mod.
+    // No fetch loop without a location: a settings change restarts everything.
     bool fetchOk = !LocationConfigured() ||
                    (uiThread && (fetchThread = CreateThread(
                                      nullptr, 0, FetchWorker, nullptr, 0,
@@ -1433,11 +1428,16 @@ BOOL Wh_ModInit() {
     if (refreshEvent) {
         CloseHandle(refreshEvent);
     }
+    stopEvent = refreshEvent = nullptr;
     GdiplusShutdown(graphicsToken);
     return FALSE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
+    // Nothing is running after a failed restart.
+    if (!stopEvent) {
+        return;
+    }
     SetEvent(stopEvent);
     if (HWND controller = controllerWindow) {
         PostMessageW(controller, WM_CLOSE, 0, 0);
@@ -1455,10 +1455,182 @@ void Wh_ModUninit() {
     }
     CloseHandle(stopEvent);
     CloseHandle(refreshEvent);
+    stopEvent = refreshEvent = uiThread = fetchThread = nullptr;
     GdiplusShutdown(graphicsToken);
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    *reload = TRUE;
+// Settings are read once at start, so a change restarts the label and the
+// fetch loop inside this process.
+void WhTool_ModSettingsChanged() {
+    WhTool_ModUninit();
+    {
+        std::lock_guard lock(dataMutex);
+        reading = Reading{};
+    }
+    hover = false;
+    if (!WhTool_ModInit()) {
+        Wh_Log(L"Restart after a settings change failed");
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
