@@ -635,7 +635,6 @@ bool PrepareSteamIndexHtml() {
                         "const u = new URL(s);"
                         "const a = typeof t === 'string' && (t.startsWith('desktopoverlay_') || t.startsWith('MainMenu_')),"
                             "b = u.searchParams.has('pid') && u.searchParams.get('pid') !== '0', c = u.searchParams.has('vrOverlayKey');"
-                        "console.log('TB4E window.open', u, t);"
                         "if (a || b || c) return o(s, t, f);" // exclude in-game overlay windows, Big Picture main menu, and SteamVR windows
                         "u.searchParams.set('browserType', '3');"
                         "return o(u.toString(), t, f);"
