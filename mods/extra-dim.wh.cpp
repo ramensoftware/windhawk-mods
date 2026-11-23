@@ -19,7 +19,7 @@
 # Extra Dim
 
 Dims the screen further than the brightness slider goes, and adds a warm tint
-for the evening. A flyout, a tray icon, five hotkeys.
+for the evening. A flyout, a tray icon and global hotkeys.
 
 ![Extra Dim Mod Sample Screenshot](https://raw.githubusercontent.com/DeepakBalaraman/extra-dim/master/assets/screenshot.png)
 
@@ -49,7 +49,10 @@ tint is off, so the number you see is the level the switch brings back.
 
 ## Good to know
 
-- Every hotkey can be changed or cleared.
+- Every hotkey can be changed or cleared. The panel, dim and tint chords start
+  bound; dim more and dim less start empty, because a global chord is a chord
+  taken from every other program, and the panel, the tray menu and the wheel
+  already change the level.
 - By default the dim layer covers the panel too, so the panel shows what the
   screen looks like. Turn on **Keep the panel above the dim layer** to read it at
   full brightness; the controls work either way, because the layer lets clicks
@@ -229,12 +232,12 @@ tint is off, so the number you see is the level the switch brings back.
   - ToggleTintHotkey: ctrl+alt+t
     $name: Toggle warm tint
     $description: "Chord that switches the warm tint on and off, for example ctrl+alt+t. Leave empty to disable."
-  - DimUpHotkey: ctrl+alt+shift+up
+  - DimUpHotkey: ""
     $name: Dim more
-    $description: "Chord that raises the dim level by the step, for example ctrl+alt+shift+up. Leave empty to disable."
-  - DimDownHotkey: ctrl+alt+shift+down
+    $description: "Chord that raises the dim level by the step, for example ctrl+alt+shift+up. Empty by default, so no chord is taken from another program; the panel, the tray menu and the wheel change the level without one."
+  - DimDownHotkey: ""
     $name: Dim less
-    $description: "Chord that lowers the dim level by the step, for example ctrl+alt+shift+down. Leave empty to disable."
+    $description: "Chord that lowers the dim level by the step, for example ctrl+alt+shift+down. Empty by default, so no chord is taken from another program; the panel, the tray menu and the wheel change the level without one."
 */
 // ==/WindhawkModSettings==
 
@@ -1368,12 +1371,14 @@ bool ParseHotkeyText(const std::wstring& text, Hotkey& out) {
     UINT vk = 0;
     std::wstring label;
     if (keyPart.empty() || !ParseKeyName(keyPart, vk, label)) {
+        Wh_Log(L"Not a key name: %s", value.c_str());
         return false;
     }
     // A global hotkey without a modifier eats that key from every program on
     // the machine, so a lone letter or digit is refused. The function keys are
     // the exception: nothing types with F12.
     if (mods == 0 && !(vk >= VK_F1 && vk <= VK_F24)) {
+        Wh_Log(L"A chord needs a modifier: %s", value.c_str());
         return false;
     }
     out.mods = mods;
@@ -1517,14 +1522,13 @@ Settings LoadSettings() {
                          s.toggleTintHotkey)) {
         ParseHotkeyText(L"ctrl+alt+t", s.toggleTintHotkey);
     }
-    if (!ParseHotkeyText(GetStringSetting(L"Shortcuts.DimUpHotkey"),
-                         s.dimUpHotkey)) {
-        ParseHotkeyText(L"ctrl+alt+shift+up", s.dimUpHotkey);
-    }
-    if (!ParseHotkeyText(GetStringSetting(L"Shortcuts.DimDownHotkey"),
-                         s.dimDownHotkey)) {
-        ParseHotkeyText(L"ctrl+alt+shift+down", s.dimDownHotkey);
-    }
+    // These two are empty by default and have no fallback: every chord this
+    // mod takes is taken from every other program on the desktop, and the
+    // level can be changed from the panel, the tray menu and the wheel.
+    ParseHotkeyText(GetStringSetting(L"Shortcuts.DimUpHotkey"),
+                    s.dimUpHotkey);
+    ParseHotkeyText(GetStringSetting(L"Shortcuts.DimDownHotkey"),
+                    s.dimDownHotkey);
 
     if (s.startLevel > s.maximum) {
         s.startLevel = s.maximum;
@@ -1982,6 +1986,10 @@ struct GammaDisplay {
     std::wstring device;
     WORD original[3][256] = {};
     bool saved = false;
+    // `original` is also in the mod's storage, which is what a run that never
+    // shuts down is undone from. The copy follows the ramp on the display, not
+    // the snapshot in memory: the two outlive each other.
+    bool stored = false;
 };
 
 std::vector<GammaDisplay> g_gammaDisplays;
@@ -2006,7 +2014,10 @@ void GammaRestore(GammaDisplay& display) {
         return;
     }
     SetDeviceGammaRamp(display.dc, display.original);
-    StoreDelete(GammaValueName(display.device).c_str());
+    if (display.stored) {
+        StoreDelete(GammaValueName(display.device).c_str());
+        display.stored = false;
+    }
 }
 
 // A ramp applied when the process was killed, or when the session ended before
@@ -2085,11 +2096,6 @@ void GammaSync() {
             DeleteDC(display.dc);
             continue;
         }
-        // A copy is left in the mod's storage as well as in memory: a run that
-        // dies with a ramp applied would otherwise leave the dimmed ramp as the
-        // next run's idea of what the display originally looked like.
-        StoreSetBinary(GammaValueName(display.device).c_str(), display.original,
-                       sizeof(display.original));
         kept.push_back(display);
     }
     g_gammaDisplays.swap(kept);
@@ -2147,6 +2153,16 @@ void GammaApply(float dim, float tint) {
                 ramp[channel][i] =
                     static_cast<WORD>(value + 0.5f);
             }
+        }
+        // The copy in the mod's storage is what a run that dies with this ramp
+        // applied is undone from, so it is written with the ramp rather than
+        // with the snapshot. Written once per applied ramp: a dim that is
+        // switched off and on again restores the snapshot, and the next ramp
+        // needs its own record.
+        if (!display.stored) {
+            StoreSetBinary(GammaValueName(display.device).c_str(),
+                           display.original, sizeof(display.original));
+            display.stored = true;
         }
         if (!SetDeviceGammaRamp(display.dc, ramp)) {
             failures++;
@@ -4704,22 +4720,29 @@ void ApplySettings() {
 
     if (g_settings.rememberValues) {
         // A panel choice only answers for the setting value it replaced. Once
-        // that setting reads differently, the choice is stale and is dropped
-        // rather than winning over the setting for good.
-        const int storedAllDisplays =
-            StoreGetInt(L"AllDisplaysBase", -1) ==
-                    (g_settings.settingAllDisplays ? 1 : 0)
-                ? StoreGetInt(L"AllDisplays", -1)
-                : -1;
-        if (storedAllDisplays >= 0) {
-            g_settings.allDisplays = storedAllDisplays != 0;
+        // that setting reads differently, the choice is stale, and it is
+        // deleted rather than merely ignored: left in place, it would come back
+        // if the setting were ever set to that value again, and outvote a
+        // choice the user has since made in Windhawk.
+        const int allDisplaysBase = StoreGetInt(L"AllDisplaysBase", -1);
+        if (allDisplaysBase == (g_settings.settingAllDisplays ? 1 : 0)) {
+            const int stored = StoreGetInt(L"AllDisplays", -1);
+            if (stored >= 0) {
+                g_settings.allDisplays = stored != 0;
+            }
+        } else if (allDisplaysBase >= 0) {
+            StoreDelete(L"AllDisplays");
+            StoreDelete(L"AllDisplaysBase");
         }
-        const int storedMethod =
-            StoreGetInt(L"MethodBase", -1) == g_settings.settingMethod
-                ? StoreGetInt(L"Method", -1)
-                : -1;
-        if (storedMethod == kMethodGamma || storedMethod == kMethodOverlay) {
-            g_settings.method = storedMethod;
+        const int methodBase = StoreGetInt(L"MethodBase", -1);
+        if (methodBase == g_settings.settingMethod) {
+            const int stored = StoreGetInt(L"Method", -1);
+            if (stored == kMethodGamma || stored == kMethodOverlay) {
+                g_settings.method = stored;
+            }
+        } else if (methodBase >= 0) {
+            StoreDelete(L"Method");
+            StoreDelete(L"MethodBase");
         }
     } else {
         // Nothing is remembered, so nothing an earlier run wrote is left to be
