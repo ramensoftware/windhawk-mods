@@ -6152,7 +6152,7 @@ bool HookTaskbarDllSymbols() {
     HMODULE hTaskbar = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!hTaskbar) return false;
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CTaskBand_ITaskListWndSite_vftable},
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CSecondaryTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"}, &CTaskBand_GetTaskbarHost_Original},
@@ -6162,7 +6162,7 @@ bool HookTaskbarDllSymbols() {
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"}, &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
     };
 
-    return WindhawkUtils::HookSymbols(hTaskbar, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(hTaskbar, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 }  // namespace
