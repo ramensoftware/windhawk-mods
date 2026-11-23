@@ -268,6 +268,7 @@ void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
         SetWindowLongW(hWnd, GWL_STYLE, style);
         if (!onlyUpdateStyle) {
             if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
+                SetPropW(hWnd, L"TB4E_Processed", (HANDLE)1);
                 Wh_Log(L"Subclassed %p", hWnd);
             }
         }
@@ -287,6 +288,7 @@ void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
 
     if (!onlyUpdateStyle) {
         if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SubclassProc, 0)) {
+            SetPropW(hWnd, L"TB4E_Processed", (HANDLE)1);
             Wh_Log(L"Subclassed %p", hWnd);
         }
     }
@@ -415,6 +417,7 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
 }
 
 BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    RemovePropW(hWnd, L"TB4E_Processed");
     DWORD pid;
     GetWindowThreadProcessId(hWnd, &pid);
     // Unsubclass all windows belonging to this process
@@ -429,6 +432,8 @@ BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
 }
 
 BOOL CALLBACK UpdateEnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    if (!GetPropW(hWnd, L"TB4E_Processed"))
+        return TRUE;
     DWORD pid;
     GetWindowThreadProcessId(hWnd, &pid);
     if (pid == GetCurrentProcessId()) {
