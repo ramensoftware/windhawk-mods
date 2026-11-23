@@ -625,6 +625,7 @@ bool PrepareSteamIndexHtml() {
     // Hook window.open to override browserType to 3, to enable Steam's built-in native frame mod for a window
     // The mode is so buggy on Windows so this mod's subclass fixes them
     // Note: overlay and VR windows aren't real HWNDs (unless I force their browserType to 3 which completely borks them)
+    // Note 2: Big Picture main window (BPM_*) is browserType=3 by default, regardless of fullscreen mode status
     const char* injectScript =
         "<script>"
             "window.open = (() => {"
@@ -632,9 +633,10 @@ bool PrepareSteamIndexHtml() {
                 "return (s, t, f) => {"
                     "try {"
                         "const u = new URL(s);"
-                        "const a = typeof t === 'string' && (t.startsWith('desktopoverlay_') || t.startsWith('BPM_') || t.startsWith('MainMenu_')),"
+                        "const a = typeof t === 'string' && (t.startsWith('desktopoverlay_') || t.startsWith('MainMenu_')),"
                             "b = u.searchParams.has('pid') && u.searchParams.get('pid') !== '0', c = u.searchParams.has('vrOverlayKey');"
-                        "if (a || b || c) return o(s, t, f);" // exclude in-game overlay windows, Big Picture windows (+ its left main menu), and SteamVR windows
+                        "console.log('TB4E window.open', u, t);"
+                        "if (a || b || c) return o(s, t, f);" // exclude in-game overlay windows, Big Picture main menu, and SteamVR windows
                         "u.searchParams.set('browserType', '3');"
                         "return o(u.toString(), t, f);"
                     "} catch {"
