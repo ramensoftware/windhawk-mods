@@ -2445,7 +2445,25 @@ std::wstring ReadButtonHelpText(FrameworkElement const& button, const wchar_t** 
     return L"";
 }
 
-std::wstring ProcessNameOf(HWND hwnd);
+// The executable name of a window's process ("Discord.exe"), for the
+// count correction below and the debug log.
+std::wstring ProcessNameOf(HWND hwnd) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid) return L"?";
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) return L"pid " + std::to_wstring(pid);
+    WCHAR path[MAX_PATH];
+    DWORD size = ARRAYSIZE(path);
+    std::wstring name = L"pid " + std::to_wstring(pid);
+    if (QueryFullProcessImageNameW(process, 0, path, &size)) {
+        std::wstring full(path, size);
+        size_t slash = full.find_last_of(L"\\/");
+        name = slash == std::wstring::npos ? full : full.substr(slash + 1);
+    }
+    CloseHandle(process);
+    return name;
+}
 
 // Whether the button's app is one of the processes `exeNames`, looked up
 // once per window (opening the process on every refresh would cost).
@@ -4253,24 +4271,6 @@ bool IsRequestingAttention(FrameworkElement const& button) {
 // Debug logging: one line per button whenever its summary changes. The app
 // is named by its process (window titles change too often to compare).
 // ---------------------------------------------------------------------------
-
-std::wstring ProcessNameOf(HWND hwnd) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (!pid) return L"?";
-    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!process) return L"pid " + std::to_wstring(pid);
-    WCHAR path[MAX_PATH];
-    DWORD size = ARRAYSIZE(path);
-    std::wstring name = L"pid " + std::to_wstring(pid);
-    if (QueryFullProcessImageNameW(process, 0, path, &size)) {
-        std::wstring full(path, size);
-        size_t slash = full.find_last_of(L"\\/");
-        name = slash == std::wstring::npos ? full : full.substr(slash + 1);
-    }
-    CloseHandle(process);
-    return name;
-}
 
 // The item (view model) a button shows, from its repeater, or null for a
 // recycled button.
