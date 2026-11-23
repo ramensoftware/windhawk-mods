@@ -30,7 +30,7 @@ Just like AnimaEngine, plus:
 - **Global hotkey** — open the Media Manager from anywhere with a configurable key combo (default: Win + Alt + P).
 - **Hot-reload** — add, remove, or change images and hit Reload without restarting Windhawk.
 - **Position memory** — remembered per image entry so every image wakes up exactly where you left it.
-- **No AI remover** — 
+- **No AI background remover** — use ChatGPT, Gemini, other AI assistants, or other 3rd-party tools to do so.
 
 
 ## Where's the workshop? AWHE Browser here!
