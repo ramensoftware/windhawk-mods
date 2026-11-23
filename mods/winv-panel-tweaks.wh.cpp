@@ -43,12 +43,16 @@ Emoji even when the Emoji tab is hidden).
 
 A "Pinned" button next to "Clear all" shows only your pinned clipboard items,
 so they're easy to reach even when they're far down the list. Click it again
-to show everything.
+to show everything. "Clear all" is hidden while only pinned items are shown,
+since it never removes pinned items.
+
+![The Win+V panel with a Pinned button next to Clear all](https://raw.githubusercontent.com/jayll1303/WindowsClipboardMods/main/images/winv-panel-tweaks-pinned-button.png)
 
 Win+Alt+V opens the panel with only the pinned items shown; Win+V still opens
 it with everything. The shortcut can be changed or turned off in the settings.
 It has to be one that Windows and other programs don't already use (Win+Shift+V
-and Win+Ctrl+V are taken, for example).
+and Win+Ctrl+V are taken, for example). The button can be turned off too; the
+shortcut keeps working without it.
 
 ## How it works
 
@@ -106,13 +110,20 @@ Source and research notes: https://github.com/jayll1303/WindowsClipboardMods
   $name: Hide "Kaomoji" tab
 - hideSymbols: false
   $name: Hide "Symbols" tab
-- pinnedHotkey: Win+Alt+V
-  $name: Pinned view shortcut
-  $description: >-
-    Opens the Win+V panel showing only pinned clipboard items. Win, Ctrl, Alt
-    and Shift joined with + to a letter, a digit or F1 to F24, e.g. Win+Alt+V
-    or Ctrl+Alt+V, not already used by Windows or another program. Leave empty
-    to turn the shortcut off.
+- pinnedView:
+  - button: true
+    $name: Pinned button
+    $description: >-
+      Shows a "Pinned" button next to "Clear all" that switches the clipboard
+      list to only the pinned items.
+  - hotkey: Win+Alt+V
+    $name: Shortcut
+    $description: >-
+      Opens the Win+V panel showing only pinned clipboard items. Win, Ctrl, Alt
+      and Shift joined with + to a letter, a digit or F1 to F24, e.g. Win+Alt+V
+      or Ctrl+Alt+V, not already used by Windows or another program. Leave
+      empty to turn the shortcut off.
+  $name: Pinned items
 */
 // ==/WindhawkModSettings==
 
@@ -187,7 +198,7 @@ int GetPanelPercentSetting(PCWSTR name) {
 // The configuration that undoes everything the script changed.
 constexpr wchar_t kRestorePageConfig[] =
     L"{hidden:[],keepScale:false,contentWidth:0,contentHeight:0,"
-    L"pinnedButton:false}";
+    L"pinnedView:false,pinnedButton:false}";
 
 // The pinned view shortcut, as MOD_* flags and a virtual-key code. A key of 0
 // means the shortcut is off.
@@ -266,10 +277,12 @@ void LoadSettings() {
                kDefaultContentHeight);
 
     std::wstring config =
-        L"{hidden:[" + hidden + L"]," + sizeConfig + L",pinnedButton:true}";
+        L"{hidden:[" + hidden + L"]," + sizeConfig + L",pinnedView:true," +
+        L"pinnedButton:" +
+        (Wh_GetIntSetting(L"pinnedView.button") ? L"true" : L"false") + L"}";
 
     UINT modifiers = 0, vk = 0;
-    auto hotkey = WindhawkUtils::StringSetting::make(L"pinnedHotkey");
+    auto hotkey = WindhawkUtils::StringSetting::make(L"pinnedView.hotkey");
     if (*hotkey.get() && !ParseHotkey(hotkey.get(), &modifiers, &vk)) {
         Wh_Log(L"Invalid pinned view shortcut: %s", hotkey.get());
     }
@@ -298,12 +311,14 @@ void LoadSettings() {
 // it computes the scale, so the content keeps its normal scale and a bigger
 // panel shows more of it. The layout itself still uses the real size.
 //
-// Pinned button: a "Pinned" button next to "Clear all" in the clipboard list's
-// header toggles S.pinnedOnly, which hides the unpinned items. The items stay
-// in the page's view model (the page edits that list by index); their rows are
-// hidden and lose their tabindex attributes, which is how the page's keyboard
-// navigation finds what it can focus. A MutationObserver keeps this applied as
-// the page re-renders, and a computed tracks the items' pinned state.
+// Pinned view (pinnedView): S.pinnedOnly hides the unpinned items, and with
+// pinnedButton a "Pinned" button next to "Clear all" in the clipboard list's
+// header toggles it (the shortcut sets it too). The items stay in the page's
+// view model (the page edits that list by index); their rows are hidden and
+// lose their tabindex attributes, which is how the page's keyboard navigation
+// finds what it can focus. "Clear all" is hidden while the view is on. A
+// MutationObserver keeps this applied as the page re-renders, and a computed
+// tracks the items' pinned state.
 constexpr wchar_t kScriptTemplate[] = LR"JS((function (config) {
   var S = window.__winvPanelTweaks || (window.__winvPanelTweaks = { subs: [], changed: {} });
   S.subs.forEach(function (s) { s.dispose(); });
@@ -373,6 +388,7 @@ constexpr wchar_t kScriptTemplate[] = LR"JS((function (config) {
   }
   function clearPinned() {
     each('.winv-pinned-action,.winv-pinned-empty', null, function (e) { e.parentNode.removeChild(e); });
+    each('.winv-pinned-mode', null, function (e) { e.classList.remove('winv-pinned-mode'); });
     each('li[data-winv-unpinned],li [data-winv-tabindex]', null, function (e) { showItem(e.closest(kItemSelector) || e); });
     if (pinnedStyle) { pinnedStyle.parentNode.removeChild(pinnedStyle); pinnedStyle = null; }
   }
@@ -387,6 +403,9 @@ constexpr wchar_t kScriptTemplate[] = LR"JS((function (config) {
         'body[dir=rtl] .winv-pinned-action{margin-right:auto;margin-left:calc(var(--expanded-view-scale-ratio) * 0.25rem)}',
         '.category-header .category-header-action-content.winv-pinned-on{background:var(--system-accent-color)!important;color:var(--text-on-accent-color)!important}',
         '@media (-ms-high-contrast:active){.category-header .category-header-action-content.winv-pinned-on{background:highlight!important;color:highlighttext!important}}',
+        // "Clear all" keeps pinned items, so in the pinned view it would seem to
+        // do nothing while it erases everything else.
+        '.winv-pinned-mode > .category-header-action:not(.winv-pinned-action){display:none!important}',
         '.winv-pinned-empty{flex-basis:100%;opacity:.7;font-size:calc(12px * var(--expanded-view-scale-ratio));padding:calc(var(--expanded-view-scale-ratio) * 0.5rem) 0}'
       ].join('\n');
       (document.head || document.documentElement).appendChild(pinnedStyle);
@@ -409,8 +428,13 @@ constexpr wchar_t kScriptTemplate[] = LR"JS((function (config) {
     function isPinned(item) { return !!ko.unwrap(item && item.isPinned); }
 
     function updateHeader(header, evl) {
+      if (header.classList.contains('winv-pinned-mode') !== !!S.pinnedOnly) header.classList.toggle('winv-pinned-mode');
+
       var action = header.querySelector('.winv-pinned-action');
-      if (!action) {
+      if (action && !config.pinnedButton) {
+        action.parentNode.removeChild(action);
+        action = null;
+      } else if (!action && config.pinnedButton) {
         action = document.createElement('div');
         action.className = 'category-header-action winv-pinned-action';
         var button = document.createElement('button');
@@ -431,9 +455,11 @@ constexpr wchar_t kScriptTemplate[] = LR"JS((function (config) {
         var label = header.querySelector('.category-header-text');
         header.insertBefore(action, label ? label.nextSibling : header.firstChild);
       }
-      var b = action.firstChild;
-      if (b.classList.contains('winv-pinned-on') !== !!S.pinnedOnly) b.classList.toggle('winv-pinned-on');
-      if (b.getAttribute('aria-pressed') !== String(!!S.pinnedOnly)) b.setAttribute('aria-pressed', String(!!S.pinnedOnly));
+      if (action) {
+        var b = action.firstChild;
+        if (b.classList.contains('winv-pinned-on') !== !!S.pinnedOnly) b.classList.toggle('winv-pinned-on');
+        if (b.getAttribute('aria-pressed') !== String(!!S.pinnedOnly)) b.setAttribute('aria-pressed', String(!!S.pinnedOnly));
+      }
 
       var empty = header.querySelector('.winv-pinned-empty');
       var showEmpty = S.pinnedOnly && !(ko.unwrap(evl.items) || []).some(isPinned);
@@ -501,7 +527,7 @@ constexpr wchar_t kScriptTemplate[] = LR"JS((function (config) {
     if (!nav || !nav.navigationMenuItems) return false;
 
     hookSizeInfo(root.viewDimensionsProvider);
-    if (config.pinnedButton) {
+    if (config.pinnedView) {
       installPinned();
     } else {
       clearPinned();
@@ -539,7 +565,7 @@ constexpr wchar_t kScriptTemplate[] = LR"JS((function (config) {
     }, 200);
     return 'waiting';
   }
-  if (!hidden.length && !config.keepScale && !config.pinnedButton) {
+  if (!hidden.length && !config.keepScale && !config.pinnedView) {
     // Everything was restored: drop the subscriptions and the state.
     S.subs.forEach(function (s) { s.dispose(); });
     delete window.__winvPanelTweaks;
@@ -890,6 +916,9 @@ bool HookInputApp(HMODULE module) {
             {LR"(private: void __cdecl WindowsInternal::ComposableShell::Experiences::TextInputUndocked::InputApp::ExpressiveSuggestionUIPage::TryShow(void))"},
             &TryShow_Original,
             TryShow_Hook,
+            // Optional: without it only the shortcut's pinned view is lost,
+            // and resizing keeps working.
+            true,
         },
     };
     // clang-format on
@@ -1067,8 +1096,7 @@ DWORD WINAPI HotkeyThreadProc(PVOID readyEvent) {
     return 0;
 }
 
-// Starts the shortcut thread once, when this Explorer turns out to own the
-// taskbar.
+// Starts the shortcut thread, from WhTool_ModInit.
 void StartHotkeyThread() {
     std::lock_guard lock(g_hotkeyThreadMutex);
     if (g_hotkeyThread || g_unloading) {
