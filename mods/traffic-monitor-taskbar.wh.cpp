@@ -3,7 +3,7 @@
 // @name            TrafficMonitor for Taskbar
 // @description     Network speed, CPU, memory, GPU and daily traffic shown inside the Windows 11 taskbar, next to the tray (TrafficMonitor-style), with a Fluent settings panel and traffic history.
 // @description:es-ES  Velocidad de red, CPU, memoria, GPU y tráfico diario dentro de la barra de tareas de Windows 11, junto a la bandeja (estilo TrafficMonitor), con un panel de ajustes Fluent.
-// @version         1.3.0
+// @version         1.4.0
 // @author          xSHIMURAx
 // @github          https://github.com/xSHIMURAx
 // @license         MIT
