@@ -2743,13 +2743,14 @@ static bool HookTaskbarDllSymbols() {
 
     // Only needed for the monitor on a second taskbar. If these are missing the first taskbar
     // still works, so a failure here is not fatal.
-    WindhawkUtils::SYMBOL_HOOK taskbarDllSecondaryHooks[] = {
+    // taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK secondaryHooks[] = {
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CSecondaryTaskBand_ITaskListWndSite_vftable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
          &CSecondaryTaskBand_GetTaskbarHost_Original},
     };
-    if (!WindhawkUtils::HookSymbols(h, taskbarDllSecondaryHooks, ARRAYSIZE(taskbarDllSecondaryHooks)))
+    if (!WindhawkUtils::HookSymbols(h, secondaryHooks, ARRAYSIZE(secondaryHooks)))
         Wh_Log(L"CSecondaryTaskBand symbols not found: the monitor can't be shown on a second taskbar");
     return true;
 }
