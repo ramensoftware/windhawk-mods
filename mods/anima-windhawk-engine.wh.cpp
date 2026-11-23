@@ -4,7 +4,7 @@
 // @description     Displays images, animated GIFs and short clips as draggable desktop widgets.
 // @version         0.1-alpha
 // @author          TuBeo5866
-// @github          https://github.com/tubeo5866
+// @github          https://github.com/TuBeo5866
 // @donateUrl       https://ko-fi.com/tubeo5866
 // @homepage        https://tubb3ll.xyz
 // @include         windhawk.exe
