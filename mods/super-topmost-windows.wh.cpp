@@ -26,6 +26,7 @@
 * Windows set as super-topmost by this mod may **show on top of Windows 10/11's default lock screen, which might expose sensitive information or allow logon bypass.**
 * This mod tries its best to avoid this issue by temporarily restoring all super-topmost windows to the original state while locked, but it could go wrong (e.g., the mod process dies with super-topmost windows left).
 * If this concerns you, either do not use this mod, or disable the lock screen entirely ([use the NoLockScreen registry/GPO](https://www.elevenforum.com/t/enable-or-disable-lock-screen-in-windows-11.1287/)) and/or enable the mod's mitigation in the options page.
+    * If your system requires pressing Ctrl+Alt+Del on logon, you must enable the mod's mitigation, as `NoLockScreen` still doesn't disable `LockApp.exe` in that case.
 
 ![Animated Screenshot](https://raw.githubusercontent.com/Ingan121/files/refs/heads/master/supertopmost.webp)
 ## Hotkey
@@ -286,31 +287,29 @@ void LoadSettings(HWND hwndListener) {
 }
 
 void ToggleAllManagedWindows(HWND hOverlay, bool setSuperTopMost) {
+    std::erase_if(g_stWindows, [](const StWindow& stWnd) {
+        return !IsWindow(stWnd.hWnd);
+    });
+
     SetWindowPos(hOverlay, setSuperTopMost ? HWND_NOTOPMOST : HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+    std::vector<StWindow> processedWindows;
     for (StWindow stWnd : g_stWindows) {
         if (IsWindow(stWnd.hWnd)) {
             if (!IsHungAppWindow(stWnd.hWnd)) {
                 SetParent(stWnd.hWnd, hOverlay);
+                processedWindows.push_back(stWnd);
+            } else {
+                Wh_Log(L"Skipped hung window %p", stWnd.hWnd);
             }
-        } else {
-            std::erase_if(g_stWindows, [&](StWindow stWnd2) {
-                return stWnd.hWnd == stWnd2.hWnd;
-            });
         }
     }
     SetWindowPos(hOverlay, setSuperTopMost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-    for (StWindow stWnd : g_stWindows) {
+    for (StWindow stWnd : processedWindows) {
         if (IsWindow(stWnd.hWnd)) {
-            if (!IsHungAppWindow(stWnd.hWnd)) {
-                SetParent(stWnd.hWnd, NULL);
-                if (!setSuperTopMost) {
-                    SetWindowPos(stWnd.hWnd, stWnd.wasTopmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
-                }
+            SetParent(stWnd.hWnd, NULL);
+            if (!setSuperTopMost) {
+                SetWindowPos(stWnd.hWnd, stWnd.wasTopmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
             }
-        } else {
-            std::erase_if(g_stWindows, [&](StWindow stWnd2) {
-                return stWnd.hWnd == stWnd2.hWnd;
-            });
         }
     }
 }
@@ -354,28 +353,26 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                         }
 
                         wchar_t className[256];
-                        GetClassNameW(hWnd, className, 256);
+                        GetClassNameW(hwndForeground, className, 256);
                         bool isShellWindow = hwndForeground == GetShellWindow() || !wcscmp(className, L"WorkerW") || !wcscmp(className, L"Shell_TrayWnd") || !wcscmp(className, L"Shell_SecondaryTrayWnd");
                         if (isShellWindow) {
                             return 0;
                         }
 
-                        bool ignore = false;
                         if (isOnUIAccessBand) {
-                            std::erase_if(g_stWindows, [&](StWindow stWnd) {
+                            size_t erased = std::erase_if(g_stWindows, [&](StWindow stWnd) {
                                 if (stWnd.hWnd == hwndForeground) {
                                     wasTopmost = stWnd.wasTopmost;
                                     return true;
                                 }
-                                ignore = true;
                                 return false;
                             });
+                            if (!erased) {
+                                // Ignore UIAccess windows that wasn't pinned by this mod
+                                return 0;
+                            }
                         } else {
                             g_stWindows.push_back({ hwndForeground, wasTopmost });
-                        }
-                        if (ignore) {
-                            // Ignore UIAccess windows that wasn't touched by this mod
-                            return 0;
                         }
 
                         // UIAccess processes can freely set their windows' band between ZBID_DESKTOP and ZBID_UIACCESS simply by setting their topmost flag
@@ -544,12 +541,13 @@ void WINAPI EntryPoint_Hook() {
 
 BOOL Wh_ModInit() {
     wchar_t exeName[MAX_PATH];
-    GetModuleFileNameW(NULL, exeName, MAX_PATH);
-    if (wcsstr(_wcsupr(exeName), L"\\LOCKAPP.EXE") != NULL) {
-        if (Wh_GetIntSetting(L"noLockApp")) {
-            ExitProcess(0);
+    if (GetModuleFileNameW(NULL, exeName, MAX_PATH)) {
+        if (_wcsicmp(wcsrchr(exeName, L'\\') + 1, L"LockApp.exe") == 0) {
+            if (Wh_GetIntSetting(L"noLockApp")) {
+                ExitProcess(0);
+            }
+            return FALSE;
         }
-        return FALSE;
     }
 
     DWORD sessionId;
