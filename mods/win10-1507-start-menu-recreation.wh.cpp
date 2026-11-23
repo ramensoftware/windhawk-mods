@@ -47,7 +47,7 @@ Use Win to open or close Start, type to search, arrow keys or Tab to navigate, E
 
 ## Optional Weather (both skins)
 
-Online Weather and IP location are both off by default. When Weather is enabled, enter both coordinates manually (for example, 41.90 and 12.50 for Rome), or separately opt in to approximate IP location. Manual coordinates take precedence. If IP location is enabled and needed, ipwho.is receives your public IP once when the weather worker starts; the result is kept for that worker session. If it fails, it retries every five minutes until successful. Changes to relevant settings or a mod reload restart the worker. Open-Meteo receives your IP and coordinates immediately after location succeeds and every 30 minutes thereafter, including while Start is closed. Its requests retry every 30 minutes on failure. Privacy mode only hides the displayed location. If neither coordinates nor IP location are available, no forecast request is made. Disabling Weather stops future requests, but an ongoing synchronous request can delay shutdown until its timeout. Data: Open-Meteo.com, CC BY 4.0; free API for non-commercial use under its terms.
+Online Weather and IP location are both off by default. When Weather is enabled, enter both coordinates manually (for example, 41.90 and 12.50 for Rome), or separately opt in to approximate IP location. Manual coordinates take precedence. If IP location is enabled and needed, ipwho.is receives your public IP once when the weather worker starts; the result is kept for that worker session. If it fails, it retries every five minutes until successful. Changes to relevant settings or a mod reload restart the worker. Open-Meteo receives your IP and coordinates immediately after location succeeds and every 30 minutes thereafter, including while Start is closed. Its requests retry every 30 minutes on failure. These requests occur even when no Weather tile is pinned, including after the informational tile is unpinned. Privacy mode only hides the displayed location. If neither coordinates nor IP location are available, no forecast request is made. Disabling Weather stops future requests, but an ongoing synchronous request can delay shutdown until its timeout. Data: Open-Meteo.com, CC BY 4.0; free API for non-commercial use under its terms.
 
 In either skin, find the local Weather, Calendar and Clock tiles in search and pin them. These open MSN Weather, Outlook Calendar and the Microsoft Clock store page. If Microsoft Weather is absent, an informational tile can be added and unpinned.
 
@@ -142,9 +142,9 @@ Credits: cips, AdmnistratoX, m417z and contributors to the original mods.
   $description:it-IT: "Questa impostazione: Registra Ctrl + Maiusc + F12 come scorciatoia globale per aprire o chiudere questo menu Start. Disattivala per lasciarla disponibile alle altre app. Se è già occupata la registrazione può fallire."
 - skin81_weatherOnline: false
   $name: Weather tile (both skins) (Open-Meteo)
-  $description: "This setting enables online Weather. Enter both coordinates or separately enable IP location. Open-Meteo receives your IP and coordinates every 30 minutes even with Start closed. Privacy mode hides only the label. The free API is for non-commercial use."
+  $description: "This setting enables online Weather. Enter both coordinates or separately enable IP location. Open-Meteo receives your IP and coordinates every 30 minutes even with Start closed and when no Weather tile is pinned, including after unpinning it. Privacy mode hides only the label. The free API is for non-commercial use."
   $name:it-IT: Entrambe le skin - Riquadro Meteo online (Open-Meteo)
-  $description:it-IT: "Questa impostazione attiva il Meteo online. Inserisci entrambe le coordinate oppure attiva separatamente la posizione tramite IP. Open-Meteo riceve IP e coordinate ogni 30 minuti anche a Start chiuso. La privacy nasconde solo il nome. L’API gratuita è per uso non commerciale."
+  $description:it-IT: "Questa impostazione attiva il Meteo online. Inserisci entrambe le coordinate oppure attiva separatamente la posizione tramite IP. Open-Meteo riceve IP e coordinate ogni 30 minuti anche a Start chiuso e senza alcun riquadro Meteo aggiunto, anche dopo averlo rimosso. La privacy nasconde solo il nome. L’API gratuita è per uso non commerciale."
 - skin81_weatherIpLocation: false
   #! $showIf: {skin81_weatherOnline: true}
   $name: Both skins - Approximate location from IP (ipwho.is)
@@ -22759,6 +22759,7 @@ void WhTool_ModUninit() {
 // Dispatch the complete implementation, not just its paint routines. A skin
 // change needs a full reload because the 8.1 bridge owns a helper process.
 static bool g_selected81 = false;
+static bool g_idleModernHost = false;
 static bool Is81Selected() {
     auto setting = WindhawkUtils::StringSetting::make(L"menuSkin");
     return wcscmp(setting.get(),L"win81") == 0;
@@ -22770,7 +22771,36 @@ BOOL Wh_ModInit() {
         Wh_Log(L"[Lifecycle] process=%s skin=%s", processPath,
                g_selected81 ? L"win81" : L"win10");
     if (g_selected81) return Menu81::Wh_ModInit();
-    if (!Menu81::IsExplorerProcess()) return FALSE;
+    if (!Menu81::IsExplorerProcess()) {
+        // Windhawk 2.0 launches this legacy tool-mod host regardless of the
+        // selected skin. The 1507 implementation lives only in Explorer, but
+        // returning FALSE here makes the host report a misleading failure.
+        // Accept only our own modern host and keep it idle using the same
+        // entry-point hook as the legacy tool implementation above.
+        const wchar_t* name = wcsrchr(processPath, L'\\');
+        name = name ? name + 1 : processPath;
+        if (_wcsicmp(name, L"windhawk-mod.exe") != 0) return FALSE;
+        int count = 0;
+        LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &count);
+        if (!argv) return FALSE;
+        bool ownHost = false;
+        for (int i = 1; i + 1 < count; ++i) {
+            if (wcscmp(argv[i], L"-windhawk-tool-mod") == 0 &&
+                wcscmp(argv[i + 1], WH_MOD_ID) == 0) { ownHost = true; break; }
+        }
+        LocalFree(argv);
+        if (!ownHost) return FALSE;
+        IMAGE_DOS_HEADER* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
+        IMAGE_NT_HEADERS* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<BYTE*>(dos) + dos->e_lfanew);
+        void* entry = reinterpret_cast<BYTE*>(dos) + nt->OptionalHeader.AddressOfEntryPoint;
+        if (!Wh_SetFunctionHook(entry, reinterpret_cast<void*>(Menu81::EntryPoint_Hook), nullptr)) {
+            Wh_Log(L"[Lifecycle] idle 1507 host entry hook failed");
+            return FALSE;
+        }
+        g_idleModernHost = true;
+        Wh_Log(L"[Lifecycle] idle 1507 tool host initialized");
+        return TRUE;
+    }
     int argc=0;
     LPWSTR* args=CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!args) return FALSE;
@@ -22789,6 +22819,7 @@ BOOL Wh_ModSettingsChanged(BOOL* reload) {
         *reload=TRUE;
         return TRUE;
     }
+    if (g_idleModernHost) return TRUE;
     if (g_selected81) Menu81::Wh_ModSettingsChanged();
     else Menu1507::Wh_ModSettingsChanged();
     return TRUE;
@@ -22797,6 +22828,10 @@ void Wh_ModBeforeUninit() {
     if (g_selected81 && Menu81::g_isExplorer) Menu81::ExplorerModUninit();
 }
 void Wh_ModUninit() {
+    if (g_idleModernHost) {
+        Wh_Log(L"[Lifecycle] idle 1507 tool host exiting");
+        ExitProcess(0);
+    }
     if (g_selected81) Menu81::Wh_ModUninit();
     else Menu1507::Wh_ModUninit();
 }
