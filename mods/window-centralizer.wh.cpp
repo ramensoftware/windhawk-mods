@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              window-centralizer
 // @name            Window Centralizer
-// @description     Centers new windows, of up to a target size, to their parent, screen, or the mouse cursor, with live exclusion list.
+// @description     Centers new windows, up to a target size, to their parent, screen, or the mouse cursor, with live exclusion list.
 // @version         1.3.0
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
@@ -16,7 +16,7 @@
 
 Center new windows where they came from, the mouse cursor, or the monitor, instead of randomly around the screen. Use a size limit setting to filter large ones, which generally save their last position, intended by the user.
 
-The window is placed **before** it appears, so there is no jump or flicker. Elevated programs are covered as well. UWP apps such as Calculator and Clock are centered right after they get focus, and may be seen jump.
+The window is placed **before** it appears, so there is no jump or flicker. Elevated programs are covered as well. UWP apps such as Calculator and Clock are centered right after they get focus, and may be seen jumping.
 
 **Show windows only after complete UI load** keeps a centered window invisible for a moment while it draws its contents, so classic dialogs don't flash blank while loading. Its opening animation, from Windows or a mod, may then be skipped.
 
@@ -30,7 +30,7 @@ In every mode the window is kept inside the monitor's work area.
 
 ## Which windows are moved
 
-- The ones with a title bar, and smaller than the **window size limit to target** setting, even if animated.
+- The ones with a title bar, smaller than the **window size limit to target**, and optional **always centered child windows**, even if animated.
 - Maximized, minimized, tool, layered and untitled windows, splash screens, menus, tooltips and shell surfaces (taskbar, Start, search) are never moved.
 - A window that is hidden and reopened (like a Find dialog) is centered again.
 - Intended moves by other tools, like FancyZones, are left alone.
@@ -59,11 +59,11 @@ Don't use this mod together with [Center New Windows](https://github.com/ramenso
     - monitor: Monitor
     - mouse: Mouse cursor
 - centerOnLauncher: true
-  $name: Parent mode also center on the unrelated launcher window
+  $name: Parent mode also centers on the unrelated launcher window
   $description: Move a program to where it was called from, instead of the center of the screen.
 - centerChildWindows: true
   $name: Always center child windows
-  $description: Move windows that have an owner, whatever their size. If disabled, follow the size limit, like any other. System default dialogs count as OS owned windows. 
+  $description: Move windows that have an owner, whatever their size. If disabled, follow the size limit, like any other. System default dialogs count as OS owned windows.
 - revealWhenDrawn: true
   $name: Show windows only after complete UI load
   $description: A centered window stays invisible until its contents finish drawing (half a second at most), avoiding the native flicker. Windows drawn with DirectX (browsers, WPF, WinUI) can't be detected and gain little. May skip opening animations, turn off to keep them.
