@@ -2,7 +2,7 @@
 // @id              anima-windhawk-engine
 // @name            AnimaWindhawkEngine
 // @description     Displays images, animated GIFs and short clips as draggable desktop widgets.
-// @version         0.1-alpha
+// @version         0.1
 // @author          TuBeo5866
 // @github          https://github.com/TuBeo5866
 // @donateUrl       https://ko-fi.com/tubeo5866
