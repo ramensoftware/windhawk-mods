@@ -84,7 +84,6 @@ The protocol is documented in
 
 #include <atomic>
 #include <cwchar>
-#include <cwctype>
 #include <mutex>
 #include <string>
 #include <vector>
