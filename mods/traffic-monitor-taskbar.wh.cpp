@@ -4,7 +4,7 @@
 // @description     Network speed, CPU, memory, GPU and daily traffic shown inside the Windows 11 taskbar, next to the tray (TrafficMonitor-style), with a Fluent settings panel and traffic history.
 // @description:es-ES  Velocidad de red, CPU, memoria, GPU y tráfico diario dentro de la barra de tareas de Windows 11, junto a la bandeja (estilo TrafficMonitor), con un panel de ajustes Fluent.
 // @version         1.0.0
-// @author          SHIMURA
+// @author          xSHIMURAx
 // @github          https://github.com/xSHIMURAx
 // @license         MIT
 // @include         explorer.exe
@@ -147,6 +147,7 @@ The measurements, formats, settings and look follow the original Python *Traffic
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <set>
 #include <string>
 #include <thread>
@@ -1034,8 +1035,11 @@ static std::mutex g_ifaceMtx;
 static std::wstring g_iface = L"auto";
 
 static HANDLE g_stopEvent = nullptr;
-static std::thread g_worker;
-static std::thread g_initThread;
+// Never destroyed by the CRT: Windhawk does not call Wh_ModUninit when Explorer itself exits
+// (restart, sign-out, shutdown), and a std::thread that is still joinable when its global
+// destructor runs calls std::terminate(). They are joined and reset in Wh_ModUninit.
+[[clang::no_destroy]] static std::optional<std::thread> g_worker;
+[[clang::no_destroy]] static std::optional<std::thread> g_initThread;
 
 // UI-thread-only state (the taskbar thread)
 static Settings g_cfg;
@@ -1047,7 +1051,13 @@ static HWND g_taskbarWnd = nullptr;
 
 using WindowThreadProc = void (*)(void*);
 
-static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
+// With `wait` the call blocks until the taskbar thread has run `proc` (SendMessage, no timeout).
+// It is used on the unload path: giving up after a timeout would leave this mod's timer and event
+// handlers alive in Explorer after Windhawk frees the mod's code, which crashes Explorer. It is
+// safe there because the panel, worker and init threads are already joined and the caller holds
+// no lock that the taskbar thread needs.
+static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param,
+                                bool wait = false) {
     static const UINT RUN_FROM_THREAD_MSG =
         RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
@@ -1096,9 +1106,13 @@ static bool RunFromWindowThread(HWND hWnd, WindowThreadProc proc, void* param) {
     // With a timeout: if the taskbar thread is busy or already shutting down (explorer
     // restarting), this must not block forever. When it times out, the payload is still
     // in the live set and is removed below, so the hook never runs it after `pay` is gone.
-    DWORD_PTR sendResult = 0;
-    SendMessageTimeoutW(hWnd, RUN_FROM_THREAD_MSG, 0, reinterpret_cast<LPARAM>(&pay),
-                        SMTO_ABORTIFHUNG | SMTO_BLOCK, 3000, &sendResult);
+    if (wait) {
+        SendMessageW(hWnd, RUN_FROM_THREAD_MSG, 0, reinterpret_cast<LPARAM>(&pay));
+    } else {
+        DWORD_PTR sendResult = 0;
+        SendMessageTimeoutW(hWnd, RUN_FROM_THREAD_MSG, 0, reinterpret_cast<LPARAM>(&pay),
+                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 3000, &sendResult);
+    }
     bool ran = false;
     {
         std::lock_guard<std::mutex> lk(s_payloadMtx);
@@ -1183,7 +1197,17 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     getTaskbarHost(taskBandForTaskListWndSite, taskbarHostSharedPtr);
     if (!taskbarHostSharedPtr[0]) return nullptr;
 
+    auto releaseHost = [&]() {
+        if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original)
+            Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
+    };
+
+    // Offset of the taskbar's IUnknown inside TaskbarHost, read from the first instructions of
+    // TaskbarHost::FrameHeight. Only the x86-64 pattern is known: this mod is built for x86-64
+    // only (see @architecture), so Windhawk does not load it in a native ARM64 Explorer. On any
+    // other architecture the offset is never guessed.
     size_t taskbarElementIUnknownOffset = 0x10;
+#if defined(_M_X64)
     {
         // 48:83EC 28 | sub rsp,28
         // 48:83C1 48 | add rcx,48
@@ -1195,18 +1219,34 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern");
         }
     }
+#else
+    Wh_Log(L"Unsupported architecture: can't find the taskbar element");
+    releaseHost();
+    return nullptr;
+#endif
 
-    auto* taskbarElementIUnknown =
-        *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] + taskbarElementIUnknownOffset);
-    if (!taskbarElementIUnknown) return nullptr;
+    // Never call QueryInterface through a pointer that is not valid (a wrong offset would
+    // otherwise crash Explorer): the object and its vtable must be readable.
+    void* const* elemSlot =
+        (void* const*)((BYTE*)taskbarHostSharedPtr[0] + taskbarElementIUnknownOffset);
+    if (!IsReadableMemoryRange(elemSlot, sizeof(void*))) {
+        releaseHost();
+        return nullptr;
+    }
+    auto* taskbarElementIUnknown = (IUnknown*)*elemSlot;
+    if (!taskbarElementIUnknown || !IsReadableMemoryRange(taskbarElementIUnknown, sizeof(void*)) ||
+        !IsReadableMemoryRange(*(void**)taskbarElementIUnknown, 3 * sizeof(void*))) {
+        Wh_Log(L"TaskbarHost element pointer is not valid");
+        releaseHost();
+        return nullptr;
+    }
 
     FrameworkElement taskbarElement{nullptr};
     taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(taskbarElement));
     auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
 
-    if (taskbarHostSharedPtr[1] && Std_Ref_Decref_Original)
-        Std_Ref_Decref_Original(taskbarHostSharedPtr[1]);
+    releaseHost();
     return result;
 }
 
@@ -1821,7 +1861,9 @@ struct Tb {
     unsigned tick = 0;
 };
 static std::vector<Tb*> g_tbs;  // changed only on the primary taskbar's thread
-static DispatcherTimer g_timer{nullptr};
+// Released on the taskbar thread by StopTimer(). Not destroyed automatically: at process exit
+// the XAML core is already gone and the destructor would release it on the wrong thread.
+[[clang::no_destroy]] static DispatcherTimer g_timer{nullptr};
 static winrt::event_token g_tickToken{};
 static unsigned g_tick = 0;
 
@@ -2565,7 +2607,7 @@ static void TickOne(Tb& t) {  // on the thread of t.wnd
 
 // Runs fn(t) on the thread that owns t's window (inline when it is the current one).
 template <typename F>
-static void OnTbThread(Tb* t, F fn) {
+static void OnTbThread(Tb* t, F fn, bool wait = false) {
     struct Call {
         Tb* t;
         F* fn;
@@ -2582,7 +2624,7 @@ static void OnTbThread(Tb* t, F fn) {
                 Wh_Log(L"Taskbar task: exception ignored");
             }
         },
-        &call);
+        &call, wait);
 }
 
 static void ResetAllTaskbars() {
@@ -2736,7 +2778,7 @@ static void ReloadOnThread(void* p) {
 static void StopOnThread() {
     StopTimer();
     for (Tb* t : std::vector<Tb*>(g_tbs))
-        if (IsWindow(t->wnd)) OnTbThread(t, [](Tb& x) { RemoveElement(x); });
+        if (IsWindow(t->wnd)) OnTbThread(t, [](Tb& x) { RemoveElement(x); }, true);
     // The Tb structs are not deleted: if a taskbar thread could not run the removal, its XAML
     // objects must not be released from here. They are empty (or intentionally leaked).
     g_tbs.clear();
@@ -2760,6 +2802,9 @@ static void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
 static bool HookTaskbarDllSymbols() {
     HMODULE h = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!h) return false;
+    // One HookSymbols call for the whole module: every extra call invalidates the symbol cache and
+    // slows down Explorer's startup. The secondary-taskbar symbols are only needed for the monitor
+    // on a second taskbar, so they are optional: if they are missing the first taskbar still works.
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &CTaskBand_ITaskListWndSite_vftable},
@@ -2771,19 +2816,14 @@ static bool HookTaskbarDllSymbols() {
          &Std_Ref_Decref_Original},
         {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
          &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CSecondaryTaskBand_ITaskListWndSite_vftable, nullptr, true},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+         &CSecondaryTaskBand_GetTaskbarHost_Original, nullptr, true},
     };
     if (!WindhawkUtils::HookSymbols(h, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) return false;
 
-    // Only needed for the monitor on a second taskbar. If these are missing the first taskbar
-    // still works, so a failure here is not fatal.
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK secondaryHooks[] = {
-        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
-         &CSecondaryTaskBand_ITaskListWndSite_vftable},
-        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
-         &CSecondaryTaskBand_GetTaskbarHost_Original},
-    };
-    if (!WindhawkUtils::HookSymbols(h, secondaryHooks, ARRAYSIZE(secondaryHooks)))
+    if (!CSecondaryTaskBand_ITaskListWndSite_vftable || !CSecondaryTaskBand_GetTaskbarHost_Original)
         Wh_Log(L"CSecondaryTaskBand symbols not found: the monitor can't be shown on a second taskbar");
     return true;
 }
@@ -5289,8 +5329,8 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_worker = std::thread(WorkerProc);
-    g_initThread = std::thread([]() {
+    g_worker.emplace(WorkerProc);
+    g_initThread.emplace([]() {
         // Retry until the taskbar window exists and XAML is ready (slow at Explorer startup).
         for (int i = 0; i < 120 && !g_unloading; i++) {
             HWND h = FindTaskbarWnd();
@@ -5308,12 +5348,18 @@ void Wh_ModUninit() {
     g_unloading = true;
     xs::CloseWindow();  // the settings panel, if open
     if (g_stopEvent) SetEvent(g_stopEvent);
-    if (g_worker.joinable()) g_worker.join();
-    if (g_initThread.joinable()) g_initThread.join();
+    if (g_worker) {
+        if (g_worker->joinable()) g_worker->join();
+        g_worker.reset();
+    }
+    if (g_initThread) {
+        if (g_initThread->joinable()) g_initThread->join();
+        g_initThread.reset();
+    }
 
     bool ran = false;
     if (g_taskbarWnd && IsWindow(g_taskbarWnd))
-        ran = RunFromWindowThread(g_taskbarWnd, [](void*) { StopOnThread(); }, nullptr);
+        ran = RunFromWindowThread(g_taskbarWnd, [](void*) { StopOnThread(); }, nullptr, true);
     if (!ran) {
         // No taskbar thread to release them on: leak rather than release them here.
         for (Tb* t : g_tbs) {
