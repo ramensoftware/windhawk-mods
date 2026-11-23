@@ -5,6 +5,7 @@
 // @version         1.0.0
 // @author          nozwin
 // @github          https://github.com/nozwin
+// @homepage        https://github.com/nozwin/Acrylic-Media-Pill
 // @include         explorer.exe
 // @compilerOptions -DWINRT_NO_MODULE_LOCK -lole32 -loleaut32 -lruntimeobject -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32
 // ==/WindhawkMod==
@@ -18,8 +19,9 @@ Chrome, VLC, Groove, ...) as a small glass pill on the taskbar.
 
 Themes: **Dark**, **Light**, **Liquid Glass**. The glass is rendered by the mod
 (blurred snapshot of what is behind it + tint + rim) so the rounded edges are
-fully anti-aliased. The snapshot is taken when the pill appears and refreshed
-about once a minute (the pill blinks for a split second then).
+fully anti-aliased. The snapshot is taken when the pill appears (it can
+optionally be refreshed every N seconds; the pill blinks for a split second
+when it is).
 
 * Left: cover art (center-cropped, downscaled with high-quality bicubic)
 * Middle: 5-bar mini visualizer (mountain / cosine shape, driven by the
@@ -34,6 +36,13 @@ element inside the taskbar. That is why it does not collide with
 
 Pill height follows the taskbar height (see "Pill height" setting).
 Horizontal taskbars only.
+
+## Links
+
+* Source code and issues: [nozwin/Acrylic-Media-Pill](https://github.com/nozwin/Acrylic-Media-Pill)
+* Author: [nozwin](https://github.com/nozwin)
+
+Found a bug or have an idea? Please open an issue on GitHub.
 */
 // ==/WindhawkModReadme==
 
@@ -194,14 +203,15 @@ struct MediaState {
 
 static std::mutex g_mtx;          // guards g_state, g_session
 static std::mutex g_refreshMtx;   // serializes RefreshAll
-static MediaState g_state;
+[[clang::no_destroy]] static MediaState g_state;
 static std::atomic<double> g_graceUntil{0};  // keep last track briefly when the session drops
-static wmc::GlobalSystemMediaTransportControlsSession g_session{nullptr};
-static wmc::GlobalSystemMediaTransportControlsSessionManager g_mgr{nullptr};
-static wmc::GlobalSystemMediaTransportControlsSessionManager::CurrentSessionChanged_revoker g_mgrRev;
-static wmc::GlobalSystemMediaTransportControlsSession::PlaybackInfoChanged_revoker g_pbRev;
-static wmc::GlobalSystemMediaTransportControlsSession::MediaPropertiesChanged_revoker g_mpRev;
-static wmc::GlobalSystemMediaTransportControlsSession::TimelinePropertiesChanged_revoker g_tlRev;
+// No destructors at process exit: when explorer.exe exits Windhawk does not call Wh_ModUninit, and
+// releasing out-of-process WinRT/COM objects from a dying process can hang sign-out. Everything is
+// released explicitly in the UI thread teardown instead.
+[[clang::no_destroy]] static wmc::GlobalSystemMediaTransportControlsSession g_session{nullptr};
+[[clang::no_destroy]] static wmc::GlobalSystemMediaTransportControlsSessionManager g_mgr{nullptr};
+// plain tokens (no revokers) so nothing runs at exit; handlers are removed in DetachSession/StopMedia
+static winrt::event_token g_mgrTok{}, g_pbTok{}, g_mpTok{}, g_tlTok{};
 
 static HWND g_pill = nullptr, g_card = nullptr, g_taskbar = nullptr;
 static std::atomic<bool> g_running{false};
@@ -340,18 +350,34 @@ static void RefreshAll() {
     if (g_pill) PostMessageW(g_pill, WM_APP_STATE, 0, 0);
 }
 
+// remove our handlers from the session they were added to
+static void DetachSession() {
+    wmc::GlobalSystemMediaTransportControlsSession old{nullptr};
+    {
+        std::lock_guard<std::mutex> l(g_mtx);
+        old = g_session;
+    }
+    if (old) {
+        try {
+            if (g_pbTok) old.PlaybackInfoChanged(g_pbTok);
+            if (g_mpTok) old.MediaPropertiesChanged(g_mpTok);
+            if (g_tlTok) old.TimelinePropertiesChanged(g_tlTok);
+        } catch (...) {
+        }
+    }
+    g_pbTok = g_mpTok = g_tlTok = {};
+}
+
 static void AttachSession(wmc::GlobalSystemMediaTransportControlsSession s) {
+    DetachSession();
     {
         std::lock_guard<std::mutex> l(g_mtx);
         g_session = s;
     }
-    g_pbRev = {};
-    g_mpRev = {};
-    g_tlRev = {};
     if (s) {
-        g_pbRev = s.PlaybackInfoChanged(winrt::auto_revoke, [](auto&&, auto&&) { RefreshAll(); });
-        g_mpRev = s.MediaPropertiesChanged(winrt::auto_revoke, [](auto&&, auto&&) { RefreshAll(); });
-        g_tlRev = s.TimelinePropertiesChanged(winrt::auto_revoke, [](auto&&, auto&&) { RefreshAll(); });
+        g_pbTok = s.PlaybackInfoChanged([](auto&&, auto&&) { RefreshAll(); });
+        g_mpTok = s.MediaPropertiesChanged([](auto&&, auto&&) { RefreshAll(); });
+        g_tlTok = s.TimelinePropertiesChanged([](auto&&, auto&&) { RefreshAll(); });
     }
     RefreshAll();
 }
@@ -366,7 +392,7 @@ static void OnSessionChanged() {
 static void StartMedia() {
     try {
         g_mgr = wmc::GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-        g_mgrRev = g_mgr.CurrentSessionChanged(winrt::auto_revoke, [](auto&&, auto&&) { OnSessionChanged(); });
+        g_mgrTok = g_mgr.CurrentSessionChanged([](auto&&, auto&&) { OnSessionChanged(); });
         OnSessionChanged();
     } catch (...) {
         Wh_Log(L"SMTC init failed");
@@ -374,10 +400,12 @@ static void StartMedia() {
 }
 
 static void StopMedia() {
-    g_mgrRev = {};
-    g_pbRev = {};
-    g_mpRev = {};
-    g_tlRev = {};
+    try {
+        if (g_mgr && g_mgrTok) g_mgr.CurrentSessionChanged(g_mgrTok);
+    } catch (...) {
+    }
+    g_mgrTok = {};
+    DetachSession();
     std::lock_guard<std::mutex> rl(g_refreshMtx);
     {
         std::lock_guard<std::mutex> l(g_mtx);
@@ -411,7 +439,7 @@ struct IAudioMeterX : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE QueryHardwareSupport(DWORD* pdwHardwareSupportMask) = 0;
 };
 static const GUID IID_MeterX = {0xC02216F6, 0x8C67, 0x4B5B, {0x9D, 0x00, 0xD0, 0x08, 0xE7, 0x3E, 0x00, 0x64}};
-static winrt::com_ptr<IAudioMeterX> g_meter;
+[[clang::no_destroy]] static winrt::com_ptr<IAudioMeterX> g_meter;
 static float g_bars[5] = {};
 static const float kShape[5] = {0.55f, 0.85f, 1.0f, 0.85f, 0.55f};  // mountain
 
@@ -431,6 +459,7 @@ static void AcquireMeter() {
 
 static float g_peakS = 0;
 static bool UpdateBars(bool playing) {
+    if (!g_set.viz) return false;  // no visualizer -> no per-frame animation
     static double last = 0;
     double t = NowSec();
     float dt = last ? (float)Cl(t - last, 0.0005, 0.1) : 0.016f;
@@ -477,7 +506,7 @@ struct IEndpointVolX : public IUnknown {
     virtual HRESULT STDMETHODCALLTYPE GetVolumeRange(float*, float*, float*) = 0;
 };
 static const GUID IID_EndpointVolX = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
-static winrt::com_ptr<IEndpointVolX> g_vol;
+[[clang::no_destroy]] static winrt::com_ptr<IEndpointVolX> g_vol;
 static float g_volShown = 0;       // value shown in the pill overlay
 static double g_volShowUntil = 0;  // overlay visible until (NowSec)
 
@@ -524,7 +553,7 @@ static void AdjustVolume(int wheelDelta) {
 struct SrcReq {
     std::wstring sourceId, title;
 };
-static std::atomic<int> g_srcBusy{0};
+static HANDLE g_srcThread = nullptr;  // owned by the UI thread (OpenSource / UiThread teardown only)
 
 static std::wstring Lower(std::wstring t) {
     for (auto& c : t) c = (wchar_t)towlower(c);
@@ -588,7 +617,7 @@ static BOOL CALLBACK EnumSrc(HWND h, LPARAM lp) {
 }
 
 static void BringToFront(HWND h) {
-    if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
+    if (IsIconic(h)) ShowWindowAsync(h, SW_RESTORE);  // async: a hung target app cannot block us
     SetForegroundWindow(h);
     if (GetForegroundWindow() != h) SwitchToThisWindow(h, TRUE);
 }
@@ -650,22 +679,20 @@ static DWORD WINAPI OpenSourceThread(LPVOID p) {
 #endif
     }
     CoUninitialize();
-    g_srcBusy--;
     return 0;
 }
 
 static void OpenSource() {
+    if (g_srcThread) {
+        if (WaitForSingleObject(g_srcThread, 0) != WAIT_OBJECT_0) return;  // previous request still running
+        CloseHandle(g_srcThread);
+        g_srcThread = nullptr;
+    }
     MediaState st = Snapshot();
     if (!st.hasSession || st.sourceId.empty()) return;
-    g_srcBusy++;
     auto* r = new SrcReq{st.sourceId, st.title};
-    HANDLE t = CreateThread(nullptr, 0, OpenSourceThread, r, 0, nullptr);
-    if (t) {
-        CloseHandle(t);
-    } else {
-        g_srcBusy--;
-        delete r;
-    }
+    g_srcThread = CreateThread(nullptr, 0, OpenSourceThread, r, 0, nullptr);
+    if (!g_srcThread) delete r;
 }
 
 // ---------------------------------------------------------------- glass windows
@@ -688,7 +715,9 @@ struct Layered {
     bool needCapture = true, glassDirty = true;
     double lastCapture = 0;
 };
-static Layered g_pillL, g_cardL;
+// GDI+ objects live in these: never destroyed at process exit (reset in the UI thread teardown)
+[[clang::no_destroy]] static Layered g_pillL;
+[[clang::no_destroy]] static Layered g_cardL;
 
 // animated cover tint (0..255 per channel, alpha factor 0..1)
 static float g_acc[3] = {0, 0, 0};
@@ -847,13 +876,13 @@ static void CaptureBackdrop(Layered& L) {
 }
 
 // ---------------------------------------------------------------- drawing helpers
+[[clang::no_destroy]] static std::unique_ptr<Gdiplus::FontFamily> g_family;  // reset before GdiplusShutdown
 static Gdiplus::FontFamily* Family() {
-    static std::unique_ptr<Gdiplus::FontFamily> f;
-    if (!f) {
-        f = std::make_unique<Gdiplus::FontFamily>(L"Segoe UI Variable Text");
-        if (!f->IsAvailable()) f = std::make_unique<Gdiplus::FontFamily>(L"Segoe UI");
+    if (!g_family) {
+        g_family = std::make_unique<Gdiplus::FontFamily>(L"Segoe UI Variable Text");
+        if (!g_family->IsAvailable()) g_family = std::make_unique<Gdiplus::FontFamily>(L"Segoe UI");
     }
-    return f.get();
+    return g_family.get();
 }
 
 static void RoundRect(Gdiplus::GraphicsPath& p, float x, float y, float w, float h, float r) {
@@ -974,7 +1003,7 @@ struct ScaledSlot {
     int size = 0;
     std::unique_ptr<Gdiplus::Bitmap> bmp;
 };
-static ScaledSlot g_scaled[2];
+[[clang::no_destroy]] static ScaledSlot g_scaled[2];
 static int g_scaledNext = 0;
 
 static Gdiplus::Bitmap* ScaledCover(const std::shared_ptr<Gdiplus::Bitmap>& src, int size) {
@@ -1034,7 +1063,7 @@ struct PillGeom {
 static float g_titleW = 0, g_timeW = 0;           // cached text widths (px)
 static double g_marqStart = 0;                    // marquee restart time (NowSec)
 static bool g_marquee = false;                    // title currently scrolling
-static std::unique_ptr<Gdiplus::Bitmap> g_strip;  // pre-rendered scrolling title
+[[clang::no_destroy]] static std::unique_ptr<Gdiplus::Bitmap> g_strip;  // pre-rendered scrolling title
 static std::wstring g_stripKey;
 
 // hover animation state
@@ -1139,7 +1168,7 @@ static void RenderPill() {
         float y0 = (h - (lh1 + lh2)) / 2.f;
 
         Gdiplus::RectF tr(G.textX, y0, tw, lh1);
-        g_marquee = g_titleW > tw + 1;
+        g_marquee = g_titleW > tw + 1 && (st.playing || g_hover > 0.05f);  // paused: static + ellipsis
         if (volMode) {
             g_marquee = false;
             std::wstring vt = L"Volume  " + std::to_wstring((int)lroundf(g_volShown * 100.f)) + L"%";
@@ -1640,9 +1669,13 @@ static LRESULT CALLBACK CardProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 }
 
 // ---------------------------------------------------------------- frame loop
-// One animation frame. Returns true while something is animating (loop then syncs to vsync).
-static bool Frame() {
+// One animation frame. Returns how soon the next one is needed:
+//   0 = idle (wake every 100 ms), 1 = ~30 fps (visualizer / progress),
+//   2 = vsync-paced, capped at ~70 fps (scrolling title, hover, fades, volume overlay).
+static int Frame() {
     static double lastSlow = 0, lastMeter = 0, lastMedia = 0, lastRaise = 0, lastT = 0;
+    static double lastPill = 0, lastCard = 0;
+    static int64_t lastSec = -1;
     static bool wasVol = false;
     double now = NowSec();
     float dt = lastT ? (float)Cl(now - lastT, 0.0005, 0.1) : 0.016f;
@@ -1667,7 +1700,7 @@ static bool Frame() {
     }
 
     MediaState st = Snapshot();
-    bool moving = UpdateBars(st.playing);
+    bool vizMoving = UpdateBars(st.playing);
 
     if (now - lastSlow >= 0.7) {
         lastSlow = now;
@@ -1716,13 +1749,35 @@ static bool Frame() {
         g_dirty = true;
     }
 
-    if (pillVis && (moving || anim || accAnim || volActive || g_dirty || g_marquee)) {
-        RenderPill();
-        g_dirty = false;
-    }
+    // the displayed time only changes once a second
+    int64_t sec = CurrentPos(st) / 10000000;
+    bool secChanged = st.playing && sec != lastSec;
+    if (secChanged) lastSec = sec;
+
+    bool smooth = anim || accAnim || volActive;
     bool cardVis = g_card && IsWindowVisible(g_card);
-    if (cardVis && (moving || st.playing || anim || accAnim)) RenderCard();
-    return (pillVis && (moving || anim || accAnim || volActive || g_marquee)) || (cardVis && (st.playing || anim));
+
+    if (pillVis) {
+        // only redraw as often as the current animation needs
+        double need = (smooth || g_marquee) ? 0.0125 : (vizMoving ? 0.032 : 1e9);
+        if (g_dirty || secChanged || now - lastPill >= need) {
+            lastPill = now;
+            RenderPill();
+            g_dirty = false;
+        }
+    }
+    if (cardVis) {
+        double need = (anim || accAnim) ? 0.0125 : (vizMoving ? 0.032 : (st.playing ? 0.1 : 1e9));
+        if (now - lastCard >= need) {
+            lastCard = now;
+            RenderCard();
+        }
+    }
+
+    if ((pillVis && (smooth || g_marquee)) || (cardVis && (anim || accAnim))) return 2;
+    if (vizMoving && (pillVis || cardVis)) return 1;
+    if (cardVis && st.playing) return 1;
+    return 0;
 }
 
 // WinEvent hook: raise the pill the instant the foreground window changes
@@ -1780,7 +1835,7 @@ static DWORD WINAPI UiThread(LPVOID) {
     LayoutPill();
 
     bool quit = false;
-    while (!quit) {
+    while (!quit && g_running) {  // g_running is a backup in case WM_QUIT is ever lost
         MSG msg;
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) {
@@ -1791,15 +1846,21 @@ static DWORD WINAPI UiThread(LPVOID) {
             DispatchMessageW(&msg);
         }
         if (quit) break;
-        if (Frame()) {
+        int mode = Frame();
+        if (mode == 2) {
             if (FAILED(DwmFlush())) Sleep(8);  // wait for the compositor = vsync-paced frames
         } else {
-            MsgWaitForMultipleObjectsEx(0, nullptr, 100, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            MsgWaitForMultipleObjectsEx(0, nullptr, mode == 1 ? 33 : 100, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         }
     }
 
     if (g_hook) UnhookWinEvent(g_hook);
     g_hook = nullptr;
+    if (g_srcThread) {  // "open source" helper must be finished before this DLL can be unloaded
+        WaitForSingleObject(g_srcThread, INFINITE);
+        CloseHandle(g_srcThread);
+        g_srcThread = nullptr;
+    }
     StopMedia();
     g_meter = nullptr;
     g_vol = nullptr;
@@ -1812,12 +1873,14 @@ static DWORD WINAPI UiThread(LPVOID) {
         L->backdrop.reset();
         FreeSurface(*L);
         L->hwnd = nullptr;
+        std::vector<BYTE>().swap(L->glassPix);
     }
     DestroyWindow(g_card);
     DestroyWindow(g_pill);
     g_card = g_pill = nullptr;
     UnregisterClassW(L"GlassMediaPill", inst);
     UnregisterClassW(L"GlassMediaCard", inst);
+    g_family.reset();  // every GDI+ object must be gone before GdiplusShutdown
     Gdiplus::GdiplusShutdown(gdipTok);
     winrt::uninit_apartment();
     return 0;
@@ -1846,10 +1909,11 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     g_running = false;
-    for (int i = 0; i < 60 && g_srcBusy > 0; i++) Sleep(50);  // let a running "open source" finish
     if (g_thread) {
+        // The UI thread joins its own helper thread, so it can be waited for without a time limit:
+        // returning earlier would unload the mod while its code is still running.
         PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_thread, 5000);
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
