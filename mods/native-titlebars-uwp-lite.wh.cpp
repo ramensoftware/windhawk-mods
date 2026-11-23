@@ -11,6 +11,29 @@
 // @compilerOptions -luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lgdiplus -luxtheme -lwevtapi
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+Replaces the UWP titlebars with native Win32 titlebars.
+
+![Screenshot](https://i.imgur.com/w5OqyJJ.png)
+
+Version 2.1 includes the changes by user o12r (show minimize and maximize
+buttons when themes are active).
+
+## Minimize and maximize buttons (dwm.exe)
+
+DWM gives "immersive" windows, such as UWP app frames, only a close button. To
+also get the minimize and maximize buttons, this mod needs to hook into
+`dwm.exe`. Please navigate to Windhawk's Settings > Advanced settings > More
+advanced settings > Process inclusion list, and make sure that `dwm.exe` is in
+the list.
+
+`dwm.exe` is a critical system process, so Windhawk doesn't inject into it by
+default. Without it, converted windows show only the close button; everything
+else in the mod keeps working.
+*/
+// ==/WindhawkModReadme==
+
 #include <windhawk_utils.h>
 #include <CommCtrl.h>
 #include <dwmapi.h>
@@ -37,6 +60,7 @@ static const PROPERTYKEY PKEY_AppUserModel_ID_local =
 
 INT64 __fastcall CTitleBar_Generic_hook(void *, void *, void *, void *) {return 0;}
 static void *g_dummyOrig;
+
 static ULONG_PTR g_gdiplusToken = 0;
 static CRITICAL_SECTION g_csSubclassedWindows;
 static std::vector<HWND> g_subclassedWindows;
@@ -63,6 +87,7 @@ void ForgetSubclassedWindow(HWND hWnd)
 }
 
 static CRITICAL_SECTION g_csGdiplus;
+
 void EnsureGdiplus()
 {
     EnterCriticalSection(&g_csGdiplus);
@@ -77,6 +102,7 @@ void EnsureGdiplus()
 HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
 {
     EnsureGdiplus();
+
     WCHAR dir[MAX_PATH];
     WCHAR stem[MAX_PATH];
     wcscpy_s(dir, MAX_PATH, szFile);
@@ -84,8 +110,10 @@ HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
     if (!lastSlash) return NULL;
     wcscpy_s(stem, MAX_PATH, lastSlash + 1);
     *(lastSlash + 1) = L'\0';
+
     WCHAR *pngPos = wcsstr(stem, L".png");
     if (pngPos) *pngPos = L'\0';
+
     const WCHAR *priorities_large[] = {
         L"targetsize-256",
         L"targetsize-96",
@@ -95,18 +123,23 @@ HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
         L"scale-100",
         NULL
     };
+
     const WCHAR *priorities_small[] = {
         L"targetsize-16",
         L"targetsize-24",
         L"scale-100",
         NULL
     };
+
     const WCHAR **priorities = (targetSize >= 48) ? priorities_large : priorities_small;
+
     WCHAR bestFile[MAX_PATH] = {0};
+
     for (int p = 0; priorities[p] != NULL && bestFile[0] == L'\0'; p++)
     {
         WCHAR searchMask[MAX_PATH];
         swprintf_s(searchMask, MAX_PATH, L"%s%s*%s*.png", dir, stem, priorities[p]);
+
         WIN32_FIND_DATAW fd;
         HANDLE hFind = FindFirstFileW(searchMask, &fd);
         if (hFind != INVALID_HANDLE_VALUE)
@@ -115,10 +148,12 @@ HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
             FindClose(hFind);
         }
     }
+
     if (bestFile[0] == L'\0')
     {
         WCHAR searchMask[MAX_PATH];
         swprintf_s(searchMask, MAX_PATH, L"%s%s*.png", dir, stem);
+
         WIN32_FIND_DATAW fd;
         HANDLE hFind = FindFirstFileW(searchMask, &fd);
         if (hFind != INVALID_HANDLE_VALUE)
@@ -127,16 +162,22 @@ HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
             FindClose(hFind);
         }
     }
+
     if (bestFile[0] == L'\0')
     {
+        Wh_Log(L"No PNG found for: %s", szFile);
         return NULL;
     }
+
+    Wh_Log(L"Loading PNG: %s at size %d", bestFile, targetSize);
+
     Gdiplus::Bitmap *bmp = new Gdiplus::Bitmap(bestFile);
     if (bmp->GetLastStatus() != Gdiplus::Ok)
     {
         delete bmp;
         return NULL;
     }
+
     Gdiplus::Bitmap *scaled = new Gdiplus::Bitmap(targetSize, targetSize, PixelFormat32bppARGB);
     if (scaled->GetLastStatus() != Gdiplus::Ok)
     {
@@ -144,13 +185,16 @@ HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
         delete scaled;
         return NULL;
     }
+
     {
         Gdiplus::Graphics g(scaled);
         g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
         g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
         g.DrawImage(bmp, 0, 0, targetSize, targetSize);
     }
+
     delete bmp;
+
     HICON hIcon = NULL;
     scaled->GetHICON(&hIcon);
     delete scaled;
@@ -160,12 +204,14 @@ HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
 HICON GetIconForWindow(HWND hWnd, int size)
 {
     HICON hIcon = NULL;
+
     IPropertyStore *pps = NULL;
     HRESULT hr = SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&pps));
     if (SUCCEEDED(hr))
     {
         PROPVARIANT pv;
         PropVariantInit(&pv);
+
         hr = pps->GetValue(PKEY_AppUserModel_ID_local, &pv);
         if (SUCCEEDED(hr) && pv.vt == VT_LPWSTR && pv.pwszVal)
         {
@@ -197,6 +243,7 @@ HICON GetIconForWindow(HWND hWnd, int size)
                             hIcon = (HICON)LoadImageW(
                                 NULL, szFile, IMAGE_ICON,
                                 size, size, LR_LOADFROMFILE);
+
                             if (!hIcon)
                             {
                                 HICON hSmall = NULL, hLarge = NULL;
@@ -217,6 +264,7 @@ HICON GetIconForWindow(HWND hWnd, int size)
                     }
                     pei->Release();
                 }
+
                 if (!hIcon)
                 {
                     SHFILEINFOW sfi = {0};
@@ -227,12 +275,15 @@ HICON GetIconForWindow(HWND hWnd, int size)
                     if (ret && sfi.hIcon)
                         hIcon = sfi.hIcon;
                 }
+
                 psi->Release();
             }
         }
+
         PropVariantClear(&pv);
         pps->Release();
     }
+
     return hIcon;
 }
 
@@ -240,6 +291,7 @@ void SetTitlebarIcon(HWND hWnd)
 {
     HICON hSmall = GetIconForWindow(hWnd, 16);
     HICON hBig   = GetIconForWindow(hWnd, 256);
+
     if (hSmall)
     {
         SendMessageW(hWnd, WM_SETICON, ICON_SMALL, (LPARAM)hSmall);
@@ -284,21 +336,24 @@ LRESULT CALLBACK SubclassProc(
         ForgetSubclassedWindow(hWnd);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
+
     if (uMsg == WM_NCRBUTTONDOWN ||
         uMsg == WM_NCRBUTTONUP ||
         uMsg == WM_NCLBUTTONDBLCLK ||
         uMsg == WM_POPUPSYSTEMMENU ||
         uMsg == WM_SYSCOMMAND ||
-        uMsg == WM_NCPAINT || 
+        uMsg == WM_NCPAINT ||
         uMsg == WM_NCCALCSIZE)
     {
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     }
+
     if (uMsg == WM_SETICON)
     {
         DefWindowProcW(hWnd, uMsg, wParam, lParam);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
+
     if (uMsg == WM_NCHITTEST)
     {
         LRESULT ht = DefWindowProcW(hWnd, uMsg, wParam, lParam);
@@ -309,17 +364,20 @@ LRESULT CALLBACK SubclassProc(
             return HTCAPTION;
         return res;
     }
+
     if ((uMsg == WM_NCLBUTTONDOWN || uMsg == WM_NCLBUTTONUP ||
          uMsg == WM_NCMOUSEMOVE || uMsg == WM_NCMOUSEHOVER) &&
         (wParam == HTMINBUTTON || wParam == HTMAXBUTTON || wParam == HTCLOSE))
     {
         return DefWindowProcW(hWnd, uMsg, wParam, lParam);
     }
+
     if (uMsg == WM_NCMOUSELEAVE)
     {
         DefWindowProcW(hWnd, uMsg, wParam, lParam);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
+
     if (uMsg == WM_NCACTIVATE || uMsg == WM_ACTIVATE)
     {
         if (!GetPropW(hWnd, L"NativeTitlebarIconSet"))
@@ -327,11 +385,13 @@ LRESULT CALLBACK SubclassProc(
             SetTitlebarIcon(hWnd);
         }
     }
+
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 typedef HWND (*CreateWindowInBandEx_t)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID, DWORD, DWORD);
 CreateWindowInBandEx_t CreateWindowInBandEx_orig;
+
 HWND WINAPI CreateWindowInBandEx_hook(
     DWORD dwExStyle,
     LPCWSTR lpClassName,
@@ -357,39 +417,47 @@ HWND WINAPI CreateWindowInBandEx_hook(
             hWndParent, hMenu, hInstance, lpParam,
             dwBand, dwTypeFlags);
     }
+
     dwExStyle &= ~WS_EX_DLGMODALFRAME;
     dwExStyle &= ~WS_EX_NOREDIRECTIONBITMAP;
     dwStyle = WS_OVERLAPPEDWINDOW;
+
     HWND res = CreateWindowInBandEx_orig(
         dwExStyle, lpClassName, lpWindowName, dwStyle,
         x, y, nWidth, nHeight,
         hWndParent, hMenu, hInstance, lpParam,
         dwBand, dwTypeFlags);
+
     if (res != NULL)
     {
         WindhawkUtils::SetWindowSubclassFromAnyThread(res, SubclassProc, 0);
         RememberSubclassedWindow(res);
         SetTitlebarIcon(res);
     }
+
     return res;
 }
 
 typedef HRESULT(WINAPI *DwmExtendFrameIntoClientArea_t)(HWND, const MARGINS *);
 DwmExtendFrameIntoClientArea_t DwmExtendFrameIntoClientArea_orig;
+
 HRESULT WINAPI DwmExtendFrameIntoClientArea_hook(
     HWND hWnd,
     const MARGINS *pMarInset)
 {
     WCHAR wszClassName[32] = {0};
     GetClassNameW(hWnd, wszClassName, ARRAYSIZE(wszClassName));
+
     if (wcscmp(wszClassName, L"ApplicationFrameWindow") == 0)
     {
         return 0x80263001;
     }
+
     return DwmExtendFrameIntoClientArea_orig(hWnd, pMarInset);
 }
 
 #define WTNCA_NOCAPTIONBUTTONS_UNDOC 0x10000
+
 #define WTNCA_STRIP_FLAGS (WTNCA_NOCAPTIONBUTTONS_UNDOC | WTNCA_NODRAWCAPTION | \
                            WTNCA_NODRAWICON | WTNCA_NOSYSMENU)
 
@@ -407,6 +475,7 @@ static bool IsApplicationFrameWindow(HWND hWnd)
 
 typedef HRESULT(WINAPI *SetWindowThemeAttribute_t)(HWND, enum WINDOWTHEMEATTRIBUTETYPE, PVOID, DWORD);
 SetWindowThemeAttribute_t SetWindowThemeAttribute_orig;
+
 HRESULT WINAPI SetWindowThemeAttribute_hook(
     HWND hWnd,
     enum WINDOWTHEMEATTRIBUTETYPE eAttribute,
@@ -418,9 +487,10 @@ HRESULT WINAPI SetWindowThemeAttribute_hook(
         IsApplicationFrameWindow(hWnd) && IsConvertedFrame(hWnd))
     {
         WTA_OPTIONS opts = *(const WTA_OPTIONS *)pvAttribute;
-        opts.dwFlags = (opts.dwFlags & ~WTNCA_STRIP_FLAGS);
+        opts.dwFlags &= ~WTNCA_STRIP_FLAGS;
         return SetWindowThemeAttribute_orig(hWnd, eAttribute, &opts, sizeof(opts));
     }
+
     return SetWindowThemeAttribute_orig(hWnd, eAttribute, pvAttribute, cbAttribute);
 }
 
@@ -448,67 +518,67 @@ constexpr UINT NCF_MAX_ENABLED   = 0x2000;
 constexpr UINT NCF_ICON          = 0x10000;
 constexpr UINT NCF_SYSMENU       = 0x0080;
 
-static size_t g_hwndOffset = 0x18;
-
-static void InitHwndOffset(void *pFunc)
-{
-    if (!pFunc) return;
-    const BYTE *p = (const BYTE *)pFunc;
-    for (int i = 0; i < 64; i++)
-    {
-#if defined(_M_ARM64) || defined(__aarch64__)
-        DWORD inst = *(const DWORD *)(p + i);
-        if ((inst & 0xFFC003E0) == 0xF9400000)
-        {
-            DWORD imm12 = (inst >> 10) & 0xFFF;
-            g_hwndOffset = imm12 * 8;
-            return;
-        }
-#else
-        if (p[i] == 0x48 && p[i+1] == 0x8B)
-        {
-            BYTE modrm = p[i+2];
-            if ((modrm & 0xC7) == 0x81)
-            {
-                g_hwndOffset = *(const DWORD *)(p + i + 3);
-                return;
-            }
-            else if ((modrm & 0xC7) == 0x41)
-            {
-                g_hwndOffset = p[i+3];
-                return;
-            }
-        }
-#endif
-    }
-}
+static size_t g_windowDataHwndOffset = 0;
 
 using IsImmersiveWindow_t = bool(*)(const void *pWindowData);
 IsImmersiveWindow_t CWindowData_IsImmersiveWindow;
 
-using IsGhostWindow_t = bool(*)(const void *pWindowData);
-IsGhostWindow_t CWindowData_IsGhostWindow_ptr;
+static void *CWindowData_IsGhostWindow;
 
 using GetCurrentStyle_t = UINT(*)(const void *pWindowData, bool);
 GetCurrentStyle_t GetCurrentStyle_orig;
 
+static bool FindHwndOffsetInIsGhostWindow(const BYTE *code, size_t *pOffset)
+{
+    constexpr size_t kScanSize = 0x40;
+
+    for (size_t i = 0; i + 7 <= kScanSize; i++)
+    {
+        size_t offset = 0;
+
+        if (code[i] == 0x48 && code[i + 1] == 0x8B &&
+            (code[i + 2] == 0x49 || code[i + 2] == 0x41))
+        {
+            offset = code[i + 3];
+        }
+        else if (code[i] == 0x48 && code[i + 1] == 0x8B &&
+                 (code[i + 2] == 0x89 || code[i + 2] == 0x81))
+        {
+            offset = *(const DWORD *)(code + i + 3);
+        }
+        else
+        {
+            continue;
+        }
+
+        if (offset != 0 && offset < 0x1000 && (offset % sizeof(void *)) == 0)
+        {
+            *pOffset = offset;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static HWND GetWindowDataHwnd(const void *pWindowData)
+{
+    return *(HWND const *)((const BYTE *)pWindowData + g_windowDataHwndOffset);
+}
+
 UINT GetCurrentStyle_hook(const void *pWindowData, bool b)
 {
     UINT flags = GetCurrentStyle_orig(pWindowData, b);
+
     if (!pWindowData || !(flags & NCF_CLOSE_VISIBLE) ||
         (flags & (NCF_MIN_VISIBLE | NCF_MAX_VISIBLE)))
         return flags;
 
-    HWND hwnd = *(const HWND *)((const BYTE *)pWindowData + g_hwndOffset);
-    if (!hwnd || !IsWindow(hwnd))
+    HWND hWnd = GetWindowDataHwnd(pWindowData);
+    if (!hWnd || !IsApplicationFrameWindow(hWnd))
         return flags;
 
-    WCHAR className[32] = {0};
-    if (!GetClassNameW(hwnd, className, ARRAYSIZE(className)) ||
-        wcscmp(className, L"ApplicationFrameWindow") != 0)
-        return flags;
-
-    DWORD style = (DWORD)GetWindowLongW(hwnd, GWL_STYLE);
+    DWORD style = (DWORD)GetWindowLongW(hWnd, GWL_STYLE);
     if ((style & (WS_CAPTION | WS_SYSMENU)) != (WS_CAPTION | WS_SYSMENU) ||
         !(style & (WS_MINIMIZEBOX | WS_MAXIMIZEBOX)) ||
         !CWindowData_IsImmersiveWindow(pWindowData))
@@ -527,8 +597,10 @@ static BOOL DwmModInit()
     HMODULE uDWM = GetModuleHandleW(L"uDWM.dll");
     if (!uDWM)
     {
+        Wh_Log(L"uDWM.dll not loaded");
         return FALSE;
     }
+
     WindhawkUtils::SYMBOL_HOOK uDWM_dll_hooks[] = {
         {
             {
@@ -547,21 +619,27 @@ static BOOL DwmModInit()
         {
             {
                 L"public: bool __cdecl CWindowData::IsGhostWindow(void)const ",
+                L"private: bool __cdecl CWindowData::IsGhostWindow(void)const ",
             },
-            (void **)&CWindowData_IsGhostWindow_ptr,
+            (void **)&CWindowData_IsGhostWindow,
             nullptr,
         },
     };
+
     if (!WindhawkUtils::HookSymbols(uDWM, uDWM_dll_hooks, ARRAYSIZE(uDWM_dll_hooks)))
     {
+        Wh_Log(L"uDWM symbol hooks failed");
         return FALSE;
     }
 
-    if (CWindowData_IsGhostWindow_ptr)
+    if (!FindHwndOffsetInIsGhostWindow((const BYTE *)CWindowData_IsGhostWindow,
+                                       &g_windowDataHwndOffset))
     {
-        InitHwndOffset((void *)CWindowData_IsGhostWindow_ptr);
+        Wh_Log(L"Failed to find HWND offset in CWindowData");
+        return FALSE;
     }
 
+    Wh_Log(L"CWindowData HWND offset: 0x%zX", g_windowDataHwndOffset);
     return TRUE;
 }
 
@@ -571,23 +649,32 @@ static bool HasMultipleDwminitWarningsInLastMinute()
     const WCHAR *query =
         L"*[System[Provider[@Name='Dwminit'] and (Level=3) and "
         L"TimeCreated[timediff(@SystemTime) <= 60000]]]";
+
     EVT_HANDLE queryHandle = EvtQuery(nullptr,
                                       queryPath,
                                       query, EvtQueryChannelPath);
     if (!queryHandle)
     {
+        Wh_Log(L"EvtQuery failed with error: %u", GetLastError());
         return false;
     }
+
     EVT_HANDLE events[2] = {};
     DWORD returned = 0;
     constexpr DWORD kTimeout = 1000;
     BOOL ok =
         EvtNext(queryHandle, ARRAYSIZE(events), events, kTimeout, 0, &returned);
+    if (!ok && GetLastError() != ERROR_NO_MORE_ITEMS)
+    {
+        Wh_Log(L"EvtNext failed with error: %u", GetLastError());
+    }
+
     for (DWORD i = 0; i < returned; i++)
     {
         EvtClose(events[i]);
     }
     EvtClose(queryHandle);
+
     return ok && returned >= ARRAYSIZE(events);
 }
 
@@ -599,6 +686,7 @@ BOOL Wh_ModInit()
     if (name && _wcsicmp(name + 1, L"dwm.exe") == 0)
     {
         g_isDwm = true;
+
         FILETIME nowFt;
         GetSystemTimeAsFileTime(&nowFt);
         ULONGLONG now =
@@ -610,23 +698,30 @@ BOOL Wh_ModInit()
         if (now - lastInitTime <= kOneMinute &&
             HasMultipleDwminitWarningsInLastMinute())
         {
+            Wh_Log(L"Refusing to load: multiple recent Dwminit warnings");
             return FALSE;
         }
+
         return DwmModInit();
     }
+
     InitializeCriticalSection(&g_csSubclassedWindows);
     InitializeCriticalSection(&g_csGdiplus);
+
     WindhawkUtils::SetFunctionHook(SetWindowThemeAttribute,
                                    SetWindowThemeAttribute_hook,
                                    &SetWindowThemeAttribute_orig);
+
     Wh_SetFunctionHook(
         (void *)GetProcAddress(GetModuleHandle(L"user32.dll"), "CreateWindowInBandEx"),
         (void *)CreateWindowInBandEx_hook,
         (void **)&CreateWindowInBandEx_orig);
+
     Wh_SetFunctionHook(
         (void *)DwmExtendFrameIntoClientArea,
         (void *)DwmExtendFrameIntoClientArea_hook,
         (void **)&DwmExtendFrameIntoClientArea_orig);
+
     WindhawkUtils::SYMBOL_HOOK ApplicationFrame_dll_hooks[] = {
         { {L"private: long __cdecl CTitleBar::_NotifyViewOfPersistence(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
         { {L"private: long __cdecl CTitleBar::_OnTitleBarHitTestVisualUpdated(void)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
@@ -668,6 +763,7 @@ BOOL Wh_ModInit()
         { {L"private: long __cdecl CTitleBar::_UpdateVisiblityForHideOptions(enum TITLE_BAR_HIDE_OPTIONS)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
         { {L"private: long __cdecl CTitleBar::_UpdateAllButtonStates(enum CTitleBar::DrawButtonFilter,bool)"}, (void **)&g_dummyOrig, (void *)CTitleBar_Generic_hook, true },
     };
+
     return WindhawkUtils::HookSymbols(
         LoadLibraryExW(L"ApplicationFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32),
         ApplicationFrame_dll_hooks,
@@ -683,10 +779,12 @@ void Wh_ModAfterInit()
 void Wh_ModUninit()
 {
     if (g_isDwm) return;
+
     EnterCriticalSection(&g_csSubclassedWindows);
     std::vector<HWND> windowsCopy = g_subclassedWindows;
     g_subclassedWindows.clear();
     LeaveCriticalSection(&g_csSubclassedWindows);
+
     for (HWND hWnd : windowsCopy)
     {
         if (IsWindow(hWnd))
@@ -697,8 +795,10 @@ void Wh_ModUninit()
             DestroyTitlebarIcons(hWnd);
         }
     }
+
     DeleteCriticalSection(&g_csSubclassedWindows);
     DeleteCriticalSection(&g_csGdiplus);
+
     if (g_gdiplusToken != 0)
     {
         Gdiplus::GdiplusShutdown(g_gdiplusToken);
