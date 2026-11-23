@@ -2,7 +2,7 @@
 // @id              explorer-extras
 // @name            Explorer Extras
 // @description     Additions for File Explorer, one switch per feature: Columns (Miller columns), a details and preview pane (PDF, text, Markdown, images, video, sound), colour labels (tags), and a toolbar with tighter gaps, a resizable search box and round corners.
-// @version         1.0.19
+// @version         1.0.20
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @donateUrl       https://ko-fi.com/aristidebh
@@ -12486,8 +12486,11 @@ void OnTick() {
     if (!state || !state->on || !state->bridge) {
         return;
     }
-    if (t_modalDepth > 0) {
-        return;  // A dialog, a menu or a drag of the mod is open below this tick: what it uses stays where it is.
+    // A dialog, a menu or a drag of the mod is open below this tick: what it uses stays where it is. Only what takes the panel or the
+    // window down waits; the rest (the auto-scroll and the spring-loading of a drag that comes back over the panel) goes on.
+    bool teardown = !IsWindow(state->topLevel) || g_unloading || !g_enabled;
+    if (teardown && t_modalDepth > 0) {
+        return;
     }
     if (!IsWindow(state->topLevel)) {
         AbandonWindow(state);
@@ -18823,6 +18826,13 @@ void PaneOpenPreview(WindowState* state, DetailsPane* pane, PaneData const& data
     hr = handler->SetWindow(pane->host, &inside);
     if (SUCCEEDED(hr)) {
         hr = handler->DoPreview();
+    }
+    // DoPreview can take a second or more, in a loop in which the window may have closed: the pane is then abandoned, and nothing
+    // else would unload the handler (its process would keep the file open).
+    if (StateForThisThread(false) != state || state->details != pane) {
+        handler->Unload();
+        handler->Release();
+        return;
     }
     if (FAILED(hr)) {
         Wh_Log(L"preview: %s failed (0x%08lx)", data.previewPath.c_str(), (unsigned long)hr);
