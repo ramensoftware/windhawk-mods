@@ -7,7 +7,7 @@
 // @description:de-DE Das Win+X-Menü anpassen und um weitere Befehle ergänzen (Rechtsklick auf die Startschaltfläche)
 // @description:pt-BR Personalize o menu Win+X e adicione mais comandos (clique com o botão direito no botão Iniciar)
 // @description:zh-CN 自定义 Win+X 菜单并添加更多命令（右键单击“开始”按钮）
-// @version         1.0.1
+// @version         1.1.1
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -16,7 +16,7 @@
 // @architecture    x86-64
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -lcomctl32 -lruntimeobject -lole32 -loleaut32 -lshell32 -lshlwapi -ladvapi32 -liphlpapi -luuid -ldwrite
 // ==/WindhawkMod==
-// Build: 41
+// Build: 43
 
 // ==WindhawkModReadme==
 /*
@@ -61,7 +61,10 @@ right-clicking the Start button.
 ### Quick access to power actions
 
 The main power row shuts down Windows in one click by default. It can run another
-action, such as Restart or Lock. Choose **None** to keep the power submenu on its own.
+action, such as Restart or Lock. Choose **None** to open the power submenu without
+running a command. When Windows offers **Update and shut down** or **Update and
+restart** in Win+X, the corresponding Shut down or Restart switch also controls
+that entry.
 
 ### Labels and icons
 
@@ -1271,6 +1274,7 @@ struct CatalogItem {
     PCWSTR action;
     PCWSTR resource;
     std::array<PCWSTR, 6> names;
+    std::array<unsigned, 2> updateCaptions{};
 };
 
 constexpr PCWSTR sectionEnabledKeys[] = {
@@ -1518,9 +1522,64 @@ constexpr CatalogItem catalog[] = {
     {L"commands.power.hibernate", 3, 113, 0xe823, L"power:hibernate", L"authui.dll,-3022",
      {L"Hibernate", L"Гибернация", L"Hibernar", L"Ruhezustand", L"Hibernar", L"休眠"}},
     {L"commands.power.shutdown", 3, 113, 0xe7e8, L"power:shutdown", L"authui.dll,-3013",
-     {L"Shut down", L"Завершение работы", L"Apagar", L"Herunterfahren", L"Desligar", L"关机"}},
+     {L"Shut down", L"Завершение работы", L"Apagar", L"Herunterfahren", L"Desligar", L"关机"}, {3026, 3150}},
     {L"commands.power.restart", 3, 113, 0xe777, L"power:restart", L"authui.dll,-3016",
-     {L"Restart", L"Перезагрузка", L"Reiniciar", L"Neu starten", L"Reiniciar", L"重启"}},
+     {L"Restart", L"Перезагрузка", L"Reiniciar", L"Neu starten", L"Reiniciar", L"重启"}, {3030, 3152}},
+};
+
+// The estimated-duration resources use unsigned integers in otherwise exact captions.
+bool MatchesPowerCaption(std::wstring_view caption, std::wstring_view pattern) {
+    if (pattern.empty()) return false;
+    for (auto slot = pattern.find(L"%u"); slot != pattern.npos; slot = pattern.find(L"%u")) {
+        if (!caption.starts_with(pattern.substr(0, slot))) return false;
+        caption.remove_prefix(slot);
+        const auto digits = caption.find_first_not_of(L"0123456789");
+        if (digits == 0) return false;
+        caption.remove_prefix(digits == caption.npos ? caption.size() : digits);
+        pattern.remove_prefix(slot + 2);
+    }
+    return caption == pattern;
+}
+
+enum class PowerPlacement { Hidden, Main, Submenu };
+
+constexpr PowerPlacement PlacePowerAction(bool withUpdate, bool primary, bool enabled) {
+    if (primary && !withUpdate) return PowerPlacement::Main;
+    return enabled ? PowerPlacement::Submenu : PowerPlacement::Hidden;
+}
+class ModuleWorkQueue {
+public:
+    bool Start() {
+        const std::lock_guard guard(lock_);
+        group_ = CreateThreadpoolCleanupGroup();
+        if (!group_) return false;
+        InitializeThreadpoolEnvironment(&environment_);
+        SetThreadpoolCallbackCleanupGroup(&environment_, group_, nullptr);
+        return true;
+    }
+
+    bool Submit(PTP_SIMPLE_CALLBACK callback, void* context = nullptr) {
+        const std::lock_guard guard(lock_);
+        return group_ && TrySubmitThreadpoolCallback(callback, context, &environment_);
+    }
+
+    void Stop() {
+        PTP_CLEANUP_GROUP group;
+        {
+            const std::lock_guard guard(lock_);
+            group = std::exchange(group_, nullptr);
+        }
+        if (!group) return;
+        // Run queued callbacks so they can release their own context.
+        CloseThreadpoolCleanupGroupMembers(group, FALSE, nullptr);
+        CloseThreadpoolCleanupGroup(group);
+        DestroyThreadpoolEnvironment(&environment_);
+    }
+
+private:
+    std::mutex lock_;
+    PTP_CLEANUP_GROUP group_{};
+    TP_CALLBACK_ENVIRON environment_{};
 };
 
 enum class HoverMode { Immediate, Delayed, Arrow, ArrowClick };
@@ -1597,19 +1656,22 @@ struct MenuSession {
 };
 
 [[clang::no_destroy]] std::unique_ptr<MenuSession> session;
-std::array<std::optional<std::wstring>, std::size(catalog)> systemCaptionCache;
+std::mutex captionLock;
+std::array<std::wstring, std::size(catalog)> systemCaptionCache;
 std::mutex settingsLock;
 Settings settings;
 std::atomic<bool> unloading;
+ModuleWorkQueue moduleWorkQueue;
 std::atomic<unsigned> settingsNavigationGeneration;
 HWND trayWindow;
 std::atomic<DWORD> trayThread;
 UINT setupMessage;
 bool subclassPresent;
 constexpr DWORD taskbarRetryInterval = 250;
-constexpr ULONGLONG taskbarStartupTimeout = 60'000;
+constexpr DWORD taskbarSlowRetryInterval = 2'000;
+constexpr ULONGLONG taskbarFastRetryDuration = 60'000;
 PTP_TIMER taskbarStartupTimer;
-ULONGLONG taskbarStartupDeadline;
+ULONGLONG taskbarFastRetryDeadline;
 SRWLOCK taskbarStartupLock = SRWLOCK_INIT;
 
 using ShowAt = HRESULT(WINAPI*)(void*, void*);
@@ -1629,20 +1691,18 @@ void OnRow(RowInteraction* row, Function&& function) noexcept {
 
 void LoadSettings() {
     Settings next;
-    const auto value = Wh_GetStringSetting(L"general.submenuHover");
-    const std::wstring_view option = value ? value : L"";
+    const auto value = WindhawkUtils::StringSetting::make(L"general.submenuHover");
+    const std::wstring_view option = value.get();
     next.mode = option == L"delayed" ? HoverMode::Delayed :
                 option == L"arrow" ? HoverMode::Arrow :
                 option == L"click" ? HoverMode::ArrowClick : HoverMode::Immediate;
-    Wh_FreeStringSetting(value);
     next.hideAdminCommands = Wh_GetIntSetting(L"general.hideAdminCommands") != 0;
     next.showHandCursor = Wh_GetIntSetting(L"general.showHandCursor") != 0;
     next.terminalAsAdmin = Wh_GetIntSetting(L"commandOptions.terminalAsAdmin") != 0;
-    const auto power = Wh_GetStringSetting(L"commandOptions.primaryPowerAction");
-    if (!power || !*power) next.primaryPowerAction = L"power:shutdown";
-    else if (std::wstring_view(power) == L"lock") next.primaryPowerAction = L"lock:session";
-    else if (std::wstring_view(power) != L"none") next.primaryPowerAction = L"power:" + std::wstring(power);
-    Wh_FreeStringSetting(power);
+    const auto power = WindhawkUtils::StringSetting::make(L"commandOptions.primaryPowerAction");
+    const std::wstring_view action = power.get();
+    if (action == L"lock") next.primaryPowerAction = L"lock:session";
+    else if (!action.empty() && action != L"none") next.primaryPowerAction = L"power:" + std::wstring(action);
     for (size_t group = 0; group < std::size(sectionEnabledKeys); ++group)
         next.enabledSections[group] = Wh_GetIntSetting(sectionEnabledKeys[group]) != 0;
     for (size_t i = 0; i < std::size(catalog); ++i)
@@ -1845,13 +1905,30 @@ std::wstring SystemCaption(CatalogItem const& item) {
 std::wstring Caption(Destination const& destination) {
     if (destination.original) return MenuCaption(destination.original.Text());
     const auto& item = *destination.item;
-    auto& cached = systemCaptionCache[&item - catalog];
-    if (!cached) {
-        auto caption = SystemCaption(item);
-        if (caption.empty()) caption = item.names[DisplayLanguage()];
-        cached = std::move(caption);
+    {
+        const std::lock_guard guard(captionLock);
+        const auto& cached = systemCaptionCache[&item - catalog];
+        if (!cached.empty()) return cached;
     }
-    return *cached;
+    return item.names[DisplayLanguage()];
+}
+
+void CALLBACK WarmSystemCaptions(PTP_CALLBACK_INSTANCE, PVOID) noexcept {
+    if (unloading) return;
+    const auto initialized = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(initialized)) return;
+    for (size_t index = 0; index < std::size(catalog) && !unloading; ++index) {
+        try {
+            auto caption = SystemCaption(catalog[index]);
+            if (!caption.empty() && !unloading) {
+                const std::lock_guard guard(captionLock);
+                systemCaptionCache[index] = std::move(caption);
+            }
+        } catch (...) {
+            // The catalog caption remains available.
+        }
+    }
+    CoUninitialize();
 }
 
 template<typename Provider>
@@ -1885,7 +1962,6 @@ DWORD LaunchPidl(Pidl const& target) {
 }
 
 struct SettingsRoute {
-    HMODULE module{};
     unsigned generation;
     std::wstring pageElementId;
     std::wstring appName;
@@ -1901,10 +1977,31 @@ winrt::com_ptr<IUIAutomationCondition> TextCondition(IUIAutomation& automation, 
     return condition;
 }
 
-void CALLBACK SelectSettingsCategory(PTP_CALLBACK_INSTANCE callback, PVOID data) noexcept {
+winrt::com_ptr<IUIAutomationInvokePattern> ParentBreadcrumb(IUIAutomationElement& bar,
+                                                           IUIAutomationCondition& crumbType,
+                                                           IUIAutomationCacheRequest& cache) {
+    winrt::com_ptr<IUIAutomationElementArray> crumbs;
+    if (FAILED(bar.FindAllBuildCache(TreeScope_Descendants, &crumbType, &cache, crumbs.put()))) {
+        crumbs = nullptr;
+        if (FAILED(bar.FindAll(TreeScope_Descendants, &crumbType, crumbs.put()))) return {};
+    }
+    int count{};
+    winrt::com_ptr<IUIAutomationElement> parent;
+    if (!crumbs || FAILED(crumbs->get_Length(&count)) || count != 2 ||
+        FAILED(crumbs->GetElement(0, parent.put())) || !parent) return {};
+
+    winrt::com_ptr<IUIAutomationInvokePattern> invoke;
+    if (FAILED(parent->GetCachedPatternAs(UIA_InvokePatternId, __uuidof(IUIAutomationInvokePattern),
+                                          invoke.put_void())) || !invoke) {
+        invoke = nullptr;
+        if (FAILED(parent->GetCurrentPatternAs(UIA_InvokePatternId, __uuidof(IUIAutomationInvokePattern),
+                                               invoke.put_void()))) return {};
+    }
+    return invoke;
+}
+
+void CALLBACK SelectSettingsCategory(PTP_CALLBACK_INSTANCE, PVOID data) noexcept {
     std::unique_ptr<SettingsRoute> route(static_cast<SettingsRoute*>(data));
-    FreeLibraryWhenCallbackReturns(callback, route->module);
-    // The module reference keeps the code alive, but Windhawk's mod instance may be gone.
     if (unloading || settingsNavigationGeneration != route->generation) return;
     const HRESULT initialized = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     if (FAILED(initialized)) return;
@@ -1922,28 +2019,27 @@ void CALLBACK SelectSettingsCategory(PTP_CALLBACK_INSTANCE callback, PVOID data)
         const auto crumbType = TextCondition(*automation, UIA_ClassNamePropertyId,
                                             L"Microsoft.UI.Xaml.Controls.BreadcrumbBarItem");
         if (!pageId || !barId || !crumbType) return;
+        winrt::com_ptr<IUIAutomationCacheRequest> crumbCache;
+        winrt::check_hresult(automation->CreateCacheRequest(crumbCache.put()));
+        winrt::check_hresult(crumbCache->AddPattern(UIA_InvokePatternId));
 
         // Wait for the URI's landing page, then invoke its parent breadcrumb.
         // Automation identifiers are independent of the Windows display language.
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(2200);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+        DWORD retryDelay = 75;
         while (!unloading && settingsNavigationGeneration == route->generation && std::chrono::steady_clock::now() < deadline) {
             const HWND hwnd = FindWindowW(L"ApplicationFrameWindow", route->appName.c_str());
-            winrt::com_ptr<IUIAutomationElement> window, page, bar, parent;
-            winrt::com_ptr<IUIAutomationElementArray> crumbs;
-            winrt::com_ptr<IUIAutomationInvokePattern> invoke;
-            int count{};
+            winrt::com_ptr<IUIAutomationElement> window, page, bar;
             if (hwnd && SUCCEEDED(automation->ElementFromHandle(hwnd, window.put())) && window &&
                 SUCCEEDED(window->FindFirst(TreeScope_Descendants, pageId.get(), page.put())) && page &&
-                SUCCEEDED(window->FindFirst(TreeScope_Descendants, barId.get(), bar.put())) && bar &&
-                SUCCEEDED(bar->FindAll(TreeScope_Descendants, crumbType.get(), crumbs.put())) && crumbs &&
-                SUCCEEDED(crumbs->get_Length(&count)) && count == 2 &&
-                SUCCEEDED(crumbs->GetElement(0, parent.put())) && parent &&
-                SUCCEEDED(parent->GetCurrentPatternAs(UIA_InvokePatternId, __uuidof(IUIAutomationInvokePattern),
-                                                     invoke.put_void())) && invoke &&
-                settingsNavigationGeneration == route->generation && !unloading &&
-                std::chrono::steady_clock::now() < deadline &&
-                SUCCEEDED(invoke->Invoke())) return;
-            Sleep(90);
+                SUCCEEDED(window->FindFirst(TreeScope_Descendants, barId.get(), bar.put())) && bar) {
+                if (const auto invoke = ParentBreadcrumb(*bar, *crumbType, *crumbCache);
+                    invoke && settingsNavigationGeneration == route->generation && !unloading &&
+                    std::chrono::steady_clock::now() < deadline && SUCCEEDED(invoke->Invoke())) return;
+            }
+            if (unloading || settingsNavigationGeneration != route->generation) return;
+            Sleep(retryDelay);
+            retryDelay = std::min<DWORD>(retryDelay * 2, 200);
         }
     } catch (...) {
     }
@@ -1975,14 +2071,11 @@ void RunDestination(MenuSession& active, Destination destination) {
             route->pageElementId = pageElementId;
             route->appName = Twinui(L"10922");
             if (route->appName.empty()) route->appName = L"Settings";
-            if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                    reinterpret_cast<PCWSTR>(&SelectSettingsCategory), &route->module)) {
-                if (TrySubmitThreadpoolCallback(SelectSettingsCategory, route.get(), nullptr))
-                    route.release();
-                else
-                    FreeLibrary(route->module);
+            auto* context = route.release();
+            if (!moduleWorkQueue.Submit(SelectSettingsCategory, context)) {
+                delete context;
+                Wh_Log(L"Could not schedule Settings category navigation for %s", item.key);
             }
-            if (route) Wh_Log(L"Could not schedule Settings category navigation for %s", item.key);
         }
     } else if (kind == L"folder") {
         error = LaunchPidl(FolderId(target));
@@ -2260,10 +2353,15 @@ C::FontIcon MakeIcon(wchar_t glyph) {
     return icon;
 }
 
+struct StockPowerAction {
+    Destination destination;
+    bool withUpdate;
+};
+
 struct StockMenu {
     std::vector<C::MenuFlyoutItemBase> rows;
     C::MenuFlyoutSubItem power{nullptr};
-    std::vector<Destination> powerActions;
+    std::vector<StockPowerAction> powerActions;
 };
 
 C::MenuFlyoutItem StockAction(StockMenu const& stock, std::wstring_view id) {
@@ -2281,8 +2379,39 @@ C::MenuFlyoutItem StockAction(StockMenu const& stock, std::wstring_view id) {
     return nullptr;
 }
 
+struct StockPowerCaption {
+    CatalogItem const* item;
+    std::wstring caption;
+};
+
+std::vector<StockPowerCaption> ReadPowerCaptions(bool withUpdate) {
+    std::vector<StockPowerCaption> captions;
+    const auto add = [&](CatalogItem const& item, std::wstring_view caption) {
+        if (!caption.empty()) captions.push_back({&item, Normalize(caption)});
+    };
+    for (auto const& item : catalog) {
+        if (!std::wstring_view(item.action).starts_with(L"power:") || !*item.resource) continue;
+        if (!withUpdate) {
+            add(item, SystemString(item.resource));
+            // Some stock captions differ from the system resource, for example Russian Sign out.
+            add(item, item.names[DisplayLanguage()]);
+            continue;
+        }
+        const auto [plainId, estimatedId] = item.updateCaptions;
+        if (!plainId) continue;
+        const auto addResource = [&](unsigned id) {
+            add(item, SystemString(L"shutdownux.dll,-" + std::to_wstring(id)));
+        };
+        addResource(plainId);
+        // Each of the eight estimates has an access-key resource next to it.
+        // Shut down and restart share the block, with four IDs per estimate.
+        for (unsigned offset = 0; offset < 32; offset += 4) addResource(estimatedId + offset);
+    }
+    return captions;
+}
+
 bool ReadStockPowerActions(StockMenu& stock) {
-    const auto language = DisplayLanguage();
+    static const auto regular = ReadPowerCaptions(false);
     for (auto const& row : stock.power.Items()) {
         if (row.try_as<C::MenuFlyoutSeparator>()) continue;
         const auto command = row.try_as<C::MenuFlyoutItem>();
@@ -2290,18 +2419,25 @@ bool ReadStockPowerActions(StockMenu& stock) {
         const auto caption = Normalize(command.Text());
         if (caption.empty()) return false;
 
-        CatalogItem const* match{};
-        for (auto const& item : catalog) {
-            if (!std::wstring_view(item.action).starts_with(L"power:") || !*item.resource) continue;
-            // Some Win+X labels differ from the system resource, for example Russian Sign out.
-            if (caption != Normalize(Caption(Destination{&item})) && caption != Normalize(item.names[language]))
-                continue;
-            if (match) return false;
-            match = &item;
+        const auto matches = [&](StockPowerCaption const& entry) { return MatchesPowerCaption(caption, entry.caption); };
+        auto const* candidates = &regular;
+        auto found = std::ranges::find_if(*candidates, matches);
+        const bool withUpdate = found == candidates->end();
+        if (withUpdate) {
+            static const auto updates = ReadPowerCaptions(true);
+            candidates = &updates;
+            found = std::ranges::find_if(*candidates, matches);
         }
-        if (!match || std::ranges::find(stock.powerActions, match, &Destination::item) != stock.powerActions.end())
+        if (found == candidates->end()) return false;
+        const auto* item = found->item;
+        if (std::any_of(found + 1, candidates->end(), [&](StockPowerCaption const& entry) {
+                return entry.item != item && matches(entry);
+            }) || std::ranges::any_of(stock.powerActions, [&](StockPowerAction const& entry) {
+                return entry.destination.item == item && entry.withUpdate == withUpdate;
+            })) {
             return false;
-        stock.powerActions.push_back({match, command});
+        }
+        stock.powerActions.push_back({{item, command}, withUpdate});
     }
     return !stock.powerActions.empty();
 }
@@ -2618,7 +2754,8 @@ AvailabilitySnapshot BuildAvailability() {
     return result;
 }
 
-constexpr ULONGLONG availabilityRefreshInterval = 20000;
+// Coalesce rapid reopenings without keeping hardware and policy changes stale for 20 seconds.
+constexpr ULONGLONG availabilityRefreshInterval = 1000;
 SRWLOCK availabilityLock = SRWLOCK_INIT;
 AvailabilitySnapshot availability;
 std::atomic<bool> availabilityRefreshing{};
@@ -2631,8 +2768,7 @@ AvailabilitySnapshot ReadAvailability() {
     return result;
 }
 
-void CALLBACK RefreshAvailabilityWorker(PTP_CALLBACK_INSTANCE callback, PVOID module) noexcept {
-    FreeLibraryWhenCallbackReturns(callback, static_cast<HMODULE>(module));
+void CALLBACK RefreshAvailabilityWorker(PTP_CALLBACK_INSTANCE, PVOID) noexcept {
     try {
         if (!unloading) {
             const auto next = BuildAvailability();
@@ -2660,12 +2796,7 @@ void RefreshAvailability(bool force = false) {
         return;
     }
 
-    HMODULE module{};
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                          reinterpret_cast<PCWSTR>(&RefreshAvailabilityWorker), &module)) {
-        if (TrySubmitThreadpoolCallback(RefreshAvailabilityWorker, module, nullptr)) return;
-        FreeLibrary(module);
-    }
+    if (moduleWorkQueue.Submit(RefreshAvailabilityWorker)) return;
     availabilityLastRefresh = GetTickCount64();
     availabilityRefreshing = false;
 }
@@ -2680,10 +2811,6 @@ std::optional<Destination> Resolve(CatalogItem const& item, StockMenu const& sto
     if (kind == L"native") {
         destination.original = StockAction(stock, target);
         if (!destination.original || !destination.original.IsEnabled()) return std::nullopt;
-    } else if (kind == L"power") {
-        const auto match = std::ranges::find(stock.powerActions, &item, &Destination::item);
-        if (match == stock.powerActions.end() || !match->original.IsEnabled()) return std::nullopt;
-        destination.original = match->original;
     }
     return destination;
 }
@@ -2846,7 +2973,8 @@ std::optional<StockMenu> ReadStockMenu(C::MenuFlyout const& menu) {
 
 void TryPatchMenu(C::MenuFlyout const& menu) {
     auto nativeMenu = ReadStockMenu(menu);
-    if (!nativeMenu || !ReadStockPowerActions(*nativeMenu)) return;
+    if (!nativeMenu) return;
+    const bool recognizedPowerMenu = ReadStockPowerActions(*nativeMenu);
     const auto& stock = *nativeMenu;
     const auto items = menu.Items();
     const auto snapshot = ReadSettings();
@@ -2878,6 +3006,8 @@ void TryPatchMenu(C::MenuFlyout const& menu) {
         std::vector<C::MenuFlyoutItem> children;
         for (size_t child = index + 1; child < std::size(catalog) && catalog[child].parent == static_cast<int>(index); ++child) {
             const auto& command = catalog[child];
+            // Stock power commands are appended below in the order Windows presents them.
+            if (power && (!recognizedPowerMenu || std::wstring_view(command.action).starts_with(L"power:"))) continue;
             const bool elevatedTerminal = elevateTerminal && std::wstring_view(command.action) == L"native:10961";
             const bool primaryPower = power && snapshot.primaryPowerAction == command.action;
             if (!snapshot.enabled[child] && !elevatedTerminal && !primaryPower) continue;
@@ -2892,9 +3022,23 @@ void TryPatchMenu(C::MenuFlyout const& menu) {
                 if (auto leaf = CreateLeaf(*pending, *resolved)) children.push_back(leaf);
             }
         }
+        if (power && recognizedPowerMenu) {
+            for (auto const& command : stock.powerActions) {
+                auto const& native = command.destination;
+                if (!native.original.IsEnabled()) continue;
+                const auto placement = PlacePowerAction(command.withUpdate,
+                    snapshot.primaryPowerAction == native.item->action, snapshot.enabled[native.item - catalog]);
+                if (placement == PowerPlacement::Main) destination = native;
+                if (placement == PowerPlacement::Submenu) {
+                    if (auto leaf = CreateLeaf(*pending, native)) children.push_back(leaf);
+                }
+            }
+        }
 
         C::MenuFlyoutItemBase entry{nullptr};
-        if (power && !destination) {
+        if (power && !recognizedPowerMenu) {
+            entry = stock.power;
+        } else if (power && !destination) {
             if (children.empty()) continue;
             powerChildren.assign(children.begin(), children.end());
             powerGlyph = item.glyph;
@@ -2952,7 +3096,7 @@ void TryPatchMenu(C::MenuFlyout const& menu) {
     items.ReplaceAll(visible);
 }
 
-[[clang::no_destroy]] winrt::weak_ref<C::MenuFlyout> observedMenu;
+winrt::weak_ref<C::MenuFlyout> observedMenu;
 [[clang::no_destroy]] P::FlyoutBase::Opening_revoker openingHandler;
 
 template<typename Interface>
@@ -3022,10 +3166,10 @@ TaskbarSetup InstallHooks() {
     }
 
     if (show == showOptions ||
-        !Wh_SetFunctionHook(show, reinterpret_cast<void*>(HookShowAt), reinterpret_cast<void**>(&originalShowAt)))
+        !WindhawkUtils::SetFunctionHook(reinterpret_cast<ShowAt>(show), HookShowAt, &originalShowAt))
         return TaskbarSetup::Failed;
-    const bool optionsHook = Wh_SetFunctionHook(showOptions, reinterpret_cast<void*>(HookShowAtOptions),
-                                                reinterpret_cast<void**>(&originalShowAtOptions));
+    const bool optionsHook = WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<ShowAtOptions>(showOptions), HookShowAtOptions, &originalShowAtOptions);
     if (optionsHook && Wh_ApplyHookOperations()) return TaskbarSetup::Ready;
 
     if (optionsHook) Wh_RemoveFunctionHook(showOptions);
@@ -3045,7 +3189,7 @@ LRESULT CALLBACK TraySubclass(HWND window, UINT message, WPARAM action, LPARAM d
                 menu.Hide();
             }
         } catch (...) {
-            Wh_Log(L"Quick Link menu taskbar operation failed");
+            if (!action) Wh_Log(L"Quick Link menu taskbar operation failed");
         }
         if (!action) Restore();
         return 0;
@@ -3067,26 +3211,34 @@ bool FinishTaskbarStartup() noexcept {
     subclassPresent = WindhawkUtils::SetWindowSubclassFromAnyThread(trayWindow, TraySubclass, 0);
     const auto result = subclassPresent ? static_cast<TaskbarSetup>(SendMessageW(trayWindow, setupMessage, 1, 0))
                                         : TaskbarSetup::Failed;
-    if (result == TaskbarSetup::WaitForXaml) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(trayWindow, TraySubclass);
-        subclassPresent = false;
-        return false;
-    }
     if (result == TaskbarSetup::Ready) {
         RefreshAvailability();
-    } else {
-        Wh_Log(L"Could not initialize the Quick Link menu hooks");
+        if (!moduleWorkQueue.Submit(WarmSystemCaptions)) Wh_Log(L"Could not schedule Quick Link menu caption resolution");
+        return true;
     }
-    return true;
+    if (subclassPresent) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(trayWindow, TraySubclass);
+        subclassPresent = false;
+    }
+    return false;
+}
+
+void ArmTaskbarTimer(PTP_TIMER timer, DWORD interval) {
+    LARGE_INTEGER delay;
+    delay.QuadPart = -static_cast<LONGLONG>(interval) * 10'000;
+    FILETIME due{delay.LowPart, static_cast<DWORD>(delay.HighPart)};
+    SetThreadpoolTimer(timer, &due, interval, 50);
 }
 
 void CALLBACK WaitForTaskbar(PTP_CALLBACK_INSTANCE, PVOID, PTP_TIMER timer) noexcept {
     if (!TryAcquireSRWLockExclusive(&taskbarStartupLock)) return;
     if (!unloading && IsThreadpoolTimerSet(timer)) {
-        const bool finished = FinishTaskbarStartup();
-        if (finished || GetTickCount64() >= taskbarStartupDeadline) {
+        if (FinishTaskbarStartup()) {
             SetThreadpoolTimer(timer, nullptr, 0, 0);
-            if (!finished) Wh_Log(L"Timed out waiting for the taskbar and XAML to initialize the Quick Link menu");
+        } else if (taskbarFastRetryDeadline && GetTickCount64() >= taskbarFastRetryDeadline) {
+            taskbarFastRetryDeadline = 0;
+            Wh_Log(L"Quick Link menu initialization is still pending; retrying every two seconds");
+            ArmTaskbarTimer(timer, taskbarSlowRetryInterval);
         }
     }
     ReleaseSRWLockExclusive(&taskbarStartupLock);
@@ -3100,11 +3252,8 @@ BOOL Wh_ModInit() {
     if (window && GetWindowThreadProcessId(window, &pid) && pid != GetCurrentProcessId()) return FALSE;
     setupMessage = RegisterWindowMessageW(L"Windhawk.QuickLinkMenu.Setup");
     if (!setupMessage) return FALSE;
-    // A pending callback can keep this DLL loaded across a disable and enable.
-    ++settingsNavigationGeneration;
-    unloading = false;
     LoadSettings();
-    return TRUE;
+    return moduleWorkQueue.Start();
 }
 
 void Wh_ModAfterInit() {
@@ -3116,11 +3265,8 @@ void Wh_ModAfterInit() {
         Wh_Log(L"Could not schedule Quick Link menu initialization");
         return;
     }
-    taskbarStartupDeadline = GetTickCount64() + taskbarStartupTimeout;
-    LARGE_INTEGER delay;
-    delay.QuadPart = -static_cast<LONGLONG>(taskbarRetryInterval) * 10'000;
-    FILETIME due{delay.LowPart, static_cast<DWORD>(delay.HighPart)};
-    SetThreadpoolTimer(taskbarStartupTimer, &due, taskbarRetryInterval, 50);
+    taskbarFastRetryDeadline = GetTickCount64() + taskbarFastRetryDuration;
+    ArmTaskbarTimer(taskbarStartupTimer, taskbarRetryInterval);
 }
 
 void Wh_ModSettingsChanged() {
@@ -3131,7 +3277,9 @@ void Wh_ModSettingsChanged() {
 void Wh_ModBeforeUninit() {
     unloading = true;
     if (taskbarStartupTimer) {
+        AcquireSRWLockExclusive(&taskbarStartupLock);
         SetThreadpoolTimer(taskbarStartupTimer, nullptr, 0, 0);
+        ReleaseSRWLockExclusive(&taskbarStartupLock);
         WaitForThreadpoolTimerCallbacks(taskbarStartupTimer, TRUE);
         CloseThreadpoolTimer(taskbarStartupTimer);
         taskbarStartupTimer = nullptr;
@@ -3140,4 +3288,8 @@ void Wh_ModBeforeUninit() {
         SendMessageW(trayWindow, setupMessage, 0, 0);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(trayWindow, TraySubclass);
     }
+}
+
+void Wh_ModUninit() {
+    moduleWorkQueue.Stop();
 }
