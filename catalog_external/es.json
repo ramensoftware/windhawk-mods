@@ -373,6 +373,37 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
       }
     },
+    "notepad-pro": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795424785015,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795424785015,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Armaninyow",
+        "compilerOptions": "-lcomctl32 -lgdi32 -luser32 -ladvapi32 -ldwmapi",
+        "description": "A collection of useful tweaks, tools, and upgrades for Windows 11 Notepad",
+        "github": "https://github.com/armaninyow",
+        "include": [
+          "notepad.exe"
+        ],
+        "name": "Notepad Pro",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7810",
+      "source": {
+        "sha256": "44fc9db3c5423241f9ce27f8d41e4f44c9e3f53bf08423d8ffb8d79ab7a176b6",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d769b0296ae25cf5462fdaab6991aadddc590bf4/mods/notepad-pro.wh.cpp"
+      }
+    },
     "same-app-window-cycler": {
       "details": {
         "defaultSorting": 0,
@@ -492,6 +523,38 @@
       "source": {
         "sha256": "3894d6569274948e7a82f4b0b7ccdf70a20cffee59ed40fe84430a798ee8d551",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/10467409bdc9c514819149ce7e797d5db31ce907/mods/taskbar-app-volume-mixer.wh.cpp"
+      }
+    },
+    "taskbar-disable-per-monitor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795424785015,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795424785015,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "eprilx",
+        "compilerOptions": "-lcomctl32 -ldwmapi",
+        "description": "Turns the taskbar off for good on the chosen monitors: it never shows (no hover, Win key, notifications or flashing apps bring it back); taskbars on the other monitors stay as usual",
+        "github": "https://github.com/eprilx",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Disable taskbar per monitor",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7863",
+      "source": {
+        "sha256": "a45a6f0f19498db30a0cb9b172fd943fdff11abb2ebce252d298d76198af7d82",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c7bfe21f1f3116b68586e5116a89f05165e52ef4/mods/taskbar-disable-per-monitor.wh.cpp"
       }
     },
     "taskbar-extra-scroll-actions": {

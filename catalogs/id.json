@@ -15525,7 +15525,7 @@
         "ratingUsers": 16,
         "reviews": 0,
         "trendingSorting": 4.109158924783169,
-        "updated": 1795201354000,
+        "updated": 1795424611000,
         "users": 508
       },
       "metadata": {
@@ -15537,7 +15537,7 @@
           "explorer.exe"
         ],
         "name": "Remove Shortcut Arrow Icons",
-        "version": "2.0.0"
+        "version": "2.0.1"
       }
     },
     "remove-spotlight-shortcut": {
