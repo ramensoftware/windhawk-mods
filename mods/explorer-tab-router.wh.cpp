@@ -4,7 +4,7 @@
 // @name:zh-CN      资源管理器页签路由
 // @description     Reuse and activate Explorer folder tabs, preserve file selection and explicit new windows
 // @description:zh-CN 复用并切换资源管理器页签，保留文件选中状态和明确的新窗口操作
-// @version         1.1.2
+// @version         1.1.4
 // @author          afate123
 // @github          https://github.com/afate123
 // @license         MIT
@@ -85,6 +85,8 @@ Some requests are handled through a temporary transparent Explorer window before
 
 Tab activation resolves the target window handle against Explorer's current tab order and issues one verified selection command. It does not step through unrelated tabs. If the required internal activation symbols are unavailable or the tab changes during resolution, activation fails safely; a routing failure restores the original window. Navigation completion uses browser events with bounded direct-view checks for providers that omit events.
 
+If tab navigation cannot be confirmed before the timeout, the original window is restored. A slow location, such as a network share, can finish loading in the tab later and leave both copies open.
+
 The mod is distributed under the MIT license.
 
 ## 简体中文
@@ -124,6 +126,8 @@ Ctrl+N 和将页签拖出为独立窗口，可能不携带本 mod 能识别的�
 部分请求会先经过临时透明窗口，再完成页签路由，因此不保证整个过程完全不创建窗口。无法安全完成时会恢复临时窗口，避免丢弃打开请求；恢复时会还原原有窗口显示状态，包括已有的分层透明属性。
 
 页签切换会先按窗口句柄查找当前页签位置，再发出一次经过验证的切换命令，不再逐个显示其他页签。所需内部接口缺失或查找期间目标发生变化时，会安全终止激活；路由失败时恢复原窗口。导航完成优先使用浏览器事件；缺少事件时只进行有限次直接视图检查。
+
+如果超时前无法确认页签导航完成，会恢复原窗口。网络共享等加载较慢的位置可能随后在页签中打开，此时两处都会保留该目录。
 
 本 mod 使用 MIT 许可。
 
@@ -204,8 +208,13 @@ inline bool HasWindowClass(HWND window, PCWSTR expected) noexcept {
     return GetClassNameW(window, name, static_cast<int>(std::size(name))) &&
            wcscmp(name, expected) == 0;
 }
+
+inline constexpr wchar_t kRedirectingProperty[] = L"ETR.Redirecting";
+inline constexpr wchar_t kConstructionShowProperty[] = L"ETR.ConstructionShow";
+
 inline bool IsStagingFrame(HWND window) noexcept {
-    if (GetPropW(window, L"ETR.Redirecting"))
+    if (GetPropW(window, kRedirectingProperty) ||
+        GetPropW(window, kConstructionShowProperty))
         return true;
     BYTE alpha = 255;
     DWORD flags = 0;
@@ -702,7 +711,8 @@ class ShellTabCatalog {
             if (!CanHostFrame(access.frame, excluded))
                 return false;
             auto location = Inspect(access);
-            if (!location || !ILIsEqual(location->identity.get(), requested))
+            if (!location || !ILIsEqual(location->identity.get(), requested) ||
+                !CanHostFrame(access.frame, excluded))
                 return false;
             result = std::move(location);
             return true;
@@ -750,7 +760,10 @@ class ShellTabCatalog {
                 return false;
             auto location = Inspect(access);
             if (!location || ClassifyShellDestination(location->address) !=
-                                 DestinationKind::Folder)
+                                 DestinationKind::Folder ||
+                !CanHostFrame(access.frame, excluded) ||
+                FindWindowExW(access.frame, nullptr, L"ShellTabWindowClass",
+                              nullptr) != access.tab)
                 return false;
             if (!fallback)
                 fallback = access.frame;
@@ -759,7 +772,7 @@ class ShellTabCatalog {
             fallback = access.frame;
             return true;
         });
-        return fallback;
+        return CanHostFrame(fallback, excluded) ? fallback : nullptr;
     }
 };
 }  // namespace etr
@@ -968,31 +981,6 @@ static bool ActivateShellTab(HWND tab) {
         ShowWindowAsync(frame, SW_RESTORE);
     SetForegroundWindow(frame);
     return true;
-}
-
-enum class ReuseResult { NoMatch, Completed, FailedAfterMatch };
-
-template <class Catalog>
-static ReuseResult ReuseFolderTab(Catalog& catalog,
-                                  PCIDLIST_ABSOLUTE folder,
-                                  const etr::SelectionSnapshot& selection,
-                                  HWND exclude = nullptr) {
-    if (!folder)
-        return ReuseResult::NoMatch;
-    auto location = catalog.FindFolder(folder, exclude);
-    if (!location)
-        return ReuseResult::NoMatch;
-    // Once an exact match exists, a failed activation or selection must leave
-    // the source recoverable. It must never request a duplicate folder tab.
-    if (!ActivateShellTab(location->tab))
-        return ReuseResult::FailedAfterMatch;
-    // Activation can reenter Explorer: acquire a fresh view and identity.
-    ComPtr<IShellView> view;
-    return location->browser &&
-                   SUCCEEDED(location->browser->QueryActiveShellView(&view)) &&
-                   view && ApplySelection(view.Get(), folder, selection)
-               ? ReuseResult::Completed
-               : ReuseResult::FailedAfterMatch;
 }
 
 namespace etr {
@@ -1436,9 +1424,9 @@ namespace etr {
 // token. All bookkeeping uses one mutex; every window API runs outside it.
 class WindowPresentationStore final {
    public:
-    static constexpr const wchar_t* PropertyName = L"ETR.Redirecting";
+    static constexpr const wchar_t* PropertyName = kRedirectingProperty;
     static constexpr const wchar_t* ConstructionPropertyName =
-        L"ETR.ConstructionShow";
+        kConstructionShowProperty;
 
     WindowPresentationStore() = default;
     WindowPresentationStore(const WindowPresentationStore&) = delete;
@@ -2386,6 +2374,79 @@ static ComPtr<IShellView> WaitForNavigation(IShellBrowser* browser,
     return nullptr;
 }
 
+static ComPtr<IShellView> ActiveFolderView(IShellBrowser* browser,
+                                         HWND frame,
+                                         HWND tab,
+                                         PCIDLIST_ABSOLUTE folder) {
+    ComPtr<IShellView> view;
+    if (!frame || !browser || FAILED(browser->QueryActiveShellView(&view)) ||
+        !SameFolder(view.Get(), folder) ||
+        !etr::CanHostFrame(frame) ||
+        FindWindowExW(frame, nullptr, L"ShellTabWindowClass", nullptr) != tab)
+        return nullptr;
+    return view;
+}
+
+static void CompleteMerge(HWND source,
+                          ULONG_PTR token,
+                          HWND tab,
+                          IShellBrowser* browser,
+                          PCIDLIST_ABSOLUTE folder,
+                          const etr::SelectionSnapshot& selection,
+                          ULONGLONG deadline) {
+    if (g_stop || !g_presentations.Owns(source, token) || !browser ||
+        !ActivateShellTab(tab))
+        return;
+    const HWND frame = GetAncestor(tab, GA_ROOT);
+    // Activation can reenter Explorer. Check the current tab and PIDL before
+    // discarding the only other window that might have the requested folder.
+    auto view = ActiveFolderView(browser, frame, tab, folder);
+    if (!view || g_stop || !g_presentations.Retire(source, token))
+        return;
+
+    // Retire releases the presentation lease. Focus and selection failures
+    // after this point must never cause the source window to reappear.
+    LASTINPUTINFO initialInput{sizeof(initialInput), 0};
+    const bool canRetry = GetLastInputInfo(&initialInput);
+    const HWND initialForeground = GetForegroundWindow();
+    const ULONGLONG retryUntil = std::min(deadline, GetTickCount64() + 400);
+    bool focused = false;
+    bool restored = selection.children.empty();
+    for (;;) {
+        if (g_stop)
+            return;
+        const bool foreground = GetForegroundWindow() == frame;
+        if (foreground && !focused)
+            focused = SUCCEEDED(view->UIActivate(SVUIA_ACTIVATE_FOCUS));
+        if (!restored)
+            restored = ApplySelection(view.Get(), folder, selection);
+        if (restored && (focused || !foreground))
+            return;
+
+        const ULONGLONG now = GetTickCount64();
+        if (!canRetry || now >= retryUntil ||
+            !CooperativeWait(static_cast<DWORD>(
+                std::min<ULONGLONG>(50, retryUntil - now))))
+            break;
+        LASTINPUTINFO input{sizeof(input), 0};
+        const HWND currentForeground = GetForegroundWindow();
+        if (!GetLastInputInfo(&input) || input.dwTime != initialInput.dwTime ||
+            (currentForeground != frame &&
+             currentForeground != initialForeground))
+            return;
+        auto current = ActiveFolderView(browser, frame, tab, folder);
+        if (!current)
+            return;
+        if (current.Get() != view.Get()) {
+            focused = false;
+            restored = selection.children.empty();
+        }
+        view = std::move(current);
+    }
+    Wh_Log(L"Merged Explorer tab presentation incomplete: focus=%d selection=%d",
+           focused, restored);
+}
+
 // Called only by RouterWorker, whose STA owns every COM reference below.
 // No nested CoInitializeEx/CoUninitialize and no thread-entry-point disguise.
 static void ExecuteMergeRequest(MergeRequest* parameter) {
@@ -2439,14 +2500,19 @@ static void ExecuteMergeRequest(MergeRequest* parameter) {
     auto selection = CaptureSelection(catalog, source, folder.get());
     if (!selection)
         return;
-    const auto reuse =
-        g_settings.reuseTabs
-            ? ReuseFolderTab(catalog, folder.get(), *selection, source)
-            : ReuseResult::NoMatch;
-    if (reuse == ReuseResult::FailedAfterMatch)
-        return;
-    bool complete = reuse == ReuseResult::Completed;
-    if (reuse == ReuseResult::NoMatch) {
+    const auto match = g_settings.reuseTabs
+                           ? catalog.FindFolder(folder.get(), source)
+                           : std::nullopt;
+    if (match) {
+        CompleteMerge(source, token, match->tab, match->browser.Get(),
+                      folder.get(), *selection, deadline);
+    } else {
+        // Reading the selection and looking up a matching tab can dispatch
+        // Explorer work. The previously selected frame may now be hidden.
+        if (!etr::CanHostFrame(primary, source))
+            primary = catalog.ChooseRoutingHost(source);
+        if (!primary)
+            return;
         std::vector<HWND> before;
         for (HWND tab = nullptr;
              (tab = FindWindowExW(primary, tab, L"ShellTabWindowClass",
@@ -2454,7 +2520,8 @@ static void ExecuteMergeRequest(MergeRequest* parameter) {
             before.push_back(tab);
         HWND active =
             FindWindowExW(primary, nullptr, L"ShellTabWindowClass", nullptr);
-        if (!active || !PostMessageW(active, WM_COMMAND, kNewTabCommand, 0))
+        if (!active || !etr::CanHostFrame(primary, source) ||
+            !PostMessageW(active, WM_COMMAND, kNewTabCommand, 0))
             return;
         HWND created = nullptr;
         ComPtr<IWebBrowser2> browser;
@@ -2464,7 +2531,7 @@ static void ExecuteMergeRequest(MergeRequest* parameter) {
         ULONGLONG nextBrowserProbe = 0;
         DWORD browserProbeDelay = 100;
         while (!g_stop && GetTickCount64() < creationDeadline &&
-               IsWindow(primary)) {
+               etr::CanHostFrame(primary, source)) {
             for (HWND tab = nullptr;
                  !created &&
                  (tab = FindWindowExW(primary, tab, L"ShellTabWindowClass",
@@ -2482,7 +2549,8 @@ static void ExecuteMergeRequest(MergeRequest* parameter) {
             if (!waitWithinDeadline(50))
                 return;
         }
-        if (!browser || !shell)
+        if (!browser || !shell || GetAncestor(created, GA_ROOT) != primary ||
+            !etr::CanHostFrame(primary, source))
             return;
         etr::NavigationSubscription events;
         // Some Explorer builds expose no events. Missing events remain safe:
@@ -2496,17 +2564,20 @@ static void ExecuteMergeRequest(MergeRequest* parameter) {
         events.Close();
         if (!view || !g_presentations.Owns(source, token))
             return;
+
         auto late = CaptureSelection(catalog, source, folder.get());
-        if (!late)
-            return;
-        if (!late->children.empty())
+        if (!late) {
+            // Retain the earlier snapshot if only the selection query failed.
+            // Keep the source window if its current folder cannot be verified.
+            const auto current = catalog.ReadFrameDestination(source);
+            if (!current || !ILIsEqual(current->identity.get(), folder.get()))
+                return;
+        } else if (!late->children.empty()) {
             selection = std::move(late);
-        complete = ApplySelection(view.Get(), folder.get(), *selection) &&
-                   ActivateShellTab(created) &&
-                   SameFolder(view.Get(), folder.get());
+        }
+        CompleteMerge(source, token, created, shell.Get(), folder.get(),
+                      *selection, deadline);
     }
-    if (complete && !g_stop && g_presentations.Owns(source, token))
-        (void)g_presentations.Retire(source, token);
 }
 
 // Hook: CreateWindowExW

@@ -1,3 +1,8 @@
+## 1.1.4 ([Nov 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5aba357fee3c0842e0bcb73d5ce770268466b8cb/mods/explorer-tab-router.wh.cpp))
+
+* Fix mouse and keyboard selection in merged Explorer tabs, including folders opened with no selected items.
+* Prevent selection restore failures and hidden destination windows from leaving duplicate folder tabs or reopening the temporary source after a successful merge.
+
 ## 1.1.2 ([Nov 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6a2eda932f27a788ca5627e4e817b0a6f9f9c568/mods/explorer-tab-router.wh.cpp))
 
 * Fix brief switches through unrelated tabs when activating an existing folder tab from an external open or file-reveal request.

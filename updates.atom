@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-23T02:01:07.000Z</updated>
+    <updated>2026-11-23T06:03:01.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Tab Router 1.1.4]]></title>
+        <id>https://windhawk.net/mods/explorer-tab-router#5aba357fee3c0842e0bcb73d5ce770268466b8cb</id>
+        <link href="https://windhawk.net/mods/explorer-tab-router"/>
+        <updated>2026-11-23T06:03:01.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix mouse and keyboard selection in merged Explorer tabs, including folders opened with no selected items.</li>
+<li>Prevent selection restore failures and hidden destination windows from leaving duplicate folder tabs or reopening the temporary source after a successful merge.</li>
+</ul>
+]]></content>
+        <author>
+            <name>afate123</name>
+            <uri>https://github.com/afate123</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 6.0.1.0]]></title>
+        <id>https://windhawk.net/mods/modern-run-dialog-ui#31ff71005f20ca3ced58d46d59953891913280e3</id>
+        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
+        <updated>2026-11-23T06:02:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Dedicated WinUI 3 Settings App (Hosted in <code>windhawk.exe</code>):</strong> Replaced the in-process settings popup with a standalone Windows 11 Settings–style window hosted in <code>windhawk.exe -tool-mod</code> (zero overlap with the Run dialog), featuring Direct2D SettingsExpander cards, ComboBox flyouts, and a 2D Hue-Saturation ColorPicker with 16 Fluent swatches.</li>
+<li><strong>13 Built-In Themes &amp; Full Visual Customization (#7693):</strong> Switched the default theme to <strong>Windows 11 Blur</strong> (frosted Fluent Acrylic, <code>14px</code> corners, hairline border) for clean readability, while keeping <strong>Liquid Glass</strong> and adding 11 new presets (<strong>Windows 11 Mica</strong>, <strong>Fluent Solid</strong>, <strong>Classic Win11</strong>, <strong>Midnight OLED</strong>, <strong>Nord Frost</strong>, <strong>Catppuccin Mocha</strong>, <strong>Dracula Velvet</strong>, <strong>Rosé Pine</strong>, <strong>Emerald Slate</strong>, <strong>Warm Paper</strong>, and <strong>Custom</strong>). Added custom <strong>Background Color</strong>, <strong>Border Color</strong>, <strong>Corner Radius (<code>0–28 px</code>)</strong>, <strong>Dialog Position</strong> (Auto, Corners, Edges, or Screen Center), and <strong>Custom Static Image / Animated GIF Background</strong> support (up to 25 MB, auto-scaled, adjustable opacity).</li>
+<li><strong>Classic-Friendly Default &amp; Optional Compact Mini-Pill (<code>360px</code>):</strong> Enabled <strong>Classic-Friendly Mode</strong> by default to preserve <code>Win + R</code> → <code>Enter</code> muscle memory (pre-filled last command, full Browse/Run/Exit/Settings buttons, and 20-item history), with a one-click toggle to switch to <strong>Compact Mini-Pill Mode (<code>360px</code>)</strong>.</li>
+<li><strong>Task Manager Support, Pinning, Aliases &amp; Safe Elevation:</strong> Extended the modern UI to <strong>Task Manager → &quot;Run new task&quot;</strong> (<code>Taskmgr.exe</code>) while respecting Task Manager's own elevation checkbox (including for <code>google:</code> and <code>Shift + Enter</code> terminal launches). Added <strong>Pinned Commands</strong>, <strong>Custom Command Aliases</strong> (e.g., <code>hosts</code>), <strong><code>Ctrl + Shift + Enter</code></strong> one-time Administrator elevation, <strong><code>Shift + Enter</code></strong> terminal execution, and <strong>Remember Last Window Position</strong> (#7612).</li>
+<li><strong>Visual &amp; Z-Order Bug Fixes (#7600):</strong> Fixed the black bar glitch when opening/closing via <code>Win + R</code> (DWM cloak/transition handling) and resolved taskbar overlap via taskbar-aware work-area clamping.</li>
+<li><strong>Streamlined UX, Security &amp; Stability Improvements:</strong> Added percentage (<code>%</code>) support to the instant calculator, capped stored history at 20 items for lower memory usage, removed the built-in Google Translate (<code>文A</code>) mode to keep the launcher focused, removed <code>-ExecutionPolicy Bypass</code> for elevated <code>.ps1</code> execution, dropped shared <code>#32770</code> class icon overrides, and hardened uninit/cleanup paths.</li>
+</ul>
+]]></content>
+        <author>
+            <name>caotu2005</name>
+            <uri>https://github.com/caotu2005</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Language Cursor 1.0.0]]></title>
         <id>https://windhawk.net/mods/language-cursor#c2a5b795c4f2a875ee16d53da32a57a761bbf54d</id>
@@ -954,67 +988,6 @@ sections:</p>
         <author>
             <name>DanRotaru</name>
             <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mac OS 27 Finder Bar 1.1.1]]></title>
-        <id>https://windhawk.net/mods/mac-os-27-finder-bar#f25af3d2731fb9672e90d7538cc8c71b12c0ddb6</id>
-        <link href="https://windhawk.net/mods/mac-os-27-finder-bar"/>
-        <updated>2026-11-22T04:03:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Stacked notifications: in the floating layout, notifications from three apps or more are stacked, with the newest in front. The stack follows the theme, and the front card hides the cards behind it, which show only at the bottom edge.</li>
-<li>The mouse wheel turns the stack to the next notification.</li>
-<li>Dragging the front card aside dismisses it and shows the next one.</li>
-<li>A click spreads the cards into the list with a spring animation; &quot;Show less&quot; stacks them again.</li>
-<li>Scrolling the notification list, with the wheel or by dragging, is smooth. Cards pile up at the top and bottom edges instead of being cut off, as on Android.</li>
-<li>The bell turns red when a notification arrives, like the microphone and camera icons. This replaces the red dot.</li>
-<li>Notifications and notice pills are now separate switches. &quot;Receive app notifications&quot; (formerly &quot;Windows notifications&quot;) is in the Notifications button group, and with the pills off, notifications still go to the bell. &quot;Only the bar shows notifications&quot; needs the pills, so it shows only when both are on.</li>
-<li>Selection gradient: an optional second selection color blends the bar's selection pill and the menus' selection from one color to the other.</li>
-<li>New &quot;Test notifications&quot; button in Menu Bar Settings. Each click sends a test notification from a different app.</li>
-<li>Fix: the notifications panel now catches the mouse wheel and clicks over very clear glass. Before, they went to the window below.</li>
-<li>README: demo of the stacked notifications.</li>
-<li>&quot;Clear&quot; in the notifications panel slides the cards out one after another before removing them.</li>
-<li>The bar slides up and down when it hides and shows (with the handle and with &quot;Hide when a window is maximized&quot;).</li>
-<li>With &quot;Hide when a window is maximized&quot;, pointing at the top edge shows the bar over the window until the pointer leaves, as on macOS.</li>
-<li>Settings backup: export the Menu Bar Settings to a file and import them again.</li>
-<li>Num Lock and Scroll Lock pills, like Caps Lock.</li>
-<li>Restart, Shut Down and Sign Out ask in a glass dialog.</li>
-<li>Fix: the notice pill set to follow the bar had no glass with the Glass background and &quot;live&quot;.</li>
-<li>Fix: with the handle on, leaving full screen no longer shows the bar.</li>
-<li>Fix: after the active app is minimized or closed, the bar goes back to &quot;Finder&quot;.</li>
-<li>Fix: moving between the bar's menus no longer flickers the app's window.</li>
-<li>Fix: a full-screen video on another display now hides that display's bar.</li>
-<li>Fix: optional updates (drivers, previews) are no longer counted as pending.</li>
-<li>Fix: Windows' own volume, network and power icons no longer show in the bar's tray.</li>
-<li>Fix: video thumbnails (YouTube) are cropped instead of stretched.</li>
-<li>Fix: connected Bluetooth LE devices (mice, keyboards) now show in the Bluetooth menu and pill.</li>
-<li>Fix: clicking the bell or Now Playing on another display while the panel is open.</li>
-<li>Fix: &quot;System Settings&quot; is now &quot;Ajustes do Sistema&quot; in Portuguese.</li>
-<li>Now Playing: the cover is enlarged once in high quality, and video thumbnails show whole over a blurred copy of themselves instead of a cropped, stretched middle.</li>
-<li>The bar slides in more smoothly with the handle; windows move down once it's in place.</li>
-<li>Fix: resting the pointer on a bar button could hide the bar or make it reload over and over on setups with displays at different scales.</li>
-<li>Settings backup: the import replaces all the bar's settings, and the copy now includes &quot;This window&quot;'s look and the weather widget's glass.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Thiago Silva</name>
-            <uri>https://github.com/brideinflame-rgb</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Border Switch 1.2.6]]></title>
-        <id>https://windhawk.net/mods/windows-border-switch#c7efc6a870f85a9bcdf3573d16482340d68f8ca9</id>
-        <link href="https://windhawk.net/mods/windows-border-switch"/>
-        <updated>2026-11-22T03:01:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix taskbar, Quick Settings, and media control borders that could stay visible after a symbol lookup failure.</li>
-<li>Discover borders through XAML islands and keep border updates running while symbols load.</li>
-<li>Prevent XAML hook registration during unload and skip scans triggered by regular File Explorer windows.</li>
-</ul>
-]]></content>
-        <author>
-            <name>CTravkin</name>
-            <uri>https://github.com/CTravkin</uri>
         </author>
     </entry>
 </feed>

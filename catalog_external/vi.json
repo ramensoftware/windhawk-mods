@@ -155,6 +155,38 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/db8842f6699931bdde1c9190c16b0b94d5670362/mods/desktop-app-groups.wh.cpp"
       }
     },
+    "desktop-shortcut-cleaner": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795414058697,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795414058697,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "ELSEGuy",
+        "compilerOptions": "-lole32 -lshlwapi -lcomctl32 -lshell32 -ladvapi32 -luser32 -lgdi32",
+        "description": "Hide desktop shortcut labels, arrows and admin shields, and replace the hover box with an icon-shaped glow, without changing File Explorer.",
+        "github": "https://github.com/ELSEGuy",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Desktop Shortcut Cleaner",
+        "version": "1.2.3"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7859",
+      "source": {
+        "sha256": "302413a958c18256f92707a246ab37fe8e3db8fd482fd0091f8e795ac7911234",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d1d6c86d8315a11cb247af6c43826bc496df77b8/mods/desktop-shortcut-cleaner.wh.cpp"
+      }
+    },
     "desktop-weather-overlay": {
       "details": {
         "defaultSorting": 0,
@@ -459,6 +491,39 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/10467409bdc9c514819149ce7e797d5db31ce907/mods/taskbar-app-volume-mixer.wh.cpp"
       }
     },
+    "taskbar-extra-scroll-actions": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795414058697,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795414058697,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "NairoDorian",
+        "compilerOptions": "-lcomctl32 -ldwmapi -ldxva2 -lgdi32 -lole32 -loleaut32 -lversion -lwbemuuid -lpowrprof -lshcore -lntdll -lruntimeobject",
+        "description": "Scroll over the taskbar to switch virtual desktops, change brightness per screen from -100% to 100% (HDR SDR Brightness + Dark Overlay), microphone, system and per-app volume",
+        "github": "https://github.com/NairoDorian",
+        "include": [
+          "explorer.exe",
+          "ShellExperienceHost.exe",
+          "SndVol.exe"
+        ],
+        "name": "Taskbar Extra Scroll Actions",
+        "version": "1.6.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/4364",
+      "source": {
+        "sha256": "fcb2728c22132c28805b93d65dc4a6ae81288d790db3dd9b111d626fb53322ac",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/92a146a1dfa6d6d580839ce32be520fbaf7bceee/mods/taskbar-extra-scroll-actions.wh.cpp"
+      }
+    },
     "taskbar-notification-bell-badge": {
       "details": {
         "defaultSorting": 0,
@@ -610,6 +675,35 @@
       "source": {
         "sha256": "53f1195dbd488733b641eafb12505cb1db5cc2dd079a1e9ce03015db368dd5fe",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3fded2a8922236ec21cde4fff3d70724b37c6209/mods/twinkle-brightness.wh.cpp"
+      }
+    },
+    "ultimate-minimize-animation": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795414058697,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795414058697,
+        "users": 0
+      },
+      "metadata": {
+        "author": "NairoDorian",
+        "compilerOptions": "-ldwmapi -lgdi32 -lmsimg32 -lole32 -loleaut32 -luuid -lshell32 -lwinmm",
+        "description": "The macOS genie and 16 more effects (Scale, Fluid, Black Hole, Glass, Thanos Snap, Pixel Melt...) for minimize, restore, launch and close, with mid-flight reversal, the window's real shadow and an Alt+Tab animation",
+        "github": "https://github.com/NairoDorian",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Ultimate Minimize Animation",
+        "version": "4.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7856",
+      "source": {
+        "sha256": "a5a40d6247c7de54a6daaaf7f7e4e084fb53f14ca29fb35dabe5db5b4ff5295f",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d6c26ce332b2eb14e42ee941a895f082e3207cf2/mods/ultimate-minimize-animation.wh.cpp"
       }
     },
     "volume-key-step": {

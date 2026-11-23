@@ -7771,7 +7771,7 @@
         "ratingUsers": 8,
         "reviews": 0,
         "trendingSorting": 0.8987472464934684,
-        "updated": 1794078027000,
+        "updated": 1795413781000,
         "users": 118
       },
       "metadata": {
@@ -7788,7 +7788,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Tab Router",
-        "version": "1.1.2"
+        "version": "1.1.4"
       }
     },
     "explorer-tab-utility-window-hider": {
@@ -12076,22 +12076,21 @@
         "ratingUsers": 113,
         "reviews": 0,
         "trendingSorting": 10.981208869198841,
-        "updated": 1794967214000,
+        "updated": 1795413776000,
         "users": 5425
       },
       "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
         "author": "caotu2005",
         "compilerOptions": "-ldwmapi -lgdi32 -luser32 -lshell32 -lshlwapi -lcomctl32 -lversion -limm32 -lcomdlg32 -ld2d1 -ldwrite -ladvapi32 -lole32 -luuid -lwindowscodecs",
-        "description": "Replaces the classic Win + R dialog with a floating Liquid Glass / Fluent pill launcher, Compact Mini-Pill mode, instant calculator, multi-language Google Translate, and smart app suggestions.",
+        "description": "Replaces the Win + R and Task Manager \"Run new task\" dialogs with a modern launcher: 13 themes, a Settings window, custom colors and GIF backgrounds, Compact mode, pinning, aliases, a calculator and app suggestions.",
         "github": "https://github.com/caotu2005",
         "include": [
-          "explorer.exe"
+          "explorer.exe",
+          "Taskmgr.exe",
+          "windhawk.exe"
         ],
         "name": "Modern Run Dialog UI For Windows 10 & 11",
-        "version": "5.0.104"
+        "version": "6.0.1.0"
       }
     },
     "modernize-folder-picker-dialog": {
