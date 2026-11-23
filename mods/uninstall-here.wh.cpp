@@ -8,7 +8,7 @@
 // @homepage        https://github.com/luizbizzio/uninstall-here
 // @donateUrl       https://github.com/sponsors/luizbizzio
 // @include         StartMenuExperienceHost.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -ladvapi32 -lole32 -loleaut32 -lruntimeobject -lmsi -lshell32 -luuid
 // @license         MIT
 // ==/WindhawkMod==
@@ -25,7 +25,7 @@ Open a desktop app's own uninstaller from the Windows 11 Start menu. Uninstall H
 
 Follow any prompts from the app's uninstaller or Windows. MSI products open Windows Installer in uninstall mode.
 
-This mod targets Windows 11 on x64. It was tested in **All apps** on build `26300.10075`.
+This mod targets 64-bit Windows 11. The **All apps** flow was tested on x64 build `26300.10075`.
 
 ## If Installed apps still opens
 
