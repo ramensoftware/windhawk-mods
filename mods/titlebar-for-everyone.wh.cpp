@@ -58,7 +58,7 @@
 * WPF apps
     * Visual Studio (tested: 2022, 2026)
     * PowerToys Workspaces
-    * Known issues: after a Visual Studio launch, an invisible update notification may block mouse and keyboard input. Please press Esc key to get out of such state for now.
+    * Known issues: after a Visual Studio launch, an invisible update notification may block mouse and keyboard input. Please press the Esc key to get out of such state for now.
 * Office apps
     * Word, Excel, PowerPoint, OneNote, Access, Outlook, and Publisher
     * Tested: 2010 and LTSC 2021 (Win10 mode)
@@ -291,7 +291,10 @@ void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
         }
     }
 
-    style |= WS_CAPTION | WS_SYSMENU;
+    if (!isSteam) {
+        // Allow Steam Big Picture window to stay captionless (keep subclassing because fullscreen mode can be switched in Big Picture settings)
+        style |= WS_CAPTION | WS_SYSMENU;
+    }
     switch (tb4e_settings.clientEdgeSetting) {
         case CE_ADD:
             exStyle |= WS_EX_CLIENTEDGE;
@@ -374,11 +377,7 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
             SetWinUICustomControlsVisibility(hWnd, false);
         // Steam
         } else if (wcscmp(className, L"SDL_app") == 0) {
-            wchar_t title[256];
-            GetWindowText(hWnd, title, 256);
-            if (wcsncmp(title, L"Steam Big Picture", 17) != 0) {
-                isTarget = true;
-            }
+            isTarget = true;
         // Microsoft 365 Copilot
         } else if (wcscmp(className, L"OfficeApp-Frame") == 0) {
             isTarget = true;
@@ -625,6 +624,7 @@ bool PrepareSteamIndexHtml() {
 
     // Hook window.open to override browserType to 3, to enable Steam's built-in native frame mod for a window
     // The mode is so buggy on Windows so this mod's subclass fixes them
+    // Note: overlay and VR windows aren't real HWNDs (unless I force their browserType to 3 which completely borks them)
     const char* injectScript =
         "<script>"
             "window.open = (() => {"
@@ -634,8 +634,7 @@ bool PrepareSteamIndexHtml() {
                         "const u = new URL(s);"
                         "const a = typeof t === 'string' && (t.startsWith('desktopoverlay_') || t.startsWith('BPM_') || t.startsWith('MainMenu_')),"
                             "b = u.searchParams.has('pid') && u.searchParams.get('pid') !== '0', c = u.searchParams.has('vrOverlayKey');"
-                        // "console.log('TB4E window.open', u, t);"
-                        "if (a || b || c) return o(s, t, f);" // exclude in-game overlay windows, Big Picture windows, and SteamVR windows
+                        "if (a || b || c) return o(s, t, f);" // exclude in-game overlay windows, Big Picture windows (+ its left main menu), and SteamVR windows
                         "u.searchParams.set('browserType', '3');"
                         "return o(u.toString(), t, f);"
                     "} catch {"
@@ -730,18 +729,12 @@ BOOL Wh_ModInit() {
         mode = MODE_VS;
     }
 
-
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_hook,
-                       (void**)&CreateWindowExW_original);
-    Wh_SetFunctionHook((void*)SetWindowThemeAttribute, (void*)SetWindowThemeAttribute_hook,
-                       (void**)&SetWindowThemeAttribute_original);
-    Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_hook,
-                       (void**)&ShowWindow_original);
-    Wh_SetFunctionHook((void*)SetParent, (void*)SetParent_hook,
-                       (void**)&SetParent_original);
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_hook, &CreateWindowExW_original);
+    WindhawkUtils::SetFunctionHook(SetWindowThemeAttribute, SetWindowThemeAttribute_hook, &SetWindowThemeAttribute_original);
+    WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_hook, &ShowWindow_original);
+    WindhawkUtils::SetFunctionHook(SetParent, SetParent_hook, &SetParent_original);
     if (isSteam && steamPrepared && !tb4e_settings.noSteamHtmlInject) {
-        Wh_SetFunctionHook((void*)CreateFileW, (void*)CreateFileW_hook,
-                           (void**)&CreateFileW_original);
+        WindhawkUtils::SetFunctionHook(CreateFileW, CreateFileW_hook, &CreateFileW_original);
     }
 
     EnumWindows(InitEnumWindowsProc, 1);
