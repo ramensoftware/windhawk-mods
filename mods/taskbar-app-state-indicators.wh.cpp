@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-app-state-indicators
 // @name            Taskbar App State Indicators
-// @description     Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, dots for several windows or a badge, and progress, all animated along the frame.
+// @description     Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, dots or counts for several windows and badges, and progress, all animated along the frame.
 // @version         1.0.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
@@ -28,31 +28,41 @@ each icon, and they move along that frame whenever something changes.
   maximized app doesn't get are drawn dimmed, so the whole frame shows.
 - **Minimized app**: an underline. It's dimmed when the app's windows are
   on another virtual desktop, or suspended like some Store apps.
-- **Several windows**: a grey dot on the left edge.
+- **Several windows**: a grey dot on the left edge, a plus sign, or the
+  number of windows.
 - **Badge** (unread messages, notifications, overlay icons): a red dot on
-  the right edge, in every window state.
+  the right edge, in every window state, or the badge's count. For apps
+  that draw their count into an overlay icon (Telegram, Discord), the count
+  is read from the description they give it (Discord's counts from 0, so 1
+  is added to it, for its PTB and Canary builds too). Without a number
+  there (Outlook's, say), the dot stays.
 - **Progress** (downloads, copies, installs): the marks fill from left to
   right in green, yellow while paused, red on error. When the end isn't
-  known, the marks run around the frame, or the underline sweeps across
-  for a minimized app.
+  known, the marks pulse, scaling about the frame's center and back twice
+  a cycle, the second time twice as fast (the dots, signs and counts stay
+  put), or the underline sweeps across for a minimized app.
 - **Attention**: the marks turn orange while the app's button flashes.
 - **Colors**: the app in front gets your accent color, every other app
   grey.
-- **Pinned apps** (optional, off by default): a dot at the top center,
-  whether the app is running, minimized or not running. A pinned app's top
-  corners then stay apart instead of forming a cap, leaving the dot its
-  place.
+- **Pinned apps** (optional, off by default): a dot or an X sign at the
+  top center, whether the app is running, minimized or not running. A
+  pinned app's top corners then stay apart instead of forming a cap,
+  leaving it its place.
+
+Counts go up to 99. Counts of one digit read normally; 10 and up turn
+vertical along the edge, so they don't run into the icon.
 
 The taskbar's own running indicator and progress bar are replaced by these
 marks. Its multi-window mark and badges are replaced too while the
-matching dot is on. Everything comes back when the mod is disabled.
+matching indicator is on. Everything comes back when the mod is disabled.
 
 ## Animations
 
 A minimized app's underline splits into the corners when it's restored, a
-maximized window's top corners travel up from the top center, and the dots
-grow from their centers. Animations follow the Windows animation setting,
-except progress, which keeps moving like the native progress bar.
+maximized window's top corners travel up from the top center, and the
+dots, signs and counts grow from their centers. Animations are controlled
+by the mod's own setting only, whatever the Windows animation setting is.
+Progress keeps moving even with them off, like the native progress bar.
 
 ## Settings
 
@@ -60,15 +70,20 @@ except progress, which keeps moving like the native progress bar.
   line thickness (which grows inwards), and whether the corners join into a
   cup and a cap.
 - **Colors**: the colors and opacity of the corner marks and the underline,
-  for the app in front and for every other app. Empty means your accent color; `#Light|#Dark` sets a color per
-  theme, and `#FF0000,#00FF00` a gradient.
+  for the app in front and for every other app. Empty means your accent
+  color; `#Light|#Dark` sets a color per theme, and `#FF0000,#00FF00` a
+  gradient.
 - **Open and Maximized Windows**: the marks' shape, whether maximized
   windows keep their bottom corners, and the dimmed missing corners.
 - **Minimized Apps**: the underline's length and ends, and its dimmed
   variant for apps running off screen.
-- **Apps With Several Windows**, **Apps With a Badge**, **Pinned Apps**:
-  turn each dot on or off, and set its size and color.
-- **Progress**, **Attention**: their colors.
+- **Apps With Several Windows**: none, a dot, a plus sign or a count, their
+  sizes and color.
+- **Apps With a Badge**: none, a dot or a count, the dot's and the count's
+  sizes, and their color.
+- **Pinned Apps**: none, a dot or an X sign, its size and color.
+- **Progress**: its colors, and the pulse's size.
+- **Attention**: on or off, and its color.
 - **Animations**: on or off, and how long a movement takes.
 - **Window Rules**: what counts as an open window.
 
@@ -78,19 +93,24 @@ except progress, which keeps moving like the native progress bar.
   themes, high contrast and right-to-left taskbars.
 - Taskbar Open Window Underline can also hide the running indicator. If you
   use both mods, turn that option off there: both use the same switch.
+- Works alongside Windows 11 Taskbar Styler: when a theme is applied or
+  removed, the native indicators the mod replaces are hidden again.
 - For bug reports, turn on **Debug logging** under Advanced and include the
   mod's log.
 
 How it works, in short: each button's windows are found through the
 taskbar's view models and judged with `IsIconic`, `IsZoomed`, DWM cloaking
 and the virtual desktop manager, refreshed on window events. Progress,
-attention and badges are read from the button's own XAML. The marks are
-composition shapes on one Direct2D path around the icon, moved by animating
-their trims along it on the render thread. The only layout change is the
-icon background's right margin, set to 0 while the multi-window dot takes
-the place of the native multi-window mark (restored when it doesn't). On
-builds where the needed symbols can't be resolved, the mod
-stays inactive and the log says so.
+attention and badges are read from the button's own XAML (an overlay
+icon's count from the button's help text, where the taskbar puts the
+icon's description). The marks are composition shapes on one Direct2D
+path around the icon, moved by animating their trims along it on the
+render thread; the plus and X signs are composition lines, and the counts
+small XAML text blocks, in the same host. The only layout change is the
+icon background's right margin, set to 0 while the mod's multi-window
+indicator takes the place of the native mark (restored when it doesn't).
+On builds where the needed symbols can't be resolved, the mod stays
+inactive and the log says so.
 */
 // ==/WindhawkModReadme==
 
@@ -108,7 +128,7 @@ stays inactive and the log says so.
     $description: Line thickness of the corner marks and the underline, in pixels. It grows inwards from the frame's outer edge.
   - ConnectCorners: true
     $name: Connect the corners
-    $description: Joins the bottom corners into a cup under the icon and the top corners into a cap over it. A pinned app showing the pinned-app dot keeps its top corners apart.
+    $description: Joins the bottom corners into a cup under the icon and the top corners into a cap over it. A pinned app showing the pinned-app indicator keeps its top corners apart.
   $name: Frame
   $description: The rounded rectangle around each icon that all indicators are drawn on. The frame itself is never drawn.
 - Colors:
@@ -171,36 +191,55 @@ stays inactive and the log says so.
   $name: Minimized Apps
   $description: Minimized apps get a line centered on the frame's bottom edge.
 - Multi:
-  - Enabled: true
-    $name: Dot for apps with several windows
-    $description: A dot on the frame's left edge for apps with two or more windows. The taskbar's own multi-window mark is hidden while this is on.
+  - Mode: dot
+    $name: Indicator
+    $description: Shown centered on the frame's left edge for apps with two or more windows. The taskbar's own multi-window mark is hidden unless this is None.
+    $options:
+    - none: None
+    - dot: Dot
+    - plus: Plus sign
+    - number: Number (the window count)
   - Diameter: '5'
     $name: Dot size
-    $description: Diameter of the dot, in pixels.
+    $description: Diameter of the dot, or width and height of the plus sign, in pixels.
+  - NumberSize: '7'
+    $name: Number size
+    $description: Height of the number's digits, in pixels.
   - Color: '#878787|#AEAEAE'
-    $name: Dot color
-    $description: Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
+    $name: Color
+    $description: Of the dot, the plus sign or the number. Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
   $name: Apps With Several Windows
 - Badge:
-  - Enabled: true
-    $name: Dot for apps with a badge
-    $description: A dot on the frame's right edge for apps with a notification badge or an overlay icon, in every window state. The taskbar's own badges and overlay icons are hidden while this is on.
+  - Mode: dot
+    $name: Indicator
+    $description: Shown centered on the frame's right edge for apps with a notification badge or an overlay icon, in every window state. Number shows the badge's count (for an overlay icon, like Telegram's or Discord's, the number in the description the app gives it), up to 99, and a dot for badges without one. The taskbar's own badges and overlay icons are hidden unless this is None.
+    $options:
+    - none: None
+    - dot: Dot
+    - number: Number (the notification count)
   - Diameter: '5'
     $name: Dot size
-    $description: Diameter of the dot, in pixels.
+    $description: Diameter of the dot, in pixels. With Number, the size of the dot shown for badges without a count.
+  - NumberSize: '7'
+    $name: Number size
+    $description: Height of the number's digits, in pixels.
   - Color: '#EB5757'
-    $name: Dot color
-    $description: Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
+    $name: Color
+    $description: Of the dot or the number. Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
   $name: Apps With a Badge
 - Pinned:
-  - Enabled: false
-    $name: Dot for pinned apps
-    $description: A dot at the top center of the frame for pinned apps, running or not. The top corners of a pinned app aren't joined into a cap then, leaving the dot its place; other apps keep their cap.
+  - Mode: none
+    $name: Indicator
+    $description: Shown at the top center of the frame for pinned apps, running or not. The top corners of a pinned app aren't joined into a cap then, leaving the indicator its place; other apps keep their cap.
+    $options:
+    - none: None
+    - dot: Dot
+    - cross: X sign
   - Diameter: '5'
-    $name: Dot size
-    $description: Diameter of the dot, in pixels.
+    $name: Size
+    $description: Diameter of the dot, or width and height of the X sign, in pixels.
   - Color: '#878787|#AEAEAE'
-    $name: Dot color
+    $name: Color
     $description: Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
   $name: Pinned Apps
 - Progress:
@@ -213,8 +252,11 @@ stays inactive and the log says so.
   - ErrorColor: '#C42B1C|#FF99A4'
     $name: Error progress color
     $description: Same format.
+  - PulseScale: '0.95'
+    $name: Pulse size
+    $description: For a busy app with no known end, the marks pulse, scaling about the frame's center and back twice a cycle, the second time twice as fast. This is their scale at the peak of a pulse; 0.95 shrinks them by 5%, 1.1 grows them by 10%. 1 turns the pulse off.
   $name: Progress
-  $description: Progress is shown on the indicators instead of the taskbar's own progress bar. A download, copy or install fills them from left to right in these colors; a busy app with no known end makes them run around the frame.
+  $description: Progress is shown on the indicators instead of the taskbar's own progress bar. A download, copy or install fills them from left to right in these colors; a busy app with no known end makes them pulse, or a minimized app's underline sweep.
 - Attention:
   - Enabled: true
     $name: Color apps requesting attention
@@ -226,7 +268,7 @@ stays inactive and the log says so.
 - Animations:
   - Enabled: true
     $name: Animate changes
-    $description: Indicators move along the frame when an app's state changes. Off, or with Windows animations turned off, they change at once. Progress keeps animating either way.
+    $description: Indicators move along the frame when an app's state changes, whatever the Windows animation setting is. Off, they change at once. Progress keeps animating either way.
   - Duration: 160
     $name: Duration (ms)
     $description: Length of one movement, in milliseconds.
@@ -260,6 +302,9 @@ stays inactive and the log says so.
 #include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Animation.h>
+#include <winrt/Windows.UI.Text.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.Foundation.Numerics.h>
@@ -281,6 +326,7 @@ stays inactive and the log says so.
 #include <mutex>
 #include <vector>
 #include <functional>
+#include <initializer_list>
 #include <optional>
 #include <utility>
 #include <cmath>
@@ -323,15 +369,18 @@ struct Settings {
     bool IndCloakedIsHidden = true;
 
     // Progress: determinate progress fills the indicators in these colors,
-    // indeterminate progress runs a lap along the frame.
+    // indeterminate progress makes them pulse to this scale.
     std::vector<winrt::Windows::UI::Color> FillLight, FillDark;
     std::vector<winrt::Windows::UI::Color> FillPausedLight, FillPausedDark;
     std::vector<winrt::Windows::UI::Color> FillErrorLight, FillErrorDark;
+    double PulseScale = 0.95;
 
-    // Apps with a badge: native badges hidden, a dot centered on the
-    // frame's right edge instead.
+    // Apps with a badge: native badges hidden, a dot (or the badge's count)
+    // centered on the frame's right edge instead.
     bool BadgeEnabled = true;
+    bool BadgeNumber = false;  // the badge's count instead, where it has one
     double BadgeDiameter = 5.0;
+    double BadgeNumberSize = 7.0;  // the count's digit height
     std::vector<winrt::Windows::UI::Color> BadgeLight, BadgeDark;
 
     // Minimized apps: a centered piece of the frame's bottom edge.
@@ -344,16 +393,21 @@ struct Settings {
     bool AttentionEnabled = true;
     std::vector<winrt::Windows::UI::Color> AttentionLight, AttentionDark;
 
-    // Pinned apps, running or not: a dot centered on the frame's top edge.
-    // With the corners connected, a pinned app's top corners stay split so
-    // the dot keeps its place.
+    // Pinned apps, running or not: a dot (or an X sign) centered on
+    // the frame's top edge. With the corners connected, a pinned app's top
+    // corners stay split so it keeps its place.
     bool PinnedEnabled = false;
+    bool PinnedCross = false;
     double PinnedDiameter = 5.0;
     std::vector<winrt::Windows::UI::Color> PinnedLight, PinnedDark;
 
-    // Apps with several windows: a dot centered on the frame's left edge.
+    // Apps with several windows: a dot (or a plus sign, or the window count)
+    // centered on the frame's left edge.
     bool MultiEnabled = true;
+    bool MultiNumber = false;
+    bool MultiPlus = false;    // a plus sign instead
     double MultiDiameter = 5.0;
+    double MultiNumberSize = 7.0;  // the count's digit height
     std::vector<winrt::Windows::UI::Color> MultiLight, MultiDark;
 
     // One log line per button whenever its summary changes.
@@ -400,12 +454,13 @@ struct FrameMetrics {
     double sRightMid = 0;     // middle of the right edge
     bool diagonal = false;
 
-    double CornerMid(int k) const { return arcStart[k] + arc[k] / 2.0; }
 };
 
 // The indicator shapes, one composition sprite shape each, all stroking the
-// same frame path and trimmed to their piece of it. The underline is the BL
-// and BR shapes parked side by side as its two halves.
+// same frame path and trimmed to their piece of it: the four corners and
+// the three dots. The underline is the BL and BR shapes parked side by side
+// as its two halves. The signs and counts are drawn apart from the path
+// (see IndicatorRenderer::Sign and ButtonEntry::CountLabel).
 constexpr int kSlotTL = 0, kSlotTR = 1, kSlotBR = 2, kSlotBL = 3, kSlotDot = 4, kSlotBadge = 5, kSlotPinned = 6;
 constexpr int kSlotCount = 7;
 
@@ -452,7 +507,8 @@ struct IndicatorSlot {
 };
 
 // The composition content of one button: a shape visual set as the child
-// visual of a small, layout-neutral XAML host in the icon's panel.
+// visual of a small, layout-neutral XAML host in the icon's panel. (The
+// count labels are XAML elements in that host, see ButtonEntry.)
 struct IndicatorRenderer {
     wuc::Compositor compositor{nullptr};
     wuc::ShapeVisual visual{nullptr};
@@ -462,14 +518,18 @@ struct IndicatorRenderer {
     FrameMetrics metrics;     // of the current path
     double pad = 0.0;         // room around the box for caps and the dot
 
+    // The corners and their fill twins, in one container shape: the pulse
+    // scales it from the frame's center, leaving the dots and signs alone.
+    wuc::CompositionContainerShape frameGroup{nullptr};
+
     // Indeterminate progress: 0 none, 1 the underline's sweep, 2 the
-    // corners' clockwise lap.
+    // corners' pulse.
     int8_t progressMode = 0;
     wuc::CompositionPropertySet progress{nullptr};   // the sweep's bar positions
     wuc::CompositionEasingFunction progressEasing{nullptr};
-    wuc::CompositionEasingFunction stepEasing{nullptr};
     double sweepKey[6] = {-1, -1, -1, -1, -1, -1};   // the track, bar and direction it was started for
-    ULONGLONG lapStartTick = 0;
+    ULONGLONG pulseStartTick = 0;
+    double pulseScale = 0.0;  // the peak scale the pulse was started with
 
     // Determinate progress: a twin of each corner shape, in the fill color,
     // whose trim is an expression of its base shape's live trim and of the
@@ -483,6 +543,22 @@ struct IndicatorRenderer {
         double thickness = -1.0;
     };
     FillTwin fills[4];                              // TL, TR, BR, BL
+
+    // The signs: the pinned-app X (two diagonal lines crossing at the top
+    // center) and the multi-window plus (a horizontal and a vertical line
+    // crossing at the left edge's middle). Not pieces of the frame path,
+    // which can only draw dots and marks along it: two line shapes in one
+    // container shape, whose scale grows them from their center.
+    struct Sign {
+        wuc::CompositionContainerShape container{nullptr};
+        wuc::CompositionSpriteShape lines[2]{nullptr, nullptr};
+        wuc::CompositionLineGeometry geometries[2]{nullptr, nullptr};
+        wuc::CompositionColorBrush brush{nullptr};
+        bool placed = false;
+        double x = -1e9, y = -1e9, half = -1.0, stroke = -1.0;
+        ScalarTween scaleTween;
+    };
+    Sign cross, plus;
     wuc::CompositionPropertySet fillProps{nullptr}; // f (fraction), alpha
     bool fillActive = false;
     bool fillBound = false;     // twins' trims bound, for fillRtl
@@ -526,10 +602,13 @@ struct ButtonEntry {
     struct HiddenNative {
         winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> element;
         bool hidden = false;
+        // Property-changed callbacks that re-hide it when something else
+        // changes it (see WatchHiddenNative).
+        std::vector<std::pair<winrt::Windows::UI::Xaml::DependencyProperty, int64_t>> watches;
     };
     HiddenNative nativeRunning;
     HiddenNative nativeProgress;
-    HiddenNative nativeMulti;  // Border#MultiWindowElement, with the multi-window dot on
+    HiddenNative nativeMulti;  // Border#MultiWindowElement, with the multi-window indicator on
 
     // Border#BackgroundElement's right margin, 0 while the native
     // multi-window mark is hidden (see UpdateBackgroundMargin): the margin
@@ -574,6 +653,27 @@ struct ButtonEntry {
         std::vector<std::pair<winrt::Windows::UI::Xaml::DependencyProperty, int64_t>> tokens;
     };
     ProgressWatch progressWatch;
+
+    // The counts shown instead of the multi-window and badge dots: XAML text
+    // blocks in the host (composition has no text), centered where the dot
+    // would be, each in a border whose composition visual's scale grows it
+    // from its center (a composition animation, like every other indicator's,
+    // so it runs whatever the Windows animation setting is).
+    struct CountLabel {
+        winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::Border> box;
+        winrt::weak_ref<winrt::Windows::UI::Xaml::Controls::TextBlock> text;
+        ScalarTween scaleTween;
+        std::wstring value;
+        double size = -1.0;      // the digit height the font size was fitted to
+        double fontSize = 0.0;
+        double x = -1e9, y = -1e9;  // the center it was placed on
+        winrt::Windows::UI::Color color{};
+        bool colorSet = false;
+    };
+    CountLabel countLabels[2];  // kLabelMulti, kLabelBadge
+    std::wstring badgeCount;    // the native badge's count, as last read
+    HWND badgeHwnd = nullptr;   // the window badgeProcess was looked up for
+    std::wstring badgeProcess;  // for app-specific readings of the count
 
     std::wstring debugLast;   // the last debug summary logged for it
 
@@ -778,6 +878,12 @@ void ParseGradientColorPair(PCWSTR str, std::vector<winrt::Windows::UI::Color>& 
     parseColors(darkStr, dark);
 }
 
+// A dropdown's value, or `fallback` when it is empty.
+std::wstring ReadModeSetting(PCWSTR name, PCWSTR fallback) {
+    WindhawkUtils::StringSetting value(Wh_GetStringSetting(name));
+    return value.get() && *value.get() ? std::wstring(value.get()) : std::wstring(fallback);
+}
+
 void LoadSettings() {
     std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
 
@@ -799,7 +905,13 @@ void LoadSettings() {
     ParseGradientColorPair(fillPausedStr.get(), g_settings.FillPausedLight, g_settings.FillPausedDark);
     WindhawkUtils::StringSetting fillErrorStr(Wh_GetStringSetting(L"Progress.ErrorColor"));
     ParseGradientColorPair(fillErrorStr.get(), g_settings.FillErrorLight, g_settings.FillErrorDark);
-    g_settings.BadgeEnabled = Wh_GetIntSetting(L"Badge.Enabled") != 0;
+    WindhawkUtils::StringSetting pulseStr(Wh_GetStringSetting(L"Progress.PulseScale"));
+    g_settings.PulseScale = std::clamp(ParseDouble(pulseStr.get(), 0.95), 0.5, 2.0);
+    std::wstring badgeMode = ReadModeSetting(L"Badge.Mode", L"dot");
+    g_settings.BadgeEnabled = badgeMode != L"none";
+    g_settings.BadgeNumber = badgeMode == L"number";
+    WindhawkUtils::StringSetting badgeNumStr(Wh_GetStringSetting(L"Badge.NumberSize"));
+    g_settings.BadgeNumberSize = std::max(1.0, ParseDouble(badgeNumStr.get(), 7.0));
     WindhawkUtils::StringSetting badgeDiaStr(Wh_GetStringSetting(L"Badge.Diameter"));
     g_settings.BadgeDiameter = std::max(1.0, ParseDouble(badgeDiaStr.get(), 5.0));
     WindhawkUtils::StringSetting badgeColStr(Wh_GetStringSetting(L"Badge.Color"));
@@ -835,13 +947,20 @@ void LoadSettings() {
     WindhawkUtils::StringSetting attentionColStr(Wh_GetStringSetting(L"Attention.Color"));
     ParseGradientColorPair(attentionColStr.get(), g_settings.AttentionLight, g_settings.AttentionDark);
 
-    g_settings.PinnedEnabled = Wh_GetIntSetting(L"Pinned.Enabled") != 0;
+    std::wstring pinnedMode = ReadModeSetting(L"Pinned.Mode", L"none");
+    g_settings.PinnedEnabled = pinnedMode != L"none";
+    g_settings.PinnedCross = pinnedMode == L"cross";
     WindhawkUtils::StringSetting pinnedColStr(Wh_GetStringSetting(L"Pinned.Color"));
     ParseGradientColorPair(pinnedColStr.get(), g_settings.PinnedLight, g_settings.PinnedDark);
     WindhawkUtils::StringSetting pinnedDiaStr(Wh_GetStringSetting(L"Pinned.Diameter"));
     g_settings.PinnedDiameter = std::max(1.0, ParseDouble(pinnedDiaStr.get(), 5.0));
 
-    g_settings.MultiEnabled = Wh_GetIntSetting(L"Multi.Enabled") != 0;
+    std::wstring multiMode = ReadModeSetting(L"Multi.Mode", L"dot");
+    g_settings.MultiEnabled = multiMode != L"none";
+    g_settings.MultiNumber = multiMode == L"number";
+    g_settings.MultiPlus = multiMode == L"plus";
+    WindhawkUtils::StringSetting multiNumStr(Wh_GetStringSetting(L"Multi.NumberSize"));
+    g_settings.MultiNumberSize = std::max(1.0, ParseDouble(multiNumStr.get(), 7.0));
     WindhawkUtils::StringSetting multiDiaStr(Wh_GetStringSetting(L"Multi.Diameter"));
     g_settings.MultiDiameter = std::max(1.0, ParseDouble(multiDiaStr.get(), 5.0));
     WindhawkUtils::StringSetting multiColStr(Wh_GetStringSetting(L"Multi.Color"));
@@ -1712,7 +1831,7 @@ void RefreshButton(FrameworkElement const& button, const Settings& localSettings
 // Property-changed callbacks queue a refresh rather than run one: the
 // taskbar changes several properties in a row (IsIndeterminate, ShowPaused,
 // ShowError, the value; a badge's visibility and source), and a refresh after
-// each saw the states in between — progress gone for a moment (a lap
+// each saw the states in between — progress gone for a moment (a pulse
 // restarted), or neither paused nor in error (the fill flashed its normal
 // color). One queued refresh per burst runs after it, on the final state.
 void ReportRefreshStats() {
@@ -1828,7 +1947,24 @@ void SetNativeIndicatorHidden(FrameworkElement const& element, bool hidden) {
     try { SetLoopingAnimationsPaused(element, hidden); } catch (...) {}
 }
 
+// Unregisters a hidden element's callbacks (see WatchHiddenNative).
+void UnwatchHiddenNative(ButtonEntry::HiddenNative& native) {
+    if (auto element = native.element.get()) {
+        for (auto const& [property, token] : native.watches) {
+            try { element.UnregisterPropertyChangedCallback(property, token); } catch (...) {}
+        }
+    }
+    native.watches.clear();
+}
+
+// Lets go of a hidden element without showing it (see RetireEntryPaths).
+void ForgetHiddenNative(ButtonEntry::HiddenNative& native) {
+    UnwatchHiddenNative(native);
+    native = {};
+}
+
 void RestoreNativeElement(ButtonEntry::HiddenNative& native) {
+    UnwatchHiddenNative(native);
     if (!native.hidden) return;
     if (auto element = native.element.get()) SetNativeIndicatorHidden(element, false);
     native.hidden = false;
@@ -1875,7 +2011,7 @@ void RestoreBackgroundMargin(std::shared_ptr<ButtonEntry> const& e) {
     m = {};
 }
 
-// While the multi-window dot is on, the taskbar's own multi-window mark is
+// While the multi-window indicator is on, the taskbar's own multi-window mark is
 // hidden. The taskbar makes room for that mark by giving the button's
 // background (Border#BackgroundElement) a right margin, which would leave
 // the background off-center without it: its right margin is set to 0, as
@@ -1944,9 +2080,43 @@ void RestoreNativeIndicators(std::shared_ptr<ButtonEntry> const& e) {
 // what flashed the native running indicator on close. Only turning the
 // option off (here, or by the sweep in RestoreNativeElements) or unloading
 // the mod shows the elements again.
-void UpdateHiddenNative(FrameworkElement const& button, FrameworkElement const& iconPanel,
-                        ButtonEntry::HiddenNative& native, bool hide, std::wstring_view name,
-                        std::wstring_view classPart) {
+//
+// Another mod restyling the button (Windows 11 Taskbar Styler applying or
+// removing a theme) changes the element's properties without refreshing
+// the button, and that can bring it back (seen when the Styler was
+// disabled: the running indicators showed until hovered). So the element's
+// properties such a change touches are watched. A change queues a refresh
+// right away, and a refresh pass of every button a moment later: XAML
+// passes the restyled element's properties on to its visual only when it
+// next renders, which set its opacity back over the immediate re-hide.
+void RequestRefreshPassSoon();
+
+void WatchHiddenNative(std::shared_ptr<ButtonEntry> const& entry, ButtonEntry::HiddenNative& native,
+                       FrameworkElement const& element) {
+    std::weak_ptr<ButtonEntry> weakEntry = entry;
+    auto onChanged = [weakEntry](DependencyObject const& sender, DependencyProperty const&) {
+        if (g_unloading) return;
+        if (g_debugLog) {
+            if (auto changed = sender.try_as<FrameworkElement>()) {
+                Wh_Log(L"[debug] hidden native %s changed by someone else; hiding it again", changed.Name().c_str());
+            }
+        }
+        PostCoalescedRefresh(weakEntry);
+        RequestRefreshPassSoon();
+    };
+    // Not Opacity: the template's own visual states animate it, and a
+    // refresh on every such change would only add work.
+    for (auto const& property : {Canvas::ZIndexProperty(), UIElement::VisibilityProperty(),
+                                 FrameworkElement::StyleProperty()}) {
+        try {
+            native.watches.emplace_back(property, element.RegisterPropertyChangedCallback(property, onChanged));
+        } catch (...) {}
+    }
+}
+
+void UpdateHiddenNative(FrameworkElement const& button, std::shared_ptr<ButtonEntry> const& entry,
+                        FrameworkElement const& iconPanel, ButtonEntry::HiddenNative& native, bool hide,
+                        std::wstring_view name, std::wstring_view classPart) {
     if (!hide && !native.hidden) return; // nothing to do, skip the lookup
 
     auto found = FindChildByName(iconPanel, name);
@@ -1955,8 +2125,20 @@ void UpdateHiddenNative(FrameworkElement const& button, FrameworkElement const& 
 
     if (hide) {
         if (!found) return; // keep tracking what we have, hidden
+        bool same = native.element.get() == found;
+        if (same && native.hidden && g_debugLog) {
+            try {
+                if (ElementCompositionPreview::GetElementVisual(found).Opacity() > 0.01f) {
+                    Wh_Log(L"[debug] hidden native %s was showing again; hidden again", found.Name().c_str());
+                }
+            } catch (...) {}
+        }
         SetNativeIndicatorHidden(found, true);
-        native.element = winrt::make_weak(found);
+        if (!same) {
+            UnwatchHiddenNative(native);
+            native.element = winrt::make_weak(found);
+            WatchHiddenNative(entry, native, found);
+        }
         native.hidden = true;
     } else {
         RestoreNativeElement(native);
@@ -1966,11 +2148,11 @@ void UpdateHiddenNative(FrameworkElement const& button, FrameworkElement const& 
 
 void UpdateNativeIndicators(FrameworkElement const& button, std::shared_ptr<ButtonEntry> const& entry,
                             FrameworkElement const& iconPanel, const Settings& localSettings) {
-    UpdateHiddenNative(button, iconPanel, entry->nativeRunning, true, L"RunningIndicator", L"");
-    UpdateHiddenNative(button, iconPanel, entry->nativeProgress, true, L"ProgressIndicator", L"ProgressBar");
+    UpdateHiddenNative(button, entry, iconPanel, entry->nativeRunning, true, L"RunningIndicator", L"");
+    UpdateHiddenNative(button, entry, iconPanel, entry->nativeProgress, true, L"ProgressIndicator", L"ProgressBar");
     // The taskbar's own mark for a button with several windows
-    // (Border#MultiWindowElement) gives way to the multi-window dot.
-    UpdateHiddenNative(button, iconPanel, entry->nativeMulti, localSettings.MultiEnabled,
+    // (Border#MultiWindowElement) gives way to the multi-window indicator.
+    UpdateHiddenNative(button, entry, iconPanel, entry->nativeMulti, localSettings.MultiEnabled,
                        L"MultiWindowElement", L"");
     try { UpdateBackgroundMargin(button, entry, iconPanel, localSettings); } catch (...) {}
 }
@@ -1984,7 +2166,9 @@ void UpdateNativeIndicators(FrameworkElement const& button, std::shared_ptr<Butt
 // and hidden through its handout visual's opacity, like the running
 // indicator. Whether the button "has a badge" is read from the elements' own
 // XAML state, which that opacity doesn't touch: shown, sized and, for an
-// image, with a source.
+// image, with a source. Its count, for the Number option, is read from the
+// badge's text, or for an overlay icon from the button's help text (see
+// ReadNativeBadgeCount).
 // Property-changed callbacks on those properties, plus SizeChanged, refresh
 // the button when a badge comes or goes.
 // ---------------------------------------------------------------------------
@@ -2113,6 +2297,14 @@ std::wstring NativeBadgeDetail(std::shared_ptr<ButtonEntry> const& entry) {
                        element.ActualWidth(), element.ActualHeight(), source ? L"y" : L"n",
                        IsHiddenByParent(element) ? L"hides" : L"ok");
             detail += buffer;
+            // The text an app gives its overlay icon for screen readers
+            // (SetOverlayIcon's description), if the taskbar passes it on.
+            try {
+                std::wstring a11y(winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetName(element));
+                std::wstring help(winrt::Windows::UI::Xaml::Automation::AutomationProperties::GetHelpText(element));
+                if (!a11y.empty()) detail += L" name=\"" + a11y + L"\"";
+                if (!help.empty()) detail += L" help=\"" + help + L"\"";
+            } catch (...) {}
             if (!badge.isImage) {
                 std::vector<FrameworkElement> leaves;
                 CollectLeaves(element, leaves);
@@ -2194,6 +2386,128 @@ void ReleaseNativeBadges(std::shared_ptr<ButtonEntry> const& e, bool restore = t
 }
 
 
+// Counts are capped at 99, so they fit along the edge.
+std::wstring CapCount(std::wstring const& digits) {
+    size_t first = digits.find_first_not_of(L'0');
+    if (first == std::wstring::npos) return L"";  // 0: nothing to count
+    std::wstring trimmed = digits.substr(first);
+    return trimmed.size() > 2 ? L"99" : trimmed;
+}
+
+// The first number in a text that stands as a word of its own ("3
+// notifications", "36987 Unread Messages"), not part of one ("Win11"), its
+// digits only. Thousands separators ("1,234", "1.234", "1 234") are part
+// of it: a separator followed by exactly three digits.
+std::wstring FirstNumberIn(std::wstring_view text) {
+    auto isSeparator = [](wchar_t c) {
+        return c == L',' || c == L'.' || c == L'\'' || c == L' ' || c == 0x00A0 || c == 0x202F;
+    };
+    size_t n = text.size();
+    for (size_t i = 0; i < n; i++) {
+        if (!std::iswdigit(text[i])) continue;
+        std::wstring digits;
+        size_t j = i;
+        while (j < n && std::iswdigit(text[j])) digits += text[j++];
+        // A separator, exactly three digits, and no fourth one.
+        while (j + 3 < n && isSeparator(text[j]) && std::iswdigit(text[j + 1]) && std::iswdigit(text[j + 2]) &&
+               std::iswdigit(text[j + 3]) && (j + 4 == n || !std::iswdigit(text[j + 4]))) {
+            digits.append(text.substr(j + 1, 3));
+            j += 4;
+        }
+        bool standsAlone = (i == 0 || !std::iswalnum(text[i - 1])) && (j == n || !std::iswalpha(text[j]));
+        if (standsAlone) return digits;
+        i = j;
+    }
+    return L"";
+}
+
+// The description an app gives its overlay icon (SetOverlayIcon's
+// pszDescription, for screen readers), which the taskbar sets as the
+// button's help text: "3 notifications" (Discord), "36987 Unread Messages"
+// (Telegram). Read from the button's AutomationProperties.HelpText, or
+// from its automation peer if one exists (none is created for this:
+// creating peers on taskbar buttons could change what screen readers see).
+// `source` (for the debug log) receives where it came from.
+std::wstring ReadButtonHelpText(FrameworkElement const& button, const wchar_t** source = nullptr) {
+    using namespace winrt::Windows::UI::Xaml::Automation;
+    if (source) *source = L"none";
+    try {
+        std::wstring help(AutomationProperties::GetHelpText(button));
+        if (!help.empty()) {
+            if (source) *source = L"property";
+            return help;
+        }
+        if (auto peer = Peers::FrameworkElementAutomationPeer::FromElement(button)) {
+            if (source) *source = L"peer";
+            return std::wstring(peer.GetHelpText());
+        }
+    } catch (...) {}
+    return L"";
+}
+
+std::wstring ProcessNameOf(HWND hwnd);
+
+// Whether the button's app is one of the processes `exeNames`, looked up
+// once per window (opening the process on every refresh would cost).
+bool IsButtonOfProcess(FrameworkElement const& button, std::shared_ptr<ButtonEntry> const& entry,
+                       std::initializer_list<const wchar_t*> exeNames) {
+    auto resolved = ResolveButtonWindows(button);
+    if (resolved.state == ButtonWindowsState::kResolved && !resolved.windows.empty()) {
+        HWND hwnd = resolved.windows[0];
+        if (hwnd != entry->badgeHwnd || entry->badgeProcess.empty()) {
+            entry->badgeHwnd = hwnd;
+            entry->badgeProcess = ProcessNameOf(hwnd);
+        }
+    }
+    if (entry->badgeProcess.empty()) return false;
+    return std::any_of(exeNames.begin(), exeNames.end(),
+                       [&](const wchar_t* name) { return _wcsicmp(entry->badgeProcess.c_str(), name) == 0; });
+}
+
+// The count a native badge shows: the number of a text badge that is
+// showing ("3", "99+" read as 99), or for an overlay icon (an image the app drew, its
+// number only pixels) the number in its description. Empty for badges
+// without one (glyphs, the small-icons dot, overlay icons with no number in
+// their description).
+std::wstring ReadNativeBadgeCount(FrameworkElement const& button, std::shared_ptr<ButtonEntry> const& entry) {
+    bool overlayShown = false;
+    for (auto const& badge : entry->nativeBadges) {
+        auto element = badge.element.get();
+        if (!element) continue;
+        if (badge.isImage) {
+            if (IsNativeBadgeShown(badge)) overlayShown = true;
+            continue;
+        }
+        try {
+            std::vector<FrameworkElement> leaves;
+            CollectLeaves(element, leaves);
+            for (auto const& leaf : leaves) {
+                auto block = leaf.try_as<TextBlock>();
+                if (!block || !IsLeafShowing(leaf, element)) continue;
+                std::wstring text(block.Text());
+                text.erase(std::remove_if(text.begin(), text.end(), [](wchar_t c) { return std::iswspace(c); }),
+                           text.end());
+                if (text.empty() || !std::iswdigit(text[0])) continue;
+                if (std::all_of(text.begin(), text.end(), [](wchar_t c) { return std::iswdigit(c) || c == L'+'; })) {
+                    // "99+" reads 99.
+                    std::wstring count = CapCount(text.substr(0, text.find(L'+')));
+                    if (!count.empty()) return count;
+                }
+            }
+        } catch (...) {}
+    }
+    if (!overlayShown) return L"";
+    std::wstring number = FirstNumberIn(ReadButtonHelpText(button));
+    if (number.empty()) return L"";
+    // Discord's description counts from 0: "0 notifications" with one
+    // unread, one less than its icon shows, whichever way the count goes.
+    if (IsButtonOfProcess(button, entry, {L"Discord.exe", L"DiscordPTB.exe", L"DiscordCanary.exe"})) {
+        if (number.size() > 2) return L"99";
+        return CapCount(std::to_wstring(std::wcstoul(number.c_str(), nullptr, 10) + 1));
+    }
+    return CapCount(number);
+}
+
 // Keeps the entry's native badge list in sync with the template, hides them,
 // and returns whether any of them is currently showing a badge.
 bool UpdateNativeBadges(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement const& iconPanel,
@@ -2247,6 +2561,18 @@ bool UpdateNativeBadges(std::shared_ptr<ButtonEntry> const& entry, FrameworkElem
             badge.sizeAttached = true;
         } catch (...) {}
         WatchBadgeTree(badge, element, onChanged);
+        // An overlay icon's count lives in the button's help text (see
+        // ReadButtonHelpText), which can change without a new icon.
+        if (badge.isImage) {
+            if (auto button = entry->button.get()) {
+                try {
+                    auto property = winrt::Windows::UI::Xaml::Automation::AutomationProperties::HelpTextProperty();
+                    int64_t token = button.RegisterPropertyChangedCallback(property, onChanged);
+                    DependencyObject buttonObject = button;
+                    badge.treeWatches.push_back({winrt::make_weak(buttonObject), property, token});
+                } catch (...) {}
+            }
+        }
         {
             static std::atomic<int> logged{0};
             if (logged.fetch_add(1) < 4) {
@@ -2329,7 +2655,6 @@ void ReleaseProgressWatch(std::shared_ptr<ButtonEntry> const& e) {
 }
 
 void ChaseFill(IndicatorRenderer& r, double fraction, bool animate);
-bool SystemAnimationsEnabled();
 
 // Keeps the watch on the button's progress bar and returns what it shows.
 ProgressInfo UpdateProgressWatch(FrameworkElement const& button, std::shared_ptr<ButtonEntry> const& entry,
@@ -2390,7 +2715,7 @@ ProgressInfo UpdateProgressWatch(FrameworkElement const& button, std::shared_ptr
                     std::lock_guard<std::mutex> lock(g_settingsMutex);
                     animate = g_settings.Animations;
                 }
-                try { ChaseFill(r, info.fraction, animate && SystemAnimationsEnabled()); } catch (...) {}
+                try { ChaseFill(r, info.fraction, animate); } catch (...) {}
             };
             for (auto property : {RangeBase::ValueProperty(), RangeBase::MinimumProperty(), RangeBase::MaximumProperty()}) {
                 try {
@@ -2411,7 +2736,7 @@ ProgressInfo UpdateProgressWatch(FrameworkElement const& button, std::shared_ptr
 // watch reports. A LayoutUpdated handler on the panel (raised after every
 // layout pass, so it only compares one number) notices a change in its
 // children: it hides a new native badge at once, before the frame is drawn,
-// and queues a refresh for the badge dot.
+// and queues a refresh for the badge indicator.
 // Debug logging: a panel's children in order, each as Name (or class) and
 // its ZIndex, e.g. "Icon BadgeControl ButtonStateIndicatorHost/z1000".
 std::wstring PanelOrderText(FrameworkElement const& panel) {
@@ -2513,9 +2838,9 @@ void UnwatchViewModelForDebug(std::shared_ptr<ButtonEntry> const& e);
 // (RestoreNativeElements).
 void RetireEntryPaths(std::shared_ptr<ButtonEntry> const& e, bool keepNativeHidden = false) {
     if (keepNativeHidden) {
-        e->nativeRunning = {};
-        e->nativeProgress = {};
-        e->nativeMulti = {};
+        ForgetHiddenNative(e->nativeRunning);
+        ForgetHiddenNative(e->nativeProgress);
+        ForgetHiddenNative(e->nativeMulti);
         // The margin goes back even here: a reused button's new entry would
         // otherwise read the adjusted margin as the taskbar's.
         RestoreBackgroundMargin(e);
@@ -2586,7 +2911,9 @@ std::shared_ptr<ButtonEntry> FindOrCreateEntry(FrameworkElement const& button, b
 // has a high ZIndex, so they render above the icon and its badge, and is
 // glued to the icon with a composition expression. Every shape is trimmed to
 // its piece of the frame path; animating TrimStart and TrimEnd moves those
-// pieces along the path, around the corners, on the render thread.
+// pieces along the path, around the corners, on the render thread. The
+// corners sit in a container shape that the indeterminate pulse scales; the
+// signs are line shapes and the counts XAML text blocks in the same host.
 // Called from every refresh of a button (hook, sweep, window-event pass,
 // Loaded, theme change).
 // ---------------------------------------------------------------------------
@@ -2608,6 +2935,7 @@ void ReleaseRenderer(std::shared_ptr<ButtonEntry> const& entry) {
         for (auto& stop : slot.stops) { try { stop.Close(); } catch (...) {} }
         slot = IndicatorSlot{};
     }
+    try { if (r.frameGroup) r.frameGroup.Close(); } catch (...) {}
     try { if (r.visual) r.visual.Close(); } catch (...) {}
     try { if (r.easing) r.easing.Close(); } catch (...) {}
     try { if (r.linear) r.linear.Close(); } catch (...) {}
@@ -2619,13 +2947,25 @@ void ReleaseRenderer(std::shared_ptr<ButtonEntry> const& entry) {
     }
     try { if (r.fillProps) r.fillProps.Close(); } catch (...) {}
     try { if (r.progressEasing) r.progressEasing.Close(); } catch (...) {}
-    try { if (r.stepEasing) r.stepEasing.Close(); } catch (...) {}
+    for (auto* sign : {&r.cross, &r.plus}) {
+        for (int i = 0; i < 2; i++) {
+            try { if (sign->lines[i]) sign->lines[i].Close(); } catch (...) {}
+            try { if (sign->geometries[i]) sign->geometries[i].Close(); } catch (...) {}
+        }
+        try { if (sign->container) sign->container.Close(); } catch (...) {}
+        try { if (sign->brush) sign->brush.Close(); } catch (...) {}
+    }
     r = IndicatorRenderer{};
 }
 
 void RetireHost(std::shared_ptr<ButtonEntry> const& entry) {
     ReleaseRenderer(entry);
-    if (auto host = entry->host.get()) RetireElement(host);
+    if (auto host = entry->host.get()) {
+        // The count labels go with it.
+        if (auto panel = host.try_as<Panel>()) { try { panel.Children().Clear(); } catch (...) {} }
+        RetireElement(host);
+    }
+    for (auto& label : entry->countLabels) label = ButtonEntry::CountLabel{};
     {
         std::lock_guard<std::mutex> lock(g_entriesMutex);
         entry->host = nullptr;
@@ -2651,7 +2991,11 @@ FrameworkElement EnsureHost(std::shared_ptr<ButtonEntry> const& entry, Panel con
 
     host = FindRetiredElement(panel, kHostName);
     bool adopted = host != nullptr;
-    if (!adopted) {
+    if (adopted) {
+        // Whatever an earlier owner left in it.
+        if (auto hostPanel = host.try_as<Panel>()) { try { hostPanel.Children().Clear(); } catch (...) {} }
+        for (auto& label : entry->countLabels) label = ButtonEntry::CountLabel{};
+    } else {
         Canvas canvas;
         canvas.Name(kHostName);
         host = canvas;
@@ -2754,7 +3098,6 @@ void BindFillTwins(IndicatorRenderer& r, bool rtl) {
             bindTrim(L"TrimStart", L"bk.TrimEnd - " + portion);
             bindTrim(L"TrimEnd", L"bk.TrimEnd");
         }
-        bindTrim(L"TrimOffset", L"bk.TrimOffset");
     }
     r.fillBound = true;
     r.fillRtl = rtl;
@@ -2848,12 +3191,38 @@ bool EnsureRenderer(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
         twin.shape.StrokeBrush(twin.brush);
     }
     // Draw order: the corners, their fills over them, then the dots.
+    // The corners and fills go in the pulse's group, their strokes kept as
+    // thick while it scales them.
     auto shapes = r.visual.Shapes();
-    for (int k = kSlotTL; k <= kSlotBL; k++) shapes.Append(r.slots[k].shape);
-    for (auto& twin : r.fills) shapes.Append(twin.shape);
+    r.frameGroup = r.compositor.CreateContainerShape();
+    for (int k = kSlotTL; k <= kSlotBL; k++) {
+        r.slots[k].shape.IsStrokeNonScaling(true);
+        r.frameGroup.Shapes().Append(r.slots[k].shape);
+    }
+    for (auto& twin : r.fills) {
+        twin.shape.IsStrokeNonScaling(true);
+        r.frameGroup.Shapes().Append(twin.shape);
+    }
+    shapes.Append(r.frameGroup);
     shapes.Append(r.slots[kSlotDot].shape);
     shapes.Append(r.slots[kSlotBadge].shape);
     shapes.Append(r.slots[kSlotPinned].shape);
+    for (auto* sign : {&r.plus, &r.cross}) {
+        sign->container = r.compositor.CreateContainerShape();
+        sign->brush = r.compositor.CreateColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0});
+        for (int i = 0; i < 2; i++) {
+            sign->geometries[i] = r.compositor.CreateLineGeometry();
+            sign->lines[i] = r.compositor.CreateSpriteShape(sign->geometries[i]);
+            sign->lines[i].StrokeBrush(sign->brush);
+            // Round ends for the X, square ones for the pixel-snapped plus.
+            auto cap = sign == &r.plus ? wuc::CompositionStrokeCap::Flat : wuc::CompositionStrokeCap::Round;
+            sign->lines[i].StrokeStartCap(cap);
+            sign->lines[i].StrokeEndCap(cap);
+            sign->container.Shapes().Append(sign->lines[i]);
+        }
+        sign->container.Scale({0.0f, 0.0f});
+        shapes.Append(sign->container);
+    }
     BindFillTwins(r, false);
     ElementCompositionPreview::SetElementChildVisual(host, r.visual);
     return true;
@@ -2865,8 +3234,11 @@ bool EnsureRenderer(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
 bool UpdateFramePath(IndicatorRenderer& r, const FrameBox& box, const Settings& localSettings) {
     FrameMetrics m = ComputeFrameMetrics(box.W, box.H, localSettings.FrameThickness, localSettings.FrameRadius,
                                          localSettings.IndDiagonal);
+    // Room for the pulse too: the frame grows past the box when it scales
+    // above 1.
     double pad = std::max({localSettings.FrameThickness, localSettings.MultiDiameter, localSettings.BadgeDiameter,
-                           localSettings.PinnedDiameter}) + 2.0;
+                           localSettings.PinnedDiameter}) + 2.0 +
+                 std::max(0.0, localSettings.PulseScale - 1.0) * std::max(m.W, m.H) / 2.0;
 
     bool same = r.metrics.valid && std::abs(r.metrics.W - m.W) < 0.01 && std::abs(r.metrics.H - m.H) < 0.01 &&
                 std::abs(r.metrics.t - m.t) < 0.001 && r.metrics.diagonal == m.diagonal;
@@ -2894,8 +3266,17 @@ bool UpdateFramePath(IndicatorRenderer& r, const FrameBox& box, const Settings& 
     r.pad = pad;
     r.visual.Size({(float)(m.W + 2.0 * pad), (float)(m.H + 2.0 * pad)});
     r.visual.Offset({(float)-pad, (float)-pad, 0.0f});
-    for (auto& slot : r.slots) slot.shape.Offset({(float)pad, (float)pad});
-    for (auto& twin : r.fills) twin.shape.Offset({(float)pad, (float)pad});
+    // The corners and fills sit in the group, which is offset instead and
+    // pulses about the frame's center.
+    r.frameGroup.Offset({(float)pad, (float)pad});
+    r.frameGroup.CenterPoint({(float)(m.W / 2.0), (float)(m.H / 2.0)});
+    for (int k = 0; k < kSlotCount; k++) {
+        float offset = k <= kSlotBL ? 0.0f : (float)pad;
+        r.slots[k].shape.Offset({offset, offset});
+    }
+    for (auto* sign : {&r.cross, &r.plus}) {
+        if (sign->container) sign->container.Offset({(float)pad, (float)pad});
+    }
     return true;
 }
 
@@ -2915,6 +3296,31 @@ struct SlotTarget {
     std::vector<winrt::Windows::UI::Color> colors;
 };
 
+// Where a count label should be: centered on (x, y) in box coordinates,
+// its digits `size` high. Counts longer than one digit are turned along the
+// edge, their tops facing out (`side`: -1 the left edge, 1 the right one).
+constexpr int kLabelMulti = 0, kLabelBadge = 1, kLabelCount = 2;
+
+struct LabelTarget {
+    bool shown = false;
+    std::wstring text;
+    double x = 0.0, y = 0.0;
+    double size = 5.0;
+    int side = -1;
+    std::vector<winrt::Windows::UI::Color> colors;
+};
+
+// A sign (the pinned-app X, `diagonal`, or the multi-window plus):
+// centered on (x, y), filling a `size` square (its round caps included),
+// its lines `stroke` thick.
+struct SignTarget {
+    bool shown = false;
+    bool diagonal = true;
+    double x = 0.0, y = 0.0;
+    double size = 5.0, stroke = 1.0;
+    std::vector<winrt::Windows::UI::Color> colors;
+};
+
 // A corner mark: the arc and a leg on each side. Round caps reach half a
 // thickness past each end, so the ends are pulled in by that much (as far as
 // the leg allows) to keep the visible length.
@@ -2925,9 +3331,10 @@ void CornerExtent(const FrameMetrics& m, int k, double leg, bool roundedEnds, do
     b = m.arcStart[k] + m.arc[k] + L - pull;
 }
 
-void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, const Settings& localSettings,
-                        int state, uint8_t mask, bool hasBadge, int windowCount, bool isActive, bool isLight,
-                        bool attention, int pinnedState) {
+void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabelCount], SignTarget& plus, SignTarget& cross,
+                        const FrameMetrics& m, const Settings& localSettings, int state, uint8_t mask, bool hasBadge,
+                        std::wstring const& badgeCount, int windowCount, bool isActive, bool isLight, bool attention,
+                        int pinnedState) {
     using wuc::CompositionStrokeCap;
     auto cap = [](bool round) { return round ? CompositionStrokeCap::Round : CompositionStrokeCap::Flat; };
     auto colors = GetIndicatorColors(localSettings, isLight, isActive);
@@ -2939,8 +3346,9 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
     // around its arc, and they go back there), the bottom ones the bottom
     // center (the underline's middle, where they also split from). A button
     // left with no mark at all lets every piece shrink where it is.
-    // The pinned-app dot, at the top center: on pinned apps, running or not
-    // (a button with no window at all is a pinned app that isn't running).
+    // The pinned-app indicator (a dot or an X), at the top center: on pinned
+    // apps, running or not (a button with no window at all is a pinned app
+    // that isn't running).
     bool pinnedDot = localSettings.PinnedEnabled && ((state == 0 && windowCount == 0) || pinnedState == 1);
     const double hiddenAt[4] = {m.P, 0.0, m.sBottomMid, m.sBottomMid};
     for (int k = 0; k < 4; k++) {
@@ -2993,9 +3401,9 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
         auto& bl = targets[kSlotBL];
         if (br.shown) { br.b = m.sBottomMid; br.endCap = CompositionStrokeCap::Flat; }
         if (bl.shown) { bl.a = m.sBottomMid; bl.startCap = CompositionStrokeCap::Flat; }
-        // On a pinned app with the dot on, the top center is the dot's
-        // place: the top corners stay apart, like the side corners around
-        // the other dots.
+        // On a pinned app with its indicator on, the top center is the
+        // indicator's place: the top corners stay apart, like the side
+        // corners around the other dots.
         if (!pinnedDot) {
             if (tr.shown) { tr.a = 0.0; tr.startCap = CompositionStrokeCap::Flat; }
             if (tl.shown) { tl.b = m.P; tl.endCap = CompositionStrokeCap::Flat; }
@@ -3057,9 +3465,31 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
         t.hidden = m.sLeftMid;
         t.grow = true;
         t.trail = false;
-        t.shown = localSettings.MultiEnabled && windowCount >= 2;
+        bool several = localSettings.MultiEnabled && windowCount >= 2;
+        t.shown = several && !localSettings.MultiNumber && !localSettings.MultiPlus;
         t.a = m.sLeftMid - kDotEpsilon;
         t.b = m.sLeftMid + kDotEpsilon;
+
+        // Or a plus sign, as big as the dot, its lines about a fifth of its
+        // size thick (at least a pixel), snapped to whole pixels (see
+        // UpdateSign).
+        plus.shown = several && localSettings.MultiPlus;
+        plus.diagonal = false;
+        plus.x = m.x0;
+        plus.y = m.cy;
+        plus.size = localSettings.MultiDiameter;
+        plus.stroke = std::clamp(localSettings.MultiDiameter * 0.2, 1.0, localSettings.MultiDiameter / 2.0);
+        plus.colors = t.colors;
+
+        // Or the window count, in the dot's place and color.
+        auto& label = labels[kLabelMulti];
+        label.shown = several && localSettings.MultiNumber;
+        label.text = std::to_wstring(std::clamp(windowCount, 0, 99));
+        label.x = m.x0;
+        label.y = m.cy;
+        label.size = localSettings.MultiNumberSize;
+        label.side = -1;
+        label.colors = t.colors;
     }
 
     // The badge dot: the multi-window dot's mirror, centered on the right
@@ -3077,14 +3507,27 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
         t.hidden = m.sRightMid;
         t.grow = true;
         t.trail = false;
-        t.shown = badgeShown;
+        // Or the badge's count, where it has one; a badge without one (a
+        // glyph, an overlay icon) keeps the dot.
+        bool counted = badgeShown && localSettings.BadgeNumber && !badgeCount.empty();
+        t.shown = badgeShown && !counted;
         t.a = m.sRightMid - kDotEpsilon;
         t.b = m.sRightMid + kDotEpsilon;
+
+        auto& label = labels[kLabelBadge];
+        label.shown = counted;
+        label.text = badgeCount;
+        label.x = m.x1;
+        label.y = m.cy;
+        label.size = localSettings.BadgeNumberSize;
+        label.side = 1;
+        label.colors = t.colors;
     }
 
     // The pinned-app dot: centered on the top edge, where the path starts
     // (s = 0), for pinned apps. It grows and shrinks like the other dots, and
     // stays clear of the underline, so a minimized pinned app shows both.
+    // With the X option, the X sign takes its place.
     {
         auto& t = targets[kSlotPinned];
         constexpr double kDotEpsilon = 0.05;
@@ -3097,9 +3540,19 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], const FrameMetrics& m, c
         t.hidden = 0.0;
         t.grow = true;
         t.trail = false;
-        t.shown = pinnedDot;
+        t.shown = pinnedDot && !localSettings.PinnedCross;
         t.a = 0.0;  // just after the path's start, so the piece doesn't wrap
         t.b = 2.0 * kDotEpsilon;
+
+        // Or an X sign in the same place, its lines a fifth of its size
+        // thick (at least a pixel).
+        cross.shown = pinnedDot && localSettings.PinnedCross;
+        cross.diagonal = true;
+        cross.x = m.cx;
+        cross.y = m.y0;
+        cross.size = localSettings.PinnedDiameter;
+        cross.stroke = std::clamp(localSettings.PinnedDiameter * 0.2, 1.0, localSettings.PinnedDiameter / 2.0);
+        cross.colors = t.colors;
     }
 }
 
@@ -3108,12 +3561,6 @@ struct AnimationContext {
     int durationMs = 160;
     int trailMs = 60;
 };
-
-bool SystemAnimationsEnabled() {
-    BOOL enabled = TRUE;
-    if (!SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &enabled, 0)) return true;
-    return enabled != FALSE;
-}
 
 std::vector<winrt::Windows::UI::Color> Transparent(std::vector<winrt::Windows::UI::Color> colors) {
     for (auto& c : colors) c.A = 0;
@@ -3423,15 +3870,212 @@ void AnimateSlot(IndicatorRenderer& r, IndicatorSlot& slot, const SlotTarget& ta
     }
 }
 
+// A sign: placed at once, grown from its center when it appears and shrunk
+// back into it when it goes, like the dots. The X's lines run corner to
+// corner of a square `stroke` smaller than `size`, so with their round caps
+// they fill the `size` square; diagonal, their smoothed edges look natural.
+// The plus is snapped to the pixel grid instead (`scale`: device pixels per
+// pixel): a horizontal or vertical line centered on a pixel boundary covers
+// half of two pixel rows, which then both show at half strength, blurred
+// and dimmed. So its size and thickness are whole device pixels, both odd
+// or both even, its center sits where both its edges and its ends fall on
+// pixel boundaries (a pixel's middle for odd sizes, a boundary for even
+// ones), and its ends are square (flat caps, set when it was created).
+void UpdateSign(IndicatorRenderer& r, IndicatorRenderer::Sign& cross, const SignTarget& t, double scale,
+                const AnimationContext& ctx) {
+    if (!cross.container) return;
+    if (t.shown || !cross.placed) {
+        double cx = t.x, cy = t.y, stroke = t.stroke;
+        double half = std::max(0.0, (t.size - t.stroke) / 2.0);
+        if (!t.diagonal) {
+            double s = scale > 0.01 ? scale : 1.0;
+            int sizePx = std::max(1, (int)std::lround(t.size * s));
+            double ideal = sizePx * 0.2;
+            int strokePx = std::max(1, (int)std::lround(ideal));
+            if ((sizePx - strokePx) % 2 != 0) {
+                int lower = strokePx - 1, upper = strokePx + 1;
+                strokePx = lower >= 1 && std::abs(lower - ideal) <= std::abs(upper - ideal) ? lower : upper;
+            }
+            strokePx = std::min(strokePx, sizePx);
+            auto snap = [&](double c) {
+                double px = c * s;
+                return (sizePx % 2 ? std::floor(px) + 0.5 : std::round(px)) / s;
+            };
+            cx = snap(t.x);
+            cy = snap(t.y);
+            half = sizePx / 2.0 / s;
+            stroke = strokePx / s;
+            if (g_debugLog && (std::abs(cross.x - cx) > 0.001 || std::abs(cross.y - cy) > 0.001)) {
+                Wh_Log(L"[debug] plus: scale %g, %dpx with %dpx lines, centered on (%g, %g) for (%g, %g)", s, sizePx,
+                       strokePx, cx, cy, t.x, t.y);
+            }
+        }
+        if (std::abs(cross.x - cx) > 0.001 || std::abs(cross.y - cy) > 0.001 || std::abs(cross.half - half) > 0.001) {
+            float x = (float)cx, y = (float)cy, h = (float)half;
+            if (t.diagonal) {
+                cross.geometries[0].Start({x - h, y - h});
+                cross.geometries[0].End({x + h, y + h});
+                cross.geometries[1].Start({x + h, y - h});
+                cross.geometries[1].End({x - h, y + h});
+            } else {
+                cross.geometries[0].Start({x - h, y});
+                cross.geometries[0].End({x + h, y});
+                cross.geometries[1].Start({x, y - h});
+                cross.geometries[1].End({x, y + h});
+            }
+            cross.container.CenterPoint({x, y});
+            cross.x = cx;
+            cross.y = cy;
+            cross.half = half;
+        }
+        if (std::abs(cross.stroke - stroke) > 0.001) {
+            for (auto& line : cross.lines) line.StrokeThickness((float)stroke);
+            cross.stroke = stroke;
+        }
+        // A sign going away keeps its color while it shrinks.
+        if (t.shown && !t.colors.empty()) cross.brush.Color(t.colors[0]);
+    }
+
+    float want = t.shown ? 1.0f : 0.0f;
+    bool snap = !ctx.animate || !cross.placed;
+    if (snap) {
+        if (std::abs(cross.scaleTween.to - want) > 0.001f || cross.scaleTween.durationMs > 0 || !cross.placed) {
+            cross.container.StopAnimation(L"Scale");
+            cross.container.Scale({want, want});
+            cross.scaleTween = {want, want, 0, 0, 0};
+        }
+    } else if (std::abs(cross.scaleTween.to - want) > 0.001f) {
+        float from = ScalarTweenNow(cross.scaleTween);
+        auto animation = r.compositor.CreateVector2KeyFrameAnimation();
+        animation.InsertKeyFrame(0.0f, {from, from});
+        animation.InsertKeyFrame(1.0f, {want, want}, r.easing);
+        animation.Duration(std::chrono::milliseconds(std::max(1, ctx.durationMs)));
+        cross.container.StartAnimation(L"Scale", animation);
+        cross.scaleTween = {from, want, GetTickCount64(), 0, std::max(1, ctx.durationMs)};
+    }
+    cross.placed = true;
+}
+
+// A count label: a text block in a border in the host, created on first
+// use, its font fitted so its digits are `size` high (tight line bounds, so
+// its box is just their height), centered on its place and turned along the
+// edge when longer than one digit. It grows from its center when it appears
+// and shrinks back into it when it goes: the border's composition visual's
+// scale, animated like the dots' size (from wherever an interrupted change
+// had got to, see ScalarTween).
+void UpdateCountLabel(IndicatorRenderer& r, ButtonEntry::CountLabel& label, FrameworkElement const& host,
+                      const LabelTarget& t, const AnimationContext& ctx) {
+    auto box = label.box.get();
+    auto text = label.text.get();
+    if (!box || !text) {
+        if (!t.shown) return;  // nothing to hide
+        auto panel = host.try_as<Panel>();
+        if (!panel) return;
+        TextBlock block;
+        block.IsHitTestVisible(false);
+        block.TextWrapping(TextWrapping::NoWrap);
+        block.TextLineBounds(TextLineBounds::Tight);
+        block.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+        Border border;
+        border.IsHitTestVisible(false);
+        border.Child(block);
+        // Not part of the button for screen readers: the taskbar already
+        // announces its windows and badge.
+        for (UIElement const& element : {UIElement(border), UIElement(block)}) {
+            winrt::Windows::UI::Xaml::Automation::AutomationProperties::SetAccessibilityView(
+                element, winrt::Windows::UI::Xaml::Automation::Peers::AccessibilityView::Raw);
+        }
+        ElementCompositionPreview::GetElementVisual(border).Scale({0.0f, 0.0f, 1.0f});
+        panel.Children().Append(border);
+        box = border;
+        text = block;
+        label = ButtonEntry::CountLabel{};
+        label.box = winrt::make_weak(box);
+        label.text = winrt::make_weak(text);
+    }
+    auto visual = ElementCompositionPreview::GetElementVisual(box);
+
+    if (t.shown) {
+        bool relayout = false;
+        if (std::abs(label.size - t.size) > 0.001) {
+            // Fit the font: measure at the size, then scale it so the tight
+            // box (the digits' height) is `size` high.
+            text.Text(L"0");
+            text.FontSize(std::max(1.0, t.size));
+            text.Measure({INFINITY, INFINITY});
+            double h = text.DesiredSize().Height;
+            label.fontSize = h > 0.1 ? std::max(1.0, t.size) * t.size / h : std::max(1.0, t.size);
+            text.FontSize(label.fontSize);
+            label.size = t.size;
+            label.value.clear();
+            relayout = true;
+        }
+        if (label.value != t.text) {
+            text.Text(winrt::hstring(t.text));
+            label.value = t.text;
+            relayout = true;
+        }
+        if (relayout || std::abs(label.x - t.x) > 0.001 || std::abs(label.y - t.y) > 0.001) {
+            // Centered on its place, and turned about its center. The box
+            // is the digits' full advance, side bearings included: digits
+            // sit centered in it. With the bearings trimmed, the box was
+            // centered but the text, snapped to whole pixels as it is
+            // drawn, landed up to a pixel to the left.
+            text.Measure({INFINITY, INFINITY});
+            auto size = text.DesiredSize();
+            if (g_debugLog) {
+                Wh_Log(L"[debug] count \"%s\": font %g, box %gx%g, centered on (%g, %g) at (%g, %g)",
+                       t.text.c_str(), label.fontSize, size.Width, size.Height, t.x, t.y,
+                       t.x - size.Width / 2.0, t.y - size.Height / 2.0);
+            }
+            Canvas::SetLeft(box, t.x - size.Width / 2.0);
+            Canvas::SetTop(box, t.y - size.Height / 2.0);
+            visual.CenterPoint({size.Width / 2.0f, size.Height / 2.0f, 0.0f});
+            text.CenterPoint({size.Width / 2.0f, size.Height / 2.0f, 0.0f});
+            text.Rotation(t.text.size() > 1 ? (t.side < 0 ? -90.0f : 90.0f) : 0.0f);
+            label.x = t.x;
+            label.y = t.y;
+        }
+        if (!t.colors.empty()) {
+            auto c = t.colors[0];
+            if (!label.colorSet || c.A != label.color.A || c.R != label.color.R || c.G != label.color.G ||
+                c.B != label.color.B) {
+                text.Foreground(SolidColorBrush(c));
+                label.color = c;
+                label.colorSet = true;
+            }
+        }
+    }
+
+    float want = t.shown ? 1.0f : 0.0f;
+    if (!ctx.animate) {
+        if (std::abs(label.scaleTween.to - want) > 0.001f || label.scaleTween.durationMs > 0) {
+            visual.StopAnimation(L"Scale");
+            visual.Scale({want, want, 1.0f});
+            label.scaleTween = {want, want, 0, 0, 0};
+        }
+    } else if (std::abs(label.scaleTween.to - want) > 0.001f) {
+        float from = ScalarTweenNow(label.scaleTween);
+        auto animation = r.compositor.CreateVector3KeyFrameAnimation();
+        animation.InsertKeyFrame(0.0f, {from, from, 1.0f});
+        animation.InsertKeyFrame(1.0f, {want, want, 1.0f}, r.easing);
+        animation.Duration(std::chrono::milliseconds(std::max(1, ctx.durationMs)));
+        visual.StartAnimation(L"Scale", animation);
+        label.scaleTween = {from, want, GetTickCount64(), 0, std::max(1, ctx.durationMs)};
+    }
+}
+
 // ---------------------------------------------------------------------------
-// Indeterminate progress animations, timed like the native ProgressBar's
-// indeterminate storyboard (WinUI): a 2 s cycle, repeated; the first bar
+// Indeterminate progress animations. A minimized app's underline sweeps,
+// timed like the native ProgressBar's indeterminate storyboard (WinUI): a
+// 2 s cycle, repeated; the first bar
 // runs over the first 1.5 s, from just off the track's left end to 120% of
 // the track; the second waits 0.75 s, then runs from 90% of the track off
 // its left end (or further, for a longer bar) to the track's right end,
 // until the end of the cycle; both with the key spline (0.4, 0, 0.6, 1).
 // The native bars are 40% and 60% of the track wide; here both are as long
 // as the underline itself, so the line keeps its length while it sweeps.
+// An open or maximized app's corners pulse instead (see StartPulse).
 // ---------------------------------------------------------------------------
 
 constexpr int kProgressCycleMs = 2000;
@@ -3439,7 +4083,6 @@ constexpr float kProgressMoveEnd = 0.75f; // 1.5 s of 2 s
 
 void EnsureProgressObjects(IndicatorRenderer& r) {
     if (!r.progressEasing) r.progressEasing = r.compositor.CreateCubicBezierEasingFunction({0.4f, 0.0f}, {0.6f, 1.0f});
-    if (!r.stepEasing) r.stepEasing = r.compositor.CreateStepEasingFunction(1);
 }
 
 // The underline's sweep: the BL and BR shapes become the two bars, moving
@@ -3480,9 +4123,6 @@ void StartSweep(IndicatorRenderer& r, double trackL, double trackR, double barW,
     bar(L"p2", w2, true);
 
     auto bind = [&](IndicatorSlot& slot, wchar_t const* position, double w) {
-        // A sweep has no rotation: drop any left over from the corners' lap.
-        slot.geometry.StopAnimation(L"TrimOffset");
-        slot.geometry.TrimOffset(0.0f);
         std::wstring pos = std::wstring(L"props.") + position;
         auto edge = [&](wchar_t const* property, std::wstring const& x) {
             auto expression = r.compositor.CreateExpressionAnimation(
@@ -3527,52 +4167,62 @@ void StopSweep(IndicatorRenderer& r) {
     for (auto& v : r.sweepKey) v = -1;
 }
 
-// The lap: every shape's TrimOffset (the corners' and the two dots') makes
-// one full turn clockwise per cycle, with the native bar's easing over its
-// first 1.5 s and a rest for the other 0.5 s, so the corners run around the
-// frame like snakes, the dots run along with them instead of being run
-// over, and everything settles back where it belongs. A full turn per cycle brings any
-// arrangement of corners back onto itself, so the cycle repeats seamlessly
-// and a state change during it (open <-> maximized) doesn't need a restart.
-void StartLap(IndicatorRenderer& r) {
+// The pulse: the corners (and their fill) scale about the frame's center
+// to `PulseScale` (below 1 they shrink) and back, twice a cycle, the second
+// time twice as fast: a 1 s pulse, then a 0.5 s one, repeated without a
+// rest. Each half of a pulse eases in and out with the native bar's curve.
+// Only the frame group scales, so the dots, signs and counts stay where
+// they are; the strokes keep their
+// thickness (non-scaling). A state change during it (open <-> maximized)
+// changes what is in the group, not the pulse, so it needs no restart.
+constexpr int kPulseFirstMs = 1000, kPulseSecondMs = 500;
+constexpr int kPulseCycleMs = kPulseFirstMs + kPulseSecondMs;
+constexpr float kPulseSplit = (float)kPulseFirstMs / kPulseCycleMs;  // where the first pulse ends
+
+void StartPulse(IndicatorRenderer& r, double peak) {
     EnsureProgressObjects(r);
-    auto animation = r.compositor.CreateScalarKeyFrameAnimation();
-    animation.InsertKeyFrame(0.0f, 0.0f);
-    animation.InsertKeyFrame(kProgressMoveEnd, 1.0f, r.progressEasing);
-    animation.InsertKeyFrame(1.0f, 1.0f);
-    animation.Duration(std::chrono::milliseconds(kProgressCycleMs));
+    float s = (float)peak;
+    auto animation = r.compositor.CreateVector2KeyFrameAnimation();
+    animation.InsertKeyFrame(0.0f, {1.0f, 1.0f});
+    animation.InsertKeyFrame(kPulseSplit / 2.0f, {s, s}, r.progressEasing);
+    animation.InsertKeyFrame(kPulseSplit, {1.0f, 1.0f}, r.progressEasing);
+    animation.InsertKeyFrame((kPulseSplit + 1.0f) / 2.0f, {s, s}, r.progressEasing);
+    animation.InsertKeyFrame(1.0f, {1.0f, 1.0f}, r.progressEasing);
+    animation.Duration(std::chrono::milliseconds(kPulseCycleMs));
     animation.IterationBehavior(wuc::AnimationIterationBehavior::Forever);
-    for (int k = 0; k < kSlotCount; k++) {
-        r.slots[k].geometry.StopAnimation(L"TrimOffset");
-        r.slots[k].geometry.TrimOffset(0.0f);
-        r.slots[k].geometry.StartAnimation(L"TrimOffset", animation);
-    }
-    r.lapStartTick = GetTickCount64();
+    r.frameGroup.StopAnimation(L"Scale");
+    r.frameGroup.Scale({1.0f, 1.0f});
+    r.frameGroup.StartAnimation(L"Scale", animation);
+    r.pulseStartTick = GetTickCount64();
+    r.pulseScale = peak;
 }
 
-// Ends the lap without a jump: a turn under way is finished, then the offset
-// drops back to 0, which after a full turn looks the same. It starts from
-// where the turn is, worked out from the time it started and the native
+// The pulse's scale now, worked out from the time it started and its
 // curve (not this.StartingValue, see ChaseFill).
-void FinishLap(IndicatorRenderer& r) {
-    double elapsed = (double)(GetTickCount64() - r.lapStartTick);
-    double phase = std::fmod(elapsed, (double)kProgressCycleMs) / kProgressCycleMs;
-    for (int k = 0; k < kSlotCount; k++) {
-        auto& geometry = r.slots[k].geometry;
-        if (phase >= kProgressMoveEnd) {
-            geometry.StopAnimation(L"TrimOffset");
-            geometry.TrimOffset(0.0f);
-            continue;
-        }
-        int remainingMs = std::max(1, (int)std::lround((kProgressMoveEnd - phase) * kProgressCycleMs));
-        float current = (float)CubicBezierAt(phase / kProgressMoveEnd, 0.4, 0.0, 0.6, 1.0);
-        auto animation = r.compositor.CreateScalarKeyFrameAnimation();
-        animation.InsertKeyFrame(0.0f, current);
-        animation.InsertKeyFrame(0.99f, 1.0f, r.easing);
-        animation.InsertKeyFrame(1.0f, 0.0f, r.stepEasing);
-        animation.Duration(std::chrono::milliseconds(remainingMs + 10));
-        geometry.StartAnimation(L"TrimOffset", animation);
+double PulseScaleNow(const IndicatorRenderer& r) {
+    double phase = std::fmod((double)(GetTickCount64() - r.pulseStartTick), (double)kPulseCycleMs) / kPulseCycleMs;
+    double start = phase < kPulseSplit ? 0.0 : kPulseSplit;
+    double length = phase < kPulseSplit ? kPulseSplit : 1.0 - kPulseSplit;
+    double u = (phase - start) / length;  // 0..1 through this pulse
+    double grow = u < 0.5 ? CubicBezierAt(u * 2.0, 0.4, 0.0, 0.6, 1.0) : 1.0 - CubicBezierAt(u * 2.0 - 1.0, 0.4, 0.0, 0.6, 1.0);
+    return 1.0 + (r.pulseScale - 1.0) * grow;
+}
+
+// Ends the pulse without a jump: the frame settles back to its size from
+// wherever the pulse is.
+void FinishPulse(IndicatorRenderer& r, int durationMs) {
+    float current = (float)PulseScaleNow(r);
+    r.frameGroup.StopAnimation(L"Scale");
+    if (std::abs(current - 1.0f) < 0.001f) {
+        r.frameGroup.Scale({1.0f, 1.0f});
+    } else {
+        auto animation = r.compositor.CreateVector2KeyFrameAnimation();
+        animation.InsertKeyFrame(0.0f, {current, current});
+        animation.InsertKeyFrame(1.0f, {1.0f, 1.0f}, r.easing);
+        animation.Duration(std::chrono::milliseconds(std::max(1, durationMs)));
+        r.frameGroup.StartAnimation(L"Scale", animation);
     }
+    r.pulseScale = 0.0;
 }
 
 // Whether the button is flashing for attention: one of its template's
@@ -3748,12 +4398,12 @@ void LogButtonSummary(FrameworkElement const& button, std::shared_ptr<ButtonEntr
         if (progress.paused) progressText += L" paused";
         if (progress.error) progressText += L" error";
     }
-    static const wchar_t* kModes[] = {L"none", L"sweep", L"lap"};
+    static const wchar_t* kModes[] = {L"none", L"sweep", L"pulse"};
     std::wstring summary = app + L": windows=" + std::to_wstring(windowCount) +
         L" state=" + (state >= 0 && state <= 4 ? kStates[state] : L"?") +
         L" active=" + (isActive ? L"yes" : L"no") +
         L" pinned=" + (pinnedState == 1 ? L"yes" : pinnedState == 0 ? L"no" : L"?") +
-        L" badge=" + (hasBadge ? L"yes" : L"no") +
+        L" badge=" + (hasBadge ? (entry->badgeCount.empty() ? L"yes" : L"yes(" + entry->badgeCount + L")") : L"no") +
         L" attention=" + (attention ? L"yes" : L"no") +
         L" progress=" + progressText +
         L" animation=" + (progressMode >= 0 && progressMode <= 2 ? kModes[progressMode] : L"?") +
@@ -3766,6 +4416,21 @@ void LogButtonSummary(FrameworkElement const& button, std::shared_ptr<ButtonEntr
     if (!entry->nativeBadges.empty()) {
         auto iconPanel = FindChildByName(button, L"IconPanel");
         if (iconPanel) summary += L" order=[" + PanelOrderText(iconPanel) + L"]";
+        // What the button tells screen readers: where an overlay icon's
+        // description could show up too. Only an existing automation peer
+        // is asked (none is created for this).
+        try {
+            using namespace winrt::Windows::UI::Xaml::Automation;
+            std::wstring name(AutomationProperties::GetName(button));
+            if (auto peer = Peers::FrameworkElementAutomationPeer::FromElement(button)) {
+                std::wstring peerName(peer.GetName());
+                if (!peerName.empty()) name = peerName;
+            }
+            const wchar_t* source = L"none";
+            std::wstring help = ReadButtonHelpText(button, &source);
+            if (!help.empty()) summary += L" buttonHelp(" + std::wstring(source) + L")=\"" + help + L"\"";
+            if (!name.empty()) summary += L" buttonName=\"" + name + L"\"";
+        } catch (...) {}
     }
     entry->debugApp = app;
     if (summary == entry->debugLast) return;
@@ -3896,23 +4561,27 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
     }
 
     SlotTarget targets[kSlotCount];
-    // Read for the pinned-app dot, and for the debug log, which shows it.
+    LabelTarget labels[kLabelCount];
+    SignTarget plus, cross;
+    entry->badgeCount = hasBadge && (localSettings.BadgeNumber || localSettings.DebugLog) ? ReadNativeBadgeCount(button, entry)
+                                                                                        : std::wstring();
+    // Read for the pinned-app indicator, and for the debug log, which shows it.
     int pinnedState = localSettings.PinnedEnabled || localSettings.DebugLog ? ReadButtonPinned(button) : -1;
     if (pinnedState < 0) pinnedState = entry->pinnedState;  // recycled: keep the last known
     entry->pinnedState = (int8_t)pinnedState;
-    ComputeSlotTargets(targets, r.metrics, localSettings, state, mask, hasBadge, windowCount, isActive,
-                       IsElementLightMode(button), attention, pinnedState);
+    ComputeSlotTargets(targets, labels, plus, cross, r.metrics, localSettings, state, mask, hasBadge, entry->badgeCount,
+                       windowCount, isActive, IsElementLightMode(button), attention, pinnedState);
 
     // Indeterminate progress: a minimized app's underline sweeps (the dots
     // stay, clear of it on the side edges); an open or maximized app's
-    // corners and dots run around the frame together. It runs with Windows
+    // corners pulse (the dots, signs and counts stay). It runs with Windows
     // animations off too: like the native moving bar it stands in for, it
     // shows information (often the only sign of the progress, with the
     // native bar hidden), not a transition.
     int progressMode = 0;
     if (indeterminate) {
         if (state == 3 || state == 4) progressMode = 1;
-        else if (state == 1 || state == 2) progressMode = 2;
+        else if ((state == 1 || state == 2) && std::abs(localSettings.PulseScale - 1.0) > 0.001) progressMode = 2;
     }
     // The sweep runs along the whole straight part of the bottom edge, with
     // bars as long as the underline (its visible length, caps included).
@@ -3934,9 +4603,12 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
                         std::abs(r.sweepKey[3] - r.metrics.sBottomMid) > 0.01 ||
                         std::abs(r.sweepKey[4] - barW) > 0.01 || r.sweepKey[5] != (rtl ? 1.0 : 0.0);
     try {
-        if (r.progressMode == 2 && progressMode != 2) FinishLap(r);
+        bool pulseChanged = std::abs(r.pulseScale - localSettings.PulseScale) > 0.0001;
+        if (r.progressMode == 2 && (progressMode != 2 || pulseChanged)) {
+            FinishPulse(r, localSettings.AnimationDurationMs);
+        }
         if (r.progressMode == 1 && (progressMode != 1 || sweepChanged)) StopSweep(r);
-        if (progressMode == 2 && r.progressMode != 2) StartLap(r);
+        if (progressMode == 2 && (r.progressMode != 2 || pulseChanged)) StartPulse(r, localSettings.PulseScale);
         if (progressMode == 1 && (r.progressMode != 1 || sweepChanged)) StartSweep(r, trackL, trackR, barW, rtl);
     } catch (...) {
         Wh_Log(L"Exception while switching the progress animation");
@@ -3944,12 +4616,22 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
     r.progressMode = (int8_t)progressMode;
 
     AnimationContext ctx;
-    ctx.animate = localSettings.Animations && !created && !rebuilt && entry->hostBound && SystemAnimationsEnabled();
+    // The mod's own setting decides, not the Windows animation setting.
+    ctx.animate = localSettings.Animations && !created && !rebuilt && entry->hostBound;
     ctx.durationMs = localSettings.AnimationDurationMs;
     ctx.trailMs = std::max(1, (int)std::lround(localSettings.AnimationDurationMs * 0.4));
     for (int k = 0; k < kSlotCount; k++) {
         try { AnimateSlot(r, r.slots[k], targets[k], ctx); } catch (...) {
             Wh_Log(L"Exception while placing indicator %d", k);
+        }
+    }
+    double rasterScale = 1.0;
+    try { if (auto root = host.XamlRoot()) rasterScale = root.RasterizationScale(); } catch (...) {}
+    try { UpdateSign(r, r.plus, plus, rasterScale, ctx); } catch (...) { Wh_Log(L"Exception while placing the plus sign"); }
+    try { UpdateSign(r, r.cross, cross, rasterScale, ctx); } catch (...) { Wh_Log(L"Exception while placing the X sign"); }
+    for (int k = 0; k < kLabelCount; k++) {
+        try { UpdateCountLabel(r, entry->countLabels[k], host, labels[k], ctx); } catch (...) {
+            Wh_Log(L"Exception while placing count %d", k);
         }
     }
 
@@ -4266,7 +4948,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             nullptr,
             true,
         },
-        // The pinned state (for the pinned-app dot), on whichever interface
+        // The pinned state (for the pinned-app indicator), on whichever interface
         // has it. All optional.
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_IsPinned(bool *))"},
@@ -4303,7 +4985,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
            IsViewModelBridgeAvailable() ? L"available" : L"unavailable, the mod is inactive");
     Wh_Log(L"Pinned state: %s", IsPinnedStateAvailable()
                ? L"available"
-               : L"unavailable (the pinned-app dot shows on pinned apps that aren't running only)");
+               : L"unavailable (the pinned-app indicator shows on pinned apps that aren't running only)");
     return true;
 }
 
@@ -4763,6 +5445,7 @@ void RestoreNativeElements(NativeRestore what) {
 
 #define WM_APP_RECONFIGURE_HOOKS (WM_APP + 1)
 #define WM_APP_COLORS_CHANGED (WM_APP + 2)
+#define WM_APP_REFRESH_PASS (WM_APP + 3)
 #define COLOR_REFRESH_DELAY_MS 150
 #define INDICATOR_REFRESH_DELAY_MS 60
 #define INDICATOR_FOLLOW_UP_DELAY_MS 300
@@ -4852,6 +5535,13 @@ void ArmIndicatorRefreshTimer() {
     if (!g_refreshTimer) {
         g_refreshTimer = SetTimer(nullptr, 0, INDICATOR_REFRESH_DELAY_MS, IndicatorRefreshTimerProc);
     }
+}
+
+// Asks the event thread for a refresh pass of every button soon (see
+// WatchHiddenNative). Callable from any thread.
+void RequestRefreshPassSoon() {
+    if (g_unloading) return;
+    if (DWORD threadId = g_eventThreadId) PostThreadMessage(threadId, WM_APP_REFRESH_PASS, 0, 0);
 }
 
 // Keeps only events that can change a taskbar button: top-level, unowned
@@ -4946,6 +5636,11 @@ DWORD WINAPI IndicatorEventThreadProc(LPVOID) {
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
         if (!msg.hwnd && msg.message == WM_APP_RECONFIGURE_HOOKS) {
             HookWinEvents();
+            continue;
+        }
+        if (!msg.hwnd && msg.message == WM_APP_REFRESH_PASS) {
+            // A pass a moment from now and a follow-up (a burst joins them).
+            ArmIndicatorRefreshTimer();
             continue;
         }
         if (!msg.hwnd && msg.message == WM_APP_COLORS_CHANGED) {
