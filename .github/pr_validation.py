@@ -140,9 +140,11 @@ def format_annotation(level: str, file: Path, line: int, message: str) -> str:
             .replace(',', '%2C')
         )
 
+    # The line is repeated in the message, since the report of the annotations
+    # doesn't show the line property.
     return (
         f'::{level} file={escape_property(str(file))},'
-        f'line={line}::{escape_data(message)}'
+        f'line={line}::{escape_data(f"Line {line}: {message}")}'
     )
 
 
@@ -325,7 +327,8 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
 
 @cache
 def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
-    """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
+    """Fetch list of existing versions for a mod, oldest first, or None if mod
+    doesn't exist."""
     try:
         url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}/versions.json'
         data = json.loads(fetch_url(url))
@@ -334,6 +337,15 @@ def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
         if e.code == 404:
             return None
         raise
+
+
+def parse_version(version: str) -> tuple[int, ...]:
+    """Parse a version of numbers and dots into a tuple that compares
+    numerically. Trailing zeros are dropped, so that 1.2 and 1.2.0 are equal."""
+    parts = [int(x) for x in version.split('.')]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
 
 
 def at(key_name: str) -> str:
@@ -622,22 +634,43 @@ class ModMetadataValidator:
             prop.add_error(f'@@ must be between {min_len} and {max_len} characters')
 
     def validate_version(self):
-        """Validate version format."""
+        """Validate version format, and that it's newer than the latest
+        version."""
         prop = self.property('version', warn_if_missing=True)
         if not prop:
             return
 
-        prop.validate_match(
-            r'([0-9]+\.)*[0-9]+',
-            '@@ must contain only numbers and dots',
-        )
+        version_pattern = r'([0-9]+\.)*[0-9]+'
+        if not re.fullmatch(version_pattern, prop.value):
+            prop.add_error('@@ must contain only numbers and dots')
+            return
 
-        # Check if version is already used
-        if self.existing_versions and prop.value in self.existing_versions:
+        if not self.existing_versions:
+            return
+
+        previous_versions = ', '.join(self.existing_versions)
+
+        if prop.value in self.existing_versions:
             prop.add_error(
                 f'@@ "{prop.value}" is already used. Please use a new, unused'
                 ' version.\n'
-                f'Previous versions: {", ".join(self.existing_versions)}'
+                f'Previous versions: {previous_versions}'
+            )
+            return
+
+        # Prerelease versions, such as 1.0-beta, are skipped.
+        release_versions = [
+            v for v in self.existing_versions if re.fullmatch(version_pattern, v)
+        ]
+        if not release_versions:
+            return
+
+        latest_version = release_versions[-1]
+        if parse_version(prop.value) <= parse_version(latest_version):
+            prop.add_error(
+                f'@@ "{prop.value}" must be newer than the latest version'
+                f' "{latest_version}".\n'
+                f'Previous versions: {previous_versions}'
             )
 
     def validate_author(self):
@@ -1641,11 +1674,27 @@ MOD_NON_WINDOWS_TARGET_MODULES = {
 # Mods accepted with noUndecoratedSymbols, with their symbol hook targets.
 # Hooking any other target brings back the manual inspection.
 MOD_NO_UNDECORATED_SYMBOLS_TARGETS = {
+    'brave-acrylic': {'chrome.dll'},
     'chrome-context-menu-items': {'chrome.dll'},
     'chrome-native-ui-tweaks': {'chrome.dll'},
+    'office-fix-account-disp-name': {'mso30win32client.dll'},
+    'office-ui-reverter-universal': {'mso40uiwin32client.dll'},
     'word-image-resize-anti-flip': {'oart.dll'},
     'word-mathtype-dark-fix': {'wwlib.dll'},
     'word-omath-shade-fix': {'wwlib.dll'},
+    'word-pdf-lossless-export': {'mso.dll'},
+}
+
+# Mods accepted with onlineCacheUrl, with their symbol hook targets.
+# Hooking any other target brings back the manual inspection.
+MOD_ONLINE_CACHE_URL_TARGETS = {
+    'brave-acrylic': {'chrome.dll'},
+    'office-fix-account-disp-name': {'mso30win32client.dll'},
+    'office-ui-reverter-universal': {'mso40uiwin32client.dll'},
+    'word-image-resize-anti-flip': {'oart.dll'},
+    'word-mathtype-dark-fix': {'wwlib.dll'},
+    'word-omath-shade-fix': {'wwlib.dll'},
+    'word-pdf-lossless-export': {'mso.dll'},
 }
 
 
@@ -1704,10 +1753,12 @@ def get_symbol_hook_blocks(mod_source: str):
         yield line_num, target_from_name, targets_from_comment
 
 
-def is_no_undecorated_symbols_accepted(mod_id: str, mod_source: str):
-    """Whether the mod is accepted with noUndecoratedSymbols and all of its symbol
-    hook targets are known and among the accepted ones."""
-    accepted_targets = MOD_NO_UNDECORATED_SYMBOLS_TARGETS.get(mod_id)
+def is_symbol_option_accepted(
+    mod_targets: dict[str, set[str]], mod_id: str, mod_source: str
+):
+    """Whether the mod is in mod_targets and all of its symbol hook targets are
+    known and among the accepted ones."""
+    accepted_targets = mod_targets.get(mod_id)
     if not accepted_targets:
         return False
 
@@ -1806,6 +1857,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
         (r'\bWh_FindNextSymbol\b', 'Wh_FindNextSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
         (r'\bWh_FindCloseSymbol\b', 'Wh_FindCloseSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
         (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
+        (r'\bonlineCacheUrl\b', 'onlineCacheUrl', 'It\'s usually best to let Windhawk handle the online symbol cache'),
         (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
         (r'\b__ptr64\b', '__ptr64', 'Windhawk doesn\'t use symbols with __ptr64 markers (UNDNAME_NO_PTR64)'),
         (r'\b__try\b', '__try', 'Using SEH is usually discouraged'),
@@ -1814,8 +1866,11 @@ def validate_specific_keywords(path: Path, mod_source: str):
     # fmt: on
 
     mod_id = path.name.removesuffix('.wh.cpp')
-    no_undecorated_symbols_accepted = is_no_undecorated_symbols_accepted(
-        mod_id, mod_source
+    no_undecorated_symbols_accepted = is_symbol_option_accepted(
+        MOD_NO_UNDECORATED_SYMBOLS_TARGETS, mod_id, mod_source
+    )
+    online_cache_url_accepted = is_symbol_option_accepted(
+        MOD_ONLINE_CACHE_URL_TARGETS, mod_id, mod_source
     )
 
     for line_num, line in enumerate(mod_source_lines, start=1):
@@ -1828,6 +1883,9 @@ def validate_specific_keywords(path: Path, mod_source: str):
                     continue
 
                 if word == 'noUndecoratedSymbols' and no_undecorated_symbols_accepted:
+                    continue
+
+                if word == 'onlineCacheUrl' and online_cache_url_accepted:
                     continue
 
                 add_review_item(
@@ -2079,6 +2137,49 @@ def validate_callback_signatures(path: Path, mod_source: str):
             )
 
 
+def validate_tool_mod_callback_scopes(path: Path, mod_source: str):
+    """Validate that the WhTool_* callbacks are defined in the global namespace,
+    where windhawk_tool_mod.h and Windhawk 2.0 look them up by name."""
+    callback_names = '|'.join(
+        re.escape(x) for x in CALLBACK_SIGNATURES if x.startswith('WhTool_')
+    )
+    token_re = re.compile(
+        r'\b(?:inline\s+)?namespace\b\s*(?P<namespace>[\w:]*)\s*\{'
+        r'|\b\w+\s+(?P<qualifier>(?:\w+::)+)?(?P<callback>' + callback_names + r')'
+        r'\s*\([^()]*\)\s*\{'
+        r'|[{}]'
+    )
+    code = '\n'.join(get_code_lines(mod_source))
+
+    # For each open brace, the namespace it opens, or None.
+    scopes: list[Optional[str]] = []
+    for match in token_re.finditer(code):
+        if match.group() == '}':
+            if scopes:
+                scopes.pop()
+            continue
+
+        if match.group('callback'):
+            namespaces = [x for x in scopes if x is not None]
+            if match.group('qualifier'):
+                namespaces.append(match.group('qualifier').removesuffix('::'))
+            if namespaces:
+                qualified_name = '::'.join([*namespaces, match.group('callback')])
+                add_error(
+                    path,
+                    1 + code.count('\n', 0, match.start('callback')),
+                    f'{qualified_name} must be defined in the global namespace:'
+                    ' windhawk_tool_mod.h calls the WhTool_* callbacks by their'
+                    ' global names, and Windhawk 2.0 uses a global WhTool_ModInit'
+                    ' to recognize a tool mod',
+                )
+            scopes.append(None)
+        elif match.group('namespace') is not None:
+            scopes.append(match.group('namespace') or '(anonymous namespace)')
+        else:
+            scopes.append(None)
+
+
 def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]):
     mod_source = path.read_text(encoding='utf-8', errors='ignore').removeprefix(
         '\ufeff'
@@ -2093,6 +2194,7 @@ def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]):
     validate_line_lengths(path, mod_source)
     validate_code_compactness(path, mod_source)
     validate_callback_signatures(path, mod_source)
+    validate_tool_mod_callback_scopes(path, mod_source)
 
 
 def test_run():
@@ -2117,6 +2219,11 @@ def test_run():
         )
 
 
+PR_DESCRIPTION_RERUN_HINT = (
+    ' The validation runs again after the PR description is edited.'
+)
+
+
 def validate_pr_changelog(pr_body: str):
     """Mod updates must describe the changes in the PR description."""
     start_marker_re = re.compile(r'<!--\s*changelog:start\s*-->', re.IGNORECASE)
@@ -2131,6 +2238,7 @@ def validate_pr_changelog(pr_body: str):
     template_hint = (
         ' See the pull request template'
         ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1).'
+        + PR_DESCRIPTION_RERUN_HINT
     )
 
     starts = list(start_marker_re.finditer(pr_body))
@@ -2222,7 +2330,8 @@ def main():
             ' pull request template'
             ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
             ' in the PR description, so reviewers know how the mod was authored.'
-            ' Please restore that section and fill it in.',
+            ' Please restore that section and fill it in.'
+            + PR_DESCRIPTION_RERUN_HINT,
         )
 
     if modified_count != 0:
