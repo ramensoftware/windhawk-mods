@@ -86,6 +86,9 @@ Choose a layout under **Appearance → Layout → Switcher Layout**.
 | Close button / middle-click | Close the entry under the pointer. |
 | Click outside | Dismiss the switcher. |
 
+On Windows 10, Tab shortcuts can dismiss Action Center as the switcher opens.
+Alt+Backtick also supports this handoff when **Exclude in Xbox Mode** is off.
+
 Scroll-wheel navigation is disabled by default. Enable it under
 **Accessibility → Scroll Wheel Activation** to change selection or scroll pages
 from anywhere. The secondary modifier/action settings provide an alternate wheel
@@ -1300,6 +1303,9 @@ static constexpr int SWS_RAW_TAP_SLOP = 65535 / 50;
 // LPARAM carries the Explorer PID.
 #define WM_SWS_EXPLORER_HOTKEY (WM_APP + 14)
 #define WM_SWS_EXPLORER_SHELL_ASSIST (WM_APP + 15)
+#define WM_SWS_EXPLORER_BACKTICK_CONFIG (WM_APP + 16)
+#define WM_SWS_RETIRE_LEGACY_SHELL_STAGE (WM_APP + 17)
+static constexpr WCHAR kExplorerBacktickMaskProp[] = L"WindhawkSWS_ExplorerBacktickMask";
 #define SWS_HOTKEY_POLICY_PROP L"WindhawkSWSHotkeyPolicy"
 #define SWS_SHELL_ASSIST_PROP L"WindhawkSWSShellAssist"
 static constexpr ULONG_PTR kHotkeyReady = 1;
@@ -9389,6 +9395,94 @@ struct ActivationWindow {
     }
 };
 
+// Win10 legacy shell flyouts can keep foreground while the tool reveals. The
+// Explorer thread receiving the shortcut can first activate a tool window.
+static constexpr WCHAR kLegacyShellStageProp[] = L"WindhawkSWS_LegacyShellStage";
+static constexpr WCHAR kLegacyShellStageSourceProp[] = L"WindhawkSWS_LegacyShellSource";
+static constexpr WCHAR kLegacyShellStageEndpointProp[] = L"WindhawkSWS_LegacyShellEndpoint";
+static constexpr WCHAR kLegacyShellStageTokenProp[] = L"WindhawkSWS_LegacyShellToken";
+static constexpr UINT_PTR kLegacyShellStageTimer = 0x7B21;
+static constexpr ULONGLONG kLegacyShellStageTimeoutMs = 4000;
+static ActivationWindow s_legacyShellSessionStage;
+static std::atomic<HWND> s_legacyShellStageWindow{nullptr};
+static std::atomic<ULONGLONG> s_legacyShellStageDeadline{0};
+
+static bool IsLegacyShellFlyout(HWND source) {
+    if (!source || IsWin11OrGreater() || !IsWindowVisible(source)) return false;
+    WCHAR cls[64]{};
+    if (!GetClassNameW(source, cls, ARRAYSIZE(cls)) ||
+        wcscmp(cls, L"Windows.UI.Core.CoreWindow") != 0) return false;
+    DWORD cloaked = 0;
+    if (FAILED(DwmGetWindowAttribute(source, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) ||
+        cloaked) return false;
+    const auto identity = ActivationWindow::Capture(source);
+    GUITHREADINFO gui{sizeof(gui)};
+    if (!identity.window || !GetGUIThreadInfo(identity.thread, &gui) || gui.hwndFocus != source) {
+        return false;
+    }
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, identity.process);
+    if (!process) return false;
+    WCHAR path[MAX_PATH]{};
+    DWORD length = ARRAYSIZE(path);
+    const bool shellHost = QueryFullProcessImageNameW(process, 0, path, &length) &&
+        _wcsicmp(PathFindFileNameW(path), L"ShellExperienceHost.exe") == 0;
+    CloseHandle(process);
+    return shellHost;
+}
+
+static ActivationWindow ReadLegacyShellStage(HWND endpoint, DWORD token, DWORD ownerPid) {
+    if (!token || !ownerPid || IsWin11OrGreater() || ownerPid != ShellProcessId()) return {};
+    const auto stage = ActivationWindow::Capture(
+        reinterpret_cast<HWND>(GetPropW(endpoint, kLegacyShellStageProp)));
+    if (!stage.window || stage.process != ownerPid ||
+        GetPropW(stage.window, kLegacyShellStageEndpointProp) != endpoint ||
+        GetPropW(stage.window, kLegacyShellStageTokenProp) != ULongToHandle(token)) return {};
+    return stage;
+}
+
+static void DestroyLegacyShellStage(HWND stage) {
+    if (!stage || s_legacyShellStageWindow.load() != stage) return;
+    const HWND endpoint = reinterpret_cast<HWND>(GetPropW(stage, kLegacyShellStageEndpointProp));
+    if (endpoint && GetPropW(endpoint, kLegacyShellStageProp) == stage) {
+        RemovePropW(endpoint, kLegacyShellStageProp);
+    }
+    KillTimer(stage, kLegacyShellStageTimer);
+    DestroyWindow(stage);
+    s_legacyShellStageWindow.store(nullptr);
+}
+
+static HWND BeginLegacyShellStage(HWND endpoint, HWND source, DWORD token) {
+    if (s_legacyShellStageWindow.load() || IsWindowVisible(endpoint) ||
+        !(GetAsyncKeyState(VK_MENU) & 0x8000) ||
+        (GetAsyncKeyState(VK_ESCAPE) & 0x8000) || (GetAsyncKeyState(VK_LBUTTON) & 0x8000) ||
+        (GetAsyncKeyState(VK_RBUTTON) & 0x8000) || (GetAsyncKeyState(VK_MBUTTON) & 0x8000) ||
+        !IsLegacyShellFlyout(source)) return nullptr;
+    const int x = GetSystemMetrics(SM_XVIRTUALSCREEN) - 16;
+    const int y = GetSystemMetrics(SM_YVIRTUALSCREEN) - 16;
+    const HWND stage = CreateWindowExW(WS_EX_TOOLWINDOW, L"STATIC", L"", WS_POPUP,
+                                      x, y, 1, 1, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!stage) return nullptr;
+    HWND empty = nullptr;
+    if (!s_legacyShellStageWindow.compare_exchange_strong(empty, stage)) {
+        DestroyWindow(stage);
+        return nullptr;
+    }
+    s_legacyShellStageDeadline.store(GetTickCount64() + kLegacyShellStageTimeoutMs);
+    if (!SetPropW(stage, kLegacyShellStageEndpointProp, endpoint) ||
+        !SetPropW(stage, kLegacyShellStageSourceProp, source) ||
+        !SetPropW(stage, kLegacyShellStageTokenProp, ULongToHandle(token)) ||
+        !SetTimer(stage, kLegacyShellStageTimer, 40, nullptr) ||
+        !SetWindowPos(stage, nullptr, 0, 0, 0, 0,
+                      SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW) ||
+        !SetPropW(endpoint, kLegacyShellStageProp, stage) ||
+        GetAncestor(GetForegroundWindow(), GA_ROOT) != source ||
+        !SetForegroundWindow(stage) || GetForegroundWindow() != stage) {
+        DestroyLegacyShellStage(stage);
+        return nullptr;
+    }
+    return stage;
+}
+
 static ActivationWindow s_sessionShell;
 static bool s_forwardedAltTabShellSession = false;
 static DWORD s_shellAssistToken = 0;
@@ -10052,7 +10146,91 @@ static bool TryHookExplorerSuppression();
 static bool AttachExplorerHotkeyWindow();
 static void RunExplorerShellAssist(DWORD token, HWND source);
 
+static bool AttachExplorerHotkeyThread(DWORD threadId);
+static constexpr int kBacktickIds[] = {SWS_HOTKEY_ALTBACKTICK, SWS_HOTKEY_ALTBACKTICK_UK};
+static constexpr UINT kBacktickKeys[] = {VK_OEM_3, VK_OEM_8};
+static constexpr PCWSTR kBacktickNames[] = {
+    L"WindhawkSWS_ExplorerBacktickUS", L"WindhawkSWS_ExplorerBacktickUK",
+};
+static std::atomic<HWND> s_backtickIpc{nullptr};
+static ActivationWindow s_backtickEndpoint;
+static ATOM s_backtickAtoms[2]{};
+static DWORD s_backtickMask = 0;
+static HWINEVENTHOOK s_backtickEndpointEvents = nullptr;
+
+static void ReleaseExplorerBacktick(HWND ipc) {
+    if (s_backtickEndpointEvents) {
+        UnhookWinEvent(s_backtickEndpointEvents);
+        s_backtickEndpointEvents = nullptr;
+    }
+    for (size_t i = 0; i < ARRAYSIZE(s_backtickAtoms); ++i) {
+        if (s_backtickMask & (1u << i)) UnregisterHotKey(ipc, s_backtickAtoms[i]);
+        if (s_backtickAtoms[i]) GlobalDeleteAtom(s_backtickAtoms[i]);
+        s_backtickAtoms[i] = 0;
+    }
+    s_backtickMask = 0;
+    s_backtickIpc.store(nullptr);
+    s_backtickEndpoint = {};
+}
+
+static void CALLBACK ExplorerBacktickEndpointDestroyed(
+    HWINEVENTHOOK hook, DWORD, HWND window, LONG object, LONG child, DWORD, DWORD) {
+    if (hook == s_backtickEndpointEvents && window == s_backtickEndpoint.window &&
+        object == OBJID_WINDOW && child == CHILDID_SELF) {
+        ReleaseExplorerBacktick(s_backtickIpc.load());
+    }
+}
+
+static DWORD ConfigureExplorerBacktick(HWND ipc, HWND endpoint, DWORD requested) {
+    if (IsWin11OrGreater() || ShellProcessId() != GetCurrentProcessId() || requested > 3) return 0;
+    if (!requested) {
+        if (endpoint == s_backtickEndpoint.window) ReleaseExplorerBacktick(ipc);
+        return 0;
+    }
+    if (endpoint != FindWindowW(SWS_CLASSNAME, SWS_MAIN_WINDOW_TITLE) ||
+        !(HandleToULong(GetPropW(endpoint, SWS_HOTKEY_POLICY_PROP)) & kHotkeyReady) ||
+        !AttachExplorerHotkeyThread(GetCurrentThreadId())) return 0;
+    if (!s_backtickEndpoint.Matches(endpoint)) {
+        ReleaseExplorerBacktick(ipc);
+        const auto receiver = ActivationWindow::Capture(endpoint);
+        if (!receiver.window) return 0;
+        s_backtickEndpointEvents = SetWinEventHook(
+            EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, nullptr,
+            ExplorerBacktickEndpointDestroyed, receiver.process, receiver.thread,
+            WINEVENT_OUTOFCONTEXT);
+        if (!s_backtickEndpointEvents) return 0;
+        s_backtickEndpoint = receiver;
+        s_backtickIpc.store(ipc);
+    }
+    for (size_t i = 0; i < ARRAYSIZE(s_backtickAtoms); ++i) {
+        const DWORD bit = 1u << i;
+        if (!(requested & bit) || (s_backtickMask & bit)) continue;
+        if (!s_backtickAtoms[i]) s_backtickAtoms[i] = GlobalAddAtomW(kBacktickNames[i]);
+        const ATOM atom = s_backtickAtoms[i];
+        if (atom && RegisterHotKey(ipc, atom, MOD_ALT, kBacktickKeys[i])) {
+            s_backtickMask |= bit;
+        }
+    }
+    return s_backtickMask;
+}
+
+static int ExplorerBacktickId(const MSG& msg) {
+    if (!msg.hwnd || msg.hwnd != s_backtickIpc.load() || LOWORD(msg.lParam) != MOD_ALT) return 0;
+    for (size_t i = 0; i < ARRAYSIZE(s_backtickAtoms); ++i) {
+        if ((s_backtickMask & (1u << i)) && msg.wParam == s_backtickAtoms[i] &&
+            HIWORD(msg.lParam) == kBacktickKeys[i]) return kBacktickIds[i];
+    }
+    return 0;
+}
+
 LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_SWS_EXPLORER_BACKTICK_CONFIG) {
+        return ConfigureExplorerBacktick(hWnd, reinterpret_cast<HWND>(wParam),
+                                             static_cast<DWORD>(lParam));
+    }
+    if (uMsg == WM_DESTROY && hWnd == s_backtickIpc.load()) {
+        ReleaseExplorerBacktick(hWnd);
+    }
     if (uMsg == WM_SWS_EXPLORER_SHELL_ASSIST) {
         if (wParam && wParam <= kShellAssistTokenMask) {
             RunExplorerShellAssist(static_cast<DWORD>(wParam), reinterpret_cast<HWND>(lParam));
@@ -16281,7 +16459,8 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
                          ULONGLONG invocationStartTick = 0,
                          PCWSTR shortcut = nullptr, DWORD shellAssistToken = 0,
                          DWORD explorerPid = 0, bool useDesktopMru = false,
-                         bool forwardedAltTab = false) {
+                         bool forwardedAltTab = false,
+                         ActivationWindow invocationStage = {}) {
     const ULONGLONG invocationTick = invocationStartTick ? invocationStartTick :
                                      GetTickCount64();
     s_crossLineGoal.valid = false;
@@ -16292,6 +16471,7 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     // A new invocation supersedes a previous denied activation request.
     StopShellInvocationHandoff();
     ClearExitActivationRetry();
+    s_legacyShellSessionStage = invocationStage;
     s_sessionShell = {};
     s_shellInvocationState = ShellInvocationState::NotStarted;
     // Publish intent before layout/icon work so the raw reader can mark a
@@ -16902,6 +17082,9 @@ static void RequestExplorerShellAssist() {
 }
 
 static void StopShellInvocationHandoff() {
+    if (s_legacyShellSessionStage.Matches(s_legacyShellSessionStage.window)) {
+        PostMessageW(s_legacyShellSessionStage.window, WM_SWS_RETIRE_LEGACY_SHELL_STAGE, 0, 0);
+    }
     CancelForwardedShellAssist();
     s_forwardedAltTabShellSession = false;
     if (s_shellInvocationDeadline && g_hSwitcher) {
@@ -16945,7 +17128,9 @@ static void TryShellInvocationHandoff(ShellInvocationPhase phase) {
     const HWND shell = s_sessionShell.window;
     const bool transferred = s_shellInvocationState == ShellInvocationState::Observing;
     HWND foreground = GetAncestor(GetForegroundWindow(), GA_ROOT);
-    if (presentation && !transferred && s_sessionShell.Matches(foreground)) {
+    const bool stageForeground = s_legacyShellSessionStage.Matches(foreground);
+    if (presentation && !transferred &&
+        (s_sessionShell.Matches(foreground) || stageForeground)) {
         BOOL granted = SetForegroundWindow(g_hSwitcher);
         if (!granted && SessionShellHoldsForeground()) {
             SwitchToThisWindow(g_hSwitcher, TRUE);
@@ -16953,7 +17138,8 @@ static void TryShellInvocationHandoff(ShellInvocationPhase phase) {
         foreground = GetAncestor(GetForegroundWindow(), GA_ROOT);
         Wh_Log(L"SWS: shell invocation claim source=%p staging=%d set=%d foreground=%p",
                shell, phase == ShellInvocationPhase::Staging, granted, foreground);
-        if (phase == ShellInvocationPhase::Reveal && s_sessionShell.Matches(foreground)) {
+        if ((phase == ShellInvocationPhase::Reveal && s_sessionShell.Matches(foreground)) ||
+            s_legacyShellSessionStage.Matches(foreground)) {
             RequestExplorerShellAssist();
         }
     }
@@ -16988,7 +17174,8 @@ static void TryShellInvocationHandoff(ShellInvocationPhase phase) {
     // Windows can hide the flyout before assigning foreground to a new HWND.
     // Keep the return identity until that transition settles or times out.
     const bool stillForeground = s_sessionShell.Matches(foreground);
-    const bool dismissed = !visible && foreground && !stillForeground;
+    const bool dismissed = !visible && foreground && !stillForeground &&
+                           !s_legacyShellSessionStage.Matches(foreground);
     if (dismissed && g_isVisible && g_isSticky && !g_touchpadInvocation &&
         !IsSwitcherWindow(foreground)) {
         SWS_SetStickyEscapeHotkey(true);
@@ -16996,7 +17183,8 @@ static void TryShellInvocationHandoff(ShellInvocationPhase phase) {
     if (dismissed && (s_shellInvocationDeadline || firstAttempt)) {
         Wh_Log(L"SWS: shell invocation dismissed source=%p foreground=%p", shell, foreground);
     }
-    if (foreground && !stillForeground && !IsSwitcherWindow(foreground)) {
+    if (foreground && !stillForeground && !IsSwitcherWindow(foreground) &&
+        !s_legacyShellSessionStage.Matches(foreground)) {
         s_shellInvocationState = ShellInvocationState::Abandoned;
     }
     if (dismissed || s_shellInvocationState == ShellInvocationState::Abandoned) {
@@ -17064,7 +17252,7 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
         }
         HWND foreground = GetAncestor(GetForegroundWindow(), GA_ROOT);
         if (!s_sessionShell.Matches(foreground) && !IsSwitcherWindow(foreground) &&
-            !IsShellSurfaceWindow(foreground)) {
+            !s_legacyShellSessionStage.Matches(foreground) && !IsShellSurfaceWindow(foreground)) {
             s_shellCommitFallback = ActivationWindow::Capture(foreground);
         }
     }
@@ -17086,7 +17274,7 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
         // Dismissing a flyout can return focus to the previous application.
         // Allow that first transition and record it for subsequent retries.
         if (foreground && foreground != hTarget && foreground != hForegroundTarget &&
-            !IsSwitcherWindow(foreground)) {
+            !IsSwitcherWindow(foreground) && !s_legacyShellSessionStage.Matches(foreground)) {
             if (s_shellForegroundConfirmTick) {
                 // Once Windows activated the selection, leaving it for a
                 // different app is a new focus change, even for the app
@@ -21035,6 +21223,12 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 break;
             }
         }
+        if (uMsg != WM_HOTKEY && !IsWin11OrGreater() && lParam &&
+            lParam == static_cast<LPARAM>(ShellProcessId())) {
+            const DWORD mask = HandleToULong(GetPropW(hWnd, kExplorerBacktickMaskProp));
+            if ((wParam == SWS_HOTKEY_ALTBACKTICK && (mask & 1u)) ||
+                (wParam == SWS_HOTKEY_ALTBACKTICK_UK && (mask & 2u))) uMsg = WM_HOTKEY;
+        }
         if (uMsg != WM_HOTKEY) return 0;
     }
     if (g_taskbarCreatedMessage && uMsg == g_taskbarCreatedMessage && hWnd == g_hSwitcher) {
@@ -21748,6 +21942,16 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
 
         if (!g_isVisible && !g_isPendingShow) {
             HWND hFg = GetForegroundWindow();
+            auto stage = forwardedHotkey
+                ? ReadLegacyShellStage(g_hSwitcher, forwardedAssistToken, static_cast<DWORD>(lParam))
+                : ActivationWindow{};
+            const HWND shell = stage.window
+                ? reinterpret_cast<HWND>(GetPropW(stage.window, kLegacyShellStageSourceProp)) : nullptr;
+            if (shell && (stage.Matches(hFg) || GetAncestor(hFg, GA_ROOT) == shell)) {
+                hFg = shell;
+            } else {
+                stage = {};
+            }
             const bool altBacktick = id == SWS_HOTKEY_ALTBACKTICK ||
                                      id == SWS_HOTKEY_ALTBACKTICK_UK;
             if (hFg && !IsSwitcherWindow(hFg)) {
@@ -21759,7 +21963,8 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             ShowSwitcher(isCtrl, hFg, 0, shortcut, forwardedAssistToken,
                          forwardedHotkey ? static_cast<DWORD>(lParam) : 0,
                          !isBackward && !isAltBacktickTrigger,
-                         forwardedHotkey && id == SWS_HOTKEY_ALTTAB);
+                         forwardedHotkey && id == SWS_HOTKEY_ALTTAB,
+                         stage);
 
             // When "Cycle Between Windows of Current Application" is combined with
             // "Group Windows by Application", skip the collapsed group entry and open
@@ -22530,6 +22735,17 @@ static DWORD ShellProcessId() {
     return pid;
 }
 
+static DWORD RequestExplorerBacktick(DWORD mask) {
+    HWND ipc = FindWindowExW(HWND_MESSAGE, nullptr, L"WindhawkSWS_IpcWindow", nullptr);
+    DWORD pid = 0;
+    if (!ipc || !GetWindowThreadProcessId(ipc, &pid) || pid != ShellProcessId()) return 0;
+    DWORD_PTR result = 0;
+    if (!SendMessageTimeoutW(ipc, WM_SWS_EXPLORER_BACKTICK_CONFIG,
+                             reinterpret_cast<WPARAM>(g_hSwitcher), mask,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &result)) return 0;
+    return static_cast<DWORD>(result) & mask;
+}
+
 static void SWS_RegisterHotkeys() {
     if (!g_hSwitcher) return;
     const bool wantAltBacktick = wcscmp(g_settings.altBacktickBehavior, L"none") != 0;
@@ -22540,8 +22756,24 @@ static void SWS_RegisterHotkeys() {
         return g_registeredHotkeys[id];
     };
 
-    bool usReady = !wantAltBacktick || registerOne(SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3);
-    bool ukReady = !wantAltBacktick || registerOne(SWS_HOTKEY_ALTBACKTICK_UK, MOD_ALT, VK_OEM_8);
+    DWORD explorerMask = 0;
+    // The Xbox passthrough replays the shortcut after releasing the local hotkey.
+    if (wantAltBacktick && !IsWin11OrGreater() && !g_settings.excludeXboxMode &&
+        GetPropW(g_hSwitcher, SWS_HOTKEY_POLICY_PROP)) {
+        DWORD requested = 0;
+        if (!g_registeredHotkeys[SWS_HOTKEY_ALTBACKTICK]) requested |= 1;
+        if (!g_registeredHotkeys[SWS_HOTKEY_ALTBACKTICK_UK]) requested |= 2;
+        if (requested) explorerMask = RequestExplorerBacktick(requested);
+    }
+    if (explorerMask && !SetPropW(g_hSwitcher, kExplorerBacktickMaskProp, ULongToHandle(explorerMask))) {
+        RequestExplorerBacktick(0);
+        explorerMask = 0;
+    }
+    if (!explorerMask) RemovePropW(g_hSwitcher, kExplorerBacktickMaskProp);
+    bool usReady = !wantAltBacktick || (explorerMask & 1u) ||
+                   registerOne(SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3);
+    bool ukReady = !wantAltBacktick || (explorerMask & 2u) ||
+                   registerOne(SWS_HOTKEY_ALTBACKTICK_UK, MOD_ALT, VK_OEM_8);
     if (usReady && ukReady) {
         KillTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID);
     } else {
@@ -22585,6 +22817,9 @@ static void SWS_SetSessionEscHotkeys(bool enable) {
     }
 }
 static void SWS_UnregisterHotkeys() {
+    if (g_hSwitcher && RemovePropW(g_hSwitcher, kExplorerBacktickMaskProp)) {
+        RequestExplorerBacktick(0);
+    }
     KillTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID);
     for (int id = 1; id <= SWS_HOTKEY_ALTBACKTICK_UK; ++id) {
         if (g_registeredHotkeys[id] && g_hSwitcher) UnregisterHotKey(g_hSwitcher, id);
@@ -23278,7 +23513,8 @@ static void RunExplorerShellAssist(DWORD token, HWND source) {
         (policy & kHotkeyReady) && (policy & kHotkeyShellAssist) &&
         ticket.endpoint.Matches(endpoint) && IsWindowVisible(endpoint) &&
         ticket.source.Matches(source) && IsShellSurfaceWindow(source) &&
-        ticket.source.Matches(GetAncestor(GetForegroundWindow(), GA_ROOT)) &&
+        (ticket.source.Matches(GetAncestor(GetForegroundWindow(), GA_ROOT)) ||
+         ReadLegacyShellStage(endpoint, token, GetCurrentProcessId()).Matches(GetForegroundWindow())) &&
         GetPropW(endpoint, SWS_SHELL_ASSIST_PROP) == ULongToHandle(token | kShellAssistReady);
     BOOL result = eligible ? SetForegroundWindow(endpoint) : FALSE;
     Wh_Log(L"SWS: Explorer shell assist token=%u source=%p eligible=%d set=%d foreground=%p",
@@ -23289,19 +23525,37 @@ static LRESULT CALLBACK ExplorerHotkeyGetMessage(int code, WPARAM wParam, LPARAM
     ++s_explorerHotkeyCalls;
     if (code == HC_ACTION && wParam == PM_REMOVE && !s_explorerHotkeyStopping.load()) {
         auto* message = reinterpret_cast<MSG*>(lParam);
+        const HWND stage = s_legacyShellStageWindow.load();
+        if (stage && message->hwnd == stage &&
+            (message->message == WM_SWS_RETIRE_LEGACY_SHELL_STAGE ||
+             (message->message == WM_TIMER && message->wParam == kLegacyShellStageTimer))) {
+            if (message->message == WM_SWS_RETIRE_LEGACY_SHELL_STAGE ||
+                GetForegroundWindow() != stage ||
+                GetTickCount64() >= s_legacyShellStageDeadline.load()) {
+                DestroyLegacyShellStage(stage);
+            }
+            message->message = WM_NULL;
+        }
         if (message->message == WM_HOTKEY) {
             int id = TabHotkeyId(LOWORD(message->lParam), HIWORD(message->lParam));
+            const int backtickId = id ? 0 : ExplorerBacktickId(*message);
+            if (backtickId) id = backtickId;
             if (id && ShellProcessId() == GetCurrentProcessId()) {
                 HWND endpoint = FindWindowW(SWS_CLASSNAME, SWS_MAIN_WINDOW_TITLE);
                 ULONG_PTR policy = endpoint ? reinterpret_cast<ULONG_PTR>(
                     GetPropW(endpoint, SWS_HOTKEY_POLICY_PROP)) : 0;
                 if ((policy & kHotkeyReady) &&
+                    (!backtickId || s_backtickEndpoint.Matches(endpoint)) &&
                     (!(policy & kHotkeyExcludeXbox) || !IsXboxModeOrForeground())) {
                     DWORD pid = 0;
                     if (GetWindowThreadProcessId(endpoint, &pid) && pid) {
                         HWND foreground = GetForegroundWindow();
                         DWORD assistToken = (policy & kHotkeyShellAssist)
                                                 ? RecordExplorerShellAssist(endpoint, foreground) : 0;
+                        const HWND source = GetAncestor(foreground, GA_ROOT);
+                        // Claim foreground on this input thread before granting it to the tool.
+                        const HWND stage = assistToken
+                            ? BeginLegacyShellStage(endpoint, source, assistToken) : nullptr;
                         BOOL granted = AllowSetForegroundWindow(pid);
                         DWORD error = granted ? ERROR_SUCCESS : GetLastError();
                         if (PostMessageW(endpoint, WM_SWS_EXPLORER_HOTKEY,
@@ -23310,6 +23564,7 @@ static LRESULT CALLBACK ExplorerHotkeyGetMessage(int code, WPARAM wParam, LPARAM
                                    id, foreground, pid, granted, error, assistToken);
                             message->message = WM_NULL;
                         } else if (assistToken) {
+                            DestroyLegacyShellStage(stage);
                             TakeExplorerShellAssist(assistToken);
                         }
                     }
@@ -24414,7 +24669,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     g_hFont = CreateScaledFont(96);
 
     g_taskbarCreatedMessage = RegisterWindowMessageW(L"TaskbarCreated");
-    SWS_RegisterHotkeys();
+    if (IsWin11OrGreater()) SWS_RegisterHotkeys();
 
     UpdateRefreshRateTiming();
 
@@ -24433,6 +24688,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
 
 
     PublishSwitcherHotkeyPolicy();
+    if (!IsWin11OrGreater()) SWS_RegisterHotkeys();
     MSG msg;
     while (true) {
         // Keep reports and discrete commands in queue order. Bound dispatch by
@@ -25755,6 +26011,9 @@ void Wh_ModBeforeUninit() {
         PublishNativeSwipeHookStatus(false);
     } else if (!g_isToolModProcessLauncher) {
         StopSwitcherHotkeyForwarding();
+    }
+    if (const HWND stage = s_legacyShellStageWindow.exchange(nullptr)) {
+        PostMessageW(stage, WM_CLOSE, 0, 0);
     }
 }
 
