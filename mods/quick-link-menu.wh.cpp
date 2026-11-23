@@ -7,7 +7,7 @@
 // @description:de-DE Das Win+X-Menü anpassen und um weitere Befehle ergänzen (Rechtsklick auf die Startschaltfläche)
 // @description:pt-BR Personalize o menu Win+X e adicione mais comandos (clique com o botão direito no botão Iniciar)
 // @description:zh-CN 自定义 Win+X 菜单并添加更多命令（右键单击“开始”按钮）
-// @version         1.1.1
+// @version         1.1.2
 // @author          CTravkin
 // @github          https://github.com/CTravkin
 // @homepage        https://ctravkin.ru
@@ -16,7 +16,7 @@
 // @architecture    x86-64
 // @compilerOptions -DWIN32_LEAN_AND_MEAN -lcomctl32 -lruntimeobject -lole32 -loleaut32 -lshell32 -lshlwapi -ladvapi32 -liphlpapi -luuid -ldwrite
 // ==/WindhawkMod==
-// Build: 43
+// Build: 44
 
 // ==WindhawkModReadme==
 /*
@@ -97,7 +97,7 @@ and Terminal and power actions under **Command settings**.
 
 ## Links
 
-- [Quick Link Menu documentation](https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Quick_Link_Menu/README.md)
+- [Quick Link Menu on GitHub](https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Quick_Link_Menu)
 - [DSN Windhawk Mods](https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md)
 */
 // ==/WindhawkModReadme==
@@ -1664,6 +1664,7 @@ std::atomic<bool> unloading;
 ModuleWorkQueue moduleWorkQueue;
 std::atomic<unsigned> settingsNavigationGeneration;
 HWND trayWindow;
+HWND subclassRetryWindow;
 std::atomic<DWORD> trayThread;
 UINT setupMessage;
 bool subclassPresent;
@@ -3147,7 +3148,7 @@ HRESULT WINAPI HookShowAtOptions(void* self, void* target, void* options) {
     return result;
 }
 
-enum class TaskbarSetup : LRESULT { Failed, Ready, WaitForXaml };
+enum class TaskbarSetup : LRESULT { Unanswered, Failed, Ready, WaitForXaml };
 
 TaskbarSetup InstallHooks() {
     void* show;
@@ -3165,23 +3166,42 @@ TaskbarSetup InstallHooks() {
         throw;
     }
 
-    if (show == showOptions ||
-        !WindhawkUtils::SetFunctionHook(reinterpret_cast<ShowAt>(show), HookShowAt, &originalShowAt))
+    if (show == showOptions) {
+        Wh_Log(L"Quick Link Menu hook targets unexpectedly share the same address");
         return TaskbarSetup::Failed;
+    }
+    if (!WindhawkUtils::SetFunctionHook(reinterpret_cast<ShowAt>(show), HookShowAt, &originalShowAt)) {
+        Wh_Log(L"Could not register the Quick Link Menu ShowAt hook");
+        return TaskbarSetup::Failed;
+    }
     const bool optionsHook = WindhawkUtils::SetFunctionHook(
         reinterpret_cast<ShowAtOptions>(showOptions), HookShowAtOptions, &originalShowAtOptions);
     if (optionsHook && Wh_ApplyHookOperations()) return TaskbarSetup::Ready;
 
-    if (optionsHook) Wh_RemoveFunctionHook(showOptions);
-    Wh_RemoveFunctionHook(show);
-    Wh_ApplyHookOperations();
+    Wh_Log(L"Quick Link Menu hook setup failed during %ls",
+           optionsHook ? L"hook application" : L"ShowAt with options registration");
+    const bool removedOptions = !optionsHook || Wh_RemoveFunctionHook(showOptions);
+    const bool removedShow = Wh_RemoveFunctionHook(show);
+    const bool appliedRemoval = Wh_ApplyHookOperations();
+    if (!removedOptions || !removedShow || !appliedRemoval) Wh_Log(L"Could not roll back the Quick Link Menu hooks");
     return TaskbarSetup::Failed;
 }
 
 LRESULT CALLBACK TraySubclass(HWND window, UINT message, WPARAM action, LPARAM data, DWORD_PTR) {
     if (message == setupMessage) {
+        if (action) {
+            try {
+                return static_cast<LRESULT>(unloading ? TaskbarSetup::Failed : InstallHooks());
+            } catch (winrt::hresult_error const& error) {
+                Wh_Log(L"Quick Link Menu XAML hook setup failed (HRESULT 0x%08lX)",
+                       static_cast<unsigned long>(error.code().value));
+            } catch (...) {
+                Wh_Log(L"Quick Link Menu hook setup failed with an unexpected exception");
+            }
+            return static_cast<LRESULT>(TaskbarSetup::Failed);
+        }
+
         try {
-            if (action) return unloading ? 0 : static_cast<LRESULT>(InstallHooks());
             openingHandler.revoke();
             observedMenu = {};
             if (session) {
@@ -3189,9 +3209,9 @@ LRESULT CALLBACK TraySubclass(HWND window, UINT message, WPARAM action, LPARAM d
                 menu.Hide();
             }
         } catch (...) {
-            if (!action) Wh_Log(L"Quick Link menu taskbar operation failed");
+            Wh_Log(L"Quick Link Menu taskbar cleanup failed");
         }
-        if (!action) Restore();
+        Restore();
         return 0;
     }
     return DefSubclassProc(window, message, action, data);
@@ -3201,26 +3221,43 @@ bool FinishTaskbarStartup() noexcept {
     const HWND window = FindWindowW(L"Shell_TrayWnd", nullptr);
     DWORD pid{};
     const DWORD thread = window ? GetWindowThreadProcessId(window, &pid) : 0;
-    if (!thread) return false;
+    if (!thread) {
+        subclassRetryWindow = nullptr;
+        return false;
+    }
     // A separate Explorer window process has no Win+X menu to customize.
     if (pid != GetCurrentProcessId() || unloading) return true;
     if (!GetModuleHandleW(L"Windows.UI.Xaml.dll")) return false;
 
-    trayWindow = window;
-    trayThread = thread;
-    subclassPresent = WindhawkUtils::SetWindowSubclassFromAnyThread(trayWindow, TraySubclass, 0);
-    const auto result = subclassPresent ? static_cast<TaskbarSetup>(SendMessageW(trayWindow, setupMessage, 1, 0))
-                                        : TaskbarSetup::Failed;
+    subclassPresent = WindhawkUtils::SetWindowSubclassFromAnyThread(window, TraySubclass, 0);
+    if (!subclassPresent) {
+        if (FindWindowW(L"Shell_TrayWnd", nullptr) != window) {
+            subclassRetryWindow = nullptr;
+            return false;
+        }
+        // A stable taskbar window gets one retry after a subclass failure.
+        if (std::exchange(subclassRetryWindow, window) != window) return false;
+        Wh_Log(L"Could not attach Quick Link Menu to the taskbar after retrying");
+        return true;
+    }
+    subclassRetryWindow = nullptr;
+
+    const auto result = static_cast<TaskbarSetup>(SendMessageW(window, setupMessage, 1, 0));
     if (result == TaskbarSetup::Ready) {
+        trayWindow = window;
+        trayThread = thread;
         RefreshAvailability();
         if (!moduleWorkQueue.Submit(WarmSystemCaptions)) Wh_Log(L"Could not schedule Quick Link menu caption resolution");
         return true;
     }
-    if (subclassPresent) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(trayWindow, TraySubclass);
-        subclassPresent = false;
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, TraySubclass);
+    subclassPresent = false;
+    if (result == TaskbarSetup::WaitForXaml) return false;
+    if (result != TaskbarSetup::Failed) {
+        if (FindWindowW(L"Shell_TrayWnd", nullptr) != window) return false;
+        Wh_Log(L"Quick Link Menu setup message returned an unexpected result (%lld)", static_cast<long long>(result));
     }
-    return false;
+    return true;
 }
 
 void ArmTaskbarTimer(PTP_TIMER timer, DWORD interval) {
