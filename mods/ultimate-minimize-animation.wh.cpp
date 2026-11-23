@@ -753,13 +753,13 @@ bottom one. If auto-detection ever gets it wrong, override it with the
   - blackhole_twist: 25
     $name: Black Hole spiral twist (0-50)
     $description: How sharply the wormhole spirals the window blocks toward the vortex center.
-  - blackhole_quality: 2
+  - blackhole_quality: "2"
     $name: Black Hole particle size
     $description: Block size of the wormhole particles.
     $options:
-    - 1: Large blocks (fast)
-    - 2: Medium blocks
-    - 3: Fine blocks (slow)
+    - "1": Large blocks (fast)
+    - "2": Medium blocks
+    - "3": Fine blocks (slow)
   - window_shadow: true
     $name: Window shadow during animations
     $description: >-
@@ -1686,7 +1686,13 @@ void MacGenieLoadSettings() {
     g_particleBlock.store(MacClampInt(Wh_GetIntSetting(L"effects.particle_block_size"), 1, 100),
                           std::memory_order_relaxed);
     g_blackholeTwist.store(MacClampInt(Wh_GetIntSetting(L"effects.blackhole_twist"), 0, 50), std::memory_order_relaxed);
-    g_blackholeQuality.store(MacClampInt(Wh_GetIntSetting(L"effects.blackhole_quality"), 1, 3), std::memory_order_relaxed);
+    // A string setting, since a setting with $options must be a string.
+    {
+        PCWSTR q = Wh_GetStringSetting(L"effects.blackhole_quality");
+        int quality = (q && *q) ? _wtoi(q) : 2;
+        Wh_FreeStringSetting(q);
+        g_blackholeQuality.store(MacClampInt(quality, 1, 3), std::memory_order_relaxed);
+    }
     g_windowShadow.store(Wh_GetIntSetting(L"effects.window_shadow") != 0, std::memory_order_relaxed);
 
     // Alt+Tab
