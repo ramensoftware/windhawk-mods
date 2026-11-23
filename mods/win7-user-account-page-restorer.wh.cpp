@@ -86,8 +86,6 @@ to the internet and restart `explorer.exe` (or toggle the mod).
 - **Show legacy online ID and fingerprint links**: off by default. When enabled, the page's original visibility
   checks apply; fingerprint hardware may be required. Close and reopen the page after changing the setting. These
   links can remain unavailable or nonfunctional because their Windows 7 targets are normally absent on Windows 10/11.
-- **Block account removal from the classic page**: on by default. Turn it off to use the classic page's normal
-  deletion flow; see the warning under *Notes and limitations*.
 - **Keep downloaded files when the mod is disabled**: on by default, so that enabling the mod again needs no
   download.
 
@@ -96,14 +94,11 @@ to the internet and restart `explorer.exe` (or toggle the mod).
   components that Microsoft can change at any time, so some features may not work, or may stop working after a
   Windows update. The translations of the page (French, Spanish, Portuguese and German in particular) were also written
   without the original Microsoft files and may differ from the official wording.
-- **Account removal protection** is enabled by default. For safety, the mod blocks removal from the classic page
-  and displays a localized warning, to avoid ambiguous deletion. To remove an account safely through Windows, use
-  Settings > Accounts > Other users, after backing up important files. Settings may also remove account data.
-  You can disable **Block account removal from the classic page** to use the Windows 7 page's ordinary deletion
-  flow through the Windows 10/11 account implementation, not the original Windows 7 account implementation.
-  **Warning:** this path has been observed to hang after the account was deleted; its profile/file handling is not
-  verified. Check whether a previous attempt already deleted the account before retrying. Protection only applies
-  if the page reaches the mod's remove method.
+- **Account removal is disabled.** Because of a limitation of the legacy provider, removing an account from the classic
+  page does nothing: the page shows a localized message and opens Settings > Accounts > Other users, where the account
+  can be removed. Back up important files first: Settings can also delete the account data. The reason is that the
+  provider's remove method runs inside the elevated account server, which for about 20 seconds blocks every other call
+  to it, and with it the window of the page; its profile/file handling is also unverified.
 - **The Guest account is an edge case and is not supported by modern Windows.**
   The Windows 7 page can turn the Guest account on and off, but the Guest account is
   not supported by Windows 10/11, and it has been reported to work correctly only
@@ -172,13 +167,6 @@ to the internet and restart `explorer.exe` (or toggle the mod).
   $description: This setting allows the classic page to show the Link online IDs and Manage your fingerprint data links instead of suppressing them. They depend on the original Windows checks, including fingerprint hardware, and might not appear. Their Windows 7 targets are normally absent on Windows 10/11, so the links may not work. Close and reopen the page after changing this setting.
   $description:it-IT: Questa impostazione consente alla pagina classica di mostrare i collegamenti per ID online e impronte invece di nasconderli. Dipendono dai controlli originali di Windows, incluso il lettore di impronte, e potrebbero non apparire. Le destinazioni di Windows 7 normalmente non sono presenti in Windows 10/11, quindi i collegamenti potrebbero non funzionare. Chiudi e riapri la pagina dopo la modifica.
   $description:de-DE: Diese Einstellung erlaubt der klassischen Seite, die alten Links für Online-IDs und Fingerabdrücke anzuzeigen, statt sie zu unterdrücken. Die ursprünglichen Windows-Prüfungen einschließlich Fingerabdruckgerät gelten weiterhin, daher erscheinen sie möglicherweise nicht. Die Windows-7-Ziele fehlen unter Windows 10/11 normalerweise, sodass die Links möglicherweise nicht funktionieren. Schließe die Seite nach der Änderung und öffne sie erneut.
-- blockAccountRemoval: true
-  $name: Block account removal from the classic page
-  $name:it-IT: Blocca la rimozione degli account dalla pagina classica
-  $name:de-DE: Kontoentfernung auf der klassischen Seite blockieren
-  $description: This setting blocks account removal from the classic page and shows a warning by default. Turn it off to use the Windows 7 page's normal deletion flow through the Windows 10/11 account implementation. That path may hang even after the account is deleted; its file handling is not verified. Back up files and check whether deletion already succeeded before retrying.
-  $description:it-IT: Questa impostazione blocca la rimozione dalla pagina classica e mostra un avviso per impostazione predefinita. Disattivala per usare il normale percorso di eliminazione della pagina Windows 7 tramite i componenti account di Windows 10/11. La pagina potrebbe bloccarsi anche dopo la cancellazione; la gestione dei file non è verificata. Salva i file e controlla se l'account è già stato eliminato prima di riprovare.
-  $description:de-DE: Diese Einstellung blockiert standardmäßig die Kontoentfernung auf der klassischen Seite und zeigt eine Warnung. Deaktiviere sie für den normalen Löschablauf der Windows-7-Seite über die Kontokomponenten von Windows 10/11. Die Seite kann auch nach der Löschung hängen bleiben; der Umgang mit Dateien ist nicht überprüft. Sichere Dateien und prüfe vor einem erneuten Versuch, ob das Konto bereits gelöscht wurde.
 - keepFilesOnDisable: true
   $name: Keep downloaded files when the mod is disabled
   $name:it-IT: Conserva i file scaricati quando la mod viene disattivata
@@ -1968,7 +1956,6 @@ std::atomic<HINTERNET> g_request{nullptr};
 std::atomic<bool> g_keepFiles{true};
 std::atomic<int> g_languageSetting{0};      // 0 automatic, 1 English, 2 Italian, 3 French, 4 Spanish, 5 Portuguese, 6 German
 std::atomic<bool> g_hideUserName{false};
-std::atomic<bool> g_blockAccountRemoval{true};
 std::atomic<bool> g_showLegacyLinks{false};
 std::atomic<const wchar_t*> g_genericName{L"User"};
 
@@ -2453,7 +2440,6 @@ void LoadSettings() {
     g_languageSetting.store(language);
     g_keepFiles.store(Wh_GetIntSetting(L"keepFilesOnDisable") != 0);
     g_hideUserName.store(Wh_GetIntSetting(L"hideUserName") != 0);
-    g_blockAccountRemoval.store(Wh_GetIntSetting(L"blockAccountRemoval") != 0);
     g_showLegacyLinks.store(Wh_GetIntSetting(L"showLegacyLinks") != 0);
 }
 
@@ -3037,8 +3023,6 @@ struct UserAdapter final : AdapterBase<IUser7, &kIidUser7> {
         // "Hide user name": the name of the signed-in user is shown as a generic one on this page only. Windows, the
         // account and every other account are not touched.
         if (SUCCEEDED(hr) && current && name && value && g_hideUserName.load()) {
-            static std::atomic<int> logged{0};
-            if (logged.fetch_add(1) < 100) Wh_Log(L"get_setting: %s", name);
             if (_wcsicmp(name, L"DisplayName") == 0 && value->vt == VT_BSTR) {
                 if (BSTR text = SysAllocString(g_genericName.load())) {
                     VariantClear(value);
@@ -3147,6 +3131,35 @@ HRESULT WrapUser(HRESULT hr, IUser10* user, IUser7** out, bool current = false) 
 // retrieve the new user through this adapter's existing enumerator.
 HRESULT CreateAccountWorkaround(IEnum10* enumerator, BSTR loginName, IUser10** user);
 
+// Removal from the classic page is always disabled: the legacy provider's remove method runs inside the elevated
+// account server, which blocks every other call to it (and so this page's window) for about 20 seconds. The user is told
+// so and Settings is opened on the page where an account can be removed.
+void ShowRemovalDisabled() {
+    const wchar_t* message;
+    switch (CurrentLanguage()) {
+            case Language::Italian:
+                message = L"A causa di una limitazione del provider legacy, la rimozione degli account da questa pagina è disattivata. Nessun account è stato eliminato. Verranno ora aperte le Impostazioni in Account > Altri utenti, dove puoi rimuovere l'account. Prima esegui un backup dei file importanti: Impostazioni può eliminare anche i dati dell'account.";
+                break;
+            case Language::French:
+                message = L"En raison d'une limitation du fournisseur hérité, la suppression de comptes depuis cette page est désactivée. Aucun compte n'a été supprimé. Les Paramètres vont s'ouvrir sur Comptes > Autres utilisateurs, où vous pouvez supprimer le compte. Sauvegardez d'abord les fichiers importants : les Paramètres peuvent aussi supprimer les données du compte.";
+                break;
+            case Language::Spanish:
+                message = L"Debido a una limitación del proveedor heredado, la eliminación de cuentas desde esta página está desactivada. No se ha eliminado ninguna cuenta. Ahora se abrirá Configuración en Cuentas > Otros usuarios, donde puedes eliminar la cuenta. Haz antes una copia de los archivos importantes: Configuración también puede eliminar los datos de la cuenta.";
+                break;
+            case Language::Portuguese:
+                message = L"Devido a uma limitação do fornecedor legado, a remoção de contas a partir desta página está desativada. Nenhuma conta foi eliminada. Vão agora abrir-se as Definições em Contas > Outros utilizadores, onde podes remover a conta. Guarda primeiro uma cópia dos ficheiros importantes: as Definições também podem eliminar os dados da conta.";
+                break;
+            case Language::German:
+                message = L"Aufgrund einer Einschränkung des Legacy-Providers ist das Entfernen von Konten über diese Seite deaktiviert. Es wurde kein Konto gelöscht. Die Einstellungen werden jetzt unter Konten > Andere Benutzer geöffnet, wo du das Konto entfernen kannst. Sichere zuvor wichtige Dateien: Die Einstellungen können auch die Kontodaten löschen.";
+                break;
+        default:
+            message = L"Because of a limitation of the legacy provider, removing accounts from this page is disabled. No account was deleted. Settings will now open at Accounts > Other users, where you can remove the account. Back up important files first: Settings can also delete the account data.";
+            break;
+    }
+    MessageBoxW(GetActiveWindow(), message, L"Windows 7 User Account Page Restorer", MB_OK | MB_ICONINFORMATION);
+    ShellExecuteW(nullptr, L"open", L"ms-settings:otherusers", nullptr, nullptr, SW_SHOWNORMAL);
+}
+
 struct EnumAdapter final : AdapterBase<IEnum7, &kIidEnum7> {
     IEnum10* inner;      // owned
     int flags = 0;
@@ -3162,7 +3175,9 @@ struct EnumAdapter final : AdapterBase<IEnum7, &kIidEnum7> {
         flags = f;
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE get_length(UINT* count) override { return inner->get_length(count); }
+    HRESULT STDMETHODCALLTYPE get_length(UINT* count) override {
+        return inner->get_length(count);
+    }
     HRESULT STDMETHODCALLTYPE get_currentUser(IUser7** user) override {
         IUser10* u = nullptr;
         const HRESULT hr = inner->get_currentUser(&u);
@@ -3184,39 +3199,12 @@ struct EnumAdapter final : AdapterBase<IEnum7, &kIidEnum7> {
         const HRESULT hr = CreateAccountWorkaround(inner, loginName, &u);
         return WrapUser(hr, u, user);
     }
-    HRESULT STDMETHODCALLTYPE remove(VARIANT id, VARIANT backupPath, VARIANT_BOOL* result) override {
-        if (!g_blockAccountRemoval.load()) {
-            Wh_Log(L"[remove] protection disabled; invoking native account implementation");
-            return inner->remove(id, backupPath, result);
-        }
-        // Fail closed: never invoke the potentially hanging private deletion method.
-        // This is not a timeout or a claim that the account was removed.
-        Wh_Log(L"[remove] blocked native deletion; no deletion performed by this call");
+    HRESULT STDMETHODCALLTYPE remove(VARIANT, VARIANT, VARIANT_BOOL* result) override {
+        // Never forwarded to the native object (see ShowRemovalDisabled); no account is deleted by this call.
+        Wh_Log(L"[remove] disabled: no deletion performed");
         if (!result) return E_POINTER;
         *result = VARIANT_FALSE;
-        // Follow the mod's language setting; automatic uses the Windows UI language.
-        const wchar_t* message;
-        switch (CurrentLanguage()) {
-            case Language::Italian:
-                message = L"Per sicurezza, la rimozione dalla pagina classica è disattivata per evitare eliminazioni ambigue. Questa richiesta non ha eliminato alcun account. Usa Impostazioni > Account > Altri utenti. Prima verifica se un tentativo precedente ha già eliminato l'account ed esegui un backup dei file importanti: Impostazioni può eliminare anche i dati.";
-                break;
-            case Language::French:
-                message = L"Par sécurité, la suppression depuis la page classique est désactivée afin d'éviter toute suppression ambiguë. Cette demande n'a supprimé aucun compte. Utilisez Paramètres > Comptes > Autres utilisateurs. Vérifiez d'abord si une tentative précédente a déjà supprimé le compte et sauvegardez les fichiers importants : les Paramètres peuvent aussi supprimer les données.";
-                break;
-            case Language::Spanish:
-                message = L"Por seguridad, la eliminación desde la página clásica está desactivada para evitar eliminaciones ambiguas. Esta solicitud no ha eliminado ninguna cuenta. Usa Configuración > Cuentas > Otros usuarios. Comprueba primero si un intento anterior ya eliminó la cuenta y haz una copia de los archivos importantes: Configuración también puede eliminar los datos.";
-                break;
-            case Language::Portuguese:
-                message = L"Por segurança, a remoção na página clássica está desativada para evitar eliminações ambíguas. Este pedido não eliminou nenhuma conta. Usa Definições > Contas > Outros utilizadores. Verifica primeiro se uma tentativa anterior já eliminou a conta e guarda uma cópia dos ficheiros importantes: as Definições também podem eliminar os dados.";
-                break;
-            case Language::German:
-                message = L"Aus Sicherheitsgründen ist das Entfernen über die klassische Seite deaktiviert, um mehrdeutige Löschvorgänge zu vermeiden. Durch diese Anfrage wurde kein Konto gelöscht. Verwende Einstellungen > Konten > Andere Benutzer. Prüfe zunächst, ob ein früherer Versuch das Konto bereits gelöscht hat, und sichere wichtige Dateien: Die Einstellungen können auch Daten löschen.";
-                break;
-            default:
-                message = L"For safety, removal from the classic page is disabled to avoid ambiguous deletion. This request did not delete an account. Use Settings > Accounts > Other users. First check whether an earlier attempt already deleted the account and back up important files: Settings can also delete account data.";
-                break;
-        }
-        MessageBoxW(GetActiveWindow(), message, L"Windows 7 User Account Page Restorer", MB_OK | MB_ICONWARNING);
+        ShowRemovalDisabled();
         return E_NOTIMPL;
     }
     HRESULT STDMETHODCALLTYPE Advise(IUnknown*, DWORD* cookie) override {
@@ -3226,7 +3214,9 @@ struct EnumAdapter final : AdapterBase<IEnum7, &kIidEnum7> {
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE Unadvise(DWORD) override { return S_OK; }
-    HRESULT STDMETHODCALLTYPE ResetList() override { return inner->ResetList(); }
+    HRESULT STDMETHODCALLTYPE ResetList() override {
+        return inner->ResetList();
+    }
     HRESULT STDMETHODCALLTYPE get_currentUserWithImpersonation(IUser7** user) override {
         IUser10* u = nullptr;
         const HRESULT hr = inner->get_currentUserWithImpersonation(&u);
@@ -3271,8 +3261,7 @@ struct FactoryAdapter final : IFactory7, LiveObject {
         return ULONG(left);
     }
     HRESULT STDMETHODCALLTYPE Activate(HWND owner, REFGUID elevationClass) override {
-        const HRESULT hr = inner->Activate(owner, elevationClass);
-        return hr;
+        return inner->Activate(owner, elevationClass);
     }
     HRESULT STDMETHODCALLTYPE CreateObject(REFCLSID clsid, REFIID iid, void** object) override {
         if (!object) return E_POINTER;
