@@ -215,6 +215,7 @@ std::atomic<HKL> g_lastKnownHkl{ nullptr };
 std::atomic<bool> g_modUnloading{ false };
 std::atomic<bool> g_systemTrayHookAttempted{ false };
 std::atomic<bool> g_win10IndicatorAttached{ false };
+std::atomic<bool> g_win11IndicatorDiscovered{ false };
 
 std::unordered_map<WORD, LANGID> g_deviceLayoutCache;
 std::unordered_map<LANGID, std::wstring> g_countryCodeCache;
@@ -1163,14 +1164,8 @@ bool ShouldSuppressTaskbarIndicatorText(HDC hdc) {
         return true;
     }
 
-    // 2. Active BeginBufferedPaint memory DC created for TrayInputIndicatorWClass
+    // 2. Active BeginBufferedPaint memory DC created during TrayInputIndicatorWClass paint
     if (!g_activeIndicatorPaintDCs.Empty() && g_activeIndicatorPaintDCs.Contains(hdc)) {
-        return true;
-    }
-
-    // 3. Direct window DC match for TrayInputIndicatorWClass
-    HWND hwnd = WindowFromDC(hdc);
-    if (hwnd && IsTrayInputIndicatorWindow(hwnd)) {
         return true;
     }
 
@@ -1278,15 +1273,9 @@ HPAINTBUFFER WINAPI BeginBufferedPaint_Hook(
     BP_PAINTPARAMS* pPaintParams, HDC* phdc) {
     HPAINTBUFFER hpb = BeginBufferedPaint_Orig(hdcTarget, prcTarget, dwFormat, pPaintParams, phdc);
     if (g_win10IndicatorAttached.load(std::memory_order_relaxed) &&
+        g_inIndicatorNativePaint > 0 &&
         hpb && phdc && *phdc && !g_modUnloading.load(std::memory_order_acquire)) {
-        bool isIndicator = (g_inIndicatorNativePaint > 0);
-        if (!isIndicator && hdcTarget) {
-            HWND hwnd = WindowFromDC(hdcTarget);
-            isIndicator = (hwnd && IsTrayInputIndicatorWindow(hwnd));
-        }
-        if (isIndicator) {
-            g_activeIndicatorPaintDCs.Insert(*phdc);
-        }
+        g_activeIndicatorPaintDCs.Insert(*phdc);
     }
     return hpb;
 }
@@ -2159,6 +2148,7 @@ void TrackLanguageIconView(const wux::FrameworkElement& iconView) {
     }
 
     g_win11Indicators->push_back(std::move(entry));
+    g_win11IndicatorDiscovered.store(true, std::memory_order_release);
     UpdateWin11IndicatorFlag(g_win11Indicators->back());
 }
 
@@ -2216,13 +2206,7 @@ void ScanVisualTreeForExistingIndicators(const wux::DependencyObject& root) {
     }
 }
 
-void DiscoverExistingIndicatorsFromIconView(void* pThis) {
-    if (!pThis || g_modUnloading.load(std::memory_order_acquire)) return;
-
-    auto fe = GetFrameworkElementFromImplThis(pThis);
-    if (!fe) return;
-
-    auto xamlRoot = fe.XamlRoot();
+void ScanXamlRootOnce(const wux::XamlRoot& xamlRoot) {
     if (!xamlRoot || !xamlRoot.Content()) return;
 
     void* xamlRootAbi = winrt::get_abi(xamlRoot);
@@ -2232,6 +2216,15 @@ void DiscoverExistingIndicatorsFromIconView(void* pThis) {
 
     g_scannedXamlRoots.insert(xamlRootAbi);
     ScanVisualTreeForExistingIndicators(xamlRoot.Content());
+}
+
+void DiscoverExistingIndicatorsFromIconView(void* pThis) {
+    if (!pThis || g_modUnloading.load(std::memory_order_acquire)) return;
+
+    auto fe = GetFrameworkElementFromImplThis(pThis);
+    if (!fe) return;
+
+    ScanXamlRootOnce(fe.XamlRoot());
 }
 
 using IconView_Init_t = void*(WINAPI*)(void* pThis);
@@ -2257,6 +2250,18 @@ void WINAPI IconView_UpdateIcon_Hook(void* pThis) {
     }
 }
 
+using IconView_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
+IconView_OnApplyTemplate_t IconView_OnApplyTemplate_Orig = nullptr;
+
+void WINAPI IconView_OnApplyTemplate_Hook(void* pThis) {
+    IconView_OnApplyTemplate_Orig(pThis);
+    try {
+        HandleIconViewInstance(pThis);
+        DiscoverExistingIndicatorsFromIconView(pThis);
+    } catch (...) {
+    }
+}
+
 using IconView_OnPointerEntered_t = void(WINAPI*)(void* pThis, void* pArgs);
 IconView_OnPointerEntered_t IconView_OnPointerEntered_Orig = nullptr;
 
@@ -2266,6 +2271,50 @@ void WINAPI IconView_OnPointerEntered_Hook(void* pThis, void* pArgs) {
         DiscoverExistingIndicatorsFromIconView(pThis);
     } catch (...) {
     }
+}
+
+// One-shot discovery hook on DirectUI::FrameworkElement::ArrangeOverride in Windows.UI.Xaml.dll.
+// Runs only until the existing taskbar indicator(s) are discovered after mid-session enable,
+// avoiding any dependence on private SystemTray::IconView method symbol names.
+using FrameworkElement_ArrangeOverride_t = HRESULT(STDMETHODCALLTYPE*)(
+    void* pThis, winrt::Windows::Foundation::Size availableSize, winrt::Windows::Foundation::Size* returnValue);
+FrameworkElement_ArrangeOverride_t FrameworkElement_ArrangeOverride_Orig = nullptr;
+
+HRESULT STDMETHODCALLTYPE FrameworkElement_ArrangeOverride_Hook(
+    void* pThis, winrt::Windows::Foundation::Size availableSize, winrt::Windows::Foundation::Size* returnValue) {
+    HRESULT hr = FrameworkElement_ArrangeOverride_Orig(pThis, availableSize, returnValue);
+    if (!g_win11IndicatorDiscovered.load(std::memory_order_acquire) &&
+        !g_modUnloading.load(std::memory_order_acquire) && pThis) {
+        try {
+            IUnknown* unk = static_cast<IUnknown*>(pThis);
+            wux::FrameworkElement fe{ nullptr };
+            if (SUCCEEDED(unk->QueryInterface(winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(fe))) && fe) {
+                ScanXamlRootOnce(fe.XamlRoot());
+            }
+        } catch (...) {
+        }
+    }
+    return hr;
+}
+
+bool HookWindowsUIXamlDiscovery() {
+    HMODULE wuxMod = GetModuleHandleW(L"Windows.UI.Xaml.dll");
+    if (!wuxMod) return false;
+
+    WindhawkUtils::SYMBOL_HOOK wuxHooks[] = {
+        {
+            { L"public: virtual long __cdecl DirectUI::FrameworkElement::ArrangeOverride(struct Windows::Foundation::Size,struct Windows::Foundation::Size *)" },
+            &FrameworkElement_ArrangeOverride_Orig,
+            FrameworkElement_ArrangeOverride_Hook,
+            true
+        }
+    };
+
+    if (!WindhawkUtils::HookSymbols(wuxMod, wuxHooks, ARRAYSIZE(wuxHooks)) || !FrameworkElement_ArrangeOverride_Orig) {
+        Wh_Log(L"Optional Windows.UI.Xaml.dll ArrangeOverride symbol did not resolve.");
+        return false;
+    }
+    return true;
 }
 
 bool HookSystemTraySymbols(HMODULE systemTrayMod) {
@@ -2286,6 +2335,12 @@ bool HookSystemTraySymbols(HMODULE systemTrayMod) {
             true
         },
         {
+            { L"public: void __cdecl winrt::SystemTray::implementation::IconView::OnApplyTemplate(void)" },
+            &IconView_OnApplyTemplate_Orig,
+            IconView_OnApplyTemplate_Hook,
+            true
+        },
+        {
             { L"public: void __cdecl winrt::SystemTray::implementation::IconView::OnPointerEntered(struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &)" },
             &IconView_OnPointerEntered_Orig,
             IconView_OnPointerEntered_Hook,
@@ -2298,27 +2353,11 @@ bool HookSystemTraySymbols(HMODULE systemTrayMod) {
         return false;
     }
 
-    if (!IconView_UpdateIcon_Orig) {
-        Wh_Log(L"Optional symbol IconView::UpdateIcon did not resolve; existing indicators will attach on recreation or hover.");
+    if (!IconView_UpdateIcon_Orig && !IconView_OnApplyTemplate_Orig && !IconView_OnPointerEntered_Orig) {
+        Wh_Log(L"Optional IconView discovery symbols did not resolve; using XAML layout discovery fallback.");
     }
 
     return true;
-}
-
-void HandleLoadedModuleIfSystemTray(HMODULE mod) {
-    if (!mod || g_modUnloading.load(std::memory_order_acquire)) {
-        return;
-    }
-
-    if (!g_systemTrayHookAttempted && GetSystemTrayModuleHandle() == mod &&
-        !g_systemTrayHookAttempted.exchange(true)) {
-        wchar_t modPath[MAX_PATH] = {};
-        GetModuleFileNameW(mod, modPath, ARRAYSIZE(modPath));
-        Wh_Log(L"Hooking system tray module: %s", modPath);
-        if (HookSystemTraySymbols(mod)) {
-            Wh_ApplyHookOperations();
-        }
-    }
 }
 
 void WINAPI RefreshWin11IndicatorsOnUIThread(void*) {
@@ -2384,6 +2423,23 @@ void DispatchToAllTaskbarUIThreads(RunFromWindowThreadProc_t proc) {
         DWORD tid = GetWindowThreadProcessId(secondary, nullptr);
         if (tid && dispatchedThreads.insert(tid).second) {
             RunFromWindowThread(secondary, proc, nullptr);
+        }
+    }
+}
+
+void HandleLoadedModuleIfSystemTray(HMODULE mod) {
+    if (!mod || g_modUnloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (!g_systemTrayHookAttempted && GetSystemTrayModuleHandle() == mod &&
+        !g_systemTrayHookAttempted.exchange(true)) {
+        wchar_t modPath[MAX_PATH] = {};
+        GetModuleFileNameW(mod, modPath, ARRAYSIZE(modPath));
+        Wh_Log(L"Hooking system tray module: %s", modPath);
+        HookWindowsUIXamlDiscovery();
+        if (HookSystemTraySymbols(mod)) {
+            Wh_ApplyHookOperations();
         }
     }
 }
@@ -2525,6 +2581,7 @@ void LoadSettings() {
 BOOL Wh_ModInit() {
     g_modUnloading.store(false, std::memory_order_release);
     g_win10IndicatorAttached.store(false, std::memory_order_relaxed);
+    g_win11IndicatorDiscovered.store(false, std::memory_order_relaxed);
     g_stopWatchdogMsg = RegisterWindowMessageW(L"Windhawk_StopWatchdog_" WH_MOD_ID);
     g_runFromWindowThreadMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
@@ -2544,6 +2601,7 @@ BOOL Wh_ModInit() {
 
     HMODULE systemTrayMod = GetSystemTrayModuleHandle();
     if (systemTrayMod && !g_systemTrayHookAttempted.exchange(true)) {
+        HookWindowsUIXamlDiscovery();
         HookSystemTraySymbols(systemTrayMod);
     }
 
@@ -2580,19 +2638,6 @@ BOOL Wh_ModInit() {
         }
     }
 
-    // 4. If enabled mid-session on Windows 11, prompt taskbars to refresh tray icons so
-    //    IconView::UpdateIcon discovers existing language indicators via XamlRoot immediately.
-    if (systemTrayMod) {
-        HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (primary) {
-            SendNotifyMessageW(primary, WM_SETTINGCHANGE, 0, 0);
-        }
-        HWND secondary = nullptr;
-        while ((secondary = FindWindowExW(nullptr, secondary, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr) {
-            SendNotifyMessageW(secondary, WM_SETTINGCHANGE, 0, 0);
-        }
-    }
-
     ModSettings settings = GetSettingsSnapshot();
     Wh_Log(L"Taskbar Keyboard Layout Flag v1.0 initialized (Scale=%d, %dx%d, DarkMode=%d).",
            settings.flagScale, settings.flagWidth, settings.flagHeight, settings.darkMode ? 1 : 0);
@@ -2607,6 +2652,7 @@ void Wh_ModAfterInit() {
 
     if (HMODULE systemTrayMod = GetSystemTrayModuleHandle()) {
         if (!g_systemTrayHookAttempted.exchange(true)) {
+            HookWindowsUIXamlDiscovery();
             if (HookSystemTraySymbols(systemTrayMod)) {
                 Wh_ApplyHookOperations();
             }
@@ -2617,6 +2663,7 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     g_modUnloading.store(true, std::memory_order_release);
     g_win10IndicatorAttached.store(false, std::memory_order_relaxed);
+    g_win11IndicatorDiscovered.store(false, std::memory_order_relaxed);
 
     // 1. Restore Windows 11 XAML indicator TextBlocks and remove injected Image on the UI thread
     DispatchToAllTaskbarUIThreads(CleanupWin11IndicatorsOnUIThread);
