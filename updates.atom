@@ -2,12 +2,94 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-23T01:04:38.000Z</updated>
+    <updated>2026-11-23T02:01:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Language Cursor 1.0.0]]></title>
+        <id>https://windhawk.net/mods/language-cursor#c2a5b795c4f2a875ee16d53da32a57a761bbf54d</id>
+        <link href="https://windhawk.net/mods/language-cursor"/>
+        <updated>2026-11-23T02:01:07.000Z</updated>
+        <content type="html"><![CDATA[<h1>Language Cursor</h1>
+<p>Shows the current keyboard layout as a small badge next to the mouse pointer,
+so you know which language you are about to type in before you press a key. It
+follows the layout of the app you are working in.</p>
+<p><img src="https://i.imgur.com/tph9cXo.png" alt="Badge next to the text caret, with the Caps Lock and Num Lock marks">
+<img src="https://i.imgur.com/YMY9W4X.png" alt="Badge for the Ukrainian layout with the Caps Lock mark">
+<img src="https://i.imgur.com/vFnIUrc.png" alt="Badge with the Caps Lock and Num Lock marks"></p>
+<h2>Indicator modes</h2>
+<ul>
+<li><strong>Label next to pointer</strong>: a floating badge that follows the mouse pointer.</li>
+<li><strong>Label inside text cursor</strong>: the label is drawn into the I-beam pointer that
+Windows shows over text fields. This replaces the system I-beam pointer while
+the mod is running.</li>
+<li><strong>Off</strong>: no badge. Custom pointers per language still apply.</li>
+</ul>
+<h2>When the badge is shown</h2>
+<ul>
+<li><strong>Always</strong>.</li>
+<li><strong>Only over text fields</strong>: while the pointer is an I-beam.</li>
+<li><strong>Briefly after switching language</strong>: for a duration you choose.</li>
+</ul>
+<p>With <strong>Show at the text caret while typing</strong> turned on, the badge moves next to
+the text caret when you start typing, and goes back to the mouse pointer when
+you move the mouse. This works in apps that report where their caret is.</p>
+<p>It can also hide when the pointer is hidden and in full-screen apps. You can
+set its position around the pointer, distance, font size, opacity, corner
+roundness and drop shadow.</p>
+<h2>Caps Lock and Num Lock</h2>
+<p>The label can also show a mark while a lock key is on: <code>⇪</code> for Caps Lock and
+<code>#</code> for Num Lock. Each one has its own setting. The marks are part of the text
+label, so they aren't shown on badges that use an image.</p>
+<h2>Per-language styles</h2>
+<p>Add one entry per keyboard layout under <strong>Languages</strong>. Each entry can set:</p>
+<ul>
+<li>a label of up to 6 characters (by default the language code, such as <code>EN</code>);</li>
+<li>a background color as hex RGB, such as <code>#FFB900</code>;</li>
+<li>an image shown in place of the label (PNG, JPG, BMP or GIF, first frame);</li>
+<li>a custom mouse pointer (CUR or ANI) used while that layout is active.</li>
+</ul>
+<p>The layout is identified by its locale, such as <code>uk-UA</code>, <code>en-US</code>, <code>en-GB</code> or
+<code>pl-PL</code>, or by its HKL value as 8 or 16 hex digits. Layouts without an entry
+get an automatic label and color. Paths may contain environment variables such
+as <code>%USERPROFILE%</code>, and the files must stay available.</p>
+<h2>Custom pointers and safety</h2>
+<p>Custom pointers and the text-cursor mode change the Windows system pointers.
+The mod restores the Windows pointer scheme when it is disabled or unloaded,
+and on its next start if it was closed unexpectedly while pointers were
+changed. To restore them by hand, open Windows Mouse settings &gt; Pointers and
+click Apply.</p>
+<p>Restoring reloads the whole Windows pointer scheme, so pointers that another
+mod or app changed at run time are reset too.</p>
+<h2>Performance</h2>
+<p>The mod runs in its own <code>windhawk.exe</code> process, not inside Explorer or other
+apps, and installs no hooks. It checks
+the pointer 60 times a second only while the badge is visible and the pointer
+is moving, and slows down to about 8 checks a second when nothing is happening.
+While the badge sits at the text caret, the mod also asks the app you are typing
+in for its caret position 8 to 20 times a second.</p>
+<h2>Limitations</h2>
+<ul>
+<li>The badge isn't shown over the secure desktop (UAC prompts, lock screen), and
+may not appear over some full-screen games.</li>
+<li>Animated GIF images show only their first frame.</li>
+<li>Showing the badge at the text caret depends on the app. Some apps don't
+report the caret position, and there the badge stays with the mouse pointer.</li>
+<li><strong>Only over text fields</strong> and the text-cursor mode work with the standard
+Windows I-beam pointer. Apps that draw their own text pointer are not
+detected.</li>
+<li>The label I-beam in text-cursor mode is always black and white. It does not
+follow a custom pointer color or scheme.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Sanekx Arcs</name>
+            <uri>https://github.com/SanekxArcs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Mini Folders 1.1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-mini-folders#65b2be5786e0ca955b406c5a8bd74ddd0fa7e897</id>
@@ -928,22 +1010,6 @@ sections:</p>
 <li>Fix taskbar, Quick Settings, and media control borders that could stay visible after a symbol lookup failure.</li>
 <li>Discover borders through XAML islands and keep border updates running while symbols load.</li>
 <li>Prevent XAML hook registration during unload and skip scans triggered by regular File Explorer windows.</li>
-</ul>
-]]></content>
-        <author>
-            <name>CTravkin</name>
-            <uri>https://github.com/CTravkin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Item Pins 1.1.7]]></title>
-        <id>https://windhawk.net/mods/explorer-item-pins#1f0a0c8c8a855d45889855ac6c329e9b5b5d5915</id>
-        <link href="https://windhawk.net/mods/explorer-item-pins"/>
-        <updated>2026-11-22T02:05:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Reduce repeated folder scans and unnecessary refreshes for missing pins, and recover a renamed pin on the first refresh when its previously resolved name disappears.</li>
-<li>Rename the commands to <strong>Pin to top</strong> and <strong>Unpin from top</strong>.</li>
-<li>Group display settings. After updating from 1.1.5, display settings are reset to their defaults. Check them again if you had changed any.</li>
 </ul>
 ]]></content>
         <author>

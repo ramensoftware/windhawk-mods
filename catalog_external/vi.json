@@ -304,34 +304,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/721a9137674f8c731562f377925c9027c7af0a6d/mods/explorer-tabs-session-saver-revamped.wh.cpp"
       }
     },
-    "language-cursor": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795313337948,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795313337948,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Sanekx Arcs",
-        "compilerOptions": "-lgdiplus -lgdi32 -lshcore -loleacc -lole32 -luuid",
-        "description": "Shows the current keyboard layout as a small badge next to the mouse pointer, with a color, image or custom pointer for each language.",
-        "github": "https://github.com/SanekxArcs",
-        "include": [
-          "windhawk.exe"
-        ],
-        "name": "Language Cursor",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7642",
-      "source": {
-        "sha256": "0f3f24d54ebf3d7c11ff208e2dbe2070dec7b9d858de2770f1dd7049429673e4",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/b92841a48a1cd4b9d1eacf70b609f333f7aa54de/mods/language-cursor.wh.cpp"
-      }
-    },
     "lockscreen-background": {
       "details": {
         "defaultSorting": 0,

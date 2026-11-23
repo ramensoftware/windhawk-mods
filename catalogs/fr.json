@@ -10623,6 +10623,30 @@
         "version": "1.0.0"
       }
     },
+    "language-cursor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795399267000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795399267000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Sanekx Arcs",
+        "compilerOptions": "-lgdiplus -lgdi32 -lshcore -loleacc -lole32 -luuid",
+        "description": "Shows the current keyboard layout as a small badge next to the mouse pointer, with a color, image or custom pointer for each language.",
+        "github": "https://github.com/SanekxArcs",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Language Cursor",
+        "version": "1.0.0"
+      }
+    },
     "language-switcher-position": {
       "details": {
         "defaultSorting": 315,
