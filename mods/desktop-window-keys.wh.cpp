@@ -36,10 +36,12 @@ Moving wraps around: Right on the last desktop goes to the first one, Left on th
 first desktop goes to the last one (same as the Virtual Desktop Hotkey Cycle mod).
 
 With **Follow Moved Window** enabled you switch to the target desktop together with
-the window; otherwise only the window moves and you stay where you are. When following
-a wrap, the switch goes through Explorer's own Win+Ctrl+Left/Right so the slide
-animation keeps the pressed direction; this needs Virtual Desktop Hotkey Cycle to be
-enabled, otherwise the switch falls back to a slide in the opposite direction.
+the window; otherwise only the window moves and you stay where you are. The slide
+animation of that switch is available on Windows 11 24H2 and later only; on older builds
+the switch is instant. When following a wrap, the switch goes through Explorer's own
+Win+Ctrl+Left/Right so the slide animation keeps the pressed direction; this needs
+Virtual Desktop Hotkey Cycle to be enabled, otherwise on 24H2 and later the switch falls
+back to a slide in the opposite direction (instant on older builds).
 Windows blocks injected keys to elevated (administrator) windows unless the mod runs
 with UIAccess, which Windhawk 2.0 provides through the `windhawk-mod-uiaccess.exe`
 host; on Windhawk 1.7.3 a wrap from an elevated window slides the opposite way.
@@ -49,6 +51,18 @@ Windhawk log.
 
 Select your Windows version in the settings (run `winver` to check the build number);
 the undocumented virtual desktop COM interfaces change IDs between Windows builds.
+
+## How it differs from similar mods
+
+* [Virtual Desktop Helper](https://windhawk.net/mods/virtual-desktop-helper) moves the
+  active window only to a numbered desktop (1-9), and its previous/next hotkeys only
+  switch desktops. Its pin hotkey is a toggle. This mod moves the window to the previous
+  or next desktop with wrap-around, has separate pin and unpin hotkeys that set the state,
+  and marks hotkey-pinned windows with a dot. It has no numbered-desktop hotkeys and its
+  hotkeys are fixed.
+* WinPager also has move-left/right hotkeys, but it always follows the window and
+  supports Windows 11 24H2 and later only. This mod makes following optional and has
+  interface IDs for Windows 10 and earlier Windows 11 builds (Windows Version setting).
 
 ## Credits
 
