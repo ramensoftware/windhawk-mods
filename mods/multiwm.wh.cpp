@@ -37,12 +37,14 @@ instead of implementing a separate desktop system.
 continuous polling.
 
 ## Layouts
-- Floating
-- Master + Stack (vertical or horizontal)
-- Dwindle
-- BSP (new and restored windows split the focused or biggest tile, trying both directions, then the biggest tile, before floating; closing or minimizing a window gives its space to its neighbour)
-- Columns / Rows
-- Monocle
+- **Floating**: no tiling. 
+- **Master + Stack**: one main window, the others stacked beside it. 
+- **Columns / Rows**: windows side by side. 
+- **Monocle**: every window fills the screen.
+- **Dwindle**: each new window takes half of the previous window's space.
+- **BSP**: a new window splits a specified tile in half.
+  - Drag a window onto a tile's edge to split, or onto its center to swap. For two windows sharing a divider, a perpendicular edge rotates their split.
+  - Alt+M rotates the focused window's split.
 
 ## Getting Started
 Move a tiled window to **float it** or **swap it with the window underneath**. In BSP, drop near an edge to split the target tile or in the center to swap. Windows sharing a divider swap on center and parallel edge drops, and rotate on perpendicular edge drops. The preview fills the destination of the dragged window and outlines the destination of the other window.
@@ -92,8 +94,8 @@ MultiWM has a dedicated [GitHub repository](https://github.com/Meteoni/MultiWM)!
 
 - workspace:
   - DefaultLayout: master_stack
-    $name: Fallback Layout
-    $description: Starting layout when no rule matches.
+    $name: Default Layout
+    $description: The layout each desktop starts with on each monitor, unless an Initialization Rule gives it another. 
     $options:
       - master_stack: Master + Stack (Vertical)
       - master_stack_h: Master + Stack (Horizontal)
@@ -152,7 +154,7 @@ MultiWM has a dedicated [GitHub repository](https://github.com/Meteoni/MultiWM)!
           #! $showIf: {Monitor: specific}
           $description: Paste a monitor ID from diagnostics. Blank disables this rule.
     $name: Initialization Rules
-    $description: Special handling rules for specific virtual desktops / monitors.
+    $description: Start specific desktops or monitors in another layout than the Default Layout. The first matching rule applies.
   - Overflow:
     - WindowLimit: 0
       $name: Auto-tiling Limit
@@ -1055,12 +1057,14 @@ static_assert(offsetof(SnapshotSection, body) == 24, "SnapshotSection layout");
 
 // Security for both named objects: full access for the creating user and
 // SYSTEM; read/map (section) or synchronize/query (event) for everyone,
-// including AppContainer apps; a low mandatory label with no-write-up so
-// low-integrity processes can read too.
+// including AppContainer apps. No mandatory label: an unlabeled object counts
+// as Medium with no-write-up, which already lets Low and AppContainer readers
+// in. A Low label would only let a Low process of the same user write here,
+// since it matches the owner entry.
 inline constexpr wchar_t kSectionSddl[] =
-    L"D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;0x0005;;;WD)(A;;0x0005;;;AC)S:(ML;;NW;;;LW)";
+    L"D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;0x0005;;;WD)(A;;0x0005;;;AC)";
 inline constexpr wchar_t kAliveEventSddl[] =
-    L"D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;0x00100001;;;WD)(A;;0x00100001;;;AC)S:(ML;;NW;;;LW)";
+    L"D:(A;;GA;;;OW)(A;;GA;;;SY)(A;;0x00100001;;;WD)(A;;0x00100001;;;AC)";
 
 // --- Seqlock -------------------------------------------------------------------
 
@@ -1610,6 +1614,7 @@ inline bool CenterWithinMaximumSize(LONG& start, LONG& end, LONG maximum) {
 // Shared platform declarations, configuration values and message types.
 // Part of MultiWM's single source file; see the include order in src/multiwm/multiwm.cpp.
 
+#include <aclapi.h>
 #include <dwmapi.h>
 #include <initguid.h>
 #include <objbase.h>
@@ -2716,6 +2721,10 @@ class Workspace {
   void AdmitMigrated(WindowRecord record, HWND anchor = nullptr);
   // Copies remembered floating frames from `source` for windows known here.
   void MergeRememberedFloatingGeometryFrom(const Workspace& source);
+  // Copies what `source` remembers for switching back to each layout (weights,
+  // Dwindle ratios, the BSP tree) and, outside Master + Stack, its master ratio:
+  // what adopting the current layout's geometry doesn't produce.
+  void MergeRememberedLayoutGeometryFrom(const Workspace& source);
   // Copies every non-tiled record from `source`, overwriting same-HWND records.
   void MergeNonTiledRecordsFrom(const Workspace& source);
   // Forgets `invalidWindows` and recreates records for tiled windows that lost
@@ -3375,6 +3384,9 @@ struct WmRuntime {
     std::vector<PendingWorkspaceArrange> pendingArranges;
     std::vector<PendingDiscoveryRetry> discoveryRetries;
     std::vector<PendingConstraintRetry> constraintRetries;
+    // Settled passes each restored window waiting for its desktop has scheduled
+    // (Reconcile::kMaxDesktopOwnershipWaits at most); dropped once it restores.
+    std::unordered_map<HWND, unsigned> desktopOwnershipWaits;
     bool retryAfterPlatformRecovery = false;  // Last pass was deferred until COM recovers.
     bool forceMonitorReconcile = false;       // Display topology changed.
   } lifecycle;
@@ -3383,7 +3395,7 @@ struct WmRuntime {
   struct DesktopTracking {
     GUID reconciled{};
     ReconciledDesktopState state = ReconciledDesktopState::Unknown;
-    bool pendingSwitchFlyouts = false;  // Show "desktop N" toasts after the next pass.
+    bool pendingSwitchFlyouts = false;  // Show each monitor's layout toast after the next pass.
   } desktop;
 
   struct Maintenance {
@@ -3803,6 +3815,11 @@ namespace Overlay {
 static bool IsOverlayThread(DWORD threadId);
 }  // namespace Overlay
 
+namespace DragPreview {
+// Defined in app/drag_preview.h.
+static void End(HWND source);
+}  // namespace DragPreview
+
 // Defined in app/tray_ui.h.
 namespace TrayUi {
 static void LoadSettings();
@@ -3811,6 +3828,7 @@ static void Shutdown();
 static void UpdateIcon(TileLayout layout, HMONITOR monitor = nullptr);
 static void ShowLayoutFlyout(TileLayout layout, HMONITOR monitor = nullptr);
 static void ShowCommandFailureFlyout(const wchar_t* text, HMONITOR monitor = nullptr);
+static void ShowAppFlyout(const std::wstring& text, const std::vector<HWND>& apps, HMONITOR monitor = nullptr);
 static void ShowManagementModeFlyout(bool automatic);
 static void ShowDesktopSwitchFlyouts(const GUID& desktopId);
 static void RefreshForMonitor(HMONITOR monitor);
@@ -4745,9 +4763,13 @@ static bool IsMoveSizeGestureInProgress(HWND hwnd) {
   return started && !ended;
 }
 
+// Also ends a drag preview of `hwnd`: without its samples the gesture can't
+// complete as a drop, and its end event may never reach the preview (a window
+// that stopped being tracked mid-drag reports its end as a helper's show).
 static void ClearMoveSizeSamples(HWND hwnd) {
   RuntimeLifecycle::AssertWmThread(L"ClearMoveSizeSamples");
   g_moveSize.Forget(hwnd);
+  DragPreview::End(hwnd);
 }
 
 static void ClearAllMoveSizeSamples() {
@@ -4773,13 +4795,28 @@ namespace Configuration {
 
 // Records a setting this load couldn't use, as one short toast line
 // (SettingsState::problems). The detail is logged where it was found.
+// Text that doesn't fit is cut off rather than dropped; a caller quoting a
+// user's value shortens it first (ShortenedSettingValue), so the cut never
+// takes the part saying what is wrong.
 static void NoteSettingProblem(PCWSTR format, ...) {
   wchar_t text[160]{};
   va_list args;
   va_start(args, format);
-  const int written = vswprintf(text, ARRAYSIZE(text), format, args);
+  _vsnwprintf_s(text, ARRAYSIZE(text), _TRUNCATE, format, args);
   va_end(args);
-  if (written > 0) g_settings.problems.emplace_back(text);
+  if (*text) g_settings.problems.emplace_back(text);
+}
+
+// A user's setting value as a toast quotes it: at most 24 characters, else
+// its first 23 and an ellipsis.
+static std::wstring ShortenedSettingValue(PCWSTR value) {
+  constexpr size_t kMaxQuoted = 24;
+  std::wstring text = value ? value : L"";
+  if (text.size() > kMaxQuoted) {
+    text.resize(kMaxQuoted - 1);
+    text += L'…';
+  }
+  return text;
 }
 
 UINT ParseModifiers(PCWSTR str) {
@@ -4818,7 +4855,7 @@ T ReadHotkeySetting(PCWSTR name, PCWSTR label, Parser parser) {
     Wh_Log(
         L"Invalid %ls hotkey setting '%ls'; hotkey disabled", name,
         value.get());
-    NoteSettingProblem(L"%ls hotkey off: \"%ls\" isn't a key", label, value.get());
+    NoteSettingProblem(L"%ls hotkey off: \"%ls\" isn't a key", label, ShortenedSettingValue(value.get()).c_str());
   }
   return result;
 }
@@ -6701,6 +6738,16 @@ void Workspace::MergeRememberedFloatingGeometryFrom(const Workspace& source) {
   DebugValidateMutation(L"Workspace::MergeRememberedFloatingGeometryFrom");
 }
 
+void Workspace::MergeRememberedLayoutGeometryFrom(const Workspace& source) {
+  RuntimeLifecycle::AssertWmThread(L"Workspace::MergeRememberedLayoutGeometryFrom");
+  rememberedMasterStack_ = source.rememberedMasterStack_;
+  rememberedGrid_ = source.rememberedGrid_;
+  rememberedDwindle_ = source.rememberedDwindle_;
+  rememberedBsp_ = source.rememberedBsp_;
+  if (!IsMasterStackLayout(layout_)) masterRatio_ = source.masterRatio_;
+  DebugValidateMutation(L"Workspace::MergeRememberedLayoutGeometryFrom");
+}
+
 void Workspace::MergeNonTiledRecordsFrom(const Workspace& source) {
   RuntimeLifecycle::AssertWmThread(L"Workspace::MergeNonTiledRecordsFrom");
   for (const auto& kv : source.records_) {
@@ -8124,20 +8171,24 @@ static bool StepFloatingWindowSize(
   }
 
   const RECT& workArea = metrics.workArea;
-  const WindowConstraints& limits = record->constraints;
+  // The app's limits at this monitor's DPI, probed when the cached report is
+  // from another one: placement skips the app's own clamp (SWP_NOSENDCHANGING).
+  const std::optional<SharedGeometry::FrameLimits> limits = FloatingSizeLimits(workspace, hwnd, metrics.dpi);
   const LONG smallest = SharedGeometry::ScaleDip(100, metrics.dpi);
   auto stepSpan = [&](LONG span, LONG areaSpan, LONG minimum, LONG maximum) {
     const LONG step = std::max<LONG>(1, MulDiv(areaSpan, static_cast<int>(g_settings.resizeStepPercent), 100));
-    const LONG lowest = std::max(smallest, limits.valid ? minimum : 1);
+    const LONG lowest = std::max(smallest, limits ? minimum : 1);
     LONG highest = areaSpan;
-    if (limits.valid && maximum > 0) highest = std::min(highest, maximum);
+    if (limits && maximum > 0) highest = std::min(highest, maximum);
     return direction > 0 ? std::max(span, std::min(span + step, highest))
                          : std::min(span, std::max(span - step, lowest));
   };
   const LONG width = Layout::RectWidth(current);
   const LONG height = Layout::RectHeight(current);
-  const LONG newWidth = stepSpan(width, Layout::RectWidth(workArea), limits.minWidth, limits.maxWidth);
-  const LONG newHeight = stepSpan(height, Layout::RectHeight(workArea), limits.minHeight, limits.maxHeight);
+  const SharedGeometry::FrameLimits none{};
+  const SharedGeometry::FrameLimits& frame = limits ? *limits : none;
+  const LONG newWidth = stepSpan(width, Layout::RectWidth(workArea), frame.minWidth, frame.maxWidth);
+  const LONG newHeight = stepSpan(height, Layout::RectHeight(workArea), frame.minHeight, frame.maxHeight);
   if (newWidth == width && newHeight == height) return false;
 
   const RECT target = SharedGeometry::ClampToArea(
@@ -10339,10 +10390,15 @@ static void ArmConstraintRetryTimer() {
 // `hwnd`, a tiled member, didn't report its size limits: ask again after the
 // New Window Retry Delay, doubled for each retry already made, unless one is
 // already scheduled or it has had kMaxConstraintRetries. A delay of 0 disables
-// retries, as it does for new windows.
+// retries, as it does for new windows. An exhausted entry stays until the window
+// answers (ClearConstraintRetry) or is gone, so a window that never answers gets
+// its retries once, not again after every arrangement.
 static void ScheduleConstraintRetry(HWND hwnd, DWORD processId) {
   if (!hwnd || !g_settings.slowApplicationDelayMs) return;
   auto& retries = g_wm.lifecycle.constraintRetries;
+  std::erase_if(retries, [](const PendingConstraintRetry& retry) {
+    return !retry.dueTickMs && !Platform::Windows::IsSameLiveWindow(retry.hwnd, retry.processId);
+  });
   auto it = std::find_if(retries.begin(), retries.end(),
                          [&](const PendingConstraintRetry& retry) { return retry.hwnd == hwnd; });
   if (it == retries.end()) {
@@ -10359,9 +10415,16 @@ static void ScheduleConstraintRetry(HWND hwnd, DWORD processId) {
   ArmConstraintRetryTimer();
 }
 
+// `hwnd` reported its size limits: its retries, scheduled or exhausted, are over.
+static void ClearConstraintRetry(HWND hwnd) {
+  std::erase_if(g_wm.lifecycle.constraintRetries,
+                [hwnd](const PendingConstraintRetry& retry) { return retry.hwnd == hwnd; });
+}
+
 // Runs the due retries: arranges each window's workspace, which queries it
 // again. A retry the arrangement doesn't reschedule (the window answered, or
-// is gone or no longer tiled) is finished.
+// is gone or no longer tiled) is finished; one that has had every retry and
+// still didn't answer stays, exhausted.
 static void ProcessConstraintRetryTimer() {
   RuntimeLifecycle::AssertWmThread(L"ProcessConstraintRetryTimer");
   RuntimeLifecycle::CancelActorTimer(g_wm.timers.constraintRetry);
@@ -10382,8 +10445,9 @@ static void ProcessConstraintRetryTimer() {
       ArrangeWorkspace(key);
     }
   }
-  std::erase_if(g_wm.lifecycle.constraintRetries,
-                [](const PendingConstraintRetry& retry) { return !retry.dueTickMs; });
+  std::erase_if(g_wm.lifecycle.constraintRetries, [](const PendingConstraintRetry& retry) {
+    return !retry.dueTickMs && retry.attempts < kMaxConstraintRetries;
+  });
   ArmConstraintRetryTimer();
 }
 
@@ -10423,7 +10487,11 @@ static bool RefreshWorkspaceNativeConstraints(
     const ConstraintProbeRefresh refresh = ProbeConstraintsAgainstCache(hwnd, record->constraints);
     changed |= workspace.UpdateConstraints(hwnd, refresh.merged);
     // No answer and nothing cached: the window is tiled without a known minimum.
-    if (!refresh.merged.valid) ScheduleConstraintRetry(hwnd, record->pid);
+    if (!refresh.merged.valid) {
+      ScheduleConstraintRetry(hwnd, record->pid);
+    } else {
+      ClearConstraintRetry(hwnd);
+    }
     if (refresh.reportChanged) {
       Diagnostics::RecordEvent(
           L"native constraint report refreshed reason=%ls hwnd=%p min=%ldx%ld dpi=%u",
@@ -10561,30 +10629,47 @@ static std::wstring ProcessDisplayName(HWND hwnd) {
   return name;
 }
 
-// "Firefox needs more space", "Firefox and Code need more space in this layout".
-// `windows` named once each; an unnamed one is "A window".
-static std::wstring NeedMoreSpaceMessage(const std::vector<HWND>& windows) {
+// A toast about apps: its text, and one window of each app it names, whose
+// icons go before the text. Empty text shows nothing.
+struct AppToast {
+  std::wstring text;
+  std::vector<HWND> apps;
+};
+
+static void ShowAppToast(const AppToast& toast, HMONITOR monitor) {
+  TrayUi::ShowAppFlyout(toast.text, toast.apps, monitor);
+}
+
+// The first of `windows` from each app (process name; the unnamed count as
+// one), so a toast shows each app's icon once.
+static std::vector<HWND> OneWindowPerApp(const std::vector<HWND>& windows) {
+  std::vector<HWND> apps;
   std::vector<std::wstring> names;
   for (HWND hwnd : windows) {
     std::wstring name = ProcessDisplayName(hwnd);
-    if (name.empty()) name = L"A window";
-    if (std::find(names.begin(), names.end(), name) == names.end()) names.push_back(std::move(name));
+    if (std::ranges::find(names, name) != names.end()) continue;
+    names.push_back(std::move(name));
+    apps.push_back(hwnd);
   }
-  std::wstring message;
-  for (size_t i = 0; i < names.size(); ++i) {
-    if (i) message += i + 1 == names.size() ? L" and " : L", ";
-    message += names[i];
+  return apps;
+}
+
+// "Firefox needs more space", "Firefox and Code need more space". `windows`
+// named once each; an unnamed one is "A window".
+static AppToast NeedMoreSpaceToast(const std::vector<HWND>& windows) {
+  AppToast toast{.apps = OneWindowPerApp(windows)};
+  for (size_t i = 0; i < toast.apps.size(); ++i) {
+    std::wstring name = ProcessDisplayName(toast.apps[i]);
+    if (i) toast.text += i + 1 == toast.apps.size() ? L" and " : L", ";
+    toast.text += name.empty() ? L"A window" : name;
   }
-  if (names.empty()) message = L"A window";
-  message += names.size() > 1 ? L" need more space in this layout" : L" needs more space";
-  return message;
+  if (toast.apps.empty()) toast.text = L"A window";
+  toast.text += toast.apps.size() > 1 ? L" need more space" : L" needs more space";
+  return toast;
 }
 
 static std::wstring SpaceFloatMessage(const std::vector<SpaceFloat>& floats) {
   if (floats.empty()) return {};
-  if (floats.size() == 1 && floats.front().reason == SpaceFloatReason::NoBspTileFits) {
-    return L"No BSP tile has enough space. Window floated.";
-  }
   const auto countLimited = static_cast<size_t>(std::count_if(floats.begin(), floats.end(), [](const SpaceFloat& item) {
     return item.reason == SpaceFloatReason::CountLimit;
   }));
@@ -10592,6 +10677,9 @@ static std::wstring SpaceFloatMessage(const std::vector<SpaceFloat>& floats) {
                                            : std::to_wstring(floats.size()) + L" windows";
   if (message.empty()) message = L"A window";
   message += L" floated";
+  if (floats.size() == 1 && floats.front().reason == SpaceFloatReason::NoBspTileFits) {
+    return message + L" because no tile fits";
+  }
   if (countLimited == floats.size()) return message + L" at the auto-tiling limit";
   if (countLimited) return message + L" due to space or the auto-tiling limit";
   return message + (floats.size() == 1 ? L" because it needs more space" : L" because they need more space");
@@ -10599,8 +10687,9 @@ static std::wstring SpaceFloatMessage(const std::vector<SpaceFloat>& floats) {
 
 static void ShowSpaceFloatToast(const std::vector<SpaceFloat>& floats, HMONITOR monitor) {
   if (floats.empty()) return;
-  const std::wstring message = SpaceFloatMessage(floats);
-  TrayUi::ShowCommandFailureFlyout(message.c_str(), monitor);
+  std::vector<HWND> windows;
+  for (const SpaceFloat& item : floats) windows.push_back(item.window);
+  ShowAppToast({SpaceFloatMessage(floats), OneWindowPerApp(windows)}, monitor);
 }
 
 // A user command reports every float it caused; otherwise only the ones that
@@ -10616,25 +10705,23 @@ static void ReportSpaceFloats(const std::vector<SpaceFloat>& floats, HMONITOR mo
   ShowSpaceFloatToast(announced, monitor);
 }
 
-// NeedMoreSpaceMessage for the tiled windows `involved` marks; `fallback` is the
+// NeedMoreSpaceToast for the tiled windows `involved` marks; `fallback` is the
 // window to blame when none is marked, if it can be named.
-static std::wstring ConstraintConflictMessage(
+static AppToast ConstraintConflictToast(
     const Workspace& workspace, const std::vector<bool>& involved, HWND fallback) {
   std::vector<HWND> windows;
   for (size_t i = 0; i < involved.size(); ++i) {
     if (involved[i]) windows.push_back(workspace.TiledWindows()[i]);
   }
   if (windows.empty() && fallback && !ProcessDisplayName(fallback).empty()) windows.push_back(fallback);
-  return NeedMoreSpaceMessage(windows);
+  return NeedMoreSpaceToast(windows);
 }
 
 // Tells the user which windows don't fit `rects`, the rejected plan.
 static void ShowWindowConstraintConflict(
     const Workspace& workspace, const std::vector<RECT>& rects,
     HWND fallback, HMONITOR monitor) {
-  const std::wstring message =
-      ConstraintConflictMessage(workspace, FindConflictingWindows(workspace, rects), fallback);
-  TrayUi::ShowCommandFailureFlyout(message.c_str(), monitor);
+  ShowAppToast(ConstraintConflictToast(workspace, FindConflictingWindows(workspace, rects), fallback), monitor);
 }
 
 static void ReportRejectedLayoutMutation(
@@ -10660,7 +10747,7 @@ static void ReportRejectedLayoutMutation(
       rejectedWorkspace, rejectedRects, subject);
   if (!culprit) culprit = culpritHint;
   if (kind == UserLayoutMutationKind::BspMerge) {
-    TrayUi::ShowCommandFailureFlyout(L"Not enough room for a split on that edge.", monitor);
+    TrayUi::ShowCommandFailureFlyout(L"Not enough space to split that tile", monitor);
   } else {
     ShowWindowConstraintConflict(rejectedWorkspace, rejectedRects, culprit, monitor);
   }
@@ -10930,7 +11017,7 @@ struct ArrangementContext {
   const Platform::Monitors::WorkspaceMetrics& metrics;
   HWND preferredTiledWindow;
   std::vector<SpaceFloat> localFloats;
-  std::wstring unresolvedConstraint;
+  AppToast unresolvedConstraint;  // Shown once the arrangement ends, unless something floated.
 };
 
 enum class ArrangementStep { Replan, Finished };
@@ -11241,7 +11328,7 @@ static ArrangementStep RecoverUnsatisfiableLayout(
   if (!victimRecord) {
     // No removal can make this layout fit: keep everyone, tell the user once.
     const HWND culprit = Layout::FindConstraintCulprit(workspace, rects, context.preferredTiledWindow);
-    context.unresolvedConstraint = ConstraintConflictMessage(workspace, FindConflictingWindows(workspace, rects), culprit);
+    context.unresolvedConstraint = ConstraintConflictToast(workspace, FindConflictingWindows(workspace, rects), culprit);
     Diagnostics::RecordEvent(
         L"constraint conflict left membership unchanged; no single settled removal is sufficient desktop=%08X",
         key.desktopId.Data1);
@@ -11276,6 +11363,9 @@ static TiledPlacementOutcome PlaceTiledWindow(
   if (Platform::Windows::IsSuspendedOrCloaked(hwnd)) {
     return {};
   }
+  // The user is dragging or resizing it: placing it now would snap it back
+  // mid-gesture. It keeps its slot; the gesture's end arranges it.
+  if (Gestures::IsMoveSizeGestureInProgress(hwnd)) return {};
   // A hung window shown by its ghost keeps its slot but isn't placed: the app
   // can't move, and dwm.exe, which owns the ghost, refuses positioning from
   // other processes (measured, also elevated). Only the user can drag a ghost.
@@ -11457,7 +11547,7 @@ static void ArrangeWorkspace(
     ClearSettledLayoutMutation(key, workspace);
   }
   if (context.localFloats.empty()) {
-    TrayUi::ShowCommandFailureFlyout(context.unresolvedConstraint.c_str(), monitor);
+    ShowAppToast(context.unresolvedConstraint, monitor);
   } else {
     ReportSpaceFloats(context.localFloats, monitor);
   }
@@ -12067,6 +12157,15 @@ static ConformanceRepairTiming CheckConformanceRepairTiming(HWND hwnd, const Con
   return ConformanceRepairTiming::Waiting;
 }
 
+// How long until a lease's next repair after attempt `attemptNumber` gave
+// `result`: the repair interval, doubled after each attempt the window didn't
+// answer (up to 16 times the interval), since each costs a response timeout.
+static ULONGLONG ConformanceRetryDelayMs(PlacementResult result, unsigned attemptNumber) {
+  const ULONGLONG interval = g_settings.conformanceRepairIntervalMs;
+  if (result != PlacementResult::Unresponsive) return interval;
+  return interval << std::min(attemptNumber, 4u);
+}
+
 // Moves the window back onto its tile once more, after re-checking everything
 // that could have changed since the observation. Saves the workspace and may
 // float or forget the window if placement reports it cannot be managed.
@@ -12095,7 +12194,12 @@ static bool ReinforceConformanceTile(
   // SetWindowPos, in case that contract changed dynamically.
   // WM_GETMINMAXINFO executes target window code. Revalidate physical state
   // after that bounded call before either learning policy or reinforcing a tile.
-  const auto constraintRefresh = RefreshConformanceConstraints(hwnd, workspace, *record);
+  // A window that didn't answer the last placement skips it: the placement's own
+  // responsiveness check comes first, and once that answers the next repair
+  // re-probes. Otherwise a busy app costs two timeouts per repair.
+  const auto constraintRefresh = record->lastPlacementResult == PlacementResult::Unresponsive
+      ? ConformanceConstraintRefresh::Unchanged
+      : RefreshConformanceConstraints(hwnd, workspace, *record);
   if (constraintRefresh == ConformanceConstraintRefresh::Stale) {
     CancelConformanceLease(hwnd, lease.generation);
     return false;
@@ -12152,10 +12256,9 @@ static bool ReinforceConformanceTile(
     // checked attempt at the configured cadence. The hard deadline performs the
     // passive final verdict and Floats only if the HWND is still materially off
     // its current tile. AccessDenied remains an immediate terminal result above.
-    const ULONGLONG now = GetTickCount64();
     const ULONGLONG due = std::min(
         lease.expiresAtTickMs,
-        now + g_settings.conformanceRepairIntervalMs);
+        GetTickCount64() + ConformanceRetryDelayMs(placement.result, attemptNumber));
     DeferConformanceLeaseRepair(hwnd, lease.generation, due);
   }
   return true;
@@ -12230,7 +12333,7 @@ static bool HandleFloatingLeaseLocationChange(HWND hwnd, const ConformanceLease&
   } else if ((placement.result == PlacementResult::Refused ||
               placement.result == PlacementResult::Unresponsive) && leaseRetained) {
     const ULONGLONG due = std::min(
-        lease.expiresAtTickMs, GetTickCount64() + g_settings.conformanceRepairIntervalMs);
+        lease.expiresAtTickMs, GetTickCount64() + ConformanceRetryDelayMs(placement.result, attemptNumber));
     DeferConformanceLeaseRepair(hwnd, lease.generation, due);
   } else if (placement.result != PlacementResult::Success) {
     CancelConformanceLease(hwnd, lease.generation);  // Access denied or suppressed.
@@ -12868,10 +12971,15 @@ static bool AdmitUntrackedSuspendedSnapshot(
   return changed;
 }
 
+// Tile Workspace: learns the order and weights of Master + Stack and the grid
+// layouts from where their windows are. Other layouts keep their model: the
+// geometry can't express a BSP tree or Dwindle's ratios, and rebuilding them
+// would reset every split the user made.
 static bool AdoptSnapshotGeometryIfEligible(
     Workspace& workspace, const std::vector<HWND>& snapshot,
     const RECT& workArea, LONG gap, HMONITOR monitor) {
-  if (workspace.Layout() == TileLayout::Floating || workspace.HasSuspended() ||
+  const TileLayout layout = workspace.Layout();
+  if (!(IsMasterStackLayout(layout) || IsGridLayout(layout)) || workspace.HasSuspended() ||
       !workspace.AllTiledVisible(snapshot) ||
       !Platform::Windows::SnapshotLooksTiled(workspace.TiledWindows(), workArea)) {
     return false;
@@ -12892,6 +13000,7 @@ static bool AdoptSnapshotGeometryIfEligible(
       geometry, preferredMaster);
   const HWND retainedFocus = workspace.LastFocusedWindow();
   captured.MergeRememberedFloatingGeometryFrom(workspace);
+  captured.MergeRememberedLayoutGeometryFrom(workspace);
   captured.MergeNonTiledRecordsFrom(workspace);
   captured.RememberFocusedWindow(retainedFocus);
   workspace = std::move(captured);
@@ -13185,6 +13294,10 @@ static SuspensionReason EffectiveSuspensionReason(
   return physicalReason;
 }
 
+// How many settled passes a restored window still waiting for its desktop may
+// schedule (each ReconcileDelayMs apart). The shell assigns one in about 10 ms.
+inline constexpr unsigned kMaxDesktopOwnershipWaits = 5;
+
 static void ReconcileWindowParticipation(
     HWND hwnd, const std::vector<DesktopMonitorKey>& ownerKeys,
     std::vector<DesktopMonitorKey>* changedKeys) {
@@ -13229,10 +13342,19 @@ static void ReconcileWindowParticipation(
       if (reason == SuspensionReason::None) {
         if (AwaitsDesktopOwnership(hwnd, ownerKey)) {
           // The next settled pass moves it to its desktop's workspace first,
-          // then restores it there (ReconcileSettledKnownWindows).
-          RequeueDirtyWindows({hwnd});
+          // then restores it there (ReconcileSettledKnownWindows). Schedule
+          // that pass rather than wait for an unrelated event, a few times:
+          // a window that never reports a desktop must not poll forever.
+          unsigned& waits = g_wm.lifecycle.desktopOwnershipWaits[hwnd];
+          if (waits < kMaxDesktopOwnershipWaits) {
+            ++waits;
+            ScheduleLifecycleReconcile(hwnd);
+          } else {
+            RequeueDirtyWindows({hwnd});
+          }
           continue;
         }
+        g_wm.lifecycle.desktopOwnershipWaits.erase(hwnd);
         const bool restored = workspace.Restore(hwnd);
         changed |= restored;
         restoredIntoFloatingLayout =
@@ -14099,8 +14221,8 @@ constexpr ULONGLONG kOverflowFollowTimeoutMs = 2000;
 static void ReportMissingRouteTarget(HWND hwnd, const wchar_t* target) {
   std::wstring name = Placement::ProcessDisplayName(hwnd);
   if (name.empty()) name = L"A window";
-  const std::wstring text = name + L": Open-on rule's " + target + L" not found";
-  TrayUi::ShowCommandFailureFlyout(text.c_str(), Platform::Windows::GetWindowPhysicalMonitor(hwnd));
+  TrayUi::ShowAppFlyout(name + L": rule's " + target + L" not found", {hwnd},
+                        Platform::Windows::GetWindowPhysicalMonitor(hwnd));
 }
 
 // Freezes a matching initial-placement rule into a pending request. Native
@@ -14501,7 +14623,11 @@ static void RollbackOverflowMove(const PendingDesktopFollow& pending) {
       [](const DesktopMonitorKey& key) { Placement::ArrangeWorkspace(key); });
   Platform::VirtualDesktop::RemoveEmptyOverflowDesktop(pending.targetDesktop, pending.sourceDesktop);
   Diagnostics::RecordEvent(L"overflow rollback hwnd=%p returned=%d", pending.hwnd, returned ? 1 : 0);
-  if (!returned) TrayUi::ShowCommandFailureFlyout(L"Could not return the window to its desktop.");
+  if (!returned) {
+    std::wstring name = Placement::ProcessDisplayName(pending.hwnd);
+    if (name.empty()) name = L"a window";
+    TrayUi::ShowAppFlyout(L"Couldn't return " + name + L" to its desktop", {pending.hwnd});
+  }
 }
 
 // Polls an existing follow request; returns whether its arrival still needs a timer.
@@ -15167,8 +15293,7 @@ static bool RefuseMovingAGhost(
   if (!ghosted) return false;
   std::wstring name = Placement::ProcessDisplayName(ghosted);
   if (name.empty()) name = L"A window";
-  const std::wstring text = name + L" isn't responding and can't be moved";
-  TrayUi::ShowCommandFailureFlyout(text.c_str(), monitor);
+  TrayUi::ShowAppFlyout(name + L" isn't responding and can't be moved", {ghosted}, monitor);
   Diagnostics::RecordEvent(L"layout mutation rejected action=%ls: hung window can't move hwnd=%p",
                            action ? action : L"Layout mutation", ghosted);
   return true;
@@ -16170,6 +16295,7 @@ static HWND ResolveGhost(DWORD event, HWND hwnd) {
 // delayed message could mistake a reused HWND value for the old window.
 static void OnWindowDestroyed(HWND hwnd, bool tracked) {
   g_wm.CancelPendingWindowMoves(hwnd);
+  g_wm.lifecycle.desktopOwnershipWaits.erase(hwnd);
   std::erase_if(g_wm.ghosts, [hwnd](const auto& ghost) { return ghost.second == hwnd; });
   const bool routingKnown = g_wm.routing.evaluated.erase(hwnd) != 0;
   const bool routingPending = g_wm.routing.pending.erase(hwnd) != 0;
@@ -17518,6 +17644,8 @@ static Function LoadExport(const wchar_t* library, const char* name) {
   return module ? reinterpret_cast<Function>(GetProcAddress(module, name)) : nullptr;
 }
 
+constexpr wchar_t kTextFont[] = L"Segoe UI";
+
 static D2D1_COLOR_F Color(COLORREF color, float alpha) {
   return D2D1::ColorF(GetRValue(color) / 255.0f, GetGValue(color) / 255.0f, GetBValue(color) / 255.0f, alpha);
 }
@@ -17527,6 +17655,7 @@ struct Device {
   ComPtr<IDCompositionDevice> composition;
   ComPtr<IDWriteFactory> text;
   ComPtr<IWICImagingFactory> imaging;
+  float capHeightRatio = 0;  // CapHeightRatio's cached answer; 0 until read.
 
   bool InitializeDrawing() {
     if (composition) return true;
@@ -17565,7 +17694,7 @@ struct Device {
     }
     ComPtr<IDWriteTextFormat> format;
     ComPtr<IDWriteTextLayout> layout;
-    if (FAILED(text->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+    if (FAILED(text->CreateTextFormat(kTextFont, nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
                                       DWRITE_FONT_STRETCH_NORMAL, size, L"", &format))) return {};
     format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
     format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -17573,6 +17702,30 @@ struct Device {
     if (FAILED(text->CreateTextLayout(label.c_str(), static_cast<UINT32>(label.size()), format.Get(),
                                       maxWidth, height, &layout))) return {};
     return layout;
+  }
+
+  // The text font's capital height as a share of its size, for lining icons up
+  // with text; a typical 0.7 until LayoutText has made the factory, or when the
+  // font can't be read.
+  float CapHeightRatio() {
+    if (capHeightRatio > 0) return capHeightRatio;
+    ComPtr<IDWriteFontCollection> fonts;
+    ComPtr<IDWriteFontFamily> family;
+    ComPtr<IDWriteFont> font;
+    UINT32 index = 0;
+    BOOL exists = FALSE;
+    DWRITE_FONT_METRICS metrics{};
+    if (!text || FAILED(text->GetSystemFontCollection(&fonts)) ||
+        FAILED(fonts->FindFamilyName(kTextFont, &index, &exists)) || !exists ||
+        FAILED(fonts->GetFontFamily(index, &family)) ||
+        FAILED(family->GetFirstMatchingFont(DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                                            DWRITE_FONT_STYLE_NORMAL, &font))) {
+      return 0.7f;
+    }
+    font->GetMetrics(&metrics);
+    if (!metrics.designUnitsPerEm || !metrics.capHeight) return 0.7f;
+    capHeightRatio = static_cast<float>(metrics.capHeight) / metrics.designUnitsPerEm;
+    return capHeightRatio;
   }
 
   ComPtr<ID2D1Bitmap> IconBitmap(ID2D1RenderTarget& target, HICON icon) {
@@ -17681,8 +17834,8 @@ struct Surface {
 // draws the fill, outline, badges and toasts. GDI layered windows measured far
 // slower for these overlays; the retained surface follows PowerToys
 // FancyZones. The overlay thread steps opacity at the compositor's refresh
-// cadence and can wake early for a new target. A thread-pool worker loads app
-// icons so the preview can draw while a window answers.
+// cadence and can wake early for a new target. Thread-pool workers load app
+// icons, for the preview's badges and toasts, so drawing never waits on an app.
 
 #include <mutex>
 
@@ -17696,6 +17849,27 @@ struct PopupAppearance {
 
 constexpr DWORD kToastFadeMs = 180;
 constexpr UINT kToastFadeIntervalMs = 16;
+// A toast's app icons: at most this many, each the small-icon size (16 DIP:
+// 16, 20, 24 or 32 pixels at the common scales, sizes apps ship) beside 14 DIP
+// text, as in Windows' own lists.
+constexpr size_t kMaxToastIcons = 3;
+constexpr LONG kToastIconDip = 16;
+
+// A window whose icon is wanted, identified so a reused handle isn't mistaken
+// for it, and the DPI and size in pixels to load the icon at.
+struct BadgeIconKey {
+  HWND window = nullptr;
+  DWORD processId = 0;
+  DWORD threadId = 0;
+  UINT dpi = 0;
+  LONG size = 0;
+  bool operator==(const BadgeIconKey&) const = default;
+
+  bool IsLive() const {
+    DWORD liveProcessId = 0;
+    return GetWindowThreadProcessId(window, &liveProcessId) == threadId && liveProcessId == processId;
+  }
+};
 
 // One status toast, centred on `monitor`'s work area unless offset.
 struct ToastRequest {
@@ -17706,6 +17880,9 @@ struct ToastRequest {
   int yOffsetDip = 0;
   bool atTop = false;
   DWORD holdMs = 0;  // Fully shown this long, then it fades over kToastFadeMs.
+  // The apps the text names, one window each, for their icons before the text
+  // (at most kMaxToastIcons are shown). ShowToast sets the DPI and size.
+  std::vector<BadgeIconKey> apps;
 };
 
 // Text on a card of the light or dark theme.
@@ -17718,8 +17895,15 @@ using PreviewIcon = std::shared_ptr<std::remove_pointer_t<HICON>>;
 
 constexpr UINT_PTR kFadeTimer = 1;
 constexpr UINT_PTR kToastTimer = 2;
+// Releases an idle host's surface: a work-area-sized BGRA surface (about 32 MB
+// of GPU memory at 4K) isn't kept for the whole session. The device and window
+// stay, so the next show re-attaches in a few milliseconds (measured 4-7 ms more
+// than a warm toast at 3066x1914), not the ~170 ms of a cold start.
+constexpr UINT_PTR kSurfaceReleaseTimer = 3;
+constexpr UINT kIdleSurfaceReleaseMs = 30'000;
 constexpr UINT kFadeIntervalMs = 16;
 constexpr UINT kBadgeIconReadyMessage = WM_APP + 32;
+constexpr UINT kToastIconsReadyMessage = WM_APP + 33;  // wParam: ToastIconJob::id.
 
 // The settings a preview is drawn with, read on the WM thread.
 struct PreviewStyle {
@@ -17750,20 +17934,6 @@ struct IconBadge {
   void Hide() { icon.reset(); }
 };
 
-struct BadgeIconKey {
-  HWND window = nullptr;
-  DWORD processId = 0;
-  DWORD threadId = 0;
-  UINT dpi = 0;
-  LONG size = 0;
-  bool operator==(const BadgeIconKey&) const = default;
-
-  bool IsLive() const {
-    DWORD liveProcessId = 0;
-    return GetWindowThreadProcessId(window, &liveProcessId) == threadId && liveProcessId == processId;
-  }
-};
-
 struct CachedBadgeIcon {
   BadgeIconKey key;
   PreviewIcon icon;
@@ -17791,6 +17961,28 @@ struct BadgeIconLookup {
   }
 };
 
+// A toast waiting for its app icons. Asking an app for its icon can wait on the
+// app, so a thread-pool worker loads them, sets `done` and posts
+// kToastIconsReadyMessage to `notifyWindow`; the presenter then shows the toast
+// (ShowToastWithIcons). Owned by the presenter; destroying a job waits for its
+// worker.
+struct ToastIconJob {
+  PTP_WORK work = nullptr;
+  uint64_t id = 0;
+  HWND notifyWindow = nullptr;
+  ToastRequest request;
+  std::vector<PreviewIcon> icons;  // The worker's result, one per request.apps entry.
+  std::atomic<bool> posted{false};  // The worker's message went out (before `done`).
+  std::atomic<bool> done{false};
+
+  ~ToastIconJob() {
+    if (work) {
+      WaitForThreadpoolWorkCallbacks(work, TRUE);
+      CloseThreadpoolWork(work);
+    }
+  }
+};
+
 struct MonitorHost {
   HWND window = nullptr;
   RECT workArea{};
@@ -17808,6 +18000,12 @@ struct MonitorHost {
   std::optional<ToastRequest> toast;
   PopupSurface::ComPtr<IDWriteTextLayout> toastText;
   D2D1_RECT_F toastFrame{};
+  D2D1_POINT_2F toastTextOrigin{};
+  struct ToastIcon {
+    PopupSurface::ComPtr<ID2D1Bitmap> bitmap;
+    D2D1_RECT_F rect{};
+  };
+  std::vector<ToastIcon> toastIcons;
   UINT toastDpi = 96;
   ULONGLONG toastStarted = 0;
   float toastAlpha = 1.0f;
@@ -17833,6 +18031,10 @@ struct Presenter {
   std::unordered_map<GUID, std::vector<CachedBadgeIcon>, Model::GuidHash, Model::GuidEqual> iconsByDesktop;
   uint64_t iconDrag = 1;
   std::unique_ptr<BadgeIconLookup> iconLookup;
+  std::vector<std::unique_ptr<ToastIconJob>> toastIconJobs;
+  // The latest toast for each monitor; a job for an older one shows nothing.
+  std::unordered_map<HMONITOR, uint64_t> latestToasts;
+  uint64_t lastToastId = 0;
   PopupSurface::Device device;
   std::unordered_map<HMONITOR, std::unique_ptr<MonitorHost>> hosts;
   MonitorHost* previewHost = nullptr;
@@ -17841,6 +18043,7 @@ struct Presenter {
 // Owned by the thread that presents: the overlay thread once started, else the caller.
 static Presenter g_presenter;
 static bool DrawHost(MonitorHost& host);
+static void ReleaseHostSurface(MonitorHost& host);
 static void StepToast(MonitorHost& host);
 
 // Milliseconds on a high-resolution clock. GetTickCount64 advances in ~15.6 ms
@@ -17922,6 +18125,7 @@ static void FadeTo(BYTE alpha, bool restart = false) {
 }
 
 static void UpdateBadgesAfterIconLookup();
+static void FinishToastIconJob(uint64_t id);
 
 static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
   if (message == WM_NCCREATE) {
@@ -17937,9 +18141,18 @@ static LRESULT CALLBACK OverlayWindowProc(HWND hwnd, UINT message, WPARAM wparam
     UpdateBadgesAfterIconLookup();
     return 0;
   }
+  if (message == kToastIconsReadyMessage) {
+    FinishToastIconJob(static_cast<uint64_t>(wparam));
+    return 0;
+  }
   auto* host = reinterpret_cast<MonitorHost*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
   if (host && message == WM_TIMER && wparam == kToastTimer) {
     StepToast(*host);
+    return 0;
+  }
+  if (host && message == WM_TIMER && wparam == kSurfaceReleaseTimer) {
+    KillTimer(hwnd, kSurfaceReleaseTimer);
+    if (!host->visible && host->surface.target) ReleaseHostSurface(*host);
     return 0;
   }
   if (host && message == WM_PAINT) {
@@ -18130,6 +18343,7 @@ static void ClearToast(MonitorHost& host) {
   if (host.window) KillTimer(host.window, kToastTimer);
   host.toast.reset();
   host.toastText.Reset();
+  host.toastIcons.clear();
 }
 
 // Hides the host and releases its surface; the window stays for the next attach.
@@ -18166,6 +18380,7 @@ static void PruneDisconnectedMonitors() {
   std::erase_if(g_presenter.hosts, [](auto& entry) {
     auto& [monitor, host] = entry;
     if (Platform::Monitors::IsLiveMonitorHandle(monitor)) return false;
+    g_presenter.latestToasts.erase(monitor);  // Its waiting toast, if any, is dropped.
     if (host.get() == g_presenter.previewHost) ClearPreview();
     if (host->window) KillTimer(host->window, kFadeTimer);
     ReleaseHostSurface(*host);
@@ -18255,18 +18470,19 @@ static D2D1_RECT_F BadgeIconRect(const D2D1_RECT_F& card, LONG badgeSize, LONG i
   return D2D1::RectF(card.left + inset, card.top + inset, card.left + inset + iconSize, card.top + inset + iconSize);
 }
 
-// Where a toast whose text is `textWidth` pixels wide goes on a host the size
-// of `workSize` (the work area), in the host's coordinates: 48 DIP tall, as
-// wide as its text plus 48 DIP (at least 128 DIP, at most the work area),
-// centred, 16 DIP from the top or bottom edge, moved by the request's offsets
-// but kept inside the work area. Nothing when the work area is shorter than a toast.
-static std::optional<D2D1_RECT_F> ToastFrame(const ToastRequest& request, SIZE workSize, UINT dpi, float textWidth) {
+// Where a toast whose content (icons and text) is `contentWidth` pixels wide
+// goes on a host the size of `workSize` (the work area), in the host's
+// coordinates: 48 DIP tall, as wide as its content plus 48 DIP (at least 128
+// DIP, at most the work area), centred, 16 DIP from the top or bottom edge,
+// moved by the request's offsets but kept inside the work area. Nothing when
+// the work area is shorter than a toast.
+static std::optional<D2D1_RECT_F> ToastFrame(const ToastRequest& request, SIZE workSize, UINT dpi, float contentWidth) {
   const float available = static_cast<float>(workSize.cx);
   const float workHeight = static_cast<float>(workSize.cy);
   const float height = static_cast<float>(SharedGeometry::ScaleDip(48, dpi));
   if (height > workHeight) return std::nullopt;
   const float width = std::min(available, std::max<float>(
-      SharedGeometry::ScaleDip(128, dpi), std::ceil(textWidth) + SharedGeometry::ScaleDip(48, dpi)));
+      SharedGeometry::ScaleDip(128, dpi), std::ceil(contentWidth) + SharedGeometry::ScaleDip(48, dpi)));
   const float left = (available - width) / 2 + SharedGeometry::ScaleDip(request.xOffsetDip, dpi);
   const float gap = static_cast<float>(SharedGeometry::ScaleDip(16, dpi));
   const float top = (request.atTop ? gap : workHeight - height - gap) +
@@ -18274,6 +18490,44 @@ static std::optional<D2D1_RECT_F> ToastFrame(const ToastRequest& request, SIZE w
   const float x = std::floor(std::clamp(left, 0.0f, available - width));
   const float y = std::clamp(top, 0.0f, workHeight - height);
   return D2D1::RectF(x, y, x + width, y + height);
+}
+
+// The width of a toast's icons and the gap before its text: `iconCount` icons
+// `iconSize` pixels wide, 4 DIP apart, then 8 DIP. 0 without icons.
+static float ToastIconsWidth(size_t iconCount, LONG iconSize, UINT dpi) {
+  if (iconCount == 0) return 0;
+  const LONG count = static_cast<LONG>(iconCount);
+  return static_cast<float>(count * iconSize + (count - 1) * SharedGeometry::ScaleDip(4, dpi) +
+                            SharedGeometry::ScaleDip(8, dpi));
+}
+
+// Where a toast's icons and text go inside its frame, in host coordinates.
+struct ToastContentLayout {
+  std::vector<D2D1_RECT_F> icons;
+  float textLeft = 0;
+  float textWidth = 0;  // The text box, at most the room left in the frame.
+};
+
+// Lays out `iconCount` icons (ToastIconsWidth) and then text `textWidth` wide
+// as one row centred in `frame`. Each icon sits on whole pixels, so one drawn
+// at its own size isn't resampled, centred on `iconMiddle` pixels below the
+// frame's top (the middle of the text's capitals, so it lines up with the
+// words rather than with their descenders).
+static ToastContentLayout LayOutToastContent(const D2D1_RECT_F& frame, size_t iconCount, LONG iconSize, UINT dpi,
+                                             float textWidth, float iconMiddle) {
+  ToastContentLayout layout;
+  const float iconsWidth = ToastIconsWidth(iconCount, iconSize, dpi);
+  const float frameWidth = frame.right - frame.left;
+  const float left = frame.left + std::floor(std::max(0.0f, (frameWidth - iconsWidth - std::ceil(textWidth)) / 2));
+  const float top = std::round(frame.top + iconMiddle - iconSize / 2.0f);
+  const float step = static_cast<float>(iconSize + SharedGeometry::ScaleDip(4, dpi));
+  for (size_t i = 0; i < iconCount; ++i) {
+    const float iconLeft = left + step * i;
+    layout.icons.push_back(D2D1::RectF(iconLeft, top, iconLeft + iconSize, top + iconSize));
+  }
+  layout.textLeft = left + iconsWidth;
+  layout.textWidth = std::max(0.0f, std::min(std::ceil(textWidth), frame.right - layout.textLeft));
+  return layout;
 }
 
 // --- Drawing -----------------------------------------------------------------------
@@ -18294,6 +18548,7 @@ static bool DrawHost(MonitorHost& host) {
     }
     host.visible = true;
     host.raise = false;
+    KillTimer(host.window, kSurfaceReleaseTimer);
   }
   auto& surface = host.surface;
   if (!surface.BeginDraw()) {
@@ -18336,9 +18591,14 @@ static bool DrawHost(MonitorHost& host) {
   if (host.toastText) {
     const auto& toast = *host.toast;
     drawSolidCard(host.toastFrame, host.toastDpi, toast.appearance, host.toastAlpha);
+    for (const auto& icon : host.toastIcons) {
+      // At its own size the cubic filter changes nothing; it is for an app
+      // that has no icon of that size.
+      target.DrawBitmap(icon.bitmap.Get(), &icon.rect, host.toastAlpha, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC);
+    }
     surface.brush->SetColor(PopupSurface::Color(CardTextColor(toast.appearance.light), host.toastAlpha));
-    target.DrawTextLayout(D2D1::Point2F(host.toastFrame.left, host.toastFrame.top),
-                          host.toastText.Get(), surface.brush.Get(), D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    target.DrawTextLayout(host.toastTextOrigin, host.toastText.Get(), surface.brush.Get(),
+                          D2D1_DRAW_TEXT_OPTIONS_CLIP);
   }
   if (!surface.EndDraw(g_presenter.device)) {
     ResetHostSurface(host);
@@ -18347,27 +18607,56 @@ static bool DrawHost(MonitorHost& host) {
   if (!visible) {
     ShowWindow(host.window, SW_HIDE);
     host.visible = false;
+    SetTimer(host.window, kSurfaceReleaseTimer, kIdleSurfaceReleaseMs, nullptr);
   }
   return true;
 }
 
-static void ShowToast(ToastRequest request) {
+// The middle of `text`'s capitals, in pixels below the top of its layout box;
+// the box's middle when the line can't be measured.
+static float TextCapMiddle(IDWriteTextLayout& text, const DWRITE_TEXT_METRICS& metrics, float fontSize) {
+  DWRITE_LINE_METRICS line{};
+  UINT32 lines = 0;
+  if (FAILED(text.GetLineMetrics(&line, 1, &lines)) || lines != 1) return metrics.top + metrics.height / 2;
+  return metrics.top + line.baseline - g_presenter.device.CapHeightRatio() * fontSize / 2;
+}
+
+// Lays out and shows `request` on its monitor, replacing the toast there, with
+// `icons` (loaded for request.apps) before the text. Missing icons, and any
+// Direct2D can't take, are left out.
+static void ShowToastWithIcons(ToastRequest request, const std::vector<PreviewIcon>& icons) {
   RECT workArea{};
   if (!Platform::Monitors::GetOverlayWorkArea(request.monitor, &workArea)) return;
   const UINT dpi = Platform::Monitors::GetMonitorEffectiveDpi(request.monitor);
   auto& host = GetMonitorHost(request.monitor, workArea);
   if (!host.surface.target) return;
+  std::vector<MonitorHost::ToastIcon> shownIcons;
+  for (const PreviewIcon& icon : icons) {
+    if (shownIcons.size() == kMaxToastIcons) break;
+    if (!icon) continue;
+    if (auto bitmap = g_presenter.device.IconBitmap(*host.surface.target.Get(), icon.get())) {
+      shownIcons.push_back({std::move(bitmap)});
+    }
+  }
   const SIZE workSize{Layout::RectWidth(workArea), Layout::RectHeight(workArea)};
-  auto text = g_presenter.device.LayoutText(request.text, SharedGeometry::ScaleDip(14, dpi),
-                                            static_cast<float>(workSize.cx),
+  const float fontSize = static_cast<float>(SharedGeometry::ScaleDip(14, dpi));
+  auto text = g_presenter.device.LayoutText(request.text, fontSize, static_cast<float>(workSize.cx),
                                             static_cast<float>(SharedGeometry::ScaleDip(48, dpi)));
   DWRITE_TEXT_METRICS metrics{};
   if (!text || FAILED(text->GetMetrics(&metrics))) return;
-  const auto frame = ToastFrame(request, workSize, dpi, metrics.width);
-  if (!frame || FAILED(text->SetMaxWidth(frame->right - frame->left))) return;
+  const LONG iconSize = SharedGeometry::ScaleDip(kToastIconDip, dpi);
+  const auto frame =
+      ToastFrame(request, workSize, dpi, ToastIconsWidth(shownIcons.size(), iconSize, dpi) + metrics.width);
+  if (!frame) return;
+  const ToastContentLayout content = LayOutToastContent(*frame, shownIcons.size(), iconSize, dpi, metrics.width,
+                                                        TextCapMiddle(*text.Get(), metrics, fontSize));
+  if (FAILED(text->SetMaxWidth(content.textWidth))) return;
+  for (size_t i = 0; i < shownIcons.size(); ++i) shownIcons[i].rect = content.icons[i];
   host.toast = std::move(request);
   host.toastText = std::move(text);
+  host.toastIcons = std::move(shownIcons);
   host.toastFrame = *frame;
+  host.toastTextOrigin = D2D1::Point2F(content.textLeft, frame->top);
   host.toastDpi = dpi;
   host.toastStarted = GetTickCount64();
   host.toastAlpha = 1.0f;
@@ -18377,6 +18666,67 @@ static void ShowToast(ToastRequest request) {
     ClearToast(host);
     DrawHost(host);
   }
+}
+
+// Thread pool: loads a ToastIconJob's icons, then tells the presenter.
+static void CALLBACK LoadToastIcons(PTP_CALLBACK_INSTANCE, void* context, PTP_WORK) {
+  auto& job = *static_cast<ToastIconJob*>(context);
+  for (const BadgeIconKey& app : job.request.apps) {
+    bool queryFailed = false;
+    job.icons.push_back(app.IsLive() ? LoadBadgeIcon(app.window, app.dpi, app.size, queryFailed) : PreviewIcon{});
+  }
+  job.posted.store(PostMessageW(job.notifyWindow, kToastIconsReadyMessage, static_cast<WPARAM>(job.id), 0) != FALSE,
+                   std::memory_order_relaxed);
+  job.done.store(true, std::memory_order_release);
+}
+
+// Shows `request` on its monitor, replacing the toast there. A toast naming
+// apps first waits for their icons (ToastIconJob), typically a millisecond or
+// two; without a worker it shows at once, without them.
+static void ShowToast(ToastRequest request) {
+  const uint64_t id = ++g_presenter.lastToastId;
+  g_presenter.latestToasts[request.monitor] = id;
+  // Drop jobs that will show nothing: replaced, or unable to say they're done.
+  std::erase_if(g_presenter.toastIconJobs, [](const std::unique_ptr<ToastIconJob>& job) {
+    if (!job->done.load(std::memory_order_acquire)) return false;
+    const auto latest = g_presenter.latestToasts.find(job->request.monitor);
+    return !job->posted.load(std::memory_order_relaxed) || latest == g_presenter.latestToasts.end() ||
+           latest->second != job->id;
+  });
+  RECT workArea{};
+  if (request.apps.empty() || !Platform::Monitors::GetOverlayWorkArea(request.monitor, &workArea)) {
+    return ShowToastWithIcons(std::move(request), {});
+  }
+  const HWND notifyWindow = GetMonitorHost(request.monitor, workArea).window;
+  if (!notifyWindow) return;
+  const UINT dpi = Platform::Monitors::GetMonitorEffectiveDpi(request.monitor);
+  if (request.apps.size() > kMaxToastIcons) request.apps.resize(kMaxToastIcons);
+  for (BadgeIconKey& app : request.apps) {
+    app.dpi = dpi;
+    app.size = SharedGeometry::ScaleDip(kToastIconDip, dpi);
+  }
+  auto job = std::make_unique<ToastIconJob>();
+  job->id = id;
+  job->notifyWindow = notifyWindow;
+  job->request = std::move(request);
+  job->work = CreateThreadpoolWork(LoadToastIcons, job.get(), nullptr);
+  if (!job->work) return ShowToastWithIcons(std::move(job->request), {});
+  SubmitThreadpoolWork(job->work);
+  g_presenter.toastIconJobs.push_back(std::move(job));
+}
+
+// kToastIconsReadyMessage: shows job `id`'s toast with its icons, unless a
+// later toast on that monitor replaced it, and drops the job.
+static void FinishToastIconJob(uint64_t id) {
+  auto& jobs = g_presenter.toastIconJobs;
+  const auto entry = std::ranges::find(jobs, id, [](const std::unique_ptr<ToastIconJob>& job) { return job->id; });
+  if (entry == jobs.end()) return;
+  const std::unique_ptr<ToastIconJob> job = std::move(*entry);
+  jobs.erase(entry);
+  WaitForThreadpoolWorkCallbacks(job->work, FALSE);  // The worker posted just before returning.
+  const auto latest = g_presenter.latestToasts.find(job->request.monitor);
+  if (latest == g_presenter.latestToasts.end() || latest->second != id) return;
+  ShowToastWithIcons(std::move(job->request), job->icons);
 }
 
 static void StepToast(MonitorHost& host) {
@@ -18511,7 +18861,9 @@ static void RepaintCards(PopupAppearance appearance) {
 }
 
 static void DestroyHosts() {
-  g_presenter.iconLookup.reset();  // Join the lookup before destroying its notification window.
+  // Join the icon workers before destroying the windows they notify.
+  g_presenter.iconLookup.reset();
+  g_presenter.toastIconJobs.clear();
   for (auto& [monitor, host] : g_presenter.hosts) {
     if (host->window) DestroyWindow(host->window);
   }
@@ -18614,9 +18966,15 @@ static void KeepDesktopIcons(LPARAM payload) {
   });
 }
 
+// Warms the device, window and surface for the first preview or toast. An
+// unused surface is released like any idle one; the device stays warm.
 static void WarmMonitorHost(HMONITOR monitor) {
   RECT workArea{};
-  if (Platform::Monitors::GetOverlayWorkArea(monitor, &workArea)) GetMonitorHost(monitor, workArea);
+  if (!Platform::Monitors::GetOverlayWorkArea(monitor, &workArea)) return;
+  MonitorHost& host = GetMonitorHost(monitor, workArea);
+  if (host.window && host.surface.target && !host.visible) {
+    SetTimer(host.window, kSurfaceReleaseTimer, kIdleSurfaceReleaseMs, nullptr);
+  }
 }
 
 static void HandleOverlayMessage(const MSG& msg) {
@@ -19080,8 +19438,12 @@ constexpr UINT kIconId = 1;
 constexpr UINT kContextTileWorkspace = 41001;
 constexpr UINT kContextToggleMode = 41002;
 constexpr UINT kContextLayoutBase = 41100;
-constexpr int kIconCanvasSize = 32;
+// The tray text's height for an icon kTrayTextDesignSize pixels square; it
+// scales with the icon.
+constexpr int kTrayTextDesignSize = 32;
 constexpr int kTrayFontHeight = 26;
+// Each icon pixel averages this many aliased samples per axis (TextCoverage).
+constexpr int kTraySupersample = 8;
 constexpr DWORD kFlyoutHoldMs = 850;
 constexpr wchar_t kPersonalizeSettings[] = LR"(Software\Microsoft\Windows\CurrentVersion\Themes\Personalize)";
 using LayoutIconSet = std::array<HICON, static_cast<size_t>(TileLayout::COUNT)>;
@@ -19112,6 +19474,7 @@ struct TraySession {
   HMONITOR displayedMonitor = nullptr;
   NOTIFYICONDATAW notifyData{};
   LayoutIconSet icons{};
+  int iconSize = 0;  // The icons' size in pixels (TrayIconSize when built).
 };
 
 static TrayPreferences g_preferences;
@@ -19185,79 +19548,110 @@ static Overlay::PopupAppearance CurrentPopupAppearance() {
   return {FlyoutBackgroundColor(), g_session.systemLightTheme};
 }
 
-static HICON CreateTextIcon(TileLayout layout) {
-  BITMAPINFO bmi{};
-  bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-  bmi.bmiHeader.biWidth = kIconCanvasSize;
-  bmi.bmiHeader.biHeight = -kIconCanvasSize;
-  bmi.bmiHeader.biPlanes = 1;
-  bmi.bmiHeader.biBitCount = 32;
-  bmi.bmiHeader.biCompression = BI_RGB;
+// The tray's icon size: the small-icon size at the taskbar's DPI, so the shell
+// shows the icon as drawn rather than resizing it.
+static int TrayIconSize() {
+  const HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+  UINT dpi = taskbar ? GetDpiForWindow(taskbar) : 0;
+  if (!dpi) dpi = Platform::Monitors::GetMonitorEffectiveDpi(MonitorFromPoint({}, MONITOR_DEFAULTTOPRIMARY));
+  const int size = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+  return size > 0 ? size : 16;
+}
 
+// How much of each pixel of a `size`-pixel square icon `text` covers, 0..255,
+// row by row; empty on failure. GDI draws the text aliased on a canvas
+// kTraySupersample times larger and each pixel averages its block, so the
+// edges are smooth whatever the system's font smoothing (which GDI's own
+// antialiasing follows; with it off, as in many VMs, the icon was pixel art).
+static std::vector<BYTE> TextCoverage(const wchar_t* text, int size) {
+  const int canvas = size * kTraySupersample;
+  BITMAPINFO bmi{};
+  bmi.bmiHeader = {sizeof(BITMAPINFOHEADER), canvas, -canvas, 1, 32, BI_RGB};
   void* bits = nullptr;
-  HBITMAP color = CreateDIBSection(nullptr, &bmi, DIB_RGB_COLORS, &bits,
-                                   nullptr, 0);
-  HDC dc = color ? CreateCompatibleDC(nullptr) : nullptr;
-  if (!color || !dc || !bits) {
+  const HBITMAP bitmap = CreateDIBSection(nullptr, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+  const HDC dc = bitmap ? CreateCompatibleDC(nullptr) : nullptr;
+  if (!bitmap || !dc || !bits) {
     if (dc) DeleteDC(dc);
-    if (color) DeleteObject(color);
-    return nullptr;
+    if (bitmap) DeleteObject(bitmap);
+    return {};
   }
 
-  HGDIOBJ oldBitmap = SelectObject(dc, color);
-  RECT rect{0, 0, kIconCanvasSize, kIconCanvasSize};
-  FillRect(dc, &rect, reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
-  HFONT font = CreateFontW(-kTrayFontHeight, 0, 0, 0, FW_BOLD, FALSE, FALSE,
-                           FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                           CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
-                           FIXED_PITCH | FF_MODERN, L"Cascadia Mono");
-  HGDIOBJ oldFont = font ? SelectObject(dc, font) : nullptr;
+  const HGDIOBJ oldBitmap = SelectObject(dc, bitmap);
+  RECT rect{0, 0, canvas, canvas};
+  FillRect(dc, &rect, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+  const HFONT font = CreateFontW(-MulDiv(kTrayFontHeight, canvas, kTrayTextDesignSize), 0, 0, 0, FW_BOLD, FALSE,
+                                 FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 NONANTIALIASED_QUALITY, FIXED_PITCH | FF_MODERN, L"Cascadia Mono");
+  const HGDIOBJ oldFont = font ? SelectObject(dc, font) : nullptr;
   SetBkMode(dc, TRANSPARENT);
   SetTextColor(dc, RGB(255, 255, 255));
-  DrawTextW(dc, LayoutTrayText(layout), -1, &rect,
-            DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+  DrawTextW(dc, text, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
   if (oldFont) SelectObject(dc, oldFont);
   if (font) DeleteObject(font);
   GdiFlush();
 
-  auto* pixels = static_cast<uint32_t*>(bits);
-  COLORREF fg = Overlay::CardTextColor(g_session.systemLightTheme);
-  uint32_t r = GetRValue(fg), g = GetGValue(fg), b = GetBValue(fg);
-  for (int i = 0; i < kIconCanvasSize * kIconCanvasSize; ++i) {
-    uint32_t p = pixels[i];
-    uint32_t a = std::max({p & 0xFFu, (p >> 8) & 0xFFu,
-                           (p >> 16) & 0xFFu});
-    pixels[i] = (a << 24) | (r << 16) | (g << 8) | b;
+  std::vector<BYTE> coverage(static_cast<size_t>(size) * size);
+  const auto* samples = static_cast<const uint32_t*>(bits);
+  constexpr int kSamples = kTraySupersample * kTraySupersample;
+  for (int y = 0; y < size; ++y) {
+    for (int x = 0; x < size; ++x) {
+      int covered = 0;
+      for (int dy = 0; dy < kTraySupersample; ++dy) {
+        const uint32_t* row = samples + static_cast<size_t>(y * kTraySupersample + dy) * canvas + x * kTraySupersample;
+        for (int dx = 0; dx < kTraySupersample; ++dx) covered += (row[dx] & 0xFF) >= 128;
+      }
+      coverage[static_cast<size_t>(y) * size + x] = static_cast<BYTE>((covered * 255 + kSamples / 2) / kSamples);
+    }
   }
-
   SelectObject(dc, oldBitmap);
   DeleteDC(dc);
+  DeleteObject(bitmap);
+  return coverage;
+}
 
-  constexpr int maskStride = ((kIconCanvasSize + 31) / 32) * 4;
-  std::array<BYTE, maskStride * kIconCanvasSize> maskBits{};
-  HBITMAP mask = CreateBitmap(kIconCanvasSize, kIconCanvasSize, 1, 1,
-                              maskBits.data());
+// `layout`'s two letters as a `size`-pixel icon in the theme's text color.
+static HICON CreateTextIcon(TileLayout layout, int size) {
+  const std::vector<BYTE> coverage = TextCoverage(LayoutTrayText(layout), size);
+  if (coverage.empty()) return nullptr;
+  BITMAPINFO bmi{};
+  bmi.bmiHeader = {sizeof(BITMAPINFOHEADER), size, -size, 1, 32, BI_RGB};
+  void* bits = nullptr;
+  const HBITMAP color = CreateDIBSection(nullptr, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+  if (!color || !bits) {
+    if (color) DeleteObject(color);
+    return nullptr;
+  }
+  // Every pixel carries the text color, the transparent ones too, so the shell
+  // can't blend a fringe of another color into the edges.
+  const COLORREF fg = Overlay::CardTextColor(g_session.systemLightTheme);
+  const uint32_t rgb = (GetRValue(fg) << 16) | (GetGValue(fg) << 8) | GetBValue(fg);
+  auto* pixels = static_cast<uint32_t*>(bits);
+  for (size_t i = 0; i < coverage.size(); ++i) pixels[i] = (static_cast<uint32_t>(coverage[i]) << 24) | rgb;
+
+  const std::vector<BYTE> maskBits(static_cast<size_t>((size + 15) / 16) * 2 * size);  // Word-aligned rows.
+  const HBITMAP mask = CreateBitmap(size, size, 1, 1, maskBits.data());
   ICONINFO info{TRUE, 0, 0, mask, color};
-  HICON icon = mask ? CreateIconIndirect(&info) : nullptr;
+  const HICON icon = mask ? CreateIconIndirect(&info) : nullptr;
   if (mask) DeleteObject(mask);
   DeleteObject(color);
   return icon;
 }
 
-// Returns an owned icon, preferring the configured file and falling back to
-// generated text. The icon must eventually be released with DestroyIcon.
-static HICON CreateLayoutIcon(TileLayout layout) {
+// Returns an owned `size`-pixel icon, preferring the configured file (its
+// closest frame) and falling back to generated text. The icon must eventually
+// be released with DestroyIcon.
+static HICON CreateLayoutIcon(TileLayout layout, int size) {
   size_t index = static_cast<size_t>(layout);
   const auto& customIconPaths = g_preferences.customIconPaths;
   if (index < customIconPaths.size() && !customIconPaths[index].empty()) {
     HICON icon = static_cast<HICON>(LoadImageW(
         nullptr, customIconPaths[index].c_str(), IMAGE_ICON,
-        kIconCanvasSize, kIconCanvasSize, LR_LOADFROMFILE));
+        size, size, LR_LOADFROMFILE));
     if (icon) return icon;
     Wh_Log(L"Failed to load custom tray icon, using text fallback: %s",
            customIconPaths[index].c_str());
   }
-  return CreateTextIcon(layout);
+  return CreateTextIcon(layout, size);
 }
 
 static void DestroyIconSet(LayoutIconSet& icons) {
@@ -19436,20 +19830,31 @@ static void RecreateIconInShell() {
 
 // Repoints the live tray entry to a complete new icon set before destroying the
 // old handles, so the shell never observes an HICON after it has been released.
+// Builds them at the tray's current size (TrayIconSize).
 static void RebuildIcons() {
+  const int size = TrayIconSize();
   LayoutIconSet icons{};
   for (size_t i = 0; i < icons.size(); ++i) {
-    icons[i] = CreateLayoutIcon(static_cast<TileLayout>(i));
+    icons[i] = CreateLayoutIcon(static_cast<TileLayout>(i), size);
   }
   auto old = g_session.icons;
   g_session.icons = icons;
+  g_session.iconSize = size;
   if (g_session.displayedLayout != TileLayout::COUNT) {
     UpdateIcon(g_session.displayedLayout, g_session.displayedMonitor);
   }
   DestroyIconSet(old);
 }
 
-static void ShowStatusFlyout(const wchar_t* text, HMONITOR monitor) {
+// After a display, DPI or taskbar change: rebuilds the icons if the tray's
+// icon size changed, so they stay unresized.
+static void RebuildIconsIfResized() {
+  if (TrayIconSize() != g_session.iconSize) RebuildIcons();
+}
+
+// Shows `text` on `monitor` (else the command monitor), with the icons of
+// `apps`, the windows of the apps it names, one each, before it.
+static void ShowStatusFlyout(const wchar_t* text, HMONITOR monitor, const std::vector<HWND>& apps = {}) {
   if ((!g_session.trayWindowClass && !g_session.trayWindow) || !g_preferences.showToasts || !text || !*text) return;
   if (!monitor) monitor = Platform::Monitors::GetWorkspaceCommandMonitor();
   if (!monitor) return;
@@ -19458,6 +19863,13 @@ static void ShowStatusFlyout(const wchar_t* text, HMONITOR monitor) {
   // Allow roughly 75 ms per character, retaining the minimum for short hints.
   request.holdMs = static_cast<DWORD>(std::max<size_t>(
       kFlyoutHoldMs, std::min<size_t>(request.text.size(), 1000000) * 75));
+  for (HWND hwnd : apps) {
+    if (request.apps.size() == Overlay::kMaxToastIcons) break;
+    DWORD processId = 0;
+    if (const DWORD threadId = GetWindowThreadProcessId(hwnd, &processId)) {
+      request.apps.push_back({.window = hwnd, .processId = processId, .threadId = threadId});
+    }
+  }
   Overlay::PublishToast(std::move(request));
 }
 
@@ -19470,6 +19882,11 @@ static void ShowCommandFailureFlyout(
     const wchar_t* text, HMONITOR monitor) {
   if (!text || !*text) return;
   ShowStatusFlyout(text, monitor);
+}
+
+// A toast about apps (Placement::AppToast): its text after their icons.
+static void ShowAppFlyout(const std::wstring& text, const std::vector<HWND>& apps, HMONITOR monitor) {
+  ShowStatusFlyout(text.c_str(), monitor, apps);
 }
 
 static void ShowManagementModeFlyout(bool automatic) {
@@ -19642,6 +20059,7 @@ static void HandleThemeChanged() {
 static LRESULT CALLBACK TrayWindowProc(HWND hwnd, UINT message, WPARAM wParam,
                                        LPARAM lParam) {
   if (g_session.taskbarCreatedMessage && message == g_session.taskbarCreatedMessage) {
+    RebuildIconsIfResized();  // The new taskbar may run at another DPI.
     RecreateIconInShell();
     RuntimeLifecycle::NotifyShellRestarted();
     return 0;
@@ -19683,12 +20101,14 @@ static LRESULT CALLBACK TrayWindowProc(HWND hwnd, UINT message, WPARAM wParam,
   switch (message) {
     case WM_DISPLAYCHANGE:
     case WM_DPICHANGED:
+      RebuildIconsIfResized();
       RuntimeLifecycle::NotifyDisplayTopologyChanged();
       return 0;
 
     case WM_SETTINGCHANGE:
       HandleThemeChanged();
       if (wParam == SPI_SETWORKAREA) {
+        RebuildIconsIfResized();
         RuntimeLifecycle::NotifyDisplayTopologyChanged();
       }
       return 0;
@@ -20926,7 +21346,7 @@ static void DumpRuntimeSummary(
 
 static void DumpConfigurationSnapshot(ReportBuilder& report) {
   report.Section(L"Configuration snapshot");
-  report.Line(L"Fallback layout: %ls", DiagnosticLayoutName(g_settings.defaultLayout));
+  report.Line(L"Default layout: %ls", DiagnosticLayoutName(g_settings.defaultLayout));
   report.TextLine(L"Layout cycle: ", DiagnosticLayoutCycleString(g_settings.layoutCycle));
   report.Line(L"Workspace initialization rules: %zu", g_settings.workspaceInitializationRules.size());
   report.Line(L"Tray click: %ls; toasts: %ls",
@@ -21337,8 +21757,9 @@ static void WriteDiagnosticReport() {
   // The interval baseline is the end of a successful diagnostic operation, so
   // report-generation time is not charged to the next "since dump" period.
   g_runtime.lastReportTickMs = GetTickCount64();
-  // Writing can take a moment on a busy system; this says it has finished.
-  TrayUi::ShowStatusFlyout(L"Diagnostic report saved", nullptr);
+  // Writing can take a moment on a busy system; this says it has finished, and
+  // where, since the folder is a setting.
+  TrayUi::ShowStatusFlyout((L"Diagnostic report saved to " + outputPath).c_str(), nullptr);
 }
 }  // namespace Diagnostics
 
@@ -21644,6 +22065,26 @@ static void RecordPublishedState(const CompanionAbi::SnapshotBody& body) {
 
 // --- Lifetime ----------------------------------------------------------------------
 
+// An object that already exists (a reader kept it alive across a restart, or an
+// older build created it) keeps the descriptor it was made with. Reapplies ours:
+// its DACL, and an empty label list, which removes an older build's Low label.
+// MultiWM owns the object, so its handle has WRITE_DAC and WRITE_OWNER.
+static void ReapplyDescriptor(HANDLE handle, PSECURITY_DESCRIPTOR descriptor) {
+  BOOL present = FALSE;
+  BOOL defaulted = FALSE;
+  PACL dacl = nullptr;
+  ACL noLabel{};
+  DWORD error = ERROR_SUCCESS;
+  if (!GetSecurityDescriptorDacl(descriptor, &present, &dacl, &defaulted) ||
+      !InitializeAcl(&noLabel, sizeof(noLabel), ACL_REVISION)) {
+    error = GetLastError();
+  } else {
+    error = SetSecurityInfo(handle, SE_KERNEL_OBJECT, DACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION,
+                            nullptr, nullptr, dacl, &noLabel);
+  }
+  if (error != ERROR_SUCCESS) Wh_Log(L"Companion snapshot: couldn't reapply security: %lu", error);
+}
+
 static HANDLE CreateNamedObject(const wchar_t* sddl, const auto& create) {
   PSECURITY_DESCRIPTOR descriptor = nullptr;
   if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, SDDL_REVISION_1, &descriptor, nullptr)) {
@@ -21653,9 +22094,21 @@ static HANDLE CreateNamedObject(const wchar_t* sddl, const auto& create) {
   SECURITY_ATTRIBUTES attributes{sizeof(attributes), descriptor, FALSE};
   const HANDLE handle = create(&attributes);
   const DWORD error = GetLastError();
+  if (handle && error == ERROR_ALREADY_EXISTS) ReapplyDescriptor(handle, descriptor);
   LocalFree(descriptor);
   SetLastError(error);
   return handle;
+}
+
+// True when `view` is a whole snapshot's worth of committed, writable memory. A
+// section left by a different build with the same name could be smaller, and
+// one created by another process could be reserved (SEC_RESERVE) rather than
+// committed: writing the header there would crash this process.
+static bool IsWritableSnapshotView(const void* view) {
+  MEMORY_BASIC_INFORMATION region{};
+  return view && VirtualQuery(view, &region, sizeof(region)) &&
+         region.RegionSize >= sizeof(CompanionAbi::SnapshotSection) && region.State == MEM_COMMIT &&
+         (region.Protect & PAGE_READWRITE) != 0;
 }
 
 // Creates (or, after a restart, reopens) the section and the liveness event and
@@ -21675,10 +22128,7 @@ static bool Open() {
 
   auto* view = static_cast<CompanionAbi::SnapshotSection*>(
       MapViewOfFile(g_publisher.section, FILE_MAP_WRITE, 0, 0, 0));
-  MEMORY_BASIC_INFORMATION region{};
-  // A section left by a different build with the same name could be smaller.
-  if (!view || !VirtualQuery(view, &region, sizeof(region)) ||
-      region.RegionSize < sizeof(CompanionAbi::SnapshotSection)) {
+  if (!IsWritableSnapshotView(view)) {
     Wh_Log(L"Companion snapshot: unusable section (%lu)", GetLastError());
     if (view) UnmapViewOfFile(view);
     CloseHandle(g_publisher.section);
@@ -21943,6 +22393,9 @@ static void Shutdown() { g_drag.reset(); }
 // WHAM@5 begin 37: src/multiwm/app/wm_thread.h
 // Hotkeys, WM dispatch and tool-thread lifecycle.
 // Part of MultiWM's single source file; see the include order in src/multiwm/multiwm.cpp.
+
+#include <mutex>
+#include <utility>
 
 namespace RuntimeLifecycle {
 
@@ -22429,6 +22882,9 @@ bool StartHotkeyThread() {
   return true;
 }
 
+// How long StopHotkeyThread waits for the worker. Tests shorten it.
+static DWORD g_stopTimeoutMs = 5000;
+
 bool StopHotkeyThread() {
   if (!g_wm.thread) return true;
 
@@ -22437,12 +22893,15 @@ bool StopHotkeyThread() {
     Wh_Log(L"Failed to post WM_QUIT to WM thread: %lu", GetLastError());
   }
 
-  const DWORD waitResult = WaitForSingleObject(g_wm.thread, 5000);
+  const DWORD waitResult = WaitForSingleObject(g_wm.thread, g_stopTimeoutMs);
   if (waitResult != WAIT_OBJECT_0) {
-    // During settings reload, retaining these handles prevents a second WM owner.
-    // During WhTool_ModUninit, the standard tool-mod wrapper exits the dedicated
+    // The queued WM_QUIT can't be withdrawn: the worker cleans up and exits once
+    // it is free. Retaining these handles prevents a second WM owner meanwhile;
+    // a settings reload finishes when it exits (DeferUntilWorkerExits). During
+    // WhTool_ModUninit, the standard tool-mod wrapper exits the dedicated
     // process immediately after the callback returns.
-    Wh_Log(L"WM thread did not stop cleanly (wait=%lu); leaving the existing actor intact", waitResult);
+    Wh_Log(L"WM thread did not stop within %lu ms (wait=%lu); it exits once it is free",
+           g_stopTimeoutMs, waitResult);
     return false;
   }
 
@@ -22456,6 +22915,61 @@ bool StopHotkeyThread() {
   return true;
 }
 
+// Who may stop or start the worker. Init, uninit, settings changes and a
+// deferred restart each hold `mutex` while they do, so there is never a second
+// worker. `deferredWait` is set while a restart waits for a worker that didn't
+// stop in time; `deferredFinish` is what it then runs.
+struct WorkerLifecycle {
+  std::mutex mutex;
+  HANDLE deferredWait = nullptr;
+  void (*deferredFinish)() = nullptr;
+};
+static WorkerLifecycle g_lifecycle;
+
+// Thread pool, once the old worker has exited: joins it and runs the deferred
+// finish. Does nothing if CancelDeferredRestart got there first.
+static void CALLBACK RunDeferredRestart(PVOID, BOOLEAN) {
+  const std::scoped_lock lock(g_lifecycle.mutex);
+  const HANDLE wait = std::exchange(g_lifecycle.deferredWait, nullptr);
+  if (!wait) return;
+  UnregisterWaitEx(wait, nullptr);  // Non-blocking, as a callback must.
+  const auto finish = std::exchange(g_lifecycle.deferredFinish, nullptr);
+  if (!StopHotkeyThread()) {
+    Wh_Log(L"Deferred restart: the exited WM thread could not be joined");
+    return;
+  }
+  Wh_Log(L"Deferred restart: the previous WM worker has exited");
+  if (finish) finish();
+}
+
+// After StopHotkeyThread timed out: runs `finish` (on a thread-pool thread,
+// holding g_lifecycle.mutex) once the old worker exits. The caller holds
+// g_lifecycle.mutex. False, deferring nothing, if the wait can't be registered.
+static bool DeferUntilWorkerExits(void (*finish)()) {
+  if (!g_wm.thread || g_lifecycle.deferredWait) return false;
+  g_lifecycle.deferredFinish = finish;
+  if (!RegisterWaitForSingleObject(&g_lifecycle.deferredWait, g_wm.thread, RunDeferredRestart, nullptr, INFINITE,
+                                   WT_EXECUTEONLYONCE | WT_EXECUTELONGFUNCTION)) {
+    Wh_Log(L"Could not wait for the WM worker to exit: %lu", GetLastError());
+    g_lifecycle.deferredWait = nullptr;
+    g_lifecycle.deferredFinish = nullptr;
+    return false;
+  }
+  return true;
+}
+
+// Drops a pending deferred restart and waits out one already running. The
+// caller must not hold g_lifecycle.mutex.
+static void CancelDeferredRestart() {
+  HANDLE wait = nullptr;
+  {
+    const std::scoped_lock lock(g_lifecycle.mutex);
+    wait = std::exchange(g_lifecycle.deferredWait, nullptr);
+    g_lifecycle.deferredFinish = nullptr;
+  }
+  if (wait) UnregisterWaitEx(wait, INVALID_HANDLE_VALUE);
+}
+
 } // namespace RuntimeLifecycle
 // WHAM@5 end 37
 
@@ -22464,6 +22978,7 @@ bool StopHotkeyThread() {
 //=============================================================================
 
 BOOL WhTool_ModInit() {
+  const std::scoped_lock lock(RuntimeLifecycle::g_lifecycle.mutex);
   Diagnostics::InitializeProcessRuntime();
   Wh_Log(L"MultiWM mod initializing...");
   Configuration::LoadSettings();
@@ -22480,6 +22995,9 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModUninit() {
   Wh_Log(L"MultiWM mod uninitializing...");
+  // A settings reload still waiting for the old worker must not start a new one.
+  RuntimeLifecycle::CancelDeferredRestart();
+  const std::scoped_lock lock(RuntimeLifecycle::g_lifecycle.mutex);
   if (!RuntimeLifecycle::StopHotkeyThread()) {
     // The standard tool-mod wrapper exits this dedicated process immediately
     // after WhTool_ModUninit returns, so never create a second owner here.
@@ -22492,17 +23010,13 @@ void WhTool_ModUninit() {
   Wh_Log(L"MultiWM mod uninitialized");
 }
 
-void WhTool_ModSettingsChanged() {
-  Wh_Log(L"Settings changed, reloading...");
-
-  // Join the old diagnostics/model owner before touching lifetime telemetry.
-  // If it cannot stop, keep the old worker/settings rather than allowing two WM
-  // actors to overlap inside the dedicated tool-mod process.
-  if (!RuntimeLifecycle::StopHotkeyThread()) {
-    Wh_Log(L"Settings reload aborted because the existing WM worker is still alive");
-    return;
-  }
-
+// The rest of a settings reload, once the old worker has exited: loads the
+// current settings and starts a new worker. The caller holds
+// RuntimeLifecycle::g_lifecycle.mutex. A deferred reload runs this on a
+// thread-pool thread: Windhawk's setting getters read storage afresh on each
+// call with no thread affinity, and Windhawk itself doesn't promise one thread
+// for this callback either.
+static void FinishSettingsReload() {
   ++Diagnostics::g_runtime.counters.settingsReloads;
   Diagnostics::RecordEvent(L"settings reload requested");
 
@@ -22517,6 +23031,28 @@ void WhTool_ModSettingsChanged() {
   if (!RuntimeLifecycle::StartHotkeyThread()) {
     Wh_Log(L"Failed to restart WM worker after settings change");
   }
+}
+
+void WhTool_ModSettingsChanged() {
+  Wh_Log(L"Settings changed, reloading...");
+  const std::scoped_lock lock(RuntimeLifecycle::g_lifecycle.mutex);
+  if (RuntimeLifecycle::g_lifecycle.deferredWait) {
+    Wh_Log(L"A reload is already waiting for the previous WM worker; it will read these settings");
+    return;
+  }
+
+  // Join the old diagnostics/model owner before touching lifetime telemetry. Two
+  // WM actors must never overlap inside the dedicated tool-mod process, so if it
+  // is still busy, finish the reload once it exits: it already has WM_QUIT.
+  if (!RuntimeLifecycle::StopHotkeyThread()) {
+    if (RuntimeLifecycle::DeferUntilWorkerExits(FinishSettingsReload)) {
+      Wh_Log(L"Settings reload deferred until the previous WM worker exits");
+    } else {
+      Wh_Log(L"Settings reload abandoned; MultiWM restarts at the next settings change");
+    }
+    return;
+  }
+  FinishSettingsReload();
 }
 
 // WHAM@5 begin 38: src/multiwm/windhawk/tool_mod_launcher.h
@@ -22682,7 +23218,6 @@ void Wh_ModSettingsChanged() {
     return;
   }
 
-  
   WhTool_ModSettingsChanged();
 }
 
@@ -22705,17 +23240,17 @@ void Wh_ModUninit() {
 //   "files": [
 //     {
 //       "path": "src/multiwm/app/companion_snapshot.h",
-//       "hash": "642d320f6c047a915bbe9ff85281176c424d2b69fe02d1094c5dbe352df8b513",
+//       "hash": "2cd0ddb396c15337155c805dad6ca8a92cc22096356f98a29cbe610b5e1e2eb8",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/app/configuration.h",
-//       "hash": "726e7a703620b6d5c1f951221674432ab9526620f3d19f77279dab5c4160b3a2",
+//       "hash": "55e0bb8f4e9016bcd1d3dece6fb32285cec520125f519cd7339333907716342e",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/app/diagnostics.h",
-//       "hash": "23d7681f099c1e181c94b74c3601f325cc88cf25aa50ca7f39a8df879ba3007c",
+//       "hash": "63ab6c4b7930ef45d9514f02a3f58315760b7ba41c0c04a97db180584b77150b",
 //       "bom": false
 //     },
 //     {
@@ -22725,12 +23260,12 @@ void Wh_ModUninit() {
 //     },
 //     {
 //       "path": "src/multiwm/app/overlay.h",
-//       "hash": "f3d24ced58bd31f371da1166c255a84104a0b2ae84f8388290ad09b0e457e90c",
+//       "hash": "7897c1a154af9c467b4d8e89bc98fadac7fbcd3b55077faec99d1848911416ac",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/app/popup_surface.h",
-//       "hash": "ce41c88179484a6bdc6fba5ec744b4bdae022be65372780cb9ac5251e4459b0f",
+//       "hash": "01804bfefa27bbdcd8e4dabfcd1901d6b0fe475c009b1513b687cd47ffaf4098",
 //       "bom": false
 //     },
 //     {
@@ -22740,37 +23275,37 @@ void Wh_ModUninit() {
 //     },
 //     {
 //       "path": "src/multiwm/app/tray_ui.h",
-//       "hash": "896cb40e52ede933995f743135dabf7de672d97332001ec23dd2dfdd9ef1c4d5",
+//       "hash": "85ae17d9a6df0deec22f113d588a218d99e2eff9b64e738f0ea10d8be788f69e",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/app/wm_thread.h",
-//       "hash": "90c92ce002393134cb04e45fe6c402e147481a781fa0b53afa7ce6486697b1a3",
+//       "hash": "a684b2c6092f348f479e7cae9e30fe3f5ab773805e618046944998f364c10876",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/commands/commands.h",
-//       "hash": "4a5118dac623165caa702e7bbd999f21d7f696235f1fc775ff14201f252f75c2",
+//       "hash": "3af170692f4d29d7ad4f7af29872b8df76351232fc2f0639343d53b150b94038",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/commands/gestures.h",
-//       "hash": "772fff08e48b7e0a36f0ef1892611d5ab0f4e76e131f5d0fb3818d2fa8b3a1a4",
+//       "hash": "ac7d1fc8ac2dded0425075509da177d7f97d0ac44d612874f35501ae779b457c",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/core/forward_declarations.h",
-//       "hash": "abe03736b717c9d09ff08c379a843dc2e6b257103dec3ea208d180044406dbf3",
+//       "hash": "24bb6b7ca6d1abdbf160c742836b8bec2f700a256de37c46a4f9bb515e7217fa",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/core/runtime_state.h",
-//       "hash": "7a15271fce7a34f484ae75d98f5480e4751e2e55d391b7c8e6958055e66eef95",
+//       "hash": "09da4aa0367b99ab07ecb4833297d358b1520476a05a11192687c0f956a7d1f1",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/core/shared_types.h",
-//       "hash": "6d66ad27e569d26152877b2982b9d0852eafdbfd66d647aa1fc1da502269ee6d",
+//       "hash": "440ed0bc01a5c0a6c3d1e70f9eea45080c7538e1c7573ca2a252cb987464f096",
 //       "bom": false
 //     },
 //     {
@@ -22810,17 +23345,17 @@ void Wh_ModUninit() {
 //     },
 //     {
 //       "path": "src/multiwm/model/workspace_impl.h",
-//       "hash": "a4003bc9f3f3cccc9a1cbf3c6d3c04d31a3bb10928769331b6df07580ddc6bc8",
+//       "hash": "d9899ecda953b8e830695fe0a2a618633e57f538115ad276bc41d4cdeaf05a44",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/model/workspace.h",
-//       "hash": "4ff9947e332b232d3bd6cfb45971dd7faba75dbce4f3a93ec8bf473ec5c7deb3",
+//       "hash": "723e48c906c6843c6a6af501f3cc3d6585e8d0867ebeb0a40e45004243737d46",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/multiwm.cpp",
-//       "hash": "f43b24bf9c520c804428788548a5d4d0343942ffb4421e85b7bb9a247e94ec97",
+//       "hash": "44602a1c8209c4323d7dc6bee4f726f1887155872b0dbb30cbb319cc669a320a",
 //       "bom": false
 //     },
 //     {
@@ -22830,17 +23365,17 @@ void Wh_ModUninit() {
 //     },
 //     {
 //       "path": "src/multiwm/placement/arrangement.h",
-//       "hash": "e51e56e05b3096f548b6cc327e5578af4b6e4da268437879c58090248fb0ad13",
+//       "hash": "5a55e78b7bb0264aca2af3dd53d3620ede6bc544ff01497b2f458605d3a45c45",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/placement/conformance.h",
-//       "hash": "61fffc1712b30c5a635cdf7f94897da373f6d8a76788b9f503ca57e63ab54752",
+//       "hash": "a563557d3216f7ea5ffceb7f3f325756817abbca6319b4020dceff9254144546",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/placement/floating.h",
-//       "hash": "be84fe810bafb62f8557b3d4ffbd2fa26eece4d9c1f7cbf25c3012dd90c2c857",
+//       "hash": "62f329faa00d5eb6d0dbe934ad806e022b0bf55d4f72791aba9c0271fd045867",
 //       "bom": false
 //     },
 //     {
@@ -22860,27 +23395,27 @@ void Wh_ModUninit() {
 //     },
 //     {
 //       "path": "src/multiwm/platform/window_events.h",
-//       "hash": "0484073583765a5918e7307e794337e5cdf88e77d88a3ab944a1671d426c90db",
+//       "hash": "ff6349b8899c0d75e32fa17678c6efe04c529c283bc53f3aeb050b05430da9af",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/reconcile/reconcile.h",
-//       "hash": "1919e1361b7f64ba7173b0206dda7c344d3ebbe68ad394cf4ead66080c640112",
+//       "hash": "0ad6b98243fbbfe554f44a750245d8973b8c0e776f633a17ea9901c41644be09",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/reconcile/window_routing.h",
-//       "hash": "d4c34bbb831b0c442b752d86bcb017c054aa8f1dfcef495ef089411116bb6e70",
+//       "hash": "5395fe1864019051ed5bc74c8a43cf887782249801ebb47f02ccfd058608866b",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/multiwm/windhawk/tool_mod_launcher.h",
-//       "hash": "01912a3603830fe49f91524423f2e6042b109c82404ea3d60d1ea172b9fa425a",
+//       "hash": "9cc3faf2689af6192721c48ed9f378426de1e3173da0a18c68d70f8b84a2697c",
 //       "bom": false
 //     },
 //     {
 //       "path": "src/shared/companion_snapshot.h",
-//       "hash": "008af3359e288dcae34f766ca4efc335f8fb9a30f6907e3a45b702b25e56ba5e",
+//       "hash": "40136d39bb7f7f9536e938548226f28d8333f7b132a8ffa3d56bb47cd7ae9e72",
 //       "bom": false
 //     },
 //     {
@@ -22912,7 +23447,7 @@ void Wh_ModUninit() {
 //     ],
 //     "externalIncludes": [],
 //     "inlineAngleIncludes": false,
-//     "generate": "manual",
+//     "generate": "onSave",
 //     "debounceMs": 250
 //   },
 //   "tail": "",
