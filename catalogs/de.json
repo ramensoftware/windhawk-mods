@@ -11378,6 +11378,31 @@
         "version": "1.1.1"
       }
     },
+    "mac-text-keys": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795395873000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795395873000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Caio Lemos",
+        "compilerOptions": "-lshell32",
+        "description": "Ctrl+Arrows jump to line start/end and Alt+Arrows jump by word, like Cmd/Option on macOS",
+        "github": "https://github.com/lemoscaio",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Mac-style Text Navigation",
+        "version": "0.1"
+      }
+    },
     "macos-enter-rename": {
       "details": {
         "defaultSorting": 2590,
@@ -17565,6 +17590,37 @@
         "version": "1.1.0"
       }
     },
+    "system-tray-network-speedtest": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795395868000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795395868000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "joaomgabaldi",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lshlwapi -lshell32 -lole32 -ladvapi32 -luser32 -ld2d1 -ld3d11 -ldcomp -ldwrite -ldwmapi -liphlpapi -lshcore -luuid -loleacc -loleaut32",
+        "description": "Replaces the network menu's web speed test with a native flyout powered by the Ookla Speedtest CLI: live gauge, ping, jitter, download, upload and a test history.",
+        "github": "https://github.com/joaomgabaldi",
+        "include": [
+          "ShellHost.exe",
+          "ShellExperienceHost.exe",
+          "SystemSettings.exe",
+          "RuntimeBroker.exe",
+          "explorer.exe"
+        ],
+        "name": "Ookla Speed Test for Network Menu",
+        "version": "1.0"
+      }
+    },
     "task-manager-pause-button": {
       "details": {
         "defaultSorting": 2070,
@@ -19304,7 +19360,7 @@
         "ratingUsers": 9,
         "reviews": 1,
         "trendingSorting": 0,
-        "updated": 1795143714000,
+        "updated": 1795395878000,
         "users": 37
       },
       "metadata": {
@@ -19319,7 +19375,7 @@
           "explorer.exe"
         ],
         "name": "Taskbar Mini Folders",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "taskbar-multi-tray": {
@@ -22174,6 +22230,32 @@
         "license": "MIT",
         "name": "Compact Voice Access bar",
         "version": "1.0"
+      }
+    },
+    "volu-macos-volume-hud": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795395863000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795395863000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Kouqqu",
+        "compilerOptions": "-lgdiplus -lgdi32 -lole32 -lwinmm -lshcore",
+        "description": "Authentic macOS-style volume HUD for Windows with audio clicks",
+        "donateUrl": "https://dalink.to/koukku",
+        "github": "https://github.com/Kouqqu",
+        "homepage": "https://github.com/Kouqqu/Volu",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Volu - macOS Volume HUD",
+        "version": "1.0.0"
       }
     },
     "volume-control-open-location": {

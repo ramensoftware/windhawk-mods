@@ -2,12 +2,236 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-22T21:03:00.000Z</updated>
+    <updated>2026-11-23T01:04:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Mini Folders 1.1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-mini-folders#65b2be5786e0ca955b406c5a8bd74ddd0fa7e897</id>
+        <link href="https://windhawk.net/mods/taskbar-mini-folders"/>
+        <updated>2026-11-23T01:04:38.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Works with a vertical taskbar (on the left or right side of the screen): the mini folders form a column and the panel opens beside the taskbar.</li>
+<li>New position: after a chosen number of taskbar icons.</li>
+<li>New &quot;Hide this mini folder&quot; switch for each mini folder, to hide it for a while without deleting it.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Sanekx Arcs</name>
+            <uri>https://github.com/SanekxArcs</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Mac-style Text Navigation 0.1]]></title>
+        <id>https://windhawk.net/mods/mac-text-keys#e09e6faca14d07424add55f33cb197ab1fa5ea43</id>
+        <link href="https://windhawk.net/mods/mac-text-keys"/>
+        <updated>2026-11-23T01:04:33.000Z</updated>
+        <content type="html"><![CDATA[<h1>Mac-style Text Navigation</h1>
+<p>Makes the modifier keys behave like on macOS when moving the text cursor:
+<strong>Ctrl acts like Cmd</strong> and <strong>Alt acts like Option</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Shortcut</th>
+<th>Does the same as (Windows)</th>
+<th>macOS equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ctrl + ←</td>
+<td>Home (start of line)</td>
+<td>Cmd + ←</td>
+</tr>
+<tr>
+<td>Ctrl + →</td>
+<td>End (end of line)</td>
+<td>Cmd + →</td>
+</tr>
+<tr>
+<td>Alt + ←</td>
+<td>Ctrl + ← (previous word)</td>
+<td>Option + ←</td>
+</tr>
+<tr>
+<td>Alt + →</td>
+<td>Ctrl + → (next word)</td>
+<td>Option + →</td>
+</tr>
+</tbody>
+</table>
+<p>Holding <strong>Shift</strong> as well extends the selection, as expected.</p>
+<h2>Notes</h2>
+<ul>
+<li>The mod runs in a dedicated background <code>windhawk.exe</code> process and uses a
+global low-level keyboard hook, so it works in every application.</li>
+<li>The remapping applies everywhere, not only in text fields. For example,
+Alt+Left/Right no longer go Back/Forward in browsers, File Explorer and
+Settings, and Ctrl+Left/Right lose app-specific meanings (such as jumping to
+the edge of a data region in Excel). Use the &quot;Excluded programs&quot; setting for
+apps where you want the original behavior.</li>
+<li>Windows running as administrator are not affected unless Windhawk itself
+runs elevated (a Windows security restriction).</li>
+<li>Ctrl+Alt combinations (including AltGr) and combinations with the Win key
+are left untouched.</li>
+<li>Modifiers produced by remapping tools that inject input (e.g. PowerToys
+Keyboard Manager, AutoHotkey) are not recognized. Remaps done through the
+scancode map (e.g. SharpKeys) work.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Caio Lemos</name>
+            <uri>https://github.com/lemoscaio</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Ookla Speed Test for Network Menu 1.0]]></title>
+        <id>https://windhawk.net/mods/system-tray-network-speedtest#a27c37d29fd6e31d56bd6ecbd78138b0429c98d6</id>
+        <link href="https://windhawk.net/mods/system-tray-network-speedtest"/>
+        <updated>2026-11-23T01:04:28.000Z</updated>
+        <content type="html"><![CDATA[<h1>Ookla Speed Test for Network Menu</h1>
+<p>Right-clicking the network icon in the Windows 11 taskbar and choosing
+<strong>Run internet speed test</strong> normally opens a web page in your browser. This mod
+replaces it with a native flyout above the taskbar that runs the official
+<strong>Ookla Speedtest CLI</strong> in the background and shows the test live.</p>
+<h2>Screenshots</h2>
+<table>
+<thead>
+<tr>
+<th>Download</th>
+<th>Upload</th>
+<th>History</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/download.png" alt="Download"></td>
+<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/upload.png" alt="Upload"></td>
+<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/history.png" alt="History"></td>
+</tr>
+</tbody>
+</table>
+<h2>Features</h2>
+<ul>
+<li>Live gauge (0 to 2,000+ Mbps) drawn as a soft light bar with smooth motion:
+blue for download, purple for upload.</li>
+<li>Ping, jitter, download and upload measured by Ookla. The server is always
+picked automatically.</li>
+<li><strong>Test history</strong>: when a test finishes, the flyout moves to a list of the last
+100 tests (date and time, IP, server, download, upload, ping) with the new
+test on top. Click a row to open its result page on speedtest.net.</li>
+<li><strong>Copy</strong> puts the result, including the speedtest.net link, on the clipboard.</li>
+<li>Follows the Windows light/dark theme, transparency, DPI and the
+&quot;Animation effects&quot; setting. Keyboard (Tab, arrows, Enter, Esc) and screen
+reader accessible.</li>
+<li>Interface in English or Portuguese, following the Windows display language.</li>
+</ul>
+<h2>Requirements</h2>
+<ol>
+<li>Download the <strong>Speedtest CLI for Windows</strong> from
+<a href="https://www.speedtest.net/apps/cli">speedtest.net/apps/cli</a> and extract
+<code>speedtest.exe</code>.</li>
+<li>Put it at <code>%LOCALAPPDATA%\Programs\speedtest\speedtest.exe</code> (the default),
+or set its path in the mod settings.</li>
+</ol>
+<h2>Ookla license and privacy</h2>
+<p>Before the first test, the flyout explains what Ookla receives and links
+Ookla's <a href="https://www.speedtest.net/about/eula">EULA</a>,
+<a href="https://www.speedtest.net/about/terms">Terms of Use</a> and
+<a href="https://www.speedtest.net/about/privacy">Privacy Policy</a>. No test runs until
+you click <strong>Accept and test</strong>. Only then does the mod start <code>speedtest.exe</code>
+with <code>--accept-license --accept-gdpr</code>. The acceptance is stored separately for
+each Windows user.</p>
+<p>The Speedtest CLI also records the acceptance in its own file,
+<code>%APPDATA%\Ookla\Speedtest CLI\speedtest-cli.ini</code>, which stays after the mod
+is removed. Delete that folder to reset it.</p>
+<h2>Network access</h2>
+<p>The mod opens no connections itself. It runs <code>speedtest.exe</code>, which:</p>
+<ul>
+<li>contacts Ookla's servers to pick a test server, then downloads from and
+uploads to that Speedtest server;</li>
+<li>uploads the result to speedtest.net, where Ookla stores it (the result link
+in the history points there).</li>
+</ul>
+<p>Ookla receives your public IP address, your internet provider and the test
+results, under its privacy policy.</p>
+<p>A test runs every time the flyout opens, and on Start, Repeat or Retry. Set
+<strong>Start the test automatically</strong> to <strong>Never</strong> to make tests click-only (<em>Auto</em>
+already waits for a click on metered connections). Clicking a history row or
+a terms link opens speedtest.net in your browser.</p>
+<h2>Data usage</h2>
+<p>Ookla does not cap a test: on a 2 Gbps line one test moves about 4-5 GB. With
+<strong>Start the test automatically</strong> set to <em>Auto</em>, the flyout waits for a click
+when Windows reports the connection as metered.</p>
+<h2>Notes</h2>
+<ul>
+<li>Stop, Esc, closing the flyout or disabling the mod ends <code>speedtest.exe</code>
+immediately (it runs inside a kill-on-close job object).</li>
+<li>The history lives in the mod's own Windhawk storage, separately for each
+Windows user, and is removed with the mod.</li>
+<li><a href="https://windhawk.net/mods/network-speedtest-native">Network Menu Speed Test</a>
+intercepts the same link. If both are installed, disable one of them.</li>
+</ul>
+<h2>Credits</h2>
+<p>Based on <a href="https://windhawk.net/mods/network-speedtest-native">Network Menu Speed Test</a>
+by Alessandro-Vecchio, which provides the hooks and the original flyout. This
+mod swaps its Cloudflare engine for the Ookla Speedtest CLI and adds the light
+bar, the smooth motion and the test history.</p>
+]]></content>
+        <author>
+            <name>joaomgabaldi</name>
+            <uri>https://github.com/joaomgabaldi</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Volu - macOS Volume HUD 1.0.0]]></title>
+        <id>https://windhawk.net/mods/volu-macos-volume-hud#227d2e545520edddb70a93346d9a4028e9995db1</id>
+        <link href="https://windhawk.net/mods/volu-macos-volume-hud"/>
+        <updated>2026-11-23T01:04:23.000Z</updated>
+        <content type="html"><![CDATA[<h1>Volu - macOS Volume HUD</h1>
+<p><img src="https://raw.githubusercontent.com/Kouqqu/Volu/main/preview.png" alt="Volu - macOS Volume HUD"></p>
+<p>Authentic macOS-style translucent volume HUD for Windows with classic step click sounds.</p>
+<h3>Features</h3>
+<ul>
+<li><strong>Pixel-perfect design</strong>: Authentic macOS frosted glass HUD overlay with clean 16-step volume bar and soft drop shadow.</li>
+<li><strong>Audio feedback</strong>: Classic wooden and modern tactile volume step clicks. Silent on mute.</li>
+<li><strong>Smooth animations</strong>: Smooth fade-out transition with configurable on-screen duration.</li>
+<li><strong>Flexible positioning</strong>: Place the HUD at the center, top, or bottom of your screen.</li>
+<li><strong>Optional hotkeys</strong>: Global shortcuts (<code>Ctrl + Alt + Up</code>, <code>Ctrl + Alt + Down</code>, <code>Ctrl + Alt + V</code>), disabled by default to avoid shortcut conflicts.</li>
+<li><strong>Native flyout suppression</strong>: Intercepts physical media keys (<code>Volume Up</code>, <code>Volume Down</code>, <code>Mute</code>) system-wide using <code>RegisterHotKey</code>, suppressing the default Windows flyouts.</li>
+<li><strong>1/16 Quantization</strong>: Each key press changes volume by 1/16 (6.25%) matching macOS, instead of Windows' default 2%.</li>
+<li><strong>Dynamic device switching</strong>: Automatically follows the default audio output device when headphones, speakers, or Bluetooth devices are connected.</li>
+</ul>
+<h3>Key Capture &amp; Shortcuts</h3>
+<p>The mod captures physical volume keys system-wide via <code>RegisterHotKey</code>, so other apps no longer receive the volume keys:</p>
+<ul>
+<li><code>Volume Up</code> — Increase volume by 6.25% (1 step)</li>
+<li><code>Volume Down</code> — Decrease volume by 6.25% (1 step)</li>
+<li><code>Volume Mute</code> — Toggle mute</li>
+</ul>
+<p>Optional shortcuts (if enabled in settings):</p>
+<ul>
+<li><code>Ctrl + Alt + Up</code> — Volume Up</li>
+<li><code>Ctrl + Alt + Down</code> — Volume Down</li>
+<li><code>Ctrl + Alt + V</code> — Mute / Unmute</li>
+</ul>
+<h3>Comparison with Other OSD Mods</h3>
+<p>Unlike <code>win10-volume-brightness-osd</code> (which restores Windows 8/10 flyouts with brightness controls) or <code>osd-custom-pill</code> (which provides modern animated pills), Volu is focused exclusively on authentic macOS volume HUD fidelity:</p>
+<ul>
+<li>Classic square frosted glass aesthetics with multi-pass soft drop shadow.</li>
+<li>Authentic wooden and tactile step clicks.</li>
+<li>16-step quantization (6.25% per step) strictly synchronizing with the 16-segment bar.</li>
+<li>Lightweight tool mod architecture dedicated solely to volume control.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Kouqqu</name>
+            <uri>https://github.com/Kouqqu</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Sharp Taskbar Icons After Remote Desktop 1.0]]></title>
         <id>https://windhawk.net/mods/rdp-icon-refresh#bab10f73f69576c9cbd26dc6e0c9f866dfb7c321</id>
@@ -725,78 +949,6 @@ sections:</p>
         <author>
             <name>CTravkin</name>
             <uri>https://github.com/CTravkin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer List view indent fix and files area spacing 1.1]]></title>
-        <id>https://windhawk.net/mods/explorer-list-status-indent-fix#de15d0ecc1b4dfc898cc13c5763716fd18c0efb8</id>
-        <link href="https://windhawk.net/mods/explorer-list-status-indent-fix"/>
-        <updated>2026-11-22T02:04:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix for latest Windows update (KB5132057) (26300.10075)</li>
-</ul>
-]]></content>
-        <author>
-            <name>NDruce</name>
-            <uri>https://github.com/NDruce</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.24.0]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#bdcfeae3c89b790c4ede7aefb587e06ba091bd23</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-11-22T02:04:51.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Optional small picture of the screenshot in the notification</li>
-<li>Optional line showing the folder the screenshot was saved in</li>
-<li>Choose what clicking the notification does: copy, open the screenshot, open its folder, or keep it without copying. A click never deletes</li>
-<li>Any of the three buttons can be hidden</li>
-<li>One button (Keep, Copy + delete, or Delete) can be highlighted, and the fallback dialog starts on that choice too</li>
-<li>The fallback dialog's title bar follows dark mode</li>
-<li>The log says why the dialog was used instead of a notification, and why a picture was left out, without file paths</li>
-</ul>
-]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Translucent Menus 1.3.0]]></title>
-        <id>https://windhawk.net/mods/explorer-translucent-menus#7396cacb5edb6c4f8f9817e382b5633bbfc9010d</id>
-        <link href="https://windhawk.net/mods/explorer-translucent-menus"/>
-        <updated>2026-11-22T01:02:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add an opt-in material setting scoped to Explorer file-list infotips.</li>
-<li>Bind native popup drawing hooks to the verified offscreen paint target.</li>
-</ul>
-]]></content>
-        <author>
-            <name>alkali210</name>
-            <uri>https://github.com/alkali210</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Round Everything Interface 2.1.0]]></title>
-        <id>https://windhawk.net/mods/round-everything#e545a64111a569c9a0fe36901e0e15f04f013752</id>
-        <link href="https://windhawk.net/mods/round-everything"/>
-        <updated>2026-11-22T01:02:44.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Hide the frame without a maximized window</strong> (new General option, off by default): each monitor shows its frame only while a window is maximized on it. Otherwise the frame and its shadow are off, and they come back together with the taskbar's look. The monitor corners and the bezel line stay up, and the work area stays reserved either way.</li>
-<li><strong>Transparent taskbar when nothing is maximized</strong> (new General option, on by default): with the option above on, the taskbar's own background and border line are hidden while no frame shows, so the wallpaper shows through. Off, the taskbar looks as it does without the mod.</li>
-<li>Aero Peek with the hide option on: the peeked window decides. If it's maximized (or minimized from maximized) on a monitor, that monitor keeps its frame; every other monitor shows the taskbar's resting look.</li>
-<li>Task View: the frame stays in place under Task View, so nothing has to come back when it closes and it no longer flickers on open or close. The taskbar keeps its look over Task View without its monitor corners; with &quot;Hide the frame without a maximized window&quot; on and &quot;Transparent taskbar when nothing is maximized&quot; off, every taskbar takes its native look there.</li>
-<li>When the frame comes back, it has the maximized window's title-bar color right away.</li>
-<li>Explorer's own windows have their titles read without being sent a message.</li>
-<li>Fixed: taskbar thumbnails opened by a click (a grouped button, or &quot;thumbnails on click&quot; in Disable Taskbar Thumbnails) were taken for Task View and hid the frame on every monitor.</li>
-<li>Fixed: after Windows updates that rearrange the taskbar's layout (e.g. KB5137006), the taskbar could blink every 1.5 seconds. The corner ears now find their place in the new layout; where there's none, the corners stay square instead.</li>
-<li>Fixed: a frame waiting for its taskbar to reveal it could be withdrawn before it showed, briefly leaving the taskbar without its frame after a layout change.</li>
-<li>Fixed: a monitor with no maximized window could keep the mod ticking at 60 Hz.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
         </author>
     </entry>
 </feed>

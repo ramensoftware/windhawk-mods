@@ -2,12 +2,220 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-22T21:03:00.000Z</updated>
+    <updated>2026-11-23T01:04:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Mac-style Text Navigation 0.1]]></title>
+        <id>https://windhawk.net/mods/mac-text-keys#e09e6faca14d07424add55f33cb197ab1fa5ea43</id>
+        <link href="https://windhawk.net/mods/mac-text-keys"/>
+        <updated>2026-11-23T01:04:33.000Z</updated>
+        <content type="html"><![CDATA[<h1>Mac-style Text Navigation</h1>
+<p>Makes the modifier keys behave like on macOS when moving the text cursor:
+<strong>Ctrl acts like Cmd</strong> and <strong>Alt acts like Option</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Shortcut</th>
+<th>Does the same as (Windows)</th>
+<th>macOS equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ctrl + ←</td>
+<td>Home (start of line)</td>
+<td>Cmd + ←</td>
+</tr>
+<tr>
+<td>Ctrl + →</td>
+<td>End (end of line)</td>
+<td>Cmd + →</td>
+</tr>
+<tr>
+<td>Alt + ←</td>
+<td>Ctrl + ← (previous word)</td>
+<td>Option + ←</td>
+</tr>
+<tr>
+<td>Alt + →</td>
+<td>Ctrl + → (next word)</td>
+<td>Option + →</td>
+</tr>
+</tbody>
+</table>
+<p>Holding <strong>Shift</strong> as well extends the selection, as expected.</p>
+<h2>Notes</h2>
+<ul>
+<li>The mod runs in a dedicated background <code>windhawk.exe</code> process and uses a
+global low-level keyboard hook, so it works in every application.</li>
+<li>The remapping applies everywhere, not only in text fields. For example,
+Alt+Left/Right no longer go Back/Forward in browsers, File Explorer and
+Settings, and Ctrl+Left/Right lose app-specific meanings (such as jumping to
+the edge of a data region in Excel). Use the &quot;Excluded programs&quot; setting for
+apps where you want the original behavior.</li>
+<li>Windows running as administrator are not affected unless Windhawk itself
+runs elevated (a Windows security restriction).</li>
+<li>Ctrl+Alt combinations (including AltGr) and combinations with the Win key
+are left untouched.</li>
+<li>Modifiers produced by remapping tools that inject input (e.g. PowerToys
+Keyboard Manager, AutoHotkey) are not recognized. Remaps done through the
+scancode map (e.g. SharpKeys) work.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Caio Lemos</name>
+            <uri>https://github.com/lemoscaio</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Ookla Speed Test for Network Menu 1.0]]></title>
+        <id>https://windhawk.net/mods/system-tray-network-speedtest#a27c37d29fd6e31d56bd6ecbd78138b0429c98d6</id>
+        <link href="https://windhawk.net/mods/system-tray-network-speedtest"/>
+        <updated>2026-11-23T01:04:28.000Z</updated>
+        <content type="html"><![CDATA[<h1>Ookla Speed Test for Network Menu</h1>
+<p>Right-clicking the network icon in the Windows 11 taskbar and choosing
+<strong>Run internet speed test</strong> normally opens a web page in your browser. This mod
+replaces it with a native flyout above the taskbar that runs the official
+<strong>Ookla Speedtest CLI</strong> in the background and shows the test live.</p>
+<h2>Screenshots</h2>
+<table>
+<thead>
+<tr>
+<th>Download</th>
+<th>Upload</th>
+<th>History</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/download.png" alt="Download"></td>
+<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/upload.png" alt="Upload"></td>
+<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/history.png" alt="History"></td>
+</tr>
+</tbody>
+</table>
+<h2>Features</h2>
+<ul>
+<li>Live gauge (0 to 2,000+ Mbps) drawn as a soft light bar with smooth motion:
+blue for download, purple for upload.</li>
+<li>Ping, jitter, download and upload measured by Ookla. The server is always
+picked automatically.</li>
+<li><strong>Test history</strong>: when a test finishes, the flyout moves to a list of the last
+100 tests (date and time, IP, server, download, upload, ping) with the new
+test on top. Click a row to open its result page on speedtest.net.</li>
+<li><strong>Copy</strong> puts the result, including the speedtest.net link, on the clipboard.</li>
+<li>Follows the Windows light/dark theme, transparency, DPI and the
+&quot;Animation effects&quot; setting. Keyboard (Tab, arrows, Enter, Esc) and screen
+reader accessible.</li>
+<li>Interface in English or Portuguese, following the Windows display language.</li>
+</ul>
+<h2>Requirements</h2>
+<ol>
+<li>Download the <strong>Speedtest CLI for Windows</strong> from
+<a href="https://www.speedtest.net/apps/cli">speedtest.net/apps/cli</a> and extract
+<code>speedtest.exe</code>.</li>
+<li>Put it at <code>%LOCALAPPDATA%\Programs\speedtest\speedtest.exe</code> (the default),
+or set its path in the mod settings.</li>
+</ol>
+<h2>Ookla license and privacy</h2>
+<p>Before the first test, the flyout explains what Ookla receives and links
+Ookla's <a href="https://www.speedtest.net/about/eula">EULA</a>,
+<a href="https://www.speedtest.net/about/terms">Terms of Use</a> and
+<a href="https://www.speedtest.net/about/privacy">Privacy Policy</a>. No test runs until
+you click <strong>Accept and test</strong>. Only then does the mod start <code>speedtest.exe</code>
+with <code>--accept-license --accept-gdpr</code>. The acceptance is stored separately for
+each Windows user.</p>
+<p>The Speedtest CLI also records the acceptance in its own file,
+<code>%APPDATA%\Ookla\Speedtest CLI\speedtest-cli.ini</code>, which stays after the mod
+is removed. Delete that folder to reset it.</p>
+<h2>Network access</h2>
+<p>The mod opens no connections itself. It runs <code>speedtest.exe</code>, which:</p>
+<ul>
+<li>contacts Ookla's servers to pick a test server, then downloads from and
+uploads to that Speedtest server;</li>
+<li>uploads the result to speedtest.net, where Ookla stores it (the result link
+in the history points there).</li>
+</ul>
+<p>Ookla receives your public IP address, your internet provider and the test
+results, under its privacy policy.</p>
+<p>A test runs every time the flyout opens, and on Start, Repeat or Retry. Set
+<strong>Start the test automatically</strong> to <strong>Never</strong> to make tests click-only (<em>Auto</em>
+already waits for a click on metered connections). Clicking a history row or
+a terms link opens speedtest.net in your browser.</p>
+<h2>Data usage</h2>
+<p>Ookla does not cap a test: on a 2 Gbps line one test moves about 4-5 GB. With
+<strong>Start the test automatically</strong> set to <em>Auto</em>, the flyout waits for a click
+when Windows reports the connection as metered.</p>
+<h2>Notes</h2>
+<ul>
+<li>Stop, Esc, closing the flyout or disabling the mod ends <code>speedtest.exe</code>
+immediately (it runs inside a kill-on-close job object).</li>
+<li>The history lives in the mod's own Windhawk storage, separately for each
+Windows user, and is removed with the mod.</li>
+<li><a href="https://windhawk.net/mods/network-speedtest-native">Network Menu Speed Test</a>
+intercepts the same link. If both are installed, disable one of them.</li>
+</ul>
+<h2>Credits</h2>
+<p>Based on <a href="https://windhawk.net/mods/network-speedtest-native">Network Menu Speed Test</a>
+by Alessandro-Vecchio, which provides the hooks and the original flyout. This
+mod swaps its Cloudflare engine for the Ookla Speedtest CLI and adds the light
+bar, the smooth motion and the test history.</p>
+]]></content>
+        <author>
+            <name>joaomgabaldi</name>
+            <uri>https://github.com/joaomgabaldi</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Volu - macOS Volume HUD 1.0.0]]></title>
+        <id>https://windhawk.net/mods/volu-macos-volume-hud#227d2e545520edddb70a93346d9a4028e9995db1</id>
+        <link href="https://windhawk.net/mods/volu-macos-volume-hud"/>
+        <updated>2026-11-23T01:04:23.000Z</updated>
+        <content type="html"><![CDATA[<h1>Volu - macOS Volume HUD</h1>
+<p><img src="https://raw.githubusercontent.com/Kouqqu/Volu/main/preview.png" alt="Volu - macOS Volume HUD"></p>
+<p>Authentic macOS-style translucent volume HUD for Windows with classic step click sounds.</p>
+<h3>Features</h3>
+<ul>
+<li><strong>Pixel-perfect design</strong>: Authentic macOS frosted glass HUD overlay with clean 16-step volume bar and soft drop shadow.</li>
+<li><strong>Audio feedback</strong>: Classic wooden and modern tactile volume step clicks. Silent on mute.</li>
+<li><strong>Smooth animations</strong>: Smooth fade-out transition with configurable on-screen duration.</li>
+<li><strong>Flexible positioning</strong>: Place the HUD at the center, top, or bottom of your screen.</li>
+<li><strong>Optional hotkeys</strong>: Global shortcuts (<code>Ctrl + Alt + Up</code>, <code>Ctrl + Alt + Down</code>, <code>Ctrl + Alt + V</code>), disabled by default to avoid shortcut conflicts.</li>
+<li><strong>Native flyout suppression</strong>: Intercepts physical media keys (<code>Volume Up</code>, <code>Volume Down</code>, <code>Mute</code>) system-wide using <code>RegisterHotKey</code>, suppressing the default Windows flyouts.</li>
+<li><strong>1/16 Quantization</strong>: Each key press changes volume by 1/16 (6.25%) matching macOS, instead of Windows' default 2%.</li>
+<li><strong>Dynamic device switching</strong>: Automatically follows the default audio output device when headphones, speakers, or Bluetooth devices are connected.</li>
+</ul>
+<h3>Key Capture &amp; Shortcuts</h3>
+<p>The mod captures physical volume keys system-wide via <code>RegisterHotKey</code>, so other apps no longer receive the volume keys:</p>
+<ul>
+<li><code>Volume Up</code> — Increase volume by 6.25% (1 step)</li>
+<li><code>Volume Down</code> — Decrease volume by 6.25% (1 step)</li>
+<li><code>Volume Mute</code> — Toggle mute</li>
+</ul>
+<p>Optional shortcuts (if enabled in settings):</p>
+<ul>
+<li><code>Ctrl + Alt + Up</code> — Volume Up</li>
+<li><code>Ctrl + Alt + Down</code> — Volume Down</li>
+<li><code>Ctrl + Alt + V</code> — Mute / Unmute</li>
+</ul>
+<h3>Comparison with Other OSD Mods</h3>
+<p>Unlike <code>win10-volume-brightness-osd</code> (which restores Windows 8/10 flyouts with brightness controls) or <code>osd-custom-pill</code> (which provides modern animated pills), Volu is focused exclusively on authentic macOS volume HUD fidelity:</p>
+<ul>
+<li>Classic square frosted glass aesthetics with multi-pass soft drop shadow.</li>
+<li>Authentic wooden and tactile step clicks.</li>
+<li>16-step quantization (6.25% per step) strictly synchronizing with the 16-segment bar.</li>
+<li>Lightweight tool mod architecture dedicated solely to volume control.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Kouqqu</name>
+            <uri>https://github.com/Kouqqu</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Sharp Taskbar Icons After Remote Desktop 1.0]]></title>
         <id>https://windhawk.net/mods/rdp-icon-refresh#bab10f73f69576c9cbd26dc6e0c9f866dfb7c321</id>
@@ -1058,234 +1266,6 @@ are not styled. Add those processes in the mod's custom process inclusion list.<
 <h2>Links</h2>
 <ul>
 <li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Windows_Border_Switch">Windows Border Switch on GitHub</a></li>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md">DSN Windhawk Mods</a></li>
-</ul>
-]]></content>
-        <author>
-            <name>CTravkin</name>
-            <uri>https://github.com/CTravkin</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Automatic Folder Icons 1.0.0]]></title>
-        <id>https://windhawk.net/mods/auto-folder-icons#9bd932407ef64a7883ca4add937ede92251f8cc2</id>
-        <link href="https://windhawk.net/mods/auto-folder-icons"/>
-        <updated>2026-11-20T19:02:22.000Z</updated>
-        <content type="html"><![CDATA[<h1>Automatic Folder Icons</h1>
-<p>Put a <code>folder.ico</code> or <code>favicon.ico</code> file directly inside a folder, and Explorer
-shows it as the icon of that folder. Nothing else is needed: no <code>desktop.ini</code>,
-no registry changes, no folder attributes, and the mod never writes to your
-folders.</p>
-<p>Before and after:</p>
-<p><img src="https://i.imgur.com/mQgmUT8.png" alt="Before"> <img src="https://i.imgur.com/IfUzLX1.png" alt="After"></p>
-<h2>How it works</h2>
-<ul>
-<li><code>folder.ico</code> takes priority. If it is missing or isn't a valid icon,
-<code>favicon.ico</code> is used, and then the original Windows icon.</li>
-<li><code>favicon.ico</code> can be turned off in the mod settings. This is useful if you
-have web projects, where many folders contain a <code>favicon.ico</code>.</li>
-<li>Hidden icon files work too.</li>
-<li>A folder that has an icon file shows the icon instead of a thumbnail preview.</li>
-<li>Adding, replacing or removing the icon file is picked up within a couple of
-seconds while an Explorer window or the desktop is in use. If Windows keeps a
-cached icon, press F5 or reopen the parent folder.</li>
-</ul>
-<h2>Performance</h2>
-<ul>
-<li>Files, including ZIP and CAB archives, are skipped without touching the
-disk. Only folders are checked, with two small file lookups per folder.</li>
-<li>Up to 256 recently shown folders are remembered and rechecked every two
-seconds, and only while Explorer is the active app and you are using the
-PC. Nothing is checked while you work in another app or are away, and the
-disk tree is never scanned.</li>
-</ul>
-<h2>Limitations</h2>
-<ul>
-<li>Only <code>explorer.exe</code> is affected. Other apps, including their open and save
-dialogs, show the original icons.</li>
-<li>Only local fixed and removable drives are supported. Network paths, virtual
-folders, reparse points, cloud placeholders, paths longer than about 245
-characters and icon files larger than 4 MiB are skipped.</li>
-<li>After enabling or disabling the mod, some icons may stay cached until
-Explorer is restarted. The mod never restarts Explorer by itself.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Sanekx Arcs</name>
-            <uri>https://github.com/SanekxArcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Simple Wallpaper Switcher 0.1.3]]></title>
-        <id>https://windhawk.net/mods/simple-wallpaper-switcher#05bfdedf882180fc609ad099c2d7ba21d3f56464</id>
-        <link href="https://windhawk.net/mods/simple-wallpaper-switcher"/>
-        <updated>2026-11-20T18:04:59.000Z</updated>
-        <content type="html"><![CDATA[<h1>Simple Wallpaper Switcher</h1>
-<p><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-banner.gif" alt="Simple Wallpaper Switcher showing the picker and wallpaper changes"></p>
-<h2>Screenshots</h2>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Solid</th>
-<th style="text-align:center">Blurred</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-solid-material.png" alt="Solid"></td>
-<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-blur-material.png" alt="Blurred"></td>
-</tr>
-</tbody>
-</table>
-<table>
-<thead>
-<tr>
-<th style="text-align:center">Acrylic</th>
-<th style="text-align:center">Quick-menu</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-acrylic-material.png" alt="Acrylic"></td>
-<td style="text-align:center"><img src="https://raw.githubusercontent.com/hheitlager/simple-wallpaper-switcher/main/assets/simple-wallpaper-switcher-taskbar-quick-menu.png" alt="Quick-menu"></td>
-</tr>
-</tbody>
-</table>
-<h3>Your wallpaper collection, ready when you are.</h3>
-<p>Browse your wallpapers in a compact visual picker, choose a new look, and watch it transition onto your desktop.</p>
-<h2>Find your next wallpaper</h2>
-<p>See your collection as a grid of thumbnails. Browse folders with the breadcrumb menu, click a wallpaper to apply it, or use the keyboard to move through your collection.</p>
-<h2>Stay in the flow</h2>
-<p>Choose another wallpaper while a transition is running. The effect retargets to your latest choice, so you can keep browsing without waiting for each change to finish.</p>
-<h2>Make it yours</h2>
-<p>Choose from the shared Emberveil themes and set the picker background to Solid, Blur, or Acrylic. Pick a transition effect, or let Random choose one for you.</p>
-<h2>Wallpaper behavior</h2>
-<p>Applying a wallpaper updates the Windows desktop wallpaper setting. Windows keeps that image after the mod is disabled or removed, and applying an image replaces a Slideshow or Windows Spotlight background. The picker applies the image to the monitor under the pointer.</p>
-<h2>Get started</h2>
-<p>Set your wallpaper folder in the mod settings, then open the picker from its tray icon or keyboard shortcut.</p>
-<p>The tray icon stays available while the mod is enabled. Disable the mod in Windhawk to stop the switcher.</p>
-<p>Click a thumbnail to apply it. Use the arrow keys to move, Enter or Space to apply, and the mouse wheel to change pages. Click the magnifying glass in the breadcrumb, or start typing, to filter filenames in the current folder. Press Escape to clear the search.</p>
-<p>Supported image formats: JPEG, PNG, BMP, and WebP.</p>
-]]></content>
-        <author>
-            <name>HHeitlager</name>
-            <uri>https://github.com/hheitlager</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cursor Scheme Extension 1.0.3]]></title>
-        <id>https://windhawk.net/mods/cursor-scheme-extension#427f188871d9503beced8388f8a4a1fdeb1fd4dd</id>
-        <link href="https://windhawk.net/mods/cursor-scheme-extension"/>
-        <updated>2026-11-20T18:04:53.000Z</updated>
-        <content type="html"><![CDATA[<h1>Cursor Scheme Extension</h1>
-<p><strong>English</strong> · <a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/Cursor_Scheme_Extension/README.ru.md">Русский</a></p>
-<p>Cursor Scheme Extension replaces built-in application pointers with pointers from the selected Windows scheme. This includes middle-button autoscroll, the pointing hand, resizing, and text and table selection.</p>
-<p>The mod uses the scheme already selected in Windows and picks up changes to it automatically. Transformed pointers are created and cached in memory.</p>
-<h2>Features</h2>
-<p><img src="https://raw.githubusercontent.com/CTravkin/DSN_Windhawk_Mods/main/Cursor_Scheme_Extension/Assets/Previews/Comparison.png" alt="Three pairs of application pointers without and with Cursor Scheme Extension: Windows Aero, W11 Concept, and Vision"></p>
-<p>Cursor artwork: Windows and Office by Microsoft, <a href="https://www.deviantart.com/jepricreations/art/Windows-11-Cursors-Concept-HD-v2-890672103">W11 Concept</a> by jepriCreations, <a href="https://www.deviantart.com/idarques/art/Vision-Cursor-911891424">Vision</a> by IDarques.</p>
-<table>
-<thead>
-<tr>
-<th>Setting</th>
-<th>Controls</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Hand</td>
-<td>Pointing hand over buttons, links, and other interactive elements</td>
-</tr>
-<tr>
-<td>Resize</td>
-<td>Resizing panels, rows, columns, and objects</td>
-</tr>
-<tr>
-<td>Move</td>
-<td>Dragging cells, ranges, and objects</td>
-</tr>
-<tr>
-<td>Autoscroll activation</td>
-<td>The pointer after a wheel-click, before choosing a scroll direction</td>
-</tr>
-<tr>
-<td>Autoscroll arrows</td>
-<td>All eight scrolling directions</td>
-</tr>
-<tr>
-<td>Selection arrows</td>
-<td>Selecting rows, columns, or an entire table</td>
-</tr>
-<tr>
-<td>Cell selection</td>
-<td>The cross over cells and when selecting ranges</td>
-</tr>
-<tr>
-<td>Margin selection</td>
-<td>Selecting text from the left page margin</td>
-</tr>
-<tr>
-<td>Vertical text input</td>
-<td>The horizontal mouse pointer in areas with vertical text</td>
-</tr>
-</tbody>
-</table>
-<p>At the start of autoscroll, the pointer indicates vertical, horizontal, or both axes. Direction arrows use <strong>Alternate select</strong> (<code>Up</code>) from the Windows scheme, rotated to match the scrolling direction. Selection arrows use the same role. Transforms account for the pointer hotspot, and animated pointers retain their frame order and timing.</p>
-<p>The interface is available in English, Russian, Spanish, German, Brazilian Portuguese, and Simplified Chinese.</p>
-<h3>Limitations</h3>
-<ul>
-<li>Replacement applies to recognized pointers displayed through Windows cursor APIs. The application controls whether autoscroll is available, its speed, and its direction.</li>
-<li>Excel and Firefox draw their stationary autoscroll markers separately. These markers keep their original appearance.</li>
-<li>Monochrome pointers that invert the background retain their original pixel rendering without smoothing.</li>
-<li>Each mod load creates at most 128 replacement instances per process. Returning to a previously used scheme or smoothing setting reuses matching instances. When full, requests that need a new instance use the application's original pointer.</li>
-<li>After disabling, the application restores its pointer at its next cursor update, usually the next mouse move. Replacement cursor handles remain allocated until the process exits so that pointers still used by Windows stay valid.</li>
-</ul>
-<h2>Platforms</h2>
-<p>Requires Windows 11. Runtime checks cover x86 and x64 processes on Windows 11 x64 with Windhawk 1.7.3. ARM64 has been compiled without a runtime check. Microsoft 365 and Qt WebEngine have not been verified.</p>
-<h3>Compatibility</h3>
-<p>Some of this mod's features may overlap with the following mods:</p>
-<ul>
-<li><a href="https://windhawk.net/mods/chromium-cursor-remap">Chromium Cursor Remap</a> — additional cursor replacement in Chromium and Electron.</li>
-<li><a href="https://windhawk.net/mods/cursor-override">Cursor Override</a> — additional cursor replacement using <code>.cur</code> and <code>.ani</code> files.</li>
-</ul>
-<p>Do not use multiple mods to replace the same cursors in the same application: the final cursor appearance may depend on the order in which replacements are applied.</p>
-<h2>Usage</h2>
-<p>Select a pointer scheme in Windows, then open the mod's <strong>Settings</strong>. <strong>Applications and processes</strong> selects the application families, and <strong>Pointer types</strong> selects the shapes to replace. Both must be enabled for a replacement to apply.</p>
-<table>
-<thead>
-<tr>
-<th>Family</th>
-<th>Coverage</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Windows</td>
-<td>Native Windows pointers, standard controls, and Windows Forms</td>
-</tr>
-<tr>
-<td>Office</td>
-<td>Desktop Word, Excel, PowerPoint, and classic Outlook</td>
-</tr>
-<tr>
-<td>Chromium</td>
-<td>Chrome, Edge, Electron, and compatible embedded browsers</td>
-</tr>
-<tr>
-<td>Gecko</td>
-<td>Firefox and compatible apps: cell selection, resizing, and vertical text</td>
-</tr>
-<tr>
-<td>Qt</td>
-<td>Panel splitters in applications with a Qt interface</td>
-</tr>
-</tbody>
-</table>
-<p>Under <strong>Application exclusions</strong>, below the family switches, add one executable name or full path per row. A name matches any installation of that executable; a full path matches one location.</p>
-<p><strong>Smoothing</strong> has separate switches for <strong>Autoscroll activation</strong>, <strong>Autoscroll arrows</strong>, and <strong>Selection arrows</strong>. Autoscroll smoothing covers all eight directions.</p>
-<h2>Links</h2>
-<ul>
-<li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/tree/main/Cursor_Scheme_Extension">Cursor Scheme Extension on GitHub</a></li>
 <li><a href="https://github.com/CTravkin/DSN_Windhawk_Mods/blob/main/README.md">DSN Windhawk Mods</a></li>
 </ul>
 ]]></content>

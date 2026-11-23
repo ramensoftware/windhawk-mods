@@ -1,5 +1,34 @@
 {
   "mods": {
+    "acrylic-media-pill": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795396153896,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795396153896,
+        "users": 0
+      },
+      "metadata": {
+        "author": "nozwin",
+        "compilerOptions": "-DWINRT_NO_MODULE_LOCK -lole32 -loleaut32 -lruntimeobject -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32",
+        "description": "Glass media pill for the taskbar (cover art, title/artist, mini visualizer) with a click-to-open player card. Dark / Light / Liquid Glass themes, smooth anti-aliased edges. Works with dock-style taskbars.",
+        "github": "https://github.com/nozwin",
+        "homepage": "https://github.com/nozwin/Acrylic-Media-Pill",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Acrylic Media Pill",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7830",
+      "source": {
+        "sha256": "e3b2c3bc3e078dc85bf23bcc4880b4960bd4564d09ae0a510af9c80e1a32fe36",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4b120b2bf65bbe07e66560d0a408bd5e2ef67540/mods/acrylic-media-pill.wh.cpp"
+      }
+    },
     "aleph-canvas": {
       "details": {
         "defaultSorting": 0,
@@ -351,35 +380,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
       }
     },
-    "mac-text-keys": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795309686766,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795309686766,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Caio Lemos",
-        "compilerOptions": "-lshell32",
-        "description": "Ctrl+Arrows jump to line start/end and Alt+Arrows jump by word, like Cmd/Option on macOS",
-        "github": "https://github.com/lemoscaio",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "Mac-style Text Navigation",
-        "version": "0.1"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7800",
-      "source": {
-        "sha256": "40295b8cc234f70a42b775d2d6412fe9110e7bfc34eac301e362dee1795d9585",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/991fce6699190290a9e5dc3527bccae938ef2fa5/mods/mac-text-keys.wh.cpp"
-      }
-    },
     "same-app-window-cycler": {
       "details": {
         "defaultSorting": 0,
@@ -438,41 +438,6 @@
       "source": {
         "sha256": "2369ece55b9b2989c45106d79d53553da5d5b57f9a17493cde371fcb425a1ac7",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c275045225aa8ba5159ec7e3d5b242a0d2ce9f35/mods/shell-font-changer-plus.wh.cpp"
-      }
-    },
-    "system-tray-network-speedtest": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795309686766,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795309686766,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "joaomgabaldi",
-        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lshlwapi -lshell32 -lole32 -ladvapi32 -luser32 -ld2d1 -ld3d11 -ldcomp -ldwrite -ldwmapi -liphlpapi -lshcore -luuid -loleacc -loleaut32",
-        "description": "Replaces the network menu's web speed test with a native flyout powered by the Ookla Speedtest CLI: live gauge, ping, jitter, download, upload and a test history.",
-        "github": "https://github.com/joaomgabaldi",
-        "include": [
-          "ShellHost.exe",
-          "ShellExperienceHost.exe",
-          "SystemSettings.exe",
-          "RuntimeBroker.exe",
-          "explorer.exe"
-        ],
-        "name": "Ookla Speed Test for Network Menu",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7799",
-      "source": {
-        "sha256": "1166aea917dbf902bbc12f57cf6bdd3a1bb8dd3244f709f558003a21a81089a2",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/e294035edd4a98e7c13d26d624edf004175ffb0f/mods/system-tray-network-speedtest.wh.cpp"
       }
     },
     "taskbar-app-state-indicators": {
@@ -683,36 +648,6 @@
       "source": {
         "sha256": "53f1195dbd488733b641eafb12505cb1db5cc2dd079a1e9ce03015db368dd5fe",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3fded2a8922236ec21cde4fff3d70724b37c6209/mods/twinkle-brightness.wh.cpp"
-      }
-    },
-    "volu-macos-volume-hud": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795309686766,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795309686766,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Kouqqu",
-        "compilerOptions": "-lgdiplus -lgdi32 -lole32 -lwinmm -lshcore",
-        "description": "Authentic macOS-style volume HUD for Windows with audio clicks",
-        "donateUrl": "https://dalink.to/koukku",
-        "github": "https://github.com/Kouqqu",
-        "homepage": "https://github.com/Kouqqu/Volu",
-        "include": [
-          "windhawk.exe"
-        ],
-        "name": "Volu - macOS Volume HUD",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7788",
-      "source": {
-        "sha256": "abc07bad6c8019ceeda2082c33a5fb22c12c7ac1d03b403fbafb41b0b596d740",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1ab68558cc75dd2a732870144c3a3af22ccfab0a/mods/volu-macos-volume-hud.wh.cpp"
       }
     },
     "win7-user-account-page-restorer": {

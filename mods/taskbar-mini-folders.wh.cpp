@@ -2,7 +2,7 @@
 // @id              taskbar-mini-folders
 // @name            Taskbar Mini Folders
 // @description     Adds mini folders with a 2x2 icon preview to the Windows 11 taskbar. Click one to open a panel with all its apps, files and shortcuts.
-// @version         1.0.0
+// @version         1.1.0
 // @author          Sanekx Arcs
 // @github          https://github.com/SanekxArcs
 // @include         explorer.exe
@@ -16,8 +16,9 @@
 
 Adds mini folders to the Windows 11 taskbar, like the app folders on a phone.
 Each mini folder is a small tile that shows the first four icons inside it.
-Click the tile and a panel opens above the taskbar with everything in the
-folder. Click an icon to launch it.
+Click the tile and a panel opens above the taskbar (or beside it, if the
+taskbar is on the side of the screen) with everything in the folder. Click an
+icon to launch it.
 
 Use it to group apps (Work, Games, Tools) and keep the taskbar short.
 
@@ -58,13 +59,19 @@ most installed apps have a shortcut.
 | Setting | Default | What it does |
 |---|---|---|
 | Mini folders | Apps, Work, Games | The list of mini folders. Each has a name and an optional path |
+| Hide this mini folder | off | Hides one mini folder from the taskbar without deleting it. Its name, path and files stay, so you can show it again later |
 | Folder path | empty | Leave empty to use `%USERPROFILE%\TaskbarFolders\<name>`. Any existing folder works, and environment variables are expanded |
-| Position in the taskbar | Next to the Start button | Can also be after the last taskbar app, or at the far left edge of the taskbar |
+| Position in the taskbar | Next to the Start button | Can also be after the last taskbar app, after a chosen number of taskbar icons, or at the far left edge of the taskbar |
+| Number of taskbar icons before the mini folders | 3 | Only for "After a chosen number of taskbar icons". Start, Search and Task View count too. 0 = before the first icon |
 | Mini folder button size | 40 | Size of the tile, from 28 to 56 |
 | Icons per row in the opened folder | 4 | Width of the panel, from 1 to 10 icons |
 
 Renaming a mini folder that uses the default path points it to a new, empty
 folder. The old folder and its contents stay on disk.
+
+The mini folders also work when the taskbar is on the left or right side of
+the screen. Then the tiles form a column, "left" means "top", and the panel
+opens beside the taskbar.
 
 ## Files and folders the mod creates
 
@@ -93,6 +100,9 @@ you no longer need it.
   you open that mini folder.
 * Dragging items onto a mini folder is not supported. Use **+ Add...** or
   **Open folder**.
+* The mini folders stay together as one group, and they can't be dragged
+  between the taskbar icons. Use the position settings to choose where the
+  group goes.
 * The panel does not scroll. A folder with many items gets more icons per row
   so that the panel fits the screen. Items that still don't fit are not shown.
 
@@ -107,21 +117,37 @@ Tip: unpin the normal taskbar icons and keep everything in mini folders.
       $name: Folder name
     - path: ""
       $name: Folder path (empty = %USERPROFILE%\TaskbarFolders\<name>)
+    - hidden: false
+      $name: Hide this mini folder
+      $description: Hides it from the taskbar but keeps its name, path and files, so you can show it again later
   - - name: Work
       $name: Folder name
     - path: ""
       $name: Folder path (empty = %USERPROFILE%\TaskbarFolders\<name>)
+    - hidden: false
+      $name: Hide this mini folder
+      $description: Hides it from the taskbar but keeps its name, path and files, so you can show it again later
   - - name: Games
       $name: Folder name
     - path: ""
       $name: Folder path (empty = %USERPROFILE%\TaskbarFolders\<name>)
+    - hidden: false
+      $name: Hide this mini folder
+      $description: Hides it from the taskbar but keeps its name, path and files, so you can show it again later
   $name: Mini folders
 - position: left
   $name: Position in the taskbar
   $options:
   - left: Next to the Start button (with the apps)
   - right: After the last taskbar app
-  - edge: Far left edge of the taskbar
+  - after: After a chosen number of taskbar icons
+  - edge: Far left edge of the taskbar (top edge if the taskbar is vertical)
+- afterIcons: 3
+  $name: Number of taskbar icons before the mini folders
+  $description: >-
+    Only for the position "After a chosen number of taskbar icons". Counted
+    from the left (from the top on a vertical taskbar). Start, Search and Task
+    View count as icons too. 0 puts the mini folders before the first icon.
 - buttonSize: 40
   $name: Mini folder button size (28 to 56)
 - columns: 4
@@ -176,11 +202,12 @@ struct FolderDef {
     std::wstring dir;  // expanded, absolute
 };
 
-enum PositionMode { kPosStart = 0, kPosEnd = 1, kPosEdge = 2 };
+enum PositionMode { kPosStart = 0, kPosEnd = 1, kPosEdge = 2, kPosAfter = 3 };
 
 struct Settings {
     std::vector<FolderDef> folders;
     int mode = 0;  // PositionMode
+    int afterIcons = 3;  // for kPosAfter
     int buttonSize = 40;
     int columns = 4;
 };
@@ -222,6 +249,11 @@ void LoadSettings() {
         if (n.empty() && p.empty()) {
             break;
         }
+        // "Hide this mini folder": skipped, but its settings and files stay.
+        // A missing value (settings saved by version 1.0.0) reads as 0, shown.
+        if (Wh_GetIntSetting(L"folders[%d].hidden", i)) {
+            continue;
+        }
 
         FolderDef f;
         if (p.empty()) {
@@ -238,10 +270,11 @@ void LoadSettings() {
     }
 
     WindhawkUtils::StringSetting position = WindhawkUtils::StringSetting::make(L"position");
-    // 0 = next to Start, 1 = after the last app, 2 = far left edge.
-    s.mode = wcscmp(position.get(), L"right") == 0  ? kPosEnd
-             : wcscmp(position.get(), L"edge") == 0 ? kPosEdge
-                                                    : kPosStart;
+    s.mode = wcscmp(position.get(), L"right") == 0   ? kPosEnd
+             : wcscmp(position.get(), L"edge") == 0  ? kPosEdge
+             : wcscmp(position.get(), L"after") == 0 ? kPosAfter
+                                                     : kPosStart;
+    s.afterIcons = std::clamp(Wh_GetIntSetting(L"afterIcons"), 0, 99);
 
     s.buttonSize = std::clamp(Wh_GetIntSetting(L"buttonSize"), 28, 56);
     s.columns = std::clamp(Wh_GetIntSetting(L"columns"), 1, 10);
@@ -509,6 +542,21 @@ struct FrameState {
     int attempts = 0;
 };
 
+// The taskbar icon that got extra margin to make a gap for the mini folders
+// (position "after a chosen number of taskbar icons").
+struct GapState {
+    winrt::weak_ref<FrameworkElement> item;
+    Thickness originalMargin{};
+    bool leading = false;
+};
+
+void RestoreGap(GapState& gap) {
+    if (auto item = gap.item.get()) {
+        item.Margin(gap.originalMargin);
+    }
+    gap.item = nullptr;
+}
+
 struct Injected {
     winrt::weak_ref<FrameworkElement> frame;
     winrt::weak_ref<wuxc::Panel> rootGrid;
@@ -518,6 +566,7 @@ struct Injected {
     bool changedMargin = false;
     bool setTransform = false;
     winrt::event_token layoutToken{};
+    std::shared_ptr<GapState> gap;
 };
 
 struct ClickReg {
@@ -692,6 +741,46 @@ double RepeaterShift(int mode, double width, bool leftAligned) {
     return leftAligned ? 0 : -width / 2;
 }
 
+void RebuildAllPanels();
+
+// The taskbar is vertical when it's placed on the left or right side of the
+// screen. Unknown (not laid out yet) counts as horizontal; the LayoutUpdated
+// handler rebuilds the panel once the real size is known.
+bool IsVerticalLayout(FrameworkElement const& rootGrid) {
+    double w = rootGrid.ActualWidth(), h = rootGrid.ActualHeight();
+    return w > 0 && h > 0 && h > w;
+}
+
+// UI thread. Rebuilds the panels from the dispatcher, not from inside a
+// layout event. Several requests in a row become one rebuild.
+bool g_rebuildQueued = false;
+
+void QueueRebuildOnUiThread() {
+    if (g_rebuildQueued || g_unloading) {
+        return;
+    }
+    auto queue = winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
+    if (!queue) {
+        return;
+    }
+    auto pending = std::make_shared<PendingDispatchGuard>();
+    g_rebuildQueued = true;
+    bool queued = queue.TryEnqueue([pending]() {
+        g_rebuildQueued = false;
+        if (g_unloading) {
+            return;
+        }
+        try {
+            RebuildAllPanels();
+        } catch (...) {
+            Wh_Log(L"Rebuild error %08X", winrt::to_hresult());
+        }
+    });
+    if (!queued) {
+        g_rebuildQueued = false;
+    }
+}
+
 bool InjectIntoFrame(FrameworkElement frame) {
     auto rootGridElement = FindChildByName(frame, L"RootGrid");
     if (!rootGridElement) {
@@ -713,13 +802,24 @@ bool InjectIntoFrame(FrameworkElement frame) {
         return true;
     }
 
+    // On a vertical taskbar everything below works along the Y axis instead
+    // of the X axis: the tiles form a column, and "left" means "top".
+    bool vertical = IsVerticalLayout(rootGridElement);
+
     wuxc::StackPanel panel;
     panel.Name(kPanelName);
-    panel.Orientation(wuxc::Orientation::Horizontal);
     panel.Spacing(kSpacing);
-    panel.HorizontalAlignment(HorizontalAlignment::Left);
-    panel.VerticalAlignment(VerticalAlignment::Center);
-    panel.Margin(Thickness{kPanelSideMargin, 0, kPanelSideMargin, 0});
+    if (vertical) {
+        panel.Orientation(wuxc::Orientation::Vertical);
+        panel.HorizontalAlignment(HorizontalAlignment::Center);
+        panel.VerticalAlignment(VerticalAlignment::Top);
+        panel.Margin(Thickness{0, kPanelSideMargin, 0, kPanelSideMargin});
+    } else {
+        panel.Orientation(wuxc::Orientation::Horizontal);
+        panel.HorizontalAlignment(HorizontalAlignment::Left);
+        panel.VerticalAlignment(VerticalAlignment::Center);
+        panel.Margin(Thickness{kPanelSideMargin, 0, kPanelSideMargin, 0});
+    }
     if (s.mode != kPosEdge) {
         panel.Opacity(0);  // shown once it's positioned
     }
@@ -743,8 +843,9 @@ bool InjectIntoFrame(FrameworkElement frame) {
 
     rootGrid.Children().Append(panel);
 
-    double contentWidth = s.folders.size() * s.buttonSize + (s.folders.size() - 1) * kSpacing;
-    double width = kPanelSideMargin * 2 + contentWidth;
+    // Size of the tiles along the taskbar (width, or height if vertical).
+    double contentLength = s.folders.size() * s.buttonSize + (s.folders.size() - 1) * kSpacing;
+    double length = kPanelSideMargin * 2 + contentLength;
 
     Injected inj;
     inj.frame = winrt::make_weak(frame);
@@ -752,99 +853,157 @@ bool InjectIntoFrame(FrameworkElement frame) {
     inj.repeater = winrt::make_weak(repeater);
     inj.panel = winrt::make_weak(panel);
     inj.originalMargin = repeater.Margin();
+    inj.gap = std::make_shared<GapState>();
 
+    wuxm::TranslateTransform shift = nullptr;
     if (s.mode == kPosEdge) {
-        // Far left edge: push the taskbar buttons aside.
+        // Far left (top) edge: push the taskbar buttons aside.
         Thickness margin = inj.originalMargin;
-        margin.Left += width;
+        (vertical ? margin.Top : margin.Left) += length;
         repeater.Margin(margin);
         inj.changedMargin = true;
-    } else {
+    } else if (s.mode != kPosAfter && !repeater.RenderTransform()) {
         // Next to the Start button / after the last app: shift the app
         // buttons to make room (see RepeaterShift), then keep the panel
         // glued to the first/last button.
-        wuxm::TranslateTransform shift = nullptr;
-        if (!repeater.RenderTransform()) {
-            shift = wuxm::TranslateTransform();
-            shift.X(RepeaterShift(s.mode, width, IsTaskbarLeftAligned()));
-            repeater.RenderTransform(shift);
-            inj.setTransform = true;
-        }
-
-        int mode = s.mode;
-        auto weakRoot = winrt::make_weak(rootGridElement);
-        auto weakRepeater = winrt::make_weak(repeater);
-        auto weakPanel = winrt::make_weak(panel);
-        inj.layoutToken = repeater.LayoutUpdated(
-            [weakRoot, weakRepeater, weakPanel, shift, mode, width, contentWidth](auto const&,
-                                                                                  auto const&) {
-                if (g_unloading) {
-                    return;
-                }
-                try {
-                    auto root = weakRoot.get();
-                    auto rep = weakRepeater.get();
-                    auto pnl = weakPanel.get();
-                    if (!root || !rep || !pnl) {
-                        return;
-                    }
-
-                    // The taskbar alignment can be changed at any time.
-                    if (shift) {
-                        double shiftX = RepeaterShift(mode, width, IsTaskbarLeftAligned());
-                        if (shift.X() != shiftX) {
-                            shift.X(shiftX);
-                        }
-                    }
-
-                    // Bounds of the visible buttons (Start + apps).
-                    double rootWidth = root.ActualWidth();
-                    double minX = 1e9, maxX = -1e9;
-                    int count = wuxm::VisualTreeHelper::GetChildrenCount(rep);
-                    for (int i = 0; i < count; i++) {
-                        auto item = wuxm::VisualTreeHelper::GetChild(rep, i)
-                                        .try_as<FrameworkElement>();
-                        if (!item || item.Visibility() != Visibility::Visible ||
-                            item.ActualWidth() <= 0) {
-                            continue;
-                        }
-                        auto pt = item.TransformToVisual(root).TransformPoint(
-                            winrt::Windows::Foundation::Point{0, 0});
-                        if (pt.X < -1 || pt.X > rootWidth) {
-                            continue;  // recycled, off-screen
-                        }
-                        minX = std::min(minX, (double)pt.X);
-                        maxX = std::max(maxX, (double)pt.X + item.ActualWidth());
-                    }
-                    if (minX > maxX) {
-                        return;
-                    }
-
-                    double targetX = mode == kPosStart ? minX - kPanelSideMargin - contentWidth
-                                                       : maxX + kPanelSideMargin;
-                    targetX = std::max(0.0, targetX);
-
-                    // Where the panel's layout slot starts (without its margin).
-                    Thickness m = pnl.Margin();
-                    auto cur = pnl.TransformToVisual(root).TransformPoint(
-                        winrt::Windows::Foundation::Point{0, 0});
-                    double slotX = cur.X - m.Left;
-                    double newLeft = std::round(targetX - slotX);
-                    if (std::abs(newLeft - m.Left) > 0.5) {
-                        m.Left = newLeft;
-                        m.Right = 0;
-                        pnl.Margin(m);
-                    } else if (pnl.Opacity() < 1) {
-                        pnl.Opacity(1);
-                    }
-                } catch (...) {
-                    Wh_Log(L"Position error %08X", winrt::to_hresult());
-                }
-            });
+        shift = wuxm::TranslateTransform();
+        double shiftBy = RepeaterShift(s.mode, length, vertical || IsTaskbarLeftAligned());
+        vertical ? shift.Y(shiftBy) : shift.X(shiftBy);
+        repeater.RenderTransform(shift);
+        inj.setTransform = true;
     }
 
+    int mode = s.mode;
+    int afterIcons = s.afterIcons;
+    auto gap = inj.gap;
+    auto weakRoot = winrt::make_weak(rootGridElement);
+    auto weakRepeater = winrt::make_weak(repeater);
+    auto weakPanel = winrt::make_weak(panel);
+    inj.layoutToken = repeater.LayoutUpdated(
+        [weakRoot, weakRepeater, weakPanel, shift, gap, mode, afterIcons, vertical, length,
+         contentLength](auto const&, auto const&) {
+            if (g_unloading) {
+                return;
+            }
+            try {
+                auto root = weakRoot.get();
+                auto rep = weakRepeater.get();
+                auto pnl = weakPanel.get();
+                if (!root || !rep || !pnl) {
+                    return;
+                }
+
+                // The taskbar was moved between a side and the top/bottom
+                // of the screen (or wasn't laid out yet): build it again.
+                double rootW = root.ActualWidth(), rootH = root.ActualHeight();
+                if (rootW > 0 && rootH > 0 && (rootH > rootW) != vertical) {
+                    QueueRebuildOnUiThread();
+                    return;
+                }
+                if (mode == kPosEdge) {
+                    return;
+                }
+
+                // The taskbar alignment can be changed at any time.
+                if (shift) {
+                    double shiftBy = RepeaterShift(mode, length, vertical || IsTaskbarLeftAligned());
+                    double current = vertical ? shift.Y() : shift.X();
+                    if (current != shiftBy) {
+                        vertical ? shift.Y(shiftBy) : shift.X(shiftBy);
+                    }
+                }
+
+                // Visible buttons (Start + apps): where each one starts
+                // along the taskbar, and its size along the taskbar.
+                struct Item {
+                    double pos;
+                    double size;
+                    FrameworkElement element;
+                };
+                std::vector<Item> items;
+                double rootLength = vertical ? rootH : rootW;
+                int count = wuxm::VisualTreeHelper::GetChildrenCount(rep);
+                for (int i = 0; i < count; i++) {
+                    auto item = wuxm::VisualTreeHelper::GetChild(rep, i)
+                                    .try_as<FrameworkElement>();
+                    if (!item || item.Visibility() != Visibility::Visible) {
+                        continue;
+                    }
+                    double size = vertical ? item.ActualHeight() : item.ActualWidth();
+                    if (size <= 0) {
+                        continue;
+                    }
+                    auto pt = item.TransformToVisual(root).TransformPoint(
+                        winrt::Windows::Foundation::Point{0, 0});
+                    double pos = vertical ? pt.Y : pt.X;
+                    if (pos < -1 || pos > rootLength) {
+                        continue;  // recycled, off-screen
+                    }
+                    items.push_back({pos, size, item});
+                }
+                if (items.empty()) {
+                    return;
+                }
+
+                double target;
+                if (mode == kPosAfter) {
+                    // Make a gap after icon number `afterIcons` by giving
+                    // that icon extra margin (or the first icon, for 0). The
+                    // taskbar then lays out and centers the icons itself.
+                    std::sort(items.begin(), items.end(),
+                              [](const Item& a, const Item& b) { return a.pos < b.pos; });
+                    int n = std::min(afterIcons, (int)items.size());
+                    const Item& anchor = items[n == 0 ? 0 : n - 1];
+                    bool leading = n == 0;
+                    if (gap->item.get() != anchor.element || gap->leading != leading) {
+                        RestoreGap(*gap);
+                        Thickness m = anchor.element.Margin();
+                        gap->originalMargin = m;
+                        gap->leading = leading;
+                        gap->item = winrt::make_weak(anchor.element);
+                        if (vertical) {
+                            (leading ? m.Top : m.Bottom) += length;
+                        } else {
+                            (leading ? m.Left : m.Right) += length;
+                        }
+                        anchor.element.Margin(m);
+                        return;  // the taskbar lays out again
+                    }
+                    target = leading ? anchor.pos - length + kPanelSideMargin
+                                     : anchor.pos + anchor.size + kPanelSideMargin;
+                } else {
+                    double minPos = 1e9, maxPos = -1e9;
+                    for (auto& it : items) {
+                        minPos = std::min(minPos, it.pos);
+                        maxPos = std::max(maxPos, it.pos + it.size);
+                    }
+                    target = mode == kPosStart ? minPos - kPanelSideMargin - contentLength
+                                               : maxPos + kPanelSideMargin;
+                }
+                target = std::max(0.0, target);
+
+                // Where the panel's layout slot starts (without its margin).
+                Thickness m = pnl.Margin();
+                auto cur = pnl.TransformToVisual(root).TransformPoint(
+                    winrt::Windows::Foundation::Point{0, 0});
+                double slot = vertical ? cur.Y - m.Top : cur.X - m.Left;
+                double newStart = std::round(target - slot);
+                double& start = vertical ? m.Top : m.Left;
+                if (std::abs(newStart - start) > 0.5) {
+                    start = newStart;
+                    (vertical ? m.Bottom : m.Right) = 0;
+                    pnl.Margin(m);
+                } else if (pnl.Opacity() < 1) {
+                    pnl.Opacity(1);
+                }
+            } catch (...) {
+                Wh_Log(L"Position error %08X", winrt::to_hresult());
+            }
+        });
+
     g_injected.push_back(inj);
-    Wh_Log(L"Injected %zu mini folders, mode %d", s.folders.size(), s.mode);
+    Wh_Log(L"Injected %zu mini folders, mode %d, vertical %d", s.folders.size(), s.mode,
+           vertical);
     return true;
 }
 
@@ -876,6 +1035,9 @@ void RemoveAllPanels() {
                 if (inj.setTransform) {
                     repeater.RenderTransform(nullptr);
                 }
+            }
+            if (inj.gap) {
+                RestoreGap(*inj.gap);
             }
         } catch (...) {
             Wh_Log(L"Remove error %08X", winrt::to_hresult());
@@ -1318,14 +1480,23 @@ void PopupShow(int folder, POINT anchor, bool force) {
     }
     g_popup.rcEmpty = {pad, headerH, w - pad, headerH + cellH};
 
-    // Position above (or below) the taskbar, centered on the click.
+    // Position above (or below) the taskbar, centered on the click. Beside
+    // it if the taskbar is on the left or right side of the screen.
     int x = anchor.x - w / 2;
     x = std::max((int)work.left + gapPx, std::min(x, (int)work.right - w - gapPx));
+    int yCentered = anchor.y - h / 2;
+    yCentered = std::max((int)work.top + gapPx, std::min(yCentered, (int)work.bottom - h - gapPx));
     int y;
     if (anchor.y >= work.bottom) {
         y = work.bottom - h - gapPx;  // taskbar at the bottom
     } else if (anchor.y < work.top) {
         y = work.top + gapPx;  // taskbar at the top
+    } else if (anchor.x < work.left) {
+        x = work.left + gapPx;  // taskbar on the left
+        y = yCentered;
+    } else if (anchor.x >= work.right) {
+        x = work.right - w - gapPx;  // taskbar on the right
+        y = yCentered;
     } else {
         y = anchor.y - h - Px(30);  // auto-hide taskbar
         y = std::max((int)work.top + gapPx, y);

@@ -1289,6 +1289,12 @@
     "githubId": 265400109,
     "homepages": []
   },
+  "https://github.com/joaomgabaldi": {
+    "author": "joaomgabaldi",
+    "github": "https://github.com/joaomgabaldi",
+    "githubId": 167992334,
+    "homepages": []
+  },
   "https://github.com/joeye-233": {
     "author": "Joe Ye",
     "github": "https://github.com/JoeYe-233",
@@ -1378,6 +1384,14 @@
     "githubId": 306814727,
     "homepages": []
   },
+  "https://github.com/kouqqu": {
+    "author": "Kouqqu",
+    "github": "https://github.com/Kouqqu",
+    "githubId": 120759275,
+    "homepages": [
+      "https://github.com/Kouqqu/Volu"
+    ]
+  },
   "https://github.com/l3r0ythingz": {
     "author": "L3r0y",
     "github": "https://github.com/L3r0yThingz",
@@ -1430,6 +1444,12 @@
     "homepages": [
       "https://github.com/lemon-web-stack"
     ]
+  },
+  "https://github.com/lemoscaio": {
+    "author": "Caio Lemos",
+    "github": "https://github.com/lemoscaio",
+    "githubId": 74937642,
+    "homepages": []
   },
   "https://github.com/leumasme": {
     "author": "Temm",
