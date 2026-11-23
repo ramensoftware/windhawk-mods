@@ -2,7 +2,7 @@
 // @id              taskbar-live-hud-radar
 // @name            Taskbar Live HUD
 // @description     Compact system monitoring widget for the taskbar: CPU, RAM, GPU, temperatures, disk speed, network speed, optional ping and a working set trimmer
-// @version         1.2
+// @version         1.2.1
 // @author          Lemon
 // @github          https://github.com/its-lemon
 // @homepage        https://github.com/its-lemon
