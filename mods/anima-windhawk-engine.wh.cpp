@@ -6,7 +6,6 @@
 // @author          TuBeo5866
 // @github          https://github.com/tubeo5866
 // @donateUrl       https://ko-fi.com/tubeo5866
-// @license         GNU
 // @homepage        https://tubb3ll.xyz
 // @include         windhawk.exe
 // @compilerOptions -lkernel32 -lktmw32 -lruntimeobject -lwindowsapp -ldwmapi -luuid -lgdiplus -lgdi32 -lshell32 -luser32 -lcomctl32 -lcomdlg32 -lole32 -lurlmon -luxtheme -lwininet -lshlwapi -lcrypt32 -ladvapi32
