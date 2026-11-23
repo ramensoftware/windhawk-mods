@@ -1,5 +1,39 @@
 {
   "mods": {
+    "aleph-canvas": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795393943372,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795393943372,
+        "users": 0
+      },
+      "metadata": {
+        "author": "CYoJkoY",
+        "compilerOptions": "-ladvapi32 -ld2d1 -ldwmapi -ldwrite -lgdi32 -lole32 -lshell32 -lshcore -luuid -lwindowscodecs",
+        "description": "在可平移画布上管理已打开的窗口，并显示 DWM 实时预览。",
+        "github": "https://github.com/CYoJkoY",
+        "include": [
+          "windhawk.exe",
+          "windhawk-mod.exe"
+        ],
+        "license": "MIT",
+        "name": "Aleph - 无限窗口画布",
+        "version": "1.8.0"
+      },
+      "metadataEnglish": {
+        "description": "Arrange open windows across a pannable canvas with live DWM previews.",
+        "name": "Aleph - Infinite Window Canvas"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7637",
+      "source": {
+        "sha256": "fce119a614fe7a7043ae41d71e484fc989ec0f71581929ee8d96dd176310837b",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/80d1d414458f03515a73ba2dfcba38934d5255dd/mods/aleph-canvas.wh.cpp"
+      }
+    },
     "autoclean": {
       "details": {
         "defaultSorting": 0,
@@ -383,13 +417,13 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795238322807,
+        "updated": 1795393943372,
         "users": 0
       },
       "metadata": {
         "author": "DavidHiFi",
         "compilerOptions": "-lgdi32 -luxtheme -ldwrite",
-        "description": "Any installed font in File Explorer, with icons and emoji left intact",
+        "description": "Any installed font and text size in File Explorer, with icons and emoji left intact",
         "donateUrl": "https://ko-fi.com/DavidHiFi",
         "github": "https://github.com/DavidHiFi",
         "homepage": "https://github.com/DavidHiFi/davids-windhawk-mods",
@@ -398,12 +432,12 @@
         ],
         "license": "MIT",
         "name": "Shell Font Changer Plus",
-        "version": "1.3.5"
+        "version": "1.4.2"
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7342",
       "source": {
-        "sha256": "124c606301a06fcb1636b58b225c8e87ed8dbe283731a27a9783fb1575c3043c",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/eec67bcfb9e3f958b4262b825d369b89aa8cc1ac/mods/shell-font-changer-plus.wh.cpp"
+        "sha256": "2369ece55b9b2989c45106d79d53553da5d5b57f9a17493cde371fcb425a1ac7",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c275045225aa8ba5159ec7e3d5b242a0d2ce9f35/mods/shell-font-changer-plus.wh.cpp"
       }
     },
     "system-tray-network-speedtest": {
