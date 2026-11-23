@@ -2,7 +2,7 @@
 // @id              desktop-shortcut-cleaner
 // @name            Desktop Shortcut Cleaner
 // @description     Hide desktop shortcut labels, arrows and admin shields, and replace the hover box with an icon-shaped glow, without changing File Explorer.
-// @version         1.2.2
+// @version         1.2.3
 // @author          ELSEGuy
 // @github          https://github.com/ELSEGuy
 // @license         MIT
@@ -36,6 +36,16 @@ with a soft glow that follows each icon's shape.
   selected.
 - **File Explorer is unchanged.** Arrows, shields, labels and highlights
   there stay exactly as Windows draws them.
+
+## Known limitations
+
+- Labels are matched by their displayed text, so a non-shortcut item showing
+  the same name as a shortcut (for example `Notes.lnk` and `Notes.txt` with
+  extensions hidden) loses its label too.
+- Shield hiding covers the *Run this program as an administrator*
+  compatibility setting only. Shortcuts to programs whose manifest requests
+  elevation (many installers) keep their shield, as do shortcuts whose
+  target is on a network path.
 
 ## Before and after
 
@@ -87,12 +97,13 @@ separately by this project.
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <uxtheme.h>
+#include <vsstyle.h>
 
+#include <atomic>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <functional>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -108,6 +119,15 @@ struct {
 } g_settings;
 
 thread_local bool g_isDrawingDesktop = false;
+
+// The desktop ListView this mod subclassed. Kept so the subclass can always be
+// removed on unload, even if the window can no longer be found by lookup (for
+// example after the desktop view moved under a WorkerW window).
+std::atomic<HWND> g_desktopListView{nullptr};
+
+// Sent to the desktop ListView on unload so its timer and caches are cleaned
+// up on the desktop thread itself.
+UINT g_uninitMessage = 0;
 
 std::unordered_set<std::wstring> g_shortcutNames;
 DWORD g_lastShortcutCacheTick = 0;
@@ -196,13 +216,8 @@ static bool IsDesktopFolderView(HWND hWnd) {
     return true;
 }
 
-static HWND GetDesktopFolderView() {
-    HWND shell = GetShellWindow();
-    if (!shell) {
-        return nullptr;
-    }
-
-    HWND defView = FindChild(shell, L"SHELLDLL_DefView", nullptr);
+static HWND FindFolderViewInTopLevel(HWND topLevel) {
+    HWND defView = FindChild(topLevel, L"SHELLDLL_DefView", nullptr);
     if (!defView) {
         return nullptr;
     }
@@ -219,6 +234,26 @@ static HWND GetDesktopFolderView() {
     }
 
     return listView;
+}
+
+static HWND GetDesktopFolderView() {
+    // Usually the desktop view lives under Progman (the shell window).
+    if (HWND shell = GetShellWindow()) {
+        if (HWND listView = FindFolderViewInTopLevel(shell)) {
+            return listView;
+        }
+    }
+
+    // Wallpaper slideshows and wallpaper tools can move it under a WorkerW
+    // window (Windows 10 and Windows 11 before 24H2).
+    HWND workerW = nullptr;
+    while ((workerW = FindWindowExW(nullptr, workerW, L"WorkerW", nullptr))) {
+        if (HWND listView = FindFolderViewInTopLevel(workerW)) {
+            return listView;
+        }
+    }
+
+    return nullptr;
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +339,7 @@ static bool ShouldHideLabel(LPCWSTR text, int cch) {
 
     std::wstring value(
         text,
-        cch == -1 ? wcslen(text) : static_cast<size_t>(cch));
+        cch < 0 ? wcslen(text) : static_cast<size_t>(cch));
 
     return g_shortcutNames.count(value) != 0;
 }
@@ -356,8 +391,8 @@ static bool ResolveLinkOverlayMask() {
 //
 // Explorer's UAC shield is already present in the cached system-image-list
 // bitmap for this compatibility case. Instead of modifying that shared cache,
-// this experiment extracts the shortcut's raw icon and substitutes it only
-// while the desktop ListView is painting.
+// the mod extracts the shortcut's raw icon and substitutes it only while the
+// desktop ListView is painting.
 // ---------------------------------------------------------------------------
 
 static const GUID kCLSID_ShellLink = {
@@ -386,17 +421,19 @@ static std::wstring ExpandPath(const WCHAR* path) {
         return {};
     }
 
-    WCHAR expanded[32768];
-    DWORD length = ExpandEnvironmentStringsW(
-        path,
-        expanded,
-        ARRAYSIZE(expanded));
-
-    if (length > 0 && length <= ARRAYSIZE(expanded)) {
-        return expanded;
+    DWORD needed = ExpandEnvironmentStringsW(path, nullptr, 0);
+    if (needed == 0) {
+        return path;
     }
 
-    return path;
+    std::wstring expanded(needed, L'\0');
+    DWORD length = ExpandEnvironmentStringsW(path, expanded.data(), needed);
+    if (length == 0 || length > needed) {
+        return path;
+    }
+
+    expanded.resize(length - 1);  // Drop the terminating null.
+    return expanded;
 }
 
 static bool RegistryLayerContainsRunAsAdmin(
@@ -569,17 +606,33 @@ static bool ShellDisplayNameToString(
         return false;
     }
 
-    WCHAR buffer[32768];
-    if (FAILED(StrRetToBufW(
-            &str,
-            pidl,
-            buffer,
-            ARRAYSIZE(buffer)))) {
+    PWSTR buffer = nullptr;
+    if (FAILED(StrRetToStrW(&str, pidl, &buffer)) || !buffer) {
         return false;
     }
 
     *value = buffer;
+    CoTaskMemFree(buffer);
     return true;
+}
+
+static HICON ExtractIconFromFile(const std::wstring& path,
+                                 int index,
+                                 int size) {
+    // Network paths can block the desktop thread until an SMB timeout if the
+    // share is offline, so they're skipped.
+    if (path.empty() || PathIsNetworkPathW(path.c_str())) {
+        return nullptr;
+    }
+
+    HICON icon = nullptr;
+    if (SHDefExtractIconW(path.c_str(), index, 0, &icon, nullptr,
+                          MAKELONG(size, 0)) == S_OK &&
+        icon) {
+        return icon;
+    }
+
+    return nullptr;
 }
 
 static HICON ExtractRawShortcutIcon(
@@ -589,36 +642,14 @@ static HICON ExtractRawShortcutIcon(
     int width,
     int height) {
 
-    HICON icon = nullptr;
-    UINT resourceId = 0;
+    int size = width > height ? width : height;
 
-    UINT extracted = PrivateExtractIconsW(
-        iconPath.c_str(),
-        iconIndex,
-        width,
-        height,
-        &icon,
-        &resourceId,
-        1,
-        LR_DEFAULTCOLOR);
-
-    if (extracted == 1 && icon) {
+    if (HICON icon = ExtractIconFromFile(iconPath, iconIndex, size)) {
         return icon;
     }
 
     if (_wcsicmp(iconPath.c_str(), targetPath.c_str()) != 0) {
-        icon = nullptr;
-        extracted = PrivateExtractIconsW(
-            targetPath.c_str(),
-            0,
-            width,
-            height,
-            &icon,
-            &resourceId,
-            1,
-            LR_DEFAULTCOLOR);
-
-        if (extracted == 1 && icon) {
+        if (HICON icon = ExtractIconFromFile(targetPath, 0, size)) {
             return icon;
         }
     }
@@ -737,16 +768,22 @@ static bool ShieldIconCacheNeedsRefresh(HWND desktopView) {
     return needsRefresh;
 }
 
-// Returns false if the rebuild was skipped (throttled or already running),
-// so the caller can retry later.
-static bool UpdateShieldedShortcutIconCache(bool force = false) {
-    if (InterlockedCompareExchange(&g_isUnloading, 0, 0) != 0) {
-        return true;
+enum class ShieldRebuildResult {
+    Rebuilt,  // The map was rebuilt.
+    Skipped,  // Throttled or already running; worth retrying shortly.
+    Failed,   // Couldn't rebuild; retrying right away won't help.
+};
+
+static ShieldRebuildResult UpdateShieldedShortcutIconCache(HWND desktopView,
+                                                          bool force = false) {
+    if (InterlockedCompareExchange(&g_isUnloading, 0, 0) != 0 ||
+        !desktopView) {
+        return ShieldRebuildResult::Failed;
     }
 
     ScopedShieldCacheUpdate updateGuard;
     if (!updateGuard.IsAcquired()) {
-        return false;
+        return ShieldRebuildResult::Skipped;
     }
 
     DWORD now = GetTickCount();
@@ -758,7 +795,7 @@ static bool UpdateShieldedShortcutIconCache(bool force = false) {
     if (!force &&
         lastUpdate != 0 &&
         now - lastUpdate < kShieldRefreshThrottleMs) {
-        return false;
+        return ShieldRebuildResult::Skipped;
     }
 
     LONG cacheGeneration =
@@ -767,11 +804,6 @@ static bool UpdateShieldedShortcutIconCache(bool force = false) {
     AcquireSRWLockExclusive(&g_cleanShieldCacheLock);
     g_lastShieldCacheTick = now;
     ReleaseSRWLockExclusive(&g_cleanShieldCacheLock);
-
-    HWND desktopView = GetDesktopFolderView();
-    if (!desktopView) {
-        return true;
-    }
 
     HIMAGELIST systemImageList =
         ListView_GetImageList(desktopView, LVSIL_NORMAL);
@@ -786,7 +818,7 @@ static bool UpdateShieldedShortcutIconCache(bool force = false) {
         iconWidth <= 0 ||
         iconHeight <= 0) {
         Wh_Log(L"Couldn't determine the desktop icon size");
-        return true;
+        return ShieldRebuildResult::Failed;
     }
 
     HIMAGELIST freshImageList = ImageList_Create(
@@ -798,7 +830,7 @@ static bool UpdateShieldedShortcutIconCache(bool force = false) {
 
     if (!freshImageList) {
         Wh_Log(L"Couldn't create the raw desktop icon list");
-        return true;
+        return ShieldRebuildResult::Failed;
     }
 
     // Preserve any normal overlay requested by the desktop draw call. The
@@ -999,7 +1031,7 @@ static bool UpdateShieldedShortcutIconCache(bool force = false) {
             0)) {
         ReleaseSRWLockExclusive(&g_cleanShieldCacheLock);
         ImageList_Destroy(freshImageList);
-        return true;
+        return ShieldRebuildResult::Skipped;
     }
 
     // Glows built from the old private image list must not be reused if a
@@ -1029,12 +1061,8 @@ static bool UpdateShieldedShortcutIconCache(bool force = false) {
         iconWidth,
         iconHeight);
 
-    return true;
+    return ShieldRebuildResult::Rebuilt;
 }
-
-// ---------------------------------------------------------------------------
-// IImageList::Draw hook for the already-working desktop shortcut-arrow feature
-// ---------------------------------------------------------------------------
 
 using IImageList_Draw_t =
     HRESULT(STDMETHODCALLTYPE*)(IImageList*, IMAGELISTDRAWPARAMS*);
@@ -1484,7 +1512,17 @@ HRESULT STDMETHODCALLTYPE IImageList_Draw_Hook(
     }
 
     // Work on a local copy so the caller's parameters are never modified.
-    IMAGELISTDRAWPARAMS local = *drawParams;
+    // Callers may pass an older, smaller IMAGELISTDRAWPARAMS, so copy only
+    // what they provided.
+    if (drawParams->cbSize < IMAGELISTDRAWPARAMS_V3_SIZE) {
+        return IImageList_Draw_Original(self, drawParams);
+    }
+
+    IMAGELISTDRAWPARAMS local = {};
+    memcpy(&local,
+           drawParams,
+           drawParams->cbSize < sizeof(local) ? drawParams->cbSize
+                                              : sizeof(local));
 
     HIMAGELIST drawImageList =
         local.himl ? local.himl : reinterpret_cast<HIMAGELIST>(self);
@@ -1568,10 +1606,9 @@ HRESULT STDMETHODCALLTYPE IImageList_Draw_Hook(
         copy.himl = g_cleanShieldImageList;
         copy.i = glowIndex;
 
-        // ImageList_DrawIndirect dispatches to the implementation that
-        // owns the private image list. Calling the system-image-list
-        // trampoline with this private object is invalid and was the
-        // cause of the previous Explorer crash loop.
+        // ImageList_DrawIndirect dispatches to the implementation that owns
+        // the private image list. Calling the system-image-list trampoline
+        // with this private object would be invalid.
         g_isDrawingCleanShieldIcon = true;
         BOOL drawn = ImageList_DrawIndirect(&copy);
         g_isDrawingCleanShieldIcon = false;
@@ -1676,14 +1713,16 @@ LRESULT CALLBACK DesktopListSubclass(
 
         if (g_settings.hide_shields &&
             ShieldIconCacheNeedsRefresh(hWnd)) {
-            UpdateShieldedShortcutIconCache();
-
-            // Check again shortly whether or not the rebuild ran: it may have
-            // been throttled, or Explorer may still be swapping placeholder
-            // icons for real ones. Without this, a stale map would only be
-            // fixed by the next repaint (e.g. hovering an icon).
-            SetTimer(hWnd, kShieldRefreshTimerId, kShieldRefreshRetryMs,
-                     nullptr);
+            // Check again shortly if the rebuild ran or was throttled:
+            // Explorer may still be swapping placeholder icons for real ones,
+            // and without the check a stale map would only be fixed by the
+            // next repaint (e.g. hovering an icon). After a failure, retrying
+            // right away won't help, so wait for the next paint instead.
+            if (UpdateShieldedShortcutIconCache(hWnd) !=
+                ShieldRebuildResult::Failed) {
+                SetTimer(hWnd, kShieldRefreshTimerId, kShieldRefreshRetryMs,
+                         nullptr);
+            }
         }
 
         bool previous = g_isDrawingDesktop;
@@ -1705,15 +1744,35 @@ LRESULT CALLBACK DesktopListSubclass(
         if (g_settings.hide_shields &&
             InterlockedCompareExchange(&g_isUnloading, 0, 0) == 0 &&
             ShieldIconCacheNeedsRefresh(hWnd)) {
-            if (UpdateShieldedShortcutIconCache()) {
-                InvalidateRect(hWnd, nullptr, FALSE);
-            } else {
-                SetTimer(hWnd, kShieldRefreshTimerId, kShieldRefreshRetryMs,
-                         nullptr);
+            switch (UpdateShieldedShortcutIconCache(hWnd)) {
+                case ShieldRebuildResult::Rebuilt:
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                    break;
+                case ShieldRebuildResult::Skipped:
+                    SetTimer(hWnd, kShieldRefreshTimerId,
+                             kShieldRefreshRetryMs, nullptr);
+                    break;
+                case ShieldRebuildResult::Failed:
+                    break;
             }
         }
 
         return 0;
+    }
+
+    if (g_uninitMessage && uMsg == g_uninitMessage) {
+        // Runs on the desktop thread, between paints, so nothing is using the
+        // caches while they're freed.
+        KillTimer(hWnd, kShieldRefreshTimerId);
+        ClearShieldedShortcutIconCache();
+        return 0;
+    }
+
+    if (uMsg == WM_NCDESTROY) {
+        KillTimer(hWnd, kShieldRefreshTimerId);
+
+        HWND expected = hWnd;
+        g_desktopListView.compare_exchange_strong(expected, nullptr);
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -1801,19 +1860,14 @@ HRESULT WINAPI DrawThemeTextEx_Hook(
 // windows are never affected.
 // ---------------------------------------------------------------------------
 
-#ifndef LVP_LISTITEM
-#define LVP_LISTITEM 1
-#endif
-
 static bool ShouldSkipThemeBackground(int partId, int stateId) {
     if (!g_isDrawingDesktop || !g_settings.icon_glow ||
         partId != LVP_LISTITEM) {
         return false;
     }
 
-    // LISS_HOT = 2, LISS_SELECTED = 3, LISS_SELECTEDNOTFOCUS = 5,
-    // LISS_HOTSELECTED = 6.
-    return stateId == 2 || stateId == 3 || stateId == 5 || stateId == 6;
+    return stateId == LISS_HOT || stateId == LISS_SELECTED ||
+           stateId == LISS_SELECTEDNOTFOCUS || stateId == LISS_HOTSELECTED;
 }
 
 using DrawThemeBackground_t =
@@ -1890,10 +1944,12 @@ HWND WINAPI CreateWindowExW_Hook(
     if (hWnd && IsDesktopFolderView(hWnd)) {
         ClearShieldedShortcutIconCache();
 
-        WindhawkUtils::SetWindowSubclassFromAnyThread(
-            hWnd,
-            DesktopListSubclass,
-            0);
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                hWnd,
+                DesktopListSubclass,
+                0)) {
+            g_desktopListView = hWnd;
+        }
     }
 
     return hWnd;
@@ -1923,6 +1979,9 @@ static void LoadSettings() {
 BOOL Wh_ModInit() {
     InterlockedExchange(&g_isUnloading, 0);
     LoadSettings();
+
+    g_uninitMessage =
+        RegisterWindowMessageW(L"DesktopShortcutCleaner_Uninit");
 
     WindhawkUtils::SetFunctionHook(
         CreateWindowExW,
@@ -1992,35 +2051,43 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    if (HWND desktop = GetDesktopFolderView()) {
-        WindhawkUtils::SetWindowSubclassFromAnyThread(
-            desktop,
-            DesktopListSubclass,
-            0);
-
-        if (g_settings.hide_shields) {
-            UpdateShieldedShortcutIconCache(true);
-        }
-
-        InvalidateRect(desktop, nullptr, TRUE);
-        UpdateWindow(desktop);
+    HWND desktop = GetDesktopFolderView();
+    if (!desktop) {
+        Wh_Log(L"Desktop ListView not found yet");
+        return;
     }
 
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+            desktop,
+            DesktopListSubclass,
+            0)) {
+        g_desktopListView = desktop;
+    }
+
+    // The repaint builds the shield map on the desktop thread.
+    InvalidateRect(desktop, nullptr, TRUE);
+    UpdateWindow(desktop);
 }
 
 void Wh_ModUninit() {
     InterlockedExchange(&g_isUnloading, 1);
 
-    if (HWND desktop = GetDesktopFolderView()) {
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            desktop,
-            DesktopListSubclass);
-
-        InvalidateRect(desktop, nullptr, TRUE);
+    HWND desktop = g_desktopListView.exchange(nullptr);
+    if (!desktop) {
+        return;
     }
 
-    ClearShieldedShortcutIconCache();
-    ClearGlowCache();
+    // Kill the retry timer and free the caches on the desktop thread, then
+    // remove the subclass from the exact window that was subclassed.
+    DWORD_PTR result = 0;
+    SendMessageTimeoutW(desktop, g_uninitMessage, 0, 0,
+                        SMTO_NORMAL | SMTO_ABORTIFHUNG, 2000, &result);
+
+    WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+        desktop,
+        DesktopListSubclass);
+
+    InvalidateRect(desktop, nullptr, TRUE);
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
