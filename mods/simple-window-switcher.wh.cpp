@@ -1185,6 +1185,7 @@ namespace SwsSelectionProtocol {
 #define SWS_HOTKEY_ALTBACKTICK_UK   8
 #define SWS_HOTKEY_ALTESC           9
 #define SWS_HOTKEY_ALTSHIFTESC      10
+#define SWS_HOTKEY_STICKY_ESC       11
 #define SWS_HOTKEY_RETRY_TIMER_ID   100
 #define SWS_HOTKEY_RETRY_INTERVAL   2000
 
@@ -3633,6 +3634,7 @@ static void SWS_RegisterHotkeys();
 static void SWS_UnregisterHotkeys();
 static void PublishSwitcherHotkeyPolicy();
 static void SWS_SetSessionEscHotkeys(bool enable);
+static void SWS_SetStickyEscapeHotkey(bool enable);
 static void ApplySwitcherRegion();
 static void ApplyThemeToWindow(HWND hWnd);
 static void ApplyPresentationWindowRegion(HWND hWnd);
@@ -16866,6 +16868,10 @@ static void TryShellInvocationHandoff(ShellInvocationPhase phase) {
     // Keep the return identity until that transition settles or times out.
     const bool stillForeground = s_sessionShell.Matches(foreground);
     const bool dismissed = !visible && foreground && !stillForeground;
+    if (dismissed && g_isVisible && g_isSticky && !g_touchpadInvocation &&
+        !IsSwitcherWindow(foreground)) {
+        SWS_SetStickyEscapeHotkey(true);
+    }
     if (dismissed && (s_shellInvocationDeadline || firstAttempt)) {
         Wh_Log(L"SWS: shell invocation dismissed source=%p foreground=%p", shell, foreground);
     }
@@ -17109,6 +17115,7 @@ static void ShowDesktop() {
 
 static void StartExitAnimation(bool activateSelectedWindow) {
     if ((!g_isVisible && !g_isPendingShow) || g_animExitActive) return;
+    SWS_SetStickyEscapeHotkey(false);
     StopShellInvocationHandoff();
     g_backdropPresentationClosing = true;
     g_backdropSwitcherPresented = false;
@@ -19452,6 +19459,12 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
     if (event != 0x0003 /* EVENT_SYSTEM_FOREGROUND */ &&
         (idObject != OBJID_WINDOW || idChild != CHILDID_SELF)) return;
     if (!hwnd) return;
+    if ((event == EVENT_OBJECT_HIDE || event == EVENT_OBJECT_DESTROY) &&
+        hwnd == s_sessionShell.window && g_isVisible && g_isSticky &&
+        !g_animExitActive && !g_touchpadInvocation &&
+        !IsSwitcherWindow(GetForegroundWindow()) && !SessionShellIsVisible()) {
+        SWS_SetStickyEscapeHotkey(true);
+    }
     if (IsDesktopSourceWindow(hwnd)) return;
     if (event == EVENT_OBJECT_DESTROY) {
         InvalidateWindowIcon(hwnd);
@@ -21513,6 +21526,13 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
     if (uMsg == WM_HOTKEY) {
         g_ctrlTapPending = false;
+        if (wParam == SWS_HOTKEY_STICKY_ESC) {
+            if (g_isVisible && g_isSticky && !g_animExitActive && s_sessionShell.window) {
+                if (g_drilledIn) ExitAppGroup();
+                else StartExitAnimation(false);
+            }
+            return 0;
+        }
         if (wParam == SWS_HOTKEY_ALTESC || wParam == SWS_HOTKEY_ALTSHIFTESC) {
             // Same as Esc in the switcher, also while another window still
             // holds the foreground (show delay).
@@ -22231,6 +22251,9 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             return 0;
         }
         break;
+    case WM_SETFOCUS:
+        if (hWnd == g_hSwitcher) SWS_SetStickyEscapeHotkey(false);
+        break;
     case WM_KILLFOCUS:
         if (g_isVisible || g_isPendingShow) {
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
@@ -22433,7 +22456,20 @@ static void SWS_RegisterHotkeys() {
 // show-delay phase. These hotkeys exist only while a session is open, so
 // Alt+Esc keeps its Windows meaning the rest of the time.
 static bool g_sessionEscHotkeys = false;
+static bool s_stickyEscapeHotkey = false;
+static void SWS_SetStickyEscapeHotkey(bool enable) {
+    if (!g_hSwitcher || enable == s_stickyEscapeHotkey) return;
+    if (enable) {
+        s_stickyEscapeHotkey =
+            RegisterHotKey(g_hSwitcher, SWS_HOTKEY_STICKY_ESC, MOD_NOREPEAT, VK_ESCAPE) != FALSE;
+    } else {
+        UnregisterHotKey(g_hSwitcher, SWS_HOTKEY_STICKY_ESC);
+        s_stickyEscapeHotkey = false;
+    }
+}
+
 static void SWS_SetSessionEscHotkeys(bool enable) {
+    if (!enable) SWS_SetStickyEscapeHotkey(false);
     if (!g_hSwitcher || enable == g_sessionEscHotkeys) return;
     g_sessionEscHotkeys = enable;
     if (!enable) {
