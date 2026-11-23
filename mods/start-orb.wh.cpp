@@ -27,8 +27,11 @@ That is all. The orb appears straight away.
 ## Using your own picture
 
 Set "Orb" to "Custom". In File Explorer, right-click your picture, choose "Copy as path", and paste
-it into "Picture" under "Customize". A web address (`https://...`) works too. PNG, JPG and GIF are
-supported, and an animated GIF plays. If a picture can't be loaded, the normal Windows logo stays.
+it into "Picture" under "Customize". PNG, JPG and GIF are supported, and an animated GIF plays.
+
+A web address (`https://...`) works too. Explorer downloads it each time it starts or the mod reloads,
+and retries once a minute if the download fails. A file on your PC needs no network access.
+ If a picture can't be loaded, the normal Windows logo stays.
 
 Two optional extras: a different picture while the pointer is on Start, and another while you click.
 
@@ -43,8 +46,12 @@ It works alongside other taskbar mods, including Windows 11 Taskbar Styler: it d
 XAML diagnostics channel that only one mod can hold. If a Styler theme also restyles the Start
 button, remove that part of the theme so the two do not draw over each other.
 
-The orb appears as soon as the mod is enabled. To manage that, the mod makes each taskbar lay itself
-out once, by narrowing its content by one pixel for a moment.
+## How this differs from Start Button Replacer
+
+[Start Button Replacer](https://windhawk.net/mods/start-button-replacer) is the better choice for a
+custom icon with separate activated and dark-mode images or hover and press effects. Start Orb is
+made for animated orbs: five are built in, so no image file is needed, and it plays sprite sheets,
+which keep the soft, partly transparent edges a GIF cannot.
 */
 // ==/WindhawkModReadme==
 
@@ -75,7 +82,8 @@ out once, by narrowing its content by one pixel for a moment.
     $name: Picture
     $description: >-
       In File Explorer, right-click your picture, choose "Copy as path" and paste it here. PNG, JPG
-      or GIF. A web address works too.
+      or GIF. A web address works too: Explorer downloads it each time it starts or the mod reloads,
+      and retries once a minute if the download fails.
   - hoverImage: ""
     $name: Picture while pointing at Start
     $description: Optional. Leave empty to keep the same picture.
@@ -116,10 +124,10 @@ out once, by narrowing its content by one pixel for a moment.
 #include <atomic>
 #include <chrono>
 #include <cmath>
-#include <cstdarg>
 #include <cstdio>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -129,54 +137,6 @@ namespace {
 
 constexpr wchar_t kOrbName[] = L"StartOrbImage";
 constexpr double kSmallTaskbarBelow = 40.0;   // px; Windows' small taskbar is 32 tall, the default 48
-
-// Diagnostics for a mod that cannot be stepped through. Logging is on only if %TEMP%\start-orb.log
-// already exists when the mod is loaded: create that file, then switch the mod off and on, and the
-// first kDebugLines events of each load are appended to it with the time of day. Delete it to stop.
-constexpr int kDebugLines = 300;
-
-// The log file's path, or empty when logging is off. Decided once per load.
-std::wstring const& DebugLogPath() {
-    static const std::wstring path = [] {
-        wchar_t temp[MAX_PATH];
-        const DWORD length = GetTempPathW(MAX_PATH, temp);
-        if (length == 0 || length >= MAX_PATH) {
-            return std::wstring();
-        }
-        std::wstring candidate = std::wstring(temp, length) + L"start-orb.log";
-        return GetFileAttributesW(candidate.c_str()) != INVALID_FILE_ATTRIBUTES ? candidate : std::wstring();
-    }();
-    return path;
-}
-
-void DebugLog(const wchar_t* format, ...) {
-    static std::atomic<int> remaining{kDebugLines};
-    const std::wstring& path = DebugLogPath();
-    if (path.empty() || remaining.fetch_sub(1) <= 0) {
-        return;
-    }
-    std::unique_ptr<FILE, int (*)(FILE*)> file(_wfopen(path.c_str(), L"a"), &fclose);
-    if (!file) {
-        return;
-    }
-    SYSTEMTIME now;
-    GetLocalTime(&now);
-    fwprintf(file.get(), L"%02d:%02d:%02d.%03d ", now.wHour, now.wMinute, now.wSecond, now.wMilliseconds);
-    va_list args;
-    va_start(args, format);
-    vfwprintf(file.get(), format, args);
-    va_end(args);
-    fputwc(L'\n', file.get());
-}
-
-// Logs `text` only when it differs from the last outcome logged, so a repeated result is one line.
-void DebugOutcome(std::wstring const& text) {
-    static std::wstring last;
-    if (!DebugLogPath().empty() && text != last) {
-        last = text;
-        DebugLog(L"apply: %s", text.c_str());
-    }
-}
 
 // ---------------------------------------------------------------------------------------------
 // Settings
@@ -239,7 +199,7 @@ std::string DecodeBase64(const char* text) {
 std::wstring BuiltInOrbFile(BuiltInOrb const& orb) {
     wchar_t folder[MAX_PATH];
     if (Wh_GetModStoragePath(folder, ARRAYSIZE(folder)) == 0) {
-        DebugLog(L"built-in orb: no storage folder");
+        Wh_Log(L"Built-in orb: no storage folder");
         return {};
     }
     unsigned hash = 2166136261u;                     // FNV-1a
@@ -259,18 +219,18 @@ std::wstring BuiltInOrbFile(BuiltInOrb const& orb) {
     {
         std::unique_ptr<FILE, int (*)(FILE*)> file(_wfopen(partial.c_str(), L"wb"), &fclose);
         if (!file || fwrite(bytes.data(), 1, bytes.size(), file.get()) != bytes.size()) {
-            DebugLog(L"built-in orb: could not write %ls", partial.c_str());
+            Wh_Log(L"Built-in orb: could not write %s", partial.c_str());
             return {};
         }
     }
     // Renamed into place only when complete, so a half-written sheet is never loaded.
     if (!MoveFileExW(partial.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-        DebugLog(L"built-in orb: could not rename to %ls, error %lu", path.c_str(), GetLastError());
+        Wh_Log(L"Built-in orb: could not rename to %s, error %lu", path.c_str(), GetLastError());
         DeleteFileW(partial.c_str());
         // Another Explorer may have put the same sheet there first.
         return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES ? path : std::wstring{};
     }
-    DebugLog(L"built-in orb: wrote %ls (%u bytes)", path.c_str(), static_cast<unsigned>(bytes.size()));
+    Wh_Log(L"Built-in orb: wrote %s (%u bytes)", path.c_str(), static_cast<unsigned>(bytes.size()));
 
     // Sheets this orb left under earlier hashes are no longer used. One still held open by Explorer
     // does not delete; it goes the next time a new sheet for this orb is written.
@@ -345,9 +305,15 @@ Settings ReadSettings() {
 
 std::vector<winrt::weak_ref<FrameworkElement>> g_frames;      // taskbar frames seen, for refresh and cleanup
 std::vector<winrt::weak_ref<UIElement>> g_buttons;            // Start buttons that carry our pointer handlers
-std::map<std::wstring, Media::ImageSource> g_images;          // loaded once per address
+// A loaded picture, and its subscription to the load failing.
+struct LoadedImage {
+    Media::ImageSource source;
+    Media::Imaging::BitmapImage::ImageFailed_revoker failedRevoker;
+};
+// Released on the UI thread (ForgetLoadedImages, RemoveEverything), never by the automatic destructor
+// at process exit, when XAML may already be gone. Loaded once per address.
+[[clang::no_destroy]] std::optional<std::map<std::wstring, LoadedImage>> g_images{std::in_place};
 std::map<std::wstring, ULONGLONG> g_failedImages;            // pictures that would not load, and when
-std::vector<Media::Imaging::BitmapImage::ImageFailed_revoker> g_imageFailedRevokers;
 constexpr ULONGLONG kRetryFailedImageMs = 60000;             // a web address may be back by then
 bool g_hover = false;
 bool g_pressed = false;
@@ -355,12 +321,12 @@ winrt::weak_ref<UIElement> g_pointerButton;                  // the Start button
 std::atomic<bool> g_unloading{false};                        // set first on unload: nothing new may be posted
 bool g_applyQueued = false;
 int g_generation = 0;        // goes up when the settings change, so everything shown is built again
-winrt::Windows::Foundation::IAsyncAction g_pendingApply{nullptr};   // the apply that is posted, if any
+[[clang::no_destroy]] winrt::Windows::Foundation::IAsyncAction g_pendingApply{nullptr};   // the apply that is posted, if any
 
-winrt::Windows::Foundation::IInspectable g_onEntered{nullptr};
-winrt::Windows::Foundation::IInspectable g_onExited{nullptr};
-winrt::Windows::Foundation::IInspectable g_onPressed{nullptr};
-winrt::Windows::Foundation::IInspectable g_onReleased{nullptr};
+[[clang::no_destroy]] winrt::Windows::Foundation::IInspectable g_onEntered{nullptr};
+[[clang::no_destroy]] winrt::Windows::Foundation::IInspectable g_onExited{nullptr};
+[[clang::no_destroy]] winrt::Windows::Foundation::IInspectable g_onPressed{nullptr};
+[[clang::no_destroy]] winrt::Windows::Foundation::IInspectable g_onReleased{nullptr};
 
 // The element named `name` at most `depth` levels below `parent`.
 FrameworkElement FindNamed(DependencyObject const& parent, const wchar_t* name, int depth) {
@@ -433,8 +399,8 @@ void RefreshAll();
 Media::ImageSource LoadImage(std::wstring const& text, int decodeWidth, int decodeHeight) {
     const std::wstring address = AsAddress(text);
     const std::wstring key = address + L"|" + std::to_wstring(decodeWidth) + L"x" + std::to_wstring(decodeHeight);
-    if (const auto it = g_images.find(key); it != g_images.end()) {
-        return it->second;
+    if (const auto it = g_images->find(key); it != g_images->end()) {
+        return it->second.source;
     }
     Media::Imaging::BitmapImage bitmap;
     if (decodeWidth > 0 || decodeHeight > 0) {       // must be set before the address
@@ -447,22 +413,25 @@ Media::ImageSource LoadImage(std::wstring const& text, int decodeWidth, int deco
         }
     }
     // A missing file or dead address raises no exception, only this: Windows' logo comes back.
-    g_imageFailedRevokers.push_back(bitmap.ImageFailed(
+    auto failedRevoker = bitmap.ImageFailed(
         winrt::auto_revoke,
         [text, key](winrt::Windows::Foundation::IInspectable const&, ExceptionRoutedEventArgs const&) {
             try {
                 if (g_unloading) {
                     return;
                 }
-                Wh_Log(L"Could not load picture: %s", text.c_str());
-                g_failedImages[text] = GetTickCount64();
-                g_images.erase(key);
+                // Erasing the entry drops this handler, and with it the captured strings.
+                const std::wstring failedText = text;
+                const std::wstring failedKey = key;
+                Wh_Log(L"Could not load picture: %s", failedText.c_str());
+                g_failedImages[failedText] = GetTickCount64();
+                g_images->erase(failedKey);
                 RefreshAll();
             } catch (...) {
             }
-        }));
+        });
     bitmap.UriSource(winrt::Windows::Foundation::Uri(address));
-    g_images.emplace(key, bitmap);
+    g_images->emplace(key, LoadedImage{bitmap, std::move(failedRevoker)});
     return bitmap;
 }
 
@@ -534,6 +503,12 @@ void RemoveOrb(Controls::Panel const& host) {
     }
 }
 
+// The canvas remembers the icon's opacity from before the orb, so another mod's or theme's value
+// comes back rather than a forced 1.0.
+void RestoreIcon(FrameworkElement const& icon, Controls::Canvas const& orb) {
+    icon.Opacity(winrt::unbox_value_or<double>(orb.DataContext(), 1.0));
+}
+
 constexpr int kMaxSheetPixels = 16384;
 
 // Shows `address` in the orb at `size` layout pixels. With more than one frame it is a sprite sheet.
@@ -592,7 +567,6 @@ void ApplyToFrame(FrameworkElement const& frame) {
     const auto settings = g_settings;
     auto button = FindStartButton(frame);
     if (!button) {
-        DebugOutcome(L"no Start button found in the frame");
         return;
     }
     // Windows' own icon; our image goes beside it in the same panel, so it is centred the same way.
@@ -600,7 +574,6 @@ void ApplyToFrame(FrameworkElement const& frame) {
     auto host = icon ? Media::VisualTreeHelper::GetParent(icon).try_as<Controls::Panel>() : nullptr;
     if (!host) {
         Wh_Log(L"Start button layout not recognised (icon %d)", icon ? 1 : 0);
-        DebugOutcome(icon ? L"the Start icon's parent is not a panel" : L"no Icon element in the Start button");
         return;
     }
 
@@ -609,10 +582,11 @@ void ApplyToFrame(FrameworkElement const& frame) {
     const bool smallTaskbar = frame.ActualHeight() < kSmallTaskbarBelow;
     const Theme* theme = &settings->theme;
     // Nothing to show, or the picture would not load: put things back as they were.
-    if (!theme || theme->image.empty() || ImageFailedRecently(theme->image)) {
-        RemoveOrb(host);
-        icon.Opacity(1.0);
-        DebugOutcome(L"no theme or image to show");
+    if (theme->image.empty() || ImageFailedRecently(theme->image)) {
+        if (orb) {
+            RestoreIcon(icon, orb);
+            RemoveOrb(host);
+        }
         return;
     }
 
@@ -622,6 +596,7 @@ void ApplyToFrame(FrameworkElement const& frame) {
         orb.HorizontalAlignment(HorizontalAlignment::Center);
         orb.VerticalAlignment(VerticalAlignment::Center);
         orb.IsHitTestVisible(false);
+        orb.DataContext(winrt::box_value(icon.Opacity()));
         orb.Children().Append(Controls::Image());
         host.Children().Append(orb);
     }
@@ -641,7 +616,7 @@ void ApplyToFrame(FrameworkElement const& frame) {
     const int frameTime = std::clamp(theme->frameTime, 10, 10000);
     const auto root = frame.XamlRoot();
     const double scale = root ? root.RasterizationScale() : 1.0;
-    // Built again only when what is shown changes: this runs on every pointer move over the taskbar,
+    // Built again only when what is shown changes: this runs on every layout pass and pointer event,
     // and building it each time would restart the animation each time.
     const std::wstring showing = *shown + L"|" + std::to_wstring(size) + L"|" + std::to_wstring(frames) + L"|" +
                                  std::to_wstring(frameTime) + L"|" + std::to_wstring(scale) + L"|" +
@@ -651,13 +626,12 @@ void ApplyToFrame(FrameworkElement const& frame) {
         ShowOrb(orb, image, *shown, size, frames, frameTime, scale);
         image.Tag(winrt::box_value(winrt::hstring(showing)));
     }
-    icon.Opacity(settings->hideOriginal ? 0.0 : 1.0);
-    EnsurePointerHandlers(button);
-    if (!DebugLogPath().empty()) {                   // the text is only built when it will be written
-        DebugOutcome(L"orb shown, theme '" + theme->name + L"', " + std::to_wstring(static_cast<int>(size)) + L" px, " +
-                     std::to_wstring(frames) + L" frame(s), bar " +
-                     std::to_wstring(static_cast<int>(frame.ActualHeight())) + L" px tall");
+    if (settings->hideOriginal) {
+        icon.Opacity(0.0);
+    } else {
+        RestoreIcon(icon, orb);
     }
+    EnsurePointerHandlers(button);
 }
 
 void RefreshAll() {
@@ -695,10 +669,8 @@ void QueueApply(FrameworkElement const& frame) {
                 RefreshAll();
             } catch (winrt::hresult_error const& e) {
                 Wh_Log(L"Apply failed: 0x%08X %s", static_cast<unsigned>(e.code().value), e.message().c_str());
-                DebugLog(L"apply failed: 0x%08X %s", static_cast<unsigned>(e.code().value), e.message().c_str());
             } catch (...) {
                 Wh_Log(L"Apply failed");
-                DebugLog(L"apply failed");
             }
         });
     } catch (...) {
@@ -707,10 +679,10 @@ void QueueApply(FrameworkElement const& frame) {
     }
 }
 
+// Replaces the cache with an empty one, on the UI thread.
 void ForgetLoadedImages() {
-    g_imageFailedRevokers.clear();
     g_failedImages.clear();
-    g_images.clear();
+    g_images.emplace();
 }
 
 // Takes back everything this mod changed.
@@ -741,12 +713,15 @@ void RemoveEverything() {
         if (!host) {
             continue;
         }
-        icon.Opacity(1.0);
-        RemoveOrb(host);
+        if (auto orb = FindOrb(host)) {
+            RestoreIcon(icon, orb);
+            RemoveOrb(host);
+        }
     }
     g_frames.clear();
     g_pointerButton = nullptr;
-    ForgetLoadedImages();
+    g_failedImages.clear();
+    g_images.reset();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -754,7 +729,6 @@ void RemoveEverything() {
 // ---------------------------------------------------------------------------------------------
 
 std::atomic<bool> g_taskbarViewDllLoaded{false};
-std::atomic<int> g_frameSightings{0};   // times a hook has been handed a taskbar frame
 
 // Returns the TaskbarFrame behind a hooked call, or null for any other control.
 FrameworkElement AsTaskbarFrame(void* pThis) {
@@ -773,7 +747,6 @@ void OnFrameSeen(void* pThis) {
             return;
         }
         if (auto frame = AsTaskbarFrame(pThis)) {
-            ++g_frameSightings;
             QueueApply(frame);
         }
     } catch (...) {
@@ -781,49 +754,15 @@ void OnFrameSeen(void* pThis) {
 }
 
 // The taskbar frame's layout pass: runs at startup and whenever the taskbar changes size, so the
-// orb is there without the pointer ever touching the taskbar. The same hook the "Taskbar height and
-// icon size" mod uses.
+// orb reaches a taskbar that appears later. The same hook the "Taskbar height and icon size" mod uses.
 using TaskbarFrame_MeasureOverride_t = int(WINAPI*)(void* pThis, winrt::Windows::Foundation::Size size,
                                                     winrt::Windows::Foundation::Size* resultSize);
 TaskbarFrame_MeasureOverride_t TaskbarFrame_MeasureOverride_Original;
 
 int WINAPI TaskbarFrame_MeasureOverride_Hook(void* pThis, winrt::Windows::Foundation::Size size,
                                              winrt::Windows::Foundation::Size* resultSize) {
-    static int logged = 0;
-    if (logged < 8) {
-        ++logged;
-        try {
-            DebugLog(L"hook: layout pass (MeasureOverride) %d", logged);
-        } catch (...) {
-        }
-    }
     OnFrameSeen(pThis);
     return TaskbarFrame_MeasureOverride_Original(pThis, size, resultSize);
-}
-
-// Pointer movement over the taskbar: the wake-up when the mod is switched on in a running Explorer
-// and no layout pass happens to follow.
-using TaskbarFrame_OnPointerMoved_t = int(WINAPI*)(void* pThis, void* pArgs);
-TaskbarFrame_OnPointerMoved_t TaskbarFrame_OnPointerMoved_Original;
-
-int WINAPI TaskbarFrame_OnPointerMoved_Hook(void* pThis, void* pArgs) {
-    static int logged = 0;
-    if (logged < 8) {
-        ++logged;
-        try {
-            DebugLog(L"hook: pointer moved %d", logged);
-        } catch (...) {
-        }
-    }
-    // At most once a second: this is a wake-up and a safety net, and the layout hook and the Start
-    // button's own pointer handlers do the real work. Applying on every move was wasted effort.
-    static ULONGLONG lastSeen = 0;
-    const ULONGLONG now = GetTickCount64();
-    if (now - lastSeen >= 1000) {
-        lastSeen = now;
-        OnFrameSeen(pThis);
-    }
-    return TaskbarFrame_OnPointerMoved_Original(pThis, pArgs);
 }
 
 HMODULE GetTaskbarViewModuleHandle() {
@@ -835,18 +774,12 @@ HMODULE GetTaskbarViewModuleHandle() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
-    // Taskbar.View.dll
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
             &TaskbarFrame_MeasureOverride_Original,
             TaskbarFrame_MeasureOverride_Hook,
-        },
-        {
-            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerMoved(void *))"},
-            &TaskbarFrame_OnPointerMoved_Original,
-            TaskbarFrame_OnPointerMoved_Hook,
-            true,   // the layout hook alone is enough
         },
     };
     if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
@@ -916,58 +849,181 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procPa
     return true;
 }
 
-// A mod switched on in a running Explorer hears nothing until the taskbar lays itself out or the
-// pointer crosses the dock, so the orb stayed missing after enabling (owner's report, 2026-11-13).
-// None of the notifications Windows sends on a settings, colour, theme, work-area or display change
-// makes the taskbar measure itself again (each was tried). Narrowing its XAML content window by one
-// pixel does; the width is put back as soon as the layout hook has fired.
-void WakeTaskbar(HWND taskbar) {
-    HWND content = FindWindowExW(taskbar, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
-    RECT rect;
-    if (!content || !GetWindowRect(content, &rect)) {
-        DebugLog(L"wake: no content window in taskbar %p", static_cast<void*>(taskbar));
-        return;
+// Reaching each taskbar directly, so the orb appears (and settings apply) without waiting for a
+// layout pass. The approach and the offset decoding follow the merged taskbar-multirow and
+// taskbar-start-button-colorizer mods.
+void* CTaskBand_ITaskListWndSite_vftable;
+void* CSecondaryTaskBand_ITaskListWndSite_vftable;
+
+using GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
+GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
+
+void* TaskbarHost_FrameHeight_Original;
+
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
+std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+bool g_taskbarHostSymbols = false;    // without them the orb arrives with the next layout pass
+
+bool HookTaskbarDllSymbols() {
+    HMODULE module = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"Could not load taskbar.dll");
+        return false;
     }
-    const int width = rect.right - rect.left;
-    const int height = rect.bottom - rect.top;
-    if (width < 2 || height < 1) {
-        return;
-    }
-    constexpr UINT flags = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE;
-    const int seenBefore = g_frameSightings;
-    if (!SetWindowPos(content, nullptr, 0, 0, width - 1, height, flags)) {
-        DebugLog(L"wake: could not resize the content window, error %lu", GetLastError());
-        return;
-    }
-    int waited = 0;
-    for (; waited < 500 && g_frameSightings == seenBefore; waited += 10) {
-        Sleep(10);
-    }
-    // Put it back only if it is still as this left it: if Explorer resized it meanwhile, that size wins.
-    RECT now;
-    const bool untouched = GetWindowRect(content, &now) && now.right - now.left == width - 1 && now.bottom - now.top == height;
-    if (untouched) {
-        SetWindowPos(content, nullptr, 0, 0, width, height, flags);
-    }
-    DebugLog(L"wake: content %dx%d, layout hook fired %d (after %d ms), width restored %d", width, height,
-             g_frameSightings != seenBefore ? 1 : 0, waited, untouched ? 1 : 0);
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &CTaskBand_ITaskListWndSite_vftable},
+        {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CSecondaryTaskBand_ITaskListWndSite_vftable},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+         &CTaskBand_GetTaskbarHost_Original},
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &TaskbarHost_FrameHeight_Original},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+         &CSecondaryTaskBand_GetTaskbarHost_Original},
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &std__Ref_count_base__Decref_Original},
+    };
+    return WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks));
 }
 
-// Wakes every taskbar of this Explorer (the main one and those on other monitors). Runs on Windhawk's
-// thread, not the taskbar's, because it waits.
-void WakeTaskbars() {
+XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
+        return nullptr;
+    }
+
+    size_t taskbarElementIUnknownOffset = 0x10;
+
+#if defined(_M_X64)
+    {
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = static_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 && b[5] == 0x83 && b[6] == 0xC1 &&
+            b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#elif defined(_M_ARM64)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = static_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD && p[2] == 0x910003FD &&
+            (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#else
+#error "Unsupported architecture"
+#endif
+
+    auto* taskbarElementIUnknown =
+        *reinterpret_cast<IUnknown**>(static_cast<BYTE*>(taskbarHostSharedPtr[0]) + taskbarElementIUnknownOffset);
+
+    FrameworkElement taskbarElement = nullptr;
+    taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(taskbarElement));
+
+    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+
+    return result;
+}
+
+// The taskbar object behind a task band window, as the interface whose vtable is `vftable`.
+XamlRoot XamlRootFromTaskBand(HWND taskSwWnd, void* vftable, GetTaskbarHost_t getTaskbarHost) {
+    if (!taskSwWnd) {
+        return nullptr;
+    }
+    void** site = reinterpret_cast<void**>(GetWindowLongPtrW(taskSwWnd, 0));
+    if (!site) {
+        return nullptr;
+    }
+    for (int i = 0; *site != vftable; ++i, ++site) {
+        if (i == 20) {
+            return nullptr;
+        }
+    }
+    void* taskbarHostSharedPtr[2]{};
+    getTaskbarHost(site, taskbarHostSharedPtr);
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+}
+
+// On newer builds the taskbar frame is the XAML content itself, on others its direct child.
+FrameworkElement TaskbarFrameFrom(XamlRoot const& root) {
+    auto content = root.Content().try_as<FrameworkElement>();
+    if (!content || winrt::get_class_name(content) == L"Taskbar.TaskbarFrame") {
+        return content;
+    }
+    const int count = Media::VisualTreeHelper::GetChildrenCount(content);
+    for (int i = 0; i < count; ++i) {
+        auto child = Media::VisualTreeHelper::GetChild(content, i).try_as<FrameworkElement>();
+        if (child && winrt::get_class_name(child) == L"Taskbar.TaskbarFrame") {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
+// Runs on the taskbar's UI thread: finds every taskbar of this Explorer and applies the orb.
+void ApplyToAllTaskbars() {
+    if (g_taskbarHostSymbols) {
+        EnumThreadWindows(
+            GetCurrentThreadId(),
+            [](HWND window, LPARAM) -> BOOL {
+                try {
+                    wchar_t className[32];
+                    if (!GetClassNameW(window, className, ARRAYSIZE(className))) {
+                        return TRUE;
+                    }
+                    XamlRoot root = nullptr;
+                    if (_wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                        root = XamlRootFromTaskBand(static_cast<HWND>(GetPropW(window, L"TaskbandHWND")),
+                                                    CTaskBand_ITaskListWndSite_vftable,
+                                                    CTaskBand_GetTaskbarHost_Original);
+                    } else if (_wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) {
+                        root = XamlRootFromTaskBand(FindWindowExW(window, nullptr, L"WorkerW", nullptr),
+                                                    CSecondaryTaskBand_ITaskListWndSite_vftable,
+                                                    CSecondaryTaskBand_GetTaskbarHost_Original);
+                    } else {
+                        return TRUE;
+                    }
+                    if (auto frame = root ? TaskbarFrameFrom(root) : nullptr) {
+                        RememberFrame(frame);
+                    }
+                } catch (...) {
+                }
+                return TRUE;
+            },
+            0);
+    }
+    RefreshAll();
+}
+
+// This process's own taskbar: with "Launch folder windows in a separate process", the mod also runs
+// in Explorers that have none.
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND found = nullptr;
     EnumWindows(
-        [](HWND window, LPARAM) -> BOOL {
+        [](HWND window, LPARAM param) -> BOOL {
             DWORD processId = 0;
-            wchar_t className[64] = {};
+            wchar_t className[32];
             if (GetWindowThreadProcessId(window, &processId) && processId == GetCurrentProcessId() &&
                 GetClassNameW(window, className, ARRAYSIZE(className)) &&
-                (wcscmp(className, L"Shell_TrayWnd") == 0 || wcscmp(className, L"Shell_SecondaryTrayWnd") == 0)) {
-                WakeTaskbar(window);
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(param) = window;
+                return FALSE;
             }
             return TRUE;
         },
-        0);
+        reinterpret_cast<LPARAM>(&found));
+    return found;
 }
 
 }  // namespace
@@ -975,6 +1031,11 @@ void WakeTaskbars() {
 BOOL Wh_ModInit() {
     try {
         g_settings = std::make_shared<const Settings>(ReadSettings());
+
+        g_taskbarHostSymbols = HookTaskbarDllSymbols();
+        if (!g_taskbarHostSymbols) {
+            Wh_Log(L"Taskbar symbols not found: the orb will arrive with the next layout pass");
+        }
 
         if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
             g_taskbarViewDllLoaded = true;
@@ -994,9 +1055,6 @@ BOOL Wh_ModInit() {
 
 void Wh_ModAfterInit() {
     try {
-        DebugLog(L"after init: Taskbar.View already loaded %d, layout hook %d, pointer hook %d",
-                 g_taskbarViewDllLoaded ? 1 : 0, TaskbarFrame_MeasureOverride_Original ? 1 : 0,
-                 TaskbarFrame_OnPointerMoved_Original ? 1 : 0);
         // It may have loaded after Wh_ModInit looked and before the LoadLibraryExW hook went live.
         if (!g_taskbarViewDllLoaded) {
             if (HMODULE module = GetTaskbarViewModuleHandle(); module && !g_taskbarViewDllLoaded.exchange(true)) {
@@ -1005,8 +1063,17 @@ void Wh_ModAfterInit() {
                 }
             }
         }
-        if (g_taskbarViewDllLoaded) {
-            WakeTaskbars();                          // switched on in a running Explorer: do not wait for the pointer
+        // Switched on in a running Explorer: put the orb on now.
+        if (HWND taskbar = g_taskbarViewDllLoaded ? FindCurrentProcessTaskbarWnd() : nullptr) {
+            RunFromWindowThread(
+                taskbar,
+                [](void*) {
+                    try {
+                        ApplyToAllTaskbars();
+                    } catch (...) {
+                    }
+                },
+                nullptr);
         }
     } catch (...) {
     }
@@ -1016,7 +1083,7 @@ void Wh_ModSettingsChanged() {
     try {
         // Build the new settings here, swap them in and redraw on the UI thread.
         auto fresh = std::make_shared<const Settings>(ReadSettings());
-        if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        if (HWND taskbar = FindCurrentProcessTaskbarWnd()) {
             RunFromWindowThread(
                 taskbar,
                 [](void* param) {
@@ -1024,14 +1091,11 @@ void Wh_ModSettingsChanged() {
                         g_settings = *static_cast<std::shared_ptr<const Settings>*>(param);
                         ForgetLoadedImages();
                         ++g_generation;
-                        RefreshAll();
+                        ApplyToAllTaskbars();
                     } catch (...) {
                     }
                 },
                 &fresh);
-        }
-        if (g_frameSightings == 0) {
-            WakeTaskbars();                          // no taskbar has been seen yet, so nothing was redrawn
         }
     } catch (...) {
     }
@@ -1039,7 +1103,7 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModBeforeUninit() {
     g_unloading = true;
-    if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+    if (HWND taskbar = FindCurrentProcessTaskbarWnd()) {
         RunFromWindowThread(
             taskbar,
             [](void*) {
