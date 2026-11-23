@@ -181,7 +181,9 @@ navigation can change the selection while the UI remains hidden.
   way WinUI's own materials are tuned. Values left at Default (or -1) keep the
   material's own look. The switcher then draws the material itself, which has
   no Windows drop shadow. On Windows 10, Acrylic follows **Switcher Background
-  Color** and **Background Opacity** instead.
+  Color** and **Background Opacity** instead. On x64 build 19044, explicit
+  rounded corner settings also clip the live Acrylic backdrop. Other Windows
+  10 builds can still show a square Acrylic backdrop.
 - **Corner Preference** sets the switcher's corners. With **Default**, it follows
   the Windows corner shape, including changes made by the
   [Custom Window Corner Radius](https://windhawk.net/mods/custom-corner-radius)
@@ -219,8 +221,9 @@ What each feature does on each Windows version. Details are in
 | **Corners** | | |
 | Corner Preference: Default | Square | Windows corner radius |
 | Corner Preference: Squared, Rounded, Rounded small, Custom Uniform, Custom Per-Corner | Yes | Yes |
-| Mica and Acrylic at every corner radius | Not applicable | Yes |
-| Rounded live thumbnails | None material at 99-100% opacity only | Every material |
+| Rounded Acrylic background | x64 build 19044 | Yes |
+| Mica and Mica Alt at every corner radius | Not applicable | Yes |
+| Rounded live thumbnails | Acrylic on x64 build 19044, and None material at 99-100% opacity | Every material |
 | Independent uniform and per-corner radii for each element | Yes | Yes |
 | **Everything else** | | |
 | Layouts, grouping, Desktop item, Custom Header, filtering, and keyboard, mouse and touchpad controls | Yes | Yes |
@@ -3382,7 +3385,20 @@ static bool EnsureSharedThumbnailDevice() {
     if (g_sharedThumbnailDevice) return true;
     if (g_sharedThumbnailApiResolved) return false;
     g_sharedThumbnailApiResolved = true;
-    if (!g_isWin11OrGreater) return false;
+    if (!g_isWin11OrGreater) {
+#ifdef __x86_64__
+        // The private shared-thumbnail API is verified on Windows 10 x64 build 19044.
+        WCHAR build[16] = {};
+        DWORD size = sizeof(build);
+        if (RegGetValueW(HKEY_LOCAL_MACHINE,
+                         L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                         L"CurrentBuildNumber", RRF_RT_REG_SZ, nullptr,
+                         build, &size) != ERROR_SUCCESS ||
+            wcscmp(build, L"19044") != 0) return false;
+#else
+        return false;
+#endif
+    }
     HMODULE dwmapi = GetModuleHandleW(L"dwmapi.dll");
     if (dwmapi) {
         g_createSharedThumbnailVisual = reinterpret_cast<SwsCreateSharedThumbnailVisual_t>(
@@ -3477,7 +3493,9 @@ static void ReleaseSharedThumbnailDevice() {
 
 static HRESULT RegisterSwitcherThumbnail(HWND destination, HWND source, HTHUMBNAIL* thumbnail) {
     *thumbnail = nullptr;
-    if (GetThumbnailCornerRadiiPx().Max() > 0) {
+    // On Windows 10, opaque None uses the existing corner mask.
+    if ((g_isWin11OrGreater || wcscmp(g_settings.theme, L"backdrop") == 0) &&
+        GetThumbnailCornerRadiiPx().Max() > 0) {
         if (SharedThumbnailTarget* target = EnsureSharedThumbnailTarget(destination)) {
             // Creation fails with E_INVALIDARG unless the thumbnail starts
             // visible with a destination; the caller positions it right after.
@@ -4365,6 +4383,9 @@ struct SwsComposedMaterial {
     winrt::Windows::UI::Composition::Desktop::DesktopWindowTarget target{nullptr};
     winrt::Windows::UI::Composition::ContainerVisual root{nullptr};
     winrt::Windows::UI::Composition::RectangleClip clip{nullptr};
+    winrt::Windows::UI::Composition::CompositionRoundedRectangleGeometry
+        legacyGeometry[4]{nullptr, nullptr, nullptr, nullptr};
+    winrt::Windows::UI::Composition::SpriteVisual legacyTint{nullptr};
     winrt::Windows::UI::Composition::SpriteVisual fill{nullptr};
     SwsMaterialParams params = {};
     bool wallpaper = false;
@@ -4407,8 +4428,29 @@ static bool CornerPreferenceIsDefault() {
            wcscmp(pref, L"perCorner") != 0;
 }
 
+static bool Windows10ComposedAcrylicWanted() {
+#ifdef __x86_64__
+    if (!ThemeIs(L"backdrop") || CornerPreferenceIsDefault()) return false;
+    const CornerRadii corners = GetResolvedCornerRadiiDIP();
+    if (corners.Max() == 0) return false;
+    static const bool supportedBuild = [] {
+        WCHAR build[16] = {};
+        DWORD size = sizeof(build);
+        return RegGetValueW(HKEY_LOCAL_MACHINE,
+                            L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                            L"CurrentBuildNumber", RRF_RT_REG_SZ, nullptr,
+                            build, &size) == ERROR_SUCCESS &&
+               wcscmp(build, L"19044") == 0;
+    }();
+    return supportedBuild;
+#else
+    return false;
+#endif
+}
+
 static bool ComposedMaterialWanted() {
-    if (!IsWin11OrGreater() || g_swsCompositionFailed) return false;
+    if (g_swsCompositionFailed) return false;
+    if (!IsWin11OrGreater()) return Windows10ComposedAcrylicWanted();
     if (ThemeIs(L"backdrop") && g_nativeTransientBackdropUnsupported) return true;
     if (!ThemeIs(L"mica") && !ThemeIs(L"backdrop")) return false;
     // Windows' own materials have no tint or luminosity settings.
@@ -4564,6 +4606,8 @@ static void DestroyComposedMaterial(HWND presentation) {
     } catch (...) {
     }
     material.fill = nullptr;
+    material.legacyTint = nullptr;
+    for (auto& geometry : material.legacyGeometry) geometry = nullptr;
     material.clip = nullptr;
     material.root = nullptr;
     material.target = nullptr;
@@ -4572,9 +4616,19 @@ static void DestroyComposedMaterial(HWND presentation) {
     }
 }
 
+static COLORREF GetBgColor();
+
 // Creates (or refreshes the brush of) the material window for a surface.
 static bool EnsureComposedMaterial(HWND presentation) {
     if (!presentation || !EnsureSwsCompositor()) return false;
+    const bool legacy = !IsWin11OrGreater();
+    const CornerRadii configured = legacy ? GetResolvedCornerRadiiDIP() : CornerRadii{};
+    const bool asymmetric = legacy && configured != CornerRadii::Uniform(configured.Max());
+    if (auto previous = g_composedMaterials.find(presentation);
+        legacy && previous != g_composedMaterials.end() &&
+        static_cast<bool>(previous->second.legacyGeometry[1]) != asymmetric) {
+        DestroyComposedMaterial(presentation);
+    }
     SwsComposedMaterial& material = g_composedMaterials[presentation];
     try {
         if (!material.window) {
@@ -4600,9 +4654,19 @@ static bool EnsureComposedMaterial(HWND presentation) {
             DwmSetWindowAttribute(material.window, 33, &corner, sizeof(corner));
             COLORREF border = kDwmColorNone;
             DwmSetWindowAttribute(material.window, 34, &border, sizeof(border));
-            BOOL hostBackdrop = TRUE;  // DWMWA_USE_HOSTBACKDROPBRUSH
-            DwmSetWindowAttribute(material.window, 17, &hostBackdrop,
-                                  sizeof(hostBackdrop));
+            if (legacy) {
+                // Windows 10's companion window must opt into host backdrop sampling.
+                ACCENT_POLICY accent{5 /* ACCENT_ENABLE_HOSTBACKDROP */, 0, 0, 0};
+                WINDOWCOMPOSITIONATTRIBDATA data{19, &accent, sizeof(accent)};
+                if (!g_SetWindowCompositionAttribute ||
+                    !g_SetWindowCompositionAttribute(material.window, &data)) {
+                    winrt::throw_hresult(E_FAIL);
+                }
+            } else {
+                BOOL hostBackdrop = TRUE;  // DWMWA_USE_HOSTBACKDROPBRUSH
+                DwmSetWindowAttribute(material.window, 17, &hostBackdrop,
+                                      sizeof(hostBackdrop));
+            }
             BOOL noTransitions = TRUE;
             DwmSetWindowAttribute(material.window, DWMWA_TRANSITIONS_FORCEDISABLED,
                                   &noTransitions, sizeof(noTransitions));
@@ -4618,29 +4682,65 @@ static bool EnsureComposedMaterial(HWND presentation) {
             winrt::check_hresult(targetHr);
             material.root = g_swsCompositor.CreateContainerVisual();
             material.root.RelativeSizeAdjustment({1.0f, 1.0f});
-            material.clip = g_swsCompositor.CreateRectangleClip();
-            material.root.Clip(material.clip);
+            auto content = material.root;
+            if (legacy) {
+                const int clipCount = asymmetric ? 4 : 1;
+                for (int i = 0; i < clipCount; ++i) {
+                    if (i > 0) {
+                        auto child = g_swsCompositor.CreateContainerVisual();
+                        child.RelativeSizeAdjustment({1.0f, 1.0f});
+                        content.Children().InsertAtTop(child);
+                        content = child;
+                    }
+                    material.legacyGeometry[i] = g_swsCompositor.CreateRoundedRectangleGeometry();
+                    content.Clip(g_swsCompositor.CreateGeometricClip(material.legacyGeometry[i]));
+                }
+            } else {
+                material.clip = g_swsCompositor.CreateRectangleClip();
+                material.root.Clip(material.clip);
+            }
             material.fill = g_swsCompositor.CreateSpriteVisual();
             material.fill.RelativeSizeAdjustment({1.0f, 1.0f});
-            material.root.Children().InsertAtTop(material.fill);
+            content.Children().InsertAtTop(material.fill);
+            if (legacy) {
+                material.legacyTint = g_swsCompositor.CreateSpriteVisual();
+                material.legacyTint.RelativeSizeAdjustment({1.0f, 1.0f});
+                content.Children().InsertAtTop(material.legacyTint);
+            }
             material.target.Root(material.root);
             material.width = material.height = 0;
         }
 
         // Mica and Mica Alt tint the blurred wallpaper, Acrylic what is behind.
         const bool wallpaper = ThemeIs(L"mica");
-        const SwsMaterialParams params = GetComposedMaterialParams();
+        SwsMaterialParams params = GetComposedMaterialParams();
         const bool effects = MaterialEffectsEnabled();
+        if (legacy) {
+            const COLORREF bg = GetBgColor();
+            params = {bg, g_settings.opacity / 100.0f, 0.0f, bg};
+        }
         if (!material.hasBrush || wallpaper != material.wallpaper ||
             !SameMaterialParams(params, material.params) ||
             effects != material.effects) {
             winrt::Windows::UI::Composition::CompositionBrush brush{nullptr};
-            try {
-                brush = CreateComposedMaterialBrush(wallpaper, params, effects);
-            } catch (winrt::hresult_error const& e) {
-                Wh_Log(L"SWS: composed material brush failed (0x%08X)",
-                       (unsigned)e.code());
-                brush = CreateComposedMaterialBrush(wallpaper, params, false);
+            if (legacy) {
+                const auto tintAlpha = static_cast<BYTE>(
+                    std::clamp(g_settings.opacity, 0, 100) * 255 / 100);
+                const winrt::Windows::UI::Color fill{255, GetRValue(params.tint),
+                    GetGValue(params.tint), GetBValue(params.tint)};
+                const winrt::Windows::UI::Color tint{tintAlpha, fill.R, fill.G, fill.B};
+                if (effects) brush = g_swsCompositor.CreateHostBackdropBrush();
+                else brush = g_swsCompositor.CreateColorBrush(fill);
+                material.legacyTint.Brush(g_swsCompositor.CreateColorBrush(tint));
+                material.legacyTint.IsVisible(effects);
+            } else {
+                try {
+                    brush = CreateComposedMaterialBrush(wallpaper, params, effects);
+                } catch (winrt::hresult_error const& e) {
+                    Wh_Log(L"SWS: composed material brush failed (0x%08X)",
+                           (unsigned)e.code());
+                    brush = CreateComposedMaterialBrush(wallpaper, params, false);
+                }
             }
             material.fill.Brush(brush);
             material.params = params;
@@ -4680,12 +4780,34 @@ static void SyncComposedMaterial(HWND presentation, bool aboutToShow) {
                                     .Clamped((std::min)(w, h) / 2);
     if (w != material.width || h != material.height || corners != material.corners) {
         try {
-            material.clip.Right((float)w);
-            material.clip.Bottom((float)h);
-            material.clip.TopLeftRadius({(float)corners.topLeft, (float)corners.topLeft});
-            material.clip.TopRightRadius({(float)corners.topRight, (float)corners.topRight});
-            material.clip.BottomRightRadius({(float)corners.bottomRight, (float)corners.bottomRight});
-            material.clip.BottomLeftRadius({(float)corners.bottomLeft, (float)corners.bottomLeft});
+            if (material.legacyGeometry[1]) {
+                // Each clip keeps one corner on the viewport and extends its
+                // other two edges beyond it. Their intersection shapes the brush.
+                const float radii[] = {static_cast<float>(corners.topLeft),
+                                       static_cast<float>(corners.topRight),
+                                       static_cast<float>(corners.bottomRight),
+                                       static_cast<float>(corners.bottomLeft)};
+                for (int i = 0; i < 4; ++i) {
+                    const float radius = radii[i];
+                    const bool right = i == 1 || i == 2;
+                    const bool bottom = i >= 2;
+                    material.legacyGeometry[i].Offset({right ? -radius : 0.0f,
+                                                       bottom ? -radius : 0.0f});
+                    material.legacyGeometry[i].Size({w + radius, h + radius});
+                    material.legacyGeometry[i].CornerRadius({radius, radius});
+                }
+            } else if (material.legacyGeometry[0]) {
+                const float radius = static_cast<float>(corners.topLeft);
+                material.legacyGeometry[0].Size({static_cast<float>(w), static_cast<float>(h)});
+                material.legacyGeometry[0].CornerRadius({radius, radius});
+            } else {
+                material.clip.Right((float)w);
+                material.clip.Bottom((float)h);
+                material.clip.TopLeftRadius({(float)corners.topLeft, (float)corners.topLeft});
+                material.clip.TopRightRadius({(float)corners.topRight, (float)corners.topRight});
+                material.clip.BottomRightRadius({(float)corners.bottomRight, (float)corners.bottomRight});
+                material.clip.BottomLeftRadius({(float)corners.bottomLeft, (float)corners.bottomLeft});
+            }
             material.width = w;
             material.height = h;
             material.corners = corners;
@@ -12064,7 +12186,8 @@ static void AddCornerPath(Gdiplus::GraphicsPath& path, float x, float y,
 }
 
 static bool ThumbnailCornersNeedMask(CornerRadii corners) {
-    return corners.Max() > 0 && !g_sharedThumbnailDevice && ThemeIs(L"none") &&
+    return corners.Max() > 0 && (!g_isWin11OrGreater || !g_sharedThumbnailDevice) &&
+           ThemeIs(L"none") &&
            g_settings.opacity >= 99;
 }
 
