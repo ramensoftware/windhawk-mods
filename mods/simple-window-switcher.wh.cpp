@@ -1877,8 +1877,6 @@ static int g_autoFitScalePct = 100;
 static int g_winW = 0, g_winH = 0;
 static int g_activePadDivider = 0;
 static UINT g_taskbarCreatedMessage = 0;
-static DWORD s_forwardedHotkeyShellPid = 0;
-static unsigned int s_forwardedHotkeys = 0;
 static bool g_isAltBacktickSameApp = false;
 static WCHAR g_sameAppSessionKey[MAX_PATH] = {};
 static HMONITOR g_hCurrentMonitor = NULL;
@@ -20910,12 +20908,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         wParam &= 0xFF;
         for (const auto& chord : kTabHotkeys) {
             if (wParam == static_cast<WPARAM>(chord.id)) {
-                DWORD shellPid = static_cast<DWORD>(lParam);
-                if (shellPid != s_forwardedHotkeyShellPid) {
-                    s_forwardedHotkeyShellPid = shellPid;
-                    s_forwardedHotkeys = 0;
-                }
-                s_forwardedHotkeys |= 1u << chord.id;
                 uMsg = WM_HOTKEY;
                 break;
             }
@@ -20924,7 +20916,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
     if (g_taskbarCreatedMessage && uMsg == g_taskbarCreatedMessage && hWnd == g_hSwitcher) {
         CancelForwardedShellAssist();
-        s_forwardedHotkeys = 0;
         SWS_RegisterHotkeys();
         return 0;
     }
@@ -22424,30 +22415,12 @@ static void SWS_RegisterHotkeys() {
         return g_registeredHotkeys[id];
     };
 
-    DWORD shellPid = ShellProcessId();
-    if (shellPid != s_forwardedHotkeyShellPid) s_forwardedHotkeys = 0;
-    // Give the shell first opportunity to register Tab shortcuts at startup.
-    DWORD taskbarPid = 0;
-    if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-        GetWindowThreadProcessId(taskbar, &taskbarPid);
-    }
-    bool allTabHotkeysReady = shellPid && taskbarPid == shellPid;
-    if (allTabHotkeysReady) {
-        for (const auto& chord : kTabHotkeys) {
-            if ((s_forwardedHotkeys & (1u << chord.id)) == 0 &&
-                !registerOne(chord.id, chord.modifiers, VK_TAB)) {
-                allTabHotkeysReady = false;
-            }
-        }
-    }
-
     bool usReady = !wantAltBacktick || registerOne(SWS_HOTKEY_ALTBACKTICK, MOD_ALT, VK_OEM_3);
     bool ukReady = !wantAltBacktick || registerOne(SWS_HOTKEY_ALTBACKTICK_UK, MOD_ALT, VK_OEM_8);
-    if (allTabHotkeysReady && usReady && ukReady) {
+    if (usReady && ukReady) {
         KillTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID);
     } else {
-        // Retry only unresolved chords. Keep both successful direct
-        // registrations and chords already observed on the Explorer route.
+        // Retry only unresolved tool shortcuts.
         SetTimer(g_hSwitcher, SWS_HOTKEY_RETRY_TIMER_ID, SWS_HOTKEY_RETRY_INTERVAL, NULL);
     }
 }
