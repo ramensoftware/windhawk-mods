@@ -4,6 +4,7 @@
 // @description Choose black or white independently for each system tray glyph based on its live background.
 // @version 0.3.13
 // @author StillDialing
+// @github https://github.com/StillDialing
 // @include explorer.exe
 // @architecture x86-64
 // @compilerOptions -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32
@@ -1865,7 +1866,7 @@ BOOL Wh_ModInit() {
                             kSamplerClass, &g_module)) {
         return FALSE;
     }
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &g_primarySite},
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
          &g_secondarySite, nullptr, true},
@@ -1878,7 +1879,7 @@ BOOL Wh_ModInit() {
         {{L"public: virtual void __cdecl TrayUI::StartTaskbar(void)"},
          &g_originalStart, StartHook, true},
     };
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"Could not resolve the Windows 11 XAML taskbar symbols.");
         return FALSE;
     }
