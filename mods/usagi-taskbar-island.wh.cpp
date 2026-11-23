@@ -733,7 +733,11 @@ Standard Windows media controls (SMTC) do not expose VK's Shuffle, Repeat, or Ad
 */
 // ==/WindhawkModSettings==
 
+// windhawk_api.h is force-included by Windhawk before line 1 and pulls in <windows.h>.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-W#warnings"
 #include <winsock2.h>
+#pragma clang diagnostic pop
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
 
