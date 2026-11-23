@@ -2,7 +2,7 @@
 // @id              taskbar-weather
 // @name            Taskbar Weather
 // @description     Current weather on the taskbar with a details card on hover. No Widgets, browser or API key needed
-// @version         1.6.0
+// @version         1.6.1
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @license         MIT
@@ -69,7 +69,7 @@ are filled in; clear them to stop all requests.
   taskbar, raise the left offset so the label clears the Start button.
 - Only the main taskbar shows the weather.
 - The mod runs in its own background process, not inside Explorer, so a
-  problem in the mod can't take the taskbar down with it.
+  crash in the mod can't take Explorer down with it.
 - If a request fails, the last reading stays and the card says when it was
   fetched. A reading is marked as stale once it is older than 30 minutes, or
   twice the update interval if that is longer.
@@ -1474,7 +1474,18 @@ void WhTool_ModSettingsChanged() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -1485,6 +1496,12 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
