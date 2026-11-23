@@ -6,7 +6,7 @@
 // @author          nozwin
 // @github          https://github.com/nozwin
 // @homepage        https://github.com/nozwin/Acrylic-Media-Pill
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -DWINRT_NO_MODULE_LOCK -lole32 -loleaut32 -lruntimeobject -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32
 // ==/WindhawkMod==
 
@@ -30,12 +30,26 @@ when it is).
 * **Click the pill** to open a player card with progress bar, seek,
   previous / play-pause / next. Click anywhere else to close it.
 
-The pill is its own small top-level window owned by explorer.exe, NOT a XAML
-element inside the taskbar. That is why it does not collide with
-"Windows 11 Taskbar Styler" on dock-style taskbars.
+The pill is its own small top-level window, NOT a XAML element inside the
+taskbar. That is why it does not collide with "Windows 11 Taskbar Styler" on
+dock-style taskbars. The mod is a Windhawk *tool mod*: it runs in its own
+process instead of inside explorer.exe, so a problem in the mod can never take
+the taskbar down, and it keeps working after Explorer restarts.
 
 Pill height follows the taskbar height (see "Pill height" setting).
-Horizontal taskbars only.
+Horizontal taskbars only; only the primary taskbar gets a pill. The pill floats
+over the taskbar without reserving space, so use the position and offset
+settings to keep it clear of the Widgets button or your task buttons.
+
+## Controls
+
+* **Click the pill** to open or close the player card.
+* **Middle-click the pill** to play / pause.
+* **Mouse wheel over the pill** changes the system volume (direction and step
+  are configurable). This needs Windows' "Scroll inactive windows when hovering
+  over them" setting, which is on by default.
+* **Click the card's cover or title** to switch to the app (and, in browsers,
+  the tab) that is playing.
 
 ## Links
 
@@ -74,10 +88,12 @@ Found a bug or have an idea? Please open an issue on GitHub.
   $description: Tint the glass with the dominant color of the current cover art. Works with every theme. Off by default.
 - tintOpacity: 35
   $name: Tint strength (0-100)
+  $description: How opaque the dark/light glass tint is (higher = more opaque). With "Cover color tint" on it also sets how strongly the cover color shows.
 - showVisualizer: true
   $name: Show mini visualizer
 - hideWhenIdle: true
   $name: Hide when nothing is playing
+  $description: Hides the pill when no media app has an active session. A paused player keeps the pill visible.
 - hoverEffect: true
   $name: Hover effects
   $description: Highlight the pill and the card buttons when the mouse is over them.
@@ -101,10 +117,7 @@ Found a bug or have an idea? Please open an issue on GitHub.
 #include <shellapi.h>
 #include <propsys.h>
 #include <oleauto.h>
-#if __has_include(<uiautomationclient.h>)
 #include <uiautomationclient.h>
-#define HAVE_UIA 1
-#endif
 #include <shcore.h>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
@@ -132,8 +145,7 @@ template <class T> static T Cl(T v, T lo, T hi) { return v < lo ? lo : (v > hi ?
 
 static constexpr UINT WM_APP_STATE = WM_APP + 1;
 static constexpr UINT WM_APP_SETTINGS = WM_APP + 2;
-static constexpr UINT_PTR TIMER_ID = 1;
-static constexpr UINT TIMER_MS = 33;
+static constexpr UINT WM_APP_SESSION = WM_APP + 3;  // media session changed (handled on the UI thread)
 
 // High-resolution clock (GetTickCount64 only ticks every ~15 ms -> visible stutter)
 static double NowSec() {
@@ -149,7 +161,7 @@ struct Settings {
     int pos = 1;  // 0 left, 1 right, 2 custom
     int offX = 0, offY = 0;
     int heightPct = 70;
-    int maxW = 320;
+    int maxW = 240;
     int theme = 0;  // 0 dark, 1 light, 2 liquid glass
     int tint = 35;
     bool viz = true;
@@ -205,9 +217,10 @@ static std::mutex g_mtx;          // guards g_state, g_session
 static std::mutex g_refreshMtx;   // serializes RefreshAll
 [[clang::no_destroy]] static MediaState g_state;
 static std::atomic<double> g_graceUntil{0};  // keep last track briefly when the session drops
-// No destructors at process exit: when explorer.exe exits Windhawk does not call Wh_ModUninit, and
-// releasing out-of-process WinRT/COM objects from a dying process can hang sign-out. Everything is
-// released explicitly in the UI thread teardown instead.
+// No destructors at process exit: the tool process ends with ExitProcess() (and on sign-out it is
+// simply killed), so global destructors would run on the exiting thread and could call into
+// out-of-process WinRT/COM objects or into GDI+ after it was shut down. Everything is released
+// explicitly in the UI thread teardown instead.
 [[clang::no_destroy]] static wmc::GlobalSystemMediaTransportControlsSession g_session{nullptr};
 [[clang::no_destroy]] static wmc::GlobalSystemMediaTransportControlsSessionManager g_mgr{nullptr};
 // plain tokens (no revokers) so nothing runs at exit; handlers are removed in DetachSession/StopMedia
@@ -392,7 +405,11 @@ static void OnSessionChanged() {
 static void StartMedia() {
     try {
         g_mgr = wmc::GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-        g_mgrTok = g_mgr.CurrentSessionChanged([](auto&&, auto&&) { OnSessionChanged(); });
+        // Only post a message: AttachSession/DetachSession/StopMedia and every access to g_mgr
+        // and the tokens run on the UI thread, one at a time (no race, nothing outlives unload).
+        g_mgrTok = g_mgr.CurrentSessionChanged([](auto&&, auto&&) {
+            if (HWND h = g_pill) PostMessageW(h, WM_APP_SESSION, 0, 0);
+        });
         OnSessionChanged();
     } catch (...) {
         Wh_Log(L"SMTC init failed");
@@ -484,29 +501,7 @@ static bool UpdateBars(bool playing) {
 }
 
 // ---------------------------------------------------------------- system volume (scroll wheel)
-// mingw only ships partial headers for this interface, so declare the vtable ourselves.
-struct IEndpointVolX : public IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE RegisterControlChangeNotify(void*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE UnregisterControlChangeNotify(void*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetChannelCount(UINT*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE SetMasterVolumeLevel(float, const GUID*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE SetMasterVolumeLevelScalar(float, const GUID*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetMasterVolumeLevel(float*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetMasterVolumeLevelScalar(float*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE SetChannelVolumeLevel(UINT, float, const GUID*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE SetChannelVolumeLevelScalar(UINT, float, const GUID*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetChannelVolumeLevel(UINT, float*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetChannelVolumeLevelScalar(UINT, float*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE SetMute(BOOL, const GUID*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetMute(BOOL*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetVolumeStepInfo(UINT*, UINT*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE VolumeStepUp(const GUID*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE VolumeStepDown(const GUID*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE QueryHardwareSupport(DWORD*) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetVolumeRange(float*, float*, float*) = 0;
-};
-static const GUID IID_EndpointVolX = {0x5CDF2C82, 0x841E, 0x4546, {0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A}};
-[[clang::no_destroy]] static winrt::com_ptr<IEndpointVolX> g_vol;
+[[clang::no_destroy]] static winrt::com_ptr<IAudioEndpointVolume> g_vol;
 static float g_volShown = 0;       // value shown in the pill overlay
 static double g_volShowUntil = 0;  // overlay visible until (NowSec)
 
@@ -523,7 +518,7 @@ static void AcquireVol() {
             return;
         winrt::com_ptr<IMMDevice> dev;
         if (FAILED(en->GetDefaultAudioEndpoint(eRender, eMultimedia, dev.put()))) return;
-        dev->Activate(IID_EndpointVolX, CLSCTX_ALL, nullptr, g_vol.put_void());
+        dev->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, g_vol.put_void());
     } catch (...) {
     }
 }
@@ -586,12 +581,10 @@ static BOOL CALLBACK EnumSrc(HWND h, LPARAM lp) {
     auto* c = (EnumCtx*)lp;
     if (!IsWindowVisible(h) || GetWindow(h, GW_OWNER)) return TRUE;
     if (GetWindowLongW(h, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return TRUE;
-    wchar_t title[512];
-    if (GetWindowTextW(h, title, 512) <= 0) return TRUE;
-
     int score = 0;
     DWORD pid = 0;
     GetWindowThreadProcessId(h, &pid);
+    if (pid == GetCurrentProcessId()) return TRUE;  // never touch our own windows
     HANDLE hp = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (hp) {
         wchar_t path[MAX_PATH];
@@ -608,6 +601,8 @@ static BOOL CALLBACK EnumSrc(HWND h, LPARAM lp) {
     std::wstring aumid = Lower(WindowAumid(h));
     if (!aumid.empty() && (aumid == c->idN || c->idN.find(aumid) != std::wstring::npos)) score = 3;
     if (!score) return TRUE;
+    wchar_t title[512] = L"";  // only candidates get their title read
+    if (GetWindowTextW(h, title, 512) <= 0) return TRUE;
     if (!c->titleN.empty() && Lower(title).find(c->titleN) != std::wstring::npos) score += 4;
     if (score > c->bestScore) {  // EnumWindows walks top-down, so ties keep the topmost window
         c->bestScore = score;
@@ -622,7 +617,10 @@ static void BringToFront(HWND h) {
     if (GetForegroundWindow() != h) SwitchToThisWindow(h, TRUE);
 }
 
-#if HAVE_UIA
+// UI Automation ids (UIA_ControlTypePropertyId, UIA_TabItemControlTypeId, UIA_SelectionItemPatternId, TreeScope_Descendants)
+static constexpr int kUiaControlTypeProp = 30003, kUiaTabItemType = 50019, kUiaSelectionItemPattern = 10010,
+                     kUiaScopeDescendants = 4;
+
 static bool SelectTab(HWND win, const std::wstring& titleN) {
     winrt::com_ptr<IUIAutomation> ua;
     if (FAILED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation),
@@ -633,11 +631,11 @@ static bool SelectTab(HWND win, const std::wstring& titleN) {
     VARIANT v;
     VariantInit(&v);
     v.vt = VT_I4;
-    v.lVal = 50019;  // UIA_TabItemControlTypeId
+    v.lVal = kUiaTabItemType;
     winrt::com_ptr<IUIAutomationCondition> cond;
-    if (FAILED(ua->CreatePropertyCondition(30003 /*UIA_ControlTypePropertyId*/, v, cond.put())) || !cond) return false;
+    if (FAILED(ua->CreatePropertyCondition(kUiaControlTypeProp, v, cond.put())) || !cond) return false;
     winrt::com_ptr<IUIAutomationElementArray> arr;
-    if (FAILED(root->FindAll((TreeScope)4 /*Descendants*/, cond.get(), arr.put())) || !arr) return false;
+    if (FAILED(root->FindAll((TreeScope)kUiaScopeDescendants, cond.get(), arr.put())) || !arr) return false;
     int n = 0;
     arr->get_Length(&n);
     for (int i = 0; i < n; i++) {
@@ -649,7 +647,7 @@ static bool SelectTab(HWND win, const std::wstring& titleN) {
         SysFreeString(name);
         if (nm.find(titleN) == std::wstring::npos) continue;
         winrt::com_ptr<IUnknown> pat;
-        if (SUCCEEDED(el->GetCurrentPattern(10010 /*SelectionItem*/, pat.put())) && pat) {
+        if (SUCCEEDED(el->GetCurrentPattern(kUiaSelectionItemPattern, pat.put())) && pat) {
             winrt::com_ptr<IUIAutomationSelectionItemPattern> si;
             if (SUCCEEDED(pat->QueryInterface(__uuidof(IUIAutomationSelectionItemPattern), si.put_void())) && si) {
                 si->Select();
@@ -659,7 +657,6 @@ static bool SelectTab(HWND win, const std::wstring& titleN) {
     }
     return false;
 }
-#endif
 
 static DWORD WINAPI OpenSourceThread(LPVOID p) {
     std::unique_ptr<SrcReq> req((SrcReq*)p);
@@ -670,13 +667,11 @@ static DWORD WINAPI OpenSourceThread(LPVOID p) {
     EnumWindows(EnumSrc, (LPARAM)&c);
     if (c.best) {
         BringToFront(c.best);
-#if HAVE_UIA
         if (!c.titleN.empty()) {
             wchar_t t[512] = L"";
             GetWindowTextW(c.best, t, 512);
             if (Lower(t).find(c.titleN) == std::wstring::npos && SelectTab(c.best, c.titleN)) BringToFront(c.best);
         }
-#endif
     }
     CoUninitialize();
     return 0;
@@ -789,6 +784,10 @@ static bool EnsureSize(Layered& L, int w, int h) {
     L.mem = CreateCompatibleDC(scr);
     L.dib = CreateDIBSection(scr, &bi, DIB_RGB_COLORS, (void**)&L.bits, nullptr, 0);
     ReleaseDC(nullptr, scr);
+    if (!L.mem || !L.dib || !L.bits) {  // allocation failed: stay empty, try again on the next layout pass
+        FreeSurface(L);
+        return false;
+    }
     L.oldObj = SelectObject(L.mem, L.dib);
     L.w = w;
     L.h = h;
@@ -980,6 +979,7 @@ static void BuildGlass(Layered& L) {
 }
 
 static void PrepareGlass(Layered& L) {
+    if (!L.bits || !L.frame) return;
     if (L.needCapture || !CapOk(L)) CaptureBackdrop(L);
     if (L.glassDirty) BuildGlass(L);
     memcpy(L.bits, L.glassPix.data(), (size_t)L.w * L.h * 4);
@@ -1062,6 +1062,8 @@ struct PillGeom {
 };
 static float g_titleW = 0, g_timeW = 0;           // cached text widths (px)
 static double g_marqStart = 0;                    // marquee restart time (NowSec)
+static double g_marqPeriod = 0;                   // one scroll cycle incl. pause (seconds)
+static float g_marqPauseLen = 1.5f;               // pause at the start of each cycle
 static bool g_marquee = false;                    // title currently scrolling
 [[clang::no_destroy]] static std::unique_ptr<Gdiplus::Bitmap> g_strip;  // pre-rendered scrolling title
 static std::wstring g_stripKey;
@@ -1185,6 +1187,8 @@ static void RenderPill() {
             float gapPx = h * 1.2f, speed = h * 1.1f, pause = 1.5f;
             float cycle = g_titleW + gapPx;
             double period = pause + cycle / speed + 0.2;
+            g_marqPeriod = period;
+            g_marqPauseLen = pause;
             double t = fmod(NowSec() - g_marqStart, period);
             float off = 0.f;
             if (t > pause) {  // ease-in, then constant speed
@@ -1418,7 +1422,11 @@ static void RaiseIfCovered() {
 static void LayoutPill() {
     if (!g_pill) return;
     if (!g_taskbar || !IsWindow(g_taskbar)) g_taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!g_taskbar) return;
+    if (!g_taskbar) {  // Explorer is not running (yet): nothing to sit on
+        if (IsWindowVisible(g_pill)) ShowWindow(g_pill, SW_HIDE);
+        HideCard();
+        return;
+    }
 
     RECT tb;
     GetWindowRect(g_taskbar, &tb);
@@ -1537,6 +1545,9 @@ static LRESULT CALLBACK PillProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             LayoutPill();
             if (IsWindowVisible(h)) RenderPill();
             RenderCard();
+            return 0;
+        case WM_APP_SESSION:
+            OnSessionChanged();
             return 0;
         case WM_APP_SETTINGS:
             LoadSettings();
@@ -1670,7 +1681,7 @@ static LRESULT CALLBACK CardProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 
 // ---------------------------------------------------------------- frame loop
 // One animation frame. Returns how soon the next one is needed:
-//   0 = idle (wake every 100 ms), 1 = ~30 fps (visualizer / progress),
+//   0 = idle (wake every 100 ms), 3 = hidden (wake every second), 1 = ~30 fps (visualizer / progress),
 //   2 = vsync-paced, capped at ~70 fps (scrolling title, hover, fades, volume overlay).
 static int Frame() {
     static double lastSlow = 0, lastMeter = 0, lastMedia = 0, lastRaise = 0, lastT = 0;
@@ -1707,9 +1718,9 @@ static int Frame() {
         UpdateSuppression();
         LayoutPill();
     }
-    if (now - lastMeter >= 5.0) {
+    if (g_set.viz && g_pill && IsWindowVisible(g_pill) && now - lastMeter >= 5.0) {
         lastMeter = now;
-        AcquireMeter();
+        AcquireMeter();  // default device may have changed
     }
     if (now - lastRaise >= 0.15) {
         lastRaise = now;
@@ -1757,9 +1768,16 @@ static int Frame() {
     bool smooth = anim || accAnim || volActive;
     bool cardVis = g_card && IsWindowVisible(g_card);
 
+    // scrolling title: nothing changes during the pause at the start of each cycle
+    bool marqMoving = false;
+    if (g_marquee && g_marqPeriod > 0) {
+        double mt = fmod(now - g_marqStart, g_marqPeriod);
+        marqMoving = mt > g_marqPauseLen - 0.06;
+    }
+
     if (pillVis) {
         // only redraw as often as the current animation needs
-        double need = (smooth || g_marquee) ? 0.0125 : (vizMoving ? 0.032 : 1e9);
+        double need = (smooth || marqMoving) ? 0.0125 : (vizMoving ? 0.032 : 1e9);
         if (g_dirty || secChanged || now - lastPill >= need) {
             lastPill = now;
             RenderPill();
@@ -1774,9 +1792,10 @@ static int Frame() {
         }
     }
 
-    if ((pillVis && (smooth || g_marquee)) || (cardVis && (anim || accAnim))) return 2;
-    if (vizMoving && (pillVis || cardVis)) return 1;
+    if ((pillVis && (smooth || marqMoving)) || (cardVis && (anim || accAnim))) return 2;
+    if ((vizMoving || g_marquee) && (pillVis || cardVis)) return 1;  // marquee pause: wake at 30 Hz to catch its end
     if (cardVis && st.playing) return 1;
+    if (!pillVis && !cardVis) return 3;  // hidden: wake rarely (events and messages wake the loop anyway)
     return 0;
 }
 
@@ -1786,22 +1805,9 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD,
 
 // ---------------------------------------------------------------- UI thread
 static DWORD WINAPI UiThread(LPVOID) {
-    // Wait (up to ~5 min) for this process to own the taskbar - needed right after boot/login.
-    {
-        bool found = false;
-        for (int i = 0; i < 600 && g_running; i++) {
-            HWND tb = FindWindowW(L"Shell_TrayWnd", nullptr);
-            if (tb) {
-                DWORD pid = 0;
-                GetWindowThreadProcessId(tb, &pid);
-                if (pid != GetCurrentProcessId()) return 0;  // some other explorer.exe process
-                found = true;
-                break;
-            }
-            Sleep(500);
-        }
-        if (!found) return 0;
-    }
+    // This runs in a windhawk.exe tool process (not explorer.exe): make this thread per-monitor
+    // DPI aware so taskbar coordinates and the screen capture use physical pixels.
+    SetThreadDpiAwarenessContext((DPI_AWARENESS_CONTEXT)-4);  // PER_MONITOR_AWARE_V2
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
 
     ULONG_PTR gdipTok = 0;
@@ -1834,7 +1840,8 @@ static DWORD WINAPI UiThread(LPVOID) {
     UpdateSuppression();
     LayoutPill();
 
-    bool quit = false;
+    bool quit = !g_pill || !g_card;  // window creation failed: skip straight to teardown
+    if (quit) Wh_Log(L"Failed to create the windows");
     while (!quit && g_running) {  // g_running is a backup in case WM_QUIT is ever lost
         MSG msg;
         while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -1850,7 +1857,8 @@ static DWORD WINAPI UiThread(LPVOID) {
         if (mode == 2) {
             if (FAILED(DwmFlush())) Sleep(8);  // wait for the compositor = vsync-paced frames
         } else {
-            MsgWaitForMultipleObjectsEx(0, nullptr, mode == 1 ? 33 : 100, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            MsgWaitForMultipleObjectsEx(0, nullptr, mode == 1 ? 33 : (mode == 3 ? 1000 : 100), QS_ALLINPUT,
+                                        MWMO_INPUTAVAILABLE);
         }
     }
 
@@ -1886,28 +1894,19 @@ static DWORD WINAPI UiThread(LPVOID) {
     return 0;
 }
 
-// ---------------------------------------------------------------- Windhawk entry points
-BOOL Wh_ModInit() {
-    // Only run in the explorer.exe instance that owns the taskbar. At boot the taskbar may not
-    // exist yet: in that case keep going and let the UI thread wait for it.
-    HWND tb = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (tb) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(tb, &pid);
-        if (pid != GetCurrentProcessId()) return FALSE;
-    }
-
+// ---------------------------------------------------------------- tool mod callbacks
+BOOL WhTool_ModInit() {
     LoadSettings();
     g_running = true;
     g_thread = CreateThread(nullptr, 0, UiThread, nullptr, 0, &g_threadId);
     return g_thread != nullptr;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (g_pill) PostMessageW(g_pill, WM_APP_SETTINGS, 0, 0);
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_running = false;
     if (g_thread) {
         // The UI thread joins its own helper thread, so it can be waited for without a time limit:
@@ -1917,4 +1916,183 @@ void Wh_ModUninit() {
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
