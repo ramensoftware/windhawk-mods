@@ -5,6 +5,7 @@
 // @version         1.0.0
 // @author          javierpetrucci
 // @github          https://github.com/javierpetrucci
+// @homepage        https://github.com/javierpetrucci/windhawk-enable-preview-pane-for-downloads
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86
@@ -24,6 +25,14 @@ could harm your computer."
 
 This mod lets the preview pane show files in the Internet zone for the file
 extensions you choose. By default only `pdf` is affected.
+
+Before, a PDF with the Mark of the Web shows the warning:
+
+![Preview pane showing the warning](https://raw.githubusercontent.com/javierpetrucci/windhawk-enable-preview-pane-for-downloads/main/images/before.png)
+
+After, the same PDF is previewed:
+
+![Preview pane showing the PDF](https://raw.githubusercontent.com/javierpetrucci/windhawk-enable-preview-pane-for-downloads/main/images/after.png)
 
 The Mark of the Web is **not** removed or modified. Files keep their
 `Zone.Identifier` stream, so SmartScreen, Office Protected View, Microsoft
