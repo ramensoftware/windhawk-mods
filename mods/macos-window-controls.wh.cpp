@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              macos-window-controls
 // @name            macOS Window Controls
-// @description     macOS-style traffic lights on an extra strip above every window
+// @description     macOS-style traffic lights on a strip above Notepad and File Explorer windows
 // @version         2.1.0
 // @author          APARUP DATTA PINAK
 // @github          https://github.com/pinakdatta2013-ops
@@ -14,10 +14,11 @@
 // ==WindhawkModReadme==
 /*
 # macOS Window Controls
-
-Adds a thin strip above every window with three macOS-style traffic lights
+Adds a thin strip above supported Notepad and File Explorer windows with three macOS-style traffic lights
 (close, minimize, maximize) on the left. The window's own content is not
 touched.
+
+This mod is a focused alternative to Caption Buttons Customizer: it adds a separate strip and leaves native title-bar buttons in place. Clicking its controls directly closes, minimizes, or maximizes/restores the supported window. It works in Notepad and File Explorer without DWM injection or adding dwm.exe to Windhawk's process inclusion list.
 
 - Anti-aliased, DPI-aware buttons
 - Light / dark theme follows the system
