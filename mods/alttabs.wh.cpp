@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              chromium-alttab-tabs
+// @id              alttabs
 // @name            AltTabs - Browser Tab Switcher HUD
 // @description     Press Alt+Q in Chrome, Edge or Brave to search the open tabs of the window and switch to one with the keyboard
 // @version         1.2.0
@@ -24,7 +24,7 @@ the arrow keys, and press **Enter** to switch to it.
 
 | Key | Action |
 |-----|--------|
-| **Alt+Q** or **Alt+\`** | Open the list. While it's open, press again to move down, or with Shift to move up. |
+| **Alt+Q** or **Alt+\`** | Open the list, with the tab after the current one selected. While it's open, press again to move down, or with Shift to move up. |
 | Typing | Filter the tabs. Several words match tabs that contain all of them. |
 | **↑** **↓**, **Tab**, **Shift+Tab** | Move the selection |
 | **Page Up**, **Page Down** | Move the selection by a page |
@@ -44,7 +44,11 @@ they work as usual.
   addresses this way, so the site name next to a tab is taken from the end of
   its title, for example "YouTube" in "Some video - YouTube". Tabs whose title
   doesn't end with a site name have no label.
-- Vivaldi isn't supported, its tab bar is part of a web page.
+- Opera should work too, but hasn't been tested. Vivaldi isn't supported, its
+  tab bar is part of a web page.
+- The first time the list is opened, the browser turns on its accessibility
+  support, as it does for screen readers. This uses some extra CPU and memory
+  in the browser while it's on.
 - The mod runs in its own Windhawk process. It doesn't inject code into the
   browser or into Explorer.
 */
@@ -308,6 +312,19 @@ void FillSolidRect(HDC dc, const RECT& rect, COLORREF color) {
     FillRect(dc, &rect, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
 }
 
+// The keyboard hook takes the hotkey press, so the tool process didn't get the
+// last input, and the foreground lock can make SetForegroundWindow fail. An
+// empty input makes it reliable.
+bool BringToForeground(HWND hwnd) {
+    INPUT input{};
+    SendInput(1, &input, sizeof(input));
+    return SetForegroundWindow(hwnd) != FALSE;
+}
+
+bool IsTimeout(HRESULT hr) {
+    return hr == static_cast<HRESULT>(UIA_E_TIMEOUT);
+}
+
 struct TabEntry {
     std::wstring title;
     std::wstring site;
@@ -344,7 +361,9 @@ class TabSwitcher {
 
     void LoadTabs(HWND browser);
     std::vector<ComPtr<IUIAutomationElement>> FindTabStrips(
-        IUIAutomationElement* window);
+        IUIAutomationElement* window,
+        bool* treeEmpty,
+        bool* timedOut);
     void ApplyFilter();
 
     void MoveSelection(int delta, bool wrap);
@@ -377,6 +396,9 @@ class TabSwitcher {
     std::wstring m_filter;
     size_t m_selected = 0;
     size_t m_scroll = 0;
+    // Wheel movement that hasn't added up to a whole row yet, e.g. from a
+    // touchpad.
+    int m_wheelRemainder = 0;
 };
 
 bool TabSwitcher::Init() {
@@ -581,8 +603,13 @@ LRESULT TabSwitcher::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         }
 
         case WM_MOUSEWHEEL: {
-            int notches = GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
-            ScrollBy(-notches * 3);
+            constexpr int kRowsPerNotch = 3;
+            m_wheelRemainder += GET_WHEEL_DELTA_WPARAM(wParam) * kRowsPerNotch;
+            int rows = m_wheelRemainder / WHEEL_DELTA;
+            m_wheelRemainder -= rows * WHEEL_DELTA;
+            if (rows) {
+                ScrollBy(-rows);
+            }
             return 0;
         }
 
@@ -658,7 +685,7 @@ void TabSwitcher::OnHotkey(bool backwards) {
     if (m_shownTime) {
         if (GetForegroundWindow() != m_window) {
             // Focus was lost during the grace period, take it back.
-            SetForegroundWindow(m_window);
+            BringToForeground(m_window);
         } else {
             MoveSelection(backwards ? -1 : 1, true);
         }
@@ -704,10 +731,29 @@ void TabSwitcher::Show(HWND browser) {
                    (std::max)(workArea.top, workArea.bottom - height));
 
     m_shownTime = GetTickCount64();
+    m_wheelRemainder = 0;
     SetWindowPos(m_window, HWND_TOPMOST, x, y, width, height,
                  SWP_SHOWWINDOW);
     UpdateDpi(GetDpiForWindow(m_window));
-    SetForegroundWindow(m_window);
+
+    // Select the tab after the current one, so that Alt+Q followed by Enter
+    // doesn't just select the current tab again.
+    auto activeTab =
+        std::find_if(m_visible.begin(), m_visible.end(),
+                     [this](size_t index) { return m_tabs[index].active; });
+    if (activeTab != m_visible.end() && m_visible.size() > 1) {
+        size_t activeRow = static_cast<size_t>(activeTab - m_visible.begin());
+        m_selected = (activeRow + 1) % m_visible.size();
+        EnsureSelectionVisible();
+    }
+
+    if (!BringToForeground(m_window)) {
+        // Without focus, the keys would still go to the browser.
+        Wh_Log(L"SetForegroundWindow failed");
+        Hide(false);
+        return;
+    }
+
     InvalidateRect(m_window, nullptr, FALSE);
 }
 
@@ -772,10 +818,11 @@ void TabSwitcher::ActivateSelectedTab() {
 void TabSwitcher::LoadTabs(HWND browser) {
     m_tabs.clear();
 
-    // Chromium creates its accessibility tree on the first request, so right
-    // after the browser starts, the tab strip might not be there yet.
+    // Chromium creates its accessibility tree on the first request, so it
+    // might still be empty. Windows without a tab strip, such as app windows,
+    // aren't retried, and neither is a browser that doesn't respond.
     constexpr int kAttempts = 3;
-    for (int attempt = 0; attempt < kAttempts && m_tabs.empty(); attempt++) {
+    for (int attempt = 0; attempt < kAttempts; attempt++) {
         if (attempt > 0) {
             Sleep(50 * attempt);
         }
@@ -784,15 +831,25 @@ void TabSwitcher::LoadTabs(HWND browser) {
         HRESULT hr = m_uia->ElementFromHandle(browser, &window);
         if (FAILED(hr) || !window) {
             Wh_Log(L"ElementFromHandle failed: 0x%08X", hr);
+            if (IsTimeout(hr)) {
+                break;
+            }
             continue;
         }
 
-        for (const auto& tabStrip : FindTabStrips(window.Get())) {
+        bool treeEmpty = false;
+        bool timedOut = false;
+        for (const auto& tabStrip :
+             FindTabStrips(window.Get(), &treeEmpty, &timedOut)) {
             ComPtr<IUIAutomationElementArray> items;
-            if (FAILED(tabStrip->FindAllBuildCache(
-                    TreeScope_Descendants, m_tabItemCondition.Get(),
-                    m_tabCache.Get(), &items)) ||
-                !items) {
+            hr = tabStrip->FindAllBuildCache(TreeScope_Descendants,
+                                             m_tabItemCondition.Get(),
+                                             m_tabCache.Get(), &items);
+            if (IsTimeout(hr)) {
+                timedOut = true;
+                break;
+            }
+            if (FAILED(hr) || !items) {
                 continue;
             }
 
@@ -830,6 +887,14 @@ void TabSwitcher::LoadTabs(HWND browser) {
                 m_tabs.push_back(std::move(tab));
             }
         }
+
+        if (timedOut) {
+            Wh_Log(L"The browser didn't respond in time");
+        }
+
+        if (!m_tabs.empty() || timedOut || !treeEmpty) {
+            break;
+        }
     }
 
     // Tabs of the same site share the position of the first one of them.
@@ -847,9 +912,13 @@ void TabSwitcher::LoadTabs(HWND browser) {
 }
 
 // Returns the tab strips of a browser window, found with a breadth-first
-// search which skips web page content.
+// search which skips web page content. Sets *treeEmpty if the window has no
+// accessible children yet, and *timedOut if the browser didn't respond, in
+// which case the search stops.
 std::vector<ComPtr<IUIAutomationElement>> TabSwitcher::FindTabStrips(
-    IUIAutomationElement* window) {
+    IUIAutomationElement* window,
+    bool* treeEmpty,
+    bool* timedOut) {
     std::vector<ComPtr<IUIAutomationElement>> tabStrips;
 
     std::deque<std::pair<ComPtr<IUIAutomationElement>, int>> queue;
@@ -862,15 +931,23 @@ std::vector<ComPtr<IUIAutomationElement>> TabSwitcher::FindTabStrips(
         visitedNodes++;
 
         ComPtr<IUIAutomationElementArray> children;
-        if (FAILED(element->FindAllBuildCache(
-                TreeScope_Children, m_trueCondition.Get(),
-                m_controlTypeCache.Get(), &children)) ||
-            !children) {
+        HRESULT hr = element->FindAllBuildCache(
+            TreeScope_Children, m_trueCondition.Get(),
+            m_controlTypeCache.Get(), &children);
+        if (IsTimeout(hr)) {
+            *timedOut = true;
+            break;
+        }
+        if (FAILED(hr) || !children) {
             continue;
         }
 
         int count = 0;
         children->get_Length(&count);
+        if (depth == 0 && count == 0) {
+            *treeEmpty = true;
+        }
+
         for (int i = 0; i < count; i++) {
             ComPtr<IUIAutomationElement> child;
             if (FAILED(children->GetElement(i, &child)) || !child) {
