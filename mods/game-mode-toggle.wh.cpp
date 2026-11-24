@@ -6,7 +6,7 @@
 // @author          theshindesahil
 // @github          https://github.com/theshindesahil
 // @include         windhawk.exe
-// @compilerOptions -lpowrprof -lshell32 -lole32 -ldwmapi -ladvapi32 -luser32 -lgdi32 -lversion
+// @compilerOptions -lpowrprof -lshell32 -lole32 -ldwmapi -ladvapi32 -luser32 -lgdi32 -lversion -lgdiplus
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -22,13 +22,49 @@ back.
 Nothing runs in the background while Game Mode is off. The mod only waits for
 its hotkey, in a small separate process started by Windhawk.
 
+## What it looks like
+
+One window carries the whole run: it opens as a checklist, turns into a live
+progress view while apps close, and ends as a summary.
+
+![The checklist](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/flow-1-review.png)
+
+![Apps closing](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/flow-2-running.png)
+
+![The summary](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/flow-3-done.png)
+
+### Themes
+
+Pick one in the settings, together with the font and the window size.
+
+| OLED purple (default) | OLED white |
+|---|---|
+| ![OLED purple (default)](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/theme-oled-purple.png) | ![OLED white](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/theme-oled-white.png) |
+
+| OLED lime | OLED blue |
+|---|---|
+| ![OLED lime](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/theme-oled-lime.png) | ![OLED blue](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/theme-oled-blue.png) |
+
+| Midnight | Graphite lime |
+|---|---|
+| ![Midnight](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/theme-midnight.png) | ![Graphite lime](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/theme-graphite-lime.png) |
+
+| Violet night | Ember |
+|---|---|
+| ![Violet night](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/theme-violet-night.png) | ![Ember](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/theme-ember.png) |
+
+| Mint | Paper light |
+|---|---|
+| ![Mint](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/theme-mint.png) | ![Paper light](https://raw.githubusercontent.com/theshindesahil/clear-the-deck/feat/windhawk-game-mode-mod/docs/game-mode-toggle/theme-paper-light.png) |
+
 ## What happens when you turn it on
 
 1. **A fresh snapshot is taken**: the active power plan, every app it is about
    to close, and the priority of any running game.
-2. **A checklist shows what will be closed**: untick anything to leave it alone
-   this time, then Enter confirms and Esc cancels. Turn the checklist off in the
-   settings if you prefer.
+2. **A window shows what will be closed**: every app is a card with its own icon
+   and a switch. Untick anything to leave it alone this time, use *Select all* or
+   *Select none* for long lists, then Enter confirms and Esc cancels. Long lists
+   scroll. Turn the checklist off in the settings if you prefer.
 3. **Apps are closed politely**, all at once: each app's visible windows get a
    normal close request, exactly like clicking the X. Hidden helper windows of
    tray apps are only touched when the app is allowed to be ended afterwards,
@@ -43,6 +79,17 @@ its hotkey, in a small separate process started by Windhawk.
    default.
 5. **Games that are already running** (from your game folders) get High
    priority. Realtime is never used.
+6. **The same window turns into a live progress view**: each app shows a spinner
+   until it has closed, then a check mark (or an amber warning if it stayed
+   open), with a progress bar underneath. When everything is done it becomes a
+   summary with a Done button, and it closes itself after a while. The progress
+   view can be switched off in the settings.
+
+The window can be restyled in the settings: **Theme** (OLED black with purple,
+white, lime or blue accents, Midnight, Graphite lime, Violet night, Ember, Mint,
+Paper light, or follow Windows dark/light), **Font** (Geist by default, with
+a fallback to a Windows font when it is not installed, or any installed font
+you type in) and **Window size** (automatic, or 100% to 250%).
 
 ## What happens when you turn it off
 
@@ -50,6 +97,11 @@ Exactly the snapshot is restored, then deleted: apps that were closed are
 reopened, the power plan goes back to what it was, priorities are reset. There
 is no stored "original": changes you make while Game Mode is off simply stay.
 Apps you reopened yourself in the meantime are not started twice.
+By default the apps are reopened **in the background**: they start minimized and
+do not take the focus, so nothing flashes over what you are doing. An app that
+ignores the request to start minimized is minimized the moment its window
+appears, for a few seconds after it was started. Turn *Reopen apps in the
+background* off in the settings if you want them to open normally.
 
 ## Which apps are closed
 
@@ -102,17 +154,75 @@ Apps you reopened yourself in the meantime are not started twice.
 
 // ==WindhawkModSettings==
 /*
-- hotkey: Ctrl+Alt+G
-  $name: Hotkey
+- theme: oled-purple
+  $name: Theme
   $description: >-
-    Press it once to turn Game Mode on, again to turn it off. Use Ctrl, Alt,
-    Shift or Win plus a letter, digit or F1-F24, for example Ctrl+Alt+G.
+    The colours of the Game Mode window. "Follow Windows" uses OLED purple when
+    Windows is in dark mode and Paper light when it is in light mode.
+  $options:
+    - auto: Follow Windows (dark or light)
+    - oled-purple: OLED black, purple accent
+    - oled-white: OLED black, white accent
+    - oled-lime: OLED black, lime accent
+    - oled-blue: OLED black, blue accent
+    - midnight: Midnight (charcoal, blue)
+    - graphite-lime: Graphite lime
+    - violet-night: Violet night
+    - ember: Ember (warm brown, orange)
+    - mint: Mint
+    - paper-light: Paper light
+- font: Geist
+  $name: Font
+  $description: >-
+    The font of the Game Mode window. If it is not installed on this PC, Segoe UI
+    Variable Text is used instead. Geist is a free font you can install.
+  $options:
+    - Geist: Geist
+    - Geist Mono: Geist Mono
+    - Segoe UI Variable Text: Segoe UI Variable (Windows 11 default)
+    - Segoe UI: Segoe UI
+    - Cascadia Code: Cascadia Code
+    - Cascadia Mono: Cascadia Mono
+    - JetBrains Mono: JetBrains Mono
+    - Consolas: Consolas
+    - Inter: Inter
+- customFont: ""
+  $name: Custom font name
+  $description: >-
+    Optional. Type the name of any installed font to use it instead of the one
+    chosen above. Leave empty to use the list.
+- uiScale: auto
+  $name: Window size
+  $description: >-
+    "Automatic" follows the display scale of the monitor the window is on. Pick a
+    percentage to make the window larger or smaller on every screen.
+  $options:
+    - auto: Automatic
+    - 100: 100%
+    - 125: 125%
+    - 150: 150%
+    - 175: 175%
+    - 200: 200%
+    - 250: 250%
 - confirm: true
   $name: Show the checklist before turning on and off
   $description: >-
     Shows the apps as a checklist first. Untick an app to leave it alone this
     time. Enter confirms, Esc cancels. With this off nothing is ended, only
     closed politely.
+- showProgress: true
+  $name: Show a progress window
+  $description: >-
+    Shows a small window with a progress bar and the apps being closed or
+    reopened, then a summary when it is done. With it off, only the
+    notification below is shown.
+- notify: true
+  $name: Show a notification when done
+- hotkey: Ctrl+Alt+G
+  $name: Hotkey
+  $description: >-
+    Press it once to turn Game Mode on, again to turn it off. Use Ctrl, Alt,
+    Shift or Win plus a letter, digit or F1-F24, for example Ctrl+Alt+G.
 - gamePowerPlan: none
   $name: Power plan while playing
   $options:
@@ -124,11 +234,17 @@ Apps you reopened yourself in the meantime are not started twice.
     setting that survives restarts. If the plan does not exist on this PC, the
     power plan is left alone. The plan that was active is restored when Game
     Mode is turned off, when the mod is unloaded, or after a restart.
-- closeApps: [""]
-  $name: Apps to close
+- reopenInBackground: true
+  $name: Reopen apps in the background
   $description: >-
-    Process names, one per row, for example Rainmeter.exe. All processes with
-    that name are asked to close, including tray apps without a window.
+    When Game Mode is turned off, apps are started minimized and without taking
+    the focus, so nothing flashes over what you are doing. Some apps ignore the
+    request to start minimized; they are minimized the moment their window
+    appears. Turn it off to let apps open normally.
+- boostGames: true
+  $name: High priority for running games
+  $description: >-
+    Only applies to games that are already running when you turn Game Mode on.
 - closeOthers: true
   $name: Close every other app too
   $description: >-
@@ -139,6 +255,16 @@ Apps you reopened yourself in the meantime are not started twice.
   $description: >-
     Also list apps that only run in the background without a window. They are
     ended (not just asked to close) when you leave them ticked.
+- closeApps: [""]
+  $name: Apps to close
+  $description: >-
+    Process names, one per row, for example Rainmeter.exe. All processes with
+    that name are asked to close, including tray apps without a window.
+- keepApps: [steam.exe, EpicGamesLauncher.exe, Battle.net.exe, GalaxyClient.exe, Discord.exe, obs64.exe, WindowsTerminal.exe]
+  $name: Apps to keep
+  $description: >-
+    Process names that are never closed, even with "Close every other app too".
+    Add your game launchers, voice chat and recording tools here.
 - keepVendorApps: true
   $name: Keep PC manufacturer and hardware utilities
   $description: >-
@@ -157,11 +283,6 @@ Apps you reopened yourself in the meantime are not started twice.
   $description: >-
     Programs whose path contains any of these pieces of text are never closed.
     Use it for drivers, GPU software and tools you always want running.
-- keepApps: [steam.exe, EpicGamesLauncher.exe, Battle.net.exe, GalaxyClient.exe, Discord.exe, obs64.exe, WindowsTerminal.exe]
-  $name: Apps to keep
-  $description: >-
-    Process names that are never closed, even with "Close every other app too".
-    Add your game launchers, voice chat and recording tools here.
 - forceCloseApps: [""]
   $name: Apps to force close
   $description: >-
@@ -177,24 +298,24 @@ Apps you reopened yourself in the meantime are not started twice.
   $description: >-
     Programs running from these folders are never closed and get High
     priority, for example D:\SteamLibrary\steamapps\common. Subfolders count.
-- boostGames: true
-  $name: High priority for running games
-  $description: >-
-    Only applies to games that are already running when you turn Game Mode on.
-- notify: true
-  $name: Show a notification when done
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <objidl.h>
+#include <gdiplus.h>
+#include <commctrl.h>
 #include <dwmapi.h>
 #include <powrprof.h>
 #include <sddl.h>
 #include <shellapi.h>
+#include <shobjidl.h>
 #include <tlhelp32.h>
 
 #include <algorithm>
 #include <cstdlib>
+#include <cwctype>
+#include <cmath>
 #include <cwctype>
 #include <map>
 #include <set>
@@ -213,6 +334,11 @@ struct Settings {
     bool closeBackground = true;
     bool boostGames = true;
     bool notify = true;
+    bool showProgress = false;  // the settings load turns it on by default
+    std::wstring fontName;      // empty = a modern Windows font
+    std::wstring theme = L"oled-purple";
+    float uiScale = 0;          // 0 = follow the display scale
+    bool reopenBackground = false;   // the settings load turns it on by default
     std::wstring plan = L"none";
     int timeoutSec = 8;
     std::vector<std::wstring> closeApps;
@@ -634,6 +760,7 @@ constexpr int kHotkeyId = 0x6D47;
 UINT_PTR g_recoverTimer;
 constexpr DWORD kRecoverDelayMs = 90 * 1000;
 const wchar_t kGuidBalanced[] = L"381b4222-f694-41f0-9685-ff5bb260df2e";
+const wchar_t kGuidUltimate[] = L"e9a42b02-d5df-448d-aa00-03f14749eb61";
 const wchar_t kGuidHigh[] = L"8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c";
 
 Settings g_settings;
@@ -650,7 +777,7 @@ std::vector<std::wstring> ReadList(PCWSTR name) {
     std::vector<std::wstring> list;
     for (int i = 0; i < 200; i++) {
         PCWSTR v = Wh_GetStringSetting(name, i);
-        std::wstring s = v ? v : L"";
+        std::wstring s = v;
         Wh_FreeStringSetting(v);
         s = Trim(s);
         if (s.empty()) {
@@ -664,7 +791,7 @@ std::vector<std::wstring> ReadList(PCWSTR name) {
 void LoadSettings() {
     Settings s;
     PCWSTR hk = Wh_GetStringSetting(L"hotkey");
-    std::wstring hotkeyText = hk ? hk : L"";
+    std::wstring hotkeyText = hk;
     Wh_FreeStringSetting(hk);
     s.hotkeyValid = ParseHotkey(hotkeyText, &s.hotMods, &s.hotVk);
     if (!s.hotkeyValid) {
@@ -675,8 +802,25 @@ void LoadSettings() {
     s.closeBackground = Wh_GetIntSetting(L"closeBackground") != 0;
     s.boostGames = Wh_GetIntSetting(L"boostGames") != 0;
     s.notify = Wh_GetIntSetting(L"notify") != 0;
+    s.showProgress = Wh_GetIntSetting(L"showProgress") != 0;
+    s.reopenBackground = Wh_GetIntSetting(L"reopenInBackground") != 0;
+    PCWSTR fontSetting = Wh_GetStringSetting(L"font");
+    s.fontName = Trim(fontSetting);
+    Wh_FreeStringSetting(fontSetting);
+    PCWSTR customFont = Wh_GetStringSetting(L"customFont");
+    if (!Trim(customFont).empty()) {
+        s.fontName = Trim(customFont);   // a font typed in by hand wins over the list
+    }
+    Wh_FreeStringSetting(customFont);
+    PCWSTR themeSetting = Wh_GetStringSetting(L"theme");
+    s.theme = Lower(Trim(themeSetting));
+    Wh_FreeStringSetting(themeSetting);
+    PCWSTR scaleSetting = Wh_GetStringSetting(L"uiScale");
+    int scalePercent = _wtoi(scaleSetting);   // "auto" reads as 0
+    s.uiScale = scalePercent >= 100 ? scalePercent / 100.0f : 0.0f;
+    Wh_FreeStringSetting(scaleSetting);
     PCWSTR plan = Wh_GetStringSetting(L"gamePowerPlan");
-    s.plan = plan ? Lower(plan) : L"none";
+    s.plan = Lower(plan);
     Wh_FreeStringSetting(plan);
     s.timeoutSec = std::clamp(Wh_GetIntSetting(L"closeTimeoutSec"), 1, 60);
     s.closeApps = ReadList(L"closeApps[%d]");
@@ -889,66 +1033,56 @@ void Notify(const std::wstring& text) {
     SetTimer(g_notifyWnd, kNotifyTimer, 8000, nullptr);
 }
 
-// ---- checklist dialog ------------------------------------------------------
+ULONG_PTR g_gdiplusToken = 0;
+
+void GdiplusOn() {
+    if (!g_gdiplusToken) {
+        Gdiplus::GdiplusStartupInput in;
+        Gdiplus::GdiplusStartup(&g_gdiplusToken, &in, nullptr);
+    }
+}
+
+void GdiplusOff() {
+    if (g_gdiplusToken) {
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+    }
+}
+
+// ---- the Game Mode window --------------------------------------------------
 //
-// A real window with real controls (check boxes and push buttons), so keyboard
-// use and screen readers work. It follows the Windows app theme (dark or light)
-// and is per-monitor DPI aware: windhawk.exe is not, so the dialog thread opts
-// in while the dialog is open. Enter confirms, Esc cancels, Tab moves, Space
-// ticks.
+// One window carries the whole flow: it opens as a checklist, turns into a live
+// progress view while apps are closed (or reopened), and ends as a summary. It is
+// drawn as a single layered surface with per-pixel alpha, so its size, position
+// and pixels change together and the animation never tears. Colours come from a
+// theme, the font and the scale from the settings.
 
 struct ChecklistItem {
     std::wstring text;
-    std::wstring note;       // shown after the name, e.g. "background"
-    bool keepNote = false;   // a warning (ends process): cut the name before the note
+    std::wstring note;       // shown as a small tag after the name, e.g. "background"
+    bool keepNote = false;   // a warning (ends process): shown in amber
+    std::wstring path;       // the program, for its icon
+    std::wstring aumid;      // the Store app id, when it has one: gives the real tile icon
 };
 
 struct ChecklistSpec {
-    std::wstring title;
-    std::wstring verb;               // "Closes" or "Reopens"
-    std::vector<std::wstring> info;  // muted lines under the summary
+    std::wstring title;              // "Turn on Game Mode?"
+    std::wstring verb;               // "Closes" or "Reopens" (kept for the tests)
+    std::wstring subtitle;           // "{n} app{s} will close. ..." ({n} = ticked apps)
+    std::vector<std::wstring> info;  // muted facts, shown on one line (power plan, games)
     std::wstring hint;
-    std::wstring okText;
+    std::wstring okText;             // "Turn on"
+    std::wstring runTitle;           // "Closing apps"
+    std::wstring runHint;            // "Asking apps to close politely"
+    std::wstring doneVerb;           // "closed" / "reopened"
     std::vector<ChecklistItem> items;
-    bool startExpanded = false;
+    bool startExpanded = false;      // unused: the list is always shown
 };
 
 struct ChecklistResult {
     bool ok = false;
     std::vector<bool> checked;
 };
-
-constexpr int kIdAdv = 1001;
-constexpr int kIdAll = 1002;
-constexpr int kIdItem0 = 2000;
-const wchar_t kDlgClass[] = L"GameModeToggleDialog";
-
-struct DlgState {
-    HWND hwnd = nullptr;
-    int dpi = 96;
-    bool dark = false;
-    bool expanded = false;
-    bool done = false;
-    bool result = false;
-    bool stopRequested = false;
-    bool reloadRequested = false;
-    HFONT font = nullptr;
-    HFONT fontTitle = nullptr;
-    HBRUSH bgBrush = nullptr;
-    COLORREF bg = 0, foot = 0, text = 0, muted = 0, line = 0;
-    int footTop = 0;
-    ChecklistSpec spec;
-    HWND titleWnd = nullptr, summaryWnd = nullptr, hintWnd = nullptr;
-    HWND advBtn = nullptr, allBtn = nullptr, okBtn = nullptr, cancelBtn = nullptr;
-    std::vector<HWND> infoWnds;
-    std::vector<HWND> itemWnds;
-};
-
-DlgState* g_dlg = nullptr;
-
-int Sd(int v) {
-    return MulDiv(v, g_dlg->dpi, 96);
-}
 
 bool IsDarkTheme() {
     DWORD v = 1;
@@ -962,453 +1096,1690 @@ bool IsDarkTheme() {
     return v == 0;
 }
 
-template <typename Fn>
-Fn UserProc(const char* name) {
-    return (Fn)GetProcAddress(GetModuleHandleW(L"user32.dll"), name);
+namespace flow {
+
+using namespace Gdiplus;
+
+float Clamp01(float v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+float Lerp(float a, float b, float t) { return a + (b - a) * t; }
+float EaseOut(float t) { t = Clamp01(t); return 1 - std::pow(1 - t, 3.0f); }
+float EaseInOut(float t) {
+    t = Clamp01(t);
+    return t < 0.5f ? 4 * t * t * t : 1 - std::pow(-2 * t + 2, 3.0f) / 2;
+}
+float Overshoot(float t) {
+    t = Clamp01(t);
+    const float c1 = 1.70158f, c3 = c1 + 1;
+    return 1 + c3 * std::pow(t - 1, 3.0f) + c1 * std::pow(t - 1, 2.0f);
+}
+Color Alpha(Color c, float a) {
+    return Color((BYTE)std::clamp((int)(a * c.GetA()), 0, 255), c.GetR(), c.GetG(), c.GetB());
+}
+Color Mix(Color a, Color b, float t) {
+    return Color(255, (BYTE)Lerp(a.GetR(), b.GetR(), t), (BYTE)Lerp(a.GetG(), b.GetG(), t),
+                 (BYTE)Lerp(a.GetB(), b.GetB(), t));
 }
 
-void MakeFonts() {
-    DlgState& d = *g_dlg;
-    NONCLIENTMETRICSW ncm = {sizeof(ncm)};
-    using SpiForDpi_t = BOOL(WINAPI*)(UINT, UINT, PVOID, UINT, UINT);
-    auto spiForDpi = UserProc<SpiForDpi_t>("SystemParametersInfoForDpi");
-    if (!(spiForDpi && spiForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, d.dpi))) {
-        SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
-        ncm.lfMessageFont.lfHeight = -MulDiv(12, d.dpi, 96);
+// ---- themes ---------------------------------------------------------------
+
+struct Theme {
+    bool light = false;
+    Color bg, card, cardLine, cardHot, cardHotLine, text, muted, accent, accentHot, accentDeep, onAccent, amber,
+        track, knobOff, glowA, glowB, edge;
+    float glowLo = 0.2f, glowHi = 0.38f;
+};
+
+Theme MakeTheme(const std::wstring& id, bool systemDark) {
+    std::wstring t = id;
+    if (t == L"auto" || t.empty()) {
+        t = systemDark ? L"oled-purple" : L"paper-light";
     }
-    if (d.font) {
-        DeleteObject(d.font);
+    Color bg(255, 0, 0, 0), card(255, 12, 11, 16), line(255, 32, 27, 42), text(255, 245, 243, 255),
+        muted(255, 142, 136, 160), accent(255, 167, 139, 250), on(255, 18, 7, 43), glow(255, 124, 58, 237);
+    bool light = false;
+    if (t == L"oled-white") {
+        accent = Color(255, 245, 245, 247); on = Color(255, 0, 0, 0); glow = Color(255, 90, 90, 100);
+        card = Color(255, 14, 14, 16); line = Color(255, 38, 38, 42); muted = Color(255, 150, 150, 158);
+    } else if (t == L"oled-lime") {
+        accent = Color(255, 163, 230, 53); on = Color(255, 8, 12, 0); glow = Color(255, 70, 110, 10);
+        card = Color(255, 14, 14, 16); line = Color(255, 38, 38, 42); muted = Color(255, 150, 150, 158);
+    } else if (t == L"oled-blue") {
+        accent = Color(255, 76, 154, 255); on = Color(255, 4, 10, 24); glow = Color(255, 30, 80, 200);
+        card = Color(255, 14, 14, 16); line = Color(255, 38, 38, 42); muted = Color(255, 150, 150, 158);
+    } else if (t == L"midnight") {
+        bg = Color(255, 30, 30, 34); card = Color(255, 42, 42, 48); line = Color(255, 60, 60, 68);
+        text = Color(255, 244, 244, 245); muted = Color(255, 161, 161, 170); accent = Color(255, 76, 154, 255);
+        on = Color(255, 8, 16, 32); glow = Color(255, 40, 90, 210);
+    } else if (t == L"graphite-lime") {
+        bg = Color(255, 18, 18, 18); card = Color(255, 28, 28, 30); line = Color(255, 44, 44, 46);
+        text = Color(255, 245, 245, 245); muted = Color(255, 160, 160, 165); accent = Color(255, 163, 230, 53);
+        on = Color(255, 8, 12, 0); glow = Color(255, 70, 110, 10);
+    } else if (t == L"violet-night") {
+        bg = Color(255, 23, 20, 31); card = Color(255, 33, 28, 46); line = Color(255, 52, 44, 74);
+        text = Color(255, 243, 240, 255); muted = Color(255, 168, 160, 196); accent = Color(255, 167, 139, 250);
+        on = Color(255, 20, 10, 50); glow = Color(255, 110, 60, 220);
+    } else if (t == L"ember") {
+        bg = Color(255, 26, 21, 18); card = Color(255, 37, 29, 24); line = Color(255, 58, 46, 38);
+        text = Color(255, 253, 246, 239); muted = Color(255, 190, 170, 154); accent = Color(255, 251, 146, 60);
+        on = Color(255, 40, 16, 0); glow = Color(255, 190, 80, 20);
+    } else if (t == L"mint") {
+        bg = Color(255, 15, 23, 21); card = Color(255, 21, 34, 30); line = Color(255, 31, 48, 41);
+        text = Color(255, 236, 253, 245); muted = Color(255, 150, 182, 170); accent = Color(255, 52, 211, 153);
+        on = Color(255, 0, 30, 18); glow = Color(255, 20, 140, 100);
+    } else if (t == L"paper-light") {
+        light = true;
+        bg = Color(255, 250, 250, 249); card = Color(255, 255, 255, 255); line = Color(255, 228, 228, 231);
+        text = Color(255, 24, 24, 27); muted = Color(255, 107, 114, 128); accent = Color(255, 37, 99, 235);
+        on = Color(255, 255, 255, 255); glow = Color(255, 110, 150, 255);
     }
-    if (d.fontTitle) {
-        DeleteObject(d.fontTitle);
-    }
-    d.font = CreateFontIndirectW(&ncm.lfMessageFont);
-    LOGFONTW title = ncm.lfMessageFont;
-    title.lfHeight = -MulDiv(20, d.dpi, 96);
-    title.lfWeight = FW_SEMIBOLD;
-    d.fontTitle = CreateFontIndirectW(&title);
+    Theme th;
+    th.light = light;
+    th.bg = bg; th.card = card; th.cardLine = line; th.text = text; th.muted = muted;
+    th.accent = accent; th.onAccent = on;
+    th.accentHot = Mix(accent, Color(255, 255, 255, 255), 0.25f);
+    th.accentDeep = Mix(accent, Color(255, 0, 0, 0), 0.35f);
+    th.cardHot = light ? Color(255, 244, 244, 245) : Mix(card, Color(255, 255, 255, 255), 0.05f);
+    th.cardHotLine = Mix(line, accent, 0.35f);
+    th.amber = light ? Color(255, 180, 110, 0) : Color(255, 251, 191, 36);
+    th.track = light ? Color(255, 228, 228, 231) : Mix(card, Color(255, 255, 255, 255), 0.06f);
+    th.knobOff = light ? Color(255, 160, 160, 170) : Color(255, 120, 114, 138);
+    th.glowA = glow;
+    th.glowB = accent;
+    th.edge = Mix(line, accent, 0.15f);
+    th.glowLo = light ? 0.16f : 0.20f;
+    th.glowHi = light ? 0.30f : 0.38f;
+    return th;
 }
 
-HWND MakeChild(const wchar_t* cls, const std::wstring& text, DWORD style, int id) {
-    DlgState& d = *g_dlg;
-    HWND h = CreateWindowExW(0, cls, text.c_str(), WS_CHILD | WS_VISIBLE | style,
-                             0, 0, 10, 10, d.hwnd, (HMENU)(INT_PTR)id,
-                             GetModuleHandleW(nullptr), nullptr);
-    SendMessageW(h, WM_SETFONT, (WPARAM)d.font, TRUE);
+Theme g_th = MakeTheme(L"oled-purple", true);
+std::wstring g_themeId;
+
+// A near-white accent (the white OLED theme) needs dark marks on top of it.
+bool BrightAccent(const Theme& T) {
+    return 0.299f * T.accent.GetR() + 0.587f * T.accent.GetG() + 0.114f * T.accent.GetB() > 215.0f;
+}
+
+
+// ---- model ----------------------------------------------------------------
+
+constexpr float W = 520;      // window width (logical px)
+constexpr float M = 26;       // transparent margin around it, for the shadow
+constexpr float TB = 44;      // the drawn title strip
+constexpr float kP1 = 420, kP2 = 760;  // review -> running, running -> done (ms)
+constexpr float rowH = 52, gap = 8;
+constexpr int kIdCancel = 100000, kIdOk = 100001, kIdDone = 100002, kIdMin = 100003, kIdClose = 100004,
+              kIdAll = 100005;
+
+enum class Phase { Closed, Review, Running, Done };
+
+struct Item {
+    std::wstring name, note, path, aumid;
+    bool keepNote = false;
+    bool ticked = true;
+    float knob = 1.0f;       // the switch's position, 0 = off, 1 = on; glides to the ticked state
+    int state = 0;           // 0 waiting, 1 done, 2 left running
+    float finishedAt = -1;
+    Bitmap* icon = nullptr;
+    Color tile;
+};
+
+struct Hit { RectF r; int id; };
+
+HWND g_wnd = nullptr;
+Phase g_phase = Phase::Closed;
+// The window has its own thread (it only draws and handles input), so its animation never waits for the work
+// the worker thread does: switching the power plan, closing apps, reopening apps. The two share the model
+// below; the lock covers a frame being drawn and the few places where the worker changes the model.
+CRITICAL_SECTION g_cs;
+bool g_csInit = false;
+HANDLE g_uiThread = nullptr, g_readyEvt = nullptr, g_answerEvt = nullptr;
+volatile LONG g_quit = 0, g_finishPending = 0, g_frames = 0, g_renderUs = 0;   // drawn frames and time spent drawing them, for the tests
+bool g_startRunning = false;
+struct Guard {
+    Guard() { EnterCriticalSection(&g_cs); }
+    ~Guard() { LeaveCriticalSection(&g_cs); }
+};
+ChecklistSpec g_spec;
+std::vector<Item> g_items;
+std::vector<int> g_run;          // indices of the items that are being worked on
+std::wstring g_infoLine;
+float g_clickAt = -1, g_doneAt = -1;
+std::wstring g_doneTitle, g_doneSummary;
+float g_doneBody = 360;
+bool g_answered = false, g_answerOk = false;
+bool g_stopRequested = false, g_reloadRequested = false;
+int g_hover = -1, g_pressed = -1, g_focus = kIdOk;
+int g_titleHover = -1;
+std::vector<Hit> g_hits;
+float g_body = 480;
+float g_listCap = 300;
+float g_scroll = 0, g_scrollTarget = 0;
+float g_scale = 1.0f;
+LARGE_INTEGER g_freq, g_start;
+HDC g_memDC = nullptr;
+HBITMAP g_dib = nullptr;
+Bitmap* g_surface = nullptr;
+int g_maxW = 0, g_maxH = 0;
+double g_cx = 0, g_cy = 0;
+int g_lastL = -99999, g_lastT = -99999;
+HICON g_iconS = nullptr, g_iconB = nullptr;
+float g_lastDoneInteraction = 0;
+bool g_userWentIdle = false;
+
+float NowMs() {
+    LARGE_INTEGER q;
+    QueryPerformanceCounter(&q);
+    return (float)((q.QuadPart - g_start.QuadPart) * 1000.0 / g_freq.QuadPart);
+}
+
+// ---- drawing helpers ------------------------------------------------------
+
+void RR(GraphicsPath& p, float x, float y, float w, float h, float r) {
+    r = std::min(r, std::min(w, h) / 2);
+    float d = r * 2;
+    if (d <= 0.1f) {
+        p.AddRectangle(RectF(x, y, w, h));
+        return;
+    }
+    p.AddArc(x, y, d, d, 180.0f, 90.0f);
+    p.AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
+    p.AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
+    p.AddArc(x, y + h - d, d, d, 90.0f, 90.0f);
+    p.CloseFigure();
+}
+void FillRR(Graphics& g, Color c, float x, float y, float w, float h, float r) {
+    GraphicsPath p;
+    RR(p, x, y, w, h, r);
+    SolidBrush b(c);
+    g.FillPath(&b, &p);
+}
+void StrokeRR(Graphics& g, Color c, float width, float x, float y, float w, float h, float r) {
+    GraphicsPath p;
+    RR(p, x, y, w, h, r);
+    Pen pen(c, width);
+    g.DrawPath(&pen, &p);
+}
+
+// ---- fonts ----------------------------------------------------------------
+
+struct Fonts {
+    FontFamily* ff;
+    Font *title, *body, *row, *tag, *btn, *big, *small;
+};
+Fonts* g_fonts = nullptr;
+std::wstring g_fontsFor;
+std::map<std::pair<std::wstring, Font*>, float> g_textW;
+std::map<Font*, float> g_lineH;   // line height per font
+
+std::wstring WantedFont() {
+    return g_settings.fontName.empty() ? L"Segoe UI Variable Text" : g_settings.fontName;
+}
+
+void FreeFonts() {
+    if (g_fonts) {
+        delete g_fonts->title; delete g_fonts->body; delete g_fonts->row; delete g_fonts->tag;
+        delete g_fonts->btn; delete g_fonts->big; delete g_fonts->small; delete g_fonts->ff;
+        delete g_fonts;
+        g_fonts = nullptr;
+    }
+    g_textW.clear();
+    g_lineH.clear();
+    g_fontsFor.clear();
+}
+
+// The font from the settings; if it is not installed, a modern Windows font.
+Fonts* GetFonts() {
+    std::wstring want = WantedFont();
+    if (g_fonts && g_fontsFor == want) {
+        return g_fonts;
+    }
+    FreeFonts();
+    FontFamily* ff = new FontFamily(want.c_str());
+    if (!ff->IsAvailable()) {
+        delete ff;
+        ff = new FontFamily(L"Segoe UI Variable Text");
+    }
+    if (!ff->IsAvailable()) {
+        delete ff;
+        ff = new FontFamily(L"Segoe UI");
+    }
+    const int bold = ff->IsStyleAvailable(FontStyleBold) ? FontStyleBold : FontStyleRegular;
+    g_fonts = new Fonts{ff,
+                        new Font(ff, 23, bold, UnitPixel),
+                        new Font(ff, 14, FontStyleRegular, UnitPixel),
+                        new Font(ff, 15, FontStyleRegular, UnitPixel),
+                        new Font(ff, 11, FontStyleRegular, UnitPixel),
+                        new Font(ff, 14, bold, UnitPixel),
+                        new Font(ff, 26, bold, UnitPixel),
+                        new Font(ff, 13, FontStyleRegular, UnitPixel)};
+    g_fontsFor = want;
+    return g_fonts;
+}
+
+// GDI+ adds a hidden margin to ordinary strings, which makes text sit a few pixels away from where it is
+// asked to go. The typographic format has none, so text lines up exactly with the cards and buttons.
+// 0 near, 1 centre, 2 far (one line), 3 centred both ways, 4 centred and wrapping.
+StringFormat* Fmt(int k) {
+    static StringFormat* f[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};
+    if (!f[k]) {
+        f[k] = new StringFormat(StringFormat::GenericTypographic());
+        f[k]->SetFormatFlags(f[k]->GetFormatFlags() | StringFormatFlagsMeasureTrailingSpaces | (k == 4 ? 0 : StringFormatFlagsNoWrap));
+        f[k]->SetTrimming(StringTrimmingNone);
+        f[k]->SetAlignment(k == 2 ? StringAlignmentFar : (k == 0 ? StringAlignmentNear : StringAlignmentCenter));
+        f[k]->SetLineAlignment(k == 3 ? StringAlignmentCenter : StringAlignmentNear);
+    }
+    return f[k];
+}
+
+float TextW(Graphics& g, const std::wstring& s, Font& f) {
+    auto key = std::make_pair(s, &f);
+    auto it = g_textW.find(key);
+    if (it != g_textW.end()) {
+        return it->second;
+    }
+    RectF r;
+    g.MeasureString(s.c_str(), -1, &f, PointF(0, 0), Fmt(0), &r);
+    g_textW[key] = r.Width;
+    return r.Width;
+}
+
+float LineH(Graphics& g, Font& f) {
+    auto it = g_lineH.find(&f);
+    if (it != g_lineH.end()) {
+        return it->second;
+    }
+    float h = f.GetHeight(&g);
+    g_lineH[&f] = h;
     return h;
 }
 
-void PlaceChild(HWND h, int x, int y, int w, int hgt) {
-    SetWindowPos(h, nullptr, x, y, w, hgt, SWP_NOZORDER | SWP_NOACTIVATE);
-}
-
-int TextWidth(HDC dc, const std::wstring& s) {
-    SIZE sz = {};
-    GetTextExtentPoint32W(dc, s.c_str(), (int)s.size(), &sz);
-    return sz.cx;
-}
-
-// Cuts a name that does not fit and ends it with an ellipsis.
-std::wstring FitText(HDC dc, const std::wstring& s, int maxWidth) {
-    if (TextWidth(dc, s) <= maxWidth) {
+std::wstring FitStr(Graphics& g, const std::wstring& s, Font& f, float maxW) {
+    if (TextW(g, s, f) <= maxW) {
         return s;
     }
     std::wstring t = s;
-    while (t.size() > 1 && TextWidth(dc, t + L"…") > maxWidth) {
+    while (t.size() > 1 && TextW(g, t + L"…", f) > maxW) {
         t.pop_back();
     }
     return t + L"…";
 }
 
-void UpdateSummary() {
-    DlgState& d = *g_dlg;
-    size_t n = d.itemWnds.size();
-    size_t on = 0;
-    for (HWND h : d.itemWnds) {
-        on += SendMessageW(h, BM_GETCHECK, 0, 0) == BST_CHECKED;
+void Str(Graphics& g, const std::wstring& s, Font& f, float x, float y, Color c, float alpha,
+         StringAlignment al = StringAlignmentNear, float boxW = 0) {
+    if (alpha <= 0.01f) {
+        return;
     }
-    std::wstring s = n == 0 ? d.spec.verb + L" nothing"
-                            : d.spec.verb + L" " + std::to_wstring(on) + L" of " +
-                                  std::to_wstring(n) + L" apps";
-    SetWindowTextW(d.summaryWnd, s.c_str());
-    if (d.allBtn) {
-        SendMessageW(d.allBtn, BM_SETCHECK,
-                     on == n ? BST_CHECKED : on == 0 ? BST_UNCHECKED : BST_INDETERMINATE, 0);
-    }
-}
-
-void Layout() {
-    DlgState& d = *g_dlg;
-    const int W = Sd(620);
-    const int M = Sd(24);
-    HDC dc = GetDC(d.hwnd);
-    HFONT old = (HFONT)SelectObject(dc, d.font);
-    int y = M;
-
-    PlaceChild(d.titleWnd, M, y, W - 2 * M, Sd(30));
-    y += Sd(38);
-    PlaceChild(d.summaryWnd, M, y, W - 2 * M, Sd(22));
-    y += Sd(24);
-    for (HWND h : d.infoWnds) {
-        PlaceChild(h, M, y, W - 2 * M, Sd(20));
-        y += Sd(20);
-    }
-    y += Sd(6);
-
-    const bool hasItems = !d.itemWnds.empty();
-    ShowWindow(d.advBtn, hasItems ? SW_SHOW : SW_HIDE);
-    if (hasItems) {
-        PlaceChild(d.advBtn, M, y, Sd(200), Sd(30));
-        SetWindowTextW(d.advBtn, d.expanded ? L"Advanced options (hide list)" : L"Advanced options");
-        y += Sd(42);
-    }
-
-    const bool showList = hasItems && d.expanded;
-    ShowWindow(d.allBtn, showList ? SW_SHOW : SW_HIDE);
-    for (HWND h : d.itemWnds) {
-        ShowWindow(h, showList ? SW_SHOW : SW_HIDE);
-    }
-    if (showList) {
-        PlaceChild(d.allBtn, M, y, W - 2 * M, Sd(28));
-        y += Sd(32);
-        const int cols = d.itemWnds.size() > 24 ? 3 : 2;
-        const int rowH = Sd(28);
-        const int colW = (W - 2 * M) / cols;
-        const int avail = colW - Sd(34);
-        for (size_t i = 0; i < d.itemWnds.size(); i++) {
-            const ChecklistItem& it = d.spec.items[i];
-            std::wstring tail = it.note.empty() ? L"" : L"  (" + it.note + L")";
-            std::wstring shown = it.text + tail;
-            if (TextWidth(dc, shown) > avail) {
-                // A plain "background" note is dropped before the name is cut;
-                // a warning note stays and the name is cut instead.
-                shown = it.keepNote ? FitText(dc, it.text, avail - TextWidth(dc, tail)) + tail
-                                    : FitText(dc, it.text, avail);
-            }
-            SetWindowTextW(d.itemWnds[i], shown.c_str());
-            int r = (int)i / cols;
-            int c = (int)i % cols;
-            PlaceChild(d.itemWnds[i], M + c * colW, y + r * rowH, colW - Sd(6), rowH);
-        }
-        int rows = ((int)d.itemWnds.size() + cols - 1) / cols;
-        y += rows * rowH + Sd(10);
-    }
-
-    RECT hr = {0, 0, W - 2 * M, 0};
-    DrawTextW(dc, d.spec.hint.c_str(), -1, &hr, DT_CALCRECT | DT_WORDBREAK);
-    PlaceChild(d.hintWnd, M, y, W - 2 * M, hr.bottom + Sd(2));
-    y += hr.bottom + M;
-
-    d.footTop = y;
-    const int bw = Sd(130);
-    const int bh = Sd(34);
-    PlaceChild(d.cancelBtn, W - M - bw, y + Sd(17), bw, bh);
-    PlaceChild(d.okBtn, W - M - 2 * bw - Sd(12), y + Sd(17), bw, bh);
-    int clientH = y + Sd(68);
-
-    SelectObject(dc, old);
-    ReleaseDC(d.hwnd, dc);
-
-    RECT r = {0, 0, W, clientH};
-    DWORD style = (DWORD)GetWindowLongPtrW(d.hwnd, GWL_STYLE);
-    DWORD ex = (DWORD)GetWindowLongPtrW(d.hwnd, GWL_EXSTYLE);
-    using AdjustForDpi_t = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
-    auto adjust = UserProc<AdjustForDpi_t>("AdjustWindowRectExForDpi");
-    if (adjust) {
-        adjust(&r, style, FALSE, ex, d.dpi);
+    SolidBrush b(Alpha(c, alpha));
+    int k = al == StringAlignmentNear ? 0 : al == StringAlignmentCenter ? 1 : 2;
+    if (al == StringAlignmentNear) {
+        g.DrawString(s.c_str(), -1, &f, PointF(x, y), Fmt(k), &b);
     } else {
-        AdjustWindowRectEx(&r, style, FALSE, ex);
+        g.DrawString(s.c_str(), -1, &f, RectF(x, y, boxW, 40), Fmt(k), &b);
     }
-    RECT cur;
-    GetWindowRect(d.hwnd, &cur);
-    SetWindowPos(d.hwnd, nullptr, cur.left, cur.top, r.right - r.left,
-                 r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE);
-    InvalidateRect(d.hwnd, nullptr, TRUE);
 }
 
-void CenterOnMonitor() {
-    DlgState& d = *g_dlg;
-    POINT pt;
-    GetCursorPos(&pt);
-    MONITORINFO mi = {sizeof(mi)};
-    GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi);
-    RECT r;
-    GetWindowRect(d.hwnd, &r);
-    int w = r.right - r.left;
-    int h = r.bottom - r.top;
-    int x = mi.rcWork.left + ((mi.rcWork.right - mi.rcWork.left) - w) / 2;
-    int y = mi.rcWork.top + ((mi.rcWork.bottom - mi.rcWork.top) - h) / 2;
-    SetWindowPos(d.hwnd, HWND_TOPMOST, x, std::max<int>(y, mi.rcWork.top), 0, 0,
-                 SWP_NOSIZE | SWP_NOACTIVATE);
+void CheckMark(Graphics& g, float cx, float cy, float s, float u, Color c, float width) {
+    PointF p0(cx - 0.34f * s, cy + 0.02f * s), p1(cx - 0.09f * s, cy + 0.27f * s),
+        p2(cx + 0.38f * s, cy - 0.26f * s);
+    float l1 = std::hypot(p1.X - p0.X, p1.Y - p0.Y), l2 = std::hypot(p2.X - p1.X, p2.Y - p1.Y);
+    float total = (l1 + l2) * Clamp01(u);
+    Pen pen(c, width);
+    pen.SetStartCap(LineCapRound);
+    pen.SetEndCap(LineCapRound);
+    pen.SetLineJoin(LineJoinRound);
+    if (total <= l1) {
+        float k = total / l1;
+        g.DrawLine(&pen, p0, PointF(Lerp(p0.X, p1.X, k), Lerp(p0.Y, p1.Y, k)));
+    } else {
+        float k = (total - l1) / l2;
+        g.DrawLine(&pen, p0, p1);
+        g.DrawLine(&pen, p1, PointF(Lerp(p1.X, p2.X, k), Lerp(p1.Y, p2.Y, k)));
+    }
 }
 
-LRESULT CALLBACK DlgProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    DlgState* d = g_dlg;
-    if (!d || !d->hwnd) {
-        return DefWindowProcW(hwnd, msg, wp, lp);
+// A colour matrix that only scales the opacity.
+ColorMatrix AlphaMatrix(float a) {
+    ColorMatrix cm = {};
+    cm.m[0][0] = cm.m[1][1] = cm.m[2][2] = cm.m[4][4] = 1.0f;
+    cm.m[3][3] = std::clamp(a, 0.0f, 1.0f);
+    return cm;
+}
+
+// A glow is baked once into a bitmap and then drawn with a changing opacity.
+Bitmap* g_glowBmp[3] = {nullptr, nullptr, nullptr};
+void Glow(Graphics& g, int slot, float cx, float cy, float rx, float ry, Color c, float alpha) {
+    if (alpha <= 0.01f) {
+        return;
     }
-    switch (msg) {
-        case WM_ERASEBKGND: {
-            HDC dc = (HDC)wp;
-            RECT rc;
-            GetClientRect(hwnd, &rc);
-            FillRect(dc, &rc, d->bgBrush);
-            RECT f = {0, d->footTop, rc.right, rc.bottom};
-            HBRUSH fb = CreateSolidBrush(d->foot);
-            FillRect(dc, &f, fb);
-            DeleteObject(fb);
-            RECT ln = {0, d->footTop, rc.right, d->footTop + 1};
-            HBRUSH lb = CreateSolidBrush(d->line);
-            FillRect(dc, &ln, lb);
-            DeleteObject(lb);
-            return 1;
+    if (!g_glowBmp[slot]) {
+        int w = (int)(rx * 2 * g_scale) + 2, h = (int)(ry * 2 * g_scale) + 2;
+        g_glowBmp[slot] = new Bitmap(w, h, PixelFormat32bppPARGB);
+        Graphics gg(g_glowBmp[slot]);
+        gg.SetSmoothingMode(SmoothingModeAntiAlias);
+        gg.Clear(Color(0, 0, 0, 0));
+        GraphicsPath p;
+        p.AddEllipse(0.0f, 0.0f, (float)w, (float)h);
+        PathGradientBrush pg(&p);
+        pg.SetCenterColor(Color(255, c.GetR(), c.GetG(), c.GetB()));
+        Color edge(0, c.GetR(), c.GetG(), c.GetB());
+        int n = 1;
+        pg.SetSurroundColors(&edge, &n);
+        gg.FillPath(&pg, &p);
+    }
+    ColorMatrix cm = AlphaMatrix(alpha);
+    ImageAttributes ia;
+    ia.SetColorMatrix(&cm);
+    g.DrawImage(g_glowBmp[slot], RectF(cx - rx, cy - ry, rx * 2, ry * 2), 0.0f, 0.0f,
+                (float)g_glowBmp[slot]->GetWidth(), (float)g_glowBmp[slot]->GetHeight(), UnitPixel, &ia);
+}
+
+// The window background (base colour plus glows) is baked into one bitmap and
+// re-baked only when the glow opacity really changes.
+constexpr float kBgH = 840;
+Bitmap* g_bg = nullptr;
+int g_bgKey = -1;
+void DrawBackground(Graphics& g, float p2) {
+    int key = (int)std::lround(p2 * 48);
+    int wPx = (int)std::ceil(W * g_scale), hPx = (int)std::ceil((kBgH + TB) * g_scale);
+    if (!g_bg || key != g_bgKey) {
+        delete g_bg;
+        g_bg = new Bitmap(wPx, hPx, PixelFormat32bppPARGB);
+        Graphics gb(g_bg);
+        gb.SetSmoothingMode(SmoothingModeAntiAlias);
+        gb.ScaleTransform(g_scale, g_scale);
+        SolidBrush bg(g_th.bg);
+        gb.FillRectangle(&bg, 0.0f, 0.0f, W + 2, kBgH + TB + 2);
+        float q = key / 48.0f;
+        Glow(gb, 0, W * 0.3f, TB + 60, 300, 130, g_th.glowA, Lerp(g_th.glowLo, g_th.glowHi, q));
+        Glow(gb, 1, W * 0.5f, TB + 130, 260, 150, g_th.glowB, 0.10f * q);
+        g_bgKey = key;
+    }
+    g.DrawImage(g_bg, RectF(0, -TB, wPx / g_scale, hPx / g_scale), 0.0f, 0.0f, (float)wPx, (float)hPx, UnitPixel);
+}
+
+void FreeCaches() {
+    for (auto& b : g_glowBmp) {
+        delete b;
+        b = nullptr;
+    }
+    delete g_bg;
+    g_bg = nullptr;
+    g_bgKey = -1;
+}
+
+// ---- layout ---------------------------------------------------------------
+
+struct Lay {
+    float p1, p2, listH, viewH, body, footerH, y0;
+    std::vector<float> fac;
+};
+
+Lay Layout(float t) {
+    Lay L;
+    L.y0 = 104 + (g_infoLine.empty() ? 0 : 22);
+    L.p1 = g_clickAt >= 0 ? EaseInOut((t - g_clickAt) / kP1) : 0;
+    L.p2 = g_doneAt >= 0 ? EaseInOut((t - g_doneAt) / kP2) : 0;
+    L.listH = 0;
+    L.fac.resize(g_items.size());
+    for (size_t i = 0; i < g_items.size(); i++) {
+        float f = 1;
+        if (!g_items[i].ticked) {
+            f *= 1 - L.p1;
         }
-        case WM_CTLCOLORSTATIC:
-        case WM_CTLCOLORBTN: {
-            HDC dc = (HDC)wp;
-            HWND c = (HWND)lp;
-            bool dim = c == d->hintWnd ||
-                       std::find(d->infoWnds.begin(), d->infoWnds.end(), c) != d->infoWnds.end();
-            SetTextColor(dc, dim ? d->muted : d->text);
-            SetBkMode(dc, TRANSPARENT);
-            return (LRESULT)d->bgBrush;
+        if (g_doneAt >= 0) {
+            f *= 1 - EaseInOut((t - g_doneAt - 24.0f * std::min<size_t>(i, 12)) / 340);
         }
-        case WM_COMMAND: {
-            int id = LOWORD(wp);
-            if (id == IDOK) {
-                d->result = true;
-                d->done = true;
-            } else if (id == IDCANCEL) {
-                d->result = false;
-                d->done = true;
-            } else if (id == kIdAdv) {
-                d->expanded = !d->expanded;
-                Layout();
-                CenterOnMonitor();
-            } else if (id == kIdAll) {
-                bool on = SendMessageW(d->allBtn, BM_GETCHECK, 0, 0) != BST_CHECKED;
-                for (HWND h : d->itemWnds) {
-                    SendMessageW(h, BM_SETCHECK, on ? BST_CHECKED : BST_UNCHECKED, 0);
+        L.fac[i] = f;
+        L.listH += (rowH + gap) * f;
+    }
+    L.viewH = std::min(L.listH, g_listCap);
+    L.footerH = Lerp(86, 70, L.p1);
+    float bodyRun = L.y0 + L.viewH + L.footerH;
+    L.body = Lerp(bodyRun, g_doneBody, L.p2);
+    return L;
+}
+
+void AddHit(float x, float y, float w, float h, int id) { g_hits.push_back({RectF(x, y, w, h), id}); }
+
+int TitleHit(float x, float y) {
+    if (y < 0 || y >= TB) {
+        return -1;
+    }
+    if (x >= W - 46) {
+        return kIdClose;   // the hit areas meet in the middle of the 4 px gap between the two buttons
+    }
+    if (x >= W - 90) {
+        return kIdMin;
+    }
+    return -1;
+}
+
+std::wstring Fill(std::wstring s, int n) {
+    auto rep = [&](const wchar_t* key, const std::wstring& val) {
+        size_t p;
+        while ((p = s.find(key)) != std::wstring::npos) {
+            s.replace(p, wcslen(key), val);
+        }
+    };
+    rep(L"{n}", std::to_wstring(n));
+    rep(L"{s}", n == 1 ? L"" : L"s");
+    return s;
+}
+
+// ---- one frame (content area, origin below the title strip) ---------------
+
+void Frame(Graphics& g, float t) {
+    Lay L = Layout(t);
+    float p1 = L.p1, p2 = L.p2;
+    g_body = L.body;
+    g_hits.clear();
+    Fonts* F = GetFonts();
+    Font& fTitle = *F->title; Font& fBody = *F->body; Font& fRow = *F->row; Font& fTag = *F->tag;
+    Font& fBtn = *F->btn; Font& fBig = *F->big; Font& fSmall = *F->small;
+    const Theme& T = g_th;
+
+    int nTicked = 0;
+    for (auto& a : g_items) {
+        nTicked += a.ticked;
+    }
+    int nDone = 0;
+    for (auto& a : g_items) {
+        nDone += a.ticked && a.state == 1;
+    }
+    float prog = 0;
+    if (g_clickAt >= 0 && nTicked > 0) {
+        float c = 0;
+        for (auto& a : g_items) {
+            if (a.ticked && a.state != 0) {
+                c += EaseOut((t - a.finishedAt) / 220);
+            }
+        }
+        prog = c / nTicked;
+        if (g_doneAt >= 0) {
+            prog = Lerp(prog, 1.0f, EaseOut((t - g_doneAt) / 260));
+        }
+    }
+
+    DrawBackground(g, p2);
+
+    float cx0 = 28, cw = W - 56, top = 0;
+    wchar_t buf[160];
+
+    // ---- header
+    float tA = 1 - EaseOut(p1 * 2.2f);
+    float tB = EaseOut((p1 - 0.35f) / 0.65f) * (1 - Clamp01(p2 * 2.2f));
+    float enterHdr = EaseOut(t / 280);
+    bool allOn = nTicked == (int)g_items.size();
+    bool canAll = g_items.size() > 1 && g_clickAt < 0;
+    Str(g, FitStr(g, g_spec.title, fTitle, canAll ? W - 56 - 108 : W - 56), fTitle, cx0, top + 26 + (1 - enterHdr) * 8 + p1 * -6, T.text,
+        tA * enterHdr);
+    std::wstring sub = g_items.empty() ? L"There are no apps to deal with right now."
+                       : nTicked == 0   ? L"Nothing is ticked, so no app will change."
+                                        : Fill(g_spec.subtitle, nTicked);
+    Str(g, FitStr(g, sub, fBody, W - 56), fBody, cx0, top + 62 + (1 - enterHdr) * 8, T.muted,
+        tA * enterHdr);
+    if (!g_infoLine.empty()) {
+        Str(g, FitStr(g, g_infoLine, fSmall, W - 56), fSmall, cx0, top + 86 + (1 - enterHdr) * 8, T.muted,
+            tA * enterHdr * 0.8f);
+    }
+    Str(g, FitStr(g, g_spec.runTitle, fTitle, W - 56), fTitle, cx0, top + 26 + (1 - tB) * 8, T.text, tB);
+    swprintf(buf, 160, L"%d of %d %ls", nDone, nTicked, g_spec.doneVerb.c_str());
+    Str(g, FitStr(g, buf, fBody, W - 56), fBody, cx0, top + 62 + (1 - tB) * 8, T.muted, tB);
+
+    // select all / none
+    if (canAll && tA * enterHdr > 0.05f) {
+        float bw = 96, bh = 28, bx = cx0 + cw - bw, by = top + 26 + LineH(g, fTitle) / 2 - bh / 2 - p1 * 6;
+        bool hot = g_hover == kIdAll;
+        FillRR(g, Alpha(hot ? T.cardHot : T.card, tA * enterHdr), bx, by, bw, bh, 14);
+        StrokeRR(g, Alpha(hot ? T.cardHotLine : T.cardLine, tA * enterHdr), 1, bx + 0.5f, by + 0.5f, bw - 1, bh - 1, 14);
+        StringFormat& sf = *Fmt(3);
+        SolidBrush tb(Alpha(T.text, tA * enterHdr));
+        g.DrawString(allOn ? L"Select none" : L"Select all", -1, &fTag, RectF(bx, by, bw, bh), &sf, &tb);
+        if (tA * enterHdr > 0.6f) {
+            AddHit(bx, by, bw, bh, kIdAll);
+        }
+    }
+
+    // ---- scrolling: smooth, clamped; follows the focus in review and the first unfinished app while working
+    static float prevT = 0;
+    float dt = t - prevT;
+    if (dt < 0 || dt > 100) {
+        dt = 16;
+    }
+    prevT = t;
+    float maxScroll = std::max(0.0f, L.listH - L.viewH);
+    {
+        static int lastFocus = -2;
+        if (g_focus != lastFocus) {
+            lastFocus = g_focus;
+            if (g_clickAt < 0 && g_focus >= 0 && g_focus < (int)g_items.size()) {
+                float yRow = g_focus * (rowH + gap);
+                if (yRow < g_scrollTarget) {
+                    g_scrollTarget = yRow;
+                } else if (yRow + rowH > g_scrollTarget + L.viewH) {
+                    g_scrollTarget = yRow + rowH - L.viewH;
                 }
-                UpdateSummary();
-            } else if (id >= kIdItem0 && id < kIdItem0 + (int)d->itemWnds.size()) {
-                UpdateSummary();
             }
-            return 0;
         }
-        case DM_GETDEFID:
-            return MAKELONG(IDOK, DC_HASDEFID);
-        case DM_SETDEFID:
-            return TRUE;
-        case WM_CLOSE:
-            d->result = false;
-            d->done = true;
-            return 0;
-        case WM_DPICHANGED: {
-            d->dpi = HIWORD(wp);
-            MakeFonts();
-            for (HWND h : {d->titleWnd, d->summaryWnd, d->hintWnd, d->advBtn, d->allBtn, d->okBtn, d->cancelBtn}) {
-                SendMessageW(h, WM_SETFONT, (WPARAM)(h == d->titleWnd ? d->fontTitle : d->font), TRUE);
+        if (g_clickAt >= 0 && g_doneAt < 0 && maxScroll > 0) {
+            float pos = 0;
+            for (size_t i = 0; i < g_items.size(); i++) {
+                if (g_items[i].ticked && g_items[i].state == 0) {
+                    g_scrollTarget = pos - L.viewH * 0.35f;
+                    break;
+                }
+                pos += (rowH + gap) * L.fac[i];
             }
-            for (HWND h : d->infoWnds) {
-                SendMessageW(h, WM_SETFONT, (WPARAM)d->font, TRUE);
-            }
-            for (HWND h : d->itemWnds) {
-                SendMessageW(h, WM_SETFONT, (WPARAM)d->font, TRUE);
-            }
-            Layout();
-            return 0;
+        }
+        g_scrollTarget = std::clamp(g_scrollTarget, 0.0f, maxScroll);
+        g_scroll += (g_scrollTarget - g_scroll) * (1 - std::exp(-dt / 45.0f));
+        g_scroll = std::clamp(g_scroll, 0.0f, maxScroll);
+    }
+
+    // the switches glide to their state: quick and slightly overshooting nothing, just a short slide
+    for (auto& a : g_items) {
+        float target = a.ticked ? 1.0f : 0.0f;
+        a.knob += (target - a.knob) * (1 - std::exp(-dt / 30.0f));
+        if (std::fabs(target - a.knob) < 0.012f) {
+            a.knob = target;
         }
     }
-    return DefWindowProcW(hwnd, msg, wp, lp);
+
+    // ---- rows
+    GraphicsState listState = g.Save();
+    float vpTop = top + L.y0, vpH = L.viewH;
+    g.SetClip(RectF(cx0 - 4, vpTop - 4, cw + 8, vpH + 8), CombineModeIntersect);
+    float ry = vpTop - g_scroll;
+    for (size_t i = 0; i < g_items.size(); i++) {
+        Item& a = g_items[i];
+        float f = L.fac[i];
+        if (f <= 0.002f) {
+            continue;
+        }
+        float rowTop = ry;
+        ry += (rowH + gap) * f;
+        if (rowTop > vpTop + vpH + 4 || rowTop + rowH < vpTop - 4) {
+            continue;   // scrolled out of view: do not draw
+        }
+        float enter = EaseOut((t - 40 - 32.0f * std::min<size_t>(i, 12)) / 280);
+        float alpha = enter * std::min(1.0f, f * 1.6f);
+        float slide = (1 - enter) * 14;
+        float yy = rowTop + slide;
+        float hh = rowH * (f < 1 ? std::max(0.35f, f) : 1.0f);
+        bool interactive = g_clickAt < 0 && enter > 0.9f;
+        bool hot = interactive && g_hover == (int)i;
+        FillRR(g, Alpha(hot ? T.cardHot : T.card, alpha), cx0, yy, cw, hh, 14);
+        StrokeRR(g, Alpha(hot ? T.cardHotLine : T.cardLine, alpha), 1, cx0 + 0.5f, yy + 0.5f, cw - 1, hh - 1, 14);
+        if (g_focus == (int)i && g_clickAt < 0) {
+            StrokeRR(g, Alpha(T.accent, alpha * 0.9f), 1.6f, cx0 - 1.5f, yy - 1.5f, cw + 3, hh + 3, 16);
+        }
+        if (interactive) {
+            float hy0 = std::max(yy, vpTop), hy1 = std::min(yy + rowH, vpTop + vpH);
+            if (hy1 > hy0) {
+                AddHit(cx0, hy0, cw, hy1 - hy0, (int)i);
+            }
+        }
+        GraphicsState rs = g.Save();
+        GraphicsPath clipP;
+        RR(clipP, cx0, yy, cw, hh, 14);
+        g.SetClip(&clipP, CombineModeIntersect);
+        float content = alpha * (f < 0.55f ? f / 0.55f : 1.0f);
+        float dim = g_clickAt >= 0 ? 1.0f : Lerp(0.55f, 1.0f, a.knob);
+        if (a.icon) {
+            float ia = std::min(1.0f, content * dim);
+            if (ia > 0.995f) {
+                g.DrawImage(a.icon, RectF(cx0 + 13, yy + 12, 28, 28), 0.0f, 0.0f, (float)a.icon->GetWidth(),
+                            (float)a.icon->GetHeight(), UnitPixel);
+            } else {
+                ColorMatrix cm = AlphaMatrix(ia);
+                ImageAttributes attr;
+                attr.SetColorMatrix(&cm);
+                g.DrawImage(a.icon, RectF(cx0 + 13, yy + 12, 28, 28), 0.0f, 0.0f, (float)a.icon->GetWidth(),
+                            (float)a.icon->GetHeight(), UnitPixel, &attr);
+            }
+        } else {
+            GraphicsPath tp;
+            RR(tp, cx0 + 13, yy + 12, 28, 28, 8);
+            LinearGradientBrush tg(PointF(0, yy + 12), PointF(0, yy + 40), Alpha(Mix(a.tile, Color(255, 255, 255, 255), 0.25f), content * dim),
+                                   Alpha(Mix(a.tile, Color(255, 0, 0, 0), 0.25f), content * dim));
+            g.FillPath(&tg, &tp);
+            wchar_t letter[2] = {a.name.empty() ? L'?' : (wchar_t)towupper(a.name[0]), 0};
+            StringFormat& sf = *Fmt(3);
+            SolidBrush lb(Alpha(Color(255, 255, 255, 255), content * dim));
+            g.DrawString(letter, -1, &fBtn, RectF(cx0 + 13, yy + 12, 28, 28), &sf, &lb);
+        }
+        float tagW = a.note.empty() ? 0 : TextW(g, a.note, fTag) + 14 + 10;
+        std::wstring nm = FitStr(g, a.name, fRow, cw - 52 - 70 - tagW);
+        Str(g, nm, fRow, cx0 + 52, yy + (rowH - LineH(g, fRow)) / 2, T.text, content * (g_clickAt >= 0 ? 1.0f : Lerp(0.6f, 1.0f, a.knob)));
+        if (!a.note.empty()) {
+            float nw = TextW(g, nm, fRow);
+            float tx = cx0 + 52 + nw + 10, tw = TextW(g, a.note, fTag) + 14;
+            StrokeRR(g, Alpha(a.keepNote ? T.amber : T.cardLine, content * (a.keepNote ? 0.7f : 1.0f)), 1, tx, yy + 16, tw, 20, 10);
+            Str(g, a.note, fTag, tx + 7, yy + 26 - LineH(g, fTag) / 2, a.keepNote ? T.amber : T.muted, content);
+        }
+        float cxr = cx0 + cw - 14 - 21, cyr = yy + rowH / 2;
+        float toggleA = (1 - EaseOut(p1 * 2.5f)) * content;
+        if (toggleA > 0.01f) {
+            FillRR(g, Alpha(Mix(T.track, T.accent, a.knob), toggleA), cxr - 21, cyr - 12, 42, 24, 12);
+            float kx = Lerp(cxr - 9, cxr + 9, a.knob);
+            float stretch = 4.0f * std::sin(3.14159265f * a.knob);   // the knob stretches a little while it moves
+            SolidBrush kb(Alpha(Mix(T.knobOff, T.onAccent, a.knob), toggleA));
+            g.FillEllipse(&kb, kx - 8.5f - stretch / 2, cyr - 8.5f, 17.0f + stretch, 17.0f);
+        }
+        if (a.ticked && g_clickAt >= 0) {
+            float runA = EaseOut((p1 - 0.3f) / 0.7f) * content;
+            float doneU = a.state == 1 ? EaseOut((t - a.finishedAt) / 240) : 0;
+            float gaveU = a.state == 2 ? EaseOut((t - a.finishedAt) / 200) : 0;
+            float spinA = runA * (1 - std::max(doneU, gaveU));
+            if (spinA > 0.01f) {
+                Pen track(Alpha(T.track, spinA), 2.5f);
+                g.DrawEllipse(&track, cxr - 9, cyr - 9, 18.0f, 18.0f);
+                Pen sp(Alpha(T.accent, spinA), 2.5f);
+                sp.SetStartCap(LineCapRound);
+                sp.SetEndCap(LineCapRound);
+                float ang = std::fmod(t * 0.42f + i * 70, 360.0f);
+                g.DrawArc(&sp, cxr - 9, cyr - 9, 18.0f, 18.0f, ang, 250.0f);
+            }
+            if (a.state == 1) {
+                float s = Overshoot(doneU);
+                SolidBrush cb(Alpha(T.accent, runA * doneU));
+                float rad = 11 * s;
+                g.FillEllipse(&cb, cxr - rad, cyr - rad, rad * 2, rad * 2);
+                CheckMark(g, cxr, cyr, 16, EaseOut((t - a.finishedAt - 30) / 210), Alpha(T.onAccent, runA), 2.2f);
+            }
+            if (a.state == 2) {
+                SolidBrush cb(Alpha(Mix(T.bg, T.amber, 0.18f), runA * gaveU));
+                g.FillEllipse(&cb, cxr - 11, cyr - 11, 22.0f, 22.0f);
+                Pen ap(Alpha(T.amber, runA * gaveU), 2.0f);
+                ap.SetStartCap(LineCapRound);
+                ap.SetEndCap(LineCapRound);
+                g.DrawEllipse(&ap, cxr - 10.5f, cyr - 10.5f, 21.0f, 21.0f);
+                g.DrawLine(&ap, cxr, cyr - 5, cxr, cyr + 1);
+                SolidBrush ad(Alpha(T.amber, runA * gaveU));
+                g.FillEllipse(&ad, cxr - 1.3f, cyr + 4.2f, 2.6f, 2.6f);
+            }
+        }
+        g.Restore(rs);
+    }
+    g.Restore(listState);
+    if (maxScroll > 1) {   // soft fade at the cut edges and a thin scroll indicator
+        float fa = 22;
+        Color b0 = Color(255, T.bg.GetR(), T.bg.GetG(), T.bg.GetB()), b1 = Color(0, T.bg.GetR(), T.bg.GetG(), T.bg.GetB());
+        if (g_scroll > 1) {
+            LinearGradientBrush lgT(PointF(0, vpTop), PointF(0, vpTop + fa), b0, b1);
+            g.FillRectangle(&lgT, cx0 - 4, vpTop, cw + 8, fa);
+        }
+        if (g_scroll < maxScroll - 1) {
+            LinearGradientBrush lgB(PointF(0, vpTop + vpH - fa), PointF(0, vpTop + vpH), b1, b0);
+            g.FillRectangle(&lgB, cx0 - 4, vpTop + vpH - fa, cw + 8, fa);
+        }
+        float thumbH = std::max(28.0f, vpH * vpH / L.listH);
+        float thumbY = vpTop + (vpH - thumbH) * (g_scroll / maxScroll);
+        FillRR(g, Alpha(T.muted, 0.45f), W - 12, thumbY, 3, thumbH, 1.5f);
+    }
+
+    // ---- footer: review buttons
+    float footTop = top + L.y0 + L.viewH;
+    float btnA = (1 - EaseOut(p1 * 2.4f)) * EaseOut((t - 200) / 260);
+    float btnY = footTop + 22;
+    if (btnA > 0.01f) {
+        bool onHot = g_hover == kIdOk, onDown = g_pressed == kIdOk && onHot, cancelHot = g_hover == kIdCancel,
+             cancelDown = g_pressed == kIdCancel && cancelHot;
+        bool disabled = false;   // confirming with nothing ticked is fine: the power plan and priorities still apply
+        Color fill = disabled ? T.track : onDown ? T.accentDeep : onHot ? T.accentHot : T.accent;
+        float okW = std::max(132.0f, TextW(g, g_spec.okText, fBtn) + 44);
+        FillRR(g, Alpha(fill, btnA), cx0 + cw - okW, btnY, okW, 42, 12);
+        StringFormat& sf = *Fmt(3);
+        SolidBrush ob(Alpha(disabled ? T.muted : T.onAccent, btnA));
+        g.DrawString(g_spec.okText.c_str(), -1, &fBtn, RectF(cx0 + cw - okW, btnY, okW, 42), &sf, &ob);
+        float cxB = cx0 + cw - okW - 12 - 108;
+        FillRR(g, Alpha(cancelDown ? T.track : cancelHot ? T.cardHot : T.card, btnA), cxB, btnY, 108, 42, 12);
+        StrokeRR(g, Alpha(cancelHot ? T.cardHotLine : T.cardLine, btnA), 1, cxB + 0.5f, btnY + 0.5f, 107, 41, 12);
+        SolidBrush tb2(Alpha(T.text, btnA));
+        g.DrawString(L"Cancel", -1, &fBtn, RectF(cxB, btnY, 108, 42), &sf, &tb2);
+        if (g_focus == kIdOk) {
+            StrokeRR(g, Alpha(T.accentHot, btnA), 1.6f, cx0 + cw - okW - 2.5f, btnY - 2.5f, okW + 5, 47, 14);
+        }
+        if (g_focus == kIdCancel) {
+            StrokeRR(g, Alpha(T.accent, btnA), 1.6f, cxB - 2.5f, btnY - 2.5f, 113, 47, 14);
+        }
+        float hintMax = cxB - cx0 - 14;
+        if (hintMax > 60) {
+            std::wstring hintText = L"Enter to confirm   Esc to cancel";
+            if (TextW(g, hintText, fTag) > hintMax) {
+                hintText = L"Enter   Esc";   // a wide font leaves less room
+            }
+            Str(g, FitStr(g, hintText, fTag, hintMax), fTag, cx0, btnY + 21 - LineH(g, fTag) / 2, T.muted,
+                btnA * 0.8f);
+        }
+        if (btnA > 0.6f && g_clickAt < 0) {
+            AddHit(cx0 + cw - okW, btnY, okW, 42, kIdOk);
+            AddHit(cxB, btnY, 108, 42, kIdCancel);
+        }
+    }
+
+    // ---- progress bar -> Done button
+    float barA = EaseOut((p1 - 0.35f) / 0.65f);
+    float barY = footTop + 38, barX = cx0, barW = cw, barH = 8;
+    float btnW = 150, btnH = 44;
+    float doneBtnX = (W - btnW) / 2, doneBtnY = top + g_doneBody - btnH - 40;
+    float m = EaseInOut((p2 - 0.45f) / 0.55f);
+    float bx = Lerp(barX, doneBtnX, m), bw = Lerp(barW, btnW, m), by = Lerp(barY, doneBtnY, m),
+          bh = Lerp(barH, btnH, m), br = Lerp(4, 13, m);
+    if (barA > 0.01f) {
+        float cA = barA * (1 - Clamp01(p2 * 3));
+        swprintf(buf, 160, L"%d%%", (int)(prog * 100));
+        Str(g, FitStr(g, g_spec.runHint, fSmall, cw - 60), fSmall, cx0, barY - 10 - LineH(g, fSmall), T.muted, cA);
+        Str(g, buf, fSmall, cx0, barY - 10 - LineH(g, fSmall), T.text, cA, StringAlignmentFar, cw);
+        FillRR(g, Alpha(T.track, barA * (1 - m)), barX, barY, barW, barH, 4);
+        float fillW = std::max(barH, barW * prog);
+        float glowA = 0.35f * (1 - m);
+        if (glowA > 0.01f) {
+            FillRR(g, Alpha(T.accent, barA * glowA * 0.5f), barX - 2, barY - 3, fillW + 4, barH + 6, 7);
+        }
+        bool dHot = m > 0.99f && g_hover == kIdDone, dDown = dHot && g_pressed == kIdDone;
+        Color fc = m > 0.5f ? (dDown ? T.accentDeep : dHot ? T.accentHot : T.accent) : T.accent;
+        if (m < 0.001f) {
+            FillRR(g, Alpha(T.accent, barA), barX, barY, fillW, barH, 4);
+        } else {
+            FillRR(g, Alpha(fc, barA), bx, by, bw, bh, br);
+        }
+        if (m > 0.55f) {
+            float ta = Clamp01((m - 0.55f) / 0.45f);
+            StringFormat& sf = *Fmt(3);
+            SolidBrush ob(Alpha(T.onAccent, ta));
+            g.DrawString(L"Done", -1, &fBtn, RectF(bx, by, bw, bh), &sf, &ob);
+        }
+        if (m > 0.99f) {
+            AddHit(bx, by, bw, bh, kIdDone);
+            if (g_focus == kIdDone) {
+                StrokeRR(g, Alpha(T.accentHot, 1.0f), 1.6f, bx - 2.5f, by - 2.5f, bw + 5, bh + 5, 15);
+            }
+        }
+    }
+
+    // ---- done: badge, rings, headline, summary
+    if (p2 > 0.2f) {
+        float u = (p2 - 0.2f) / 0.8f;
+        float bcx = W / 2, bcy = top + 106;
+        for (int k = 0; k < 2; k++) {
+            float ru = Clamp01((u - 0.12f * k - 0.04f) / 0.7f);
+            if (ru > 0 && ru < 1) {
+                Pen rp(Alpha(T.accent, (1 - ru) * 0.45f), 2.0f);
+                float rr = 38 + ru * 30;   // the rings stay inside the badge's own area
+                g.DrawEllipse(&rp, bcx - rr, bcy - rr, rr * 2, rr * 2);
+            }
+        }
+        float s = Overshoot((u - 0.0f) / 0.46f);
+        Glow(g, 2, bcx, bcy, 70, 70, T.glowB, 0.55f * EaseOut(u) * std::min(1.0f, s));
+        GraphicsPath bp;
+        float rad = 32 * s;
+        bp.AddEllipse(bcx - rad, bcy - rad, rad * 2, rad * 2);
+        LinearGradientBrush lg(PointF(bcx - rad, bcy - rad), PointF(bcx + rad, bcy + rad), Mix(T.accent, Color(255, 255, 255, 255), 0.35f), T.accentDeep);
+        g.FillPath(&lg, &bp);
+        CheckMark(g, bcx, bcy, 44, EaseOut((u - 0.22f) / 0.34f), (T.light || BrightAccent(T)) ? T.onAccent : Color(255, 255, 255, 255), 4.2f);
+        float ha = EaseOut((u - 0.30f) / 0.40f);
+        Str(g, FitStr(g, g_doneTitle, fBig, W - 56), fBig, 0, top + 180 + (1 - ha) * 10, T.text, ha, StringAlignmentCenter, W);
+        if (ha > 0.01f) {
+            SolidBrush sb(Alpha(T.muted, ha));
+            g.DrawString(g_doneSummary.c_str(), -1, &fBody, RectF(28, top + 228 + (1 - ha) * 10, W - 56, 80), Fmt(4), &sb);
+        }
+    }
 }
 
-// Check boxes and buttons only look modern with common controls 6, which
-// windhawk.exe may not enable for itself. Activate a manifest that asks for it.
-HANDLE CreateComctl6Context() {
-    static const char kManifest[] =
-        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-        "<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">"
-        "<dependency><dependentAssembly><assemblyIdentity type=\"win32\" "
-        "name=\"Microsoft.Windows.Common-Controls\" version=\"6.0.0.0\" "
-        "processorArchitecture=\"*\" publicKeyToken=\"6595b64144ccf1df\" "
-        "language=\"*\"/></dependentAssembly></dependency></assembly>";
-    std::wstring path;
-    WCHAR dir[MAX_PATH];
-    if (Wh_GetModStoragePath(dir, ARRAYSIZE(dir)) != 0) {
-        CreateDirectoryW(dir, nullptr);
-        path = std::wstring(dir) + L"\\comctl6.manifest";
-    } else {
-        GetTempPathW(ARRAYSIZE(dir), dir);
-        path = std::wstring(dir) + L"gmt-comctl6.manifest";
+// ---- title strip ------------------------------------------------------------
+
+// The app icon: a game controller on a rounded tile in the theme's accent colour. Drawn in a unit square
+// at (x, y) with side s, so the same drawing serves the title strip and the window/taskbar icons.
+void DrawGlyph(Graphics& g, float x, float y, float s, const Theme& T) {
+    GraphicsPath tile;
+    RR(tile, x + 0.5f, y + 0.5f, s - 1, s - 1, s * 0.26f);
+    LinearGradientBrush grad(PointF(x, y), PointF(x + s, y + s), Mix(T.accent, Color(255, 255, 255, 255), 0.35f), T.accentDeep);
+    g.FillPath(&grad, &tile);
+    const bool dark = BrightAccent(T);
+    const Color ink = dark ? T.onAccent : Color(255, 255, 255, 255);
+    SolidBrush white(ink);
+    // body: a wide rounded bar with a grip hanging from each end
+    FillRR(g, ink, x + 0.17f * s, y + 0.31f * s, 0.66f * s, 0.30f * s, 0.15f * s);
+    g.FillEllipse(&white, x + 0.17f * s, y + 0.44f * s, 0.22f * s, 0.30f * s);
+    g.FillEllipse(&white, x + 0.61f * s, y + 0.44f * s, 0.22f * s, 0.30f * s);
+    // d-pad and two buttons, cut out in the tile's colour
+    SolidBrush cut(dark ? Mix(T.accent, T.accentDeep, 0.35f) : Mix(T.accent, T.accentDeep, 0.55f));
+    g.FillRectangle(&cut, x + 0.27f * s, y + 0.425f * s, 0.15f * s, 0.045f * s);
+    g.FillRectangle(&cut, x + 0.325f * s, y + 0.37f * s, 0.045f * s, 0.155f * s);
+    g.FillEllipse(&cut, x + 0.575f * s, y + 0.38f * s, 0.075f * s, 0.075f * s);
+    g.FillEllipse(&cut, x + 0.665f * s, y + 0.45f * s, 0.075f * s, 0.075f * s);
+}
+
+HICON MakeIcon(int size) {
+    HICON icon = nullptr;
+    Bitmap bmp(size, size, PixelFormat32bppARGB);
+    Graphics g(&bmp);
+    g.SetSmoothingMode(SmoothingModeHighQuality);
+    g.Clear(Color(0, 0, 0, 0));
+    DrawGlyph(g, 0, 0, (float)size, g_th);
+    bmp.GetHICON(&icon);
+    return icon;
+}
+
+void DrawTitle(Graphics& g, bool active) {
+    Font& f = *GetFonts()->small;
+    const Theme& T = g_th;
+    const float cy = TB / 2;                       // the strip's centre line: icon, title and buttons share it
+    DrawGlyph(g, 18, cy - 8.5f, 17, T);
+    Str(g, L"Game Mode", f, 46, cy - LineH(g, f) / 2, T.muted, active ? 1.0f : 0.6f);
+
+    // two buttons, 36 x 28, 4 px apart, 8 px from the top and right edge; the glyphs sit in their centres
+    const float bh = 28, by = cy - bh / 2;
+    const float closeX = W - 8 - 36, minX = closeX - 4 - 36;
+    bool canClose = g_phase != Phase::Running;
+    if (g_titleHover == kIdClose && canClose) {
+        FillRR(g, Color(255, 229, 72, 77), closeX, by, 36, bh, 8);
+    } else if (g_titleHover == kIdMin) {
+        FillRR(g, T.cardHot, minX, by, 36, bh, 8);
     }
-    HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (f == INVALID_HANDLE_VALUE) {
+    Pen x(g_titleHover == kIdClose && canClose ? Color(255, 255, 255, 255) : Alpha(T.muted, canClose ? 1.0f : 0.35f), 1.4f);
+    x.SetStartCap(LineCapRound);
+    x.SetEndCap(LineCapRound);
+    const float cxc = closeX + 18;
+    g.DrawLine(&x, cxc - 5, cy - 5, cxc + 5, cy + 5);
+    g.DrawLine(&x, cxc + 5, cy - 5, cxc - 5, cy + 5);
+    Pen mn(Alpha(T.muted, 1), 1.4f);
+    mn.SetStartCap(LineCapRound);
+    mn.SetEndCap(LineCapRound);
+    const float cxm = minX + 18;
+    g.DrawLine(&mn, cxm - 5, cy, cxm + 5, cy);
+}
+
+// ---- window and surface -----------------------------------------------------
+
+float ScaleFor(HWND h) {
+    if (g_settings.uiScale >= 1.0f) {
+        return std::clamp(g_settings.uiScale, 1.0f, 4.0f);
+    }
+    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+    static auto fn = (GetDpiForWindow_t)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow");
+    if (fn) {
+        UINT d = fn(h);
+        if (d) {
+            return d / 96.0f;
+        }
+    }
+    HDC dc = GetDC(nullptr);
+    int d = GetDeviceCaps(dc, LOGPIXELSX);
+    ReleaseDC(nullptr, dc);
+    return d > 0 ? d / 96.0f : 1.0f;
+}
+
+// How many rows fit: the window may use at most ~92% of the monitor's work area; longer lists scroll.
+void ComputeListCap(HWND h) {
+    MONITORINFO mi = {sizeof(mi)};
+    GetMonitorInfoW(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST), &mi);
+    float availLogical = (mi.rcWork.bottom - mi.rcWork.top) / g_scale;
+    float cap = availLogical * 0.92f - 2 * M - TB - 126 - 92;
+    g_listCap = std::clamp(cap, 3 * (rowH + gap), 9 * (rowH + gap));
+}
+
+void AllocSurface() {
+    delete g_surface;
+    g_surface = nullptr;
+    if (g_dib) {
+        DeleteObject(g_dib);
+        g_dib = nullptr;
+    }
+    if (g_memDC) {
+        DeleteDC(g_memDC);
+        g_memDC = nullptr;
+    }
+    g_maxW = (int)std::ceil((W + 2 * M) * g_scale) + 2;
+    g_maxH = (int)std::ceil((TB + 126 + std::max(g_listCap, 300.0f) + 100 + 2 * M) * g_scale) + 2;
+    HDC screen = GetDC(nullptr);
+    g_memDC = CreateCompatibleDC(screen);
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = g_maxW;
+    bi.bmiHeader.biHeight = -g_maxH;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    void* bits = nullptr;
+    g_dib = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    SelectObject(g_memDC, g_dib);
+    ReleaseDC(nullptr, screen);
+    g_surface = new Bitmap(g_maxW, g_maxH, g_maxW * 4, PixelFormat32bppPARGB, (BYTE*)bits);
+}
+
+void FreeIcons() {
+    if (g_iconS) {
+        DestroyIcon(g_iconS);
+        g_iconS = nullptr;
+    }
+    if (g_iconB) {
+        DestroyIcon(g_iconB);
+        g_iconB = nullptr;
+    }
+}
+
+// Everything that depends on the scale: baked glows, icons, the drawing surface.
+void ApplyScale(HWND h, float scale) {
+    g_scale = scale;
+    FreeCaches();
+    ComputeListCap(h);
+    AllocSurface();
+    FreeIcons();
+    g_iconS = MakeIcon(std::max(16, (int)(16 * g_scale)));
+    g_iconB = MakeIcon(std::max(32, (int)(32 * g_scale)));
+    SendMessageW(h, WM_SETICON, ICON_SMALL, (LPARAM)g_iconS);
+    SendMessageW(h, WM_SETICON, ICON_BIG, (LPARAM)g_iconB);
+}
+
+void Render() {
+    if (!g_wnd || IsIconic(g_wnd) || !g_surface) {
+        return;
+    }
+    float now = NowMs();
+    Lay L = Layout(now);
+    g_body = L.body;
+    float totW = W + 2 * M, totH = TB + g_body + 2 * M;
+    int cw = (int)std::lround(totW * g_scale), ch = (int)std::lround(totH * g_scale);
+    cw = std::min(cw, g_maxW);
+    ch = std::min(ch, g_maxH);
+    {
+        Graphics g(g_surface);
+        g.SetCompositingMode(CompositingModeSourceCopy);
+        SolidBrush clear(Color(0, 0, 0, 0));
+        g.FillRectangle(&clear, 0, 0, cw, ch);
+        g.SetCompositingMode(CompositingModeSourceOver);
+        // Everything that is copied (the baked background, the icons, the glows) is already at its final size, so
+        // copying needs no filtering; gamma-correct blending would cost a lot per frame for no visible gain.
+        g.SetCompositingQuality(CompositingQualityHighSpeed);
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        g.SetPixelOffsetMode(PixelOffsetModeHalf);
+        g.SetInterpolationMode(InterpolationModeNearestNeighbor);
+        // Whole-number scales (100%, 200%) get hinted text, which is crisper; in-between scales get smooth,
+        // unhinted text, which keeps the letter spacing even.
+        bool wholeScale = std::fabs(g_scale - std::round(g_scale)) < 0.01f;
+        g.SetTextRenderingHint(wholeScale ? TextRenderingHintAntiAliasGridFit : TextRenderingHintAntiAlias);
+        g.ScaleTransform(g_scale, g_scale);
+        float H = TB + g_body;
+        GraphicsPath win;
+        RR(win, M, M, W, H, 14);
+        {   // soft shadow, only in the ring outside the window
+            Region ring(RectF(0, 0, totW, totH));
+            ring.Exclude(&win);
+            g.SetClip(&ring);
+            for (int i = 0; i < 7; i++) {
+                float e = (float)i * 3.2f;
+                FillRR(g, Color((BYTE)((g_th.light ? 6 : 10) + (g_th.light ? 1.0f : 1.6f) * (7 - i)), 0, 0, 0), M - e, M + 5 - e,
+                       W + 2 * e, H + 2 * e, 14 + e);
+            }
+            g.ResetClip();
+        }
+        g.SetClip(&win);
+        g.TranslateTransform(M, M + TB);
+        Frame(g, now);
+        g.ResetTransform();
+        g.ScaleTransform(g_scale, g_scale);
+        g.TranslateTransform(M, M);
+        DrawTitle(g, GetForegroundWindow() == g_wnd);
+        g.ResetClip();
+        g.ResetTransform();
+        g.ScaleTransform(g_scale, g_scale);
+        StrokeRR(g, g_th.edge, 1.0f, M + 0.5f, M + 0.5f, W - 1, H - 1, 14);
+    }
+    GdiFlush();
+
+    // keep the window centred where it is, even while its height changes; follow it if the user drags it
+    RECT cur;
+    GetWindowRect(g_wnd, &cur);
+    if (g_lastL != -99999 && (cur.left != g_lastL || cur.top != g_lastT)) {
+        g_cx = cur.left + (cur.right - cur.left) / 2.0;
+        g_cy = cur.top + (cur.bottom - cur.top) / 2.0;
+    }
+    int left = (int)std::lround(g_cx - cw / 2.0), topPx = (int)std::lround(g_cy - ch / 2.0);
+    g_lastL = left;
+    g_lastT = topPx;
+    POINT dst = {left, topPx}, src = {0, 0};
+    SIZE sz = {cw, ch};
+    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UpdateLayeredWindow(g_wnd, nullptr, &dst, &sz, g_memDC, &src, 0, &bf, ULW_ALPHA);
+}
+
+// ---- input --------------------------------------------------------------------
+
+void ToLogical(LPARAM l, float* x, float* y) {
+    *x = (short)LOWORD(l) / g_scale - M;
+    *y = (short)HIWORD(l) / g_scale - M;
+}
+
+int HitAt(float x, float y) {
+    for (int i = (int)g_hits.size() - 1; i >= 0; i--) {
+        if (g_hits[i].r.Contains(x, y)) {
+            return g_hits[i].id;
+        }
+    }
+    return -1;
+}
+
+int HitAtWindow(float x, float y) {
+    int t = TitleHit(x, y);
+    if (t >= 0) {
+        return t;
+    }
+    return y < TB ? -1 : HitAt(x, y - TB);
+}
+
+// Asks the window's thread to finish; the worker joins it with Close().
+void RequestClose() { InterlockedExchange(&g_quit, 1); }
+
+void BeginRun() {
+    g_run.clear();
+    for (size_t i = 0; i < g_items.size(); i++) {
+        if (g_items[i].ticked) {
+            g_run.push_back((int)i);
+        }
+    }
+    g_clickAt = NowMs();
+    g_phase = Phase::Running;
+    g_focus = -1;
+}
+
+void Answer(bool ok) {
+    if (g_phase != Phase::Review || g_answered) {
+        return;
+    }
+    g_answerOk = ok;
+    if (ok) {
+        BeginRun();   // before the answer is announced, so the worker sees the running phase
+    }
+    g_answered = true;
+    SetEvent(g_answerEvt);
+}
+
+void Activate(int id) {
+    if (id >= 0 && id < (int)g_items.size()) {
+        if (g_clickAt < 0) {
+            g_items[id].ticked = !g_items[id].ticked;
+        }
+    } else if (id == kIdAll) {
+        bool all = true;
+        for (auto& a : g_items) {
+            all = all && a.ticked;
+        }
+        for (auto& a : g_items) {
+            a.ticked = !all;
+        }
+    } else if (id == kIdOk) {
+        Answer(true);
+    } else if (id == kIdCancel) {
+        Answer(false);
+    } else if (id == kIdDone) {
+        RequestClose();
+    } else if (id == kIdMin) {
+        ShowWindow(g_wnd, SW_MINIMIZE);
+    } else if (id == kIdClose) {
+        if (g_phase == Phase::Review) {
+            Answer(false);
+        } else if (g_phase == Phase::Done) {
+            RequestClose();
+        }
+    }
+}
+
+LRESULT CALLBACK Proc(HWND h, UINT m, WPARAM w, LPARAM l) {
+    switch (m) {
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            BeginPaint(h, &ps);
+            EndPaint(h, &ps);
+            return 0;
+        }
+        case WM_NCHITTEST: {
+            POINT pt = {(short)LOWORD(l), (short)HIWORD(l)};
+            RECT r;
+            GetWindowRect(h, &r);
+            float x = (pt.x - r.left) / g_scale - M, y = (pt.y - r.top) / g_scale - M;
+            float H = TB + g_body;
+            if (x < 0 || y < 0 || x >= W || y >= H) {
+                return HTTRANSPARENT;   // the shadow margin
+            }
+            if (y < TB && TitleHit(x, y) < 0) {
+                return HTCAPTION;       // drag by the strip
+            }
+            return HTCLIENT;
+        }
+        case WM_NCACTIVATE:
+            return TRUE;
+        case WM_CLOSE:   // Alt+F4 or the taskbar: same as the close button
+            if (g_phase == Phase::Review) {
+                Answer(false);
+            } else if (g_phase == Phase::Done) {
+                RequestClose();
+            }
+            return 0;
+        case WM_MOUSEWHEEL:
+            g_scrollTarget -= (short)HIWORD(w) / 120.0f * 60.0f;
+            return 0;
+        case WM_DPICHANGED:
+            if (g_settings.uiScale < 1.0f) {
+                ApplyScale(h, HIWORD(w) / 96.0f);
+            }
+            return 0;
+        case WM_MOUSEMOVE: {
+            float mx, my;
+            ToLogical(l, &mx, &my);
+            g_titleHover = TitleHit(mx, my);
+            g_hover = g_titleHover >= 0 ? -1 : (my < TB ? -1 : HitAt(mx, my - TB));
+            TRACKMOUSEEVENT te = {sizeof(te), TME_LEAVE, h, 0};
+            TrackMouseEvent(&te);
+            return 0;
+        }
+        case WM_MOUSELEAVE:
+            g_hover = -1;
+            g_titleHover = -1;
+            return 0;
+        case WM_SETCURSOR:
+            if (LOWORD(l) == HTCLIENT) {
+                SetCursor(LoadCursorW(nullptr, (g_hover >= 0 || g_titleHover >= 0) ? IDC_HAND : IDC_ARROW));
+                return TRUE;
+            }
+            break;
+        case WM_LBUTTONDOWN: {
+            float mx, my;
+            ToLogical(l, &mx, &my);
+            g_pressed = HitAtWindow(mx, my);
+            if (g_pressed >= 0 && g_pressed < (int)g_items.size()) {
+                g_focus = g_pressed;
+            }
+            SetCapture(h);
+            return 0;
+        }
+        case WM_LBUTTONUP: {
+            ReleaseCapture();
+            float mx, my;
+            ToLogical(l, &mx, &my);
+            int id = HitAtWindow(mx, my);
+            int pressed = g_pressed;
+            g_pressed = -1;
+            if (id >= 0 && id == pressed) {
+                Activate(id);
+            }
+            return 0;
+        }
+        case WM_KEYDOWN: {
+            bool review = g_phase == Phase::Review, done = g_phase == Phase::Done && g_doneAt >= 0 && NowMs() > g_doneAt + kP2;
+            if (w == VK_ESCAPE) {
+                if (review) {
+                    Answer(false);
+                } else if (done) {
+                    RequestClose();
+                }
+                return 0;
+            }
+            if (review) {
+                std::vector<int> order;
+                for (size_t i = 0; i < g_items.size(); i++) {
+                    order.push_back((int)i);
+                }
+                order.push_back(kIdCancel);
+                order.push_back(kIdOk);
+                int idx = (int)order.size() - 1;
+                for (size_t i = 0; i < order.size(); i++) {
+                    if (order[i] == g_focus) {
+                        idx = (int)i;
+                    }
+                }
+                int n = (int)order.size();
+                bool shift = GetKeyState(VK_SHIFT) < 0;
+                if (w == VK_TAB || w == VK_DOWN || w == VK_UP || w == VK_RIGHT || w == VK_LEFT) {
+                    bool back = (w == VK_TAB && shift) || w == VK_UP || w == VK_LEFT;
+                    idx = (idx + (back ? n - 1 : 1)) % n;
+                    g_focus = order[idx];
+                } else if (w == VK_SPACE) {
+                    if (g_focus >= 0) {
+                        Activate(g_focus);
+                    }
+                } else if (w == VK_RETURN) {
+                    if (g_focus == kIdCancel) {
+                        Answer(false);
+                    } else {
+                        Answer(true);
+                    }
+                }
+            } else if (done && (w == VK_RETURN || w == VK_SPACE)) {
+                RequestClose();
+            }
+            return 0;
+        }
+        case WM_DESTROY:
+            g_wnd = nullptr;
+            SetEvent(g_answerEvt);   // a worker waiting for an answer must not wait for a window that is gone
+            return 0;
+    }
+    return DefWindowProcW(h, m, w, l);
+}
+
+// ---- icons of the listed programs ---------------------------------------------
+
+Color TileColor(const std::wstring& name) {
+    static const Color pal[] = {Color(255, 88, 101, 242), Color(255, 29, 185, 84), Color(255, 224, 30, 90),
+                                Color(255, 0, 97, 255), Color(255, 42, 171, 238), Color(255, 255, 140, 0),
+                                Color(255, 168, 85, 247), Color(255, 20, 170, 160)};
+    unsigned h = 0;
+    for (wchar_t c : name) {
+        h = h * 31 + c;
+    }
+    return pal[h % 8];
+}
+
+Bitmap* IconOf(const std::wstring& path);
+
+// The shell's own picture of a program or Store app at a requested size, with transparency: the same
+// icon Explorer and the Start menu show, including the proper tile for Store apps.
+Bitmap* ShellImage(const std::wstring& parsingName, int px) {
+    IShellItemImageFactory* factory = nullptr;
+    HRESULT hr = SHCreateItemFromParsingName(parsingName.c_str(), nullptr, IID_PPV_ARGS(&factory));
+    if (FAILED(hr) || !factory) {
         return nullptr;
     }
-    DWORD wrote = 0;
-    WriteFile(f, kManifest, (DWORD)sizeof(kManifest) - 1, &wrote, nullptr);
-    CloseHandle(f);
-    ACTCTXW ac = {sizeof(ac)};
-    ac.lpSource = path.c_str();
-    HANDLE h = CreateActCtxW(&ac);
-    return h == INVALID_HANDLE_VALUE ? nullptr : h;
+    HBITMAP hbm = nullptr;
+    SIZE sz = {px, px};
+    hr = factory->GetImage(sz, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &hbm);
+    factory->Release();
+    if (FAILED(hr) || !hbm) {
+        return nullptr;
+    }
+    BITMAP bm = {};
+    GetObjectW(hbm, sizeof(bm), &bm);
+    Bitmap* out = nullptr;
+    if (bm.bmBitsPixel == 32 && bm.bmWidth > 0 && bm.bmHeight > 0) {
+        int w = bm.bmWidth, h = bm.bmHeight;
+        std::vector<BYTE> bits((size_t)w * h * 4);
+        BITMAPINFO bi = {};
+        bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bi.bmiHeader.biWidth = w;
+        bi.bmiHeader.biHeight = -h;   // top-down
+        bi.bmiHeader.biPlanes = 1;
+        bi.bmiHeader.biBitCount = 32;
+        HDC dc = GetDC(nullptr);
+        GetDIBits(dc, hbm, 0, h, bits.data(), &bi, DIB_RGB_COLORS);
+        ReleaseDC(nullptr, dc);
+        // Some icons come back with real transparency, others fully opaque: if no pixel has any
+        // transparency, the alpha channel is not used and the picture is taken as it is.
+        bool anyAlpha = false;
+        for (size_t i = 3; i < bits.size(); i += 4) {
+            if (bits[i] != 0) {
+                anyAlpha = true;
+                break;
+            }
+        }
+        if (!anyAlpha) {
+            for (size_t i = 3; i < bits.size(); i += 4) {
+                bits[i] = 255;
+            }
+        }
+        Bitmap tmp(w, h, w * 4, PixelFormat32bppPARGB, bits.data());
+        out = new Bitmap(w, h, PixelFormat32bppPARGB);
+        Graphics g(out);
+        g.SetCompositingMode(CompositingModeSourceCopy);
+        g.DrawImage(&tmp, 0, 0, w, h);   // copied, so the pixels outlive the vector
+    }
+    DeleteObject(hbm);
+    return out;
 }
 
-ChecklistResult ShowChecklist(const ChecklistSpec& spec) {
-    ChecklistResult res;
-    res.checked.assign(spec.items.size(), true);
-    if (g_dlg) {
-        return res;
+// Best icon first: the Store app's tile, the program's own high-resolution icon, the shell's 32 px icon.
+// If none works the caller draws a tile with the app's initial.
+Bitmap* LoadAppIcon(const std::wstring& aumid, const std::wstring& path, int px) {
+    HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    Bitmap* b = nullptr;
+    if (!aumid.empty()) {
+        b = ShellImage(L"shell:AppsFolder\\" + aumid, px);
     }
-    DlgState d;
-    g_dlg = &d;
-    d.spec = spec;
-    d.expanded = spec.startExpanded;
+    if (!b && !path.empty()) {
+        b = ShellImage(path, px);
+    }
+    if (SUCCEEDED(co)) {
+        CoUninitialize();
+    }
+    return b ? b : IconOf(path);
+}
 
-    using SetDpiCtx_t = HANDLE(WINAPI*)(HANDLE);
-    auto setDpiCtx = UserProc<SetDpiCtx_t>("SetThreadDpiAwarenessContext");
-    HANDLE oldDpiCtx = setDpiCtx ? setDpiCtx((HANDLE)-4) : nullptr;  // per-monitor v2
+Bitmap* IconOf(const std::wstring& path) {
+    if (path.empty()) {
+        return nullptr;
+    }
+    SHFILEINFOW sfi = {};
+    if (!SHGetFileInfoW(path.c_str(), 0, &sfi, sizeof(sfi), SHGFI_ICON | SHGFI_LARGEICON) || !sfi.hIcon) {
+        return nullptr;
+    }
+    Bitmap* b = Bitmap::FromHICON(sfi.hIcon);
+    DestroyIcon(sfi.hIcon);
+    if (b && b->GetLastStatus() != Ok) {
+        delete b;
+        return nullptr;
+    }
+    return b;
+}
 
-    HANDLE actCtx = CreateComctl6Context();
-    ULONG_PTR cookie = 0;
-    bool actCtxOn = actCtx && ActivateActCtx(actCtx, &cookie);
+void ClearItems() {
+    for (auto& a : g_items) {
+        delete a.icon;
+        a.icon = nullptr;
+    }
+    g_items.clear();
+}
 
-    static bool classRegistered = false;
-    if (!classRegistered) {
+// ---- public API -----------------------------------------------------------------
+
+bool Alive() { return g_wnd != nullptr; }
+
+// One frame, under the lock.
+void RenderLocked() {
+    Guard lock;
+    Render();
+}
+
+// The picture of a program, scaled once to the size it is drawn at, so a frame only has to copy it.
+Bitmap* ScaledIcon(Bitmap* big, int dst) {
+    if (!big) {
+        return nullptr;
+    }
+    Bitmap* out = new Bitmap(dst, dst, PixelFormat32bppPARGB);
+    Graphics g(out);
+    g.SetCompositingMode(CompositingModeSourceCopy);
+    g.SetInterpolationMode(InterpolationModeHighQualityBicubic);
+    g.SetPixelOffsetMode(PixelOffsetModeHalf);
+    g.DrawImage(big, Rect(0, 0, dst, dst));
+    delete big;
+    return out;
+}
+
+// The worker said the work is over: measure the summary here, where the fonts live, and show it.
+void ApplyFinish() {
+    Guard lock;
+    Bitmap tmp(4, 4, PixelFormat32bppARGB);
+    Graphics gg(&tmp);
+    Font& f = *GetFonts()->body;
+    RectF box;
+    gg.MeasureString(g_doneSummary.c_str(), -1, &f, RectF(0, 0, W - 56, 1000), Fmt(4), &box);
+    float lineH = f.GetHeight(&gg);
+    int lines = std::clamp((int)std::lround(box.Height / std::max(1.0f, lineH)), 1, 4);
+    g_doneBody = 360 + (lines - 1) * lineH;
+    g_phase = Phase::Done;
+    g_doneAt = NowMs();
+    g_focus = kIdDone;
+}
+
+// The window's thread: creates the window, then draws and handles input until it is asked to stop.
+DWORD WINAPI UiThread(LPVOID) {
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
+    GdiplusOn();
+    static bool registered = false;
+    HINSTANCE inst = GetModuleHandleW(nullptr);
+    if (!registered) {
         WNDCLASSEXW wc = {sizeof(wc)};
-        wc.lpfnWndProc = DlgProc;
-        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.lpfnWndProc = Proc;
+        wc.hInstance = inst;
+        wc.lpszClassName = L"GameModeToggleFlow";
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-        wc.hIcon = LoadIconW(nullptr, IDI_QUESTION);
-        wc.lpszClassName = kDlgClass;
-        classRegistered = RegisterClassExW(&wc) != 0;
+        registered = RegisterClassExW(&wc) != 0;
     }
-
-    d.dark = IsDarkTheme();
-    d.bg = d.dark ? RGB(0x2B, 0x2B, 0x2B) : RGB(0xF9, 0xF9, 0xF9);
-    d.foot = d.dark ? RGB(0x20, 0x20, 0x20) : RGB(0xF0, 0xF0, 0xF0);
-    d.text = d.dark ? RGB(0xFF, 0xFF, 0xFF) : RGB(0x1A, 0x1A, 0x1A);
-    d.muted = d.dark ? RGB(0xB5, 0xB5, 0xB5) : RGB(0x5F, 0x5F, 0x5F);
-    d.line = d.dark ? RGB(0x45, 0x45, 0x45) : RGB(0xE3, 0xE3, 0xE3);
-    d.bgBrush = CreateSolidBrush(d.bg);
-
     POINT pt;
     GetCursorPos(&pt);
     MONITORINFO mi = {sizeof(mi)};
     GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi);
-    d.hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_APPWINDOW, kDlgClass,
-                             L"Game Mode",
-                             WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN,
-                             mi.rcWork.left + 100, mi.rcWork.top + 100, 100, 100,
-                             nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
-    if (d.hwnd) {
-        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
-        auto getDpi = UserProc<GetDpiForWindow_t>("GetDpiForWindow");
-        d.dpi = getDpi ? (int)getDpi(d.hwnd) : 96;
-        if (d.dpi < 96) {
-            d.dpi = 96;
+    g_cx = (mi.rcWork.left + mi.rcWork.right) / 2.0;
+    g_cy = (mi.rcWork.top + mi.rcWork.bottom) / 2.0;
+    g_lastL = g_lastT = -99999;
+    HWND wnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_APPWINDOW | WS_EX_TOPMOST, L"GameModeToggleFlow", L"Game Mode",
+                               WS_POPUP | WS_MINIMIZEBOX | WS_SYSMENU, (int)g_cx - 100, (int)g_cy - 100, 200, 200,
+                               nullptr, nullptr, inst, nullptr);
+    if (!wnd) {
+        g_phase = Phase::Closed;
+        SetEvent(g_readyEvt);
+        return 0;
+    }
+    g_wnd = wnd;
+    ApplyScale(wnd, ScaleFor(wnd));
+    {
+        int px = std::clamp((int)std::lround(28 * g_scale * 2), 64, 256);
+        int dst = std::max(16, (int)std::lround(28 * g_scale));
+        for (auto& a : g_items) {
+            a.icon = ScaledIcon(LoadAppIcon(a.aumid, a.path, px), dst);
         }
-        MakeFonts();
-
-        d.titleWnd = MakeChild(L"STATIC", spec.title, SS_LEFT | SS_NOPREFIX, 0);
-        SendMessageW(d.titleWnd, WM_SETFONT, (WPARAM)d.fontTitle, TRUE);
-        d.summaryWnd = MakeChild(L"STATIC", L"", SS_LEFT | SS_NOPREFIX, 0);
-        for (const auto& line : spec.info) {
-            d.infoWnds.push_back(MakeChild(L"STATIC", line, SS_LEFT | SS_NOPREFIX, 0));
+    }
+    QueryPerformanceCounter(&g_start);
+    // warm up (font, glows) before the clock starts and the window is shown, so the opening animation plays in full
+    RenderLocked();
+    RenderLocked();
+    QueryPerformanceCounter(&g_start);
+    if (g_startRunning) {
+        Guard lock;
+        for (auto& a : g_items) {
+            a.ticked = true;
         }
-        d.advBtn = MakeChild(L"BUTTON", L"Advanced options", WS_TABSTOP | BS_PUSHBUTTON, kIdAdv);
-        d.allBtn = MakeChild(L"BUTTON", L"Select all", WS_TABSTOP | BS_3STATE, kIdAll);
-        for (size_t i = 0; i < spec.items.size(); i++) {
-            HWND h = MakeChild(L"BUTTON", spec.items[i].text, WS_TABSTOP | BS_AUTOCHECKBOX,
-                               kIdItem0 + (int)i);
-            SendMessageW(h, BM_SETCHECK, BST_CHECKED, 0);
-            d.itemWnds.push_back(h);
-        }
-        d.hintWnd = MakeChild(L"STATIC", spec.hint, SS_LEFT | SS_NOPREFIX, 0);
-        d.okBtn = MakeChild(L"BUTTON", spec.okText, WS_TABSTOP | WS_GROUP | BS_DEFPUSHBUTTON, IDOK);
-        d.cancelBtn = MakeChild(L"BUTTON", L"Cancel", WS_TABSTOP | BS_PUSHBUTTON, IDCANCEL);
+        BeginRun();
+        g_clickAt = -(kP1 + 10);   // already in the running look
+    }
+    RenderLocked();
+    ShowWindow(wnd, SW_SHOWNA);
+    SetForegroundWindow(wnd);
+    SetEvent(g_readyEvt);
 
-        if (d.dark) {
-            using SetWindowTheme_t = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
-            auto setTheme = (SetWindowTheme_t)GetProcAddress(LoadLibraryW(L"uxtheme.dll"), "SetWindowTheme");
-            if (setTheme) {
-                for (HWND h : {d.advBtn, d.allBtn, d.okBtn, d.cancelBtn}) {
-                    setTheme(h, L"DarkMode_Explorer", nullptr);
-                }
-                for (HWND h : d.itemWnds) {
-                    setTheme(h, L"DarkMode_Explorer", nullptr);
-                }
-            }
-        }
-        BOOL dark = d.dark;
-        DwmSetWindowAttribute(d.hwnd, 20, &dark, sizeof(dark));
-        COLORREF cap = d.bg;
-        DwmSetWindowAttribute(d.hwnd, 35, &cap, sizeof(cap));
-
-        UpdateSummary();
-        Layout();
-        CenterOnMonitor();
-        ShowWindow(d.hwnd, SW_SHOW);
-        SetForegroundWindow(d.hwnd);
-        SetFocus(d.okBtn);
-
+    while (!g_quit && g_wnd) {
         MSG m;
-        while (!d.done) {
-            BOOL r = GetMessageW(&m, nullptr, 0, 0);
-            if (r <= 0) {
-                if (r == 0) {
-                    PostQuitMessage((int)m.wParam);
-                }
-                break;
+        while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&m);
+            DispatchMessageW(&m);
+        }
+        if (InterlockedExchange(&g_finishPending, 0)) {
+            ApplyFinish();
+        }
+        if (g_phase == Phase::Done && g_doneAt >= 0 && NowMs() - g_doneAt > 16000 && g_hover < 0 && g_titleHover < 0) {
+            break;   // closes itself a while after the work is done
+        }
+        float r0 = NowMs();
+        RenderLocked();
+        InterlockedExchangeAdd(&g_renderUs, (LONG)((NowMs() - r0) * 1000));
+        InterlockedIncrement(&g_frames);
+        if (g_phase == Phase::Done && NowMs() - g_doneAt > 2200) {
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, 45, QS_ALLINPUT);   // nothing moves any more: draw less often
+        } else if (FAILED(DwmFlush())) {
+            Sleep(8);
+        }
+    }
+    if (g_wnd) {
+        DestroyWindow(g_wnd);
+    }
+    g_wnd = nullptr;
+    g_phase = Phase::Closed;
+    SetEvent(g_answerEvt);
+    return 0;
+}
+
+// Ends the window's thread (and with it the window) and waits for it. For the worker thread only.
+void Close() {
+    if (g_uiThread) {
+        InterlockedExchange(&g_quit, 1);
+        WaitForSingleObject(g_uiThread, 4000);
+        CloseHandle(g_uiThread);
+        g_uiThread = nullptr;
+    }
+    if (g_csInit) {
+        Guard lock;
+        ClearItems();
+    }
+    FreeIcons();
+    g_phase = Phase::Closed;
+}
+
+// Plain wait: the window animates by itself, whatever the worker is doing.
+void Sleep_(DWORD ms) { Sleep(ms); }
+
+void EnsureWindow(const ChecklistSpec& spec, bool startRunning) {
+    Close();
+    if (!g_csInit) {
+        InitializeCriticalSection(&g_cs);
+        g_csInit = true;
+    }
+    QueryPerformanceFrequency(&g_freq);
+    GdiplusOn();
+    g_th = MakeTheme(g_settings.theme, IsDarkTheme());
+    if (g_themeId != g_settings.theme) {
+        FreeCaches();
+        g_themeId = g_settings.theme;
+    }
+    {
+        Guard lock;
+        g_spec = spec;
+        ClearItems();
+        for (const auto& it : spec.items) {
+            Item a;
+            a.name = it.text;
+            a.note = it.note;
+            a.keepNote = it.keepNote;
+            a.path = it.path;
+            a.aumid = it.aumid;
+            a.tile = TileColor(it.text);
+            g_items.push_back(std::move(a));
+        }
+        g_infoLine.clear();
+        for (const auto& s : spec.info) {
+            if (!s.empty()) {
+                g_infoLine += (g_infoLine.empty() ? L"" : L"  \u00B7  ") + s;
             }
-            if (!m.hwnd) {  // messages meant for the hotkey loop that is waiting for us
+        }
+        g_run.clear();
+        g_clickAt = g_doneAt = -1;
+        g_answered = false;
+        g_answerOk = false;
+        g_scroll = g_scrollTarget = 0;
+        g_hover = g_pressed = g_titleHover = -1;
+        g_focus = kIdOk;
+        g_doneBody = 360;
+        g_phase = Phase::Review;
+    }
+    g_startRunning = startRunning;
+    InterlockedExchange(&g_quit, 0);
+    InterlockedExchange(&g_finishPending, 0);
+    if (!g_readyEvt) {
+        g_readyEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        g_answerEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    }
+    ResetEvent(g_readyEvt);
+    ResetEvent(g_answerEvt);
+    g_uiThread = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
+    if (!g_uiThread) {
+        g_phase = Phase::Closed;
+        return;
+    }
+    WaitForSingleObject(g_readyEvt, 10000);
+}
+
+// Shows the checklist and waits for an answer. On OK the window stays open and
+// switches to its progress view; call SetState() as the apps finish.
+ChecklistResult Review(const ChecklistSpec& spec) {
+    ChecklistResult res;
+    res.checked.assign(spec.items.size(), true);
+    if (g_wnd) {
+        return res;
+    }
+    EnsureWindow(spec, false);
+    if (!g_wnd) {
+        Close();
+        return res;   // could not make the window: treated as cancelled, so nothing is closed unseen
+    }
+    while (g_wnd && !g_answered && !g_stopRequested) {
+        MsgWaitForMultipleObjects(1, &g_answerEvt, FALSE, 250, QS_ALLINPUT);
+        MSG m;
+        while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
+            if (!m.hwnd) {   // messages meant for the hotkey loop that is waiting for us
                 if (m.message == WM_APP_STOP) {
-                    d.stopRequested = true;
-                    d.done = true;
+                    g_stopRequested = true;
                 } else if (m.message == WM_APP_RELOAD) {
-                    d.reloadRequested = true;
+                    g_reloadRequested = true;
                 }
                 continue;
             }
-            if (!IsDialogMessageW(d.hwnd, &m)) {
-                TranslateMessage(&m);
-                DispatchMessageW(&m);
-            }
+            TranslateMessage(&m);
+            DispatchMessageW(&m);
         }
-
-        res.ok = d.result && !d.stopRequested;
-        for (size_t i = 0; i < d.itemWnds.size(); i++) {
-            res.checked[i] = SendMessageW(d.itemWnds[i], BM_GETCHECK, 0, 0) == BST_CHECKED;
+    }
+    {
+        Guard lock;
+        for (size_t i = 0; i < g_items.size() && i < res.checked.size(); i++) {
+            res.checked[i] = g_items[i].ticked;
         }
-        DestroyWindow(d.hwnd);
     }
-    if (d.font) {
-        DeleteObject(d.font);
+    res.ok = g_answered && g_answerOk && !g_stopRequested;
+    if (!res.ok) {
+        Close();
     }
-    if (d.fontTitle) {
-        DeleteObject(d.fontTitle);
-    }
-    DeleteObject(d.bgBrush);
-    if (actCtxOn) {
-        DeactivateActCtx(0, cookie);
-    }
-    if (actCtx) {
-        ReleaseActCtx(actCtx);
-    }
-    if (setDpiCtx && oldDpiCtx) {
-        setDpiCtx(oldDpiCtx);
-    }
-    if (d.stopRequested) {
+    if (g_stopRequested) {
+        g_stopRequested = false;
         PostThreadMessageW(GetCurrentThreadId(), WM_APP_STOP, 0, 0);
     }
-    if (d.reloadRequested) {
+    if (g_reloadRequested) {
+        g_reloadRequested = false;
         PostThreadMessageW(GetCurrentThreadId(), WM_APP_RELOAD, 0, 0);
     }
-    g_dlg = nullptr;
     return res;
 }
+
+// Opens straight in the progress view (no checklist), for a run that needs no confirmation.
+void Direct(const ChecklistSpec& spec) {
+    EnsureWindow(spec, true);
+}
+
+// The k-th item that was worked on has finished: state 1 = done, 2 = left running.
+void SetState(size_t k, int state) {
+    if (!g_wnd) {
+        return;
+    }
+    Guard lock;
+    if (k >= g_run.size()) {
+        return;
+    }
+    Item& a = g_items[g_run[k]];
+    if (a.state != state) {
+        a.state = state;
+        a.finishedAt = NowMs();
+    }
+}
+
+void Finish(const std::wstring& title, const std::wstring& summary) {
+    if (!g_wnd) {
+        return;
+    }
+    {
+        Guard lock;
+        g_doneTitle = title;
+        g_doneSummary = summary;
+    }
+    InterlockedExchange(&g_finishPending, 1);   // the window's thread shows it on its next frame
+}
+
+void Shutdown() {
+    Close();
+    FreeCaches();
+    FreeFonts();
+    if (g_surface) {
+        delete g_surface;
+        g_surface = nullptr;
+    }
+    if (g_dib) {
+        DeleteObject(g_dib);
+        g_dib = nullptr;
+    }
+    if (g_memDC) {
+        DeleteDC(g_memDC);
+        g_memDC = nullptr;
+    }
+}
+
+}  // namespace flow
 
 // ---- processes -------------------------------------------------------------
 
@@ -1454,7 +2825,15 @@ std::wstring QueryCommandLine(HANDLE h) {
            &len) < 0) {
         return L"";
     }
+    // The string sits inside the buffer; trust no pointer or length from a
+    // process we only read through WOW64.
     auto* us = (UnicodeString*)buf.data();
+    const BYTE* first = (const BYTE*)us->Buffer;
+    if (buf.size() < sizeof(UnicodeString) || first < buf.data() + sizeof(UnicodeString) ||
+        first > buf.data() + buf.size() || us->Length % sizeof(WCHAR) != 0 ||
+        us->Length > (size_t)(buf.data() + buf.size() - first)) {
+        return L"";
+    }
     return std::wstring(us->Buffer, us->Length / sizeof(WCHAR));
 }
 
@@ -1709,8 +3088,7 @@ bool CanControl(DWORD pid) {
     return true;
 }
 
-std::vector<AppGroup> CollectGroups(const Settings& s,
-                                    std::vector<std::wstring>* kept) {
+std::vector<AppGroup> CollectGroups(const Settings& s) {
     std::vector<ProcInfo> procs = ListProcesses();
     std::vector<WindowInfo> windows = ListTopLevelWindows();
     DWORD self = GetCurrentProcessId();
@@ -1772,7 +3150,6 @@ std::vector<AppGroup> CollectGroups(const Settings& s,
     };
 
     // 1) Listed apps, then 2) every other program that is not needed for gaming.
-    std::set<std::wstring> keptNames;
     for (const auto& p : procs) {
         if (p.pid == self || !CanControl(p.pid)) {
             continue;
@@ -1787,7 +3164,6 @@ std::vector<AppGroup> CollectGroups(const Settings& s,
             }
             const wchar_t* why = WhyKeep(p.exe, p.path, g_windowsDir, s);
             if (why) {
-                keptNames.insert(DisplayName(p.path) + L" (" + why + L")");
                 continue;
             }
             if (!IsGuiExe(p.path)) {
@@ -1802,19 +3178,14 @@ std::vector<AppGroup> CollectGroups(const Settings& s,
                                    InstallFolderName(p.path);
                 }
                 if (VendorMatches(makerOf[key], s.keepVendors)) {
-                    keptNames.insert(DisplayName(p.path) + L" (hardware or PC maker tool)");
                     continue;
                 }
             }
             if (startedByKeptApp(p)) {
-                keptNames.insert(DisplayName(p.path) + L" (started by an app to keep)");
                 continue;
             }
         }
         addPid(p);
-    }
-    if (kept) {
-        kept->assign(keptNames.begin(), keptNames.end());
     }
 
     // A helper that was started by another program on the list belongs to it
@@ -1977,6 +3348,12 @@ std::wstring ResolveGamePlan(const std::wstring& setting, std::wstring* label) {
             }
         }
     } else if (setting == L"ultimate") {
+        for (const auto& p : plans) {  // the built-in GUID first: the name is localized
+            if (p.first == kGuidUltimate) {
+                *label = p.second;
+                return p.first;
+            }
+        }
         for (const auto& p : plans) {
             if (Lower(p.second).find(L"ultimate") != std::wstring::npos) {
                 *label = p.second;
@@ -1998,15 +3375,19 @@ ChecklistSpec OnChecklist(const std::vector<ChecklistItem>& items,
     spec.title = L"Turn on Game Mode?";
     spec.verb = L"Closes";
     spec.okText = L"Turn on";
+    spec.subtitle = L"{n} app{s} will close. The hotkey brings them back.";
+    spec.runTitle = L"Closing apps";
+    spec.runHint = L"Asking apps to close politely";
+    spec.doneVerb = L"closed";
     spec.items = items;
     spec.startExpanded = true;  // the user must see every name before it is closed
-    spec.info.push_back(changePlan ? L"Switch power plan to " + planLabel
+    spec.info.push_back(changePlan ? L"Power plan: " + planLabel
                         : planNotSet
                             ? L"Power plan: not changed"
-                            : L"Power plan: already " + planLabel + L" (no change)");
-    spec.info.push_back(gameCount ? L"High priority for " + std::to_wstring(gameCount) +
-                                        L" running game process(es)"
-                                  : L"No game running yet. Launch it after this.");
+                            : L"Power plan: " + planLabel + L" (already on)");
+    spec.info.push_back(gameCount ? L"Boosts " + std::to_wstring(gameCount) + L" running game" +
+                                        (gameCount == 1 ? L"" : L"s")
+                                  : L"No game running yet");
     spec.hint = L"Press the hotkey again to restore everything exactly as it is now.";
     return spec;
 }
@@ -2017,6 +3398,10 @@ ChecklistSpec OffChecklist(const std::vector<ChecklistItem>& items,
     spec.title = L"Turn off Game Mode?";
     spec.verb = L"Reopens";
     spec.okText = L"Turn off";
+    spec.subtitle = L"{n} app{s} will be reopened.";
+    spec.runTitle = L"Reopening apps";
+    spec.runHint = L"Starting your apps again";
+    spec.doneVerb = L"reopened";
     spec.items = items;
     spec.info.push_back(planRestored ? L"Restores the power plan from before"
                                      : L"Power plan: not changed by Game Mode");
@@ -2035,9 +3420,38 @@ std::wstring NoteFor(const AppGroup& g) {
     return g.background ? L"background" : L"";
 }
 
+// "Closing: A, B, C and 4 more" for the apps that are still open.
+std::wstring NamesOfOpen(const std::vector<AppGroup>& groups, const std::vector<bool>& done) {
+    std::wstring names;
+    size_t shown = 0, open = 0;
+    for (size_t i = 0; i < groups.size(); i++) {
+        if (done[i]) {
+            continue;
+        }
+        open++;
+        if (shown < 3) {
+            names += (shown ? L", " : L"") + groups[i].name;
+            shown++;
+        }
+    }
+    if (open > shown) {
+        names += L" and " + std::to_wstring(open - shown) + L" more";
+    }
+    return names;
+}
+
+// The summary goes into the window when there is one, otherwise into a notification.
+void ShowResult(const std::wstring& title, const std::wstring& summary) {
+    if (flow::Alive()) {
+        flow::Finish(title, summary);
+    } else {
+        Notify(summary);
+    }
+}
+
 void TurnOn() {
     const Settings s = g_settings;
-    std::vector<AppGroup> groups = CollectGroups(s, nullptr);
+    std::vector<AppGroup> groups = CollectGroups(s);
 
     std::wstring planLabel;
     std::wstring current = ActivePlan();
@@ -2058,9 +3472,9 @@ void TurnOn() {
     if (s.confirm) {
         std::vector<ChecklistItem> items;
         for (const auto& g : groups) {
-            items.push_back({g.name, NoteFor(g), g.forced || g.windowless});
+            items.push_back({g.name, NoteFor(g), g.forced || g.windowless, g.path, g.aumid});
         }
-        ChecklistResult choice = ShowChecklist(
+        ChecklistResult choice = flow::Review(
             OnChecklist(items, changePlan, target.empty(), planLabel, games.size()));
         if (!choice.ok) {
             Wh_Log(L"ON cancelled");
@@ -2075,6 +3489,16 @@ void TurnOn() {
             }
         }
         groups = picked;
+        if (!s.showProgress) {
+            flow::Close();   // the progress view is switched off: only the notification at the end
+        }
+    } else if (s.showProgress && !groups.empty()) {
+        // No checklist: the window opens straight in its progress view.
+        std::vector<ChecklistItem> items;
+        for (const auto& g : groups) {
+            items.push_back({g.name, NoteFor(g), g.forced || g.windowless, g.path, g.aumid});
+        }
+        flow::Direct(OnChecklist(items, changePlan, target.empty(), planLabel, games.size()));
     }
 
     // Snapshot first: if anything below is interrupted, a restore knows what
@@ -2099,6 +3523,7 @@ void TurnOn() {
     }
     if (!WriteSnapshot(sn)) {
         Wh_Log(L"Could not write the snapshot; nothing was changed");
+        flow::Close();
         Notify(L"Could not save the snapshot, so nothing was changed.");
         return;
     }
@@ -2122,7 +3547,10 @@ void TurnOn() {
             HANDLE h = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pc.first);
             if (h) {
                 TerminateProcess(h, 1);
-                WaitForSingleObject(h, 2000);
+                for (ULONGLONG until = GetTickCount64() + 2000;
+                     GetTickCount64() < until && WaitForSingleObject(h, 0) == WAIT_TIMEOUT;) {
+                    flow::Sleep_(16);   // keeps the window animating while the process goes away
+                }
                 CloseHandle(h);
             }
         }
@@ -2157,6 +3585,22 @@ void TurnOn() {
     }
     ULONGLONG deadline = GetTickCount64() + (ULONGLONG)s.timeoutSec * 1000;
     std::vector<bool> done(groups.size(), false);
+    std::vector<char> reported(groups.size(), 0);
+    // Tells the window which apps have finished (1) or stayed running (2, at the end).
+    auto syncStates = [&](bool last = false) {
+        for (size_t i = 0; i < groups.size(); i++) {
+            if (reported[i]) {
+                continue;
+            }
+            if (done[i]) {
+                flow::SetState(i, 1);
+                reported[i] = 1;
+            } else if (last) {
+                flow::SetState(i, 2);
+                reported[i] = 1;
+            }
+        }
+    };
     while (true) {
         bool pending = false;
         for (size_t i = 0; i < groups.size(); i++) {
@@ -2168,7 +3612,8 @@ void TurnOn() {
         if (!pending || GetTickCount64() >= deadline) {
             break;
         }
-        Sleep(250);
+        syncStates();
+        flow::Sleep_(250);
     }
 
     // Some apps (WhatsApp, Phone Link, tray tools) answer a close request by
@@ -2207,7 +3652,8 @@ void TurnOn() {
             if (!waiting) {
                 break;
             }
-            Sleep(250);
+            syncStates();
+            flow::Sleep_(250);
         }
         for (size_t i = 0; i < groups.size(); i++) {
             if (hidToTray(i) && (groups[i].forced || s.confirm)) {
@@ -2241,6 +3687,8 @@ void TurnOn() {
         }
     }
 
+    syncStates(true);
+
     // Priority last, on the games that were running.
     int boosted = 0;
     for (const auto& pr : after.prios) {
@@ -2261,17 +3709,170 @@ void TurnOn() {
         msg += L" " + std::to_wstring(boosted) + L" game process(es) boosted.";
     }
     Wh_Log(L"%s", msg.c_str());
-    Notify(msg);
+    std::wstring summary = L"Closed " + std::to_wstring(closed) + L" of " + std::to_wstring(groups.size()) + L" app(s).";
+    if (left) {
+        summary += L" Still running: " + NamesOfOpen(groups, done) + L".";
+    }
+    if (changePlan) {
+        summary += L" Power plan set.";
+    }
+    if (boosted) {
+        summary += L" " + std::to_wstring(boosted) + L" game process(es) boosted.";
+    }
+    ShowResult(left ? L"Game Mode is on (with exceptions)" : L"Game Mode is on", summary);
 }
 
 // ---- turning off -----------------------------------------------------------
+
+// ---- reopening in the background ---------------------------------------------
+//
+// Reopened apps are started minimized and without taking the focus. Plenty of apps ignore that request and
+// would flash over the game, so while apps are being started a hook watches for new windows of exactly those
+// apps and minimizes each one the moment it appears. The hook runs on its own short-lived thread.
+
+namespace reopen {
+
+struct Target {
+    std::wstring path;   // lower case
+    std::wstring aumid;
+    DWORD expires = 0;   // GetTickCount() value: an app is only watched for a short while after it was started,
+                         // so a window you open yourself later is never touched
+};
+
+CRITICAL_SECTION g_cs;
+bool g_csInit = false;
+std::vector<Target> g_targets;
+HANDLE g_thread = nullptr;
+volatile LONG g_stop = 0;
+volatile DWORD g_deadline = 0;   // GetTickCount() value after which the watching ends
+std::set<HWND> g_minimized;      // only touched on the watcher's thread
+
+bool Matches(HWND h) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    if (!pid) {
+        return false;
+    }
+    std::vector<Target> targets;
+    EnterCriticalSection(&g_cs);
+    targets = g_targets;
+    LeaveCriticalSection(&g_cs);
+    HANDLE ph = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!ph) {
+        return false;
+    }
+    std::wstring path = Lower(QueryPath(ph));
+    std::wstring aumid = QueryAumid(ph);
+    CloseHandle(ph);
+    if (ExeKey(BaseName(path)) == L"applicationframehost") {
+        // a Store app's window belongs to ApplicationFrameHost: look at the app behind it
+        DWORD real = StoreAppPidOfFrame(h, pid);
+        HANDLE rp = real ? OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, real) : nullptr;
+        if (!rp) {
+            return false;
+        }
+        path = Lower(QueryPath(rp));
+        aumid = QueryAumid(rp);
+        CloseHandle(rp);
+    }
+    for (const auto& t : targets) {
+        if ((LONG)(GetTickCount() - t.expires) >= 0) {
+            continue;
+        }
+        if ((!t.aumid.empty() && aumid == t.aumid) || (!t.path.empty() && path == t.path)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void CALLBACK OnShow(HWINEVENTHOOK, DWORD, HWND h, LONG idObject, LONG idChild, DWORD, DWORD) {
+    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !h || GetAncestor(h, GA_ROOT) != h) {
+        return;
+    }
+    LONG_PTR ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+    if ((ex & WS_EX_TOOLWINDOW) || GetWindow(h, GW_OWNER) || !IsWindowVisible(h) || IsIconic(h)) {
+        return;   // tool windows, dialogs and popups of an app are left alone
+    }
+    if (g_minimized.count(h) || !Matches(h)) {
+        return;
+    }
+    g_minimized.insert(h);
+    ShowWindowAsync(h, SW_SHOWMINNOACTIVE);   // asynchronous: a slow app cannot hold the watcher up
+}
+
+DWORD WINAPI WatchThread(LPVOID) {
+    MSG m;
+    PeekMessageW(&m, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // make the queue
+    HWINEVENTHOOK hook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, OnShow, 0, 0,
+                                         WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    while (!g_stop && (LONG)(GetTickCount() - g_deadline) < 0) {
+        MsgWaitForMultipleObjects(0, nullptr, FALSE, 100, QS_ALLINPUT);
+        while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&m);
+            DispatchMessageW(&m);
+        }
+    }
+    if (hook) {
+        UnhookWinEvent(hook);
+    }
+    return 0;
+}
+
+// Starts watching (call before the first app is started).
+void Begin() {
+    if (!g_csInit) {
+        InitializeCriticalSection(&g_cs);
+        g_csInit = true;
+    }
+    g_deadline = GetTickCount() + 13000;
+    if (g_thread && WaitForSingleObject(g_thread, 0) == WAIT_TIMEOUT) {
+        return;   // already watching: the deadline above is enough
+    }
+    if (g_thread) {
+        CloseHandle(g_thread);
+    }
+    g_minimized.clear();
+    g_stop = 0;
+    g_thread = CreateThread(nullptr, 0, WatchThread, nullptr, 0, nullptr);
+}
+
+// The app is about to be started: its windows are to be minimized. Call this before starting it, so a window
+// that appears the instant the process exists is already recognised.
+void Expect(const std::wstring& path, const std::wstring& aumid) {
+    if (!g_csInit) {
+        return;
+    }
+    EnterCriticalSection(&g_cs);
+    std::wstring norm = Lower(path);
+    std::replace(norm.begin(), norm.end(), L'/', L'\\');   // running programs report their path with backslashes
+    g_targets.push_back({norm, aumid, GetTickCount() + 12000});
+    LeaveCriticalSection(&g_cs);
+    g_deadline = GetTickCount() + 13000;
+}
+
+void Stop() {
+    if (g_thread) {
+        g_stop = 1;
+        WaitForSingleObject(g_thread, 2000);
+        CloseHandle(g_thread);
+        g_thread = nullptr;
+    }
+    if (g_csInit) {
+        EnterCriticalSection(&g_cs);
+        g_targets.clear();
+        LeaveCriticalSection(&g_cs);
+    }
+}
+
+}  // namespace reopen
 
 bool Relaunch(const SavedApp& a) {
     if (!a.aumid.empty()) {
         std::wstring target = L"shell:AppsFolder\\" + a.aumid;
         return (INT_PTR)ShellExecuteW(nullptr, L"open", L"explorer.exe",
                                       target.c_str(), nullptr,
-                                      SW_SHOWNORMAL) > 32;
+                                      g_settings.reopenBackground ? SW_SHOWMINNOACTIVE : SW_SHOWNORMAL) > 32;
     }
     if (GetFileAttributesW(a.path.c_str()) == INVALID_FILE_ATTRIBUTES) {
         return false;
@@ -2280,6 +3881,10 @@ bool Relaunch(const SavedApp& a) {
         L"\"" + a.path + L"\"" + (a.args.empty() ? L"" : L" " + a.args);
     std::wstring dir = a.path.substr(0, a.path.find_last_of(L'\\'));
     STARTUPINFOW si = {sizeof(si)};
+    if (g_settings.reopenBackground) {
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_SHOWMINNOACTIVE;   // minimized, and the focus stays where it is
+    }
     PROCESS_INFORMATION pi = {};
     if (!CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr,
                         dir.c_str(), &si, &pi)) {
@@ -2350,36 +3955,68 @@ void RestoreOnUnload() {
 void TurnOff(const Snapshot& sn, bool interactive) {
     std::set<std::wstring> running = RunningPaths();
     std::set<std::wstring> skip;  // apps the user unticked: not reopened
+    std::map<std::wstring, size_t> kOf;   // app path -> its position in the window's progress view
     if (interactive && g_settings.confirm) {
         std::vector<ChecklistItem> items;
         std::vector<std::wstring> itemPaths;
         for (const auto& a : sn.apps) {
             if (!running.count(Lower(a.path))) {
-                items.push_back({a.name, L""});
+                items.push_back({a.name, L"", false, a.path, a.aumid});
                 itemPaths.push_back(Lower(a.path));
             }
         }
-        ChecklistResult choice = ShowChecklist(OffChecklist(items, !sn.plan.empty()));
+        ChecklistResult choice = flow::Review(OffChecklist(items, !sn.plan.empty()));
         if (!choice.ok) {
             Wh_Log(L"OFF cancelled");
             return;
         }
+        size_t nextK = 0;
         for (size_t i = 0; i < itemPaths.size(); i++) {
             if (!choice.checked[i]) {
                 skip.insert(itemPaths[i]);
+            } else {
+                kOf[itemPaths[i]] = nextK++;
             }
         }
     }
 
+    size_t toReopen = 0;
+    {
+        std::set<std::wstring> already = RunningPaths();
+        for (const auto& a : sn.apps) {
+            if (!already.count(Lower(a.path)) && !skip.count(Lower(a.path))) {
+                toReopen++;
+            }
+        }
+    }
+    if (interactive && g_settings.confirm && !g_settings.showProgress) {
+        flow::Close();
+    } else if (interactive && !g_settings.confirm && g_settings.showProgress && toReopen) {
+        // No checklist: the window opens straight in its progress view.
+        std::vector<ChecklistItem> items;
+        std::set<std::wstring> already = RunningPaths();
+        size_t nextK = 0;
+        for (const auto& a : sn.apps) {
+            if (!already.count(Lower(a.path)) && !skip.count(Lower(a.path))) {
+                items.push_back({a.name, L"", false, a.path, a.aumid});
+                kOf[Lower(a.path)] = nextK++;
+            }
+        }
+        flow::Direct(OffChecklist(items, !sn.plan.empty()));
+    }
     RestorePriorities(sn);
     bool failed = !RestorePlan(sn);
 
     // Apps first started again by Windows or by the user are left alone.
     running = RunningPaths();
     int reopened = 0;
+    std::vector<std::wstring> couldNot;
     Snapshot rest = sn;
     rest.apps.clear();
     rest.prios.clear();
+    if (g_settings.reopenBackground) {
+        reopen::Begin();   // the hook is in place before the first app is started
+    }
     for (const auto& a : sn.apps) {
         if (running.count(Lower(a.path))) {
             Wh_Log(L"%s is already running", a.name.c_str());
@@ -2389,14 +4026,24 @@ void TurnOff(const Snapshot& sn, bool interactive) {
             Wh_Log(L"Not reopened (your choice): %s", a.name.c_str());
             continue;
         }
-        if (Relaunch(a)) {
+        if (g_settings.reopenBackground) {
+            reopen::Expect(a.path, a.aumid);
+        }
+        const bool opened = Relaunch(a);
+        if (opened) {
             Wh_Log(L"Reopened %s", a.name.c_str());
             reopened++;
         } else {
             Wh_Log(L"Could not reopen %s", a.name.c_str());
             rest.apps.push_back(a);
+            couldNot.push_back(a.name);
             failed = true;
         }
+        auto kit = kOf.find(Lower(a.path));
+        if (kit != kOf.end()) {
+            flow::SetState(kit->second, opened ? 1 : 2);
+        }
+        flow::Sleep_(150);  // keeps the window animating; apps start one by one
     }
 
     if (failed) {
@@ -2405,15 +4052,24 @@ void TurnOff(const Snapshot& sn, bool interactive) {
             rest.plan.clear();
         }
         WriteSnapshot(rest);
-        Notify(L"Off, but not everything could be restored. Press the hotkey "
-               L"to retry.");
+        std::wstring names;
+        for (size_t i = 0; i < couldNot.size() && i < 3; i++) {
+            names += (i ? L", " : L"") + couldNot[i];
+        }
+        ShowResult(L"Game Mode is off (with problems)",
+                     L"Reopened " + std::to_wstring(reopened) + L" app(s)." +
+                         (couldNot.empty() ? L" The power plan could not be restored."
+                                           : L" Could not reopen: " + names + L".") +
+                         L" Press the hotkey to retry.");
         return;
     }
     DeleteSnapshot();
     std::wstring msg = L"Off: reopened " + std::to_wstring(reopened) + L" app(s)";
     msg += sn.plan.empty() ? L"." : L", power plan restored.";
     Wh_Log(L"%s", msg.c_str());
-    Notify(msg);
+    ShowResult(L"Game Mode is off",
+                 L"Reopened " + std::to_wstring(reopened) + L" app(s)." +
+                     (sn.plan.empty() ? L"" : L" Power plan restored."));
 }
 
 void Toggle() {
@@ -2421,6 +4077,7 @@ void Toggle() {
         return;
     }
     g_busy = true;
+    flow::Close();  // a summary from the last press
     Snapshot sn;
     switch (LoadSnapshot(&sn)) {
         case LoadResult::None:
@@ -2518,27 +4175,35 @@ DWORD WINAPI WorkerThread(LPVOID) {
         g_recoverTimer = SetTimer(nullptr, 0, kRecoverDelayMs, nullptr);
     }
 
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == WM_HOTKEY && msg.wParam == (WPARAM)kHotkeyId) {
+    // Handles one message of the worker thread; false means "stop".
+    auto handle = [&](MSG& m) -> bool {
+        if (m.message == WM_QUIT || m.message == WM_APP_STOP) {
+            return false;
+        }
+        if (m.message == WM_HOTKEY && m.wParam == (WPARAM)kHotkeyId) {
             Toggle();
             MSG drop;
-            while (PeekMessageW(&drop, nullptr, WM_HOTKEY, WM_HOTKEY,
-                                PM_REMOVE)) {
+            while (PeekMessageW(&drop, nullptr, WM_HOTKEY, WM_HOTKEY, PM_REMOVE)) {
             }  // presses that piled up while a dialog was open
-        } else if (msg.message == WM_TIMER && g_recoverTimer &&
-                   msg.wParam == g_recoverTimer) {
+        } else if (m.message == WM_TIMER && !m.hwnd && g_recoverTimer && m.wParam == g_recoverTimer) {
             KillTimer(nullptr, g_recoverTimer);
             g_recoverTimer = 0;
             Recover();
-        } else if (msg.message == WM_APP_RELOAD) {
+        } else if (m.message == WM_APP_RELOAD) {
             LoadSettings();
             RegisterHotkey();
-        } else if (msg.message == WM_APP_STOP) {
-            break;
         } else {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+            TranslateMessage(&m);
+            DispatchMessageW(&m);
         }
+        return true;
+    };
+    bool running = true;
+    while (running) {
+        if (GetMessageW(&msg, nullptr, 0, 0) <= 0) {
+            break;
+        }
+        running = handle(msg);
     }
     if (g_recoverTimer) {
         KillTimer(nullptr, g_recoverTimer);
@@ -2547,6 +4212,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
     if (g_hotkeyRegistered) {
         UnregisterHotKey(nullptr, kHotkeyId);
     }
+    flow::Shutdown();
+    reopen::Stop();
     RestoreOnUnload();  // power plan and priorities, if Game Mode is still on
     if (g_notifyWnd) {
         NOTIFYICONDATAW nid = {sizeof(nid)};
@@ -2555,6 +4222,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         Shell_NotifyIconW(NIM_DELETE, &nid);
         DestroyWindow(g_notifyWnd);
     }
+    GdiplusOff();
     return 0;
 }
 
