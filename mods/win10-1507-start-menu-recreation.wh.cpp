@@ -9628,6 +9628,9 @@ private:
                 if(dc && bitmap) {
                     ScopedSelectObject selected(dc.get(),bitmap.get());
                     if(selected.IsValid()) {
+                        // A new memory DC defaults to opaque text backgrounds.
+                        // Preserve the tile face behind text during the flip.
+                        ScopedBkMode bk(dc.get(), TRANSPARENT);
                         bool oldLogo=weatherShowLogo_;float progress=weatherFlipProgress_;
                         weatherFlipping_=false;weatherShowLogo_=progress>=0.5f ? !oldLogo : oldLogo;
                         RECT face{0,0,w,h}; DrawSingleTile(dc.get(),tile,face,hovered,accent,1.0f);
@@ -22612,20 +22615,14 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        // On a settings reload the old helper may still be exiting. Allow it
-        // time to release its process-owned mutex instead of losing the launch.
-        for (int attempt=0; attempt<100; ++attempt) {
-            g_toolModProcessMutex=CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-            if (!g_toolModProcessMutex) {
-                Wh_Log(L"CreateMutex failed");
-                ExitProcess(1);
-            }
-            if (GetLastError()!=ERROR_ALREADY_EXISTS) break;
-            CloseHandle(g_toolModProcessMutex);
-            g_toolModProcessMutex=nullptr;
-            Sleep(100);
-        }
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
@@ -22747,8 +22744,8 @@ void Wh_ModUninit() {
 
 } // namespace Menu81
 
-// Global legacy-tool marker recognized by Windhawk 2.0. The 1.7 launcher
-// continues to use the Menu81 runtime through its existing lifecycle.
+// Global tool callbacks recognized by Windhawk 2.0 and used by the 1.7
+// launcher; they forward to the Menu81 tool runtime.
 // Windhawk exports global functions and checks for _Z14WhTool_ModInitv.
 BOOL WhTool_ModInit() {
     return Menu81::ToolRuntimeInit();
