@@ -83,10 +83,9 @@ If a renderer can't find that
 row's replacement, it keeps the original font. Rules use the active process's
 weight settings and apply wherever the mod is active.
 
-Choose replacement families that differ from your source families. Cached
-GDI drawing and DirectWrite font fallback keep configured replacement
-families to avoid applying a second substitution. New font requests still
-follow the replacement settings.
+A rule's destination takes priority if another rule or list includes it as
+a source. This keeps the replacement family when an app creates a bold or
+underlined font from it.
 
 ## Use different fonts in different apps
 
@@ -701,18 +700,15 @@ const ReplacementFont* FindRuleReplacement(std::wstring_view family,
 
 const ReplacementFont* SelectReplacement(std::wstring_view family,
                                          const Runtime& rt, bool latePass) {
-    const auto* ruleFont = FindRuleReplacement(family, rt);
-    // DrawText and DirectWrite fallback can see the result of an earlier
-    // substitution. Keep configured destinations on those later passes.
-    if (latePass) {
-        for (const auto& rule : rt.fontRules) {
-            if (IsTargetFamily(family, rule.replacement)) {
-                return nullptr;
-            }
+    // Apps can create another font from a LOGFONT that already has the
+    // replacement face. Keep rule destinations on creation and draw paths.
+    for (const auto& rule : rt.fontRules) {
+        if (IsTargetFamily(family, rule.replacement)) {
+            return nullptr;
         }
     }
     bool isDefaultFont = IsTargetFamily(family, rt.defaultFont);
-    if (ruleFont) {
+    if (const auto* ruleFont = FindRuleReplacement(family, rt)) {
         return latePass && isDefaultFont ? nullptr : ruleFont;
     }
     bool listed = std::any_of(rt.replaceFamilies.begin(), rt.replaceFamilies.end(),
@@ -923,7 +919,12 @@ std::wstring ChooseGdiFace(HDC dc, const std::vector<const GdiCandidate*>& candi
 }
 
 bool ResolveGdiFaces(ReplacementFont& font, const GdiFontCatalog& catalog) {
-    if (!catalog.dc || catalog.failed || font.family.size() >= LF_FACESIZE) {
+    if (font.family.size() >= LF_FACESIZE) {
+        Wh_Log(L"Font family '%s' is too long for GDI (maximum %d characters)",
+               font.family.c_str(), LF_FACESIZE - 1);
+        return false;
+    }
+    if (!catalog.dc || catalog.failed) {
         return false;
     }
 
@@ -1205,8 +1206,14 @@ std::shared_ptr<Runtime> BuildRuntime(Settings settings, bool refreshFonts) {
     if (catalog.dc) {
         LOGFONTW filter{};
         filter.lfCharSet = DEFAULT_CHARSET;
-        EnumFontFamiliesExW(catalog.dc, &filter, GdiEnumProc,
-                            reinterpret_cast<LPARAM>(&catalog), 0);
+        int result = EnumFontFamiliesExW(catalog.dc, &filter, GdiEnumProc,
+                                         reinterpret_cast<LPARAM>(&catalog), 0);
+        if (!result || catalog.failed) {
+            catalog.failed = true;
+            Wh_Log(L"GDI font enumeration did not complete");
+        }
+    } else {
+        Wh_Log(L"Could not create a device context for GDI font resolution");
     }
     std::unordered_map<std::wstring, ReplacementFont> resolvedFonts;
     auto resolveFont = [&](const std::wstring& family) -> const ReplacementFont& {
@@ -1299,7 +1306,8 @@ void ApplyGdiFaceDecision(const Runtime& rt,
         return;
     }
 
-    int newWeight = ChooseGdiWeight(SourceWeight(NamedFontWeight(lower), weight), rt);
+    int namedWeight = IsTargetFamily(lower, *font) ? 0 : NamedFontWeight(lower);
+    int newWeight = ChooseGdiWeight(SourceWeight(namedWeight, weight), rt);
     const auto& replacement = GdiFaceForWeight(*font, newWeight);
     if (replacement.empty()) {
         return;
@@ -2322,7 +2330,7 @@ BOOL Wh_ModInit() {
         // recover without restarting the target process.
         Wh_Log(
             L"Font family '%s' is unavailable. Check the name and installation, "
-            L"then change a setting to try again.", runtime->settings.fontFamily.c_str());
+            L"then change a setting to try again.", runtime->defaultFont.family.c_str());
     }
 
     Wh_Log(L"Initialization complete (GDI=%d DirectWrite=%d)",
