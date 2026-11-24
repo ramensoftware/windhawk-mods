@@ -2,11 +2,11 @@
 // @id              spotlight-for-windows
 // @name            Spotlight Search for Windows
 // @description     Spotlight-style launcher: frosted glass, themes, icons, drag, hover zoom, recents, all-drive search, many animations
-// @version         3.0.0
+// @version         3.1.0
 // @author          itzderix
-// @include         explorer.exe
+// @include         windhawk.exe
 // @github          https://github.com/itzderix
-// @compilerOptions -lgdi32 -luser32 -lshell32 -luxtheme -lshlwapi -ladvapi32 -lole32
+// @compilerOptions -lgdi32 -luser32 -lshell32 -luxtheme -lshlwapi -ladvapi32 -lole32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -193,6 +193,7 @@ A minimal, centered search bar with a frosted-glass look.
 #include <uxtheme.h>
 #include <shellapi.h>
 #include <shlwapi.h>
+#include <shellscalingapi.h>
 
 #include <algorithm>
 #include <cmath>
@@ -203,6 +204,8 @@ A minimal, centered search bar with a frosted-glass look.
 #include <set>
 #include <string>
 #include <vector>
+
+extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 // ---------------------------------------------------------------- types ---
 
@@ -260,12 +263,10 @@ enum { PU_NONE, PU_JELLY, PU_POP, PU_SHAKE, PU_BOUNCE };
 
 static const wchar_t* kClass = L"WindhawkSpotlightWnd";
 
-static HANDLE g_mutex = nullptr;
 static HANDLE g_thread = nullptr;
 static DWORD g_threadId = 0;
 static HWND g_hwnd = nullptr;
 static HTHEME g_theme = nullptr;
-static bool g_owner = false;
 
 static struct {
     std::wstring hotkey, theme, webUrl, animation, switchAnim, position, browser, customBrowser,
@@ -400,6 +401,36 @@ static std::wstring UrlEnc(const std::wstring& s) {
     return o;
 }
 
+// Resolves a System32 tool. When this (tool mod) process is 32-bit (Windhawk 1.x),
+// plain names would resolve through SysWOW64, so go through Sysnative to start the
+// 64-bit version. Falls back to the plain name if the file is not found.
+static std::wstring Sys32(const std::wstring& exe) {
+    if (exe.empty() || exe.find(L':') != std::wstring::npos || exe[0] == L'\\' || exe[0] == L'/')
+        return exe;
+    wchar_t win[MAX_PATH];
+    UINT n = GetWindowsDirectoryW(win, MAX_PATH);
+    if (!n || n >= MAX_PATH) return exe;
+    BOOL wow = FALSE;
+    IsWow64Process(GetCurrentProcess(), &wow);
+    std::wstring p = std::wstring(win) + (wow ? L"\\Sysnative\\" : L"\\System32\\") + exe;
+    if (PathFileExistsW(p.c_str())) return p;
+    if (exe.find(L'.') == std::wstring::npos) {  // name given without extension
+        p += L".exe";
+        if (PathFileExistsW(p.c_str())) return p;
+    }
+    return exe;
+}
+
+// DPI scale (1.0 = 96 dpi) of a monitor.
+static double MonDpi(HMONITOR hm) {
+    UINT dx = 96, dy = 96;
+    if (hm && SUCCEEDED(GetDpiForMonitor(hm, MDT_EFFECTIVE_DPI, &dx, &dy)) && dx) return dx / 96.0;
+    HDC sdc = GetDC(nullptr);
+    double d = GetDeviceCaps(sdc, LOGPIXELSX) / 96.0;
+    ReleaseDC(nullptr, sdc);
+    return d;
+}
+
 // -------------------------------------------------------------- browser ---
 
 static std::wstring RegAppPath(const wchar_t* exe) {
@@ -408,7 +439,8 @@ static std::wstring RegAppPath(const wchar_t* exe) {
     for (HKEY root : roots) {
         wchar_t b[MAX_PATH * 2];
         DWORD sz = sizeof(b);
-        if (RegGetValueW(root, key.c_str(), nullptr, RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ,
+        if (RegGetValueW(root, key.c_str(), nullptr,
+                         RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_SUBKEY_WOW6464KEY,
                          nullptr, b, &sz) == ERROR_SUCCESS) {
             std::wstring p = b;
             if (!p.empty() && p.front() == L'"') {
@@ -430,28 +462,34 @@ static void ResolveBrowser() {
     std::vector<std::wstring> fb;
     if (b == L"chrome") {
         exe = L"chrome.exe"; g_browserName = L"Chrome";
-        fb = {Env(L"%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"),
+        fb = {Env(L"%ProgramW6432%\\Google\\Chrome\\Application\\chrome.exe"),
+              Env(L"%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"),
               Env(L"%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"),
               Env(L"%LOCALAPPDATA%\\Google\\Chrome\\Application\\chrome.exe")};
     } else if (b == L"edge") {
         exe = L"msedge.exe"; g_browserName = L"Edge";
         fb = {Env(L"%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe"),
+              Env(L"%ProgramW6432%\\Microsoft\\Edge\\Application\\msedge.exe"),
               Env(L"%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe")};
     } else if (b == L"firefox") {
         exe = L"firefox.exe"; g_browserName = L"Firefox";
-        fb = {Env(L"%ProgramFiles%\\Mozilla Firefox\\firefox.exe"),
+        fb = {Env(L"%ProgramW6432%\\Mozilla Firefox\\firefox.exe"),
+              Env(L"%ProgramFiles%\\Mozilla Firefox\\firefox.exe"),
               Env(L"%ProgramFiles(x86)%\\Mozilla Firefox\\firefox.exe")};
     } else if (b == L"brave") {
         exe = L"brave.exe"; g_browserName = L"Brave";
-        fb = {Env(L"%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"),
+        fb = {Env(L"%ProgramW6432%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"),
+              Env(L"%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"),
               Env(L"%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe")};
     } else if (b == L"opera") {
         exe = L"opera.exe"; g_browserName = L"Opera";
         fb = {Env(L"%LOCALAPPDATA%\\Programs\\Opera\\opera.exe"),
+              Env(L"%ProgramW6432%\\Opera\\opera.exe"),
               Env(L"%ProgramFiles%\\Opera\\opera.exe")};
     } else if (b == L"vivaldi") {
         exe = L"vivaldi.exe"; g_browserName = L"Vivaldi";
         fb = {Env(L"%LOCALAPPDATA%\\Vivaldi\\Application\\vivaldi.exe"),
+              Env(L"%ProgramW6432%\\Vivaldi\\Application\\vivaldi.exe"),
               Env(L"%ProgramFiles%\\Vivaldi\\Application\\vivaldi.exe")};
     } else if (b == L"custom") {
         std::wstring p = Env(S.customBrowser.c_str());
@@ -652,33 +690,41 @@ static bool TryCalc(const std::wstring& q, double& out) {
 }
 
 // ---------------------------------------------------------------- recents ---
+// Stored as one value per field (portable Windhawk keeps storage in an INI file,
+// which can't hold line breaks): recentCount, recent<i>Name, recent<i>Target, recent<i>Cat.
+
+static std::wstring RKey(const wchar_t* field, int i) {
+    return L"recent" + std::to_wstring(i) + field;
+}
 
 static void SaveRecents() {
-    std::wstring s;
-    for (auto& r : g_recents)
-        s += r.name + L"\t" + r.target + L"\t" + std::to_wstring(r.cat) + L"\n";
-    Wh_SetStringValue(L"recents", s.c_str());
+    int old = Wh_GetIntValue(L"recentCount", 0);
+    int n = (int)g_recents.size();
+    Wh_SetIntValue(L"recentCount", n);
+    for (int i = 0; i < n; i++) {
+        Wh_SetStringValue(RKey(L"Name", i).c_str(), g_recents[i].name.c_str());
+        Wh_SetStringValue(RKey(L"Target", i).c_str(), g_recents[i].target.c_str());
+        Wh_SetIntValue(RKey(L"Cat", i).c_str(), g_recents[i].cat);
+    }
+    for (int i = n; i < old; i++) {
+        Wh_DeleteValue(RKey(L"Name", i).c_str());
+        Wh_DeleteValue(RKey(L"Target", i).c_str());
+        Wh_DeleteValue(RKey(L"Cat", i).c_str());
+    }
 }
 
 static void LoadRecents() {
     g_recents.clear();
-    std::vector<wchar_t> buf(16384, 0);
-    Wh_GetStringValue(L"recents", buf.data(), buf.size() - 1);
-    std::wstring all(buf.data());
-    size_t pos = 0;
-    while (pos < all.size()) {
-        size_t e = all.find(L'\n', pos);
-        if (e == std::wstring::npos) e = all.size();
-        std::wstring line = all.substr(pos, e - pos);
-        pos = e + 1;
-        size_t a = line.find(L'\t');
-        if (a == std::wstring::npos) continue;
-        size_t b = line.find(L'\t', a + 1);
-        if (b == std::wstring::npos) continue;
+    Wh_DeleteValue(L"recents");  // old single-value format
+    int n = Clampi(Wh_GetIntValue(L"recentCount", 0), 0, 20);
+    for (int i = 0; i < n; i++) {
+        std::vector<wchar_t> name(1024, 0), target(4096, 0);
+        Wh_GetStringValue(RKey(L"Name", i).c_str(), name.data(), (size_t)name.size() - 1);
+        Wh_GetStringValue(RKey(L"Target", i).c_str(), target.data(), (size_t)target.size() - 1);
         Recent r;
-        r.name = line.substr(0, a);
-        r.target = line.substr(a + 1, b - a - 1);
-        r.cat = _wtoi(line.c_str() + b + 1);
+        r.name = name.data();
+        r.target = target.data();
+        r.cat = Wh_GetIntValue(RKey(L"Cat", i).c_str(), C_APP);
         if (!r.name.empty() && !r.target.empty()) g_recents.push_back(r);
     }
 }
@@ -702,12 +748,15 @@ static void AddRecent(const Item& it) {
 
 // ---------------------------------------------------------------- index ---
 
+static bool StopReq() { return WaitForSingleObject(g_stopEvt, 0) == WAIT_OBJECT_0; }
+
 static void ScanDir(const std::wstring& dir, std::vector<Entry>& out, int depth) {
     if (depth > 6 || dir.empty()) return;
     WIN32_FIND_DATAW fd;
     HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
     if (h == INVALID_HANDLE_VALUE) return;
     do {
+        if (StopReq()) break;
         if (fd.cFileName[0] == L'.') {
             if (!fd.cFileName[1] || (fd.cFileName[1] == L'.' && !fd.cFileName[2])) continue;
         }
@@ -734,21 +783,18 @@ static void BuildIndex() {
     std::wstring od = Env(L"%OneDrive%");
     if (!od.empty()) ScanDir(od + L"\\Desktop", all, 0);
 
-    static const struct { const wchar_t* n; const wchar_t* t; } kBuiltins[] = {
-        {L"Settings", L"ms-settings:"},
-        {L"Calculator", L"calc.exe"},
-        {L"Microsoft Store", L"ms-windows-store:"},
-        {L"Task Manager", L"taskmgr.exe"},
-        {L"File Explorer", L"explorer.exe"},
-        {L"Command Prompt", L"cmd.exe"},
-        {L"PowerShell", L"powershell.exe"},
-        {L"Windows Terminal", L"wt.exe"},
-        {L"Control Panel", L"control.exe"},
-        {L"Notepad", L"notepad.exe"},
-        {L"Registry Editor", L"regedit.exe"},
-        {L"Device Manager", L"devmgmt.msc"},
-    };
-    for (auto& b : kBuiltins) all.push_back({b.n, b.t, true});
+    all.push_back({L"Settings", L"ms-settings:", true});
+    all.push_back({L"Calculator", Sys32(L"calc.exe"), true});
+    all.push_back({L"Microsoft Store", L"ms-windows-store:", true});
+    all.push_back({L"Task Manager", Sys32(L"taskmgr.exe"), true});
+    all.push_back({L"File Explorer", L"explorer.exe", true});
+    all.push_back({L"Command Prompt", Sys32(L"cmd.exe"), true});
+    all.push_back({L"PowerShell", Sys32(L"WindowsPowerShell\\v1.0\\powershell.exe"), true});
+    all.push_back({L"Windows Terminal", L"wt.exe", true});
+    all.push_back({L"Control Panel", Sys32(L"control.exe"), true});
+    all.push_back({L"Notepad", Sys32(L"notepad.exe"), true});
+    all.push_back({L"Registry Editor", Sys32(L"regedit.exe"), true});
+    all.push_back({L"Device Manager", Sys32(L"devmgmt.msc"), true});
 
     std::set<std::wstring> seen;
     g_index.clear();
@@ -766,8 +812,6 @@ struct ScanCtx {
     std::wstring pool, poolL;
     std::vector<std::wstring> excl;
 };
-
-static bool StopReq() { return WaitForSingleObject(g_stopEvt, 0) == WAIT_OBJECT_0; }
 
 static uint32_t AddRec(ScanCtx& c, const wchar_t* name, uint32_t parent, uint16_t flags) {
     FRec r;
@@ -794,6 +838,7 @@ static void ScanFiles(ScanCtx& cx, const std::wstring& dir, uint32_t parentIdx, 
     if (h == INVALID_HANDLE_VALUE) return;
     std::vector<std::pair<uint32_t, std::wstring>> subs;
     do {
+        if (StopReq()) break;
         if (fd.cFileName[0] == L'.') {
             if (!fd.cFileName[1] || (fd.cFileName[1] == L'.' && !fd.cFileName[2])) continue;
         }
@@ -2059,16 +2104,15 @@ static void ShowWnd() {
     g_query.clear();
     g_hov = 1.0;
 
-    HDC sdc = GetDC(nullptr);
-    g_dpi = GetDeviceCaps(sdc, LOGPIXELSX) / 96.0;
-    ReleaseDC(nullptr, sdc);
-    ApplyScale();
-    UpdateTheme();
-
+    // DPI of the monitor the bar opens on (not the system DPI)
     POINT pt;
     GetCursorPos(&pt);
+    HMONITOR hmHome = MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
     MONITORINFO mi{sizeof(mi)};
-    GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY), &mi);
+    GetMonitorInfoW(hmHome, &mi);
+    g_dpi = MonDpi(hmHome);
+    ApplyScale();
+    UpdateTheme();
     g_homeWork = mi.rcWork;
     ComputeBase(g_homeWork);
 
@@ -2076,12 +2120,15 @@ static void ShowWnd() {
     g_work = g_homeWork;
     if (g_userMoved) {
         POINT mp = {g_dragCx, g_dragTop};
+        HMONITOR hm2 = MonitorFromPoint(mp, MONITOR_DEFAULTTOPRIMARY);
         MONITORINFO m2{sizeof(m2)};
-        GetMonitorInfoW(MonitorFromPoint(mp, MONITOR_DEFAULTTOPRIMARY), &m2);
+        GetMonitorInfoW(hm2, &m2);
         g_work = m2.rcWork;
         monRect = m2.rcMonitor;
         g_baseCx = g_dragCx;
         g_baseTop = g_dragTop;
+        g_dpi = MonDpi(hm2);
+        ApplyScale();
     } else {
         g_baseCx = g_origCx;
         g_baseTop = g_origTop;
@@ -2106,13 +2153,11 @@ static void ShowWnd() {
 
     SetWindowPos(g_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
 
-    HWND fg = GetForegroundWindow();
-    DWORD ft = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-    DWORD me = GetCurrentThreadId();
-    if (ft && ft != me) AttachThreadInput(me, ft, TRUE);
+    // Allows to take focus without attaching to another thread's input queue.
+    INPUT input{};
+    SendInput(1, &input, sizeof(INPUT));
     SetForegroundWindow(g_hwnd);
     SetFocus(g_hwnd);
-    if (ft && ft != me) AttachThreadInput(me, ft, FALSE);
 
     g_shownTick = GetTickCount64();
     g_lastInput = g_shownTick;
@@ -2166,6 +2211,7 @@ static void Activate(int i) {
             args = file.substr(sp + 1);
             file = file.substr(0, sp);
         }
+        file = Sys32(file);  // 64-bit System32 tools even when running as 32-bit
         ShellExecuteW(nullptr, L"open", file.c_str(), args.empty() ? nullptr : args.c_str(),
                       nullptr, SW_SHOWNORMAL);
     } else if (it.kind == 4) {
@@ -2232,6 +2278,8 @@ static void ResetPosition() {
     g_dragging = false;
     if (GetCapture() == g_hwnd) ReleaseCapture();
     g_work = g_homeWork;
+    g_dpi = MonDpi(MonitorFromRect(&g_homeWork, MONITOR_DEFAULTTONEAREST));
+    ApplyScale();
     ComputeBase(g_homeWork);
     g_baseCx = g_origCx;
     g_baseTop = g_origTop;
@@ -2402,12 +2450,18 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 g_baseTop = g_dragBase0.y + dy;
                 g_dragCx = g_baseCx;
                 g_dragTop = g_baseTop;
+                HMONITOR hm = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
                 MONITORINFO mi{sizeof(mi)};
-                if (GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi))
-                    g_work = mi.rcWork;
+                if (GetMonitorInfoW(hm, &mi)) g_work = mi.rcWork;
+                double nd = MonDpi(hm);
                 g_lastInput = GetTickCount64();
-                PlacePanel();
-                Redraw();
+                if (std::fabs(nd - g_dpi) > 0.001) {  // moved onto a monitor with another DPI
+                    g_dpi = nd;
+                    Layout();
+                } else {
+                    PlacePanel();
+                    Redraw();
+                }
                 return 0;
             }
             int i = HitRow(GET_Y_LPARAM(lp));
@@ -2444,7 +2498,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 static DWORD WINAPI UiThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    HINSTANCE hi = GetModuleHandleW(nullptr);
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    HINSTANCE hi = (HINSTANCE)&__ImageBase;  // this mod's module, not the host exe
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
     wc.style = CS_DBLCLKS;  // double-click resets the dragged position
@@ -2452,7 +2507,11 @@ static DWORD WINAPI UiThread(LPVOID) {
     wc.hInstance = hi;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kClass;
-    RegisterClassExW(&wc);
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"RegisterClassExW failed");
+        CoUninitialize();
+        return 0;
+    }
 
     g_hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW, kClass,
                              L"Spotlight", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, hi, nullptr);
@@ -2461,9 +2520,7 @@ static DWORD WINAPI UiThread(LPVOID) {
         LoadSettings();
         LoadRecents();
         UpdateTheme();
-        HDC sdc = GetDC(nullptr);
-        g_dpi = GetDeviceCaps(sdc, LOGPIXELSX) / 96.0;
-        ReleaseDC(nullptr, sdc);
+        g_dpi = MonDpi(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY));
         ApplyScale();
         RegisterHot();
         SetTimer(g_hwnd, TIMER_BLINK, 530, nullptr);
@@ -2492,17 +2549,9 @@ static DWORD WINAPI UiThread(LPVOID) {
     return 0;
 }
 
-// ------------------------------------------------------- Windhawk hooks ---
+// ------------------------------------------------------- tool mod hooks ---
 
-BOOL Wh_ModInit() {
-    // Several explorer.exe processes may load this mod; only one should own the UI.
-    g_mutex = CreateMutexW(nullptr, FALSE, L"Local\\WindhawkSpotlightForWindows");
-    if (g_mutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
-        return TRUE;
-    }
-    g_owner = true;
+BOOL WhTool_ModInit() {
     InitializeCriticalSection(&g_fcs);
     g_stopEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_rescanEvt = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -2511,32 +2560,185 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (g_hwnd) PostMessageW(g_hwnd, WM_APP_SETTINGS, 0, 0);
 }
 
-void Wh_ModUninit() {
-    if (!g_owner) return;
+void WhTool_ModUninit() {
     if (g_stopEvt) SetEvent(g_stopEvt);
     if (g_thread) {
-        for (int i = 0; i < 30; i++) {
+        // Wait until the UI thread has really exited (retry until its queue exists).
+        while (WaitForSingleObject(g_thread, 100) == WAIT_TIMEOUT)
             PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
-            if (WaitForSingleObject(g_thread, 100) == WAIT_OBJECT_0) break;
-        }
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
     if (g_idxThread) {
-        WaitForSingleObject(g_idxThread, 5000);
+        WaitForSingleObject(g_idxThread, INFINITE);
         CloseHandle(g_idxThread);
         g_idxThread = nullptr;
     }
     if (g_stopEvt) { CloseHandle(g_stopEvt); g_stopEvt = nullptr; }
     if (g_rescanEvt) { CloseHandle(g_rescanEvt); g_rescanEvt = nullptr; }
     DeleteCriticalSection(&g_fcs);
-    if (g_mutex) {
-        CloseHandle(g_mutex);
-        g_mutex = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod launcher code (from the Windhawk wiki, "Mods as tools").
+// Runs the mod in a dedicated windhawk.exe process.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isService = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
     }
-    g_owner = false;
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isService) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD_PTR entryPoint =
+            (DWORD_PTR)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        Wh_SetFunctionHook((void*)entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID L"\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{};
+    si.cb = sizeof(STARTUPINFO);
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE,
+                                 CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
