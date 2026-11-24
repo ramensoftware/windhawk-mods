@@ -946,6 +946,7 @@ enum CustomMsg : UINT {
 };
 
 static std::atomic<bool> g_isRecording{false};
+static std::atomic<bool> g_workerRunning{false};
 static std::atomic<bool> g_isPaused{false};
 static std::atomic<bool> g_stopRequested{false};
 static std::atomic<bool> g_isSelectingRegion{false};
@@ -3808,7 +3809,8 @@ static void RecordingWorkerProc(RECT targetRect, bool useCustomLayout) {
 
 static void StopRecordingSync() {
     std::lock_guard<std::mutex> lock(g_recordLifecycleMutex);
-    if (g_isRecording.load() || (g_recordThread && g_recordThread->joinable())) {
+    if (g_isRecording.load() || g_workerRunning.load() ||
+        (g_recordThread && g_recordThread->joinable())) {
         g_stopRequested = true;
         if (g_recordThread && g_recordThread->joinable()) {
             g_recordThread->join();
@@ -3820,7 +3822,7 @@ static void StopRecordingSync() {
 
 static void JoinFinishedRecordingThread() {
     std::lock_guard<std::mutex> lock(g_recordLifecycleMutex);
-    if (!g_isRecording.load() && g_recordThread && g_recordThread->joinable()) {
+    if (!g_workerRunning.load() && g_recordThread && g_recordThread->joinable()) {
         g_recordThread->join();
         g_recordThread.reset();
     }
@@ -3828,13 +3830,17 @@ static void JoinFinishedRecordingThread() {
 
 static void StartRecordingRect(const RECT& rect, bool useCustomLayout = false) {
     std::lock_guard<std::mutex> lock(g_recordLifecycleMutex);
-    if (g_unloading.load() || g_isRecording.load()) return;
+    if (g_unloading.load() || g_workerRunning.load()) return;
     if (g_recordThread && g_recordThread->joinable()) {
-        g_recordThread->join();
-        g_recordThread.reset();
+        g_recordThread->join();  // Already finished, returns at once.
     }
+    g_recordThread.reset();
     g_stopRequested = false;
-    g_recordThread.emplace(RecordingWorkerProc, rect, useCustomLayout);
+    g_workerRunning = true;
+    g_recordThread.emplace([=] {
+        RecordingWorkerProc(rect, useCustomLayout);
+        g_workerRunning = false;
+    });
 }
 
 
@@ -5091,7 +5097,7 @@ static LRESULT CALLBACK RegionSelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
 }
 
 static void LaunchRegionSelector() {
-    if (g_isRecording.load() || g_isSelectingRegion.load()) return;
+    if (g_unloading.load() || g_isRecording.load() || g_workerRunning.load() || g_isSelectingRegion.load()) return;
     g_isSelectingRegion = true;
     g_selState = {};
     g_selState.virtLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -5160,13 +5166,13 @@ static LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             if (g_unloading.load()) return 0;
             int id = static_cast<int>(wParam);
             if (id == HOTKEY_TOGGLE_BAR) {
-                if (g_isRecording.load()) g_stopRequested = true;
+                if (g_isRecording.load() || g_workerRunning.load()) g_stopRequested = true;
                 else if (!g_isSelectingRegion.load()) {
                     if (g_pill.visible) HidePillBar();
                     else ShowPillBar(false);
                 }
             } else if (id == HOTKEY_RECORD_REGION) {
-                if (g_isRecording.load()) g_stopRequested = true;
+                if (g_isRecording.load() || g_workerRunning.load()) g_stopRequested = true;
                 else { HidePillBar(); LaunchRegionSelector(); }
             } else if (id == HOTKEY_PAUSE_RESUME) {
                 if (g_isRecording.load()) {
@@ -5184,9 +5190,9 @@ static LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             RefreshUiAfterSettingsReload(hwnd);
             return 0;
         case WM_APP_START_REGION_RECORD:
-            if (g_unloading.load()) return 0;
+            if (g_unloading.load() || g_workerRunning.load()) return 0;
             Sleep(80);
-            if (g_unloading.load()) return 0;
+            if (g_unloading.load() || g_workerRunning.load()) return 0;
             ShowRegionBorder(g_pendingRegionRect);
             StartRecordingRect(g_pendingRegionRect);
             return 0;
