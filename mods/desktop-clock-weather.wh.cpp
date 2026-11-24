@@ -2,7 +2,7 @@
 // @id              desktop-clock-weather
 // @name            Desktop Clock & Weather
 // @description     Time, weekday, date and weekly weather on the desktop - behind icons, not clickable
-// @version         1.0.6
+// @version         1.0.7
 // @author          DineroOne
 // @license         MIT
 // @github          https://github.com/DineroOne
@@ -30,13 +30,20 @@ It first samples the pixels visible behind the widget, when the desktop is unobs
 is unavailable, it estimates brightness from the wallpaper file and Windows wallpaper layout settings.
 This processing is local; no wallpaper data is sent anywhere.
 
+## Why this is a separate mod
+
+[Desktop Live Overlay](https://windhawk.net/mods/desktop-live-overlay) is a general-purpose overlay built from free-form text patterns and system metrics.
+This mod does one narrower thing: a structured 3-7 day forecast grid (weekday, icon, high/low, precipitation chance, as a row or a column)
+with an independent font, size and color for the time, weekday, date and weather, an element order, an overall scale and a text color that follows the wallpaper.
+It uses Open-Meteo instead of wttr.in. If the maintainer prefers, the forecast part can instead be offered to the author of Desktop Live Overlay as a contribution.
+
 ## Network use
 
 Weather is the only feature that uses the network. Requests are made only when **Show weather** is on,
 a city is configured, and `weather` is included in the **Order of elements** setting.
 The mod sends HTTPS requests to two Open-Meteo hosts:
 
-- `geocoding-api.open-meteo.com` - when the city or the date/weekday language changes, to turn the city name into coordinates (the city name and language code are sent).
+- `geocoding-api.open-meteo.com` - once each time the mod loads (for example at every Explorer start) and when the city or the date/weekday language changes, to turn the city name into coordinates (the city name and language code are sent).
 - `api.open-meteo.com` - at startup and then every N minutes (30 by default, see **Update weather every**), to get the forecast (the coordinates are sent). Failed requests are retried after about one minute.
 
 Like any web server, Open-Meteo can see your IP address. No API key or account is required.
@@ -1205,6 +1212,14 @@ static ULONG_PTR g_gdiplusToken = 0;
 static bool g_windowClassRegistered = false;
 static HWND g_shellHost = nullptr;
 
+// The mod's own module (not explorer.exe), so the class is tied to this copy's code.
+static HINSTANCE GetCurrentModuleHandle() {
+    HMODULE module = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       kClass, &module);
+    return module;
+}
+
 static void WINAPI CreateUiOnShellThread(void* parameter) {
     auto* context = static_cast<CreateUiContext*>(parameter);
     if (!context || WaitForSingleObject(g_evStop, 0) == WAIT_OBJECT_0) return;
@@ -1216,21 +1231,19 @@ static void WINAPI CreateUiOnShellThread(void* parameter) {
         return;
     }
 
-    HINSTANCE instance = GetModuleHandleW(nullptr);
+    HINSTANCE instance = GetCurrentModuleHandle();
     WNDCLASSW wc = {};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = instance;
     wc.lpszClassName = kClass;
-    if (RegisterClassW(&wc)) {
-        g_windowClassRegistered = true;
-    } else if (GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
-        g_windowClassRegistered = true;
-    } else {
+    // Any failure (including ERROR_CLASS_ALREADY_EXISTS) is a failure: an existing class could belong to an unloaded copy of the mod.
+    if (!instance || !RegisterClassW(&wc)) {
         Wh_Log(L"RegisterClass failed: %lu", GetLastError());
         GdiplusShutdown(g_gdiplusToken);
         g_gdiplusToken = 0;
         return;
     }
+    g_windowClassRegistered = true;
 
     HWND window = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_NOPARENTNOTIFY,
@@ -1263,7 +1276,7 @@ static void WINAPI DestroyUiOnShellThread(void*) {
     g_hwnd = nullptr;
     g_shellHost = nullptr;
 
-    HINSTANCE instance = GetModuleHandleW(nullptr);
+    HINSTANCE instance = GetCurrentModuleHandle();
     if (g_windowClassRegistered) {
         UnregisterClassW(kClass, instance);
         g_windowClassRegistered = false;
@@ -1313,13 +1326,27 @@ static DWORD WINAPI UiThread(LPVOID) {
         cleanupTarget = (progman && pid == GetCurrentProcessId()) ? progman : nullptr;
     }
     if (cleanupTarget && IsWindow(cleanupTarget)) {
-        if (!RunFromWindowThread(cleanupTarget, DestroyUiOnShellThread, nullptr))
-            Wh_Log(L"Could not dispatch desktop widget cleanup to shell thread");
+        if (!RunFromWindowThread(cleanupTarget, DestroyUiOnShellThread, nullptr)) {
+            Wh_Log(L"Could not dispatch desktop widget cleanup; sending WM_CLOSE to the widget");
+            // WM_CLOSE makes DefWindowProc destroy the window on its own thread; only then is the class released.
+            HWND window = g_hwnd;
+            if (window && IsWindow(window)) SendMessageW(window, WM_CLOSE, 0, 0);
+            g_hwnd = nullptr;
+            g_shellHost = nullptr;
+            if (g_windowClassRegistered) {
+                UnregisterClassW(kClass, GetCurrentModuleHandle());
+                g_windowClassRegistered = false;
+            }
+            if (g_gdiplusToken) {
+                GdiplusShutdown(g_gdiplusToken);
+                g_gdiplusToken = 0;
+            }
+        }
     } else {
         // The parent desktop window has already disappeared. Its child is gone too.
         g_hwnd = nullptr;
         if (g_windowClassRegistered) {
-            UnregisterClassW(kClass, GetModuleHandleW(nullptr));
+            UnregisterClassW(kClass, GetCurrentModuleHandle());
             g_windowClassRegistered = false;
         }
         if (g_gdiplusToken) {
