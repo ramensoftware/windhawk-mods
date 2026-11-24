@@ -11094,6 +11094,10 @@ void Wh_ModUninit() {
 } // namespace Menu1507
 #undef GUARDED
 
+BOOL WhTool_ModInit();
+void WhTool_ModSettingsChanged();
+void WhTool_ModUninit();
+
 namespace Menu81 {
 static std::atomic<bool> g_stopRequested{ false };
 
@@ -22542,9 +22546,9 @@ void ExplorerModUninit() {
 // The mod will load and run in a dedicated windhawk.exe process.
 //
 // Paste the code below as part of the mod code, and use these callbacks:
-// * ToolRuntimeInit
-// * ToolRuntimeSettingsChanged
-// * ToolRuntimeUninit
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
 //
 // Currently, other callbacks are not supported.
 //
@@ -22626,7 +22630,7 @@ BOOL Wh_ModInit() {
             ExitProcess(1);
         }
 
-        if (!ToolRuntimeInit()) {
+        if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
 
@@ -22722,7 +22726,7 @@ void Wh_ModSettingsChanged() {
         return;
     }
 
-    ToolRuntimeSettingsChanged();
+    WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
@@ -22736,7 +22740,7 @@ void Wh_ModUninit() {
         return;
     }
 
-    ToolRuntimeUninit();
+    WhTool_ModUninit();
     ExitProcess(0);
 }
 
