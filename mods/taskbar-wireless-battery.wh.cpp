@@ -7,7 +7,7 @@
 // @github          https://github.com/simonzk27
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lhid -lsetupapi -lshcore -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lhid -lsetupapi -lshcore -lshlwapi -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,6 +16,14 @@
 
 Shows the battery level of your wireless devices right next to the system tray
 on the Windows 11 taskbar.
+
+![Mouse and controller next to the system tray](https://raw.githubusercontent.com/simonzk27/windhawk-mod-assets/main/taskbar-wireless-battery/tray.png)
+
+Hover a device to see its details:
+
+![Mouse tooltip](https://raw.githubusercontent.com/simonzk27/windhawk-mod-assets/main/taskbar-wireless-battery/tooltip-mouse.png)
+
+![Controller tooltip](https://raw.githubusercontent.com/simonzk27/windhawk-mod-assets/main/taskbar-wireless-battery/tooltip-controller.png)
 
 ## Supported devices
 
@@ -46,7 +54,12 @@ SVG icon.
 
 - Windows 11 only.
 - If you enable the mod while Explorer is already running, the indicator
-  appears the next time the system tray is laid out or hovered with the mouse.
+  appears when the clock changes minute or when you hover the system tray.
+- Razer mice are read every 60 seconds by default (configurable), controllers
+  every 5 seconds.
+- Razer Synapse sends the same kind of requests to the mouse. Running it at the
+  same time can occasionally cause a missed reading, which is retried on the
+  next refresh.
 - Compatible with Windows 11 Taskbar Styler: the indicator is a `StackPanel`
   named `BatteryWidget` and can be styled with the target
   `StackPanel#BatteryWidget`.
@@ -88,7 +101,8 @@ SVG icon.
   $name: Hide disconnected devices
   $description: When disabled, devices that stop responding stay visible (dimmed) with their last known level
 - pollInterval: 60
-  $name: Battery refresh interval (seconds)
+  $name: Razer battery refresh interval (seconds)
+  $description: Controllers are checked every 5 seconds regardless of this value
 - deviceSpacing: 8
   $name: Spacing between devices (px)
 - showOnAllTaskbars: false
@@ -209,8 +223,9 @@ std::mutex g_devicesMutex;
 std::vector<DeviceState> g_devices;
 std::atomic<int> g_dataVersion{1};
 
-std::vector<WidgetInstance> g_instances;
-wux::DispatcherTimer g_uiTimer{nullptr};
+// Released on the taskbar thread in Wh_ModBeforeUninit.
+[[clang::no_destroy]] std::optional<std::vector<WidgetInstance>> g_instances{std::in_place};
+[[clang::no_destroy]] wux::DispatcherTimer g_uiTimer{nullptr};
 winrt::event_token g_uiTimerToken{};
 int g_renderedDataVersion = 0;
 int g_renderedSettingsVersion = 0;
@@ -237,11 +252,11 @@ std::wstring ToLower(std::wstring s) {
     return s;
 }
 
+std::atomic<bool> g_showOnAllTaskbars{false};
+std::atomic<Position> g_position{Position::LeftOfChevron};
+
 std::wstring ReadStringSetting(PCWSTR name) {
-    PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return result;
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 
 void LoadSettings() {
@@ -279,23 +294,25 @@ void LoadSettings() {
     s.showOnAllTaskbars = Wh_GetIntSetting(L"showOnAllTaskbars") != 0;
 
     for (int i = 0; i < 32; i++) {
-        PCWSTR match = Wh_GetStringSetting(L"devices[%d].match", i);
-        std::wstring matchStr = match ? match : L"";
-        Wh_FreeStringSetting(match);
+        std::wstring matchStr =
+            WindhawkUtils::StringSetting::make(L"devices[%d].match", i).get();
         if (matchStr.empty()) {
             continue;
         }
         DeviceOverride o;
         o.match = ToLower(matchStr);
-        PCWSTR displayName = Wh_GetStringSetting(L"devices[%d].displayName", i);
-        o.displayName = displayName ? displayName : L"";
-        Wh_FreeStringSetting(displayName);
-        PCWSTR customIcon = Wh_GetStringSetting(L"devices[%d].customIcon", i);
-        o.customIcon = customIcon ? customIcon : L"";
-        Wh_FreeStringSetting(customIcon);
+        o.displayName =
+            WindhawkUtils::StringSetting::make(L"devices[%d].displayName", i)
+                .get();
+        o.customIcon =
+            WindhawkUtils::StringSetting::make(L"devices[%d].customIcon", i)
+                .get();
         o.hide = Wh_GetIntSetting(L"devices[%d].hide", i) != 0;
         s.devices.push_back(std::move(o));
     }
+
+    g_showOnAllTaskbars = s.showOnAllTaskbars;
+    g_position = s.position;
 
     std::lock_guard<std::mutex> lock(g_settingsMutex);
     g_settings = std::move(s);
@@ -620,8 +637,11 @@ std::vector<XInputReading> PollXInput() {
         return readings;
     }
 
+    static int mismatchReloadedForCount = -1;
     if (xusbCount > CountXInputConnected() &&
+        mismatchReloadedForCount != xusbCount &&
         GetTickCount64() - g_lastXInputReload > 15000) {
+        mismatchReloadedForCount = xusbCount;
         Wh_Log(L"XInput sees fewer controllers than present, reloading");
         UnloadXInput();
         if (!LoadXInput()) {
@@ -801,8 +821,6 @@ void UpdateRazerCache(const std::vector<RazerReading>& readings,
 }
 
 DWORD WINAPI PollThreadProc(LPVOID) {
-    HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-
     ULONGLONG lastRazerPoll = 0;
     bool firstRun = true;
 
@@ -850,10 +868,6 @@ DWORD WINAPI PollThreadProc(LPVOID) {
     }
 
     UnloadXInput();
-
-    if (SUCCEEDED(hrCo)) {
-        CoUninitialize();
-    }
     return 0;
 }
 
@@ -1032,7 +1046,7 @@ wux::UIElement BuildDeviceItem(const Settings& settings,
         text.FontFamily(wuxm::FontFamily(settings.fontFamily));
         text.FontSize(settings.fontSize);
         if (settings.bold) {
-            text.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+            text.FontWeight(winrt::Windows::UI::Text::FontWeights::Bold());
         }
         text.VerticalAlignment(wux::VerticalAlignment::Center);
         if (effectiveBrush) {
@@ -1145,6 +1159,9 @@ void RenderInstance(WidgetInstance& inst,
 void RenderAll(bool force) {
     int dataVersion = g_dataVersion.load();
     int settingsVersion = g_settingsVersion.load();
+    if (!g_instances) {
+        return;
+    }
     if (!force && dataVersion == g_renderedDataVersion &&
         settingsVersion == g_renderedSettingsVersion) {
         return;
@@ -1157,7 +1174,7 @@ void RenderAll(bool force) {
     }
     Settings settings = GetSettingsCopy();
 
-    for (auto& inst : g_instances) {
+    for (auto& inst : *g_instances) {
         try {
             RenderInstance(inst, settings, devices);
         } catch (winrt::hresult_error const& e) {
@@ -1234,6 +1251,7 @@ struct KnownFrame {
     void* frameAbi = nullptr;
     TrayKind kind = TrayKind::Unknown;
     ULONGLONG lastDetectTick = 0;
+    TrayKind lastGuess = TrayKind::Unknown;
 };
 
 std::vector<KnownFrame> g_knownFrames;
@@ -1327,14 +1345,47 @@ KnownFrame& RememberFrame(wux::FrameworkElement const& frame) {
     return g_knownFrames.back();
 }
 
-TrayKind GetTrayKind(wux::FrameworkElement const& frame) {
+TrayKind DetectTrayKindFromContent(wuxc::Panel const& container) {
+    if (!container || container.ActualWidth() <= 0) {
+        return TrayKind::Unknown;
+    }
+    for (auto child : container.Children()) {
+        auto fe = child.try_as<wux::FrameworkElement>();
+        if (!fe || fe.Name() != L"ControlCenterButton") {
+            continue;
+        }
+        bool hasContent = fe.Visibility() == wux::Visibility::Visible &&
+                          fe.ActualWidth() > 0;
+        return hasContent ? TrayKind::Primary : TrayKind::Secondary;
+    }
+    return TrayKind::Unknown;
+}
+
+// Returns the confirmed kind (from the window under the tray or under the
+// cursor) when known, otherwise a best guess from the tray content, which is
+// re-evaluated on every call. `confirmed` tells which one it is.
+TrayKind GetTrayKind(wux::FrameworkElement const& frame,
+                     wuxc::Panel const& container,
+                     bool* confirmed = nullptr) {
     KnownFrame& known = RememberFrame(frame);
     ULONGLONG now = GetTickCount64();
     if (known.kind == TrayKind::Unknown && now - known.lastDetectTick >= 500) {
         known.lastDetectTick = now;
         known.kind = DetectTrayKindFromLayout(frame);
     }
-    return known.kind;
+    if (confirmed) {
+        *confirmed = known.kind != TrayKind::Unknown;
+    }
+    if (known.kind != TrayKind::Unknown) {
+        return known.kind;
+    }
+    TrayKind guess = DetectTrayKindFromContent(container);
+    if (guess != known.lastGuess) {
+        Wh_Log(L"Tray kind from content: %d (was %d)", (int)guess,
+               (int)known.lastGuess);
+        known.lastGuess = guess;
+    }
+    return guess;
 }
 
 void SetTrayKindFromCursor(wux::FrameworkElement const& frame) {
@@ -1452,7 +1503,7 @@ bool InsertWidget(WidgetInstance& inst,
 }
 
 void EnsureWidgetForFrame(wux::FrameworkElement const& frame) {
-    if (g_unloading || g_inEnsure || !frame) {
+    if (g_unloading || g_inEnsure || !frame || !g_instances) {
         return;
     }
     g_inEnsure = true;
@@ -1460,14 +1511,14 @@ void EnsureWidgetForFrame(wux::FrameworkElement const& frame) {
     try {
         void* frameAbi = winrt::get_abi(frame);
 
-        g_instances.erase(
-            std::remove_if(g_instances.begin(), g_instances.end(),
+        g_instances->erase(
+            std::remove_if(g_instances->begin(), g_instances->end(),
                            [](WidgetInstance& inst) {
                                return !inst.frame.get();
                            }),
-            g_instances.end());
+            g_instances->end());
 
-        auto it = std::find_if(g_instances.begin(), g_instances.end(),
+        auto it = std::find_if(g_instances->begin(), g_instances->end(),
                                [&](const WidgetInstance& inst) {
                                    return inst.frameAbi == frameAbi;
                                });
@@ -1478,16 +1529,20 @@ void EnsureWidgetForFrame(wux::FrameworkElement const& frame) {
                              ? containerElement.try_as<wuxc::Panel>()
                              : nullptr;
 
-        if (it != g_instances.end()) {
-            bool allowed = GetSettingsCopy().showOnAllTaskbars ||
-                           GetTrayKind(frame) == TrayKind::Primary;
+        if (it != g_instances->end()) {
+            bool confirmedKind = false;
+            TrayKind currentKind =
+                container ? GetTrayKind(frame, container, &confirmedKind)
+                          : TrayKind::Unknown;
+            bool allowed = g_showOnAllTaskbars || !confirmedKind ||
+                           currentKind == TrayKind::Primary;
             bool valid = it->widget && container &&
                          it->container.get() == container &&
                          it->widget.Parent() == container;
             if (valid && !allowed) {
                 Wh_Log(L"Removing widget from non-primary taskbar");
                 RemoveInstance(*it);
-                g_instances.erase(it);
+                g_instances->erase(it);
                 g_inEnsure = false;
                 return;
             }
@@ -1496,7 +1551,7 @@ void EnsureWidgetForFrame(wux::FrameworkElement const& frame) {
                 return;
             }
             RemoveInstance(*it);
-            g_instances.erase(it);
+            g_instances->erase(it);
         }
 
         if (!container) {
@@ -1504,10 +1559,9 @@ void EnsureWidgetForFrame(wux::FrameworkElement const& frame) {
             return;
         }
 
-        Settings settings = GetSettingsCopy();
-        TrayKind kind = GetTrayKind(frame);
+        TrayKind kind = GetTrayKind(frame, container);
         EnsureUiTimer();
-        if (!settings.showOnAllTaskbars && kind != TrayKind::Primary) {
+        if (!g_showOnAllTaskbars && kind != TrayKind::Primary) {
             g_inEnsure = false;
             return;
         }
@@ -1517,8 +1571,8 @@ void EnsureWidgetForFrame(wux::FrameworkElement const& frame) {
         WidgetInstance inst;
         inst.frame = winrt::make_weak(frame);
         inst.frameAbi = frameAbi;
-        if (InsertWidget(inst, container, settings.position)) {
-            g_instances.push_back(std::move(inst));
+        if (InsertWidget(inst, container, g_position)) {
+            g_instances->push_back(std::move(inst));
             EnsureUiTimer();
             RenderAll(true);
             if (kind == TrayKind::Primary) {
@@ -1570,14 +1624,17 @@ wux::FrameworkElement ElementFromThis(void* pThis) {
 }
 
 void RemoveAllWidgets() {
-    for (auto& inst : g_instances) {
+    if (!g_instances) {
+        return;
+    }
+    for (auto& inst : *g_instances) {
         try {
             RemoveInstance(inst);
         } catch (...) {
             Wh_Log(L"RemoveInstance failed: %08X", winrt::to_hresult().value);
         }
     }
-    g_instances.clear();
+    g_instances->clear();
 }
 
 #pragma endregion
@@ -1673,7 +1730,10 @@ void ScanFromIconViewImpl(void* pThis) {
         return;
     }
     try {
-        if (auto element = ElementFromThis(pThis)) {
+        wux::FrameworkElement element{nullptr};
+        ((IUnknown**)pThis)[1]->QueryInterface(
+            winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(element));
+        if (element) {
             if (auto frame = FindAncestorTrayFrame(element)) {
                 EnsureWidgetForFrame(frame);
             }
@@ -1697,7 +1757,8 @@ void WINAPI IconView_OnContentViewModelPropertyChanged_Hook(void* pThis,
 }
 
 bool HookSystemTraySymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
         {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::SystemTrayFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::ArrangeOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
             &SystemTrayFrame_ArrangeOverride_Original,
@@ -1729,7 +1790,81 @@ bool HookSystemTraySymbols(HMODULE module) {
         },
     };
 
-    return WindhawkUtils::HookSymbols(module, systemTrayDllHooks, ARRAYSIZE(systemTrayDllHooks));
+    return WindhawkUtils::HookSymbols(module, systemTrayHooks,
+                                      ARRAYSIZE(systemTrayHooks));
+}
+
+VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
+    void* pFixedFileInfo = nullptr;
+    UINT uPtrLen = 0;
+
+    HRSRC hResource =
+        FindResource(hModule, MAKEINTRESOURCE(VS_VERSION_INFO), RT_VERSION);
+    if (hResource) {
+        HGLOBAL hGlobal = LoadResource(hModule, hResource);
+        if (hGlobal) {
+            void* pData = LockResource(hGlobal);
+            if (pData) {
+                if (!VerQueryValue(pData, L"\\", &pFixedFileInfo, &uPtrLen) ||
+                    uPtrLen == 0) {
+                    pFixedFileInfo = nullptr;
+                    uPtrLen = 0;
+                }
+            }
+        }
+    }
+
+    if (puPtrLen) {
+        *puPtrLen = uPtrLen;
+    }
+
+    return (VS_FIXEDFILEINFO*)pFixedFileInfo;
+}
+
+HMODULE GetSystemTrayModuleHandle() {
+    HMODULE module = GetModuleHandle(L"SystemTray.dll");
+    if (!module) {
+        module = GetModuleHandle(L"Taskbar.View.dll");
+        if (module) {
+            // Starting with Taskbar.View.dll 2604.8002, the SystemTray types
+            // moved into SystemTray.dll.
+            VS_FIXEDFILEINFO* fixedFileInfo =
+                GetModuleVersionInfo(module, nullptr);
+            WORD moduleMajor =
+                fixedFileInfo ? HIWORD(fixedFileInfo->dwFileVersionMS) : 0;
+            if (!moduleMajor || moduleMajor >= 2604) {
+                module = nullptr;
+            }
+        }
+    }
+    if (!module) {
+        module = GetModuleHandle(L"ExplorerExtensions.dll");
+    }
+    return module;
+}
+
+void HookSystemTrayModuleIfLoaded(HMODULE candidate, bool applyNow) {
+    if (g_systemTrayHooked) {
+        return;
+    }
+    HMODULE module = GetSystemTrayModuleHandle();
+    if (!module || (candidate && candidate != module)) {
+        return;
+    }
+    if (g_systemTrayHooked.exchange(true)) {
+        return;
+    }
+    WCHAR path[MAX_PATH];
+    if (GetModuleFileName(module, path, ARRAYSIZE(path))) {
+        Wh_Log(L"Hooking system tray module %s", path);
+    }
+    if (!HookSystemTraySymbols(module)) {
+        Wh_Log(L"HookSymbols failed");
+        return;
+    }
+    if (applyNow) {
+        Wh_ApplyHookOperations();
+    }
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -1739,16 +1874,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
                                    HANDLE hFile,
                                    DWORD dwFlags) {
     HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-    if (module && !g_systemTrayHooked &&
-        module == GetModuleHandleW(L"SystemTray.dll")) {
-        if (!g_systemTrayHooked.exchange(true)) {
-            Wh_Log(L"SystemTray.dll loaded, hooking");
-            if (HookSystemTraySymbols(module)) {
-                Wh_ApplyHookOperations();
-            } else {
-                Wh_Log(L"HookSymbols failed");
-            }
-        }
+    if (module && !g_systemTrayHooked) {
+        HookSystemTrayModuleIfLoaded(module, true);
     }
     return module;
 }
@@ -1839,8 +1966,12 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (HMODULE module = GetModuleHandleW(L"SystemTray.dll")) {
+    if (HMODULE module = GetSystemTrayModuleHandle()) {
         g_systemTrayHooked = true;
+        WCHAR path[MAX_PATH];
+        if (GetModuleFileName(module, path, ARRAYSIZE(path))) {
+            Wh_Log(L"Hooking system tray module %s", path);
+        }
         if (!HookSystemTraySymbols(module)) {
             Wh_Log(L"HookSymbols failed");
             return FALSE;
@@ -1857,6 +1988,12 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+void Wh_ModAfterInit() {
+    Wh_Log(L">");
+
+    HookSystemTrayModuleIfLoaded(nullptr, true);
+}
+
 void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
@@ -1866,7 +2003,7 @@ void Wh_ModBeforeUninit() {
         SetEvent(g_stopEvent);
     }
     if (g_pollThread) {
-        WaitForSingleObject(g_pollThread, 10000);
+        WaitForSingleObject(g_pollThread, INFINITE);
         CloseHandle(g_pollThread);
         g_pollThread = nullptr;
     }
@@ -1877,6 +2014,7 @@ void Wh_ModBeforeUninit() {
             [](PVOID) {
                 StopUiTimer();
                 RemoveAllWidgets();
+                g_instances.reset();
             },
             nullptr);
     }
