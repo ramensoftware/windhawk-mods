@@ -5,8 +5,8 @@
 // @version         1.0
 // @author          voide61
 // @github          https://github.com/voide61
-// @include         explorer.exe
-// @compilerOptions -luser32 -lole32 -loleaut32
+// @include         windhawk.exe
+// @compilerOptions -luser32 -lole32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -29,14 +29,26 @@ click your icons without overshooting.
 - Want to go to the other monitor? **Keep pushing** the mouse a little more.
 - Over the taskbar **icons**, you can make it **never cross**, no matter how hard
   you push (option below). Cross through the empty part of the taskbar instead.
-- Coming from the other monitor, the way is **free**.
+- Coming from the other monitor straight onto the taskbar, the way is **free**.
+- Moving **sideways** into the taskbar strip of a neighboring monitor (monitors side
+  by side) is also stopped, so the mouse doesn't slide onto the wrong taskbar.
 - Nothing changes anywhere else on the screen.
 
 ## Works with
 
 - Monitors stacked vertically or side by side, any size (ultrawide included).
 - Small taskbars (other Windhawk mods), auto-hide, and taskbars on any screen edge.
-- Plugging in, unplugging or rearranging monitors: the mod adapts within a few seconds.
+- Plugging in, unplugging or rearranging monitors, and Explorer restarts: the mod
+  adapts within a second.
+
+## Limitations
+
+- Injected mouse input is ignored, so the mod does nothing in Remote Desktop
+  sessions, in virtual machines with guest tools, and with some tablets or
+  touchpads that report their movement as injected input.
+- Other mods that also act on the mouse crossing between monitors with a low-level
+  mouse hook (for example *Proportional cursor between monitors*) may conflict:
+  whichever hook was installed last decides.
 
 ## Settings
 
@@ -63,6 +75,9 @@ click your icons without overshooting.
 
 #include <windows.h>
 #include <uiautomationclient.h>
+
+#include <algorithm>
+#include <atomic>
 #include <climits>
 #include <cstdlib>
 #include <utility>
@@ -83,15 +98,16 @@ struct BarIcons {
     std::vector<Span> spans;
 };
 
-static volatile LONG g_margin = 40;
-static volatile LONG g_force = 400;
-static volatile LONG g_blockIcons = 1;
+static std::atomic<int> g_margin{40};
+static std::atomic<int> g_force{400};
+static std::atomic<bool> g_blockIcons{true};
+static std::atomic<bool> g_stop{false};
 
-static HANDLE g_thread = nullptr;
-static DWORD g_threadId = 0;
+static HANDLE g_hookThread = nullptr;
+static DWORD g_hookThreadId = 0;
+static HANDLE g_queueReadyEvent = nullptr;
 static HANDLE g_iconThread = nullptr;
 static HANDLE g_stopEvent = nullptr;
-static volatile LONG g_stop = 0;
 
 // icon ranges found by the UI Automation thread
 static SRWLOCK g_iconLock = SRWLOCK_INIT;
@@ -128,13 +144,6 @@ static int Nearest(const std::vector<Mon>& mons, int x, int y) {
     return idx;
 }
 
-static void SetThreadDpiAware() {
-    using SetDpiCtx = HANDLE(WINAPI*)(HANDLE);
-    auto setDpi = reinterpret_cast<SetDpiCtx>(
-        reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext")));
-    if (setDpi) setDpi(reinterpret_cast<HANDLE>(-4)); // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-}
-
 static std::vector<HWND> TaskbarWindows() {
     std::vector<HWND> v;
     const wchar_t* classes[] = {L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd"};
@@ -147,9 +156,6 @@ static std::vector<HWND> TaskbarWindows() {
 
 // ---------------------------------------------------------------- icons (UI Automation)
 // Runs on its own thread, so a slow taskbar never makes the mouse hook lag.
-
-static const CLSID kClsidUIA = {0xff48dba4, 0x60ef, 0x4201, {0xaa, 0x87, 0x54, 0x10, 0x3e, 0xef, 0x59, 0x4e}};
-static const IID kIidUIA = {0x30cbe57d, 0xd9d0, 0x452a, {0xab, 0x13, 0x7a, 0xc5, 0xac, 0x48, 0x25, 0xee}};
 
 struct SpanCollector {
     RECT bar;
@@ -193,7 +199,7 @@ static void WalkButtons(IUIAutomationTreeWalker* w, IUIAutomationCacheRequest* c
             WalkButtons(w, cache, c, depth + 1, sc);
         }
         IUIAutomationElement* next = nullptr;
-        w->GetNextSiblingElementBuildCache(c, cache, &next);
+        if (!g_stop) w->GetNextSiblingElementBuildCache(c, cache, &next);
         c->Release();
         c = next;
     }
@@ -229,8 +235,7 @@ static std::vector<Span> ReadIconSpans(IUIAutomation* uia, IUIAutomationTreeWalk
     std::vector<Span>& spans = sc.spans;
 
     // merge neighboring icons into one block (no gaps between them)
-    for (size_t i = 1; i < spans.size(); i++)
-        for (size_t j = i; j > 0 && spans[j].first < spans[j - 1].first; j--) std::swap(spans[j], spans[j - 1]);
+    std::sort(spans.begin(), spans.end());
     std::vector<Span> merged;
     for (const Span& s : spans) {
         if (!merged.empty() && s.first <= merged.back().second + 8) {
@@ -243,13 +248,20 @@ static std::vector<Span> ReadIconSpans(IUIAutomation* uia, IUIAutomationTreeWalk
 }
 
 static DWORD WINAPI IconThread(LPVOID) {
-    SetThreadDpiAware();
     if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return 0;
     IUIAutomation* uia = nullptr;
     IUIAutomationTreeWalker* walker = nullptr;
     IUIAutomationCondition* rawView = nullptr;
     IUIAutomationCacheRequest* cache = nullptr;
-    if (SUCCEEDED(CoCreateInstance(kClsidUIA, nullptr, CLSCTX_INPROC_SERVER, kIidUIA, reinterpret_cast<void**>(&uia))) && uia) {
+    if (SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER,
+                                   __uuidof(IUIAutomation), reinterpret_cast<void**>(&uia))) && uia) {
+        // keep each UIA call short, so stopping the mod never waits long
+        IUIAutomation2* uia2 = nullptr;
+        if (SUCCEEDED(uia->QueryInterface(__uuidof(IUIAutomation2), reinterpret_cast<void**>(&uia2)))) {
+            uia2->put_ConnectionTimeout(1000);
+            uia2->put_TransactionTimeout(1000);
+            uia2->Release();
+        }
         uia->get_RawViewWalker(&walker);
         uia->CreateTrueCondition(&rawView);
         if (SUCCEEDED(uia->CreateCacheRequest(&cache)) && cache) {
@@ -263,13 +275,23 @@ static DWORD WINAPI IconThread(LPVOID) {
     } else {
         while (!g_stop) {
             if (g_blockIcons) {
+                std::vector<HWND> bars = TaskbarWindows();
                 std::vector<BarIcons> found;
-                for (HWND bar : TaskbarWindows()) found.push_back({bar, ReadIconSpans(uia, walker, cache, bar)});
+                for (HWND bar : bars) {
+                    if (g_stop) break;
+                    found.push_back({bar, ReadIconSpans(uia, walker, cache, bar)});
+                }
+                // forget taskbars that no longer exist (monitor unplugged, Explorer restarted)
+                g_lastXaml.erase(std::remove_if(g_lastXaml.begin(), g_lastXaml.end(),
+                                                [&](const BarIcons& bi) {
+                                                    return std::find(bars.begin(), bars.end(), bi.bar) == bars.end();
+                                                }),
+                                 g_lastXaml.end());
                 AcquireSRWLockExclusive(&g_iconLock);
                 g_barIcons.swap(found);
                 ReleaseSRWLockExclusive(&g_iconLock);
             }
-            if (WaitForSingleObject(g_stopEvent, 1500) == WAIT_OBJECT_0) break;
+            if (WaitForSingleObject(g_stopEvent, 1500) != WAIT_TIMEOUT) break;
         }
     }
     if (cache) cache->Release();
@@ -293,7 +315,7 @@ static BOOL CALLBACK EnumMonProc(HMONITOR, HDC, LPRECT rc, LPARAM lp) {
 static void Refresh() {
     std::vector<Mon> mons;
     EnumDisplayMonitors(nullptr, nullptr, EnumMonProc, reinterpret_cast<LPARAM>(&mons));
-    int margin = (int)g_margin;
+    int margin = g_margin;
 
     std::vector<BarIcons> icons;
     AcquireSRWLockShared(&g_iconLock);
@@ -338,9 +360,9 @@ static void Refresh() {
 
         Mon& mon = mons[idx];
         const RECT& m = mon.rc;
-        int thick = flat ? hgt : w;
-        if (thick < 8 || thick > 300) thick = 48;
         int mw = m.right - m.left, mh = m.bottom - m.top;
+        int thick = flat ? hgt : w;
+        if (thick < 8 || thick > (flat ? mh : mw) / 2) thick = 48;
         int band = thick + margin;
         int maxBand = (mw < mh ? mw : mh) / 2;
         if (band > maxBand) band = maxBand;
@@ -398,7 +420,7 @@ static bool ShouldBlock(int cx, int cy, int x, int y) {
         g_accum = 0;
     } else {
         g_accum += abs(x - nx) + abs(y - ny);
-        int force = (int)g_force;
+        int force = g_force;
         if (force > 0 && g_accum >= force) { g_accum = 0; return false; }
     }
 
@@ -417,29 +439,12 @@ static LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wp, LPARAM lp) {
     return CallNextHookEx(nullptr, code, wp, lp);
 }
 
-// Only the explorer process that owns the taskbar installs the hook.
-static bool OwnsTaskbar() {
-    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!tray) return false;
-    DWORD pid = 0;
-    GetWindowThreadProcessId(tray, &pid);
-    return pid == GetCurrentProcessId();
-}
-
 static DWORD WINAPI HookThread(LPVOID) {
-    SetThreadDpiAware(); // physical pixels, even with per-monitor scaling
-
+    // Force the message queue to be created, and only then let WhTool_ModUninit
+    // post to this thread.
     MSG msg;
-    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE); // create the message queue
-
-    // wait for the taskbar (explorer may have just started) and check it belongs to this process
-    for (int i = 0; i < 120 && !g_stop; i++) {
-        if (FindWindowW(L"Shell_TrayWnd", nullptr)) break;
-        Sleep(500);
-    }
-    if (g_stop || !OwnsTaskbar()) return 0;
-
-    g_iconThread = CreateThread(nullptr, 0, IconThread, nullptr, 0, nullptr);
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent(g_queueReadyEvent);
 
     Refresh();
     HMODULE self = nullptr;
@@ -448,23 +453,31 @@ static DWORD WINAPI HookThread(LPVOID) {
     g_hook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, self, 0);
     if (!g_hook) {
         Wh_Log(L"SetWindowsHookEx failed: %u", GetLastError());
-        return 0;
+    } else {
+        Wh_Log(L"Mouse hook installed");
+        // icons are only needed while the hook is running
+        g_iconThread = CreateThread(nullptr, 0, IconThread, nullptr, 0, nullptr);
+        if (!g_iconThread) Wh_Log(L"CreateThread (icons) failed: %u", GetLastError());
     }
-    Wh_Log(L"Mouse hook installed");
 
-    UINT_PTR timer = SetTimer(nullptr, 0, 1000, nullptr); // re-read monitors, taskbars and icons
+    // re-read monitors, taskbars and icons every second (also survives Explorer restarts)
+    UINT_PTR timer = SetTimer(nullptr, 0, 1000, nullptr);
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         if (msg.message == WM_TIMER || msg.message == WM_APP) {
-            Refresh();
+            if (g_hook) Refresh();
             continue;
         }
         DispatchMessageW(&msg);
     }
     KillTimer(nullptr, timer);
-    UnhookWindowsHookEx(g_hook);
-    g_hook = nullptr;
+    if (g_hook) {
+        UnhookWindowsHookEx(g_hook);
+        g_hook = nullptr;
+    }
     return 0;
 }
+
+// ---------------------------------------------------------------- mod entry points
 
 static void LoadSettings() {
     int m = Wh_GetIntSetting(L"margin");
@@ -473,32 +486,64 @@ static void LoadSettings() {
     if (m < 0) m = 0;
     if (m > 400) m = 400;
     if (f < 0) f = 0;
-    InterlockedExchange(&g_margin, m);
-    InterlockedExchange(&g_force, f);
-    InterlockedExchange(&g_blockIcons, b ? 1 : 0);
+    g_margin = m;
+    g_force = f;
+    g_blockIcons = b != 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     LoadSettings();
-    g_stop = 0;
+    g_stop = false;
+
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_thread = CreateThread(nullptr, 0, HookThread, nullptr, 0, &g_threadId);
+    g_queueReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_stopEvent || !g_queueReadyEvent) {
+        Wh_Log(L"CreateEvent failed: %u", GetLastError());
+        if (g_stopEvent) CloseHandle(g_stopEvent);
+        if (g_queueReadyEvent) CloseHandle(g_queueReadyEvent);
+        g_stopEvent = g_queueReadyEvent = nullptr;
+        return FALSE;
+    }
+
+    g_hookThread = CreateThread(nullptr, 0, HookThread, nullptr, 0, &g_hookThreadId);
+    if (!g_hookThread) {
+        Wh_Log(L"CreateThread failed: %u", GetLastError());
+        CloseHandle(g_stopEvent);
+        CloseHandle(g_queueReadyEvent);
+        g_stopEvent = g_queueReadyEvent = nullptr;
+        return FALSE;
+    }
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    InterlockedExchange(&g_stop, 1);
+void WhTool_ModSettingsChanged() {
+    LoadSettings();
+    if (g_hookThread) PostThreadMessageW(g_hookThreadId, WM_APP, 0, 0);
+}
+
+void WhTool_ModUninit() {
+    g_stop = true;
     if (g_stopEvent) SetEvent(g_stopEvent);
-    if (g_thread) {
-        PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_thread, 5000);
-        CloseHandle(g_thread);
-        g_thread = nullptr;
+
+    if (g_hookThread) {
+        // The queue is ready by now, so WM_QUIT can't be lost and the wait
+        // below is guaranteed to return.
+        WaitForSingleObject(g_queueReadyEvent, INFINITE);
+        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+        g_hookThreadId = 0;
     }
+    // created by the hook thread, which has finished by now
     if (g_iconThread) {
-        WaitForSingleObject(g_iconThread, 5000);
+        WaitForSingleObject(g_iconThread, INFINITE);
         CloseHandle(g_iconThread);
         g_iconThread = nullptr;
+    }
+    if (g_queueReadyEvent) {
+        CloseHandle(g_queueReadyEvent);
+        g_queueReadyEvent = nullptr;
     }
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
@@ -506,7 +551,181 @@ void Wh_ModUninit() {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
 void Wh_ModSettingsChanged() {
-    LoadSettings();
-    if (g_thread) PostThreadMessageW(g_threadId, WM_APP, 0, 0);
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
