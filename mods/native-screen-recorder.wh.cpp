@@ -7,7 +7,6 @@
 // @version         2.0.4
 // @author          caotu2005
 // @github          https://github.com/caotu2005
-// @include         explorer.exe
 // @include         windhawk.exe
 // @compilerOptions -ld3d11 -ldxgi -lmfplat -lmfreadwrite -lmfuuid -lole32 -luuid -lgdi32 -luser32 -lshell32 -lshlwapi -ldwmapi -lwinmm -ld2d1 -ldwrite
 // ==/WindhawkMod==
@@ -17,8 +16,8 @@
 # Native Windows Screen Recorder
 
 > ℹ️ **Compatibility Note (Smart App Control) / Lưu ý tương thích:**
-> - **🌐 English:** Like all Windhawk mods, this mod is compiled locally into an unsigned `.dll` file and loaded into `explorer.exe`. If Windows **Smart App Control** is active on your PC, Windows will block the compiled `.dll` and the mod will not load.
-> - **🇻🇳 Tiếng Việt:** Giống như mọi bản mod trên Windhawk, mod này được biên dịch cục bộ thành tệp `.dll` không có chữ ký số để nạp vào `explorer.exe`. Nếu máy đang bật **Smart App Control (Kiểm soát Ứng dụng Thông minh)**, Windows sẽ chặn tệp `.dll` này khiến mod không thể hoạt động.
+> - **🌐 English:** Like all Windhawk mods, this mod is compiled locally into an unsigned `.dll` file and runs in a dedicated Windhawk tool process (`windhawk.exe` / `windhawk-mod.exe`). If Windows **Smart App Control** is active on your PC, Windows will block the compiled `.dll` and the mod will not load. See [Windhawk's documentation and guidance on Smart App Control](https://github.com/ramensoftware/windhawk/issues/696) for details.
+> - **🇻🇳 Tiếng Việt:** Giống như mọi bản mod trên Windhawk, mod này được biên dịch cục bộ thành tệp `.dll` không có chữ ký số và chạy trong tiến trình công cụ độc lập của Windhawk (`windhawk.exe` / `windhawk-mod.exe`). Nếu máy đang bật **Smart App Control (Kiểm soát Ứng dụng Thông minh)**, Windows sẽ chặn tệp `.dll` này khiến mod không thể hoạt động. Xem thêm [hướng dẫn và thảo luận chính thức của Windhawk về Smart App Control](https://github.com/ramensoftware/windhawk/issues/696).
 
 ![Native Windows Screen Recorder Preview (Floating Pill Bar)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/main.jpg)
 
@@ -44,12 +43,12 @@
 
 ## 🌐 English
 
-A lightweight, native screen recorder integrated directly into Windows (`explorer.exe`) with **13 built-in visual themes**, a **dedicated WinUI 3 Settings window hosted in `windhawk.exe`**, **hardware-capped resolution & active refresh-rate FPS selector**, **live screen drawing/annotation toolbar**, **multi-monitor custom layout arranger**, and **21-language support** — no third-party apps required.
+A lightweight, native Windows screen recorder running in an isolated Windhawk tool process (`windhawk.exe` / `windhawk-mod.exe` — never injecting into `explorer.exe`) with **13 built-in visual themes**, a **dedicated WinUI 3 Settings window**, **hardware-capped resolution & active refresh-rate FPS selector**, **live screen drawing/annotation toolbar**, **multi-monitor custom layout arranger**, and **21-language support** — no third-party apps required.
 
 ### Key Features
 
-- **Dedicated WinUI 3 Settings Window (Hosted in `windhawk.exe`):**
-  * Clicking the `⚙️` button on the floating pill bar opens a standalone **Windows 11 Settings–style** window running in a dedicated `windhawk.exe -tool-mod` process rather than `explorer.exe`.
+- **Dedicated WinUI 3 Settings Window & Isolated Tool Process:**
+  * The entire recorder runs in its own isolated Windhawk tool process (`windhawk.exe` / `windhawk-mod.exe`), keeping `explorer.exe` completely untouched. Clicking `⚙️` on the floating pill bar opens the built-in **Windows 11 Settings–style** window for themes, resolution, FPS, monitor layout, audio, and language.
   * Built end-to-end with Direct2D WinUI 3 controls: grouped SettingsExpander cards, WinUI 3 ComboBox flyouts with vertical accent indicators, and a native-style WinUI 3 HSV ColorPicker with 16 Fluent swatches. Changes apply immediately to the live pill bar.
 
 - **13 Built-In Themes & Full Visual Customization:**
@@ -77,12 +76,12 @@ A lightweight, native screen recorder integrated directly into Windows (`explore
 
 ## 🇻🇳 Tiếng Việt
 
-Trình quay màn hình native gọn nhẹ tích hợp trực tiếp trong Windows (`explorer.exe`) với **13 chủ đề giao diện**, **cửa sổ Cài đặt WinUI 3 độc lập chạy trên tiến trình `windhawk.exe`**, **tùy chỉnh độ phân giải & FPS giới hạn theo tần số quét thực tế của phần cứng**, **bộ công cụ vẽ trực tiếp lên màn hình khi quay**, **trình tự bố trí đa màn hình trực quan** và **hỗ trợ 21 ngôn ngữ** — không cần cài thêm phần mềm bên thứ 3.
+Trình quay màn hình native gọn nhẹ cho Windows chạy trong tiến trình công cụ độc lập của Windhawk (`windhawk.exe` / `windhawk-mod.exe`, không can thiệp vào `explorer.exe`) với **13 chủ đề giao diện**, **cửa sổ Cài đặt WinUI 3 tích hợp**, **tùy chỉnh độ phân giải & FPS giới hạn theo tần số quét thực tế của phần cứng**, **bộ công cụ vẽ trực tiếp lên màn hình khi quay**, **trình tự bố trí đa màn hình trực quan** và **hỗ trợ 21 ngôn ngữ** — không cần cài thêm phần mềm bên thứ 3.
 
 ### Tính năng chính
 
-- **Cửa sổ Cài đặt WinUI 3 Độc Lập (Chạy trên `windhawk.exe`):**
-  * Khi bấm nút `⚙️` trên thanh viên thuốc, cửa sổ **Cài đặt Quay Màn Hình** phong cách Windows 11 sẽ mở trong tiến trình riêng `windhawk.exe -tool-mod` thay vì chạy trong `explorer.exe`.
+- **Cửa sổ Cài đặt WinUI 3 & Tiến Trình Công Cụ Độc Lập:**
+  * Toàn bộ trình quay màn hình chạy tách biệt hoàn toàn trong tiến trình công cụ của Windhawk (`windhawk.exe` / `windhawk-mod.exe`), an toàn tuyệt đối cho `explorer.exe`. Bấm nút `⚙️` trên thanh viên thuốc để mở cửa sổ **Cài đặt Quay Màn Hình** phong cách Windows 11.
   * Thiết kế đồng bộ chuẩn WinUI 3 với thẻ nhóm SettingsExpander, menu thả xuống ComboBox Flyout có thanh nhấn dọc và bảng chọn màu WinUI 3 ColorPicker 16 ô màu nhanh Fluent — mọi thay đổi áp dụng tức thì lên thanh viên thuốc.
 
 - **13 Chủ Đề Giao Diện & Tùy Chỉnh Màu Sắc, Bo Góc:**
@@ -110,196 +109,14 @@ Trình quay màn hình native gọn nhẹ tích hợp trực tiếp trong Window
 
 // ==WindhawkModSettings==
 /*
-- appearanceGroup:
-  - themePreset: windows_blur
-    $name: Theme Preset
-    $name:vi-VN: Chủ đề giao diện (Theme Preset)
-    $description: Choose from 13 built-in visual themes (Windows 11 Blur, Liquid Glass, Mica, OLED, Nord, Catppuccin, Dracula, and Custom).
-    $description:vi-VN: Chọn trong 13 chủ đề có sẵn (mặc định Windows 11 Blur; hỗ trợ Liquid Glass, Mica, OLED, Nord, Catppuccin, Dracula và Tự tùy chỉnh).
-    $options:
-    - windows_blur: Windows 11 Blur (Recommended Default)
-    - liquid_glass: Liquid Glass (Refractive Glass)
-    - mica_alt: Windows 11 Mica (Soft Native Mica)
-    - fluent_solid: Fluent Solid (Opaque Win11 Pill)
-    - classic_win11: Classic Win11 (Subtle Corners & Border)
-    - midnight_oled: Midnight OLED (Deep Black)
-    - nord_frost: Nord Frost (Arctic Slate & Ice)
-    - catppuccin_mocha: Catppuccin Mocha (Warm Dark & Lavender)
-    - dracula_velvet: Dracula Velvet (Deep Plum & Violet)
-    - rose_pine: Rosé Pine (Twilight & Rose Gold)
-    - emerald_slate: Emerald Slate (Deep Forest & Mint)
-    - warm_paper: Warm Paper (Soft Light Ivory)
-    - custom: Custom Colors & Corner Radius
-    $options:vi-VN:
-    - windows_blur: Windows 11 Blur (Mặc định khuyên dùng)
-    - liquid_glass: Liquid Glass (Kính trong suốt khúc xạ)
-    - mica_alt: Windows 11 Mica (Bề mặt Mica mềm mại)
-    - fluent_solid: Fluent Solid (Nền đặc Win11 hiện đại)
-    - classic_win11: Classic Win11 (Bo góc nhẹ, viền tinh giản)
-    - midnight_oled: Midnight OLED (Đen sâu tiết kiệm pin)
-    - nord_frost: Nord Frost (Xám Bắc Âu viền băng)
-    - catppuccin_mocha: Catppuccin Mocha (Tối dịu viền oải hương)
-    - dracula_velvet: Dracula Velvet (Tím than viền tím sáng)
-    - rose_pine: Rosé Pine (Tối trầm viền hồng vàng)
-    - emerald_slate: Emerald Slate (Xanh rừng sâu viền ngọc)
-    - warm_paper: Warm Paper (Nền giấy sáng dịu mắt)
-    - custom: Tự tùy chỉnh màu & bo góc (Custom)
-  - colorMode: auto
-    $name: Color Mode (Light / Dark)
-    $name:vi-VN: Chế độ màu Sáng / Tối
-    $description: Follow Windows Light/Dark mode automatically, or choose a fixed mode.
-    $description:vi-VN: Tự động theo giao diện Sáng/Tối của Windows hoặc chọn cố định.
-    $options:
-    - auto: Auto – Follow Windows
-    - dark: Dark Mode
-    - light: Light Mode
-    $options:vi-VN:
-    - auto: Tự động theo Windows
-    - dark: Giao diện Tối (Dark)
-    - light: Giao diện Sáng (Light)
-  - customBgColor: ""
-    $name: Custom Background Color (Hex, e.g. #1E1E24)
-    $name:vi-VN: Màu nền tùy chỉnh (Hex, ví dụ #1E1E24)
-    $description: Optional hex color (#RRGGBB) to override the recorder pill background color. Leave empty to follow Theme Preset.
-    $description:vi-VN: Mã màu hex (#RRGGBB) để tự đổi màu nền thanh quay. Để trống để dùng theo Theme Preset đã chọn.
-  - customBorderColor: ""
-    $name: Custom Border Color (Hex, e.g. #4C566A)
-    $name:vi-VN: Màu viền tùy chỉnh (Hex, ví dụ #4C566A)
-    $description: Optional hex color (#RRGGBB) to override the recorder pill border color. Leave empty to follow Theme Preset.
-    $description:vi-VN: Mã màu hex (#RRGGBB) để tự đổi màu viền thanh quay. Để trống để dùng theo Theme Preset đã chọn.
-  - customCornerRadius: -1
-    $name: Corner Radius in px (-1 = Theme Default, or 0–28)
-    $name:vi-VN: Bán kính bo góc viền (-1 = Theo chủ đề, hoặc 0–28 px)
-    $description: Set exact corner roundness in pixels (0 = square, 14 = Win11, 27 = full pill, -1 = Theme default).
-    $description:vi-VN: Chỉnh độ bo góc theo pixel (0 = góc vuông, 14 = Win11, 27 = viên thuốc, -1 = theo chủ đề).
-  - language: auto
-    $name: Display Language
-    $name:vi-VN: Ngôn ngữ hiển thị
-    $description: Auto-detect your Windows UI language or choose from 21 built-in languages.
-    $description:vi-VN: Tự động theo hệ điều hành hoặc chọn trong 21 ngôn ngữ tích hợp sẵn.
-    $options:
-    - auto: Auto – System Default
-    - en: English
-    - vi: Tiếng Việt (Vietnamese)
-    - th: ไทย (Thai)
-    - id: Bahasa Indonesia (Indonesian)
-    - ms: Bahasa Melayu (Malay)
-    - ja: 日本語 (Japanese)
-    - zh_cn: 简体中文 (Simplified Chinese)
-    - zh_tw: 繁體中文 (Traditional Chinese)
-    - ko: 한국어 (Korean)
-    - fr: Français (French)
-    - de: Deutsch (German)
-    - es: Español (Spanish)
-    - pt: Português (Portuguese)
-    - it: Italiano (Italian)
-    - ru: Русский (Russian)
-    - uk: Українська (Ukrainian)
-    - pl: Polski (Polish)
-    - nl: Nederlands (Dutch)
-    - tr: Türkçe (Turkish)
-    - hi: हिन्दी (Hindi)
-    - ar: العربية (Arabic)
-    $options:vi-VN:
-    - auto: Tự động theo Windows
-    - en: English (Tiếng Anh)
-    - vi: Tiếng Việt
-    - th: ไทย (Tiếng Thái)
-    - id: Bahasa Indonesia (Tiếng Indonesia)
-    - ms: Bahasa Melayu (Tiếng Mã Lai)
-    - ja: 日本語 (Tiếng Nhật)
-    - zh_cn: 简体中文 (Tiếng Trung Giản thể)
-    - zh_tw: 繁體中文 (Tiếng Trung Phồn thể)
-    - ko: 한국어 (Tiếng Hàn)
-    - fr: Français (Tiếng Pháp)
-    - de: Deutsch (Tiếng Đức)
-    - es: Español (Tiếng Tây Ban Nha)
-    - pt: Português (Tiếng Bồ Đào Nha)
-    - it: Italiano (Tiếng Ý)
-    - ru: Русский (Tiếng Nga)
-    - uk: Українська (Tiếng Ukraina)
-    - pl: Polski (Tiếng Ba Lan)
-    - nl: Nederlands (Tiếng Hà Lan)
-    - tr: Türkçe (Tiếng Thổ Nhĩ Kỳ)
-    - hi: हिन्दी (Tiếng Hindi)
-    - ar: العربية (Tiếng Ả Rập)
-  $name: 1. Appearance & Themes
-  $name:vi-VN: 1. Giao diện & 13 Chủ đề
-
 - recordingGroup:
   - outputFolder: ""
     $name: Output folder
     $name:vi-VN: Thư mục lưu video
-    $description: Folder where MP4 files are saved. Leave empty to use Videos\ScreenRecordings.
-    $description:vi-VN: Thư mục lưu tệp MP4. Để trống để lưu tại Videos\ScreenRecordings.
-  - videoResolution: "0"
-    $name: Recording Resolution (never exceeds monitor hardware)
-    $name:vi-VN: Độ phân giải quay (không vượt quá phần cứng màn hình)
-    $options:
-    - "0": Native (Monitor Hardware)
-    - "2160": 2160p (4K)
-    - "1440": 1440p (2K)
-    - "1080": 1080p (Full HD)
-    - "900": 900p (HD+)
-    - "720": 720p (HD)
-    - "480": 480p (SD)
-    $options:vi-VN:
-    - "0": Gốc (Theo phần cứng màn hình)
-    - "2160": 2160p (4K)
-    - "1440": 1440p (2K)
-    - "1080": 1080p (Full HD)
-    - "900": 900p (HD+)
-    - "720": 720p (HD)
-    - "480": 480p (SD)
-  - fps: "60"
-    $name: Frame rate (FPS)
-    $name:vi-VN: Tốc độ khung hình (FPS)
-    $description: Target FPS (automatically capped to your active Windows monitor refresh rate and GPU H.264 encoder).
-    $description:vi-VN: Tốc độ khung hình mục tiêu (tự động giới hạn theo tần số quét Windows đang đặt và GPU H.264).
-    $options:
-    - "30": 30 FPS
-    - "60": 60 FPS
-    - "75": 75 FPS
-    - "90": 90 FPS (High Refresh)
-    - "120": 120 FPS (High Refresh)
-    - "144": 144 FPS (High Refresh)
-    - "165": 165 FPS (High Refresh)
-    - "240": 240 FPS (High Refresh)
-  - videoBitrateMbps: 12
-    $name: Video bitrate (Mbps)
-    $name:vi-VN: Bitrate video (Mbps)
-  - captureMonitor: cursor
-    $name: Monitor selection (full-screen)
-    $name:vi-VN: Màn hình quay (chế độ toàn màn hình)
-    $description: Choose cursor monitor, a specific monitor (1, 2, ...), all monitors, or arrange a custom layout from Settings.
-    $description:vi-VN: Chọn màn hình theo con trỏ, màn hình 1/2/..., quay tất cả màn hình, hoặc mở trình Tự bố trí màn hình trong Cài đặt.
-    $options:
-    - cursor: Monitor under mouse cursor
-    - primary: Primary monitor
-    - all: All monitors combined
-    - custom: Custom monitor layout
-    $options:vi-VN:
-    - cursor: Màn hình chứa con trỏ chuột
-    - primary: Màn hình chính
-    - all: Tất cả màn hình cùng lúc
-    - custom: Tự bố trí màn hình
-  - recordCursor: true
-    $name: Capture mouse cursor
-    $name:vi-VN: Ghi lại con trỏ chuột
-  - recordSystemAudio: true
-    $name: Record system audio
-    $name:vi-VN: Thu âm thanh hệ thống (WASAPI)
-  - recordMicrophone: false
-    $name: Record microphone
-    $name:vi-VN: Thu âm từ Micro
-  - showFloatingHud: true
-    $name: Show floating pill HUD while recording
-    $name:vi-VN: Hiển thị thanh viên thuốc khi đang quay
-  - openFolderOnFinish: true
-    $name: Reveal video in Explorer on finish
-    $name:vi-VN: Mở thư mục chọn tệp MP4 khi quay xong
-  $name: 2. Recording & Audio
-  $name:vi-VN: 2. Cài đặt Quay & Âm thanh
+    $description: Folder where MP4 files are saved. Leave empty to use Videos\ScreenRecordings. (Themes, resolution, FPS, audio, monitor layout, and language are configured via the ⚙️ button on the floating pill bar.)
+    $description:vi-VN: Thư mục lưu tệp MP4. Để trống để lưu tại Videos\ScreenRecordings. (Chủ đề, độ phân giải, FPS, âm thanh, bố trí màn hình và ngôn ngữ được chỉnh trực tiếp qua nút ⚙️ trên thanh viên thuốc.)
+  $name: 1. Output Folder
+  $name:vi-VN: 1. Thư mục lưu video
 
 - hotkeyGroup:
   - hotkeyModifiers: ctrl+alt
@@ -319,8 +136,8 @@ Trình quay màn hình native gọn nhẹ tích hợp trực tiếp trong Window
   - hotkeyPauseKey: "P"
     $name: Pause / Resume key
     $name:vi-VN: Phím Tạm dừng / Tiếp tục
-  $name: 3. Global Hotkeys
-  $name:vi-VN: 3. Phím tắt toàn cục
+  $name: 2. Global Hotkeys
+  $name:vi-VN: 2. Phím tắt toàn cục
 */
 // ==/WindhawkModSettings==
 
@@ -353,6 +170,7 @@ Trình quay màn hình native gọn nhẹ tích hợp trực tiếp trong Window
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -1135,18 +953,19 @@ static std::atomic<bool> g_drawingEnabled{false};
 static std::atomic<bool> g_unloading{false};
 static std::atomic<int64_t> g_elapsedMs{0};
 
-static std::thread g_uiThread;
-static std::thread g_recordThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_uiThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_recordThread;
 static std::mutex g_recordLifecycleMutex;
 
 static std::atomic<HWND> g_msgHwnd{nullptr};
 static HWND g_pillHwnd = nullptr;
+static HWND g_regionSelHwnd = nullptr;
 static HWND g_regionBorderHwnd = nullptr;
 static HWND g_drawCanvasHwnd = nullptr;
 static HWND g_drawBarHwnd = nullptr;
 static HWND g_drawHintHwnd = nullptr;
 static HWND g_layoutHwnd = nullptr;
-static std::atomic<HWND> g_activeMenuHwnd{nullptr};
+static std::atomic<HWND> g_hRecWin11SettingsWnd{nullptr};
 
 static ID2D1Factory* g_pD2DFactory = nullptr;
 static IDWriteFactory* g_pDWriteFactory = nullptr;
@@ -1154,8 +973,10 @@ static IDWriteRenderingParams* g_pNaturalRenderParams = nullptr;
 
 static const wchar_t* kMsgWndClass = L"WH_ScreenRec_MsgWnd_v21";
 static const wchar_t* kPillWndClass = L"WH_ScreenRec_PillWnd_v21";
-static const wchar_t* kMenuWndClass = L"WH_ScreenRec_MenuWnd_v21";
 static const wchar_t* kRegionSelWndClass = L"WH_ScreenRec_RegionSelWnd_v21";
+static constexpr const wchar_t* kRecWin11SettingsClass = L"WindhawkScreenRecWin11Settings_v2";
+static constexpr const wchar_t* kRecColorPickerClass = L"WindhawkScreenRecColorPicker_v2";
+static constexpr const wchar_t* kRecComboFlyoutClass = L"WindhawkScreenRecComboFlyout_v2";
 static const wchar_t* kRegionBorderWndClass = L"WH_ScreenRec_RegionBorderWnd_v21";
 static const wchar_t* kDrawCanvasWndClass = L"WH_ScreenRec_DrawCanvasWnd_v21";
 static const wchar_t* kDrawBarWndClass = L"WH_ScreenRec_DrawBarWnd_v21";
@@ -1413,96 +1234,61 @@ static std::wstring ReadStringSetting(const wchar_t* groupedKey, const wchar_t* 
     return defVal ? defVal : L"";
 }
 
-static void ClearInAppOverrides() {
-    const wchar_t* keys[] = {
-        L"Ov_themePreset", L"Ov_surfaceTheme", L"Ov_colorMode", L"Ov_customBgColor",
-        L"Ov_customBorderColor", L"Ov_customCornerRadius", L"Ov_glassOpacity", L"Ov_language",
-        L"Ov_targetResHeight", L"Ov_fps", L"Ov_videoBitrateMbps", L"Ov_captureMonitor",
-        L"Ov_recordCursor", L"Ov_recordSystemAudio", L"Ov_recordMicrophone",
-        L"Ov_showFloatingHud", L"Ov_openFolderOnFinish"
-    };
-    for (const wchar_t* k : keys) Wh_DeleteValue(k);
+static std::wstring ReadStoredString(const wchar_t* key, const wchar_t* defVal) {
+    wchar_t buf[256] = {};
+    if (Wh_GetStringValue(key, buf, ARRAYSIZE(buf)) > 0 && buf[0]) {
+        return buf;
+    }
+    return defVal ? defVal : L"";
 }
 
-static void LoadSettings(bool fromSettingsChanged = false) {
-    if (fromSettingsChanged) ClearInAppOverrides();
-
+static void LoadSettings() {
     ModSettings s;
-    wchar_t ovBuf[128] = {};
 
-    std::wstring preset = ReadStringSetting(L"appearanceGroup.themePreset", L"themePreset", L"windows_blur");
-    if (Wh_GetStringValue(L"Ov_themePreset", ovBuf, ARRAYSIZE(ovBuf)) > 0 && ovBuf[0]) preset = ovBuf;
+    // Appearance, recording, audio, and language settings (owned exclusively by the built-in WinUI 3 Settings window & pill toggles)
+    std::wstring preset = ReadStoredString(L"Cfg_themePreset", L"windows_blur");
     s.themePreset = preset.empty() ? L"windows_blur" : preset;
 
-    std::wstring bgHex = ReadStringSetting(L"appearanceGroup.customBgColor", L"customBgColor", L"");
-    if (Wh_GetStringValue(L"Ov_customBgColor", ovBuf, ARRAYSIZE(ovBuf)) > 0) {
-        bgHex = (wcscmp(ovBuf, L"__NONE__") == 0) ? L"" : ovBuf;
-    }
-    s.customBgColor = bgHex;
+    std::wstring bgHex = ReadStoredString(L"Cfg_customBgColor", L"");
+    s.customBgColor = (bgHex == L"__NONE__") ? L"" : bgHex;
 
-    std::wstring bdHex = ReadStringSetting(L"appearanceGroup.customBorderColor", L"customBorderColor", L"");
-    if (Wh_GetStringValue(L"Ov_customBorderColor", ovBuf, ARRAYSIZE(ovBuf)) > 0) {
-        bdHex = (wcscmp(ovBuf, L"__NONE__") == 0) ? L"" : ovBuf;
-    }
-    s.customBorderColor = bdHex;
+    std::wstring bdHex = ReadStoredString(L"Cfg_customBorderColor", L"");
+    s.customBorderColor = (bdHex == L"__NONE__") ? L"" : bdHex;
 
-    int crSet = Wh_GetIntSetting(L"appearanceGroup.customCornerRadius");
-    int crOv  = Wh_GetIntValue(L"Ov_customCornerRadius", -99);
-    s.customCornerRadius = (crOv >= -1) ? std::clamp(crOv, -1, 28) : std::clamp(crSet, -1, 28);
+    int crVal = Wh_GetIntValue(L"Cfg_customCornerRadius", -1);
+    s.customCornerRadius = std::clamp(crVal, -1, 28);
 
     ResolvedThemeVisuals rvPreview = ResolveEffectiveThemeVisuals(s, false);
     s.surfaceTheme = rvPreview.surface;
     s.glassOpacity = -100;
     s.blurOpacity  = 255;
 
-    std::wstring col = ReadStringSetting(L"appearanceGroup.colorMode", L"colorMode", L"auto");
-    if (Wh_GetStringValue(L"Ov_colorMode", ovBuf, ARRAYSIZE(ovBuf)) > 0 && ovBuf[0]) col = ovBuf;
+    std::wstring col = ReadStoredString(L"Cfg_colorMode", L"auto");
     if (col == L"dark") s.colorMode = ColorMode::Dark;
     else if (col == L"light") s.colorMode = ColorMode::Light;
     else s.colorMode = ColorMode::Auto;
 
-    s.language = ReadStringSetting(L"appearanceGroup.language", L"language", L"auto");
-    if (Wh_GetStringValue(L"Ov_language", ovBuf, ARRAYSIZE(ovBuf)) > 0 && ovBuf[0]) s.language = ovBuf;
+    s.language = ReadStoredString(L"Cfg_language", L"auto");
 
-    s.outputFolder = ReadStringSetting(L"recordingGroup.outputFolder", L"outputFolder", L"");
+    s.targetResHeight = std::max(0, Wh_GetIntValue(L"Cfg_targetResHeight", 0));
 
-    std::wstring resStr = ReadStringSetting(L"recordingGroup.videoResolution", L"videoResolution", L"0");
-    int resSet = _wtoi(resStr.c_str());
-    int resOv = Wh_GetIntValue(L"Ov_targetResHeight", -1);
-    s.targetResHeight = (resOv >= 0) ? resOv : std::max(0, resSet);
+    int fpsVal = Wh_GetIntValue(L"Cfg_fps", 60);
+    s.fps = (fpsVal >= 30 && fpsVal <= 360) ? fpsVal : 60;
 
-    auto isValidFps = [](int f) {
-        return f >= 30 && f <= 360;
-    };
-    std::wstring fpsStr = ReadStringSetting(L"recordingGroup.fps", L"fps", L"60");
-    int fpsSet = _wtoi(fpsStr.c_str());
-    if (!isValidFps(fpsSet)) fpsSet = Wh_GetIntSetting(L"recordingGroup.fps");
-    int fpsOv = Wh_GetIntValue(L"Ov_fps", 0);
-    s.fps = isValidFps(fpsOv) ? fpsOv : (isValidFps(fpsSet) ? fpsSet : 60);
+    int brVal = Wh_GetIntValue(L"Cfg_videoBitrateMbps", 12);
+    s.videoBitrateMbps = std::clamp(brVal > 0 ? brVal : 12, 2, 50);
 
-    int brSet = Wh_GetIntSetting(L"recordingGroup.videoBitrateMbps");
-    if (brSet <= 0) brSet = 12;
-    int brOv = Wh_GetIntValue(L"Ov_videoBitrateMbps", 0);
-    s.videoBitrateMbps = std::clamp(brOv > 0 ? brOv : brSet, 2, 50);
-
-    std::wstring mon = ReadStringSetting(L"recordingGroup.captureMonitor", L"captureMonitor", L"cursor");
-    if (Wh_GetStringValue(L"Ov_captureMonitor", ovBuf, ARRAYSIZE(ovBuf)) > 0 && ovBuf[0]) mon = ovBuf;
+    std::wstring mon = ReadStoredString(L"Cfg_captureMonitor", L"cursor");
     s.captureMonitorMode = mon.empty() ? L"cursor" : mon;
 
-    int ovCur = Wh_GetIntValue(L"Ov_recordCursor", -1);
-    s.recordCursor = (ovCur >= 0) ? (ovCur != 0) : (Wh_GetIntSetting(L"recordingGroup.recordCursor") != 0);
+    s.recordCursor       = (Wh_GetIntValue(L"Cfg_recordCursor", 1) != 0);
+    s.recordSystemAudio  = (Wh_GetIntValue(L"Cfg_recordSystemAudio", 1) != 0);
+    s.recordMicrophone   = (Wh_GetIntValue(L"Cfg_recordMicrophone", 0) != 0);
+    s.showFloatingHud    = (Wh_GetIntValue(L"Cfg_showFloatingHud", 1) != 0);
+    s.openFolderOnFinish = (Wh_GetIntValue(L"Cfg_openFolderOnFinish", 1) != 0);
 
-    int ovSys = Wh_GetIntValue(L"Ov_recordSystemAudio", -1);
-    s.recordSystemAudio = (ovSys >= 0) ? (ovSys != 0) : (Wh_GetIntSetting(L"recordingGroup.recordSystemAudio") != 0);
-
-    int ovMic = Wh_GetIntValue(L"Ov_recordMicrophone", -1);
-    s.recordMicrophone = (ovMic >= 0) ? (ovMic != 0) : (Wh_GetIntSetting(L"recordingGroup.recordMicrophone") != 0);
-
-    int ovHud = Wh_GetIntValue(L"Ov_showFloatingHud", -1);
-    s.showFloatingHud = (ovHud >= 0) ? (ovHud != 0) : (Wh_GetIntSetting(L"recordingGroup.showFloatingHud") != 0);
-
-    int ovOpen = Wh_GetIntValue(L"Ov_openFolderOnFinish", -1);
-    s.openFolderOnFinish = (ovOpen >= 0) ? (ovOpen != 0) : (Wh_GetIntSetting(L"recordingGroup.openFolderOnFinish") != 0);
+    // Output folder & Global Hotkeys (owned exclusively by WindhawkModSettings)
+    s.outputFolder = ReadStringSetting(L"recordingGroup.outputFolder", L"outputFolder", L"");
 
     std::wstring mods = ReadStringSetting(L"hotkeyGroup.hotkeyModifiers", L"hotkeyModifiers", L"ctrl+alt");
     s.hotkeyModifiers = ParseModifiersSetting(mods.c_str());
@@ -4022,449 +3808,35 @@ static void RecordingWorkerProc(RECT targetRect, bool useCustomLayout) {
 
 static void StopRecordingSync() {
     std::lock_guard<std::mutex> lock(g_recordLifecycleMutex);
-    if (g_isRecording.load() || g_recordThread.joinable()) {
+    if (g_isRecording.load() || (g_recordThread && g_recordThread->joinable())) {
         g_stopRequested = true;
-        if (g_recordThread.joinable()) g_recordThread.join();
+        if (g_recordThread && g_recordThread->joinable()) {
+            g_recordThread->join();
+        }
+        g_recordThread.reset();
         g_stopRequested = false;
+    }
+}
+
+static void JoinFinishedRecordingThread() {
+    std::lock_guard<std::mutex> lock(g_recordLifecycleMutex);
+    if (!g_isRecording.load() && g_recordThread && g_recordThread->joinable()) {
+        g_recordThread->join();
+        g_recordThread.reset();
     }
 }
 
 static void StartRecordingRect(const RECT& rect, bool useCustomLayout = false) {
     std::lock_guard<std::mutex> lock(g_recordLifecycleMutex);
-    if (g_isRecording.load()) return;
-    if (g_recordThread.joinable()) g_recordThread.join();
+    if (g_unloading.load() || g_isRecording.load()) return;
+    if (g_recordThread && g_recordThread->joinable()) {
+        g_recordThread->join();
+        g_recordThread.reset();
+    }
     g_stopRequested = false;
-    g_recordThread = std::thread(RecordingWorkerProc, rect, useCustomLayout);
+    g_recordThread.emplace(RecordingWorkerProc, rect, useCustomLayout);
 }
 
-// ============================================================================
-// Synchronized Liquid Glass / Fluent Popup Menu
-// ============================================================================
-
-struct MenuItem {
-    UINT id = 0;
-    std::wstring label;
-    bool isToggle = false;
-    bool checked = false;
-    bool isSeparator = false;
-    std::vector<MenuItem> subItems;
-};
-
-struct MenuPanelState {
-    HWND hWnd = nullptr;
-    std::vector<MenuItem> items;
-    bool isSubMenu = false;
-    int hoveredIdx = -1, pressedIdx = -1, openSubIdx = -1;
-    int width = 240, height = 100;
-    int contentHeight = 100, scrollOffset = 0, maxScroll = 0;
-    struct MenuSession* session = nullptr;
-};
-
-struct MenuSession {
-    UINT dpi = 96;
-    SurfaceTheme surface = SurfaceTheme::Glass;
-    int glassOpacity = -80, blurOpacity = 255;
-    bool isLight = false, anchoredTop = false;
-    MenuPanelState mainPanel, subPanel;
-    UINT selectedCmd = 0;
-    bool running = true;
-    int pendingSubIdx = -1;
-};
-
-constexpr UINT_PTR kTimerMenuSub = 9501;
-
-static void ComputeMenuPanelSize(MenuSession* s, MenuPanelState* p) {
-    int rowH = DpiScale(34, s->dpi), sepH = DpiScale(9, s->dpi), padY = DpiScale(8, s->dpi);
-    float maxTextW = DpiScaleF(140.0f, s->dpi);
-    if (g_pDWriteFactory) {
-        IDWriteTextFormat* pFmt = nullptr;
-        if (SUCCEEDED(g_pDWriteFactory->CreateTextFormat(
-                GetPreferredFluentFontFamily(), nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_FONT_STRETCH_NORMAL, DpiScaleF(13.0f, s->dpi), L"", &pFmt)) && pFmt) {
-            for (const auto& it : p->items) {
-                if (it.isSeparator || it.label.empty()) continue;
-                IDWriteTextLayout* pLayout = nullptr;
-                if (SUCCEEDED(g_pDWriteFactory->CreateTextLayout(
-                        it.label.c_str(), static_cast<UINT32>(it.label.size()), pFmt, 600.0f, static_cast<float>(rowH), &pLayout)) && pLayout) {
-                    DWRITE_TEXT_METRICS tm{};
-                    if (SUCCEEDED(pLayout->GetMetrics(&tm))) maxTextW = std::max(maxTextW, tm.widthIncludingTrailingWhitespace);
-                    pLayout->Release();
-                }
-            }
-            pFmt->Release();
-        }
-    }
-    bool hasToggle = false;
-    for (const auto& it : p->items) if (it.isToggle) { hasToggle = true; break; }
-    p->width = std::clamp(DpiScale(24, s->dpi) + static_cast<int>(std::ceil(maxTextW)) + DpiScale(hasToggle ? 62 : 40, s->dpi),
-                          DpiScale(216, s->dpi), DpiScale(380, s->dpi));
-    int h = padY * 2;
-    for (const auto& it : p->items) h += it.isSeparator ? sepH : rowH;
-    p->contentHeight = h;
-    int maxVisibleH = padY * 2 + rowH * 12;
-    p->height = std::min(h, maxVisibleH);
-    p->maxScroll = std::max(0, p->contentHeight - p->height);
-    p->scrollOffset = std::clamp(p->scrollOffset, 0, p->maxScroll);
-}
-
-static int HitTestMenuRow(const MenuSession* s, const MenuPanelState* p, POINT pt) {
-    int padY = DpiScale(8, s->dpi);
-    if (pt.x < 0 || pt.x >= p->width || pt.y < padY || pt.y >= p->height - padY) return -1;
-    int targetY = pt.y + p->scrollOffset;
-    int curY = padY, rowH = DpiScale(34, s->dpi), sepH = DpiScale(9, s->dpi);
-    for (int i = 0; i < static_cast<int>(p->items.size()); ++i) {
-        int h = p->items[i].isSeparator ? sepH : rowH;
-        if (targetY >= curY && targetY < curY + h) return p->items[i].isSeparator ? -1 : i;
-        curY += h;
-    }
-    return -1;
-}
-
-static int GetMenuRowTopY(const MenuSession* s, const MenuPanelState* p, int idx) {
-    int curY = DpiScale(8, s->dpi), rowH = DpiScale(34, s->dpi), sepH = DpiScale(9, s->dpi);
-    for (int i = 0; i < idx && i < static_cast<int>(p->items.size()); ++i) curY += p->items[i].isSeparator ? sepH : rowH;
-    return curY - p->scrollOffset;
-}
-
-static void ShowSubMenu(MenuSession* s, int parentIdx) {
-    if (!s) return;
-    if (parentIdx < 0 || parentIdx >= static_cast<int>(s->mainPanel.items.size()) || s->mainPanel.items[parentIdx].subItems.empty()) {
-        s->mainPanel.openSubIdx = -1;
-        if (s->subPanel.hWnd && IsWindowVisible(s->subPanel.hWnd)) {
-            ShowWindow(s->subPanel.hWnd, SW_HIDE);
-            InvalidateRect(s->mainPanel.hWnd, nullptr, FALSE);
-        }
-        return;
-    }
-    if (s->mainPanel.openSubIdx == parentIdx && s->subPanel.hWnd && IsWindowVisible(s->subPanel.hWnd)) return;
-
-    s->mainPanel.openSubIdx = parentIdx;
-    s->subPanel.items = s->mainPanel.items[parentIdx].subItems;
-    s->subPanel.hoveredIdx = -1; s->subPanel.pressedIdx = -1; s->subPanel.scrollOffset = 0;
-    ComputeMenuPanelSize(s, &s->subPanel);
-
-    RECT rcMain{};
-    GetWindowRect(s->mainPanel.hWnd, &rcMain);
-    HMONITOR hMon = MonitorFromWindow(s->mainPanel.hWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi{sizeof(mi)};
-    RECT rcWork{0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
-    if (hMon && GetMonitorInfoW(hMon, &mi)) rcWork = mi.rcWork;
-
-    int margin = DpiScale(8, s->dpi);
-    int subX = static_cast<int>(rcMain.right) - DpiScale(2, s->dpi);
-    if (subX + s->subPanel.width > rcWork.right - margin) subX = static_cast<int>(rcMain.left) - s->subPanel.width + DpiScale(2, s->dpi);
-    int subY = static_cast<int>(rcMain.top) + GetMenuRowTopY(s, &s->mainPanel, parentIdx) - DpiScale(8, s->dpi);
-    subY = std::clamp(subY, static_cast<int>(rcWork.top) + margin,
-                      std::max(static_cast<int>(rcWork.top) + margin, static_cast<int>(rcWork.bottom) - s->subPanel.height - margin));
-
-    SetWindowPos(s->subPanel.hWnd, HWND_TOPMOST, subX, subY, s->subPanel.width, s->subPanel.height, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
-    ApplyBorderlessPerPixelDwm(s->subPanel.hWnd, s->isLight, true);
-    InvalidateRect(s->subPanel.hWnd, nullptr, FALSE);
-    InvalidateRect(s->mainPanel.hWnd, nullptr, FALSE);
-}
-
-static void PaintMenuPanel(HWND hWnd, MenuPanelState* p) {
-    PAINTSTRUCT ps{};
-    HDC hdc = BeginPaint(hWnd, &ps);
-    if (!p || !p->session || !g_pD2DFactory || !g_pDWriteFactory) { EndPaint(hWnd, &ps); return; }
-
-    MenuSession* s = p->session;
-    RECT rc{};
-    GetClientRect(hWnd, &rc);
-    int w = rc.right, h = rc.bottom;
-    UINT dpi = s->dpi;
-    bool isLight = s->isLight;
-
-    if (w > 0 && h > 0) {
-        HDC memDc = CreateCompatibleDC(hdc);
-        BITMAPINFO bmi{};
-        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bmi.bmiHeader.biWidth = w; bmi.bmiHeader.biHeight = -h;
-        bmi.bmiHeader.biPlanes = 1; bmi.bmiHeader.biBitCount = 32; bmi.bmiHeader.biCompression = BI_RGB;
-
-        DWORD* pixels = nullptr;
-        HBITMAP hBmp = CreateDIBSection(memDc, &bmi, DIB_RGB_COLORS, reinterpret_cast<void**>(&pixels), nullptr, 0);
-        if (hBmp && pixels) {
-            HGDIOBJ oldBmp = SelectObject(memDc, hBmp);
-            D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
-                D2D1_RENDER_TARGET_TYPE_DEFAULT,
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED), 96.0f, 96.0f);
-            ID2D1DCRenderTarget* pRT = nullptr;
-            if (SUCCEEDED(g_pD2DFactory->CreateDCRenderTarget(&rtProps, &pRT)) && pRT) {
-                pRT->BindDC(memDc, &rc);
-                pRT->BeginDraw();
-                pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-                ApplyFluentTextRendering(pRT);
-                pRT->Clear(D2D1::ColorF(0, 0, 0, 0));
-
-                float rimInset = DpiScaleF(0.75f, dpi);
-                D2D1_RECT_F rcCard = D2D1::RectF(rimInset, rimInset, w - rimInset, h - rimInset);
-                float cornerR = std::min(DpiScaleF(20.0f, dpi), (rcCard.bottom - rcCard.top) * 0.5f);
-                DrawPillGlassBackdrop(pRT, hWnd, w, h, cornerR, dpi, s->surface, s->glassOpacity, s->blurOpacity, isLight);
-
-                ID2D1SolidColorBrush *pBrText = nullptr, *pBrSub = nullptr, *pBrAccent = nullptr;
-                pRT->CreateSolidColorBrush(isLight ? D2D1::ColorF(0.08f, 0.09f, 0.12f, 1.0f) : D2D1::ColorF(0.96f, 0.97f, 0.99f, 1.0f), &pBrText);
-                pRT->CreateSolidColorBrush(isLight ? D2D1::ColorF(0.22f, 0.25f, 0.32f, 0.72f) : D2D1::ColorF(0.82f, 0.86f, 0.94f, 0.72f), &pBrSub);
-                pRT->CreateSolidColorBrush(isLight ? D2D1::ColorF(0.07f, 0.43f, 0.80f, 1.0f) : D2D1::ColorF(0.38f, 0.74f, 1.00f, 1.0f), &pBrAccent);
-
-                ID2D1StrokeStyle* pStroke = nullptr;
-                D2D1_STROKE_STYLE_PROPERTIES sp = D2D1::StrokeStyleProperties(
-                    D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_LINE_JOIN_ROUND);
-                g_pD2DFactory->CreateStrokeStyle(sp, nullptr, 0, &pStroke);
-
-                IDWriteTextFormat* pFmt = nullptr;
-                g_pDWriteFactory->CreateTextFormat(GetPreferredFluentFontFamily(), nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-                                                   DWRITE_FONT_STRETCH_NORMAL, DpiScaleF(13.0f, dpi), L"", &pFmt);
-                if (pFmt) { pFmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER); pFmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP); }
-
-                float padY = DpiScaleF(8.0f, dpi);
-                float curY = padY - static_cast<float>(p->scrollOffset);
-                float rowH = DpiScaleF(34.0f, dpi), sepH = DpiScaleF(9.0f, dpi), padX = DpiScaleF(8.0f, dpi);
-                float scrollPadR = (p->maxScroll > 0) ? DpiScaleF(7.0f, dpi) : 0.0f;
-                pRT->PushAxisAlignedClip(D2D1::RectF(0.0f, padY - 1.0f, static_cast<float>(w), static_cast<float>(h) - padY + 1.0f),
-                                         D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-                for (int i = 0; i < static_cast<int>(p->items.size()); ++i) {
-                    const auto& it = p->items[i];
-                    float itemH = it.isSeparator ? sepH : rowH;
-                    if (curY + itemH < padY || curY > static_cast<float>(h) - padY) {
-                        curY += itemH;
-                        continue;
-                    }
-                    if (it.isSeparator) {
-                        ID2D1SolidColorBrush* pDiv = nullptr;
-                        if (SUCCEEDED(pRT->CreateSolidColorBrush(isLight ? D2D1::ColorF(0, 0, 0, 0.09f) : D2D1::ColorF(1, 1, 1, 0.11f), &pDiv))) {
-                            float ly = curY + sepH * 0.5f;
-                            pRT->DrawLine(D2D1::Point2F(DpiScaleF(14.0f, dpi), ly), D2D1::Point2F(w - DpiScaleF(14.0f, dpi) - scrollPadR, ly), pDiv, DpiScaleF(1.0f, dpi));
-                            pDiv->Release();
-                        }
-                        curY += sepH;
-                        continue;
-                    }
-                    bool hov = (i == p->hoveredIdx || i == p->openSubIdx), prs = (i == p->pressedIdx);
-                    if (hov || prs) {
-                        D2D1_RECT_F rcPill = D2D1::RectF(padX, curY + DpiScaleF(2.0f, dpi), w - padX - scrollPadR, curY + rowH - DpiScaleF(2.0f, dpi));
-                        D2D1_COLOR_F tint = isLight ? D2D1::ColorF(0, 0, 0, prs ? 0.14f : 0.07f) : D2D1::ColorF(1, 1, 1, prs ? 0.18f : 0.10f);
-                        DrawD2DGlassButton(pRT, rcPill, (rcPill.bottom - rcPill.top) * 0.5f, dpi, tint, hov, prs, isLight);
-                    }
-                    float cy = curY + rowH * 0.5f;
-                    float rightRes = (it.isToggle ? DpiScaleF(54.0f, dpi) : DpiScaleF(28.0f, dpi)) + scrollPadR;
-                    if (pFmt && pBrText) {
-                        pRT->DrawText(it.label.c_str(), static_cast<UINT32>(it.label.size()), pFmt,
-                                      D2D1::RectF(DpiScaleF(16.0f, dpi), curY, w - rightRes, curY + rowH), pBrText, D2D1_DRAW_TEXT_OPTIONS_CLIP);
-                    }
-                    if (!it.subItems.empty() && pBrSub && pStroke) DrawIconChevronRight(pRT, pBrSub, pStroke, w - DpiScaleF(16.0f, dpi) - scrollPadR, cy, dpi);
-                    else if (it.isToggle) DrawD2DLiquidToggleSwitch(pRT, w - DpiScaleF(13.0f, dpi) - scrollPadR, cy, dpi, it.checked, isLight, hov);
-                    else if (it.checked && pStroke && pBrAccent) DrawIconCheckmark(pRT, pBrAccent, pStroke, w - DpiScaleF(18.0f, dpi) - scrollPadR, cy, dpi);
-                    curY += rowH;
-                }
-                pRT->PopAxisAlignedClip();
-
-                if (p->maxScroll > 0 && p->contentHeight > 0) {
-                    float trackTop = padY + DpiScaleF(4.0f, dpi);
-                    float trackH = static_cast<float>(h) - padY * 2.0f - DpiScaleF(8.0f, dpi);
-                    float thumbH = std::max(DpiScaleF(24.0f, dpi), trackH * (static_cast<float>(p->height) / static_cast<float>(p->contentHeight)));
-                    float ratio = static_cast<float>(p->scrollOffset) / static_cast<float>(p->maxScroll);
-                    float thumbY = trackTop + ratio * (trackH - thumbH);
-                    float sbW = DpiScaleF(3.5f, dpi);
-                    float sbX = static_cast<float>(w) - DpiScaleF(7.5f, dpi);
-                    ID2D1SolidColorBrush* pBrSb = nullptr;
-                    if (SUCCEEDED(pRT->CreateSolidColorBrush(isLight ? D2D1::ColorF(0, 0, 0, 0.28f) : D2D1::ColorF(1, 1, 1, 0.34f), &pBrSb))) {
-                        pRT->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(sbX, thumbY, sbX + sbW, thumbY + thumbH), sbW * 0.5f, sbW * 0.5f), pBrSb);
-                        pBrSb->Release();
-                    }
-                }
-
-                DrawD2DGlassRim(pRT, rcCard, cornerR, dpi, isLight, 1.3f);
-                pRT->EndDraw();
-
-                if (pFmt) pFmt->Release();
-                if (pStroke) pStroke->Release();
-                if (pBrAccent) pBrAccent->Release();
-                if (pBrSub) pBrSub->Release();
-                if (pBrText) pBrText->Release();
-                pRT->Release();
-            }
-            BitBlt(hdc, 0, 0, w, h, memDc, 0, 0, SRCCOPY);
-            SelectObject(memDc, oldBmp);
-            DeleteObject(hBmp);
-        }
-        DeleteDC(memDc);
-    }
-    EndPaint(hWnd, &ps);
-}
-
-static LRESULT CALLBACK MenuWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    auto* p = reinterpret_cast<MenuPanelState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
-    switch (uMsg) {
-        case WM_NCCREATE: {
-            auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
-            SetWindowLongPtrW(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(cs->lpCreateParams));
-            return TRUE;
-        }
-        case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
-        case WM_ERASEBKGND: return 1;
-        case WM_PAINT: PaintMenuPanel(hWnd, p); return 0;
-        case WM_MOUSEMOVE: {
-            if (!p || !p->session) return 0;
-            POINT pt{static_cast<short>(LOWORD(lParam)), static_cast<short>(HIWORD(lParam))};
-            int row = HitTestMenuRow(p->session, p, pt);
-            if (row != p->hoveredIdx) {
-                p->hoveredIdx = row;
-                if (!p->isSubMenu) { p->session->pendingSubIdx = row; SetTimer(hWnd, kTimerMenuSub, 60, nullptr); }
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hWnd, 0};
-            TrackMouseEvent(&tme);
-            return 0;
-        }
-        case WM_TIMER:
-            if (wParam == kTimerMenuSub && p && p->session && !p->isSubMenu) {
-                KillTimer(hWnd, kTimerMenuSub);
-                if (p->session->subPanel.hWnd && IsWindowVisible(p->session->subPanel.hWnd)) {
-                    POINT cur{}; GetCursorPos(&cur);
-                    RECT rcSub{}; GetWindowRect(p->session->subPanel.hWnd, &rcSub);
-                    if (PtInRect(&rcSub, cur)) { p->hoveredIdx = p->openSubIdx; InvalidateRect(hWnd, nullptr, FALSE); return 0; }
-                }
-                ShowSubMenu(p->session, p->session->pendingSubIdx);
-                return 0;
-            }
-            break;
-        case WM_MOUSELEAVE: {
-            if (!p || !p->session) return 0;
-            p->pressedIdx = -1;
-            if (p->isSubMenu) p->hoveredIdx = -1;
-            else {
-                POINT cur{}; GetCursorPos(&cur);
-                RECT rcSub{};
-                if (p->session->subPanel.hWnd && IsWindowVisible(p->session->subPanel.hWnd) &&
-                    GetWindowRect(p->session->subPanel.hWnd, &rcSub) && PtInRect(&rcSub, cur)) p->hoveredIdx = p->openSubIdx;
-                else p->hoveredIdx = -1;
-            }
-            InvalidateRect(hWnd, nullptr, FALSE);
-            return 0;
-        }
-        case WM_LBUTTONDOWN: {
-            if (!p || !p->session) return 0;
-            POINT pt{static_cast<short>(LOWORD(lParam)), static_cast<short>(HIWORD(lParam))};
-            int row = HitTestMenuRow(p->session, p, pt);
-            p->pressedIdx = row;
-            if (row >= 0 && !p->isSubMenu && !p->items[row].subItems.empty()) ShowSubMenu(p->session, row);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            return 0;
-        }
-        case WM_LBUTTONUP: {
-            if (!p || !p->session) return 0;
-            POINT pt{static_cast<short>(LOWORD(lParam)), static_cast<short>(HIWORD(lParam))};
-            int row = HitTestMenuRow(p->session, p, pt);
-            p->pressedIdx = -1;
-            if (row >= 0 && row < static_cast<int>(p->items.size())) {
-                const auto& it = p->items[row];
-                if (!it.subItems.empty()) ShowSubMenu(p->session, row);
-                else if (it.id != 0) { p->session->selectedCmd = it.id; p->session->running = false; }
-            }
-            InvalidateRect(hWnd, nullptr, FALSE);
-            return 0;
-        }
-        case WM_MOUSEWHEEL: {
-            if (!p || !p->session || p->maxScroll <= 0) return 0;
-            int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-            int step = DpiScale(68, p->session->dpi);
-            int nextOff = std::clamp(p->scrollOffset - (delta > 0 ? step : -step), 0, p->maxScroll);
-            if (nextOff != p->scrollOffset) {
-                p->scrollOffset = nextOff;
-                POINT cur{}; GetCursorPos(&cur); ScreenToClient(hWnd, &cur);
-                p->hoveredIdx = HitTestMenuRow(p->session, p, cur);
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            return 0;
-        }
-        case WM_CLOSE:
-            if (p && p->session) p->session->running = false;
-            return 0;
-    }
-    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
-}
-
-static UINT RunPillPopupMenu(HWND hOwner, UINT dpi, const ModSettings& cfg, bool isLight, bool anchoredTop,
-                             std::vector<MenuItem>&& items, POINT ptAnchorRight) {
-    MenuSession s;
-    s.dpi = dpi; s.surface = cfg.surfaceTheme; s.glassOpacity = cfg.glassOpacity;
-    s.blurOpacity = cfg.blurOpacity; s.isLight = isLight; s.anchoredTop = anchoredTop;
-    s.mainPanel.items = std::move(items); s.mainPanel.isSubMenu = false; s.mainPanel.session = &s;
-    s.subPanel.isSubMenu = true; s.subPanel.session = &s;
-    ComputeMenuPanelSize(&s, &s.mainPanel);
-
-    HMONITOR hMon = MonitorFromWindow(hOwner, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi{sizeof(mi)};
-    RECT rcWork{0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
-    if (hMon && GetMonitorInfoW(hMon, &mi)) rcWork = mi.rcWork;
-
-    int margin = DpiScale(8, dpi);
-    int mainX = std::clamp(static_cast<int>(ptAnchorRight.x) - s.mainPanel.width,
-                           static_cast<int>(rcWork.left) + margin,
-                           std::max(static_cast<int>(rcWork.left) + margin, static_cast<int>(rcWork.right) - s.mainPanel.width - margin));
-    int mainY = anchoredTop
-        ? (static_cast<int>(ptAnchorRight.y) + DpiScale(8, dpi))
-        : (static_cast<int>(ptAnchorRight.y) - s.mainPanel.height - DpiScale(8, dpi));
-    mainY = std::clamp(mainY, static_cast<int>(rcWork.top) + margin,
-                       std::max(static_cast<int>(rcWork.top) + margin, static_cast<int>(rcWork.bottom) - s.mainPanel.height - margin));
-
-    HWND hMain = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE, kMenuWndClass, L"", WS_POPUP,
-                                 mainX, mainY, s.mainPanel.width, s.mainPanel.height, hOwner, nullptr, GetModInstanceHandle(), &s.mainPanel);
-    HWND hSub = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE, kMenuWndClass, L"", WS_POPUP,
-                                0, 0, 10, 10, hOwner, nullptr, GetModInstanceHandle(), &s.subPanel);
-
-    s.mainPanel.hWnd = hMain; s.subPanel.hWnd = hSub;
-    g_activeMenuHwnd.store(hMain);
-    ApplyBorderlessPerPixelDwm(hMain, isLight, true);
-    ApplyBorderlessPerPixelDwm(hSub, isLight, true);
-    ShowWindow(hMain, SW_SHOWNOACTIVATE);
-    InvalidateRect(hMain, nullptr, FALSE);
-
-    bool mouseReleased = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0;
-    MSG msg{};
-    while (s.running && !g_unloading.load() && IsWindow(hMain)) {
-        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            if (msg.message == WM_QUIT) { s.running = false; PostQuitMessage(static_cast<int>(msg.wParam)); break; }
-            if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) { s.running = false; break; }
-            if (msg.message == WM_MOUSEWHEEL) {
-                POINT cur{}; GetCursorPos(&cur);
-                RECT rM{}, rS{}; GetWindowRect(hMain, &rM);
-                if (IsWindowVisible(hSub) && GetWindowRect(hSub, &rS) && PtInRect(&rS, cur)) {
-                    SendMessageW(hSub, WM_MOUSEWHEEL, msg.wParam, msg.lParam);
-                    continue;
-                } else if (PtInRect(&rM, cur)) {
-                    SendMessageW(hMain, WM_MOUSEWHEEL, msg.wParam, msg.lParam);
-                    continue;
-                }
-            }
-            if (msg.message == WM_LBUTTONDOWN || msg.message == WM_RBUTTONDOWN) {
-                RECT rM{}, rS{}; GetWindowRect(hMain, &rM);
-                bool inM = PtInRect(&rM, msg.pt);
-                bool inS = IsWindowVisible(hSub) && GetWindowRect(hSub, &rS) && PtInRect(&rS, msg.pt);
-                if (!inM && !inS) { s.running = false; break; }
-            }
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-        if (!s.running) break;
-        bool btnDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 || (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-        if (!btnDown) mouseReleased = true;
-        else if (mouseReleased) {
-            POINT pt{}; GetCursorPos(&pt);
-            RECT rM{}, rS{}; GetWindowRect(hMain, &rM);
-            bool inM = PtInRect(&rM, pt);
-            bool inS = IsWindowVisible(hSub) && GetWindowRect(hSub, &rS) && PtInRect(&rS, pt);
-            if (!inM && !inS) { s.running = false; break; }
-        }
-        MsgWaitForMultipleObjects(0, nullptr, FALSE, 25, QS_ALLINPUT);
-    }
-
-    g_activeMenuHwnd.store(nullptr);
-    if (IsWindow(hSub)) DestroyWindow(hSub);
-    if (IsWindow(hMain)) DestroyWindow(hMain);
-    return s.selectedCmd;
-}
 
 // ============================================================================
 // Interactive Liquid Glass Multi-Monitor Layout Arranger
@@ -4864,8 +4236,8 @@ static LRESULT CALLBACK LayoutArrangerWndProc(HWND hWnd, UINT msg, WPARAM wParam
                         std::lock_guard<std::mutex> lock(g_customLayoutMutex);
                         g_customLayout = g_layoutState.slots;
                     }
-                    Wh_SetStringValue(L"Ov_captureMonitor", L"custom");
-                    LoadSettings(false);
+                    Wh_SetStringValue(L"Cfg_captureMonitor", L"custom");
+                    LoadSettings();
                     DestroyWindow(hWnd);
                     g_layoutHwnd = nullptr;
                     if (g_pillHwnd && IsWindow(g_pillHwnd)) {
@@ -5129,247 +4501,6 @@ static void ComputeTaskbarAwarePosition(int w, int h, UINT dpi, int& outX, int& 
 
 static void OpenScreenRecorderSettingsApp(HWND hPillWnd);
 
-static void OpenSettingsMenuFromPill(HWND hWnd) {
-    ModSettings cfg = GetSettingsCopy();
-    UiStrings ui = GetUiStrings(cfg.language);
-
-    RECT monRect = GetCaptureTargetRect(cfg.captureMonitorMode);
-    int hwW = static_cast<int>(monRect.right - monRect.left) & ~1;
-    int hwH = static_cast<int>(monRect.bottom - monRect.top) & ~1;
-
-    MenuItem sep;
-    sep.isSeparator = true;
-
-    std::vector<MenuItem> items;
-    items.push_back({ 100, ui.mDrawMode,     true,  g_drawingEnabled.load(), false, {} });
-    items.push_back({ 101, ui.mSysAudio,     true,  cfg.recordSystemAudio,   false, {} });
-    items.push_back({ 102, ui.mMicAudio,     true,  cfg.recordMicrophone,    false, {} });
-    items.push_back({ 103, ui.mCursor,       true,  cfg.recordCursor,        false, {} });
-    items.push_back({ 104, ui.mOpenOnFinish, true,  cfg.openFolderOnFinish,  false, {} });
-    items.push_back(sep);
-
-    // Hardware-capped Resolution submenu (ONLY shows presets <= hardware resolution!)
-    {
-        MenuItem resMenu{ 0, ui.mResolution, false, false, false, {} };
-        wchar_t nativeLbl[96];
-        swprintf_s(nativeLbl, L"%s (%d\u00D7%d)", ui.mResNativePrefix, hwW, hwH);
-        bool isNativeSel = (cfg.targetResHeight == 0 || cfg.targetResHeight >= hwH);
-        resMenu.subItems.push_back({ 250, nativeLbl, false, isNativeSel, false, {} });
-
-        struct ResPreset { UINT id; int h; const wchar_t* tag; };
-        static constexpr ResPreset kPresets[] = {
-            { 251, 2160, L"4K" },
-            { 252, 1440, L"2K" },
-            { 253, 1080, L"Full HD" },
-            { 254, 900,  L"HD+" },
-            { 255, 720,  L"HD" },
-            { 256, 480,  L"SD" }
-        };
-        for (const auto& pr : kPresets) {
-            if (pr.h < hwH) {
-                int pw = 0, ph = 0;
-                ComputeCappedOutputSize(hwW, hwH, pr.h, pw, ph);
-                wchar_t lbl[96];
-                swprintf_s(lbl, L"%dp %s (%d\u00D7%d)", ph, pr.tag, pw, ph);
-                resMenu.subItems.push_back({ pr.id, lbl, false, (!isNativeSel && cfg.targetResHeight == pr.h), false, {} });
-            }
-        }
-        items.push_back(std::move(resMenu));
-    }
-
-    // Hardware-capped FPS submenu (ONLY shows FPS presets <= current monitor hardware refresh rate!)
-    {
-        int hwHz = GetMonitorRefreshRateHz(cfg.captureMonitorMode);
-        int effFps = ResolveEffectiveFps(cfg.fps, cfg.captureMonitorMode);
-        MenuItem fpsMenu{ 0, ui.mFps, false, false, false, {} };
-        struct FpsOpt { UINT id; int fps; };
-        static constexpr FpsOpt kFpsOpts[] = {
-            { 201, 30 }, { 202, 60 }, { 203, 75 }, { 204, 90 },
-            { 205, 120 }, { 206, 144 }, { 207, 165 }, { 208, 240 }
-        };
-        bool hasExactHw = false;
-        for (const auto& opt : kFpsOpts) {
-            if (opt.fps <= hwHz || opt.fps == 30) {
-                if (opt.fps == hwHz) hasExactHw = true;
-                wchar_t lbl[64];
-                if (opt.fps == hwHz) {
-                    swprintf_s(lbl, ui.mFpsCurrentFmt, opt.fps, hwHz);
-                } else {
-                    swprintf_s(lbl, L"%d FPS", opt.fps);
-                }
-                fpsMenu.subItems.push_back({ opt.id, lbl, false, effFps == opt.fps, false, {} });
-            }
-        }
-        if (!hasExactHw && hwHz > 30 && hwHz <= 360) {
-            wchar_t lbl[64];
-            swprintf_s(lbl, ui.mFpsCurrentFmt, hwHz, hwHz);
-            fpsMenu.subItems.push_back({ 209, lbl, false, effFps == hwHz, false, {} });
-        }
-        items.push_back(std::move(fpsMenu));
-    }
-
-    // Bitrate submenu
-    items.push_back({ 0, ui.mBitrate, false, false, false, {
-        { 211, L"6 Mbps",  false, cfg.videoBitrateMbps <= 8, false, {} },
-        { 212, L"12 Mbps", false, cfg.videoBitrateMbps > 8 && cfg.videoBitrateMbps <= 16, false, {} },
-        { 213, L"20 Mbps", false, cfg.videoBitrateMbps > 16 && cfg.videoBitrateMbps <= 28, false, {} },
-        { 214, L"35 Mbps", false, cfg.videoBitrateMbps > 28, false, {} }
-    }});
-
-    // Dynamic Multi-Monitor submenu (Monitor 1, 2, ..., All Monitors, Custom Layout)
-    {
-        auto mons = EnumerateConnectedMonitors();
-        MenuItem monMenu{ 0, ui.mMonitor, false, false, false, {} };
-        monMenu.subItems.push_back({ 220, ui.mMonCursor, false, cfg.captureMonitorMode == L"cursor", false, {} });
-        int selIdx = ParseMonitorIndexMode(cfg.captureMonitorMode);
-        for (size_t i = 0; i < mons.size() && i < 8; ++i) {
-            wchar_t lbl[96];
-            wchar_t base[32];
-            swprintf_s(base, ui.mMonItemFmt, mons[i].displayNumber);
-            swprintf_s(lbl, L"%s (%d\u00D7%d \u2022 %dHz)%s",
-                       base, mons[i].width, mons[i].height, mons[i].refreshHz,
-                       mons[i].isPrimary ? L" ★" : L"");
-            bool isSel = (selIdx == static_cast<int>(i)) || (cfg.captureMonitorMode == L"primary" && i == 0);
-            monMenu.subItems.push_back({ static_cast<UINT>(230 + i), lbl, false, isSel, false, {} });
-        }
-        monMenu.subItems.push_back(sep);
-        if (mons.size() > 1) {
-            monMenu.subItems.push_back({ 225, ui.mMonAll, false, cfg.captureMonitorMode == L"all", false, {} });
-        }
-        monMenu.subItems.push_back({ 226, ui.mMonCustom, false, cfg.captureMonitorMode == L"custom", false, {} });
-        items.push_back(std::move(monMenu));
-    }
-
-    items.push_back(sep);
-
-    // Surface Theme submenu
-    items.push_back({ 0, ui.mSurface, false, false, false, {
-        { 301, ui.mSurfGlass,    false, cfg.surfaceTheme == SurfaceTheme::Glass, false, {} },
-        { 302, ui.mSurfBlur,     false, cfg.surfaceTheme == SurfaceTheme::Blur,  false, {} },
-        { 303, ui.mSurfSolid,    false, cfg.surfaceTheme == SurfaceTheme::Solid, false, {} },
-        sep,
-        { 311, ui.mGlassMax,      false, cfg.glassOpacity <= -75, false, {} },
-        { 312, ui.mGlassClear,    false, cfg.glassOpacity > -75 && cfg.glassOpacity <= -25, false, {} },
-        { 313, ui.mGlassBalanced, false, cfg.glassOpacity > -25 && cfg.glassOpacity <= 20, false, {} },
-        { 314, ui.mGlassTinted,   false, cfg.glassOpacity > 20, false, {} }
-    }});
-
-    // Color Mode submenu
-    items.push_back({ 0, ui.mColor, false, false, false, {
-        { 321, ui.mColorAuto,  false, cfg.colorMode == ColorMode::Auto,  false, {} },
-        { 322, ui.mColorDark,  false, cfg.colorMode == ColorMode::Dark,  false, {} },
-        { 323, ui.mColorLight, false, cfg.colorMode == ColorMode::Light, false, {} }
-    }});
-
-    // Language submenu (Auto + 21 common languages, scrollable)
-    struct LangMenuOpt { UINT id; const wchar_t* code; const wchar_t* label; };
-    static constexpr LangMenuOpt kLangOpts[] = {
-        { 331, L"auto",  nullptr },
-        { 332, L"en",    L"English" },
-        { 333, L"vi",    L"Tiếng Việt" },
-        { 334, L"th",    L"ไทย (Thai)" },
-        { 335, L"id",    L"Bahasa Indonesia" },
-        { 336, L"ms",    L"Bahasa Melayu" },
-        { 337, L"ja",    L"日本語" },
-        { 338, L"zh_cn", L"简体中文" },
-        { 339, L"zh_tw", L"繁體中文" },
-        { 340, L"ko",    L"한국어" },
-        { 341, L"fr",    L"Français" },
-        { 342, L"de",    L"Deutsch" },
-        { 343, L"es",    L"Español" },
-        { 344, L"pt",    L"Português" },
-        { 345, L"it",    L"Italiano" },
-        { 346, L"ru",    L"Русский" },
-        { 347, L"uk",    L"Українська" },
-        { 348, L"pl",    L"Polski" },
-        { 349, L"nl",    L"Nederlands" },
-        { 350, L"tr",    L"Türkçe" },
-        { 351, L"hi",    L"हिन्दी (Hindi)" },
-        { 352, L"ar",    L"العربية (Arabic)" }
-    };
-    {
-        MenuItem langMenu{ 0, ui.mLanguage, false, false, false, {} };
-        for (const auto& lo : kLangOpts) {
-            const wchar_t* lbl = lo.label ? lo.label : ui.mLangAuto;
-            langMenu.subItems.push_back({ lo.id, lbl, false, cfg.language == lo.code, false, {} });
-        }
-        items.push_back(std::move(langMenu));
-    }
-
-    items.push_back(sep);
-    items.push_back({ 401, ui.mOpenFolder, false, false, false, {} });
-    items.push_back({ 402, ui.mCloseBar,   false, false, false, {} });
-
-    RECT rcWnd{};
-    GetWindowRect(hWnd, &rcWnd);
-    POINT anchor{ rcWnd.right, g_pill.anchoredTop ? rcWnd.bottom : rcWnd.top };
-
-    UINT cmd = RunPillPopupMenu(hWnd, g_pill.dpi, cfg, g_pill.isLight, g_pill.anchoredTop, std::move(items), anchor);
-    if (cmd == 0) return;
-
-    if (cmd == 100) { SetDrawingMode(!g_drawingEnabled.load()); return; }
-    else if (cmd == 101) Wh_SetIntValue(L"Ov_recordSystemAudio", cfg.recordSystemAudio ? 0 : 1);
-    else if (cmd == 102) Wh_SetIntValue(L"Ov_recordMicrophone", cfg.recordMicrophone ? 0 : 1);
-    else if (cmd == 103) Wh_SetIntValue(L"Ov_recordCursor", cfg.recordCursor ? 0 : 1);
-    else if (cmd == 104) Wh_SetIntValue(L"Ov_openFolderOnFinish", cfg.openFolderOnFinish ? 0 : 1);
-    else if (cmd == 250) Wh_SetIntValue(L"Ov_targetResHeight", 0);
-    else if (cmd == 251) Wh_SetIntValue(L"Ov_targetResHeight", 2160);
-    else if (cmd == 252) Wh_SetIntValue(L"Ov_targetResHeight", 1440);
-    else if (cmd == 253) Wh_SetIntValue(L"Ov_targetResHeight", 1080);
-    else if (cmd == 254) Wh_SetIntValue(L"Ov_targetResHeight", 900);
-    else if (cmd == 255) Wh_SetIntValue(L"Ov_targetResHeight", 720);
-    else if (cmd == 256) Wh_SetIntValue(L"Ov_targetResHeight", 480);
-    else if (cmd == 201) Wh_SetIntValue(L"Ov_fps", 30);
-    else if (cmd == 202) Wh_SetIntValue(L"Ov_fps", 60);
-    else if (cmd == 203) Wh_SetIntValue(L"Ov_fps", 75);
-    else if (cmd == 204) Wh_SetIntValue(L"Ov_fps", 90);
-    else if (cmd == 205) Wh_SetIntValue(L"Ov_fps", 120);
-    else if (cmd == 206) Wh_SetIntValue(L"Ov_fps", 144);
-    else if (cmd == 207) Wh_SetIntValue(L"Ov_fps", 165);
-    else if (cmd == 208) Wh_SetIntValue(L"Ov_fps", 240);
-    else if (cmd == 209) Wh_SetIntValue(L"Ov_fps", GetMonitorRefreshRateHz(cfg.captureMonitorMode));
-    else if (cmd == 211) Wh_SetIntValue(L"Ov_videoBitrateMbps", 6);
-    else if (cmd == 212) Wh_SetIntValue(L"Ov_videoBitrateMbps", 12);
-    else if (cmd == 213) Wh_SetIntValue(L"Ov_videoBitrateMbps", 20);
-    else if (cmd == 214) Wh_SetIntValue(L"Ov_videoBitrateMbps", 35);
-    else if (cmd == 220) Wh_SetStringValue(L"Ov_captureMonitor", L"cursor");
-    else if (cmd >= 230 && cmd <= 237) {
-        wchar_t mVal[16];
-        swprintf_s(mVal, L"mon:%u", cmd - 230);
-        Wh_SetStringValue(L"Ov_captureMonitor", mVal);
-    }
-    else if (cmd == 225) Wh_SetStringValue(L"Ov_captureMonitor", L"all");
-    else if (cmd == 226) { OpenCustomMonitorLayoutArranger(hWnd); return; }
-    else if (cmd == 301) Wh_SetStringValue(L"Ov_surfaceTheme", L"glass");
-    else if (cmd == 302) Wh_SetStringValue(L"Ov_surfaceTheme", L"blur");
-    else if (cmd == 303) Wh_SetStringValue(L"Ov_surfaceTheme", L"solid");
-    else if (cmd == 311) { Wh_SetStringValue(L"Ov_surfaceTheme", L"glass"); Wh_SetIntValue(L"Ov_glassOpacity", -100); }
-    else if (cmd == 312) { Wh_SetStringValue(L"Ov_surfaceTheme", L"glass"); Wh_SetIntValue(L"Ov_glassOpacity", -50); }
-    else if (cmd == 313) { Wh_SetStringValue(L"Ov_surfaceTheme", L"glass"); Wh_SetIntValue(L"Ov_glassOpacity", 0); }
-    else if (cmd == 314) { Wh_SetStringValue(L"Ov_surfaceTheme", L"glass"); Wh_SetIntValue(L"Ov_glassOpacity", 45); }
-    else if (cmd == 321) Wh_SetStringValue(L"Ov_colorMode", L"auto");
-    else if (cmd == 322) Wh_SetStringValue(L"Ov_colorMode", L"dark");
-    else if (cmd == 323) Wh_SetStringValue(L"Ov_colorMode", L"light");
-    else if (cmd >= 331 && cmd <= 352) {
-        for (const auto& lo : kLangOpts) {
-            if (lo.id == cmd) { Wh_SetStringValue(L"Ov_language", lo.code); break; }
-        }
-    }
-    else if (cmd == 401) { OpenRecordingsFolderInExplorer(); return; }
-    else if (cmd == 402) { HidePillBar(); return; }
-
-    LoadSettings(false);
-    UpdatePillGeometry(false);
-    InvalidateRect(hWnd, nullptr, FALSE);
-    if (g_drawBarHwnd && IsWindow(g_drawBarHwnd)) {
-        ModSettings nc = GetSettingsCopy();
-        RECT dr{}; GetWindowRect(g_drawBarHwnd, &dr);
-        g_draw.barLight = ResolveIsLightMode(nc, static_cast<int>(dr.left), static_cast<int>(dr.top),
-                                             static_cast<int>(dr.right - dr.left), static_cast<int>(dr.bottom - dr.top), g_draw.barLight);
-        ApplyBorderlessPerPixelDwm(g_drawBarHwnd, g_draw.barLight, true);
-        InvalidateRect(g_drawBarHwnd, nullptr, FALSE);
-    }
-}
 
 static void PaintPillBar(HWND hWnd) {
     PAINTSTRUCT ps{};
@@ -5737,8 +4868,8 @@ static LRESULT CALLBACK PillWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                 if (hit == 1) StartRecordingRect(GetCaptureTargetRect(cfg.captureMonitorMode), cfg.captureMonitorMode == L"custom");
                 else if (hit == 2) { HidePillBar(); LaunchRegionSelector(); }
                 else if (hit == 3 || hit == 8) SetDrawingMode(!g_drawingEnabled.load());
-                else if (hit == 4) { Wh_SetIntValue(L"Ov_recordSystemAudio", cfg.recordSystemAudio ? 0 : 1); LoadSettings(false); InvalidateRect(hWnd, nullptr, FALSE); }
-                else if (hit == 5) { Wh_SetIntValue(L"Ov_recordMicrophone", cfg.recordMicrophone ? 0 : 1); LoadSettings(false); InvalidateRect(hWnd, nullptr, FALSE); }
+                else if (hit == 4) { Wh_SetIntValue(L"Cfg_recordSystemAudio", cfg.recordSystemAudio ? 0 : 1); LoadSettings(); InvalidateRect(hWnd, nullptr, FALSE); if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet)) PostMessageW(hSet, WM_APP_RELOAD_SETTINGS, 0, 0); }
+                else if (hit == 5) { Wh_SetIntValue(L"Cfg_recordMicrophone", cfg.recordMicrophone ? 0 : 1); LoadSettings(); InvalidateRect(hWnd, nullptr, FALSE); if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet)) PostMessageW(hSet, WM_APP_RELOAD_SETTINGS, 0, 0); }
                 else if (hit == 6) OpenScreenRecorderSettingsApp(hWnd);
                 else if (hit == 7) HidePillBar();
                 else if (hit == 9) { g_isPaused = !g_isPaused.load(); InvalidateRect(hWnd, nullptr, FALSE); }
@@ -5801,9 +4932,6 @@ static void ShowPillBar(bool forRecording) {
 }
 
 static void HidePillBar() {
-    if (HWND hMenu = g_activeMenuHwnd.load()) {
-        if (IsWindow(hMenu)) PostMessageW(hMenu, WM_CLOSE, 0, 0);
-    }
     if (g_pillHwnd && IsWindow(g_pillHwnd)) {
         KillTimer(g_pillHwnd, kTimerPillTick);
         KillTimer(g_pillHwnd, kTimerPillAnim);
@@ -5907,6 +5035,10 @@ static LRESULT CALLBACK RegionSelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
                 }
             }
             return 0;
+        case WM_DESTROY:
+            if (g_regionSelHwnd == hwnd) g_regionSelHwnd = nullptr;
+            g_isSelectingRegion = false;
+            return 0;
         case WM_PAINT: {
             PAINTSTRUCT ps{}; HDC hdc = BeginPaint(hwnd, &ps);
             RECT rc{}; GetClientRect(hwnd, &rc);
@@ -5958,6 +5090,7 @@ static void LaunchRegionSelector() {
         g_selState.virtLeft, g_selState.virtTop, virtW, virtH,
         nullptr, nullptr, GetModInstanceHandle(), nullptr);
     if (!selHwnd) { g_isSelectingRegion = false; return; }
+    g_regionSelHwnd = selHwnd;
     SetLayeredWindowAttributes(selHwnd, 0, 120, LWA_ALPHA);
     ShowWindow(selHwnd, SW_SHOW);
     SetForegroundWindow(selHwnd);
@@ -5982,38 +5115,36 @@ static void RegisterAllHotkeys(HWND hwnd) {
     RegisterHotKey(hwnd, HOTKEY_PAUSE_RESUME, cfg.hotkeyModifiers | MOD_NOREPEAT, cfg.hotkeyPauseVk);
 }
 
-static UINT g_msgOpenSettings = 0;
-static UINT g_msgReloadSettings = 0;
-static UINT g_msgOpenLayoutArranger = 0;
+static LRESULT CALLBACK RecWin11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+static void RefreshUiAfterSettingsReload(HWND msgHwnd) {
+    LoadSettings();
+    RegisterAllHotkeys(msgHwnd);
+    if (g_pill.visible && g_pillHwnd && IsWindow(g_pillHwnd)) {
+        ModSettings cfg = GetSettingsCopy();
+        RECT rcP{};
+        GetWindowRect(g_pillHwnd, &rcP);
+        int pw = std::max(1, static_cast<int>(rcP.right - rcP.left));
+        int ph = std::max(1, static_cast<int>(rcP.bottom - rcP.top));
+        g_pill.isLight = ResolveIsLightMode(cfg, g_pill.posX, g_pill.posY, pw, ph, g_pill.isLight);
+        UpdatePillGeometry(false);
+        InvalidateRect(g_pillHwnd, nullptr, FALSE);
+    }
+    if (g_drawingEnabled.load() && g_drawBarHwnd && IsWindow(g_drawBarHwnd)) {
+        InvalidateRect(g_drawBarHwnd, nullptr, FALSE);
+    }
+    if (g_drawingEnabled.load() && g_drawHintHwnd && IsWindow(g_drawHintHwnd)) {
+        InvalidateRect(g_drawHintHwnd, nullptr, FALSE);
+    }
+    if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet)) {
+        PostMessageW(hSet, WM_APP_RELOAD_SETTINGS, 0, 0);
+    }
+}
 
 static LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (msg == g_msgReloadSettings && g_msgReloadSettings != 0) {
-        LoadSettings(false);
-        RegisterAllHotkeys(hwnd);
-        if (g_pill.visible && g_pillHwnd) {
-            ModSettings cfg = GetSettingsCopy();
-            RECT rcP{};
-            GetWindowRect(g_pillHwnd, &rcP);
-            int pw = std::max(1, static_cast<int>(rcP.right - rcP.left));
-            int ph = std::max(1, static_cast<int>(rcP.bottom - rcP.top));
-            g_pill.isLight = ResolveIsLightMode(cfg, g_pill.posX, g_pill.posY, pw, ph, g_pill.isLight);
-            UpdatePillGeometry(false);
-            InvalidateRect(g_pillHwnd, nullptr, FALSE);
-        }
-        if (g_drawingEnabled.load() && g_drawBarHwnd && IsWindow(g_drawBarHwnd)) {
-            InvalidateRect(g_drawBarHwnd, nullptr, FALSE);
-        }
-        if (g_drawingEnabled.load() && g_drawHintHwnd && IsWindow(g_drawHintHwnd)) {
-            InvalidateRect(g_drawHintHwnd, nullptr, FALSE);
-        }
-        return 0;
-    }
-    if (msg == g_msgOpenLayoutArranger && g_msgOpenLayoutArranger != 0) {
-        OpenCustomMonitorLayoutArranger(g_pillHwnd);
-        return 0;
-    }
     switch (msg) {
         case WM_HOTKEY: {
+            if (g_unloading.load()) return 0;
             int id = static_cast<int>(wParam);
             if (id == HOTKEY_TOGGLE_BAR) {
                 if (g_isRecording.load()) g_stopRequested = true;
@@ -6037,18 +5168,17 @@ static LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             return 0;
         }
         case WM_APP_RELOAD_SETTINGS:
-            RegisterAllHotkeys(hwnd);
-            if (g_pill.visible && g_pillHwnd) {
-                UpdatePillGeometry(false);
-                InvalidateRect(g_pillHwnd, nullptr, FALSE);
-            }
+            RefreshUiAfterSettingsReload(hwnd);
             return 0;
         case WM_APP_START_REGION_RECORD:
+            if (g_unloading.load()) return 0;
             Sleep(80);
+            if (g_unloading.load()) return 0;
             ShowRegionBorder(g_pendingRegionRect);
             StartRecordingRect(g_pendingRegionRect);
             return 0;
         case WM_APP_RECORDING_STARTED: {
+            if (g_unloading.load()) return 0;
             ModSettings cfg = GetSettingsCopy();
             if (cfg.showFloatingHud) ShowPillBar(true);
             else HidePillBar();
@@ -6056,11 +5186,20 @@ static LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         }
         case WM_APP_RECORDING_STOPPED:
         case WM_APP_RECORDING_ERROR:
+            JoinFinishedRecordingThread();
             DestroyRegionBorder();
             SetDrawingMode(false);
             HidePillBar();
             return 0;
         case WM_APP_SHUTDOWN:
+            if (g_regionSelHwnd && IsWindow(g_regionSelHwnd)) {
+                DestroyWindow(g_regionSelHwnd);
+                g_regionSelHwnd = nullptr;
+            }
+            g_isSelectingRegion.store(false);
+            if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet)) {
+                DestroyWindow(hSet);
+            }
             DestroyPillBar();
             DestroyRegionBorder();
             UnregisterAllHotkeys(hwnd);
@@ -6073,7 +5212,8 @@ static LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-static void UiThreadProc() {
+static void UiThreadProc(HANDLE hReadyEvent) {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     HINSTANCE hInst = GetModInstanceHandle();
 
@@ -6089,27 +5229,24 @@ static void UiThreadProc() {
         }
     }
 
-    auto regCls = [&](const wchar_t* name, WNDPROC proc, HCURSOR cur) {
+    auto regCls = [&](const wchar_t* name, WNDPROC proc, HCURSOR cur, UINT style = 0) {
         WNDCLASSEXW wc{sizeof(wc)};
-        wc.lpfnWndProc = proc; wc.hInstance = hInst; wc.hCursor = cur; wc.lpszClassName = name;
+        wc.style = style; wc.lpfnWndProc = proc; wc.hInstance = hInst; wc.hCursor = cur; wc.lpszClassName = name;
         RegisterClassExW(&wc);
     };
     regCls(kMsgWndClass, MsgWndProc, nullptr);
     regCls(kPillWndClass, PillWndProc, LoadCursorW(nullptr, IDC_ARROW));
-    regCls(kMenuWndClass, MenuWndProc, LoadCursorW(nullptr, IDC_ARROW));
     regCls(kRegionSelWndClass, RegionSelWndProc, LoadCursorW(nullptr, IDC_CROSS));
     regCls(kRegionBorderWndClass, RegionBorderWndProc, nullptr);
     regCls(kDrawCanvasWndClass, DrawCanvasWndProc, LoadCursorW(nullptr, IDC_CROSS));
     regCls(kDrawBarWndClass, DrawBarWndProc, LoadCursorW(nullptr, IDC_ARROW));
     regCls(kDrawHintWndClass, DrawHintWndProc, nullptr);
     regCls(kLayoutWndClass, LayoutArrangerWndProc, LoadCursorW(nullptr, IDC_ARROW));
+    regCls(kRecWin11SettingsClass, RecWin11SettingsWndProc, LoadCursorW(nullptr, IDC_ARROW), CS_HREDRAW | CS_VREDRAW);
 
     HWND hwnd = CreateWindowExW(0, kMsgWndClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, hInst, nullptr);
     g_msgHwnd.store(hwnd);
-    if (hwnd) {
-        if (g_msgReloadSettings) ChangeWindowMessageFilterEx(hwnd, g_msgReloadSettings, MSGFLT_ALLOW, nullptr);
-        if (g_msgOpenLayoutArranger) ChangeWindowMessageFilterEx(hwnd, g_msgOpenLayoutArranger, MSGFLT_ALLOW, nullptr);
-    }
+    if (hReadyEvent) SetEvent(hReadyEvent);
 
     if (hwnd) {
         RegisterAllHotkeys(hwnd);
@@ -6120,14 +5257,22 @@ static void UiThreadProc() {
         }
     }
 
+    // Ensure no owned windows linger if loop exited early
+    if (g_regionSelHwnd && IsWindow(g_regionSelHwnd)) { DestroyWindow(g_regionSelHwnd); g_regionSelHwnd = nullptr; }
+    if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet)) { DestroyWindow(hSet); }
+    DestroyPillBar();
+    DestroyRegionBorder();
+
     g_msgHwnd.store(nullptr);
+    UnregisterClassW(kRecComboFlyoutClass, hInst);
+    UnregisterClassW(kRecColorPickerClass, hInst);
+    UnregisterClassW(kRecWin11SettingsClass, hInst);
     UnregisterClassW(kLayoutWndClass, hInst);
     UnregisterClassW(kDrawHintWndClass, hInst);
     UnregisterClassW(kDrawBarWndClass, hInst);
     UnregisterClassW(kDrawCanvasWndClass, hInst);
     UnregisterClassW(kRegionBorderWndClass, hInst);
     UnregisterClassW(kRegionSelWndClass, hInst);
-    UnregisterClassW(kMenuWndClass, hInst);
     UnregisterClassW(kPillWndClass, hInst);
     UnregisterClassW(kMsgWndClass, hInst);
 
@@ -6139,50 +5284,26 @@ static void UiThreadProc() {
 
 
 // ============================================================================
-// Dedicated WinUI 3 Settings Window (Hosted in windhawk.exe -tool-mod)
+// Built-In WinUI 3 Settings Window (In-Process on Tool Mod UI Thread)
 // ============================================================================
 
-static constexpr const wchar_t* kRecSettingsHostClass = L"WindhawkScreenRecSettingsHost_v2";
-static constexpr const wchar_t* kRecWin11SettingsClass = L"WindhawkScreenRecWin11Settings_v2";
-
-static bool g_isExplorerProcess = false;
-static bool g_isToolModProcessLauncher = false;
-static HANDLE g_toolModProcessMutex = nullptr;
-static bool g_recSettingsHostRegistered = false;
-static bool g_recWin11SettingsRegistered = false;
-static std::atomic<HWND> g_hRecSettingsHostWnd{nullptr};
-static std::atomic<HWND> g_hRecWin11SettingsWnd{nullptr};
-static HANDLE g_hRecSettingsHostThread = nullptr;
-static DWORD g_recSettingsHostThreadId = 0;
+static void ShowOrFocusRecSettingsWindow();
 
 static void OpenScreenRecorderSettingsApp(HWND) {
     if (g_unloading.load()) return;
-    HWND hHost = FindWindowW(kRecSettingsHostClass, nullptr);
-    if (!hHost || !IsWindow(hHost) || g_msgOpenSettings == 0) {
-        Wh_Log(L"[ScreenRecorder] Settings host not running (hHost=%p, msg=%u)", hHost, g_msgOpenSettings);
-        return;
-    }
-    DWORD hostPid = 0;
-    GetWindowThreadProcessId(hHost, &hostPid);
-    if (hostPid != 0) AllowSetForegroundWindow(hostPid);
-    PostMessageW(hHost, g_msgOpenSettings, 0, 0);
+    ShowOrFocusRecSettingsWindow();
 }
 
-static void BroadcastReloadToExplorerRecorder() {
-    HWND hMsg = FindWindowExW(HWND_MESSAGE, nullptr, kMsgWndClass, nullptr);
-    if (hMsg && IsWindow(hMsg) && g_msgReloadSettings != 0) {
-        PostMessageW(hMsg, g_msgReloadSettings, 0, 0);
+static void BroadcastReloadToRecorderUi() {
+    HWND hMsg = g_msgHwnd.load();
+    if (hMsg && IsWindow(hMsg)) {
+        PostMessageW(hMsg, WM_APP_RELOAD_SETTINGS, 0, 0);
     }
 }
 
-static void TriggerLayoutArrangerInExplorer() {
-    HWND hMsg = FindWindowExW(HWND_MESSAGE, nullptr, kMsgWndClass, nullptr);
-    if (hMsg && IsWindow(hMsg) && g_msgOpenLayoutArranger != 0) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(hMsg, &pid);
-        if (pid != 0) AllowSetForegroundWindow(pid);
-        PostMessageW(hMsg, g_msgOpenLayoutArranger, 0, 0);
-    }
+static void TriggerLayoutArrangerInProcess() {
+    if (g_unloading.load()) return;
+    OpenCustomMonitorLayoutArranger(g_pillHwnd);
 }
 
 static D2D1_COLOR_F GetWindowsSystemAccentColor(bool isLight) {
@@ -6546,7 +5667,7 @@ static LRESULT CALLBACK RecColorPickerWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
 }
 
 static bool PickRecColorViaWinUI3(HWND hOwner, COLORREF initRgb, bool isLight, bool isVi, UINT dpi, COLORREF* outRgb) {
-    static constexpr const wchar_t* kColorCls = L"WindhawkScreenRecColorPicker_v2";
+    const wchar_t* kColorCls = kRecColorPickerClass;
     WNDCLASSEXW wc{ sizeof(wc) };
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = RecColorPickerWndProc;
@@ -6585,11 +5706,16 @@ static bool PickRecColorViaWinUI3(HWND hOwner, COLORREF initRgb, bool isLight, b
     SetForegroundWindow(hDlg);
 
     MSG msg{};
-    while (!sess.done && GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == WM_QUIT) { PostQuitMessage(static_cast<int>(msg.wParam)); break; }
+    while (!sess.done && !g_unloading.load() && IsWindow(hDlg)) {
+        BOOL gm = GetMessageW(&msg, nullptr, 0, 0);
+        if (gm <= 0) {
+            if (gm == 0) PostQuitMessage(static_cast<int>(msg.wParam));
+            break;
+        }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    if (IsWindow(hDlg)) DestroyWindow(hDlg);
     if (hOwner && IsWindow(hOwner)) { EnableWindow(hOwner, TRUE); SetForegroundWindow(hOwner); }
     if (sess.confirmed && outRgb) { *outRgb = HsvToRgb(sess.hue, sess.sat, sess.val); return true; }
     return false;
@@ -6738,7 +5864,7 @@ static LRESULT CALLBACK RecComboFlyoutWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
 static int ShowRecComboFlyout(HWND hOwner, const RECT& rcCombo, const std::vector<std::pair<int, std::wstring>>& items,
                               int checkedId, bool isLight, UINT dpi) {
     if (items.empty()) return 0;
-    static constexpr const wchar_t* kComboCls = L"WindhawkScreenRecComboFlyout_v2";
+    const wchar_t* kComboCls = kRecComboFlyoutClass;
     WNDCLASSEXW wc{ sizeof(wc) };
     wc.style = CS_HREDRAW | CS_VREDRAW | CS_DROPSHADOW;
     wc.lpfnWndProc = RecComboFlyoutWndProc;
@@ -6787,11 +5913,16 @@ static int ShowRecComboFlyout(HWND hOwner, const RECT& rcCombo, const std::vecto
     SetForegroundWindow(hPop);
 
     MSG msg{};
-    while (!sess.done && GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        if (msg.message == WM_QUIT) { PostQuitMessage(static_cast<int>(msg.wParam)); break; }
+    while (!sess.done && !g_unloading.load() && IsWindow(hPop)) {
+        BOOL gm = GetMessageW(&msg, nullptr, 0, 0);
+        if (gm <= 0) {
+            if (gm == 0) PostQuitMessage(static_cast<int>(msg.wParam));
+            break;
+        }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+    if (IsWindow(hPop)) DestroyWindow(hPop);
     return sess.chosenId;
 }
 
@@ -7303,8 +6434,8 @@ static void PaintRecSettingsWindow(HWND hWnd, RecSettingsState* st) {
 
 static LRESULT CALLBACK RecWin11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     auto* st = reinterpret_cast<RecSettingsState*>(GetWindowLongPtrW(hWnd, GWLP_USERDATA));
-    if (uMsg == g_msgReloadSettings && g_msgReloadSettings != 0 && st) {
-        LoadSettings(false);
+    if (uMsg == WM_APP_RELOAD_SETTINGS && st) {
+        LoadSettings();
         st->settings = GetSettingsCopy();
         st->isLight = (st->settings.colorMode == ColorMode::Light) ? true
                     : ((st->settings.colorMode == ColorMode::Dark) ? false : IsSystemAppLightTheme());
@@ -7385,11 +6516,11 @@ static LRESULT CALLBACK RecWin11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wPa
                     for (int k = 1; k <= 13; ++k) if (st->settings.themePreset == kKeys[k]) curIdx = k;
                     int sel = ShowRecComboFlyout(hWnd, hit.rc, opts, curIdx, st->isLight, st->dpi);
                     if (sel >= 1 && sel <= 13) {
-                        Wh_SetStringValue(L"Ov_themePreset", kKeys[sel]);
+                        Wh_SetStringValue(L"Cfg_themePreset", kKeys[sel]);
                         if (sel != 13) {
-                            Wh_SetStringValue(L"Ov_customBgColor", L"__NONE__");
-                            Wh_SetStringValue(L"Ov_customBorderColor", L"__NONE__");
-                            Wh_SetIntValue(L"Ov_customCornerRadius", -1);
+                            Wh_SetStringValue(L"Cfg_customBgColor", L"__NONE__");
+                            Wh_SetStringValue(L"Cfg_customBorderColor", L"__NONE__");
+                            Wh_SetIntValue(L"Cfg_customCornerRadius", -1);
                         }
                         changed = true;
                     }
@@ -7403,7 +6534,7 @@ static LRESULT CALLBACK RecWin11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wPa
                     int sel = ShowRecComboFlyout(hWnd, hit.rc, opts, curIdx, st->isLight, st->dpi);
                     if (sel >= 1 && sel <= 3) {
                         static const wchar_t* kC[] = { L"", L"auto", L"dark", L"light" };
-                        Wh_SetStringValue(L"Ov_colorMode", kC[sel]);
+                        Wh_SetStringValue(L"Cfg_colorMode", kC[sel]);
                         changed = true;
                     }
                 } else if (id == 2201) {
@@ -7411,27 +6542,27 @@ static LRESULT CALLBACK RecWin11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wPa
                     TryParseHexColor(st->settings.customBgColor, &initRgb);
                     COLORREF picked = 0;
                     if (PickRecColorViaWinUI3(hWnd, initRgb, st->isLight, isVi, st->dpi, &picked)) {
-                        Wh_SetStringValue(L"Ov_customBgColor", FormatHexColor(picked).c_str());
+                        Wh_SetStringValue(L"Cfg_customBgColor", FormatHexColor(picked).c_str());
                         changed = true;
                     }
                 } else if (id == 2202) {
-                    Wh_SetStringValue(L"Ov_customBgColor", L"__NONE__");
+                    Wh_SetStringValue(L"Cfg_customBgColor", L"__NONE__");
                     changed = true;
                 } else if (id == 2203) {
                     COLORREF initRgb = RGB(80, 90, 110);
                     TryParseHexColor(st->settings.customBorderColor, &initRgb);
                     COLORREF picked = 0;
                     if (PickRecColorViaWinUI3(hWnd, initRgb, st->isLight, isVi, st->dpi, &picked)) {
-                        Wh_SetStringValue(L"Ov_customBorderColor", FormatHexColor(picked).c_str());
+                        Wh_SetStringValue(L"Cfg_customBorderColor", FormatHexColor(picked).c_str());
                         changed = true;
                     }
                 } else if (id == 2204) {
-                    Wh_SetStringValue(L"Ov_customBorderColor", L"__NONE__");
+                    Wh_SetStringValue(L"Cfg_customBorderColor", L"__NONE__");
                     changed = true;
                 } else if (id == 2210 || id == 2211 || id == 2212) {
                     int cur = (st->settings.customCornerRadius < 0) ? 14 : st->settings.customCornerRadius;
                     int next = (id == 2212) ? -1 : std::clamp(cur + (id == 2211 ? 2 : -2), 0, 28);
-                    Wh_SetIntValue(L"Ov_customCornerRadius", next);
+                    Wh_SetIntValue(L"Cfg_customCornerRadius", next);
                     changed = true;
                 } else if (id == 2301) {
                     RECT monRect = GetCaptureTargetRect(st->settings.captureMonitorMode);
@@ -7458,7 +6589,7 @@ static LRESULT CALLBACK RecWin11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wPa
                     std::vector<std::pair<int, std::wstring>> flyOpts;
                     for (auto& o : opts) flyOpts.push_back({ o.first + 1, o.second });
                     int sel = ShowRecComboFlyout(hWnd, hit.rc, flyOpts, curRes + 1, st->isLight, st->dpi);
-                    if (sel >= 1) { Wh_SetIntValue(L"Ov_targetResHeight", sel - 1); changed = true; }
+                    if (sel >= 1) { Wh_SetIntValue(L"Cfg_targetResHeight", sel - 1); changed = true; }
                 } else if (id == 2302) {
                     int hwHz = GetMonitorRefreshRateHz(st->settings.captureMonitorMode);
                     int effFps = ResolveEffectiveFps(st->settings.fps, st->settings.captureMonitorMode);
@@ -7480,13 +6611,13 @@ static LRESULT CALLBACK RecWin11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wPa
                         opts.push_back({ hwHz, lbl });
                     }
                     int sel = ShowRecComboFlyout(hWnd, hit.rc, opts, effFps, st->isLight, st->dpi);
-                    if (sel >= 30 && sel <= 360) { Wh_SetIntValue(L"Ov_fps", sel); changed = true; }
+                    if (sel >= 30 && sel <= 360) { Wh_SetIntValue(L"Cfg_fps", sel); changed = true; }
                 } else if (id == 2303) {
                     std::vector<std::pair<int, std::wstring>> opts = {
                         { 6, L"6 Mbps" }, { 12, L"12 Mbps" }, { 20, L"20 Mbps" }, { 35, L"35 Mbps" }
                     };
                     int sel = ShowRecComboFlyout(hWnd, hit.rc, opts, st->settings.videoBitrateMbps, st->isLight, st->dpi);
-                    if (sel >= 2 && sel <= 50) { Wh_SetIntValue(L"Ov_videoBitrateMbps", sel); changed = true; }
+                    if (sel >= 2 && sel <= 50) { Wh_SetIntValue(L"Cfg_videoBitrateMbps", sel); changed = true; }
                 } else if (id == 2310) {
                     auto mons = EnumerateConnectedMonitors();
                     std::vector<std::pair<int, std::wstring>> opts;
@@ -7509,37 +6640,37 @@ static LRESULT CALLBACK RecWin11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wPa
                     if (st->settings.captureMonitorMode == L"custom") curId = 3;
 
                     int sel = ShowRecComboFlyout(hWnd, hit.rc, opts, curId, st->isLight, st->dpi);
-                    if (sel == 1) { Wh_SetStringValue(L"Ov_captureMonitor", L"cursor"); changed = true; }
-                    else if (sel == 2) { Wh_SetStringValue(L"Ov_captureMonitor", L"all"); changed = true; }
-                    else if (sel == 3) { Wh_SetStringValue(L"Ov_captureMonitor", L"custom"); changed = true; TriggerLayoutArrangerInExplorer(); }
+                    if (sel == 1) { Wh_SetStringValue(L"Cfg_captureMonitor", L"cursor"); changed = true; }
+                    else if (sel == 2) { Wh_SetStringValue(L"Cfg_captureMonitor", L"all"); changed = true; }
+                    else if (sel == 3) { Wh_SetStringValue(L"Cfg_captureMonitor", L"custom"); changed = true; TriggerLayoutArrangerInProcess(); }
                     else if (sel >= 10 && sel < 18) {
                         wchar_t mv[16] = {};
                         swprintf_s(mv, L"mon:%d", sel - 10);
-                        Wh_SetStringValue(L"Ov_captureMonitor", mv);
+                        Wh_SetStringValue(L"Cfg_captureMonitor", mv);
                         changed = true;
                     }
                 } else if (id == 2311) {
-                    TriggerLayoutArrangerInExplorer();
+                    TriggerLayoutArrangerInProcess();
                     return 0;
                 } else if (id == 2401) {
-                    Wh_SetIntValue(L"Ov_recordSystemAudio", st->settings.recordSystemAudio ? 0 : 1); changed = true;
+                    Wh_SetIntValue(L"Cfg_recordSystemAudio", st->settings.recordSystemAudio ? 0 : 1); changed = true;
                 } else if (id == 2402) {
-                    Wh_SetIntValue(L"Ov_recordMicrophone", st->settings.recordMicrophone ? 0 : 1); changed = true;
+                    Wh_SetIntValue(L"Cfg_recordMicrophone", st->settings.recordMicrophone ? 0 : 1); changed = true;
                 } else if (id == 2403) {
-                    Wh_SetIntValue(L"Ov_recordCursor", st->settings.recordCursor ? 0 : 1); changed = true;
+                    Wh_SetIntValue(L"Cfg_recordCursor", st->settings.recordCursor ? 0 : 1); changed = true;
                 } else if (id == 2404) {
-                    Wh_SetIntValue(L"Ov_openFolderOnFinish", st->settings.openFolderOnFinish ? 0 : 1); changed = true;
+                    Wh_SetIntValue(L"Cfg_openFolderOnFinish", st->settings.openFolderOnFinish ? 0 : 1); changed = true;
                 } else if (id == 2405) {
-                    Wh_SetIntValue(L"Ov_showFloatingHud", st->settings.showFloatingHud ? 0 : 1); changed = true;
+                    Wh_SetIntValue(L"Cfg_showFloatingHud", st->settings.showFloatingHud ? 0 : 1); changed = true;
                 } else if (id == 2410) {
                     OpenRecordingsFolderInExplorer();
                     return 0;
                 } else if (id >= 2600 && id <= 2621) {
-                    Wh_SetStringValue(L"Ov_language", hit.strVal.c_str()); changed = true;
+                    Wh_SetStringValue(L"Cfg_language", hit.strVal.c_str()); changed = true;
                 }
 
                 if (changed) {
-                    LoadSettings(false);
+                    LoadSettings();
                     st->settings = GetSettingsCopy();
                     st->isLight = (st->settings.colorMode == ColorMode::Light) ? true
                                 : ((st->settings.colorMode == ColorMode::Dark) ? false : IsSystemAppLightTheme());
@@ -7547,7 +6678,7 @@ static LRESULT CALLBACK RecWin11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wPa
                     SetWindowTextW(hWnd, viNow ? L"Cài đặt Quay Màn Hình" : L"Screen Recorder Settings");
                     ApplyRecSettingsWindowFrame(hWnd, st->isLight);
                     InvalidateRect(hWnd, nullptr, FALSE);
-                    BroadcastReloadToExplorerRecorder();
+                    BroadcastReloadToRecorderUi();
                 }
                 break;
             }
@@ -7567,7 +6698,7 @@ static LRESULT CALLBACK RecWin11SettingsWndProc(HWND hWnd, UINT uMsg, WPARAM wPa
 }
 
 static void ShowOrFocusRecSettingsWindow() {
-    if (g_unloading.load() || !g_recWin11SettingsRegistered) return;
+    if (g_unloading.load()) return;
     HWND hExisting = g_hRecWin11SettingsWnd.load();
     if (hExisting && IsWindow(hExisting)) {
         if (IsIconic(hExisting)) ShowWindow(hExisting, SW_RESTORE);
@@ -7577,7 +6708,7 @@ static void ShowOrFocusRecSettingsWindow() {
         return;
     }
 
-    LoadSettings(false);
+    LoadSettings();
     auto* st = new RecSettingsState();
     st->settings = GetSettingsCopy();
 
@@ -7612,240 +6743,233 @@ static void ShowOrFocusRecSettingsWindow() {
     SetForegroundWindow(hWnd);
 }
 
-static LRESULT CALLBACK RecSettingsHostWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == g_msgOpenSettings && g_msgOpenSettings != 0) {
-        ShowOrFocusRecSettingsWindow();
-        return 1;
-    }
-    if (uMsg == WM_CLOSE) {
-        if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet)) DestroyWindow(hSet);
-        DestroyWindow(hWnd);
-        return 0;
-    }
-    if (uMsg == WM_DESTROY) { PostQuitMessage(0); return 0; }
-    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
-}
-
-static DWORD WINAPI RecSettingsHostThreadProc(LPVOID param) {
-    HANDLE hReadyEvent = static_cast<HANDLE>(param);
-    MSG initMsg{};
-    PeekMessageW(&initMsg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-
-    D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), nullptr, reinterpret_cast<void**>(&g_pD2DFactory));
-    DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&g_pDWriteFactory));
-
-    HINSTANCE hInst = GetModInstanceHandle();
-    WNDCLASSEXW wcSet{ sizeof(wcSet) };
-    wcSet.style = CS_HREDRAW | CS_VREDRAW;
-    wcSet.lpfnWndProc = RecWin11SettingsWndProc;
-    wcSet.hInstance = hInst;
-    wcSet.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-    wcSet.lpszClassName = kRecWin11SettingsClass;
-    if (RegisterClassExW(&wcSet) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS) g_recWin11SettingsRegistered = true;
-
-    WNDCLASSEXW wcHost{ sizeof(wcHost) };
-    wcHost.lpfnWndProc = RecSettingsHostWndProc;
-    wcHost.hInstance = hInst;
-    wcHost.lpszClassName = kRecSettingsHostClass;
-    if (RegisterClassExW(&wcHost) || GetLastError() == ERROR_CLASS_ALREADY_EXISTS) g_recSettingsHostRegistered = true;
-
-    HWND hHost = nullptr;
-    if (g_recSettingsHostRegistered) {
-        hHost = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kRecSettingsHostClass, L"",
-            WS_POPUP, -32000, -32000, 0, 0, nullptr, nullptr, hInst, nullptr);
-    }
-    if (hHost) {
-        if (g_msgOpenSettings) ChangeWindowMessageFilterEx(hHost, g_msgOpenSettings, MSGFLT_ALLOW, nullptr);
-        g_hRecSettingsHostWnd.store(hHost);
-        Wh_Log(L"[ScreenRecorder] WinUI 3 Settings IPC host ready (HWND=%p, PID=%lu)", hHost, GetCurrentProcessId());
-    } else {
-        Wh_Log(L"[ScreenRecorder] Settings IPC host CreateWindowExW failed (err=%lu)", GetLastError());
-    }
-    if (hReadyEvent) SetEvent(hReadyEvent);
-
-    if (hHost) {
-        MSG msg{};
-        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-        HWND expected = hHost;
-        g_hRecSettingsHostWnd.compare_exchange_strong(expected, nullptr);
-    }
-
-    if (g_recWin11SettingsRegistered) { UnregisterClassW(kRecWin11SettingsClass, hInst); g_recWin11SettingsRegistered = false; }
-    if (g_recSettingsHostRegistered)  { UnregisterClassW(kRecSettingsHostClass, hInst);  g_recSettingsHostRegistered = false; }
-    if (g_pDWriteFactory) { g_pDWriteFactory->Release(); g_pDWriteFactory = nullptr; }
-    if (g_pD2DFactory)    { g_pD2DFactory->Release();    g_pD2DFactory = nullptr; }
-    CoUninitialize();
-    return 0;
-}
-
-static void StopRecSettingsHostCleanly() {
-    if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet)) PostMessageW(hSet, WM_CLOSE, 0, 0);
-    if (HWND hHost = g_hRecSettingsHostWnd.load(); hHost && IsWindow(hHost)) PostMessageW(hHost, WM_CLOSE, 0, 0);
-    if (g_recSettingsHostThreadId != 0) PostThreadMessageW(g_recSettingsHostThreadId, WM_QUIT, 0, 0);
-    if (g_hRecSettingsHostThread) {
-        WaitForSingleObject(g_hRecSettingsHostThread, 2000);
-        CloseHandle(g_hRecSettingsHostThread);
-        g_hRecSettingsHostThread = nullptr;
-        g_recSettingsHostThreadId = 0;
-    }
-}
-
-static bool IsExplorerProcess() {
-    wchar_t exePath[MAX_PATH] = {};
-    if (GetModuleFileNameW(nullptr, exePath, ARRAYSIZE(exePath)) == 0) return false;
-    const wchar_t* exeName = PathFindFileNameW(exePath);
-    return exeName && _wcsicmp(exeName, L"explorer.exe") == 0;
-}
-
 BOOL WhTool_ModInit() {
+    Wh_Log(L"[ScreenRecorder] Initializing Native Windows Screen Recorder v2.0.4 (tool process)");
     g_unloading.store(false);
-    LoadSettings(false);
-    g_msgOpenSettings       = RegisterWindowMessageW(L"Windhawk_OpenRecSettings_" WH_MOD_ID);
-    g_msgReloadSettings     = RegisterWindowMessageW(L"Windhawk_ReloadRecSettings_" WH_MOD_ID);
-    g_msgOpenLayoutArranger = RegisterWindowMessageW(L"Windhawk_OpenRecLayout_" WH_MOD_ID);
+    LoadSettings();
 
     HANDLE hReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_hRecSettingsHostThread = CreateThread(nullptr, 0, RecSettingsHostThreadProc, hReady, 0, &g_recSettingsHostThreadId);
-    if (!g_hRecSettingsHostThread) {
-        if (hReady) CloseHandle(hReady);
+    if (!hReady) {
+        Wh_Log(L"[ScreenRecorder] CreateEventW failed");
         return FALSE;
     }
-    if (hReady) { WaitForSingleObject(hReady, 3000); CloseHandle(hReady); }
+
+    g_uiThread.emplace(UiThreadProc, hReady);
+    WaitForSingleObject(hReady, 5000);
+    CloseHandle(hReady);
+
+    if (!g_msgHwnd.load()) {
+        Wh_Log(L"[ScreenRecorder] UI message window failed to initialize");
+        if (g_uiThread && g_uiThread->joinable()) {
+            g_uiThread->join();
+        }
+        g_uiThread.reset();
+        return FALSE;
+    }
+
     return TRUE;
 }
 
 void WhTool_ModSettingsChanged() {
-    LoadSettings(true);
-    if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet) && g_msgReloadSettings != 0) {
-        PostMessageW(hSet, g_msgReloadSettings, 0, 0);
+    LoadSettings();
+    HWND hwnd = g_msgHwnd.load();
+    if (hwnd && IsWindow(hwnd)) {
+        PostMessageW(hwnd, WM_APP_RELOAD_SETTINGS, 0, 0);
     }
 }
 
 void WhTool_ModUninit() {
     g_unloading.store(true);
-    StopRecSettingsHostCleanly();
+
+    // 1. Shut down and join the UI thread first so no new recording can start during unload.
+    HWND hwnd = g_msgHwnd.load();
+    if (hwnd) {
+        PostMessageW(hwnd, WM_APP_SHUTDOWN, 0, 0);
+    }
+    if (g_uiThread && g_uiThread->joinable()) {
+        g_uiThread->join();
+    }
+    g_uiThread.reset();
+
+    // 2. Now safely stop and join any active recording worker thread.
+    StopRecordingSync();
 }
 
-static void WINAPI RecToolEntryPoint_Hook() {
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
-// ============================================================================
-// Windhawk Dual-Process Entry Points (explorer.exe + windhawk.exe -tool-mod)
-// ============================================================================
-
 BOOL Wh_ModInit() {
-    if (IsExplorerProcess()) {
-        g_isExplorerProcess = true;
-        Wh_Log(L"[ScreenRecorder] Initializing Native Windows Screen Recorder v2.0.4 (explorer.exe)");
-        g_unloading.store(false);
-        g_msgOpenSettings       = RegisterWindowMessageW(L"Windhawk_OpenRecSettings_" WH_MOD_ID);
-        g_msgReloadSettings     = RegisterWindowMessageW(L"Windhawk_ReloadRecSettings_" WH_MOD_ID);
-        g_msgOpenLayoutArranger = RegisterWindowMessageW(L"Windhawk_OpenRecLayout_" WH_MOD_ID);
-        LoadSettings(false);
-        g_uiThread = std::thread(UiThreadProc);
-        return TRUE;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
     }
 
-    DWORD sessionId = 0;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) return FALSE;
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
 
-    bool isExcluded = false, isToolModProcess = false, isCurrentToolModProcess = false;
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!argv) return FALSE;
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 || wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true; break;
-        }
-    }
-    for (int i = 1; i < argc - 1; i++) {
-        if (wcscmp(argv[i], L"-tool-mod") == 0) {
-            isToolModProcess = true;
-            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) isCurrentToolModProcess = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
     LocalFree(argv);
-    if (isExcluded) return FALSE;
+
+    if (isExcluded) {
+        return FALSE;
+    }
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex = CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex || GetLastError() == ERROR_ALREADY_EXISTS) ExitProcess(1);
-        if (!WhTool_ModInit()) ExitProcess(1);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
 
-        auto* dosHeader = reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        auto* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
-        void* entryPoint = reinterpret_cast<BYTE*>(dosHeader) + ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(RecToolEntryPoint_Hook), nullptr);
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
-    if (isToolModProcess) return FALSE;
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    if (g_isExplorerProcess || !g_isToolModProcessLauncher) return;
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
 
     WCHAR currentProcessPath[MAX_PATH];
-    DWORD len = GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath));
-    if (len == 0 || len == ARRAYSIZE(currentProcessPath)) return;
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
 
-    WCHAR commandLine[MAX_PATH + 64];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
-    if (!kernelModule) kernelModule = GetModuleHandleW(L"kernel32.dll");
-    if (!kernelModule) return;
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE, LPCWSTR, LPWSTR, LPSECURITY_ATTRIBUTES, LPSECURITY_ATTRIBUTES, WINBOOL,
-        DWORD, LPVOID, LPCWSTR, LPSTARTUPINFOW, LPPROCESS_INFORMATION, PHANDLE);
-    auto pCreateProcessInternalW = reinterpret_cast<CreateProcessInternalW_t>(GetProcAddress(kernelModule, "CreateProcessInternalW"));
-    if (!pCreateProcessInternalW) return;
-
-    STARTUPINFOW si{};
-    si.cb = sizeof(STARTUPINFOW);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi{};
-    if (pCreateProcessInternalW(nullptr, currentProcessPath, commandLine, nullptr, nullptr, FALSE,
-                                NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)) {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment,
+        LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
     }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isExplorerProcess) {
-        LoadSettings(true);
-        HWND hwnd = g_msgHwnd.load();
-        if (hwnd) PostMessageW(hwnd, WM_APP_RELOAD_SETTINGS, 0, 0);
+    if (g_isToolModProcessLauncher) {
         return;
     }
-    if (g_isToolModProcessLauncher) return;
+
     WhTool_ModSettingsChanged();
 }
 
 void Wh_ModUninit() {
-    if (g_isExplorerProcess) {
-        g_unloading.store(true);
-        StopRecordingSync();
-        if (HWND hMenu = g_activeMenuHwnd.load()) {
-            if (IsWindow(hMenu)) PostMessageW(hMenu, WM_CLOSE, 0, 0);
-        }
-        HWND hwnd = g_msgHwnd.load();
-        if (hwnd) PostMessageW(hwnd, WM_APP_SHUTDOWN, 0, 0);
-        if (g_uiThread.joinable()) g_uiThread.join();
+    if (g_isToolModProcessLauncher) {
         return;
     }
-    if (g_isToolModProcessLauncher) return;
+
     WhTool_ModUninit();
     ExitProcess(0);
 }
