@@ -44,15 +44,6 @@
 
 Customize and enhance the Windows 11 lock screen clock with modern designs, frosted glass panels, dynamic date capsules, and clean layout controls.
 
-## What's New:
-- **✨ NEW in v3.0.0** 
-- **ANSI Shadow Style:** Retro terminal ASCII block-art clock with 4 phosphor color themes, prompt header bar, and glow effect.
-- **🎨 Per-Theme Customizations:** Dedicated settings groups so every style can be tuned independently:
-  - **Colors & Typography:** 14 curated color palettes, 8 built-in Windows fonts, font weight, and drop-shadow toggle.
-  - **Retro Pixel & Flip Cards:** LED dot shapes, frosted backplate opacity, Flip card corner radius, and center split seam.
-  - **ANSI Shadow & Cyberpunk HUD:** 4 terminal/HUD color presets, header/telemetry bar toggles, phosphor glow, and card/chassis opacity.
-- **✨ NEW — 3 VERTICAL CLOCK STYLES:** Pixel, Dual Weight & Impact.
-
 ## Screenshots:
 | Style | Preview |
 | :---: | :---: |
@@ -65,10 +56,11 @@ Customize and enhance the Windows 11 lock screen clock with modern designs, fros
 | Cyberpunk Sci-Fi HUD | ![Cyberpunk Sci-Fi HUD](https://raw.githubusercontent.com/ali0zdas/windhawk-mod-lock-screen-clock-styler/main/screenshots/cyberpunk%20hud.png) |
 
 ## Features:
-- **Multiple Distinct Clock Styles:** 9 distinct styles including Retro Pixel, Vertical Stacks, ANSI Shadow, Flip Clocks, Minimalist Sonoma, and Cyberpunk HUD.
+- **Multiple Distinct Clock Styles:** 9 distinct styles including Retro Pixel, 3 Vertical Stack styles (Pixel, Dual Weight, Heavy Impact), ANSI Shadow (Terminal ASCII), Modern & Classic Flip Clocks, Minimalist Sonoma, and Cyberpunk Sci-Fi HUD.
+- **Per-Theme Customizations:** Dedicated settings groups for each theme family — curated color palettes (plus custom `#RGB` / `#RRGGBB` / `#AARRGGBB` hex values via Windhawk's Advanced raw settings), built-in Windows fonts, font weight, drop-shadow toggles, LED dot shapes, backplate/card opacity, and HUD/terminal header bars.
 - **Lightweight & Thread-Safe:** Native XAML injection without XAML Diagnostics TAP, ensuring minimal CPU overhead.
 - **Show Seconds Toggle:** Theme-aware live seconds display (`Automatic`, `Always Show`, or `Always Hide` — supported across all non-flip and non-vertical styles).
-- **Extensive Customization:** Card opacity, font size, vertical offsets, and screen alignments are fully customizable via settings.
+- **Extensive Customization:** Font size, vertical offsets, screen alignments, date capsule, battery status, and default widget visibility are fully customizable via settings.
 
 ## Security Note:
 This mod exclusively targets `LockApp.exe`. It does not inject into or interfere with `LogonUI.exe` or `winlogon.exe` in the Secure Desktop, preventing any system lockup or logon security risks.
@@ -2898,8 +2890,10 @@ Feedback, bug reports, and theme suggestions are warmly welcomed! If you'd like 
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -3055,8 +3049,7 @@ inline winrt::Windows::UI::Text::FontWeight ResolveFontWeight(
 // Loads every setting. Before the UI hook is installed this may run on any
 // thread; afterwards it must run on the lock screen UI thread.
 void LoadSettings() {
-    auto style = WindhawkUtils::StringSetting::make(L"clockStyle");
-    g_settings.clockStyle = (style.get() && *style.get()) ? style.get() : L"pixel";
+    g_settings.clockStyle = ReadStringSetting(L"clockStyle", L"pixel");
     // Migrate legacy "aura" users seamlessly to Minimalist Sonoma ("macos")
     if (g_settings.clockStyle == L"aura") {
         g_settings.clockStyle = L"macos";
@@ -3071,8 +3064,7 @@ void LoadSettings() {
         g_settings.clockStyle = L"pixel";
     }
 
-    auto fmt = WindhawkUtils::StringSetting::make(L"timeFormat");
-    g_settings.timeFormat = (fmt.get() && *fmt.get()) ? fmt.get() : L"24h";
+    g_settings.timeFormat = ReadStringSetting(L"timeFormat", L"24h");
     if (g_settings.timeFormat != L"24h" && g_settings.timeFormat != L"12h") {
         g_settings.timeFormat = L"24h";
     }
@@ -3083,26 +3075,20 @@ void LoadSettings() {
     bool supportsSeconds =
         (g_settings.clockStyle != L"flip" && g_settings.clockStyle != L"vintage" && !isVertical);
     std::wstring rawShowSeconds = ReadStringSetting(L"showSeconds", L"auto");
-    if (rawShowSeconds == L"on") {
+    if (rawShowSeconds == L"on" || rawShowSeconds == L"1") {
         g_settings.showSeconds = supportsSeconds;
-    } else if (rawShowSeconds == L"off") {
+    } else if (rawShowSeconds == L"off" || rawShowSeconds == L"0") {
         g_settings.showSeconds = false;
     } else {
         g_settings.showSeconds = supportsSeconds && (g_settings.clockStyle != L"macos");
     }
 
     g_settings.glassOpacity = Wh_GetIntSetting(L"flipSettings.glassOpacity");
-    if (g_settings.glassOpacity == 45) {
-        int legacyOpacity = Wh_GetIntSetting(L"glassOpacity");
-        if (legacyOpacity > 0 && legacyOpacity != 45) {
-            g_settings.glassOpacity = legacyOpacity;
-        }
-    }
     if (g_settings.glassOpacity < 0) g_settings.glassOpacity = 0;
     if (g_settings.glassOpacity > 255) g_settings.glassOpacity = 255;
 
     int fontSetting = Wh_GetIntSetting(L"clockFontSize");
-    if (fontSetting == 0) fontSetting = 140;
+    if (fontSetting == 0) fontSetting = 165;
     if (fontSetting < 20) fontSetting = 20;
     if (fontSetting > 300) fontSetting = 300;
     g_settings.clockFontSize = fontSetting;
@@ -3111,8 +3097,7 @@ void LoadSettings() {
     if (g_settings.verticalOffset < -200) g_settings.verticalOffset = -200;
     if (g_settings.verticalOffset > 400) g_settings.verticalOffset = 400;
 
-    auto align = WindhawkUtils::StringSetting::make(L"clockAlignment");
-    std::wstring rawAlign = (align.get() && *align.get()) ? align.get() : L"auto";
+    std::wstring rawAlign = ReadStringSetting(L"clockAlignment", L"auto");
     if (rawAlign != L"auto" && rawAlign != L"center" && rawAlign != L"bottomLeft" &&
         rawAlign != L"left" && rawAlign != L"right") {
         rawAlign = L"auto";
@@ -3224,8 +3209,6 @@ void LoadSettings() {
 [[clang::no_destroy]] wuxc::TextBlock g_minBotTextBlock{ nullptr };
 [[clang::no_destroy]] wuxc::TextBlock g_secTextBlock{ nullptr };
 [[clang::no_destroy]] wuxc::TextBlock g_ampmTextBlock{ nullptr };
-[[clang::no_destroy]] wuxc::TextBlock g_auraTimeTextBlock{ nullptr };
-[[clang::no_destroy]] wuxc::TextBlock g_auraShadowTextBlock{ nullptr };
 [[clang::no_destroy]] wuxc::TextBlock g_dateTextBlock{ nullptr };
 
 // Minimalist Sonoma (Clean Typography) Theme State
@@ -3268,9 +3251,10 @@ struct TrackedElement {
 };
 
 // no_destroy: releasing these vectors in a CRT destructor at process exit would
-// release XAML objects off the UI thread. They are cleared on the UI thread.
-[[clang::no_destroy]] std::vector<TrackedElement> g_hiddenClockElements;
-[[clang::no_destroy]] std::vector<TrackedElement> g_hiddenWidgetElements;
+// release XAML objects off the UI thread. Wrapped in std::optional and reset on
+// the UI thread so their buffers are guaranteed to be freed.
+[[clang::no_destroy]] std::optional<std::vector<TrackedElement>> g_hiddenClockElements;
+[[clang::no_destroy]] std::optional<std::vector<TrackedElement>> g_hiddenWidgetElements;
 
 // Dirty-checking time cache for high-efficiency rendering (eliminates redundant DirectWrite invalidations)
 struct TimeCache {
@@ -3281,7 +3265,6 @@ struct TimeCache {
     int lastMonth = -1;
     int lastYear = -1;
     std::wstring lastAmPm;
-    std::wstring lastAuraTime;
     std::wstring lastDateStr;
     std::wstring lastMacosTime;
     std::wstring lastMacosDate;
@@ -3299,7 +3282,6 @@ struct TimeCache {
         lastMonth = -1;
         lastYear = -1;
         lastAmPm.clear();
-        lastAuraTime.clear();
         lastDateStr.clear();
         lastMacosTime.clear();
         lastMacosDate.clear();
@@ -3441,9 +3423,9 @@ struct PixelDigitGrid {
     std::vector<wuxs::Shape> dots; // 77 dots per digit (7 cols x 11 rows)
     int lastVal = -1; // Cached last rendered digit to avoid redundant updates
 };
-// no_destroy: the six dot vectors hold XAML Ellipse references and must only be
-// cleared from the UI thread (see ResetClockElementReferences()).
-[[clang::no_destroy]] PixelDigitGrid g_pixelDigits[6]; // H1, H2, M1, M2, S1, S2
+// no_destroy: the six dot vectors hold XAML Shape references and must only be
+// reset from the UI thread (see ResetClockElementReferences()).
+[[clang::no_destroy]] std::optional<std::array<PixelDigitGrid, 6>> g_pixelDigits; // H1, H2, M1, M2, S1, S2
 [[clang::no_destroy]] wuxm::SolidColorBrush g_brushActiveDot{ nullptr };
 [[clang::no_destroy]] wuxm::SolidColorBrush g_brushInactiveDot{ nullptr };
 
@@ -3732,21 +3714,23 @@ void UpdateTimeAndDate() {
     g_timeCache.lastAmPm = ampmStr;
 
     if (g_settings.clockStyle == L"pixel") {
-        int h1 = displayHour / 10;
-        int h2 = displayHour % 10;
-        int m1 = st.wMinute / 10;
-        int m2 = st.wMinute % 10;
+        if (g_pixelDigits) {
+            int h1 = displayHour / 10;
+            int h2 = displayHour % 10;
+            int m1 = st.wMinute / 10;
+            int m2 = st.wMinute % 10;
 
-        SetPixelDigitValue(g_pixelDigits[0], h1);
-        SetPixelDigitValue(g_pixelDigits[1], h2);
-        SetPixelDigitValue(g_pixelDigits[2], m1);
-        SetPixelDigitValue(g_pixelDigits[3], m2);
+            SetPixelDigitValue((*g_pixelDigits)[0], h1);
+            SetPixelDigitValue((*g_pixelDigits)[1], h2);
+            SetPixelDigitValue((*g_pixelDigits)[2], m1);
+            SetPixelDigitValue((*g_pixelDigits)[3], m2);
 
-        if (g_settings.showSeconds) {
-            int s1 = st.wSecond / 10;
-            int s2 = st.wSecond % 10;
-            SetPixelDigitValue(g_pixelDigits[4], s1);
-            SetPixelDigitValue(g_pixelDigits[5], s2);
+            if (g_settings.showSeconds) {
+                int s1 = st.wSecond / 10;
+                int s2 = st.wSecond % 10;
+                SetPixelDigitValue((*g_pixelDigits)[4], s1);
+                SetPixelDigitValue((*g_pixelDigits)[5], s2);
+            }
         }
     } else if (g_settings.clockStyle == L"macos") {
         bool shouldUpdateTime = g_settings.showSeconds ? secondChanged : (minuteChanged || hourChanged);
@@ -3782,29 +3766,6 @@ void UpdateTimeAndDate() {
                 g_macosDateShadowBlock.Text(dateBuf);
             }
             g_timeCache.lastMacosDate = dateBuf;
-        }
-    } else if (g_settings.clockStyle == L"aura") {
-        bool shouldUpdateAura = g_settings.showSeconds ? secondChanged : (minuteChanged || hourChanged || ampmChanged);
-        if (g_auraTimeTextBlock && (shouldUpdateAura || g_timeCache.lastAuraTime.empty())) {
-            WCHAR timeBuf[32];
-            if (is12h) {
-                if (g_settings.showSeconds) {
-                    swprintf_s(timeBuf, L"%d:%02d:%02d %s", displayHour, st.wMinute, st.wSecond, ampmStr);
-                } else {
-                    swprintf_s(timeBuf, L"%d:%02d %s", displayHour, st.wMinute, ampmStr);
-                }
-            } else {
-                if (g_settings.showSeconds) {
-                    swprintf_s(timeBuf, L"%02d:%02d:%02d", displayHour, st.wMinute, st.wSecond);
-                } else {
-                    swprintf_s(timeBuf, L"%02d:%02d", displayHour, st.wMinute);
-                }
-            }
-            g_auraTimeTextBlock.Text(timeBuf);
-            if (g_auraShadowTextBlock) {
-                g_auraShadowTextBlock.Text(timeBuf);
-            }
-            g_timeCache.lastAuraTime = timeBuf;
         }
     } else if (IsVerticalStyle(g_settings.clockStyle)) {
         if (g_verticalHourText && (hourChanged || g_timeCache.lastVerticalHour.empty())) {
@@ -4839,9 +4800,11 @@ wux::UIElement BuildPixelClockElement() {
     double digitGap = dotSize * 1.3;
     double colonGap = dotSize * 1.0;
 
+    auto& digits = g_pixelDigits.emplace();
+
     // H1 & H2
-    auto h1 = CreatePixelDigitGrid(g_pixelDigits[0], dotSize, spacing);
-    auto h2 = CreatePixelDigitGrid(g_pixelDigits[1], dotSize, spacing);
+    auto h1 = CreatePixelDigitGrid(digits[0], dotSize, spacing);
+    auto h2 = CreatePixelDigitGrid(digits[1], dotSize, spacing);
     h1.Margin(wux::Thickness{ 0.0, 0.0, digitGap, 0.0 });
     h2.Margin(wux::Thickness{ 0.0, 0.0, colonGap, 0.0 });
     matrixLayout.Children().Append(h1);
@@ -4853,8 +4816,8 @@ wux::UIElement BuildPixelClockElement() {
     matrixLayout.Children().Append(colon1);
 
     // M1 & M2
-    auto m1 = CreatePixelDigitGrid(g_pixelDigits[2], dotSize, spacing);
-    auto m2 = CreatePixelDigitGrid(g_pixelDigits[3], dotSize, spacing);
+    auto m1 = CreatePixelDigitGrid(digits[2], dotSize, spacing);
+    auto m2 = CreatePixelDigitGrid(digits[3], dotSize, spacing);
     m1.Margin(wux::Thickness{ 0.0, 0.0, digitGap, 0.0 });
     matrixLayout.Children().Append(m1);
     matrixLayout.Children().Append(m2);
@@ -4869,8 +4832,8 @@ wux::UIElement BuildPixelClockElement() {
         matrixLayout.Children().Append(colon2);
 
         // S1 & S2
-        auto s1 = CreatePixelDigitGrid(g_pixelDigits[4], dotSize, spacing);
-        auto s2 = CreatePixelDigitGrid(g_pixelDigits[5], dotSize, spacing);
+        auto s1 = CreatePixelDigitGrid(digits[4], dotSize, spacing);
+        auto s2 = CreatePixelDigitGrid(digits[5], dotSize, spacing);
         s1.Margin(wux::Thickness{ 0.0, 0.0, digitGap, 0.0 });
         matrixLayout.Children().Append(s1);
         matrixLayout.Children().Append(s2);
@@ -4939,96 +4902,6 @@ wux::UIElement BuildPixelClockElement() {
         rootContainer.Children().Append(verticalLayout);
     }
 
-    UpdateTimeAndDate();
-
-    return rootContainer;
-}
-
-// Build Minimalist Aura / Floating Clock Element
-wux::UIElement BuildAuraClockElement() {
-    wuxc::Grid rootContainer;
-    rootContainer.Name(L"WindhawkAuraClockContainer");
-    ApplyAlignmentAndMargin(rootContainer);
-
-    wuxc::StackPanel verticalLayout;
-    verticalLayout.Orientation(wuxc::Orientation::Vertical);
-    verticalLayout.HorizontalAlignment(wux::HorizontalAlignment::Center);
-
-    // Layered floating time container with soft ambient drop-shadow
-    wuxc::Grid timeLayerGrid;
-    timeLayerGrid.HorizontalAlignment(wux::HorizontalAlignment::Center);
-
-    double fontSize = (double)(g_settings.clockFontSize * 1.35);
-    auto auraWeight = ResolveFontWeight(g_settings.minimalist.fontWeight, winrt::Windows::UI::Text::FontWeights::SemiBold());
-    const wchar_t* auraFontFam = g_settings.minimalist.fontFamily.empty()
-        ? L"Segoe UI Variable Display"
-        : g_settings.minimalist.fontFamily.c_str();
-    wu::Color auraTextColor = g_settings.minimalist.hasCustomTextColor
-        ? g_settings.minimalist.textColor
-        : wu::Colors::White();
-
-    // 1. Ambient Drop-Shadow Aura Layer (Behind foreground text for contrast on any wallpaper)
-    if (g_settings.minimalist.showShadow) {
-        wuxc::TextBlock shadowText;
-        shadowText.FontSize(fontSize);
-        shadowText.FontFamily(wuxm::FontFamily(auraFontFam));
-        shadowText.FontWeight(auraWeight);
-        shadowText.Foreground(wuxm::SolidColorBrush(wu::ColorHelper::FromArgb(140, 0, 0, 0)));
-        shadowText.HorizontalAlignment(wux::HorizontalAlignment::Center);
-        shadowText.TextAlignment(wux::TextAlignment::Center);
-        shadowText.Margin(wux::Thickness{ 0.0, 4.0, 0.0, 0.0 });
-        wuxd::Typography::SetNumeralAlignment(shadowText, wux::FontNumeralAlignment::Tabular);
-        timeLayerGrid.Children().Append(shadowText);
-        g_auraShadowTextBlock = shadowText;
-    }
-
-    // 2. Foreground Crisp Floating Text Layer
-    wuxc::TextBlock timeText;
-    timeText.FontSize(fontSize);
-    timeText.FontFamily(wuxm::FontFamily(auraFontFam));
-    timeText.FontWeight(auraWeight);
-    timeText.Foreground(wuxm::SolidColorBrush(auraTextColor));
-    timeText.HorizontalAlignment(wux::HorizontalAlignment::Center);
-    timeText.TextAlignment(wux::TextAlignment::Center);
-    wuxd::Typography::SetNumeralAlignment(timeText, wux::FontNumeralAlignment::Tabular);
-    timeLayerGrid.Children().Append(timeText);
-    g_auraTimeTextBlock = timeText;
-
-    verticalLayout.Children().Append(timeLayerGrid);
-
-    // Floating Aura Date Pill
-    if (g_settings.showDateCapsule) {
-        wuxc::Border auraDatePill;
-        auraDatePill.Background(wuxm::SolidColorBrush(wu::ColorHelper::FromArgb(38, 255, 255, 255)));
-        auraDatePill.BorderBrush(wuxm::SolidColorBrush(wu::ColorHelper::FromArgb(65, 255, 255, 255)));
-        auraDatePill.BorderThickness(wux::Thickness{ 1.0, 1.0, 1.0, 1.0 });
-        auraDatePill.CornerRadius(wux::CornerRadiusHelper::FromUniformRadius(18.0));
-        auraDatePill.Padding(wux::Thickness{ 22.0, 7.0, 22.0, 7.0 });
-        auraDatePill.Margin(wux::Thickness{ 0.0, 14.0, 0.0, 0.0 });
-        auraDatePill.HorizontalAlignment(wux::HorizontalAlignment::Center);
-
-        wuxc::TextBlock dateText;
-        dateText.Name(L"WindhawkAuraDateText");
-        dateText.FontSize(18.0);
-        dateText.FontFamily(wuxm::FontFamily(L"Segoe UI Variable Text"));
-        dateText.FontWeight(winrt::Windows::UI::Text::FontWeights::Medium());
-        dateText.Foreground(wuxm::SolidColorBrush(wu::ColorHelper::FromArgb(245, 255, 255, 255)));
-        dateText.HorizontalAlignment(wux::HorizontalAlignment::Center);
-
-        auraDatePill.Child(dateText);
-        verticalLayout.Children().Append(auraDatePill);
-        g_dateTextBlock = dateText;
-    }
-
-    // Battery Capsule (if enabled and laptop battery present)
-    if (g_settings.showBatteryStatus) {
-        auto batteryCapsule = CreateBatteryCapsule(false);
-        if (batteryCapsule) {
-            verticalLayout.Children().Append(batteryCapsule);
-        }
-    }
-
-    rootContainer.Children().Append(verticalLayout);
     UpdateTimeAndDate();
 
     return rootContainer;
@@ -5729,8 +5602,6 @@ wux::UIElement BuildClockElement() {
         return BuildCyberpunkClockElement();
     } else if (g_settings.clockStyle == L"ansiShadow") {
         return BuildAnsiShadowClockElement();
-    } else if (g_settings.clockStyle == L"aura") {
-        return BuildAuraClockElement();
     } else if (g_settings.clockStyle == L"verticalBahnschrift") {
         return BuildVerticalBahnschriftClockElement();
     } else if (g_settings.clockStyle == L"verticalSegoe") {
@@ -5922,9 +5793,12 @@ bool IsClockAttached() {
 // Restores the local Visibility value that existed before this mod hid an
 // element. ClearValue() is used when the element had no local value, which
 // keeps Windows' own bindings and visual states intact.
-void RestoreTrackedElements(std::vector<TrackedElement>& tracked) {
+void RestoreTrackedElements(std::optional<std::vector<TrackedElement>>& trackedOpt) {
+    if (!trackedOpt) {
+        return;
+    }
     auto prop = wux::UIElement::VisibilityProperty();
-    for (auto& trackedElement : tracked) {
+    for (auto& trackedElement : *trackedOpt) {
         if (!trackedElement.element) {
             continue;
         }
@@ -5942,33 +5816,40 @@ void RestoreTrackedElements(std::vector<TrackedElement>& tracked) {
             } catch (...) {}
         }
     }
-    tracked.clear();
-    tracked.shrink_to_fit();
+    trackedOpt.reset();
 }
 
 // Keeps the tracking list in sync with the current tree and hides only the
 // elements that are actually supposed to be hidden.
-void SyncTrackedElements(std::vector<TrackedElement>& tracked,
+void SyncTrackedElements(std::optional<std::vector<TrackedElement>>& trackedOpt,
                          std::vector<wux::FrameworkElement> const& found,
                          bool shouldHide) {
-    tracked.erase(
-        std::remove_if(tracked.begin(), tracked.end(),
-                       [&found](TrackedElement const& trackedElement) {
-                           if (!trackedElement.element) {
-                               return true;
-                           }
-                           return std::none_of(
-                               found.begin(), found.end(),
-                               [&trackedElement](wux::FrameworkElement const& element) {
-                                   return element == trackedElement.element;
-                               });
-                       }),
-        tracked.end());
+    if (trackedOpt) {
+        auto& tracked = *trackedOpt;
+        tracked.erase(
+            std::remove_if(tracked.begin(), tracked.end(),
+                           [&found](TrackedElement const& trackedElement) {
+                               if (!trackedElement.element) {
+                                   return true;
+                               }
+                               return std::none_of(
+                                   found.begin(), found.end(),
+                                   [&trackedElement](wux::FrameworkElement const& element) {
+                                       return element == trackedElement.element;
+                                   });
+                           }),
+            tracked.end());
+    }
 
     if (!shouldHide) {
-        RestoreTrackedElements(tracked);
+        RestoreTrackedElements(trackedOpt);
         return;
     }
+
+    if (!trackedOpt) {
+        trackedOpt.emplace();
+    }
+    auto& tracked = *trackedOpt;
 
     auto prop = wux::UIElement::VisibilityProperty();
     for (auto const& element : found) {
@@ -6012,6 +5893,10 @@ void SyncTrackedElements(std::vector<TrackedElement>& tracked,
             trackedElement.element.Visibility(wux::Visibility::Collapsed);
         } catch (...) {}
     }
+
+    if (tracked.empty()) {
+        trackedOpt.reset();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -6041,8 +5926,6 @@ void ResetClockElementReferences() {
     g_minBotTextBlock = nullptr;
     g_secTextBlock = nullptr;
     g_ampmTextBlock = nullptr;
-    g_auraTimeTextBlock = nullptr;
-    g_auraShadowTextBlock = nullptr;
     g_macosTimeTextBlock = nullptr;
     g_macosShadowTextBlock = nullptr;
     g_macosDateTextBlock = nullptr;
@@ -6071,11 +5954,7 @@ void ResetClockElementReferences() {
     g_ansiShadowBrush = nullptr;
     g_dateTextBlock = nullptr;
 
-    for (int i = 0; i < 6; i++) {
-        g_pixelDigits[i].dots.clear();
-        g_pixelDigits[i].dots.shrink_to_fit();
-        g_pixelDigits[i].lastVal = -1;
-    }
+    g_pixelDigits.reset();
     g_brushActiveDot = nullptr;
     g_brushInactiveDot = nullptr;
 }
