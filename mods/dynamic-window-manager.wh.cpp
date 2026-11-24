@@ -44,9 +44,9 @@ exact: `spotify.exe`, not "Spotify".
 
 ## Similar mods
 
-[Center New Windows](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/center-new-windows.wh.cpp)
+[Center New Windows](https://windhawk.net/mods/center-new-windows)
 and
-[Window Centralizer](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/window-centralizer.wh.cpp)
+[Window Centralizer](https://windhawk.net/mods/window-centralizer)
 also place new windows, but with a single global size or without resizing at
 all, so they don't cover per-application rules, sizes and anchors. If either of
 them is enabled together with this mod, both will handle the same window.
