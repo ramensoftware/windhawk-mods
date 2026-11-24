@@ -420,6 +420,7 @@ Requires a Windows 11 build with the new colored battery icon (Windows 11
 #include <atomic>
 #include <functional>
 #include <list>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -428,7 +429,6 @@ Requires a Windows 11 build with the new colored battery icon (Windows 11
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.Automation.Peers.h>
@@ -457,7 +457,7 @@ enum class ColorMode { windows, monochrome, custom };
 enum class PercentPosition { none, right, left, inside };
 
 struct ColorSpec {
-    enum class Kind { Default, Text, Fill, Value };
+    enum class Kind { Default, Text, Fill, Accent, Value };
     Kind kind = Kind::Default;
     winrt::Windows::UI::Color color{};
 };
@@ -564,22 +564,22 @@ ColorSpec ParseColorSpec(PCWSTR raw, PCWSTR settingName) {
     };
     static const NamedColor kNamedColors[] = {
         {L"white", 0xFFFFFFFF},  {L"black", 0xFF000000},
-        {L"gray", 0xFF9E9E9E},   {L"grey", 0xFF9E9E9E},
+        {L"gray", 0xFF9E9E9E},
         {L"red", 0xFFFF4545},    {L"orange", 0xFFFF9F1A},
         {L"yellow", 0xFFFFD60A}, {L"green", 0xFF4CD964},
-        {L"lime", 0xFF9FD89F},   {L"blue", 0xFF3B9CFF},
+        {L"blue", 0xFF3B9CFF},
         {L"cyan", 0xFF32D7E6},   {L"purple", 0xFFB38CFF},
-        {L"pink", 0xFFFF6FAE},   {L"transparent", 0x00000000},
+        {L"pink", 0xFFFF6FAE},
     };
 
     ColorSpec spec;
     std::wstring v = TrimLower(raw);
 
-    if (v.empty() || v == L"default" || v == L"auto" || v == L"windows") {
+    if (v.empty() || v == L"default" || v == L"auto") {
         return spec;
     }
 
-    if (v == L"text" || v == L"inherit") {
+    if (v == L"text") {
         spec.kind = ColorSpec::Kind::Text;
         return spec;
     }
@@ -590,14 +590,7 @@ ColorSpec ParseColorSpec(PCWSTR raw, PCWSTR settingName) {
     }
 
     if (v == L"accent") {
-        try {
-            spec.color =
-                winrt::Windows::UI::ViewManagement::UISettings().GetColorValue(
-                    winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-            spec.kind = ColorSpec::Kind::Value;
-        } catch (...) {
-            Wh_Log(L"Failed to get the accent color");
-        }
+        spec.kind = ColorSpec::Kind::Accent;
         return spec;
     }
 
@@ -623,17 +616,16 @@ ColorSpec ParseColorSpec(PCWSTR raw, PCWSTR settingName) {
 // Reads a color dropdown. "custom" means: use the matching entry of the
 // "Exact colors" section (customColors.<key>).
 ColorSpec GetColorSetting(PCWSTR name, PCWSTR customKey) {
-    PCWSTR value = Wh_GetStringSetting(name);
+    auto value = WindhawkUtils::StringSetting::make(name);
     ColorSpec spec;
-    if (TrimLower(value) == L"custom") {
+    if (TrimLower(value.get()) == L"custom") {
         std::wstring customName = std::wstring(L"customColors.") + customKey;
-        PCWSTR customValue = Wh_GetStringSetting(customName.c_str());
-        spec = ParseColorSpec(customValue, customName.c_str());
-        Wh_FreeStringSetting(customValue);
+        auto customValue =
+            WindhawkUtils::StringSetting::make(customName.c_str());
+        spec = ParseColorSpec(customValue.get(), customName.c_str());
     } else {
-        spec = ParseColorSpec(value, name);
+        spec = ParseColorSpec(value.get(), name);
     }
-    Wh_FreeStringSetting(value);
     return spec;
 }
 
@@ -672,7 +664,7 @@ void ApplyPreset(PCWSTR preset) {
 }
 
 void LoadSettings() {
-    PCWSTR style = Wh_GetStringSetting(L"style");
+    auto style = WindhawkUtils::StringSetting::make(L"style");
     g_settings.style = IconStyle::modern;
     if (wcscmp(style, L"classic") == 0) {
         g_settings.style = IconStyle::classic;
@@ -681,16 +673,14 @@ void LoadSettings() {
     } else if (wcscmp(style, L"text") == 0) {
         g_settings.style = IconStyle::text;
     }
-    Wh_FreeStringSetting(style);
 
-    PCWSTR mode = Wh_GetStringSetting(L"colors.mode");
+    auto mode = WindhawkUtils::StringSetting::make(L"colors.mode");
     g_settings.colorMode = ColorMode::windows;
     if (wcscmp(mode, L"monochrome") == 0) {
         g_settings.colorMode = ColorMode::monochrome;
     } else if (wcscmp(mode, L"custom") == 0) {
         g_settings.colorMode = ColorMode::custom;
     }
-    Wh_FreeStringSetting(mode);
 
     g_settings.outline = GetColorSetting(L"colors.outline", L"outline");
     g_settings.normal = GetColorSetting(L"colors.normal", L"normal");
@@ -703,7 +693,7 @@ void LoadSettings() {
     g_settings.lowThreshold = Wh_GetIntSetting(L"colors.lowThreshold");
     g_settings.criticalThreshold = Wh_GetIntSetting(L"colors.criticalThreshold");
 
-    PCWSTR position = Wh_GetStringSetting(L"percentage.position");
+    auto position = WindhawkUtils::StringSetting::make(L"percentage.position");
     g_settings.percentPosition = PercentPosition::none;
     if (wcscmp(position, L"right") == 0) {
         g_settings.percentPosition = PercentPosition::right;
@@ -712,7 +702,6 @@ void LoadSettings() {
     } else if (wcscmp(position, L"inside") == 0) {
         g_settings.percentPosition = PercentPosition::inside;
     }
-    Wh_FreeStringSetting(position);
 
     g_settings.percentFontSize =
         std::clamp(Wh_GetIntSetting(L"percentage.fontSize"), 4, 40);
@@ -731,19 +720,17 @@ void LoadSettings() {
     g_settings.marginRight = Wh_GetIntSetting(L"size.marginRight");
     g_settings.verticalOffset = Wh_GetIntSetting(L"size.verticalOffset");
 
-    // 0 means the setting is missing (e.g. saved by an older version).
     int textFontSize = Wh_GetIntSetting(L"textOnly.fontSize");
     g_settings.textFontSize =
         textFontSize > 0 ? std::clamp(textFontSize, 4, 48) : 13;
-    PCWSTR weight = Wh_GetStringSetting(L"textOnly.weight");
+    auto weight = WindhawkUtils::StringSetting::make(L"textOnly.weight");
     g_settings.textWeight = 600;
     if (wcscmp(weight, L"regular") == 0) {
         g_settings.textWeight = 400;
     } else if (wcscmp(weight, L"bold") == 0) {
         g_settings.textWeight = 700;
     }
-    Wh_FreeStringSetting(weight);
-    PCWSTR font = Wh_GetStringSetting(L"textOnly.font");
+    auto font = WindhawkUtils::StringSetting::make(L"textOnly.font");
     g_settings.textFont = L"Segoe UI Variable";
     if (wcscmp(font, L"segoe") == 0) {
         g_settings.textFont = L"Segoe UI";
@@ -754,29 +741,26 @@ void LoadSettings() {
     } else if (wcscmp(font, L"consolas") == 0) {
         g_settings.textFont = L"Consolas";
     }
-    Wh_FreeStringSetting(font);
     g_settings.textPercentSign = Wh_GetIntSetting(L"textOnly.percentSign");
-    PCWSTR chargingIcon = Wh_GetStringSetting(L"textOnly.chargingIcon");
+    auto chargingIcon = WindhawkUtils::StringSetting::make(L"textOnly.chargingIcon");
     g_settings.textChargingIcon = TextChargingIcon::after;
     if (wcscmp(chargingIcon, L"before") == 0) {
         g_settings.textChargingIcon = TextChargingIcon::before;
     } else if (wcscmp(chargingIcon, L"none") == 0) {
         g_settings.textChargingIcon = TextChargingIcon::none;
     }
-    Wh_FreeStringSetting(chargingIcon);
-    PCWSTR background = Wh_GetStringSetting(L"textOnly.background");
+    auto background = WindhawkUtils::StringSetting::make(L"textOnly.background");
     g_settings.textBackground = TextBackground::none;
     if (wcscmp(background, L"pill") == 0) {
         g_settings.textBackground = TextBackground::pill;
     } else if (wcscmp(background, L"outline") == 0) {
         g_settings.textBackground = TextBackground::outline;
     }
-    Wh_FreeStringSetting(background);
 
     // Returns the index of the chosen option, or `fallback` if missing.
     auto readChoice = [](PCWSTR name, std::initializer_list<PCWSTR> options,
                          int fallback) {
-        PCWSTR value = Wh_GetStringSetting(name);
+        auto value = WindhawkUtils::StringSetting::make(name);
         int result = fallback;
         int index = 0;
         for (PCWSTR option : options) {
@@ -786,7 +770,6 @@ void LoadSettings() {
             }
             index++;
         }
-        Wh_FreeStringSetting(value);
         return result;
     };
     g_settings.plugAnimation = (PlugAnimation)readChoice(
@@ -802,9 +785,8 @@ void LoadSettings() {
     g_settings.animationSpeed = speed == 0 ? 1.6 : speed == 2 ? 0.6 : 1.0;
     g_settings.animationPreview = Wh_GetIntSetting(L"animations.preview");
 
-    PCWSTR preset = Wh_GetStringSetting(L"preset");
-    ApplyPreset(preset);
-    Wh_FreeStringSetting(preset);
+    auto preset = WindhawkUtils::StringSetting::make(L"preset");
+    ApplyPreset(preset.get());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -855,30 +837,19 @@ FrameworkElement FindDescendantByClassName(FrameworkElement element,
     return found;
 }
 
-bool IsChildOfElementByName(FrameworkElement element, PCWSTR name) {
-    auto parent = element;
-    while ((parent = Media::VisualTreeHelper::GetParent(parent)
-                         .try_as<FrameworkElement>())) {
-        if (parent.Name() == name) {
-            return true;
-        }
-    }
-    return false;
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Battery state
 
 // Glyphs of the "SysBatt Fluent Icons" font used by the new battery icon.
-constexpr wchar_t kGlyphOutlineDischarging = L'';
-constexpr wchar_t kGlyphOutlineCharging = L'';
-constexpr wchar_t kGlyphOutlinePluggedIn = L'';
-constexpr wchar_t kGlyphOutlineSaver = L'';
+constexpr wchar_t kGlyphOutlineDischarging = L'\xF8D0';  // SysBatt outline, discharging
+constexpr wchar_t kGlyphOutlineCharging = L'\xF8DB';     // SysBatt outline, charging
+constexpr wchar_t kGlyphOutlinePluggedIn = L'\xF8E4';    // SysBatt outline, plugged in
+constexpr wchar_t kGlyphOutlineSaver = L'\xF849';        // SysBatt outline, battery saver
 
 // Classic glyphs from Segoe Fluent Icons (MobBattery0-10 and friends).
-constexpr wchar_t kClassicBattery0 = L'';
-constexpr wchar_t kClassicCharging0 = L'';
-constexpr wchar_t kClassicSaver0 = L'';
+constexpr wchar_t kClassicBattery0 = L'\xEBA0';   // MobBattery0
+constexpr wchar_t kClassicCharging0 = L'\xEBAB';  // MobBatteryCharging0
+constexpr wchar_t kClassicSaver0 = L'\xEBB6';     // MobBatterySaver0
 
 // Geometry of the glyphs, relative to the glyph box (advance x line height).
 // Modern: 2560 x 2048 font units, classic: 2048 x 2048 font units.
@@ -919,17 +890,17 @@ int LevelFromFillGlyph(std::wstring_view text) {
         return 0;
     }
     wchar_t c = text[0];
-    if (c >= L'' && c <= L'') {
-        return c - L'';
+    if (c >= L'\xF8D1' && c <= L'\xF8DA') {  // U+F8D1-F8DA discharging (1-10)
+        return c - L'\xF8D0';
     }
-    if (c >= L'' && c <= L'') {
-        return c - L'' + 3;
+    if (c >= L'\xF8DC' && c <= L'\xF8E3') {  // U+F8DC-F8E3 charging (3-10)
+        return c - L'\xF8DC' + 3;
     }
-    if (c >= L'' && c <= L'') {
-        return c - L'' + 3;
+    if (c >= L'\xF8E5' && c <= L'\xF8EC') {  // U+F8E5-F8EC plugged in (3-10)
+        return c - L'\xF8E5' + 3;
     }
-    if (c >= L'' && c <= L'') {
-        return c - L'' + 3;
+    if (c >= L'\xF84A' && c <= L'\xF851') {  // U+F84A-F851 saver (3-10)
+        return c - L'\xF84A' + 3;
     }
     return 0;
 }
@@ -997,8 +968,7 @@ struct BatteryIcon {
     bool hasLastState = false;
     BatteryState lastState = BatteryState::Unknown;
     // Last Apple-style colors, reused by the "filling up" animation.
-    winrt::Windows::UI::Color appleFill{}, appleTrack{}, appleOnFill{},
-        appleOnTrack{};
+    winrt::Windows::UI::Color appleFill{}, appleTrack{};
     double appleWidth = 0;
 
     int64_t contentForegroundToken = 0;
@@ -1013,7 +983,11 @@ struct BatteryIcon {
     bool dead = false;
 };
 
-std::list<BatteryIcon> g_batteryIcons;
+// Holds strong XAML refs: must not be released by the automatic destructor at
+// process exit. Released with `g_batteryIcons.reset()` on the taskbar thread.
+// See: https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown
+[[clang::no_destroy]] std::optional<std::list<BatteryIcon>> g_batteryIcons{
+    std::in_place};
 
 void RestoreSavedProperty(const SavedProperty& saved) {
     auto object = saved.object.get();
@@ -1098,6 +1072,26 @@ void SetVisible(UIElement const& element, bool visible) {
     }
 }
 
+using Color = winrt::Windows::UI::Color;
+
+inline Color ColorFromArgb(uint32_t argb) {
+    return Color{(uint8_t)(argb >> 24), (uint8_t)(argb >> 16),
+                 (uint8_t)(argb >> 8), (uint8_t)argb};
+}
+
+inline uint32_t ColorToArgb(Color c) {
+    return (uint32_t)((c.A << 24) | (c.R << 16) | (c.G << 8) | c.B);
+}
+
+inline Color GetWindowsAccentColor(Color fallback = ColorFromArgb(0xFF0078D7)) {
+    try {
+        return winrt::Windows::UI::ViewManagement::UISettings().GetColorValue(
+            winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+    } catch (...) {
+        return fallback;
+    }
+}
+
 // Resolves a color setting. nullptr means "inherit the taskbar text color".
 Media::Brush ResolveColor(const ColorSpec& spec,
                           Media::Brush const& defaultBrush,
@@ -1109,6 +1103,8 @@ Media::Brush ResolveColor(const ColorSpec& spec,
             return nullptr;
         case ColorSpec::Kind::Fill:
             return fillBrush;
+        case ColorSpec::Kind::Accent:
+            return Media::SolidColorBrush(GetWindowsAccentColor());
         case ColorSpec::Kind::Value:
             return Media::SolidColorBrush(spec.color);
     }
@@ -1131,19 +1127,12 @@ void UpdateBatteryIcon(BatteryIcon& icon);
 ////////////////////////////////////////////////////////////////////////////////
 // Apple style
 
-using Color = winrt::Windows::UI::Color;
-
 double Luminance(Color c) {
     return 0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B;
 }
 
 Color WithAlpha(Color c, uint8_t alpha) {
     return Color{(uint8_t)(c.A * alpha / 255), c.R, c.G, c.B};
-}
-
-Color ColorFromArgb(uint32_t argb) {
-    return Color{(uint8_t)(argb >> 24), (uint8_t)(argb >> 16),
-                 (uint8_t)(argb >> 8), (uint8_t)argb};
 }
 
 Media::LinearGradientBrush MakeSplitBrush(Color left,
@@ -1200,6 +1189,8 @@ Color ResolveColorValue(const ColorSpec& spec, Color textColor, Color fallback) 
     switch (spec.kind) {
         case ColorSpec::Kind::Text:
             return textColor;
+        case ColorSpec::Kind::Accent:
+            return GetWindowsAccentColor(fallback);
         case ColorSpec::Kind::Value:
             return spec.color;
         default:
@@ -1311,8 +1302,8 @@ void UpdateAppleIcon(BatteryIcon& icon,
     // Empty part of the pill and the nub: translucent text color.
     Color trackColor = WithAlpha(textColor, 90);
     if (s.colorMode == ColorMode::custom &&
-        s.outline.kind == ColorSpec::Kind::Value) {
-        trackColor = s.outline.color;
+        s.outline.kind != ColorSpec::Kind::Default) {
+        trackColor = resolve(s.outline, trackColor);
     }
     Color nubColor = WithAlpha(textColor, 110);
 
@@ -1347,18 +1338,14 @@ void UpdateAppleIcon(BatteryIcon& icon,
     double nubHeight = std::round(height * 0.42);
     double gap = std::max(1.0, std::round(fontSize * 0.07));
     double boltHeight = std::round(fontSize * 0.6);
-    double boltWidth = boltHeight * 0.62;
 
-    auto argb = [](Color c) {
-        return (unsigned)((c.A << 24) | (c.R << 16) | (c.G << 8) | c.B);
-    };
     wchar_t key[256];
     swprintf(key, ARRAYSIZE(key),
              L"%08X|%08X|%08X|%08X|%08X|%08X|%.3f|%.2f|%d|%d|%d|%d",
-             argb(fillColor), argb(trackColor), argb(nubColor), argb(onFill),
-             argb(onTrack), argb(boltColor), level, fontSize,
-             showNumber ? percent : -1, charging, s.appleFontSize,
-             s.percentBold);
+             ColorToArgb(fillColor), ColorToArgb(trackColor),
+             ColorToArgb(nubColor), ColorToArgb(onFill), ColorToArgb(onTrack),
+             ColorToArgb(boltColor), level, fontSize, showNumber ? percent : -1,
+             charging, s.appleFontSize, s.percentBold);
     if (icon.appleKey == key) {
         return;
     }
@@ -1369,8 +1356,6 @@ void UpdateAppleIcon(BatteryIcon& icon,
     icon.appleBody.CornerRadius(CornerRadius{radius, radius, radius, radius});
     icon.appleFill = fillColor;
     icon.appleTrack = trackColor;
-    icon.appleOnFill = onFill;
-    icon.appleOnTrack = onTrack;
     icon.appleWidth = width;
 
     for (bool overFill : {true, false}) {
@@ -1397,18 +1382,7 @@ void UpdateAppleIcon(BatteryIcon& icon,
 
     SetVisible(icon.appleBolt, charging);
     if (charging) {
-        // A filled lightning bolt, drawn as a polygon.
-        static const float kBolt[][2] = {
-            {0.58f, 0.00f}, {0.06f, 0.58f}, {0.44f, 0.58f}, {0.30f, 1.00f},
-            {0.94f, 0.36f}, {0.56f, 0.36f}, {0.86f, 0.00f},
-        };
-        Media::PointCollection points;
-        for (const auto& p : kBolt) {
-            points.Append({(float)(p[0] * boltWidth), (float)(p[1] * boltHeight)});
-        }
-        icon.appleBolt.Points(points);
-        icon.appleBolt.Width(boltWidth);
-        icon.appleBolt.Height(boltHeight);
+        SetBoltShape(icon.appleBolt, boltHeight);
         icon.appleBolt.Margin(Thickness{gap * 1.5, 0, 0, 0});
         icon.appleBolt.Fill(Media::SolidColorBrush(boltColor));
     }
@@ -1449,14 +1423,12 @@ void UpdateTextIcon(BatteryIcon& icon,
         text += L'%';
     }
 
-    auto argb = [](Color c) {
-        return (unsigned)((c.A << 24) | (c.R << 16) | (c.G << 8) | c.B);
-    };
     wchar_t key[512];
     swprintf(key, ARRAYSIZE(key), L"%s|%08X|%08X|%08X|%.2f|%d|%s|%d|%d|%d",
-             text.c_str(), argb(numberColor), argb(boltColor),
-             argb(colors.text), fontSize, s.textWeight, s.textFont.c_str(),
-             (int)s.textBackground, (int)s.textChargingIcon, showBolt);
+             text.c_str(), ColorToArgb(numberColor), ColorToArgb(boltColor),
+             ColorToArgb(colors.text), fontSize, s.textWeight,
+             s.textFont.c_str(), (int)s.textBackground,
+             (int)s.textChargingIcon, showBolt);
     if (icon.textKey == key) {
         return;
     }
@@ -1653,12 +1625,12 @@ wchar_t ModernFillGlyph(BatteryState state, int level) {
         return 0;
     }
     if (level >= 3 && state == BatteryState::Charging) {
-        return (wchar_t)(L'' + (level - 3));
+        return (wchar_t)(L'\xF8DC' + (level - 3));  // U+F8DC-F8E3 charging (3-10)
     }
     if (level >= 3 && state == BatteryState::PluggedIn) {
-        return (wchar_t)(L'' + (level - 3));
+        return (wchar_t)(L'\xF8E5' + (level - 3));  // U+F8E5-F8EC plugged in (3-10)
     }
-    return (wchar_t)(L'' + level);
+    return (wchar_t)(L'\xF8D0' + level);  // U+F8D1-F8DA discharging (1-10)
 }
 
 // "Filling up": the fill rises from the current level to full, holds, and
@@ -2018,7 +1990,8 @@ void UpdateBatteryIconUnsafe(BatteryIcon& icon,
         if (s.percentSign) {
             text += L'%';
         }
-        SetFontSizeIfChanged(icon.percent, s.percentFontSize);
+        SetFontSizeIfChanged(icon.percent,
+                             s.percentFontSize * s.scale / 100.0);
         icon.percent.FontWeight(fontWeight);
         SetTextIfChanged(icon.percent, winrt::hstring(text));
         SetForeground(icon.percent,
@@ -2213,9 +2186,13 @@ bool IsModElementName(winrt::hstring const& name) {
 }
 
 void EnsureBatteryIcon(FrameworkElement batteryIconContent) {
-    for (auto it = g_batteryIcons.begin(); it != g_batteryIcons.end();) {
+    if (!g_batteryIcons) {
+        return;
+    }
+
+    for (auto it = g_batteryIcons->begin(); it != g_batteryIcons->end();) {
         if (it->dead) {
-            it = g_batteryIcons.erase(it);
+            it = g_batteryIcons->erase(it);
             continue;
         }
         if (it->content.get() == batteryIconContent) {
@@ -2279,7 +2256,7 @@ void EnsureBatteryIcon(FrameworkElement batteryIconContent) {
 
     Wh_Log(L"Attaching to battery icon");
 
-    auto& icon = g_batteryIcons.emplace_back();
+    auto& icon = g_batteryIcons->emplace_back();
     icon.content = batteryIconContent;
     icon.stackPanel = stackPanel;
     icon.glyphGrid = glyphGrid;
@@ -2580,11 +2557,15 @@ bool RunFromWindowThread(HWND hWnd,
 void ApplySettingsFromTaskbarThread(HWND hTaskbarWnd, bool reloadSettings) {
     g_autoRevokerList.clear();
 
+    if (!g_batteryIcons) {
+        return;
+    }
+
     if (reloadSettings) {
         LoadSettings();
     }
 
-    for (auto& icon : g_batteryIcons) {
+    for (auto& icon : *g_batteryIcons) {
         if (g_unloading) {
             DetachBatteryIcon(icon);
         } else {
@@ -2604,9 +2585,10 @@ void ApplySettingsFromTaskbarThread(HWND hTaskbarWnd, bool reloadSettings) {
             }
         }
     }
-    std::erase_if(g_batteryIcons, [](const BatteryIcon& icon) { return icon.dead; });
+    std::erase_if(*g_batteryIcons, [](const BatteryIcon& icon) { return icon.dead; });
 
     if (g_unloading) {
+        g_batteryIcons.reset();  // Runs ~list() on the taskbar thread.
         return;
     }
 
