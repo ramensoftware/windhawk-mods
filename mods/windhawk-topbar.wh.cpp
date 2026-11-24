@@ -8,7 +8,7 @@
 // @github          https://github.com/wasixgamer
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -O0 -lwtsapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32 -lpdh -lpsapi -ldxgi -lwinhttp -ld2d1 -lshlwapi -luxtheme
+// @compilerOptions -O0 -g0 -fno-rtti -fno-addrsig -lwtsapi32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -ladvapi32 -luser32 -lshcore -lcomctl32 -lpdh -lpsapi -ldxgi -lwinhttp -ld2d1 -lshlwapi -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -128,23 +128,29 @@ They change the real light/dark app and system theme, transparency effects,
 Windows interface animations, hide-pointer-while-typing, locate-pointer-with-Ctrl,
 keyboard access-key underlines, full-window dragging, mouse ClickLock, Night light,
 speaker/microphone mute, pointer precision/trails/shadow, primary-button swapping,
-inactive-window scrolling, Sticky Keys, Toggle Keys and the active power plan. Only controls available on the current system are shown.
+inactive-window scrolling, Sticky Keys, Toggle Keys, Energy saver (on systems with a battery) and the active power plan. Only controls available on the current system are shown.
 
 Control Center also changes real system settings, including light/dark mode,
-Night light and power plan, as well as display brightness, audio volume/mute and
+Night light, Energy saver and power plan, as well as display brightness, audio volume/mute and
 output device, and Wi-Fi/Bluetooth controls. Changes made with these controls
 **persist after the mod is disabled, removed or exits unexpectedly**. They are
 user choices and are not automatically reverted; use the controls or Windows
 settings to change them back. Merely searching does not write these Windows preferences.
 
-## Weather data
+## Network requests (Weather & SpeedTest)
 
-The weather widget uses **[Open-Meteo](https://open-meteo.com/)**, a
-free weather service that doesn't need an API key. The city search sends what you type to
-`geocoding-api.open-meteo.com`. After you pick a location, the bar sends its
-latitude/longitude to `api.open-meteo.com` to get the forecast. No account,
-no API key and no personal data, just the coordinates (or search text) you
-gave it.
+- **Weather (`Open-Meteo`):** The weather widget uses **[Open-Meteo](https://open-meteo.com/)**, a
+  free weather service that doesn't need an API key. City search sends what you type to
+  `geocoding-api.open-meteo.com`, and forecasts send the selected latitude/longitude to
+  `api.open-meteo.com`. No account, API key, or personal data is sent.
+- **SpeedTest (`speed.cloudflare.com`):** The SpeedTest flyout connects to `https://speed.cloudflare.com`
+  over HTTPS (WinHTTP with system proxy) **only when you click Start Test**—nothing is sent at startup
+  or on a timer, and closing the flyout cancels any active test. It requests `/cdn-cgi/trace` (reading
+  only the server `colo`/`loc`; client IP is ignored), measures ping/jitter with `/cdn-cgi/trace?ping=...`,
+  downloads test payloads from `/__down?bytes=8000000`, and uploads random bytes to `/__up` (capped at up
+  to 512 MB per direction, ~1 GB total per full run). You can hide the SpeedTest button under
+  **Settings → Buttons**.
+
 
 ## Process model
 
@@ -206,6 +212,7 @@ Run **[UWPSpy](https://github.com/m417z/UWPSpy/releases/)** on the TopBar's
 | `MediaPrevButton` / `MediaPauseButton` / `MediaResumeButton` / `MediaNextButton` | Media transport buttons (`MediaTransportButton` is the generic fallback) |
 | `NetworkButton` / `NetworkGrid` / `NetworkUploadRow` / `NetworkDownloadRow` | Live upload / download monitor button and its rows (`NetworkUploadButton` / `NetworkDownloadButton` when split) |
 | `SpeedTestButton` | SpeedTest button (`SpeedHigh2` gauge flyout) |
+| `OptimizerButton` | System Optimizer button (`Diagnostic` / Task Manager flyout with RAM / CPU / Disk tabs) |
 | `SettingsButton` | Settings gear button |
 | `PinnedTrayPanel` / `PinnedTrayIconButton` | Container for pinned system tray icons and each pinned tray icon button |
 | `TrayIconButton` | System tray overflow button |
@@ -361,7 +368,6 @@ desktop are ignored.
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
-#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Documents.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.Graphics.Effects.h>
@@ -389,7 +395,6 @@ desktop are ignored.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
-#include <winrt/Windows.ApplicationModel.DataTransfer.h>
 #include <winrt/Windows.Web.Http.h>
 #include <winrt/Windows.Data.Json.h>
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
@@ -408,7 +413,6 @@ desktop are ignored.
 #include <winrt/Windows.Devices.Bluetooth.h>
 #include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
 #include <winrt/Windows.Devices.Enumeration.h>
-#include <winrt/Windows.Foundation.Collections.h>
 
 #define TOPBAR_HAS_STORAGE_SEARCH 1
 #include <winrt/Windows.Storage.h>
@@ -428,7 +432,6 @@ desktop are ignored.
 #include <string>
 #include <string_view>
 #include <thread>
-#include <future>
 #include <atomic>
 #include <mutex>
 #include <process.h>
@@ -793,10 +796,15 @@ namespace resource {
         return out;
     }
 
+    static std::mutex g_diskEnumMutex;
+
     std::vector<DiskDeviceInfo> EnumerateDisks() {
-        ULONGLONG now = GetTickCount64();
-        if (!g_cachedDisks.empty() && now - g_cachedDisksTick < 15000) {
-            return g_cachedDisks;
+        {
+            std::lock_guard<std::mutex> lock(g_diskEnumMutex);
+            ULONGLONG now = GetTickCount64();
+            if (!g_cachedDisks.empty() && now - g_cachedDisksTick < 15000) {
+                return g_cachedDisks;
+            }
         }
         // Pre-compute non-admin capacity per PhysicalDrive via logical volume extents
         // (IOCTL_DISK_GET_LENGTH_INFO on PhysicalDriveN requires admin, while
@@ -920,8 +928,11 @@ namespace resource {
             fb.displayName = L"Disk 0";
             list.push_back(fb);
         }
-        g_cachedDisks = list;
-        g_cachedDisksTick = now;
+        {
+            std::lock_guard<std::mutex> lock(g_diskEnumMutex);
+            g_cachedDisks = list;
+            g_cachedDisksTick = GetTickCount64();
+        }
         return list;
     }
 
@@ -940,9 +951,9 @@ namespace resource {
             g_diskQuery = nullptr;
             return;
         }
-        auto instances = ExpandGpuWildcard(L"\\PhysicalDisk(*)\\% Disk Time");
+        auto instances = ExpandGpuWildcard(L"\\PhysicalDisk(*)\\% Idle Time");
         for (const auto& path : instances) {
-            // path looks like: \PhysicalDisk(0 C:)\% Disk Time
+            // path looks like: \PhysicalDisk(0 C:)\% Idle Time
             size_t lp = path.find(L'(');
             size_t rp = path.find(L')', lp == std::wstring::npos ? 0 : lp);
             if (lp == std::wstring::npos || rp == std::wstring::npos || rp <= lp + 1) continue;
@@ -954,11 +965,12 @@ namespace resource {
 
             DiskPdhSet set;
             set.physicalIndex = physIdx;
-            std::wstring pBusy  = L"\\PhysicalDisk(" + inst + L")\\% Disk Time";
+            // Task Manager "Active time" is 100 - (% Idle Time), clamped to [0, 100].
+            std::wstring pIdle  = L"\\PhysicalDisk(" + inst + L")\\% Idle Time";
             std::wstring pRead  = L"\\PhysicalDisk(" + inst + L")\\Disk Read Bytes/sec";
             std::wstring pWrite = L"\\PhysicalDisk(" + inst + L")\\Disk Write Bytes/sec";
             std::wstring pResp  = L"\\PhysicalDisk(" + inst + L")\\Avg. Disk sec/Transfer";
-            PdhAddEnglishCounter(g_diskQuery, pBusy.c_str(), 0, &set.busyCounter);
+            PdhAddEnglishCounter(g_diskQuery, pIdle.c_str(), 0, &set.busyCounter);
             PdhAddEnglishCounter(g_diskQuery, pRead.c_str(), 0, &set.readCounter);
             PdhAddEnglishCounter(g_diskQuery, pWrite.c_str(), 0, &set.writeCounter);
             PdhAddEnglishCounter(g_diskQuery, pResp.c_str(), 0, &set.respCounter);
@@ -969,7 +981,7 @@ namespace resource {
         if (g_diskPdhSets.empty()) {
             DiskPdhSet totalSet;
             totalSet.physicalIndex = 0;
-            PdhAddEnglishCounter(g_diskQuery, L"\\PhysicalDisk(_Total)\\% Disk Time", 0, &totalSet.busyCounter);
+            PdhAddEnglishCounter(g_diskQuery, L"\\PhysicalDisk(_Total)\\% Idle Time", 0, &totalSet.busyCounter);
             PdhAddEnglishCounter(g_diskQuery, L"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec", 0, &totalSet.readCounter);
             PdhAddEnglishCounter(g_diskQuery, L"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec", 0, &totalSet.writeCounter);
             PdhAddEnglishCounter(g_diskQuery, L"\\PhysicalDisk(_Total)\\Avg. Disk sec/Transfer", 0, &totalSet.respCounter);
@@ -1007,7 +1019,8 @@ namespace resource {
         if (PdhGetFormattedCounterValue(s->busyCounter, PDH_FMT_DOUBLE, nullptr, &val) != ERROR_SUCCESS) {
             return 0;
         }
-        int pct = static_cast<int>(std::lround(val.doubleValue));
+        double activePct = 100.0 - std::clamp(val.doubleValue, 0.0, 100.0);
+        int pct = static_cast<int>(std::lround(activePct));
         return std::clamp(pct, 0, 100);
     }
 
@@ -1140,19 +1153,20 @@ namespace resource {
     }
 
     int GetRamSpeedMHz() {
-        static int cached = -1;
-        if (cached >= 0) return cached;
+        static int cached = 0;
+        static std::once_flag once;
+        std::call_once(once, [] {
         static const CLSID kCLSID_WbemLocator = {0x4590f811, 0x1d3a, 0x11d0, {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
         static const IID kIID_IWbemLocator = {0xdc12a687, 0x737f, 0x11cf, {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
         winrt::com_ptr<IWbemLocator> locator;
         if (FAILED(CoCreateInstance(kCLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
-                                    kIID_IWbemLocator, locator.put_void()))) return 0;
+                                    kIID_IWbemLocator, locator.put_void()))) return;
         BSTR ns = SysAllocString(L"root\\cimv2");
         winrt::com_ptr<IWbemServices> services;
         if (FAILED(locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0, nullptr, nullptr,
                                              services.put()))) {
             SysFreeString(ns);
-            return 0;
+            return;
         }
         SysFreeString(ns);
         CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
@@ -1179,6 +1193,7 @@ namespace resource {
         }
         SysFreeString(query);
         SysFreeString(lang);
+        });
         return cached > 0 ? cached : 0;
     }
 
@@ -1211,18 +1226,19 @@ namespace resource {
 
     std::wstring GetCpuFullName() {
         static std::wstring name;
-        if (!name.empty()) return name;
+        static std::once_flag once;
+        std::call_once(once, [] {
         static const CLSID kCLSID_WbemLocator = {0x4590f811, 0x1d3a, 0x11d0, {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
         static const IID kIID_IWbemLocator = {0xdc12a687, 0x737f, 0x11cf, {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
         winrt::com_ptr<IWbemLocator> locator;
         if (FAILED(CoCreateInstance(kCLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
-                                    kIID_IWbemLocator, locator.put_void()))) return L"";
+                                    kIID_IWbemLocator, locator.put_void()))) return;
         BSTR ns = SysAllocString(L"root\\cimv2");
         winrt::com_ptr<IWbemServices> services;
         if (FAILED(locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0, nullptr, nullptr,
                                              services.put()))) {
             SysFreeString(ns);
-            return L"";
+            return;
         }
         SysFreeString(ns);
         CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
@@ -1246,6 +1262,7 @@ namespace resource {
         }
         SysFreeString(query);
         SysFreeString(lang);
+        });
         return name;
     }
 
@@ -1258,22 +1275,20 @@ namespace resource {
 
     RamInfo GetRamInfo() {
         static RamInfo cached;
-        static bool cachedInitialized = false;
-        if (cachedInitialized) {
-            return cached;
-        }
+        static std::once_flag once;
+        std::call_once(once, [] {
         RamInfo info;
         static const CLSID kCLSID_WbemLocator = {0x4590f811, 0x1d3a, 0x11d0, {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
         static const IID kIID_IWbemLocator = {0xdc12a687, 0x737f, 0x11cf, {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
         winrt::com_ptr<IWbemLocator> locator;
         if (FAILED(CoCreateInstance(kCLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
-                                    kIID_IWbemLocator, locator.put_void()))) return info;
+                                    kIID_IWbemLocator, locator.put_void()))) return;
         BSTR ns = SysAllocString(L"root\\cimv2");
         winrt::com_ptr<IWbemServices> services;
         if (FAILED(locator->ConnectServer(ns, nullptr, nullptr, nullptr, 0, nullptr, nullptr,
                                              services.put()))) {
             SysFreeString(ns);
-            return info;
+            return;
         }
         SysFreeString(ns);
         CoSetProxyBlanket(services.get(), RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
@@ -1379,8 +1394,8 @@ namespace resource {
             }
         }
         cached = info;
-        cachedInitialized = true;
-        return info;
+        });
+        return cached;
     }
 
     struct PROCESSOR_POWER_INFORMATION {
@@ -1869,15 +1884,15 @@ namespace resource {
 
             if (!s_nvmlTried) {
                 s_nvmlTried = true;
-                s_nvml = LoadLibraryW(L"nvml.dll");
+                s_nvml = LoadLibraryExW(L"nvml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
                 if (!s_nvml) {
-                    wchar_t sysDir[MAX_PATH]{};
-                    if (GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir))) {
-                        s_nvml = LoadLibraryW((std::wstring(sysDir) + L"\\nvml.dll").c_str());
+                    PWSTR pfPath = nullptr;
+                    static const GUID kFolderIdProgramFiles = { 0x905e63b6, 0xc1bf, 0x494e, { 0xb2, 0x9c, 0x65, 0xb7, 0x32, 0xd3, 0xd2, 0x1a } };
+                    if (SUCCEEDED(SHGetKnownFolderPath(kFolderIdProgramFiles, 0, nullptr, &pfPath)) && pfPath) {
+                        std::wstring nvsmi = std::wstring(pfPath) + L"\\NVIDIA Corporation\\NVSMI\\nvml.dll";
+                        CoTaskMemFree(pfPath);
+                        s_nvml = LoadLibraryExW(nvsmi.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
                     }
-                }
-                if (!s_nvml) {
-                    s_nvml = LoadLibraryW(L"C:\\Program Files\\NVIDIA Corporation\\NVSMI\\nvml.dll");
                 }
                 if (s_nvml) {
                     auto pInit = (nvmlInit_t)GetProcAddress(s_nvml, "nvmlInit_v2");
@@ -1924,7 +1939,7 @@ namespace resource {
             static NvAPI_ClientPowerTopologyGetStatus_t pNvPowerTopo = nullptr;
             if (!s_nvapiTried) {
                 s_nvapiTried = true;
-                HMODULE hNvapi = LoadLibraryW(L"nvapi64.dll");
+                HMODULE hNvapi = LoadLibraryExW(L"nvapi64.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
                 if (hNvapi) {
                     auto pQuery = (nvapi_QueryInterface_t)GetProcAddress(hNvapi, "nvapi_QueryInterface");
                     if (pQuery) {
@@ -2110,8 +2125,8 @@ namespace resource {
 
             if (!s_adlTried) {
                 s_adlTried = true;
-                s_adl = LoadLibraryW(L"atiadlxx.dll");
-                if (!s_adl) s_adl = LoadLibraryW(L"atiadlxy.dll");
+                s_adl = LoadLibraryExW(L"atiadlxx.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+                if (!s_adl) s_adl = LoadLibraryExW(L"atiadlxy.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
                 if (s_adl) {
                     pAdlCreate = (ADL2_Main_Control_Create_t)GetProcAddress(s_adl, "ADL2_Main_Control_Create");
                     pAdlDestroy = (ADL2_Main_Control_Destroy_t)GetProcAddress(s_adl, "ADL2_Main_Control_Destroy");
@@ -2593,6 +2608,7 @@ constexpr WCHAR kShellTrayClientClass[] =
 constexpr UINT WM_TOPBAR_TRAY_HELLO = WM_APP + 0x700;
 constexpr UINT WM_TOPBAR_SHELL_START = WM_APP + 0x701;
 constexpr UINT WM_TOPBAR_SHELL_START_STATUS = WM_APP + 0x702;
+constexpr UINT WM_TOPBAR_ACTIVATE_UNDER_CURSOR = WM_APP + 0x703;
 std::atomic<bool> g_shellStartHookInstalled{false};
 std::atomic<bool> g_shellStartHookReady{false};
 constexpr DWORD WM_TOPBAR_TRAY_PUSH = 0xA100;
@@ -2696,6 +2712,7 @@ void RefreshWeatherButtonContent();
 void PopulateRecycleBinPanel();
 void ResetRecycleBinPanelState();
 void PopulateSpeedTestPanel();
+void PopulateOptimizerPanel();
 void PopulateSettingsPanel();
 void PopulateMediaPanel();
 void PopulateTrayFlyoutPanel();
@@ -2784,77 +2801,6 @@ struct NotifDismissStateGlobal {
 [[clang::no_destroy]] DispatcherTimer g_rgnTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_pillDelayTimer{nullptr};
 
-void CloseAllWin32PopupMenus() {
-    const DWORD selfPid = GetCurrentProcessId();
-
-    HWND menu = nullptr;
-    while (true) {
-        menu = FindWindowExW(nullptr, menu, L"#32768", nullptr);
-        if (!menu) break;
-        if (!IsWindowVisible(menu)) continue;
-        DWORD pid = 0;
-        GetWindowThreadProcessId(menu, &pid);
-        if (!pid || pid == selfPid) continue;
-        PostMessageW(menu, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(-8, -8));
-        PostMessageW(menu, WM_LBUTTONUP,   0,          MAKELPARAM(-8, -8));
-        PostMessageW(menu, WM_RBUTTONDOWN, MK_RBUTTON, MAKELPARAM(-8, -8));
-        PostMessageW(menu, WM_RBUTTONUP,   0,          MAKELPARAM(-8, -8));
-        PostMessageW(menu, WM_KEYDOWN, VK_ESCAPE, 0);
-        PostMessageW(menu, WM_KEYUP,   VK_ESCAPE, 0);
-        PostMessageW(menu, WM_CANCELMODE, 0, 0);
-    }
-
-    struct Ctx { DWORD selfPid; };
-    Ctx ctx{ selfPid };
-    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
-        auto* c = reinterpret_cast<Ctx*>(lp);
-        if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd)) return TRUE;
-        DWORD pid = 0;
-        GetWindowThreadProcessId(hwnd, &pid);
-        if (!pid || pid == c->selfPid) return TRUE;
-
-        wchar_t cls[256]{};
-        if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
-        if (wcsstr(cls, L"Shell_TrayWnd") || wcsstr(cls, L"Shell_SecondaryTrayWnd") ||
-            wcsstr(cls, L"Progman") || wcsstr(cls, L"WorkerW") ||
-            wcsstr(cls, L"XamlExplorerHostIslandWindow") ||
-            wcsstr(cls, L"Windows.UI.Core.CoreWindow") ||
-            wcsstr(cls, L"tooltips_class32") ||
-            wcsstr(cls, L"MSCTFIME UI") ||
-            wcsstr(cls, L"CiceroUIWndFrame") ||
-            wcsstr(cls, L"ForegroundStaging")) {
-            return TRUE;
-        }
-
-        LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
-        LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        bool isPopup = (style & WS_POPUP) != 0;
-        bool isToolWindow = (exStyle & WS_EX_TOOLWINDOW) != 0;
-        bool isMenuClass = wcsstr(cls, L"Menu") || wcsstr(cls, L"Context") ||
-                           wcsstr(cls, L"Popup") || wcsstr(cls, L"PopupMenu");
-        if (!isPopup && !isToolWindow && !isMenuClass) return TRUE;
-
-        HWND owner = GetWindow(hwnd, GW_OWNER);
-        if (!owner) return TRUE;
-
-        PostMessageW(hwnd, WM_KEYDOWN, VK_ESCAPE, 0);
-        PostMessageW(hwnd, WM_KEYUP,   VK_ESCAPE, 0);
-        PostMessageW(hwnd, WM_CANCELMODE, 0, 0);
-        PostMessageW(hwnd, WM_CLOSE, 0, 0);
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&ctx));
-
-    HWND fg = GetForegroundWindow();
-    if (fg) {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(fg, &pid);
-        if (pid && pid != selfPid) {
-            PostMessageW(fg, WM_KEYDOWN, VK_ESCAPE, 0);
-            PostMessageW(fg, WM_KEYUP,   VK_ESCAPE, 0);
-            PostMessageW(fg, WM_CANCELMODE, 0, 0);
-        }
-    }
-}
 
 void ShowThumbnailPreview(HWND source, wuxc::Button const& anchor);
 void ShowPinnedTaskTooltip(const std::wstring& text, wuxc::Button const& anchor);
@@ -2915,7 +2861,6 @@ static double GetStartMenuScaleFactor();
 static RECT GetStartSearchScreenRect();
 void SyncSearchKeyHook();
 void RestoreNativeShellHostWindows(bool restoreStart, bool restoreSearch);
-void KillStaleShellHosts(bool killStart, bool killSearch);
 void UpdateNetworkButton();
 void AdaptNetworkButtonDensity();
 void AdaptTopBarHeightDensity();
@@ -2964,7 +2909,7 @@ struct {
     bool disableTitleBarBleed = false;
 
     std::wstring leftItems = L"StartButton,SearchButton,VirtualDesktopButton,AppTitleButton,TaskListPanel";
-    std::wstring centerItems = L"ResourceButton,WeatherButton,MediaButton,NetworkButton,SpeedTestButton,SettingsButton";
+    std::wstring centerItems = L"ResourceButton,WeatherButton,MediaButton,NetworkButton,SpeedTestButton,OptimizerButton,SettingsButton";
     std::wstring rightItems = L"TrayIconButton,WallpaperButton,DisplayButton,WifiButton,SoundButton,BluetoothButton,RecycleBinButton,BatteryButton,NotificationsButton,ControlCenterButton,ClockButton";
 
     bool showCpuUsage = true;
@@ -3006,7 +2951,6 @@ struct {
     std::wstring dateFormat = L"📅ddd, MMM dd";
     std::wstring iconColor = L"#FFFFFF";
     std::wstring fontColor = L"#FFFFFF";
-    std::wstring iconPack = L"winui";
     std::wstring fontFamily;
     bool fontBold = false;
     int boldIntensity = 700;
@@ -3036,6 +2980,8 @@ struct {
     bool showNetworkDownload = true;
     bool showNetworkUpload = true;
     bool showSpeedTestButton = true;
+    bool showOptimizerButton = true;
+    bool optimizerSkipRamConfirm = false;
     bool showResourceLabels = false;
 
     std::wstring weatherLocationName;
@@ -3140,7 +3086,7 @@ std::vector<std::wstring> g_trayOrder;
 const std::vector<std::wstring> kDefaultTrayOrder = {
     L"WallpaperButton", L"WeatherButton", L"DisplayButton", L"SoundButton", L"WifiButton",
     L"BluetoothButton", L"BatteryButton", L"ControlCenterButton", L"ResourceButton",
-    L"SpeedTestButton", L"RecycleBinButton", L"TrayIconButton", L"ClockButton", L"MediaButton",
+    L"SpeedTestButton", L"OptimizerButton", L"RecycleBinButton", L"TrayIconButton", L"ClockButton", L"MediaButton",
     L"AppTitleButton"};
 
 const std::vector<std::wstring> kMovableItems = {
@@ -3148,7 +3094,7 @@ const std::vector<std::wstring> kMovableItems = {
     L"WallpaperButton", L"WeatherButton", L"DisplayButton", L"SoundButton", L"WifiButton",
     L"BluetoothButton", L"BatteryButton", L"ControlCenterButton", L"ResourceButton",
     L"RecycleBinButton", L"TrayIconButton", L"ClockButton", L"MediaButton",
-    L"NetworkButton", L"SpeedTestButton", L"NotificationsButton", L"AppTitleButton", L"TaskListPanel"};
+    L"NetworkButton", L"SpeedTestButton", L"OptimizerButton", L"NotificationsButton", L"AppTitleButton", L"TaskListPanel"};
 
 [[clang::no_destroy]] wuxc::StackPanel g_trayPanel{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_centerPanel{nullptr};
@@ -3353,36 +3299,13 @@ const std::vector<ControlStyleRule> g_themeGreenBarStyles = {
 };
 
 const std::vector<ControlStyleRule> g_themeNoIslandsStyles = {
-    {L"TopBarRoot", {L"Margin=0", L"CornerRadius=0"}},
-    {L"WeatherButton", {L"Background:=transparent"}},
-    {L"WallpaperButton", {L"Background:=transparent"}},
-    {L"RecycleBinButton", {L"Background:=transparent"}},
-    {L"SettingsButton", {L"Background:=transparent"}},
-    {L"StartButton", {L"Background:=transparent"}},
-    {L"SearchButton", {L"Background:=transparent"}},
-    {L"VirtualDesktopButton", {L"Background:=transparent"}},
-    {L"ClockButton", {L"Background:=transparent"}},
-    {L"DisplayButton", {L"Background:=transparent"}},
-    {L"SoundButton", {L"Background:=transparent"}},
-    {L"WifiButton", {L"Background:=transparent"}},
-    {L"BluetoothButton", {L"Background:=transparent"}},
-    {L"BatteryButton", {L"Background:=transparent"}}, 
-    {L"ControlCenterButton", {L"Background:=transparent"}},
-    {L"NotificationsButton", {L"Background:=transparent"}},
-    {L"ResourceButton", {L"Background:=transparent"}},
-    {L"NetworkButton", {L"Background:=transparent", L"BorderThickness=0,0,0,0", L"Margin=5,4"}},
-    {L"SpeedTestButton", {L"Background:=transparent"}},
-    {L"TrayIconButton", {L"Background:=transparent"}},
-    {L"PinnedTrayIconButton", {L"Background:=transparent"}},
-    {L"TaskButton", {L"Background:=transparent"}},
-    {L"TaskOverflowButton", {L"Background:=transparent"}},
-    {L"AppTitleButton", {L"Background:=transparent"}},
-    {L"MediaButton", {L"Background:=transparent"}},
-    {L"MediaTransportButton, MediaPrevButton, MediaPauseButton, MediaResumeButton, MediaNextButton", {L"Background:=transparent"}},
-    {L"ResourceCpuButton, ResourceRamButton, ResourceGpuButton, ResourceDiskButton, NetworkDownloadButton, NetworkUploadButton",
-     {L"Background:=transparent", L"BorderThickness=0,0,0,0", L"Margin=2,4,2,4"}},
-    {L"ResourceButton",
-     {L"Background:=transparent", L"BorderThickness=0", L"Padding=0", L"Margin=0"}},
+    {L"Grid#TopBarRoot", {L"Margin=0", L"CornerRadius=0"}},
+    {L"Grid#TopBarRoot > StackPanel > Button", {L"Background=transparent", L"BorderBrush=transparent"}},
+    {L"Grid#TopBarRoot > StackPanel > Button#ResourceButton > ContentPresenter#ContentPresenter > Grid#ResourceGrid", {L"Background=transparent"}},
+    {L"Grid#TopBarRoot > StackPanel > Button#ResourceButton > ContentPresenter#ContentPresenter > Grid#ResourceGrid > Button > ContentPresenter#ContentPresenter", {L"Background=transparent", L"BorderBrush=transparent"}},
+    {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder > ContentPresenter > Viewbox#TopBarScaler > Border > Grid#BarRoot > Grid#TopBarRoot > StackPanel#ControlCenterPanel > StackPanel#PinnedTrayPanel", {L"Background=transparent", L"BorderBrush=transparent"}},
+    {L"Button#TaskButton", {L"Background=transparent", L"BorderBrush=transparent"}},
+    {L"AppTitleButton", {L"Background=transparent", L"BorderBrush=transparent"}},
 };
 
 const std::vector<ControlStyleRule> g_themeOS27GoldenGateStyles = {
@@ -3424,7 +3347,7 @@ const std::vector<ControlStyleRule> g_themeOS27GoldenGateStyles = {
         L"BorderThickness=1",
         L"CornerRadius=10",
         L"Margin=3,3,3,3"}},
-    {L"VirtualDesktopButton, TaskOverflowButton, PinnedTrayIconButton, DisplayButton, SoundButton, WifiButton, BluetoothButton, ResourceButton, NetworkButton, SpeedTestButton, WallpaperButton, BatteryButton, WeatherButton, RecycleBinButton, SettingsButton, ControlCenterButton, TrayIconButton, NotificationsButton", {
+    {L"VirtualDesktopButton, TaskOverflowButton, PinnedTrayIconButton, DisplayButton, SoundButton, WifiButton, BluetoothButton, ResourceButton, NetworkButton, SpeedTestButton, OptimizerButton, WallpaperButton, BatteryButton, WeatherButton, RecycleBinButton, SettingsButton, ControlCenterButton, TrayIconButton, NotificationsButton", {
         L"Background:=<WindhawkBlur BlurAmount=\"16\" TintColor=\"#20FFFFFF\" TintOpacity=\"0.2\" />",
         L"BorderBrush:=<LinearGradientBrush StartPoint=\"0.50,1.17\" EndPoint=\"0.50,-0.17\"><GradientStop Offset=\"0.09\" Color=\"#C9FFFFFF\"/><GradientStop Offset=\"0.46\" Color=\"#001C1C1C\"/><GradientStop Offset=\"0.49\" Color=\"#001C1C1C\"/><GradientStop Offset=\"0.91\" Color=\"#A8FFFFFF\"/></LinearGradientBrush>",
         L"BorderThickness=1",
@@ -3615,7 +3538,7 @@ const std::vector<ControlStyleRule> g_themeMidnightNeonStyles = {
         L"CornerRadius=10",
         L"IconColor=#8FD9F0",
         L"Margin=5,4"}},
-    {L"SpeedTestButton", {
+    {L"SpeedTestButton, OptimizerButton", {
         L"Background:=#16243A",
         L"BorderBrush:=#338FD9F0",
         L"BorderThickness=1",
@@ -3629,25 +3552,26 @@ const std::vector<ControlStyleRule> g_themeMidnightNeonStyles = {
 };
 
 static std::vector<ControlStyleRule> BuildNeonBlueBaseStyles() {
+    // styleConstants: ItemBackground=#274755, ItemBorder=#397E9B, IconColor=#4CC2FF
     return {
         {L"Grid#TopBarRoot", {
             L"Background:=#242231", L"CornerRadius=16",
             L"BorderBrush:=#397E9B", L"BorderThickness=0",
             L"IconColor=#00D6FF", L"Height=40"}},
-        {L"Button#ResourceButton, Button#NetworkButton, Button#WeatherButton, Button#MediaButton, Button#ClockButton, Button#AppTitleButton",
+        {L"Button#ResourceButton > ContentPresenter#ContentPresenter > Grid#ResourceGrid > Button > ContentPresenter#ContentPresenter, Button#NetworkButton, Button#WeatherButton, Button#MediaButton, Button#ClockButton, Button#AppTitleButton",
             {L"Background:=#274755", L"BorderBrush:=#397E9B", L"BorderThickness=1.3", L"CornerRadius=12"}},
-        {L"Button#ResourceButton, Button#NetworkButton, Button#WeatherButton, Button#MediaButton, Button#ClockButton, Button#AppTitleButton",
+        {L"Button#WeatherButton, Button#MediaButton, Button#ClockButton, Button#AppTitleButton",
             {L"Margin=3,3,3,3", L"VerticalAlignment=Center", L"MinHeight=28", L"Padding=8,0,8,0", L"Foreground:=#E9F7FF"}},
-        {L"Button#VirtualDesktopButton, Button#TaskOverflowButton, Button#PinnedTrayIconButton, Button#WallpaperButton, Button#DisplayButton, Button#SoundButton, Button#WifiButton, Button#BluetoothButton, Button#BatteryButton, Button#RecycleBinButton, Button#SettingsButton, Button#ControlCenterButton, Button#NotificationsButton, Button#TrayIconButton, Button#SpeedTestButton",
+        {L"Button#WallpaperButton, Button#OptimizerButton, Button#SpeedTestButton, Button#DisplayButton, Button#SoundButton, Button#WifiButton, Button#BluetoothButton, Button#BatteryButton, Button#RecycleBinButton, Button#SettingsButton, Button#ControlCenterButton, Button#NotificationsButton, Button#TrayIconButton",
             {L"Background:=#274755", L"BorderBrush:=#397E9B", L"BorderThickness=1.3", L"CornerRadius=6"}},
-        {L"Button#VirtualDesktopButton, Button#TaskOverflowButton, Button#PinnedTrayIconButton, Button#WallpaperButton, Button#DisplayButton, Button#SoundButton, Button#WifiButton, Button#BluetoothButton, Button#BatteryButton, Button#RecycleBinButton, Button#SettingsButton, Button#ControlCenterButton, Button#NotificationsButton, Button#TrayIconButton, Button#SpeedTestButton",
+        {L"Button#DisplayButton, Button#SoundButton, Button#WifiButton, Button#BluetoothButton, Button#BatteryButton, Button#RecycleBinButton, Button#SettingsButton, Button#ControlCenterButton, Button#NotificationsButton, Button#TrayIconButton",
             {L"Margin=3,3,3,3", L"MinWidth=30", L"MinHeight=28", L"VerticalAlignment=Center", L"Padding=5,0,5,0", L"Foreground:=#4CC2FF"}},
         {L"Button#SearchButton",
             {L"Background:=Transparent", L"BorderThickness=0", L"Margin=3,2,3,2", L"MinWidth=32", L"MinHeight=28", L"VerticalAlignment=Center", L"Padding=4,0,4,0", L"Foreground:=#4CC2FF"}},
         {L"Button#StartButton", {L"Background:=Transparent"}},
         {L"StackPanel#TaskListPanel",
             {L"Background:=#274755", L"BorderBrush:=#397E9B", L"BorderThickness=1.3", L"CornerRadius=12"}},
-        {L"StackPanel#TaskListPanel", {L"Margin=0,3", L"Padding=2,0,2,0"}},
+        {L"StackPanel#TaskListPanel", {L"Padding=2,0,2,0"}},
         {L"Button#TaskButton > ContentPresenter#ContentPresenter",
             {L"Background:=Transparent", L"CornerRadius=9"}},
         {L"TextBlock#ClockText, TextBlock#AppTitleText, TextBlock#TaskButtonText",
@@ -3669,7 +3593,8 @@ static std::vector<ControlStyleRule> BuildNeonBlueBaseStyles() {
         {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder",
             {L"Background:=#242231", L"Canvas.ZIndex=1", L"CornerRadius=18"}},
         {L"FlyoutBlurHost", {L"Background:=#242231", L"CornerRadius=18"}},
-        {L"StartMenuBlurHost, StartAccountSurface", {L"Background:=#242231", L"BorderBrush:=#397E9B", L"BorderThickness=1", L"CornerRadius=16"}},
+        {L"StartMenuBlurHost, StartAccountSurface",
+            {L"Background:=#242231", L"BorderBrush:=#397E9B", L"BorderThickness=1", L"CornerRadius=16"}},
         {L"SearchBlurHost",
             {L"Background:=#242231", L"BorderBrush:=#397E9B", L"BorderThickness=1.3", L"CornerRadius=18"}},
         {L"Border#SearchBarSurface",
@@ -3691,28 +3616,34 @@ static std::vector<ControlStyleRule> BuildNeonBlueBaseStyles() {
             {L"Background:=#242231", L"Foreground:=#E9F7FF", L"BorderBrush:=#397E9B", L"BorderThickness=1", L"CornerRadius=12"}},
         {L"MenuFlyoutPresenter > Border#PART_BackgroundBorder, MenuFlyoutPresenter > Grid > Border#PART_BackgroundBorder",
             {L"Background:=#242231", L"BorderBrush:=#397E9B", L"CornerRadius=12"}},
-        {L"Button#ResourceCpuTab, Button#ResourceRamTab, Button#ResourceGpuTab, Button#ResourceDiskTab",
+        {L"Button#ResourceCpuTab, Button#ResourceRamTab, Button#ResourceGpuTab",
             {L"Background:=#274755", L"BorderBrush:=#00D6FF", L"CornerRadius=10"}},
-        {L"TextBlock#ResourceCpuTabText, TextBlock#ResourceRamTabText, TextBlock#ResourceGpuTabText, TextBlock#ResourceDiskTabText",
+        {L"TextBlock#ResourceCpuTabText, TextBlock#ResourceRamTabText, TextBlock#ResourceGpuTabText",
             {L"Foreground:=#E9F7FF", L"FontWeight=SemiBold"}},
         {L"Border#InfoIsland",
             {L"Background:=#274755", L"BorderBrush:=#397E9B", L"BorderThickness=1.3", L"CornerRadius=12"}},
-        {L"Border#ResourceGraphBorder", {L"Background:=#1D2C3B", L"CornerRadius=12"}},
+        {L"Border#ResourceGraphBorder",
+            {L"Background:=#1D2C3B", L"CornerRadius=12"}},
         {L"Canvas#ResourceGraphCanvas > Polygon", {L"Fill:=#34397E9B"}},
         {L"Canvas#ResourceGraphCanvas > Polyline", {L"Stroke=#00C2E4", L"StrokeThickness=2.2"}},
-        {L"Grid#ResourceStatsGrid", {L"Background:=#274755", L"CornerRadius=12", L"Padding=8,6,8,6"}},
-        {L"TextBlock#StatLabel0, TextBlock#StatLabel1, TextBlock#StatLabel2, TextBlock#StatLabel3, TextBlock#StatLabel4, TextBlock#StatLabel5, TextBlock#InfoCpuLabel, TextBlock#InfoRamLabel, TextBlock#InfoGpuLabel, TextBlock#InfoDiskLabel",
+        {L"Grid#ResourceStatsGrid",
+            {L"Background:=#274755", L"CornerRadius=12", L"Padding=8,6,8,6"}},
+        {L"TextBlock#StatLabel0, TextBlock#StatLabel1, TextBlock#StatLabel2, TextBlock#StatLabel3, TextBlock#InfoCpuLabel, TextBlock#InfoRamLabel, TextBlock#InfoGpuLabel",
             {L"Foreground:=#A3C1CD", L"FontSize=11"}},
-        {L"TextBlock#StatValue0, TextBlock#StatValue1, TextBlock#StatValue2, TextBlock#StatValue3, TextBlock#StatValue4, TextBlock#StatValue5",
-            {L"Foreground:=#00D6FF", L"FontSize=15", L"FontWeight=SemiBold"}},
-        {L"TextBlock#InfoCpuName, TextBlock#InfoRamName", {L"Foreground:=#E9F7FF", L"FontWeight=SemiBold"}},
-        {L"ComboBox#GpuSelector, ComboBox#DiskSelector",
+        {L"TextBlock#StatValue0, TextBlock#StatValue1, TextBlock#StatValue2, TextBlock#StatValue3",
+            {L"Foreground:=#00D6FF", L"FontSize=16", L"FontWeight=SemiBold"}},
+        {L"TextBlock#InfoCpuName, TextBlock#InfoRamName",
+            {L"Foreground:=#E9F7FF", L"FontWeight=SemiBold"}},
+        {L"ComboBox#GpuSelector",
             {L"Background:=#1D2C3B", L"Foreground:=#E9F7FF", L"BorderBrush:=#397E9B", L"BorderThickness=1", L"CornerRadius=8"}},
-        {L"TextBlock#WeatherCityName", {L"Foreground:=#4CC2FF", L"FontSize=16", L"FontWeight=SemiBold"}},
-        {L"TextBlock#WeatherCurrentTemp", {L"Foreground:=#E9F7FF", L"FontSize=38", L"FontWeight=SemiLight"}},
+        {L"TextBlock#WeatherCityName",
+            {L"Foreground:=#4CC2FF", L"FontSize=16", L"FontWeight=SemiBold"}},
+        {L"TextBlock#WeatherCurrentTemp",
+            {L"Foreground:=#E9F7FF", L"FontSize=38", L"FontWeight=SemiLight"}},
         {L"TextBlock#WeatherDesc", {L"Foreground:=#E9F7FF"}},
         {L"TextBlock#WeatherMinMax", {L"Foreground:=#A3C1CD"}},
-        {L"Button#WeatherDayButton", {L"Background:=#274755", L"BorderBrush:=#00D6FF", L"CornerRadius=12"}},
+        {L"Button#WeatherDayButton",
+            {L"Background:=#274755", L"BorderBrush:=#00D6FF", L"CornerRadius=12"}},
         {L"Button#WeatherDayButton > ContentPresenter > StackPanel > TextBlock[1]",
             {L"Foreground:=#4CC2FF", L"FontWeight=SemiBold"}},
         {L"Button#WeatherDayButton > ContentPresenter > StackPanel > TextBlock[3]",
@@ -3730,7 +3661,8 @@ static std::vector<ControlStyleRule> BuildNeonBlueBaseStyles() {
             {L"Background:=#274755", L"BorderBrush:=#397E9B", L"BorderThickness=1.3", L"CornerRadius=8"}},
         {L"Button#WeatherChangeLocation",
             {L"Background:=#274755", L"BorderThickness=0", L"Foreground:=#4CC2FF", L"CornerRadius=10"}},
-        {L"Button#WeatherChangeLocation > ContentPresenter > TextBlock", {L"Foreground:=#4CC2FF"}},
+        {L"Button#WeatherChangeLocation > ContentPresenter > TextBlock",
+            {L"Foreground:=#4CC2FF"}},
         {L"StackPanel#ControlCenterFlyoutRoot > Canvas > Grid > Button[1]",
             {L"Background:=#274755", L"BorderBrush:=#397E9B", L"BorderThickness=1.3", L"CornerRadius=12"}},
         {L"StackPanel#ControlCenterFlyoutRoot > Canvas > Grid > Border[1]",
@@ -3758,8 +3690,10 @@ static std::vector<ControlStyleRule> BuildNeonBlueBaseStyles() {
             {L"Foreground:=#4CC2FF", L"FontWeight=SemiBold"}},
         {L"QuickToggleTile, ControlCenterCustomizeButton",
             {L"Background:=#274755", L"BorderBrush:=#397E9B", L"BorderThickness=1.3"}},
-        {L"MediaTransportButton, Button#MediaPrevButton, Button#MediaPauseButton, Button#MediaResumeButton, Button#MediaNextButton", {L"Background:=Transparent", L"Foreground:=#4CC2FF", L"CornerRadius=7"}},
-        {L"MediaProgressBar", {L"Foreground:=#00D6FF", L"Background:=#397E9B"}},
+        {L"MediaTransportButton",
+            {L"Background:=Transparent", L"Foreground:=#4CC2FF", L"CornerRadius=7"}},
+        {L"MediaProgressBar",
+            {L"Foreground:=#00D6FF", L"Background:=#397E9B"}},
         {L"MediaPositionText, MediaEndText, RecycleBinSizeText, RecycleBinCountText",
             {L"Foreground:=#A3C1CD"}},
         {L"RecycleBinConfirmButton",
@@ -3771,12 +3705,6 @@ static std::vector<ControlStyleRule> BuildNeonBlueBaseStyles() {
             {L"Background:=#274755", L"BorderBrush:=#397E9B", L"BorderThickness=1.3", L"CornerRadius=12"}},
         {L"NotificationCloseButton, NotificationCloseAppButton",
             {L"Foreground:=#FF8FA3", L"CornerRadius=8"}},
-        // Split resource / network tiles keep the neon panel language.
-        {L"Button#ResourceCpuButton, Button#ResourceRamButton, Button#ResourceGpuButton, Button#ResourceDiskButton, Button#NetworkDownloadButton, Button#NetworkUploadButton",
-            {L"Background:=#274755", L"BorderBrush:=#397E9B", L"BorderThickness=1.3", L"CornerRadius=9",
-             L"Margin=2,3,2,3", L"MinHeight=28", L"Padding=6,0,6,0", L"Foreground:=#E9F7FF"}},
-        {L"Button#ResourceButton",
-            {L"Background:=Transparent", L"BorderThickness=0", L"Padding=0", L"Margin=0"}},
     };
 }
 
@@ -4191,6 +4119,9 @@ std::atomic<ULONGLONG> g_lastTopBarPointerTick{0};
 [[clang::no_destroy]] wuxc::Button g_speedTestButton{nullptr};
 [[clang::no_destroy]] wuxc::Flyout g_speedTestFlyout{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_speedTestPanel{nullptr};
+[[clang::no_destroy]] wuxc::Button g_optimizerButton{nullptr};
+[[clang::no_destroy]] wuxc::Flyout g_optimizerFlyout{nullptr};
+[[clang::no_destroy]] wuxc::StackPanel g_optimizerPanel{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_resourcePanel{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_resourceFlyoutTimer{nullptr};
 [[clang::no_destroy]] wuxc::Canvas g_graphCanvas{nullptr};
@@ -4821,9 +4752,9 @@ bool g_appBarRegistered = false;
 
 std::wstring GetStringSettingCopy(PCWSTR name) {
     {
-        wchar_t buf[2048] = {0};
-        size_t n = Wh_GetStringValue(name, buf, ARRAYSIZE(buf));
-        if (n > 0) return std::wstring(buf, n);
+        std::vector<wchar_t> buf(32768, 0);
+        size_t n = Wh_GetStringValue(name, buf.data(), buf.size());
+        if (n > 0 && n < buf.size()) return std::wstring(buf.data(), n);
     }
     PCWSTR value = Wh_GetStringSetting(name);
     std::wstring result = value ? value : L"";
@@ -4864,6 +4795,9 @@ static const std::map<std::wstring, int>& IntDefaults() {
         { L"showCpuUsage", 1 },
         { L"showRamUsage", 1 },
         { L"showGpuUsage", 1 },
+        { L"showDiskUsage", 1 },
+        { L"showOptimizerButton", 1 },
+        { L"optimizerSkipRamConfirm", 0 },
         { L"showMediaButton", 1 },
         { L"showMediaVisualizer", 1 },
         { L"mediaButtonShowIcon", 1 },
@@ -4904,6 +4838,7 @@ static const std::map<std::wstring, std::wstring>& StringDefaults() {
         { L"labelCpu", L"CPU:" },
         { L"labelRam", L"RAM:" },
         { L"labelGpu", L"GPU:" },
+        { L"labelDisk", L"Disk:" },
         { L"startSearchAlignment", L"center" },
         { L"activationPillColor", L"#FFFFFF" },
         { L"trayFlyoutView", L"list" },
@@ -6128,18 +6063,6 @@ bool ApplyStateResourceOverrides(FrameworkElement element,
     return handledByButton && baseProp != L"BorderThickness";
 }
 
-void EnsureButtonCustomTemplate(wuxc::Button const& button) {
-    if (!button) return;
-    if (auto tmpl = GetButtonHoverTemplate()) {
-        try {
-            if (button.Template() != tmpl) {
-                button.Template(tmpl);
-                button.ApplyTemplate();
-            }
-        } catch (...) {}
-    }
-    EnsureButtonHoverHook(button);
-}
 
 struct TopBarPressAnimConfig {
     bool enabled = true;
@@ -7065,37 +6988,6 @@ void ApplyControlStylesToPopupRoot(FrameworkElement const& root) {
     ApplyShadowTree(root);
 }
 
-static void ApplyControlStylesToSurface(FrameworkElement const& surface) {
-    if (!surface || g_applyingStyles) return;
-    g_applyingStyles = true;
-    struct Guard { ~Guard() { g_applyingStyles = false; } } guard;
-    auto apply = [&](const std::vector<ControlStyleRule>& rules) {
-        for (auto const& rule : rules) {
-            size_t start = 0;
-            while (start <= rule.target.size()) {
-                size_t comma = rule.target.find(L',', start);
-                auto target = TrimWs(rule.target.substr(start, comma == std::wstring::npos
-                                                        ? std::wstring::npos : comma - start));
-                auto chain = ParseTargetChain(target);
-                if (!chain.empty() && TestTreeMatcher(surface, chain.back()) &&
-                    MatchesAncestorChain(surface, chain)) {
-                    for (auto const& style : rule.styles) ApplySingleStyleToElement(surface, style);
-                }
-                if (comma == std::wstring::npos) break;
-                start = comma + 1;
-            }
-        }
-    };
-    apply(BuiltInStyles());
-    {
-        int prevTier = g_styleApplyTier;
-        struct TierGuard { int prev; ~TierGuard() { g_styleApplyTier = prev; } } tierGuard{prevTier};
-        g_styleApplyTier = 1;
-        apply(g_themeStyleRules);
-        g_styleApplyTier = 2;
-        apply(g_controlStyleRules);
-    }
-}
 
 static bool RuleListSetsProperty(const std::vector<ControlStyleRule>& rules,
                                  FrameworkElement const& element,
@@ -7223,13 +7115,8 @@ void TrimTopBarWorkingSet(bool force = false) {
     ULONGLONG prev = s_lastTrim.load(std::memory_order_relaxed);
     if (!force && prev != 0 && now - prev < 5000) return;
     s_lastTrim.store(now, std::memory_order_relaxed);
-    // Compact process heap and reclaim freed/paged XAML, D2D, and COM working set pages cleanly.
+    // Coalesce freed heap blocks without calling EmptyWorkingSet (avoids hard page faults/stutter).
     HeapCompact(GetProcessHeap(), 0);
-    EmptyWorkingSet(GetCurrentProcess());
-    SetProcessWorkingSetSizeEx(GetCurrentProcess(),
-                               static_cast<SIZE_T>(-1),
-                               static_cast<SIZE_T>(-1),
-                               0);
 }
 
 void ApplyAllControlStyles() {
@@ -7275,9 +7162,16 @@ void ApplyAllControlStyles() {
                     } catch (...) {}
                 };
             PruneDetachedStyleRoots();
-            if (g_rootElement) walk(g_rootElement);
+            if (g_rootElement) {
+                walk(g_rootElement);
+                try { g_rootElement.UpdateLayout(); } catch (...) {}
+                walk(g_rootElement);
+            }
             for (auto& wr : g_detachedStyleRoots) {
-                if (auto root = wr.get(); isLoadedRoot(root)) walk(root);
+                if (auto root = wr.get(); isLoadedRoot(root)) {
+                    walk(root);
+                    try { root.UpdateLayout(); } catch (...) {}
+                }
             }
         }
     } catch (...) {}
@@ -7311,6 +7205,26 @@ void ApplyAllControlStyles() {
         g_styleApplyTier = 2;
         ApplyRuleList(g_controlStyleRules);
     }
+    // Re-apply recorded IconColor rules after all Content:= replacements have run
+    // so newly created icons (e.g. StartButton custom FontIcon) inherit IconColor immediately.
+    try {
+        if (!g_namedElementIconColorHex.empty()) {
+            auto applyRecordedIconColor = [](const std::wstring& elemName, const std::wstring& hex) {
+                auto it = g_namedElements.find(elemName);
+                if (it != g_namedElements.end() && it->second) {
+                    ApplyIconColorToElement(it->second, hex);
+                }
+            };
+            if (auto rootIt = g_namedElementIconColorHex.find(L"TopBarRoot");
+                rootIt != g_namedElementIconColorHex.end()) {
+                applyRecordedIconColor(rootIt->first, rootIt->second);
+            }
+            for (const auto& kv : g_namedElementIconColorHex) {
+                if (kv.first == L"TopBarRoot") continue;
+                applyRecordedIconColor(kv.first, kv.second);
+            }
+        }
+    } catch (...) {}
     try {
         FrameworkElement topBarRootFE = nullptr;
         auto tbRootIt = g_namedElements.find(L"TopBarRoot");
@@ -7455,11 +7369,12 @@ void ApplyVisibilitySettings() {
     setVis(L"WeatherButton", g_settings.showWeatherButton);
     setVis(L"WallpaperButton", g_settings.showWallpaperButton);
     setVis(L"VirtualDesktopButton", g_settings.showVirtualDesktopButton);
-    setVis(L"ResourceButton", g_settings.showResourceButton && (g_settings.showCpuUsage || g_settings.showRamUsage || g_settings.showGpuUsage));
+    setVis(L"ResourceButton", g_settings.showResourceButton && (g_settings.showCpuUsage || g_settings.showRamUsage || g_settings.showGpuUsage || g_settings.showDiskUsage));
     setVis(L"NetworkButton", g_settings.showNetworkButton);
     setVis(L"NetworkDownloadButton", g_settings.showNetworkButton && g_settings.showNetworkDownload);
     setVis(L"NetworkUploadButton", g_settings.showNetworkButton && g_settings.showNetworkUpload);
     setVis(L"SpeedTestButton", g_settings.showSpeedTestButton);
+    setVis(L"OptimizerButton", g_settings.showOptimizerButton);
     setVis(L"ClockButton", g_settings.showClock || g_settings.showDate);
     setVis(L"MediaButton", g_settings.showMediaButton && g_mediaSessionExists);
     setVis(L"NotificationsButton", g_settings.showNotificationsButton);
@@ -8368,275 +8283,8 @@ constexpr PCWSTR kSystemTrayStroke =
     L"M15 16.5 L17 16.5";
 
 }
-namespace macos_sf {
-constexpr PCWSTR kMacAppleLogo = L"F1 M15.8,6.63C14.23,6.63 12.96,7.58 12.14,7.58C11.27,7.58 10.13,6.68 8.76,6.68C6.17,6.68 3.54,8.83 3.54,12.86C3.54,15.39 4.51,18.04 5.72,19.76C6.75,21.21 7.65,22.4 8.95,22.4C10.24,22.4 10.8,21.54 12.4,21.54C14.02,21.54 14.38,22.37 15.8,22.37C17.21,22.37 18.15,21.09 19.03,19.81C20.03,18.35 20.44,16.93 20.46,16.86C20.37,16.83 17.68,15.73 17.68,12.65C17.68,9.98 19.8,8.79 19.92,8.69C18.52,6.68 16.39,6.63 15.8,6.63ZM15.06,4.93C15.71,4.15 16.16,3.09 16.16,2.02C16.16,1.87 16.15,1.72 16.12,1.6C15.08,1.64 13.82,2.3 13.07,3.18C12.48,3.85 11.93,4.93 11.93,6C11.93,6.16 11.95,6.32 11.97,6.37C12.03,6.39 12.14,6.4 12.25,6.4C13.19,6.4 14.37,5.77 15.06,4.93Z";
-constexpr PCWSTR kMacSearch = L"F1 M2.1,10.09C2.1,14.55 5.73,18.18 10.19,18.18C11.95,18.18 13.56,17.61 14.89,16.66L19.88,21.66C20.11,21.89 20.41,22 20.74,22C21.43,22 21.9,21.48 21.9,20.8C21.9,20.48 21.78,20.19 21.57,19.97L16.61,14.99C17.66,13.63 18.27,11.93 18.27,10.09C18.27,5.63 14.65,2 10.19,2C5.73,2 2.1,5.63 2.1,10.09ZM3.83,10.09C3.83,6.58 6.68,3.73 10.19,3.73C13.69,3.73 16.54,6.58 16.54,10.09C16.54,13.6 13.69,16.45 10.19,16.45C6.68,16.45 3.83,13.6 3.83,10.09Z";
-constexpr PCWSTR kMacSettings = L"F1 M11.04,22.19L12.96,22.19C13.7,22.19 14.27,21.74 14.43,21.04L14.84,19.25L15.15,19.15L16.7,20.1C17.32,20.48 18.03,20.4 18.56,19.87L19.89,18.55C20.42,18.02 20.5,17.3 20.12,16.69L19.15,15.15L19.26,14.86L21.05,14.44C21.74,14.28 22.2,13.7 22.2,12.97L22.2,11.08C22.2,10.36 21.75,9.79 21.05,9.62L19.28,9.19L19.16,8.88L20.13,7.34C20.51,6.73 20.44,6.01 19.9,5.48L18.57,4.15C18.05,3.63 17.34,3.53 16.72,3.92L15.16,4.87L14.84,4.75L14.43,2.96C14.27,2.26 13.7,1.81 12.96,1.81L11.04,1.81C10.3,1.81 9.73,2.26 9.57,2.96L9.15,4.75L8.83,4.87L7.28,3.92C6.66,3.53 5.94,3.63 5.42,4.15L4.1,5.48C3.56,6.01 3.48,6.73 3.87,7.34L4.83,8.88L4.72,9.19L2.95,9.62C2.25,9.79 1.8,10.36 1.8,11.08L1.8,12.97C1.8,13.7 2.26,14.28 2.95,14.44L4.74,14.86L4.84,15.15L3.88,16.69C3.49,17.3 3.58,18.02 4.11,18.55L5.43,19.87C5.96,20.4 6.68,20.48 7.3,20.1L8.84,19.15L9.15,19.25L9.57,21.04C9.73,21.74 10.3,22.19 11.04,22.19ZM11.19,20.7C11.03,20.7 10.94,20.64 10.91,20.48L10.34,18.12C9.76,17.98 9.22,17.75 8.81,17.49L6.73,18.77C6.61,18.85 6.48,18.84 6.38,18.72L5.25,17.6C5.15,17.49 5.14,17.38 5.21,17.24L6.49,15.18C6.27,14.78 6.02,14.24 5.87,13.66L3.51,13.1C3.35,13.07 3.29,12.98 3.29,12.82L3.29,11.23C3.29,11.06 3.34,10.98 3.51,10.95L5.86,10.38C6.01,9.76 6.3,9.2 6.47,8.84L5.2,6.79C5.12,6.64 5.13,6.53 5.23,6.41L6.37,5.31C6.48,5.19 6.59,5.18 6.73,5.26L8.79,6.51C9.2,6.28 9.78,6.04 10.35,5.88L10.91,3.52C10.94,3.36 11.03,3.3 11.19,3.3L12.81,3.3C12.97,3.3 13.06,3.36 13.08,3.52L13.66,5.9C14.25,6.05 14.76,6.29 15.19,6.52L17.26,5.26C17.41,5.18 17.51,5.19 17.63,5.31L18.76,6.41C18.87,6.53 18.87,6.64 18.79,6.79L17.52,8.84C17.7,9.2 17.98,9.76 18.13,10.38L20.49,10.95C20.65,10.98 20.71,11.06 20.71,11.23L20.71,12.82C20.71,12.98 20.64,13.07 20.49,13.1L18.12,13.66C17.97,14.24 17.73,14.78 17.5,15.18L18.78,17.24C18.85,17.38 18.85,17.49 18.74,17.6L17.62,18.72C17.51,18.84 17.39,18.85 17.26,18.77L15.18,17.49C14.77,17.75 14.24,17.98 13.66,18.12L13.08,20.48C13.06,20.64 12.97,20.7 12.81,20.7ZM12,15.63C14.01,15.63 15.63,14.01 15.63,12C15.63,9.99 14.01,8.37 12,8.37C9.99,8.37 8.37,9.99 8.37,12C8.37,14.01 9.99,15.63 12,15.63ZM12,14.15C10.81,14.15 9.85,13.19 9.85,12C9.85,10.81 10.81,9.85 12,9.85C13.19,9.85 14.15,10.81 14.15,12C14.15,13.19 13.19,14.15 12,14.15Z";
-constexpr PCWSTR kMacBrightness = L"F1 M12,5.46C12.45,5.46 12.81,5.09 12.81,4.64L12.81,2.62C12.81,2.17 12.45,1.8 12,1.8C11.55,1.8 11.19,2.17 11.19,2.62L11.19,4.64C11.19,5.09 11.55,5.46 12,5.46ZM16.61,7.39C16.93,7.7 17.45,7.71 17.77,7.39L19.21,5.95C19.52,5.64 19.52,5.11 19.21,4.79C18.9,4.48 18.37,4.48 18.06,4.79L16.61,6.24C16.3,6.55 16.3,7.08 16.61,7.39ZM18.52,12C18.52,12.45 18.9,12.81 19.34,12.81L21.36,12.81C21.8,12.81 22.17,12.45 22.17,12C22.17,11.56 21.8,11.19 21.36,11.19L19.34,11.19C18.9,11.19 18.52,11.56 18.52,12ZM16.61,16.62C16.3,16.94 16.3,17.46 16.61,17.77L18.06,19.23C18.37,19.54 18.9,19.52 19.21,19.22C19.52,18.9 19.52,18.38 19.21,18.07L17.76,16.62C17.45,16.31 16.93,16.32 16.61,16.62ZM12,18.55C11.55,18.55 11.19,18.92 11.19,19.36L11.19,21.39C11.19,21.83 11.55,22.2 12,22.2C12.45,22.2 12.81,21.83 12.81,21.39L12.81,19.36C12.81,18.92 12.45,18.55 12,18.55ZM7.39,16.62C7.07,16.32 6.54,16.31 6.23,16.62L4.79,18.06C4.48,18.37 4.48,18.89 4.78,19.21C5.09,19.51 5.63,19.53 5.94,19.22L7.38,17.77C7.69,17.46 7.69,16.94 7.39,16.62ZM5.48,12C5.48,11.56 5.1,11.19 4.66,11.19L2.64,11.19C2.2,11.19 1.83,11.56 1.83,12C1.83,12.45 2.2,12.81 2.64,12.81L4.66,12.81C5.1,12.81 5.48,12.45 5.48,12ZM7.38,7.39C7.69,7.09 7.69,6.54 7.39,6.24L5.95,4.79C5.65,4.49 5.11,4.48 4.8,4.79C4.49,5.11 4.49,5.64 4.79,5.94L6.23,7.39C6.54,7.7 7.06,7.7 7.38,7.39ZM12,16.79C14.65,16.79 16.79,14.65 16.79,12C16.79,9.36 14.65,7.21 12,7.21C9.36,7.21 7.21,9.36 7.21,12C7.21,14.65 9.36,16.79 12,16.79ZM12,15.36C10.14,15.36 8.64,13.87 8.64,12C8.64,10.14 10.14,8.64 12,8.64C13.87,8.64 15.36,10.14 15.36,12C15.36,13.87 13.87,15.36 12,15.36Z";
-constexpr PCWSTR kMacControlCenter = L"F1 M6.95,11.66L17.05,11.66C19.79,11.66 22,9.73 22,6.88C22,4.03 19.79,2.1 17.05,2.1L6.95,2.1C4.21,2.1 2,4.03 2,6.88C2,9.73 4.21,11.66 6.95,11.66ZM6.95,10.08C5.13,10.08 3.65,8.79 3.65,6.88C3.65,4.97 5.13,3.68 6.95,3.68L17.05,3.68C18.87,3.68 20.35,4.97 20.35,6.88C20.35,8.79 18.87,10.08 17.05,10.08ZM6.95,9.37L10,9.37C11.43,9.37 12.57,8.36 12.57,6.88C12.57,5.39 11.43,4.39 10,4.39L6.95,4.39C5.52,4.39 4.38,5.39 4.38,6.87C4.38,8.36 5.52,9.37 6.95,9.37ZM6.49,21.9L17.51,21.9C20,21.9 22,20.16 22,17.59C22,15.02 20,13.28 17.51,13.28L6.49,13.28C4,13.28 2,15.02 2,17.59C2,20.16 4,21.9 6.49,21.9ZM14.47,20.3C12.92,20.3 11.67,19.21 11.67,17.58C11.67,15.96 12.92,14.87 14.47,14.87L17.68,14.87C19.24,14.87 20.48,15.96 20.48,17.59C20.48,19.21 19.24,20.3 17.68,20.3Z";
-constexpr PCWSTR kMacWifiFull = L"F1 M2.23,10.39C2.76,10.92 3.55,10.84 4.2,10.25C6.34,8.32 9.03,7.32 12,7.32C14.98,7.32 17.67,8.34 19.81,10.25C20.45,10.83 21.24,10.9 21.76,10.38C22.3,9.84 22.37,9.03 21.82,8.46C19.56,6.17 15.86,4.57 12,4.57C8.14,4.57 4.43,6.18 2.18,8.47C1.64,9.03 1.7,9.84 2.23,10.39ZM7.98,14.12C9.07,13.26 10.52,12.68 12,12.69C13.48,12.68 14.93,13.27 16.02,14.13C16.7,14.66 17.48,14.7 18.05,14.13C18.61,13.56 18.7,12.7 18.1,12.15C16.64,10.84 14.43,9.92 12,9.92C9.57,9.92 7.36,10.84 5.9,12.15C5.38,12.62 5.28,13.45 5.97,14.15C6.55,14.72 7.31,14.66 7.98,14.12ZM12,19.43C12.49,19.43 12.97,19.18 13.44,18.73L14.43,17.79C14.77,17.48 14.89,17.21 14.89,16.92C14.89,16.61 14.7,16.34 14.33,16.06C13.73,15.6 12.85,15.27 12,15.27C11.14,15.27 10.27,15.6 9.67,16.06C9.3,16.34 9.1,16.61 9.1,16.92C9.1,17.21 9.23,17.48 9.57,17.79L10.56,18.73C11.03,19.18 11.51,19.43 12,19.43Z";
-constexpr PCWSTR kMacWifi2 = L"F1 M7.98,14.12C9.07,13.26 10.52,12.68 12,12.69C13.48,12.68 14.93,13.27 16.02,14.13C16.7,14.66 17.48,14.7 18.05,14.13C18.61,13.56 18.7,12.7 18.1,12.15C16.64,10.84 14.43,9.92 12,9.92C9.57,9.92 7.36,10.84 5.9,12.15C5.38,12.62 5.28,13.45 5.97,14.15C6.55,14.72 7.31,14.66 7.98,14.12ZM12,19.43C12.49,19.43 12.97,19.18 13.44,18.73L14.43,17.79C14.77,17.48 14.89,17.21 14.89,16.92C14.89,16.61 14.7,16.34 14.33,16.06C13.73,15.6 12.85,15.27 12,15.27C11.14,15.27 10.27,15.6 9.67,16.06C9.3,16.34 9.1,16.61 9.1,16.92C9.1,17.21 9.23,17.48 9.57,17.79L10.56,18.73C11.03,19.18 11.51,19.43 12,19.43Z";
-constexpr PCWSTR kMacWifi1 = L"F1 M12,19.43C12.49,19.43 12.97,19.18 13.44,18.73L14.43,17.79C14.77,17.48 14.89,17.21 14.89,16.92C14.89,16.61 14.7,16.34 14.33,16.06C13.73,15.6 12.85,15.27 12,15.27C11.14,15.27 10.27,15.6 9.67,16.06C9.3,16.34 9.1,16.61 9.1,16.92C9.1,17.21 9.23,17.48 9.57,17.79L10.56,18.73C11.03,19.18 11.51,19.43 12,19.43Z";
-constexpr PCWSTR kMacWifiSlash = L"F1 M2.18,9.57C1.64,10.13 1.7,10.94 2.23,11.49C2.76,12.02 3.55,11.94 4.2,11.35C5.17,10.48 6.26,9.79 7.44,9.32L5.39,7.27C4.16,7.89 3.06,8.68 2.18,9.57ZM19.81,11.35C20.45,11.93 21.24,12 21.76,11.48C22.3,10.94 22.37,10.13 21.82,9.56C19.56,7.27 15.86,5.68 12,5.68C11.02,5.68 10.05,5.78 9.13,5.97L11.61,8.46C14.54,8.37 17.47,9.26 19.81,11.35ZM5.9,13.25C5.38,13.73 5.28,14.55 5.97,15.25C6.55,15.83 7.31,15.76 7.98,15.22C9.03,14.39 10.44,13.8 11.92,13.8L9.49,11.37C8.09,11.74 6.83,12.41 5.9,13.25ZM18.1,13.25C17.18,12.41 15.94,11.75 14.54,11.4L18.12,14.97C18.55,14.54 18.65,13.75 18.1,13.25ZM12,20.53C12.49,20.53 12.97,20.28 13.44,19.83L14.43,18.9C14.77,18.59 14.89,18.31 14.89,18.03C14.89,17.71 14.7,17.44 14.33,17.16C13.73,16.71 12.85,16.38 12,16.38C11.14,16.38 10.27,16.71 9.67,17.16C9.3,17.44 9.1,17.71 9.1,18.03C9.1,18.31 9.23,18.59 9.57,18.9L10.56,19.83C11.03,20.28 11.51,20.53 12,20.53ZM19.73,20.1C20,20.37 20.46,20.37 20.72,20.1C20.99,19.81 21,19.37 20.72,19.1L5.31,3.68C5.04,3.4 4.58,3.4 4.3,3.68C4.03,3.94 4.03,4.42 4.3,4.68Z";
-constexpr PCWSTR kMacWifiExclam = L"F1 M12.01,15.72C12.49,15.72 12.82,15.4 12.83,14.89L12.91,4.74C12.91,4.22 12.49,3.86 12,3.86C11.51,3.86 11.08,4.22 11.08,4.74L11.18,14.89C11.19,15.4 11.53,15.72 12.01,15.72ZM12,20.14C12.78,20.14 13.4,19.5 13.4,18.73C13.4,17.96 12.78,17.34 12,17.34C11.23,17.34 10.6,17.96 10.6,18.73C10.6,19.5 11.23,20.14 12,20.14ZM2.18,8.8C1.64,9.35 1.7,10.16 2.23,10.71C2.76,11.24 3.55,11.16 4.2,10.57C5.79,9.14 7.68,8.23 9.77,7.85L9.73,5.09C6.73,5.56 3.99,6.95 2.18,8.8ZM21.82,8.79C20.01,6.94 17.27,5.55 14.27,5.08L14.24,7.86C16.32,8.24 18.22,9.16 19.81,10.57C20.45,11.15 21.24,11.23 21.76,10.7C22.3,10.16 22.37,9.35 21.82,8.79ZM5.9,12.47C5.38,12.95 5.28,13.77 5.97,14.47C6.55,15.05 7.31,14.98 7.98,14.44C8.52,14.01 9.14,13.65 9.82,13.43L9.79,10.51C8.25,10.86 6.9,11.57 5.9,12.47ZM16.02,14.45C16.7,14.98 17.48,15.02 18.05,14.45C18.61,13.88 18.7,13.02 18.1,12.47C17.11,11.57 15.75,10.87 14.22,10.51L14.2,13.43C14.86,13.67 15.49,14.03 16.02,14.45Z";
-constexpr PCWSTR kMacSpeaker0 = L"F1 M6.4,15.62L9.41,15.62C9.52,15.62 9.6,15.65 9.67,15.71L14.24,19.99C14.74,20.45 15.14,20.65 15.63,20.65C16.18,20.65 16.59,20.38 16.76,19.77L4.7,7.73C4.4,8.08 4.24,8.61 4.24,9.32L4.24,13.37C4.24,14.9 4.96,15.62 6.4,15.62ZM16.83,14.08L16.83,3.25C16.83,2.56 16.34,2 15.62,2C15.12,2 14.79,2.22 14.24,2.73L9.99,6.67C9.94,6.72 9.87,6.76 9.81,6.76L9.49,6.76ZM20.48,21.76C20.8,22.08 21.33,22.08 21.63,21.76C21.95,21.43 21.95,20.93 21.63,20.61L3.53,2.51C3.21,2.19 2.68,2.19 2.37,2.51C2.05,2.81 2.05,3.35 2.37,3.66Z";
-constexpr PCWSTR kMacSpeaker1 = L"F1 M14.13,21.92C14.87,21.92 15.4,21.39 15.4,20.66L15.4,3.41C15.4,2.67 14.87,2.08 14.1,2.08C13.57,2.08 13.21,2.3 12.65,2.85L7.85,7.35C7.78,7.42 7.68,7.46 7.57,7.46L4.35,7.46C2.82,7.46 2,8.3 2,9.92L2,14.1C2,15.73 2.82,16.57 4.35,16.57L7.57,16.57C7.68,16.57 7.78,16.6 7.85,16.67L12.65,21.21C13.16,21.71 13.6,21.92 14.13,21.92ZM19.41,16.78C19.78,17.04 20.31,16.96 20.62,16.52C21.48,15.39 22,13.71 22,11.99C22,10.27 21.48,8.6 20.62,7.46C20.31,7.02 19.78,6.93 19.41,7.2C18.95,7.51 18.88,8.07 19.23,8.54C19.89,9.44 20.26,10.68 20.26,11.99C20.26,13.29 19.87,14.53 19.23,15.44C18.9,15.91 18.95,16.45 19.41,16.78Z";
-constexpr PCWSTR kMacSpeaker2 = L"F1 M11.66,19.9C12.25,19.9 12.67,19.48 12.67,18.9L12.67,5.15C12.67,4.57 12.25,4.1 11.64,4.1C11.22,4.1 10.94,4.28 10.49,4.72L6.66,8.3C6.61,8.35 6.53,8.38 6.44,8.38L3.87,8.38C2.65,8.38 2,9.05 2,10.34L2,13.68C2,14.97 2.65,15.64 3.87,15.64L6.44,15.64C6.53,15.64 6.61,15.66 6.66,15.72L10.49,19.34C10.89,19.73 11.24,19.9 11.66,19.9ZM15.88,15.81C16.18,16.01 16.6,15.95 16.84,15.6C17.53,14.7 17.94,13.36 17.94,11.99C17.94,10.62 17.53,9.29 16.84,8.38C16.6,8.03 16.18,7.96 15.88,8.17C15.51,8.42 15.46,8.87 15.74,9.24C16.26,9.96 16.55,10.95 16.55,11.99C16.55,13.03 16.25,14.02 15.74,14.74C15.47,15.12 15.51,15.55 15.88,15.81ZM19.2,18.15C19.53,18.37 19.94,18.29 20.18,17.95C21.33,16.37 22,14.2 22,11.99C22,9.78 21.34,7.59 20.18,6.03C19.94,5.69 19.53,5.61 19.2,5.84C18.86,6.06 18.81,6.48 19.07,6.85C20.05,8.23 20.61,10.08 20.61,11.99C20.61,13.9 20.03,15.74 19.07,17.13C18.82,17.5 18.86,17.92 19.2,18.15Z";
-constexpr PCWSTR kMacSpeaker3 = L"F1 M10.03,18.58C10.52,18.58 10.87,18.23 10.87,17.75L10.87,6.32C10.87,5.83 10.52,5.44 10.02,5.44C9.67,5.44 9.43,5.59 9.06,5.95L5.87,8.93C5.83,8.98 5.76,9 5.69,9L3.56,9C2.54,9 2,9.56 2,10.63L2,13.4C2,14.48 2.54,15.03 3.56,15.03L5.69,15.03C5.76,15.03 5.83,15.06 5.87,15.1L9.06,18.11C9.39,18.44 9.68,18.58 10.03,18.58ZM13.54,15.18C13.78,15.35 14.13,15.29 14.33,15C14.91,14.25 15.25,13.14 15.25,12C15.25,10.86 14.91,9.76 14.33,9C14.13,8.71 13.78,8.65 13.54,8.83C13.23,9.04 13.18,9.41 13.42,9.71C13.85,10.31 14.09,11.14 14.09,12C14.09,12.87 13.84,13.69 13.42,14.29C13.19,14.6 13.23,14.96 13.54,15.18ZM16.3,17.12C16.58,17.31 16.92,17.24 17.12,16.96C18.07,15.64 18.63,13.84 18.63,12C18.63,10.16 18.08,8.34 17.12,7.05C16.92,6.76 16.58,6.7 16.3,6.88C16.02,7.07 15.98,7.42 16.2,7.72C17.01,8.87 17.48,10.41 17.48,12C17.48,13.59 16.99,15.12 16.2,16.28C15.99,16.58 16.02,16.93 16.3,17.12ZM19.09,19.09C19.35,19.28 19.71,19.21 19.91,18.91C21.22,17.02 22,14.63 22,12C22,9.36 21.2,6.99 19.91,5.09C19.71,4.79 19.35,4.72 19.09,4.91C18.81,5.1 18.77,5.45 18.97,5.76C20.13,7.46 20.86,9.61 20.86,12C20.86,14.39 20.13,16.55 18.97,18.25C18.77,18.55 18.81,18.9 19.09,19.09Z";
-constexpr PCWSTR kMacMic = L"F1 M12,18.43C15.98,18.43 18.69,15.77 18.69,11.88L18.69,9.98C18.69,9.59 18.38,9.28 17.99,9.28C17.59,9.28 17.28,9.59 17.28,9.98L17.28,11.82C17.28,15.01 15.2,17.12 12,17.12C8.8,17.12 6.72,15.01 6.72,11.82L6.72,9.98C6.72,9.59 6.42,9.28 6.01,9.28C5.62,9.28 5.31,9.59 5.31,9.98L5.31,11.88C5.31,15.77 8.02,18.43 12,18.43ZM8.6,11.54C8.6,13.69 9.99,15.21 12,15.21C14.01,15.21 15.4,13.69 15.4,11.54L15.4,5.66C15.4,3.5 14.01,2 12,2C9.99,2 8.6,3.5 8.6,5.66ZM10.01,11.54L10.01,5.66C10.01,4.28 10.81,3.39 12,3.39C13.2,3.39 13.99,4.28 13.99,5.66L13.99,11.54C13.99,12.93 13.2,13.81 12,13.81C10.81,13.81 10.01,12.93 10.01,11.54ZM7.83,22L16.17,22C16.57,22 16.88,21.69 16.88,21.3C16.88,20.91 16.57,20.59 16.17,20.59L7.83,20.59C7.43,20.59 7.12,20.91 7.12,21.3C7.12,21.69 7.43,22 7.83,22ZM12,21.69C12.4,21.69 12.71,21.37 12.71,20.98L12.71,18.11C12.71,17.72 12.4,17.4 12,17.4C11.61,17.4 11.29,17.72 11.29,18.11L11.29,20.98C11.29,21.37 11.61,21.69 12,21.69Z";
-constexpr PCWSTR kMacMicSlash = L"F1 M5.17,11.88C5.17,15.54 7.59,18.11 11.15,18.41L11.15,20.59L7.69,20.59C7.29,20.59 6.97,20.91 6.97,21.3C6.97,21.69 7.29,22 7.69,22L16.03,22C16.42,22 16.74,21.69 16.74,21.3C16.74,20.91 16.42,20.59 16.03,20.59L12.56,20.59L12.56,18.41C13.62,18.33 14.56,18.04 15.39,17.58L14.38,16.58C13.66,16.93 12.82,17.12 11.86,17.12C8.66,17.12 6.58,15.01 6.58,11.82L6.58,9.98C6.58,9.59 6.27,9.28 5.87,9.28C5.48,9.28 5.17,9.59 5.17,9.98ZM16.81,13.8L17.9,14.9C18.32,14.02 18.54,13 18.54,11.88L18.54,9.98C18.54,9.59 18.24,9.28 17.84,9.28C17.45,9.28 17.13,9.59 17.13,9.98L17.13,11.82C17.13,12.54 17.02,13.21 16.81,13.8ZM11.86,15.21C12.22,15.21 12.54,15.15 12.84,15.05L11.41,13.61C11.34,13.64 11.26,13.65 11.17,13.65C10.62,13.53 10.23,13.09 10.1,12.52L10.09,12.29L8.46,10.66L8.46,11.54C8.46,13.69 9.84,15.21 11.86,15.21ZM15.26,5.66C15.26,3.5 13.87,2 11.86,2C10.01,2 8.7,3.27 8.5,5.14L8.5,5.51L9.87,6.88L9.87,5.66C9.87,4.28 10.67,3.39 11.86,3.39C13.06,3.39 13.84,4.28 13.84,5.66L13.84,10.63C13.84,10.7 13.84,10.78 13.83,10.84L15.2,12.21C15.24,11.99 15.26,11.77 15.26,11.54ZM18.72,19.34C19,19.62 19.46,19.62 19.74,19.34C20.01,19.05 20.02,18.6 19.74,18.32L5.28,3.87C5,3.6 4.54,3.59 4.26,3.87C3.98,4.15 3.98,4.62 4.26,4.89Z";
-constexpr PCWSTR kMacBattery0 = L"F1 M5.15,17.03L16.46,17.03C17.7,17.03 18.79,16.73 19.55,15.97C20.31,15.21 20.61,14.24 20.61,13.01L20.61,10.99C20.61,9.76 20.31,8.79 19.55,8.03C18.79,7.27 17.7,6.97 16.46,6.97L5.15,6.97C3.91,6.97 2.82,7.27 2.06,8.03C1.3,8.79 1,9.76 1,10.99L1,13.01C1,14.24 1.3,15.21 2.06,15.97C2.82,16.73 3.91,17.03 5.15,17.03ZM5.19,15.84C4.31,15.84 3.51,15.7 2.92,15.11C2.33,14.53 2.2,13.75 2.2,12.88L2.2,11.12C2.2,10.25 2.33,9.47 2.92,8.89C3.51,8.3 4.31,8.16 5.19,8.16L16.42,8.16C17.31,8.16 18.1,8.3 18.69,8.89C19.28,9.47 19.42,10.25 19.42,11.12L19.42,12.88C19.42,13.75 19.28,14.53 18.69,15.11C18.1,15.7 17.31,15.84 16.42,15.84ZM21.62,13.92C22.21,13.88 23,13.13 23,12C23,10.87 22.21,10.11 21.62,10.07Z";
-constexpr PCWSTR kMacBattery25 = L"F1 M5.15,17.03L7.06,17.03L7.06,6.97L5.15,6.97C3.91,6.97 2.82,7.27 2.06,8.03C1.3,8.79 1,9.76 1,10.99L1,13.01C1,14.24 1.3,15.21 2.06,15.97C2.82,16.73 3.91,17.03 5.15,17.03ZM5.15,17.03L16.46,17.03C17.7,17.03 18.79,16.73 19.55,15.97C20.31,15.21 20.61,14.24 20.61,13.01L20.61,10.99C20.61,9.76 20.31,8.79 19.55,8.03C18.79,7.27 17.7,6.97 16.46,6.97L5.15,6.97C3.91,6.97 2.82,7.27 2.06,8.03C1.3,8.79 1,9.76 1,10.99L1,13.01C1,14.24 1.3,15.21 2.06,15.97C2.82,16.73 3.91,17.03 5.15,17.03ZM5.19,15.84C4.31,15.84 3.51,15.7 2.92,15.11C2.33,14.53 2.2,13.75 2.2,12.88L2.2,11.12C2.2,10.25 2.33,9.47 2.92,8.89C3.51,8.3 4.31,8.16 5.19,8.16L16.42,8.16C17.31,8.16 18.1,8.3 18.69,8.89C19.28,9.47 19.42,10.25 19.42,11.12L19.42,12.88C19.42,13.75 19.28,14.53 18.69,15.11C18.1,15.7 17.31,15.84 16.42,15.84ZM21.62,13.92C22.21,13.88 23,13.13 23,12C23,10.87 22.21,10.11 21.62,10.07Z";
-constexpr PCWSTR kMacBattery50 = L"F1 M5.15,17.03L10.81,17.03L10.81,6.97L5.15,6.97C3.91,6.97 2.82,7.27 2.06,8.03C1.3,8.79 1,9.76 1,10.99L1,13.01C1,14.24 1.3,15.21 2.06,15.97C2.82,16.73 3.91,17.03 5.15,17.03ZM5.15,17.03L16.46,17.03C17.7,17.03 18.79,16.73 19.55,15.97C20.31,15.21 20.61,14.24 20.61,13.01L20.61,10.99C20.61,9.76 20.31,8.79 19.55,8.03C18.79,7.27 17.7,6.97 16.46,6.97L5.15,6.97C3.91,6.97 2.82,7.27 2.06,8.03C1.3,8.79 1,9.76 1,10.99L1,13.01C1,14.24 1.3,15.21 2.06,15.97C2.82,16.73 3.91,17.03 5.15,17.03ZM5.19,15.84C4.31,15.84 3.51,15.7 2.92,15.11C2.33,14.53 2.2,13.75 2.2,12.88L2.2,11.12C2.2,10.25 2.33,9.47 2.92,8.89C3.51,8.3 4.31,8.16 5.19,8.16L16.42,8.16C17.31,8.16 18.1,8.3 18.69,8.89C19.28,9.47 19.42,10.25 19.42,11.12L19.42,12.88C19.42,13.75 19.28,14.53 18.69,15.11C18.1,15.7 17.31,15.84 16.42,15.84ZM21.62,13.92C22.21,13.88 23,13.13 23,12C23,10.87 22.21,10.11 21.62,10.07Z";
-constexpr PCWSTR kMacBattery75 = L"F1 M5.15,17.03L15.11,17.03L15.11,6.97L5.15,6.97C3.91,6.97 2.82,7.27 2.06,8.03C1.3,8.79 1,9.76 1,10.99L1,13.01C1,14.24 1.3,15.21 2.06,15.97C2.82,16.73 3.91,17.03 5.15,17.03ZM5.15,17.03L16.46,17.03C17.7,17.03 18.79,16.73 19.55,15.97C20.31,15.21 20.61,14.24 20.61,13.01L20.61,10.99C20.61,9.76 20.31,8.79 19.55,8.03C18.79,7.27 17.7,6.97 16.46,6.97L5.15,6.97C3.91,6.97 2.82,7.27 2.06,8.03C1.3,8.79 1,9.76 1,10.99L1,13.01C1,14.24 1.3,15.21 2.06,15.97C2.82,16.73 3.91,17.03 5.15,17.03ZM5.19,15.84C4.31,15.84 3.51,15.7 2.92,15.11C2.33,14.53 2.2,13.75 2.2,12.88L2.2,11.12C2.2,10.25 2.33,9.47 2.92,8.89C3.51,8.3 4.31,8.16 5.19,8.16L16.42,8.16C17.31,8.16 18.1,8.3 18.69,8.89C19.28,9.47 19.42,10.25 19.42,11.12L19.42,12.88C19.42,13.75 19.28,14.53 18.69,15.11C18.1,15.7 17.31,15.84 16.42,15.84ZM21.62,13.92C22.21,13.88 23,13.13 23,12C23,10.87 22.21,10.11 21.62,10.07Z";
-constexpr PCWSTR kMacBattery100 = L"F1 M5.18,17.03L16.44,17.03C17.71,17.03 18.79,16.73 19.55,15.97C20.31,15.21 20.61,14.24 20.61,12.99L20.61,11C20.61,9.76 20.31,8.78 19.55,8.02C18.79,7.27 17.71,6.97 16.44,6.97L5.15,6.97C3.91,6.97 2.82,7.27 2.06,8.03C1.3,8.79 1,9.76 1,10.99L1,12.99C1,14.24 1.3,15.22 2.06,15.97C2.82,16.73 3.91,17.03 5.18,17.03ZM5.15,17.03L16.46,17.03C17.7,17.03 18.79,16.73 19.55,15.97C20.31,15.21 20.61,14.24 20.61,13.01L20.61,10.99C20.61,9.76 20.31,8.79 19.55,8.03C18.79,7.27 17.7,6.97 16.46,6.97L5.15,6.97C3.91,6.97 2.82,7.27 2.06,8.03C1.3,8.79 1,9.76 1,10.99L1,13.01C1,14.24 1.3,15.21 2.06,15.97C2.82,16.73 3.91,17.03 5.15,17.03ZM5.19,15.84C4.31,15.84 3.51,15.7 2.92,15.11C2.33,14.53 2.2,13.75 2.2,12.88L2.2,11.12C2.2,10.25 2.33,9.47 2.92,8.89C3.51,8.3 4.31,8.16 5.19,8.16L16.42,8.16C17.31,8.16 18.1,8.3 18.69,8.89C19.28,9.47 19.42,10.25 19.42,11.12L19.42,12.88C19.42,13.75 19.28,14.53 18.69,15.11C18.1,15.7 17.31,15.84 16.42,15.84ZM21.62,13.92C22.21,13.88 23,13.13 23,12C23,10.87 22.21,10.11 21.62,10.07Z";
-constexpr PCWSTR kMacBatteryCharging = L"F1 M5.15,17.03L8.21,17.03C8.11,16.74 8.1,16.39 8.24,16.02L9.02,13.9L7.96,13.9C7.22,13.9 6.61,13.31 6.61,12.56C6.61,12.24 6.74,11.93 6.95,11.65L10.67,6.97L5.15,6.97C3.91,6.97 2.82,7.27 2.06,8.03C1.3,8.79 1,9.76 1,10.99L1,13.01C1,14.24 1.3,15.21 2.06,15.97C2.82,16.73 3.91,17.03 5.15,17.03ZM10.94,17.03L16.46,17.03C17.7,17.03 18.79,16.73 19.55,15.97C20.31,15.21 20.61,14.24 20.61,13.01L20.61,10.99C20.61,9.76 20.31,8.79 19.55,8.03C18.79,7.27 17.7,6.97 16.46,6.97L13.4,6.97C13.5,7.27 13.5,7.62 13.37,8L12.59,10.11L13.64,10.11C14.39,10.11 15,10.69 15,11.44C15,11.76 14.87,12.07 14.66,12.35ZM7.63,12.56C7.63,12.75 7.78,12.88 7.97,12.88L10.48,12.88L9.15,16.49C8.98,16.97 9.48,17.23 9.79,16.85L13.86,11.73C13.93,11.63 13.98,11.53 13.98,11.44C13.98,11.25 13.83,11.12 13.64,11.12L11.12,11.12L12.47,7.5C12.64,7.03 12.13,6.77 11.83,7.15L7.75,12.27C7.67,12.37 7.63,12.47 7.63,12.56ZM5.15,17.03L8.21,17.03C8.11,16.74 8.1,16.4 8.23,16.03L8.31,15.84L5.19,15.84C4.31,15.84 3.51,15.7 2.92,15.11C2.33,14.53 2.2,13.75 2.2,12.88L2.2,11.12C2.2,10.25 2.33,9.47 2.92,8.89C3.51,8.3 4.31,8.17 5.19,8.17L9.72,8.17L10.67,6.97L5.15,6.97C3.91,6.97 2.82,7.27 2.06,8.03C1.3,8.79 1,9.76 1,10.99L1,13.01C1,14.24 1.3,15.21 2.06,15.97C2.82,16.73 3.91,17.03 5.15,17.03ZM10.94,17.03L16.46,17.03C17.7,17.03 18.79,16.73 19.55,15.97C20.31,15.21 20.61,14.24 20.61,13.01L20.61,10.99C20.61,9.76 20.31,8.79 19.55,8.03C18.79,7.27 17.7,6.97 16.46,6.97L13.4,6.97C13.5,7.26 13.51,7.6 13.38,7.97L13.3,8.17L16.42,8.17C17.31,8.17 18.1,8.3 18.69,8.89C19.28,9.47 19.42,10.25 19.42,11.12L19.42,12.88C19.42,13.75 19.28,14.53 18.69,15.11C18.1,15.7 17.31,15.84 16.42,15.84L11.89,15.84ZM21.62,13.92C22.21,13.88 23,13.13 23,12C23,10.87 22.21,10.11 21.62,10.08Z";
-constexpr PCWSTR kMacBolt = L"F1 M5.69,13.11C5.69,13.46 5.96,13.72 6.34,13.72L11.4,13.72L8.73,20.97C8.38,21.89 9.34,22.38 9.94,21.63L18.07,11.46C18.23,11.27 18.31,11.09 18.31,10.89C18.31,10.55 18.04,10.28 17.66,10.28L12.6,10.28L15.27,3.03C15.62,2.11 14.66,1.61 14.06,2.37L5.93,12.54C5.77,12.73 5.69,12.91 5.69,13.11Z";
-constexpr PCWSTR kMacTrash = L"F1 M9.26,19.27C8.91,19.27 8.69,19.06 8.67,18.72L8.4,8.83C8.39,8.5 8.61,8.29 8.97,8.29C9.31,8.29 9.54,8.49 9.55,8.83L9.84,18.72C9.84,19.05 9.61,19.27 9.26,19.27ZM12,19.27C11.65,19.27 11.41,19.05 11.41,18.72L11.41,8.83C11.41,8.5 11.65,8.29 12,8.29C12.35,8.29 12.6,8.5 12.6,8.83L12.6,18.72C12.6,19.05 12.35,19.27 12,19.27ZM14.75,19.27C14.4,19.27 14.16,19.05 14.17,18.72L14.45,8.83C14.46,8.49 14.69,8.29 15.03,8.29C15.39,8.29 15.61,8.5 15.6,8.83L15.33,18.72C15.31,19.06 15.09,19.27 14.75,19.27ZM8.06,6.1L9.49,6.1L9.49,4.18C9.49,3.67 9.84,3.34 10.38,3.34L13.6,3.34C14.14,3.34 14.5,3.67 14.5,4.18L14.5,6.1L15.92,6.1L15.92,4.09C15.92,2.79 15.08,2 13.7,2L10.28,2C8.9,2 8.06,2.79 8.06,4.09ZM3.98,6.82L20.03,6.82C20.4,6.82 20.69,6.51 20.69,6.14C20.69,5.77 20.4,5.47 20.03,5.47L3.98,5.47C3.62,5.47 3.31,5.77 3.31,6.14C3.31,6.52 3.62,6.82 3.98,6.82ZM7.89,22L16.12,22C17.41,22 18.27,21.16 18.33,19.88L18.96,6.63L5.04,6.63L5.68,19.89C5.74,21.17 6.58,22 7.89,22Z";
-constexpr PCWSTR kMacBell = L"F1 M4.47,18.19L19.53,18.19C20.42,18.19 20.96,17.73 20.96,17.04C20.96,16.09 20,15.24 19.18,14.39C18.55,13.73 18.38,12.38 18.3,11.29C18.24,7.64 17.27,5.14 14.74,4.22C14.38,2.98 13.4,2 12,2C10.6,2 9.61,2.98 9.26,4.22C6.73,5.14 5.76,7.64 5.7,11.29C5.62,12.38 5.45,13.73 4.82,14.39C4,15.24 3.04,16.09 3.04,17.04C3.04,17.73 3.57,18.19 4.47,18.19ZM12,22C13.61,22 14.79,20.82 14.91,19.49L9.09,19.49C9.21,20.82 10.39,22 12,22Z";
-constexpr PCWSTR kMacPhoto = L"F1 M4.6,19.21L18.82,19.21C20.35,19.21 21.13,18.36 21.13,16.73L16.09,12C15.72,11.65 15.27,11.47 14.81,11.47C14.34,11.47 13.93,11.63 13.54,11.98L9.7,15.41L8.13,13.99C7.78,13.67 7.39,13.51 6.99,13.51C6.61,13.51 6.24,13.66 5.89,13.98L2.66,16.9C2.71,18.43 3.34,19.21 4.6,19.21ZM8.32,12.08C9.41,12.08 10.31,11.18 10.31,10.08C10.31,8.98 9.41,8.08 8.32,8.08C7.22,8.08 6.32,8.98 6.32,10.08C6.32,11.18 7.22,12.08 8.32,12.08ZM4.66,19.81L19.34,19.81C21.12,19.81 22,18.93 22,17.19L22,6.82C22,5.07 21.12,4.19 19.34,4.19L4.66,4.19C2.89,4.19 2,5.07 2,6.82L2,17.19C2,18.93 2.89,19.81 4.66,19.81ZM4.68,18.44C3.83,18.44 3.37,17.99 3.37,17.11L3.37,6.9C3.37,6.02 3.83,5.56 4.68,5.56L19.32,5.56C20.16,5.56 20.63,6.02 20.63,6.9L20.63,17.11C20.63,17.99 20.16,18.44 19.32,18.44Z";
-constexpr PCWSTR kMacSpeedometer = L"F1 M7.93,16.88C8.4,16.88 8.79,16.49 8.79,16.02C8.79,15.55 8.4,15.16 7.93,15.16C7.46,15.16 7.07,15.55 7.07,16.02C7.07,16.49 7.46,16.88 7.93,16.88ZM6.24,12.86C6.71,12.86 7.1,12.47 7.1,12C7.1,11.53 6.71,11.14 6.24,11.14C5.77,11.14 5.38,11.53 5.38,12C5.38,12.47 5.77,12.86 6.24,12.86ZM7.93,8.84C8.4,8.84 8.79,8.45 8.79,7.98C8.79,7.5 8.4,7.12 7.93,7.12C7.46,7.12 7.07,7.5 7.07,7.98C7.07,8.45 7.46,8.84 7.93,8.84ZM11.99,7.12C12.46,7.12 12.85,6.73 12.85,6.26C12.85,5.79 12.46,5.4 11.99,5.4C11.52,5.4 11.13,5.79 11.13,6.26C11.13,6.73 11.52,7.12 11.99,7.12ZM17.72,12.86C18.19,12.86 18.58,12.47 18.58,12C18.58,11.53 18.19,11.14 17.72,11.14C17.25,11.14 16.86,11.53 16.86,12C16.86,12.47 17.25,12.86 17.72,12.86ZM16.03,16.88C16.5,16.88 16.89,16.49 16.89,16.02C16.89,15.55 16.5,15.16 16.03,15.16C15.56,15.16 15.17,15.55 15.17,16.02C15.17,16.49 15.56,16.88 16.03,16.88ZM10.38,13.54C11.03,14.19 11.97,14.19 12.63,13.54C12.75,13.42 12.94,13.15 13.06,12.99L16.42,8.14C16.59,7.9 16.54,7.67 16.4,7.52C16.25,7.38 16.01,7.33 15.77,7.49L10.92,10.86C10.76,10.97 10.5,11.16 10.38,11.28C9.72,11.94 9.72,12.88 10.38,13.54ZM12,22.2C17.63,22.2 22.2,17.63 22.2,12C22.2,6.37 17.63,1.8 12,1.8C6.37,1.8 1.8,6.37 1.8,12C1.8,17.63 6.37,22.2 12,22.2ZM12,20.5C7.3,20.5 3.5,16.7 3.5,12C3.5,7.3 7.3,3.5 12,3.5C16.7,3.5 20.5,7.3 20.5,12C20.5,16.7 16.7,20.5 12,20.5Z";
-constexpr PCWSTR kMacGauge = L"F1 M6.58,10.46C7.05,10.46 7.44,10.07 7.44,9.6C7.44,9.12 7.05,8.73 6.58,8.73C6.11,8.73 5.72,9.12 5.72,9.6C5.72,10.07 6.11,10.46 6.58,10.46ZM8.82,7.98C9.29,7.98 9.68,7.59 9.68,7.12C9.68,6.65 9.29,6.26 8.82,6.26C8.35,6.26 7.96,6.65 7.96,7.12C7.96,7.59 8.35,7.98 8.82,7.98ZM11.99,7.03C12.46,7.03 12.85,6.64 12.85,6.17C12.85,5.7 12.46,5.31 11.99,5.31C11.52,5.31 11.13,5.7 11.13,6.17C11.13,6.64 11.52,7.03 11.99,7.03ZM15.16,7.98C15.63,7.98 16.02,7.59 16.02,7.12C16.02,6.65 15.63,6.26 15.16,6.26C14.69,6.26 14.3,6.65 14.3,7.12C14.3,7.59 14.69,7.98 15.16,7.98ZM17.4,10.46C17.87,10.46 18.26,10.07 18.26,9.6C18.26,9.12 17.87,8.73 17.4,8.73C16.93,8.73 16.54,9.12 16.54,9.6C16.54,10.07 16.93,10.46 17.4,10.46ZM12,18.25C12.93,18.25 13.6,17.58 13.6,16.66C13.6,16.48 13.54,16.16 13.51,15.97L12.46,10.16C12.41,9.88 12.21,9.74 12,9.74C11.79,9.74 11.6,9.88 11.54,10.16L10.5,15.97C10.46,16.16 10.41,16.48 10.41,16.66C10.41,17.58 11.08,18.25 12,18.25ZM12,22.2C17.63,22.2 22.2,17.63 22.2,12C22.2,6.37 17.63,1.8 12,1.8C6.37,1.8 1.8,6.37 1.8,12C1.8,17.63 6.37,22.2 12,22.2ZM12,20.5C7.3,20.5 3.5,16.7 3.5,12C3.5,7.3 7.3,3.5 12,3.5C16.7,3.5 20.5,7.3 20.5,12C20.5,16.7 16.7,20.5 12,20.5Z";
-constexpr PCWSTR kMacSpaces = L"F1 M5.37,22L18.63,22C20.5,22 21.46,21.06 21.46,19.2L21.46,9.92C21.46,8.06 20.5,7.12 18.63,7.12L5.37,7.12C3.48,7.12 2.54,8.06 2.54,9.92L2.54,19.2C2.54,21.06 3.48,22 5.37,22ZM5.39,20.55C4.49,20.55 3.99,20.06 3.99,19.12L3.99,10C3.99,9.06 4.49,8.58 5.39,8.58L18.6,8.58C19.49,8.58 20.01,9.06 20.01,10L20.01,19.12C20.01,20.06 19.49,20.55 18.6,20.55ZM4.44,5.67L19.57,5.67C19.43,4.85 19.04,4.39 18.14,4.39L5.87,4.39C4.97,4.39 4.58,4.85 4.44,5.67ZM6.3,3.17L17.7,3.17C17.65,2.4 17.22,2 16.38,2L7.62,2C6.79,2 6.36,2.4 6.3,3.17Z";
-constexpr PCWSTR kMacChevronUp = L"F1 M3.47,15.37C3.3,15.54 3.2,15.77 3.2,16.03C3.2,16.56 3.6,16.95 4.12,16.95C4.39,16.95 4.63,16.86 4.78,16.69L12.54,8.77L11.46,8.77L19.22,16.69C19.38,16.86 19.62,16.95 19.88,16.95C20.4,16.95 20.8,16.56 20.8,16.03C20.8,15.77 20.7,15.54 20.53,15.37L12.68,7.35C12.51,7.16 12.26,7.05 12.01,7.05C11.74,7.05 11.5,7.16 11.32,7.35Z";
-constexpr PCWSTR kMacChevronDown = L"F1 M12.01,16.95C12.26,16.95 12.51,16.85 12.68,16.66L20.53,8.63C20.7,8.45 20.8,8.23 20.8,7.98C20.8,7.45 20.4,7.05 19.88,7.05C19.62,7.05 19.39,7.15 19.22,7.31L11.46,15.24L12.54,15.24L4.78,7.31C4.62,7.15 4.39,7.05 4.12,7.05C3.6,7.05 3.2,7.45 3.2,7.98C3.2,8.23 3.3,8.45 3.47,8.64L11.32,16.66C11.51,16.85 11.74,16.95 12.01,16.95Z";
-constexpr PCWSTR kMacChevronLeft = L"F1 M7.04,12C7.04,12.25 7.13,12.48 7.33,12.67L15.37,20.53C15.54,20.71 15.76,20.8 16.02,20.8C16.55,20.8 16.96,20.4 16.96,19.88C16.96,19.61 16.85,19.39 16.68,19.22L9.3,12L16.68,4.78C16.85,4.61 16.96,4.38 16.96,4.12C16.96,3.6 16.55,3.2 16.02,3.2C15.76,3.2 15.54,3.29 15.37,3.46L7.33,11.33C7.13,11.51 7.04,11.75 7.04,12Z";
-constexpr PCWSTR kMacChevronRight = L"F1 M16.96,12C16.96,11.75 16.86,11.51 16.66,11.33L8.63,3.46C8.45,3.29 8.23,3.2 7.96,3.2C7.45,3.2 7.04,3.6 7.04,4.12C7.04,4.38 7.14,4.61 7.31,4.78L14.69,12L7.31,19.22C7.14,19.39 7.04,19.61 7.04,19.88C7.04,20.4 7.45,20.8 7.96,20.8C8.23,20.8 8.45,20.71 8.63,20.53L16.66,12.67C16.86,12.48 16.96,12.25 16.96,12Z";
-constexpr PCWSTR kMacArrowLeft = L"F1 M10.26,19.84C10.76,19.84 11.17,19.46 11.17,18.95C11.17,18.7 11.07,18.45 10.91,18.3L8.59,15.94L4.28,12L8.59,8.06L10.91,5.7C11.07,5.54 11.17,5.3 11.17,5.05C11.17,4.54 10.76,4.16 10.26,4.16C10.01,4.16 9.79,4.25 9.57,4.47L2.72,11.31C2.51,11.5 2.4,11.74 2.4,12C2.4,12.26 2.51,12.5 2.72,12.69L9.59,19.55C9.79,19.74 10.01,19.84 10.26,19.84ZM7.61,12.92L20.69,12.92C21.23,12.92 21.6,12.54 21.6,12C21.6,11.46 21.23,11.08 20.69,11.08L7.61,11.08L4.28,11.29C3.86,11.29 3.57,11.58 3.57,12C3.57,12.42 3.86,12.71 4.28,12.71Z";
-constexpr PCWSTR kMacRefresh = L"F1 M12,21.8C16.45,21.8 20.06,18.2 20.06,13.73C20.06,13.33 19.73,13 19.33,13C18.93,13 18.59,13.33 18.59,13.73C18.59,17.37 15.64,20.32 12,20.32C8.36,20.32 5.41,17.37 5.41,13.73C5.41,10.09 8.36,7.15 12,7.15C12.81,7.15 13.59,7.29 14.31,7.56C14.77,7.74 15.32,7.47 15.33,6.91C15.34,6.44 14.99,6.27 14.75,6.18C13.91,5.86 12.98,5.69 12,5.69C7.55,5.69 3.94,9.29 3.94,13.74C3.94,18.2 7.55,21.8 12,21.8ZM14.47,6.78L11.16,10.07C11.01,10.21 10.95,10.39 10.95,10.59C10.95,11.01 11.26,11.32 11.66,11.32C11.89,11.32 12.05,11.24 12.19,11.11L15.95,7.34C16.12,7.17 16.19,6.99 16.19,6.79C16.19,6.59 16.11,6.39 15.95,6.24L12.2,2.43C12.05,2.29 11.89,2.2 11.66,2.2C11.26,2.2 10.95,2.54 10.95,2.95C10.95,3.14 11.01,3.34 11.15,3.48Z";
-constexpr PCWSTR kMacRestart = L"F1 M12,21.8C16.45,21.8 20.06,18.2 20.06,13.74C20.06,9.29 16.45,5.69 12,5.69C11.03,5.69 10.09,5.86 9.25,6.18C9.01,6.27 8.66,6.44 8.67,6.91C8.68,7.47 9.24,7.74 9.7,7.56C10.42,7.29 11.2,7.15 12,7.15C15.64,7.15 18.59,10.09 18.59,13.73C18.59,17.37 15.64,20.32 12,20.32C8.36,20.32 5.41,17.37 5.41,13.73C5.41,13.33 5.08,13 4.67,13C4.27,13 3.94,13.33 3.94,13.73C3.94,18.2 7.55,21.8 12,21.8ZM9.53,6.78L12.86,3.48C12.99,3.34 13.06,3.14 13.06,2.95C13.06,2.54 12.75,2.2 12.34,2.2C12.12,2.2 11.95,2.29 11.81,2.43L8.05,6.24C7.9,6.39 7.82,6.59 7.82,6.79C7.82,6.99 7.88,7.17 8.05,7.34L11.81,11.11C11.95,11.24 12.11,11.32 12.34,11.32C12.75,11.32 13.06,11.01 13.06,10.59C13.06,10.39 12.99,10.21 12.85,10.07Z";
-constexpr PCWSTR kMacSync = L"F1 M21.42,10.64L17.66,10.64C17.07,10.64 16.93,11.03 17.24,11.48L19.07,14.1C19.34,14.48 19.73,14.48 20,14.1L21.84,11.49C22.16,11.03 22,10.64 21.42,10.64ZM12,5.03C15.85,5.03 18.97,8.15 18.97,12C18.97,12.38 19.28,12.69 19.67,12.69C20.05,12.69 20.35,12.39 20.36,12.01C20.35,7.38 16.62,3.64 12,3.64C9.54,3.64 7.31,4.71 5.78,6.42C5.44,6.79 5.56,7.27 5.87,7.48C6.13,7.68 6.48,7.7 6.83,7.33C8.11,5.91 9.95,5.03 12,5.03ZM2.58,13.36L6.35,13.36C6.93,13.36 7.07,12.96 6.76,12.52L4.93,9.89C4.66,9.52 4.27,9.52 4,9.89L2.17,12.51C1.85,12.96 1.99,13.36 2.58,13.36ZM12,18.97C8.15,18.97 5.03,15.85 5.03,12C5.03,11.62 4.71,11.3 4.33,11.3C3.95,11.3 3.65,11.61 3.64,11.99C3.65,16.62 7.39,20.36 12,20.36C14.46,20.36 16.69,19.29 18.22,17.58C18.56,17.2 18.44,16.73 18.13,16.51C17.87,16.32 17.52,16.3 17.17,16.66C15.89,18.08 14.05,18.97 12,18.97Z";
-constexpr PCWSTR kMacPower = L"F1 M12,22C17.37,22 21.72,17.64 21.72,12.28C21.72,9.26 20.41,6.8 18.57,5.13C17.73,4.35 16.64,5.52 17.48,6.3C19.1,7.79 20.1,9.9 20.1,12.28C20.1,16.76 16.48,20.38 12,20.38C7.52,20.38 3.9,16.76 3.9,12.28C3.9,9.88 4.91,7.78 6.52,6.29C7.37,5.5 6.29,4.38 5.44,5.14C3.58,6.77 2.28,9.35 2.28,12.28C2.28,17.64 6.63,22 12,22ZM12,12.18C12.46,12.18 12.77,11.85 12.77,11.37L12.77,2.81C12.77,2.32 12.46,2 12,2C11.54,2 11.24,2.32 11.24,2.81L11.24,11.37C11.24,11.85 11.54,12.18 12,12.18Z";
-constexpr PCWSTR kMacMoon = L"F1 M12.44,21.8C16.67,21.8 20.1,19.25 21.62,15.99C21.95,15.31 21.52,14.86 20.87,15.06C20.15,15.31 18.96,15.54 17.87,15.54C12.04,15.54 8.7,12.2 8.7,6.36C8.7,5.27 8.94,4.03 9.29,3.15C9.57,2.43 9.08,2 8.39,2.3C4.91,3.81 2.26,7.37 2.26,11.63C2.26,17.25 6.83,21.8 12.44,21.8ZM12.44,20.3C7.66,20.3 3.77,16.41 3.77,11.63C3.77,8.64 5.34,6.12 7.39,4.64C7.26,5.21 7.2,5.76 7.2,6.36C7.2,13.03 11.21,17.04 17.87,17.04C18.38,17.04 18.87,16.98 19.27,16.9C17.77,18.9 15.31,20.3 12.44,20.3Z";
-constexpr PCWSTR kMacAirplane = L"F1 M22.2,12C22.19,10.94 20.75,10.17 19.02,10.17L15.38,10.17C14.87,10.17 14.68,10.09 14.38,9.75L8.3,3.11C8.11,2.9 7.87,2.79 7.6,2.79L6.55,2.79C6.32,2.79 6.18,2.99 6.3,3.25L9.43,10.17L4.83,10.7L3.19,7.69C3.08,7.47 2.88,7.37 2.58,7.37L2.19,7.37C1.95,7.37 1.8,7.52 1.8,7.76L1.8,16.24C1.8,16.48 1.95,16.62 2.19,16.62L2.58,16.62C2.88,16.62 3.08,16.53 3.19,16.31L4.83,13.3L9.43,13.83L6.3,20.75C6.18,21 6.32,21.21 6.55,21.21L7.6,21.21C7.87,21.21 8.11,21.1 8.3,20.89L14.38,14.24C14.68,13.91 14.87,13.83 15.38,13.83L19.02,13.83C20.75,13.83 22.19,13.05 22.2,12Z";
-constexpr PCWSTR kMacLock = L"F1 M7.33,22L16.67,22C18.17,22 18.96,21.18 18.96,19.57L18.96,12.55C18.96,10.94 18.17,10.13 16.67,10.13L7.33,10.13C5.83,10.13 5.04,10.94 5.04,12.55L5.04,19.57C5.04,21.18 5.83,22 7.33,22ZM7.39,20.46C6.95,20.46 6.69,20.18 6.69,19.68L6.69,12.43C6.69,11.93 6.95,11.67 7.39,11.67L16.61,11.67C17.06,11.67 17.31,11.93 17.31,12.43L17.31,19.68C17.31,20.18 17.06,20.46 16.61,20.46ZM6.82,10.91L8.45,10.91L8.45,7.48C8.45,4.9 10.09,3.54 11.99,3.54C13.9,3.54 15.56,4.9 15.56,7.48L15.56,10.91L17.18,10.91L17.18,7.69C17.18,3.86 14.67,2 11.99,2C9.33,2 6.82,3.86 6.82,7.69Z";
-constexpr PCWSTR kMacFolder = L"F1 M4.77,20.06L19.5,20.06C21.08,20.06 22,19.14 22,17.33L22,8.28C22,6.47 21.07,5.55 19.23,5.55L10.78,5.55C10.18,5.55 9.82,5.41 9.38,5.03L8.84,4.59C8.26,4.1 7.81,3.94 6.94,3.94L4.43,3.94C2.89,3.94 2,4.82 2,6.59L2,17.33C2,19.15 2.92,20.06 4.77,20.06ZM4.78,18.64C3.9,18.64 3.42,18.17 3.42,17.26L3.42,6.67C3.42,5.8 3.88,5.35 4.72,5.35L6.58,5.35C7.16,5.35 7.51,5.5 7.96,5.88L8.5,6.33C9.07,6.8 9.54,6.97 10.41,6.97L19.21,6.97C20.08,6.97 20.58,7.45 20.58,8.36L20.58,17.27C20.58,18.17 20.08,18.64 19.21,18.64ZM4.51,9.68L19.48,9.68L19.48,9.15C19.48,8.58 19.2,8.31 18.61,8.31L5.38,8.31C4.79,8.31 4.51,8.58 4.51,9.15Z";
-constexpr PCWSTR kMacFolderFill = L"F1 M4.77,20.06L19.5,20.06C21.08,20.06 22,19.14 22,17.33L22,8.28C22,6.47 21.07,5.55 19.23,5.55L10.34,5.55C9.74,5.55 9.38,5.41 8.94,5.03L8.4,4.59C7.82,4.1 7.37,3.94 6.5,3.94L4.43,3.94C2.89,3.94 2,4.82 2,6.59L2,17.33C2,19.15 2.92,20.06 4.77,20.06ZM3.63,8.8L3.63,8.31C3.63,7.77 4.01,7.43 4.67,7.43L19.3,7.43C19.95,7.43 20.34,7.77 20.34,8.31L20.34,8.8Z";
-constexpr PCWSTR kMacDoc = L"F1 M7.05,22L16.95,22C18.88,22 19.85,21.02 19.85,19.08L19.85,10.61C19.85,9.41 19.71,8.88 18.96,8.12L13.82,2.89C13.11,2.16 12.52,2 11.48,2L7.05,2C5.12,2 4.15,2.99 4.15,4.93L4.15,19.08C4.15,21.03 5.12,22 7.05,22ZM7.11,20.5C6.15,20.5 5.66,19.99 5.66,19.05L5.66,4.96C5.66,4.03 6.15,3.5 7.12,3.5L11.27,3.5L11.27,8.92C11.27,10.1 11.86,10.68 13.03,10.68L18.34,10.68L18.34,19.05C18.34,19.99 17.85,20.5 16.88,20.5ZM13.19,9.27C12.82,9.27 12.68,9.12 12.68,8.74L12.68,3.79L18.05,9.27Z";
-constexpr PCWSTR kMacCopy = L"F1 M7.73,6.4L9.01,6.4L9.01,4.52C9.01,3.73 9.43,3.28 10.26,3.28L13.77,3.28L13.77,7.36C13.77,8.28 14.21,8.72 15.13,8.72L18.85,8.72L18.85,15.51C18.85,16.31 18.42,16.75 17.59,16.75L16.03,16.75L16.03,18.03L17.66,18.03C19.3,18.03 20.13,17.19 20.13,15.54L20.13,9.08C20.13,8.1 19.93,7.48 19.33,6.87L15.32,2.79C14.75,2.21 14.09,2 13.24,2L10.19,2C8.55,2 7.73,2.84 7.73,4.5ZM14.92,7.17L14.92,3.91L18.51,7.56L15.31,7.56C15.03,7.56 14.92,7.45 14.92,7.17ZM3.87,19.5C3.87,21.17 4.69,22 6.34,22L13.81,22C15.45,22 16.27,21.16 16.27,19.5L16.27,13.3C16.27,12.28 16.15,11.83 15.52,11.18L11.14,6.72C10.53,6.1 10.03,5.97 9.14,5.97L6.34,5.97C4.7,5.97 3.87,6.8 3.87,8.46ZM5.15,19.48L5.15,8.48C5.15,7.7 5.57,7.25 6.4,7.25L9.01,7.25L9.01,11.86C9.01,12.86 9.52,13.36 10.5,13.36L14.99,13.36L14.99,19.48C14.99,20.28 14.56,20.72 13.74,20.72L6.39,20.72C5.57,20.72 5.15,20.28 5.15,19.48ZM10.65,12.16C10.33,12.16 10.21,12.03 10.21,11.71L10.21,7.54L14.75,12.16Z";
-constexpr PCWSTR kMacPlay = L"F1 M3.65,19.77C3.65,20.87 4.28,21.4 5.05,21.4C5.38,21.4 5.73,21.29 6.07,21.11L19.11,13.49C20.04,12.95 20.35,12.58 20.35,12C20.35,11.41 20.04,11.05 19.11,10.51L6.07,2.89C5.73,2.7 5.38,2.6 5.05,2.6C4.28,2.6 3.65,3.13 3.65,4.23Z";
-constexpr PCWSTR kMacPause = L"F1 M6.69,21.2L9.23,21.2C10.2,21.2 10.71,20.69 10.71,19.71L10.71,4.28C10.71,3.26 10.2,2.8 9.23,2.8L6.69,2.8C5.73,2.8 5.21,3.3 5.21,4.28L5.21,19.71C5.21,20.69 5.73,21.2 6.69,21.2ZM14.78,21.2L17.31,21.2C18.29,21.2 18.79,20.69 18.79,19.71L18.79,4.28C18.79,3.26 18.29,2.8 17.31,2.8L14.78,2.8C13.8,2.8 13.29,3.3 13.29,4.28L13.29,19.71C13.29,20.69 13.8,21.2 14.78,21.2Z";
-constexpr PCWSTR kMacStop = L"F1 M3.01,18.56C3.01,20.09 3.93,21 5.48,21L18.52,21C20.08,21 20.99,20.09 20.99,18.56L20.99,5.44C20.99,3.91 20.08,3 18.52,3L5.48,3C3.93,3 3.01,3.91 3.01,5.44Z";
-constexpr PCWSTR kMacPrev = L"F1 M21.6,18.49L21.6,5.5C21.6,4.53 21.03,4.07 20.36,4.07C20.06,4.07 19.76,4.15 19.46,4.33L8.55,10.68C7.78,11.14 7.48,11.48 7.48,12C7.48,12.52 7.78,12.86 8.55,13.32L19.46,19.67C19.76,19.84 20.06,19.93 20.36,19.93C21.03,19.93 21.6,19.46 21.6,18.49ZM6.15,19.87C7.05,19.87 7.53,19.39 7.53,18.48L7.53,5.51C7.53,4.6 7.05,4.12 6.15,4.12L3.78,4.12C2.88,4.12 2.4,4.56 2.4,5.51L2.4,18.48C2.4,19.39 2.88,19.87 3.78,19.87Z";
-constexpr PCWSTR kMacNext = L"F1 M2.4,18.49C2.4,19.46 2.96,19.93 3.64,19.93C3.93,19.93 4.24,19.84 4.54,19.67L15.44,13.32C16.22,12.86 16.52,12.52 16.52,12C16.52,11.48 16.22,11.14 15.44,10.68L4.54,4.33C4.24,4.15 3.93,4.07 3.64,4.07C2.96,4.07 2.4,4.53 2.4,5.5ZM17.85,19.87L20.21,19.87C21.12,19.87 21.6,19.39 21.6,18.48L21.6,5.51C21.6,4.56 21.12,4.12 20.21,4.12L17.85,4.12C16.94,4.12 16.47,4.6 16.47,5.51L16.47,18.48C16.47,19.39 16.94,19.87 17.85,19.87Z";
-constexpr PCWSTR kMacMusic = L"F1 M18.07,6.53L18.07,2.78C18.07,2.26 17.65,1.92 17.14,2.02L12.02,3.13C11.38,3.27 11.03,3.62 11.03,4.18L11.05,15.25C11.1,15.74 10.87,16.06 10.44,16.15L8.85,16.47C6.86,16.89 5.93,17.91 5.93,19.41C5.93,20.93 7.1,22 8.75,22C10.22,22 12.41,20.92 12.41,18.03L12.41,8.92C12.41,8.39 12.51,8.28 12.98,8.18L17.53,7.18C17.86,7.12 18.07,6.86 18.07,6.53Z";
-constexpr PCWSTR kMacPin = L"F1 M12,22C12.21,22 12.76,20.91 12.76,19.6L12.76,14.89L11.24,14.89L11.24,19.6C11.24,20.91 11.79,22 12,22ZM6.6,15.59L17.4,15.59C18.17,15.59 18.66,15.11 18.66,14.38C18.66,11.86 15.85,9.31 12,9.31C8.15,9.31 5.34,11.86 5.34,14.38C5.34,15.11 5.83,15.59 6.6,15.59ZM6.94,14.3C6.74,14.3 6.66,14.18 6.69,13.95C6.88,12.41 8.86,10.56 12,10.56C15.14,10.56 17.12,12.41 17.31,13.95C17.34,14.18 17.26,14.3 17.06,14.3ZM6.43,2.91C6.43,3.16 6.53,3.45 6.75,3.74C7.19,4.33 8.23,5.13 9.31,5.84L8.99,10.37L10.37,10.37L10.68,5.21C10.69,5.09 10.67,5.05 10.59,5C9.3,4.34 8.31,3.56 8.24,3.39C8.17,3.28 8.24,3.21 8.33,3.21L15.67,3.21C15.76,3.21 15.83,3.28 15.76,3.39C15.69,3.56 14.7,4.34 13.41,5C13.33,5.05 13.31,5.09 13.33,5.21L13.63,10.37L15.01,10.37L14.69,5.84C15.78,5.13 16.81,4.33 17.25,3.74C17.48,3.45 17.58,3.16 17.58,2.91C17.58,2.39 17.18,2 16.58,2L7.43,2C6.82,2 6.43,2.39 6.43,2.91Z";
-constexpr PCWSTR kMacPinFill = L"F1 M5.34,14.38C5.34,15.11 5.83,15.59 6.6,15.59L11.24,15.59L11.24,19.6C11.24,20.91 11.79,22 12,22C12.21,22 12.76,20.91 12.76,19.6L12.76,15.59L17.4,15.59C18.17,15.59 18.66,15.11 18.66,14.38C18.66,12.57 17.21,10.66 14.8,9.78L14.52,5.84C15.77,5.13 16.8,4.33 17.25,3.75C17.47,3.46 17.58,3.17 17.58,2.91C17.58,2.39 17.18,2 16.58,2L7.43,2C6.82,2 6.43,2.39 6.43,2.91C6.43,3.17 6.53,3.46 6.75,3.75C7.2,4.33 8.23,5.13 9.48,5.84L9.2,9.78C6.79,10.66 5.34,12.57 5.34,14.38Z";
-constexpr PCWSTR kMacPinSlash = L"F1 M5.68,14.38C5.68,15.11 6.17,15.59 6.94,15.59L11.58,15.59L11.58,19.6C11.58,20.91 12.13,22 12.34,22C12.55,22 13.1,20.91 13.1,19.6L13.1,15.69L13.59,15.69L12.19,14.3L7.28,14.3C7.08,14.3 7,14.18 7.03,13.95C7.13,12.99 7.94,11.97 9.21,11.32L8.31,10.42C6.69,11.37 5.68,12.87 5.68,14.38ZM6.77,2.91C6.77,3.16 6.87,3.45 7.09,3.74C7.53,4.33 8.57,5.13 9.65,5.84L9.58,6.79L10.85,8.06L11.02,5.21C11.03,5.09 11.01,5.05 10.93,5C9.64,4.34 8.64,3.56 8.58,3.39C8.51,3.28 8.58,3.21 8.67,3.21L16.01,3.21C16.1,3.21 16.17,3.28 16.1,3.39C16.03,3.56 15.04,4.34 13.75,5C13.67,5.05 13.65,5.09 13.66,5.21L13.92,9.46C13.42,9.36 12.89,9.31 12.34,9.31L12.11,9.31L13.44,10.66C15.82,10.9 17.56,12.84 17.56,14.21C17.56,14.25 17.56,14.3 17.56,14.34L18.49,15.4C18.77,15.23 19,14.88 19,14.38C19,12.57 17.55,10.74 15.31,9.87L15.03,5.84C16.12,5.13 17.15,4.33 17.59,3.74C17.82,3.45 17.92,3.16 17.92,2.91C17.92,2.39 17.52,2 16.92,2L7.77,2C7.16,2 6.77,2.39 6.77,2.91ZM3.77,4.37L19.28,19.86C19.55,20.12 19.97,20.12 20.22,19.86C20.48,19.61 20.49,19.19 20.22,18.93L4.72,3.43C4.46,3.18 4.03,3.17 3.77,3.43C3.52,3.68 3.52,4.11 3.77,4.37Z";
-constexpr PCWSTR kMacPlus = L"F1 M12.98,20.03L12.98,3.97C12.98,3.45 12.53,3 12,3C11.47,3 11.03,3.45 11.03,3.97L11.03,20.03C11.03,20.55 11.47,21 12,21C12.53,21 12.98,20.55 12.98,20.03ZM3.97,12.97L20.03,12.97C20.55,12.97 21,12.53 21,12C21,11.47 20.55,11.02 20.03,11.02L3.97,11.02C3.45,11.02 3,11.47 3,12C3,12.53 3.45,12.97 3.97,12.97Z";
-constexpr PCWSTR kMacMinus = L"F1 M4.15,12.95L19.85,12.95C20.36,12.95 20.8,12.52 20.8,11.99C20.8,11.47 20.36,11.05 19.85,11.05L4.15,11.05C3.64,11.05 3.2,11.47 3.2,11.99C3.2,12.52 3.64,12.95 4.15,12.95Z";
-constexpr PCWSTR kMacXmark = L"F1 M19.1,3.5L3.49,19.11C3.11,19.49 3.1,20.13 3.49,20.51C3.88,20.89 4.52,20.89 4.9,20.51L20.51,4.9C20.89,4.52 20.9,3.87 20.51,3.5C20.12,3.11 19.49,3.1 19.1,3.5ZM20.51,19.11L4.9,3.5C4.52,3.11 3.86,3.1 3.49,3.5C3.11,3.89 3.11,4.52 3.49,4.9L19.1,20.51C19.48,20.89 20.14,20.9 20.51,20.51C20.89,20.12 20.89,19.49 20.51,19.11Z";
-constexpr PCWSTR kMacCheckmark = L"F1 M9.71,21.32C10.18,21.32 10.55,21.12 10.82,20.71L21.13,4.48C21.32,4.16 21.4,3.92 21.4,3.67C21.4,3.07 21.01,2.68 20.41,2.68C19.97,2.68 19.73,2.82 19.47,3.23L9.67,18.85L4.59,12.19C4.31,11.81 4.04,11.66 3.65,11.66C3.03,11.66 2.6,12.08 2.6,12.68C2.6,12.93 2.71,13.22 2.92,13.48L8.58,20.69C8.91,21.12 9.24,21.32 9.71,21.32Z";
-constexpr PCWSTR kMacEllipsis = L"F1 M4.35,13.95C5.44,13.95 6.3,13.09 6.3,12.01C6.3,10.92 5.44,10.05 4.35,10.05C3.27,10.05 2.4,10.92 2.4,12.01C2.4,13.09 3.27,13.95 4.35,13.95ZM12,13.95C13.08,13.95 13.94,13.09 13.94,12.01C13.94,10.92 13.08,10.05 12,10.05C10.92,10.05 10.05,10.92 10.05,12.01C10.05,13.09 10.92,13.95 12,13.95ZM19.65,13.95C20.73,13.95 21.6,13.09 21.6,12.01C21.6,10.92 20.73,10.05 19.65,10.05C18.56,10.05 17.69,10.92 17.69,12.01C17.69,13.09 18.56,13.95 19.65,13.95Z";
-constexpr PCWSTR kMacHamburger = L"F1 M3.11,16.86L20.88,16.86C21.28,16.86 21.6,16.54 21.6,16.13C21.6,15.73 21.28,15.42 20.88,15.42L3.11,15.42C2.71,15.42 2.4,15.73 2.4,16.13C2.4,16.54 2.71,16.86 3.11,16.86ZM3.11,12.71L20.88,12.71C21.28,12.71 21.6,12.4 21.6,12C21.6,11.59 21.28,11.27 20.88,11.27L3.11,11.27C2.71,11.27 2.4,11.59 2.4,12C2.4,12.4 2.71,12.71 3.11,12.71ZM3.11,8.57L20.88,8.57C21.28,8.57 21.6,8.26 21.6,7.86C21.6,7.46 21.28,7.14 20.88,7.14L3.11,7.14C2.71,7.14 2.4,7.46 2.4,7.86C2.4,8.26 2.71,8.57 3.11,8.57Z";
-constexpr PCWSTR kMacGridApps = L"F1 M4.07,11.1L9.03,11.1C10.41,11.1 11.1,10.42 11.1,8.99L11.1,4.12C11.1,2.7 10.41,2 9.03,2L4.07,2C2.7,2 2,2.7 2,4.12L2,8.99C2,10.42 2.7,11.1 4.07,11.1ZM4.1,9.57C3.72,9.57 3.53,9.38 3.53,8.97L3.53,4.12C3.53,3.73 3.72,3.53 4.1,3.53L9,3.53C9.38,3.53 9.57,3.73 9.57,4.12L9.57,8.97C9.57,9.38 9.38,9.57 9,9.57ZM14.98,11.1L19.93,11.1C21.3,11.1 22,10.42 22,8.99L22,4.12C22,2.7 21.3,2 19.93,2L14.98,2C13.59,2 12.9,2.7 12.9,4.12L12.9,8.99C12.9,10.42 13.59,11.1 14.98,11.1ZM15,9.57C14.61,9.57 14.43,9.38 14.43,8.97L14.43,4.12C14.43,3.73 14.61,3.53 15,3.53L19.9,3.53C20.28,3.53 20.47,3.73 20.47,4.12L20.47,8.97C20.47,9.38 20.28,9.57 19.9,9.57ZM4.07,22L9.03,22C10.41,22 11.1,21.32 11.1,19.88L11.1,15.03C11.1,13.59 10.41,12.91 9.03,12.91L4.07,12.91C2.7,12.91 2,13.59 2,15.03L2,19.88C2,21.32 2.7,22 4.07,22ZM4.1,20.47C3.72,20.47 3.53,20.27 3.53,19.89L3.53,15.03C3.53,14.63 3.72,14.44 4.1,14.44L9,14.44C9.38,14.44 9.57,14.63 9.57,15.03L9.57,19.89C9.57,20.27 9.38,20.47 9,20.47ZM14.98,22L19.93,22C21.3,22 22,21.32 22,19.88L22,15.03C22,13.59 21.3,12.91 19.93,12.91L14.98,12.91C13.59,12.91 12.9,13.59 12.9,15.03L12.9,19.88C12.9,21.32 13.59,22 14.98,22ZM15,20.47C14.61,20.47 14.43,20.27 14.43,19.89L14.43,15.03C14.43,14.63 14.61,14.44 15,14.44L19.9,14.44C20.28,14.44 20.47,14.63 20.47,15.03L20.47,19.89C20.47,20.27 20.28,20.47 19.9,20.47Z";
-constexpr PCWSTR kMacSend = L"F1 M13.95,22C14.64,22 15.13,21.41 15.48,20.49L21.73,4.16C21.9,3.72 22,3.33 22,3C22,2.38 21.62,2 21,2C20.67,2 20.28,2.1 19.84,2.27L3.42,8.56C2.62,8.86 2,9.35 2,10.05C2,10.93 2.67,11.22 3.58,11.5L10.48,13.52L12.48,20.33C12.77,21.29 13.06,22 13.95,22ZM10.91,12.07L4.32,10.06C4.17,10.01 4.12,9.97 4.12,9.9C4.12,9.84 4.16,9.79 4.3,9.73L17.21,4.84C17.97,4.56 18.71,4.18 19.41,3.85C18.78,4.37 18,4.98 17.47,5.5ZM14.11,19.9C14.03,19.9 13.99,19.83 13.94,19.68L11.93,13.09L18.5,6.53C19.01,6.01 19.65,5.21 20.16,4.56C19.83,5.28 19.44,6.02 19.16,6.79L14.27,19.7C14.21,19.84 14.17,19.9 14.11,19.9Z";
-constexpr PCWSTR kMacSendFill = L"F1 M13.95,22C14.64,22 15.13,21.41 15.48,20.49L21.73,4.16C21.9,3.72 22,3.33 22,3C22,2.38 21.62,2 21,2C20.67,2 20.28,2.1 19.84,2.27L3.42,8.56C2.62,8.86 2,9.35 2,10.05C2,10.93 2.67,11.22 3.58,11.5L8.74,13.06C9.35,13.26 9.69,13.24 10.11,12.85L20.58,3.07C20.7,2.95 20.84,2.97 20.94,3.06C21.04,3.16 21.05,3.3 20.93,3.42L11.18,13.93C10.81,14.32 10.78,14.65 10.96,15.29L12.48,20.33C12.77,21.29 13.06,22 13.95,22Z";
-constexpr PCWSTR kMacInfo = L"F1 M12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22ZM12,20.33C7.39,20.33 3.67,16.61 3.67,12C3.67,7.39 7.39,3.67 12,3.67C16.61,3.67 20.33,7.39 20.33,12C20.33,16.61 16.61,20.33 12,20.33ZM9.76,17.36L14.69,17.36C15.08,17.36 15.4,17.07 15.4,16.67C15.4,16.28 15.08,15.99 14.69,15.99L13.05,15.99L13.05,11.12C13.05,10.59 12.78,10.24 12.29,10.24L9.93,10.24C9.53,10.24 9.22,10.54 9.22,10.92C9.22,11.32 9.53,11.62 9.93,11.62L11.49,11.62L11.49,15.99L9.76,15.99C9.36,15.99 9.05,16.28 9.05,16.67C9.05,17.07 9.36,17.36 9.76,17.36ZM11.9,8.74C12.66,8.74 13.25,8.14 13.25,7.39C13.25,6.65 12.66,6.05 11.9,6.05C11.17,6.05 10.57,6.65 10.57,7.39C10.57,8.14 11.17,8.74 11.9,8.74Z";
-constexpr PCWSTR kMacWarning = L"F1 M4.6,21.06L19.4,21.06C21.02,21.06 22,19.94 22,18.48C22,18.03 21.87,17.56 21.63,17.14L14.22,4.24C13.73,3.37 12.88,2.94 12,2.94C11.12,2.94 10.26,3.37 9.78,4.24L2.37,17.14C2.11,17.57 2,18.03 2,18.48C2,19.94 2.98,21.06 4.6,21.06ZM4.61,19.57C3.95,19.57 3.55,19.05 3.55,18.47C3.55,18.29 3.58,18.06 3.69,17.86L11.08,4.97C11.28,4.61 11.65,4.46 12,4.46C12.35,4.46 12.71,4.61 12.91,4.97L20.3,17.87C20.41,18.07 20.45,18.29 20.45,18.47C20.45,19.05 20.03,19.57 19.38,19.57ZM12,14.63C12.46,14.63 12.73,14.37 12.73,13.87L12.87,8.84C12.88,8.35 12.5,7.99 11.99,7.99C11.48,7.99 11.11,8.35 11.12,8.83L11.25,13.87C11.26,14.36 11.52,14.63 12,14.63ZM12,17.73C12.55,17.73 13.03,17.3 13.03,16.74C13.03,16.18 12.56,15.75 12,15.75C11.44,15.75 10.97,16.19 10.97,16.74C10.97,17.29 11.45,17.73 12,17.73Z";
-constexpr PCWSTR kMacGlobe = L"F1 M12,21.45C14.73,21.45 16.95,17.42 16.95,12.02C16.95,6.59 14.74,2.56 12,2.56C9.26,2.56 7.05,6.59 7.05,12.02C7.05,17.42 9.27,21.45 12,21.45ZM12,20.25C10.08,20.25 8.36,16.39 8.36,12.02C8.36,7.57 10.08,3.75 12,3.75C13.92,3.75 15.64,7.57 15.64,12.02C15.64,16.39 13.92,20.25 12,20.25ZM12,21.72C12.35,21.72 12.65,21.42 12.65,21.07L12.65,3.02C12.65,2.67 12.35,2.37 12,2.37C11.65,2.37 11.36,2.67 11.36,3.02L11.36,21.07C11.36,21.42 11.65,21.72 12,21.72ZM5.9,18.57C7.22,17.53 9.32,16.97 12,16.97C14.68,16.97 16.78,17.53 18.1,18.57C18.38,18.79 18.75,18.82 19.01,18.58C19.25,18.33 19.27,17.93 19,17.69C17.69,16.5 15.02,15.69 12,15.69C8.98,15.69 6.31,16.5 5,17.69C4.73,17.93 4.75,18.33 4.99,18.58C5.25,18.82 5.62,18.79 5.9,18.57ZM3.18,12.64L21.02,12.64C21.37,12.64 21.67,12.35 21.67,12C21.67,11.65 21.37,11.35 21.02,11.35L3.18,11.35C2.82,11.35 2.53,11.65 2.53,12C2.53,12.35 2.82,12.64 3.18,12.64ZM12,8.36C15.02,8.36 17.69,7.55 19,6.36C19.27,6.11 19.25,5.72 19.01,5.47C18.75,5.23 18.38,5.25 18.1,5.48C16.78,6.51 14.68,7.08 12,7.08C9.32,7.08 7.22,6.51 5.9,5.48C5.62,5.25 5.25,5.23 4.99,5.47C4.75,5.72 4.73,6.11 5,6.36C6.31,7.55 8.98,8.36 12,8.36ZM12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22ZM12,20.67C7.22,20.67 3.33,16.78 3.33,12C3.33,7.22 7.22,3.33 12,3.33C16.78,3.33 20.67,7.22 20.67,12C20.67,16.78 16.78,20.67 12,20.67Z";
-constexpr PCWSTR kMacNetwork = L"F1 M1.8,9.91C1.8,12.39 2.7,14.7 4.3,16.43C4.66,16.83 5.2,16.83 5.51,16.48C5.82,16.13 5.72,15.68 5.37,15.29C4.09,13.86 3.37,11.97 3.37,9.91C3.37,7.84 4.09,5.96 5.37,4.52C5.72,4.13 5.82,3.68 5.51,3.33C5.2,2.98 4.66,2.98 4.3,3.38C2.7,5.11 1.8,7.42 1.8,9.91ZM5.85,9.91C5.85,11.32 6.33,12.63 7.16,13.67C7.5,14.11 8.07,14.11 8.39,13.74C8.7,13.39 8.57,12.96 8.27,12.55C7.69,11.84 7.41,10.91 7.41,9.91C7.41,8.91 7.72,8 8.27,7.26C8.56,6.84 8.7,6.42 8.39,6.07C8.07,5.71 7.5,5.7 7.16,6.14C6.33,7.18 5.85,8.49 5.85,9.91ZM10.28,9.91C10.28,10.6 10.67,11.19 11.26,11.46L11.26,20.1C11.26,20.59 11.56,20.93 12,20.93C12.46,20.93 12.74,20.6 12.74,20.1L12.74,11.46C13.32,11.19 13.72,10.59 13.72,9.91C13.72,8.95 12.97,8.17 12,8.17C11.03,8.17 10.28,8.95 10.28,9.91ZM15.61,13.74C15.93,14.11 16.5,14.11 16.84,13.67C17.67,12.63 18.15,11.32 18.15,9.91C18.15,8.49 17.67,7.18 16.84,6.14C16.5,5.7 15.93,5.71 15.61,6.07C15.3,6.42 15.44,6.84 15.73,7.26C16.28,8 16.59,8.91 16.59,9.91C16.59,10.91 16.31,11.84 15.73,12.55C15.43,12.96 15.3,13.39 15.61,13.74ZM18.49,16.48C18.8,16.83 19.34,16.83 19.7,16.43C21.3,14.7 22.2,12.39 22.2,9.91C22.2,7.42 21.3,5.11 19.7,3.38C19.34,2.98 18.8,2.98 18.49,3.33C18.18,3.68 18.28,4.13 18.63,4.52C19.91,5.96 20.63,7.84 20.63,9.91C20.63,11.97 19.91,13.86 18.63,15.29C18.28,15.68 18.18,16.13 18.49,16.48Z";
-constexpr PCWSTR kMacKeyboard = L"F1 M4.34,18.4L19.66,18.4C21.34,18.4 22.2,17.56 22.2,15.89L22.2,8.1C22.2,6.44 21.34,5.6 19.66,5.6L4.34,5.6C2.64,5.6 1.8,6.43 1.8,8.1L1.8,15.89C1.8,17.56 2.64,18.4 4.34,18.4ZM4.36,17.1C3.55,17.1 3.1,16.66 3.1,15.82L3.1,8.17C3.1,7.33 3.55,6.9 4.36,6.9L19.63,6.9C20.43,6.9 20.9,7.33 20.9,8.17L20.9,15.82C20.9,16.66 20.43,17.1 19.63,17.1ZM5.09,10.11L5.84,10.11C6.06,10.11 6.2,9.97 6.2,9.75L6.2,9.01C6.2,8.78 6.06,8.64 5.84,8.64L5.09,8.64C4.87,8.64 4.73,8.78 4.73,9.01L4.73,9.75C4.73,9.97 4.87,10.11 5.09,10.11ZM7.7,10.11L8.45,10.11C8.66,10.11 8.8,9.97 8.8,9.75L8.8,9.01C8.8,8.78 8.66,8.64 8.45,8.64L7.7,8.64C7.47,8.64 7.34,8.78 7.34,9.01L7.34,9.75C7.34,9.97 7.47,10.11 7.7,10.11ZM10.31,10.11L11.05,10.11C11.27,10.11 11.41,9.97 11.41,9.75L11.41,9.01C11.41,8.78 11.27,8.64 11.05,8.64L10.31,8.64C10.08,8.64 9.95,8.78 9.95,9.01L9.95,9.75C9.95,9.97 10.08,10.11 10.31,10.11ZM12.91,10.11L13.66,10.11C13.88,10.11 14.02,9.97 14.02,9.75L14.02,9.01C14.02,8.78 13.88,8.64 13.66,8.64L12.91,8.64C12.69,8.64 12.56,8.78 12.56,9.01L12.56,9.75C12.56,9.97 12.69,10.11 12.91,10.11ZM15.52,10.11L16.27,10.11C16.49,10.11 16.62,9.97 16.62,9.75L16.62,9.01C16.62,8.78 16.49,8.64 16.27,8.64L15.52,8.64C15.29,8.64 15.16,8.78 15.16,9.01L15.16,9.75C15.16,9.97 15.29,10.11 15.52,10.11ZM18.13,10.11L18.87,10.11C19.1,10.11 19.23,9.97 19.23,9.75L19.23,9.01C19.23,8.78 19.1,8.64 18.87,8.64L18.13,8.64C17.9,8.64 17.77,8.78 17.77,9.01L17.77,9.75C17.77,9.97 17.9,10.11 18.13,10.11ZM5.09,12.72L5.84,12.72C6.06,12.72 6.2,12.58 6.2,12.36L6.2,11.62C6.2,11.39 6.06,11.25 5.84,11.25L5.09,11.25C4.87,11.25 4.73,11.39 4.73,11.62L4.73,12.36C4.73,12.58 4.87,12.72 5.09,12.72ZM7.7,12.72L8.45,12.72C8.66,12.72 8.8,12.58 8.8,12.36L8.8,11.62C8.8,11.39 8.66,11.25 8.45,11.25L7.7,11.25C7.47,11.25 7.34,11.39 7.34,11.62L7.34,12.36C7.34,12.58 7.47,12.72 7.7,12.72ZM10.31,12.72L11.05,12.72C11.27,12.72 11.41,12.58 11.41,12.36L11.41,11.62C11.41,11.39 11.27,11.25 11.05,11.25L10.31,11.25C10.08,11.25 9.95,11.39 9.95,11.62L9.95,12.36C9.95,12.58 10.08,12.72 10.31,12.72ZM12.91,12.72L13.66,12.72C13.88,12.72 14.02,12.58 14.02,12.36L14.02,11.62C14.02,11.39 13.88,11.25 13.66,11.25L12.91,11.25C12.69,11.25 12.56,11.39 12.56,11.62L12.56,12.36C12.56,12.58 12.69,12.72 12.91,12.72ZM15.52,12.72L16.27,12.72C16.49,12.72 16.62,12.58 16.62,12.36L16.62,11.62C16.62,11.39 16.49,11.25 16.27,11.25L15.52,11.25C15.29,11.25 15.16,11.39 15.16,11.62L15.16,12.36C15.16,12.58 15.29,12.72 15.52,12.72ZM18.13,12.72L18.87,12.72C19.1,12.72 19.23,12.58 19.23,12.36L19.23,11.62C19.23,11.39 19.1,11.25 18.87,11.25L18.13,11.25C17.9,11.25 17.77,11.39 17.77,11.62L17.77,12.36C17.77,12.58 17.9,12.72 18.13,12.72ZM5.09,15.33L5.84,15.33C6.06,15.33 6.2,15.19 6.2,14.97L6.2,14.22C6.2,14 6.06,13.86 5.84,13.86L5.09,13.86C4.87,13.86 4.73,14 4.73,14.22L4.73,14.97C4.73,15.19 4.87,15.33 5.09,15.33ZM7.78,15.33L16.19,15.33C16.46,15.33 16.62,15.17 16.62,14.89L16.62,14.3C16.62,14.03 16.46,13.86 16.19,13.86L7.78,13.86C7.5,13.86 7.34,14.03 7.34,14.3L7.34,14.89C7.34,15.17 7.5,15.33 7.78,15.33ZM18.13,15.33L18.87,15.33C19.1,15.33 19.23,15.19 19.23,14.97L19.23,14.22C19.23,14 19.1,13.86 18.87,13.86L18.13,13.86C17.9,13.86 17.77,14 17.77,14.22L17.77,14.97C17.77,15.19 17.9,15.33 18.13,15.33Z";
-constexpr PCWSTR kMacPerson = L"F1 M12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22ZM12,20.33C7.39,20.33 3.67,16.61 3.67,12C3.67,7.39 7.39,3.67 12,3.67C16.61,3.67 20.33,7.39 20.33,12C20.33,16.61 16.61,20.33 12,20.33ZM18.71,18.46L18.68,18.35C18.2,16.91 15.61,15.33 12,15.33C8.4,15.33 5.81,16.91 5.32,18.34L5.29,18.46C7.06,20.21 10.09,21.23 12,21.23C13.92,21.23 16.92,20.22 18.71,18.46ZM12,13.67C13.89,13.69 15.36,12.08 15.36,9.97C15.36,7.99 13.88,6.35 12,6.35C10.12,6.35 8.63,7.99 8.64,9.97C8.65,12.08 10.12,13.65 12,13.67Z";
-constexpr PCWSTR kMacPaintbrush = L"F1 M4.11,20.93C5.52,22.34 7.16,22.36 8.54,20.98C9.56,19.96 10.63,17.56 11.42,16.62L13.21,18.42C13.86,19.08 14.66,19.08 15.29,18.44L16.38,17.35C17.02,16.7 17.02,15.94 16.35,15.27L9.78,8.69C9.12,8.03 8.35,8.02 7.7,8.67L6.61,9.76C5.97,10.4 5.97,11.18 6.63,11.85L8.43,13.64C7.5,14.43 5.1,15.49 4.08,16.51C2.7,17.89 2.71,19.54 4.11,20.93ZM7.78,10.51L8.46,9.85C8.68,9.63 8.92,9.62 9.14,9.84L15.22,15.91C15.43,16.13 15.43,16.37 15.2,16.59L14.55,17.26C14.33,17.49 14.07,17.5 13.86,17.27L11.85,15.25C11.53,14.94 11.13,14.97 10.78,15.32C10.12,15.96 8.97,18.73 7.63,20.06C6.82,20.88 5.85,20.88 5.01,20.04C4.18,19.21 4.17,18.23 4.99,17.42C6.33,16.09 9.09,14.94 9.74,14.28C10.08,13.92 10.12,13.51 9.81,13.21L7.78,11.19C7.56,10.97 7.56,10.73 7.78,10.51ZM6.29,19.82C6.87,19.82 7.33,19.34 7.33,18.77C7.33,18.2 6.87,17.74 6.29,17.74C5.72,17.74 5.25,18.2 5.25,18.77C5.25,19.34 5.72,19.82 6.29,19.82ZM16.26,16.11L20.26,12.11C21.19,11.18 21.17,10.06 20.22,9.1L13.61,2.49C12.73,1.6 11.2,1.95 10.89,3.32C10.1,6.72 10.07,7.12 8.78,8.92L9.75,9.89C11.22,7.96 11.33,7.02 12.14,4.02C12.25,3.59 12.6,3.48 12.89,3.76L19.19,10.05C19.58,10.44 19.58,10.91 19.21,11.27L15.32,15.16ZM14.93,11.31C15.38,11.76 17.83,10.39 18.68,9.33L16.83,7.48C16.67,8.97 15.9,10.05 14.96,10.99C14.85,11.1 14.86,11.24 14.93,11.31Z";
-constexpr PCWSTR kMacLightbulb = L"F1 M6.25,7.29C6.25,10.59 8.23,11.41 8.78,17.14C8.81,17.45 8.98,17.65 9.31,17.65L14.69,17.65C15.03,17.65 15.2,17.45 15.23,17.14C15.78,11.41 17.75,10.59 17.75,7.29C17.75,4.33 15.21,2 12,2C8.79,2 6.25,4.33 6.25,7.29ZM7.55,7.29C7.55,4.97 9.58,3.3 12,3.3C14.42,3.3 16.45,4.97 16.45,7.29C16.45,9.76 14.82,10.35 14.05,16.35L9.96,16.35C9.18,10.35 7.55,9.76 7.55,7.29ZM9.28,19.51L14.72,19.51C15.01,19.51 15.22,19.28 15.22,19C15.22,18.73 15.01,18.5 14.72,18.5L9.28,18.5C9,18.5 8.78,18.73 8.78,19C8.78,19.28 9,19.51 9.28,19.51ZM12,22C13.33,22 14.44,21.35 14.53,20.36L9.48,20.36C9.54,21.35 10.66,22 12,22Z";
-constexpr PCWSTR kMacShield = L"F1 M12,22C12.16,22 12.42,21.94 12.66,21.8C18.3,18.64 20.23,17.31 20.23,13.69L20.23,6.12C20.23,5.08 19.78,4.75 18.94,4.4C17.77,3.91 14,2.55 12.83,2.15C12.56,2.06 12.28,2 12,2C11.72,2 11.44,2.08 11.18,2.15C10.01,2.49 6.23,3.92 5.06,4.4C4.23,4.74 3.77,5.08 3.77,6.12L3.77,13.69C3.77,17.31 5.71,18.63 11.34,21.8C11.59,21.94 11.84,22 12,22ZM12,20.21C11.84,20.21 11.68,20.15 11.39,19.97C6.81,17.2 5.35,16.39 5.35,13.33L5.35,6.43C5.35,6.09 5.41,5.96 5.68,5.85C7.19,5.26 10.11,4.28 11.6,3.68C11.76,3.61 11.89,3.59 12,3.59C12.11,3.59 12.24,3.62 12.4,3.68C13.89,4.28 16.79,5.33 18.33,5.85C18.59,5.95 18.65,6.09 18.65,6.43L18.65,13.33C18.65,16.39 17.19,17.19 12.61,19.97C12.33,20.15 12.16,20.21 12,20.21Z";
-constexpr PCWSTR kMacVideo = L"F1 M5.15,18.65L13.6,18.65C15.57,18.65 16.75,17.5 16.75,15.52L16.75,8.47C16.75,6.5 15.57,5.35 13.6,5.35L5.15,5.35C3.27,5.35 2,6.5 2,8.47L2,15.52C2,17.5 3.18,18.65 5.15,18.65ZM5.38,17.42C4.05,17.42 3.3,16.74 3.3,15.34L3.3,8.66C3.3,7.25 4.05,6.57 5.38,6.57L13.37,6.57C14.69,6.57 15.45,7.25 15.45,8.66L15.45,15.34C15.45,16.74 14.69,17.42 13.37,17.42ZM16.57,9.74L16.57,11.27L20.42,8.1C20.49,8.04 20.54,8 20.61,8C20.71,8 20.75,8.08 20.75,8.19L20.75,15.81C20.75,15.92 20.71,15.99 20.61,15.99C20.54,15.99 20.49,15.95 20.42,15.9L16.57,12.73L16.57,14.26L19.81,17C20.13,17.27 20.49,17.46 20.82,17.46C21.53,17.46 22,16.93 22,16.18L22,7.82C22,7.07 21.53,6.54 20.82,6.54C20.49,6.54 20.13,6.73 19.81,7Z";
-constexpr PCWSTR kMacEmoji = L"F1 M12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22ZM12,20.33C7.39,20.33 3.67,16.61 3.67,12C3.67,7.39 7.39,3.67 12,3.67C16.61,3.67 20.33,7.39 20.33,12C20.33,16.61 16.61,20.33 12,20.33ZM11.99,16.91C14.04,16.91 15.41,15.55 15.41,14.9C15.41,14.67 15.19,14.56 14.98,14.66C14.26,15.05 13.41,15.49 11.99,15.49C10.57,15.49 9.72,15.04 9.01,14.66C8.79,14.56 8.57,14.67 8.57,14.9C8.57,15.55 9.94,16.91 11.99,16.91ZM9.09,11.13C9.71,11.13 10.25,10.57 10.25,9.78C10.25,8.99 9.72,8.43 9.09,8.43C8.47,8.43 7.93,8.99 7.93,9.78C7.93,10.57 8.47,11.13 9.09,11.13ZM14.9,11.13C15.52,11.13 16.07,10.57 16.07,9.78C16.07,8.99 15.53,8.43 14.9,8.43C14.28,8.43 13.75,8.99 13.75,9.78C13.75,10.57 14.28,11.13 14.9,11.13Z";
-constexpr PCWSTR kMacBook = L"F1 M2,18.87C2,19.6 2.49,19.89 3.02,19.89C3.32,19.89 3.58,19.71 3.93,19.51C4.92,18.83 6.14,18.42 7.39,18.43C8.69,18.43 9.98,18.91 10.99,19.88C11.38,20.24 11.67,20.36 12,20.36C12.33,20.36 12.63,20.24 13.01,19.88C14.02,18.92 15.31,18.43 16.62,18.43C17.87,18.42 19.08,18.83 20.07,19.51C20.42,19.71 20.68,19.89 20.99,19.89C21.51,19.89 22,19.6 22,18.87L22,6.65C22,6.49 21.99,6.37 21.89,6.21C21.09,4.82 19.06,3.64 16.58,3.64C14.62,3.64 12.91,4.42 12,5.53C11.1,4.42 9.38,3.64 7.43,3.64C4.94,3.64 2.91,4.82 2.11,6.21C2.02,6.37 2,6.49 2,6.65ZM3.45,18.1L3.45,6.85C4.18,5.8 5.76,5.09 7.43,5.09C9.14,5.09 10.64,5.81 11.28,6.91L11.28,18.25C10.36,17.52 8.92,16.98 7.43,16.98C5.86,16.98 4.4,17.42 3.45,18.1ZM12.72,18.25L12.72,6.91C13.36,5.81 14.87,5.09 16.58,5.09C18.24,5.09 19.82,5.8 20.55,6.85L20.55,18.1C19.6,17.42 18.14,16.98 16.58,16.98C15.08,16.98 13.64,17.52 12.72,18.25Z";
-constexpr PCWSTR kMacDesktop = L"F1 M3.77,17.58L20.22,17.58C21.46,17.58 22.2,16.84 22.2,15.61L22.2,5.35C22.2,4.11 21.46,3.38 20.22,3.38L3.77,3.38C2.54,3.38 1.8,4.11 1.8,5.35L1.8,15.61C1.8,16.84 2.54,17.58 3.77,17.58ZM3.55,13.81C3.29,13.81 3.18,13.72 3.18,13.44L3.18,5.37C3.18,4.99 3.42,4.76 3.79,4.76L20.21,4.76C20.58,4.76 20.82,4.99 20.82,5.37L20.82,13.44C20.82,13.72 20.7,13.81 20.45,13.81ZM9.3,19.62L14.7,19.62L14.7,17.47L9.3,17.47ZM9.24,20.62L14.76,20.62C15.13,20.62 15.44,20.31 15.44,19.93C15.44,19.54 15.13,19.23 14.76,19.23L9.24,19.23C8.87,19.23 8.55,19.54 8.55,19.93C8.55,20.31 8.87,20.62 9.24,20.62Z";
-constexpr PCWSTR kMacOpenExternal = L"F1 M5.41,22L18.59,22C20.87,22 22,20.88 22,18.64L22,5.37C22,3.13 20.87,2 18.59,2L5.41,2C3.14,2 2,3.13 2,5.37L2,18.64C2,20.88 3.14,22 5.41,22ZM5.43,20.25C4.35,20.25 3.75,19.68 3.75,18.55L3.75,5.47C3.75,4.34 4.35,3.75 5.43,3.75L18.57,3.75C19.64,3.75 20.25,4.34 20.25,5.47L20.25,18.55C20.25,19.68 19.64,20.25 18.57,20.25ZM14.08,8.93L12.07,10.8L8.07,14.81C7.92,14.96 7.81,15.18 7.81,15.39C7.81,15.88 8.13,16.2 8.61,16.2C8.88,16.2 9.07,16.1 9.22,15.95L13.22,11.95L15.09,9.95C15.89,9.1 14.9,8.17 14.08,8.93ZM14.62,11.97L14.62,13.85C14.62,14.36 14.94,14.7 15.43,14.7C15.91,14.7 16.22,14.33 16.22,13.83L16.22,8.7C16.22,8.06 15.87,7.81 15.32,7.81L10.16,7.81C9.65,7.81 9.32,8.13 9.32,8.61C9.32,9.08 9.66,9.4 10.18,9.4L12.16,9.4L14.93,9.07Z";
-constexpr PCWSTR kMacSignOut = L"F1 M5.41,22L18.59,22C20.87,22 22,20.88 22,18.64L22,5.37C22,3.13 20.87,2 18.59,2L5.41,2C3.14,2 2,3.13 2,5.37L2,18.64C2,20.88 3.14,22 5.41,22ZM5.43,20.25C4.35,20.25 3.75,19.68 3.75,18.55L3.75,5.47C3.75,4.34 4.35,3.75 5.43,3.75L18.57,3.75C19.64,3.75 20.25,4.34 20.25,5.47L20.25,18.55C20.25,19.68 19.64,20.25 18.57,20.25ZM7.38,12.85L13.67,12.85L15.64,12.78C16.07,12.76 16.43,12.43 16.43,11.99C16.43,11.56 16.07,11.23 15.64,11.21L13.67,11.14L7.38,11.13C6.92,11.13 6.53,11.53 6.53,11.99C6.53,12.46 6.92,12.85 7.38,12.85ZM13.18,16.46C13.41,16.46 13.58,16.37 13.75,16.21L17.2,12.62C17.42,12.41 17.49,12.21 17.49,11.99C17.49,11.77 17.42,11.58 17.2,11.36L13.75,7.78C13.58,7.62 13.41,7.53 13.18,7.53C12.73,7.53 12.42,7.87 12.42,8.32C12.42,8.53 12.51,8.76 12.68,8.91L14.44,10.56L15.96,11.99L15.96,11.99L14.44,13.43L12.68,15.08C12.51,15.23 12.42,15.47 12.42,15.68C12.42,16.13 12.73,16.46 13.18,16.46Z";
-constexpr PCWSTR kMacDownload = L"F1 M12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22ZM12,20.33C7.39,20.33 3.67,16.61 3.67,12C3.67,7.39 7.39,3.67 12,3.67C16.61,3.67 20.33,7.39 20.33,12C20.33,16.61 16.61,20.33 12,20.33ZM12,7.06C11.58,7.06 11.23,7.4 11.23,7.81L11.23,13.32L11.29,15.37C11.31,15.81 11.65,16.05 12,16.05C12.35,16.05 12.7,15.81 12.71,15.37L12.78,13.32L12.78,7.81C12.78,7.4 12.42,7.06 12,7.06ZM12,16.94C12.2,16.94 12.37,16.88 12.57,16.69L15.79,13.57C15.95,13.42 16.03,13.26 16.03,13.05C16.03,12.65 15.73,12.36 15.31,12.36C15.13,12.36 14.92,12.44 14.78,12.6L13.29,14.19L12,15.56L12,15.56L10.71,14.19L9.22,12.6C9.08,12.44 8.86,12.36 8.68,12.36C8.26,12.36 7.97,12.65 7.97,13.05C7.97,13.26 8.05,13.42 8.2,13.57L11.43,16.69C11.63,16.88 11.8,16.94 12,16.94Z";
-constexpr PCWSTR kMacUpload = L"F1 M12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22ZM12,20.33C7.39,20.33 3.67,16.61 3.67,12C3.67,7.39 7.39,3.67 12,3.67C16.61,3.67 20.33,7.39 20.33,12C20.33,16.61 16.61,20.33 12,20.33ZM12,16.94C12.42,16.94 12.78,16.6 12.78,16.19L12.78,10.67L12.71,8.63C12.7,8.19 12.35,7.95 12,7.95C11.65,7.95 11.31,8.19 11.29,8.63L11.23,10.67L11.23,16.19C11.23,16.6 11.58,16.94 12,16.94ZM12,7.06C11.8,7.06 11.63,7.12 11.43,7.31L8.2,10.43C8.05,10.58 7.97,10.74 7.97,10.95C7.97,11.34 8.26,11.64 8.68,11.64C8.86,11.64 9.08,11.56 9.22,11.4L10.71,9.8L12,8.44L12,8.44L13.29,9.8L14.78,11.4C14.92,11.56 15.13,11.64 15.31,11.64C15.73,11.64 16.03,11.34 16.03,10.95C16.03,10.74 15.95,10.58 15.79,10.43L12.57,7.31C12.37,7.12 12.2,7.06 12,7.06Z";
-constexpr PCWSTR kMacFullScreen = L"F1 M4.09,8.68L3.79,3.78L8.71,4.07L9.57,4.07C10.11,4.07 10.53,3.69 10.53,3.15C10.53,2.59 10.12,2.2 9.57,2.2L3.86,2.2C2.82,2.2 2.21,2.81 2.21,3.85L2.21,9.54C2.21,10.09 2.61,10.5 3.16,10.5C3.7,10.5 4.09,10.1 4.09,9.54ZM4.4,3.2C3.49,2.35 2.4,3.5 3.21,4.38L6.59,7.95L9.75,11.14C9.92,11.32 10.15,11.4 10.4,11.4C10.98,11.4 11.41,11.02 11.41,10.44C11.41,10.17 11.32,9.92 11.14,9.74L7.96,6.57ZM19.9,15.31L20.2,20.22L15.29,19.92L14.42,19.92C13.88,19.92 13.46,20.3 13.46,20.85C13.46,21.41 13.88,21.8 14.42,21.8L20.13,21.8C21.17,21.8 21.79,21.19 21.79,20.15L21.79,14.44C21.79,13.91 21.39,13.49 20.83,13.49C20.3,13.49 19.9,13.9 19.9,14.44ZM19.6,20.79C20.51,21.64 21.6,20.5 20.78,19.61L17.4,16.05L14.25,12.86C14.08,12.68 13.84,12.6 13.59,12.6C13.02,12.6 12.58,12.98 12.58,13.55C12.58,13.83 12.68,14.08 12.86,14.26L16.03,17.42Z";
-constexpr PCWSTR kMacRestore = L"F1 M9.53,4.92L9.83,9.82L4.92,9.53L4.06,9.53C3.51,9.53 3.09,9.91 3.09,10.46C3.09,11.01 3.5,11.4 4.06,11.4L9.76,11.4C10.81,11.4 11.41,10.8 11.41,9.75L11.41,4.06C11.41,3.51 11.01,3.1 10.47,3.1C9.92,3.1 9.53,3.5 9.53,4.06ZM9.23,10.41C10.13,11.25 11.24,10.1 10.42,9.23L7.04,5.65L3.88,2.48C3.71,2.28 3.47,2.2 3.23,2.2C2.64,2.2 2.21,2.58 2.21,3.17C2.21,3.43 2.31,3.68 2.5,3.87L5.66,7.04ZM14.47,19.08L14.17,14.18L19.08,14.47L19.94,14.47C20.49,14.47 20.91,14.09 20.91,13.53C20.91,12.99 20.49,12.6 19.94,12.6L14.24,12.6C13.18,12.6 12.58,13.2 12.58,14.25L12.58,19.94C12.58,20.47 12.98,20.9 13.53,20.9C14.06,20.9 14.47,20.5 14.47,19.94ZM14.76,13.59C13.86,12.75 12.76,13.9 13.57,14.77L16.96,18.34L20.12,21.52C20.29,21.71 20.52,21.8 20.77,21.8C21.35,21.8 21.79,21.42 21.79,20.83C21.79,20.57 21.69,20.31 21.5,20.13L18.34,16.96Z";
-constexpr PCWSTR kMacTriUp = L"F1 M20.77,17.52C20.77,17.2 20.58,16.95 20.34,16.61L13.47,6.42C13.01,5.73 12.58,5.52 11.99,5.52C11.41,5.52 10.99,5.73 10.53,6.42L3.65,16.61C3.42,16.96 3.23,17.21 3.23,17.53C3.23,18.11 3.84,18.48 4.8,18.48L19.19,18.47C20.15,18.47 20.77,18.11 20.77,17.52Z";
-constexpr PCWSTR kMacTriDown = L"F1 M20.77,6.48C20.77,5.89 20.15,5.53 19.19,5.53L4.8,5.52C3.84,5.52 3.23,5.89 3.23,6.47C3.23,6.79 3.42,7.05 3.65,7.39L10.53,17.59C10.99,18.27 11.41,18.48 11.99,18.48C12.58,18.48 13.01,18.27 13.47,17.59L20.34,7.39C20.58,7.06 20.77,6.8 20.77,6.48Z";
-constexpr PCWSTR kMacActivity = L"F1 M2.78,13.43L7.17,13.43C7.62,13.43 7.89,13.23 7.99,12.84L9.52,5.77L9.43,5.77L12.08,21.67C12.2,22.38 13.3,22.37 13.44,21.67L16,9.68L15.92,9.67L16.56,12.76C16.65,13.21 16.91,13.43 17.37,13.43L21.22,13.43C21.62,13.43 21.94,13.12 21.94,12.74C21.94,12.34 21.63,12.03 21.22,12.03L17.51,12.03L17.75,12.18L16.57,6.98C16.42,6.29 15.4,6.3 15.23,7.01L12.67,18.42L12.79,18.42L10.13,2.33C10.02,1.63 9.01,1.61 8.85,2.33L6.72,12.18L6.85,12.03L2.78,12.03C2.37,12.03 2.06,12.35 2.06,12.74C2.06,13.12 2.37,13.43 2.78,13.43Z";
-constexpr PCWSTR kMacChart = L"F1 M3.86,19.41L5.97,19.41C7.2,19.41 7.84,18.82 7.84,17.66L7.84,10.94C7.84,9.78 7.2,9.18 5.97,9.18L3.86,9.18C2.63,9.18 2,9.78 2,10.94L2,17.66C2,18.82 2.63,19.41 3.86,19.41ZM4.06,18.22C3.46,18.22 3.25,18.02 3.25,17.43L3.25,11.17C3.25,10.57 3.46,10.37 4.06,10.37L5.77,10.37C6.38,10.37 6.59,10.57 6.59,11.17L6.59,17.43C6.59,18.02 6.38,18.22 5.77,18.22ZM10.93,19.41L13.06,19.41C14.29,19.41 14.92,18.82 14.92,17.66L14.92,8.65C14.92,7.49 14.29,6.89 13.06,6.89L10.93,6.89C9.71,6.89 9.08,7.49 9.08,8.65L9.08,17.66C9.08,18.82 9.71,19.41 10.93,19.41ZM11.15,18.22C10.54,18.22 10.33,18.02 10.33,17.43L10.33,8.88C10.33,8.29 10.54,8.08 11.15,8.08L12.85,8.08C13.46,8.08 13.66,8.29 13.66,8.88L13.66,17.43C13.66,18.02 13.46,18.22 12.85,18.22ZM18.01,19.41L20.13,19.41C21.36,19.41 22,18.82 22,17.66L22,6.35C22,5.19 21.36,4.59 20.13,4.59L18.01,4.59C16.79,4.59 16.16,5.19 16.16,6.35L16.16,17.66C16.16,18.82 16.79,19.41 18.01,19.41ZM18.22,18.22C17.62,18.22 17.41,18.02 17.41,17.43L17.41,6.58C17.41,5.99 17.62,5.78 18.22,5.78L19.93,5.78C20.54,5.78 20.75,5.99 20.75,6.58L20.75,17.43C20.75,18.02 20.54,18.22 19.93,18.22Z";
-constexpr PCWSTR kMacChecklist = L"F1 M3.25,7.25C3.95,7.25 4.5,6.69 4.5,6C4.5,5.32 3.95,4.75 3.25,4.75C2.56,4.75 2,5.32 2,6C2,6.69 2.56,7.25 3.25,7.25ZM7.64,6.8L21.19,6.8C21.63,6.8 22,6.46 22,6C22,5.55 21.63,5.21 21.19,5.21L7.64,5.21C7.18,5.21 6.83,5.55 6.83,6C6.83,6.46 7.18,6.8 7.64,6.8ZM3.25,13.26C3.95,13.26 4.5,12.7 4.5,12C4.5,11.31 3.95,10.75 3.25,10.75C2.56,10.75 2,11.31 2,12C2,12.7 2.56,13.26 3.25,13.26ZM7.64,12.8L21.19,12.8C21.63,12.8 22,12.45 22,12C22,11.56 21.63,11.2 21.19,11.2L7.64,11.2C7.18,11.2 6.83,11.56 6.83,12C6.83,12.45 7.18,12.8 7.64,12.8ZM3.25,19.25C3.95,19.25 4.5,18.69 4.5,18C4.5,17.32 3.95,16.76 3.25,16.76C2.56,16.76 2,17.32 2,18C2,18.69 2.56,19.25 3.25,19.25ZM7.64,18.8L21.19,18.8C21.63,18.8 22,18.46 22,18C22,17.55 21.63,17.21 21.19,17.21L7.64,17.21C7.18,17.21 6.83,17.55 6.83,18C6.83,18.46 7.18,18.8 7.64,18.8Z";
-constexpr PCWSTR kMacIndent = L"F1 M3,8.19C3.56,8.19 4,7.75 4,7.19C4,6.64 3.56,6.19 3,6.19C2.45,6.19 2,6.64 2,7.19C2,7.75 2.45,8.19 3,8.19ZM6.52,7.84L17.38,7.84C17.74,7.84 18.03,7.56 18.03,7.19C18.03,6.83 17.74,6.55 17.38,6.55L6.52,6.55C6.15,6.55 5.87,6.83 5.87,7.19C5.87,7.56 6.15,7.84 6.52,7.84ZM4.99,13.01C5.54,13.01 5.99,12.56 5.99,12C5.99,11.45 5.54,11 4.99,11C4.43,11 3.99,11.45 3.99,12C3.99,12.56 4.43,13.01 4.99,13.01ZM8.5,12.64L19.37,12.64C19.72,12.64 20.01,12.36 20.01,12C20.01,11.65 19.72,11.36 19.37,11.36L8.5,11.36C8.14,11.36 7.86,11.65 7.86,12C7.86,12.36 8.14,12.64 8.5,12.64ZM6.97,17.81C7.53,17.81 7.97,17.37 7.97,16.81C7.97,16.26 7.53,15.81 6.97,15.81C6.42,15.81 5.97,16.26 5.97,16.81C5.97,17.37 6.42,17.81 6.97,17.81ZM10.49,17.45L21.36,17.45C21.71,17.45 22,17.18 22,16.81C22,16.45 21.71,16.17 21.36,16.17L10.49,16.17C10.13,16.17 9.85,16.45 9.85,16.81C9.85,17.18 10.13,17.45 10.49,17.45Z";
-constexpr PCWSTR kMacCpu = L"F1 M1.8,15.36C1.8,15.84 2.12,16.18 2.61,16.18L3.66,16.18L3.66,19.54C3.66,20.03 3.98,20.34 4.47,20.34L7.82,20.34L7.82,21.39C7.82,21.88 8.16,22.2 8.64,22.2C9.13,22.2 9.46,21.88 9.46,21.39L9.46,20.34L11.19,20.34L11.19,21.39C11.19,21.88 11.51,22.2 12,22.2C12.49,22.2 12.82,21.88 12.82,21.39L12.82,20.34L14.54,20.34L14.54,21.39C14.54,21.88 14.87,22.2 15.36,22.2C15.85,22.2 16.18,21.88 16.18,21.39L16.18,20.34L19.53,20.34C20.02,20.34 20.34,20.03 20.34,19.54L20.34,16.17L21.39,16.17C21.88,16.17 22.2,15.83 22.2,15.35C22.2,14.86 21.88,14.53 21.39,14.53L20.34,14.53L20.34,12.8L21.39,12.8C21.88,12.8 22.2,12.48 22.2,11.99C22.2,11.5 21.88,11.17 21.39,11.17L20.34,11.17L20.34,9.44L21.39,9.44C21.88,9.44 22.2,9.11 22.2,8.62C22.2,8.14 21.88,7.81 21.39,7.81L20.34,7.81L20.34,4.47C20.34,3.98 20.02,3.66 19.53,3.66L16.18,3.66L16.18,2.62C16.18,2.13 15.85,1.8 15.36,1.8C14.87,1.8 14.54,2.13 14.54,2.62L14.54,3.66L12.82,3.66L12.82,2.62C12.82,2.13 12.49,1.8 12,1.8C11.51,1.8 11.19,2.13 11.19,2.62L11.19,3.66L9.46,3.66L9.46,2.62C9.46,2.13 9.13,1.8 8.64,1.8C8.16,1.8 7.82,2.13 7.82,2.62L7.82,3.66L4.47,3.66C3.98,3.66 3.66,3.98 3.66,4.47L3.66,7.82L2.61,7.82C2.12,7.82 1.8,8.15 1.8,8.63C1.8,9.12 2.12,9.46 2.61,9.46L3.66,9.46L3.66,11.18L2.61,11.18C2.12,11.18 1.8,11.51 1.8,12C1.8,12.49 2.12,12.81 2.61,12.81L3.66,12.81L3.66,14.54L2.61,14.54C2.12,14.54 1.8,14.87 1.8,15.36ZM5.29,18.42L5.29,5.59C5.29,5.37 5.37,5.29 5.58,5.29L18.42,5.29C18.63,5.29 18.71,5.37 18.71,5.59L18.71,18.42C18.71,18.64 18.63,18.71 18.42,18.71L5.58,18.71C5.37,18.71 5.29,18.64 5.29,18.42ZM8.24,16.54L15.78,16.54C16.3,16.54 16.54,16.3 16.54,15.76L16.54,8.24C16.54,7.71 16.3,7.47 15.78,7.47L8.24,7.47C7.72,7.47 7.47,7.71 7.47,8.24L7.47,15.76C7.47,16.3 7.72,16.54 8.24,16.54ZM8.8,14.97L8.8,9.04C8.8,8.89 8.9,8.8 9.04,8.8L14.97,8.8C15.12,8.8 15.21,8.89 15.21,9.04L15.21,14.97C15.21,15.11 15.12,15.21 14.97,15.21L9.04,15.21C8.9,15.21 8.8,15.11 8.8,14.97Z";
-constexpr PCWSTR kMacRam = L"F1 M4.79,18.41L19.21,18.41C21.21,18.41 22.2,17.42 22.2,15.46L22.2,8.54C22.2,6.58 21.21,5.59 19.21,5.59L4.79,5.59C2.8,5.59 1.8,6.57 1.8,8.54L1.8,15.46C1.8,17.43 2.8,18.41 4.79,18.41ZM4.81,16.88C3.86,16.88 3.33,16.37 3.33,15.38L3.33,8.62C3.33,7.63 3.86,7.12 4.81,7.12L19.19,7.12C20.12,7.12 20.67,7.63 20.67,8.62L20.67,15.38C20.67,16.37 20.12,16.88 19.19,16.88ZM5.08,6.22L6.62,6.22L6.62,4.48C6.62,4.03 6.3,3.72 5.85,3.72C5.39,3.72 5.08,4.03 5.08,4.48ZM8.16,6.22L9.69,6.22L9.69,4.48C9.69,4.03 9.38,3.72 8.92,3.72C8.46,3.72 8.16,4.03 8.16,4.48ZM11.23,6.22L12.77,6.22L12.77,4.48C12.77,4.03 12.45,3.72 12,3.72C11.54,3.72 11.23,4.03 11.23,4.48ZM14.31,6.22L15.84,6.22L15.84,4.48C15.84,4.03 15.54,3.72 15.08,3.72C14.62,3.72 14.31,4.03 14.31,4.48ZM17.38,6.22L18.92,6.22L18.92,4.48C18.92,4.03 18.61,3.72 18.15,3.72C17.7,3.72 17.38,4.03 17.38,4.48ZM5.08,17.8L5.08,19.51C5.08,19.96 5.39,20.28 5.85,20.28C6.3,20.28 6.62,19.96 6.62,19.51L6.62,17.8ZM8.16,17.8L8.16,19.51C8.16,19.96 8.46,20.28 8.92,20.28C9.38,20.28 9.69,19.96 9.69,19.51L9.69,17.8ZM11.23,17.8L11.23,19.51C11.23,19.96 11.54,20.28 12,20.28C12.45,20.28 12.77,19.96 12.77,19.51L12.77,17.8ZM14.31,17.8L14.31,19.51C14.31,19.96 14.62,20.28 15.08,20.28C15.54,20.28 15.84,19.96 15.84,19.51L15.84,17.8ZM17.38,17.8L17.38,19.51C17.38,19.96 17.7,20.28 18.15,20.28C18.61,20.28 18.92,19.96 18.92,19.51L18.92,17.8Z";
-constexpr PCWSTR kMacTerminal = L"F1 M4.75,19.85L19.25,19.85C21.1,19.85 22,18.97 22,17.14L22,6.84C22,5.03 21.1,4.15 19.25,4.15L4.75,4.15C2.92,4.15 2,5.03 2,6.84L2,17.14C2,18.97 2.92,19.85 4.75,19.85ZM5.56,10.79L7.56,9.58L5.56,8.4C4.77,7.91 5.43,6.73 6.29,7.25L8.79,8.81C9.34,9.16 9.34,10 8.79,10.33L6.29,11.91C5.43,12.44 4.77,11.25 5.56,10.79ZM9.32,11.85C9.32,11.47 9.6,11.19 9.96,11.19L13.27,11.19C13.67,11.19 13.96,11.47 13.96,11.85C13.96,12.18 13.67,12.48 13.27,12.48L9.96,12.48C9.6,12.48 9.32,12.18 9.32,11.85Z";
-constexpr PCWSTR kMacBluetooth = L"F1 M11.3,1.8C11.3,1.25 11.96,0.98 12.35,1.37L17.95,6.87C18.3,7.22 18.29,7.78 17.93,8.11L13.68,12L17.93,15.89C18.29,16.22 18.3,16.78 17.95,17.13L12.35,22.63C11.96,23.02 11.3,22.75 11.3,22.2L11.3,14.12L7.34,17.75C6.98,18.08 6.42,18.06 6.09,17.7C5.76,17.34 5.78,16.78 6.14,16.45L11.0,12L6.14,7.55C5.78,7.22 5.76,6.66 6.09,6.3C6.42,5.94 6.98,5.92 7.34,6.25L11.3,9.88ZM13.06,4.55L13.06,10.18L16.0,7.48ZM13.06,13.82L13.06,19.45L16.0,16.52Z";
-
-// SF Symbols "return" (arrow.turn.down.left) - the Enter / Return key glyph.
-constexpr PCWSTR kMacReturn = L"F1 M18.35,5.4L18.37,5.21L18.42,5.03L18.51,4.87L18.63,4.73L18.77,4.61L18.93,4.52L19.11,4.47L19.3,4.45L19.49,4.47L19.67,4.52L19.83,4.61L19.97,4.73L20.09,4.87L20.18,5.03L20.23,5.21L20.25,5.4L20.25,12.2L19.37,14.67L16.9,15.55L4.9,15.55L4.71,15.53L4.53,15.48L4.37,15.39L4.23,15.27L4.11,15.13L4.02,14.97L3.97,14.79L3.95,14.6L3.97,14.41L4.02,14.23L4.11,14.07L4.23,13.93L4.37,13.81L4.53,13.72L4.71,13.67L4.9,13.65L16.9,13.65L18.03,13.33L18.35,12.2L18.35,5.4ZM8.93,9.23L9.08,9.11L9.24,9.02L9.42,8.97L9.6,8.95L9.78,8.97L9.96,9.02L10.12,9.11L10.27,9.23L10.39,9.38L10.48,9.54L10.53,9.72L10.55,9.9L10.53,10.08L10.48,10.26L10.39,10.42L10.27,10.57L5.57,15.27L4.9,14.6L5.57,13.93L10.27,18.63L10.39,18.78L10.48,18.94L10.53,19.12L10.55,19.3L10.53,19.48L10.48,19.66L10.39,19.82L10.27,19.97L10.12,20.09L9.96,20.18L9.78,20.23L9.6,20.25L9.42,20.23L9.24,20.18L9.08,20.09L8.93,19.97L4.23,15.27L4.11,15.13L4.02,14.96L3.97,14.79L3.95,14.6L3.97,14.41L4.02,14.24L4.11,14.07L4.23,13.93L8.93,9.23Z";
-
-// SF Symbols "circle.lefthalf.filled" - macOS Control Center's Dark Mode glyph.
-constexpr PCWSTR kMacDarkMode = L"F1 M12,2A10,10 0 1 1 12,22A10,10 0 1 1 12,2ZM12,3.9A8.1,8.1 0 1 0 12,20.1A8.1,8.1 0 1 0 12,3.9ZM12,3.9A8.1,8.1 0 0 0 12,20.1Z";
-
-inline PCWSTR LookupMacOSPath(wchar_t code) {
-    switch (code) {
-        case 0xE100: return kMacPrev;
-        case 0xE101: return kMacNext;
-        case 0xE700: return kMacHamburger;
-        case 0xE701: return kMacWifiFull;
-        case 0xE702: return kMacBluetooth;
-        case 0xE704: return kMacNetwork;
-        case 0xE706: return kMacBrightness;
-        case 0xE708: return kMacMoon;
-        case 0xE709: return kMacAirplane;
-        case 0xE70D: return kMacChevronDown;
-        case 0xE70E: return kMacChevronUp;
-        case 0xE710: return kMacPlus;
-        case 0xE711: return kMacXmark;
-        case 0xE712: return kMacEllipsis;
-        case 0xE713: return kMacSettings;
-        case 0xE714: return kMacVideo;
-        case 0xE718: return kMacPin;
-        case 0xE71A: return kMacStop;
-        case 0xE71D: return kMacGridApps;
-        case 0xE720: return kMacMic;
-        case 0xE721: return kMacSearch;
-        case 0xE724: return kMacSend;
-        case 0xE72B: return kMacArrowLeft;
-        case 0xE72C: return kMacRefresh;
-        case 0xE72E: return kMacLock;
-        case 0xE737: return kMacIndent;
-        case 0xE738: return kMacMinus;
-        case 0xE73E: return kMacCheckmark;
-        case 0xE740: return kMacFullScreen;
-        case 0xE74D: return kMacTrash;
-        case 0xE74F: return kMacSpeaker0;
-        case 0xE751: return kMacReturn;
-        case 0xE756: return kMacTerminal;
-        case 0xE765: return kMacKeyboard;
-        case 0xE768: return kMacPlay;
-        case 0xE769: return kMacPause;
-        case 0xE76B: return kMacChevronLeft;
-        case 0xE76C: return kMacChevronRight;
-        case 0xE774: return kMacGlobe;
-        case 0xE777: return kMacRestart;
-        case 0xE77A: return kMacPinSlash;
-        case 0xE77B: return kMacPerson;
-        case 0xE790: return kMacPaintbrush;
-        case 0xE793: return kMacDarkMode;
-        case 0xE7BA: return kMacWarning;
-        case 0xE7C4: return kMacSpaces;
-        case 0xE7E8: return kMacPower;
-        case 0xE7EF: return kMacShield;
-        case 0xE838: return kMacFolderFill;
-        case 0xE83E: return kMacBatteryCharging;
-        case 0xE83F: return kMacBattery100;
-        case 0xE840: return kMacPinFill;
-        case 0xE850:
-        case 0xE851: return kMacBattery0;
-        case 0xE852:
-        case 0xE853:
-        case 0xE854: return kMacBattery25;
-        case 0xE855:
-        case 0xE856: return kMacBattery50;
-        case 0xE857:
-        case 0xE858:
-        case 0xE859: return kMacBattery75;
-        case 0xE85A:
-        case 0xE85B:
-        case 0xE85C:
-        case 0xE85D:
-        case 0xE85E:
-        case 0xE85F:
-        case 0xE860:
-        case 0xE861:
-        case 0xE862:
-        case 0xEA93: return kMacBatteryCharging;
-        case 0xE863:
-        case 0xE864: return kMacBattery0;
-        case 0xE865:
-        case 0xE866:
-        case 0xE867: return kMacBattery25;
-        case 0xE868:
-        case 0xE869: return kMacBattery50;
-        case 0xE86A:
-        case 0xE86B:
-        case 0xEA94: return kMacBattery75;
-        case 0xEA95: return kMacBattery100;
-        case 0xE871: return kMacWifiSlash;
-        case 0xE872: return kMacWifi1;
-        case 0xE873: return kMacWifi2;
-        case 0xE874: return kMacWifiFull;
-        case 0xE895: return kMacSync;
-        case 0xE896: return kMacDownload;
-        case 0xE898: return kMacUpload;
-        case 0xE8A5: return kMacDoc;
-        case 0xE8A7: return kMacOpenExternal;
-        case 0xE8A9: return kMacBook;
-        case 0xE8B5: return kMacPlay;
-        case 0xE8B7: return kMacFolder;
-        case 0xE8BB: return kMacXmark;
-        case 0xE8C8: return kMacCopy;
-        case 0xE8D6: return kMacMusic;
-        case 0xE8E5: return kMacFolderFill;
-        case 0xE8FC: return kMacDesktop;
-        case 0xE921: return kMacMinus;
-        case 0xE922: return kMacFullScreen;
-        case 0xE923: return kMacRestore;
-        case 0xE935: return kMacTriUp;
-        case 0xE936: return kMacTriDown;
-        case 0xE945: return kMacBolt;
-        case 0xE946: return kMacInfo;
-        case 0xE968: return kMacNetwork;
-        case 0xE992: return kMacSpeaker0;
-        case 0xE993: return kMacSpeaker1;
-        case 0xE994: return kMacSpeaker2;
-        case 0xE995: return kMacSpeaker3;
-        case 0xE996: return kMacBattery0;
-        case 0xE9D9: return kMacActivity;
-        case 0xE9E9: return kMacControlCenter;
-        case 0xEA8F: return kMacBell;
-        case 0xEB9F: return kMacPhoto;
-        case 0xEBA0:
-        case 0xECB9:
-        case 0xF5F2:
-        case 0xF5F3: return kMacBattery0;
-        case 0xECBA:
-        case 0xECBB:
-        case 0xF5F4:
-        case 0xF5F5:
-        case 0xF5F6: return kMacBattery25;
-        case 0xECBC:
-        case 0xECBD:
-        case 0xF5F7:
-        case 0xF5F8: return kMacBattery50;
-        case 0xECBE:
-        case 0xF5F9:
-        case 0xF5FA:
-        case 0xF5FB: return kMacBattery75;
-        case 0xECBF:
-        case 0xF5FC: return kMacBattery100;
-        case 0xEC4A: return kMacGauge;
-        case 0xEEA0: return kMacRam;
-        case 0xEEA1: return kMacCpu;
-        case 0xF384: return kMacWifiExclam;
-        case 0xF3B1: return kMacSignOut;
-        case 0xF42F: return kMacSpeedometer;
-        case 0xF781: return kMacMicSlash;
-        default: return nullptr;
-    }
-}
-}
-
 FrameworkElement BuildWindows11StartIcon(double displaySize) {
     std::wstring brush = GetEffectiveIconColorString();
-
-    if (g_settings.iconPack == L"macos") {
-        std::wstring xaml =
-            L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-            L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(displaySize) + L"\" Height=\"" + std::to_wstring(displaySize) + L"\">"
-            L"<Grid Width=\"24\" Height=\"24\">"
-            L"<Path Data=\"" + std::wstring(macos_sf::kMacAppleLogo) + L"\" Fill=\"" + brush + L"\"/>"
-            L"</Grid></Viewbox>";
-        try {
-            auto element = Markup::XamlReader::Load(xaml).as<FrameworkElement>();
-            element.Name(L"StartIcon");
-            return element;
-        } catch (winrt::hresult_error const& ex) {
-            Wh_Log(L"Failed to build macOS Apple start icon: %08X",
-                   static_cast<unsigned int>(ex.code().value));
-        }
-    }
 
     constexpr PCWSTR kStartLogoPath =
         L"F1 "
@@ -8707,195 +8355,8 @@ FrameworkElement BuildVectorIcon(PCWSTR name,
     }
 }
 
-FrameworkElement BuildSearchIcon(double displaySize) {
-    std::wstring brush = GetEffectiveIconColorString();
 
-    std::wstring pathsXaml =
-        L"<Grid xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\">"
-        L"<Path Data=\"" + EscapeXmlAttr(icons::kSearchOutline) + L"\" />"
-        L"<Path Data=\"" + EscapeXmlAttr(icons::kSearchLens) + L"\" />"
-        L"</Grid>";
 
-    std::wstring viewboxXaml =
-        L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-        L"Stretch=\"Uniform\" Width=\"" +
-        std::to_wstring(displaySize) + L"\" Height=\"" + std::to_wstring(displaySize) + L"\">"
-        L"<Grid Width=\"360\" Height=\"360\">"
-        L"<Path Fill=\"" + brush + L"\" />"
-        L"</Grid>"
-        L"</Viewbox>";
-
-    try {
-        auto tempGrid = Markup::XamlReader::Load(pathsXaml).as<wuxc::Grid>();
-        auto p1 = tempGrid.Children().GetAt(0).as<winrt::Windows::UI::Xaml::Shapes::Path>();
-        auto p2 = tempGrid.Children().GetAt(1).as<winrt::Windows::UI::Xaml::Shapes::Path>();
-
-        auto p1Geom = p1.Data();
-        p1.Data(nullptr);
-        auto p2Geom = p2.Data();
-        p2.Data(nullptr);
-
-        wuxm::GeometryGroup group;
-        group.FillRule(wuxm::FillRule::EvenOdd);
-        group.Children().Append(p1Geom);
-
-        wuxm::TranslateTransform transform;
-        transform.X(189.488037109375);
-        transform.Y(66.264892578125);
-        p2Geom.Transform(transform);
-        group.Children().Append(p2Geom);
-
-        auto viewbox = Markup::XamlReader::Load(viewboxXaml).as<wuxc::Viewbox>();
-        auto finalGrid = viewbox.Child().as<wuxc::Grid>();
-        auto searchPath =
-            finalGrid.Children().GetAt(0).as<winrt::Windows::UI::Xaml::Shapes::Path>();
-        searchPath.Data(group);
-        viewbox.Name(L"SearchIcon");
-        return viewbox;
-    } catch (winrt::hresult_error const& ex) {
-        Wh_Log(L"Failed to build search icon: %08X",
-               static_cast<unsigned int>(ex.code().value));
-        return nullptr;
-    }
-}
-
-FrameworkElement BuildBatteryIcon(double displaySize, int percentage, bool charging, bool present = true) {
-    if (!present) {
-        std::wstring batteryXaml;
-        batteryXaml += L"<Grid Width=\"108.809\" Height=\"55.6796\">";
-        batteryXaml += L"<Border Width=\"5.404\" Height=\"11.931\" "
-                       L"CornerRadius=\"0,3,3,0\" Background=\"#D1D1D1\" "
-                       L"HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\"/>";
-        batteryXaml += L"<Grid Width=\"99.4277\" Height=\"55.6796\" "
-                       L"HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\">";
-        batteryXaml += L"<Border Width=\"99.4277\" Height=\"55.6796\" "
-                       L"CornerRadius=\"15.9085\" Background=\"#D1D1D1\"/>";
-        batteryXaml += L"<Path Data=\"M15,15 L84,40 M84,15 L15,40\" Stroke=\"#FFFFFF\" StrokeThickness=\"6\" StrokeStartLineCap=\"Round\" StrokeEndLineCap=\"Round\"/>";
-        batteryXaml += L"</Grid>";
-        batteryXaml += L"</Grid>";
-        std::wstring xaml =
-            L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-            L"Stretch=\"Uniform\" Height=\"" + std::to_wstring(displaySize) + L"\">"
-            + batteryXaml + L"</Viewbox>";
-        try {
-            auto element = Markup::XamlReader::Load(xaml).as<FrameworkElement>();
-            element.Name(L"BatteryIcon");
-            return element;
-        } catch (...) {
-            return nullptr;
-        }
-    }
-    percentage = std::clamp(percentage, 0, 100);
-
-    std::wstring indicatorColor;
-    std::wstring textColor;
-    if (percentage < 20) {
-        indicatorColor = L"#FF3B30";
-        textColor = L"#000000";
-    } else if (percentage < 40) {
-        indicatorColor = L"#FF9500";
-        textColor = L"#000000";
-    } else if (percentage < 60) {
-        indicatorColor = L"#FFCC00";
-        textColor = L"#000000";
-    } else if (percentage < 80) {
-        indicatorColor = L"#121212";
-        textColor = L"#FFFFFF";
-    } else {
-        indicatorColor = L"#34C759";
-        textColor = L"#000000";
-    }
-
-    const double shellWidth = 99.4277;
-    const double shellHeight = 55.6796;
-
-    double indicatorWidth = shellWidth * percentage / 100.0;
-    if (indicatorWidth < 6.0) indicatorWidth = 6.0;
-
-    std::wstring batteryXaml;
-    batteryXaml += L"<Grid Width=\"108.809\" Height=\"55.6796\">";
-
-    batteryXaml += L"<Border Width=\"5.404\" Height=\"11.931\" "
-                   L"CornerRadius=\"0,3,3,0\" Background=\"#D1D1D1\" "
-                   L"HorizontalAlignment=\"Right\" VerticalAlignment=\"Center\"/>";
-
-    batteryXaml += L"<Grid Width=\"99.4277\" Height=\"55.6796\" "
-                   L"HorizontalAlignment=\"Left\" VerticalAlignment=\"Center\">";
-    batteryXaml += L"<Border Width=\"99.4277\" Height=\"55.6796\" "
-                   L"CornerRadius=\"15.9085\" Background=\"#D1D1D1\"/>";
-    batteryXaml += L"<Border Width=\"" + std::to_wstring(indicatorWidth) + L"\" "
-                   L"Height=\"55.6796\" CornerRadius=\"15.9085\" "
-                   L"Background=\"" + indicatorColor + L"\" "
-                   L"HorizontalAlignment=\"Left\"/>";
-    batteryXaml += L"<TextBlock Text=\"" + std::to_wstring(percentage) + L"\" "
-                   L"Foreground=\"" + textColor + L"\" FontWeight=\"Bold\" "
-                   L"FontSize=\"50\" FontFamily=\"Segoe UI Variable Display, Segoe UI\" "
-                   L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" "
-                   L"TextAlignment=\"Center\" Margin=\"0\" Padding=\"0\">"
-                   L"<TextBlock.RenderTransform>"
-                   L"<TranslateTransform Y=\"-2\"/>"
-                   L"</TextBlock.RenderTransform>"
-                   L"</TextBlock>";
-    batteryXaml += L"</Grid>";
-    batteryXaml += L"</Grid>";
-
-    std::wstring contentXaml;
-    if (charging) {
-        contentXaml += L"<StackPanel Orientation=\"Horizontal\" Spacing=\"2\" "
-                       L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\">";
-        contentXaml += L"<Path Data=\"M0 18.3378L14.2119 0L11.9196 13.4478H24.1448L4.43166 32.8553L10.6971 18.3378H0Z\" "
-                       L"Fill=\"#FFFFFF\" Width=\"36\" Height=\"47\" Stretch=\"Uniform\" "
-                       L"VerticalAlignment=\"Center\"/>";
-        contentXaml += batteryXaml;
-        contentXaml += L"</StackPanel>";
-    } else {
-        contentXaml = batteryXaml;
-    }
-
-    std::wstring xaml =
-        L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-        L"Stretch=\"Uniform\" Height=\"" + std::to_wstring(displaySize) + L"\">"
-        + contentXaml + L"</Viewbox>";
-
-    try {
-        auto element = Markup::XamlReader::Load(xaml).as<FrameworkElement>();
-        element.Name(L"BatteryIcon");
-        return element;
-    } catch (winrt::hresult_error const& ex) {
-        Wh_Log(L"Failed to build battery icon: %08X", static_cast<unsigned int>(ex.code().value));
-        return nullptr;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-FrameworkElement BuildRecycleBinIcon(double displaySize) {
-    std::wstring brush = GetEffectiveIconColorString();
-    std::wstring data =
-        L"F0 "
-        L"M3,5 L21,5 L21,7 L3,7 Z "
-        L"M9,3 L15,3 L15,5 L9,5 Z "
-        L"M5,8 L19,8 L17.6,21 L6.4,21 Z "
-        L"M8.6,10.6 L9.9,10.6 L10.8,18.6 L9.5,18.6 Z "
-        L"M11.35,10.6 L12.65,10.6 L12.65,18.6 L11.35,18.6 Z "
-        L"M14.1,10.6 L15.4,10.6 L14.5,18.6 L13.2,18.6 Z";
-    std::wstring xaml =
-        L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-        L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(displaySize) + L"\" Height=\"" +
-        std::to_wstring(displaySize) + L"\">"
-        L"<Grid Width=\"24\" Height=\"24\">"
-        L"<Path Data=\"" + data + L"\" Fill=\"" + brush + L"\"/>"
-        L"</Grid></Viewbox>";
-    try {
-        auto element = Markup::XamlReader::Load(xaml).as<FrameworkElement>();
-        element.Name(L"RecycleBinIcon");
-        return element;
-    } catch (winrt::hresult_error const& ex) {
-        Wh_Log(L"Failed to build recycle bin icon: %08X",
-               static_cast<unsigned int>(ex.code().value));
-        return nullptr;
-    }
-}
 
 wuxm::SolidColorBrush MakeBrush(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
     return wuxm::SolidColorBrush(wui::ColorHelper::FromArgb(a, r, g, b));
@@ -9608,49 +9069,12 @@ FrameworkElement BuildSpeakerIcon(double size, int volume, bool muted);
 
 namespace iconpacks {
 
-inline bool IsMacOS() {
-    return g_settings.iconPack == L"macos";
-}
-
 inline bool IsWinUI() {
     return true;
 }
 
-FrameworkElement BuildMacOSPathIcon(PCWSTR pathData, double displaySize, wuxm::Brush const& fgBrush = nullptr) {
-    if (!pathData || !*pathData) return nullptr;
-    try {
-        std::wstring xaml =
-            L"<Viewbox xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
-            L"Stretch=\"Uniform\" Width=\"" + std::to_wstring(displaySize) +
-            L"\" Height=\"" + std::to_wstring(displaySize) + L"\">"
-            L"<Grid Width=\"24\" Height=\"24\">"
-            L"<Path Data=\"" + std::wstring(pathData) + L"\" Fill=\"#FFFFFFFF\"/>"
-            L"</Grid></Viewbox>";
-        auto vb = Markup::XamlReader::Load(xaml).as<wuxc::Viewbox>();
-        if (auto grid = vb.Child().try_as<wuxc::Grid>()) {
-            if (grid.Children().Size() > 0) {
-                if (auto p = grid.Children().GetAt(0).try_as<winrt::Windows::UI::Xaml::Shapes::Path>()) {
-                    p.Fill(fgBrush ? fgBrush : IconColorBrush());
-                }
-            }
-        }
-        vb.HorizontalAlignment(HorizontalAlignment::Center);
-        vb.VerticalAlignment(VerticalAlignment::Center);
-        return vb;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
 FrameworkElement MakeInlineGlyph(PCWSTR glyph, double fontSize, wuxm::Brush const& fgBrush = nullptr) {
     wuxm::Brush brush = fgBrush ? fgBrush : IconColorBrush();
-    if (IsMacOS() && glyph && *glyph) {
-        if (PCWSTR macPath = macos_sf::LookupMacOSPath(glyph[0])) {
-            if (auto macEl = BuildMacOSPathIcon(macPath, fontSize, brush)) {
-                return macEl;
-            }
-        }
-    }
     wuxc::FontIcon fi;
     try {
         fi.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets"));
@@ -9672,14 +9096,6 @@ FrameworkElement Glyph(PCWSTR glyph, double displaySize, PCWSTR colorHexOverride
         }
     }
     wuxm::Brush brush = haveColor ? MakeBrush(c.A, c.R, c.G, c.B) : IconColorBrush();
-
-    if (IsMacOS() && glyph && *glyph) {
-        if (PCWSTR macPath = macos_sf::LookupMacOSPath(glyph[0])) {
-            if (auto macEl = BuildMacOSPathIcon(macPath, displaySize, brush)) {
-                return macEl;
-            }
-        }
-    }
 
     wuxc::FontIcon fi;
     fi.Glyph(winrt::hstring(glyph));
@@ -9706,19 +9122,15 @@ FrameworkElement Glyph(PCWSTR glyph, double displaySize, PCWSTR colorHexOverride
 }
 
 FrameworkElement SearchIcon() {
-    return Glyph(L"\uE721", IsMacOS() ? 17 : 20);
+    return Glyph(L"\uE721", 20);
 }
 
 FrameworkElement DisplayIcon() {
-    if (IsMacOS()) {
-        // macOS family display glyph (SF "desktopcomputer"); \uE8FC maps to kMacDesktop.
-        return Glyph(L"\uE8FC", 19);
-    }
     return Glyph(L"\uE706", 18);
 }
 
 FrameworkElement SettingsIcon() {
-    return Glyph(L"\uE713", IsMacOS() ? 18 : 20);
+    return Glyph(L"\uE713", 20);
 }
 
 FrameworkElement SoundIcon(int volume, bool muted) {
@@ -9732,7 +9144,7 @@ FrameworkElement SoundIcon(int volume, bool muted) {
     } else {
         glyph = L"\uE995";
     }
-    return Glyph(glyph, IsMacOS() ? 18 : 20);
+    return Glyph(glyph, 20);
 }
 
 FrameworkElement WifiIcon(int signal, bool connected) {
@@ -9750,13 +9162,13 @@ FrameworkElement WifiIcon(int signal, bool connected) {
     } else {
         glyph = L"\uE872";
     }
-    auto g = Glyph(glyph, IsMacOS() ? 18 : 20);
+    auto g = Glyph(glyph, 20);
     if (g) g.Opacity(opacity);
     return g;
 }
 
 FrameworkElement BluetoothIcon(bool on) {
-    auto g = Glyph(L"\uE702", IsMacOS() ? 17 : 16);
+    auto g = Glyph(L"\uE702", 16);
     if (g) g.Opacity(on ? 1.0 : 0.4);
     return g;
 }
@@ -9772,23 +9184,7 @@ FrameworkElement BatteryIcon(int percentage, bool charging, bool present = true,
     }
     percentage = std::clamp(percentage, 0, 100);
     FrameworkElement ic{nullptr};
-    if (IsMacOS()) {
-        PCWSTR macPath = macos_sf::kMacBattery100;
-        if (charging) {
-            macPath = macos_sf::kMacBatteryCharging;
-        } else if (percentage >= 88) {
-            macPath = macos_sf::kMacBattery100;
-        } else if (percentage >= 63) {
-            macPath = macos_sf::kMacBattery75;
-        } else if (percentage >= 38) {
-            macPath = macos_sf::kMacBattery50;
-        } else if (percentage >= 13) {
-            macPath = macos_sf::kMacBattery25;
-        } else {
-            macPath = macos_sf::kMacBattery0;
-        }
-        ic = BuildMacOSPathIcon(macPath, 22);
-    } else {
+    {
         PCWSTR glyph;
         if (charging) {
             static const wchar_t* kCharging[11] = {
@@ -9836,27 +9232,31 @@ FrameworkElement BatteryIcon(int percentage, bool charging, bool present = true,
 }
 
 FrameworkElement BinIcon() {
-    return Glyph(L"\uE74D", IsMacOS() ? 17 : 16);
+    return Glyph(L"\uE74D", 16);
 }
 
 FrameworkElement TrayChevronIcon() {
-    return Glyph(L"\uE70E", IsMacOS() ? 15 : 20);
+    return Glyph(L"\uE70E", 20);
 }
 
 FrameworkElement ControlCenterIcon() {
-    return Glyph(L"\uE9E9", IsMacOS() ? 17 : 16);
+    return Glyph(L"\uE9E9", 16);
 }
 
 FrameworkElement NotificationsIcon() {
-    return Glyph(L"\uEA8F", IsMacOS() ? 17 : 16);
+    return Glyph(L"\uEA8F", 16);
 }
 
 FrameworkElement WallpaperIcon() {
-    return Glyph(L"\uEB9F", IsMacOS() ? 17 : 16);
+    return Glyph(L"\uEB9F", 16);
 }
 
 FrameworkElement SpeedTestIcon() {
     return Glyph(L"\uF42F", 18);
+}
+
+FrameworkElement OptimizerIcon() {
+    return Glyph(L"\uE9D9", 18);
 }
 
 FrameworkElement MediaPrev(double size, PCWSTR colorHex = nullptr) {
@@ -11458,7 +10858,9 @@ wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
     };
     auto barDrag = std::make_shared<BarTaskDragState>();
 
-    auto recomputeClampBounds = [barDrag, hwnd, button](int visibleLimit) {
+    auto recomputeClampBounds = [barDrag, hwnd, weakBtn = winrt::make_weak(button)](int visibleLimit) {
+        auto button = weakBtn.get();
+        if (!button) return;
         barDrag->minDxDip = 0.0;
         barDrag->maxDxDip = 0.0;
         barDrag->arrangedLeftDip.clear();
@@ -11559,7 +10961,9 @@ wuxc::Button CreateTaskButton(HWND hwnd, const std::wstring& title) {
         }
     };
 
-    auto finishBarDrag = [barDrag, hwnd, button]() {
+    auto finishBarDrag = [barDrag, hwnd, weakBtn = winrt::make_weak(button)]() {
+        auto button = weakBtn.get();
+        if (!button) return;
         if (!barDrag->pressing) return;
         bool wasDragging = barDrag->dragging;
         barDrag->pressing = false;
@@ -12049,85 +11453,6 @@ std::wstring ResolveShortcutTarget(const std::wstring& lnkPath) {
     return target;
 }
 
-std::wstring FindStartMenuShortcutName(const std::wstring& exePath) {
-    static std::mutex s_cacheMutex;
-    static std::map<std::wstring, std::wstring> s_cache;
-
-    std::wstring key = ToLowerCopy(exePath);
-    {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        auto cached = s_cache.find(key);
-        if (cached != s_cache.end()) return cached->second;
-    }
-
-    std::wstring exeBase = exePath;
-    size_t slash = exeBase.find_last_of(L"\\/");
-    if (slash != std::wstring::npos) exeBase.erase(0, slash + 1);
-    size_t dot = exeBase.find_last_of(L'.');
-    if (dot != std::wstring::npos) exeBase.resize(dot);
-    std::wstring exeBaseLower = ToLowerCopy(exeBase);
-
-    static const GUID kProgramsFolder =
-        {0xA77F5D77, 0x2E2B, 0x44C3, {0xA6, 0xA2, 0xAB, 0xA6, 0x01, 0x05, 0x4A, 0x51}};
-    static const GUID kCommonProgramsFolder =
-        {0x0139D44E, 0x6AFE, 0x49F2, {0x86, 0x90, 0x3D, 0xAF, 0xCA, 0xE6, 0xFF, 0xB8}};
-
-    std::wstring exactMatch;
-    std::wstring fuzzyMatch;
-
-    const GUID* folders[] = { &kProgramsFolder, &kCommonProgramsFolder };
-    for (const GUID* id : folders) {
-        PWSTR folder = nullptr;
-        if (FAILED(SHGetKnownFolderPath(*id, 0, nullptr, &folder))) continue;
-
-        std::vector<std::wstring> stack;
-        stack.push_back(folder);
-        CoTaskMemFree(folder);
-
-        while (!stack.empty()) {
-            std::wstring dir = stack.back();
-            stack.pop_back();
-
-            WIN32_FIND_DATAW fd{};
-            HANDLE find = FindFirstFileW((dir + L"\\*").c_str(), &fd);
-            if (find == INVALID_HANDLE_VALUE) continue;
-            do {
-                if (wcscmp(fd.cFileName, L".") == 0 ||
-                    wcscmp(fd.cFileName, L"..") == 0) continue;
-                std::wstring full = dir + L"\\" + fd.cFileName;
-                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-                    stack.push_back(full);
-                    continue;
-                }
-                std::wstring name = fd.cFileName;
-                if (name.size() <= 4) continue;
-                if (_wcsicmp(name.c_str() + name.size() - 4, L".lnk") != 0) continue;
-
-                std::wstring shortName = name.substr(0, name.size() - 4);
-
-                if (exactMatch.empty()) {
-                    std::wstring target = ResolveShortcutTarget(full);
-                    if (!target.empty() &&
-                        _wcsicmp(target.c_str(), exePath.c_str()) == 0) {
-                        exactMatch = shortName;
-                    }
-                }
-                if (fuzzyMatch.empty() &&
-                    ToLowerCopy(shortName) == exeBaseLower) {
-                    fuzzyMatch = shortName;
-                }
-            } while (FindNextFileW(find, &fd));
-            FindClose(find);
-        }
-    }
-
-    std::wstring result = !exactMatch.empty() ? exactMatch : fuzzyMatch;
-    if (!result.empty()) {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        s_cache[key] = result;
-    }
-    return result;
-}
 
 std::wstring GetApplicationDisplayName(HWND hwnd) {
     if (hwnd && IsWindow(hwnd)) {
@@ -13068,6 +12393,7 @@ static wuxc::Button CreatePinnedTaskAppButton(const PinnedTaskAppEntry& entry) {
             }
         }
         if (bmp) {
+            if (g_pinnedAppIconCache.size() >= 32) g_pinnedAppIconCache.clear();
             g_pinnedAppIconCache[lowerExe] = bmp;
         }
         if (bmp) {
@@ -16145,40 +15471,57 @@ bool PairDevice(const BLUETOOTH_ADDRESS& address) {
             return true;
         }
 
-        auto future = std::async(std::launch::async, [deviceInfo]() {
-            auto customPairing = deviceInfo.Pairing().Custom();
-            if (customPairing) {
-                auto pairingRequestedToken = customPairing.PairingRequested(
-                    [](DeviceInformationCustomPairing const&,
-                       DevicePairingRequestedEventArgs const& args) {
-                        args.Accept();
-                    });
-                try {
-                    auto kinds = DevicePairingKinds::ConfirmOnly |
-                                 DevicePairingKinds::ConfirmPinMatch;
-                    auto result = customPairing.PairAsync(kinds).get();
-                    customPairing.PairingRequested(pairingRequestedToken);
-                    if (result.Status() == DevicePairingResultStatus::Paired ||
-                        result.Status() == DevicePairingResultStatus::AlreadyPaired) {
-                        return true;
-                    }
-                } catch (...) {
-                    customPairing.PairingRequested(pairingRequestedToken);
-                }
-            }
+        struct PairWaitState {
+            std::mutex mtx;
+            std::condition_variable cv;
+            bool done = false;
+            bool paired = false;
+        };
+        auto waitState = std::make_shared<PairWaitState>();
+        std::thread([deviceInfo, waitState]() {
+            bool ok = false;
             try {
-                auto fallback = deviceInfo.Pairing().PairAsync().get();
-                return fallback.Status() == DevicePairingResultStatus::Paired ||
-                       fallback.Status() == DevicePairingResultStatus::AlreadyPaired;
-            } catch (...) {
-                return false;
+                auto customPairing = deviceInfo.Pairing().Custom();
+                if (customPairing) {
+                    auto pairingRequestedToken = customPairing.PairingRequested(
+                        [](DeviceInformationCustomPairing const&,
+                           DevicePairingRequestedEventArgs const& args) {
+                            if (args.PairingKind() == DevicePairingKinds::ConfirmOnly) {
+                                args.Accept();
+                            }
+                        });
+                    try {
+                        // Only auto-accept ConfirmOnly; let Windows pairing UI handle PIN comparison.
+                        auto result = customPairing.PairAsync(DevicePairingKinds::ConfirmOnly).get();
+                        customPairing.PairingRequested(pairingRequestedToken);
+                        if (result.Status() == DevicePairingResultStatus::Paired ||
+                            result.Status() == DevicePairingResultStatus::AlreadyPaired) {
+                            ok = true;
+                        }
+                    } catch (...) {
+                        customPairing.PairingRequested(pairingRequestedToken);
+                    }
+                }
+                if (!ok) {
+                    try {
+                        auto fallback = deviceInfo.Pairing().PairAsync().get();
+                        ok = fallback.Status() == DevicePairingResultStatus::Paired ||
+                             fallback.Status() == DevicePairingResultStatus::AlreadyPaired;
+                    } catch (...) {}
+                }
+            } catch (...) {}
+            {
+                std::lock_guard<std::mutex> lock(waitState->mtx);
+                waitState->paired = ok;
+                waitState->done = true;
             }
-        });
+            waitState->cv.notify_one();
+        }).detach();
 
-        if (future.wait_for(std::chrono::seconds(25)) == std::future_status::ready) {
-            bool result = future.get();
-            Wh_Log(L"Pairing result: %d", result ? 1 : 0);
-            return result;
+        std::unique_lock<std::mutex> lk(waitState->mtx);
+        if (waitState->cv.wait_for(lk, std::chrono::seconds(25), [&] { return waitState->done; })) {
+            Wh_Log(L"Pairing result: %d", waitState->paired ? 1 : 0);
+            return waitState->paired;
         } else {
             Wh_Log(L"Pairing timed out");
             return false;
@@ -16537,403 +15880,6 @@ bool UnpairDevice(const BLUETOOTH_ADDRESS& address) {
 wuxm::Imaging::BitmapImage CaptureScreenRect(const RECT& bounds);
 winrt::com_ptr<IUIAutomation> GetCachedUIA();
 
-namespace systray {
-
-struct TrayEntry {
-    std::wstring name;
-    RECT screenRect{};
-    wuxm::Imaging::BitmapImage image{nullptr};
-    winrt::com_ptr<IUIAutomationElement> element{nullptr};
-};
-
-struct NamedCondition {
-    winrt::com_ptr<IUIAutomationCondition> cond;
-    VARIANT var{};
-
-    NamedCondition(IUIAutomation* uia, int propId, const wchar_t* value) {
-        VariantInit(&var);
-        var.vt = VT_BSTR;
-        var.bstrVal = SysAllocString(value);
-        if (uia) uia->CreatePropertyCondition(propId, var, cond.put());
-    }
-
-    ~NamedCondition() { VariantClear(&var); }
-
-    NamedCondition(const NamedCondition&) = delete;
-    NamedCondition& operator=(const NamedCondition&) = delete;
-
-    IUIAutomationCondition* get() const { return cond.get(); }
-};
-
-winrt::com_ptr<IUIAutomationElement> GetDesktopRoot() {
-    auto uia = GetCachedUIA();
-    if (!uia) return nullptr;
-    winrt::com_ptr<IUIAutomationElement> root;
-    uia->GetRootElement(root.put());
-    return root;
-}
-
-std::vector<HWND> FindAllTaskbarWindows() {
-    std::vector<HWND> result;
-    HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (primary) result.push_back(primary);
-
-    HWND secondary = nullptr;
-    do {
-        secondary = FindWindowExW(nullptr, secondary, L"Shell_SecondaryTrayWnd",
-                                  nullptr);
-        if (secondary) result.push_back(secondary);
-    } while (secondary);
-    return result;
-}
-
-std::vector<TrayEntry> EnumerateFromElement(
-        IUIAutomation* uia, IUIAutomationElement* rootEl,
-        const std::wstring& tag) {
-    std::vector<TrayEntry> entries;
-    if (!uia || !rootEl) return entries;
-
-    winrt::com_ptr<IUIAutomationElementArray> children;
-
-    {
-        VARIANT idVar;
-        VariantInit(&idVar);
-        idVar.vt = VT_BSTR;
-        idVar.bstrVal = SysAllocString(L"NotifyItemIcon");
-        winrt::com_ptr<IUIAutomationCondition> cond;
-        uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, idVar, cond.put());
-        VariantClear(&idVar);
-        if (cond) {
-            rootEl->FindAll(TreeScope_Descendants, cond.get(), children.put());
-        }
-    }
-
-    if (!children || (children && [&] {
-            int c = 0;
-            children->get_Length(&c);
-            return c == 0;
-        }())) {
-        children = nullptr;
-        VARIANT clsVar;
-        VariantInit(&clsVar);
-        clsVar.vt = VT_BSTR;
-        clsVar.bstrVal = SysAllocString(L"SystemTray.NotifyIconView");
-        winrt::com_ptr<IUIAutomationCondition> cond;
-        uia->CreatePropertyCondition(UIA_ClassNamePropertyId, clsVar, cond.put());
-        VariantClear(&clsVar);
-        if (cond) {
-            rootEl->FindAll(TreeScope_Descendants, cond.get(), children.put());
-        }
-    }
-
-    if (!children || (children && [&] {
-            int c = 0;
-            children->get_Length(&c);
-            return c == 0;
-        }())) {
-        children = nullptr;
-        VARIANT idVar;
-        VariantInit(&idVar);
-        idVar.vt = VT_BSTR;
-        idVar.bstrVal = SysAllocString(L"NotificationAreaIcons");
-        winrt::com_ptr<IUIAutomationCondition> containerCond;
-        uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, idVar, containerCond.put());
-        VariantClear(&idVar);
-        if (containerCond) {
-            winrt::com_ptr<IUIAutomationElement> container;
-            if (SUCCEEDED(rootEl->FindFirst(TreeScope_Descendants,
-                                            containerCond.get(),
-                                            container.put())) && container) {
-                VARIANT iconIdVar;
-                VariantInit(&iconIdVar);
-                iconIdVar.vt = VT_BSTR;
-                iconIdVar.bstrVal = SysAllocString(L"NotifyItemIcon");
-                winrt::com_ptr<IUIAutomationCondition> iconCond;
-                uia->CreatePropertyCondition(UIA_AutomationIdPropertyId,
-                                             iconIdVar, iconCond.put());
-                VariantClear(&iconIdVar);
-                if (iconCond) {
-                    container->FindAll(TreeScope_Descendants,
-                                       iconCond.get(), children.put());
-                }
-            }
-        }
-    }
-
-    if (!children) {
-        VARIANT btnVar;
-        VariantInit(&btnVar);
-        btnVar.vt = VT_I4;
-        btnVar.lVal = UIA_ButtonControlTypeId;
-        winrt::com_ptr<IUIAutomationCondition> btnCond;
-        uia->CreatePropertyCondition(UIA_ControlTypePropertyId, btnVar,
-                                     btnCond.put());
-        VariantClear(&btnVar);
-        if (btnCond) {
-            rootEl->FindAll(TreeScope_Descendants, btnCond.get(),
-                            children.put());
-        }
-    }
-
-    if (!children) {
-        Wh_Log(L"tray[%s]: no children array", tag.c_str());
-        return entries;
-    }
-
-    int count = 0;
-    if (FAILED(children->get_Length(&count)) || count <= 0) {
-        Wh_Log(L"tray[%s]: 0 candidates", tag.c_str());
-        return entries;
-    }
-    Wh_Log(L"tray[%s]: %d candidates", tag.c_str(), count);
-
-    RECT monitorRect = GetBarMonitorRect();
-
-    for (int i = 0; i < count; i++) {
-        winrt::com_ptr<IUIAutomationElement> child;
-        if (FAILED(children->GetElement(i, child.put())) || !child) continue;
-
-        BSTR nameRaw = nullptr;
-        child->get_CurrentName(&nameRaw);
-        std::wstring name = nameRaw ? nameRaw : L"";
-        if (nameRaw) SysFreeString(nameRaw);
-
-        BSTR clsRaw = nullptr;
-        child->get_CurrentClassName(&clsRaw);
-        std::wstring cls = clsRaw ? clsRaw : L"";
-        if (clsRaw) SysFreeString(clsRaw);
-
-        BSTR idRaw = nullptr;
-        child->get_CurrentAutomationId(&idRaw);
-        std::wstring aid = idRaw ? idRaw : L"";
-        if (idRaw) SysFreeString(idRaw);
-
-        RECT rect{};
-        if (FAILED(child->get_CurrentBoundingRectangle(&rect))) continue;
-        if (rect.right <= rect.left || rect.bottom <= rect.top) continue;
-        int w = rect.right - rect.left;
-        int h = rect.bottom - rect.top;
-        if (w > 200 || h > 200) continue;
-        if (w < 4 || h < 4) continue;
-        if (rect.left < monitorRect.left || rect.right > monitorRect.right ||
-            rect.top < monitorRect.top || rect.bottom > monitorRect.bottom) {
-            continue;
-        }
-
-        Wh_Log(L"tray[%s]: icon cls=%s aid=%s name=%s rect=%ld,%ld,%ld,%ld",
-               tag.c_str(), cls.c_str(), aid.c_str(), name.c_str(),
-               rect.left, rect.top, rect.right, rect.bottom);
-
-        TrayEntry entry;
-        entry.name = name.empty() ? cls : name;
-        entry.screenRect = rect;
-        entry.element = child;
-        try {
-            entry.image = CaptureScreenRect(rect);
-        } catch (...) {}
-        entries.push_back(std::move(entry));
-    }
-
-    return entries;
-}
-
-std::vector<TrayEntry> EnumerateFromRoot(IUIAutomation* uia) {
-    std::vector<TrayEntry> entries;
-    if (!uia) return entries;
-
-    winrt::com_ptr<IUIAutomationElement> root;
-    if (FAILED(uia->GetRootElement(root.put())) || !root) {
-        Wh_Log(L"tray[root]: GetRootElement failed");
-        return entries;
-    }
-
-    RECT monitorRect = GetBarMonitorRect();
-    UINT iconPx = static_cast<UINT>(16.0 * GetBarDpiScale() + 0.5);
-    if (iconPx < 16) iconPx = 16;
-
-    const wchar_t* kNotificationAreaNames[] = {
-        L"User Promoted Notification Area",
-        L"System Promoted Notification Area",
-    };
-
-    for (const wchar_t* areaName : kNotificationAreaNames) {
-        VARIANT nv; VariantInit(&nv); nv.vt = VT_BSTR;
-        nv.bstrVal = SysAllocString(areaName);
-        winrt::com_ptr<IUIAutomationCondition> nameCond;
-        uia->CreatePropertyCondition(UIA_NamePropertyId, nv, nameCond.put());
-        VariantClear(&nv);
-
-        winrt::com_ptr<IUIAutomationElement> areaEl;
-        if (FAILED(root->FindFirst(TreeScope_Descendants, nameCond.get(),
-                                   areaEl.put())) || !areaEl) {
-            Wh_Log(L"tray[root]: '%s' not found", areaName);
-            continue;
-        }
-        Wh_Log(L"tray[root]: found '%s'", areaName);
-
-        VARIANT btnVar; VariantInit(&btnVar); btnVar.vt = VT_I4;
-        btnVar.lVal = UIA_ButtonControlTypeId;
-        winrt::com_ptr<IUIAutomationCondition> btnCond;
-        uia->CreatePropertyCondition(UIA_ControlTypePropertyId, btnVar,
-                                     btnCond.put());
-        VariantClear(&btnVar);
-
-        winrt::com_ptr<IUIAutomationElementArray> arr;
-        if (FAILED(areaEl->FindAll(TreeScope_Descendants, btnCond.get(),
-                                   arr.put())) || !arr) {
-            continue;
-        }
-        int count = 0;
-        if (FAILED(arr->get_Length(&count)) || count <= 0) {
-            Wh_Log(L"tray[root/%s]: 0 buttons", areaName);
-            continue;
-        }
-        Wh_Log(L"tray[root/%s]: %d buttons", areaName, count);
-
-        for (int i = 0; i < count; i++) {
-            winrt::com_ptr<IUIAutomationElement> child;
-            if (FAILED(arr->GetElement(i, child.put())) || !child) continue;
-
-            BSTR nameRaw = nullptr;
-            child->get_CurrentName(&nameRaw);
-            std::wstring name = nameRaw ? nameRaw : L"";
-            if (nameRaw) SysFreeString(nameRaw);
-
-            BSTR clsRaw = nullptr;
-            child->get_CurrentClassName(&clsRaw);
-            std::wstring cls = clsRaw ? clsRaw : L"";
-            if (clsRaw) SysFreeString(clsRaw);
-
-            BSTR idRaw = nullptr;
-            child->get_CurrentAutomationId(&idRaw);
-            std::wstring aid = idRaw ? idRaw : L"";
-            if (idRaw) SysFreeString(idRaw);
-
-            RECT rect{};
-            if (FAILED(child->get_CurrentBoundingRectangle(&rect))) continue;
-            if (rect.right <= rect.left || rect.bottom <= rect.top) continue;
-            int w = rect.right - rect.left;
-            int h = rect.bottom - rect.top;
-            if (w > 200 || h > 200) continue;
-            if (w < 4 || h < 4) continue;
-            if (rect.left < monitorRect.left || rect.right > monitorRect.right ||
-                rect.top < monitorRect.top || rect.bottom > monitorRect.bottom) {
-                continue;
-            }
-
-            bool duplicate = false;
-            for (auto& existing : entries) {
-                if (existing.screenRect.left == rect.left &&
-                    existing.screenRect.top == rect.top) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (duplicate) continue;
-
-            Wh_Log(L"tray[root/%s]: cls=%s aid=%s name=%s rect=%ld,%ld,%ld,%ld",
-                   areaName, cls.c_str(), aid.c_str(), name.c_str(),
-                   rect.left, rect.top, rect.right, rect.bottom);
-
-            TrayEntry entry;
-            entry.name = name.empty() ? cls : name;
-            entry.screenRect = rect;
-            entry.element = child;
-            try { entry.image = CaptureScreenRect(rect); } catch (...) {}
-            entries.push_back(std::move(entry));
-        }
-    }
-
-    return entries;
-}
-
-std::vector<TrayEntry> Enumerate() {
-    std::vector<TrayEntry> entries;
-    auto uia = GetCachedUIA();
-    if (!uia) {
-        Wh_Log(L"tray: GetCachedUIA returned null");
-        return entries;
-    }
-
-    auto rootEntries = EnumerateFromRoot(uia.get());
-    for (auto& e : rootEntries) entries.push_back(std::move(e));
-
-    if (entries.empty()) {
-        auto taskbars = FindAllTaskbarWindows();
-        Wh_Log(L"tray: root gave 0, falling back to %zu taskbar(s)",
-               taskbars.size());
-        for (size_t ti = 0; ti < taskbars.size(); ti++) {
-            winrt::com_ptr<IUIAutomationElement> trayEl;
-            if (FAILED(uia->ElementFromHandle(taskbars[ti], trayEl.put())) ||
-                !trayEl) {
-                continue;
-            }
-            std::wstring tag = L"tb" + std::to_wstring(ti);
-            auto found = EnumerateFromElement(uia.get(), trayEl.get(), tag);
-            for (auto& e : found) entries.push_back(std::move(e));
-        }
-    }
-
-    Wh_Log(L"tray: returning %zu entries (Windows 11 25H2 typically returns 0 due to UIAutomation lockdown)",
-           entries.size());
-    return entries;
-}
-
-void Invoke(const TrayEntry& entry) {
-    if (!entry.element) return;
-    try {
-        winrt::com_ptr<IUIAutomationInvokePattern> pattern;
-        if (SUCCEEDED(entry.element->GetCurrentPatternAs(
-                UIA_InvokePatternId,
-                __uuidof(IUIAutomationInvokePattern),
-                pattern.put_void())) && pattern) {
-            pattern->Invoke();
-            return;
-        }
-    } catch (...) {}
-
-    POINT pt{
-        entry.screenRect.left + (entry.screenRect.right - entry.screenRect.left) / 2,
-        entry.screenRect.top + (entry.screenRect.bottom - entry.screenRect.top) / 2,
-    };
-    POINT saved{};
-    GetCursorPos(&saved);
-    SetCursorPos(pt.x, pt.y);
-    INPUT in[2]{};
-    in[0].type = INPUT_MOUSE;
-    in[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
-    in[1].type = INPUT_MOUSE;
-    in[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
-    SendInput(2, in, sizeof(INPUT));
-    SetCursorPos(saved.x, saved.y);
-}
-
-void OpenOverflow() {
-    auto uia = GetCachedUIA();
-    if (!uia) return;
-    HWND trayWnd = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (!trayWnd) return;
-    winrt::com_ptr<IUIAutomationElement> trayEl;
-    if (FAILED(uia->ElementFromHandle(trayWnd, trayEl.put())) || !trayEl) return;
-
-    NamedCondition c(uia.get(), UIA_AutomationIdPropertyId, L"SystemTrayIcon");
-    winrt::com_ptr<IUIAutomationElement> chevron;
-    if (SUCCEEDED(trayEl->FindFirst(TreeScope_Descendants, c.get(),
-                                    chevron.put())) && chevron) {
-            try {
-                winrt::com_ptr<IUIAutomationInvokePattern> pattern;
-                if (SUCCEEDED(chevron->GetCurrentPatternAs(
-                        UIA_InvokePatternId,
-                        __uuidof(IUIAutomationInvokePattern),
-                        pattern.put_void())) && pattern) {
-                    pattern->Invoke();
-                    return;
-                }
-            } catch (...) {}
-    }
-}
-
-}
 
 namespace wuc = winrt::Windows::UI::Composition;
 namespace wge = winrt::Windows::Graphics::Effects;
@@ -17241,7 +16187,7 @@ struct SaturationEffect
             value) noexcept override try {
         if (!value) return E_INVALIDARG;
         if (index == D2D1_COLORMATRIX_PROP_COLOR_MATRIX) {
-            const float s = std::clamp(Saturation, 0.0f, 2.0f);
+            const float s = std::clamp(Saturation, 0.0f, 4.0f);
             // D2D applies the color matrix as a column vector, so the flat
             // row-major array is read as m[row][col] and each column belongs to
             // one *output* channel:
@@ -17307,7 +16253,7 @@ class XamlBlurBrush : public wuxm::XamlCompositionBrushBaseT<XamlBlurBrush> {
         : m_compositor(wuxh::ElementCompositionPreview::GetElementVisual(element)
                            .Compositor()),
           m_blurAmount(blurAmount),
-          m_saturation(std::clamp(saturation, 0.0f, 2.0f)),
+          m_saturation(std::clamp(saturation, 0.0f, 4.0f)),
           m_overlayOpacity(std::clamp(overlayOpacity, 0.0f, 1.0f)),
           m_tint(tint),
           m_rebuildable(rebuildable),
@@ -17363,7 +16309,7 @@ class XamlBlurBrush : public wuxm::XamlCompositionBrushBaseT<XamlBlurBrush> {
     void UpdateParams(float blurAmount, float saturation, float overlayOpacity,
                       wui::Color tint, uint8_t tintOpacity) {
         m_blurAmount = blurAmount;
-        m_saturation = std::clamp(saturation, 0.0f, 2.0f);
+        m_saturation = std::clamp(saturation, 0.0f, 4.0f);
         m_overlayOpacity = std::clamp(overlayOpacity, 0.0f, 1.0f);
         m_tint = tint;
         m_tint.A = tintOpacity;
@@ -17470,7 +16416,7 @@ std::optional<WindhawkBlurParams> ParseWindhawkBlurValue(std::wstring_view value
         if (key == L"BlurAmount") {
             try { p.blurAmount = std::stof(val); } catch (...) {}
         } else if (key == L"Saturation") {
-            try { p.saturation = std::clamp(std::stof(val), 0.0f, 2.0f); }
+            try { p.saturation = std::clamp(std::stof(val), 0.0f, 4.0f); }
             catch (...) {}
         } else if (key == L"TintColor") {
             wui::Color c{};
@@ -17930,29 +16876,6 @@ std::mutex g_monitorCacheMutex;
 std::vector<brightness::MonitorEntry> g_monitorCache;
 std::atomic<bool> g_monitorCacheWarming{false};
 
-void WarmMonitorCacheAsync() {
-    static std::atomic<ULONGLONG> s_lastWarmTick{0};
-    ULONGLONG now = GetTickCount64();
-    ULONGLONG last = s_lastWarmTick.load();
-    if (last != 0 && now - last < 5000) {
-        return;
-    }
-    s_lastWarmTick.store(now);
-    if (g_monitorCacheWarming.exchange(true)) {
-        return;
-    }
-    RunInBackground([] {
-        auto list = brightness::EnumerateMonitorsForFlyout();
-        {
-            std::lock_guard<std::mutex> lock(g_monitorCacheMutex);
-            g_monitorCache = std::move(list);
-        }
-        g_monitorCacheWarming = false;
-        RunOnUiThread([] {
-            try { PopulateDisplayPanel(); } catch (...) {}
-        });
-    });
-}
 
 std::vector<brightness::MonitorEntry> GetCachedMonitors() {
     std::lock_guard<std::mutex> lock(g_monitorCacheMutex);
@@ -19231,10 +18154,17 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut,
             }
         } catch (...) {}
     });
-    flyout.Closed([weakBlurHost](auto&& sender, auto&&) {
+    auto weakPanel = winrt::make_weak(panel);
+    flyout.Closed([weakBlurHost, weakPanel](auto&& sender, auto&&) {
         auto fb = sender.template as<wuxc::Primitives::FlyoutBase>();
         ForgetImmediateFlyoutStyleRoot(fb);
         UnregisterOpenPopup(fb);
+        if (auto p = weakPanel.get()) {
+            try {
+                // Release closed flyout XAML subtrees & BitmapImages to keep steady-state RAM low.
+                p.Children().Clear();
+            } catch (...) {}
+        }
         if (auto bh = weakBlurHost.get()) {
             try {
                 // Release live CompositionEffectBrush / BackdropBrush when closed to save RAM.
@@ -20525,7 +19455,7 @@ void ApplyWinUI3SliderStyle(wuxc::Slider const& slider, bool /*lightSurface*/ = 
                 L"Height=\"4\" RadiusX=\"2\" RadiusY=\"2\" "
                 L"Fill=\"{TemplateBinding Background}\" VerticalAlignment=\"Center\"/>"
                 L"<Rectangle x:Name=\"HorizontalDecreaseRect\" Grid.Column=\"0\" "
-                L"Height=\"4\" RadiusX=\"2\" RadiusY=\"2\" Margin=\"0,0,-10,0\" "
+                L"Height=\"4\" RadiusX=\"2\" RadiusY=\"2\" "
                 L"Fill=\"{TemplateBinding Foreground}\" VerticalAlignment=\"Center\"/>"
                 L"<Thumb x:Name=\"HorizontalThumb\" Grid.Column=\"1\" "
                 L"Width=\"20\" Height=\"20\" "
@@ -21171,7 +20101,17 @@ Expander MakeExpander(std::wstring_view title,
     };
     auto animState = std::make_shared<ExpanderAnimState>();
 
-    header.Click([expandedFlag, header, fi, bodyCard, body, onToggled, animState](auto&&, auto&&) {
+    header.Click([expandedFlag,
+                  weakHeader = winrt::make_weak(header),
+                  weakFi = winrt::make_weak(fi),
+                  weakBodyCard = winrt::make_weak(bodyCard),
+                  weakBody = winrt::make_weak(body),
+                  onToggled, animState](auto&&, auto&&) {
+        auto header = weakHeader.get();
+        auto fi = weakFi.get();
+        auto bodyCard = weakBodyCard.get();
+        auto body = weakBody.get();
+        if (!header || !fi || !bodyCard || !body) return;
         *expandedFlag = !*expandedFlag;
         const bool open = *expandedFlag;
         const uint64_t myGen = ++animState->gen;
@@ -22695,35 +21635,6 @@ void StartMediaVisualizer() {
     g_mediaVisualizerTimer.Start();
 }
 
-void BuildMediaVisualizerGrid(wuxc::Grid const& target) {
-    try {
-        target.ColumnDefinitions().Clear();
-        target.Children().Clear();
-        g_visualizerBars.clear();
-        constexpr int kBarCount = 24;
-        wui::Color accent{};
-        if (!TryParseHexColor(GetEffectiveIconColorString(), &accent)) {
-            accent = wui::ColorHelper::FromArgb(255, 255, 255, 255);
-        }
-        for (int i = 0; i < kBarCount; i++) {
-            wuxc::ColumnDefinition cd;
-            cd.Width(GridLength{1, GridUnitType::Star});
-            target.ColumnDefinitions().Append(cd);
-
-            winrt::Windows::UI::Xaml::Shapes::Rectangle bar;
-            bar.Width(4);
-            bar.RadiusX(2);
-            bar.RadiusY(2);
-            bar.VerticalAlignment(VerticalAlignment::Bottom);
-            bar.HorizontalAlignment(HorizontalAlignment::Center);
-            bar.Height(4);
-            bar.Fill(MakeBrush(0xFF, accent.R, accent.G, accent.B));
-            wuxc::Grid::SetColumn(bar, i);
-            target.Children().Append(bar);
-            g_visualizerBars.push_back(bar);
-        }
-    } catch (...) {}
-}
 
 FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
     wuxc::StackPanel row;
@@ -22931,9 +21842,18 @@ void ApplyMediaSnapshot(const media::Snapshot& snapshot) {
     }
     if (playing != wasPlaying || sessionExists != wasSessionExists) {
         ApplyVisibilitySettings();
-        if (g_mediaFlyout && g_mediaFlyout.IsOpen()) {
-            PopulateMediaPanel();
-        }
+    }
+    if ((needRebuild || playing != wasPlaying || sessionExists != wasSessionExists) &&
+        g_mediaFlyout && g_mediaFlyout.IsOpen()) {
+        PopulateMediaPanel();
+    }
+    if (wasSessionExists && !sessionExists && g_settings.showMediaButton) {
+        RunInBackground([] {
+            if (WaitForSingleObject(g_stopEvent, 350) == WAIT_OBJECT_0) return;
+            RunOnUiThread([] {
+                try { RefreshMediaButtonState(); } catch (...) {}
+            });
+        });
     }
 }
 
@@ -23457,6 +22377,8 @@ void PopulateMediaPanel() {
     });
 }
 
+static std::atomic<bool> g_mediaRefreshInFlight{false};
+
 void RefreshMediaButtonState() {
     if (!g_settings.showMediaButton) {
         g_mediaPlaying = false;
@@ -23464,8 +22386,10 @@ void RefreshMediaButtonState() {
         ApplyVisibilitySettings();
         return;
     }
+    if (g_mediaRefreshInFlight.exchange(true)) return;
     RunInBackground([] {
         auto snapshot = media::Read();
+        g_mediaRefreshInFlight.store(false);
         RunOnUiThread([snapshot] { ApplyMediaSnapshot(snapshot); });
     });
 }
@@ -25588,50 +24512,18 @@ bool GetNightLightState() {
 }
 
 bool SetSystemPowerSaving(bool enable) {
-    bool wnfOk = false;
-    // Publish WNF_PO_ENERGY_SAVER_OVERRIDE (0x41C6013DA3BC3075ULL): 1 = On, 2 = Off
-    // (same mechanism used by Windows 11 Quick Settings Energy Saver button)
+    // Publish WNF_PO_ENERGY_SAVER_OVERRIDE (0x41C6013DA3BC3075ULL): 1 = On, 2 = Off.
+    // Same transient override used by Windows 11 Quick Settings; does not rewrite the active power plan's ESBATTTHRESHOLD.
     using RtlPublishWnfStateData_t = LONG(NTAPI*)(ULONGLONG, const void*, const void*, ULONG, const void*);
     static auto publishWnf = reinterpret_cast<RtlPublishWnfStateData_t>(
         reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlPublishWnfStateData")));
     if (publishWnf) {
         DWORD v = enable ? 1 : 2;
         if (publishWnf(0x41C6013DA3BC3075ULL, nullptr, &v, sizeof(v), nullptr) >= 0) {
-            wnfOk = true;
+            return true;
         }
     }
-
-    // Also update PowrProf ESBATTTHRESHOLD so DC threshold matches
-    bool powrOk = false;
-    using PowerGetActiveScheme_t = DWORD(WINAPI*)(HKEY, GUID**);
-    using PowerWriteACValueIndex_t = DWORD(WINAPI*)(HKEY, const GUID*, const GUID*, const GUID*, DWORD);
-    using PowerWriteDCValueIndex_t = DWORD(WINAPI*)(HKEY, const GUID*, const GUID*, const GUID*, DWORD);
-    using PowerSetActiveScheme_t = DWORD(WINAPI*)(HKEY, const GUID*);
-
-    HMODULE hPowr = GetModuleHandleW(L"powrprof.dll");
-    if (!hPowr) hPowr = LoadLibraryExW(L"powrprof.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (hPowr) {
-        auto pGetActive = reinterpret_cast<PowerGetActiveScheme_t>(GetProcAddress(hPowr, "PowerGetActiveScheme"));
-        auto pWriteAC = reinterpret_cast<PowerWriteACValueIndex_t>(GetProcAddress(hPowr, "PowerWriteACValueIndex"));
-        auto pWriteDC = reinterpret_cast<PowerWriteDCValueIndex_t>(GetProcAddress(hPowr, "PowerWriteDCValueIndex"));
-        auto pSetActive = reinterpret_cast<PowerSetActiveScheme_t>(GetProcAddress(hPowr, "PowerSetActiveScheme"));
-        if (pGetActive && pWriteDC && pSetActive) {
-            GUID* activeScheme = nullptr;
-            if (pGetActive(nullptr, &activeScheme) == ERROR_SUCCESS && activeScheme) {
-                static const GUID kBatterySubgroup = {0xe73a048d, 0xbf27, 0x4f12, {0x97, 0x31, 0x8b, 0x20, 0x76, 0xe8, 0x89, 0x1f}};
-                static const GUID kEsBattThreshold = {0xe69653ca, 0xcf7f, 0x4f05, {0xaa, 0x73, 0xcb, 0x83, 0x3f, 0xa9, 0x0a, 0xd4}};
-                DWORD dcVal = enable ? 100 : 20;
-                DWORD acVal = enable ? 100 : 0;
-                DWORD r1 = pWriteDC(nullptr, activeScheme, &kBatterySubgroup, &kEsBattThreshold, dcVal);
-                if (pWriteAC) pWriteAC(nullptr, activeScheme, &kBatterySubgroup, &kEsBattThreshold, acVal);
-                DWORD r3 = pSetActive(nullptr, activeScheme);
-                LocalFree(activeScheme);
-                if (r1 == ERROR_SUCCESS && r3 == ERROR_SUCCESS) powrOk = true;
-            }
-        }
-    }
-
-    return wnfOk || powrOk;
+    return false;
 }
 
 void UpdateBatteryButton() {
@@ -26499,17 +25391,6 @@ inline wuxm::LinearGradientBrush MakeArcGradient(wui::Color c0, wui::Color c1) {
     return lgb;
 }
 
-inline double NowMs() {
-    static LARGE_INTEGER freq = [] {
-        LARGE_INTEGER f{};
-        QueryPerformanceFrequency(&f);
-        return f;
-    }();
-    LARGE_INTEGER now{};
-    QueryPerformanceCounter(&now);
-    return (static_cast<double>(now.QuadPart) * 1000.0) /
-           static_cast<double>(std::max<LONGLONG>(1LL, freq.QuadPart));
-}
 
 inline bool IsCancelled(uint64_t runId) {
     return g_runId.load() != runId ||
@@ -27999,6 +26880,1194 @@ void PopulateSpeedTestPanel() {
     if (g_speedTestPanel) ApplyControlStylesToPopupRoot(g_speedTestPanel.as<FrameworkElement>());
 }
 
+// ===========================================================================
+// System Optimizer (Mem Reduct RAM Engine + EcoQoS CPU + Disk Temp/I/O)
+// ===========================================================================
+namespace optimizer {
+
+enum class Tab { kRam = 0, kCpu = 1, kDisk = 2 };
+
+struct RamCleanResult {
+    uint64_t beforeUsedBytes = 0;
+    uint64_t afterUsedBytes = 0;
+    uint64_t freedBytes = 0;
+    int ntCommandsSucceeded = 0;
+    int processesTrimmed = 0;
+};
+
+struct CpuOptimizeResult {
+    int processesThrottled = 0;
+};
+
+struct DiskCleanResult {
+    uint64_t freedBytes = 0;
+    int filesDeleted = 0;
+    int processesThrottled = 0;
+};
+
+struct AppResourceEntry {
+    std::wstring name;
+    std::wstring exePath;
+    std::vector<DWORD> pids;
+    uint64_t ramBytes = 0;
+    double cpuPercent = 0.0;
+    double diskBytesPerSec = 0.0;
+    bool isProtected = false;
+};
+
+static std::atomic<int> g_activeTab{ 0 };
+static std::atomic<uint64_t> g_panelGen{ 0 };
+static std::atomic<bool> g_cleanBusy{ false };
+static std::atomic<bool> g_sampleBusy{ false };
+[[clang::no_destroy]] static std::wstring g_lastRamStatus;
+[[clang::no_destroy]] static std::wstring g_lastCpuStatus;
+[[clang::no_destroy]] static std::wstring g_lastDiskStatus;
+
+static bool IsProtectedSystemProcess(const std::wstring& exeLow) {
+    static const std::set<std::wstring> kProtected = {
+        L"system", L"registry", L"memory compression", L"secure system",
+        L"smss.exe", L"csrss.exe", L"wininit.exe", L"winlogon.exe",
+        L"services.exe", L"lsass.exe", L"svchost.exe", L"dwm.exe",
+        L"explorer.exe", L"sihost.exe", L"fontdrvhost.exe", L"taskhostw.exe",
+        L"ctfmon.exe", L"audiodg.exe", L"runtimebroker.exe", L"startmenuexperiencehost.exe",
+        L"shellexperiencehost.exe", L"searchhost.exe", L"windhawk.exe"
+    };
+    return kProtected.count(exeLow) != 0;
+}
+
+static bool EnablePrivilege(PCWSTR privName) {
+    HANDLE hToken = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) {
+        return false;
+    }
+    TOKEN_PRIVILEGES tp{};
+    LUID luid{};
+    bool ok = false;
+    if (LookupPrivilegeValueW(nullptr, privName, &luid)) {
+        tp.PrivilegeCount = 1;
+        tp.Privileges[0].Luid = luid;
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        if (AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), nullptr, nullptr) &&
+            GetLastError() == ERROR_SUCCESS) {
+            ok = true;
+        }
+    }
+    CloseHandle(hToken);
+    return ok;
+}
+
+// Mem Reduct exact NT API technique + unelevated per-process working-set trim fallback
+static RamCleanResult CleanRam() {
+    RamCleanResult res{};
+    MEMORYSTATUSEX memBefore{ sizeof(memBefore) };
+    if (GlobalMemoryStatusEx(&memBefore)) {
+        res.beforeUsedBytes = memBefore.ullTotalPhys - memBefore.ullAvailPhys;
+    }
+
+    // 1. Mem Reduct NT API sequence (works system-wide when privileges are available)
+    EnablePrivilege(SE_PROF_SINGLE_PROCESS_NAME);
+    EnablePrivilege(SE_INCREASE_QUOTA_NAME);
+
+    using NtSetSystemInformation_t = LONG(NTAPI*)(ULONG, PVOID, ULONG);
+    auto pNtSetSysInfo = reinterpret_cast<NtSetSystemInformation_t>(
+        reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtSetSystemInformation")));
+
+    if (pNtSetSysInfo) {
+        // a) SystemFileCacheInformation (21) - trim system working set
+        struct LocalSystemFileCacheInfo {
+            SIZE_T CurrentSize;
+            SIZE_T PeakSize;
+            ULONG PageFaultCount;
+            SIZE_T MinimumWorkingSet;
+            SIZE_T MaximumWorkingSet;
+            SIZE_T CurrentSizeIncludingTransitionInPages;
+            SIZE_T PeakSizeIncludingTransitionInPages;
+            ULONG TransitionRePurposeCount;
+            ULONG Flags;
+        };
+        LocalSystemFileCacheInfo sfci{};
+        sfci.MinimumWorkingSet = static_cast<SIZE_T>(-1);
+        sfci.MaximumWorkingSet = static_cast<SIZE_T>(-1);
+        if (pNtSetSysInfo(21, &sfci, sizeof(sfci)) >= 0) {
+            ++res.ntCommandsSucceeded;
+        }
+
+        // b) SystemMemoryListInformation (80):
+        //    2 = MemoryEmptyWorkingSets, 3 = MemoryFlushModifiedList,
+        //    4 = MemoryPurgeStandbyList, 5 = MemoryPurgeLowPriorityStandbyList
+        for (ULONG cmd : { 2UL, 3UL, 4UL, 5UL }) {
+            if (pNtSetSysInfo(80, &cmd, sizeof(cmd)) >= 0) {
+                ++res.ntCommandsSucceeded;
+            }
+        }
+
+        // c) SystemCombinePhysicalMemoryInformation (130)
+        struct LocalMemoryCombineInfoEx {
+            HANDLE Handle;
+            ULONG_PTR PagesCombined;
+            ULONG Flags;
+        };
+        LocalMemoryCombineInfoEx mci{};
+        if (pNtSetSysInfo(130, &mci, sizeof(mci)) >= 0) {
+            ++res.ntCommandsSucceeded;
+        }
+    }
+
+    // 2. Per-process working-set trim sweep (effective even in unelevated user explorer.exe!)
+    const DWORD selfPid = GetCurrentProcessId();
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe{ sizeof(pe) };
+        if (Process32FirstW(snap, &pe)) {
+            do {
+                if (pe.th32ProcessID <= 4 || pe.th32ProcessID == selfPid) continue;
+                HANDLE hProc = OpenProcess(PROCESS_SET_QUOTA | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+                if (!hProc) continue;
+                if (EmptyWorkingSet(hProc) ||
+                    SetProcessWorkingSetSizeEx(hProc, static_cast<SIZE_T>(-1), static_cast<SIZE_T>(-1), 0)) {
+                    ++res.processesTrimmed;
+                }
+                CloseHandle(hProc);
+            } while (Process32NextW(snap, &pe));
+        }
+        CloseHandle(snap);
+    }
+
+    Sleep(120);
+    MEMORYSTATUSEX memAfter{ sizeof(memAfter) };
+    if (GlobalMemoryStatusEx(&memAfter)) {
+        res.afterUsedBytes = memAfter.ullTotalPhys - memAfter.ullAvailPhys;
+    }
+    res.freedBytes = (res.beforeUsedBytes > res.afterUsedBytes)
+        ? (res.beforeUsedBytes - res.afterUsedBytes)
+        : 0;
+    return res;
+}
+
+static bool ApplyEcoQoSToPid(DWORD pid, bool lowerPriority) {
+    HANDLE hProc = OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc) return false;
+    bool ok = false;
+    // Windows 11 Efficiency Mode (EcoQoS): ProcessPowerThrottling = 4
+    struct LocalPowerThrottlingState {
+        ULONG Version;
+        ULONG ControlMask;
+        ULONG StateMask;
+    };
+    using SetProcessInformation_t = BOOL(WINAPI*)(HANDLE, DWORD, LPVOID, DWORD);
+    static auto pSetProcInfo = reinterpret_cast<SetProcessInformation_t>(
+        reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetProcessInformation")));
+    if (pSetProcInfo) {
+        LocalPowerThrottlingState st{ 1UL, 0x1UL, 0x1UL }; // PROCESS_POWER_THROTTLING_EXECUTION_SPEED
+        if (pSetProcInfo(hProc, 4 /*ProcessPowerThrottling*/, &st, sizeof(st))) {
+            ok = true;
+        }
+    }
+    if (lowerPriority) {
+        if (SetPriorityClass(hProc, BELOW_NORMAL_PRIORITY_CLASS)) {
+            ok = true;
+        }
+    }
+    CloseHandle(hProc);
+    return ok;
+}
+
+static CpuOptimizeResult OptimizeCpuBackgroundApps() {
+    CpuOptimizeResult res{};
+    DWORD fgPid = 0;
+    if (HWND fg = GetForegroundWindow()) GetWindowThreadProcessId(fg, &fgPid);
+    const DWORD selfPid = GetCurrentProcessId();
+
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return res;
+    PROCESSENTRY32W pe{ sizeof(pe) };
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            if (pe.th32ProcessID <= 4 || pe.th32ProcessID == selfPid || pe.th32ProcessID == fgPid) continue;
+            std::wstring exeLow = ToLowerCopy(pe.szExeFile);
+            if (IsProtectedSystemProcess(exeLow)) continue;
+            if (ApplyEcoQoSToPid(pe.th32ProcessID, true)) {
+                ++res.processesThrottled;
+            }
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+    return res;
+}
+
+static uint64_t MeasureTempDirBytes() {
+    wchar_t tempPath[MAX_PATH]{};
+    DWORD n = GetTempPathW(ARRAYSIZE(tempPath), tempPath);
+    if (n == 0 || n >= ARRAYSIZE(tempPath)) return 0;
+    uint64_t total = 0;
+    std::wstring base(tempPath);
+    WIN32_FIND_DATAW fd{};
+    HANDLE hFind = FindFirstFileW((base + L"*").c_str(), &fd);
+    if (hFind == INVALID_HANDLE_VALUE) return 0;
+    int seen = 0;
+    do {
+        if (++seen > 4000) break;
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        ULARGE_INTEGER sz{};
+        sz.LowPart = fd.nFileSizeLow;
+        sz.HighPart = fd.nFileSizeHigh;
+        total += sz.QuadPart;
+    } while (FindNextFileW(hFind, &fd));
+    FindClose(hFind);
+    return total;
+}
+
+static DiskCleanResult CleanDiskTempAndThrottle() {
+    DiskCleanResult res{};
+    wchar_t tempPath[MAX_PATH]{};
+    DWORD n = GetTempPathW(ARRAYSIZE(tempPath), tempPath);
+    if (n > 0 && n < ARRAYSIZE(tempPath)) {
+        std::wstring base(tempPath);
+        WIN32_FIND_DATAW fd{};
+        HANDLE hFind = FindFirstFileW((base + L"*").c_str(), &fd);
+        if (hFind != INVALID_HANDLE_VALUE) {
+            int seen = 0;
+            do {
+                if (++seen > 4000) break;
+                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+                std::wstring full = base + fd.cFileName;
+                ULARGE_INTEGER sz{};
+                sz.LowPart = fd.nFileSizeLow;
+                sz.HighPart = fd.nFileSizeHigh;
+                if (DeleteFileW(full.c_str())) {
+                    res.freedBytes += sz.QuadPart;
+                    ++res.filesDeleted;
+                }
+            } while (FindNextFileW(hFind, &fd));
+            FindClose(hFind);
+        }
+    }
+    // Also set low memory/I/O priority (MEMORY_PRIORITY_VERY_LOW + EcoQoS) on non-foreground user apps
+    DWORD fgPid = 0;
+    if (HWND fg = GetForegroundWindow()) GetWindowThreadProcessId(fg, &fgPid);
+    const DWORD selfPid = GetCurrentProcessId();
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe{ sizeof(pe) };
+        if (Process32FirstW(snap, &pe)) {
+            do {
+                if (pe.th32ProcessID <= 4 || pe.th32ProcessID == selfPid || pe.th32ProcessID == fgPid) continue;
+                std::wstring exeLow = ToLowerCopy(pe.szExeFile);
+                if (IsProtectedSystemProcess(exeLow)) continue;
+                if (ApplyEcoQoSToPid(pe.th32ProcessID, false)) {
+                    ++res.processesThrottled;
+                }
+            } while (Process32NextW(snap, &pe));
+        }
+        CloseHandle(snap);
+    }
+    return res;
+}
+
+static bool EndTaskApp(const std::vector<DWORD>& pids, const std::wstring& exeName) {
+    if (IsProtectedSystemProcess(ToLowerCopy(exeName))) return false;
+    const DWORD selfPid = GetCurrentProcessId();
+    bool any = false;
+    for (DWORD pid : pids) {
+        if (pid <= 4 || pid == selfPid) continue;
+        HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
+        if (!h) continue;
+        if (TerminateProcess(h, 1)) any = true;
+        CloseHandle(h);
+    }
+    return any;
+}
+
+static std::vector<AppResourceEntry> SampleTopApps(Tab tab) {
+    struct PidSnap {
+        std::wstring exe;
+        std::wstring exePath;
+        uint64_t cpuTime100ns = 0;
+        uint64_t ioBytes = 0;
+        uint64_t ramBytes = 0;
+    };
+    auto takeSnap = []() -> std::map<DWORD, PidSnap> {
+        std::map<DWORD, PidSnap> m;
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snap == INVALID_HANDLE_VALUE) return m;
+        PROCESSENTRY32W pe{ sizeof(pe) };
+        if (Process32FirstW(snap, &pe)) {
+            do {
+                if (pe.th32ProcessID <= 4) continue;
+                HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, FALSE, pe.th32ProcessID);
+                if (!h) h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe.th32ProcessID);
+                if (!h) continue;
+                PidSnap ps;
+                ps.exe = pe.szExeFile;
+                {
+                    wchar_t pBuf[MAX_PATH]{};
+                    DWORD pLen = ARRAYSIZE(pBuf);
+                    if (QueryFullProcessImageNameW(h, 0, pBuf, &pLen) && pLen > 0) {
+                        ps.exePath.assign(pBuf, pLen);
+                    }
+                }
+                PROCESS_MEMORY_COUNTERS_EX pmc{};
+                pmc.cb = sizeof(pmc);
+                if (GetProcessMemoryInfo(h, reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc), sizeof(pmc))) {
+                    ps.ramBytes = pmc.WorkingSetSize;
+                }
+                FILETIME cr{}, ex{}, kt{}, ut{};
+                if (GetProcessTimes(h, &cr, &ex, &kt, &ut)) {
+                    ULARGE_INTEGER k{}, u{};
+                    k.LowPart = kt.dwLowDateTime; k.HighPart = kt.dwHighDateTime;
+                    u.LowPart = ut.dwLowDateTime; u.HighPart = ut.dwHighDateTime;
+                    ps.cpuTime100ns = k.QuadPart + u.QuadPart;
+                }
+                IO_COUNTERS ioc{};
+                if (GetProcessIoCounters(h, &ioc)) {
+                    ps.ioBytes = ioc.ReadTransferCount + ioc.WriteTransferCount;
+                }
+                CloseHandle(h);
+                m[pe.th32ProcessID] = std::move(ps);
+            } while (Process32NextW(snap, &pe));
+        }
+        CloseHandle(snap);
+        return m;
+    };
+
+    auto s1 = takeSnap();
+    ULONGLONG t1 = GetTickCount64();
+    std::map<DWORD, PidSnap> s2;
+    double elapsedSec = 0.0;
+    if (tab == Tab::kCpu || tab == Tab::kDisk) {
+        Sleep(450);
+        s2 = takeSnap();
+        ULONGLONG t2 = GetTickCount64();
+        elapsedSec = std::max(0.1, static_cast<double>(t2 - t1) / 1000.0);
+    } else {
+        s2 = s1;
+    }
+
+    SYSTEM_INFO si{};
+    GetSystemInfo(&si);
+    const double numCores = std::max(1.0, static_cast<double>(si.dwNumberOfProcessors));
+
+    std::map<std::wstring, AppResourceEntry> grouped;
+    for (const auto& [pid, ps2] : s2) {
+        std::wstring key = ToLowerCopy(ps2.exe);
+        auto& entry = grouped[key];
+        if (entry.name.empty()) {
+            entry.name = ps2.exe;
+            if (entry.name.size() > 4 &&
+                _wcsicmp(entry.name.c_str() + entry.name.size() - 4, L".exe") == 0) {
+                entry.name.resize(entry.name.size() - 4);
+            }
+            entry.isProtected = IsProtectedSystemProcess(key);
+        }
+        if (entry.exePath.empty() && !ps2.exePath.empty()) {
+            entry.exePath = ps2.exePath;
+        }
+        entry.pids.push_back(pid);
+        entry.ramBytes += ps2.ramBytes;
+
+        if (elapsedSec > 0.0) {
+            auto it1 = s1.find(pid);
+            if (it1 != s1.end()) {
+                if (ps2.cpuTime100ns >= it1->second.cpuTime100ns) {
+                    double dSec = static_cast<double>(ps2.cpuTime100ns - it1->second.cpuTime100ns) / 1e7;
+                    entry.cpuPercent += (dSec / (elapsedSec * numCores)) * 100.0;
+                }
+                if (ps2.ioBytes >= it1->second.ioBytes) {
+                    entry.diskBytesPerSec += static_cast<double>(ps2.ioBytes - it1->second.ioBytes) / elapsedSec;
+                }
+            }
+        }
+    }
+
+    std::vector<AppResourceEntry> list;
+    list.reserve(grouped.size());
+    for (auto& [k, v] : grouped) {
+        if (tab == Tab::kRam && v.ramBytes < 25ULL * 1024 * 1024) continue;
+        if (tab == Tab::kCpu && v.cpuPercent < 0.2) continue;
+        if (tab == Tab::kDisk && v.diskBytesPerSec < 1024.0) continue;
+        list.push_back(std::move(v));
+    }
+
+    std::sort(list.begin(), list.end(), [tab](const AppResourceEntry& a, const AppResourceEntry& b) {
+        if (tab == Tab::kRam) return a.ramBytes > b.ramBytes;
+        if (tab == Tab::kCpu) return a.cpuPercent > b.cpuPercent;
+        return a.diskBytesPerSec > b.diskBytesPerSec;
+    });
+    if (list.size() > 12) list.resize(12);
+    return list;
+}
+
+static std::wstring FormatBytesGb(uint64_t bytes) {
+    wchar_t buf[32]{};
+    double gb = static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
+    swprintf_s(buf, L"%.2f GB", gb);
+    return buf;
+}
+
+static std::wstring FormatBytesSmart(uint64_t bytes) {
+    wchar_t buf[32]{};
+    if (bytes >= 1024ULL * 1024 * 1024) {
+        swprintf_s(buf, L"%.2f GB", static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0));
+    } else {
+        swprintf_s(buf, L"%.0f MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+    }
+    return buf;
+}
+
+// Reusable one-time Clean RAM confirmation overlay (WinUI 3 card + smooth fade-in)
+static void ShowCleanRamConfirmOverlay(wuxc::Panel const& hostPanel,
+                                       std::function<void()> onConfirm) {
+    if (!hostPanel) return;
+    if (g_settings.optimizerSkipRamConfirm) {
+        if (onConfirm) onConfirm();
+        return;
+    }
+    for (int i = static_cast<int>(hostPanel.Children().Size()) - 1; i >= 0; --i) {
+        if (auto fe = hostPanel.Children().GetAt(static_cast<uint32_t>(i)).try_as<FrameworkElement>()) {
+            if (fe.Name() == L"RamCleanConfirmCard") {
+                hostPanel.Children().RemoveAt(static_cast<uint32_t>(i));
+            }
+        }
+    }
+
+    wuxc::Border card;
+    card.Name(L"RamCleanConfirmCard");
+    card.Background(MakeBrush(0xF0, 0x20, 0x20, 0x24));
+    card.BorderBrush(MakeBrush(0x24, 0xFF, 0xFF, 0xFF));
+    card.BorderThickness(Thickness{ 1, 1, 1, 1 });
+    try { card.BackgroundSizing(wuxc::BackgroundSizing::InnerBorderEdge); } catch (...) {}
+    card.CornerRadius(MakeCorner(8));
+    card.Padding(Thickness{ 14, 12, 14, 12 });
+    card.Margin(Thickness{ 0, 2, 0, 4 });
+
+    wuxc::StackPanel body;
+    body.Spacing(8);
+
+    body.Children().Append(MakeText(nullptr, L"Clean RAM", 13, true));
+
+    auto desc = MakeText(
+        nullptr,
+        L"Frees unused memory using Windows NT memory-list commands and working-set trimming:\n"
+        L"\u2022 Empty process working sets across running apps\n"
+        L"\u2022 Flush modified page list & purge standby list (when elevated)\n"
+        L"\u2022 Trim system file cache & combine identical memory pages\n"
+        L"Open apps stay running; active pages reload automatically as needed.",
+        11.5, false, 0.78);
+    desc.TextWrapping(TextWrapping::Wrap);
+    body.Children().Append(desc);
+
+    wuxc::CheckBox dontShowCb;
+    dontShowCb.Content(winrt::box_value(winrt::hstring(L"Don't show this again")));
+    dontShowCb.FontSize(11.5);
+    dontShowCb.Foreground(FontColorBrush(0xD8));
+    dontShowCb.MinHeight(24);
+    body.Children().Append(dontShowCb);
+
+    wuxc::StackPanel btnRow;
+    btnRow.Orientation(wuxc::Orientation::Horizontal);
+    btnRow.HorizontalAlignment(HorizontalAlignment::Right);
+    btnRow.Spacing(8);
+
+    auto cancelBtn = MakeGhostButton(nullptr, 6);
+    cancelBtn.Padding(Thickness{ 14, 6, 14, 6 });
+    cancelBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+    cancelBtn.VerticalContentAlignment(VerticalAlignment::Center);
+    cancelBtn.Background(MakeBrush(0x14, 0xFF, 0xFF, 0xFF));
+    cancelBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+    cancelBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")),
+                                 MakeBrush(0x22, 0xFF, 0xFF, 0xFF));
+    cancelBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")),
+                                 MakeBrush(0x0E, 0xFF, 0xFF, 0xFF));
+    cancelBtn.Content(MakeText(nullptr, L"Cancel", 12, false));
+    AttachTopBarPressAnimation(cancelBtn, 0.94f);
+
+    auto acc = GetSystemAccentColor();
+    const double lum = 0.2126 * (acc.R / 255.0) + 0.7152 * (acc.G / 255.0) + 0.0722 * (acc.B / 255.0);
+    uint8_t accFg = lum > 0.55 ? 0x10 : 0xFF;
+
+    auto confirmBtn = MakeGhostButton(nullptr, 6);
+    confirmBtn.Padding(Thickness{ 14, 6, 14, 6 });
+    confirmBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+    confirmBtn.VerticalContentAlignment(VerticalAlignment::Center);
+    confirmBtn.Background(MakeBrush(0xFF, acc.R, acc.G, acc.B));
+    confirmBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+    confirmBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")),
+                                  MakeBrush(0xE6, acc.R, acc.G, acc.B));
+    confirmBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")),
+                                  MakeBrush(0xC8, acc.R, acc.G, acc.B));
+    auto confLbl = MakeText(nullptr, L"Clean RAM", 12, true);
+    confLbl.Foreground(MakeBrush(0xFF, accFg, accFg, accFg));
+    confirmBtn.Content(confLbl);
+    AttachTopBarPressAnimation(confirmBtn, 0.94f);
+
+    auto weakHost = winrt::make_weak(hostPanel);
+    auto weakCard = winrt::make_weak(card);
+    auto weakCb = winrt::make_weak(dontShowCb);
+
+    cancelBtn.Click([weakHost, weakCard](auto&&, auto&&) {
+        if (auto h = weakHost.get(); auto c = weakCard.get()) {
+            uint32_t idx = 0;
+            if (h.Children().IndexOf(c, idx)) h.Children().RemoveAt(idx);
+        }
+    });
+
+    confirmBtn.Click([weakHost, weakCard, weakCb, onConfirm](auto&&, auto&&) {
+        if (auto cb = weakCb.get()) {
+            bool skip = cb.IsChecked() && cb.IsChecked().Value();
+            if (skip) {
+                g_settings.optimizerSkipRamConfirm = true;
+                Wh_SetStringValue(L"optimizerSkipRamConfirm", L"1");
+            }
+        }
+        if (auto h = weakHost.get(); auto c = weakCard.get()) {
+            uint32_t idx = 0;
+            if (h.Children().IndexOf(c, idx)) h.Children().RemoveAt(idx);
+        }
+        if (onConfirm) onConfirm();
+    });
+
+    btnRow.Children().Append(cancelBtn);
+    btnRow.Children().Append(confirmBtn);
+    body.Children().Append(btnRow);
+    card.Child(body);
+
+    uint32_t insertAt = hostPanel.Children().Size() >= 2 ? 2 : 0;
+    hostPanel.Children().InsertAt(insertAt, card);
+    try {
+        wuxh::ElementCompositionPreview::SetIsTranslationEnabled(card, true);
+        auto vis = wuxh::ElementCompositionPreview::GetElementVisual(card);
+        auto comp = vis.Compositor();
+        auto ease = comp.CreateCubicBezierEasingFunction({ 0.1f, 0.9f }, { 0.2f, 1.0f });
+        auto opAnim = comp.CreateScalarKeyFrameAnimation();
+        opAnim.InsertKeyFrame(0.0f, 0.0f);
+        opAnim.InsertKeyFrame(1.0f, 1.0f, ease);
+        opAnim.Duration(std::chrono::milliseconds(160));
+        vis.StartAnimation(L"Opacity", opAnim);
+        auto trAnim = comp.CreateVector3KeyFrameAnimation();
+        trAnim.InsertKeyFrame(0.0f, { 0.0f, -6.0f, 0.0f });
+        trAnim.InsertKeyFrame(1.0f, { 0.0f, 0.0f, 0.0f }, ease);
+        trAnim.Duration(std::chrono::milliseconds(160));
+        vis.StartAnimation(L"Translation", trAnim);
+    } catch (...) {}
+}
+
+static double g_lastPillX = -1.0;
+[[clang::no_destroy]] static wuxc::Grid g_optTabPanel{ nullptr };
+[[clang::no_destroy]] static wuxc::Border g_optTabPill{ nullptr };
+[[clang::no_destroy]] static wuxc::Button g_optTabBtns[3]{ nullptr, nullptr, nullptr };
+[[clang::no_destroy]] static wuxc::StackPanel g_optTabBody{ nullptr };
+[[clang::no_destroy]] static std::map<std::wstring, wuxm::Imaging::BitmapImage> g_optIconCache;
+
+static void ClearUiRefs() {
+    g_optTabPanel = nullptr;
+    g_optTabPill = nullptr;
+    for (int i = 0; i < 3; ++i) g_optTabBtns[i] = nullptr;
+    g_optTabBody = nullptr;
+    g_optIconCache.clear();
+    g_lastPillX = -1.0;
+}
+
+static wuxm::Imaging::BitmapImage GetAppRowIcon(const std::wstring& exePath) {
+    if (exePath.empty()) return nullptr;
+    std::wstring key = ToLowerCopy(exePath);
+    auto it = g_optIconCache.find(key);
+    if (it != g_optIconCache.end()) return it->second;
+    wuxm::Imaging::BitmapImage bmp{ nullptr };
+    SHFILEINFOW sfi{};
+    if (SHGetFileInfoW(exePath.c_str(), 0, &sfi, sizeof(sfi), SHGFI_ICON | SHGFI_SMALLICON) && sfi.hIcon) {
+        bmp = HIconToBitmapImage(sfi.hIcon, 24);
+        DestroyIcon(sfi.hIcon);
+    }
+    if (g_optIconCache.size() > 32) g_optIconCache.clear();
+    if (bmp) g_optIconCache[key] = bmp;
+    return bmp;
+}
+
+static void AnimatePillToTab(int tabIdx, bool animate) {
+    if (!g_optTabPill) return;
+    try {
+        double totalW = 340.0;
+        if (g_optTabPanel && g_optTabPanel.ActualWidth() > 40.0) {
+            totalW = g_optTabPanel.ActualWidth();
+        }
+        double colW = (totalW - 8.0) / 3.0;
+        constexpr double pillW = 44.0;
+        double targetX = std::clamp(tabIdx, 0, 2) * (colW + 4.0) + (colW - pillW) * 0.5;
+        double prevX = g_lastPillX;
+        g_lastPillX = targetX;
+        wuxh::ElementCompositionPreview::SetIsTranslationEnabled(g_optTabPill, true);
+        auto vis = wuxh::ElementCompositionPreview::GetElementVisual(g_optTabPill);
+        winrt::Windows::Foundation::Numerics::float3 endVec{ static_cast<float>(targetX), 0.f, 0.f };
+        if (animate && prevX >= 0.0 && std::abs(prevX - targetX) > 0.5 && g_optTabPill.IsLoaded()) {
+            auto comp = vis.Compositor();
+            auto ease = comp.CreateCubicBezierEasingFunction({ 0.1f, 0.9f }, { 0.2f, 1.0f });
+            auto anim = comp.CreateVector3KeyFrameAnimation();
+            anim.InsertKeyFrame(0.0f, { static_cast<float>(prevX), 0.f, 0.f });
+            anim.InsertKeyFrame(1.0f, endVec, ease);
+            anim.Duration(std::chrono::milliseconds(140));
+            vis.StartAnimation(L"Translation", anim);
+        } else {
+            vis.Properties().InsertVector3(L"Translation", endVec);
+        }
+    } catch (...) {}
+}
+
+static void RefreshTabButtonVisuals(int tabIdx) {
+    for (int i = 0; i < 3; ++i) {
+        auto btn = g_optTabBtns[i];
+        if (!btn) continue;
+        bool sel = (i == tabIdx);
+        auto normalBg = sel ? MakeBrush(0x1C, 0xFF, 0xFF, 0xFF) : MakeBrush(0x0A, 0xFF, 0xFF, 0xFF);
+        auto borderBr = sel ? MakeBrush(0x28, 0xFF, 0xFF, 0xFF) : MakeBrush(0x14, 0xFF, 0xFF, 0xFF);
+        btn.Background(normalBg);
+        btn.BorderBrush(borderBr);
+        btn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushPointerOver")), borderBr);
+        btn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushPressed")), borderBr);
+        if (auto sp = btn.Content().try_as<wuxc::StackPanel>(); sp && sp.Children().Size() >= 2) {
+            if (auto tb = sp.Children().GetAt(1).try_as<wuxc::TextBlock>()) {
+                tb.Opacity(sel ? 1.0 : 0.78);
+            }
+        }
+    }
+}
+
+static void PopulateOptimizerTabBody(bool animateBody);
+
+} // namespace optimizer
+
+void optimizer::PopulateOptimizerTabBody(bool animateBody) {
+    if (!g_optTabBody || !g_optimizerPanel) return;
+    const uint64_t gen = ++g_panelGen;
+    const int tabIdx = std::clamp(g_activeTab.load(), 0, 2);
+    const Tab tab = static_cast<Tab>(tabIdx);
+
+    g_optTabBody.Children().Clear();
+
+    auto acc = GetSystemAccentColor();
+    const double accLum = 0.2126 * (acc.R / 255.0) + 0.7152 * (acc.G / 255.0) + 0.0722 * (acc.B / 255.0);
+    uint8_t accFg = accLum > 0.55 ? 0x10 : 0xFF;
+
+    auto makeAccentBtn = [&](PCWSTR name, PCWSTR textLabel) -> wuxc::Button {
+        auto b = MakeGhostButton(name, 6);
+        b.Padding(Thickness{ 14, 7, 14, 7 });
+        b.VerticalAlignment(VerticalAlignment::Center);
+        b.HorizontalContentAlignment(HorizontalAlignment::Center);
+        b.VerticalContentAlignment(VerticalAlignment::Center);
+        b.Background(MakeBrush(0xFF, acc.R, acc.G, acc.B));
+        b.BorderThickness(Thickness{ 0, 0, 0, 0 });
+        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")),
+                             MakeBrush(0xE6, acc.R, acc.G, acc.B));
+        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")),
+                             MakeBrush(0xC8, acc.R, acc.G, acc.B));
+        auto lbl = MakeText(nullptr, textLabel, 12, true);
+        lbl.Foreground(MakeBrush(0xFF, accFg, accFg, accFg));
+        lbl.HorizontalAlignment(HorizontalAlignment::Center);
+        b.Content(lbl);
+        AttachTopBarPressAnimation(b, 0.93f);
+        return b;
+    };
+
+    // WinUI 3 InfoIsland-style Summary Card
+    wuxc::Border summaryCard;
+    summaryCard.Name(L"OptimizerSummaryCard");
+    summaryCard.Background(MakeBrush(0x0F, 0xFF, 0xFF, 0xFF));
+    summaryCard.BorderBrush(MakeBrush(0x1A, 0xFF, 0xFF, 0xFF));
+    summaryCard.BorderThickness(Thickness{ 1, 1, 1, 1 });
+    try { summaryCard.BackgroundSizing(wuxc::BackgroundSizing::InnerBorderEdge); } catch (...) {}
+    summaryCard.CornerRadius(MakeCorner(6));
+    summaryCard.Padding(Thickness{ 12, 10, 12, 10 });
+    summaryCard.MinHeight(78);
+
+    wuxc::StackPanel sumBody;
+    sumBody.Spacing(8);
+
+    auto statusText = MakeText(nullptr, L"", 11.5, false, 0.72);
+    statusText.TextWrapping(TextWrapping::Wrap);
+
+    if (tab == Tab::kRam) {
+        MEMORYSTATUSEX ms{ sizeof(ms) };
+        GlobalMemoryStatusEx(&ms);
+        uint64_t usedB = ms.ullTotalPhys - ms.ullAvailPhys;
+        wuxc::Grid topRow;
+        wuxc::ColumnDefinition c0; c0.Width(GridLength{ 1, GridUnitType::Star });
+        wuxc::ColumnDefinition c1; c1.Width(GridLength{ 0, GridUnitType::Auto });
+        topRow.ColumnDefinitions().Append(c0);
+        topRow.ColumnDefinitions().Append(c1);
+        topRow.ColumnSpacing(10);
+
+        wuxc::StackPanel leftCol;
+        leftCol.Spacing(2);
+        leftCol.VerticalAlignment(VerticalAlignment::Center);
+        leftCol.Children().Append(MakeText(nullptr, L"Memory In Use", 10.5, false, 0.62));
+        std::wstring ramLine = FormatBytesGb(usedB) + L" / " +
+                               FormatBytesGb(ms.ullTotalPhys) +
+                               L"  (" + std::to_wstring(ms.dwMemoryLoad) + L"%)";
+        leftCol.Children().Append(MakeText(L"OptimizerRamValueText", ramLine, 13.5, true));
+        wuxc::Grid::SetColumn(leftCol, 0);
+        topRow.Children().Append(leftCol);
+
+        auto cleanBtn = makeAccentBtn(L"OptimizerCleanRamButton", L"Clean RAM");
+        auto weakBtn = winrt::make_weak(cleanBtn);
+        auto weakPanel = winrt::make_weak(g_optimizerPanel);
+        cleanBtn.Click([weakBtn, weakPanel, gen, accFg](auto&&, auto&&) {
+            auto host = weakPanel.get();
+            if (!host) return;
+            ShowCleanRamConfirmOverlay(host, [weakBtn, gen, accFg]() {
+                if (g_cleanBusy.exchange(true)) return;
+                if (auto b = weakBtn.get()) {
+                    b.IsEnabled(false);
+                    auto l = MakeText(nullptr, L"Cleaning...", 12, true);
+                    l.Foreground(MakeBrush(0xFF, accFg, accFg, accFg));
+                    b.Content(l);
+                }
+                RunInBackground([gen] {
+                    auto res = CleanRam();
+                    g_cleanBusy.store(false);
+                    std::wstring msg = L"Freed " + FormatBytesSmart(res.freedBytes) +
+                                       L" (trimmed " + std::to_wstring(res.processesTrimmed) + L" processes" +
+                                       (res.ntCommandsSucceeded > 0 ? L", NT memory lists purged" : L"") + L").";
+                    RunOnUiThread([msg, gen] {
+                        g_lastRamStatus = msg;
+                        if (gen == g_panelGen.load()) PopulateOptimizerTabBody(false);
+                    });
+                });
+            });
+        });
+        wuxc::Grid::SetColumn(cleanBtn, 1);
+        topRow.Children().Append(cleanBtn);
+        sumBody.Children().Append(topRow);
+
+        wuxc::ProgressBar pb;
+        pb.Minimum(0);
+        pb.Maximum(100);
+        pb.Value(static_cast<double>(ms.dwMemoryLoad));
+        pb.Height(4);
+        pb.Background(MakeBrush(0x1A, 0xFF, 0xFF, 0xFF));
+        pb.Foreground(MakeBrush(0xFF, 0x5C, 0x9E, 0xFA));
+        sumBody.Children().Append(pb);
+
+        if (!g_lastRamStatus.empty()) {
+            statusText.Text(winrt::hstring(g_lastRamStatus));
+            sumBody.Children().Append(statusText);
+        }
+    } else if (tab == Tab::kCpu) {
+        wuxc::Grid topRow;
+        wuxc::ColumnDefinition c0; c0.Width(GridLength{ 1, GridUnitType::Star });
+        wuxc::ColumnDefinition c1; c1.Width(GridLength{ 0, GridUnitType::Auto });
+        topRow.ColumnDefinitions().Append(c0);
+        topRow.ColumnDefinitions().Append(c1);
+        topRow.ColumnSpacing(10);
+
+        wuxc::StackPanel leftCol;
+        leftCol.Spacing(2);
+        leftCol.VerticalAlignment(VerticalAlignment::Center);
+        leftCol.Children().Append(MakeText(nullptr, L"Background Efficiency Mode", 10.5, false, 0.62));
+        leftCol.Children().Append(MakeText(nullptr, L"Throttle background CPU (EcoQoS)", 13, true));
+        wuxc::Grid::SetColumn(leftCol, 0);
+        topRow.Children().Append(leftCol);
+
+        auto optCpuBtn = makeAccentBtn(L"OptimizerCpuButton", L"Optimize CPU");
+        auto weakBtn = winrt::make_weak(optCpuBtn);
+        optCpuBtn.Click([weakBtn, gen, accFg](auto&&, auto&&) {
+            if (g_cleanBusy.exchange(true)) return;
+            if (auto b = weakBtn.get()) {
+                b.IsEnabled(false);
+                auto l = MakeText(nullptr, L"Optimizing...", 12, true);
+                l.Foreground(MakeBrush(0xFF, accFg, accFg, accFg));
+                b.Content(l);
+            }
+            RunInBackground([gen] {
+                auto res = OptimizeCpuBackgroundApps();
+                g_cleanBusy.store(false);
+                std::wstring msg = L"Enabled Efficiency Mode (EcoQoS) & lowered priority on " +
+                                   std::to_wstring(res.processesThrottled) + L" background processes.";
+                RunOnUiThread([msg, gen] {
+                    g_lastCpuStatus = msg;
+                    if (gen == g_panelGen.load()) PopulateOptimizerTabBody(false);
+                });
+            });
+        });
+        wuxc::Grid::SetColumn(optCpuBtn, 1);
+        topRow.Children().Append(optCpuBtn);
+        sumBody.Children().Append(topRow);
+
+        if (!g_lastCpuStatus.empty()) {
+            statusText.Text(winrt::hstring(g_lastCpuStatus));
+            sumBody.Children().Append(statusText);
+        }
+    } else {
+        wuxc::Grid topRow;
+        wuxc::ColumnDefinition c0; c0.Width(GridLength{ 1, GridUnitType::Star });
+        wuxc::ColumnDefinition c1; c1.Width(GridLength{ 0, GridUnitType::Auto });
+        topRow.ColumnDefinitions().Append(c0);
+        topRow.ColumnDefinitions().Append(c1);
+        topRow.ColumnSpacing(10);
+
+        wuxc::StackPanel leftCol;
+        leftCol.Spacing(2);
+        leftCol.VerticalAlignment(VerticalAlignment::Center);
+        leftCol.Children().Append(MakeText(nullptr, L"Temporary Files & Disk I/O", 10.5, false, 0.62));
+        auto tempSizeTb = MakeText(nullptr, L"Scanning temp files...", 13, true);
+        leftCol.Children().Append(tempSizeTb);
+        wuxc::Grid::SetColumn(leftCol, 0);
+        topRow.Children().Append(leftCol);
+
+        auto weakTempTb = winrt::make_weak(tempSizeTb);
+        RunInBackground([weakTempTb, gen] {
+            uint64_t bytes = MeasureTempDirBytes();
+            RunOnUiThread([weakTempTb, bytes, gen] {
+                if (gen != g_panelGen.load()) return;
+                if (auto tb = weakTempTb.get()) {
+                    tb.Text(winrt::hstring(L"Temp files: " + FormatBytesSmart(bytes)));
+                }
+            });
+        });
+
+        auto optDiskBtn = makeAccentBtn(L"OptimizerDiskButton", L"Clean & Optimize");
+        auto weakBtn = winrt::make_weak(optDiskBtn);
+        optDiskBtn.Click([weakBtn, gen, accFg](auto&&, auto&&) {
+            if (g_cleanBusy.exchange(true)) return;
+            if (auto b = weakBtn.get()) {
+                b.IsEnabled(false);
+                auto l = MakeText(nullptr, L"Cleaning...", 12, true);
+                l.Foreground(MakeBrush(0xFF, accFg, accFg, accFg));
+                b.Content(l);
+            }
+            RunInBackground([gen] {
+                auto res = CleanDiskTempAndThrottle();
+                g_cleanBusy.store(false);
+                std::wstring msg = L"Deleted " + std::to_wstring(res.filesDeleted) + L" temp files (" +
+                                   FormatBytesSmart(res.freedBytes) + L" freed) & throttled " +
+                                   std::to_wstring(res.processesThrottled) + L" background processes.";
+                RunOnUiThread([msg, gen] {
+                    g_lastDiskStatus = msg;
+                    if (gen == g_panelGen.load()) PopulateOptimizerTabBody(false);
+                });
+            });
+        });
+        wuxc::Grid::SetColumn(optDiskBtn, 1);
+        topRow.Children().Append(optDiskBtn);
+        sumBody.Children().Append(topRow);
+
+        if (!g_lastDiskStatus.empty()) {
+            statusText.Text(winrt::hstring(g_lastDiskStatus));
+            sumBody.Children().Append(statusText);
+        }
+    }
+
+    summaryCard.Child(sumBody);
+    g_optTabBody.Children().Append(summaryCard);
+
+    // High Usage Apps header + borderless refresh ghost button
+    wuxc::Grid listHdr;
+    wuxc::ColumnDefinition lc0; lc0.Width(GridLength{ 1, GridUnitType::Star });
+    wuxc::ColumnDefinition lc1; lc1.Width(GridLength{ 0, GridUnitType::Auto });
+    listHdr.ColumnDefinitions().Append(lc0);
+    listHdr.ColumnDefinitions().Append(lc1);
+    const wchar_t* listTitle = (tab == Tab::kRam) ? L"High RAM Usage Apps"
+                             : (tab == Tab::kCpu) ? L"High CPU Usage Apps"
+                                                  : L"High Disk I/O Apps";
+    auto lhTb = MakeText(nullptr, listTitle, 11.5, true, 0.78);
+    lhTb.VerticalAlignment(VerticalAlignment::Center);
+    wuxc::Grid::SetColumn(lhTb, 0);
+    listHdr.Children().Append(lhTb);
+
+    auto refreshBtn = MakeGhostButton(nullptr, 6);
+    refreshBtn.Width(28);
+    refreshBtn.Height(28);
+    refreshBtn.MinWidth(28);
+    refreshBtn.Padding(Thickness{ 0, 0, 0, 0 });
+    refreshBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+    refreshBtn.VerticalContentAlignment(VerticalAlignment::Center);
+    refreshBtn.Background(MakeBrush(0x00, 0, 0, 0));
+    refreshBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+    refreshBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")),
+                                  MakeBrush(0x1A, 0xFF, 0xFF, 0xFF));
+    refreshBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")),
+                                  MakeBrush(0x0E, 0xFF, 0xFF, 0xFF));
+    refreshBtn.Content(iconpacks::MakeInlineGlyph(L"\uE72C", 12.0, IconColorBrush()));
+    wuxc::ToolTipService::SetToolTip(refreshBtn, winrt::box_value(winrt::hstring(L"Refresh")));
+    AttachTopBarPressAnimation(refreshBtn, 0.88f);
+    refreshBtn.Click([](auto&&, auto&&) { PopulateOptimizerTabBody(false); });
+    wuxc::Grid::SetColumn(refreshBtn, 1);
+    listHdr.Children().Append(refreshBtn);
+    g_optTabBody.Children().Append(listHdr);
+
+    // Scrollable high-usage apps list (fixed height prevents WindowedPopup resize/re-anchoring on tab switch)
+    wuxc::ScrollViewer sv;
+    sv.Height(260);
+    sv.MaxHeight(260);
+    sv.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
+    sv.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
+
+    wuxc::StackPanel appsStack;
+    appsStack.Name(L"OptimizerAppsList");
+    appsStack.Spacing(5);
+    appsStack.Children().Append(MakeText(nullptr, L"Sampling running apps...", 11.5, false, 0.58));
+    sv.Content(appsStack);
+    g_optTabBody.Children().Append(sv);
+
+    if (animateBody) {
+        try {
+            wuxh::ElementCompositionPreview::SetIsTranslationEnabled(g_optTabBody, true);
+            auto vis = wuxh::ElementCompositionPreview::GetElementVisual(g_optTabBody);
+            auto comp = vis.Compositor();
+            auto ease = comp.CreateCubicBezierEasingFunction({ 0.1f, 0.9f }, { 0.2f, 1.0f });
+            auto opAnim = comp.CreateScalarKeyFrameAnimation();
+            opAnim.InsertKeyFrame(0.0f, 0.0f);
+            opAnim.InsertKeyFrame(1.0f, 1.0f, ease);
+            opAnim.Duration(std::chrono::milliseconds(150));
+            vis.StartAnimation(L"Opacity", opAnim);
+            auto trAnim = comp.CreateVector3KeyFrameAnimation();
+            trAnim.InsertKeyFrame(0.0f, { 0.0f, 6.0f, 0.0f });
+            trAnim.InsertKeyFrame(1.0f, { 0.0f, 0.0f, 0.0f }, ease);
+            trAnim.Duration(std::chrono::milliseconds(150));
+            vis.StartAnimation(L"Translation", trAnim);
+        } catch (...) {}
+    }
+
+    auto weakApps = winrt::make_weak(appsStack);
+    RunInBackground([tab, weakApps, gen] {
+        auto apps = SampleTopApps(tab);
+        RunOnUiThread([tab, apps = std::move(apps), weakApps, gen] {
+            if (gen != g_panelGen.load()) return;
+            auto stack = weakApps.get();
+            if (!stack) return;
+            try {
+                stack.Children().Clear();
+                if (apps.empty()) {
+                    stack.Children().Append(MakeText(nullptr, L"No high-usage apps detected right now.", 11.5, false, 0.58));
+                    return;
+                }
+                for (const auto& app : apps) {
+                    wuxc::Border row;
+                    row.Name(L"FlyoutListRow");
+                    row.Background(MakeBrush(0x0D, 0xFF, 0xFF, 0xFF));
+                    row.BorderBrush(MakeBrush(0x16, 0xFF, 0xFF, 0xFF));
+                    row.BorderThickness(Thickness{ 1, 1, 1, 1 });
+                    try { row.BackgroundSizing(wuxc::BackgroundSizing::InnerBorderEdge); } catch (...) {}
+                    row.CornerRadius(MakeCorner(6));
+                    row.Padding(Thickness{ 8, 6, 6, 6 });
+
+                    wuxc::Grid rg;
+                    wuxc::ColumnDefinition rcIcon; rcIcon.Width(GridLength{ 0, GridUnitType::Auto });
+                    wuxc::ColumnDefinition rc0;    rc0.Width(GridLength{ 1, GridUnitType::Star });
+                    wuxc::ColumnDefinition rc1;    rc1.Width(GridLength{ 0, GridUnitType::Auto });
+                    wuxc::ColumnDefinition rc2;    rc2.Width(GridLength{ 0, GridUnitType::Auto });
+                    rg.ColumnDefinitions().Append(rcIcon);
+                    rg.ColumnDefinitions().Append(rc0);
+                    rg.ColumnDefinitions().Append(rc1);
+                    rg.ColumnDefinitions().Append(rc2);
+                    rg.ColumnSpacing(8);
+
+                    // App icon (20x20)
+                    wuxc::Border iconHost;
+                    iconHost.Width(22);
+                    iconHost.Height(22);
+                    iconHost.VerticalAlignment(VerticalAlignment::Center);
+                    if (auto bmp = GetAppRowIcon(app.exePath)) {
+                        wuxc::Image img;
+                        img.Source(bmp);
+                        img.Width(20);
+                        img.Height(20);
+                        img.Stretch(wuxm::Stretch::Uniform);
+                        img.HorizontalAlignment(HorizontalAlignment::Center);
+                        img.VerticalAlignment(VerticalAlignment::Center);
+                        iconHost.Child(img);
+                    } else {
+                        iconHost.Child(iconpacks::MakeInlineGlyph(L"\uE737", 15.0, IconColorBrush()));
+                    }
+                    wuxc::Grid::SetColumn(iconHost, 0);
+                    rg.Children().Append(iconHost);
+
+                    wuxc::StackPanel nameCol;
+                    nameCol.VerticalAlignment(VerticalAlignment::Center);
+                    auto nTb = MakeText(nullptr, app.name, 12.5, true, 0.94);
+                    nTb.TextTrimming(TextTrimming::CharacterEllipsis);
+                    nameCol.Children().Append(nTb);
+                    if (app.pids.size() > 1) {
+                        auto pTb = MakeText(nullptr, std::to_wstring(app.pids.size()) + L" processes", 10.5, false, 0.52);
+                        nameCol.Children().Append(pTb);
+                    }
+                    wuxc::Grid::SetColumn(nameCol, 1);
+                    rg.Children().Append(nameCol);
+
+                    std::wstring metricStr;
+                    if (tab == Tab::kRam) {
+                        metricStr = FormatBytesGb(app.ramBytes);
+                    } else if (tab == Tab::kCpu) {
+                        wchar_t b[32]{};
+                        swprintf_s(b, L"%.1f%%", std::min(100.0, app.cpuPercent));
+                        metricStr = b;
+                    } else {
+                        wchar_t b[32]{};
+                        if (app.diskBytesPerSec >= 1024.0 * 1024.0) {
+                            swprintf_s(b, L"%.1f MB/s", app.diskBytesPerSec / (1024.0 * 1024.0));
+                        } else {
+                            swprintf_s(b, L"%.0f KB/s", app.diskBytesPerSec / 1024.0);
+                        }
+                        metricStr = b;
+                    }
+                    auto mTb = MakeText(nullptr, metricStr, 12, true, 0.88);
+                    mTb.VerticalAlignment(VerticalAlignment::Center);
+                    wuxc::Grid::SetColumn(mTb, 2);
+                    rg.Children().Append(mTb);
+
+                    auto endBtn = MakeGhostButton(L"OptimizerEndTaskButton", 6);
+                    endBtn.Width(28);
+                    endBtn.Height(28);
+                    endBtn.MinWidth(28);
+                    endBtn.Padding(Thickness{ 0, 0, 0, 0 });
+                    endBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+                    endBtn.VerticalContentAlignment(VerticalAlignment::Center);
+                    endBtn.VerticalAlignment(VerticalAlignment::Center);
+                    endBtn.Background(MakeBrush(0x00, 0, 0, 0));
+                    endBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+                    endBtn.IsEnabled(!app.isProtected);
+                    endBtn.Opacity(app.isProtected ? 0.28 : 1.0);
+                    endBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")),
+                                              MakeBrush(0x2E, 0xFF, 0x5A, 0x5A));
+                    endBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")),
+                                              MakeBrush(0x48, 0xFF, 0x5A, 0x5A));
+                    endBtn.Content(iconpacks::MakeInlineGlyph(L"\uE74D", 13.0, MakeBrush(0xEB, 0xFF, 0x8A, 0x8A)));
+                    wuxc::ToolTipService::SetToolTip(
+                        endBtn,
+                        winrt::box_value(winrt::hstring(app.isProtected ? L"Protected system process" : L"End task")));
+                    AttachTopBarPressAnimation(endBtn, 0.88f);
+
+                    if (!app.isProtected) {
+                        auto pidsCopy = app.pids;
+                        std::wstring exeCopy = app.name + L".exe";
+                        endBtn.Click([pidsCopy, exeCopy, gen](auto&&, auto&&) {
+                            RunInBackground([pidsCopy, exeCopy, gen] {
+                                EndTaskApp(pidsCopy, exeCopy);
+                                Sleep(180);
+                                RunOnUiThread([gen] {
+                                    if (gen == g_panelGen.load()) PopulateOptimizerTabBody(false);
+                                });
+                            });
+                        });
+                    }
+                    wuxc::Grid::SetColumn(endBtn, 3);
+                    rg.Children().Append(endBtn);
+
+                    row.Child(rg);
+                    stack.Children().Append(row);
+                }
+            } catch (...) {}
+        });
+    });
+
+    if (g_optimizerPanel) ApplyControlStylesToPopupRoot(g_optimizerPanel.as<FrameworkElement>());
+}
+
+void PopulateOptimizerPanel() {
+    if (!g_optimizerPanel) return;
+    const int tabIdx = std::clamp(optimizer::g_activeTab.load(), 0, 2);
+
+    auto children = g_optimizerPanel.Children();
+    children.Clear();
+    optimizer::ClearUiRefs();
+    g_optimizerPanel.Spacing(8);
+
+    children.Append(MakePanelTitle(L"System Optimizer"));
+
+    // Persistent WinUI 3 Tab Bar with sliding top accent pill (kept alive across tab switches!)
+    wuxc::Grid tabPanel;
+    tabPanel.Name(L"OptimizerTabPanel");
+    tabPanel.ColumnSpacing(4);
+    tabPanel.RowSpacing(2);
+    tabPanel.Margin(Thickness{ 0, 0, 0, 2 });
+    tabPanel.HorizontalAlignment(HorizontalAlignment::Stretch);
+    {
+        wuxc::RowDefinition pillRow; pillRow.Height(GridLength{ 4, GridUnitType::Pixel });
+        wuxc::RowDefinition btnRow;  btnRow.Height(GridLength{ 0, GridUnitType::Auto });
+        tabPanel.RowDefinitions().Append(pillRow);
+        tabPanel.RowDefinitions().Append(btnRow);
+    }
+    for (int i = 0; i < 3; ++i) {
+        wuxc::ColumnDefinition cd;
+        cd.Width(GridLength{ 1, GridUnitType::Star });
+        tabPanel.ColumnDefinitions().Append(cd);
+    }
+    optimizer::g_optTabPanel = tabPanel;
+
+    struct OptTabDef { PCWSTR name; PCWSTR label; PCWSTR glyph; int idx; };
+    static const OptTabDef kTabs[] = {
+        { L"OptimizerRamTab",  L"RAM",  L"\uEEA0", 0 },
+        { L"OptimizerCpuTab",  L"CPU",  L"\uEEA1", 1 },
+        { L"OptimizerDiskTab", L"Disk", L"\uEDA2", 2 },
+    };
+    for (const auto& td : kTabs) {
+        auto tbBtn = MakeGhostButton(td.name, EffectiveRowCorner());
+        tbBtn.HorizontalAlignment(HorizontalAlignment::Stretch);
+        tbBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+        tbBtn.VerticalContentAlignment(VerticalAlignment::Center);
+        tbBtn.Padding(Thickness{ 6, 7, 6, 7 });
+        tbBtn.MinWidth(0);
+        tbBtn.BorderThickness(Thickness{ 1, 1, 1, 1 });
+        tbBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")),
+                                 MakeBrush(0x22, 0xFF, 0xFF, 0xFF));
+        tbBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")),
+                                 MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
+        AttachTopBarPressAnimation(tbBtn, 0.94f);
+
+        wuxc::StackPanel sp;
+        sp.Orientation(wuxc::Orientation::Horizontal);
+        sp.Spacing(6);
+        sp.HorizontalAlignment(HorizontalAlignment::Center);
+        sp.VerticalAlignment(VerticalAlignment::Center);
+        auto ic = iconpacks::MakeInlineGlyph(td.glyph, 16.0, IconColorBrush());
+        ic.VerticalAlignment(VerticalAlignment::Center);
+        sp.Children().Append(ic);
+        auto lbl = MakeText(nullptr, td.label, 12.5, true);
+        lbl.VerticalAlignment(VerticalAlignment::Center);
+        sp.Children().Append(lbl);
+        tbBtn.Content(sp);
+        int idxCapture = td.idx;
+        tbBtn.Click([idxCapture](auto&&, auto&&) {
+            if (optimizer::g_activeTab.load() == idxCapture) return;
+            optimizer::g_activeTab.store(idxCapture);
+            optimizer::RefreshTabButtonVisuals(idxCapture);
+            optimizer::AnimatePillToTab(idxCapture, true);
+            optimizer::PopulateOptimizerTabBody(true);
+        });
+        wuxc::Grid::SetRow(tbBtn, 1);
+        wuxc::Grid::SetColumn(tbBtn, td.idx);
+        tabPanel.Children().Append(tbBtn);
+        optimizer::g_optTabBtns[td.idx] = tbBtn;
+    }
+
+    wuxc::Border topPill;
+    topPill.Name(L"OptimizerTabActivePill");
+    topPill.Width(44);
+    topPill.Height(3);
+    topPill.CornerRadius(CornerRadius{ 1.5, 1.5, 1.5, 1.5 });
+    topPill.Background(wuxm::SolidColorBrush(GetSystemAccentLightColor()));
+    topPill.HorizontalAlignment(HorizontalAlignment::Left);
+    topPill.VerticalAlignment(VerticalAlignment::Center);
+    topPill.IsHitTestVisible(false);
+    wuxc::Grid::SetRow(topPill, 0);
+    wuxc::Grid::SetColumnSpan(topPill, 3);
+    tabPanel.Children().Append(topPill);
+    optimizer::g_optTabPill = topPill;
+
+    tabPanel.SizeChanged([](wf::IInspectable const&, auto&&) {
+        optimizer::AnimatePillToTab(optimizer::g_activeTab.load(), false);
+    });
+    children.Append(tabPanel);
+
+    wuxc::StackPanel tabBody;
+    tabBody.Name(L"OptimizerTabBody");
+    tabBody.Spacing(8);
+    optimizer::g_optTabBody = tabBody;
+    children.Append(tabBody);
+
+    optimizer::RefreshTabButtonVisuals(tabIdx);
+    optimizer::AnimatePillToTab(tabIdx, false);
+    optimizer::PopulateOptimizerTabBody(false);
+}
+
 // Keeps a metric tile compact: the default "CPU:"/"RAM:"/"GPU:" prefixes are
 // dropped because each metric now has its own button, but a customised label
 // is still honoured.
@@ -28236,24 +28305,36 @@ void ApplyResourceFlyoutContentUI(const resource::Usage& usage,
             if (g_infoDiskCombo) {
                 g_infoDiskCombo.Visibility(Visibility::Visible);
                 if (g_infoDiskCombo.Items().Size() == 0) {
-                    if (!g_selectedDiskIndexLoaded) {
-                        g_selectedDiskIndex = Wh_GetIntValue(L"selectedDiskIndex", 0);
-                        g_selectedDiskIndexLoaded = true;
-                    }
-                    g_diskNames = resource::GetAllDiskNames();
-                    for (const auto& name : g_diskNames) {
-                        wuxc::ComboBoxItem item;
-                        item.Content(winrt::box_value(winrt::hstring(name)));
-                        g_infoDiskCombo.Items().Append(item);
-                    }
-                    if (!g_diskNames.empty()) {
-                        if (g_selectedDiskIndex < 0 || g_selectedDiskIndex >= static_cast<int>(g_diskNames.size())) {
-                            g_selectedDiskIndex = 0;
-                        }
-                        bool prev = g_populatingPanel;
-                        g_populatingPanel = true;
-                        g_infoDiskCombo.SelectedIndex(g_selectedDiskIndex);
-                        g_populatingPanel = prev;
+                    static std::atomic<bool> s_diskNamesLoading{false};
+                    if (!s_diskNamesLoading.exchange(true)) {
+                        RunInBackground([] {
+                            auto names = resource::GetAllDiskNames();
+                            RunOnUiThread([names = std::move(names)] {
+                                s_diskNamesLoading.store(false);
+                                if (!g_infoDiskCombo || g_infoDiskCombo.Items().Size() > 0) return;
+                                try {
+                                    if (!g_selectedDiskIndexLoaded) {
+                                        g_selectedDiskIndex = Wh_GetIntValue(L"selectedDiskIndex", 0);
+                                        g_selectedDiskIndexLoaded = true;
+                                    }
+                                    g_diskNames = names;
+                                    for (const auto& name : g_diskNames) {
+                                        wuxc::ComboBoxItem item;
+                                        item.Content(winrt::box_value(winrt::hstring(name)));
+                                        g_infoDiskCombo.Items().Append(item);
+                                    }
+                                    if (!g_diskNames.empty()) {
+                                        if (g_selectedDiskIndex < 0 || g_selectedDiskIndex >= static_cast<int>(g_diskNames.size())) {
+                                            g_selectedDiskIndex = 0;
+                                        }
+                                        bool prev = g_populatingPanel;
+                                        g_populatingPanel = true;
+                                        g_infoDiskCombo.SelectedIndex(g_selectedDiskIndex);
+                                        g_populatingPanel = prev;
+                                    }
+                                } catch (...) {}
+                            });
+                        });
                     }
                 }
             }
@@ -28606,8 +28687,11 @@ void RefreshResourceTabButtonStyles() {
 
 void UpdateResourceFlyoutContent() {
     if (!g_graphCanvas || !g_graphLine || !g_graphFill || !g_statsGrid) return;
+    static std::atomic<bool> s_resUpdateInFlight{false};
+    if (s_resUpdateInFlight.exchange(true)) return;
     int gpuIndex = g_selectedGpuIndex;
     RunInBackground([gpuIndex] {
+        struct InFlightGuard { ~InFlightGuard() { s_resUpdateInFlight.store(false); } } guard;
         int diskIndex = g_selectedDiskIndex;
         resource::Initialize();
         auto usage = resource::GetUsage(gpuIndex, diskIndex);
@@ -28616,14 +28700,17 @@ void UpdateResourceFlyoutContent() {
         static resource::DetailedInfo s_cachedDetailed;
         static ULONGLONG s_lastDetailedTick = 0;
         static int s_lastDetailedDisk = -1;
+        static int s_lastDetailedGpu = -1;
         resource::DetailedInfo detailed;
         {
             std::lock_guard<std::mutex> lock(s_detailMutex);
             ULONGLONG now = GetTickCount64();
-            if (s_lastDetailedTick == 0 || s_lastDetailedDisk != diskIndex || now - s_lastDetailedTick >= 1000) {
+            if (s_lastDetailedTick == 0 || s_lastDetailedDisk != diskIndex ||
+                s_lastDetailedGpu != gpuIndex || now - s_lastDetailedTick >= 3000) {
                 s_cachedDetailed = resource::GetDetailedInfo(gpuIndex, diskIndex);
                 s_lastDetailedTick = now;
                 s_lastDetailedDisk = diskIndex;
+                s_lastDetailedGpu = gpuIndex;
             }
             detailed = s_cachedDetailed;
         }
@@ -28802,19 +28889,77 @@ void PopulateResourceFlyout() {
     infoStack.Children().Append(g_infoCpuPanel);
 
     g_infoRamPanel = wuxc::StackPanel();
-    g_infoRamPanel.Spacing(2);
+    g_infoRamPanel.Spacing(0);
     g_infoRamPanel.HorizontalAlignment(HorizontalAlignment::Stretch);
     g_infoRamPanel.VerticalAlignment(VerticalAlignment::Center);
     g_infoRamPanel.Visibility(Visibility::Collapsed);
-    g_infoRamLabel = MakeText(L"InfoRamLabel", L"Memory", 10, false, 0.65);
-    g_infoRamLabel.HorizontalAlignment(HorizontalAlignment::Left);
-    g_infoRamLabel.TextAlignment(TextAlignment::Left);
-    g_infoRamName = MakeText(L"InfoRamName", L"Loading...", 13, true);
-    g_infoRamName.HorizontalAlignment(HorizontalAlignment::Left);
-    g_infoRamName.TextAlignment(TextAlignment::Left);
-    g_infoRamName.TextTrimming(TextTrimming::CharacterEllipsis);
-    g_infoRamPanel.Children().Append(g_infoRamLabel);
-    g_infoRamPanel.Children().Append(g_infoRamName);
+    {
+        wuxc::Grid ramRow;
+        wuxc::ColumnDefinition rc0; rc0.Width(GridLength{ 1, GridUnitType::Star });
+        wuxc::ColumnDefinition rc1; rc1.Width(GridLength{ 0, GridUnitType::Auto });
+        ramRow.ColumnDefinitions().Append(rc0);
+        ramRow.ColumnDefinitions().Append(rc1);
+        ramRow.ColumnSpacing(8);
+
+        wuxc::StackPanel ramTextCol;
+        ramTextCol.Spacing(2);
+        ramTextCol.VerticalAlignment(VerticalAlignment::Center);
+        g_infoRamLabel = MakeText(L"InfoRamLabel", L"Memory", 10, false, 0.65);
+        g_infoRamLabel.HorizontalAlignment(HorizontalAlignment::Left);
+        g_infoRamLabel.TextAlignment(TextAlignment::Left);
+        g_infoRamName = MakeText(L"InfoRamName", L"Loading...", 13, true);
+        g_infoRamName.HorizontalAlignment(HorizontalAlignment::Left);
+        g_infoRamName.TextAlignment(TextAlignment::Left);
+        g_infoRamName.TextTrimming(TextTrimming::CharacterEllipsis);
+        ramTextCol.Children().Append(g_infoRamLabel);
+        ramTextCol.Children().Append(g_infoRamName);
+        wuxc::Grid::SetColumn(ramTextCol, 0);
+        ramRow.Children().Append(ramTextCol);
+
+        auto acc = GetSystemAccentColor();
+        auto cleanRamBtn = MakeGhostButton(L"ResourceCleanRamButton", 6);
+        cleanRamBtn.Padding(Thickness{ 12, 6, 12, 6 });
+        cleanRamBtn.VerticalAlignment(VerticalAlignment::Center);
+        cleanRamBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+        cleanRamBtn.VerticalContentAlignment(VerticalAlignment::Center);
+        cleanRamBtn.Background(MakeBrush(0x28, acc.R, acc.G, acc.B));
+        cleanRamBtn.BorderThickness(Thickness{ 0, 0, 0, 0 });
+        cleanRamBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")),
+                                       MakeBrush(0x40, acc.R, acc.G, acc.B));
+        cleanRamBtn.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")),
+                                       MakeBrush(0x1E, acc.R, acc.G, acc.B));
+        cleanRamBtn.Content(MakeText(nullptr, L"Clean RAM", 11.5, true));
+        AttachTopBarPressAnimation(cleanRamBtn, 0.92f);
+
+        auto weakCleanBtn = winrt::make_weak(cleanRamBtn);
+        auto weakResPanel = winrt::make_weak(g_resourcePanel);
+        cleanRamBtn.Click([weakCleanBtn, weakResPanel](auto&&, auto&&) {
+            auto host = weakResPanel.get();
+            if (!host) return;
+            optimizer::ShowCleanRamConfirmOverlay(host, [weakCleanBtn]() {
+                if (optimizer::g_cleanBusy.exchange(true)) return;
+                if (auto b = weakCleanBtn.get()) {
+                    b.IsEnabled(false);
+                    b.Content(MakeText(nullptr, L"Cleaning...", 11.5, true));
+                }
+                RunInBackground([weakCleanBtn] {
+                    auto res = optimizer::CleanRam();
+                    optimizer::g_cleanBusy.store(false);
+                    std::wstring badge = L"Freed " + optimizer::FormatBytesSmart(res.freedBytes);
+                    RunOnUiThread([weakCleanBtn, badge] {
+                        if (auto b = weakCleanBtn.get()) {
+                            b.IsEnabled(true);
+                            b.Content(MakeText(nullptr, badge, 11.5, true));
+                        }
+                        try { UpdateResourceFlyoutContent(); } catch (...) {}
+                    });
+                });
+            });
+        });
+        wuxc::Grid::SetColumn(cleanRamBtn, 1);
+        ramRow.Children().Append(cleanRamBtn);
+        g_infoRamPanel.Children().Append(ramRow);
+    }
     infoStack.Children().Append(g_infoRamPanel);
 
     g_infoGpuPanel = wuxc::StackPanel();
@@ -29848,54 +29993,57 @@ static std::shared_ptr<const WallpaperThumbData> DecodeWallpaperThumb(const std:
         auto it = g_wallpaperThumbCache.find(path);
         if (it != g_wallpaperThumbCache.end()) return it->second;
     }
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ,
-                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) return {};
-    LARGE_INTEGER length{};
-    if (!GetFileSizeEx(file, &length) || length.QuadPart <= 0 || length.QuadPart > 64LL * 1024 * 1024) {
-        CloseHandle(file);
-        return {};
-    }
-    std::vector<uint8_t> encoded(static_cast<size_t>(length.QuadPart));
-    DWORD read = 0;
-    bool ok = ReadFile(file, encoded.data(), static_cast<DWORD>(encoded.size()), &read, nullptr) &&
-              read == encoded.size();
-    CloseHandle(file);
-    if (!ok) return {};
     try {
-        using namespace winrt::Windows::Storage::Streams;
-        using namespace winrt::Windows::Graphics::Imaging;
-        InMemoryRandomAccessStream stream;
-        DataWriter writer(stream);
-        writer.WriteBytes(encoded);
-        writer.StoreAsync().get();
-        writer.DetachStream();
-        stream.Seek(0);
-        auto decoder = BitmapDecoder::CreateAsync(stream).get();
-        UINT w = decoder.PixelWidth();
-        UINT h = decoder.PixelHeight();
-        if (!w || !h) return {};
-        double scale = std::min(1.0, 260.0 / static_cast<double>(std::max(w, h)));
+        winrt::com_ptr<IShellItemImageFactory> factory;
+        if (FAILED(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(factory.put()))) || !factory) {
+            return {};
+        }
+        HBITMAP hbm = nullptr;
+        SIZE sz{ 260, 260 };
+        HRESULT hr = factory->GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_BIGGERSIZEOK | SIIGBF_THUMBNAILONLY, &hbm);
+        if (FAILED(hr) || !hbm) {
+            hr = factory->GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_BIGGERSIZEOK, &hbm);
+        }
+        if (FAILED(hr) || !hbm) return {};
+
+        BITMAP bm{};
+        if (!GetObjectW(hbm, sizeof(bm), &bm) || bm.bmWidth <= 0 || bm.bmHeight <= 0) {
+            DeleteObject(hbm);
+            return {};
+        }
         auto out = std::make_shared<WallpaperThumbData>();
-        out->width = std::max(1u, static_cast<UINT>(std::lround(w * scale)));
-        out->height = std::max(1u, static_cast<UINT>(std::lround(h * scale)));
-        BitmapTransform transform;
-        transform.ScaledWidth(out->width);
-        transform.ScaledHeight(out->height);
-        auto data = decoder.GetPixelDataAsync(
-            BitmapPixelFormat::Bgra8,
-            BitmapAlphaMode::Premultiplied,
-            transform,
-            ExifOrientationMode::RespectExifOrientation,
-            ColorManagementMode::DoNotColorManage).get().DetachPixelData();
-        out->pixels.assign(data.begin(), data.end());
-        if (out->pixels.size() != static_cast<size_t>(out->width) * out->height * 4) return {};
+        out->width = static_cast<UINT>(bm.bmWidth);
+        out->height = static_cast<UINT>(bm.bmHeight);
+        out->pixels.resize(static_cast<size_t>(out->width) * out->height * 4);
+
+        BITMAPINFO bmi{};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = bm.bmWidth;
+        bmi.bmiHeader.biHeight = -bm.bmHeight; // top-down
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        HDC hdc = GetDC(nullptr);
+        int got = hdc ? GetDIBits(hdc, hbm, 0, out->height, out->pixels.data(), &bmi, DIB_RGB_COLORS) : 0;
+        if (hdc) ReleaseDC(nullptr, hdc);
+        DeleteObject(hbm);
+        if (got == 0) return {};
+
+        // Ensure alpha channel is opaque for RGB32 shell thumbnails that leave alpha=0
+        bool anyAlpha = false;
+        for (size_t i = 3; i < out->pixels.size(); i += 4) {
+            if (out->pixels[i] != 0) { anyAlpha = true; break; }
+        }
+        if (!anyAlpha) {
+            for (size_t i = 3; i < out->pixels.size(); i += 4) out->pixels[i] = 0xFF;
+        }
+
         {
             std::lock_guard<std::mutex> lock(g_wallpaperThumbMutex);
             auto [it, inserted] = g_wallpaperThumbCache.insert_or_assign(path, out);
             if (inserted) g_wallpaperThumbOrder.push_back(path);
-            while (g_wallpaperThumbCache.size() > 24 && !g_wallpaperThumbOrder.empty()) {
+            while (g_wallpaperThumbCache.size() > 12 && !g_wallpaperThumbOrder.empty()) {
                 auto oldPath = std::move(g_wallpaperThumbOrder.front());
                 g_wallpaperThumbOrder.pop_front();
                 g_wallpaperThumbCache.erase(oldPath);
@@ -29996,7 +30144,7 @@ static void EnumerateWallpaperDirectory(const std::wstring& folder,
                 WallpaperFolderEntry entry;
                 entry.name = fd.cFileName;
                 entry.fullPath = baseDir + fd.cFileName;
-                entry.imageCount = CountWallpapersInFolderRecursive(entry.fullPath);
+                entry.imageCount = static_cast<size_t>(-1); // computed asynchronously off UI thread
                 outFolders.push_back(std::move(entry));
             }
             continue;
@@ -30022,6 +30170,66 @@ static std::wstring GetActiveDesktopWallpaperPath() {
         return buf;
     }
     return {};
+}
+
+struct WallpaperThumbJob {
+    std::wstring path;
+    winrt::weak_ref<wuxc::Border> border;
+    uint64_t gen = 0;
+};
+static std::mutex g_wpPoolMutex;
+static std::condition_variable g_wpPoolCv;
+[[clang::no_destroy]] static std::deque<WallpaperThumbJob> g_wpPoolQueue;
+static std::atomic<int> g_wpPoolWorkers{0};
+
+static void EnqueueWallpaperThumbJob(const std::wstring& path,
+                                     winrt::weak_ref<wuxc::Border> weakBorder,
+                                     uint64_t gen) {
+    {
+        std::lock_guard<std::mutex> lock(g_wpPoolMutex);
+        g_wpPoolQueue.push_back(WallpaperThumbJob{ path, std::move(weakBorder), gen });
+    }
+    g_wpPoolCv.notify_one();
+    constexpr int kMaxWpWorkers = 3;
+    int cur = g_wpPoolWorkers.load();
+    while (cur < kMaxWpWorkers && !g_wpPoolWorkers.compare_exchange_weak(cur, cur + 1)) {}
+    if (cur < kMaxWpWorkers) {
+        std::thread([] {
+            HRESULT hrCo = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+            while (true) {
+                WallpaperThumbJob job;
+                {
+                    std::unique_lock<std::mutex> lock(g_wpPoolMutex);
+                    if (!g_wpPoolCv.wait_for(lock, std::chrono::seconds(10), [] {
+                            return !g_wpPoolQueue.empty();
+                        })) {
+                        break;
+                    }
+                    job = std::move(g_wpPoolQueue.front());
+                    g_wpPoolQueue.pop_front();
+                }
+                if (job.gen != g_wallpaperPanelGeneration.load()) continue;
+                auto decoded = DecodeWallpaperThumb(job.path);
+                if (!decoded || job.gen != g_wallpaperPanelGeneration.load()) continue;
+                RunOnUiThread([decoded, wb = job.border, gen = job.gen] {
+                    if (gen != g_wallpaperPanelGeneration.load()) return;
+                    if (auto b = wb.get()) {
+                        try {
+                            if (auto bmp = Bgra32ToBitmapImage(decoded->pixels, decoded->width, decoded->height)) {
+                                wuxm::ImageBrush ib;
+                                ib.ImageSource(bmp);
+                                ib.Stretch(wuxm::Stretch::UniformToFill);
+                                b.Background(ib);
+                                b.Child(nullptr);
+                            }
+                        } catch (...) {}
+                    }
+                });
+            }
+            if (SUCCEEDED(hrCo)) CoUninitialize();
+            g_wpPoolWorkers.fetch_sub(1);
+        }).detach();
+    }
 }
 
 void PopulateWallpaperPanel();
@@ -30291,9 +30499,7 @@ void PopulateWallpaperPanel() {
         wuxc::Grid::SetRow(topRow, 0);
         cardLayout.Children().Append(topRow);
 
-        std::wstring countStr = std::to_wstring(folderEntry.imageCount) +
-            (folderEntry.imageCount == 1 ? L" picture" : L" pictures");
-        auto countTxt = MakeText(nullptr, countStr, 11, false, 0.65);
+        auto countTxt = MakeText(nullptr, L"...", 11, false, 0.65);
         countTxt.VerticalAlignment(VerticalAlignment::Bottom);
         countTxt.TextTrimming(TextTrimming::CharacterEllipsis);
         countTxt.MaxLines(1);
@@ -30302,7 +30508,26 @@ void PopulateWallpaperPanel() {
 
         folderCard.Child(cardLayout);
         folderBtn.Content(folderCard);
-        wuxc::ToolTipService::SetToolTip(folderBtn, winrt::box_value(folderEntry.name + L" (" + countStr + L")"));
+        wuxc::ToolTipService::SetToolTip(folderBtn, winrt::box_value(folderEntry.name));
+        {
+            std::wstring fPath = folderEntry.fullPath;
+            std::wstring fName = folderEntry.name;
+            auto weakCount = winrt::make_weak(countTxt);
+            auto weakBtn = winrt::make_weak(folderBtn);
+            RunInBackground([fPath, fName, weakCount, weakBtn, gen] {
+                if (gen != g_wallpaperPanelGeneration.load()) return;
+                size_t cnt = CountWallpapersInFolderRecursive(fPath);
+                if (gen != g_wallpaperPanelGeneration.load()) return;
+                RunOnUiThread([cnt, fName, weakCount, weakBtn, gen] {
+                    if (gen != g_wallpaperPanelGeneration.load()) return;
+                    std::wstring cs = std::to_wstring(cnt) + (cnt == 1 ? L" picture" : L" pictures");
+                    if (auto t = weakCount.get()) { try { t.Text(winrt::hstring(cs)); } catch (...) {} }
+                    if (auto b = weakBtn.get()) {
+                        try { wuxc::ToolTipService::SetToolTip(b, winrt::box_value(fName + L" (" + cs + L")")); } catch (...) {}
+                    }
+                });
+            });
+        }
 
         auto weakCard = winrt::make_weak(folderCard);
         folderBtn.PointerEntered([weakCard, accent](auto&&, auto&&) {
@@ -30390,25 +30615,7 @@ void PopulateWallpaperPanel() {
                 thumbBorder.Child(ph);
             }
             auto weakBorder = winrt::make_weak(thumbBorder);
-            RunInBackground([fullPath, weakBorder, gen] {
-                if (gen != g_wallpaperPanelGeneration.load()) return;
-                auto decoded = DecodeWallpaperThumb(fullPath);
-                if (!decoded || gen != g_wallpaperPanelGeneration.load()) return;
-                RunOnUiThread([decoded, weakBorder, gen] {
-                    if (gen != g_wallpaperPanelGeneration.load()) return;
-                    if (auto b = weakBorder.get()) {
-                        try {
-                            if (auto bmp = Bgra32ToBitmapImage(decoded->pixels, decoded->width, decoded->height)) {
-                                wuxm::ImageBrush ib;
-                                ib.ImageSource(bmp);
-                                ib.Stretch(wuxm::Stretch::UniformToFill);
-                                b.Background(ib);
-                                b.Child(nullptr);
-                            }
-                        } catch (...) {}
-                    }
-                });
-            });
+            EnqueueWallpaperThumbJob(fullPath, weakBorder, gen);
         }
 
         cardBorders->emplace_back(fullPath, winrt::make_weak(thumbBorder));
@@ -30654,7 +30861,7 @@ static void OpenTaskView() {
 } // namespace vdesktop
 
 void UpdateVirtualDesktopButton() {
-    if (!g_virtualDesktopBadgeText) return;
+    if (!g_settings.showVirtualDesktopButton || !g_virtualDesktopBadgeText) return;
     try {
         auto list = vdesktop::Enumerate();
         int curIdx = 0;
@@ -31527,28 +31734,35 @@ namespace ccd {
             kCLSID_QuietHoursSettings, nullptr, CLSCTX_LOCAL_SERVER,
             kIID_IQuietHoursSettings, settings.put_void()));
     }
-    inline bool Get() {
+    inline std::wstring GetProfile() {
+        winrt::com_ptr<IQuietHoursSettings> settings;
+        if (FAILED(CoCreateInstance(kCLSID_QuietHoursSettings, nullptr,
+                                    CLSCTX_LOCAL_SERVER,
+                                    kIID_IQuietHoursSettings,
+                                    settings.put_void()))) return L"";
+        LPWSTR profile = nullptr;
+        if (FAILED(settings->get_UserSelectedProfile(&profile)) || !profile) return L"";
+        std::wstring res(profile);
+        CoTaskMemFree(profile);
+        return res;
+    }
+    inline bool SetProfile(PCWSTR profileId) {
+        if (!profileId || !*profileId) return false;
         winrt::com_ptr<IQuietHoursSettings> settings;
         if (FAILED(CoCreateInstance(kCLSID_QuietHoursSettings, nullptr,
                                     CLSCTX_LOCAL_SERVER,
                                     kIID_IQuietHoursSettings,
                                     settings.put_void()))) return false;
-        LPWSTR profile = nullptr;
-        if (FAILED(settings->get_UserSelectedProfile(&profile))) return false;
-        bool on = profile && wcscmp(profile,
-            L"Microsoft.QuietHoursProfile.Unrestricted") != 0;
-        if (profile) CoTaskMemFree(profile);
-        return on;
+        return SUCCEEDED(settings->put_UserSelectedProfile(profileId));
+    }
+    inline bool Get() {
+        std::wstring p = GetProfile();
+        return !p.empty() && p != L"Microsoft.QuietHoursProfile.Unrestricted";
     }
     inline bool Set(bool on) {
-        winrt::com_ptr<IQuietHoursSettings> settings;
-        if (FAILED(CoCreateInstance(kCLSID_QuietHoursSettings, nullptr,
-                                    CLSCTX_LOCAL_SERVER,
-                                    kIID_IQuietHoursSettings,
-                                    settings.put_void()))) return false;
-        return SUCCEEDED(settings->put_UserSelectedProfile(
-            on ? L"Microsoft.QuietHoursProfile.PriorityOnly"
-               : L"Microsoft.QuietHoursProfile.Unrestricted"));
+        // Use AlarmsOnly (not PriorityOnly) so Windows 11 suppresses all regular/priority shell toast banners.
+        return SetProfile(on ? L"Microsoft.QuietHoursProfile.AlarmsOnly"
+                             : L"Microsoft.QuietHoursProfile.Unrestricted");
     }
     inline std::vector<std::wstring> AllItems() {
         return {L"WiFi", L"Bluetooth", L"AirplaneMode", L"MobileHotspot",
@@ -32447,9 +32661,7 @@ void PopulateControlCenterPanel_New() {
                                  const std::wstring& instantSub, PCWSTR newGlyph = nullptr) {
         try {
             circle.Background(newOn ? circleOn : circleOff);
-            if (newGlyph && *newGlyph && iconpacks::IsMacOS()) {
-                circle.Child(iconpacks::MakeInlineGlyph(newGlyph, 15.0, newOn ? fgActive : fgInactive));
-            } else if (auto child = circle.Child().try_as<FrameworkElement>()) {
+            if (auto child = circle.Child().try_as<FrameworkElement>()) {
                 if (auto fi = child.try_as<wuxc::FontIcon>()) {
                     fi.Foreground(newOn ? fgActive : fgInactive);
                     if (newGlyph && *newGlyph) fi.Glyph(newGlyph);
@@ -33459,17 +33671,6 @@ void PopulateControlCenterPanel() {
     PopulateControlCenterPanel_New();
 }
 
-void EnsureBrightnessSyncCallback() {
-    static bool s_installed = false;
-    if (s_installed) return;
-    s_installed = true;
-    g_mainBrightnessSyncCallback = [](int value) {
-        if (g_controlCenterPanel) {
-            extern void ControlPanel_SetBrightnessFromSync(int);
-            ControlPanel_SetBrightnessFromSync(value);
-        }
-    };
-}
 
 void ControlPanel_SetBrightnessFromSync(int value) {
     if (!g_controlCenterPanel) return;
@@ -33796,31 +33997,20 @@ wuxm::Brush CreateWinUI3MenuBlurBrush(UIElement const& element) {
     }
 }
 
-wuxc::ControlTemplate GetWinUI3MenuItemTemplate(bool hasIcon, bool macos = false) {
+wuxc::ControlTemplate GetWinUI3MenuItemTemplate(bool hasIcon) {
     static thread_local wuxc::ControlTemplate s_tplIconWin{nullptr};
     static thread_local wuxc::ControlTemplate s_tplPlainWin{nullptr};
-    static thread_local wuxc::ControlTemplate s_tplIconMac{nullptr};
-    static thread_local wuxc::ControlTemplate s_tplPlainMac{nullptr};
-    wuxc::ControlTemplate& slot = macos
-        ? (hasIcon ? s_tplIconMac : s_tplPlainMac)
-        : (hasIcon ? s_tplIconWin : s_tplPlainWin);
+    wuxc::ControlTemplate& slot = hasIcon ? s_tplIconWin : s_tplPlainWin;
     if (slot) return slot;
 
     std::wstring iconCol = L"";
     if (hasIcon) {
-        if (macos) {
-            iconCol =
-                L"<ContentPresenter x:Name=\"MenuGlyph\" Content=\"{TemplateBinding Tag}\" "
-                L"Width=\"15\" Height=\"15\" Margin=\"0,0,10,0\" "
-                L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\"/>";
-        } else {
-            iconCol =
-                L"<TextBlock x:Name=\"MenuGlyph\" Text=\"{TemplateBinding Tag}\" "
-                L"FontFamily=\"Segoe Fluent Icons, Segoe MDL2 Assets\" FontSize=\"14\" "
-                L"Foreground=\"#EBFFFFFF\" TextLineBounds=\"Full\" OpticalMarginAlignment=\"None\" "
-                L"Margin=\"0,0,10,0\" Padding=\"0\" "
-                L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\"/>";
-        }
+        iconCol =
+            L"<TextBlock x:Name=\"MenuGlyph\" Text=\"{TemplateBinding Tag}\" "
+            L"FontFamily=\"Segoe Fluent Icons, Segoe MDL2 Assets\" FontSize=\"14\" "
+            L"Foreground=\"#EBFFFFFF\" TextLineBounds=\"Full\" OpticalMarginAlignment=\"None\" "
+            L"Margin=\"0,0,10,0\" Padding=\"0\" "
+            L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\"/>";
     }
     std::wstring textColIdx = hasIcon ? L" Grid.Column=\"1\"" : L" Grid.Column=\"0\"";
     std::wstring cols = hasIcon
@@ -33874,31 +34064,20 @@ wuxc::ControlTemplate GetWinUI3MenuItemTemplate(bool hasIcon, bool macos = false
     return slot;
 }
 
-wuxc::ControlTemplate GetWinUI3MenuSubItemTemplate(bool hasIcon, bool macos = false) {
+wuxc::ControlTemplate GetWinUI3MenuSubItemTemplate(bool hasIcon) {
     static thread_local wuxc::ControlTemplate s_tplIconWin{nullptr};
     static thread_local wuxc::ControlTemplate s_tplPlainWin{nullptr};
-    static thread_local wuxc::ControlTemplate s_tplIconMac{nullptr};
-    static thread_local wuxc::ControlTemplate s_tplPlainMac{nullptr};
-    wuxc::ControlTemplate& slot = macos
-        ? (hasIcon ? s_tplIconMac : s_tplPlainMac)
-        : (hasIcon ? s_tplIconWin : s_tplPlainWin);
+    wuxc::ControlTemplate& slot = hasIcon ? s_tplIconWin : s_tplPlainWin;
     if (slot) return slot;
 
     std::wstring iconCol = L"";
     if (hasIcon) {
-        if (macos) {
-            iconCol =
-                L"<ContentPresenter x:Name=\"MenuGlyph\" Content=\"{TemplateBinding Tag}\" "
-                L"Width=\"15\" Height=\"15\" Margin=\"0,0,10,0\" "
-                L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\"/>";
-        } else {
-            iconCol =
-                L"<TextBlock x:Name=\"MenuGlyph\" Text=\"{TemplateBinding Tag}\" "
-                L"FontFamily=\"Segoe Fluent Icons, Segoe MDL2 Assets\" FontSize=\"14\" "
-                L"Foreground=\"#EBFFFFFF\" TextLineBounds=\"Full\" OpticalMarginAlignment=\"None\" "
-                L"Margin=\"0,0,10,0\" Padding=\"0\" "
-                L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\"/>";
-        }
+        iconCol =
+            L"<TextBlock x:Name=\"MenuGlyph\" Text=\"{TemplateBinding Tag}\" "
+            L"FontFamily=\"Segoe Fluent Icons, Segoe MDL2 Assets\" FontSize=\"14\" "
+            L"Foreground=\"#EBFFFFFF\" TextLineBounds=\"Full\" OpticalMarginAlignment=\"None\" "
+            L"Margin=\"0,0,10,0\" Padding=\"0\" "
+            L"HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\"/>";
     }
     std::wstring textColIdx = hasIcon ? L" Grid.Column=\"1\"" : L" Grid.Column=\"0\"";
     std::wstring chevColIdx = hasIcon ? L" Grid.Column=\"2\"" : L" Grid.Column=\"1\"";
@@ -33906,15 +34085,11 @@ wuxc::ControlTemplate GetWinUI3MenuSubItemTemplate(bool hasIcon, bool macos = fa
         ? L"<Grid.ColumnDefinitions><ColumnDefinition Width=\"Auto\"/><ColumnDefinition Width=\"*\"/><ColumnDefinition Width=\"Auto\"/></Grid.ColumnDefinitions>"
         : L"<Grid.ColumnDefinitions><ColumnDefinition Width=\"*\"/><ColumnDefinition Width=\"Auto\"/></Grid.ColumnDefinitions>";
 
-    std::wstring chevEl = macos
-        ? (L"<Viewbox x:Name=\"SubItemChevron\"" + chevColIdx +
-           L" Stretch=\"Uniform\" Width=\"10\" Height=\"10\" Margin=\"16,0,0,0\" VerticalAlignment=\"Center\">"
-           L"<Grid Width=\"24\" Height=\"24\"><Path Data=\"" + std::wstring(macos_sf::kMacChevronRight) +
-           L"\" Fill=\"#B3FFFFFF\"/></Grid></Viewbox>")
-        : (L"<TextBlock x:Name=\"SubItemChevron\"" + chevColIdx +
-           L" FontFamily=\"Segoe Fluent Icons, Segoe MDL2 Assets\" Text=\"&#xE76C;\" "
-           L"FontSize=\"10\" Foreground=\"#B3FFFFFF\" TextLineBounds=\"Full\" Padding=\"0\" "
-           L"Margin=\"16,0,0,0\" VerticalAlignment=\"Center\"/>");
+    std::wstring chevEl =
+        L"<TextBlock x:Name=\"SubItemChevron\"" + chevColIdx +
+        L" FontFamily=\"Segoe Fluent Icons, Segoe MDL2 Assets\" Text=\"&#xE76C;\" "
+        L"FontSize=\"10\" Foreground=\"#B3FFFFFF\" TextLineBounds=\"Full\" Padding=\"0\" "
+        L"Margin=\"16,0,0,0\" VerticalAlignment=\"Center\"/>";
 
     std::wstring xaml =
         L"<ControlTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" "
@@ -34166,20 +34341,10 @@ void ApplyMenuItemLook(wuxc::MenuFlyoutItemBase const& item) {
 wuxc::MenuFlyoutItem MakeMenuItem(std::wstring_view text, std::function<void()> onClick,
                                   const wchar_t* glyph = nullptr) {
     const bool hasIcon = (glyph && *glyph);
-    const bool useMacIcon = hasIcon && iconpacks::IsMacOS() &&
-                            (macos_sf::LookupMacOSPath(glyph[0]) != nullptr);
     wuxc::MenuFlyoutItem item;
     item.Text(winrt::hstring(text));
     if (hasIcon) {
-        if (useMacIcon) {
-            if (auto ic = iconpacks::Glyph(glyph, 15, L"#EBFFFFFF")) {
-                item.Tag(ic);
-            } else {
-                item.Tag(winrt::box_value(winrt::hstring(glyph)));
-            }
-        } else {
-            item.Tag(winrt::box_value(winrt::hstring(glyph)));
-        }
+        item.Tag(winrt::box_value(winrt::hstring(glyph)));
     }
     try {
         std::wstring ff = g_settings.fontFamily.empty()
@@ -34198,7 +34363,7 @@ wuxc::MenuFlyoutItem MakeMenuItem(std::wstring_view text, std::function<void()> 
         item.Foreground(MakeBrush(0xF5, 0xFF, 0xFF, 0xFF));
     }
     ApplyMenuItemLook(item);
-    if (auto tpl = GetWinUI3MenuItemTemplate(hasIcon, useMacIcon)) {
+    if (auto tpl = GetWinUI3MenuItemTemplate(hasIcon)) {
         try { item.Template(tpl); } catch (...) {}
     }
     if (onClick) {
@@ -34277,21 +34442,10 @@ wuxc::MenuFlyoutItem MakeMenuItem(std::wstring_view text, std::function<void()> 
 wuxc::MenuFlyoutSubItem MakeMenuSubItem(std::wstring_view text,
                                         const wchar_t* glyph = nullptr) {
     const bool hasIcon = (glyph && *glyph);
-    const bool useMac = iconpacks::IsMacOS();
-    const bool useMacIcon = hasIcon && useMac &&
-                            (macos_sf::LookupMacOSPath(glyph[0]) != nullptr);
     wuxc::MenuFlyoutSubItem item;
     item.Text(winrt::hstring(text));
     if (hasIcon) {
-        if (useMacIcon) {
-            if (auto ic = iconpacks::Glyph(glyph, 15, L"#EBFFFFFF")) {
-                item.Tag(ic);
-            } else {
-                item.Tag(winrt::box_value(winrt::hstring(glyph)));
-            }
-        } else {
-            item.Tag(winrt::box_value(winrt::hstring(glyph)));
-        }
+        item.Tag(winrt::box_value(winrt::hstring(glyph)));
     }
     try {
         std::wstring ff = g_settings.fontFamily.empty()
@@ -34310,7 +34464,7 @@ wuxc::MenuFlyoutSubItem MakeMenuSubItem(std::wstring_view text,
         item.Foreground(MakeBrush(0xF5, 0xFF, 0xFF, 0xFF));
     }
     ApplyMenuItemLook(item);
-    if (auto tpl = GetWinUI3MenuSubItemTemplate(hasIcon, useMacIcon || (!hasIcon && useMac))) {
+    if (auto tpl = GetWinUI3MenuSubItemTemplate(hasIcon)) {
         try { item.Template(tpl); } catch (...) {}
     }
     item.PointerEntered([](auto&&, auto&&) {
@@ -34857,7 +35011,7 @@ static bool ReadNightLightQuickState(bool& on) {
 }
 
 static bool ReadQuickSetting(QuickAction action, bool& on) {
-    if(action==QuickAction::PowerSaving){on=GetBatteryInfo().powerSaving;return true;}
+    if(action==QuickAction::PowerSaving){auto bi=GetBatteryInfo();if(!bi.present)return false;on=bi.powerSaving;return true;}
     if(action==QuickAction::NightLight)return ReadNightLightQuickState(on);
     if(action==QuickAction::MuteOutput||action==QuickAction::MuteMicrophone){
         auto volume=action==QuickAction::MuteOutput?audio::EndpointVolume():QuickMicrophoneVolume();
@@ -35811,14 +35965,35 @@ static std::atomic<bool> g_sessionInputBlocked{false};
 static std::atomic<bool> g_startButtonUsesWindows{false};
 static std::atomic<bool> g_searchButtonUsesWindows{false};
 
+static void ReleaseStuckWinKeysIfNeeded(DWORD specificVk = 0) {
+    auto releaseVk = [](WORD vk) {
+        if ((GetAsyncKeyState(vk) & 0x8000) != 0) {
+            INPUT up[1]{};
+            up[0].type = INPUT_KEYBOARD;
+            up[0].ki.wVk = vk;
+            up[0].ki.dwFlags = KEYEVENTF_KEYUP;
+            SendInput(1, up, sizeof(INPUT));
+        }
+    };
+    if (specificVk == VK_LWIN || specificVk == VK_RWIN) {
+        releaseVk(static_cast<WORD>(specificVk));
+    } else {
+        releaseVk(VK_LWIN);
+        releaseVk(VK_RWIN);
+    }
+}
+
 static void ResetShortcutChordState() {
+    bool wasReplayed = g_winReplayed.exchange(false);
+    DWORD vk = g_winVkDown.exchange(0);
     g_winKeyDown=false;
     g_winOtherSeen=false;
-    g_winReplayed=false;
     g_winChordConsumed=0;
-    g_winVkDown=0;
     g_winDownTick=0;
     g_shortcutResetGeneration.fetch_add(1);
+    if (wasReplayed) {
+        ReleaseStuckWinKeysIfNeeded(vk);
+    }
 }
 static std::atomic<bool> g_taskbarClickConsumed{false};
 static std::atomic<ULONGLONG> g_taskbarClickTick{0};
@@ -35872,7 +36047,6 @@ static bool g_searchOpenPendingAfterPrime = false;
 [[clang::no_destroy]] DispatcherTimer g_searchPopupPrimeTimer{nullptr};
 static int g_searchPopupPrimePollTicks = 0;
 static int g_searchPopupPrimeStableTicks = 0;
-static void PrimeSearchPopupForStartup();
 static void ExecuteSearchQueryAsync(std::wstring query, int queryToken);
 static void ScheduleSearchPopupFit();
 
@@ -35885,7 +36059,7 @@ static RECT g_topBarStartButtonBounds{}, g_topBarSearchButtonBounds{};
 static const PCWSTR kTopBarFlyoutButtons[] = {
     L"DisplayButton", L"SoundButton", L"WifiButton", L"BluetoothButton",
     L"BatteryButton", L"ControlCenterButton", L"NetworkButton",
-    L"SpeedTestButton", L"WallpaperButton", L"RecycleBinButton",
+    L"SpeedTestButton", L"OptimizerButton", L"WallpaperButton", L"RecycleBinButton",
     L"TrayIconButton", L"MediaButton", L"NotificationsButton",
     L"WeatherButton", L"ClockButton", L"VirtualDesktopButton",
     L"ResourceCpuButton", L"ResourceRamButton", L"ResourceGpuButton", L"ResourceDiskButton",
@@ -37158,7 +37332,7 @@ static bool FitSearchPopupToContent() {
 [[clang::no_destroy]] static std::map<std::wstring, wuxm::Imaging::BitmapImage> g_searchIconCache;
 [[clang::no_destroy]] static std::deque<std::wstring> g_searchIconOrder;
 [[clang::no_destroy]] static std::map<std::wstring, std::vector<winrt::weak_ref<wuxc::Border>>> g_searchIconWaiters;
-static constexpr size_t kMaxStartSearchIconCacheEntries = 48;
+static constexpr size_t kMaxStartSearchIconCacheEntries = 24;
 static void CacheSearchIconLocked(const std::wstring& key, wuxm::Imaging::BitmapImage const& bmp) {
     if (!bmp) return;
     auto [it, inserted] = g_searchIconCache.insert_or_assign(key, bmp);
@@ -37958,109 +38132,7 @@ void EnsureSearchFlyoutCreated() {
     } catch (...) {}
 }
 
-static void FinishSearchPopupPrime(bool success) {
-    if (!g_searchPopupPriming) return;
-    auto anchorIt = g_namedElements.find(L"SearchAnchor");
-    if (anchorIt != g_namedElements.end()) {
-        if (auto fe = anchorIt->second.try_as<FrameworkElement>()) {
-            try { fe.RenderTransform(wuxm::TranslateTransform()); } catch (...) {}
-        }
-    }
-    if (g_searchFlyout) {
-        if (auto root = g_searchFlyout.Content().try_as<FrameworkElement>()) {
-            try { root.Opacity(1.0); root.IsHitTestVisible(true); } catch (...) {}
-        }
-    }
-    g_wideFlyoutTargetX = -1;
-    g_wideFlyoutTargetY = -1;
-    g_searchPopupPriming = false;
-    g_searchPopupPrimed = success;
-    g_searchPopupPrimeAttempted = true;
-    Wh_Log(L"[Search] first-use XAML popup prime %s", success ? L"complete" : L"failed");
-    if (g_searchOpenPendingAfterPrime) {
-        g_searchOpenPendingAfterPrime = false;
-        RunOnUiThread([] { try { ShowSearchFlyout(); } catch (...) {} });
-    }
-}
 
-static void PrimeSearchPopupForStartup() {
-    if (g_searchPopupPrimed || g_searchPopupPriming ||
-        g_searchPopupPrimeAttempted || !g_rootElement) return;
-    try {
-        if (!g_rootElement.IsLoaded()) return;
-        EnsureSearchFlyoutCreated();
-        if (!g_searchFlyout || g_searchFlyout.IsOpen()) return;
-
-        auto anchorIt = g_namedElements.find(L"SearchAnchor");
-        if (anchorIt == g_namedElements.end()) return;
-        auto anchor = anchorIt->second.try_as<FrameworkElement>();
-        if (!anchor) return;
-
-        RECT barMonitor = GetBarMonitorRect();
-        double dpi = GetBarDpiScale();
-        if (!std::isfinite(dpi) || dpi <= 0.0) dpi = 1.0;
-        int hiddenX = GetSystemMetrics(SM_XVIRTUALSCREEN) - 2400;
-        int hiddenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
-        SetTopBarAnchorScreenPosition(
-            anchor,
-            (hiddenX - barMonitor.left) / dpi,
-            (hiddenY - barMonitor.top) / dpi);
-
-        g_searchPopupPriming = true;
-        g_searchPopupPrimeAttempted = true;
-        auto content = g_searchFlyout.Content().try_as<FrameworkElement>();
-        if (content) {
-            content.Opacity(0.0);
-            content.IsHitTestVisible(false);
-        }
-
-        wuxc::Primitives::FlyoutShowOptions opts;
-        opts.Placement(wuxc::Primitives::FlyoutPlacementMode::TopEdgeAlignedLeft);
-        g_searchFlyout.ShowAt(anchor, opts);
-        Wh_Log(L"[Search] priming first-use XAML popup off-screen");
-
-        if (!g_searchPopupPrimeTimer) {
-            g_searchPopupPrimeTimer = DispatcherTimer();
-            g_searchPopupPrimeTimer.Interval(std::chrono::milliseconds(25));
-            g_searchPopupPrimeTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
-                if (!g_searchPopupPriming || !g_searchFlyout ||
-                    !g_searchFlyout.IsOpen()) {
-                    try { if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop(); } catch (...) {}
-                    FinishSearchPopupPrime(false);
-                    return;
-                }
-
-                ++g_searchPopupPrimePollTicks;
-                HWND popup = FindWideFlyoutPopupHwnd();
-                RECT rect{};
-                if (popup && IsWindow(popup) && GetWindowRect(popup, &rect) &&
-                    rect.right > rect.left && rect.bottom > rect.top) {
-                    ++g_searchPopupPrimeStableTicks;
-                } else {
-                    g_searchPopupPrimeStableTicks = 0;
-                }
-
-                if (g_searchPopupPrimeStableTicks >= 2 ||
-                    g_searchPopupPrimePollTicks >= 60) {
-                    try { if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop(); } catch (...) {}
-                    bool created = g_searchPopupPrimeStableTicks >= 2;
-                    try { if (g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
-                    RunOnUiThread([created] { FinishSearchPopupPrime(created); });
-                }
-            });
-        }
-        g_searchPopupPrimePollTicks = 0;
-        g_searchPopupPrimeStableTicks = 0;
-        g_searchPopupPrimeTimer.Stop();
-        g_searchPopupPrimeTimer.Start();
-    } catch (...) {
-        try {
-            if (g_searchPopupPrimeTimer) g_searchPopupPrimeTimer.Stop();
-        } catch (...) {}
-        try { if (g_searchFlyout && g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
-        if (g_searchPopupPriming) FinishSearchPopupPrime(false);
-    }
-}
 
 static HWND FindWideFlyoutPopupHwnd() {
     const RECT expected = GetStartSearchScreenRect();
@@ -38595,127 +38667,6 @@ static const startmenu::AppEntry* FindAppEntryByLnkPath(const std::wstring& lnkP
     return nullptr;
 }
 
-wuxm::Imaging::BitmapImage GetOrBuildStartAppIcon(const std::wstring& lnkPath, UINT iconPx) {
-    if (lnkPath.empty() || iconPx == 0) return nullptr;
-
-    std::wstring cacheKey = lnkPath;
-    cacheKey += L'|';
-    cacheKey += std::to_wstring(iconPx);
-
-    {
-        std::lock_guard<std::mutex> lock(g_startAppIconCacheMutex);
-        auto it = g_startAppIconCache.find(cacheKey);
-        if (it != g_startAppIconCache.end() && it->second) return it->second;
-    }
-
-    wuxm::Imaging::BitmapImage bmp;
-
-    if (auto* entry = FindAppEntryByLnkPath(lnkPath)) {
-        if (!entry->logoBytes.empty()) {
-            try {
-                winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
-                winrt::Windows::Storage::Streams::DataWriter writer(stream);
-                writer.WriteBytes(entry->logoBytes);
-                writer.StoreAsync().get();
-                writer.DetachStream();
-                stream.Seek(0);
-                wuxm::Imaging::BitmapImage bi;
-                bi.DecodePixelWidth(static_cast<int32_t>(iconPx));
-                bi.SetSource(stream);
-                bmp = bi;
-            } catch (...) {}
-            if (bmp) {
-                std::lock_guard<std::mutex> lock(g_startAppIconCacheMutex);
-                CacheStartAppIconLocked(cacheKey, bmp);
-                return bmp;
-            }
-        }
-    }
-
-    if (!bmp) {
-        SHFILEINFOW sfi{};
-        if (SHGetFileInfoW(lnkPath.c_str(), 0, &sfi, sizeof(sfi),
-                           SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
-            bmp = HIconToBitmapImage(sfi.hIcon, iconPx);
-            DestroyIcon(sfi.hIcon);
-        }
-    }
-
-    if (!bmp) {
-        SHFILEINFOW sfi{};
-        if (SHGetFileInfoW(lnkPath.c_str(), 0, &sfi, sizeof(sfi),
-                           SHGFI_SYSICONINDEX | SHGFI_LARGEICON) &&
-            sfi.iIcon != 0) {
-            const int kSizes[] = { SHIL_JUMBO, SHIL_EXTRALARGE, SHIL_LARGE };
-            for (int sizeFlag : kSizes) {
-                if (bmp) break;
-                winrt::com_ptr<IImageList> imageList;
-                if (FAILED(SHGetImageList(sizeFlag, IID_PPV_ARGS(imageList.put()))) ||
-                    !imageList) {
-                    continue;
-                }
-                HICON ico = nullptr;
-                if (SUCCEEDED(imageList->GetIcon(sfi.iIcon, ILD_TRANSPARENT, &ico)) &&
-                    ico) {
-                    bmp = HIconToBitmapImage(ico, iconPx);
-                    DestroyIcon(ico);
-                }
-            }
-        }
-    }
-
-    if (!bmp && lnkPath.size() >= 4 &&
-        _wcsicmp(lnkPath.c_str() + lnkPath.size() - 4, L".lnk") == 0) {
-        std::wstring target = ResolveShortcutTarget(lnkPath);
-        if (!target.empty()) {
-            if (auto extract = GetPrivateExtractIcons()) {
-                HICON ico = nullptr;
-                UINT iconId = 0;
-                if (extract(target.c_str(), 0, 256, 256, &ico, &iconId, 1, 0) == 1 &&
-                    ico) {
-                    bmp = HIconToBitmapImage(ico, iconPx);
-                    DestroyIcon(ico);
-                }
-            }
-        }
-    }
-
-    if (!bmp) {
-        winrt::com_ptr<IShellItemImageFactory> factory;
-        if (SUCCEEDED(SHCreateItemFromParsingName(lnkPath.c_str(), nullptr,
-                                                  IID_PPV_ARGS(factory.put()))) &&
-            factory) {
-            HBITMAP hbm = nullptr;
-            SIZE sz{ static_cast<LONG>(iconPx), static_cast<LONG>(iconPx) };
-            if (SUCCEEDED(factory->GetImage(sz, SIIGBF_ICONONLY, &hbm)) && hbm) {
-                ICONINFO ii{};
-                ii.fIcon = TRUE;
-                ii.hbmColor = hbm;
-                ii.hbmMask = CreateBitmap(sz.cx, sz.cy, 1, 1, nullptr);
-                HICON ico = CreateIconIndirect(&ii);
-                if (ii.hbmMask) DeleteObject(ii.hbmMask);
-                DeleteObject(hbm);
-                if (ico) {
-                    bmp = HIconToBitmapImage(ico, iconPx);
-                    DestroyIcon(ico);
-                }
-            }
-        }
-    }
-
-    if (!bmp) {
-        Wh_Log(L"[StartMenu] No icon extracted for %s at %u px",
-               lnkPath.c_str(), iconPx);
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(g_startAppIconCacheMutex);
-        if (bmp) {
-            CacheStartAppIconLocked(cacheKey, bmp);
-        }
-    }
-    return bmp;
-}
 
 struct StartMenuIconPixels {
     std::vector<uint8_t> bytes;
@@ -39244,14 +39195,14 @@ static void QueueStartMenuIcon(const std::shared_ptr<StartMenuIconWork>& work,
 }
 
 static std::set<std::wstring> ReadStartMenuFavorites() {
-    std::vector<wchar_t> buffer(65536);
+    std::vector<wchar_t> buffer(32768, 0);
     size_t length = Wh_GetStringValue(L"startMenuFavorites", buffer.data(), buffer.size());
     std::set<std::wstring> result;
     if (!length || length >= buffer.size()) return result;
-    std::wstring text(buffer.data());
+    std::wstring text(buffer.data(), length);
     for (size_t pos = 0; pos < text.size();) {
-        size_t end = text.find(L'\n', pos);
-        auto path = text.substr(pos, end == std::wstring::npos ? end : end - pos);
+        size_t end = text.find_first_of(L"|\r\n", pos);
+        auto path = TrimWs(text.substr(pos, end == std::wstring::npos ? end : end - pos));
         if (!path.empty()) result.insert(std::move(path));
         if (end == std::wstring::npos) break;
         pos = end + 1;
@@ -39262,7 +39213,10 @@ static std::set<std::wstring> ReadStartMenuFavorites() {
 static void SaveStartMenuFavorites(const std::set<std::wstring>& favorites) {
     std::wstring text;
     for (const auto& path : favorites) {
-        if (!text.empty()) text += L'\n';
+        if (path.empty()) continue;
+        size_t addLen = (text.empty() ? 0 : 1) + path.size();
+        if (text.size() + addLen >= 32760) break;
+        if (!text.empty()) text += L'|';
         text += path;
     }
     Wh_SetStringValue(L"startMenuFavorites", text.c_str());
@@ -40743,31 +40697,6 @@ std::wstring ReadTrayOrder() {
     return std::wstring(buffer.data(), length);
 }
 
-void ApplyTrayOrderToPanel() {
-    if (!g_trayPanel) {
-        return;
-    }
-    std::map<std::wstring, UIElement> byName;
-    for (auto&& child : g_trayPanel.Children()) {
-        if (auto fe = child.try_as<FrameworkElement>()) {
-            std::wstring childName(fe.Name());
-            if (!childName.empty()) {
-                byName.insert_or_assign(childName, child);
-            }
-        }
-    }
-    g_trayPanel.Children().Clear();
-    for (const auto& childName : g_trayOrder) {
-        auto found = byName.find(childName);
-        if (found != byName.end()) {
-            g_trayPanel.Children().Append(found->second);
-            byName.erase(found);
-        }
-    }
-    for (auto& leftover : byName) {
-        g_trayPanel.Children().Append(leftover.second);
-    }
-}
 
 std::vector<std::wstring> SplitItemList(const std::wstring& csv);
 static void InsertCanonical(std::wstring& csv, const std::wstring& item);
@@ -41187,37 +41116,11 @@ std::wstring FindSectionOf(const std::wstring& item) {
     return L"";
 }
 
-void ReorderInSection(const std::wstring& section, const std::wstring& item, int direction) {
-    std::wstring* target = nullptr;
-    if (section == L"left")        target = &g_settings.leftItems;
-    else if (section == L"center") target = &g_settings.centerItems;
-    else if (section == L"right")  target = &g_settings.rightItems;
-    if (!target) return;
-
-    auto list = SplitItemList(*target);
-    auto it = std::find(list.begin(), list.end(), item);
-    if (it == list.end()) return;
-
-    int idx = static_cast<int>(it - list.begin());
-    int newIdx = idx + direction;
-    if (newIdx < 0 || newIdx >= static_cast<int>(list.size())) return;
-    std::swap(list[idx], list[newIdx]);
-
-    std::wstring rebuilt;
-    for (auto& s : list) {
-        if (!rebuilt.empty()) rebuilt += L",";
-        rebuilt += s;
-    }
-    *target = rebuilt;
-    Wh_SetStringValue(L"leftItems",   g_settings.leftItems.c_str());
-    Wh_SetStringValue(L"centerItems", g_settings.centerItems.c_str());
-    Wh_SetStringValue(L"rightItems",  g_settings.rightItems.c_str());
-}
 
 static int CanonicalItemRank(const std::wstring& item) {
     static const wchar_t* kOrder[] = {
         L"StartButton", L"SearchButton", L"VirtualDesktopButton", L"AppTitleButton", L"TaskListPanel",
-        L"ResourceButton", L"WeatherButton", L"MediaButton", L"NetworkButton", L"SpeedTestButton", L"SettingsButton",
+        L"ResourceButton", L"WeatherButton", L"MediaButton", L"NetworkButton", L"SpeedTestButton", L"OptimizerButton", L"SettingsButton",
         L"TrayIconButton", L"WallpaperButton",
         L"DisplayButton", L"WifiButton", L"SoundButton", L"BluetoothButton", L"RecycleBinButton",
         L"BatteryButton", L"NotificationsButton",
@@ -41655,6 +41558,8 @@ void ExecuteShortcutAction(const std::wstring& action) {
                 ToggleFlyout(g_resourceFlyout, g_resourceButton);
             } else if (action == L"speedtest" && g_speedTestButton && g_speedTestFlyout) {
                 ToggleFlyout(g_speedTestFlyout, g_speedTestButton);
+            } else if (action == L"optimizer" && g_optimizerButton && g_optimizerFlyout) {
+                ToggleFlyout(g_optimizerFlyout, g_optimizerButton);
             } else if (action == L"controlcenter" && g_controlCenterButton && g_controlCenterFlyout) {
                 ToggleFlyout(g_controlCenterFlyout, g_controlCenterButton);
             } else if (action == L"media" && g_mediaButton && g_mediaFlyout) {
@@ -41717,6 +41622,7 @@ void PopulateSettingsPanel() {
         {L"Resources",      {L"ResourceButton"}},
         {L"Network",        {L"NetworkButton"}},
         {L"SpeedTest",      {L"SpeedTestButton"}},
+        {L"Optimizer",      {L"OptimizerButton"}},
         {L"Weather",        {L"WeatherButton"}},
         {L"Wallpaper",      {L"WallpaperButton"}},
         {L"Control Center", {L"DisplayButton", L"SoundButton", L"WifiButton",
@@ -41814,7 +41720,7 @@ void PopulateSettingsPanel() {
     resetBtn.Content(MakeText(nullptr, L"Reset to defaults", 12));
     resetBtn.Click([](auto&&, auto&&) {
         g_settings.leftItems   = L"StartButton,SearchButton,VirtualDesktopButton,AppTitleButton,TaskListPanel";
-        g_settings.centerItems = L"ResourceButton,WeatherButton,MediaButton,NetworkButton,SpeedTestButton,SettingsButton";
+        g_settings.centerItems = L"ResourceButton,WeatherButton,MediaButton,NetworkButton,SpeedTestButton,OptimizerButton,SettingsButton";
         g_settings.rightItems  = L"TrayIconButton,WallpaperButton,DisplayButton,WifiButton,SoundButton,BluetoothButton,"
                                  L"RecycleBinButton,BatteryButton,NotificationsButton,ControlCenterButton,ClockButton";
         Wh_SetStringValue(L"leftItems",   g_settings.leftItems.c_str());
@@ -42600,6 +42506,7 @@ static bool TryApplySettingLive(PCWSTR key) {
     if (keyEq(L"showWallpaperButton"))     { g_settings.showWallpaperButton = ReadIntSetting(key, 1) != 0; applyVisibilityAndAlign(); return true; }
     if (keyEq(L"showVirtualDesktopButton")){ g_settings.showVirtualDesktopButton = ReadIntSetting(key, 1) != 0; applyVisibilityAndAlign(); return true; }
     if (keyEq(L"showSpeedTestButton"))     { g_settings.showSpeedTestButton = ReadIntSetting(key, 1) != 0; applyVisibilityAndAlign(); return true; }
+    if (keyEq(L"showOptimizerButton"))     { g_settings.showOptimizerButton = ReadIntSetting(key, 1) != 0; applyVisibilityAndAlign(); return true; }
     if (keyEq(L"showAppTitleButton")) {
         g_settings.showAppTitleButton = ReadIntSetting(key, 1) != 0;
         applyVisibilityAndAlign();
@@ -42685,7 +42592,7 @@ static bool TryApplySettingLive(PCWSTR key) {
         if (g_settings.topBarBackgroundColor.empty()) g_settings.topBarBackgroundColor = L"#000000";
         g_settings.topBarBackgroundOpacity = std::clamp(ReadIntSetting(L"topBarBackgroundOpacity", 25), 0, 100);
         g_settings.globalBlurAmount = std::clamp(ReadIntSetting(L"globalBlurAmount", 6), 1, 50);
-        g_settings.globalBlurSaturation = std::clamp(ReadIntSetting(L"globalBlurSaturation", 100), 0, 200);
+        g_settings.globalBlurSaturation = std::clamp(ReadIntSetting(L"globalBlurSaturation", 100), 0, 400);
         ApplyTopBarBackgroundNow();
         RefreshFlyoutBackdropBrushes();
         RebuildAllLiveBlurBrushes();
@@ -44271,10 +44178,10 @@ void BuildAppearancePage(wuxc::StackPanel& p) {
                      RebuildAllLiveBlurBrushes();
                      ApplyAllControlStyles();
                  });
-    AddSliderRow(p, L"Global Blur Saturation", L"globalBlurSaturation", 0, 200,
+    AddSliderRow(p, L"Global Blur Saturation", L"globalBlurSaturation", 0, 400,
                  L"100% is normal.",
                  1, [](int value) {
-                     g_settings.globalBlurSaturation = std::clamp(value, 0, 200);
+                     g_settings.globalBlurSaturation = std::clamp(value, 0, 400);
                      ApplyTopBarBackgroundNow();
                      RefreshFlyoutBackdropBrushes();
                      RebuildAllLiveBlurBrushes();
@@ -44289,10 +44196,6 @@ void BuildAppearancePage(wuxc::StackPanel& p) {
                      RebuildAllLiveBlurBrushes();
                      ApplyAllControlStyles();
                  });
-    AddComboRow(p, L"Icon pack", L"iconPack", {
-        { L"winui", L"WinUI Glyphs" },
-        { L"macos", L"MacOS Glyphs" },
-    });
     AddColorRow(p,  L"Icon colour", L"iconColor");
 
     p.Children().Append(MakeHeading(L"Font")); 
@@ -44659,8 +44562,8 @@ void BuildLayoutPage(wuxc::StackPanel& p) {
             for (auto& [id, b] : *btns) {
                 bool sel = (*curAlign == id);
                 b.Background(sel ? MakeSolid(0xFF, acc.R, acc.G, acc.B) : MakeSolid(0x16, 0xFF, 0xFF, 0xFF));
-                b.BorderBrush(sel ? MakeSolid(0x40, 0xFF, 0xFF, 0xFF) : MakeSolid(0x24, 0xFF, 0xFF, 0xFF));
-                b.BorderThickness(Thickness{ 1, 1, 1, 1 });
+                b.BorderBrush(sel ? MakeSolid(0x00, 0, 0, 0) : MakeSolid(0x22, 0xFF, 0xFF, 0xFF));
+                b.BorderThickness(sel ? Thickness{ 0, 0, 0, 0 } : Thickness{ 1, 1, 1, 1 });
                 b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackground")), b.Background());
                 b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")),
                     sel ? MakeSolid(0xFF, acc.R, acc.G, acc.B) : MakeSolid(0x28, 0xFF, 0xFF, 0xFF));
@@ -44674,8 +44577,13 @@ void BuildLayoutPage(wuxc::StackPanel& p) {
         for (const auto& opt : kOpts) {
             auto b = MakeGhostButton(nullptr, 6);
             b.Padding(Thickness{ 12, 6, 12, 6 });
-            b.MinWidth(66);
-            b.Content(MakeLabel(opt.label, 12));
+            b.MinWidth(68);
+            b.HorizontalContentAlignment(HorizontalAlignment::Center);
+            b.VerticalContentAlignment(VerticalAlignment::Center);
+            auto lbl = MakeLabel(opt.label, 12);
+            lbl.HorizontalAlignment(HorizontalAlignment::Center);
+            lbl.TextAlignment(TextAlignment::Center);
+            b.Content(lbl);
             std::wstring idStr = opt.id;
             b.Click([idStr, curAlign, paintBtns](auto&&, auto&&) {
                 *curAlign = idStr;
@@ -44741,14 +44649,15 @@ void BuildLayoutPage(wuxc::StackPanel& p) {
     {
         auto card = MakeCard();
         wuxc::StackPanel cardBody;
+        cardBody.Padding(Thickness{ 14, 12, 14, 12 });
         cardBody.Spacing(10);
 
         wuxc::StackPanel hdrStack;
         hdrStack.Spacing(2);
-        hdrStack.Children().Append(MakeLabel(L"Apps with disabled notifications", 13.5, true));
+        hdrStack.Children().Append(MakeLabel(L"Apps with disabled notifications", 13, false));
         const std::wstring mutedDesc =
             L"Apps muted from notification popups. Click the delete icon on the right to allow notifications from an app again.";
-        auto descTb = MakeLabel(mutedDesc, 11.5, false, 0.65);
+        auto descTb = MakeLabel(mutedDesc, 11, false, 0.55);
         descTb.TextWrapping(TextWrapping::Wrap);
         hdrStack.Children().Append(descTb);
         cardBody.Children().Append(hdrStack);
@@ -45113,7 +45022,8 @@ void BuildStartSearchPage(wuxc::StackPanel& p) {
             }else if(changed){
                 cell.Background(MakeSolid(0x28,238,245,255));
             }
-            cell.BorderBrush(MakeSolid(selected?0xA0:0x18,255,255,255));
+            cell.BorderBrush(selected ? MakeSolid(0x00, 0, 0, 0) : MakeSolid(0x18, 255, 255, 255));
+            cell.BorderThickness(selected ? Thickness{0,0,0,0} : Thickness{1,1,1,1});
             setHover(cell,false);
         }
     };
@@ -45185,6 +45095,7 @@ void BuildButtonsPage(wuxc::StackPanel& p) {
                 AddBoolRow(p, L"Show Network Monitor button", L"showNetworkButton");
             } else if (item == L"SpeedTestButton") {
                 AddBoolRow(p, L"Show SpeedTest button", L"showSpeedTestButton");
+    AddBoolRow(p, L"Show System Optimizer button", L"showOptimizerButton");
             } else if (item == L"WeatherButton") {
                 AddBoolRow(p, L"Show Weather button", L"showWeatherButton");
             } else if (item == L"WallpaperButton") {
@@ -45236,13 +45147,14 @@ static std::wstring BuildSettingsJson() {
     addStr(L"topBarBackgroundColor");
     addInt(L"topBarBackgroundOpacity");
     addStr(L"iconColor");
-    addStr(L"iconPack");
     addStr(L"fontColor");
     addStr(L"fontFamily");
     addInt(L"fontBold");
     addInt(L"boldIntensity");
     addInt(L"showNetworkButton");
     addInt(L"showSpeedTestButton");
+    addInt(L"showOptimizerButton");
+    addInt(L"optimizerSkipRamConfirm");
     addStr(L"powerButtonAction");
     addStr(L"timeFormat");
     addStr(L"dateFormat");
@@ -45339,13 +45251,14 @@ static std::wstring BuildSettingsJson() {
 
 void BuildAboutPage(wuxc::StackPanel& p) {
     p.Children().Append(MakeHeading(L"TopBar for Windows", 22));
-    p.Children().Append(MakeLabel(L"Version 1.5.0", 13, false, 0.65));
+    p.Children().Append(MakeLabel(L"Version " WH_MOD_VERSION, 13, false, 0.65));
     auto info = MakeLabel(
         L"• Mod created by WasiXGamer.\n"
         L"• Tray button functionality inspired by Mac Island & Dock by caliberda.\n"
         L"• Settings app inspired by Taskbar Fluent Media Player by Salyts.\n"
         L"• Windhawk Blur imported from Windows 11 Taskbar Styler by m417z.\n"
-        L"• Speed Test Flyout inspired by Network Menu Speed Test Mod by Alessandro-Vecchio.",
+        L"• Speed Test Flyout inspired by Network Menu Speed Test Mod by Alessandro-Vecchio.\n"
+        L"• RAM Cleaner inspired by Mem Reduct by Henry++.",
         12, false, 0.8);
     info.TextWrapping(TextWrapping::Wrap);
     info.MaxWidth(420);
@@ -45514,7 +45427,7 @@ static void ApplySettingsPairs(
     static const std::set<std::wstring> kAllowedKeys = {
         L"topBarScaleMode", L"topBarScale", L"barHeight", L"cornerRadius",
         L"topBarBackgroundColor", L"topBarBackgroundOpacity",
-        L"iconColor", L"iconPack", L"fontColor", L"fontFamily", L"fontBold",
+        L"iconColor", L"fontColor", L"fontFamily", L"fontBold",
         L"boldIntensity", L"showNetworkButton", L"showSpeedTestButton", L"powerButtonAction",
         L"globalBlurAmount", L"globalBlurSaturation",
         L"showStartButton", L"showSearchButton",
@@ -45526,8 +45439,9 @@ static void ApplySettingsPairs(
         L"showTrayIconButton", L"showNotificationsButton",
         L"disableTitleBarBleed",
         L"leftItems", L"centerItems", L"rightItems",
-        L"showCpuUsage", L"showRamUsage", L"showGpuUsage",
-        L"labelCpu", L"labelRam", L"labelGpu",
+        L"showCpuUsage", L"showRamUsage", L"showGpuUsage", L"showDiskUsage",
+        L"labelCpu", L"labelRam", L"labelGpu", L"labelDisk",
+        L"showOptimizerButton", L"optimizerSkipRamConfirm",
         L"showMediaButton", L"showMediaVisualizer",
         L"mediaButtonShowIcon", L"mediaButtonShowName",
         L"mediaButtonShowControls", L"mediaButtonShowVisualizer",
@@ -45554,7 +45468,7 @@ static void ApplySettingsPairs(
         { L"cornerRadius",              {   0,  30 } },
         { L"topBarBackgroundOpacity",   {   0, 100 } },
         { L"globalBlurAmount",          {   1,  50 } },
-        { L"globalBlurSaturation",      {   0, 200 } },
+        { L"globalBlurSaturation",      {   0, 400 } },
         { L"taskButtonWidth",           {  40, 250 } },
         { L"taskIconSize",              {  12,  40 } },
         { L"showStartButton",           {   0,   1 } },
@@ -45578,6 +45492,9 @@ static void ApplySettingsPairs(
         { L"showCpuUsage",              {   0,   1 } },
         { L"showRamUsage",              {   0,   1 } },
         { L"showGpuUsage",              {   0,   1 } },
+        { L"showDiskUsage",             {   0,   1 } },
+        { L"showOptimizerButton",       {   0,   1 } },
+        { L"optimizerSkipRamConfirm",   {   0,   1 } },
         { L"showMediaButton",           {   0,   1 } },
         { L"showMediaVisualizer",       {   0,   1 } },
         { L"mediaButtonShowIcon",       {   0,   1 } },
@@ -45689,7 +45606,12 @@ static std::wstring ReadFileUtf8(const std::wstring& path) {
                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) return {};
     DWORD sz = GetFileSize(h, nullptr);
-    std::string utf8(sz ? sz : 0, '\0');
+    constexpr DWORD kMaxImportFileBytes = 2 * 1024 * 1024; // 2 MB cap
+    if (sz == INVALID_FILE_SIZE || sz == 0 || sz > kMaxImportFileBytes) {
+        CloseHandle(h);
+        return {};
+    }
+    std::string utf8(sz, '\0');
     DWORD read = 0;
     if (sz) ReadFile(h, utf8.data(), sz, &read, nullptr);
     CloseHandle(h);
@@ -47026,8 +46948,9 @@ wuxc::Grid BuildWindowContent() {
                 L"startButtonAction", L"searchButtonAction",
         L"showPinnedSection", L"searchQuickControls", L"startSearchAlignment", L"startFolderExplorer", L"startFolderDocuments", L"startFolderDownloads", L"startFolderSettings",
         L"startFolderPictures", L"startFolderMusic", L"startFolderVideos", L"startFolderNetwork",
-                L"showCpuUsage", L"showRamUsage", L"showGpuUsage",
-                L"labelCpu", L"labelRam", L"labelGpu",
+                L"showCpuUsage", L"showRamUsage", L"showGpuUsage", L"showDiskUsage",
+                L"labelCpu", L"labelRam", L"labelGpu", L"labelDisk",
+                L"showOptimizerButton", L"optimizerSkipRamConfirm",
                 L"showMediaButton", L"showMediaVisualizer",
                 L"mediaButtonShowIcon", L"mediaButtonShowName",
                 L"mediaButtonShowControls", L"mediaButtonShowVisualizer",
@@ -47930,6 +47853,7 @@ static std::wstring QueryStorageSummary() {
     return joined;
 }
 
+static std::atomic<bool> s_aboutPcGatherInFlight{false};
 static AboutPcInfo GatherAboutPcInfo() {
     AboutPcInfo info;
 
@@ -48491,12 +48415,15 @@ static void CreateAboutPcWindowOnCurrentThread() {
         ApplyAboutWindowBackdrop(s_hwnd);
         ShowWindow(s_hwnd, SW_SHOW);
         SetForegroundWindow(s_hwnd);
-        RunInBackground([] {
-            auto info = GatherAboutPcInfo();
-            RunOnUiThread([info = std::move(info)] {
-                if (s_hwnd && IsWindow(s_hwnd)) PopulateSpecsRows(info);
+        if (!s_aboutPcGatherInFlight.exchange(true)) {
+            RunInBackground([] {
+                auto info = GatherAboutPcInfo();
+                RunOnUiThread([info = std::move(info)] {
+                    s_aboutPcGatherInFlight.store(false);
+                    if (s_hwnd && IsWindow(s_hwnd)) PopulateSpecsRows(info);
+                });
             });
-        });
+        }
         return;
     }
 
@@ -48788,6 +48715,8 @@ static void ParseTrayPush(const COPYDATASTRUCT* cd) {
     memcpy(&count, p, sizeof(count));
     p += sizeof(count);
 
+    const size_t maxPossible = static_cast<size_t>(end - p) / sizeof(TopBarTrayPushRecord);
+    if (count > maxPossible) return;
     std::vector<TopBarTrayIconClient> parsed;
     parsed.reserve(count);
     for (UINT32 i = 0; i < count; i++) {
@@ -50881,6 +50810,77 @@ void SlideTopBarXaml(bool show, bool animate) {
     } catch (...) {}
 }
 
+void ClipIslandHwndToEmpty();
+void ClipHostHwndToEmpty();
+
+void ParkHiddenTopBarPopup() {
+    ClipIslandHwndToEmpty();
+    ClipHostHwndToEmpty();
+    if (g_topBarPopupRetryTimer) {
+        try { g_topBarPopupRetryTimer.Stop(); } catch (...) {}
+    }
+    if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+        HRGN empty = CreateRectRgn(0, 0, 0, 0);
+        if (empty) SetWindowRgn(g_topBarPopupHwnd, empty, TRUE);
+        BOOL cloakOn = TRUE;
+        DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &cloakOn, sizeof(cloakOn));
+        LONG_PTR ex = GetWindowLongPtrW(g_topBarPopupHwnd, GWL_EXSTYLE);
+        if (!(ex & WS_EX_TRANSPARENT)) {
+            SetWindowLongPtrW(g_topBarPopupHwnd, GWL_EXSTYLE,
+                              ex | static_cast<LONG_PTR>(WS_EX_TRANSPARENT));
+        }
+        g_suppressPopupPositionLock = true;
+        SetWindowPos(g_topBarPopupHwnd, HWND_BOTTOM, -32000, -32000, 0, 0,
+                     SWP_NOSIZE | SWP_NOACTIVATE | SWP_HIDEWINDOW | SWP_NOREDRAW | SWP_FRAMECHANGED);
+        ShowWindow(g_topBarPopupHwnd, SW_HIDE);
+        g_suppressPopupPositionLock = false;
+    }
+    // Also sweep any stale/duplicate Xaml_WindowedPopupClass in our own process
+    // left behind over the top-bar strip (never touching Settings or live child/toast popups).
+    if (!g_anyChildFlyoutOpen.load() && !g_liveNotifPopupOpen.load()) {
+        struct SweepCtx { DWORD pid; RECT barStrip; };
+        RECT mr = GetBarMonitorRect();
+        RECT strip{ mr.left, mr.top, mr.right, mr.top + std::max(g_barHeightPx, 40) + 12 };
+        SweepCtx ctx{ GetCurrentProcessId(), strip };
+        EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+            auto* c = reinterpret_cast<SweepCtx*>(lp);
+            if (!IsWindow(hwnd) || !IsWindowVisible(hwnd)) return TRUE;
+            if (hwnd == g_topBarHwnd || hwnd == g_islandHwnd || hwnd == g_topBarPopupHwnd ||
+                hwnd == g_settingsWindowHwnd || IsXamlPopupOwnedBySettingsWindow(hwnd)) {
+                return TRUE;
+            }
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hwnd, &pid);
+            if (pid != c->pid) return TRUE;
+            wchar_t cls[64]{};
+            if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
+            if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+            RECT r{}, inter{};
+            if (GetWindowRect(hwnd, &r) && IntersectRect(&inter, &r, &c->barStrip)) {
+                HRGN empty = CreateRectRgn(0, 0, 0, 0);
+                if (empty) SetWindowRgn(hwnd, empty, TRUE);
+                BOOL cloakOn = TRUE;
+                DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloakOn, sizeof(cloakOn));
+                ShowWindow(hwnd, SW_HIDE);
+            }
+            return TRUE;
+        }, reinterpret_cast<LPARAM>(&ctx));
+    }
+    {
+        RECT mr = GetBarMonitorRect();
+        POINT probePt{ mr.left + 100, mr.top + 20 };
+        HWND under = WindowFromPoint(probePt);
+        wchar_t cls[64]{};
+        DWORD pid = 0;
+        if (under) {
+            GetClassNameW(under, cls, ARRAYSIZE(cls));
+            GetWindowThreadProcessId(under, &pid);
+        }
+        Wh_Log(L"AutoHide: parked popup=%p; under(%ld,%ld)=%p class=%s pid=%u (ours=%u)",
+               g_topBarPopupHwnd, probePt.x, probePt.y, under, cls, pid, GetCurrentProcessId());
+    }
+}
+
 void ScheduleCloakAfterSlide() {
     if (!g_cloakTimer) {
         g_cloakTimer = DispatcherTimer();
@@ -50890,15 +50890,7 @@ void ScheduleCloakAfterSlide() {
             if (g_topBarAutoHidden.load() &&
                 g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
                 ForceDisableWindowsTransparency(g_topBarPopupHwnd, true);
-                HRGN empty = CreateRectRgn(0, 0, 0, 0);
-                if (empty) {
-                    SetWindowRgn(g_topBarPopupHwnd, empty, TRUE);
-                }
-                BOOL on = TRUE;
-                DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &on, sizeof(on));
-                g_suppressPopupPositionLock = true;
-                ShowWindow(g_topBarPopupHwnd, SW_HIDE);
-                g_suppressPopupPositionLock = false;
+                ParkHiddenTopBarPopup();
             }
         });
     }
@@ -50930,6 +50922,7 @@ void EnforceTopBarPopupState() {
         auto* c = reinterpret_cast<Ctx*>(lp);
         if (!IsWindow(hwnd)) return TRUE;
         if (hwnd == g_islandHwnd || hwnd == g_topBarHwnd) return TRUE;
+        if (hwnd == g_topBarPopupHwnd && (ShouldKeepTopBarPopupHidden() || g_fullScreenAppActive)) return TRUE;
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
         if (pid != c->pid) return TRUE;
@@ -50967,6 +50960,11 @@ void FinishShowBarForAutoHide() {
     }
 
     if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+        LONG_PTR ex = GetWindowLongPtrW(g_topBarPopupHwnd, GWL_EXSTYLE);
+        if (ex & WS_EX_TRANSPARENT) {
+            SetWindowLongPtrW(g_topBarPopupHwnd, GWL_EXSTYLE,
+                              ex & ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT));
+        }
         SetWindowRgn(g_topBarPopupHwnd, nullptr, TRUE);
         RECT mr0 = GetBarMonitorRect();
         g_forcePopupPosition = true;
@@ -51101,13 +51099,7 @@ void HideBarForAutoHide() {
         SlideTopBarXaml(false, false);
         if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
             ForceDisableWindowsTransparency(g_topBarPopupHwnd, true);
-            HRGN emptyRgn = CreateRectRgn(0, 0, 0, 0);
-            if (emptyRgn) SetWindowRgn(g_topBarPopupHwnd, emptyRgn, TRUE);
-            BOOL cloakOn = TRUE;
-            DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &cloakOn, sizeof(cloakOn));
-            g_suppressPopupPositionLock = true;
-            ShowWindow(g_topBarPopupHwnd, SW_HIDE);
-            g_suppressPopupPositionLock = false;
+            ParkHiddenTopBarPopup();
         }
         if (g_settings.topBarShowTrigger == L"activationbar" && !IsTrueFullscreen()) {
             try { AnimateActivationPillWindow(true); } catch (...) {}
@@ -51161,13 +51153,7 @@ void HideBarForAutoHide() {
                     s_rgnTimer.Stop();
                     g_topBarHideAnimating.store(false);
                     ForceDisableWindowsTransparency(g_topBarPopupHwnd, true);
-                    HRGN emptyRgn = CreateRectRgn(0, 0, 0, 0);
-                    if (emptyRgn) SetWindowRgn(g_topBarPopupHwnd, emptyRgn, TRUE);
-                    BOOL cloakOn = TRUE;
-                    DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &cloakOn, sizeof(cloakOn));
-                    g_suppressPopupPositionLock = true;
-                    ShowWindow(g_topBarPopupHwnd, SW_HIDE);
-                    g_suppressPopupPositionLock = false;
+                    ParkHiddenTopBarPopup();
                 }
             });
         }
@@ -51194,13 +51180,21 @@ void HideBarForAutoHide() {
 
 void SyncTopBarCloakState() {
     if (!g_topBarPopupHwnd || !IsWindow(g_topBarPopupHwnd)) return;
-    BOOL isCloaked = FALSE;
-    if (FAILED(DwmGetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAKED,
-                                     &isCloaked, sizeof(isCloaked)))) return;
     bool wantCloaked = ShouldKeepTopBarPopupHidden();
-    if (wantCloaked != (isCloaked != FALSE)) {
-        BOOL val = wantCloaked ? TRUE : FALSE;
-        DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &val, sizeof(val));
+    BOOL isCloaked = FALSE;
+    if (SUCCEEDED(DwmGetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAKED,
+                                        &isCloaked, sizeof(isCloaked)))) {
+        if (wantCloaked != (isCloaked != FALSE)) {
+            BOOL val = wantCloaked ? TRUE : FALSE;
+            DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &val, sizeof(val));
+        }
+    }
+    if (wantCloaked) {
+        RECT r{};
+        bool onScreen = GetWindowRect(g_topBarPopupHwnd, &r) && r.left > -16000;
+        if (IsWindowVisible(g_topBarPopupHwnd) || onScreen) {
+            ParkHiddenTopBarPopup();
+        }
     }
 }
 
@@ -51765,57 +51759,7 @@ static bool QueryAppCustomActivatorClsid(const std::wstring& appId, CLSID* outCl
         if (tryReadClsidValue(root, aumidKey, L"ToastActivatorCLSID")) return true;
     }
 
-    // For MSIX / packaged apps (e.g. WhatsApp, Telegram, Discord, Teams), also inspect
-    // Package Family Name registrations under ActivatableClasses & PackagedCom.
-    const size_t bangPos = appId.find(L'!');
-    if (bangPos != std::wstring::npos && bangPos > 0) {
-        const std::wstring pfn = appId.substr(0, bangPos);
-        const std::wstring pkgPrefix = pfn.substr(0, pfn.find(L'_'));
-        const std::wstring pkgRootPaths[2] = {
-            L"Software\\Classes\\ActivatableClasses\\Package",
-            L"Software\\Classes\\PackagedCom\\Package"
-        };
-        for (HKEY root : roots) {
-            HKEY hPkgRoot = nullptr;
-            if (RegOpenKeyExW(root, pkgRootPaths[1].c_str(), 0, KEY_READ, &hPkgRoot) == ERROR_SUCCESS) {
-                wchar_t pkgName[256]{};
-                for (DWORD idx = 0; ; ++idx) {
-                    DWORD nameLen = ARRAYSIZE(pkgName);
-                    if (RegEnumKeyExW(hPkgRoot, idx, pkgName, &nameLen, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) break;
-                    std::wstring pkg(pkgName, nameLen);
-                    if (!pkgPrefix.empty() && pkg.rfind(pkgPrefix, 0) != 0) continue;
-                    // Check Class subkeys for a ToastActivator / NotificationActivator COM class
-                    std::wstring classRootPath = pkgRootPaths[1] + L"\\" + pkg + L"\\Class";
-                    HKEY hClassRoot = nullptr;
-                    if (RegOpenKeyExW(root, classRootPath.c_str(), 0, KEY_READ, &hClassRoot) == ERROR_SUCCESS) {
-                        wchar_t clsGuid[128]{};
-                        for (DWORD cIdx = 0; ; ++cIdx) {
-                            DWORD cLen = ARRAYSIZE(clsGuid);
-                            if (RegEnumKeyExW(hClassRoot, cIdx, clsGuid, &cLen, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) break;
-                            std::wstring gStr(clsGuid, cLen);
-                            CLSID candidate{};
-                            if (SUCCEEDED(CLSIDFromString(gStr.c_str(), &candidate))) {
-                                // Verify it actually implements INotificationActivationCallback
-                                winrt::com_ptr<TopBarINotificationActivationCallback> probe;
-                                static const IID kIidProbe =
-                                    {0x53E31837, 0x6600, 0x4A81, {0x93, 0x95, 0x75, 0xCF, 0xFE, 0x74, 0x6F, 0x94}};
-                                if (SUCCEEDED(CoCreateInstance(candidate, nullptr,
-                                                               CLSCTX_LOCAL_SERVER | CLSCTX_INPROC_SERVER,
-                                                               kIidProbe, probe.put_void())) && probe) {
-                                    *outClsid = candidate;
-                                    RegCloseKey(hClassRoot);
-                                    RegCloseKey(hPkgRoot);
-                                    return true;
-                                }
-                            }
-                        }
-                        RegCloseKey(hClassRoot);
-                    }
-                }
-                RegCloseKey(hPkgRoot);
-            }
-        }
-    }
+
     return false;
 }
 
@@ -51827,12 +51771,12 @@ static void ActivateNotificationAction(const std::wstring& appId,
                                        const std::wstring& inputId,
                                        const std::wstring& inputText) {
     RunInBackground([appId, args, activationType, inputId, inputText] {
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        HRESULT hrCoNotif = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        struct CoNotifGuard { HRESULT hr; ~CoNotifGuard() { if (SUCCEEDED(hr)) CoUninitialize(); } } coNotifGuard{hrCoNotif};
         bool handled = false;
         const bool isReply = !inputText.empty();
 
-        if (!isReply && (_wcsicmp(activationType.c_str(), L"protocol") == 0 ||
-            args.find(L"://") != std::wstring::npos)) {
+        if (!isReply && _wcsicmp(activationType.c_str(), L"protocol") == 0) {
             if (!args.empty()) {
                 ShellExecuteW(nullptr, L"open", args.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
                 handled = true;
@@ -51980,7 +51924,6 @@ static void ActivateNotificationAction(const std::wstring& appId,
             ShellExecuteW(nullptr, L"open", shellTarget.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         }
 
-        CoUninitialize();
     });
 }
 
@@ -52091,7 +52034,7 @@ wuxm::Imaging::BitmapImage AppIcon(const std::wstring& appId) {
     std::lock_guard<std::mutex> lock(g_appPresentationMutex);
     auto [it, inserted] = g_appIconCache.insert_or_assign(appId, icon);
     if (inserted) g_appIconOrder.push_back(appId);
-    while (g_appIconCache.size() > 24 && !g_appIconOrder.empty()) {
+    while (g_appIconCache.size() > 16 && !g_appIconOrder.empty()) {
         auto oldApp = std::move(g_appIconOrder.front());
         g_appIconOrder.pop_front();
         g_appIconCache.erase(oldApp);
@@ -52468,21 +52411,22 @@ static void EnsureMutedAppsLoaded() {
     std::wstring raw = GetStringSettingCopy(L"mutedNotificationApps");
     size_t pos = 0;
     while (pos < raw.size()) {
-        size_t nl = raw.find(L'\n', pos);
-        std::wstring line = (nl == std::wstring::npos) ? raw.substr(pos) : raw.substr(pos, nl - pos);
+        size_t sep = raw.find_first_of(L"|\r\n", pos);
+        std::wstring line = (sep == std::wstring::npos) ? raw.substr(pos) : raw.substr(pos, sep - pos);
         line = TrimWs(line);
         if (!line.empty()) g_mutedNotificationApps[ToLowerCopy(line)] = line;
-        if (nl == std::wstring::npos) break;
-        pos = nl + 1;
+        if (sep == std::wstring::npos) break;
+        pos = sep + 1;
     }
 }
 
 static std::wstring SerializeMutedAppsLocked() {
     std::wstring serialized;
-    bool first = true;
     for (const auto& kv : g_mutedNotificationApps) {
-        if (!first) serialized += L"\n";
-        first = false;
+        if (kv.second.empty()) continue;
+        size_t addLen = (serialized.empty() ? 0 : 1) + kv.second.size();
+        if (serialized.size() + addLen >= 32760) break;
+        if (!serialized.empty()) serialized += L"|";
         serialized += kv.second;
     }
     return serialized;
@@ -52913,13 +52857,20 @@ static void RemoveToastCardById(long long id, bool dismissGlobally) {
                     visual.StartAnimation(L"Opacity", oAnim);
 
                     auto t = std::make_shared<DispatcherTimer>();
+                    auto tok = std::make_shared<winrt::event_token>();
+                    auto weakCard = winrt::make_weak(cardShell);
                     t->Interval(std::chrono::milliseconds(205));
-                    t->Tick([t, cardShell](wf::IInspectable const&, wf::IInspectable const&) {
-                        try { t->Stop(); } catch (...) {}
-                        if (g_popupCardsStack && cardShell) {
-                            uint32_t idx = 0;
-                            if (g_popupCardsStack.Children().IndexOf(cardShell, idx)) {
-                                g_popupCardsStack.Children().RemoveAt(idx);
+                    *tok = t->Tick([t, tok, weakCard](wf::IInspectable const&, wf::IInspectable const&) {
+                        try {
+                            t->Stop();
+                            t->Tick(*tok);
+                        } catch (...) {}
+                        if (auto cs = weakCard.get()) {
+                            if (g_popupCardsStack) {
+                                uint32_t idx = 0;
+                                if (g_popupCardsStack.Children().IndexOf(cs, idx)) {
+                                    g_popupCardsStack.Children().RemoveAt(idx);
+                                }
                             }
                         }
                         if (g_popupVisible && !g_popupClosing && g_notifPopup && g_notifPopup.IsOpen()) {
@@ -53427,12 +53378,36 @@ static void PushNewNotifications(const std::vector<windows_notifications::Item>&
     g_popupClosing = false;
     try { if (g_popupSlideTimer) g_popupSlideTimer.Stop(); } catch (...) {}
 
+    static std::map<std::wstring, ULONGLONG> s_recentPopupFingerprints;
+    const ULONGLONG nowTick = GetTickCount64();
+    for (auto it = s_recentPopupFingerprints.begin(); it != s_recentPopupFingerprints.end();) {
+        if (nowTick - it->second > 30000ULL) it = s_recentPopupFingerprints.erase(it);
+        else ++it;
+    }
+    auto makeFingerprint = [](const windows_notifications::Item& it) -> std::wstring {
+        std::wstring fp = ToLowerCopy(it.appId);
+        fp.push_back(L'\x1F');
+        fp += TrimWs(it.title);
+        fp.push_back(L'\x1F');
+        fp += TrimWs(it.body);
+        return fp;
+    };
+
     bool addedAny = false;
     for (const auto& item : newItems) {
         if (IsAppMutedForPopup(item.appId)) continue;
-        bool dup = std::any_of(g_activeCards.begin(), g_activeCards.end(),
-            [&](const ActiveToastCard& c) { return c.item.id == item.id; });
-        if (dup) continue;
+        std::wstring fp = makeFingerprint(item);
+        bool dupActive = std::any_of(g_activeCards.begin(), g_activeCards.end(),
+            [&](const ActiveToastCard& c) {
+                return c.item.id == item.id || makeFingerprint(c.item) == fp;
+            });
+        if (dupActive) continue;
+        if (auto rit = s_recentPopupFingerprints.find(fp);
+            rit != s_recentPopupFingerprints.end() && (nowTick - rit->second) <= 30000ULL) {
+            continue;
+        }
+        if (s_recentPopupFingerprints.size() >= 64) s_recentPopupFingerprints.clear();
+        s_recentPopupFingerprints[fp] = nowTick;
 
         // Allow up to 3 stacked rows (even from a single app); never evict a card being replied to
         while (g_activeCards.size() >= 3) {
@@ -53513,20 +53488,37 @@ static void Cleanup() {
 
 } // namespace live_notif_popup
 
+static std::mutex g_savedQuietHoursMutex;
+static std::wstring g_savedQuietHoursProfile;
+
 void SyncNativeToastSuppression() {
     bool shouldSuppress = (g_settings.enableNotificationPopup && g_settings.hideWindowsNotifications) ||
                           (g_settings.enableNotificationPopup && g_settings.topBarNotificationDnd);
     RunInBackground([shouldSuppress] {
         try {
             if (shouldSuppress) {
-                if (!ccd::Get()) {
-                    if (ccd::Set(true)) {
+                std::wstring cur = ccd::GetProfile();
+                if (cur != L"Microsoft.QuietHoursProfile.AlarmsOnly") {
+                    if (!live_notif_popup::g_weEnabledWindowsDnd.load()) {
+                        std::lock_guard<std::mutex> lock(g_savedQuietHoursMutex);
+                        g_savedQuietHoursProfile = cur.empty()
+                            ? L"Microsoft.QuietHoursProfile.Unrestricted" : cur;
+                    }
+                    if (ccd::SetProfile(L"Microsoft.QuietHoursProfile.AlarmsOnly")) {
                         live_notif_popup::g_weEnabledWindowsDnd.store(true);
                     }
                 }
             } else {
                 if (live_notif_popup::g_weEnabledWindowsDnd.exchange(false)) {
-                    ccd::Set(false);
+                    std::wstring restore;
+                    {
+                        std::lock_guard<std::mutex> lock(g_savedQuietHoursMutex);
+                        restore = g_savedQuietHoursProfile;
+                        g_savedQuietHoursProfile.clear();
+                    }
+                    ccd::SetProfile(restore.empty()
+                        ? L"Microsoft.QuietHoursProfile.Unrestricted"
+                        : restore.c_str());
                 }
             }
         } catch (...) {}
@@ -53617,6 +53609,64 @@ void PollNotificationsForLivePopup() {
             live_notif_popup::PushNewNotifications(newlyArrived);
         }
     });
+}
+
+static void AnimateNotificationFlyoutDismiss(FrameworkElement const& target,
+                                             std::function<void()> onCompleted) {
+    BOOL animEnabled = TRUE;
+    SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animEnabled, 0);
+    if (!target || !animEnabled) {
+        if (onCompleted) onCompleted();
+        return;
+    }
+    try {
+        auto visual = wuxh::ElementCompositionPreview::GetElementVisual(target);
+        if (!visual) {
+            if (onCompleted) onCompleted();
+            return;
+        }
+        auto compositor = visual.Compositor();
+        if (!compositor) {
+            if (onCompleted) onCompleted();
+            return;
+        }
+        wuxh::ElementCompositionPreview::SetIsTranslationEnabled(target, true);
+        float w = static_cast<float>(target.ActualWidth());
+        float h = static_cast<float>(target.ActualHeight());
+        float slideX = (w > 1.0f) ? (w * 0.45f) : 120.0f;
+        visual.CenterPoint({ w * 0.5f, h * 0.5f, 0.0f });
+
+        auto batch = compositor.CreateScopedBatch(
+            winrt::Windows::UI::Composition::CompositionBatchTypes::Animation);
+        auto ease = compositor.CreateCubicBezierEasingFunction({ 0.4f, 0.0f }, { 1.0f, 1.0f });
+        constexpr auto kDur = std::chrono::milliseconds(190);
+
+        auto transAnim = compositor.CreateVector3KeyFrameAnimation();
+        transAnim.Duration(kDur);
+        transAnim.InsertKeyFrame(1.0f, { slideX, 0.0f, 0.0f }, ease);
+        visual.StartAnimation(L"Translation", transAnim);
+
+        auto opAnim = compositor.CreateScalarKeyFrameAnimation();
+        opAnim.Duration(kDur);
+        opAnim.InsertKeyFrame(1.0f, 0.0f, ease);
+        visual.StartAnimation(L"Opacity", opAnim);
+
+        auto scaleAnim = compositor.CreateVector3KeyFrameAnimation();
+        scaleAnim.Duration(kDur);
+        scaleAnim.InsertKeyFrame(1.0f, { 0.96f, 0.96f, 1.0f }, ease);
+        visual.StartAnimation(L"Scale", scaleAnim);
+
+        batch.End();
+        auto fired = std::make_shared<std::atomic<bool>>(false);
+        batch.Completed([fired, onCompleted = std::move(onCompleted)](auto&&, auto&&) {
+            if (fired->exchange(true)) return;
+            RunOnUiThread([onCompleted]() {
+                try { if (onCompleted) onCompleted(); } catch (...) {}
+            });
+        });
+        return;
+    } catch (...) {}
+    if (onCompleted) onCompleted();
 }
 
 void PopulateWindowsNotificationPanel(wuxc::StackPanel const& panel,
@@ -53722,9 +53772,29 @@ void PopulateWindowsNotificationPanel(wuxc::StackPanel const& panel,
         winrt::box_value(winrt::hstring(L"ButtonBorderBrushPointerOver")),
         MakeBrush(0x20, 0xFF, 0xFF, 0xFF));
     clear.Content(MakeText(nullptr, L"Clear all", 12));
-    clear.Click([panel, flyout](auto&&, auto&&) {
-        windows_notifications::ClearVisible();
-        PopulateWindowsNotificationPanel(panel, flyout);
+    clear.Click([weakPanel = winrt::make_weak(panel), weakFlyout = winrt::make_weak(flyout)](auto&&, auto&&) {
+        auto p = weakPanel.get();
+        auto f = weakFlyout.get();
+        if (!p || !f) return;
+        FrameworkElement animTarget{ nullptr };
+        for (auto&& ch : p.Children()) {
+            if (auto sv = ch.try_as<wuxc::ScrollViewer>()) {
+                animTarget = sv.as<FrameworkElement>();
+                break;
+            }
+        }
+        auto finish = [weakPanel, weakFlyout]() {
+            windows_notifications::ClearVisible();
+            UpdateNotificationsBadgeDot();
+            if (auto p2 = weakPanel.get(); auto f2 = weakFlyout.get()) {
+                PopulateWindowsNotificationPanel(p2, f2);
+            }
+        };
+        if (animTarget) {
+            AnimateNotificationFlyoutDismiss(animTarget, std::move(finish));
+        } else {
+            finish();
+        }
     });
     auto settingsBtn = MakeGhostButton(L"NotificationsSettingsButton", winui ? 6.0 : 8.0);
     settingsBtn.Width(34);
@@ -53887,9 +53957,22 @@ void PopulateWindowsNotificationPanel(wuxc::StackPanel const& panel,
             appHeaderTile.PointerExited([closeApp](auto&&, auto&&) {
                 closeApp.Opacity(0.55);
             });
-            closeApp.Click([appId, panel, flyout](auto&&, auto&&) {
-                windows_notifications::g_dismissedApps.insert(appId);
-                PopulateWindowsNotificationPanel(panel, flyout);
+            closeApp.Click([appId,
+                            weakGroup = winrt::make_weak(groupCard),
+                            weakPanel = winrt::make_weak(panel),
+                            weakFlyout = winrt::make_weak(flyout)](auto&&, auto&&) {
+                auto finish = [appId, weakPanel, weakFlyout]() {
+                    windows_notifications::g_dismissedApps.insert(appId);
+                    UpdateNotificationsBadgeDot();
+                    if (auto p2 = weakPanel.get(); auto f2 = weakFlyout.get()) {
+                        PopulateWindowsNotificationPanel(p2, f2);
+                    }
+                };
+                if (auto g = weakGroup.get()) {
+                    AnimateNotificationFlyoutDismiss(g.as<FrameworkElement>(), std::move(finish));
+                } else {
+                    finish();
+                }
             });
             appHeaderTile.Child(appHeader);
             groupStack.Children().Append(appHeaderTile);
@@ -53997,52 +54080,21 @@ void PopulateWindowsNotificationPanel(wuxc::StackPanel const& panel,
                     closeNotification.Opacity(0.45);
                 });
 
-                closeNotification.Click([captured, panel, flyout, itemShell](auto&&, auto&&) {
-                    windows_notifications::g_dismissedNotificationIds.insert(captured.id);
-                    UpdateNotificationsBadgeDot();
-                    bool animated = false;
-                    try {
-                        auto visual = wuxh::ElementCompositionPreview::GetElementVisual(itemShell);
-                        if (visual) {
-                            auto compositor = visual.Compositor();
-                            if (compositor) {
-                                wuxh::ElementCompositionPreview::SetIsTranslationEnabled(itemShell, true);
-                                auto ease = compositor.CreateCubicBezierEasingFunction({0.4f, 0.0f}, {1.0f, 1.0f});
-                                auto opacityAnim = compositor.CreateScalarKeyFrameAnimation();
-                                opacityAnim.Duration(std::chrono::milliseconds(180));
-                                opacityAnim.InsertKeyFrame(1.0f, 0.0f, ease);
-                                visual.StartAnimation(L"Opacity", opacityAnim);
-                                auto offsetAnim = compositor.CreateVector3KeyFrameAnimation();
-                                offsetAnim.Duration(std::chrono::milliseconds(180));
-                                offsetAnim.InsertKeyFrame(1.0f, {-28.0f, 0.0f, 0.0f}, ease);
-                                visual.StartAnimation(L"Offset", offsetAnim);
-                                animated = true;
-                                if (!g_notifDismissState) {
-                                    g_notifDismissState = std::make_shared<NotifDismissStateGlobal>();
-                                }
-                                g_notifDismissState->panel = panel;
-                                g_notifDismissState->flyout = flyout;
-                                if (!g_notifDismissTimer) {
-                                    g_notifDismissTimer = DispatcherTimer();
-                                    g_notifDismissTimer.Interval(std::chrono::milliseconds(180));
-                                    g_notifDismissTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
-                                        if (!g_notifDismissTimer) return;
-                                        g_notifDismissTimer.Stop();
-                                        if (!g_notifDismissState) return;
-                                        try {
-                                            PopulateWindowsNotificationPanel(
-                                                g_notifDismissState->panel,
-                                                g_notifDismissState->flyout);
-                                        } catch (...) {}
-                                    });
-                                }
-                                g_notifDismissTimer.Stop();
-                                g_notifDismissTimer.Start();
-                            }
+                closeNotification.Click([captured,
+                                         weakShell = winrt::make_weak(itemShell),
+                                         weakPanel = winrt::make_weak(panel),
+                                         weakFlyout = winrt::make_weak(flyout)](auto&&, auto&&) {
+                    auto finish = [captured, weakPanel, weakFlyout]() {
+                        windows_notifications::g_dismissedNotificationIds.insert(captured.id);
+                        UpdateNotificationsBadgeDot();
+                        if (auto p2 = weakPanel.get(); auto f2 = weakFlyout.get()) {
+                            PopulateWindowsNotificationPanel(p2, f2);
                         }
-                    } catch (...) {}
-                    if (!animated) {
-                        PopulateWindowsNotificationPanel(panel, flyout);
+                    };
+                    if (auto s = weakShell.get()) {
+                        AnimateNotificationFlyoutDismiss(s.as<FrameworkElement>(), std::move(finish));
+                    } else {
+                        finish();
                     }
                 });
 
@@ -54287,63 +54339,6 @@ uint64_t BleedHashPixels(const std::vector<uint32_t>& px) {
     return h;
 }
 
-BleedRgb BleedDominantColor(const std::vector<uint32_t>& px) {
-    struct Bin {
-        uint32_t count = 0;
-        uint64_t r = 0, g = 0, b = 0;
-    };
-    static std::vector<Bin> bins(32768);
-    static std::vector<uint32_t> touched;
-    touched.clear();
-    for (uint32_t v : px) {
-        uint32_t b = v & 0xFF, g = (v >> 8) & 0xFF, r = (v >> 16) & 0xFF;
-        uint32_t key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
-        Bin& bin = bins[key];
-        if (bin.count == 0) touched.push_back(key);
-        bin.count++;
-        bin.r += r;
-        bin.g += g;
-        bin.b += b;
-    }
-    if (touched.empty()) return BleedRgb{};
-    std::sort(touched.begin(), touched.end(),
-              [](uint32_t a, uint32_t b) { return bins[a].count > bins[b].count; });
-    BleedRgb result;
-    const Bin& top = bins[touched[0]];
-    if ((double)top.count / (double)px.size() >= 0.15 || touched.size() == 1) {
-        result = BleedRgb{(int)(top.r / top.count), (int)(top.g / top.count), (int)(top.b / top.count)};
-    } else {
-        uint64_t cnt = 0, r = 0, g = 0, b = 0;
-        size_t k = std::min<size_t>(3, touched.size());
-        for (size_t i = 0; i < k; i++) {
-            const Bin& bin = bins[touched[i]];
-            cnt += bin.count;
-            r += bin.r;
-            g += bin.g;
-            b += bin.b;
-        }
-        result = BleedRgb{(int)(r / cnt), (int)(g / cnt), (int)(b / cnt)};
-    }
-    for (uint32_t key : touched) bins[key] = Bin{};
-    for (int pass = 0; pass < 2; pass++) {
-        uint64_t cnt = 0, r = 0, g = 0, b = 0;
-        for (uint32_t v : px) {
-            int pb = v & 0xFF, pg = (v >> 8) & 0xFF, pr = (v >> 16) & 0xFF;
-            if (std::abs(pr - result.r) <= 12 && std::abs(pg - result.g) <= 12 && std::abs(pb - result.b) <= 12) {
-                cnt++;
-                r += pr;
-                g += pg;
-                b += pb;
-            }
-        }
-        if (cnt == 0) break;
-        BleedRgb refined{(int)std::lround((double)r / cnt), (int)std::lround((double)g / cnt),
-                         (int)std::lround((double)b / cnt)};
-        if (refined == result) break;
-        result = refined;
-    }
-    return result;
-}
 
 bool BleedCaptureStrip(const RECT& strip, std::vector<uint32_t>& out, int& outW, int& outH) {
     int w = strip.right - strip.left, h = strip.bottom - strip.top;
@@ -54791,6 +54786,23 @@ FrameworkElement BuildTopBarContent() {
         auto menu = wuxc::MenuFlyout();
         s_topBarMenu = menu;
         StyleMenuFlyout(menu);
+        menu.Opened([](wf::IInspectable const& s, wf::IInspectable const&) {
+            try { RegisterOpenPopup(s.as<wuxc::Primitives::FlyoutBase>()); } catch (...) {}
+            RunOnUiThread([] {
+                try { PromoteChildFlyoutPopups(); } catch (...) {}
+            });
+            RunInBackground([] {
+                if (WaitForSingleObject(g_stopEvent, 45) == WAIT_OBJECT_0) return;
+                RunOnUiThread([] {
+                    if (g_anyChildFlyoutOpen.load()) {
+                        try { PromoteChildFlyoutPopups(); } catch (...) {}
+                    }
+                });
+            });
+        });
+        menu.Closed([](wf::IInspectable const& s, wf::IInspectable const&) {
+            try { UnregisterOpenPopup(s.as<wuxc::Primitives::FlyoutBase>()); } catch (...) {}
+        });
         menu.Items().Append(MakeMenuItem(L"TopBar settings…", [] {
             OpenTopBarSettingsWindow();
         }, L"\uE713"));
@@ -54847,17 +54859,26 @@ FrameworkElement BuildTopBarContent() {
         }, L"\uE72C"));
         auto fe = sender.as<FrameworkElement>();
         auto pt = args.GetPosition(fe);
-        if (pt.X <= 1.0f && pt.Y <= 1.0f && g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+        if (pt.X <= 1.0f && g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
             POINT cur{};
             RECT popup{};
             if (GetCursorPos(&cur) && GetWindowRect(g_topBarPopupHwnd, &popup)) {
-                double dpi = GetBarDpiScale();
-                if (!std::isfinite(dpi) || dpi <= 0.0) dpi = 1.0;
-                pt.X = static_cast<float>((cur.x - popup.left) / dpi);
-                pt.Y = static_cast<float>((cur.y - popup.top) / dpi);
+                double userScale = g_settings.topBarScale / 100.0;
+                if (!std::isfinite(userScale) || userScale <= 0.0) userScale = 1.0;
+                pt.X = static_cast<float>((cur.x - popup.left) / userScale);
             }
         }
-        menu.ShowAt(fe, pt);
+        double barH = fe.ActualHeight();
+        if (!std::isfinite(barH) || barH < 16.0) barH = g_settings.barHeightDip;
+        pt.Y = static_cast<float>(barH) + 4.0f;
+        wuxc::Primitives::FlyoutShowOptions opts;
+        opts.Position(pt);
+        opts.Placement(wuxc::Primitives::FlyoutPlacementMode::BottomEdgeAlignedLeft);
+        try {
+            menu.ShowAt(fe, opts);
+        } catch (...) {
+            menu.ShowAt(fe, pt);
+        }
     });
 
     wuxc::StackPanel leftPanel;
@@ -55237,10 +55258,9 @@ g_taskListPanel.SizeChanged([](auto&&, auto&&) {
         // between the two triangles and each aligns parallel to its speed text row.
         auto makeSpeedRow = [](PCWSTR name, PCWSTR glyph, bool isUpload,
                                wuxc::TextBlock* textOut) -> wuxc::Grid {
-            const bool isMac = iconpacks::IsMacOS();
             wuxc::Grid row;
             row.Name(name);
-            row.Height(isMac ? 12 : 13);
+            row.Height(13);
             row.Margin(Thickness{0, 0, 0, 0});
             row.HorizontalAlignment(HorizontalAlignment::Left);
             row.VerticalAlignment(VerticalAlignment::Center);
@@ -55251,13 +55271,9 @@ g_taskListPanel.SizeChanged([](auto&&, auto&&) {
             group.HorizontalAlignment(HorizontalAlignment::Left);
             group.VerticalAlignment(VerticalAlignment::Center);
             // U+E935 = FlickDown (upward triangle), U+E936 = FlickUp (downward triangle)
-            if (auto icon = iconpacks::Glyph(glyph, isMac ? 9.0 : 14.0)) {
+            if (auto icon = iconpacks::Glyph(glyph, 14.0)) {
                 icon.VerticalAlignment(VerticalAlignment::Center);
-                if (isMac) {
-                    icon.Margin(isUpload ? Thickness{0, 1.5, 0, -0.5} : Thickness{0, -0.5, 0, 1.5});
-                } else {
-                    icon.Margin(isUpload ? Thickness{0, -3, 0, 2} : Thickness{0, 2, 0, -3});
-                }
+                icon.Margin(isUpload ? Thickness{0, -3, 0, 2} : Thickness{0, 2, 0, -3});
                 group.Children().Append(icon);
             }
             auto text = MakeText(nullptr, L"0 B/s", 11);
@@ -55275,7 +55291,7 @@ g_taskListPanel.SizeChanged([](auto&&, auto&&) {
         networkGrid.VerticalAlignment(VerticalAlignment::Center);
         for (int r = 0; r < 2; ++r) {
             wuxc::RowDefinition rd;
-            rd.Height(GridLength{iconpacks::IsMacOS() ? 12.0 : 13.0, GridUnitType::Pixel});
+            rd.Height(GridLength{13.0, GridUnitType::Pixel});
             networkGrid.RowDefinitions().Append(rd);
         }
         auto upRow = makeSpeedRow(L"NetworkUploadRow", L"\uE935", true, &g_networkUploadText);
@@ -55346,6 +55362,7 @@ g_taskListPanel.SizeChanged([](auto&&, auto&&) {
         auto speedIcon = iconpacks::SpeedTestIcon();
         g_speedTestFlyout = MakeControlFlyout(L"SpeedTestFlyoutRoot", g_speedTestPanel, 368.0);
         g_speedTestFlyout.Closed([](auto&&, auto&&) {
+            try { speedtest::CancelActiveTest(); } catch (...) {}
             if (speedtest::g_uiTimer) {
                 try { speedtest::g_uiTimer.Stop(); } catch (...) {}
             }
@@ -55354,6 +55371,19 @@ g_taskListPanel.SizeChanged([](auto&&, auto&&) {
             L"SpeedTestButton", speedIcon, g_speedTestFlyout,
             [] { PopulateSpeedTestPanel(); });
         rightPanel.Children().Append(g_speedTestButton);
+    }
+
+    {
+        auto optIcon = iconpacks::OptimizerIcon();
+        g_optimizerFlyout = MakeControlFlyout(L"OptimizerFlyoutRoot", g_optimizerPanel, 368.0);
+        g_optimizerFlyout.Closed([](auto&&, auto&&) {
+            ++optimizer::g_panelGen;
+            optimizer::ClearUiRefs();
+        });
+        g_optimizerButton = MakeControlButton(
+            L"OptimizerButton", optIcon, g_optimizerFlyout,
+            [] { PopulateOptimizerPanel(); });
+        rightPanel.Children().Append(g_optimizerButton);
     }
 
     {
@@ -55850,10 +55880,8 @@ g_centerPanel.Children().Append(resourceButton);
                 try { g_wallpaperPanel.Children().Clear(); } catch (...) {}
             }
             {
-                std::lock_guard<std::mutex> lock(g_wallpaperThumbMutex);
-                g_wallpaperThumbCache.clear();
-                g_wallpaperThumbOrder.clear();
-                g_wallpaperThumbLoading.clear();
+                std::lock_guard<std::mutex> lock(g_wpPoolMutex);
+                g_wpPoolQueue.clear();
             }
         });
         g_wallpaperButton = wallButton;
@@ -55926,9 +55954,7 @@ g_centerPanel.Children().Append(resourceButton);
             }
         });
 
-        FrameworkElement mediaInitialContent = iconpacks::IsMacOS()
-            ? iconpacks::Glyph(L"\uE8D6", 18)
-            : BuildVectorIcon(nullptr, icons::kMusicNoteFill, L"", 24, 18, 1.6);
+        FrameworkElement mediaInitialContent = BuildVectorIcon(nullptr, icons::kMusicNoteFill, L"", 24, 18, 1.6);
         if (mediaInitialContent) {
             mediaInitialContent.HorizontalAlignment(HorizontalAlignment::Center);
             mediaInitialContent.VerticalAlignment(VerticalAlignment::Center);
@@ -56167,7 +56193,7 @@ g_centerPanel.Children().Append(resourceButton);
                               L"ResourceButton", L"ResourceCpuButton",
                               L"ResourceRamButton", L"ResourceGpuButton",
                               L"ResourceDiskButton",
-                              L"NetworkButton", L"SpeedTestButton",
+                              L"NetworkButton", L"SpeedTestButton", L"OptimizerButton",
                               L"WeatherButton", L"WallpaperButton",
                               L"RecycleBinButton", L"SettingsButton",
                               L"ClockButton", L"MediaButton",
@@ -56338,122 +56364,6 @@ void ClipHostHwndToEmpty() {
 
 void EnsureTopBarPopupShown();
 
-void RebuildXamlForDpiChange() {
-    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
-    if (!g_topBarHwnd || !IsWindow(g_topBarHwnd)) return;
-
-    Wh_Log(L"RebuildXamlForDpiChange: rebuilding XAML stack for new DPI");
-    ++g_searchPopupEpoch;
-    StopSearchHeightAnimation();
-
-    try { if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) g_startMenuFlyout.Hide(); } catch (...) {}
-    try { if (g_searchFlyout && g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
-    try { if (g_displayFlyout) g_displayFlyout.Hide(); } catch (...) {}
-    try { if (g_soundFlyout) g_soundFlyout.Hide(); } catch (...) {}
-    try { if (g_wifiFlyout) g_wifiFlyout.Hide(); } catch (...) {}
-    try { if (g_bluetoothFlyout) g_bluetoothFlyout.Hide(); } catch (...) {}
-    try { if (g_batteryFlyout) g_batteryFlyout.Hide(); } catch (...) {}
-    try { if (g_resourceFlyout) g_resourceFlyout.Hide(); } catch (...) {}
-    try { if (g_networkFlyout) g_networkFlyout.Hide(); } catch (...) {}
-    try { if (g_mediaFlyout) g_mediaFlyout.Hide(); } catch (...) {}
-    try { if (g_settingsFlyout) g_settingsFlyout.Hide(); } catch (...) {}
-    try { if (g_startContextMenu) g_startContextMenu.Hide(); } catch (...) {}
-    try { if (g_taskContextMenu) g_taskContextMenu.Hide(); } catch (...) {}
-    try { if (g_appTitleContextMenu) g_appTitleContextMenu.Hide(); } catch (...) {}
-    try { if (g_startPowerMenu) g_startPowerMenu.Hide(); } catch (...) {}
-    try { if (g_startAccountFlyout) g_startAccountFlyout.Hide(); } catch (...) {}
-    try { if (g_startTileMenu) g_startTileMenu.Hide(); } catch (...) {}
-    try { if (g_searchResultMenu) g_searchResultMenu.Hide(); } catch (...) {}
-
-    g_topBarAllowClose = true;
-    try { if (g_topBarPopup) g_topBarPopup.Hide(); } catch (...) {}
-    g_topBarAllowClose = false;
-
-    g_topBarPopup = nullptr;
-    g_topBarPopupHwnd = nullptr;
-    g_topBarPopupCanvas = nullptr;
-    g_topBarPopupAnchor = nullptr;
-    g_subclassedPopupHwnd = nullptr;
-
-    g_startMenuFlyout = nullptr;
-    g_searchFlyout = nullptr;
-    g_startPowerMenu = nullptr;
-    g_startAccountFlyout = nullptr;
-    g_startTileMenu = nullptr;
-    g_searchResultMenu = nullptr;
-    g_displayFlyout = nullptr;
-    g_soundFlyout = nullptr;
-    g_wifiFlyout = nullptr;
-    g_bluetoothFlyout = nullptr;
-    g_batteryFlyout = nullptr;
-    g_resourceFlyout = nullptr;
-    g_mediaFlyout = nullptr;
-    g_speedTestFlyout = nullptr;
-    g_speedTestPanel = nullptr;
-    g_speedTestButton = nullptr;
-    speedtest::ClearUiRefs();
-    g_settingsFlyout = nullptr;
-    g_taskOverflowFlyout = nullptr;
-    g_taskOverflowPanel = nullptr;
-    g_taskOverflowButton = nullptr;
-    g_taskOverflowChevronIcon = nullptr;
-    g_overflowTaskWindows.clear();
-    g_startContextMenu = nullptr;
-    g_taskContextMenu = nullptr;
-    g_appTitleContextMenu = nullptr;
-
-    g_namedElements.clear();
-    g_detachedStyleRoots.clear();
-    g_immediateFlyoutStyleRoots.clear();
-    g_rootElement = nullptr;
-    g_taskListPanel = nullptr;
-    g_leftPanel = nullptr;
-    g_centerPanel = nullptr;
-    g_clockPanel = nullptr;
-    g_pinnedTrayPanel = nullptr;
-    g_trayPanel = nullptr;
-    g_settingsButton = nullptr;
-
-    {
-        std::lock_guard<std::mutex> lock(g_openPopupMutex);
-        g_openPopups.clear();
-        g_anyChildFlyoutOpen = false;
-    }
-
-    try { if (g_desktopSource) g_desktopSource.Content(nullptr); } catch (...) {}
-    g_desktopSource = nullptr;
-    g_islandHwnd = nullptr;
-
-    try {
-        g_desktopSource = wuxh::DesktopWindowXamlSource();
-        auto native = g_desktopSource.as<IDesktopWindowXamlSourceNative>();
-        winrt::check_hresult(native->AttachToWindow(g_topBarHwnd));
-        winrt::check_hresult(native->get_WindowHandle(&g_islandHwnd));
-    } catch (winrt::hresult_error const& ex) {
-        Wh_Log(L"RebuildXamlForDpiChange: attach failed: %08X %s",
-               static_cast<unsigned>(ex.code().value), ex.message().c_str());
-        return;
-    }
-
-    RECT mr = GetBarMonitorRect();
-    SetWindowPos(g_islandHwnd, nullptr, 0, 0,
-                 mr.right - mr.left, g_barHeightPx,
-                 SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
-
-    InstallGlobalMenuResources();
-    SetTopBarContent(BuildTopBarContent());
-    BuildStartContextMenu();
-    BuildTaskContextMenu();
-    BuildAppTitleContextMenu();
-    ApplyAllControlStyles();
-    ApplyVisibilitySettings();
-    UpdateResourceButton();
-    StripInheritedIslandBackgrounds();
-    PositionAppBar(g_topBarHwnd, g_barHeightPx);
-    RefreshTaskList(true);
-
-    Wh_Log(L"RebuildXamlForDpiChange: complete");
-}
 
 void RecordChildPopupShowOrder(HWND hwnd) {
     if (!hwnd) return;
@@ -56592,12 +56502,35 @@ static std::mutex g_childPopupMutex;
 static std::map<HWND, RECT> g_childPopupTargets;
 static std::set<HWND> g_childPopupSubclassed;
 
+static constexpr UINT kWmSyncPopupInputOrigin = WM_APP + 0x41F;
+static std::set<HWND> g_childPopupSyncPending;
+
 LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     if (msg == WM_ERASEBKGND) {
         return 1;
     }
     if (msg == WM_NCCALCSIZE) {
         if (wParam) return 0;
+    }
+    if (msg == kWmSyncPopupInputOrigin) {
+        {
+            std::lock_guard<std::mutex> lock(g_childPopupMutex);
+            g_childPopupSyncPending.erase(hwnd);
+        }
+        RECT r{};
+        if (IsWindow(hwnd) && IsWindowVisible(hwnd) && GetWindowRect(hwnd, &r)) {
+            int w = r.right - r.left;
+            int h = r.bottom - r.top;
+            if (w > 0 && h > 1) {
+                // Force XAML's WindowedPopup input site to re-read the true pinned HWND origin
+                // without re-entering WM_WINDOWPOSCHANGING.
+                SetWindowPos(hwnd, nullptr, r.left, r.top, w, h - 1,
+                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+                SetWindowPos(hwnd, nullptr, r.left, r.top, w, h,
+                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
+            }
+        }
+        return 0;
     }
     if (msg == WM_WINDOWPOSCHANGING) {
         RECT target{};
@@ -56612,9 +56545,32 @@ LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         }
         if (haveTarget) {
             auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
+            bool xamlTriedMove = !(wp->flags & SWP_NOMOVE) &&
+                                 (wp->x != target.left || wp->y != target.top);
+            bool xamlResized = !(wp->flags & SWP_NOSIZE) &&
+                               (wp->cx > 0 && wp->cy > 0);
             wp->x = target.left;
             wp->y = target.top;
             wp->flags &= ~SWP_NOMOVE;
+            if (xamlTriedMove || xamlResized) {
+                bool shouldPost = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_childPopupMutex);
+                    if (xamlResized) {
+                        auto it = g_childPopupTargets.find(hwnd);
+                        if (it != g_childPopupTargets.end()) {
+                            it->second.right = target.left + wp->cx;
+                            it->second.bottom = target.top + wp->cy;
+                        }
+                    }
+                    if (xamlTriedMove && g_childPopupSyncPending.insert(hwnd).second) {
+                        shouldPost = true;
+                    }
+                }
+                if (shouldPost) {
+                    PostMessageW(hwnd, kWmSyncPopupInputOrigin, 0, 0);
+                }
+            }
         }
     }
 
@@ -56623,6 +56579,7 @@ LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             std::lock_guard<std::mutex> lock(g_childPopupMutex);
             g_childPopupTargets.erase(hwnd);
             g_childPopupSubclassed.erase(hwnd);
+            g_childPopupSyncPending.erase(hwnd);
         }
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ChildFlyoutPopupProc);
         return DefSubclassProc(hwnd, msg, wParam, lParam);
@@ -56634,6 +56591,7 @@ LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
 void ClearChildPopupTargets() {
     std::lock_guard<std::mutex> lock(g_childPopupMutex);
     g_childPopupTargets.clear();
+    g_childPopupSyncPending.clear();
     g_wideFlyoutTargetX = -1;
     g_wideFlyoutTargetY = -1;
 }
@@ -57484,19 +57442,7 @@ void ActivateTopBarWindowUnderCursor(POINT pt) {
     }
     if (!ours || !hit) return;
 
-    // The mod runs inside explorer.exe, so the real taskbar shares our process
-    // id. Never touch it - its flyouts must keep their own activation.
     HWND root = GetAncestor(hit, GA_ROOT);
-    if (root) {
-        wchar_t rootCls[256]{};
-        if (GetClassNameW(root, rootCls, ARRAYSIZE(rootCls)) &&
-            (wcscmp(rootCls, L"Shell_TrayWnd") == 0 ||
-             wcscmp(rootCls, L"Shell_SecondaryTrayWnd") == 0 ||
-             wcscmp(rootCls, L"NotifyIconOverflowWindow") == 0 ||
-             wcscmp(rootCls, L"TopLevelWindowForOverflowXamlIsland") == 0)) {
-            return;
-        }
-    }
 
     HWND activateTarget = (hit == g_islandHwnd && g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd))
         ? g_topBarPopupHwnd
@@ -57532,7 +57478,30 @@ LRESULT CALLBACK ChildFlyoutMouseHookProc(int nCode, WPARAM wParam, LPARAM lPara
             if (ConsumeTopBarMenuToggleMouse(wParam, mouse->pt)) return 1;
             if (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
                 wParam == WM_MBUTTONDOWN) {
-                try { ActivateTopBarWindowUnderCursor(mouse->pt); } catch (...) {}
+                if (!g_anyChildFlyoutOpen.load() && !g_contextMenuTargetHwnd &&
+                    !g_fullScreenAppActive && !ShouldKeepTopBarPopupHidden() &&
+                    g_topBarHwnd) {
+                    RECT mr = GetBarMonitorRect();
+                    RECT barRect{ mr.left, mr.top, mr.right, mr.top + g_barHeightPx + 4 };
+                    bool inCachedTarget = PtInRect(&barRect, mouse->pt) != FALSE;
+                    if (!inCachedTarget && g_thumbPreviewHwnd && IsWindowVisible(g_thumbPreviewHwnd)) {
+                        RECT tr{};
+                        if (GetWindowRect(g_thumbPreviewHwnd, &tr) && PtInRect(&tr, mouse->pt)) {
+                            inCachedTarget = true;
+                        }
+                    }
+                    if (!inCachedTarget && g_thumbButtonsHwnd && IsWindowVisible(g_thumbButtonsHwnd)) {
+                        RECT tr{};
+                        if (GetWindowRect(g_thumbButtonsHwnd, &tr) && PtInRect(&tr, mouse->pt)) {
+                            inCachedTarget = true;
+                        }
+                    }
+                    if (inCachedTarget) {
+                        PostMessageW(g_topBarHwnd, WM_TOPBAR_ACTIVATE_UNDER_CURSOR,
+                                     static_cast<WPARAM>(mouse->pt.x),
+                                     static_cast<LPARAM>(mouse->pt.y));
+                    }
+                }
             }
         }
     }
@@ -57767,16 +57736,6 @@ void StartHookThread() {
     }
 }
 
-void StopHookThread() {
-    if (!g_hookThread) return;
-    if (g_hookThreadId) {
-        PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0);
-    }
-    WaitForSingleObject(g_hookThread, 5000);
-    CloseHandle(g_hookThread);
-    g_hookThread = nullptr;
-    g_hookThreadId = 0;
-}
 
 void InstallChildFlyoutMouseHook() {
     g_mouseHookRequested=true;
@@ -58027,21 +57986,31 @@ LRESULT CALLBACK SearchKeyHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
         }
 
         if (isWin && isDown) {
+            const ULONGLONG nowTick = GetTickCount64();
             if (!g_winKeyDown.load()) {
                 g_winOtherSeen = false;
                 g_winReplayed = false;
                 g_winChordConsumed = 0;
                 g_winVkDown = kb->vkCode;
-                g_winDownTick = GetTickCount64();
                 if(g_settings.defaultStartMenu)RunOnUiThread([] {
                     try { CloseNativeStartMenuIfOpen(); } catch (...) {}
                 });
             }
+            // Refresh timestamp on initial press and every hardware auto-repeat so we can
+            // detect a missed Win key-up (e.g. UAC/elevated window) and never leave Win stuck.
+            g_winDownTick = nowTick;
             g_winKeyDown = true;
             return 1;
         }
 
         if (isDown && !isWin && g_winKeyDown.load()) {
+            // Stale guard: if Win key-up was missed (>2.5s without repeat and not physically held),
+            // clear state instead of injecting a stuck synthetic VK_LWIN down!
+            ULONGLONG downTick = g_winDownTick.load();
+            if (downTick != 0 && (GetTickCount64() - downTick) > 2500ULL) {
+                ResetShortcutChordState();
+                return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
+            }
             if(kb->vkCode==VK_SHIFT||kb->vkCode==VK_LSHIFT||kb->vkCode==VK_RSHIFT||
                kb->vkCode==VK_CONTROL||kb->vkCode==VK_LCONTROL||kb->vkCode==VK_RCONTROL||
                kb->vkCode==VK_MENU||kb->vkCode==VK_LMENU||kb->vkCode==VK_RMENU)
@@ -58084,15 +58053,17 @@ LRESULT CALLBACK SearchKeyHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
         if (isWin && isUp && g_winKeyDown.load()) {
             bool other = g_winOtherSeen.load();
+            bool replayed = g_winReplayed.load();
             bool consumed = (g_winChordConsumed.load() != 0);
-            DWORD releasedWin=g_winVkDown.load();
+            DWORD releasedWin = g_winVkDown.load();
             g_winKeyDown = false;
             g_winOtherSeen = false;
             g_winReplayed = false;
             g_winChordConsumed = 0;
             g_winVkDown = 0;
+            g_winDownTick = 0;
 
-            if (other) {
+            if (other || replayed) {
                 return CallNextHookEx(g_searchKeyHook, nCode, wParam, lParam);
             }
 
@@ -58105,6 +58076,8 @@ LRESULT CALLBACK SearchKeyHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 g_startActivationHandledTick = GetTickCount64();
                 RunOnUiThread([] {
                     try {
+                        // Ensure Windows does not have a stale logical Win key held down when Start opens
+                        ReleaseStuckWinKeysIfNeeded();
                         if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
                             g_startMenuFlyout.Hide();
                         } else {
@@ -58863,6 +58836,11 @@ void SyncSearchKeyHook() {
 
 LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     switch (msg) {
+        case WM_NCHITTEST:
+            if (g_fullScreenAppActive || ShouldKeepTopBarPopupHidden()) {
+                return HTTRANSPARENT;
+            }
+            break;
         case WM_ERASEBKGND:
             return 1;
         case WM_SETCURSOR:
@@ -58889,8 +58867,17 @@ LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
                 return MA_ACTIVATE;
             }
             break;
-        case WM_WINDOWPOSCHANGED:
         case WM_WINDOWPOSCHANGING:
+            if ((g_fullScreenAppActive || ShouldKeepTopBarPopupHidden()) && !g_suppressPopupPositionLock) {
+                if (auto* wp = reinterpret_cast<WINDOWPOS*>(lParam)) {
+                    wp->flags &= ~SWP_SHOWWINDOW;
+                }
+            }
+            if (!g_fullScreenAppActive) {
+                ForceDisableWindowsTransparency(hwnd);
+            }
+            break;
+        case WM_WINDOWPOSCHANGED:
         case WM_SHOWWINDOW:
         case WM_DWMCOMPOSITIONCHANGED:
         case WM_SETTINGCHANGE:
@@ -59081,6 +59068,11 @@ LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
 
 void InstallPopupSubclass(HWND hwnd) {
     if (!hwnd || hwnd == g_subclassedPopupHwnd) return;
+    wchar_t cls[64]{};
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) ||
+        !(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) {
+        return;
+    }
     if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TopBarPopupSubclassProc, 0)) {
         g_subclassedPopupHwnd = hwnd;
         Wh_Log(L"TopBar: popup HWND subclassed: %p", hwnd);
@@ -59127,16 +59119,8 @@ void PinTopBarFlyoutHwnd() {
     g_forcePopupPosition = true;
 
     if (ShouldKeepTopBarPopupHidden()) {
-        RECT mr = GetBarMonitorRect();
         ForceDisableWindowsTransparency(g_topBarPopupHwnd, true);
-        BOOL cloakOn = TRUE;
-        DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
-                              &cloakOn, sizeof(cloakOn));
-        g_suppressPopupPositionLock = true;
-        SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST,
-                     mr.left, mr.top, mr.right - mr.left, g_barHeightPx,
-                     SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOREDRAW);
-        g_suppressPopupPositionLock = false;
+        ParkHiddenTopBarPopup();
         return;
     }
 
@@ -59537,6 +59521,11 @@ void EnsureTopBarPopupShown() {
                     g_rootElement.ActualHeight() > 1.0;
     } catch (...) {}
     bool keepHidden = ShouldKeepTopBarPopupHidden();
+    if (keepHidden) {
+        if (g_topBarPopupRetryTimer) g_topBarPopupRetryTimer.Stop();
+        ParkHiddenTopBarPopup();
+        return;
+    }
 
     if (!keepHidden && g_settings.topBarBehaviour == L"default") {
         g_topBarAutoHidden = false;
@@ -60226,8 +60215,10 @@ void PositionAppBar(HWND hwnd, int heightPx) {
     if (g_islandHwnd) {
         SetWindowPos(g_islandHwnd, nullptr, 0, 0,
                      data.rc.right - data.rc.left, hostHeight,
-                     SWP_NOZORDER | SWP_SHOWWINDOW);
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
+    ClipIslandHwndToEmpty();
+    ClipHostHwndToEmpty();
 }
 
 void ReloadTopBarFully() {
@@ -60696,9 +60687,14 @@ static bool IsTopBarBackdropTarget(HWND hwnd) {
     // backdrop changes to every XAML popup in explorer.exe can affect the
     // shell and unrelated flyouts during a mode switch.
     HWND owner = GetAncestor(hwnd, GA_ROOTOWNER);
-    return (g_topBarHwnd && owner == g_topBarHwnd) ||
-           (g_topBarPopupHwnd && owner == g_topBarPopupHwnd) ||
-           (g_islandHwnd && owner == g_islandHwnd);
+    if (!((g_topBarHwnd && owner == g_topBarHwnd) ||
+          (g_topBarPopupHwnd && owner == g_topBarPopupHwnd) ||
+          (g_islandHwnd && owner == g_islandHwnd))) {
+        return false;
+    }
+    wchar_t cls[64]{};
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls))) return false;
+    return wcsstr(cls, L"Xaml") != nullptr && wcsstr(cls, L"Popup") != nullptr;
 }
 
 // NOACTIVATE popups can miss WM_NCACTIVATE entirely. DWM may then render a
@@ -62069,6 +62065,11 @@ void ForceXamlPopupToTop(HWND hwnd) {
 void InstallChildPopupSubclassForTintKill(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
     if (hwnd == g_topBarPopupHwnd || hwnd == g_topBarHwnd || hwnd == g_islandHwnd) return;
+    wchar_t cls[64]{};
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) ||
+        !(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) {
+        return;
+    }
 
     // Never classify the TopBar popup itself as a child flyout or cloak it!
     if (g_creatingTopBarPopup.load()) {
@@ -62307,6 +62308,12 @@ void UpdateClockText() {
 }
 
 LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_TOPBAR_ACTIVATE_UNDER_CURSOR) {
+        POINT pt{ static_cast<LONG>(static_cast<intptr_t>(wParam)),
+                  static_cast<LONG>(static_cast<intptr_t>(lParam)) };
+        try { ActivateTopBarWindowUnderCursor(pt); } catch (...) {}
+        return 0;
+    }
     if(message==WM_CREATE){
         if(!WTSRegisterSessionNotification(hwnd,NOTIFY_FOR_THIS_SESSION))
             Wh_Log(L"Session notification registration failed: %u",GetLastError());
@@ -62774,6 +62781,21 @@ void CALLBACK NativeShellShowEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
                                        LONG idObject, LONG idChild, DWORD, DWORD) {
     if (event != EVENT_OBJECT_SHOW || !hwnd || idObject != OBJID_WINDOW ||
         idChild != CHILDID_SELF) return;
+    // Suppress native Windows shell toast banners ("New notification" CoreWindow)
+    // whenever TopBar is hiding native Windows notifications or DND is active.
+    if (g_settings.enableNotificationPopup &&
+        (g_settings.hideWindowsNotifications || g_settings.topBarNotificationDnd)) {
+        wchar_t cls[64]{};
+        if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
+            wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
+            wchar_t title[64]{};
+            if (GetWindowTextW(hwnd, title, ARRAYSIZE(title)) > 0 &&
+                _wcsicmp(title, L"New notification") == 0) {
+                ShowWindow(hwnd, SW_HIDE);
+                return;
+            }
+        }
+    }
     const ULONGLONG tick = g_lastTaskbarPointerDownTick.load();
     if (!tick || GetTickCount64() - tick >= 2000) return;
     try { KillNativeShellHostIfOursOpen(hwnd); } catch (...) {}
@@ -62794,83 +62816,6 @@ void ForegroundEventProcInstall() {
     if (!g_nativeShellShowHook) Wh_Log(L"TopBar: shell show event hook failed: %u", GetLastError());
 }
 
-void ShowElementTargetUnderCursor() {
-    POINT cursor;
-    if (!GetCursorPos(&cursor)) return;
-
-    HWND hWndUnderCursor = WindowFromPoint(cursor);
-    if (!hWndUnderCursor) return;
-
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hWndUnderCursor, &pid);
-    if (pid != GetCurrentProcessId()) {
-        Wh_Log(L"[Ctrl+D] cursor over a foreign window");
-        return;
-    }
-
-    POINT clientPt = cursor;
-    ScreenToClient(hWndUnderCursor, &clientPt);
-    winrt::Windows::Foundation::Point pt{(float)clientPt.x, (float)clientPt.y};
-
-    FrameworkElement hit{nullptr};
-
-    auto tryRoot = [&](FrameworkElement const& root) {
-        if (hit || !root) return;
-        try {
-            for (auto const& el : wuxm::VisualTreeHelper::FindElementsInHostCoordinates(pt, root)) {
-                if (auto fe = el.try_as<FrameworkElement>()) {
-                    hit = fe;
-                    return;
-                }
-            }
-        } catch (...) {}
-    };
-
-    for (auto it = g_detachedStyleRoots.rbegin();
-         it != g_detachedStyleRoots.rend() && !hit; ++it) {
-        if (auto root = it->get()) tryRoot(root);
-    }
-    if (!hit && g_rootElement) {
-        tryRoot(g_rootElement.try_as<FrameworkElement>());
-    }
-
-    if (!hit) {
-        Wh_Log(L"[Ctrl+D] no XAML element under cursor");
-        return;
-    }
-
-    std::wstring fullClass(winrt::get_class_name(hit));
-    std::wstring shortClass = fullClass;
-    if (auto dot = fullClass.rfind(L'.'); dot != std::wstring::npos) {
-        shortClass = fullClass.substr(dot + 1);
-    }
-    std::wstring elemName(hit.Name());
-
-    std::wstring target = shortClass;
-    if (!elemName.empty()) target += L"#" + elemName;
-
-    Wh_Log(L"[Ctrl+D] %s", target.c_str());
-
-    try {
-        auto tb = MakeText(nullptr, target, 13, true);
-        auto border = wuxc::Border();
-        border.Background(MakeBrush(0xE0, 0x20, 0x20, 0x20));
-        border.BorderBrush(MakeBrush(0xFF, 0x60, 0x60, 0x60));
-        border.BorderThickness(Thickness{1, 1, 1, 1});
-        border.Padding(Thickness{10, 6, 10, 6});
-        border.CornerRadius(MakeCorner(6));
-        border.Child(tb);
-
-        static wuxc::Flyout s_targetFlyout{nullptr};
-        if (s_targetFlyout && s_targetFlyout.IsOpen()) {
-            s_targetFlyout.Hide();
-        }
-        s_targetFlyout = wuxc::Flyout();
-        s_targetFlyout.Content(border);
-        s_targetFlyout.ShouldConstrainToRootBounds(false);
-        s_targetFlyout.ShowAt(hit);
-    } catch (...) {}
-}
 
 static std::atomic<bool> g_scaleRestartPending{false};
 
@@ -62956,8 +62901,7 @@ static DWORD WINAPI StatusPollWorkerProc(LPVOID) {
         // Lightweight background cache preload so first open of Wi-Fi / Bluetooth
         // flyouts renders immediately with accurate live state.
         ULONGLONG now = GetTickCount64();
-        if (wantWifi && (g_wifiLastEnumTick.load() == 0 || wifiChanged ||
-                         now - lastBgWifiPreloadTick > 10000)) {
+        if (wantWifi && (g_wifiLastEnumTick.load() == 0 || wifiChanged)) {
             if (!g_wifiScanning.load() && !g_wifiSyncing.load()) {
                 lastBgWifiPreloadTick = now;
                 const uint64_t startVer = g_wifiNetworksVersion.load();
@@ -62973,8 +62917,7 @@ static DWORD WINAPI StatusPollWorkerProc(LPVOID) {
                 });
             }
         }
-        if (wantBt && (g_btLastEnumTick.load() == 0 || btChanged ||
-                       (btOn && now - lastBgBtPreloadTick > 8000))) {
+        if (wantBt && (g_btLastEnumTick.load() == 0 || btChanged)) {
             if (!g_bluetoothScanning.load() && !g_bluetoothSyncing.load() &&
                 g_bluetoothConnectingAddress.load() == 0 &&
                 g_pairingDeviceAddress.load() == 0 &&
@@ -63232,8 +63175,33 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         StripInheritedIslandBackgrounds();
 
+        if (g_rootElement) {
+            try {
+                auto loadedApplied = std::make_shared<bool>(false);
+                g_rootElement.Loaded([loadedApplied](wf::IInspectable const&, auto&&) {
+                    if (*loadedApplied) return;
+                    *loadedApplied = true;
+                    try {
+                        if (g_rootElement) g_rootElement.UpdateLayout();
+                        ApplyAllControlStyles();
+                    } catch (...) {}
+                });
+            } catch (...) {}
+        }
         RunOnUiThread([] {
-            try { ApplyAllControlStyles(); } catch (...) {}
+            try {
+                if (g_rootElement) g_rootElement.UpdateLayout();
+                ApplyAllControlStyles();
+            } catch (...) {}
+        });
+        RunInBackground([] {
+            if (WaitForSingleObject(g_stopEvent, 150) == WAIT_OBJECT_0) return;
+            RunOnUiThread([] {
+                try {
+                    if (g_rootElement) g_rootElement.UpdateLayout();
+                    ApplyAllControlStyles();
+                } catch (...) {}
+            });
         });
 
         ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
@@ -63290,23 +63258,6 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         }
 
         RunInBackground([] {
-            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
-
-            WaitForSingleObject(g_stopEvent, 250);
-            if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
-
-            auto& apps = startmenu::GetCachedApps();
-            Wh_Log(L"[StartMenu] Pre-warmed %zu apps", apps.size());
-            RunOnUiThread([] {
-                try {
-                    EnsureStartMenuFlyoutCreated();
-                } catch (...) {}
-                if (g_searchQuery.empty()) return;
-                if (!g_searchQueryPending && !g_searchResults.empty()) return;
-                try {
-                    ExecuteSearchQueryAsync(g_searchQuery, g_searchToken.load());
-                } catch (...) {}
-            });
             if (WaitForSingleObject(g_stopEvent, 5000) == WAIT_OBJECT_0) return;
             TrimTopBarWorkingSet(true);
         });
@@ -63361,16 +63312,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                 UpdateClockText();
                 UpdateBatteryButton();
                 UpdateVirtualDesktopButton();
-                static ULONGLONG s_lastPeriodicTrim = 0;
-                ULONGLONG now = GetTickCount64();
-                if (!g_anyChildFlyoutOpen.load() && (s_lastPeriodicTrim == 0 || now - s_lastPeriodicTrim >= 30000)) {
-                    s_lastPeriodicTrim = now;
-                    RunInBackground([] {
-                        if (!g_anyChildFlyoutOpen.load()) {
-                            TrimTopBarWorkingSet(false);
-                        }
-                    });
-                }
+
             } catch (...) {
             }
         });
@@ -63392,12 +63334,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         g_topBarAutoHideTimer.Start();
     }
 
-        g_blurRefreshTimer = DispatcherTimer();
-        g_blurRefreshTimer.Interval(std::chrono::seconds(2));
-        g_blurRefreshTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
-            try { PollNotificationsForLivePopup(); } catch (...) {}
-        });
-        g_blurRefreshTimer.Start();
+        // Notification database is watched via 300ms file-timestamp check below (zero SQLite work while idle).
         try {
             SyncNativeToastSuppression();
             PollNotificationsForLivePopup();
@@ -63467,7 +63404,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         try { UpdateNetworkButton(); } catch (...) {}
 
         g_mediaStateTimer = DispatcherTimer();
-        g_mediaStateTimer.Interval(std::chrono::seconds(5));
+        g_mediaStateTimer.Interval(std::chrono::milliseconds(1000));
         g_mediaStateTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
             try {
                 if (!g_settings.showMediaButton) return;
@@ -63609,7 +63546,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                 {
                     HWND shell = GetShellWindow();
                     HWND fgNow = GetForegroundWindow();
-                    if (!g_fullScreenAppActive &&
+                    if (!g_fullScreenAppActive && !ShouldKeepTopBarPopupHidden() &&
                         (fgNow == shell || fgNow == GetDesktopWindow())) {
                         if (g_topBarHwnd && IsWindow(g_topBarHwnd) &&
                             !IsWindowVisible(g_topBarHwnd)) {
@@ -63619,15 +63556,17 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                             !IsWindowVisible(g_topBarPopupHwnd)) {
                             ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
                         }
-                        if (g_topBarHwnd && IsWindow(g_topBarHwnd)) {
-                            SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                                         SWP_SHOWWINDOW);
-                        }
-                        if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
-                            SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                                         SWP_SHOWWINDOW);
+                        if (!g_anyChildFlyoutOpen.load()) {
+                            if (g_topBarHwnd && IsWindow(g_topBarHwnd)) {
+                                SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                                             SWP_SHOWWINDOW);
+                            }
+                            if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                                SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
+                                             SWP_SHOWWINDOW);
+                            }
                         }
                     }
                 }
@@ -63692,33 +63631,40 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     DwmFlush();
                 }
 
+                const bool keepHiddenNow = ShouldKeepTopBarPopupHidden();
                 HWND flyoutHwnd = FindTopBarFlyoutHwnd();
-                if (flyoutHwnd) {
-                    HWND insertAfter = desktopFg ? HWND_TOPMOST : HWND_TOPMOST;
-                    SetWindowPos(flyoutHwnd, insertAfter, 0, 0, 0, 0,
+                if (flyoutHwnd && !keepHiddenNow && !g_anyChildFlyoutOpen.load()) {
+                    SetWindowPos(flyoutHwnd, HWND_TOPMOST, 0, 0, 0, 0,
                                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
                                  SWP_NOOWNERZORDER);
                 }
-                if (classChanged) {
+                if (classChanged && !keepHiddenNow) {
                     if (desktopFg) {
                         g_fullScreenAppActive = false;
                         ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
                         if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
                             ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
                         }
-                        SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                        if (!g_anyChildFlyoutOpen.load()) {
+                            SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                        }
                     } else {
                         g_fullScreenAppActive = false;
                         ShowWindow(g_topBarHwnd, SW_SHOWNOACTIVATE);
                         if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
                             ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
                         }
-                        SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        if (!g_anyChildFlyoutOpen.load()) {
+                            SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                        }
                         RebuildAllLiveBlurBrushes();
                     }
                     RepositionTopBarPopup();
+                }
+                if (g_anyChildFlyoutOpen.load()) {
+                    try { PromoteChildFlyoutPopups(); } catch (...) {}
                 }
 
                 ClipIslandHwndToEmpty();
@@ -64228,6 +64174,9 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         g_speedTestButton = nullptr;
         g_speedTestFlyout = nullptr;
         g_speedTestPanel = nullptr;
+        g_optimizerButton = nullptr;
+        g_optimizerFlyout = nullptr;
+        g_optimizerPanel = nullptr;
         g_visualizerBars.clear();
         g_mediaThumbnailCache = nullptr;
         g_mediaThumbnailCacheBytes.clear();
@@ -64297,14 +64246,14 @@ void LoadSettings() {
                 g_settings.showTaskButtonLabels = true;
                 g_settings.taskLabelsScope = L"all";
                 g_settings.taskLabelsHideWhen = L"never";
-                Wh_SetIntValue(L"showTaskButtonLabels", 1);
+                Wh_SetStringValue(L"showTaskButtonLabels", L"1");
                 Wh_SetStringValue(L"taskLabelsScope", L"all");
                 Wh_SetStringValue(L"taskLabelsHideWhen", L"never");
             } else if (legacyContent == L"iconOnly") {
                 g_settings.showTaskButtonLabels = false;
                 g_settings.taskLabelsScope = L"openedOnly";
                 g_settings.taskLabelsHideWhen = L"never";
-                Wh_SetIntValue(L"showTaskButtonLabels", 0);
+                Wh_SetStringValue(L"showTaskButtonLabels", L"0");
                 Wh_SetStringValue(L"taskLabelsScope", L"openedOnly");
                 Wh_SetStringValue(L"taskLabelsHideWhen", L"never");
             } else {
@@ -64359,7 +64308,7 @@ void LoadSettings() {
     if (g_settings.leftItems.empty() && g_settings.centerItems.empty() &&
         g_settings.rightItems.empty()) {
         g_settings.leftItems = L"StartButton,SearchButton,VirtualDesktopButton,AppTitleButton,TaskListPanel";
-        g_settings.centerItems = L"ResourceButton,WeatherButton,MediaButton,NetworkButton,SpeedTestButton,SettingsButton";
+        g_settings.centerItems = L"ResourceButton,WeatherButton,MediaButton,NetworkButton,SpeedTestButton,OptimizerButton,SettingsButton";
         g_settings.rightItems = L"TrayIconButton,WallpaperButton,DisplayButton,WifiButton,SoundButton,BluetoothButton,RecycleBinButton,BatteryButton,NotificationsButton,ControlCenterButton,ClockButton";
         Wh_SetStringValue(L"leftItems", g_settings.leftItems.c_str());
         Wh_SetStringValue(L"centerItems", g_settings.centerItems.c_str());
@@ -64423,6 +64372,29 @@ void LoadSettings() {
                 if (!s_speedTestRightMigWritten.exchange(true)) {
                     Wh_SetStringValue(L"rightItems", g_settings.rightItems.c_str());
                 }
+            }
+        }
+        bool optPlaced = hasItem(g_settings.leftItems, L"OptimizerButton") ||
+                         hasItem(g_settings.centerItems, L"OptimizerButton") ||
+                         hasItem(g_settings.rightItems, L"OptimizerButton");
+        if (!optPlaced) {
+            auto list = SplitItemList(g_settings.centerItems);
+            auto anchorIt = std::find(list.begin(), list.end(), L"SpeedTestButton");
+            if (anchorIt == list.end()) anchorIt = std::find(list.begin(), list.end(), L"NetworkButton");
+            if (anchorIt != list.end()) {
+                list.insert(anchorIt + 1, L"OptimizerButton");
+            } else {
+                list.push_back(L"OptimizerButton");
+            }
+            std::wstring out;
+            for (size_t i = 0; i < list.size(); i++) {
+                if (i) out += L",";
+                out += list[i];
+            }
+            g_settings.centerItems = out;
+            static std::atomic<bool> s_optimizerCenterMigWritten{false};
+            if (!s_optimizerCenterMigWritten.exchange(true)) {
+                Wh_SetStringValue(L"centerItems", g_settings.centerItems.c_str());
             }
         }
     }
@@ -64676,10 +64648,6 @@ void LoadSettings() {
     if (g_settings.fontColor.empty()) {
         g_settings.fontColor = L"#FFFFFF";
     }
-    g_settings.iconPack = GetStringSettingCopy(L"iconPack");
-    if (g_settings.iconPack != L"macos") {
-        g_settings.iconPack = L"winui";
-    }
     g_iconColorOverride.reset();
     g_settings.fontFamily = GetStringSettingCopy(L"fontFamily");
     g_settings.fontBold = ReadIntSetting(L"fontBold", 0) != 0;
@@ -64693,6 +64661,8 @@ void LoadSettings() {
     g_settings.showNetworkDownload = ReadIntSetting(L"showNetworkDownload", 1) != 0;
     g_settings.showNetworkUpload = ReadIntSetting(L"showNetworkUpload", 1) != 0;
     g_settings.showSpeedTestButton = ReadIntSetting(L"showSpeedTestButton", 1) != 0;
+    g_settings.showOptimizerButton = ReadIntSetting(L"showOptimizerButton", 1) != 0;
+    g_settings.optimizerSkipRamConfirm = ReadIntSetting(L"optimizerSkipRamConfirm", 0) != 0;
     {
         auto action = GetStringSettingCopy(L"powerButtonAction");
         if (action != L"sleep" && action != L"shutdown" &&
@@ -64707,7 +64677,7 @@ void LoadSettings() {
     if (g_settings.globalBlurAmount > 50) g_settings.globalBlurAmount = 50;
     g_settings.globalBlurSaturation = ReadIntSetting(L"globalBlurSaturation", 100);
     g_settings.globalBlurSaturation =
-        std::clamp(g_settings.globalBlurSaturation, 0, 200);
+        std::clamp(g_settings.globalBlurSaturation, 0, 400);
     g_settings.flyoutAnimation = GetStringSettingCopy(L"flyoutAnimation");
     if (g_settings.flyoutAnimation.empty() ||
         (g_settings.flyoutAnimation != L"slide" &&
@@ -64949,50 +64919,6 @@ void LoadSettings() {
     }
 }
 
-void KillStaleShellHosts(bool hideStart, bool hideSearch) {
-    if (!hideStart && !hideSearch) return;
-
-    struct Hit { HWND hwnd; bool isStart; bool isSearch; };
-    std::vector<Hit> hits;
-    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
-        auto* v = reinterpret_cast<std::vector<Hit>*>(lp);
-        DWORD pid = 0;
-        GetWindowThreadProcessId(hwnd, &pid);
-        if (!pid || pid == GetCurrentProcessId()) return TRUE;
-        HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-        if (!proc) return TRUE;
-        wchar_t path[MAX_PATH]{};
-        DWORD size = ARRAYSIZE(path);
-        bool ok = QueryFullProcessImageNameW(proc, 0, path, &size) != FALSE;
-        CloseHandle(proc);
-        if (!ok) return TRUE;
-        std::wstring exe = path;
-        size_t slash = exe.find_last_of(L"\\/");
-        if (slash != std::wstring::npos) exe.erase(0, slash + 1);
-        bool isStart = _wcsicmp(exe.c_str(),
-                                L"StartMenuExperienceHost.exe") == 0;
-        bool isSearch = !isStart && (
-            _wcsicmp(exe.c_str(), L"SearchHost.exe") == 0 ||
-            _wcsicmp(exe.c_str(), L"SearchApp.exe") == 0 ||
-            _wcsicmp(exe.c_str(), L"SearchUI.exe") == 0);
-        if (isStart || isSearch) {
-            v->push_back({ hwnd, isStart, isSearch });
-        }
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&hits));
-
-    Wh_Log(L"HideStaleShellHosts: %zu candidate(s)", hits.size());
-
-    for (auto const& hit : hits) {
-        if ((hit.isStart && !hideStart) || (hit.isSearch && !hideSearch)) {
-            continue;
-        }
-        if (!IsWindow(hit.hwnd)) continue;
-        HideNativeShellHostWindow(hit.hwnd,
-            hit.isStart ? L"StartMenuExperienceHost.exe" : L"SearchHost.exe",
-            hit.isStart, hit.isSearch);
-    }
-}
 
 static std::wstring ShellTrayExeName(HWND owner) {
     std::wstring name;
@@ -65557,6 +65483,11 @@ static TopBarShowWindow_t TopBarShowWindow_Original = nullptr;
 
 static BOOL WINAPI TopBarShowWindow_Hook(HWND hwnd, int nCmdShow) {
     if (!TopBarShowWindow_Original) return FALSE;
+    if (hwnd && hwnd == g_topBarPopupHwnd && nCmdShow != SW_HIDE &&
+        ShouldKeepTopBarPopupHidden() && !g_suppressPopupPositionLock.load() &&
+        InterlockedCompareExchange(&g_shuttingDown, 0, 0) == 0) {
+        return TRUE;
+    }
     if (hwnd &&
         (nCmdShow == SW_HIDE || nCmdShow == SW_MINIMIZE ||
          nCmdShow == SW_SHOWMINIMIZED || nCmdShow == SW_FORCEMINIMIZE) &&
@@ -65588,6 +65519,12 @@ static TopBarSetWindowPos_t TopBarSetWindowPos_Original = nullptr;
 
 static BOOL WINAPI TopBarSetWindowPos_Hook(HWND hwnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
     if (!TopBarSetWindowPos_Original) return FALSE;
+    if (hwnd && hwnd == g_topBarPopupHwnd && ShouldKeepTopBarPopupHidden() &&
+        !g_suppressPopupPositionLock.load() &&
+        InterlockedCompareExchange(&g_shuttingDown, 0, 0) == 0) {
+        uFlags &= ~SWP_SHOWWINDOW;
+        uFlags |= SWP_NOMOVE | SWP_NOZORDER;
+    }
     const bool protectBar =
         hwnd && (hwnd == g_topBarPopupHwnd || hwnd == g_topBarHwnd) &&
         !g_allowHide && !g_topBarAllowClose &&
@@ -65807,120 +65744,6 @@ void WhTool_ModSettingsChanged() {
         try { topbar_settings_window::ScheduleReload(); } catch (...) {}
     });
     return;
-    static std::atomic<ULONGLONG> s_lastReloadAt{0};
-    static std::atomic<bool> s_reloadInFlight{false};
-    ULONGLONG now = GetTickCount64();
-    ULONGLONG last = s_lastReloadAt.load();
-    if (last != 0 && now - last < 800) {
-        return;
-    }
-    if (s_reloadInFlight.exchange(true)) {
-        return;
-    }
-    s_lastReloadAt.store(now);
-    bool prevStart = g_settings.defaultStartMenu;
-    bool prevSearch = g_settings.defaultSearch;
-    std::wstring prevStartAction = g_settings.startButtonAction;
-    int prevMonitorIndex = g_prevMonitorIndex;
-    RunOnUiThread([prevStart, prevSearch, prevStartAction, prevMonitorIndex] {
-        try {
-        LoadSettings();
-        g_prevDefaultStartMenu = g_settings.defaultStartMenu;
-        g_prevDefaultSearch = g_settings.defaultSearch;
-        g_prevStartButtonAction = g_settings.startButtonAction;
-        bool monitorChanged = (prevMonitorIndex != g_settings.monitorIndex);
-        g_prevMonitorIndex = g_settings.monitorIndex;
-        if (monitorChanged && g_topBarHwnd && IsWindow(g_topBarHwnd)) {
-            UnregisterAppBar(g_topBarHwnd);
-            RegisterAppBar(g_topBarHwnd);
-            SetTimer(g_topBarHwnd, kAppBarInitTimerId, 200, nullptr);
-            g_forcePopupPosition = false;
-            g_replaceAttempts = 0;
-            g_wideFlyoutTargetX = -1;
-            g_wideFlyoutTargetY = -1;
-            ClearChildPopupTargets();
-        }
-        bool turnedOffStart = prevStart && !g_settings.defaultStartMenu;
-        bool turnedOffSearch = prevSearch && !g_settings.defaultSearch;
-        bool startActionSwitchedToWindows =
-            prevStartAction != L"windows" &&
-            g_settings.startButtonAction == L"windows";
-        g_winKeyDown = false;
-        g_winOtherSeen = false;
-        g_winReplayed = false;
-        g_winChordConsumed = 0;
-        g_winVkDown = 0;
-        SyncSearchKeyHook();
-        if (turnedOffStart || turnedOffSearch) {
-            if (g_nativeSmCloseTimer) g_nativeSmCloseTimer.Stop();
-            g_nativeSmCloseTicks = 0;
-            try {
-                RestoreNativeShellHostWindows(turnedOffStart, turnedOffSearch);
-            } catch (...) {}
-        }
-        (void)startActionSwitchedToWindows;
-        if (!g_topBarHwnd) {
-            return;
-        }
-        g_taskbarButtonRectsValid = false;
-        if (TaskbarButtonRemapNeeded()) {
-            RefreshTaskbarButtonRectsAsync();
-            ScheduleTaskbarRectRefreshRetries();
-        } else {
-            if (g_taskbarRectDebounceTimer) {
-                KillTimer(g_topBarHwnd, g_taskbarRectDebounceTimer);
-                g_taskbarRectDebounceTimer = 0;
-            }
-            if (g_taskbarRemapRetryTimer) {
-                KillTimer(g_topBarHwnd, g_taskbarRemapRetryTimer);
-                g_taskbarRemapRetryTimer = 0;
-            }
-        }
-        g_dpiScale = g_settings.topBarScale / 100.0;
-        g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
-
-        InvalidateStartAndSearchFlyouts();
-        try { CloseAnyOpenChildFlyout(); } catch (...) {}
-        SetTopBarContent(BuildTopBarContent());
-        BuildStartContextMenu();
-        BuildTaskContextMenu();
-        BuildAppTitleContextMenu();
-        ApplyAllControlStyles();
-        ApplyVisibilitySettings();
-        UpdateResourceButton();
-        StripInheritedIslandBackgrounds();
-        ApplyWindowBackdrop(g_topBarHwnd);
-        PositionAppBar(g_topBarHwnd, g_barHeightPx);
-
-        if (g_topBarHwnd) {
-            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_DISPLAY);
-            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_SOUND);
-            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_WIFI);
-            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_BLUETOOTH);
-            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_RESOURCE);
-            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_BATTERY);
-            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_START_MENU);
-            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_TASK_MENU);
-            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_WEATHER);
-            UnregisterHotKey(g_topBarHwnd, HOTKEY_ID_RECYCLEBIN);
-            if (!g_appBarRegistered) {
-                RegisterAppBar(g_topBarHwnd);
-                SetTimer(g_topBarHwnd, kAppBarInitTimerId, 200, nullptr);
-            }
-            PositionAppBar(g_topBarHwnd, g_barHeightPx);
-        }
-        RefreshTaskList(true);
-        } catch (const winrt::hresult_error& ex) {
-            Wh_Log(L"Reload: XAML error %08X - %s",
-                   static_cast<unsigned>(ex.code().value),
-                   ex.message().c_str());
-        } catch (const std::exception& ex) {
-            Wh_Log(L"Reload: %S", ex.what());
-        } catch (...) {
-            Wh_Log(L"Reload: unknown error");
-        }
-        s_reloadInFlight.store(false);
-    });
 }
 
 void WhTool_ModUninit() {
