@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              super-topmost-windows
 // @name            Super Topmost Windows
-// @description     Show ordinary windows on top of almost all apps and games
+// @description     Show ordinary windows on top of almost all apps and games (read mod description first)
 // @version         1.0
 // @author          Ingan121
 // @github          https://github.com/Ingan121
@@ -68,8 +68,9 @@ already own it. Turn on logging in the mod's Advanced tab to see why.
 
 // Another possible way for changing the window band is using the long and tedious code to directly call SetWindowBand
 // (https://gist.github.com/ADeltaX/80d220579400a95c336af0eec372ecb0)
-// But that needs hooking the main explorer.exe to steal the immersive token, which makes managing admin windows impossible (without disabling UAC)
+// But that needs hooking the main explorer.exe to steal the immersive token, which makes managing admin windows impossible (without disabling UAC or complex IPC)
 // The immersive token retrieval code is unreliable too (I tried that)
+// And it will never work with third-party shells
 
 #include <windhawk_utils.h>
 #include <optional>
