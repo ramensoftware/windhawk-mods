@@ -3746,6 +3746,16 @@ HANDLE g_thread = nullptr;
 volatile LONG g_stop = 0;
 volatile DWORD g_deadline = 0;   // GetTickCount() value after which the watching ends
 std::set<HWND> g_minimized;      // only touched on the watcher's thread
+std::map<HWND, DWORD> g_pending;  // Store app frames whose app is not known yet (watcher's thread): window -> give up at
+ULONGLONG g_begin = 0;           // FILETIME of the moment watching began
+
+ULONGLONG CreatedAt(HANDLE ph) {
+    FILETIME c, e, k, u;
+    if (!GetProcessTimes(ph, &c, &e, &k, &u)) {
+        return 0;
+    }
+    return ((ULONGLONG)c.dwHighDateTime << 32) | c.dwLowDateTime;
+}
 
 bool Matches(HWND h) {
     DWORD pid = 0;
@@ -3763,6 +3773,7 @@ bool Matches(HWND h) {
     }
     std::wstring path = Lower(QueryPath(ph));
     std::wstring aumid = QueryAumid(ph);
+    ULONGLONG created = CreatedAt(ph);
     CloseHandle(ph);
     if (ExeKey(BaseName(path)) == L"applicationframehost") {
         // a Store app's window belongs to ApplicationFrameHost: look at the app behind it
@@ -3773,17 +3784,23 @@ bool Matches(HWND h) {
         }
         path = Lower(QueryPath(rp));
         aumid = QueryAumid(rp);
+        created = CreatedAt(rp);
         CloseHandle(rp);
     }
+    bool live = false;
     for (const auto& t : targets) {
         if ((LONG)(GetTickCount() - t.expires) >= 0) {
             continue;
         }
+        live = true;
         if ((!t.aumid.empty() && aumid == t.aumid) || (!t.path.empty() && path == t.path)) {
             return true;
         }
     }
-    return false;
+    // Launchers, updaters and Store apps start a different program than the one that was saved. A window of a
+    // program that did not exist before the reopening began belongs to what is being reopened, as long as an
+    // app is still being watched for.
+    return live && created && created >= g_begin;
 }
 
 void CALLBACK OnShow(HWINEVENTHOOK, DWORD, HWND h, LONG idObject, LONG idChild, DWORD, DWORD) {
@@ -3794,11 +3811,34 @@ void CALLBACK OnShow(HWINEVENTHOOK, DWORD, HWND h, LONG idObject, LONG idChild, 
     if ((ex & WS_EX_TOOLWINDOW) || GetWindow(h, GW_OWNER) || !IsWindowVisible(h) || IsIconic(h)) {
         return;   // tool windows, dialogs and popups of an app are left alone
     }
-    if (g_minimized.count(h) || !Matches(h)) {
+    if (g_minimized.count(h)) {
+        return;
+    }
+    if (!Matches(h)) {
+        WCHAR cls[64] = L"";
+        GetClassNameW(h, cls, 64);
+        if (wcscmp(cls, L"ApplicationFrameWindow") == 0) {
+            g_pending[h] = GetTickCount() + 4000;   // the app behind a Store frame shows up a moment later
+        }
         return;
     }
     g_minimized.insert(h);
     ShowWindowAsync(h, SW_SHOWMINNOACTIVE);   // asynchronous: a slow app cannot hold the watcher up
+}
+
+void RetryPending() {
+    for (auto it = g_pending.begin(); it != g_pending.end();) {
+        HWND h = it->first;
+        if (!IsWindow(h) || IsIconic(h) || (LONG)(GetTickCount() - it->second) >= 0) {
+            it = g_pending.erase(it);
+        } else if (Matches(h)) {
+            g_minimized.insert(h);
+            ShowWindowAsync(h, SW_SHOWMINNOACTIVE);
+            it = g_pending.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 DWORD WINAPI WatchThread(LPVOID) {
@@ -3807,11 +3847,12 @@ DWORD WINAPI WatchThread(LPVOID) {
     HWINEVENTHOOK hook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, OnShow, 0, 0,
                                          WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
     while (!g_stop && (LONG)(GetTickCount() - g_deadline) < 0) {
-        MsgWaitForMultipleObjects(0, nullptr, FALSE, 100, QS_ALLINPUT);
+        MsgWaitForMultipleObjects(0, nullptr, FALSE, g_pending.empty() ? 100 : 50, QS_ALLINPUT);
         while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&m);
             DispatchMessageW(&m);
         }
+        RetryPending();
     }
     if (hook) {
         UnhookWinEvent(hook);
@@ -3826,6 +3867,11 @@ void Begin() {
         g_csInit = true;
     }
     g_deadline = GetTickCount() + 13000;
+    {
+        FILETIME ft;
+        GetSystemTimeAsFileTime(&ft);
+        g_begin = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    }
     if (g_thread && WaitForSingleObject(g_thread, 0) == WAIT_TIMEOUT) {
         return;   // already watching: the deadline above is enough
     }
@@ -3833,6 +3879,7 @@ void Begin() {
         CloseHandle(g_thread);
     }
     g_minimized.clear();
+    g_pending.clear();
     g_stop = 0;
     g_thread = CreateThread(nullptr, 0, WatchThread, nullptr, 0, nullptr);
 }
