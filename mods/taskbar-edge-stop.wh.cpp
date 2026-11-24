@@ -6,7 +6,7 @@
 // @author          voide61
 // @github          https://github.com/voide61
 // @include         windhawk.exe
-// @compilerOptions -luser32 -lole32
+// @compilerOptions -luser32 -lole32 -lshcore
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -53,6 +53,7 @@ click your icons without overshooting.
 ## Settings
 
 - **Extra height above the taskbar:** increase it if the mouse still slips through.
+  It follows each monitor's scale, so it looks the same on a 100% and a 200% monitor.
 - **Push force to cross:** how much to push against the taskbar to cross (0 = never).
 - **Never cross over the icons:** over the app icons, Start and the system tray icons,
   the mouse never crosses, even when pushing.
@@ -63,7 +64,7 @@ click your icons without overshooting.
 /*
 - margin: 40
   $name: Extra height above the taskbar (px)
-  $description: Strip above the taskbar that also stops the mouse. Increase it if the mouse still slips through.
+  $description: Strip above the taskbar that also stops the mouse, in pixels at 100% scale (scaled with each monitor's DPI). Increase it if the mouse still slips through.
 - force: 400
   $name: Push force to cross to the other monitor (px)
   $description: How much to keep pushing against the taskbar to cross over. 0 = never crosses through the taskbar.
@@ -74,6 +75,7 @@ click your icons without overshooting.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <shellscalingapi.h>
 #include <uiautomationclient.h>
 
 #include <algorithm>
@@ -90,6 +92,7 @@ struct Mon {
     RECT zone;
     bool hasZone;
     bool flat;               // horizontal taskbar (top/bottom)
+    int dpi;                 // monitor DPI (96 = 100% scale)
     std::vector<Span> icons; // taskbar ranges that have icons
 };
 
@@ -108,6 +111,7 @@ static DWORD g_hookThreadId = 0;
 static HANDLE g_queueReadyEvent = nullptr;
 static HANDLE g_iconThread = nullptr;
 static HANDLE g_stopEvent = nullptr;
+static HANDLE g_wakeEvent = nullptr; // hook thread -> icon thread: "the cursor is near a taskbar"
 
 // icon ranges found by the UI Automation thread
 static SRWLOCK g_iconLock = SRWLOCK_INIT;
@@ -118,6 +122,7 @@ static std::vector<Mon> g_mons;
 static HHOOK g_hook = nullptr;
 static int g_accum = 0;
 static DWORD g_lastBlock = 0;
+static DWORD g_lastWake = 0;
 
 static bool InRect(const RECT& r, int x, int y) {
     return x >= r.left && x < r.right && y >= r.top && y < r.bottom;
@@ -273,7 +278,13 @@ static DWORD WINAPI IconThread(LPVOID) {
     if (!uia || !walker || !cache) {
         Wh_Log(L"UI Automation unavailable, icon blocking disabled");
     } else {
+        // Read once at start, then only when the hook thread reports the cursor near a
+        // taskbar (at most every 1.5 s). Meanwhile the last known spans are used.
+        HANDLE waits[] = {g_stopEvent, g_wakeEvent};
+        bool first = true;
         while (!g_stop) {
+            if (!first && WaitForMultipleObjects(2, waits, FALSE, INFINITE) != WAIT_OBJECT_0 + 1) break;
+            first = false;
             if (g_blockIcons) {
                 std::vector<HWND> bars = TaskbarWindows();
                 std::vector<BarIcons> found;
@@ -291,7 +302,7 @@ static DWORD WINAPI IconThread(LPVOID) {
                 g_barIcons.swap(found);
                 ReleaseSRWLockExclusive(&g_iconLock);
             }
-            if (WaitForSingleObject(g_stopEvent, 1500) != WAIT_TIMEOUT) break;
+            if (WaitForSingleObject(g_stopEvent, 1500) != WAIT_TIMEOUT) break; // rate limit
         }
     }
     if (cache) cache->Release();
@@ -304,10 +315,12 @@ static DWORD WINAPI IconThread(LPVOID) {
 
 // ---------------------------------------------------------------- monitors and taskbars
 
-static BOOL CALLBACK EnumMonProc(HMONITOR, HDC, LPRECT rc, LPARAM lp) {
+static BOOL CALLBACK EnumMonProc(HMONITOR hmon, HDC, LPRECT rc, LPARAM lp) {
     auto* v = reinterpret_cast<std::vector<Mon>*>(lp);
     Mon m = {};
     m.rc = *rc;
+    UINT dx = 96, dy = 96;
+    m.dpi = SUCCEEDED(GetDpiForMonitor(hmon, MDT_EFFECTIVE_DPI, &dx, &dy)) && dy ? (int)dy : 96;
     v->push_back(m);
     return TRUE;
 }
@@ -361,9 +374,10 @@ static void Refresh() {
         Mon& mon = mons[idx];
         const RECT& m = mon.rc;
         int mw = m.right - m.left, mh = m.bottom - m.top;
+        // margin is in pixels at 100% scale, so it covers the same visual size on every monitor
         int thick = flat ? hgt : w;
-        if (thick < 8 || thick > (flat ? mh : mw) / 2) thick = 48;
-        int band = thick + margin;
+        if (thick < 8 || thick > (flat ? mh : mw) / 2) thick = MulDiv(48, mon.dpi, 96);
+        int band = thick + MulDiv(margin, mon.dpi, 96);
         int maxBand = (mw < mh ? mw : mh) / 2;
         if (band > maxBand) band = maxBand;
 
@@ -428,10 +442,25 @@ static bool ShouldBlock(int cx, int cy, int x, int y) {
     return true;
 }
 
+// Ask the icon thread to re-read the icons when the cursor gets near a taskbar.
+static void WakeIconThreadIfNearBar(int x, int y) {
+    if (!g_blockIcons || !g_wakeEvent) return;
+    DWORD now = GetTickCount();
+    if (now - g_lastWake < 1000) return;
+    for (const Mon& m : g_mons) {
+        if (m.hasZone && InRect(m.zone, x, y)) {
+            g_lastWake = now;
+            SetEvent(g_wakeEvent);
+            return;
+        }
+    }
+}
+
 static LRESULT CALLBACK LowLevelMouseProc(int code, WPARAM wp, LPARAM lp) {
     if (code == HC_ACTION && wp == WM_MOUSEMOVE) {
         auto* info = reinterpret_cast<MSLLHOOKSTRUCT*>(lp);
         if (!(info->flags & LLMHF_INJECTED)) {
+            WakeIconThreadIfNearBar(info->pt.x, info->pt.y);
             POINT c;
             if (GetCursorPos(&c) && ShouldBlock(c.x, c.y, info->pt.x, info->pt.y)) return 1;
         }
@@ -491,26 +520,32 @@ static void LoadSettings() {
     g_blockIcons = b != 0;
 }
 
+static void CloseEvents() {
+    for (HANDLE* h : {&g_stopEvent, &g_queueReadyEvent, &g_wakeEvent}) {
+        if (*h) {
+            CloseHandle(*h);
+            *h = nullptr;
+        }
+    }
+}
+
 BOOL WhTool_ModInit() {
     LoadSettings();
     g_stop = false;
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_queueReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent || !g_queueReadyEvent) {
+    g_wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr); // auto-reset
+    if (!g_stopEvent || !g_queueReadyEvent || !g_wakeEvent) {
         Wh_Log(L"CreateEvent failed: %u", GetLastError());
-        if (g_stopEvent) CloseHandle(g_stopEvent);
-        if (g_queueReadyEvent) CloseHandle(g_queueReadyEvent);
-        g_stopEvent = g_queueReadyEvent = nullptr;
+        CloseEvents();
         return FALSE;
     }
 
     g_hookThread = CreateThread(nullptr, 0, HookThread, nullptr, 0, &g_hookThreadId);
     if (!g_hookThread) {
         Wh_Log(L"CreateThread failed: %u", GetLastError());
-        CloseHandle(g_stopEvent);
-        CloseHandle(g_queueReadyEvent);
-        g_stopEvent = g_queueReadyEvent = nullptr;
+        CloseEvents();
         return FALSE;
     }
     return TRUE;
@@ -519,6 +554,7 @@ BOOL WhTool_ModInit() {
 void WhTool_ModSettingsChanged() {
     LoadSettings();
     if (g_hookThread) PostThreadMessageW(g_hookThreadId, WM_APP, 0, 0);
+    if (g_wakeEvent && g_blockIcons) SetEvent(g_wakeEvent); // icons may have just been turned on
 }
 
 void WhTool_ModUninit() {
@@ -541,14 +577,7 @@ void WhTool_ModUninit() {
         CloseHandle(g_iconThread);
         g_iconThread = nullptr;
     }
-    if (g_queueReadyEvent) {
-        CloseHandle(g_queueReadyEvent);
-        g_queueReadyEvent = nullptr;
-    }
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-    }
+    CloseEvents();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
