@@ -29,11 +29,15 @@ its hotkey, in a small separate process started by Windhawk.
 2. **A checklist shows what will be closed**: untick anything to leave it alone
    this time, then Enter confirms and Esc cancels. Turn the checklist off in the
    settings if you prefer.
-3. **Apps are closed politely**, all at once: every window of the app gets a
-   normal close request, exactly like clicking the X. An app that asks "save
-   changes?" stays open and is left alone. Background apps that have no window
-   to close (tray apps) are ended, but only the ones you left ticked in the
-   checklist. Apps you list under *Apps to force close* are ended too.
+3. **Apps are closed politely**, all at once: each app's visible windows get a
+   normal close request, exactly like clicking the X. Hidden helper windows of
+   tray apps are only touched when the app is allowed to be ended afterwards,
+   so an app is never left running but broken (no tray icon, no hotkey). An app
+   that asks "save changes?" stays open and is left alone. Apps that only hide to the tray when
+   asked to close, and background apps with no window at all, are ended, but
+   only the ones you left ticked in the checklist, and they are put back when
+   you turn Game Mode off. Apps you list under *Apps to force close* are ended
+   too.
 4. **The power plan is switched** (Ultimate Performance by default, if your PC
    has it).
 5. **Games that are already running** (from your game folders) get High
@@ -57,7 +61,9 @@ Apps you reopened yourself in the meantime are not started twice.
   Explorer, Windhawk and its editor, console tools (git, node, shells), drivers
   and GPU software in the *Folders to keep* list, anything under *Apps to keep*,
   anything running from your *Game folders*, and administrator apps, which a
-  normal program cannot close anyway.
+  normal program cannot close anyway. Tools made by your PC's manufacturer or
+  by hardware vendors (Acer, Lenovo, HP, Dell, Intel, NVIDIA, Realtek and
+  others, see *Manufacturers to keep*) are kept by default.
 - Store apps (Phone Link, WhatsApp, Files, ...) are reopened through Windows
   with their app identity, other apps with their original command line. A web
   link a browser was started with is not replayed.
@@ -123,6 +129,19 @@ Apps you reopened yourself in the meantime are not started twice.
   $description: >-
     Also list apps that only run in the background without a window. They are
     ended (not just asked to close) when you leave them ticked.
+- keepVendorApps: true
+  $name: Keep PC manufacturer and hardware utilities
+  $description: >-
+    Never close programs made by the companies listed below, such as Acer,
+    Lenovo, HP and Dell system tools, RGB and fan control, GPU and audio
+    software. Matched on the company name stored in the program's file.
+- keepVendors: [Acer, ULIC, Predator, Nitro, Lenovo, Legion, Hewlett-Packard, HP Inc, OMEN, Dell, Alienware, ASUS, ROG, Armoury, Micro-Star, MSI, Gigabyte, Razer, Logitech, Corsair, SteelSeries, Intel, NVIDIA, AMD, Advanced Micro Devices, Realtek, Qualcomm, Rivet Networks, Killer]
+  $name: Manufacturers to keep
+  $description: >-
+    Company, brand or product names, any capitalization. A program is kept when
+    one of them starts a word in its company name, its product name or the
+    folder it is installed in under Program Files. Names of 3 letters or fewer
+    must match a whole word. Add or remove names to suit your PC.
 - keepFolders: [\NVIDIA Corporation\, \NVIDIA\, \AMD\, \Intel\, .IntelGraphicsExperience, \Realtek, \Windhawk\, \WindowsApps\MicrosoftWindows., \WindowsApps\Microsoft.Widgets, \WindowsApps\Microsoft.DesktopAppInstaller, \EdgeWebView\]
   $name: Folders to keep
   $description: >-
@@ -188,6 +207,8 @@ struct Settings {
     std::vector<std::wstring> closeApps;
     std::vector<std::wstring> keepApps;
     std::vector<std::wstring> keepFolders;  // pieces of text a path may contain
+    bool keepVendorApps = true;
+    std::vector<std::wstring> keepVendors;  // company names (start of a word)
     std::vector<std::wstring> forceApps;
     std::vector<std::wstring> gameFolders;
 };
@@ -393,6 +414,49 @@ static const wchar_t* WhyKeep(const std::wstring& exeName,
         }
     }
     return nullptr;
+}
+
+// True when any listed vendor name appears in `text` at the start of a word
+// ("Acer Incorporated" matches Acer; "Racer Games" does not). Case is ignored.
+static bool VendorMatches(const std::wstring& text,
+                          const std::vector<std::wstring>& vendors) {
+    std::wstring t = Lower(text);
+    for (const auto& vendor : vendors) {
+        std::wstring v = Lower(Trim(vendor));
+        if (v.empty()) {
+            continue;
+        }
+        // Very short names (MSI, AMD, ROG) must be a whole word: "rogue" is not ROG.
+        const bool wholeWord = v.size() <= 3;
+        for (size_t pos = t.find(v); pos != std::wstring::npos; pos = t.find(v, pos + 1)) {
+            const bool startOk = pos == 0 || !iswalnum(t[pos - 1]);
+            const size_t end = pos + v.size();
+            const bool endOk = !wholeWord || end >= t.size() || !iswalnum(t[end]);
+            if (startOk && endOk) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// The folder a program was installed into under Program Files or WindowsApps
+// ("Acer" for C:\Program Files\Acer\Care Center\x.exe). Only this level is used
+// to recognise a maker, never the whole path, so a user account named "Dell"
+// cannot make everything it owns look like a Dell tool.
+static std::wstring InstallFolderName(const std::wstring& path) {
+    std::wstring p = Lower(path);
+    // WindowsApps first: it lives inside Program Files.
+    for (const wchar_t* root : {L"\\windowsapps\\", L"\\program files (x86)\\", L"\\program files\\"}) {
+        size_t at = p.find(root);
+        if (at == std::wstring::npos) {
+            continue;
+        }
+        size_t start = at + wcslen(root);
+        size_t end = p.find(L'\\', start);
+        return p.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
+    }
+    return L"";
 }
 
 // Helper programs of an installer or updater are never the app itself.
@@ -601,6 +665,8 @@ void LoadSettings() {
     s.closeApps = ReadList(L"closeApps[%d]");
     s.keepApps = ReadList(L"keepApps[%d]");
     s.keepFolders = ReadList(L"keepFolders[%d]");
+    s.keepVendorApps = Wh_GetIntSetting(L"keepVendorApps") != 0;
+    s.keepVendors = ReadList(L"keepVendors[%d]");
     s.forceApps = ReadList(L"forceCloseApps[%d]");
     s.gameFolders = ReadList(L"gameFolders[%d]");
     g_settings = s;
@@ -774,7 +840,8 @@ void Notify(const std::wstring& text) {
 
 struct ChecklistItem {
     std::wstring text;
-    std::wstring note;  // shown after the name, e.g. "background"
+    std::wstring note;       // shown after the name, e.g. "background"
+    bool keepNote = false;   // a warning (ends process): cut the name before the note
 };
 
 struct ChecklistSpec {
@@ -913,7 +980,7 @@ void UpdateSummary() {
 
 void Layout() {
     DlgState& d = *g_dlg;
-    const int W = Sd(500);
+    const int W = Sd(620);
     const int M = Sd(24);
     HDC dc = GetDC(d.hwnd);
     HFONT old = (HFONT)SelectObject(dc, d.font);
@@ -951,8 +1018,14 @@ void Layout() {
         const int avail = colW - Sd(34);
         for (size_t i = 0; i < d.itemWnds.size(); i++) {
             const ChecklistItem& it = d.spec.items[i];
-            std::wstring full = it.text + (it.note.empty() ? L"" : L"  (" + it.note + L")");
-            std::wstring shown = FitText(dc, full, avail);
+            std::wstring tail = it.note.empty() ? L"" : L"  (" + it.note + L")";
+            std::wstring shown = it.text + tail;
+            if (TextWidth(dc, shown) > avail) {
+                // A plain "background" note is dropped before the name is cut;
+                // a warning note stays and the name is cut instead.
+                shown = it.keepNote ? FitText(dc, it.text, avail - TextWidth(dc, tail)) + tail
+                                    : FitText(dc, it.text, avail);
+            }
             SetWindowTextW(d.itemWnds[i], shown.c_str());
             int r = (int)i / cols;
             int c = (int)i % cols;
@@ -1486,39 +1559,47 @@ struct AppGroup {
     std::wstring args;
     std::wstring aumid;
     std::map<DWORD, unsigned long long> pids;  // pid -> creation time
-    std::vector<HWND> windows;  // every top-level window to send WM_CLOSE to
+    std::vector<HWND> windows;         // every top-level window, hidden ones included
+    std::vector<HWND> visibleWindows;  // the ones a user could click the X of
     bool forced = false;        // listed under "Apps to force close"
     bool background = false;    // no taskbar window: a tray or background app
     bool windowless = false;    // no window at all: it cannot be asked to close
 };
 
-// The name the program calls itself ("Google Chrome"), else the file name.
-std::wstring DisplayName(const std::wstring& path) {
+// A text field from the program's version resource (FileDescription,
+// CompanyName, ...), or empty.
+std::wstring FileVersionString(const std::wstring& path, const wchar_t* key) {
     DWORD ignored = 0;
     DWORD size = GetFileVersionInfoSizeW(path.c_str(), &ignored);
-    if (size) {
-        std::vector<BYTE> buf(size);
-        struct Translation {
-            WORD lang;
-            WORD codepage;
-        }* tr = nullptr;
-        UINT len = 0;
-        if (GetFileVersionInfoW(path.c_str(), 0, size, buf.data()) &&
-            VerQueryValueW(buf.data(), L"\\VarFileInfo\\Translation", (LPVOID*)&tr, &len) &&
-            len >= sizeof(Translation)) {
-            WCHAR sub[64];
-            swprintf_s(sub, L"\\StringFileInfo\\%04x%04x\\FileDescription", tr[0].lang,
-                       tr[0].codepage);
-            PWSTR value = nullptr;
-            UINT vlen = 0;
-            if (VerQueryValueW(buf.data(), sub, (LPVOID*)&value, &vlen) && value &&
-                vlen > 1) {
-                std::wstring name = Trim(value);
-                if (!name.empty()) {
-                    return name;
-                }
-            }
-        }
+    if (!size) {
+        return L"";
+    }
+    std::vector<BYTE> buf(size);
+    struct Translation {
+        WORD lang;
+        WORD codepage;
+    }* tr = nullptr;
+    UINT len = 0;
+    if (!GetFileVersionInfoW(path.c_str(), 0, size, buf.data()) ||
+        !VerQueryValueW(buf.data(), L"\\VarFileInfo\\Translation", (LPVOID*)&tr, &len) ||
+        len < sizeof(Translation)) {
+        return L"";
+    }
+    WCHAR sub[96];
+    swprintf_s(sub, L"\\StringFileInfo\\%04x%04x\\%s", tr[0].lang, tr[0].codepage, key);
+    PWSTR value = nullptr;
+    UINT vlen = 0;
+    if (VerQueryValueW(buf.data(), sub, (LPVOID*)&value, &vlen) && value && vlen > 1) {
+        return Trim(value);
+    }
+    return L"";
+}
+
+// The name the program calls itself ("Google Chrome"), else the file name.
+std::wstring DisplayName(const std::wstring& path) {
+    std::wstring name = FileVersionString(path, L"FileDescription");
+    if (!name.empty()) {
+        return name;
     }
     std::wstring n = BaseName(path);
     if (n.size() > 4 && Lower(n.substr(n.size() - 4)) == L".exe") {
@@ -1653,6 +1734,19 @@ std::vector<AppGroup> CollectGroups(const Settings& s,
             if (!IsGuiExe(p.path)) {
                 continue;
             }
+            if (s.keepVendorApps) {
+                static std::map<std::wstring, std::wstring> makerOf;  // path -> who made it
+                std::wstring key = Lower(p.path);
+                if (!makerOf.count(key)) {
+                    makerOf[key] = FileVersionString(p.path, L"CompanyName") + L" | " +
+                                   FileVersionString(p.path, L"ProductName") + L" | " +
+                                   InstallFolderName(p.path);
+                }
+                if (VendorMatches(makerOf[key], s.keepVendors)) {
+                    keptNames.insert(DisplayName(p.path) + L" (hardware or PC maker tool)");
+                    continue;
+                }
+            }
             if (startedByKeptApp(p)) {
                 keptNames.insert(DisplayName(p.path) + L" (started by an app to keep)");
                 continue;
@@ -1745,6 +1839,11 @@ std::vector<AppGroup> CollectGroups(const Settings& s,
         }
         g.forced = InNameList(s.forceApps, g.exe);
         g.windowless = g.windows.empty();
+        for (HWND w : g.windows) {
+            if (IsWindowVisible(w)) {
+                g.visibleWindows.push_back(w);
+            }
+        }
         HANDLE h =
             OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, root->pid);
         if (h) {
@@ -1899,7 +1998,7 @@ void TurnOn() {
     if (s.confirm) {
         std::vector<ChecklistItem> items;
         for (const auto& g : groups) {
-            items.push_back({g.name, NoteFor(g)});
+            items.push_back({g.name, NoteFor(g), g.forced || g.windowless});
         }
         ChecklistResult choice = ShowChecklist(
             OnChecklist(items, changePlan, target.empty(), planLabel, games.size()));
@@ -1969,10 +2068,25 @@ void TurnOn() {
     };
 
     // Close everything at once: one round of WM_CLOSE, one shared wait.
+    //
+    // The close request goes to the windows a user could click the X of. Hidden
+    // windows (the hotkey and tray helpers of a tray app) get it only for an app
+    // with nothing visible to close, and only when this app may be ended if it
+    // then refuses to quit: an app that survives after losing its hidden
+    // windows is alive but broken (no tray icon, no hotkey).
     for (const auto& g : groups) {
-        Wh_Log(L"Closing %s (%zu process(es), %zu window(s))", g.name.c_str(),
-               g.pids.size(), g.windows.size());
-        for (HWND w : g.windows) {
+        const bool mayEndIfStuck = g.forced || s.confirm;
+        const std::vector<HWND> none;
+        const std::vector<HWND>& targets =
+            !g.visibleWindows.empty() ? g.visibleWindows
+            : mayEndIfStuck           ? g.windows
+                                      : none;
+        Wh_Log(L"Closing %s (%zu process(es), %zu of %zu window(s))", g.name.c_str(),
+               g.pids.size(), targets.size(), g.windows.size());
+        if (targets.empty() && !g.windows.empty()) {
+            Wh_Log(L"%s only has hidden windows and may not be ended: left untouched", g.name.c_str());
+        }
+        for (HWND w : targets) {
             PostMessageW(w, WM_CLOSE, 0, 0);
         }
         if (g.windowless && mayEnd(g)) {
@@ -1995,6 +2109,53 @@ void TurnOn() {
         }
         Sleep(250);
     }
+
+    // Some apps (WhatsApp, Phone Link, tray tools) answer a close request by
+    // hiding their window and carrying on. Their windows are gone but the
+    // process lives on, so without this they would stay in the background and
+    // never be put back. After a short extra wait (a browser may still be
+    // saving its session) they are ended, if the user left them ticked.
+    auto hasVisibleWindow = [](const AppGroup& g) {
+        for (HWND w : g.windows) {
+            if (IsWindow(w) && IsWindowVisible(w)) {
+                return true;  // still showing something, e.g. "save changes?"
+            }
+        }
+        return false;
+    };
+    auto hidToTray = [&](size_t i) {
+        return !done[i] && !groups[i].windowless && !hasVisibleWindow(groups[i]);
+    };
+    bool anyHidden = false;
+    for (size_t i = 0; i < groups.size(); i++) {
+        anyHidden = anyHidden || hidToTray(i);
+    }
+    if (anyHidden) {
+        ULONGLONG grace = GetTickCount64() + (ULONGLONG)std::min(20, s.timeoutSec * 2) * 1000;
+        while (GetTickCount64() < grace) {
+            bool waiting = false;
+            for (size_t i = 0; i < groups.size(); i++) {
+                if (hidToTray(i)) {
+                    if (!GroupRunning(groups[i])) {
+                        done[i] = true;
+                    } else {
+                        waiting = true;
+                    }
+                }
+            }
+            if (!waiting) {
+                break;
+            }
+            Sleep(250);
+        }
+        for (size_t i = 0; i < groups.size(); i++) {
+            if (hidToTray(i) && (groups[i].forced || s.confirm)) {
+                Wh_Log(L"Ending %s: it hid to the tray instead of closing", groups[i].name.c_str());
+                endProcesses(groups[i]);
+                done[i] = !GroupRunning(groups[i]);
+            }
+        }
+    }
     int closed = 0;
     int left = 0;
     Snapshot after = sn;
@@ -2013,8 +2174,9 @@ void TurnOn() {
             after.apps.push_back({g.name, g.path, g.args, g.aumid});
         } else {
             left++;
-            Wh_Log(L"%s did not close (it may be asking to save); left running",
-                   g.name.c_str());
+            Wh_Log(L"%s did not close (%s); left running", g.name.c_str(),
+                   hasVisibleWindow(g) ? L"it is still showing a window, maybe asking to save"
+                                       : L"it only hid its window");
         }
     }
 
