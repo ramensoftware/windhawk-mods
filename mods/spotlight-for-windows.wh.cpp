@@ -2,7 +2,7 @@
 // @id              spotlight-for-windows
 // @name            Spotlight Search for Windows
 // @description     Liquid-glass Spotlight-style launcher with themes, animations, hover zoom, recents and all-drive file search
-// @version         3.3.0
+// @version         3.3.1
 // @author          itzderix
 // @include         windhawk.exe
 // @github          https://github.com/itzderix
@@ -19,10 +19,27 @@ A liquid-glass Spotlight-style search bar: a frosted, blurred-desktop glass pane
 smooth open / close and selection animations, hover zoom and a draggable layout. The right-click
 menu is drawn in the same glass.
 
-## How it differs from Spotlight Launcher
+## Demos
 
-[Spotlight Launcher](https://windhawk.net/mods/spotlight-launcher) concentrates on breadth: Store apps,
-a file browser, clipboard history, bookmarks and a window switcher. This mod concentrates on the
+**Open animation (Jelly)**
+
+![Jelly](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/jelly.gif)
+
+**Open animation (Fade)**
+
+![Fade-in](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/fade-in.gif)
+
+**Switching selection / Tab**
+
+![Jelly tab](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/jelly-tab.gif)
+
+**Right-click menu**
+
+![Right-click menu](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/right-click.gif)
+
+## Liquid Glass 
+
+**User Experience** :This mod concentrates on the
 experience: the liquid-glass look, open/close and selection animations, hover zoom, a draggable bar,
 a persistent whole-drive file index (refreshed every 15 minutes) and a web-search fallback with a
 browser picker. The two cover different ground; Store-app, clipboard, bookmark and window-switcher
