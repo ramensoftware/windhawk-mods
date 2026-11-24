@@ -706,6 +706,40 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c275045225aa8ba5159ec7e3d5b242a0d2ce9f35/mods/shell-font-changer-plus.wh.cpp"
       }
     },
+    "swipe-for-10start": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795493271636,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795493271636,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Zhanyuanium",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luser32 -lhid -lshell32 -ladvapi32",
+        "description": "Touch and pen swipe gestures for ExplorerPatcher's legacy Windows 10 Start menu: pull it out with your finger, drag it back to close, with the same animation on the Windows key.",
+        "github": "https://github.com/Zhanyuanium",
+        "homepage": "https://github.com/Zhanyuanium/swipe-for-10start",
+        "include": [
+          "explorer.exe",
+          "StartMenuExperienceHost.exe"
+        ],
+        "license": "MIT",
+        "name": "Swipe for 10Start",
+        "version": "0.8.6"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7758",
+      "source": {
+        "sha256": "62485e147544ab027fce2be6823ebaba6d3ef064b1e7f34a1f08cd7a244b06a7",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/8aa2d0b87215ea73e12a7b17e36c084813b1d730/mods/swipe-for-10start.wh.cpp"
+      }
+    },
     "taskbar-app-state-indicators": {
       "details": {
         "defaultSorting": 0,
@@ -714,7 +748,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795370788861,
+        "updated": 1795493271636,
         "users": 0
       },
       "metadata": {
@@ -723,7 +757,7 @@
         ],
         "author": "Deen-0x",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldwmapi -ld2d1",
-        "description": "Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, dots for several windows or a badge, and progress, all animated along the frame.",
+        "description": "Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, dots or counts for several windows and badges, and progress, all animated along the frame.",
         "github": "https://github.com/Deen-0x",
         "include": [
           "explorer.exe"
@@ -733,8 +767,8 @@
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7747",
       "source": {
-        "sha256": "a95200e2448abfd8c6b3e438a077631b29fa5f31a28d53e2d7fc437ec17be652",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3ffb7a9eea45a80dcb66b1276ff21cfee84b41c0/mods/taskbar-app-state-indicators.wh.cpp"
+        "sha256": "97f8306cd8486aed70bb0e551bcb56fa3797830ecad30b94d9a09e143a36c625",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/23c9aed369aea5ab66506c73f0d088446e6fb186/mods/taskbar-app-state-indicators.wh.cpp"
       }
     },
     "taskbar-app-volume-mixer": {
@@ -1096,6 +1130,140 @@
       "source": {
         "sha256": "0f4574b2856d9882baf69641cbbea3d7a2729ffd488f08833c69db7302456cd8",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/81879c640468b04eb36377210b4b50d72e70222a/mods/volume-key-step.wh.cpp"
+      }
+    },
+    "win7-balloon-notifications-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795493271636,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795493271636,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-lole32 -lshlwapi -lshell32 -lversion -lgdiplus -lruntimeobject",
+        "description": "This mod converts supported Windows 10 and 11 toast notifications into classic notification-area balloons inspired by Windows Vista, 7 and 8.1.",
+        "exclude": [
+          "MusNotificationUx.exe",
+          "MusNotification.exe",
+          "MoUsoCoreWorker.exe",
+          "UsoClient.exe",
+          "wuauclt.exe",
+          "dwm.exe",
+          "smss.exe",
+          "csrss.exe",
+          "wininit.exe",
+          "winlogon.exe",
+          "services.exe",
+          "lsass.exe",
+          "fontdrvhost.exe",
+          "audiodg.exe",
+          "LogonUI.exe",
+          "consent.exe",
+          "CredentialUIBroker.exe",
+          "LsaIso.exe",
+          "NgcIso.exe",
+          "BioIso.exe",
+          "SecurityHealthService.exe",
+          "MsMpEng.exe",
+          "NisSrv.exe",
+          "UserOOBEBroker.exe",
+          "smartscreen.exe",
+          "WerFault.exe",
+          "sihost.exe",
+          "ctfmon.exe",
+          "RuntimeBroker.exe",
+          "ShellExperienceHost.exe",
+          "StartMenuExperienceHost.exe",
+          "SearchHost.exe",
+          "SearchApp.exe",
+          "SearchUI.exe",
+          "TextInputHost.exe",
+          "windhawk.exe",
+          "windhawk-ui.exe",
+          "windhawk-mod.exe",
+          "git.exe",
+          "git-remote-https.exe",
+          "conhost.exe"
+        ],
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe",
+          "powershell.exe",
+          "pwsh.exe",
+          "windowsterminal.exe",
+          "discord.exe",
+          "discordcanary.exe",
+          "discordptb.exe",
+          "vesktop.exe",
+          "whatsapp.exe",
+          "whatsapp.root.exe",
+          "telegram.exe",
+          "signal.exe",
+          "slack.exe",
+          "teams.exe",
+          "ms-teams.exe",
+          "msteams.exe",
+          "zoom.exe",
+          "zoom workplace.exe",
+          "skype.exe",
+          "chrome.exe",
+          "msedge.exe",
+          "firefox.exe",
+          "brave.exe",
+          "opera.exe",
+          "vivaldi.exe",
+          "vivaldi_proxy.exe",
+          "chromium.exe",
+          "waterfox.exe",
+          "librewolf.exe",
+          "floorp.exe",
+          "zen.exe",
+          "palemoon.exe",
+          "basilisk.exe",
+          "torbrowser.exe",
+          "mullvadbrowser.exe",
+          "duckduckgo.exe",
+          "arc.exe",
+          "thorium.exe",
+          "avast_secure_browser.exe",
+          "avgbrowser.exe",
+          "maxthon.exe",
+          "thunderbird.exe",
+          "outlook.exe",
+          "olk.exe",
+          "hxoutlook.exe",
+          "spotify.exe",
+          "steam.exe",
+          "epicgameslauncher.exe",
+          "battle.net.exe",
+          "xboxapp.exe",
+          "phoneexperiencehost.exe",
+          "todo.exe",
+          "notion.exe",
+          "obsidian.exe",
+          "dropbox.exe",
+          "onedrive.exe",
+          "googledrivefs.exe",
+          "code.exe",
+          "code - insiders.exe",
+          "devenv.exe"
+        ],
+        "license": "MIT",
+        "name": "Windows Vista/7/8.1 Balloon Notifications Restorer",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7891",
+      "source": {
+        "sha256": "802ceff17bc5c78612f72597de64008f2fde31c7a6bd4a04dbfe70eaad2146a6",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/5cfb6ee0124a643d2249f149e32b8652614576f8/mods/win7-balloon-notifications-restorer.wh.cpp"
       }
     },
     "win7-user-account-page-restorer": {
