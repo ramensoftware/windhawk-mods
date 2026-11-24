@@ -13,7 +13,7 @@
 /*
 # Spotlight for Windows
 
-![Spotlight Search for Windows](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/Screenshot%202026-11-24%20122542%20(2).png)
+![Spotlight for Windows](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/Screenshot%202026-11-24%20122542%20%282%29.png)
 
 
 A minimal, centered search bar with a frosted-glass look.
