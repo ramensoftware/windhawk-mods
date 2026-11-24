@@ -6914,7 +6914,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         // SPI_SETHIGHCONTRAST: Windows 7 BSDR never updated the high-contrast status on runtime, so don't update it here either. We already skipped taking screenshot too
         break;
     }
-    case WM_BSDR_SETFOCUS: {        
+    case WM_BSDR_SETFOCUS: {
         HWND fgWnd = GetForegroundWindow();
         DWORD myTid = GetCurrentThreadId();
         DWORD fgTid = fgWnd ? GetWindowThreadProcessId(fgWnd, nullptr) : 0;
