@@ -289,14 +289,8 @@ BOOL __thiscall PermitAutoHide_Hook(void* pThis) {
 }
 
 static void HookPermitAutoHide() {
-    // Windows 11: taskbar.dll; Windows 10: explorer.exe itself.
-    HMODULE module =
-        LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!module) {
-        module = GetModuleHandleW(nullptr);
-    }
-
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // Windows 11: taskbar.dll.
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{
              L"public: virtual int __cdecl CTaskListWnd::PermitAutoHide(void)",
              L"public: virtual int __stdcall CTaskListWnd::PermitAutoHide(void)",
@@ -304,7 +298,28 @@ static void HookPermitAutoHide() {
          (void**)&PermitAutoHide_Original,
          (void*)PermitAutoHide_Hook},
     };
-    if (WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+    // Windows 10: explorer.exe itself.
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
+        {{
+             L"public: virtual int __cdecl CTaskListWnd::PermitAutoHide(void)",
+             L"public: virtual int __stdcall CTaskListWnd::PermitAutoHide(void)",
+         },
+         (void**)&PermitAutoHide_Original,
+         (void*)PermitAutoHide_Hook},
+    };
+
+    bool hooked;
+    HMODULE taskbarDll =
+        LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (taskbarDll) {
+        hooked = WindhawkUtils::HookSymbols(taskbarDll, taskbarDllHooks,
+                                            ARRAYSIZE(taskbarDllHooks));
+    } else {
+        hooked = WindhawkUtils::HookSymbols(GetModuleHandleW(nullptr),
+                                            explorerExeHooks,
+                                            ARRAYSIZE(explorerExeHooks));
+    }
+    if (hooked) {
         Wh_Log(L"PermitAutoHide hooked");
     } else {
         Wh_Log(L"PermitAutoHide not found; flashing apps will still hold "
