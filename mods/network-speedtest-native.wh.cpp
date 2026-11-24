@@ -2,7 +2,7 @@
 // @id              network-speedtest-native
 // @name            Network Menu Speed Test
 // @description     Replaces the web speed test in the Windows 11 network menu with a native flyout: ping, jitter, download and upload measured against Cloudflare, live gauge, results chart with copy, keyboard accessible. No browser, no separate app.
-// @version         1.0
+// @version         1.1
 // @author          Alessandro-Vecchio
 // @github          https://github.com/Alessandro-Vecchio
 // @include         ShellHost.exe
@@ -18,18 +18,16 @@
 /*
 # Network Menu Speed Test
 
-Windows 11's network menu ("Run internet speed test") opens
+Windows 11's network menu ("Run internet speed test") normally opens
 
     https://go.microsoft.com/fwlink/?linkid=2324916
 
-in the default browser, which redirects to a Bing search page.
-
-This mod intercepts that URL in the shell processes and replaces it with a
-native flyout. The window, the gauge, the result cards and the speed
-measurement all live inside the mod: no external application or protocol
-handler is involved. The test talks to the public Cloudflare speed test
-endpoints (`speed.cloudflare.com`), the same stateless endpoints used by the
-website.
+in the default browser, which redirects to a Bing search page. This mod
+intercepts that URL in the shell processes and replaces it with a native
+flyout: the window, the gauge, the result cards and the measurement all live
+inside the mod, with no browser, external app or protocol handler. The test
+uses the public Cloudflare endpoints on `speed.cloudflare.com`, the same ones
+the website uses.
 
 ### Screenshots
 
@@ -37,58 +35,53 @@ website.
 | --- | --- |
 | ![Light theme](https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/light.png) | ![Dark theme](https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/dark.png) |
 
-| Desktop Acrylic | Results card |
+| Acrylic | Results card |
 | --- | --- |
-| ![Desktop Acrylic](https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/acrylic.png) | ![Results card](https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/results.png) |
+| ![Acrylic](https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/acrylic.png) | ![Results card](https://raw.githubusercontent.com/Alessandro-Vecchio/windhawk-mods/assets/results.png) |
 
 ### Data usage
 
-The test transfers real data with a per-direction budget of **512 MB**. Lines
-at or below ~340 Mbps complete the full 12 s window per direction without
-reaching the budget; faster lines end the phase once the budget is spent
-(minimum 4 s window, and the result divides bytes by the time the transfer
-was actually moving data). Total usage stays under ~1 GB regardless of line
-speed, and the results card shows the bytes used ("Data used: 762 MB", also
-included in the clipboard text).
+The test moves real data. The **Data limit per direction** setting caps each
+phase, download and upload separately; with the default limit a whole test
+stays under ~1 GB. Lines up to ~340 Mbps complete the full 12 s window; faster
+lines end the phase when the cap is reached, and the result divides the bytes
+by the time data was actually moving. Lower limits shorten the measurement on
+fast lines, while removing the cap can move several GB per test. The results
+card shows the bytes used ("Data used: 762 MB"), and the same figure is
+included in the text copied with Copy.
 
-The **Start the test automatically** setting defaults to `auto`: the test
-starts when the flyout opens, except when Windows reports the connection as
-metered - then the flyout opens idle and waits for a click on Start.
+### Settings
 
-**Coexistence**: the mod [perform-speedtest-redirect](https://windhawk.net/mods/perform-speedtest-redirect)
-intercepts the same URL launches. If both are enabled, whichever mod hooks
-the launch first wins - disable the other one to keep this mod's flyout.
+- **Extra URL patterns**: additional URL substrings separated by `|`. Leave
+  it empty when the network menu opens the flyout; add patterns only if the
+  menu starts using a different URL.
+- **Fall back to the web page**: run the original URL when the flyout cannot
+  start.
+- **Also intercept browser process launches**: catch launches made directly
+  through `CreateProcessW`. The launch returns `ERROR_CANCELLED` because no
+  browser process is created; turn this off to open the browser normally when
+  the shell skips the shell-execute path.
+- **Start the test automatically**: `auto` (default) starts the test when the
+  flyout opens, but waits for a click on metered connections; `always` starts
+  unconditionally; `never` always waits for a click.
+- **Data limit per direction**: 128 MB, 256 MB, 512 MB (default), 1 GB or
+  Unlimited.
 
-The flyout opens above the taskbar, on the monitor under the mouse. It closes
-when you click outside, but never while a measurement is running.
+### Notes
 
-It is keyboard accessible (Tab / Enter / Esc with a WinUI-style focus ring),
-exposed to screen readers through MSAA (`WM_GETOBJECT`), and honours the
-"Animation effects" system setting: with animations off every transition is
-instant. The error view shrinks the window to fit its content.
-
-## Settings
-
-- **Extra URL patterns**: additional substrings separated by `|`.
-- **Fall back to the web page**: if the flyout cannot start, run the original
-  URL instead of doing nothing.
-- **Also intercept browser process launches**: catch the network menu launching
-  the browser directly through `CreateProcessW`. The launch returns
-  `ERROR_CANCELLED` because no browser process is created; turning it off makes
-  the menu open the browser normally when the shell skips the shell-execute
-  path.
-- **Start the test automatically**: `auto` starts the test when the flyout
-  opens, but waits for a click when Windows reports the connection as metered;
-  `always` starts unconditionally; `never` always waits for a click.
-- **Language**: `auto` (follows the Windows display language), `it` or `en`.
-
-Diagnostics go to the Windhawk mod log: enable logging for this mod from its
-Details page in Windhawk when you need them.
-
-Note: when the network menu launches the browser directly through
-`CreateProcessW`, the flyout is shown but process creation returns
-`ERROR_CANCELLED`: the hook never reports success without creating the
-requested browser process.
+- The flyout opens above the taskbar on the monitor under the mouse and
+  closes on an outside click, but never while a measurement is running.
+- Keyboard accessible (Tab / Enter / Esc with a WinUI-style focus ring) and
+  exposed to screen readers through MSAA; it honours the "Animation effects"
+  setting, so transitions are instant when animations are off.
+- The flyout texts follow the Windows display language: English, Italian,
+  Spanish, French, German, Portuguese, Russian, Japanese, Korean, Chinese
+  (Simplified and Traditional), Dutch, Polish and Turkish; other languages
+  fall back to English.
+- [perform-speedtest-redirect](https://windhawk.net/mods/perform-speedtest-redirect)
+  intercepts the same URL launches; enable only one of the two mods.
+- Diagnostics go to the Windhawk mod log; enable logging for this mod from
+  its Details page when needed.
 */
 // ==/WindhawkModReadme==
 
@@ -96,7 +89,7 @@ requested browser process.
 /*
 - extraPatterns: ""
   $name: Extra URL patterns
-  $description: Additional substrings separated by | (example speedtest.net|ookla.com).
+  $description: Additional substrings separated by | (example speedtest.net|ookla.com). Leave empty if the speed test opens correctly; add patterns only if the network menu starts using a different URL.
 - fallbackToOriginal: true
   $name: Fall back to the web page
   $description: If the native flyout cannot start, open the original web page instead of doing nothing.
@@ -110,13 +103,15 @@ requested browser process.
   - auto: Auto (waits on metered connections)
   - always: Always
   - never: Never (click to start)
-- language: auto
-  $name: Language
-  $description: Language of the flyout texts. Auto follows the Windows display language.
+- dataBudget: '512'
+  $name: Data limit per direction
+  $description: Maximum data used by each phase of the test, download and upload separately. Set to Unlimited for no cap (a fast line can then use several GB per test).
   $options:
-  - auto: Automatic (Windows display language)
-  - it: Italiano
-  - en: English
+  - '128': 128 MB
+  - '256': 256 MB
+  - '512': 512 MB (default)
+  - '1000': 1 GB
+  - unlimited: Unlimited
 */
 // ==/WindhawkModSettings==
 
@@ -150,6 +145,7 @@ requested browser process.
 #include <string>
 #include <vector>
 #include <cstdio>
+#include <cstdlib>
 #include <cwchar>
 #include <new>
 #include <atomic>
@@ -174,9 +170,16 @@ static std::atomic<bool> g_interceptProcessLaunch = true;
 // Start mode for the flyout: 0 = auto (start unless the connection is
 // metered), 1 = always start, 2 = never start (wait for the Start button).
 static std::atomic<int> g_autoStart = 0;
+// Default and lowest accepted per-direction data budget, in bytes.
+static constexpr LONGLONG kDefaultTransferBudgetBytes = 512'000'000;
+static constexpr LONGLONG kMinTransferBudgetBytes = 128'000'000;
+// Maximum data per direction in bytes, from settings; 0 means unlimited.
+static std::atomic<LONGLONG> g_transferBudgetBytes =
+    kDefaultTransferBudgetBytes;
 
 // ---------------------------------------------------------------------------
-// UI strings (Italian / English, chosen from the Windows display language)
+// UI strings in the main Windows display languages, chosen from the user's
+// language with a fallback to English.
 // ---------------------------------------------------------------------------
 
 struct UiStrings {
@@ -211,6 +214,21 @@ struct UiStrings {
     PCWSTR errUnexpected;
 };
 
+static const UiStrings kStringsEn = {
+    L"Ready", L"Starting", L"Connecting", L"Completed", L"Canceled",
+    L"Stopping\x2026", L"Error", L"Ping", L"Download", L"Upload", L"Jitter",
+    L"Data used", L"Copy", L"Copied", L"Start", L"Stop", L"Repeat",
+    L"Test results", L"Test failed",
+    L"Try again in a moment.", L"Retry", L"Close", L"Server",
+    L"Could not connect to the server.",
+    L"Could not measure the ping: requests failed.",
+    L"Test canceled.",
+    L"Upload: the server received no data. Try again in a few minutes.",
+    L"Download: the server returned no data. Try again in a few minutes.",
+    L"Unexpected error during the test.",
+};
+
+// Italian
 static const UiStrings kStringsIt = {
     L"Pronto", L"Avvio", L"Connessione", L"Completato", L"Annullato",
     L"Arresto\x2026", L"Errore", L"Ping", L"Download", L"Upload", L"Jitter",
@@ -225,18 +243,215 @@ static const UiStrings kStringsIt = {
     L"Errore imprevisto durante il test.",
 };
 
-static const UiStrings kStringsEn = {
-    L"Ready", L"Starting", L"Connecting", L"Completed", L"Canceled",
-    L"Stopping\x2026", L"Error", L"Ping", L"Download", L"Upload", L"Jitter",
-    L"Data used", L"Copy", L"Copied", L"Start", L"Stop", L"Repeat",
-    L"Test results", L"Test failed",
-    L"Try again in a moment.", L"Retry", L"Close", L"Server",
-    L"Could not connect to the server.",
-    L"Could not measure the ping: requests failed.",
-    L"Test canceled.",
-    L"Upload: the server received no data. Try again in a few minutes.",
-    L"Download: the server returned no data. Try again in a few minutes.",
-    L"Unexpected error during the test.",
+// Spanish
+static const UiStrings kStringsEs = {
+    L"Listo", L"Iniciando", L"Conectando", L"Completado", L"Cancelado",
+    L"Deteniendo\x2026", L"Error", L"Ping", L"Descarga", L"Carga", L"Jitter",
+    L"Datos usados", L"Copiar", L"Copiado", L"Iniciar", L"Detener", L"Repetir",
+    L"Resultados de la prueba", L"Error en la prueba",
+    L"Inténtalo de nuevo en un momento.", L"Reintentar", L"Cerrar", L"Servidor",
+    L"No se pudo conectar al servidor.",
+    L"No se pudo medir el ping: error en las solicitudes.",
+    L"Prueba cancelada.",
+    L"Carga: el servidor no recibió datos. Inténtalo de nuevo en unos minutos.",
+    L"Descarga: el servidor no devolvió datos. Inténtalo de nuevo en unos minutos.",
+    L"Error inesperado durante la prueba.",
+};
+
+// French
+static const UiStrings kStringsFr = {
+    L"Prêt", L"Démarrage", L"Connexion", L"Terminé", L"Annulé",
+    L"Arrêt\x2026", L"Erreur", L"Ping", L"Téléchargement", L"Chargement",
+    L"Jitter", L"Données utilisées", L"Copier", L"Copié", L"Démarrer",
+    L"Arrêter", L"Répéter", L"Résultats du test", L"Échec du test",
+    L"Réessayez dans un instant.", L"Réessayer", L"Fermer", L"Serveur",
+    L"Impossible de se connecter au serveur.",
+    L"Impossible de mesurer le ping\x202F: échec des requêtes.",
+    L"Test annulé.",
+    L"Chargement\x202F: le serveur n'a reçu aucune donnée. Réessayez dans "
+    L"quelques minutes.",
+    L"Téléchargement\x202F: le serveur n'a renvoyé aucune donnée. Réessayez "
+    L"dans quelques minutes.",
+    L"Erreur inattendue pendant le test.",
+};
+
+// German
+static const UiStrings kStringsDe = {
+    L"Bereit", L"Wird gestartet", L"Verbindung wird hergestellt", L"Fertig",
+    L"Abgebrochen", L"Wird beendet\x2026", L"Fehler", L"Ping",
+    L"Herunterladen", L"Hochladen", L"Jitter", L"Verwendete Daten",
+    L"Kopieren", L"Kopiert", L"Starten", L"Beenden", L"Wiederholen",
+    L"Testergebnisse", L"Test fehlgeschlagen",
+    L"Versuchen Sie es gleich noch einmal.", L"Erneut versuchen", L"Schließen",
+    L"Server", L"Verbindung zum Server nicht möglich.",
+    L"Ping konnte nicht gemessen werden: Anforderungen fehlgeschlagen.",
+    L"Test abgebrochen.",
+    L"Hochladen: Der Server hat keine Daten empfangen. Versuchen Sie es in "
+    L"einigen Minuten erneut.",
+    L"Herunterladen: Der Server hat keine Daten zurückgegeben. Versuchen Sie "
+    L"es in einigen Minuten erneut.",
+    L"Unerwarteter Fehler beim Test.",
+};
+
+// Portuguese (Brazil)
+static const UiStrings kStringsPt = {
+    L"Pronto", L"Iniciando", L"Conectando", L"Concluído", L"Cancelado",
+    L"Interrompendo\x2026", L"Erro", L"Ping", L"Download", L"Upload", L"Jitter",
+    L"Dados usados", L"Copiar", L"Copiado", L"Iniciar", L"Parar", L"Repetir",
+    L"Resultados do teste", L"Falha no teste",
+    L"Tente novamente em instantes.", L"Tentar novamente", L"Fechar",
+    L"Servidor", L"Não foi possível conectar ao servidor.",
+    L"Não foi possível medir o ping: falha nas solicitações.",
+    L"Teste cancelado.",
+    L"Upload: o servidor não recebeu dados. Tente novamente em alguns minutos.",
+    L"Download: o servidor não retornou dados. Tente novamente em alguns "
+    L"minutos.",
+    L"Erro inesperado durante o teste.",
+};
+
+// Russian
+static const UiStrings kStringsRu = {
+    L"Готово", L"Запуск", L"Подключение", L"Завершено", L"Отменено",
+    L"Остановка\x2026", L"Ошибка", L"Пинг", L"Скачивание", L"Отправка",
+    L"Джиттер", L"Использовано данных", L"Копировать", L"Скопировано",
+    L"Запустить", L"Остановить", L"Повторить", L"Результаты теста",
+    L"Тест не выполнен",
+    L"Повторите попытку через некоторое время.", L"Повторить попытку",
+    L"Закрыть", L"Сервер",
+    L"Не удалось подключиться к серверу.",
+    L"Не удалось измерить пинг: запросы завершились ошибкой.",
+    L"Тест отменен.",
+    L"Отправка: сервер не получил данные. Повторите попытку через несколько "
+    L"минут.",
+    L"Скачивание: сервер не вернул данные. Повторите попытку через несколько "
+    L"минут.",
+    L"Непредвиденная ошибка во время теста.",
+};
+
+// Japanese
+static const UiStrings kStringsJa = {
+    L"準備完了", L"開始中", L"接続中", L"完了", L"キャンセルされました",
+    L"停止中\x2026", L"エラー", L"Ping", L"ダウンロード", L"アップロード",
+    L"ジッター", L"使用データ", L"コピー", L"コピーしました", L"開始", L"停止",
+    L"再実行", L"テスト結果", L"テストに失敗しました",
+    L"しばらくしてからもう一度お試しください。", L"再試行", L"閉じる",
+    L"サーバー", L"サーバーに接続できませんでした。",
+    L"Ping を測定できませんでした: 要求が失敗しました。",
+    L"テストがキャンセルされました。",
+    L"アップロード: サーバーがデータを受信しませんでした。数分後にもう一度お試しください。",
+    L"ダウンロード: サーバーからデータが返されませんでした。数分後にもう一度お試しください。",
+    L"テスト中に予期しないエラーが発生しました。",
+};
+
+// Korean
+static const UiStrings kStringsKo = {
+    L"준비됨", L"시작 중", L"연결 중", L"완료됨", L"취소됨",
+    L"중지 중\x2026", L"오류", L"핑", L"다운로드", L"업로드", L"지터",
+    L"사용된 데이터", L"복사", L"복사됨", L"시작", L"중지", L"다시 실행",
+    L"테스트 결과", L"테스트 실패",
+    L"잠시 후 다시 시도하세요.", L"재시도", L"닫기", L"서버",
+    L"서버에 연결할 수 없습니다.",
+    L"핑을 측정할 수 없음: 요청이 실패했습니다.",
+    L"테스트가 취소되었습니다.",
+    L"업로드: 서버가 데이터를 받지 못했습니다. 몇 분 후 다시 시도하세요.",
+    L"다운로드: 서버가 데이터를 반환하지 않았습니다. 몇 분 후 다시 시도하세요.",
+    L"테스트 중 예기치 않은 오류가 발생했습니다.",
+};
+
+// Chinese (Simplified)
+static const UiStrings kStringsZhHans = {
+    L"就绪", L"正在启动", L"正在连接", L"已完成", L"已取消",
+    L"正在停止\x2026", L"错误", L"Ping", L"下载", L"上传", L"抖动",
+    L"已用数据", L"复制", L"已复制", L"开始", L"停止", L"再测一次",
+    L"测试结果", L"测试失败",
+    L"请稍后重试。", L"重试", L"关闭", L"服务器",
+    L"无法连接到服务器。",
+    L"无法测量 Ping：请求失败。",
+    L"测试已取消。",
+    L"上传：服务器未收到数据。请在几分钟后重试。",
+    L"下载：服务器未返回数据。请在几分钟后重试。",
+    L"测试期间发生意外错误。",
+};
+
+// Chinese (Traditional)
+static const UiStrings kStringsZhHant = {
+    L"就緒", L"正在啟動", L"正在連線", L"已完成", L"已取消",
+    L"正在停止\x2026", L"錯誤", L"Ping", L"下載", L"上傳", L"抖動",
+    L"已用資料", L"複製", L"已複製", L"開始", L"停止", L"再測一次",
+    L"測試結果", L"測試失敗",
+    L"請稍後重試。", L"重試", L"關閉", L"伺服器",
+    L"無法連線到伺服器。",
+    L"無法測量 Ping：要求失敗。",
+    L"測試已取消。",
+    L"上傳：伺服器未收到資料。請在幾分鐘後重試。",
+    L"下載：伺服器未傳回資料。請在幾分鐘後重試。",
+    L"測試期間發生意外錯誤。",
+};
+
+// Dutch
+static const UiStrings kStringsNl = {
+    L"Gereed", L"Bezig met starten", L"Bezig met verbinden", L"Voltooid",
+    L"Geannuleerd", L"Bezig met stoppen\x2026", L"Fout", L"Ping",
+    L"Downloaden", L"Uploaden", L"Jitter", L"Gebruikte gegevens", L"Kopiëren",
+    L"Gekopieerd", L"Starten", L"Stoppen", L"Herhalen", L"Testresultaten",
+    L"Test mislukt",
+    L"Probeer het zo opnieuw.", L"Opnieuw proberen", L"Sluiten", L"Server",
+    L"Kan geen verbinding maken met de server.",
+    L"De ping kan niet worden gemeten: aanvragen zijn mislukt.",
+    L"Test geannuleerd.",
+    L"Uploaden: de server heeft geen gegevens ontvangen. Probeer het over "
+    L"enkele minuten opnieuw.",
+    L"Downloaden: de server heeft geen gegevens geretourneerd. Probeer het "
+    L"over enkele minuten opnieuw.",
+    L"Onverwachte fout tijdens de test.",
+};
+
+// Polish
+static const UiStrings kStringsPl = {
+    L"Gotowe", L"Uruchamianie", L"Łączenie", L"Ukończono", L"Anulowano",
+    L"Zatrzymywanie\x2026", L"Błąd", L"Ping", L"Pobieranie", L"Wysyłanie",
+    L"Jitter", L"Wykorzystane dane", L"Kopiuj", L"Skopiowano", L"Uruchom",
+    L"Zatrzymaj", L"Powtórz", L"Wyniki testu", L"Test nie powiódł się",
+    L"Spróbuj ponownie za chwilę.", L"Spróbuj ponownie", L"Zamknij", L"Serwer",
+    L"Nie można połączyć się z serwerem.",
+    L"Nie można zmierzyć pinga: żądania nie powiodły się.",
+    L"Test anulowany.",
+    L"Wysyłanie: serwer nie odebrał danych. Spróbuj ponownie za kilka minut.",
+    L"Pobieranie: serwer nie zwrócił danych. Spróbuj ponownie za kilka minut.",
+    L"Nieoczekiwany błąd podczas testu.",
+};
+
+// Turkish
+static const UiStrings kStringsTr = {
+    L"Hazır", L"Başlatılıyor", L"Bağlanıyor", L"Tamamlandı", L"İptal edildi",
+    L"Durduruluyor\x2026", L"Hata", L"Ping", L"İndirme", L"Yükleme", L"Jitter",
+    L"Kullanılan veri", L"Kopyala", L"Kopyalandı", L"Başlat", L"Durdur",
+    L"Tekrarla", L"Test sonuçları", L"Test başarısız",
+    L"Birazdan yeniden deneyin.", L"Yeniden dene", L"Kapat", L"Sunucu",
+    L"Sunucuya bağlanılamadı.",
+    L"Ping ölçülemedi: istekler başarısız oldu.",
+    L"Test iptal edildi.",
+    L"Yükleme: sunucu veri almadı. Birkaç dakika sonra yeniden deneyin.",
+    L"İndirme: sunucu veri döndürmedi. Birkaç dakika sonra yeniden deneyin.",
+    L"Test sırasında beklenmeyen bir hata oluştu.",
+};
+
+// The languages the flyout strings are available in, matched by the primary
+// language identifier of the Windows display language. Languages outside the
+// table fall back to English; adding one is a table row plus a strings block.
+// Chinese is matched below because its variants split on the sublanguage.
+struct UiStringsLang {
+    LANGID lang;
+    const UiStrings* strings;
+};
+
+static const UiStringsLang kStringsByLang[] = {
+    {LANG_ITALIAN, &kStringsIt},    {LANG_SPANISH, &kStringsEs},
+    {LANG_FRENCH, &kStringsFr},     {LANG_GERMAN, &kStringsDe},
+    {LANG_PORTUGUESE, &kStringsPt}, {LANG_RUSSIAN, &kStringsRu},
+    {LANG_JAPANESE, &kStringsJa},   {LANG_KOREAN, &kStringsKo},
+    {LANG_DUTCH, &kStringsNl},      {LANG_POLISH, &kStringsPl},
+    {LANG_TURKISH, &kStringsTr},
 };
 
 class UiStringsRef {
@@ -260,19 +475,27 @@ private:
     std::atomic<const UiStrings*> strings_;
 };
 
-static UiStringsRef g_str(&kStringsIt);
+static UiStringsRef g_str(&kStringsEn);
 
-static void SelectLanguage(PCWSTR language) {
-    bool english = false;
-    if (_wcsicmp(language, L"en") == 0) {
-        english = true;
-    } else if (_wcsicmp(language, L"it") == 0) {
-        english = false;
+static void SelectLanguage() {
+    LANGID lang = GetUserDefaultUILanguage();
+    const UiStrings* strings = &kStringsEn;
+    if (PRIMARYLANGID(lang) == LANG_CHINESE) {
+        // Simplified covers the mainland and Singapore variants; the rest are
+        // Traditional.
+        strings = SUBLANGID(lang) == SUBLANG_CHINESE_SIMPLIFIED ||
+                          SUBLANGID(lang) == SUBLANG_CHINESE_SINGAPORE
+                      ? &kStringsZhHans
+                      : &kStringsZhHant;
     } else {
-        LANGID lang = GetUserDefaultUILanguage();
-        english = PRIMARYLANGID(lang) != LANG_ITALIAN;
+        for (const auto& entry : kStringsByLang) {
+            if (PRIMARYLANGID(lang) == entry.lang) {
+                strings = entry.strings;
+                break;
+            }
+        }
     }
-    g_str = english ? &kStringsEn : &kStringsIt;
+    g_str = strings;
 }
 
 static std::vector<std::wstring> SplitPatterns(PCWSTR text) {
@@ -314,8 +537,21 @@ static void LoadSettings() {
         startMode = 2;
     }
     g_autoStart.store(startMode, std::memory_order_relaxed);
-    auto language = WindhawkUtils::StringSetting::make(L"language");
-    SelectLanguage(*language.get() ? language.get() : L"auto");
+    auto dataBudget = WindhawkUtils::StringSetting::make(L"dataBudget");
+    LONGLONG budgetBytes = kDefaultTransferBudgetBytes;
+    if (_wcsicmp(dataBudget.get(), L"unlimited") == 0) {
+        budgetBytes = 0;
+    } else if (*dataBudget.get()) {
+        long long mb = _wcstoi64(dataBudget.get(), nullptr, 10);
+        if (mb > 0) {
+            budgetBytes = mb * 1'000'000;
+            if (budgetBytes < kMinTransferBudgetBytes) {
+                budgetBytes = kMinTransferBudgetBytes;
+            }
+        }
+    }
+    g_transferBudgetBytes.store(budgetBytes, std::memory_order_relaxed);
+    SelectLanguage();
 }
 
 // ---------------------------------------------------------------------------
@@ -423,7 +659,6 @@ static bool ShowNativeFlyout() {
         Wh_Log(L"Flyout message post failed (error %u)", GetLastError());
         return false;
     }
-    Wh_Log(L"Flyout requested");
     return true;
 }
 
@@ -433,8 +668,6 @@ static bool ShowNativeFlyout() {
 
 static BOOL WINAPI ShellExecuteExW_Hook(SHELLEXECUTEINFOW* sei) {
     if (sei && IsSpeedTestUrl(sei->lpFile)) {
-        Wh_Log(L"ShellExecuteExW match url=%s", sei->lpFile ? sei->lpFile : L"(null)");
-
         if (ShowNativeFlyout()) {
             if (sei->fMask & SEE_MASK_NOCLOSEPROCESS) {
                 sei->hProcess = nullptr;
@@ -456,7 +689,6 @@ static HINSTANCE WINAPI ShellExecuteW_Hook(HWND hwnd, LPCWSTR lpOperation,
                                            LPCWSTR lpFile, LPCWSTR lpParameters,
                                            LPCWSTR lpDirectory, INT nShowCmd) {
     if (IsSpeedTestUrl(lpFile)) {
-        Wh_Log(L"ShellExecuteW url=%s", lpFile);
         if (ShowNativeFlyout()) {
             return (HINSTANCE)33;
         }
@@ -480,9 +712,6 @@ static BOOL WINAPI CreateProcessW_Hook(LPCWSTR lpApplicationName,
                                        LPPROCESS_INFORMATION lpProcessInformation) {
     if (g_interceptProcessLaunch.load(std::memory_order_relaxed) &&
         (IsSpeedTestUrl(lpCommandLine) || IsSpeedTestUrl(lpApplicationName))) {
-        Wh_Log(L"CreateProcessW match app=%s",
-               lpApplicationName ? lpApplicationName : L"(null)");
-
         if (ShowNativeFlyout()) {
             if (lpProcessInformation) {
                 *lpProcessInformation = {};
@@ -1192,9 +1421,9 @@ struct TransferCounter {
     // Per-phase data budget in bytes (0 = unlimited). Workers stop requesting
     // new transfers once it is spent, and read/write loops cut in-flight
     // transfers short when they notice; the partial bytes still count, so the
-    // total never overshoots the budget by much. Full-window measurement is
-    // unaffected at or below the budget line (~340 Mbps); faster lines end the
-    // phase early and the result divides by the actual elapsed time.
+    // total never overshoots the budget by much. Lines that don't reach the
+    // budget keep the full window; faster lines end the phase early and report
+    // bytes over the actual elapsed time.
     LONGLONG budget = 0;
 
     bool BudgetExceeded() const {
@@ -1445,18 +1674,17 @@ static constexpr int kDownloadWorkers = 12;
 static constexpr int kUploadWorkers = 8;
 static constexpr int kTransferWarmupMs = 2000;
 static constexpr int kTransferMeasureMs = 10000;
-// Per-direction data budget. Warm-up and measured bytes both count. At or
-// below ~340 Mbps the full 12 s window completes before the budget is spent
-// and measurement is unchanged; faster lines end the phase as soon as the
-// budget is exhausted and report bytes over the actual elapsed time, so the
-// worst case for the whole test stays around 1 GB regardless of line speed.
-static constexpr LONGLONG kTransferBudgetBytes = 512'000'000;
-// Warm-up alone stops well before the full budget so that faster lines keep
-// enough data left for a meaningful measured interval.
+// Warm-up data is counted but excluded from the measurement with a byte
+// baseline. Its cap is a quarter of the per-direction budget (128 MB at the
+// 512 MB default), leaving the rest for a meaningful measured window. When
+// the budget is unlimited, keep the 128 MB warm-up cap so a fast line still
+// enters the measured window quickly.
 static constexpr LONGLONG kWarmupBudgetBytes = 128'000'000;
-// Even when the budget ends a phase early, keep sampling for at least this
-// long so the reported average is not just the initial ramp.
-static constexpr int kTransferMinMeasureMs = 4000;
+// Even when the budget ends a phase early, keep the phase alive for at least
+// this long while the in-flight transfers drain. The reported average still
+// covers only the time bytes actually moved, so a lower budget shortens the
+// measured interval on fast lines.
+static constexpr int kTransferMinPhaseMs = 4000;
 static constexpr int kLatencySamples = 12;
 static constexpr int kLatencyWarmup = 2;
 
@@ -1708,8 +1936,11 @@ static bool TransferWorkerRunning(HANDLE* workers, int count) {
 }
 
 static double MeasureTransfer(bool upload) {
+    LONGLONG budget = g_transferBudgetBytes.load(std::memory_order_relaxed);
+    LONGLONG warmupBudget =
+        budget > 0 ? budget / 4 : kWarmupBudgetBytes;
     TransferCounter counter;
-    counter.budget = kTransferBudgetBytes;
+    counter.budget = budget;
     std::atomic<LONG> stop = 0;
 
     const int workerCount = upload ? kUploadWorkers : kDownloadWorkers;
@@ -1765,8 +1996,7 @@ static double MeasureTransfer(bool upload) {
             throw std::wstring(upload ? g_str->errUpload : g_str->errDownload);
         }
         if (counter.BudgetExceeded() ||
-            counter.bytes.load(std::memory_order_relaxed) >=
-                kWarmupBudgetBytes) {
+            counter.bytes.load(std::memory_order_relaxed) >= warmupBudget) {
             break;
         }
         Sleep(100);
@@ -1780,7 +2010,6 @@ static double MeasureTransfer(bool upload) {
     ULONGLONG lastTraffic = measuredStart;
     LONGLONG prevTotal = base;
     std::deque<std::pair<ULONGLONG, LONGLONG>> window;
-    std::vector<double> speeds;
     double current = 0;
     // Once the budget is spent the display stops updating: the tail after the
     // in-flight transfers drain is idle time and would otherwise paint a
@@ -1819,9 +2048,6 @@ static double MeasureTransfer(bool upload) {
             StateSetCurrent(current);
             StateSetCaption(upload ? g_str->upload : g_str->download);
             StateAddSample(current, upload);
-            if (current > 0 && Now() - measuredStart > 500) {
-                speeds.push_back(current);
-            }
         }
 
         // The budget can end the phase early on fast lines: once it is spent,
@@ -1829,7 +2055,7 @@ static double MeasureTransfer(bool upload) {
         // before the minimum window so the average is not just the ramp.
         if (counter.BudgetExceeded() &&
             !TransferWorkerRunning(workers, workerCount) &&
-            Now() - measuredStart >= kTransferMinMeasureMs) {
+            Now() - measuredStart >= kTransferMinPhaseMs) {
             break;
         }
     }
@@ -1854,13 +2080,8 @@ static double MeasureTransfer(bool upload) {
 
     // Report exactly what the connection moved: total bytes over the measured
     // window. No percentile uplift and no multiplier, so the figure cannot be
-    // inflated. The spread below is only diagnostic.
+    // inflated.
     double mbps = bytes * 8.0 / seconds / 1'000'000.0;
-    Wh_Log(L"%s: %.1f Mbps measured avg (spread p10 %.1f / p50 %.1f / p90 %.1f)",
-        upload ? L"upload" : L"download", mbps,
-        speeds.empty() ? 0.0 : Percentile(speeds, 10),
-        speeds.empty() ? 0.0 : Percentile(speeds, 50),
-        speeds.empty() ? 0.0 : Percentile(speeds, 90));
 
     DWORD requests = 0;
     DWORD failures = 0;
@@ -1868,10 +2089,8 @@ static double MeasureTransfer(bool upload) {
         requests += upload ? uploadJobs[i].requests : downloadJobs[i].requests;
         failures += upload ? uploadJobs[i].failures : downloadJobs[i].failures;
     }
-    Wh_Log(L"%s: %u requests, %u failures, %.0f ms each (total window %.0f ms)",
-        upload ? L"upload" : L"download", requests, failures,
-        requests ? seconds * 1000.0 * workerCount / requests : 0.0,
-        seconds * 1000.0);
+    Wh_Log(L"%s: %.1f Mbps, %u requests, %u failures (window %.1f s)",
+           upload ? L"upload" : L"download", mbps, requests, failures, seconds);
 
     StateSetMeasured(upload, mbps);
     StateAddDataUsed(counter.bytes.load(std::memory_order_relaxed));
@@ -2027,13 +2246,11 @@ struct TextKey {
     int valign;
     bool wrap;
     int family;
-    bool english;
 
     bool operator==(const TextKey& other) const {
         return size == other.size && weight == other.weight &&
                align == other.align && valign == other.valign &&
-               wrap == other.wrap && family == other.family &&
-               english == other.english;
+               wrap == other.wrap && family == other.family;
     }
 };
 
@@ -2050,13 +2267,22 @@ static PCWSTR FamilyName(int family) {
     }
 }
 
+// Locale name for text shaping (digit forms, line breaking, bidi): follows the
+// user's regional format, independent of the flyout language.
+static PCWSTR LocaleName() {
+    static wchar_t name[LOCALE_NAME_MAX_LENGTH];
+    if (!name[0] &&
+        GetUserDefaultLocaleName(name, LOCALE_NAME_MAX_LENGTH) <= 0) {
+        wcscpy_s(name, L"en-US");
+    }
+    return name;
+}
+
 static IDWriteTextFormat* GetTextFormat(float size, DWRITE_FONT_WEIGHT weight,
                                         DWRITE_TEXT_ALIGNMENT align,
                                         DWRITE_PARAGRAPH_ALIGNMENT valign,
                                         bool wrap, int family) {
-    bool english = g_str == &kStringsEn;
-    TextKey key = {size, (int)weight, (int)align, (int)valign, wrap, family,
-                   english};
+    TextKey key = {size, (int)weight, (int)align, (int)valign, wrap, family};
     for (const auto& entry : g_textFormats) {
         if (entry.first == key) {
             return entry.second;
@@ -2069,8 +2295,7 @@ static IDWriteTextFormat* GetTextFormat(float size, DWRITE_FONT_WEIGHT weight,
     IDWriteTextFormat* format = nullptr;
     if (FAILED(g_dwriteFactory->CreateTextFormat(
             FamilyName(family), nullptr, weight, DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL, size,
-            english ? L"en-US" : L"it-IT", &format))) {
+            DWRITE_FONT_STRETCH_NORMAL, size, LocaleName(), &format))) {
         return nullptr;
     }
     format->SetTextAlignment(align);
@@ -3404,7 +3629,6 @@ static bool EnsureRenderTarget() {
     // The material needs per-pixel alpha, so the composition surface is the
     // default path; the HWND target stays as a fallback if D3D is unavailable.
     if (CreateCompositionTarget(g_flyoutHwnd, width, height)) {
-        Wh_Log(L"render target: composition (acrylic) %ux%u", width, height);
         return true;
     }
     ReleaseTargets();
@@ -3426,6 +3650,7 @@ static bool EnsureRenderTarget() {
     if (FAILED(g_d2dFactory->CreateHwndRenderTarget(properties, hwndProperties,
                                                     &g_hwndTarget))) {
         g_hwndTarget = nullptr;
+        Wh_Log(L"Unable to create a render target");
         return false;
     }
     if (FAILED(g_hwndTarget->QueryInterface(__uuidof(ID2D1RenderTarget),
@@ -3434,8 +3659,6 @@ static bool EnsureRenderTarget() {
     }
     g_targetWidth = width;
     g_targetHeight = height;
-    Wh_Log(L"render target: hwnd %ux%u (translucent %d)", width, height,
-        g_translucent ? 1 : 0);
     return true;
 }
 
@@ -3715,7 +3938,6 @@ static bool IsConnectionMetered() {
     bool metered = (cost & (NLM_CONNECTION_COST_FIXED |
                             NLM_CONNECTION_COST_VARIABLE |
                             NLM_CONNECTION_COST_ROAMING)) != 0;
-    Wh_Log(L"connection cost %u -> metered %d", (unsigned)cost, metered);
     return metered;
 }
 
@@ -4739,8 +4961,6 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
         g_d2dFactory->CreateStrokeStyle(strokeProperties, nullptr, 0, &g_roundStroke);
     }
 
-    Wh_Log(L"Flyout window ready");
-
     // A mod unload can arrive while this thread is still starting up. In that
     // case the message loop would never receive WM_QUIT, so check the flag
     // before entering it.
@@ -4836,7 +5056,6 @@ BOOL Wh_ModInit(void) {
         Wh_Log(L"Unable to hook CreateProcessW");
     }
 
-    Wh_Log(L"Native speed test loaded (pid %u)", GetCurrentProcessId());
     return TRUE;
 }
 
