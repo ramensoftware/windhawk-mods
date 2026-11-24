@@ -1990,7 +1990,8 @@ void SetHideClip(wuc::Visual const& visual, bool on) {
         clip.BottomInset(kHideClipInset);
         {
             std::lock_guard<std::mutex> lock(g_hideClipsMutex);
-            g_hideClipPrevious[winrt::get_abi(visual)] = previous;
+            // Not operator[]: a CompositionClip has no default constructor.
+            g_hideClipPrevious.insert_or_assign(winrt::get_abi(visual), previous);
         }
         visual.Clip(clip);
     } else if (HasHideClip(visual)) {
