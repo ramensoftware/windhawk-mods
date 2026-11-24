@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              spotlight-for-windows
 // @name            Spotlight Search for Windows
-// @description     Spotlight-style launcher: frosted glass, themes, icons, drag, hover zoom, recents, all-drive search, many animations
-// @version         3.1.0
+// @description     Liquid-glass Spotlight-style launcher with themes, animations, hover zoom, recents and all-drive file search
+// @version         3.3.0
 // @author          itzderix
 // @include         windhawk.exe
 // @github          https://github.com/itzderix
@@ -11,29 +11,53 @@
 
 // ==WindhawkModReadme==
 /*
-# Spotlight for Windows
+# Liquid Glass Spotlight for Windows
 
 ![Spotlight for Windows](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/Screenshot%202026-11-24%20122542%20%282%29.png)
 
+A liquid-glass Spotlight-style search bar: a frosted, blurred-desktop glass panel with themes,
+smooth open / close and selection animations, hover zoom and a draggable layout. The right-click
+menu is drawn in the same glass.
 
-A minimal, centered search bar with a frosted-glass look.
+## How it differs from Spotlight Launcher
 
-* **Hotkey** (default Ctrl+Space) opens / closes it.
-* Type to search Start Menu apps, system tools, **files and folders on all drives**, and more.
-* **Tab** autofills the selected suggestion (grey ghost text). **Right arrow** also accepts it.
+[Spotlight Launcher](https://windhawk.net/mods/spotlight-launcher) concentrates on breadth: Store apps,
+a file browser, clipboard history, bookmarks and a window switcher. This mod concentrates on the
+experience: the liquid-glass look, open/close and selection animations, hover zoom, a draggable bar,
+a persistent whole-drive file index (refreshed every 15 minutes) and a web-search fallback with a
+browser picker. The two cover different ground; Store-app, clipboard, bookmark and window-switcher
+features are not part of this mod.
+
+## Usage
+
+* **Hotkey** (default Ctrl+Space) opens / closes it. Ctrl+Space is also used by some editors and IDEs
+  for code completion and by IME layouts; pick another combination in the settings if it clashes.
+  If the combination is already taken by another program, the bar will not open.
+* Type to search Start Menu apps, system tools, **files and folders on all drives** (fixed and removable), and more.
+* **Tab** autofills the selected suggestion (grey ghost text). **Right arrow** at the end of the text also accepts it.
   **Shift+Tab / Up / Down** move the selection. **Enter** launches, **Esc** closes.
 * Calculator: `12*(3+4)/2` + Enter copies the result. `>command args` runs a command.
 * If nothing matches, the web search uses the browser you pick in settings.
 
+## Text box
+* Click and drag inside the text field to select text. Double-click selects everything.
+* Left / Right / Home / End move the caret (hold Shift to select). Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V work.
+* Right-click the text field for Cut / Copy / Paste / Select all.
+
+## Right-click on a result
+* Open, Open file location, Cut, Copy, Paste (into that folder) and Copy path.
+  Cut and Copy put the real file on the clipboard, so you can paste it in Explorer.
+
 ## Recents
 * With an empty bar the most recently launched items are listed.
   They disappear the moment you start typing and are replaced by search results.
+* Recents are stored per Windows user.
 * Hover a recent and click the X (or press Delete) to remove it.
 
 ## Mouse
-* Drag the bar (search row) with the left mouse button to move it.
-  Double-click the search row to snap back to the original position.
-  Dragging can be turned off in settings.
+* Drag the bar with the left mouse button by the search icon or by the right end of the search row.
+  The text field and the result rows never drag. Double-click the drag area to snap back to the
+  original position. Dragging can be turned off in settings.
 * Hover zoom: the bar grows smoothly (100%-200%) while the pointer is over it.
 
 ## Look
@@ -98,8 +122,6 @@ A minimal, centered search bar with a frosted-glass look.
   $name: Hover zoom % (100 = off, 120 = 1.2x ... 200 = 2x)
 - maxResults: 7
   $name: Maximum results (3-10)
-- placeholder: Windows Spotlight Search
-  $name: Placeholder text
 - position: upper
   $name: Position
   $options:
@@ -112,7 +134,7 @@ A minimal, centered search bar with a frosted-glass look.
 - customY: 30
   $name: Custom Y - % of screen height (centre of search row)
 - allowDrag: true
-  $name: Drag with mouse (double-click search row to reset)
+  $name: Drag with mouse (search icon / right end of the bar; double-click to reset)
 - alwaysOnTop: false
   $name: Always on top (stay open when focus is lost)
 - idleSeconds: 5
@@ -197,6 +219,8 @@ A minimal, centered search bar with a frosted-glass look.
 #include <shellapi.h>
 #include <shlwapi.h>
 #include <shellscalingapi.h>
+#include <sddl.h>
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <cmath>
@@ -247,6 +271,20 @@ struct FRec {
     uint16_t flags;  // 1 = directory
 };
 
+struct DropFilesHdr {  // same layout as DROPFILES
+    DWORD pFiles;
+    POINT pt;
+    BOOL fNC;
+    BOOL fWide;
+};
+
+struct MenuEnt {
+    int id;
+    std::wstring text;
+    bool enabled;
+    bool sep;
+};
+
 typedef HRESULT(WINAPI* pSHGetImageList)(int, REFIID, void**);
 
 // -------------------------------------------------------------- globals ---
@@ -259,12 +297,19 @@ static constexpr int PAD = 8;
 static constexpr int ICON_SZ = 34;
 static constexpr int MARGIN = 36;
 static constexpr int BD_DIV = 4;
+static constexpr int DRAG_ZONE = 110;  // right end of the search row: drags the bar instead of selecting text
 enum { ANIM_NONE = 0, ANIM_OPEN = 1, ANIM_CLOSE = 2, ANIM_PULSE = 3 };
 enum { TIMER_BLINK = 1, TIMER_ANIM = 2, TIMER_HOVER = 3, TIMER_IDLE = 4 };
 enum { ST_NONE, ST_FADE, ST_JELLY, ST_POP, ST_SLIDE, ST_ZOOM, ST_BOUNCE, ST_ELASTIC, ST_RUBBER };
 enum { PU_NONE, PU_JELLY, PU_POP, PU_SHAKE, PU_BOUNCE };
+enum {
+    M_OPEN = 1, M_LOC, M_CUT, M_COPY, M_PASTE, M_COPYPATH,
+    M_TCUT, M_TCOPY, M_TPASTE, M_TSELALL
+};
 
 static const wchar_t* kClass = L"WindhawkSpotlightWnd";
+static const wchar_t* kPlaceholder = L"Windows Spotlight Search";
+static const wchar_t* kMenuClass = L"WindhawkSpotlightMenu";
 
 static HANDLE g_thread = nullptr;
 static DWORD g_threadId = 0;
@@ -273,7 +318,7 @@ static HTHEME g_theme = nullptr;
 
 static struct {
     std::wstring hotkey, theme, webUrl, animation, switchAnim, position, browser, customBrowser,
-        placeholder, hiddenApps, excludeDirs;
+        hiddenApps, excludeDirs;
     int opacity = 150, maxResults = 7, radius = 22, animMs = 450, jiggle = 60, switchMs = 350,
         frostBlur = 24, frostWhite = 30, barSize = 100, hoverPct = 110, customX = 50, customY = 30,
         idleSec = 5, idleFadeMs = 700, recentsMax = 5, fileResults = 3;
@@ -286,9 +331,26 @@ static std::vector<std::wstring> g_hidden;
 static std::wstring g_browserPath, g_browserName;
 
 static std::wstring g_query, g_ghost;
+static size_t g_caret = 0, g_anchor = 0;  // text caret and selection anchor (indices into g_query)
+static bool g_selecting = false;          // mouse-selecting text in the search field
+static bool g_menuOpen = false;           // the glass context menu is showing
+static HWND g_menuWnd = nullptr;
+static std::vector<MenuEnt> g_mItems;
+static std::vector<RECT> g_mRects;        // item rects, relative to the menu panel
+static int g_mHot = -1, g_mW = 0, g_mH = 0, g_mM = 0, g_mX = 0, g_mY = 0, g_mRad = 0;
+static HDC g_mDc = nullptr;
+static HBITMAP g_mBmp = nullptr;
+static HGDIOBJ g_mOld = nullptr;
+static DWORD* g_mPx = nullptr;
+static int g_ctxRow = -1;                 // what the menu was opened on
+static Item g_ctxItem{};
+static std::wstring g_ctxPath;
+static bool g_ctxDir = false;
+static void CloseMenu();
 static std::vector<Item> g_items;
 static std::vector<Entry> g_index;
 static std::vector<Recent> g_recents;
+static std::wstring g_sid;
 static std::map<std::wstring, IconPx> g_icons;
 static int g_sel = 0;
 static ULONGLONG g_indexTick = 0;
@@ -297,7 +359,7 @@ static ULONGLONG g_lastInput = 0;
 static bool g_caretOn = true;
 static int g_rad = 0;
 static double g_scale = 1.0, g_dpi = 1.0, g_scaleBuilt = -1.0, g_hov = 1.0;
-static HFONT g_fQuery, g_fName, g_fSub, g_fIcon;
+static HFONT g_fQuery, g_fName, g_fSub, g_fIcon, g_fSearch;
 static Pal g_pal;
 
 // panel geometry (screen pixels)
@@ -373,10 +435,7 @@ static std::vector<std::wstring> SplitList(const std::wstring& s) {
 }
 
 static std::wstring GetStr(const wchar_t* name) {
-    PCWSTR v = Wh_GetStringSetting(name);
-    std::wstring r = v ? v : L"";
-    Wh_FreeStringSetting(v);
-    return r;
+    return std::wstring(WindhawkUtils::StringSetting::make(name).get());
 }
 
 static std::wstring Env(const wchar_t* s) {
@@ -404,24 +463,61 @@ static std::wstring UrlEnc(const std::wstring& s) {
     return o;
 }
 
-// Resolves a System32 tool. When this (tool mod) process is 32-bit (Windhawk 1.x),
-// plain names would resolve through SysWOW64, so go through Sysnative to start the
-// 64-bit version. Falls back to the plain name if the file is not found.
+static bool IsWow() {
+    static int w = -1;
+    if (w < 0) {
+        BOOL b = FALSE;
+        IsWow64Process(GetCurrentProcess(), &b);
+        w = b ? 1 : 0;
+    }
+    return w == 1;
+}
+
+static std::wstring WinDir() {
+    wchar_t win[MAX_PATH];
+    UINT n = GetWindowsDirectoryW(win, MAX_PATH);
+    if (!n || n >= MAX_PATH) return L"";
+    return win;
+}
+
+// Resolves a System32 tool and returns the canonical ...\System32\... path (this is what is
+// stored in the index and in recents). Existence is checked through Sysnative when this process
+// is 32-bit (Windhawk 1.x), because plain System32 would be redirected to SysWOW64.
+// Falls back to the plain name if the file is not found.
 static std::wstring Sys32(const std::wstring& exe) {
     if (exe.empty() || exe.find(L':') != std::wstring::npos || exe[0] == L'\\' || exe[0] == L'/')
         return exe;
-    wchar_t win[MAX_PATH];
-    UINT n = GetWindowsDirectoryW(win, MAX_PATH);
-    if (!n || n >= MAX_PATH) return exe;
-    BOOL wow = FALSE;
-    IsWow64Process(GetCurrentProcess(), &wow);
-    std::wstring p = std::wstring(win) + (wow ? L"\\Sysnative\\" : L"\\System32\\") + exe;
-    if (PathFileExistsW(p.c_str())) return p;
+    std::wstring win = WinDir();
+    if (win.empty()) return exe;
+    std::wstring chk = win + (IsWow() ? L"\\Sysnative\\" : L"\\System32\\") + exe;
+    std::wstring canon = win + L"\\System32\\" + exe;
+    if (PathFileExistsW(chk.c_str())) return canon;
     if (exe.find(L'.') == std::wstring::npos) {  // name given without extension
-        p += L".exe";
-        if (PathFileExistsW(p.c_str())) return p;
+        if (PathFileExistsW((chk + L".exe").c_str())) return canon + L".exe";
     }
     return exe;
+}
+
+// Maps a canonical System32 path to Sysnative when running as a 32-bit process, so that the
+// 64-bit tool is started / its icon is read. Other paths are returned unchanged.
+static std::wstring LaunchPath(const std::wstring& p) {
+    if (!IsWow()) return p;
+    std::wstring win = WinDir();
+    if (win.empty()) return p;
+    std::wstring pre = win + L"\\System32\\";
+    if (p.size() > pre.size() && _wcsnicmp(p.c_str(), pre.c_str(), pre.size()) == 0)
+        return win + L"\\Sysnative\\" + p.substr(pre.size());
+    return p;
+}
+
+// Turns ...\Sysnative\... (old recents) back into the canonical ...\System32\... form.
+static std::wstring NormSys(const std::wstring& p) {
+    std::wstring win = WinDir();
+    if (win.empty()) return p;
+    std::wstring pre = win + L"\\Sysnative\\";
+    if (p.size() > pre.size() && _wcsnicmp(p.c_str(), pre.c_str(), pre.size()) == 0)
+        return win + L"\\System32\\" + p.substr(pre.size());
+    return p;
 }
 
 // DPI scale (1.0 = 96 dpi) of a monitor.
@@ -432,6 +528,27 @@ static double MonDpi(HMONITOR hm) {
     double d = GetDeviceCaps(sdc, LOGPIXELSX) / 96.0;
     ReleaseDC(nullptr, sdc);
     return d;
+}
+
+// String SID of the user this process runs as ("" on failure).
+static std::wstring CurrentUserSid() {
+    std::wstring out;
+    HANDLE tok = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok)) return out;
+    DWORD sz = 0;
+    GetTokenInformation(tok, TokenUser, nullptr, 0, &sz);
+    if (sz) {
+        std::vector<BYTE> buf(sz);
+        if (GetTokenInformation(tok, TokenUser, buf.data(), sz, &sz)) {
+            LPWSTR s = nullptr;
+            if (ConvertSidToStringSidW(((TOKEN_USER*)buf.data())->User.Sid, &s)) {
+                out = s;
+                LocalFree(s);
+            }
+        }
+    }
+    CloseHandle(tok);
+    return out;
 }
 
 // -------------------------------------------------------------- browser ---
@@ -536,7 +653,6 @@ static void LoadSettings() {
     S.position = GetStr(L"position");
     S.browser = GetStr(L"browser");
     S.customBrowser = GetStr(L"customBrowser");
-    S.placeholder = GetStr(L"placeholder");
     S.hiddenApps = GetStr(L"hiddenApps");
     S.excludeDirs = GetStr(L"excludeDirs");
     S.opacity = Clampi(Wh_GetIntSetting(L"tintOpacity"), 0, 255);
@@ -572,7 +688,6 @@ static void LoadSettings() {
     S.sites = Wh_GetIntSetting(L"showWebsites") != 0;
     S.websearch = Wh_GetIntSetting(L"showWebSearch") != 0;
     if (S.webUrl.empty()) S.webUrl = L"https://www.google.com/search?q=";
-    if (S.placeholder.empty()) S.placeholder = L"Windows Spotlight Search";
     g_hidden = SplitList(S.hiddenApps);
     ResolveBrowser();
 
@@ -693,17 +808,33 @@ static bool TryCalc(const std::wstring& q, double& out) {
 }
 
 // ---------------------------------------------------------------- recents ---
-// Stored as one value per field (portable Windhawk keeps storage in an INI file,
-// which can't hold line breaks): recentCount, recent<i>Name, recent<i>Target, recent<i>Cat.
+// Windhawk mod storage is machine-wide, so every value name carries the user's SID
+// (<SID>_recentCount, <SID>_recent<i>Name/Target/Cat). Stored as one value per field
+// because portable Windhawk keeps storage in an INI file, which can't hold line breaks.
+
+static std::wstring CountKey() { return g_sid + L"_recentCount"; }
 
 static std::wstring RKey(const wchar_t* field, int i) {
-    return L"recent" + std::to_wstring(i) + field;
+    return g_sid + L"_recent" + std::to_wstring(i) + field;
+}
+
+// Removes the old formats: the single "recents" value and the shared unprefixed values.
+static void DeleteLegacyRecents() {
+    Wh_DeleteValue(L"recents");
+    int n = Clampi(Wh_GetIntValue(L"recentCount", 0), 0, 20);
+    for (int i = 0; i < n; i++) {
+        std::wstring b = L"recent" + std::to_wstring(i);
+        Wh_DeleteValue((b + L"Name").c_str());
+        Wh_DeleteValue((b + L"Target").c_str());
+        Wh_DeleteValue((b + L"Cat").c_str());
+    }
+    Wh_DeleteValue(L"recentCount");
 }
 
 static void SaveRecents() {
-    int old = Wh_GetIntValue(L"recentCount", 0);
+    int old = Wh_GetIntValue(CountKey().c_str(), 0);
     int n = (int)g_recents.size();
-    Wh_SetIntValue(L"recentCount", n);
+    Wh_SetIntValue(CountKey().c_str(), n);
     for (int i = 0; i < n; i++) {
         Wh_SetStringValue(RKey(L"Name", i).c_str(), g_recents[i].name.c_str());
         Wh_SetStringValue(RKey(L"Target", i).c_str(), g_recents[i].target.c_str());
@@ -718,15 +849,17 @@ static void SaveRecents() {
 
 static void LoadRecents() {
     g_recents.clear();
-    Wh_DeleteValue(L"recents");  // old single-value format
-    int n = Clampi(Wh_GetIntValue(L"recentCount", 0), 0, 20);
+    g_sid = CurrentUserSid();
+    if (g_sid.empty()) g_sid = L"user";
+    DeleteLegacyRecents();
+    int n = Clampi(Wh_GetIntValue(CountKey().c_str(), 0), 0, 20);
     for (int i = 0; i < n; i++) {
         std::vector<wchar_t> name(1024, 0), target(4096, 0);
         Wh_GetStringValue(RKey(L"Name", i).c_str(), name.data(), (size_t)name.size() - 1);
         Wh_GetStringValue(RKey(L"Target", i).c_str(), target.data(), (size_t)target.size() - 1);
         Recent r;
         r.name = name.data();
-        r.target = target.data();
+        r.target = NormSys(target.data());
         r.cat = Wh_GetIntValue(RKey(L"Cat", i).c_str(), C_APP);
         if (!r.name.empty() && !r.target.empty()) g_recents.push_back(r);
     }
@@ -779,13 +912,9 @@ static void ScanDir(const std::wstring& dir, std::vector<Entry>& out, int depth)
 
 static void BuildIndex() {
     std::vector<Entry> all;
-    ScanDir(Env(L"%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs"), all, 0);
-    ScanDir(Env(L"%ProgramData%\\Microsoft\\Windows\\Start Menu\\Programs"), all, 0);
-    ScanDir(Env(L"%USERPROFILE%\\Desktop"), all, 0);
-    ScanDir(Env(L"%PUBLIC%\\Desktop"), all, 0);
-    std::wstring od = Env(L"%OneDrive%");
-    if (!od.empty()) ScanDir(od + L"\\Desktop", all, 0);
 
+    // Built-in tools go first: the first entry for a name wins, so a Start Menu shortcut with the
+    // same name can't replace them with a 32-bit-redirected launch.
     all.push_back({L"Settings", L"ms-settings:", true});
     all.push_back({L"Calculator", Sys32(L"calc.exe"), true});
     all.push_back({L"Microsoft Store", L"ms-windows-store:", true});
@@ -798,6 +927,13 @@ static void BuildIndex() {
     all.push_back({L"Notepad", Sys32(L"notepad.exe"), true});
     all.push_back({L"Registry Editor", Sys32(L"regedit.exe"), true});
     all.push_back({L"Device Manager", Sys32(L"devmgmt.msc"), true});
+
+    ScanDir(Env(L"%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs"), all, 0);
+    ScanDir(Env(L"%ProgramData%\\Microsoft\\Windows\\Start Menu\\Programs"), all, 0);
+    ScanDir(Env(L"%USERPROFILE%\\Desktop"), all, 0);
+    ScanDir(Env(L"%PUBLIC%\\Desktop"), all, 0);
+    std::wstring od = Env(L"%OneDrive%");
+    if (!od.empty()) ScanDir(od + L"\\Desktop", all, 0);
 
     std::set<std::wstring> seen;
     g_index.clear();
@@ -1137,6 +1273,7 @@ static bool LoadIconPx(const std::wstring& path, IconPx& out) {
         }
         p = b;
     }
+    p = LaunchPath(p);  // 64-bit System32 file when this process is 32-bit
     SHFILEINFOW sfi{};
     if (!SHGetFileInfoW(p.c_str(), 0, &sfi, sizeof(sfi), SHGFI_SYSICONINDEX)) return false;
 
@@ -1371,6 +1508,7 @@ static void ApplyScale() {
     if (g_fName) DeleteObject(g_fName);
     if (g_fSub) DeleteObject(g_fSub);
     if (g_fIcon) DeleteObject(g_fIcon);
+    if (g_fSearch) DeleteObject(g_fSearch);
     auto mk = [](int h, int w, const wchar_t* face) {
         return CreateFontW(-h, 0, 0, 0, w, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                            CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, face);
@@ -1379,12 +1517,86 @@ static void ApplyScale() {
     g_fName = mk(Sc(15), FW_NORMAL, L"Segoe UI");
     g_fSub = mk(Sc(12), FW_NORMAL, L"Segoe UI");
     g_fIcon = mk(Sc(18), FW_NORMAL, L"Segoe MDL2 Assets");
+    // Bold weight on a font without a bold face makes GDI thicken the strokes (thicker magnifier).
+    g_fSearch = mk(Sc(19), FW_BOLD, L"Segoe MDL2 Assets");
 }
 
 static int WinH() {
     int h = Sc(SEARCH_H);
     if (!g_items.empty()) h += Sc(1) + Sc(PAD) + (int)g_items.size() * Sc(ROW_H) + Sc(PAD);
     return h;
+}
+
+// ---------------------------------------------------------- text editing ---
+
+static bool HasSel() { return g_caret != g_anchor; }
+static size_t SelLo() { return std::min(g_caret, g_anchor); }
+static size_t SelHi() { return std::max(g_caret, g_anchor); }
+
+static void SetQuery(const std::wstring& q) {
+    g_query = q;
+    g_caret = g_anchor = g_query.size();
+}
+
+static bool DeleteSel() {
+    if (!HasSel()) return false;
+    size_t lo = SelLo(), hi = SelHi();
+    g_query.erase(lo, hi - lo);
+    g_caret = g_anchor = lo;
+    return true;
+}
+
+static void InsertText(const std::wstring& t) {
+    DeleteSel();
+    size_t room = g_query.size() < 80 ? 80 - g_query.size() : 0;
+    std::wstring s = t.substr(0, room);
+    g_query.insert(g_caret, s);
+    g_caret += s.size();
+    g_anchor = g_caret;
+}
+
+static std::wstring SelText() {
+    return HasSel() ? g_query.substr(SelLo(), SelHi() - SelLo()) : std::wstring();
+}
+
+// Width in pixels of the first n characters of the query in the query font.
+static int TextW(size_t n) {
+    if (!n || !g_srcDc || !g_fQuery) return 0;
+    n = std::min(n, g_query.size());
+    HGDIOBJ old = SelectObject(g_srcDc, g_fQuery);
+    SIZE sz{};
+    GetTextExtentPoint32W(g_srcDc, g_query.c_str(), (int)n, &sz);
+    SelectObject(g_srcDc, old);
+    return sz.cx;
+}
+
+// Caret index nearest to a panel-relative x coordinate.
+static size_t CaretFromX(int px) {
+    int rel = px - Sc(62);
+    size_t n = g_query.size();
+    int prev = 0;
+    for (size_t i = 0; i < n; i++) {
+        int next = TextW(i + 1);
+        if (rel < (prev + next) / 2) return i;
+        prev = next;
+    }
+    return n;
+}
+
+static bool HasEndIcon() {
+    return S.endIcon && !g_query.empty() && !g_items.empty() &&
+           ItemIcon(g_items[g_sel]) != nullptr;
+}
+
+// The clickable text field (panel-relative). Clicks here select text; drag-to-move uses the rest.
+static RECT TextBox() {
+    return {Sc(58), Sc(8), g_pw - Sc(DRAG_ZONE), Sc(SEARCH_H) - Sc(8)};
+}
+
+static bool InTextBox(int px, int py) {
+    RECT r = TextBox();
+    POINT p = {px, py};
+    return PtInRect(&r, p) != FALSE;
 }
 
 // ------------------------------------------------------------- drawing ---
@@ -1395,8 +1607,8 @@ static inline double Sdf(double px, double py, double hx, double hy, double r) {
     return std::hypot(std::max(qx, 0.0), std::max(qy, 0.0)) - r;
 }
 
-static void BuildShadow(int ww, int wh, int M, int W, int H, double r) {
-    g_shadow.assign((size_t)ww * wh, 0);
+static void BuildShadow(std::vector<DWORD>& out, int ww, int wh, int M, int W, int H, double r) {
+    out.assign((size_t)ww * wh, 0);
     double hx = W / 2.0, hy = H / 2.0;
     double oy = Sc(8), range = M * 0.95;
     for (int y = 0; y < wh; y++) {
@@ -1408,15 +1620,15 @@ static void BuildShadow(int ww, int wh, int M, int W, int H, double r) {
             if (t >= 1.0) continue;
             double u = 1.0 - t;
             DWORD a = (DWORD)(85.0 * u * u * u);
-            g_shadow[(size_t)y * ww + x] = a << 24;
+            out[(size_t)y * ww + x] = a << 24;
         }
     }
 }
 
 // Background: frosted (blurred desktop + white veil) or plain tinted glass.
-static void PaintBg(DWORD* P, int stride, int W, int H) {
+static void PaintBg(DWORD* P, int stride, int W, int H, int ox, int oy, int rad) {
     const Pal& pl = g_pal;
-    double r = (double)g_rad, hx = W / 2.0, hy = H / 2.0, bx = hx - r, by = hy - r;
+    double r = (double)rad, hx = W / 2.0, hy = H / 2.0, bx = hx - r, by = hy - r;
     double bw = std::max(1.0, (double)Sc(1));
     int tr = GetRValue(pl.top), tg = GetGValue(pl.top), tb = GetBValue(pl.top);
     int br = GetRValue(pl.bot), bg = GetGValue(pl.bot), bb = GetBValue(pl.bot);
@@ -1433,7 +1645,7 @@ static void PaintBg(DWORD* P, int stride, int W, int H) {
         int ya = 0, yb = 0, fy = 0;
         int sheen = 0;
         if (frost) {
-            double v = (g_panelY + y + 0.5 - g_bdY) / BD_DIV - 0.5;
+            double v = (oy + y + 0.5 - g_bdY) / BD_DIV - 0.5;
             int y0 = (int)std::floor(v);
             fy = (int)((v - y0) * 256);
             ya = Clampi(y0, 0, g_bdH - 1);
@@ -1450,7 +1662,7 @@ static void PaintBg(DWORD* P, int stride, int W, int H) {
             double cov = d <= -0.5 ? 1.0 : 0.5 - d;
             int fr = cr, fg = cg, fb = cb, a;
             if (frost) {
-                double u = (g_panelX + x + 0.5 - g_bdX) / BD_DIV - 0.5;
+                double u = (ox + x + 0.5 - g_bdX) / BD_DIV - 0.5;
                 int x0 = (int)std::floor(u);
                 int fx = (int)((u - x0) * 256);
                 int xa = Clampi(x0, 0, g_bdW - 1), xb = Clampi(x0 + 1, 0, g_bdW - 1);
@@ -1566,7 +1778,7 @@ static void RenderPanel() {
         int key[5] = {W, H, g_rad, M, ww};
         bool same = g_shadow.size() == total && memcmp(key, g_shKey, sizeof(key)) == 0;
         if (!same) {
-            BuildShadow(ww, wh, M, W, H, (double)g_rad);
+            BuildShadow(g_shadow, ww, wh, M, W, H, (double)g_rad);
             memcpy(g_shKey, key, sizeof(key));
         }
         memcpy(g_srcPx, g_shadow.data(), total * 4);
@@ -1576,41 +1788,42 @@ static void RenderPanel() {
 
     g_off = M;
     DWORD* P = g_srcPx + (size_t)M * ww + M;
-    PaintBg(P, ww, W, H);
+    PaintBg(P, ww, W, H, g_panelX, g_panelY, g_rad);
 
     HDC mdc = g_srcDc;
     SetBkMode(mdc, TRANSPARENT);
     const Pal& pl = g_pal;
     COLORREF txt = pl.text, dim = pl.dim, ghostC = pl.ghost, line = pl.hi;
 
-    // search glyph
-    RECT ri = {Sc(22), 0, Sc(54), Sc(SEARCH_H)};
-    Txt(mdc, g_fIcon, L"\uE721", ri, dim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    // search glyph (bold = thicker strokes)
+    RECT ri = {Sc(20), 0, Sc(56), Sc(SEARCH_H)};
+    Txt(mdc, g_fSearch, L"\uE721", ri, dim, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
 
     // app icon at the end of the search field
     int esz = Sc(30);
-    bool hasEnd = S.endIcon && !g_query.empty() && !g_items.empty() &&
-                  ItemIcon(g_items[g_sel]) != nullptr;
+    bool hasEnd = HasEndIcon();
 
-    int tx = Sc(62), maxR = W - Sc(22) - (hasEnd ? esz + Sc(14) : 0);
+    int tx = Sc(62), maxR = W - Sc(DRAG_ZONE);
     RECT rq = {tx, 0, maxR, Sc(SEARCH_H)};
     UINT tf = DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS;
     int tw = 0;
     if (g_query.empty()) {
-        Txt(mdc, g_fQuery, S.placeholder, rq, dim, tf);
+        Txt(mdc, g_fQuery, std::wstring(kPlaceholder), rq, dim, tf);
     } else {
+        if (HasSel()) {
+            int x0 = tx + TextW(SelLo()), x1 = std::min(tx + TextW(SelHi()), maxR);
+            if (x1 > x0)
+                FillRR(P, ww, W, H, x0, Sc(16), x1 - x0, Sc(32), Sc(4), RGB(0, 120, 215), 120);
+        }
         Txt(mdc, g_fQuery, g_query, rq, txt, tf);
-        SelectObject(mdc, g_fQuery);
-        SIZE sz{};
-        GetTextExtentPoint32W(mdc, g_query.c_str(), (int)g_query.size(), &sz);
-        tw = sz.cx;
-        if (!g_ghost.empty() && tx + tw < maxR) {
+        tw = TextW(g_query.size());
+        if (!g_ghost.empty() && !HasSel() && g_caret == g_query.size() && tx + tw < maxR) {
             RECT rg = {tx + tw, 0, maxR, Sc(SEARCH_H)};
             Txt(mdc, g_fQuery, g_ghost, rg, ghostC, tf);
         }
     }
-    if (g_caretOn) {
-        int cx = std::min(tx + tw + Sc(1), maxR);
+    if (g_caretOn && !HasSel()) {
+        int cx = std::min(tx + TextW(g_caret) + Sc(1), maxR);
         FillRR(P, ww, W, H, cx, Sc(17), std::max(2, Sc(2)), Sc(30), 0, txt, 230);
     }
     if (hasEnd) {
@@ -1978,12 +2191,14 @@ static void ComputePulse(double t, int style, double& sx, double& sy, double& tx
 
 static void DoHide() {
     if (!g_hwnd) return;
+    CloseMenu();
     KillTimer(g_hwnd, TIMER_ANIM);
     KillTimer(g_hwnd, TIMER_HOVER);
     KillTimer(g_hwnd, TIMER_IDLE);
     g_anim = ANIM_NONE;
     g_idleFade = false;
     g_dragging = false;
+    g_selecting = false;
     if (GetCapture() == g_hwnd) ReleaseCapture();
     ResetCur();
     ShowWindow(g_hwnd, SW_HIDE);
@@ -2023,6 +2238,7 @@ static void StartPulse() {
 
 static void HideWnd(bool idle = false) {
     if (!IsWindowVisible(g_hwnd) || g_anim == ANIM_CLOSE) return;
+    CloseMenu();
     int style = ST_FADE, dur = 0;
     bool animate;
     if (idle) {
@@ -2032,6 +2248,7 @@ static void HideWnd(bool idle = false) {
         animate = DecideAnim(false, style, dur);
     }
     g_dragging = false;
+    g_selecting = false;
     if (GetCapture() == g_hwnd) ReleaseCapture();
     if (!animate) { DoHide(); return; }
     g_idleFade = idle;
@@ -2069,7 +2286,7 @@ static void HoverTick() {
     if (g_anim == ANIM_OPEN || g_anim == ANIM_CLOSE) return;
 
     double target = 1.0;
-    if ((inside || g_dragging) && S.hoverPct > 100) {
+    if ((inside || g_dragging || g_selecting) && S.hoverPct > 100) {
         target = S.hoverPct / 100.0;
         double unit = LAYOUT_W * g_dpi * S.barSize / 100.0;
         double maxH = (double)(g_work.right - g_work.left) * 0.96 / std::max(1.0, unit);
@@ -2083,10 +2300,11 @@ static void HoverTick() {
 
 static void IdleTick() {
     if (!IsWindowVisible(g_hwnd)) return;
-    if (S.onTop && g_anim != ANIM_CLOSE)
+    if (S.onTop && !g_menuOpen && g_anim != ANIM_CLOSE)
         SetWindowPos(g_hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    if (g_menuOpen) { g_lastInput = GetTickCount64(); return; }
     if (S.idleSec > 0 && (g_anim == ANIM_NONE || g_anim == ANIM_PULSE) && !g_dragging &&
-        GetTickCount64() - g_lastInput > (ULONGLONG)S.idleSec * 1000ULL)
+        !g_selecting && GetTickCount64() - g_lastInput > (ULONGLONG)S.idleSec * 1000ULL)
         HideWnd(true);
 }
 
@@ -2104,7 +2322,9 @@ static void ShowWnd() {
     g_anim = ANIM_NONE;
     g_idleFade = false;
     g_dragging = false;
+    g_selecting = false;
     g_query.clear();
+    g_caret = g_anchor = 0;
     g_hov = 1.0;
 
     // DPI of the monitor the bar opens on (not the system DPI)
@@ -2180,24 +2400,106 @@ static void CopyText(const std::wstring& s) {
     EmptyClipboard();
     HGLOBAL m = GlobalAlloc(GMEM_MOVEABLE, (s.size() + 1) * sizeof(wchar_t));
     if (m) {
-        memcpy(GlobalLock(m), s.c_str(), (s.size() + 1) * sizeof(wchar_t));
-        GlobalUnlock(m);
-        SetClipboardData(CF_UNICODETEXT, m);
+        void* p = GlobalLock(m);
+        if (p) {
+            memcpy(p, s.c_str(), (s.size() + 1) * sizeof(wchar_t));
+            GlobalUnlock(m);
+            if (!SetClipboardData(CF_UNICODETEXT, m)) GlobalFree(m);
+        } else {
+            GlobalFree(m);
+        }
     }
     CloseClipboard();
 }
 
-static void PasteText() {
-    if (!OpenClipboard(g_hwnd)) return;
+// First line of the clipboard text.
+static std::wstring ClipText() {
+    std::wstring out;
+    if (!OpenClipboard(g_hwnd)) return out;
     HANDLE h = GetClipboardData(CF_UNICODETEXT);
     if (h) {
         const wchar_t* p = (const wchar_t*)GlobalLock(h);
         if (p) {
-            for (; *p && *p != L'\r' && *p != L'\n' && g_query.size() < 80; p++) g_query += *p;
+            for (; *p && *p != L'\r' && *p != L'\n' && out.size() < 80; p++) out += *p;
             GlobalUnlock(h);
         }
     }
     CloseClipboard();
+    return out;
+}
+
+// Puts a real file on the clipboard (CF_HDROP + Preferred DropEffect) so Explorer can paste it.
+static void SetClipFiles(const std::wstring& path, bool cut) {
+    size_t bytes = sizeof(DropFilesHdr) + (path.size() + 2) * sizeof(wchar_t);
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, bytes);
+    HGLOBAL he = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, sizeof(DWORD));
+    if (!h || !he) {
+        if (h) GlobalFree(h);
+        if (he) GlobalFree(he);
+        return;
+    }
+    DropFilesHdr* df = (DropFilesHdr*)GlobalLock(h);
+    if (!df) { GlobalFree(h); GlobalFree(he); return; }
+    df->pFiles = sizeof(DropFilesHdr);
+    df->fWide = TRUE;
+    memcpy((BYTE*)df + sizeof(DropFilesHdr), path.c_str(), (path.size() + 1) * sizeof(wchar_t));
+    GlobalUnlock(h);
+    DWORD* eff = (DWORD*)GlobalLock(he);
+    if (!eff) { GlobalFree(h); GlobalFree(he); return; }
+    *eff = cut ? 2 : 1;  // DROPEFFECT_MOVE / DROPEFFECT_COPY
+    GlobalUnlock(he);
+
+    if (!OpenClipboard(g_hwnd)) { GlobalFree(h); GlobalFree(he); return; }
+    EmptyClipboard();
+    if (!SetClipboardData(CF_HDROP, h)) GlobalFree(h);
+    UINT fmt = RegisterClipboardFormatW(L"Preferred DropEffect");
+    if (!SetClipboardData(fmt, he)) GlobalFree(he);
+    CloseClipboard();
+}
+
+// Pastes the files on the clipboard (copy or move, as Explorer would) into a folder.
+static void PasteFilesInto(const std::wstring& destDir) {
+    if (destDir.empty()) return;
+    std::wstring from;
+    bool move = false;
+    if (!OpenClipboard(g_hwnd)) return;
+    HANDLE h = GetClipboardData(CF_HDROP);
+    if (h) {
+        HDROP dr = (HDROP)h;
+        UINT n = DragQueryFileW(dr, 0xFFFFFFFFu, nullptr, 0);
+        for (UINT i = 0; i < n; i++) {
+            wchar_t b[MAX_PATH * 2];
+            if (DragQueryFileW(dr, i, b, ARRAYSIZE(b))) {
+                from.append(b);
+                from.push_back(0);
+            }
+        }
+        UINT fmt = RegisterClipboardFormatW(L"Preferred DropEffect");
+        HANDLE he = GetClipboardData(fmt);
+        if (he) {
+            DWORD* e = (DWORD*)GlobalLock(he);
+            if (e) {
+                move = (*e & 2) && !(*e & 1);
+                GlobalUnlock(he);
+            }
+        }
+    }
+    CloseClipboard();
+    if (from.empty()) return;
+    from.push_back(0);  // double-null terminated list
+    std::wstring to = destDir;
+    to.push_back(0);
+    SHFILEOPSTRUCTW op{};
+    op.hwnd = g_hwnd;
+    op.wFunc = move ? FO_MOVE : FO_COPY;
+    op.pFrom = from.c_str();
+    op.pTo = to.c_str();
+    op.fFlags = FOF_ALLOWUNDO;
+    SHFileOperationW(&op);
+    if (move && OpenClipboard(g_hwnd)) {
+        EmptyClipboard();
+        CloseClipboard();
+    }
 }
 
 static void Activate(int i) {
@@ -2214,13 +2516,14 @@ static void Activate(int i) {
             args = file.substr(sp + 1);
             file = file.substr(0, sp);
         }
-        file = Sys32(file);  // 64-bit System32 tools even when running as 32-bit
+        file = LaunchPath(Sys32(file));  // 64-bit System32 tools even when running as 32-bit
         ShellExecuteW(nullptr, L"open", file.c_str(), args.empty() ? nullptr : args.c_str(),
                       nullptr, SW_SHOWNORMAL);
     } else if (it.kind == 4) {
         OpenUrl(it.target);
     } else {
-        ShellExecuteW(nullptr, L"open", it.target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        std::wstring file = LaunchPath(it.target);
+        ShellExecuteW(nullptr, L"open", file.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
 }
 
@@ -2290,6 +2593,325 @@ static void ResetPosition() {
     StartPulse();
 }
 
+// Real file-system path of a result (empty for calculator / commands / URLs / non-file items).
+static std::wstring FsPath(const Item& it) {
+    if (it.cat != C_APP && it.cat != C_FILE && it.cat != C_FOLDER && it.cat != C_RECENT)
+        return L"";
+    std::wstring p = NormSys(it.target);
+    bool drive = p.size() > 2 && p[1] == L':' && p[2] == L'\\';
+    bool unc = p.size() > 2 && p[0] == L'\\' && p[1] == L'\\';
+    if (!drive && !unc) return L"";
+    // Existence is checked on the launch path (Sysnative when 32-bit); the canonical path is returned.
+    if (!PathFileExistsW(LaunchPath(p).c_str())) return L"";
+    return p;
+}
+
+static void TextMenuAction(int id) {
+    switch (id) {
+        case M_TCUT:
+            if (HasSel()) { CopyText(SelText()); DeleteSel(); QueryChanged(); }
+            break;
+        case M_TCOPY:
+            if (HasSel()) CopyText(SelText());
+            break;
+        case M_TPASTE: {
+            std::wstring t = ClipText();
+            if (!t.empty()) { InsertText(t); QueryChanged(); }
+            break;
+        }
+        case M_TSELALL:
+            g_anchor = 0;
+            g_caret = g_query.size();
+            g_caretOn = true;
+            Redraw();
+            break;
+    }
+}
+
+// ---- liquid-glass context menu: its own layered window, same glass as the bar ----
+
+static void FreeMenuBuf() {
+    if (g_mDc) {
+        SelectObject(g_mDc, g_mOld);
+        DeleteDC(g_mDc);
+    }
+    if (g_mBmp) DeleteObject(g_mBmp);
+    g_mDc = nullptr;
+    g_mBmp = nullptr;
+    g_mOld = nullptr;
+    g_mPx = nullptr;
+}
+
+static void CloseMenu() {
+    if (!g_menuOpen) return;
+    g_menuOpen = false;  // first, so WM_CAPTURECHANGED does not recurse
+    if (g_menuWnd) {
+        if (GetCapture() == g_menuWnd) ReleaseCapture();
+        ShowWindow(g_menuWnd, SW_HIDE);
+    }
+    FreeMenuBuf();
+    NoteInput();
+}
+
+static void RenderMenu() {
+    if (!g_mPx || !g_menuWnd) return;
+    int M = g_mM, W = g_mW, H = g_mH, ww = W + 2 * M, wh = H + 2 * M;
+    size_t total = (size_t)ww * wh;
+    if (S.shadow) {
+        std::vector<DWORD> sh;
+        BuildShadow(sh, ww, wh, M, W, H, (double)g_mRad);
+        memcpy(g_mPx, sh.data(), total * 4);
+    } else {
+        memset(g_mPx, 0, total * 4);
+    }
+    DWORD* P = g_mPx + (size_t)M * ww + M;
+    PaintBg(P, ww, W, H, g_mX, g_mY, g_mRad);
+
+    const Pal& pl = g_pal;
+    HDC dc = g_mDc;
+    SetBkMode(dc, TRANSPARENT);
+    int saveOff = g_off;
+    g_off = M;
+    for (size_t i = 0; i < g_mItems.size(); i++) {
+        const MenuEnt& e = g_mItems[i];
+        const RECT& r = g_mRects[i];
+        if (e.sep) {
+            FillRR(P, ww, W, H, r.left + Sc(6), (r.top + r.bottom) / 2, r.right - r.left - Sc(12),
+                   std::max(1, Sc(1)), 0, pl.hi, 40);
+            continue;
+        }
+        if ((int)i == g_mHot && e.enabled)
+            FillRR(P, ww, W, H, r.left, r.top, r.right - r.left, r.bottom - r.top, Sc(9), pl.hi,
+                   pl.dark ? 46 : 32);
+        RECT rt = {r.left + Sc(14), r.top, r.right - Sc(10), r.bottom};
+        Txt(dc, g_fName, e.text, rt, e.enabled ? pl.text : pl.ghost,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    }
+    g_off = saveOff;
+    GdiFlush();
+
+    POINT pos = {g_mX - M, g_mY - M};
+    SIZE size = {ww, wh};
+    POINT src = {0, 0};
+    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    HDC sdc = GetDC(nullptr);
+    UpdateLayeredWindow(g_menuWnd, sdc, &pos, &size, g_mDc, &src, 0, &bf, ULW_ALPHA);
+    ReleaseDC(nullptr, sdc);
+}
+
+static void OpenMenu(const std::vector<MenuEnt>& items, int sx, int sy) {
+    if (!g_menuWnd) return;
+    g_mItems = items;
+    int itemH = Sc(34), sepH = Sc(11), padV = Sc(7), padH = Sc(7);
+
+    HDC sdc = GetDC(nullptr);
+    HGDIOBJ old = SelectObject(sdc, g_fName);
+    int maxT = 0;
+    for (auto& e : g_mItems) {
+        if (e.sep) continue;
+        SIZE sz{};
+        GetTextExtentPoint32W(sdc, e.text.c_str(), (int)e.text.size(), &sz);
+        maxT = std::max(maxT, (int)sz.cx);
+    }
+    SelectObject(sdc, old);
+    ReleaseDC(nullptr, sdc);
+
+    g_mW = std::max(Sc(200), maxT + Sc(44));
+    g_mRects.clear();
+    int y = padV;
+    for (auto& e : g_mItems) {
+        int h = e.sep ? sepH : itemH;
+        g_mRects.push_back(RECT{padH, y, g_mW - padH, y + h});
+        y += h;
+    }
+    g_mH = y + padV;
+    g_mM = Sc(18);
+    g_mRad = std::min(Sc(16), g_mH / 2);
+
+    POINT pt = {sx, sy};
+    HMONITOR hm = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{sizeof(mi)};
+    GetMonitorInfoW(hm, &mi);
+    g_mX = std::max((int)mi.rcWork.left, std::min(sx, (int)mi.rcWork.right - g_mW));
+    g_mY = sy;
+    if (g_mY + g_mH > mi.rcWork.bottom) g_mY = sy - g_mH;
+    if (g_mY < mi.rcWork.top) g_mY = mi.rcWork.top;
+
+    FreeMenuBuf();
+    int ww = g_mW + 2 * g_mM, wh = g_mH + 2 * g_mM;
+    BITMAPINFO bi{};
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = ww;
+    bi.bmiHeader.biHeight = -wh;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    g_mDc = CreateCompatibleDC(nullptr);
+    g_mBmp = CreateDIBSection(g_mDc, &bi, DIB_RGB_COLORS, (void**)&g_mPx, nullptr, 0);
+    if (!g_mBmp || !g_mPx) {
+        FreeMenuBuf();
+        return;
+    }
+    g_mOld = SelectObject(g_mDc, g_mBmp);
+
+    g_mHot = -1;
+    g_menuOpen = true;
+    RenderMenu();
+    SetWindowPos(g_menuWnd, HWND_TOPMOST, g_mX - g_mM, g_mY - g_mM, ww, wh,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetCapture(g_menuWnd);  // clicks anywhere else close the menu
+}
+
+static void MenuMove(int dir) {
+    int n = (int)g_mItems.size();
+    if (!n || !g_menuOpen) return;
+    int i = g_mHot;
+    if (i < 0) i = dir > 0 ? -1 : 0;
+    for (int k = 0; k < n; k++) {
+        i = (i + dir + n) % n;
+        if (!g_mItems[i].sep && g_mItems[i].enabled) {
+            g_mHot = i;
+            RenderMenu();
+            return;
+        }
+    }
+}
+
+static void RunMenuAction(int id) {
+    switch (id) {
+        case M_OPEN:
+            Activate(g_ctxRow);
+            break;
+        case M_LOC:
+            if (!g_ctxPath.empty()) {
+                std::wstring args = L"/select,\"" + g_ctxPath + L"\"";
+                HideWnd();
+                ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+            }
+            break;
+        case M_CUT:
+            if (!g_ctxPath.empty()) SetClipFiles(g_ctxPath, true);
+            break;
+        case M_COPY:
+            if (!g_ctxPath.empty()) SetClipFiles(g_ctxPath, false);
+            else CopyText(g_ctxItem.target);
+            break;
+        case M_PASTE:
+            if (!g_ctxPath.empty()) {
+                std::wstring dest = g_ctxPath;
+                if (!g_ctxDir) {
+                    PathRemoveFileSpecW(&dest[0]);
+                    dest.resize(wcslen(dest.c_str()));
+                }
+                PasteFilesInto(dest);
+            }
+            break;
+        case M_COPYPATH:
+            if (!g_ctxPath.empty()) CopyText(g_ctxPath);
+            break;
+        case M_TCUT:
+        case M_TCOPY:
+        case M_TPASTE:
+        case M_TSELALL:
+            TextMenuAction(id);
+            break;
+    }
+}
+
+static void ChooseMenu(int idx) {
+    if (idx < 0 || idx >= (int)g_mItems.size()) return;
+    int id = g_mItems[idx].id;
+    CloseMenu();
+    RunMenuAction(id);
+}
+
+static int MenuHit(LPARAM lp) {
+    POINT p = {GET_X_LPARAM(lp) - g_mM, GET_Y_LPARAM(lp) - g_mM};
+    for (size_t i = 0; i < g_mRects.size(); i++) {
+        if (PtInRect(&g_mRects[i], p) && !g_mItems[i].sep && g_mItems[i].enabled) return (int)i;
+    }
+    return -1;
+}
+
+static LRESULT CALLBACK MenuProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+        case WM_ERASEBKGND:
+            return 1;
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+        case WM_MOUSEMOVE: {
+            if (!g_menuOpen) return 0;
+            int hot = MenuHit(lp);
+            if (hot != g_mHot) {
+                g_mHot = hot;
+                RenderMenu();
+            }
+            NoteInput();
+            return 0;
+        }
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN: {
+            if (!g_menuOpen) return 0;
+            int hit = MenuHit(lp);
+            int x = GET_X_LPARAM(lp) - g_mM, y = GET_Y_LPARAM(lp) - g_mM;
+            bool inPanel = x >= 0 && x < g_mW && y >= 0 && y < g_mH;
+            if (hit >= 0 && msg == WM_LBUTTONDOWN) ChooseMenu(hit);
+            else if (!inPanel) CloseMenu();
+            return 0;
+        }
+        case WM_CAPTURECHANGED:
+            if (g_menuOpen) CloseMenu();
+            return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static void ShowContextMenu(LPARAM lp) {
+    int cx = GET_X_LPARAM(lp), cy = GET_Y_LPARAM(lp);
+    int M = Mg();
+    int px = cx - M, py = cy - M;
+    int row = HitRow(cy);
+    bool inSearch = px >= 0 && px < g_pw && py >= 0 && py < Sc(SEARCH_H);
+    if (row < 0 && !inSearch) return;
+
+    NoteInput();
+    g_ctxRow = row;
+    g_ctxPath.clear();
+    g_ctxDir = false;
+    g_ctxItem = Item{};
+    std::vector<MenuEnt> m;
+
+    if (row >= 0) {
+        if (g_sel != row) SetSel(row, false);
+        g_ctxItem = g_items[row];
+        g_ctxPath = FsPath(g_ctxItem);
+        bool hasPath = !g_ctxPath.empty();
+        g_ctxDir = hasPath && PathIsDirectoryW(LaunchPath(g_ctxPath).c_str());
+        bool canPaste = hasPath && IsClipboardFormatAvailable(CF_HDROP);
+        m.push_back(MenuEnt{M_OPEN, L"Open", true, false});
+        m.push_back(MenuEnt{M_LOC, L"Open file location", hasPath, false});
+        m.push_back(MenuEnt{0, L"", false, true});
+        m.push_back(MenuEnt{M_CUT, L"Cut", hasPath, false});
+        m.push_back(MenuEnt{M_COPY, L"Copy", true, false});
+        m.push_back(MenuEnt{M_PASTE, g_ctxDir ? L"Paste into folder" : L"Paste into this folder",
+                            canPaste, false});
+        m.push_back(MenuEnt{0, L"", false, true});
+        m.push_back(MenuEnt{M_COPYPATH, L"Copy path", hasPath, false});
+    } else {
+        bool sel = HasSel();
+        m.push_back(MenuEnt{M_TCUT, L"Cut", sel, false});
+        m.push_back(MenuEnt{M_TCOPY, L"Copy", sel, false});
+        m.push_back(MenuEnt{M_TPASTE, L"Paste", IsClipboardFormatAvailable(CF_UNICODETEXT) != FALSE,
+                            false});
+        m.push_back(MenuEnt{0, L"", false, true});
+        m.push_back(MenuEnt{M_TSELALL, L"Select all", !g_query.empty(), false});
+    }
+
+    POINT pt;
+    GetCursorPos(&pt);
+    OpenMenu(m, pt.x, pt.y);
+}
+
 static void OnLButton(LPARAM lp, bool dbl) {
     if (g_anim == ANIM_CLOSE) return;
     NoteInput();
@@ -2304,8 +2926,29 @@ static void OnLButton(LPARAM lp, bool dbl) {
         return;
     }
     int M = Mg();
-    bool inPanel = cx >= M && cx < M + g_pw && cy >= M && cy < M + g_ph;
-    if (!inPanel || !S.drag) return;
+    int px = cx - M, py = cy - M;
+    bool inPanel = px >= 0 && px < g_pw && py >= 0 && py < g_ph;
+    if (!inPanel) return;
+
+    // Text field: select text, never drag the bar.
+    if (InTextBox(px, py)) {
+        if (dbl) {
+            g_anchor = 0;
+            g_caret = g_query.size();
+            g_caretOn = true;
+            Redraw();
+            return;
+        }
+        g_caret = CaretFromX(px);
+        if (GetKeyState(VK_SHIFT) >= 0) g_anchor = g_caret;
+        g_selecting = true;
+        g_caretOn = true;
+        SetCapture(g_hwnd);
+        Redraw();
+        return;
+    }
+
+    if (!S.drag) return;
     if (dbl) {
         ResetPosition();
         return;
@@ -2346,10 +2989,22 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         case WM_ACTIVATE:
-            if (LOWORD(wp) == WA_INACTIVE && IsWindowVisible(hwnd) && !S.onTop &&
+            if (LOWORD(wp) == WA_INACTIVE && g_menuOpen) CloseMenu();
+            if (LOWORD(wp) == WA_INACTIVE && IsWindowVisible(hwnd) && !S.onTop && !g_menuOpen &&
                 GetTickCount64() - g_shownTick > 250)
                 HideWnd();
             return 0;
+        case WM_SETCURSOR:
+            if (LOWORD(lp) == HTCLIENT) {
+                POINT pt;
+                GetCursorPos(&pt);
+                ScreenToClient(hwnd, &pt);
+                if (g_selecting || InTextBox(pt.x - Mg(), pt.y - Mg())) {
+                    SetCursor(LoadCursorW(nullptr, IDC_IBEAM));
+                    return TRUE;
+                }
+            }
+            break;
         case WM_TIMER:
             switch (wp) {
                 case TIMER_ANIM: TickAnim(); break;
@@ -2357,7 +3012,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 case TIMER_IDLE: IdleTick(); break;
                 case TIMER_BLINK:
                     if (IsWindowVisible(hwnd) && g_anim == ANIM_NONE) {
-                        if (!S.onTop && GetForegroundWindow() != hwnd &&
+                        if (!S.onTop && !g_menuOpen && GetForegroundWindow() != hwnd &&
                             GetTickCount64() - g_shownTick > 600) {
                             HideWnd();
                         } else {
@@ -2369,15 +3024,23 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             return 0;
         case WM_CHAR:
+            if (g_menuOpen) return 0;
             if (g_anim == ANIM_CLOSE) CancelIdleFade();
             if (g_anim == ANIM_CLOSE) return 0;
             NoteInput();
-            if (wp >= 32 && wp != 127 && g_query.size() < 80) {
-                g_query += (wchar_t)wp;
+            if (wp >= 32 && wp != 127) {
+                InsertText(std::wstring(1, (wchar_t)wp));
                 QueryChanged();
             }
             return 0;
         case WM_KEYDOWN: {
+            if (g_menuOpen) {
+                if (wp == VK_ESCAPE) CloseMenu();
+                else if (wp == VK_UP) MenuMove(-1);
+                else if (wp == VK_DOWN) MenuMove(1);
+                else if (wp == VK_RETURN && g_mHot >= 0) ChooseMenu(g_mHot);
+                return 0;
+            }
             if (g_anim == ANIM_CLOSE) CancelIdleFade();
             if (g_anim == ANIM_CLOSE) return 0;
             NoteInput();
@@ -2393,14 +3056,49 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 case VK_UP:
                     if (n) SetSel((g_sel + n - 1) % n, true);
                     break;
-                case VK_DELETE:
-                    if (n && g_query.empty() && g_items[g_sel].cat == C_RECENT) RemoveRecentAt(g_sel);
+                case VK_LEFT: {
+                    size_t pos = (!shift && HasSel()) ? SelLo() : (g_caret > 0 ? g_caret - 1 : 0);
+                    g_caret = pos;
+                    if (!shift) g_anchor = pos;
+                    g_caretOn = true;
+                    Redraw();
                     break;
+                }
                 case VK_RIGHT:
-                    if (!g_ghost.empty()) {
-                        g_query = g_items[g_sel].name;
+                    if (!g_ghost.empty() && !HasSel() && g_caret == g_query.size()) {
+                        SetQuery(g_items[g_sel].name);  // accept ghost text
                         QueryChanged();
                         StartPulse();
+                    } else {
+                        size_t pos = (!shift && HasSel()) ? SelHi()
+                                                          : std::min(g_caret + 1, g_query.size());
+                        g_caret = pos;
+                        if (!shift) g_anchor = pos;
+                        g_caretOn = true;
+                        Redraw();
+                    }
+                    break;
+                case VK_HOME:
+                    g_caret = 0;
+                    if (!shift) g_anchor = 0;
+                    g_caretOn = true;
+                    Redraw();
+                    break;
+                case VK_END:
+                    g_caret = g_query.size();
+                    if (!shift) g_anchor = g_caret;
+                    g_caretOn = true;
+                    Redraw();
+                    break;
+                case VK_DELETE:
+                    if (g_query.empty()) {
+                        if (n && g_items[g_sel].cat == C_RECENT) RemoveRecentAt(g_sel);
+                    } else if (HasSel()) {
+                        DeleteSel();
+                        QueryChanged();
+                    } else if (g_caret < g_query.size()) {
+                        g_query.erase(g_caret, 1);
+                        QueryChanged();
                     }
                     break;
                 case VK_TAB:
@@ -2409,7 +3107,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                         SetSel((g_sel + n - 1) % n, true);
                     } else if (g_items[g_sel].cat == C_APP &&
                                _wcsicmp(g_items[g_sel].name.c_str(), g_query.c_str()) != 0) {
-                        g_query = g_items[g_sel].name;  // autofill
+                        SetQuery(g_items[g_sel].name);  // autofill
                         QueryChanged();
                         StartPulse();
                     } else {
@@ -2417,31 +3115,50 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     }
                     break;
                 case VK_BACK:
-                    if (!g_query.empty()) {
+                    if (HasSel()) {
+                        DeleteSel();
+                    } else if (g_caret > 0) {
                         if (ctrl) {
-                            size_t e = g_query.find_last_not_of(L' ');
-                            if (e == std::wstring::npos) g_query.clear();
-                            else {
-                                size_t sp = g_query.find_last_of(L' ', e);
-                                g_query.erase(sp == std::wstring::npos ? 0 : sp + 1);
-                            }
+                            size_t e = g_caret;
+                            while (e > 0 && g_query[e - 1] == L' ') e--;
+                            size_t s = e;
+                            while (s > 0 && g_query[s - 1] != L' ') s--;
+                            g_query.erase(s, g_caret - s);
+                            g_caret = g_anchor = s;
                         } else {
-                            g_query.pop_back();
+                            g_query.erase(g_caret - 1, 1);
+                            g_caret--;
+                            g_anchor = g_caret;
                         }
-                        QueryChanged();
+                    } else {
+                        break;
                     }
-                    break;
-                case 'V':
-                    if (ctrl) { PasteText(); QueryChanged(); }
+                    QueryChanged();
                     break;
                 case 'A':
-                    if (ctrl) { g_query.clear(); QueryChanged(); }
+                    if (ctrl) TextMenuAction(M_TSELALL);
+                    break;
+                case 'C':
+                    if (ctrl) TextMenuAction(M_TCOPY);
+                    break;
+                case 'X':
+                    if (ctrl) TextMenuAction(M_TCUT);
+                    break;
+                case 'V':
+                    if (ctrl) TextMenuAction(M_TPASTE);
                     break;
             }
             return 0;
         }
         case WM_MOUSEMOVE: {
             if (g_anim == ANIM_CLOSE) return 0;
+            if (g_selecting) {
+                g_caret = CaretFromX(GET_X_LPARAM(lp) - Mg());
+                g_caretOn = true;
+                g_lastInput = GetTickCount64();
+                Redraw();
+                return 0;
+            }
             if (g_dragging) {
                 POINT pt;
                 GetCursorPos(&pt);
@@ -2478,13 +3195,21 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             OnLButton(lp, true);
             return 0;
         case WM_LBUTTONUP:
-            if (g_dragging) {
+            if (g_dragging || g_selecting) {
                 g_dragging = false;
+                g_selecting = false;
                 if (GetCapture() == hwnd) ReleaseCapture();
             }
             return 0;
+        case WM_RBUTTONDOWN:
+            NoteInput();
+            return 0;
+        case WM_RBUTTONUP:
+            if (g_anim != ANIM_CLOSE) ShowContextMenu(lp);
+            return 0;
         case WM_CAPTURECHANGED:
             g_dragging = false;
+            g_selecting = false;
             return 0;
         case WM_DESTROY:
             KillTimer(hwnd, TIMER_BLINK);
@@ -2501,11 +3226,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 static DWORD WINAPI UiThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HINSTANCE hi = (HINSTANCE)&__ImageBase;  // this mod's module, not the host exe
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
-    wc.style = CS_DBLCLKS;  // double-click resets the dragged position
+    wc.style = CS_DBLCLKS;  // double-click selects all / resets the dragged position
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hi;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
@@ -2515,11 +3239,21 @@ static DWORD WINAPI UiThread(LPVOID) {
         CoUninitialize();
         return 0;
     }
+    WNDCLASSEXW mc{};
+    mc.cbSize = sizeof(mc);
+    mc.lpfnWndProc = MenuProc;
+    mc.hInstance = hi;
+    mc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    mc.lpszClassName = kMenuClass;
+    RegisterClassExW(&mc);
 
     g_hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW, kClass,
                              L"Spotlight", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, hi, nullptr);
     if (g_hwnd) {
         g_theme = OpenThemeData(g_hwnd, L"CompositedWindow::Window");
+        g_menuWnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+                                    kMenuClass, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr, hi,
+                                    nullptr);
         LoadSettings();
         LoadRecents();
         UpdateTheme();
@@ -2533,6 +3267,11 @@ static DWORD WINAPI UiThread(LPVOID) {
             TranslateMessage(&m);
             DispatchMessageW(&m);
         }
+        CloseMenu();
+        if (g_menuWnd) {
+            DestroyWindow(g_menuWnd);
+            g_menuWnd = nullptr;
+        }
         DestroyWindow(g_hwnd);
         if (g_theme) CloseThemeData(g_theme);
         g_theme = nullptr;
@@ -2545,8 +3284,10 @@ static DWORD WINAPI UiThread(LPVOID) {
     if (g_fName) DeleteObject(g_fName);
     if (g_fSub) DeleteObject(g_fSub);
     if (g_fIcon) DeleteObject(g_fIcon);
-    g_fQuery = g_fName = g_fSub = g_fIcon = nullptr;
+    if (g_fSearch) DeleteObject(g_fSearch);
+    g_fQuery = g_fName = g_fSub = g_fIcon = g_fSearch = nullptr;
     g_icons.clear();
+    UnregisterClassW(kMenuClass, hi);
     UnregisterClassW(kClass, hi);
     CoUninitialize();
     return 0;
@@ -2589,6 +3330,7 @@ void WhTool_ModUninit() {
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod launcher code (from the Windhawk wiki, "Mods as tools").
 // Runs the mod in a dedicated windhawk.exe process.
+// Keep this block identical to the wiki snippet so it can be maintained in one place.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -2599,7 +3341,13 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
@@ -2610,8 +3358,10 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -2628,7 +3378,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
@@ -2713,13 +3463,13 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFO si{};
-    si.cb = sizeof(STARTUPINFO);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE,
-                                 CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
                                  nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
