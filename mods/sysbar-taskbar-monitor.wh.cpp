@@ -42,14 +42,14 @@
 // @description:zh-CN 在 Windows 11 任务栏上显示 CPU 和 GPU 使用率与温度、内存使用率以及网络速度。
 // @name:zh-TW      SysBar — 工作列監視器
 // @description:zh-TW 在 Windows 11 工作列上顯示 CPU 和 GPU 使用率與溫度、記憶體使用率及網路速度。
-// @version         1.2.0
+// @version         1.2.1
 // @author          Brov3r
 // @github          https://github.com/Brov3r
 // @homepage        https://github.com/Brov3r/SysBar
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -liphlpapi -lpdh -lwbemuuid -lws2_32
+// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -liphlpapi -lpdh -lwbemuuid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -70,6 +70,13 @@ usable reading, the temperature stays hidden.
 On Windows 11 x64, enable the mod and open **Settings** to choose which
 readings to display. Memory can show percentage used, used GiB or available
 GiB. Enable uptime to see hours and minutes since the last restart.
+
+[Taskbar System Info](https://windhawk.net/mods/taskbar-system-info) already
+provides CPU, GPU, memory and network statistics. SysBar is an alternative
+for users who want uptime alongside those readings, scalable drawn icons,
+and access to an optional, separately installed thermal-zone sensor through
+read-only shared memory. It overlays the area left of the notification tray;
+it does not reserve space for taskbar buttons.
 
 The [optional sensor and installation instructions](https://github.com/Brov3r/SysBar#-quick-start)
 are only needed if you want to try the helper for temperature readings.
@@ -603,70 +610,27 @@ License: MIT. Icon reference: [Nieobie's game-icon-pack](https://github.com/Nieo
     $description:ar: "تُقرأ درجات الحرارة عبر WMI مرة واحدة كل 5 ثوانٍ على الأكثر."
     $description:hi: "WMI से तापमान पाँच सेकंड में अधिकतम एक बार पढ़ा जाता है।"
     $description:bn: "WMI দিয়ে প্রতি 5 সেকেন্ডে সর্বোচ্চ একবার তাপমাত্রা পড়া হয়।"
-  - debugLog: false
-    $name: Write diagnostic log
-    $name:ru-RU: Записывать журнал диагностики
-    $name:de: "Diagnoseprotokoll schreiben"
-    $name:es: "Guardar registro de diagnóstico"
-    $name:fr: "Écrire le journal de diagnostic"
-    $name:it: "Scrivi registro diagnostico"
-    $name:pt-BR: "Gravar log de diagnóstico"
-    $name:pt-PT: "Gravar registo de diagnóstico"
-    $name:nl: "Diagnoselogboek schrijven"
-    $name:pl: "Zapisuj dziennik diagnostyczny"
-    $name:uk: "Записувати журнал діагностики"
-    $name:tr: "Tanılama günlüğünü yaz"
-    $name:id: "Tulis log diagnostik"
-    $name:vi: "Ghi nhật ký chẩn đoán"
-    $name:ja: "診断ログを記録"
-    $name:ko: "진단 로그 기록"
-    $name:zh-CN: "记录诊断日志"
-    $name:zh-TW: "寫入診斷記錄"
-    $name:ar: "كتابة سجل التشخيص"
-    $name:hi: "निदान लॉग लिखें"
-    $name:bn: "নির্ণয় লগ লিখুন"
-    $description: Writes sensor diagnostics to %LOCALAPPDATA%\SysBar\debug.log.
-    $description:ru-RU: Данные диагностики сохраняются в %LOCALAPPDATA%\SysBar\debug.log.
-    $description:de: "Sensordiagnose wird in %LOCALAPPDATA%\\SysBar\\debug.log gespeichert."
-    $description:es: "El diagnóstico de los sensores se guarda en %LOCALAPPDATA%\\SysBar\\debug.log."
-    $description:fr: "Le diagnostic des capteurs est enregistré dans %LOCALAPPDATA%\\SysBar\\debug.log."
-    $description:it: "La diagnostica dei sensori viene salvata in %LOCALAPPDATA%\\SysBar\\debug.log."
-    $description:pt-BR: "O diagnóstico dos sensores é salvo em %LOCALAPPDATA%\\SysBar\\debug.log."
-    $description:pt-PT: "O diagnóstico dos sensores é guardado em %LOCALAPPDATA%\\SysBar\\debug.log."
-    $description:nl: "Sensordiagnose wordt opgeslagen in %LOCALAPPDATA%\\SysBar\\debug.log."
-    $description:pl: "Diagnostyka czujników jest zapisywana w %LOCALAPPDATA%\\SysBar\\debug.log."
-    $description:uk: "Діагностика датчиків зберігається у %LOCALAPPDATA%\\SysBar\\debug.log."
-    $description:tr: "Sensör tanılama bilgileri %LOCALAPPDATA%\\SysBar\\debug.log dosyasına yazılır."
-    $description:id: "Diagnostik sensor disimpan di %LOCALAPPDATA%\\SysBar\\debug.log."
-    $description:vi: "Thông tin chẩn đoán cảm biến được lưu vào %LOCALAPPDATA%\\SysBar\\debug.log."
-    $description:ja: "センサーの診断情報を %LOCALAPPDATA%\\SysBar\\debug.log に保存します。"
-    $description:ko: "센서 진단 정보를 %LOCALAPPDATA%\\SysBar\\debug.log에 저장합니다."
-    $description:zh-CN: "传感器诊断信息保存在 %LOCALAPPDATA%\\SysBar\\debug.log。"
-    $description:zh-TW: "感測器診斷資訊儲存於 %LOCALAPPDATA%\\SysBar\\debug.log。"
-    $description:ar: "تُحفظ بيانات تشخيص المستشعرات في %LOCALAPPDATA%\\SysBar\\debug.log."
-    $description:hi: "सेंसर की निदान जानकारी %LOCALAPPDATA%\\SysBar\\debug.log में सहेजी जाती है।"
-    $description:bn: "সেন্সরের নির্ণয় তথ্য %LOCALAPPDATA%\\SysBar\\debug.log-এ সংরক্ষিত হয়।"
-  $name: Refresh and diagnostics
-  $name:ru-RU: Обновление и диагностика
-  $name:de: "Aktualisierung und Diagnose"
-  $name:es: "Actualización y diagnóstico"
-  $name:fr: "Actualisation et diagnostic"
-  $name:it: "Aggiornamento e diagnostica"
-  $name:pt-BR: "Atualização e diagnóstico"
-  $name:pt-PT: "Atualização e diagnóstico"
-  $name:nl: "Vernieuwen en diagnose"
-  $name:pl: "Odświeżanie i diagnostyka"
-  $name:uk: "Оновлення й діагностика"
-  $name:tr: "Yenileme ve tanılama"
-  $name:id: "Pembaruan dan diagnostik"
-  $name:vi: "Làm mới và chẩn đoán"
-  $name:ja: "更新と診断"
-  $name:ko: "새로 고침 및 진단"
-  $name:zh-CN: "刷新与诊断"
-  $name:zh-TW: "更新與診斷"
-  $name:ar: "التحديث والتشخيص"
-  $name:hi: "अपडेट और निदान"
-  $name:bn: "হালনাগাদ ও নির্ণয়"
+  $name: Refresh
+  $name:ru-RU: Обновление
+  $name:de: Aktualisierung
+  $name:es: Actualización
+  $name:fr: Actualisation
+  $name:it: Aggiornamento
+  $name:pt-BR: Atualização
+  $name:pt-PT: Atualização
+  $name:nl: Vernieuwen
+  $name:pl: Odświeżanie
+  $name:uk: Оновлення
+  $name:tr: Yenileme
+  $name:id: Pembaruan
+  $name:vi: Làm mới
+  $name:ja: 更新
+  $name:ko: 새로 고침
+  $name:zh-CN: 刷新
+  $name:zh-TW: 更新
+  $name:ar: التحديث
+  $name:hi: अपडेट
+  $name:bn: হালনাগাদ
 */
 // ==/WindhawkModSettings==
 
@@ -685,7 +649,6 @@ License: MIT. Icon reference: [Nieobie's game-icon-pack](https://github.com/Nieo
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <cstdarg>
 #include <cstdio>
 #include <cwchar>
 #include <limits>
@@ -736,7 +699,6 @@ struct Settings {
     int metricGap = 13, trayGap = 6;
     int warnTemp = 75;
     int critTemp = 88;
-    bool debugLog = false;
     int intervalSeconds = 1;
 };
 
@@ -747,7 +709,6 @@ Settings CurrentSettings() {
     return g_settings;
 }
 
-void DebugLog(const wchar_t* format, ...);
 
 void LoadSettings() {
     // Values are zero when the mod has never been configured (for example,
@@ -758,7 +719,6 @@ void LoadSettings() {
     const int showIcons = Wh_GetIntSetting(L"appearance.showIcons");
     const int warnTemp = Wh_GetIntSetting(L"temperature.warnTemp");
     const int critTemp = Wh_GetIntSetting(L"temperature.critTemp");
-    const int debugLog = Wh_GetIntSetting(L"operation.debugLog");
 
     const bool unconfigured = fontSize == 0 && showTemps == 0 && showNet == 0 &&
                               showIcons == 0 && warnTemp == 0 && critTemp == 0;
@@ -781,57 +741,9 @@ void LoadSettings() {
     s.trayGap = std::clamp(unconfigured ? 6 : Wh_GetIntSetting(L"appearance.trayGap"), 0, 128);
     s.warnTemp = std::clamp(unconfigured ? 75 : warnTemp, 30, 120);
     s.critTemp = std::clamp(unconfigured ? 88 : critTemp, s.warnTemp + 1, 130);
-    s.debugLog = debugLog != 0;
     s.intervalSeconds = std::clamp(Wh_GetIntSetting(L"operation.intervalSeconds"), 1, 10);
     std::lock_guard lock(g_settingsMutex);
     g_settings = s;
-}
-
-void DebugLog(const wchar_t* format, ...) {
-    if (!CurrentSettings().debugLog) {
-        return;
-    }
-    wchar_t directory[MAX_PATH];
-    DWORD size = GetEnvironmentVariableW(L"LOCALAPPDATA", directory, MAX_PATH);
-    if (!size || size >= MAX_PATH) {
-        return;
-    }
-    std::wstring folder = std::wstring(directory) + L"\\SysBar";
-    CreateDirectoryW(folder.c_str(), nullptr);
-    std::wstring path = folder + L"\\debug.log";
-
-    wchar_t message[1024];
-    va_list args;
-    va_start(args, format);
-    _vsnwprintf(message, 1024, format, args);
-    message[1023] = L'\0';
-    va_end(args);
-
-    SYSTEMTIME time;
-    GetLocalTime(&time);
-
-    char line[2048];
-    int offset = snprintf(line, sizeof(line), "[%02u:%02u:%02u] ", time.wHour,
-                          time.wMinute, time.wSecond);
-    int length = WideCharToMultiByte(CP_UTF8, 0, message, -1, line + offset,
-                                     static_cast<int>(sizeof(line)) - offset,
-                                     nullptr, nullptr);
-    if (length > 0) {
-        line[offset + length - 1] = '\n';
-    } else {
-        line[offset] = '\n';
-        length = 1;
-    }
-
-    HANDLE file = CreateFileW(path.c_str(), FILE_APPEND_DATA,
-                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                              OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file != INVALID_HANDLE_VALUE) {
-        DWORD written = 0;
-        WriteFile(file, line, static_cast<DWORD>(offset + length), &written,
-                  nullptr);
-        CloseHandle(file);
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -854,7 +766,7 @@ struct Snapshot {
 std::mutex g_snapMutex;
 Snapshot g_snap;
 
-std::thread g_worker;
+[[clang::no_destroy]] std::optional<std::thread> g_worker;
 std::atomic<bool> g_workerStop{false};
 std::mutex g_workerWakeMutex;
 std::condition_variable g_workerWake;
@@ -1065,7 +977,7 @@ struct NvmlGpu {
                                  LOAD_LIBRARY_SEARCH_SYSTEM32);
         }
         if (!lib) {
-            DebugLog(L"nvml: LoadLibrary failed, error=%lu", GetLastError());
+            Wh_Log(L"nvml: LoadLibrary failed, error=%lu", GetLastError());
             failed = true;
             nextRetry = std::chrono::steady_clock::now() +
                         std::chrono::seconds(60);
@@ -1082,7 +994,7 @@ struct NvmlGpu {
         utilization = reinterpret_cast<UtilFn>(
             GetProcAddress(lib, "nvmlDeviceGetUtilizationRates"));
         if (!init || !shutdown || !count || !handle || !temperature || !utilization) {
-            DebugLog(L"nvml: missing exports init=%d count=%d handle=%d temp=%d util=%d",
+            Wh_Log(L"nvml: missing exports init=%d count=%d handle=%d temp=%d util=%d",
                      init != nullptr, count != nullptr, handle != nullptr,
                      temperature != nullptr, utilization != nullptr);
             failed = true;
@@ -1092,7 +1004,7 @@ struct NvmlGpu {
         }
         const int initResult = initialized ? 0 : init();
         if (initResult != 0) {
-            DebugLog(L"nvml: init failed, code=%d", initResult);
+            Wh_Log(L"nvml: init failed, code=%d", initResult);
             failed = true;
             nextRetry = std::chrono::steady_clock::now() +
                         std::chrono::seconds(60);
@@ -1102,7 +1014,7 @@ struct NvmlGpu {
         initialized = true;
         const int countResult = count(&deviceCount);
         if (countResult != 0 || deviceCount == 0) {
-            DebugLog(L"nvml: count failed, code=%d count=%u", countResult,
+            Wh_Log(L"nvml: count failed, code=%d count=%u", countResult,
                      deviceCount);
             failed = true;
             nextRetry = std::chrono::steady_clock::now() +
@@ -1111,7 +1023,7 @@ struct NvmlGpu {
         }
         const int handleResult = handle(0, &device);
         if (handleResult != 0) {
-            DebugLog(L"nvml: handle failed, code=%d", handleResult);
+            Wh_Log(L"nvml: handle failed, code=%d", handleResult);
             failed = true;
             nextRetry = std::chrono::steady_clock::now() +
                         std::chrono::seconds(60);
@@ -1122,7 +1034,7 @@ struct NvmlGpu {
                 GetProcAddress(lib, "nvmlDeviceGetName"))) {
             getName(device, name, sizeof(name));
         }
-        DebugLog(L"nvml: ready, gpu=%S", name);
+        Wh_Log(L"nvml: ready, gpu=%S", name);
         return true;
     }
 
@@ -1147,7 +1059,7 @@ struct NvmlGpu {
             const auto now = std::chrono::steady_clock::now();
             if (now >= lastLog) {
                 lastLog = now + std::chrono::seconds(30);
-                DebugLog(L"nvml: sample failed temp=%d/%d util=%d",
+                Wh_Log(L"nvml: sample failed temp=%d/%d util=%d",
                          tempResult, t, utilResult);
             }
         }
@@ -1529,7 +1441,7 @@ void WorkerMain() {
         }
 
         if (tick % 10 == 0) {
-            DebugLog(
+            Wh_Log(
                 L"metrics cpu=%.0f cpuTemp=%.1f gpu=%.0f gpuTemp=%.1f "
                 L"ram=%.0f down=%.0f up=%.0f",
                 snapshot.cpuPct, snapshot.cpuTemp, snapshot.gpuPct,
@@ -1552,11 +1464,11 @@ void WorkerMain() {
 
 void StartWorker() {
     g_workerStop = false;
-    g_worker = std::thread(WorkerMain);
+    g_worker.emplace(WorkerMain);
 }
 
 void StopWorker() {
-    if (!g_worker.joinable()) {
+    if (!g_worker) {
         return;
     }
     {
@@ -1564,7 +1476,8 @@ void StopWorker() {
         g_workerStop = true;
     }
     g_workerWake.notify_all();
-    g_worker.join();
+    g_worker->join();
+    g_worker.reset();
 }
 
 // ---------------------------------------------------------------------------
@@ -2305,13 +2218,31 @@ wux::FrameworkElement FindDirectChildByName(wux::DependencyObject const& parent,
     return nullptr;
 }
 
+wux::FrameworkElement GetTaskbarHostElement(HWND tray);
+
+bool IsPrimaryFrame(HWND tray, wux::FrameworkElement const& frame) noexcept {
+    try {
+        auto host = GetTaskbarHostElement(tray);
+        auto primaryRoot = host ? host.XamlRoot() : nullptr;
+        return primaryRoot && frame.XamlRoot() == primaryRoot;
+    } catch (const winrt::hresult_error&) {
+        return false;  // The shell can be replacing its XAML tree.
+    }
+}
+
+void DetachHost() {
+    uint32_t index;
+    if (g_rootGrid && g_host && g_rootGrid.Children().IndexOf(g_host, index))
+        g_rootGrid.Children().RemoveAt(index);
+}
+
 void AttachToTaskbarFrame(wux::FrameworkElement frame) {
     if (!frame || g_unloading) {
         return;
     }
     HWND primary = FindPrimaryTaskbarOnCurrentThread();
-    if (!primary) {
-        return;  // secondary taskbar
+    if (!primary || !IsPrimaryFrame(primary, frame)) {
+        return;
     }
     g_taskbarWindow = primary;
     EnsureMessageWindow();
@@ -2356,6 +2287,7 @@ void AttachToTaskbarFrame(wux::FrameworkElement frame) {
 
     if (g_rootGrid && winrt::get_abi(g_rootGrid) != winrt::get_abi(root)) {
         // A new taskbar tree was created (explorer restart or theme reload).
+        DetachHost();
         g_host = nullptr;
         g_row = nullptr;
         g_cpuGroup = nullptr;
@@ -2380,7 +2312,7 @@ void AttachToTaskbarFrame(wux::FrameworkElement frame) {
     g_xamlRoot = frame.XamlRoot();
     CreateUi();
     g_attached = true;
-    DebugLog(L"widget attached: root=%.0fx%.0f margin=%.0f scale=%.2f",
+    Wh_Log(L"widget attached: root=%.0fx%.0f margin=%.0f scale=%.2f",
              g_rootGrid.ActualWidth(), g_rootGrid.ActualHeight(), g_rightMargin,
              g_xamlRoot ? g_xamlRoot.RasterizationScale() : -1.0);
     Wh_Log(L"SysBar: widget attached");
@@ -2431,12 +2363,13 @@ using MeasureFrame_t = int(WINAPI*)(void*, wf::Size, wf::Size*);
 MeasureFrame_t MeasureFrame_Original = nullptr;
 int WINAPI MeasureFrame_Hook(void* self, wf::Size size, wf::Size* resultSize) {
     int result = MeasureFrame_Original(self, size, resultSize);
-    if (SUCCEEDED(result) && !g_unloading && !g_attached &&
-        FindPrimaryTaskbarOnCurrentThread() && !g_measuredFrame && !g_retryTimer) {
+    if (SUCCEEDED(result) && !g_unloading && !g_attached) {
+        HWND primary = FindPrimaryTaskbarOnCurrentThread();
+        if (!primary || g_measuredFrame || g_retryTimer) return result;
         wux::FrameworkElement frame{nullptr};
         static_cast<IUnknown*>(self)->QueryInterface(
             winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(frame));
-        if (frame) {
+        if (frame && IsPrimaryFrame(primary, frame)) {
             EnsureMessageWindow();
             if (HWND window = g_msgWindow.load()) {
                 g_measuredFrame = frame;
@@ -2472,23 +2405,23 @@ HMODULE GetTaskbarViewModule() {
     return module;
 }
 
-bool g_taskbarViewHooked = false;
+std::atomic<bool> g_taskbarViewHooked{false};
 
 bool HandleLoadedModuleIfTaskbarView(HMODULE module, LPCWSTR fileName,
                                     bool applyImmediately) {
     if (!module || GetTaskbarViewModule() != module) {
         return false;
     }
-    if (g_taskbarViewHooked) {
+    if (g_taskbarViewHooked.exchange(true)) {
         return true;
     }
     Wh_Log(L"SysBar: taskbar view loaded (%s)",
            fileName ? fileName : L"already loaded");
     if (!HookTaskbarViewSymbols(module)) {
         Wh_Log(L"SysBar: taskbar view symbols unavailable");
+        g_taskbarViewHooked = false;
         return false;
     }
-    g_taskbarViewHooked = true;
     if (applyImmediately) {
         Wh_ApplyHookOperations();
     }
@@ -2515,34 +2448,50 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file,
 
 // When Explorer already owns a fully laid out taskbar, no constructor or
 // measure callback is guaranteed. Resolve the existing TaskbarHost as in
-// Windhawk's taskbar-notification-icon-spacing mod (Windows x64).
+// Windhawk's taskbar-notification-icon-spacing and taskbar-multirow mods.
 void* g_siteVtable = nullptr;
 void* (WINAPI* g_getHost)(void*, void**) = nullptr;
 BYTE* g_frameHeight = nullptr;
 void (WINAPI* g_releaseHost)(void*) = nullptr;
 UINT g_attachMessage = 0;
 
-void AttachExistingFrame(HWND tray) {
-    if (g_attached || g_unloading) return;
+wux::FrameworkElement GetTaskbarHostElement(HWND tray) {
     HWND band = static_cast<HWND>(GetPropW(tray, L"TaskbandHWND"));
     auto site = band ? reinterpret_cast<void**>(GetWindowLongPtrW(band, 0)) : nullptr;
-    if (!site) return;
+    if (!site) return nullptr;
     int i = 0;
     while (i < 20 && site[i] != g_siteVtable) ++i;
-    if (i == 20) return;
-    // FrameHeight accesses the frame member via `sub rsp,N; add rcx,offset`.
+    if (i == 20) return nullptr;
+#if defined(__x86_64__)
     const BYTE* b = g_frameHeight;
     if (b[0] != 0x48 || b[1] != 0x83 || b[2] != 0xec ||
-        b[4] != 0x48 || b[5] != 0x83 || b[6] != 0xc1 || b[7] > 0x7f) return;
+        b[4] != 0x48 || b[5] != 0x83 || b[6] != 0xc1 || b[7] > 0x7f) return nullptr;
+    size_t offset = b[7];
+#elif defined(__aarch64__)
+    // pacibsp; stp fp,lr,[sp,#imm]!; mov fp,sp; ldr x8,[x0,#imm]!
+    const DWORD* p = reinterpret_cast<const DWORD*>(g_frameHeight);
+    if (p[0] != 0xD503237F || (p[1] & 0xFFC07FFF) != 0xA9807BFD ||
+        p[2] != 0x910003FD || (p[3] & 0xFFE00FFF) != 0xF8400C08 ||
+        (p[3] & 0x00100000)) return nullptr;
+    size_t offset = (p[3] >> 12) & 0xff;
+#else
+#error Unsupported architecture
+#endif
     void* host[2]{};
     g_getHost(site + i, host);
     wux::FrameworkElement element{nullptr};
     if (host[0] && host[1]) {
-        auto unk = *reinterpret_cast<IUnknown**>(static_cast<BYTE*>(host[0]) + b[7]);
+        auto unk = *reinterpret_cast<IUnknown**>(static_cast<BYTE*>(host[0]) + offset);
         if (unk) unk->QueryInterface(winrt::guid_of<wux::FrameworkElement>(),
                                      winrt::put_abi(element));
     }
     if (host[1]) g_releaseHost(host[1]);
+    return element;
+}
+
+void AttachExistingFrame(HWND tray) {
+    if (g_attached || g_unloading) return;
+    auto element = GetTaskbarHostElement(tray);
     if (element) {
         auto root = element.XamlRoot();
         auto frame = root && root.Content() ?
@@ -2554,19 +2503,28 @@ void AttachExistingFrame(HWND tray) {
     }
 }
 
-void RecoverExistingTaskbar() {
-    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    DWORD pid = 0;
-    DWORD tid = GetWindowThreadProcessId(tray, &pid);
-    HMODULE module = GetModuleHandleW(L"taskbar.dll");
-    if (!tid || pid != GetCurrentProcessId() || !module || g_attached) return;
+HMODULE g_taskbarDll = nullptr;
+struct ModuleTraits {
+    using type = HMODULE;
+    static type invalid() noexcept { return nullptr; }
+    static void close(type module) noexcept { FreeLibrary(module); }
+};
+bool ResolveTaskbarSymbols(HMODULE module) {
+    if (!module) return false;
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &g_siteVtable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"}, &g_getHost},
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &g_frameHeight},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &g_releaseHost},
     };
-    if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks, std::size(taskbarDllHooks))) return;
+    return WindhawkUtils::HookSymbols(module, taskbarDllHooks, std::size(taskbarDllHooks));
+}
+
+void RecoverExistingTaskbar() {
+    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    DWORD pid = 0;
+    DWORD tid = GetWindowThreadProcessId(tray, &pid);
+    if (!tid || pid != GetCurrentProcessId() || g_attached) return;
     g_attachMessage = RegisterWindowMessageW(L"SysBar.AttachExistingTaskbar");
     if (!g_attachMessage) return;
     HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC,
@@ -2612,7 +2570,7 @@ LRESULT CALLBACK MessageWindowProc(HWND window, UINT message, WPARAM wparam,
 }
 
 void EnsureMessageWindow() {
-    if (g_msgWindow) {
+    if (g_unloading || g_msgWindow) {
         return;
     }
     static bool registered = false;
@@ -2642,7 +2600,9 @@ BOOL Wh_ModInit() {
     g_unloading = false;
     g_taskbarViewHooked = false;
     LoadSettings();
-    DebugLog(L"init");
+    winrt::handle_type<ModuleTraits> library{
+        LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)};
+    if (!ResolveTaskbarSymbols(library.get())) return FALSE;
 
     if (HMODULE module = GetTaskbarViewModule()) {
         if (!HandleLoadedModuleIfTaskbarView(module, nullptr, false)) {
@@ -2665,11 +2625,12 @@ BOOL Wh_ModInit() {
             return FALSE;
         }
     }
+    g_taskbarDll = library.detach();
     return TRUE;
 }
 
 void Wh_ModAfterInit() {
-    DebugLog(L"after init");
+    Wh_Log(L"after init");
     StartWorker();
     if (!g_taskbarViewHooked) {
         if (HMODULE module = GetTaskbarViewModule()) {
@@ -2710,12 +2671,7 @@ void DestroyUi() {
             g_retryTimer.Stop();
             g_retryTimer = nullptr;
         }
-        if (g_rootGrid && g_host) {
-            uint32_t index = 0;
-            if (g_rootGrid.Children().IndexOf(g_host, index)) {
-                g_rootGrid.Children().RemoveAt(index);
-            }
-        }
+        DetachHost();
         g_host = nullptr;
         g_row = nullptr;
         g_cpuGroup = nullptr;
@@ -2750,6 +2706,7 @@ void DestroyUi() {
 void Wh_ModUninit() {
     Wh_Log(L"SysBar: uninit");
     StopWorker();
+    if (g_taskbarDll) FreeLibrary(g_taskbarDll);
 }
 
 
