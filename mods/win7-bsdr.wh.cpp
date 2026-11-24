@@ -151,8 +151,8 @@ and make sure that `LogonUI.exe` is in the list.
 - disableAsyncLogoff: false
   $name: Restore Windows Vista/7's logoff sequence
   $name:ko-KR: Windows Vista/7의 로그오프 절차 복원
-  $description: Switch to the 'logging off' screen after all applications have been closed. If your user account has no password set, you might be immediately logged back on automatically after logging off.
-  $description:ko-KR: 모든 응용 프로그램이 닫힌 이후 '로그오프 중' 화면으로 전환합니다. 사용자 계정에 암호가 설정되지 않은 경우, 로그오프 직후 자동으로 다시 로그온 될 수 있습니다.
+  $description: Switch to the 'logging off' screen after all applications have been closed.
+  $description:ko-KR: 모든 응용 프로그램이 닫힌 이후 '로그오프 중' 화면으로 전환합니다.
 - resDllPath: ""
   $name: (Advanced) AuthUX.dll/winsrv.dll path
   $name:ko-KR: (고급) AuthUX.dll/winsrv.dll 경로
@@ -6914,7 +6914,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
         // SPI_SETHIGHCONTRAST: Windows 7 BSDR never updated the high-contrast status on runtime, so don't update it here either. We already skipped taking screenshot too
         break;
     }
-    case WM_BSDR_SETFOCUS: {
+    case WM_BSDR_SETFOCUS: {        
         HWND fgWnd = GetForegroundWindow();
         DWORD myTid = GetCurrentThreadId();
         DWORD fgTid = fgWnd ? GetWindowThreadProcessId(fgWnd, nullptr) : 0;
@@ -6922,7 +6922,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 
         // Creating window on the default desktop doesn't allow it to get focus
         // So do this workaround
-        if (!isOnSecureDesktop) {
+        if (!isOnSecureDesktop && !IsHungAppWindow(fgWnd)) {
             if (fgTid && fgTid != myTid) {
                 attached = AttachThreadInput(myTid, fgTid, TRUE);
                 if (!attached) {
@@ -7972,10 +7972,9 @@ void ShutdownWindowsWorkerThread(...)
         info = WluiGetShutdownResolverInfo(...);
     ...
 }
-So, create an event on LogonUI ModInit, check it in WluiInformLogonUI, and if the event is found, set g_fShutdownResolverDisabled to 1, ~~and ignore the call~~
- -> Turns out sending the WluiInformLogonUI message regardless is enough for fixing the passwordless autorelog issue (found by @repensky)
-    Without it the next LogonUI thinks nobody signed out and signs a passwordless account straight back in
-This should have the same effect as having g_fShutdownResolverDisabled == 1 at the beginning of ShutdownWindowsWorkerThread
+So, create an event on LogonUI ModInit, check it in WluiInformLogonUI, and if the event is found, set g_fShutdownResolverDisabled to 1
+Turns out sending the WluiInformLogonUI(0, a2, 0) message regardless is needed for fixing the passwordless autorelog issue (found by @repensky)
+Without it the next LogonUI thinks nobody signed out and signs a passwordless account straight back in, so keep calling the original
 */
 typedef __int64 (__fastcall *WluiInformLogonUI_t)(int a1, int a2, int a3);
 WluiInformLogonUI_t WluiInformLogonUI_original;
