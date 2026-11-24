@@ -4868,8 +4868,21 @@ static LRESULT CALLBACK PillWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                 if (hit == 1) StartRecordingRect(GetCaptureTargetRect(cfg.captureMonitorMode), cfg.captureMonitorMode == L"custom");
                 else if (hit == 2) { HidePillBar(); LaunchRegionSelector(); }
                 else if (hit == 3 || hit == 8) SetDrawingMode(!g_drawingEnabled.load());
-                else if (hit == 4) { Wh_SetIntValue(L"Cfg_recordSystemAudio", cfg.recordSystemAudio ? 0 : 1); LoadSettings(); InvalidateRect(hWnd, nullptr, FALSE); if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet)) PostMessageW(hSet, WM_APP_RELOAD_SETTINGS, 0, 0); }
-                else if (hit == 5) { Wh_SetIntValue(L"Cfg_recordMicrophone", cfg.recordMicrophone ? 0 : 1); LoadSettings(); InvalidateRect(hWnd, nullptr, FALSE); if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet)) PostMessageW(hSet, WM_APP_RELOAD_SETTINGS, 0, 0); }
+                else if (hit == 4) {
+                    Wh_SetIntValue(L"Cfg_recordSystemAudio", cfg.recordSystemAudio ? 0 : 1);
+                    LoadSettings();
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                    if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet)) {
+                        PostMessageW(hSet, WM_APP_RELOAD_SETTINGS, 0, 0);
+                    }
+                } else if (hit == 5) {
+                    Wh_SetIntValue(L"Cfg_recordMicrophone", cfg.recordMicrophone ? 0 : 1);
+                    LoadSettings();
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                    if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet)) {
+                        PostMessageW(hSet, WM_APP_RELOAD_SETTINGS, 0, 0);
+                    }
+                }
                 else if (hit == 6) OpenScreenRecorderSettingsApp(hWnd);
                 else if (hit == 7) HidePillBar();
                 else if (hit == 9) { g_isPaused = !g_isPaused.load(); InvalidateRect(hWnd, nullptr, FALSE); }
