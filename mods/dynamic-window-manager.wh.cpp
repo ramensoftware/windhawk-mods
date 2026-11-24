@@ -973,7 +973,11 @@ BOOL Wh_ModInit() {
         g_managesOtherProcesses = false;
         g_isInProcessWorker = true;
         g_processId = GetCurrentProcessId();
-        return WhTool_ModInit();
+        if (!WhTool_ModInit()) {
+            return FALSE;
+        }
+
+        return TRUE;
     }
 
     g_isToolModProcessLauncher = true;
