@@ -2,7 +2,7 @@
 // @id              ctrl-backspace-fix-for-win32-text-boxes
 // @name            Ctrl+Backspace Fix for Win32 Text Boxes
 // @description     Makes Ctrl+Backspace delete the previous word in Win32 text boxes instead of inserting a control character
-// @version         1.1.0
+// @version         1.1
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         *
