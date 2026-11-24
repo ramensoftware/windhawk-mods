@@ -38,8 +38,9 @@ its hotkey, in a small separate process started by Windhawk.
    only the ones you left ticked in the checklist, and they are put back when
    you turn Game Mode off. Apps you list under *Apps to force close* are ended
    too.
-4. **The power plan is switched** (Ultimate Performance by default, if your PC
-   has it).
+4. **The power plan is switched**, only if you pick one in the settings
+   (Ultimate Performance or High performance, if your PC has it). It is off by
+   default.
 5. **Games that are already running** (from your game folders) get High
    priority. Realtime is never used.
 
@@ -70,9 +71,16 @@ Apps you reopened yourself in the meantime are not started twice.
 
 ## Safety
 
-- An app with a window is never force-closed unless you list it for that. A
-  background app with no window is only ended if you left it ticked in the
-  checklist, and with the checklist off it is only asked to close.
+- Every app is asked to close politely first. An app is ended (not just asked)
+  only when it is in *Apps to force close*, or when it has no window, or hid its
+  window to the tray after being asked, and you left it ticked in the checklist.
+  The checklist opens with the full list of names, so you see each one before
+  you confirm. With the checklist off nothing is ended, only asked to close.
+- The power plan is a system-wide setting that Windows keeps across restarts.
+  It is only changed if you pick a plan in the settings. It is restored when
+  you turn Game Mode off, when the mod is disabled or removed, and about 90
+  seconds after the mod starts following a restart or crash. If Windhawk is
+  killed outright while Game Mode is on, the plan stays changed until then.
 - An unreadable or half-written snapshot is discarded with a notification
   instead of blocking the hotkey.
 - If the PC restarted or crashed while Game Mode was on, the leftover snapshot
@@ -105,15 +113,17 @@ Apps you reopened yourself in the meantime are not started twice.
     Shows the apps as a checklist first. Untick an app to leave it alone this
     time. Enter confirms, Esc cancels. With this off nothing is ended, only
     closed politely.
-- gamePowerPlan: ultimate
+- gamePowerPlan: none
   $name: Power plan while playing
   $options:
     - none: Leave the power plan alone
     - ultimate: Ultimate Performance
     - high: High performance
   $description: >-
-    If the plan does not exist on this PC, the power plan is left alone. The
-    plan that was active is restored when Game Mode is turned off.
+    Off by default. Changes the active Windows power plan, a system-wide
+    setting that survives restarts. If the plan does not exist on this PC, the
+    power plan is left alone. The plan that was active is restored when Game
+    Mode is turned off, when the mod is unloaded, or after a restart.
 - closeApps: [""]
   $name: Apps to close
   $description: >-
@@ -179,6 +189,7 @@ Apps you reopened yourself in the meantime are not started twice.
 #include <windows.h>
 #include <dwmapi.h>
 #include <powrprof.h>
+#include <sddl.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
 
@@ -202,7 +213,7 @@ struct Settings {
     bool closeBackground = true;
     bool boostGames = true;
     bool notify = true;
-    std::wstring plan = L"ultimate";
+    std::wstring plan = L"none";
     int timeoutSec = 8;
     std::vector<std::wstring> closeApps;
     std::vector<std::wstring> keepApps;
@@ -485,6 +496,7 @@ struct SavedPriority {
 struct Snapshot {
     unsigned long long startedAt = 0;  // FILETIME, 100 ns ticks
     std::wstring plan;                 // GUID text, empty = not changed
+    std::wstring logon;                // id of the sign-in that wrote it, may be empty
     std::vector<SavedApp> apps;
     std::vector<SavedPriority> prios;
 };
@@ -524,6 +536,9 @@ static std::wstring SerializeSnapshot(const Snapshot& sn) {
     std::wstring o = L"GMT1\n";
     o += L"started\t" + std::to_wstring(sn.startedAt) + L"\n";
     o += L"plan\t" + Esc(sn.plan) + L"\n";
+    if (!sn.logon.empty()) {
+        o += L"logon\t" + Esc(sn.logon) + L"\n";
+    }
     for (const auto& a : sn.apps) {
         o += L"app\t" + Esc(a.name) + L"\t" + Esc(a.path) + L"\t" + Esc(a.args) +
              L"\t" + Esc(a.aumid) + L"\n";
@@ -584,6 +599,8 @@ static bool ParseSnapshot(const std::wstring& text, Snapshot* out) {
             sawStarted = true;
         } else if (f[0] == L"plan" && f.size() == 2) {
             sn.plan = Unesc(f[1]);
+        } else if (f[0] == L"logon" && f.size() == 2) {
+            sn.logon = Unesc(f[1]);
         } else if (f[0] == L"app" && f.size() == 5) {
             sn.apps.push_back(
                 {Unesc(f[1]), Unesc(f[2]), Unesc(f[3]), Unesc(f[4])});
@@ -614,7 +631,7 @@ namespace {
 constexpr UINT WM_APP_RELOAD = WM_APP + 1;
 constexpr UINT WM_APP_STOP = WM_APP + 2;
 constexpr int kHotkeyId = 0x6D47;
-constexpr UINT_PTR kRecoverTimer = 0x6D48;
+UINT_PTR g_recoverTimer;
 constexpr DWORD kRecoverDelayMs = 90 * 1000;
 const wchar_t kGuidBalanced[] = L"381b4222-f694-41f0-9685-ff5bb260df2e";
 const wchar_t kGuidHigh[] = L"8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c";
@@ -692,13 +709,55 @@ bool GuidFromString(const std::wstring& text, GUID* g) {
     return SUCCEEDED(CLSIDFromString(braced.c_str(), g));
 }
 
+// The storage folder is shared by every Windows account on the PC, so each
+// account gets its own snapshot file, named after its SID.
+std::wstring UserSidText() {
+    std::wstring out;
+    HANDLE tok = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok)) {
+        return L"unknown";
+    }
+    DWORD need = 0;
+    GetTokenInformation(tok, TokenUser, nullptr, 0, &need);
+    std::vector<BYTE> buf(need ? need : 1);
+    if (need && GetTokenInformation(tok, TokenUser, buf.data(), need, &need)) {
+        LPWSTR text = nullptr;
+        if (ConvertSidToStringSidW(((TOKEN_USER*)buf.data())->User.Sid, &text)) {
+            out = text;
+            LocalFree(text);
+        }
+    }
+    CloseHandle(tok);
+    return out.empty() ? L"unknown" : out;
+}
+
+// Changes at every sign-in (also after a restart with Fast Startup, which
+// keeps the tick count running), so a snapshot from an earlier sign-in is
+// recognisable as left over.
+std::wstring CurrentLogonId() {
+    std::wstring out;
+    HANDLE tok = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok)) {
+        TOKEN_STATISTICS st;
+        DWORD got = 0;
+        if (GetTokenInformation(tok, TokenStatistics, &st, sizeof(st), &got)) {
+            WCHAR b[40];
+            wsprintfW(b, L"%08lx%08lx", (unsigned long)st.AuthenticationId.HighPart,
+                      (unsigned long)st.AuthenticationId.LowPart);
+            out = b;
+        }
+        CloseHandle(tok);
+    }
+    return out;
+}
+
 std::wstring SnapshotPath() {
     WCHAR dir[MAX_PATH];
     if (Wh_GetModStoragePath(dir, ARRAYSIZE(dir)) == 0) {
         return L"";
     }
     CreateDirectoryW(dir, nullptr);
-    return std::wstring(dir) + L"\\snapshot.txt";
+    return std::wstring(dir) + L"\\snapshot-" + UserSidText() + L".txt";
 }
 
 bool ReadFileText(const std::wstring& path, std::wstring* text) {
@@ -1940,6 +1999,7 @@ ChecklistSpec OnChecklist(const std::vector<ChecklistItem>& items,
     spec.verb = L"Closes";
     spec.okText = L"Turn on";
     spec.items = items;
+    spec.startExpanded = true;  // the user must see every name before it is closed
     spec.info.push_back(changePlan ? L"Switch power plan to " + planLabel
                         : planNotSet
                             ? L"Power plan: not changed"
@@ -2021,6 +2081,7 @@ void TurnOn() {
     // to do. Apps that fail to close are dropped from it afterwards.
     Snapshot sn;
     sn.startedAt = NowFileTime();
+    sn.logon = CurrentLogonId();
     sn.plan = changePlan ? current : L"";
     for (const auto& g : groups) {
         sn.apps.push_back({g.name, g.path, g.args, g.aumid});
@@ -2229,6 +2290,62 @@ bool Relaunch(const SavedApp& a) {
     return true;
 }
 
+void RestorePriorities(const Snapshot& sn) {
+    for (const auto& p : sn.prios) {
+        if (!PidRunning(p.pid, 0)) {
+            continue;
+        }
+        HANDLE h = OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_INFORMATION, FALSE,
+            p.pid);
+        if (!h) {
+            continue;
+        }
+        if (Lower(BaseName(QueryPath(h))) == Lower(p.exe)) {
+            SetPriorityClass(h, p.priorityClass);
+        }
+        CloseHandle(h);
+    }
+}
+
+// False when the saved plan could not be put back.
+bool RestorePlan(const Snapshot& sn) {
+    if (sn.plan.empty() || ActivePlan() == sn.plan) {
+        return true;
+    }
+    std::wstring target = sn.plan;
+    bool exists = false;
+    for (const auto& p : ListPowerPlans()) {
+        exists = exists || p.first == target;
+    }
+    if (!exists) {
+        Wh_Log(L"Saved power plan %s no longer exists; using Balanced",
+               target.c_str());
+        target = kGuidBalanced;
+    }
+    if (!SetPlan(target)) {
+        Wh_Log(L"Could not restore the power plan");
+        return false;
+    }
+    return true;
+}
+
+// The mod is being unloaded (disabled, updated or removed) while Game Mode is
+// on: put the machine-wide power plan and the priorities back now. The closed
+// apps stay in the snapshot, so the next hotkey press can still reopen them.
+void RestoreOnUnload() {
+    Snapshot sn;
+    if (LoadSnapshot(&sn) != LoadResult::Ok) {
+        return;
+    }
+    RestorePriorities(sn);
+    if (RestorePlan(sn)) {
+        sn.plan.clear();
+        sn.prios.clear();
+        WriteSnapshot(sn);
+    }
+}
+
 // `interactive` false = silent recovery after a crash or restart.
 void TurnOff(const Snapshot& sn, bool interactive) {
     std::set<std::wstring> running = RunningPaths();
@@ -2254,39 +2371,8 @@ void TurnOff(const Snapshot& sn, bool interactive) {
         }
     }
 
-    for (const auto& p : sn.prios) {
-        if (!PidRunning(p.pid, 0)) {
-            continue;
-        }
-        HANDLE h = OpenProcess(
-            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_INFORMATION, FALSE,
-            p.pid);
-        if (!h) {
-            continue;
-        }
-        if (Lower(BaseName(QueryPath(h))) == Lower(p.exe)) {
-            SetPriorityClass(h, p.priorityClass);
-        }
-        CloseHandle(h);
-    }
-
-    bool failed = false;
-    if (!sn.plan.empty() && ActivePlan() != sn.plan) {
-        std::wstring target = sn.plan;
-        bool exists = false;
-        for (const auto& p : ListPowerPlans()) {
-            exists = exists || p.first == target;
-        }
-        if (!exists) {
-            Wh_Log(L"Saved power plan %s no longer exists; using Balanced",
-                   target.c_str());
-            target = kGuidBalanced;
-        }
-        if (!SetPlan(target)) {
-            Wh_Log(L"Could not restore the power plan");
-            failed = true;
-        }
-    }
+    RestorePriorities(sn);
+    bool failed = !RestorePlan(sn);
 
     // Apps first started again by Windows or by the user are left alone.
     running = RunningPaths();
@@ -2341,7 +2427,10 @@ void Toggle() {
             TurnOn();
             break;
         case LoadResult::Ok:
-            KillTimer(nullptr, kRecoverTimer);  // the user acted before recovery
+            if (g_recoverTimer) {  // the user acted before recovery
+                KillTimer(nullptr, g_recoverTimer);
+                g_recoverTimer = 0;
+            }
             TurnOff(sn, true);
             break;
         case LoadResult::Corrupt:
@@ -2384,6 +2473,10 @@ bool SnapshotIsLeftOver() {
         case LoadResult::Ok:
             break;
     }
+    if (!sn.logon.empty()) {
+        // Written during another sign-in: the restart or sign-out closed the apps.
+        return sn.logon != CurrentLogonId();
+    }
     unsigned long long boot =
         NowFileTime() - (unsigned long long)GetTickCount64() * 10000ULL;
     return sn.startedAt + 50000000ULL < boot;  // began over 5 s before boot
@@ -2421,7 +2514,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
     LoadSettings();
     RegisterHotkey();
     if (SnapshotIsLeftOver()) {
-        SetTimer(nullptr, kRecoverTimer, kRecoverDelayMs, nullptr);
+        // A thread timer gets a system-chosen id; keep the one it returns.
+        g_recoverTimer = SetTimer(nullptr, 0, kRecoverDelayMs, nullptr);
     }
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -2431,8 +2525,10 @@ DWORD WINAPI WorkerThread(LPVOID) {
             while (PeekMessageW(&drop, nullptr, WM_HOTKEY, WM_HOTKEY,
                                 PM_REMOVE)) {
             }  // presses that piled up while a dialog was open
-        } else if (msg.message == WM_TIMER && msg.wParam == kRecoverTimer) {
-            KillTimer(nullptr, kRecoverTimer);
+        } else if (msg.message == WM_TIMER && g_recoverTimer &&
+                   msg.wParam == g_recoverTimer) {
+            KillTimer(nullptr, g_recoverTimer);
+            g_recoverTimer = 0;
             Recover();
         } else if (msg.message == WM_APP_RELOAD) {
             LoadSettings();
@@ -2444,9 +2540,14 @@ DWORD WINAPI WorkerThread(LPVOID) {
             DispatchMessageW(&msg);
         }
     }
+    if (g_recoverTimer) {
+        KillTimer(nullptr, g_recoverTimer);
+        g_recoverTimer = 0;
+    }
     if (g_hotkeyRegistered) {
         UnregisterHotKey(nullptr, kHotkeyId);
     }
+    RestoreOnUnload();  // power plan and priorities, if Game Mode is still on
     if (g_notifyWnd) {
         NOTIFYICONDATAW nid = {sizeof(nid)};
         nid.hWnd = g_notifyWnd;
