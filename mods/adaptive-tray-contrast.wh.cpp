@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id adaptive-tray-contrast
 // @name Adaptive Tray Contrast
-// @description Adapts tray icons, individual clock and date characters, taskbar buttons and supported app icons to the background behind each.
-// @description:zh-CN 根据各自背后的画面调整托盘图标、任务栏按钮和受支持的应用图标，时间与日期逐字符变色。 Adapts tray icons, individual clock and date characters, taskbar buttons and supported app icons to the background behind each.
-// @version 0.3.15
+// @description Adapts tray icons, clock and date characters, taskbar button themes and supported app icons to the background behind each.
+// @description:zh-CN 根据各自背后的画面调整托盘图标、任务栏按钮主题及受支持的应用图标，时间和日期逐字符变色。 Adapts tray icons, clock and date characters, taskbar button themes and supported app icons to the background behind each.
+// @version 0.3.16
 // @author StillDialing
 // @github https://github.com/StillDialing
 // @include explorer.exe
@@ -17,39 +17,57 @@
 
 // ==WindhawkModReadme==
 /*
-# Adaptive tray contrast
+# Adaptive Tray Contrast
 
-For transparent taskbars on Windows 11. Drag a light window
-behind the clock on a dark desktop: digits over the window can turn black
-while digits over the desktop stay white. The date is evaluated separately,
-one character at a time.
+On a transparent Windows 11 taskbar, a light window can sit behind half the date while the other half is over dark wallpaper. This Windhawk mod chooses black or white for each clock and date character according to the background behind it.
 
-The mod adapts supported monochrome tray glyphs and the input indicator, selects
-light or dark themes for Start, Search, Task View, Widgets and app buttons, and
-switches packaged app icons when matching light and dark assets are available.
-Colored tray artwork and the colored battery layer retain their colors.
-A packaged app's own dynamic icon can be covered by its themed package icon.
+Supported monochrome tray icons and the Chinese/English input indicator adapt independently. Start, Search, Task View, Widgets and app buttons can switch button themes. For packaged apps that provide both light and dark icon variants, the mod uses the variant that suits each button's background. Colored tray icons and the colored part of the battery keep their original colors. A packaged app's themed icon can cover its own dynamic artwork.
 
-The default active sampling interval is 80 ms. Increase it in Settings to
-sample less frequently. A sharp background boundary can cause brief flicker.
-
-**App icons**
-
-![App icon variants switching as the window moves](https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/30bf07f5435b1cdcedbba3fda84d6ee295572809/images/app-icons.gif)
-
-**Tray, clock and date**
-
-![Tray icons and individual date digits adapting across a window edge](https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/30bf07f5435b1cdcedbba3fda84d6ee295572809/images/tray-clock-date.gif)
+In 0.3.16, clicking the Chinese/English input indicator hides the previous tinted glyph while the new one is captured. When the native glyph already has the desired color, the mod displays it directly.
 
 ## 中文说明
 
-适用于 Windows 11 透明任务栏。把亮色窗口拖到深色桌面上的时钟后方，
-同一行数字会按各自背后的明暗显示黑色或白色，日期也逐字符独立判断。
+在 Windows 11 的透明任务栏上，如果浅色窗口的边缘刚好穿过日期，同一行里，压在浅色窗口上的数字可以变黑，留在深色壁纸上的数字可以保持白色。时间和日期分别逐字符判断。
 
-模组还会调整受支持的单色托盘图标、输入法指示器，以及开始、搜索、任务视图、小组件和应用按钮的主题。
-自带深浅两套资源的打包应用可以切换图标，这可能盖住应用自行设置的动态图标。
-彩色托盘图案和电池的彩色部分保留原色。默认每 80 毫秒采样一次，可在设置中调长间隔。
-深浅交界处偶尔会短暂闪烁。
+模组也会分别调整受支持的单色托盘图标和中英文输入法指示器，切换开始、搜索、任务视图、小组件及应用按钮的深浅主题。打包应用如果自带深浅两套图标，模组会按每个按钮背后的画面选用对应图标。彩色托盘图标和电池的彩色部分保留原色；应用自带的动态图案可能被深浅版图标覆盖。
+
+从 0.3.16 起，点击“中／英”时会先撤下旧字的着色层，再用新字着色，减少切换瞬间的重影。如果系统原字已经是需要的颜色，就直接显示原字。
+
+## Demos · 实机演示
+
+### App icons · 应用图标
+
+**Drag a window · 缓慢拖动窗口**  
+Watch each supported app icon as the window edge passes behind its button.  
+窗口边缘扫过不同按钮时，各应用图标分别切换深浅版本。
+
+![App icons as a window edge moves behind the taskbar](https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/app-icons-window-drag.gif)
+
+**Switch between full-screen apps · 切换全屏应用**  
+Compare the app icons as you switch apps and reveal the taskbar.  
+切换全屏应用，观察任务栏显示时应用图标的变化。
+
+![App icons when switching between full-screen apps](https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/app-icons-window-switch.gif)
+
+### System tray, clock and date · 右侧托盘、时间和日期
+
+**Drag a window · 缓慢拖动窗口**  
+Follow the window edge across the tray icons and individual clock and date characters.  
+留意窗口边缘经过右侧托盘和日期时，哪些图标、哪些数字先变色。
+
+![Tray icons and individual characters as a window moves](https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/tray-window-drag.gif)
+
+**Switch between full-screen apps · 切换全屏应用**  
+Compare the right side of the taskbar against the different backgrounds.  
+切换全屏应用后，对比不同背景下右侧托盘、时间和日期的颜色。
+
+![System tray, clock and date when switching between full-screen apps](https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/tray-window-switch.gif)
+
+## Settings · 设置
+
+The default sampling interval is 80 ms (adjustable from 40 to 2000 ms). A longer interval samples less often and responds more slowly. Sharp background boundaries can cause brief flicker.
+
+默认每 80 毫秒采样一次，可在设置中调整为 40 至 2000 毫秒。间隔越长，采样越少，响应也越慢。图标恰好位于深浅交界处时可能短暂闪烁。
 */
 // ==/WindhawkModReadme==
 
@@ -77,6 +95,7 @@ sample less frequently. A sharp background boundary can cause brief flicker.
 #include <cwchar>
 #include <cwctype>
 #include <fstream>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -89,10 +108,12 @@ sample less frequently. A sharp background boundary can cause brief flicker.
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Documents.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 
@@ -148,6 +169,53 @@ struct Contrast {
     bool valid = false;
 };
 
+// Keep the click handler independent of Glyph addresses: the tray vector can move.
+struct ImeClickWatch {
+    winrt::weak_ref<UIElement> owner;
+    winrt::weak_ref<Controls::Image> overlay;
+    IInspectable handler{nullptr};
+    ULONGLONG resumeAt = 0;
+    bool changed = false;
+
+    ~ImeClickWatch() {
+        if (auto target = owner.get()) {
+            try { target.RemoveHandler(UIElement::PointerPressedEvent(), handler); } catch (...) {}
+            try { target.RemoveHandler(UIElement::PointerReleasedEvent(), handler); } catch (...) {}
+        }
+    }
+};
+
+std::shared_ptr<ImeClickWatch> WatchImeClicks(Controls::Image const& image) {
+    auto root = image.XamlRoot();
+    auto target = root ? root.Content() : nullptr;
+    if (!target) return {};
+    auto watch = std::make_shared<ImeClickWatch>();
+    watch->owner = winrt::make_weak(target);
+    Input::PointerEventHandler onClick = [weak = std::weak_ptr<ImeClickWatch>(watch), icon = winrt::make_weak(image)](
+        IInspectable const&, Input::PointerRoutedEventArgs const& args) {
+        try {
+            auto state = weak.lock();
+            auto glyph = icon.get();
+            if (!state || !glyph) return;
+            const auto point = args.GetCurrentPoint(glyph).Position();
+            // Include the padding of the clickable tray button around the image.
+            constexpr float padding = 8;
+            if (point.X < -padding || point.Y < -padding ||
+                point.X > glyph.ActualWidth() + padding ||
+                point.Y > glyph.ActualHeight() + padding) return;
+            state->changed = true;
+            state->resumeAt = GetTickCount64() + 100;
+            if (auto overlay = state->overlay.get()) overlay.Opacity(0.0);
+        } catch (winrt::hresult_error const&) {
+            // The taskbar can replace the element during input dispatch.
+        }
+    };
+    watch->handler = winrt::box_value(onClick);
+    target.AddHandler(UIElement::PointerPressedEvent(), watch->handler, true);
+    target.AddHandler(UIElement::PointerReleasedEvent(), watch->handler, true);
+    return watch;
+}
+
 struct Glyph {
     Contrast cachedContrast;
     winrt::weak_ref<FrameworkElement> element;
@@ -161,6 +229,8 @@ struct Glyph {
     IAsyncOperation<IBuffer> readback{nullptr};
     Imaging::WriteableBitmap imageTint{nullptr};
     std::vector<uint8_t> imageAlpha;
+    std::shared_ptr<ImeClickWatch> imeClicks;
+    int nativeTint = -1;
     ULONGLONG nextImageCapture = 0;
     int paintedTint = -1;
     RECT bounds{};
@@ -851,6 +921,7 @@ void Restore(Glyph& glyph) {
     glyph.render = nullptr;
     glyph.readback = nullptr;
     glyph.imageAlpha.clear();
+    glyph.nativeTint = -1;
     glyph.nextImageCapture = 0;
     glyph.paintedTint = -1;
     if (element && glyph.applied &&
@@ -1427,8 +1498,16 @@ void ReadInputImage(Glyph& glyph, Controls::Image const& image) {
         }
         const auto* pixels = buffer.data();
         std::vector<uint8_t> alpha(static_cast<size_t>(width) * height);
+        bool allBlack = true;
+        bool allWhite = true;
         for (size_t i = 0; i < alpha.size(); ++i) {
             alpha[i] = pixels[4 * i + 3];
+            if (alpha[i] < 16) continue;
+            for (int c = 0; c < 3; ++c) {
+                const auto channel = pixels[4 * i + c];
+                allBlack &= channel <= alpha[i] / 16;
+                allWhite &= channel >= alpha[i] - alpha[i] / 16;
+            }
         }
         const auto [low, high] = std::minmax_element(alpha.begin(), alpha.end());
         if (*high == 0 || *low == 255) {
@@ -1438,6 +1517,9 @@ void ReadInputImage(Glyph& glyph, Controls::Image const& image) {
             }
             return;
         }
+        const int native = allBlack == allWhite ? -1 : (allWhite ? 1 : 0);
+        if (native != glyph.nativeTint) glyph.paintedTint = -1;
+        glyph.nativeTint = native;
         if (!glyph.imageTint || glyph.imageTint.PixelWidth() != width ||
             glyph.imageTint.PixelHeight() != height) {
             glyph.imageTint = Imaging::WriteableBitmap(width, height);
@@ -1498,7 +1580,31 @@ void TintInputModeImage(Glyph& glyph, Controls::Image const& image, Contrast con
     if (next >= 0) {
         glyph.chosen = next;
     }
+    if (!glyph.imeClicks) {
+        try { glyph.imeClicks = WatchImeClicks(image); }
+        catch (winrt::hresult_error const&) { /* Keep the original tint path available. */ }
+    }
+    if (glyph.imeClicks && glyph.imeClicks->changed) {
+        if (GetTickCount64() < glyph.imeClicks->resumeAt) return;
+        // Abandon the old snapshot, including in-flight jobs. A new capture
+        // uses a fresh bitmap so an earlier completion cannot paint the old shape.
+        glyph.capture = nullptr;
+        glyph.render = nullptr;
+        glyph.readback = nullptr;
+        glyph.imageAlpha.clear();
+        glyph.paintedTint = -1;
+        glyph.nextImageCapture = 0;
+        glyph.imeClicks->changed = false;
+    }
     ReadInputImage(glyph, image);
+    // If the native artwork already has the desired color, display it directly.
+    if (glyph.chosen >= 0 && glyph.chosen == glyph.nativeTint) {
+        if (glyph.imageOverlay && glyph.imageOverlay.Opacity() != 0.0) {
+            glyph.imageOverlay.Opacity(0.0);
+        }
+        glyph.paintedTint = -1;
+        return;
+    }
     if (glyph.chosen < 0 || glyph.imageAlpha.empty() ||
         glyph.paintedTint == glyph.chosen) {
         return;
@@ -1530,10 +1636,12 @@ void TintInputModeImage(Glyph& glyph, Controls::Image const& image, Contrast con
         Controls::Grid::SetRow(overlay, Controls::Grid::GetRow(image));
         siblings.InsertAt(index + 1, overlay);
         glyph.imageOverlay = overlay;
+        if (glyph.imeClicks) glyph.imeClicks->overlay = winrt::make_weak(overlay);
     } else {
         glyph.imageOverlay.Width(image.ActualWidth());
         glyph.imageOverlay.Height(image.ActualHeight());
     }
+    glyph.imageOverlay.Opacity(1.0);
     glyph.paintedTint = glyph.chosen;
     if (glyph.lastImeState != glyph.chosen) {
         glyph.lastImeState = glyph.chosen;
