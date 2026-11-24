@@ -2,7 +2,7 @@
 // @id              win7-bsdr
 // @name            Windows Vista/7 Blocked Shutdown UX & Logoff Sequence
 // @description     Bring back Windows Vista/7's shutdown experience
-// @version         1.3
+// @version         1.4
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -24,8 +24,7 @@
     * This part is compatible with AuthUX BSDR as well.
 * This mod is confirmed to work on Windows 10 LTSC 2021 (21H2, 22H2), 11 24H2, and 11 25H2. It may not work on older Windows 10 versions, and it will not work on versions older than Windows 10 build 1607.
 * This mod does not modify any system files. The optional DLL below can be placed anywhere in the file system.
-* Known issues
-    * If your user account has no password, enabling the logoff sequence option may make the system automatically log on again after logging off.
+* Known issue
     * Not compatible with a portable Windhawk installation, even when run as admin, because it doesn't survive a logoff long enough to handle BSDR.
 
 ## ⚠ Important usage note ⚠
@@ -7973,7 +7972,9 @@ void ShutdownWindowsWorkerThread(...)
         info = WluiGetShutdownResolverInfo(...);
     ...
 }
-So, create an event on LogonUI ModInit, check it in WluiInformLogonUI, and if the event is found, set g_fShutdownResolverDisabled to 1, and ignore the call
+So, create an event on LogonUI ModInit, check it in WluiInformLogonUI, and if the event is found, set g_fShutdownResolverDisabled to 1, ~~and ignore the call~~
+ -> Turns out sending the WluiInformLogonUI message regardless is enough for fixing the passwordless autorelog issue (found by @repensky)
+    Without it the next LogonUI thinks nobody signed out and signs a passwordless account straight back in
 This should have the same effect as having g_fShutdownResolverDisabled == 1 at the beginning of ShutdownWindowsWorkerThread
 */
 typedef __int64 (__fastcall *WluiInformLogonUI_t)(int a1, int a2, int a3);
@@ -7999,7 +8000,6 @@ __int64 __fastcall WluiInformLogonUI_hook(int a1, int a2, int a3) {
             g_origResolverDisabledState = *p_g_fShutdownResolverDisabled;
             *p_g_fShutdownResolverDisabled = 1;
             g_resolverDisabledByMod = true;
-            return 0;
         } else {
             Wh_Log(L"LogonUI load check failed!");
         }
