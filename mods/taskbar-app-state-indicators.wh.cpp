@@ -24,8 +24,10 @@ each icon, and they move along that frame whenever something changes.
 
 - **Open window**: the two bottom corners, joined into a cup under the icon.
 - **Maximized window**: all four corners, with a cap over the icon too, or
-  only the top corners if you prefer. Optionally, the corners an open or
-  maximized app doesn't get are drawn dimmed, so the whole frame shows.
+  only the top corners if you prefer. With all corners connected, the sides
+  join too wherever no indicator sits on them, so a maximized window can
+  get the whole frame. Optionally, the corners an open or maximized app
+  doesn't get are drawn dimmed, so the whole frame shows.
 - **Minimized app**: an underline. It's dimmed when the app's windows are
   on another virtual desktop, or suspended like some Store apps.
 - **Several windows**: a grey dot on the left edge, a plus sign, or the
@@ -69,8 +71,8 @@ Progress keeps moving even with them off, like the native progress bar.
 ## Settings
 
 - **Frame**: how far the frame sits from the icon, its corner radius, its
-  line thickness (which grows inwards), and whether the corners join into a
-  cup and a cap.
+  line thickness (which grows inwards), and how the corners join: not at
+  all, into a cup and a cap, or all around where nothing sits in between.
 - **Colors**: the colors and opacity of the corner marks and the underline,
   for the app in front and for every other app. Empty means your accent
   color; `#Light|#Dark` sets a color per theme, and `#FF0000,#00FF00` a
@@ -130,9 +132,13 @@ inactive and the log says so.
   - Thickness: '2'
     $name: Thickness
     $description: Line thickness of the corner marks and the underline, in pixels. It grows inwards from the frame's outer edge.
-  - ConnectCorners: true
+  - CornerJoin: pairs
     $name: Connect the corners
-    $description: Joins the bottom corners into a cup under the icon and the top corners into a cap over it. A pinned app showing the pinned-app indicator keeps its top corners apart.
+    $description: Connecting the top two and bottom two joins the bottom corners into a cup under the icon and the top ones into a cap over it. Connecting all corners also joins each side's two corners along that side, unless an indicator sits on it (the several-windows indicator on the left, the badge on the right, the pinned-app indicator on top), so a maximized window without any of them gets the complete frame.
+    $options:
+    - split: Split corners
+    - pairs: Connect top two and bottom two
+    - all: Connect all corners
   $name: Frame
   $description: The rounded rectangle around each icon that all indicators are drawn on. The frame itself is never drawn.
 - Colors:
@@ -358,7 +364,10 @@ struct Settings {
     // Corner marks (open / maximized windows; always on, as are the
     // underline for minimized apps, counting the app in front as open, and
     // hiding the native running indicator and progress bar).
-    bool IndConnect = true; // bottom corners joined along the bottom edge, top ones along the top
+    // How the corners join: 0 not at all, 1 the bottom two along the bottom
+    // edge and the top two along the top one, 2 also each side's two along
+    // that side, where no indicator sits on it.
+    int IndCornerJoin = 1;
     bool IndMaximizedBottom = true;  // maximized windows keep the bottom corners too
     // The corners an open or maximized app doesn't get, drawn dimmed.
     bool IndDimEnabled = false;
@@ -934,7 +943,10 @@ void LoadSettings() {
     ParseGradientColorPair(dimColStr.get(), g_settings.IndDimLight, g_settings.IndDimDark);
     WindhawkUtils::StringSetting dimOpStr(Wh_GetStringSetting(L"Corners.DimOpacity"));
     ParseDoublePair(dimOpStr.get(), g_settings.IndDimOpacityLight, g_settings.IndDimOpacityDark, 0.2, 0.2);
-    g_settings.IndConnect = Wh_GetIntSetting(L"Frame.ConnectCorners") != 0;
+    {
+        std::wstring join = ReadModeSetting(L"Frame.CornerJoin", L"pairs");
+        g_settings.IndCornerJoin = join == L"split" ? 0 : join == L"all" ? 2 : 1;
+    }
     WindhawkUtils::StringSetting indLegStr(Wh_GetStringSetting(L"Corners.LegLength"));
     g_settings.IndLeg = ParseDouble(indLegStr.get(), 5.0);
     WindhawkUtils::StringSetting indStyleStr(Wh_GetStringSetting(L"Corners.CornerStyle"));
@@ -1952,8 +1964,15 @@ void SetLoopingAnimationsPaused(FrameworkElement const& element, bool paused) {
 // icon or badge in on that same visual's opacity, which brought it back
 // right after it was hidden (a new message, a count change). A clip that
 // leaves nothing of the visual (insets past any size, recognized by them)
-// is out of reach of those animations; it goes when the element is shown.
+// is out of reach of those animations. When the element is shown again,
+// the clip it had before (someone else's, if any) is put back, kept here by
+// visual: elements no entry tracks any more are shown again too (see
+// RestoreNativeElementsFromTaskbarThread). An entry is only read while the
+// visual carries this mod's clip, which this mod put there after writing
+// the entry, so a visual's address being reused can't mix them up.
 constexpr float kHideClipInset = 100000.0f;
+std::mutex g_hideClipsMutex;
+[[clang::no_destroy]] std::unordered_map<void*, wuc::CompositionClip> g_hideClipPrevious;
 
 bool HasHideClip(wuc::Visual const& visual) {
     auto inset = visual.Clip().try_as<wuc::InsetClip>();
@@ -1963,14 +1982,28 @@ bool HasHideClip(wuc::Visual const& visual) {
 void SetHideClip(wuc::Visual const& visual, bool on) {
     if (on) {
         if (HasHideClip(visual)) return;
+        auto previous = visual.Clip();
         auto clip = visual.Compositor().CreateInsetClip();
         clip.LeftInset(kHideClipInset);
         clip.RightInset(kHideClipInset);
         clip.TopInset(kHideClipInset);
         clip.BottomInset(kHideClipInset);
+        {
+            std::lock_guard<std::mutex> lock(g_hideClipsMutex);
+            g_hideClipPrevious[winrt::get_abi(visual)] = previous;
+        }
         visual.Clip(clip);
     } else if (HasHideClip(visual)) {
-        visual.Clip(nullptr);
+        wuc::CompositionClip previous{nullptr};
+        {
+            std::lock_guard<std::mutex> lock(g_hideClipsMutex);
+            auto it = g_hideClipPrevious.find(winrt::get_abi(visual));
+            if (it != g_hideClipPrevious.end()) {
+                previous = it->second;
+                g_hideClipPrevious.erase(it);
+            }
+        }
+        visual.Clip(previous);
     }
 }
 
@@ -3477,7 +3510,7 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
     // starts, and TL ends there, where it ends). The underline's halves
     // meet in the same place, so a restored app's underline just grows
     // into the cup.
-    if (localSettings.IndConnect) {
+    if (localSettings.IndCornerJoin >= 1) {
         auto& tl = targets[kSlotTL];
         auto& tr = targets[kSlotTR];
         auto& br = targets[kSlotBR];
@@ -3490,6 +3523,31 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
         if (!pinnedDot) {
             if (tr.shown) { tr.a = 0.0; tr.startCap = CompositionStrokeCap::Flat; }
             if (tl.shown) { tl.b = m.P; tl.endCap = CompositionStrokeCap::Flat; }
+        }
+
+        // All corners: each side's two corners also meet at the side's
+        // middle, where the side's indicator would be: the left side unless
+        // the several-windows indicator shows (dot, plus or count), the
+        // right side unless the badge does. Only between two shown corners,
+        // so a maximized window without either gets the complete frame and
+        // an open window's cup stays a cup. Along the path the right side
+        // runs from TR's end to BR's start, the left from BL's end to TL's
+        // start. The fill still runs left to right: each track now goes up
+        // its sides too.
+        if (localSettings.IndCornerJoin == 2) {
+            bool leftBlocked = localSettings.MultiEnabled && windowCount >= 2;
+            if (!leftBlocked && bl.shown && tl.shown) {
+                bl.b = m.sLeftMid;
+                bl.endCap = CompositionStrokeCap::Flat;
+                tl.a = m.sLeftMid;
+                tl.startCap = CompositionStrokeCap::Flat;
+            }
+            if (!badgeShown && tr.shown && br.shown) {
+                tr.b = m.sRightMid;
+                tr.endCap = CompositionStrokeCap::Flat;
+                br.a = m.sRightMid;
+                br.startCap = CompositionStrokeCap::Flat;
+            }
         }
     }
 
@@ -5585,6 +5643,12 @@ void WINAPI UnloadCleanupOnTaskbarThread(void* param) {
     }
     g_virtualDesktopManager = nullptr;
     g_virtualDesktopManagerTried = false;
+    // Every badge was shown again above, its previous clip put back; drop
+    // what's left (elements gone meanwhile).
+    {
+        std::lock_guard<std::mutex> lock(g_hideClipsMutex);
+        g_hideClipPrevious.clear();
+    }
 }
 
 void RestoreNativeElements(NativeRestore what) {
