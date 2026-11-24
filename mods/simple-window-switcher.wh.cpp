@@ -3385,6 +3385,64 @@ static bool g_sharedThumbnailApiResolved = false;
 static std::map<HWND, SharedThumbnailTarget> g_sharedThumbnailTargets;
 static std::map<HTHUMBNAIL, SharedThumbnailVisual> g_sharedThumbnailVisuals;
 
+struct DesktopThumbnailSource {
+    HWND shell;
+    HWND window = nullptr;
+    SIZE size = {};
+    HTHUMBNAIL halves[2] = {};
+
+    explicit DesktopThumbnailSource(HWND source) : shell(source) {}
+    ~DesktopThumbnailSource() {
+        for (HTHUMBNAIL half : halves) {
+            if (half) DwmUnregisterThumbnail(half);
+        }
+        if (window) DestroyWindow(window);
+    }
+};
+
+static std::weak_ptr<DesktopThumbnailSource> g_desktopThumbnailSource;
+[[clang::no_destroy]] static std::map<HTHUMBNAIL, std::shared_ptr<DesktopThumbnailSource>>
+    g_desktopThumbnailReferences;
+
+static std::shared_ptr<DesktopThumbnailSource> PrepareDesktopThumbnailSource(HWND shell) {
+    if (auto source = g_desktopThumbnailSource.lock(); source && source->shell == shell) {
+        return source;
+    }
+    auto source = std::make_shared<DesktopThumbnailSource>(shell);
+    const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    source->window = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"STATIC", L"",
+                                     WS_POPUP, left - 1, top - 1, 1, 1,
+                                     nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!source->window) return {};
+    if (FAILED(DwmRegisterThumbnail(source->window, shell, &source->halves[0])) ||
+        FAILED(DwmQueryThumbnailSourceSize(source->halves[0], &source->size))) {
+        return {};
+    }
+    const auto [width, height] = source->size;
+    if (width < 2 || height <= 0 ||
+        !SetWindowPos(source->window, nullptr, left - width - 32, top - height - 32,
+                      width, height, SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW) ||
+        FAILED(DwmRegisterThumbnail(source->window, shell, &source->halves[1]))) {
+        return {};
+    }
+    // DWM can scale one full-width nested thumbnail as though it were the
+    // original desktop. Two adjacent one-to-one thumbnails compose first.
+    const LONG middle = width / 2;
+    const RECT halves[] = {{0, 0, middle, height}, {middle, 0, width, height}};
+    for (size_t i = 0; i < ARRAYSIZE(halves); ++i) {
+        DWM_THUMBNAIL_PROPERTIES properties{};
+        properties.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_RECTSOURCE | DWM_TNP_VISIBLE |
+                             DWM_TNP_OPACITY | DWM_TNP_SOURCECLIENTAREAONLY;
+        properties.rcDestination = halves[i];
+        properties.rcSource = halves[i];
+        properties.fVisible = TRUE;
+        properties.opacity = 255;
+        if (FAILED(DwmUpdateThumbnailProperties(source->halves[i], &properties))) return {};
+    }
+    return source;
+}
+
 static CornerRadii GetThumbnailCornerRadiiPx();
 
 static bool EnsureSharedThumbnailDevice() {
@@ -3470,6 +3528,7 @@ static void ReleaseSharedThumbnailTarget(HWND destination) {
         ++it;
         DwmUnregisterThumbnail(thumbnail);
         DetachSharedThumbnailVisual(thumbnail);
+        g_desktopThumbnailReferences.erase(thumbnail);
     }
     auto it = g_sharedThumbnailTargets.find(destination);
     if (it == g_sharedThumbnailTargets.end()) return;
@@ -3488,6 +3547,7 @@ static void ReleaseSharedThumbnailDevice() {
         HTHUMBNAIL thumbnail = g_sharedThumbnailVisuals.begin()->first;
         DwmUnregisterThumbnail(thumbnail);
         DetachSharedThumbnailVisual(thumbnail);
+        g_desktopThumbnailReferences.erase(thumbnail);
     }
     if (g_sharedThumbnailDevice) {
         g_sharedThumbnailDevice->Release();
@@ -3495,13 +3555,23 @@ static void ReleaseSharedThumbnailDevice() {
     }
     g_createSharedThumbnailVisual = nullptr;
     g_sharedThumbnailApiResolved = false;
+    for (const auto& reference : g_desktopThumbnailReferences) {
+        DwmUnregisterThumbnail(reference.first);
+    }
+    g_desktopThumbnailReferences.clear();
+    g_desktopThumbnailSource.reset();
 }
 
-static HRESULT RegisterSwitcherThumbnail(HWND destination, HWND source, HTHUMBNAIL* thumbnail) {
+static bool WantsSharedThumbnailVisual() {
+    return (g_isWin11OrGreater || wcscmp(g_settings.theme, L"backdrop") == 0) &&
+           GetThumbnailCornerRadiiPx().Max() > 0;
+}
+
+static HRESULT RegisterThumbnailSource(HWND destination, HWND source, HTHUMBNAIL* thumbnail,
+                                       bool allowClassicFallback = true) {
     *thumbnail = nullptr;
     // On Windows 10, opaque None uses the existing corner mask.
-    if ((g_isWin11OrGreater || wcscmp(g_settings.theme, L"backdrop") == 0) &&
-        GetThumbnailCornerRadiiPx().Max() > 0) {
+    if (WantsSharedThumbnailVisual()) {
         if (SharedThumbnailTarget* target = EnsureSharedThumbnailTarget(destination)) {
             // Creation fails with E_INVALIDARG unless the thumbnail starts
             // visible with a destination; the caller positions it right after.
@@ -3545,8 +3615,31 @@ static HRESULT RegisterSwitcherThumbnail(HWND destination, HWND source, HTHUMBNA
             Wh_Log(L"SWS: rounded thumbnail failed source=%p hr=0x%08X, using a classic thumbnail",
                    source, (unsigned)hr);
         }
+        if (!allowClassicFallback) return E_FAIL;
     }
     return DwmRegisterThumbnail(destination, source, thumbnail);
+}
+
+static HRESULT RegisterSwitcherThumbnail(HWND destination, HWND source, HTHUMBNAIL* thumbnail) {
+    // The off-screen scaling path improves the Windows 11 Desktop preview.
+    if (g_isWin11OrGreater && source && source == GetShellWindow()) {
+        if (auto preview = PrepareDesktopThumbnailSource(source)) {
+            HTHUMBNAIL handle = nullptr;
+            if (SUCCEEDED(RegisterThumbnailSource(destination, preview->window, &handle, false)) && handle) {
+                SIZE size{};
+                if (SUCCEEDED(DwmQueryThumbnailSourceSize(handle, &size)) &&
+                    size.cx == preview->size.cx && size.cy == preview->size.cy) {
+                    g_desktopThumbnailReferences[handle] = preview;
+                    g_desktopThumbnailSource = preview;
+                    *thumbnail = handle;
+                    return S_OK;
+                }
+                DwmUnregisterThumbnail(handle);
+                DetachSharedThumbnailVisual(handle);
+            }
+        }
+    }
+    return RegisterThumbnailSource(destination, source, thumbnail);
 }
 
 // Keeps a shared visual's rounded clip on its unclipped thumbnail rectangle, so
@@ -3589,6 +3682,7 @@ static void ReleaseDwmThumbnailRegistration(DwmThumbnailRegistration* record) {
             }
         }
         g_thumbSourceRects.erase(handle);
+        g_desktopThumbnailReferences.erase(handle);
     } else {
         Wh_Log(L"SWS: DwmUnregisterThumbnail failed handle=%p hr=0x%08X",
                handle, (unsigned)result);
@@ -3643,6 +3737,7 @@ static inline HRESULT SafeDwmUnregisterThumbnail(HTHUMBNAIL h) {
         }
         DetachSharedThumbnailVisual(h);
         g_thumbSourceRects.erase(h);
+        g_desktopThumbnailReferences.erase(h);
     } else {
         Wh_Log(L"SWS: DwmUnregisterThumbnail failed handle=%p hr=0x%08X",
                h, (unsigned)result);
@@ -21233,6 +21328,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
     if (g_taskbarCreatedMessage && uMsg == g_taskbarCreatedMessage && hWnd == g_hSwitcher) {
         CancelForwardedShellAssist();
+        g_desktopThumbnailSource.reset();
+        if ((g_isVisible || g_isPendingShow) && !g_desktopThumbnailReferences.empty()) {
+            PostMessageW(hWnd, WM_SWS_CANCEL_INPUT, 0, 0);
+        }
         SWS_RegisterHotkeys();
         return 0;
     }
@@ -22350,6 +22449,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         return 0;
     case WM_DISPLAYCHANGE:
+        if (hWnd == g_hSwitcher) g_desktopThumbnailSource.reset();
         UpdateRefreshRateTiming(true);
         if (hWnd == g_hSwitcher && (g_isVisible || g_isPendingShow)) {
             PostMessageW(hWnd, WM_SWS_CANCEL_INPUT, 0, 0);
