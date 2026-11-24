@@ -500,6 +500,7 @@ DWORD g_prevStart, g_prevEnd;
 // one, kLoneTimer settles it (FlushArmed).
 bool g_armed;
 DWORD g_armedEnd;
+POINT g_armedPt;  // the pointer when it was armed; the late left click only goes there
 
 // A primary click held back until it's clear whether it was a corner tap.
 bool g_pending, g_pendingUp;
@@ -881,6 +882,8 @@ static void ResetTouch() {
 
 static void ResolvePending();
 static bool IsCornerTap();
+static bool MaybeCornerTap(DWORD now);
+static void FlushArmed();
 
 static void ProcessFrame(Dev& d) {
     DWORD now = GetTickCount();
@@ -926,6 +929,10 @@ static void ProcessFrame(Dev& d) {
         }
         if ((int)g_fingers.size() > g_maxFingers)
             g_maxFingers = (int)g_fingers.size();
+        // A touch that can no longer be the second corner tap settles the first
+        // one now, before it moves the pointer, scrolls or starts a drag.
+        if (g_armed && !MaybeCornerTap(now))
+            FlushArmed();
     } else if (g_haveSession && !g_sessionEnded) {
         g_sessionEnded = true;
         g_endTick = now;
@@ -1079,10 +1086,18 @@ static void FlushArmed() {
     if (!g_armed)
         return;
     g_armed = false;
-    if (g_s.loneLeft) {
-        Wh_Log(L"Lone corner tap -> left click");
-        SendClick(PrimaryDown());
+    if (!g_s.loneLeft)
+        return;
+    // If the pointer has moved since (a touch that moved a little, or another
+    // mouse), the click would land on something else, so it's dropped.
+    POINT pt;
+    if (!GetCursorPos(&pt) || std::abs(pt.x - g_armedPt.x) > kOtherMouseMovePx ||
+        std::abs(pt.y - g_armedPt.y) > kOtherMouseMovePx) {
+        Wh_Log(L"Lone corner tap, but the pointer moved, dropping");
+        return;
     }
+    Wh_Log(L"Lone corner tap -> left click");
+    SendClick(PrimaryDown());
 }
 
 // The double-click time after the first tap's lift is up. A touch that started
@@ -1121,6 +1136,7 @@ static void ResolvePending() {
             FlushArmed();
             g_armed = true;
             g_armedEnd = tapEnd;
+            GetCursorPos(&g_armedPt);
             if (g_s.loneLeft) {
                 DWORD waited = GetTickCount() - tapEnd;
                 SetTimer(g_hwnd, kLoneTimer, waited < dct ? dct - waited : 1, nullptr);
@@ -1311,6 +1327,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 
 static void OnSettingsReloaded() {
     LoadSettings();
+    // A first tap from before the change is forgotten, not settled the new way.
+    g_armed = false;
+    KillTimer(g_hwnd, kLoneTimer);
     if (!g_s.ring) {
         HideRing();
     } else if (g_ringShown) {
@@ -1403,6 +1422,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     KillTimer(g_hwnd, kHookTimer);
     KillTimer(g_hwnd, kReleaseTimer);
     KillTimer(g_hwnd, kGraceTimer);
+    KillTimer(g_hwnd, kLoneTimer);
     if (g_hook)
         UnhookWindowsHookEx(g_hook);
     g_hook = nullptr;
