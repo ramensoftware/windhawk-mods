@@ -699,9 +699,9 @@ void TabSwitcher::Show(HWND browser) {
     LONG x = (browserRect.left + browserRect.right - width) / 2;
     LONG y = (browserRect.top + browserRect.bottom - height) / 2;
     x = std::clamp(x, workArea.left,
-                   std::max(workArea.left, workArea.right - width));
+                   (std::max)(workArea.left, workArea.right - width));
     y = std::clamp(y, workArea.top,
-                   std::max(workArea.top, workArea.bottom - height));
+                   (std::max)(workArea.top, workArea.bottom - height));
 
     m_shownTime = GetTickCount64();
     SetWindowPos(m_window, HWND_TOPMOST, x, y, width, height,
@@ -937,7 +937,7 @@ void TabSwitcher::MoveSelection(int delta, bool wrap) {
 }
 
 void TabSwitcher::ScrollBy(int rows) {
-    int maxScroll = std::max(
+    int maxScroll = (std::max)(
         0, static_cast<int>(m_visible.size()) - GetVisibleRowCount());
     int scroll =
         std::clamp(static_cast<int>(m_scroll) + rows, 0, maxScroll);
@@ -959,7 +959,7 @@ int TabSwitcher::GetVisibleRowCount() const {
     GetClientRect(m_window, &client);
     int listHeight = client.bottom - Scale(kFooterHeight) - Scale(kListTop);
     int rowGap = Scale(kRowStride) - Scale(kRowHeight);
-    return std::max(1, (listHeight + rowGap) / Scale(kRowStride));
+    return (std::max)(1, (listHeight + rowGap) / Scale(kRowStride));
 }
 
 // Returns the index into m_visible of the row at the given client coordinate,
@@ -1065,9 +1065,9 @@ void TabSwitcher::Paint(HDC hdc) {
         GetTextExtentPoint32W(dc, m_filter.c_str(),
                               static_cast<int>(m_filter.size()), &textSize);
         LONG caretX =
-            std::min(searchText.left + textSize.cx + Scale(2), searchText.right);
+            (std::min)(searchText.left + textSize.cx + Scale(2), searchText.right);
         RECT caret{caretX, search.top + Scale(10),
-                   caretX + std::max(1, Scale(1)), search.bottom - Scale(10)};
+                   caretX + (std::max)(1, Scale(1)), search.bottom - Scale(10)};
         FillSolidRect(dc, caret, kAccentColor);
     }
 
@@ -1126,7 +1126,7 @@ void TabSwitcher::Paint(HDC hdc) {
         int trackTop = Scale(kListTop);
         int trackHeight = rows * Scale(kRowStride) - (Scale(kRowStride) -
                                                        Scale(kRowHeight));
-        int thumbHeight = std::max(
+        int thumbHeight = (std::max)(
             Scale(20), MulDiv(trackHeight, rows, static_cast<int>(visibleCount)));
         int maxScroll = static_cast<int>(visibleCount) - rows;
         int thumbTop = trackTop + MulDiv(trackHeight - thumbHeight,
