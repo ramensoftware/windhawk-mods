@@ -4,6 +4,7 @@
 // @description     Makes virtual desktop switches and touchpad swipes start faster: caches wallpaper images, skips hidden windows, and requests a short performance boost.
 // @version         1.5.0
 // @author          meteoni
+// @github          https://github.com/Meteoni
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -luser32 -lshell32 -lgdi32 -ladvapi32 -luuid -lruntimeobject
@@ -1303,8 +1304,27 @@ bool GetFunctionRange(void* function, uintptr_t& start, uintptr_t& end) {
     if (!runtimeFunction || !imageBase) return false;
     const uintptr_t functionStart =
         static_cast<uintptr_t>(imageBase + runtimeFunction->BeginAddress);
+#if defined(__aarch64__) || defined(_M_ARM64)
+    // ARM64 entries store a length, not an end address, in 4-byte units:
+    // inline for packed unwind data (Flag 1 or 2), otherwise in the first 18
+    // bits of the .xdata record that UnwindData points to (Flag 0). Flag 3 is
+    // reserved, so the range is unknown and the feature stays off.
+    const DWORD unwindData = runtimeFunction->UnwindData;
+    const DWORD flag = unwindData & 3;
+    DWORD length = 0;
+    if (flag == 1 || flag == 2) {
+        length = ((unwindData >> 2) & 0x7FF) * 4;
+    } else if (flag == 0) {
+        const DWORD header =
+            *reinterpret_cast<const DWORD*>(imageBase + unwindData);
+        length = (header & 0x3FFFF) * 4;
+    }
+    if (!length) return false;
+    const uintptr_t functionEnd = functionStart + length;
+#else
     const uintptr_t functionEnd =
         static_cast<uintptr_t>(imageBase + runtimeFunction->EndAddress);
+#endif
     const uintptr_t symbolAddress = reinterpret_cast<uintptr_t>(function);
     if (symbolAddress < functionStart || symbolAddress >= functionEnd ||
         functionEnd - functionStart > 0x4000) {
@@ -1327,7 +1347,8 @@ bool ResolveTargetFunctionRange() {
 
     void* targetFunction = nullptr;
     void* backgroundFunction = nullptr;
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllSymbolHooks[] = {
         {
             {
                 L"protected: long __cdecl VirtualDesktopGestureWindow::MakeBackgroundThumbnailFromThumbnailCache(struct IDCompThumbnail *,struct IVirtualDesktop *,struct HSTRING__ *,struct tagRECT,struct IDCompThumbnail * *)",
@@ -1348,7 +1369,8 @@ bool ResolveTargetFunctionRange() {
 
     // Both are optional so either feature works without the other.
     if (!WindhawkUtils::HookSymbols(
-            g_twinuiPcShell, symbolHooks, ARRAYSIZE(symbolHooks))) {
+            g_twinuiPcShell, twinuiPcshellDllSymbolHooks,
+            ARRAYSIZE(twinuiPcshellDllSymbolHooks))) {
         Wh_Log(L"Failed to resolve virtual desktop symbols");
         return false;
     }
@@ -1480,7 +1502,8 @@ BOOL Wh_ModInit() {
     }
     const bool filterHookInstalled = HookHiddenWindowFilter();
 
-    WindhawkUtils::SYMBOL_HOOK boostHooks[] = {
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
         {{L"private: long __cdecl CVirtualDesktopHotkeyHandler::InvokeSwitchDesktopWithAnimation(enum VirtualDesktopSwitchDirection)"},
          &g_switchByHotkeyOriginal, SwitchByHotkeyHook, true},
         {{L"public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktopWithAnimation(struct IVirtualDesktop *)"},
@@ -1490,7 +1513,8 @@ BOOL Wh_ModInit() {
         {{L"public: virtual void __cdecl VirtualDesktopGestureHandler::Cleanup(unsigned int)"},
          &g_gestureCleanupOriginal, GestureCleanupHook, true},
     };
-    WindhawkUtils::HookSymbols(g_twinuiPcShell, boostHooks, ARRAYSIZE(boostHooks));
+    WindhawkUtils::HookSymbols(g_twinuiPcShell, twinuiPcshellDllHooks,
+                               ARRAYSIZE(twinuiPcshellDllHooks));
     Wh_Log(L"Transition hooks: keyboard=%d animated=%d gesture=%d gesture-end=%d",
            g_switchByHotkeyOriginal != nullptr, g_switchWithAnimationOriginal != nullptr,
            g_initializeGestureOriginal != nullptr, g_gestureCleanupOriginal != nullptr);
