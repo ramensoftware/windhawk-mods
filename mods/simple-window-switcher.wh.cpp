@@ -3327,11 +3327,6 @@ static bool DetectSystemDwmCornerRadius() {
     int small = 0;
     const bool active = DetectSystemDwmCornerRadiusValues(corners, small);
     const bool shapeChanged = corners != g_systemDwmCorners || small != g_systemDwmSmallRadius;
-    if (active != g_customCornerRadiusModActive || shapeChanged) {
-        Wh_Log(L"SWS: corner radius mod active=%d radius=%d small=%d corners=%d,%d,%d,%d",
-               active, corners.Max(), small, corners.topLeft, corners.topRight,
-               corners.bottomRight, corners.bottomLeft);
-    }
     g_customCornerRadiusModActive = active;
     g_systemDwmCorners = corners;
     g_systemDwmSmallRadius = small;
@@ -16002,11 +15997,6 @@ static void RevealPendingSwitcher(bool forceImmediate = false) {
     // and frame-zero paint are staged. None changes WS_EX_LAYERED while visible,
     // which otherwise exposes one unpainted frame before PresentSwitcherWindows().
     if (IsWindowVisible(g_hSwitcher)) {
-        if (s_sessionShell.window && !g_touchpadInvocation) {
-            Wh_Log(L"SWS: shell keyboard staging hide source=%p foreground=%p altDown=%d",
-                   s_sessionShell.window, GetForegroundWindow(),
-                   (GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
-        }
         const DWORD inputTick = s_sessionShell.window && GetForegroundWindow() == g_hSwitcher
                                     ? LastShellInvocationInputTick() : 0;
         ShowWindow(g_hSwitcher, SW_HIDE);
@@ -16552,7 +16542,7 @@ static void RememberCrossLineGoal(int offset, double slot) {
 
 static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
                          ULONGLONG invocationStartTick = 0,
-                         PCWSTR shortcut = nullptr, DWORD shellAssistToken = 0,
+                         DWORD shellAssistToken = 0,
                          DWORD explorerPid = 0, bool useDesktopMru = false,
                          bool forwardedAltTab = false,
                          ActivationWindow invocationStage = {}) {
@@ -16580,9 +16570,6 @@ static void ShowSwitcher(bool sticky, HWND invocationSource = nullptr,
     if (shellSource) {
         s_sessionShell = ActivationWindow::Capture(invocationRoot);
         s_forwardedAltTabShellSession = forwardedAltTab;
-        Wh_Log(L"SWS: shell invocation source=%p via=%s visible=%d",
-               invocationRoot, shortcut ? shortcut : (touchpadInvocation ? L"touchpad" : L"other"),
-               IsWindowVisible(invocationRoot));
         for (HWND candidate : g_mruWindows) {
             HWND root = GetAncestor(candidate, GA_ROOT);
             if (!root || !IsWindowVisible(root) || IsIconic(root) ||
@@ -17295,9 +17282,9 @@ static void TryShellInvocationHandoff(ShellInvocationPhase phase) {
         !SessionShellHoldsForeground()) return;
     if (firstAttempt) {
         s_shellInvocationInputTick = LastShellInvocationInputTick();
-        if (SessionShellHoldsForeground()) {
-            BOOL posted = PostMessageW(shell, WM_CANCELMODE, 0, 0);
-            Wh_Log(L"SWS: shell invocation cancel mode source=%p posted=%d", shell, posted);
+        if (SessionShellHoldsForeground() && !PostMessageW(shell, WM_CANCELMODE, 0, 0)) {
+            Wh_Log(L"SWS: shell invocation cancel mode post failed source=%p error=%u",
+                   shell, GetLastError());
         }
         if (phase == ShellInvocationPhase::Reveal && s_forwardedAltTabShellSession) {
             PostEscapeToSessionShellFocus();
@@ -19843,10 +19830,6 @@ static void RunSwsFocusRecovery(ULONG_PTR generation) {
     if (request.unspecifiedFocus &&
         (IsNativeSwitcherWindow(foreground) ||
          GetTickCount64() - s_lastTouchpadScrollTick.load(std::memory_order_acquire) < 1200)) return;
-    if (s_sessionShell.window && !g_touchpadInvocation) {
-        Wh_Log(L"SWS: shell keyboard cancel reason=focus-loss source=%p foreground=%p altDown=%d",
-               s_sessionShell.window, foreground, (GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
-    }
     StartExitAnimation(false);
 }
 
@@ -22042,15 +22025,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             } else {
                 stage = {};
             }
-            const bool altBacktick = id == SWS_HOTKEY_ALTBACKTICK ||
-                                     id == SWS_HOTKEY_ALTBACKTICK_UK;
             if (hFg && !IsSwitcherWindow(hFg)) {
                 UpdateMruWindow(hFg);
             }
             if (isAltBacktickTrigger) g_isAltBacktickSameApp = true;
-            PCWSTR shortcut = altBacktick ? L"backtick" :
-                              (forwardedHotkey ? L"explorer-tab" : L"direct-tab");
-            ShowSwitcher(isCtrl, hFg, 0, shortcut, forwardedAssistToken,
+            ShowSwitcher(isCtrl, hFg, 0, forwardedAssistToken,
                          forwardedHotkey ? static_cast<DWORD>(lParam) : 0,
                          !isBackward && !isAltBacktickTrigger,
                          forwardedHotkey && id == SWS_HOTKEY_ALTTAB,
@@ -22616,10 +22595,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (LOWORD(wParam) == WA_INACTIVE && (g_isVisible || g_isPendingShow)) {
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewActive = (HWND)lParam;
-            if (s_sessionShell.window && !g_touchpadInvocation) {
-                Wh_Log(L"SWS: shell keyboard deactivated source=%p next=%p",
-                       s_sessionShell.window, hNewActive);
-            }
             HWND hCheck = hNewActive ? hNewActive : GetForegroundWindow();
             if (StickyTwoFingerTapOwnershipLive()) {
                 RetainStickyTwoFingerTapForeground();
@@ -22670,10 +22645,6 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (g_isVisible || g_isPendingShow) {
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewFocus = (HWND)wParam;
-            if (s_sessionShell.window && !g_touchpadInvocation) {
-                Wh_Log(L"SWS: shell keyboard lost focus source=%p next=%p",
-                       s_sessionShell.window, hNewFocus);
-            }
             HWND hCheck = hNewFocus ? hNewFocus : GetForegroundWindow();
             if (StickyTwoFingerTapOwnershipLive()) {
                 RetainStickyTwoFingerTapForeground();
@@ -25968,8 +25939,6 @@ BOOL Wh_ModInit() {
                 Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
                 ExitProcess(1);
             }
-            Wh_Log(L"Previous tool mod host exited after %llu ms",
-                   GetTickCount64() - waitStart);
         }
 
         g_toolModExitingEvent =
