@@ -13,6 +13,8 @@
 /*
 # Spotlight for Windows
 
+![Spotlight Search for Windows](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/Screenshot%202026-11-24%20122542.png)
+
 A minimal, centered search bar with a frosted-glass look.
 
 * **Hotkey** (default Ctrl+Space) opens / closes it.
