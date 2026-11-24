@@ -3,7 +3,7 @@
 // @name            TrafficMonitor for Taskbar
 // @description     Network speed, CPU, memory, GPU and daily traffic shown inside the Windows 11 taskbar, next to the tray (TrafficMonitor-style), with a Fluent settings panel and traffic history.
 // @description:es-ES  Velocidad de red, CPU, memoria, GPU y tráfico diario dentro de la barra de tareas de Windows 11, junto a la bandeja (estilo TrafficMonitor), con un panel de ajustes Fluent.
-// @version         1.0.0
+// @version         1.0.4
 // @author          xSHIMURAx
 // @github          https://github.com/xSHIMURAx
 // @license         MIT
@@ -20,7 +20,7 @@ Shows live system usage **inside** the Windows 11 taskbar (it is a XAML element 
 taskbar itself, not a separate window), so it moves by itself when tray icons appear or
 disappear.
 
-![TrafficMonitor for Taskbar](https://raw.githubusercontent.com/xSHIMURAx/TrafficMonitor-for-Taskbar/main/Screenshot/TrafficMonitor.png)
+![TrafficMonitor for Taskbar](https://raw.githubusercontent.com/xSHIMURAx/TrafficMonitor-for-Taskbar/main/Screenshot/Traffic%20Monitor.png)
 
 ## Settings panel
 
@@ -29,12 +29,12 @@ disappear.
 
 The panel has the same sections as the original Python *TrafficMonitor* app:
 
-* **Monitor** – shown items, MEM values, which monitor(s) it is shown on, anchor, network connection.
+* **Monitor** – shown items (drag the handle on the left of a row to change their order), MEM values, which monitor(s) it is shown on, anchor, network connection.
 * **Appearance** – skin and size, spacing and height, font / bold / text effect / MEM
   separator, units and decimals.
 * **Colors** – color of every part (label, number, unit), color alerts and color profiles
   (with automatic switching when Windows changes between dark and light theme).
-* **General** – update interval, panel language, export / import settings.
+* **General** – update interval, panel language, acrylic background of the panel, export / import settings.
 
 Changes are a live preview; press **Save** to keep them. The panel keeps its settings in the
 mod's own storage, so Windhawk's own settings page only has the switch to open the panel.
@@ -102,6 +102,7 @@ The measurements, formats, settings and look follow the original Python *Traffic
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.h>
+#include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Text.h>
@@ -137,6 +138,9 @@ The measurements, formats, settings and look follow the original Python *Traffic
 #endif
 #ifndef PDH_CSTATUS_NEW_DATA
 #define PDH_CSTATUS_NEW_DATA ((DWORD)0x00000001L)
+#endif
+#ifndef DWMWA_SYSTEMBACKDROP_TYPE
+#define DWMWA_SYSTEMBACKDROP_TYPE 38
 #endif
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -189,6 +193,9 @@ static const wchar_t* const kShowKey[I_COUNT] = {L"showDown", L"showUp",  L"show
 static const wchar_t* const kRoleKey[3] = {L"label", L"num", L"unit"};
 // Order the original app lists the parts in (its Colors tab and alerts).
 static const int kPanelOrder[I_COUNT] = {I_DOWN, I_UP, I_CPU, I_GPU, I_MEM, I_TOTAL};
+// Order of the items in the taskbar when the user has not dragged them (it differs per skin).
+static const int kDefaultOrderClassic[I_COUNT] = {I_DOWN, I_UP, I_CPU, I_MEM, I_GPU, I_TOTAL};
+static const int kDefaultOrderModern[I_COUNT] = {I_UP, I_DOWN, I_CPU, I_GPU, I_MEM, I_TOTAL};
 static const double kAlertLimitDefault[I_COUNT] = {10, 5, 80, 85, 90, 5};
 
 struct Alert {
@@ -202,6 +209,7 @@ struct Settings {
     std::wstring monitor = L"primary";  // primary | secondary | both
     std::wstring skin = L"classic";
     bool show[I_COUNT] = {true, true, false, true, false, false};
+    int order[I_COUNT] = {I_DOWN, I_UP, I_CPU, I_MEM, I_GPU, I_TOTAL};  // left to right
     bool memField[3] = {false, true, true};  // percent, used, available
     std::wstring memSep = L"\u2022";
     std::wstring todayLabel = L"TODAY";
@@ -275,6 +283,9 @@ static const SMap& Defaults() {
         m[L"monitor"] = L"primary";  // primary | secondary | both
         m[L"position"] = L"tray_left";  // tray_left | tray_before_clock | tray_after_clock | taskbar_left_edge
         m[L"skin"] = L"classic";
+        m[L"order"] = L"";  // item keys separated by commas; empty = the skin's own order
+        m[L"panelAcrylic"] = L"1";  // acrylic background of the settings panel (the panel only)
+        m[L"panelAlpha"] = L"50";   // tint opacity of that background, 20-100 %
         for (int i = 0; i < I_COUNT; i++) m[kShowKey[i]] = (i == I_DOWN || i == I_UP || i == I_MEM) ? L"1" : L"0";
         m[L"memPercent"] = L"0";
         m[L"memUsed"] = L"1";
@@ -312,6 +323,30 @@ static const SMap& Defaults() {
     return d;
 }
 
+// The order the items are shown in: the saved "order" list (item keys separated by commas), and
+// any item missing from it after those, in the skin's own order. Empty or invalid = the skin's order.
+static std::vector<int> EffectiveOrder(const SMap& m) {
+    const bool modern = MGet(m, L"skin") == L"modern";
+    std::vector<int> out;
+    bool used[I_COUNT] = {};
+    const std::wstring list = MGet(m, L"order");
+    for (size_t pos = 0; pos <= list.size();) {
+        size_t end = list.find(L',', pos);
+        if (end == std::wstring::npos) end = list.size();
+        const std::wstring key = list.substr(pos, end - pos);
+        pos = end + 1;
+        for (int i = 0; i < I_COUNT; i++) {
+            if (!used[i] && key == kItemKey[i]) {
+                used[i] = true;
+                out.push_back(i);
+            }
+        }
+    }
+    for (int item : modern ? kDefaultOrderModern : kDefaultOrderClassic)
+        if (!used[item]) out.push_back(item);
+    return out;
+}
+
 static Settings BuildSettings(const SMap& m) {
     Settings c;
     c.monitor = MGet(m, L"monitor");
@@ -321,6 +356,10 @@ static Settings BuildSettings(const SMap& m) {
         c.position != L"taskbar_left_edge")
         c.position = L"tray_left";
     c.skin = MGet(m, L"skin") == L"modern" ? L"modern" : L"classic";
+    {
+        const std::vector<int> o = EffectiveOrder(m);
+        for (int i = 0; i < I_COUNT; i++) c.order[i] = o[i];
+    }
     for (int i = 0; i < I_COUNT; i++) c.show[i] = MBool(m, kShowKey[i]);
     c.memField[0] = MBool(m, L"memPercent");
     c.memField[1] = MBool(m, L"memUsed");
@@ -2133,11 +2172,9 @@ static void BuildUi(Tb& t, const Settings& c) {
 
     static const wchar_t* classicLabel[I_COUNT] = {L"\u2193:", L"\u2191:", L"CPU:",
                                                    L"MEM:",    L"GPU:",    nullptr};
-    static const int orderClassic[] = {I_DOWN, I_UP, I_CPU, I_MEM, I_GPU, I_TOTAL};
-    static const int orderModern[] = {I_UP, I_DOWN, I_CPU, I_GPU, I_MEM, I_TOTAL};
 
     bool first = true;
-    for (int item : modern ? orderModern : orderClassic) {
+    for (int item : c.order) {
         if (!c.show[item]) continue;
         ItemUi ui;
         ui.item = item;
@@ -2935,9 +2972,18 @@ static Color Shade(Color c, double delta) {
 static void RefreshAccent() {
     Color c{255, 0, 120, 212};
     try {
-        c = winrt::Windows::UI::ViewManagement::UISettings().GetColorValue(
-            winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+        winrt::Windows::UI::ViewManagement::UISettings ui;
+        c = ui.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+        // Like Windows 11 itself: controls use Light 2 of the accent in the dark theme and Dark 1 in the
+        // light one. With a dark system accent (e.g. dark gray) the plain accent made the switches
+        // and the Save button almost invisible.
+        c = ui.GetColorValue(s_light ? winrt::Windows::UI::ViewManagement::UIColorType::AccentDark1
+                                     : winrt::Windows::UI::ViewManagement::UIColorType::AccentLight2);
     } catch (...) {
+    }
+    {
+        const double l0 = 0.299 * c.R + 0.587 * c.G + 0.114 * c.B;
+        if (!s_light && l0 < 110.0) c = Shade(c, 0.45);  // still too dark on a dark panel: lighten it
     }
     s_accent = BrC(c);
     s_accentHover = BrC(Shade(c, -0.12));
@@ -3056,6 +3102,7 @@ static std::wstring L2(const wchar_t* es, const wchar_t* en) { return TR(es, en)
 
 static void RebuildPage();
 static void RebuildAll();
+static void RefreshPanelBackdrop();
 
 // ---- Controls ----
 
@@ -3353,8 +3400,8 @@ static wuxc::Grid RowOf(const std::wstring& title, const std::wstring& desc, wux
         col.Width(wux::GridLength{1.0, w});
         g.ColumnDefinitions().Append(col);
     }
-    g.MinHeight(48);
-    g.Padding(wux::Thickness{4, 6, 4, 6});
+    g.MinHeight(36);
+    g.Padding(wux::Thickness{4, 3, 4, 3});
     wuxc::StackPanel left;
     left.VerticalAlignment(wux::VerticalAlignment::Center);
     left.Margin(wux::Thickness{0, 0, 16, 0});
@@ -3363,6 +3410,7 @@ static wuxc::Grid RowOf(const std::wstring& title, const std::wstring& desc, wux
     g.Children().Append(left);
     if (ctrl) {
         ctrl.VerticalAlignment(wux::VerticalAlignment::Center);
+        if (ctrl.try_as<wuxc::ToggleSwitch>()) ctrl.Margin(wux::Thickness{0, -4, 0, -4});
         wuxc::Grid::SetColumn(ctrl, 1);
         g.Children().Append(ctrl);
     }
@@ -3372,7 +3420,7 @@ static wuxc::Grid RowOf(const std::wstring& title, const std::wstring& desc, wux
 static wuxc::StackPanel BeginCard(const std::wstring& section) {
     if (!section.empty()) {
         auto h = Text(section, 14, 1.0, true);
-        h.Margin(wux::Thickness{0, 18, 0, 6});
+        h.Margin(wux::Thickness{0, 12, 0, 4});
         s_pagePanel.Children().Append(h);
     } else {
         s_pagePanel.Children().Append(wuxc::Border());
@@ -3382,7 +3430,7 @@ static wuxc::StackPanel BeginCard(const std::wstring& section) {
     card.Background(BrC(F().card));
     card.BorderBrush(BrC(F().cardStroke));
     card.BorderThickness(wux::Thickness{1, 1, 1, 1});
-    card.Padding(wux::Thickness{14, 4, 14, 4});
+    card.Padding(wux::Thickness{12, 2, 12, 2});
     wuxc::StackPanel inner;
     card.Child(inner);
     s_pagePanel.Children().Append(card);
@@ -3401,7 +3449,7 @@ static void AddRow(wuxc::StackPanel const& card, wux::UIElement const& row) {
 
 static void AddNote(wuxc::StackPanel const& card, const std::wstring& note) {
     auto t = Text(note, 12, 0.6);
-    t.Margin(wux::Thickness{4, 8, 4, 10});
+    t.Margin(wux::Thickness{4, 5, 4, 7});
     card.Children().Append(t);
 }
 
@@ -3415,8 +3463,8 @@ static void ResetKeys(const std::vector<std::wstring>& keys) {
 }
 
 static void PageTitle(const std::wstring& t) {
-    auto h = Text(t, 28, 1.0, true);
-    h.Margin(wux::Thickness{0, 0, 0, 4});
+    auto h = Text(t, 24, 1.0, true);
+    h.Margin(wux::Thickness{0, 0, 0, 0});
     s_pagePanel.Children().Append(h);
 }
 
@@ -3459,17 +3507,167 @@ static std::vector<std::wstring> InstalledFonts() {
     return v;
 }
 
+// ---- A list whose rows are reordered by dragging the handle on their left ----
+// Pointer events with pointer capture, so it does not depend on OLE drag and drop inside the
+// XAML island. The card holds the rows at even child positions (a separator sits between them).
+
+// Plain data only, and the card only weakly: the handlers live inside the card, so they must not
+// keep it alive.
+struct DragState {
+    std::vector<int> order;  // items, top to bottom
+    winrt::weak_ref<wuxc::StackPanel> card;
+    int from = -1;      // row being dragged, -1 = none
+    double startY = 0;  // pointer position (relative to the card) when the drag started
+    double pitch = 39;  // row height plus separator
+};
+
+static wuxc::Grid DragRow(wuxc::StackPanel const& card, int i) {
+    return card.Children().GetAt((uint32_t)(2 * i)).as<wuxc::Grid>();
+}
+static void DragOffset(wuxc::Grid const& row, double y) {
+    if (auto tt = row.RenderTransform().try_as<wuxm::TranslateTransform>()) tt.Y(y);
+}
+static int DragTarget(DragState const& d, double dy) {
+    return std::clamp(d.from + (int)std::lround(dy / d.pitch), 0, (int)d.order.size() - 1);
+}
+// The dragged row follows the pointer; the rows it passes over make room for it.
+static void DragLayout(DragState const& d, wuxc::StackPanel const& card, double dy) {
+    const int n = (int)d.order.size();
+    const int to = DragTarget(d, dy);
+    for (int i = 0; i < n; i++) {
+        double off = 0;
+        if (i == d.from) off = std::clamp(dy, -d.from * d.pitch, (n - 1 - d.from) * d.pitch);
+        else if (d.from < to && i > d.from && i <= to) off = -d.pitch;
+        else if (d.from > to && i >= to && i < d.from) off = d.pitch;
+        DragOffset(DragRow(card, i), off);
+    }
+}
+static void DragEnd(DragState const& d, wuxc::StackPanel const& card) {
+    for (int i = 0; i < (int)d.order.size(); i++) {
+        auto row = DragRow(card, i);
+        DragOffset(row, 0);
+        row.Opacity(1.0);
+        wuxc::Canvas::SetZIndex(row, 0);
+    }
+}
+
+static wuxc::Border DragHandle() {
+    wuxc::Border h;
+    h.Width(30);
+    h.Margin(wux::Thickness{0, 0, 6, 0});
+    h.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Colors::Transparent()));  // to receive the pointer
+    auto g = Text(L"\u22EE\u22EE", 16, 0.55);
+    g.TextWrapping(wux::TextWrapping::NoWrap);
+    g.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    g.VerticalAlignment(wux::VerticalAlignment::Center);
+    h.Child(g);
+    wuxc::ToolTipService::SetToolTip(
+        h, winrt::box_value(hstring{L2(L"Arrastra para cambiar el orden", L"Drag to change the order")}));
+    return h;
+}
+
+// handle | title | control, with a transform so the row can move while it is dragged.
+static wuxc::Grid ReorderableRow(const std::wstring& title, wuxc::Border const& handle,
+                                 wux::FrameworkElement const& ctrl) {
+    wuxc::Grid g;
+    for (auto w : {wux::GridUnitType::Auto, wux::GridUnitType::Star, wux::GridUnitType::Auto}) {
+        wuxc::ColumnDefinition col;
+        col.Width(wux::GridLength{1.0, w});
+        g.ColumnDefinitions().Append(col);
+    }
+    g.MinHeight(36);
+    g.Padding(wux::Thickness{4, 3, 4, 3});
+    g.RenderTransform(wuxm::TranslateTransform());
+    g.Children().Append(handle);
+    auto t = Text(title, 14);
+    t.VerticalAlignment(wux::VerticalAlignment::Center);
+    t.Margin(wux::Thickness{0, 0, 16, 0});
+    wuxc::Grid::SetColumn(t, 1);
+    g.Children().Append(t);
+    ctrl.VerticalAlignment(wux::VerticalAlignment::Center);
+    if (ctrl.try_as<wuxc::ToggleSwitch>()) ctrl.Margin(wux::Thickness{0, -4, 0, -4});
+    wuxc::Grid::SetColumn(ctrl, 2);
+    g.Children().Append(ctrl);
+    return g;
+}
+
+static void WireDrag(wuxc::Border const& handle, std::shared_ptr<DragState> d, int index) {
+    handle.PointerPressed([d, index](IInspectable const& s, wux::Input::PointerRoutedEventArgs const& e) {
+        auto card = d->card.get();
+        if (!card) return;
+        auto pt = e.GetCurrentPoint(card);
+        if (!pt.Properties().IsLeftButtonPressed()) return;
+        d->from = index;
+        d->startY = pt.Position().Y;
+        auto row = DragRow(card, index);
+        if (row.ActualHeight() > 0) d->pitch = row.ActualHeight() + 1;
+        wuxc::Canvas::SetZIndex(row, 10);
+        row.Opacity(0.85);
+        s.as<wux::UIElement>().CapturePointer(e.Pointer());
+        e.Handled(true);
+    });
+    handle.PointerMoved([d](IInspectable const&, wux::Input::PointerRoutedEventArgs const& e) {
+        if (d->from < 0) return;
+        auto card = d->card.get();
+        if (!card) return;
+        DragLayout(*d, card, e.GetCurrentPoint(card).Position().Y - d->startY);
+        e.Handled(true);
+    });
+    handle.PointerReleased([d](IInspectable const& s, wux::Input::PointerRoutedEventArgs const& e) {
+        if (d->from < 0) return;
+        auto card = d->card.get();
+        const int from = d->from;
+        const int to = card ? DragTarget(*d, e.GetCurrentPoint(card).Position().Y - d->startY) : from;
+        d->from = -1;
+        s.as<wux::UIElement>().ReleasePointerCapture(e.Pointer());
+        e.Handled(true);
+        if (!card) return;
+        DragEnd(*d, card);
+        if (to == from) return;
+        std::vector<int> order = d->order;
+        const int item = order[from];
+        order.erase(order.begin() + from);
+        order.insert(order.begin() + to, item);
+        std::wstring v;
+        for (int it : order) {
+            if (!v.empty()) v += L',';
+            v += kItemKey[it];
+        }
+        SetKey(L"order", v);
+        RebuildPage();
+    });
+    auto cancel = [d](IInspectable const&, wux::Input::PointerRoutedEventArgs const&) {
+        if (d->from < 0) return;
+        d->from = -1;
+        if (auto card = d->card.get()) DragEnd(*d, card);
+    };
+    handle.PointerCanceled(cancel);
+    handle.PointerCaptureLost(cancel);
+}
+
 static void PageMonitor() {
     PageTitle(L2(L"Monitor", L"Monitor"));
     auto card = BeginCard(L2(L"Elementos mostrados", L"Shown items"));
-    struct R { int item; const wchar_t* es; const wchar_t* en; };
-    const R rows[] = {{I_DOWN, L"Bajada (↓)", L"Download speed (↓)"}, {I_UP, L"Subida (↑)", L"Upload speed (↑)"},
-                      {I_CPU, L"CPU", L"CPU"},                         {I_GPU, L"GPU", L"GPU"},
-                      {I_MEM, L"MEM (memoria)", L"MEM (memory)"},     {I_TOTAL, L"Tráfico de hoy", L"Today's traffic"}};
-    for (const R& r : rows) {
-        const bool mem = r.item == I_MEM;
-        AddRow(card, RowOf(L2(r.es, r.en), L"", ToggleCtl(kShowKey[r.item], [mem](bool) { if (mem) RebuildPage(); })));
+    struct R { const wchar_t* es; const wchar_t* en; };
+    static const R rows[I_COUNT] = {  // indexed by Item
+        {L"Bajada (↓)", L"Download speed (↓)"}, {L"Subida (↑)", L"Upload speed (↑)"},
+        {L"CPU", L"CPU"},                         {L"MEM (memoria)", L"MEM (memory)"},
+        {L"GPU", L"GPU"},                         {L"Tráfico de hoy", L"Today's traffic"}};
+    auto drag = std::make_shared<DragState>();
+    drag->order = EffectiveOrder(SnapshotVals());
+    drag->card = winrt::make_weak(card);
+    for (int i = 0; i < (int)drag->order.size(); i++) {
+        const int item = drag->order[i];
+        const bool mem = item == I_MEM;
+        auto handle = DragHandle();
+        WireDrag(handle, drag, i);
+        AddRow(card, ReorderableRow(L2(rows[item].es, rows[item].en), handle,
+                                    ToggleCtl(kShowKey[item], [mem](bool) { if (mem) RebuildPage(); })));
     }
+    AddRow(card, RowOf(L2(L"Restablecer orden", L"Reset order"), L"",
+                       TextButton(L2(L"Restablecer", L"Reset"), []() { ResetKeys({L"order"}); })));
+    AddNote(card, L2(L"Arrastra ⋮⋮ para cambiar el orden en la barra de tareas.",
+                     L"Drag ⋮⋮ to change the order in the taskbar."));
 
     const bool memOn = ValGet(L"showMem") == L"1";
     card = BeginCard(L2(L"Valores de MEM", L"MEM values"));
@@ -3918,6 +4116,46 @@ static void PageGeneral() {
                            g_uiEs = ResolveUiEs(SnapshotVals());
                            RebuildAll();
                        })));
+
+    card = BeginCard(L2(L"Fondo del panel", L"Panel background"));
+    {
+        const bool acrylic = ValGet(L"panelAcrylic") == L"1";
+        AddRow(card, RowOf(L2(L"Efecto de fondo", L"Background effect"), L"",
+                           MakeDropdown({L2(L"Acrílico", L"Acrylic"), L2(L"Ninguno", L"None")}, acrylic ? 0 : 1,
+                                        [](int i) {
+                                            ValSet(L"panelAcrylic", i == 0 ? L"1" : L"0");
+                                            RefreshPanelBackdrop();
+                                            RebuildPage();
+                                        }, 200)));
+        // Same slider as the others, but it only changes the panel, so the taskbar is not rebuilt.
+        wuxc::StackPanel sp;
+        sp.Orientation(wuxc::Orientation::Horizontal);
+        sp.Spacing(12);
+        wuxc::Slider sl;
+        sl.Minimum(20);
+        sl.Maximum(100);
+        sl.StepFrequency(1);
+        sl.Width(220);
+        sl.IsThumbToolTipEnabled(false);
+        sl.IsEnabled(acrylic);
+        sl.Value((double)std::clamp<long>(MInt(SnapshotVals(), L"panelAlpha", 50), 20, 100));
+        auto label = Text(std::to_wstring((long)sl.Value()) + L" %", 14);
+        label.MinWidth(54);
+        label.TextAlignment(wux::TextAlignment::Right);
+        label.VerticalAlignment(wux::VerticalAlignment::Center);
+        sl.ValueChanged([label](IInspectable const&, wuxp::RangeBaseValueChangedEventArgs const& e) {
+            const long nv = (long)std::lround(e.NewValue());
+            label.Text(hstring{std::to_wstring(nv) + L" %"});
+            if (ValGet(L"panelAlpha") != std::to_wstring(nv)) {
+                ValSet(L"panelAlpha", std::to_wstring(nv));
+                RefreshPanelBackdrop();
+            }
+        });
+        sp.Children().Append(sl);
+        sp.Children().Append(label);
+        AddRow(card, RowOf(L2(L"Opacidad del fondo", L"Background opacity"),
+                           L2(L"Más alto = más oscuro y menos transparente.", L"Higher = darker and less transparent."), sp));
+    }
 
     card = BeginCard(L2(L"Copia de ajustes", L"Settings backup"));
     AddNote(card, L2(L"Lleva tu configuración (colores, perfiles, tamaño, unidades…) a otra PC o desde la app original de TrafficMonitor. "
@@ -4560,6 +4798,108 @@ static void RebuildPage() {
     }
 }
 
+// ---- Acrylic background of the panel (the same look as the FFmpeg Studio app) ----
+static bool PanelAcrylicOn() { return ValGet(L"panelAcrylic") == L"1"; }
+
+// Windows 11 22H2+ (build 22621) has real acrylic as a DWM system backdrop. The old
+// SetWindowCompositionAttribute acrylic is flat/black there, so it is only the fallback.
+// The DWM system backdrop and the XAML AcrylicBrush fall back to a flat solid color when the window
+// is inactive. To avoid it the window is always reported as active (WM_NCACTIVATE below).
+// (The legacy accent acrylic is NOT an option on Win11: the XAML island is opaque and shows black.)
+static constexpr bool kKeepAcrylicWhenInactive = true;
+
+static bool SystemBackdropSupported() {
+    static int ok = -1;
+    if (ok < 0) {
+        ok = 0;
+        using RtlGetVersionFn = LONG(WINAPI*)(OSVERSIONINFOW*);
+        auto fn = reinterpret_cast<RtlGetVersionFn>(
+            reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlGetVersion")));
+        OSVERSIONINFOW vi{};
+        vi.dwOSVersionInfoSize = sizeof(vi);
+        if (fn && fn(&vi) == 0 && vi.dwBuildNumber >= 22621) ok = 1;
+    }
+    return ok == 1;
+}
+
+// Own acrylic: a host-backdrop brush + a tint, drawn as composition visuals. XAML's AcrylicBrush turns
+// itself into a flat color when the window is not active; these visuals have no such logic, so the
+// blur stays when another window is in use.
+namespace wuc = winrt::Windows::UI::Composition;
+[[clang::no_destroy]] static wuc::ContainerVisual s_acrylicVisual{nullptr};
+[[clang::no_destroy]] static wuc::CompositionColorBrush s_tintBrush{nullptr};
+
+static void UpdateCustomAcrylic() {
+    if (!s_acrylicVisual || !s_tintBrush) return;
+    try {
+        s_acrylicVisual.IsVisible(PanelAcrylicOn());
+        const long pct = std::clamp(MInt(SnapshotVals(), L"panelAlpha", 50), 20L, 100L);
+        const BYTE t = s_light ? 243 : 32;
+        s_tintBrush.Color(Color{(BYTE)(pct * 255 / 100), t, t, t});
+    } catch (...) {
+        Wh_Log(L"UpdateCustomAcrylic failed");
+    }
+}
+
+// First child of the root: an empty Border that carries the acrylic visuals under all the UI.
+static wuxc::Border MakeBackdropBorder() {
+    wuxc::Border b;
+    b.IsHitTestVisible(false);
+    s_acrylicVisual = nullptr;
+    s_tintBrush = nullptr;
+    if (!SystemBackdropSupported()) return b;
+    try {
+        auto vis = wux::Hosting::ElementCompositionPreview::GetElementVisual(b);
+        auto comp = vis.Compositor();
+        auto backdrop = comp.CreateSpriteVisual();
+        backdrop.Brush(comp.CreateHostBackdropBrush());
+        auto tint = comp.CreateSpriteVisual();
+        s_tintBrush = comp.CreateColorBrush(Color{0, 0, 0, 0});
+        tint.Brush(s_tintBrush);
+        for (auto sv : {backdrop, tint}) {
+            auto size = comp.CreateExpressionAnimation(L"host.Size");
+            size.SetReferenceParameter(L"host", vis);
+            sv.StartAnimation(L"Size", size);
+        }
+        auto container = comp.CreateContainerVisual();
+        container.Children().InsertAtTop(backdrop);
+        container.Children().InsertAtTop(tint);
+        wux::Hosting::ElementCompositionPreview::SetElementChildVisual(b, container);
+        s_acrylicVisual = container;
+        UpdateCustomAcrylic();
+    } catch (...) {
+        Wh_Log(L"Custom acrylic failed, falling back to AcrylicBrush");
+        s_acrylicVisual = nullptr;
+        s_tintBrush = nullptr;
+    }
+    return b;
+}
+
+// Background of the XAML root. Windows 11: a XAML acrylic brush (BackgroundSource = HostBackdrop) that
+// blurs what is behind the window (in-app "Backdrop" only blurs XAML content, which is nothing here);
+// a transparent island would just be black. The opacity slider is the brush's tint opacity.
+// Older Windows: transparent root over the legacy accent acrylic.
+static wuxm::Brush PanelRootBrush() {
+    if (PanelAcrylicOn() && s_acrylicVisual) return Br(0, 0, 0, 0);  // the blur is the backdrop visual below
+    if (PanelAcrylicOn()) {
+        if (!SystemBackdropSupported()) return Br(0, 0, 0, 0);
+        const long pct = std::clamp(MInt(SnapshotVals(), L"panelAlpha", 50), 20L, 100L);
+        const BYTE t = s_light ? 243 : 32;
+        try {
+            wuxm::AcrylicBrush ab;
+            ab.BackgroundSource(wuxm::AcrylicBackgroundSource::HostBackdrop);
+            ab.TintColor(Color{255, t, t, t});
+            ab.TintOpacity(pct / 100.0);
+            ab.TintLuminosityOpacity(winrt::box_value(std::clamp(pct / 100.0, 0.2, 1.0)).as<winrt::Windows::Foundation::IReference<double>>());
+            ab.FallbackColor(Color{255, t, t, t});
+            return ab;
+        } catch (...) {
+            Wh_Log(L"AcrylicBrush failed, using a solid color");
+        }
+    }
+    return s_light ? Br(255, 243, 243, 243) : Br(255, 32, 32, 32);
+}
+
 static void BuildPanelUi() {
     s_light = IsSystemLight();
     s_tplBtn[0][0] = s_tplBtn[1][0] = nullptr;
@@ -4570,7 +4910,8 @@ static void BuildPanelUi() {
 
     wuxc::Grid root;
     s_root = root;
-    root.Background(s_light ? Br(255, 243, 243, 243) : Br(255, 32, 32, 32));
+    auto backdropBorder = MakeBackdropBorder();
+    root.Background(PanelRootBrush());
     root.RequestedTheme(s_light ? wux::ElementTheme::Light : wux::ElementTheme::Dark);
     {
         auto res = root.Resources();
@@ -4590,7 +4931,7 @@ static void BuildPanelUi() {
         shell.ColumnDefinitions().Append(page);
     }
     wuxc::Grid pane;
-    pane.Padding(wux::Thickness{4, 12, 4, 0});
+    pane.Padding(wux::Thickness{4, 8, 4, 0});
     for (auto h : {wux::GridUnitType::Star, wux::GridUnitType::Auto}) {
         wuxc::RowDefinition r;
         r.Height(wux::GridLength{1, h});
@@ -4621,8 +4962,8 @@ static void BuildPanelUi() {
         wuxc::Button b;
         StyleButton(b, Look::Subtle);
         b.Content(cell);
-        b.Height(40);
-        b.Margin(wux::Thickness{4, 2, 4, 2});
+        b.Height(34);
+        b.Margin(wux::Thickness{4, 1, 4, 1});
         b.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
         b.HorizontalContentAlignment(wux::HorizontalAlignment::Stretch);
         b.Click([i](IInspectable const&, wux::RoutedEventArgs const&) {
@@ -4693,10 +5034,11 @@ static void BuildPanelUi() {
     sv.HorizontalScrollMode(wuxc::ScrollMode::Disabled);
     sv.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
     s_pagePanel = wuxc::StackPanel();
-    s_pagePanel.Margin(wux::Thickness{28, 16, 28, 28});
+    s_pagePanel.Margin(wux::Thickness{24, 10, 24, 20});
     sv.Content(s_pagePanel);
     wuxc::Grid::SetColumn(sv, 1);
     shell.Children().Append(sv);
+    root.Children().Append(backdropBorder);
     root.Children().Append(shell);
     s_src.Content(root);
 
@@ -4724,18 +5066,79 @@ static void ApplyDarkTitle(HWND h) {
     DwmSetWindowAttribute(h, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
 }
 
+// Real acrylic behind the whole window: SetWindowCompositionAttribute with
+// ACCENT_ENABLE_ACRYLICBLURBEHIND and a tint (black in the dark theme, white in the light one).
+// The window is erased with black, which DWM treats as transparent, and the XAML root is
+// transparent, so the blur shows through. Not in user32's headers: looked up at run time.
+struct AccentPolicy {
+    int state;
+    int flags;
+    unsigned color;  // AABBGGRR
+    int animation;
+};
+struct CompositionData {
+    int attribute;
+    void* data;
+    size_t size;
+};
+
+static void RefreshPanelBackdrop() {
+    HWND h = s_hwnd;
+    if (!h) return;
+    ApplyDarkTitle(h);
+    using SetWcaFn = BOOL(WINAPI*)(HWND, CompositionData*);
+    static SetWcaFn setWca = reinterpret_cast<SetWcaFn>(
+        reinterpret_cast<void*>(GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute")));
+    const bool on = PanelAcrylicOn();
+    if (SystemBackdropSupported()) {
+        if (setWca) {  // make sure the legacy accent is off, the two do not mix
+            AccentPolicy off{};
+            CompositionData d0{19, &off, sizeof(off)};
+            setWca(h, &d0);
+        }
+        int type = on ? 3 : 1;  // DWMSBT_TRANSIENTWINDOW (acrylic) / DWMSBT_NONE
+        const HRESULT hrBd = DwmSetWindowAttribute(h, DWMWA_SYSTEMBACKDROP_TYPE, &type, sizeof(type));
+        Wh_Log(L"Panel backdrop: acrylic=%d type=%d hr=0x%08X", on ? 1 : 0, type, (unsigned)hrBd);
+        MARGINS mg = on ? MARGINS{-1, -1, -1, -1} : MARGINS{0, 0, 0, 0};
+        DwmExtendFrameIntoClientArea(h, &mg);
+        SetWindowPos(h, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    } else if (setWca) {
+        AccentPolicy acc{};
+        if (on) {
+            const long pct = std::clamp(MInt(SnapshotVals(), L"panelAlpha", 50), 20L, 100L);
+            const unsigned a = (unsigned)std::clamp(pct * 2, 1L, 255L);  // 50 % -> 100
+            const unsigned t = s_light ? 255u : 0u;
+            acc = {4, 0x20 | 0x40 | 0x80 | 0x100, (a << 24) | (t << 16) | (t << 8) | t, 0};
+        }
+        CompositionData d{19, &acc, sizeof(acc)};
+        setWca(h, &d);
+    }
+    UpdateCustomAcrylic();
+    try {
+        if (s_root) s_root.Background(PanelRootBrush());
+    } catch (...) {
+    }
+    InvalidateRect(h, nullptr, TRUE);
+}
+
 static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
         case WM_SETTINGCHANGE:
             if (l && lstrcmpiW(reinterpret_cast<LPCWSTR>(l), L"ImmersiveColorSet") == 0 && IsSystemLight() != s_light) {
                 try {
                     RebuildAll();
-                    ApplyDarkTitle(h);
+                    RefreshPanelBackdrop();
                 } catch (...) {
                 }
             }
             break;
         case WM_ERASEBKGND: {
+            if (PanelAcrylicOn()) {  // black = transparent for DWM: the acrylic shows through
+                RECT rcA;
+                GetClientRect(h, &rcA);
+                FillRect(reinterpret_cast<HDC>(w), &rcA, reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+                return 1;
+            }
             if (!s_eraseLight) s_eraseLight = CreateSolidBrush(RGB(243, 243, 243));
             if (!s_eraseDark) s_eraseDark = CreateSolidBrush(RGB(32, 32, 32));
             RECT rc;
@@ -4746,6 +5149,17 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         case WM_SIZE:
             if (s_island) MoveWindow(s_island, 0, 0, LOWORD(l), HIWORD(l), TRUE);
             return 0;
+        case WM_NCACTIVATE:
+            // Always "active" for DWM / XAML so the acrylic does not turn into a flat color
+            // when another window has the focus.
+            if (kKeepAcrylicWhenInactive && PanelAcrylicOn() && SystemBackdropSupported()) {
+                const LRESULT r = DefWindowProcW(h, m, TRUE, l);
+                if (!w) {  // really deactivated: tell the XAML island it is still active
+                    if (s_island) SendMessageW(s_island, WM_ACTIVATE, MAKEWPARAM(WA_ACTIVE, 0), 0);
+                }
+                return r;
+            }
+            break;
         case WM_SETFOCUS:
             if (s_island) SetFocus(s_island);
             return 0;
@@ -4786,6 +5200,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             try { if (s_src) s_src.Close(); } catch (...) {}
             s_src = nullptr;
             s_root = nullptr;
+            s_acrylicVisual = nullptr;
+            s_tintBrush = nullptr;
             s_pagePanel = nullptr;
             s_pageScroll = nullptr;
             s_navItems = nullptr;
@@ -5159,7 +5575,10 @@ static DWORD WINAPI ThreadProc(void*) {
     int y = mi.rcWork.top + ((mi.rcWork.bottom - mi.rcWork.top) - height) / 2;
 
     s_light = IsSystemLight();
-    s_hwnd = CreateWindowExW(WS_EX_APPWINDOW, s_class, TR(L"Ajustes de TrafficMonitor", L"TrafficMonitor settings"),
+    // A XAML Island is opaque (black where it is transparent) unless the host window has no
+    // redirection bitmap: then the island's transparent areas show the DWM backdrop (acrylic).
+    const DWORD exStyle = WS_EX_APPWINDOW | (SystemBackdropSupported() ? WS_EX_NOREDIRECTIONBITMAP : 0);
+    s_hwnd = CreateWindowExW(exStyle, s_class, TR(L"Ajustes de TrafficMonitor", L"TrafficMonitor settings"),
                              WS_OVERLAPPEDWINDOW, x, y, width, height, nullptr, nullptr, s_module, nullptr);
     if (!s_hwnd) {
         try { s_mgr.Close(); } catch (...) {}
@@ -5167,7 +5586,7 @@ static DWORD WINAPI ThreadProc(void*) {
         winrt::uninit_apartment();
         return 0;
     }
-    ApplyDarkTitle(s_hwnd);
+    RefreshPanelBackdrop();
 
     // Own taskbar identity: without it Windows groups this window (it belongs to
     // explorer.exe) under the File Explorer button and shows it as "File Explorer".
