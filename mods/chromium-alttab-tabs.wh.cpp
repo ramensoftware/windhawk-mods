@@ -1,824 +1,1343 @@
 // ==WindhawkMod==
 // @id              chromium-alttab-tabs
 // @name            AltTabs - Browser Tab Switcher HUD
-// @description     A fast, beautiful Windows 11 Alt+Tab HUD for browser tabs with domain grouping and instant search.
-// @version         1.1.1
+// @description     Press Alt+Q in Chrome, Edge or Brave to search the open tabs of the window and switch to one with the keyboard
+// @version         1.2.0
 // @author          Dszae
 // @github          https://github.com/Dszae
 // @homepage        https://github.com/Dszae/AltTabs
 // @include         windhawk.exe
-// @compilerOptions -lole32 -loleaut32 -luiautomationcore -luuid -lshell32 -lgdi32 -ldwmapi -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -lshell32 -lgdi32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # AltTabs - Browser Tab Switcher HUD
 
-Press **Alt + `** (Tilde / Backtick) or **Alt + Q** while in any Chromium browser (Google Chrome,
-Brave, Microsoft Edge, Opera, Vivaldi) to summon a sleek, native Windows 11 floating Tab Switcher HUD.
+Press **Alt+Q** while a Chrome, Edge or Brave window is focused to open a
+searchable list of the tabs in that window. Type to filter, pick a tab with
+the arrow keys, and press **Enter** to switch to it.
 
-![AltTabs Demo](https://raw.githubusercontent.com/Dszae/AltTabs/main/brag-output/brag.jpg)
+![AltTabs](https://raw.githubusercontent.com/Dszae/AltTabs/8fdb2c819e758ff60a8b6b35ea9a46135c42e632/assets/hud.png)
 
-### Highlights:
-- **Instant Keyboard Navigation**: Press `Alt + ` ` or `Alt + Q` to summon. Use `Tab` / `Arrow Keys` to navigate, and `Enter` to switch.
-- **Domain Clustering**: Stacks tabs by root domain (`github.com`, `youtube.com`) so 50 open tabs become clean, readable groups.
-- **Real-Time Fuzzy Search**: Just start typing any keyword to filter tabs instantly across your open browser window.
-- **Native Windows 11 Styling**: Smooth rounded corners, dark mode, favicons, and zero background clutter.
-- **100% Isolated & Stable**: Runs in a dedicated Windhawk tool process without injecting into File Explorer.
+## Keys
+
+| Key | Action |
+|-----|--------|
+| **Alt+Q** or **Alt+\`** | Open the list. While it's open, press again to move down, or with Shift to move up. |
+| Typing | Filter the tabs. Several words match tabs that contain all of them. |
+| **↑** **↓**, **Tab**, **Shift+Tab** | Move the selection |
+| **Page Up**, **Page Down** | Move the selection by a page |
+| **Enter** or click | Switch to the selected tab |
+| **Backspace**, **Ctrl+Backspace** | Delete a character, clear the filter |
+| **Esc** | Close the list |
+
+**Alt+\`** is the key above Tab on US keyboard layouts. The hotkeys are only
+taken over while a window of an enabled browser is focused. In other apps
+they work as usual.
+
+## Notes
+
+- Only the tabs of the focused browser window are listed. The current tab is
+  marked with a blue bar.
+- Tab titles are read with Windows UI Automation. Browsers don't expose tab
+  addresses this way, so the site name next to a tab is taken from the end of
+  its title, for example "YouTube" in "Some video - YouTube". Tabs whose title
+  doesn't end with a site name have no label.
+- Vivaldi isn't supported, its tab bar is part of a web page.
+- The mod runs in its own Windhawk process. It doesn't inject code into the
+  browser or into Explorer.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- GroupByDomain: true
-  $name: Group tabs by domain
-  $description: Categorizes multiple tabs from the same website together in the switcher.
+- GroupBySite: true
+  $name: Group tabs by site
+  $description: List the tabs of each site together, in the order the sites first appear in the tab strip
 - EnableChrome: true
-  $name: Support Google Chrome
-- EnableBrave: true
-  $name: Support Brave Browser
+  $name: Google Chrome
 - EnableEdge: true
-  $name: Support Microsoft Edge
+  $name: Microsoft Edge
+- EnableBrave: true
+  $name: Brave
 - EnableOpera: true
-  $name: Support Opera Browser
-- EnableVivaldi: true
-  $name: Support Vivaldi Browser
+  $name: Opera
 */
 // ==/WindhawkModSettings==
 
-#include <initguid.h>
 #include <windows.h>
-#include <uiautomation.h>
+
 #include <dwmapi.h>
-#include <psapi.h>
-#include <shlwapi.h>
-#include <memory>
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <mutex>
+#include <initguid.h>  // Defines the UI Automation GUIDs.
+#include <uiautomation.h>
+#include <wrl/client.h>
+
 #include <algorithm>
-#include <sstream>
+#include <atomic>
+#include <deque>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include <windhawk_api.h>
 
+using Microsoft::WRL::ComPtr;
+
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
-#define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
+#define HINST_THISCOMPONENT ((HINSTANCE) & __ImageBase)
 
-namespace AltTabsMod {
+namespace {
 
-struct ModSettings {
-    bool groupByDomain = true;
-    bool enableChrome = true;
-    bool enableBrave = true;
-    bool enableEdge = true;
-    bool enableOpera = true;
-    bool enableVivaldi = true;
-} g_settings;
+constexpr UINT_PTR kDeactivateTimerId = 1;
 
-std::mutex g_settingsMutex;
+// A focus change right after the window is shown, e.g. when Alt is released,
+// doesn't close it.
+constexpr ULONGLONG kActivationGraceMs = 400;
+
+// UI Automation calls to a hung browser fail after this time.
+constexpr DWORD kUiaTimeoutMs = 2000;
+
+// Limits for the search for the tab strip in the browser's UI.
+constexpr int kTabStripMaxDepth = 16;
+constexpr int kTabStripMaxNodes = 400;
+
+constexpr PCWSTR kWindowClass = L"AltTabs_TabSwitcher";
+
+// DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE and
+// DWMWCP_ROUND, which older SDKs don't define.
+constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
+constexpr DWORD kDwmwaWindowCornerPreference = 33;
+constexpr DWORD kDwmwcpRound = 2;
+
+// Layout, in pixels at 96 DPI.
+constexpr int kWindowWidth = 640;
+constexpr int kWindowHeight = 440;
+constexpr int kSearchTop = 14;
+constexpr int kSearchBottom = 52;
+constexpr int kListTop = 66;
+constexpr int kRowHeight = 44;
+constexpr int kRowStride = 46;
+constexpr int kFooterHeight = 34;
+constexpr int kSiteWidth = 140;
+
+constexpr COLORREF kBackgroundColor = RGB(24, 24, 28);
+constexpr COLORREF kSearchColor = RGB(36, 36, 42);
+constexpr COLORREF kSelectionColor = RGB(48, 68, 120);
+constexpr COLORREF kAccentColor = RGB(96, 165, 250);
+constexpr COLORREF kTextColor = RGB(230, 230, 235);
+constexpr COLORREF kSelectedTextColor = RGB(255, 255, 255);
+constexpr COLORREF kSiteColor = RGB(140, 145, 160);
+constexpr COLORREF kSelectedSiteColor = RGB(190, 215, 255);
+constexpr COLORREF kDimTextColor = RGB(120, 125, 135);
+constexpr COLORREF kScrollColor = RGB(70, 72, 82);
+
+struct Settings {
+    std::atomic<bool> groupBySite{true};
+    std::atomic<bool> chrome{true};
+    std::atomic<bool> edge{true};
+    std::atomic<bool> brave{true};
+    std::atomic<bool> opera{true};
+};
+
+Settings g_settings;
+
+// Registered messages, since the switcher is a top-level window and can get
+// WM_APP messages that other programs broadcast.
+// Posted by the keyboard hook. wParam is TRUE if Shift is down.
+UINT g_hotkeyMessage;
+// Posted to stop the switcher thread.
+UINT g_quitMessage;
+
+HANDLE g_switcherThread;
+HANDLE g_hookThread;
+DWORD g_hookThreadId;
+std::atomic<HWND> g_switcherWindow;
+bool g_threadStartOk;
 
 void LoadSettings() {
-    std::lock_guard<std::mutex> lock(g_settingsMutex);
-    g_settings.groupByDomain = Wh_GetIntSetting(L"GroupByDomain") != 0;
-    g_settings.enableChrome = Wh_GetIntSetting(L"EnableChrome") != 0;
-    g_settings.enableBrave = Wh_GetIntSetting(L"EnableBrave") != 0;
-    g_settings.enableEdge = Wh_GetIntSetting(L"EnableEdge") != 0;
-    g_settings.enableOpera = Wh_GetIntSetting(L"EnableOpera") != 0;
-    g_settings.enableVivaldi = Wh_GetIntSetting(L"EnableVivaldi") != 0;
+    g_settings.groupBySite = Wh_GetIntSetting(L"GroupBySite") != 0;
+    g_settings.chrome = Wh_GetIntSetting(L"EnableChrome") != 0;
+    g_settings.edge = Wh_GetIntSetting(L"EnableEdge") != 0;
+    g_settings.brave = Wh_GetIntSetting(L"EnableBrave") != 0;
+    g_settings.opera = Wh_GetIntSetting(L"EnableOpera") != 0;
 }
 
-template <typename T>
-class SafeComPtr {
-    T* m_ptr = nullptr;
-public:
-    SafeComPtr() = default;
-    SafeComPtr(T* ptr) : m_ptr(ptr) { if (m_ptr) m_ptr->AddRef(); }
-    ~SafeComPtr() { Release(); }
-    SafeComPtr(const SafeComPtr& o) : m_ptr(o.m_ptr) { if (m_ptr) m_ptr->AddRef(); }
-    SafeComPtr& operator=(const SafeComPtr& o) {
-        if (this != std::addressof(o)) {
-            Release();
-            m_ptr = o.m_ptr;
-            if (m_ptr) m_ptr->AddRef();
-        }
-        return *this;
+// Returns whether the window is a main window of an enabled browser.
+bool IsEnabledBrowserWindow(HWND hwnd) {
+    if (!hwnd || !IsWindowVisible(hwnd)) {
+        return false;
     }
-    T* operator->() const { return m_ptr; }
-    T** operator&() { Release(); return &m_ptr; }
-    operator T*() const { return m_ptr; }
-    bool operator!() const { return m_ptr == nullptr; }
-    void Release() { if (m_ptr) { T* tmp = m_ptr; m_ptr = nullptr; tmp->Release(); } }
-};
 
-struct TabInfo {
+    WCHAR className[32];
+    if (!GetClassNameW(hwnd, className, ARRAYSIZE(className)) ||
+        wcscmp(className, L"Chrome_WidgetWin_1") != 0) {
+        return false;
+    }
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    HANDLE process =
+        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return false;
+    }
+
+    WCHAR path[MAX_PATH];
+    DWORD pathSize = ARRAYSIZE(path);
+    BOOL gotPath = QueryFullProcessImageNameW(process, 0, path, &pathSize);
+    CloseHandle(process);
+    if (!gotPath) {
+        return false;
+    }
+
+    PCWSTR fileName = wcsrchr(path, L'\\');
+    fileName = fileName ? fileName + 1 : path;
+
+    const struct {
+        PCWSTR fileName;
+        const std::atomic<bool>& enabled;
+    } browsers[] = {
+        {L"chrome.exe", g_settings.chrome},
+        {L"msedge.exe", g_settings.edge},
+        {L"brave.exe", g_settings.brave},
+        {L"opera.exe", g_settings.opera},
+    };
+
+    for (const auto& browser : browsers) {
+        if (_wcsicmp(fileName, browser.fileName) == 0) {
+            return browser.enabled;
+        }
+    }
+
+    return false;
+}
+
+std::wstring ToLower(std::wstring text) {
+    if (!text.empty()) {
+        CharLowerBuffW(text.data(), static_cast<DWORD>(text.size()));
+    }
+    return text;
+}
+
+std::vector<std::wstring> SplitWords(const std::wstring& text) {
+    std::vector<std::wstring> words;
+    size_t pos = 0;
+    while (true) {
+        size_t start = text.find_first_not_of(L' ', pos);
+        if (start == std::wstring::npos) {
+            break;
+        }
+        size_t end = text.find(L' ', start);
+        if (end == std::wstring::npos) {
+            end = text.size();
+        }
+        words.push_back(text.substr(start, end - start));
+        pos = end;
+    }
+    return words;
+}
+
+// Returns the site name at the end of a page title, e.g. "YouTube" for
+// "Some video - YouTube", or an empty string if the title doesn't seem to end
+// with one.
+std::wstring GetSiteName(const std::wstring& title) {
+    static constexpr PCWSTR kSeparators[] = {
+        L" - ", L" | ", L" – ", L" — ", L" · ",
+    };
+
+    size_t siteStart = std::wstring::npos;
+    for (PCWSTR separator : kSeparators) {
+        size_t pos = title.rfind(separator);
+        if (pos == std::wstring::npos || pos == 0) {
+            continue;
+        }
+        size_t end = pos + wcslen(separator);
+        if (siteStart == std::wstring::npos || end > siteStart) {
+            siteStart = end;
+        }
+    }
+
+    if (siteStart == std::wstring::npos) {
+        return {};
+    }
+
+    std::wstring site = title.substr(siteStart);
+    size_t first = site.find_first_not_of(L' ');
+    size_t last = site.find_last_not_of(L' ');
+    if (first == std::wstring::npos) {
+        return {};
+    }
+    site = site.substr(first, last - first + 1);
+
+    // Site names are short, and don't look like paths or contain many words.
+    constexpr size_t kMaxSiteLength = 30;
+    constexpr std::ptrdiff_t kMaxSpaces = 2;
+    if (site.size() > kMaxSiteLength ||
+        site.find_first_of(L"/\\:") != std::wstring::npos ||
+        std::count(site.begin(), site.end(), L' ') > kMaxSpaces) {
+        return {};
+    }
+
+    return site;
+}
+
+bool IsLeafControlType(CONTROLTYPEID type) {
+    switch (type) {
+        case UIA_ButtonControlTypeId:
+        case UIA_CheckBoxControlTypeId:
+        case UIA_EditControlTypeId:
+        case UIA_HyperlinkControlTypeId:
+        case UIA_ImageControlTypeId:
+        case UIA_MenuItemControlTypeId:
+        case UIA_ProgressBarControlTypeId:
+        case UIA_RadioButtonControlTypeId:
+        case UIA_SeparatorControlTypeId:
+        case UIA_SliderControlTypeId:
+        case UIA_SplitButtonControlTypeId:
+        case UIA_TabItemControlTypeId:
+        case UIA_TextControlTypeId:
+            return true;
+    }
+    return false;
+}
+
+void FillSolidRect(HDC dc, const RECT& rect, COLORREF color) {
+    SetDCBrushColor(dc, color);
+    FillRect(dc, &rect, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+}
+
+struct TabEntry {
     std::wstring title;
-    std::wstring domain;
-    HWND browserHwnd = nullptr;
-    RECT boundingRect = { 0 };
-    bool isSelected = false;
-    SafeComPtr<IUIAutomationElement> uiaElement;
-    HICON hFavicon = nullptr;
-
-    TabInfo() = default;
-    ~TabInfo() { if (hFavicon) DestroyIcon(hFavicon); }
-    TabInfo(const TabInfo&) = delete;
-    TabInfo& operator=(const TabInfo&) = delete;
+    std::wstring site;
+    std::wstring searchText;
+    size_t groupOrder = 0;
+    bool active = false;
+    ComPtr<IUIAutomationElement> element;
 };
 
-static std::wstring ExtractDomainFromTitle(const std::wstring& title) {
-    std::wstring s = title;
-    std::transform(s.begin(), s.end(), s.begin(), ::towlower);
-    if (s.find(L"github") != std::wstring::npos) return L"github.com";
-    if (s.find(L"google") != std::wstring::npos) return L"google.com";
-    if (s.find(L"youtube") != std::wstring::npos) return L"youtube.com";
-    if (s.find(L"stackoverflow") != std::wstring::npos) return L"stackoverflow.com";
-    if (s.find(L"reddit") != std::wstring::npos) return L"reddit.com";
-    if (s.find(L"facebook") != std::wstring::npos) return L"facebook.com";
-    if (s.find(L"twitter") != std::wstring::npos || s.find(L" x ") != std::wstring::npos) return L"x.com";
-    if (s.find(L"chatgpt") != std::wstring::npos || s.find(L"openai") != std::wstring::npos) return L"openai.com";
-    if (s.find(L"claude") != std::wstring::npos) return L"claude.ai";
-    if (s.find(L"tcioe") != std::wstring::npos) return L"tcioe.edu.np";
+class TabSwitcher {
+   public:
+    TabSwitcher() = default;
+    TabSwitcher(const TabSwitcher&) = delete;
+    TabSwitcher& operator=(const TabSwitcher&) = delete;
 
-    // Clean up title separators (" - ", " | ")
-    size_t lastSep = s.find_last_of(L"-|");
-    if (lastSep != std::wstring::npos && lastSep + 1 < s.length()) {
-        std::wstring part = s.substr(lastSep + 1);
-        while (!part.empty() && part.front() == L' ') part.erase(0, 1);
-        while (!part.empty() && part.back() == L' ') part.pop_back();
-        if (part.length() > 3 && part.find(L' ') == std::wstring::npos) {
-            return part + L".com";
-        }
-    }
-    return L"Other Websites";
-}
+    // Both run on the switcher thread, which must have initialized COM.
+    bool Init();
+    void Uninit();
 
-static bool IsSupportedBrowserWindow(HWND hwnd, std::wstring* outBrowserName = nullptr) {
-    if (!IsWindow(hwnd) || !IsWindowVisible(hwnd)) return false;
-    wchar_t cls[64] = { 0 };
-    GetClassNameW(hwnd, cls, 64);
-    if (wcscmp(cls, L"Chrome_WidgetWin_1") != 0) return false;
+    HWND Window() const { return m_window; }
 
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (hProc) {
-        wchar_t path[MAX_PATH] = { 0 };
-        DWORD sz = MAX_PATH;
-        if (QueryFullProcessImageNameW(hProc, 0, path, &sz)) {
-            std::wstring sPath(path);
-            std::transform(sPath.begin(), sPath.end(), sPath.begin(), ::towlower);
+   private:
+    static LRESULT CALLBACK WndProc(HWND hwnd,
+                                    UINT message,
+                                    WPARAM wParam,
+                                    LPARAM lParam);
+    LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam);
+    bool HandleKey(WPARAM key);
 
-            std::lock_guard<std::mutex> lock(g_settingsMutex);
-            if (g_settings.enableBrave && sPath.find(L"brave.exe") != std::wstring::npos) {
-                if (outBrowserName) *outBrowserName = L"Brave";
-                CloseHandle(hProc);
-                return true;
-            }
-            if (g_settings.enableChrome && sPath.find(L"chrome.exe") != std::wstring::npos) {
-                if (outBrowserName) *outBrowserName = L"Google Chrome";
-                CloseHandle(hProc);
-                return true;
-            }
-            if (g_settings.enableEdge && sPath.find(L"msedge.exe") != std::wstring::npos) {
-                if (outBrowserName) *outBrowserName = L"Microsoft Edge";
-                CloseHandle(hProc);
-                return true;
-            }
-            if (g_settings.enableOpera && sPath.find(L"opera.exe") != std::wstring::npos) {
-                if (outBrowserName) *outBrowserName = L"Opera";
-                CloseHandle(hProc);
-                return true;
-            }
-            if (g_settings.enableVivaldi && sPath.find(L"vivaldi.exe") != std::wstring::npos) {
-                if (outBrowserName) *outBrowserName = L"Vivaldi";
-                CloseHandle(hProc);
-                return true;
-            }
-        }
-        CloseHandle(hProc);
-    }
+    void OnHotkey(bool backwards);
+    void Show(HWND browser);
+    void Hide(bool focusBrowser);
+    void ActivateSelectedTab();
 
-    // Title fallback
-    wchar_t title[256] = { 0 };
-    GetWindowTextW(hwnd, title, 256);
-    std::wstring sTitle(title);
-    std::transform(sTitle.begin(), sTitle.end(), sTitle.begin(), ::towlower);
+    void LoadTabs(HWND browser);
+    std::vector<ComPtr<IUIAutomationElement>> FindTabStrips(
+        IUIAutomationElement* window);
+    void ApplyFilter();
 
-    std::lock_guard<std::mutex> lock(g_settingsMutex);
-    if (g_settings.enableBrave && sTitle.find(L"brave") != std::wstring::npos) {
-        if (outBrowserName) *outBrowserName = L"Brave";
-        return true;
+    void MoveSelection(int delta, bool wrap);
+    void ScrollBy(int rows);
+    void EnsureSelectionVisible();
+    int GetVisibleRowCount() const;
+    int GetRowFromPoint(int y) const;
+
+    int Scale(int value) const { return MulDiv(value, m_dpi, 96); }
+    void UpdateDpi(UINT dpi);
+    void DeleteFonts();
+    void Paint(HDC hdc);
+
+    HWND m_window = nullptr;
+    HWND m_browser = nullptr;
+    ULONGLONG m_shownTime = 0;
+    UINT m_dpi = 96;
+    HFONT m_titleFont = nullptr;
+    HFONT m_smallFont = nullptr;
+
+    ComPtr<IUIAutomation> m_uia;
+    ComPtr<IUIAutomationCondition> m_trueCondition;
+    ComPtr<IUIAutomationCondition> m_tabItemCondition;
+    ComPtr<IUIAutomationCacheRequest> m_controlTypeCache;
+    ComPtr<IUIAutomationCacheRequest> m_tabCache;
+
+    std::vector<TabEntry> m_tabs;
+    // Indices into m_tabs of the tabs that match the filter, in display order.
+    std::vector<size_t> m_visible;
+    std::wstring m_filter;
+    size_t m_selected = 0;
+    size_t m_scroll = 0;
+};
+
+bool TabSwitcher::Init() {
+    HRESULT hr = CoCreateInstance(
+        CLSID_CUIAutomation8, nullptr, CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(m_uia.ReleaseAndGetAddressOf()));
+    if (FAILED(hr)) {
+        hr = CoCreateInstance(CLSID_CUIAutomation, nullptr,
+                              CLSCTX_INPROC_SERVER,
+                              IID_PPV_ARGS(m_uia.ReleaseAndGetAddressOf()));
     }
-    if (g_settings.enableChrome && sTitle.find(L"chrome") != std::wstring::npos) {
-        if (outBrowserName) *outBrowserName = L"Google Chrome";
-        return true;
-    }
-    if (g_settings.enableEdge && sTitle.find(L"edge") != std::wstring::npos) {
-        if (outBrowserName) *outBrowserName = L"Microsoft Edge";
-        return true;
-    }
-    if (g_settings.enableOpera && sTitle.find(L"opera") != std::wstring::npos) {
-        if (outBrowserName) *outBrowserName = L"Opera";
-        return true;
-    }
-    if (g_settings.enableVivaldi && sTitle.find(L"vivaldi") != std::wstring::npos) {
-        if (outBrowserName) *outBrowserName = L"Vivaldi";
-        return true;
+    if (FAILED(hr)) {
+        Wh_Log(L"Creating CUIAutomation failed: 0x%08X", hr);
+        return false;
     }
 
-    if (outBrowserName) *outBrowserName = L"Browser";
+    ComPtr<IUIAutomation2> uia2;
+    if (SUCCEEDED(m_uia.As(&uia2))) {
+        uia2->put_ConnectionTimeout(kUiaTimeoutMs);
+        uia2->put_TransactionTimeout(kUiaTimeoutMs);
+    }
+
+    VARIANT tabItemType;
+    tabItemType.vt = VT_I4;
+    tabItemType.lVal = UIA_TabItemControlTypeId;
+
+    if (FAILED(m_uia->CreateTrueCondition(&m_trueCondition)) ||
+        FAILED(m_uia->CreatePropertyCondition(
+            UIA_ControlTypePropertyId, tabItemType, &m_tabItemCondition)) ||
+        FAILED(m_uia->CreateCacheRequest(&m_controlTypeCache)) ||
+        FAILED(m_controlTypeCache->AddProperty(UIA_ControlTypePropertyId)) ||
+        FAILED(m_uia->CreateCacheRequest(&m_tabCache)) ||
+        FAILED(m_tabCache->AddProperty(UIA_NamePropertyId)) ||
+        FAILED(m_tabCache->AddProperty(
+            UIA_SelectionItemIsSelectedPropertyId))) {
+        Wh_Log(L"Creating UI Automation conditions failed");
+        return false;
+    }
+
+    WNDCLASSEXW windowClass{};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.lpfnWndProc = WndProc;
+    windowClass.hInstance = HINST_THISCOMPONENT;
+    windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    windowClass.lpszClassName = kWindowClass;
+    if (!RegisterClassExW(&windowClass)) {
+        Wh_Log(L"RegisterClassExW failed: %u", GetLastError());
+        return false;
+    }
+
+    CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, kWindowClass, L"AltTabs",
+                    WS_POPUP | WS_BORDER, 0, 0, 0, 0, nullptr, nullptr,
+                    HINST_THISCOMPONENT, this);
+    if (!m_window) {
+        Wh_Log(L"CreateWindowExW failed: %u", GetLastError());
+        UnregisterClassW(kWindowClass, HINST_THISCOMPONENT);
+        return false;
+    }
+
+    // Dark mode and rounded corners. Older Windows versions ignore these.
+    BOOL darkMode = TRUE;
+    DwmSetWindowAttribute(m_window, kDwmwaUseImmersiveDarkMode, &darkMode,
+                          sizeof(darkMode));
+    DWORD corners = kDwmwcpRound;
+    DwmSetWindowAttribute(m_window, kDwmwaWindowCornerPreference, &corners,
+                          sizeof(corners));
+
+    UpdateDpi(GetDpiForWindow(m_window));
     return true;
 }
 
-static HWND FindTargetBrowserWindow(std::wstring* outBrowserName = nullptr) {
-    HWND fgHwnd = GetForegroundWindow();
-    if (IsSupportedBrowserWindow(fgHwnd, outBrowserName)) {
-        return fgHwnd;
+void TabSwitcher::Uninit() {
+    if (m_window) {
+        DestroyWindow(m_window);
+        UnregisterClassW(kWindowClass, HINST_THISCOMPONENT);
     }
 
-    HWND target = nullptr;
-    HWND hWalk = GetTopWindow(nullptr);
-    while (hWalk) {
-        if (IsWindowVisible(hWalk) && !IsIconic(hWalk)) {
-            if (IsSupportedBrowserWindow(hWalk, outBrowserName)) {
-                target = hWalk;
-                break;
-            }
-        }
-        hWalk = GetWindow(hWalk, GW_HWNDNEXT);
-    }
-    return target;
+    DeleteFonts();
+
+    // Release the UI Automation objects before COM is uninitialized.
+    m_tabs.clear();
+    m_visible.clear();
+    m_tabCache.Reset();
+    m_controlTypeCache.Reset();
+    m_tabItemCondition.Reset();
+    m_trueCondition.Reset();
+    m_uia.Reset();
 }
 
-// --- TAB SWITCHER HUD WINDOW ---
-class TabSwitcherHUD {
-public:
-    static TabSwitcherHUD& Instance() {
-        static TabSwitcherHUD s_hud;
-        return s_hud;
+LRESULT CALLBACK TabSwitcher::WndProc(HWND hwnd,
+                                      UINT message,
+                                      WPARAM wParam,
+                                      LPARAM lParam) {
+    TabSwitcher* self;
+    if (message == WM_NCCREATE) {
+        auto* createStruct = reinterpret_cast<CREATESTRUCTW*>(lParam);
+        self = static_cast<TabSwitcher*>(createStruct->lpCreateParams);
+        self->m_window = hwnd;
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA,
+                          reinterpret_cast<LONG_PTR>(self));
+    } else {
+        self = reinterpret_cast<TabSwitcher*>(
+            GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     }
 
-    HWND GetHwnd() const { return m_hwnd; }
-
-    void CreateHUDWindow() {
-        if (m_hwnd && IsWindow(m_hwnd)) return;
-
-        WNDCLASSEXW wc = { 0 };
-        wc.cbSize = sizeof(WNDCLASSEXW);
-        wc.lpfnWndProc = WndProc;
-        wc.hInstance = HINST_THISCOMPONENT;
-        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-        wc.lpszClassName = L"AltTabs_FloatingHUDWindow";
-        RegisterClassExW(&wc);
-
-        m_hwnd = CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-            L"AltTabs_FloatingHUDWindow",
-            L"AltTabs Quick Switcher",
-            WS_POPUP | WS_BORDER,
-            100, 100, 640, 440,
-            nullptr, nullptr, HINST_THISCOMPONENT, this
-        );
-
-        // Windows 11 Rounded Corners & Dark Mode
-        BOOL darkMode = TRUE;
-        DwmSetWindowAttribute(m_hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &darkMode, sizeof(BOOL));
-        DWORD corner = 2 /* DWMWCP_ROUND */;
-        DwmSetWindowAttribute(m_hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, &corner, sizeof(DWORD));
+    if (!self) {
+        return DefWindowProcW(hwnd, message, wParam, lParam);
     }
 
-    void DestroyHUDWindow() {
-        if (m_hwnd && IsWindow(m_hwnd)) {
-            DestroyWindow(m_hwnd);
-            m_hwnd = nullptr;
-        }
+    LRESULT result = self->HandleMessage(message, wParam, lParam);
+
+    if (message == WM_NCDESTROY) {
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+        self->m_window = nullptr;
     }
 
-    void ShowOrCycle() {
-        if (m_hwnd && IsWindowVisible(m_hwnd)) {
-            if (!m_filteredTabs.empty()) {
-                m_selectedIndex = (m_selectedIndex + 1) % m_filteredTabs.size();
-                InvalidateRect(m_hwnd, nullptr, FALSE);
-            }
-            return;
-        }
-        Show();
+    return result;
+}
+
+LRESULT TabSwitcher::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == g_hotkeyMessage) {
+        OnHotkey(wParam != 0);
+        return 0;
     }
 
-    void Show() {
-        std::wstring browserName = L"Browser";
-        HWND fgHwnd = FindTargetBrowserWindow(&browserName);
-        if (!fgHwnd) {
-            Wh_Log(L"AltTabs: No target browser window found.");
-            return;
-        }
-
-        m_targetBrowserHwnd = fgHwnd;
-        m_browserTitle = browserName;
-        FetchTabsForBrowser(fgHwnd);
-
-        m_filterText.clear();
-        m_selectedIndex = 0;
-        ApplyFilter();
-
-        if (!m_hwnd || !IsWindow(m_hwnd)) {
-            CreateHUDWindow();
-        }
-
-        // Center HUD on browser window
-        RECT rcBrowser = { 0 };
-        GetWindowRect(fgHwnd, &rcBrowser);
-        int w = 640;
-        int h = 440;
-        int x = rcBrowser.left + (rcBrowser.right - rcBrowser.left - w) / 2;
-        int y = rcBrowser.top + (rcBrowser.bottom - rcBrowser.top - h) / 2;
-        if (x < 50) x = 50;
-        if (y < 50) y = 50;
-
-        m_openTime = GetTickCount64();
-        SetWindowPos(m_hwnd, HWND_TOPMOST, x, y, w, h, SWP_SHOWWINDOW);
-        SetForegroundWindow(m_hwnd);
-        SetFocus(m_hwnd);
-        InvalidateRect(m_hwnd, nullptr, TRUE);
-        Wh_Log(L"AltTabs: HUD displayed for browser hwnd=0x%p (%ls) with %d tabs", fgHwnd, browserName.c_str(), (int)m_allTabs.size());
+    if (message == g_quitMessage) {
+        PostQuitMessage(0);
+        return 0;
     }
 
-    void Hide() {
-        if (m_hwnd && IsWindow(m_hwnd)) {
-            ShowWindow(m_hwnd, SW_HIDE);
-        }
-        m_openTime = 0;
-        if (m_targetBrowserHwnd && IsWindow(m_targetBrowserHwnd)) {
-            SetForegroundWindow(m_targetBrowserHwnd);
-        }
-    }
-
-    void ActivateSelectedTab() {
-        if (m_filteredTabs.empty() || m_selectedIndex >= m_filteredTabs.size()) {
-            Hide();
-            return;
-        }
-
-        auto tab = m_filteredTabs[m_selectedIndex];
-        HWND bHwnd = tab->browserHwnd;
-        Hide();
-
-        if (bHwnd && IsWindow(bHwnd)) {
-            if (IsIconic(bHwnd)) ShowWindow(bHwnd, SW_RESTORE);
-            SetForegroundWindow(bHwnd);
-
-            if (tab->uiaElement) {
-                SafeComPtr<IUIAutomationSelectionItemPattern> pSel;
-                if (SUCCEEDED(tab->uiaElement->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_IUIAutomationSelectionItemPattern, (void**)&pSel)) && pSel) {
-                    pSel->Select();
-                    Wh_Log(L"AltTabs: Tab activated via SelectionItemPattern");
-                    return;
-                }
-
-                SafeComPtr<IUIAutomationLegacyIAccessiblePattern> pLegacy;
-                if (SUCCEEDED(tab->uiaElement->GetCurrentPatternAs(UIA_LegacyIAccessiblePatternId, IID_IUIAutomationLegacyIAccessiblePattern, (void**)&pLegacy)) && pLegacy) {
-                    pLegacy->DoDefaultAction();
-                    Wh_Log(L"AltTabs: Tab activated via LegacyIAccessiblePattern");
-                    return;
-                }
-
-                SafeComPtr<IUIAutomationInvokePattern> pInv;
-                if (SUCCEEDED(tab->uiaElement->GetCurrentPatternAs(UIA_InvokePatternId, IID_IUIAutomationInvokePattern, (void**)&pInv)) && pInv) {
-                    pInv->Invoke();
-                    Wh_Log(L"AltTabs: Tab activated via InvokePattern");
-                    return;
-                }
-            }
-
-            // Coordinate click fallback
-            if (tab->boundingRect.right > tab->boundingRect.left) {
-                POINT pt = {
-                    tab->boundingRect.left + (tab->boundingRect.right - tab->boundingRect.left) / 2,
-                    tab->boundingRect.top + (tab->boundingRect.bottom - tab->boundingRect.top) / 2
-                };
-                if (ScreenToClient(bHwnd, &pt)) {
-                    LPARAM lParam = MAKELPARAM(pt.x, pt.y);
-                    PostMessageW(bHwnd, WM_LBUTTONDOWN, MK_LBUTTON, lParam);
-                    PostMessageW(bHwnd, WM_LBUTTONUP, 0, lParam);
-                    Wh_Log(L"AltTabs: Tab activated via coordinate click (%d, %d)", pt.x, pt.y);
-                }
-            }
-        }
-    }
-
-private:
-    TabSwitcherHUD() = default;
-
-    void FetchTabsForBrowser(HWND bHwnd) {
-        m_allTabs.clear();
-
-        // 1. Wake up Chromium accessibility tree
-        DWORD_PTR dwRes = 0;
-        SendMessageTimeoutW(bHwnd, WM_GETOBJECT, 0, (LPARAM)(LONG)-4 /* OBJID_CLIENT */, SMTO_ABORTIFHUNG, 100, &dwRes);
-
-        SafeComPtr<IUIAutomation> pUIA;
-        HRESULT hrUIA = CoCreateInstance(CLSID_CUIAutomation8, nullptr, CLSCTX_INPROC_SERVER, IID_IUIAutomation, (void**)&pUIA);
-        if (FAILED(hrUIA) || !pUIA) {
-            hrUIA = CoCreateInstance(CLSID_CUIAutomation, nullptr, CLSCTX_INPROC_SERVER, IID_IUIAutomation, (void**)&pUIA);
-        }
-        if (FAILED(hrUIA) || !pUIA) {
-            Wh_Log(L"AltTabs: CoCreateInstance(IUIAutomation) failed hr=0x%08X", (DWORD)hrUIA);
-        } else {
-            SafeComPtr<IUIAutomationElement> pWinElem;
-            HRESULT hrElem = pUIA->ElementFromHandle(bHwnd, &pWinElem);
-            if (SUCCEEDED(hrElem) && pWinElem) {
-                VARIANT varTabItem;
-                varTabItem.vt = VT_I4;
-                varTabItem.lVal = UIA_TabItemControlTypeId;
-                SafeComPtr<IUIAutomationCondition> pTabCond;
-                pUIA->CreatePropertyCondition(UIA_ControlTypePropertyId, varTabItem, &pTabCond);
-
-                SafeComPtr<IUIAutomationElementArray> pArray;
-                pWinElem->FindAll(TreeScope_Descendants, pTabCond, &pArray);
-                int count = 0;
-                if (pArray) pArray->get_Length(&count);
-
-                // Brief pause if Chromium tree is being generated
-                if (count == 0) {
-                    Sleep(50);
-                    pArray.Release();
-                    pWinElem->FindAll(TreeScope_Descendants, pTabCond, &pArray);
-                    if (pArray) pArray->get_Length(&count);
-                }
-
-                Wh_Log(L"AltTabs: Found %d UIA tab items in browser hwnd=0x%p", count, bHwnd);
-
-                for (int i = 0; i < count; ++i) {
-                    SafeComPtr<IUIAutomationElement> pElem;
-                    if (FAILED(pArray->GetElement(i, &pElem)) || !pElem) continue;
-
-                    auto tab = std::make_shared<TabInfo>();
-                    tab->browserHwnd = bHwnd;
-                    tab->uiaElement = pElem;
-
-                    BSTR bstrName = nullptr;
-                    if (SUCCEEDED(pElem->get_CurrentName(&bstrName)) && bstrName) {
-                        tab->title = bstrName;
-                        SysFreeString(bstrName);
-                    }
-                    if (tab->title.empty()) tab->title = L"Untitled Tab";
-
-                    tab->domain = ExtractDomainFromTitle(tab->title);
-                    pElem->get_CurrentBoundingRectangle(&tab->boundingRect);
-
-                    m_allTabs.push_back(tab);
-                }
-            } else {
-                Wh_Log(L"AltTabs: ElementFromHandle failed hr=0x%08X", (DWORD)hrElem);
-            }
-        }
-
-        // Guaranteed fallback: If no UIA tabs could be enumerated, use active window title
-        if (m_allTabs.empty()) {
-            wchar_t wTitle[512] = { 0 };
-            GetWindowTextW(bHwnd, wTitle, 512);
-            auto tab = std::make_shared<TabInfo>();
-            tab->browserHwnd = bHwnd;
-            tab->title = (wTitle[0] != L'\0') ? wTitle : L"Active Browser Tab";
-            tab->domain = ExtractDomainFromTitle(tab->title);
-            m_allTabs.push_back(tab);
-            Wh_Log(L"AltTabs: Fallback tab added: %ls", tab->title.c_str());
-        }
-    }
-
-    void ApplyFilter() {
-        m_filteredTabs.clear();
-        std::wstring query = m_filterText;
-        std::transform(query.begin(), query.end(), query.begin(), ::towlower);
-
-        for (auto& tab : m_allTabs) {
-            if (query.empty()) {
-                m_filteredTabs.push_back(tab);
-            } else {
-                std::wstring sTitle = tab->title;
-                std::transform(sTitle.begin(), sTitle.end(), sTitle.begin(), ::towlower);
-                std::wstring sDomain = tab->domain;
-                std::transform(sDomain.begin(), sDomain.end(), sDomain.begin(), ::towlower);
-
-                if (sTitle.find(query) != std::wstring::npos || sDomain.find(query) != std::wstring::npos) {
-                    m_filteredTabs.push_back(tab);
-                }
-            }
-        }
-
-        if (m_selectedIndex >= m_filteredTabs.size()) {
-            m_selectedIndex = m_filteredTabs.empty() ? 0 : m_filteredTabs.size() - 1;
-        }
-    }
-
-    static LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-        TabSwitcherHUD* pThis = (TabSwitcherHUD*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-        if (uMsg == WM_CREATE) {
-            auto* cs = (CREATESTRUCTW*)lParam;
-            pThis = (TabSwitcherHUD*)cs->lpCreateParams;
-            SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)pThis);
+    switch (message) {
+        case WM_CLOSE:
+            // Alt+F4 hides the window, it's reused next time.
+            Hide(true);
             return 0;
-        }
 
-        if (uMsg == WM_APP + 10) {
-            if (pThis) pThis->ShowOrCycle();
-            return 0;
-        }
-
-        if (!pThis) return DefWindowProcW(hwnd, uMsg, wParam, lParam);
-
-        switch (uMsg) {
         case WM_ACTIVATE:
-            if (LOWORD(wParam) == WA_INACTIVE) {
-                ULONGLONG now = GetTickCount64();
-                if (pThis->m_openTime > 0 && (now - pThis->m_openTime) > 400) {
-                    pThis->Hide();
+            if (LOWORD(wParam) == WA_INACTIVE && m_shownTime) {
+                ULONGLONG elapsed = GetTickCount64() - m_shownTime;
+                if (elapsed >= kActivationGraceMs) {
+                    Hide(false);
+                } else {
+                    SetTimer(m_window, kDeactivateTimerId,
+                             static_cast<UINT>(kActivationGraceMs - elapsed),
+                             nullptr);
                 }
             }
             return 0;
+
+        case WM_TIMER:
+            if (wParam == kDeactivateTimerId) {
+                KillTimer(m_window, kDeactivateTimerId);
+                if (m_shownTime && GetForegroundWindow() != m_window) {
+                    Hide(false);
+                }
+                return 0;
+            }
+            break;
 
         case WM_KEYDOWN:
-            if (wParam == VK_ESCAPE) {
-                pThis->Hide();
-                return 0;
-            }
-            if (wParam == VK_RETURN) {
-                pThis->ActivateSelectedTab();
-                return 0;
-            }
-            if (wParam == VK_TAB) {
-                bool shiftDown = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-                if (!pThis->m_filteredTabs.empty()) {
-                    if (shiftDown) {
-                        if (pThis->m_selectedIndex == 0) pThis->m_selectedIndex = pThis->m_filteredTabs.size() - 1;
-                        else pThis->m_selectedIndex--;
-                    } else {
-                        pThis->m_selectedIndex = (pThis->m_selectedIndex + 1) % pThis->m_filteredTabs.size();
-                    }
-                    InvalidateRect(hwnd, nullptr, FALSE);
-                }
-                return 0;
-            }
-            if (wParam == VK_DOWN) {
-                if (!pThis->m_filteredTabs.empty()) {
-                    pThis->m_selectedIndex = (pThis->m_selectedIndex + 1) % pThis->m_filteredTabs.size();
-                    InvalidateRect(hwnd, nullptr, FALSE);
-                }
-                return 0;
-            }
-            if (wParam == VK_UP) {
-                if (!pThis->m_filteredTabs.empty()) {
-                    if (pThis->m_selectedIndex == 0) pThis->m_selectedIndex = pThis->m_filteredTabs.size() - 1;
-                    else pThis->m_selectedIndex--;
-                    InvalidateRect(hwnd, nullptr, FALSE);
-                }
-                return 0;
-            }
-            if (wParam == VK_BACK) {
-                if (!pThis->m_filterText.empty()) {
-                    pThis->m_filterText.pop_back();
-                    pThis->ApplyFilter();
-                    InvalidateRect(hwnd, nullptr, FALSE);
-                }
+            if (HandleKey(wParam)) {
                 return 0;
             }
             break;
+
+        case WM_SYSKEYDOWN:
+            // Arrow keys and Enter while Alt is still held after Alt+Q.
+            if (wParam != VK_F4 && HandleKey(wParam)) {
+                return 0;
+            }
+            if (wParam == VK_MENU) {
+                return 0;
+            }
+            break;
+
+        case WM_SYSKEYUP:
+            // Releasing Alt mustn't enter menu mode.
+            if (wParam == VK_MENU || wParam == VK_F10) {
+                return 0;
+            }
+            break;
+
+        case WM_SYSCHAR:
+            // Alt+letter has no meaning here, don't beep.
+            return 0;
 
         case WM_CHAR:
-            if (wParam >= 32 && wParam != 127) {
-                pThis->m_filterText.push_back((wchar_t)wParam);
-                pThis->ApplyFilter();
-                InvalidateRect(hwnd, nullptr, FALSE);
-                return 0;
+            if (wParam >= L' ' && wParam != 0x7F) {
+                m_filter.push_back(static_cast<WCHAR>(wParam));
+                ApplyFilter();
+                InvalidateRect(m_window, nullptr, FALSE);
             }
-            break;
+            return 0;
 
         case WM_LBUTTONDOWN: {
-            int y = HIWORD(lParam);
-            int rowStart = 70;
-            int rowHeight = 44;
-            if (y >= rowStart) {
-                size_t clickedIndex = (y - rowStart) / rowHeight;
-                if (clickedIndex < pThis->m_filteredTabs.size()) {
-                    pThis->m_selectedIndex = clickedIndex;
-                    pThis->ActivateSelectedTab();
-                }
+            int row = GetRowFromPoint(static_cast<short>(HIWORD(lParam)));
+            if (row >= 0) {
+                m_selected = static_cast<size_t>(row);
+                ActivateSelectedTab();
             }
             return 0;
         }
+
+        case WM_MOUSEWHEEL: {
+            int notches = GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
+            ScrollBy(-notches * 3);
+            return 0;
+        }
+
+        case WM_DPICHANGED:
+            // The window is sized for the browser's monitor before it's moved
+            // there, so only the fonts need to change.
+            UpdateDpi(HIWORD(wParam));
+            InvalidateRect(m_window, nullptr, FALSE);
+            return 0;
+
+        case WM_ERASEBKGND:
+            return 1;
 
         case WM_PAINT: {
             PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
-            pThis->Render(hdc);
-            EndPaint(hwnd, &ps);
+            HDC hdc = BeginPaint(m_window, &ps);
+            Paint(hdc);
+            EndPaint(m_window, &ps);
             return 0;
         }
-        }
-
-        return DefWindowProcW(hwnd, uMsg, wParam, lParam);
     }
 
-    void Render(HDC hdc) {
-        RECT rc;
-        GetClientRect(m_hwnd, &rc);
-        int w = rc.right - rc.left;
-        int h = rc.bottom - rc.top;
-
-        HDC memDC = CreateCompatibleDC(hdc);
-        HBITMAP memBmp = CreateCompatibleBitmap(hdc, w, h);
-        HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
-
-        // Dark background
-        HBRUSH bgBrush = CreateSolidBrush(RGB(24, 24, 28));
-        FillRect(memDC, &rc, bgBrush);
-        DeleteObject(bgBrush);
-
-        SetBkMode(memDC, TRANSPARENT);
-        HFONT hFontMain = CreateFontW(17, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-        HFONT hFontSub = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-        HFONT hFontHeader = CreateFontW(18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
-
-        // Header / Search Bar
-        RECT rcSearch = { 16, 14, w - 16, 52 };
-        HBRUSH searchBg = CreateSolidBrush(RGB(36, 36, 42));
-        FillRect(memDC, &rcSearch, searchBg);
-        DeleteObject(searchBg);
-
-        SelectObject(memDC, hFontMain);
-        SetTextColor(memDC, RGB(220, 225, 235));
-        std::wstring prompt = m_filterText.empty() ? L"Type to search tabs... (Alt+` or Alt+Q to cycle)" : (L"Search: " + m_filterText);
-        if (m_filterText.empty()) SetTextColor(memDC, RGB(130, 135, 145));
-        RECT rcSearchText = { rcSearch.left + 12, rcSearch.top + 8, rcSearch.right - 12, rcSearch.bottom };
-        DrawTextW(memDC, prompt.c_str(), -1, &rcSearchText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-
-        // Tab list
-        int y = 66;
-        int rowHeight = 44;
-        for (size_t i = 0; i < m_filteredTabs.size() && y < h - 40; ++i) {
-            RECT rowRc = { 12, y, w - 12, y + rowHeight };
-            bool isSelected = (i == m_selectedIndex);
-
-            if (isSelected) {
-                HBRUSH selBrush = CreateSolidBrush(RGB(48, 68, 120));
-                FillRect(memDC, &rowRc, selBrush);
-                DeleteObject(selBrush);
-            }
-
-            // Domain Badge / Title
-            SelectObject(memDC, hFontMain);
-            SetTextColor(memDC, isSelected ? RGB(255, 255, 255) : RGB(230, 230, 235));
-            RECT titleRc = { rowRc.left + 14, rowRc.top + 4, rowRc.right - 130, rowRc.top + 24 };
-            DrawTextW(memDC, m_filteredTabs[i]->title.c_str(), -1, &titleRc, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-
-            // Domain chip
-            SelectObject(memDC, hFontSub);
-            SetTextColor(memDC, isSelected ? RGB(190, 215, 255) : RGB(140, 145, 160));
-            RECT domRc = { rowRc.right - 120, rowRc.top + 12, rowRc.right - 14, rowRc.bottom - 12 };
-            DrawTextW(memDC, m_filteredTabs[i]->domain.c_str(), -1, &domRc, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-
-            y += rowHeight + 2;
-        }
-
-        // Footer hint
-        SelectObject(memDC, hFontSub);
-        SetTextColor(memDC, RGB(120, 125, 135));
-        RECT ftRc = { 16, h - 28, w - 16, h - 6 };
-        DrawTextW(memDC, L"[Tab / \u2191\u2193] Navigate    [Enter] Switch Tab    [Esc] Close", -1, &ftRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-
-        DeleteObject(hFontMain);
-        DeleteObject(hFontSub);
-        DeleteObject(hFontHeader);
-
-        BitBlt(hdc, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
-        SelectObject(memDC, oldBmp);
-        DeleteObject(memBmp);
-        DeleteDC(memDC);
-    }
-
-    HWND m_hwnd = nullptr;
-    HWND m_targetBrowserHwnd = nullptr;
-    ULONGLONG m_openTime = 0;
-    std::wstring m_browserTitle;
-    std::wstring m_filterText;
-    size_t m_selectedIndex = 0;
-    std::vector<std::shared_ptr<TabInfo>> m_allTabs;
-    std::vector<std::shared_ptr<TabInfo>> m_filteredTabs;
-};
-
-// --- KEYBOARD HOOK & THREAD ---
-static HANDLE g_hThread = nullptr;
-static DWORD g_dwThreadId = 0;
-static HHOOK g_hKbdHook = nullptr;
-
-static LRESULT CALLBACK LowLevelKbdHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
-        auto* kbd = (KBDLLHOOKSTRUCT*)lParam;
-        bool altDown = ((kbd->flags & LLKHF_ALTDOWN) != 0) || ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
-        if (altDown) {
-            // VK_OEM_3: ` ~ (above Tab on standard US keyboard)
-            // 'Q' / 'q': Q (adjacent to Tab, universal on all physical layouts)
-            // VK_OEM_5: \ | (above Tab on European/ISO layouts)
-            if (kbd->vkCode == VK_OEM_3 || kbd->vkCode == 'Q' || kbd->vkCode == 'q' || kbd->vkCode == VK_OEM_5) {
-                HWND hHUD = TabSwitcherHUD::Instance().GetHwnd();
-                if (hHUD && IsWindow(hHUD)) {
-                    PostMessageW(hHUD, WM_APP + 10, 0, 0);
-                    return 1; // Consume key
-                }
-            }
-        }
-    }
-    return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    return DefWindowProcW(m_window, message, wParam, lParam);
 }
 
-DWORD WINAPI HUDThreadProc(LPVOID lpParam) {
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    Wh_Log(L"AltTabs: Worker thread started, CoInitializeEx hr=0x%08X", (DWORD)hr);
+bool TabSwitcher::HandleKey(WPARAM key) {
+    switch (key) {
+        case VK_ESCAPE:
+            Hide(true);
+            return true;
 
-    TabSwitcherHUD::Instance().CreateHUDWindow();
+        case VK_RETURN:
+            ActivateSelectedTab();
+            return true;
 
-    HINSTANCE hInst = HINST_THISCOMPONENT;
-    if (!hInst) {
-        GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            (LPCWSTR)LowLevelKbdHookProc,
-            &hInst
-        );
+        case VK_TAB:
+            MoveSelection(GetKeyState(VK_SHIFT) < 0 ? -1 : 1, true);
+            return true;
+
+        case VK_DOWN:
+            MoveSelection(1, true);
+            return true;
+
+        case VK_UP:
+            MoveSelection(-1, true);
+            return true;
+
+        case VK_NEXT:
+            MoveSelection(GetVisibleRowCount(), false);
+            return true;
+
+        case VK_PRIOR:
+            MoveSelection(-GetVisibleRowCount(), false);
+            return true;
+
+        case VK_BACK:
+            if (!m_filter.empty()) {
+                if (GetKeyState(VK_CONTROL) < 0) {
+                    m_filter.clear();
+                } else {
+                    m_filter.pop_back();
+                }
+                ApplyFilter();
+                InvalidateRect(m_window, nullptr, FALSE);
+            }
+            return true;
     }
 
-    g_hKbdHook = SetWindowsHookExW(
-        WH_KEYBOARD_LL,
-        LowLevelKbdHookProc,
-        hInst,
-        0
-    );
+    return false;
+}
 
-    if (g_hKbdHook) {
-        Wh_Log(L"AltTabs: Low-level keyboard hook installed successfully (hInst=0x%p)", hInst);
-    } else {
-        DWORD err = GetLastError();
-        Wh_Log(L"AltTabs: FAILED to install keyboard hook, err=%lu. Retrying with NULL module...", err);
-        g_hKbdHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKbdHookProc, nullptr, 0);
-        if (g_hKbdHook) {
-            Wh_Log(L"AltTabs: Keyboard hook installed with NULL module.");
+void TabSwitcher::OnHotkey(bool backwards) {
+    if (m_shownTime) {
+        if (GetForegroundWindow() != m_window) {
+            // Focus was lost during the grace period, take it back.
+            SetForegroundWindow(m_window);
         } else {
-            Wh_Log(L"AltTabs: Critical failure installing keyboard hook err=%lu", GetLastError());
+            MoveSelection(backwards ? -1 : 1, true);
+        }
+        return;
+    }
+
+    HWND foreground = GetForegroundWindow();
+    HWND browser = foreground ? GetAncestor(foreground, GA_ROOTOWNER) : nullptr;
+    if (!IsEnabledBrowserWindow(browser)) {
+        return;
+    }
+
+    Show(browser);
+}
+
+void TabSwitcher::Show(HWND browser) {
+    m_browser = browser;
+    LoadTabs(browser);
+    m_filter.clear();
+    ApplyFilter();
+
+    // Center on the browser window, inside the work area of its monitor.
+    UINT dpi = GetDpiForWindow(browser);
+    if (!dpi) {
+        dpi = 96;
+    }
+    int width = MulDiv(kWindowWidth, dpi, 96);
+    int height = MulDiv(kWindowHeight, dpi, 96);
+
+    RECT browserRect{};
+    GetWindowRect(browser, &browserRect);
+    MONITORINFO monitorInfo{};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    GetMonitorInfoW(MonitorFromWindow(browser, MONITOR_DEFAULTTONEAREST),
+                    &monitorInfo);
+    const RECT& workArea = monitorInfo.rcWork;
+
+    LONG x = (browserRect.left + browserRect.right - width) / 2;
+    LONG y = (browserRect.top + browserRect.bottom - height) / 2;
+    x = std::clamp(x, workArea.left,
+                   std::max(workArea.left, workArea.right - width));
+    y = std::clamp(y, workArea.top,
+                   std::max(workArea.top, workArea.bottom - height));
+
+    m_shownTime = GetTickCount64();
+    SetWindowPos(m_window, HWND_TOPMOST, x, y, width, height,
+                 SWP_SHOWWINDOW);
+    UpdateDpi(GetDpiForWindow(m_window));
+    SetForegroundWindow(m_window);
+    InvalidateRect(m_window, nullptr, FALSE);
+}
+
+void TabSwitcher::Hide(bool focusBrowser) {
+    if (!m_shownTime) {
+        return;
+    }
+
+    // Cleared first, since hiding the window deactivates it.
+    m_shownTime = 0;
+    KillTimer(m_window, kDeactivateTimerId);
+    ShowWindow(m_window, SW_HIDE);
+
+    if (focusBrowser && IsWindow(m_browser)) {
+        SetForegroundWindow(m_browser);
+    }
+
+    // Don't hold on to the browser's UI Automation elements while hidden.
+    m_tabs.clear();
+    m_visible.clear();
+    m_filter.clear();
+}
+
+void TabSwitcher::ActivateSelectedTab() {
+    if (m_selected >= m_visible.size()) {
+        Hide(true);
+        return;
+    }
+
+    ComPtr<IUIAutomationElement> element = m_tabs[m_visible[m_selected]].element;
+    HWND browser = m_browser;
+    Hide(false);
+
+    if (!IsWindow(browser)) {
+        return;
+    }
+
+    if (IsIconic(browser)) {
+        ShowWindow(browser, SW_RESTORE);
+    }
+    SetForegroundWindow(browser);
+
+    ComPtr<IUIAutomationSelectionItemPattern> selectionItem;
+    if (SUCCEEDED(element->GetCurrentPatternAs(
+            UIA_SelectionItemPatternId,
+            IID_PPV_ARGS(selectionItem.GetAddressOf()))) &&
+        selectionItem && SUCCEEDED(selectionItem->Select())) {
+        return;
+    }
+
+    ComPtr<IUIAutomationLegacyIAccessiblePattern> legacy;
+    if (SUCCEEDED(element->GetCurrentPatternAs(
+            UIA_LegacyIAccessiblePatternId,
+            IID_PPV_ARGS(legacy.GetAddressOf()))) &&
+        legacy && SUCCEEDED(legacy->DoDefaultAction())) {
+        return;
+    }
+
+    Wh_Log(L"Switching to the tab failed");
+}
+
+void TabSwitcher::LoadTabs(HWND browser) {
+    m_tabs.clear();
+
+    // Chromium creates its accessibility tree on the first request, so right
+    // after the browser starts, the tab strip might not be there yet.
+    constexpr int kAttempts = 3;
+    for (int attempt = 0; attempt < kAttempts && m_tabs.empty(); attempt++) {
+        if (attempt > 0) {
+            Sleep(50 * attempt);
+        }
+
+        ComPtr<IUIAutomationElement> window;
+        HRESULT hr = m_uia->ElementFromHandle(browser, &window);
+        if (FAILED(hr) || !window) {
+            Wh_Log(L"ElementFromHandle failed: 0x%08X", hr);
+            continue;
+        }
+
+        for (const auto& tabStrip : FindTabStrips(window.Get())) {
+            ComPtr<IUIAutomationElementArray> items;
+            if (FAILED(tabStrip->FindAllBuildCache(
+                    TreeScope_Descendants, m_tabItemCondition.Get(),
+                    m_tabCache.Get(), &items)) ||
+                !items) {
+                continue;
+            }
+
+            int count = 0;
+            items->get_Length(&count);
+            for (int i = 0; i < count; i++) {
+                ComPtr<IUIAutomationElement> item;
+                if (FAILED(items->GetElement(i, &item)) || !item) {
+                    continue;
+                }
+
+                TabEntry tab;
+
+                BSTR name = nullptr;
+                if (SUCCEEDED(item->get_CachedName(&name)) && name) {
+                    tab.title.assign(name, SysStringLen(name));
+                    SysFreeString(name);
+                }
+                if (tab.title.empty()) {
+                    tab.title = L"(untitled)";
+                }
+
+                VARIANT selected;
+                VariantInit(&selected);
+                if (SUCCEEDED(item->GetCachedPropertyValue(
+                        UIA_SelectionItemIsSelectedPropertyId, &selected)) &&
+                    selected.vt == VT_BOOL) {
+                    tab.active = selected.boolVal != VARIANT_FALSE;
+                }
+                VariantClear(&selected);
+
+                tab.site = GetSiteName(tab.title);
+                tab.searchText = ToLower(tab.title);
+                tab.element = std::move(item);
+                m_tabs.push_back(std::move(tab));
+            }
         }
     }
 
+    // Tabs of the same site share the position of the first one of them.
+    std::unordered_map<std::wstring, size_t> firstTabOfSite;
+    for (size_t i = 0; i < m_tabs.size(); i++) {
+        TabEntry& tab = m_tabs[i];
+        tab.groupOrder = i;
+        if (!tab.site.empty()) {
+            auto [it, inserted] = firstTabOfSite.try_emplace(ToLower(tab.site), i);
+            tab.groupOrder = it->second;
+        }
+    }
+
+    Wh_Log(L"Found %d tabs", static_cast<int>(m_tabs.size()));
+}
+
+// Returns the tab strips of a browser window, found with a breadth-first
+// search which skips web page content.
+std::vector<ComPtr<IUIAutomationElement>> TabSwitcher::FindTabStrips(
+    IUIAutomationElement* window) {
+    std::vector<ComPtr<IUIAutomationElement>> tabStrips;
+
+    std::deque<std::pair<ComPtr<IUIAutomationElement>, int>> queue;
+    queue.emplace_back(window, 0);
+    int visitedNodes = 0;
+
+    while (!queue.empty() && visitedNodes < kTabStripMaxNodes) {
+        auto [element, depth] = std::move(queue.front());
+        queue.pop_front();
+        visitedNodes++;
+
+        ComPtr<IUIAutomationElementArray> children;
+        if (FAILED(element->FindAllBuildCache(
+                TreeScope_Children, m_trueCondition.Get(),
+                m_controlTypeCache.Get(), &children)) ||
+            !children) {
+            continue;
+        }
+
+        int count = 0;
+        children->get_Length(&count);
+        for (int i = 0; i < count; i++) {
+            ComPtr<IUIAutomationElement> child;
+            if (FAILED(children->GetElement(i, &child)) || !child) {
+                continue;
+            }
+
+            CONTROLTYPEID type = 0;
+            child->get_CachedControlType(&type);
+            if (type == UIA_TabControlTypeId) {
+                tabStrips.push_back(std::move(child));
+            } else if (type != UIA_DocumentControlTypeId &&
+                       !IsLeafControlType(type) &&
+                       depth + 1 < kTabStripMaxDepth) {
+                queue.emplace_back(std::move(child), depth + 1);
+            }
+        }
+    }
+
+    return tabStrips;
+}
+
+void TabSwitcher::ApplyFilter() {
+    std::vector<std::wstring> words = SplitWords(ToLower(m_filter));
+
+    m_visible.clear();
+    for (size_t i = 0; i < m_tabs.size(); i++) {
+        const std::wstring& text = m_tabs[i].searchText;
+        bool matches = std::all_of(
+            words.begin(), words.end(), [&text](const std::wstring& word) {
+                return text.find(word) != std::wstring::npos;
+            });
+        if (matches) {
+            m_visible.push_back(i);
+        }
+    }
+
+    if (g_settings.groupBySite) {
+        std::stable_sort(m_visible.begin(), m_visible.end(),
+                         [this](size_t a, size_t b) {
+                             return m_tabs[a].groupOrder < m_tabs[b].groupOrder;
+                         });
+    }
+
+    m_selected = 0;
+    m_scroll = 0;
+}
+
+void TabSwitcher::MoveSelection(int delta, bool wrap) {
+    int count = static_cast<int>(m_visible.size());
+    if (count == 0) {
+        return;
+    }
+
+    int selected = static_cast<int>(m_selected) + delta;
+    if (wrap) {
+        selected = ((selected % count) + count) % count;
+    } else {
+        selected = std::clamp(selected, 0, count - 1);
+    }
+
+    m_selected = static_cast<size_t>(selected);
+    EnsureSelectionVisible();
+    InvalidateRect(m_window, nullptr, FALSE);
+}
+
+void TabSwitcher::ScrollBy(int rows) {
+    int maxScroll = std::max(
+        0, static_cast<int>(m_visible.size()) - GetVisibleRowCount());
+    int scroll =
+        std::clamp(static_cast<int>(m_scroll) + rows, 0, maxScroll);
+    m_scroll = static_cast<size_t>(scroll);
+    InvalidateRect(m_window, nullptr, FALSE);
+}
+
+void TabSwitcher::EnsureSelectionVisible() {
+    size_t rows = static_cast<size_t>(GetVisibleRowCount());
+    if (m_selected < m_scroll) {
+        m_scroll = m_selected;
+    } else if (m_selected >= m_scroll + rows) {
+        m_scroll = m_selected - rows + 1;
+    }
+}
+
+int TabSwitcher::GetVisibleRowCount() const {
+    RECT client{};
+    GetClientRect(m_window, &client);
+    int listHeight = client.bottom - Scale(kFooterHeight) - Scale(kListTop);
+    int rowGap = Scale(kRowStride) - Scale(kRowHeight);
+    return std::max(1, (listHeight + rowGap) / Scale(kRowStride));
+}
+
+// Returns the index into m_visible of the row at the given client coordinate,
+// or -1.
+int TabSwitcher::GetRowFromPoint(int y) const {
+    int offset = y - Scale(kListTop);
+    if (offset < 0 || offset % Scale(kRowStride) >= Scale(kRowHeight)) {
+        return -1;
+    }
+
+    int row = offset / Scale(kRowStride);
+    if (row >= GetVisibleRowCount()) {
+        return -1;
+    }
+
+    size_t index = m_scroll + static_cast<size_t>(row);
+    if (index >= m_visible.size()) {
+        return -1;
+    }
+
+    return static_cast<int>(index);
+}
+
+void TabSwitcher::UpdateDpi(UINT dpi) {
+    if (!dpi) {
+        dpi = 96;
+    }
+    if (dpi == m_dpi && m_titleFont) {
+        return;
+    }
+
+    m_dpi = dpi;
+    DeleteFonts();
+    m_titleFont = CreateFontW(-Scale(15), 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE,
+                              FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                              CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                              DEFAULT_PITCH, L"Segoe UI");
+    m_smallFont = CreateFontW(-Scale(12), 0, 0, 0, FW_NORMAL, FALSE, FALSE,
+                              FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                              CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                              DEFAULT_PITCH, L"Segoe UI");
+}
+
+void TabSwitcher::DeleteFonts() {
+    if (m_titleFont) {
+        DeleteObject(m_titleFont);
+        m_titleFont = nullptr;
+    }
+    if (m_smallFont) {
+        DeleteObject(m_smallFont);
+        m_smallFont = nullptr;
+    }
+}
+
+void TabSwitcher::Paint(HDC hdc) {
+    RECT client{};
+    GetClientRect(m_window, &client);
+    int width = client.right;
+    int height = client.bottom;
+
+    HDC dc = CreateCompatibleDC(hdc);
+    HBITMAP bitmap = CreateCompatibleBitmap(hdc, width, height);
+    HGDIOBJ oldBitmap = SelectObject(dc, bitmap);
+    HGDIOBJ oldFont = SelectObject(dc, m_titleFont);
+    SetBkMode(dc, TRANSPARENT);
+
+    FillSolidRect(dc, client, kBackgroundColor);
+
+    constexpr UINT kTextFlags =
+        DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX | DT_END_ELLIPSIS;
+
+    // Search box, with the number of matching tabs on the right.
+    RECT search{Scale(16), Scale(kSearchTop), width - Scale(16),
+                Scale(kSearchBottom)};
+    FillSolidRect(dc, search, kSearchColor);
+
+    RECT searchText = search;
+    InflateRect(&searchText, -Scale(12), 0);
+
+    WCHAR countText[64];
+    if (m_filter.empty()) {
+        swprintf_s(countText, m_tabs.size() == 1 ? L"%d tab" : L"%d tabs",
+                   static_cast<int>(m_tabs.size()));
+    } else {
+        swprintf_s(countText, L"%d of %d", static_cast<int>(m_visible.size()),
+                   static_cast<int>(m_tabs.size()));
+    }
+    SelectObject(dc, m_smallFont);
+    SetTextColor(dc, kDimTextColor);
+    DrawTextW(dc, countText, -1, &searchText, kTextFlags | DT_RIGHT);
+    searchText.right -= Scale(90);
+
+    SelectObject(dc, m_titleFont);
+    if (m_filter.empty()) {
+        SetTextColor(dc, kDimTextColor);
+        DrawTextW(dc, L"Type to search tabs", -1, &searchText, kTextFlags);
+    } else {
+        SetTextColor(dc, kTextColor);
+        DrawTextW(dc, m_filter.c_str(), static_cast<int>(m_filter.size()),
+                  &searchText, kTextFlags);
+
+        SIZE textSize{};
+        GetTextExtentPoint32W(dc, m_filter.c_str(),
+                              static_cast<int>(m_filter.size()), &textSize);
+        LONG caretX =
+            std::min(searchText.left + textSize.cx + Scale(2), searchText.right);
+        RECT caret{caretX, search.top + Scale(10),
+                   caretX + std::max(1, Scale(1)), search.bottom - Scale(10)};
+        FillSolidRect(dc, caret, kAccentColor);
+    }
+
+    // Tab list.
+    int listBottom = height - Scale(kFooterHeight);
+    int rows = GetVisibleRowCount();
+    int y = Scale(kListTop);
+    for (size_t i = m_scroll;
+         i < m_visible.size() && i < m_scroll + static_cast<size_t>(rows);
+         i++, y += Scale(kRowStride)) {
+        const TabEntry& tab = m_tabs[m_visible[i]];
+        bool selected = i == m_selected;
+
+        RECT row{Scale(12), y, width - Scale(12), y + Scale(kRowHeight)};
+        if (selected) {
+            FillSolidRect(dc, row, kSelectionColor);
+        }
+
+        if (tab.active) {
+            RECT marker{row.left, row.top + Scale(12), row.left + Scale(3),
+                        row.bottom - Scale(12)};
+            FillSolidRect(dc, marker, kAccentColor);
+        }
+
+        RECT titleRect{row.left + Scale(14), row.top, row.right - Scale(14),
+                       row.bottom};
+        if (!tab.site.empty()) {
+            RECT siteRect{row.right - Scale(kSiteWidth), row.top,
+                          row.right - Scale(14), row.bottom};
+            SelectObject(dc, m_smallFont);
+            SetTextColor(dc, selected ? kSelectedSiteColor : kSiteColor);
+            DrawTextW(dc, tab.site.c_str(), static_cast<int>(tab.site.size()),
+                      &siteRect, kTextFlags | DT_RIGHT);
+            titleRect.right = siteRect.left - Scale(10);
+        }
+
+        SelectObject(dc, m_titleFont);
+        SetTextColor(dc, selected ? kSelectedTextColor : kTextColor);
+        DrawTextW(dc, tab.title.c_str(), static_cast<int>(tab.title.size()),
+                  &titleRect, kTextFlags);
+    }
+
+    if (m_visible.empty()) {
+        RECT message{Scale(16), Scale(kListTop), width - Scale(16), listBottom};
+        SelectObject(dc, m_titleFont);
+        SetTextColor(dc, kDimTextColor);
+        DrawTextW(dc,
+                  m_tabs.empty() ? L"No tabs found in this window"
+                                 : L"No matching tabs",
+                  -1, &message, kTextFlags | DT_CENTER);
+    }
+
+    // Scroll bar.
+    size_t visibleCount = m_visible.size();
+    if (visibleCount > static_cast<size_t>(rows)) {
+        int trackTop = Scale(kListTop);
+        int trackHeight = rows * Scale(kRowStride) - (Scale(kRowStride) -
+                                                       Scale(kRowHeight));
+        int thumbHeight = std::max(
+            Scale(20), MulDiv(trackHeight, rows, static_cast<int>(visibleCount)));
+        int maxScroll = static_cast<int>(visibleCount) - rows;
+        int thumbTop = trackTop + MulDiv(trackHeight - thumbHeight,
+                                         static_cast<int>(m_scroll), maxScroll);
+        RECT thumb{width - Scale(8), thumbTop, width - Scale(5),
+                   thumbTop + thumbHeight};
+        FillSolidRect(dc, thumb, kScrollColor);
+    }
+
+    // Footer.
+    RECT footer{Scale(16), listBottom, width - Scale(16), height - Scale(6)};
+    SelectObject(dc, m_smallFont);
+    SetTextColor(dc, kDimTextColor);
+    DrawTextW(dc,
+              L"↑↓ Navigate        Enter Switch        Esc Close",
+              -1, &footer, kTextFlags | DT_CENTER);
+
+    BitBlt(hdc, 0, 0, width, height, dc, 0, 0, SRCCOPY);
+
+    SelectObject(dc, oldFont);
+    SelectObject(dc, oldBitmap);
+    DeleteObject(bitmap);
+    DeleteDC(dc);
+}
+
+bool IsHotkey(const KBDLLHOOKSTRUCT* key) {
+    // Q, and the key above Tab on US layouts.
+    if (key->vkCode != 'Q' && key->vkCode != VK_OEM_3) {
+        return false;
+    }
+
+    if (!(key->flags & LLKHF_ALTDOWN)) {
+        return false;
+    }
+
+    // Ctrl+Alt is also AltGr, which types characters on many layouts, e.g.
+    // AltGr+Q is @ on German keyboards.
+    if (GetAsyncKeyState(VK_CONTROL) < 0 || GetAsyncKeyState(VK_LWIN) < 0 ||
+        GetAsyncKeyState(VK_RWIN) < 0) {
+        return false;
+    }
+
+    return true;
+}
+
+LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+        const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
+        HWND switcherWindow = g_switcherWindow;
+        if (switcherWindow && IsHotkey(key)) {
+            HWND foreground = GetForegroundWindow();
+            HWND root =
+                foreground ? GetAncestor(foreground, GA_ROOTOWNER) : nullptr;
+            if (foreground == switcherWindow || IsEnabledBrowserWindow(root)) {
+                BOOL backwards = GetAsyncKeyState(VK_SHIFT) < 0;
+                PostMessageW(switcherWindow, g_hotkeyMessage, backwards, 0);
+                return 1;
+            }
+        }
+    }
+
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+// Owns the switcher window and does the UI Automation work.
+DWORD WINAPI SwitcherThreadProc(LPVOID param) {
+    HANDLE readyEvent = param;
+
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr)) {
+        Wh_Log(L"CoInitializeEx failed: 0x%08X", hr);
+        SetEvent(readyEvent);
+        return 0;
+    }
+
+    {
+        TabSwitcher switcher;
+        // g_threadStartOk is reused for the next thread once the event is set,
+        // so the result is also kept in a local variable.
+        bool startOk = switcher.Init();
+        if (startOk) {
+            g_switcherWindow = switcher.Window();
+        }
+        g_threadStartOk = startOk;
+        SetEvent(readyEvent);
+
+        if (startOk) {
+            MSG msg;
+            while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+
+        g_switcherWindow = nullptr;
+        switcher.Uninit();
+    }
+
+    CoUninitialize();
+    return 0;
+}
+
+// Only runs the keyboard hook, so that it's never blocked by the UI
+// Automation calls of the switcher thread.
+DWORD WINAPI HookThreadProc(LPVOID param) {
+    HANDLE readyEvent = param;
+
+    // Create the message queue before WhTool_ModUninit can post WM_QUIT.
     MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0)) {
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc,
+                                   HINST_THISCOMPONENT, 0);
+    if (!hook) {
+        Wh_Log(L"SetWindowsHookExW failed: %u", GetLastError());
+    }
+
+    g_threadStartOk = hook != nullptr;
+    SetEvent(readyEvent);
+    if (!hook) {
+        return 0;
+    }
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
 
-    if (g_hKbdHook) {
-        UnhookWindowsHookEx(g_hKbdHook);
-        g_hKbdHook = nullptr;
-    }
-
-    TabSwitcherHUD::Instance().DestroyHUDWindow();
-    CoUninitialize();
-    Wh_Log(L"AltTabs: Worker thread exiting.");
+    UnhookWindowsHookEx(hook);
     return 0;
 }
 
-} // namespace AltTabsMod
+// Starts a thread and waits until it signals whether it started successfully.
+HANDLE StartThread(LPTHREAD_START_ROUTINE threadProc, DWORD* threadId) {
+    HANDLE readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!readyEvent) {
+        return nullptr;
+    }
 
-// --- WINDHAWK TOOL MOD ENTRY POINTS ---
+    g_threadStartOk = false;
+    HANDLE thread =
+        CreateThread(nullptr, 0, threadProc, readyEvent, 0, threadId);
+    if (thread) {
+        // The thread sets the event on every path.
+        WaitForSingleObject(readyEvent, INFINITE);
+        if (!g_threadStartOk) {
+            WaitForSingleObject(thread, INFINITE);
+            CloseHandle(thread);
+            thread = nullptr;
+        }
+    }
+
+    CloseHandle(readyEvent);
+    return thread;
+}
+
+void StopSwitcherThread() {
+    if (!g_switcherThread) {
+        return;
+    }
+
+    HWND switcherWindow = g_switcherWindow;
+    if (switcherWindow) {
+        PostMessageW(switcherWindow, g_quitMessage, 0, 0);
+    }
+    WaitForSingleObject(g_switcherThread, INFINITE);
+    CloseHandle(g_switcherThread);
+    g_switcherThread = nullptr;
+}
+
+}  // namespace
+
 BOOL WhTool_ModInit() {
-    Wh_Log(L"Initializing AltTabs Browser HUD Mod...");
-    AltTabsMod::LoadSettings();
-    AltTabsMod::g_hThread = CreateThread(nullptr, 0, AltTabsMod::HUDThreadProc, nullptr, 0, &AltTabsMod::g_dwThreadId);
-    if (!AltTabsMod::g_hThread) {
-        Wh_Log(L"AltTabs: Failed to create worker thread, err=%lu", GetLastError());
+    LoadSettings();
+
+    g_hotkeyMessage = RegisterWindowMessageW(L"AltTabs_Hotkey_" WH_MOD_ID);
+    g_quitMessage = RegisterWindowMessageW(L"AltTabs_Quit_" WH_MOD_ID);
+    if (!g_hotkeyMessage || !g_quitMessage) {
+        Wh_Log(L"RegisterWindowMessageW failed: %u", GetLastError());
         return FALSE;
     }
-    Wh_Log(L"AltTabs Browser HUD Mod loaded successfully.");
+
+    g_switcherThread = StartThread(SwitcherThreadProc, nullptr);
+    if (!g_switcherThread) {
+        Wh_Log(L"Starting the switcher thread failed");
+        return FALSE;
+    }
+
+    g_hookThread = StartThread(HookThreadProc, &g_hookThreadId);
+    if (!g_hookThread) {
+        Wh_Log(L"Starting the keyboard hook thread failed");
+        StopSwitcherThread();
+        return FALSE;
+    }
+
     return TRUE;
 }
 
 void WhTool_ModUninit() {
-    Wh_Log(L"Unloading AltTabs Browser HUD Mod...");
-    if (AltTabsMod::g_dwThreadId != 0) {
-        PostThreadMessageW(AltTabsMod::g_dwThreadId, WM_QUIT, 0, 0);
+    if (g_hookThread) {
+        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
     }
-    if (AltTabsMod::g_hThread) {
-        WaitForSingleObject(AltTabsMod::g_hThread, 3000);
-        CloseHandle(AltTabsMod::g_hThread);
-        AltTabsMod::g_hThread = nullptr;
-    }
-    Wh_Log(L"AltTabs Browser HUD Mod unloaded.");
+
+    StopSwitcherThread();
 }
 
 void WhTool_ModSettingsChanged() {
-    Wh_Log(L"Settings updated for AltTabs Browser HUD Mod.");
-    AltTabsMod::LoadSettings();
+    LoadSettings();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
