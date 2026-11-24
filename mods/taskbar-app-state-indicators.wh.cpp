@@ -45,7 +45,7 @@ each icon, and they move along that frame whenever something changes.
   put), or the underline sweeps across for a minimized app.
 - **Attention**: the marks turn orange while the app's button flashes.
 - **Colors**: the app in front gets your accent color, every other app
-  grey.
+  grey. The app in front can also get thicker corner marks.
 - **Pinned apps** (optional, off by default): a dot or an X sign at the
   top center, whether the app is running, minimized or not running. A
   pinned app's top corners then stay apart instead of forming a cap,
@@ -73,10 +73,10 @@ Progress keeps moving even with them off, like the native progress bar.
 - **Frame**: how far the frame sits from the icon, its corner radius, its
   line thickness (which grows inwards), and how the corners join: not at
   all, into a cup and a cap, or all around where nothing sits in between.
-- **Colors**: the colors and opacity of the corner marks and the underline,
-  for the app in front and for every other app. Empty means your accent
-  color; `#Light|#Dark` sets a color per theme, and `#FF0000,#00FF00` a
-  gradient.
+- **Appearance**: the colors and opacity of the corner marks and the
+  underline, for the app in front and for every other app, and the corner
+  marks' line thickness on the app in front. Empty colors mean your accent color;
+  `#Light|#Dark` sets a color per theme, and `#FF0000,#00FF00` a gradient.
 - **Open and Maximized Windows**: the marks' shape, whether maximized
   windows keep their bottom corners, and the dimmed missing corners.
 - **Minimized Apps**: the underline's length and ends, and its dimmed
@@ -131,7 +131,7 @@ inactive and the log says so.
     $description: One value for all corners, two for the top and bottom corners, or four for top-left, top-right, bottom-right and bottom-left.
   - Thickness: '2'
     $name: Thickness
-    $description: Line thickness of the corner marks and the underline, in pixels. It grows inwards from the frame's outer edge.
+    $description: Line thickness of the corner marks and the underline, in pixels. It grows inwards from the frame's outer edge. The app in front can have its own, under Appearance.
   - CornerJoin: pairs
     $name: Connect the corners
     $description: Connecting the top two and bottom two joins the bottom corners into a cup under the icon and the top ones into a cap over it. Connecting all corners also joins each side's two corners along that side, unless an indicator sits on it (the several-windows indicator on the left, the badge on the right, the pinned-app indicator on top), so a maximized window without any of them gets the complete frame.
@@ -141,13 +141,16 @@ inactive and the log says so.
     - all: Connect all corners
   $name: Frame
   $description: The rounded rectangle around each icon that all indicators are drawn on. The frame itself is never drawn.
-- Colors:
+- Appearance:
   - ActiveColor: ''
     $name: Active app color
     $description: Color of the indicators on the button of the app in front. Leave empty for the system accent color. Hex color code, e.g. '#0078D4'; a different color per theme as '#Light|#Dark'; a left-to-right gradient as '#FF0000,#00FF00'.
   - ActiveOpacity: '1.0, 1.0'
     $name: Active app opacity (Light, Dark)
     $description: From 0 to 1, for the light and the dark theme. One value applies to both.
+  - ActiveThickness: ''
+    $name: Active app thickness
+    $description: Line thickness of the corner marks on the button of the app in front, in pixels. Like the frame's thickness, it grows inwards from the frame's outer edge; the dots, signs and counts stay where they are. Leave empty to use the frame's thickness.
   - InactiveColor: '#878787|#AEAEAE'
     $name: Other apps color
     $description: Color of the indicators on every other button, same format. Leave empty for the system accent color.
@@ -157,8 +160,8 @@ inactive and the log says so.
   - AccentShading: true
     $name: Theme-shaded accent
     $description: Where the system accent color is used, a darker shade of it in the light theme and a lighter one in the dark theme, instead of the plain accent in both.
-  $name: Colors
-  $description: For the corner marks and the underline. The dots, progress and attention have colors of their own. In a high contrast theme, the system's colors are used instead.
+  $name: Appearance
+  $description: How the corner marks and the underline look, on the app in front and on every other app. The dots, progress and attention have colors of their own. In a high contrast theme, the system's colors are used instead.
 - Corners:
   - MaximizedBottom: true
     $name: Bottom corners on maximized windows too
@@ -360,6 +363,7 @@ struct Settings {
     winrt::Windows::UI::Xaml::Thickness FrameOffsets = {5, 5, 5, 5};
     double FrameRadius[4] = {4.0, 4.0, 4.0, 4.0};
     double FrameThickness = 2.0;
+    double ActiveThickness = 0.0;  // the app in front's; 0: FrameThickness
 
     // Corner marks (open / maximized windows; always on, as are the
     // underline for minimized apps, counting the app in front as open, and
@@ -514,6 +518,8 @@ struct IndicatorSlot {
     // that ends, the next placement moves it from wherever it got to.
     bool forceMove = false;
 
+    double pathLength = 0.0;  // of the path it strokes (the corners' or the dots', see UpdateFramePath)
+
     ScalarTween trimStartTween, trimEndTween;
     ScalarTween thicknessTween;            // the dots' growing and shrinking
     std::vector<ColorTween> colorTweens;   // one per brush color
@@ -528,7 +534,8 @@ struct IndicatorRenderer {
     wuc::CompositionEasingFunction easing{nullptr};
     wuc::CompositionEasingFunction linear{nullptr};
     IndicatorSlot slots[kSlotCount];
-    FrameMetrics metrics;     // of the current path
+    FrameMetrics metrics;     // of the corners' path (the app in front's thickness, if it has its own)
+    FrameMetrics dotMetrics;  // of the dots' path, always the frame's thickness (see UpdateFramePath)
     double pad = 0.0;         // room around the box for caps and the dot
 
     // The corners and their fill twins, in one container shape: the pulse
@@ -900,14 +907,14 @@ std::wstring ReadModeSetting(PCWSTR name, PCWSTR fallback) {
 void LoadSettings() {
     std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
 
-    g_settings.AccentShading = Wh_GetIntSetting(L"Colors.AccentShading") != 0;
-    WindhawkUtils::StringSetting activeColStr(Wh_GetStringSetting(L"Colors.ActiveColor"));
+    g_settings.AccentShading = Wh_GetIntSetting(L"Appearance.AccentShading") != 0;
+    WindhawkUtils::StringSetting activeColStr(Wh_GetStringSetting(L"Appearance.ActiveColor"));
     ParseGradientColorPair(activeColStr.get(), g_settings.ActiveLight, g_settings.ActiveDark);
-    WindhawkUtils::StringSetting activeOpStr(Wh_GetStringSetting(L"Colors.ActiveOpacity"));
+    WindhawkUtils::StringSetting activeOpStr(Wh_GetStringSetting(L"Appearance.ActiveOpacity"));
     ParseDoublePair(activeOpStr.get(), g_settings.ActiveOpacityLight, g_settings.ActiveOpacityDark, 1.0, 1.0);
-    WindhawkUtils::StringSetting inactiveColStr(Wh_GetStringSetting(L"Colors.InactiveColor"));
+    WindhawkUtils::StringSetting inactiveColStr(Wh_GetStringSetting(L"Appearance.InactiveColor"));
     ParseGradientColorPair(inactiveColStr.get(), g_settings.InactiveLight, g_settings.InactiveDark);
-    WindhawkUtils::StringSetting inactiveOpStr(Wh_GetStringSetting(L"Colors.InactiveOpacity"));
+    WindhawkUtils::StringSetting inactiveOpStr(Wh_GetStringSetting(L"Appearance.InactiveOpacity"));
     ParseDoublePair(inactiveOpStr.get(), g_settings.InactiveOpacityLight, g_settings.InactiveOpacityDark, 1.0, 1.0);
     WindhawkUtils::StringSetting groupRuleStr(Wh_GetStringSetting(L"Rules.GroupRule"));
     g_settings.IndGroupAll = groupRuleStr.get() && wcscmp(groupRuleStr.get(), L"all") == 0;
@@ -936,6 +943,11 @@ void LoadSettings() {
     ParseCornerRadius(frameRadStr.get(), g_settings.FrameRadius, 4.0);
     WindhawkUtils::StringSetting frameThickStr(Wh_GetStringSetting(L"Frame.Thickness"));
     g_settings.FrameThickness = std::max(0.5, ParseDouble(frameThickStr.get(), 2.0));
+    {
+        WindhawkUtils::StringSetting activeThickStr(Wh_GetStringSetting(L"Appearance.ActiveThickness"));
+        double value = ParseDouble(activeThickStr.get(), 0.0);
+        g_settings.ActiveThickness = value > 0.0 ? std::max(0.5, value) : 0.0;
+    }
 
     g_settings.IndMaximizedBottom = Wh_GetIntSetting(L"Corners.MaximizedBottom") != 0;
     g_settings.IndDimEnabled = Wh_GetIntSetting(L"Corners.DimEnabled") != 0;
@@ -3345,31 +3357,76 @@ bool EnsureRenderer(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
     return true;
 }
 
-// Rebuilds the frame path when the box, thickness, radii or corner style
-// changed. Returns true when it did (everything is then placed without
-// animation, since every position along the path changed meaning).
-bool UpdateFramePath(IndicatorRenderer& r, const FrameBox& box, const Settings& localSettings) {
-    FrameMetrics m = ComputeFrameMetrics(box.W, box.H, localSettings.FrameThickness, localSettings.FrameRadius,
-                                         localSettings.IndDiagonal);
+// Whether two frames have the same shape (size, radii, corner style),
+// thickness aside.
+bool SameFrameShape(const FrameMetrics& a, const FrameMetrics& b) {
+    if (!a.valid || !b.valid) return false;
+    if (std::abs(a.W - b.W) > 0.01 || std::abs(a.H - b.H) > 0.01 || a.diagonal != b.diagonal) return false;
+    for (int k = 0; k < 4; k++) {
+        if (std::abs(a.r[k] - b.r[k]) > 0.01) return false;
+    }
+    return true;
+}
+
+bool SameFrame(const FrameMetrics& a, const FrameMetrics& b) {
+    return SameFrameShape(a, b) && std::abs(a.t - b.t) < 0.001;
+}
+
+// Rebuilds the frame paths when the box, thickness, radii or corner style
+// changed. There are two: the corners' (and their fills'), built for the
+// button's thickness (the app in front can have its own, see
+// ActiveThickness, and its stroke grows inwards from the same outer edge),
+// and the dots', always built for the frame's thickness, so the dots, signs
+// and counts sit in the same place on every button. With one thickness
+// they're one path. Returns true when anything changed (everything is then
+// placed without animation, since positions along the paths changed
+// meaning), except that `thicknessOnly` says when nothing but the corners'
+// thickness changed (another app came to the front): their positions then
+// barely move, and the change can animate like any other.
+bool UpdateFramePath(IndicatorRenderer& r, const FrameBox& box, const Settings& localSettings, double thickness,
+                     bool* thicknessOnly = nullptr) {
+    if (thicknessOnly) *thicknessOnly = false;
+    FrameMetrics m = ComputeFrameMetrics(box.W, box.H, thickness, localSettings.FrameRadius, localSettings.IndDiagonal);
+    FrameMetrics mb = std::abs(thickness - localSettings.FrameThickness) < 0.001
+        ? m
+        : ComputeFrameMetrics(box.W, box.H, localSettings.FrameThickness, localSettings.FrameRadius,
+                              localSettings.IndDiagonal);
     // Room for the pulse too: the frame grows past the box when it scales
-    // above 1.
-    double pad = std::max({localSettings.FrameThickness, localSettings.MultiDiameter, localSettings.BadgeDiameter,
-                           localSettings.PinnedDiameter}) + 2.0 +
+    // above 1. The same for both thicknesses, so activating an app doesn't
+    // move the visual.
+    double pad = std::max({localSettings.FrameThickness, localSettings.ActiveThickness, localSettings.MultiDiameter,
+                           localSettings.BadgeDiameter, localSettings.PinnedDiameter}) + 2.0 +
                  std::max(0.0, localSettings.PulseScale - 1.0) * std::max(m.W, m.H) / 2.0;
 
-    bool same = r.metrics.valid && std::abs(r.metrics.W - m.W) < 0.01 && std::abs(r.metrics.H - m.H) < 0.01 &&
-                std::abs(r.metrics.t - m.t) < 0.001 && r.metrics.diagonal == m.diagonal;
-    for (int k = 0; k < 4 && same; k++) {
-        if (std::abs(r.metrics.r[k] - m.r[k]) > 0.01) same = false;
-    }
-    if (same && std::abs(r.pad - pad) < 0.01) return false;
+    bool cornersSame = SameFrame(r.metrics, m);
+    bool dotsSame = SameFrame(r.dotMetrics, mb);
+    if (cornersSame && dotsSame && std::abs(r.pad - pad) < 0.01) return false;
 
-    if (!same) {
-        auto path = CreateFramePath(m);
-        if (!path) return false;
-        for (auto& slot : r.slots) slot.geometry.Path(path);
-        for (auto& twin : r.fills) twin.geometry.Path(path);
-        r.metrics = m;
+    if (!cornersSame || !dotsSame) {
+        wuc::CompositionPath cornerPath{nullptr};
+        if (!cornersSame) {
+            cornerPath = CreateFramePath(m);
+            if (!cornerPath) return false;
+        }
+        if (!cornersSame) {
+            if (thicknessOnly) *thicknessOnly = dotsSame && SameFrameShape(r.metrics, m);
+            for (int k = kSlotTL; k <= kSlotBL; k++) {
+                r.slots[k].geometry.Path(cornerPath);
+                r.slots[k].pathLength = m.P;
+            }
+            for (auto& twin : r.fills) twin.geometry.Path(cornerPath);
+            r.metrics = m;
+        }
+        if (!dotsSame) {
+            // The same path object when the thicknesses match.
+            auto dotPath = cornerPath && SameFrame(m, mb) ? cornerPath : CreateFramePath(mb);
+            if (!dotPath) return false;
+            for (int k = kSlotDot; k < kSlotCount; k++) {
+                r.slots[k].geometry.Path(dotPath);
+                r.slots[k].pathLength = mb.P;
+            }
+            r.dotMetrics = mb;
+        }
         static std::atomic<bool> logged;
         if (!logged.exchange(true)) {
             Wh_Log(L"Frame path created: %gx%g, length %g; geometry sources alive: %d", m.W, m.H, m.P,
@@ -3449,7 +3506,7 @@ void CornerExtent(const FrameMetrics& m, int k, double leg, bool roundedEnds, do
 }
 
 void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabelCount], SignTarget& plus, SignTarget& cross,
-                        const FrameMetrics& m, const Settings& localSettings, int state, uint8_t mask, bool hasBadge,
+                        const FrameMetrics& m, const FrameMetrics& mb, const Settings& localSettings, int state, uint8_t mask, bool hasBadge,
                         std::wstring const& badgeCount, int windowCount, bool isActive, bool isLight, bool attention,
                         int pinnedState) {
     using wuc::CompositionStrokeCap;
@@ -3591,6 +3648,10 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
         }
     }
 
+    // The dots, signs and counts sit on the dots' path (`mb`, the frame's
+    // thickness), not the corners', so a thicker or thinner app in front
+    // doesn't move them.
+    //
     // The multi-window dot: a near-zero piece with round caps, as thick as
     // its diameter, so it is a circle sitting on the path, in its own color.
     // It grows from its center when it appears and shrinks back into it when
@@ -3604,21 +3665,21 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
             : ResolveThemedColors(localSettings.MultiLight, localSettings.MultiDark, 1.0, 1.0, isLight,
                                   localSettings.AccentShading);
         t.startCap = t.endCap = CompositionStrokeCap::Round;
-        t.hidden = m.sLeftMid;
+        t.hidden = mb.sLeftMid;
         t.grow = true;
         t.trail = false;
         bool several = localSettings.MultiEnabled && windowCount >= 2;
         t.shown = several && !localSettings.MultiNumber && !localSettings.MultiPlus;
-        t.a = m.sLeftMid - kDotEpsilon;
-        t.b = m.sLeftMid + kDotEpsilon;
+        t.a = mb.sLeftMid - kDotEpsilon;
+        t.b = mb.sLeftMid + kDotEpsilon;
 
         // Or a plus sign, as big as the dot, its lines about a fifth of its
         // size thick (at least a pixel), snapped to whole pixels (see
         // UpdateSign).
         plus.shown = several && localSettings.MultiPlus;
         plus.diagonal = false;
-        plus.x = m.x0;
-        plus.y = m.cy;
+        plus.x = mb.x0;
+        plus.y = mb.cy;
         plus.size = localSettings.MultiDiameter;
         plus.stroke = std::clamp(localSettings.MultiDiameter * 0.2, 1.0, localSettings.MultiDiameter / 2.0);
         plus.colors = t.colors;
@@ -3627,8 +3688,8 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
         auto& label = labels[kLabelMulti];
         label.shown = several && localSettings.MultiNumber;
         label.text = std::to_wstring(std::clamp(windowCount, 0, 99));
-        label.x = m.x0;
-        label.y = m.cy;
+        label.x = mb.x0;
+        label.y = mb.cy;
         label.size = localSettings.MultiNumberSize;
         label.side = -1;
         label.colors = t.colors;
@@ -3646,21 +3707,21 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
             : ResolveThemedColors(localSettings.BadgeLight, localSettings.BadgeDark, 1.0, 1.0, isLight,
                                   localSettings.AccentShading);
         t.startCap = t.endCap = CompositionStrokeCap::Round;
-        t.hidden = m.sRightMid;
+        t.hidden = mb.sRightMid;
         t.grow = true;
         t.trail = false;
         // Or the badge's count, where it has one; a badge without one (a
         // glyph, an overlay icon) keeps the dot.
         bool counted = badgeShown && localSettings.BadgeNumber && !badgeCount.empty();
         t.shown = badgeShown && !counted;
-        t.a = m.sRightMid - kDotEpsilon;
-        t.b = m.sRightMid + kDotEpsilon;
+        t.a = mb.sRightMid - kDotEpsilon;
+        t.b = mb.sRightMid + kDotEpsilon;
 
         auto& label = labels[kLabelBadge];
         label.shown = counted;
         label.text = badgeCount;
-        label.x = m.x1;
-        label.y = m.cy;
+        label.x = mb.x1;
+        label.y = mb.cy;
         label.size = localSettings.BadgeNumberSize;
         label.side = 1;
         label.colors = t.colors;
@@ -3690,8 +3751,8 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
         // thick (at least a pixel).
         cross.shown = pinnedDot && localSettings.PinnedCross;
         cross.diagonal = true;
-        cross.x = m.cx;
-        cross.y = m.y0;
+        cross.x = mb.cx;
+        cross.y = mb.y0;
         cross.size = localSettings.PinnedDiameter;
         cross.stroke = std::clamp(localSettings.PinnedDiameter * 0.2, 1.0, localSettings.PinnedDiameter / 2.0);
         cross.colors = t.colors;
@@ -3908,7 +3969,7 @@ void AnimateSlotThickness(IndicatorRenderer& r, IndicatorSlot& slot, double to, 
 }
 
 void AnimateSlot(IndicatorRenderer& r, IndicatorSlot& slot, const SlotTarget& target, const AnimationContext& ctx) {
-    const double P = r.metrics.P;
+    const double P = slot.pathLength > 0.0 ? slot.pathLength : r.metrics.P;
     auto frac = [&](double s) { return (float)std::clamp(s / P, 0.0, 1.0); };
 
     if (slot.startCap != target.startCap) {
@@ -4657,8 +4718,14 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
     auto& r = entry->renderer;
     if (!r.visual) return;
     FrameBox box = ComputeFrameBox(iw, ih, localSettings);
-    bool rebuilt = UpdateFramePath(r, box, localSettings);
-    if (!r.metrics.valid) return;
+    // The app in front can have thicker (or thinner) corner marks; their
+    // path is built for the thickness, so the stroke grows inwards either
+    // way. The dots, signs and counts keep the frame's (see UpdateFramePath).
+    double thickness = activeState == 1 && localSettings.ActiveThickness > 0.0 ? localSettings.ActiveThickness
+                                                                                : localSettings.FrameThickness;
+    bool thicknessOnly = false;
+    bool rebuilt = UpdateFramePath(r, box, localSettings, thickness, &thicknessOnly);
+    if (!r.metrics.valid || !r.dotMetrics.valid) return;
 
     if (!entry->hostBound || std::abs(entry->hostAdjX - box.adjX) > 0.5f || std::abs(entry->hostAdjY - box.adjY) > 0.5f) {
         if (BindToElement(host, panel, icon, box.adjX, box.adjY)) {
@@ -4693,7 +4760,7 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
     int pinnedState = localSettings.PinnedEnabled || localSettings.DebugLog ? ReadButtonPinned(button) : -1;
     if (pinnedState < 0) pinnedState = entry->pinnedState;  // recycled: keep the last known
     entry->pinnedState = (int8_t)pinnedState;
-    ComputeSlotTargets(targets, labels, plus, cross, r.metrics, localSettings, state, mask, hasBadge, entry->badgeCount,
+    ComputeSlotTargets(targets, labels, plus, cross, r.metrics, r.dotMetrics, localSettings, state, mask, hasBadge, entry->badgeCount,
                        windowCount, isActive, IsElementLightMode(button), attention, pinnedState);
 
     // A button's first placement (the mod just turned on, a new button)
@@ -4760,8 +4827,10 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
 
     AnimationContext ctx;
     // The mod's own setting decides, not the Windows animation setting. A
-    // rebuilt frame (a new size) is placed at once, except on the intro.
-    ctx.animate = localSettings.Animations && entry->hostBound && (intro || (!created && !rebuilt));
+    // rebuilt frame (a new size) is placed at once, except on the intro and
+    // when only the thickness changed (the app in front).
+    ctx.animate = localSettings.Animations && entry->hostBound &&
+                  (intro || (!created && (!rebuilt || thicknessOnly)));
     ctx.durationMs = localSettings.AnimationDurationMs;
     ctx.trailMs = std::max(1, (int)std::lround(localSettings.AnimationDurationMs * 0.4));
     for (int k = 0; k < kSlotCount; k++) {
