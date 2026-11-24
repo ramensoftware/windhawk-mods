@@ -1335,16 +1335,7 @@ bool GetFunctionRange(void* function, uintptr_t& start, uintptr_t& end) {
     return true;
 }
 
-// Resolve the targets for the loaded Windows build, then obtain their exact
-// code ranges without detouring either helper.
-bool ResolveTargetFunctionRange() {
-    g_twinuiPcShell = LoadLibraryExW(
-        L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!g_twinuiPcShell) {
-        Wh_Log(L"Failed to load twinui.pcshell.dll: %lu", GetLastError());
-        return false;
-    }
-
+void ResolveVirtualDesktopSymbols() {
     void* targetFunction = nullptr;
     void* backgroundFunction = nullptr;
     // twinui.pcshell.dll
@@ -1365,14 +1356,21 @@ bool ResolveTargetFunctionRange() {
             nullptr,
             true,
         },
+        {{L"private: long __cdecl CVirtualDesktopHotkeyHandler::InvokeSwitchDesktopWithAnimation(enum VirtualDesktopSwitchDirection)"},
+         &g_switchByHotkeyOriginal, SwitchByHotkeyHook, true},
+        {{L"public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktopWithAnimation(struct IVirtualDesktop *)"},
+         &g_switchWithAnimationOriginal, SwitchWithAnimationHook, true},
+        {{L"private: long __cdecl VirtualDesktopGestureHandler::InitializeContext(unsigned int)"},
+         &g_initializeGestureOriginal, InitializeGestureHook, true},
+        {{L"public: virtual void __cdecl VirtualDesktopGestureHandler::Cleanup(unsigned int)"},
+         &g_gestureCleanupOriginal, GestureCleanupHook, true},
     };
 
-    // Both are optional so either feature works without the other.
+    // Windhawk stores one symbol cache entry per module for the mod.
     if (!WindhawkUtils::HookSymbols(
             g_twinuiPcShell, twinuiPcshellDllSymbolHooks,
             ARRAYSIZE(twinuiPcshellDllSymbolHooks))) {
-        Wh_Log(L"Failed to resolve virtual desktop symbols");
-        return false;
+        Wh_Log(L"Failed to resolve or hook one or more virtual desktop symbols");
     }
 
     if (!backgroundFunction ||
@@ -1384,14 +1382,10 @@ bool ResolveTargetFunctionRange() {
 
     if (!targetFunction) {
         Wh_Log(L"Failed to resolve the virtual desktop wallpaper helper");
-        return false;
-    }
-    if (!GetFunctionRange(targetFunction, g_targetFunctionStart,
-                          g_targetFunctionEnd)) {
+    } else if (!GetFunctionRange(targetFunction, g_targetFunctionStart,
+                                 g_targetFunctionEnd)) {
         Wh_Log(L"Resolved an invalid virtual desktop helper range");
-        return false;
     }
-    return true;
 }
 
 // Independent of the thumbnail cache and its worker: the filter keeps no state.
@@ -1495,26 +1489,16 @@ BOOL Wh_ModInit() {
     LoadSettings(true);
     if (!IsOrMayBecomeShellExplorer()) return TRUE;
 
-    const bool thumbnailHookInstalled = ResolveTargetFunctionRange() && HookThumbnailCache();
+    g_twinuiPcShell = LoadLibraryExW(
+        L"twinui.pcshell.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_twinuiPcShell) {
-        ReleaseModuleReferences();
+        Wh_Log(L"Failed to load twinui.pcshell.dll: %lu", GetLastError());
         return FALSE;
     }
-    const bool filterHookInstalled = HookHiddenWindowFilter();
 
-    // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK transitionHooks[] = {
-        {{L"private: long __cdecl CVirtualDesktopHotkeyHandler::InvokeSwitchDesktopWithAnimation(enum VirtualDesktopSwitchDirection)"},
-         &g_switchByHotkeyOriginal, SwitchByHotkeyHook, true},
-        {{L"public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktopWithAnimation(struct IVirtualDesktop *)"},
-         &g_switchWithAnimationOriginal, SwitchWithAnimationHook, true},
-        {{L"private: long __cdecl VirtualDesktopGestureHandler::InitializeContext(unsigned int)"},
-         &g_initializeGestureOriginal, InitializeGestureHook, true},
-        {{L"public: virtual void __cdecl VirtualDesktopGestureHandler::Cleanup(unsigned int)"},
-         &g_gestureCleanupOriginal, GestureCleanupHook, true},
-    };
-    WindhawkUtils::HookSymbols(g_twinuiPcShell, transitionHooks,
-                               ARRAYSIZE(transitionHooks));
+    ResolveVirtualDesktopSymbols();
+    const bool thumbnailHookInstalled = g_targetFunctionStart && HookThumbnailCache();
+    const bool filterHookInstalled = HookHiddenWindowFilter();
     Wh_Log(L"Transition hooks: keyboard=%d animated=%d gesture=%d gesture-end=%d",
            g_switchByHotkeyOriginal != nullptr, g_switchWithAnimationOriginal != nullptr,
            g_initializeGestureOriginal != nullptr, g_gestureCleanupOriginal != nullptr);
