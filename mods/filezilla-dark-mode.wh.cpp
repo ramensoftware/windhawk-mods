@@ -2,7 +2,7 @@
 // @id              filezilla-dark-mode
 // @name            FileZilla Dark Mode
 // @description     Forces a dark theme on FileZilla Client for Windows
-// @version         1.5
+// @version         1.6
 // @author          tulukaruk
 // @github          https://github.com/tulukaruk
 // @include         filezilla.exe
@@ -60,6 +60,10 @@ column headers, text boxes, labels and the message log.
 #include <dwmapi.h>
 #include <cwchar>
 #include <cstring>
+#include <mutex>
+#include <unordered_set>
+
+#include <windhawk_utils.h>
 
 // ---------------------------------------------------------------------------
 // Undocumented uxtheme exports (by ordinal) that Win32 apps use for dark mode.
@@ -83,7 +87,6 @@ static HBRUSH   g_origBrushes[kMaxColor + 1];  // real system brushes, to recogn
 
 static COLORREF g_bg, g_face, g_text, g_border;
 static HBRUSH g_borderBrush;
-static UINT g_msgUnsubclass;
 // Pop-up dialogs are always left in the normal light style.
 static const bool g_darkDialogs = false;
 
@@ -641,14 +644,17 @@ static void DrawDarkBorder(HWND hwnd) {
     ReleaseDC(hwnd, hdc);
 }
 
+// Every window we subclass is recorded, so Wh_ModUninit can remove the
+// subclass from exactly those windows before the mod's code is unloaded.
+static std::mutex g_subclassedMutex;
+static std::unordered_set<HWND> g_subclassed;
+
 static LRESULT CALLBACK DarkSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp,
-                                         UINT_PTR id, DWORD_PTR) {
-    if (msg == g_msgUnsubclass && g_msgUnsubclass) {
-        RemoveWindowSubclass(hwnd, DarkSubclassProc, id);
-        return 0;
-    }
+                                         DWORD_PTR) {
     if (msg == WM_NCDESTROY) {
-        RemoveWindowSubclass(hwnd, DarkSubclassProc, id);
+        // The WindhawkUtils wrapper removes the subclass itself on WM_NCDESTROY.
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        g_subclassed.erase(hwnd);
         return DefSubclassProc(hwnd, msg, wp, lp);
     }
     // Checked on every message, so it works even if the window only became
@@ -681,17 +687,15 @@ static LRESULT CALLBACK DarkSubclassProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM 
             DrawDarkBorder(hwnd);
             return r;
         }
-        case WM_NCDESTROY:
-            RemoveWindowSubclass(hwnd, DarkSubclassProc, id);
-            break;
     }
     return DefSubclassProc(hwnd, msg, wp, lp);
 }
 
 static void SubclassForDark(HWND hwnd) {
-    DWORD pid = 0;
-    if (GetWindowThreadProcessId(hwnd, &pid) != GetCurrentThreadId()) return;  // owner thread only
-    SetWindowSubclass(hwnd, DarkSubclassProc, 0xFD4C, 0);
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, DarkSubclassProc, 0)) {
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        g_subclassed.insert(hwnd);
+    }
 }
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -705,7 +709,8 @@ static HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className, LPCWST
     HWND hwnd = CreateWindowExW_Original(exStyle, className, windowName, style, x, y,
                                          width, height, parent, menu, instance, param);
     if (light) g_light--;
-    if (!hwnd) return hwnd;
+    // Message-only windows (e.g. COM's OleMainThreadWndClass) never paint.
+    if (!hwnd || parent == HWND_MESSAGE) return hwnd;
 
     if (!g_darkDialogs && !light && IsDialogTopLevel(hwnd)) {
         SetPropW(hwnd, kLightProp, (HANDLE)1);
@@ -721,8 +726,8 @@ static HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className, LPCWST
 // Re-theme windows that already exist (mod enabled while FileZilla is open).
 // ---------------------------------------------------------------------------
 static BOOL CALLBACK ApplyChildProc(HWND hwnd, LPARAM) {
-    if (IsInLightDialog(hwnd)) return TRUE;
-    ApplyDarkToWindow(hwnd);
+    if (!IsInLightDialog(hwnd)) ApplyDarkToWindow(hwnd);
+    SubclassForDark(hwnd);
     return TRUE;
 }
 
@@ -730,7 +735,8 @@ static BOOL CALLBACK ApplyTopProc(HWND hwnd, LPARAM) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (pid != GetCurrentProcessId()) return TRUE;
-    ApplyDarkToWindow(hwnd);
+    if (!IsInLightDialog(hwnd)) ApplyDarkToWindow(hwnd);
+    SubclassForDark(hwnd);
     EnumChildWindows(hwnd, ApplyChildProc, 0);
     DWORD_PTR result;
     SendMessageTimeoutW(hwnd, WM_SYSCOLORCHANGE, 0, 0, SMTO_ABORTIFHUNG, 500, &result);
@@ -742,25 +748,8 @@ static BOOL CALLBACK ApplyTopProc(HWND hwnd, LPARAM) {
 // ---------------------------------------------------------------------------
 // Mod entry points
 // ---------------------------------------------------------------------------
-static BOOL CALLBACK UnsubclassChildProc(HWND hwnd, LPARAM) {
-    DWORD_PTR result;
-    SendMessageTimeoutW(hwnd, g_msgUnsubclass, 0, 0, SMTO_ABORTIFHUNG, 500, &result);
-    return TRUE;
-}
-
-static BOOL CALLBACK UnsubclassTopProc(HWND hwnd, LPARAM) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid != GetCurrentProcessId()) return TRUE;
-    UnsubclassChildProc(hwnd, 0);
-    EnumChildWindows(hwnd, UnsubclassChildProc, 0);
-    return TRUE;
-}
-
 BOOL Wh_ModInit() {
     Wh_Log(L"FileZilla Dark Mode: init");
-
-    g_msgUnsubclass = RegisterWindowMessageW(L"Windhawk_FileZillaDarkMode_Unsubclass");
 
     LoadPalette();
 
@@ -815,8 +804,16 @@ void Wh_ModAfterInit() {
 
 void Wh_ModUninit() {
     Wh_Log(L"FileZilla Dark Mode: uninit");
-    // Detach our window subclass before the mod's code is unloaded.
-    if (g_msgUnsubclass) EnumWindows(UnsubclassTopProc, 0);
+    // Remove our subclass from every window that still has it, waiting for
+    // each removal: a subclass left behind after unload would crash FileZilla.
+    std::unordered_set<HWND> subclassed;
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        subclassed.swap(g_subclassed);
+    }
+    for (HWND hwnd : subclassed) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, DarkSubclassProc);
+    }
     // Brushes are intentionally not deleted: FileZilla may still hold them.
     // Restart FileZilla to fully return to the light theme.
 }
