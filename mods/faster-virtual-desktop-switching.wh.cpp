@@ -1503,7 +1503,7 @@ BOOL Wh_ModInit() {
     const bool filterHookInstalled = HookHiddenWindowFilter();
 
     // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK twinuiPcshellDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK transitionHooks[] = {
         {{L"private: long __cdecl CVirtualDesktopHotkeyHandler::InvokeSwitchDesktopWithAnimation(enum VirtualDesktopSwitchDirection)"},
          &g_switchByHotkeyOriginal, SwitchByHotkeyHook, true},
         {{L"public: virtual long __cdecl CVirtualDesktopManager::SwitchDesktopWithAnimation(struct IVirtualDesktop *)"},
@@ -1513,8 +1513,8 @@ BOOL Wh_ModInit() {
         {{L"public: virtual void __cdecl VirtualDesktopGestureHandler::Cleanup(unsigned int)"},
          &g_gestureCleanupOriginal, GestureCleanupHook, true},
     };
-    WindhawkUtils::HookSymbols(g_twinuiPcShell, twinuiPcshellDllHooks,
-                               ARRAYSIZE(twinuiPcshellDllHooks));
+    WindhawkUtils::HookSymbols(g_twinuiPcShell, transitionHooks,
+                               ARRAYSIZE(transitionHooks));
     Wh_Log(L"Transition hooks: keyboard=%d animated=%d gesture=%d gesture-end=%d",
            g_switchByHotkeyOriginal != nullptr, g_switchWithAnimationOriginal != nullptr,
            g_initializeGestureOriginal != nullptr, g_gestureCleanupOriginal != nullptr);
