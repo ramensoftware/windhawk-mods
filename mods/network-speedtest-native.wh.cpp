@@ -82,6 +82,17 @@ included in the text copied with Copy.
   intercepts the same URL launches; enable only one of the two mods.
 - Diagnostics go to the Windhawk mod log; enable logging for this mod from
   its Details page when needed.
+
+## Changelog
+
+### 1.1
+
+- Flyout texts in 13 Windows display languages with English fallback; removed
+  the `language` setting.
+- Added the **Data limit per direction** dropdown: 128 MB, 256 MB, 512 MB
+  (default), 1 GB or Unlimited.
+- Reduced logging to failures, warnings and one measurement summary per phase.
+- Rewrote the readme to remove duplicated information.
 */
 // ==/WindhawkModReadme==
 
