@@ -27,7 +27,8 @@ to those `Edit` controls.
 | ![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/ctrl-backspace-fix-for-win32-text-boxes_after.gif) |
 
 ## Features & behavior
-* Supports wrapped `Edit` controls used in .NET WinForms and Delphi VCL apps.
+* Supports wrapped `Edit` controls used in .NET WinForms, Delphi VCL, and
+  ATL/WTL apps.
 * Handles Unicode whitespace, punctuation, and symbols for word-wise deletion.
 * Groups consecutive Japanese kana (Hiragana & Katakana) by script for word-wise
   deletion.
@@ -93,7 +94,7 @@ CharClass GetCharClass(WCHAR wch)
         return CharClass::Alphanumeric;
     }
 
-    // Treat prolonged and voiced/semi-voiced sound marks as katakana
+    // Treat prolonged and halfwidth voiced/semi-voiced sound marks as katakana
     if (IsProlongedSoundMark(wch) || wch == L'\uFF9E' || wch == L'\uFF9F')
     {
         return CharClass::Katakana;
@@ -154,8 +155,8 @@ CharClass GetProlongedSoundMarkClass(std::wstring_view text, int iPos)
     return CharClass::Katakana;
 }
 
-// Helper: Identify selectors and joiners that attach to a base character
-bool IsSelectorOrJoiner(char32_t codePoint)
+// Helper: Identify modifiers and joiners that attach to a base character
+bool IsModifierOrJoiner(char32_t codePoint)
 {
     return (codePoint >= 0xFE00 && codePoint <= 0xFE0F) ||
         codePoint == 0x200D || codePoint == 0x20E3 ||
@@ -180,9 +181,9 @@ CharClass GetCharClassAt(std::wstring_view text, int iPos, int& cchCharLen)
                 (static_cast<char32_t>(text[iPos]) - 0xDC00);
         }
 
-        // Keep selectors and joiners attached to the preceding base character
+        // Keep modifiers and joiners attached to the preceding base character
         cchCharLen += cchCodePointLen;
-        if (IsSelectorOrJoiner(codePoint) && iPos >= cchCodePointLen)
+        if (IsModifierOrJoiner(codePoint) && iPos >= cchCodePointLen)
         {
             iPos -= cchCodePointLen;
             continue;
@@ -350,18 +351,20 @@ bool IsEditControl(HWND hWnd)
         return true;
     }
 
-    // Fallback for ATL/WTL wrapped Edit controls (experimental)
-    // ATL dynamically generates class names (e.g., "ATL:00007FF65AD47060") via
-    // memory thunks, bypassing OS superclass detection.
-    // Example: "Results:" text box in Windhawk Symbol Helper.
-    //
-    // NOTE: EM_GETLIMITTEXT is defined as (WM_USER + 37), which may collide
-    // with custom messages and trigger unintended behavior on non-Edit ATL
-    // windows. Looking for a safer way to identify ATL-wrapped Edit controls.
-    //
-    // Reference: https://github.com/ramensoftware/windhawk-mods/pull/4004
-    return (_wcsnicmp(szClassName, L"ATL:", 4) == 0 &&
-        SendMessageW(hWnd, EM_GETLIMITTEXT, 0, 0) != 0);
+    // Fallback for ATL/WTL superclassed Edit controls whose WM_GETDLGCODE
+    // response omits DLGC_HASSETSEL, such as Windhawk Symbol Helper's results
+    // text box. EM_GETSEL is a read-only system message below WM_USER, so only
+    // an Edit control fills in the output values.
+    if (_wcsnicmp(szClassName, L"ATL:", 4) == 0)
+    {
+        DWORD dwSelStart = static_cast<DWORD>(-1);
+        DWORD dwSelEnd = static_cast<DWORD>(-1);
+        SendMessageW(hWnd, EM_GETSEL, reinterpret_cast<WPARAM>(&dwSelStart),
+            reinterpret_cast<LPARAM>(&dwSelEnd));
+        return dwSelStart != static_cast<DWORD>(-1);
+    }
+
+    return false;
 }
 
 // Helper: Validate the Ctrl+Backspace hotkey on a target Edit control
