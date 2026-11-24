@@ -17,8 +17,8 @@
 # Native Windows Screen Recorder
 
 > ℹ️ **Compatibility Note (Smart App Control) / Lưu ý tương thích:**
-> - **🌐 English:** Like all Windhawk mods, this mod is compiled locally into an unsigned `.dll` file and loaded into `explorer.exe` and `windhawk.exe`. If Windows **Smart App Control** is active on your PC, Windows will block the compiled `.dll` and the mod will not load. See [Windhawk's documentation and guidance on Smart App Control](https://github.com/ramensoftware/windhawk/issues/696) for details.
-> - **🇻🇳 Tiếng Việt:** Giống như mọi bản mod trên Windhawk, mod này được biên dịch cục bộ thành tệp `.dll` không có chữ ký số để nạp vào `explorer.exe` và `windhawk.exe`. Nếu máy đang bật **Smart App Control (Kiểm soát Ứng dụng Thông minh)**, Windows sẽ chặn tệp `.dll` này khiến mod không thể hoạt động. Xem thêm [hướng dẫn và thảo luận chính thức của Windhawk về Smart App Control](https://github.com/ramensoftware/windhawk/issues/696).
+> - **🌐 English:** Like all Windhawk mods, this mod is compiled locally into an unsigned `.dll` file and loaded into `explorer.exe`. If Windows **Smart App Control** is active on your PC, Windows will block the compiled `.dll` and the mod will not load.
+> - **🇻🇳 Tiếng Việt:** Giống như mọi bản mod trên Windhawk, mod này được biên dịch cục bộ thành tệp `.dll` không có chữ ký số để nạp vào `explorer.exe`. Nếu máy đang bật **Smart App Control (Kiểm soát Ứng dụng Thông minh)**, Windows sẽ chặn tệp `.dll` này khiến mod không thể hoạt động.
 
 ![Native Windows Screen Recorder Preview (Floating Pill Bar)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/main.jpg)
 
@@ -251,20 +251,20 @@ Trình quay màn hình native gọn nhẹ tích hợp trực tiếp trong Window
     - "900": 900p (HD+)
     - "720": 720p (HD)
     - "480": 480p (SD)
-  - fps: 60
+  - fps: "60"
     $name: Frame rate (FPS)
     $name:vi-VN: Tốc độ khung hình (FPS)
     $description: Target FPS (automatically capped to your active Windows monitor refresh rate and GPU H.264 encoder).
     $description:vi-VN: Tốc độ khung hình mục tiêu (tự động giới hạn theo tần số quét Windows đang đặt và GPU H.264).
     $options:
-    - 30: 30 FPS
-    - 60: 60 FPS
-    - 75: 75 FPS
-    - 90: 90 FPS (High Refresh)
-    - 120: 120 FPS (High Refresh)
-    - 144: 144 FPS (High Refresh)
-    - 165: 165 FPS (High Refresh)
-    - 240: 240 FPS (High Refresh)
+    - "30": 30 FPS
+    - "60": 60 FPS
+    - "75": 75 FPS
+    - "90": 90 FPS (High Refresh)
+    - "120": 120 FPS (High Refresh)
+    - "144": 144 FPS (High Refresh)
+    - "165": 165 FPS (High Refresh)
+    - "240": 240 FPS (High Refresh)
   - videoBitrateMbps: 12
     $name: Video bitrate (Mbps)
     $name:vi-VN: Bitrate video (Mbps)
@@ -1474,7 +1474,9 @@ static void LoadSettings(bool fromSettingsChanged = false) {
     auto isValidFps = [](int f) {
         return f >= 30 && f <= 360;
     };
-    int fpsSet = Wh_GetIntSetting(L"recordingGroup.fps");
+    std::wstring fpsStr = ReadStringSetting(L"recordingGroup.fps", L"fps", L"60");
+    int fpsSet = _wtoi(fpsStr.c_str());
+    if (!isValidFps(fpsSet)) fpsSet = Wh_GetIntSetting(L"recordingGroup.fps");
     int fpsOv = Wh_GetIntValue(L"Ov_fps", 0);
     s.fps = isValidFps(fpsOv) ? fpsOv : (isValidFps(fpsSet) ? fpsSet : 60);
 
@@ -7700,7 +7702,7 @@ static bool IsExplorerProcess() {
     return exeName && _wcsicmp(exeName, L"explorer.exe") == 0;
 }
 
-static BOOL WhTool_ModInit() {
+BOOL WhTool_ModInit() {
     g_unloading.store(false);
     LoadSettings(false);
     g_msgOpenSettings       = RegisterWindowMessageW(L"Windhawk_OpenRecSettings_" WH_MOD_ID);
@@ -7717,14 +7719,14 @@ static BOOL WhTool_ModInit() {
     return TRUE;
 }
 
-static void WhTool_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings(true);
     if (HWND hSet = g_hRecWin11SettingsWnd.load(); hSet && IsWindow(hSet) && g_msgReloadSettings != 0) {
         PostMessageW(hSet, g_msgReloadSettings, 0, 0);
     }
 }
 
-static void WhTool_ModUninit() {
+void WhTool_ModUninit() {
     g_unloading.store(true);
     StopRecSettingsHostCleanly();
 }
