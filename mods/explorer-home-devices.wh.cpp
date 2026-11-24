@@ -6,7 +6,7 @@
 // @description     Adds a native WinUI section for devices and drives after Quick access on the Windows 11 File Explorer Home page.
 // @description:pt  Adiciona uma seção WinUI nativa de dispositivos e unidades depois de Acesso rápido na Página Inicial do Explorador do Windows 11.
 // @description:es  Agrega una sección WinUI nativa de dispositivos y unidades después de Acceso rápido en la página Inicio del Explorador de Windows 11.
-// @version         1.0
+// @version         1.0.1
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         explorer.exe
@@ -305,7 +305,7 @@ namespace {
 constexpr wchar_t kPrimaryContentPresenterName[] =
     L"PrimaryGroupContentPresenter";
 constexpr wchar_t kDevicesSectionName[] = L"WindhawkDevicesSection";
-constexpr wchar_t kHomeListViewWrapperName[] = L"WindhawkHomeListViewWrapper";
+constexpr wchar_t kHomeListViewFooterName[] = L"WindhawkHomeListViewFooter";
 constexpr wchar_t kDevicesGridName[] = L"WindhawkDevicesGrid";
 constexpr UINT_PTR kExplorerWindowSubclassId = 0x48444D45;
 
@@ -443,14 +443,15 @@ std::mutex g_registeredWindowsMutex;
 std::vector<HWND> g_registeredWindows;
 
 std::mutex g_navigationControllersMutex;
-std::unordered_map<DWORD, IFileExplorerNavigationControllerAbi*>
+struct NavigationControllerEntry {
+    winrt::handle thread;
+    winrt::weak_ref<wf::IInspectable> controller;
+};
+std::unordered_map<DWORD, NavigationControllerEntry>
     g_navigationControllersByThread;
 
 // XAML objects are only accessed by the UI thread which owns them.
-// panel is a Panel, not specifically a StackPanel: on builds where Home
-// groups items in a HomeListView instead of laying them out as named
-// StackPanel children, the devices section lives in that ListView's
-// ItemsStackPanel instead.
+// The section is a child of either a native Home panel or our list footer.
 struct HomePanelState {
     winrt::weak_ref<muxc::Panel> panel;
     IFileExplorerNavigationControllerAbi* navigationController = nullptr;
@@ -458,6 +459,7 @@ struct HomePanelState {
     // against, so a catch-up refresh that finds nothing different can skip
     // rebuilding every card. Left null until the first populate.
     std::shared_ptr<const DriveSnapshot> lastAppliedSnapshot;
+    winrt::weak_ref<muxc::ListView> footerOwner;
 };
 
 thread_local std::vector<HomePanelState> g_homePanels;
@@ -1636,60 +1638,72 @@ void RememberNavigationControllerForCurrentThread(void* implementation) {
         return;
     }
 
-    IFileExplorerNavigationControllerAbi* controller = nullptr;
-    HRESULT result = reinterpret_cast<IUnknown*>(implementation)->QueryInterface(
-        kIidFileExplorerNavigationController,
-        reinterpret_cast<void**>(&controller));
-    if (FAILED(result) || !controller) {
-        Wh_Log(L"Couldn't capture the tab navigation controller: %08X",
-               result);
+    wf::IInspectable controller;
+    winrt::check_hresult(
+        reinterpret_cast<IUnknown*>(implementation)->QueryInterface(
+            winrt::guid_of<wf::IInspectable>(), winrt::put_abi(controller)));
+    auto weakController = winrt::make_weak(controller);
+    auto threadId = GetCurrentThreadId();
+
+    std::lock_guard lock(g_navigationControllersMutex);
+    if (g_unloading.load()) {
+        return;
+    }
+    // A signaled thread handle distinguishes a dead owner from a new
+    // Explorer thread that happens to receive the same numeric ID.
+    std::erase_if(g_navigationControllersByThread, [](auto const& entry) {
+        return WaitForSingleObject(entry.second.thread.get(), 0) != WAIT_TIMEOUT;
+    });
+    if (auto it = g_navigationControllersByThread.find(threadId);
+        it != g_navigationControllersByThread.end()) {
+        it->second.controller = std::move(weakController);
         return;
     }
 
-    IFileExplorerNavigationControllerAbi* previous = nullptr;
-    {
-        std::lock_guard lock(g_navigationControllersMutex);
-        auto& entry = g_navigationControllersByThread[GetCurrentThreadId()];
-        previous = entry;
-        if (previous == controller) {
-            controller->Release();
-            return;
-        }
-        entry = controller;
+    winrt::handle thread;
+    HANDLE handle = nullptr;
+    if (!DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
+                         GetCurrentProcess(), &handle, SYNCHRONIZE, FALSE, 0)) {
+        return;
     }
-
-    if (previous) {
-        previous->Release();
-    }
+    thread.attach(handle);
+    g_navigationControllersByThread.emplace(
+        threadId, NavigationControllerEntry{std::move(thread),
+                                            std::move(weakController)});
 }
 
 IFileExplorerNavigationControllerAbi*
 GetNavigationControllerForCurrentThread() {
-    std::lock_guard lock(g_navigationControllersMutex);
-    auto it = g_navigationControllersByThread.find(GetCurrentThreadId());
-    if (it == g_navigationControllersByThread.end() || !it->second) {
-        return nullptr;
-    }
-
-    it->second->AddRef();
-    return it->second;
-}
-
-void ReleaseNavigationControllerForCurrentThread() {
-    IFileExplorerNavigationControllerAbi* controller = nullptr;
+    winrt::weak_ref<wf::IInspectable> reference;
     {
         std::lock_guard lock(g_navigationControllersMutex);
         auto it = g_navigationControllersByThread.find(GetCurrentThreadId());
         if (it == g_navigationControllersByThread.end()) {
-            return;
+            return nullptr;
         }
-        controller = it->second;
-        g_navigationControllersByThread.erase(it);
+        if (WaitForSingleObject(it->second.thread.get(), 0) != WAIT_TIMEOUT) {
+            g_navigationControllersByThread.erase(it);
+            return nullptr;
+        }
+        reference = it->second.controller;
+    }
+    auto controller = reference.get();
+    if (!controller) {
+        return nullptr;
     }
 
-    if (controller) {
-        controller->Release();
+    winrt::com_ptr<IFileExplorerNavigationControllerAbi> result;
+    if (FAILED(reinterpret_cast<IUnknown*>(winrt::get_abi(controller))
+                   ->QueryInterface(kIidFileExplorerNavigationController,
+                                    result.put_void()))) {
+        return nullptr;
     }
+    return result.detach();
+}
+
+void ReleaseNavigationControllerForCurrentThread() {
+    std::lock_guard lock(g_navigationControllersMutex);
+    g_navigationControllersByThread.erase(GetCurrentThreadId());
 }
 
 HWND GetExplorerWindowForCurrentThread() {
@@ -3286,21 +3300,29 @@ HRESULT CreateDriveShortcuts(
             continue;
         }
 
+        wchar_t uniquePath[MAX_PATH]{};
+        BOOL mustCopy = FALSE;
+        if (!SHGetNewLinkInfoW(path.c_str(), targetRoot.c_str(), uniquePath,
+                              &mustCopy, 0)) {
+            Wh_Log(L"Couldn't build a unique shortcut name for %s",
+                   path.c_str());
+            continue;
+        }
+
+        if (mustCopy) {
+            if (CopyFileW(path.c_str(), uniquePath, TRUE)) {
+                ++createdItems;
+            } else {
+                Wh_Log(L"Couldn't copy the shortcut %s: %08X",
+                       path.c_str(), GetLastError());
+            }
+            continue;
+        }
+
         result = link->SetPath(path.c_str());
         if (FAILED(result)) {
             Wh_Log(L"Couldn't set the shortcut target %s: %08X", path.c_str(),
                    result);
-            continue;
-        }
-
-        std::wstring desiredPath =
-            targetRoot + L"Shortcut to " + PathFindFileNameW(path.c_str()) +
-            L".lnk";
-        wchar_t uniquePath[MAX_PATH]{};
-        if (!PathYetAnotherMakeUniqueName(uniquePath, desiredPath.c_str(),
-                                          nullptr, nullptr)) {
-            Wh_Log(L"Couldn't build a unique shortcut name for %s",
-                   path.c_str());
             continue;
         }
 
@@ -4434,7 +4456,7 @@ void ClearDevicesHeaderEventHandlersForCurrentThread() {
     for (auto const& state : g_devicesHeaderEventStates) {
         ClearDevicesHeaderEventHandlers(state);
     }
-    g_devicesHeaderEventStates.clear();
+    decltype(g_devicesHeaderEventStates){}.swap(g_devicesHeaderEventStates);
 }
 
 bool IsTrackedDriveSource(mux::DependencyObject source,
@@ -4744,7 +4766,7 @@ void ClearHomeSelectionEventHandlersForCurrentThread() {
             }
         }
     }
-    g_homeSelectionEventStates.clear();
+    decltype(g_homeSelectionEventStates){}.swap(g_homeSelectionEventStates);
 }
 
 void RefreshDevicesSectionsForCurrentThread() {
@@ -5169,65 +5191,30 @@ bool InsertDevicesSection(muxc::StackPanel const& panel) {
                                   existingSectionIndex);
 }
 
-// Older builds group Home content as items inside a HomeListView instead of
-// laying groups out as named StackPanel children (no HomeScrollViewer,
-// PrimaryGroupContentPresenter, etc. exist in that tree at all). The
-// generated item containers live in a panel the ListView itself owns and
-// manages (see Panel.IsItemsHost) -- inserting a foreign sibling directly
-// into that panel isn't safe. Instead, HomeListView itself is left
-// untouched and wrapped in a plain StackPanel installed in its place, with
-// the devices section added as the wrapper's second child. The section
-// ends up after all of Home's content rather than specifically after Quick
-// access, but nothing that manages its own children gets an outside
-// sibling forced into it.
-bool InsertDevicesSectionAfterHomeListView(muxc::ListView const& listView) {
-    if (auto existingWrapper = muxm::VisualTreeHelper::GetParent(listView)
-                                   .try_as<muxc::StackPanel>();
-        existingWrapper &&
-        existingWrapper.Name() == kHomeListViewWrapperName) {
-        // Already wrapped by a previous call for this XamlRoot.
-        uint32_t existingSectionIndex = UINT32_MAX;
-        auto wrapperChildren = existingWrapper.Children();
-        for (uint32_t i = 0; i < wrapperChildren.Size(); ++i) {
-            auto element =
-                wrapperChildren.GetAt(i).try_as<mux::FrameworkElement>();
-            if (element && element.Name() == kDevicesSectionName) {
-                existingSectionIndex = i;
-                break;
-            }
-        }
-        return InsertDevicesSectionAt(existingWrapper, 1,
-                                      existingSectionIndex);
+// On older builds the ListView owns scrolling and virtualization. Its
+// footer adds the section without reparenting the list or its item containers.
+muxc::StackPanel EnsureDevicesFooter(muxc::ListView const& listView) {
+    if (auto existing = listView.Footer().try_as<muxc::StackPanel>();
+        existing && existing.Name() == kHomeListViewFooterName) {
+        return existing;
+    }
+    if (listView.Footer() || listView.FooterTemplate() ||
+        listView.ReadLocalValue(muxc::ListViewBase::FooterProperty()) !=
+            mux::DependencyProperty::UnsetValue()) {
+        return nullptr;
     }
 
-    auto parent =
-        muxm::VisualTreeHelper::GetParent(listView).try_as<muxc::Panel>();
-    if (!parent) {
-        return false;
-    }
-
-    auto siblings = parent.Children();
-    uint32_t listViewIndex = UINT32_MAX;
-    for (uint32_t i = 0; i < siblings.Size(); ++i) {
-        if (siblings.GetAt(i) == listView) {
-            listViewIndex = i;
+    muxc::StackPanel footer;
+    footer.Name(kHomeListViewFooterName);
+    InsertDevicesSectionAt(footer, 0, UINT32_MAX);
+    for (auto& state : g_homePanels) {
+        if (state.panel.get() == footer) {
+            state.footerOwner = winrt::make_weak(listView);
             break;
         }
     }
-    if (listViewIndex == UINT32_MAX) {
-        return false;
-    }
-
-    muxc::StackPanel wrapper;
-    wrapper.Name(kHomeListViewWrapperName);
-    wrapper.HorizontalAlignment(mux::HorizontalAlignment::Stretch);
-    wrapper.VerticalAlignment(mux::VerticalAlignment::Stretch);
-
-    siblings.RemoveAt(listViewIndex);
-    wrapper.Children().Append(listView);
-    siblings.InsertAt(listViewIndex, wrapper);
-
-    return InsertDevicesSectionAt(wrapper, 1, UINT32_MAX);
+    listView.Footer(footer);
+    return footer;
 }
 
 void TryInjectFromHomeScrollViewer(mux::FrameworkElement const& element) {
@@ -5380,38 +5367,22 @@ muxc::ScrollViewer FindHomeScrollViewer(mux::DependencyObject const& root) {
 
 // Fallback for builds where Home groups content inside a HomeListView
 // instead of laying groups out as named StackPanel children (see
-// InsertDevicesSectionAfterHomeListView).
+// EnsureDevicesFooter).
 muxc::ListView FindHomeListView(mux::DependencyObject const& root) {
     return FindNamedElementInTree(root, L"HomeListView")
         .try_as<muxc::ListView>();
 }
 
-// Click-away-to-deselect/commit-rename reuses the same
-// HomeSelection_PointerPressed/Moved/Released machinery as the
-// HomeScrollViewer path: HomeViewRootGrid (the wrapper's own parent, a
-// Grid) stands in for contentGrid as the hit-testing surface, and the
-// wrapper StackPanel stands in for the StackPanel that path uses -- both
-// only need a Grid to route pointer events through and a StackPanel to
-// find the devices grid inside, neither of which cares what else lives
-// under that Grid. This also means a marquee drag starting over
-// HomeListView's own native items now syncs with the devices grid's
-// selection the same way it does on the HomeScrollViewer path.
 void TryInjectFromHomeListView(muxc::ListView const& listView) {
-    if (!InsertDevicesSectionAfterHomeListView(listView)) {
-        Wh_Log(L"Couldn't insert the devices section next to HomeListView");
+    auto footer = EnsureDevicesFooter(listView);
+    if (!footer) {
         return;
     }
 
-    auto wrapper =
-        muxm::VisualTreeHelper::GetParent(listView).try_as<muxc::StackPanel>();
-    if (!wrapper) {
-        return;
-    }
-
-    if (auto surface = muxm::VisualTreeHelper::GetParent(wrapper)
+    if (auto surface = muxm::VisualTreeHelper::GetParent(listView)
                             .try_as<muxc::Grid>()) {
         try {
-            EnsureHomeSelectionHandlers(surface, wrapper);
+            EnsureHomeSelectionHandlers(surface, footer);
         } catch (...) {
             Wh_Log(L"Couldn't wire Home selection handlers for "
                    L"HomeListView: %08X",
@@ -5420,7 +5391,7 @@ void TryInjectFromHomeListView(muxc::ListView const& listView) {
     }
 
     EnsureShellNotificationsForCurrentThread();
-    if (!PopulateDevicesSectionIfEmpty(wrapper)) {
+    if (!PopulateDevicesSectionIfEmpty(footer)) {
         RequestInitialDriveSnapshot();
     }
 }
@@ -5497,7 +5468,7 @@ void ClearTrackedHomePanelsForCurrentThread() {
             state.navigationController->Release();
         }
     }
-    g_homePanels.clear();
+    decltype(g_homePanels){}.swap(g_homePanels);
 }
 
 void RemoveDevicesSectionsForCurrentThread() {
@@ -5513,6 +5484,10 @@ void RemoveDevicesSectionsForCurrentThread() {
         }
 
         try {
+            if (auto listView = state.footerOwner.get();
+                listView && listView.Footer() == panel) {
+                listView.ClearValue(muxc::ListViewBase::FooterProperty());
+            }
             auto children = panel.Children();
             for (uint32_t i = children.Size(); i > 0; --i) {
                 auto element =
@@ -5648,7 +5623,13 @@ FileExplorerNavigationController_SetNavigationState_t
 HRESULT WINAPI FileExplorerNavigationController_SetNavigationState_Hook(
     void* pThis,
     unsigned long state) {
-    RememberNavigationControllerForCurrentThread(pThis);
+    try {
+        RememberNavigationControllerForCurrentThread(pThis);
+    } catch (...) {
+        ReleaseNavigationControllerForCurrentThread();
+        Wh_Log(L"Couldn't capture the tab navigation controller: %08X",
+               winrt::to_hresult().value);
+    }
     return FileExplorerNavigationController_SetNavigationState_Original(pThis,
                                                                          state);
 }
@@ -5846,7 +5827,12 @@ LRESULT CALLBACK RunFromWindowThreadHookProc(int code,
         if (call->message == GetRunFromWindowThreadMessage()) {
             auto parameters = reinterpret_cast<RunFromWindowThreadParameters*>(
                 call->lParam);
-            parameters->procedure(parameters->parameter);
+            try {
+                parameters->procedure(parameters->parameter);
+            } catch (...) {
+                Wh_Log(L"Explorer thread cleanup failed: %08X",
+                       winrt::to_hresult().value);
+            }
         }
     }
 
@@ -5993,26 +5979,30 @@ bool IsRelevantShellDriveEvent(WPARAM wParam, LPARAM lParam,
 LRESULT CALLBACK DriveKeyboardGetMessageHookProc(int code,
                                                   WPARAM wParam,
                                                   LPARAM lParam) {
-    if (code == HC_ACTION && wParam == PM_REMOVE && !g_unloading.load()) {
-        auto message = reinterpret_cast<MSG*>(lParam);
-        constexpr LPARAM kAltContextBit = static_cast<LPARAM>(1) << 29;
-        constexpr LPARAM kPreviousStateBit = static_cast<LPARAM>(1) << 30;
-        if (message && message->message == WM_SYSKEYDOWN &&
-            message->wParam == VK_RETURN &&
-            (message->lParam & kAltContextBit) &&
-            !(message->lParam & kPreviousStateBit) &&
-            !(GetKeyState(VK_CONTROL) & 0x8000) && FindFocusedDriveCard()) {
-            HWND owner = GetExplorerWindowForCurrentThread();
-            if (owner &&
-                PostMessageW(owner, GetInvokeDrivePropertiesMessage(), 0, 0)) {
-                // Alt+Enter is a system-key message and doesn't enter WinUI's
-                // routed KeyDown path. Replace it before chaining so
-                // downstream hooks observe the same replacement.
-                message->message = WM_NULL;
-                message->wParam = 0;
-                message->lParam = 0;
+    try {
+        if (code == HC_ACTION && wParam == PM_REMOVE && !g_unloading.load()) {
+            auto message = reinterpret_cast<MSG*>(lParam);
+            constexpr LPARAM kAltContextBit = static_cast<LPARAM>(1) << 29;
+            constexpr LPARAM kPreviousStateBit = static_cast<LPARAM>(1) << 30;
+            if (message && message->message == WM_SYSKEYDOWN &&
+                message->wParam == VK_RETURN &&
+                (message->lParam & kAltContextBit) &&
+                !(message->lParam & kPreviousStateBit) &&
+                !(GetKeyState(VK_CONTROL) & 0x8000) && FindFocusedDriveCard()) {
+                HWND owner = GetExplorerWindowForCurrentThread();
+                if (owner &&
+                    PostMessageW(owner, GetInvokeDrivePropertiesMessage(), 0, 0)) {
+                    // Alt+Enter is a system-key message and doesn't enter WinUI's
+                    // routed KeyDown path. Replace it before chaining so
+                    // downstream hooks observe the same replacement.
+                    message->message = WM_NULL;
+                    message->wParam = 0;
+                    message->lParam = 0;
+                }
             }
         }
+    } catch (...) {
+        Wh_Log(L"Explorer keyboard hook failed: %08X", winrt::to_hresult().value);
     }
 
     return CallNextHookEx(nullptr, code, wParam, lParam);
@@ -6047,110 +6037,114 @@ LRESULT CALLBACK ExplorerWindowSubclassProc(HWND window, UINT message,
                                              WPARAM wParam, LPARAM lParam,
                                              UINT_PTR subclassId,
                                              DWORD_PTR) {
-    if (g_trackedContextMenu3 &&
-        (message == WM_INITMENUPOPUP || message == WM_DRAWITEM ||
-         message == WM_MEASUREITEM || message == WM_MENUCHAR)) {
-        LRESULT menuResult = 0;
-        if (SUCCEEDED(g_trackedContextMenu3->HandleMenuMsg2(
-                message, wParam, lParam, &menuResult))) {
-            return menuResult;
+    try {
+        if (g_trackedContextMenu3 &&
+            (message == WM_INITMENUPOPUP || message == WM_DRAWITEM ||
+             message == WM_MEASUREITEM || message == WM_MENUCHAR)) {
+            LRESULT menuResult = 0;
+            if (SUCCEEDED(g_trackedContextMenu3->HandleMenuMsg2(
+                    message, wParam, lParam, &menuResult))) {
+                return menuResult;
+            }
+        } else if (g_trackedContextMenu2 &&
+                   (message == WM_INITMENUPOPUP || message == WM_DRAWITEM ||
+                    message == WM_MEASUREITEM)) {
+            if (SUCCEEDED(g_trackedContextMenu2->HandleMenuMsg(message, wParam,
+                                                               lParam))) {
+                return 0;
+            }
         }
-    } else if (g_trackedContextMenu2 &&
-               (message == WM_INITMENUPOPUP || message == WM_DRAWITEM ||
-                message == WM_MEASUREITEM)) {
-        if (SUCCEEDED(g_trackedContextMenu2->HandleMenuMsg(message, wParam,
-                                                           lParam))) {
+
+        if (message == GetApplyDriveSnapshotMessage()) {
+            if (!g_unloading.load()) {
+                RefreshDevicesSectionsForCurrentThread();
+            }
             return 0;
         }
-    }
 
-    if (message == GetApplyDriveSnapshotMessage()) {
-        if (!g_unloading.load()) {
-            RefreshDevicesSectionsForCurrentThread();
-        }
-        return 0;
-    }
-
-    if (message == GetFocusDriveRenameMessage()) {
-        if (!g_unloading.load()) {
-            FocusPendingDriveRenameForCurrentThread();
-        }
-        return 0;
-    }
-
-    if (message == GetInvokeDrivePropertiesMessage()) {
-        if (!g_unloading.load()) {
-            InvokeFocusedDriveProperties(window);
-        }
-        return 0;
-    }
-
-    if (message == GetToggleDevicesExpandedMessage()) {
-        if (!g_unloading.load()) {
-            ApplyDevicesExpandedState(wParam != 0);
-        }
-        return 0;
-    }
-
-    if (message == GetCloseModernDriveContextMenusMessage()) {
-        CloseModernDriveContextMenusForCurrentThread();
-        return 0;
-    }
-
-    if (message == WM_SETTINGCHANGE && !g_unloading.load()) {
-        UpdateDriveSelectionCheckBoxesForCurrentThread();
-    }
-
-    if (message == GetShellChangeMessage()) {
-        // Called unconditionally, even while unloading: it's what runs
-        // SHChangeNotification_Lock/Unlock, which releases this delivery's
-        // SHCNRF_NewDelivery shared-memory entry regardless of whether the
-        // event ends up mattering. Only the resulting refresh is skipped.
-        LONG eventId = 0;
-        bool relevant = IsRelevantShellDriveEvent(wParam, lParam, &eventId);
-        if (relevant && !g_unloading.load()) {
-            RequestDriveRefresh(
-                (eventId & ~SHCNE_FREESPACE) ? kDriveRefreshTopology
-                                             : kDriveRefreshCapacity);
-        }
-        return 0;
-    }
-
-    // Unconditional, not gated on whether Shell notifications are also
-    // registered: a portable/MTP device's arrival can surface from the
-    // Shell only as a generic SHCNE_UPDATEDIR anchored at the Desktop root,
-    // which IsRelevantShellDriveEvent has no PIDL-based way to recognize as
-    // relevant. DBT_DEVICEARRIVAL is what actually catches that case, so it
-    // has to keep firing even when Shell registration also succeeded.
-    if (message == WM_DEVICECHANGE && !g_unloading.load()) {
-        switch (wParam) {
-            case DBT_DEVICEARRIVAL:
-            case DBT_DEVICEREMOVECOMPLETE:
-            case DBT_DEVNODES_CHANGED:
-                RequestDriveRefresh();
-                break;
-        }
-    }
-
-    if (message == WM_NCDESTROY) {
-        auto registration = g_windowNotificationRegistrations.find(window);
-        if (registration != g_windowNotificationRegistrations.end()) {
-            if (registration->second) {
-                SHChangeNotifyDeregister(registration->second);
+        if (message == GetFocusDriveRenameMessage()) {
+            if (!g_unloading.load()) {
+                FocusPendingDriveRenameForCurrentThread();
             }
-            g_windowNotificationRegistrations.erase(registration);
+            return 0;
         }
-        RemoveRegisteredWindow(window);
-        if (g_windowNotificationRegistrations.empty()) {
+
+        if (message == GetInvokeDrivePropertiesMessage()) {
+            if (!g_unloading.load()) {
+                InvokeFocusedDriveProperties(window);
+            }
+            return 0;
+        }
+
+        if (message == GetToggleDevicesExpandedMessage()) {
+            if (!g_unloading.load()) {
+                ApplyDevicesExpandedState(wParam != 0);
+            }
+            return 0;
+        }
+
+        if (message == GetCloseModernDriveContextMenusMessage()) {
             CloseModernDriveContextMenusForCurrentThread();
-            RemoveDriveKeyboardMessageHookForCurrentThread();
-            ClearHomeSelectionEventHandlersForCurrentThread();
-            ClearDriveCardEventHandlersForCurrentThread();
-            ClearDevicesHeaderEventHandlersForCurrentThread();
-            ClearTrackedHomePanelsForCurrentThread();
-            ReleaseNavigationControllerForCurrentThread();
+            return 0;
         }
-        RemoveWindowSubclass(window, ExplorerWindowSubclassProc, subclassId);
+
+        if (message == WM_SETTINGCHANGE && !g_unloading.load()) {
+            UpdateDriveSelectionCheckBoxesForCurrentThread();
+        }
+
+        if (message == GetShellChangeMessage()) {
+            // Called unconditionally, even while unloading: it's what runs
+            // SHChangeNotification_Lock/Unlock, which releases this delivery's
+            // SHCNRF_NewDelivery shared-memory entry regardless of whether the
+            // event ends up mattering. Only the resulting refresh is skipped.
+            LONG eventId = 0;
+            bool relevant = IsRelevantShellDriveEvent(wParam, lParam, &eventId);
+            if (relevant && !g_unloading.load()) {
+                RequestDriveRefresh(
+                    (eventId & ~SHCNE_FREESPACE) ? kDriveRefreshTopology
+                                                 : kDriveRefreshCapacity);
+            }
+            return 0;
+        }
+
+        // Unconditional, not gated on whether Shell notifications are also
+        // registered: a portable/MTP device's arrival can surface from the
+        // Shell only as a generic SHCNE_UPDATEDIR anchored at the Desktop root,
+        // which IsRelevantShellDriveEvent has no PIDL-based way to recognize as
+        // relevant. DBT_DEVICEARRIVAL is what actually catches that case, so it
+        // has to keep firing even when Shell registration also succeeded.
+        if (message == WM_DEVICECHANGE && !g_unloading.load()) {
+            switch (wParam) {
+                case DBT_DEVICEARRIVAL:
+                case DBT_DEVICEREMOVECOMPLETE:
+                case DBT_DEVNODES_CHANGED:
+                    RequestDriveRefresh();
+                    break;
+            }
+        }
+
+        if (message == WM_NCDESTROY) {
+            auto registration = g_windowNotificationRegistrations.find(window);
+            if (registration != g_windowNotificationRegistrations.end()) {
+                if (registration->second) {
+                    SHChangeNotifyDeregister(registration->second);
+                }
+                g_windowNotificationRegistrations.erase(registration);
+            }
+            RemoveWindowSubclass(window, ExplorerWindowSubclassProc, subclassId);
+            RemoveRegisteredWindow(window);
+            if (g_windowNotificationRegistrations.empty()) {
+                CloseModernDriveContextMenusForCurrentThread();
+                RemoveDriveKeyboardMessageHookForCurrentThread();
+                ClearHomeSelectionEventHandlersForCurrentThread();
+                ClearDriveCardEventHandlersForCurrentThread();
+                ClearDevicesHeaderEventHandlersForCurrentThread();
+                ClearTrackedHomePanelsForCurrentThread();
+                ReleaseNavigationControllerForCurrentThread();
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Explorer window callback failed: %08X", winrt::to_hresult().value);
     }
 
     return DefSubclassProc(window, message, wParam, lParam);
@@ -6237,8 +6231,7 @@ void RemoveShellNotificationsForCurrentThread() {
 }
 
 void DrainPendingShellInteractions() {
-    unsigned waitIterations = 0;
-    while (g_openContextMenuCount.load() > 0) {
+    if (g_openContextMenuCount.load() > 0) {
         std::vector<HWND> windows;
         {
             std::lock_guard lock(g_registeredWindowsMutex);
@@ -6252,9 +6245,12 @@ void DrainPendingShellInteractions() {
                              GetCloseModernDriveContextMenusMessage(), 0, 0);
             }
         }
+    }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        if (++waitIterations % 100 == 0) {
+    unsigned waitIterations = 0;
+    while (g_openContextMenuCount.load() > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        if (++waitIterations % 20 == 0) {
             Wh_Log(L"Waiting for %d drive context menu(s) to close",
                    g_openContextMenuCount.load());
         }
@@ -6374,9 +6370,6 @@ void Wh_ModUninit() {
         }
     }
 
-    // A navigation controller whose owning thread couldn't be reached above
-    // (e.g. its window is already gone) is deliberately left alive rather
-    // than released here: per the thread-affine ownership wiki, if no UI
-    // thread can be found to release from, it's better to leak a COM ref
-    // than to release one from the wrong thread.
+    std::lock_guard lock(g_navigationControllersMutex);
+    g_navigationControllersByThread.clear();
 }
