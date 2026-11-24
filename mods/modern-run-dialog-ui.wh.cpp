@@ -1575,6 +1575,20 @@ void EnsurePreblurredMonitorCache(PreblurredMonitorCache& mcache, int softRad, i
     }
 }
 
+// Monotonic, continuous mapping from Background Opacity (30..255, default 215) to Liquid Glass glassPct (-100..+100):
+// - 30  -> -100 (ultra-clear crystal glass)
+// - 215 ->  -20 (default crystal Liquid Glass with full lens refraction)
+// - 255 -> +100 (dense frosted glass)
+inline int MapBackgroundOpacityToGlassPct(int bgOpacity) {
+    int op = std::clamp(bgOpacity, 30, 255);
+    if (op <= 215) {
+        double t = (op - 30) / 185.0;
+        return std::clamp((int)std::lround(-100.0 + t * 80.0), -100, 100);
+    }
+    double t = (op - 215) / 40.0;
+    return std::clamp((int)std::lround(-20.0 + t * 120.0), -100, 100);
+}
+
 // Renders zero-latency Optical Liquid Glass onto pRT using cached GPU bitmap & 1/4-res text-dissolving blur
 void DrawOpticalLiquidGlassBackdrop(ID2D1RenderTarget* pRT, HWND hWnd, int w, int h,
                                     int topAreaH, int gapH,
@@ -10976,7 +10990,9 @@ void PaintFluentMenuPanel(HWND hWnd, FluentMenuPanelState* p) {
                         pSolBr->Release();
                     }
                 } else if (s->surface == SurfaceTheme::Glass) {
-                    int glassPct = (s->dlgState) ? std::clamp(s->dlgState->settings.glassOpacity, -100, 100) : -100;
+                    int glassPct = (s->dlgState)
+                        ? MapBackgroundOpacityToGlassPct(s->dlgState->settings.customBackgroundOpacity)
+                        : -20;
                     DrawOpticalLiquidGlassBackdrop(pRT, hWnd, w, h, 0, 0, dpi, glassPct, isLight, true, slot);
                 } else {
                     // Windows Blur: translucent vibrant Acrylic blur matching Windows 11 right-click menu (Image 2)
@@ -14899,9 +14915,9 @@ bool RenderDialogToCachedBitmap(HWND hWnd, RunDialogState* state, int w, int h) 
                             }
                         } else if (surface == SurfaceTheme::Glass) {
                             bool hasBgMedia = (state->bgMedia && !state->bgMedia->frames.empty());
-                            int glassPct = (!hasBgMedia && state->settings.customBackgroundOpacity != 215)
-                                ? std::clamp((int)std::lround(((state->settings.customBackgroundOpacity - 30) / 225.0) * 200.0 - 100.0), -100, 100)
-                                : std::clamp(state->settings.glassOpacity, -100, 100);
+                            int glassPct = hasBgMedia
+                                ? -20
+                                : MapBackgroundOpacityToGlassPct(state->settings.customBackgroundOpacity);
                             DrawOpticalLiquidGlassBackdrop(pRT, hWnd, w, h, state->topAreaHeight, gapH,
                                                            effectiveDpi, glassPct, isLight, false, 0,
                                                            state->normalX, state->normalY, state->anchoredTop,
@@ -14922,8 +14938,9 @@ bool RenderDialogToCachedBitmap(HWND hWnd, RunDialogState* state, int w, int h) 
                                 ? themeVis.bgColor
                                 : (isLight ? D2D1::ColorF(0.96f, 0.96f, 0.98f, 1.0f)
                                            : D2D1::ColorF(0.12f, 0.12f, 0.15f, 1.0f));
-                            if (!hasBgMedia && state->settings.customBackgroundOpacity != 215) {
-                                solidCol.a = std::clamp(state->settings.customBackgroundOpacity, 30, 255) / 255.0f;
+                            if (!hasBgMedia) {
+                                float opScale = std::clamp(state->settings.customBackgroundOpacity, 30, 255) / 255.0f;
+                                solidCol.a = std::clamp(solidCol.a * opScale, 0.08f, 1.0f);
                             }
                             ID2D1SolidColorBrush* pSolidBr = nullptr;
                             if (SUCCEEDED(pRT->CreateSolidColorBrush(solidCol, &pSolidBr))) {
