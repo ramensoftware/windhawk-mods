@@ -287,6 +287,15 @@ void LoadSettings(HWND hwndListener) {
     }
 }
 
+BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
+    // Restoration after unexpected exit
+    HANDLE value = GetPropW(hWnd, L"SuperTopmostPinned");
+    if (value) {
+        g_stWindows.push_back({ hWnd, (size_t)value == 2 });
+    }
+    return TRUE;
+}
+
 void ToggleAllManagedWindows(HWND hOverlay, bool setSuperTopMost) {
     std::erase_if(g_stWindows, [](const StWindow& stWnd) {
         return !IsWindow(stWnd.hWnd);
@@ -310,6 +319,9 @@ void ToggleAllManagedWindows(HWND hOverlay, bool setSuperTopMost) {
             SetParent(stWnd.hWnd, NULL);
             if (!setSuperTopMost) {
                 SetWindowPos(stWnd.hWnd, stWnd.wasTopmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
+                RemovePropW(stWnd.hWnd, L"SuperTopmostPinned");
+            } else {
+                SetPropW(stWnd.hWnd, L"SuperTopmostPinned", (HANDLE)(stWnd.wasTopmost ? (size_t)2 : 1));
             }
         }
     }
@@ -325,6 +337,7 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                 Wh_Log(L"WTSRegisterSessionNotification failed, GLE=%d", GetLastError());
                 return -1;
             }
+            EnumWindows(InitEnumWindowsProc, 0);
             return 0;
         case WM_HOTKEY:
             if (g_isLocked) {
@@ -384,7 +397,12 @@ LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                         SetParent(hwndForeground, hWnd);
                         SetWindowPos(hWnd, isOnUIAccessBand ? HWND_NOTOPMOST : HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
                         SetParent(hwndForeground, NULL);
-                        SetWindowPos(hwndForeground, wasTopmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
+                        if (isOnUIAccessBand) { // 'was'OnUIAccessBand
+                            SetWindowPos(hwndForeground, wasTopmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
+                            RemovePropW(hwndForeground, L"SuperTopmostPinned");
+                        } else {
+                            SetPropW(hwndForeground, L"SuperTopmostPinned", (HANDLE)(wasTopmost ? (size_t)2 : 1));
+                        }
                     }
                 }
             }
