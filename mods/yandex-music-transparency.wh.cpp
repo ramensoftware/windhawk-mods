@@ -44,48 +44,26 @@ other Chromium/Electron apps by adding their executable names in the mod's
 /*
 ## 1.2.8
 
-- Added `OpaqueWhenMaximized` option: 100% opacity when the window is
-  maximized or fullscreen, applied immediately (no animation) so it does not
-  conflict with the system resize animation.
+- Added configurable opacity for active and inactive windows
+  (`Alpha` / `InactiveAlpha`).
+- Added "fully opaque on hover" option (`OpaqueOnHover`), which now works
+  with both SmoothTransitions settings.
+- Added "fully opaque when maximized/fullscreen" option
+  (`OpaqueWhenMaximized`), applied immediately to avoid clashing with the
+  system resize animation.
+- Added smooth animated transitions between opacity levels
+  (`SmoothTransitions`).
+- Defaults: active opacity 220, inactive opacity 170, smooth transitions on,
+  fully opaque on hover off.
 - Documented that the mod is universal and works with any Chromium / Electron
-  application (via the custom process inclusion list).
-- Defaults changed: `Alpha` 180 -> 220, `InactiveAlpha` 0 -> 170,
-  `SmoothTransitions` on, `OpaqueOnHover` off.
-- Performance: the polling timer now runs only while needed, and each tracked
-  window manages its own timer. It stops when neither hover polling
-  (OpaqueOnHover) nor an opacity animation is active for that window.
-- Fixed smooth transitions working with default settings (inactive opacity and
-  settings changes now animate correctly).
-- Fixed thread safety: timers are created/killed on the window's own thread
-  via a registered control message; the control message is never sent while
-  holding the mutex, avoiding freeze/deadlock on the engine thread.
-- Fixed "fully opaque on hover" not working when smooth transitions are off
-  (and starting late when they are on): the timer-control message is now
-  always sent after applying the target alpha, so hover polling starts
-  immediately regardless of the SmoothTransitions setting.
-
-## 1.27
-
-- Fixed transparency being broken: the function that applies the target alpha
-  now ensures `WS_EX_LAYERED` is set first (and skips `LWA_COLORKEY`
-  windows). Previously the layered style was never applied, so
-  `SetLayeredWindowAttributes` failed and the window stayed opaque.
-
-## 1.26
-
-- Removed the `PlaybackAlpha` feature (title-based playback detection) — it
-  could interfere with normal transparency. Smooth transitions remain.
-
-## 1.25
-
-- Added smooth animated transitions between opacity levels (toggleable).
-- Added `PlaybackAlpha` — when a track is playing (title-based detection), a
-  separate opacity value is used. `0` disables this feature.
-
-## 1.24
-
-- Removed all background blur effects (Blur / Acrylic / Mica). The mod now
-  only provides window transparency.
+  application.
+- Fixed the layered-window style (`WS_EX_LAYERED`) always being applied, so
+  transparency reliably works even after the mod is loaded into a running app.
+- Fixed restoring the original alpha on unload (the window's true original
+  opacity is now captured once).
+- Each tracked window manages its own timer, which runs only while needed
+  (hover polling or an animation); timers are controlled on the window's own
+  thread, and the control message is never sent while holding the mutex.
 */
 // ==/WindhawkModChangelog==
 
@@ -102,7 +80,7 @@ other Chromium/Electron apps by adding their executable names in the mod's
   $description: Make the window fully opaque while the mouse hovers over it
 - OpaqueWhenMaximized: false
   $name: Fully opaque when maximized (alpha)
-  $description: Make the window 100% opaque when it is maximized or fullscreen
+  $description: alpha v1.2.8 - Make the window 100% opaque when it is maximized or fullscreen
 - SmoothTransitions: true
   $name: Smooth transitions
   $description: Animate opacity changes instead of applying them instantly.
@@ -193,7 +171,7 @@ bool UsesColorKey(HWND hwnd) {
     return false;
 }
 
-// [alpha v1.2.8a] Fully opaque when maximized: true when the window is
+// [alpha v1.2.8] Fully opaque when maximized: true when the window is
 // maximized or covers the full work area (fullscreen).
 bool IsMaximizedOrFullscreen(HWND hwnd) {
     if (IsZoomed(hwnd)) {
@@ -307,7 +285,7 @@ void ApplyTargetAlpha(HWND hwnd) {
 
         BYTE target = ComputeTargetAlpha(hwnd, it->second);
 
-        // [alpha v1.2.8a] Fully opaque when maximized: apply immediately when
+        // [alpha v1.2.8] Fully opaque when maximized: apply immediately when
         // transitioning into or out of the maximized / fullscreen state with
         // OpaqueWhenMaximized on: animating simultaneously with the system
         // resize animation looks like overlapping flicker.
