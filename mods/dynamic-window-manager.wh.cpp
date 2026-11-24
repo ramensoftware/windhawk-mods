@@ -44,10 +44,12 @@ exact: `spotify.exe`, not "Spotify".
 
 ## Similar mods
 
-Center New Windows and Window Centralizer also place new windows, but with a
-single global size or without resizing at all, so they don't cover
-per-application rules, sizes and anchors. If either of them is enabled together
-with this mod, both will handle the same window.
+[Center New Windows](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/center-new-windows.wh.cpp)
+and
+[Window Centralizer](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/window-centralizer.wh.cpp)
+also place new windows, but with a single global size or without resizing at
+all, so they don't cover per-application rules, sizes and anchors. If either of
+them is enabled together with this mod, both will handle the same window.
 */
 // ==/WindhawkModReadme==
 
@@ -128,9 +130,6 @@ constexpr ULONGLONG kApplyDelayMs = 200;
 // restore is asynchronous, so the first pass can't apply the rule.
 constexpr int kMaxApplyAttempts = 5;
 
-// Identifier of the worker thread's timer, armed only while a rule is waiting.
-constexpr UINT_PTR kApplyTimerId = 1;
-
 // DWMWA_EXTENDED_FRAME_BOUNDS, the visible window frame.
 constexpr DWORD kExtendedFrameBounds = 9;
 
@@ -200,7 +199,11 @@ DWORD g_processId = 0;
 // The members below are only accessed from the worker thread.
 std::set<HWND> g_seenWindows;
 std::deque<PendingWindow> g_pendingWindows;
-bool g_timerActive = false;
+
+// Identifier of the worker thread's timer while a rule is waiting, or zero when
+// the timer isn't armed. Windows assigns the identifier, so the returned value
+// has to be kept.
+UINT_PTR g_applyTimerId = 0;
 
 void UpdateApplyTimer();
 void CALLBACK ApplyTimerProc(HWND, UINT, UINT_PTR, DWORD);
@@ -624,9 +627,9 @@ void ProcessPendingWindows() {
 // new windows themselves are reported by the event hooks.
 void UpdateApplyTimer() {
     if (g_pendingWindows.empty()) {
-        if (g_timerActive) {
-            KillTimer(nullptr, kApplyTimerId);
-            g_timerActive = false;
+        if (g_applyTimerId) {
+            KillTimer(nullptr, g_applyTimerId);
+            g_applyTimerId = 0;
         }
         return;
     }
@@ -638,8 +641,12 @@ void UpdateApplyTimer() {
     }
 
     UINT delay = earliest > now ? static_cast<UINT>(earliest - now) : 1;
-    SetTimer(nullptr, kApplyTimerId, delay, ApplyTimerProc);
-    g_timerActive = true;
+
+    // A thread timer (created with a NULL window) gets its identifier from
+    // Windows, which ignores the requested one and returns the identifier it
+    // chose. Keeping that identifier and passing it back resets the existing
+    // timer instead of creating another one, and is also what KillTimer needs.
+    g_applyTimerId = SetTimer(nullptr, g_applyTimerId, delay, ApplyTimerProc);
 }
 
 void CALLBACK ApplyTimerProc(HWND, UINT, UINT_PTR, DWORD) {
@@ -809,9 +816,9 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
-    if (g_timerActive) {
-        KillTimer(nullptr, kApplyTimerId);
-        g_timerActive = false;
+    if (g_applyTimerId) {
+        KillTimer(nullptr, g_applyTimerId);
+        g_applyTimerId = 0;
     }
 
     HWINEVENTHOOK* hooks[] = {&g_showHook, &g_destroyHook, &g_uncloakHook,
