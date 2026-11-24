@@ -37,13 +37,12 @@ menu is drawn in the same glass.
 
 ![Right-click menu](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/right-click.gif)
 
-## Liquid Glass 
+## How it differs from Spotlight Launcher
 
-**User Experience** :This mod concentrates on the
-experience: the liquid-glass look, open/close and selection animations, hover zoom, a draggable bar,
-a persistent whole-drive file index (refreshed every 15 minutes) and a web-search fallback with a
-browser picker. The two cover different ground; Store-app, clipboard, bookmark and window-switcher
-features are not part of this mod.
+[Spotlight Launcher](https://windhawk.net/mods/spotlight-launcher) focuses on breadth: Store apps, a file browser, clipboard history,
+bookmarks and a window switcher. This mod focuses on the experience: the liquid-glass look, open/close and selection animations, hover zoom,
+a draggable bar, a persistent whole-drive file index (refreshed every 15 minutes) and a web-search fallback with a browser picker. Store-app,
+clipboard, bookmark and window-switcher features are not part of this mod.
 
 ## Usage
 
