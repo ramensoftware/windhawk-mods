@@ -418,6 +418,8 @@ Requires a Windows 11 build with the new colored battery icon (Windows 11
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cmath>
 #include <functional>
 #include <list>
 #include <optional>
@@ -1113,11 +1115,19 @@ Media::Brush ResolveColor(const ColorSpec& spec,
 
 bool NeedsPeriodicUpdate() {
     const auto& s = g_settings;
+    auto isAccent = [](const ColorSpec& spec) {
+        return spec.kind == ColorSpec::Kind::Accent;
+    };
     return s.style != IconStyle::modern ||
            s.lowAnimation != LowAnimation::none ||
            s.percentPosition != PercentPosition::none ||
+           isAccent(s.percentColor) ||
            (s.colorMode == ColorMode::custom &&
-            (s.low.kind != ColorSpec::Kind::Default ||
+            (isAccent(s.normal) || isAccent(s.charging) ||
+             isAccent(s.pluggedIn) || isAccent(s.batterySaver) ||
+             isAccent(s.low) || isAccent(s.critical) ||
+             isAccent(s.outline) || isAccent(s.chargingIndicator) ||
+             s.low.kind != ColorSpec::Kind::Default ||
              s.critical.kind != ColorSpec::Kind::Default));
 }
 
@@ -1314,11 +1324,11 @@ void UpdateAppleIcon(BatteryIcon& icon,
     if (fillColor.A < 128) {
         onFill = textColor;
     }
-    Color onTrack = textColor;
-    if (s.percentColor.kind == ColorSpec::Kind::Value) {
-        onFill = onTrack = s.percentColor.color;
-    } else if (s.percentColor.kind == ColorSpec::Kind::Text) {
-        onFill = onTrack = textColor;
+    Color onTrack = ContrastColor(trackColor, textColor);
+    if (s.percentColor.kind == ColorSpec::Kind::Value ||
+        s.percentColor.kind == ColorSpec::Kind::Text ||
+        s.percentColor.kind == ColorSpec::Kind::Accent) {
+        onFill = onTrack = resolve(s.percentColor, textColor);
     }
 
     Color boltColor = textColor;
@@ -1399,10 +1409,11 @@ void UpdateTextIcon(BatteryIcon& icon,
 
     StatusColors colors = GetStatusColors(content, state, percent);
     Color numberColor = colors.fill;
-    if (s.percentColor.kind == ColorSpec::Kind::Value) {
-        numberColor = s.percentColor.color;
-    } else if (s.percentColor.kind == ColorSpec::Kind::Text) {
-        numberColor = colors.text;
+    if (s.percentColor.kind == ColorSpec::Kind::Value ||
+        s.percentColor.kind == ColorSpec::Kind::Text ||
+        s.percentColor.kind == ColorSpec::Kind::Accent) {
+        numberColor =
+            ResolveColorValue(s.percentColor, colors.text, numberColor);
     }
 
     bool charging = state == BatteryState::Charging ||
@@ -2412,7 +2423,9 @@ using FrameworkElementLoadedEventRevoker = winrt::impl::event_revoker<
     IFrameworkElement,
     &winrt::impl::abi<IFrameworkElement>::type::remove_Loaded>;
 
-std::list<FrameworkElementLoadedEventRevoker> g_autoRevokerList;
+[[clang::no_destroy]] std::optional<
+    std::list<FrameworkElementLoadedEventRevoker>> g_autoRevokerList{
+    std::in_place};
 
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -2470,7 +2483,7 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         return nullptr;
     }
 
-    size_t taskbarElementIUnknownOffset = 0x48;
+    size_t taskbarElementIUnknownOffset = 0x10;
 
 #if defined(_M_X64)
     {
@@ -2484,6 +2497,22 @@ XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
         }
     }
+#elif defined(_M_ARM64)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#else
+#error "Unsupported architecture"
 #endif
 
     auto* taskbarElementIUnknown =
@@ -2555,7 +2584,9 @@ bool RunFromWindowThread(HWND hWnd,
 
 // Runs on the taskbar thread.
 void ApplySettingsFromTaskbarThread(HWND hTaskbarWnd, bool reloadSettings) {
-    g_autoRevokerList.clear();
+    if (g_autoRevokerList) {
+        g_autoRevokerList->clear();
+    }
 
     if (!g_batteryIcons) {
         return;
@@ -2589,6 +2620,7 @@ void ApplySettingsFromTaskbarThread(HWND hTaskbarWnd, bool reloadSettings) {
 
     if (g_unloading) {
         g_batteryIcons.reset();  // Runs ~list() on the taskbar thread.
+        g_autoRevokerList.reset();
         return;
     }
 
@@ -2643,6 +2675,12 @@ IconView_IconView_t IconView_IconView_Original;
 void* WINAPI IconView_IconView_Hook(void* pThis) {
     void* ret = IconView_IconView_Original(pThis);
 
+    // A new icon view has nothing to restore, and the revoker list is released
+    // while unloading.
+    if (g_unloading) {
+        return ret;
+    }
+
     FrameworkElement iconView = nullptr;
     ((IUnknown**)pThis)[1]->QueryInterface(winrt::guid_of<FrameworkElement>(),
                                            winrt::put_abi(iconView));
@@ -2650,14 +2688,20 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
         return ret;
     }
 
-    g_autoRevokerList.emplace_back();
-    auto autoRevokerIt = g_autoRevokerList.end();
+    if (!g_autoRevokerList) {
+        return ret;
+    }
+
+    g_autoRevokerList->emplace_back();
+    auto autoRevokerIt = g_autoRevokerList->end();
     --autoRevokerIt;
 
     *autoRevokerIt = iconView.Loaded(
         winrt::auto_revoke_t{},
         [autoRevokerIt](IInspectable const& sender, RoutedEventArgs const& e) {
-            g_autoRevokerList.erase(autoRevokerIt);
+            if (g_autoRevokerList) {
+                g_autoRevokerList->erase(autoRevokerIt);
+            }
 
             if (g_unloading) {
                 return;
