@@ -1,9 +1,8 @@
 // ==WindhawkMod==
 // @id adaptive-tray-contrast
-// @name Adaptive tray contrast
-// @name:zh-CN 任务栏自适应变色
-// @description Adjust tray glyphs, clock and date characters, taskbar button themes and supported app icons to their local backgrounds.
-// @description:zh-CN 根据各自背后的画面调整托盘图标、时间和日期字符、任务栏按钮主题及受支持的应用图标。
+// @name Adaptive Tray Contrast
+// @description Adapts tray icons, individual clock and date characters, taskbar buttons and supported app icons to the background behind each.
+// @description:zh-CN 根据各自背后的画面调整托盘图标、任务栏按钮和受支持的应用图标，时间与日期逐字符变色。 Adapts tray icons, individual clock and date characters, taskbar buttons and supported app icons to the background behind each.
 // @version 0.3.15
 // @author StillDialing
 // @github https://github.com/StillDialing
