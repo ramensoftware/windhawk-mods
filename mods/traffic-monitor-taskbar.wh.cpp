@@ -3,7 +3,7 @@
 // @name            TrafficMonitor for Taskbar
 // @description     Network speed, CPU, memory, GPU and daily traffic shown inside the Windows 11 taskbar, next to the tray (TrafficMonitor-style), with a Fluent settings panel and traffic history.
 // @description:es-ES  Velocidad de red, CPU, memoria, GPU y tráfico diario dentro de la barra de tareas de Windows 11, junto a la bandeja (estilo TrafficMonitor), con un panel de ajustes Fluent.
-// @version         1.0.4
+// @version         1.0.5
 // @author          xSHIMURAx
 // @github          https://github.com/xSHIMURAx
 // @license         MIT
@@ -1252,9 +1252,9 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     };
 
     // Offset of the taskbar's IUnknown inside TaskbarHost, read from the first instructions of
-    // TaskbarHost::FrameHeight. Only the x86-64 pattern is known: this mod is built for x86-64
-    // only (see @architecture), so Windhawk does not load it in a native ARM64 Explorer. On any
-    // other architecture the offset is never guessed.
+    // TaskbarHost::FrameHeight. The x86-64 and ARM64 patterns are known. Windhawk loads the x86-64
+    // build into a native ARM64 Explorer too (Explorer is a predefined shell process, so the mod is
+    // compiled for ARM64 there). On any other architecture the offset is never guessed.
     size_t taskbarElementIUnknownOffset = 0x10;
 #if defined(_M_X64)
     {
@@ -1264,6 +1264,20 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         if (b && b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
             b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
             taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern");
+        }
+    }
+#elif defined(_M_ARM64)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp  fp, lr, [sp, #-0x10]!
+        // fd030091 mov  fp, sp
+        // 080c41f8 ldr  x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p && p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD && p[2] == 0x910003FD &&
+            (p[3] & 0xFFFFFE00) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
         } else {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern");
         }
