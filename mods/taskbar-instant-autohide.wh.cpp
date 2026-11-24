@@ -2,7 +2,7 @@
 // @id              taskbar-instant-autohide
 // @name            Taskbar instant auto-hide
 // @description     Hides the auto-hidden taskbar right after the pointer leaves it, also while an app flashes, but keeps it up for thumbnails and menus
-// @version         0.8
+// @version         1.0
 // @author          Faci Labs
 // @github          https://github.com/FreedomPortal
 // @include         explorer.exe
@@ -17,8 +17,8 @@
 
 For Windows' *Automatically hide the taskbar* (turn it on first).
 
-1. **No wait after the pointer leaves.** Explorer's auto-hide timer
-   (ID 2 on every taskbar) is shortened to the *Hide delay*.
+1. **No wait after the pointer leaves.** Explorer's auto-hide timer is
+   shortened to the *Hide delay*.
 2. **Flashing apps don't hold the taskbar up.** Windows keeps the taskbar
    shown while a taskbar button flashes for attention. The mod lets it hide
    anyway (the button still flashes when you bring the taskbar back).
