@@ -8,7 +8,7 @@
 // @author StillDialing
 // @github https://github.com/StillDialing
 // @include explorer.exe
-// @architecture amd64
+// @architecture x86-64
 // @compilerOptions -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32
 // ==/WindhawkMod==
 
@@ -20,7 +20,7 @@
 /*
 # Adaptive tray contrast
 
-For transparent taskbars on Windows 11 x64 (Intel or AMD). Drag a light window
+For transparent taskbars on Windows 11. Drag a light window
 behind the clock on a dark desktop: digits over the window can turn black
 while digits over the desktop stay white. The date is evaluated separately,
 one character at a time.
@@ -44,7 +44,7 @@ sample less frequently. A sharp background boundary can cause brief flicker.
 
 ## 中文说明
 
-适用于 Intel 或 AMD x64 电脑上的 Windows 11 透明任务栏。把亮色窗口拖到深色桌面上的时钟后方，
+适用于 Windows 11 透明任务栏。把亮色窗口拖到深色桌面上的时钟后方，
 同一行数字会按各自背后的明暗显示黑色或白色，日期也逐字符独立判断。
 
 模组还会调整受支持的单色托盘图标、输入法指示器，以及开始、搜索、任务视图、小组件和应用按钮的主题。
@@ -731,12 +731,24 @@ XamlRoot ReadRoot(HWND window) {
         return nullptr;
     }
 
-    // FrameHeight passes the embedded island element to a helper via RCX.
-    // Accept the known x64 encoding only and skip unknown builds.
+    size_t offset = 0;
+#if defined(_M_X64)
     const auto* code = static_cast<const BYTE*>(g_frameHeight);
-    if (code[0] != 0x48 || code[1] != 0x83 || code[2] != 0xEC ||
-        code[4] != 0x48 || code[5] != 0x83 || code[6] != 0xC1 ||
-        code[7] == 0 || code[7] > 0x7F || code[7] % sizeof(void*) != 0) {
+    if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
+        code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 && code[7] <= 0x7F) {
+        offset = code[7];
+    }
+#elif defined(_M_ARM64)
+    // Match the FrameHeight prologue and its positive pre-indexed LDR offset.
+    const auto* code = static_cast<const DWORD*>(g_frameHeight);
+    if (code[0] == 0xD503237F && (code[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        code[2] == 0x910003FD && (code[3] & 0xFFF00FE0) == 0xF8400C00) {
+        offset = (code[3] >> 12) & 0xFF;
+    }
+#else
+#error Unsupported architecture
+#endif
+    if (offset == 0 || offset % sizeof(void*) != 0) {
         static bool logged = false;
         if (!logged) {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight layout. Skipping.");
@@ -771,7 +783,7 @@ XamlRoot ReadRoot(HWND window) {
         IUnknown* element = nullptr;
         if (host[0] &&
             ReadProcessMemory(GetCurrentProcess(),
-                              static_cast<const BYTE*>(host[0]) + code[7],
+                              static_cast<const BYTE*>(host[0]) + offset,
                               &element, sizeof(element), &bytesRead) &&
             element) {
             FrameworkElement xaml{nullptr};
