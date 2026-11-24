@@ -45,8 +45,6 @@ A modular Fluent Design island for the **Windows 11 taskbar**, combining a custo
 - **VK Music Integration (`vk-music-bridge.user.js`):**
   - **Optional (disabled by default)** loopback bridge (`127.0.0.1:49321`) syncing Shuffle, Repeat (`Off` / `Playlist` / `One Track`), and Add/Remove from Library with VK (`vk.com`, `vk.ru`, `music.vk.com`) when configured with a shared secret token.
 
-> **Need per-app Split Tunneling?** Split Tunneling is available as a separate mod (**WireGuard Split Tunneling**) so this taskbar mod runs exclusively inside `explorer.exe` and the standalone split-tunneling mod can cover both 32-bit and 64-bit apps.
-
 ---
 
 ## Requirements
@@ -60,7 +58,7 @@ A modular Fluent Design island for the **Windows 11 taskbar**, combining a custo
 ## Setup Guides
 
 ### 1. WireGuard VPN & Optional Passwordless Toggle
-1. Install WireGuard and store your tunnel `.conf` file in an administrator-protected folder (for example, `C:\Program Files\WireGuard\Data\Configurations\my-vpn.conf` or another folder not writable by standard programs).
+1. Install WireGuard and store your tunnel `.conf` file in an administrator-protected folder (for example, `C:\ProgramData\WireGuardConfigs\my-vpn.conf` with write permissions restricted to Administrators; note that WireGuard's manager service auto-encrypts plain `.conf` files placed in its `Data\Configurations\` directory into `.conf.dpapi`, which also works if you point the setting directly at the `.conf.dpapi` file).
 2. Open **Mod Settings -> VPN - Connection & Behavior**:
    - Verify **Path to `wireguard.exe`** (default: `C:\Program Files\WireGuard\wireguard.exe`).
    - Set **Path to `.conf` file** to your `.conf` path.
@@ -95,8 +93,6 @@ Standard Windows media controls (SMTC) do not expose VK's Shuffle, Repeat, or Ad
 
 Модульный островок в стиле **Fluent Design** для **панели задач Windows 11**. Объединяет компактный **Медиаплеер** со всплывающим окном полного просмотра и кнопку **WireGuard VPN** (работает строго внутри `explorer.exe`).
 
-> **Нужно раздельное туннелирование (Split Tunneling)?** Оно вынесено в отдельный мод **WireGuard Split Tunneling**, чтобы не загружать этот мод во все процессы системы и поддерживать как 64-битные, так и 32-битные приложения.
-
 ### Основные возможности
 - **Островок (`Island`):** единая капсула или раздельные кнопки (Плеер и VPN отдельно), выбор монитора (`1`, `2`, или все мониторы), позиция на панели (`Левый край`, `Центр`, `Правый край`, `Трей`), стиль фона (`Прозрачный`, `Сплошной`, `Acrylic`), скругление углов, рамка и объёмная тень `ThemeShadow`.
 - **Медиаплеер на панели (`MediaBar`):** обложка (квадратная или адаптивная `1:1`/`16:9`), название и исполнитель (с плавной бегущей строкой), гибкое включение/отключение любых кнопок и точные отступы, нативный hover Win11, действие колеса мыши, контекстное меню ПКМ и понятные названия приложений (`Firefox`, `Chrome`, `Edge` и др. вместо ID).
@@ -107,7 +103,7 @@ Standard Windows media controls (SMTC) do not expose VK's Shuffle, Repeat, or Ad
 ### Что понадобится для настройки
 
 #### 1. WireGuard VPN и опциональный запуск без UAC
-1. Установите [WireGuard для Windows](https://www.wireguard.com/install/) (или AmneziaWG) и положите `.conf` файл в папку, защищённую от записи обычными программами (например, `C:\WireGuard\my-vpn.conf` с правами только для администратора). Если вам нужен только медиаплеер — просто отключите `Island -> Включить модуль кнопки VPN`.
+1. Установите [WireGuard для Windows](https://www.wireguard.com/install/) (или AmneziaWG) и положите `.conf` файл в папку, защищённую от записи обычными программами (например, `C:\ProgramData\WireGuardConfigs\my-vpn.conf` с правами только для администраторов). Если вам нужен только медиаплеер — просто отключите `Island -> Включить модуль кнопки VPN`.
 2. Откройте настройки мода **VPN — Подключение и поведение**, проверьте **Путь к `wireguard.exe`** и укажите **Путь к файлу `.conf`**.
 3. По умолчанию клик по VPN запускает туннель через стандартный запрос UAC и не создаёт никаких записей в системе.
 4. *(По желанию — запуск без UAC)* Нажмите **ПКМ** по кнопке VPN и выберите **«Настроить / обновить запуск без UAC (1 раз)»**. Будут созданы две задачи Планировщика заданий Windows: `WindhawkVPN_Start` и `WindhawkVPN_Stop` (`/sc ONCE /rl HIGHEST`).
@@ -716,6 +712,7 @@ Standard Windows media controls (SMTC) do not expose VK's Shuffle, Repeat, or Ad
 #include <cwctype>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -776,7 +773,6 @@ struct MediaSnapshot {
     std::wstring             title;
     std::wstring             artist;
     std::wstring             activeAumid;
-    std::wstring             activeAppName;
     int64_t                  positionTicks = 0;
     int64_t                  timelineBasePosTicks = 0;
     ULONGLONG                timelineAnchorTickMs = 0;
@@ -922,7 +918,6 @@ struct VpnModuleUI {
     Border    capsule{nullptr};
     Grid      slot{nullptr};
     Border    buttonPill{nullptr};
-    Grid      iconHost{nullptr};
     winrt::Windows::UI::Xaml::Shapes::Path iconPathConnected{nullptr};
     winrt::Windows::UI::Xaml::Shapes::Path iconPathDisconnected{nullptr};
     TextBlock textBlock{nullptr};
@@ -945,7 +940,6 @@ struct MediaModuleUI {
     Grid       slot{nullptr};
     bool       isHovered = false;
     bool       isPressed = false;
-    Grid       clickArea{nullptr};
     Grid       artBox{nullptr};
     Border     artBackdrop{nullptr};
     winrt::Windows::UI::Xaml::Shapes::Rectangle artRect{nullptr};
@@ -1008,6 +1002,7 @@ struct MiniPlayerUI {
     winrt::Windows::UI::Xaml::Shapes::Path repeatOnePath{nullptr};
     DispatcherTimer seekTimer{nullptr};
     winrt::event_token seekTickToken{};
+    winrt::event_token closedToken{};
     uint64_t   lastThumbHash = 0;
     size_t     lastSessionSig = 0;
     bool       isSeeking = false;
@@ -1022,6 +1017,10 @@ struct MiniPlayerUI {
             }
             seekTimer = nullptr;
         }
+        if (flyout && closedToken.value) {
+            try { flyout.Closed(closedToken); } catch (...) {}
+        }
+        closedToken = {};
         repeatOnePath = nullptr;
         repeatAllPath = nullptr;
         nextPath = nullptr;
@@ -1069,10 +1068,6 @@ struct IslandHost {
     StackPanel         modulesRow{nullptr};
     Border             moduleDivider{nullptr};
     int                injectedColumn = -1;
-    bool               isTray = false;
-    int                marginLeft = 4;
-    int                marginRight = 4;
-    std::wstring       position = L"taskbar_left_edge";
     MediaModuleUI      media;
     VpnModuleUI        vpn;
 };
@@ -1114,13 +1109,14 @@ HANDLE g_vkBridgeThread = nullptr;
 HANDLE g_stopEvent      = nullptr;
 HANDLE g_wakeEvent      = nullptr;
 HANDLE g_mediaWakeEvent = nullptr;
+HANDLE g_vkWakeEvent    = nullptr;
 
 std::mutex        g_mountedMutex;
 std::vector<HWND> g_mountedHwnds;
 
 // Accessed strictly on taskbar UI threads.
-[[clang::no_destroy]] std::vector<IslandHost> g_hosts;
-[[clang::no_destroy]] MiniPlayerUI g_miniPlayer;
+[[clang::no_destroy]] std::optional<std::vector<IslandHost>> g_hosts{std::in_place};
+[[clang::no_destroy]] std::optional<MiniPlayerUI> g_miniPlayer{std::in_place};
 
 using CTaskBand_GetTaskbarHost_t          = void*(WINAPI*)(void*, void*);
 using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
@@ -1220,17 +1216,10 @@ bool TryParseColor(std::wstring_view raw, winrt::Windows::UI::Color& out) {
         s.erase(s.begin());
     }
 
-    auto parseHexNibble = [](wchar_t ch, BYTE& nibble) -> bool {
-        if (ch >= L'0' && ch <= L'9') { nibble = static_cast<BYTE>(ch - L'0'); return true; }
-        if (ch >= L'a' && ch <= L'f') { nibble = static_cast<BYTE>(10 + ch - L'a'); return true; }
-        if (ch >= L'A' && ch <= L'F') { nibble = static_cast<BYTE>(10 + ch - L'A'); return true; }
-        return false;
-    };
-
     if (!hadCssFunc && s.find_first_of(L" ,;\t()") == std::wstring::npos) {
         if (s.size() == 3) {
             BYTE r = 0, g = 0, b = 0;
-            if (parseHexNibble(s[0], r) && parseHexNibble(s[1], g) && parseHexNibble(s[2], b)) {
+            if (HexDigitVal(s[0], r) && HexDigitVal(s[1], g) && HexDigitVal(s[2], b)) {
                 out = {0xFF, static_cast<BYTE>(r * 17), static_cast<BYTE>(g * 17), static_cast<BYTE>(b * 17)};
                 return true;
             }
@@ -1238,8 +1227,8 @@ bool TryParseColor(std::wstring_view raw, winrt::Windows::UI::Color& out) {
         }
         if (s.size() == 4) {
             BYTE a = 0, r = 0, g = 0, b = 0;
-            if (parseHexNibble(s[0], a) && parseHexNibble(s[1], r) &&
-                parseHexNibble(s[2], g) && parseHexNibble(s[3], b)) {
+            if (HexDigitVal(s[0], a) && HexDigitVal(s[1], r) &&
+                HexDigitVal(s[2], g) && HexDigitVal(s[3], b)) {
                 out = {static_cast<BYTE>(a * 17), static_cast<BYTE>(r * 17),
                        static_cast<BYTE>(g * 17), static_cast<BYTE>(b * 17)};
                 return true;
@@ -1292,7 +1281,7 @@ bool TryParseColor(std::wstring_view raw, winrt::Windows::UI::Color& out) {
     }
     if (parts.size() == 4) {
         if (hadRgba) {
-            const double alphaVal = (parts[3] >= 0.0 && parts[3] <= 1.0 && (parts[3] != 0.0 && parts[3] != 1.0 ? true : (s.find(L'.') != std::wstring::npos || parts[3] <= 1.0)))
+            const double alphaVal = (parts[3] >= 0.0 && parts[3] <= 1.0)
                 ? (parts[3] * 255.0)
                 : parts[3];
             out = {
@@ -1334,10 +1323,8 @@ bool TryParseCustomColor(std::wstring_view raw, winrt::Windows::UI::Color& out) 
 
 IslandSettings ReadSettingsFromWindhawk() {
     auto ReadRawStr = [](const wchar_t* key) -> std::wstring {
-        PCWSTR raw = Wh_GetStringSetting(key);
-        std::wstring result = raw ? raw : L"";
-        Wh_FreeStringSetting(raw);
-        return result;
+        auto val = WindhawkUtils::StringSetting::make(key);
+        return std::wstring(val.get());
     };
     auto ReadStr = [&ReadRawStr](const wchar_t* key, const wchar_t* defVal) -> std::wstring {
         std::wstring result = ReadRawStr(key);
@@ -1889,28 +1876,58 @@ bool TryRunScheduledTaskCom(const wchar_t* taskName,
     return SUCCEEDED(hr);
 }
 
+std::wstring GetSystem32ExePath(const wchar_t* exeName) {
+    wchar_t sysDir[MAX_PATH]{};
+    const UINT len = GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir));
+    if (len == 0 || len >= ARRAYSIZE(sysDir)) {
+        return {};
+    }
+    std::wstring full(sysDir, len);
+    if (!full.empty() && full.back() != L'\\') {
+        full.push_back(L'\\');
+    }
+    full += exeName;
+    return full;
+}
+
+bool HasUnsafeCmdChars(std::wstring_view sv) {
+    return sv.find_first_of(L"\"&|<>%^\r\n") != std::wstring_view::npos;
+}
+
 void SetupPasswordlessTasks(const IslandSettings& s) {
     if (s.wgExePath.empty() || s.configPath.empty() || s.tunnelName.empty()) return;
+    if (HasUnsafeCmdChars(s.wgExePath) || HasUnsafeCmdChars(s.configPath) || HasUnsafeCmdChars(s.tunnelName)) {
+        Wh_Log(L"Refusing passwordless task setup: configured WireGuard/tunnel path contains unsupported characters");
+        return;
+    }
+
+    const std::wstring cmdExe = GetSystem32ExePath(L"cmd.exe");
+    const std::wstring schtasksExe = GetSystem32ExePath(L"schtasks.exe");
+    if (cmdExe.empty() || schtasksExe.empty()) return;
 
     const std::wstring cmd =
-        L"/c schtasks /create /tn \"" + std::wstring(kTaskStartName) +
+        L"/c \"\"" + schtasksExe + L"\" /create /tn \"" + std::wstring(kTaskStartName) +
         L"\" /tr \"\\\"" + s.wgExePath + L"\\\" /installtunnelservice \\\"" + s.configPath +
-        L"\\\"\" /sc ONCE /st 00:00 /rl HIGHEST /f & "
-        L"schtasks /create /tn \"" + std::wstring(kTaskStopName) +
+        L"\\\"\" /sc ONCE /st 00:00 /rl HIGHEST /f & \"" +
+        schtasksExe + L"\" /create /tn \"" + std::wstring(kTaskStopName) +
         L"\" /tr \"\\\"" + s.wgExePath + L"\\\" /uninstalltunnelservice " + s.tunnelName +
-        L"\" /sc ONCE /st 00:00 /rl HIGHEST /f";
+        L"\" /sc ONCE /st 00:00 /rl HIGHEST /f\"";
 
     HWND owner = FindWindowW(L"Shell_TrayWnd", nullptr);
-    ShellExecuteW(owner, L"runas", L"cmd.exe", cmd.c_str(), nullptr, SW_HIDE);
+    ShellExecuteW(owner, L"runas", cmdExe.c_str(), cmd.c_str(), nullptr, SW_HIDE);
 }
 
 void RemovePasswordlessTasks() {
+    const std::wstring cmdExe = GetSystem32ExePath(L"cmd.exe");
+    const std::wstring schtasksExe = GetSystem32ExePath(L"schtasks.exe");
+    if (cmdExe.empty() || schtasksExe.empty()) return;
+
     const std::wstring cmd =
-        L"/c schtasks /delete /tn \"" + std::wstring(kTaskStartName) +
-        L"\" /f & schtasks /delete /tn \"" + std::wstring(kTaskStopName) + L"\" /f";
+        L"/c \"\"" + schtasksExe + L"\" /delete /tn \"" + std::wstring(kTaskStartName) +
+        L"\" /f & \"" + schtasksExe + L"\" /delete /tn \"" + std::wstring(kTaskStopName) + L"\" /f\"";
 
     HWND owner = FindWindowW(L"Shell_TrayWnd", nullptr);
-    ShellExecuteW(owner, L"runas", L"cmd.exe", cmd.c_str(), nullptr, SW_HIDE);
+    ShellExecuteW(owner, L"runas", cmdExe.c_str(), cmd.c_str(), nullptr, SW_HIDE);
 }
 
 void RequestVpnToggle() {
@@ -1941,7 +1958,8 @@ void RemoveMountedHwnd(HWND hWnd) {
 }
 
 IslandHost* FindHostByHwnd(HWND hWnd) {
-    for (auto& host : g_hosts) {
+    if (!g_hosts) return nullptr;
+    for (auto& host : *g_hosts) {
         if (host.hWnd == hWnd) return &host;
     }
     return nullptr;
@@ -2064,6 +2082,19 @@ std::wstring FormatTimeFromTicks(int64_t ticks) {
     return buf;
 }
 
+bool ContainsTokenWord(std::wstring_view haystackLower, std::wstring_view wordLower) {
+    if (wordLower.empty() || haystackLower.size() < wordLower.size()) return false;
+    size_t pos = 0;
+    while ((pos = haystackLower.find(wordLower, pos)) != std::wstring_view::npos) {
+        const bool leftOk = (pos == 0) || !iswalnum(haystackLower[pos - 1]);
+        const size_t after = pos + wordLower.size();
+        const bool rightOk = (after >= haystackLower.size()) || !iswalnum(haystackLower[after]);
+        if (leftOk && rightOk) return true;
+        pos += wordLower.size();
+    }
+    return false;
+}
+
 std::wstring ResolveAppDisplayName(const std::wstring& aumid) {
     if (aumid.empty()) return L"Media";
 
@@ -2108,7 +2139,7 @@ std::wstring ResolveAppDisplayName(const std::wstring& aumid) {
             resolved = L"Brave";
         } else if (low.find(L"vivaldi") != std::wstring::npos) {
             resolved = L"Vivaldi";
-        } else if (low.find(L"zen") != std::wstring::npos) {
+        } else if (ContainsTokenWord(low, L"zen")) {
             resolved = L"Zen";
         } else if (low.find(L"spotify") != std::wstring::npos) {
             resolved = L"Spotify";
@@ -2148,14 +2179,22 @@ std::wstring ResolveAppDisplayName(const std::wstring& aumid) {
 bool IsBrowserSession(std::wstring_view aumid, std::wstring_view resolvedName) {
     const std::wstring a = ToLower(std::wstring(aumid));
     const std::wstring r = ToLower(std::wstring(resolvedName));
-    static constexpr std::wstring_view kBrowsers[] = {
-        L"firefox", L"chrome", L"msedge", L"edge", L"opera", L"brave",
-        L"yandex", L"vivaldi", L"zen", L"waterfox", L"floorp", L"librewolf",
-        L"arc", L"browser", L"браузер",
+    static constexpr std::wstring_view kExactBrowsers[] = {
+        L"firefox", L"chrome", L"msedge", L"operagx", L"brave",
+        L"yandex", L"vivaldi", L"waterfox", L"floorp", L"librewolf",
+        L"браузер",
         L"308046b0af4a39cb", L"e7cf176e110c211b", L"6f193ccc56814779"
     };
-    for (const auto needle : kBrowsers) {
+    for (const auto needle : kExactBrowsers) {
         if (a.find(needle) != std::wstring::npos || r.find(needle) != std::wstring::npos) {
+            return true;
+        }
+    }
+    static constexpr std::wstring_view kWordBrowsers[] = {
+        L"edge", L"opera", L"zen", L"arc", L"browser"
+    };
+    for (const auto word : kWordBrowsers) {
+        if (ContainsTokenWord(a, word) || ContainsTokenWord(r, word)) {
             return true;
         }
     }
@@ -2600,36 +2639,42 @@ void RefreshMediaHoverForHwnd(HWND hWnd) {
 
 void CloseMiniPlayerOnUiThread() {
     HWND prevAnchor = g_miniPlayerAnchorHwnd;
-    if (g_miniPlayer.flyout) {
-        try { g_miniPlayer.flyout.Hide(); } catch (...) {}
+    if (g_miniPlayer && g_miniPlayer->flyout) {
+        if (g_miniPlayer->closedToken.value) {
+            try { g_miniPlayer->flyout.Closed(g_miniPlayer->closedToken); } catch (...) {}
+            g_miniPlayer->closedToken = {};
+        }
+        try { g_miniPlayer->flyout.Hide(); } catch (...) {}
     }
     g_miniPlayerOpen.store(false);
     g_miniPlayerAnchorHwnd = nullptr;
-    g_miniPlayer.Reset();
+    if (g_miniPlayer) {
+        g_miniPlayer->Reset();
+    }
     if (prevAnchor) {
         RefreshMediaHoverForHwnd(prevAnchor);
     }
 }
 
 void UpdateSeekBarVisuals(double ratio, int64_t durationTicks) {
-    if (!g_miniPlayer.seekHitArea || !g_miniPlayer.seekTrackFill) return;
+    if (!g_miniPlayer || !g_miniPlayer->seekHitArea || !g_miniPlayer->seekTrackFill) return;
     ratio = std::clamp(ratio, 0.0, 1.0);
-    double trackW = g_miniPlayer.seekHitArea.ActualWidth();
+    double trackW = g_miniPlayer->seekHitArea.ActualWidth();
     if (trackW < 10.0) trackW = 264.0;
     const double fillW = ratio * trackW;
-    g_miniPlayer.seekTrackFill.Width(fillW);
-    if (g_miniPlayer.seekKnobTransform) {
+    g_miniPlayer->seekTrackFill.Width(fillW);
+    if (g_miniPlayer->seekKnobTransform) {
         const double knobX = std::clamp(fillW - 5.0, 0.0, std::max(0.0, trackW - 10.0));
-        g_miniPlayer.seekKnobTransform.X(knobX);
+        g_miniPlayer->seekKnobTransform.X(knobX);
     }
-    if (g_miniPlayer.posText) {
-        g_miniPlayer.posText.Text(FormatTimeFromTicks(
+    if (g_miniPlayer->posText) {
+        g_miniPlayer->posText.Text(FormatTimeFromTicks(
             static_cast<int64_t>(ratio * static_cast<double>(durationTicks))));
     }
 }
 
 void RefreshMiniPlayerUI(const IslandSettings& s, const MediaSnapshot& media) {
-    if (!g_miniPlayerOpen.load() || !g_miniPlayer.card || g_unloading.load()) return;
+    if (!g_miniPlayerOpen.load() || !g_miniPlayer || !g_miniPlayer->card || g_unloading.load()) return;
 
     try {
         const bool isLight = IsSystemLightTheme();
@@ -2646,17 +2691,17 @@ void RefreshMiniPlayerUI(const IslandSettings& s, const MediaSnapshot& media) {
         const winrt::Windows::UI::Color accentCol = s.mediaAccentColor;
 
         // Session switcher pills (visible only when > 1 media session)
-        if (g_miniPlayer.sessionBar) {
+        if (g_miniPlayer->sessionBar) {
             if (media.sessions.size() > 1) {
-                g_miniPlayer.sessionBar.Visibility(Visibility::Visible);
+                g_miniPlayer->sessionBar.Visibility(Visibility::Visible);
                 size_t sig = media.sessions.size();
                 for (const auto& sess : media.sessions) {
                     sig = sig * 131 + std::hash<std::wstring>{}(sess.aumid) + (sess.isPlaying ? 7 : 0);
                 }
                 sig = sig * 131 + std::hash<std::wstring>{}(media.activeAumid);
-                if (sig != g_miniPlayer.lastSessionSig) {
-                    g_miniPlayer.lastSessionSig = sig;
-                    g_miniPlayer.sessionBar.Children().Clear();
+                if (sig != g_miniPlayer->lastSessionSig) {
+                    g_miniPlayer->lastSessionSig = sig;
+                    g_miniPlayer->sessionBar.Children().Clear();
                     for (const auto& sess : media.sessions) {
                         const bool isActive = (sess.aumid == media.activeAumid);
                         Border pill;
@@ -2694,94 +2739,94 @@ void RefreshMiniPlayerUI(const IslandSettings& s, const MediaSnapshot& media) {
                                 e.Handled(true);
                             }
                         });
-                        g_miniPlayer.sessionBar.Children().Append(pill);
+                        g_miniPlayer->sessionBar.Children().Append(pill);
                     }
                 }
             } else {
-                g_miniPlayer.sessionBar.Visibility(Visibility::Collapsed);
-                g_miniPlayer.lastSessionSig = 0;
+                g_miniPlayer->sessionBar.Visibility(Visibility::Collapsed);
+                g_miniPlayer->lastSessionSig = 0;
             }
         }
 
         // Cover art
-        if (g_miniPlayer.artBackdrop) {
-            g_miniPlayer.artBackdrop.Background(MakeBrush(isLight
+        if (g_miniPlayer->artBackdrop) {
+            g_miniPlayer->artBackdrop.Background(MakeBrush(isLight
                 ? winrt::Windows::UI::Color{0x18, 0x00, 0x00, 0x00}
                 : winrt::Windows::UI::Color{0x1C, 0xFF, 0xFF, 0xFF}));
         }
-        if (g_miniPlayer.fallbackNote) {
-            g_miniPlayer.fallbackNote.Fill(MakeBrush(titleCol));
-            g_miniPlayer.fallbackNote.Opacity(0.55);
+        if (g_miniPlayer->fallbackNote) {
+            g_miniPlayer->fallbackNote.Fill(MakeBrush(titleCol));
+            g_miniPlayer->fallbackNote.Opacity(0.55);
         }
-        if (media.thumbnailHash != g_miniPlayer.lastThumbHash) {
+        if (media.thumbnailHash != g_miniPlayer->lastThumbHash) {
             const double innerW = std::max(120.0, static_cast<double>(s.miniPlayerWidth - s.miniPlayerPadX * 2));
             const double maxH = static_cast<double>(s.miniPlayerArtMaxHeight);
             if (media.thumbnailBytes && !media.thumbnailBytes->empty() &&
-                g_miniPlayer.artBrush && g_miniPlayer.artRect) {
-                ApplyMiniPlayerArtToBrush(g_miniPlayer.artBrush, *media.thumbnailBytes,
-                                          s.miniPlayerAdaptiveArt, innerW, maxH, g_miniPlayer.artBox);
-                g_miniPlayer.artRect.Visibility(Visibility::Visible);
-                if (g_miniPlayer.fallbackNote) g_miniPlayer.fallbackNote.Visibility(Visibility::Collapsed);
+                g_miniPlayer->artBrush && g_miniPlayer->artRect) {
+                ApplyMiniPlayerArtToBrush(g_miniPlayer->artBrush, *media.thumbnailBytes,
+                                          s.miniPlayerAdaptiveArt, innerW, maxH, g_miniPlayer->artBox);
+                g_miniPlayer->artRect.Visibility(Visibility::Visible);
+                if (g_miniPlayer->fallbackNote) g_miniPlayer->fallbackNote.Visibility(Visibility::Collapsed);
             } else {
-                if (g_miniPlayer.artBox) {
+                if (g_miniPlayer->artBox) {
                     const double fb = std::min(innerW, std::min(maxH, 180.0));
-                    g_miniPlayer.artBox.Width(fb);
-                    g_miniPlayer.artBox.Height(fb);
+                    g_miniPlayer->artBox.Width(fb);
+                    g_miniPlayer->artBox.Height(fb);
                 }
-                if (g_miniPlayer.artBrush) g_miniPlayer.artBrush.ImageSource(nullptr);
-                if (g_miniPlayer.artRect) g_miniPlayer.artRect.Visibility(Visibility::Collapsed);
-                if (g_miniPlayer.fallbackNote) g_miniPlayer.fallbackNote.Visibility(Visibility::Visible);
+                if (g_miniPlayer->artBrush) g_miniPlayer->artBrush.ImageSource(nullptr);
+                if (g_miniPlayer->artRect) g_miniPlayer->artRect.Visibility(Visibility::Collapsed);
+                if (g_miniPlayer->fallbackNote) g_miniPlayer->fallbackNote.Visibility(Visibility::Visible);
             }
-            g_miniPlayer.lastThumbHash = media.thumbnailHash;
+            g_miniPlayer->lastThumbHash = media.thumbnailHash;
         }
 
         // Title & artist
-        if (g_miniPlayer.titleBlock) {
+        if (g_miniPlayer->titleBlock) {
             const bool ru = IsRussianUi();
-            g_miniPlayer.titleBlock.Text(media.hasMedia
+            g_miniPlayer->titleBlock.Text(media.hasMedia
                 ? (media.title.empty() ? (ru ? L"Без названия" : L"Untitled") : media.title)
                 : (ru ? L"Нет активного медиа" : L"No active media"));
-            g_miniPlayer.titleBlock.Foreground(MakeBrush(titleCol));
+            g_miniPlayer->titleBlock.Foreground(MakeBrush(titleCol));
         }
-        if (g_miniPlayer.artistBlock) {
-            g_miniPlayer.artistBlock.Text(media.artist.empty() ? L" " : media.artist);
-            g_miniPlayer.artistBlock.Foreground(MakeBrush(artistCol));
-            if (s.mediaColorMode != L"custom") g_miniPlayer.artistBlock.Opacity(0.72);
-            else g_miniPlayer.artistBlock.Opacity(1.0);
+        if (g_miniPlayer->artistBlock) {
+            g_miniPlayer->artistBlock.Text(media.artist.empty() ? L" " : media.artist);
+            g_miniPlayer->artistBlock.Foreground(MakeBrush(artistCol));
+            if (s.mediaColorMode != L"custom") g_miniPlayer->artistBlock.Opacity(0.72);
+            else g_miniPlayer->artistBlock.Opacity(1.0);
         }
 
         // Like / Library button
-        if (g_miniPlayer.likeBtn) {
-            g_miniPlayer.likeBtn.Visibility(media.hasMedia ? Visibility::Visible : Visibility::Collapsed);
+        if (g_miniPlayer->likeBtn) {
+            g_miniPlayer->likeBtn.Visibility(media.hasMedia ? Visibility::Visible : Visibility::Collapsed);
         }
-        if (g_miniPlayer.likeAddPath && g_miniPlayer.likeCheckPath) {
-            g_miniPlayer.likeAddPath.Visibility(media.inLibrary ? Visibility::Collapsed : Visibility::Visible);
-            g_miniPlayer.likeCheckPath.Visibility(media.inLibrary ? Visibility::Visible : Visibility::Collapsed);
-            g_miniPlayer.likeAddPath.Fill(MakeBrush(btnCol));
-            g_miniPlayer.likeAddPath.Opacity(0.80);
-            g_miniPlayer.likeCheckPath.Fill(MakeBrush(accentCol));
+        if (g_miniPlayer->likeAddPath && g_miniPlayer->likeCheckPath) {
+            g_miniPlayer->likeAddPath.Visibility(media.inLibrary ? Visibility::Collapsed : Visibility::Visible);
+            g_miniPlayer->likeCheckPath.Visibility(media.inLibrary ? Visibility::Visible : Visibility::Collapsed);
+            g_miniPlayer->likeAddPath.Fill(MakeBrush(btnCol));
+            g_miniPlayer->likeAddPath.Opacity(0.80);
+            g_miniPlayer->likeCheckPath.Fill(MakeBrush(accentCol));
         }
 
         // Seek bar & timestamps
-        if (g_miniPlayer.seekTrackBg) {
-            g_miniPlayer.seekTrackBg.Background(MakeBrush(isLight
+        if (g_miniPlayer->seekTrackBg) {
+            g_miniPlayer->seekTrackBg.Background(MakeBrush(isLight
                 ? winrt::Windows::UI::Color{0x24, 0x00, 0x00, 0x00}
                 : winrt::Windows::UI::Color{0x28, 0xFF, 0xFF, 0xFF}));
         }
-        if (g_miniPlayer.seekTrackFill) {
-            g_miniPlayer.seekTrackFill.Background(MakeBrush(accentCol));
+        if (g_miniPlayer->seekTrackFill) {
+            g_miniPlayer->seekTrackFill.Background(MakeBrush(accentCol));
         }
-        if (g_miniPlayer.seekKnob) {
-            g_miniPlayer.seekKnob.Fill(MakeBrush(accentCol));
+        if (g_miniPlayer->seekKnob) {
+            g_miniPlayer->seekKnob.Fill(MakeBrush(accentCol));
         }
-        if (g_miniPlayer.posText) g_miniPlayer.posText.Foreground(MakeBrush(titleCol));
-        if (g_miniPlayer.durText) {
-            g_miniPlayer.durText.Foreground(MakeBrush(titleCol));
-            g_miniPlayer.durText.Text(media.durationTicks > 0
+        if (g_miniPlayer->posText) g_miniPlayer->posText.Foreground(MakeBrush(titleCol));
+        if (g_miniPlayer->durText) {
+            g_miniPlayer->durText.Foreground(MakeBrush(titleCol));
+            g_miniPlayer->durText.Text(media.durationTicks > 0
                 ? FormatTimeFromTicks(media.durationTicks)
                 : L"0:00");
         }
-        if (!g_miniPlayer.isSeeking) {
+        if (!g_miniPlayer->isSeeking) {
             const int64_t curPos = ComputeCurrentPositionTicks(media);
             const double ratio = (media.durationTicks > 0)
                 ? std::clamp(static_cast<double>(curPos) /
@@ -2793,26 +2838,26 @@ void RefreshMiniPlayerUI(const IslandSettings& s, const MediaSnapshot& media) {
         // 5 Transport buttons
         auto brushBtn = MakeBrush(btnCol);
         auto brushAcc = MakeBrush(accentCol);
-        if (g_miniPlayer.prevPath) g_miniPlayer.prevPath.Fill(brushBtn);
-        if (g_miniPlayer.nextPath) g_miniPlayer.nextPath.Fill(brushBtn);
-        if (g_miniPlayer.playPath) {
-            g_miniPlayer.playPath.Fill(brushBtn);
-            g_miniPlayer.playPath.Visibility(media.isPlaying ? Visibility::Collapsed : Visibility::Visible);
+        if (g_miniPlayer->prevPath) g_miniPlayer->prevPath.Fill(brushBtn);
+        if (g_miniPlayer->nextPath) g_miniPlayer->nextPath.Fill(brushBtn);
+        if (g_miniPlayer->playPath) {
+            g_miniPlayer->playPath.Fill(brushBtn);
+            g_miniPlayer->playPath.Visibility(media.isPlaying ? Visibility::Collapsed : Visibility::Visible);
         }
-        if (g_miniPlayer.pausePath) {
-            g_miniPlayer.pausePath.Fill(brushBtn);
-            g_miniPlayer.pausePath.Visibility(media.isPlaying ? Visibility::Visible : Visibility::Collapsed);
+        if (g_miniPlayer->pausePath) {
+            g_miniPlayer->pausePath.Fill(brushBtn);
+            g_miniPlayer->pausePath.Visibility(media.isPlaying ? Visibility::Visible : Visibility::Collapsed);
         }
-        if (g_miniPlayer.shufflePath) {
-            g_miniPlayer.shufflePath.Fill(media.shuffleEnabled ? brushAcc : brushBtn);
-            g_miniPlayer.shufflePath.Opacity(media.shuffleEnabled ? 1.0 : 0.45);
+        if (g_miniPlayer->shufflePath) {
+            g_miniPlayer->shufflePath.Fill(media.shuffleEnabled ? brushAcc : brushBtn);
+            g_miniPlayer->shufflePath.Opacity(media.shuffleEnabled ? 1.0 : 0.45);
         }
-        if (g_miniPlayer.repeatAllPath && g_miniPlayer.repeatOnePath) {
+        if (g_miniPlayer->repeatAllPath && g_miniPlayer->repeatOnePath) {
             const bool repOn = (media.repeatMode != RepeatMode::Off);
             const bool repOne = (media.repeatMode == RepeatMode::One);
-            g_miniPlayer.repeatAllPath.Visibility(repOne ? Visibility::Collapsed : Visibility::Visible);
-            g_miniPlayer.repeatOnePath.Visibility(repOne ? Visibility::Visible : Visibility::Collapsed);
-            auto& activeRep = repOne ? g_miniPlayer.repeatOnePath : g_miniPlayer.repeatAllPath;
+            g_miniPlayer->repeatAllPath.Visibility(repOne ? Visibility::Collapsed : Visibility::Visible);
+            g_miniPlayer->repeatOnePath.Visibility(repOne ? Visibility::Visible : Visibility::Collapsed);
+            auto& activeRep = repOne ? g_miniPlayer->repeatOnePath : g_miniPlayer->repeatAllPath;
             activeRep.Fill(repOn ? brushAcc : brushBtn);
             activeRep.Opacity(repOn ? 1.0 : 0.45);
         }
@@ -3067,11 +3112,11 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
             seekHitArea.Children().Append(seekKnob);
 
             seekHitArea.SizeChanged([](auto const&, auto const&) {
-                if (!g_miniPlayerOpen.load() || g_unloading.load()) return;
+                if (!g_miniPlayerOpen.load() || !g_miniPlayer || g_unloading.load()) return;
                 const MediaSnapshot m = GetMediaSnapshot();
                 const int64_t curPos = ComputeCurrentPositionTicks(m);
-                const double r = g_miniPlayer.isSeeking
-                    ? g_miniPlayer.seekRatio
+                const double r = g_miniPlayer->isSeeking
+                    ? g_miniPlayer->seekRatio
                     : (m.durationTicks > 0
                         ? static_cast<double>(curPos) / static_cast<double>(m.durationTicks)
                         : 0.0);
@@ -3079,7 +3124,7 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
             });
 
             seekHitArea.PointerPressed([](auto const& sender, Input::PointerRoutedEventArgs const& e) {
-                if (g_unloading.load()) return;
+                if (g_unloading.load() || !g_miniPlayer) return;
                 const MediaSnapshot m = GetMediaSnapshot();
                 if (m.durationTicks <= 0) return;
                 if (auto el = sender.template try_as<UIElement>()) {
@@ -3087,8 +3132,8 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
                     const double w = el.RenderSize().Width;
                     if (w > 1.0) {
                         const double ratio = std::clamp(e.GetCurrentPoint(el).Position().X / w, 0.0, 1.0);
-                        g_miniPlayer.isSeeking = true;
-                        g_miniPlayer.seekRatio = ratio;
+                        g_miniPlayer->isSeeking = true;
+                        g_miniPlayer->seekRatio = ratio;
                         UpdateSeekBarVisuals(ratio, m.durationTicks);
                     }
                 }
@@ -3096,13 +3141,13 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
             });
 
             seekHitArea.PointerMoved([](auto const& sender, Input::PointerRoutedEventArgs const& e) {
-                if (!g_miniPlayer.isSeeking || g_unloading.load()) return;
+                if (!g_miniPlayer || !g_miniPlayer->isSeeking || g_unloading.load()) return;
                 const MediaSnapshot m = GetMediaSnapshot();
                 if (auto el = sender.template try_as<UIElement>()) {
                     const double w = el.RenderSize().Width;
                     if (w > 1.0) {
                         const double ratio = std::clamp(e.GetCurrentPoint(el).Position().X / w, 0.0, 1.0);
-                        g_miniPlayer.seekRatio = ratio;
+                        g_miniPlayer->seekRatio = ratio;
                         UpdateSeekBarVisuals(ratio, m.durationTicks);
                     }
                 }
@@ -3110,9 +3155,9 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
             });
 
             seekHitArea.PointerReleased([](auto const& sender, Input::PointerRoutedEventArgs const& e) {
-                if (!g_miniPlayer.isSeeking || g_unloading.load()) return;
+                if (!g_miniPlayer || !g_miniPlayer->isSeeking || g_unloading.load()) return;
                 const MediaSnapshot m = GetMediaSnapshot();
-                double ratio = g_miniPlayer.seekRatio;
+                double ratio = g_miniPlayer->seekRatio;
                 if (auto el = sender.template try_as<UIElement>()) {
                     el.ReleasePointerCapture(e.Pointer());
                     const double w = el.RenderSize().Width;
@@ -3120,7 +3165,7 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
                         ratio = std::clamp(e.GetCurrentPoint(el).Position().X / w, 0.0, 1.0);
                     }
                 }
-                g_miniPlayer.isSeeking = false;
+                g_miniPlayer->isSeeking = false;
                 if (m.durationTicks > 0) {
                     RequestMediaSeek(static_cast<int64_t>(ratio * static_cast<double>(m.durationTicks)));
                 }
@@ -3201,39 +3246,40 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
             card.Opacity(0.0);
         }
 
-        g_miniPlayer.Reset();
-        g_miniPlayer.flyout = flyout;
-        g_miniPlayer.card = card;
-        g_miniPlayer.sessionBar = sessionBar;
-        g_miniPlayer.artBox = artBox;
-        g_miniPlayer.artBackdrop = artBackdrop;
-        g_miniPlayer.artRect = artRect;
-        g_miniPlayer.artBrush = artBrush;
-        g_miniPlayer.fallbackNote = fallbackNote;
-        g_miniPlayer.titleBlock = titleBlock;
-        g_miniPlayer.artistBlock = artistBlock;
-        g_miniPlayer.likeBtn = likeBtn;
-        g_miniPlayer.likeAddPath = likeAddPath;
-        g_miniPlayer.likeCheckPath = likeCheckPath;
-        g_miniPlayer.seekHitArea = seekHitArea;
-        g_miniPlayer.seekTrackBg = seekTrackBg;
-        g_miniPlayer.seekTrackFill = seekTrackFill;
-        g_miniPlayer.seekKnob = seekKnob;
-        g_miniPlayer.seekKnobTransform = knobTransform;
-        g_miniPlayer.posText = posText;
-        g_miniPlayer.durText = durText;
-        g_miniPlayer.shuffleBtn = shuffleBtn;
-        g_miniPlayer.prevBtn = prevBtn;
-        g_miniPlayer.playPauseBtn = playPauseBtn;
-        g_miniPlayer.nextBtn = nextBtn;
-        g_miniPlayer.repeatBtn = repeatBtn;
-        g_miniPlayer.shufflePath = shufflePath;
-        g_miniPlayer.prevPath = prevPath;
-        g_miniPlayer.playPath = playPath;
-        g_miniPlayer.pausePath = pausePath;
-        g_miniPlayer.nextPath = nextPath;
-        g_miniPlayer.repeatAllPath = repeatAllPath;
-        g_miniPlayer.repeatOnePath = repeatOnePath;
+        if (!g_miniPlayer) g_miniPlayer.emplace();
+        g_miniPlayer->Reset();
+        g_miniPlayer->flyout = flyout;
+        g_miniPlayer->card = card;
+        g_miniPlayer->sessionBar = sessionBar;
+        g_miniPlayer->artBox = artBox;
+        g_miniPlayer->artBackdrop = artBackdrop;
+        g_miniPlayer->artRect = artRect;
+        g_miniPlayer->artBrush = artBrush;
+        g_miniPlayer->fallbackNote = fallbackNote;
+        g_miniPlayer->titleBlock = titleBlock;
+        g_miniPlayer->artistBlock = artistBlock;
+        g_miniPlayer->likeBtn = likeBtn;
+        g_miniPlayer->likeAddPath = likeAddPath;
+        g_miniPlayer->likeCheckPath = likeCheckPath;
+        g_miniPlayer->seekHitArea = seekHitArea;
+        g_miniPlayer->seekTrackBg = seekTrackBg;
+        g_miniPlayer->seekTrackFill = seekTrackFill;
+        g_miniPlayer->seekKnob = seekKnob;
+        g_miniPlayer->seekKnobTransform = knobTransform;
+        g_miniPlayer->posText = posText;
+        g_miniPlayer->durText = durText;
+        g_miniPlayer->shuffleBtn = shuffleBtn;
+        g_miniPlayer->prevBtn = prevBtn;
+        g_miniPlayer->playPauseBtn = playPauseBtn;
+        g_miniPlayer->nextBtn = nextBtn;
+        g_miniPlayer->repeatBtn = repeatBtn;
+        g_miniPlayer->shufflePath = shufflePath;
+        g_miniPlayer->prevPath = prevPath;
+        g_miniPlayer->playPath = playPath;
+        g_miniPlayer->pausePath = pausePath;
+        g_miniPlayer->nextPath = nextPath;
+        g_miniPlayer->repeatAllPath = repeatAllPath;
+        g_miniPlayer->repeatOnePath = repeatOnePath;
 
         Controls::Primitives::FlyoutPlacementMode placementMode =
             Controls::Primitives::FlyoutPlacementMode::TopEdgeAlignedLeft;
@@ -3410,11 +3456,15 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
             }
         });
 
-        flyout.Closed([](auto const&, auto const&) {
+        g_miniPlayer->closedToken = flyout.Closed([](auto const&, auto const&) {
+            if (g_unloading.load()) return;
             HWND prevAnchor = g_miniPlayerAnchorHwnd;
             g_miniPlayerOpen.store(false);
             g_miniPlayerAnchorHwnd = nullptr;
-            g_miniPlayer.Reset();
+            if (g_miniPlayer) {
+                g_miniPlayer->closedToken = {};
+                g_miniPlayer->Reset();
+            }
             if (prevAnchor) {
                 RefreshMediaHoverForHwnd(prevAnchor);
             }
@@ -3426,8 +3476,8 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
             try {
                 DispatcherTimer seekTimer;
                 seekTimer.Interval(winrt::Windows::Foundation::TimeSpan(std::chrono::milliseconds(500)));
-                g_miniPlayer.seekTickToken = seekTimer.Tick([](auto const&, auto const&) {
-                    if (!g_miniPlayerOpen.load() || g_miniPlayer.isSeeking || g_unloading.load()) return;
+                g_miniPlayer->seekTickToken = seekTimer.Tick([](auto const&, auto const&) {
+                    if (!g_miniPlayerOpen.load() || !g_miniPlayer || g_miniPlayer->isSeeking || g_unloading.load()) return;
                     const MediaSnapshot m = GetMediaSnapshot();
                     if (!m.hasMedia || !m.isPlaying || m.durationTicks <= 0) return;
                     const int64_t curPos = ComputeCurrentPositionTicks(m);
@@ -3436,7 +3486,7 @@ void ShowMiniPlayerFlyout(HWND anchorHwnd, FrameworkElement const& target) {
                     UpdateSeekBarVisuals(ratio, m.durationTicks);
                 });
                 seekTimer.Start();
-                g_miniPlayer.seekTimer = seekTimer;
+                g_miniPlayer->seekTimer = seekTimer;
             } catch (...) {}
         }
         RefreshMiniPlayerUI(s, media);
@@ -3946,7 +3996,6 @@ VpnModuleUI BuildVpnModuleUI(HWND hostHwnd, const IslandSettings& s) {
                 }
 
                 targetRow.Children().Append(iconHost);
-                ui.iconHost = iconHost;
             }
         }
 
@@ -4382,7 +4431,6 @@ MediaModuleUI BuildMediaModuleUI(HWND hostHwnd, const IslandSettings& s) {
         }
 
         row.Children().Append(clickArea);
-        ui.clickArea = clickArea;
     }
 
     StackPanel controlsRow;
@@ -4666,7 +4714,6 @@ void RemoveHostUI(IslandHost& host) {
     host.media.artRect = nullptr;
     host.media.artBackdrop = nullptr;
     host.media.artBox = nullptr;
-    host.media.clickArea = nullptr;
     host.media.hoverPlate = nullptr;
     host.media.capsule = nullptr;
     host.media.slot = nullptr;
@@ -4678,7 +4725,6 @@ void RemoveHostUI(IslandHost& host) {
     host.vpn.textBlock = nullptr;
     host.vpn.iconPathDisconnected = nullptr;
     host.vpn.iconPathConnected = nullptr;
-    host.vpn.iconHost = nullptr;
     host.vpn.buttonPill = nullptr;
     host.vpn.capsule = nullptr;
     host.vpn.slot = nullptr;
@@ -4691,13 +4737,15 @@ void RemoveHostUI(IslandHost& host) {
 }
 
 void PruneInvalidHostsOnUiThread() {
-    for (int i = static_cast<int>(g_hosts.size()) - 1; i >= 0; --i) {
-        if (!IsWindow(g_hosts[i].hWnd)) {
-            HWND deadHwnd = g_hosts[i].hWnd;
-            g_hosts[i].injectionParent = nullptr;
-            RemoveHostUI(g_hosts[i]);
-            g_hosts.erase(g_hosts.begin() + i);
-            RemoveMountedHwnd(deadHwnd);
+    if (g_hosts) {
+        for (int i = static_cast<int>(g_hosts->size()) - 1; i >= 0; --i) {
+            if (!IsWindow((*g_hosts)[i].hWnd)) {
+                HWND deadHwnd = (*g_hosts)[i].hWnd;
+                (*g_hosts)[i].injectionParent = nullptr;
+                RemoveHostUI((*g_hosts)[i]);
+                g_hosts->erase(g_hosts->begin() + i);
+                RemoveMountedHwnd(deadHwnd);
+            }
         }
     }
     if (g_miniPlayerOpen.load() && g_miniPlayerAnchorHwnd && !IsWindow(g_miniPlayerAnchorHwnd)) {
@@ -4707,11 +4755,13 @@ void PruneInvalidHostsOnUiThread() {
 
 void RemoveHostForHwndOnUiThread(HWND hWnd) {
     PruneInvalidHostsOnUiThread();
-    for (size_t i = 0; i < g_hosts.size(); ++i) {
-        if (g_hosts[i].hWnd == hWnd) {
-            RemoveHostUI(g_hosts[i]);
-            g_hosts.erase(g_hosts.begin() + static_cast<ptrdiff_t>(i));
-            break;
+    if (g_hosts) {
+        for (size_t i = 0; i < g_hosts->size(); ++i) {
+            if ((*g_hosts)[i].hWnd == hWnd) {
+                RemoveHostUI((*g_hosts)[i]);
+                g_hosts->erase(g_hosts->begin() + static_cast<ptrdiff_t>(i));
+                break;
+            }
         }
     }
     RemoveMountedHwnd(hWnd);
@@ -4756,10 +4806,6 @@ void InjectHostForHwndOnUiThread(HWND hWnd) {
         IslandHost host;
         host.hWnd = hWnd;
         host.injectionParent = targetGrid;
-        host.isTray = isTray;
-        host.marginLeft = s.marginLeft;
-        host.marginRight = s.marginRight;
-        host.position = s.position;
 
         BuildIslandForHost(host, s);
         if (!host.islandRoot) return;
@@ -4814,7 +4860,8 @@ void InjectHostForHwndOnUiThread(HWND hWnd) {
             host.injectedColumn = -1;
         }
 
-        g_hosts.push_back(std::move(host));
+        if (!g_hosts) g_hosts.emplace();
+        g_hosts->push_back(std::move(host));
         AddMountedHwnd(hWnd);
 
         IslandHost* mounted = FindHostByHwnd(hWnd);
@@ -4845,12 +4892,13 @@ void RefreshAllHostsUi(const IslandSettings& s) {
 }
 
 void RemoveHostsOnCurrentThread() {
+    if (!g_hosts) return;
     const DWORD curTid = GetCurrentThreadId();
-    for (int i = static_cast<int>(g_hosts.size()) - 1; i >= 0; --i) {
-        if (GetWindowThreadProcessId(g_hosts[i].hWnd, nullptr) == curTid) {
-            HWND h = g_hosts[i].hWnd;
-            RemoveHostUI(g_hosts[i]);
-            g_hosts.erase(g_hosts.begin() + i);
+    for (int i = static_cast<int>(g_hosts->size()) - 1; i >= 0; --i) {
+        if (GetWindowThreadProcessId((*g_hosts)[i].hWnd, nullptr) == curTid) {
+            HWND h = (*g_hosts)[i].hWnd;
+            RemoveHostUI((*g_hosts)[i]);
+            g_hosts->erase(g_hosts->begin() + i);
             RemoveMountedHwnd(h);
         }
     }
@@ -5220,7 +5268,16 @@ DWORD WINAPI VkBridgeThreadProc(void*) {
             closeListen();
             g_vkLastSeenTick.store(0);
             g_vkV2SeenTick.store(0);
-            if (g_stopEvent && WaitForSingleObject(g_stopEvent, 300) == WAIT_OBJECT_0) {
+            if (g_stopEvent && g_vkWakeEvent) {
+                HANDLE waitHandles[] = {g_stopEvent, g_vkWakeEvent};
+                if (WaitForMultipleObjects(2, waitHandles, FALSE, INFINITE) == WAIT_OBJECT_0) {
+                    break;
+                }
+            } else if (g_stopEvent) {
+                if (WaitForSingleObject(g_stopEvent, INFINITE) == WAIT_OBJECT_0) {
+                    break;
+                }
+            } else {
                 break;
             }
             continue;
@@ -5509,28 +5566,24 @@ winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSession Select
 template <typename AsyncT>
 bool WaitWinrtAsync(AsyncT const& op, DWORD timeoutMs = 2000) {
     if (!op) return false;
-    const DWORD sliceMs = 50;
-    DWORD elapsed = 0;
-    while (elapsed < timeoutMs) {
-        if (g_unloading.load()) {
-            try { op.Cancel(); } catch (...) {}
-            return false;
-        }
-        if (g_stopEvent && WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) {
-            try { op.Cancel(); } catch (...) {}
-            return false;
-        }
-        const auto status = op.wait_for(std::chrono::milliseconds(sliceMs));
-        if (status == winrt::Windows::Foundation::AsyncStatus::Completed) {
-            return true;
-        }
-        if (status != winrt::Windows::Foundation::AsyncStatus::Started) {
-            return false;
-        }
-        elapsed += sliceMs;
+    // Completed can be set only once per operation, and the handler is mod
+    // code, so it must have run before this thread returns (including after Cancel).
+    winrt::handle done{CreateEventW(nullptr, TRUE, FALSE, nullptr)};
+    if (!done) return false;
+    op.Completed([h = done.get()](auto const&, auto const&) { SetEvent(h); });
+    DWORD waitRes = WAIT_TIMEOUT;
+    if (g_stopEvent) {
+        HANDLE handles[] = {done.get(), g_stopEvent};
+        waitRes = WaitForMultipleObjects(2, handles, FALSE, timeoutMs);
+    } else {
+        waitRes = WaitForSingleObject(done.get(), timeoutMs);
     }
-    try { op.Cancel(); } catch (...) {}
-    return false;
+    if (waitRes != WAIT_OBJECT_0) {
+        try { op.Cancel(); } catch (...) {}
+        WaitForSingleObject(done.get(), INFINITE);
+        return false;
+    }
+    return op.Status() == winrt::Windows::Foundation::AsyncStatus::Completed;
 }
 
 DWORD WINAPI MediaWorkerThreadProc(void*) {
@@ -5886,7 +5939,6 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                 if (!aumid.empty()) {
                     lastAumid = aumid;
                     nextSnap.activeAumid = aumid;
-                    nextSnap.activeAppName = appName;
                 }
 
                 const ULONGLONG vkSeen = g_vkLastSeenTick.load();
@@ -6004,6 +6056,8 @@ DWORD WINAPI MediaWorkerThreadProc(void*) {
                                     cachedThumbHash = 0;
                                 }
                             }
+                        } else if (!g_unloading.load()) {
+                            g_mediaPropsDirty.store(true);
                         }
                     } catch (...) {}
                 }
@@ -6150,6 +6204,7 @@ void Wh_ModAfterInit() {
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_wakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_mediaWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_vkWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, nullptr);
     g_mediaThread = CreateThread(nullptr, 0, MediaWorkerThreadProc, nullptr, 0, nullptr);
     g_vkBridgeThread = CreateThread(nullptr, 0, VkBridgeThreadProc, nullptr, 0, nullptr);
@@ -6158,6 +6213,7 @@ void Wh_ModAfterInit() {
     g_rebuildRequested.store(true);
     if (g_wakeEvent) SetEvent(g_wakeEvent);
     if (g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
+    if (g_vkWakeEvent) SetEvent(g_vkWakeEvent);
 }
 
 void Wh_ModSettingsChanged() {
@@ -6173,6 +6229,7 @@ void Wh_ModSettingsChanged() {
     g_needsUiUpdate.store(true);
     if (g_wakeEvent) SetEvent(g_wakeEvent);
     if (g_mediaWakeEvent) SetEvent(g_mediaWakeEvent);
+    if (g_vkWakeEvent) SetEvent(g_vkWakeEvent);
 }
 
 void Wh_ModUninit() {
@@ -6206,6 +6263,10 @@ void Wh_ModUninit() {
         CloseHandle(g_mediaWakeEvent);
         g_mediaWakeEvent = nullptr;
     }
+    if (g_vkWakeEvent) {
+        CloseHandle(g_vkWakeEvent);
+        g_vkWakeEvent = nullptr;
+    }
 
     {
         std::lock_guard<std::mutex> lock(g_mediaMutex);
@@ -6216,23 +6277,25 @@ void Wh_ModUninit() {
     }
 
     const auto hwnds = GetMountedHwndsSnapshot();
-    bool hasDeadHwnd = false;
     for (HWND hWnd : hwnds) {
         if (IsWindow(hWnd)) {
             RunFromWindowThread(hWnd, [](void* raw) {
                 RemoveHostForHwndOnUiThread(reinterpret_cast<HWND>(raw));
             }, hWnd);
         } else {
-            hasDeadHwnd = true;
             RemoveMountedHwnd(hWnd);
         }
     }
 
-    if (hasDeadHwnd) {
-        if (HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr); hTray && IsWindow(hTray)) {
-            RunFromWindowThread(hTray, [](void*) {
-                PruneInvalidHostsOnUiThread();
-            }, nullptr);
-        }
+    if (HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr); hTray && IsWindow(hTray)) {
+        RunFromWindowThread(hTray, [](void*) {
+            CloseMiniPlayerOnUiThread();
+            PruneInvalidHostsOnUiThread();
+            g_miniPlayer.reset();
+            g_hosts.reset();
+        }, nullptr);
+    } else {
+        g_miniPlayer.reset();
+        g_hosts.reset();
     }
 }
