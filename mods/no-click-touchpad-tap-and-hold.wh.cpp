@@ -33,6 +33,10 @@ the corner twice, as fast as a double-click, and a single tap there does nothing
 How fast is set by Windows' double-click speed (Settings > Bluetooth & devices >
 Mouse > Additional mouse settings).
 
+If you'd rather keep a single corner tap as a left click, choose "Two taps, one tap
+left-clicks". A single tap there then left-clicks once the double-click time has
+passed, so it comes about half a second late.
+
 ## Drag
 Rest two fingers on the touchpad and keep them still for a moment. A ring appears
 around the pointer to show that a drag has started. Move your fingers to select text
@@ -57,7 +61,8 @@ years have. Some older touchpads aren't supported.
 In Settings > Bluetooth & devices > Touchpad, keep "Tap with a single finger to
 single-click" on, since the corner right-click needs it. Turning off "Tap twice and
 drag" there is recommended, because with it on Windows waits a moment after every tap
-to see whether a drag follows. If letting go of a two-finger hold too early opens a
+to see whether a drag follows. With two taps to right-click, it has to be off, or the
+two taps can come out as a left click. If letting go of a two-finger hold too early opens a
 menu, turn off "Tap with two fingers to right-click" as well.
 
 If you also use the Touchpad Relaxed Hand Tracking mod, turn off its two-finger option
@@ -82,10 +87,11 @@ page](https://github.com/mario0318/no-click-touchpad-tap-and-hold/issues).
   $description: A quick one-finger tap in the chosen corner right-clicks
 - cornerTaps: single
   $name: Taps to right-click
-  $description: With two, a single tap in the corner does nothing
+  $description: With two, a single tap in the corner does nothing, or left-clicks a moment later
   $options:
   - single: One tap
   - double: Two taps
+  - doubleLeft: Two taps, one tap left-clicks
 - corner: bottomRight
   $name: Corner
   $options:
@@ -163,6 +169,7 @@ constexpr UINT_PTR kHookTimer = 4;   // removes the mouse hook once the pad is i
 constexpr UINT_PTR kRingTimer = 5;   // only while the ring pulses or the fingers are lifted
 constexpr UINT_PTR kReleaseTimer = 6;  // only while a button-up still has to be delivered
 constexpr UINT_PTR kGraceTimer = 7;  // only while a drag waits for the fingers to return
+constexpr UINT_PTR kLoneTimer = 8;   // only while a first corner tap waits for a second one
 
 constexpr DWORD kClickAfterLiftMs = 800;  // a tap's click comes this soon after the lift
 constexpr DWORD kLiftWaitMs = 60;         // how long a held-back click waits for the lift report
@@ -191,6 +198,7 @@ constexpr DWORD kRingFrameMs = 15;
 struct Settings {
     bool cornerTap = true;
     bool doubleTap = false;
+    bool loneLeft = false;  // with two taps, a lone corner tap still left-clicks, late
     bool bottomLeft = false;
     double zoneW = 0.5, zoneH = 0.33;
     DWORD maxTapMs = 400;
@@ -220,8 +228,9 @@ static void ReadWindowsZone(double* w, double* h) {
 static void LoadSettings() {
     Settings s;
     s.cornerTap = Wh_GetIntSetting(L"cornerTap") != 0;
-    s.doubleTap =
-        wcscmp(WindhawkUtils::StringSetting::make(L"cornerTaps"), L"double") == 0;
+    auto taps = WindhawkUtils::StringSetting::make(L"cornerTaps");
+    s.loneLeft = wcscmp(taps, L"doubleLeft") == 0;
+    s.doubleTap = s.loneLeft || wcscmp(taps, L"double") == 0;
     s.bottomLeft =
         wcscmp(WindhawkUtils::StringSetting::make(L"corner"), L"bottomLeft") == 0;
 
@@ -255,10 +264,10 @@ static void LoadSettings() {
         }
     }
     g_s = s;
-    Wh_Log(L"Settings: corner %s %.2fx%.2f, cornerTap %d, doubleTap %d, twoFingerDrag %d, "
-           L"hold %u ms, lift grace %u ms, ring %d #%02X%02X%02X",
+    Wh_Log(L"Settings: corner %s %.2fx%.2f, cornerTap %d, doubleTap %d, loneLeft %d, "
+           L"twoFingerDrag %d, hold %u ms, lift grace %u ms, ring %d #%02X%02X%02X",
            s.bottomLeft ? L"bottomLeft" : L"bottomRight", s.zoneW, s.zoneH, s.cornerTap,
-           s.doubleTap, s.twoFingerDrag, s.holdMs, s.dragLockMs, s.ring, s.ringR, s.ringG, s.ringB);
+           s.doubleTap, s.loneLeft, s.twoFingerDrag, s.holdMs, s.dragLockMs, s.ring, s.ringR, s.ringG, s.ringB);
 }
 
 // ---------------------------------------------------------------------------
@@ -487,7 +496,8 @@ bool g_prevTap;
 DWORD g_prevStart, g_prevEnd;
 
 // With two taps to right-click: the first corner tap was swallowed, and a second
-// one that starts within the double-click time of its lift right-clicks.
+// one that starts within the double-click time of its lift right-clicks. Without
+// one, kLoneTimer settles it (FlushArmed).
 bool g_armed;
 DWORD g_armedEnd;
 
@@ -1061,12 +1071,39 @@ static bool PrevTapClick(DWORD now) {
     return g_haveSession && !g_sessionEnded && g_prevTap && now - g_prevEnd <= kClickAfterLiftMs;
 }
 
+// The first of two corner taps is given up on. In the "one tap left-clicks" mode
+// its click is sent now, late; otherwise it's dropped. Only call this outside the
+// mouse hook, so the late click can't land in the middle of another one.
+static void FlushArmed() {
+    KillTimer(g_hwnd, kLoneTimer);
+    if (!g_armed)
+        return;
+    g_armed = false;
+    if (g_s.loneLeft) {
+        Wh_Log(L"Lone corner tap -> left click");
+        SendClick(PrimaryDown());
+    }
+}
+
+// The double-click time after the first tap's lift is up. A touch that started
+// within it may still be the second tap, so its click is waited for first.
+static void CheckLoneTap() {
+    DWORD now = GetTickCount();
+    bool secondUnderway =
+        g_pending || (g_haveSession && g_startTick - g_armedEnd <= GetDoubleClickTime() &&
+                      (!g_sessionEnded || now - g_endTick <= kClickAfterLiftMs));
+    if (g_armed && secondUnderway)
+        SetTimer(g_hwnd, kLoneTimer, 50, nullptr);
+    else
+        FlushArmed();
+}
+
 // Decide the held-back click now, from what is known so far.
 static void ResolvePending() {
     g_pending = false;
     KillTimer(g_hwnd, kTapTimer);
     if (!g_pendingUp) {
-        g_armed = false;
+        FlushArmed();
         SendDown(PrimaryDown());  // a press: the real release follows through the hook
         return;
     }
@@ -1077,19 +1114,26 @@ static void ResolvePending() {
             g_prevTap = false;
         else
             g_consumed = true;
-        if (g_s.doubleTap &&
-            !(g_armed && tapStart - g_armedEnd <= GetDoubleClickTime())) {
-            // The first of two taps: nothing happens yet.
+        DWORD dct = GetDoubleClickTime();
+        if (g_s.doubleTap && !(g_armed && tapStart - g_armedEnd <= dct)) {
+            // The first of two taps: nothing happens yet. An older first tap
+            // that never got its second one is settled before this one waits.
+            FlushArmed();
             g_armed = true;
             g_armedEnd = tapEnd;
+            if (g_s.loneLeft) {
+                DWORD waited = GetTickCount() - tapEnd;
+                SetTimer(g_hwnd, kLoneTimer, waited < dct ? dct - waited : 1, nullptr);
+            }
             Wh_Log(L"Corner tap, waiting for a second one");
             return;
         }
         g_armed = false;
+        KillTimer(g_hwnd, kLoneTimer);
         Wh_Log(L"Corner tap -> right click");
         SendClick(SecondaryDown());
     } else {
-        g_armed = false;
+        FlushArmed();
         SendClick(PrimaryDown());
     }
 }
@@ -1188,6 +1232,13 @@ static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam) {
             g_upTick = now;
             return 1;
         }
+
+        // Any other click between two corner taps cancels the first one. Its late
+        // left click is dropped too: sent from here, it would land inside this one.
+        if (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN) {
+            g_armed = false;
+            KillTimer(g_hwnd, kLoneTimer);
+        }
     }
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
@@ -1220,6 +1271,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                     KillTimer(hwnd, kRingTimer);
             } else if (wParam == kTapTimer) {
                 CheckPending();
+            } else if (wParam == kLoneTimer) {
+                KillTimer(hwnd, kLoneTimer);
+                CheckLoneTap();
             } else if (wParam == kStaleTimer) {
                 Wh_Log(L"Touchpad reports stopped mid-touch, resetting");
                 ResetTouch();
