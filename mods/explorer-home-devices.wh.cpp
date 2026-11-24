@@ -5201,6 +5201,8 @@ muxc::StackPanel EnsureDevicesFooter(muxc::ListView const& listView) {
     if (listView.Footer() || listView.FooterTemplate() ||
         listView.ReadLocalValue(muxc::ListViewBase::FooterProperty()) !=
             mux::DependencyProperty::UnsetValue()) {
+        Wh_Log(L"Skipping the devices section: HomeListView already has "
+               L"a footer or footer template configured");
         return nullptr;
     }
 
