@@ -60,8 +60,10 @@ matching indicator is on. Everything comes back when the mod is disabled.
 
 A minimized app's underline splits into the corners when it's restored, a
 maximized window's top corners travel up from the top center, and the
-dots, signs and counts grow from their centers. Animations are controlled
-by the mod's own setting only, whatever the Windows animation setting is.
+dots, signs and counts grow from their centers. When the mod is turned
+on, the marks animate in; when it's turned off, they animate out while the
+taskbar's own indicators fade back in. Animations are controlled by the
+mod's own setting only, whatever the Windows animation setting is.
 Progress keeps moving even with them off, like the native progress bar.
 
 ## Settings
@@ -94,7 +96,9 @@ Progress keeps moving even with them off, like the native progress bar.
 - Taskbar Open Window Underline can also hide the running indicator. If you
   use both mods, turn that option off there: both use the same switch.
 - Works alongside Windows 11 Taskbar Styler: when a theme is applied or
-  removed, the native indicators the mod replaces are hidden again.
+  removed, the native indicators the mod replaces are hidden again, and
+  when the mod is turned off, they come back as the theme has them (a
+  theme that hides them keeps them hidden).
 - For bug reports, turn on **Debug logging** under Advanced and include the
   mod's log.
 
@@ -268,7 +272,7 @@ inactive and the log says so.
 - Animations:
   - Enabled: true
     $name: Animate changes
-    $description: Indicators move along the frame when an app's state changes, whatever the Windows animation setting is. Off, they change at once. Progress keeps animating either way.
+    $description: Indicators move along the frame when an app's state changes, and animate in and out when the mod is turned on and off, whatever the Windows animation setting is. Off, they change at once. Progress keeps animating either way.
   - Duration: 160
     $name: Duration (ms)
     $description: Length of one movement, in milliseconds.
@@ -1891,11 +1895,15 @@ void PostCoalescedRefresh(std::weak_ptr<ButtonEntry> const& weakEntry) {
 // Rectangle#RunningIndicator in the button template) and progress bar (the
 // ProgressBar#ProgressIndicator that shows determinate progress and, with
 // IsIndeterminate, the indeterminate one) are hidden through the opacity of
-// their composition handout visuals. That opacity is composed with what XAML
-// renders but never written by XAML, so the button's visual-state
-// storyboards (active, inactive, attention, progress states, which animate
-// the elements' own properties) can't bring them back, and the layout is
-// untouched.
+// their composition handout visuals. The button's visual-state storyboards
+// (active, inactive, attention, progress states) don't write that opacity,
+// so they can't bring the elements back, and the layout is untouched. XAML
+// does write it when the element's own Opacity changes (a theme from
+// Windows 11 Taskbar Styler setting or clearing it, say), which is why a
+// restyle is followed by hiding them again (see WatchHiddenNative), and why
+// showing one again gives the visual the element's Opacity back rather than
+// 1: a theme that set it to 0 keeps the element hidden after this mod is
+// turned off.
 //
 // Opacity alone doesn't stop what the element keeps animating, though: the
 // progress bar's indeterminate state runs a storyboard that repeats forever
@@ -1940,9 +1948,46 @@ void SetLoopingAnimationsPaused(FrameworkElement const& element, bool paused) {
     }
 }
 
-void SetNativeIndicatorHidden(FrameworkElement const& element, bool hidden) {
+// Badges are clipped away too (`clip`): the taskbar animates a new overlay
+// icon or badge in on that same visual's opacity, which brought it back
+// right after it was hidden (a new message, a count change). A clip that
+// leaves nothing of the visual (insets past any size, recognized by them)
+// is out of reach of those animations; it goes when the element is shown.
+constexpr float kHideClipInset = 100000.0f;
+
+bool HasHideClip(wuc::Visual const& visual) {
+    auto inset = visual.Clip().try_as<wuc::InsetClip>();
+    return inset && inset.LeftInset() >= kHideClipInset;
+}
+
+void SetHideClip(wuc::Visual const& visual, bool on) {
+    if (on) {
+        if (HasHideClip(visual)) return;
+        auto clip = visual.Compositor().CreateInsetClip();
+        clip.LeftInset(kHideClipInset);
+        clip.RightInset(kHideClipInset);
+        clip.TopInset(kHideClipInset);
+        clip.BottomInset(kHideClipInset);
+        visual.Clip(clip);
+    } else if (HasHideClip(visual)) {
+        visual.Clip(nullptr);
+    }
+}
+
+void SetNativeIndicatorHidden(FrameworkElement const& element, bool hidden, bool clip = false) {
     try {
-        ElementCompositionPreview::GetElementVisual(element).Opacity(hidden ? 0.0f : 1.0f);
+        float opacity = 0.0f;
+        if (!hidden) {
+            // The element's own Opacity, as another mod's theme may have
+            // set it, not 1 (see above).
+            opacity = 1.0f;
+            try { opacity = (float)std::clamp(element.Opacity(), 0.0, 1.0); } catch (...) {}
+        }
+        auto visual = ElementCompositionPreview::GetElementVisual(element);
+        visual.StopAnimation(L"Opacity");  // the unload fade-in, or the taskbar's own
+        visual.Opacity(opacity);
+        // Shown again: whatever clip of ours it had goes, whoever hid it.
+        if (clip || !hidden) SetHideClip(visual, hidden);
     } catch (...) {}
     try { SetLoopingAnimationsPaused(element, hidden); } catch (...) {}
 }
@@ -2164,8 +2209,9 @@ void UpdateNativeIndicators(FrameworkElement const& button, std::shared_ptr<Butt
 // the icon. With badge support on, every such element is found in the icon's
 // panel — by name or class containing "Badge" or "Beacon", plus OverlayIcon —
 // and hidden through its handout visual's opacity, like the running
-// indicator. Whether the button "has a badge" is read from the elements' own
-// XAML state, which that opacity doesn't touch: shown, sized and, for an
+// indicator, and a clip that leaves nothing of it (see SetHideClip).
+// Whether the button "has a badge" is read from the elements' own XAML
+// state, which neither touches: shown, sized and, for an
 // image, with a source. Its count, for the Number option, is read from the
 // badge's text, or for an overlay icon from the button's help text (see
 // ReadNativeBadgeCount).
@@ -2565,6 +2611,9 @@ bool UpdateNativeBadges(std::shared_ptr<ButtonEntry> const& entry, FrameworkElem
         std::weak_ptr<ButtonEntry> weakEntry = entry;
         auto onChanged = [weakEntry](DependencyObject const&, DependencyProperty const&) {
             PostCoalescedRefresh(weakEntry);
+            // And after the taskbar's own animation of the change has started
+            // (see SetHideClip).
+            RequestRefreshPassSoon();
         };
         try {
             badge.visibilityToken = element.RegisterPropertyChangedCallback(UIElement::VisibilityProperty(), onChanged);
@@ -2602,7 +2651,21 @@ bool UpdateNativeBadges(std::shared_ptr<ButtonEntry> const& entry, FrameworkElem
 
     bool shown = false;
     for (auto& badge : list) {
-        if (auto element = badge.element.get()) SetNativeIndicatorHidden(element, true);
+        if (auto element = badge.element.get()) {
+            if (g_debugLog) {
+                try {
+                    auto visual = ElementCompositionPreview::GetElementVisual(element);
+                    float opacity = visual.Opacity();
+                    bool clipped = HasHideClip(visual);
+                    if (opacity > 0.01f || !clipped) {
+                        Wh_Log(L"[debug] native badge %s#%s: visual opacity %.2f, clip %s (XAML opacity %.2f); hidden again",
+                               winrt::get_class_name(element).c_str(), element.Name().c_str(), opacity,
+                               clipped ? L"ours" : L"none", element.Opacity());
+                    }
+                } catch (...) {}
+            }
+            SetNativeIndicatorHidden(element, true, true);
+        }
         if (IsNativeBadgeShown(badge)) shown = true;
     }
     return shown;
@@ -2837,6 +2900,7 @@ void WatchIconPanel(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
         if (!localSettings.BadgeEnabled) return;
         try { UpdateNativeBadges(e, panel, localSettings); } catch (...) {}
         PostCoalescedRefresh(weakEntry);
+        RequestRefreshPassSoon();
     });
     entry->layoutAttached = true;
 }
@@ -3189,7 +3253,8 @@ void FadeFill(IndicatorRenderer& r, float from, float to, int durationMs) {
 }
 
 // Creates the shape visual and its shapes on first use. Returns true when
-// they were just created (the first placement is then not animated).
+// they were just created (the first placement is then the intro, see
+// UpdateIndicator).
 bool EnsureRenderer(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement const& host) {
     auto& r = entry->renderer;
     if (r.visual) return false;
@@ -4572,11 +4637,30 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
     ComputeSlotTargets(targets, labels, plus, cross, r.metrics, localSettings, state, mask, hasBadge, entry->badgeCount,
                        windowCount, isActive, IsElementLightMode(button), attention, pinnedState);
 
+    // A button's first placement (the mod just turned on, a new button)
+    // animates in: everything is first placed hidden, where it comes from,
+    // and then moves to its target like any change. Before the progress
+    // animations start, which own some of the trims.
+    bool intro = created && localSettings.Animations && entry->hostBound;
+    if (intro) {
+        AnimationContext still;
+        still.animate = false;
+        for (int k = 0; k < kSlotCount; k++) {
+            SlotTarget hidden = targets[k];
+            hidden.shown = false;
+            hidden.driven = false;
+            try { AnimateSlot(r, r.slots[k], hidden, still); } catch (...) {}
+        }
+        SignTarget none;
+        try { UpdateSign(r, r.plus, none, 1.0, still); } catch (...) {}
+        try { UpdateSign(r, r.cross, none, 1.0, still); } catch (...) {}
+    }
+
     // Indeterminate progress: a minimized app's underline sweeps (the dots
     // stay, clear of it on the side edges); an open or maximized app's
-    // corners pulse (the dots, signs and counts stay). It runs with Windows
-    // animations off too: like the native moving bar it stands in for, it
-    // shows information (often the only sign of the progress, with the
+    // corners pulse (the dots, signs and counts stay). It runs with the
+    // mod's animations off too: like the native moving bar it stands in for,
+    // it shows information (often the only sign of the progress, with the
     // native bar hidden), not a transition.
     int progressMode = 0;
     if (indeterminate) {
@@ -4616,8 +4700,9 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
     r.progressMode = (int8_t)progressMode;
 
     AnimationContext ctx;
-    // The mod's own setting decides, not the Windows animation setting.
-    ctx.animate = localSettings.Animations && !created && !rebuilt && entry->hostBound;
+    // The mod's own setting decides, not the Windows animation setting. A
+    // rebuilt frame (a new size) is placed at once, except on the intro.
+    ctx.animate = localSettings.Animations && entry->hostBound && (intro || (!created && !rebuilt));
     ctx.durationMs = localSettings.AnimationDurationMs;
     ctx.trailMs = std::max(1, (int)std::lround(localSettings.AnimationDurationMs * 0.4));
     for (int k = 0; k < kSlotCount; k++) {
@@ -5385,6 +5470,93 @@ struct UnloadCleanup {
 // removed and the virtual desktop manager released.
 void UnsubscribeColorChanges();  // defined with the system color code
 
+// The outro, before the unload cleanup: every button's marks move away
+// the way they came (the corners to the top and bottom centers, the
+// underline into its middle, the dots, signs and counts shrinking into
+// their centers, the fill fading), and the native elements the mod hid fade
+// back in, over one animation. Runs on the taskbar thread, after
+// g_unloading is set, so no refresh moves anything back meanwhile;
+// Wh_ModBeforeUninit waits for it to finish before the cleanup.
+struct UnloadOutro {
+    std::vector<std::shared_ptr<ButtonEntry>>* entries = nullptr;
+    int durationMs = 160;
+};
+
+void FadeNativeIn(FrameworkElement const& element, int durationMs) {
+    try {
+        auto visual = ElementCompositionPreview::GetElementVisual(element);
+        SetHideClip(visual, false);
+        float to = (float)std::clamp(element.Opacity(), 0.0, 1.0);
+        auto animation = visual.Compositor().CreateScalarKeyFrameAnimation();
+        animation.InsertKeyFrame(0.0f, visual.Opacity());
+        animation.InsertKeyFrame(1.0f, to);
+        animation.Duration(std::chrono::milliseconds(std::max(1, durationMs)));
+        visual.StartAnimation(L"Opacity", animation);
+    } catch (...) {}
+}
+
+void WINAPI UnloadOutroOnTaskbarThread(void* param) {
+    auto& outro = *static_cast<UnloadOutro*>(param);
+    AnimationContext ctx;
+    ctx.animate = true;
+    ctx.durationMs = outro.durationMs;
+    ctx.trailMs = std::max(1, (int)std::lround(outro.durationMs * 0.4));
+    for (auto& entry : *outro.entries) {
+        auto& r = entry->renderer;
+        if (!r.visual || !r.metrics.valid || !entry->hostBound) continue;
+        try {
+            if (r.progressMode == 1) StopSweep(r);
+            if (r.progressMode == 2) FinishPulse(r, outro.durationMs);
+            r.progressMode = 0;
+
+            const auto& m = r.metrics;
+            const double hiddenAt[4] = {m.P, 0.0, m.sBottomMid, m.sBottomMid};
+            for (int k = 0; k < kSlotCount; k++) {
+                auto& slot = r.slots[k];
+                if (!slot.placed || !slot.shown) continue;
+                SlotTarget t;
+                t.colors = slot.colors;
+                t.startCap = slot.startCap;
+                t.endCap = slot.endCap;
+                t.thickness = slot.thickness;
+                if (k <= kSlotBL) {
+                    t.hidden = hiddenAt[k];
+                } else {
+                    // A dot: shrinks into its center.
+                    t.grow = true;
+                    t.trail = false;
+                    t.a = slot.a;
+                    t.b = slot.b;
+                    t.hidden = slot.a;
+                }
+                AnimateSlot(r, slot, t, ctx);
+            }
+            if (r.fillActive) {
+                FadeFill(r, 1.0f, 0.0f, outro.durationMs);
+                r.fillActive = false;
+            }
+            SignTarget none;
+            UpdateSign(r, r.plus, none, 1.0, ctx);
+            UpdateSign(r, r.cross, none, 1.0, ctx);
+            if (auto host = entry->host.get()) {
+                LabelTarget gone;
+                for (auto& label : entry->countLabels) UpdateCountLabel(r, label, host, gone, ctx);
+            }
+
+            // The native elements fade back in, to their own opacity.
+            for (auto* native : {&entry->nativeRunning, &entry->nativeProgress, &entry->nativeMulti}) {
+                if (!native->hidden) continue;
+                if (auto element = native->element.get()) FadeNativeIn(element, outro.durationMs);
+            }
+            for (auto const& badge : entry->nativeBadges) {
+                if (auto element = badge.element.get()) FadeNativeIn(element, outro.durationMs);
+            }
+        } catch (...) {
+            Wh_Log(L"Exception during the unload animation");
+        }
+    }
+}
+
 void WINAPI UnloadCleanupOnTaskbarThread(void* param) {
     // RefreshButton subscribes on this thread: catch a first refresh that
     // subscribed after the revoke in Wh_ModBeforeUninit. g_unloading is set
@@ -5868,11 +6040,27 @@ void Wh_ModBeforeUninit() {
     // then fail harmlessly, and the composition objects are closed anyway.
     UnloadCleanup cleanup;
     cleanup.entries = &localEntries;
+    int outroMs = 0;
     {
         std::lock_guard<std::mutex> lock(g_settingsMutex);
         cleanup.restore = {true, true, g_settings.BadgeEnabled, g_settings.MultiEnabled};
+        // At most a second: unloading waits for it.
+        if (g_settings.Animations) outroMs = std::clamp(g_settings.AnimationDurationMs, 1, 1000);
     }
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+
+    // The marks animate out first (see UnloadOutroOnTaskbarThread). This
+    // thread waits for the animations, which run on the compositor, the
+    // trailing ends' delay included, before the cleanup removes them.
+    if (outroMs > 0 && hTaskbarWnd) {
+        UnloadOutro outro;
+        outro.entries = &localEntries;
+        outro.durationMs = outroMs;
+        if (RunFromWindowThread(hTaskbarWnd, UnloadOutroOnTaskbarThread, &outro)) {
+            Sleep((DWORD)(outroMs + std::max(1, (int)std::lround(outroMs * 0.4)) + 50));
+        }
+    }
+
     if (!hTaskbarWnd || !RunFromWindowThread(hTaskbarWnd, UnloadCleanupOnTaskbarThread, &cleanup)) {
         UnloadCleanupOnTaskbarThread(&cleanup);
     }
