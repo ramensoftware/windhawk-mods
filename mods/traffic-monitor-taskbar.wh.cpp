@@ -3,7 +3,7 @@
 // @name            TrafficMonitor for Taskbar
 // @description     Network speed, CPU, memory, GPU and daily traffic shown inside the Windows 11 taskbar, next to the tray (TrafficMonitor-style), with a Fluent settings panel and traffic history.
 // @description:es-ES  Velocidad de red, CPU, memoria, GPU y tráfico diario dentro de la barra de tareas de Windows 11, junto a la bandeja (estilo TrafficMonitor), con un panel de ajustes Fluent.
-// @version         1.0.5
+// @version         1.0.6
 // @author          xSHIMURAx
 // @github          https://github.com/xSHIMURAx
 // @license         MIT
@@ -1276,7 +1276,7 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
         // 080c41f8 ldr  x8, [x0, #0x10]!
         const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
         if (p && p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD && p[2] == 0x910003FD &&
-            (p[3] & 0xFFFFFE00) == 0xF8400C00) {
+            (p[3] & 0xFFF00FE0) == 0xF8400C00) {
             taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
         } else {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight pattern");
