@@ -290,7 +290,8 @@ void LoadSettings(HWND hwndListener) {
 BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
     // Restoration after unexpected exit
     HANDLE value = GetPropW(hWnd, L"SuperTopmostPinned");
-    if (value) {
+    DWORD dwBand = ZBID_DEFAULT;
+    if (value && GetWindowBand(hWnd, &dwBand) && dwBand == ZBID_UIACCESS) {
         g_stWindows.push_back({ hWnd, (size_t)value == 2 });
     }
     return TRUE;
@@ -331,14 +332,23 @@ bool g_isLocked = false;
 
 LRESULT WINAPI OverlayWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
-        case WM_CREATE:
+        case WM_CREATE: {
             Wh_Log(L"OverlayWndProc WM_CREATE");
             if (!WTSRegisterSessionNotification(hWnd, NOTIFY_FOR_THIS_SESSION)) {
                 Wh_Log(L"WTSRegisterSessionNotification failed, GLE=%d", GetLastError());
                 return -1;
             }
             EnumWindows(InitEnumWindowsProc, 0);
+            WTSINFOEXW* wtsInfo = nullptr;
+            DWORD cbSize = 0;
+            if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION, WTSSessionInfoEx, (LPWSTR*)&wtsInfo, &cbSize)) {
+                if (cbSize == sizeof(WTSINFOEXW) && wtsInfo->Level == 1 && wtsInfo->Data.WTSInfoExLevel1.SessionFlags == WTS_SESSIONSTATE_LOCK) {
+                    ToggleAllManagedWindows(hWnd, false);
+                }
+                WTSFreeMemory(wtsInfo);
+            }
             return 0;
+        }
         case WM_HOTKEY:
             if (g_isLocked) {
                 // All non-Winlogon hotkeys are disabled while locked but just to be safe
