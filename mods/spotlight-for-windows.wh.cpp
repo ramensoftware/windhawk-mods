@@ -634,6 +634,8 @@ static void ResolveBrowser() {
 }
 
 static void OpenUrl(const std::wstring& url) {
+    // A double quote would break out of the quoted browser argument and allow extra arguments.
+    if (url.find(L'"') != std::wstring::npos) return;
     if (!g_browserPath.empty()) {
         std::wstring a = L"\"" + url + L"\"";
         ShellExecuteW(nullptr, L"open", g_browserPath.c_str(), a.c_str(), nullptr, SW_SHOWNORMAL);
@@ -2202,6 +2204,7 @@ static void DoHide() {
     if (GetCapture() == g_hwnd) ReleaseCapture();
     ResetCur();
     ShowWindow(g_hwnd, SW_HIDE);
+    std::vector<DWORD>().swap(g_bd);  // drop the desktop snapshot while the bar is hidden
 }
 
 static void FinishAnim() {
@@ -2557,8 +2560,11 @@ static void RegisterHot() {
     if (!RegisterHotKey(g_hwnd, 1, mods, vk)) Wh_Log(L"Failed to register hotkey");
 }
 
-static int HitRow(int y) {
-    y -= Mg();
+// Result row under a window-relative point; the shadow margin around the panel is not a row.
+static int HitRow(int x, int y) {
+    int M = Mg();
+    if (x < M || x >= M + g_pw) return -1;
+    y -= M;
     int top = Sc(SEARCH_H) + Sc(1) + Sc(PAD);
     if (y < top) return -1;
     int i = (y - top) / Sc(ROW_H);
@@ -2870,7 +2876,7 @@ static void ShowContextMenu(LPARAM lp) {
     int cx = GET_X_LPARAM(lp), cy = GET_Y_LPARAM(lp);
     int M = Mg();
     int px = cx - M, py = cy - M;
-    int row = HitRow(cy);
+    int row = HitRow(cx, cy);
     bool inSearch = px >= 0 && px < g_pw && py >= 0 && py < Sc(SEARCH_H);
     if (row < 0 && !inSearch) return;
 
@@ -2916,7 +2922,7 @@ static void OnLButton(LPARAM lp, bool dbl) {
     if (g_anim == ANIM_CLOSE) return;
     NoteInput();
     int cx = GET_X_LPARAM(lp), cy = GET_Y_LPARAM(lp);
-    int i = HitRow(cy);
+    int i = HitRow(cx, cy);
     if (i >= 0) {
         if (g_items[i].cat == C_RECENT && cx - Mg() > g_pw - Sc(60)) {
             RemoveRecentAt(i);
@@ -3184,7 +3190,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 }
                 return 0;
             }
-            int i = HitRow(GET_Y_LPARAM(lp));
+            int i = HitRow(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
             if (i >= 0 && i != g_sel) SetSel(i, false);
             return 0;
         }
