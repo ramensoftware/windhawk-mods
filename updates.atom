@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-24T04:04:11.000Z</updated>
+    <updated>2026-11-24T18:32:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Live HUD 1.2.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-live-hud-radar#0000eec01a03da511c3f0e849f69495f9b8920fc</id>
+        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
+        <updated>2026-11-24T18:32:36.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Updated author profile and repository links to @its-lemon.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Lemon</name>
+            <uri>https://github.com/its-lemon</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Move Window to Monitor 1.1.1]]></title>
         <id>https://windhawk.net/mods/move-window-to-monitor#8e9155da316053d27d39d343a54e2b0bd12be00a</id>
@@ -844,30 +858,6 @@ counts and stack/module information, without window titles or AppID strings.</p>
         <author>
             <name>chaochenzhudian</name>
             <uri>https://github.com/chaochenzhudian</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Spotlight Launcher 1.3.0]]></title>
-        <id>https://windhawk.net/mods/spotlight-launcher#b256288a57106c8f21f050e787ee7c4d95ed88d4</id>
-        <link href="https://windhawk.net/mods/spotlight-launcher"/>
-        <updated>2026-11-22T07:04:03.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Write in your own language.</strong> The bar takes input from the Windows language bar and its input
-method, so Chinese, Japanese, Korean and every other IME work: type the reading, see the
-composition underlined in the search field with the candidate list under the caret, and the
-characters you pick land in the search. Nothing is searched until you accept a candidate, and the
-text goes into the field you are editing - the search, the path bar, a custom entry or the entry
-manager.</li>
-<li><strong>The Windows key as the shortcut.</strong> Pick <strong>Win</strong> under Shortcuts and pressing the Windows key
-opens the bar. The Windows Start menu is kept closed so only one panel appears; the candidate
-list, the result list and the rest of the bar work the same as with any other shortcut.</li>
-<li><strong>Shortcut help follows the setting.</strong> The F1 sheet and the settings page show the Windows key as
-the shortcut when that is what you picked.</li>
-</ul>
-]]></content>
-        <author>
-            <name>David Ravelo</name>
-            <uri>https://github.com/DavidRaveloU</uri>
         </author>
     </entry>
 </feed>

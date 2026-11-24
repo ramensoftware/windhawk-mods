@@ -37,27 +37,27 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795471852872,
+        "updated": 1795545412441,
         "users": 0
       },
       "metadata": {
         "architecture": [
-          "amd64"
+          "x86-64"
         ],
         "author": "StillDialing",
         "compilerOptions": "-lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32",
-        "description": "Adjust tray glyphs, clock and date characters, taskbar button themes and supported app icons to their local backgrounds.",
+        "description": "Adapts tray icons, clock and date characters, taskbar button themes and supported app icons to the background behind each.",
         "github": "https://github.com/StillDialing",
         "include": [
           "explorer.exe"
         ],
-        "name": "Adaptive tray contrast",
-        "version": "0.3.15"
+        "name": "Adaptive Tray Contrast",
+        "version": "0.3.16"
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7868",
       "source": {
-        "sha256": "141d57e41b65153f43609353ef211545f73a2359ae6c4b6de4f9abc82c68665d",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/7b67ea24652c0452c6ba9b4bb8b84ce00531b715/mods/adaptive-tray-contrast.wh.cpp"
+        "sha256": "be27b3db816dfab23ea2c2d1d8fe742e73aae42bdc5b0694502f189b0e3c6edf",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6a05c10c82ddc65766e56ca07685043478e4d419/mods/adaptive-tray-contrast.wh.cpp"
       }
     },
     "aleph-canvas": {
@@ -251,6 +251,35 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/db8842f6699931bdde1c9190c16b0b94d5670362/mods/desktop-app-groups.wh.cpp"
       }
     },
+    "desktop-clock-weather": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795545412441,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795545412441,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DineroOne",
+        "compilerOptions": "-lgdi32 -lgdiplus -lwinhttp -luser32 -ladvapi32",
+        "description": "Time, weekday, date and weekly weather on the desktop - behind icons, not clickable",
+        "github": "https://github.com/DineroOne",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Desktop Clock & Weather",
+        "version": "1.0.7"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7820",
+      "source": {
+        "sha256": "8591f709a4e74a07ad2d9b684e9991ae98b16d81ef2954416bda114861e2b4cd",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/56ef7d33bb6e8beb765449cb7cb8e74d6747fa10/mods/desktop-clock-weather.wh.cpp"
+      }
+    },
     "desktop-shortcut-cleaner": {
       "details": {
         "defaultSorting": 0,
@@ -440,6 +469,38 @@
       "source": {
         "sha256": "fafde4cdaf899e519719f540b90bd9a1ddd4964d4aa6a1f5e9a88264f2153e9e",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/bf0810bdeda793f19e29b7cd6a4c61cfc13d6efe/mods/explorer-font-size-changer.wh.cpp"
+      }
+    },
+    "explorer-home-devices": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795545412441,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795545412441,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "crazyboyybs",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -lcomctl32 -lwindowscodecs -luuid -lgdi32",
+        "description": "Adds a native WinUI section for devices and drives after Quick access on the Windows 11 File Explorer Home page.",
+        "github": "https://github.com/crazyboyybs",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Devices and drives in Explorer Home",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7916",
+      "source": {
+        "sha256": "cc8d69bd1da7cc427da57a76508ec730322b8ec9b0fb4665ca1b8d3408fd8c51",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d659cb34857338cc1a58400c79016baa6c240b41/mods/explorer-home-devices.wh.cpp"
       }
     },
     "explorer-mouse-actions-plus": {
@@ -641,6 +702,34 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/9989e5c525e7812affc4373d7b9285679f07f99c/mods/multiwm-companion.wh.cpp"
       }
     },
+    "native-screen-recorder": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795545412441,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795545412441,
+        "users": 0
+      },
+      "metadata": {
+        "author": "caotu2005",
+        "compilerOptions": "-ld3d11 -ldxgi -lmfplat -lmfreadwrite -lmfuuid -lole32 -luuid -lgdi32 -luser32 -lshell32 -lshlwapi -ldwmapi -lwinmm -ld2d1 -ldwrite",
+        "description": "Lightweight native Windows screen recorder with 13 themes, a WinUI 3 Settings window, hardware-capped resolution & FPS, live screen drawing, custom multi-monitor layout, and 21 languages.",
+        "github": "https://github.com/caotu2005",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Native Windows Screen Recorder",
+        "version": "2.0.4"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7772",
+      "source": {
+        "sha256": "e85e46fd9302511398e7f16db5df95d7c88232a29d7abd3378db1e1bd6b47aca",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/fbe7dcd7a337f8129a97f61a0db4f54c4d889d06/mods/native-screen-recorder.wh.cpp"
+      }
+    },
     "notepad-pro": {
       "details": {
         "defaultSorting": 0,
@@ -799,6 +888,43 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/8aa2d0b87215ea73e12a7b17e36c084813b1d730/mods/swipe-for-10start.wh.cpp"
       }
     },
+    "sysbar-taskbar-monitor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795545412441,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795545412441,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Brov3r",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -liphlpapi -lpdh -lwbemuuid",
+        "description": "Windows 11 のタスクバーに CPU・GPU の使用率と温度、メモリ使用率、ネットワーク速度を表示します。",
+        "github": "https://github.com/Brov3r",
+        "homepage": "https://github.com/Brov3r/SysBar",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "SysBar — タスクバーモニター",
+        "version": "1.2.1"
+      },
+      "metadataEnglish": {
+        "description": "CPU and GPU load and temperature, RAM usage and network speed with icons, embedded into the Windows 11 taskbar",
+        "name": "SysBar - Taskbar Monitor"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7908",
+      "source": {
+        "sha256": "8757fe0e49fe3981354dc5b2b123718214f1db228dd2c4cbef1221d13f2fbd9a",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/66c59a7938481ba84c007c598409461218b0c6c2/mods/sysbar-taskbar-monitor.wh.cpp"
+      }
+    },
     "taskbar-app-state-indicators": {
       "details": {
         "defaultSorting": 0,
@@ -807,7 +933,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795493271636,
+        "updated": 1795545412441,
         "users": 0
       },
       "metadata": {
@@ -826,8 +952,8 @@
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7747",
       "source": {
-        "sha256": "97f8306cd8486aed70bb0e551bcb56fa3797830ecad30b94d9a09e143a36c625",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/23c9aed369aea5ab66506c73f0d088446e6fb186/mods/taskbar-app-state-indicators.wh.cpp"
+        "sha256": "3108fc38ac7bafaaac16c0698c39675ae0557fee9b8309cb266b149f1094eee6",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/72e74181831296ddef47b837e379f957f09483fe/mods/taskbar-app-state-indicators.wh.cpp"
       }
     },
     "taskbar-app-volume-mixer": {
@@ -1009,6 +1135,37 @@
       "source": {
         "sha256": "789d28c43e8cdc92e178160d6331af8485ffdbc0457757a2a941da36beb4b64d",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/eb8cc7f8e45c20eb6fd4026a350afb74d6fb70f4/mods/taskbar-weather.wh.cpp"
+      }
+    },
+    "taskbar-wireless-battery": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795545412441,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795545412441,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "simonzk27",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lhid -lsetupapi -lshcore -lshlwapi -lversion",
+        "description": "Shows the battery level of wireless mice and controllers (Razer, Xbox/XInput) next to the system tray",
+        "github": "https://github.com/simonzk27",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Wireless Battery Indicator",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7898",
+      "source": {
+        "sha256": "6f00fcb659ce20b478220eb6ba2bbd44fbcd9afc3572f6ba98b93cfd09a0db67",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/29a44ab63376ca3b20410133f510ae1a10d9b38b/mods/taskbar-wireless-battery.wh.cpp"
       }
     },
     "taskbar-wireless-battery-widget": {

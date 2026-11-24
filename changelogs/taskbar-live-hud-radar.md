@@ -1,3 +1,7 @@
+## 1.2.1 ([Nov 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0000eec01a03da511c3f0e849f69495f9b8920fc/mods/taskbar-live-hud-radar.wh.cpp))
+
+* Updated author profile and repository links to @its-lemon.
+
 ## 1.2 ([Nov 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fd84d413a1340b4f4f306423e127368d8518757b/mods/taskbar-live-hud-radar.wh.cpp))
 
 * Added GPU utilization (%) via Windows PDH (`\GPU Engine(*)\Utilization Percentage`).

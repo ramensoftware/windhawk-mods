@@ -9215,7 +9215,7 @@
         "rating": 10,
         "ratingBreakdown": [0, 0, 1, 2, 20],
         "ratingUsers": 23,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 34.5,
         "updated": 1795046487000,
         "users": 345
@@ -19288,21 +19288,21 @@
         "ratingUsers": 18,
         "reviews": 0,
         "trendingSorting": 7.117440430756336,
-        "updated": 1794855926000,
+        "updated": 1795545156000,
         "users": 351
       },
       "metadata": {
         "author": "Lemon",
         "compilerOptions": "-luser32 -lgdi32 -liphlpapi -lpsapi -ldwmapi -lshell32 -lgdiplus -ladvapi32 -lpdh -lole32 -loleaut32 -lwbemuuid",
         "description": "Compact system monitoring widget for the taskbar: CPU, RAM, GPU, temperatures, disk speed, network speed, optional ping and a working set trimmer",
-        "github": "https://github.com/lemon-web-stack",
-        "homepage": "https://github.com/lemon-web-stack",
+        "github": "https://github.com/its-lemon",
+        "homepage": "https://github.com/its-lemon",
         "include": [
           "windhawk.exe"
         ],
         "license": "MIT",
         "name": "Taskbar Live HUD",
-        "version": "1.2"
+        "version": "1.2.1"
       }
     },
     "taskbar-margin": {
