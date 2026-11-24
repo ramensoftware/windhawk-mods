@@ -2,8 +2,8 @@
 // @id              native-screen-recorder
 // @name            Native Windows Screen Recorder
 // @name:vi-VN      Trình Quay Màn Hình Native cho Windows
-// @description     Built-in lightweight screen recorder inside explorer.exe with 13 themes, a dedicated WinUI 3 Settings window (hosted in windhawk.exe), hardware-capped resolution & refresh-rate FPS selector, live screen drawing toolbar, multi-monitor custom layout arranger, and 21-language support.
-// @description:vi-VN Trình quay màn hình native trong explorer.exe với 13 chủ đề giao diện, cửa sổ Cài đặt WinUI 3 độc lập (chạy trên windhawk.exe), tùy chỉnh độ phân giải & FPS theo phần cứng, bộ công cụ vẽ trực tiếp lên màn hình, tự bố trí đa màn hình và hỗ trợ 21 ngôn ngữ.
+// @description     Lightweight native Windows screen recorder with 13 themes, a WinUI 3 Settings window, hardware-capped resolution & FPS, live screen drawing, custom multi-monitor layout, and 21 languages.
+// @description:vi-VN Trình quay màn hình native cho Windows với 13 chủ đề, cửa sổ Cài đặt WinUI 3, độ phân giải & FPS theo phần cứng, vẽ trực tiếp lên màn hình, tự bố trí đa màn hình và 21 ngôn ngữ.
 // @version         2.0.4
 // @author          caotu2005
 // @github          https://github.com/caotu2005
@@ -20,19 +20,23 @@
 > - **🌐 English:** Like all Windhawk mods, this mod is compiled locally into an unsigned `.dll` file and loaded into `explorer.exe` and `windhawk.exe`. If Windows **Smart App Control** is active on your PC, Windows will block the compiled `.dll` and the mod will not load. See [Windhawk's documentation and guidance on Smart App Control](https://github.com/ramensoftware/windhawk/issues/696) for details.
 > - **🇻🇳 Tiếng Việt:** Giống như mọi bản mod trên Windhawk, mod này được biên dịch cục bộ thành tệp `.dll` không có chữ ký số để nạp vào `explorer.exe` và `windhawk.exe`. Nếu máy đang bật **Smart App Control (Kiểm soát Ứng dụng Thông minh)**, Windows sẽ chặn tệp `.dll` này khiến mod không thể hoạt động. Xem thêm [hướng dẫn và thảo luận chính thức của Windhawk về Smart App Control](https://github.com/ramensoftware/windhawk/issues/696).
 
-![Native Windows Screen Recorder Preview (Liquid Glass Pill Bar)](https://raw.githubusercontent.com/caotu2005/native-screen-recorder/main/2.0.4/preview-pill.png)
+![Native Windows Screen Recorder Preview (Floating Pill Bar)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/main.jpg)
 
 *Floating Pill Bar (13 Themes & Windows 11 Blur / Liquid Glass)*
 
-![Native Windows Screen Recorder Preview (Live Screen Drawing)](https://raw.githubusercontent.com/caotu2005/native-screen-recorder/main/2.0.4/preview-drawing.png)
+![Native Windows Screen Recorder Preview (Active Recording HUD)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/record.jpg)
+
+*Active Recording HUD*
+
+![Native Windows Screen Recorder Preview (Live Screen Drawing)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/drawscreen.jpg)
 
 *Live Screen Drawing / Annotation Toolbar & Esc Hint Pill*
 
-![Native Windows Screen Recorder Preview (WinUI 3 Settings Window)](https://raw.githubusercontent.com/caotu2005/native-screen-recorder/main/2.0.4/preview-settings-menu.png)
+![Native Windows Screen Recorder Preview (WinUI 3 Settings Window)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/settingsui.jpg)
 
 *Dedicated WinUI 3 Settings Window (Hosted in `windhawk.exe`)*
 
-![Native Windows Screen Recorder Preview (Multi-Monitor Layout Arranger)](https://raw.githubusercontent.com/caotu2005/native-screen-recorder/main/2.0.4/preview-monitor-layout.png)
+![Native Windows Screen Recorder Preview (Multi-Monitor Layout Arranger)](https://raw.githubusercontent.com/caotu2k5/windhawk-mods-resources/main/nativerecord/monitor.jpg)
 
 *Interactive Multi-Monitor Custom Layout Arranger*
 
