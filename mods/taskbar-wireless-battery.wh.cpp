@@ -1169,6 +1169,8 @@ void RenderAll(bool force) {
     g_renderedSettingsVersion = settingsVersion;
 }
 
+void RetryPendingFrames();
+
 void EnsureUiTimer() {
     if (g_uiTimer) {
         return;
@@ -1181,6 +1183,9 @@ void EnsureUiTimer() {
             return;
         }
         try {
+            if (g_needScan) {
+                RetryPendingFrames();
+            }
             RenderAll(false);
         } catch (...) {
             Wh_Log(L"RenderAll failed: %08X", winrt::to_hresult().value);
@@ -1228,7 +1233,7 @@ struct KnownFrame {
     winrt::weak_ref<wux::FrameworkElement> frame;
     void* frameAbi = nullptr;
     TrayKind kind = TrayKind::Unknown;
-    int detectAttempts = 0;
+    ULONGLONG lastDetectTick = 0;
 };
 
 std::vector<KnownFrame> g_knownFrames;
@@ -1324,8 +1329,9 @@ KnownFrame& RememberFrame(wux::FrameworkElement const& frame) {
 
 TrayKind GetTrayKind(wux::FrameworkElement const& frame) {
     KnownFrame& known = RememberFrame(frame);
-    if (known.kind == TrayKind::Unknown && known.detectAttempts < 50) {
-        known.detectAttempts++;
+    ULONGLONG now = GetTickCount64();
+    if (known.kind == TrayKind::Unknown && now - known.lastDetectTick >= 500) {
+        known.lastDetectTick = now;
         known.kind = DetectTrayKindFromLayout(frame);
     }
     return known.kind;
@@ -1500,6 +1506,7 @@ void EnsureWidgetForFrame(wux::FrameworkElement const& frame) {
 
         Settings settings = GetSettingsCopy();
         TrayKind kind = GetTrayKind(frame);
+        EnsureUiTimer();
         if (!settings.showOnAllTaskbars && kind != TrayKind::Primary) {
             g_inEnsure = false;
             return;
@@ -1524,6 +1531,21 @@ void EnsureWidgetForFrame(wux::FrameworkElement const& frame) {
     }
 
     g_inEnsure = false;
+}
+
+void RetryPendingFrames() {
+    if (g_unloading || g_inEnsure) {
+        return;
+    }
+    std::vector<wux::FrameworkElement> frames;
+    for (auto& known : g_knownFrames) {
+        if (auto frame = known.frame.get()) {
+            frames.push_back(frame);
+        }
+    }
+    for (auto& frame : frames) {
+        EnsureWidgetForFrame(frame);
+    }
 }
 
 wux::FrameworkElement FindAncestorTrayFrame(wux::FrameworkElement const& element) {
@@ -1640,6 +1662,40 @@ int WINAPI SystemTrayFrame_OnPointerEntered_Hook(void* pThis, void* args) {
     return ret;
 }
 
+using IconView_PropertyChanged_t = void(WINAPI*)(void* pThis,
+                                                 void* sender,
+                                                 void* args);
+IconView_PropertyChanged_t IconView_OnIconViewModelPropertyChanged_Original;
+IconView_PropertyChanged_t IconView_OnContentViewModelPropertyChanged_Original;
+
+void ScanFromIconViewImpl(void* pThis) {
+    if (!g_needScan || g_unloading || g_inEnsure || !IsTaskbarThread()) {
+        return;
+    }
+    try {
+        if (auto element = ElementFromThis(pThis)) {
+            if (auto frame = FindAncestorTrayFrame(element)) {
+                EnsureWidgetForFrame(frame);
+            }
+        }
+    } catch (...) {
+    }
+}
+
+void WINAPI IconView_OnIconViewModelPropertyChanged_Hook(void* pThis,
+                                                         void* sender,
+                                                         void* args) {
+    IconView_OnIconViewModelPropertyChanged_Original(pThis, sender, args);
+    ScanFromIconViewImpl(pThis);
+}
+
+void WINAPI IconView_OnContentViewModelPropertyChanged_Hook(void* pThis,
+                                                            void* sender,
+                                                            void* args) {
+    IconView_OnContentViewModelPropertyChanged_Original(pThis, sender, args);
+    ScanFromIconViewImpl(pThis);
+}
+
 bool HookSystemTraySymbols(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {
         {
@@ -1657,6 +1713,18 @@ bool HookSystemTraySymbols(HMODULE module) {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::SystemTrayFrame,struct winrt::Windows::UI::Xaml::Controls::IControlOverrides>::OnPointerEntered(void *))"},
             &SystemTrayFrame_OnPointerEntered_Original,
             SystemTrayFrame_OnPointerEntered_Hook,
+            true,
+        },
+        {
+            {LR"(private: void __cdecl winrt::SystemTray::implementation::IconView::OnIconViewModelPropertyChanged(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Windows::Foundation::IInspectable const &))"},
+            &IconView_OnIconViewModelPropertyChanged_Original,
+            IconView_OnIconViewModelPropertyChanged_Hook,
+            true,
+        },
+        {
+            {LR"(protected: virtual void __cdecl winrt::SystemTray::implementation::IconView::OnContentViewModelPropertyChanged(struct winrt::Windows::Foundation::IInspectable const &,struct winrt::Windows::Foundation::IInspectable const &))"},
+            &IconView_OnContentViewModelPropertyChanged_Original,
+            IconView_OnContentViewModelPropertyChanged_Hook,
             true,
         },
     };
