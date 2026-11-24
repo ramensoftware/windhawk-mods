@@ -698,6 +698,11 @@ const ReplacementFont* FindRuleReplacement(std::wstring_view family,
     return nullptr;
 }
 
+bool IsListedSourceFamily(std::wstring_view family, const Runtime& rt) {
+    return std::any_of(rt.replaceFamilies.begin(), rt.replaceFamilies.end(),
+                       [family](const auto& name) { return EqualsCI(family, name); });
+}
+
 const ReplacementFont* SelectReplacement(std::wstring_view family,
                                          const Runtime& rt, bool latePass) {
     // Apps can create another font from a LOGFONT that already has the
@@ -711,10 +716,8 @@ const ReplacementFont* SelectReplacement(std::wstring_view family,
     if (const auto* ruleFont = FindRuleReplacement(family, rt)) {
         return latePass && isDefaultFont ? nullptr : ruleFont;
     }
-    bool listed = std::any_of(rt.replaceFamilies.begin(), rt.replaceFamilies.end(),
-                             [family](const auto& name) { return EqualsCI(family, name); });
-    if (listed || (!rt.settings.replaceListedOnly &&
-                   (rt.settings.replaceAllFonts || isDefaultFont))) {
+    if (IsListedSourceFamily(family, rt) ||
+        (!rt.settings.replaceListedOnly && (rt.settings.replaceAllFonts || isDefaultFont))) {
         return &rt.defaultFont;
     }
     return nullptr;
@@ -824,11 +827,12 @@ struct GdiCandidate {
 };
 
 struct GdiFontCatalog {
-    HDC dc = CreateCompatibleDC(nullptr);
+    HDC dc;
     std::unordered_map<std::wstring, GdiCandidate> candidates;
     bool failed = false;
 
-    GdiFontCatalog() = default;
+    explicit GdiFontCatalog(bool enabled)
+        : dc(enabled ? CreateCompatibleDC(nullptr) : nullptr) {}
     ~GdiFontCatalog() {
         if (dc) {
             DeleteDC(dc);
@@ -1198,11 +1202,12 @@ std::shared_ptr<Runtime> BuildRuntime(Settings settings, bool refreshFonts) {
     }
 
     ComPtr<IDWriteFontCollection> collection;
-    if (g_dwFactory && FAILED(g_dwFactory->GetSystemFontCollection(
+    if (!runtime->settings.disableDirectWrite && g_dwFactory &&
+        FAILED(g_dwFactory->GetSystemFontCollection(
                            collection.GetAddressOf(), refreshFonts))) {
         Wh_Log(L"Could not read the DirectWrite system font collection");
     }
-    GdiFontCatalog catalog;
+    GdiFontCatalog catalog(!runtime->settings.disableGdi);
     if (catalog.dc) {
         LOGFONTW filter{};
         filter.lfCharSet = DEFAULT_CHARSET;
@@ -1212,7 +1217,7 @@ std::shared_ptr<Runtime> BuildRuntime(Settings settings, bool refreshFonts) {
             catalog.failed = true;
             Wh_Log(L"GDI font enumeration did not complete");
         }
-    } else {
+    } else if (!runtime->settings.disableGdi) {
         Wh_Log(L"Could not create a device context for GDI font resolution");
     }
     std::unordered_map<std::wstring, ReplacementFont> resolvedFonts;
@@ -1221,7 +1226,9 @@ std::shared_ptr<Runtime> BuildRuntime(Settings settings, bool refreshFonts) {
         auto& font = entry->second;
         if (inserted) {
             font.family = family;
-            runtime->gdiValid |= ResolveGdiFaces(font, catalog);
+            if (!runtime->settings.disableGdi) {
+                runtime->gdiValid |= ResolveGdiFaces(font, catalog);
+            }
             runtime->dwValid |= ResolveDWriteFamily(font, collection.Get(),
                                                    runtime->settings.fontWeight);
         }
@@ -1232,8 +1239,9 @@ std::shared_ptr<Runtime> BuildRuntime(Settings settings, bool refreshFonts) {
     const auto& processFamily = runtime->settings.processFontFamily;
     defaultFont = resolveFont(processFamily.empty() ? globalFamily : processFamily);
     if (!processFamily.empty() && !EqualsCI(processFamily, globalFamily)) {
-        bool needGdi = GdiFaceForWeight(defaultFont, FW_NORMAL).empty();
-        bool needDw = defaultFont.dwFamily.empty();
+        bool needGdi = !runtime->settings.disableGdi &&
+                       GdiFaceForWeight(defaultFont, FW_NORMAL).empty();
+        bool needDw = !runtime->settings.disableDirectWrite && defaultFont.dwFamily.empty();
         const auto* fallback = needGdi || needDw ? &resolveFont(globalFamily) : nullptr;
         if (needGdi && !GdiFaceForWeight(*fallback, FW_NORMAL).empty()) {
             defaultFont.gdiFaces = fallback->gdiFaces;
@@ -1306,7 +1314,11 @@ void ApplyGdiFaceDecision(const Runtime& rt,
         return;
     }
 
-    int namedWeight = IsTargetFamily(lower, *font) ? 0 : NamedFontWeight(lower);
+    // Listed sources can also be faces of the chosen replacement, as with
+    // Segoe UI Semibold when the user has selected the classic Segoe UI family.
+    int namedWeight = !IsTargetFamily(lower, *font) || IsListedSourceFamily(lower, rt)
+                          ? NamedFontWeight(lower)
+                          : 0;
     int newWeight = ChooseGdiWeight(SourceWeight(namedWeight, weight), rt);
     const auto& replacement = GdiFaceForWeight(*font, newWeight);
     if (replacement.empty()) {
@@ -2156,7 +2168,7 @@ bool InstallVtableHook(void** vtable, size_t index, T hook, T* original) {
 }
 
 void InstallGdiHooks(const Runtime& rt) {
-    if (g_gdiHooksInstalled) {
+    if (rt.settings.disableGdi || g_gdiHooksInstalled) {
         return;
     }
     if (!rt.gdiValid) {
@@ -2189,7 +2201,7 @@ void InstallGdiHooks(const Runtime& rt) {
 }
 
 void InstallDirectWriteHooks(const Runtime& rt) {
-    if (g_dwHooksInstalled) {
+    if (rt.settings.disableDirectWrite || g_dwHooksInstalled) {
         return;
     }
     if (!rt.dwValid || !g_dwFactory) {
@@ -2313,7 +2325,9 @@ BOOL Wh_ModInit() {
             Wh_Log(L"Font replacement is off in '%s'", processName.c_str());
             return FALSE;
         }
-        CreateDWriteFactory();
+        if (!settings.disableDirectWrite) {
+            CreateDWriteFactory();
+        }
         runtime = BuildRuntime(std::move(settings), false);
     } catch (...) {
         Wh_Log(L"Exception while resolving fonts; mod will stay pass-through");
@@ -2325,7 +2339,7 @@ BOOL Wh_ModInit() {
     if (runtime->gdiValid || runtime->dwValid) {
         InstallGdiHooks(*runtime);
         InstallDirectWriteHooks(*runtime);
-    } else {
+    } else if (!runtime->settings.disableGdi || !runtime->settings.disableDirectWrite) {
         // Stay loaded so that installing the font and changing a setting can
         // recover without restarting the target process.
         Wh_Log(
@@ -2349,7 +2363,7 @@ void Wh_ModSettingsChanged() {
             Wh_Log(L"Font replacement is off in '%s'", processName.c_str());
             return;
         }
-        if (!g_dwFactory) {
+        if (!settings.disableDirectWrite && !g_dwFactory) {
             CreateDWriteFactory();
         }
         runtime = BuildRuntime(std::move(settings), true);
