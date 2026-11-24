@@ -6,7 +6,7 @@
 // @description     Adds a native WinUI section for devices and drives after Quick access on the Windows 11 File Explorer Home page.
 // @description:pt  Adiciona uma seção WinUI nativa de dispositivos e unidades depois de Acesso rápido na Página Inicial do Explorador do Windows 11.
 // @description:es  Agrega una sección WinUI nativa de dispositivos y unidades después de Acceso rápido en la página Inicio del Explorador de Windows 11.
-// @version         1.0.1
+// @version         1.0.0
 // @author          crazyboyybs
 // @github          https://github.com/crazyboyybs
 // @include         explorer.exe
