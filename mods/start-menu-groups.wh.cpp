@@ -727,15 +727,27 @@ ModSettings g_settings;
 // Groups and items it doesn't list (new ones) stay where they are in the
 // settings; keys that are no longer there are skipped.
 //
-// Stored as lines: a "v1" header, then "g\t<key>" for a group followed by
+// Stored as records, each ended by U+001D (not a line break: the portable
+// version of Windhawk keeps the mod's storage in an INI file, which can't
+// hold one): a "v2" header, then "g\t<key>" for a group followed by
 // "i\t<key>" for each of its items. A folder's item is followed by
 // "c\t<key>" for each of its apps (apps of a folder not listed stay in it).
 // Made in Start: an app dragged out of its group gets a group of its own
 // (an app on its own, 1 x 1), "n\t<name>" instead of "g"; an app dropped
 // onto another makes a folder of the two, "f\t<name>" instead of "i".
 // Either is dropped when its apps are gone.
+//
+// The records are split into parts of up to kStartOrderPartLen characters,
+// at record boundaries (so no part starts or ends with a space or a quote,
+// which an INI file drops), stored as "startOrder0", "startOrder1", ... with
+// their number in "startOrderParts": a value in an INI file can't be longer
+// than 32,767 characters. Version 1.1.0 stored "v1" with line breaks as one
+// "startOrder" value; that's still read, and removed on the next write.
 
-constexpr PCWSTR kStartOrderValue = L"startOrder";
+constexpr PCWSTR kStartOrderValue = L"startOrder";  // v1
+constexpr PCWSTR kStartOrderPartsValue = L"startOrderParts";
+constexpr WCHAR kOrderSep = L'\x1D';
+constexpr size_t kStartOrderPartLen = 16000;
 
 template <typename G>
 std::vector<std::wstring> OrderGroupKeys(std::vector<G> const& groups) {
@@ -792,18 +804,85 @@ ChildKeys OrderChildKeys(std::vector<G> const& groups) {
     return keys;
 }
 
-// The value, or "" when there's none. (Wh_GetStringValue gives "" also when
-// the buffer is too small.)
-std::wstring ReadStartOrderValue() {
+std::wstring StartOrderPartName(int i) {
+    return L"startOrder" + std::to_wstring(i);
+}
+
+// A stored string, or "" when there's none. (Wh_GetStringValue gives "" also
+// when the buffer is too small.)
+std::wstring ReadStoredString(PCWSTR name) {
     for (size_t size : {size_t{1} << 12, size_t{1} << 16, size_t{1} << 20}) {
         std::wstring buf(size, L'\0');
-        size_t n = Wh_GetStringValue(kStartOrderValue, buf.data(), size);
+        size_t n = Wh_GetStringValue(name, buf.data(), size);
         if (n > 0 && n < size) {
             buf.resize(n);
             return buf;
         }
     }
     return L"";
+}
+
+// The order, or "" when there's none (or a part of it is missing).
+std::wstring ReadStartOrderValue() {
+    int parts = Wh_GetIntValue(kStartOrderPartsValue, 0);
+    if (parts <= 0) {
+        return ReadStoredString(kStartOrderValue);
+    }
+    std::wstring value;
+    for (int i = 0; i < parts; i++) {
+        std::wstring part = ReadStoredString(StartOrderPartName(i).c_str());
+        if (part.empty()) {
+            return L"";
+        }
+        value += part;
+    }
+    return value;
+}
+
+// Removes the order (back in the saved order).
+void DeleteStartOrderValue() {
+    int parts = Wh_GetIntValue(kStartOrderPartsValue, 0);
+    Wh_DeleteValue(kStartOrderPartsValue);
+    for (int i = 0; i < parts; i++) {
+        Wh_DeleteValue(StartOrderPartName(i).c_str());
+    }
+    Wh_DeleteValue(kStartOrderValue);
+}
+
+// Stores `value` (made by StartOrderValue, "v2") in parts. The number of
+// parts is written last, so a reader doesn't see parts that aren't there yet.
+bool WriteStartOrderValue(std::wstring const& value) {
+    std::vector<std::wstring> parts;
+    size_t pos = 0;
+    while (pos < value.size()) {
+        // Whole records; a single longer one makes a part of its own.
+        size_t end = pos;
+        while (end < value.size()) {
+            size_t next = value.find(kOrderSep, end);
+            next = next == std::wstring::npos ? value.size() : next + 1;
+            if (end > pos && next - pos > kStartOrderPartLen) {
+                break;
+            }
+            end = next;
+        }
+        parts.push_back(value.substr(pos, end - pos));
+        pos = end;
+    }
+    int oldParts = Wh_GetIntValue(kStartOrderPartsValue, 0);
+    for (int i = 0; i < (int)parts.size(); i++) {
+        if (!Wh_SetStringValue(StartOrderPartName(i).c_str(),
+                               parts[i].c_str())) {
+            return false;
+        }
+    }
+    if (!Wh_SetIntValue(kStartOrderPartsValue, (int)parts.size())) {
+        return false;
+    }
+    for (int i = (int)parts.size(); i < oldParts; i++) {
+        Wh_DeleteValue(StartOrderPartName(i).c_str());
+    }
+    Wh_DeleteValue(kStartOrderValue);
+    return true;
 }
 
 std::wstring EscapeOrderKey(std::wstring const& s) {
@@ -814,6 +893,7 @@ std::wstring EscapeOrderKey(std::wstring const& s) {
             case L'\n': out += L"\\n"; break;
             case L'\r': out += L"\\r"; break;
             case L'\t': out += L"\\t"; break;
+            case kOrderSep: out += L"\\d"; break;
             default: out += c;
         }
     }
@@ -828,7 +908,11 @@ std::wstring UnescapeOrderKey(std::wstring_view s) {
             continue;
         }
         WCHAR c = s[++i];
-        out += c == L'n' ? L'\n' : c == L'r' ? L'\r' : c == L't' ? L'\t' : c;
+        out += c == L'n'   ? L'\n'
+               : c == L'r' ? L'\r'
+               : c == L't' ? L'\t'
+               : c == L'd' ? kOrderSep
+                           : c;
     }
     return out;
 }
@@ -885,7 +969,11 @@ std::vector<OrderedGroup> PlanStartOrder(std::vector<G> const& raw,
         return true;
     };
 
-    if (value.rfind(L"v1\n", 0) == 0) {
+    // "v1" (1.1.0) ended its records with line breaks.
+    WCHAR sep = value.rfind(L"v2\x1D", 0) == 0   ? kOrderSep
+                : value.rfind(L"v1\n", 0) == 0 ? L'\n'
+                                                 : L'\0';
+    if (sep) {
         auto groupKeys = OrderGroupKeys(raw);
         auto itemKeys = OrderItemKeys(raw);
         auto childKeys = OrderChildKeys(raw);
@@ -905,7 +993,7 @@ std::vector<OrderedGroup> PlanStartOrder(std::vector<G> const& raw,
         int curFolder = -1;  // folder item in plan[cur]
         size_t pos = 3;
         while (pos < value.size()) {
-            size_t end = value.find(L'\n', pos);
+            size_t end = value.find(sep, pos);
             if (end == std::wstring::npos) {
                 end = value.size();
             }
@@ -938,8 +1026,9 @@ std::vector<OrderedGroup> PlanStartOrder(std::vector<G> const& raw,
                     OrderedItem item;
                     item.ref = it->second;
                     item.folder = isFolder(it->second);
+                    bool folder = item.folder;
                     plan[cur].items.push_back(std::move(item));
-                    if (item.folder) {
+                    if (folder) {
                         curFolder = (int)plan[cur].items.size() - 1;
                     }
                 }
@@ -1071,7 +1160,8 @@ std::vector<G> ApplyStartOrder(std::vector<G> const& raw,
 std::wstring StartOrderValue(ModSettings const& s) {
     const int n = (int)s.rawGroupKeys.size();
     bool same = (int)s.groups.size() == n;
-    std::wstring out = L"v1\n";
+    const std::wstring end(1, kOrderSep);
+    std::wstring out = L"v2" + end;
     // An item's key; false if it isn't one of the saved ones.
     auto key = [&](ItemSetting const& it, std::wstring& k) {
         if (it.rawGroup < 0 || it.rawGroup >= n || it.rawItem < 0 ||
@@ -1097,11 +1187,11 @@ std::wstring StartOrderValue(ModSettings const& s) {
         if (g.raw < 0) {
             // Made in Start (see MakeStartGroup).
             same = false;
-            out += L"n\t" + EscapeOrderKey(g.name) + L"\n";
+            out += L"n\t" + EscapeOrderKey(g.name) + end;
         } else {
             same = same && g.raw == k &&
                    g.items.size() == s.rawItemKeys[k].size();
-            out += L"g\t" + EscapeOrderKey(s.rawGroupKeys[g.raw]) + L"\n";
+            out += L"g\t" + EscapeOrderKey(s.rawGroupKeys[g.raw]) + end;
         }
         for (int j = 0; j < (int)g.items.size(); j++) {
             auto const& it = g.items[j];
@@ -1109,11 +1199,11 @@ std::wstring StartOrderValue(ModSettings const& s) {
             if (it.rawGroup < 0 && it.type == L"folder") {
                 // Made in Start.
                 same = false;
-                out += L"f\t" + EscapeOrderKey(it.label) + L"\n";
+                out += L"f\t" + EscapeOrderKey(it.label) + end;
             } else if (key(it, itemKey)) {
                 same = same && it.rawGroup == k && it.rawItem == j &&
                        it.rawSub < 0;
-                out += L"i\t" + EscapeOrderKey(itemKey) + L"\n";
+                out += L"i\t" + EscapeOrderKey(itemKey) + end;
             } else {
                 return L"";
             }
@@ -1131,7 +1221,7 @@ std::wstring StartOrderValue(ModSettings const& s) {
                 }
                 same = same && child.rawGroup == k && child.rawItem == j &&
                        child.rawSub == c;
-                out += L"c\t" + EscapeOrderKey(childKey) + L"\n";
+                out += L"c\t" + EscapeOrderKey(childKey) + end;
             }
         }
     }
@@ -1509,7 +1599,15 @@ struct Attachment {
     // right unless set (see HostMargin).
     double inset = 0;
 };
-[[clang::no_destroy]] Attachment g_attach;
+[[clang::no_destroy]] std::optional<Attachment> g_attach;
+
+// The attachment (an empty one when the groups aren't in Start).
+Attachment& AttachState() {
+    if (!g_attach) {
+        g_attach.emplace();
+    }
+    return *g_attach;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1769,6 +1867,31 @@ void TrackFlyout(xcp::FlyoutBase const& fly) {
         std::erase_if(g_flyouts, [](auto& w) { return !w.get(); });
     }
     g_flyouts.push_back(winrt::make_weak(fly));
+}
+
+// The closing animations of opened groups that are still running, with their
+// `Completed` handlers (which close the flyout), to revoke them when the mod
+// unloads: the batch would call them later, from Start's UI thread queue,
+// after the mod's code is gone (UI thread).
+struct CloseAnimation {
+    uint64_t id;
+    wcomp::CompositionScopedBatch batch;
+    winrt::event_token token;
+};
+[[clang::no_destroy]] std::optional<std::vector<CloseAnimation>>
+    g_closeAnimations;
+
+void RevokeCloseAnimations() {
+    if (!g_closeAnimations) {
+        return;
+    }
+    for (auto& a : *g_closeAnimations) {
+        try {
+            a.batch.Completed(a.token);
+        } catch (...) {
+        }
+    }
+    g_closeAnimations.reset();
 }
 
 // Runs `fn` on Start's UI thread, later. Dropped if the mod is unloading.
@@ -2845,7 +2968,7 @@ wf::Rect RootRect(FrameworkElement const& el) {
 // holding Start's sections and the groups (Start's window is larger than
 // the menu it shows). Empty if not found.
 wf::Rect StartAppsArea() {
-    auto host = g_attach.host;
+    auto host = AttachState().host;
     int depth = 0;
     for (DependencyObject p = host; p && depth < 16;
          p = xm::VisualTreeHelper::GetParent(p), depth++) {
@@ -2968,7 +3091,20 @@ void AnimateFromOrigin(xc::Flyout const& fly, wf::Rect origin) {
         v.StartAnimation(L"Opacity", fade);
         batch.End();
         if (done) {
-            batch.Completed([done](auto&&, auto&&) { done(); });
+            // Kept, to revoke it if the mod unloads first.
+            static uint64_t lastId = 0;
+            const uint64_t id = ++lastId;
+            auto token = batch.Completed([done, id](auto&&, auto&&) {
+                if (g_closeAnimations) {
+                    std::erase_if(*g_closeAnimations,
+                                  [id](auto const& a) { return a.id == id; });
+                }
+                done();
+            });
+            if (!g_closeAnimations) {
+                g_closeAnimations.emplace();
+            }
+            g_closeAnimations->push_back({id, batch, token});
         }
     };
 
@@ -3227,7 +3363,7 @@ xc::Grid BuildGroupFlyoutContent(xc::Flyout const& fly,
         root.Children().Append(overlay);
         fs.root = root;
         fs.overlay = overlay;
-        g_attach.flyout = std::move(fs);
+        AttachState().flyout = std::move(fs);
         HookStartFlyoutDrag(root);
     }
     return root;
@@ -3270,7 +3406,7 @@ xc::Flyout BuildGroupFlyout(const Model& model,
 // The opened group or folder again, after its apps were rearranged in it
 // (ApplyStartDrop): from the rebuilt model, at the same size.
 void RefreshStartFlyout() {
-    auto& fs = g_attach.flyout;
+    auto& fs = AttachState().flyout;
     auto fly = fs.fly.get();
     auto oldRoot = fs.root.get();
     auto model = g_model;
@@ -3303,7 +3439,7 @@ void RefreshStartFlyout() {
     std::wstring title = folder >= 0 ? cat.apps[folder].name : cat.name;
     // Tied to the group's new tile.
     winrt::weak_ref<FrameworkElement> anchor = fs.anchor;
-    for (auto const& t : g_attach.tiles) {
+    for (auto const& t : AttachState().tiles) {
         if (t.group == tile) {
             if (auto el = t.tile.get()) {
                 anchor = winrt::make_weak(el.as<FrameworkElement>());
@@ -3659,19 +3795,19 @@ bool SubtreeHasText(DependencyObject const& root,
 }
 
 void RestoreSections() {
-    for (auto& [weak, vis] : g_attach.hidden) {
+    for (auto& [weak, vis] : AttachState().hidden) {
         if (auto el = weak.get()) {
             el.Visibility(vis);
         }
     }
-    g_attach.hidden.clear();
+    AttachState().hidden.clear();
 }
 
 void HideSectionElement(UIElement const& el) {
     if (!el) {
         return;
     }
-    g_attach.hidden.emplace_back(winrt::make_weak(el), el.Visibility());
+    AttachState().hidden.emplace_back(winrt::make_weak(el), el.Visibility());
     el.Visibility(Visibility::Collapsed);
 }
 
@@ -3682,9 +3818,9 @@ void HideSectionElement(UIElement const& el) {
 // GridView the header grid belongs to.
 void ApplySectionVisibility() {
     RestoreSections();
-    auto grid = g_attach.rowGrid.get();
-    if (!grid || !g_attach.host ||
-        (g_attach.insertedRow < 0 && !g_attach.footerList.get())) {
+    auto grid = AttachState().rowGrid.get();
+    if (!grid || !AttachState().host ||
+        (AttachState().insertedRow < 0 && !AttachState().footerList.get())) {
         return;
     }
     bool show[3];
@@ -3702,13 +3838,14 @@ void ApplySectionVisibility() {
         return;
     }
     // Our row; in the footer, below all of the grid's rows.
-    const int ins = g_attach.insertedRow >= 0 ? g_attach.insertedRow
-                                              : (int)grid.RowDefinitions().Size() + 1;
+    const int ins = AttachState().insertedRow >= 0
+                        ? AttachState().insertedRow
+                        : (int)grid.RowDefinitions().Size() + 1;
 
     // Row of each section's header (-1 = not found).
     int headerRow[3] = {-1, -1, -1};
     for (auto child : grid.Children()) {
-        if (child == g_attach.host) {
+        if (child == AttachState().host) {
             continue;
         }
         auto fe = child.try_as<FrameworkElement>();
@@ -3723,7 +3860,7 @@ void ApplySectionVisibility() {
         }
     }
     if (headerRow[0] < 0) {
-        if (auto pinned = g_attach.target.get()) {
+        if (auto pinned = AttachState().target.get()) {
             headerRow[0] = xc::Grid::GetRow(pinned);  // the pinned list
         }
     }
@@ -3742,7 +3879,7 @@ void ApplySectionVisibility() {
 
     for (auto child : grid.Children()) {
         auto fe = child.try_as<FrameworkElement>();
-        if (!fe || child == g_attach.host) {
+        if (!fe || child == AttachState().host) {
             continue;
         }
         int r = xc::Grid::GetRow(fe);
@@ -3783,7 +3920,7 @@ constexpr PCWSTR kStartRowWidthValue = L"startRowWidth";
 // (rounded down, so the row is never a fraction wider than the host and
 // shrunk by the Viewbox for it). 0 before the host is laid out.
 double HostRowWidth() {
-    double w = g_attach.host ? g_attach.host.ActualWidth() : 0;
+    double w = AttachState().host ? AttachState().host.ActualWidth() : 0;
     return w > 0 ? std::floor(w) : 0;
 }
 
@@ -3791,13 +3928,13 @@ double HostRowWidth() {
 // (FitRow), so they're built again when the width changes. Called after
 // every layout pass; returns early when nothing changed.
 void ApplyColumns() {
-    auto wrap = g_attach.wrap.get();
-    auto frame = g_attach.wrapFrame.get();
-    if (!wrap || !frame || !g_model || !g_attach.host) {
+    auto wrap = AttachState().wrap.get();
+    auto frame = AttachState().wrapFrame.get();
+    if (!wrap || !frame || !g_model || !AttachState().host) {
         return;
     }
     double width = HostRowWidth();
-    if (width <= 0 || width == g_attach.builtWidth) {
+    if (width <= 0 || width == AttachState().builtWidth) {
         return;
     }
     static int published = -1;
@@ -3822,7 +3959,7 @@ void ApplyColumns() {
         }
         return;
     }
-    g_attach.builtWidth = width;  // once per change
+    AttachState().builtWidth = width;  // once per change
     // Not from inside this layout pass.
     PostToUi([] { RebuildHostContent(); });
 }
@@ -4152,8 +4289,8 @@ void ApplyStartDrop(StartDrop const& d) {
     }
     // Back in the saved order: nothing to keep.
     if (value.empty()) {
-        Wh_DeleteValue(kStartOrderValue);
-    } else if (!Wh_SetStringValue(kStartOrderValue, value.c_str())) {
+        DeleteStartOrderValue();
+    } else if (!WriteStartOrderValue(value)) {
         Wh_Log(L"Saving the order arranged in Start failed");
     }
     g_model = ReorderedModel(*model, groups);
@@ -4166,19 +4303,20 @@ void ApplyStartDrop(StartDrop const& d) {
 // Where the drag draws: the opened folder's layer while it's in there, else
 // the groups'.
 xc::Grid DragSurfaceRoot(StartDrag const& d) {
-    return d.inFlyout ? g_attach.flyout.root.get() : g_attach.dragRoot.get();
+    auto& a = AttachState();
+    return d.inFlyout ? a.flyout.root.get() : a.dragRoot.get();
 }
 xc::Canvas DragSurfaceOverlay(StartDrag const& d) {
-    return d.inFlyout ? g_attach.flyout.overlay.get()
-                      : g_attach.dragOverlay.get();
+    return d.inFlyout ? AttachState().flyout.overlay.get()
+                      : AttachState().dragOverlay.get();
 }
 
 // Ends the drag in Start: drops it (`drop`) or cancels it.
 void EndStartDrag(bool drop) {
-    StartDrag d = std::move(g_attach.drag);
-    g_attach.drag = StartDrag{};
-    for (auto overlay :
-         {g_attach.dragOverlay.get(), g_attach.flyout.overlay.get()}) {
+    StartDrag d = std::move(AttachState().drag);
+    AttachState().drag = StartDrag{};
+    auto& a = AttachState();
+    for (auto overlay : {a.dragOverlay.get(), a.flyout.overlay.get()}) {
         if (overlay) {
             overlay.Children().Clear();
         }
@@ -4210,7 +4348,7 @@ void EndStartDrag(bool drop) {
 }
 
 void StartDragVisuals() {
-    auto& d = g_attach.drag;
+    auto& d = AttachState().drag;
     auto root = DragSurfaceRoot(d);
     auto overlay = DragSurfaceOverlay(d);
     if (!root || !overlay || !d.model || d.tile < 0 ||
@@ -4218,7 +4356,7 @@ void StartDragVisuals() {
         return;
     }
     auto const& cat = d.model->groups[d.tile];
-    auto target = g_attach.target.get();
+    auto target = AttachState().target.get();
     bool dark = target ? target.ActualTheme() == ElementTheme::Dark : true;
 
     d.indicator = xc::Border();
@@ -4295,9 +4433,9 @@ void UpdateStartDrag(wf::Point p);
 // The drag of an app out of the opened folder (or group): on over the
 // groups, where it goes on like a drag that started there. The popup closes.
 void HandStartDragToGroups(wf::Point p) {
-    auto& d = g_attach.drag;
-    auto froot = g_attach.flyout.root.get();
-    auto root = g_attach.dragRoot.get();
+    auto& d = AttachState().drag;
+    auto froot = AttachState().flyout.root.get();
+    auto root = AttachState().dragRoot.get();
     if (!froot || !root) {
         EndStartDrag(false);
         return;
@@ -4311,7 +4449,7 @@ void HandStartDragToGroups(wf::Point p) {
         EndStartDrag(false);
         return;
     }
-    if (auto overlay = g_attach.flyout.overlay.get()) {
+    if (auto overlay = AttachState().flyout.overlay.get()) {
         overlay.Children().Clear();
     }
     if (auto src = d.source.get()) {
@@ -4324,7 +4462,7 @@ void HandStartDragToGroups(wf::Point p) {
     d.start = start;
     // The groups are shrunk to fit Start; by how much.
     d.scale = 1;
-    for (auto const& t : g_attach.tiles) {
+    for (auto const& t : AttachState().tiles) {
         if (auto tileEl = t.tile.get(); tileEl && tileEl.ActualWidth() > 0) {
             d.scale = BoundsIn(tileEl, root).Width / tileEl.ActualWidth();
             break;
@@ -4334,7 +4472,7 @@ void HandStartDragToGroups(wf::Point p) {
     if (d.pointer) {
         root.CapturePointer(d.pointer);
     }
-    if (auto f = g_attach.flyout.fly.get()) {
+    if (auto f = AttachState().flyout.fly.get()) {
         f.Hide();
     }
     UpdateStartDrag(gp);
@@ -4342,8 +4480,8 @@ void HandStartDragToGroups(wf::Point p) {
 
 // In the opened folder (or group): before or after one of its apps.
 void UpdateStartFlyoutDrag(wf::Point p) {
-    auto& d = g_attach.drag;
-    auto& fs = g_attach.flyout;
+    auto& d = AttachState().drag;
+    auto& fs = AttachState().flyout;
     auto root = fs.root.get();
     if (!root) {
         return;
@@ -4389,7 +4527,7 @@ void UpdateStartFlyoutDrag(wf::Point p) {
 }
 
 void UpdateStartDrag(wf::Point p) {
-    auto& d = g_attach.drag;
+    auto& d = AttachState().drag;
     auto root = DragSurfaceRoot(d);
     if (!root || !d.model) {
         return;
@@ -4450,7 +4588,7 @@ void UpdateStartDrag(wf::Point p) {
     auto nearestInRow = [&](wf::Rect& best) {
         float bestDist = 1e9f;
         int bestTile = -1;
-        for (auto const& t : g_attach.tiles) {
+        for (auto const& t : AttachState().tiles) {
             auto outer = t.outer.get();
             auto tileEl = t.tile.get();
             if (!outer || !tileEl || t.group < 0 ||
@@ -4540,7 +4678,7 @@ void UpdateStartDrag(wf::Point p) {
 
     if (!d.group) {
         bool overTile = false;
-        for (auto const& t : g_attach.tiles) {
+        for (auto const& t : AttachState().tiles) {
             auto tileEl = t.tile.get();
             if (!tileEl || t.group < 0 || t.group >= (int)groups.size()) {
                 continue;
@@ -4557,7 +4695,7 @@ void UpdateStartDrag(wf::Point p) {
         // group of its own, an app on its own (as in the settings window),
         // before or after the nearest tile of that row, or else at the end.
         float below = (float)(L.tileSize * d.scale);
-        if (!overTile && !g_attach.tiles.empty() && p.X >= 0 &&
+        if (!overTile && !AttachState().tiles.empty() && p.X >= 0 &&
             p.X <= root.ActualWidth() && p.Y >= 0 &&
             p.Y <= root.ActualHeight() + below) {
             wf::Rect best{};
@@ -4565,7 +4703,7 @@ void UpdateStartDrag(wf::Point p) {
             if (bestTile >= 0) {
                 d.after = p.X >= best.X + best.Width / 2;
             } else {
-                auto const& last = g_attach.tiles.back();
+                auto const& last = AttachState().tiles.back();
                 auto tileEl = last.tile.get();
                 if (tileEl && last.group >= 0 &&
                     last.group < (int)groups.size()) {
@@ -4586,7 +4724,7 @@ void UpdateStartDrag(wf::Point p) {
         // before or after the tile, like a group.
         auto const& cat = groups[d.tile];
         if (IsSingleAppTile(cat) && !cat.apps.empty()) {
-            for (auto const& t : g_attach.tiles) {
+            for (auto const& t : AttachState().tiles) {
                 auto tileEl = t.tile.get();
                 if (!tileEl || t.group < 0 || t.group >= (int)groups.size() ||
                     t.group == d.tile) {
@@ -4618,9 +4756,9 @@ void UpdateStartDrag(wf::Point p) {
 }
 
 void OnStartPointerPressed(Input::PointerRoutedEventArgs const& e) {
-    auto root = g_attach.dragRoot.get();
+    auto root = AttachState().dragRoot.get();
     auto model = g_model;
-    if (!root || !model || g_attach.drag.pressed ||
+    if (!root || !model || AttachState().drag.pressed ||
         e.Pointer().PointerDeviceType() !=
             winrt::Windows::Devices::Input::PointerDeviceType::Mouse) {
         return;
@@ -4630,7 +4768,7 @@ void OnStartPointerPressed(Input::PointerRoutedEventArgs const& e) {
         return;
     }
     auto p = pt.Position();
-    for (auto const& t : g_attach.tiles) {
+    for (auto const& t : AttachState().tiles) {
         auto tileEl = t.tile.get();
         if (!tileEl || t.group < 0 || t.group >= (int)model->groups.size()) {
             continue;
@@ -4670,7 +4808,7 @@ void OnStartPointerPressed(Input::PointerRoutedEventArgs const& e) {
             c && RectContains(BoundsIn(c, root), p)) {
             onButton = true;  // the overflow cluster moves the group
         }
-        g_attach.drag = std::move(d);
+        AttachState().drag = std::move(d);
         // A button has the pointer captured already, and its moves reach
         // the root. Elsewhere on the tile, capture now so the moves are seen
         // over the gaps between the tiles too.
@@ -4697,8 +4835,8 @@ void HookStartDrag(xc::Grid const& root) {
         winrt::box_value(Input::PointerEventHandler(
             [](wf::IInspectable const&,
                Input::PointerRoutedEventArgs const& e) {
-                auto& d = g_attach.drag;
-                auto root = g_attach.dragRoot.get();
+                auto& d = AttachState().drag;
+                auto root = AttachState().dragRoot.get();
                 if (!d.pressed || d.inFlyout || !root) {
                     return;
                 }
@@ -4726,14 +4864,14 @@ void HookStartDrag(xc::Grid const& root) {
         winrt::box_value(Input::PointerEventHandler(
             [](wf::IInspectable const&,
                Input::PointerRoutedEventArgs const& e) {
-                auto root = g_attach.dragRoot.get();
-                if (!g_attach.drag.pressed || g_attach.drag.inFlyout ||
-                    !root) {
+                auto root = AttachState().dragRoot.get();
+                auto const& drag = AttachState().drag;
+                if (!drag.pressed || drag.inFlyout || !root) {
                     return;
                 }
-                if (!g_attach.drag.active) {
+                if (!AttachState().drag.active) {
                     // A click: the button already did what it does.
-                    g_attach.drag = StartDrag{};
+                    AttachState().drag = StartDrag{};
                     root.ReleasePointerCapture(e.Pointer());
                     return;
                 }
@@ -4750,9 +4888,10 @@ void HookStartDrag(xc::Grid const& root) {
         winrt::box_value(Input::PointerEventHandler(
             [](wf::IInspectable const&,
                Input::PointerRoutedEventArgs const& e) {
-                auto root = g_attach.dragRoot.get();
-                if (g_attach.drag.pressed && !g_attach.drag.inFlyout &&
-                    root && e.OriginalSource() == root) {
+                auto root = AttachState().dragRoot.get();
+                auto const& drag = AttachState().drag;
+                if (drag.pressed && !drag.inFlyout && root &&
+                    e.OriginalSource() == root) {
                     EndStartDrag(false);
                 }
             })),
@@ -4769,10 +4908,10 @@ void HookStartFlyoutDrag(xc::Grid const& root) {
             [weakRoot](wf::IInspectable const&,
                        Input::PointerRoutedEventArgs const& e) {
                 auto root = weakRoot.get();
-                auto& fs = g_attach.flyout;
+                auto& fs = AttachState().flyout;
                 auto model = g_model;
                 if (!root || root != fs.root.get() || !model ||
-                    model != fs.model || g_attach.drag.pressed ||
+                    model != fs.model || AttachState().drag.pressed ||
                     fs.tile < 0 || fs.tile >= (int)model->groups.size() ||
                     e.Pointer().PointerDeviceType() !=
                         winrt::Windows::Devices::Input::PointerDeviceType::
@@ -4799,7 +4938,7 @@ void HookStartFlyoutDrag(xc::Grid const& root) {
                     d.start = p;
                     d.pointer = e.Pointer();
                     d.source = winrt::make_weak(btn.as<UIElement>());
-                    g_attach.drag = std::move(d);
+                    AttachState().drag = std::move(d);
                     return;
                 }
             })),
@@ -4809,7 +4948,7 @@ void HookStartFlyoutDrag(xc::Grid const& root) {
         winrt::box_value(Input::PointerEventHandler(
             [weakRoot](wf::IInspectable const&,
                        Input::PointerRoutedEventArgs const& e) {
-                auto& d = g_attach.drag;
+                auto& d = AttachState().drag;
                 auto root = weakRoot.get();
                 if (!d.pressed || !d.inFlyout || !root) {
                     return;
@@ -4839,19 +4978,19 @@ void HookStartFlyoutDrag(xc::Grid const& root) {
             [weakRoot](wf::IInspectable const&,
                        Input::PointerRoutedEventArgs const& e) {
                 auto root = weakRoot.get();
-                if (!g_attach.drag.pressed || !g_attach.drag.inFlyout ||
-                    !root) {
+                auto const& drag = AttachState().drag;
+                if (!drag.pressed || !drag.inFlyout || !root) {
                     return;
                 }
-                if (!g_attach.drag.active) {
+                if (!AttachState().drag.active) {
                     // A click: the button already did what it does.
-                    g_attach.drag = StartDrag{};
+                    AttachState().drag = StartDrag{};
                     root.ReleasePointerCapture(e.Pointer());
                     return;
                 }
                 e.Handled(true);
                 UpdateStartDrag(e.GetCurrentPoint(root).Position());
-                if (g_attach.drag.inFlyout) {
+                if (AttachState().drag.inFlyout) {
                     EndStartDrag(true);
                     root.ReleasePointerCapture(e.Pointer());
                 }
@@ -4863,7 +5002,8 @@ void HookStartFlyoutDrag(xc::Grid const& root) {
             [weakRoot](wf::IInspectable const&,
                        Input::PointerRoutedEventArgs const& e) {
                 auto root = weakRoot.get();
-                if (g_attach.drag.pressed && g_attach.drag.inFlyout && root &&
+                auto const& drag = AttachState().drag;
+                if (drag.pressed && drag.inFlyout && root &&
                     e.OriginalSource() == root) {
                     EndStartDrag(false);
                 }
@@ -4872,22 +5012,22 @@ void HookStartFlyoutDrag(xc::Grid const& root) {
 }
 
 void RebuildHostContent() {
-    auto host = g_attach.host;
+    auto host = AttachState().host;
     if (!host || !g_model) {
         return;
     }
-    auto target = g_attach.target.get();
+    auto target = AttachState().target.get();
     bool dark = target ? target.ActualTheme() == ElementTheme::Dark : true;
     const auto& L = g_model->layout;
 
     // A drag in progress is of the tiles being replaced.
-    if (g_attach.drag.pressed) {
+    if (AttachState().drag.pressed) {
         EndStartDrag(false);
     }
     // The left and right spacing may have changed; a new width builds the
     // tiles again (see ApplyColumns).
     host.Margin(HostMargin());
-    g_attach.tiles.clear();
+    AttachState().tiles.clear();
     g_imageSources.clear();
 
     // The row, fitted to the host's width (FitRow): the tiles are a little
@@ -4896,7 +5036,7 @@ void RebuildHostContent() {
     // tiles again once its width is known.
     const double rowWidth = HostRowWidth();
     const RowFit row = FitRow(rowWidth, L.tileSize, L.tileSpacingX);
-    g_attach.builtWidth = rowWidth;
+    AttachState().builtWidth = rowWidth;
 
     xc::VariableSizedWrapGrid wrap;
     wrap.Orientation(xc::Orientation::Horizontal);
@@ -4924,8 +5064,8 @@ void RebuildHostContent() {
     fit.StretchDirection(xc::StretchDirection::DownOnly);
     fit.HorizontalAlignment(HorizontalAlignment::Left);
     fit.Child(frame);
-    g_attach.wrap = wrap;
-    g_attach.wrapFrame = frame;
+    AttachState().wrap = wrap;
+    AttachState().wrapFrame = frame;
 
     for (int gi = 0; gi < (int)g_model->groups.size(); gi++) {
         // A tile wider than the row is built as wide as the row.
@@ -4943,7 +5083,7 @@ void RebuildHostContent() {
             st.apps.emplace_back(btn, i);
         }
         st.cluster = parts.cluster;
-        g_attach.tiles.push_back(std::move(st));
+        AttachState().tiles.push_back(std::move(st));
         tile.HorizontalAlignment(HorizontalAlignment::Left);
         tile.VerticalAlignment(VerticalAlignment::Top);
         if (cat.layout.spanHalfColumns > 1) {
@@ -4964,7 +5104,7 @@ void RebuildHostContent() {
         heading.Text(L.sectionTitle);
         heading.FontSize(14);
         heading.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
-        if (auto pinned = g_attach.pinnedHeader.get()) {
+        if (auto pinned = AttachState().pinnedHeader.get()) {
             heading.FontSize(pinned.FontSize());
             heading.FontWeight(pinned.FontWeight());
             heading.FontFamily(pinned.FontFamily());
@@ -4981,8 +5121,8 @@ void RebuildHostContent() {
     xc::Canvas overlay;
     overlay.IsHitTestVisible(false);
     root.Children().Append(overlay);
-    g_attach.dragRoot = root;
-    g_attach.dragOverlay = overlay;
+    AttachState().dragRoot = root;
+    AttachState().dragOverlay = overlay;
     HookStartDrag(root);
 
     if (auto sv = host.try_as<xc::ScrollViewer>()) {
@@ -4995,8 +5135,8 @@ void RebuildHostContent() {
     // be built before the host has its final width and then never see the
     // host resize. ApplyColumns returns early when nothing changed.
     ApplyColumns();
-    if (!g_attach.sizeToken) {
-        g_attach.sizeToken =
+    if (!AttachState().sizeToken) {
+        AttachState().sizeToken =
             host.LayoutUpdated([](auto&&, auto&&) { ApplyColumns(); });
     }
 
@@ -5013,7 +5153,7 @@ constexpr double kGapBottom = 8;
 // The host's margin: Start's inset (aligned with its "Pinned" title, the
 // same on the right), moved by the left and right spacing set.
 winrt::Windows::UI::Xaml::Thickness HostMargin() {
-    double left = g_attach.inset, right = g_attach.inset;
+    double left = AttachState().inset, right = AttachState().inset;
     if (g_model) {
         left += g_model->layout.marginLeft;
         right += g_model->layout.marginRight;
@@ -5022,33 +5162,34 @@ winrt::Windows::UI::Xaml::Thickness HostMargin() {
 }
 
 void Detach() {
-    auto target = g_attach.target.get();
+    auto target = AttachState().target.get();
     RestoreSections();
-    for (auto& [weak, token] : g_attach.unloadedTokens) {
+    for (auto& [weak, token] : AttachState().unloadedTokens) {
         if (auto el = weak.get()) {
             el.Unloaded(token);
         }
     }
-    g_attach.unloadedTokens.clear();
-    if (g_attach.host && g_attach.sizeToken) {
-        g_attach.host.LayoutUpdated(g_attach.sizeToken);
+    AttachState().unloadedTokens.clear();
+    if (AttachState().host && AttachState().sizeToken) {
+        AttachState().host.LayoutUpdated(AttachState().sizeToken);
     }
-    if (target && g_attach.themeToken) {
-        target.ActualThemeChanged(g_attach.themeToken);
+    if (target && AttachState().themeToken) {
+        target.ActualThemeChanged(AttachState().themeToken);
     }
-    if (auto parent = g_attach.parent.get(); parent && g_attach.host) {
+    if (auto parent = AttachState().parent.get(); parent && AttachState().host) {
         uint32_t idx;
-        if (parent.Children().IndexOf(g_attach.host, idx)) {
+        if (parent.Children().IndexOf(AttachState().host, idx)) {
             parent.Children().RemoveAt(idx);
         }
     }
-    if (auto list = g_attach.footerList.get();
-        list && g_attach.host && list.Footer() == g_attach.host) {
+    if (auto list = AttachState().footerList.get();
+        list && AttachState().host && list.Footer() == AttachState().host) {
         list.Footer(nullptr);
     }
     // Undo the inserted grid row: shift Start's rows back up.
-    if (auto grid = g_attach.rowGrid.get(); grid && g_attach.insertedRow >= 0) {
-        int ins = g_attach.insertedRow;
+    if (auto grid = AttachState().rowGrid.get();
+        grid && AttachState().insertedRow >= 0) {
+        int ins = AttachState().insertedRow;
         for (auto child : grid.Children()) {
             auto c = child.try_as<FrameworkElement>();
             if (!c) {
@@ -5066,7 +5207,7 @@ void Detach() {
             grid.RowDefinitions().RemoveAt(ins);
         }
     }
-    g_attach = Attachment{};
+    g_attach.emplace();
     g_imageSources.clear();
 }
 
@@ -5084,21 +5225,21 @@ void RequestScan();
 bool g_validateQueued = false;  // UI thread only
 
 void ValidateAttachment() {
-    if (!g_attach.host || g_unloading) {
+    if (!AttachState().host || g_unloading) {
         return;
     }
-    auto target = g_attach.target.get();
+    auto target = AttachState().target.get();
     bool stale = !target;
     if (!stale) {
-        if (g_attach.insertedRow >= 0) {
-            auto grid = g_attach.rowGrid.get();
+        if (AttachState().insertedRow >= 0) {
+            auto grid = AttachState().rowGrid.get();
             uint32_t idx;
             stale = !grid || xm::VisualTreeHelper::GetParent(target) != grid ||
-                    !grid.Children().IndexOf(g_attach.host, idx) ||
+                    !grid.Children().IndexOf(AttachState().host, idx) ||
                     !grid.IsLoaded();
         } else {
-            auto list = g_attach.footerList.get();
-            stale = !list || list.Footer() != g_attach.host ||
+            auto list = AttachState().footerList.get();
+            stale = !list || list.Footer() != AttachState().host ||
                     !xm::VisualTreeHelper::GetParent(target) ||
                     !target.IsLoaded();
         }
@@ -5114,7 +5255,7 @@ void ValidateAttachment() {
 }
 
 void ScheduleValidate() {
-    if (g_validateQueued || !g_attach.host) {
+    if (g_validateQueued || !AttachState().host) {
         return;
     }
     g_validateQueued = true;
@@ -5129,7 +5270,7 @@ void WatchUnloaded(FrameworkElement const& el) {
         return;
     }
     auto token = el.Unloaded([](auto&&, auto&&) { ScheduleValidate(); });
-    g_attach.unloadedTokens.emplace_back(winrt::make_weak(el), token);
+    AttachState().unloadedTokens.emplace_back(winrt::make_weak(el), token);
 }
 
 // Loads config + icons off the UI thread, then swaps the model in.
@@ -5281,7 +5422,7 @@ bool AttachInHeaderGrid(FrameworkElement header) {
         }
     }
 
-    if (g_attach.host) {
+    if (AttachState().host) {
         Detach();
     }
 
@@ -5297,22 +5438,22 @@ bool AttachInHeaderGrid(FrameworkElement header) {
         }
     } catch (...) {
     }
-    g_attach.inset = inset;
+    AttachState().inset = inset;
     host.Margin(HostMargin());
     host.HorizontalAlignment(HorizontalAlignment::Stretch);
 
     if (footerList) {
         footerList.Footer(host);
-        g_attach.target = pinned;
-        g_attach.host = host;
-        g_attach.rowGrid = grid;
-        g_attach.insertedRow = -1;
-        g_attach.footerList = footerList;
-        g_attach.placement = requestedPlacement;
+        AttachState().target = pinned;
+        AttachState().host = host;
+        AttachState().rowGrid = grid;
+        AttachState().insertedRow = -1;
+        AttachState().footerList = footerList;
+        AttachState().placement = requestedPlacement;
         if (auto tb = header.try_as<xc::TextBlock>()) {
-            g_attach.pinnedHeader = tb;
+            AttachState().pinnedHeader = tb;
         }
-        g_attach.themeToken = pinned.ActualThemeChanged(
+        AttachState().themeToken = pinned.ActualThemeChanged(
             [](auto&&, auto&&) { RebuildHostContent(); });
         WatchUnloaded(grid);
         WatchUnloaded(pinned);
@@ -5348,16 +5489,16 @@ bool AttachInHeaderGrid(FrameworkElement header) {
         host, std::max<int>(1, grid.ColumnDefinitions().Size()));
     grid.Children().Append(host);
 
-    g_attach.target = pinned;
-    g_attach.parent = grid.as<xc::Panel>();
-    g_attach.host = host;
-    g_attach.rowGrid = grid;
-    g_attach.insertedRow = ins;
-    g_attach.placement = requestedPlacement;
+    AttachState().target = pinned;
+    AttachState().parent = grid.as<xc::Panel>();
+    AttachState().host = host;
+    AttachState().rowGrid = grid;
+    AttachState().insertedRow = ins;
+    AttachState().placement = requestedPlacement;
     if (auto tb = header.try_as<xc::TextBlock>()) {
-        g_attach.pinnedHeader = tb;
+        AttachState().pinnedHeader = tb;
     }
-    g_attach.themeToken = pinned.ActualThemeChanged(
+    AttachState().themeToken = pinned.ActualThemeChanged(
         [](auto&&, auto&&) { RebuildHostContent(); });
     WatchUnloaded(grid);
     WatchUnloaded(pinned);
@@ -5755,12 +5896,12 @@ void OnScanTimer() {
         bool open = IsStartOpen(g_coreWnd);
         if (open) {
             CheckOpenMenus();
-            if (!g_startWasOpen && g_attach.host) {
+            if (!g_startWasOpen && AttachState().host) {
                 ValidateAttachment();  // each time Start opens
             }
         }
         g_startWasOpen = open;
-        if (!g_attach.host) {
+        if (!AttachState().host) {
             // Every tick while Start is open, else once a second; slower
             // after many tries (e.g. a Start layout the mod doesn't know).
             DWORD now = GetTickCount();
@@ -5836,11 +5977,17 @@ void InstallStartUi(HWND coreWnd) {
     wc.lpfnWndProc = UiWndProc;
     wc.hInstance = ThisModule();
     wc.lpszClassName = UiWindowClassName();
-    RegisterClassExW(&wc);
+    // Not with a class left registered by something else: its window would
+    // run that class's window procedure.
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"Registering the UI window class failed: %u", GetLastError());
+        return;
+    }
     HWND wnd = CreateWindowExW(0, UiWindowClassName(), L"", 0, 0, 0, 0, 0,
                                HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
     if (!wnd) {
         Wh_Log(L"Creating the UI window failed: %u", GetLastError());
+        UnregisterClassW(UiWindowClassName(), wc.hInstance);
         return;
     }
     g_coreWnd = coreWnd;
@@ -5861,6 +6008,9 @@ void UninstallStartUi() {
     KillTimer(wnd, kMenuTimerId);
     // Shown again if it was hidden after a launch (CloseStartAfterLaunch).
     HideStartContent(false);
+    // Before the flyouts are hidden: one that's shrinking just closes, and
+    // its animation mustn't call back into the mod when it ends.
+    RevokeCloseAnimations();
     try {
         for (auto& weak : g_flyouts) {
             if (auto fly = weak.get()) {
@@ -5877,6 +6027,7 @@ void UninstallStartUi() {
     } catch (...) {
         Wh_Log(L"Cleanup failed: %08X", winrt::to_hresult());
     }
+    g_attach.reset();
     g_model = nullptr;
     g_imageSources.clear();
     MSG msg;
@@ -12438,12 +12589,16 @@ void SettingsWindow::Save(bool closeAfter, bool overwrite) {
         // them again. Put back if the settings weren't saved.
         std::wstring startOrder = ReadStartOrderValue();
         if (!startOrder.empty()) {
-            Wh_DeleteValue(kStartOrderValue);
+            DeleteStartOrderValue();
         }
         auto* result = new SaveResult(WriteModSettings(entries, hwnd));
         if (!result->error.empty() && !startOrder.empty() &&
             ReadStartOrderValue().empty()) {
-            Wh_SetStringValue(kStartOrderValue, startOrder.c_str());
+            if (startOrder.rfind(L"v2\x1D", 0) == 0) {
+                WriteStartOrderValue(startOrder);
+            } else {
+                Wh_SetStringValue(kStartOrderValue, startOrder.c_str());
+            }
         }
         if (!PostMessageW(hwnd, kSaveDoneMsg, 0, (LPARAM)result)) {
             delete result;
@@ -13005,7 +13160,7 @@ void Wh_ModSettingsChanged() {
             placement = g_settings.placement;
         }
         // A new "Where to show the groups": attached again, there.
-        if (g_attach.host && g_attach.placement != placement) {
+        if (AttachState().host && AttachState().placement != placement) {
             Wh_Log(L"Moving the groups: %s", placement.c_str());
             Detach();
             RequestScan();
