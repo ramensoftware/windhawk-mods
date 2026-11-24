@@ -2,7 +2,7 @@
 // @id              disable-windows-shortcuts
 // @name            Disable Windows Shortcuts
 // @description     Selectively disable Windows keyboard shortcuts with individual toggles
-// @version         1.3.0
+// @version         1.3.1
 // @author          Lone
 // @github          https://github.com/Louis047
 // @include         explorer.exe
@@ -270,6 +270,9 @@ Required only if you use the **"Block hotkey"** option on Special Shortcuts, or 
   - DisableWinShiftS: false
     $name: Win+Shift+S
     $description: Snipping Tool screenshot
+  - DisableWinShiftT: false
+    $name: Win+Shift+T
+    $description: Snipping Tool text extractor (OCR)
   - DisableWinAltK: false
     $name: Win+Alt+K
     $description: Toggle microphone (calls)
@@ -380,6 +383,7 @@ struct Settings
     bool DisableWinSpace;
     bool DisableWinShiftR;
     bool DisableWinShiftS;
+    bool DisableWinShiftT;
     bool DisableWinAltK;
     bool DisableWinPeriod;
     bool DisableWinSemicolon;
@@ -459,6 +463,7 @@ bool StandardShortcutsEqual(const Settings& a, const Settings& b)
            a.DisableWinShiftM == b.DisableWinShiftM &&
            a.DisableWinShiftR == b.DisableWinShiftR &&
            a.DisableWinShiftS == b.DisableWinShiftS &&
+           a.DisableWinShiftT == b.DisableWinShiftT &&
            a.DisableWinComma == b.DisableWinComma &&
            a.DisableWinPause == b.DisableWinPause &&
            a.DisableWinCtrlD == b.DisableWinCtrlD &&
@@ -571,6 +576,7 @@ void LoadSettings()
     g_settings.DisableWinCtrlS = Wh_GetIntSetting(L"StandardShortcuts.DisableWinCtrlS");
     g_settings.DisableWinShiftR = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftR");
     g_settings.DisableWinShiftS = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftS");
+    g_settings.DisableWinShiftT = Wh_GetIntSetting(L"StandardShortcuts.DisableWinShiftT");
     g_settings.DisableWinAltK = Wh_GetIntSetting(L"StandardShortcuts.DisableWinAltK");
     g_settings.DisableWinPeriod = Wh_GetIntSetting(L"StandardShortcuts.DisableWinPeriod");
     g_settings.DisableWinSemicolon = Wh_GetIntSetting(L"StandardShortcuts.DisableWinSemicolon");
@@ -637,6 +643,7 @@ bool ShouldBlockHotkey(UINT fsModifiers, UINT vk)
                 case 'M': block = g_settings.DisableWinShiftM; break;
                 case 'R': block = g_settings.DisableWinShiftR; break;
                 case 'S': block = g_settings.DisableWinShiftS; break;
+                case 'T': block = g_settings.DisableWinShiftT; break;
                 case VK_LEFT: block = g_settings.DisableWinShiftLeft; break;
                 case VK_RIGHT: block = g_settings.DisableWinShiftRight; break;
                 case VK_UP: block = g_settings.DisableWinShiftUp; break;
@@ -823,9 +830,57 @@ HANDLE g_restartExplorerPromptThread = NULL;
 std::atomic<HWND> g_restartExplorerPromptWindow = NULL;
 
 constexpr WCHAR kRestartExplorerPromptTitle[] = L"Disable Windows Shortcuts - Windhawk";
-constexpr WCHAR kRestartExplorerPromptText[] = L"Explorer needs to be restarted to apply changes and release standard shortcuts for other applications. Restart now?";
 
-void PromptForExplorerRestart()
+// The event that caused the restart prompt, so the dialog can explain why it appeared.
+enum class RestartPromptEvent
+{
+    ModEnabled,       // Mod loaded while Explorer was already running
+    SettingsChanged,  // Shortcut settings changed, some shortcuts still disabled
+    SettingsRestored, // Shortcut settings changed, no restart-requiring shortcut is disabled anymore
+    ModDisabled,      // Mod unloaded (disabled or reloaded)
+    ModUninstalled,   // Mod unloaded because it was uninstalled
+};
+
+struct RestartPromptText
+{
+    PCWSTR instruction;
+    PCWSTR content;
+};
+
+RestartPromptText GetRestartPromptText(RestartPromptEvent event)
+{
+    switch (event)
+    {
+    case RestartPromptEvent::ModEnabled:
+        return {
+            L"Restart Explorer to disable the selected shortcuts",
+            L"Explorer registered these shortcuts before this mod was enabled, so they stay active until Explorer restarts. Restart Explorer now?"
+        };
+    case RestartPromptEvent::SettingsChanged:
+        return {
+            L"Restart Explorer to apply your shortcut changes",
+            L"Explorer must be restarted for the updated list of disabled shortcuts to take effect and to release them for other applications. Restart Explorer now?"
+        };
+    case RestartPromptEvent::SettingsRestored:
+        return {
+            L"Restart Explorer to restore your shortcuts",
+            L"You turned the disabled shortcuts back on, but Explorer will not register them again until it restarts. Restart Explorer now?"
+        };
+    case RestartPromptEvent::ModUninstalled:
+        return {
+            L"Restart Explorer to restore the disabled shortcuts",
+            L"This mod was uninstalled, but Explorer is still holding back the shortcuts it blocked. Restart Explorer now to restore them?"
+        };
+    case RestartPromptEvent::ModDisabled:
+    default:
+        return {
+            L"Restart Explorer to restore the disabled shortcuts",
+            L"This mod is being disabled or reloaded, but Explorer is still holding back the shortcuts it blocked. Restart Explorer now to restore them? If the mod is only being updated, choose No."
+        };
+    }
+}
+
+void PromptForExplorerRestart(RestartPromptEvent event)
 {
     if (g_restartExplorerPromptThread)
     {
@@ -835,14 +890,16 @@ void PromptForExplorerRestart()
         g_restartExplorerPromptThread = NULL;
     }
 
-    g_restartExplorerPromptThread = CreateThread(nullptr, 0, [](LPVOID) WINAPI -> DWORD {
+    g_restartExplorerPromptThread = CreateThread(nullptr, 0, [](LPVOID param) WINAPI -> DWORD {
+        RestartPromptText text = GetRestartPromptText((RestartPromptEvent)(INT_PTR)param);
         TASKDIALOGCONFIG taskDialogConfig{
             .cbSize = sizeof(taskDialogConfig),
             .dwFlags = TDF_ALLOW_DIALOG_CANCELLATION,
             .dwCommonButtons = TDCBF_YES_BUTTON | TDCBF_NO_BUTTON,
             .pszWindowTitle = kRestartExplorerPromptTitle,
             .pszMainIcon = TD_INFORMATION_ICON,
-            .pszContent = kRestartExplorerPromptText,
+            .pszMainInstruction = text.instruction,
+            .pszContent = text.content,
             .pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR lpRefData) WINAPI -> HRESULT {
                 switch (msg)
                 {
@@ -877,7 +934,59 @@ void PromptForExplorerRestart()
             }
         }
         return 0;
-    }, nullptr, 0, nullptr);
+    }, (LPVOID)(INT_PTR)event, 0, nullptr);
+}
+
+// Windhawk keeps the enabled state of each mod in the "Disabled" value under this key.
+// WH_MOD_ID is the id of the running build (it includes the "local@" prefix of a local build).
+// The layout is not documented and does not exist in portable mode, so any failure is reported
+// as "unknown" and the prompt then simply waits as if the mod could not be re-enabled meanwhile.
+constexpr WCHAR kModConfigKey[] = L"SOFTWARE\\Windhawk\\Engine\\Mods\\" WH_MOD_ID;
+
+// Returns 1 if the mod is disabled, 0 if it is enabled, -1 if the state is unknown.
+int ReadModDisabledState()
+{
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, kModConfigKey, 0, KEY_QUERY_VALUE | KEY_WOW64_64KEY, &hKey) != ERROR_SUCCESS)
+        return -1;
+
+    DWORD type = 0;
+    DWORD value = 0;
+    DWORD size = sizeof(value);
+    LSTATUS status = RegQueryValueExW(hKey, L"Disabled", nullptr, &type, (LPBYTE)&value, &size);
+    RegCloseKey(hKey);
+
+    if (status != ERROR_SUCCESS || type != REG_DWORD)
+        return -1;
+
+    return value != 0 ? 1 : 0;
+}
+
+// Waits for the restart prompt thread to finish. The prompt is closed (as "No") when it has been
+// shown for 30 seconds, or when the mod was disabled and gets enabled again while it is shown.
+// In the second case the shortcuts stay blocked after the reload, so the prompt is moot.
+// WM_CLOSE is re-posted until the thread exits, because the dialog may not exist yet.
+void WaitForPromptOrReEnable(bool watchReEnable)
+{
+    const ULONGLONG deadline = GetTickCount64() + 30000;
+    bool closeRequested = false;
+
+    while (WaitForSingleObject(g_restartExplorerPromptThread, 100) == WAIT_TIMEOUT)
+    {
+        if (!closeRequested)
+        {
+            closeRequested = GetTickCount64() >= deadline ||
+                             (watchReEnable && ReadModDisabledState() == 0);
+        }
+
+        if (closeRequested)
+        {
+            if (HWND promptWindow = g_restartExplorerPromptWindow.load())
+            {
+                PostMessage(promptWindow, WM_CLOSE, 0, 0);
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -1277,12 +1386,15 @@ BOOL Wh_ModInit()
         // and this Explorer process hasn't already had them blocked at startup.
         // Wh_GetIntValue persists across mod reloads; PID mismatch means a new Explorer
         // process started and genuinely needs a restart to claim the blocked shortcuts.
+        // The result is kept in memory (g_recordedBlock) because Windhawk deletes the mod's
+        // stored values before calling Wh_ModUninit when the mod is uninstalled.
         bool alreadyBlockedInThisProcess = (Wh_GetIntValue(L"blockedInPid", 0) == (int)GetCurrentProcessId());
+        g_recordedBlock = alreadyBlockedInThisProcess;
 
-        if (IsExplorerMidSession() && !GetSystemMetrics(SM_SHUTTINGDOWN) && 
+        if (IsExplorerMidSession() && !GetSystemMetrics(SM_SHUTTINGDOWN) &&
             HasAnyStandardShortcutsDisabled() && !alreadyBlockedInThisProcess)
         {
-            PromptForExplorerRestart();
+            PromptForExplorerRestart(RestartPromptEvent::ModEnabled);
         }
     }
 
@@ -1320,28 +1432,28 @@ void Wh_ModUninit()
 
         if (IsMainExplorer())
         {
+            // Only a genuine disable (Disabled == 1) is watched for a re-enable. After an
+            // uninstall the key is gone and after an update it stays 0, so neither is watched.
+            bool watchReEnable = (ReadModDisabledState() == 1);
+
             // 2. Prompt to restore standard shortcuts only if this Explorer process actually
-            // had registrations blocked by the hook. Gated on PID so the prompt is skipped
-            // on reloads where no blocking occurred (e.g. mid-session enable + "No" path).
-            if (!GetSystemMetrics(SM_SHUTTINGDOWN) &&
-                Wh_GetIntValue(L"blockedInPid", 0) == (int)GetCurrentProcessId())
+            // had registrations blocked by the hook. Gated on the in-memory flag (not on stored
+            // values, which are already deleted on uninstall) so the prompt is skipped on
+            // reloads where no blocking occurred (e.g. mid-session enable + "No" path).
+            if (!GetSystemMetrics(SM_SHUTTINGDOWN) && g_recordedBlock.load())
             {
-                PromptForExplorerRestart();
+                // g_recordedBlock implies blockedInPid was stored for this process, so a mismatch
+                // means the mod's storage was deleted (uninstall). It affects the wording only,
+                // never whether the prompt is shown.
+                bool uninstalled = (Wh_GetIntValue(L"blockedInPid", 0) != (int)GetCurrentProcessId());
+                PromptForExplorerRestart(uninstalled ? RestartPromptEvent::ModUninstalled
+                                                     : RestartPromptEvent::ModDisabled);
             }
 
-            // 3. Safe bounded wait (30s) matching step 1 re-posting pattern
+            // 3. Bounded wait (30s) that also ends early if the mod is re-enabled meanwhile
             if (g_restartExplorerPromptThread)
             {
-                if (WaitForSingleObject(g_restartExplorerPromptThread, 30000) == WAIT_TIMEOUT)
-                {
-                    while (WaitForSingleObject(g_restartExplorerPromptThread, 100) == WAIT_TIMEOUT)
-                    {
-                        if (HWND promptWindow = g_restartExplorerPromptWindow.load())
-                        {
-                            PostMessage(promptWindow, WM_CLOSE, 0, 0);
-                        }
-                    }
-                }
+                WaitForPromptOrReEnable(watchReEnable);
                 CloseHandle(g_restartExplorerPromptThread);
                 g_restartExplorerPromptThread = nullptr;
             }
@@ -1362,8 +1474,13 @@ void Wh_ModSettingsChanged()
             StopHookThread();
     }
     
-    if (g_isExplorer && IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && !StandardShortcutsEqual(oldSettings, g_settings))
+    // Restoring shortcuts only needs a restart if this Explorer actually had registrations blocked.
+    bool anyDisabled = HasAnyStandardShortcutsDisabled();
+    if (g_isExplorer && IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) &&
+        !StandardShortcutsEqual(oldSettings, g_settings) &&
+        (anyDisabled || g_recordedBlock.load()))
     {
-        PromptForExplorerRestart();
+        PromptForExplorerRestart(anyDisabled ? RestartPromptEvent::SettingsChanged
+                                             : RestartPromptEvent::SettingsRestored);
     }
 }

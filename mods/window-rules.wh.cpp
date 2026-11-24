@@ -2,7 +2,7 @@
 // @id              window-rules
 // @name            Window Rules
 // @description     Apply a rule to an app's windows: force position and size, move to a monitor, set opacity, keep on top. Matches executable, class and title.
-// @version         1.0
+// @version         1.1
 // @author          metanoid18
 // @github          https://github.com/Metanoid18
 // @license         MIT
@@ -65,8 +65,9 @@ What it deliberately does not do is fight for the top:
   says `app-cleared`, rather than pinning it again on the next activation.
 * **Dragging the window stops the mod touching it**, the z-order included, for the
   rest of the session.
-* **Turning the rule off takes the window back down.** The mod only ever lowers a
-  bit it set itself, so an app that pins its own windows is never affected.
+* **Turning the rule off takes the window back down.** The mod only directly
+  lowers a window it pinned. Windows may also change the topmost state of that
+  window's owners or owned windows when it is lowered.
 * **The same goes for opacity.** The mod records the windows it made translucent,
   so changing the level takes effect on windows that are already open, and
   clearing the level, deleting the rule or turning the mod off puts them back to
@@ -111,6 +112,16 @@ regular expression, wrap it in slashes: `/^Document - \w+\.txt$/`. Nothing else
 is treated as a pattern, so a path like `C:\Program Files (x86)\Steam\steam.exe`
 or a title like `Inbox | Outlook` matches literally.
 
+Owned dialogs are excluded unless **Include owned dialogs** is enabled on the
+rule. Child, hidden, cloaked and tool windows are still excluded. For hosted
+apps such as Calculator, **Match the hosted app executable** lets a rule use
+the executable of a visible, unambiguous hosted CoreWindow as well as the frame
+host. It is off by default; if the app's child is unavailable, the frame host
+remains the only executable identity. Both choices are per rule. A recently
+created hosted frame can be reconsidered when its title or child arrives or it
+becomes uncloaked, for up to five seconds. This depends on Windows reporting the
+relevant events and does not guarantee a match for a slowly starting app.
+
 ## What it does not do, and where the limits are
 
 * Hide a window from the taskbar or Alt+Tab. Toggling the extended window style is
@@ -146,16 +157,17 @@ or a title like `Inbox | Outlook` matches literally.
   version.
 * **A window on another virtual desktop is left alone until you save the
   settings while it is in front of you.** Those windows are cloaked, and the mod
-  ignores cloaked windows on purpose. So if you delete a rule while one of its
+  ignores cloaked windows on purpose. A newly observed hosted frame may be
+  reconsidered if it becomes visible within five seconds. If you delete a rule
+  while one of its
   windows sits on another desktop, that window keeps its opacity and its always on
   top until the next settings save with it visible, or until you turn the mod off.
   Nothing is left behind after that.
 * **Always on top and fullscreen is detected geometrically.** A window counts as
   fullscreen when it covers a monitor and is not maximized. A window that nearly
   covers a monitor is not detected, so a pinned window can stay above it.
-* **Stepping aside for a fullscreen app is tested, not observed, across
-  monitors.** It was built and tried on a single-monitor machine, so "a game on
-  the other monitor leaves this window pinned" has not been watched happening.
+* **Multiple monitors.** Fullscreen detection across monitors has not been
+  confirmed on a multi-monitor setup.
 
 ## Not the same as other mods
 
@@ -243,6 +255,17 @@ window on purpose, put a `*` in one of the match fields.
       $name: Rule enabled
       $description: >-
         Turn this rule off without deleting it.
+    - includeOwned: false
+      $name: Include owned dialogs
+      $description: >-
+        Allow this rule to match an owned top-level dialog. Off by default so
+        existing rules do not start moving or styling an app's dialogs. Hidden,
+        child, cloaked, and tool windows are still excluded.
+    - matchHostedApp: false
+      $name: Match the hosted app executable
+      $description: >-
+        For an ApplicationFrameHost window, also match its visible hosted app's
+        executable. Turn on only for a rule that needs this. Off by default.
     - executable: ""
       $name: Executable
       $description: >-
@@ -306,7 +329,8 @@ window on purpose, put a `*` in one of the match fields.
         while a fullscreen app covers the same monitor, and raised again after it
         closes; another always-on-top window may still sit above it. "No change"
         takes back a pin this mod set, so a window it pinned earlier comes back
-        down; it never touches the z-order of a window the mod did not pin.
+        down. Windows can also change the topmost state of its owner or owned
+        windows when a topmost window is made non-topmost.
       $options:
       - leave: No change
       - "on": Always on top
@@ -337,20 +361,22 @@ window on purpose, put a `*` in one of the match fields.
 #include <unordered_set>
 #include <vector>
 
-// Design overview, for the reviewer.
+// Design overview.
 //
 // What this is: a tool mod. It runs in windhawk.exe, hooks window events, and
 // changes the z-order and geometry of other applications' windows when a rule
 // matches them. It injects nothing, reads no memory of another process, and
 // writes nothing to disk except its own journal.
 //
-// * One event thread with its own message loop, and four out-of-context
+// * One event thread with its own message loop, and up to six out-of-context
 //   SetWinEventHook registrations on it:
 //     - EVENT_OBJECT_CREATE..EVENT_OBJECT_SHOW, for a window appearing;
 //     - EVENT_SYSTEM_MOVESIZEEND, for the user placing a window by hand;
 //     - EVENT_SYSTEM_MINIMIZEEND, for a window whose rule was deferred while it
 //       was minimized and which is now back;
-//     - EVENT_SYSTEM_FOREGROUND, alone, for a fullscreen app taking a monitor.
+//     - EVENT_SYSTEM_FOREGROUND, alone, for a fullscreen app taking a monitor;
+//     - EVENT_OBJECT_NAMECHANGE and EVENT_OBJECT_UNCLOAKED, only to retry
+//       recently unresolved hosted frames.
 //   EVENT_OBJECT_LOCATIONCHANGE is deliberately not registered: it is the
 //   highest-volume event in the shell and a rules engine learns nothing from a
 //   window being dragged.
@@ -362,23 +388,15 @@ window on purpose, put a `*` in one of the match fields.
 // * Two SetLayeredWindowAttributes and two SetWindowLongPtrW, both for opacity:
 //   one pair sets the level on a window the app has not layered itself, the other
 //   takes it back. A window the app layered itself is never touched.
-// * No timer except the settle poll, which is armed only while a move is
-//   settling and killed when the last one is. The mod is idle otherwise.
-// * No polling, no sleeping, no PeekMessage loop, no persistence. Rules are
-//   user-authored settings and live in the settings block; the mod never writes
-//   settings back.
+// * Timers run only while a move is settling or a hosted-frame retry is pending.
+//   The arrival timer expires pending frames and removes the extra event hooks.
+// * No sleeping or PeekMessage loop. Rules are user-authored settings and live
+//   in the settings block; the mod never writes settings back.
 // * A rules engine that re-applied on every event would fight the user and the
 //   application. So: apply once on appearance, one retry if the app moves the
 //   window, then stop. A hand move releases the window for the session. The
 //   journal records which of those happened, because "nothing happened" is the
 //   answer that needs evidence most.
-// * The journal is the validation surface: one line appended at the instant of
-//   each decision, nothing debounced or overwritten, so a script can assert
-//   against it without racing the mod.
-// * `tools/check_rules_boundaries.sh` in the mod's repository asserts the
-//   structure above mechanically, including that a claim on the z-order is
-//   released before any early return in the apply path. That last one was a
-//   real defect found in the field, and it is silent when it recurs.
 
 // --- Constants --------------------------------------------------------------
 
@@ -424,6 +442,8 @@ static constexpr int kMaxFilterSkipLinesPerReason = 10;
 // populated match fields must match; a blank field matches anything.
 struct RuleSpec {
     bool enabled = true;
+    bool includeOwned = false;
+    bool matchHostedApp = false;
     std::wstring name;
     std::wstring executable;
     std::wstring windowClass;
@@ -775,6 +795,7 @@ struct MatchOutcome {
     int ruleIndex = -1;
     std::wstring field;  // which field decided it
     std::wstring value;  // the text that matched, for the journal
+    bool matchedHosted = false;
 };
 
 // Rule matching is by the window's own facts and nothing else: no window handle
@@ -787,18 +808,25 @@ static MatchOutcome FindFirstMatchingRule(
     const std::wstring& exePath,
     const std::wstring& exeName,
     const std::wstring& windowClass,
-    const std::wstring& title) {
+    const std::wstring& title,
+    bool isOwned = false,
+    const std::wstring& hostedPath = std::wstring(),
+    const std::wstring& hostedName = std::wstring()) {
     MatchOutcome outcome;
 
     for (size_t i = 0; i < rules.size() && i < compiledRules.size(); i++) {
         const RuleSpec& rule = rules[i];
         const CompiledRule& compiled = compiledRules[i];
 
-        if (!rule.enabled || !compiled.usable) {
+        if (!rule.enabled || !compiled.usable || (isOwned && !rule.includeOwned)) {
             continue;
         }
 
-        if (!PatternMatchesExecutable(compiled.executable, exePath, exeName)) {
+        const bool matchesHost =
+            PatternMatchesExecutable(compiled.executable, exePath, exeName);
+        const bool matchesHosted = rule.matchHostedApp && !hostedName.empty() &&
+            PatternMatchesExecutable(compiled.executable, hostedPath, hostedName);
+        if (!matchesHost && !matchesHosted) {
             continue;
         }
         if (!PatternMatchesValue(compiled.windowClass, windowClass,
@@ -811,6 +839,7 @@ static MatchOutcome FindFirstMatchingRule(
 
         outcome.matched = true;
         outcome.ruleIndex = (int)i;
+        outcome.matchedHosted = !matchesHost && matchesHosted;
         // Report the most specific field that was actually used, so a journal
         // line explains why this rule won and not one of the others.
         if (compiled.title.kind != PatternKind::Blank) {
@@ -821,7 +850,7 @@ static MatchOutcome FindFirstMatchingRule(
             outcome.value = windowClass;
         } else if (compiled.executable.kind != PatternKind::Blank) {
             outcome.field = L"executable";
-            outcome.value = exeName;
+            outcome.value = matchesHost ? exeName : hostedName;
         } else {
             outcome.field = L"any";
             outcome.value = exeName;
@@ -1122,7 +1151,7 @@ static TargetPlan ComputeTargetPlan(const RuleRect& current,
         // Moving a window must not resize it. With no size in the rule, the far
         // edges travel with the near ones -- the first version left them where
         // they were, which silently resized every window a position-only rule
-        // touched. The unit tests caught it before it reached a desktop.
+        // touched.
         if (!plan.setSize) {
             plan.target.right = plan.target.left + currentWidth;
             plan.target.bottom = plan.target.top + currentHeight;
@@ -1426,19 +1455,6 @@ static bool IsFullscreenCandidate(const RuleRect& window,
     return RectsCoverMonitor(window, monitor, tolerance);
 }
 
-// Which monitor a rectangle covers, or -1. Monitors do not overlap, so the first
-// match is the only one.
-static int FindCoveredMonitor(const RuleRect& window,
-                              const std::vector<RuleMonitor>& monitors,
-                              long tolerance) {
-    for (size_t i = 0; i < monitors.size(); i++) {
-        if (RectsCoverMonitor(window, monitors[i].pixelRect, tolerance)) {
-            return (int)i;
-        }
-    }
-    return -1;
-}
-
 // What to do about one claimed window, given what is covering which monitor.
 enum class YieldDecision {
     Nothing,
@@ -1552,6 +1568,23 @@ static std::wstring BaseNameOf(const std::wstring& path) {
 static std::vector<RuleSpec> g_rules;
 static std::vector<CompiledRule> g_compiledRules;
 static std::vector<RuleActions> g_ruleActions;
+static bool g_allowOwnedRules = false;
+static bool g_needFrameArrivalRetry = false;
+
+// The host's actual path is not known while loading settings. Keep retrying for
+// path patterns rather than rejecting a potentially valid host path.
+static bool RuleMayNeedFrameRetry(const RuleSpec& rule, const CompiledRule& compiled) {
+    if (!rule.enabled || !compiled.usable ||
+        !PatternMatchesValue(compiled.windowClass, L"ApplicationFrameWindow", false)) {
+        return false;
+    }
+    if (rule.matchHostedApp && !rule.executable.empty()) return true;
+    if (rule.title.empty()) return false;
+    const CompiledPattern& exe = compiled.executable;
+    if (exe.kind != PatternKind::Regex && LooksLikePath(exe.literal)) return true;
+    return PatternMatchesExecutable(exe, L"", L"ApplicationFrameHost.exe");
+}
+
 
 // Reads one setting, leaving the value untouched when the key is absent. Every
 // key is read this way: a rule entry whose "name" key is missing -- which is what
@@ -1566,9 +1599,7 @@ static bool ReadStringSetting(PCWSTR key, std::wstring& out) {
     // then did nothing at all. Emptiness is the only signal there is, and it is
     // also what a blank field means, so the two agree.
     //
-    // The null test stays. It costs nothing, and this is the one reader where
-    // getting the contract wrong has already cost a debugging session; the
-    // geometry-memory mod guards here the same way.
+    // Also guard against a null setting value.
     if (!value || !*value) {
         Wh_FreeStringSetting(value);
         return false;
@@ -1584,6 +1615,8 @@ static void LoadRules() {
     g_rules.clear();
     g_compiledRules.clear();
     g_ruleActions.clear();
+    g_allowOwnedRules = false;
+    g_needFrameArrivalRetry = false;
 
     for (int index = 0;; index++) {
         RuleSpec rule;
@@ -1626,19 +1659,24 @@ static void LoadRules() {
 
         keyFor(indexText, L"enabled");
         rule.enabled = Wh_GetIntSetting(key) != 0;
+        keyFor(indexText, L"includeOwned");
+        rule.includeOwned = Wh_GetIntSetting(key) != 0;
+        keyFor(indexText, L"matchHostedApp");
+        rule.matchHostedApp = Wh_GetIntSetting(key) != 0;
 
         g_rules.push_back(rule);
         g_compiledRules.push_back(CompileRule(rule));
         g_ruleActions.push_back(actions);
+        const CompiledRule& compiled = g_compiledRules.back();
+        g_allowOwnedRules |= rule.enabled && compiled.usable && rule.includeOwned;
+        g_needFrameArrivalRetry |= RuleMayNeedFrameRetry(rule, compiled);
     }
 
 }
 
 // --- Diagnostics journal ----------------------------------------------------
 //
-// One line appended at the instant of each decision, nothing debounced, nothing
-// overwritten, so a test script can assert against the journal without racing the
-// mod.
+// Append one line per decision when diagnostics are enabled.
 static bool g_diagnosticsLog = false;
 
 // How many times the private folder has been tried this session. Owned here rather
@@ -1649,10 +1687,8 @@ static int g_folderAttempts = 0;
 // looks complete but was written by the previous copy of the mod is the easiest
 // way to waste an hour.
 //
-// Hand-maintained rather than WH_MOD_VERSION, because @version has to stay
-// numeric for the submission validator ("1.0"), and "1.0" cannot tell one build
-// of 1.0 from the next. This tag is what the test scripts compare.
-static constexpr PCWSTR kJournalBuild = L"r15-2026-10-21";
+// Identifies the build that wrote the journal.
+static constexpr PCWSTR kJournalBuild = WH_MOD_VERSION;
 
 static void RefreshDiagnosticsSetting() {
     const bool was = g_diagnosticsLog;
@@ -2073,6 +2109,8 @@ static void JournalRulesLoaded() {
         AppendDiagnosticsJournal(
             L"RULE-LOADED i=" + std::to_wstring(i) +
             L" enabled=" + (rule.enabled ? L"yes" : L"no") +
+            L" includeOwned=" + (rule.includeOwned ? L"yes" : L"no") +
+            L" matchHostedApp=" + (rule.matchHostedApp ? L"yes" : L"no") +
             L" name=\"" + (rule.name.empty() ? L"(unnamed)" : rule.name) +
             L"\" exe=\"" + rule.executable + L"\" class=\"" + rule.windowClass +
             L"\" title=\"" + rule.title + L"\" actions=" + actions);
@@ -2100,7 +2138,8 @@ static void JournalRulesLoaded() {
 }
 
 static void JournalRuleHit(int ruleIndex, const MatchOutcome& outcome,
-                           const std::wstring& exeName) {
+                           const std::wstring& exeName,
+                           const std::wstring& hostedName) {
     if (!g_diagnosticsLog) {
         return;
     }
@@ -2113,7 +2152,9 @@ static void JournalRuleHit(int ruleIndex, const MatchOutcome& outcome,
             ? DescribeRequestedActions(g_ruleActions[(size_t)ruleIndex])
             : std::wstring(L"none");
     AppendDiagnosticsJournal(
-        L"RULE-HIT exe=" + exeName + L" rule=" + std::to_wstring(ruleIndex) +
+        L"RULE-HIT exe=" + exeName +
+        (outcome.matchedHosted ? L" hosted=" + hostedName : L"") +
+        L" rule=" + std::to_wstring(ruleIndex) +
         L" name=\"" + RuleNameText(ruleIndex) + L"\" matched=" + outcome.field +
         L":\"" + outcome.value + L"\" actions=" + actions);
 }
@@ -2139,10 +2180,7 @@ static void JournalNoMatch(const std::wstring& exeName,
 // is actually about to be written. The budget above means that happens at most
 // ten times per rejection reason, so the cost is bounded by the setting that
 // benefits from it.
-//
-// It is resolved at all because "(unknown)" in a journal is not an answer: the
-// first run on a real desktop printed twenty rejection lines that named no process, which
-// made it impossible to tell the app being tested from the shell's own windows.
+
 static std::wstring ExeNameForLog(HWND hwnd) {
     DWORD processId = 0;
     GetWindowThreadProcessId(hwnd, &processId);
@@ -2202,12 +2240,13 @@ static std::wstring GetWindowTitle(HWND hwnd) {
 // *reason receives a short human-readable explanation of the first filter that
 // rejected the window, so the journal answers "why was my rule not applied to
 // this window?" without anyone having to read this function.
-static bool PassesWindowFilters(HWND hwnd, const wchar_t** reason) {
+static bool PassesWindowFilters(HWND hwnd, const wchar_t** reason,
+                                bool includeOwned = false) {
     if (GetAncestor(hwnd, GA_ROOT) != hwnd) {
         *reason = L"child window";
         return false;
     }
-    if (GetWindow(hwnd, GW_OWNER) != nullptr) {
+    if (!includeOwned && GetWindow(hwnd, GW_OWNER) != nullptr) {
         *reason = L"owned window (dialog)";
         return false;
     }
@@ -2316,6 +2355,111 @@ static bool ResolveWindowFacts(HWND hwnd, WindowFacts& facts,
     // match it), which is exactly the kind of thing the journal should show.
     facts.title = GetWindowTitle(hwnd);
     return true;
+}
+
+// A hosted UWP frame belongs to ApplicationFrameHost, while its CoreWindow can
+// belong to the actual app. Keep the frame's identity as well, and use the
+// hosted identity only when all eligible CoreWindows agree on one path.
+struct HostedCandidate {
+    HWND frame = nullptr;
+    DWORD hostPid = 0;
+    std::wstring path;
+    bool ambiguous = false;
+};
+static BOOL CALLBACK FindHostedCoreWindow(HWND child, LPARAM param) {
+    auto* candidate = reinterpret_cast<HostedCandidate*>(param);
+    try {
+        WCHAR name[128]{};
+        if (!GetClassNameW(child, name, ARRAYSIZE(name)) ||
+            _wcsicmp(name, L"Windows.UI.Core.CoreWindow") != 0 ||
+            !IsWindowVisible(child)) {
+            return TRUE;
+        }
+        DWORD cloaked = 0;
+        if (FAILED(DwmGetWindowAttribute(child, DWMWA_CLOAKED, &cloaked,
+                                         sizeof(cloaked)))) {
+            candidate->ambiguous = true;
+            return FALSE;
+        }
+        if (cloaked) {
+            return TRUE;
+        }
+        DWORD pid = 0;
+        GetWindowThreadProcessId(child, &pid);
+        if (!pid) {
+            candidate->ambiguous = true;
+            return FALSE;
+        }
+        if (pid == candidate->hostPid) {
+            return TRUE;
+        }
+        HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!process) {
+            candidate->ambiguous = true;
+            return FALSE;
+        }
+        WCHAR path[MAX_PATH]{};
+        DWORD length = ARRAYSIZE(path);
+        BOOL ok = QueryFullProcessImageNameW(process, 0, path, &length);
+        CloseHandle(process);
+        DWORD confirmedPid = 0;
+        GetWindowThreadProcessId(child, &confirmedPid);
+        DWORD confirmedCloak = 0;
+        const HRESULT cloakResult = DwmGetWindowAttribute(
+            child, DWMWA_CLOAKED, &confirmedCloak, sizeof(confirmedCloak));
+        if (!ok || confirmedPid != pid || !IsWindowVisible(child) ||
+            FAILED(cloakResult) || confirmedCloak ||
+            GetAncestor(child, GA_ROOT) != candidate->frame) {
+            candidate->ambiguous = true;
+            return FALSE;
+        }
+        const std::wstring exe = BaseNameOf(path);
+        for (PCWSTR excluded : kExcludedProcesses) {
+            if (_wcsicmp(exe.c_str(), excluded) == 0) {
+                candidate->ambiguous = true;
+                return FALSE;
+            }
+        }
+        if (!candidate->path.empty() &&
+            _wcsicmp(candidate->path.c_str(), path) != 0) {
+            candidate->ambiguous = true;
+            return FALSE;
+        }
+        candidate->path = path;
+        return TRUE;
+    } catch (...) {
+        candidate->ambiguous = true;
+        return FALSE;
+    }
+}
+static void ResolveHostedApplication(HWND hwnd, const WindowFacts& facts,
+                                     std::wstring& path, std::wstring& name) {
+    if (_wcsicmp(facts.exeName.c_str(), L"ApplicationFrameHost.exe") != 0 ||
+        _wcsicmp(facts.windowClass.c_str(), L"ApplicationFrameWindow") != 0) {
+        return;
+    }
+    bool needed = false;
+    for (const RuleSpec& rule : g_rules) {
+        if (rule.enabled && rule.matchHostedApp && !rule.executable.empty()) {
+            needed = true;
+            break;
+        }
+    }
+    if (!needed) {
+        return;
+    }
+    HostedCandidate candidate;
+    candidate.frame = hwnd;
+    GetWindowThreadProcessId(hwnd, &candidate.hostPid);
+    if (!candidate.hostPid) {
+        return;
+    }
+    EnumChildWindows(hwnd, FindHostedCoreWindow,
+                     reinterpret_cast<LPARAM>(&candidate));
+    if (!candidate.ambiguous && !candidate.path.empty()) {
+        path = candidate.path;
+        name = BaseNameOf(path);
+    }
 }
 
 // --- Acting on a window -----------------------------------------------------
@@ -3225,14 +3369,91 @@ static void RunReapplyPass() {
 // early "already evaluated" mark for an unshown window is not a cosmetic bug:
 // it silently discards the SHOW event the mod was written for.
 static std::unordered_set<HWND> g_evaluatedWindows;
+// Briefly revisit unresolved hosted frames when their child or caption arrives.
+// A user move, a match, a settings reload or destruction cancels the retry.
+static std::unordered_map<HWND, ULONGLONG> g_pendingAppFrames;
+// Keep expired handles until destruction or a user move so a long drag that
+// outlasts the retry interval is still respected.
+static std::unordered_set<HWND> g_expiredAppFrames;
+struct CloakedFrame { ULONGLONG started; DWORD pid; DWORD tid; };
+static std::unordered_map<HWND, CloakedFrame> g_cloakedAppFrames;
+static std::unordered_set<HWND> g_suppressedArrivalFrames;
+static constexpr ULONGLONG kHostedFrameArrivalMs = 5000;
+static constexpr UINT_PTR kArrivalTimerId = 2;
+static constexpr UINT kArrivalTickMs = 500;
+static UINT_PTR g_arrivalTimer = 0;
+static HWINEVENTHOOK g_hookName = nullptr;
+static HWINEVENTHOOK g_hookUncloaked = nullptr;
+static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD);
+
+// Hooks are held only while a recently observed frame may need them.
+// A periodic timer bounds their lifetime and retries failed hook installations.
+static bool StartArrivalHooks() {
+    bool installed = false;
+    if (!g_hookName) {
+        g_hookName = SetWinEventHook(EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE,
+                                     nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+        installed |= g_hookName != nullptr;
+    }
+    if (!g_hookUncloaked) {
+        g_hookUncloaked = SetWinEventHook(EVENT_OBJECT_UNCLOAKED, EVENT_OBJECT_UNCLOAKED,
+                                          nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+        installed |= g_hookUncloaked != nullptr;
+    }
+    if (!g_arrivalTimer) {
+        HWND hwnd = g_messageWindow.load();
+        if (hwnd) g_arrivalTimer = SetTimer(hwnd, kArrivalTimerId, kArrivalTickMs, nullptr);
+        if (!g_arrivalTimer) Wh_Log(L"arrival retry timer failed (last error %lu)", GetLastError());
+    }
+    if (!g_hookName || !g_hookUncloaked) {
+        Wh_Log(L"arrival event hook failed (last error %lu)", GetLastError());
+    }
+    return installed;
+}
+
+static void StopArrivalHooks() {
+    if (g_hookName) { UnhookWinEvent(g_hookName); g_hookName = nullptr; }
+    if (g_hookUncloaked) { UnhookWinEvent(g_hookUncloaked); g_hookUncloaked = nullptr; }
+    if (g_arrivalTimer) {
+        HWND hwnd = g_messageWindow.load();
+        if (hwnd) KillTimer(hwnd, kArrivalTimerId);
+        g_arrivalTimer = 0;
+    }
+}
+
+static bool IsApplicationFrame(const WindowFacts& facts) {
+    return _wcsicmp(facts.exeName.c_str(), L"ApplicationFrameHost.exe") == 0 &&
+           _wcsicmp(facts.windowClass.c_str(), L"ApplicationFrameWindow") == 0;
+}
+
+static bool CloakedFrameStillMatches(HWND hwnd, const CloakedFrame& seen) {
+    DWORD pid = 0;
+    DWORD tid = GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid || pid != seen.pid || tid != seen.tid) {
+        return false;
+    }
+    WindowFacts facts;
+    const wchar_t* reason = L"unknown";
+    if (!ResolveWindowFacts(hwnd, facts, &reason) || !IsApplicationFrame(facts)) {
+        return false;
+    }
+    pid = 0;
+    tid = GetWindowThreadProcessId(hwnd, &pid);
+    return pid == seen.pid && tid == seen.tid;
+}
+
+static bool NeedsFrameArrivalRetry() {
+    return g_needFrameArrivalRetry;
+}
 
 static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
     // The re-apply pass forces every window past this bookkeeping, because the
     // rules themselves have changed and so has every window's answer.
     // A window that was matched while minimized stays un-decided, so the event
     // raised when it is restored gets it its rule.
-    if (!forced && g_evaluatedWindows.count(hwnd) &&
-        !g_deferredWindows.count(hwnd)) {
+    if (!forced && (g_suppressedArrivalFrames.count(hwnd) ||
+                    (g_evaluatedWindows.count(hwnd) &&
+                     !g_deferredWindows.count(hwnd)))) {
         return;
     }
 
@@ -3243,7 +3464,43 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
     // as decided. Almost every window is created hidden, at zero size, or before
     // it is laid out, and passes these same filters a moment later when it is
     // shown.
-    if (!PassesWindowFilters(hwnd, &reason)) {
+    if (!PassesWindowFilters(hwnd, &reason, g_allowOwnedRules)) {
+        if (!forced && wcscmp(reason, L"cloaked (not shown to the user)") == 0 &&
+            NeedsFrameArrivalRetry() && !g_evaluatedWindows.count(hwnd) &&
+            !g_governedWindows.count(hwnd) && !g_overriddenWindows.count(hwnd) &&
+            !g_suppressedArrivalFrames.count(hwnd)) {
+            WindowFacts frameFacts;
+            const wchar_t* ignored = L"unknown";
+            WCHAR className[128]{};
+            if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"ApplicationFrameWindow") == 0 &&
+                ResolveWindowFacts(hwnd, frameFacts, &ignored) &&
+                IsApplicationFrame(frameFacts)) {
+                const ULONGLONG now = GetTickCount64();
+                for (auto it = g_cloakedAppFrames.begin();
+                     it != g_cloakedAppFrames.end();) {
+                    if (now - it->second.started > kHostedFrameArrivalMs) {
+                        g_expiredAppFrames.insert(it->first);
+                        it = g_cloakedAppFrames.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+                DWORD pid = 0;
+                DWORD tid = GetWindowThreadProcessId(hwnd, &pid);
+                if (pid && tid && g_cloakedAppFrames.size() < 128) {
+                    g_expiredAppFrames.erase(hwnd);
+                    auto inserted = g_cloakedAppFrames.emplace(hwnd, CloakedFrame{now, pid, tid});
+                    const bool installed = StartArrivalHooks();
+                    // The frame may have uncloaked before the hook was installed.
+                    if ((inserted.second || installed) &&
+                        PassesWindowFilters(hwnd, &ignored, g_allowOwnedRules) &&
+                        CloakedFrameStillMatches(hwnd, inserted.first->second)) {
+                        EvaluateWindow(hwnd, /*forced=*/false, L"hosted-uncloaked");
+                    }
+                }
+            }
+        }
         if (g_diagnosticsLog) {
             JournalFilterSkip(hwnd, reason);
         }
@@ -3257,16 +3514,31 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
         return;
     }
 
+    if ((wcscmp(source, L"hosted-uncloaked") == 0 ||
+         wcscmp(source, L"hosted-child-shown") == 0 ||
+         wcscmp(source, L"hosted-arrival") == 0) &&
+        !IsApplicationFrame(facts)) {
+        g_cloakedAppFrames.erase(hwnd);
+        g_pendingAppFrames.erase(hwnd);
+        return;
+    }
+    g_cloakedAppFrames.erase(hwnd);
     if (g_rules.empty()) {
         return;
     }
 
+    std::wstring hostedPath;
+    std::wstring hostedName;
+    ResolveHostedApplication(hwnd, facts, hostedPath, hostedName);
+    const bool isOwned = GetWindow(hwnd, GW_OWNER) != nullptr;
     MatchOutcome outcome = FindFirstMatchingRule(
         g_rules, g_compiledRules, facts.exePath, facts.exeName,
-        facts.windowClass, facts.title);
+        facts.windowClass, facts.title, isOwned, hostedPath, hostedName);
 
     if (outcome.matched) {
-        JournalRuleHit(outcome.ruleIndex, outcome, facts.exeName);
+        g_pendingAppFrames.erase(hwnd);
+        g_expiredAppFrames.erase(hwnd);
+        JournalRuleHit(outcome.ruleIndex, outcome, facts.exeName, hostedName);
         g_governedWindows.insert(hwnd);
         if (IsIconic(hwnd)) {
             g_deferredWindows.insert(hwnd);
@@ -3278,6 +3550,15 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
         return;
     }
 
+    bool recheckArrival = false;
+    if (IsApplicationFrame(facts) && NeedsFrameArrivalRetry() &&
+        (!forced || wcscmp(source, L"reapply") == 0)) {
+        const bool inserted = !g_pendingAppFrames.count(hwnd);
+        g_expiredAppFrames.erase(hwnd);
+        g_pendingAppFrames[hwnd] = GetTickCount64();
+        const bool installed = StartArrivalHooks();
+        recheckArrival = inserted || installed;
+    }
     JournalNoMatch(facts.exeName, facts.title);
 
     // A rule that no longer matches this window is a rule that no longer asks
@@ -3297,6 +3578,59 @@ static void EvaluateWindow(HWND hwnd, bool forced, PCWSTR source) {
     // its only chance.
     if (!facts.title.empty()) {
         g_evaluatedWindows.insert(hwnd);
+    }
+    // Check once after installing: a name/child event may have preceded the hook.
+    if (recheckArrival && g_pendingAppFrames.count(hwnd)) {
+        EvaluateWindow(hwnd, /*forced=*/true, L"hosted-arrival");
+    }
+}
+
+// Only the event thread calls this. Copy handles before evaluation, which can
+// remove entries while handling the recheck.
+static void ProcessArrivalTick() {
+    const ULONGLONG now = GetTickCount64();
+    for (auto it = g_pendingAppFrames.begin(); it != g_pendingAppFrames.end();) {
+        if (now - it->second > kHostedFrameArrivalMs) {
+            g_expiredAppFrames.insert(it->first);
+            it = g_pendingAppFrames.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = g_cloakedAppFrames.begin(); it != g_cloakedAppFrames.end();) {
+        if (now - it->second.started > kHostedFrameArrivalMs) {
+            g_expiredAppFrames.insert(it->first);
+            it = g_cloakedAppFrames.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (g_pendingAppFrames.empty() && g_cloakedAppFrames.empty()) {
+        StopArrivalHooks();
+        return;
+    }
+    // If a hook failed earlier, retry it and close the new installation gap.
+    if (StartArrivalHooks()) {
+        std::vector<HWND> pending;
+        for (const auto& entry : g_pendingAppFrames) pending.push_back(entry.first);
+        for (HWND hwnd : pending) {
+            if (g_pendingAppFrames.count(hwnd) && !g_overriddenWindows.count(hwnd) &&
+                !g_governedWindows.count(hwnd)) {
+                EvaluateWindow(hwnd, /*forced=*/true, L"hosted-arrival");
+            }
+        }
+        std::vector<HWND> cloaked;
+        for (const auto& entry : g_cloakedAppFrames) cloaked.push_back(entry.first);
+        for (HWND hwnd : cloaked) {
+            auto it = g_cloakedAppFrames.find(hwnd);
+            if (it != g_cloakedAppFrames.end() && !g_overriddenWindows.count(hwnd) &&
+                !g_governedWindows.count(hwnd) && CloakedFrameStillMatches(hwnd, it->second)) {
+                const wchar_t* reason = L"unknown";
+                if (PassesWindowFilters(hwnd, &reason, g_allowOwnedRules)) {
+                    EvaluateWindow(hwnd, /*forced=*/false, L"hosted-uncloaked");
+                }
+            }
+        }
     }
 }
 
@@ -3390,6 +3724,13 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
                                   HWND hwnd, LONG idObject, LONG idChild,
                                   DWORD /*eventThread*/,
                                   DWORD /*eventTime*/) {
+    // If creating the timer failed, retry on the next event. Until then the
+    // hooks stay installed rather than losing a pending frame.
+    if (event != EVENT_OBJECT_DESTROY && event != EVENT_SYSTEM_MOVESIZEEND &&
+        !g_arrivalTimer &&
+        (!g_pendingAppFrames.empty() || !g_cloakedAppFrames.empty())) {
+        ProcessArrivalTick();
+    }
     // Foreground changes first, and before the window-object filter below: the
     // event arrives for the new foreground window, but the window this path
     // cares about is read from GetForegroundWindow, so nothing here depends on
@@ -3406,6 +3747,10 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
     }
 
     if (event == EVENT_OBJECT_DESTROY) {
+        g_pendingAppFrames.erase(hwnd);
+        g_cloakedAppFrames.erase(hwnd);
+        g_expiredAppFrames.erase(hwnd);
+        g_suppressedArrivalFrames.erase(hwnd);
         g_evaluatedWindows.erase(hwnd);
         g_pendingApplies.erase(hwnd);
         g_overriddenWindows.erase(hwnd);
@@ -3431,6 +3776,13 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
     }
 
     if (event == EVENT_SYSTEM_MOVESIZEEND) {
+        // An unresolved frame is also left where the user put it.
+        const bool wasPending = g_pendingAppFrames.erase(hwnd) != 0;
+        const bool wasCloaked = g_cloakedAppFrames.erase(hwnd) != 0;
+        const bool wasExpired = g_expiredAppFrames.erase(hwnd) != 0;
+        if (wasPending || wasCloaked || wasExpired) {
+            g_suppressedArrivalFrames.insert(hwnd);
+        }
         // The user has just placed this window by hand. Their intent outranks the
         // rule for the rest of the session -- the project's first principle, and
         // the same override the geometry-memory mod applies.
@@ -3450,7 +3802,66 @@ static void CALLBACK WinEventProc(HWINEVENTHOOK /*hook*/, DWORD event,
         return;
     }
 
-    EvaluateWindow(hwnd, /*forced=*/false, L"window-event");
+    // A frame can be shown and named while still cloaked. Only revisit a
+    // recently observed rejected host, not every window on a desktop switch.
+    if (event == EVENT_OBJECT_UNCLOAKED) {
+        auto seen = g_cloakedAppFrames.find(hwnd);
+        if (seen != g_cloakedAppFrames.end()) {
+            if (GetTickCount64() - seen->second.started > kHostedFrameArrivalMs ||
+                !CloakedFrameStillMatches(hwnd, seen->second) ||
+                g_governedWindows.count(hwnd) || g_overriddenWindows.count(hwnd)) {
+                g_cloakedAppFrames.erase(seen);
+            } else {
+                EvaluateWindow(hwnd, /*forced=*/false, L"hosted-uncloaked");
+            }
+            return;
+        }
+    }
+
+    // A hosted app can attach its CoreWindow after the frame was evaluated, or
+    // reveal an already-shown child by uncloaking it. Only retry unresolved frames.
+    HWND frame = nullptr;
+    if (event == EVENT_OBJECT_NAMECHANGE) {
+        frame = hwnd;
+    } else if (event == EVENT_OBJECT_SHOW ||
+               (event == EVENT_OBJECT_UNCLOAKED && !g_pendingAppFrames.empty())) {
+        WCHAR cls[128]{};
+        if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) &&
+            _wcsicmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
+            HWND root = GetAncestor(hwnd, GA_ROOT);
+            if (root && root != hwnd) frame = root;
+        }
+    }
+    if (frame) {
+        auto pending = g_pendingAppFrames.find(frame);
+        if (pending != g_pendingAppFrames.end()) {
+            if (GetTickCount64() - pending->second > kHostedFrameArrivalMs ||
+                g_governedWindows.count(frame) ||
+                g_overriddenWindows.count(frame)) {
+                g_pendingAppFrames.erase(pending);
+            } else {
+                // EvaluateWindow checks frame identity using the facts it
+                // resolves, instead of opening the same process twice.
+                EvaluateWindow(frame, /*forced=*/true, L"hosted-arrival");
+            }
+        }
+        if (event == EVENT_OBJECT_SHOW && frame != hwnd &&
+            g_cloakedAppFrames.count(frame) && !g_governedWindows.count(frame) &&
+            !g_overriddenWindows.count(frame)) {
+            auto seen = g_cloakedAppFrames.find(frame);
+            if (GetTickCount64() - seen->second.started <= kHostedFrameArrivalMs &&
+                CloakedFrameStillMatches(frame, seen->second)) {
+                EvaluateWindow(frame, /*forced=*/false, L"hosted-child-shown");
+            } else {
+                g_cloakedAppFrames.erase(seen);
+            }
+        }
+        if (event == EVENT_OBJECT_NAMECHANGE || frame != hwnd) return;
+    }
+
+    if (event != EVENT_OBJECT_NAMECHANGE && event != EVENT_OBJECT_UNCLOAKED) {
+        EvaluateWindow(hwnd, /*forced=*/false, L"window-event");
+    }
 }
 
 // --- Event thread -----------------------------------------------------------
@@ -3535,6 +3946,7 @@ static void UninstallHooks() {
         UnhookWinEvent(g_hookForeground);
         g_hookForeground = nullptr;
     }
+    StopArrivalHooks();
 }
 
 // Event-thread only. Re-reads everything the mod needs from the settings.
@@ -3559,6 +3971,11 @@ static void ApplySettingsOnEventThread(bool initial) {
     // last rule returns early, and a retry left over from that rule would still
     // put the window back at its old target up to 800 ms later.
     g_pendingApplies.clear();
+    g_pendingAppFrames.clear();
+    g_cloakedAppFrames.clear();
+    g_expiredAppFrames.clear();
+    g_suppressedArrivalFrames.clear();
+    StopArrivalHooks();
 
     LoadRules();
     JournalRulesLoaded();
@@ -3607,6 +4024,10 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
                 ProcessSettleTick();
                 return 0;
             }
+            if (wParam == kArrivalTimerId) {
+                ProcessArrivalTick();
+                return 0;
+            }
             break;
 
         case WM_DISPLAYCHANGE:
@@ -3620,6 +4041,11 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             // different monitor or to none: dropping it is the only answer that
             // cannot put a window somewhere nobody asked for.
             g_pendingApplies.clear();
+            g_pendingAppFrames.clear();
+            g_cloakedAppFrames.clear();
+            g_expiredAppFrames.clear();
+            g_suppressedArrivalFrames.clear();
+            StopArrivalHooks();
             AppendDiagnosticsJournal(
                 L"DISPLAYCHANGE monitors=" + std::to_wstring(g_monitors.size()));
             return 0;
@@ -3636,6 +4062,10 @@ static LRESULT CALLBACK MessageWndProc(HWND hwnd, UINT message, WPARAM wParam,
             g_compiledRules.clear();
             g_ruleActions.clear();
             g_evaluatedWindows.clear();
+            g_pendingAppFrames.clear();
+            g_cloakedAppFrames.clear();
+            g_expiredAppFrames.clear();
+            g_suppressedArrivalFrames.clear();
             g_pendingApplies.clear();
             g_overriddenWindows.clear();
             g_unwritableWindows.clear();

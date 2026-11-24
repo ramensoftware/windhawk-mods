@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              musicians-toolkit
 // @name            Musician's Toolkit
-// @description     An all-in-one toolkit flyout for musicians, containing a chord library, a metronome, a tuner, a tap tempo calculator, a strumming pattern builder, an interactive circle of fifths and a timed note trainer for guitar, ukulele and piano.
-// @version         1.0.0
+// @description     An all-in-one toolkit flyout for musicians: a chord library, a metronome, a tuner, a tap tempo calculator, a strumming pattern builder, the circle of fifths and a timed note trainer for guitar, ukulele and piano.
+// @version         1.1.0
 // @author          DpakB
 // @homepage        https://dpakb.com
 // @github          https://github.com/DeepakBalaraman
@@ -15,18 +15,21 @@
 
 // ==WindhawkModReadme==
 /*
+
 # Musician's Toolkit
 
-![Sample Screenshot](https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot.png)
+![Sample Screenshot in action](https://raw.githubusercontent.com/DeepakBalaraman/musicians-toolkit/master/assets/screenshot.png)
 
-A chord library, a tuner, a metronome, a strumming trainer, a circle of
-fifths, a tap tempo and a note drill, for guitar, ukulele and piano. All of
-it lives in one small panel that stays on top of your other windows, so you
-can keep it beside your DAW, tab app or video lesson.
+A chord library, a tuner, a metronome, a strumming trainer, a circle of fifths,
+a tap tempo and a note drill, for guitar, ukulele and piano. All of it lives in
+one small panel that stays on top of your other windows, so you can keep it
+beside your DAW, tab app or video lesson.
 
 Press **Win+Y** to open it and pick a tool from the menu in the top left.
 **Ctrl+Tab** cycles through them. Close it with the **x**, with **Esc**, or
 with the shortcut again (the shortcut itself is under Settings > Shortcut).
+The icon it puts in the notification area is the other way in: click it to open
+or close the panel, right-click it to jump straight to a tool.
 If you would rather it close whenever you click elsewhere, turn that on under
 Settings > Placement.
 
@@ -41,7 +44,11 @@ letter, and the one you settle on is drawn underneath.
 - **Fingerings** - the arrow keys, or the slider under the diagram, step
   through the other ways to play the same chord.
 - **Hear it** - the speaker on the card plays the chord, strummed on an
-  acoustic guitar or played on a piano.
+  acoustic guitar or played on a piano. **Tab** asks for the same chord from the
+  keyboard, and **Space** or **Enter** do too, so one hand can stay on the
+  arrows while the other types.
+- **Instrument** - **Shift+Tab** steps back through guitar, piano and
+  ukulele, the same key every tool uses.
 
 ## Tap Tempo
 
@@ -153,13 +160,20 @@ listens and you play it before the clock runs out.
 
 - **Win+Y** - open or close the panel.
 - **Ctrl+Tab** - switch tools.
-- **Tab** - switch instruments.
+- **Tab** - play the chord on the card, step through the pattern list, or step
+  forward through the instruments in the Circle and the note drill.
+- **Shift+Tab** - step back through the instruments, in every tool that has
+  more than one.
+- **Space / Enter** - play the chord on the card as well; Space also taps the
+  tempo and starts the trainer.
 - **Up / Down** - move through search results, step the metronome, hop
   between the rings of the circle.
 - **Left / Right** - step through fingerings, halve or double a tap tempo,
   change the metronome's meter.
 - **D U X M R, A G T, C** - lay strokes in the strumming grid, add accents,
   ghosts and ties, clear the bar.
+- **Tray icon** - a click opens or closes the panel, a right click names every
+  tool so one can be opened in a single step.
 - **Esc** - clear the search, or close the panel when the search is empty.
 
 ## Settings
@@ -167,8 +181,8 @@ listens and you play it before the clock runs out.
 - **Startup** - the tool and instrument the panel opens with.
 - **Appearance** - follow Windows or fix light or dark, pick an accent
   colour, set the opacity.
-- **Placement** - corner, monitor, fine offsets, and whether the panel closes
-  when it loses focus.
+- **Placement** - corner, monitor, fine offsets, whether the panel closes
+  when it loses focus, and whether it keeps a tray icon.
 - **Shortcut** - the key and modifiers that open the panel.
 - **Metronome** - volume, background playback, default meter and subdivision.
 - **Chords** - hide the finger numbers.
@@ -180,7 +194,12 @@ listens and you play it before the clock runs out.
   its scale.
 - **Note trainer** - seconds per note, chromatic or naturals.
 
-The chord library comes from [chords-db](https://github.com/tombatossals/chords-db)
+## GitHub Repo
+The source code of this mod can be found in this [GitHub Repo](https://github.com/DeepakBalaraman/musicians-toolkit).
+
+## Credits
+
+- The chord library comes from [chords-db](https://github.com/tombatossals/chords-db)
 by David Rubert (MIT). It is packed into the mod, so there is nothing to
 download and no internet connection needed.
 */
@@ -273,6 +292,9 @@ download and no internet connection needed.
   - CloseOnFocusLoss: false
     $name: Close when the panel loses focus
     $description: "Close the panel when you click somewhere else. Off by default, so the panel stays on top while you play; the x button or the shortcut closes it."
+  - ShowTrayIcon: true
+    $name: Show a tray icon
+    $description: "Keep an icon in the notification area while the mod is loaded: a click opens or closes the panel, and a right click jumps straight to a tool."
 - Shortcut:
   - HotkeyKey: Y
     $name: Shortcut key
@@ -395,6 +417,7 @@ download and no internet connection needed.
 
 #include <mmreg.h>
 #include <mmsystem.h>
+#include <shellapi.h>
 
 #include <algorithm>
 #include <atomic>
@@ -2085,8 +2108,11 @@ struct Settings {
     // Off by default, so the panel stays up while you play. The x button and
     // the shortcut close it; only turn this on for the old click-away habit.
     bool closeOnFocusLoss = false;
+    // On by default: the tray icon is the way back to the panel when the
+    // shortcut is forgotten or has been taken by another app.
+    bool showTrayIcon = true;
     // The order matches the Tool enum: chords, tempo, metronome, tuner,
-    // strumming, circle of fifths.
+    // strumming, circle of fifths, note trainer.
     int defaultTool = 0;
     bool showFingerings = false;
     int defaultInstrument = 0;
@@ -2222,7 +2248,7 @@ bool ParseHotkeyKey(const std::wstring& raw, WORD& vk, std::wstring& label) {
 Settings LoadSettings() {
     Settings s;
     const std::wstring startTool = GetStringSetting(L"Startup.DefaultTool");
-    s.defaultTool = startTool == L"tempo"   ? 1
+    s.defaultTool = startTool == L"tempo"     ? 1
                     : startTool == L"metronome" ? 2
                     : startTool == L"tuner"     ? 3
                     : startTool == L"strum"     ? 4
@@ -2257,6 +2283,11 @@ Settings LoadSettings() {
     s.closeOnFocusLoss =
         !closeOnFocusLoss.empty() &&
         Wh_GetIntSetting(L"Placement.CloseOnFocusLoss") != 0;
+    // On unless it was turned off, so a settings file written before the option
+    // existed still gets the icon.
+    const std::wstring showTray = GetStringSetting(L"Placement.ShowTrayIcon");
+    s.showTrayIcon =
+        showTray.empty() ? true : Wh_GetIntSetting(L"Placement.ShowTrayIcon") != 0;
     // Opt out, so numbers stay on even where an older settings file is kept.
     s.showFingerings = Wh_GetIntSetting(L"Chords.HideFingerings") == 0;
     // The setting lives in the Startup group, among the other defaults.
@@ -3895,6 +3926,11 @@ struct CircleState {
 
 CircleState g_circle;
 
+// When the chord card's speaker last sounded, from the pointer or from a key.
+// The ring under it stays lit while this is fresh, so a press is never a
+// silent question.
+double g_chordFlashAt = -1000.0;
+
 // A key badge reports which ring it sits on in the index it hands back: the
 // twelve spokes are the majors outside, and the twelve past them are the
 // relative minors inside the same spokes.
@@ -4759,535 +4795,6 @@ void ToggleFlyout() {
         OpenFlyout();
     }
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// Chord playback
-//
-// Parked until the freeze it caused is understood. Bringing it back needs the
-// #include <mmreg.h> above as well.
-//
-// The mod bundles no audio libraries, so the handful of WASAPI interfaces it
-// needs are declared here. A render thread owns the device, synthesises the
-// requested chord at the device's own sample rate and feeds it in shared mode:
-// a plucked string model for guitar and ukulele, a struck one for the piano.
-
-#if 0
-
-struct AudioUnknown {
-    virtual HRESULT QueryInterface(const GUID& iid, void** out) = 0;
-    virtual ULONG AddRef() = 0;
-    virtual ULONG Release() = 0;
-};
-
-struct AudioDevice {
-    virtual HRESULT Activate(const GUID& iid, DWORD context, void* params,
-                             void** out) = 0;
-};
-
-struct AudioDeviceEnumerator {
-    virtual HRESULT EnumAudioEndpoints(int flow, DWORD mask, void** out) = 0;
-    virtual HRESULT GetDefaultAudioEndpoint(int flow, int role, AudioDevice** out) = 0;
-};
-
-// Every method has to be listed, in order, for the virtual table to line up.
-struct AudioClient {
-    virtual HRESULT Initialize(int mode, DWORD flags, LONGLONG duration,
-                               LONGLONG periodicity, const WAVEFORMATEX* format,
-                               const GUID* session) = 0;
-    virtual HRESULT GetBufferSize(UINT32* frames) = 0;
-    virtual HRESULT GetStreamLatency(LONGLONG* latency) = 0;
-    virtual HRESULT GetCurrentPadding(UINT32* padding) = 0;
-    virtual HRESULT IsFormatSupported(int mode, const WAVEFORMATEX* format,
-                                      WAVEFORMATEX** closest) = 0;
-    virtual HRESULT GetMixFormat(WAVEFORMATEX** format) = 0;
-    virtual HRESULT GetDevicePeriod(LONGLONG* minimum, LONGLONG* alignment) = 0;
-    virtual HRESULT Start() = 0;
-    virtual HRESULT Stop() = 0;
-    virtual HRESULT Reset() = 0;
-    virtual HRESULT SetEventHandle(HANDLE event) = 0;
-    virtual HRESULT GetService(const GUID& iid, void** out) = 0;
-};
-
-struct AudioRenderClient {
-    virtual HRESULT GetBuffer(UINT32 frames, BYTE** data) = 0;
-    virtual HRESULT ReleaseBuffer(UINT32 frames, DWORD flags) = 0;
-};
-
-const GUID kMmDeviceEnumeratorClsid = {0xBCDE0395, 0xE52F, 0x467C,
-                                       {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
-const GUID kMmDeviceEnumeratorIid = {0xA95664D2, 0x9614, 0x4F35,
-                                     {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
-const GUID kAudioClientIid = {0x1CB9AD4C, 0xDBFA, 0x4C32,
-                              {0xB1, 0x78, 0xC2, 0xF5, 0x68, 0xA7, 0x03, 0xB2}};
-const GUID kAudioRenderClientIid = {0xF294ACFC, 0x3146, 0x4483,
-                                    {0xA7, 0xBF, 0xAD, 0xDC, 0xA7, 0xC2, 0x60, 0xE2}};
-
-struct AudioRequest {
-    int generation = 0;
-    bool plucked = true;
-    float damping = 0.9975f;  // How long a plucked string rings.
-    float arpeggio = 0.0f;    // Seconds between notes; 0 sounds them together.
-    int noteCount = 0;
-    int notes[kMaxNotes] = {};
-};
-
-struct AudioOutput {
-    AudioClient* client = nullptr;
-    AudioRenderClient* render = nullptr;
-    WAVEFORMATEX* format = nullptr;
-    UINT32 frames = 0;
-    int channels = 0;
-    int bits = 0;
-    bool floating = false;
-};
-
-CRITICAL_SECTION g_audioLock;
-bool g_audioLockReady = false;
-AudioRequest g_audioRequest;
-HANDLE g_audioWake = nullptr;
-HANDLE g_audioStop = nullptr;
-HANDLE g_audioThread = nullptr;
-double g_audioBusyUntil = 0.0;
-// Asking for the device ahead of time, and handing it back once the panel is
-// gone, keeps an idle stream from holding the audio engine awake all day.
-bool g_audioWarm = false;
-bool g_audioRelease = false;
-
-inline void ReleaseUnknown(void* object) {
-    if (object) {
-        static_cast<AudioUnknown*>(object)->Release();
-    }
-}
-
-inline float NoteFrequency(int midi) {
-    return 440.0f * powf(2.0f, (static_cast<float>(midi) - 69.0f) / 12.0f);
-}
-
-inline float AudioNoise(uint32_t& state) {
-    state ^= state << 13;
-    state ^= state >> 17;
-    state ^= state << 5;
-    return static_cast<float>(state) / 2147483648.0f - 1.0f;
-}
-
-// Karplus-Strong: noise recirculated through a two tap average, which is close
-// enough to a plucked string for a handful of lines.
-void MixPluck(std::vector<float>& out,
-              int channels,
-              int rate,
-              float frequency,
-              double start,
-              float damping,
-              float gain) {
-    const int delay =
-        std::max(2, static_cast<int>(static_cast<float>(rate) / frequency));
-    std::vector<float> line(static_cast<size_t>(delay));
-    uint32_t seed = 0x9E3779B9u ^ static_cast<uint32_t>(frequency * 11.0f);
-    float previous = 0.0f;
-    for (int i = 0; i < delay; i++) {
-        previous = 0.5f * (previous + AudioNoise(seed));
-        line[static_cast<size_t>(i)] = previous;
-    }
-
-    const size_t total = out.size() / static_cast<size_t>(channels);
-    const size_t first = static_cast<size_t>(start * rate);
-    if (first >= total) {
-        return;
-    }
-    size_t index = 0;
-    for (size_t n = first; n < total; n++) {
-        const size_t next = (index + 1) % static_cast<size_t>(delay);
-        const float value = 0.5f * (line[index] + line[next]) * damping;
-        line[index] = value;
-        index = next;
-        float* frame = &out[n * static_cast<size_t>(channels)];
-        frame[0] += value * gain;
-        if (channels > 1) {
-            frame[1] += value * gain * 0.94f;
-        }
-    }
-}
-
-// A struck string is a stack of slightly inharmonic partials that fade at their
-// own pace, which reads as a piano rather than a plain tone.
-void MixStrike(std::vector<float>& out,
-               int channels,
-               int rate,
-               float frequency,
-               double start,
-               float gain) {
-    const size_t total = out.size() / static_cast<size_t>(channels);
-    const size_t first = static_cast<size_t>(start * rate);
-    if (first >= total) {
-        return;
-    }
-    for (int partial = 1; partial <= 8; partial++) {
-        const float order = static_cast<float>(partial);
-        const float partialFrequency =
-            frequency * order * sqrtf(1.0f + 0.0004f * order * order);
-        if (partialFrequency > static_cast<float>(rate) * 0.45f) {
-            break;
-        }
-        const float amplitude = gain / powf(order, 1.35f);
-        const float step = 6.2831853f * partialFrequency / static_cast<float>(rate);
-        const float fall = 1.7f / (0.55f + order * 0.45f);
-        const float decay = expf(-1.0f / (fall * static_cast<float>(rate)));
-        float envelope = amplitude;
-        float phase = order * 0.9f;
-        for (size_t n = first; n < total; n++) {
-            phase += step;
-            const float attack = (n - first) < 128 ? static_cast<float>(n - first) / 128.0f : 1.0f;
-            const float value = sinf(phase) * envelope * attack;
-            envelope *= decay;
-            float* frame = &out[n * static_cast<size_t>(channels)];
-            frame[0] += value;
-            if (channels > 1) {
-                frame[1] += value * 0.96f;
-            }
-        }
-    }
-}
-
-void RenderChord(std::vector<float>& out,
-                 int channels,
-                 int rate,
-                 const AudioRequest& request) {
-    const double baseLength = request.plucked ? 3.2 : 2.8;
-    // A scale asks for a real arpeggio: each note starts well after the last,
-    // so it rises where a chord's two-centimetre spread would blur together.
-    const bool spaced = request.arpeggio > 0.0f && request.noteCount > 1;
-    const double spread =
-        spaced ? (request.noteCount - 1) * static_cast<double>(request.arpeggio)
-               : 0.0;
-    const double length = baseLength + spread;
-    out.assign(static_cast<size_t>(length * rate) *
-                   static_cast<size_t>(channels),
-               0.0f);
-    for (int i = 0; i < request.noteCount; i++) {
-        const float frequency = NoteFrequency(request.notes[i]);
-        const double start =
-            spaced ? i * static_cast<double>(request.arpeggio)
-                   : i * (request.plucked ? 0.022 : 0.007);
-        if (request.plucked) {
-            MixPluck(out, channels, rate, frequency, start, request.damping,
-                     0.20f);
-        } else {
-            MixStrike(out, channels, rate, frequency, start, 0.09f);
-        }
-    }
-    // Soft clipping keeps a dense chord from crackling and leaves headroom.
-    for (size_t i = 0; i < out.size(); i++) {
-        out[i] = tanhf(out[i] * 1.35f) * 0.82f;
-    }
-    // The tail fades out so the buffer never ends on a step.
-    const size_t totalFrames = out.size() / static_cast<size_t>(channels);
-    const size_t fade =
-        std::min(totalFrames, static_cast<size_t>(0.18 * static_cast<double>(rate)));
-    for (size_t i = 0; i < fade; i++) {
-        const float tail = static_cast<float>(i) / static_cast<float>(fade);
-        float* frame = &out[(totalFrames - fade + i) * static_cast<size_t>(channels)];
-        for (int c = 0; c < channels; c++) {
-            frame[c] *= tail;
-        }
-    }
-}
-
-void FillAudio(BYTE* data,
-               UINT32 frames,
-               const std::vector<float>& samples,
-               size_t& playhead,
-               const AudioOutput& output) {
-    const size_t channels = static_cast<size_t>(output.channels);
-    const size_t total = samples.size() / channels;
-    for (UINT32 i = 0; i < frames; i++, playhead++) {
-        float left = 0.0f;
-        float right = 0.0f;
-        if (playhead < total) {
-            const float* source = &samples[playhead * channels];
-            left = source[0];
-            right = channels > 1 ? source[1] : left;
-        }
-        const size_t frame = static_cast<size_t>(i) * channels;
-        if (output.bits == 16) {
-            auto* target = reinterpret_cast<int16_t*>(data) + frame;
-            target[0] = static_cast<int16_t>(left * 32767.0f);
-            for (size_t c = 1; c < channels; c++) {
-                target[c] = static_cast<int16_t>(right * 32767.0f);
-            }
-        } else if (output.floating) {
-            auto* target = reinterpret_cast<float*>(data) + frame;
-            target[0] = left;
-            for (size_t c = 1; c < channels; c++) {
-                target[c] = right;
-            }
-        } else {
-            auto* target = reinterpret_cast<int32_t*>(data) + frame;
-            target[0] = static_cast<int32_t>(left * 2147483000.0f);
-            for (size_t c = 1; c < channels; c++) {
-                target[c] = static_cast<int32_t>(right * 2147483000.0f);
-            }
-        }
-    }
-}
-
-void CloseAudio(AudioOutput& output) {
-    ReleaseUnknown(output.render);
-    ReleaseUnknown(output.client);
-    if (output.format) {
-        CoTaskMemFree(output.format);
-    }
-    output = AudioOutput();
-}
-
-bool OpenAudio(AudioOutput& output) {
-    AudioDeviceEnumerator* enumerator = nullptr;
-    if (FAILED(CoCreateInstance(kMmDeviceEnumeratorClsid, nullptr, CLSCTX_ALL,
-                                kMmDeviceEnumeratorIid,
-                                reinterpret_cast<void**>(&enumerator))) ||
-        !enumerator) {
-        Wh_Log(L"Audio: no device enumerator");
-        return false;
-    }
-    AudioDevice* device = nullptr;
-    const HRESULT deviceResult = enumerator->GetDefaultAudioEndpoint(
-        0 /* eRender */, 0 /* eConsole */, &device);
-    ReleaseUnknown(enumerator);
-    if (FAILED(deviceResult) || !device) {
-        Wh_Log(L"Audio: no default output device");
-        return false;
-    }
-    AudioClient* client = nullptr;
-    const HRESULT activateResult = device->Activate(
-        kAudioClientIid, CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&client));
-    ReleaseUnknown(device);
-    if (FAILED(activateResult) || !client) {
-        Wh_Log(L"Audio: no audio client");
-        return false;
-    }
-
-    WAVEFORMATEX* format = nullptr;
-    if (FAILED(client->GetMixFormat(&format)) || !format) {
-        Wh_Log(L"Audio: no mix format");
-        ReleaseUnknown(client);
-        return false;
-    }
-    constexpr int kSharedMode = 0;
-    if (FAILED(client->Initialize(kSharedMode, 0, 0, 0, format, nullptr))) {
-        Wh_Log(L"Audio: shared mode init failed");
-        CoTaskMemFree(format);
-        ReleaseUnknown(client);
-        return false;
-    }
-    AudioRenderClient* render = nullptr;
-    if (FAILED(client->GetService(kAudioRenderClientIid,
-                                  reinterpret_cast<void**>(&render))) ||
-        !render) {
-        Wh_Log(L"Audio: no render client");
-        CoTaskMemFree(format);
-        ReleaseUnknown(client);
-        return false;
-    }
-
-    UINT32 frames = 0;
-    client->GetBufferSize(&frames);
-    if (frames == 0) {
-        Wh_Log(L"Audio: empty buffer");
-        ReleaseUnknown(render);
-        CoTaskMemFree(format);
-        ReleaseUnknown(client);
-        return false;
-    }
-
-    bool floating = format->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
-    if (format->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
-        const auto* extensible =
-            reinterpret_cast<const WAVEFORMATEXTENSIBLE*>(format);
-        floating = extensible->SubFormat.Data1 == 3;  // 3 is IEEE float.
-    }
-
-    output.client = client;
-    output.render = render;
-    output.format = format;
-    output.frames = frames;
-    output.channels = format->nChannels > 0 ? format->nChannels : 2;
-    output.bits = format->wBitsPerSample;
-    output.floating = floating;
-    Wh_Log(L"Audio: %u Hz, %d channels, %d bits, float %d",
-           format->nSamplesPerSec, output.channels, output.bits,
-           floating ? 1 : 0);
-    return true;
-}
-
-DWORD WINAPI AudioThreadProc(void*) {
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
-
-    AudioOutput output;
-    bool opened = OpenAudio(output);
-    std::vector<float> samples;
-    size_t playhead = 0;
-    int rendered = 0;
-    bool running = false;
-
-    while (WaitForSingleObject(g_audioStop, 0) != WAIT_OBJECT_0) {
-        if (!opened) {
-            bool wanted = g_audioWarm;
-            g_audioWarm = false;
-            EnterCriticalSection(&g_audioLock);
-            if (g_audioRequest.generation != rendered) {
-                wanted = true;
-            }
-            LeaveCriticalSection(&g_audioLock);
-            if (wanted) {
-                opened = OpenAudio(output);
-                if (opened) {
-                    continue;
-                }
-            }
-            WaitForSingleObject(g_audioWake, 500);
-            continue;
-        }
-        g_audioWarm = false;  // The device is up, so nothing is pending.
-
-        AudioRequest request;
-        bool pending = false;
-        EnterCriticalSection(&g_audioLock);
-        if (g_audioRequest.generation != rendered) {
-            request = g_audioRequest;
-            pending = true;
-        }
-        LeaveCriticalSection(&g_audioLock);
-
-        if (pending) {
-            if (running) {
-                output.client->Stop();
-                running = false;
-            }
-            RenderChord(samples, output.channels,
-                        static_cast<int>(output.format->nSamplesPerSec), request);
-            playhead = 0;
-            rendered = request.generation;
-        }
-
-        if (playhead >= samples.size() / static_cast<size_t>(output.channels)) {
-            if (running) {
-                output.client->Stop();
-                running = false;
-            }
-            if (g_audioRelease) {
-                g_audioRelease = false;
-                CloseAudio(output);
-                opened = false;
-                samples.clear();
-                continue;
-            }
-            WaitForSingleObject(g_audioWake, 200);
-            continue;
-        }
-        if (!running) {
-            if (FAILED(output.client->Start())) {
-                Wh_Log(L"Audio: start failed");
-                CloseAudio(output);
-                opened = false;
-                continue;
-            }
-            running = true;
-        }
-
-        UINT32 padding = 0;
-        if (FAILED(output.client->GetCurrentPadding(&padding))) {
-            Sleep(5);
-            continue;
-        }
-        const UINT32 available =
-            output.frames > padding ? output.frames - padding : 0;
-        if (available == 0) {
-            Sleep(2);
-            continue;
-        }
-        BYTE* data = nullptr;
-        if (FAILED(output.render->GetBuffer(available, &data))) {
-            Sleep(2);
-            continue;
-        }
-        FillAudio(data, available, samples, playhead, output);
-        output.render->ReleaseBuffer(available, 0);
-    }
-
-    if (running) {
-        output.client->Stop();
-    }
-    CloseAudio(output);
-    CoUninitialize();
-    return 0;
-}
-
-void AudioPrepare() {
-    if (g_audioThread) {
-        g_audioRelease = false;
-        g_audioWarm = true;
-        if (g_audioWake) {
-            SetEvent(g_audioWake);
-        }
-        return;
-    }
-    InitializeCriticalSection(&g_audioLock);
-    g_audioLockReady = true;
-    g_audioWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    g_audioStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_audioThread = CreateThread(nullptr, 0, AudioThreadProc, nullptr, 0, nullptr);
-}
-
-void AudioRelease() {
-    if (!g_audioThread) {
-        return;
-    }
-    g_audioRelease = true;
-    if (g_audioWake) {
-        SetEvent(g_audioWake);
-    }
-}
-
-void AudioPlay(const AudioRequest& request) {
-    AudioPrepare();
-    if (!g_audioLockReady || !g_audioWake) {
-        return;
-    }
-    EnterCriticalSection(&g_audioLock);
-    g_audioRequest = request;
-    g_audioRequest.generation++;
-    LeaveCriticalSection(&g_audioLock);
-    SetEvent(g_audioWake);
-    g_audioBusyUntil = NowMs() + 2600.0;
-    if (g_panel.Hwnd()) {
-        SetTimer(g_panel.Hwnd(), kAudioTimer, 250, nullptr);
-    }
-}
-
-void AudioShutdown() {
-    if (g_audioStop) {
-        SetEvent(g_audioStop);
-    }
-    if (g_audioThread) {
-        WaitForSingleObject(g_audioThread, 2000);
-        CloseHandle(g_audioThread);
-        g_audioThread = nullptr;
-    }
-    if (g_audioWake) {
-        CloseHandle(g_audioWake);
-        g_audioWake = nullptr;
-    }
-    if (g_audioStop) {
-        CloseHandle(g_audioStop);
-        g_audioStop = nullptr;
-    }
-    if (g_audioLockReady) {
-        DeleteCriticalSection(&g_audioLock);
-        g_audioLockReady = false;
-    }
-}
-
-#endif  // Chord playback
 
 ////////////////////////////////////////////////////////////////////////////////
 // Metronome audio
@@ -6615,12 +6122,22 @@ void PaintPlayButton(Surface& s, const Theme& t) {
     const float cx = L(box.left + box.right) * 0.5f;
     const float cy = L(box.top + box.bottom) * 0.5f;
 
+    // A key press lands here too, so the speaker keeps a short accent ring of
+    // its own that fades out on the shared fast timer.
+    const double since = NowMs() - g_chordFlashAt;
+    const float flash = available && since >= 0.0 && since < 180.0
+                            ? 1.0f - static_cast<float>(since) / 180.0f
+                            : 0.0f;
+
     if (hovered) {
         FillCircle(s, cx, cy, S(11.0f),
                    pressed ? WithAlpha(t.text, 0.22f) : t.controlHover);
+    } else if (flash > 0.0f) {
+        FillCircle(s, cx, cy, S(11.0f), WithAlpha(t.accent, 0.28f * flash));
     }
-    const Color color = available ? (hovered ? t.text : t.textMuted)
-                                  : WithAlpha(t.textMuted, 0.35f);
+    const Color color = available
+                            ? (hovered || flash > 0.0f ? t.text : t.textMuted)
+                            : WithAlpha(t.textMuted, 0.35f);
 
     PaintGlyph(s, cx, cy, L'\xE768', S(15.0f), color);
 }
@@ -8992,9 +8509,12 @@ void PaintFooter(Surface& s, const Theme& t) {
 
     std::vector<FooterItem> items;
     if (g_app.tool == kToolChords) {
+        // Tab is the speaker now, so the instrument walk moved to Shift+Tab;
+        // the arrows keep the fingerings, which are the same axis the list of
+        // voicings has always used.
         items = {
-            {L"\x2191\x2193", L"browse"},
-            {L"Tab", L"instrument"},
+            {L"Tab", L"play"},
+            {L"Shift+Tab", L"instrument"},
             {L"\x2190\x2192", L"fingering"},
             {L"Esc", L"close"}
         };
@@ -9683,10 +9203,14 @@ void SetTool(int tool) {
         g_selAnchor = g_caret;
         g_caretStart = NowMs();
     }
-    if (g_app.tool == kToolTuner && g_phase == kPhaseOpen) {
+    // The panel counts as up while it fades in, so a tool picked from the tray
+    // menu, or switched to during the animation, gets its microphone like any
+    // other switch.
+    const bool onScreen = g_phase == kPhaseOpen || g_phase == kPhaseOpening;
+    if (g_app.tool == kToolTuner && onScreen) {
         TunerStart();
     }
-    if (g_app.tool == kToolTrainer && g_phase == kPhaseOpen) {
+    if (g_app.tool == kToolTrainer && onScreen) {
         TrainerEnter();
     }
     Repaint();
@@ -10712,6 +10236,12 @@ void ChordPlaySelected() {
     }
     PlayAcousticClip(voicing->notes, voicing->noteCount, 0.0f,
                      g_app.instrument == kInstrumentPiano);
+    // The pointer and the keyboard both arrive here, so the speaker lights up
+    // for either, and one timer runs the ring out.
+    g_chordFlashAt = NowMs();
+    if (g_panel.Hwnd()) {
+        SetTimer(g_panel.Hwnd(), kFlashTimer, 16, nullptr);
+    }
 }
 
 // Pick a spoke and the ring it is read on. A key outside the twelve wraps, so
@@ -11224,45 +10754,6 @@ void OnMouseMove(HWND hwnd, POINT pt) {
     }
 }
 
-#if 0  // Chord playback, parked with the engine above.
-void PlaySelectedChord() {
-    const Voicing* voicing = SelectedVoicing();
-    if (!voicing) {
-        return;
-    }
-    const auto& info = chorddata::kInstruments[g_app.instrument];
-    AudioRequest request;
-    request.plucked = info.kind == chorddata::kFretted;
-    // A four string neck reads as a ukulele: shorter and brighter than a guitar.
-    request.damping = info.strings > 0 && info.strings <= 4 ? 0.9962f : 0.9975f;
-    if (request.plucked && info.tuning) {
-        // Low string first, so the render thread strums upwards.
-        for (int i = 0; i < voicing->stringCount && request.noteCount < kMaxNotes;
-             i++) {
-            const int fret = voicing->frets[i];
-            if (fret == kMutedFret) {
-                continue;
-            }
-            // An open string is fret zero at the nut, not the base fret.
-            const int absolute = fret == 0 ? 0 : voicing->baseFret + fret - 1;
-            request.notes[request.noteCount++] =
-                info.tuning[i] + absolute;
-        }
-    } else {
-        const int count = std::min(voicing->noteCount, kMaxNotes);
-        for (int i = 0; i < count; i++) {
-            request.notes[i] = voicing->notes[i];
-        }
-        std::sort(request.notes, request.notes + count);
-        request.noteCount = count;
-    }
-    if (request.noteCount == 0) {
-        return;
-    }
-    AudioPlay(request);
-}
-#endif  // PlaySelectedChord
-
 void OnMouseDown(HWND hwnd, POINT pt) {
     const HitResult hit = HitTest(pt);
     if (MenuVisual(g_toolMenu) && hit.id == kHitNone) {
@@ -11694,6 +11185,57 @@ void OnWheel(HWND hwnd, WPARAM wParam, POINT pt) {
     Repaint();
 }
 
+// The chips list the instruments in an order of their own, so the walk follows
+// that order rather than the enum's.
+int StepInstrumentChip(int instrument, int delta) {
+    int step = 0;
+    for (int i = 0; i < kInstrumentChipCount; i++) {
+        if (kInstrumentChipOrder[i] == instrument) {
+            step = i;
+            break;
+        }
+    }
+    return kInstrumentChipOrder[(step + delta + kInstrumentChipCount) %
+                                kInstrumentChipCount];
+}
+
+// Shift+Tab steps back through the instruments, and Tab steps forward where it
+// is not already taken, in every tool that has more than one to offer. Each
+// tool keeps its own idea of which one is showing, so the walk goes through
+// that tool's own setter.
+void CycleInstrument(int delta) {
+    switch (g_app.tool) {
+        case kToolChords:
+            // Tab is the speaker on this card, so Shift+Tab is its only way to
+            // change instrument, and the search box keeps the caret.
+            g_searchFocused = true;
+            SetInstrument(StepInstrumentChip(static_cast<int>(g_app.instrument),
+                                             delta),
+                          true);
+            Repaint();
+            return;
+        case kToolTuner:
+            TunerStepInstrument(delta);
+            return;
+        case kToolStrum:
+            // The strumming card only offers the two fretted voices, so either
+            // direction lands on the other one.
+            StrumSetInstrument(g_strum.instrument == kInstrumentGuitar
+                                   ? kInstrumentUkulele
+                                   : kInstrumentGuitar);
+            return;
+        case kToolCircle:
+            CircleSetInstrument(StepInstrumentChip(g_circle.instrument, delta));
+            return;
+        case kToolTrainer:
+            TrainerSetInstrument(
+                StepInstrumentChip(g_trainer.instrument, delta));
+            return;
+        default:
+            return;  // The metronome and the tap tempo have no instrument.
+    }
+}
+
 void OnKeyDown(WPARAM key) {
     const bool shift = GetKeyState(VK_SHIFT) < 0;
     const bool ctrl = GetKeyState(VK_CONTROL) < 0;
@@ -11744,6 +11286,8 @@ void OnKeyDown(WPARAM key) {
             Repaint();
             return;
         }
+        // The list is modal: the card behind it takes no key while it is up.
+        return;
     }
     if (g_app.tool == kToolTempo) {
         if (key == VK_ESCAPE) {
@@ -11885,7 +11429,11 @@ void OnKeyDown(WPARAM key) {
             return;
         }
         if (key == VK_TAB) {
-            StrumStepPreset(shift ? -1 : 1);
+            if (shift) {
+                CycleInstrument(-1);
+            } else {
+                StrumStepPreset(1);
+            }
             return;
         }
         // The letters lay a stroke on the focused cell; a g t reach the marks
@@ -11950,16 +11498,9 @@ void OnKeyDown(WPARAM key) {
             return;
         }
         if (key == VK_TAB) {
-            // Tab walks the instrument chips in the order they are drawn.
-            int step = 0;
-            for (int i = 0; i < kInstrumentChipCount; i++) {
-                if (kInstrumentChipOrder[i] == g_circle.instrument) {
-                    step = i;
-                    break;
-                }
-            }
-            CircleSetInstrument(
-                kInstrumentChipOrder[(step + 1) % kInstrumentChipCount]);
+            // Tab walks the instrument chips and Shift+Tab walks them back,
+            // the same pair the rest of the panel uses.
+            CycleInstrument(shift ? -1 : 1);
             return;
         }
         // The number keys play the diatonic chord built on that degree.
@@ -11983,16 +11524,8 @@ void OnKeyDown(WPARAM key) {
             return;
         }
         if (key == VK_TAB) {
-            // Tab walks the instrument chips in the order they are drawn.
-            int step = 0;
-            for (int i = 0; i < kInstrumentChipCount; i++) {
-                if (kInstrumentChipOrder[i] == g_trainer.instrument) {
-                    step = i;
-                    break;
-                }
-            }
-            TrainerSetInstrument(
-                kInstrumentChipOrder[(step + 1) % kInstrumentChipCount]);
+            // Tab walks the instruments and Shift+Tab walks them back.
+            CycleInstrument(shift ? -1 : 1);
             return;
         }
         if (key == 'N') {
@@ -12057,6 +11590,10 @@ void OnKeyDown(WPARAM key) {
             TunerStepInstrument(key == VK_UP ? -1 : 1);
             return;
         }
+        if (key == VK_TAB) {
+            CycleInstrument(shift ? -1 : 1);
+            return;
+        }
         if (key == VK_LEFT || key == VK_RIGHT) {
             TunerStepTuning(key == VK_LEFT ? -1 : 1);
             return;
@@ -12089,9 +11626,11 @@ void OnKeyDown(WPARAM key) {
             }
             return;
         case VK_RETURN:
-            if (!g_app.query.empty()) {
-                ClearQuery();
-            }
+        case VK_SPACE:
+            // The chord answers to the thumb and to the hand that rests beside
+            // the arrows, so reading the diagram never costs a trip back to the
+            // mouse. Enter used to clear the search; Esc still does.
+            ChordPlaySelected();
             return;
         case VK_DELETE:
             DeleteQueryChar();
@@ -12131,6 +11670,9 @@ void OnKeyDown(WPARAM key) {
             g_app.voicing = 0;
             Repaint();
             return;
+        // The fingerings stay on the horizontal arrows; the three keys between
+        // M and right Shift (comma, period, slash) are left untouched so an
+        // inversion walk can take them if the library ever grows one.
         case VK_LEFT:
             StepVoicing(-1);
             Repaint();
@@ -12139,16 +11681,357 @@ void OnKeyDown(WPARAM key) {
             StepVoicing(1);
             Repaint();
             return;
-        case VK_TAB: {
-            const int next = (g_app.instrument + (shift ? kInstrumentCount - 1 : 1)) %
-                             kInstrumentCount;
-            g_searchFocused = true;
-            SetInstrument(next, true);
-            Repaint();
+        case VK_TAB:
+            if (shift) {
+                // Tab is the speaker here, so the instrument walk lives on
+                // Shift+Tab, which steps back like it does everywhere else.
+                CycleInstrument(-1);
+            } else {
+                ChordPlaySelected();
+            }
             return;
-        }
         case VK_BACK:
             EraseQueryChar();
+            return;
+        default:
+            break;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Tray icon
+//
+// The panel has no taskbar button, so once it is closed the shortcut is the only
+// way back - and a shortcut can be forgotten, or taken by another app. The
+// notification-area icon is the other door: a click opens or closes the panel, a
+// right click lists the tools so one can be opened in a single step.
+//
+// The icon belongs to the panel window rather than to the message window, which
+// is message-only and so never sees the shell's "TaskbarCreated" broadcast - the
+// one moment an icon has to be put back by hand, when Explorer restarts.
+
+constexpr UINT kMessageTray = WM_APP + 3;
+constexpr UINT kTrayIconId = 1;
+constexpr UINT kTrayMenuToggle = 1;
+constexpr UINT kTrayMenuTool = 100;  // The tool index is added to this.
+
+UINT g_taskbarCreated = 0;
+bool g_trayAdded = false;
+// A click that has just taken the panel's focus away is not also a request to
+// open it again, so the icon stays quiet until this moment has passed.
+double g_trayIgnoreUntil = 0.0;
+// A double click arrives as up, double-click, up. Without this the second up
+// would undo what the first one opened.
+bool g_traySkipClick = false;
+HICON g_trayIcon = nullptr;
+
+// Draws the icon rather than loading one, because a mod ships as a single file
+// with no assets. It is painted four times too big and averaged down, which is
+// what keeps the circle and the note smooth at sixteen pixels.
+HICON TrayBuildIcon(int size) {
+    if (size < 8) {
+        size = 8;
+    }
+    const int scale = 4;
+    const int big = size * scale;
+    BITMAPINFO info{};
+    info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    info.bmiHeader.biWidth = big;
+    info.bmiHeader.biHeight = -big;  // Top row first, so y counts downwards.
+    info.bmiHeader.biPlanes = 1;
+    info.bmiHeader.biBitCount = 32;
+    info.bmiHeader.biCompression = BI_RGB;
+
+    HDC dc = CreateCompatibleDC(nullptr);
+    if (!dc) {
+        return nullptr;
+    }
+    void* canvasPixels = nullptr;
+    HBITMAP canvas =
+        CreateDIBSection(dc, &info, DIB_RGB_COLORS, &canvasPixels, nullptr, 0);
+    if (!canvas || !canvasPixels) {
+        if (canvas) {
+            DeleteObject(canvas);
+        }
+        DeleteDC(dc);
+        return nullptr;
+    }
+    HGDIOBJ oldBitmap = SelectObject(dc, canvas);
+    RECT frame{0, 0, big, big};
+    FillRect(dc, &frame, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+    // The two colours carry the two facts the averaging needs: red says "inside
+    // the plate", green says "inside the note", and black is outside both.
+    HBRUSH plate = CreateSolidBrush(RGB(255, 0, 0));
+    HGDIOBJ oldBrush = SelectObject(dc, plate);
+    HGDIOBJ oldPen = SelectObject(dc, GetStockObject(NULL_PEN));
+    const int inset = scale / 2;
+    Ellipse(dc, inset, inset, big - inset, big - inset);
+    SelectObject(dc, GetStockObject(WHITE_BRUSH));
+    const auto px = [&](double unit) {
+        return static_cast<int>(lround(unit * big));
+    };
+    // One eighth note: a round head, a thick stem and a flag off its top.
+    Ellipse(dc, px(0.270), px(0.592), px(0.520), px(0.788));
+    Rectangle(dc, px(0.470), px(0.212), px(0.556), px(0.690));
+    const POINT flag[] = {
+        {px(0.556), px(0.212)},
+        {px(0.742), px(0.318)},
+        {px(0.664), px(0.386)},
+        {px(0.556), px(0.300)},
+    };
+    Polygon(dc, flag, ARRAYSIZE(flag));
+    SelectObject(dc, oldPen);
+    SelectObject(dc, oldBrush);
+    DeleteObject(plate);
+    GdiFlush();  // The pixels below are read back, so the drawing has to be done.
+
+    // Averaging the oversized picture down both antialiases the edges and turns
+    // the two colour channels back into a coverage and a tint.
+    const uint8_t* source = static_cast<const uint8_t*>(canvasPixels);
+    std::vector<uint32_t> art(static_cast<size_t>(size) * size, 0);
+    const int samples = scale * scale;
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            int inside = 0;
+            int note = 0;
+            for (int sy = 0; sy < scale; sy++) {
+                const uint8_t* row =
+                    source + (static_cast<size_t>(y * scale + sy) * big +
+                              static_cast<size_t>(x) * scale) *
+                                 4;
+                for (int sx = 0; sx < scale; sx++) {
+                    inside += row[sx * 4 + 2];  // Red: the plate.
+                    note += row[sx * 4 + 1];    // Green: the note on it.
+                }
+            }
+            if (inside == 0) {
+                continue;  // Outside the plate, so the pixel stays clear.
+            }
+            const float alpha = static_cast<float>(inside) / (samples * 255.0f);
+            const float white = static_cast<float>(note) / inside;
+            // The colour is left unmultiplied: a 32-bit bitmap hands the shell
+            // its coverage in the alpha channel, and folding that into the
+            // colour as well would darken the rim of the plate.
+            const auto channel = [&](float base) {
+                return static_cast<uint32_t>(
+                    Clamp01(base + (1.0f - base) * white) * 255.0f + 0.5f);
+            };
+            art[static_cast<size_t>(y) * size + x] =
+                (static_cast<uint32_t>(alpha * 255.0f + 0.5f) << 24) |
+                (channel(g_accent.r) << 16) | (channel(g_accent.g) << 8) |
+                channel(g_accent.b);
+        }
+    }
+    SelectObject(dc, oldBitmap);
+    DeleteObject(canvas);
+
+    // The pixels at the size the shell asks for, plus the mask an icon structure
+    // wants even though a 32-bit icon draws from its own alpha.
+    info.bmiHeader.biWidth = size;
+    info.bmiHeader.biHeight = -size;
+    void* iconPixels = nullptr;
+    HBITMAP colour =
+        CreateDIBSection(dc, &info, DIB_RGB_COLORS, &iconPixels, nullptr, 0);
+    if (colour && iconPixels) {
+        std::copy(art.begin(), art.end(), static_cast<uint32_t*>(iconPixels));
+    }
+    HDC maskDc = CreateCompatibleDC(nullptr);
+    HBITMAP mask = CreateBitmap(size, size, 1, 1, nullptr);
+    HICON icon = nullptr;
+    if (maskDc && mask) {
+        HGDIOBJ oldMask = SelectObject(maskDc, mask);
+        RECT maskFrame{0, 0, size, size};
+        FillRect(maskDc, &maskFrame,
+                 static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+        SelectObject(maskDc, oldMask);
+        if (colour) {
+            ICONINFO parts{};
+            parts.fIcon = TRUE;
+            parts.hbmMask = mask;
+            parts.hbmColor = colour;
+            icon = CreateIconIndirect(&parts);
+        }
+    }
+    if (maskDc) {
+        DeleteDC(maskDc);
+    }
+    if (mask) {
+        DeleteObject(mask);
+    }
+    if (colour) {
+        DeleteObject(colour);
+    }
+    DeleteDC(dc);
+    return icon;
+}
+
+// Takes the icon away and lets go of the picture it was showing.
+void TrayHalt() {
+    if (g_panel.Hwnd()) {
+        NOTIFYICONDATAW data{};
+        data.cbSize = sizeof(data);
+        data.hWnd = g_panel.Hwnd();
+        data.uID = kTrayIconId;
+        Shell_NotifyIconW(NIM_DELETE, &data);
+    }
+    g_trayAdded = false;
+    if (g_trayIcon) {
+        DestroyIcon(g_trayIcon);
+        g_trayIcon = nullptr;
+    }
+}
+
+// Draws the icon and fills in the structure the shell is handed. The picture is
+// kept between calls, so a redraw only happens when it was let go of.
+bool TrayPrepare(NOTIFYICONDATAW& data) {
+    if (!g_taskbarCreated) {
+        g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+        if (g_taskbarCreated) {
+            // Explorer and the mod normally run at the same level, so nothing
+            // is filtered and this call changes nothing. It matters when the
+            // mod runs elevated, as a portable Windhawk started as admin does:
+            // Explorer's broadcast would then be dropped before it got here.
+            ChangeWindowMessageFilterEx(g_panel.Hwnd(), g_taskbarCreated,
+                                        MSGFLT_ALLOW, nullptr);
+        }
+    }
+    if (!g_trayIcon) {
+        const int size = static_cast<int>(GetSystemMetrics(SM_CXSMICON));
+        g_trayIcon = TrayBuildIcon(size > 0 ? size : 16);
+    }
+    if (!g_trayIcon) {
+        Wh_Log(L"Couldn't draw the tray icon");
+        return false;
+    }
+    data = NOTIFYICONDATAW();
+    data.cbSize = sizeof(data);
+    data.hWnd = g_panel.Hwnd();
+    data.uID = kTrayIconId;
+    data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+    data.uCallbackMessage = kMessageTray;
+    data.hIcon = g_trayIcon;
+    // The shortcut is the other way in, so the tooltip names it as well.
+    std::wstring tip = L"Musician's Toolkit";
+    if (!g_settings.hotkeyText.empty()) {
+        tip += L"  \x00B7  ";
+        tip += g_settings.hotkeyText;
+    }
+    const size_t length =
+        std::min<size_t>(tip.size(), ARRAYSIZE(data.szTip) - 1);
+    std::copy(tip.begin(), tip.begin() + length, data.szTip);
+    return true;
+}
+
+// Hands the icon to the shell: nothing to show takes it away, and an icon that
+// is already up is modified rather than put up again, which is what keeps it
+// where the user dropped it.
+void TrayPublish() {
+    if (!g_settings.showTrayIcon || !g_panel.Hwnd()) {
+        TrayHalt();
+        return;
+    }
+    NOTIFYICONDATAW data{};
+    if (!TrayPrepare(data)) {
+        return;
+    }
+    if (!Shell_NotifyIconW(g_trayAdded ? NIM_MODIFY : NIM_ADD, &data)) {
+        // Explorer may not be up yet; its "TaskbarCreated" broadcast adds the
+        // icon once it is.
+        Wh_Log(L"Couldn't put the tray icon up: %u", GetLastError());
+        return;
+    }
+    g_trayAdded = true;
+}
+
+// Puts the icon up, unless it is already there. Called on the panel thread,
+// because that is the thread the icon reports its clicks to.
+void TrayAdd() {
+    if (g_trayAdded || !g_settings.showTrayIcon || !g_panel.Hwnd()) {
+        return;
+    }
+    TrayPublish();
+}
+
+// Follows the settings: the icon appears or goes, and it is redrawn so it wears
+// the new accent colour.
+void TrayRefresh() {
+    // The shell copies the picture as it takes it, so the one it was showing is
+    // released once the new one is in place.
+    HICON previous = g_trayIcon;
+    g_trayIcon = nullptr;
+    TrayPublish();
+    if (previous) {
+        DestroyIcon(previous);
+    }
+}
+
+// The menu behind a right click: the panel itself, then every tool, so one can
+// be reached without opening the panel first.
+void TrayShowMenu() {
+    HWND owner = g_panel.Hwnd();
+    HMENU menu = CreatePopupMenu();
+    if (!owner || !menu) {
+        if (menu) {
+            DestroyMenu(menu);
+        }
+        return;
+    }
+    const bool open = g_phase == kPhaseOpen || g_phase == kPhaseOpening;
+    AppendMenuW(menu, MF_STRING, kTrayMenuToggle,
+                open ? L"Close the panel" : L"Open the panel");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    for (int tool = 0; tool < kToolCount; tool++) {
+        UINT flags = MF_STRING;
+        if (static_cast<int>(g_app.tool) == tool) {
+            flags |= MF_CHECKED;
+        }
+        AppendMenuW(menu, flags, kTrayMenuTool + tool, ToolLabel(tool));
+    }
+    POINT at{};
+    GetCursorPos(&at);
+    // A menu opened from the notification area needs its owner in front, or it
+    // stays up after the user has clicked somewhere else.
+    SetForegroundWindow(owner);
+    const int command = TrackPopupMenu(
+        menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, at.x, at.y, 0,
+        owner, nullptr);
+    DestroyMenu(menu);
+    PostMessageW(owner, WM_NULL, 0, 0);
+    if (command == static_cast<int>(kTrayMenuToggle)) {
+        ToggleFlyout();
+        return;
+    }
+    if (command < static_cast<int>(kTrayMenuTool) ||
+        command >= static_cast<int>(kTrayMenuTool) + kToolCount) {
+        return;
+    }
+    // The panel opens first, so the tool it seeds itself with is the one that
+    // gets replaced by the tool that was asked for, not the other way round.
+    if (g_phase != kPhaseOpen && g_phase != kPhaseOpening) {
+        OpenFlyout();
+    }
+    SetTool(command - static_cast<int>(kTrayMenuTool));
+}
+
+void TrayOnMessage(LPARAM event) {
+    switch (LOWORD(event)) {
+        case WM_LBUTTONUP:
+            if (g_traySkipClick) {
+                g_traySkipClick = false;  // The tail of a double click.
+                return;
+            }
+            if (NowMs() < g_trayIgnoreUntil) {
+                // This is the click that took the focus away a moment ago, so
+                // it has already done its work on the panel.
+                return;
+            }
+            ToggleFlyout();
+            return;
+        case WM_LBUTTONDBLCLK:
+            g_traySkipClick = true;
+            return;
+        case WM_RBUTTONUP:
+            TrayShowMenu();
             return;
         default:
             break;
@@ -12162,6 +12045,17 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                               UINT message,
                               WPARAM wParam,
                               LPARAM lParam) {
+    if (message == kMessageTray) {
+        TrayOnMessage(lParam);
+        return 0;
+    }
+    if (g_taskbarCreated && message == g_taskbarCreated) {
+        // Explorer restarted, and every icon it was showing went with it, so
+        // this one is put back.
+        g_trayAdded = false;
+        TrayAdd();
+        return 0;
+    }
     switch (message) {
         case WM_MOUSEMOVE:
             OnMouseMove(hwnd, POINT{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
@@ -12184,6 +12078,9 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                     POINT{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
             return 0;
         case WM_KEYDOWN:
+            if (g_phase == kPhaseClosed) {
+                return 0;  // The panel is not on screen, so the key is not its.
+            }
             // Alt combinations belong to the shell, not to the flyout.
             if (!(lParam & (1 << 29))) {
                 // A held key auto repeats, which would read as a very fast
@@ -12199,6 +12096,8 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                                       g_app.tool == kToolStrum ||
                                       g_app.tool == kToolCircle ||
                                       g_app.tool == kToolTrainer)) ||
+                    (g_app.tool == kToolChords && transportKey) ||
+                    wParam == VK_TAB ||
                     (g_app.tool == kToolCircle && wParam >= '1' &&
                      wParam <= '7');
                 if (repeat && singleShot) {
@@ -12208,12 +12107,18 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
             }
             return 0;
         case WM_CHAR: {
+            if (g_phase == kPhaseClosed) {
+                return 0;
+            }
             const wchar_t c = static_cast<wchar_t>(wParam);
             if (c >= 32 && c != 127) {
                 if (TempoEntryType(c)) {
                     return 0;  // A digit went into the tempo field.
                 }
-                if (g_app.tool == kToolChords && !MenuHit(g_toolMenu)) {
+                // Space sounds the chord instead of joining the query, and
+                // the filter would have dropped the gap anyway.
+                if (g_app.tool == kToolChords && !MenuHit(g_toolMenu) &&
+                    c != L' ') {
                     AppendQueryChar(c);
                 }
             }
@@ -12227,11 +12132,15 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
                        g_windowActive) {
                 Repaint();  // Moves the blinking caret along.
             } else if (wParam == kFlashTimer) {
-                if (NowMs() - g_tap.flashAt > 320.0) {
+                // The tap dial and the chord card's speaker share this timer,
+                // so it only stops once both flashes have run out.
+                const double now = NowMs();
+                if (now - g_tap.flashAt > 320.0 &&
+                    now - g_chordFlashAt > 180.0) {
                     KillTimer(hwnd, kFlashTimer);
                 }
                 if (g_phase != kPhaseClosed) {
-                    Repaint();  // Runs the tap flash out.
+                    Repaint();  // Runs the flashes out.
                 }
             } else if (wParam == kPulseTimer) {
                 if ((!g_metro.running && !g_strum.running) ||
@@ -12306,6 +12215,10 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
             g_windowActive = !inactive;
             if (inactive) {
                 if (g_settings.closeOnFocusLoss && g_phase == kPhaseOpen) {
+                    // The panel is folding away because the pointer went to
+                    // the notification area, so the button that is still on its
+                    // way up from the icon must not open it straight back.
+                    g_trayIgnoreUntil = NowMs() + 300.0;
                     CloseFlyout();
                 }
             } else if (g_phase != kPhaseClosed) {
@@ -12364,6 +12277,28 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd,
             return HTCLIENT;
         case WM_DPICHANGED:
             return 0;
+        case WM_SETTINGCHANGE: {
+            // The tray icon is drawn in the accent color, so it is put back
+            // when that color moved - otherwise a closed panel would leave the
+            // old one in the notification area until the next settings edit.
+            const Color accent =
+                ResolveAccent(g_settings.accentChoice, g_settings.customAccent);
+            if (accent.r != g_accent.r || accent.g != g_accent.g ||
+                accent.b != g_accent.b) {
+                // The icon is drawn from g_accent, so the new color is taken
+                // first and the icon is then rebuilt around it.
+                g_accent = accent;
+                TrayRefresh();
+            }
+            // The app theme and the accent color live in the registry, so a
+            // theme switch redraws the panel with the new colors.
+            if (g_phase != kPhaseClosed) {
+                ApplySettings();
+                Render();
+                PresentPanel(false);
+            }
+            return 0;
+        }
         case WM_CLOSE:
             CloseFlyout();
             return 0;
@@ -12418,15 +12353,7 @@ LRESULT CALLBACK MessageWndProc(HWND hwnd,
         case kMessageSettings:
             ApplySettings();
             RepositionPanel();
-            return 0;
-        case WM_SETTINGCHANGE:
-            // The app theme and the accent color live in the registry, so a
-            // theme switch redraws the panel with the new colors.
-            if (g_phase != kPhaseClosed) {
-                ApplySettings();
-                Render();
-                PresentPanel(false);
-            }
+            TrayRefresh();
             return 0;
         case WM_CLOSE:
             DestroyWindow(hwnd);
@@ -12491,10 +12418,15 @@ bool CreateWindows() {
     // The shortcut comes from the settings, which ApplySettings has already
     // loaded; now that the message window exists it can actually be hooked.
     ApplyToggleHotkey();
+    // The panel is up, so the icon that opens and closes it can be placed too.
+    TrayRefresh();
     return true;
 }
 
 void DestroyWindows() {
+    // The shell holds the icon, not this window, so it is taken away while the
+    // window it reports to is still there to be named.
+    TrayHalt();
     if (g_messageWindow) {
         UnregisterHotKey(g_messageWindow, kHotkeyToggle);
     }
@@ -12597,6 +12529,20 @@ void WhTool_ModUninit() {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
@@ -12698,9 +12644,9 @@ void Wh_ModAfterInit() {
             return;
     }
 
-    WCHAR commandLine[MAX_PATH + 2 +
-                     (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
-                     1];
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
@@ -12721,20 +12667,22 @@ void Wh_ModAfterInit() {
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
-    auto createProcessInternal = reinterpret_cast<CreateProcessInternalW_t>(
-        GetProcAddress(kernelModule, "CreateProcessInternalW"));
-    if (!createProcessInternal) {
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
         Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    STARTUPINFO si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
-    if (!createProcessInternal(nullptr, currentProcessPath, commandLine, nullptr,
-                               nullptr, FALSE, NORMAL_PRIORITY_CLASS, nullptr,
-                               nullptr, &si, &pi, nullptr)) {
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
     }

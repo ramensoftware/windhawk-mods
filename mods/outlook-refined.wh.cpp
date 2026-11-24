@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              outlook-refined
 // @name            Outlook Refined
-// @description     Restyles new Outlook: favorites groups, per-account compose buttons, a resizable folder pane, an agenda with a month grid, the Other inbox under Focused, a tidier calendar and reading pane, and a print layout
-// @version         0.6.1
+// @description     Restyles new Outlook: favorites groups, per-account compose buttons, folder colors, a resizable folder pane, an agenda with a month grid, the Other inbox under Focused, a tidier calendar and reading pane, and a print layout
+// @version         0.7.0
 // @author          Analytic Endeavors
 // @github          https://github.com/ae-reid-havens
 // @include         olk.exe
@@ -15,6 +15,10 @@
 /*
 # Outlook Refined
 
+By Reid Havens, co-founder of
+[Analytic Endeavors](https://go.analyticendeavors.com/outlook-refined), who builds tools
+like this one for the community.
+
 Restyles the new Outlook for Windows (olk.exe) from inside its own page. The mod
 adds one script to each Outlook window when the window is created, and the
 script stops at once unless the page is one of Outlook's own. It opens no ports
@@ -25,7 +29,8 @@ Outlook's mail service as described below.
 
 ![Folder pane](https://raw.githubusercontent.com/ae-reid-havens/outlook-refined/main/docs/folder-pane.png)
 
-Restart Outlook after enabling the mod or changing a setting.
+Restart Outlook after enabling the mod. A changed setting reaches each open
+Outlook window the next time you switch to it.
 
 **What it asks Outlook for.** The agenda, month grid and Other inbox card read
 your calendar and inbox through Outlook's own mail service, from inside its
@@ -34,21 +39,23 @@ headers Outlook sets, in memory, and reuses them. Those features refresh every
 few minutes while they are on, and each is off until you turn it on. Nothing is
 stored, logged or sent anywhere else, and no credential is written down.
 
-**Where your edits are kept.** Groups, renames, folds, account order and the
-pane and card sizes are saved in Windhawk's own storage for this mod, so they
+**Where your edits are kept.** Groups, renames, folds, account order, folder
+colors and the pane and card sizes are saved in Windhawk's own storage for this mod, so they
 leave when the mod does. State an earlier version wrote into Outlook's own local
 storage is moved across the first time this one runs. Other Outlook windows
 that are already open pick up a change as soon as you move into them.
 
 **Folder pane:** Favorites in groups that fold (right-click a group header for
 its menu, drag a favorite to move it, Shift+right-click it to rename or move
-it), per-account compose buttons, a resizable pane, account trees under one
-foldable heading, accounts reordered by dragging.
+it), per-account compose buttons, short account labels (shared mailboxes
+included), a color for any folder (Shift+right-click it, then Color..., with
+Outlook's own palette in light and dark), a resizable pane, account trees under
+one foldable heading, accounts reordered by dragging.
 
 **Agenda:** today and the next days from every account's calendar at the bottom
 of the folder pane, with a join button for online meetings, under a month grid
 shaded by booked hours. **Other inbox:** the newest Other conversations below
-the Focused list.
+the Focused list. All three start off: turn them on in this mod's Settings tab.
 
 ![Agenda and the Other inbox card](https://raw.githubusercontent.com/ae-reid-havens/outlook-refined/main/docs/other-inbox.png)
 
@@ -94,7 +101,7 @@ the parts that depend on this most.
     - label: ""
       $name: Short label
   $name: Account labels
-  $description: Short names for accounts in the folder pane, pattern groups and the calendar list
+  $description: Short names for accounts and shared mailboxes in the folder pane, pattern groups and the calendar list
 - primaryAccount: ""
   $name: Primary account address
   $description: Leave empty to detect it. Outlook names the primary account's folders without an address suffix
@@ -165,7 +172,7 @@ the parts that depend on this most.
   $name: Print, quoted replies
   $options:
   - show: Print them as they are
-  - lighten: Print them smaller and grey
+  - lighten: Print them smaller and gray
   - hide: Leave them out
 */
 // ==/WindhawkModSettings==
@@ -220,7 +227,9 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
 // attributes, never by generated class names) plus elements of our own (group
 // headers, compose buttons, menus, the resize handle). Outlook's own nodes are
 // never moved, so its React tree stays intact.
-(() => {
+// A function rather than a one-off, so that settings changed in Windhawk can start the
+// page again on the new ones (see the state answer handler in `store`).
+const runPage = (OLKT_CONFIG, carried, owedAnswers) => {
   // Outlook has hidden subframes with folder trees of their own; only the main window is ours.
   if (window.top !== window) return 'skipped subframe';
   // Outlook opens WebViews for pages of its own and for add-in dialogs, which load
@@ -238,7 +247,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   const SESSION_V = 5;
   const session = (window.__olktSession && window.__olktSession.v === SESSION_V) ? window.__olktSession : (window.__olktSession = (() => {
     const byAnchor = new Map(); // x-anchormailbox -> { base, headers, at }
-    const byCategory = new Map(); // x-anchormailbox (or '*') -> Map(category name -> colour index)
+    const byCategory = new Map(); // x-anchormailbox (or '*') -> Map(category name -> color index)
     const asked = new Set(); // mailboxes whose palette has been asked for, so it is asked once
     const KEEP = ['authorization', 'x-owa-sessionid', 'x-client-version', 'x-tenantid', 'prefer', 'x-owa-hosted-ux', 'x-req-source'];
     const listeners = new Set();
@@ -271,7 +280,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       if (fresh) for (const fn of listeners) { try { fn(anchor); } catch {} }
     };
     // Each category in the startup payload is written as {"Name":"...","Color":n,"Id":"..."},
-    // where the colour is an index into Outlook's fixed palette. Pulled out with a search
+    // where the color is an index into Outlook's fixed palette. Pulled out with a search
     // rather than by parsing the whole payload, which is large and none of our business.
     const CATEGORY = /\{"Name":"((?:[^"\\]|\\.)*)","Color":(-?\d+),"Id":"/g;
     const readPalette = (anchor, text) => {
@@ -284,7 +293,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
         if (name && color >= 0) map.set(name, color);
       }
       // Only for the mailbox it came from: two accounts can give the same category name
-      // different colours, and a palette with no mailbox on it belongs to none of them.
+      // different colors, and a palette with no mailbox on it belongs to none of them.
       if (map.size && anchor) byCategory.set(anchor, map);
     };
     const isStartup = url => { try { return /\/owa\/startupdata\.ashx/i.test(new URL(url, location.href).pathname); } catch { return false; } };
@@ -378,21 +387,32 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   const FAVORITES_KEY = 'olkt-favorites';
   const ACCOUNT_ORDER_KEY = 'olkt-account-order';
   // Static choices come from the mod's settings. Edits made inside Outlook (groups,
-  // renames, folds, account order, pane and card sizes) belong to the mod rather than to
+  // renames, folds, account order, folder colors, pane and card sizes) belong to the mod rather than to
   // Outlook, so they live in Windhawk's own storage: this script asks for them over the
   // WebView's message channel and sends each change back the same way. Nothing of ours
   // is left in Outlook's profile when the mod goes.
   const S = OLKT_CONFIG;
-  const STORE_KEYS = [FOLD_KEY, WIDTH_KEY, FAVORITES_KEY, ACCOUNT_ORDER_KEY, 'olkt-agenda-height', 'olkt-other-height', 'olkt-other-split', 'olkt-other-folds'];
+  // The settings as the mod sends them in each state answer, without the per-load key.
+  const configText = ({ key, ...rest }) => JSON.stringify(rest);
+  const CONFIG_TEXT = configText(S);
+  const COLORS_KEY = 'olkt-folder-colors';
+  const STORE_KEYS = [COLORS_KEY, FOLD_KEY, WIDTH_KEY, FAVORITES_KEY, ACCOUNT_ORDER_KEY, 'olkt-agenda-height', 'olkt-other-height', 'olkt-other-split', 'olkt-other-folds'];
   const store = (() => {
     const mem = new Map();
+    // A copy started by a settings change takes over the state the copy before it had
+    // just read, so it draws with it at once and accepts writes from the start.
+    if (carried) for (const [k, v] of carried) mem.set(k, v);
     const channel = (() => { try { return window.chrome.webview; } catch { return null; } })();
     // Every message carries the key the mod put in this script. A page in another
     // WebView, an add-in dialog for instance, shares the message channel but never sees
     // the script, so it cannot ask for the state or change it.
     const post = text => { try { channel.postMessage(text); } catch {} };
-    let loaded = false;
+    let loaded = !!carried;
     let onMessage = null;
+    let failedConfig = '';
+    // Answers still owed to the copy this one replaced come first (the mod answers in
+    // order) and are older than the state it handed over, so they are passed over.
+    let owed = owedAnswers || 0;
     // The state is asked for rather than baked into this script: a window that reloads
     // then starts from what is saved now, not from what was saved when it opened. It is
     // asked for again whenever the window is shown or focused, and whenever the pointer
@@ -427,15 +447,32 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       onMessage = ev => {
         const text = typeof ev.data === 'string' ? ev.data : '';
         if (!text.startsWith('olkt-state\n')) return;
+        if (owed > 0) { owed--; return; }
         const n = received = Math.min(received + 1, sent);
         const next = new Map();
-        let parsed = true;
+        let parsed = true, config = null;
         try {
           const saved = JSON.parse(text.slice('olkt-state\n'.length));
           for (const key of STORE_KEYS) if (typeof saved[key] === 'string') next.set(key, saved[key]);
+          if (saved.config && typeof saved.config === 'object') config = saved.config;
         } catch { parsed = false; }
         // A value this page wrote after this question went out is newer than the answer.
         if (parsed) for (const [k, after] of writtenAfter) if (after >= n) { if (mem.has(k)) next.set(k, mem.get(k)); else next.delete(k); }
+        // Settings changed in Windhawk since this copy started: a new copy takes over on
+        // them with this state (its generation check tears this one down) and asks again
+        // itself. Settings that a new copy failed to start on are not tried twice. An open
+        // rename box or menu is left alone: a later answer carries the same settings.
+        if (config && !document.querySelector('.olkt-rename, .olkt-menu')) {
+          const changed = configText(config);
+          if (changed !== CONFIG_TEXT && changed !== failedConfig) {
+            try { runPage({ ...config, key: S.key }, next, sent - n); return; } catch (err) {
+              failedConfig = changed;
+              console.warn(`outlook-refined: the changed settings did not apply (${err.message}); restart Outlook to load them`);
+            }
+            // A new copy that failed after taking over has already torn this one down.
+            if (!current()) return;
+          }
+        }
         for (const [k, after] of writtenAfter) if (after <= n) writtenAfter.delete(k);
         if (again) { again = false; ask(); }
         // An answer that will not parse: a page still waiting for its first one asks again.
@@ -472,6 +509,8 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
         post('olkt-set\n' + S.key + '\n' + key + '\n');
       },
       stop() {
+        // A copy that has been replaced saves nothing more over the one that replaced it.
+        loaded = false;
         clearTimeout(retry);
         window.removeEventListener('focus', ask);
         document.removeEventListener('visibilitychange', onVisible);
@@ -597,6 +636,12 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   // root, whose mailbox is some other account's. A node kept from an earlier render
   // can still point at the older fiber, so only the one drawn with this name counts.
   function rowAccount(el) {
+    return drawnProp(el, 'mailboxInfo', 2, b => lower(b.mailboxSmtpAddress));
+  }
+  // A prop from the row's React fiber or the `depth - 1` components above it, read through
+  // `pick`, which returns '' for a value it cannot use. Only the fiber drawn with the row's
+  // current name counts.
+  function drawnProp(el, prop, depth, pick) {
     try {
       const key = Object.keys(el).find(k => k.startsWith('__reactFiber$'));
       const name = el.getAttribute('data-folder-name');
@@ -604,9 +649,10 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       let f = key && el[key];
       if (!drawn(f)) f = f && f.alternate;
       if (!drawn(f)) return '';
-      for (let i = 0; f && i < 2; f = f.return, i++) {
-        const box = f.memoizedProps && f.memoizedProps.mailboxInfo;
-        if (box && typeof box.mailboxSmtpAddress === 'string') return lower(box.mailboxSmtpAddress);
+      for (let i = 0; f && i < depth; f = f.return, i++) {
+        const v = f.memoizedProps && f.memoizedProps[prop];
+        const got = v ? pick(v) : '';
+        if (got) return got;
       }
     } catch {}
     return '';
@@ -664,7 +710,34 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
 
   // ==== CSS ====
   let fs;
+
+  // How far the favorites list sits inside the pane. The agenda is positioned against the
+  // pane, so without this it lines up with nothing: the list is inside Outlook's own
+  // scrolling container, which is inset on both sides and gives up another 8px or so to its
+  // scrollbar. Measured live rather than assumed, because both depend on the pane width and
+  // on how the viewer's scrollbars are drawn. The fallbacks are what a default pane measures.
+  function agendaInsets() {
+    // 8 on both sides: what a default pane measures once the gutter above is released. The
+    // old 24 on the right described the layout before that, and left the agenda's contents
+    // 16px short of the rows above on any pass that fell back.
+    const fallback = { left: 8, right: 8 };
+    const pane = document.querySelector(PANE);
+    const list = document.querySelector(FAVS);
+    if (!pane || !list) return fallback;
+    const p = pane.getBoundingClientRect();
+    const l = list.getBoundingClientRect();
+    if (!p.width || !l.width) return fallback;
+    const left = Math.round(l.left - p.left);
+    const right = Math.round(p.right - l.right);
+    // A collapsing pane, or a list Outlook is still building, measures as nonsense.
+    if (left < 0 || right < 0 || left > 60 || right > 60) return fallback;
+    return { left, right };
+  }
+
+  let lastInset = null;
   function buildCss() {
+    const inset = agendaInsets();
+    lastInset = inset;
     // Read Outlook's label size once the tree exists, before rename rules zero it.
     // A row a rename rule already zeroed reads 0px, so take the first one that is not.
     const label = [...document.querySelectorAll('[role="treeitem"] > span')].find(s => parseFloat(getComputedStyle(s).fontSize) > 0);
@@ -684,8 +757,12 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     }
     for (const [acct, name] of Object.entries(cfg.accounts || {})) {
       if (!name) continue;
-      const r = `${PANE} [role="treeitem"][aria-level="1"][data-folder-name=${q(acct)}] > span:first-of-type`;
-      out.push(`${r}{font-size:0!important}`, `${r}::after{content:${JSON.stringify(name)};font-size:${size}}`);
+      for (const r of [`${PANE} [role="treeitem"][aria-level="1"][data-folder-name=${q(acct)}] > span:first-of-type`,
+                       `${PANE} [role="treeitem"][data-olkt-acct=${q(acct)}] > span:first-of-type`,
+                       // A shared mailbox's root draws its name one wrapper deeper.
+                       `${PANE} [role="treeitem"][aria-level="1"]:not([id^="primaryMailboxRoot"])[data-olkt-acct=${q(acct)}] > div > div > span:first-child`]) {
+        out.push(`${r}{font-size:0!important}`, `${r}::after{content:${JSON.stringify(name)};font-size:${size}}`);
+      }
     }
     if (cfg.accountsHeading && folds[ACCOUNTS]) {
       out.push(`${PANE} div:has(> [role="treeitem"][aria-level="1"]:not([data-folder-name="favorites"])){display:none!important}`);
@@ -757,8 +834,15 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     out.push(`.olkt-menu .olkt-sep{height:1px;margin:4px 6px;background:var(--colorNeutralStroke2,#3a3a3a)}`);
     out.push(`.olkt-menu .olkt-sub{padding:6px 12px 2px;font-size:11px;letter-spacing:.06em;color:var(--colorNeutralForeground3,#a3a3a3)}`);
     out.push(`.olkt-tree{box-sizing:border-box!important;max-height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:auto!important;scrollbar-color:auto!important}`);
+    // The element holding the tree reserves a scrollbar gutter it never draws in: measured on
+    // a live pane it keeps 18px while its own overflow is hidden, so the folder names were
+    // squeezed into 163px of a 197px pane. Releasing the reservation hands those pixels back
+    // and leaves only the tree's real scrollbar. Keyed on Outlook's own role rather than on
+    // the olkt-tree class, which layoutAgenda only adds once the agenda has drawn, so the
+    // width would otherwise come back for nobody but the few who turn the agenda on.
+    out.push(`${PANE} div:has(> [role="tree"]){scrollbar-gutter:auto!important}`);
     // A scrollbar like Outlook's own: thin, no arrows, a rounded thumb in the theme's stroke
-    // colour, shown while the pointer is over the tree. (scrollbar-width or scrollbar-color
+    // color, shown while the pointer is over the tree. (scrollbar-width or scrollbar-color
     // would switch these ::-webkit-scrollbar rules off, so neither is set.)
     out.push(`.olkt-tree::-webkit-scrollbar{width:8px}`);
     out.push(`.olkt-tree::-webkit-scrollbar-button{display:none;height:0}`);
@@ -768,10 +852,18 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     out.push(`.olkt-tree:hover::-webkit-scrollbar-thumb{background-color:var(--colorNeutralStroke1,#666)}`);
     out.push(`.olkt-tree::-webkit-scrollbar-thumb:hover{background-color:var(--colorNeutralStroke1Hover,#888)}`);
     out.push(`.olkt-tree > .customScrollBar{flex:none!important;height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important}`);
-    out.push(`.olkt-agenda{position:absolute;left:0;right:2px;bottom:0;z-index:15;box-sizing:border-box;display:flex;flex-direction:column;padding:0 8px 6px 6px;font-size:12px;color:var(--colorNeutralForeground1,#e6e6e6)}`);
+    // The contents line up with the favorites list above, not with the pane: the list sits
+    // inside Outlook's own scrolling container, which is inset from the pane and gives up
+    // more to its scrollbar. Measured against a live pane, that left the agenda 8px wider on
+    // the left and 24px wider on the right than the rows above it, so no edge lined up.
+    // The insets go in the padding rather than in left/right, so the box still spans the pane
+    // and its opaque background still covers everything scrolling underneath, including rows
+    // wider than the favorites list. The divider is a flex item and follows the content box;
+    // the grip is absolutely positioned and stays full width.
+    out.push(`.olkt-agenda{position:absolute;left:0;right:2px;bottom:0;z-index:15;box-sizing:border-box;display:flex;flex-direction:column;padding:0 ${Math.max(0, inset.right - 2)}px 6px ${inset.left}px;font-size:12px;color:var(--colorNeutralForeground1,#e6e6e6)}`);
     // Outlook hides the pane by sliding its own tree out; ours would stay behind.
     out.push(`body:has(button[aria-label="Show navigation pane"]) ${PANE} :is(.olkt-agenda,.olkt-resize){display:none}`);
-    out.push(`.olkt-agenda::before{content:"";flex:none;height:1px;margin:0 2px 0 6px;background:var(--colorNeutralStroke2,#3a3a3a)}`);
+    out.push(`.olkt-agenda::before{content:"";flex:none;height:1px;margin:0;background:var(--colorNeutralStroke2,#3a3a3a)}`);
     out.push(`.olkt-agenda-grip{position:absolute;left:0;right:0;top:-3px;height:7px;cursor:row-resize;z-index:2}`);
     out.push(`.olkt-agenda-grip:hover{background:var(--colorBrandStroke1,#4aa3f0);opacity:.5}`);
     out.push(`.olkt-feed{flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:transparent transparent}`);
@@ -841,16 +933,33 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     return list && list.querySelector(':scope > div > [role="treeitem"]') ? list : null;
   }
 
+  // Windows counts a second click inside 500ms as a double; 400 covers it without blocking
+  // someone deliberately pressing the same control twice.
+  const DOUBLE_MS = 400;
   function onPress(el, fn) {
+    let lastAt = -Infinity;
     // Act on press, not click: Outlook's focus manager re-renders the tree
     // between press and release, so a click event often never arrives.
     el.addEventListener('pointerdown', ev => {
       if (ev.button !== 0) return;
       ev.preventDefault();
       ev.stopPropagation();
+      // Still swallowed, but not acted on twice. Running again would re-click Outlook's tile
+      // and toggle the card the first press opened back shut, which is what made a
+      // double-click look like it did nothing. A double-click now behaves as a single one.
+      // Timing, not ev.detail: on a pointerdown detail is 0 by spec, whatever the click
+      // count, so a detail test here never fires. (It does fire for CDP's synthetic events,
+      // which is how a test of this passed while real double-clicks stayed broken.)
+      const now = ev.timeStamp || performance.now();
+      if (now - lastAt < DOUBLE_MS) return;
+      lastAt = now;
       fn();
     });
     el.addEventListener('click', ev => ev.stopPropagation());
+    // The second press of a double-click reaches whatever sits under the control. On the
+    // calendar that is Outlook's day grid, which reads a double-click as "new event here"
+    // and opens a blank form. The first press has already acted, so swallow the pair.
+    el.addEventListener('dblclick', ev => { ev.preventDefault(); ev.stopPropagation(); });
     el.addEventListener('keydown', ev => {
       if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.stopPropagation(); fn(); }
     });
@@ -984,6 +1093,26 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     const found = key && (key.group ? findGroup(key.group) : findFolder(key.folder));
     // The names before the release: only a favorite that appears after it was dropped.
     lastDrop = found ? { ...key, at: Date.now(), before: new Set(favoriteNames()) } : null;
+  }
+
+  // A shared mailbox's root is not a primaryMailboxRoot and can name itself with its address in
+  // any letter case, so tag any account-tree node whose name, label text or element id (a shared
+  // root's id is its address) is a labelled account; the label rule above then matches
+  // data-olkt-acct. The mailbox in the React tree is not used: the component above the
+  // Favorites root (and above an archive root) carries the primary mailbox.
+  function tagSharedRoots() {
+    const keys = Object.keys(cfg.accounts || {}).filter(a => cfg.accounts[a]);
+    if (!keys.length && !document.querySelector('[data-olkt-acct]')) return;
+    for (const el of document.querySelectorAll(`${PANE} [role="treeitem"]`)) {
+      let acct = '';
+      if (keys.length && !el.closest(FAVS) && el.id !== 'favoritesRoot' && el.getAttribute('data-folder-name') !== 'favorites') {
+        const span = el.querySelector(':scope > span');
+        const root = el.getAttribute('aria-level') === '1';
+        acct = [el.getAttribute('data-folder-name'), span && span.textContent, root ? el.id : ''].map(lower).find(a => a && keys.includes(a)) || '';
+      }
+      if (acct) setAttr(el, 'data-olkt-acct', acct);
+      else if (el.hasAttribute('data-olkt-acct')) el.removeAttribute('data-olkt-acct');
+    }
   }
 
   // Header above the first account tree. Inserted next to Outlook's nodes, never moving them.
@@ -1313,7 +1442,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     return undefined;
   }
   const joinIn = (...texts) => { for (const t of texts) { const j = meetingLink(t); if (j) return j; } return undefined; };
-  // Outlook's 25 category colours, in the order its colour index uses.
+  // Outlook's 25 category colors, in the order its color index uses.
   const CATEGORY_COLORS = ('#d13438 #ca5010 #8e562e #c19c00 #498205 #038387 #5c7e10 #0078d4 #8764b8 #c30052 ' +
     '#69797e #394146 #7a7574 #525252 #000000 #750b1c #8e3b05 #4d291c #817400 #0b6a0b ' +
     '#005b70 #3a4d00 #004e8c #5c2e91 #77004d').split(' ');
@@ -1360,7 +1489,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   const instant = s => new Date(s).toISOString();
   // One account's events between from and to (occurrences expanded), as the agenda draws them.
   async function readAccount(acct, from, to, joinsUntil) {
-    // Outlook colours an event by its calendar; a failure here only costs the colours.
+    // Outlook colors an event by its calendar; a failure here only costs the colors.
     const colors = await calendarColors(acct).catch(() => null);
     const found = await owa(acct, 'FindItem', { ItemShape: { __type: 'ItemResponseShape:#Exchange', BaseShape: 'Default', AdditionalProperties: CAL_PROPS }, ParentFolderIds: [{ __type: 'DistinguishedFolderId:#Exchange', Id: 'calendar' }], Traversal: 'Shallow', Paging: { __type: 'CalendarPageView:#Exchange', StartDate: from.toISOString(), EndDate: to.toISOString() } });
     const msg = found.ResponseMessages && found.ResponseMessages.Items && found.ResponseMessages.Items[0];
@@ -1391,7 +1520,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       events.push(e);
     }
     if (!session.palette(acct.anchor) && events.some(e => e.categories && e.categories.length)) {
-      // The next read paints them; this one keeps the calendar colours it already has.
+      // The next read paints them; this one keeps the calendar colors it already has.
       session.palettes(acct.anchor).then(n => { if (n && current()) ensureAgendaData(true); }, () => {});
     }
     if (bodies.length) {
@@ -1946,6 +2075,11 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       b.textContent = e.label;
       if (e.indent) b.style.paddingLeft = (12 + e.indent * 12) + 'px';
       if (e.disabled) b.disabled = true;
+      if (e.swatch !== undefined) {
+        const sw = document.createElement('span');
+        sw.style.cssText = 'display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px;vertical-align:-1px;' + (e.swatch ? 'background:' + e.swatch : 'border:1px solid currentColor;opacity:.6');
+        b.prepend(sw);
+      }
       b.addEventListener('click', ev => { ev.stopPropagation(); closeMenus(); e.run(); });
       menu.appendChild(b);
     }
@@ -2064,6 +2198,8 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       targets.push({ label: g.label, indent: depth + 1, disabled: at && at.parent === g, run: () => { const cur = findGroup(g.id); if (cur) moveTo(self(), cur); } });
     }
     showMenu(x, y, [
+      { label: 'Color...', run: () => colorMenu(item, x, y) },
+      '-',
       { label: 'Rename (short label)', run: () => rename(item, node.label || original, v => { self().label = v && v !== original ? v : undefined; save(); }) },
       { label: 'Use original name', disabled: !node.label, run: () => { delete self().label; save(); } },
       { label: 'New group below', run: () => addGroupAfter(self()) },
@@ -2082,10 +2218,127 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     const folder = item && item.getAttribute('data-folder-name');
     let node = folder && findFolder(folder);
     if (!node && folder && cfg.favorites.length && !matchesAnyGroup(folder) && placeUnplaced()) node = findFolder(folder);
-    if (!node) return;
+    if (!node) { onColorContextMenu(ev); return; }
     ev.preventDefault();
     ev.stopPropagation();
     folderMenu(node, item, ev.clientX, ev.clientY);
+  }
+
+  // ==== folder colors ====
+  // Outlook colors a folder icon through the custom property --customColor on the
+  // element around the icon, and offers no way to set it on a shared mailbox's folders.
+  // Here any folder row, shared or not, takes one of the 15 colors Outlook's own picker
+  // offers, in its order, with its dark and light theme values (read from Outlook's
+  // FolderColorPicker). Shift+right-click, Color... A choice is saved as the color's name
+  // per folder, so it follows the theme. The row's icon box gets data-olkt-color and a
+  // stylesheet rule overrides --customColor with !important, which outranks Outlook's own
+  // inline value without touching it, so "Automatic" (dropping the attribute) shows
+  // whatever Outlook draws now.
+  // name, label, dark theme, light theme
+  const FOLDER_COLORS = [
+    ['cranberry', 'Red', '#DC626D', '#C50F1F'], ['peach', 'Orange', '#FFBA66', '#FF8C00'],
+    ['gold', 'Yellow', '#F2C661', '#EAA300'], ['bronze', 'Copper', '#CA8057', '#A74109'],
+    ['lime', 'Light green', '#A4CC6C', '#73AA24'],
+    ['dark_green', 'Green', '#4DA64D', '#0B6A0B'], ['light_teal', 'Aqua', '#58D3DB', '#00B7C3'],
+    ['dark_teal', 'Teal', '#41A3A3', '#006666'], ['light_blue', 'Light blue', '#83BDEB', '#3A96DD'],
+    ['dark_blue', 'Steel blue', '#4178A3', '#003966'],
+    ['lavender', 'Lavender', '#A79CF1', '#7160E8'], ['dark_purple', 'Purple', '#7E5CA7', '#401B6C'],
+    ['pink', 'Pink', '#EF85C8', '#E43BA6'], ['magenta', 'Magenta', '#D957A8', '#BF0077'],
+    ['silver', 'Silver', '#B3BFC2', '#859599'],
+  ];
+  let folderColors = {};
+  // Read from the theme's background token: Outlook keeps the "dark" class on the html
+  // element after a switch to the light theme, so the class is only a fallback.
+  function isDarkTheme() {
+    const h = document.documentElement;
+    const m = /^#([0-9a-f]{6})$/i.exec(getComputedStyle(h).getPropertyValue('--colorNeutralBackground1').trim());
+    if (m) { const n = parseInt(m[1], 16); return ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000 < 128; }
+    if (h.classList.contains('dark')) return true;
+    if (h.classList.contains('light')) return false;
+    return matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function loadColors() {
+    try { const v = JSON.parse(store.getItem(COLORS_KEY) || '{}'); folderColors = v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { folderColors = {}; }
+  }
+  loadColors();
+  const colorIcon = row => row.querySelector(':scope > div > div > i');
+  // A folder is known by Outlook's folder id, which its Favorites row and its tree row share
+  // and which survives a rename. A row drawn without one (a mailbox root) falls back to its
+  // account and name.
+  function colorKey(row) {
+    const id = drawnProp(row, 'folderId', 4, v => (typeof v === 'string' ? v : ''));
+    if (id) return 'id:' + id;
+    const name = row.getAttribute('data-folder-name') || '';
+    return accountOf(name, row) + '|' + name.replace(/ \([^()]+@[^()]+\)$/, '');
+  }
+  let colorsDark = null;
+  let colorStyle = null;
+  function ensureFolderColors() {
+    const any = Object.keys(folderColors).length > 0;
+    if (!any && !document.querySelector('[data-olkt-color]')) return;
+    const dark = isDarkTheme();
+    if (!colorStyle || !colorStyle.isConnected || dark !== colorsDark) {
+      colorsDark = dark;
+      if (!colorStyle || !colorStyle.isConnected) {
+        colorStyle = document.createElement('style');
+        colorStyle.id = 'olkt-colors';
+        document.head.appendChild(colorStyle);
+      }
+      colorStyle.textContent = FOLDER_COLORS.map(c => `[data-olkt-color="${c[0]}"]{--customColor:${c[dark ? 2 : 3]}!important}`).join('');
+    }
+    for (const row of document.querySelectorAll(`${PANE} [role="treeitem"][data-folder-name]`)) {
+      const icon = colorIcon(row);
+      const box = icon && icon.parentElement;
+      if (!box) continue;
+      const name = any ? folderColors[colorKey(row)] : '';
+      if (name && FOLDER_COLORS.some(c => c[0] === name)) setAttr(box, 'data-olkt-color', name);
+      else if (box.hasAttribute('data-olkt-color')) box.removeAttribute('data-olkt-color');
+    }
+  }
+  // The mod keeps a value only up to 32,767 characters (what Windhawk's portable storage
+  // reads back whole), so a color that would push the list past that is refused, with a note.
+  const COLORS_MAX = 32767;
+  function setFolderColor(key, name, x, y) {
+    const next = { ...folderColors };
+    if (name) next[key] = name; else delete next[key];
+    const text = JSON.stringify(next);
+    if (text.length > COLORS_MAX) {
+      showMenu(x, y, [{ heading: 'TOO MANY FOLDER COLORS' }, { label: 'Set some folders back to Automatic first', disabled: true, run: () => {} }]);
+      return;
+    }
+    folderColors = next;
+    try { store.setItem(COLORS_KEY, text); } catch {}
+    ensureFolderColors();
+  }
+  // The folder is looked up once, when the menu opens: Outlook may redraw or reuse the row
+  // before an entry is clicked.
+  function colorMenu(row, x, y) {
+    const key = colorKey(row);
+    const cur = folderColors[key];
+    const dark = isDarkTheme();
+    showMenu(x, y, [
+      { heading: 'COLOR' },
+      { label: 'Automatic', swatch: '', disabled: !cur, run: () => setFolderColor(key, null, x, y) },
+      '-',
+      ...FOLDER_COLORS.map(c => ({ label: c[1] + (cur === c[0] ? ' (current)' : ''), swatch: c[dark ? 2 : 3], run: () => setFolderColor(key, c[0], x, y) })),
+    ]);
+  }
+  function onColorContextMenu(ev) {
+    if (!ev.shiftKey) return;
+    const row = ev.target.closest('[role="treeitem"][data-folder-name]');
+    if (!row || !row.closest(PANE) || !colorIcon(row)) return;
+    if (boundList && boundList.contains(row) && ev.currentTarget !== boundList) return;  // the list's own handler takes it
+    ev.preventDefault();
+    ev.stopPropagation();
+    colorMenu(row, ev.clientX, ev.clientY);
+  }
+  // A theme switch changes no element the observer watches, so the colors check the theme
+  // every two seconds, and only while one is set.
+  let themeTimer = 0;
+  const onThemeTick = () => { if (Object.keys(folderColors).length && isDarkTheme() !== colorsDark) ensureFolderColors(); };
+  function restoreFolderColors() {
+    document.querySelectorAll('[data-olkt-color]').forEach(box => box.removeAttribute('data-olkt-color'));
+    if (colorStyle) colorStyle.remove();
   }
 
   // Favorites that are in no group yet (all of them, on a new install) show at the
@@ -2119,7 +2372,11 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       out.push(`${CALNAV} div:has([role="grid"]){width:auto!important;max-width:100%!important;box-sizing:border-box}`);
       out.push(`${CALNAV} [role="grid"]{margin-left:0!important;width:auto!important}`);
       out.push(`${CALNAV} div:has(> button[aria-label*="select to change the month"]){width:auto!important}`);
-      out.push(`${CALNAV} button[aria-label*="select to change the month"]{flex:1 1 auto!important;min-width:0!important;width:auto!important;padding-left:3px!important}`);
+      // The month and year button also carries a 20px left indent, which at a narrowed pane is
+      // the difference between fitting and not: measured at 180px, the header splits as 20px
+      // margin, 91px button and 56px arrows, while the longest labels ("September 2027") need
+      // 104px and the button clips at overflow hidden. Dropping the indent gives it 111px.
+      out.push(`${CALNAV} button[aria-label*="select to change the month"]{flex:1 1 auto!important;min-width:0!important;width:auto!important;margin-left:0!important;padding-left:3px!important}`);
       out.push(`${CALNAV} [role="grid"] :is(td,th){padding-left:0!important;padding-right:0!important}`);
     }
     if (S.calendarRowPerAccount) {
@@ -2142,7 +2399,9 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     const GRID = 'body:has([data-tabid="surfaceHeader_timeStripHeader"])';
     if (S.tileTimes) {
       // Only tiles whose time was read (data-olkt-time): all-day and unusual tiles keep every line.
-      out.push(`${GRID} ${CALTILE}:has(> div > [data-olkt-time]) > div > div:nth-child(n+2):not(:has(i)){display:none!important}`);
+      // The lines after the title go; a Join button row before it stays, beside the title.
+      out.push(`${GRID} ${CALTILE} > div > [data-olkt-time] ~ div:not(:has(i)){display:none!important}`);
+      out.push(`${GRID} ${CALTILE} > div:has(> [data-olkt-time]) > div:has(> button:only-child):not([data-olkt-time]){float:right;margin-left:4px}`);
       out.push(`${GRID} [data-olkt-time]::after{content:attr(data-olkt-time);display:block;font-weight:400;font-size:11.5px;opacity:.8}`);
     }
     // Overlaps (ensureOverlap): two events cascade, the later one 18px in and on top;
@@ -2151,15 +2410,26 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     for (let i = 1; i < 4; i++) out.push(`[data-olkt-ov="c${i}"]{left:${i * 18}px!important;right:0!important;z-index:${i + 1};box-shadow:-2px 0 0 var(--olkt-cal-bg,#1f1f1f)}`);
     out.push(`[data-olkt-ov^="c"]:hover{z-index:4!important}`);
     out.push(`[data-olkt-ov="m"]{opacity:0!important;pointer-events:none!important}`);
-    out.push(`.olkt-merge{position:absolute;left:0;right:0;margin:1px 2px;z-index:3;box-sizing:border-box;display:flex;flex-direction:column;gap:3px;padding:2px 4px;overflow-y:auto;scrollbar-width:none;border-radius:4px;border:1px solid var(--colorNeutralStroke1,#474747);background:var(--colorNeutralBackground3,#2b2b2b);color:var(--colorNeutralForeground1,#fff);font-size:11.5px;line-height:15px}`);
+    out.push(`.olkt-merge{position:absolute;left:0;right:0;margin:1px 2px;z-index:3;box-sizing:border-box;display:flex;overflow:hidden;border-radius:4px;border:1px solid var(--colorNeutralStroke1,#474747);background:var(--colorNeutralBackground3,#2b2b2b);color:var(--colorNeutralForeground1,#fff);font-size:11.5px;line-height:15px}`);
     out.push(`.olkt-merge:is(:hover,:focus-within){height:auto!important;min-height:var(--h);z-index:6;box-shadow:0 4px 12px rgba(0,0,0,.5)}`);
-    out.push(`.olkt-merge .ct{flex:none;font-size:10.5px;font-weight:600;color:var(--colorNeutralForeground3,#adadad);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`);
-    out.push(`.olkt-merge .crow{flex:none;border-left:3px solid var(--edge,#479ef5);padding-left:4px;border-radius:2px;cursor:pointer}`);
+    // The rail carries one segment per event at its true offset and duration, each in a lane
+    // of its own so two that overlap never cover each other.
+    // The rail keeps the calendar's own scale: its height is the cluster's real span in
+    // pixels and it does not stretch, so expanding the card on hover cannot restretch the
+    // segments away from the rows, which are placed in those same pixels.
+    out.push(`.olkt-merge .rail{position:relative;flex:none;align-self:flex-start;width:calc(var(--lanes,1) * 5px + 3px);background:var(--colorNeutralBackground1,#201f1e);border-right:1px solid var(--colorNeutralStroke2,#3a3a38)}`);
+    out.push(`.olkt-merge .rail i{position:absolute;width:4px;border-radius:3px;background:var(--edge,#479ef5)}`);
+    // The rows' full height lives on the spacer inside the body rather than on the body, so
+    // a collapsed card scrolls through them instead of being exactly as tall as they are.
+    out.push(`.olkt-merge .body{flex:1;min-width:0;overflow-y:auto;scrollbar-width:none}`);
+    out.push(`.olkt-merge .pad{position:relative}`);
+    out.push(`.olkt-merge .cn{position:absolute;top:2px;right:3px;z-index:4;font-size:9.5px;font-weight:700;line-height:1;color:var(--colorNeutralForeground3,#adadad);background:var(--colorNeutralStroke2,#3a3a38);border-radius:8px;padding:2px 6px;pointer-events:none}`);
+    out.push(`.olkt-merge .crow{position:absolute;left:4px;right:4px;border-left:3px solid var(--edge,#479ef5);padding-left:4px;border-radius:2px;cursor:pointer}`);
     out.push(`.olkt-merge .crow:hover{background:var(--colorNeutralBackground1Hover,#333)}`);
     out.push(`.olkt-merge .crow b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`);
-    out.push(`.olkt-merge .crow small{display:block;opacity:.75;font-variant-numeric:tabular-nums}`);
-    out.push(`.olkt-merge .bar{position:relative;height:3px;margin-top:1px;border-radius:2px;background:var(--colorNeutralStroke2,#3d3d3d)}`);
-    out.push(`.olkt-merge .bar i{position:absolute;top:0;bottom:0;border-radius:2px;background:var(--edge,#479ef5)}`);
+    // Both lines stay on one line each: a wrapped time would make the row taller than the
+    // height the rows are spaced by, and they would then sit on top of one another.
+    out.push(`.olkt-merge .crow small{display:block;opacity:.75;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`);
   }
 
   // ==== Other inbox under Focused ====
@@ -2724,7 +2994,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     out.push(`.olkt-agenda,.olkt-other,.olkt-other-toggle,.olkt-compose,.olkt-head,.olkt-resize{display:none!important}`);
     // Paper is white. Under a dark theme Outlook rewrites the message with inline
     // `color: ... !important`, which no stylesheet can outrank, so the text is painted black
-    // through its fill colour, which those inline rules do not set.
+    // through its fill color, which those inline rules do not set.
     out.push(`${READING}{background:#fff!important}`);
     out.push(`${READING} *{background-color:transparent!important;box-shadow:none!important}`);
     out.push(`${READING},${READING} *{color:#000!important;-webkit-text-fill-color:#000!important}`);
@@ -2944,10 +3214,15 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       if (t.getAttribute('data-olkt-short') !== s.label) t.setAttribute('data-olkt-short', s.label);
       t.toggleAttribute('data-olkt-off', s.h24 < 9 || s.h24 >= 17);
     }
-    // Tiles: the time from the tile's own label, under the title.
+    // Tiles: the time from the tile's own label, under the title. A meeting about to start
+    // has a row holding only its Join button before the title, so that row is skipped.
+    const joinRow = r => r.children.length === 1 && r.firstElementChild.tagName === 'BUTTON';
     for (const tile of S.tileTimes ? document.querySelectorAll(CALTILE) : []) {
       const m = /(\d{1,2}:\d{2}) ([AP]M) to (\d{1,2}:\d{2}) ([AP]M)/.exec(tile.getAttribute('aria-label') || '');
-      const title = tile.firstElementChild && tile.firstElementChild.firstElementChild;
+      const rows = tile.firstElementChild ? [...tile.firstElementChild.children] : [];
+      const title = rows.find(r => !joinRow(r));
+      // Outlook reuses tile nodes, and the Join row comes and goes: no other row keeps a mark.
+      for (const r of rows) if (r !== title && r.hasAttribute('data-olkt-time')) r.removeAttribute('data-olkt-time');
       if (!title) continue;
       if (!m) { title.removeAttribute('data-olkt-time'); continue; } // Outlook reuses tile nodes
       const when = m[2] === m[4] ? `${m[1]} to ${m[3]} ${m[4]}` : `${m[1]} ${m[2]} to ${m[3]} ${m[4]}`;
@@ -2979,7 +3254,11 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     for (const [day, evs] of days) {
       // Redone when tiles move, are renamed, or are re-created as new nodes (which lose their marks).
       const label = it => (it.querySelector('[role="button"]') || it).getAttribute('aria-label') || '';
-      const sig = evs.map(v => `${v.it.getAttribute('data-calitemid')}@${v.s},${v.e}:${label(v.it)}`).sort().join('|');
+      // One read per day. Rows are placed in pixels, so the day's height belongs in the
+      // signature too: resize the window and the percentages are unchanged while every row
+      // offset is wrong, which the old signature could not see.
+      const dayH = day.getBoundingClientRect().height;
+      const sig = evs.map(v => `${v.it.getAttribute('data-calitemid')}@${v.s},${v.e}:${label(v.it)}`).sort().join('|') + `#${Math.round(dayH)}`;
       const marked = evs.filter(v => v.it.hasAttribute('data-olkt-ov')).length;
       if (day.dataset.olktSig === sig && marked === Number(day.dataset.olktMarked || 0) &&
         day.querySelectorAll(':scope > .olkt-merge').length === Number(day.dataset.olktMerges || 0)) continue;
@@ -2998,13 +3277,36 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
           const val = mode === 'c' ? 'c' + Math.min(i, 3) : mode;
           if (val) v.it.setAttribute('data-olkt-ov', val); else v.it.removeAttribute('data-olkt-ov');
         });
-        if (mode === 'm') day.appendChild(mergedTile(list));
+        if (mode === 'm') day.appendChild(mergedTile(list, dayH));
       }
       day.dataset.olktMerges = clusters.filter(c => c.list.length > 1 && c.list.length >= (CAL.mergeAt || 3)).length;
       day.dataset.olktMarked = clusters.reduce((n, c) => n + (c.list.length > 1 ? c.list.length : 0), 0);
     }
   }
-  function mergedTile(list) {
+  // "8:30 AM to 9:30 AM" is wider than a day column in week view, and the end time is the
+  // half that gets clipped. Both times in one half of the day need the AM or PM said once.
+  const span = (from, to) => {
+    if (!from || !to) return from || to || '';
+    const m = /\s([AP]M)$/.exec(from);
+    return m && to.endsWith(m[1]) ? `${from.slice(0, -3)} to ${to}` : `${from} to ${to}`;
+  };
+  // Double-clicking an Outlook tile opens the event in a window of its own. A synthetic
+  // dblclick on the tile does nothing, so the route is the one a person would take: the press
+  // that started the double-click has already opened the peek, and the peek carries a
+  // "View event" button that opens the window. The peek takes a moment to arrive, so this
+  // waits for it rather than firing once and missing.
+  function openFull() {
+    let tries = 0;
+    const tick = () => {
+      const b = [...document.querySelectorAll('button,[role="button"]')]
+        .find(n => n.offsetParent && /view event/i.test(n.getAttribute('aria-label') || ''));
+      if (b) { b.click(); return; }
+      if (++tries < 25) setTimeout(tick, 100);
+    };
+    tick();
+  }
+
+  function mergedTile(list, dayH) {
     const parse = v => {
       const label = (v.it.querySelector('[role="button"]') || v.it).getAttribute('aria-label') || '';
       const m = /^(.*?), (\d{1,2}:\d{2} [AP]M) to (\d{1,2}:\d{2} [AP]M), /.exec(label);
@@ -3018,27 +3320,80 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     t.style.top = s + '%';
     t.style.height = (e - s) + '%';
     t.style.setProperty('--h', (e - s) + '%');
-    t.append(el('div', 'ct', `${list.length} events, ${first.from} to ${last.to}`));
-    for (const v of list) {
+    // Lanes for the rail: the first lane whose previous event has already ended, or a new one.
+    // Without this two overlapping segments would sit in the same column and hide each other.
+    const order = [...list].sort((a, b) => a.s - b.s || a.e - b.e);
+    const laneEnd = [], lane = new Map();
+    for (const v of order) {
+      let n = laneEnd.findIndex(end => end <= v.s + 0.01);
+      if (n < 0) n = laneEnd.length;
+      laneEnd[n] = v.e;
+      lane.set(v, n);
+    }
+    const rail = el('div', 'rail');
+    rail.style.setProperty('--lanes', String(laneEnd.length));
+    if (dayH > 0) rail.style.height = ((e - s) / 100) * dayH + 'px';
+    const body = el('div', 'body'), pad = el('div', 'pad');
+    const cn = el('div', 'cn', String(list.length));
+    cn.title = `${list.length} events, ${first.from} to ${last.to}`;
+    // Rows sit at their own start rather than in list order, so each lines up with its rail
+    // segment. Starts closer together than a row is tall would collide, so a row is pushed
+    // down to clear the one above it; the body scrolls, and hovering expands the card.
+    const ROW = 31, GAP = 2;
+    let floor = 0;
+    for (const v of order) {
       const info = parse(v);
       const btn = v.it.querySelector('[role="button"]');
       const r = el('div', 'crow');
       r.setAttribute('role', 'button');
       r.tabIndex = 0;
       r.title = `${info.title}, ${info.from} to ${info.to}`;
-      // The tile's own color strip (a narrow colored box at its left) marks the row and bar.
+      // The tile's own color strip (a narrow colored box at its left) marks the row and segment.
       const strip = [...v.it.querySelectorAll('div')].find(d => d.getBoundingClientRect().width <= 8 && getComputedStyle(d).backgroundColor !== 'rgba(0, 0, 0, 0)');
-      if (strip) r.style.setProperty('--edge', getComputedStyle(strip).backgroundColor);
-      const bar = el('div', 'bar'), i = el('i');
-      i.style.left = ((v.s - s) / (e - s)) * 100 + '%';
-      i.style.width = ((v.e - v.s) / (e - s)) * 100 + '%';
-      bar.append(i);
-      r.append(el('b', null, info.title), el('small', null, `${info.from} to ${info.to}`), bar);
-      // Looked up at click time: Outlook may have re-created the tile since this was built.
+      const edge = strip ? getComputedStyle(strip).backgroundColor : '';
+      if (edge) r.style.setProperty('--edge', edge);
+      const seg = el('i');
+      seg.style.top = ((v.s - s) / (e - s)) * 100 + '%';
+      seg.style.height = ((v.e - v.s) / (e - s)) * 100 + '%';
+      seg.style.left = (lane.get(v) * 5 + 3) + 'px';
+      if (edge) seg.style.setProperty('--edge', edge);
+      rail.append(seg);
+      // dayH is the day box in pixels, so the row's own offset is its share of that box.
+      const want = dayH > 0 ? ((v.s - s) / 100) * dayH : floor;
+      const top = Math.max(want, floor);
+      floor = top + ROW + GAP;
+      r.style.top = top + 'px';
+      const name = el('b', null, info.title);
+      // Only the title shares a line with the count badge, so the time keeps the full width.
+      if (top < 18) name.style.paddingRight = '26px';
+      r.append(name, el('small', null, span(info.from, info.to)));
       const id = v.it.getAttribute('data-calitemid');
-      onPress(r, () => { const b = document.querySelector(`[data-calitemid="${CSS.escape(id)}"] [role="button"]`) || btn; if (b) b.click(); }); // Outlook opens its own event card
-      t.append(r);
+      // Looked up at press time: Outlook may have re-created the tile since this was built.
+      const live = () => document.querySelector(`[data-calitemid="${CSS.escape(id)}"]`);
+      const target = () => { const t2 = live(); return (t2 && t2.querySelector('[role="button"]')) || t2 || btn; };
+      onPress(r, () => { const b = target(); if (b) b.click(); }); // Outlook opens its own event card
+      // A row answers the same three gestures an Outlook tile does. Anything left unhandled
+      // travels to the day grid underneath, which answers for itself: a double-click there
+      // means "new event here" and a right-click there offers New event and Go to today.
+      r.addEventListener('contextmenu', ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const b = target();
+        if (!b) return;
+        // Forwarded with the pointer's own coordinates so Outlook places its menu at the row.
+        b.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, view: window,
+          button: 2, buttons: 2, clientX: ev.clientX, clientY: ev.clientY }));
+      }, true);
+      r.addEventListener('dblclick', ev => { ev.preventDefault(); ev.stopPropagation(); openFull(); }, true);
+      pad.append(r);
     }
+    // Abspos rows give the spacer no height of its own, so it is set from the last row.
+    pad.style.height = Math.max(0, floor - GAP) + 'px';
+    body.append(pad);
+    t.append(rail, body, cn);
+    // The count header and the gaps between rows are not press targets, so a double-click
+    // landing on them would still reach the day grid underneath.
+    t.addEventListener('dblclick', ev => { ev.preventDefault(); ev.stopPropagation(); });
     return t;
   }
 
@@ -3058,6 +3413,9 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
     ensureReading();
     ensureAgendaData();
     ensureOther();
+    ensureFolderColors();
+    // Account trees are labelled whether or not there is a Favorites list.
+    tagSharedRoots();
     // The agenda hides with a collapsed navigation pane; the tree is fitted again when
     // it comes back, not a minute later.
     const shown = !!(agendaEl && agendaEl.isConnected && agendaEl.offsetParent);
@@ -3072,6 +3430,15 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       list.addEventListener('drop', onListRelease, true);
       list.addEventListener('pointerup', onListRelease, true);
       list.addEventListener('pointerdown', onFavPress, true);
+    }
+    // The agenda's padding is measured from this list, which does not exist on the first
+    // pass, so the first stylesheet is built from the fallbacks. Rebuild it once, as soon as
+    // the real numbers differ; buildCss records them, so this settles in one pass. Only when
+    // the agenda is on: nothing else uses the insets, and measuring here forces a layout on
+    // every mutation batch.
+    if (cfg.agenda) {
+      const inset = agendaInsets();
+      if (!lastInset || inset.left !== lastInset.left || inset.right !== lastInset.right) { render(); return; }
     }
     ensureCompose(list);
     if (adoptNewFavorites(list)) { save(); return; }
@@ -3129,12 +3496,16 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   const onDocKey = ev => { if (ev.key === 'Escape') closeMenus(); };
 
   function start() {
+    // A copy replaced before the page finished loading never starts.
+    if (!current()) return;
     render();
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['title'] });
     document.addEventListener('pointerdown', onDocPointer, true);
     document.addEventListener('pointerdown', onWellPress, true);
     document.addEventListener('keydown', onDocKey, true);
     document.addEventListener('keydown', onWellKey, true);
+    document.addEventListener('contextmenu', onColorContextMenu, true);
+    themeTimer = setInterval(onThemeTick, 2000);
     window.addEventListener('resize', onResize);
     window.addEventListener('beforeprint', onBeforePrint);
     window.addEventListener('afterprint', onAfterPrint);
@@ -3151,6 +3522,9 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       document.removeEventListener('pointerdown', onWellPress, true);
       document.removeEventListener('keydown', onDocKey, true);
       document.removeEventListener('keydown', onWellKey, true);
+      document.removeEventListener('contextmenu', onColorContextMenu, true);
+      clearInterval(themeTimer);
+      restoreFolderColors();
       window.removeEventListener('resize', onResize);
       clearTimeout(resizeTimer);
       window.removeEventListener('beforeprint', onBeforePrint);
@@ -3167,7 +3541,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
       });
       document.querySelectorAll(OURS).forEach(n => n.remove());
       document.querySelectorAll('[data-olkt-favs]').forEach(n => n.removeAttribute('data-olkt-favs'));
-      for (const a of ['data-olkt-label', 'data-olkt-tz', 'data-olkt-short', 'data-olkt-off', 'data-olkt-time', 'data-olkt-chip', 'data-olkt-open', 'data-olkt-othertab', 'data-olkt-ov', 'data-olkt-sig', 'data-olkt-merges', 'data-olkt-marked', 'data-olkt-quoted', 'data-olkt-collapsed'])document.querySelectorAll(`[${a}]`).forEach(n => n.removeAttribute(a));
+      for (const a of ['data-olkt-label', 'data-olkt-tz', 'data-olkt-short', 'data-olkt-off', 'data-olkt-time', 'data-olkt-chip', 'data-olkt-open', 'data-olkt-othertab', 'data-olkt-ov', 'data-olkt-sig', 'data-olkt-merges', 'data-olkt-marked', 'data-olkt-quoted', 'data-olkt-collapsed', 'data-olkt-acct'])document.querySelectorAll(`[${a}]`).forEach(n => n.removeAttribute(a));
       delete window.__olkt;
       store.stop();
       if (full) session.stop();
@@ -3192,6 +3566,7 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
   function applyState() {
     if (S.favoritesGroups) cfg.favorites = stored(FAVORITES_KEY, DEFAULT_FAVORITES);
     cfg.accounts = orderedAccounts(stored(ACCOUNT_ORDER_KEY, []));
+    loadColors();
     // A value an older version left behind is deleted only once the mod has it: a
     // write it refuses, for being too large, must not take the last copy with it.
     for (const key of STORE_KEYS) {
@@ -3219,7 +3594,8 @@ const wchar_t kPageScript[] = LR"olkt(// Runs inside Outlook's page. The Windhaw
 
   if (document.body) start(); else addEventListener('DOMContentLoaded', start, { once: true });
   return 'installed';
-})())olkt";
+};
+runPage(OLKT_CONFIG))olkt";
 
 // ==== settings to OLKT_CONFIG ====
 
@@ -3295,7 +3671,7 @@ void AddList(std::wstring& json, PCWSTR name, std::initializer_list<PCWSTR> fiel
 
 // ==== the mod's own saved state ====
 
-// Edits made inside Outlook (groups, renames, folds, account order, pane and card
+// Edits made inside Outlook (groups, renames, folds, account order, folder colors, pane and card
 // sizes) are the mod's state, not Outlook's, so they live in Windhawk's storage and
 // leave with the mod. The page asks for them over the WebView's message channel, again
 // whenever its window is shown or focused or the pointer or a drag comes into it, and
@@ -3305,8 +3681,12 @@ void AddList(std::wstring& json, PCWSTR name, std::initializer_list<PCWSTR> fiel
 constexpr PCWSTR kStoreKeys[] = {
     L"olkt-favorites", L"olkt-account-order", L"olkt-folds",        L"olkt-pane-width",
     L"olkt-agenda-height", L"olkt-other-height", L"olkt-other-split", L"olkt-other-folds",
+    L"olkt-folder-colors",
 };
-constexpr size_t kStoreMaxChars = 65536;
+constexpr size_t kStoreMaxChars = 65536;  // read buffer, so a larger value an older version saved still loads
+// The longest value written: Windhawk's portable storage (an INI file) accepts more but reads
+// back only the length modulo 32,768.
+constexpr size_t kStoreMaxWriteChars = 32767;
 
 SRWLOCK g_storeLock = SRWLOCK_INIT;
 std::map<std::wstring, std::wstring> g_store;
@@ -3322,13 +3702,14 @@ void LoadStore() {
     ReleaseSRWLockExclusive(&g_storeLock);
 }
 
-// The saved state as a JSON object, for the answer to a page that asks for it.
-std::wstring StateJson() {
-    std::wstring object = L"{";
+// The saved state as a JSON object, for the answer to a page that asks for it. The
+// current settings ride along under "config", so an open window that started on older
+// ones can start again on these.
+std::wstring StateJson(const std::wstring& config) {
+    std::wstring object = L"{\"config\":" + (config.empty() ? std::wstring(L"null") : config);
     AcquireSRWLockShared(&g_storeLock);
     for (const auto& [key, value] : g_store) {
-        if (object.size() > 1) object += L",";
-        object += JsonString(key.c_str()) + L":" + JsonString(value.c_str());
+        object += L"," + JsonString(key.c_str()) + L":" + JsonString(value.c_str());
     }
     ReleaseSRWLockShared(&g_storeLock);
     return object + L"}";
@@ -3356,9 +3737,11 @@ void MakeKey() {
 
 SRWLOCK g_scriptLock = SRWLOCK_INIT;
 std::wstring g_script;
+std::wstring g_config; // the settings without the key, for state answers
 
 // Wraps the page as `{ const OLKT_CONFIG = {...}; <page> }`. Windows created after a
-// settings change get the new settings; open windows keep theirs until a restart.
+// settings change get the new settings; open windows get them in their next state
+// answer and start the page again on them.
 void BuildScript() {
     std::wstring json = L"{";
     AddBool(json, L"favoritesGroups");
@@ -3389,12 +3772,23 @@ void BuildScript() {
     AddString(json, L"printFit");
     AddBool(json, L"printKeepChartsWhole");
     AddString(json, L"printQuotedReplies");
+    // The key stays out of what is answered: an answer can land on a page that has just
+    // navigated away from Outlook.
+    std::wstring config = json + L"}";
     AddField(json, L"key", JsonString(g_key.c_str()));
     json += L"}";
     std::wstring script = L"{\nconst OLKT_CONFIG = " + json + L";\n" + kPageScript + L"\n}";
     AcquireSRWLockExclusive(&g_scriptLock);
     g_script.swap(script);
+    g_config.swap(config);
     ReleaseSRWLockExclusive(&g_scriptLock);
+}
+
+std::wstring CurrentConfig() {
+    AcquireSRWLockShared(&g_scriptLock);
+    std::wstring config = g_config;
+    ReleaseSRWLockShared(&g_scriptLock);
+    return config;
 }
 
 // ==== WebView2 hooks ====
@@ -3473,7 +3867,7 @@ void StoreValue(std::wstring_view name, std::wstring_view text) {
     // Only the mod's own keys, and nothing big enough to bloat the registry.
     bool known = false;
     for (PCWSTR k : kStoreKeys) known = known || key == k;
-    if (!known || value.size() >= kStoreMaxChars) return;
+    if (!known || value.size() > kStoreMaxWriteChars) return;
     AcquireSRWLockExclusive(&g_storeLock);
     if (value.empty()) {
         g_store.erase(key);
@@ -3512,7 +3906,7 @@ void HandleMessage(IUnknown* sender, PCWSTR text) {
         StoreValue(message.substr(0, name), message.substr(name + 1));
         return;
     }
-    std::wstring answer = L"olkt-state\n" + StateJson();
+    std::wstring answer = L"olkt-state\n" + StateJson(CurrentConfig());
     using Post_t = HRESULT(STDMETHODCALLTYPE*)(IUnknown*, LPCWSTR);
     reinterpret_cast<Post_t>(Slot(sender, kWebView_PostWebMessageAsString))(sender, answer.c_str());
 }
