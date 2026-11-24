@@ -3612,8 +3612,8 @@ static HRESULT RegisterThumbnailSource(HWND destination, HWND source, HTHUMBNAIL
             if (entry.clip) entry.clip->Release();
             if (entry.container) entry.container->Release();
             if (entry.visual) entry.visual->Release();
-            Wh_Log(L"SWS: rounded thumbnail failed source=%p hr=0x%08X, using a classic thumbnail",
-                   source, (unsigned)hr);
+            Wh_Log(L"SWS: rounded thumbnail failed source=%p hr=0x%08X fallback=%s",
+                   source, (unsigned)hr, allowClassicFallback ? L"classic" : L"original source");
         }
         if (!allowClassicFallback) return E_FAIL;
     }
@@ -17171,9 +17171,11 @@ static void RequestExplorerShellAssist() {
                   SetPropW(g_hSwitcher, SWS_SHELL_ASSIST_PROP, ULongToHandle(token | kShellAssistReady)) &&
                   PostMessageW(ipc, WM_SWS_EXPLORER_SHELL_ASSIST, token,
                                reinterpret_cast<LPARAM>(s_sessionShell.window));
-    if (!posted) CancelForwardedShellAssist();
-    Wh_Log(L"SWS: shell invocation Explorer assist source=%p token=%u posted=%d",
-           s_sessionShell.window, token, posted);
+    if (!posted) {
+        Wh_Log(L"SWS: could not queue Explorer shell assist source=%p token=%u",
+               s_sessionShell.window, token);
+        CancelForwardedShellAssist();
+    }
 }
 
 static void StopShellInvocationHandoff() {
@@ -17231,8 +17233,10 @@ static void TryShellInvocationHandoff(ShellInvocationPhase phase) {
             SwitchToThisWindow(g_hSwitcher, TRUE);
         }
         foreground = GetAncestor(GetForegroundWindow(), GA_ROOT);
-        Wh_Log(L"SWS: shell invocation claim source=%p staging=%d set=%d foreground=%p",
-               shell, phase == ShellInvocationPhase::Staging, granted, foreground);
+        if (!IsSwitcherWindow(foreground)) {
+            Wh_Log(L"SWS: shell invocation claim source=%p staging=%d set=%d foreground=%p",
+                   shell, phase == ShellInvocationPhase::Staging, granted, foreground);
+        }
         if ((phase == ShellInvocationPhase::Reveal && s_sessionShell.Matches(foreground)) ||
             s_legacyShellSessionStage.Matches(foreground)) {
             RequestExplorerShellAssist();
@@ -17258,14 +17262,8 @@ static void TryShellInvocationHandoff(ShellInvocationPhase phase) {
         CancelForwardedShellAssist();
         s_shellInvocationState = ShellInvocationState::Observing;
         s_shellInvocationInputTick = 0;
-        Wh_Log(L"SWS: shell invocation foreground transferred source=%p foreground=%p",
-               shell, foreground);
     }
     const bool visible = SessionShellIsVisible();
-    if (phase == ShellInvocationPhase::Reveal) {
-        Wh_Log(L"SWS: shell invocation reveal source=%p visible=%d foreground=%p",
-               shell, visible, foreground);
-    }
     // Windows can hide the flyout before assigning foreground to a new HWND.
     // Keep the return identity until that transition settles or times out.
     const bool stillForeground = s_sessionShell.Matches(foreground);
@@ -17274,9 +17272,6 @@ static void TryShellInvocationHandoff(ShellInvocationPhase phase) {
     if (dismissed && g_isVisible && g_isSticky && !g_touchpadInvocation &&
         !IsSwitcherWindow(foreground)) {
         SWS_SetStickyEscapeHotkey(true);
-    }
-    if (dismissed && (s_shellInvocationDeadline || firstAttempt)) {
-        Wh_Log(L"SWS: shell invocation dismissed source=%p foreground=%p", shell, foreground);
     }
     if (foreground && !stillForeground && !IsSwitcherWindow(foreground) &&
         !s_legacyShellSessionStage.Matches(foreground)) {
@@ -17465,10 +17460,6 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
     }
     const bool confirming = active && s_shellForegroundConfirmTick > now;
     if (active && !confirming) {
-        if (s_shellCommitDeadline) {
-            Wh_Log(L"SWS: shell commit confirmed source=%p target=%p",
-                   s_sessionShell.window, hForegroundTarget);
-        }
         ClearExitActivationRetry();
         UpdateMruWindow(hTarget);
     } else if (!retrying && ((!g_isVisible && !g_isPendingShow) || g_animExitActive || confirming)) {
@@ -23616,9 +23607,10 @@ static void RunExplorerShellAssist(DWORD token, HWND source) {
         (ticket.source.Matches(GetAncestor(GetForegroundWindow(), GA_ROOT)) ||
          ReadLegacyShellStage(endpoint, token, GetCurrentProcessId()).Matches(GetForegroundWindow())) &&
         GetPropW(endpoint, SWS_SHELL_ASSIST_PROP) == ULongToHandle(token | kShellAssistReady);
-    BOOL result = eligible ? SetForegroundWindow(endpoint) : FALSE;
-    Wh_Log(L"SWS: Explorer shell assist token=%u source=%p eligible=%d set=%d foreground=%p",
-           token, source, eligible, result, GetForegroundWindow());
+    if (eligible && !SetForegroundWindow(endpoint)) {
+        Wh_Log(L"SWS: Explorer shell assist failed token=%u source=%p foreground=%p",
+               token, source, GetForegroundWindow());
+    }
 }
 
 static LRESULT CALLBACK ExplorerHotkeyGetMessage(int code, WPARAM wParam, LPARAM lParam) {
@@ -23660,8 +23652,10 @@ static LRESULT CALLBACK ExplorerHotkeyGetMessage(int code, WPARAM wParam, LPARAM
                         DWORD error = granted ? ERROR_SUCCESS : GetLastError();
                         if (PostMessageW(endpoint, WM_SWS_EXPLORER_HOTKEY,
                                          (assistToken << 8) | id, GetCurrentProcessId())) {
-                            Wh_Log(L"SWS: Explorer hotkey id=%d source=%p targetPid=%u grant=%d error=%u token=%u",
-                                   id, foreground, pid, granted, error, assistToken);
+                            if (!granted) {
+                                Wh_Log(L"SWS: Explorer foreground grant failed hotkey=%d targetPid=%u error=%u",
+                                       id, pid, error);
+                            }
                             message->message = WM_NULL;
                         } else if (assistToken) {
                             DestroyLegacyShellStage(stage);
@@ -25820,7 +25814,6 @@ static void SignalToolHostExiting() {
 }
 
 void WINAPI EntryPoint_Hook() {
-    Wh_Log(L">");
     ExitThread(0);
 }
 
