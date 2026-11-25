@@ -2,9 +2,8 @@
 // @id              everything-explorer-search
 // @name            Everything Explorer Search
 // @description     Everything search inside File Explorer (native search box via UI Automation and a hotkey) and Win+S to EverythingToolbar
-// @version         0.8.0
+// @version         0.9.3
 // @author          Frixed
-// @github          https://github.com/frixed
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -lshell32 -lshlwapi -lcomctl32 -luuid -lpropsys -ladvapi32 -lgdi32 -ldwmapi -luser32
 // ==/WindhawkMod==
@@ -23,7 +22,10 @@ EverythingToolbar.
   and folder.
 - [EverythingToolbar](https://github.com/srwi/EverythingToolbar) installed. It
   ships `Everything64.dll`, which this mod uses to query Everything. If you
-  installed it somewhere else, update the DLL path in the settings.
+  installed it somewhere else, update the DLL path in the settings. On ARM64
+  Windows, point the setting to an ARM64 build of the Everything SDK DLL: the
+  x64 one can't be loaded into Explorer and every search falls back to Windows
+  Search.
 - For Win+S: EverythingToolbar running, with the same global shortcut set in
   this mod.
 
@@ -38,18 +40,18 @@ EverythingToolbar.
   confirms, Escape goes back to the original folder.
 - **Classic search box:** if your Explorer still uses the Win32 search box,
   pressing Enter in it does the same (hooked when the window is created).
-- The virtual folder (a shell folder registered in HKCU that lives inside this
-  DLL) lists real files: context menu, drag and drop, icons and properties are
+- Control Panel windows keep their own search.
+- The results are a virtual shell folder that lives inside this mod. Its
+  registration is answered from memory: nothing is written to your registry.
+  It lists real files: context menu, drag and drop, icons and properties are
   delegated to the shell. It refreshes by itself when a result is deleted or
   renamed.
 - The current folder is used as the search scope: `"C:\folder\" text`.
 - **Win+S:** a low-level keyboard hook in the taskbar's explorer.exe detects
   Win+S (without Shift/Ctrl/Alt, so Win+Shift+S still takes screenshots),
-  swallows it and sends the configured EverythingToolbar shortcut.
-
-## Try the folder without the hotkey
-With the mod enabled, type in the address bar:
-`::{7E3C2A10-4B5D-4F0E-9A57-3D6E8B2C1F44}\text to search`
+  swallows it and sends the configured EverythingToolbar shortcut. Other mods
+  that also take over Win+S (for example "Everything & Power Tools in the Start
+  Menu") conflict with it: enable only one.
 
 ## Known limitations
 - The classic search box is only hooked in windows opened AFTER enabling the
@@ -58,17 +60,9 @@ With the mod enabled, type in the address bar:
 - The results view shows the old Windows 7 style command bar (Organize,
   Include in library...) instead of the Windows 11 one. It stays in that
   window until you open another tab or window.
-- After updating the mod, restart Windows Explorer so the results folder loads
-  the new version.
-- The index warning option writes `WholeFileSystem = 1` to
-  `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Search\Preferences`
-  and does not revert it when the mod is disabled.
-
-## Support the project
-
-If you enjoy using this mod and would like to support its development, you can make a donation through PayPal. Every contribution is appreciated!
-
-[**Donate with PayPal**](https://www.paypal.com/donate?hosted_button_id=W7BHDHGZP6CHY)
+- The index warning option only changes what Explorer reads while the mod is
+  loaded (`WholeFileSystem = 1` in the search preferences). The registry is not
+  modified.
 */
 // ==/WindhawkModReadme==
 
@@ -81,9 +75,9 @@ If you enjoy using this mod and would like to support its development, you can m
   $name: Maximum results
 - interceptSearchBox: true
   $name: Replace the native search box (UI Automation)
-- searchBoxHints: search,buscar
+- searchBoxHints: search
   $name: Search box keywords
-  $description: Words that identify the search box in its Name or AutomationId, comma separated
+  $description: Words that identify the search box in its Name or AutomationId, comma separated. Add the word your Windows language uses (for example "buscar").
 - hotkey: ctrlF
   $name: Hotkey to open the Everything search
   $options:
@@ -94,7 +88,7 @@ If you enjoy using this mod and would like to support its development, you can m
   $name: Show results as you type
 - disableIndexWarning: true
   $name: Disable the Windows Search indexing warning
-  $description: Writes WholeFileSystem = 1 to the user's search preferences
+  $description: Explorer reads WholeFileSystem = 1 from the search preferences while the mod is loaded. Nothing is written to the registry.
 - winSEnabled: true
   $name: Win+S opens EverythingToolbar
 - winSShortcut: Win+Alt+S
@@ -117,10 +111,12 @@ If you enjoy using this mod and would like to support its development, you can m
 #include <dwmapi.h>
 #include <uiautomation.h>
 #include <tlhelp32.h>
+#include <windhawk_utils.h>
 
 #include <atomic>
 #include <cwctype>
 #include <mutex>
+#include <set>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -133,19 +129,13 @@ If you enjoy using this mod and would like to support its development, you can m
 #endif
 
 // ---------------------------------------------------------------------------
-// Constantes y GUIDs (definidos acá para no depender de libuuid)
+// Constantes y GUIDs propios (los PKEY_* de propkey.h no están en libuuid de mingw)
 // ---------------------------------------------------------------------------
 
 // {7E3C2A10-4B5D-4F0E-9A57-3D6E8B2C1F44}
 static const CLSID CLSID_EvFolder = {0x7e3c2a10, 0x4b5d, 0x4f0e, {0x9a, 0x57, 0x3d, 0x6e, 0x8b, 0x2c, 0x1f, 0x44}};
 static const wchar_t kClsidStr[] = L"{7E3C2A10-4B5D-4F0E-9A57-3D6E8B2C1F44}";
 
-static const GUID kBHID_DataObject = {0xB8C0BD9F, 0xED24, 0x455C, {0x83, 0xE6, 0xD5, 0x39, 0x0C, 0x4F, 0xE8, 0xC4}};
-static const GUID kBHID_SFUIObject = {0x3981E225, 0xF559, 0x11D3, {0x8E, 0x3A, 0x00, 0xC0, 0x4F, 0x68, 0x37, 0xD5}};
-static const GUID kSID_STopLevelBrowser = {0x4C96BE40, 0x915C, 0x11CF, {0x99, 0xD3, 0x00, 0xAA, 0x00, 0x4A, 0xE8, 0x37}};
-static const GUID kCLSID_ShellWindows = {0x9BA05972, 0xF6A8, 0x11CF, {0xA4, 0x42, 0x00, 0xA0, 0xC9, 0x0A, 0x8F, 0x39}};
-static const GUID kIID_IShellFolderViewCB = {0x2047E320, 0xF2A9, 0x11CE, {0xAE, 0x65, 0x08, 0x00, 0x2B, 0x2E, 0x12, 0x62}};
-static const GUID kFOLDERID_ComputerFolder = {0x0AC0837C, 0xBBF8, 0x452A, {0x85, 0x0D, 0x79, 0xD0, 0x8E, 0x66, 0x7C, 0xA7}};
 
 #define MKKEY(a, b, c, d0, d1, d2, d3, d4, d5, d6, d7, pid) \
     {{a, b, c, {d0, d1, d2, d3, d4, d5, d6, d7}}, pid}
@@ -159,14 +149,22 @@ static const PROPERTYKEY kPkFolder = MKKEY(0xE3E0584C, 0xB788, 0x4A5A, 0xBB, 0x2
 // Ajustes
 // ---------------------------------------------------------------------------
 
-static std::wstring g_dllPath;
-static DWORD g_maxResults = 1000;
+static std::wstring g_dllPath;  // protegido por g_evMutex
+static std::atomic<DWORD> g_maxResults{1000};
 enum Hotkey { HK_NONE, HK_CTRL_F, HK_CTRL_SHIFT_F };
-static Hotkey g_hotkey = HK_CTRL_F;
+static std::atomic<Hotkey> g_hotkey{HK_CTRL_F};
 static HMODULE g_self = nullptr;
 static std::atomic<bool> g_intercept{true};
 static std::atomic<bool> g_live{true};
-static bool g_disableIndexWarning = true;
+static std::atomic<bool> g_disableIndexWarning{true};
+
+// Objetos COM y ventanas del mod que el shell todavía tiene vivos. Al descargar
+// hay que esperar a que lleguen a cero: su código está en este DLL.
+static std::atomic<LONG> g_liveObjects{0};
+
+static bool IsSpanishUi() {
+    return PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_SPANISH;
+}
 static std::mutex g_hintMutex;
 static std::vector<std::wstring> g_hints;
 
@@ -226,29 +224,34 @@ static bool ParseShortcut(const std::wstring& text, std::vector<WORD>& keys) {
     return true;
 }
 
+static std::wstring StringSetting(PCWSTR name) {
+    return WindhawkUtils::StringSetting::make(name).get();
+}
+
+static std::mutex g_evMutex;  // el SDK2 usa estado global: serializar todo
+
 static void LoadSettings() {
-    PCWSTR p = Wh_GetStringSetting(L"everythingDll");
     // La ruta admite variables de entorno (%LocalAppData%, etc.).
+    std::wstring dll = StringSetting(L"everythingDll");
     WCHAR expanded[MAX_PATH] = {};
-    DWORD n = ExpandEnvironmentStringsW(p ? p : L"", expanded, ARRAYSIZE(expanded));
-    g_dllPath = (n && n <= ARRAYSIZE(expanded)) ? expanded : (p ? p : L"");
-    Wh_FreeStringSetting(p);
+    DWORD n = ExpandEnvironmentStringsW(dll.c_str(), expanded, ARRAYSIZE(expanded));
+    {
+        std::lock_guard<std::mutex> lk(g_evMutex);
+        g_dllPath = (n && n <= ARRAYSIZE(expanded)) ? expanded : dll;
+    }
     int m = Wh_GetIntSetting(L"maxResults");
     g_maxResults = m > 0 ? (DWORD)m : 1000;
-    PCWSTR hk = Wh_GetStringSetting(L"hotkey");
-    g_hotkey = HK_CTRL_F;
-    if (hk && !wcscmp(hk, L"ctrlShiftF")) g_hotkey = HK_CTRL_SHIFT_F;
-    else if (hk && !wcscmp(hk, L"none")) g_hotkey = HK_NONE;
-    Wh_FreeStringSetting(hk);
+    std::wstring hk = StringSetting(L"hotkey");
+    g_hotkey = hk == L"ctrlShiftF" ? HK_CTRL_SHIFT_F : hk == L"none" ? HK_NONE : HK_CTRL_F;
 
     g_intercept = Wh_GetIntSetting(L"interceptSearchBox") != 0;
     g_live = Wh_GetIntSetting(L"liveSearch") != 0;
     g_disableIndexWarning = Wh_GetIntSetting(L"disableIndexWarning") != 0;
 
-    PCWSTR hs = Wh_GetStringSetting(L"searchBoxHints");
+    std::wstring hs = StringSetting(L"searchBoxHints");
     std::vector<std::wstring> hints;
     std::wstring cur;
-    for (const wchar_t* c = hs ? hs : L""; ; c++) {
+    for (const wchar_t* c = hs.c_str(); ; c++) {
         if (*c == L',' || *c == 0) {
             std::wstring t = Trim(cur);
             if (!t.empty()) {
@@ -261,7 +264,6 @@ static void LoadSettings() {
             cur += *c;
         }
     }
-    Wh_FreeStringSetting(hs);
     {
         std::lock_guard<std::mutex> lk(g_hintMutex);
         g_hints = hints;
@@ -269,22 +271,10 @@ static void LoadSettings() {
 
     WinSConfig ws;
     ws.enabled = Wh_GetIntSetting(L"winSEnabled") != 0;
-    PCWSTR sc = Wh_GetStringSetting(L"winSShortcut");
-    std::wstring shortcut = sc ? sc : L"";
-    Wh_FreeStringSetting(sc);
-    PCWSTR rp = Wh_GetStringSetting(L"winSRequiredProcess");
-    ws.requiredProcess = rp ? Trim(rp) : L"";
-    Wh_FreeStringSetting(rp);
-    ws.valid = ParseShortcut(shortcut, ws.keys);
+    ws.requiredProcess = Trim(StringSetting(L"winSRequiredProcess"));
+    ws.valid = ParseShortcut(StringSetting(L"winSShortcut"), ws.keys);
     std::lock_guard<std::mutex> lk(g_winSMutex);
     g_winS = ws;
-}
-
-// Evita el aviso del Explorador cuando el indexado de Windows Search está desactivado.
-static void DisableIndexWarning() {
-    DWORD one = 1;
-    RegSetKeyValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Search\\Preferences",
-                    L"WholeFileSystem", REG_DWORD, &one, sizeof(one));
 }
 
 // ---------------------------------------------------------------------------
@@ -298,14 +288,14 @@ struct EvApi {
     BOOL(WINAPI* QueryW)(BOOL) = nullptr;
     DWORD(WINAPI* GetNumResults)() = nullptr;
     DWORD(WINAPI* GetResultFullPathNameW)(DWORD, LPWSTR, DWORD) = nullptr;
-    DWORD(WINAPI* GetMajorVersion)() = nullptr;
     void(WINAPI* Reset)() = nullptr;
 };
 static EvApi g_ev;
-static std::mutex g_evMutex;  // el SDK2 usa estado global: serializar todo
+static std::atomic<bool> g_evLoaded{false};
 
 static bool LoadEverything() {
     std::lock_guard<std::mutex> lk(g_evMutex);
+    g_evLoaded = false;
     if (g_ev.h) {
         FreeLibrary(g_ev.h);
         g_ev = EvApi{};
@@ -318,18 +308,24 @@ static bool LoadEverything() {
     LOADFN(QueryW);
     LOADFN(GetNumResults);
     LOADFN(GetResultFullPathNameW);
-    LOADFN(GetMajorVersion);
     LOADFN(Reset);
 #undef LOADFN
-    return g_ev.SetSearchW && g_ev.SetMax && g_ev.QueryW && g_ev.GetNumResults && g_ev.GetResultFullPathNameW;
+    g_evLoaded = g_ev.SetSearchW && g_ev.SetMax && g_ev.QueryW && g_ev.GetNumResults && g_ev.GetResultFullPathNameW;
+    return g_evLoaded;
 }
 
-// Everything tiene que estar corriendo para que el IPC responda.
+// Everything tiene que estar corriendo para que el IPC responda. Corre en el hilo
+// de UI del Explorador, así que no usa el SDK (SendMessage sin límite, y su lock lo
+// puede tener una consulta larga de otra ventana): le pregunta la versión a la
+// ventana IPC de Everything con un tiempo máximo.
 static bool EvAvailable() {
-    std::lock_guard<std::mutex> lk(g_evMutex);
-    if (!g_ev.h || !g_ev.QueryW) return false;
-    if (g_ev.GetMajorVersion) return g_ev.GetMajorVersion() > 0;
-    return true;
+    if (!g_evLoaded) return false;
+    HWND ev = FindWindowW(L"EVERYTHING_TASKBAR_NOTIFICATION", nullptr);
+    if (!ev) ev = FindWindowW(L"EVERYTHING_TASKBAR_NOTIFICATION_(1.5a)", nullptr);
+    if (!ev) return false;
+    const UINT kGetMajorVersion = 0;  // EVERYTHING_IPC_GET_MAJOR_VERSION, se manda con WM_USER
+    DWORD_PTR major = 0;
+    return SendMessageTimeoutW(ev, WM_USER, kGetMajorVersion, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, &major) && major > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -484,9 +480,10 @@ static std::wstring FolderLabel(const std::wstring& path) {
     return label;
 }
 
-// Título de la pestaña: "texto — en Descargas".
+// Título de la pestaña: "texto — in Downloads" (o "en Descargas" con Windows en español).
 static std::wstring SearchTitle(const std::wstring& text, const std::wstring& scope) {
-    return scope.empty() ? text : text + L" \u2014 en " + FolderLabel(scope);
+    if (scope.empty()) return text;
+    return text + (IsSpanishUi() ? L" \u2014 en " : L" \u2014 in ") + FolderLabel(scope);
 }
 
 // ---------------------------------------------------------------------------
@@ -500,11 +497,11 @@ struct Col {
     SHCOLSTATEF state;
 };
 static const Col kCols[] = {
-    {L"Nombre", &kPkName, 32, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT},
-    {L"Carpeta", &kPkFolder, 44, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT},
-    {L"Tipo", &kPkType, 20, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT},
-    {L"Tamaño", &kPkSize, 12, SHCOLSTATE_TYPE_INT | SHCOLSTATE_ONBYDEFAULT},
-    {L"Fecha de modificación", &kPkDate, 22, SHCOLSTATE_TYPE_DATE | SHCOLSTATE_ONBYDEFAULT},
+    {L"Name", &kPkName, 32, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT},
+    {L"Folder", &kPkFolder, 44, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT},
+    {L"Type", &kPkType, 20, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT},
+    {L"Size", &kPkSize, 12, SHCOLSTATE_TYPE_INT | SHCOLSTATE_ONBYDEFAULT},
+    {L"Date modified", &kPkDate, 22, SHCOLSTATE_TYPE_DATE | SHCOLSTATE_ONBYDEFAULT},
 };
 
 // ---------------------------------------------------------------------------
@@ -517,9 +514,10 @@ class EvEnum : public IEnumIDList {
     size_t m_pos = 0;
 
 public:
-    explicit EvEnum(std::vector<PITEMID_CHILD>&& v) : m_items(std::move(v)) {}
+    explicit EvEnum(std::vector<PITEMID_CHILD>&& v) : m_items(std::move(v)) { g_liveObjects++; }
     virtual ~EvEnum() {
         for (auto p : m_items) CoTaskMemFree(p);
+        g_liveObjects--;
     }
     STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
         if (riid == IID_IUnknown || riid == __uuidof(IEnumIDList)) {
@@ -571,9 +569,10 @@ class EvFolder : public IShellFolder2, public IPersistFolder2 {
     std::unordered_set<std::wstring> m_paths;
 
 public:
-    EvFolder() {}
+    EvFolder() { g_liveObjects++; }
     virtual ~EvFolder() {
         if (m_pidl) ILFree(m_pidl);
+        g_liveObjects--;
     }
 
     const std::wstring& Query() const { return m_query; }
@@ -780,7 +779,7 @@ public:
             IShellItemArray* sia = nullptr;
             HRESULT hr = SHCreateShellItemArrayFromIDLists(cidl, abs.data(), &sia);
             if (FAILED(hr)) return hr;
-            hr = sia->BindToHandler(nullptr, riid == __uuidof(IDataObject) ? kBHID_DataObject : kBHID_SFUIObject, riid, ppv);
+            hr = sia->BindToHandler(nullptr, riid == __uuidof(IDataObject) ? BHID_DataObject : BHID_SFUIObject, riid, ppv);
             sia->Release();
             return hr;
         }
@@ -838,7 +837,7 @@ public:
         if (SUCCEEDED(hr)) {
             // mingw no declara PropVariantToVariant; se resuelve en runtime desde propsys.dll
             using Fn = HRESULT(WINAPI*)(const PROPVARIANT*, VARIANT*);
-            static Fn fn = (Fn)GetProcAddress(LoadLibraryW(L"propsys.dll"), "PropVariantToVariant");
+            static Fn fn = (Fn)GetProcAddress(GetModuleHandleW(L"propsys.dll"), "PropVariantToVariant");
             hr = fn ? fn(&p, pv) : E_NOTIMPL;
         }
         PropVariantClear(&p);
@@ -848,7 +847,21 @@ public:
         if (i >= ARRAYSIZE(kCols)) return E_FAIL;
         psd->fmt = (i == 3) ? LVCFMT_RIGHT : LVCFMT_LEFT;
         psd->cxChar = kCols[i].cx;
-        if (!pidl) return StringToStrRet(kCols[i].name, &psd->str);
+        if (!pidl) {
+            // Mismos encabezados que muestra el Explorador, en el idioma de Windows.
+            IPropertyDescription* desc = nullptr;
+            PWSTR label = nullptr;
+            if (SUCCEEDED(PSGetPropertyDescription(*kCols[i].key, IID_PPV_ARGS(&desc)))) {
+                if (FAILED(desc->GetDisplayName(&label))) label = nullptr;
+                desc->Release();
+            }
+            if (label) {
+                psd->str.uType = STRRET_WSTR;
+                psd->str.pOleStr = label;
+                return S_OK;
+            }
+            return StringToStrRet(kCols[i].name, &psd->str);
+        }
         if (!AsEv(pidl, SIG_FILE)) return StringToStrRet(L"", &psd->str);
         PROPVARIANT pv;
         PropVariantInit(&pv);
@@ -882,11 +895,17 @@ public:
     EvFolder* folder;             // referencia propia
     IShellView* view = nullptr;   // débil: la vista es dueña de este callback
 
-    explicit EvViewCB(EvFolder* f) : folder(f) { folder->AddRef(); }
-    virtual ~EvViewCB() { folder->Release(); }
+    explicit EvViewCB(EvFolder* f) : folder(f) {
+        folder->AddRef();
+        g_liveObjects++;
+    }
+    virtual ~EvViewCB() {
+        folder->Release();
+        g_liveObjects--;
+    }
 
     STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
-        if (riid == IID_IUnknown || riid == kIID_IShellFolderViewCB) {
+        if (riid == IID_IUnknown || riid == IID_IShellFolderViewCB) {
             *ppv = static_cast<IShellFolderViewCB*>(this);
             AddRef();
             return S_OK;
@@ -940,6 +959,7 @@ static LRESULT CALLBACK NotifyWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             auto* cs = (CREATESTRUCTW*)l;
             d = new NotifyData{(EvViewCB*)cs->lpCreateParams, 0};
             d->cb->AddRef();
+            g_liveObjects++;
             SetWindowLongPtrW(h, GWLP_USERDATA, (LONG_PTR)d);
             break;
         }
@@ -980,6 +1000,7 @@ static LRESULT CALLBACK NotifyWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 d->cb->Release();
                 delete d;
                 SetWindowLongPtrW(h, GWLP_USERDATA, 0);
+                g_liveObjects--;
             }
             break;
     }
@@ -1017,8 +1038,8 @@ STDMETHODIMP EvFolder::CreateViewObject(HWND, REFIID riid, void** ppv) {
 }
 
 // ---------------------------------------------------------------------------
-// Class factory + export (el shell instancia la carpeta vía registro HKCU,
-// que apunta a este mismo DLL)
+// Class factory. COM nunca carga este DLL: los hooks de CoGetClassObject /
+// CoCreateInstance devuelven la fábrica directamente cuando piden CLSID_EvFolder.
 // ---------------------------------------------------------------------------
 
 class EvFactory : public IClassFactory {
@@ -1026,13 +1047,21 @@ public:
     STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
         if (riid == IID_IUnknown || riid == __uuidof(IClassFactory)) {
             *ppv = static_cast<IClassFactory*>(this);
+            AddRef();
             return S_OK;
         }
         *ppv = nullptr;
         return E_NOINTERFACE;
     }
-    STDMETHODIMP_(ULONG) AddRef() override { return 2; }
-    STDMETHODIMP_(ULONG) Release() override { return 1; }
+    // Objeto estático: el conteo solo sirve para saber si el shell todavía lo usa.
+    STDMETHODIMP_(ULONG) AddRef() override {
+        g_liveObjects++;
+        return 2;
+    }
+    STDMETHODIMP_(ULONG) Release() override {
+        g_liveObjects--;
+        return 1;
+    }
     STDMETHODIMP CreateInstance(IUnknown* outer, REFIID riid, void** ppv) override {
         *ppv = nullptr;
         if (outer) return CLASS_E_NOAGGREGATION;
@@ -1045,55 +1074,467 @@ public:
 };
 static EvFactory g_factory;
 
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-#endif
-extern "C" __declspec(dllexport) HRESULT STDAPICALLTYPE DllGetClassObject(REFCLSID clsid, REFIID riid, void** ppv) {
-    if (clsid == CLSID_EvFolder) return g_factory.QueryInterface(riid, ppv);
-    *ppv = nullptr;
-    return CLASS_E_CLASSNOTAVAILABLE;
+using CoGetClassObject_t = HRESULT(WINAPI*)(REFCLSID, DWORD, LPVOID, REFIID, LPVOID*);
+using CoCreateInstance_t = HRESULT(WINAPI*)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
+using CoCreateInstanceEx_t = HRESULT(WINAPI*)(REFCLSID, IUnknown*, DWORD, COSERVERINFO*, DWORD, MULTI_QI*);
+// Cada módulo (combase y ole32) conserva su propio puntero original.
+static CoGetClassObject_t CoGetClassObject_Combase, CoGetClassObject_Ole32;
+static CoCreateInstance_t CoCreateInstance_Combase, CoCreateInstance_Ole32;
+static CoCreateInstanceEx_t CoCreateInstanceEx_Combase, CoCreateInstanceEx_Ole32;
+
+static HRESULT ServeClassObject(REFCLSID clsid, DWORD ctx, LPVOID info, REFIID iid, LPVOID* ppv, CoGetClassObject_t original) {
+    if (clsid != CLSID_EvFolder) return original(clsid, ctx, info, iid, ppv);
+    return g_factory.QueryInterface(iid, ppv);
 }
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
-
-static const wchar_t kHideNewStart[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons\\NewStartPanel";
-static const wchar_t kHideClassic[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons\\ClassicStartMenu";
-
-static std::wstring NameSpaceKey() {
-    return std::wstring(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Desktop\\NameSpace\\") + kClsidStr;
+static HRESULT WINAPI CoGetClassObject_HookCombase(REFCLSID c, DWORD x, LPVOID i, REFIID r, LPVOID* p) {
+    return ServeClassObject(c, x, i, r, p, CoGetClassObject_Combase);
 }
-
-static std::wstring ClsidKey() { return std::wstring(L"Software\\Classes\\CLSID\\") + kClsidStr; }
-
-static void RegisterFolderClass() {
-    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       (LPCWSTR)&DllGetClassObject, &g_self);
-    WCHAR path[MAX_PATH] = {};
-    GetModuleFileNameW(g_self, path, MAX_PATH);
-
-    std::wstring base = ClsidKey();
-    static const wchar_t kName[] = L"Everything";
-    static const wchar_t kBoth[] = L"Both";
-    DWORD attr = SFGAO_FOLDER | SFGAO_BROWSABLE;
-    RegSetKeyValueW(HKEY_CURRENT_USER, base.c_str(), nullptr, REG_SZ, kName, sizeof(kName));
-    RegSetKeyValueW(HKEY_CURRENT_USER, (base + L"\\InprocServer32").c_str(), nullptr, REG_SZ, path, (DWORD)((wcslen(path) + 1) * sizeof(WCHAR)));
-    RegSetKeyValueW(HKEY_CURRENT_USER, (base + L"\\InprocServer32").c_str(), L"ThreadingModel", REG_SZ, kBoth, sizeof(kBoth));
-    RegSetKeyValueW(HKEY_CURRENT_USER, (base + L"\\ShellFolder").c_str(), L"Attributes", REG_DWORD, &attr, sizeof(attr));
-
-    // Sin esta entrada "::{CLSID}" no se puede parsear (E_INVALIDARG). Se oculta del
-    // escritorio y del panel de navegación.
-    DWORD zero = 0, one = 1;
-    RegSetKeyValueW(HKEY_CURRENT_USER, base.c_str(), L"System.IsPinnedToNameSpaceTree", REG_DWORD, &zero, sizeof(zero));
-    for (const wchar_t* k : {kHideNewStart, kHideClassic}) RegSetKeyValueW(HKEY_CURRENT_USER, k, kClsidStr, REG_DWORD, &one, sizeof(one));
-    RegSetKeyValueW(HKEY_CURRENT_USER, NameSpaceKey().c_str(), nullptr, REG_SZ, kName, sizeof(kName));
+static HRESULT WINAPI CoGetClassObject_HookOle32(REFCLSID c, DWORD x, LPVOID i, REFIID r, LPVOID* p) {
+    return ServeClassObject(c, x, i, r, p, CoGetClassObject_Ole32);
 }
 
-static void UnregisterFolderClass() {
-    RegDeleteTreeW(HKEY_CURRENT_USER, NameSpaceKey().c_str());
-    for (const wchar_t* k : {kHideNewStart, kHideClassic}) RegDeleteKeyValueW(HKEY_CURRENT_USER, k, kClsidStr);
-    RegDeleteTreeW(HKEY_CURRENT_USER, ClsidKey().c_str());
+static HRESULT ServeInstance(REFCLSID clsid, LPUNKNOWN outer, DWORD ctx, REFIID iid, LPVOID* ppv, CoCreateInstance_t original) {
+    if (clsid != CLSID_EvFolder) return original(clsid, outer, ctx, iid, ppv);
+    return g_factory.CreateInstance(outer, iid, ppv);
+}
+static HRESULT WINAPI CoCreateInstance_HookCombase(REFCLSID c, LPUNKNOWN o, DWORD x, REFIID r, LPVOID* p) {
+    return ServeInstance(c, o, x, r, p, CoCreateInstance_Combase);
+}
+static HRESULT WINAPI CoCreateInstance_HookOle32(REFCLSID c, LPUNKNOWN o, DWORD x, REFIID r, LPVOID* p) {
+    return ServeInstance(c, o, x, r, p, CoCreateInstance_Ole32);
+}
+
+static HRESULT ServeInstanceEx(REFCLSID clsid, IUnknown* outer, DWORD ctx, COSERVERINFO* info, DWORD count, MULTI_QI* results,
+                               CoCreateInstanceEx_t original) {
+    if (clsid != CLSID_EvFolder) return original(clsid, outer, ctx, info, count, results);
+    if (!count || !results) return E_INVALIDARG;
+    IUnknown* unk = nullptr;
+    HRESULT hr = g_factory.CreateInstance(outer, IID_IUnknown, (void**)&unk);
+    if (FAILED(hr)) return hr;
+    DWORD ok = 0;
+    for (DWORD i = 0; i < count; i++) {
+        results[i].pItf = nullptr;
+        results[i].hr = unk->QueryInterface(*results[i].pIID, (void**)&results[i].pItf);
+        if (SUCCEEDED(results[i].hr)) ok++;
+    }
+    unk->Release();
+    return ok == count ? S_OK : ok ? CO_S_NOTALLINTERFACES : E_NOINTERFACE;
+}
+static HRESULT WINAPI CoCreateInstanceEx_HookCombase(REFCLSID c, IUnknown* o, DWORD x, COSERVERINFO* i, DWORD n, MULTI_QI* r) {
+    return ServeInstanceEx(c, o, x, i, n, r, CoCreateInstanceEx_Combase);
+}
+static HRESULT WINAPI CoCreateInstanceEx_HookOle32(REFCLSID c, IUnknown* o, DWORD x, COSERVERINFO* i, DWORD n, MULTI_QI* r) {
+    return ServeInstanceEx(c, o, x, i, n, r, CoCreateInstanceEx_Ole32);
+}
+
+template <typename T>
+static void HookExport(HMODULE module, const char* name, T hook, T* original, void* skip = nullptr) {
+    void* target = module ? (void*)GetProcAddress(module, name) : nullptr;
+    // ole32 reenvía estas funciones a combase: si es la misma dirección, ya está enganchada.
+    if (target && target != skip) WindhawkUtils::SetFunctionHook((T)target, hook, original);
+}
+
+static void HookCom() {
+    HMODULE combase = GetModuleHandleW(L"combase.dll");
+    HMODULE ole32 = GetModuleHandleW(L"ole32.dll");
+    void* gco = combase ? (void*)GetProcAddress(combase, "CoGetClassObject") : nullptr;
+    void* cci = combase ? (void*)GetProcAddress(combase, "CoCreateInstance") : nullptr;
+    void* ccx = combase ? (void*)GetProcAddress(combase, "CoCreateInstanceEx") : nullptr;
+    HookExport(combase, "CoGetClassObject", CoGetClassObject_HookCombase, &CoGetClassObject_Combase);
+    HookExport(combase, "CoCreateInstance", CoCreateInstance_HookCombase, &CoCreateInstance_Combase);
+    HookExport(combase, "CoCreateInstanceEx", CoCreateInstanceEx_HookCombase, &CoCreateInstanceEx_Combase);
+    HookExport(ole32, "CoGetClassObject", CoGetClassObject_HookOle32, &CoGetClassObject_Ole32, gco);
+    HookExport(ole32, "CoCreateInstance", CoCreateInstance_HookOle32, &CoCreateInstance_Ole32, cci);
+    HookExport(ole32, "CoCreateInstanceEx", CoCreateInstanceEx_HookOle32, &CoCreateInstanceEx_Ole32, ccx);
+}
+
+// ---------------------------------------------------------------------------
+// Registro virtual
+//   El shell necesita ver la carpeta registrada (CLSID, ShellFolder, entrada en
+//   Desktop\NameSpace oculta del escritorio). Nada de eso se escribe en el
+//   registro del usuario: vive en un hive privado (RegLoadAppKey, un archivo en
+//   la carpeta de datos del mod que ningún otro proceso ve) y los hooks de
+//   lectura de kernelbase hacen que el Explorador lo encuentre donde lo busca.
+//   El mismo mecanismo devuelve WholeFileSystem = 1 solo en memoria.
+// ---------------------------------------------------------------------------
+
+static HKEY g_hive = nullptr;
+static std::wstring g_hivePath;
+
+static const wchar_t kNsPath[] = L"hkcu\\software\\microsoft\\windows\\currentversion\\explorer\\desktop\\namespace";
+static const wchar_t kHidePath[] = L"hkcu\\software\\microsoft\\windows\\currentversion\\explorer\\hidedesktopicons\\newstartpanel";
+static const wchar_t kHidePathClassic[] =
+    L"hkcu\\software\\microsoft\\windows\\currentversion\\explorer\\hidedesktopicons\\classicstartmenu";
+static const wchar_t kPrefsPath[] = L"hkcu\\software\\microsoft\\windows\\currentversion\\explorer\\search\\preferences";
+static const wchar_t kClsidLower[] = L"{7e3c2a10-4b5d-4f0e-9a57-3d6e8b2c1f44}";
+
+using NtQueryKey_t = LONG(NTAPI*)(HANDLE, int, PVOID, ULONG, PULONG);
+static NtQueryKey_t g_NtQueryKey = nullptr;
+
+// Handles de las claves NameSpace / HideDesktopIcons abiertas por el Explorador,
+// para sumarles la entrada del mod al enumerarlas.
+static SRWLOCK g_handlesLock = SRWLOCK_INIT;
+static std::set<HKEY> g_nsHandles, g_hideHandles;
+static std::atomic<LONG> g_trackedCount{0};
+
+static bool ContainsI(const wchar_t* s, const wchar_t* needle) {
+    size_t n = wcslen(needle);
+    for (; *s; s++) {
+        size_t i = 0;
+        while (i < n && s[i] && towlower(s[i]) == needle[i]) i++;
+        if (i == n) return true;
+    }
+    return false;
+}
+
+// Filtro barato antes de calcular la ruta completa de la clave.
+static bool MightBeOurs(const wchar_t* sub) {
+    return ContainsI(sub, L"{7e3c2a10-") || ContainsI(sub, L"namespace") || ContainsI(sub, L"newstartpanel") ||
+           ContainsI(sub, L"classicstartmenu") || ContainsI(sub, L"preferences");
+}
+
+static bool IsOurClsid(const wchar_t* name) { return name && !_wcsicmp(name, kClsidStr); }
+static bool IsHidePath(const std::wstring& path) { return path == kHidePath || path == kHidePathClassic; }
+static bool StartsWith(const std::wstring& s, const std::wstring& p) { return !s.compare(0, p.size(), p); }
+
+// "classes\..." para cualquier raíz de clases, "hkcu\..." para el usuario actual.
+static std::wstring NormalizeKeyPath(std::wstring k) {
+    auto cut = [&](const std::wstring& prefix, const std::wstring& to) {
+        if (StartsWith(k, prefix) && (k.size() == prefix.size() || k[prefix.size()] == L'\\')) {
+            k = to + k.substr(prefix.size());
+            return true;
+        }
+        return false;
+    };
+    if (cut(L"\\registry\\machine\\software\\classes", L"classes")) return k;
+    if (cut(L"\\registry\\machine", L"hklm")) return k;
+    if (StartsWith(k, L"\\registry\\user\\")) {
+        size_t sidEnd = k.find(L'\\', 15);
+        std::wstring sid = k.substr(15, sidEnd == std::wstring::npos ? std::wstring::npos : sidEnd - 15);
+        std::wstring rest = sidEnd == std::wstring::npos ? L"" : k.substr(sidEnd);
+        if (sid.size() > 8 && !sid.compare(sid.size() - 8, 8, L"_classes")) return L"classes" + rest;
+        k = L"hkcu" + rest;
+    }
+    if (cut(L"hkcu\\software\\classes", L"classes")) return k;
+    if (cut(L"hklm\\software\\classes", L"classes")) return k;
+    return StartsWith(k, L"classes") || StartsWith(k, L"hkcu") || StartsWith(k, L"hklm") ? k : std::wstring();
+}
+
+static std::wstring KeyPath(HKEY h) {
+    if (h == HKEY_CLASSES_ROOT) return L"classes";
+    if (h == HKEY_CURRENT_USER) return L"hkcu";
+    if (h == HKEY_LOCAL_MACHINE) return L"hklm";
+    if (!g_NtQueryKey || ((ULONG_PTR)h & 0x80000000) == 0x80000000) return {};
+    alignas(8) BYTE buf[4096];
+    ULONG len = 0;
+    if (g_NtQueryKey(h, 3 /* KeyNameInformation */, buf, sizeof(buf), &len) < 0) return {};
+    ULONG nameLen = *(ULONG*)buf;
+    if (nameLen > sizeof(buf) - sizeof(ULONG)) return {};
+    return NormalizeKeyPath(Lower(std::wstring((wchar_t*)(buf + sizeof(ULONG)), nameLen / 2)));
+}
+
+static std::wstring JoinKeyPath(const std::wstring& base, const wchar_t* sub) {
+    if (base.empty()) return {};
+    std::wstring s = sub ? Lower(sub) : L"";
+    while (!s.empty() && s[0] == L'\\') s.erase(0, 1);
+    while (!s.empty() && s.back() == L'\\') s.pop_back();
+    return NormalizeKeyPath(s.empty() ? base : base + L"\\" + s);
+}
+
+// Ruta dentro del hive privado que reemplaza a "full", si es una de las del mod.
+static bool MapToHive(const std::wstring& full, std::wstring& out) {
+    std::wstring clsid = std::wstring(L"classes\\clsid\\") + kClsidLower;
+    if (StartsWith(full, clsid) && (full.size() == clsid.size() || full[clsid.size()] == L'\\')) {
+        out = L"Classes\\CLSID\\" + std::wstring(kClsidStr) + full.substr(clsid.size());
+        return true;
+    }
+    std::wstring ns = std::wstring(kNsPath) + L"\\" + kClsidLower;
+    if (StartsWith(full, ns) && (full.size() == ns.size() || full[ns.size()] == L'\\')) {
+        out = L"NameSpaceNode" + full.substr(ns.size());
+        return true;
+    }
+    return false;
+}
+
+static void TrackHandle(HKEY h, bool ns) {
+    AcquireSRWLockExclusive(&g_handlesLock);
+    (ns ? g_nsHandles : g_hideHandles).insert(h);
+    g_trackedCount = (LONG)(g_nsHandles.size() + g_hideHandles.size());
+    ReleaseSRWLockExclusive(&g_handlesLock);
+}
+
+static bool IsTrackedKey(HKEY h, bool ns) {
+    if (!g_trackedCount) return false;
+    AcquireSRWLockShared(&g_handlesLock);
+    bool found = (ns ? g_nsHandles : g_hideHandles).count(h) > 0;
+    ReleaseSRWLockShared(&g_handlesLock);
+    if (!found) return false;
+    std::wstring path = KeyPath(h);
+    return ns ? path == kNsPath : IsHidePath(path);
+}
+
+static LSTATUS ServeDword(LPDWORD type, LPBYTE data, LPDWORD cb) {
+    if (type) *type = REG_DWORD;
+    if (!cb) return data ? ERROR_INVALID_PARAMETER : ERROR_SUCCESS;
+    if (data) {
+        if (*cb < sizeof(DWORD)) {
+            *cb = sizeof(DWORD);
+            return ERROR_MORE_DATA;
+        }
+        *(DWORD*)data = 1;
+    }
+    *cb = sizeof(DWORD);
+    return ERROR_SUCCESS;
+}
+
+// Valor que el mod responde sin tocar el registro: el CLSID oculto del escritorio
+// y WholeFileSystem = 1 si el ajuste está activo.
+static bool ServesValue(const std::wstring& path, const wchar_t* value) {
+    if (!value) return false;
+    if (IsOurClsid(value)) return IsHidePath(path);
+    return g_disableIndexWarning && !_wcsicmp(value, L"WholeFileSystem") && path == kPrefsPath;
+}
+
+using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
+using RegCreateKeyExW_t = decltype(&RegCreateKeyExW);
+using RegCloseKey_t = decltype(&RegCloseKey);
+using RegEnumKeyExW_t = decltype(&RegEnumKeyExW);
+using RegQueryInfoKeyW_t = decltype(&RegQueryInfoKeyW);
+using RegQueryValueExW_t = decltype(&RegQueryValueExW);
+using RegGetValueW_t = decltype(&RegGetValueW);
+using RegEnumValueW_t = decltype(&RegEnumValueW);
+static RegOpenKeyExW_t RegOpenKeyExW_Original;
+static RegCreateKeyExW_t RegCreateKeyExW_Original;
+static RegCloseKey_t RegCloseKey_Original;
+static RegEnumKeyExW_t RegEnumKeyExW_Original;
+static RegQueryInfoKeyW_t RegQueryInfoKeyW_Original;
+static RegQueryValueExW_t RegQueryValueExW_Original;
+static RegGetValueW_t RegGetValueW_Original;
+static RegEnumValueW_t RegEnumValueW_Original;
+
+// Clave de reemplazo del hive para NameSpace / HideDesktopIcons / Preferences cuando
+// la real no existe y la abren solo para leer.
+static LSTATUS OpenStandIn(const std::wstring& full, REGSAM sam, PHKEY result) {
+    const REGSAM kWrite = KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK | WRITE_DAC | WRITE_OWNER | DELETE |
+                          GENERIC_WRITE | GENERIC_ALL | MAXIMUM_ALLOWED;
+    if (sam & kWrite) return ERROR_FILE_NOT_FOUND;
+    const wchar_t* standIn = full == kNsPath          ? L"NameSpace"
+                             : IsHidePath(full)       ? L"HideDesktopIcons"
+                             : full == kPrefsPath && g_disableIndexWarning ? L"SearchPreferences"
+                                                                            : nullptr;
+    if (!standIn) return ERROR_FILE_NOT_FOUND;
+    return RegOpenKeyExW_Original(g_hive, standIn, 0, KEY_READ, result);
+}
+
+static LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey, LPCWSTR sub, DWORD options, REGSAM sam, PHKEY result) {
+    HKEY hive = g_hive;
+    if (!hive || !sub || !*sub || !result || !MightBeOurs(sub)) return RegOpenKeyExW_Original(hKey, sub, options, sam, result);
+    std::wstring full = JoinKeyPath(KeyPath(hKey), sub);
+    std::wstring hivePath;
+    if (!full.empty() && MapToHive(full, hivePath))
+        return RegOpenKeyExW_Original(hive, hivePath.c_str(), 0, sam & ~(KEY_WOW64_32KEY | KEY_WOW64_64KEY), result);
+    LSTATUS status = RegOpenKeyExW_Original(hKey, sub, options, sam, result);
+    if (status == ERROR_FILE_NOT_FOUND) status = OpenStandIn(full, sam, result);
+    bool ns = full == kNsPath;
+    if (status == ERROR_SUCCESS && (ns || IsHidePath(full))) TrackHandle(*result, ns);
+    return status;
+}
+
+static LSTATUS WINAPI RegCreateKeyExW_Hook(HKEY hKey, LPCWSTR sub, DWORD reserved, LPWSTR cls, DWORD options, REGSAM sam,
+                                           const LPSECURITY_ATTRIBUTES security, PHKEY result, LPDWORD disposition) {
+    HKEY hive = g_hive;
+    if (!hive || !sub || !*sub || !result || !MightBeOurs(sub))
+        return RegCreateKeyExW_Original(hKey, sub, reserved, cls, options, sam, security, result, disposition);
+    std::wstring full = JoinKeyPath(KeyPath(hKey), sub);
+    std::wstring hivePath;
+    if (!full.empty() && MapToHive(full, hivePath))
+        return RegCreateKeyExW_Original(hive, hivePath.c_str(), 0, nullptr, 0, sam & ~(KEY_WOW64_32KEY | KEY_WOW64_64KEY), nullptr,
+                                        result, disposition);
+    LSTATUS status = RegCreateKeyExW_Original(hKey, sub, reserved, cls, options, sam, security, result, disposition);
+    bool ns = full == kNsPath;
+    if (status == ERROR_SUCCESS && (ns || IsHidePath(full))) TrackHandle(*result, ns);
+    return status;
+}
+
+static LSTATUS WINAPI RegCloseKey_Hook(HKEY hKey) {
+    if (g_trackedCount) {
+        AcquireSRWLockExclusive(&g_handlesLock);
+        g_nsHandles.erase(hKey);
+        g_hideHandles.erase(hKey);
+        g_trackedCount = (LONG)(g_nsHandles.size() + g_hideHandles.size());
+        ReleaseSRWLockExclusive(&g_handlesLock);
+    }
+    return RegCloseKey_Original(hKey);
+}
+
+// Suma el CLSID del mod después de las entradas reales de NameSpace.
+static LSTATUS WINAPI RegEnumKeyExW_Hook(HKEY hKey, DWORD index, LPWSTR name, LPDWORD nameLen, LPDWORD reserved, LPWSTR cls,
+                                         LPDWORD clsLen, PFILETIME lastWrite) {
+    LSTATUS status = RegEnumKeyExW_Original(hKey, index, name, nameLen, reserved, cls, clsLen, lastWrite);
+    if (status != ERROR_NO_MORE_ITEMS || !g_hive || !IsTrackedKey(hKey, true)) return status;
+    DWORD real = 0;
+    if (RegQueryInfoKeyW_Original(hKey, nullptr, nullptr, nullptr, &real, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                                  nullptr) != ERROR_SUCCESS ||
+        index != real)
+        return status;
+    DWORD len = (DWORD)wcslen(kClsidStr);
+    if (!nameLen) return ERROR_INVALID_PARAMETER;
+    if (!name || *nameLen <= len) {
+        *nameLen = len + 1;
+        return ERROR_MORE_DATA;
+    }
+    wcscpy_s(name, *nameLen, kClsidStr);
+    *nameLen = len;
+    if (cls && clsLen && *clsLen) cls[0] = 0;
+    if (clsLen) *clsLen = 0;
+    if (lastWrite) GetSystemTimeAsFileTime(lastWrite);
+    return ERROR_SUCCESS;
+}
+
+static LSTATUS WINAPI RegQueryInfoKeyW_Hook(HKEY hKey, LPWSTR cls, LPDWORD clsLen, LPDWORD reserved, LPDWORD subKeys,
+                                            LPDWORD maxSubKeyLen, LPDWORD maxClassLen, LPDWORD values, LPDWORD maxValueNameLen,
+                                            LPDWORD maxValueLen, LPDWORD securityLen, PFILETIME lastWrite) {
+    LSTATUS status = RegQueryInfoKeyW_Original(hKey, cls, clsLen, reserved, subKeys, maxSubKeyLen, maxClassLen, values,
+                                               maxValueNameLen, maxValueLen, securityLen, lastWrite);
+    if (status != ERROR_SUCCESS || !g_hive || !g_trackedCount) return status;
+    DWORD len = (DWORD)wcslen(kClsidStr);
+    if (subKeys && IsTrackedKey(hKey, true)) {
+        *subKeys += 1;
+        if (maxSubKeyLen && *maxSubKeyLen < len) *maxSubKeyLen = len;
+    } else if (values && IsTrackedKey(hKey, false)) {
+        *values += 1;
+        if (maxValueNameLen && *maxValueNameLen < len) *maxValueNameLen = len;
+        if (maxValueLen && *maxValueLen < sizeof(DWORD)) *maxValueLen = sizeof(DWORD);
+    }
+    return status;
+}
+
+static LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey, LPCWSTR value, LPDWORD reserved, LPDWORD type, LPBYTE data, LPDWORD cb) {
+    if (g_hive && value && (IsOurClsid(value) || !_wcsicmp(value, L"WholeFileSystem")) && ServesValue(KeyPath(hKey), value))
+        return ServeDword(type, data, cb);
+    return RegQueryValueExW_Original(hKey, value, reserved, type, data, cb);
+}
+
+// Suma el valor "{CLSID}" = 1 después de los valores reales de HideDesktopIcons.
+static LSTATUS WINAPI RegEnumValueW_Hook(HKEY hKey, DWORD index, LPWSTR name, LPDWORD nameLen, LPDWORD reserved, LPDWORD type,
+                                         LPBYTE data, LPDWORD cb) {
+    LSTATUS status = RegEnumValueW_Original(hKey, index, name, nameLen, reserved, type, data, cb);
+    if (status != ERROR_NO_MORE_ITEMS || !g_hive || !IsTrackedKey(hKey, false)) return status;
+    DWORD real = 0;
+    if (RegQueryInfoKeyW_Original(hKey, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &real, nullptr, nullptr, nullptr,
+                                  nullptr) != ERROR_SUCCESS ||
+        index != real)
+        return status;
+    DWORD len = (DWORD)wcslen(kClsidStr);
+    if (!nameLen) return ERROR_INVALID_PARAMETER;
+    if (!name || *nameLen <= len) {
+        *nameLen = len + 1;
+        return ERROR_MORE_DATA;
+    }
+    wcscpy_s(name, *nameLen, kClsidStr);
+    *nameLen = len;
+    return ServeDword(type, data, cb);
+}
+
+static LSTATUS WINAPI RegGetValueW_Hook(HKEY hKey, LPCWSTR sub, LPCWSTR value, DWORD flags, LPDWORD type, PVOID data,
+                                        LPDWORD cb) {
+    HKEY hive = g_hive;
+    bool valueOfInterest = value && (IsOurClsid(value) || !_wcsicmp(value, L"WholeFileSystem"));
+    if (hive && ((sub && *sub && MightBeOurs(sub)) || valueOfInterest)) {
+        std::wstring full = JoinKeyPath(KeyPath(hKey), sub);
+        std::wstring hivePath;
+        if (sub && *sub && !full.empty() && MapToHive(full, hivePath)) {
+            HKEY key;
+            LSTATUS status = RegOpenKeyExW_Original(hive, hivePath.c_str(), 0, KEY_QUERY_VALUE, &key);
+            if (status != ERROR_SUCCESS) return status;
+            status = RegGetValueW_Original(key, nullptr, value, flags, type, data, cb);
+            RegCloseKey_Original(key);
+            return status;
+        }
+        if (valueOfInterest && ServesValue(full, value)) {
+            if (!(flags & RRF_RT_REG_DWORD)) return ERROR_UNSUPPORTED_TYPE;
+            return ServeDword(type, (LPBYTE)data, cb);
+        }
+    }
+    return RegGetValueW_Original(hKey, sub, value, flags, type, data, cb);
+}
+
+static void HiveDword(const wchar_t* key, const wchar_t* name, DWORD v) {
+    RegSetKeyValueW(g_hive, key, name, REG_DWORD, &v, sizeof(v));
+}
+static void HiveString(const wchar_t* key, const wchar_t* name, const wchar_t* v, DWORD type = REG_SZ) {
+    RegSetKeyValueW(g_hive, key, name, type, v, (DWORD)((wcslen(v) + 1) * sizeof(WCHAR)));
+}
+
+// Crea el hive privado del mod con lo que el Explorador tiene que encontrar.
+static bool OpenHive() {
+    WCHAR storage[MAX_PATH] = {};
+    WCHAR user[256] = {};
+    DWORD userLen = ARRAYSIZE(user);
+    if (!Wh_GetModStoragePath(storage, ARRAYSIZE(storage)) || !GetUserNameW(user, &userLen)) return false;
+    SHCreateDirectoryExW(nullptr, storage, nullptr);
+    // Un archivo por proceso: con "abrir carpetas en un proceso aparte" hay más de
+    // un explorer.exe por usuario y un hive de aplicación no se puede compartir.
+    std::wstring prefix = std::wstring(storage) + L"\\" + user + L"-";
+    WIN32_FIND_DATAW fd;
+    HANDLE find = FindFirstFileW((prefix + L"*").c_str(), &fd);
+    if (find != INVALID_HANDLE_VALUE) {  // restos de procesos anteriores (los que están en uso no se borran)
+        do DeleteFileW((std::wstring(storage) + L"\\" + fd.cFileName).c_str());
+        while (FindNextFileW(find, &fd));
+        FindClose(find);
+    }
+    g_hivePath = prefix + std::to_wstring(GetCurrentProcessId()) + L".hiv";
+    HKEY hive = nullptr;
+    if (RegLoadAppKeyW(g_hivePath.c_str(), &hive, KEY_ALL_ACCESS, 0, 0) != ERROR_SUCCESS) return false;
+    g_hive = hive;
+
+    std::wstring base = std::wstring(L"Classes\\CLSID\\") + kClsidStr;
+    HiveString(base.c_str(), nullptr, L"Everything");
+    HiveDword(base.c_str(), L"System.IsPinnedToNameSpaceTree", 0);
+    // El shell exige un InprocServer32 antes de pedirle la clase a COM, y ahí los
+    // hooks de CoGetClassObject / CoCreateInstance entregan la fábrica. No puede
+    // ser shell32.dll (shell32 reconoce su propio DLL y se salta COM) ni este mod:
+    // se usa shdocvw.dll, que si algo llegara a COM sin pasar por los hooks solo
+    // respondería que no conoce la clase. COM nunca carga este DLL.
+    HiveString((base + L"\\InprocServer32").c_str(), nullptr, L"%SystemRoot%\\system32\\shdocvw.dll", REG_EXPAND_SZ);
+    HiveString((base + L"\\InprocServer32").c_str(), L"ThreadingModel", L"Both");
+    HiveDword((base + L"\\ShellFolder").c_str(), L"Attributes", SFGAO_FOLDER | SFGAO_BROWSABLE);
+    HiveString(L"NameSpaceNode", nullptr, L"Everything");
+    HiveDword(L"SearchPreferences", L"WholeFileSystem", 1);
+    for (const wchar_t* k : {L"NameSpace", L"HideDesktopIcons"}) {
+        HKEY h;
+        if (RegCreateKeyExW(g_hive, k, 0, nullptr, 0, KEY_READ, nullptr, &h, nullptr) == ERROR_SUCCESS) RegCloseKey(h);
+    }
+    return true;
+}
+
+static void CloseHive() {
+    HKEY hive = g_hive;
+    g_hive = nullptr;
+    if (!hive) return;
+    RegCloseKey(hive);
+    // Si el Explorador todavía tiene abierta alguna clave del hive, el archivo sigue
+    // en uso: se borra al iniciar la próxima vez.
+    DeleteFileW(g_hivePath.c_str());
+}
+
+template <typename T>
+static bool HookKernelBase(const char* name, T hook, T* original) {
+    HMODULE module = GetModuleHandleW(L"kernelbase.dll");
+    void* target = module ? (void*)GetProcAddress(module, name) : nullptr;
+    return target && WindhawkUtils::SetFunctionHook((T)target, hook, original);
+}
+
+static bool HookRegistry() {
+    g_NtQueryKey = (NtQueryKey_t)(void*)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryKey");
+    return g_NtQueryKey && HookKernelBase("RegOpenKeyExW", RegOpenKeyExW_Hook, &RegOpenKeyExW_Original) &&
+           HookKernelBase("RegCreateKeyExW", RegCreateKeyExW_Hook, &RegCreateKeyExW_Original) &&
+           HookKernelBase("RegCloseKey", RegCloseKey_Hook, &RegCloseKey_Original) &&
+           HookKernelBase("RegEnumKeyExW", RegEnumKeyExW_Hook, &RegEnumKeyExW_Original) &&
+           HookKernelBase("RegQueryInfoKeyW", RegQueryInfoKeyW_Hook, &RegQueryInfoKeyW_Original) &&
+           HookKernelBase("RegQueryValueExW", RegQueryValueExW_Hook, &RegQueryValueExW_Original) &&
+           HookKernelBase("RegGetValueW", RegGetValueW_Hook, &RegGetValueW_Original) &&
+           HookKernelBase("RegEnumValueW", RegEnumValueW_Hook, &RegEnumValueW_Original);
 }
 
 // ---------------------------------------------------------------------------
@@ -1102,7 +1543,6 @@ static void UnregisterFolderClass() {
 
 static std::wstring g_lastScope;
 static std::mutex g_scopeMutex;  // cada ventana del Explorador corre en su propio hilo
-static UINT g_msgUnsub = 0;
 static bool g_swallowChar = false;
 static std::mutex g_listMutex;
 static std::vector<HWND> g_subclassed;
@@ -1118,7 +1558,7 @@ static HWND FindAncestorByClass(HWND h, PCWSTR cls) {
 // IShellBrowser de la pestaña/ventana que contiene la caja de búsqueda.
 static IShellBrowser* FindShellBrowser(HWND frame, HWND tab) {
     IShellWindows* psw = nullptr;
-    if (FAILED(CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&psw)))) return nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&psw)))) return nullptr;
     IShellBrowser* best = nullptr;
     IShellBrowser* fallback = nullptr;
     long n = 0;
@@ -1133,7 +1573,7 @@ static IShellBrowser* FindShellBrowser(HWND frame, HWND tab) {
         IServiceProvider* sp = nullptr;
         if (SUCCEEDED(disp->QueryInterface(IID_PPV_ARGS(&sp)))) {
             IShellBrowser* sb = nullptr;
-            if (SUCCEEDED(sp->QueryService(kSID_STopLevelBrowser, IID_PPV_ARGS(&sb)))) {
+            if (SUCCEEDED(sp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&sb)))) {
                 HWND h = nullptr;
                 sb->GetWindow(&h);
                 if (tab && h == tab) {
@@ -1231,6 +1671,10 @@ struct RegItemPidl {
 #pragma pack(pop)
 
 // PIDL de un "regitem" (carpeta identificada por CLSID) hijo del Escritorio, armado a mano.
+// El Panel de control también es una ventana CabinetWClass del Explorador y su caja
+// de búsqueda busca configuraciones: ahí no se reemplaza nada.
+static bool IsControlPanelTab(HWND frame, HWND tab);
+
 static PIDLIST_ABSOLUTE MakeRootPidl() {
     RegItemPidl* r = (RegItemPidl*)CoTaskMemAlloc(sizeof(RegItemPidl));
     if (!r) return nullptr;
@@ -1323,9 +1767,12 @@ static bool NavigateSearch(HWND frame, HWND tab, const std::wstring& q, bool fal
 // Enter dentro de la caja de búsqueda clásica (Edit Win32). Si Everything no
 // responde, se deja seguir a la búsqueda nativa de esa misma caja.
 static bool HandleEnter(HWND edit) {
+    HWND frame = GetAncestor(edit, GA_ROOT);
+    HWND tab = FindAncestorByClass(edit, L"ShellTabWindowClass");
+    if (IsControlPanelTab(frame, tab)) return false;
     WCHAR text[2048] = {};
     GetWindowTextW(edit, text, ARRAYSIZE(text));
-    return NavigateSearch(GetAncestor(edit, GA_ROOT), FindAncestorByClass(edit, L"ShellTabWindowClass"), Trim(text), false, 0);
+    return NavigateSearch(frame, tab, Trim(text), false, 0);
 }
 
 // Antes de descargar el mod: las pestañas que muestran resultados usan código
@@ -1334,7 +1781,7 @@ static void EvacuateThreadBrowsers() {
     PIDLIST_ABSOLUTE root = GetRootPidl();
     if (!root) return;
     IShellWindows* psw = nullptr;
-    if (FAILED(CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&psw)))) {
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&psw)))) {
         ILFree(root);
         return;
     }
@@ -1350,7 +1797,7 @@ static void EvacuateThreadBrowsers() {
         IServiceProvider* sp = nullptr;
         IShellBrowser* sb = nullptr;
         if (SUCCEEDED(disp->QueryInterface(IID_PPV_ARGS(&sp)))) {
-            sp->QueryService(kSID_STopLevelBrowser, IID_PPV_ARGS(&sb));
+            sp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&sb));
             sp->Release();
         }
         disp->Release();
@@ -1365,7 +1812,7 @@ static void EvacuateThreadBrowsers() {
                 SplitQuery(QueryText(q), scope, text);
                 if (!scope.empty()) SHParseDisplayName(StripSlash(scope).c_str(), nullptr, &target, 0, nullptr);
             }
-            if (!target) SHGetKnownFolderIDList(kFOLDERID_ComputerFolder, 0, nullptr, &target);
+            if (!target) SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, nullptr, &target);
             if (target) {
                 sb->BrowseObject(target, SBSP_SAMEBROWSER | SBSP_ABSOLUTE | SBSP_WRITENOHISTORY);
                 ILFree(target);
@@ -1403,8 +1850,9 @@ struct PopupReq {
 static UINT g_msgShowPopup = 0;
 static UINT g_msgEvacuate = 0;
 static std::atomic<ULONGLONG> g_popupClosedTick{0};
-static std::atomic<LONG> g_evacPending{0};
-static HANDLE g_evacDone = nullptr;
+// Evacuación antes de descargar: un evento por hilo de ventanas del Explorador.
+static std::mutex g_evacMutex;
+static std::vector<std::pair<DWORD, HANDLE>> g_evacEvents;
 
 static BOOL CALLBACK FindTabProc(HWND h, LPARAM l) {
     WCHAR cls[64];
@@ -1419,6 +1867,23 @@ static HWND FindActiveTab(HWND frame) {
     HWND r = nullptr;
     EnumChildWindows(frame, FindTabProc, (LPARAM)&r);
     return r;
+}
+
+static bool IsControlPanelTab(HWND frame, HWND tab) {
+    IShellBrowser* sb = FindShellBrowser(frame, tab ? tab : FindActiveTab(frame));
+    if (!sb) return false;
+    bool cpl = false;
+    if (PIDLIST_ABSOLUTE cur = CurrentFolder(sb)) {
+        PWSTR s = nullptr;
+        if (SUCCEEDED(SHGetNameFromIDList(cur, SIGDN_DESKTOPABSOLUTEPARSING, &s))) {
+            // Vista por categorías y "Todos los elementos de Panel de control".
+            cpl = StrStrIW(s, L"{26EE0668-A00A-44D7-9371-BEB064C98683}") || StrStrIW(s, L"{21EC2020-3AEA-1069-A2DD-08002B30309D}");
+            CoTaskMemFree(s);
+        }
+        ILFree(cur);
+    }
+    sb->Release();
+    return cpl;
 }
 
 static void RestoreOrigin() {
@@ -1558,7 +2023,7 @@ static LRESULT CALLBACK PopupWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             if (!e) return -1;
             g_popupEdit = e;
             SendMessageW(e, WM_SETFONT, (WPARAM)g_ps.font, TRUE);
-            SendMessageW(e, EM_SETCUEBANNER, TRUE, (LPARAM)L"Buscar con Everything…");
+            SendMessageW(e, EM_SETCUEBANNER, TRUE, (LPARAM)(IsSpanishUi() ? L"Buscar con Everything\u2026" : L"Search with Everything\u2026"));
             SetWindowSubclass(e, PopupEditProc, 1, 0);
             return 0;
         }
@@ -1657,13 +2122,30 @@ static LRESULT CALLBACK PopupWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     return DefWindowProcW(h, m, w, l);
 }
 
+// Lupa: Segoe Fluent Icons solo viene con Windows 11; en Windows 10 el mismo glifo
+// está en Segoe MDL2 Assets. CreateFont nunca falla, hay que ver qué fuente eligió GDI.
+static HFONT CreateIconFont(int px) {
+    for (const wchar_t* face : {L"Segoe Fluent Icons", L"Segoe MDL2 Assets"}) {
+        HFONT f = CreateFontW(-px, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, face);
+        WCHAR got[LF_FACESIZE] = {};
+        HDC dc = GetDC(nullptr);
+        HGDIOBJ old = SelectObject(dc, f);
+        GetTextFaceW(dc, LF_FACESIZE, got);
+        SelectObject(dc, old);
+        ReleaseDC(nullptr, dc);
+        if (!_wcsicmp(got, face)) return f;
+        DeleteObject(f);
+    }
+    return CreateFontW(-px, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe MDL2 Assets");
+}
+
 static bool EnsurePopupClass() {
     if (g_popupClassRegistered) return true;
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = PopupWndProc;
     wc.hInstance = g_self;
-    wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kPopupClass;
     if (!RegisterClassExW(&wc)) return false;
     g_popupClassRegistered = true;
@@ -1684,7 +2166,7 @@ static void ShowPopup(HWND frame, const PopupReq* req = nullptr) {
     g_ps.bg = CreateSolidBrush(g_ps.th.bg);
     int fpx = MulDiv(14, (int)dpi, 96);
     g_ps.font = CreateFontW(-fpx, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-    g_ps.icon = CreateFontW(-fpx, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe Fluent Icons");
+    g_ps.icon = CreateIconFont(fpx);
 
     RECT fr;
     GetWindowRect(frame, &fr);
@@ -1708,11 +2190,14 @@ static void ShowPopup(HWND frame, const PopupReq* req = nullptr) {
 
     HWND hw = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, kPopupClass, L"", WS_POPUP, x, y, w, h, frame, nullptr, g_self, nullptr);
     if (!hw) return;
-    // Esquinas redondeadas chicas de Win11 (DWMWCP_ROUNDSMALL) y borde del color del tema.
-    int pref = 3;
-    DwmSetWindowAttribute(hw, 33, &pref, sizeof(pref));
+    // Esquinas redondeadas chicas de Win11 y borde del color del tema (los headers de
+    // mingw todavía no traen estas constantes de dwmapi.h).
+    const DWORD kDwmwaWindowCornerPreference = 33, kDwmwaBorderColor = 34;
+    const int kDwmwcpRoundSmall = 3;
+    int pref = kDwmwcpRoundSmall;
+    DwmSetWindowAttribute(hw, kDwmwaWindowCornerPreference, &pref, sizeof(pref));
     COLORREF bc = g_ps.th.border;
-    DwmSetWindowAttribute(hw, 34, &bc, sizeof(bc));
+    DwmSetWindowAttribute(hw, kDwmwaBorderColor, &bc, sizeof(bc));
 
     g_popup = hw;
     g_popupFrame = frame;
@@ -1751,6 +2236,7 @@ static LRESULT CALLBACK KbProc(int code, WPARAM w, LPARAM l) {
             // Si UIA ya reconoció la caja nativa, se deja que el Explorador enfoque su propia caja:
             // el cuadro de texto aparece justo encima de ella, en su posición exacta.
             if (g_intercept && g_uiaMatched) return CallNextHookEx(nullptr, code, w, l);
+            if (IsControlPanelTab(fg, nullptr)) return CallNextHookEx(nullptr, code, w, l);
             ShowPopup(fg);
             return 1;  // no llega al Explorador
         }
@@ -1759,10 +2245,16 @@ static LRESULT CALLBACK KbProc(int code, WPARAM w, LPARAM l) {
 }
 
 // Se ejecuta fuera del hook, desde el bucle de mensajes del hilo.
+static void SignalEvacuated() {
+    std::lock_guard<std::mutex> lk(g_evacMutex);
+    for (auto& e : g_evacEvents)
+        if (e.first == GetCurrentThreadId()) SetEvent(e.second);
+}
+
 static VOID CALLBACK EvacuateTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
     KillTimer(nullptr, id);
     EvacuateThreadBrowsers();
-    if (--g_evacPending == 0 && g_evacDone) SetEvent(g_evacDone);
+    SignalEvacuated();
 }
 
 // Mensajes que llegan al hilo de UI del Explorador desde otros hilos del mod.
@@ -1783,7 +2275,7 @@ static LRESULT CALLBACK GetMsgProc(int code, WPARAM w, LPARAM l) {
         }
         if (g_msgEvacuate && m->message == g_msgEvacuate) {
             m->message = WM_NULL;
-            if (!SetTimer(nullptr, 0, 0, EvacuateTimerProc) && --g_evacPending == 0 && g_evacDone) SetEvent(g_evacDone);
+            if (!SetTimer(nullptr, 0, 0, EvacuateTimerProc)) SignalEvacuated();
             return 0;
         }
     }
@@ -1827,32 +2319,40 @@ static BOOL CALLBACK EnumExplorerProc(HWND h, LPARAM) {
 }
 
 // Manda cada hilo de ventanas del Explorador a sacar sus pestañas de la carpeta
-// de resultados y espera a que terminen.
+// de resultados y espera a que cada uno termine o deje de existir.
 static void EvacuateAll() {
     std::vector<DWORD> tids;
     {
         std::lock_guard<std::mutex> lk(g_hookMutex);
         for (auto& p : g_kbHooks) tids.push_back(p.tid);
     }
-    if (tids.empty()) return;
-    g_evacDone = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_evacPending = 1;  // reserva para que ningún hilo dispare el evento antes de terminar de postear
+    std::vector<std::pair<HANDLE, HANDLE>> waits;  // evento, hilo
     for (DWORD tid : tids) {
-        g_evacPending++;
-        if (!PostThreadMessageW(tid, g_msgEvacuate, 0, 0)) g_evacPending--;
+        HANDLE th = OpenThread(SYNCHRONIZE, FALSE, tid);
+        if (!th) continue;
+        HANDLE ev = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        {
+            std::lock_guard<std::mutex> lk(g_evacMutex);
+            g_evacEvents.push_back({tid, ev});
+        }
+        if (PostThreadMessageW(tid, g_msgEvacuate, 0, 0)) {
+            waits.push_back({ev, th});
+        } else {
+            SetEvent(ev);
+            CloseHandle(th);
+        }
     }
-    if (--g_evacPending == 0) SetEvent(g_evacDone);
-    WaitForSingleObject(g_evacDone, 3000);
-    HANDLE ev = g_evacDone;
-    g_evacDone = nullptr;
-    CloseHandle(ev);
+    for (auto& w : waits) {
+        HANDLE hs[2] = {w.first, w.second};
+        WaitForMultipleObjects(2, hs, FALSE, INFINITE);
+        CloseHandle(w.second);
+    }
+    std::lock_guard<std::mutex> lk(g_evacMutex);
+    for (auto& e : g_evacEvents) CloseHandle(e.second);
+    g_evacEvents.clear();
 }
 
-static LRESULT CALLBACK EditSubclassProc(HWND h, UINT m, WPARAM w, LPARAM l, UINT_PTR id, DWORD_PTR) {
-    if (m == g_msgUnsub) {
-        RemoveWindowSubclass(h, EditSubclassProc, id);
-        return 0;
-    }
+static LRESULT CALLBACK EditSubclassProc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     switch (m) {
         case WM_KEYDOWN:
             if (w == VK_RETURN && !(GetKeyState(VK_SHIFT) & 0x8000) && HandleEnter(h)) {
@@ -1867,7 +2367,7 @@ static LRESULT CALLBACK EditSubclassProc(HWND h, UINT m, WPARAM w, LPARAM l, UIN
             }
             break;
         case WM_NCDESTROY: {
-            RemoveWindowSubclass(h, EditSubclassProc, id);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, EditSubclassProc);
             std::lock_guard<std::mutex> lk(g_listMutex);
             for (size_t i = 0; i < g_subclassed.size(); i++)
                 if (g_subclassed[i] == h) {
@@ -1902,6 +2402,50 @@ static bool HintMatches(const std::wstring& lowered) {
     return false;
 }
 
+// Si alguna pestaña de la ventana muestra el Panel de control. Usa solo interfaces
+// de automatización (IDispatch), que COM puede llevar entre hilos: corre en el
+// hilo de UIA, no en el de la ventana.
+static bool FrameShowsControlPanel(HWND frame) {
+    IShellWindows* psw = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&psw)))) return false;
+    bool cpl = false;
+    long n = 0;
+    psw->get_Count(&n);
+    for (long i = 0; i < n && !cpl; i++) {
+        VARIANT v;
+        VariantInit(&v);
+        v.vt = VT_I4;
+        v.lVal = i;
+        IDispatch* disp = nullptr;
+        if (FAILED(psw->Item(v, &disp)) || !disp) continue;
+        IWebBrowser2* wb = nullptr;
+        SHANDLE_PTR h = 0;
+        IDispatch* doc = nullptr;
+        IShellFolderViewDual* view = nullptr;
+        Folder* folder = nullptr;
+        Folder2* folder2 = nullptr;
+        FolderItem* self = nullptr;
+        BSTR path = nullptr;
+        if (SUCCEEDED(disp->QueryInterface(IID_PPV_ARGS(&wb))) && SUCCEEDED(wb->get_HWND(&h)) && (HWND)h == frame &&
+            SUCCEEDED(wb->get_Document(&doc)) && doc && SUCCEEDED(doc->QueryInterface(IID_PPV_ARGS(&view))) &&
+            SUCCEEDED(view->get_Folder(&folder)) && folder && SUCCEEDED(folder->QueryInterface(IID_PPV_ARGS(&folder2))) &&
+            SUCCEEDED(folder2->get_Self(&self)) && self && SUCCEEDED(self->get_Path(&path)) && path) {
+            // Vista por categorías y "Todos los elementos de Panel de control".
+            cpl = StrStrIW(path, L"{26EE0668-A00A-44D7-9371-BEB064C98683}") || StrStrIW(path, L"{21EC2020-3AEA-1069-A2DD-08002B30309D}");
+        }
+        SysFreeString(path);
+        if (self) self->Release();
+        if (folder2) folder2->Release();
+        if (folder) folder->Release();
+        if (view) view->Release();
+        if (doc) doc->Release();
+        if (wb) wb->Release();
+        disp->Release();
+    }
+    psw->Release();
+    return cpl;
+}
+
 // Corre en un hilo interno de UIA (MTA), no en el hilo de UI.
 static void OnFocus(IUIAutomationElement* el) {
     if (!g_intercept || !el) return;
@@ -1925,7 +2469,7 @@ static void OnFocus(IUIAutomationElement* el) {
     bool match = HintMatches(Lower(name ? name : L"")) || HintMatches(Lower(aid ? aid : L""));
 
     if (match) g_uiaMatched = true;
-    if (match && GetTickCount64() - g_popupClosedTick > 800 && g_msgShowPopup) {
+    if (match && GetTickCount64() - g_popupClosedTick > 800 && g_msgShowPopup && !FrameShowsControlPanel(fg)) {
         std::wstring text;
         IUIAutomationValuePattern* vp = nullptr;
         if (SUCCEEDED(el->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&vp))) && vp) {
@@ -1934,6 +2478,8 @@ static void OnFocus(IUIAutomationElement* el) {
                 text = v;
                 SysFreeString(v);
             }
+            // Antes de abrir el cuadro: vaciar la caja XAML le devuelve el foco, y si
+            // el cuadro ya estuviera abierto se cerraría.
             BSTR empty = SysAllocString(L"");
             vp->SetValue(empty);  // que la caja nativa no arranque Windows Search
             SysFreeString(empty);
@@ -2130,7 +2676,6 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int code, WPARAM wParam, LPARAM lPa
 static DWORD WINAPI LowLevelHookThread(LPVOID) {
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // crea la cola de mensajes
-    g_llThreadId = GetCurrentThreadId();
     g_llHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandleW(nullptr), 0);
     SetEvent(g_llReady);
     if (!g_llHook) return 1;
@@ -2150,19 +2695,25 @@ static DWORD WINAPI LowLevelHookThread(LPVOID) {
 static void StartWinS() {
     if (g_llThread) return;
     g_llReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_llThread = CreateThread(nullptr, 0, LowLevelHookThread, nullptr, 0, nullptr);
+    DWORD tid = 0;
+    g_llThread = CreateThread(nullptr, 0, LowLevelHookThread, nullptr, 0, &tid);
     if (!g_llThread) {
         CloseHandle(g_llReady);
         g_llReady = nullptr;
         return;
     }
-    WaitForSingleObject(g_llReady, 2000);
+    g_llThreadId = tid;
+    // El hilo avisa apenas instaló el hook (o falló): espera corta y acotada por él.
+    HANDLE hs[2] = {g_llReady, g_llThread};
+    WaitForMultipleObjects(2, hs, FALSE, INFINITE);
 }
 
 static void StopWinS() {
     if (!g_llThread) return;
-    if (g_llThreadId) PostThreadMessageW(g_llThreadId, WM_QUIT, 0, 0);
-    WaitForSingleObject(g_llThread, 3000);
+    // La cola del hilo existe antes de que avise que está listo, así que WM_QUIT
+    // siempre llega; si el hook falló, el hilo ya terminó solo.
+    PostThreadMessageW(g_llThreadId, WM_QUIT, 0, 0);
+    WaitForSingleObject(g_llThread, INFINITE);
     CloseHandle(g_llThread);
     CloseHandle(g_llReady);
     g_llThread = nullptr;
@@ -2196,7 +2747,7 @@ static HWND WINAPI CreateWindowExW_Hook(DWORD ex, LPCWSTR cls, LPCWSTR name, DWO
     if (hwnd && !parent && !IS_INTRESOURCE(cls) && !_wcsicmp(cls, L"CabinetWClass")) InstallKbHook(GetCurrentThreadId());
     if (hwnd && parent && !IS_INTRESOURCE(cls) && !_wcsicmp(cls, L"Edit")) {
         if (InSearchBox(parent)) {
-            if (SetWindowSubclass(hwnd, EditSubclassProc, 1, 0)) {
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, EditSubclassProc, 0)) {
                 std::lock_guard<std::mutex> lk(g_listMutex);
                 g_subclassed.push_back(hwnd);
             }
@@ -2210,14 +2761,17 @@ static HWND WINAPI CreateWindowExW_Hook(DWORD ex, LPCWSTR cls, LPCWSTR name, DWO
 // ---------------------------------------------------------------------------
 
 BOOL Wh_ModInit() {
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&Wh_ModInit, &g_self);
     LoadSettings();
-    g_msgUnsub = RegisterWindowMessageW(L"EverythingExplorerSearch_Unsub");
     g_msgShowPopup = RegisterWindowMessageW(L"EverythingExplorerSearch_ShowPopup");
     g_msgEvacuate = RegisterWindowMessageW(L"EverythingExplorerSearch_Evacuate");
-    if (g_disableIndexWarning) DisableIndexWarning();
     LoadEverything();
-    RegisterFolderClass();
-    Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook, (void**)&CreateWindowExW_Original);
+    // Sin el hive o sin los hooks de lectura el Explorador no encontraría la carpeta
+    // de resultados: la búsqueda cae a Windows Search, el resto del mod sigue.
+    if (!OpenHive() || !HookRegistry()) CloseHive();
+    HookCom();
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
     EnumWindows(EnumExplorerProc, 0);  // ventanas que ya estaban abiertas
     if (g_intercept) StartUia();
     ApplyWinS();
@@ -2226,7 +2780,6 @@ BOOL Wh_ModInit() {
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    if (g_disableIndexWarning) DisableIndexWarning();
     LoadEverything();
     if (g_intercept)
         StartUia();
@@ -2235,25 +2788,23 @@ void Wh_ModSettingsChanged() {
     ApplyWinS();
 }
 
-void Wh_ModUninit() {
+// Con los hooks todavía activos: se dejan de abrir cuadros y resultados nuevos y
+// se sacan las pestañas de la carpeta de resultados.
+void Wh_ModBeforeUninit() {
     StopUia();
     StopWinS();
-    if (g_popup) {
-        DWORD_PTR res = 0;
-        SendMessageTimeoutW(g_popup, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG, 1000, &res);
-    }
-    // La carpeta virtual vive en este DLL: ninguna pestaña puede quedar mostrándola.
+    if (g_popup) SendMessageW(g_popup, WM_CLOSE, 0, 0);
     EvacuateAll();
+}
+
+void Wh_ModUninit() {
     // Quitar el subclass en el hilo dueño de cada ventana antes de que se descargue el código.
     std::vector<HWND> list;
     {
         std::lock_guard<std::mutex> lk(g_listMutex);
         list = g_subclassed;
     }
-    for (HWND h : list) {
-        DWORD_PTR res = 0;
-        SendMessageTimeoutW(h, g_msgUnsub, 0, 0, SMTO_ABORTIFHUNG, 1000, &res);
-    }
+    for (HWND h : list) WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, EditSubclassProc);
     {
         std::lock_guard<std::mutex> lk(g_hookMutex);
         for (auto& p : g_kbHooks) {
@@ -2262,13 +2813,25 @@ void Wh_ModUninit() {
         }
         g_kbHooks.clear();
     }
+    // Las vistas que mostraban resultados sueltan la carpeta, el enumerador y la
+    // ventana de avisos un momento después de navegar. Si el shell se queda con
+    // algún objeto (por ejemplo en una caché), el DLL se fija en memoria hasta que
+    // termine el Explorador en lugar de descargarse con código todavía en uso.
+    ULONGLONG start = GetTickCount64();
+    while (g_liveObjects > 0 && GetTickCount64() - start < 10000) Sleep(50);
+    bool pinned = g_liveObjects > 0;
+    if (pinned) {
+        HMODULE pin = nullptr;
+        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_PIN | GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCWSTR)&Wh_ModUninit, &pin);
+    }
     if (g_popupClassRegistered) {
         UnregisterClassW(kPopupClass, g_self);
         g_popupClassRegistered = false;
     }
-    if (g_notifyClassRegistered) UnregisterClassW(kNotifyClass, g_self);
-    UnregisterFolderClass();
+    if (g_notifyClassRegistered && !pinned) UnregisterClassW(kNotifyClass, g_self);
+    CloseHive();
     std::lock_guard<std::mutex> lk(g_evMutex);
+    g_evLoaded = false;
     if (g_ev.h) FreeLibrary(g_ev.h);
     g_ev = EvApi{};
 }
