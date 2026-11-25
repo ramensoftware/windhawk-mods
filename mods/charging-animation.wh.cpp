@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              charging-animation
 // @name            Charging Animation
-// @description     Plays an animation, shows a battery stats card (optionally with sound) when the charger is plugged in or unplugged.
-// @version         1.0.0
+// @description     Plays an animation and a battery card, with optional sound, when the charger is plugged in or unplugged. Eleven effects and eleven card styles.
+// @version         1.1.0
 // @author          DpakB
 // @homepage        https://dpakb.com
 // @github          https://github.com/DeepakBalaraman
@@ -30,7 +30,7 @@ that your choices don't use hide themselves, so the list stays short.
 `When plugged in` and `When unplugged` decide which events play anything at all. The rest of the section is
 shared by both, apart from the two colors and the unplug direction. The sounds have a section of their own.
 
-There are six looks. `Animation` picks the one you want.
+There are eleven looks. `Animation` picks the one you want.
 
 **Wave** is the default. It takes a picture of the desktop and bends it outward along an expanding ring,
 tinted with the event color. `Origin` moves where it starts, either one of nine spots on the screen under
@@ -81,6 +81,45 @@ long the trails are. Like the bezel it is a burst rather than a slow move, so it
 seconds whatever `Duration` says. `Reverse` on an unplug turns the cascade around: the characters run
 upward, and the release starts at the edges and closes in on `Origin` instead of spreading out from it.
 
+**Aurora Ribbons** is the soft one. Four bands of light drift across the screen, each one breathing in and
+out and sliding at its own pace, with a second, slower ripple running along it so the edges never look
+mechanical. The bands come in from the border nearest `Origin`, and on `rainbow` the color rolls along them
+instead of sitting still. Only the middle of a band is close to white; the rest fades into the wallpaper,
+so `Dim` works on it unchanged. Nothing is captured from the desktop. `Strength` sets how thick the ribbons
+are and how far they breathe, and `Motion` is hidden because the drift never eases. `Reverse` on an unplug
+sends the bands back the way they came.
+
+**Hex Grid Pulse** lays a honeycomb over the screen and lights it from the `Origin` outward. A wavefront
+runs across the grid, each cell flaring as it crosses and cooling for a while behind it, so the pulse reads
+as a wave rather than a ring. Every cell is a hexagon with a brighter rim, which is what makes the honeycomb
+read as a grid instead of a field of blobs. Nothing is captured from the desktop. `Strength` sets the size
+of the cells and how long a cell stays lit. `Reverse` on an unplug runs the front inward.
+
+**Energy Fill** floods the screen with liquid, up to the battery level: the body of it dark at the bottom
+edge and brighter towards the surface, a lit meniscus riding the top with a slow wave in it and a soft glow
+above that. The level climbs over the first third of `Duration` and then holds while the whole thing fades
+out. It is read once as the event fires, so the liquid and the card always agree on the number. `Strength`
+sets the height of the surface wave and `Motion` the way the level climbs. `Reverse` on an unplug drains it
+instead of filling it. It starts at the bottom edge rather than a point, so `Origin` is hidden, and on an
+empty battery only the meniscus shows, which is the whole picture.
+
+**Particle Sparks** throws embers out of `Origin`. Each one leaves at its own angle and speed, loses speed
+as it travels, falls under its own weight and cools from white-hot to the event color before it goes out,
+and the streak behind it is the path it covered since the last frame, so the burst reads as a spray of short
+comet tails rather than a field of dots. The embers are thrown over the first half of `Duration` instead of
+all at the same instant, and the last of them is let go before the end, so a long duration keeps the burst
+alive without ever cutting one off in mid-flight. Nothing is captured from the desktop. `Strength` sets how
+fast and how far they fly, and `Motion` is hidden because nothing here eases. `Reverse` on an unplug turns
+the burst inward: the embers start out on a ring around `Origin` and fall in toward it.
+
+**Radar Sweep** spins a scope over the screen, centred on `Origin`. The disc, its range rings, the
+crosshair and the ring of ticks around the rim are drawn once when the animation starts; over them a beam
+turns one and a half times, trailing a wedge of light that fades behind it, and blips light up as it crosses
+them, each pinging a ring outward and then cooling until the beam comes round again. Nothing is captured
+from the desktop. `Motion` shapes the spin, so the beam winds up out of the origin and settles at the end
+instead of starting and stopping dead, and `Strength` sets how big the scope is and how long its wake
+trails. `Reverse` on an unplug turns the beam the other way round.
+
 **Colors.** `Plugged-in color` and `Unplugged color` each tint their own event. Pick one from the list, or
 choose Custom and type into the field that appears underneath. On Windhawk 2.0 that field is a color
 picker. These all work:
@@ -99,9 +138,11 @@ so a typo doesn't break anything.
 
 **Strength, Duration, Motion and Opacity** control the size and the timing. `Strength` (0-40) is how far
 the desktop bends, how wide the light band is, how deep the push goes, how thick the traces are, how long
-the cascade trails; at 0 the wave keeps only its glow. `Duration` (300-5000 ms) is how long the animation
-runs, though the bezel and the cascade stop well before it, `Opacity` (0-100) fades all of it, and `Motion`
-picks the easing used by Wave and Edge Glow.
+the cascade trails, how thick the ribbons are, how large the hex cells are, how long they stay lit, how
+fast the sparks fly, how big the radar scope is and how long its wake trails, and how tall the wave on the
+energy fill's surface is; at 0 the wave keeps only its glow. `Duration` (300-5000 ms) is how long the
+animation runs, though the bezel and the cascade stop well before it, `Opacity` (0-100) fades all of it, and
+`Motion` picks the easing used by Wave, Edge Glow, Hex Grid Pulse, Energy Fill and Radar Sweep.
 
 **Dim screen** darkens the monitor the animation plays on, the way a phone dims its display when it starts
 charging. It fades in over the first quarter second, stays down for the length of the animation and fades
@@ -111,8 +152,9 @@ animation turned off for an event there is nothing to dim.
 
 **Unplug direction** picks which way the unplug travels. `Forwards` plays it exactly like a plug-in,
 expanding from the origin; `Reverse` starts at the screen edges and collapses back to the origin, like the
-charge being pulled away. Wave, Edge Glow, Circuit Trace and Matrix Code use it, and Bezel hides it because
-it has nowhere to travel.
+charge being pulled away. Wave, Edge Glow, Circuit Trace, Matrix Code, Aurora Ribbons, Hex Grid Pulse and
+Energy Fill use it, Particle Sparks pulls its embers back in and Radar Sweep turns the other way. Bezel
+hides it because it has nowhere to travel.
 
 ## Sounds
 
@@ -134,6 +176,12 @@ level bar that fills from empty as the card slides in and turns red below 20% wh
 **Fluent (Minimal)** is the same card at badge size, with half the padding, a smaller number, no status
 line and a thinner bar.
 
+**Fluent (Tiny)** is that badge with the battery taken from the Segoe Fluent Icons font, the same icon
+the taskbar uses, so the level comes from the system's own battery glyphs instead of a drawn one. It
+sits on its own without the tinted tile, and the bar stays. The font ships with Windows 11; Windows 10
+has Segoe MDL2 Assets, which carries the same glyphs, and if neither is there the drawn battery is
+used instead.
+
 **PineApple (Card)** is the plain system HUD: a rounded square, as wide as it is tall, black in dark mode
 and white in light mode, with a large battery icon on top, the percentage below it, the status line under that
 and a full-width capsule bar along the bottom. The accent color isn't used anywhere in it, and the icon and
@@ -153,17 +201,51 @@ floating instead of turning it into a card. The number and the bolt also carry a
 them readable on a bright background. It springs in with a small overshoot, sweeps the ring once, and
 shrinks away when it closes.
 
-The Fluent and Galaxy cards follow the Windows app theme; the PineApple card flips between black and
-white with it, so it stays readable on either wallpaper. All five update once a second and fade out at the
+**Capsule (Gradient)** is the wide glass pill: a bolt in a round tinted badge on the left, the percentage
+at twice the normal size with the status line under it on the right, and the level drawn as a capsule bar
+that hugs the inside of the rim and fills as the card arrives. It is acrylic like the Fluent cards, so the
+desktop behind it is blurred once when it appears, and the bolt and the bar turn red below 20% while on
+battery. It fades and scales in the way a system HUD does.
+
+**Halo Dial (Segments)** has no card at all. Sixty short ticks stand in a circle, the lit ones taking the
+accent and the rest a faint track, with the percentage in the middle and a pill underneath that names what
+the charger is doing: `RAPID CHARGE` from 30 W, `FAST CHARGE` from 15 W, `CHARGING` otherwise, `FULLY
+CHARGED` at 100% and `ON BATTERY` on battery. The ticks light up once as the dial springs in, and the pill
+moves above the dial when there is no room for it underneath. Nothing is captured from the desktop, and
+`Details` off drops the pill.
+
+**Dot Matrix (Mono)** is a flat slab, black in dark mode and white in light mode, with the level drawn as
+dot-matrix characters and a row of twenty dots under it that lights up five percent each. There is no
+glass, no accent and no gradient here, only the ink and the dots, plus a bolt in front of the number while
+the battery is taking charge. Below that the status line sits at a little over half strength, letterspaced.
+The dots turn red below 20% while on battery, and with no reading at all the number is `--` and the strip
+stays empty.
+
+**Half Gauge (Arc)** is a bare semicircle: the level fills the band from the left corner over the top, with
+a row of ticks inside it, a needle that swings up from zero as the dial arrives, the percentage under the
+hub and the status line under that. There is no card and nothing is captured, so both lines carry a halo of
+the opposite shade to keep them readable over a bright wallpaper; `Details` off drops the caption. The level
+turns red below 20% while on battery, and on `rainbow` the band takes the rolling gradient.
+
+**Ticker Strip (Marquee)** is one slim glass bar: a bolt or a battery in a round tinted badge, the
+percentage, a hairline break and then the status line. It is cut for the widest line the charging state can
+reach, so a wattage landing a second later never resizes it; when the line is longer than the window it
+slides sideways after a short hold, with a gap before it comes round again, and when it fits it sits still
+and centred. The badge and the hairline turn red below 20% while on battery. It is acrylic like the Fluent
+cards and fades and scales in the way a system HUD does.
+
+The Fluent and Galaxy cards follow the Windows app theme; the PineApple, Capsule, Dot Matrix and
+Ticker Strip cards flip between dark and light with it, and so does the ink of the Halo Dial and the Half
+Gauge, so they all stay readable on either wallpaper. All eleven refresh once a second, and fade out at the
 end.
 
 **Position, accent and the rest.** `Position` is where the card appears: `Follow Effect Origin` keeps it
 where the animation started, and the other choices are the corners, the edges, `Center` and the cursor. It
 always stays inside the working area, so the taskbar isn't covered. `Accent color` sets the tint, with
 `Match Effect Color` taking the color from the event that brought the card up (the gradient included) and
-`Custom` reading the field below it in any of the formats above; the PineApple card has no tint to
-give it, so it ignores this one. Turning `Details` off drops the status line, and `Duration`, `Opacity` and
-`Font size` tune the rest.
+`Custom` reading the field below it in any of the formats above; the PineApple circle and the Dot Matrix
+slab have no tint to give it, so they ignore this one. Turning `Details` off drops the status line, and
+`Duration`, `Opacity` and `Font size` tune the rest.
 
 ## Quiet Mode
 
@@ -198,6 +280,11 @@ Power notification handling adapted from [Charging Sound](https://windhawk.net/m
       - bezel: Bezel (Screen Push)
       - circuit: Circuit Trace (PCB Glow)
       - matrix: Matrix Code (Character Rain)
+      - aurora: Aurora Ribbons
+      - hex: Hex Grid Pulse
+      - energyfill: Energy Fill (Liquid Rise)
+      - sparks: Particle Sparks (Embers)
+      - radar: Radar Sweep (Sonar)
   - PluggedInColor: accent
     $name: Plugged-in color
     $description: "Color of the animation when the charger is connected. Choose Custom to use the color below."
@@ -250,15 +337,15 @@ Power notification handling adapted from [Charging Sound](https://windhawk.net/m
     #! $showIf: {UnpluggedColor: custom}
   - UnplugDirection: reverse
     $name: Unplug direction
-    $description: "Which way the unplug animation travels. Forwards plays it exactly like plugging in, moving out from the origin; Reverse starts at the screen edges and collapses back in toward it. Wave, Linear Wave, Edge Glow, Circuit Trace and Matrix Code use this."
-    #! $showIf: {Animation: [ripple, linearwave, edgeglow, circuit, matrix]}
+    $description: "Which way the unplug animation travels. Forwards plays it exactly like plugging in, moving out from the origin; Reverse starts at the screen edges and collapses back in toward it. Particle Sparks pulls its embers back in and Radar Sweep turns the other way. Wave, Linear Wave, Edge Glow, Circuit Trace, Aurora Ribbons, Hex Grid Pulse, Energy Fill, Particle Sparks, Radar Sweep and Matrix Code use this."
+    #! $showIf: {Animation: [ripple, linearwave, edgeglow, circuit, matrix, aurora, hex, energyfill, sparks, radar]}
     $options:
       - forwards: Forwards (Expand)
       - reverse: Reverse (Collapse)
   - Origin: bottom
     $name: Origin
-    $description: "Where the animation starts on the monitor under the cursor. Wave grows from here, Linear Wave sends its two fronts out from here, Edge Glow brings its travelling highlight in along the border from here, and the cascade is released from here outward. Cursor Position follows the pointer itself."
-    #! $showIf: {Animation: [ripple, linearwave, edgeglow, matrix]}
+    $description: "Where the animation starts on the monitor under the cursor. Wave grows from here, Linear Wave sends its two fronts out from here, Edge Glow brings its travelling highlight in along the border from here, the cascade is released from here outward, the aurora pours in from the nearest border, the hex grid pulses out of here, the sparks fly out of here and the radar is centred here. Cursor Position follows the pointer itself."
+    #! $showIf: {Animation: [ripple, linearwave, edgeglow, matrix, aurora, hex, sparks, radar]}
     $options:
       - topleft: Top Left
       - top: Top
@@ -272,7 +359,7 @@ Power notification handling adapted from [Charging Sound](https://windhawk.net/m
       - cursor: Cursor Position
   - Strength: 16
     $name: Strength
-    $description: "How far the effect reaches: wave displacement, glow band width, push depth, trace thickness or how long the cascade trails behind its head. Lower values are gentler."
+    $description: "How far the effect reaches: wave displacement, glow band width, push depth, trace thickness, how long the cascade trails behind its head, how thick the aurora ribbons are, how big the hex cells are, how wide the spark burst is, how long the radar's wake trails behind the beam, or how tall the fill's surface wave is. Lower values are gentler."
     #! $min: 0
     #! $max: 40
   - Duration: 1650
@@ -282,8 +369,8 @@ Power notification handling adapted from [Charging Sound](https://windhawk.net/m
     #! $max: 5000
   - Motion: smooth
     $name: Motion
-    $description: "How the animation speeds up and slows down. Wave, Linear Wave and Edge Glow use this."
-    #! $showIf: {Animation: [ripple, linearwave, edgeglow]}
+    $description: "How the animation speeds up and slows down. Wave, Linear Wave and Edge Glow use this, and the hex front, the fill's rise and the radar's spin follow it too."
+    #! $showIf: {Animation: [ripple, linearwave, edgeglow, hex, energyfill, radar]}
     $options:
       - smooth: Smooth (Default)
       - linear: Linear
@@ -316,13 +403,19 @@ Power notification handling adapted from [Charging Sound](https://windhawk.net/m
     $description: "Show the panel with the battery level and charging status when the charger is disconnected."
   - Style: fluent
     $name: Style
-    $description: "Fluent is the Windows 11 acrylic card, Fluent Minimal the badge-sized version, PineApple (Card) a plain black or white HUD slab, Galaxy UI a wide soft card with a bolt badge beside the percentage, and PineApple (Circle) the phone charging ring with a caption pill."
+    $description: "Fluent is the Windows 11 acrylic card, PineApple the plain phone-style HUD, Galaxy UI the wide soft card, Capsule the gradient pill, Halo Dial the segmented ring, Dot Matrix the dot-drawn slab, Half Gauge the semicircle dial and Ticker Strip the slim scrolling bar. The readme describes each one in full."
     $options:
       - fluent: Fluent (Windows 11-ish)
       - minimal: Fluent (Minimal)
+      - icons: Fluent (Tiny)
       - osd: PineApple (Card)
       - galaxy: Galaxy UI
       - pineapple: PineApple (Circle)
+      - capsule: Capsule (Gradient)
+      - halo: Halo Dial (Segments)
+      - dots: Dot Matrix (Mono)
+      - gauge: Half Gauge (Arc)
+      - ticker: Ticker Strip (Marquee)
   - Position: ripple
     $name: Position
     $description: "Where the panel appears. Follow Effect puts it where the animation started. It stays inside the working area, so the taskbar is never covered."
@@ -855,6 +948,49 @@ bool IsWindows11() {
                 (info.dwMajorVersion == 10 && info.dwBuildNumber >= 22000));
     }();
     return windows11;
+}
+
+// GDI quietly substitutes another family when a face is missing, so the face it
+// reports for the font is the only way to tell whether the font is installed.
+bool FontFaceInstalled(PCWSTR face) {
+    HDC dc = CreateCompatibleDC(nullptr);
+    if (!dc) {
+        return false;
+    }
+    LOGFONTW logFont{};
+    logFont.lfHeight = -16;
+    logFont.lfWeight = FW_NORMAL;
+    logFont.lfCharSet = DEFAULT_CHARSET;
+    lstrcpynW(logFont.lfFaceName, face, LF_FACESIZE);
+    bool installed = false;
+    HFONT font = CreateFontIndirectW(&logFont);
+    if (font) {
+        HGDIOBJ previous = SelectObject(dc, font);
+        wchar_t actual[LF_FACESIZE]{};
+        if (GetTextFaceW(dc, LF_FACESIZE, actual) > 0) {
+            installed = _wcsicmp(actual, face) == 0;
+        }
+        SelectObject(dc, previous);
+        DeleteObject(font);
+    }
+    DeleteDC(dc);
+    return installed;
+}
+
+// Segoe Fluent Icons is the Windows 11 icon font and Segoe MDL2 Assets is the
+// Windows 10 one. They share the battery range E850 to E862, so either will do
+// and the hand drawn glyph is the last resort.
+const wchar_t* CardIconFace() {
+    static const wchar_t* face = []() -> const wchar_t* {
+        if (FontFaceInstalled(L"Segoe Fluent Icons")) {
+            return L"Segoe Fluent Icons";
+        }
+        if (FontFaceInstalled(L"Segoe MDL2 Assets")) {
+            return L"Segoe MDL2 Assets";
+        }
+        return nullptr;
+    }();
+    return face;
 }
 
 void SetDwmAttribute(HWND hwnd, DWORD attribute, const void* value, DWORD size) {
@@ -1525,7 +1661,10 @@ float RoundedRectSdf(float px, float py, const RoundedRect& rect) {
 // crosses the screen, the edge glow paints a neon band that hugs the border,
 // the bezel presses the whole desktop inward inside a flat frame, the circuit
 // trace wakes up a board's routing along the taskbar and in the corners, and
-// the matrix rains characters down the screen in columns.
+// the matrix rains characters down the screen in columns. The later ones paint
+// the screen themselves: the aurora washes ribbons across it, the hex grid
+// pulses cells outward, the fill rises like liquid, the sparks throw embers out
+// of the origin and the radar spins a scope over it.
 enum class RippleEffect {
     Ripple,
     LinearWave,
@@ -1533,6 +1672,11 @@ enum class RippleEffect {
     Bezel,
     Circuit,
     Matrix,
+    Aurora,
+    HexGrid,
+    EnergyFill,
+    Sparks,
+    Radar,
 };
 
 RippleEffect ParseRippleEffect(std::wstring text) {
@@ -1545,6 +1689,11 @@ RippleEffect ParseRippleEffect(std::wstring text) {
     if (text == L"bezel") return RippleEffect::Bezel;
     if (text == L"circuit") return RippleEffect::Circuit;
     if (text == L"matrix") return RippleEffect::Matrix;
+    if (text == L"aurora") return RippleEffect::Aurora;
+    if (text == L"hex") return RippleEffect::HexGrid;
+    if (text == L"energyfill") return RippleEffect::EnergyFill;
+    if (text == L"sparks") return RippleEffect::Sparks;
+    if (text == L"radar") return RippleEffect::Radar;
     return RippleEffect::Ripple;
 }
 
@@ -1561,6 +1710,10 @@ struct RippleStyle {
     bool reverse = false;
     // Which scene effect plays.
     RippleEffect effect = RippleEffect::Ripple;
+    // The level the liquid rises to in Energy Fill, read once when the event
+    // fires. Machines without a battery keep the default, so the effect still
+    // has a sensible height.
+    float batteryLevel = 0.6f;
 };
 
 // Anchors are taken on the monitor under the cursor, so the ripple starts where
@@ -1605,6 +1758,13 @@ POINT ResolveRippleOrigin(std::wstring origin) {
 // Declared here because the bezel needs a picture of the desktop before its
 // window covers it, while the definition lives with the cards further down.
 bool CaptureRegion(int x, int y, int width, int height, Surface& target);
+
+// The line and disc primitives live with the card drawing, but the sparks and
+// the radar need them too, so they are declared here.
+void DrawLine(Surface& surface, float x0, float y0, float x1, float y1,
+              float thickness, const Color& color, float alpha);
+void DrawDisc(Surface& surface, float cx, float cy, float radius,
+              const Color& color, float alpha);
 
 class Ripple {
 public:
@@ -1736,6 +1896,19 @@ public:
         matrixColumns_.clear();
         matrixAtlas_.Reset();
         matrixGlyphs_ = 0;
+        auroraBands_.clear();
+        auroraRows_.clear();
+        auroraWaver_.clear();
+        hexCells_.clear();
+        hexRadius_ = 0.0f;
+        hexMaxDist_ = 0.0f;
+        hexTail_ = 0.0f;
+        fillTarget_ = 0.6f;
+        fillDrawnTop_ = -1;
+        sparks_.clear();
+        radarBlips_.clear();
+        radarScope_.Reset();
+        radarRadius_ = 0.0f;
     }
 
     bool Active() const { return active_; }
@@ -1853,6 +2026,21 @@ private:
             case RippleEffect::Matrix:
                 RenderMatrix(now);
                 break;
+            case RippleEffect::Aurora:
+                RenderAurora(now);
+                break;
+            case RippleEffect::HexGrid:
+                RenderHex(now);
+                break;
+            case RippleEffect::EnergyFill:
+                RenderFill(now);
+                break;
+            case RippleEffect::Sparks:
+                RenderSparks(now);
+                break;
+            case RippleEffect::Radar:
+                RenderRadar(now);
+                break;
             default:
                 RenderRipple(now);
                 break;
@@ -1917,26 +2105,52 @@ private:
         }
         surface_.Clear();
         ResetFrames(h);
-        if (style_.effect == RippleEffect::Bezel) {
-            BuildBezelProfile(w, h);
-            // The frame scales a picture of the desktop, so grab it now, while
-            // the window is still hidden. If it fails the frame still shows and
-            // the content underneath is simply left where it is. The picture is
-            // captured as it is; the dim is applied as the frame is drawn, so it
-            // can follow the fade.
-            if (!CaptureRegion(monitor_.left, monitor_.top, w, h, bezelCapture_)) {
-                bezelCapture_.Reset();
-            }
-        } else if (style_.effect == RippleEffect::Circuit) {
-            BuildCircuitProfile(w, h);
-        } else if (style_.effect == RippleEffect::Matrix) {
-            BuildMatrixProfile(w, h);
-        } else {
-            BuildGlowProfile(w, h);
+        switch (style_.effect) {
+            case RippleEffect::Bezel:
+                BuildBezelProfile(w, h);
+                // The frame scales a picture of the desktop, so grab it now, while
+                // the window is still hidden. If it fails the frame still shows and
+                // the content underneath is simply left where it is. The picture is
+                // captured as it is; the dim is applied as the frame is drawn, so it
+                // can follow the fade.
+                if (!CaptureRegion(monitor_.left, monitor_.top, w, h, bezelCapture_)) {
+                    bezelCapture_.Reset();
+                }
+                break;
+            case RippleEffect::Circuit:
+                BuildCircuitProfile(w, h);
+                break;
+            case RippleEffect::Matrix:
+                BuildMatrixProfile(w, h);
+                break;
+            case RippleEffect::Aurora:
+                BuildAuroraProfile(w, h);
+                break;
+            case RippleEffect::HexGrid:
+                BuildHexProfile(w, h);
+                break;
+            case RippleEffect::EnergyFill:
+                BuildFillProfile(w, h);
+                break;
+            case RippleEffect::Sparks:
+                BuildSparksProfile(w, h);
+                break;
+            case RippleEffect::Radar:
+                BuildRadarProfile(w, h);
+                break;
+            default:
+                BuildGlowProfile(w, h);
+                break;
         }
-        // The cascade rewrites the whole monitor every frame, so it runs a
-        // little under the usual rate: falling glyphs do not need 60 of them.
-        frameMs_ = style_.effect == RippleEffect::Matrix ? kMatrixFrameMs : kFrameMs;
+        // The cascade, the aurora, the hex grid and the spark burst rewrite the
+        // whole monitor every frame, so they run a little under the usual rate:
+        // none of that motion needs 60 of them.
+        frameMs_ = (style_.effect == RippleEffect::Matrix ||
+                    style_.effect == RippleEffect::Aurora ||
+                    style_.effect == RippleEffect::HexGrid ||
+                    style_.effect == RippleEffect::Sparks)
+                       ? kMatrixFrameMs
+                       : kFrameMs;
         start_ = NowMs();
         active_ = true;
         Render(start_);
@@ -2904,6 +3118,735 @@ private:
         firstFrame_ = false;
     }
 
+    // Aurora ribbons: soft bands of light washing across the monitor from the
+    // border nearest the origin. Each band swells at its own pace and the set
+    // drifts, so a long duration never looks like a loop. The whole frame is
+    // driven by two lookup tables built once per frame, which leaves a single
+    // multiply per pixel instead of a handful of sines.
+    struct AuroraBand {
+        float base = 0.5f;        // centreline, 0-1 of the height
+        float thickness = 0.08f;  // half width, 0-1 of the height
+        float breath = 0.03f;     // how far it swells, 0-1 of the height
+        float speed = 0.1f;       // cycles per second
+        float phase = 0.0f;       // where it starts in its cycle
+    };
+
+    void BuildAuroraProfile(int w, int h) {
+        auroraBands_.clear();
+        for (int i = 0; i < 4; i++) {
+            const float q = (static_cast<float>(i) + 0.5f) * 0.25f;
+            AuroraBand band;
+            band.base = 0.18f + 0.67f * q;
+            band.thickness =
+                (0.055f + style_.strength * 0.0012f) * (0.85f + 0.3f * q);
+            band.breath = 0.02f + style_.strength * 0.0008f;
+            band.speed = 0.06f + 0.02f * static_cast<float>(i);
+            band.phase = q * 2.0f * kPi;
+            auroraBands_.push_back(band);
+        }
+        auroraRows_.assign(static_cast<size_t>(h), 0.0f);
+        auroraWaver_.assign(static_cast<size_t>(w), 0.0f);
+    }
+
+    void RenderAurora(double now) {
+        const int w = surface_.Width();
+        const int h = surface_.Height();
+        if (w <= 0 || h <= 0 || auroraBands_.empty() ||
+            auroraRows_.size() != static_cast<size_t>(h) ||
+            auroraWaver_.size() != static_cast<size_t>(w)) {
+            return;
+        }
+
+        const float span = static_cast<float>(SpanMs());
+        const float elapsed = static_cast<float>(now - start_);
+        const float rise = Clamp01(elapsed / 300.0f);
+        const float swell = rise * rise * (3.0f - 2.0f * rise);
+        const float outStart = span * 0.65f;
+        const float fade =
+            elapsed <= outStart
+                ? 1.0f
+                : 1.0f - Clamp01((elapsed - outStart) /
+                                 std::max(1.0f, span - outStart));
+        const float gain = swell * fade * Clamp01(style_.opacity);
+        const float seconds = elapsed * 0.001f;
+        // The bands pour in from the border the origin sits nearest, and Reverse
+        // sends them back the way they came.
+        const float dir =
+            (center_.y < static_cast<float>(h) * 0.5f ? 1.0f : -1.0f) *
+            (style_.reverse ? -1.0f : 1.0f);
+        const float flow = dir * seconds * 0.045f;
+        const float invH = 1.0f / static_cast<float>(h);
+
+        surface_.Clear();
+        if (gain <= 0.003f) {
+            window_.Present(surface_, monitor_.left, monitor_.top, 255);
+            firstFrame_ = false;
+            return;
+        }
+
+        for (int y = 0; y < h; y++) {
+            const float v = (static_cast<float>(y) + 0.5f) * invH;
+            float sum = 0.0f;
+            for (const AuroraBand& band : auroraBands_) {
+                const float middle =
+                    band.base + flow * (0.6f + band.speed * 4.0f) +
+                    band.breath *
+                        sinf(band.phase + seconds * band.speed * 2.0f * kPi);
+                const float q = (v - middle) / band.thickness;
+                sum += expf(-q * q);
+            }
+            auroraRows_[y] = Clamp01(sum * 0.8f);
+        }
+
+        const float invW = 1.0f / static_cast<float>(w);
+        for (int x = 0; x < w; x++) {
+            const float angle = (static_cast<float>(x) + 0.5f) * invW * 2.0f * kPi;
+            auroraWaver_[x] =
+                0.74f + 0.16f * sinf(angle * 1.7f + seconds * 0.9f) +
+                0.10f * sinf(angle * 0.6f - seconds * 0.55f + 1.3f);
+        }
+
+        uint32_t tintRamp[64];
+        const float drift = static_cast<float>(now - start_) / 9000.0f;
+        for (int i = 0; i < 64; i++) {
+            tintRamp[i] = PackPremultiplied(
+                g_glow.At(static_cast<float>(i) / 64.0f + drift), 1.0f);
+        }
+        const uint32_t flat = PackPremultiplied(g_glow.color, 1.0f);
+        const uint32_t white = PackPremultiplied(Rgb(255, 255, 255), 1.0f);
+        const bool rainbow = g_glow.rainbow;
+
+        for (int y = 0; y < h; y++) {
+            const float lit = auroraRows_[y] * gain;
+            if (lit <= 0.004f) {
+                continue;
+            }
+            // The middle of a band gets a lift towards white, which reads as the
+            // bright heart of a curtain rather than a flat wash of colour.
+            const uint32_t core =
+                lit > 0.55f
+                    ? static_cast<uint32_t>((lit - 0.55f) * 120.0f + 0.5f)
+                    : 0u;
+            uint32_t* row = surface_.Row(y);
+            for (int x = 0; x < w; x++) {
+                const float waver = auroraWaver_[x];
+                const uint32_t alpha = static_cast<uint32_t>(
+                    Clamp01(lit * waver) * 235.0f + 0.5f);
+                if (!alpha) {
+                    continue;
+                }
+                const uint32_t ink =
+                    rainbow ? tintRamp[((x * 64) / w) & 63] : flat;
+                uint32_t pixel = ScalePremultiplied(ink, alpha);
+                if (core) {
+                    BlendOver(pixel, ScalePremultiplied(
+                                         white, static_cast<uint32_t>(
+                                                    static_cast<float>(core) * waver)));
+                }
+                row[x] = pixel;
+            }
+        }
+
+        window_.Present(surface_, monitor_.left, monitor_.top, 255);
+        firstFrame_ = false;
+    }
+
+    // Hex grid pulse: honeycomb cells over the whole monitor, lighting up in a
+    // wave outward from the origin and cooling behind it. Only the cells the
+    // wavefront is passing through are drawn, so a frame costs a band rather
+    // than the whole grid.
+    struct HexCell {
+        float x = 0.0f;
+        float y = 0.0f;
+        float dist = 0.0f;
+    };
+
+    void BuildHexProfile(int w, int h) {
+        hexCells_.clear();
+        hexRadius_ = std::clamp((34.0f - style_.strength * 0.45f) * scale_,
+                               14.0f * scale_, 40.0f * scale_);
+        const float stepX = 1.7320508f * hexRadius_;
+        const float stepY = 1.5f * hexRadius_;
+        const int cols = static_cast<int>(ceilf(static_cast<float>(w) / stepX)) + 1;
+        const int rows = static_cast<int>(ceilf(static_cast<float>(h) / stepY)) + 1;
+        hexMaxDist_ = 0.0f;
+        for (int row = 0; row <= rows; row++) {
+            const float cy = static_cast<float>(row) * stepY;
+            const float offset = (row & 1) ? stepX * 0.5f : 0.0f;
+            if (cy < -hexRadius_ || cy > static_cast<float>(h) + hexRadius_) {
+                continue;
+            }
+            for (int col = 0; col <= cols; col++) {
+                const float cx = static_cast<float>(col) * stepX + offset;
+                if (cx < -hexRadius_ || cx > static_cast<float>(w) + hexRadius_) {
+                    continue;
+                }
+                HexCell cell;
+                cell.x = cx;
+                cell.y = cy;
+                cell.dist = hypotf(cx - center_.x, cy - center_.y);
+                hexMaxDist_ = std::max(hexMaxDist_, cell.dist);
+                hexCells_.push_back(cell);
+            }
+        }
+        hexMaxDist_ = std::max(1.0f, hexMaxDist_);
+        // Strength sets how long a cell keeps glowing behind the front: at the
+        // low end it is a thin ripple, at the high end a broad wake.
+        hexTail_ = std::max(hexRadius_ * 2.0f,
+                            (0.12f + style_.strength * 0.006f) * hexMaxDist_);
+    }
+
+    void RenderHex(double now) {
+        const int w = surface_.Width();
+        const int h = surface_.Height();
+        if (w <= 0 || h <= 0 || hexCells_.empty() || hexRadius_ <= 0.0f) {
+            return;
+        }
+
+        const float span = static_cast<float>(SpanMs());
+        const float elapsed = static_cast<float>(now - start_);
+        const float rise = Clamp01(elapsed / 220.0f);
+        const float swell = rise * rise * (3.0f - 2.0f * rise);
+        const float outStart = span * 0.7f;
+        const float fade =
+            elapsed <= outStart
+                ? 1.0f
+                : 1.0f - Clamp01((elapsed - outStart) /
+                                 std::max(1.0f, span - outStart));
+        const float gain = swell * fade * Clamp01(style_.opacity);
+        const float t = Clamp01(elapsed / std::max(1.0f, span));
+        const float travel = EaseTravel(style_.curve, t);
+        const float front = (style_.reverse ? 1.0f - travel : travel) * hexMaxDist_;
+        const float drift = static_cast<float>(now - start_) / 12000.0f;
+
+        surface_.Clear();
+        if (gain <= 0.003f) {
+            window_.Present(surface_, monitor_.left, monitor_.top, 255);
+            firstFrame_ = false;
+            return;
+        }
+
+        uint32_t ramp[64];
+        for (int i = 0; i < 64; i++) {
+            ramp[i] = PackPremultiplied(
+                g_glow.At(static_cast<float>(i) / 64.0f + drift), 1.0f);
+        }
+        const uint32_t flat = PackPremultiplied(g_glow.color, 1.0f);
+        const bool rainbow = g_glow.rainbow;
+        const float r = hexRadius_;
+        const float halfW = 0.8660254f * r;
+        const float rimWidth = std::max(1.0f, 1.2f * scale_);
+
+        for (const HexCell& cell : hexCells_) {
+            const float cellGain = CircuitGlow(cell.dist - front, hexTail_);
+            if (cellGain <= 0.01f) {
+                continue;
+            }
+            const uint32_t alpha =
+                static_cast<uint32_t>(Clamp01(cellGain * gain) * 255.0f + 0.5f);
+            if (!alpha) {
+                continue;
+            }
+            const uint32_t ink =
+                rainbow
+                    ? ramp[std::clamp(static_cast<int>((cell.dist / hexMaxDist_) * 63.0f),
+                                      0, 63)]
+                    : flat;
+            const int firstX =
+                std::max(0, static_cast<int>(floorf(cell.x - halfW - 1.0f)));
+            const int lastX =
+                std::min(w, static_cast<int>(ceilf(cell.x + halfW + 1.0f)));
+            const int firstY =
+                std::max(0, static_cast<int>(floorf(cell.y - r - 1.0f)));
+            const int lastY =
+                std::min(h, static_cast<int>(ceilf(cell.y + r + 1.0f)));
+            for (int y = firstY; y < lastY; y++) {
+                const float dy = fabsf(static_cast<float>(y) + 0.5f - cell.y);
+                if (dy > r) {
+                    continue;
+                }
+                // A pointy-top hexagon: full width across its middle half, then
+                // tapering to the flat tips top and bottom.
+                const float half = dy <= r * 0.5f
+                                       ? halfW
+                                       : halfW * 2.0f * (1.0f - dy / r);
+                const float left = cell.x - half;
+                const float right = cell.x + half;
+                uint32_t* row = surface_.Row(y);
+                for (int x = firstX; x < lastX; x++) {
+                    const float px = static_cast<float>(x) + 0.5f;
+                    const float cover =
+                        Clamp01(std::min(px - left + 0.5f, right - px + 0.5f));
+                    if (cover <= 0.0f) {
+                        continue;
+                    }
+                    // The lit edge is what turns the cells into a honeycomb;
+                    // the inside stays a faint wash of the same colour.
+                    const float edge = std::min(px - left, right - px);
+                    const uint32_t band = edge < rimWidth ? alpha : alpha / 5;
+                    if (!band) {
+                        continue;
+                    }
+                    BlendOver(row[x],
+                              ScalePremultiplied(
+                                  ink, static_cast<uint32_t>(
+                                           static_cast<float>(band) * cover + 0.5f)));
+                }
+            }
+        }
+
+        window_.Present(surface_, monitor_.left, monitor_.top, 255);
+        firstFrame_ = false;
+    }
+
+    // Energy Fill: a translucent liquid rises up the monitor to the battery
+    // level, with a bright meniscus riding on top. The body keeps its shade from
+    // frame to frame, so only the strip around the moving surface is redrawn.
+    void BuildFillProfile(int, int) {
+        fillTarget_ = std::clamp(style_.batteryLevel, 0.0f, 1.0f);
+        fillDrawnTop_ = -1;
+    }
+
+    void RenderFill(double now) {
+        const int w = surface_.Width();
+        const int h = surface_.Height();
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+
+        const float span = static_cast<float>(SpanMs());
+        const float elapsed = static_cast<float>(now - start_);
+        const float riseMs = std::min(span * 0.35f, 900.0f);
+        const float travel =
+            EaseTravel(style_.curve, Clamp01(elapsed / std::max(1.0f, riseMs)));
+        // On a reverse event the liquid drains back down instead of filling.
+        const float level = Clamp01(style_.reverse ? fillTarget_ * (1.0f - travel)
+                                                   : fillTarget_ * travel);
+        const float fadeStart = span * 0.8f;
+        const float fade =
+            elapsed <= fadeStart
+                ? 1.0f
+                : 1.0f - Clamp01((elapsed - fadeStart) /
+                                 std::max(1.0f, span - fadeStart));
+        const BYTE windowAlpha =
+            static_cast<BYTE>(Clamp01(style_.opacity * fade) * 255.0f + 0.5f);
+        const float seconds = elapsed * 0.001f;
+        const float amp = (2.0f + style_.strength * 0.35f) * scale_;
+        const float glowH = (8.0f + style_.strength * 0.9f) * scale_;
+        const float baseTop = static_cast<float>(h) * (1.0f - level);
+
+        // The surface is read once per column, so the per-pixel pass is a couple
+        // of comparisons instead of two sines.
+        fillSurfX_.assign(static_cast<size_t>(w), 0.0f);
+        const float invW = 1.0f / static_cast<float>(w);
+        for (int x = 0; x < w; x++) {
+            const float angle = (static_cast<float>(x) + 0.5f) * invW * 2.0f * kPi;
+            fillSurfX_[x] = baseTop + amp * sinf(angle * 2.3f + seconds * 3.7f) +
+                            amp * 0.5f * sinf(angle * 0.9f - seconds * 2.1f);
+        }
+
+        const float surfaceTop = baseTop - amp - glowH;
+        const int bandReach = static_cast<int>(amp + glowH) + 4;
+        const int previousTop = fillDrawnTop_;
+        const int newTop =
+            std::clamp(static_cast<int>(surfaceTop), 0, h);
+        const int bandFirst = std::max(
+            0, std::min(previousTop < 0 ? newTop : previousTop, newTop) - bandReach);
+        const bool firstFrame = previousTop < 0;
+        const int bandLast =
+            firstFrame ? h
+                       : std::min(h,
+                                  std::max(previousTop, newTop) + bandReach + 2);
+
+        const float drift = static_cast<float>(now - start_) / 7000.0f;
+        uint32_t ramp[64];
+        for (int i = 0; i < 64; i++) {
+            const float v = static_cast<float>(i) / 63.0f;
+            const Color tint = g_glow.At(0.35f + 0.65f * v + drift);
+            const Color deep = Mix(Rgb(8, 12, 20), tint, 0.62f);
+            const Color bright = Mix(tint, Rgb(255, 255, 255), 0.22f);
+            ramp[i] = PackPremultiplied(Mix(deep, bright, v), 1.0f);
+        }
+        const Color crest = Mix(g_glow.At(0.9f + drift), Rgb(255, 255, 255), 0.55f);
+        const uint32_t crestPixel = PackPremultiplied(crest, 1.0f);
+        const uint32_t hazePixel = PackPremultiplied(g_glow.At(0.6f + drift), 1.0f);
+        const float depthSpan = std::max(1.0f, static_cast<float>(h) * 0.55f);
+
+        for (int y = bandFirst; y < bandLast; y++) {
+            uint32_t* row = surface_.Row(y);
+            memset(row, 0, static_cast<size_t>(w) * sizeof(uint32_t));
+            const float py = static_cast<float>(y) + 0.5f;
+            for (int x = 0; x < w; x++) {
+                const float surface = fillSurfX_[x];
+                if (py >= surface) {
+                    const float depth = py - surface;
+                    const float v = Clamp01(1.0f - depth / depthSpan);
+                    const uint32_t alpha = static_cast<uint32_t>(
+                        (0.30f + 0.12f * v) * 255.0f + 0.5f);
+                    row[x] = ScalePremultiplied(
+                        ramp[std::clamp(static_cast<int>(v * 63.0f), 0, 63)], alpha);
+                    if (depth < 2.5f * scale_) {
+                        BlendOver(row[x], crestPixel);
+                    }
+                } else {
+                    const float above = surface - py;
+                    if (above < glowH) {
+                        const float q = 1.0f - above / glowH;
+                        BlendOver(row[x],
+                                  ScalePremultiplied(
+                                      hazePixel,
+                                      static_cast<uint32_t>(q * q * 70.0f + 0.5f)));
+                    }
+                }
+            }
+        }
+
+        if (firstFrame) {
+            window_.Present(surface_, monitor_.left, monitor_.top, windowAlpha);
+            firstFrame_ = false;
+        } else {
+            const RECT dirty{0, bandFirst, w, bandLast};
+            if (dirty.bottom > dirty.top && dirty.right > dirty.left) {
+                window_.Present(surface_, monitor_.left, monitor_.top, windowAlpha,
+                                &dirty);
+            }
+        }
+        fillDrawnTop_ = newTop;
+    }
+
+    // Particle Sparks: a burst of embers thrown out of the origin. Every ember is
+    // fixed when the event fires, so a frame only works out where each one has
+    // got to: the speed bleeds off against the air, gravity pulls it down and the
+    // streak is the path it covered since the last frame. Nothing is captured, so
+    // the burst plays over whatever is on screen.
+    struct Spark {
+        float angle = 0.0f;
+        float speed = 0.0f;  // pixels per second at birth
+        float reach = 0.0f;  // how far out it starts on a reverse burst
+        float radius = 1.0f;
+        float delay = 0.0f;  // seconds after the event
+        float life = 0.8f;   // seconds it lasts
+        float hue = 0.0f;
+    };
+
+    // A small deterministic scramble, so the same strength always throws the same
+    // burst and nothing here has to touch the shared random state.
+    static float Scatter(int seed) {
+        uint32_t x = static_cast<uint32_t>(seed) * 2654435761u;
+        x ^= x >> 15;
+        x *= 2246822519u;
+        x ^= x >> 13;
+        x *= 3266489917u;
+        x ^= x >> 16;
+        return static_cast<float>(x & 0xFFFFFFu) / 16777215.0f;
+    }
+
+    void BuildSparksProfile(int, int) {
+        sparks_.clear();
+        const float s = scale_;
+        const int count =
+            std::clamp(70 + static_cast<int>(style_.strength * 3.0f), 60, 220);
+        const float span = static_cast<float>(SpanMs()) * 0.001f;
+        // The burst keeps throwing embers for a while instead of firing them all
+        // at once, but it always leaves room at the end for the last to burn out.
+        const float window = std::clamp(span * 0.55f, 0.15f, 2.2f);
+        const float speed = (170.0f + style_.strength * 15.0f) * s;
+        for (int i = 0; i < count; i++) {
+            Spark spark;
+            spark.angle = Scatter(i * 7 + 1) * 2.0f * kPi;
+            spark.speed = speed * (0.42f + 1.05f * Scatter(i * 7 + 2));
+            spark.radius = (1.0f + 1.7f * Scatter(i * 7 + 3)) * s;
+            spark.delay = window * Scatter(i * 7 + 4);
+            spark.life = 0.5f + 0.7f * Scatter(i * 7 + 5);
+            spark.hue = Scatter(i * 7 + 6);
+            // A reverse burst gathers instead of spreading, so each ember starts
+            // out on the ring it falls in from rather than at the origin.
+            spark.reach = spark.speed * (0.5f + 0.7f * Scatter(i * 7 + 7));
+            sparks_.push_back(spark);
+        }
+    }
+
+    // How far an ember has travelled this many seconds after it was thrown. The
+    // drag is solved in closed form, so a slow frame cannot make the burst skip.
+    static float SparkTravel(float speed, float age, bool reverse, float reach) {
+        constexpr float kDrag = 2.2f;
+        const float settled = 1.0f - expf(-kDrag * std::max(0.0f, age));
+        return reverse ? reach * (1.0f - settled) : speed * settled / kDrag;
+    }
+
+    void RenderSparks(double now) {
+        const int w = surface_.Width();
+        const int h = surface_.Height();
+        if (w <= 0 || h <= 0 || sparks_.empty()) {
+            return;
+        }
+
+        const float span = static_cast<float>(SpanMs());
+        const float elapsed = static_cast<float>(now - start_);
+        const float rise = Clamp01(elapsed / 140.0f);
+        // The burst lets go of its last embers over the closing third of a second,
+        // so a short duration never cuts one off mid-flight.
+        const float release = Clamp01((span - elapsed) / 300.0f);
+        const float gain = Clamp01(style_.opacity) * rise * rise * (3.0f - 2.0f * rise) *
+                           release;
+        const float gravity = 250.0f * scale_;
+        // The streak is a frame and a half long, so a dropped frame still shows
+        // a continuous trail instead of a dotted line.
+        const float streak = std::max(1.0f / 90.0f, static_cast<float>(frameMs_) * 0.0016f);
+        const float drift = elapsed / 5200.0f;
+        const bool rainbow = g_glow.rainbow;
+        const Color flat = g_glow.color;
+        const bool reverse = style_.reverse;
+
+        surface_.Clear();
+        if (gain <= 0.004f) {
+            window_.Present(surface_, monitor_.left, monitor_.top, 255);
+            firstFrame_ = false;
+            return;
+        }
+
+        for (const Spark& spark : sparks_) {
+            const float age = elapsed * 0.001f - spark.delay;
+            if (age <= 0.0f || age > spark.life) {
+                continue;
+            }
+            const float cool = 1.0f - Clamp01(age / spark.life);
+            // A quick flare on birth, then a long cool-down.
+            const float alpha = cool * cool * Clamp01(age / 0.05f) * gain;
+            if (alpha <= 0.01f) {
+                continue;
+            }
+            const Color tint = rainbow ? g_glow.At(spark.hue + drift) : flat;
+            const float dirX = cosf(spark.angle);
+            const float dirY = sinf(spark.angle);
+            const float now_ = SparkTravel(spark.speed, age, reverse, spark.reach);
+            const float before = SparkTravel(spark.speed, age - streak, reverse, spark.reach);
+            const float fall = reverse ? 0.0f : 0.5f * gravity * age * age;
+            const float fallBefore =
+                reverse ? 0.0f : 0.5f * gravity * (age - streak) * (age - streak);
+            const float tailX = center_.x + dirX * before;
+            const float tailY = center_.y + dirY * before + fallBefore;
+            const float headX = center_.x + dirX * now_;
+            const float headY = center_.y + dirY * now_ + fall;
+            DrawLine(surface_, tailX, tailY, headX, headY, spark.radius * 1.8f, tint,
+                     alpha * 0.72f);
+            DrawDisc(surface_, headX, headY, spark.radius,
+                     Mix(tint, Rgb(255, 255, 255), 0.55f), alpha * 0.95f);
+        }
+
+        window_.Present(surface_, monitor_.left, monitor_.top, 255);
+        firstFrame_ = false;
+    }
+
+    // Radar Sweep: a scope that is drawn once - the disc, its range rings, the
+    // crosshair and the rim ticks - with a rotating beam and a handful of blips
+    // over it. Only the beam and the blips move, so a frame puts the scope back
+    // and paints those on top of it.
+    struct RadarBlip {
+        float angle = 0.0f;
+        float radius = 0.5f;
+        float phase = 0.0f;
+    };
+
+    // A circle drawn as a short polyline, which is a great deal cheaper than a
+    // ring pass over the whole box it sits in.
+    static void RadarCircle(Surface& surface, float cx, float cy, float radius,
+                            float thickness, const Color& color, float alpha) {
+        if (radius <= 0.5f || alpha <= 0.0f) {
+            return;
+        }
+        const int segments =
+            std::clamp(static_cast<int>(radius * 0.55f), 24, 160);
+        float px = cx + radius;
+        float py = cy;
+        for (int i = 1; i <= segments; i++) {
+            const float a = static_cast<float>(i) / static_cast<float>(segments) *
+                            2.0f * kPi;
+            const float nx = cx + cosf(a) * radius;
+            const float ny = cy + sinf(a) * radius;
+            DrawLine(surface, px, py, nx, ny, thickness, color, alpha);
+            px = nx;
+            py = ny;
+        }
+    }
+
+    void BuildRadarProfile(int w, int h) {
+        radarBlips_.clear();
+        radarScope_.Reset();
+        const float s = scale_;
+        const float diag = hypotf(static_cast<float>(w), static_cast<float>(h));
+        radarRadius_ = std::clamp(diag * 0.5f * (0.32f + style_.strength * 0.006f),
+                                  130.0f * s, diag * 0.62f);
+        for (int i = 0; i < 7; i++) {
+            RadarBlip blip;
+            blip.angle = Scatter(i * 5 + 21) * 2.0f * kPi;
+            blip.radius = 0.24f + 0.66f * Scatter(i * 5 + 22);
+            blip.phase = Scatter(i * 5 + 23);
+            radarBlips_.push_back(blip);
+        }
+
+        // The scope is cut at the size of the circle it covers and no bigger, so
+        // a frame only has to put those rows back.
+        const int reach = static_cast<int>(ceilf(radarRadius_)) + 4;
+        const int cx = static_cast<int>(center_.x);
+        const int cy = static_cast<int>(center_.y);
+        radarLeft_ = std::max(0, cx - reach);
+        radarTop_ = std::max(0, cy - reach);
+        const int boxW = std::min(w, cx + reach) - radarLeft_;
+        const int boxH = std::min(h, cy + reach) - radarTop_;
+        if (boxW <= 0 || boxH <= 0 || !radarScope_.Resize(boxW, boxH)) {
+            radarRadius_ = 0.0f;
+            return;
+        }
+        radarScope_.Clear();
+
+        const float sx = center_.x - static_cast<float>(radarLeft_);
+        const float sy = center_.y - static_cast<float>(radarTop_);
+        const float r = radarRadius_;
+        const Color ink = g_glow.color;
+        const float hair = std::max(1.0f, s);
+
+        // The glass of the scope: a dark disc under a faint wash of the accent,
+        // so the grid and the beam have something to sit on over a bright
+        // wallpaper.
+        DrawDisc(radarScope_, sx, sy, r, Rgb(6, 10, 18), 0.44f);
+        DrawDisc(radarScope_, sx, sy, r * 0.92f, ink, 0.05f);
+
+        // Rim, range rings, crosshair and the ring of ticks around the edge.
+        RadarCircle(radarScope_, sx, sy, r * 0.98f, std::max(1.0f, 1.6f * s), ink, 0.58f);
+        for (int k = 1; k <= 3; k++) {
+            RadarCircle(radarScope_, sx, sy,
+                        r * static_cast<float>(k) * 0.245f, hair, ink, 0.22f);
+        }
+        DrawLine(radarScope_, sx - r * 0.96f, sy, sx + r * 0.96f, sy, hair, ink, 0.16f);
+        DrawLine(radarScope_, sx, sy - r * 0.96f, sx, sy + r * 0.96f, hair, ink, 0.16f);
+        for (int i = 0; i < 36; i++) {
+            const float a = static_cast<float>(i) / 36.0f * 2.0f * kPi;
+            const bool major = (i % 3) == 0;
+            const float ca = cosf(a);
+            const float sa = sinf(a);
+            const float outer = r * 0.975f;
+            const float inner = outer - r * (major ? 0.05f : 0.028f);
+            DrawLine(radarScope_, sx + ca * inner, sy + sa * inner, sx + ca * outer,
+                     sy + sa * outer, major ? 1.6f * s : hair, ink,
+                     major ? 0.50f : 0.26f);
+        }
+        DrawDisc(radarScope_, sx, sy, std::max(2.0f, 3.0f * s), ink, 0.55f);
+    }
+
+    void RenderRadar(double now) {
+        const int w = surface_.Width();
+        const int h = surface_.Height();
+        if (w <= 0 || h <= 0 || radarRadius_ <= 0.0f || !radarScope_.Valid()) {
+            return;
+        }
+
+        const float span = static_cast<float>(SpanMs());
+        const float elapsed = static_cast<float>(now - start_);
+        const float rise = Clamp01(elapsed / 240.0f);
+        const float outStart = span * 0.72f;
+        const float fade =
+            elapsed <= outStart
+                ? 1.0f
+                : 1.0f - Clamp01((elapsed - outStart) / std::max(1.0f, span - outStart));
+        const float envelope = rise * rise * (3.0f - 2.0f * rise) * fade;
+        const BYTE windowAlpha =
+            static_cast<BYTE>(Clamp01(style_.opacity * envelope) * 255.0f + 0.5f);
+
+        // Putting the scope back is also what wipes the previous frame: nothing
+        // is ever drawn outside it.
+        const int x0 = std::max(0, radarLeft_);
+        const int y0 = std::max(0, radarTop_);
+        const int x1 = std::min(w, radarLeft_ + radarScope_.Width());
+        const int y1 = std::min(h, radarTop_ + radarScope_.Height());
+        for (int y = y0; y < y1; y++) {
+            memcpy(surface_.Row(y) + x0,
+                   radarScope_.Row(y - radarTop_) + (x0 - radarLeft_),
+                   static_cast<size_t>(x1 - x0) * sizeof(uint32_t));
+        }
+        if (windowAlpha == 0) {
+            window_.Present(surface_, monitor_.left, monitor_.top, 0);
+            firstFrame_ = false;
+            return;
+        }
+
+        const float s = scale_;
+        const float t = Clamp01(elapsed / std::max(1.0f, span));
+        // Motion shapes the spin, so the beam winds up out of the origin and
+        // settles at the end instead of starting at full speed. Reverse sends it
+        // the other way round.
+        const float travel = EaseTravel(style_.curve, t);
+        const float dir = style_.reverse ? -1.0f : 1.0f;
+        constexpr float kTurns = 1.6f;
+        const float sweep = -kPi * 0.5f + dir * travel * kTurns * 2.0f * kPi;
+        const float drift = elapsed / 6500.0f;
+        const bool rainbow = g_glow.rainbow;
+        const Color ink = g_glow.color;
+        const float cx = center_.x;
+        const float cy = center_.y;
+        const float r = radarRadius_;
+
+        // The wake: one ray per step behind the beam, each cut thick enough to
+        // sit against the next, so the trail reads as one smear rather than a fan
+        // of lines.
+        const float trail = 0.55f + style_.strength * 0.018f;
+        const int steps = 34;
+        const float thickness =
+            std::max(2.0f, r * trail / static_cast<float>(steps) * 1.35f);
+        for (int i = 0; i < steps; i++) {
+            const float q = static_cast<float>(i) / static_cast<float>(steps);
+            const float a = sweep - dir * q * trail;
+            const float falloff = (1.0f - q) * (1.0f - q);
+            const float ca = cosf(a);
+            const float sa = sinf(a);
+            const Color tint = rainbow ? g_glow.At(q * 0.35f + drift) : ink;
+            DrawLine(surface_, cx + ca * r * 0.05f, cy + sa * r * 0.05f,
+                     cx + ca * r * 0.97f, cy + sa * r * 0.97f, thickness, tint,
+                     0.34f * falloff);
+        }
+        // The leading edge itself: a thin bright line the wake falls away from.
+        {
+            const float ca = cosf(sweep);
+            const float sa = sinf(sweep);
+            DrawLine(surface_, cx + ca * r * 0.05f, cy + sa * r * 0.05f,
+                     cx + ca * r * 0.99f, cy + sa * r * 0.99f,
+                     std::max(1.5f, 2.4f * s),
+                     Mix(ink, Rgb(255, 255, 255), 0.45f), 0.9f);
+        }
+
+        for (const RadarBlip& blip : radarBlips_) {
+            // How far the beam has run past this blip, in radians. The blip only
+            // lights up once it has been crossed, and cools from there.
+            float since = fmodf(dir * (sweep - blip.angle), 2.0f * kPi);
+            if (since < 0.0f) {
+                since += 2.0f * kPi;
+            }
+            const float lit = expf(-since / 1.35f);
+            if (lit <= 0.02f) {
+                continue;
+            }
+            const float blink =
+                0.75f + 0.25f * sinf(elapsed * 0.006f + blip.phase * 6.2832f);
+            const float a = lit * blink;
+            const float bx = cx + cosf(blip.angle) * r * blip.radius;
+            const float by = cy + sinf(blip.angle) * r * blip.radius;
+            const Color tint = rainbow ? g_glow.At(blip.phase + drift) : ink;
+            DrawDisc(surface_, bx, by, std::max(3.0f, 8.0f * s), tint, a * 0.20f);
+            DrawDisc(surface_, bx, by, std::max(1.5f, 2.6f * s),
+                     Mix(tint, Rgb(255, 255, 255), 0.6f), a * 0.95f);
+            // A ping ring rolls out from the blip just after the beam crosses it.
+            if (since < 0.9f) {
+                const float ping = since / 0.9f;
+                RadarCircle(surface_, bx, by,
+                            std::max(4.0f, 6.0f * s) + ping * 16.0f * s,
+                            std::max(1.0f, 1.6f * s), tint, (1.0f - ping) * 0.55f);
+            }
+        }
+
+        window_.Present(surface_, monitor_.left, monitor_.top, windowAlpha);
+        firstFrame_ = false;
+    }
+
     // The bezel presses the whole desktop inward: a dark frame grows out of the
     // four edges and the screen, captured once before the window appears, is
     // scaled down to fit inside it. The depth stays small so the desktop reads as
@@ -3748,6 +4691,30 @@ private:
     int matrixCellH_ = 0;
     int matrixGlyphs_ = 0;
     std::vector<MatrixColumn> matrixColumns_;
+    // Aurora: the bands themselves and the two tables a frame is built from.
+    std::vector<AuroraBand> auroraBands_;
+    std::vector<float> auroraRows_;
+    std::vector<float> auroraWaver_;
+    // Hex grid: the cells, their size, how far the grid reaches and how far a
+    // cell keeps glowing behind the front.
+    std::vector<HexCell> hexCells_;
+    float hexRadius_ = 0.0f;
+    float hexMaxDist_ = 0.0f;
+    float hexTail_ = 0.0f;
+    // Energy fill: the level it rises to, the row its surface was drawn at last
+    // frame, and the wavy surface height of every column.
+    float fillTarget_ = 0.6f;
+    int fillDrawnTop_ = -1;
+    std::vector<float> fillSurfX_;
+    // Sparks: every ember of the burst, thrown once when the event fires.
+    std::vector<Spark> sparks_;
+    // Radar: the blips on the scope, how far the scope reaches, and the scope
+    // itself, which never changes once it is drawn.
+    std::vector<RadarBlip> radarBlips_;
+    Surface radarScope_;
+    float radarRadius_ = 0.0f;
+    int radarLeft_ = 0;
+    int radarTop_ = 0;
     int drawnFirst_ = 0;
     int drawnLast_ = 0;
     int drawnX0_ = 0;
@@ -4213,6 +5180,135 @@ void DrawRingArc(Surface& surface, float cx, float cy, float radius,
     }
 }
 
+// A round-capped segment, measured by distance to the segment itself so the ends
+// stay smooth without a per-pixel direction. The dial's ticks are the only
+// caller and they are small, so the swath test is cheap.
+void DrawLine(Surface& surface, float x0, float y0, float x1, float y1,
+              float thickness, const Color& color, float alpha) {
+    if (thickness <= 0.0f || alpha <= 0.0f || !surface.Valid()) {
+        return;
+    }
+    const float half = thickness * 0.5f;
+    const float dx = x1 - x0;
+    const float dy = y1 - y0;
+    const float lengthSq = dx * dx + dy * dy;
+    const int firstX =
+        std::max(0, static_cast<int>(floorf(std::min(x0, x1) - half - 1.0f)));
+    const int lastX = std::min(
+        surface.Width() - 1,
+        static_cast<int>(ceilf(std::max(x0, x1) + half + 1.0f)));
+    const int firstY =
+        std::max(0, static_cast<int>(floorf(std::min(y0, y1) - half - 1.0f)));
+    const int lastY = std::min(
+        surface.Height() - 1,
+        static_cast<int>(ceilf(std::max(y0, y1) + half + 1.0f)));
+    for (int y = firstY; y <= lastY; y++) {
+        uint32_t* row = surface.Row(y);
+        const float py = static_cast<float>(y) + 0.5f - y0;
+        for (int x = firstX; x <= lastX; x++) {
+            const float px = static_cast<float>(x) + 0.5f - x0;
+            const float t =
+                Clamp01(lengthSq > 0.0f ? (px * dx + py * dy) / lengthSq : 0.0f);
+            const float ex = px - dx * t;
+            const float ey = py - dy * t;
+            const float coverage =
+                Clamp01(half + 0.5f - sqrtf(ex * ex + ey * ey));
+            if (coverage > 0.0f) {
+                BlendOver(row[x], PackPremultiplied(color, coverage * alpha));
+            }
+        }
+    }
+}
+
+// One dot of the dot-matrix numerals: a filled disc with a soft edge.
+void DrawDisc(Surface& surface, float cx, float cy, float radius,
+              const Color& color, float alpha) {
+    if (radius <= 0.0f || alpha <= 0.0f || !surface.Valid()) {
+        return;
+    }
+    const int firstX = std::max(0, static_cast<int>(floorf(cx - radius - 1.0f)));
+    const int lastX =
+        std::min(surface.Width() - 1, static_cast<int>(ceilf(cx + radius + 1.0f)));
+    const int firstY = std::max(0, static_cast<int>(floorf(cy - radius - 1.0f)));
+    const int lastY =
+        std::min(surface.Height() - 1, static_cast<int>(ceilf(cy + radius + 1.0f)));
+    for (int y = firstY; y <= lastY; y++) {
+        uint32_t* row = surface.Row(y);
+        const float py = static_cast<float>(y) + 0.5f - cy;
+        for (int x = firstX; x <= lastX; x++) {
+            const float px = static_cast<float>(x) + 0.5f - cx;
+            const float coverage =
+                Clamp01(radius + 0.5f - sqrtf(px * px + py * py));
+            if (coverage > 0.0f) {
+                BlendOver(row[x], PackPremultiplied(color, coverage * alpha));
+            }
+        }
+    }
+}
+
+// The dot-matrix numerals are five columns by seven rows per glyph, one bit per
+// dot with the leftmost dot in the most significant position. Only the
+// characters the card can produce are in the table.
+const uint8_t* DotGlyphRows(wchar_t c) {
+    static const struct {
+        wchar_t ch;
+        uint8_t rows[7];
+    } kGlyphs[] = {
+        {L'0', {0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110}},
+        {L'1', {0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110}},
+        {L'2', {0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b01000, 0b11111}},
+        {L'3', {0b11111, 0b00010, 0b00100, 0b00010, 0b00001, 0b10001, 0b01110}},
+        {L'4', {0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010}},
+        {L'5', {0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110}},
+        {L'6', {0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110}},
+        {L'7', {0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000}},
+        {L'8', {0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110}},
+        {L'9', {0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100}},
+        {L'%', {0b11001, 0b11010, 0b00010, 0b00100, 0b01000, 0b01011, 0b10011}},
+        {L'-', {0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000}},
+        {0x26A1, {0b00011, 0b00110, 0b01100, 0b11111, 0b00110, 0b01100, 0b11000}},
+    };
+    for (const auto& glyph : kGlyphs) {
+        if (glyph.ch == c) {
+            return glyph.rows;
+        }
+    }
+    return nullptr;
+}
+
+// Seven dot rows tall, five dot columns wide per glyph, with one empty column
+// between neighbours. The pitch is a dot plus the gap between two of them.
+void MeasureDotText(const std::wstring& text, int dotPx, int gapPx, int* width,
+                    int* height) {
+    const int pitch = std::max(1, dotPx + gapPx);
+    const int count = static_cast<int>(text.size());
+    *width = count > 0 ? count * pitch * 6 - pitch : 0;
+    *height = std::max(1, pitch * 7 - gapPx);
+}
+
+void DrawDotText(Surface& surface, float left, float top, int dotPx, int gapPx,
+                 const std::wstring& text, const Color& color, float alpha) {
+    const int pitch = std::max(1, dotPx + gapPx);
+    const float radius = static_cast<float>(dotPx) * 0.5f;
+    float penX = left;
+    for (wchar_t c : text) {
+        const uint8_t* rows = DotGlyphRows(c);
+        if (rows) {
+            for (int r = 0; r < 7; r++) {
+                for (int col = 0; col < 5; col++) {
+                    if (!(rows[r] & (1u << (4 - col)))) {
+                        continue;
+                    }
+                    DrawDisc(surface, penX + static_cast<float>(col * pitch) + radius,
+                             top + static_cast<float>(r * pitch) + radius, radius,
+                             color, alpha);
+                }
+            }
+        }
+        penX += static_cast<float>(pitch * 6);
+    }
+}
+
 // The cards frost over a copy of whatever sits behind them. A layered window
 // cannot ask DWM for that backdrop, so the region is captured once when the card
 // appears and blurred here instead.
@@ -4645,13 +5741,20 @@ public:
         if (barAnimating) {
             RenderBarFill(BarProgress(now));
         }
+        // The ticker keeps sliding while it is up, so it wants the fast cadence
+        // for the whole time the card is on screen.
+        const bool tickerScrolling = !closing_ && ticker_;
+        if (tickerScrolling) {
+            RenderTickerScroll();
+        }
         const bool popping = std::fabs(pop - 1.0f) > 0.001f;
         Push(envelope, slide, pop);
 
         // Wake up for the next animation frame, or right when the card is due
         // to close, so a short duration is not stretched by the idle cadence.
         UINT next = kIdleMs;
-        if (envelope < 1.0f || ringAnimating || barAnimating || popping) {
+        if (envelope < 1.0f || ringAnimating || barAnimating || popping ||
+            tickerScrolling) {
             next = kAnimMs;
         } else {
             const double remaining = hideAt_ - now;
@@ -4717,6 +5820,36 @@ private:
         }
     }
 
+    // The scrolling strip needs its text cut off at the edge of its window
+    // instead of running out over the card, so this is CompositeText with a box.
+    void CompositeTextClipped(const Color& color, int dx, int dy, const RECT& clip) {
+        const int width = std::min(surface_.Width(), mask_.Width());
+        const int height = std::min(surface_.Height(), mask_.Height());
+        const int firstY = std::max(static_cast<int>(clip.top), std::max(0, dy));
+        const int lastY =
+            std::min({static_cast<int>(clip.bottom), surface_.Height(), height + dy});
+        const int firstX = std::max(static_cast<int>(clip.left), std::max(0, dx));
+        const int lastX =
+            std::min({static_cast<int>(clip.right), surface_.Width(), width + dx});
+        for (int y = firstY; y < lastY; y++) {
+            const uint32_t* source = mask_.Row(y - dy);
+            uint32_t* target = surface_.Row(y);
+            for (int t = firstX; t < lastX; t++) {
+                const uint32_t pixel = source[t - dx];
+                if (!pixel) {
+                    continue;
+                }
+                const uint32_t coverage = std::max({(pixel >> 16) & 0xFFu,
+                                                    (pixel >> 8) & 0xFFu, pixel & 0xFFu});
+                if (!coverage) {
+                    continue;
+                }
+                BlendOver(target[t], PackPremultiplied(
+                                         color, static_cast<float>(coverage) / 255.0f));
+            }
+        }
+    }
+
     static constexpr UINT kAnimMs = 16;
     static constexpr UINT kIdleMs = 1000;
     static constexpr double kIntroMs = 170.0;
@@ -4777,10 +5910,98 @@ private:
             return;
         }
         surface_.CopyFrom(base_);
+        if (gauge_) {
+            RenderGauge(progress);
+            return;
+        }
+        if (segmented_) {
+            DrawSegments(segLevel_ * Clamp01(progress));
+            return;
+        }
         GlowPalette gradient = MakeRainbowPalette();
         DrawRingArc(surface_, ringCx_, ringCy_, ringRadius_, ringThickness_,
                     ringSweep_ * Clamp01(progress), ringColor_, 0.97f,
                     rainbow_ ? &gradient : nullptr);
+    }
+
+    // Halo Dial: the ticks light up from twelve o'clock instead of an arc being
+    // swept, so the dial wakes up on the same beat without drawing a band the
+    // theme never asked for. Unlit ticks stay as a faint track.
+    void DrawSegments(float level) {
+        if (segCount_ <= 0 || segRadius_ <= 0.0f) {
+            return;
+        }
+        const int lit = std::clamp(
+            static_cast<int>(Clamp01(level) * static_cast<float>(segCount_) + 0.5f),
+            0, segCount_);
+        constexpr float kTwoPi = 2.0f * kPi;
+        const float inner = std::max(0.0f, segRadius_ - segThickness_);
+        GlowPalette gradient = MakeRainbowPalette();
+        for (int i = 0; i < segCount_; i++) {
+            const float u =
+                (static_cast<float>(i) + 0.5f) / static_cast<float>(segCount_);
+            // Twelve o'clock is zero, and the dial runs clockwise.
+            const float angle = u * kTwoPi - kPi * 0.5f;
+            const float dirX = cosf(angle);
+            const float dirY = sinf(angle);
+            const bool on = i < lit;
+            const Color tint = on && rainbow_ ? gradient.At(u) : ringColor_;
+            DrawLine(surface_, ringCx_ + dirX * inner, ringCy_ + dirY * inner,
+                     ringCx_ + dirX * segRadius_, ringCy_ + dirY * segRadius_,
+                     segThickness_, tint, on ? 0.97f : 0.12f);
+        }
+    }
+
+    // Half Gauge: the level band and the needle are replayed over the static
+    // frame, so the dial sweeps up from the left on the same beat as the rings.
+    void RenderGauge(float progress) {
+        if (!gauge_ || gaugeRadius_ <= 0.0f) {
+            return;
+        }
+        const float level = Clamp01(gaugeLevel_) * Clamp01(progress);
+        const float inner = std::max(0.0f, gaugeRadius_ - gaugeThickness_ * 0.5f);
+        const float to = kPi + kPi * level;
+        if (level > 0.0f) {
+            DrawDialArc(gaugeCx_, gaugeCy_, gaugeRadius_, gaugeThickness_, kPi, to,
+                        gaugeColor_, 0.97f, rainbow_);
+        }
+        // The needle, with a short stub behind the hub so it reads as a pointer
+        // rather than a line laid over the dial.
+        const float ca = cosf(to);
+        const float sa = sinf(to);
+        const float tip = std::max(4.0f, inner - gaugeThickness_ * 1.1f);
+        const float stub = gaugeThickness_ * 1.8f;
+        DrawLine(surface_, gaugeCx_ - ca * stub, gaugeCy_ - sa * stub,
+                 gaugeCx_ + ca * tip, gaugeCy_ + sa * tip,
+                 std::max(1.6f, 2.6f * scale_), gaugeNeedle_, 0.95f);
+        DrawDisc(surface_, gaugeCx_, gaugeCy_, std::max(2.5f, 4.0f * scale_),
+                 gaugeNeedle_, 0.95f);
+    }
+
+    // A filled arc band walked as short segments, which rounds both ends and
+    // saves the gauge from needing a second rasteriser.
+    void DrawDialArc(float cx, float cy, float radius, float thickness, float from,
+                     float to, const Color& color, float alpha, bool gradient) {
+        const float sweep = fabsf(to - from);
+        if (radius <= 0.0f || thickness <= 0.0f || sweep <= 0.0f) {
+            return;
+        }
+        const float start = std::min(from, to);
+        const int segments = std::clamp(
+            static_cast<int>(sweep * radius / (4.0f * std::max(1.0f, scale_))), 8, 240);
+        GlowPalette palette = MakeRainbowPalette();
+        float px = cx + cosf(start) * radius;
+        float py = cy + sinf(start) * radius;
+        for (int i = 1; i <= segments; i++) {
+            const float q = static_cast<float>(i) / static_cast<float>(segments);
+            const float angle = start + sweep * q;
+            const float nx = cx + cosf(angle) * radius;
+            const float ny = cy + sinf(angle) * radius;
+            const Color tint = gradient ? palette.At(q * 0.5f) : color;
+            DrawLine(surface_, px, py, nx, ny, thickness, tint, alpha);
+            px = nx;
+            py = ny;
+        }
     }
 
     // Repaints the level bar over the static frame: the track stays where it is
@@ -4801,6 +6022,31 @@ private:
                              barH_ * 0.5f),
                     barTopColor_, 0.95f, barColor_, 0.95f, 0.0f,
                     barSweep_ ? &gradient : nullptr);
+    }
+
+    // Ticker Strip: the status line slides through its own window, which is how
+    // the strip can show a line longer than the room it gives it.
+    void RenderTickerScroll() {
+        if (!ticker_ || !base_.Valid() || !mask_.Valid()) {
+            return;
+        }
+        surface_.CopyFrom(base_);
+        // A short hold first, so the line is readable from its start before it
+        // starts moving.
+        const double elapsed = NowMs() - shownAt_ - 420.0;
+        if (elapsed <= 0.0) {
+            return;
+        }
+        const float cycle = tickerTextW_ + tickerGap_;
+        if (cycle <= 1.0f) {
+            return;
+        }
+        const float shift =
+            fmodf(static_cast<float>(elapsed) * 0.045f * scale_, cycle);
+        const RECT clip{tickerX_, 0, tickerX_ + tickerWindowW_, surface_.Height()};
+        CompositeTextClipped(tickerInk_,
+                             tickerX_ - static_cast<int>(shift) - tickerMaskX_, 0,
+                             clip);
     }
 
     // 16 ms while the card animates, one second once it has settled.
@@ -4824,9 +6070,10 @@ private:
         window_.Present(*frame, left_, top_ + static_cast<int>(slide + 0.5f), alpha);
     }
 
-    // Only the glass cards read the screen behind them; the plain one is a flat
-    // slab of its own colour, so capturing it would just cost a frame.
-    bool UsesBackdrop() const { return !KeyIs(style_.theme, L"osd"); }
+    // Only the glass cards read the screen behind them. The capsule wants that
+    // blur, the bare dial and the flat dot slab do not, so the capture would
+    // only cost a frame for them.
+    bool UsesBackdrop() const { return wantsBackdrop_; }
 
     // Grabs the screen under the card and blurs it, so the glass has something
     // real behind it. Only valid while the window is hidden.
@@ -4846,6 +6093,9 @@ private:
     bool Refresh() {
         ringReady_ = false;
         barReady_ = false;
+        segmented_ = false;
+        gauge_ = false;
+        ticker_ = false;
         const ChargingStats stats = ReadChargingStats();
         const std::wstring title =
             stats.percent >= 0 ? std::to_wstring(stats.percent) + L"%"
@@ -4855,10 +6105,34 @@ private:
 
         scale_ = DpiScaleAt(anchor_);
         const bool galaxy = KeyIs(style_.theme, L"galaxy");
+        const bool capsule = KeyIs(style_.theme, L"capsule");
+        const bool halo = KeyIs(style_.theme, L"halo");
+        const bool dots = KeyIs(style_.theme, L"dots");
+        const bool gauge = KeyIs(style_.theme, L"gauge");
+        const bool ticker = KeyIs(style_.theme, L"ticker");
         springy_ = KeyIs(style_.theme, L"pineapple");
         // The Galaxy and PineApple cards are system HUDs, so they fade and scale
-        // in instead of sliding like the Fluent cards.
+        // in instead of sliding like the Fluent cards. The capsule and the dot
+        // slab join them, and the dial sets its own spring below.
         hud_ = KeyIs(style_.theme, L"osd") || galaxy;
+        // A theme that paints the whole surface wants the blurred desktop behind
+        // it; one that is only its own shape would waste the capture.
+        wantsBackdrop_ = !KeyIs(style_.theme, L"osd") && !halo && !dots && !gauge;
+        if (halo) {
+            return RefreshHalo(stats, title, detail);
+        }
+        if (gauge) {
+            return RefreshGauge(stats, title);
+        }
+        if (capsule) {
+            return RefreshCapsule(stats, title, detail);
+        }
+        if (dots) {
+            return RefreshDots(stats, title);
+        }
+        if (ticker) {
+            return RefreshTicker(stats, title, detail);
+        }
         if (springy_) {
             return RefreshPineApple(stats, title, detail);
         }
@@ -4867,6 +6141,9 @@ private:
         }
         if (hud_) {
             return RefreshPineAppleDesktop(stats, title, detail);
+        }
+        if (KeyIs(style_.theme, L"icons")) {
+            return RefreshFluentTiny(stats, title);
         }
         return RefreshFluent(stats, title, detail, KeyIs(style_.theme, L"minimal"));
     }
@@ -5088,6 +6365,216 @@ private:
 
         DeleteObject(titleFont);
         DeleteObject(detailFont);
+
+        return PlaceOnScreen(width, height);
+    }
+
+    static HFONT MakeIconFont(const wchar_t* face, int px) {
+        return CreateFontW(-px, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                           OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+                           DEFAULT_PITCH | FF_DONTCARE, face);
+    }
+
+    // The battery glyph for the current level. The charging range stops at 90%,
+    // and Battery10 lives on its own legacy code, so both ends are special cases.
+    static wchar_t CardBatteryGlyph(const ChargingStats& stats) {
+        if (stats.percent < 0) {
+            return static_cast<wchar_t>(0xE83F);  // Battery10, no reading to show.
+        }
+        const int level = std::clamp((stats.percent + 5) / 10, 0, 10);
+        if (stats.onAc) {
+            return static_cast<wchar_t>(0xE85A + std::min(level, 8));
+        }
+        return level >= 10 ? static_cast<wchar_t>(0xE83F)
+                           : static_cast<wchar_t>(0xE850 + level);
+    }
+
+    // Fluent (Tiny): the minimal badge, with the battery drawn from the Segoe
+    // Fluent Icons font instead of by hand, so it is the icon the system itself
+    // uses. It sits bare, without the tinted tile, and keeps the level bar.
+    bool RefreshFluentTiny(const ChargingStats& stats, const std::wstring& title) {
+        const float s = scale_;
+        const int basePx = std::clamp(style_.fontPx, 8, 64);
+        const int titlePx = std::max(12, static_cast<int>(basePx * 1.05f * s + 0.5f));
+        const wchar_t* face = CardIconFace();
+        const wchar_t glyphChar = CardBatteryGlyph(stats);
+
+        HFONT titleFont = CreateFontW(
+            -titlePx, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+            OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
+            DEFAULT_PITCH | FF_DONTCARE,
+            IsWindows11() ? L"Segoe UI Variable Display" : L"Segoe UI");
+        if (!titleFont) {
+            return false;
+        }
+
+        const int pad = std::max(5, static_cast<int>(10.0f * s + 0.5f));
+        const int iconBox = std::max(16, static_cast<int>(26.0f * s + 0.5f));
+        const int gap = std::max(5, static_cast<int>(9.0f * s + 0.5f));
+        const int barH = std::max(2, static_cast<int>(2.5f * s + 0.5f));
+        const int barGap = std::max(3, static_cast<int>(6.0f * s + 0.5f));
+        const int minTextW = std::max(34, static_cast<int>(56.0f * s + 0.5f));
+        const bool showBar = stats.percent >= 0;
+
+        SIZE titleSize{};
+        SIZE ink{};
+        HFONT iconFont = face ? MakeIconFont(face, iconBox) : nullptr;
+        HDC measure = CreateCompatibleDC(nullptr);
+        if (measure) {
+            HGDIOBJ previous = SelectObject(measure, titleFont);
+            GetTextExtentPoint32W(measure, title.c_str(), static_cast<int>(title.size()),
+                                  &titleSize);
+            // The ink sits inside a much larger em box, so the font is measured
+            // and resized once instead of guessed at from the box it goes in.
+            if (iconFont) {
+                SelectObject(measure, iconFont);
+                GetTextExtentPoint32W(measure, &glyphChar, 1, &ink);
+                if (ink.cx > 0 && ink.cy > 0) {
+                    const float fitX =
+                        static_cast<float>(iconBox) / static_cast<float>(ink.cx);
+                    const float fitY =
+                        static_cast<float>(iconBox) / static_cast<float>(ink.cy);
+                    const int fitted = std::max(
+                        8, static_cast<int>(iconBox * std::min(fitX, fitY) + 0.5f));
+                    if (fitted != iconBox) {
+                        HFONT resized = MakeIconFont(face, fitted);
+                        if (resized) {
+                            SelectObject(measure, resized);
+                            DeleteObject(iconFont);
+                            iconFont = resized;
+                            GetTextExtentPoint32W(measure, &glyphChar, 1, &ink);
+                        }
+                    }
+                }
+            }
+            SelectObject(measure, previous);
+            DeleteDC(measure);
+        }
+
+        const int textW = std::max(static_cast<int>(titleSize.cx),
+                                   showBar ? minTextW : 0);
+        int textH = static_cast<int>(titleSize.cy);
+        if (showBar) {
+            textH += barGap + barH;
+        }
+
+        const int cardW = pad * 2 + iconBox + gap + textW;
+        const int cardH = pad * 2 + std::max(textH, iconBox);
+        if (cardW <= 0 || cardH <= 0 || cardW > 4000 || cardH > 2000) {
+            if (iconFont) {
+                DeleteObject(iconFont);
+            }
+            DeleteObject(titleFont);
+            return false;
+        }
+
+        // Same soft shadow and glass as the other Fluent cards, at badge size.
+        const float sigma = 6.0f * s;
+        const int shadow = static_cast<int>(ceilf(sigma * 3.0f));
+        const int width = cardW + shadow * 2;
+        const int height = cardH + shadow * 2;
+        if (!surface_.Resize(width, height) || !mask_.Resize(width, height)) {
+            if (iconFont) {
+                DeleteObject(iconFont);
+            }
+            DeleteObject(titleFont);
+            return false;
+        }
+
+        const Color accent =
+            ResolveOverlayAccent(style_.color, style_.customColor);
+        const GlowPalette gradient = MakeRainbowPalette();
+        const GlowPalette* sweep = style_.rainbow ? &gradient : nullptr;
+        const OverlayTheme theme = MakeOverlayTheme();
+        const RoundedRect card = MakeRect(static_cast<float>(shadow),
+                                          static_cast<float>(shadow),
+                                          static_cast<float>(shadow + cardW),
+                                          static_cast<float>(shadow + cardH),
+                                          std::max(5.0f, 6.0f * s));
+        surface_.Clear();
+        CastShadow(surface_, card, sigma, 4.0f * s, theme.shadowAlpha);
+
+        const float hairline = std::max(1.0f, s);
+        StrokeRounded(surface_, card, hairline, theme.hairline, theme.hairlineTop,
+                      theme.hairline, theme.hairlineBottom);
+        const RoundedRect panel =
+            MakeRect(card.x0 + hairline, card.y0 + hairline, card.x1 - hairline,
+                     card.y1 - hairline, std::max(5.0f, card.radius - hairline));
+        FillGlass(surface_, panel, backdrop_, theme.panelTop,
+                  theme.panelAlpha * 0.86f, accent, theme.tintTop);
+        FillRounded(surface_, panel, Mix(theme.panelTop, accent, theme.tintTop), 0.34f,
+                    Mix(theme.panelBottom, accent, theme.tintBottom), 0.34f, 0.012f);
+
+        HDC dc = mask_.Dc();
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(255, 255, 255));
+
+        if (iconFont) {
+            // Drawn into the mask first, so the glyph picks up the same theme
+            // colour and antialiasing as the text next to it.
+            mask_.Clear();
+            const float iconX =
+                static_cast<float>(shadow + pad) + (iconBox - ink.cx) * 0.5f;
+            const float iconY =
+                static_cast<float>(shadow) + (cardH - ink.cy) * 0.5f;
+            HGDIOBJ previous = SelectObject(dc, iconFont);
+            TextOutW(dc, static_cast<int>(iconX + 0.5f),
+                     static_cast<int>(iconY + 0.5f), &glyphChar, 1);
+            GdiFlush();
+            SelectObject(dc, previous);
+            CompositeText(theme.title);
+        } else {
+            // No icon font on this machine, so the hand drawn glyph stands in.
+            const float glyphW = static_cast<float>(iconBox) * 0.68f;
+            const float glyphH = static_cast<float>(iconBox) * 0.34f;
+            DrawBatteryGlyph(surface_,
+                             static_cast<float>(shadow + pad) + (iconBox - glyphW) * 0.5f,
+                             static_cast<float>(shadow) + (cardH - glyphH) * 0.5f,
+                             glyphW, glyphH, stats.percent, theme.title, 0.96f);
+        }
+
+        const int textLeft = shadow + pad + iconBox + gap;
+        const int textTop = shadow + (cardH - textH) / 2;
+        mask_.Clear();
+        HGDIOBJ previous = SelectObject(dc, titleFont);
+        TextOutW(dc, textLeft, textTop, title.c_str(), static_cast<int>(title.size()));
+        GdiFlush();
+        SelectObject(dc, previous);
+        CompositeText(theme.title);
+
+        if (showBar) {
+            const int barTop = textTop + static_cast<int>(titleSize.cy) + barGap;
+            const float barRight = static_cast<float>(textLeft + textW);
+            FillRounded(surface_,
+                        MakeRect(static_cast<float>(textLeft), static_cast<float>(barTop),
+                                 barRight, static_cast<float>(barTop + barH), barH * 0.5f),
+                        theme.track, 0.13f, theme.track, 0.09f, 0.0f);
+            Color bar = theme.light ? Mix(accent, Rgb(16, 16, 18), 0.14f) : accent;
+            const GlowPalette* barSweep = sweep;
+            if (!stats.onAc && stats.percent <= 20) {
+                bar = Mix(Rgb(232, 84, 66), accent, 0.2f);
+                barSweep = nullptr;
+            }
+            barReady_ = true;
+            barX_ = static_cast<float>(textLeft);
+            barY_ = static_cast<float>(barTop);
+            barW_ = static_cast<float>(textW);
+            barH_ = static_cast<float>(barH);
+            barLevel_ = Clamp01(stats.percent / 100.0f);
+            barTopColor_ = theme.light ? bar : Mix(bar, Rgb(255, 255, 255), 0.15f);
+            barColor_ = bar;
+            barSweep_ = barSweep != nullptr;
+        }
+
+        if (barReady_) {
+            base_.CopyFrom(surface_);
+            RenderBarFill(BarProgress(NowMs()));
+        }
+
+        if (iconFont) {
+            DeleteObject(iconFont);
+        }
+        DeleteObject(titleFont);
 
         return PlaceOnScreen(width, height);
     }
@@ -5720,6 +7207,982 @@ private:
         return PlaceOnScreen(width, height);
     }
 
+    // Capsule (Gradient): a wide glass pill with the bolt badge on the left, the
+    // percentage and the status line stacked on the right, and the level drawn as
+    // a capsule that hugs the inside of the rim.
+    bool RefreshCapsule(const ChargingStats& stats, const std::wstring& title,
+                        const std::wstring& detail) {
+        // Fades and scales in like the other system HUDs, and it is glass, so it
+        // is the one new theme that keeps the blurred backdrop.
+        hud_ = true;
+        springy_ = false;
+        wantsBackdrop_ = true;
+
+        const float s = scale_;
+        const int basePx = std::clamp(style_.fontPx, 8, 64);
+        const int titlePx = std::max(15, static_cast<int>(basePx * 2.0f * s + 0.5f));
+        const int detailPx = std::max(9, static_cast<int>(basePx * 0.62f * s + 0.5f));
+        const bool windows11 = IsWindows11();
+        const wchar_t* display = windows11 ? L"Segoe UI Variable Display" : L"Segoe UI";
+        const wchar_t* captionFace =
+            windows11 ? L"Segoe UI Variable Text" : L"Segoe UI";
+
+        HFONT titleFont =
+            CreateFontW(-titlePx, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, display);
+        HFONT detailFont =
+            CreateFontW(-detailPx, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                        captionFace);
+        if (!titleFont || !detailFont) {
+            if (titleFont) DeleteObject(titleFont);
+            if (detailFont) DeleteObject(detailFont);
+            return false;
+        }
+
+        SIZE titleSize{};
+        SIZE detailSize{};
+        SIZE detailReserve{};
+        const bool showDetail = !detail.empty();
+        HDC measure = CreateCompatibleDC(nullptr);
+        if (measure) {
+            HGDIOBJ previous = SelectObject(measure, titleFont);
+            GetTextExtentPoint32W(measure, title.c_str(), static_cast<int>(title.size()),
+                                  &titleSize);
+            if (showDetail) {
+                SelectObject(measure, detailFont);
+                GetTextExtentPoint32W(measure, detail.c_str(),
+                                      static_cast<int>(detail.size()), &detailSize);
+                // Cut for the widest status line this state can reach, so the
+                // wattage landing a second later cannot widen the pill.
+                const std::wstring reserve = ReserveDetailLine(stats);
+                GetTextExtentPoint32W(measure, reserve.c_str(),
+                                      static_cast<int>(reserve.size()), &detailReserve);
+            }
+            SelectObject(measure, previous);
+            DeleteDC(measure);
+        }
+
+        const bool showBar = stats.percent >= 0;
+        const int pad = std::max(11, static_cast<int>(15.0f * s + 0.5f));
+        const int gap = std::max(7, static_cast<int>(13.0f * s + 0.5f));
+        const int lineGap = std::max(1, static_cast<int>(3.0f * s + 0.5f));
+        const int badge = std::max(22, static_cast<int>(basePx * 1.6f * s + 0.5f));
+        const int barH = std::max(3, static_cast<int>(4.0f * s + 0.5f));
+        const int barGap = std::max(4, static_cast<int>(8.0f * s + 0.5f));
+
+        const int textW =
+            std::max(static_cast<int>(titleSize.cx),
+                     showDetail ? std::max(static_cast<int>(detailSize.cx),
+                                           static_cast<int>(detailReserve.cx))
+                                : 0);
+        const int rowH = std::max(badge, static_cast<int>(titleSize.cy));
+        const int textH = rowH + (showDetail ? lineGap + static_cast<int>(detailSize.cy) : 0);
+        // Wide by design: the pill is cut for the room the content wants, with a
+        // floor of nine base font heights so even "9%" reads as a capsule. The
+        // inset keeps the badge off the rounded end.
+        const int minH = std::max(56, static_cast<int>(basePx * 3.2f * s + 0.5f));
+        const int insetX = std::max(pad, static_cast<int>(static_cast<float>(minH) * 0.28f));
+        const int capsuleW = std::max(
+            insetX * 2 + badge + gap + textW,
+            std::max(120, static_cast<int>(basePx * 9.0f * s + 0.5f)));
+        const int capsuleH = std::max(
+            textH + pad * 2 + (showBar ? barGap + barH : 0), minH);
+        if (capsuleW <= 0 || capsuleH <= 0) {
+            DeleteObject(titleFont);
+            DeleteObject(detailFont);
+            return false;
+        }
+
+        const float sigma = 8.0f * s;
+        const int shadow = static_cast<int>(ceilf(sigma * 3.0f));
+        const int width = capsuleW + shadow * 2;
+        const int height = capsuleH + shadow * 2;
+        if (width > 4000 || height > 2000 || !surface_.Resize(width, height) ||
+            !mask_.Resize(width, height) || !base_.Resize(width, height)) {
+            DeleteObject(titleFont);
+            DeleteObject(detailFont);
+            return false;
+        }
+
+        const Color accent =
+            ResolveOverlayAccent(style_.color, style_.customColor);
+        const GlowPalette gradient = MakeRainbowPalette();
+        const GlowPalette* sweep = style_.rainbow ? &gradient : nullptr;
+        const OverlayTheme theme = MakeOverlayTheme();
+        const bool low = !stats.onAc && stats.percent >= 0 && stats.percent <= 20;
+        const Color level = low ? Mix(Rgb(255, 59, 48), accent, 0.15f) : accent;
+        const float radius = static_cast<float>(capsuleH) * 0.5f;
+
+        const RoundedRect card =
+            MakeRect(static_cast<float>(shadow), static_cast<float>(shadow),
+                     static_cast<float>(shadow + capsuleW),
+                     static_cast<float>(shadow + capsuleH), radius);
+        surface_.Clear();
+        CastShadow(surface_, card, sigma, 4.0f * s, theme.shadowAlpha);
+
+        const float hairline = std::max(1.0f, s);
+        StrokeRounded(surface_, card, hairline, theme.hairline, theme.hairlineTop,
+                      theme.hairline, theme.hairlineBottom);
+
+        // Glass, like the Fluent family: the blurred desktop covered by the theme
+        // colour and then by the vertical tint.
+        const RoundedRect panel =
+            MakeRect(card.x0 + hairline, card.y0 + hairline, card.x1 - hairline,
+                     card.y1 - hairline, std::max(4.0f, radius - hairline));
+        FillGlass(surface_, panel, backdrop_, theme.panelTop, theme.panelAlpha * 0.90f,
+                  level, theme.tintTop);
+        FillRounded(surface_, panel, Mix(theme.panelTop, level, theme.tintTop), 0.34f,
+                    Mix(theme.panelBottom, level, theme.tintBottom), 0.36f, 0.012f);
+
+        // The badge and the two text lines are one block, centred in the part of
+        // the pill that the level bar leaves free.
+        const int barBlock = showBar ? barGap + barH : 0;
+        const int blockTop = (capsuleH - barBlock - textH) / 2;
+        const float badgeX = static_cast<float>(shadow + insetX);
+        const float badgeY = static_cast<float>(shadow + blockTop) +
+                             static_cast<float>(rowH - badge) * 0.5f;
+        FillRounded(surface_,
+                    MakeRect(badgeX, badgeY, badgeX + static_cast<float>(badge),
+                             badgeY + static_cast<float>(badge),
+                             static_cast<float>(badge) * 0.5f),
+                    level, 0.26f, level, 0.13f, 0.0f, sweep);
+
+        const bool charging =
+            stats.charging || (stats.onAc && stats.percent >= 0 && stats.percent < 100);
+        const Color ink = theme.light ? Mix(level, Rgb(24, 24, 26), 0.35f)
+                                      : Mix(Rgb(255, 255, 255), level, 0.25f);
+        if (charging) {
+            const float boltH = static_cast<float>(badge) * 0.52f;
+            const float boltW = boltH * 0.60f;
+            FillBolt(surface_, badgeX + (static_cast<float>(badge) - boltW) * 0.5f,
+                     badgeY + (static_cast<float>(badge) - boltH) * 0.5f, boltW,
+                     boltH, ink, 0.96f);
+        } else {
+            const float glyphW = static_cast<float>(badge) * 0.54f;
+            const float glyphH = glyphW * 0.46f;
+            DrawBatteryGlyph(surface_,
+                             badgeX + (static_cast<float>(badge) - glyphW) * 0.5f,
+                             badgeY + (static_cast<float>(badge) - glyphH) * 0.5f,
+                             glyphW, glyphH, stats.percent, ink, 0.94f);
+        }
+
+        HDC dc = mask_.Dc();
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(255, 255, 255));
+
+        const int textLeft = shadow + insetX + badge + gap;
+        const int titleTop = shadow + blockTop + (rowH - static_cast<int>(titleSize.cy)) / 2;
+        mask_.Clear();
+        HGDIOBJ previous = SelectObject(dc, titleFont);
+        TextOutW(dc, textLeft, titleTop, title.c_str(), static_cast<int>(title.size()));
+        GdiFlush();
+        SelectObject(dc, previous);
+        CompositeText(theme.title);
+
+        if (showDetail) {
+            const int detailTop = shadow + blockTop + rowH + lineGap;
+            mask_.Clear();
+            previous = SelectObject(dc, detailFont);
+            TextOutW(dc, textLeft, detailTop, detail.c_str(),
+                     static_cast<int>(detail.size()));
+            GdiFlush();
+            SelectObject(dc, previous);
+            CompositeText(theme.detail);
+        }
+
+        if (showBar) {
+            // The track sits on the flat part of the rim, which starts one
+            // radius in from either end of the pill.
+            const float barLeft = static_cast<float>(shadow) + radius;
+            const float barW = std::max(24.0f, static_cast<float>(capsuleW) -
+                                                  radius * 2.0f);
+            const float barTop =
+                static_cast<float>(shadow + capsuleH - barH) -
+                std::max(5.0f, static_cast<float>(capsuleH) * 0.12f);
+            FillRounded(surface_,
+                        MakeRect(barLeft, barTop, barLeft + barW, barTop + barH,
+                                 static_cast<float>(barH) * 0.5f),
+                        theme.track, 0.16f, theme.track, 0.10f, 0.0f);
+            // The track is the static frame and the fill grows over a copy of it,
+            // exactly like the Fluent bar.
+            barReady_ = true;
+            barX_ = barLeft;
+            barY_ = barTop;
+            barW_ = barW;
+            barH_ = static_cast<float>(barH);
+            barLevel_ = Clamp01(stats.percent / 100.0f);
+            barTopColor_ = theme.light ? level : Mix(level, Rgb(255, 255, 255), 0.15f);
+            barColor_ = level;
+            barSweep_ = sweep != nullptr && !low;
+        }
+
+        DeleteObject(titleFont);
+        DeleteObject(detailFont);
+
+        if (barReady_) {
+            base_.CopyFrom(surface_);
+            RenderBarFill(BarProgress(NowMs()));
+        }
+        return PlaceOnScreen(width, height);
+    }
+
+    // The wording under the dial comes from the charging rate, the way a phone
+    // labels its own HUD: what the charger is doing matters more than the number.
+    static std::wstring HaloCaption(const ChargingStats& stats) {
+        if (!stats.onAc) {
+            return L"ON BATTERY";
+        }
+        if (stats.percent >= 100) {
+            return L"FULLY CHARGED";
+        }
+        const int watts = (stats.rateMw + 500) / 1000;
+        if (watts >= 30) {
+            return L"RAPID CHARGE";
+        }
+        if (watts >= 15) {
+            return L"FAST CHARGE";
+        }
+        return L"CHARGING";
+    }
+
+    // Halo Dial (Segments): a bare circular dial of sixty radial ticks with the
+    // percentage in the middle and a pill underneath naming what the charger is
+    // doing. No card and no glass, so the dial floats on the desktop.
+    bool RefreshHalo(const ChargingStats& stats, const std::wstring& title,
+                     const std::wstring& detail) {
+        (void)detail;
+        // Pops in like the PineApple circle. The dial is transparent around its
+        // ticks, so there is nothing behind it worth capturing.
+        springy_ = true;
+        hud_ = false;
+        wantsBackdrop_ = false;
+
+        const float s = scale_;
+        const int basePx = std::clamp(style_.fontPx, 8, 64);
+        const float dial = std::clamp(static_cast<float>(basePx) * 7.4f * s,
+                                      120.0f * s, 260.0f * s);
+        const float thickness = std::max(3.0f, 7.0f * s);
+        const int pctPx = std::max(15, static_cast<int>(basePx * 1.9f * s + 0.5f));
+        const int capPx = std::max(9, static_cast<int>(basePx * 0.60f * s + 0.5f));
+        const bool windows11 = IsWindows11();
+        const wchar_t* display = windows11 ? L"Segoe UI Variable Display" : L"Segoe UI";
+        const wchar_t* captionFace =
+            windows11 ? L"Segoe UI Variable Text" : L"Segoe UI";
+
+        HFONT pctFont =
+            CreateFontW(-pctPx, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, display);
+        HFONT capFont =
+            CreateFontW(-capPx, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                        captionFace);
+        if (!pctFont || !capFont) {
+            if (pctFont) DeleteObject(pctFont);
+            if (capFont) DeleteObject(capFont);
+            return false;
+        }
+
+        const std::wstring caption =
+            style_.details ? HaloCaption(stats) : std::wstring();
+
+        SIZE pctSize{};
+        SIZE capSize{};
+        SIZE capReserve{};
+        HDC measure = CreateCompatibleDC(nullptr);
+        if (measure) {
+            HGDIOBJ previous = SelectObject(measure, pctFont);
+            GetTextExtentPoint32W(measure, title.c_str(), static_cast<int>(title.size()),
+                                  &pctSize);
+            if (!caption.empty()) {
+                SelectObject(measure, capFont);
+                GetTextExtentPoint32W(measure, caption.c_str(),
+                                      static_cast<int>(caption.size()), &capSize);
+                // The pill is cut for the longest label this state can reach, so
+                // the wattage landing later cannot widen it.
+                const std::wstring reserve = L"FULLY CHARGED";
+                GetTextExtentPoint32W(measure, reserve.c_str(),
+                                      static_cast<int>(reserve.size()), &capReserve);
+            }
+            SelectObject(measure, previous);
+            DeleteDC(measure);
+        }
+
+        const int dialBox = static_cast<int>(ceilf(dial));
+        const int gap = std::max(6, static_cast<int>(12.0f * s + 0.5f));
+        const int pillPadX = std::max(9, static_cast<int>(14.0f * s + 0.5f));
+        const int pillPadY = std::max(4, static_cast<int>(7.0f * s + 0.5f));
+        const int pillW =
+            caption.empty() ? 0
+                            : std::max(static_cast<int>(capSize.cx),
+                                       static_cast<int>(capReserve.cx)) +
+                                  pillPadX * 2;
+        const int pillH =
+            caption.empty() ? 0 : static_cast<int>(capSize.cy) + pillPadY * 2;
+        const float sigma = 7.0f * s;
+        const int shadow = static_cast<int>(ceilf(sigma * 3.0f));
+        const int contentW = std::max(dialBox, pillW);
+        const int contentH = dialBox + (pillH > 0 ? gap + pillH : 0);
+        const int cardW = contentW + shadow * 2;
+        const int cardH = contentH + shadow * 2;
+        if (cardW <= 0 || cardH <= 0 || cardW > 4000 || cardH > 2000 ||
+            !surface_.Resize(cardW, cardH) || !mask_.Resize(cardW, cardH) ||
+            !base_.Resize(cardW, cardH)) {
+            DeleteObject(pctFont);
+            DeleteObject(capFont);
+            return false;
+        }
+
+        const Color accent =
+            ResolveOverlayAccent(style_.color, style_.customColor);
+        const bool low = !stats.onAc && stats.percent >= 0 && stats.percent <= 20;
+        // A gradient rolls around the dial; the low battery warning stays red.
+        rainbow_ = style_.rainbow && !low;
+        const Color level = low ? Mix(Rgb(255, 59, 48), accent, 0.15f) : accent;
+        const OverlayTheme theme = MakeOverlayTheme();
+
+        // The pill flips to the top when the anchor sits close enough to the
+        // bottom of the screen that it would otherwise be pushed off it.
+        const RECT monitor = UsableRect(anchor_);
+        const int margin = std::max(8, static_cast<int>(28.0f * s + 0.5f));
+        const bool pillAbove =
+            pillH > 0 &&
+            anchor_.y + static_cast<int>(cardH * 0.5f) + margin > monitor.bottom;
+        const float dialTop =
+            static_cast<float>(shadow) +
+            (pillAbove ? static_cast<float>(gap + pillH) : 0.0f);
+        const int pillTop = pillAbove ? shadow : shadow + dialBox + gap;
+
+        ringCx_ = static_cast<float>(shadow) + static_cast<float>(contentW) * 0.5f;
+        ringCy_ = dialTop + dial * 0.5f;
+        ringRadius_ = dial * 0.5f - thickness * 0.5f;
+        ringThickness_ = thickness;
+        ringColor_ = level;
+        segmented_ = true;
+        segCount_ = 60;
+        segRadius_ = dial * 0.5f;
+        segThickness_ = thickness;
+        segLevel_ = stats.percent >= 0
+                        ? Clamp01(static_cast<float>(stats.percent) / 100.0f)
+                        : 0.0f;
+        // RingProgress() treats a zero sweep as "nothing to fill", so the dial
+        // keeps the angle the arc would have used even though it lights ticks.
+        ringSweep_ = 2.0f * kPi * segLevel_;
+
+        surface_.Clear();
+
+        if (pillH > 0) {
+            const float pillX =
+                static_cast<float>(shadow) +
+                (static_cast<float>(contentW) - static_cast<float>(pillW)) * 0.5f;
+            const RoundedRect pill =
+                MakeRect(pillX, static_cast<float>(pillTop),
+                         pillX + static_cast<float>(pillW),
+                         static_cast<float>(pillTop + pillH),
+                         static_cast<float>(pillH) * 0.5f);
+            const Color fill = theme.light ? Rgb(252, 252, 253) : Rgb(12, 13, 16);
+            CastShadow(surface_, pill, sigma, 2.0f * s, theme.shadowAlpha * 0.8f);
+            FillRounded(surface_, pill, Mix(fill, level, 0.10f),
+                        theme.light ? 0.88f : 0.62f, Mix(fill, level, 0.04f),
+                        theme.light ? 0.92f : 0.66f, 0.0f);
+            StrokeRounded(surface_, pill, std::max(1.0f, s),
+                          theme.light ? Rgb(0, 0, 0) : Rgb(255, 255, 255),
+                          theme.light ? 0.08f : 0.18f,
+                          theme.light ? Rgb(0, 0, 0) : Rgb(255, 255, 255),
+                          theme.light ? 0.04f : 0.06f);
+        }
+
+        HDC dc = mask_.Dc();
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(255, 255, 255));
+
+        mask_.Clear();
+        HGDIOBJ previous = SelectObject(dc, pctFont);
+        TextOutW(dc, static_cast<int>(ringCx_ - pctSize.cx * 0.5f + 0.5f),
+                 static_cast<int>(ringCy_ - pctSize.cy * 0.5f + 0.5f),
+                 title.c_str(), static_cast<int>(title.size()));
+        GdiFlush();
+        SelectObject(dc, previous);
+        // There is no glass under the number, so the digits carry a halo of their
+        // own: white behind the light theme's ink, black behind the dark one's.
+        const Color ink = theme.light ? Rgb(24, 24, 28) : Rgb(255, 255, 255);
+        const Color halo = theme.light ? Rgb(255, 255, 255) : Rgb(0, 0, 0);
+        const int shade = std::max(1, static_cast<int>(1.6f * s + 0.5f));
+        CompositeText(Color{halo.r, halo.g, halo.b, 0.40f}, -shade, shade);
+        CompositeText(Color{halo.r, halo.g, halo.b, 0.40f}, shade, shade);
+        CompositeText(Color{halo.r, halo.g, halo.b, 0.26f}, 0, shade * 2);
+        CompositeText(Color{ink.r, ink.g, ink.b, 0.98f});
+
+        if (pillH > 0) {
+            const int capLeft = shadow + (contentW - static_cast<int>(capSize.cx)) / 2;
+            mask_.Clear();
+            previous = SelectObject(dc, capFont);
+            TextOutW(dc, capLeft, pillTop + pillPadY, caption.c_str(),
+                     static_cast<int>(caption.size()));
+            GdiFlush();
+            SelectObject(dc, previous);
+            CompositeText(theme.light ? Rgb(48, 50, 56, 0.92f)
+                                      : Rgb(255, 255, 255, 0.82f));
+        }
+
+        DeleteObject(pctFont);
+        DeleteObject(capFont);
+
+        // The static frame holds everything except the ticks, so the sweep only
+        // has to light them.
+        base_.CopyFrom(surface_);
+        ringReady_ = true;
+        RenderRingSweep(RingProgress(NowMs()));
+        return PlaceOnScreen(cardW, cardH);
+    }
+
+    // Dot Matrix (Mono): the level as a slab of dots. A flat black panel in the
+    // dark theme and a white one in the light theme, no glass and no accent,
+    // which is the point of the style.
+    bool RefreshDots(const ChargingStats& stats, const std::wstring& title) {
+        (void)title;
+        hud_ = true;
+        springy_ = false;
+        wantsBackdrop_ = false;
+
+        const float s = scale_;
+        const int basePx = std::clamp(style_.fontPx, 8, 64);
+        const int dotPx = std::max(2, static_cast<int>(basePx * 0.16f * s + 0.5f));
+        const int gapPx = dotPx;
+        const int detailPx = std::max(9, static_cast<int>(basePx * 0.55f * s + 0.5f));
+        const int tracking = std::max(1, static_cast<int>(1.5f * s + 0.5f));
+        const bool windows11 = IsWindows11();
+
+        const bool charging =
+            stats.charging || (stats.onAc && stats.percent >= 0 && stats.percent < 100);
+        std::wstring number;
+        if (stats.percent >= 0) {
+            if (charging) {
+                number.push_back(static_cast<wchar_t>(0x26A1));
+                number.push_back(L' ');
+            }
+            number += std::to_wstring(stats.percent) + L"%";
+        } else {
+            // No reading at all: the strip stays empty and the glyphs say so.
+            number = L"--";
+        }
+
+        int numberW = 0;
+        int numberH = 0;
+        MeasureDotText(number, dotPx, gapPx, &numberW, &numberH);
+
+        const std::wstring detail =
+            style_.details ? BuildDetailLine(stats) : std::wstring();
+        const bool showDetail = !detail.empty();
+        HFONT detailFont =
+            CreateFontW(-detailPx, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                        windows11 ? L"Segoe UI Variable Text" : L"Segoe UI");
+        if (!detailFont) {
+            return false;
+        }
+
+        SIZE detailSize{};
+        SIZE detailReserve{};
+        HDC measure = CreateCompatibleDC(nullptr);
+        if (measure) {
+            HGDIOBJ previous = SelectObject(measure, detailFont);
+            if (showDetail) {
+                GetTextExtentPoint32W(measure, detail.c_str(),
+                                      static_cast<int>(detail.size()), &detailSize);
+                // Same reserve as the other cards: the status line grows when
+                // the wattage lands, and the slab must not resize for it.
+                const std::wstring reserve = ReserveDetailLine(stats);
+                GetTextExtentPoint32W(measure, reserve.c_str(),
+                                      static_cast<int>(reserve.size()), &detailReserve);
+            }
+            SelectObject(measure, previous);
+            DeleteDC(measure);
+        }
+
+        // The caption is letterspaced, so its laid-out width carries one tracking
+        // step per character.
+        const int detailW =
+            showDetail ? std::max(static_cast<int>(detailSize.cx),
+                                  static_cast<int>(detailReserve.cx)) +
+                             tracking * static_cast<int>(detail.size())
+                       : 0;
+        const int stripDots = 20;
+        const int stripDot = std::max(2, static_cast<int>(dotPx * 1.4f + 0.5f));
+        const int slotGap = std::max(1, static_cast<int>(2.0f * s + 0.5f));
+        const int slotW = stripDot * 2 + slotGap;
+        const int stripW = slotW * stripDots - slotGap;
+        const bool showStrip = stats.percent >= 0;
+
+        const int pad = std::max(12, static_cast<int>(18.0f * s + 0.5f));
+        const int blockGap = std::max(7, static_cast<int>(13.0f * s + 0.5f));
+        const int contentW =
+            std::max(numberW, std::max(showStrip ? stripW : 0, detailW));
+        int contentH = numberH;
+        if (showStrip) {
+            contentH += blockGap + stripDot * 2;
+        }
+        if (showDetail) {
+            contentH += blockGap + static_cast<int>(detailSize.cy);
+        }
+        const int slabW = contentW + pad * 2;
+        const int slabH = contentH + pad * 2;
+        if (slabW <= 0 || slabH <= 0) {
+            DeleteObject(detailFont);
+            return false;
+        }
+
+        const float sigma = 6.0f * s;
+        const int shadow = static_cast<int>(ceilf(sigma * 3.0f));
+        const int width = slabW + shadow * 2;
+        const int height = slabH + shadow * 2;
+        if (width > 4000 || height > 2000 || !surface_.Resize(width, height) ||
+            !mask_.Resize(width, height)) {
+            DeleteObject(detailFont);
+            return false;
+        }
+
+        const OverlayTheme theme = MakeOverlayTheme();
+        const RoundedRect slab =
+            MakeRect(static_cast<float>(shadow), static_cast<float>(shadow),
+                     static_cast<float>(shadow + slabW),
+                     static_cast<float>(shadow + slabH),
+                     std::max(8.0f, 12.0f * s));
+        surface_.Clear();
+        CastShadow(surface_, slab, sigma, 3.0f * s, theme.shadowAlpha);
+        FillRounded(surface_, slab, theme.light ? Rgb(253, 253, 254) : Rgb(9, 9, 11),
+                    0.97f, theme.light ? Rgb(242, 242, 246) : Rgb(4, 4, 5), 0.97f,
+                    0.0f);
+        StrokeRounded(surface_, slab, std::max(1.0f, s),
+                      theme.light ? Rgb(0, 0, 0) : Rgb(255, 255, 255), 0.06f,
+                      theme.light ? Rgb(0, 0, 0) : Rgb(255, 255, 255), 0.03f);
+
+        const bool low = !stats.onAc && stats.percent >= 0 && stats.percent <= 20;
+        const Color ink = theme.light ? Rgb(16, 16, 18) : Rgb(255, 255, 255);
+        const Color numberInk = low ? Mix(Rgb(255, 59, 48), ink, 0.22f) : ink;
+
+        int cursorY = shadow + pad;
+        DrawDotText(surface_,
+                    static_cast<float>(shadow + pad + (contentW - numberW) / 2),
+                    static_cast<float>(cursorY), dotPx, gapPx, number, numberInk,
+                    0.98f);
+        cursorY += numberH;
+
+        if (showStrip) {
+            const int lit = std::clamp(stats.percent / 5, 0, stripDots);
+            const float stripTop = static_cast<float>(cursorY + blockGap);
+            const float stripLeft =
+                static_cast<float>(shadow) +
+                (static_cast<float>(slabW) - static_cast<float>(stripW)) * 0.5f;
+            const float radius = static_cast<float>(stripDot) * 0.5f;
+            for (int i = 0; i < stripDots; i++) {
+                const bool on = i < lit;
+                DrawDisc(surface_, stripLeft + static_cast<float>(i) * slotW + radius,
+                         stripTop + radius, radius, numberInk, on ? 0.96f : 0.13f);
+            }
+            cursorY += blockGap + stripDot * 2;
+        }
+
+        if (showDetail) {
+            const int detailTop = cursorY + blockGap;
+            const int trackingTotal = tracking * (static_cast<int>(detail.size()) - 1);
+            int penX = shadow + pad +
+                       (contentW - (static_cast<int>(detailSize.cx) + trackingTotal)) / 2;
+            HDC dc = mask_.Dc();
+            SetBkMode(dc, TRANSPARENT);
+            SetTextColor(dc, RGB(255, 255, 255));
+            // The line sits at a little over half strength, so it reads as a
+            // label under the number instead of competing with it.
+            const Color fade{ink.r, ink.g, ink.b, 0.55f};
+            HGDIOBJ previous = SelectObject(dc, detailFont);
+            for (size_t i = 0; i < detail.size(); i++) {
+                mask_.Clear();
+                TextOutW(dc, penX, detailTop, detail.c_str() + i, 1);
+                GdiFlush();
+                CompositeText(fade);
+                SIZE advance{};
+                GetTextExtentPoint32W(dc, detail.c_str() + i, 1, &advance);
+                penX += static_cast<int>(advance.cx) + tracking;
+            }
+            SelectObject(dc, previous);
+        }
+
+        DeleteObject(detailFont);
+        return PlaceOnScreen(width, height);
+    }
+
+    // Half Gauge (Arc): a semicircle with a level band, a needle and the
+    // percentage under the hub. Bare like the Halo Dial, so it floats on the
+    // desktop with no card behind it.
+    bool RefreshGauge(const ChargingStats& stats, const std::wstring& title) {
+        // The needle swings in on the spring the phone HUDs use.
+        springy_ = true;
+        hud_ = false;
+        wantsBackdrop_ = false;
+        gauge_ = true;
+
+        const float s = scale_;
+        const int basePx = std::clamp(style_.fontPx, 8, 64);
+        const float dial = std::clamp(static_cast<float>(basePx) * 7.0f * s,
+                                      140.0f * s, 270.0f * s);
+        const float thickness = std::max(3.0f, 6.5f * s);
+        const int pctPx = std::max(14, static_cast<int>(basePx * 1.55f * s + 0.5f));
+        const int capPx = std::max(9, static_cast<int>(basePx * 0.56f * s + 0.5f));
+        const bool windows11 = IsWindows11();
+        const wchar_t* display = windows11 ? L"Segoe UI Variable Display" : L"Segoe UI";
+        const wchar_t* captionFace =
+            windows11 ? L"Segoe UI Variable Text" : L"Segoe UI";
+
+        HFONT pctFont =
+            CreateFontW(-pctPx, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, display);
+        HFONT capFont =
+            CreateFontW(-capPx, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                        captionFace);
+        if (!pctFont || !capFont) {
+            if (pctFont) DeleteObject(pctFont);
+            if (capFont) DeleteObject(capFont);
+            return false;
+        }
+
+        const std::wstring caption = style_.details ? HaloCaption(stats) : std::wstring();
+
+        SIZE pctSize{};
+        SIZE capSize{};
+        SIZE capReserve{};
+        HDC measure = CreateCompatibleDC(nullptr);
+        if (measure) {
+            HGDIOBJ previous = SelectObject(measure, pctFont);
+            GetTextExtentPoint32W(measure, title.c_str(), static_cast<int>(title.size()),
+                                  &pctSize);
+            if (!caption.empty()) {
+                SelectObject(measure, capFont);
+                GetTextExtentPoint32W(measure, caption.c_str(),
+                                      static_cast<int>(caption.size()), &capSize);
+                // Cut for the longest label this state can reach, so the
+                // wattage landing a second later cannot widen the dial.
+                const std::wstring reserve = L"FULLY CHARGED";
+                GetTextExtentPoint32W(measure, reserve.c_str(),
+                                      static_cast<int>(reserve.size()), &capReserve);
+            }
+            SelectObject(measure, previous);
+            DeleteDC(measure);
+        }
+
+        const int dialBox = static_cast<int>(ceilf(dial));
+        const int arcH = static_cast<int>(ceilf(dial * 0.5f + thickness * 0.5f));
+        const int hubGap = std::max(5, static_cast<int>(9.0f * s + 0.5f));
+        const int capGap = std::max(3, static_cast<int>(6.0f * s + 0.5f));
+        const int contentW = std::max(
+            dialBox, std::max(static_cast<int>(pctSize.cx),
+                              caption.empty()
+                                  ? 0
+                                  : std::max(static_cast<int>(capSize.cx),
+                                             static_cast<int>(capReserve.cx))));
+        const int contentH =
+            arcH + hubGap + static_cast<int>(pctSize.cy) +
+            (caption.empty() ? 0 : capGap + static_cast<int>(capSize.cy));
+        const float sigma = 7.0f * s;
+        const int shadow = static_cast<int>(ceilf(sigma * 3.0f));
+        const int cardW = contentW + shadow * 2;
+        const int cardH = contentH + shadow * 2;
+        if (cardW <= 0 || cardH <= 0 || cardW > 4000 || cardH > 2000 ||
+            !surface_.Resize(cardW, cardH) || !mask_.Resize(cardW, cardH) ||
+            !base_.Resize(cardW, cardH)) {
+            DeleteObject(pctFont);
+            DeleteObject(capFont);
+            return false;
+        }
+
+        const Color accent =
+            ResolveOverlayAccent(style_.color, style_.customColor);
+        const bool low = !stats.onAc && stats.percent >= 0 && stats.percent <= 20;
+        rainbow_ = style_.rainbow && !low;
+        const Color level = low ? Mix(Rgb(255, 59, 48), accent, 0.15f) : accent;
+        const OverlayTheme theme = MakeOverlayTheme();
+        const Color track = theme.light ? Rgb(0, 0, 0) : Rgb(255, 255, 255);
+        const Color ink = theme.light ? Rgb(22, 22, 26) : Rgb(255, 255, 255);
+        const Color halo = theme.light ? Rgb(255, 255, 255) : Rgb(0, 0, 0);
+
+        gaugeCx_ = static_cast<float>(shadow) + static_cast<float>(contentW) * 0.5f;
+        gaugeCy_ = static_cast<float>(shadow) + dial * 0.5f;
+        gaugeRadius_ = dial * 0.5f - thickness * 0.5f;
+        gaugeThickness_ = thickness;
+        gaugeColor_ = level;
+        gaugeNeedle_ = ink;
+        gaugeLevel_ = stats.percent >= 0
+                          ? Clamp01(static_cast<float>(stats.percent) / 100.0f)
+                          : 0.0f;
+
+        surface_.Clear();
+
+        // The track and the ticks are part of the static frame; only the level
+        // band and the needle are replayed over it.
+        DrawDialArc(gaugeCx_, gaugeCy_, gaugeRadius_, thickness, kPi, 2.0f * kPi,
+                    track, 0.18f, false);
+        const float tickOuter = gaugeRadius_ - thickness * 0.5f - 2.0f * s;
+        for (int i = 0; i <= 40; i++) {
+            const float a = kPi + kPi * static_cast<float>(i) / 40.0f;
+            const bool major = (i % 5) == 0;
+            const float len = (major ? 7.0f : 3.5f) * s;
+            const float ca = cosf(a);
+            const float sa = sinf(a);
+            DrawLine(surface_, gaugeCx_ + ca * (tickOuter - len),
+                     gaugeCy_ + sa * (tickOuter - len), gaugeCx_ + ca * tickOuter,
+                     gaugeCy_ + sa * tickOuter,
+                     major ? std::max(1.0f, 1.6f * s) : std::max(1.0f, s), track,
+                     major ? 0.42f : 0.22f);
+        }
+
+        HDC dc = mask_.Dc();
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(255, 255, 255));
+
+        // There is no card under any of this, so both lines carry a halo of the
+        // opposite shade to hold them over a bright wallpaper.
+        const int shade = std::max(1, static_cast<int>(1.6f * s + 0.5f));
+        const int numberTop = shadow + arcH + hubGap;
+        mask_.Clear();
+        HGDIOBJ previous = SelectObject(dc, pctFont);
+        TextOutW(dc, static_cast<int>(gaugeCx_ - pctSize.cx * 0.5f + 0.5f), numberTop,
+                 title.c_str(), static_cast<int>(title.size()));
+        GdiFlush();
+        SelectObject(dc, previous);
+        CompositeText(Color{halo.r, halo.g, halo.b, 0.36f}, -shade, shade);
+        CompositeText(Color{halo.r, halo.g, halo.b, 0.36f}, shade, shade);
+        CompositeText(Color{ink.r, ink.g, ink.b, 0.98f});
+
+        if (!caption.empty()) {
+            const int capTop = numberTop + static_cast<int>(pctSize.cy) + capGap;
+            const int capLeft =
+                shadow + (contentW - static_cast<int>(capSize.cx)) / 2;
+            mask_.Clear();
+            previous = SelectObject(dc, capFont);
+            TextOutW(dc, capLeft, capTop, caption.c_str(),
+                     static_cast<int>(caption.size()));
+            GdiFlush();
+            SelectObject(dc, previous);
+            const Color capInk = theme.light ? Rgb(48, 50, 56) : Rgb(255, 255, 255);
+            CompositeText(Color{halo.r, halo.g, halo.b, 0.30f}, shade, shade);
+            CompositeText(Color{capInk.r, capInk.g, capInk.b, 0.84f});
+        }
+
+        DeleteObject(pctFont);
+        DeleteObject(capFont);
+
+        // The static frame holds the empty track, so the sweep only has to draw
+        // the level band and the needle on top of it.
+        base_.CopyFrom(surface_);
+        ringReady_ = true;
+        // RingProgress() reads a zero sweep as "nothing to fill", so the dial
+        // keeps the angle it covers even when the level itself is zero.
+        ringSweep_ = std::max(0.02f, kPi * gaugeLevel_);
+        RenderRingSweep(RingProgress(NowMs()));
+        return PlaceOnScreen(cardW, cardH);
+    }
+
+    // Ticker Strip (Marquee): one slim glass bar carrying the glyph, the
+    // percentage and the status line, which slides through a window of its own
+    // when the line is longer than the room the strip gives it.
+    bool RefreshTicker(const ChargingStats& stats, const std::wstring& title,
+                       const std::wstring& detail) {
+        hud_ = true;
+        springy_ = false;
+        wantsBackdrop_ = true;
+
+        const float s = scale_;
+        const int basePx = std::clamp(style_.fontPx, 8, 64);
+        const int numberPx = std::max(13, static_cast<int>(basePx * 1.12f * s + 0.5f));
+        const int detailPx = std::max(9, static_cast<int>(basePx * 0.56f * s + 0.5f));
+        const bool windows11 = IsWindows11();
+        const wchar_t* display = windows11 ? L"Segoe UI Variable Display" : L"Segoe UI";
+        const wchar_t* textFace = windows11 ? L"Segoe UI Variable Text" : L"Segoe UI";
+
+        HFONT numberFont =
+            CreateFontW(-numberPx, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, display);
+        HFONT detailFont =
+            CreateFontW(-detailPx, 0, 0, 0, FW_MEDIUM, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+                        ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, textFace);
+        if (!numberFont || !detailFont) {
+            if (numberFont) DeleteObject(numberFont);
+            if (detailFont) DeleteObject(detailFont);
+            return false;
+        }
+
+        const bool showDetail = !detail.empty();
+        SIZE numberSize{};
+        SIZE detailSize{};
+        SIZE detailReserve{};
+        HDC measure = CreateCompatibleDC(nullptr);
+        if (measure) {
+            HGDIOBJ previous = SelectObject(measure, numberFont);
+            GetTextExtentPoint32W(measure, title.c_str(), static_cast<int>(title.size()),
+                                  &numberSize);
+            if (showDetail) {
+                SelectObject(measure, detailFont);
+                GetTextExtentPoint32W(measure, detail.c_str(),
+                                      static_cast<int>(detail.size()), &detailSize);
+                // The window is cut for the widest line this state can reach, so
+                // the wattage landing later cannot resize the strip.
+                const std::wstring reserve = ReserveDetailLine(stats);
+                GetTextExtentPoint32W(measure, reserve.c_str(),
+                                      static_cast<int>(reserve.size()), &detailReserve);
+            }
+            SelectObject(measure, previous);
+            DeleteDC(measure);
+        }
+
+        const int rowH = std::max(38, static_cast<int>(basePx * 2.6f * s + 0.5f));
+        const int pad = std::max(10, static_cast<int>(14.0f * s + 0.5f));
+        const int gap = std::max(7, static_cast<int>(11.0f * s + 0.5f));
+        const int badge = rowH - pad;
+        const int detailW = std::max(static_cast<int>(detailSize.cx),
+                                     static_cast<int>(detailReserve.cx));
+        const int winW =
+            showDetail ? std::min(detailW, std::max(90, static_cast<int>(210.0f * s)))
+                       : 0;
+        const int stripW = pad * 2 + badge + gap + static_cast<int>(numberSize.cx) +
+                           (showDetail ? gap * 3 + 1 + winW : 0);
+        const float radius = static_cast<float>(rowH) * 0.5f;
+        const float sigma = 8.0f * s;
+        const int shadow = static_cast<int>(ceilf(sigma * 3.0f));
+        const int width = stripW + shadow * 2;
+        const int height = rowH + shadow * 2;
+        if (stripW <= 0 || rowH <= 0 || width > 4000 || height > 2000 ||
+            !surface_.Resize(width, height) || !mask_.Resize(width, height) ||
+            !base_.Resize(width, height)) {
+            DeleteObject(numberFont);
+            DeleteObject(detailFont);
+            return false;
+        }
+
+        const Color accent =
+            ResolveOverlayAccent(style_.color, style_.customColor);
+        const GlowPalette gradient = MakeRainbowPalette();
+        const GlowPalette* sweep = style_.rainbow ? &gradient : nullptr;
+        const OverlayTheme theme = MakeOverlayTheme();
+        const bool low = !stats.onAc && stats.percent >= 0 && stats.percent <= 20;
+        const Color level = low ? Mix(Rgb(255, 59, 48), accent, 0.15f) : accent;
+
+        const RoundedRect card =
+            MakeRect(static_cast<float>(shadow), static_cast<float>(shadow),
+                     static_cast<float>(shadow + stripW),
+                     static_cast<float>(shadow + rowH), radius);
+        surface_.Clear();
+        CastShadow(surface_, card, sigma, 4.0f * s, theme.shadowAlpha);
+        const float hairline = std::max(1.0f, s);
+        StrokeRounded(surface_, card, hairline, theme.hairline, theme.hairlineTop,
+                      theme.hairline, theme.hairlineBottom);
+        const RoundedRect panel =
+            MakeRect(card.x0 + hairline, card.y0 + hairline, card.x1 - hairline,
+                     card.y1 - hairline, std::max(4.0f, radius - hairline));
+        FillGlass(surface_, panel, backdrop_, theme.panelTop, theme.panelAlpha * 0.90f,
+                  level, theme.tintTop);
+        FillRounded(surface_, panel, Mix(theme.panelTop, level, theme.tintTop), 0.30f,
+                    Mix(theme.panelBottom, level, theme.tintBottom), 0.32f, 0.010f);
+
+        const int badgeLeft = shadow + pad;
+        const float badgeX = static_cast<float>(badgeLeft);
+        const float badgeY =
+            static_cast<float>(shadow) + (static_cast<float>(rowH) - badge) * 0.5f;
+        FillRounded(surface_,
+                    MakeRect(badgeX, badgeY, badgeX + static_cast<float>(badge),
+                             badgeY + static_cast<float>(badge),
+                             static_cast<float>(badge) * 0.5f),
+                    level, 0.26f, level, 0.13f, 0.0f, sweep);
+
+        const bool charging =
+            stats.charging || (stats.onAc && stats.percent >= 0 && stats.percent < 100);
+        const Color icon = theme.light ? Mix(level, Rgb(24, 24, 26), 0.35f)
+                                       : Mix(Rgb(255, 255, 255), level, 0.25f);
+        if (charging) {
+            const float boltH = static_cast<float>(badge) * 0.52f;
+            const float boltW = boltH * 0.60f;
+            FillBolt(surface_, badgeX + (static_cast<float>(badge) - boltW) * 0.5f,
+                     badgeY + (static_cast<float>(badge) - boltH) * 0.5f, boltW,
+                     boltH, icon, 0.96f);
+        } else {
+            const float glyphW = static_cast<float>(badge) * 0.52f;
+            const float glyphH = glyphW * 0.46f;
+            DrawBatteryGlyph(surface_,
+                             badgeX + (static_cast<float>(badge) - glyphW) * 0.5f,
+                             badgeY + (static_cast<float>(badge) - glyphH) * 0.5f,
+                             glyphW, glyphH, stats.percent, icon, 0.94f);
+        }
+
+        const int numberLeft = badgeLeft + badge + gap;
+        const int dividerX = numberLeft + static_cast<int>(numberSize.cx) + gap;
+        const int winX = dividerX + 1 + gap;
+
+        HDC dc = mask_.Dc();
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(255, 255, 255));
+        mask_.Clear();
+        HGDIOBJ previous = SelectObject(dc, numberFont);
+        TextOutW(dc, numberLeft,
+                 shadow + (rowH - static_cast<int>(numberSize.cy)) / 2, title.c_str(),
+                 static_cast<int>(title.size()));
+        GdiFlush();
+        SelectObject(dc, previous);
+        CompositeText(theme.title);
+
+        if (showDetail) {
+            // A hairline break between the number and the line, so the two read
+            // as separate blocks even when the line is sliding past.
+            DrawLine(surface_, static_cast<float>(dividerX),
+                     static_cast<float>(shadow) + static_cast<float>(rowH) * 0.30f,
+                     static_cast<float>(dividerX),
+                     static_cast<float>(shadow) + static_cast<float>(rowH) * 0.70f,
+                     std::max(1.0f, s), theme.light ? Rgb(0, 0, 0) : Rgb(255, 255, 255),
+                     0.16f);
+
+            const int detailTop = shadow + (rowH - static_cast<int>(detailSize.cy)) / 2;
+            const int maskX = 2;
+            // The static frame has to be taken before the line goes on it, or the
+            // scroll would drag a copy of the text it started from along with it.
+            base_.CopyFrom(surface_);
+            mask_.Clear();
+            previous = SelectObject(dc, detailFont);
+            TextOutW(dc, maskX, detailTop, detail.c_str(),
+                     static_cast<int>(detail.size()));
+            GdiFlush();
+            SelectObject(dc, previous);
+
+            tickerInk_ = theme.light ? Rgb(52, 54, 60, 0.92f)
+                                     : Rgb(255, 255, 255, 0.80f);
+            tickerX_ = winX;
+            tickerWindowW_ = winW;
+            tickerMaskX_ = maskX;
+            tickerTextW_ = static_cast<float>(detailSize.cx);
+            tickerGap_ = std::max(16.0f, 36.0f * s);
+            ticker_ = static_cast<int>(detailSize.cx) > winW;
+            if (ticker_) {
+                const RECT clip{winX, 0, winX + winW, height};
+                CompositeTextClipped(tickerInk_, winX - maskX, 0, clip);
+            } else {
+                // Short enough to sit still: centre it in the window instead.
+                CompositeText(tickerInk_,
+                              winX + (winW - static_cast<int>(detailSize.cx)) / 2 - maskX,
+                              0);
+            }
+        }
+
+        DeleteObject(numberFont);
+        DeleteObject(detailFont);
+        return PlaceOnScreen(width, height);
+    }
+
     // Centres the surface on the anchor settled when the card appeared, and
     // keeps it on that monitor, clear of the taskbar.
     bool PlaceOnScreen(int width, int height) {
@@ -5745,9 +8208,18 @@ private:
     Surface backdrop_;
     Surface scaled_;
     bool springy_ = false;
-    // The HUD themes, the PineApple card and the Galaxy card, fade and scale
-    // instead of sliding.
+    // The HUD themes, the PineApple card, the Galaxy card, the capsule and the
+    // dot slab fade and scale instead of sliding.
     bool hud_ = false;
+    // Which themes need the blurred screen behind them.
+    bool wantsBackdrop_ = true;
+    // The dial lights ticks instead of sweeping an arc, so the ring pass takes
+    // the segmented branch.
+    bool segmented_ = false;
+    int segCount_ = 0;
+    float segRadius_ = 0.0f;
+    float segThickness_ = 0.0f;
+    float segLevel_ = 0.0f;
     bool ringReady_ = false;
     float ringCx_ = 0.0f;
     float ringCy_ = 0.0f;
@@ -5768,6 +8240,25 @@ private:
     Color barTopColor_{};
     Color barColor_{};
     bool barSweep_ = false;
+    // Half Gauge: the arc and the needle the replay redraws, plus the two
+    // colours they are painted in.
+    bool gauge_ = false;
+    float gaugeLevel_ = 0.0f;
+    float gaugeCx_ = 0.0f;
+    float gaugeCy_ = 0.0f;
+    float gaugeRadius_ = 0.0f;
+    float gaugeThickness_ = 0.0f;
+    Color gaugeColor_{};
+    Color gaugeNeedle_{};
+    // Ticker Strip: the window the status line slides through, how wide that
+    // line is and the gap before it comes round again.
+    bool ticker_ = false;
+    int tickerX_ = 0;
+    int tickerWindowW_ = 0;
+    int tickerMaskX_ = 0;
+    float tickerTextW_ = 0.0f;
+    float tickerGap_ = 0.0f;
+    Color tickerInk_{};
     OverlayStyle style_;
     // Where the card sits while it is up, settled once when it appears.
     POINT anchor_{};
@@ -5887,6 +8378,13 @@ void RunChargingEffect(bool pluggedIn) {
     // Only the unplug event offers the reverse wave, which collapses toward the
     // origin.
     style.reverse = !pluggedIn && KeyIs(direction, L"reverse");
+
+    // Energy Fill needs the level it rises to. The reading is taken once, as the
+    // event fires, so the liquid and the card always agree on the number.
+    const ChargingStats eventStats = ReadChargingStats();
+    style.batteryLevel =
+        eventStats.percent >= 0 ? static_cast<float>(eventStats.percent) / 100.0f
+                                : 0.6f;
 
     g_glow = ResolveRippleColor(preset, custom,
                                 pluggedIn ? kGlowBlue : kGlowRed);

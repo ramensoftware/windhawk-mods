@@ -1,3 +1,11 @@
+## 1.3.0 ([Nov 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/12590c91b16c21c10ab8616e5d59042379f7ee51/mods/window-centralizer.wh.cpp))
+
+* New option, **Always center child windows** (on by default), replacing the special case for standard dialogs: windows that belong to another (Save As, Properties, an app's settings) are centered whatever their size, while windows without an owner, such as a program's main window, follow the size limit. Dialogs of Windows itself without an owner, such as Run or Sound, count as child windows of the system; other programs dialogs opened alone, without an owner, follow the limit.
+* Default hotkeys changed to Win+Shift+I (ignore) and Win+Ctrl+Shift+I (ignored list).
+* Size limit default changed from 10 to 20%.
+* Parent mode center on the unrelated window enabled by default.
+* README and settings reviewed and reorganized.
+
 ## 1.2.0 ([Nov 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/55d92d44a3b17f6a8309e1acb201173dcdbca218/mods/window-centralizer.wh.cpp))
 
 * Windows shown with `SetWindowPlacement` are now centered. Programs that restore a saved position this way (7-Zip's file manager) were left where they were, whatever the size limit.

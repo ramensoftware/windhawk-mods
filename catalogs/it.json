@@ -1972,13 +1972,13 @@
         "ratingUsers": 42,
         "reviews": 0,
         "trendingSorting": 16.757347017560402,
-        "updated": 1793937627000,
+        "updated": 1795572072000,
         "users": 1479
       },
       "metadata": {
         "author": "DpakB",
         "compilerOptions": "-luser32 -lgdi32 -lshell32 -ladvapi32 -lwinmm",
-        "description": "Plays an animation, shows a battery stats card (optionally with sound) when the charger is plugged in or unplugged.",
+        "description": "Plays an animation and a battery card, with optional sound, when the charger is plugged in or unplugged. Eleven effects and eleven card styles.",
         "donateUrl": "https://buymeacoffee.com/dpakb",
         "github": "https://github.com/DeepakBalaraman",
         "homepage": "https://dpakb.com",
@@ -1988,7 +1988,7 @@
         "license": "MIT",
         "name": "Charging Animation",
         "twitter": "https://twitter.com/dpakb_",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "charging-sound": {
@@ -3410,7 +3410,7 @@
         "ratingUsers": 4,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791324305000,
+        "updated": 1795572056000,
         "users": 92
       },
       "metadata": {
@@ -3428,7 +3428,7 @@
         "license": "gpl-2.0",
         "name": "ClassicWindowSwitcher",
         "twitter": "https://twitter.com/Ingan121",
-        "version": "1.3"
+        "version": "1.4"
       }
     },
     "classic-winver": {
@@ -24267,20 +24267,20 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": -0.39926474516905947,
-        "updated": 1794700891000,
+        "updated": 1795572062000,
         "users": 195
       },
       "metadata": {
         "author": "3DDinosaur",
         "compilerOptions": "-lgdi32 -lshell32 -ldwmapi",
-        "description": "Predictably centers new windows and dialogs to their parent, the screen or the mouse cursor, with configurable threshold and live exclusion list.",
+        "description": "Centers new windows, up to a target size, to their parent, screen, or the mouse cursor, with live exclusion list.",
         "github": "https://github.com/3DDinosaur",
         "include": [
           "*",
           "windhawk.exe"
         ],
         "name": "Window Centralizer",
-        "version": "1.2.0"
+        "version": "1.3.0"
       }
     },
     "window-geometry-memory": {
@@ -25273,23 +25273,21 @@
         "ratingUsers": 28,
         "reviews": 0,
         "trendingSorting": 2.196943952319133,
-        "updated": 1792573423000,
+        "updated": 1795572067000,
         "users": 608
       },
       "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
         "author": "jayll1303",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore",
-        "description": "Resize the Win+V clipboard / Win+. emoji panel and hide the tabs you don't use (Emoji, GIF, Kaomoji, Symbols, Most recently used)",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore -lshell32",
+        "description": "Resize the Win+V clipboard / Win+. emoji panel, hide the tabs you don't use, and show only pinned clipboard items with a button or Win+Alt+V",
         "github": "https://github.com/jayll1303",
         "include": [
-          "TextInputHost.exe"
+          "TextInputHost.exe",
+          "windhawk.exe"
         ],
         "license": "MIT",
         "name": "Win+V Panel Tweaks",
-        "version": "1.0.1"
+        "version": "1.1.0"
       }
     },
     "winver-custom-text": {
