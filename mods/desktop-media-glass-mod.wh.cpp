@@ -15,7 +15,7 @@
 
 Interactive glass media player for Windows media sessions.
 
-![Desktop Media Glass preview](https://imgur.com/a/NZcP1wy)
+![Desktop Media Glass preview](https://raw.githubusercontent.com/satt-glitch/windhawk-assets/main/Screenshot%202026-11-25%20184503.png)
 
 ## Why a separate mod?
 While mods such as *SMTC Now Playing Desktop Widgets* or *Glass Widget Bar* provide desktop media widgets or blur panels, **Desktop Media Glass** combines:
