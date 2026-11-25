@@ -1,9 +1,9 @@
 // ==WindhawkMod==
 // @id              disable-usb-scan-fix
-// @name            Disable USB Scan and Fix Dialog
-// @name:ru-RU      Отключение предупреждений о проверке USB-накопителей
-// @description     Blocks USB scan dialogs and disk repair notifications
-// @description:ru-RU Блокирует окна и уведомления о проверке USB-накопителей
+// @name            Disable USB Scan and Fix Dialog Windows 11
+// @name:ru-RU      Отключение предупреждений о проверке USB-накопителей в Windows 11
+// @description     Blocks USB scan dialogs and disk repair notifications on Windows 11
+// @description:ru-RU Блокирует окна и уведомления о проверке USB-накопителей в Windows 11
 // @version         1.1
 // @author          d-p4d-67
 // @github          https://github.com/d-p4d-67
@@ -14,9 +14,9 @@
 
 // ==WindhawkModReadme==
 /*
-# Disable USB Scan and Fix Dialog
+# Disable USB Scan and Fix Dialog Windows 11
 
-Suppresses matching Windows USB drive scan and repair dialogs and
+Suppresses matching Windows 11 USB drive scan and repair dialogs and
 AutoPlay notifications without disabling the AutoPlay service.
 
 - Recognizes English and Russian warning text.
@@ -34,9 +34,9 @@ drives manually when necessary.
 
 ---
 
-# Отключение предупреждений о проверке USB-накопителей
+# Отключение предупреждений о проверке USB-накопителей в Windows 11
 
-Блокирует соответствующие окна и уведомления автозапуска без отключения
+В Windows 11 блокирует соответствующие окна и уведомления автозапуска без отключения
 службы автозапуска. Поддерживает русский и английский текст предупреждений.
 Другие уведомления и окна, не соответствующие фильтру, не блокируются.
 
