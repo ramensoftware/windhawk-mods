@@ -1,3 +1,13 @@
+## 1.2.0 ([Nov 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c8f4d8fc48cf117a61fc76d342b32288b99579db/mods/background-dimmer.wh.cpp))
+
+* **Per-monitor dimming:** configuration window lists the connected monitors under Active; unchecked ones stay always lit. 
+* **Improved menu vs dialog detection:** new logic based of title bars. Windows with a title bar are treated as dialogs; small windows without one, like Office menus or Chrome extension panels, are treated as menus.
+* **Fade:** the window that loses focus dims gradually, including when a dialog opens or Alt+Tab, Start, the taskbar or the desktop takes focus.
+* **Taskbar dimming** (off by default): a click-through layer over each taskbar, hidden while the taskbar, Start or Alt+Tab has focus.
+* **Image / Custom pattern** replaces Image: a Scale setting (1–400%) takes the place of Size, and brightness, contrast and base color apply to the image like they do to the other patterns. 
+* **Tray icon click-action swap:** click toggles dimming, right-click opens the configuration window.
+* **New default configuration hotkey:** Win+Ctrl+Shift+D, to match with possible Win+Shift+D on/off toggle shortcut.
+
 ## 1.1.1 ([Nov 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/4448165feff7f0a5beb2b4865643312557e0431d/mods/background-dimmer.wh.cpp))
 
 * Hotkeys now need Win plus at least one of Ctrl, Alt or Shift, so a hotkey can't take over typing keys (Shift+letter) or the Win+letter keys Windows uses. Saved hotkeys that don't follow this stop working and must be set again.

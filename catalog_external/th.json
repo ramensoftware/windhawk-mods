@@ -119,6 +119,35 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/cf4a6e75824483f8bd638e65a7933c3615655c24/mods/alttabs.wh.cpp"
       }
     },
+    "attack-shark-x11-battery": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795568877367,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795568877367,
+        "users": 0
+      },
+      "metadata": {
+        "author": "xtrimdr",
+        "compilerOptions": "-lsetupapi -lhid -lgdi32 -lshell32 -luser32",
+        "description": "Shows the battery level of the Attack Shark X11 wireless mouse in the system tray",
+        "github": "https://github.com/xtrimdr",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Attack Shark X11 Battery",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7887",
+      "source": {
+        "sha256": "7e8ac2b0df10c2a687dd0abd3f264941a5efbfbff80756c128c327af40ae9cef",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1916fcd54f51d9f9d33c503b480ddbb8b9847ed7/mods/attack-shark-x11-battery.wh.cpp"
+      }
+    },
     "autoclean": {
       "details": {
         "defaultSorting": 0,
@@ -1218,6 +1247,38 @@
       "source": {
         "sha256": "3a1e0f10e7ab714ec4af3fa6483030de22d2e1f6b1e1e511e9eadda818e44445",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3b284d718598ae924d4af8f3af3959f4e5c46d47/mods/titlebar-opacity-button.wh.cpp"
+      }
+    },
+    "traffic-monitor-taskbar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795568877367,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795568877367,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "xSHIMURAx",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luuid -luser32 -lwindowsapp -lpdh -ldwmapi -lshell32 -lgdi32 -lcomdlg32 -ladvapi32",
+        "description": "Network speed, CPU, memory, GPU and daily traffic shown inside the Windows 11 taskbar, next to the tray (TrafficMonitor-style), with a Fluent settings panel and traffic history.",
+        "github": "https://github.com/xSHIMURAx",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "TrafficMonitor for Taskbar",
+        "version": "1.0.6"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7879",
+      "source": {
+        "sha256": "9bf18ccf62fd2b2711631f75ede1f2530a150b5b096d7e8f94c68fb0e2fc21b6",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/34524efc045bd0c780d69e33ec47ecee1f05567d/mods/traffic-monitor-taskbar.wh.cpp"
       }
     },
     "twinkle-brightness": {

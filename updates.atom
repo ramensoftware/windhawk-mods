@@ -2,12 +2,48 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-24T18:32:36.000Z</updated>
+    <updated>2026-11-25T01:04:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[1 Letter Language Indicator 1.1]]></title>
+        <id>https://windhawk.net/mods/one-letter-language-indicator#4095aca81f4030254c8f8d87199dd6a37bdb71fb</id>
+        <link href="https://windhawk.net/mods/one-letter-language-indicator"/>
+        <updated>2026-11-25T01:04:12.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New <strong>Letter weight</strong> setting: font weight of the letter from 1 to 999 (100 Thin … 900 Black). 0 keeps the Windows weight (400).</li>
+<li>Overrides <code>TextBlock.FontWeight</code> on <code>InnerTextBlock</code> with the same property-callback mechanism as the other settings, and restores the original weight on unload or when set back to 0.</li>
+<li>Fixed: the indicator went back to the full text after switching the taskbar size between small and default.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Deen-0x</name>
+            <uri>https://github.com/Deen-0x</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Background Dimmer 1.2.0]]></title>
+        <id>https://windhawk.net/mods/background-dimmer#c8f4d8fc48cf117a61fc76d342b32288b99579db</id>
+        <link href="https://windhawk.net/mods/background-dimmer"/>
+        <updated>2026-11-25T01:04:06.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Per-monitor dimming:</strong> configuration window lists the connected monitors under Active; unchecked ones stay always lit.</li>
+<li><strong>Improved menu vs dialog detection:</strong> new logic based of title bars. Windows with a title bar are treated as dialogs; small windows without one, like Office menus or Chrome extension panels, are treated as menus.</li>
+<li><strong>Fade:</strong> the window that loses focus dims gradually, including when a dialog opens or Alt+Tab, Start, the taskbar or the desktop takes focus.</li>
+<li><strong>Taskbar dimming</strong> (off by default): a click-through layer over each taskbar, hidden while the taskbar, Start or Alt+Tab has focus.</li>
+<li><strong>Image / Custom pattern</strong> replaces Image: a Scale setting (1–400%) takes the place of Size, and brightness, contrast and base color apply to the image like they do to the other patterns.</li>
+<li><strong>Tray icon click-action swap:</strong> click toggles dimming, right-click opens the configuration window.</li>
+<li><strong>New default configuration hotkey:</strong> Win+Ctrl+Shift+D, to match with possible Win+Shift+D on/off toggle shortcut.</li>
+</ul>
+]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Live HUD 1.2.1]]></title>
         <id>https://windhawk.net/mods/taskbar-live-hud-radar#0000eec01a03da511c3f0e849f69495f9b8920fc</id>
@@ -761,103 +797,6 @@ to pause the timer while a full-screen app is detected.</p>
         <author>
             <name>haniobaid</name>
             <uri>https://github.com/haniobaid</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Snap Groups: Alt+Tab and taskbar 0.5.3]]></title>
-        <id>https://windhawk.net/mods/hide-snapped#dffea8bdfcd848438f5832deabb3431953a98a2f</id>
-        <link href="https://windhawk.net/mods/hide-snapped"/>
-        <updated>2026-11-22T18:02:31.000Z</updated>
-        <content type="html"><![CDATA[<h1>Snap Groups: Alt+Tab and taskbar</h1>
-<p>Keep native Snap Groups in Alt+Tab and give each group a separate taskbar button
-with a grid of its application icons. Individual member buttons can be hidden;
-windows outside groups remain accessible.</p>
-<p><img src="https://raw.githubusercontent.com/coldfeudal/public/main/images/hide-snapped-poster.webp" alt="Snap Groups demonstration"></p>
-<h2>Usage</h2>
-<p>Enable Snap windows and the option to show snapped groups in Alt+Tab under
-Windows Settings &gt; System &gt; Multitasking. Arrange at least two windows into a
-native Snap Group. The mod reads groups maintained by Windows.</p>
-<p>A group button brings all members forward. With the default click setting,
-clicking an active group minimizes it. If a member is already minimized, the
-button restores the group. Closing a group button minimizes the group by default
-and does not close the applications. Group buttons are temporary and cannot be
-pinned; ordinary pinned application launchers remain.</p>
-<p>The taskbar label uses the native localized group title. Hover previews use the
-Windows group visual. Win+Tab is unchanged. Group commands use native Windows
-activation/minimization; animation behavior follows those native commands.</p>
-<h2>Settings</h2>
-<ul>
-<li>Independently enable Alt+Tab filtering, group taskbar buttons and hiding of
-individual member buttons.</li>
-<li>Keep separate buttons for separate groups, including groups of the same apps.</li>
-<li>Display two to four equally sized icons in a two-column grid. Adjust icon size,
-spacing and incomplete-row alignment. The icon limit does not limit membership.</li>
-<li>Order icons by screen rows from top
-to bottom and centers from left to right. A tall window belongs to its first
-row (default), or use Windows' member order. Minimized windows use restored
-positions; only icon order changes.</li>
-<li>Choose restore-only or minimize-if-active behavior, and the close-button action.</li>
-<li>Adjust refresh interval and current-virtual-desktop filtering.</li>
-<li>Enable or disable native hover previews.</li>
-<li>Diagnostic mode keeps individual Alt+Tab cards and disables taskbar integration.</li>
-</ul>
-<h2>Tested configuration and limitations</h2>
-<p>Version 0.5.2 was tested on Windows 11 25H2 (26200.8246, x64), Windhawk 1.7.3:
-Alt+Tab advancement, group activity and no empty buttons after disable/enable;
-group recovery, native previews, Alt+Tab/activity and minimize/restore after
-Explorer restart; group creation on the other monitor. Separate classic/modern
-preview routes were not independently identified. The support-trace toggle and
-heavy-game scenario below were confirmed on 0.4.24, not repeated for 0.5.x.</p>
-<ul>
-<li><strong>Independent taskbar per monitor 1.7.0:</strong> group creation, moving groups
-between monitors and restoring minimized groups; no empty buttons or unload
-stalls in the tested disable/enable scenario.</li>
-<li><strong>Alt+Tab per monitor 1.2.1:</strong> switching during a heavy game and after closing
-it, including disabling both mods without restarting Explorer.</li>
-</ul>
-<p>Taskbar integration calls native DLL methods and COM interfaces; it does not
-parse machine instructions or read private task-list/preview object fields.
-Native task items come from the shell enumerator. Hidden members and pending
-button restores use owned window icons until their own task list is restored.
-Native previews replace the window thumbnail factory for owned group proxies;
-Windows creates and manages the visual itself. Required shell symbols must be
-available. Missing optional preview/selection methods leave those paths native.
-Shell interfaces are undocumented; other Windows versions and DLL revisions
-remain unverified, and updates can require changes to the mod.
-Longer sessions and other monitor/DPI/virtual desktop configurations have limited
-coverage. ARM64 installation is allowed; ARM64 runtime behavior is unverified.</p>
-<p>Report mod problems in https://github.com/ramensoftware/windhawk-mods/issues.
-Include &quot;hide-snapped&quot; in the title and mention @coldfeudal in the report.</p>
-<h2>Diagnostics and removal</h2>
-<p>Windhawk debug logging records phase codes and counts without window/document
-titles. Disable this mod to restore the native taskbar and switcher behavior.
-Enable Record support trace only when collecting diagnostics. Changing this
-setting reloads the mod. Bounded journals are stored in Windhawk's per-mod
-storage directory, in the traces subfolder. A background writer saves queued
-records. Records may be dropped under load. Journals contain numeric identities,
-counts and stack/module information, without window titles or AppID strings.</p>
-<p>The Alt+Tab scoping approach was informed by
-<a href="https://windhawk.net/mods/alt-tab-per-monitor">Alt+Tab per monitor</a>.</p>
-]]></content>
-        <author>
-            <name>coldfeudal</name>
-            <uri>https://github.com/coldfeudal</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Floating Taskbar 2.1.15]]></title>
-        <id>https://windhawk.net/mods/floating-taskbar#cb956cc0a64236fa2498a8ea08c095855b986434</id>
-        <link href="https://windhawk.net/mods/floating-taskbar"/>
-        <updated>2026-11-22T07:04:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Pass a valid timer handle to <code>CreateTimerQueueTimer</code> during the initial taskbar layout calibration.</li>
-<li>Skip applying the floating taskbar until <code>TaskbarFrame</code> is loaded and has an <code>XamlRoot</code>.</li>
-<li>Harden Explorer restart initialization against invalid timer output and pre-load taskbar application.</li>
-</ul>
-]]></content>
-        <author>
-            <name>chaochenzhudian</name>
-            <uri>https://github.com/chaochenzhudian</uri>
         </author>
     </entry>
 </feed>
