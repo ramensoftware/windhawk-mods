@@ -2132,7 +2132,6 @@ int g_editRow = -1;
 HFONT g_editFont;
 HBRUSH g_editBrush;
 COLORREF g_editTextColor;
-WNDPROC g_editDefaultProc;
 
 int S(int dip) {
     return MulDiv(dip, (int)g_panelDpi, 96);
@@ -2488,7 +2487,12 @@ COLORREF ToColorRef(const Gdiplus::Color& c) {
     return RGB(c.GetR(), c.GetG(), c.GetB());
 }
 
-LRESULT CALLBACK EditBoxProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK EditBoxProc(HWND hwnd,
+                             UINT msg,
+                             WPARAM wParam,
+                             LPARAM lParam,
+                             UINT_PTR,
+                             DWORD_PTR) {
     switch (msg) {
         case WM_KEYDOWN:
             if (wParam == VK_RETURN || wParam == VK_ESCAPE) {
@@ -2506,7 +2510,7 @@ LRESULT CALLBACK EditBoxProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             PostMessage(g_hwndPanel, WM_APP_END_EDIT, 1, 0);
             break;
     }
-    return CallWindowProcW(g_editDefaultProc, hwnd, msg, wParam, lParam);
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 RECT ValueRect(const PanelRow& row) {
@@ -2545,8 +2549,7 @@ void BeginEdit(int rowIndex) {
         SetWindowTextW(g_editBox, std::to_wstring(value).c_str());
     }
     SendMessageW(g_editBox, EM_SETSEL, 0, -1);
-    g_editDefaultProc = (WNDPROC)SetWindowLongPtrW(
-        g_editBox, GWLP_WNDPROC, (LONG_PTR)EditBoxProc);
+    SetWindowSubclass(g_editBox, EditBoxProc, 0, 0);
     SetFocus(g_editBox);
     g_focusRow = rowIndex;
     InvalidateRect(g_hwndPanel, nullptr, FALSE);
