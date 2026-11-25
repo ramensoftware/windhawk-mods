@@ -148,39 +148,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1916fcd54f51d9f9d33c503b480ddbb8b9847ed7/mods/attack-shark-x11-battery.wh.cpp"
       }
     },
-    "battery-icon-customizer": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795507391102,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795507391102,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "Faizaan",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
-        "description": "Restyle the Windows 11 taskbar battery icon: Apple iOS or classic look, percentage only, your own colors, charging animations, size and spacing - all from simple dropdowns",
-        "github": "https://github.com/LoneFaizaan",
-        "homepage": "https://github.com/LoneFaizaan/battery-icon-customizer",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "GPL-3.0",
-        "name": "Taskbar Battery Icon Customizer",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/5780",
-      "source": {
-        "sha256": "8ddba71f65c80e5c451337a5254e26bc29d95ef62cb38bdbdc3b843062ab7413",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6e63ff1b64af2c91581d46383ce04e29925bbaab/mods/battery-icon-customizer.wh.cpp"
-      }
-    },
     "batteryhub-custom-taskbar-integration": {
       "details": {
         "defaultSorting": 0,
@@ -400,6 +367,30 @@
       "source": {
         "sha256": "6e28fbf0a925c7e65a6620b144a612f5926cc3cea60bbb6d88a88e01a5f94b20",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/dd138b042b15b3ed83862a98cdbbea275107a466/mods/enable-preview-pane-for-downloads.wh.cpp"
+      }
+    },
+    "env-var-spoofer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795594021868,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795594021868,
+        "users": 0
+      },
+      "metadata": {
+        "author": "loliri",
+        "description": "Spoofs environment variables such as TEMP and TMP for selected processes",
+        "github": "https://github.com/loliri",
+        "name": "Environment Variable Spoofer",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7941",
+      "source": {
+        "sha256": "d5b825d8b8d7caf7f8f56a257a7de7de4916c3edd20534681177d635f4685ace",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/106ed48b967c0913c253cec0562760f3848e4d96/mods/env-var-spoofer.wh.cpp"
       }
     },
     "explorer-extras": {
@@ -698,37 +689,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/fbe7dcd7a337f8129a97f61a0db4f54c4d889d06/mods/native-screen-recorder.wh.cpp"
       }
     },
-    "notepad-pro": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795424785015,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795424785015,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "Armaninyow",
-        "compilerOptions": "-lcomctl32 -lgdi32 -luser32 -ladvapi32 -ldwmapi",
-        "description": "A collection of useful tweaks, tools, and upgrades for Windows 11 Notepad",
-        "github": "https://github.com/armaninyow",
-        "include": [
-          "notepad.exe"
-        ],
-        "name": "Notepad Pro",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7810",
-      "source": {
-        "sha256": "44fc9db3c5423241f9ce27f8d41e4f44c9e3f53bf08423d8ffb8d79ab7a176b6",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d769b0296ae25cf5462fdaab6991aadddc590bf4/mods/notepad-pro.wh.cpp"
-      }
-    },
     "quick-link-menu": {
       "details": {
         "defaultSorting": 0,
@@ -789,6 +749,34 @@
       "source": {
         "sha256": "88281afc1a4585c497cb77d0cb7fdaec87398b63442427c8c83337091d330d51",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6e9706ac0f9bbeb620d3c8e087a8e5c3f8ef7708/mods/same-app-window-cycler.wh.cpp"
+      }
+    },
+    "spotlight-for-windows": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795594021868,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795594021868,
+        "users": 0
+      },
+      "metadata": {
+        "author": "itzderix",
+        "compilerOptions": "-lgdi32 -luser32 -lshell32 -luxtheme -lshlwapi -ladvapi32 -lole32 -lshcore",
+        "description": "Liquid-glass Spotlight-style launcher with themes, animations, hover zoom, recents and all-drive file search",
+        "github": "https://github.com/itzderix",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Liquid Search",
+        "version": "3.3.1"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7888",
+      "source": {
+        "sha256": "af45fb8112c8f0c887c25ac3da24473771d72dac21dbf33eeb91fe0aa6e306d5",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/555ba16864a4c3446e4a35ca22e188413e2557d9/mods/spotlight-for-windows.wh.cpp"
       }
     },
     "swipe-for-10start": {
@@ -946,38 +934,6 @@
       "source": {
         "sha256": "86ccb4cdd5677c1c9efdcd09386e924efc3e9541c6c5f7744b040ebcee20b840",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/14cf534db315314c0f8954750c966049036530e3/mods/taskbar-audio-media-suite.wh.cpp"
-      }
-    },
-    "taskbar-disable-per-monitor": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795424785015,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795424785015,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "eprilx",
-        "compilerOptions": "-lcomctl32 -ldwmapi",
-        "description": "Turns the taskbar off for good on the chosen monitors: it never shows (no hover, Win key, notifications or flashing apps bring it back); taskbars on the other monitors stay as usual",
-        "github": "https://github.com/eprilx",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "GPL-3.0-only",
-        "name": "Disable taskbar per monitor",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7863",
-      "source": {
-        "sha256": "a45a6f0f19498db30a0cb9b172fd943fdff11abb2ebce252d298d76198af7d82",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c7bfe21f1f3116b68586e5116a89f05165e52ef4/mods/taskbar-disable-per-monitor.wh.cpp"
       }
     },
     "taskbar-extra-scroll-actions": {
@@ -1253,34 +1209,6 @@
       "source": {
         "sha256": "1fcb5008cad3fd3ee8829a5d714fe11044dca7dcae75d20924162a68fe96dd61",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6b835b34f325f586d4c5fc5516b9b5358b01f39a/mods/uninstall-here.wh.cpp"
-      }
-    },
-    "volume-key-step": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795411462779,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795411462779,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Artistro08",
-        "compilerOptions": "-lole32",
-        "description": "Choose how much each volume key press raises or lowers the volume",
-        "github": "https://github.com/artistro08",
-        "include": [
-          "explorer.exe"
-        ],
-        "name": "Volume Key Step",
-        "version": "1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7854",
-      "source": {
-        "sha256": "0f4574b2856d9882baf69641cbbea3d7a2729ffd488f08833c69db7302456cd8",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/81879c640468b04eb36377210b4b50d72e70222a/mods/volume-key-step.wh.cpp"
       }
     },
     "win7-balloon-notifications-restorer": {

@@ -2,12 +2,191 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-25T07:05:10.000Z</updated>
+    <updated>2026-11-25T08:02:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable taskbar per monitor 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-disable-per-monitor#a95d2c814194ae8a0ab80ec124f5289038179118</id>
+        <link href="https://windhawk.net/mods/taskbar-disable-per-monitor"/>
+        <updated>2026-11-25T08:02:48.000Z</updated>
+        <content type="html"><![CDATA[<h1>Disable taskbar per monitor</h1>
+<p>Pick one or more monitors. Their taskbar is disabled: it's invisible, can't be
+clicked, and never comes back, whether from the mouse at the screen edge, the
+Win key, Win+T / Win+number, flashing app buttons or notifications. Windows on
+those monitors can use the space the taskbar took. Taskbars on every other
+monitor are left alone. Works with the taskbar at the bottom, top, left or
+right, with auto-hide on or off.</p>
+<h2>Why not auto-hide</h2>
+<p>Auto-hide brings the taskbar back on hover, on the Win key and when an app
+wants attention, and it applies to every monitor. <strong>Taskbar auto-hide fine
+tuning</strong> can keep it from ever showing, but on all monitors at once, and
+<strong>Taskbar auto-hide per monitor</strong> chooses auto-hide on or off per monitor but
+doesn't stop the taskbar from showing. This mod turns the taskbar off on the
+chosen monitors only and doesn't need or change the auto-hide setting.</p>
+<h2>Choosing monitors</h2>
+<p>The <strong>Monitors to disable the taskbar on</strong> setting is a comma-separated list.
+Each entry can be:</p>
+<ul>
+<li><code>primary</code>: the primary monitor, wherever it is.</li>
+<li>A number (<code>1</code>, <code>2</code>, <code>3</code>...): the monitor's position in Windows' monitor
+enumeration. It may differ from the numbers shown in Display Settings, and it
+can change after plugging monitors in or out.</li>
+<li>Any other text: matched (case-insensitive) against part of the monitor's
+device name, model name or interface name, e.g. <code>GSM5BD2</code> or <code>DISPLAY2</code>.
+This stays correct when the numbering changes.</li>
+</ul>
+<p>Examples: <code>primary</code> · <code>1,3</code> · <code>primary, GSM5BD2</code>. An empty list disables
+nothing.</p>
+<p>To see the number, device name, model and interface name of each monitor:
+Advanced tab, set <strong>Debug logging</strong> to <strong>Mod logs</strong>, open <strong>Show log output</strong>,
+then save the settings again. Every monitor is logged in a <code>Monitor</code> line.</p>
+<h2>How it works</h2>
+<p>The taskbar window of a chosen monitor and its popups (tooltips, previews) are
+cloaked with DWM, which makes them invisible and click-through without moving
+them, and the work area of that monitor is computed as if its taskbar were
+auto-hidden. Nothing is written to the system settings, so disabling or
+removing the mod leaves no trace.</p>
+<h2>Notes</h2>
+<ul>
+<li>Windows 11. Tested on build 26300 with bottom and left taskbars, auto-hide
+on and off. &quot;Show my taskbar on all displays&quot; must be on if any of the chosen
+monitors is not the primary one.</li>
+<li>Keyboard focus can still move to a disabled taskbar (e.g. Win+T); press Esc
+to leave it.</li>
+</ul>
+]]></content>
+        <author>
+            <name>eprilx</name>
+            <uri>https://github.com/eprilx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Volume Key Step 1.0]]></title>
+        <id>https://windhawk.net/mods/volume-key-step#ad86ce3a5b546f545af49f4430c7b002be48c4bb</id>
+        <link href="https://windhawk.net/mods/volume-key-step"/>
+        <updated>2026-11-25T08:02:43.000Z</updated>
+        <content type="html"><![CDATA[<h1>Volume Key Step</h1>
+<p>Windows raises or lowers the volume by 2% per volume key press. This mod lets you
+pick any step from 1% to 100%. The Windows volume flyout still shows as usual.</p>
+<p>The step also applies to anything else that steps the volume through Explorer, such as
+scrolling with the Windows 11 indicator in the Taskbar Volume Control mod.</p>
+<p>At least one audio device (speaker or mic) must be connected when Explorer starts. If
+none was, reload the mod after connecting one.</p>
+]]></content>
+        <author>
+            <name>Artistro08</name>
+            <uri>https://github.com/artistro08</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Notepad Pro 1.0.0]]></title>
+        <id>https://windhawk.net/mods/notepad-pro#f25ef647911aa78ccd08b23778d2e96b51dd3de1</id>
+        <link href="https://windhawk.net/mods/notepad-pro"/>
+        <updated>2026-11-25T08:02:37.000Z</updated>
+        <content type="html"><![CDATA[<h1>Notepad Pro</h1>
+<p><img src="https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/Don't%20Touch/NP.png" alt="Notepad Pro"></p>
+<p>Upgrade the standard Windows Notepad with modern code-editor features while keeping it fast and lightweight.</p>
+<h2>Line-Number Gutter</h2>
+<p>Adds a clean line-number margin to the left side of the editor.</p>
+<ul>
+<li><code>Smart wrapping</code>: Only displays numbers on the first row of wrapped lines.</li>
+<li><code>Dynamic sizing</code>: Automatically adjusts its width as your document grows.</li>
+<li><code>Theme-aware</code>: Seamlessly adapts to light and dark modes in real time.</li>
+<li><code>Editor sync</code>: Matches your current font, size, zoom level, and display scaling, with highlighting for the active line.</li>
+<li><code>Markers</code>: Colors the left edge of the gutter next to every line you changed, added, or removed.</li>
+</ul>
+<h2>Minimap</h2>
+<p>Adds a high-level visual overview of your entire file right alongside the scrollbar.</p>
+<ul>
+<li><code>Visual preview</code>: Represents your text as clean, color-coded blocks for easy scanning.</li>
+<li><code>Smooth navigation</code>: Click anywhere to jump directly to that section, drag the viewport slider, or scroll smoothly with your mouse wheel.</li>
+<li><code>Responsive layout</code>: Automatically scales with the window size and hides itself when the window becomes too narrow.</li>
+<li><code>Universal support</code>: Works across all open documents and file types.</li>
+</ul>
+<h2>Syntax Highlighting</h2>
+<p>Automatically brings color and readability to popular programming and data files based on the open file type.</p>
+<ul>
+<li><code>Rich color coding</code>: Highlights keywords, types, strings, numbers, and directives while keeping plain text and unsaved tabs clean.</li>
+<li><code>Non-destructive</code>: Purely visual, never alters your underlying files.</li>
+<li><code>Theme-aware</code>: Uses tailored color palettes that automatically switch between light and dark themes.</li>
+</ul>
+<blockquote>
+<p>Note: Very large files may cause slight delays, slower rendering, or higher memory usage when calculating line numbers, drawing the minimap, or running syntax highlighting.</p>
+</blockquote>
+<h3>More Features Soon</h3>
+<p>This mod is under active development, with additional quality-of-life improvements and editor tools planned for future updates.</p>
+]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Battery Icon Customizer 1.0]]></title>
+        <id>https://windhawk.net/mods/battery-icon-customizer#0c5b0772f221271b77e91b75c36fb82acd0baf38</id>
+        <link href="https://windhawk.net/mods/battery-icon-customizer"/>
+        <updated>2026-11-25T08:02:31.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Battery Icon Customizer</h1>
+<p>Give the Windows 11 taskbar battery icon a new look - no coding needed.</p>
+<p><img src="https://raw.githubusercontent.com/LoneFaizaan/battery-icon-customizer/8c7af22c99a4fc36276e0a709ddfc13248930a09/images/preview.png" alt="Preview of the available looks"></p>
+<p><img src="https://raw.githubusercontent.com/LoneFaizaan/battery-icon-customizer/8c7af22c99a4fc36276e0a709ddfc13248930a09/images/animations.gif" alt="Charger and charging animations"></p>
+<ul>
+<li><strong>Apple iOS style</strong> - a solid pill with the percentage cut out of it, green
+while charging, yellow in battery saver and red when low.</li>
+<li><strong>Classic style</strong> - the older, compact single-color Windows 11 battery.</li>
+<li><strong>Percentage only</strong> - replace the icon with just the number, with your
+choice of size, weight, font, % sign, charging bolt and an optional colored
+or outlined pill behind it.</li>
+<li><strong>Your own colors</strong> - pick a color for every state (on battery, charging,
+plugged in, battery saver, low, very low) from simple lists.</li>
+<li><strong>Battery percentage</strong> - next to the icon or inside the battery.</li>
+<li><strong>Animations</strong> - bounce, zoom or flash when you plug in; shake, drop or
+flash when you unplug; a &quot;filling up&quot; or breathing effect while charging;
+and a pulse or blink when the battery is low.</li>
+<li><strong>Size and spacing</strong> - make it bigger or line it up with the Wi-Fi and
+volume icons.</li>
+</ul>
+<h2>Getting started</h2>
+<ol>
+<li>Open the <strong>Settings</strong> tab.</li>
+<li>Choose a look from <strong>Quick look</strong> (for example <em>Apple iOS</em>) and click
+<strong>Save settings</strong>. The taskbar updates right away.</li>
+</ol>
+<p>Want something else? Set <strong>Quick look</strong> to <strong>Build my own</strong>, then choose:</p>
+<ul>
+<li><strong>Icon style</strong> - Windows 11, Classic Windows 11, Apple iOS, or Percentage
+only (then fine-tune it under <strong>Percentage-only style</strong>).</li>
+<li><strong>Color mode</strong> - <em>Automatic</em>, <em>Single color</em>, or <em>My own colors</em> (then pick a
+color for each battery state from the lists under <strong>Colors</strong>).</li>
+<li><strong>Show battery percentage</strong> - off, next to the icon, or inside it.</li>
+<li><strong>Size and spacing</strong> and <strong>Animations</strong> - these apply to every look,
+including Quick looks. Turn on &quot;Preview the charger animations&quot; to see the
+plug-in and unplug animations each time you save.</li>
+</ul>
+<p>Need an exact shade? Pick <strong>Custom</strong> in a color list and type a hex code such
+as <code>#FF4545</code> in the matching field of <strong>Exact colors</strong> at the bottom.</p>
+<h2>Tips</h2>
+<ul>
+<li>Single color but red when the battery is low: Color mode <em>My own colors</em>,
+set every color to <em>Same as the taskbar text</em>, and <strong>Low battery</strong> to <em>Red</em>.</li>
+<li><em>Automatic</em> colors in the Apple style follow iOS: white (or black on a light
+taskbar) normally, green when charging, yellow in battery saver and red at or
+below the low battery level.</li>
+<li>If Windows' own &quot;Battery percentage&quot; option is on, the mod hides it while it
+shows its own percentage, so it never appears twice.</li>
+</ul>
+<p>Requires a Windows 11 build with the new colored battery icon (Windows 11
+24H2/25H2 builds from late 2025 onwards).</p>
+]]></content>
+        <author>
+            <name>Faizaan</name>
+            <uri>https://github.com/LoneFaizaan</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Twinkle Brightness 1.1.0]]></title>
         <id>https://windhawk.net/mods/twinkle-brightness#6ec92a920503db975426e6489bb3537a44b534fd</id>
@@ -598,69 +777,6 @@ is created, the approach worked out in
         <author>
             <name>3DDinosaur</name>
             <uri>https://github.com/3DDinosaur</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Live HUD 1.2.1]]></title>
-        <id>https://windhawk.net/mods/taskbar-live-hud-radar#0000eec01a03da511c3f0e849f69495f9b8920fc</id>
-        <link href="https://windhawk.net/mods/taskbar-live-hud-radar"/>
-        <updated>2026-11-24T18:32:36.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Updated author profile and repository links to @its-lemon.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Lemon</name>
-            <uri>https://github.com/its-lemon</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Move Window to Monitor 1.1.1]]></title>
-        <id>https://windhawk.net/mods/move-window-to-monitor#8e9155da316053d27d39d343a54e2b0bd12be00a</id>
-        <link href="https://windhawk.net/mods/move-window-to-monitor"/>
-        <updated>2026-11-24T04:04:11.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed maximized windows ending up on the old monitor or flickering when moved</li>
-<li>Borderless full-screen windows now cover the destination monitor instead of being scaled to its work area</li>
-<li>If a configured target monitor no longer exists (e.g. unplugged, wrong index), the hotkey now falls back to the automatic direction-based move
-(Thanks to DavidHiFi for the report and the proposed fix)</li>
-</ul>
-]]></content>
-        <author>
-            <name>TomberWolf</name>
-            <uri>https://github.com/TomberWolf</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Smart Process Priority & RAM Optimizer 1.1.1]]></title>
-        <id>https://windhawk.net/mods/smart-process-priority-ram-optimizer#796dc6024cf28ef0f8046323f1b4a184a6781ffb</id>
-        <link href="https://windhawk.net/mods/smart-process-priority-ram-optimizer"/>
-        <updated>2026-11-23T22:05:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Enhance game detection for full-screen and registered Windows games</li>
-<li>Automatically reduce RAM usage of inactive browser tabs</li>
-<li>Protect modern online gaming and voice traffic (Discord)</li>
-<li>Prevent OBS Studio from being trimmed in the background</li>
-<li>Improve power plan switching stability</li>
-</ul>
-]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.24.1]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#63d4c4446923e66196601f466bfa7e844e93245f</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-11-23T22:04:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Shorter, simpler descriptions for every setting. The details are still in the readme</li>
-</ul>
-]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
         </author>
     </entry>
 </feed>

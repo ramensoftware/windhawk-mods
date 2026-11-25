@@ -239,6 +239,12 @@
     "githubId": 63135654,
     "homepages": []
   },
+  "https://github.com/artistro08": {
+    "author": "Artistro08",
+    "github": "https://github.com/artistro08",
+    "githubId": 6427230,
+    "homepages": []
+  },
   "https://github.com/artllex": {
     "author": "Arkadiusz",
     "github": "https://github.com/Artllex",
@@ -864,6 +870,12 @@
     "author": "Ephrem T.",
     "github": "https://github.com/EphremTil17",
     "githubId": 106619102,
+    "homepages": []
+  },
+  "https://github.com/eprilx": {
+    "author": "eprilx",
+    "github": "https://github.com/eprilx",
+    "githubId": 49425492,
     "homepages": []
   },
   "https://github.com/ereinaimer": {
@@ -1543,6 +1555,14 @@
     "github": "https://github.com/lolstijl",
     "githubId": 94002929,
     "homepages": []
+  },
+  "https://github.com/lonefaizaan": {
+    "author": "Faizaan",
+    "github": "https://github.com/LoneFaizaan",
+    "githubId": 128882925,
+    "homepages": [
+      "https://github.com/LoneFaizaan/battery-icon-customizer"
+    ]
   },
   "https://github.com/lonfro": {
     "author": "lonfro",

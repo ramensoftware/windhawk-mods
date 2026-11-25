@@ -2,12 +2,191 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-25T07:05:10.000Z</updated>
+    <updated>2026-11-25T08:02:48.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable taskbar per monitor 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-disable-per-monitor#a95d2c814194ae8a0ab80ec124f5289038179118</id>
+        <link href="https://windhawk.net/mods/taskbar-disable-per-monitor"/>
+        <updated>2026-11-25T08:02:48.000Z</updated>
+        <content type="html"><![CDATA[<h1>Disable taskbar per monitor</h1>
+<p>Pick one or more monitors. Their taskbar is disabled: it's invisible, can't be
+clicked, and never comes back, whether from the mouse at the screen edge, the
+Win key, Win+T / Win+number, flashing app buttons or notifications. Windows on
+those monitors can use the space the taskbar took. Taskbars on every other
+monitor are left alone. Works with the taskbar at the bottom, top, left or
+right, with auto-hide on or off.</p>
+<h2>Why not auto-hide</h2>
+<p>Auto-hide brings the taskbar back on hover, on the Win key and when an app
+wants attention, and it applies to every monitor. <strong>Taskbar auto-hide fine
+tuning</strong> can keep it from ever showing, but on all monitors at once, and
+<strong>Taskbar auto-hide per monitor</strong> chooses auto-hide on or off per monitor but
+doesn't stop the taskbar from showing. This mod turns the taskbar off on the
+chosen monitors only and doesn't need or change the auto-hide setting.</p>
+<h2>Choosing monitors</h2>
+<p>The <strong>Monitors to disable the taskbar on</strong> setting is a comma-separated list.
+Each entry can be:</p>
+<ul>
+<li><code>primary</code>: the primary monitor, wherever it is.</li>
+<li>A number (<code>1</code>, <code>2</code>, <code>3</code>...): the monitor's position in Windows' monitor
+enumeration. It may differ from the numbers shown in Display Settings, and it
+can change after plugging monitors in or out.</li>
+<li>Any other text: matched (case-insensitive) against part of the monitor's
+device name, model name or interface name, e.g. <code>GSM5BD2</code> or <code>DISPLAY2</code>.
+This stays correct when the numbering changes.</li>
+</ul>
+<p>Examples: <code>primary</code> · <code>1,3</code> · <code>primary, GSM5BD2</code>. An empty list disables
+nothing.</p>
+<p>To see the number, device name, model and interface name of each monitor:
+Advanced tab, set <strong>Debug logging</strong> to <strong>Mod logs</strong>, open <strong>Show log output</strong>,
+then save the settings again. Every monitor is logged in a <code>Monitor</code> line.</p>
+<h2>How it works</h2>
+<p>The taskbar window of a chosen monitor and its popups (tooltips, previews) are
+cloaked with DWM, which makes them invisible and click-through without moving
+them, and the work area of that monitor is computed as if its taskbar were
+auto-hidden. Nothing is written to the system settings, so disabling or
+removing the mod leaves no trace.</p>
+<h2>Notes</h2>
+<ul>
+<li>Windows 11. Tested on build 26300 with bottom and left taskbars, auto-hide
+on and off. &quot;Show my taskbar on all displays&quot; must be on if any of the chosen
+monitors is not the primary one.</li>
+<li>Keyboard focus can still move to a disabled taskbar (e.g. Win+T); press Esc
+to leave it.</li>
+</ul>
+]]></content>
+        <author>
+            <name>eprilx</name>
+            <uri>https://github.com/eprilx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Volume Key Step 1.0]]></title>
+        <id>https://windhawk.net/mods/volume-key-step#ad86ce3a5b546f545af49f4430c7b002be48c4bb</id>
+        <link href="https://windhawk.net/mods/volume-key-step"/>
+        <updated>2026-11-25T08:02:43.000Z</updated>
+        <content type="html"><![CDATA[<h1>Volume Key Step</h1>
+<p>Windows raises or lowers the volume by 2% per volume key press. This mod lets you
+pick any step from 1% to 100%. The Windows volume flyout still shows as usual.</p>
+<p>The step also applies to anything else that steps the volume through Explorer, such as
+scrolling with the Windows 11 indicator in the Taskbar Volume Control mod.</p>
+<p>At least one audio device (speaker or mic) must be connected when Explorer starts. If
+none was, reload the mod after connecting one.</p>
+]]></content>
+        <author>
+            <name>Artistro08</name>
+            <uri>https://github.com/artistro08</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Notepad Pro 1.0.0]]></title>
+        <id>https://windhawk.net/mods/notepad-pro#f25ef647911aa78ccd08b23778d2e96b51dd3de1</id>
+        <link href="https://windhawk.net/mods/notepad-pro"/>
+        <updated>2026-11-25T08:02:37.000Z</updated>
+        <content type="html"><![CDATA[<h1>Notepad Pro</h1>
+<p><img src="https://raw.githubusercontent.com/armaninyow/Remove-Context-Menu-Items/refs/heads/main/Don't%20Touch/NP.png" alt="Notepad Pro"></p>
+<p>Upgrade the standard Windows Notepad with modern code-editor features while keeping it fast and lightweight.</p>
+<h2>Line-Number Gutter</h2>
+<p>Adds a clean line-number margin to the left side of the editor.</p>
+<ul>
+<li><code>Smart wrapping</code>: Only displays numbers on the first row of wrapped lines.</li>
+<li><code>Dynamic sizing</code>: Automatically adjusts its width as your document grows.</li>
+<li><code>Theme-aware</code>: Seamlessly adapts to light and dark modes in real time.</li>
+<li><code>Editor sync</code>: Matches your current font, size, zoom level, and display scaling, with highlighting for the active line.</li>
+<li><code>Markers</code>: Colors the left edge of the gutter next to every line you changed, added, or removed.</li>
+</ul>
+<h2>Minimap</h2>
+<p>Adds a high-level visual overview of your entire file right alongside the scrollbar.</p>
+<ul>
+<li><code>Visual preview</code>: Represents your text as clean, color-coded blocks for easy scanning.</li>
+<li><code>Smooth navigation</code>: Click anywhere to jump directly to that section, drag the viewport slider, or scroll smoothly with your mouse wheel.</li>
+<li><code>Responsive layout</code>: Automatically scales with the window size and hides itself when the window becomes too narrow.</li>
+<li><code>Universal support</code>: Works across all open documents and file types.</li>
+</ul>
+<h2>Syntax Highlighting</h2>
+<p>Automatically brings color and readability to popular programming and data files based on the open file type.</p>
+<ul>
+<li><code>Rich color coding</code>: Highlights keywords, types, strings, numbers, and directives while keeping plain text and unsaved tabs clean.</li>
+<li><code>Non-destructive</code>: Purely visual, never alters your underlying files.</li>
+<li><code>Theme-aware</code>: Uses tailored color palettes that automatically switch between light and dark themes.</li>
+</ul>
+<blockquote>
+<p>Note: Very large files may cause slight delays, slower rendering, or higher memory usage when calculating line numbers, drawing the minimap, or running syntax highlighting.</p>
+</blockquote>
+<h3>More Features Soon</h3>
+<p>This mod is under active development, with additional quality-of-life improvements and editor tools planned for future updates.</p>
+]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Battery Icon Customizer 1.0]]></title>
+        <id>https://windhawk.net/mods/battery-icon-customizer#0c5b0772f221271b77e91b75c36fb82acd0baf38</id>
+        <link href="https://windhawk.net/mods/battery-icon-customizer"/>
+        <updated>2026-11-25T08:02:31.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Battery Icon Customizer</h1>
+<p>Give the Windows 11 taskbar battery icon a new look - no coding needed.</p>
+<p><img src="https://raw.githubusercontent.com/LoneFaizaan/battery-icon-customizer/8c7af22c99a4fc36276e0a709ddfc13248930a09/images/preview.png" alt="Preview of the available looks"></p>
+<p><img src="https://raw.githubusercontent.com/LoneFaizaan/battery-icon-customizer/8c7af22c99a4fc36276e0a709ddfc13248930a09/images/animations.gif" alt="Charger and charging animations"></p>
+<ul>
+<li><strong>Apple iOS style</strong> - a solid pill with the percentage cut out of it, green
+while charging, yellow in battery saver and red when low.</li>
+<li><strong>Classic style</strong> - the older, compact single-color Windows 11 battery.</li>
+<li><strong>Percentage only</strong> - replace the icon with just the number, with your
+choice of size, weight, font, % sign, charging bolt and an optional colored
+or outlined pill behind it.</li>
+<li><strong>Your own colors</strong> - pick a color for every state (on battery, charging,
+plugged in, battery saver, low, very low) from simple lists.</li>
+<li><strong>Battery percentage</strong> - next to the icon or inside the battery.</li>
+<li><strong>Animations</strong> - bounce, zoom or flash when you plug in; shake, drop or
+flash when you unplug; a &quot;filling up&quot; or breathing effect while charging;
+and a pulse or blink when the battery is low.</li>
+<li><strong>Size and spacing</strong> - make it bigger or line it up with the Wi-Fi and
+volume icons.</li>
+</ul>
+<h2>Getting started</h2>
+<ol>
+<li>Open the <strong>Settings</strong> tab.</li>
+<li>Choose a look from <strong>Quick look</strong> (for example <em>Apple iOS</em>) and click
+<strong>Save settings</strong>. The taskbar updates right away.</li>
+</ol>
+<p>Want something else? Set <strong>Quick look</strong> to <strong>Build my own</strong>, then choose:</p>
+<ul>
+<li><strong>Icon style</strong> - Windows 11, Classic Windows 11, Apple iOS, or Percentage
+only (then fine-tune it under <strong>Percentage-only style</strong>).</li>
+<li><strong>Color mode</strong> - <em>Automatic</em>, <em>Single color</em>, or <em>My own colors</em> (then pick a
+color for each battery state from the lists under <strong>Colors</strong>).</li>
+<li><strong>Show battery percentage</strong> - off, next to the icon, or inside it.</li>
+<li><strong>Size and spacing</strong> and <strong>Animations</strong> - these apply to every look,
+including Quick looks. Turn on &quot;Preview the charger animations&quot; to see the
+plug-in and unplug animations each time you save.</li>
+</ul>
+<p>Need an exact shade? Pick <strong>Custom</strong> in a color list and type a hex code such
+as <code>#FF4545</code> in the matching field of <strong>Exact colors</strong> at the bottom.</p>
+<h2>Tips</h2>
+<ul>
+<li>Single color but red when the battery is low: Color mode <em>My own colors</em>,
+set every color to <em>Same as the taskbar text</em>, and <strong>Low battery</strong> to <em>Red</em>.</li>
+<li><em>Automatic</em> colors in the Apple style follow iOS: white (or black on a light
+taskbar) normally, green when charging, yellow in battery saver and red at or
+below the low battery level.</li>
+<li>If Windows' own &quot;Battery percentage&quot; option is on, the mod hides it while it
+shows its own percentage, so it never appears twice.</li>
+</ul>
+<p>Requires a Windows 11 build with the new colored battery icon (Windows 11
+24H2/25H2 builds from late 2025 onwards).</p>
+]]></content>
+        <author>
+            <name>Faizaan</name>
+            <uri>https://github.com/LoneFaizaan</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Twinkle Brightness 1.1.0]]></title>
         <id>https://windhawk.net/mods/twinkle-brightness#6ec92a920503db975426e6489bb3537a44b534fd</id>
@@ -1125,164 +1304,6 @@ counts and stack/module information, without window titles or AppID strings.</p>
         <author>
             <name>minster586</name>
             <uri>https://github.com/minster586</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Hello Auto OK 0.1.3]]></title>
-        <id>https://windhawk.net/mods/windows-hello-auto-ok#d32f034946b86a639d2ade33e0af860e7bf02286</id>
-        <link href="https://windhawk.net/mods/windows-hello-auto-ok"/>
-        <updated>2026-11-22T05:00:04.000Z</updated>
-        <content type="html"><![CDATA[<h1>Windows Hello Auto OK</h1>
-<p>Confirms the ready OK button in standard Windows Hello biometric dialogs,
-regardless of the requesting application or interface language.</p>
-<p><img src="https://raw.githubusercontent.com/hermanzamula/windhawk-windows-hello-auto-ok/main/docs/preview.gif" alt="Animated preview"></p>
-<p><em>Illustrated demo using an English interface and the display name User.</em></p>
-<p>Detection uses AutomationId, control types, visibility and enabled state.
-It never matches captions, translated messages, account names or websites.
-Visible dialogs owned by the Windows CredentialUIBroker are monitored directly,
-only while the Hello dialog itself is the foreground window. Visible credential input fields prevent
-automatic confirmation.</p>
-<p>This removes Windows Hello's manual confirmation step: a program requesting
-verification can be approved as soon as Windows recognizes you, provided its
-Hello dialog is active. Background dialogs are never confirmed automatically.</p>
-<p>The mod runs inside CredentialUIBroker.exe, with no helper process or UAC launcher.
-It reacts to window events and checks readiness only while its dialog is active.
-No credential values, account names, or biometric data are read.</p>
-<p>This is an experimental release. Its readiness check describes the standard
-Windows Hello UI structure, not an independent biometric-success API. Windows
-still performs authentication. Custom application dialogs and future changes
-to the system UI may require an update.</p>
-]]></content>
-        <author>
-            <name>hermanzamula</name>
-            <uri>https://github.com/hermanzamula</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Edge No Bleed 1.0.0]]></title>
-        <id>https://windhawk.net/mods/edge-no-bleed#94fec81390dbd142801006fee21a3b72bc08271f</id>
-        <link href="https://windhawk.net/mods/edge-no-bleed"/>
-        <updated>2026-11-22T04:03:31.000Z</updated>
-        <content type="html"><![CDATA[<h1>Edge No Bleed</h1>
-<p>Eliminates the persistent 1-2px margin gap where desktop wallpaper bleeds through along screen edges behind maximized windows.</p>
-<h2>The Problem</h2>
-<p>On Windows 10 and 11, users running dark-mode themes, IDEs, terminals, and browsers frequently notice a razor-thin 1-2px strip of desktop wallpaper leaking through along the edges of maximized windows (especially at the bottom or side monitor borders).</p>
-<h3>Why This Happens</h3>
-<ul>
-<li><strong>DWM Frame Padding &amp; Fractional DPI Rounding:</strong> Windows calculates maximized client coordinates by converting logical device-independent units into physical screen pixels. At fractional display scaling factors (such as 125%, 150%, or 175%), rounding calculations frequently leave a 1-2 physical pixel deficit against the work area, exposing bright desktop wallpaper pixels.</li>
-<li><strong>Invisible Margin Bounds:</strong> Normal Win32 maximized frames hang invisible resize margins off-screen, but custom-chrome and modern applications (such as Chromium, Electron, and Windows Terminal) size their own frames and can fall short of physical display boundaries.</li>
-</ul>
-<h2>How It Works</h2>
-<p><code>Edge No Bleed</code> runs as a dedicated tool mod within Windhawk without injecting invasive hooks into third-party processes. It monitors window position and state changes via out-of-context WinEvents on a dedicated message-loop worker thread:</p>
-<ol>
-<li>When a window is maximized, the mod measures its true visible frame bounds using <code>DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)</code> against the monitor's work area (<code>MONITORINFO::rcWork</code>).</li>
-<li>If a 1-2px fractional rounding gap is detected, the mod expands the window frame via <code>SetWindowPos</code> by the exact measured discrepancy, sealing the edge flush against the screen.</li>
-<li>If an auto-hide taskbar is active on that edge, the mod detects it via <code>SHAppBarMessage(ABM_GETAUTOHIDEBAREX)</code> and preserves the 1px mouse-hover reveal strip.</li>
-</ol>
-<h2>Comparison With Other Mods</h2>
-<ul>
-<li><strong>Maximized Window Margins:</strong> That mod intentionally adds large margins (10px to 200px, macOS-style) by shrinking the system work area with AppBars. <code>Edge No Bleed</code> does the opposite: it eliminates unwanted 1-2px fractional DPI gaps so maximized windows sit completely flush.</li>
-<li><strong>Classic Maximized Windows Fix:</strong> That mod is exclusively designed for the legacy Classic 3D Theme on Windows 10/11 using region clipping (<code>SetWindowRgn</code>). <code>Edge No Bleed</code> targets standard modern DWM themes and dark-mode setups.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start Menu Groups 1.0.0]]></title>
-        <id>https://windhawk.net/mods/start-menu-groups#0d9d966af10c36b77bb8960c82ad9ae89bdcccd2</id>
-        <link href="https://windhawk.net/mods/start-menu-groups"/>
-        <updated>2026-11-22T04:03:24.000Z</updated>
-        <content type="html"><![CDATA[<h1>Start Menu Groups</h1>
-<p>Add your own <strong>app groups</strong> to the <strong>Windows 11 Start menu</strong>, before or after the Pinned section (or in place of the built‑in <strong>All → View: Category</strong> grid), using the same look as Start: rounded tiles with an icon preview, an overflow cluster for the remaining apps and the group name underneath.</p>
-<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/start-menu-groups/screenshots/start-menu.gif" alt="Start Menu Groups demo"></p>
-<p>Designed for the Windows 11 Start menu (<code>StartMenuExperienceHost.exe</code>).</p>
-<h2>Features</h2>
-<ul>
-<li><strong>Your own groups</strong> — create any number of groups and put any Start menu app in them, desktop and Store apps alike. An app can be in several groups.</li>
-<li><strong>Apps, programs and websites</strong> — each item is a Start app (picked by name or app ID), a program, file or folder (full path with optional arguments), or a website opened in the default browser.</li>
-<li><strong>Custom names and icons</strong> — every item can have its own label and icon: an <code>.ico</code>, <code>.exe</code>, <code>.dll</code> or image file, an image link (such as a website's favicon), a Fluent icon by its code (e.g. <code>E774</code>) or an emoji.</li>
-<li><strong>Native look</strong> — rounded tiles, borders and colors match Start's own category view and follow the Windows light / dark theme.</li>
-<li><strong>Resizable tiles</strong> — give each group its own tile size, from 1 × 1 up to 6 × 4 (24 apps). Bigger tiles take more cells of the group grid. A 1 × 1 tile is a single app on its own, without a group.</li>
-<li><strong>Overflow cluster</strong> — when a group has more apps than fit, the last cell shows the rest as small icons; click it to open the whole group.</li>
-<li><strong>Right‑click menu</strong> — right‑click an app in a group for <strong>Edit</strong>, <strong>Run as administrator</strong>, <strong>Open file location</strong>, <strong>Pin to taskbar</strong>, <strong>App settings</strong> and <strong>Uninstall</strong>, like Start's own apps.</li>
-<li><strong>Size presets</strong> — Default, Small and Large presets for the tiles, icons and names, plus control over gaps, corner radius, colors and group names.</li>
-<li><strong>Placement</strong> — show the groups before or after Pinned, after Recommended / Recent, or after the All section, with an optional section title.</li>
-<li><strong>Hide Start's sections</strong> — optionally hide Start's own Pinned, Recommended and All sections and use only your groups.</li>
-<li><strong>Settings window</strong> — right‑click the groups in Start → <strong>Customize Start Groups</strong> for a visual editor with drag &amp; drop (see <a href="#settings-window">Settings window</a>).</li>
-<li><strong>Import / export</strong> — all settings can be exported to and imported from a JSON file.</li>
-</ul>
-<h2>Screenshots</h2>
-<p>The settings window, with drag &amp; drop editing of groups and apps:</p>
-<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/start-menu-groups/screenshots/settings-window.gif" alt="Settings window"></p>
-<h2>Setting it up</h2>
-<p>Everything is configured on the mod's <strong>Settings</strong> tab in Windhawk, in
-sections:</p>
-<ul>
-<li><strong>Groups</strong> — add a group with <em>Add new item</em>, give it a name, a tile size and its items. For a Start app, enter the app's name exactly as it appears in Start (for example <code>Calculator</code>, <code>Visual Studio Code</code>; case doesn't matter), or its app ID (AUMID, such as <code>Microsoft.WindowsCalculator_8wekyb3d8bbwe!App</code>). For a program, its full path (a program, file or folder) and optional arguments; for a website, its address. Reorder groups with the arrows.</li>
-<li><strong>Behavior</strong> — where the groups appear, the section title, app names and tooltips, sorting, empty groups, the number of columns when a group is opened, and hiding Start's own sections.</li>
-<li><strong>Tiles</strong>, <strong>Icons</strong>, <strong>Group names</strong> — sizes, gaps and colors. The defaults match Start's own category view.</li>
-</ul>
-<p>Changes apply to Start as soon as you click <strong>Save settings</strong>.</p>
-<h2>Settings window</h2>
-<p>Right‑click the groups in Start → <strong>Customize Start Groups</strong> (also added to Start's own right‑click menu, after <em>Start settings</em>) opens a settings window with the same settings, but easier to edit:</p>
-<ul>
-<li><strong>Groups</strong> — shows the groups the way Start does. Drag apps to reorder them or move them to another group, drag a tile to reorder the groups, drag a tile's corner to resize it, and drag apps from the All Apps list onto a tile to add them. The selected group and app are edited below the groups. Right‑click a tile to rename, duplicate or delete it.</li>
-<li><strong>Customization</strong> — the size preset (Default, Small, Large), gaps, corner radius, colors and group names.</li>
-<li><strong>Behavior</strong> — placement, section title, app names, tooltips, sorting and columns.</li>
-<li><strong>Built‑in sections</strong> — hide Start's own Pinned, Recommended and All sections.</li>
-</ul>
-<p>Start apps are picked by name with suggestions from the apps in Start; programs have a file picker. Groups and items can be duplicated, and an app can be added on its own, without a group. <strong>Import</strong> / <strong>Export</strong> at the bottom of the navigation pane save all settings to, or load them from, a JSON file.</p>
-<p>The window is hosted by File Explorer — the mod also loads into <code>explorer.exe</code> for this, and does nothing else there — because the Start menu process can't host one. It edits the same settings as Windhawk. Windhawk keeps them in a protected registry key, so <strong>Save</strong> shows an administrator (UAC) prompt for Windows PowerShell, which imports the new settings, and Start updates right after. The import checks that the settings file is exactly the one the window wrote, so no other program can change what gets saved. If the settings were changed in Windhawk while the window was open, <strong>Save</strong> asks before replacing them. The portable version of Windhawk isn't supported by the window.</p>
-<h2>Tile size and apps in the tile</h2>
-<p>Each group has two size settings:</p>
-<ul>
-<li><strong>Tile size</strong> — width × height of the tile, in app spots. 2 × 2 is the size of one of Start's own tiles; 1 × 1 is an app on its own, without a group.</li>
-<li><strong>Apps in the tile</strong> — apps per row × rows of apps, at most the tile size. <em>Default</em> fills the tile with one app per spot; the rest go in the overflow cluster.</li>
-</ul>
-<p>A group can also hide its app names, its group name, or its tile background (no background, border or padding — just the apps, e.g. for a single app on its own).</p>
-<h2>Colors</h2>
-<p>Colors are <code>#RRGGBB</code> or <code>#AARRGGBB</code>. Leave a color empty to follow the Windows theme and match Start.</p>
-<h2>Network access</h2>
-<p>The mod doesn't connect to the internet by itself, and the default settings don't contact any server: the default websites show a globe icon.</p>
-<p>An icon set to an image link (<code>http://</code> or <code>https://</code>, such as a website's favicon) is downloaded from that address by Windows' XAML image loader: a normal web request for the image, which sends your IP address and a user agent to that server. It happens when Start builds the tiles (when the mod loads, on a theme or settings change, and when a group is opened), and when the settings window shows the item. To avoid it, leave the icon empty or use a local file, a Fluent icon code or an emoji.</p>
-<h2>Compatibility</h2>
-<p>The mod reaches Start's UI directly, without XAML diagnostics, so it works alongside mods and tools that use them, such as Windows 11 Start Menu Styler.</p>
-<h2>Language</h2>
-<p>The groups are placed next to Start's pinned list, found by its element name, so they show in any display language. Two things go by Start's English titles: hiding Start's sections (<em>Pinned</em>, <em>Recommended</em> / <em>Recent</em>, <em>All</em>), and adding <em>Customize Start Groups</em> after <em>Start settings</em> in Start's own right‑click menu. In other languages, open the settings window by right‑clicking the groups instead.</p>
-<h2>Default configuration</h2>
-<p>Out of the box the mod adds these groups before the Pinned section, under an <strong>Apps</strong> heading:</p>
-<ul>
-<li><strong>Group 1</strong> — Microsoft Store, Settings, Notepad, Weather</li>
-<li><strong>Group 2</strong> — Camera, Paint, Calculator, Calendar</li>
-<li><strong>Favorites</strong> — Photos, Terminal, Notepad, Get Help (group name hidden)</li>
-<li><strong>Group 3</strong> (3 × 3) — Sound Recorder, Voice access, Task Manager, Movies &amp; TV, File Explorer, Sticky Notes</li>
-<li><strong>System</strong> (3 × 1) — Control Panel, Services, Run (group name hidden)</li>
-<li><strong>Websites</strong> (3 × 2) — YouTube, ChatGPT, Example, Google, Reddit, dan13.me</li>
-</ul>
-<p>Empty groups are hidden. None of Start's own sections are hidden by default. Everything is configurable in the mod settings.</p>
-]]></content>
-        <author>
-            <name>DanRotaru</name>
-            <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Text Capitalization 0.3.1]]></title>
-        <id>https://windhawk.net/mods/text-capitalization#35ca0f0f9418c63d941b20cdef3bff966cb0d791</id>
-        <link href="https://windhawk.net/mods/text-capitalization"/>
-        <updated>2026-11-21T17:02:34.000Z</updated>
-        <content type="html"><![CDATA[<h1>Text Capitalization</h1>
-<p>Select text and press Ctrl+Alt+P to capture the selection and open a compact picker. The selected text is shown in a read-only preview; Up/Down changes the highlighted case and updates the preview. Enter or clicking a case replaces the original selection with the transformed text. Escape cancels.</p>
-<p>Default shortcuts are Ctrl+Alt+P (open picker), Ctrl+Alt+C (apply saved case immediately), Up/Down (navigate), Enter (apply highlighted case), and Escape (cancel). Shortcuts are configurable in Windhawk settings. On older Windhawk versions enter numeric VK values such as ctrl+alt+80 for Ctrl+Alt+P.</p>
-<p>The picker never takes keyboard focus from the original editor. Selection capture and replacement use a guarded clipboard copy/paste workflow instead of depending on UI Automation selection detection. The clipboard is snapshotted and restoration is best-effort. The mode is remembered in Windhawk local storage.</p>
-<p>Compatibility depends on the target app supporting copy and paste and leaving the original selection intact while the non-activating picker is shown. Elevated apps may reject simulated input if Windhawk/Explorer runs at a lower integrity level.</p>
-]]></content>
-        <author>
-            <name>rockinggreninja-bot</name>
-            <uri>https://github.com/rockinggreninja-bot</uri>
         </author>
     </entry>
 </feed>
