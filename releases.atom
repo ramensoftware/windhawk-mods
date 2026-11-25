@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-25T08:02:48.000Z</updated>
+    <updated>2026-11-25T17:01:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Vista/7/8.1 Balloon Notifications Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-balloon-notifications-restorer#1db1f371456e7411b70395663b2e27f67fd62faa</id>
+        <link href="https://windhawk.net/mods/win7-balloon-notifications-restorer"/>
+        <updated>2026-11-25T17:01:34.000Z</updated>
+        <content type="html"><![CDATA[<h1>Windows Vista/7/8.1 Balloon Notifications Restorer</h1>
+<p>This mod tries to convert supported Windows 10 and Windows 11 toast notifications
+into classic notification-area balloons inspired by Windows Vista, 7 and 8.1.</p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/notification.png" alt="Classic balloon notification"></p>
+<h2>Setup</h2>
+<ul>
+<li>Use a compatible notification area, such as Windows 7/8/8.1 Taskbar Recreation.</li>
+<li>Restart Explorer after installing the mod. The mod includes an Explorer hook
+for legacy balloon notifications; an existing Windows legacy balloon policy
+is also recognized.</li>
+</ul>
+<p>Supported notifications are converted on a best-effort basis for selected
+applications, including Discord, WhatsApp, Telegram, PowerShell, Chrome, Edge,
+Firefox, Brave, Opera, Vivaldi, Teams, Slack and Outlook. Executable names vary by app version, and
+inclusion does not guarantee compatibility. Other applications can be added
+using Windhawk's advanced process inclusion settings.</p>
+<p>The mod tries to turn supported toast content into notification-area requests.
+The notification area determines how those requests are displayed.</p>
+<p>Tested on Windows 11 24H2 with Windows 8.1 Taskbar Recreation using a
+PowerShell notification.</p>
+<h2>Credits</h2>
+<p>The Explorer registry-query hook is inspired by
+<a href="https://windhawk.net/mods/legacy-balloon-notifications">Legacy XP-style balloon notifications</a> by Anixx.</p>
+]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable taskbar per monitor 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-disable-per-monitor#a95d2c814194ae8a0ab80ec124f5289038179118</id>
@@ -1277,33 +1311,6 @@ counts and stack/module information, without window titles or AppID strings.</p>
         <author>
             <name>yumeyao</name>
             <uri>https://github.com/yumeyao</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SMTC Now Playing Desktop Widgets 1.0.11]]></title>
-        <id>https://windhawk.net/mods/smtc-now-playing-widgets#f9c2d2b7d92dd48c22becca49e1511d7f4134cd9</id>
-        <link href="https://windhawk.net/mods/smtc-now-playing-widgets"/>
-        <updated>2026-11-22T05:00:09.000Z</updated>
-        <content type="html"><![CDATA[<h1>SMTC Now Playing Desktop Widgets</h1>
-<p>Displays up to 5 customizable, multi-monitor Now Playing widgets on your Windows 11 desktop using the native Windows System Media Transport Controls (SMTC) API.</p>
-<p><img src="https://raw.githubusercontent.com/minster586/windhawk-assets/main/img.webp" alt="SMTC Now Playing Desktop Widgets Preview"></p>
-<p>When album art is unavailable, the widgets display an embedded default image.</p>
-<h2>Themes</h2>
-<ul>
-<li><strong>Standard</strong>: Wide horizontal Acrylic card with rounded album art, bold track/artist text, 5 outlined playback controls, and a progress bar with timestamps.</li>
-<li><strong>Album</strong>: Full-bleed dimmed album art square with centered track/artist text, corner timestamps, and a bottom-edge progress bar.</li>
-<li><strong>Cardstock</strong>: Vertical portrait Acrylic card with full-brightness album art, centered track/artist, and progress bar. Automatically shrinks uniformly when playback controls are disabled.</li>
-<li><strong>Simplified</strong>: Sleek single-row horizontal Acrylic bar with compact art, track/artist text, 5 outlined playback controls, and a clean progress bar without timestamps.</li>
-</ul>
-<h2>Usage</h2>
-<ul>
-<li><strong>Move Widgets</strong>: Left-click and drag any widget across any monitor (unless &quot;Lock Position&quot; is enabled for that instance). Coordinates save automatically.</li>
-<li><strong>Display-Only Mode</strong>: Enable &quot;Disable Playback Controls&quot; on any instance to hide all transport buttons and disable progress bar seeking.</li>
-</ul>
-]]></content>
-        <author>
-            <name>minster586</name>
-            <uri>https://github.com/minster586</uri>
         </author>
     </entry>
 </feed>

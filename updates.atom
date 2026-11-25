@@ -2,12 +2,67 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-25T08:02:48.000Z</updated>
+    <updated>2026-11-25T17:01:34.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows Vista/7/8.1 Balloon Notifications Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-balloon-notifications-restorer#1db1f371456e7411b70395663b2e27f67fd62faa</id>
+        <link href="https://windhawk.net/mods/win7-balloon-notifications-restorer"/>
+        <updated>2026-11-25T17:01:34.000Z</updated>
+        <content type="html"><![CDATA[<h1>Windows Vista/7/8.1 Balloon Notifications Restorer</h1>
+<p>This mod tries to convert supported Windows 10 and Windows 11 toast notifications
+into classic notification-area balloons inspired by Windows Vista, 7 and 8.1.</p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/notification.png" alt="Classic balloon notification"></p>
+<h2>Setup</h2>
+<ul>
+<li>Use a compatible notification area, such as Windows 7/8/8.1 Taskbar Recreation.</li>
+<li>Restart Explorer after installing the mod. The mod includes an Explorer hook
+for legacy balloon notifications; an existing Windows legacy balloon policy
+is also recognized.</li>
+</ul>
+<p>Supported notifications are converted on a best-effort basis for selected
+applications, including Discord, WhatsApp, Telegram, PowerShell, Chrome, Edge,
+Firefox, Brave, Opera, Vivaldi, Teams, Slack and Outlook. Executable names vary by app version, and
+inclusion does not guarantee compatibility. Other applications can be added
+using Windhawk's advanced process inclusion settings.</p>
+<p>The mod tries to turn supported toast content into notification-area requests.
+The notification area determines how those requests are displayed.</p>
+<p>Tested on Windows 11 24H2 with Windows 8.1 Taskbar Recreation using a
+PowerShell notification.</p>
+<h2>Credits</h2>
+<p>The Explorer registry-query hook is inspired by
+<a href="https://windhawk.net/mods/legacy-balloon-notifications">Legacy XP-style balloon notifications</a> by Anixx.</p>
+]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 8.1 Start Screen Recreation 1.3.0]]></title>
+        <id>https://windhawk.net/mods/win81-start-screen-recreation#e8116310d764553d91ec584d0d34f2acbc9b0c28</id>
+        <link href="https://windhawk.net/mods/win81-start-screen-recreation"/>
+        <updated>2026-11-25T17:01:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added best-effort live tiles</li>
+<li>Added support for up to eight custom tiles, each with a target, color, icon, and separate images for the four tile sizes</li>
+<li>Added best-effort touchscreen support (not tested by the author due to hardware limitations)</li>
+<li>Reintroduced the optional setting to sample desktop tile colors from application icons (Color sampling is best-effort)</li>
+<li>Added best-effort integration with Windows 8.1 Taskbar Recreation: when detected on the current monitor, it is prioritized on bottom-edge hover. The native taskbar remains the fallback when the companion is not detected</li>
+<li>Preserved the existing layout format. Custom images are read from local paths and are not copied by the mod</li>
+<li>Standardized and translated the new settings’ descriptions</li>
+<li>Applied minor graphic improvements</li>
+</ul>
+]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable taskbar per monitor 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-disable-per-monitor#a95d2c814194ae8a0ab80ec124f5289038179118</id>
@@ -741,42 +796,6 @@ is created, the approach worked out in
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[1 Letter Language Indicator 1.1]]></title>
-        <id>https://windhawk.net/mods/one-letter-language-indicator#4095aca81f4030254c8f8d87199dd6a37bdb71fb</id>
-        <link href="https://windhawk.net/mods/one-letter-language-indicator"/>
-        <updated>2026-11-25T01:04:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New <strong>Letter weight</strong> setting: font weight of the letter from 1 to 999 (100 Thin … 900 Black). 0 keeps the Windows weight (400).</li>
-<li>Overrides <code>TextBlock.FontWeight</code> on <code>InnerTextBlock</code> with the same property-callback mechanism as the other settings, and restores the original weight on unload or when set back to 0.</li>
-<li>Fixed: the indicator went back to the full text after switching the taskbar size between small and default.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Deen-0x</name>
-            <uri>https://github.com/Deen-0x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Background Dimmer 1.2.0]]></title>
-        <id>https://windhawk.net/mods/background-dimmer#c8f4d8fc48cf117a61fc76d342b32288b99579db</id>
-        <link href="https://windhawk.net/mods/background-dimmer"/>
-        <updated>2026-11-25T01:04:06.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Per-monitor dimming:</strong> configuration window lists the connected monitors under Active; unchecked ones stay always lit.</li>
-<li><strong>Improved menu vs dialog detection:</strong> new logic based of title bars. Windows with a title bar are treated as dialogs; small windows without one, like Office menus or Chrome extension panels, are treated as menus.</li>
-<li><strong>Fade:</strong> the window that loses focus dims gradually, including when a dialog opens or Alt+Tab, Start, the taskbar or the desktop takes focus.</li>
-<li><strong>Taskbar dimming</strong> (off by default): a click-through layer over each taskbar, hidden while the taskbar, Start or Alt+Tab has focus.</li>
-<li><strong>Image / Custom pattern</strong> replaces Image: a Scale setting (1–400%) takes the place of Size, and brightness, contrast and base color apply to the image like they do to the other patterns.</li>
-<li><strong>Tray icon click-action swap:</strong> click toggles dimming, right-click opens the configuration window.</li>
-<li><strong>New default configuration hotkey:</strong> Win+Ctrl+Shift+D, to match with possible Win+Shift+D on/off toggle shortcut.</li>
-</ul>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
         </author>
     </entry>
 </feed>

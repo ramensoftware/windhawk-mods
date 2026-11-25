@@ -1,3 +1,14 @@
+## 1.3.0 ([Nov 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e8116310d764553d91ec584d0d34f2acbc9b0c28/mods/win81-start-screen-recreation.wh.cpp))
+
+- Added best-effort live tiles
+- Added support for up to eight custom tiles, each with a target, color, icon, and separate images for the four tile sizes
+- Added best-effort touchscreen support (not tested by the author due to hardware limitations)
+- Reintroduced the optional setting to sample desktop tile colors from application icons (Color sampling is best-effort)
+- Added best-effort integration with Windows 8.1 Taskbar Recreation: when detected on the current monitor, it is prioritized on bottom-edge hover. The native taskbar remains the fallback when the companion is not detected
+- Preserved the existing layout format. Custom images are read from local paths and are not copied by the mod
+- Standardized and translated the new settings’ descriptions
+- Applied minor graphic improvements
+
 ## 1.2.0 ([Nov 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/208aff70c74897d4deff49304a06090ca069e814/mods/win81-start-screen-recreation.wh.cpp))
 
 - Improved the context menus to match the Windows 8/8.1 interface
