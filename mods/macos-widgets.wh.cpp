@@ -92,10 +92,10 @@ are never turned off.
 
 | Host | What is sent | When | Turned off by |
 |---|---|---|---|
-| api.open-meteo.com | The latitude and longitude of your city | Every 15 minutes, and when the city changes | Weather and Sunrise both off (and nothing is asked before a city is chosen) |
+| api.open-meteo.com | The latitude and longitude of your city | Every 15 minutes, and on every settings change | Weather and Sunrise both off (and nothing is asked before a city is chosen) |
 | geocoding-api.open-meteo.com | The city name you type | Only when you search for a city in the settings window | — |
 | query1.finance.yahoo.com | The stock symbols, one request each | Every 5 minutes | Stocks widget off (off by default) |
-| The news sites you add | Nothing beyond the request (one extra request per site to find its feed) | Every 15 minutes (1 minute after a failure) | News widget off (off by default; no sites until you add them) |
+| The news sites you add | Nothing beyond the request | Every 15 minutes. When an address is a page and not a feed, finding its feed takes up to 10 more requests: the feeds the page announces, links on the page that look like feeds (these can be on other hosts) and the usual places on the site (/feed, /rss, /rss.xml, /feed.xml, /index.xml, /atom.xml, /rss/&lt;site&gt;/). That happens the first time, again an hour after no feed was found, and again if the feed found goes 30 days without a story. A site that doesn't answer is left alone for 1, 2, 4… up to 60 minutes, and no other addresses are tried on it | News widget off (off by default; no sites until you add them) |
 | The hosts the feeds name for their cover images | Nothing beyond the request | Up to 30 images after each news update | News widget off |
 | Your calendar links | The link itself, which for a private iCal address includes its secret token | Every 15 minutes | Calendar widget off (off by default) |
 | Your Home Assistant | Your access token (`Authorization: Bearer`) | Every 5 seconds (every minute while it doesn't answer), and on each tap | Home widget off (off by default) or no token |
@@ -745,7 +745,7 @@ struct Settings {
     bool showClock = true, showWeather = true, showMusic = true, showSystem = true;
     int clockStyle = 0;  // 0 both (as the Mac), 1 hands only, 2 digital only
     std::wstring city;
-    std::wstring latitude = L"-23.55", longitude = L"-46.63";
+    std::wstring latitude, longitude;  // empty until a city is chosen
     bool lockPosition = false;
     bool showGrid = false;
     bool showCalendar = false, showWorld = false, showSun = false, showBattery = false, showNetwork = false,
@@ -3260,7 +3260,23 @@ static std::wstring AbsoluteUrl(const std::wstring& page, std::wstring href) {
 // (<link rel="alternate" type="application/rss+xml">), a link on the page that looks like one, or the usual places
 // (/feed, /rss...). What was found is remembered, so a site is only searched once
 static std::vector<std::pair<std::wstring, std::wstring>> g_feedFound;  // address -> its feed (network thread only)
-static std::vector<std::pair<std::wstring, ULONGLONG>> g_feedMissing;   // address -> when no feed was found
+struct FeedWait {
+    ULONGLONG until = 0;  // not asked again before this (GetTickCount64)
+    int fails = 0;        // failures in a row
+};
+static std::vector<std::pair<std::wstring, FeedWait>> g_feedWait;  // address -> how long to leave it alone
+
+// A site that failed is left alone for a while, longer each time: 1, 2, 4, 8... up to 60 minutes
+static void FeedFailed(const std::wstring& url, bool noFeed) {
+    FeedWait* w = FindIn(g_feedWait, url);
+    if (!w) {
+        g_feedWait.push_back({url, {}});
+        w = &g_feedWait.back().second;
+    }
+    w->fails++;
+    ULONGLONG minutes = noFeed ? 60 : std::min<ULONGLONG>(60, 1ULL << std::min(w->fails - 1, 6));
+    w->until = GetTickCount64() + minutes * 60 * 1000;
+}
 
 static long long ParseFeedDate(const std::wstring& raw);
 static long long UnixNow();
@@ -3284,18 +3300,36 @@ static long long NewestStory(const std::wstring& xml) {
 // is older than this doesn't count
 constexpr long long kStaleFeed = 30LL * 24 * 3600;
 
-static std::wstring FeedXml(std::wstring url) {
+// One request for the address; only when it's a page and not a feed, up to 10 more to find the feed (see the README)
+static std::wstring FeedXml(std::wstring url, std::wstring* feedUrl) {
     if (url.find(L"://") == std::wstring::npos) url = L"https://" + url;  // "g1.globo.com" is enough
     if (!IsWebUrl(url)) return L"";
+    *feedUrl = url;
+    if (FeedWait* w = FindIn(g_feedWait, url))
+        if (GetTickCount64() < w->until) return L"";
     if (auto* known = FindIn(g_feedFound, url)) {
         std::wstring xml = FromUtf8(HttpGetUrl(*known));
+        if (xml.empty()) {  // didn't answer: nothing else is tried
+            FeedFailed(url, false);
+            return L"";
+        }
         long long newest = IsFeed(xml) ? NewestStory(xml) : -1;
-        if (newest == 0 || (newest > 0 && UnixNow() - newest < kStaleFeed)) return xml;  // else searched again below
+        if (newest == 0 || (newest > 0 && UnixNow() - newest < kStaleFeed)) {
+            if (FeedWait* w = FindIn(g_feedWait, url)) w->fails = 0;
+            *feedUrl = *known;
+            return xml;
+        }
+        // No longer a feed, or abandoned: searched again below
     }
-    if (auto* when = FindIn(g_feedMissing, url))  // searched in vain not long ago: not again for half an hour
-        if (GetTickCount64() - *when < 30 * 60 * 1000) return L"";
     std::wstring page = FromUtf8(HttpGetUrl(url));
-    if (IsFeed(page)) return page;
+    if (page.empty()) {  // no network, blocked or gone: no guessing at other addresses on that site
+        FeedFailed(url, false);
+        return L"";
+    }
+    if (IsFeed(page)) {
+        if (FeedWait* w = FindIn(g_feedWait, url)) w->fails = 0;
+        return page;
+    }
     std::vector<std::wstring> tries;
     auto addTry = [&](const std::wstring& u) {
         if (!u.empty() && IsWebUrl(u) && std::find(tries.begin(), tries.end(), u) == tries.end()) tries.push_back(u);
@@ -3338,11 +3372,11 @@ static std::wstring FeedXml(std::wstring url) {
     if (!bestUrl.empty()) {
         if (auto* known = FindIn(g_feedFound, url)) *known = bestUrl;
         else g_feedFound.push_back({url, bestUrl});
+        if (FeedWait* w = FindIn(g_feedWait, url)) w->fails = 0;
+        *feedUrl = bestUrl;
         return bestXml;
     }
-    if (page.empty()) return L"";  // the site didn't answer (no internet yet?): tried again soon
-    if (auto* when = FindIn(g_feedMissing, url)) *when = GetTickCount64();
-    else g_feedMissing.push_back({url, GetTickCount64()});
+    FeedFailed(url, true);  // no feed on this site: searched again in an hour
     return L"";
 }
 
@@ -3355,7 +3389,8 @@ static bool FetchNews() {
     std::vector<std::vector<NewsItem>> perFeed;
     for (const auto& url : SplitList(GetSettings().newsFeeds, L",; \n")) {
         if (perFeed.size() >= 5 || !g_running) break;
-        std::wstring xml = FeedXml(url);
+        std::wstring feedUrl;
+        std::wstring xml = FeedXml(url, &feedUrl);
         if (xml.empty()) continue;
         std::vector<NewsItem> items;
         bool atom = xml.find(L"<entry") != std::wstring::npos && xml.find(L"<item") == std::wstring::npos;
@@ -3373,10 +3408,10 @@ static bool FetchNews() {
                 size_t lp = xml.find(L"<link", p);
                 if (lp != std::wstring::npos && lp < end) n.link = AttrOf(xml, lp, L"href");
             }
-            if (!IsWebUrl(n.link)) n.link.clear();
+            if (!n.link.empty() && !IsWebUrl(n.link)) n.link = AbsoluteUrl(feedUrl, n.link);  // a relative link (or "")
             n.source = source;
             n.image = NewsImage(xml, p, end);
-            if (!IsWebUrl(n.image)) n.image.clear();
+            if (!n.image.empty() && !IsWebUrl(n.image)) n.image = AbsoluteUrl(feedUrl, n.image);
             for (PCWSTR tag : {L"pubDate", L"published", L"updated", L"dc:date"}) {
                 if (n.when) break;
                 n.when = ParseFeedDate(TagText(xml, p, end, tag));
@@ -3409,7 +3444,7 @@ static bool FetchNews() {
         for (auto& f : perFeed)
             if (i < f.size()) {
                 bool dup = false;  // the same story in two sections
-                for (auto& o : out) dup = dup || o.link == f[i].link || o.title == f[i].title;
+                for (auto& o : out) dup = dup || (!o.link.empty() && o.link == f[i].link) || o.title == f[i].title;
                 if (!dup) out.push_back(f[i]);
             }
     // The headlines go out at once; the covers are downloaded after, on their own thread (they'd hold up the music,
@@ -3849,6 +3884,7 @@ static void NetThread() {
             newsNow = g_newsRefresh;
             g_weatherRefresh = g_eventsRefresh = g_newsRefresh = false;
         }
+        RunHomeCommands();  // taps on the Home widget (a slow Home Assistant holds up only this thread)
         ULONGLONG now = GetTickCount64();
         // Only when Weather or Sunrise is shown, and there is a city to ask about
         if ((s.showWeather || s.showSun) && HasCity(s) && (weatherNow || !lastWeather || now - lastWeather > 15 * 60 * 1000)) {
@@ -3883,7 +3919,7 @@ static void NetThread() {
 
         std::unique_lock<std::mutex> lock(g_dataMutex);
         g_cv.wait_for(lock, std::chrono::seconds(1),
-                      [] { return !g_running || g_weatherRefresh || g_eventsRefresh || g_newsRefresh; });
+                      [] { return !g_running || g_weatherRefresh || g_eventsRefresh || g_newsRefresh || !g_haCommands.empty(); });
     }
     {
         std::lock_guard<std::mutex> lock(g_dataMutex);
@@ -3928,8 +3964,6 @@ static void DataThread() {
             lastPhoto = now;
         }
         if (!g_running) break;
-        RunHomeCommands();
-        if (!g_running) break;
         if ((s.showNotes || s.showReminders) && (!lastNotes || now - lastNotes > 3 * 1000)) {
             ReadNotesAndReminders();
             lastNotes = now;
@@ -3937,7 +3971,7 @@ static void DataThread() {
         if (g_uiThreadId) PostThreadMessageW(g_uiThreadId, WM_APP_REDRAW, 0, 0);
 
         std::unique_lock<std::mutex> lock(g_dataMutex);
-        g_cv.wait_for(lock, std::chrono::seconds(1), [] { return !g_running || !g_commands.empty() || !g_haCommands.empty(); });
+        g_cv.wait_for(lock, std::chrono::seconds(1), [] { return !g_running || !g_commands.empty(); });
     }
     {
         std::lock_guard<std::mutex> lock(g_dataMutex);
@@ -4596,8 +4630,10 @@ struct Widget {
 };
 
 static std::vector<Widget*> g_widgets;
-static ComPtr<ID2D1Factory1> g_d2d;
-static ComPtr<IDWriteFactory> g_dw;
+// Not destroyed at process exit: the process ends during the UI thread's teardown (see WhTool_ModUninit), and the
+// single-threaded factory must not be released from the exiting thread
+[[clang::no_destroy]] static ComPtr<ID2D1Factory1> g_d2d;
+[[clang::no_destroy]] static ComPtr<IDWriteFactory> g_dw;
 static Settings g_ui;  // the UI thread's copy of the settings
 static const wchar_t kClassName[] = L"MacOSWidgets_Widget";
 static UINT_PTR g_secondTimer = 0, g_animTimer = 0, g_glassTimer = 0;
@@ -7517,7 +7553,6 @@ struct CfgUi {
 };
 static CfgUi g_cfg;
 static std::wstring g_cityQuery;
-static std::atomic<int> g_searches{0};  // city searches still running (waited for when the mod unloads)
 // Rows that aren't settings: the cities found (item = kPlaceRow - index) and the search status (kStatusRow)
 static const int kPlaceRow = -1000, kStatusRow = -2000;
 
@@ -8144,11 +8179,7 @@ static void CfgCommitEdit() {
             return;
         }
         g_placeStatus = Fmt(TF(L"Procurando \u201C%ls\u201D…"), g_cityQuery.c_str());
-        g_searches++;
-        std::thread([q = g_cityQuery] {
-            SearchPlaces(q);
-            g_searches--;
-        }).detach();
+        std::thread([q = g_cityQuery] { SearchPlaces(q); }).detach();
         return;
     }
     if (it.type == kCfgColor) {
@@ -11145,18 +11176,14 @@ static DWORD WINAPI UiThread(LPVOID) {
 // ---------------------------------------------------------------------------
 
 // A worker thread whose unexpected error only stops that thread's widgets from updating, not the whole process
-static std::atomic<int> g_workersAlive{0};
-
 template <class F>
 static std::thread GuardedThread(PCWSTR name, F body) {
-    g_workersAlive++;
     return std::thread([name, body] {
         try {
             body();
         } catch (...) {
             Wh_Log(L"%s: unexpected error, stopped updating", name);
         }
-        g_workersAlive--;
     });
 }
 
