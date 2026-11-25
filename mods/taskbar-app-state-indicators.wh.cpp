@@ -52,6 +52,9 @@ each icon, and they move along that frame whenever something changes.
   top center, whether the app is running, minimized or not running. A
   pinned app's top corners then stay apart instead of forming a cap,
   leaving it its place.
+- **Active app** (optional, off by default): a dot or another shape at the
+  bottom center of the app in front, in your accent color by default. Its
+  bottom corners then stay apart instead of forming a cup.
 
 The half dot and half diamond keep only the half facing the icon: their
 flat side lies on the frame's line. The branch is a plus without its outer
@@ -94,8 +97,9 @@ Progress keeps moving even with them off, like the native progress bar.
 - **Apps With Several Windows**, **Apps With a Badge**: the shape (none, a
   dot, a square, a diamond, a half dot, half diamond or branch, a plus, X
   or equal sign), whether the count shows instead, their sizes and color.
-- **Pinned Apps**: none, a dot, a square, a diamond, a half dot, half
-  diamond or branch, a plus, an X or an equal sign, its size and color.
+- **Pinned Apps**, **Active App**: none, a dot, a square, a diamond, a half
+  dot, half diamond or branch, a plus, an X or an equal sign, its size and
+  color.
 - **Progress**: its colors, and the pulse's size.
 - **Attention**: on or off, and its color.
 - **Animations**: on or off, and how long a movement takes.
@@ -146,7 +150,7 @@ inactive and the log says so.
     $description: Line thickness of the corner marks and the underline, in pixels. It grows inwards from the frame's outer edge. The app in front can have its own, under Appearance.
   - CornerJoin: pairs
     $name: Connect the corners
-    $description: Connecting the top two and bottom two joins the bottom corners into a cup under the icon and the top ones into a cap over it. Connecting all corners also joins each side's two corners along that side, unless an indicator sits on it (the several-windows indicator on the left, the badge on the right, the pinned-app indicator on top), so a maximized window without any of them gets the complete frame.
+    $description: Connecting the top two and bottom two joins the bottom corners into a cup under the icon and the top ones into a cap over it, except where the active-app indicator (bottom) or the pinned-app indicator (top) sits. Connecting all corners also joins each side's two corners along that side, unless the several-windows indicator (left) or the badge (right) sits on it, so a maximized window without any indicator gets the complete frame.
     $options:
     - split: Split corners
     - pairs: Connect top two and bottom two
@@ -293,6 +297,28 @@ inactive and the log says so.
     $name: Color
     $description: Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
   $name: Pinned Apps
+- ActiveApp:
+  - Mode: none
+    $name: Shape
+    $description: Shown at the bottom center of the frame for the app in front. Its bottom corners aren't joined into a cup then, leaving the indicator its place; other apps keep their cup.
+    $options:
+    - none: None
+    - dot: Dot
+    - square: Square
+    - diamond: Diamond
+    - halfdot: Half dot
+    - halfdiamond: Half diamond
+    - branch: Branch
+    - plus: Plus sign
+    - cross: X sign
+    - equal: Equal sign
+  - Diameter: '5'
+    $name: Shape size
+    $description: The dot's diameter, the width and height of the square, diamond, plus, X or equal sign, or the length of a half dot's or half diamond's flat side or of the branch's line, in pixels.
+  - Color: ''
+    $name: Color
+    $description: Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
+  $name: Active App
 - Progress:
   - FillColor: '#0F7B0F|#6CCB5F'
     $name: Progress color
@@ -463,6 +489,14 @@ struct Settings {
     double PinnedDiameter = 5.0;
     std::vector<winrt::Windows::UI::Color> PinnedLight, PinnedDark;
 
+    // The app in front: a dot (or a sign) centered on the frame's bottom
+    // edge. With the corners connected, its bottom corners stay split so it
+    // keeps its place.
+    bool ActiveAppEnabled = false;
+    int ActiveAppKind = kKindNone;
+    double ActiveAppDiameter = 5.0;
+    std::vector<winrt::Windows::UI::Color> ActiveAppLight, ActiveAppDark;  // empty: the accent color
+
     // Apps with several windows: a dot (or a sign, or the window count)
     // centered on the frame's left edge.
     bool MultiEnabled = true;
@@ -523,13 +557,14 @@ struct FrameMetrics {
 // the three dots. The underline is the BL and BR shapes parked side by side
 // as its two halves. The signs and counts are drawn apart from the path
 // (see IndicatorRenderer::Sign and ButtonEntry::CountLabel).
-constexpr int kSlotTL = 0, kSlotTR = 1, kSlotBR = 2, kSlotBL = 3, kSlotDot = 4, kSlotBadge = 5, kSlotPinned = 6;
-constexpr int kSlotCount = 7;
+constexpr int kSlotTL = 0, kSlotTR = 1, kSlotBR = 2, kSlotBL = 3, kSlotDot = 4, kSlotBadge = 5, kSlotPinned = 6,
+              kSlotActiveApp = 7;
+constexpr int kSlotCount = 8;
 
 // The signs' places (see IndicatorRenderer::Sign): the several-windows
 // indicator's on the left edge, the badge's on the right, the pinned app's
-// at the top.
-constexpr int kSignMulti = 0, kSignBadge = 1, kSignPinned = 2, kSignCount = 3;
+// at the top, the active app's at the bottom.
+constexpr int kSignMulti = 0, kSignBadge = 1, kSignPinned = 2, kSignActiveApp = 3, kSignCount = 4;
 
 // Where an animation of ours is, worked out from how it was started (see
 // ScalarTweenNow): a restarted animation begins there, explicitly. A
@@ -615,7 +650,8 @@ struct IndicatorRenderer {
     FillTwin fills[4];                              // TL, TR, BR, BL
 
     // The signs, one per indicator place (kSignMulti on the left edge,
-    // kSignBadge on the right, kSignPinned at the top): a plus (a horizontal
+    // kSignBadge on the right, kSignPinned at the top, kSignActiveApp at the
+    // bottom): a plus (a horizontal
     // and a vertical line) or an X (two diagonal ones) crossing at the place,
     // or a filled square or diamond (a square turned 45 degrees, its points
     // where the plus's ends are), or the half of a dot or a diamond facing
@@ -1061,6 +1097,13 @@ void LoadSettings() {
     ParseGradientColorPair(pinnedColStr.get(), g_settings.PinnedLight, g_settings.PinnedDark);
     WindhawkUtils::StringSetting pinnedDiaStr(Wh_GetStringSetting(L"Pinned.Diameter"));
     g_settings.PinnedDiameter = std::max(1.0, ParseDouble(pinnedDiaStr.get(), 5.0));
+
+    g_settings.ActiveAppKind = ReadIndicatorKind(L"ActiveApp.Mode", kKindNone);
+    g_settings.ActiveAppEnabled = g_settings.ActiveAppKind != kKindNone;
+    WindhawkUtils::StringSetting activeAppColStr(Wh_GetStringSetting(L"ActiveApp.Color"));
+    ParseGradientColorPair(activeAppColStr.get(), g_settings.ActiveAppLight, g_settings.ActiveAppDark);
+    WindhawkUtils::StringSetting activeAppDiaStr(Wh_GetStringSetting(L"ActiveApp.Diameter"));
+    g_settings.ActiveAppDiameter = std::max(1.0, ParseDouble(activeAppDiaStr.get(), 5.0));
 
     g_settings.MultiKind = ReadIndicatorKind(L"Multi.Mode", kKindDot);
     g_settings.MultiNumber = Wh_GetIntSetting(L"Multi.Number") != 0;
@@ -3493,6 +3536,7 @@ bool EnsureRenderer(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
     shapes.Append(r.slots[kSlotDot].shape);
     shapes.Append(r.slots[kSlotBadge].shape);
     shapes.Append(r.slots[kSlotPinned].shape);
+    shapes.Append(r.slots[kSlotActiveApp].shape);
     for (auto& sign : r.signs) {
         sign.container = r.compositor.CreateContainerShape();
         sign.brush = r.compositor.CreateColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0});
@@ -3565,7 +3609,8 @@ bool UpdateFramePath(IndicatorRenderer& r, const FrameBox& box, const Settings& 
     // above 1. The same for both thicknesses, so activating an app doesn't
     // move the visual.
     double pad = std::max({localSettings.FrameThickness, localSettings.ActiveThickness, localSettings.MultiDiameter,
-                           localSettings.BadgeDiameter, localSettings.PinnedDiameter}) + 2.0 +
+                           localSettings.BadgeDiameter, localSettings.PinnedDiameter,
+                           localSettings.ActiveAppDiameter}) + 2.0 +
                  std::max(0.0, localSettings.PulseScale - 1.0) * std::max(m.W, m.H) / 2.0;
 
     bool cornersSame = SameFrame(r.metrics, m);
@@ -3735,6 +3780,10 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
     // apps, running or not (a button with no window at all is a pinned app
     // that isn't running).
     bool pinnedDot = localSettings.PinnedEnabled && ((state == 0 && windowCount == 0) || pinnedState == 1);
+    // The active-app indicator, at the bottom center: on the app in front,
+    // with a window open or maximized (a minimized app isn't in front, and
+    // its underline has that place).
+    bool activeDot = localSettings.ActiveAppEnabled && isActive && (state == 1 || state == 2);
     const double hiddenAt[4] = {m.P, 0.0, m.sBottomMid, m.sBottomMid};
     for (int k = 0; k < 4; k++) {
         auto& t = targets[k];
@@ -3784,8 +3833,12 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
         auto& tr = targets[kSlotTR];
         auto& br = targets[kSlotBR];
         auto& bl = targets[kSlotBL];
-        if (br.shown) { br.b = m.sBottomMid; br.endCap = CompositionStrokeCap::Flat; }
-        if (bl.shown) { bl.a = m.sBottomMid; bl.startCap = CompositionStrokeCap::Flat; }
+        // On the app in front with its indicator on, the bottom center is
+        // the indicator's place: the bottom corners stay apart.
+        if (!activeDot) {
+            if (br.shown) { br.b = m.sBottomMid; br.endCap = CompositionStrokeCap::Flat; }
+            if (bl.shown) { bl.a = m.sBottomMid; bl.startCap = CompositionStrokeCap::Flat; }
+        }
         // On a pinned app with its indicator on, the top center is the
         // indicator's place: the top corners stay apart, like the side
         // corners around the other dots.
@@ -3962,6 +4015,32 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
         // Or a sign in the same place.
         SetSignTarget(signs[kSignPinned], pinnedDot, localSettings.PinnedKind, mb.cx, mb.y0,
                       localSettings.PinnedDiameter, t.colors, 0.0, 1.0);
+    }
+
+    // The active-app dot: the pinned dot's mirror, centered on the bottom
+    // edge (where the cup's halves and the underline's meet), for the app in
+    // front, in the accent color unless it has its own. It grows on the app
+    // coming to the front and shrinks on the one leaving it. With a sign
+    // option, the sign takes its place.
+    {
+        auto& t = targets[kSlotActiveApp];
+        constexpr double kDotEpsilon = 0.05;
+        t.thickness = localSettings.ActiveAppDiameter;
+        t.colors = HighContrastOn()
+            ? std::vector<winrt::Windows::UI::Color>{SystemColor(COLOR_HIGHLIGHT)}
+            : ResolveThemedColors(localSettings.ActiveAppLight, localSettings.ActiveAppDark, 1.0, 1.0, isLight,
+                                  localSettings.AccentShading);
+        t.startCap = t.endCap = CompositionStrokeCap::Round;
+        t.hidden = mb.sBottomMid;
+        t.grow = true;
+        t.trail = false;
+        t.shown = activeDot && localSettings.ActiveAppKind == kKindDot;
+        t.a = mb.sBottomMid - kDotEpsilon;
+        t.b = mb.sBottomMid + kDotEpsilon;
+
+        // Or a sign in the same place, facing up towards the icon.
+        SetSignTarget(signs[kSignActiveApp], activeDot, localSettings.ActiveAppKind, mb.cx, mb.y1,
+                      localSettings.ActiveAppDiameter, t.colors, 0.0, -1.0);
     }
 }
 
@@ -5296,7 +5375,9 @@ struct XamlRootWatch {
     std::shared_ptr<double> scale;  // the last one seen, shared with the handler
 };
 std::mutex g_xamlRootWatchesMutex;
-[[clang::no_destroy]] std::optional<std::vector<XamlRootWatch>> g_xamlRootWatches{std::in_place};
+// Weak references, tokens and heap only, so safe to destroy at Explorer's
+// exit; reset() at unload marks it closed (see UnwatchXamlRoots).
+std::optional<std::vector<XamlRootWatch>> g_xamlRootWatches{std::in_place};
 
 void WatchXamlRootScale(FrameworkElement const& element) {
     XamlRoot root{nullptr};
