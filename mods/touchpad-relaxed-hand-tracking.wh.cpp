@@ -2,7 +2,7 @@
 // @id              touchpad-relaxed-hand-tracking
 // @name            Touchpad Relaxed Hand Tracking
 // @description     Enables 5-2 fingers mouse pointer tracking for improved hand ergonomics (admin windows need Windhawk 2)
-// @version         1.2.0
+// @version         1.2.1
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
 // @include         windhawk.exe
@@ -20,7 +20,7 @@ Move the pointer with more fingers resting on a precision touchpad, as if glidin
 
 ## How it works
 
-- **Trigger:** with 5, down to 2 fingers touching the pad. When only 1, Windows takes control. To avoid lag, activation has to be inclusive, where 4 contacts (even if deactivated) contains 3 and 2, and those will be triggered when enabled. 
+- **Trigger:** with 5, down to 2 fingers touching the pad. When only 1, Windows takes control. To avoid lag, activation has to be inclusive, where 4 contacts (even if disabled) contains 3 and 2, and those will be triggered when enabled. 
 - **Disarm:** after all fingers leave the touchpad. Lifting some keeps the tracking going.
 - **Movement:** each finger influences as much as it moves. Resting fingers fade and don't fight the others. The thumb is completely ignored (unless it is the only touching, when Windows takes control). With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
 - **Click:** you only need to lift the tapping finger(s). Same as native - finger(s) (double) tap to (double) click, tap-hold to drag, tap-tap-hold to drag-select text by words, etc. **A hold lasts until another tap or the whole hand leaves the pad**. Excludes the thumb.
@@ -28,25 +28,23 @@ Move the pointer with more fingers resting on a precision touchpad, as if glidin
 
 ## The thumb
 
-It only adds to start tracking and for the speed multiplier: **never moves the pointer or clicks with more fingers touching the pad.** Alone, Windows takes control. Touchpads read a resting thumb poorly (it slides at its own angle and is often split in two touches), so leaving it out keeps the movement steady. It's recognized by where it lands: the farthest point inside the hand (set by the **Hand** option) on the lower third of the pad or, with five contacts down, always the farthest inside.
+It only adds to start tracking and for the speed multiplier: **never moves the pointer or clicks with more fingers touching the pad.** Alone, Windows takes control. Touchpads read a resting thumb poorly (it slides at its own angle and is often split in two touches), so leaving it out keeps the movement steady.   It's recognized by where it lands: the farthest point inside the hand (set by the **Hand** option) on the lower third of the pad or, with five contacts down, always the farthest inside. Prefer fast movements and sudden direction changes with only the opposing fingers.
 
 ## 4 and 3 finger tracking
 
-The options to start with four or three fingers conflict with the respective Windows swipes. **Disable them in Settings → Bluetooth & devices → Touchpad → Four-finger gestures (or Three) → Swipes: Nothing**. Otherwise Windows simultaneously triggers the swipe. Four and three-finger taps can keep their actions. If the Three Finger Drag mod is installed and set to the same finger count, both mods respond to the same swipe, so give them different counts.
+The options to start with four or three fingers conflict with the respective Windows swipes. **Disable them in Settings → Bluetooth & devices → Touchpad → Four-finger gestures (or Three) → Swipes: Nothing**. Otherwise Windows simultaneously triggers the swipe. Four and three-finger taps can keep their actions. If [Three Finger Drag](https://windhawk.net/mods/three-finger-drag) is installed, both mods will also respond.
 
 ## 2-finger tracking
 
-When active, two fingers do everything: glide, right click (tap) and scroll (tap-slide). Windows' own two-finger gestures have to be disabled in **Settings → Bluetooth & devices → Touchpad**: uncheck **Scroll & zoom → Drag two fingers to scroll** and **Taps → Tap with two fingers to right-click**. Otherwise both commands respond. On Windhawk 1.x, with two-finger tracking active, programs running as administrator get no two-finger scroll at all, since Windows' will be disabled and the mod can't reach them.
+When active, two fingers do everything: track, right click (tap) and scroll (tap-slide). Windows' own two-finger gestures have to be disabled in **Settings → Bluetooth & devices → Touchpad**: uncheck **Scroll & zoom → Drag two fingers to scroll** and **Taps → Tap with two fingers to right-click**. Otherwise both commands respond. On Windhawk 1.x, with two-finger tracking active, programs running as administrator get no two-finger scroll at all, since Windows' will be disabled and the mod can't reach them.
 
 ## Speed
 
-The mod learns the touchpad's native speed and acceleration by watching ordinary one-finger use: for each range of finger speed, it compares how far the finger moved with how far Windows moved the pointer. The glide reproduces that curve, and the multipliers apply on top of it: **1.0 is the same as native**, 1.5 is 50% faster. When the touchpad speed is changed in Windows settings, the curve adjusts with use.
-
-Right after installing, before anything is learned, the glide uses a default speed. Using the touchpad normally for a few minutes, with slow and fast movements, is enough for it to learn.
+Right after installing, more-fingers tracking uses a default internal curve. The mod learns the touchpad's native speed and acceleration by watching some ordinary one-finger use, and reproduces its curve. When touchpad speed is modified in Windows settings, the curve adjusts with use. Multipliers for tracking with more and less fingers can be applied. **Prefer reaching with 5-3 fingers faster speed, and adjust/click/select with precise 2-1 fingers slower speed.**
 
 ## Diagnostics overlay
 
-Off by default. Set a **Diagnostics overlay hotkey** to open a window that shows how the mod reads each finger: green steers the pointer (bigger, more weight), gray rests, dark gray is the thumb, yellow may still tap, blue scrolls, orange holds, and a red ring is a palm. Dotted lines separate the pad's safety edge band and thumb zone, both for filtering and increased precision.
+Set a **Diagnostics overlay hotkey** to open a window that shows how the mod reads each finger: green steers the pointer (bigger, more weight), gray rests, dark gray is the thumb, yellow may still tap, blue scrolls, orange holds, and a red ring is a palm. Dotted lines separate the pad's safety edge band and thumb zone, both for filtering and increased precision.
 
 ## Limitations
 
@@ -57,7 +55,7 @@ Off by default. Set a **Diagnostics overlay hotkey** to open a window that shows
 
 ## Credits
 
-Reading the touchpad follows the approach of the [Three Finger Drag](https://windhawk.net/mods/three-finger-drag) mod by RodrigoThomazi, under the GPL v3.
+Reading the touchpad follows the approach of [Three Finger Drag](https://windhawk.net/mods/three-finger-drag) mod by RodrigoThomazi, under the GPL v3.
 */
 // ==/WindhawkModReadme==
 
@@ -65,13 +63,13 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
 /*
 - hand: right
   $name: Hand
-  $description: The hand on the touchpad. Helps filter out the thumb's contrary movements.
+  $description: The hand on the touchpad. Helps identify the thumb to filter out its contrary movements. 
   $options:
   - right: Right
   - left: Left
 - tapToClick: high
   $name: Tap sensitivity
-  $description: Tapping with one or two fingers while others rest (three and four-finger taps belong to Windows settings). Low ignores more accidental touches, but needs firmer taps; High is the opposite.
+  $description: Tapping with one or two fingers while others rest (three and four-finger taps belong to Windows settings). Low ignores more accidental touches, but requires firmer taps; High is the opposite.
   $options:
   - "off": "Off"
   - low: Low
@@ -80,12 +78,12 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
 - tapFeedback: false
   $name: Tap and hold feedback
   $description: A small dot briefly appears beside the pointer when taps and holds are captured, since there's no button feedback.
-- multiplierMore: "1.5"
-  $name: 5-3 fingers speed multiplier
-  $description: When more fingers are gliding and you'd need room to travel. 1.0 is the system's touchpad speed and acceleration, 1.5 is 50% faster.
+- multiplierMore: "2.0"
+  $name: 5-3 fingers moving speed multiplier
+  $description: When more fingers move and you'd need room to travel. 1.0 is the system's touchpad speed and acceleration, 1.5 is 50% faster.
 - multiplierLess: "1.0"
-  $name: 2-1 fingers speed multiplier
-  $description: When fewer fingers move or touch-glide the pad. 1.0 is native.
+  $name: 2-1 fingers moving speed multiplier
+  $description: When fewer fingers move, even with more touching the pad. 1.0 is native.
 - armFive: true
   $name: 5-finger tracking
   $description: The mod takes over with five contacts, thumb included. Off, it only starts with the counts enabled below.
@@ -160,6 +158,9 @@ constexpr int kFingers = 5;
 // one stays, so that the multiplier doesn't flap.
 constexpr double kHandMovers = 2.7;
 constexpr double kFewMovers = 2.3;
+// The lower multiplier only takes over after the count stays under kFewMovers this long of movement: the fingers
+// don't stop or start together, and their dip at every stop and start dropped the hand to the lower multiplier.
+constexpr DWORD kFewHoldMs = 100;
 // A scroll's movement is judged over kSpeedWindowSec, like the glide's: under this, it's the resting fingers'
 // jitter, which goes back and forth and cancels out. Judged frame by frame, slow scrolling, which comes as one
 // unit of the pad every few frames, was all dropped as jitter: nothing moved, then it jumped.
@@ -218,7 +219,7 @@ constexpr double kThumbBelowMm = 15.0;
 // taken for the thumb: a contact landing within kReturnMs and kReturnMm of where one left is that finger back,
 // and keeps what it was.
 constexpr DWORD kReturnMs = 250;
-constexpr double kReturnMm = 15.0;
+constexpr double kReturnMm = 5.0;
 // A thumb lying flat can be reported as two contacts: one landing this close to the thumb, and closer to it than
 // to any finger, is part of it, above the zone too: its tip half lies there, and at half this distance it became
 // a finger which steered at the glide's start. That part comes and goes as the thumb rolls: it doesn't tap, and
@@ -250,6 +251,10 @@ constexpr double kHoldNearMm = 12.0;
 // A finger at the edge of the pad slips off it and back, and the touchpad reports a new contact each time, which
 // tapped: contacts landing this close to the edge never tap, pair or start a hold.
 constexpr double kEdgeMm = 5.0;
+// Touchpads commonly report five contacts at most: with five down and the thumb split in two, the pad takes turns
+// among them, and resting fingers vanished and came back as new contacts, which tapped. With five contacts down and
+// the thumb among them, a contact landing within this long of one vanishing is that swap: it lands as a flicker.
+constexpr DWORD kSwapMs = 100;
 // The first tap of a hold is judged looser than a click: a finger which came down after the start and lifted
 // within these, even if it didn't click, starts a hold when it comes back. A click needs the stricter profile, a
 // tap-and-hold only needs its return.
@@ -336,7 +341,7 @@ constexpr double kPinchMm = 0.2;
 // Frames processed back to back would give a near-zero interval and spike the measured speed.
 constexpr double kMinFrameSec = 0.005;
 
-std::atomic<double> g_multMore{1.5};
+std::atomic<double> g_multMore{2.0};
 std::atomic<DWORD> g_lastReportTick;
 std::atomic<DWORD> g_pinchTick;
 std::atomic<double> g_multLess{1.0};
@@ -453,6 +458,7 @@ struct {
     bool anchorValid;
     std::unordered_map<ULONG, std::pair<double, double>> last;  // id -> previous position, mm
     bool fewMoving;  // the lower speed multiplier applies
+    DWORD fewSince;  // when the movers count went under kFewMovers, 0 while it isn't
     double accX, accY;
     std::unordered_map<ULONG, Track> tracks;
     bool recentClick;
@@ -473,6 +479,7 @@ struct {
     bool tapDown;        // a first tap's button is down, its release waiting for a possible hold
     int lastHand;  // contacts down which aren't the thumb
     DWORD countChangeTime;
+    DWORD lossTime;  // when a contact last vanished, see kSwapMs
     std::vector<ULONG> refIds;  // the fingers which move the pointer
     std::unordered_map<ULONG, std::deque<TrailPoint>> trails;  // every finger's last kWeightWindowSec
     std::deque<Step> steps;                                    // the glide's last frames, newest last
@@ -601,7 +608,7 @@ bool ParseHotkey(PCWSTR text, UINT& mods, UINT& key) {
 }
 
 void LoadSettings() {
-    g_multMore = ReadMultiplier(L"multiplierMore", 1.5);
+    g_multMore = ReadMultiplier(L"multiplierMore", 2.0);
     g_multLess = ReadMultiplier(L"multiplierLess", 1.0);
     g_armTwo = Wh_GetIntSetting(L"armTwo");
     UINT mods = 0;
@@ -2138,6 +2145,7 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<
         }
         Track t = it->second;
         it = g_state.tracks.erase(it);
+        g_state.lossTime = now;
         // The thumb is dead to taps: it lifting sends no owed click early and isn't a resting finger rising.
         if (t.thumb) {
             continue;
@@ -2235,7 +2243,9 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<
             // A flicker is a contact back where one just left, not any contact leaving anywhere on the pad: a thumb
             // slipping off the edge or losing its Confidence made the fingers' taps fail.
             auto back = g_state.backAfter.find(c->id);
-            bool flicker = back != g_state.backAfter.end() && back->second <= tap.flickerMs;
+            bool swap = touching >= kFingers && now - g_state.lossTime <= kSwapMs &&
+                        std::any_of(tips.begin(), tips.end(), [](const Contact* o) { return IsThumb(o->id); });
+            bool flicker = (back != g_state.backAfter.end() && back->second <= tap.flickerMs) || swap;
             t.thumb = IsThumb(c->id);
             // The thumb, a flicker and a contact at the edge land on their own: they neither pair with a finger
             // landing at the same time nor cancel its tap, as the hand coming down does.
@@ -3305,6 +3315,7 @@ void ProcessFrame() {
         g_state.armed = true;
         g_state.armTime = now;
         g_state.fewMoving = count <= 2;
+        g_state.fewSince = 0;
         SetWheelBlock(true);
         SetTimer(g_hWnd, kStaleTimerId, kStaleFrameMs, nullptr);
         Wh_Log(L"Glide started");
@@ -3413,11 +3424,22 @@ void ProcessFrame() {
         if (g_vizOn) {
             g_viz.movers = movers;
         }
-        if (movers >= kHandMovers) {
-            g_state.fewMoving = false;
-        } else if (movers <= kFewMovers) {
-            g_state.fewMoving = true;
+        if (movers <= kFewMovers) {
+            if (!g_state.fewSince) {
+                g_state.fewSince = now | 1;
+            }
+            // Signed: with now even, fewSince is now + 1, one ms ahead.
+            if ((LONG)(now - g_state.fewSince) >= (LONG)kFewHoldMs) {
+                g_state.fewMoving = true;
+            }
+        } else {
+            g_state.fewSince = 0;
+            if (movers >= kHandMovers) {
+                g_state.fewMoving = false;
+            }
         }
+    } else {
+        g_state.fewSince = 0;
     }
 
     // Only the fingers which started the glide move the pointer, until they have all lifted: then those left
