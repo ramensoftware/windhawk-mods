@@ -1984,7 +1984,11 @@ void SetLoopingAnimationsPaused(FrameworkElement const& element, bool paused) {
 // the entry, so a visual's address being reused can't mix them up.
 constexpr float kHideClipInset = 100000.0f;
 std::mutex g_hideClipsMutex;
-[[clang::no_destroy]] std::unordered_map<void*, wuc::CompositionClip> g_hideClipPrevious;
+// Kept out of the CRT's global destructors (composition clips must not be
+// released at Explorer's exit); reset() at unload is its release path, like
+// g_entries'.
+[[clang::no_destroy]] std::optional<std::unordered_map<void*, wuc::CompositionClip>>
+    g_hideClipPrevious{std::in_place};
 
 bool HasHideClip(wuc::Visual const& visual) {
     auto inset = visual.Clip().try_as<wuc::InsetClip>();
@@ -2003,17 +2007,19 @@ void SetHideClip(wuc::Visual const& visual, bool on) {
         {
             std::lock_guard<std::mutex> lock(g_hideClipsMutex);
             // Not operator[]: a CompositionClip has no default constructor.
-            g_hideClipPrevious.insert_or_assign(winrt::get_abi(visual), previous);
+            if (g_hideClipPrevious) g_hideClipPrevious->insert_or_assign(winrt::get_abi(visual), previous);
         }
         visual.Clip(clip);
     } else if (HasHideClip(visual)) {
         wuc::CompositionClip previous{nullptr};
         {
             std::lock_guard<std::mutex> lock(g_hideClipsMutex);
-            auto it = g_hideClipPrevious.find(winrt::get_abi(visual));
-            if (it != g_hideClipPrevious.end()) {
-                previous = it->second;
-                g_hideClipPrevious.erase(it);
+            if (g_hideClipPrevious) {
+                auto it = g_hideClipPrevious->find(winrt::get_abi(visual));
+                if (it != g_hideClipPrevious->end()) {
+                    previous = it->second;
+                    g_hideClipPrevious->erase(it);
+                }
             }
         }
         visual.Clip(previous);
@@ -5713,11 +5719,11 @@ void WINAPI UnloadCleanupOnTaskbarThread(void* param) {
     }
     g_virtualDesktopManager = nullptr;
     g_virtualDesktopManagerTried = false;
-    // Every badge was shown again above, its previous clip put back; drop
-    // what's left (elements gone meanwhile).
+    // Every badge was shown again above, its previous clip put back; release
+    // what's left (elements gone meanwhile), the map's storage with it.
     {
         std::lock_guard<std::mutex> lock(g_hideClipsMutex);
-        g_hideClipPrevious.clear();
+        g_hideClipPrevious.reset();
     }
 }
 
