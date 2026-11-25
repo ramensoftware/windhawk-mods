@@ -15,6 +15,10 @@
 # macOS 26 Tahoe Dock
 A standalone **macOS 26 Tahoe Liquid Glass Dock** for Windows 11.
 
+![macOS 26 Tahoe Dock](https://raw.githubusercontent.com/Badalemo/windhawk-mods-media/main/dock.png)
+
+![macOS 26 Tahoe Dock magnification demo](https://raw.githubusercontent.com/Badalemo/windhawk-mods-media/main/dock-demo.gif)
+
 ## Features
 - **True Optical Liquid Glass**: Real-time DXGI Desktop Duplication with 32-bit float Apple-squircle curved-lens refraction (`CLSID_D2D1DisplacementMap`), crisp blur, saturation boost, dark-mode highlight limiter, outer dark separation hairline, sculpted inner bevel halo, dual-corner Fresnel catchlight rim, and Clear/Dark/Default/Tinted icon styles. Press **Win+Ctrl+Shift+G** (or right-click Dock → *Liquid Glass → Freeze Glass for Screenshot*) to freeze glass for screenshots.
 - **True macOS Dock + Windows Taskbar Sync**: Live two-way Windows Taskbar pin sync (`IPinnedList3`, including Microsoft Store/UWP & PWA apps), native **Pin to Taskbar / Unpin from Taskbar**, Windows Jump Lists (**Recent** items), **Shift+Click** new window, **Ctrl+Shift+Click / Run as administrator**, smooth cosine-bell magnification, live window preview flyouts, Liquid Glass menus & Control Panel, **1-click icon changer** (`.png/.icns/.ico/.jpg/.webp`), drag-to-reorder & drag-off-to-unpin, OLE file drag-and-drop, and multi-folder Stacks.
