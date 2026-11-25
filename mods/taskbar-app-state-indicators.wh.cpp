@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-app-state-indicators
 // @name            Taskbar App State Indicators
-// @description     Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, dots or counts for several windows and badges, and progress, all animated along the frame.
+// @description     Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, shapes or counts for several windows, badges and pinned apps, and progress, all animated along the frame.
 // @version         1.0.0
 // @author          Deen-0x
 // @github          https://github.com/Deen-0x
@@ -30,14 +30,16 @@ each icon, and they move along that frame whenever something changes.
   doesn't get are drawn dimmed, so the whole frame shows.
 - **Minimized app**: an underline. It's dimmed when the app's windows are
   on another virtual desktop, or suspended like some Store apps.
-- **Several windows**: a grey dot on the left edge, a plus sign, or the
-  number of windows.
+- **Several windows**: a grey dot on the left edge, or another shape (a
+  square, a diamond, a half dot, half diamond or branch, a plus, X or
+  equal sign), or the number of windows.
 - **Badge** (unread messages, notifications, overlay icons): a red dot on
-  the right edge, in every window state, or the badge's count. For apps
-  that draw their count into an overlay icon (Telegram, Discord), the count
-  is read from the description they give it (Discord's counts from 0, so 1
-  is added to it, for its PTB and Canary builds too). Without a number
-  there (Outlook's, say), the dot stays.
+  the right edge, in every window state, or another shape, or the badge's
+  count, with the shape for badges without one. For apps that draw their
+  count into an overlay icon (Telegram, Discord), the count is read from
+  the description they give it (Discord's counts from 0, so 1 is added to
+  it, for its PTB and Canary builds too). Without a number there
+  (Outlook's, say), the shape stays.
 - **Progress** (downloads, copies, installs): the marks fill from left to
   right in green, yellow while paused, red on error. When the end isn't
   known, the marks pulse, scaling about the frame's center and back twice
@@ -46,10 +48,17 @@ each icon, and they move along that frame whenever something changes.
 - **Attention**: the marks turn orange while the app's button flashes.
 - **Colors**: the app in front gets your accent color, every other app
   grey. The app in front can also get thicker corner marks.
-- **Pinned apps** (optional, off by default): a dot or an X sign at the
+- **Pinned apps** (optional, off by default): a dot or another shape at the
   top center, whether the app is running, minimized or not running. A
   pinned app's top corners then stay apart instead of forming a cap,
   leaving it its place.
+
+The half dot and half diamond keep only the half facing the icon: their
+flat side lies on the frame's line. The branch is a plus without its outer
+arm: a line along the frame's edge with one arm towards the icon. All
+three point at their own icon, never at a neighbor's. The equal sign is
+the square's two edges that cross the frame's line, so its lines run
+towards the icon whichever edge it sits on.
 
 Counts go up to 99. Counts of one digit read normally; 10 and up turn
 vertical along the edge, so they don't run into the icon.
@@ -75,17 +84,18 @@ Progress keeps moving even with them off, like the native progress bar.
   all, into a cup and a cap, or all around where nothing sits in between.
 - **Appearance**: the colors and opacity of the corner marks and the
   underline, for the app in front and for every other app, and the corner
-  marks' line thickness on the app in front. Empty colors mean your accent color;
-  `#Light|#Dark` sets a color per theme, and `#FF0000,#00FF00` a gradient.
+  marks' line thickness on the app in front. Empty colors mean your
+  accent color; `#Light|#Dark` sets a color per theme, and
+  `#FF0000,#00FF00` a gradient.
 - **Open and Maximized Windows**: the marks' shape, whether maximized
   windows keep their bottom corners, and the dimmed missing corners.
 - **Minimized Apps**: the underline's length and ends, and its dimmed
   variant for apps running off screen.
-- **Apps With Several Windows**: none, a dot, a plus sign or a count, their
-  sizes and color.
-- **Apps With a Badge**: none, a dot or a count, the dot's and the count's
-  sizes, and their color.
-- **Pinned Apps**: none, a dot or an X sign, its size and color.
+- **Apps With Several Windows**, **Apps With a Badge**: the shape (none, a
+  dot, a square, a diamond, a half dot, half diamond or branch, a plus, X
+  or equal sign), whether the count shows instead, their sizes and color.
+- **Pinned Apps**: none, a dot, a square, a diamond, a half dot, half
+  diamond or branch, a plus, an X or an equal sign, its size and color.
 - **Progress**: its colors, and the pulse's size.
 - **Attention**: on or off, and its color.
 - **Animations**: on or off, and how long a movement takes.
@@ -109,10 +119,12 @@ taskbar's view models and judged with `IsIconic`, `IsZoomed`, DWM cloaking
 and the virtual desktop manager, refreshed on window events. Progress,
 attention and badges are read from the button's own XAML (an overlay
 icon's count from the button's help text, where the taskbar puts the
-icon's description). The marks are composition shapes on one Direct2D
-path around the icon, moved by animating their trims along it on the
-render thread; the plus and X signs are composition lines, and the counts
-small XAML text blocks, in the same host. The only layout change is the
+icon's description). The marks are composition shapes on a Direct2D path
+around the icon (two: the corners' follows the active app's thickness, the
+dots' keeps the frame's), moved by animating their trims along it on the
+render thread. The other shapes are composition lines, rectangles and
+small paths snapped to the screen's pixels, and the counts small XAML text
+blocks, all in the same host. The only layout change is the
 icon background's right margin, set to 0 while the mod's multi-window
 indicator takes the place of the native mark (restored when it doesn't).
 On builds where the needed symbols can't be resolved, the mod stays
@@ -163,6 +175,17 @@ inactive and the log says so.
   $name: Appearance
   $description: How the corner marks and the underline look, on the app in front and on every other app. The dots, progress and attention have colors of their own. In a high contrast theme, the system's colors are used instead.
 - Corners:
+  - LegLength: '5'
+    $name: Leg length
+    $description: Length of each mark's straight part beyond the corner, in pixels. 0 draws just the corners.
+  - CornerStyle: rounded
+    $name: Corner style
+    $options:
+    - rounded: Rounded (a quarter circle)
+    - diagonal: Diagonal (a straight cut)
+  - RoundedEnds: true
+    $name: Rounded ends
+    $description: Rounds the ends of each mark; off, they are square.
   - MaximizedBottom: true
     $name: Bottom corners on maximized windows too
     $description: On, maximized windows get all four corners. Off, only the two top corners (or the cap), so maximized and open windows are told apart at a glance.
@@ -175,17 +198,6 @@ inactive and the log says so.
   - DimOpacity: '0.2, 0.2'
     $name: Dimmed corners opacity (Light, Dark)
     $description: From 0 to 1, for the light and the dark theme. One value applies to both.
-  - LegLength: '5'
-    $name: Leg length
-    $description: Length of each mark's straight part beyond the corner, in pixels. 0 draws just the corners.
-  - RoundedEnds: true
-    $name: Rounded ends
-    $description: Rounds the ends of each mark; off, they are square.
-  - CornerStyle: rounded
-    $name: Corner style
-    $options:
-    - rounded: Rounded (a quarter circle)
-    - diagonal: Diagonal (a straight cut)
   $name: Open and Maximized Windows
   $description: Open windows get the frame's two bottom corners, maximized windows the two top ones as well.
 - Minimized:
@@ -205,52 +217,78 @@ inactive and the log says so.
   $description: Minimized apps get a line centered on the frame's bottom edge.
 - Multi:
   - Mode: dot
-    $name: Indicator
-    $description: Shown centered on the frame's left edge for apps with two or more windows. The taskbar's own multi-window mark is hidden unless this is None.
+    $name: Shape
+    $description: Shown centered on the frame's left edge for apps with two or more windows, unless the window count shows instead. The taskbar's own multi-window mark is hidden unless this is None and the count is off.
     $options:
     - none: None
     - dot: Dot
+    - square: Square
+    - diamond: Diamond
+    - halfdot: Half dot
+    - halfdiamond: Half diamond
+    - branch: Branch
     - plus: Plus sign
-    - number: Number (the window count)
+    - cross: X sign
+    - equal: Equal sign
   - Diameter: '5'
-    $name: Dot size
-    $description: Diameter of the dot, or width and height of the plus sign, in pixels.
+    $name: Shape size
+    $description: The dot's diameter, the width and height of the square, diamond, plus, X or equal sign, or the length of a half dot's or half diamond's flat side or of the branch's line, in pixels.
+  - Number: false
+    $name: Show the window count
+    $description: The number of windows, up to 99, in the shape's place.
   - NumberSize: '7'
     $name: Number size
     $description: Height of the number's digits, in pixels.
   - Color: '#878787|#AEAEAE'
     $name: Color
-    $description: Of the dot, the plus sign or the number. Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
+    $description: Of the shape or the number. Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
   $name: Apps With Several Windows
 - Badge:
   - Mode: dot
-    $name: Indicator
-    $description: Shown centered on the frame's right edge for apps with a notification badge or an overlay icon, in every window state. Number shows the badge's count (for an overlay icon, like Telegram's or Discord's, the number in the description the app gives it), up to 99, and a dot for badges without one. The taskbar's own badges and overlay icons are hidden unless this is None.
+    $name: Shape
+    $description: Shown centered on the frame's right edge for apps with a notification badge or an overlay icon, in every window state, unless the badge's count shows instead. The taskbar's own badges and overlay icons are hidden unless this is None and the count is off.
     $options:
     - none: None
     - dot: Dot
-    - number: Number (the notification count)
+    - square: Square
+    - diamond: Diamond
+    - halfdot: Half dot
+    - halfdiamond: Half diamond
+    - branch: Branch
+    - plus: Plus sign
+    - cross: X sign
+    - equal: Equal sign
   - Diameter: '5'
-    $name: Dot size
-    $description: Diameter of the dot, in pixels. With Number, the size of the dot shown for badges without a count.
+    $name: Shape size
+    $description: The dot's diameter, the width and height of the square, diamond, plus, X or equal sign, or the length of a half dot's or half diamond's flat side or of the branch's line, in pixels.
+  - Number: false
+    $name: Show the notification count
+    $description: The badge's count, up to 99, in the shape's place. For an overlay icon (Telegram, Discord) it's the number in the description the app gives the icon. Badges without a count show the shape.
   - NumberSize: '7'
     $name: Number size
     $description: Height of the number's digits, in pixels.
   - Color: '#EB5757'
     $name: Color
-    $description: Of the dot or the number. Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
+    $description: Of the shape or the number. Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
   $name: Apps With a Badge
 - Pinned:
   - Mode: none
-    $name: Indicator
+    $name: Shape
     $description: Shown at the top center of the frame for pinned apps, running or not. The top corners of a pinned app aren't joined into a cap then, leaving the indicator its place; other apps keep their cap.
     $options:
     - none: None
     - dot: Dot
+    - square: Square
+    - diamond: Diamond
+    - halfdot: Half dot
+    - halfdiamond: Half diamond
+    - branch: Branch
+    - plus: Plus sign
     - cross: X sign
+    - equal: Equal sign
   - Diameter: '5'
-    $name: Size
-    $description: Diameter of the dot, or width and height of the X sign, in pixels.
+    $name: Shape size
+    $description: The dot's diameter, the width and height of the square, diamond, plus, X or equal sign, or the length of a half dot's or half diamond's flat side or of the branch's line, in pixels.
   - Color: '#878787|#AEAEAE'
     $name: Color
     $description: Hex color code, with '#Light|#Dark' for a color per theme. Leave empty for the system accent color.
@@ -346,6 +384,12 @@ inactive and the log says so.
 #include <memory>
 #include <chrono>
 
+// The shape an indicator dropdown picks: nothing, a dot, a square, a
+// diamond, a half dot, half diamond or branch, a plus, an X or an equal
+// sign. (The counts are separate toggles, see MultiNumber and BadgeNumber.)
+constexpr int kKindNone = 0, kKindDot = 1, kKindSquare = 2, kKindDiamond = 3, kKindHalfDot = 4,
+              kKindHalfDiamond = 5, kKindBranch = 6, kKindPlus = 7, kKindCross = 8, kKindEqual = 9;
+
 struct Settings {
     bool AccentShading = false;
 
@@ -392,10 +436,11 @@ struct Settings {
     std::vector<winrt::Windows::UI::Color> FillErrorLight, FillErrorDark;
     double PulseScale = 0.95;
 
-    // Apps with a badge: native badges hidden, a dot (or the badge's count)
-    // centered on the frame's right edge instead.
+    // Apps with a badge: native badges hidden, a dot (or a sign, or the
+    // badge's count) centered on the frame's right edge instead.
     bool BadgeEnabled = true;
-    bool BadgeNumber = false;  // the badge's count instead, where it has one
+    int BadgeKind = kKindDot;
+    bool BadgeNumber = false;  // the count instead of the shape, where the badge has one
     double BadgeDiameter = 5.0;
     double BadgeNumberSize = 7.0;  // the count's digit height
     std::vector<winrt::Windows::UI::Color> BadgeLight, BadgeDark;
@@ -410,19 +455,19 @@ struct Settings {
     bool AttentionEnabled = true;
     std::vector<winrt::Windows::UI::Color> AttentionLight, AttentionDark;
 
-    // Pinned apps, running or not: a dot (or an X sign) centered on
-    // the frame's top edge. With the corners connected, a pinned app's top
+    // Pinned apps, running or not: a dot (or a sign) centered on the
+    // frame's top edge. With the corners connected, a pinned app's top
     // corners stay split so it keeps its place.
     bool PinnedEnabled = false;
-    bool PinnedCross = false;
+    int PinnedKind = kKindNone;
     double PinnedDiameter = 5.0;
     std::vector<winrt::Windows::UI::Color> PinnedLight, PinnedDark;
 
-    // Apps with several windows: a dot (or a plus sign, or the window count)
+    // Apps with several windows: a dot (or a sign, or the window count)
     // centered on the frame's left edge.
     bool MultiEnabled = true;
-    bool MultiNumber = false;
-    bool MultiPlus = false;    // a plus sign instead
+    int MultiKind = kKindDot;
+    bool MultiNumber = false;  // the window count instead of the shape
     double MultiDiameter = 5.0;
     double MultiNumberSize = 7.0;  // the count's digit height
     std::vector<winrt::Windows::UI::Color> MultiLight, MultiDark;
@@ -480,6 +525,11 @@ struct FrameMetrics {
 // (see IndicatorRenderer::Sign and ButtonEntry::CountLabel).
 constexpr int kSlotTL = 0, kSlotTR = 1, kSlotBR = 2, kSlotBL = 3, kSlotDot = 4, kSlotBadge = 5, kSlotPinned = 6;
 constexpr int kSlotCount = 7;
+
+// The signs' places (see IndicatorRenderer::Sign): the several-windows
+// indicator's on the left edge, the badge's on the right, the pinned app's
+// at the top.
+constexpr int kSignMulti = 0, kSignBadge = 1, kSignPinned = 2, kSignCount = 3;
 
 // Where an animation of ours is, worked out from how it was started (see
 // ScalarTweenNow): a restarted animation begins there, explicitly. A
@@ -564,21 +614,34 @@ struct IndicatorRenderer {
     };
     FillTwin fills[4];                              // TL, TR, BR, BL
 
-    // The signs: the pinned-app X (two diagonal lines crossing at the top
-    // center) and the multi-window plus (a horizontal and a vertical line
-    // crossing at the left edge's middle). Not pieces of the frame path,
-    // which can only draw dots and marks along it: two line shapes in one
-    // container shape, whose scale grows them from their center.
+    // The signs, one per indicator place (kSignMulti on the left edge,
+    // kSignBadge on the right, kSignPinned at the top): a plus (a horizontal
+    // and a vertical line) or an X (two diagonal ones) crossing at the place,
+    // or a filled square or diamond (a square turned 45 degrees, its points
+    // where the plus's ends are), or the half of a dot or a diamond facing
+    // the icon (a path of its own), or a branch (the plus without its arm
+    // away from the icon), or an equal sign (two lines across the frame's
+    // line, the square's edges there). Not pieces of the frame path, which can
+    // only draw dots and marks along it: two line shapes, two rectangles and
+    // a path shape in one container shape, whose scale grows them from
+    // their center.
     struct Sign {
         wuc::CompositionContainerShape container{nullptr};
         wuc::CompositionSpriteShape lines[2]{nullptr, nullptr};
         wuc::CompositionLineGeometry geometries[2]{nullptr, nullptr};
+        wuc::CompositionSpriteShape square{nullptr};
+        wuc::CompositionRectangleGeometry squareGeometry{nullptr};
+        wuc::CompositionSpriteShape diamond{nullptr};
+        wuc::CompositionRectangleGeometry diamondGeometry{nullptr};
+        wuc::CompositionSpriteShape halfShape{nullptr};      // the half dot or half diamond
+        wuc::CompositionPathGeometry halfShapeGeometry{nullptr};
         wuc::CompositionColorBrush brush{nullptr};
         bool placed = false;
+        int shape = -1;  // the shape it's drawn as (kShapePlus...), -1 not yet
         double x = -1e9, y = -1e9, half = -1.0, stroke = -1.0;
         ScalarTween scaleTween;
     };
-    Sign cross, plus;
+    Sign signs[kSignCount];
     wuc::CompositionPropertySet fillProps{nullptr}; // f (fraction), alpha
     bool fillActive = false;
     bool fillBound = false;     // twins' trims bound, for fillRtl
@@ -674,7 +737,7 @@ struct ButtonEntry {
     };
     ProgressWatch progressWatch;
 
-    // The counts shown instead of the multi-window and badge dots: XAML text
+    // The counts shown instead of the multi-window and badge shapes: XAML text
     // blocks in the host (composition has no text), centered where the dot
     // would be, each in a border whose composition visual's scale grows it
     // from its center (a composition animation, like every other indicator's,
@@ -689,6 +752,7 @@ struct ButtonEntry {
         double x = -1e9, y = -1e9;  // the center it was placed on
         winrt::Windows::UI::Color color{};
         bool colorSet = false;
+        double rasterScale = 0.0;   // the display scale it was made at
     };
     CountLabel countLabels[2];  // kLabelMulti, kLabelBadge
     std::wstring badgeCount;    // the native badge's count, as last read
@@ -904,6 +968,22 @@ std::wstring ReadModeSetting(PCWSTR name, PCWSTR fallback) {
     return value.get() && *value.get() ? std::wstring(value.get()) : std::wstring(fallback);
 }
 
+// An indicator dropdown's value (see kKindNone).
+int ReadIndicatorKind(PCWSTR name, int fallback) {
+    std::wstring value = ReadModeSetting(name, L"");
+    if (value == L"none") return kKindNone;
+    if (value == L"dot") return kKindDot;
+    if (value == L"square") return kKindSquare;
+    if (value == L"diamond") return kKindDiamond;
+    if (value == L"halfdot") return kKindHalfDot;
+    if (value == L"halfdiamond") return kKindHalfDiamond;
+    if (value == L"branch") return kKindBranch;
+    if (value == L"plus") return kKindPlus;
+    if (value == L"cross") return kKindCross;
+    if (value == L"equal") return kKindEqual;
+    return fallback;
+}
+
 void LoadSettings() {
     std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
 
@@ -927,9 +1007,9 @@ void LoadSettings() {
     ParseGradientColorPair(fillErrorStr.get(), g_settings.FillErrorLight, g_settings.FillErrorDark);
     WindhawkUtils::StringSetting pulseStr(Wh_GetStringSetting(L"Progress.PulseScale"));
     g_settings.PulseScale = std::clamp(ParseDouble(pulseStr.get(), 0.95), 0.5, 2.0);
-    std::wstring badgeMode = ReadModeSetting(L"Badge.Mode", L"dot");
-    g_settings.BadgeEnabled = badgeMode != L"none";
-    g_settings.BadgeNumber = badgeMode == L"number";
+    g_settings.BadgeKind = ReadIndicatorKind(L"Badge.Mode", kKindDot);
+    g_settings.BadgeNumber = Wh_GetIntSetting(L"Badge.Number") != 0;
+    g_settings.BadgeEnabled = g_settings.BadgeKind != kKindNone || g_settings.BadgeNumber;
     WindhawkUtils::StringSetting badgeNumStr(Wh_GetStringSetting(L"Badge.NumberSize"));
     g_settings.BadgeNumberSize = std::max(1.0, ParseDouble(badgeNumStr.get(), 7.0));
     WindhawkUtils::StringSetting badgeDiaStr(Wh_GetStringSetting(L"Badge.Diameter"));
@@ -975,18 +1055,16 @@ void LoadSettings() {
     WindhawkUtils::StringSetting attentionColStr(Wh_GetStringSetting(L"Attention.Color"));
     ParseGradientColorPair(attentionColStr.get(), g_settings.AttentionLight, g_settings.AttentionDark);
 
-    std::wstring pinnedMode = ReadModeSetting(L"Pinned.Mode", L"none");
-    g_settings.PinnedEnabled = pinnedMode != L"none";
-    g_settings.PinnedCross = pinnedMode == L"cross";
+    g_settings.PinnedKind = ReadIndicatorKind(L"Pinned.Mode", kKindNone);
+    g_settings.PinnedEnabled = g_settings.PinnedKind != kKindNone;
     WindhawkUtils::StringSetting pinnedColStr(Wh_GetStringSetting(L"Pinned.Color"));
     ParseGradientColorPair(pinnedColStr.get(), g_settings.PinnedLight, g_settings.PinnedDark);
     WindhawkUtils::StringSetting pinnedDiaStr(Wh_GetStringSetting(L"Pinned.Diameter"));
     g_settings.PinnedDiameter = std::max(1.0, ParseDouble(pinnedDiaStr.get(), 5.0));
 
-    std::wstring multiMode = ReadModeSetting(L"Multi.Mode", L"dot");
-    g_settings.MultiEnabled = multiMode != L"none";
-    g_settings.MultiNumber = multiMode == L"number";
-    g_settings.MultiPlus = multiMode == L"plus";
+    g_settings.MultiKind = ReadIndicatorKind(L"Multi.Mode", kKindDot);
+    g_settings.MultiNumber = Wh_GetIntSetting(L"Multi.Number") != 0;
+    g_settings.MultiEnabled = g_settings.MultiKind != kKindNone || g_settings.MultiNumber;
     WindhawkUtils::StringSetting multiNumStr(Wh_GetStringSetting(L"Multi.NumberSize"));
     g_settings.MultiNumberSize = std::max(1.0, ParseDouble(multiNumStr.get(), 7.0));
     WindhawkUtils::StringSetting multiDiaStr(Wh_GetStringSetting(L"Multi.Diameter"));
@@ -1113,7 +1191,23 @@ FrameBox ComputeFrameBox(double iw, double ih, const Settings& localSettings) {
 // order is the one BuildFramePathD2D draws: from the top center, clockwise,
 // TR arc, right edge, BR arc, bottom edge, BL arc, left edge, TL arc, back to
 // the top center.
-FrameMetrics ComputeFrameMetrics(double W, double H, double t, const double radius[4], bool diagonal) {
+// Where the frame box sits on the screen's pixel grid: its origin in device
+// pixels, and device pixels per pixel (the display scale).
+struct PixelGrid {
+    bool valid = false;
+    double scale = 1.0;
+    double ox = 0.0, oy = 0.0;
+};
+
+// With `grid`, the frame's center lines (cx, cy) are snapped to device pixel
+// boundaries. The corners meet there (the cup, the cap, the sides with all
+// corners connected, the underline's halves), flat end to flat end; a meeting
+// point inside a device pixel leaves each end covering part of it, both
+// drawn translucent, and the pixel showed lighter: a seam at 125%, 150% and
+// 175%, where the centers fall between device pixels. On a boundary, each
+// side covers its pixels fully. The shift is half a device pixel at most.
+FrameMetrics ComputeFrameMetrics(double W, double H, double t, const double radius[4], bool diagonal,
+                                 const PixelGrid* grid = nullptr) {
     FrameMetrics m;
     m.W = W; m.H = H; m.t = t; m.diagonal = diagonal;
     double inset = std::max(0.0, t) / 2.0;
@@ -1126,6 +1220,14 @@ FrameMetrics ComputeFrameMetrics(double W, double H, double t, const double radi
     for (int k = 0; k < 4; k++) {
         m.r[k] = std::clamp(radius[k], 0.0, m.half);
         m.arc[k] = diagonal ? m.r[k] * std::sqrt(2.0) : m.r[k] * 3.14159265358979323846 / 2.0;
+    }
+    if (grid && grid->valid && grid->scale > 0.01) {
+        auto snap = [&](double c, double origin, double lo, double hi) {
+            double snapped = (std::round(origin + c * grid->scale) - origin) / grid->scale;
+            return lo <= hi ? std::clamp(snapped, lo, hi) : c;  // on the straight parts
+        };
+        m.cx = snap(m.cx, grid->ox, m.x0 + std::max(m.r[0], m.r[3]), m.x1 - std::max(m.r[1], m.r[2]));
+        m.cy = snap(m.cy, grid->oy, m.y0 + std::max(m.r[0], m.r[1]), m.y1 - std::max(m.r[2], m.r[3]));
     }
 
     double s = 0.0;
@@ -1293,8 +1395,9 @@ winrt::com_ptr<ID2D1PathGeometry> BuildFramePathD2D(const FrameMetrics& m) {
     return path;
 }
 
-wuc::CompositionPath CreateFramePath(const FrameMetrics& m) {
-    auto d2dPath = BuildFramePathD2D(m);
+// A composition path for a Direct2D path, through this mod's geometry
+// source (counted, see FrameGeometrySource).
+wuc::CompositionPath CreateCompositionPath(winrt::com_ptr<ID2D1PathGeometry> const& d2dPath) {
     if (!d2dPath) return nullptr;
     // A path geometry is a geometry: an upcast, no QueryInterface needed.
     winrt::com_ptr<ID2D1Geometry> geometry;
@@ -1307,9 +1410,51 @@ wuc::CompositionPath CreateFramePath(const FrameMetrics& m) {
     try {
         return wuc::CompositionPath(projected);
     } catch (...) {
-        Wh_Log(L"Creating the frame's composition path failed");
+        Wh_Log(L"Creating a composition path failed");
         return nullptr;
     }
+}
+
+wuc::CompositionPath CreateFramePath(const FrameMetrics& m) {
+    return CreateCompositionPath(BuildFramePathD2D(m));
+}
+
+// The half signs: a half dot (a half disc) or a half diamond (a triangle),
+// their flat side `r` either side of the center (cx, cy) along the frame's
+// edge, bulging or pointing `r` towards the icon (`inward`, a unit vector).
+// Drawn top-to-bottom, right-to-left or the like so the arc always sweeps
+// clockwise.
+wuc::CompositionPath CreateHalfSignPath(double cx, double cy, double r, double inX, double inY, bool round) {
+    auto factory = GetD2DFactory();
+    if (!factory) return nullptr;
+    winrt::com_ptr<ID2D1PathGeometry> path;
+    if (FAILED(factory->CreatePathGeometry(path.put()))) return nullptr;
+    winrt::com_ptr<ID2D1GeometrySink> sink;
+    if (FAILED(path->Open(sink.put()))) return nullptr;
+    auto pt = [](double x, double y) { return D2D1_POINT_2F{(float)x, (float)y}; };
+    double perpX = -inY, perpY = inX;  // turns clockwise from p1 through the apex to p2
+    auto p1 = pt(cx - r * perpX, cy - r * perpY);
+    auto apex = pt(cx + r * inX, cy + r * inY);
+    auto p2 = pt(cx + r * perpX, cy + r * perpY);
+    sink->BeginFigure(p1, D2D1_FIGURE_BEGIN_FILLED);
+    if (round) {
+        // Two quarter arcs, so neither is the ambiguous half circle.
+        for (auto const& to : {apex, p2}) {
+            D2D1_ARC_SEGMENT arc{};
+            arc.point = to;
+            arc.size = D2D1_SIZE_F{(float)r, (float)r};
+            arc.rotationAngle = 0.0f;
+            arc.sweepDirection = D2D1_SWEEP_DIRECTION_CLOCKWISE;
+            arc.arcSize = D2D1_ARC_SIZE_SMALL;
+            sink->AddArc(&arc);
+        }
+    } else {
+        sink->AddLine(apex);
+        sink->AddLine(p2);
+    }
+    sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    if (FAILED(sink->Close())) return nullptr;
+    return CreateCompositionPath(path);
 }
 
 using namespace winrt::Windows::UI::Xaml;
@@ -2186,7 +2331,7 @@ void RestoreNativeIndicators(std::shared_ptr<ButtonEntry> const& e) {
 // right away, and a refresh pass of every button a moment later: XAML
 // passes the restyled element's properties on to its visual only when it
 // next renders, which set its opacity back over the immediate re-hide.
-void RequestRefreshPassSoon();
+void RequestRefreshPassSoon(bool scaleChanged = false);
 
 void WatchHiddenNative(std::shared_ptr<ButtonEntry> const& entry, ButtonEntry::HiddenNative& native,
                        FrameworkElement const& element) {
@@ -2263,8 +2408,8 @@ void UpdateNativeIndicators(FrameworkElement const& button, std::shared_ptr<Butt
 // and hidden through its handout visual's opacity, like the running
 // indicator, and a clip that leaves nothing of it (see SetHideClip).
 // Whether the button "has a badge" is read from the elements' own XAML
-// state, which neither touches: shown, sized and, for an
-// image, with a source. Its count, for the Number option, is read from the
+// state, which neither touches: shown, sized and, for an image, with a
+// source. Its count, for the notification count toggle, is read from the
 // badge's text, or for an overlay icon from the button's help text (see
 // ReadNativeBadgeCount).
 // Property-changed callbacks on those properties, plus SizeChanged, refresh
@@ -3081,13 +3226,19 @@ void ReleaseRenderer(std::shared_ptr<ButtonEntry> const& entry) {
     }
     try { if (r.fillProps) r.fillProps.Close(); } catch (...) {}
     try { if (r.progressEasing) r.progressEasing.Close(); } catch (...) {}
-    for (auto* sign : {&r.cross, &r.plus}) {
+    for (auto& sign : r.signs) {
         for (int i = 0; i < 2; i++) {
-            try { if (sign->lines[i]) sign->lines[i].Close(); } catch (...) {}
-            try { if (sign->geometries[i]) sign->geometries[i].Close(); } catch (...) {}
+            try { if (sign.lines[i]) sign.lines[i].Close(); } catch (...) {}
+            try { if (sign.geometries[i]) sign.geometries[i].Close(); } catch (...) {}
         }
-        try { if (sign->container) sign->container.Close(); } catch (...) {}
-        try { if (sign->brush) sign->brush.Close(); } catch (...) {}
+        try { if (sign.square) sign.square.Close(); } catch (...) {}
+        try { if (sign.squareGeometry) sign.squareGeometry.Close(); } catch (...) {}
+        try { if (sign.diamond) sign.diamond.Close(); } catch (...) {}
+        try { if (sign.diamondGeometry) sign.diamondGeometry.Close(); } catch (...) {}
+        try { if (sign.halfShape) sign.halfShape.Close(); } catch (...) {}
+        try { if (sign.halfShapeGeometry) sign.halfShapeGeometry.Close(); } catch (...) {}
+        try { if (sign.container) sign.container.Close(); } catch (...) {}
+        try { if (sign.brush) sign.brush.Close(); } catch (...) {}
     }
     r = IndicatorRenderer{};
 }
@@ -3342,21 +3493,32 @@ bool EnsureRenderer(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
     shapes.Append(r.slots[kSlotDot].shape);
     shapes.Append(r.slots[kSlotBadge].shape);
     shapes.Append(r.slots[kSlotPinned].shape);
-    for (auto* sign : {&r.plus, &r.cross}) {
-        sign->container = r.compositor.CreateContainerShape();
-        sign->brush = r.compositor.CreateColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0});
+    for (auto& sign : r.signs) {
+        sign.container = r.compositor.CreateContainerShape();
+        sign.brush = r.compositor.CreateColorBrush(winrt::Windows::UI::Color{0, 0, 0, 0});
         for (int i = 0; i < 2; i++) {
-            sign->geometries[i] = r.compositor.CreateLineGeometry();
-            sign->lines[i] = r.compositor.CreateSpriteShape(sign->geometries[i]);
-            sign->lines[i].StrokeBrush(sign->brush);
-            // Round ends for the X, square ones for the pixel-snapped plus.
-            auto cap = sign == &r.plus ? wuc::CompositionStrokeCap::Flat : wuc::CompositionStrokeCap::Round;
-            sign->lines[i].StrokeStartCap(cap);
-            sign->lines[i].StrokeEndCap(cap);
-            sign->container.Shapes().Append(sign->lines[i]);
+            sign.geometries[i] = r.compositor.CreateLineGeometry();
+            sign.lines[i] = r.compositor.CreateSpriteShape(sign.geometries[i]);
+            sign.lines[i].StrokeBrush(sign.brush);
+            sign.container.Shapes().Append(sign.lines[i]);
         }
-        sign->container.Scale({0.0f, 0.0f});
-        shapes.Append(sign->container);
+        sign.squareGeometry = r.compositor.CreateRectangleGeometry();
+        sign.squareGeometry.Size({0.0f, 0.0f});
+        sign.square = r.compositor.CreateSpriteShape(sign.squareGeometry);
+        sign.square.FillBrush(sign.brush);
+        sign.container.Shapes().Append(sign.square);
+        sign.diamondGeometry = r.compositor.CreateRectangleGeometry();
+        sign.diamondGeometry.Size({0.0f, 0.0f});
+        sign.diamond = r.compositor.CreateSpriteShape(sign.diamondGeometry);
+        sign.diamond.FillBrush(sign.brush);
+        sign.diamond.RotationAngleInDegrees(45.0f);
+        sign.container.Shapes().Append(sign.diamond);
+        sign.halfShapeGeometry = r.compositor.CreatePathGeometry();
+        sign.halfShape = r.compositor.CreateSpriteShape(sign.halfShapeGeometry);
+        // No fill until a half shape is chosen (see UpdateSign).
+        sign.container.Shapes().Append(sign.halfShape);
+        sign.container.Scale({0.0f, 0.0f});
+        shapes.Append(sign.container);
     }
     BindFillTwins(r, false);
     ElementCompositionPreview::SetElementChildVisual(host, r.visual);
@@ -3368,6 +3530,7 @@ bool EnsureRenderer(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
 bool SameFrameShape(const FrameMetrics& a, const FrameMetrics& b) {
     if (!a.valid || !b.valid) return false;
     if (std::abs(a.W - b.W) > 0.01 || std::abs(a.H - b.H) > 0.01 || a.diagonal != b.diagonal) return false;
+    if (std::abs(a.cx - b.cx) > 0.001 || std::abs(a.cy - b.cy) > 0.001) return false;  // snapped elsewhere
     for (int k = 0; k < 4; k++) {
         if (std::abs(a.r[k] - b.r[k]) > 0.01) return false;
     }
@@ -3390,13 +3553,14 @@ bool SameFrame(const FrameMetrics& a, const FrameMetrics& b) {
 // thickness changed (another app came to the front): their positions then
 // barely move, and the change can animate like any other.
 bool UpdateFramePath(IndicatorRenderer& r, const FrameBox& box, const Settings& localSettings, double thickness,
-                     bool* thicknessOnly = nullptr) {
+                     const PixelGrid& grid, bool* thicknessOnly = nullptr) {
     if (thicknessOnly) *thicknessOnly = false;
-    FrameMetrics m = ComputeFrameMetrics(box.W, box.H, thickness, localSettings.FrameRadius, localSettings.IndDiagonal);
+    FrameMetrics m = ComputeFrameMetrics(box.W, box.H, thickness, localSettings.FrameRadius, localSettings.IndDiagonal,
+                                         &grid);
     FrameMetrics mb = std::abs(thickness - localSettings.FrameThickness) < 0.001
         ? m
         : ComputeFrameMetrics(box.W, box.H, localSettings.FrameThickness, localSettings.FrameRadius,
-                              localSettings.IndDiagonal);
+                              localSettings.IndDiagonal, &grid);
     // Room for the pulse too: the frame grows past the box when it scales
     // above 1. The same for both thicknesses, so activating an app doesn't
     // move the visual.
@@ -3454,8 +3618,8 @@ bool UpdateFramePath(IndicatorRenderer& r, const FrameBox& box, const Settings& 
         float offset = k <= kSlotBL ? 0.0f : (float)pad;
         r.slots[k].shape.Offset({offset, offset});
     }
-    for (auto* sign : {&r.cross, &r.plus}) {
-        if (sign->container) sign->container.Offset({(float)pad, (float)pad});
+    for (auto& sign : r.signs) {
+        if (sign.container) sign.container.Offset({(float)pad, (float)pad});
     }
     return true;
 }
@@ -3490,16 +3654,57 @@ struct LabelTarget {
     std::vector<winrt::Windows::UI::Color> colors;
 };
 
-// A sign (the pinned-app X, `diagonal`, or the multi-window plus):
-// centered on (x, y), filling a `size` square (its round caps included),
-// its lines `stroke` thick.
+// A sign (`shape`, see Sign): centered on (x, y), filling a `size` square
+// (the X's round caps included, the diamond's points on its sides' middles;
+// a half shape or branch its half facing the icon, `inX`/`inY`; the equal
+// sign's lines run that way), its lines `stroke` thick.
+constexpr int kShapePlus = 0, kShapeCross = 1, kShapeSquare = 2, kShapeDiamond = 3, kShapeHalfDot = 4,
+              kShapeHalfDiamond = 5, kShapeBranch = 6, kShapeEqual = 7;
+
+// The shapes drawn with the two lines.
+bool IsLineShape(int shape) {
+    return shape == kShapePlus || shape == kShapeCross || shape == kShapeBranch || shape == kShapeEqual;
+}
+
 struct SignTarget {
     bool shown = false;
-    bool diagonal = true;
+    int shape = kShapeCross;
+    double inX = 0.0, inY = 0.0;  // towards the icon, for the half signs, the branch and the equal sign
     double x = 0.0, y = 0.0;
     double size = 5.0, stroke = 1.0;
     std::vector<winrt::Windows::UI::Color> colors;
 };
+
+// Whether a dropdown's choice is drawn as a sign (see Sign).
+bool IsSignKind(int kind) {
+    return kind == kKindPlus || kind == kKindCross || kind == kKindSquare || kind == kKindDiamond ||
+           kind == kKindHalfDot || kind == kKindHalfDiamond || kind == kKindBranch || kind == kKindEqual;
+}
+
+// A sign in an indicator's place, shown when `active` and the dropdown
+// (`kind`) is one of the shapes (see IsSignKind), facing `inX`/`inY`
+// (towards the icon; for the half signs, the branch and the equal sign): as
+// big as the dot would be, the lines a fifth of that thick (at least a
+// pixel).
+void SetSignTarget(SignTarget& sign, bool active, int kind, double x, double y, double size,
+                   const std::vector<winrt::Windows::UI::Color>& colors, double inX, double inY) {
+    sign.inX = inX;
+    sign.inY = inY;
+    sign.shown = active && IsSignKind(kind);
+    sign.shape = kind == kKindPlus      ? kShapePlus
+               : kind == kKindSquare    ? kShapeSquare
+               : kind == kKindDiamond   ? kShapeDiamond
+               : kind == kKindHalfDot   ? kShapeHalfDot
+               : kind == kKindHalfDiamond ? kShapeHalfDiamond
+               : kind == kKindBranch    ? kShapeBranch
+               : kind == kKindEqual     ? kShapeEqual
+                                        : kShapeCross;
+    sign.x = x;
+    sign.y = y;
+    sign.size = size;
+    sign.stroke = std::clamp(size * 0.2, 1.0, size / 2.0);
+    sign.colors = colors;
+}
 
 // A corner mark: the arc and a leg on each side. Round caps reach half a
 // thickness past each end, so the ends are pulled in by that much (as far as
@@ -3511,7 +3716,7 @@ void CornerExtent(const FrameMetrics& m, int k, double leg, bool roundedEnds, do
     b = m.arcStart[k] + m.arc[k] + L - pull;
 }
 
-void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabelCount], SignTarget& plus, SignTarget& cross,
+void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabelCount], SignTarget signs[kSignCount],
                         const FrameMetrics& m, const FrameMetrics& mb, const Settings& localSettings, int state, uint8_t mask, bool hasBadge,
                         std::wstring const& badgeCount, int windowCount, bool isActive, bool isLight, bool attention,
                         int pinnedState) {
@@ -3526,7 +3731,7 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
     // around its arc, and they go back there), the bottom ones the bottom
     // center (the underline's middle, where they also split from). A button
     // left with no mark at all lets every piece shrink where it is.
-    // The pinned-app indicator (a dot or an X), at the top center: on pinned
+    // The pinned-app indicator (a dot or a sign), at the top center: on pinned
     // apps, running or not (a button with no window at all is a pinned app
     // that isn't running).
     bool pinnedDot = localSettings.PinnedEnabled && ((state == 0 && windowCount == 0) || pinnedState == 1);
@@ -3591,7 +3796,7 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
 
         // All corners: each side's two corners also meet at the side's
         // middle, where the side's indicator would be: the left side unless
-        // the several-windows indicator shows (dot, plus or count), the
+        // the several-windows indicator shows (dot, sign or count), the
         // right side unless the badge does. Only between two shown corners,
         // so a maximized window without either gets the complete frame and
         // an open window's cup stays a cup. Along the path the right side
@@ -3675,20 +3880,15 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
         t.grow = true;
         t.trail = false;
         bool several = localSettings.MultiEnabled && windowCount >= 2;
-        t.shown = several && !localSettings.MultiNumber && !localSettings.MultiPlus;
+        // The window count instead of the shape, with its toggle on.
+        bool shape = several && !localSettings.MultiNumber;
+        t.shown = shape && localSettings.MultiKind == kKindDot;
         t.a = mb.sLeftMid - kDotEpsilon;
         t.b = mb.sLeftMid + kDotEpsilon;
 
-        // Or a plus sign, as big as the dot, its lines about a fifth of its
-        // size thick (at least a pixel), snapped to whole pixels (see
-        // UpdateSign).
-        plus.shown = several && localSettings.MultiPlus;
-        plus.diagonal = false;
-        plus.x = mb.x0;
-        plus.y = mb.cy;
-        plus.size = localSettings.MultiDiameter;
-        plus.stroke = std::clamp(localSettings.MultiDiameter * 0.2, 1.0, localSettings.MultiDiameter / 2.0);
-        plus.colors = t.colors;
+        // Or a sign, as big as the dot (see SetSignTarget).
+        SetSignTarget(signs[kSignMulti], shape, localSettings.MultiKind, mb.x0, mb.cy, localSettings.MultiDiameter,
+                      t.colors, 1.0, 0.0);
 
         // Or the window count, in the dot's place and color.
         auto& label = labels[kLabelMulti];
@@ -3716,12 +3916,18 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
         t.hidden = mb.sRightMid;
         t.grow = true;
         t.trail = false;
-        // Or the badge's count, where it has one; a badge without one (a
-        // glyph, an overlay icon) keeps the dot.
+        // Or the badge's count, with its toggle on, where it has one; a
+        // badge without one (a glyph, an overlay icon with no number in its
+        // description) shows the shape.
         bool counted = badgeShown && localSettings.BadgeNumber && !badgeCount.empty();
-        t.shown = badgeShown && !counted;
+        bool shape = badgeShown && !counted;
+        t.shown = shape && localSettings.BadgeKind == kKindDot;
         t.a = mb.sRightMid - kDotEpsilon;
         t.b = mb.sRightMid + kDotEpsilon;
+
+        // Or a sign, as big as the dot.
+        SetSignTarget(signs[kSignBadge], shape, localSettings.BadgeKind, mb.x1, mb.cy, localSettings.BadgeDiameter,
+                      t.colors, -1.0, 0.0);
 
         auto& label = labels[kLabelBadge];
         label.shown = counted;
@@ -3736,7 +3942,7 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
     // The pinned-app dot: centered on the top edge, where the path starts
     // (s = 0), for pinned apps. It grows and shrinks like the other dots, and
     // stays clear of the underline, so a minimized pinned app shows both.
-    // With the X option, the X sign takes its place.
+    // With a sign option, the sign takes its place.
     {
         auto& t = targets[kSlotPinned];
         constexpr double kDotEpsilon = 0.05;
@@ -3749,19 +3955,13 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
         t.hidden = 0.0;
         t.grow = true;
         t.trail = false;
-        t.shown = pinnedDot && !localSettings.PinnedCross;
+        t.shown = pinnedDot && localSettings.PinnedKind == kKindDot;
         t.a = 0.0;  // just after the path's start, so the piece doesn't wrap
         t.b = 2.0 * kDotEpsilon;
 
-        // Or an X sign in the same place, its lines a fifth of its size
-        // thick (at least a pixel).
-        cross.shown = pinnedDot && localSettings.PinnedCross;
-        cross.diagonal = true;
-        cross.x = mb.cx;
-        cross.y = mb.y0;
-        cross.size = localSettings.PinnedDiameter;
-        cross.stroke = std::clamp(localSettings.PinnedDiameter * 0.2, 1.0, localSettings.PinnedDiameter / 2.0);
-        cross.colors = t.colors;
+        // Or a sign in the same place.
+        SetSignTarget(signs[kSignPinned], pinnedDot, localSettings.PinnedKind, mb.cx, mb.y0,
+                      localSettings.PinnedDiameter, t.colors, 0.0, 1.0);
     }
 }
 
@@ -4080,89 +4280,184 @@ void AnimateSlot(IndicatorRenderer& r, IndicatorSlot& slot, const SlotTarget& ta
 }
 
 // A sign: placed at once, grown from its center when it appears and shrunk
-// back into it when it goes, like the dots. The X's lines run corner to
-// corner of a square `stroke` smaller than `size`, so with their round caps
-// they fill the `size` square; diagonal, their smoothed edges look natural.
-// The plus is snapped to the pixel grid instead (`scale`: device pixels per
-// pixel): a horizontal or vertical line centered on a pixel boundary covers
-// half of two pixel rows, which then both show at half strength, blurred
-// and dimmed. So its size and thickness are whole device pixels, both odd
-// or both even, its center sits where both its edges and its ends fall on
-// pixel boundaries (a pixel's middle for odd sizes, a boundary for even
-// ones), and its ends are square (flat caps, set when it was created).
-void UpdateSign(IndicatorRenderer& r, IndicatorRenderer::Sign& cross, const SignTarget& t, double scale,
+// back into it when it goes, like the dots. Every shape is snapped to the
+// screen's pixel grid (`grid`, see ComputeFrameMetrics): its size and line
+// thickness are whole device pixels (for the plus and the branch, both odd
+// or both even, so the lines straddle the center evenly), and its center
+// sits where its square's edges fall on pixel boundaries (a pixel's middle
+// for odd sizes, a boundary for even ones; a half shape's flat side on a
+// boundary). Unsnapped, a line centered on a pixel boundary covered half of
+// two pixel rows, both shown at half strength, blurred and dimmed, and the
+// same shape was smoothed differently in each place, at its own fraction
+// of a pixel. The plus's, branch's and equal sign's lines have square ends
+// (flat caps); the X's run corner to corner of a square `stroke` smaller,
+// so with their round caps they fill the square. The equal sign's lines are
+// the square's two edges across the frame's line, so they lie on its
+// pixels like the square's. A place can switch shapes (its dropdown
+// changed): the parts of the other shapes are emptied.
+void UpdateSign(IndicatorRenderer& r, IndicatorRenderer::Sign& sign, const SignTarget& t, const PixelGrid& grid,
                 const AnimationContext& ctx) {
-    if (!cross.container) return;
-    if (t.shown || !cross.placed) {
+    if (!sign.container) return;
+    if (t.shown && sign.shape != t.shape) {
+        // The lines' ends: round for the X, square for the others. Then the
+        // parts of the other shapes emptied.
+        auto cap = t.shape == kShapeCross ? wuc::CompositionStrokeCap::Round : wuc::CompositionStrokeCap::Flat;
+        for (auto& line : sign.lines) {
+            line.StrokeStartCap(cap);
+            line.StrokeEndCap(cap);
+        }
+        if (!IsLineShape(t.shape)) {
+            for (auto& geometry : sign.geometries) {
+                geometry.Start({0.0f, 0.0f});
+                geometry.End({0.0f, 0.0f});
+            }
+            for (auto& line : sign.lines) line.StrokeThickness(0.0f);
+        }
+        if (t.shape != kShapeSquare) sign.squareGeometry.Size({0.0f, 0.0f});
+        if (t.shape != kShapeDiamond) sign.diamondGeometry.Size({0.0f, 0.0f});
+        // The half shape shows through its fill, never by clearing its path:
+        // a null path took Explorer down.
+        bool halfShape = t.shape == kShapeHalfDot || t.shape == kShapeHalfDiamond;
+        sign.halfShape.FillBrush(halfShape ? sign.brush : nullptr);
+        sign.shape = t.shape;
+        sign.half = -1.0;    // redraw
+        sign.stroke = -1.0;
+    }
+    if (t.shown || !sign.placed) {
         double cx = t.x, cy = t.y, stroke = t.stroke;
         double half = std::max(0.0, (t.size - t.stroke) / 2.0);
-        if (!t.diagonal) {
-            double s = scale > 0.01 ? scale : 1.0;
+        {
+            double s = grid.valid && grid.scale > 0.01 ? grid.scale : 1.0;
+            double ox = grid.valid ? grid.ox : 0.0, oy = grid.valid ? grid.oy : 0.0;
             int sizePx = std::max(1, (int)std::lround(t.size * s));
             double ideal = sizePx * 0.2;
             int strokePx = std::max(1, (int)std::lround(ideal));
-            if ((sizePx - strokePx) % 2 != 0) {
+            // The plus's and branch's lines must straddle the center evenly,
+            // so their thickness has the size's parity; the X's bounds come
+            // out whole either way (its ends' round caps reach the square's
+            // corners).
+            if ((t.shape == kShapePlus || t.shape == kShapeBranch) && (sizePx - strokePx) % 2 != 0) {
                 int lower = strokePx - 1, upper = strokePx + 1;
                 strokePx = lower >= 1 && std::abs(lower - ideal) <= std::abs(upper - ideal) ? lower : upper;
             }
             strokePx = std::min(strokePx, sizePx);
-            auto snap = [&](double c) {
-                double px = c * s;
-                return (sizePx % 2 ? std::floor(px) + 0.5 : std::round(px)) / s;
+            // On the screen's grid: from the box's origin in device pixels,
+            // to the nearest pixel middle (odd sizes) or boundary (even
+            // ones). A half sign's flat side lies on a boundary instead,
+            // along the axis it faces. A tie goes the same way on every edge
+            // (`dir`, on that axis): with an odd frame thickness the frame's
+            // line is centered between two pixels, and each edge rounded its
+            // own way, the right edge's signs a pixel further out than the
+            // left and top ones. Towards the icon for the full signs; away
+            // from it for a half sign's flat side, which then lies on the
+            // line's outer pixel boundary, a pixel further from the icon.
+            bool halfSign = t.shape == kShapeHalfDot || t.shape == kShapeHalfDiamond;
+            auto snap = [&](double c, double origin, bool toBoundary, double dir) {
+                double offset = sizePx % 2 && !toBoundary ? 0.5 : 0.0;
+                double v = origin + c * s - offset;
+                constexpr double kTie = 1e-6;
+                double k = dir < 0.0 ? std::ceil(v - 0.5 - kTie) : std::floor(v + 0.5 + (dir > 0.0 ? kTie : 0.0));
+                return (k + offset - origin) / s;
             };
-            cx = snap(t.x);
-            cy = snap(t.y);
-            half = sizePx / 2.0 / s;
-            stroke = strokePx / s;
-            if (g_debugLog && (std::abs(cross.x - cx) > 0.001 || std::abs(cross.y - cy) > 0.001)) {
-                Wh_Log(L"[debug] plus: scale %g, %dpx with %dpx lines, centered on (%g, %g) for (%g, %g)", s, sizePx,
-                       strokePx, cx, cy, t.x, t.y);
+            double tieX = halfSign ? -t.inX : t.inX, tieY = halfSign ? -t.inY : t.inY;
+            cx = snap(t.x, ox, halfSign && t.inX != 0.0, tieX);
+            cy = snap(t.y, oy, halfSign && t.inY != 0.0, tieY);
+            // The lines of the plus, branch and equal sign, the square, the
+            // diamond's points and a half shape's flat side span the square;
+            // the X's ends sit half a line inside its corners, their round
+            // caps reaching them.
+            half = (t.shape == kShapeCross ? (sizePx - strokePx) / 2.0 : sizePx / 2.0) / s;
+            stroke = IsLineShape(t.shape) ? strokePx / s : 0.0;
+            if (g_debugLog && t.shown && (std::abs(sign.x - cx) > 0.001 || std::abs(sign.y - cy) > 0.001)) {
+                static const wchar_t* kNames[] = {L"plus", L"X", L"square", L"diamond", L"half dot", L"half diamond",
+                                                  L"branch", L"equal sign"};
+                Wh_Log(L"[debug] %s: scale %g, %dpx with %dpx lines, centered on (%g, %g) for (%g, %g)",
+                       kNames[std::clamp(t.shape, 0, 7)], s, sizePx, strokePx, cx, cy, t.x, t.y);
             }
         }
-        if (std::abs(cross.x - cx) > 0.001 || std::abs(cross.y - cy) > 0.001 || std::abs(cross.half - half) > 0.001) {
+        // The branch's arm and the equal sign's lines sit by their line
+        // thickness, so a new thickness redraws them too.
+        bool strokePlaced = (t.shape == kShapeBranch || t.shape == kShapeEqual) && std::abs(sign.stroke - stroke) > 0.001;
+        if (std::abs(sign.x - cx) > 0.001 || std::abs(sign.y - cy) > 0.001 || std::abs(sign.half - half) > 0.001 ||
+            strokePlaced) {
             float x = (float)cx, y = (float)cy, h = (float)half;
-            if (t.diagonal) {
-                cross.geometries[0].Start({x - h, y - h});
-                cross.geometries[0].End({x + h, y + h});
-                cross.geometries[1].Start({x + h, y - h});
-                cross.geometries[1].End({x - h, y + h});
+            if (t.shape == kShapeSquare) {
+                sign.squareGeometry.Offset({x - h, y - h});
+                sign.squareGeometry.Size({2.0f * h, 2.0f * h});
+            } else if (t.shape == kShapeHalfDot || t.shape == kShapeHalfDiamond) {
+                if (auto path = CreateHalfSignPath(x, y, h, t.inX, t.inY, t.shape == kShapeHalfDot)) {
+                    sign.halfShapeGeometry.Path(path);
+                }
+            } else if (t.shape == kShapeDiamond) {
+                // A square with sides h * sqrt(2), turned 45 degrees about the
+                // center: its points land on the plus's ends.
+                float side = h * 1.41421356f;
+                sign.diamondGeometry.Offset({x - side / 2.0f, y - side / 2.0f});
+                sign.diamondGeometry.Size({side, side});
+                sign.diamond.CenterPoint({x, y});
+            } else if (t.shape == kShapeBranch) {
+                // The line along the edge, then the arm towards the icon from
+                // the line's inner side (not over it, which doubled a
+                // translucent color there).
+                float inX = (float)t.inX, inY = (float)t.inY, perpX = -inY, perpY = inX;
+                float from = (float)(stroke / 2.0);
+                sign.geometries[0].Start({x - h * perpX, y - h * perpY});
+                sign.geometries[0].End({x + h * perpX, y + h * perpY});
+                sign.geometries[1].Start({x + from * inX, y + from * inY});
+                sign.geometries[1].End({x + h * inX, y + h * inY});
+            } else if (t.shape == kShapeEqual) {
+                // The square's two edges across the frame's line: lines
+                // towards the icon, half a line inside the square's sides
+                // along the edge.
+                float inX = (float)t.inX, inY = (float)t.inY, perpX = -inY, perpY = inX;
+                float d = h - (float)(stroke / 2.0);
+                for (int i = 0; i < 2; i++) {
+                    float sx = x + (i ? d : -d) * perpX, sy = y + (i ? d : -d) * perpY;
+                    sign.geometries[i].Start({sx - h * inX, sy - h * inY});
+                    sign.geometries[i].End({sx + h * inX, sy + h * inY});
+                }
+            } else if (t.shape == kShapeCross) {
+                sign.geometries[0].Start({x - h, y - h});
+                sign.geometries[0].End({x + h, y + h});
+                sign.geometries[1].Start({x + h, y - h});
+                sign.geometries[1].End({x - h, y + h});
             } else {
-                cross.geometries[0].Start({x - h, y});
-                cross.geometries[0].End({x + h, y});
-                cross.geometries[1].Start({x, y - h});
-                cross.geometries[1].End({x, y + h});
+                sign.geometries[0].Start({x - h, y});
+                sign.geometries[0].End({x + h, y});
+                sign.geometries[1].Start({x, y - h});
+                sign.geometries[1].End({x, y + h});
             }
-            cross.container.CenterPoint({x, y});
-            cross.x = cx;
-            cross.y = cy;
-            cross.half = half;
+            sign.container.CenterPoint({x, y});
+            sign.x = cx;
+            sign.y = cy;
+            sign.half = half;
         }
-        if (std::abs(cross.stroke - stroke) > 0.001) {
-            for (auto& line : cross.lines) line.StrokeThickness((float)stroke);
-            cross.stroke = stroke;
+        if (IsLineShape(t.shape) && std::abs(sign.stroke - stroke) > 0.001) {
+            for (auto& line : sign.lines) line.StrokeThickness((float)stroke);
+            sign.stroke = stroke;
         }
         // A sign going away keeps its color while it shrinks.
-        if (t.shown && !t.colors.empty()) cross.brush.Color(t.colors[0]);
+        if (t.shown && !t.colors.empty()) sign.brush.Color(t.colors[0]);
     }
 
     float want = t.shown ? 1.0f : 0.0f;
-    bool snap = !ctx.animate || !cross.placed;
+    bool snap = !ctx.animate || !sign.placed;
     if (snap) {
-        if (std::abs(cross.scaleTween.to - want) > 0.001f || cross.scaleTween.durationMs > 0 || !cross.placed) {
-            cross.container.StopAnimation(L"Scale");
-            cross.container.Scale({want, want});
-            cross.scaleTween = {want, want, 0, 0, 0};
+        if (std::abs(sign.scaleTween.to - want) > 0.001f || sign.scaleTween.durationMs > 0 || !sign.placed) {
+            sign.container.StopAnimation(L"Scale");
+            sign.container.Scale({want, want});
+            sign.scaleTween = {want, want, 0, 0, 0};
         }
-    } else if (std::abs(cross.scaleTween.to - want) > 0.001f) {
-        float from = ScalarTweenNow(cross.scaleTween);
+    } else if (std::abs(sign.scaleTween.to - want) > 0.001f) {
+        float from = ScalarTweenNow(sign.scaleTween);
         auto animation = r.compositor.CreateVector2KeyFrameAnimation();
         animation.InsertKeyFrame(0.0f, {from, from});
         animation.InsertKeyFrame(1.0f, {want, want}, r.easing);
         animation.Duration(std::chrono::milliseconds(std::max(1, ctx.durationMs)));
-        cross.container.StartAnimation(L"Scale", animation);
-        cross.scaleTween = {from, want, GetTickCount64(), 0, std::max(1, ctx.durationMs)};
+        sign.container.StartAnimation(L"Scale", animation);
+        sign.scaleTween = {from, want, GetTickCount64(), 0, std::max(1, ctx.durationMs)};
     }
-    cross.placed = true;
+    sign.placed = true;
 }
 
 // A count label: a text block in a border in the host, created on first
@@ -4172,10 +4467,26 @@ void UpdateSign(IndicatorRenderer& r, IndicatorRenderer::Sign& cross, const Sign
 // and shrinks back into it when it goes: the border's composition visual's
 // scale, animated like the dots' size (from wherever an interrupted change
 // had got to, see ScalarTween).
+// A label made at another display scale (`rasterScale`; 0 doesn't check) is
+// made again: its text kept its old layout and rendering after the scale
+// changed and showed cut off until the button was redrawn (a click). The
+// new one shows at once, without growing in.
 void UpdateCountLabel(IndicatorRenderer& r, ButtonEntry::CountLabel& label, FrameworkElement const& host,
-                      const LabelTarget& t, const AnimationContext& ctx) {
+                      const LabelTarget& t, const AnimationContext& ctx, double rasterScale) {
     auto box = label.box.get();
     auto text = label.text.get();
+    bool remade = false;
+    if (box && text && rasterScale > 0.0 && label.rasterScale > 0.0 &&
+        std::abs(label.rasterScale - rasterScale) > 0.001) {
+        if (auto panel = host.try_as<Panel>()) {
+            uint32_t index = 0;
+            if (panel.Children().IndexOf(box, index)) panel.Children().RemoveAt(index);
+        }
+        remade = label.scaleTween.to > 0.5f;  // it was showing
+        label = ButtonEntry::CountLabel{};
+        box = nullptr;
+        text = nullptr;
+    }
     if (!box || !text) {
         if (!t.shown) return;  // nothing to hide
         auto panel = host.try_as<Panel>();
@@ -4201,8 +4512,13 @@ void UpdateCountLabel(IndicatorRenderer& r, ButtonEntry::CountLabel& label, Fram
         label = ButtonEntry::CountLabel{};
         label.box = winrt::make_weak(box);
         label.text = winrt::make_weak(text);
+        label.rasterScale = rasterScale;
     }
     auto visual = ElementCompositionPreview::GetElementVisual(box);
+    if (remade && t.shown) {
+        visual.Scale({1.0f, 1.0f, 1.0f});
+        label.scaleTween = {1.0f, 1.0f, 0, 0, 0};
+    }
 
     if (t.shown) {
         bool relayout = false;
@@ -4729,8 +5045,48 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
     // way. The dots, signs and counts keep the frame's (see UpdateFramePath).
     double thickness = activeState == 1 && localSettings.ActiveThickness > 0.0 ? localSettings.ActiveThickness
                                                                                 : localSettings.FrameThickness;
+    // Where the box sits on the screen's pixel grid, for the joins and the
+    // signs (see ComputeFrameMetrics, UpdateSign): the icon's place in the
+    // window plus the box's offset from it. The place is its layout's: the
+    // sum of the layout offsets up the tree, which a transform doesn't
+    // touch. The transformed place (TransformToVisual) moved with the
+    // button's press animation, and the refresh a click runs snapped the
+    // signs to a neighboring pixel for the moment. A right-to-left taskbar's
+    // layout offsets count from the right, so it takes the transformed
+    // place.
+    PixelGrid grid;
+    try {
+        double scale = 1.0;
+        if (auto root = host.XamlRoot()) scale = root.RasterizationScale();
+        double x = 0.0, y = 0.0;
+        bool rtlLayout = false;
+        try { rtlLayout = button.FlowDirection() == FlowDirection::RightToLeft; } catch (...) {}
+        if (rtlLayout) {
+            auto origin = icon.TransformToVisual(nullptr).TransformPoint({0.0f, 0.0f});
+            x = origin.X;
+            y = origin.Y;
+        } else {
+            DependencyObject node = icon;
+            for (int depth = 0; node && depth < 64; depth++) {
+                if (auto element = node.try_as<UIElement>()) {
+                    auto offset = element.ActualOffset();
+                    x += offset.x;
+                    y += offset.y;
+                }
+                node = VisualTreeHelper::GetParent(node);
+            }
+        }
+        grid.scale = scale;
+        grid.ox = (x + box.adjX) * scale;
+        grid.oy = (y + box.adjY) * scale;
+        grid.valid = true;
+    } catch (...) {}
     bool thicknessOnly = false;
-    bool rebuilt = UpdateFramePath(r, box, localSettings, thickness, &thicknessOnly);
+    bool rebuilt = UpdateFramePath(r, box, localSettings, thickness, grid, &thicknessOnly);
+    if (rebuilt && localSettings.DebugLog && r.metrics.valid) {
+        Wh_Log(L"[debug] frame %gx%g, thickness %g: center (%g, %g), box origin (%g, %g) device px at scale %g",
+               r.metrics.W, r.metrics.H, r.metrics.t, r.metrics.cx, r.metrics.cy, grid.ox, grid.oy, grid.scale);
+    }
     if (!r.metrics.valid || !r.dotMetrics.valid) return;
 
     if (!entry->hostBound || std::abs(entry->hostAdjX - box.adjX) > 0.5f || std::abs(entry->hostAdjY - box.adjY) > 0.5f) {
@@ -4759,14 +5115,14 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
 
     SlotTarget targets[kSlotCount];
     LabelTarget labels[kLabelCount];
-    SignTarget plus, cross;
+    SignTarget signs[kSignCount];
     entry->badgeCount = hasBadge && (localSettings.BadgeNumber || localSettings.DebugLog) ? ReadNativeBadgeCount(button, entry)
                                                                                         : std::wstring();
     // Read for the pinned-app indicator, and for the debug log, which shows it.
     int pinnedState = localSettings.PinnedEnabled || localSettings.DebugLog ? ReadButtonPinned(button) : -1;
     if (pinnedState < 0) pinnedState = entry->pinnedState;  // recycled: keep the last known
     entry->pinnedState = (int8_t)pinnedState;
-    ComputeSlotTargets(targets, labels, plus, cross, r.metrics, r.dotMetrics, localSettings, state, mask, hasBadge, entry->badgeCount,
+    ComputeSlotTargets(targets, labels, signs, r.metrics, r.dotMetrics, localSettings, state, mask, hasBadge, entry->badgeCount,
                        windowCount, isActive, IsElementLightMode(button), attention, pinnedState);
 
     // A button's first placement (the mod just turned on, a new button)
@@ -4784,8 +5140,9 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
             try { AnimateSlot(r, r.slots[k], hidden, still); } catch (...) {}
         }
         SignTarget none;
-        try { UpdateSign(r, r.plus, none, 1.0, still); } catch (...) {}
-        try { UpdateSign(r, r.cross, none, 1.0, still); } catch (...) {}
+        for (auto& sign : r.signs) {
+            try { UpdateSign(r, sign, none, grid, still); } catch (...) {}
+        }
     }
 
     // Indeterminate progress: a minimized app's underline sweeps (the dots
@@ -4844,12 +5201,11 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
             Wh_Log(L"Exception while placing indicator %d", k);
         }
     }
-    double rasterScale = 1.0;
-    try { if (auto root = host.XamlRoot()) rasterScale = root.RasterizationScale(); } catch (...) {}
-    try { UpdateSign(r, r.plus, plus, rasterScale, ctx); } catch (...) { Wh_Log(L"Exception while placing the plus sign"); }
-    try { UpdateSign(r, r.cross, cross, rasterScale, ctx); } catch (...) { Wh_Log(L"Exception while placing the X sign"); }
+    for (int k = 0; k < kSignCount; k++) {
+        try { UpdateSign(r, r.signs[k], signs[k], grid, ctx); } catch (...) { Wh_Log(L"Exception while placing sign %d", k); }
+    }
     for (int k = 0; k < kLabelCount; k++) {
-        try { UpdateCountLabel(r, entry->countLabels[k], host, labels[k], ctx); } catch (...) {
+        try { UpdateCountLabel(r, entry->countLabels[k], host, labels[k], ctx, grid.valid ? grid.scale : 0.0); } catch (...) {
             Wh_Log(L"Exception while placing count %d", k);
         }
     }
@@ -4926,6 +5282,61 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
 // applies the marks.
 void EnsureColorSubscription();
 
+// Display scale changes: they move and resize nothing in logical pixels, so
+// no event this mod follows reported them, and the frames' pixel snapping
+// and the counts' text stayed at the old scale until a button was hovered.
+// Each taskbar's XamlRoot reports them (Changed, with a new
+// RasterizationScale): one handler per root, added on a button's refresh,
+// which asks for a refresh pass of every button and the passes that lay
+// them out again (see kScaleSettleDelaysMs). Removed on the taskbar thread
+// at unload (see UnloadCleanupOnTaskbarThread).
+struct XamlRootWatch {
+    winrt::weak_ref<XamlRoot> root;
+    winrt::event_token token{};
+    std::shared_ptr<double> scale;  // the last one seen, shared with the handler
+};
+std::mutex g_xamlRootWatchesMutex;
+[[clang::no_destroy]] std::optional<std::vector<XamlRootWatch>> g_xamlRootWatches{std::in_place};
+
+void WatchXamlRootScale(FrameworkElement const& element) {
+    XamlRoot root{nullptr};
+    try { root = element.XamlRoot(); } catch (...) {}
+    if (!root) return;
+    std::lock_guard<std::mutex> lock(g_xamlRootWatchesMutex);
+    if (!g_xamlRootWatches) return;
+    auto& watches = *g_xamlRootWatches;
+    // Roots gone (a taskbar removed) are dropped; their handlers went with them.
+    watches.erase(std::remove_if(watches.begin(), watches.end(), [](auto const& w) { return !w.root.get(); }),
+                  watches.end());
+    for (auto const& watch : watches) {
+        if (watch.root.get() == root) return;
+    }
+    try {
+        auto scale = std::make_shared<double>(root.RasterizationScale());
+        auto token = root.Changed([scale](XamlRoot const& sender, auto const&) {
+            if (g_unloading) return;
+            double now = *scale;
+            try { now = sender.RasterizationScale(); } catch (...) {}
+            if (std::abs(now - *scale) < 0.0001) return;  // a size or visibility change
+            *scale = now;
+            if (g_debugLog) Wh_Log(L"[debug] display scale changed to %g; refreshing", now);
+            RequestRefreshPassSoon(true);
+        });
+        watches.push_back({winrt::make_weak(root), token, scale});
+    } catch (...) {}
+}
+
+void UnwatchXamlRoots() {
+    std::lock_guard<std::mutex> lock(g_xamlRootWatchesMutex);
+    if (!g_xamlRootWatches) return;
+    for (auto const& watch : *g_xamlRootWatches) {
+        if (auto root = watch.root.get()) {
+            try { root.Changed(watch.token); } catch (...) {}
+        }
+    }
+    g_xamlRootWatches.reset();
+}
+
 void RefreshButton(FrameworkElement const& button, const Settings& localSettings) {
     if (g_unloading) return;
 
@@ -4938,6 +5349,7 @@ void RefreshButton(FrameworkElement const& button, const Settings& localSettings
     // couldn't (after an Explorer restart the mod starts before the taskbar
     // window exists). Refreshes run on the taskbar's thread.
     EnsureColorSubscription();
+    WatchXamlRootScale(button);
 
     auto entry = FindOrCreateEntry(button);
     if (!entry) return;
@@ -5670,11 +6082,10 @@ void WINAPI UnloadOutroOnTaskbarThread(void* param) {
                 r.fillActive = false;
             }
             SignTarget none;
-            UpdateSign(r, r.plus, none, 1.0, ctx);
-            UpdateSign(r, r.cross, none, 1.0, ctx);
+            for (auto& sign : r.signs) UpdateSign(r, sign, none, PixelGrid{}, ctx);
             if (auto host = entry->host.get()) {
                 LabelTarget gone;
-                for (auto& label : entry->countLabels) UpdateCountLabel(r, label, host, gone, ctx);
+                for (auto& label : entry->countLabels) UpdateCountLabel(r, label, host, gone, ctx, 0.0);
             }
 
             // The native elements fade back in, to their own opacity.
@@ -5717,6 +6128,7 @@ void WINAPI UnloadCleanupOnTaskbarThread(void* param) {
             Wh_Log(L"Exception while restoring the taskbars");
         }
     }
+    UnwatchXamlRoots();
     g_virtualDesktopManager = nullptr;
     g_virtualDesktopManagerTried = false;
     // Every badge was shown again above, its previous clip put back; release
@@ -5761,6 +6173,11 @@ void RestoreNativeElements(NativeRestore what) {
 #define COLOR_REFRESH_DELAY_MS 150
 #define INDICATOR_REFRESH_DELAY_MS 60
 #define INDICATOR_FOLLOW_UP_DELAY_MS 300
+// After a display scale change the taskbar doesn't lay most buttons out
+// again: they keep the old scale's rounding, between the new scale's
+// pixels, until something re-measures them (a hover, a new icon). Passes
+// this late lay them out again first (see InvalidateLayoutForScale).
+constexpr UINT kScaleSettleDelaysMs[3] = {150, 800, 2000};
 
 HANDLE g_eventThread = nullptr;
 HANDLE g_eventThreadReady = nullptr;
@@ -5769,14 +6186,31 @@ std::atomic<DWORD> g_eventThreadId{0};
 // Only touched on the event thread.
 UINT_PTR g_refreshTimer = 0;
 UINT_PTR g_followUpTimer = 0;
+UINT_PTR g_settleTimers[3] = {0, 0, 0};  // the late passes after a display scale change
 std::vector<HWINEVENTHOOK> g_winEventHooks;
 // The last known maximized state of top-level windows, so that of the many
 // location changes only the ones that maximize or restore schedule a pass.
 std::unordered_map<HWND, bool> g_zoomStates;
 
+// After a display scale change: marks the icon and every element above it
+// for a new layout, so each one's offset is rounded to the new scale's
+// pixels by the next layout pass. The elements off this path keep their
+// cached layout.
+void InvalidateLayoutForScale(ButtonEntry const& entry, FrameworkElement const& button) {
+    auto icon = entry.icon.get();
+    DependencyObject node = icon ? DependencyObject(icon) : DependencyObject(button);
+    for (int depth = 0; node && depth < 64; depth++) {
+        if (auto element = node.try_as<UIElement>()) element.InvalidateMeasure();
+        node = VisualTreeHelper::GetParent(node);
+    }
+}
+
 // Runs on the taskbar thread: refreshes every task list button entry, which
-// re-evaluates its indicator.
-void WINAPI RefreshIndicatorsProc(void*) {
+// re-evaluates its indicator. With `relayout` (after a display scale
+// change) the buttons are laid out again first and at once, so the refresh
+// reads offsets rounded to the new scale (see the pixel grid in
+// UpdateIndicator).
+void RefreshIndicatorsProc(bool relayout) {
     if (g_unloading) return;
     std::vector<std::shared_ptr<ButtonEntry>> entries;
     {
@@ -5787,6 +6221,23 @@ void WINAPI RefreshIndicatorsProc(void*) {
     Settings localSettings;
     { std::lock_guard<std::mutex> lock(g_settingsMutex); localSettings = g_settings; }
     if (localSettings.DebugLog) g_refreshStats.passes++;
+    if (relayout) {
+        if (localSettings.DebugLog) {
+            Wh_Log(L"[debug] laying out %d buttons again for the display scale", (int)entries.size());
+        }
+        for (auto& e : entries) {
+            if (auto btn = e->button.get()) {
+                try { InvalidateLayoutForScale(*e, btn); } catch (...) {}
+            }
+        }
+        // One layout pass per taskbar; a later call finds nothing to do.
+        for (auto& e : entries) {
+            if (auto btn = e->button.get()) {
+                try { btn.UpdateLayout(); } catch (...) {}
+            }
+        }
+        if (g_unloading) return;
+    }
     for (auto& e : entries) {
         auto btn = e->button.get();
         if (!btn) continue;
@@ -5798,7 +6249,7 @@ void WINAPI RefreshIndicatorsProc(void*) {
 // Posts a refresh pass to the taskbar thread through a known button's
 // dispatcher (every taskbar lives on that thread). With no button known yet
 // there is nothing to refresh: the first one is found by the hooks.
-void PostRefreshPass() {
+void PostRefreshPass(bool relayout = false) {
     winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
     {
         std::lock_guard<std::mutex> lock(g_entriesMutex);
@@ -5810,7 +6261,7 @@ void PostRefreshPass() {
             }
         }
     }
-    if (dispatcher) PostToUiThread(dispatcher, [] { RefreshIndicatorsProc(nullptr); });
+    if (dispatcher) PostToUiThread(dispatcher, [relayout] { RefreshIndicatorsProc(relayout); });
 }
 
 void CALLBACK IndicatorRefreshTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
@@ -5826,6 +6277,12 @@ void CALLBACK IndicatorRefreshTimerProc(HWND, UINT, UINT_PTR id, DWORD) {
     } else if (id == g_followUpTimer) {
         g_followUpTimer = 0;
         PostRefreshPass();
+    } else {
+        for (auto& timer : g_settleTimers) {
+            if (id != timer) continue;
+            timer = 0;
+            PostRefreshPass(true);
+        }
     }
 }
 
@@ -5849,11 +6306,23 @@ void ArmIndicatorRefreshTimer() {
     }
 }
 
+// The passes after a display scale change: the usual two, then the ones
+// that lay the buttons out again (kScaleSettleDelaysMs), restarted by a
+// later change.
+void ArmScaleSettleTimers() {
+    ArmIndicatorRefreshTimer();
+    for (int i = 0; i < 3; i++) {
+        if (g_settleTimers[i]) KillTimer(nullptr, g_settleTimers[i]);
+        g_settleTimers[i] = SetTimer(nullptr, 0, kScaleSettleDelaysMs[i], IndicatorRefreshTimerProc);
+    }
+}
+
 // Asks the event thread for a refresh pass of every button soon (see
-// WatchHiddenNative). Callable from any thread.
-void RequestRefreshPassSoon() {
+// WatchHiddenNative), with `scaleChanged` the late ones too (see
+// WatchXamlRootScale). Callable from any thread.
+void RequestRefreshPassSoon(bool scaleChanged) {
     if (g_unloading) return;
-    if (DWORD threadId = g_eventThreadId) PostThreadMessage(threadId, WM_APP_REFRESH_PASS, 0, 0);
+    if (DWORD threadId = g_eventThreadId) PostThreadMessage(threadId, WM_APP_REFRESH_PASS, scaleChanged ? 1 : 0, 0);
 }
 
 // Keeps only events that can change a taskbar button: top-level, unowned
@@ -5951,8 +6420,10 @@ DWORD WINAPI IndicatorEventThreadProc(LPVOID) {
             continue;
         }
         if (!msg.hwnd && msg.message == WM_APP_REFRESH_PASS) {
-            // A pass a moment from now and a follow-up (a burst joins them).
-            ArmIndicatorRefreshTimer();
+            // A pass a moment from now and a follow-up (a burst joins them),
+            // and after a display scale change the late ones too.
+            if (msg.wParam) ArmScaleSettleTimers();
+            else ArmIndicatorRefreshTimer();
             continue;
         }
         if (!msg.hwnd && msg.message == WM_APP_COLORS_CHANGED) {
