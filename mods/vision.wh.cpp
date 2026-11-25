@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              vison
-// @name            Vison
+// @id              vision
+// @name            Vision
 // @description     Per-window opacity, Z-order pinning, and brightness-aware dimming via title-bar mouse gestures and optional header control
 // @author          Ashix
 // @version         1.2026.1711
