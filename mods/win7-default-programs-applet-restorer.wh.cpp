@@ -82,8 +82,7 @@ manually. Without the required files the Windows page stays in place; connect to
 - If the generated DirectUI page cannot load, this mod may use an unmodified private copy instead. Its page
   strings may be missing or different. The log records the loading steps.
 - This mod uses older pages with newer Windows components. Some features may not work or may stop working after
-  a Windows update. The page and program access link have been tested on Windows 10 21H2 (build 19044); other builds
-  and Windows 11 are not guaranteed to work.
+  a Windows update. The page and program access link have been tested on Windows 10 21H2 and Windows 11 24H2.
 - Windows 10 1607 or later, or Windows 11; 64-bit (x64) only. A recent Windhawk version is required. DirectUI
   control accessibility names are in English. Private copies remain loaded until `explorer.exe` restarts.
 
