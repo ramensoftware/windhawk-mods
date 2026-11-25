@@ -11097,10 +11097,6 @@ void Wh_ModUninit() {
 } // namespace Menu1507
 #undef GUARDED
 
-BOOL WhTool_ModInit();
-void WhTool_ModSettingsChanged();
-void WhTool_ModUninit();
-
 namespace Menu81 {
 static std::atomic<bool> g_stopRequested{ false };
 
@@ -22403,16 +22399,7 @@ static HANDLE g_nativeCatalogThread = nullptr;
 static HANDLE g_nativeCatalogReady = nullptr;
 static std::atomic<bool> g_toolStopping{false};
 static bool g_toolRuntimeStopped = false;
-static bool g_explorerRuntimeStopped = false;
-static bool g_isExplorer = false;
 
-static bool IsExplorerProcess() {
-    WCHAR path[MAX_PATH]{};
-    DWORD len=GetModuleFileNameW(nullptr,path,ARRAYSIZE(path));
-    if (!len || len>=ARRAYSIZE(path)) return false;
-    const wchar_t* name=wcsrchr(path,L'\\');
-    return _wcsicmp(name?name+1:path,L"explorer.exe")==0;
-}
 static DWORD WINAPI ToolMonitorProc(void*) {
     HANDLE handles[]={g_toolStopEvent,g_hUiThread.get()};
     DWORD result=WaitForMultipleObjects(ARRAYSIZE(handles),handles,FALSE,INFINITE);
@@ -22497,7 +22484,6 @@ BOOL ExplorerModInit() {
     const DWORD shellPid=DesktopShellOwnerPid();
     if (shellPid && shellPid!=GetCurrentProcessId()) return FALSE;
     g_stopRequested=false;
-    g_explorerRuntimeStopped=false;
     g_nativeCatalogReady=CreateEventW(nullptr,TRUE,FALSE,L"Local\\windhawk-start81-native-catalog_" WH_MOD_ID);
     if (g_nativeCatalogReady) {
         ResetEvent(g_nativeCatalogReady);
@@ -22523,10 +22509,7 @@ BOOL ExplorerModInit() {
     }
     return TRUE;
 }
-void ExplorerModSettingsChanged() {}
 void ExplorerModUninit() {
-    if (g_explorerRuntimeStopped) return;
-    g_explorerRuntimeStopped=true;
     g_stopRequested=true;
     if (g_explorerBridgeStop) SetEvent(g_explorerBridgeStop);
     if (g_explorerBridgeThread) {
@@ -22539,6 +22522,69 @@ void ExplorerModUninit() {
     }
     if (g_nativeCatalogReady) {CloseHandle(g_nativeCatalogReady);g_nativeCatalogReady=nullptr;}
     if (g_explorerBridgeStop) {CloseHandle(g_explorerBridgeStop);g_explorerBridgeStop=nullptr;}
+}
+
+} // namespace Menu81
+
+// The 1507 menu runs in explorer.exe. The 8.1 menu runs in the tool process,
+// with a bridge to it in explorer.exe.
+static bool Is81Selected() {
+    auto setting = WindhawkUtils::StringSetting::make(L"menuSkin");
+    return wcscmp(setting.get(),L"win81") == 0;
+}
+
+// The tool process.
+BOOL WhTool_ModInit() {
+    if (!Is81Selected()) {
+        Wh_Log(L"[Lifecycle] the selected skin doesn't use the tool process");
+        return FALSE;
+    }
+    return Menu81::ToolRuntimeInit();
+}
+void WhTool_ModSettingsChanged() {
+    if (!Is81Selected()) {
+        Wh_Log(L"[Lifecycle] the selected skin doesn't use the tool process");
+        Menu81::ToolRuntimeUninit();
+        ExitProcess(0);
+    }
+    Menu81::ToolRuntimeSettingsChanged();
+}
+void WhTool_ModUninit() {
+    Menu81::ToolRuntimeUninit();
+}
+
+// The launcher process: windhawk.exe, which launches the tool process, or
+// explorer.exe, which runs its part of the selected skin instead.
+static bool g_isExplorer = false;
+static bool g_selected81 = false;
+
+static bool IsExplorerProcess() {
+    WCHAR path[MAX_PATH]{};
+    DWORD len=GetModuleFileNameW(nullptr,path,ARRAYSIZE(path));
+    if (!len || len>=ARRAYSIZE(path)) return false;
+    const wchar_t* name=wcsrchr(path,L'\\');
+    return _wcsicmp(name?name+1:path,L"explorer.exe")==0;
+}
+static BOOL Launcher_ModInit() {
+    g_isExplorer = IsExplorerProcess();
+    g_selected81 = Is81Selected();
+    Wh_Log(L"[Lifecycle] skin=%s", g_selected81 ? L"win81" : L"win10");
+    if (g_isExplorer)
+        return g_selected81 ? Menu81::ExplorerModInit() : Menu1507::Wh_ModInit();
+    // Only the 8.1 menu has a tool process to launch. Windhawk retries loading
+    // the mod when its settings change.
+    return g_selected81;
+}
+static void Launcher_ModSettingsChanged(BOOL* bReload) {
+    if (Is81Selected() != g_selected81)
+        *bReload = TRUE;
+    else if (g_isExplorer && !g_selected81)
+        Menu1507::Wh_ModSettingsChanged();
+}
+static void Launcher_ModUninit() {
+    if (!g_isExplorer) return;
+    if (g_selected81) Menu81::ExplorerModUninit();
+    else Menu1507::Wh_ModUninit();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -22555,8 +22601,8 @@ void ExplorerModUninit() {
 //
 // Currently, other callbacks are not supported.
 //
-// This mod also targets explorer.exe: there, each callback calls the explorer
-// part instead (the lines marked "explorer.exe part").
+// The Launcher_* callbacks are an addition of this mod, for the launcher
+// process.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -22567,12 +22613,6 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    // explorer.exe part.
-    if (IsExplorerProcess()) {
-        g_isExplorer = true;
-        return ExplorerModInit();
-    }
-
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
@@ -22648,11 +22688,11 @@ BOOL Wh_ModInit() {
     }
 
     g_isToolModProcessLauncher = true;
-    return TRUE;
+    return Launcher_ModInit();
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
+    if (!g_isToolModProcessLauncher || g_isExplorer) {
         return;
     }
 
@@ -22712,123 +22752,22 @@ void Wh_ModAfterInit() {
     CloseHandle(pi.hThread);
 }
 
-void Wh_ModSettingsChanged() {
-    // explorer.exe part.
-    if (g_isExplorer) {
-        ExplorerModSettingsChanged();
-        return;
-    }
-
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     if (g_isToolModProcessLauncher) {
-        return;
+        Launcher_ModSettingsChanged(bReload);
+        return TRUE;
     }
 
     WhTool_ModSettingsChanged();
+    return TRUE;
 }
 
 void Wh_ModUninit() {
-    // explorer.exe part.
-    if (g_isExplorer) {
-        ExplorerModUninit();
-        return;
-    }
-
     if (g_isToolModProcessLauncher) {
+        Launcher_ModUninit();
         return;
     }
 
     WhTool_ModUninit();
     ExitProcess(0);
-}
-
-
-} // namespace Menu81
-
-// Global tool callbacks recognized by Windhawk 2.0 and used by the 1.7
-// launcher; they forward to the Menu81 tool runtime.
-// Windhawk exports global functions and checks for _Z14WhTool_ModInitv.
-BOOL WhTool_ModInit() {
-    return Menu81::ToolRuntimeInit();
-}
-void WhTool_ModSettingsChanged() {
-    Menu81::ToolRuntimeSettingsChanged();
-}
-void WhTool_ModUninit() {
-    Menu81::ToolRuntimeUninit();
-}
-
-// Dispatch the complete implementation, not just its paint routines. A skin
-// change needs a full reload because the 8.1 bridge owns a helper process.
-static bool g_selected81 = false;
-static bool g_idleToolHost = false;
-static bool Is81Selected() {
-    auto setting = WindhawkUtils::StringSetting::make(L"menuSkin");
-    return wcscmp(setting.get(),L"win81") == 0;
-}
-BOOL Wh_ModInit() {
-    g_selected81=Is81Selected();
-    WCHAR processPath[MAX_PATH]{};
-    if (GetModuleFileNameW(nullptr, processPath, ARRAYSIZE(processPath)))
-        Wh_Log(L"[Lifecycle] process=%s skin=%s", processPath,
-               g_selected81 ? L"win81" : L"win10");
-    if (g_selected81) return Menu81::Wh_ModInit();
-    if (!Menu81::IsExplorerProcess()) {
-        // The legacy tool-mod launcher identifies the helper by -tool-mod
-        // and the mod ID on both Windhawk 1.7.3 and compatible 2.0 hosts.
-        // The 1507 menu runs in Explorer, so this helper has no menu to run.
-        // Do not depend on a particular host executable name.
-        int count = 0;
-        LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &count);
-        if (!argv) return FALSE;
-        bool ownHost = false;
-        for (int i = 1; i + 1 < count; ++i) {
-            if (wcscmp(argv[i], L"-tool-mod") == 0 &&
-                wcscmp(argv[i + 1], WH_MOD_ID) == 0) { ownHost = true; break; }
-        }
-        LocalFree(argv);
-        if (!ownHost) return FALSE;
-        IMAGE_DOS_HEADER* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        IMAGE_NT_HEADERS* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(reinterpret_cast<BYTE*>(dos) + dos->e_lfanew);
-        void* entry = reinterpret_cast<BYTE*>(dos) + nt->OptionalHeader.AddressOfEntryPoint;
-        if (!Wh_SetFunctionHook(entry, reinterpret_cast<void*>(Menu81::EntryPoint_Hook), nullptr)) {
-            Wh_Log(L"[Lifecycle] idle 1507 host entry hook failed");
-            return FALSE;
-        }
-        g_idleToolHost = true;
-        Wh_Log(L"[Lifecycle] idle 1507 tool host initialized");
-        return TRUE;
-    }
-    int argc=0;
-    LPWSTR* args=CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (!args) return FALSE;
-    bool tool=false;
-    for (int i=1; i<argc; ++i)
-        if (wcscmp(args[i],L"-tool-mod")==0) tool=true;
-    LocalFree(args);
-    if (tool) return FALSE;
-    return Menu1507::Wh_ModInit();
-}
-void Wh_ModAfterInit() {
-    if (g_selected81) Menu81::Wh_ModAfterInit();
-}
-BOOL Wh_ModSettingsChanged(BOOL* reload) {
-    if (Is81Selected()!=g_selected81) {
-        *reload=TRUE;
-        return TRUE;
-    }
-    if (g_idleToolHost) return TRUE;
-    if (g_selected81) Menu81::Wh_ModSettingsChanged();
-    else Menu1507::Wh_ModSettingsChanged();
-    return TRUE;
-}
-void Wh_ModBeforeUninit() {
-    if (g_selected81 && Menu81::g_isExplorer) Menu81::ExplorerModUninit();
-}
-void Wh_ModUninit() {
-    if (g_idleToolHost) {
-        Wh_Log(L"[Lifecycle] idle 1507 tool host exiting");
-        ExitProcess(0);
-    }
-    if (g_selected81) Menu81::Wh_ModUninit();
-    else Menu1507::Wh_ModUninit();
 }
