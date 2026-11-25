@@ -4,6 +4,7 @@
 // @description     Everything search inside File Explorer (native search box via UI Automation and a hotkey) and Win+S to EverythingToolbar
 // @version         0.8.0
 // @author          Frixed
+// @github          https://github.com/frixed
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -lshell32 -lshlwapi -lcomctl32 -luuid -lpropsys -ladvapi32 -lgdi32 -ldwmapi -luser32
 // ==/WindhawkMod==
