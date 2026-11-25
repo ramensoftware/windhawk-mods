@@ -20,6 +20,8 @@
 Suppresses matching Windows 11 USB drive scan and repair dialogs and
 AutoPlay notifications without disabling the AutoPlay service.
 
+![USB Scan and Fix dialog blocked](https://raw.githubusercontent.com/d-p4d-67/Disable-USB-Scan-and-Fix-Dialog-Windows-11/main/Disk_Check_dialog.png)
+
 - Recognizes English and Russian warning text.
 - Automatically selects "Continue without scanning" for matching dialogs.
 - Leaves non-matching notifications and dialogs unchanged.
