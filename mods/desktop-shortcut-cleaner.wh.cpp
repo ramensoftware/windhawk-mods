@@ -19,7 +19,7 @@ Clean up the Windows 11 desktop without touching File Explorer: hide shortcut
 labels, arrows and administrator shields, and replace the white hover box
 with a soft glow that follows each icon's shape.
 
-![Hovering and selecting desktop icons shows a soft white glow around each icon's shape instead of the white box](https://raw.githubusercontent.com/ELSEGuy/desktop-shortcut-cleaner-Windhawk/39fa539f259d9b3dff3c2b2d10da7e7cd3cc95be/Screnshot/glow_demo.gif)
+![Hovering, selecting and dragging desktop icons: a soft white glow follows each icon's shape, and dragged icons move as a solid icon](https://raw.githubusercontent.com/ELSEGuy/desktop-shortcut-cleaner-Windhawk/47e7b1ad6c4c8ed5cb7a310b8b4c9dafe2b53446/Screnshot/glow_demo.gif)
 
 ## Features
 
