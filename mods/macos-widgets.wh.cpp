@@ -2767,6 +2767,7 @@ static bool g_eventsRefresh = false;
 static bool g_newsRefresh = false;  // "Atualizar Notícias"
 static bool g_coversWanted = false;  // news covers still to download (by CoverThread)
 static std::thread g_coverThread;
+static std::thread g_netThread;
 
 static int DaysInMonth(int year, int month) {
     static const int d[12] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -3233,6 +3234,79 @@ static std::wstring NewsAgo(long long when) {
     return Fmt(TF(days == 1 ? L"há %lld dia" : L"há %lld dias"), days);
 }
 
+static bool IsWebUrl(const std::wstring& u);
+
+static bool IsFeed(const std::wstring& xml) {
+    bool root = xml.find(L"<rss") != std::wstring::npos || xml.find(L"<feed") != std::wstring::npos ||
+                xml.find(L"<rdf:RDF") != std::wstring::npos;
+    return root && (xml.find(L"<item") != std::wstring::npos || xml.find(L"<entry") != std::wstring::npos);
+}
+
+// An address found in a page, made whole: //host/x, /x and x are relative to the page
+static std::wstring AbsoluteUrl(const std::wstring& page, std::wstring href) {
+    if (href.empty() || IsWebUrl(href)) return href;
+    size_t scheme = page.find(L"://");
+    if (scheme == std::wstring::npos) return L"";
+    if (href.rfind(L"//", 0) == 0) return page.substr(0, scheme + 1) + href;
+    size_t slash = page.find(L'/', scheme + 3);
+    std::wstring origin = page.substr(0, slash);
+    if (href[0] == L'/') return origin + href;
+    if (href.find(L':') != std::wstring::npos) return L"";  // another scheme (mailto:, javascript:...)
+    std::wstring dir = slash == std::wstring::npos ? origin + L"/" : page.substr(0, page.find_last_of(L'/') + 1);
+    return dir + href;
+}
+
+// The feed behind an address: the address itself if it's a feed; else the feed the page announces
+// (<link rel="alternate" type="application/rss+xml">), a link on the page that looks like one, or the usual places
+// (/feed, /rss...). What was found is remembered, so a site is only searched once
+static std::vector<std::pair<std::wstring, std::wstring>> g_feedFound;  // address -> its feed (network thread only)
+static std::vector<std::pair<std::wstring, ULONGLONG>> g_feedMissing;   // address -> when no feed was found
+
+static std::wstring FeedXml(std::wstring url) {
+    if (url.find(L"://") == std::wstring::npos) url = L"https://" + url;  // "g1.globo.com" is enough
+    if (!IsWebUrl(url)) return L"";
+    if (auto* known = FindIn(g_feedFound, url)) {
+        std::wstring xml = FromUtf8(HttpGetUrl(*known));
+        if (IsFeed(xml)) return xml;  // else the site changed: searched again below
+    }
+    if (auto* when = FindIn(g_feedMissing, url))  // searched in vain not long ago: not again for half an hour
+        if (GetTickCount64() - *when < 30 * 60 * 1000) return L"";
+    std::wstring page = FromUtf8(HttpGetUrl(url));
+    if (IsFeed(page)) return page;
+    std::vector<std::wstring> tries;
+    auto addTry = [&](const std::wstring& u) {
+        if (!u.empty() && IsWebUrl(u) && std::find(tries.begin(), tries.end(), u) == tries.end()) tries.push_back(u);
+    };
+    for (size_t p = 0; (p = page.find(L"<link", p)) != std::wstring::npos; p++) {
+        std::wstring type = Lower(AttrOf(page, p, L"type"));
+        if (type.find(L"rss+xml") != std::wstring::npos || type.find(L"atom+xml") != std::wstring::npos)
+            addTry(AbsoluteUrl(url, AttrOf(page, p, L"href")));
+    }
+    for (size_t p = 0; (p = page.find(L"<a ", p)) != std::wstring::npos && tries.size() < 6; p++) {
+        std::wstring href = AttrOf(page, p, L"href"), h = Lower(href);
+        if (h.find(L"rss") != std::wstring::npos || h.find(L"/feed") != std::wstring::npos || h.find(L"atom") != std::wstring::npos)
+            addTry(AbsoluteUrl(url, href));
+    }
+    size_t scheme = url.find(L"://");
+    std::wstring origin = url.substr(0, url.find(L'/', scheme + 3));
+    std::wstring base = url.back() == L'/' ? url.substr(0, url.size() - 1) : url;
+    for (PCWSTR tail : {L"/feed", L"/rss", L"/rss.xml", L"/feed.xml", L"/index.xml", L"/atom.xml", L"/feed/"}) {
+        addTry(base + tail);
+        addTry(origin + tail);
+    }
+    for (size_t i = 0; i < tries.size() && i < 10 && g_running; i++) {
+        std::wstring xml = FromUtf8(HttpGetUrl(tries[i]));
+        if (!IsFeed(xml)) continue;
+        if (auto* known = FindIn(g_feedFound, url)) *known = tries[i];
+        else g_feedFound.push_back({url, tries[i]});
+        return xml;
+    }
+    if (page.empty()) return L"";  // the site didn't answer (no internet yet?): tried again soon
+    if (auto* when = FindIn(g_feedMissing, url)) *when = GetTickCount64();
+    else g_feedMissing.push_back({url, GetTickCount64()});
+    return L"";
+}
+
 // Only web pages: a feed (or anyone between it and us, on plain http) could name a program, a file or another protocol
 static bool IsWebUrl(const std::wstring& u) {
     return _wcsnicmp(u.c_str(), L"http://", 7) == 0 || _wcsnicmp(u.c_str(), L"https://", 8) == 0;
@@ -3242,23 +3316,7 @@ static bool FetchNews() {
     std::vector<std::vector<NewsItem>> perFeed;
     for (const auto& url : SplitList(GetSettings().newsFeeds, L",; \n")) {
         if (perFeed.size() >= 5 || !g_running) break;
-        std::wstring xml = FromUtf8(HttpGetUrl(url));
-        if (xml.find(L"<item") == std::wstring::npos && xml.find(L"<entry") == std::wstring::npos) {
-            // A site's page, not its feed: the feed it announces in <link rel="alternate" type="application/rss+xml">
-            std::wstring feed;
-            for (size_t p = 0; feed.empty() && (p = xml.find(L"<link", p)) != std::wstring::npos; p++) {
-                std::wstring type = Lower(AttrOf(xml, p, L"type"));
-                if (type.find(L"rss+xml") != std::wstring::npos || type.find(L"atom+xml") != std::wstring::npos)
-                    feed = AttrOf(xml, p, L"href");
-            }
-            if (feed.rfind(L"//", 0) == 0) feed = L"https:" + feed;
-            else if (!feed.empty() && feed[0] == L'/') {
-                size_t host = url.find(L"://");
-                size_t slash = host == std::wstring::npos ? std::wstring::npos : url.find(L'/', host + 3);
-                feed = url.substr(0, slash) + feed;
-            }
-            xml = feed.rfind(L"http", 0) == 0 ? FromUtf8(HttpGetUrl(feed)) : L"";
-        }
+        std::wstring xml = FeedXml(url);
         if (xml.empty()) continue;
         std::vector<NewsItem> items;
         bool atom = xml.find(L"<entry") != std::wstring::npos && xml.find(L"<item") == std::wstring::npos;
@@ -3266,7 +3324,7 @@ static bool FetchNews() {
         size_t first = xml.find(itemTag);
         std::wstring source = TagText(xml, 0, first == std::wstring::npos ? xml.size() : first, L"title");
         size_t p = first;
-        while (p != std::wstring::npos && items.size() < 20) {
+        while (p != std::wstring::npos && items.size() < 200) {
             size_t end = xml.find(atom ? L"</entry>" : L"</item>", p);
             if (end == std::wstring::npos) break;
             NewsItem n;
@@ -3287,6 +3345,9 @@ static bool FetchNews() {
             if (!n.title.empty() && !AutomaticStory(n)) items.push_back(n);
             p = xml.find(itemTag, end);
         }
+        // The newest of this feed, whatever order it lists them in (some put old ones first, or mix them)
+        std::stable_sort(items.begin(), items.end(), [](const NewsItem& a, const NewsItem& b) { return a.when > b.when; });
+        if (items.size() > 20) items.resize(20);
         // A title pattern repeated over and over is a series of automatic stories: only its first one stays
         std::vector<NewsItem> kept;
         for (auto& n : items) {
@@ -3730,6 +3791,66 @@ static void CoverThread() {
     CoUninitialize();
 }
 
+// Everything that comes from the internet (and Home Assistant), on its own thread: a slow site or a server that
+// doesn't answer holds up only these, never the music, notifications, notes or the clock
+static void NetThread() {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    ULONGLONG lastWeather = 0, lastCal = 0, lastQuotes = 0, lastNews = 0, lastHome = 0;
+    while (g_running) {
+        Settings s = GetSettings();
+        bool weatherNow, calNow, newsNow;
+        {
+            std::lock_guard<std::mutex> lock(g_dataMutex);
+            weatherNow = g_weatherRefresh;
+            calNow = g_eventsRefresh;
+            newsNow = g_newsRefresh;
+            g_weatherRefresh = g_eventsRefresh = g_newsRefresh = false;
+        }
+        ULONGLONG now = GetTickCount64();
+        // Only when Weather or Sunrise is shown, and there is a city to ask about
+        if ((s.showWeather || s.showSun) && HasCity(s) && (weatherNow || !lastWeather || now - lastWeather > 15 * 60 * 1000)) {
+            FetchWeather();
+            lastWeather = now;
+        }
+        bool haDown;
+        {
+            std::lock_guard<std::mutex> lock(g_dataMutex);
+            haDown = !g_haError.empty();
+        }
+        // Every 5 s; when Home Assistant doesn't answer, every minute
+        if (g_running && s.showHome && (calNow || !lastHome || now - lastHome > (haDown ? 60 : 5) * 1000)) {
+            FetchHome();
+            lastHome = now;
+        }
+        if (g_running && s.showStocks && (calNow || !lastQuotes || now - lastQuotes > 5 * 60 * 1000)) {
+            FetchQuotes();
+            lastQuotes = now;
+        }
+        if (g_running && s.showCalendar && (calNow || !lastCal || now - lastCal > 15 * 60 * 1000)) {
+            FetchCalendar();
+            lastCal = now;
+        }
+        if (g_running && s.showNews && (calNow || newsNow || !lastNews || now - lastNews > 15 * 60 * 1000)) {
+            bool ok = FetchNews();
+            g_cv.notify_all();  // the covers thread starts on them
+            // A failed update (the internet not back yet after the PC wakes up, for one) is tried again in a minute
+            lastNews = ok ? now : now - 14 * 60 * 1000;
+        }
+        if (g_uiThreadId) PostThreadMessageW(g_uiThreadId, WM_APP_REDRAW, 0, 0);
+
+        std::unique_lock<std::mutex> lock(g_dataMutex);
+        g_cv.wait_for(lock, std::chrono::seconds(1),
+                      [] { return !g_running || g_weatherRefresh || g_eventsRefresh || g_newsRefresh; });
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_dataMutex);
+        g_events.clear();
+        g_quotes.clear();
+        g_news.clear();
+    }
+    CoUninitialize();
+}
+
 static void DataThread() {
 #ifndef WW_NO_WINRT
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
@@ -3737,21 +3858,8 @@ static void DataThread() {
 #else
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 #endif
-    ULONGLONG lastWeather = 0, lastBattery = 0, lastNotif = 0, lastPhoto = 0, lastCal = 0, lastQuotes = 0, lastNews = 0, lastNotes = 0, lastHome = 0;
+    ULONGLONG lastBattery = 0, lastNotif = 0, lastPhoto = 0, lastNotes = 0;
     while (g_running) {
-        bool doWeather;
-        {
-            Settings ws = GetSettings();  // before the lock (it takes it too)
-            std::lock_guard<std::mutex> lock(g_dataMutex);
-            // Only when Weather or Sunrise is shown, and there is a city to ask about
-            doWeather = (ws.showWeather || ws.showSun) && HasCity(ws) &&
-                        (g_weatherRefresh || !lastWeather || GetTickCount64() - lastWeather > 15 * 60 * 1000);
-            g_weatherRefresh = false;
-        }
-        if (doWeather) {
-            FetchWeather();
-            lastWeather = GetTickCount64();
-        }
 #ifndef WW_NO_WINRT
         PollMedia(mgr);
 #endif
@@ -3776,43 +3884,8 @@ static void DataThread() {
             PickPhoto();
             lastPhoto = now;
         }
-        bool calNow, newsNow;
-        {
-            std::lock_guard<std::mutex> lock(g_dataMutex);
-            calNow = g_eventsRefresh;
-            g_eventsRefresh = false;
-            newsNow = g_newsRefresh;
-            g_newsRefresh = false;
-        }
-        if (!g_running) break;
-        if (s.showCalendar && (calNow || !lastCal || now - lastCal > 15 * 60 * 1000)) {
-            FetchCalendar();
-            lastCal = now;
-        }
-        if (!g_running) break;
-        if (s.showStocks && (calNow || !lastQuotes || now - lastQuotes > 5 * 60 * 1000)) {
-            FetchQuotes();
-            lastQuotes = now;
-        }
-        if (!g_running) break;
-        if (s.showNews && (calNow || newsNow || !lastNews || now - lastNews > 15 * 60 * 1000)) {
-            bool ok = FetchNews();
-            g_cv.notify_all();  // the covers thread starts on them
-            // A failed update (the internet not back yet after the PC wakes up, for one) is tried again in a minute
-            lastNews = ok ? now : now - 14 * 60 * 1000;
-        }
         if (!g_running) break;
         RunHomeCommands();
-        bool haDown;
-        {
-            std::lock_guard<std::mutex> lock(g_dataMutex);
-            haDown = !g_haError.empty();
-        }
-        // Every 5 s; when Home Assistant doesn't answer, every minute (each try waits for it, holding up the rest)
-        if (s.showHome && (calNow || !lastHome || now - lastHome > (haDown ? 60 : 5) * 1000)) {
-            FetchHome();
-            lastHome = now;
-        }
         if (!g_running) break;
         if ((s.showNotes || s.showReminders) && (!lastNotes || now - lastNotes > 3 * 1000)) {
             ReadNotesAndReminders();
@@ -3821,16 +3894,12 @@ static void DataThread() {
         if (g_uiThreadId) PostThreadMessageW(g_uiThreadId, WM_APP_REDRAW, 0, 0);
 
         std::unique_lock<std::mutex> lock(g_dataMutex);
-        g_cv.wait_for(lock, std::chrono::seconds(1),
-                      [] { return !g_running || !g_commands.empty() || !g_haCommands.empty() || g_weatherRefresh; });
+        g_cv.wait_for(lock, std::chrono::seconds(1), [] { return !g_running || !g_commands.empty() || !g_haCommands.empty(); });
     }
     {
         std::lock_guard<std::mutex> lock(g_dataMutex);
         g_media = MediaData();  // its picture is released on this thread
         g_photo = PhotoInfo();
-        g_events.clear();
-        g_quotes.clear();
-        g_news.clear();
     }
 #ifndef WW_NO_WINRT
     mgr = nullptr;
@@ -11050,6 +11119,7 @@ static void StartWorkers() {
         g_sensorThread = GuardedThread(L"Sensors", SensorThread);
         g_glassThread = GuardedThread(L"Glass", GlassThread);
         g_coverThread = GuardedThread(L"Covers", CoverThread);
+        g_netThread = GuardedThread(L"Network", NetThread);
     } catch (...) {
         Wh_Log(L"Could not start the worker threads");
     }
@@ -11098,7 +11168,7 @@ void WhTool_ModUninit() {
     // With the downloads cancelled the workers are out in moments; one stuck elsewhere is left behind rather than
     // holding up the process' exit
     for (int i = 0; i < 100 && (g_workersAlive > 0 || g_searches > 0); i++) Sleep(20);
-    for (std::thread* t : {&g_dataThread, &g_sensorThread, &g_glassThread, &g_coverThread})
+    for (std::thread* t : {&g_dataThread, &g_sensorThread, &g_glassThread, &g_coverThread, &g_netThread})
         if (t->joinable()) {
             if (g_workersAlive == 0) t->join();
             else t->detach();
