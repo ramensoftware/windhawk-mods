@@ -1,11 +1,11 @@
 // ==WindhawkMod==
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
-// @description     Weather effects and seasonal particles under desktop icons with window accumulation and shake physics.
-// @version         1.5.0
+// @description     Direct2D weather precipitation and atmospheric effects overlay for the Windows desktop with live forecast integration and low-overhead rendering.
+// @version         1.5.1
 // @author          alembiq
 // @github          https://github.com/alembiqspace
-// @include         explorer.exe
+// @include         windhawk.exe
 // @compilerOptions -ld2d1 -ldwrite -lwininet -luser32 -lgdi32 -lshell32 -lole32
 // ==/WindhawkMod==
 
@@ -1945,10 +1945,9 @@ void Wh_ModAfterInit() {
     STARTUPINFO si = {sizeof(si)};
     si.dwFlags = STARTF_FORCEOFFFEEDBACK;
     PROCESS_INFORMATION pi;
-    if (!CreateProcessInternalW(nullptr, windhawkPath, commandLine, nullptr,
-                                nullptr, FALSE, 0, nullptr, nullptr, &si,
-                                &pi)) {
-        Wh_Log(L"CreateProcessInternalW failed");
+    if (!CreateProcessW(windhawkPath, commandLine, nullptr, nullptr, FALSE, 0,
+                        nullptr, nullptr, &si, &pi)) {
+        Wh_Log(L"CreateProcessW failed: %u", GetLastError());
         return;
     }
 
