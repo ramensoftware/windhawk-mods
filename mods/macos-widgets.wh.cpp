@@ -8,7 +8,6 @@
 // @homepage        https://github.com/brideinflame-rgb/Mac-OS-Widgets
 // @donateUrl       https://livepix.gg/kurokobr
 // @include         windhawk.exe
-// @architecture    x86-64
 // @compilerOptions -ld2d1 -ldwrite -ldwmapi -lwinhttp -lruntimeobject -lole32 -loleaut32 -luser32 -lgdi32 -lshell32 -lwindowscodecs -lsetupapi -liphlpapi -luuid -ladvapi32 -lversion -lpdh
 // @license         GPL-3.0
 // ==/WindhawkMod==
