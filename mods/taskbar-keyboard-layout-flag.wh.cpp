@@ -2301,7 +2301,7 @@ bool HookWindowsUIXamlDiscovery() {
     HMODULE wuxMod = GetModuleHandleW(L"Windows.UI.Xaml.dll");
     if (!wuxMod) return false;
     // Windows.UI.Xaml.dll
-    WindhawkUtils::SYMBOL_HOOK windowsUIXamlDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             { L"public: virtual long __cdecl DirectUI::FrameworkElement::ArrangeOverride(struct Windows::Foundation::Size,struct Windows::Foundation::Size *)" },
             &FrameworkElement_ArrangeOverride_Orig,
@@ -2310,7 +2310,7 @@ bool HookWindowsUIXamlDiscovery() {
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(wuxMod, windowsUIXamlDllHooks, ARRAYSIZE(windowsUIXamlDllHooks)) || !FrameworkElement_ArrangeOverride_Orig) {
+    if (!WindhawkUtils::HookSymbols(wuxMod, hooks, ARRAYSIZE(hooks)) || !FrameworkElement_ArrangeOverride_Orig) {
         Wh_Log(L"Optional Windows.UI.Xaml.dll ArrangeOverride symbol did not resolve.");
         return false;
     }
