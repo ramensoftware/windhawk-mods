@@ -2,7 +2,7 @@
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
 // @description     Atmospheric effects and live weather forecast visualization for the Windows desktop (Direct2D overlay)
-// @version         1.8.1.1
+// @version         1.8.3
 // @author          alembiq
 // @github          https://github.com/alembiqspace
 // @include         windhawk.exe
@@ -19,7 +19,7 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
 - **Sky (`[Sky]`):** Intensity-based drifting clouds with edge fade at monitor borders, a UV-reactive sun with soft rays, and a real-phase moon with surface shading, independent movement modes, per-monitor visibility (`primary` / `all`), and cloud occlusion toggle. Hovering the cursor over clouds, sun, or moon fades them to the configured cursor-hover opacity percentage (default `5%`) so desktop icons remain visible.
 - **Effects (`[Effects]`):** Wind gusts, frost/heat tint, night stars, air quality haze/particles, floating pollen, flood-level water, and atmospheric layers (`dust`, `fog`, `smog`, `thunderstorm`, `aurora`, `mirage`, `rainbow`).
 - **Custom & Playful Units:** Configure standard or playful units in settings for temperature, wind, cloud cover, precipitation, UV index, and air quality.
-- **Draggable Temperature Button & Interactive Table:** Drag the circular button (shows a gear icon when no temperature forecast is available yet) or click it to open an auto-sized table below desktop icons without blocking icon clicks.
+- **Draggable Temperature Button & Interactive Table:** Drag the circular button (shows a gear icon when no temperature forecast is available yet) or click it to open an auto-sized table with unified forecast fields, `auto` multi-provider aggregation, italic/50%-opacity styling for unsupported fields, and `(i)` hover tooltips showing source and sync time.
 */
 // ==/WindhawkModReadme==
 
@@ -67,36 +67,49 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
   $description: "Pauses rendering while a fullscreen app is active. Default: true."
 
 # --- 2. WEATHER SOURCES & UNITS ---
-- primarySource: seven_timer
+- primarySource: auto
   $name: "[Weather] Primary source"
-  $description: "Primary forecast provider for auto modes. Default: seven_timer."
+  $description: "Primary forecast provider or 'auto' to aggregate across providers in autoProviderOrder. Default: auto."
   $options:
-    - off: Off (disable forecast fetching)
+    - auto: Auto (aggregate across providers)
     - seven_timer: 7Timer! (civil)
-    - open_meteo: Open-Meteo API
     - met_norway: MET Norway (Yr.no)
-    - weatherapi: WeatherAPI.com
-    - openweathermap: OpenWeatherMap
-    - visual_crossing: Visual Crossing
-    - tomorrow_io: Tomorrow.io
+    - open_meteo: Open-Meteo API
+    - weatherapi: WeatherAPI.com (*)
+    - openweathermap: OpenWeatherMap (*)
+    - visual_crossing: Visual Crossing (*)
+    - tomorrow_io: Tomorrow.io (*)
     - custom_api: Custom JSON URL
     - local_file: Local file
+    - off: Off (disable forecast fetching)
 - fallbackSource: off
   $name: "[Weather] Fallback source"
   $description: "Backup forecast source if primary fails. Default: off."
   $options:
     - off: Off
     - seven_timer: 7Timer! (civil)
-    - open_meteo: Open-Meteo API
     - met_norway: MET Norway (Yr.no)
-    - weatherapi: WeatherAPI.com
-    - openweathermap: OpenWeatherMap
-    - visual_crossing: Visual Crossing
-    - tomorrow_io: Tomorrow.io
+    - open_meteo: Open-Meteo API
+    - weatherapi: WeatherAPI.com (*)
+    - openweathermap: OpenWeatherMap (*)
+    - visual_crossing: Visual Crossing (*)
+    - tomorrow_io: Tomorrow.io (*)
     - local_file: Local file
-- weatherApiKey: ""
-  $name: "[Weather] API key"
-  $description: "API key for WeatherAPI.com, OpenWeatherMap, Visual Crossing, or Tomorrow.io."
+- autoProviderOrder: "1/2/3/4/5/6/7/8/9"
+  $name: "[Weather] Auto provider order"
+  $description: "Slash-separated ranks (ascending) for 1=7Timer!, 2=Yr.no, 3=Open-Meteo, 4=WeatherAPI, 5=OWM, 6=VisualCrossing, 7=Tomorrow.io, 8=CustomAPI, 9=LocalFile. Default: '1/2/3/4/5/6/7/8/9'."
+- weatherapiKey: ""
+  $name: "[Weather] WeatherAPI.com API key (*)"
+  $description: "API key for WeatherAPI.com."
+- openweathermapKey: ""
+  $name: "[Weather] OpenWeatherMap API key (*)"
+  $description: "API key for OpenWeatherMap."
+- visualCrossingKey: ""
+  $name: "[Weather] Visual Crossing API key (*)"
+  $description: "API key for Visual Crossing."
+- tomorrowIoKey: ""
+  $name: "[Weather] Tomorrow.io API key (*)"
+  $description: "API key for Tomorrow.io."
 - coords: "44.7866/20.4489"
   $name: "[Weather] Latitude/Longitude"
   $description: "Format: lat/lon (e.g. 44.7866/20.4489). Latitude -90..90, longitude -180..180. Default: Belgrade (44.7866/20.4489)."
@@ -440,6 +453,12 @@ struct GeneralEffectsState {
     bool floodWater = false;
 };
 
+struct MetricMeta {
+    bool available = false;
+    std::wstring sourceName;
+    std::wstring syncTime;
+};
+
 struct ArcGeometry {
     int radius = 50;
     int centerX = 50;
@@ -481,7 +500,9 @@ struct ForecastSnapshot {
     int weatherCode = -1;
     double tempC = 0.0;
     double apparentTempC = 15.0;
+    double dewPointC = 8.0;
     double humidityPct = 55.0;
+    double pressureHpa = 1013.25;
     double windSpeedKmh = 0.0;
     double windGustsKmh = 0.0;
     double windDirDeg = 0.0;
@@ -500,6 +521,26 @@ struct ForecastSnapshot {
     bool hasPrecip = false;
     ObjectKind precipKind = ObjectKind::Rain;
     GeneralEffectsState effects;
+
+    MetricMeta mCondition;
+    MetricMeta mTemp;
+    MetricMeta mFeelsLike;
+    MetricMeta mHumidity;
+    MetricMeta mPressure;
+    MetricMeta mWind;
+    MetricMeta mGusts;
+    MetricMeta mClouds;
+    MetricMeta mPrecip;
+    MetricMeta mUv;
+    MetricMeta mAqi;
+    MetricMeta mPollen;
+    MetricMeta mVisibility;
+    MetricMeta mDewPoint;
+    MetricMeta mDayNight;
+    MetricMeta mSunCycle;
+
+    std::wstring sunriseText = L"--:--";
+    std::wstring sunsetText = L"--:--";
     std::wstring lastUpdateText = L"--:--";
     std::wstring sourceLabel = L"none";
 };
@@ -514,9 +555,13 @@ struct Settings {
     int targetFps = 60;
     bool pauseOnFullscreen = true;
 
-    std::wstring primarySource = L"seven_timer";
+    std::wstring primarySource = L"auto";
     std::wstring fallbackSource = L"off";
-    std::wstring weatherApiKey;
+    std::wstring autoProviderOrder = L"1/2/3/4/5/6/7/8/9";
+    std::wstring weatherapiKey;
+    std::wstring openweathermapKey;
+    std::wstring visualCrossingKey;
+    std::wstring tomorrowIoKey;
     bool hasValidCoords = true;
     std::wstring coordsRaw = L"44.7866/20.4489";
     double latitude = 44.7866;
@@ -623,6 +668,7 @@ struct InteractiveControl {
     HudFieldId fieldId = HudFieldId::None;
     std::wstring btnText;
     D2D1_COLOR_F tint = D2D1::ColorF(0.35f, 0.68f, 1.0f, 0.90f);
+    std::wstring tooltipText;
 };
 
 struct FallingItem {
@@ -683,12 +729,15 @@ int g_hudMaxScrollPx = 0;
 ExpandedSection g_expandedSection = ExpandedSection::None;
 HudFieldId g_focusedField = HudFieldId::None;
 std::wstring g_editBuffer;
+float g_hoverRelX = -1000.0f;
+float g_hoverRelY = -1000.0f;
 std::vector<InteractiveControl> g_hudControls;
 
 ID2D1Factory* g_d2dFactory = nullptr;
 IDWriteFactory* g_dwriteFactory = nullptr;
 IDWriteTextFormat* g_hudTitleFormat = nullptr;
 IDWriteTextFormat* g_hudBodyFormat = nullptr;
+IDWriteTextFormat* g_hudItalicFormat = nullptr;
 IDWriteTextFormat* g_hudCircleFormat = nullptr;
 IDWriteTextFormat* g_hudPillFormat = nullptr;
 float g_cachedFontSizePx = 0.0f;
@@ -750,8 +799,7 @@ bool HasAnyForecastConsumer(const Settings& cfg) {
 }
 
 bool NeedsAirQualityFetch(const Settings& cfg) {
-    return cfg.primarySource == L"open_meteo" &&
-           cfg.hasValidCoords &&
+    return cfg.hasValidCoords &&
            (cfg.effectAirQuality == TriStateMode::Auto ||
             cfg.effectPollen == TriStateMode::Auto ||
             cfg.forecastHudEnabled);
@@ -807,6 +855,30 @@ std::wstring ReplaceAllSubstrings(std::wstring s, const std::wstring& from, cons
         pos += to.size();
     }
     return s;
+}
+
+std::wstring FormatCoordDot(double v) {
+    wchar_t buf[32] = {};
+    swprintf_s(buf, L"%.4f", v);
+    std::wstring s(buf);
+    for (wchar_t& c : s) {
+        if (c == L',') {
+            c = L'.';
+        }
+    }
+    return s;
+}
+
+std::wstring HourToHhMm(double hour) {
+    double hNorm = std::fmod(hour, 24.0);
+    if (hNorm < 0.0) {
+        hNorm += 24.0;
+    }
+    int hh = static_cast<int>(hNorm) % 24;
+    int mm = static_cast<int>(std::llround((hNorm - hh) * 60.0)) % 60;
+    wchar_t buf[16] = {};
+    swprintf_s(buf, L"%02d:%02d", hh, mm);
+    return buf;
 }
 
 std::string ExtractJsonStringField(const std::string& json, size_t scope, const std::string& key) {
@@ -987,6 +1059,69 @@ std::vector<std::wstring> SplitSlashTokens(const std::wstring& raw) {
         tokens.push_back(Trim(item));
     }
     return tokens;
+}
+
+std::vector<std::wstring> BuildOrderedAutoProviders(const std::wstring& orderStr) {
+    const std::wstring defaultProviders[9] = {
+        L"seven_timer", L"met_norway", L"open_meteo", L"weatherapi",
+        L"openweathermap", L"visual_crossing", L"tomorrow_io",
+        L"custom_api", L"local_file"
+    };
+    std::vector<std::wstring> tokens = SplitSlashTokens(orderStr);
+    if (tokens.size() != 9) {
+        return std::vector<std::wstring>(defaultProviders, defaultProviders + 9);
+    }
+
+    struct RankEntry {
+        int rank = 0;
+        int idx = 0;
+    };
+    std::vector<RankEntry> entries;
+    entries.reserve(9);
+    for (int i = 0; i < 9; ++i) {
+        double v = 0.0;
+        if (!TryParseDoubleStrict(tokens[i], v)) {
+            return std::vector<std::wstring>(defaultProviders, defaultProviders + 9);
+        }
+        entries.push_back(RankEntry{static_cast<int>(std::llround(v)), i});
+    }
+    std::stable_sort(entries.begin(), entries.end(), [](const RankEntry& a, const RankEntry& b) {
+        return a.rank < b.rank;
+    });
+
+    std::vector<std::wstring> ordered;
+    ordered.reserve(9);
+    for (const auto& e : entries) {
+        ordered.push_back(defaultProviders[e.idx]);
+    }
+    return ordered;
+}
+
+bool ProviderRequiresApiKey(const std::wstring& src) {
+    return src == L"weatherapi" ||
+           src == L"openweathermap" ||
+           src == L"visual_crossing" ||
+           src == L"tomorrow_io";
+}
+
+std::wstring GetProviderApiKey(const std::wstring& src, const Settings& cfg) {
+    if (src == L"weatherapi") {
+        return cfg.weatherapiKey;
+    }
+    if (src == L"openweathermap") {
+        return cfg.openweathermapKey;
+    }
+    if (src == L"visual_crossing") {
+        return cfg.visualCrossingKey;
+    }
+    if (src == L"tomorrow_io") {
+        return cfg.tomorrowIoKey;
+    }
+    return L"";
+}
+
+std::wstring FormatProviderHudBadge(const std::wstring& src) {
+    return ProviderRequiresApiKey(src) ? (src + L"*") : src;
 }
 
 PerformanceMode ParsePerformanceMode(const std::wstring& s) {
@@ -1241,7 +1376,7 @@ std::wstring FormatTempValue(double tempC, TempUnit unit, bool shortButton) {
     return buf;
 }
 
-std::wstring FormatWindValue(double windKmh, double windDeg, WindUnit unit) {
+std::wstring FormatWindValue(double windKmh, WindUnit unit) {
     wchar_t buf[96] = {};
     if (unit == WindUnit::Ms) {
         swprintf_s(buf, L"%.1f m/s", windKmh / 3.6);
@@ -1258,7 +1393,6 @@ std::wstring FormatWindValue(double windKmh, double windDeg, WindUnit unit) {
     } else {
         swprintf_s(buf, L"%.1f km/h", windKmh);
     }
-    (void)windDeg;
     return buf;
 }
 
@@ -1624,9 +1758,13 @@ void LoadSettingsFromWh() {
     next.targetFps = (fpsRaw == 30 || fpsRaw == 60) ? fpsRaw : 60;
     next.pauseOnFullscreen = Wh_GetIntSetting(L"pauseOnFullscreen") != 0;
 
-    next.primarySource = ToLower(Trim(readStr(L"primarySource", L"seven_timer")));
+    next.primarySource = ToLower(Trim(readStr(L"primarySource", L"auto")));
     next.fallbackSource = ToLower(Trim(readStr(L"fallbackSource", L"off")));
-    next.weatherApiKey = Trim(readStr(L"weatherApiKey", L""));
+    next.autoProviderOrder = Trim(readStr(L"autoProviderOrder", L"1/2/3/4/5/6/7/8/9"));
+    next.weatherapiKey = Trim(readStr(L"weatherapiKey", L""));
+    next.openweathermapKey = Trim(readStr(L"openweathermapKey", L""));
+    next.visualCrossingKey = Trim(readStr(L"visualCrossingKey", L""));
+    next.tomorrowIoKey = Trim(readStr(L"tomorrowIoKey", L""));
     next.coordsRaw = Trim(readStr(L"coords", L"44.7866/20.4489"));
     next.hasValidCoords = TryParseCoordsString(next.coordsRaw, next.latitude, next.longitude);
     if (!next.hasValidCoords && next.primarySource != L"off" && next.primarySource != L"local_file") {
@@ -1842,7 +1980,7 @@ void CycleSettingOption(const std::wstring& actionId) {
                 : ((cur.performanceMode == PerformanceMode::Medium) ? PerformanceMode::High : PerformanceMode::Low);
         } else if (actionId == L"cycle_source") {
             const std::wstring order[] = {
-                L"seven_timer", L"open_meteo", L"met_norway", L"weatherapi",
+                L"auto", L"seven_timer", L"met_norway", L"open_meteo", L"weatherapi",
                 L"openweathermap", L"visual_crossing", L"tomorrow_io",
                 L"custom_api", L"local_file", L"off"
             };
@@ -1926,7 +2064,7 @@ std::string HttpGetUtf8(const std::wstring& url, const std::wstring& userAgent =
     parts.dwUrlPathLength = _countof(path);
 
     if (!InternetCrackUrlW(url.c_str(), 0, 0, &parts)) {
-        Wh_Log(L"InternetCrackUrlW failed: %u", GetLastError());
+        Wh_Log(L"InternetCrackUrlW failed: %u (%s)", GetLastError(), url.c_str());
         return {};
     }
 
@@ -1946,7 +2084,7 @@ std::string HttpGetUtf8(const std::wstring& url, const std::wstring& userAgent =
 
     HINTERNET hConnect = InternetConnectW(hSession, host, parts.nPort, nullptr, nullptr, INTERNET_SERVICE_HTTP, 0, 0);
     if (!hConnect) {
-        Wh_Log(L"InternetConnectW failed: %u", GetLastError());
+        Wh_Log(L"InternetConnectW failed: %u (%s)", GetLastError(), host);
         InternetCloseHandle(hSession);
         return {};
     }
@@ -1963,12 +2101,12 @@ std::string HttpGetUtf8(const std::wstring& url, const std::wstring& userAgent =
             while (InternetReadFile(hRequest, buf, sizeof(buf), &bytesRead) && bytesRead > 0) {
                 response.append(buf, bytesRead);
             }
-            Wh_Log(L"HTTP GET 200 OK (%zu bytes)", response.size());
+            Wh_Log(L"HTTP GET 200 OK (%zu bytes) from %s", response.size(), host);
         } else {
-            Wh_Log(L"HTTP GET unexpected status: %u (err=%u)", statusCode, GetLastError());
+            Wh_Log(L"HTTP GET unexpected status: %u (err=%u) from %s", statusCode, GetLastError(), host);
         }
     } else {
-        Wh_Log(L"HttpSendRequestW failed: %u", GetLastError());
+        Wh_Log(L"HttpSendRequestW failed: %u for %s", GetLastError(), url.c_str());
     }
 
     if (hRequest) {
@@ -2022,6 +2160,14 @@ double EstimatePrecipMmFromWmo(int code) {
     return 0.0;
 }
 
+void StampMetricMeta(MetricMeta& meta, bool available, const std::wstring& srcLabel, const std::wstring& syncTime) {
+    if (available) {
+        meta.available = true;
+        meta.sourceName = srcLabel;
+        meta.syncTime = syncTime;
+    }
+}
+
 void StampForecastUpdateTime(ForecastSnapshot& snap) {
     SYSTEMTIME st = {};
     GetLocalTime(&st);
@@ -2030,6 +2176,10 @@ void StampForecastUpdateTime(ForecastSnapshot& snap) {
     snap.lastUpdateText = timeBuf;
     snap.lastSuccessEpochSec = GetNowEpochSec();
     snap.lastFetchFailed = false;
+    if (snap.hasSunTimes) {
+        snap.sunriseText = HourToHhMm(snap.sunriseHour);
+        snap.sunsetText = HourToHhMm(snap.sunsetHour);
+    }
 }
 
 void ApplyForecastMetrics(int code, double windKmh, double windGustsKmh, double tempC, double apparentTempC,
@@ -2100,7 +2250,7 @@ void ApplyForecastMetrics(int code, double windKmh, double windGustsKmh, double 
     }
 }
 
-void FinalizeParsedForecast(ForecastSnapshot& snap) {
+void FinalizeParsedForecast(ForecastSnapshot& snap, const std::wstring& srcLabel) {
     if (snap.precipMm <= 0.0 && snap.weatherCode > 0) {
         snap.precipMm = EstimatePrecipMmFromWmo(snap.weatherCode);
     }
@@ -2112,8 +2262,27 @@ void FinalizeParsedForecast(ForecastSnapshot& snap) {
         snap.precipMm, snap.aqiValue, snap.pm25Value,
         snap.pollenMaxValue, snap.isDay, snap.hasPrecip,
         snap.precipKind, snap.effects);
-    snap.valid = true;
+    snap.valid = snap.mTemp.available || snap.mCondition.available;
+    snap.sourceLabel = srcLabel;
     StampForecastUpdateTime(snap);
+
+    const std::wstring& t = snap.lastUpdateText;
+    if (snap.mCondition.available) StampMetricMeta(snap.mCondition, true, srcLabel, t);
+    if (snap.mTemp.available) StampMetricMeta(snap.mTemp, true, srcLabel, t);
+    if (snap.mFeelsLike.available) StampMetricMeta(snap.mFeelsLike, true, srcLabel, t);
+    if (snap.mHumidity.available) StampMetricMeta(snap.mHumidity, true, srcLabel, t);
+    if (snap.mPressure.available) StampMetricMeta(snap.mPressure, true, srcLabel, t);
+    if (snap.mWind.available) StampMetricMeta(snap.mWind, true, srcLabel, t);
+    if (snap.mGusts.available) StampMetricMeta(snap.mGusts, true, srcLabel, t);
+    if (snap.mClouds.available) StampMetricMeta(snap.mClouds, true, srcLabel, t);
+    if (snap.mPrecip.available) StampMetricMeta(snap.mPrecip, true, srcLabel, t);
+    if (snap.mUv.available) StampMetricMeta(snap.mUv, true, srcLabel, t);
+    if (snap.mAqi.available) StampMetricMeta(snap.mAqi, true, srcLabel, t);
+    if (snap.mPollen.available) StampMetricMeta(snap.mPollen, true, srcLabel, t);
+    if (snap.mVisibility.available) StampMetricMeta(snap.mVisibility, true, srcLabel, t);
+    if (snap.mDewPoint.available) StampMetricMeta(snap.mDewPoint, true, srcLabel, t);
+    if (snap.mDayNight.available) StampMetricMeta(snap.mDayNight, true, srcLabel, t);
+    if (snap.mSunCycle.available) StampMetricMeta(snap.mSunCycle, true, srcLabel, t);
 }
 
 bool ExtractNumberScoped(const std::string& json, size_t scope, const std::string& key, double& val) {
@@ -2160,25 +2329,34 @@ void ParseAirQualityJson(const std::string& json, ForecastSnapshot& outSnap) {
     double v = 0.0;
     if (ExtractNumberAnyScope(json, scope, "european_aqi", v) || ExtractNumberAnyScope(json, scope, "us_aqi", v)) {
         outSnap.aqiValue = std::max(0.0, v);
+        outSnap.mAqi.available = true;
     }
     if (ExtractNumberAnyScope(json, scope, "pm2_5", v)) {
         outSnap.pm25Value = std::max(0.0, v);
+        outSnap.mAqi.available = true;
     }
     double maxPollen = 0.0;
+    bool anyPollen = false;
     const char* pollenKeys[] = {
         "alder_pollen", "birch_pollen", "grass_pollen",
         "mugwort_pollen", "olive_pollen", "ragweed_pollen"
     };
     for (const char* pk : pollenKeys) {
         double pv = 0.0;
-        if (ExtractNumberAnyScope(json, scope, pk, pv) && pv > maxPollen) {
-            maxPollen = pv;
+        if (ExtractNumberAnyScope(json, scope, pk, pv)) {
+            anyPollen = true;
+            if (pv > maxPollen) {
+                maxPollen = pv;
+            }
         }
     }
-    outSnap.pollenMaxValue = maxPollen;
+    if (anyPollen) {
+        outSnap.pollenMaxValue = maxPollen;
+        outSnap.mPollen.available = true;
+    }
 }
 
-bool ParseWeatherJson(const std::string& json, ForecastSnapshot& outSnap) {
+bool ParseWeatherJson(const std::string& json, ForecastSnapshot& outSnap, const std::wstring& srcLabel) {
     size_t scope = json.find("\"current\":");
     if (scope == std::string::npos) {
         scope = json.find("\"current_weather\":");
@@ -2192,11 +2370,13 @@ bool ParseWeatherJson(const std::string& json, ForecastSnapshot& outSnap) {
         ExtractNumberAnyScope(json, scope, "windspeed", spd) ||
         ExtractNumberAnyScope(json, scope, "wind_speed", spd)) {
         outSnap.windSpeedKmh = std::max(0.0, spd);
+        outSnap.mWind.available = true;
     }
     double gusts = 0.0;
     if (ExtractNumberAnyScope(json, scope, "wind_gusts_10m", gusts) ||
         ExtractNumberAnyScope(json, scope, "wind_gusts", gusts)) {
         outSnap.windGustsKmh = std::max(0.0, gusts);
+        outSnap.mGusts.available = true;
     } else {
         outSnap.windGustsKmh = outSnap.windSpeedKmh;
     }
@@ -2205,41 +2385,60 @@ bool ParseWeatherJson(const std::string& json, ForecastSnapshot& outSnap) {
         ExtractNumberAnyScope(json, scope, "winddirection", deg) ||
         ExtractNumberAnyScope(json, scope, "wind_deg", deg)) {
         outSnap.windDirDeg = deg;
-        outSnap.windDirSign = (outSnap.windSpeedKmh > 0.2) ? WindDegToSign(deg) : 0;
-    } else {
-        outSnap.windDirDeg = 0.0;
-        outSnap.windDirSign = 0;
     }
 
-    bool hasTemp = false;
     double tempC = 15.0;
     if (ExtractNumberAnyScope(json, scope, "temperature_2m", tempC) ||
         ExtractNumberAnyScope(json, scope, "temperature", tempC)) {
         outSnap.tempC = tempC;
-        hasTemp = true;
+        outSnap.mTemp.available = true;
     }
     double appTemp = outSnap.tempC;
-    outSnap.apparentTempC = ExtractNumberAnyScope(json, scope, "apparent_temperature", appTemp)
-        ? appTemp
-        : outSnap.tempC;
-
+    if (ExtractNumberAnyScope(json, scope, "apparent_temperature", appTemp)) {
+        outSnap.apparentTempC = appTemp;
+        outSnap.mFeelsLike.available = true;
+    } else {
+        outSnap.apparentTempC = outSnap.tempC;
+    }
+    double dewC = 8.0;
+    if (ExtractNumberAnyScope(json, scope, "dew_point_2m", dewC) ||
+        ExtractNumberAnyScope(json, scope, "dewpoint", dewC)) {
+        outSnap.dewPointC = dewC;
+        outSnap.mDewPoint.available = true;
+    }
     double hum = 55.0;
-    if (ExtractNumberAnyScope(json, scope, "relative_humidity_2m", hum)) {
+    if (ExtractNumberAnyScope(json, scope, "relative_humidity_2m", hum) ||
+        ExtractNumberAnyScope(json, scope, "humidity", hum)) {
         outSnap.humidityPct = std::clamp(hum, 0.0, 100.0);
+        outSnap.mHumidity.available = true;
+    }
+    double press = 1013.25;
+    if (ExtractNumberAnyScope(json, scope, "pressure_msl", press) ||
+        ExtractNumberAnyScope(json, scope, "surface_pressure", press) ||
+        ExtractNumberAnyScope(json, scope, "pressure", press)) {
+        outSnap.pressureHpa = press;
+        outSnap.mPressure.available = true;
     }
     double cloud = 20.0;
-    ExtractNumberAnyScope(json, scope, "cloud_cover", cloud);
-    outSnap.cloudCoverPct = std::clamp(cloud, 0.0, 100.0);
+    if (ExtractNumberAnyScope(json, scope, "cloud_cover", cloud)) {
+        outSnap.cloudCoverPct = std::clamp(cloud, 0.0, 100.0);
+        outSnap.mClouds.available = true;
+    }
     double vis = 12000.0;
-    ExtractNumberAnyScope(json, scope, "visibility", vis);
-    outSnap.visibilityM = std::max(0.0, vis);
+    if (ExtractNumberAnyScope(json, scope, "visibility", vis)) {
+        outSnap.visibilityM = std::max(0.0, vis);
+        outSnap.mVisibility.available = true;
+    }
     double isDayNum = 1.0;
-    ExtractNumberAnyScope(json, scope, "is_day", isDayNum);
-    outSnap.isDay = (isDayNum > 0.5);
+    if (ExtractNumberAnyScope(json, scope, "is_day", isDayNum)) {
+        outSnap.isDay = (isDayNum > 0.5);
+        outSnap.mDayNight.available = true;
+    }
     double uv = 2.0;
     if (ExtractNumberAnyScope(json, scope, "uv_index", uv) ||
         ExtractNumberAnyScope(json, scope, "uv", uv)) {
         outSnap.uvIndex = std::max(0.0, uv);
+        outSnap.mUv.available = true;
     }
 
     double sr = 6.5;
@@ -2248,36 +2447,36 @@ bool ParseWeatherJson(const std::string& json, ForecastSnapshot& outSnap) {
         outSnap.hasSunTimes = true;
         outSnap.sunriseHour = sr;
         outSnap.sunsetHour = ss;
+        outSnap.mSunCycle.available = true;
     }
     double aqiNum = 0.0;
     if (ExtractNumberAnyScope(json, scope, "european_aqi", aqiNum) ||
         ExtractNumberAnyScope(json, scope, "us_aqi", aqiNum)) {
         outSnap.aqiValue = std::max(0.0, aqiNum);
+        outSnap.mAqi.available = true;
     }
     double pmNum = 0.0;
     if (ExtractNumberAnyScope(json, scope, "pm2_5", pmNum)) {
         outSnap.pm25Value = std::max(0.0, pmNum);
+        outSnap.mAqi.available = true;
     }
 
     double wmo = -999.0;
     bool hasCode = ExtractNumberAnyScope(json, scope, "weather_code", wmo) ||
                    ExtractNumberAnyScope(json, scope, "weathercode", wmo);
-    if (hasCode || hasTemp) {
+    if (hasCode || outSnap.mTemp.available) {
+        outSnap.mCondition.available = hasCode;
         outSnap.weatherCode = hasCode ? static_cast<int>(wmo) : 0;
         double mm = 0.0;
-        outSnap.precipMm = (ExtractNumberAnyScope(json, scope, "precipitation", mm) ||
-                            ExtractNumberAnyScope(json, scope, "rain", mm))
-            ? std::max(0.0, mm)
-            : EstimatePrecipMmFromWmo(outSnap.weatherCode);
-        ApplyForecastMetrics(
-            outSnap.weatherCode, outSnap.windSpeedKmh, outSnap.windGustsKmh,
-            outSnap.tempC, outSnap.apparentTempC, outSnap.humidityPct,
-            static_cast<int>(outSnap.cloudCoverPct), outSnap.visibilityM,
-            outSnap.precipMm, outSnap.aqiValue, outSnap.pm25Value,
-            outSnap.pollenMaxValue, outSnap.isDay, outSnap.hasPrecip,
-            outSnap.precipKind, outSnap.effects);
-        outSnap.valid = hasTemp;
-        StampForecastUpdateTime(outSnap);
+        if (ExtractNumberAnyScope(json, scope, "precipitation", mm) ||
+            ExtractNumberAnyScope(json, scope, "rain", mm)) {
+            outSnap.precipMm = std::max(0.0, mm);
+            outSnap.mPrecip.available = true;
+        } else {
+            outSnap.precipMm = EstimatePrecipMmFromWmo(outSnap.weatherCode);
+            outSnap.mPrecip.available = hasCode;
+        }
+        FinalizeParsedForecast(outSnap, srcLabel);
         return true;
     }
     return false;
@@ -2330,19 +2529,28 @@ bool ParseMetNorwayJson(const std::string& json, ForecastSnapshot& outSnap) {
     }
     outSnap.tempC = tempC;
     outSnap.apparentTempC = tempC;
+    outSnap.mTemp.available = true;
 
+    double press = 1013.25;
+    if (ExtractNumberScoped(json, detailsPos, "air_pressure_at_sea_level", press)) {
+        outSnap.pressureHpa = press;
+        outSnap.mPressure.available = true;
+    }
     double cloud = 20.0;
     if (ExtractNumberScoped(json, detailsPos, "cloud_area_fraction", cloud)) {
         outSnap.cloudCoverPct = std::clamp(cloud, 0.0, 100.0);
+        outSnap.mClouds.available = true;
     }
     double hum = 55.0;
     if (ExtractNumberScoped(json, detailsPos, "relative_humidity", hum)) {
         outSnap.humidityPct = std::clamp(hum, 0.0, 100.0);
+        outSnap.mHumidity.available = true;
     }
     double windMs = 0.0;
     if (ExtractNumberScoped(json, detailsPos, "wind_speed", windMs)) {
         outSnap.windSpeedKmh = std::max(0.0, windMs * 3.6);
         outSnap.windGustsKmh = outSnap.windSpeedKmh;
+        outSnap.mWind.available = true;
     }
     double windDeg = 0.0;
     if (ExtractNumberScoped(json, detailsPos, "wind_from_direction", windDeg)) {
@@ -2350,80 +2558,61 @@ bool ParseMetNorwayJson(const std::string& json, ForecastSnapshot& outSnap) {
     }
 
     std::string symCode = ExtractJsonStringField(json, detailsPos, "symbol_code");
-    if (symCode.empty()) {
-        size_t next1h = json.find("\"next_1_hours\":", detailsPos);
-        symCode = ExtractJsonStringField(json, (next1h != std::string::npos) ? next1h : detailsPos, "symbol_code");
+    size_t next1h = json.find("\"next_1_hours\":", detailsPos);
+    if (symCode.empty() && next1h != std::string::npos) {
+        symCode = ExtractJsonStringField(json, next1h, "symbol_code");
     }
-    outSnap.weatherCode = MetNorwaySymbolToWmo(symCode);
+    if (!symCode.empty()) {
+        outSnap.weatherCode = MetNorwaySymbolToWmo(symCode);
+        outSnap.mCondition.available = true;
+    } else {
+        outSnap.weatherCode = (outSnap.cloudCoverPct >= 80.0) ? 3 : ((outSnap.cloudCoverPct >= 25.0) ? 2 : 0);
+        outSnap.mCondition.available = outSnap.mClouds.available;
+    }
 
     double mm = 0.0;
-    if (ExtractNumberScoped(json, detailsPos, "precipitation_amount", mm)) {
+    if (ExtractNumberScoped(json, detailsPos, "precipitation_amount", mm) ||
+        (next1h != std::string::npos && ExtractNumberScoped(json, next1h, "precipitation_amount", mm))) {
         outSnap.precipMm = std::max(0.0, mm);
+        outSnap.mPrecip.available = true;
     }
 
     double hr = GetLocalHourFloat();
     outSnap.isDay = (hr >= 6.0 && hr < 19.0);
-    FinalizeParsedForecast(outSnap);
-    outSnap.sourceLabel = L"Yr.no";
+    FinalizeParsedForecast(outSnap, L"Yr.no");
     return true;
 }
 
 double SevenTimerDirToDeg(const std::string& dir) {
-    if (dir == "N") {
-        return 0.0;
-    }
-    if (dir == "NE") {
-        return 45.0;
-    }
-    if (dir == "E") {
-        return 90.0;
-    }
-    if (dir == "SE") {
-        return 135.0;
-    }
-    if (dir == "S") {
-        return 180.0;
-    }
-    if (dir == "SW") {
-        return 225.0;
-    }
-    if (dir == "W") {
-        return 270.0;
-    }
-    if (dir == "NW") {
-        return 315.0;
-    }
+    if (dir == "N") return 0.0;
+    if (dir == "NE") return 45.0;
+    if (dir == "E") return 90.0;
+    if (dir == "SE") return 135.0;
+    if (dir == "S") return 180.0;
+    if (dir == "SW") return 225.0;
+    if (dir == "W") return 270.0;
+    if (dir == "NW") return 315.0;
     return 0.0;
 }
 
 double SevenTimerWindSpeedCatToKmh(int cat) {
-    if (cat <= 1) {
-        return 2.0;
-    }
-    if (cat == 2) {
-        return 8.0;
-    }
-    if (cat == 3) {
-        return 18.0;
-    }
-    if (cat == 4) {
-        return 30.0;
-    }
-    if (cat == 5) {
-        return 45.0;
-    }
-    if (cat == 6) {
-        return 62.0;
-    }
-    if (cat == 7) {
-        return 80.0;
-    }
+    if (cat <= 1) return 2.0;
+    if (cat == 2) return 8.0;
+    if (cat == 3) return 18.0;
+    if (cat == 4) return 30.0;
+    if (cat == 5) return 45.0;
+    if (cat == 6) return 62.0;
+    if (cat == 7) return 80.0;
     return 100.0;
 }
 
 bool ParseSevenTimerJson(const std::string& json, ForecastSnapshot& outSnap) {
-    size_t seriesPos = json.find("\"dataseries\":");
+    size_t seriesPos = json.find("\"dataseries\"");
     if (seriesPos == std::string::npos) {
+        return false;
+    }
+    size_t arrStart = json.find('[', seriesPos);
+    if (arrStart == std::string::npos) {
         return false;
     }
 
@@ -2439,54 +2628,92 @@ bool ParseSevenTimerJson(const std::string& json, ForecastSnapshot& outSnap) {
         elapsedHours += 24.0;
     }
 
-    size_t bestObj = std::string::npos;
+    size_t bestStart = std::string::npos;
+    size_t bestEnd = std::string::npos;
     double bestDiff = 1e9;
-    size_t scanPos = seriesPos;
-    while ((scanPos = json.find('{', scanPos)) != std::string::npos) {
-        size_t nextObj = json.find('{', scanPos + 1);
-        double tp = 3.0;
-        if (ExtractNumberScoped(json, scanPos, "timepoint", tp)) {
-            if (nextObj == std::string::npos || json.find("\"timepoint\"", scanPos) < nextObj) {
-                double diff = std::abs(tp - elapsedHours);
-                if (diff < bestDiff) {
-                    bestDiff = diff;
-                    bestObj = scanPos;
-                }
-            }
+    int braceDepth = 0;
+    bool inString = false;
+    bool escaped = false;
+    size_t itemStart = std::string::npos;
+
+    for (size_t i = arrStart + 1; i < json.size(); ++i) {
+        char c = json[i];
+        if (escaped) {
+            escaped = false;
+            continue;
         }
-        scanPos += 1;
+        if (c == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (c == '"') {
+            inString = !inString;
+            continue;
+        }
+        if (inString) {
+            continue;
+        }
+        if (c == '{') {
+            if (braceDepth == 0) {
+                itemStart = i;
+            }
+            braceDepth++;
+        } else if (c == '}') {
+            braceDepth--;
+            if (braceDepth == 0 && itemStart != std::string::npos) {
+                std::string elem = json.substr(itemStart, i - itemStart + 1);
+                double tp = 3.0;
+                if (ExtractNumberScoped(elem, 0, "timepoint", tp)) {
+                    double diff = std::abs(tp - elapsedHours);
+                    if (diff < bestDiff) {
+                        bestDiff = diff;
+                        bestStart = itemStart;
+                        bestEnd = i + 1;
+                    }
+                } else if (bestStart == std::string::npos) {
+                    bestStart = itemStart;
+                    bestEnd = i + 1;
+                }
+                itemStart = std::string::npos;
+            }
+        } else if (c == ']' && braceDepth == 0) {
+            break;
+        }
     }
-    if (bestObj == std::string::npos) {
-        bestObj = json.find('{', seriesPos);
-    }
-    if (bestObj == std::string::npos) {
+
+    if (bestStart == std::string::npos || bestEnd <= bestStart) {
         return false;
     }
 
+    std::string bestItem = json.substr(bestStart, bestEnd - bestStart);
     double tempC = 0.0;
-    if (!ExtractNumberScoped(json, bestObj, "temp2m", tempC)) {
+    if (!ExtractNumberScoped(bestItem, 0, "temp2m", tempC)) {
         return false;
     }
     outSnap.tempC = tempC;
     outSnap.apparentTempC = tempC;
+    outSnap.mTemp.available = true;
 
     double cloudCat = 2.0;
-    if (ExtractNumberScoped(json, bestObj, "cloudcover", cloudCat)) {
+    if (ExtractNumberScoped(bestItem, 0, "cloudcover", cloudCat)) {
         outSnap.cloudCoverPct = std::clamp(((cloudCat - 1.0) / 8.0) * 100.0, 0.0, 100.0);
+        outSnap.mClouds.available = true;
     }
 
-    size_t windObj = json.find("\"wind10m\":", bestObj);
+    size_t windObj = bestItem.find("\"wind10m\"");
     if (windObj != std::string::npos) {
         double spdCat = 2.0;
-        if (ExtractNumberScoped(json, windObj, "speed", spdCat)) {
+        if (ExtractNumberScoped(bestItem, windObj, "speed", spdCat)) {
             outSnap.windSpeedKmh = SevenTimerWindSpeedCatToKmh(static_cast<int>(spdCat));
             outSnap.windGustsKmh = outSnap.windSpeedKmh;
+            outSnap.mWind.available = true;
         }
-        std::string dirStr = ExtractJsonStringField(json, windObj, "direction");
+        std::string dirStr = ExtractJsonStringField(bestItem, windObj, "direction");
         outSnap.windDirDeg = SevenTimerDirToDeg(dirStr);
     }
 
-    std::string weatherStr = ExtractJsonStringField(json, bestObj, "weather");
+    std::string weatherStr = ExtractJsonStringField(bestItem, 0, "weather");
+    outSnap.mCondition.available = !weatherStr.empty();
     if (weatherStr.find("ts") != std::string::npos) {
         outSnap.weatherCode = 95;
     } else if (weatherStr.find("snow") != std::string::npos) {
@@ -2500,11 +2727,9 @@ bool ParseSevenTimerJson(const std::string& json, ForecastSnapshot& outSnap) {
     } else {
         outSnap.weatherCode = 0;
     }
-
-    double hr = GetLocalHourFloat();
-    outSnap.isDay = (hr >= 6.0 && hr < 19.0);
-    FinalizeParsedForecast(outSnap);
-    outSnap.sourceLabel = L"7Timer!";
+    outSnap.isDay = (weatherStr.find("night") == std::string::npos);
+    outSnap.mDayNight.available = !weatherStr.empty();
+    FinalizeParsedForecast(outSnap, L"7Timer!");
     return true;
 }
 
@@ -2518,21 +2743,34 @@ bool ParseWeatherApiJson(const std::string& json, ForecastSnapshot& outSnap) {
         return false;
     }
     outSnap.tempC = tempC;
+    outSnap.mTemp.available = true;
 
     double appC = tempC;
     if (ExtractNumberScoped(json, curPos, "feelslike_c", appC)) {
         outSnap.apparentTempC = appC;
+        outSnap.mFeelsLike.available = true;
     } else {
         outSnap.apparentTempC = tempC;
     }
-
+    double dewC = 8.0;
+    if (ExtractNumberScoped(json, curPos, "dewpoint_c", dewC)) {
+        outSnap.dewPointC = dewC;
+        outSnap.mDewPoint.available = true;
+    }
+    double press = 1013.25;
+    if (ExtractNumberScoped(json, curPos, "pressure_mb", press)) {
+        outSnap.pressureHpa = press;
+        outSnap.mPressure.available = true;
+    }
     double windKmh = 0.0;
     if (ExtractNumberScoped(json, curPos, "wind_kph", windKmh)) {
         outSnap.windSpeedKmh = std::max(0.0, windKmh);
+        outSnap.mWind.available = true;
     }
     double gustKmh = outSnap.windSpeedKmh;
     if (ExtractNumberScoped(json, curPos, "gust_kph", gustKmh)) {
         outSnap.windGustsKmh = std::max(0.0, gustKmh);
+        outSnap.mGusts.available = true;
     } else {
         outSnap.windGustsKmh = outSnap.windSpeedKmh;
     }
@@ -2543,32 +2781,43 @@ bool ParseWeatherApiJson(const std::string& json, ForecastSnapshot& outSnap) {
     double hum = 55.0;
     if (ExtractNumberScoped(json, curPos, "humidity", hum)) {
         outSnap.humidityPct = std::clamp(hum, 0.0, 100.0);
+        outSnap.mHumidity.available = true;
     }
     double cloud = 20.0;
     if (ExtractNumberScoped(json, curPos, "cloud", cloud)) {
         outSnap.cloudCoverPct = std::clamp(cloud, 0.0, 100.0);
+        outSnap.mClouds.available = true;
+    }
+    double visKm = 12.0;
+    if (ExtractNumberScoped(json, curPos, "vis_km", visKm)) {
+        outSnap.visibilityM = std::max(0.0, visKm * 1000.0);
+        outSnap.mVisibility.available = true;
     }
     double isDay = 1.0;
     if (ExtractNumberScoped(json, curPos, "is_day", isDay)) {
         outSnap.isDay = (isDay > 0.5);
+        outSnap.mDayNight.available = true;
     }
     double uv = 2.0;
     if (ExtractNumberScoped(json, curPos, "uv", uv)) {
         outSnap.uvIndex = std::max(0.0, uv);
+        outSnap.mUv.available = true;
     }
     double mm = 0.0;
     if (ExtractNumberScoped(json, curPos, "precip_mm", mm)) {
         outSnap.precipMm = std::max(0.0, mm);
+        outSnap.mPrecip.available = true;
     }
     double pm25 = 0.0;
     if (ExtractNumberScoped(json, curPos, "pm2_5", pm25)) {
         outSnap.pm25Value = std::max(0.0, pm25);
         outSnap.aqiValue = std::max(outSnap.aqiValue, outSnap.pm25Value * 2.5);
+        outSnap.mAqi.available = true;
     }
 
+    outSnap.mCondition.available = true;
     outSnap.weatherCode = (outSnap.precipMm > 0.2) ? 61 : ((outSnap.cloudCoverPct >= 80.0) ? 3 : ((outSnap.cloudCoverPct >= 25.0) ? 2 : 0));
-    FinalizeParsedForecast(outSnap);
-    outSnap.sourceLabel = L"WeatherAPI";
+    FinalizeParsedForecast(outSnap, L"WeatherAPI");
     return true;
 }
 
@@ -2582,21 +2831,35 @@ bool ParseOpenWeatherMapJson(const std::string& json, ForecastSnapshot& outSnap)
         return false;
     }
     outSnap.tempC = tempC;
+    outSnap.mTemp.available = true;
 
     double feelsC = tempC;
     if (ExtractNumberScoped(json, mainPos, "feels_like", feelsC)) {
         outSnap.apparentTempC = feelsC;
+        outSnap.mFeelsLike.available = true;
     } else {
         outSnap.apparentTempC = tempC;
     }
     double hum = 55.0;
     if (ExtractNumberScoped(json, mainPos, "humidity", hum)) {
         outSnap.humidityPct = std::clamp(hum, 0.0, 100.0);
+        outSnap.mHumidity.available = true;
+    }
+    double press = 1013.25;
+    if (ExtractNumberScoped(json, mainPos, "pressure", press)) {
+        outSnap.pressureHpa = press;
+        outSnap.mPressure.available = true;
+    }
+    double vis = 12000.0;
+    if (ExtractNumberScoped(json, 0, "visibility", vis)) {
+        outSnap.visibilityM = std::max(0.0, vis);
+        outSnap.mVisibility.available = true;
     }
     size_t cloudsPos = json.find("\"clouds\":");
     double cloud = 20.0;
     if (ExtractNumberScoped(json, (cloudsPos != std::string::npos) ? cloudsPos : 0, "all", cloud)) {
         outSnap.cloudCoverPct = std::clamp(cloud, 0.0, 100.0);
+        outSnap.mClouds.available = true;
     }
     size_t windPos = json.find("\"wind\":");
     if (windPos != std::string::npos) {
@@ -2604,6 +2867,12 @@ bool ParseOpenWeatherMapJson(const std::string& json, ForecastSnapshot& outSnap)
         if (ExtractNumberScoped(json, windPos, "speed", windMs)) {
             outSnap.windSpeedKmh = std::max(0.0, windMs * 3.6);
             outSnap.windGustsKmh = outSnap.windSpeedKmh;
+            outSnap.mWind.available = true;
+        }
+        double gustMs = 0.0;
+        if (ExtractNumberScoped(json, windPos, "gust", gustMs)) {
+            outSnap.windGustsKmh = std::max(0.0, gustMs * 3.6);
+            outSnap.mGusts.available = true;
         }
         double deg = 0.0;
         if (ExtractNumberScoped(json, windPos, "deg", deg)) {
@@ -2612,15 +2881,28 @@ bool ParseOpenWeatherMapJson(const std::string& json, ForecastSnapshot& outSnap)
     }
     size_t rainPos = json.find("\"rain\":");
     double rainMm = 0.0;
-    if (ExtractNumberScoped(json, (rainPos != std::string::npos) ? rainPos : 0, "1h", rainMm)) {
+    if (rainPos != std::string::npos && ExtractNumberScoped(json, rainPos, "1h", rainMm)) {
         outSnap.precipMm = std::max(0.0, rainMm);
+        outSnap.mPrecip.available = true;
+    }
+    size_t snowPos = json.find("\"snow\":");
+    double snowMm = 0.0;
+    if (snowPos != std::string::npos && ExtractNumberScoped(json, snowPos, "1h", snowMm)) {
+        outSnap.precipMm = std::max(outSnap.precipMm, std::max(0.0, snowMm));
+        outSnap.mPrecip.available = true;
     }
 
     double hr = GetLocalHourFloat();
     outSnap.isDay = (hr >= 6.0 && hr < 19.0);
-    outSnap.weatherCode = (outSnap.precipMm > 0.1) ? 61 : ((outSnap.cloudCoverPct >= 80.0) ? 3 : ((outSnap.cloudCoverPct >= 25.0) ? 2 : 0));
-    FinalizeParsedForecast(outSnap);
-    outSnap.sourceLabel = L"OWM";
+    outSnap.mCondition.available = true;
+    if (snowMm > 0.1) {
+        outSnap.weatherCode = 71;
+    } else if (outSnap.precipMm > 0.1) {
+        outSnap.weatherCode = 61;
+    } else {
+        outSnap.weatherCode = (outSnap.cloudCoverPct >= 80.0) ? 3 : ((outSnap.cloudCoverPct >= 25.0) ? 2 : 0);
+    }
+    FinalizeParsedForecast(outSnap, L"OWM");
     return true;
 }
 
@@ -2634,17 +2916,40 @@ bool ParseVisualCrossingJson(const std::string& json, ForecastSnapshot& outSnap)
         return false;
     }
     outSnap.tempC = tempC;
+    outSnap.mTemp.available = true;
 
     double feelsC = tempC;
     if (ExtractNumberScoped(json, curPos, "feelslike", feelsC)) {
         outSnap.apparentTempC = feelsC;
+        outSnap.mFeelsLike.available = true;
     } else {
         outSnap.apparentTempC = tempC;
+    }
+    double dewC = 8.0;
+    if (ExtractNumberScoped(json, curPos, "dew", dewC)) {
+        outSnap.dewPointC = dewC;
+        outSnap.mDewPoint.available = true;
+    }
+    double hum = 55.0;
+    if (ExtractNumberScoped(json, curPos, "humidity", hum)) {
+        outSnap.humidityPct = std::clamp(hum, 0.0, 100.0);
+        outSnap.mHumidity.available = true;
+    }
+    double press = 1013.25;
+    if (ExtractNumberScoped(json, curPos, "pressure", press)) {
+        outSnap.pressureHpa = press;
+        outSnap.mPressure.available = true;
     }
     double windKmh = 0.0;
     if (ExtractNumberScoped(json, curPos, "windspeed", windKmh)) {
         outSnap.windSpeedKmh = std::max(0.0, windKmh);
         outSnap.windGustsKmh = outSnap.windSpeedKmh;
+        outSnap.mWind.available = true;
+    }
+    double gustKmh = outSnap.windSpeedKmh;
+    if (ExtractNumberScoped(json, curPos, "windgust", gustKmh)) {
+        outSnap.windGustsKmh = std::max(0.0, gustKmh);
+        outSnap.mGusts.available = true;
     }
     double deg = 0.0;
     if (ExtractNumberScoped(json, curPos, "winddir", deg)) {
@@ -2653,21 +2958,29 @@ bool ParseVisualCrossingJson(const std::string& json, ForecastSnapshot& outSnap)
     double cloud = 20.0;
     if (ExtractNumberScoped(json, curPos, "cloudcover", cloud)) {
         outSnap.cloudCoverPct = std::clamp(cloud, 0.0, 100.0);
+        outSnap.mClouds.available = true;
+    }
+    double visKm = 12.0;
+    if (ExtractNumberScoped(json, curPos, "visibility", visKm)) {
+        outSnap.visibilityM = std::max(0.0, visKm * 1000.0);
+        outSnap.mVisibility.available = true;
     }
     double uv = 2.0;
     if (ExtractNumberScoped(json, curPos, "uvindex", uv)) {
         outSnap.uvIndex = std::max(0.0, uv);
+        outSnap.mUv.available = true;
     }
     double mm = 0.0;
     if (ExtractNumberScoped(json, curPos, "precip", mm)) {
         outSnap.precipMm = std::max(0.0, mm);
+        outSnap.mPrecip.available = true;
     }
 
     double hr = GetLocalHourFloat();
     outSnap.isDay = (hr >= 6.0 && hr < 19.0);
+    outSnap.mCondition.available = true;
     outSnap.weatherCode = (outSnap.precipMm > 0.1) ? 61 : ((outSnap.cloudCoverPct >= 80.0) ? 3 : ((outSnap.cloudCoverPct >= 25.0) ? 2 : 0));
-    FinalizeParsedForecast(outSnap);
-    outSnap.sourceLabel = L"VisCross";
+    FinalizeParsedForecast(outSnap, L"VisCross");
     return true;
 }
 
@@ -2681,17 +2994,41 @@ bool ParseTomorrowIoJson(const std::string& json, ForecastSnapshot& outSnap) {
         return false;
     }
     outSnap.tempC = tempC;
+    outSnap.mTemp.available = true;
 
     double appC = tempC;
     if (ExtractNumberScoped(json, valPos, "temperatureApparent", appC)) {
         outSnap.apparentTempC = appC;
+        outSnap.mFeelsLike.available = true;
     } else {
         outSnap.apparentTempC = tempC;
+    }
+    double dewC = 8.0;
+    if (ExtractNumberScoped(json, valPos, "dewPoint", dewC)) {
+        outSnap.dewPointC = dewC;
+        outSnap.mDewPoint.available = true;
+    }
+    double hum = 55.0;
+    if (ExtractNumberScoped(json, valPos, "humidity", hum)) {
+        outSnap.humidityPct = std::clamp(hum, 0.0, 100.0);
+        outSnap.mHumidity.available = true;
+    }
+    double press = 1013.25;
+    if (ExtractNumberScoped(json, valPos, "pressureSeaLevel", press) ||
+        ExtractNumberScoped(json, valPos, "pressureSurfaceLevel", press)) {
+        outSnap.pressureHpa = press;
+        outSnap.mPressure.available = true;
     }
     double windMs = 0.0;
     if (ExtractNumberScoped(json, valPos, "windSpeed", windMs)) {
         outSnap.windSpeedKmh = std::max(0.0, windMs * 3.6);
         outSnap.windGustsKmh = outSnap.windSpeedKmh;
+        outSnap.mWind.available = true;
+    }
+    double gustMs = 0.0;
+    if (ExtractNumberScoped(json, valPos, "windGust", gustMs)) {
+        outSnap.windGustsKmh = std::max(0.0, gustMs * 3.6);
+        outSnap.mGusts.available = true;
     }
     double deg = 0.0;
     if (ExtractNumberScoped(json, valPos, "windDirection", deg)) {
@@ -2700,70 +3037,71 @@ bool ParseTomorrowIoJson(const std::string& json, ForecastSnapshot& outSnap) {
     double cloud = 20.0;
     if (ExtractNumberScoped(json, valPos, "cloudCover", cloud)) {
         outSnap.cloudCoverPct = std::clamp(cloud, 0.0, 100.0);
+        outSnap.mClouds.available = true;
+    }
+    double visKm = 12.0;
+    if (ExtractNumberScoped(json, valPos, "visibility", visKm)) {
+        outSnap.visibilityM = std::max(0.0, visKm * 1000.0);
+        outSnap.mVisibility.available = true;
     }
     double uv = 2.0;
     if (ExtractNumberScoped(json, valPos, "uvIndex", uv)) {
         outSnap.uvIndex = std::max(0.0, uv);
+        outSnap.mUv.available = true;
     }
     double mm = 0.0;
     if (ExtractNumberScoped(json, valPos, "precipitationIntensity", mm)) {
         outSnap.precipMm = std::max(0.0, mm);
+        outSnap.mPrecip.available = true;
     }
 
     double hr = GetLocalHourFloat();
     outSnap.isDay = (hr >= 6.0 && hr < 19.0);
+    outSnap.mCondition.available = true;
     outSnap.weatherCode = (outSnap.precipMm > 0.1) ? 61 : ((outSnap.cloudCoverPct >= 80.0) ? 3 : ((outSnap.cloudCoverPct >= 25.0) ? 2 : 0));
-    FinalizeParsedForecast(outSnap);
-    outSnap.sourceLabel = L"Tomorrow";
+    FinalizeParsedForecast(outSnap, L"Tomorrow");
     return true;
 }
 
-bool FetchWeatherSource(const std::wstring& src, const Settings& cfg, ForecastSnapshot& outSnap) {
-    if (src == L"off") {
+bool FetchSingleWeatherSource(const std::wstring& src, const Settings& cfg, ForecastSnapshot& outSnap) {
+    if (src == L"off" || src == L"auto") {
         return false;
     }
+    std::wstring latStr = FormatCoordDot(cfg.latitude);
+    std::wstring lonStr = FormatCoordDot(cfg.longitude);
+    std::wstring apiKey = GetProviderApiKey(src, cfg);
+
     if (src == L"open_meteo") {
         if (!cfg.hasValidCoords) {
             return false;
         }
-        std::wstringstream url;
-        url << L"https://api.open-meteo.com/v1/forecast?latitude=" << cfg.latitude
-            << L"&longitude=" << cfg.longitude
-            << L"¤t=weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,temperature_2m,apparent_temperature,relative_humidity_2m,cloud_cover,visibility,is_day,uv_index,precipitation&daily=sunrise,sunset&timezone=auto";
-        std::string body = HttpGetUtf8(url.str());
-        if (body.empty() || !ParseWeatherJson(body, outSnap)) {
+        std::wstring url =
+            L"https://api.open-meteo.com/v1/forecast?latitude=" + latStr +
+            L"&longitude=" + lonStr +
+            L"¤t=weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,temperature_2m,apparent_temperature,dew_point_2m,relative_humidity_2m,pressure_msl,cloud_cover,visibility,is_day,uv_index,precipitation&daily=sunrise,sunset&timezone=auto";
+        std::string body = HttpGetUtf8(url);
+        if (body.empty() || !ParseWeatherJson(body, outSnap, L"Open-Meteo")) {
             return false;
         }
         if (NeedsAirQualityFetch(cfg)) {
-            std::wstringstream aqUrl;
-            aqUrl << L"https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" << cfg.latitude
-                  << L"&longitude=" << cfg.longitude
-                  << L"¤t=european_aqi,pm2_5,alder_pollen,birch_pollen,grass_pollen,ragweed_pollen&timezone=auto";
-            std::string aqBody = HttpGetUtf8(aqUrl.str());
+            std::wstring aqUrl =
+                L"https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + latStr +
+                L"&longitude=" + lonStr +
+                L"¤t=european_aqi,pm2_5,alder_pollen,birch_pollen,grass_pollen,ragweed_pollen&timezone=auto";
+            std::string aqBody = HttpGetUtf8(aqUrl);
             if (!aqBody.empty()) {
                 ParseAirQualityJson(aqBody, outSnap);
-                ApplyForecastMetrics(
-                    outSnap.weatherCode, outSnap.windSpeedKmh, outSnap.windGustsKmh,
-                    outSnap.tempC, outSnap.apparentTempC, outSnap.humidityPct,
-                    static_cast<int>(outSnap.cloudCoverPct), outSnap.visibilityM,
-                    outSnap.precipMm, outSnap.aqiValue, outSnap.pm25Value,
-                    outSnap.pollenMaxValue, outSnap.isDay, outSnap.hasPrecip,
-                    outSnap.precipKind, outSnap.effects);
+                FinalizeParsedForecast(outSnap, L"Open-Meteo");
             }
         }
-        outSnap.sourceLabel = L"Open-Meteo";
         return true;
     }
     if (src == L"met_norway") {
         if (!cfg.hasValidCoords) {
             return false;
         }
-        wchar_t latBuf[32] = {};
-        wchar_t lonBuf[32] = {};
-        swprintf_s(latBuf, L"%.4f", cfg.latitude);
-        swprintf_s(lonBuf, L"%.4f", cfg.longitude);
         std::wstring url = L"https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=" +
-                           std::wstring(latBuf) + L"&lon=" + std::wstring(lonBuf);
+                           latStr + L"&lon=" + lonStr;
         std::string body = HttpGetUtf8(url, L"WindhawkWeatherOverlay/2.9 github.com/alembiqspace");
         return !body.empty() && ParseMetNorwayJson(body, outSnap);
     }
@@ -2771,65 +3109,45 @@ bool FetchWeatherSource(const std::wstring& src, const Settings& cfg, ForecastSn
         if (!cfg.hasValidCoords) {
             return false;
         }
-        wchar_t latBuf[32] = {};
-        wchar_t lonBuf[32] = {};
-        swprintf_s(latBuf, L"%.4f", cfg.latitude);
-        swprintf_s(lonBuf, L"%.4f", cfg.longitude);
-        std::wstring url = L"https://www.7timer.info/bin/api.pl?lon=" + std::wstring(lonBuf) +
-                           L"&lat=" + std::wstring(latBuf) + L"&product=civil&output=json";
+        std::wstring url = L"https://www.7timer.info/bin/api.pl?lon=" + lonStr +
+                           L"&lat=" + latStr + L"&product=civil&output=json";
         std::string body = HttpGetUtf8(url);
         return !body.empty() && ParseSevenTimerJson(body, outSnap);
     }
     if (src == L"weatherapi") {
-        if (!cfg.hasValidCoords || cfg.weatherApiKey.empty()) {
+        if (!cfg.hasValidCoords || apiKey.empty()) {
             return false;
         }
-        wchar_t latBuf[32] = {};
-        wchar_t lonBuf[32] = {};
-        swprintf_s(latBuf, L"%.4f", cfg.latitude);
-        swprintf_s(lonBuf, L"%.4f", cfg.longitude);
-        std::wstring url = L"https://api.weatherapi.com/v1/current.json?key=" + cfg.weatherApiKey +
-                           L"&q=" + std::wstring(latBuf) + L"," + std::wstring(lonBuf) + L"&aqi=yes";
+        std::wstring url = L"https://api.weatherapi.com/v1/current.json?key=" + apiKey +
+                           L"&q=" + latStr + L"," + lonStr + L"&aqi=yes";
         std::string body = HttpGetUtf8(url);
         return !body.empty() && ParseWeatherApiJson(body, outSnap);
     }
     if (src == L"openweathermap") {
-        if (!cfg.hasValidCoords || cfg.weatherApiKey.empty()) {
+        if (!cfg.hasValidCoords || apiKey.empty()) {
             return false;
         }
-        wchar_t latBuf[32] = {};
-        wchar_t lonBuf[32] = {};
-        swprintf_s(latBuf, L"%.4f", cfg.latitude);
-        swprintf_s(lonBuf, L"%.4f", cfg.longitude);
-        std::wstring url = L"https://api.openweathermap.org/data/2.5/weather?lat=" + std::wstring(latBuf) +
-                           L"&lon=" + std::wstring(lonBuf) + L"&appid=" + cfg.weatherApiKey + L"&units=metric";
+        std::wstring url = L"https://api.openweathermap.org/data/2.5/weather?lat=" + latStr +
+                           L"&lon=" + lonStr + L"&appid=" + apiKey + L"&units=metric";
         std::string body = HttpGetUtf8(url);
         return !body.empty() && ParseOpenWeatherMapJson(body, outSnap);
     }
     if (src == L"visual_crossing") {
-        if (!cfg.hasValidCoords || cfg.weatherApiKey.empty()) {
+        if (!cfg.hasValidCoords || apiKey.empty()) {
             return false;
         }
-        wchar_t latBuf[32] = {};
-        wchar_t lonBuf[32] = {};
-        swprintf_s(latBuf, L"%.4f", cfg.latitude);
-        swprintf_s(lonBuf, L"%.4f", cfg.longitude);
         std::wstring url = L"https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/" +
-                           std::wstring(latBuf) + L"," + std::wstring(lonBuf) +
-                           L"?unitGroup=metric&include=current&key=" + cfg.weatherApiKey + L"&contentType=json";
+                           latStr + L"," + lonStr +
+                           L"?unitGroup=metric&include=current&key=" + apiKey + L"&contentType=json";
         std::string body = HttpGetUtf8(url);
         return !body.empty() && ParseVisualCrossingJson(body, outSnap);
     }
     if (src == L"tomorrow_io") {
-        if (!cfg.hasValidCoords || cfg.weatherApiKey.empty()) {
+        if (!cfg.hasValidCoords || apiKey.empty()) {
             return false;
         }
-        wchar_t latBuf[32] = {};
-        wchar_t lonBuf[32] = {};
-        swprintf_s(latBuf, L"%.4f", cfg.latitude);
-        swprintf_s(lonBuf, L"%.4f", cfg.longitude);
-        std::wstring url = L"https://api.tomorrow.io/v4/weather/realtime?location=" + std::wstring(latBuf) +
-                           L"," + std::wstring(lonBuf) + L"&apikey=" + cfg.weatherApiKey;
+        std::wstring url = L"https://api.tomorrow.io/v4/weather/realtime?location=" +
+                           latStr + L"," + lonStr + L"&apikey=" + apiKey;
         std::string body = HttpGetUtf8(url);
         return !body.empty() && ParseTomorrowIoJson(body, outSnap);
     }
@@ -2837,20 +3155,11 @@ bool FetchWeatherSource(const std::wstring& src, const Settings& cfg, ForecastSn
         if (cfg.customApiUrl.empty()) {
             return false;
         }
-        wchar_t latBuf[32] = {};
-        wchar_t lonBuf[32] = {};
-        swprintf_s(latBuf, L"%.4f", cfg.latitude);
-        swprintf_s(lonBuf, L"%.4f", cfg.longitude);
         std::wstring resolvedUrl = cfg.customApiUrl;
-        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{lat}", latBuf);
-        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{lon}", lonBuf);
-        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{key}", cfg.weatherApiKey);
+        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{lat}", latStr);
+        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{lon}", lonStr);
         std::string body = HttpGetUtf8(resolvedUrl);
-        if (body.empty() || !ParseWeatherJson(body, outSnap)) {
-            return false;
-        }
-        outSnap.sourceLabel = L"Custom API";
-        return true;
+        return !body.empty() && ParseWeatherJson(body, outSnap, L"Custom API");
     }
     if (src == L"local_file") {
         if (cfg.localWeatherPath.empty()) {
@@ -2871,13 +3180,140 @@ bool FetchWeatherSource(const std::wstring& src, const Settings& cfg, ForecastSn
             content.resize(read);
         }
         CloseHandle(hFile);
-        if (content.empty() || !ParseWeatherJson(content, outSnap)) {
-            return false;
-        }
-        outSnap.sourceLabel = L"Local File";
-        return true;
+        return !content.empty() && ParseWeatherJson(content, outSnap, L"Local File");
     }
     return false;
+}
+
+void MergeMissingSnapshotFields(ForecastSnapshot& dst, const ForecastSnapshot& src) {
+    if (!dst.mCondition.available && src.mCondition.available) {
+        dst.weatherCode = src.weatherCode;
+        dst.mCondition = src.mCondition;
+    }
+    if (!dst.mTemp.available && src.mTemp.available) {
+        dst.tempC = src.tempC;
+        dst.mTemp = src.mTemp;
+    }
+    if (!dst.mFeelsLike.available && src.mFeelsLike.available) {
+        dst.apparentTempC = src.apparentTempC;
+        dst.mFeelsLike = src.mFeelsLike;
+    }
+    if (!dst.mHumidity.available && src.mHumidity.available) {
+        dst.humidityPct = src.humidityPct;
+        dst.mHumidity = src.mHumidity;
+    }
+    if (!dst.mPressure.available && src.mPressure.available) {
+        dst.pressureHpa = src.pressureHpa;
+        dst.mPressure = src.mPressure;
+    }
+    if (!dst.mWind.available && src.mWind.available) {
+        dst.windSpeedKmh = src.windSpeedKmh;
+        dst.windDirDeg = src.windDirDeg;
+        dst.windDirSign = src.windDirSign;
+        dst.mWind = src.mWind;
+    }
+    if (!dst.mGusts.available && src.mGusts.available) {
+        dst.windGustsKmh = src.windGustsKmh;
+        dst.mGusts = src.mGusts;
+    }
+    if (!dst.mClouds.available && src.mClouds.available) {
+        dst.cloudCoverPct = src.cloudCoverPct;
+        dst.mClouds = src.mClouds;
+    }
+    if (!dst.mPrecip.available && src.mPrecip.available) {
+        dst.precipMm = src.precipMm;
+        dst.mPrecip = src.mPrecip;
+    }
+    if (!dst.mUv.available && src.mUv.available) {
+        dst.uvIndex = src.uvIndex;
+        dst.mUv = src.mUv;
+    }
+    if (!dst.mAqi.available && src.mAqi.available) {
+        dst.aqiValue = src.aqiValue;
+        dst.pm25Value = src.pm25Value;
+        dst.mAqi = src.mAqi;
+    }
+    if (!dst.mPollen.available && src.mPollen.available) {
+        dst.pollenMaxValue = src.pollenMaxValue;
+        dst.mPollen = src.mPollen;
+    }
+    if (!dst.mVisibility.available && src.mVisibility.available) {
+        dst.visibilityM = src.visibilityM;
+        dst.mVisibility = src.mVisibility;
+    }
+    if (!dst.mDewPoint.available && src.mDewPoint.available) {
+        dst.dewPointC = src.dewPointC;
+        dst.mDewPoint = src.mDewPoint;
+    }
+    if (!dst.mDayNight.available && src.mDayNight.available) {
+        dst.isDay = src.isDay;
+        dst.mDayNight = src.mDayNight;
+    }
+    if (!dst.mSunCycle.available && src.mSunCycle.available) {
+        dst.hasSunTimes = src.hasSunTimes;
+        dst.sunriseHour = src.sunriseHour;
+        dst.sunsetHour = src.sunsetHour;
+        dst.sunriseText = src.sunriseText;
+        dst.sunsetText = src.sunsetText;
+        dst.mSunCycle = src.mSunCycle;
+    }
+}
+
+bool HasAllSnapshotFields(const ForecastSnapshot& s) {
+    return s.mCondition.available && s.mTemp.available && s.mFeelsLike.available &&
+           s.mHumidity.available && s.mPressure.available && s.mWind.available &&
+           s.mGusts.available && s.mClouds.available && s.mPrecip.available &&
+           s.mUv.available && s.mAqi.available && s.mPollen.available &&
+           s.mVisibility.available && s.mDewPoint.available &&
+           s.mDayNight.available && s.mSunCycle.available;
+}
+
+bool FetchAutoAggregatedForecast(const Settings& cfg, ForecastSnapshot& outSnap) {
+    std::vector<std::wstring> ordered = BuildOrderedAutoProviders(cfg.autoProviderOrder);
+    bool anyOk = false;
+    int sourcesUsed = 0;
+
+    for (const auto& src : ordered) {
+        if (ProviderRequiresApiKey(src) && GetProviderApiKey(src, cfg).empty()) {
+            continue;
+        }
+        if (src == L"custom_api" && cfg.customApiUrl.empty()) {
+            continue;
+        }
+        if (src == L"local_file" && cfg.localWeatherPath.empty()) {
+            continue;
+        }
+        ForecastSnapshot part;
+        if (FetchSingleWeatherSource(src, cfg, part)) {
+            if (!anyOk) {
+                outSnap = part;
+                anyOk = true;
+            } else {
+                MergeMissingSnapshotFields(outSnap, part);
+            }
+            sourcesUsed++;
+            if (HasAllSnapshotFields(outSnap)) {
+                break;
+            }
+        }
+    }
+
+    if (!anyOk) {
+        return false;
+    }
+    ApplyForecastMetrics(
+        outSnap.weatherCode, outSnap.windSpeedKmh, outSnap.windGustsKmh,
+        outSnap.tempC, outSnap.apparentTempC, outSnap.humidityPct,
+        static_cast<int>(outSnap.cloudCoverPct), outSnap.visibilityM,
+        outSnap.precipMm, outSnap.aqiValue, outSnap.pm25Value,
+        outSnap.pollenMaxValue, outSnap.isDay, outSnap.hasPrecip,
+        outSnap.precipKind, outSnap.effects);
+    outSnap.valid = outSnap.mTemp.available || outSnap.mCondition.available;
+    StampForecastUpdateTime(outSnap);
+    if (sourcesUsed > 1) {
+        outSnap.sourceLabel = L"AUTO (" + std::to_wstring(sourcesUsed) + L")";
+    }
+    return true;
 }
 
 void WeatherWorkerLoop() {
@@ -2892,9 +3328,11 @@ void WeatherWorkerLoop() {
         DWORD waitMs = static_cast<DWORD>(intervalSec) * 1000;
         if ((cfg.primarySource != L"off") && HasAnyForecastConsumer(cfg)) {
             ForecastSnapshot snap;
-            bool ok = FetchWeatherSource(cfg.primarySource, cfg, snap);
+            bool ok = (cfg.primarySource == L"auto")
+                ? FetchAutoAggregatedForecast(cfg, snap)
+                : FetchSingleWeatherSource(cfg.primarySource, cfg, snap);
             if (!ok && cfg.fallbackSource != L"off" && cfg.fallbackSource != cfg.primarySource) {
-                ok = FetchWeatherSource(cfg.fallbackSource, cfg, snap);
+                ok = FetchSingleWeatherSource(cfg.fallbackSource, cfg, snap);
             }
             if (ok) {
                 std::lock_guard<std::mutex> lock(g_mutex);
@@ -3263,6 +3701,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         }
     } else if (msg == WM_MOUSEMOVE) {
         std::lock_guard<std::mutex> lock(g_hudUiMutex);
+        g_hoverRelX = static_cast<float>(static_cast<short>(LOWORD(lParam)));
+        g_hoverRelY = static_cast<float>(static_cast<short>(HIWORD(lParam)));
         if (g_draggingHudBtn) {
             int deltaX = (g_canvasLeft + static_cast<short>(LOWORD(lParam))) - g_dragStartScreenX;
             int deltaY = (g_canvasTop + static_cast<short>(HIWORD(lParam))) - g_dragStartScreenY;
@@ -3492,6 +3932,10 @@ bool EnsureDirectWrite(float fontSizePx, float circleFontPx) {
             g_hudBodyFormat->Release();
             g_hudBodyFormat = nullptr;
         }
+        if (g_hudItalicFormat) {
+            g_hudItalicFormat->Release();
+            g_hudItalicFormat = nullptr;
+        }
         g_cachedFontSizePx = fontSizePx;
     }
     if (std::abs(g_cachedCircleFontPx - circleFontPx) > 0.1f) {
@@ -3508,6 +3952,10 @@ bool EnsureDirectWrite(float fontSizePx, float circleFontPx) {
     if (!g_hudBodyFormat) {
         g_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
                                         DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, fontSizePx, L"en-US", &g_hudBodyFormat);
+    }
+    if (!g_hudItalicFormat) {
+        g_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+                                        DWRITE_FONT_STYLE_ITALIC, DWRITE_FONT_STRETCH_NORMAL, fontSizePx, L"en-US", &g_hudItalicFormat);
     }
     if (!g_hudCircleFormat) {
         g_dwriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_BOLD,
@@ -3527,7 +3975,7 @@ bool EnsureDirectWrite(float fontSizePx, float circleFontPx) {
             g_hudPillFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
         }
     }
-    return g_hudTitleFormat && g_hudBodyFormat && g_hudCircleFormat && g_hudPillFormat;
+    return g_hudTitleFormat && g_hudBodyFormat && g_hudItalicFormat && g_hudCircleFormat && g_hudPillFormat;
 }
 
 void CleanupDirectWrite() {
@@ -3546,6 +3994,10 @@ void CleanupDirectWrite() {
     if (g_hudBodyFormat) {
         g_hudBodyFormat->Release();
         g_hudBodyFormat = nullptr;
+    }
+    if (g_hudItalicFormat) {
+        g_hudItalicFormat->Release();
+        g_hudItalicFormat = nullptr;
     }
     if (g_dwriteFactory) {
         g_dwriteFactory->Release();
@@ -4248,6 +4700,24 @@ void DrawGearSettingsIcon(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
     rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), holeR, holeR), brush);
 }
 
+void DrawInfoBadgeIcon(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
+                       D2D1_RECT_F rect, D2D1_COLOR_F textCol, bool hovered) {
+    float cx = (rect.left + rect.right) * 0.5f;
+    float cy = (rect.top + rect.bottom) * 0.5f;
+    float r = std::max(5.5f, std::min(rect.right - rect.left, rect.bottom - rect.top) * 0.45f);
+    brush->SetOpacity(1.0f);
+    brush->SetColor(hovered
+        ? D2D1::ColorF(0.35f, 0.72f, 1.0f, 0.35f)
+        : D2D1::ColorF(textCol.r, textCol.g, textCol.b, 0.12f));
+    rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), brush);
+    brush->SetColor(hovered
+        ? D2D1::ColorF(0.45f, 0.80f, 1.0f, 0.95f)
+        : D2D1::ColorF(textCol.r, textCol.g, textCol.b, 0.55f));
+    rt->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), r, r), brush, 1.0f);
+    brush->SetColor(textCol);
+    rt->DrawTextW(L"i", 1, g_hudPillFormat, rect, brush);
+}
+
 D2D1_COLOR_F ComputeProviderStatusTint(const ForecastSnapshot& snap) {
     if (snap.lastFetchFailed) {
         return D2D1::ColorF(0.92f, 0.30f, 0.30f, 0.95f);
@@ -4263,6 +4733,13 @@ D2D1_COLOR_F ComputeProviderStatusTint(const ForecastSnapshot& snap) {
         return D2D1::ColorF(0.60f, 0.65f, 0.72f, 0.95f);
     }
     return D2D1::ColorF(0.24f, 0.85f, 0.48f, 0.95f);
+}
+
+std::wstring BuildMetricTooltip(const MetricMeta& meta) {
+    if (!meta.available || meta.sourceName.empty()) {
+        return L"Not provided by active source";
+    }
+    return meta.sourceName + L"  •  " + meta.syncTime;
 }
 
 void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
@@ -4294,10 +4771,14 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
     float btnCy = 0.0f;
     bool isDragging = false;
     ExpandedSection expSec = ExpandedSection::None;
+    float hoverX = -1000.0f;
+    float hoverY = -1000.0f;
     {
         std::lock_guard<std::mutex> lock(g_hudUiMutex);
         isDragging = g_draggingHudBtn;
         expSec = g_expandedSection;
+        hoverX = g_hoverRelX;
+        hoverY = g_hoverRelY;
         if (isDragging) {
             btnCx = g_hudBtnCx.load();
             btnCy = g_hudBtnCy.load();
@@ -4333,6 +4814,9 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         std::wstring label;
         std::wstring value;
         bool isHeader = false;
+        bool isMetric = false;
+        bool available = true;
+        std::wstring tooltip;
         std::wstring actionId;
         std::wstring btnLabel;
         D2D1_COLOR_F btnTint = D2D1::ColorF(0.35f, 0.68f, 1.0f, 0.90f);
@@ -4343,28 +4827,53 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
     wchar_t buf[96] = {};
     rows.push_back({
         L"FORECAST", snap.valid ? (snap.sourceLabel + L"  " + snap.lastUpdateText) : L"No data",
-        true, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None
+        true, false, true, L"", L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None
     });
     rows.push_back({
-        L"Coords", cfg.coordsRaw.empty() ? L"(empty)" : cfg.coordsRaw, false,
-        L"cycle_source", cfg.primarySource, ComputeProviderStatusTint(snap),
+        L"Coords", cfg.coordsRaw.empty() ? L"(empty)" : cfg.coordsRaw, false, false, true, L"",
+        L"cycle_source", FormatProviderHudBadge(cfg.primarySource), ComputeProviderStatusTint(snap),
         cfg.primarySource != L"off" ? HudFieldId::Coords : HudFieldId::None
     });
-    rows.push_back({L"Condition", snap.valid ? WmoCodeToLabel(snap.weatherCode) : L"N/A", false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
-    rows.push_back({L"Temperature", snap.valid ? FormatTempValue(snap.tempC, cfg.tempUnit, false) : L"--", false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
-    if (snap.valid) {
-        std::wstring wStr = FormatWindValue(snap.windSpeedKmh, snap.windDirDeg, cfg.windUnit) + L" (" + WindDegToCompass(snap.windDirDeg) + L")";
-        rows.push_back({L"Wind", wStr, false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
-    } else {
-        rows.push_back({L"Wind", L"--", false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
-    }
-    rows.push_back({L"Cloud cover", snap.valid ? FormatCloudValue(snap.cloudCoverPct, cfg.cloudUnit) : L"--", false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
-    rows.push_back({L"Precipitation", snap.valid ? FormatPrecipValue(snap.precipMm, cfg.precipUnit) : L"--", false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
-    rows.push_back({L"UV index", snap.valid ? FormatUvValue(snap.uvIndex, cfg.uvUnit) : L"--", false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
-    rows.push_back({L"Air quality", snap.valid ? FormatAqiValue(snap.aqiValue, snap.pm25Value, cfg.aqiUnit) : L"--", false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
+
+    auto addMetricRow = [&](const wchar_t* name, const MetricMeta& meta, const std::wstring& valStr) {
+        bool ok = snap.valid && meta.available;
+        rows.push_back({
+            name,
+            ok ? valStr : L"--",
+            false,
+            true,
+            ok,
+            BuildMetricTooltip(meta),
+            L"",
+            L"",
+            D2D1::ColorF(0, 0, 0, 0),
+            HudFieldId::None
+        });
+    };
+
+    addMetricRow(L"Condition", snap.mCondition, WmoCodeToLabel(snap.weatherCode));
+    addMetricRow(L"Temperature", snap.mTemp, FormatTempValue(snap.tempC, cfg.tempUnit, false));
+    addMetricRow(L"Feels like", snap.mFeelsLike, FormatTempValue(snap.apparentTempC, cfg.tempUnit, false));
+    swprintf_s(buf, L"%.0f%%", snap.humidityPct);
+    addMetricRow(L"Humidity", snap.mHumidity, buf);
+    swprintf_s(buf, L"%.0f hPa", snap.pressureHpa);
+    addMetricRow(L"Pressure", snap.mPressure, buf);
+    addMetricRow(L"Wind", snap.mWind, FormatWindValue(snap.windSpeedKmh, cfg.windUnit) + L" (" + WindDegToCompass(snap.windDirDeg) + L")");
+    addMetricRow(L"Wind gusts", snap.mGusts, FormatWindValue(snap.windGustsKmh, cfg.windUnit));
+    addMetricRow(L"Cloud cover", snap.mClouds, FormatCloudValue(snap.cloudCoverPct, cfg.cloudUnit));
+    addMetricRow(L"Precipitation", snap.mPrecip, FormatPrecipValue(snap.precipMm, cfg.precipUnit));
+    addMetricRow(L"UV index", snap.mUv, FormatUvValue(snap.uvIndex, cfg.uvUnit));
+    addMetricRow(L"Air quality", snap.mAqi, FormatAqiValue(snap.aqiValue, snap.pm25Value, cfg.aqiUnit));
+    swprintf_s(buf, L"%.0f idx", snap.pollenMaxValue);
+    addMetricRow(L"Pollen", snap.mPollen, buf);
+    swprintf_s(buf, L"%.1f km", snap.visibilityM / 1000.0);
+    addMetricRow(L"Visibility", snap.mVisibility, buf);
+    addMetricRow(L"Dew point", snap.mDewPoint, FormatTempValue(snap.dewPointC, cfg.tempUnit, false));
+    addMetricRow(L"Day / Night", snap.mDayNight, snap.isDay ? L"Day" : L"Night");
+    addMetricRow(L"Sun cycle", snap.mSunCycle, snap.sunriseText + L" / " + snap.sunsetText);
 
     rows.push_back({
-        L"[Sky]", expSec == ExpandedSection::Sky ? L"Expanded" : L"Collapsed", true,
+        L"[Sky]", expSec == ExpandedSection::Sky ? L"Expanded" : L"Collapsed", true, false, true, L"",
         L"sec_sky", expSec == ExpandedSection::Sky ? L"HIDE" : L"OPEN", sectionGrayTint, HudFieldId::None
     });
     if (expSec == ExpandedSection::Sky) {
@@ -4373,10 +4882,8 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         rows.push_back({
             L"Clouds",
             cfg.cloudsMode == TriStateMode::On ? buf : L"",
-            false,
-            L"cycle_clouds",
-            cB.first,
-            cB.second,
+            false, false, true, L"",
+            L"cycle_clouds", cB.first, cB.second,
             cfg.cloudsMode == TriStateMode::On ? HudFieldId::CloudsIntensity : HudFieldId::None
         });
 
@@ -4385,10 +4892,8 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         rows.push_back({
             L"Sun",
             cfg.sunMode == TriStateMode::On ? buf : L"",
-            false,
-            L"cycle_sun",
-            sB.first,
-            sB.second,
+            false, false, true, L"",
+            L"cycle_sun", sB.first, sB.second,
             cfg.sunMode == TriStateMode::On ? HudFieldId::SunUvOverride : HudFieldId::None
         });
 
@@ -4397,17 +4902,13 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         rows.push_back({
             L"Moon",
             cfg.moonMode == TriStateMode::On ? buf : L"",
-            false,
-            L"cycle_moon",
-            mB.first,
-            mB.second,
+            false, false, true, L"",
+            L"cycle_moon", mB.first, mB.second,
             cfg.moonMode == TriStateMode::On ? HudFieldId::MoonPhaseOverride : HudFieldId::None
         });
 
         rows.push_back({
-            L"Over clouds",
-            L"",
-            false,
+            L"Over clouds", L"", false, false, true, L"",
             L"toggle_celestial_front",
             cfg.celestialInFrontOfClouds ? L"FRONT" : L"DIM",
             D2D1::ColorF(0.65f, 0.78f, 0.95f, 0.9f),
@@ -4416,7 +4917,7 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
     }
 
     rows.push_back({
-        L"[Precipitation]", expSec == ExpandedSection::Precipitation ? L"Expanded" : L"Collapsed", true,
+        L"[Precipitation]", expSec == ExpandedSection::Precipitation ? L"Expanded" : L"Collapsed", true, false, true, L"",
         L"sec_precip", expSec == ExpandedSection::Precipitation ? L"HIDE" : L"OPEN", sectionGrayTint, HudFieldId::None
     });
     if (expSec == ExpandedSection::Precipitation) {
@@ -4437,20 +4938,20 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                 providerPrecipStr = L"rain";
             }
         }
-        rows.push_back({L"Mode", providerPrecipStr, false, L"cycle_precip_mode", pModeStr, D2D1::ColorF(0.35f, 0.72f, 1.0f, 0.9f), HudFieldId::None});
+        rows.push_back({L"Mode", providerPrecipStr, false, false, true, L"", L"cycle_precip_mode", pModeStr, D2D1::ColorF(0.35f, 0.72f, 1.0f, 0.9f), HudFieldId::None});
 
         const wchar_t* dStr = (cfg.precipFallDirection == FallDirMode::Auto)
             ? L"AUTO"
             : ((cfg.precipFallDirection == FallDirMode::Down)
                 ? L"DOWN"
                 : ((cfg.precipFallDirection == FallDirMode::DownLeft) ? L"LEFT" : L"RIGHT"));
-        rows.push_back({L"Direction", L"", false, L"cycle_precip_dir", dStr, D2D1::ColorF(0.45f, 0.78f, 1.0f, 0.9f), HudFieldId::None});
+        rows.push_back({L"Direction", L"", false, false, true, L"", L"cycle_precip_dir", dStr, D2D1::ColorF(0.45f, 0.78f, 1.0f, 0.9f), HudFieldId::None});
 
         swprintf_s(buf, L"%.1f m/s", cfg.precipFallSpeedMps);
         rows.push_back({
             L"Fall speed",
             cfg.precipSpeedMode == PrecipSpeedMode::Custom ? buf : L"",
-            false,
+            false, false, true, L"",
             L"cycle_precip_speed",
             cfg.precipSpeedMode == PrecipSpeedMode::Auto ? L"AUTO" : L"CUSTOM",
             D2D1::ColorF(0.35f, 0.68f, 1.0f, 0.9f),
@@ -4462,16 +4963,13 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         rows.push_back({
             L"Intensity",
             showPrecipInt ? buf : L"",
-            false,
-            L"",
-            L"",
-            D2D1::ColorF(0, 0, 0, 0),
+            false, false, true, L"", L"", L"", D2D1::ColorF(0, 0, 0, 0),
             showPrecipInt ? HudFieldId::PrecipIntensity : HudFieldId::None
         });
     }
 
     rows.push_back({
-        L"[Effects]", expSec == ExpandedSection::Effects ? L"Expanded" : L"Collapsed", true,
+        L"[Effects]", expSec == ExpandedSection::Effects ? L"Expanded" : L"Collapsed", true, false, true, L"",
         L"sec_effects", expSec == ExpandedSection::Effects ? L"HIDE" : L"OPEN", sectionGrayTint, HudFieldId::None
     });
     if (expSec == ExpandedSection::Effects) {
@@ -4486,48 +4984,50 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         rows.push_back({
             L"Intensity",
             anyManualFx ? buf : L"",
-            false,
-            L"",
-            L"",
-            D2D1::ColorF(0, 0, 0, 0),
+            false, false, true, L"", L"", L"", D2D1::ColorF(0, 0, 0, 0),
             anyManualFx ? HudFieldId::EffectsIntensity : HudFieldId::None
         });
 
-        auto addFxRow = [&](const wchar_t* name, TriStateMode m, bool providerVal, const wchar_t* act) {
+        auto addFxRow = [&](const wchar_t* name, TriStateMode m, bool providerVal, bool hasProvData, const wchar_t* act) {
             auto b = triBadge(m);
-            std::wstring provState = snap.valid ? (providerVal ? L"active" : L"none") : L"--";
-            rows.push_back({name, provState, false, act, b.first, b.second, HudFieldId::None});
+            std::wstring provState = (snap.valid && hasProvData) ? (providerVal ? L"active" : L"none") : L"--";
+            rows.push_back({name, provState, false, false, true, L"", act, b.first, b.second, HudFieldId::None});
         };
-        addFxRow(L"Dust", cfg.effectDust, snap.effects.dust, L"cycle_fx_dust");
-        addFxRow(L"Fog", cfg.effectFog, snap.effects.fog, L"cycle_fx_fog");
-        addFxRow(L"Smog", cfg.effectSmog, snap.effects.smog, L"cycle_fx_smog");
-        addFxRow(L"Thunderstorm", cfg.effectThunderstorm, snap.effects.thunderstorm, L"cycle_fx_storm");
-        addFxRow(L"Aurora", cfg.effectAurora, snap.effects.aurora, L"cycle_fx_aurora");
-        addFxRow(L"Mirage", cfg.effectMirage, snap.effects.mirage, L"cycle_fx_mirage");
-        addFxRow(L"Rainbow", cfg.effectRainbow, snap.effects.rainbow, L"cycle_fx_rainbow");
-        addFxRow(L"Wind streams", cfg.effectWindStreams, snap.effects.windStreams, L"cycle_fx_wind");
-        addFxRow(L"Frost / Heat", cfg.effectThermal, snap.effects.frost || snap.effects.heat, L"cycle_fx_thermal");
-        addFxRow(L"Night stars", cfg.effectNightStars, snap.effects.nightStars, L"cycle_fx_stars");
-        addFxRow(L"Air quality", cfg.effectAirQuality, snap.effects.airQuality, L"cycle_fx_aq");
-        addFxRow(L"Pollen", cfg.effectPollen, snap.effects.pollen, L"cycle_fx_pollen");
-        addFxRow(L"Flood water", cfg.effectFloodWater, snap.effects.floodWater, L"cycle_fx_flood");
+        addFxRow(L"Dust", cfg.effectDust, snap.effects.dust, snap.mWind.available || snap.mVisibility.available, L"cycle_fx_dust");
+        addFxRow(L"Fog", cfg.effectFog, snap.effects.fog, snap.mCondition.available || snap.mHumidity.available, L"cycle_fx_fog");
+        addFxRow(L"Smog", cfg.effectSmog, snap.effects.smog, snap.mWind.available || snap.mVisibility.available, L"cycle_fx_smog");
+        addFxRow(L"Thunderstorm", cfg.effectThunderstorm, snap.effects.thunderstorm, snap.mCondition.available, L"cycle_fx_storm");
+        addFxRow(L"Aurora", cfg.effectAurora, snap.effects.aurora, snap.mClouds.available, L"cycle_fx_aurora");
+        addFxRow(L"Mirage", cfg.effectMirage, snap.effects.mirage, snap.mTemp.available, L"cycle_fx_mirage");
+        addFxRow(L"Rainbow", cfg.effectRainbow, snap.effects.rainbow, snap.mCondition.available || snap.mClouds.available, L"cycle_fx_rainbow");
+        addFxRow(L"Wind streams", cfg.effectWindStreams, snap.effects.windStreams, snap.mWind.available || snap.mGusts.available, L"cycle_fx_wind");
+        addFxRow(L"Frost / Heat", cfg.effectThermal, snap.effects.frost || snap.effects.heat, snap.mTemp.available || snap.mFeelsLike.available, L"cycle_fx_thermal");
+        addFxRow(L"Night stars", cfg.effectNightStars, snap.effects.nightStars, snap.mClouds.available, L"cycle_fx_stars");
+        addFxRow(L"Air quality", cfg.effectAirQuality, snap.effects.airQuality, snap.mAqi.available, L"cycle_fx_aq");
+        addFxRow(L"Pollen", cfg.effectPollen, snap.effects.pollen, snap.mPollen.available, L"cycle_fx_pollen");
+        addFxRow(L"Flood water", cfg.effectFloodWater, snap.effects.floodWater, snap.mPrecip.available, L"cycle_fx_flood");
     }
 
     const wchar_t* perfStr = (cfg.performanceMode == PerformanceMode::High)
         ? L"HIGH"
         : ((cfg.performanceMode == PerformanceMode::Medium) ? L"MEDIUM" : L"LOW");
-    rows.push_back({L"Performance", L"", true, L"cycle_perf", perfStr, D2D1::ColorF(0.30f, 0.85f, 0.65f, 0.9f), HudFieldId::None});
+    rows.push_back({L"Performance", L"", true, false, true, L"", L"cycle_perf", perfStr, D2D1::ColorF(0.30f, 0.85f, 0.65f, 0.9f), HudFieldId::None});
 
     std::vector<InteractiveControl> nextControls;
+    std::wstring activeTooltip;
+    float tooltipX = 0.0f;
+    float tooltipY = 0.0f;
+
     if (expanded) {
         const float padX = 12.0f;
         const float padY = 10.0f;
         const float rowH = std::max(22.0f, cfg.hudFontSizePx + 11.0f);
         const float headerH = std::max(24.0f, cfg.hudFontSizePx + 13.0f);
-        const float pillW = std::max(98.0f, cfg.hudFontSizePx * 8.4f);
+        const float pillW = std::max(108.0f, cfg.hudFontSizePx * 9.0f);
         const float pillH = std::max(18.0f, cfg.hudFontSizePx + 6.0f);
-        const float valW = std::max(126.0f, cfg.hudFontSizePx * 11.0f);
-        const float labelW = std::max(115.0f, cfg.hudFontSizePx * 10.0f);
+        const float infoSize = std::max(15.0f, cfg.hudFontSizePx + 3.0f);
+        const float valW = std::max(132.0f, cfg.hudFontSizePx * 11.5f);
+        const float labelW = std::max(118.0f, cfg.hudFontSizePx * 10.2f);
         const float gap = static_cast<float>(cfg.forecastHudMarginPx);
         float cardW = padX * 2.0f + labelW + valW + pillW + 24.0f;
         float totalContentH = padY * 2.0f;
@@ -4592,8 +5092,13 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                     brush->SetColor(sepCol);
                     rt->DrawLine(D2D1::Point2F(left + padX, curY - 2.0f), D2D1::Point2F(left + cardW - padX, curY - 2.0f), brush, 1.0f);
                 }
-                IDWriteTextFormat* fmt = r.isHeader ? g_hudTitleFormat : g_hudBodyFormat;
-                brush->SetColor(r.isHeader ? cfg.colorHudText : mutedText);
+                float rowAlphaMul = r.available ? 1.0f : 0.50f;
+                IDWriteTextFormat* fmt = r.isHeader
+                    ? g_hudTitleFormat
+                    : (r.available ? g_hudBodyFormat : g_hudItalicFormat);
+                D2D1_COLOR_F lblCol = r.isHeader ? cfg.colorHudText : mutedText;
+                lblCol.a *= rowAlphaMul;
+                brush->SetColor(lblCol);
                 rt->DrawTextW(r.label.c_str(), static_cast<UINT32>(r.label.size()), fmt,
                               D2D1::RectF(left + padX, curY, left + padX + labelW, curY + h), brush);
 
@@ -4608,7 +5113,23 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                     DrawRoundedPillButton(rt, brush, cfg, ic);
                     nextControls.push_back(ic);
                     cursorX -= (pillW + 8.0f);
+                } else if (r.isMetric) {
+                    D2D1_RECT_F infoRect = D2D1::RectF(cursorX - infoSize, curY + (h - infoSize) * 0.5f, cursorX, curY + (h + infoSize) * 0.5f);
+                    bool isHovered = (hoverX >= infoRect.left && hoverX <= infoRect.right &&
+                                      hoverY >= infoRect.top && hoverY <= infoRect.bottom);
+                    DrawInfoBadgeIcon(rt, brush, infoRect, lblCol, isHovered);
+                    InteractiveControl ic;
+                    ic.rect = infoRect;
+                    ic.tooltipText = r.tooltip;
+                    nextControls.push_back(ic);
+                    if (isHovered && !r.tooltip.empty()) {
+                        activeTooltip = r.tooltip;
+                        tooltipX = infoRect.left;
+                        tooltipY = infoRect.top;
+                    }
+                    cursorX -= (infoSize + 8.0f);
                 }
+
                 if (!r.value.empty() || r.editField != HudFieldId::None) {
                     bool isEditing = (r.editField != HudFieldId::None && focusedField == r.editField);
                     std::wstring dispVal = isEditing ? (editBuf + L"|") : r.value;
@@ -4624,11 +5145,14 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                         ic.fieldId = r.editField;
                         nextControls.push_back(ic);
                     }
-                    brush->SetColor(cfg.colorHudText);
-                    g_hudBodyFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-                    rt->DrawTextW(dispVal.c_str(), static_cast<UINT32>(dispVal.size()), g_hudBodyFormat,
+                    D2D1_COLOR_F valCol = cfg.colorHudText;
+                    valCol.a *= rowAlphaMul;
+                    brush->SetColor(valCol);
+                    IDWriteTextFormat* valFmt = r.available ? g_hudBodyFormat : g_hudItalicFormat;
+                    valFmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+                    rt->DrawTextW(dispVal.c_str(), static_cast<UINT32>(dispVal.size()), valFmt,
                                   D2D1::RectF(valRect.left + 4.0f, curY, valRect.right - 4.0f, curY + h), brush);
-                    g_hudBodyFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+                    valFmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
                 }
             }
             curY += h;
@@ -4643,6 +5167,22 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
             rt->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(left + cardW - 7.0f, thumbTop, left + cardW - 3.0f, thumbTop + thumbH), 2.0f, 2.0f), brush);
         }
         rt->PopAxisAlignedClip();
+
+        if (!activeTooltip.empty()) {
+            float tipW = std::max(145.0f, static_cast<float>(activeTooltip.size()) * (cfg.hudFontSizePx * 0.58f) + 18.0f);
+            float tipH = std::max(22.0f, cfg.hudFontSizePx + 10.0f);
+            float tipLeft = std::clamp(tooltipX - tipW + 12.0f, primaryMon.left + 6.0f, primaryMon.left + primaryMon.width - tipW - 6.0f);
+            float tipTop = std::max(primaryMon.top + 6.0f, tooltipY - tipH - 6.0f);
+            D2D1_ROUNDED_RECT tipRr = D2D1::RoundedRect(D2D1::RectF(tipLeft, tipTop, tipLeft + tipW, tipTop + tipH), 6.0f, 6.0f);
+            brush->SetOpacity(1.0f);
+            brush->SetColor(D2D1::ColorF(0.05f, 0.07f, 0.11f, 0.96f));
+            rt->FillRoundedRectangle(tipRr, brush);
+            brush->SetColor(D2D1::ColorF(0.45f, 0.78f, 1.0f, 0.85f));
+            rt->DrawRoundedRectangle(tipRr, brush, 1.0f);
+            brush->SetColor(cfg.colorHudText);
+            rt->DrawTextW(activeTooltip.c_str(), static_cast<UINT32>(activeTooltip.size()), g_hudPillFormat,
+                          D2D1::RectF(tipLeft + 4.0f, tipTop, tipLeft + tipW - 4.0f, tipTop + tipH), brush);
+        }
     }
 
     {
@@ -4894,6 +5434,11 @@ void RenderWorkerLoop() {
             hasCursor = true;
             curRelX = static_cast<float>(ptCur.x - g_canvasLeft);
             curRelY = static_cast<float>(ptCur.y - g_canvasTop);
+            {
+                std::lock_guard<std::mutex> hlock(g_hudUiMutex);
+                g_hoverRelX = curRelX;
+                g_hoverRelY = curRelY;
+            }
             if (g_overlayHwnd && IsWindowVisible(g_overlayHwnd)) {
                 SyncClickThroughExStyle(g_overlayHwnd, IsRelPointInsideHud(curRelX, curRelY));
             }
