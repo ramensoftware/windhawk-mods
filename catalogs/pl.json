@@ -11394,13 +11394,13 @@
         "ratingUsers": 1193,
         "reviews": 7,
         "trendingSorting": 20.35919261236255,
-        "updated": 1795143726000,
+        "updated": 1795629809000,
         "users": 28618
       },
       "metadata": {
         "author": "caliberda",
         "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -ldwmapi -lcomctl32 -lgdi32 -lmsimg32 -ld2d1 -ldwrite -lwlanapi -luuid -lversion -lbthprops -ldxva2 -lshlwapi -lwinhttp -lwinmm -liphlpapi -lshcore -lcomdlg32 -limm32 -lsetupapi -lcfgmgr32 -luserenv -lbcrypt",
-        "description": "An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)",
+        "description": "Wyspa u góry ekranu jak pasek menu macOS i Dynamic Island z iPhone'a (zegar, centrum sterowania, powiadomienia, multimedia, ikony obszaru powiadomień) oraz dock jak w macOS zamiast paska zadań (albo pasek zadań Windows, przezroczysty lub bez zmian)",
         "donateUrl": "https://github.com/sponsors/cesarkali",
         "github": "https://github.com/cesarkali",
         "homepage": "https://island.caliberda.com.br",
@@ -11410,7 +11410,10 @@
         ],
         "license": "GPL-3.0",
         "name": "Mac Island & Dock",
-        "version": "3.3.0"
+        "version": "3.4.0"
+      },
+      "metadataEnglish": {
+        "description": "An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)"
       }
     },
     "mac-magnifying-cursor": {
