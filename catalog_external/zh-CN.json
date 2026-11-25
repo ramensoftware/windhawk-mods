@@ -408,36 +408,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4398b4841ab98d76e16b35d93af4f2e561e62ea3/mods/desktop-window-keys.wh.cpp"
       }
     },
-    "dynamic-window-manager": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795587228422,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795587228422,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Armaninyow",
-        "compilerOptions": "-luser32 -ldwmapi -lshell32",
-        "description": "Sizes, maximizes and positions new application windows according to user-defined per-application rules",
-        "github": "https://github.com/armaninyow",
-        "include": [
-          "windhawk.exe",
-          "taskmgr.exe"
-        ],
-        "license": "MIT",
-        "name": "Dynamic Window Manager",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7903",
-      "source": {
-        "sha256": "3b0fd8485d39c16bbc39cf8b8a665939bf9f684eda18c99ea692939a99bdb68e",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/a863dc5fbdc274745667b4ab64c7a7eef42fbc41/mods/dynamic-window-manager.wh.cpp"
-      }
-    },
     "enable-preview-pane-for-downloads": {
       "details": {
         "defaultSorting": 0,
