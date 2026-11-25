@@ -28,7 +28,8 @@ fade out toward the top and bottom of the arc.
   wheel, faster the further you go.
 - Click a label to choose it. A click on empty space inside the wheel
   chooses the highlighted item by default; that can be changed to do
-  nothing or to close the wheel. Click outside to dismiss.
+  nothing, close the menu, or go back out of a submenu. Click outside to
+  dismiss.
 - Press and pull a label to rearrange. The order is remembered for that menu.
 - Right-click inside the wheel for the standard menu.
 
@@ -36,11 +37,15 @@ fade out toward the top and bottom of the arc.
 - Type a name to jump to it. Up / Down step, Left / Right jump to the ends.
 - Enter chooses, Backspace goes back, Esc closes.
 
+**Shape** can be changed from the wheel to a straight menu that keeps every
+feature: "List" is a regular box, "Sliding list" is the wheel straightened
+into a column.
+
 **Last choice note** (off by default) shows what you last chose from a
 wheel, and how long ago, as a greyed entry at the top or bottom of the list
 or in the centre of the wheel. Handy after an accidental click.
 
-**Wheel options** (last entry in the wheel) changes most settings on the
+**Menu options** (last entry in the menu) changes most settings on the
 spot. A change made there holds until you next change the mod's settings in
 Windhawk, which then take over again.
 
@@ -77,6 +82,13 @@ takes the menu, so use one at a time.
 
 // ==WindhawkModSettings==
 /*
+- shape: wheel
+  $name: Shape
+  $description: The wheel, or the same menu straightened out. "List" is a regular box where the list stays put and the highlight moves. "Sliding list" keeps the wheel's behavior in a straight column, where the rows slide through a fixed highlight line and fade toward the ends.
+  $options:
+  - wheel: Wheel
+  - list: List
+  - slide: Sliding list
 - side: right
   $name: Opens toward
   $description: The wheel flips to the other side on its own when it would not fit on the screen.
@@ -149,7 +161,8 @@ takes the menu, so use one at a time.
   $options:
   - choose: Choose the highlighted item
   - nothing: Do nothing
-  - close: Close the wheel
+  - close: Close the menu
+  - back: Go back to the previous menu
 - showLast: none
   $name: Show the last choice
   $description: Shows a greyed, non-selectable note of the last item chosen from a wheel and how long ago, so an accidental click can be identified at a glance. Choices made in the standard menu are not recorded.
@@ -162,7 +175,7 @@ takes the menu, so use one at a time.
   $name: Show "Default context options"
   $description: Adds an entry that opens the standard menu. A right-click inside the wheel always does the same.
 - showOptionsEntry: true
-  $name: Show "Wheel options"
+  $name: Show "Menu options"
 - hideItems:
   - ""
   $name: Hidden items
@@ -273,13 +286,20 @@ struct Config {
     float minStepDeg = 3.5f;     // finest label spacing on outer rings
     float parentDim = 0.55f;     // opacity of the rings behind the active one
 
-    // A click inside the wheel that is not on a label: 0 chooses the
-    // highlighted item, 1 does nothing, 2 closes the wheel.
+    // A click inside the menu that is not on a label: 0 chooses the
+    // highlighted item, 1 does nothing, 2 closes the menu, 3 goes back out of
+    // a submenu.
     int emptyClick = 0;
 
     // A greyed note of the last choice: 0 off, 1 top of the list, 2 bottom
     // of the list, 3 centre of the wheel.
     int lastNote = 0;
+
+    // Shape: 0 the wheel, 1 a regular list in a box (the list stays put and
+    // the highlight moves), 2 a sliding list (the wheel straightened out: the
+    // rows slide through a fixed highlight line and fade toward the ends).
+    int shape = 0;
+    float listInset = 16.0f;     // cursor to the start of a straight row
 
     // Placement. The arc flips to the other side when it would not fit.
     bool preferLeft = false;
@@ -308,7 +328,7 @@ struct Config {
     bool hasTextColor = false, hasLabelColor = false, hasHighlight = false;
     uint32_t userText = 0, userLabel = 0, userHighlight = 0;
     bool showNativeEntry = true;   // "Default context options"
-    bool showOptionsEntry = true;  // "Wheel options"
+    bool showOptionsEntry = true;  // "Menu options"
     std::vector<std::wstring> hideItems;       // wildcard patterns
     std::vector<CustomItem> customItems;
     std::vector<std::wstring> copyNames = {L"cut", L"copy"};  // lower-case
@@ -325,7 +345,7 @@ static Config cfg;
 enum : int {
     ID_BACK = -1,
     ID_NATIVE = -2,
-    ID_OPTIONS = -3,      // the "Wheel options" entry
+    ID_OPTIONS = -3,      // the "Menu options" entry
     ID_OPT_SETTING = -4,  // one setting inside it
     ID_CUSTOM = -5,       // a user-defined entry that runs a command
     ID_INFO = -6,         // the greyed "Last: ..." note; never selectable
@@ -379,6 +399,8 @@ struct Level {
     float innerPx = 0.0f;       // where this level's labels start
     float rimPx = 0.0f;         // its outline radius
     float step = 0.0f;          // degrees between its items
+    double view = 0.0;          // list shape: the row on the centre line
+    double viewWant = 0.0;      // where `view` is easing to
 };
 
 struct Wheel {
@@ -398,6 +420,9 @@ struct Wheel {
     std::vector<MSG> pending; // hook events delivered by a nested loop
     POINT center = {};       // screen px
     bool tiltArmed = false;  // tilt waits until the cursor is in the band
+    RECT mon = {};           // the monitor the menu opened on
+    double extTop = 0.0;     // straight shapes: how far the menu reaches
+    double extBottom = 0.0;  // above and below the centre line, px
     float scale = 1.0f;
     int size = 0;            // window is size x size px
     float outerPx = 0.0f;    // current rim radius, px (fits this level)
@@ -467,6 +492,8 @@ static Wheel g;
 static std::atomic<HWND> g_hookTarget{nullptr};
 static std::atomic<int> g_snapCx{0}, g_snapCy{0}, g_snapSide{1};
 static std::atomic<int> g_snapOuter{0}, g_snapHub{0};
+static std::atomic<bool> g_snapRect{false};  // straight shape: a rectangle
+static std::atomic<int> g_snapTop{0}, g_snapBottom{0};
 
 // Mouse events the hook thread posts to the wheel window.
 enum : UINT {
@@ -577,6 +604,17 @@ static bool RingVisible(size_t d) {
     return d + 1 == n;
 }
 
+// The menu is straightened into a column (either list shape).
+static bool Straight() { return cfg.shape != 0; }
+
+// Height of a row in a straight menu.
+static float RowHeight() { return (cfg.pillHeight + 3.0f) * g.scale; }
+
+// The list position sitting on the centre line of the active level.
+static double TopRef() {
+    return cfg.shape == 1 && !g.stack.empty() ? g.stack.back().view : g.rot;
+}
+
 // Degrees between items on the active level.
 static float TopStep() {
     const float st = g.stack.empty() ? 0.0f : g.stack.back().step;
@@ -586,13 +624,21 @@ static float TopStep() {
 static bool Wrapping() {
     // Wrap only when the list is long enough that no item could show twice
     // in the visible half.
-    return cfg.wrap && !g.dragging && ItemCount() * TopStep() >= 180.0f + TopStep();
+    // The regular list never wraps: it is all on show and stays put.
+    return cfg.wrap && cfg.shape != 1 && !g.dragging &&
+           ItemCount() * TopStep() >= 180.0f + TopStep();
 }
 
 static bool InsideWheel(POINT pt) {
     const double dx = double(g.side) * (pt.x - g.center.x);
     const double dy = pt.y - g.center.y;
     const double R = g.outerPx;
+    if (Straight()) {
+        // A rectangle round the rows, with a little slack.
+        const double m = 10.0 * g.scale;
+        return dx >= -m && dx <= R + m && dy >= g.extTop - m &&
+               dy <= g.extBottom + m;
+    }
     if (dx * dx + dy * dy > R * R) return false;
     // The far half of the circle is empty. Only a hub's width of it counts
     // as the wheel, so a click on something over there dismisses the wheel
@@ -845,7 +891,8 @@ static void LayoutLevel() {
     g.outerPx = g.tiltR = cfg.outerRadius * s;
     if (g.stack.empty()) return;
     const bool canMeasure = EnsureText();
-    const float base = cfg.textInner * s;
+    // Straightened, the rows start right beside the cursor.
+    const float base = (Straight() ? cfg.listInset : cfg.textInner) * s;
     const float span = (cfg.textOuter - cfg.textInner) * s;
     const float gap = cfg.ringGap * s;
     const size_t top = g.stack.size() - 1;
@@ -855,9 +902,9 @@ static void LayoutLevel() {
         lvl.innerPx = inner;
         // Outer rings use a finer angle so neighbouring labels stay the
         // same distance apart instead of fanning out.
-        lvl.step = inner > base ? std::max(cfg.minStepDeg,
-                                           cfg.stepDeg * base / inner)
-                                : cfg.stepDeg;
+        lvl.step = (!Straight() && inner > base)
+                       ? std::max(cfg.minStepDeg, cfg.stepDeg * base / inner)
+                       : cfg.stepDeg;
         float longest = span;
         if (canMeasure) {
             MeasureLevel(lvl);
@@ -895,7 +942,18 @@ static void LayoutLevel() {
     }
 
     // Window: the rings plus a margin for a label dragged past the rim.
-    const float need = std::max(cfg.outerRadius * s, g.outerPx) + 120 * s;
+    float need = std::max(cfg.outerRadius * s, g.outerPx) + 120 * s;
+    if (Straight()) {
+        // Tall enough for the rows on show, up to the height of the screen.
+        float rows = 90.0f / cfg.stepDeg + 1.0f;
+        if (cfg.shape == 1)
+            for (const Level& lvl : g.stack)
+                rows = std::max(rows, float(lvl.items.size()) + 1.0f);
+        const float screen = float(g.mon.bottom - g.mon.top);
+        float reach = rows * RowHeight() + 40 * s;
+        if (screen > 0) reach = std::min(reach, screen);
+        need = std::max(need, reach);
+    }
     g.size = int(std::ceil(need)) * 2;
 }
 
@@ -924,7 +982,7 @@ static bool EnsureResources() {
         if (FAILED(g.rt->CreateSolidColorBrush(&white, nullptr, &g.brush)))
             return false;
     }
-    return EnsureSurface() && EnsureBackground();
+    return EnsureSurface() && (cfg.shape != 0 || EnsureBackground());
 }
 
 // ---------------------------------------------------------------------------
@@ -941,6 +999,14 @@ static int SlotCount() { return ItemCount() + (g.dragging ? 1 : 0); }
 static D2D1_RECT_F SpanRect(float c, float a, float b, float halfH) {
     return g.side > 0 ? RectF(c + a, c - halfH, c + b, c + halfH)
                       : RectF(c - b, c - halfH, c - a, c + halfH);
+}
+
+// Where the small boxes beside the cursor (typed text, the last-choice note)
+// are centred. In the wheel that is the hub. Straightened, the rows start
+// right at the cursor, so the box sits on the other side of it.
+static float BubbleCentre(float c, float width) {
+    if (!Straight()) return c;
+    return c - float(g.side) * (12 * g.scale + width * 0.5f);
 }
 
 static void Render() {
@@ -967,9 +1033,16 @@ static void Render() {
     g.rt->Clear(&clear);
     g.rt->SetTransform(&identity);
 
-    const D2D1_RECT_F full = RectF(0, 0, float(g.size), float(g.size));
-    g.rt->DrawBitmap(g.bg, &full, 1.0f,
-                     D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR, nullptr);
+    const int shape = cfg.shape;  // 0 wheel, 1 list, 2 sliding list
+    const float rowH = RowHeight();
+
+    // The ring outlines belong to the wheel only.
+    if (shape == 0) {
+        const D2D1_RECT_F full = RectF(0, 0, float(g.size), float(g.size));
+        g.rt->DrawBitmap(g.bg, &full, 1.0f,
+                         D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
+                         nullptr);
+    }
 
     if (cfg.guides) {
         const D2D1_COLOR_F col = Color(0xFFCC33);
@@ -992,64 +1065,140 @@ static void Render() {
     IDWriteTextFormat* chevFmt = g.side > 0 ? g.fmtRight : g.fmt;
     const wchar_t* chevGlyph = g.side > 0 ? L"\x203A" : L"\x2039";
 
-    // Draws one ring of items. `rot` is the list position sitting on the
-    // 3:00 (or 9:00) line; `dim` fades the rings behind the active one.
-    auto drawLevel = [&](const Level& lvl, double rot, bool top, float dim) {
+    // Draws one level of items: a ring in the wheel, a column when the menu
+    // is straightened. `ref` is the list position sitting on the centre line,
+    // `sel` the highlighted index (or -1); `dim` fades the levels behind the
+    // active one.
+    auto drawLevel = [&](const Level& lvl, double ref, int sel, bool top,
+                         float dim) {
         const std::vector<Item>& items = lvl.items;
         const std::vector<float>& widths = lvl.widths;
         const int n = int(items.size());
         const float r0 = lvl.innerPx, r1 = r0 + span, R = lvl.rimPx;
         const float step = lvl.step;
         const bool dragging = top && g.dragging;
-        const int hi = (top && !dragging) ? HighlightIndexAt(g.lastCursor) : -1;
+        // The column's edges when straightened (see also HitTestLabel).
+        const float colL = r0 - pad - 4 * s;
+        const float colR = R - (cfg.rimGap - 4) * s;
+
+        // Where list position `pos` goes and how solid it is. In the wheel
+        // it turns about the centre; straightened, it moves up and down.
+        auto slotAt = [&](double pos, float* alpha) -> D2D1_MATRIX_3X2_F {
+            const float off = float(pos - ref);
+            if (shape == 0) {
+                *alpha = Profile(90.0f + off * step);
+                return RotationAbout(side * off * step, c, c);
+            }
+            const float y = off * rowH;
+            if (std::fabs(y) > c + rowH)
+                *alpha = 0.0f;  // off the surface
+            else
+                *alpha = shape == 1 ? 1.0f : Profile(90.0f + off * step);
+            D2D1_MATRIX_3X2_F m = identity;
+            m._32 = y;
+            return m;
+        };
+
+        // The list is a solid box with the rows inside it.
+        if (shape == 1) {
+            const int rows = n + (dragging ? 1 : 0);
+            g.rt->SetTransform(&identity);
+            D2D1_ROUNDED_RECT panel;
+            panel.rect = SpanRect(c, colL, colR, 0);
+            panel.rect.top = c + float(0.0 - ref) * rowH - rowH * 0.5f - 4 * s;
+            panel.rect.bottom =
+                c + float(double(rows - 1) - ref) * rowH + rowH * 0.5f + 4 * s;
+            panel.radiusX = panel.radiusY = 8 * s;
+            const D2D1_COLOR_F bgc = Color(cfg.bgColor);
+            g.brush->SetColor(&bgc);
+            g.brush->SetOpacity(cfg.labelBgOpacity * dim);
+            g.rt->FillRoundedRectangle(&panel, g.brush);
+            const D2D1_COLOR_F oc = Color(cfg.outlineColor);
+            g.brush->SetColor(&oc);
+            g.brush->SetOpacity(dim);
+            g.rt->DrawRoundedRectangle(&panel, g.brush, cfg.outlineWidth * s,
+                                       nullptr);
+        }
 
         auto drawSlot = [&](int idx, double pos, bool selected, bool seam) {
             const Item& it = items[size_t(idx)];
             if (it.id == ID_INFO) selected = false;  // it is only a note
-            const float phi = float(pos - rot) * step;
-            const float theta = 90.0f + phi;
-            if (theta <= -step || theta >= 180.0f + step) return;
 
-            // Separator tick hanging inward off the rim, before this item.
+            // Separator before this item: a tick hanging inward off the rim
+            // in the wheel, a rule between rows when straightened.
             const bool sep = seam || (lvl.hoisted > 0 && idx == lvl.hoisted) ||
                              (it.groupStart && !it.hoisted && idx != 0);
             if (sep) {
-                const float td = theta - step * 0.5f;
-                const float ta = Profile(td) * dim;
+                float ta = 0.0f;
+                const D2D1_MATRIX_3X2_F m = slotAt(pos - 0.5, &ta);
+                ta *= dim;
                 if (ta > 0.01f) {
-                    const D2D1_MATRIX_3X2_F m =
-                        RotationAbout(side * (td - 90.0f), c, c);
                     g.rt->SetTransform(&m);
-                    const D2D1_COLOR_F col = Color(cfg.outlineColor);
-                    g.brush->SetColor(&col);
-                    g.brush->SetOpacity(ta);
                     D2D1_POINT_2F a, b;
-                    a.x = c + side * (R - (seam ? 60 : 16) * s); a.y = c;
-                    b.x = c + side * R; b.y = c;
-                    g.rt->DrawLine(a, b, g.brush, cfg.outlineWidth * s,
+                    a.y = b.y = c;
+                    if (shape == 0) {
+                        const D2D1_COLOR_F col = Color(cfg.outlineColor);
+                        g.brush->SetColor(&col);
+                        g.brush->SetOpacity(ta);
+                        a.x = c + side * (R - (seam ? 60 : 16) * s);
+                        b.x = c + side * R;
+                    } else {
+                        const D2D1_COLOR_F col = Color(cfg.textColor);
+                        g.brush->SetColor(&col);
+                        g.brush->SetOpacity(ta * (seam ? 0.6f : 0.3f));
+                        a.x = c + side * (colL + 8 * s);
+                        b.x = c + side * (colR - 8 * s);
+                    }
+                    g.rt->DrawLine(a, b, g.brush,
+                                   (shape == 0 ? cfg.outlineWidth : 1.0f) * s,
                                    nullptr);
                 }
             }
 
-            const float a = Profile(theta) * dim;
+            float a = 0.0f;
+            const D2D1_MATRIX_3X2_F m = slotAt(pos, &a);
+            a *= dim;
             if (a <= 0.01f) return;
-            const D2D1_MATRIX_3X2_F m = RotationAbout(side * phi, c, c);
             g.rt->SetTransform(&m);
             const bool hasSub = !it.sub.empty();
             const float w = widths[size_t(idx)];
             const float chk = it.radio ? chev : 0;  // check-mark column
 
-            // Label background: theme colour, accent for the selected item.
-            D2D1_ROUNDED_RECT rr;
-            rr.rect = SpanRect(c, r0 - pad,
-                               r0 + chk + w + (hasSub ? chev : 0) + pad,
-                               pillHalf);
-            rr.radiusX = rr.radiusY = 5 * s;
-            const D2D1_COLOR_F bgc =
-                Color(selected ? cfg.accentColor : cfg.bgColor);
-            g.brush->SetColor(&bgc);
-            g.brush->SetOpacity(a * (selected ? 1.0f : cfg.labelBgOpacity));
-            g.rt->FillRoundedRectangle(&rr, g.brush);
+            // The sliding list keeps the wheel's fading outline, as a
+            // straight edge on each side of the rows.
+            if (shape == 2) {
+                const D2D1_COLOR_F oc = Color(cfg.outlineColor);
+                g.brush->SetColor(&oc);
+                g.brush->SetOpacity(a);
+                D2D1_POINT_2F p0, p1;
+                p0.y = c - rowH * 0.5f;
+                p1.y = c + rowH * 0.5f;
+                p0.x = p1.x = c + side * colR;
+                g.rt->DrawLine(p0, p1, g.brush, cfg.outlineWidth * s, nullptr);
+                p0.x = p1.x = c + side * colL;
+                g.rt->DrawLine(p0, p1, g.brush, cfg.outlineWidth * s, nullptr);
+            }
+
+            // Label background. Wheel and sliding list: one behind every
+            // label, accent for the selected item. List: the box is the
+            // background, so only the selected row gets a bar.
+            if (shape != 1 || selected) {
+                D2D1_ROUNDED_RECT rr;
+                rr.rect = shape == 1
+                              ? SpanRect(c, colL + 4 * s, colR - 4 * s,
+                                         rowH * 0.5f - 1 * s)
+                              : SpanRect(c, r0 - pad,
+                                         r0 + chk + w + (hasSub ? chev : 0) +
+                                             pad,
+                                         pillHalf);
+                rr.radiusX = rr.radiusY = 5 * s;
+                const D2D1_COLOR_F bgc =
+                    Color(selected ? cfg.accentColor : cfg.bgColor);
+                g.brush->SetColor(&bgc);
+                g.brush->SetOpacity(a *
+                                    (selected ? 1.0f : cfg.labelBgOpacity));
+                g.rt->FillRoundedRectangle(&rr, g.brush);
+            }
 
             const D2D1_COLOR_F col =
                 Color(selected ? cfg.selTextColor : cfg.textColor);
@@ -1077,11 +1226,11 @@ static void Render() {
 
         if (top && Wrapping()) {
             const double reach = 90.0 / step;
-            const long long kMin = (long long)std::floor(rot - reach) - 1;
-            const long long kMax = (long long)std::ceil(rot + reach) + 1;
+            const long long kMin = (long long)std::floor(ref - reach) - 1;
+            const long long kMax = (long long)std::ceil(ref + reach) + 1;
             for (long long k = kMin; k <= kMax; k++) {
                 const int idx = Mod(k, n);
-                drawSlot(idx, double(k), idx == hi, idx == 0);
+                drawSlot(idx, double(k), idx == sel, idx == 0);
             }
         } else {
             for (int i = 0; i < n; i++) {
@@ -1089,23 +1238,22 @@ static void Render() {
                 // Items at or past the gap slide down a slot to make room.
                 if (dragging)
                     pos += std::clamp(double(i) - g.gapPos + 1.0, 0.0, 1.0);
-                drawSlot(i, pos,
-                         top ? i == hi
-                             : std::fabs(pos - rot) < 0.5,
-                         false);
+                drawSlot(i, pos, i == sel, false);
             }
         }
 
         if (dragging) {
             // Where the carried item will land: an outlined empty slot.
             const float dw = g.dragWidth + (g.dragItem.sub.empty() ? 0 : chev);
-            const float phi = float(g.gapPos - rot) * step;
-            const float a = Profile(90.0f + phi);
+            float a = 0.0f;
+            const D2D1_MATRIX_3X2_F m = slotAt(g.gapPos, &a);
             if (a > 0.01f) {
-                const D2D1_MATRIX_3X2_F m = RotationAbout(side * phi, c, c);
                 g.rt->SetTransform(&m);
                 D2D1_ROUNDED_RECT rr;
-                rr.rect = SpanRect(c, r0 - pad, r0 + dw + pad, pillHalf);
+                rr.rect = shape == 1
+                              ? SpanRect(c, colL + 4 * s, colR - 4 * s,
+                                         rowH * 0.5f - 1 * s)
+                              : SpanRect(c, r0 - pad, r0 + dw + pad, pillHalf);
                 rr.radiusX = rr.radiusY = 5 * s;
                 const D2D1_COLOR_F accent = Color(cfg.accentColor);
                 g.brush->SetColor(&accent);
@@ -1115,14 +1263,18 @@ static void Render() {
         }
     };
 
-    // The deepest level is the active ring. Any ancestors on show are drawn
-    // dimmed and frozen where you left them.
+    // The deepest level is the active one. Any ancestors on show are drawn
+    // dimmed and frozen where you left them, each with the entry you came
+    // through highlighted.
     const size_t topIdx = g.stack.size() - 1;
-    for (size_t d = 0; d < topIdx; d++)
-        if (RingVisible(d))
-            drawLevel(g.stack[d], g.stack[d + 1].savedRot, false,
-                      cfg.parentDim);
-    drawLevel(g.stack[topIdx], g.rot, true, 1.0f);
+    for (size_t d = 0; d < topIdx; d++) {
+        if (!RingVisible(d)) continue;
+        const double came = g.stack[d + 1].savedRot;
+        drawLevel(g.stack[d], shape == 1 ? g.stack[d].view : came,
+                  int(std::llround(came)), false, cfg.parentDim);
+    }
+    drawLevel(g.stack[topIdx], TopRef(),
+              g.dragging ? -1 : HighlightIndexAt(g.lastCursor), true, 1.0f);
 
     if (g.dragging) {
         // The carried item rides on the cursor.
@@ -1165,9 +1317,10 @@ static void Render() {
             layout->Release();
         }
         const float ty = c + 40 * s;
+        const float mx = BubbleCentre(c, tw + pad * 2);
         D2D1_ROUNDED_RECT rr;
-        rr.rect = RectF(c - tw * 0.5f - pad, ty - pillHalf,
-                        c + tw * 0.5f + pad, ty + pillHalf);
+        rr.rect = RectF(mx - tw * 0.5f - pad, ty - pillHalf,
+                        mx + tw * 0.5f + pad, ty + pillHalf);
         rr.radiusX = rr.radiusY = 5 * s;
         const D2D1_COLOR_F bgc = Color(cfg.bgColor);
         g.brush->SetColor(&bgc);
@@ -1176,8 +1329,8 @@ static void Render() {
         const D2D1_COLOR_F col = Color(cfg.textColor);
         g.brush->SetColor(&col);
         g.brush->SetOpacity(0.5f);
-        const D2D1_RECT_F tr = RectF(c - tw * 0.5f, ty - halfH,
-                                     c + tw * 0.5f + 2 * s, ty + halfH);
+        const D2D1_RECT_F tr = RectF(mx - tw * 0.5f, ty - halfH,
+                                     mx + tw * 0.5f + 2 * s, ty + halfH);
         g.rt->DrawText(g.lastNote.c_str(), UINT32(g.lastNote.size()), g.fmt,
                        &tr, g.brush, D2D1_DRAW_TEXT_OPTIONS_CLIP,
                        DWRITE_MEASURING_MODE_NATURAL);
@@ -1197,9 +1350,10 @@ static void Render() {
             layout->Release();
         }
         const float ty = c - 40 * s;
+        const float mx = BubbleCentre(c, tw + pad * 2);
         D2D1_ROUNDED_RECT rr;
-        rr.rect = RectF(c - tw * 0.5f - pad, ty - pillHalf,
-                        c + tw * 0.5f + pad, ty + pillHalf);
+        rr.rect = RectF(mx - tw * 0.5f - pad, ty - pillHalf,
+                        mx + tw * 0.5f + pad, ty + pillHalf);
         rr.radiusX = rr.radiusY = 5 * s;
         const D2D1_COLOR_F bgc = Color(cfg.bgColor);
         g.brush->SetColor(&bgc);
@@ -1211,8 +1365,8 @@ static void Render() {
         const D2D1_COLOR_F col = Color(cfg.textColor);
         g.brush->SetColor(&col);
         g.brush->SetOpacity(1.0f);
-        const D2D1_RECT_F tr = RectF(c - tw * 0.5f, ty - halfH,
-                                     c + tw * 0.5f + 4 * s, ty + halfH);
+        const D2D1_RECT_F tr = RectF(mx - tw * 0.5f, ty - halfH,
+                                     mx + tw * 0.5f + 4 * s, ty + halfH);
         g.rt->DrawText(g.typed.c_str(), UINT32(g.typed.size()), g.fmt, &tr,
                        g.brush, D2D1_DRAW_TEXT_OPTIONS_NONE,
                        DWRITE_MEASURING_MODE_NATURAL);
@@ -1492,7 +1646,7 @@ static void ApplyStoredOrder(std::vector<Item>& items) {
 // Options, edited from inside the wheel
 // ---------------------------------------------------------------------------
 //
-// "Wheel options" is an ordinary entry whose submenu lists the settings; each
+// "Menu options" is an ordinary entry whose submenu lists the settings; each
 // setting opens a group of exclusive choices with a check mark on the current
 // one. Choosing one applies it on the spot and leaves the wheel open.
 
@@ -1510,6 +1664,10 @@ struct Setting {
 
 static const std::vector<Setting>& Settings() {
     static const std::vector<Setting> v = {
+        {L"Shape",
+         [] { return float(cfg.shape); },
+         [](float x) { cfg.shape = int(x); },
+         {{L"Wheel", 0}, {L"List", 1}, {L"Sliding list", 2}}},
         {L"Opens toward",
          [] { return cfg.preferLeft ? 1.0f : 0.0f; },
          [](float x) { cfg.preferLeft = x > 0.5f; },
@@ -1572,7 +1730,8 @@ static const std::vector<Setting>& Settings() {
         {L"Empty click",
          [] { return float(cfg.emptyClick); },
          [](float x) { cfg.emptyClick = int(x); },
-         {{L"Chooses", 0}, {L"Does nothing", 1}, {L"Closes the wheel", 2}}},
+         {{L"Chooses", 0}, {L"Does nothing", 1}, {L"Closes the menu", 2},
+          {L"Goes back", 3}}},
         {L"Last choice note",
          [] { return float(cfg.lastNote); },
          [](float x) { cfg.lastNote = int(x); },
@@ -1582,7 +1741,7 @@ static const std::vector<Setting>& Settings() {
     return v;
 }
 
-// Storage key for a choice made in "Wheel options".
+// Storage key for a choice made in "Menu options".
 static std::wstring OverrideKey(const Setting& st) {
     std::wstring key = L"opt_";
     for (const wchar_t* p = st.name; *p; p++)
@@ -1593,7 +1752,7 @@ static std::wstring OverrideKey(const Setting& st) {
 // The whole options subtree, reflecting cfg as it stands right now.
 static Item BuildOptionsItem() {
     Item root;
-    root.text = L"Wheel options";
+    root.text = L"Menu options";
     root.id = ID_OPTIONS;
     root.groupStart = true;
     const std::vector<Setting>& all = Settings();
@@ -1629,6 +1788,8 @@ static Item* RefreshOptionsItem() {
     return nullptr;
 }
 
+static void ResetListViews();
+
 // Applies one radio choice, then refreshes the check marks and the value
 // shown on the parent entry without leaving the menu.
 static void ApplyOption(int id) {
@@ -1637,7 +1798,8 @@ static void ApplyOption(int id) {
     const size_t c = size_t((id - ID_OPT_BASE) % 32);
     if (k >= all.size() || c >= all[k].choices.size()) return;
     all[k].set(all[k].choices[c].value);
-    if (k == 0) g.side = cfg.preferLeft ? -1 : 1;  // show a side change now
+    if (std::wcscmp(all[k].name, L"Opens toward") == 0)
+        g.side = cfg.preferLeft ? -1 : 1;  // show a side change now
     g.forceRender = true;
     ApplyTheme();
 
@@ -1661,6 +1823,7 @@ static void ApplyOption(int id) {
         choices.widths.clear();
         LayoutLevel();
     }
+    ResetListViews();  // in case the shape or the submenu mode changed
     // Remember it; see LoadConfig for how this meets the mod's settings.
     Wh_SetIntValue(OverrideKey(all[k]).c_str(),
                    int(std::lround(all[k].choices[c].value * 100.0f)));
@@ -1853,12 +2016,58 @@ static void Touch() {
 }
 
 // Fractional list position under the cursor's angle.
+static void UpdateExtent();
+
 static double CursorSlot(POINT pt) {
     const double dx = double(g.side) * (pt.x - g.center.x);
     const double dy = double(pt.y - g.center.y);
     const double phi =
         std::clamp(std::atan2(dy, std::max(dx, 1.0)) * 180.0 / kPi, -88.0, 88.0);
+    if (Straight()) return TopRef() + dy / RowHeight();
     return g.rot + phi / TopStep();
+}
+
+// How far the straightened menu reaches above and below the centre line.
+static void UpdateExtent() {
+    g.extTop = -g.outerPx;
+    g.extBottom = g.outerPx;
+    if (!Straight() || g.stack.empty()) return;
+    const double rowH = RowHeight();
+    if (cfg.shape == 2) {
+        // The sliding list fades out a fixed number of rows either way.
+        const double rows = 90.0 / cfg.stepDeg + 0.5;
+        g.extTop = -rows * rowH;
+        g.extBottom = rows * rowH;
+        return;
+    }
+    double top = -rowH * 0.5, bottom = rowH * 0.5;
+    for (size_t d = 0; d < g.stack.size(); d++) {
+        if (!RingVisible(d)) continue;
+        const Level& lvl = g.stack[d];
+        const int n = int(lvl.items.size()) +
+                      (d + 1 == g.stack.size() && g.dragging ? 1 : 0);
+        top = std::min(top, (0.0 - lvl.view) * rowH - rowH * 0.5);
+        bottom = std::max(bottom, (double(n - 1) - lvl.view) * rowH + rowH * 0.5);
+    }
+    g.extTop = top;
+    g.extBottom = bottom;
+}
+
+// Regular list: choose the row on the centre line so that `keep` (the row
+// the keyboard and scroll wheel are on) is on the screen, and the whole list
+// is too whenever it fits.
+static void FitListView(Level& lvl, double keep, int rows) {
+    const double rowH = RowHeight();
+    const double margin = 8.0 * g.scale + rowH * 0.5;
+    const double above = std::max(
+        0.0, std::floor((double(g.center.y - g.mon.top) - margin) / rowH));
+    const double below = std::max(
+        0.0, std::floor((double(g.mon.bottom - g.center.y) - margin) / rowH));
+    double w = lvl.viewWant;
+    w = std::clamp(w, keep - below, keep + above);
+    if (double(rows - 1) <= above + below)
+        w = std::clamp(w, double(rows - 1) - below, above);
+    lvl.viewWant = w;
 }
 
 // Index of the label under the point, or -1.
@@ -1869,6 +2078,28 @@ static int HitTestLabel(POINT pt) {
     const double dx = double(g.side) * (pt.x - g.center.x);
     const double dy = double(pt.y - g.center.y);
     if (dx <= 0.0) return -1;
+    if (Straight()) {
+        // Rows: a whole row in the list, the label itself in the sliding list.
+        const double rowH = RowHeight(), sc = g.scale;
+        const double q = TopRef() + dy / rowH;
+        const long long k = std::llround(q);
+        if (k < 0 || k >= (long long)lvl.items.size()) return -1;
+        const Item& it = lvl.items[size_t(k)];
+        const double pad = cfg.pillPad * sc;
+        double lo = lvl.innerPx - pad, hi = 0.0;
+        if (cfg.shape == 1) {
+            lo -= 4.0 * sc;
+            hi = lvl.rimPx - (cfg.rimGap - 4.0) * sc;
+        } else {
+            if (std::fabs(q - double(k)) * rowH >
+                cfg.pillHeight * sc * 0.5 + 2.0 * sc)
+                return -1;
+            hi = lvl.innerPx + lvl.widths[size_t(k)] +
+                 (it.sub.empty() ? 0.0 : 18.0 * sc) +
+                 (it.radio ? 18.0 * sc : 0.0) + pad;
+        }
+        return (dx >= lo && dx <= hi) ? int(k) : -1;
+    }
     const double r = std::sqrt(dx * dx + dy * dy);
     const double q = g.rot + std::atan2(dy, dx) * 180.0 / kPi / TopStep();
     const long long k = std::llround(q);
@@ -2083,6 +2314,23 @@ static void OnBackspace() {
     GoBack();
 }
 
+// Regular list: puts each level's highlighted row on the centre line, then
+// lets the active level fit itself to the screen. Used when a menu opens
+// and when the shape is changed while one is open.
+static void ResetListViews() {
+    for (size_t d = 0; d < g.stack.size(); d++) {
+        Level& lvl = g.stack[d];
+        lvl.view = lvl.viewWant =
+            d + 1 == g.stack.size() ? g.target : g.stack[d + 1].savedRot;
+    }
+    if (cfg.shape == 1 && !g.stack.empty()) {
+        Level& lvl = g.stack.back();
+        FitListView(lvl, g.target, SlotCount());
+        lvl.view = lvl.viewWant;
+    }
+    UpdateExtent();
+}
+
 static void OpenWheel(POINT pt) {
     // Scale for the monitor the wheel opens on, which is not always the
     // owner window's.
@@ -2094,6 +2342,11 @@ static void OpenWheel(POINT pt) {
     g.forceRender = true;
     ApplyTheme();
     g.center = pt;
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    const bool haveMonitor = GetMonitorInfoW(
+        MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi) != 0;
+    g.mon = haveMonitor ? mi.rcMonitor : RECT{};
     g.lastNote = LastNote();
     g.tiltArmed = false;  // Tick arms it once the cursor is in the band
     g.pressed = false;
@@ -2105,10 +2358,8 @@ static void OpenWheel(POINT pt) {
     LayoutLevel();
 
     // Open on the preferred side unless that would run off the screen.
-    MONITORINFO mi = {};
-    mi.cbSize = sizeof(mi);
     g.side = cfg.preferLeft ? -1 : 1;
-    if (GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi)) {
+    if (haveMonitor) {
         const int reach = int(g.outerPx);
         const bool fitsRight = pt.x + reach <= mi.rcWork.right;
         const bool fitsLeft = pt.x - reach >= mi.rcWork.left;
@@ -2126,10 +2377,14 @@ static void OpenWheel(POINT pt) {
         const int keep = int(g.outerPx * cfg.edgeKeep);
         const int top = mi.rcMonitor.top + keep;
         const int bottom = mi.rcMonitor.bottom - keep;
-        if (top <= bottom) g.center.y = std::clamp(int(pt.y), top, bottom);
+        // (A straight menu stays at the cursor; the list fits itself to the
+        // screen by choosing which row sits beside it.)
+        if (!Straight() && top <= bottom)
+            g.center.y = std::clamp(int(pt.y), top, bottom);
     }
 
     g.rot = g.target = double(PreselectIndex(g.stack.back().items));
+    ResetListViews();
     g.wheelAccum = 0;
     g.tiltHeld = false;
     g.closing = false;
@@ -2181,6 +2436,18 @@ static void ActivateIndex(int idx) {
         g.typed.clear();
         LayoutLevel();
         g.rot = g.target = 1.0;  // first real entry
+        if (cfg.shape == 1) {
+            // Beside the row it came from when both are on show; otherwise
+            // on the centre line.
+            const size_t t = g.stack.size() - 1;
+            Level& child = g.stack[t];
+            const Level& parent = g.stack[t - 1];
+            child.view = child.viewWant =
+                cfg.menuMode != 0 ? 1.0 - (child.savedRot - parent.view) : 1.0;
+            FitListView(child, g.target, SlotCount());
+            child.view = child.viewWant;
+        }
+        UpdateExtent();
         return;
     }
     if (it.id == ID_NATIVE) {
@@ -2228,6 +2495,8 @@ static void OnLeftUp() {
             ActivateIndex(target);
         else if (cfg.emptyClick == 2)
             CloseWheel();
+        else if (cfg.emptyClick == 3)
+            GoBack();  // out of a submenu; nothing to do at the top level
     }
     g.pressed = false;
 }
@@ -2254,6 +2523,16 @@ static void Tick(double dt) {
     } else if (fgNow && g.fg && fgNow != g.fg) {
         StartClose(cfg.dismissSec, false);
     }
+
+    // Regular list: ease the view to wherever keeps the stepped-to row, and
+    // the whole list if it fits, on the screen.
+    if (cfg.shape == 1) {
+        Level& lvl = g.stack.back();
+        FitListView(lvl, g.target, SlotCount());
+        lvl.view += (lvl.viewWant - lvl.view) * (1.0 - std::exp(-dt * 18.0));
+        if (std::fabs(lvl.viewWant - lvl.view) < 0.002) lvl.view = lvl.viewWant;
+    }
+    UpdateExtent();
 
     POINT p;
     GetCursorPos(&p);
@@ -2305,8 +2584,9 @@ static void Tick(double dt) {
         const double mx = p.x - g.holdPos.x, my = p.y - g.holdPos.y;
         if (mx * mx + my * my > hold * hold) g.tiltHeld = false;
     }
-    if (cfg.tilt && g.tiltArmed && inside && !dismissing && !g.tiltHeld &&
-        !pressing) {
+    // (Not in the regular list, which stays put.)
+    if (cfg.tilt && cfg.shape != 1 && g.tiltArmed && inside && !dismissing &&
+        !g.tiltHeld && !pressing) {
         const double d = std::fabs(dy) - band;
         if (d > 0.0) {
             const double range = std::max(1.0, (R - band) * cfg.tiltRange);
@@ -2359,6 +2639,11 @@ static bool SnapInside(POINT pt) {
     const double dx = double(g_snapSide.load()) * (pt.x - g_snapCx.load());
     const double dy = double(pt.y - g_snapCy.load());
     const double R = double(g_snapOuter.load());
+    if (g_snapRect.load()) {
+        const double m = double(g_snapHub.load());
+        return dx >= -m && dx <= R + m && dy >= g_snapTop.load() - m &&
+               dy <= g_snapBottom.load() + m;
+    }
     if (dx * dx + dy * dy > R * R) return false;
     return dx > -double(g_snapHub.load());  // see InsideWheel
 }
@@ -2369,7 +2654,11 @@ static void PublishGeometry() {
     g_snapCy = g.center.y;
     g_snapSide = g.side;
     g_snapOuter = int(g.outerPx);
-    g_snapHub = int(cfg.hubRadius * g.scale);
+    UpdateExtent();
+    g_snapRect = Straight();
+    g_snapHub = Straight() ? int(10 * g.scale) : int(cfg.hubRadius * g.scale);
+    g_snapTop = int(g.extTop);
+    g_snapBottom = int(g.extBottom);
 }
 
 // Only touched by the hook thread.
@@ -2617,7 +2906,7 @@ static bool ParseColor(const std::wstring& text, uint32_t* out) {
     return true;
 }
 
-// Reads the mod's settings. Choices made in "Wheel options" are kept in the
+// Reads the mod's settings. Choices made in "Menu options" are kept in the
 // mod's storage and laid over the top, until the settings are next changed
 // in Windhawk, at which point Windhawk's values win again.
 static void LoadConfig() {
@@ -2650,11 +2939,14 @@ static void LoadConfig() {
     cfg.hasLabelColor = ParseColor(StrSetting(L"labelColor"), &cfg.userLabel);
     cfg.hasHighlight =
         ParseColor(StrSetting(L"highlightColor"), &cfg.userHighlight);
+    const std::wstring shape = StrSetting(L"shape");
+    cfg.shape = shape == L"list" ? 1 : shape == L"slide" ? 2 : 0;
     const std::wstring showLast = StrSetting(L"showLast");
     cfg.lastNote = showLast == L"top" ? 1 : showLast == L"bottom" ? 2
                  : showLast == L"center" ? 3 : 0;
     const std::wstring emptyClick = StrSetting(L"emptyClick");
-    cfg.emptyClick = emptyClick == L"nothing" ? 1 : emptyClick == L"close" ? 2 : 0;
+    cfg.emptyClick = emptyClick == L"nothing" ? 1 : emptyClick == L"close" ? 2
+                   : emptyClick == L"back" ? 3 : 0;
     cfg.showNativeEntry = Wh_GetIntSetting(L"showDefaultEntry") != 0;
     cfg.showOptionsEntry = Wh_GetIntSetting(L"showOptionsEntry") != 0;
 
@@ -2739,6 +3031,7 @@ struct FrameKey {
     int size = 0, side = 0;
     bool dragging = false;
     int highlight = -1;
+    double view = 0;
     std::wstring typed;
 };
 
@@ -2754,6 +3047,7 @@ static bool NeedsRender(FrameKey* last) {
     now.side = g.side;
     now.dragging = g.dragging;
     now.highlight = g.dragging ? -1 : HighlightIndexAt(g.lastCursor);
+    now.view = g.stack.empty() ? 0.0 : g.stack.back().view;
     now.typed = g.typed;
     const bool same =
         !g.forceRender && now.rot == last->rot && now.gap == last->gap &&
@@ -2761,7 +3055,7 @@ static bool NeedsRender(FrameKey* last) {
         now.cursor.x == last->cursor.x && now.cursor.y == last->cursor.y &&
         now.depth == last->depth && now.size == last->size &&
         now.side == last->side && now.dragging == last->dragging &&
-        now.highlight == last->highlight &&
+        now.highlight == last->highlight && now.view == last->view &&
         now.typed == last->typed;
     g.forceRender = false;
     *last = now;
@@ -3026,7 +3320,7 @@ BOOL Wh_ModInit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L"Settings changed");
     // Picked up by the next wheel, on its own thread. Windhawk's values
-    // replace anything chosen in "Wheel options".
+    // replace anything chosen in "Menu options".
     g_dropOverrides = true;
     g_cfgDirty = true;
 }
