@@ -114,7 +114,6 @@ std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_moduleAttempted = false;
 std::atomic<bool> g_hooksReady = false;
 std::atomic<bool> g_filteringActive = false;
-std::atomic<bool> g_cleanupFailed = false;
 // Drain in-flight callbacks before sending UI-thread cleanup messages, which a
 // nested message pump could otherwise dispatch reentrantly. Recursive for XAML.
 std::recursive_mutex g_visualMutex;
@@ -603,26 +602,17 @@ bool IsMaskOpacity(Inspectable const& value) {
     return number && number.Value() == 0.0;
 }
 
-bool UpdateMaskSnapshot(Mask& mask, Inspectable const& local, Data::Binding const& binding,
-                        bool initial = false) {
-    // Animations can change the effective opacity while our local zero remains
-    // in place. Neither those notifications nor the animation ending own a new
-    // base value, so they must not replace the original snapshot.
-    if (!initial && IsMaskOpacity(local) && !binding) return false;
-    mask.originalLocal = local;
-    mask.originalBinding = binding;
-    return true;
-}
-
 void CaptureMask(Mask& mask, FrameworkElement const& element, bool initial = false) {
     auto property = UIElement::OpacityProperty();
     auto local = element.ReadLocalValue(property);
+    // Effective opacity can change during animation while our local zero stays.
     if (!initial && IsMaskOpacity(local)) return;
     Data::Binding binding{nullptr};
     if (auto expression = element.GetBindingExpression(property)) {
         binding = expression.ParentBinding();
     }
-    UpdateMaskSnapshot(mask, local, binding, initial);
+    mask.originalLocal = local;
+    mask.originalBinding = binding;
 }
 
 void RestoreMask(Mask& mask, FrameworkElement const& element) {
@@ -988,7 +978,6 @@ bool CleanupAction(PCWSTR description, Action action) noexcept {
     } catch (...) {
         Wh_Log(L"Cleanup (%s) failed", description);
     }
-    g_cleanupFailed = true;
     return false;
 }
 
@@ -1106,7 +1095,6 @@ LRESULT CALLBACK TaskbarSubclass(HWND window, UINT message, WPARAM wParam,
     try {
         return HandleTaskbarMessage(window, message, wParam, lParam, reference);
     } catch (...) {
-        g_cleanupFailed = true;
         Wh_Log(L"Exception in taskbar window procedure");
         // Do not replay a message which DefSubclassProc may already have handled.
         return 0;
@@ -1144,7 +1132,12 @@ std::shared_ptr<ThreadState> GetThreadState() {
     state->window = window;
     if (!AttachTaskbarWindow(*state, window)) return {};
     {
-        std::lock_guard lock(g_statesMutex);
+        std::unique_lock lock(g_statesMutex);
+        if (!g_states || g_unloading) {
+            lock.unlock();
+            RestoreAll(*state);
+            return {};
+        }
         (*g_states)[thread] = state;
     }
     Wh_Log(L"Tracking taskbar UI thread %lu", thread);
@@ -1379,10 +1372,6 @@ std::vector<std::shared_ptr<ThreadState>> StatesSnapshot() {
 }
 
 BOOL Wh_ModInit() {
-    if (g_unloading) {
-        Wh_Log(L"An earlier cleanup could not finish; restart Explorer before enabling this mod again");
-        return FALSE;
-    }
     g_controlMessage = RegisterWindowMessageW(
         L"Windhawk.TaskbarBadgeControl.9C994C4A-50DA-470B-95DA-E6975C452979");
     if (!g_controlMessage) return FALSE;
@@ -1425,19 +1414,6 @@ void Wh_ModSettingsChanged() {
     }
 }
 
-void KeepModuleLoadedAfterCleanupFailure() {
-    // A failed revocation can leave a delegate pointing into this DLL. Keep
-    // the code (now inert via g_unloading) mapped rather than leave a dangling
-    // callback. This exceptional path requires an Explorer restart to recover.
-    HMODULE module;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
-                          reinterpret_cast<PCWSTR>(&KeepModuleLoadedAfterCleanupFailure), &module)) {
-        Wh_Log(L"Cleanup incomplete; the mod remains mapped until Explorer exits");
-    } else {
-        Wh_Log(L"Could not retain the module after cleanup failure: %lu", GetLastError());
-    }
-}
-
 void Wh_ModBeforeUninit() {
     g_unloading = true;
     CleanupAction(L"mod unload", [] {
@@ -1450,21 +1426,13 @@ void Wh_ModBeforeUninit() {
             }
             released &= state->cleanupComplete.load();
         }
-        if (!released) {
-            // A missing UI thread is not permission to release XAML here.
-            g_cleanupFailed = true;
-            Wh_Log(L"Could not complete cleanup on every taskbar UI thread");
-        }
-        if (!g_cleanupFailed) {
+        if (released) {
             std::lock_guard lock(g_statesMutex);
             g_states.reset();
+            Wh_Log(L"Taskbar UI-thread cleanup completed; hooks unloading");
+        } else {
+            // A missing UI thread is not permission to release XAML here.
+            Wh_Log(L"Could not complete cleanup on every taskbar UI thread");
         }
     });
-    if (g_cleanupFailed) {
-        // Subclasses use raw state pointers; retain their backing state too if
-        // any callback revocation failed. It remains inert until process exit.
-        KeepModuleLoadedAfterCleanupFailure();
-    } else {
-        Wh_Log(L"Badge visuals restored; taskbar hooks unloading");
-    }
 }
