@@ -1,3 +1,26 @@
+## 1.7.2 ([Nov 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f11433e958a8f8a44449a19aefc096eedec76c22/mods/taskbar-independent-per-monitor.wh.cpp))
+
+**1.7.2**
+
+* Pins made from a window button no longer break after the app restarts. With *Disable grouping on
+  the taskbar*, the mod pins the app's Start menu shortcut instead. This is a temporary workaround
+  for #7900, existing pins are not changed.
+* The jump list of a window button shows *Pin to taskbar* again if the app is only pinned on another
+  taskbar.
+* Pinning from a window button puts the pin on that taskbar (before, it could end up on the main
+  taskbar).
+* Fixed a rare case where pinning an app on another taskbar too moved it to the end of the pin list.
+* Code cleanup: shared helpers and automatic cleanup of system objects.
+
+**1.7.1** (not released on its own, included here)
+
+* Works together with mods that change taskbar grouping (e.g. *Disable grouping on the taskbar*,
+  including *Pinned items remain in place*): pinning and unpinning from a window button now apply to the
+  clicked taskbar. Before, *Unpin* could remove the pin from another taskbar.
+* Readme in English, German, Russian, French and Spanish, with animated before/after pictures and a link
+  for reporting bugs.
+* The note about other mods is now a general hint instead of "not compatible".
+
 ## 1.7.0 ([Nov 16, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cc308a58f9ddbaf76a9d2425e710abe68ea3b70f/mods/taskbar-independent-per-monitor.wh.cpp))
 
 * Fixed: window buttons of windows parked off-screen could appear on the taskbar of the leftmost monitor.

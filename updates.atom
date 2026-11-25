@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-25T19:05:11.000Z</updated>
+    <updated>2026-11-25T20:02:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Independent taskbar per monitor 1.7.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-independent-per-monitor#f11433e958a8f8a44449a19aefc096eedec76c22</id>
+        <link href="https://windhawk.net/mods/taskbar-independent-per-monitor"/>
+        <updated>2026-11-25T20:02:08.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>1.7.2</strong></p>
+<ul>
+<li>Pins made from a window button no longer break after the app restarts. With <em>Disable grouping on
+the taskbar</em>, the mod pins the app's Start menu shortcut instead. This is a temporary workaround
+for #7900, existing pins are not changed.</li>
+<li>The jump list of a window button shows <em>Pin to taskbar</em> again if the app is only pinned on another
+taskbar.</li>
+<li>Pinning from a window button puts the pin on that taskbar (before, it could end up on the main
+taskbar).</li>
+<li>Fixed a rare case where pinning an app on another taskbar too moved it to the end of the pin list.</li>
+<li>Code cleanup: shared helpers and automatic cleanup of system objects.</li>
+</ul>
+<p><strong>1.7.1</strong> (not released on its own, included here)</p>
+<ul>
+<li>Works together with mods that change taskbar grouping (e.g. <em>Disable grouping on the taskbar</em>,
+including <em>Pinned items remain in place</em>): pinning and unpinning from a window button now apply to the
+clicked taskbar. Before, <em>Unpin</em> could remove the pin from another taskbar.</li>
+<li>Readme in English, German, Russian, French and Spanish, with animated before/after pictures and a link
+for reporting bugs.</li>
+<li>The note about other mods is now a general hint instead of &quot;not compatible&quot;.</li>
+</ul>
+]]></content>
+        <author>
+            <name>2ndSky95</name>
+            <uri>https://github.com/2ndSky95</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MultiWM Companion 0.3.2]]></title>
         <id>https://windhawk.net/mods/multiwm-companion#06b03acabc00a697cb9daf1518086a2c0c09191f</id>
@@ -876,22 +908,6 @@ is created, the approach worked out in
         <author>
             <name>0Allu</name>
             <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Translucent Menus 1.3.2]]></title>
-        <id>https://windhawk.net/mods/explorer-translucent-menus#2ad733afc8627b693f3e0c41ab656b40e62b7627</id>
-        <link href="https://windhawk.net/mods/explorer-translucent-menus"/>
-        <updated>2026-11-25T03:02:52.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Match menu captions and symbols to the explicit Light or Dark palette, including Shell captions drawn in separate buffers.</li>
-<li>Apply the shared tooltip material to truncated navigation labels.</li>
-<li>Group material and hover settings. <strong>This will reset the custom values in settings.</strong></li>
-</ul>
-]]></content>
-        <author>
-            <name>alkali210</name>
-            <uri>https://github.com/alkali210</uri>
         </author>
     </entry>
 </feed>

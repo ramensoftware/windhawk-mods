@@ -879,7 +879,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795590583971,
+        "updated": 1795637152917,
         "users": 0
       },
       "metadata": {
@@ -888,7 +888,7 @@
         ],
         "author": "Deen-0x",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ldwmapi -ld2d1",
-        "description": "Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, dots or counts for several windows and badges, and progress, all animated along the frame.",
+        "description": "Marks taskbar buttons by window state on a frame around the icon: corner marks for open and maximized windows, an underline for minimized apps, shapes or counts for several windows, badges and pinned apps, and progress, all animated along the frame.",
         "github": "https://github.com/Deen-0x",
         "include": [
           "explorer.exe"
@@ -898,8 +898,8 @@
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7747",
       "source": {
-        "sha256": "10bbab793cfe293ab57b33b90aca8fc06fdb6d17a53b9e53fb08c94e89ae2a07",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/2396fc177d35b9c36aeb31034d17267cc0cca8a5/mods/taskbar-app-state-indicators.wh.cpp"
+        "sha256": "4434c72ea99082c6ba3ed2e8f5e05e6905d9719f92ae2147bea97e53728d4b6b",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/ecec85a5f8ff6a95b9ae6bc3faebb76e77bd7d1e/mods/taskbar-app-state-indicators.wh.cpp"
       }
     },
     "taskbar-app-volume-mixer": {

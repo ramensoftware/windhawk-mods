@@ -19303,7 +19303,7 @@
         "ratingUsers": 19,
         "reviews": 0,
         "trendingSorting": 1.4187478749557103,
-        "updated": 1794790966000,
+        "updated": 1795636928000,
         "users": 282
       },
       "metadata": {
@@ -19321,7 +19321,7 @@
         ],
         "license": "MIT",
         "name": "Independent taskbar per monitor",
-        "version": "1.7.0"
+        "version": "1.7.2"
       }
     },
     "taskbar-jump-list-on-cursor-pos": {
@@ -26082,7 +26082,7 @@
         "rating": 0,
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
-        "reviews": 0,
+        "reviews": 1,
         "trendingSorting": 0,
         "updated": 1795590298000,
         "users": 0
