@@ -357,8 +357,8 @@ bool IsEditControl(HWND hWnd)
     // an Edit control fills in the output values.
     if (_wcsnicmp(szClassName, L"ATL:", 4) == 0)
     {
-        DWORD dwSelStart = static_cast<DWORD>(-1);
-        DWORD dwSelEnd = static_cast<DWORD>(-1);
+        auto dwSelStart = static_cast<DWORD>(-1);
+        auto dwSelEnd = static_cast<DWORD>(-1);
         SendMessageW(hWnd, EM_GETSEL, reinterpret_cast<WPARAM>(&dwSelStart),
             reinterpret_cast<LPARAM>(&dwSelEnd));
         return dwSelStart != static_cast<DWORD>(-1);
