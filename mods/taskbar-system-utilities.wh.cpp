@@ -2,7 +2,7 @@
 // @id              taskbar-system-utilities
 // @name            Taskbar System Utilities
 // @description     Native XAML taskbar tools (Restart Explorer, Clean Temp, Reduce Memory, Reset GPU, Get IP, Cache, DNS) and custom launch items (programs, folders, URLs, settings).
-// @version         1.3
+// @version         1.3.1
 // @author          Marco Petrucci
 // @github          https://github.com/marco00petrucci
 // @donateUrl       https://www.paypal.me/marco00petrucci
@@ -2025,22 +2025,66 @@ void __cdecl MenuFlyoutItemBaseVector_Append_Hook(
     state->modifying = false;
 }
 
-using ContextMenus_ShowTaskbarSettingsContextMenu_t =
-    void(__cdecl*)(wux::FrameworkElement const& target,
-                   void* taskbarSettings,
-                   wuxi::ContextRequestedEventArgs const& args,
-                   unsigned long long options);
-ContextMenus_ShowTaskbarSettingsContextMenu_t
-    ContextMenus_ShowTaskbarSettingsContextMenu_Original;
+// Newer builds fill the taskbar menu without calling the Append wrapper
+// above, so also inject right before the menu is shown, if not done yet.
+using FlyoutBase_ShowAt_t =
+    void(__cdecl*)(void* pThis,
+                   wux::DependencyObject const& placementTarget,
+                   wuxcp::FlyoutShowOptions const& showOptions);
 
-void __cdecl ContextMenus_ShowTaskbarSettingsContextMenu_Hook(
-    wux::FrameworkElement const& target,
-    void* taskbarSettings,
-    wuxi::ContextRequestedEventArgs const& args,
-    unsigned long long options) {
+void InjectBeforeShow(void* pThis) {
+    MenuBuildState* state = g_menuBuildState;
+    if (!state || state->modifying || state->itemsIdentity ||
+        g_unloading.load()) {
+        return;
+    }
+
+    state->modifying = true;
+
+    try {
+        auto const& flyout =
+            *reinterpret_cast<wuxcp::FlyoutBase const*>(pThis);
+        if (auto menu = flyout.try_as<wuxc::MenuFlyout>()) {
+            MenuItemsVector items = menu.Items();
+            state->itemsIdentity = GetIdentity(items);
+            InjectElements(items, *state);
+        }
+    } catch (winrt::hresult_error const& e) {
+        Wh_Log(L"Failed to update taskbar menu before show: %08X %s",
+               static_cast<unsigned>(e.code()), e.message().c_str());
+    } catch (...) {
+        Wh_Log(L"Failed to update taskbar menu before show");
+    }
+
+    state->modifying = false;
+}
+
+// Two copies of the same wrapper exist (for MenuFlyout and FlyoutBase).
+FlyoutBase_ShowAt_t MenuFlyout_ShowAt_Original;
+void __cdecl MenuFlyout_ShowAt_Hook(
+    void* pThis,
+    wux::DependencyObject const& placementTarget,
+    wuxcp::FlyoutShowOptions const& showOptions) {
+    InjectBeforeShow(pThis);
+    MenuFlyout_ShowAt_Original(pThis, placementTarget, showOptions);
+}
+
+FlyoutBase_ShowAt_t FlyoutBase_ShowAt_Original;
+void __cdecl FlyoutBase_ShowAt_Hook(
+    void* pThis,
+    wux::DependencyObject const& placementTarget,
+    wuxcp::FlyoutShowOptions const& showOptions) {
+    InjectBeforeShow(pThis);
+    FlyoutBase_ShowAt_Original(pThis, placementTarget, showOptions);
+}
+
+// Shared logic for both versions of ShowTaskbarSettingsContextMenu.
+// callOriginal runs the real Windows function.
+template <typename CallOriginal>
+void HandleShowTaskbarSettingsContextMenu(wux::FrameworkElement const& target,
+                                          CallOriginal callOriginal) {
     if (g_menuBuildState) {
-        ContextMenus_ShowTaskbarSettingsContextMenu_Original(
-            target, taskbarSettings, args, options);
+        callOriginal();
         return;
     }
 
@@ -2061,8 +2105,45 @@ void __cdecl ContextMenus_ShowTaskbarSettingsContextMenu_Hook(
         ~ScopedMenuBuild() { g_menuBuildState = nullptr; }
     } scopedMenuBuild(&state);
 
-    ContextMenus_ShowTaskbarSettingsContextMenu_Original(
-        target, taskbarSettings, args, options);
+    callOriginal();
+}
+
+// Older Windows 11 builds: the function takes a TaskbarSettings argument.
+using ContextMenus_ShowTaskbarSettingsContextMenu_t =
+    void(__cdecl*)(wux::FrameworkElement const& target,
+                   void* taskbarSettings,
+                   wuxi::ContextRequestedEventArgs const& args,
+                   unsigned long long options);
+ContextMenus_ShowTaskbarSettingsContextMenu_t
+    ContextMenus_ShowTaskbarSettingsContextMenu_Original;
+
+void __cdecl ContextMenus_ShowTaskbarSettingsContextMenu_Hook(
+    wux::FrameworkElement const& target,
+    void* taskbarSettings,
+    wuxi::ContextRequestedEventArgs const& args,
+    unsigned long long options) {
+    HandleShowTaskbarSettingsContextMenu(target, [&] {
+        ContextMenus_ShowTaskbarSettingsContextMenu_Original(
+            target, taskbarSettings, args, options);
+    });
+}
+
+// Newer builds (e.g. 25H2 26200.7171): the TaskbarSettings argument is gone.
+using ContextMenus_ShowTaskbarSettingsContextMenuNoSettings_t =
+    void(__cdecl*)(wux::FrameworkElement const& target,
+                   wuxi::ContextRequestedEventArgs const& args,
+                   unsigned long long options);
+ContextMenus_ShowTaskbarSettingsContextMenuNoSettings_t
+    ContextMenus_ShowTaskbarSettingsContextMenuNoSettings_Original;
+
+void __cdecl ContextMenus_ShowTaskbarSettingsContextMenuNoSettings_Hook(
+    wux::FrameworkElement const& target,
+    wuxi::ContextRequestedEventArgs const& args,
+    unsigned long long options) {
+    HandleShowTaskbarSettingsContextMenu(target, [&] {
+        ContextMenus_ShowTaskbarSettingsContextMenuNoSettings_Original(
+            target, args, options);
+    });
 }
 
 // ============================================================================
@@ -2107,6 +2188,15 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &ContextMenus_ShowTaskbarSettingsContextMenu_Original,
             ContextMenus_ShowTaskbarSettingsContextMenu_Hook,
+            true,  // optional: only one of the two versions exists
+        },
+        {
+            {
+                LR"(void __cdecl winrt::Taskbar::implementation::ContextMenus::ShowTaskbarSettingsContextMenu(struct winrt::Windows::UI::Xaml::FrameworkElement const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &,unsigned __int64))",
+            },
+            &ContextMenus_ShowTaskbarSettingsContextMenuNoSettings_Original,
+            ContextMenus_ShowTaskbarSettingsContextMenuNoSettings_Hook,
+            true,  // optional: only one of the two versions exists
         },
         {
             {
@@ -2115,6 +2205,22 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             &MenuFlyoutItemBaseVector_Append_Original,
             MenuFlyoutItemBaseVector_Append_Hook,
         },
+        {
+            {
+                LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_Controls_Primitives_IFlyoutBase5<struct winrt::Windows::UI::Xaml::Controls::MenuFlyout>::ShowAt(struct winrt::Windows::UI::Xaml::DependencyObject const &,struct winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutShowOptions const &)const )",
+            },
+            &MenuFlyout_ShowAt_Original,
+            MenuFlyout_ShowAt_Hook,
+            true,  // optional: needed on newer builds only
+        },
+        {
+            {
+                LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_Controls_Primitives_IFlyoutBase5<struct winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutBase>::ShowAt(struct winrt::Windows::UI::Xaml::DependencyObject const &,struct winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutShowOptions const &)const )",
+            },
+            &FlyoutBase_ShowAt_Original,
+            FlyoutBase_ShowAt_Hook,
+            true,  // optional: needed on newer builds only
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(module, symbolHooks,
@@ -2122,6 +2228,13 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         Wh_Log(
             L"Failed to hook Taskbar.View symbols, required symbols are "
             L"missing");
+        return false;
+    }
+
+    if (!ContextMenus_ShowTaskbarSettingsContextMenu_Original &&
+        !ContextMenus_ShowTaskbarSettingsContextMenuNoSettings_Original) {
+        Wh_Log(L"Failed to hook Taskbar.View symbols, no known version of "
+               L"ShowTaskbarSettingsContextMenu was found");
         return false;
     }
 
