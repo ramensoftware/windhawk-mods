@@ -28,6 +28,7 @@ Replaces the Alt+Tab switcher with a full-screen view split into two halves:
   toward a window to select it.
 - Release **Alt** to switch to the selected window. No click is needed.
 - Tab / Shift+Tab, the arrow keys and the mouse wheel also change the selection.
+  Other keys don't reach the app while Alt+Tab is held.
 - Left click switches right away. Right click closes the selected window; if
   it has unsaved changes, the app asks first. **Esc** cancels.
 
@@ -35,7 +36,9 @@ The view opens and closes instantly, without animations.
 
 ## Limitations
 When a program running as administrator is in the foreground, Windows may not
-pass the keyboard to this mod, and the default Alt+Tab appears instead.
+pass the keyboard to this mod, and the default Alt+Tab appears instead. Windows
+of programs running as administrator can't be closed with a right click; the
+right click only switches to them.
 */
 // ==/WindhawkModReadme==
 
@@ -48,6 +51,7 @@ pass the keyboard to this mod, and the default Alt+Tab appears instead.
     showing the view, like the default Alt+Tab. 0 opens the view immediately.
 - maxWindows: 12
   $name: Maximum number of windows on the wheel
+  $description: From 2 to 16. Larger values use 16.
 */
 // ==/WindhawkModSettings==
 
@@ -68,8 +72,8 @@ constexpr UINT WM_APP_JOY = WM_APP + 4;
 constexpr UINT WM_APP_MOUSEHOOK = WM_APP + 5;
 
 struct {
-    int delay;
-    int maxWindows;
+    std::atomic<int> delay;
+    std::atomic<int> maxWindows;
 } settings;
 
 HANDLE g_thread, g_hookThread;
@@ -84,6 +88,11 @@ HTHUMBNAIL g_thumb;
 RECT g_mon, g_preview;
 POINT g_center, g_savedPos;
 float g_ro, g_ri, g_wx, g_wy, g_jx, g_jy, g_lastAngle;
+HDC g_mem;
+HBITMAP g_bmp;
+SIZE g_bmpSize;
+bool g_swallowed[256], g_unhookPending;
+WPARAM g_upToSwallow;
 
 float Sc(float v) {
     return v * g_dpi / 96.f;
@@ -110,7 +119,11 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM) {
     DWORD_PTR icon = 0;
     SendMessageTimeout(hwnd, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG, 20, &icon);
     if (!icon)
+        SendMessageTimeout(hwnd, WM_GETICON, ICON_SMALL2, 0, SMTO_ABORTIFHUNG, 20, &icon);
+    if (!icon)
         icon = GetClassLongPtr(hwnd, GCLP_HICON);
+    if (!icon)
+        icon = GetClassLongPtr(hwnd, GCLP_HICONSM);
     g_icons[g_count] = (HICON)icon;
     g_list[g_count++] = hwnd;
     return g_count < settings.maxWindows;
@@ -119,13 +132,13 @@ BOOL CALLBACK EnumProc(HWND hwnd, LPARAM) {
 void Activate(HWND hwnd) {
     if (IsIconic(hwnd))
         ShowWindowAsync(hwnd, SW_RESTORE);
-    if (SetForegroundWindow(hwnd))
-        return;
-    SendKey(VK_MENU, false);
+    INPUT in{};
+    SendInput(1, &in, sizeof(INPUT));
     SetForegroundWindow(hwnd);
-    SendKey(VK_MASK, false);
-    SendKey(VK_MASK, true);
-    SendKey(VK_MENU, true);
+}
+
+bool AltReleased() {
+    return GetAsyncKeyState(VK_MENU) >= 0;
 }
 
 void UpdatePreview() {
@@ -317,10 +330,15 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
         return CallNextHookEx(nullptr, code, wp, lp);
 
     bool down = wp == WM_KEYDOWN || wp == WM_SYSKEYDOWN;
-    DWORD vk = k->vkCode;
-    if (vk == VK_TAB && ((k->flags & LLKHF_ALTDOWN) || g_session)) {
+    DWORD vk = k->vkCode & 0xFF;
+    if (!down && g_swallowed[vk]) {
+        g_swallowed[vk] = false;
+        return 1;
+    }
+    if (vk == VK_TAB && down && ((k->flags & LLKHF_ALTDOWN) || g_session)) {
         bool shift = GetAsyncKeyState(VK_SHIFT) < 0;
-        if (down && !g_session) {
+        g_swallowed[vk] = true;
+        if (!g_session) {
             g_session = true;
             PostMessage(g_wnd, WM_APP_START, shift, 0);
         } else if (down) {
@@ -331,30 +349,47 @@ LRESULT CALLBACK KeyboardProc(int code, WPARAM wp, LPARAM lp) {
     if (!g_session)
         return CallNextHookEx(nullptr, code, wp, lp);
 
-    if (!down && (vk == VK_LMENU || vk == VK_RMENU)) {
-        g_session = false;
-        PostMessage(g_wnd, WM_APP_END, 1, 0);
-    } else if (down && vk == VK_ESCAPE) {
+    if (vk == VK_LMENU || vk == VK_RMENU || vk == VK_MENU) {
+        if (!down) {
+            g_session = false;
+            PostMessage(g_wnd, WM_APP_END, 1, 0);
+        }
+        return CallNextHookEx(nullptr, code, wp, lp);
+    }
+    if (!down || vk == VK_LSHIFT || vk == VK_RSHIFT || vk == VK_SHIFT)
+        return CallNextHookEx(nullptr, code, wp, lp);
+
+    g_swallowed[vk] = true;
+    if (vk == VK_ESCAPE) {
         g_session = false;
         PostMessage(g_wnd, WM_APP_END, 0, 0);
-        return 1;
-    } else if (down && (vk == VK_LEFT || vk == VK_UP || vk == VK_RIGHT || vk == VK_DOWN)) {
+    } else if (vk == VK_LEFT || vk == VK_UP || vk == VK_RIGHT || vk == VK_DOWN) {
         PostMessage(g_wnd, WM_APP_STEP, vk == VK_LEFT || vk == VK_UP ? -1 : 1, 0);
-        return 1;
     }
-    return CallNextHookEx(nullptr, code, wp, lp);
+    return 1;
 }
 
 LRESULT CALLBACK MouseProc(int code, WPARAM wp, LPARAM lp) {
-    if (code != HC_ACTION || !g_open)
+    if (code != HC_ACTION)
+        return CallNextHookEx(nullptr, code, wp, lp);
+    if (g_upToSwallow && wp == g_upToSwallow) {
+        g_upToSwallow = 0;
+        if (g_unhookPending)
+            PostThreadMessage(GetCurrentThreadId(), WM_APP_MOUSEHOOK, 0, 0);
+        return 1;
+    }
+    if (!g_open)
         return CallNextHookEx(nullptr, code, wp, lp);
     auto* m = (MSLLHOOKSTRUCT*)lp;
-    int dx = m->pt.x - g_center.x, dy = m->pt.y - g_center.y;
-    if (wp == WM_MOUSEMOVE && !dx && !dy)
-        return CallNextHookEx(nullptr, code, wp, lp);
     if (wp == WM_MOUSEMOVE) {
+        POINT cur;
+        GetCursorPos(&cur);
+        int dx = m->pt.x - cur.x, dy = m->pt.y - cur.y;
+        if (!dx && !dy)
+            return CallNextHookEx(nullptr, code, wp, lp);
         PostMessage(g_wnd, WM_APP_JOY, (WPARAM)dx, (LPARAM)dy);
     } else if (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN) {
+        g_upToSwallow = wp == WM_LBUTTONDOWN ? WM_LBUTTONUP : WM_RBUTTONUP;
         g_session = false;
         PostMessage(g_wnd, WM_APP_END, wp == WM_LBUTTONDOWN ? 1 : 2, 0);
     } else if (wp == WM_MOUSEWHEEL) {
@@ -369,8 +404,11 @@ DWORD WINAPI HookThreadProc(LPVOID) {
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
         if (msg.message != WM_APP_MOUSEHOOK)
             continue;
+        g_unhookPending = false;
         if (msg.wParam && !mouse) {
             mouse = SetWindowsHookEx(WH_MOUSE_LL, MouseProc, g_inst, 0);
+        } else if (!msg.wParam && mouse && g_upToSwallow) {
+            g_unhookPending = true;
         } else if (!msg.wParam && mouse) {
             UnhookWindowsHookEx(mouse);
             mouse = nullptr;
@@ -393,6 +431,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 g_session = false;
                 return 0;
             }
+            for (int i = 1; i < g_count; i++) {
+                if (g_list[i] != GetAncestor(GetForegroundWindow(), GA_ROOTOWNER))
+                    continue;
+                HWND w = g_list[i];
+                HICON icon = g_icons[i];
+                for (; i > 0; i--) {
+                    g_list[i] = g_list[i - 1];
+                    g_icons[i] = g_icons[i - 1];
+                }
+                g_list[0] = w;
+                g_icons[0] = icon;
+                break;
+            }
             g_sel = g_count < 2 ? 0 : wp ? g_count - 1 : 1;
             if (settings.delay > 0)
                 SetTimer(hwnd, 1, settings.delay, nullptr);
@@ -401,16 +452,28 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_TIMER:
             KillTimer(hwnd, 1);
-            if (g_session)
+            if (g_session && AltReleased()) {
+                g_session = false;
+                PostMessage(hwnd, WM_APP_END, 0, 0);
+            } else if (g_session) {
                 Open();
+            }
             return 0;
         case WM_APP_STEP:
-            if (g_count)
+            if (g_session && AltReleased()) {
+                g_session = false;
+                PostMessage(hwnd, WM_APP_END, 0, 0);
+            } else if (g_count)
                 Select((g_sel + (int)(INT_PTR)wp + g_count) % g_count);
             return 0;
         case WM_APP_JOY: {
             if (!g_open)
                 return 0;
+            if (g_session && AltReleased()) {
+                g_session = false;
+                PostMessage(hwnd, WM_APP_END, 0, 0);
+                return 0;
+            }
             g_jx += (int)(INT_PTR)wp;
             g_jy += (int)(INT_PTR)lp;
             float len = sqrtf(g_jx * g_jx + g_jy * g_jy), r = Sc(80);
@@ -450,14 +513,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             HDC dc = BeginPaint(hwnd, &ps);
             RECT rc;
             GetClientRect(hwnd, &rc);
-            HDC mem = CreateCompatibleDC(dc);
-            HBITMAP bmp = CreateCompatibleBitmap(dc, rc.right, rc.bottom);
-            HGDIOBJ old = SelectObject(mem, bmp);
-            Paint(mem, rc.right, rc.bottom);
-            BitBlt(dc, 0, 0, rc.right, rc.bottom, mem, 0, 0, SRCCOPY);
-            SelectObject(mem, old);
-            DeleteObject(bmp);
-            DeleteDC(mem);
+            if (!g_mem)
+                g_mem = CreateCompatibleDC(dc);
+            if (rc.right != g_bmpSize.cx || rc.bottom != g_bmpSize.cy) {
+                HBITMAP bmp = CreateCompatibleBitmap(dc, rc.right, rc.bottom);
+                SelectObject(g_mem, bmp);
+                if (g_bmp)
+                    DeleteObject(g_bmp);
+                g_bmp = bmp;
+                g_bmpSize = {rc.right, rc.bottom};
+            }
+            Paint(g_mem, rc.right, rc.bottom);
+            BitBlt(dc, 0, 0, rc.right, rc.bottom, g_mem, 0, 0, SRCCOPY);
             EndPaint(hwnd, &ps);
             return 0;
         }
@@ -466,7 +533,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 DWORD WINAPI ThreadProc(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     ULONG_PTR gdiplusToken;
     Gdiplus::GdiplusStartupInput gsi;
     Gdiplus::GdiplusStartup(&gdiplusToken, &gsi, nullptr);
@@ -493,18 +559,20 @@ DWORD WINAPI ThreadProc(LPVOID) {
     WaitForSingleObject(g_hookThread, INFINITE);
     CloseHandle(g_hookThread);
     DestroyWindow(g_wnd);
+    if (g_mem)
+        DeleteDC(g_mem);
+    if (g_bmp)
+        DeleteObject(g_bmp);
     UnregisterClass(wc.lpszClassName, g_inst);
     Gdiplus::GdiplusShutdown(gdiplusToken);
     return 0;
 }
 
 void LoadSettings() {
-    settings.delay = Wh_GetIntSetting(L"openDelay");
-    if (settings.delay < 0)
-        settings.delay = 0;
-    settings.maxWindows = Wh_GetIntSetting(L"maxWindows");
-    if (settings.maxWindows < 2 || settings.maxWindows > MAXWIN)
-        settings.maxWindows = 12;
+    int delay = Wh_GetIntSetting(L"openDelay");
+    int maxWindows = Wh_GetIntSetting(L"maxWindows");
+    settings.delay = delay < 0 ? 0 : delay;
+    settings.maxWindows = maxWindows < 2 ? 2 : maxWindows > MAXWIN ? MAXWIN : maxWindows;
 }
 
 BOOL WhTool_ModInit() {
