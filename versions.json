@@ -48,6 +48,7 @@
     "auto-refresh-rate": "1.0.0",
     "auto-theme-switcher": "1.3.2",
     "auto-time-sync-on-startup": "1.1",
+    "autoclean": "2.2026.2211",
     "automatic-whatsapp-audio-ducking": "1.0",
     "autoscroll-win32": "1.0.2",
     "background-dimmer": "1.2.0",
@@ -637,6 +638,7 @@
     "shake-to-find-cursor": "1.4.1",
     "shell-animation-disabler": "1.0",
     "shell-flyout-positions": "1.3.1",
+    "shell-font-changer-plus": "1.4.2",
     "shrink-address-bar-height": "1.0.1",
     "sib-plusplus-tweaker": "0.7.1",
     "simple-wallpaper-switcher": "0.1.3",
@@ -822,6 +824,7 @@
     "tray-hover-expand": "1.7.2",
     "tray-overflow-list": "0.1.8.8",
     "tray-utility-customizer": "2.1",
+    "twinkle-brightness": "1.1.0",
     "two-sided-snapping": "1.0.0",
     "ubuntu-unity-desktop": "1.0",
     "uifile-override": "1.0.3",
@@ -976,6 +979,7 @@
     "yandex-music-transparency": "1.1",
     "zen-desktop-toggle-icons": "3.4.0",
     "zen-duplicate-titlebar-fix-win-10": "1.0.0",
-    "zoneshift": "1.0.0"
+    "zoneshift": "1.0.0",
+    "zoomit": "1.3.0"
   }
 }

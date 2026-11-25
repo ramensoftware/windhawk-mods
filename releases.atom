@@ -2,12 +2,370 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-25T06:02:26.000Z</updated>
+    <updated>2026-11-25T07:05:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Twinkle Brightness 1.1.0]]></title>
+        <id>https://windhawk.net/mods/twinkle-brightness#6ec92a920503db975426e6489bb3537a44b534fd</id>
+        <link href="https://windhawk.net/mods/twinkle-brightness"/>
+        <updated>2026-11-25T07:05:10.000Z</updated>
+        <content type="html"><![CDATA[<h1>Twinkle Brightness</h1>
+<p>Control the brightness of <strong>all your displays</strong> - external monitors and laptop
+screens - from a tray icon or the keyboard. Inspired by the
+excellent <a href="https://github.com/xanderfrangos/twinkle-tray">Twinkle Tray</a> app,
+re-imagined as a lightweight Windhawk mod with no Electron runtime.</p>
+<p><img src="https://raw.githubusercontent.com/isousluer/twinkle-brightness/main/assets/screenshot-panel.png" alt="Screenshot"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>Tray panel:</strong> click the sun icon in the notification area to get a
+brightness slider for every display. The panel follows the Windows
+light/dark theme and accent color.</li>
+<li><strong>Link displays:</strong> the chain button in the panel links the displays. While
+linked, one slider controls all displays and the hotkeys change all of them.
+Linked displays are always set to the same level: the first change brings
+them together. To make displays that differ in brightness look alike at the
+same level, use the per-display minimum and maximum. While unlinked, each
+display has its own slider and the hotkeys change the display with the
+active window.</li>
+<li><strong>Hotkeys:</strong> bind any key combination to increase, decrease or set the
+brightness, turn the displays off, or open the panel. A hotkey can also
+target a specific display.</li>
+<li><strong>On-screen indicator:</strong> a small overlay shows the new level when you use a
+hotkey, with one row per display when they are at different levels.</li>
+<li><strong>Schedule:</strong> change the brightness automatically at given times of the day,
+with a smooth transition.</li>
+<li><strong>Idle dimming:</strong> dim the displays after a period of inactivity and restore
+them as soon as you touch the mouse or keyboard.</li>
+<li><strong>Per-display options:</strong> custom names, hiding displays, and min/max
+brightness to normalize displays that are brighter or darker than others.</li>
+<li><strong>Tray menu:</strong> refresh displays, turn displays off, pause automatic
+brightness, and copy display names/IDs for use in the settings.</li>
+</ul>
+<h2>How it works</h2>
+<ul>
+<li><strong>External monitors</strong> are controlled with <strong>DDC/CI</strong> (VCP code <code>0x10</code>), the
+same channel the monitor's own on-screen menu uses. DDC/CI must be enabled in
+the monitor's menu. Some docks, adapters, KVM switches and VGA/DVI
+connections do not pass DDC/CI through.</li>
+<li><strong>Laptop and tablet screens</strong> are controlled through <strong>WMI</strong>, like the
+Windows brightness slider.</li>
+</ul>
+<p>The mod runs in its own dedicated <code>windhawk.exe</code> process (Windhawk &quot;tool mod&quot;)
+and does not inject code into Explorer or any other program.</p>
+<h2>Hotkey format</h2>
+<p>Combine <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code> and <code>Win</code> with one key, separated by <code>+</code>, for
+example <code>Ctrl+Alt+Up</code>, <code>Win+Shift+PageDown</code> or <code>Ctrl+Alt+F1</code>. Supported keys:
+<code>A</code>-<code>Z</code>, <code>0</code>-<code>9</code>, <code>F1</code>-<code>F24</code>, <code>Up</code>, <code>Down</code>, <code>Left</code>, <code>Right</code>, <code>PageUp</code>,
+<code>PageDown</code>, <code>Home</code>, <code>End</code>, <code>Insert</code>, <code>Delete</code>, <code>Space</code>, <code>Plus</code>, <code>Minus</code>,
+<code>NumpadPlus</code>, <code>NumpadMinus</code>, <code>Numpad0</code>-<code>Numpad9</code>.</p>
+<h2>Choosing displays in the settings</h2>
+<p>Hotkeys, schedule entries and per-display options accept a part of a display's
+<strong>name</strong> (as shown in the panel) or <strong>ID</strong>. Right-click the tray icon and choose
+<strong>Copy display info</strong> to copy the names and IDs of all connected displays.
+Leave the field empty to target all displays (for hotkeys: to follow the
+link button).</p>
+<h2>Troubleshooting</h2>
+<ul>
+<li><strong>A monitor says &quot;not supported&quot;:</strong> enable DDC/CI in its on-screen menu, use a
+direct HDMI/DisplayPort/USB-C cable instead of a dock or adapter, then choose
+<strong>Refresh displays</strong> in the tray menu.</li>
+<li><strong>A monitor stops responding after sleep:</strong> choose <strong>Refresh displays</strong>, or
+turn the monitor off and on with its power button.</li>
+<li><strong>A hotkey does nothing:</strong> another program may already use that combination.
+Check the Windhawk log for &quot;RegisterHotKey failed&quot;. The default
+<code>Ctrl+Alt+Up</code>/<code>Ctrl+Alt+Down</code> are also used by Visual Studio Code (add a
+cursor) and some Intel graphics drivers (rotate the screen); change them in
+the settings if you need those shortcuts.</li>
+<li><strong>The AMD Radeon software can interfere</strong> with DDC/CI brightness. Disable
+&quot;Custom Colors&quot; there if brightness changes have no effect.</li>
+</ul>
+<p>This mod is not affiliated with Twinkle Tray or its author.</p>
+]]></content>
+        <author>
+            <name>isousluer</name>
+            <uri>https://github.com/isousluer</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[AutoClean 2.2026.2211]]></title>
+        <id>https://windhawk.net/mods/autoclean#c822be02a4206d4b849a83cbdc631aa81f7f3959</id>
+        <link href="https://windhawk.net/mods/autoclean"/>
+        <updated>2026-11-25T07:05:04.000Z</updated>
+        <content type="html"><![CDATA[<h1>AutoClean</h1>
+<p>Silent, event-driven background Temp folder and Recycle Bin cleaner running in a dedicated Windhawk Tool Mod process.</p>
+<p><img src="https://raw.githubusercontent.com/k-ashix/ashix-windhawk-mods/main/Auto_Clean/Auto_Clean.png" alt="AutoClean OLED Toast"></p>
+<h2>Action Triggers — Temp &amp; Recycle Bin</h2>
+<table>
+<thead>
+<tr>
+<th>Icon</th>
+<th>Shortcut / Trigger</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>🖱️</td>
+<td><code>3x Left-Click</code> (<code>Desktop &amp; Taskbar empty space</code>)</td>
+<td>Clean Temp folders immediately and show OLED corner toast</td>
+</tr>
+<tr>
+<td>🖱️</td>
+<td><code>Middle-Click</code> (<code>1x</code>/<code>2x</code>/<code>3x</code>, <code>Desktop &amp; Taskbar empty space</code>)</td>
+<td>Empty Recycle Bin immediately and show OLED corner toast</td>
+</tr>
+<tr>
+<td>🚀</td>
+<td><code>Windows Login / Startup</code></td>
+<td>Clean Temp folders (and optionally Recycle Bin) automatically after login</td>
+</tr>
+<tr>
+<td>📦</td>
+<td><code>Size Limit</code> (<code>KB</code>/<code>MB</code>/<code>GB</code>/<code>TB</code>)</td>
+<td>Prune oldest items first or full sweep when Temp or Recycle Bin hits limit</td>
+</tr>
+<tr>
+<td>🔢</td>
+<td><code>File Count Limit</code> (<code>X items</code>)</td>
+<td>Prune oldest-deleted items or empty Recycle Bin at <code>X</code> items</td>
+</tr>
+<tr>
+<td>⏱️</td>
+<td><code>Timer / Retention</code></td>
+<td>Clean Temp on a repeating schedule and expire Recycle Bin items older than your retention window</td>
+</tr>
+<tr>
+<td>⚠️</td>
+<td><code>Low Disk Space Emergency</code></td>
+<td>Free Temp and oldest Recycle Bin items on the low-space drive when free space crosses below the floor</td>
+</tr>
+</tbody>
+</table>
+<h2>How AutoClean Differs from Windows Storage Sense</h2>
+<p>Windows Storage Sense covers basic periodic Temp and Recycle Bin cleanup, whereas AutoClean adds:</p>
+<ul>
+<li><strong>True Event-Driven Watching</strong>: Uses <code>ReadDirectoryChangesW</code> for <code>%TEMP%</code> and <code>SHChangeNotifyRegister</code> on the Recycle Bin so idle CPU and disk usage stay at zero (secondary HDDs can spin down normally).</li>
+<li><strong>AI Agent <code>%TEMP%</code> Protection</strong>: Preserves local <code>%TEMP%</code> scratchpads and worktrees created by AI coding &amp; desktop agents (Claude Code, Codex, Hermes, OpenClaw, Gemini CLI, OpenCode, Cursor, Windsurf, Goose, Aider, Copilot, MCP) by default.</li>
+<li><strong>Instant Empty-Space Mouse Shortcuts</strong>: Triple left-click empty Desktop/Taskbar space to clean Temp, or middle-click empty space to empty the Recycle Bin, with UI Automation checks so taskbar buttons and desktop icons are never triggered.</li>
+<li><strong>Granular Controls &amp; Smart Deferral</strong>: Exact <code>KB</code>/<code>MB</code>/<code>GB</code>/<code>TB</code> size caps, oldest-first pruning to a target percentage, wildcard exclusions, fullscreen/battery deferral, single-shot Dry-Run simulation, and borderless OLED corner toasts.</li>
+</ul>
+<h2>Safety Guards</h2>
+<ul>
+<li><strong>Temp Path Validation</strong>: Refuses to clean drive roots, <code>%windir%</code>, <code>%USERPROFILE%</code>, or known user folders (Desktop, Documents, Downloads, Pictures, Music, Videos, AppData) if <code>%TEMP%</code> is misconfigured.</li>
+<li><strong>Minimum Age Grace Periods</strong>: Honored on all Temp sweeps (default 24 hours / 1440 minutes) and Recycle Bin pruning (default 24 hours / 1440 minutes) so active installers, build tools, PyInstaller payloads, and recent deletions stay protected.</li>
+<li><strong>Reparse-Point &amp; Attribute Safety</strong>: Skips junctions/symlinks, respects Windows file locks, and restores Read-Only/Hidden/System attributes if a locked file cannot be deleted.</li>
+<li><strong>Safe Recycle Bin Defaults</strong>: Automatic Recycle Bin size/count thresholds and startup cleaning are off by default; only 30-day age expiry is enabled out of the box.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ashix</name>
+            <uri>https://github.com/k-ashix</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[ZoomIt 1.3.0]]></title>
+        <id>https://windhawk.net/mods/zoomit#30525bf79008309b9b868eb44aa0008965f8ad42</id>
+        <link href="https://windhawk.net/mods/zoomit"/>
+        <updated>2026-11-25T07:04:58.000Z</updated>
+        <content type="html"><![CDATA[<h1>ZoomIt</h1>
+<p>Zoom into any part of your screen and draw on it, straight from a hotkey. It
+works like Sysinternals ZoomIt, without a separate app running in the tray.</p>
+<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/zoomit.png" alt="ZoomIt preview"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>Zoom with Ctrl+1.</strong> The screen under your mouse zooms in smoothly. Scroll
+or use the arrow keys to zoom further, and move the mouse to look around.</li>
+<li><strong>Draw with Ctrl+2.</strong> Draw on the screen as it is, or click while zoomed to
+draw on the zoomed view.</li>
+<li><strong>Shapes and highlighters.</strong> Hold Shift for a straight line, Ctrl for a box,
+Tab for a circle and Ctrl+Shift for an arrow. Shift plus a color key gives a
+see-through highlighter.</li>
+<li><strong>Text and blur.</strong> Press T to type on the screen and X to blur out private
+details.</li>
+<li><strong>Copy or save.</strong> Ctrl+C copies what you see and Ctrl+S saves it as a
+picture. Add Shift to pick an area first.</li>
+<li><strong>Works over admin windows.</strong> The hotkeys and drawing keep working while an
+app that runs as administrator is in front.</li>
+<li><strong>Your settings.</strong> Hotkeys, zoom level and speed, animation, pen color (six
+colors, system, the Windows accent color or your own hex), pen size,
+highlighter and blur strength, text font and size, save folder.</li>
+</ul>
+<h2>Keys while zoomed or drawing</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mouse wheel, Up, Down</td>
+<td>Zoom in or out</td>
+</tr>
+<tr>
+<td>Left click</td>
+<td>Start drawing while zoomed</td>
+</tr>
+<tr>
+<td>Right click</td>
+<td>Stop drawing, or leave</td>
+</tr>
+<tr>
+<td>Esc</td>
+<td>Leave</td>
+</tr>
+<tr>
+<td>R, G, B, Y, O, P</td>
+<td>Red, green, blue, yellow, orange or pink pen</td>
+</tr>
+<tr>
+<td>Shift + a color key</td>
+<td>Highlighter in that color</td>
+</tr>
+<tr>
+<td>X</td>
+<td>Blur pen</td>
+</tr>
+<tr>
+<td>Ctrl + wheel, Ctrl + Up or Down</td>
+<td>Pen size, or text size while typing</td>
+</tr>
+<tr>
+<td>Hold Shift, Ctrl, Tab or Ctrl+Shift while dragging</td>
+<td>Line, box, circle or arrow</td>
+</tr>
+<tr>
+<td>T, Shift+T</td>
+<td>Type text, lined up left or right</td>
+</tr>
+<tr>
+<td>W, K</td>
+<td>White or black board</td>
+</tr>
+<tr>
+<td>E</td>
+<td>Erase all drawings</td>
+</tr>
+<tr>
+<td>Ctrl+Z</td>
+<td>Undo the last drawing</td>
+</tr>
+<tr>
+<td>Space</td>
+<td>Move the mouse to the middle of the screen</td>
+</tr>
+<tr>
+<td>Ctrl+C, Ctrl+Shift+C</td>
+<td>Copy the screen, or an area of it</td>
+</tr>
+<tr>
+<td>Ctrl+S, Ctrl+Shift+S</td>
+<td>Save the screen, or an area of it</td>
+</tr>
+</tbody>
+</table>
+<h2>Notes</h2>
+<ul>
+<li>Turn off ZoomIt in PowerToys or the ZoomIt app first. Two apps can't use the
+same hotkey.</li>
+<li>Write hotkeys like <code>Ctrl+1</code>, <code>Ctrl+Shift+Z</code> or <code>Win+Alt+F2</code>. Leave one empty
+to turn it off.</li>
+</ul>
+<h2>How it differs from WinDraw and Taskbar Snipper</h2>
+<p><a href="https://windhawk.net/mods/windraw">WinDraw</a> and
+<a href="https://windhawk.net/mods/taskbar-snipper">Taskbar Snipper</a> mark up the screen
+at its normal size. ZoomIt is a tool for presenting: it zooms into a still
+picture of the screen first, and you draw on the zoomed view, with a blur pen
+and text, on Sysinternals ZoomIt's own keys. If you only want to mark up the
+screen, WinDraw has more drawing tools.</p>
+<h2>Credits</h2>
+<p>Works like <a href="https://learn.microsoft.com/sysinternals/downloads/zoomit">ZoomIt</a>
+by Mark Russinovich (Sysinternals). Written from scratch for Windhawk; it shares
+no code with ZoomIt. MIT.</p>
+<p>To read text bigger under the mouse, try
+<a href="https://windhawk.net/mods/hover-text-magnifier">Hover Text Magnifier</a> by Math
+Shamenson.</p>
+]]></content>
+        <author>
+            <name>DavidHiFi</name>
+            <uri>https://github.com/DavidHiFi</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Shell Font Changer Plus 1.4.2]]></title>
+        <id>https://windhawk.net/mods/shell-font-changer-plus#61f97bf4cf94b9a4ff461ffd74376088e8fc2569</id>
+        <link href="https://windhawk.net/mods/shell-font-changer-plus"/>
+        <updated>2026-11-25T07:04:52.000Z</updated>
+        <content type="html"><![CDATA[<h1>Shell Font Changer Plus</h1>
+<p>Change the text font in File Explorer to any font you have installed, and make
+the text bigger or smaller. Icons and emoji keep their own glyphs, so buttons
+never turn into empty boxes.</p>
+<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/shell-font-changer-plus.png" alt="Shell Font Changer Plus preview"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>File Explorer text.</strong> The file list, the navigation pane and the column
+headers follow the font you pick.</li>
+<li><strong>Icons and emoji stay intact.</strong> Symbol and icon fonts keep their own glyphs,
+so buttons never show empty boxes.</li>
+<li><strong>Text size.</strong> Scale File Explorer's text from 75% to 200%. Rows, columns
+and boxes are laid out for the new size, headings stay larger than body text,
+and each monitor keeps its own scaling. The size covers all text Explorer
+draws itself: the desktop labels, context menus, the Run, Properties and
+copy dialogs, and the Windows 10 taskbar.</li>
+<li><strong>Weight is kept.</strong> Semibold and bold text stays semibold and bold.</li>
+<li><strong>Classic, themed and modern text.</strong> GDI text, visual-style themes and
+DirectWrite layouts are all covered.</li>
+<li><strong>Text fits its controls.</strong> Text that would overflow shrinks a little, to no
+less than 85% of its height or 80% of its width. If classic text still
+overflows, the original UI font draws it.</li>
+<li><strong>Clean to remove.</strong> The mod writes nothing to the registry, so turning it off
+leaves nothing behind.</li>
+</ul>
+<h2>How to use</h2>
+<p>Type an installed font family name in the settings, such as <code>FiraCode Nerd Font</code>
+or <code>Inter</code>. The field starts empty, so nothing changes until you pick a font.
+Leave it empty, or type <code>None</code>, to keep the original font.</p>
+<p>Set <strong>Text size</strong> to make the text bigger or smaller. It is a percentage of the
+size Windows picks: 100 keeps it as it is, 125 makes it a quarter bigger. It
+works with or without a font. With the font empty and the size at 100, the mod
+does nothing.</p>
+<p>If the font is not installed, or its name is 32 characters or longer, the font
+is left as it is and the Windhawk log says why. The text size still applies.</p>
+<p>Settings apply without reloading the mod. Explorer sizes its rows and boxes
+when it creates a window's fonts, so a new text size shows in windows opened
+after the change. Restart Explorer to resize the desktop and the windows that
+were already open, and again after turning the size back to 100 or turning the
+mod off. Turning the mod off and on again, or updating it, without that
+restart can make some text grow twice, and a restart fixes it.</p>
+<p>To fit its box, text drawn by DirectWrite never shrinks below its original
+size when only the size is changed, or below 85% of it with a font set. Text
+that ends in &quot;...&quot; keeps its size and its &quot;...&quot;.</p>
+<p>The Windows 11 command bar and address bar, Start, Search and Settings are
+drawn by XAML or web views and keep their fonts. The
+<a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>,
+<a href="https://windhawk.net/mods/windows-11-start-menu-styler">Start Menu Styler</a> and
+<a href="https://windhawk.net/mods/windows-11-settings-styler">Settings Styler</a> can set
+fonts there. Windows that were already open may need to be reopened.</p>
+<p>Turn off the original Explorer Font Changer before you turn this one on.
+<a href="https://windhawk.net/mods/change-more-fonts">Change More Fonts</a> also changes
+fonts as they are created. If you use it, leave this mod's font empty so only
+one of them picks the font.</p>
+<h2>Credits</h2>
+<p>Based on <a href="https://windhawk.net/mods/explorer-font-changer">Explorer Font Changer</a>
+by Gabriela Cristei. MIT. The text size scales each font in proportion when it
+is created, the approach worked out in
+<a href="https://github.com/wodenwhel">wodenwhel</a>'s Explorer Font Size Changer.</p>
+]]></content>
+        <author>
+            <name>DavidHiFi</name>
+            <uri>https://github.com/DavidHiFi</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Tabs Session Saver Revamped 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-tabs-session-saver-revamped#6e094d2b1e6df46729aed0eb81861b924423f0a3</id>
@@ -925,253 +1283,6 @@ sections:</p>
         <author>
             <name>rockinggreninja-bot</name>
             <uri>https://github.com/rockinggreninja-bot</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable acrylic Snap preview 1.0]]></title>
-        <id>https://windhawk.net/mods/disable-acrylic-snap-preview#93f2b7ef6adf37c3b316d8a35f2d4cf4c3588b90</id>
-        <link href="https://windhawk.net/mods/disable-acrylic-snap-preview"/>
-        <updated>2026-11-21T17:02:28.000Z</updated>
-        <content type="html"><![CDATA[<h2>禁用 Windows 11 丙烯贴靠预览动画</h2>
-<h2>Disable acrylic Snap preview</h2>
-<p>使用前 / Before
-<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/disable-acrylic-snap-preview/before.png" alt="Before"></p>
-<p>使用后 / After
-<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/disable-acrylic-snap-preview/after.png" alt="After"></p>
-<p>效果（动图中效果较差） / Effect(The actual appearance may differ from the GIF)
-<img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/disable-acrylic-snap-preview/CAnimatedGlassSheet_gif.gif" alt="Effect"></p>
-<h2>中文</h2>
-<p>将 Windows 11 丙烯贴靠预览动画替换为 Windows 10 的 Aero 样式</p>
-<p>支持版本：Windows 11 21H2、22H2、23H2、24H2、25H2、26H2</p>
-<h3>提示</h3>
-<p>你需要安装 <a href="https://github.com/ALTaleX531/OpenGlass">OpenGlass</a> 来在贴靠预览窗口里显示反光图集。Mod 支持同步 OpenGlass GUI 的设置</p>
-<p>你需要将 <code>dwm.exe</code> 添加到进程包含列表中：<em>Windhawk设置 &gt; 高级设置 &gt; 更多高级设置 &gt; 包含的进程列表</em> 才能使此模块工作</p>
-<p>与上一版仅小范围发布的相比，这个版本效果更好，支持同步OpenGlass，代码更少。如果使用过程中出现问题，你可以随时提交issue。</p>
-<p><strong>警告：</strong> Mod 依赖于 uDWM.dll 内的固定偏移量，且偏移量可能会随 Windows 版本变化。我们假设这些偏移量在同一个开发周期中不会改变（21H2：Co，22H2 &amp; 23H2：Ni，24H2+: Ge）。注意，本Mod不支持预览版本</p>
-<p><em>本 Mod 由 AI 生成，所有代码基于 Windows 10 与 Windows 11 的uDWM</em></p>
-<h2>English</h2>
-<p>Replaces Windows 11's acrylic snap preview with Windows 10 one</p>
-<p>Support Version: Windows 11 21H2, 22H2, 23H2, 24H2, 25H2, 26H2</p>
-<h3>Notice:</h3>
-<p>You need to install <a href="https://github.com/ALTaleX531/OpenGlass">OpenGlass</a> to get the reflection image in the snap region. It also can sync OpenGlass setting.</p>
-<p>You need to add <code>dwm.exe</code> to the process inclusion list: <em>Windhawk Settings &gt; Advanced settings &gt; More advanced settings &gt; Process inclusion list</em> to get this mod working</p>
-<p>Feel free to test the mod and you can submit an issue when you meet problems.</p>
-<p><strong>Warning:</strong> This mod rely on the hardcoded offsets in udwm.dll which could be changed with the build. We assume that these offsets won't be changed in the same Windows development semester (21H2: Cobalt, 22H2 &amp; 23H2: Nickel, 24H2+: Germanium). Insider Preview builds are not supported.</p>
-<p><em>This mod is generated by AI, all code is based on uDWM from Windows 10 and Windows 11</em></p>
-<p><img src="https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/disable-acrylic-snap-preview/advancesetting.png" alt="Adddwm"></p>
-]]></content>
-        <author>
-            <name>QCQ171-C</name>
-            <uri>https://github.com/QCQ171-C</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Default Folder 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-default-folder#e2f0cc12211f5928767f93f61ce51750d41616d5</id>
-        <link href="https://windhawk.net/mods/explorer-default-folder"/>
-        <updated>2026-11-21T17:02:23.000Z</updated>
-        <content type="html"><![CDATA[<h1>Explorer Default Folder</h1>
-<p>Opens every new File Explorer <strong>window or tab</strong> in a folder of your choice
-when it would otherwise open <strong>This PC</strong>, <strong>Home</strong> or <strong>Quick access</strong>.</p>
-<p>Enter a folder in the mod settings, for example <code>D:\Documents</code>,
-<code>%USERPROFILE%\Downloads</code>, <code>~\Downloads</code>, <code>Downloads</code> or <code>shell:Downloads</code>.
-Environment variables are expanded, and <code>~</code> or a relative path starts at your
-user folder. Leave the setting empty to keep Explorer's normal behavior.</p>
-<p>You can apply the folder to new windows only, new tabs only, or both, and
-optionally reopen the folder you closed most recently instead.</p>
-<p>Windows and tabs opened for any other folder are not changed, and navigating
-to This PC or Home yourself in an existing tab is not redirected. A new window
-or tab that is explicitly opened at This PC or Home (for example with the This
-PC desktop icon) can't be told apart from a default one, so it is redirected
-too.</p>
-<h2>How it works</h2>
-<p>The mod listens to Shell window events instead of polling, so it costs
-nothing while idle and redirects a new tab as soon as its first location
-loads. Its background thread never holds up Explorer's windows, even when the
-folder is on a slow or offline network share.</p>
-<h2>Compatibility</h2>
-<p>Designed for File Explorer on Windows 10 and 11. It uses documented Shell COM
-interfaces rather than version-specific Explorer symbols, so it does not need
-an update for each Explorer build.</p>
-]]></content>
-        <author>
-            <name>DanRotaru</name>
-            <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer navigation pane: thin divider, even padding 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-navigation-pane-spacing-fixes#bc7954695eee49136608c0d5c0e4f639c0f60681</id>
-        <link href="https://windhawk.net/mods/explorer-navigation-pane-spacing-fixes"/>
-        <updated>2026-11-20T21:02:23.000Z</updated>
-        <content type="html"><![CDATA[<h1>File Explorer navigation pane: thin divider, even padding</h1>
-<p>A set of small adjustments of the navigation pane of File Explorer: the tree
-of folders on the left of a folder window. Every adjustment has a setting, and
-can be changed or turned off.</p>
-<h2>Before and after</h2>
-<p>The pin icons are set to 10% opacity in this screenshot, and the pointer is on
-the folder Data (D:), which shows the expand arrows. The left half is without
-the mod, the right half is with the mod.</p>
-<p><img src="https://i.imgur.com/WKnigly.png" alt="Navigation pane, before and after"></p>
-<h2>What it does</h2>
-<ul>
-<li><strong>Thin divider.</strong> The strip between the navigation pane and the files area
-is replaced with a line of 1 pixel. By default, the line has the color of
-the line below the command bar, for the light and for the dark theme. The
-color is configurable. The navigation pane can still be resized by dragging
-the divider.</li>
-<li><strong>Even padding.</strong> The gap to the left of the items of the navigation pane is
-made the same as the gap to the right of them. The size is configurable. A
-space above and below the contents of the navigation pane can be added too.</li>
-<li><strong>Pin icons.</strong> The pin icons to the right of the pinned folders can be made
-less visible, with a configurable opacity, or hidden.</li>
-<li><strong>Separators.</strong> The lines which separate the groups of the navigation pane
-can be made longer or shorter. They can go from edge to edge.</li>
-<li><strong>Expand arrows.</strong> The arrows can be moved vertically.</li>
-</ul>
-<h2>Defaults</h2>
-<p>The divider, the padding, the pin icons and the offset of the arrows are
-adjusted by default. To get the stock look of a part back, use these values:</p>
-<ul>
-<li>Thin divider: off.</li>
-<li>Padding of the navigation pane: -1.</li>
-<li>Vertical padding of the navigation pane: 0.</li>
-<li>Hide the pin icons: off, with the opacity of 0.</li>
-<li>Vertical offset of the expand arrows: 0.</li>
-</ul>
-<p>The adjustment of the separators is turned off by default.</p>
-<h2>Other mods</h2>
-<p>The thin divider and the padding have no counterpart in other mods. For the
-rest, there are mods which do related things in a different way:</p>
-<ul>
-<li><strong>Explorer TreeItem Tweaker</strong> and <strong>Classic Explorer Treeview</strong> can hide the
-pin icons. This mod can also fade them instead of hiding them.</li>
-<li><strong>Explorer TreeLine Killer</strong> hides the separators and changes the spacing
-around them. This mod keeps the separators and changes their length.</li>
-<li><strong>Explorer Navigation Tree Offset</strong> shifts the tree and can remove the
-expand arrows. This mod moves the arrows vertically by a pixel or two.</li>
-</ul>
-<p>The mods can be used together. A part of this mod which is set to its stock
-value does nothing at all, so if another mod takes care of the pin icons, the
-separators or the arrows, set that part to the stock value here, as listed
-above. The combinations with those mods weren't tested.</p>
-<p>The files area of a folder window is handled by a separate mod, <strong>File
-Explorer List view indent fix and files area spacing</strong>.</p>
-<h2>Scaling and themes</h2>
-<p>The padding and the side gaps of the separators follow the display scaling.
-The offset of the expand arrows is a small correction, and is applied in
-physical pixels regardless of the scaling.</p>
-<p>The mod was only tested with a single monitor. With several monitors of
-different scaling, the side gaps of the separators can be off on a monitor
-whose scaling differs from the one of the main monitor. A folder window which
-was moved to such a monitor can also keep the adjusted padding after the mod
-is turned off, until it's reopened.</p>
-<p>The automatic color of the thin divider is chosen when a folder window is
-opened. Windows which are already open when the theme changes keep the old
-color until they're reopened. The divider is left alone in the high contrast
-mode.</p>
-<h2>Other programs</h2>
-<p>By default, the mod only applies to File Explorer (<code>explorer.exe</code>). That's the
-recommended setup, and nothing has to be configured for it.</p>
-<p>The same navigation pane is used by the Open/Save dialogs of other programs.
-To adjust it there too, add the programs to the custom process inclusion list
-in the Advanced tab of the mod, by the name of the executable file, for
-example <code>notepad.exe</code>. <code>explorer.exe</code> doesn't have to be added, it's always
-included.</p>
-<p>It's also possible to add <code>*</code>, which means all programs. The mod is then
-loaded into every process, including the ones which never show a file dialog,
-so adding only the programs you need is the lighter option.</p>
-<p>Only 64-bit programs are supported. In a program other than File Explorer, the
-mod does nothing until the program loads <code>explorerframe.dll</code>, which usually
-happens when a file dialog is opened for the first time. From then on, the
-vertical offset of the expand arrows applies to all tree views of that
-program.</p>
-<h2>How it works</h2>
-<p>The divider and the padding are properties of DirectUI elements of the frame
-of a folder window. They're changed when a frame is created, and the windows
-which are already open are adjusted when the mod is loaded. The functions
-which are exported by <code>dui70.dll</code> are used for that. The adjustments are only
-made to elements which have the expected stock values.</p>
-<p>The pin icons are the state images of the tree of the navigation pane. The mod
-gives the tree a copy of its state image list with faded images, and leaves
-the list of File Explorer itself untouched.</p>
-<p>The separators are adjusted while File Explorer draws them, which relies on
-the debug symbols of <code>explorerframe.dll</code>. If that part can't be set up on a
-Windows build, the rest of the mod still works. The expand arrows are moved
-while they're drawn with the theme of a tree view.</p>
-<p>No files are modified. When the mod is turned off, the stock look is restored.</p>
-<p>Tested on Windows 11 build 26300 (26H2 preview) at 125% scaling, with the
-light and the dark theme.</p>
-]]></content>
-        <author>
-            <name>NDruce</name>
-            <uri>https://github.com/NDruce</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Frosted Window Blur 1.0.0]]></title>
-        <id>https://windhawk.net/mods/frosted-window-blur#141d0f925046d4754460e14329212156629ca63c</id>
-        <link href="https://windhawk.net/mods/frosted-window-blur"/>
-        <updated>2026-11-20T20:04:59.000Z</updated>
-        <content type="html"><![CDATA[<h1>Frosted Window Blur</h1>
-<p>Give any window a frosted glass look, like the Windows 11 Settings app: what's
-behind the window is blurred, and you choose how strong the blur is for each
-window.</p>
-<p><img src="https://raw.githubusercontent.com/JeremyWayne93/windhawk-mods/readme-assets/frosted-window-blur/frosted-window-blur-levels.png" alt="Notepad with the blur off, at level 1 and at level 3"></p>
-<p><em>The same Notepad window with the blur off, at level 1 and at level 3.</em></p>
-<h2>Usage</h2>
-<ul>
-<li><strong>Ctrl + Shift + mouse wheel down</strong> over any window: more blur</li>
-<li><strong>Ctrl + Shift + mouse wheel up</strong>: less blur (the lowest step turns it off)</li>
-<li><strong>Ctrl + Shift + middle-click</strong> over a window: blur off</li>
-</ul>
-<p>Every window keeps its own blur level, and the blur stays the same when you
-click into another window. A small &quot;Blur 2/3&quot; indicator shows up briefly after
-every change.</p>
-<p>The key combination can be changed in the settings. The default doesn't use Alt,
-so it doesn't clash with mods that use Alt + wheel or Ctrl + Alt + wheel (for
-example to change opacity).</p>
-<p>There's also an optional small button next to the <strong>minimize</strong> button of the
-active window (off by default): left-click = next blur level (wraps back to
-off), right-click = blur off.</p>
-<p>The maximum level, the window's own opacity while blurred, the indicator, the
-button and excluded programs can all be changed in the mod settings, and the
-changes apply instantly. When the mod is disabled or unloaded, the blur is
-removed from every window and their opacity is restored.</p>
-<h2>How it works</h2>
-<ul>
-<li>The window itself isn't changed, except that it's made a bit see-through
-(75% by default) so the blur behind it shows. Windows that are already
-see-through (for example made so by another mod) keep their own opacity.</li>
-<li>The blur is drawn by helper windows of the mod that have no content of their
-own and only the DWM blur-behind effect. They sit directly behind the window
-in the z-order and follow it when it's moved, resized, minimized, restored,
-hidden or brought to the front. They never take focus and can't be clicked,
-so the blur doesn't turn off when the window loses focus.</li>
-<li>Windows' blur has a fixed radius, so every level stacks one more blur pass
-behind the window, which makes it noticeably stronger.</li>
-<li>It's fully event driven (<code>SetWinEventHook</code>, no polling timer), so it uses no
-CPU while nothing moves. Higher levels on large windows cost a bit more GPU.</li>
-<li>The wheel shortcut uses a keyboard hook that only arms a mouse hook while the
-modifier keys are held down. Both hooks run on their own thread that only
-forwards events. Over excluded programs, the taskbar and the desktop, the
-shortcut is passed through as usual.</li>
-<li>The mod runs in its own dedicated <code>windhawk.exe</code> process (a &quot;tool mod&quot;), so it
-doesn't inject into Explorer or any other program.</li>
-</ul>
-<h2>Limitations</h2>
-<ul>
-<li>Windows of programs running as administrator (for example Task Manager or
-Windhawk's own window) can't be changed, because Windows blocks a normal
-program from modifying them (UIPI). Windows that draw their own transparency
-are left alone too.</li>
-<li>While a window is dragged, the blur can trail a frame behind it.</li>
-<li>If another mod also blurs the same window, the effects add up.</li>
-</ul>
-]]></content>
-        <author>
-            <name>JeremyWayne93</name>
-            <uri>https://github.com/JeremyWayne93</uri>
         </author>
     </entry>
 </feed>

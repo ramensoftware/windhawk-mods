@@ -1157,6 +1157,32 @@
         "version": "1.1"
       }
     },
+    "autoclean": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795590304000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795590304000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Ashix",
+        "compilerOptions": "-ladvapi32 -lole32 -loleaut32 -lshell32 -lshlwapi -lshcore -luser32 -lgdi32 -lgdiplus -ldwmapi -lwtsapi32 -luuid",
+        "description": "Event-driven background Temp folder and Recycle Bin cleaner with AI agent protection, oldest-first pruning, mouse shortcuts, and OLED toasts",
+        "donateUrl": "https://ko-fi.com/kashix",
+        "github": "https://github.com/k-ashix",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "AutoClean",
+        "twitter": "https://x.com/k_ashix",
+        "version": "2.2026.2211"
+      }
+    },
     "automatic-whatsapp-audio-ducking": {
       "details": {
         "defaultSorting": 910,
@@ -16460,6 +16486,33 @@
         "version": "1.3.1"
       }
     },
+    "shell-font-changer-plus": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795590292000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795590292000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DavidHiFi",
+        "compilerOptions": "-lgdi32 -luxtheme -ldwrite",
+        "description": "Any installed font and text size in File Explorer, with icons and emoji left intact",
+        "donateUrl": "https://ko-fi.com/DavidHiFi",
+        "github": "https://github.com/DavidHiFi",
+        "homepage": "https://github.com/DavidHiFi/davids-windhawk-mods",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Shell Font Changer Plus",
+        "version": "1.4.2"
+      }
+    },
     "shrink-address-bar-height": {
       "details": {
         "defaultSorting": 10197,
@@ -21546,6 +21599,32 @@
         "version": "2.1"
       }
     },
+    "twinkle-brightness": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795590310000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795590310000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "isousluer",
+        "compilerOptions": "-ldxva2 -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -ladvapi32",
+        "description": "Brightness sliders for every display in the system tray, with hotkeys, an on-screen indicator, time-based schedules, and idle dimming",
+        "github": "https://github.com/isousluer",
+        "homepage": "https://github.com/isousluer/twinkle-brightness",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Twinkle Brightness",
+        "version": "1.1.0"
+      }
+    },
     "two-sided-snapping": {
       "details": {
         "defaultSorting": 1737,
@@ -25697,6 +25776,34 @@
         ],
         "name": "ZoneShift - Per-App Timezone Spoofer",
         "version": "1.0.0"
+      }
+    },
+    "zoomit": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795590298000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795590298000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "DavidHiFi",
+        "compilerOptions": "-ld2d1 -ldwrite -lwindowscodecs -lole32 -luuid -lgdi32 -luser32 -lshell32 -ladvapi32 -ldwmapi",
+        "description": "Zoom into the screen and draw on it with a hotkey, like Sysinternals ZoomIt",
+        "donateUrl": "https://ko-fi.com/DavidHiFi",
+        "github": "https://github.com/DavidHiFi",
+        "homepage": "https://github.com/DavidHiFi/davids-windhawk-mods",
+        "include": [
+          "windhawk.exe",
+          "windhawk-mod.exe",
+          "windhawk-mod-uiaccess.exe"
+        ],
+        "name": "ZoomIt",
+        "version": "1.3.0"
       }
     }
   }

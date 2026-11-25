@@ -148,36 +148,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/1916fcd54f51d9f9d33c503b480ddbb8b9847ed7/mods/attack-shark-x11-battery.wh.cpp"
       }
     },
-    "autoclean": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795331350764,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795331350764,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Ashix",
-        "compilerOptions": "-ladvapi32 -lole32 -loleaut32 -lshell32 -lshlwapi -lshcore -luser32 -lgdi32 -lgdiplus -ldwmapi -lwtsapi32 -luuid",
-        "description": "Event-driven background Temp folder and Recycle Bin cleaner with AI agent protection, oldest-first pruning, mouse shortcuts, and OLED toasts",
-        "donateUrl": "https://ko-fi.com/kashix",
-        "github": "https://github.com/k-ashix",
-        "include": [
-          "windhawk.exe"
-        ],
-        "name": "AutoClean",
-        "twitter": "https://x.com/k_ashix",
-        "version": "2.2026.2211"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7707",
-      "source": {
-        "sha256": "c1cf3c66cc0b2cf473f72dd52d5d16f535ac0ea0f2fa251bdabdd648b81eebc0",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/75db1c317282a3fdc157091742dfd61ed6edf904/mods/autoclean.wh.cpp"
-      }
-    },
     "battery-icon-customizer": {
       "details": {
         "defaultSorting": 0,
@@ -821,37 +791,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6e9706ac0f9bbeb620d3c8e087a8e5c3f8ef7708/mods/same-app-window-cycler.wh.cpp"
       }
     },
-    "shell-font-changer-plus": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795238322807,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795393943372,
-        "users": 0
-      },
-      "metadata": {
-        "author": "DavidHiFi",
-        "compilerOptions": "-lgdi32 -luxtheme -ldwrite",
-        "description": "Any installed font and text size in File Explorer, with icons and emoji left intact",
-        "donateUrl": "https://ko-fi.com/DavidHiFi",
-        "github": "https://github.com/DavidHiFi",
-        "homepage": "https://github.com/DavidHiFi/davids-windhawk-mods",
-        "include": [
-          "explorer.exe"
-        ],
-        "license": "MIT",
-        "name": "Shell Font Changer Plus",
-        "version": "1.4.2"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7342",
-      "source": {
-        "sha256": "2369ece55b9b2989c45106d79d53553da5d5b57f9a17493cde371fcb425a1ac7",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c275045225aa8ba5159ec7e3d5b242a0d2ce9f35/mods/shell-font-changer-plus.wh.cpp"
-      }
-    },
     "swipe-for-10start": {
       "details": {
         "defaultSorting": 0,
@@ -927,7 +866,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795545412441,
+        "updated": 1795590583971,
         "users": 0
       },
       "metadata": {
@@ -946,8 +885,8 @@
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7747",
       "source": {
-        "sha256": "3108fc38ac7bafaaac16c0698c39675ae0557fee9b8309cb266b149f1094eee6",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/72e74181831296ddef47b837e379f957f09483fe/mods/taskbar-app-state-indicators.wh.cpp"
+        "sha256": "10bbab793cfe293ab57b33b90aca8fc06fdb6d17a53b9e53fb08c94e89ae2a07",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/2396fc177d35b9c36aeb31034d17267cc0cca8a5/mods/taskbar-app-state-indicators.wh.cpp"
       }
     },
     "taskbar-app-volume-mixer": {
@@ -1253,36 +1192,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/34524efc045bd0c780d69e33ec47ecee1f05567d/mods/traffic-monitor-taskbar.wh.cpp"
       }
     },
-    "twinkle-brightness": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795374561919,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795374561919,
-        "users": 0
-      },
-      "metadata": {
-        "author": "isousluer",
-        "compilerOptions": "-ldxva2 -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -ladvapi32",
-        "description": "Brightness sliders for every display in the system tray, with hotkeys, an on-screen indicator, time-based schedules, and idle dimming",
-        "github": "https://github.com/isousluer",
-        "homepage": "https://github.com/isousluer/twinkle-brightness",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "Twinkle Brightness",
-        "version": "1.1.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7786",
-      "source": {
-        "sha256": "53f1195dbd488733b641eafb12505cb1db5cc2dd079a1e9ce03015db368dd5fe",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/3fded2a8922236ec21cde4fff3d70724b37c6209/mods/twinkle-brightness.wh.cpp"
-      }
-    },
     "ultimate-minimize-animation": {
       "details": {
         "defaultSorting": 0,
@@ -1568,38 +1477,6 @@
       "source": {
         "sha256": "012569f93597643a5f639085f478b85fc0406b1863fa32aa2b8833ff857b3b2a",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c2226cdb15a3684219163cfcf0dbeeb4c02ab62a/mods/windows-11-lock-screen-styler.wh.cpp"
-      }
-    },
-    "zoomit": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795277173823,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795370788861,
-        "users": 0
-      },
-      "metadata": {
-        "author": "DavidHiFi",
-        "compilerOptions": "-ld2d1 -ldwrite -lwindowscodecs -lole32 -luuid -lgdi32 -luser32 -lshell32 -ladvapi32 -ldwmapi",
-        "description": "Zoom into the screen and draw on it with a hotkey, like Sysinternals ZoomIt",
-        "donateUrl": "https://ko-fi.com/DavidHiFi",
-        "github": "https://github.com/DavidHiFi",
-        "homepage": "https://github.com/DavidHiFi/davids-windhawk-mods",
-        "include": [
-          "windhawk.exe",
-          "windhawk-mod.exe",
-          "windhawk-mod-uiaccess.exe"
-        ],
-        "name": "ZoomIt",
-        "version": "1.3.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7541",
-      "source": {
-        "sha256": "7d4aaffa606b5b6d230e9dbc46db7ec90aea919e04025e95cf752b36ae5c9ed4",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/e2af281f6e83a75dec896ceb0978a25854098952/mods/zoomit.wh.cpp"
       }
     }
   }

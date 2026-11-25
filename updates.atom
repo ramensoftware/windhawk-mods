@@ -2,12 +2,370 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-25T06:02:43.000Z</updated>
+    <updated>2026-11-25T07:05:10.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Twinkle Brightness 1.1.0]]></title>
+        <id>https://windhawk.net/mods/twinkle-brightness#6ec92a920503db975426e6489bb3537a44b534fd</id>
+        <link href="https://windhawk.net/mods/twinkle-brightness"/>
+        <updated>2026-11-25T07:05:10.000Z</updated>
+        <content type="html"><![CDATA[<h1>Twinkle Brightness</h1>
+<p>Control the brightness of <strong>all your displays</strong> - external monitors and laptop
+screens - from a tray icon or the keyboard. Inspired by the
+excellent <a href="https://github.com/xanderfrangos/twinkle-tray">Twinkle Tray</a> app,
+re-imagined as a lightweight Windhawk mod with no Electron runtime.</p>
+<p><img src="https://raw.githubusercontent.com/isousluer/twinkle-brightness/main/assets/screenshot-panel.png" alt="Screenshot"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>Tray panel:</strong> click the sun icon in the notification area to get a
+brightness slider for every display. The panel follows the Windows
+light/dark theme and accent color.</li>
+<li><strong>Link displays:</strong> the chain button in the panel links the displays. While
+linked, one slider controls all displays and the hotkeys change all of them.
+Linked displays are always set to the same level: the first change brings
+them together. To make displays that differ in brightness look alike at the
+same level, use the per-display minimum and maximum. While unlinked, each
+display has its own slider and the hotkeys change the display with the
+active window.</li>
+<li><strong>Hotkeys:</strong> bind any key combination to increase, decrease or set the
+brightness, turn the displays off, or open the panel. A hotkey can also
+target a specific display.</li>
+<li><strong>On-screen indicator:</strong> a small overlay shows the new level when you use a
+hotkey, with one row per display when they are at different levels.</li>
+<li><strong>Schedule:</strong> change the brightness automatically at given times of the day,
+with a smooth transition.</li>
+<li><strong>Idle dimming:</strong> dim the displays after a period of inactivity and restore
+them as soon as you touch the mouse or keyboard.</li>
+<li><strong>Per-display options:</strong> custom names, hiding displays, and min/max
+brightness to normalize displays that are brighter or darker than others.</li>
+<li><strong>Tray menu:</strong> refresh displays, turn displays off, pause automatic
+brightness, and copy display names/IDs for use in the settings.</li>
+</ul>
+<h2>How it works</h2>
+<ul>
+<li><strong>External monitors</strong> are controlled with <strong>DDC/CI</strong> (VCP code <code>0x10</code>), the
+same channel the monitor's own on-screen menu uses. DDC/CI must be enabled in
+the monitor's menu. Some docks, adapters, KVM switches and VGA/DVI
+connections do not pass DDC/CI through.</li>
+<li><strong>Laptop and tablet screens</strong> are controlled through <strong>WMI</strong>, like the
+Windows brightness slider.</li>
+</ul>
+<p>The mod runs in its own dedicated <code>windhawk.exe</code> process (Windhawk &quot;tool mod&quot;)
+and does not inject code into Explorer or any other program.</p>
+<h2>Hotkey format</h2>
+<p>Combine <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code> and <code>Win</code> with one key, separated by <code>+</code>, for
+example <code>Ctrl+Alt+Up</code>, <code>Win+Shift+PageDown</code> or <code>Ctrl+Alt+F1</code>. Supported keys:
+<code>A</code>-<code>Z</code>, <code>0</code>-<code>9</code>, <code>F1</code>-<code>F24</code>, <code>Up</code>, <code>Down</code>, <code>Left</code>, <code>Right</code>, <code>PageUp</code>,
+<code>PageDown</code>, <code>Home</code>, <code>End</code>, <code>Insert</code>, <code>Delete</code>, <code>Space</code>, <code>Plus</code>, <code>Minus</code>,
+<code>NumpadPlus</code>, <code>NumpadMinus</code>, <code>Numpad0</code>-<code>Numpad9</code>.</p>
+<h2>Choosing displays in the settings</h2>
+<p>Hotkeys, schedule entries and per-display options accept a part of a display's
+<strong>name</strong> (as shown in the panel) or <strong>ID</strong>. Right-click the tray icon and choose
+<strong>Copy display info</strong> to copy the names and IDs of all connected displays.
+Leave the field empty to target all displays (for hotkeys: to follow the
+link button).</p>
+<h2>Troubleshooting</h2>
+<ul>
+<li><strong>A monitor says &quot;not supported&quot;:</strong> enable DDC/CI in its on-screen menu, use a
+direct HDMI/DisplayPort/USB-C cable instead of a dock or adapter, then choose
+<strong>Refresh displays</strong> in the tray menu.</li>
+<li><strong>A monitor stops responding after sleep:</strong> choose <strong>Refresh displays</strong>, or
+turn the monitor off and on with its power button.</li>
+<li><strong>A hotkey does nothing:</strong> another program may already use that combination.
+Check the Windhawk log for &quot;RegisterHotKey failed&quot;. The default
+<code>Ctrl+Alt+Up</code>/<code>Ctrl+Alt+Down</code> are also used by Visual Studio Code (add a
+cursor) and some Intel graphics drivers (rotate the screen); change them in
+the settings if you need those shortcuts.</li>
+<li><strong>The AMD Radeon software can interfere</strong> with DDC/CI brightness. Disable
+&quot;Custom Colors&quot; there if brightness changes have no effect.</li>
+</ul>
+<p>This mod is not affiliated with Twinkle Tray or its author.</p>
+]]></content>
+        <author>
+            <name>isousluer</name>
+            <uri>https://github.com/isousluer</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[AutoClean 2.2026.2211]]></title>
+        <id>https://windhawk.net/mods/autoclean#c822be02a4206d4b849a83cbdc631aa81f7f3959</id>
+        <link href="https://windhawk.net/mods/autoclean"/>
+        <updated>2026-11-25T07:05:04.000Z</updated>
+        <content type="html"><![CDATA[<h1>AutoClean</h1>
+<p>Silent, event-driven background Temp folder and Recycle Bin cleaner running in a dedicated Windhawk Tool Mod process.</p>
+<p><img src="https://raw.githubusercontent.com/k-ashix/ashix-windhawk-mods/main/Auto_Clean/Auto_Clean.png" alt="AutoClean OLED Toast"></p>
+<h2>Action Triggers — Temp &amp; Recycle Bin</h2>
+<table>
+<thead>
+<tr>
+<th>Icon</th>
+<th>Shortcut / Trigger</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>🖱️</td>
+<td><code>3x Left-Click</code> (<code>Desktop &amp; Taskbar empty space</code>)</td>
+<td>Clean Temp folders immediately and show OLED corner toast</td>
+</tr>
+<tr>
+<td>🖱️</td>
+<td><code>Middle-Click</code> (<code>1x</code>/<code>2x</code>/<code>3x</code>, <code>Desktop &amp; Taskbar empty space</code>)</td>
+<td>Empty Recycle Bin immediately and show OLED corner toast</td>
+</tr>
+<tr>
+<td>🚀</td>
+<td><code>Windows Login / Startup</code></td>
+<td>Clean Temp folders (and optionally Recycle Bin) automatically after login</td>
+</tr>
+<tr>
+<td>📦</td>
+<td><code>Size Limit</code> (<code>KB</code>/<code>MB</code>/<code>GB</code>/<code>TB</code>)</td>
+<td>Prune oldest items first or full sweep when Temp or Recycle Bin hits limit</td>
+</tr>
+<tr>
+<td>🔢</td>
+<td><code>File Count Limit</code> (<code>X items</code>)</td>
+<td>Prune oldest-deleted items or empty Recycle Bin at <code>X</code> items</td>
+</tr>
+<tr>
+<td>⏱️</td>
+<td><code>Timer / Retention</code></td>
+<td>Clean Temp on a repeating schedule and expire Recycle Bin items older than your retention window</td>
+</tr>
+<tr>
+<td>⚠️</td>
+<td><code>Low Disk Space Emergency</code></td>
+<td>Free Temp and oldest Recycle Bin items on the low-space drive when free space crosses below the floor</td>
+</tr>
+</tbody>
+</table>
+<h2>How AutoClean Differs from Windows Storage Sense</h2>
+<p>Windows Storage Sense covers basic periodic Temp and Recycle Bin cleanup, whereas AutoClean adds:</p>
+<ul>
+<li><strong>True Event-Driven Watching</strong>: Uses <code>ReadDirectoryChangesW</code> for <code>%TEMP%</code> and <code>SHChangeNotifyRegister</code> on the Recycle Bin so idle CPU and disk usage stay at zero (secondary HDDs can spin down normally).</li>
+<li><strong>AI Agent <code>%TEMP%</code> Protection</strong>: Preserves local <code>%TEMP%</code> scratchpads and worktrees created by AI coding &amp; desktop agents (Claude Code, Codex, Hermes, OpenClaw, Gemini CLI, OpenCode, Cursor, Windsurf, Goose, Aider, Copilot, MCP) by default.</li>
+<li><strong>Instant Empty-Space Mouse Shortcuts</strong>: Triple left-click empty Desktop/Taskbar space to clean Temp, or middle-click empty space to empty the Recycle Bin, with UI Automation checks so taskbar buttons and desktop icons are never triggered.</li>
+<li><strong>Granular Controls &amp; Smart Deferral</strong>: Exact <code>KB</code>/<code>MB</code>/<code>GB</code>/<code>TB</code> size caps, oldest-first pruning to a target percentage, wildcard exclusions, fullscreen/battery deferral, single-shot Dry-Run simulation, and borderless OLED corner toasts.</li>
+</ul>
+<h2>Safety Guards</h2>
+<ul>
+<li><strong>Temp Path Validation</strong>: Refuses to clean drive roots, <code>%windir%</code>, <code>%USERPROFILE%</code>, or known user folders (Desktop, Documents, Downloads, Pictures, Music, Videos, AppData) if <code>%TEMP%</code> is misconfigured.</li>
+<li><strong>Minimum Age Grace Periods</strong>: Honored on all Temp sweeps (default 24 hours / 1440 minutes) and Recycle Bin pruning (default 24 hours / 1440 minutes) so active installers, build tools, PyInstaller payloads, and recent deletions stay protected.</li>
+<li><strong>Reparse-Point &amp; Attribute Safety</strong>: Skips junctions/symlinks, respects Windows file locks, and restores Read-Only/Hidden/System attributes if a locked file cannot be deleted.</li>
+<li><strong>Safe Recycle Bin Defaults</strong>: Automatic Recycle Bin size/count thresholds and startup cleaning are off by default; only 30-day age expiry is enabled out of the box.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Ashix</name>
+            <uri>https://github.com/k-ashix</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[ZoomIt 1.3.0]]></title>
+        <id>https://windhawk.net/mods/zoomit#30525bf79008309b9b868eb44aa0008965f8ad42</id>
+        <link href="https://windhawk.net/mods/zoomit"/>
+        <updated>2026-11-25T07:04:58.000Z</updated>
+        <content type="html"><![CDATA[<h1>ZoomIt</h1>
+<p>Zoom into any part of your screen and draw on it, straight from a hotkey. It
+works like Sysinternals ZoomIt, without a separate app running in the tray.</p>
+<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/zoomit.png" alt="ZoomIt preview"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>Zoom with Ctrl+1.</strong> The screen under your mouse zooms in smoothly. Scroll
+or use the arrow keys to zoom further, and move the mouse to look around.</li>
+<li><strong>Draw with Ctrl+2.</strong> Draw on the screen as it is, or click while zoomed to
+draw on the zoomed view.</li>
+<li><strong>Shapes and highlighters.</strong> Hold Shift for a straight line, Ctrl for a box,
+Tab for a circle and Ctrl+Shift for an arrow. Shift plus a color key gives a
+see-through highlighter.</li>
+<li><strong>Text and blur.</strong> Press T to type on the screen and X to blur out private
+details.</li>
+<li><strong>Copy or save.</strong> Ctrl+C copies what you see and Ctrl+S saves it as a
+picture. Add Shift to pick an area first.</li>
+<li><strong>Works over admin windows.</strong> The hotkeys and drawing keep working while an
+app that runs as administrator is in front.</li>
+<li><strong>Your settings.</strong> Hotkeys, zoom level and speed, animation, pen color (six
+colors, system, the Windows accent color or your own hex), pen size,
+highlighter and blur strength, text font and size, save folder.</li>
+</ul>
+<h2>Keys while zoomed or drawing</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mouse wheel, Up, Down</td>
+<td>Zoom in or out</td>
+</tr>
+<tr>
+<td>Left click</td>
+<td>Start drawing while zoomed</td>
+</tr>
+<tr>
+<td>Right click</td>
+<td>Stop drawing, or leave</td>
+</tr>
+<tr>
+<td>Esc</td>
+<td>Leave</td>
+</tr>
+<tr>
+<td>R, G, B, Y, O, P</td>
+<td>Red, green, blue, yellow, orange or pink pen</td>
+</tr>
+<tr>
+<td>Shift + a color key</td>
+<td>Highlighter in that color</td>
+</tr>
+<tr>
+<td>X</td>
+<td>Blur pen</td>
+</tr>
+<tr>
+<td>Ctrl + wheel, Ctrl + Up or Down</td>
+<td>Pen size, or text size while typing</td>
+</tr>
+<tr>
+<td>Hold Shift, Ctrl, Tab or Ctrl+Shift while dragging</td>
+<td>Line, box, circle or arrow</td>
+</tr>
+<tr>
+<td>T, Shift+T</td>
+<td>Type text, lined up left or right</td>
+</tr>
+<tr>
+<td>W, K</td>
+<td>White or black board</td>
+</tr>
+<tr>
+<td>E</td>
+<td>Erase all drawings</td>
+</tr>
+<tr>
+<td>Ctrl+Z</td>
+<td>Undo the last drawing</td>
+</tr>
+<tr>
+<td>Space</td>
+<td>Move the mouse to the middle of the screen</td>
+</tr>
+<tr>
+<td>Ctrl+C, Ctrl+Shift+C</td>
+<td>Copy the screen, or an area of it</td>
+</tr>
+<tr>
+<td>Ctrl+S, Ctrl+Shift+S</td>
+<td>Save the screen, or an area of it</td>
+</tr>
+</tbody>
+</table>
+<h2>Notes</h2>
+<ul>
+<li>Turn off ZoomIt in PowerToys or the ZoomIt app first. Two apps can't use the
+same hotkey.</li>
+<li>Write hotkeys like <code>Ctrl+1</code>, <code>Ctrl+Shift+Z</code> or <code>Win+Alt+F2</code>. Leave one empty
+to turn it off.</li>
+</ul>
+<h2>How it differs from WinDraw and Taskbar Snipper</h2>
+<p><a href="https://windhawk.net/mods/windraw">WinDraw</a> and
+<a href="https://windhawk.net/mods/taskbar-snipper">Taskbar Snipper</a> mark up the screen
+at its normal size. ZoomIt is a tool for presenting: it zooms into a still
+picture of the screen first, and you draw on the zoomed view, with a blur pen
+and text, on Sysinternals ZoomIt's own keys. If you only want to mark up the
+screen, WinDraw has more drawing tools.</p>
+<h2>Credits</h2>
+<p>Works like <a href="https://learn.microsoft.com/sysinternals/downloads/zoomit">ZoomIt</a>
+by Mark Russinovich (Sysinternals). Written from scratch for Windhawk; it shares
+no code with ZoomIt. MIT.</p>
+<p>To read text bigger under the mouse, try
+<a href="https://windhawk.net/mods/hover-text-magnifier">Hover Text Magnifier</a> by Math
+Shamenson.</p>
+]]></content>
+        <author>
+            <name>DavidHiFi</name>
+            <uri>https://github.com/DavidHiFi</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Shell Font Changer Plus 1.4.2]]></title>
+        <id>https://windhawk.net/mods/shell-font-changer-plus#61f97bf4cf94b9a4ff461ffd74376088e8fc2569</id>
+        <link href="https://windhawk.net/mods/shell-font-changer-plus"/>
+        <updated>2026-11-25T07:04:52.000Z</updated>
+        <content type="html"><![CDATA[<h1>Shell Font Changer Plus</h1>
+<p>Change the text font in File Explorer to any font you have installed, and make
+the text bigger or smaller. Icons and emoji keep their own glyphs, so buttons
+never turn into empty boxes.</p>
+<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/shell-font-changer-plus.png" alt="Shell Font Changer Plus preview"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>File Explorer text.</strong> The file list, the navigation pane and the column
+headers follow the font you pick.</li>
+<li><strong>Icons and emoji stay intact.</strong> Symbol and icon fonts keep their own glyphs,
+so buttons never show empty boxes.</li>
+<li><strong>Text size.</strong> Scale File Explorer's text from 75% to 200%. Rows, columns
+and boxes are laid out for the new size, headings stay larger than body text,
+and each monitor keeps its own scaling. The size covers all text Explorer
+draws itself: the desktop labels, context menus, the Run, Properties and
+copy dialogs, and the Windows 10 taskbar.</li>
+<li><strong>Weight is kept.</strong> Semibold and bold text stays semibold and bold.</li>
+<li><strong>Classic, themed and modern text.</strong> GDI text, visual-style themes and
+DirectWrite layouts are all covered.</li>
+<li><strong>Text fits its controls.</strong> Text that would overflow shrinks a little, to no
+less than 85% of its height or 80% of its width. If classic text still
+overflows, the original UI font draws it.</li>
+<li><strong>Clean to remove.</strong> The mod writes nothing to the registry, so turning it off
+leaves nothing behind.</li>
+</ul>
+<h2>How to use</h2>
+<p>Type an installed font family name in the settings, such as <code>FiraCode Nerd Font</code>
+or <code>Inter</code>. The field starts empty, so nothing changes until you pick a font.
+Leave it empty, or type <code>None</code>, to keep the original font.</p>
+<p>Set <strong>Text size</strong> to make the text bigger or smaller. It is a percentage of the
+size Windows picks: 100 keeps it as it is, 125 makes it a quarter bigger. It
+works with or without a font. With the font empty and the size at 100, the mod
+does nothing.</p>
+<p>If the font is not installed, or its name is 32 characters or longer, the font
+is left as it is and the Windhawk log says why. The text size still applies.</p>
+<p>Settings apply without reloading the mod. Explorer sizes its rows and boxes
+when it creates a window's fonts, so a new text size shows in windows opened
+after the change. Restart Explorer to resize the desktop and the windows that
+were already open, and again after turning the size back to 100 or turning the
+mod off. Turning the mod off and on again, or updating it, without that
+restart can make some text grow twice, and a restart fixes it.</p>
+<p>To fit its box, text drawn by DirectWrite never shrinks below its original
+size when only the size is changed, or below 85% of it with a font set. Text
+that ends in &quot;...&quot; keeps its size and its &quot;...&quot;.</p>
+<p>The Windows 11 command bar and address bar, Start, Search and Settings are
+drawn by XAML or web views and keep their fonts. The
+<a href="https://windhawk.net/mods/windows-11-file-explorer-styler">Windows 11 File Explorer Styler</a>,
+<a href="https://windhawk.net/mods/windows-11-start-menu-styler">Start Menu Styler</a> and
+<a href="https://windhawk.net/mods/windows-11-settings-styler">Settings Styler</a> can set
+fonts there. Windows that were already open may need to be reopened.</p>
+<p>Turn off the original Explorer Font Changer before you turn this one on.
+<a href="https://windhawk.net/mods/change-more-fonts">Change More Fonts</a> also changes
+fonts as they are created. If you use it, leave this mod's font empty so only
+one of them picks the font.</p>
+<h2>Credits</h2>
+<p>Based on <a href="https://windhawk.net/mods/explorer-font-changer">Explorer Font Changer</a>
+by Gabriela Cristei. MIT. The text size scales each font in proportion when it
+is created, the approach worked out in
+<a href="https://github.com/wodenwhel">wodenwhel</a>'s Explorer Font Size Changer.</p>
+]]></content>
+        <author>
+            <name>DavidHiFi</name>
+            <uri>https://github.com/DavidHiFi</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[No-Click Touchpad: Tap & Hold 1.1]]></title>
         <id>https://windhawk.net/mods/no-click-touchpad-tap-and-hold#500c9a5ef28ce9c6b9bb00d85e14d8dadaaffebe</id>
@@ -303,81 +661,6 @@
         <author>
             <name>mario0318</name>
             <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7/8/8.1 Taskbar Recreation 1.1.0]]></title>
-        <id>https://windhawk.net/mods/win81-taskbar-recreation#c86494e9b9ffc0213556e43966e47f34be4f6837</id>
-        <link href="https://windhawk.net/mods/win81-taskbar-recreation"/>
-        <updated>2026-11-23T22:04:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved the appearance of the main skins</li>
-<li>Added more skins (credits to WinBoeing777, MLC_YT and Allison for the references and testing)</li>
-<li>Improved hover effects and the Start button’s appearance when the menu is open</li>
-<li>Improved the interface of the Metro language flyout (credits to AdministratoX)</li>
-<li>Improved handling of the native taskbar to reduce overlaps with the recreated taskbar</li>
-<li>Improved responsiveness of the taskbar and the Customize page for notification icons</li>
-<li>Improved multi-monitor support, vertical layouts, and Aero Peek (best-effort)</li>
-<li>Updated the network, volume, and battery menus, with support for additional languages</li>
-<li>Improved Open-Shell compatibility and Windows key behavior</li>
-<li>Mitigated a defect with the battery flyout</li>
-<li>Added an auto-hide feature</li>
-<li>Added balloon notifications</li>
-<li>Applied general fixes and stability improvements</li>
-</ul>
-]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove Shortcut Arrow Icons 2.0.1]]></title>
-        <id>https://windhawk.net/mods/remove-shortcut-arrows#7a68f9db4ab7ce1f00951688c7381b9b3cc99de3</id>
-        <link href="https://windhawk.net/mods/remove-shortcut-arrows"/>
-        <updated>2026-11-23T09:03:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Fix Desktop Startup Crash:</strong> Defer icon refresh until desktop view initialization completes to prevent startup crashes on certain Windows 11 builds (thanks to @DavidHiFi).</li>
-<li><strong>Non-blocking Shell Notification:</strong> Switch to asynchronous shell flush notifications to eliminate UI thread stalls.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Dev-StudioCode</name>
-            <uri>https://github.com/Dev-StudioCode</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Tab Router 1.1.4]]></title>
-        <id>https://windhawk.net/mods/explorer-tab-router#5aba357fee3c0842e0bcb73d5ce770268466b8cb</id>
-        <link href="https://windhawk.net/mods/explorer-tab-router"/>
-        <updated>2026-11-23T06:03:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix mouse and keyboard selection in merged Explorer tabs, including folders opened with no selected items.</li>
-<li>Prevent selection restore failures and hidden destination windows from leaving duplicate folder tabs or reopening the temporary source after a successful merge.</li>
-</ul>
-]]></content>
-        <author>
-            <name>afate123</name>
-            <uri>https://github.com/afate123</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 6.0.1.0]]></title>
-        <id>https://windhawk.net/mods/modern-run-dialog-ui#31ff71005f20ca3ced58d46d59953891913280e3</id>
-        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
-        <updated>2026-11-23T06:02:56.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Dedicated WinUI 3 Settings App (Hosted in <code>windhawk.exe</code>):</strong> Replaced the in-process settings popup with a standalone Windows 11 Settings–style window hosted in <code>windhawk.exe -tool-mod</code> (zero overlap with the Run dialog), featuring Direct2D SettingsExpander cards, ComboBox flyouts, and a 2D Hue-Saturation ColorPicker with 16 Fluent swatches.</li>
-<li><strong>13 Built-In Themes &amp; Full Visual Customization (#7693):</strong> Switched the default theme to <strong>Windows 11 Blur</strong> (frosted Fluent Acrylic, <code>14px</code> corners, hairline border) for clean readability, while keeping <strong>Liquid Glass</strong> and adding 11 new presets (<strong>Windows 11 Mica</strong>, <strong>Fluent Solid</strong>, <strong>Classic Win11</strong>, <strong>Midnight OLED</strong>, <strong>Nord Frost</strong>, <strong>Catppuccin Mocha</strong>, <strong>Dracula Velvet</strong>, <strong>Rosé Pine</strong>, <strong>Emerald Slate</strong>, <strong>Warm Paper</strong>, and <strong>Custom</strong>). Added custom <strong>Background Color</strong>, <strong>Border Color</strong>, <strong>Corner Radius (<code>0–28 px</code>)</strong>, <strong>Dialog Position</strong> (Auto, Corners, Edges, or Screen Center), and <strong>Custom Static Image / Animated GIF Background</strong> support (up to 25 MB, auto-scaled, adjustable opacity).</li>
-<li><strong>Classic-Friendly Default &amp; Optional Compact Mini-Pill (<code>360px</code>):</strong> Enabled <strong>Classic-Friendly Mode</strong> by default to preserve <code>Win + R</code> → <code>Enter</code> muscle memory (pre-filled last command, full Browse/Run/Exit/Settings buttons, and 20-item history), with a one-click toggle to switch to <strong>Compact Mini-Pill Mode (<code>360px</code>)</strong>.</li>
-<li><strong>Task Manager Support, Pinning, Aliases &amp; Safe Elevation:</strong> Extended the modern UI to <strong>Task Manager → &quot;Run new task&quot;</strong> (<code>Taskmgr.exe</code>) while respecting Task Manager's own elevation checkbox (including for <code>google:</code> and <code>Shift + Enter</code> terminal launches). Added <strong>Pinned Commands</strong>, <strong>Custom Command Aliases</strong> (e.g., <code>hosts</code>), <strong><code>Ctrl + Shift + Enter</code></strong> one-time Administrator elevation, <strong><code>Shift + Enter</code></strong> terminal execution, and <strong>Remember Last Window Position</strong> (#7612).</li>
-<li><strong>Visual &amp; Z-Order Bug Fixes (#7600):</strong> Fixed the black bar glitch when opening/closing via <code>Win + R</code> (DWM cloak/transition handling) and resolved taskbar overlap via taskbar-aware work-area clamping.</li>
-<li><strong>Streamlined UX, Security &amp; Stability Improvements:</strong> Added percentage (<code>%</code>) support to the instant calculator, capped stored history at 20 items for lower memory usage, removed the built-in Google Translate (<code>文A</code>) mode to keep the launcher focused, removed <code>-ExecutionPolicy Bypass</code> for elevated <code>.ps1</code> execution, dropped shared <code>#32770</code> class icon overrides, and hardened uninit/cleanup paths.</li>
-</ul>
-]]></content>
-        <author>
-            <name>caotu2005</name>
-            <uri>https://github.com/caotu2005</uri>
         </author>
     </entry>
 </feed>
