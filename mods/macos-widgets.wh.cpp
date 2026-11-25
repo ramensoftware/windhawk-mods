@@ -8,7 +8,7 @@
 // @homepage        https://github.com/brideinflame-rgb/Mac-OS-Widgets
 // @donateUrl       https://livepix.gg/kurokobr
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ldwrite -ldwmapi -lwinhttp -lruntimeobject -lole32 -loleaut32 -luser32 -lgdi32 -lshell32 -lwindowscodecs -lsetupapi -liphlpapi -luuid -ladvapi32 -lversion -lpdh
+// @compilerOptions -ld2d1 -ldwrite -lwinhttp -lruntimeobject -lole32 -loleaut32 -luser32 -lgdi32 -lshell32 -lwindowscodecs -lsetupapi -liphlpapi -luuid -ladvapi32 -lversion -lpdh
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -28,7 +28,8 @@ desktop down.
 ## Widgets
 In up to four sizes (small, medium, large and extra large, a portrait size as in macOS 27):
 - **Clock**: time and date, with hands, digital or both (right-click the Clock).
-- **Weather**: temperature now, the next hours and the next days (Open-Meteo, no API key). The moon at night.
+- **Weather**: temperature now, the next hours and the next days (Open-Meteo, no API key). The moon at night. A click on
+  it the first time asks for your city.
 - **Music**: what's playing, with the cover, previous / play-pause / next. A click opens the player.
 - **System**: CPU, GPU, memory and drive C:; the large size adds memory and disk in GB, processors and processes.
 - **Calendar**: today, the month and the next events from iCal links or .ics files (right-click > Import Calendar).
@@ -39,18 +40,23 @@ In up to four sizes (small, medium, large and extra large, a portrait size as in
 - **Photos**: a photo from the OneDrive Pictures folder, changed every 20 minutes.
 - **Notifications**: the notifications that reach Windows (WhatsApp, Instagram, Outlook...).
 - **Notes**: write right in the widget (+ creates one, a click opens a note to edit; the first line is the title). They're
-  saved by themselves as .txt files in Documents\MacOS Widgets\Notas.
-- **Reminders**: + writes a new one (Enter starts the next), a click on the text edits it, the circle checks it off.
+  saved by themselves as .txt files in Documents\MacOS Widgets\Notes.
+- **Reminders**: + writes a new one (Enter starts the next), a click on the text edits it, the circle checks it off. They're
+  kept one per line in Documents\MacOS Widgets\Reminders.txt.
 - **Shortcuts**: apps (Store apps too), folders and sites one click away, chosen from a list.
 - **Stocks**: stocks, indexes, currencies and crypto (Yahoo Finance's public data).
 - **News**: headlines with their covers from any site or RSS feed, newest first. The mouse wheel goes through them.
-- **Screen Time**: how long you spent in each app today.
+- **Screen Time**: how long you spent in each app today, counted while the widget is on (Store apps that run in a frame
+  window count together as "Application Frame Host").
 - **Sensors**: CPU and GPU temperatures, usage, clock, memory, fan, power, disk and network, live; you choose what goes in
   each slot. CPU temperature and power need LibreHardwareMonitor running.
 - **Home**: lights, plugs, scenes and sensors from Home Assistant (which brings together SmartThings, Matter and the device
   brands); a tap turns them on and off. Favorites are chosen from a list.
 
 Clock, Weather, Music and System start on; the others are turned on by right-clicking any widget or in Settings > Widgets.
+
+The notes and reminders folder (Documents\MacOS Widgets, or the one chosen in the settings) is only created when the first
+note or reminder is saved. It's yours: it stays when the mod is disabled or removed.
 
 ## Themes (the ones of Siri Plus)
 | | | |
@@ -79,6 +85,25 @@ The glass is made by the mod from a picture of what is behind the widget, as in 
 follows what changes behind it, up to 20 times a second and only where something changed (Windows' Desktop Duplication),
 and follows the widget while you drag it: videos and animated wallpapers show in the glass. Off, the glass uses the
 wallpaper and the icons, and is lighter.
+
+## Network access
+Nothing is sent anywhere unless a widget that needs it is on. No API keys, no accounts, no telemetry; TLS certificate checks
+are never turned off.
+
+| Host | What is sent | When | Turned off by |
+|---|---|---|---|
+| api.open-meteo.com | The latitude and longitude of your city | Every 15 minutes, and when the city changes | Weather and Sunrise both off (and nothing is asked before a city is chosen) |
+| geocoding-api.open-meteo.com | The city name you type | Only when you search for a city in the settings window | — |
+| query1.finance.yahoo.com | The stock symbols, one request each | Every 5 minutes | Stocks widget off (off by default) |
+| The news sites you add | Nothing beyond the request (one extra request per site to find its feed) | Every 15 minutes (1 minute after a failure) | News widget off (off by default; no sites until you add them) |
+| The hosts the feeds name for their cover images | Nothing beyond the request | Up to 30 images after each news update | News widget off |
+| Your calendar links | The link itself, which for a private iCal address includes its secret token | Every 15 minutes | Calendar widget off (off by default) |
+| Your Home Assistant | Your access token (`Authorization: Bearer`) | Every 5 seconds (every minute while it doesn't answer), and on each tap | Home widget off (off by default) or no token |
+
+The default Home Assistant address is `http://homeassistant.local:8123`: on plain http the token travels unencrypted over your
+network. Use an `https://` address if your Home Assistant has one.
+
+A click on a news story opens it in the browser; only `http://` and `https://` links are opened.
 
 ## Use
 - Drag a widget: a glass outline shows the grid cell where it will go, and it snaps into it when released.
@@ -285,15 +310,15 @@ If you enjoy MacOS Widgets, you can support its development with a Pix donation:
   - both: "Ponteiros e digital"
   - analog: "Ponteiros"
   - digital: "Digital"
-- city: "Sua cidade"
+- city: ""
   $name: "Weather - city name"
   $name:pt-BR: "Tempo - nome da cidade"
   $description: "Easier in the widgets’ settings window: search the city by name"
   $description:pt-BR: "Mais fácil na janela de ajustes dos widgets: procure a cidade pelo nome"
-- latitude: "-23.55"
+- latitude: ""
   $name: "Weather - latitude"
   $name:pt-BR: "Tempo - latitude"
-- longitude: "-46.63"
+- longitude: ""
   $name: "Weather - longitude"
   $name:pt-BR: "Tempo - longitude"
 - worldCity1: "Pacific Standard Time"
@@ -316,15 +341,15 @@ If you enjoy MacOS Widgets, you can support its development with a Pix donation:
 - notesFolder: ""
   $name: "Notes and reminders folder (empty = Documents\\MacOS Widgets)"
   $name:pt-BR: "Pasta das notas e lembretes (vazio = Documentos\\MacOS Widgets)"
-- shortcuts: "Explorador=explorer.exe; Configurações=ms-settings:; Calculadora=calc.exe; Bloco de Notas=notepad.exe"
+- shortcuts: "File Explorer=explorer.exe; Settings=ms-settings:; Calculator=calc.exe; Notepad=notepad.exe"
   $name: "Shortcuts (Name=target; ...)"
   $name:pt-BR: "Atalhos (Nome=alvo; ...)"
   $description: "Easier in the widgets’ settings window: Choose shortcuts…, a list of your apps and folders"
   $description:pt-BR: "Mais fácil na janela de ajustes dos widgets: Escolher atalhos…, uma lista dos seus apps e pastas"
-- stocks: "^BVSP, USDBRL=X, PETR4.SA, VALE3.SA, BTC-USD"
+- stocks: "^GSPC, ^IXIC, ^DJI, BTC-USD"
   $name: "Stocks - Yahoo Finance symbols"
   $name:pt-BR: "Bolsa - códigos do Yahoo Finance"
-- newsFeeds: "https://g1.globo.com/rss/g1/brasil/; https://g1.globo.com/rss/g1/politica/; https://g1.globo.com/rss/g1/economia/; https://g1.globo.com/rss/g1/mundo/"
+- newsFeeds: ""
   $name: "News - sites or RSS feeds (separated by ;)"
   $name:pt-BR: "Notícias - sites ou feeds RSS (separados por ;)"
   $description: "Paste a site’s address and the widget finds its feed by itself; newest news first"
@@ -642,7 +667,6 @@ If you enjoy MacOS Widgets, you can support its development with a Pix donation:
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <dwmapi.h>
 #include <d2d1_1.h>
 #include <dwrite.h>
 #include <winhttp.h>
@@ -720,7 +744,7 @@ struct Settings {
     bool liveGlass = true;
     bool showClock = true, showWeather = true, showMusic = true, showSystem = true;
     int clockStyle = 0;  // 0 both (as the Mac), 1 hands only, 2 digital only
-    std::wstring city = L"Sua cidade";
+    std::wstring city;
     std::wstring latitude = L"-23.55", longitude = L"-46.63";
     bool lockPosition = false;
     bool showGrid = false;
@@ -759,6 +783,8 @@ static std::wstring SanitizeCoord(const std::wstring& s, PCWSTR def) {
     }
     return r.empty() ? std::wstring(def) : r;
 }
+
+static bool HasCity(const Settings& s) { return !s.latitude.empty() && !s.longitude.empty(); }
 
 // ---------------------------------------------------------------------------
 // The settings table: Windhawk's Settings tab and the mod's own settings window
@@ -814,6 +840,13 @@ struct TrRow {
     PCWSTR v[LANG_COUNT];  // pt, en, es, fr, de, it, zh
 };
 static const TrRow kTr[] = {
+    {{L"previsão do tempo", L"weather forecast", L"pronóstico del tiempo", L"météo", L"Wettervorhersage", L"previsioni meteo", L"天气预报"}},
+    {{L"nascer e pôr do sol", L"sunrise and sunset", L"amanecer y atardecer", L"lever et coucher du soleil", L"Sonnenaufgang und Sonnenuntergang", L"alba e tramonto", L"日出日落"}},
+    {{L"Clique para escolher sua cidade", L"Click to choose your city", L"Haz clic para elegir tu ciudad", L"Cliquez pour choisir votre ville", L"Klicke, um deine Stadt zu wählen", L"Fai clic per scegliere la tua città", L"点击选择你的城市"}},
+    {{L"Clique para escolher os sites de notícias", L"Click to choose your news sites", L"Haz clic para elegir tus sitios de noticias", L"Cliquez pour choisir vos sites d'actualités", L"Klicke, um deine Nachrichtenseiten zu wählen", L"Fai clic per scegliere i siti di notizie", L"点击选择新闻网站"}},
+    {{L"Clique para escolher os códigos", L"Click to choose the symbols", L"Haz clic para elegir los símbolos", L"Cliquez pour choisir les symboles", L"Klicke, um die Symbole zu wählen", L"Fai clic per scegliere i simboli", L"点击选择代码"}},
+    {{L"Calculadora", L"Calculator", L"Calculadora", L"Calculatrice", L"Rechner", L"Calcolatrice", L"计算器"}},
+    {{L"Bloco de Notas", L"Notepad", L"Bloc de notas", L"Bloc-notes", L"Editor", L"Blocco note", L"记事本"}},
     {{L"Sua cidade", L"Your city", L"Tu ciudad", L"Votre ville", L"Deine Stadt", L"La tua città", L"你的城市"}},
     {{L"Widgets", L"Widgets", L"Widgets", L"Widgets", L"Widgets", L"Widget", L"小组件"}},
     {{L"Quais widgets aparecem na área de trabalho e como eles se comportam", L"Which widgets appear on the desktop and how they behave", L"Qué widgets aparecen en el escritorio y cómo se comportan", L"Quels widgets apparaissent sur le bureau et comment ils se comportent", L"Welche Widgets auf dem Desktop erscheinen und wie sie sich verhalten", L"Quali widget compaiono sul desktop e come si comportano", L"桌面上显示哪些小组件以及它们的行为"}},
@@ -907,7 +940,7 @@ static const TrRow kTr[] = {
     {{L"Notificações", L"Notifications", L"Notificaciones", L"Notifications", L"Mitteilungen", L"Notifiche", L"通知"}},
     {{L"As notificações que chegam no Windows (WhatsApp, Instagram, Outlook...), lidas do banco de notificações do Windows", L"The notifications that reach Windows (WhatsApp, Instagram, Outlook...), read from Windows' notification database", L"Las notificaciones que llegan a Windows (WhatsApp, Instagram, Outlook...), leídas de la base de notificaciones de Windows", L"Les notifications reçues par Windows (WhatsApp, Instagram, Outlook...), lues dans la base de notifications de Windows", L"Die Mitteilungen, die in Windows ankommen (WhatsApp, Instagram, Outlook...), aus der Mitteilungsdatenbank von Windows gelesen", L"Le notifiche che arrivano su Windows (WhatsApp, Instagram, Outlook...), lette dal database delle notifiche di Windows", L"Windows 收到的通知（WhatsApp、Instagram、Outlook…），从 Windows 通知数据库读取"}},
     {{L"Notas", L"Notes", L"Notas", L"Notes", L"Notizen", L"Note", L"备忘录"}},
-    {{L"Suas notas em texto (Documentos\\MacOS Widgets\\Notas)", L"Your text notes (Documents\\MacOS Widgets\\Notas)", L"Tus notas de texto (Documentos\\MacOS Widgets\\Notas)", L"Vos notes texte (Documents\\MacOS Widgets\\Notas)", L"Deine Textnotizen (Dokumente\\MacOS Widgets\\Notas)", L"Le tue note di testo (Documenti\\MacOS Widgets\\Notas)", L"你的文本备忘录（文档\\MacOS Widgets\\Notas）"}},
+    {{L"Suas notas em texto (Documentos\\MacOS Widgets\\Notes)", L"Your text notes (Documents\\MacOS Widgets\\Notes)", L"Tus notas de texto (Documentos\\MacOS Widgets\\Notes)", L"Vos notes texte (Documents\\MacOS Widgets\\Notes)", L"Deine Textnotizen (Dokumente\\MacOS Widgets\\Notes)", L"Le tue note di testo (Documenti\\MacOS Widgets\\Notes)", L"你的文本备忘录（文档\\MacOS Widgets\\Notes）"}},
     {{L"Lembretes", L"Reminders", L"Recordatorios", L"Rappels", L"Erinnerungen", L"Promemoria", L"提醒事项"}},
     {{L"Uma lista de tarefas para marcar como feitas", L"A to-do list to check off", L"Una lista de tareas para marcar como hechas", L"Une liste de tâches à cocher", L"Eine Aufgabenliste zum Abhaken", L"Un elenco di cose da fare da spuntare", L"可勾选完成的待办清单"}},
     {{L"Apps, pastas e sites a um clique", L"Apps, folders and sites one click away", L"Apps, carpetas y sitios a un clic", L"Apps, dossiers et sites en un clic", L"Apps, Ordner und Websites mit einem Klick", L"App, cartelle e siti a portata di clic", L"一键打开应用、文件夹和网站"}},
@@ -983,7 +1016,7 @@ static const TrRow kTr[] = {
     {{L"Um arquivo exportado de qualquer agenda. O widget relê o arquivo sozinho, então trocar o arquivo atualiza os eventos", L"A file exported from any calendar. The widget rereads the file by itself, so replacing the file updates the events", L"Un archivo exportado de cualquier agenda. El widget vuelve a leer el archivo solo, así que reemplazarlo actualiza los eventos", L"Un fichier exporté de n'importe quel agenda. Le widget relit le fichier tout seul : le remplacer met à jour les événements", L"Eine aus einem beliebigen Kalender exportierte Datei. Das Widget liest sie selbst neu ein, daher aktualisiert das Ersetzen der Datei die Termine", L"Un file esportato da qualsiasi calendario. Il widget rilegge il file da solo, quindi sostituirlo aggiorna gli eventi", L"从任意日历导出的文件。小组件会自动重新读取，替换文件即可更新日程"}},
     {{L"Pasta", L"Folder", L"Carpeta", L"Dossier", L"Ordner", L"Cartella", L"文件夹"}},
     {{L"Pasta das notas e lembretes", L"Notes and reminders folder", L"Carpeta de notas y recordatorios", L"Dossier des notes et rappels", L"Ordner für Notizen und Erinnerungen", L"Cartella di note e promemoria", L"备忘录和提醒事项文件夹"}},
-    {{L"Vazio: Documentos\\MacOS Widgets. Notas são arquivos .txt ou .md na subpasta Notas; os lembretes ficam em Lembretes.txt", L"Empty: Documents\\MacOS Widgets. Notes are .txt or .md files in the Notas subfolder; reminders go in Lembretes.txt", L"Vacío: Documentos\\MacOS Widgets. Las notas son archivos .txt o .md en la subcarpeta Notas; los recordatorios van en Lembretes.txt", L"Vide : Documents\\MacOS Widgets. Les notes sont des fichiers .txt ou .md dans le sous-dossier Notas ; les rappels vont dans Lembretes.txt", L"Leer: Dokumente\\MacOS Widgets. Notizen sind .txt- oder .md-Dateien im Unterordner Notas; Erinnerungen stehen in Lembretes.txt", L"Vuoto: Documenti\\MacOS Widgets. Le note sono file .txt o .md nella sottocartella Notas; i promemoria vanno in Lembretes.txt", L"留空：文档\\MacOS Widgets。备忘录是 Notas 子文件夹中的 .txt 或 .md 文件；提醒事项保存在 Lembretes.txt"}},
+    {{L"Vazio: Documentos\\MacOS Widgets. Notas são arquivos .txt ou .md na subpasta Notes; os lembretes ficam em Reminders.txt", L"Empty: Documents\\MacOS Widgets. Notes are .txt or .md files in the Notes subfolder; reminders go in Reminders.txt", L"Vacío: Documentos\\MacOS Widgets. Las notas son archivos .txt o .md en la subcarpeta Notes; los recordatorios van en Reminders.txt", L"Vide : Documents\\MacOS Widgets. Les notes sont des fichiers .txt ou .md dans le sous-dossier Notes ; les rappels vont dans Reminders.txt", L"Leer: Dokumente\\MacOS Widgets. Notizen sind .txt- oder .md-Dateien im Unterordner Notes; Erinnerungen stehen in Reminders.txt", L"Vuoto: Documenti\\MacOS Widgets. Le note sono file .txt o .md nella sottocartella Notes; i promemoria vanno in Reminders.txt", L"留空：文档\\MacOS Widgets。备忘录是 Notes 子文件夹中的 .txt 或 .md 文件；提醒事项保存在 Reminders.txt"}},
     {{L"No widget", L"In the widget", L"En el widget", L"Dans le widget", L"Im Widget", L"Nel widget", L"小组件中"}},
     {{L"Nome=programa, pasta ou site, separados por ponto e vírgula", L"Name=program, folder or site, separated by semicolons", L"Nombre=programa, carpeta o sitio, separados por punto y coma", L"Nom=programme, dossier ou site, séparés par des points-virgules", L"Name=Programm, Ordner oder Website, durch Semikolon getrennt", L"Nome=programma, cartella o sito, separati da punto e virgola", L"名称=程序、文件夹或网站，用分号分隔"}},
     {{L"Escolher atalhos…", L"Choose shortcuts…", L"Elegir atajos…", L"Choisir les raccourcis…", L"Kurzbefehle auswählen…", L"Scegli scorciatoie…", L"选择快捷方式…"}},
@@ -1095,8 +1128,9 @@ static const TrRow kTr[] = {
     {{L"Ligue seu calendário em Ajustes > Calendário", L"Connect your calendar in Settings > Calendar", L"Conecta tu calendario en Ajustes > Calendario", L"Connectez votre calendrier dans Réglages > Calendrier", L"Verbinde deinen Kalender unter Einstellungen > Kalender", L"Collega il tuo calendario in Impostazioni > Calendario", L"请在设置 > 日历中连接你的日历"}},
     {{L"Nenhum evento", L"No events", L"Ningún evento", L"Aucun événement", L"Keine Termine", L"Nessun evento", L"没有日程"}},
     {{L"Título", L"Title", L"Título", L"Titre", L"Titel", L"Titolo", L"标题"}},
+    {{L"Clique em + para adicionar um lembrete", L"Click + to add a reminder", L"Haz clic en + para añadir un recordatorio", L"Cliquez sur + pour ajouter un rappel", L"Klicke auf +, um eine Erinnerung hinzuzufügen", L"Fai clic su + per aggiungere un promemoria", L"点击 + 添加提醒事项"}},
     {{L"Nenhuma nota ainda", L"No notes yet", L"Aún no hay notas", L"Aucune note pour l'instant", L"Noch keine Notizen", L"Ancora nessuna nota", L"还没有备忘录"}},
-    {{L"Clique em + e escreva aqui mesmo. Elas ficam em Documentos\\MacOS Widgets\\Notas", L"Click + and write right here. They're kept in Documents\\MacOS Widgets\\Notas", L"Haz clic en + y escribe aquí mismo. Se guardan en Documentos\\MacOS Widgets\\Notas", L"Cliquez sur + et écrivez ici même. Elles sont gardées dans Documents\\MacOS Widgets\\Notas", L"Klicke auf + und schreib direkt hier. Sie liegen in Dokumente\\MacOS Widgets\\Notas", L"Fai clic su + e scrivi qui. Vengono salvate in Documenti\\MacOS Widgets\\Notas", L"点击 + 直接在这里书写。它们保存在 文档\\MacOS Widgets\\Notas"}},
+    {{L"Clique em + e escreva aqui mesmo. Elas ficam em Documentos\\MacOS Widgets\\Notes", L"Click + and write right here. They're kept in Documents\\MacOS Widgets\\Notes", L"Haz clic en + y escribe aquí mismo. Se guardan en Documentos\\MacOS Widgets\\Notes", L"Cliquez sur + et écrivez ici même. Elles sont gardées dans Documents\\MacOS Widgets\\Notes", L"Klicke auf + und schreib direkt hier. Sie liegen in Dokumente\\MacOS Widgets\\Notes", L"Fai clic su + e scrivi qui. Vengono salvate in Documenti\\MacOS Widgets\\Notes", L"点击 + 直接在这里书写。它们保存在 文档\\MacOS Widgets\\Notes"}},
     {{L"Sem mais texto", L"No more text", L"Sin más texto", L"Pas d'autre texte", L"Kein weiterer Text", L"Nessun altro testo", L"无更多文本"}},
     {{L"Novo lembrete", L"New reminder", L"Nuevo recordatorio", L"Nouveau rappel", L"Neue Erinnerung", L"Nuovo promemoria", L"新提醒事项"}},
     {{L"Clique em + para escrever um lembrete", L"Click + to write a reminder", L"Haz clic en + para escribir un recordatorio", L"Cliquez sur + pour écrire un rappel", L"Klicke auf +, um eine Erinnerung zu schreiben", L"Fai clic su + per scrivere un promemoria", L"点击 + 添加提醒事项"}},
@@ -1254,6 +1288,10 @@ static std::wstring Fmt(PCWSTR fmt, ...) {
 }
 
 // Dates in the language in use ("Automático": the user's own region)
+static PCWSTR LangCode() {
+    static const PCWSTR codes[LANG_COUNT] = {L"pt", L"en", L"es", L"fr", L"de", L"it", L"zh"};
+    return codes[g_lang];
+}
 static PCWSTR LangLocale() {
     static const PCWSTR names[LANG_COUNT] = {L"pt-BR", L"en-US", L"es-ES", L"fr-FR", L"de-DE", L"it-IT", L"zh-CN"};
     return g_langAuto ? LOCALE_NAME_USER_DEFAULT : names[g_lang];
@@ -1378,7 +1416,7 @@ static const CfgItem kCfgItems[] = {
     {SEC_WIDGETS, kCfgToggle, L"showNotif", L"Notificações",
      L"As notificações que chegam no Windows (WhatsApp, Instagram, Outlook...), lidas do banco de notificações do Windows",
      L"0", false, 0, 1, nullptr, nullptr, 0},
-    {SEC_WIDGETS, kCfgToggle, L"showNotes", L"Notas", L"Suas notas em texto (Documentos\\MacOS Widgets\\Notas)", L"0", false, 0, 1, nullptr, nullptr, 0},
+    {SEC_WIDGETS, kCfgToggle, L"showNotes", L"Notas", L"Suas notas em texto (Documentos\\MacOS Widgets\\Notes)", L"0", false, 0, 1, nullptr, nullptr, 0},
     {SEC_WIDGETS, kCfgToggle, L"showReminders", L"Lembretes", L"Uma lista de tarefas para marcar como feitas", L"0", false, 0, 1, nullptr,
      nullptr, 0},
     {SEC_WIDGETS, kCfgToggle, L"showShortcuts", L"Atalhos", L"Apps, pastas e sites a um clique", L"0", false, 0, 1, nullptr, nullptr, 0},
@@ -1447,9 +1485,9 @@ static const CfgItem kCfgItems[] = {
     {SEC_WEATHER, kCfgText, L"#citySearch", L"Pesquisar", L"Digite o nome da cidade e tecle Enter; depois clique em Usar", L"", false, 0, 0,
      nullptr, nullptr, 0},
     {SEC_WEATHER, kCfgGroup, L"#g.place", L"Local em uso", nullptr, L"", false, 0, 0, nullptr, nullptr, 0},
-    {SEC_WEATHER, kCfgText, L"city", L"Nome da cidade", L"O nome que aparece no widget", L"Sua cidade", false, 0, 0, nullptr, nullptr, 0},
-    {SEC_WEATHER, kCfgText, L"latitude", L"Latitude", L"Por exemplo -23.55", L"-23.55", false, 0, 0, nullptr, nullptr, 0},
-    {SEC_WEATHER, kCfgText, L"longitude", L"Longitude", L"Por exemplo -46.63", L"-46.63", false, 0, 0, nullptr, nullptr, 0},
+    {SEC_WEATHER, kCfgText, L"city", L"Nome da cidade", L"O nome que aparece no widget", L"", false, 0, 0, nullptr, nullptr, 0},
+    {SEC_WEATHER, kCfgText, L"latitude", L"Latitude", L"Por exemplo -23.55", L"", false, 0, 0, nullptr, nullptr, 0},
+    {SEC_WEATHER, kCfgText, L"longitude", L"Longitude", L"Por exemplo -46.63", L"", false, 0, 0, nullptr, nullptr, 0},
 
     {SEC_WORLD, kCfgGroup, L"#g.world", L"Cidades", nullptr, L"", false, 0, 0, nullptr, nullptr, 0},
     {SEC_WORLD, kCfgChoice, L"worldCity1", L"Cidade 1", L"A que aparece no tamanho pequeno", L"Pacific Standard Time", false, 0, 0,
@@ -1467,24 +1505,24 @@ static const CfgItem kCfgItems[] = {
      false, 0, 0, nullptr, nullptr, 0},
     {SEC_NOTES, kCfgGroup, L"#g.texts", L"Pasta", nullptr, L"", false, 0, 0, nullptr, nullptr, 0},
     {SEC_NOTES, kCfgText, L"notesFolder", L"Pasta das notas e lembretes",
-     L"Vazio: Documentos\\MacOS Widgets. Notas são arquivos .txt ou .md na subpasta Notas; os lembretes ficam em Lembretes.txt",
+     L"Vazio: Documentos\\MacOS Widgets. Notas são arquivos .txt ou .md na subpasta Notes; os lembretes ficam em Reminders.txt",
      L"", false, 0, 0, nullptr, nullptr, 0},
     {SEC_SHORTCUTS, kCfgGroup, L"#g.shortcuts", L"No widget", nullptr, L"", false, 0, 0, nullptr, nullptr, 0},
     {SEC_SHORTCUTS, kCfgText, L"shortcuts", L"Atalhos", L"Nome=programa, pasta ou site, separados por ponto e vírgula",
-     L"Explorador=explorer.exe; Configurações=ms-settings:; Calculadora=calc.exe; Bloco de Notas=notepad.exe", false, 0, 0, nullptr,
+     L"File Explorer=explorer.exe; Settings=ms-settings:; Calculator=calc.exe; Notepad=notepad.exe", false, 0, 0, nullptr,
      nullptr, 0},
     {SEC_SHORTCUTS, kCfgButton, L"#pickShortcuts", L"Escolher atalhos…", L"Uma lista com seus apps (da Loja também) e pastas, com pesquisa",
      L"", false, 0, 0, nullptr, nullptr, 0},
     {SEC_STOCKS, kCfgGroup, L"#g.stocks", L"Códigos", nullptr, L"", false, 0, 0, nullptr, nullptr, 0},
     {SEC_STOCKS, kCfgText, L"stocks", L"Códigos da Bolsa",
-     L"Os do Yahoo Finance, separados por vírgula: PETR4.SA, ^BVSP (Ibovespa), USDBRL=X (dólar), BTC-USD", L"^BVSP, USDBRL=X, PETR4.SA, VALE3.SA, BTC-USD",
+     L"Os do Yahoo Finance, separados por vírgula: PETR4.SA, ^BVSP (Ibovespa), USDBRL=X (dólar), BTC-USD", L"^GSPC, ^IXIC, ^DJI, BTC-USD",
      false, 0, 0, nullptr, nullptr, 0},
     {SEC_NEWS, kCfgGroup, L"#g.news", L"Feeds", nullptr, L"", false, 0, 0, nullptr, nullptr, 0},
     {SEC_NEWS, kCfgText, L"newsFeeds", L"Endereços RSS das notícias",
      L"Cole o endereço do site que você quer (ex.: https://www.bbc.com/portuguese): o widget acha o feed dele sozinho. Se não "
      L"achar, procure no site por \"RSS\" e cole esse endereço. Vários: separe com ponto e vírgula. As notícias de todos se "
      L"juntam, as mais novas primeiro. Do g1, cada seção tem o seu: g1.globo.com/rss/g1/ + tecnologia/, esporte/, sp/...",
-     L"https://g1.globo.com/rss/g1/brasil/; https://g1.globo.com/rss/g1/politica/; https://g1.globo.com/rss/g1/economia/; https://g1.globo.com/rss/g1/mundo/", false, 0, 0,
+     L"", false, 0, 0,
      nullptr, nullptr, 0},
     {SEC_SENSORS, kCfgGroup, L"#g.sensors", L"O que mostrar", nullptr, L"", false, 0, 0, nullptr, nullptr, 0},
     {SEC_SENSORS, kCfgChoice, L"sensor1", L"Espaço 1", L"Pequeno e médio mostram os 4 primeiros; grande, 6; extra-grande, os 8", L"cpuTemp", false, 0, 0, nullptr, CFG_OPTS(kOptSensors)},
@@ -1539,13 +1577,17 @@ static const CfgItem* CfgFind(PCWSTR key) {
     return nullptr;
 }
 
-// A value changed in the window wins over the Settings tab while the tab still holds the value it had then (`base`);
-// changing it in the tab afterwards takes over again
+// A value changed in the window wins over the Settings tab while the tab still holds the value it had then (`base`).
+// As soon as the tab holds anything else, the override is dropped for good: the latest change wins, wherever it was made
 struct CfgOverride {
     std::wstring value, base;
 };
-static std::vector<std::pair<std::wstring, CfgOverride>> g_cfgOver;                                    // key -> override
-static std::vector<std::pair<std::wstring, std::vector<std::pair<std::wstring, std::wstring>>>> g_themeVals;  // theme -> key -> value
+static std::vector<std::pair<std::wstring, CfgOverride>> g_cfgOver;                                     // key -> override
+static std::vector<std::pair<std::wstring, std::vector<std::pair<std::wstring, CfgOverride>>>> g_themeVals;  // theme -> key -> override
+
+// Stored records are separated by this, not by line breaks: portable Windhawk keeps values in an INI file, where a
+// line break can't be stored
+constexpr wchar_t kRecSep = L'\x1F';
 static bool g_cfgLoaded = false;
 
 template <class V>
@@ -1574,17 +1616,19 @@ static std::wstring ReadValue(PCWSTR name) {
     return buf.data();
 }
 
+static std::wstring CfgTab(const CfgItem& it);
+
 static void CfgLoadStored() {  // (g_dataMutex held)
     g_cfgLoaded = true;
     g_cfgOver.clear();
     g_themeVals.clear();
-    for (const auto& line : Split(ReadValue(L"cfgOverrides"), L'\n')) {
+    for (const auto& line : Split(ReadValue(L"cfgOverrides"), kRecSep)) {
         auto f = Split(line, L'\t');
         if (f.size() == 3 && CfgFind(f[0].c_str())) g_cfgOver.push_back({f[0], {f[1], f[2]}});
     }
-    for (const auto& line : Split(ReadValue(L"themeValues"), L'\n')) {
+    for (const auto& line : Split(ReadValue(L"themeValues"), kRecSep)) {
         auto f = Split(line, L'\t');
-        if (f.size() != 3) continue;
+        if (f.size() != 4) continue;
         const CfgItem* it = CfgFind(f[1].c_str());
         if (!it || !it->themed) continue;
         auto* vals = FindIn(g_themeVals, f[0]);
@@ -1592,21 +1636,22 @@ static void CfgLoadStored() {  // (g_dataMutex held)
             g_themeVals.push_back({f[0], {}});
             vals = &g_themeVals.back().second;
         }
-        vals->push_back({f[1], f[2]});
+        vals->push_back({f[1], {f[2], f[3]}});
     }
 }
 
 static std::wstring CleanValue(std::wstring v) {
     for (auto& c : v)
-        if (c == L'\t' || c == L'\n' || c == L'\r') c = L' ';
+        if (c == L'\t' || c == L'\n' || c == L'\r' || c == kRecSep) c = L' ';
     return v;
 }
 
 static void CfgSaveStored() {  // (g_dataMutex held)
     std::wstring a, b;
-    for (const auto& p : g_cfgOver) a += p.first + L"\t" + CleanValue(p.second.value) + L"\t" + CleanValue(p.second.base) + L"\n";
+    for (const auto& p : g_cfgOver) a += p.first + L"\t" + CleanValue(p.second.value) + L"\t" + CleanValue(p.second.base) + kRecSep;
     for (const auto& t : g_themeVals)
-        for (const auto& p : t.second) b += t.first + L"\t" + p.first + L"\t" + CleanValue(p.second) + L"\n";
+        for (const auto& p : t.second)
+            b += t.first + L"\t" + p.first + L"\t" + CleanValue(p.second.value) + L"\t" + CleanValue(p.second.base) + kRecSep;
     Wh_SetStringValue(L"cfgOverrides", a.c_str());
     Wh_SetStringValue(L"themeValues", b.c_str());
 }
@@ -1615,15 +1660,22 @@ static void CfgSaveStored() {  // (g_dataMutex held)
 static std::wstring CfgTab(const CfgItem& it) {
     if (it.type == kCfgToggle || it.type == kCfgSlider) return std::to_wstring(Wh_GetIntSetting(it.key));
     PCWSTR v = Wh_GetStringSetting(it.key);
-    std::wstring r = (v && *v) ? v : it.def;
-    if (v) Wh_FreeStringSetting(v);
+    // A list cleared in the tab stays empty; for the rest, empty means the starting value
+    bool list = !wcscmp(it.key, L"stocks") || !wcscmp(it.key, L"newsFeeds") || !wcscmp(it.key, L"shortcuts");
+    std::wstring r = (*v || list) ? v : it.def;
+    Wh_FreeStringSetting(v);
     return r;
 }
 
 static std::wstring CfgShared(const CfgItem& it) {  // (g_dataMutex held)
     std::wstring tab = CfgTab(it);
-    if (CfgOverride* o = FindIn(g_cfgOver, it.key))
-        if (o->base == tab) return o->value;
+    for (size_t i = 0; i < g_cfgOver.size(); i++)
+        if (g_cfgOver[i].first == it.key) {
+            if (g_cfgOver[i].second.base == tab) return g_cfgOver[i].second.value;
+            g_cfgOver.erase(g_cfgOver.begin() + i);  // changed in the tab since: the tab wins from now on
+            CfgSaveStored();
+            break;
+        }
     return tab;
 }
 
@@ -1649,7 +1701,13 @@ static std::wstring CfgNowLocked(const CfgItem& it) {
     if (!it.themed) return shared;
     std::wstring theme = CfgThemeName();
     if (auto* vals = FindIn(g_themeVals, theme))
-        if (std::wstring* v = FindIn(*vals, it.key)) return *v;
+        for (size_t i = 0; i < vals->size(); i++)
+            if ((*vals)[i].first == it.key) {
+                if ((*vals)[i].second.base == shared) return (*vals)[i].second.value;
+                vals->erase(vals->begin() + i);  // changed in the tab since: the tab wins
+                CfgSaveStored();
+                break;
+            }
     PCWSTR td = ThemeDefaultFor(theme, it.key);
     if (*td && shared == it.def) return td;
     return shared;
@@ -1667,6 +1725,7 @@ static void CfgSet(PCWSTR key, const std::wstring& value) {
     if (!it) return;
     std::lock_guard<std::mutex> lock(g_dataMutex);
     if (!g_cfgLoaded) CfgLoadStored();
+    std::wstring tab = CfgTab(*it);
     if (it->themed) {
         std::wstring theme = CfgThemeName();
         auto* vals = FindIn(g_themeVals, theme);
@@ -1674,10 +1733,9 @@ static void CfgSet(PCWSTR key, const std::wstring& value) {
             g_themeVals.push_back({theme, {}});
             vals = &g_themeVals.back().second;
         }
-        if (std::wstring* v = FindIn(*vals, key)) *v = value;
-        else vals->push_back({key, value});
+        if (CfgOverride* v = FindIn(*vals, key)) *v = {value, tab};
+        else vals->push_back({key, {value, tab}});
     } else {
-        std::wstring tab = CfgTab(*it);
         if (CfgOverride* o = FindIn(g_cfgOver, key)) *o = {value, tab};
         else g_cfgOver.push_back({key, {value, tab}});
     }
@@ -1755,8 +1813,8 @@ static void LoadSettings() {
     s.showMusic = CfgInt(L"showMusic", 0, 1) != 0;
     s.showSystem = CfgInt(L"showSystem", 0, 1) != 0;
     s.city = CfgNow(L"city");
-    s.latitude = SanitizeCoord(CfgNow(L"latitude"), L"-23.55");
-    s.longitude = SanitizeCoord(CfgNow(L"longitude"), L"-46.63");
+    s.latitude = SanitizeCoord(CfgNow(L"latitude"), L"");
+    s.longitude = SanitizeCoord(CfgNow(L"longitude"), L"");
     s.lockPosition = CfgInt(L"lockPosition", 0, 1) != 0;
     s.showGrid = CfgInt(L"showGrid", 0, 1) != 0;
     s.showCalendar = CfgInt(L"showCalendar", 0, 1) != 0;
@@ -1862,8 +1920,6 @@ static std::thread g_dataThread;
 static HANDLE g_uiThread = nullptr;
 static DWORD g_uiThreadId = 0;
 static HANDLE g_uiReady = nullptr;
-static std::atomic<bool> g_ownsInstance{false};
-static HANDLE g_instanceMutex = nullptr;
 
 #define WM_APP_RELOAD (WM_APP + 1)
 #define WM_APP_REDRAW (WM_APP + 2)
@@ -1872,6 +1928,39 @@ static HANDLE g_instanceMutex = nullptr;
 // ---------------------------------------------------------------------------
 // Weather (Open-Meteo over WinHTTP)
 // ---------------------------------------------------------------------------
+
+// The requests in flight, so unloading can cancel them (closing a request's handle ends a call waiting on it) instead
+// of waiting for each one's timeout
+static std::mutex g_httpMutex;
+static std::vector<HINTERNET> g_httpOpen;
+static bool g_httpStopped = false;
+
+static HINTERNET HttpTrack(HINTERNET req) {
+    if (!req) return nullptr;
+    std::lock_guard<std::mutex> lock(g_httpMutex);
+    if (g_httpStopped) {
+        WinHttpCloseHandle(req);
+        return nullptr;
+    }
+    g_httpOpen.push_back(req);
+    return req;
+}
+
+static void HttpRelease(HINTERNET req) {
+    if (!req) return;
+    std::lock_guard<std::mutex> lock(g_httpMutex);
+    auto it = std::find(g_httpOpen.begin(), g_httpOpen.end(), req);
+    if (it == g_httpOpen.end()) return;  // already closed by HttpAbortAll
+    g_httpOpen.erase(it);
+    WinHttpCloseHandle(req);
+}
+
+static void HttpAbortAll() {
+    std::lock_guard<std::mutex> lock(g_httpMutex);
+    g_httpStopped = true;
+    for (HINTERNET h : g_httpOpen) WinHttpCloseHandle(h);
+    g_httpOpen.clear();
+}
 
 static std::string HttpsGet(PCWSTR host, const std::wstring& path) {
     std::string out;
@@ -1884,9 +1973,9 @@ static std::string HttpsGet(PCWSTR host, const std::wstring& path) {
     if (!session) return out;
     WinHttpSetTimeouts(session, 5000, 5000, 5000, 5000);
     HINTERNET conn = WinHttpConnect(session, host, INTERNET_DEFAULT_HTTPS_PORT, 0);
-    HINTERNET req = conn ? WinHttpOpenRequest(conn, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
-                                              WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE)
-                         : nullptr;
+    HINTERNET req = HttpTrack(conn ? WinHttpOpenRequest(conn, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
+                                                        WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE)
+                                   : nullptr);
     if (req && WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
         WinHttpReceiveResponse(req, nullptr)) {
         DWORD status = 0, size = sizeof(status);
@@ -1902,7 +1991,7 @@ static std::string HttpsGet(PCWSTR host, const std::wstring& path) {
             }
         }
     }
-    if (req) WinHttpCloseHandle(req);
+    HttpRelease(req);
     if (conn) WinHttpCloseHandle(conn);
     WinHttpCloseHandle(session);
     return out;
@@ -2085,7 +2174,7 @@ static std::wstring CoordText(double v) {
 static void SearchPlaces(std::wstring query) {
     auto* found = new std::vector<Place>();
     std::string json = HttpsGet(L"geocoding-api.open-meteo.com",
-                                L"/v1/search?name=" + UrlEncode(query) + L"&count=6&language=pt&format=json");
+                                L"/v1/search?name=" + UrlEncode(query) + L"&count=6&language=" + std::wstring(LangCode()) + L"&format=json");
     bool ok = !json.empty();
     size_t p = json.find("\"results\":[");
     while (p != std::string::npos) {
@@ -2300,6 +2389,7 @@ static void PollMedia(GlobalSystemMediaTransportControlsSessionManager& mgr) {
     }
     std::lock_guard<std::mutex> lock(g_dataMutex);
     g_media = m;
+    if (!m.hasSession) g_commands.clear();  // presses that couldn't reach a player don't keep the thread awake
 }
 #endif
 
@@ -2364,7 +2454,7 @@ struct NotifInfo {
 };
 static std::vector<NotifInfo> g_notifs;
 static std::wstring g_notifError;
-static long long g_notifCleared = -1;  // "Limpar": hides what arrived up to then (-1 = not loaded yet)
+static std::atomic<long long> g_notifCleared{-1};  // "Limpar": hides what arrived up to then (-1 = not loaded yet)
 
 typedef int(WINAPI* sq_open_t)(const char*, void**, int, const char*);
 typedef int(WINAPI* sq_prepare_t)(void*, const char*, int, void**, const char**);
@@ -2376,11 +2466,44 @@ typedef const unsigned char*(WINAPI* sq_text_t)(void*, int);
 typedef int(WINAPI* sq_finalize_t)(void*);
 typedef int(WINAPI* sq_close_t)(void*);
 
-static std::wstring XmlDecode(std::wstring s) {
-    const std::pair<PCWSTR, PCWSTR> ents[] = {{L"&lt;", L"<"}, {L"&gt;", L">"}, {L"&quot;", L"\""}, {L"&apos;", L"'"}, {L"&amp;", L"&"}};
-    for (auto& e : ents)
-        for (size_t p; (p = s.find(e.first)) != std::wstring::npos;) s.replace(p, wcslen(e.first), e.second);
-    return s;
+// One pass, left to right: "&amp;lt;" becomes "&lt;" (not "<"), and numeric ones (&#8217; &#x2019;) are decoded too
+static std::wstring XmlDecode(const std::wstring& s) {
+    static const std::pair<PCWSTR, wchar_t> named[] = {{L"lt", L'<'}, {L"gt", L'>'}, {L"quot", L'"'}, {L"apos", L'\''}, {L"amp", L'&'}};
+    std::wstring out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); i++) {
+        size_t semi = s[i] == L'&' ? s.find(L';', i + 1) : std::wstring::npos;
+        if (semi == std::wstring::npos || semi - i > 10) {
+            out += s[i];
+            continue;
+        }
+        std::wstring name = s.substr(i + 1, semi - i - 1);
+        bool done = false;
+        if (name.size() > 1 && name[0] == L'#') {
+            bool hex = name[1] == L'x' || name[1] == L'X';
+            unsigned long cp = wcstoul(name.c_str() + (hex ? 2 : 1), nullptr, hex ? 16 : 10);
+            if (cp > 0 && cp <= 0x10FFFF && !(cp >= 0xD800 && cp <= 0xDFFF)) {
+                if (cp >= 0x10000) {
+                    cp -= 0x10000;
+                    out += (wchar_t)(0xD800 + (cp >> 10));
+                    out += (wchar_t)(0xDC00 + (cp & 0x3FF));
+                } else {
+                    out += (wchar_t)cp;
+                }
+                done = true;
+            }
+        } else {
+            for (const auto& n : named)
+                if (name == n.first) {
+                    out += n.second;
+                    done = true;
+                    break;
+                }
+        }
+        if (done) i = semi;
+        else out += s[i];
+    }
+    return out;
 }
 
 // The <text> lines of a toast
@@ -2586,9 +2709,9 @@ static std::string HttpGetUrl(const std::wstring& url, PCWSTR agent = L"Mozilla/
     if (!session) return out;
     WinHttpSetTimeouts(session, 6000, 6000, 8000, 8000);
     HINTERNET conn = WinHttpConnect(session, host, uc.nPort, 0);
-    HINTERNET req = conn ? WinHttpOpenRequest(conn, L"GET", full.c_str(), nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                              secure ? WINHTTP_FLAG_SECURE : 0)
-                         : nullptr;
+    HINTERNET req = HttpTrack(conn ? WinHttpOpenRequest(conn, L"GET", full.c_str(), nullptr, WINHTTP_NO_REFERER,
+                                                        WINHTTP_DEFAULT_ACCEPT_TYPES, secure ? WINHTTP_FLAG_SECURE : 0)
+                                   : nullptr);
     // Always the current version, not a copy kept by a proxy or the site's cache
     PCWSTR fresh = L"Cache-Control: no-cache\r\nPragma: no-cache\r\n";
     if (req && WinHttpSendRequest(req, fresh, (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) && WinHttpReceiveResponse(req, nullptr)) {
@@ -2605,7 +2728,7 @@ static std::string HttpGetUrl(const std::wstring& url, PCWSTR agent = L"Mozilla/
             }
         }
     }
-    if (req) WinHttpCloseHandle(req);
+    HttpRelease(req);
     if (conn) WinHttpCloseHandle(conn);
     WinHttpCloseHandle(session);
     return out;
@@ -2727,10 +2850,10 @@ static void ExpandEvent(const CalEvent& base, const std::wstring& rrule, const s
         if (eq == std::wstring::npos) continue;
         std::wstring k = part.substr(0, eq), v = part.substr(eq + 1);
         if (k == L"FREQ") freq = v;
-        else if (k == L"INTERVAL") interval = std::max(1, _wtoi(v.c_str()));
+        else if (k == L"INTERVAL") interval = std::clamp(_wtoi(v.c_str()), 1, 1000);  // the date math stays in range
         else if (k == L"COUNT") count = _wtoi(v.c_str());
         else if (k == L"UNTIL") {
-            bool ad;
+            bool ad = false;
             ParseIcsTime(v, &until, &ad);
             if (ad) until += 1439;
         } else if (k == L"BYDAY") {
@@ -3110,10 +3233,15 @@ static std::wstring NewsAgo(long long when) {
     return Fmt(TF(days == 1 ? L"há %lld dia" : L"há %lld dias"), days);
 }
 
+// Only web pages: a feed (or anyone between it and us, on plain http) could name a program, a file or another protocol
+static bool IsWebUrl(const std::wstring& u) {
+    return _wcsnicmp(u.c_str(), L"http://", 7) == 0 || _wcsnicmp(u.c_str(), L"https://", 8) == 0;
+}
+
 static bool FetchNews() {
     std::vector<std::vector<NewsItem>> perFeed;
     for (const auto& url : SplitList(GetSettings().newsFeeds, L",; \n")) {
-        if (perFeed.size() >= 5) break;
+        if (perFeed.size() >= 5 || !g_running) break;
         std::wstring xml = FromUtf8(HttpGetUrl(url));
         if (xml.find(L"<item") == std::wstring::npos && xml.find(L"<entry") == std::wstring::npos) {
             // A site's page, not its feed: the feed it announces in <link rel="alternate" type="application/rss+xml">
@@ -3148,8 +3276,10 @@ static bool FetchNews() {
                 size_t lp = xml.find(L"<link", p);
                 if (lp != std::wstring::npos && lp < end) n.link = AttrOf(xml, lp, L"href");
             }
+            if (!IsWebUrl(n.link)) n.link.clear();
             n.source = source;
             n.image = NewsImage(xml, p, end);
+            if (!IsWebUrl(n.image)) n.image.clear();
             for (PCWSTR tag : {L"pubDate", L"published", L"updated", L"dc:date"}) {
                 if (n.when) break;
                 n.when = ParseFeedDate(TagText(xml, p, end, tag));
@@ -3228,32 +3358,53 @@ static std::wstring NotesFolder() {
     std::wstring out;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &docs))) {
         out = std::wstring(docs) + L"\\MacOS Widgets";
-        // The folder had the mod's old name (Win Widgets): it moves, notes and all
-        std::wstring old = std::wstring(docs) + L"\\Win Widgets";
-        if (GetFileAttributesW(out.c_str()) == INVALID_FILE_ATTRIBUTES && GetFileAttributesW(old.c_str()) != INVALID_FILE_ATTRIBUTES)
-            MoveFileW(old.c_str(), out.c_str());
     }
     CoTaskMemFree(docs);
     return out;
 }
 
-static std::wstring ReadTextFile(const std::wstring& path, size_t maxBytes) {
+enum class ReadResult { Ok, Missing, Failed };
+
+// A file that isn't there and one that couldn't be read (locked by sync or an antivirus, online-only while offline...)
+// are different: only the first may be treated as empty, or writing back would wipe what's in it
+static ReadResult ReadText(const std::wstring& path, size_t maxBytes, std::wstring* out) {
+    out->clear();
     HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
                            FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return L"";
-    std::string b(maxBytes, '\0');
+    if (h == INVALID_HANDLE_VALUE) {
+        DWORD e = GetLastError();
+        return e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND ? ReadResult::Missing : ReadResult::Failed;
+    }
+    LARGE_INTEGER size = {};
+    if (!GetFileSizeEx(h, &size)) {
+        CloseHandle(h);
+        return ReadResult::Failed;
+    }
+    size_t want = (size_t)std::min<long long>(size.QuadPart, (long long)maxBytes);
+    std::string b(want, '\0');
     DWORD read = 0;
-    ReadFile(h, &b[0], (DWORD)maxBytes, &read, nullptr);
+    BOOL ok = want == 0 || ReadFile(h, &b[0], (DWORD)want, &read, nullptr);
     CloseHandle(h);
+    if (!ok) return ReadResult::Failed;
     b.resize(read);
-    if (b.size() >= 2 && (unsigned char)b[0] == 0xFF && (unsigned char)b[1] == 0xFE)
-        return std::wstring((const wchar_t*)(b.data() + 2), (b.size() - 2) / 2);
+    std::wstring& w = *out;
+    if (b.size() >= 2 && (unsigned char)b[0] == 0xFF && (unsigned char)b[1] == 0xFE) {
+        w.assign((const wchar_t*)(b.data() + 2), (b.size() - 2) / 2);
+        return ReadResult::Ok;
+    }
     if (b.size() >= 3 && (unsigned char)b[0] == 0xEF && (unsigned char)b[1] == 0xBB && (unsigned char)b[2] == 0xBF) b.erase(0, 3);
     int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, b.data(), (int)b.size(), nullptr, 0);
     UINT cp = n > 0 || b.empty() ? CP_UTF8 : CP_ACP;
     n = MultiByteToWideChar(cp, 0, b.data(), (int)b.size(), nullptr, 0);
-    std::wstring w(n, L'\0');
-    MultiByteToWideChar(cp, 0, b.data(), (int)b.size(), &w[0], n);
+    w.assign(n, L'\0');
+    if (n > 0) MultiByteToWideChar(cp, 0, b.data(), (int)b.size(), &w[0], n);
+    return ReadResult::Ok;
+}
+
+// For showing only: anything unreadable shows as empty
+static std::wstring ReadTextFile(const std::wstring& path, size_t maxBytes) {
+    std::wstring w;
+    ReadText(path, maxBytes, &w);
     return w;
 }
 
@@ -3261,24 +3412,29 @@ static bool WriteTextFile(const std::wstring& path, const std::wstring& text) {
     int n = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0, nullptr, nullptr);
     std::string u(n, '\0');
     WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), &u[0], n, nullptr, nullptr);
-    HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    // Written beside it first, then put in its place: a failed write never leaves the file half written
+    std::wstring tmp = path + L".mwtmp";
+    HANDLE h = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h == INVALID_HANDLE_VALUE) return false;
     DWORD w = 0;
-    BOOL ok = WriteFile(h, u.data(), (DWORD)u.size(), &w, nullptr);
+    BOOL ok = WriteFile(h, u.data(), (DWORD)u.size(), &w, nullptr) && w == u.size() && FlushFileBuffers(h);
     CloseHandle(h);
-    return ok && w == u.size();
+    if (ok) ok = MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    if (!ok) DeleteFileW(tmp.c_str());
+    return ok;
 }
 
-static std::wstring RemindersPath() { return NotesFolder() + L"\\Lembretes.txt"; }
+static std::wstring NotesDir();
+
+// Nothing is created until the first note or reminder is saved
+static std::wstring RemindersPath() { return NotesFolder() + L"\\Reminders.txt"; }
+static std::wstring NotesDir() { return NotesFolder() + L"\\Notes"; }
 
 static void ReadNotesAndReminders() {
     std::wstring dir = NotesFolder();
     if (dir.empty()) return;
-    std::wstring notesDir = dir + L"\\Notas";
-    SHCreateDirectoryExW(nullptr, notesDir.c_str(), nullptr);
+    std::wstring notesDir = NotesDir();
     std::wstring rp = RemindersPath();
-    if (GetFileAttributesW(rp.c_str()) == INVALID_FILE_ATTRIBUTES)
-        WriteTextFile(rp, L"[ ] Um lembrete por linha\n[ ] Clique no círculo para marcar como feito\n[x] Lembretes feitos ficam assim\n");
 
     std::vector<NoteInfo> notes;
     WIN32_FIND_DATAW fd;
@@ -3294,26 +3450,33 @@ static void ReadNotesAndReminders() {
             NoteInfo n;
             n.path = notesDir + L"\\" + name;
             n.written = (long long)(((ULONGLONG)fd.ftLastWriteTime.dwHighDateTime << 32) | fd.ftLastWriteTime.dwLowDateTime);
-            std::wstring text = ReadTextFile(n.path, 4096);
-            auto lines = Split(text, L'\n');
-            for (auto& l : lines) {
-                if (!l.empty() && l.back() == L'\r') l.pop_back();
-                while (!l.empty() && (l[0] == L'#' || l[0] == L' ')) l.erase(0, 1);
-            }
-            size_t i = 0;
-            while (i < lines.size() && lines[i].empty()) i++;
-            n.title = i < lines.size() ? lines[i] : name.substr(0, dot);
-            for (size_t j = i + 1; j < lines.size() && n.text.size() < 600; j++)
-                if (!lines[j].empty()) n.text += (n.text.empty() ? L"" : L"\n") + lines[j];
             notes.push_back(n);
         } while (FindNextFileW(h, &fd));
         FindClose(h);
     }
+    // Only the 12 newest are shown, so only they are read
     std::sort(notes.begin(), notes.end(), [](const NoteInfo& a, const NoteInfo& b) { return a.written > b.written; });
     if (notes.size() > 12) notes.resize(12);
+    for (NoteInfo& n : notes) {
+        std::wstring name = n.path.substr(notesDir.size() + 1);
+        size_t dot = name.find_last_of(L'.');
+        std::wstring text = ReadTextFile(n.path, 4096);
+        auto lines = Split(text, L'\n');
+        for (auto& l : lines) {
+            if (!l.empty() && l.back() == L'\r') l.pop_back();
+            while (!l.empty() && (l[0] == L'#' || l[0] == L' ')) l.erase(0, 1);
+        }
+        size_t i = 0;
+        while (i < lines.size() && lines[i].empty()) i++;
+        n.title = i < lines.size() ? lines[i] : name.substr(0, dot);
+        for (size_t j = i + 1; j < lines.size() && n.text.size() < 600; j++)
+            if (!lines[j].empty()) n.text += (n.text.empty() ? L"" : L"\n") + lines[j];
+    }
 
     std::vector<ReminderLine> rem;
-    auto lines = Split(ReadTextFile(rp, 16 * 1024 * 1024), L'\n');
+    std::wstring remText;
+    bool remOk = ReadText(rp, 16 * 1024 * 1024, &remText) != ReadResult::Failed;
+    auto lines = Split(remText, L'\n');
     for (size_t i = 0; i < lines.size(); i++) {
         std::wstring l = lines[i];
         if (!l.empty() && l.back() == L'\r') l.pop_back();
@@ -3337,13 +3500,14 @@ static void ReadNotesAndReminders() {
     std::stable_sort(rem.begin(), rem.end(), [](const ReminderLine& a, const ReminderLine& b) { return !a.done && b.done; });
     std::lock_guard<std::mutex> lock(g_dataMutex);
     g_notes = notes;
-    g_reminders = rem;
+    if (remOk) g_reminders = rem;  // unreadable for a moment: the ones shown stay
 }
 
 // Marks a reminder done (or not), changing only its line in the file
 static void ToggleReminder(int line) {
     std::wstring rp = RemindersPath();
-    std::wstring text = ReadTextFile(rp, 16 * 1024 * 1024);
+    std::wstring text;
+    if (ReadText(rp, 16 * 1024 * 1024, &text) != ReadResult::Ok) return;  // never write over what couldn't be read
     auto lines = Split(text, L'\n');
     if (line < 0 || line >= (int)lines.size()) return;
     std::wstring& l = lines[line];
@@ -3391,9 +3555,9 @@ static std::string HttpRequest(PCWSTR method, const std::wstring& url, const std
     if (!session) return out;
     WinHttpSetTimeouts(session, 3000, 3000, 4000, 6000);
     HINTERNET conn = WinHttpConnect(session, host, uc.nPort, 0);
-    HINTERNET req = conn ? WinHttpOpenRequest(conn, method, path, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                              uc.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0)
-                         : nullptr;
+    HINTERNET req = HttpTrack(conn ? WinHttpOpenRequest(conn, method, path, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
+                                                        uc.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0)
+                                   : nullptr);
     if (req && WinHttpSendRequest(req, headers.c_str(), (DWORD)-1L, body.empty() ? WINHTTP_NO_REQUEST_DATA : (LPVOID)body.data(),
                                   (DWORD)body.size(), (DWORD)body.size(), 0) &&
         WinHttpReceiveResponse(req, nullptr)) {
@@ -3409,7 +3573,7 @@ static std::string HttpRequest(PCWSTR method, const std::wstring& url, const std
             out.append(buf.data(), read);
         }
     }
-    if (req) WinHttpCloseHandle(req);
+    HttpRelease(req);
     if (conn) WinHttpCloseHandle(conn);
     WinHttpCloseHandle(session);
     return out;
@@ -3577,8 +3741,11 @@ static void DataThread() {
     while (g_running) {
         bool doWeather;
         {
+            Settings ws = GetSettings();  // before the lock (it takes it too)
             std::lock_guard<std::mutex> lock(g_dataMutex);
-            doWeather = g_weatherRefresh || GetTickCount64() - lastWeather > 15 * 60 * 1000;
+            // Only when Weather or Sunrise is shown, and there is a city to ask about
+            doWeather = (ws.showWeather || ws.showSun) && HasCity(ws) &&
+                        (g_weatherRefresh || !lastWeather || GetTickCount64() - lastWeather > 15 * 60 * 1000);
             g_weatherRefresh = false;
         }
         if (doWeather) {
@@ -3617,20 +3784,24 @@ static void DataThread() {
             newsNow = g_newsRefresh;
             g_newsRefresh = false;
         }
+        if (!g_running) break;
         if (s.showCalendar && (calNow || !lastCal || now - lastCal > 15 * 60 * 1000)) {
             FetchCalendar();
             lastCal = now;
         }
+        if (!g_running) break;
         if (s.showStocks && (calNow || !lastQuotes || now - lastQuotes > 5 * 60 * 1000)) {
             FetchQuotes();
             lastQuotes = now;
         }
+        if (!g_running) break;
         if (s.showNews && (calNow || newsNow || !lastNews || now - lastNews > 15 * 60 * 1000)) {
             bool ok = FetchNews();
             g_cv.notify_all();  // the covers thread starts on them
             // A failed update (the internet not back yet after the PC wakes up, for one) is tried again in a minute
             lastNews = ok ? now : now - 14 * 60 * 1000;
         }
+        if (!g_running) break;
         RunHomeCommands();
         bool haDown;
         {
@@ -3642,6 +3813,7 @@ static void DataThread() {
             FetchHome();
             lastHome = now;
         }
+        if (!g_running) break;
         if ((s.showNotes || s.showReminders) && (!lastNotes || now - lastNotes > 3 * 1000)) {
             ReadNotesAndReminders();
             lastNotes = now;
@@ -3682,7 +3854,7 @@ struct SystemStats {
 static SystemStats g_sys;
 
 struct NetStats {
-    double down = 0, up = 0;  // bytes per second
+    std::atomic<double> down{0}, up{0};  // bytes per second (written on the UI thread, read by the sensors thread too)
     double histDown[60] = {}, histUp[60] = {};
     int histPos = 0;
     double totalDown = 0, totalUp = 0;
@@ -3869,7 +4041,7 @@ struct GpuState {
 };
 
 static void FindGpu(GpuState& g) {
-    HMODULE dxgi = LoadLibraryW(L"dxgi.dll");
+    HMODULE dxgi = LoadLibraryExW(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     auto create = dxgi ? (HRESULT(WINAPI*)(REFIID, void**))(void*)GetProcAddress(dxgi, "CreateDXGIFactory1") : nullptr;
     ComPtr<IDXGIFactory1> f;
     if (!create || FAILED(create(__uuidof(IDXGIFactory1), (void**)f.GetAddressOf()))) return;
@@ -5114,6 +5286,11 @@ static void DrawWeatherIconAt(float x, float y, float s, int code, bool day) {
     DrawWeatherIcon(x, y, s, code);  // clouds, rain, snow: the same as by day
 }
 
+static void TextWrap(const std::wstring& src, float x, float y, float w, float h, float size, DWRITE_FONT_WEIGHT weight,
+                     D2D1_COLOR_F color);
+
+static std::wstring CityName() { return g_ui.city.empty() ? T(L"Sua cidade") : g_ui.city; }
+
 static void DrawWeather(Widget* wd) {
     WeatherData w;
     {
@@ -5121,14 +5298,19 @@ static void DrawWeather(Widget* wd) {
         w = g_weather;
     }
     float W = wd->w;
+    if (!HasCity(g_ui)) {
+        Text(L"Tempo", 16, 14, W - 32, 20, 13, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(1));
+        TextWrap(L"Clique para escolher sua cidade", 16, 44, W - 32, wd->h - 56, 13, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.7f));
+        return;
+    }
     if (!w.valid) {
-        Text(g_ui.city, 16, 14, W - 32, 20, 13, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(1));
+        Text(CityName(), 16, 14, W - 32, 20, 13, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(1));
         Text(L"Carregando…", 16, 70, W - 32, 20, 13, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.7f));
         return;
     }
     wchar_t buf[64];
     if (wd->size == 0) {
-        Text(g_ui.city, 16, 14, W - 32, 20, 13, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(1));
+        Text(CityName(), 16, 14, W - 32, 20, 13, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(1));
         swprintf(buf, 64, L"%.0f°", w.temp);
         Text(buf, 14, 32, W - 28, 52, 40, DWRITE_FONT_WEIGHT_MEDIUM, Ink(1));
         DrawWeatherIconAt(16, 88, 26, w.code, w.day);
@@ -5138,7 +5320,7 @@ static void DrawWeather(Widget* wd) {
         return;
     }
     // Medium and large: now on top, the next hours under it
-    Text(g_ui.city, 16, 14, W / 2, 20, 13, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(1));
+    Text(CityName(), 16, 14, W / 2, 20, 13, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(1));
     swprintf(buf, 64, L"%.0f°", w.temp);
     Text(buf, 14, 30, W / 2, 50, 38, DWRITE_FONT_WEIGHT_MEDIUM, Ink(1));
     DrawWeatherIconAt(W - 16 - 24, 14, 24, w.code, w.day);
@@ -5405,7 +5587,8 @@ static void DrawSun(Widget* wd) {
     }
     if (!w.valid || w.sunrise[0] == 0) {
         Text(L"Nascer do Sol", 16, 14, wd->w - 32, 20, 13, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(1));
-        Text(L"Carregando…", 16, 70, wd->w - 32, 20, 13, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.7f));
+        if (HasCity(g_ui)) Text(L"Carregando…", 16, 70, wd->w - 32, 20, 13, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.7f));
+        else TextWrap(L"Clique para escolher sua cidade", 16, 44, wd->w - 32, wd->h - 56, 13, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.7f));
         return;
     }
     long long now = UnixNow(), off = w.offset;
@@ -5981,7 +6164,7 @@ static void DrawNotes(Widget* wd) {
     PlusButton(wd, L"newnote");
     if (notes.empty()) {
         Text(L"Nenhuma nota ainda", 16, 52, W - 32, 20, 14, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(0.9f));
-        TextWrap(L"Clique em + e escreva aqui mesmo. Elas ficam em Documentos\\MacOS Widgets\\Notas", 16, 74, W - 32, H - 90, 12,
+        TextWrap(L"Clique em + e escreva aqui mesmo. Elas ficam em Documentos\\MacOS Widgets\\Notes", 16, 74, W - 32, H - 90, 12,
                  DWRITE_FONT_WEIGHT_NORMAL, Ink(0.6f));
         return;
     }
@@ -6026,6 +6209,7 @@ static void DrawReminders(Widget* wd) {
         list.insert(list.begin(), fresh);
     }
     float y = 46, rowH = wd->size == 0 ? 36 : 32;
+    if (list.empty()) TextWrap(L"Clique em + para adicionar um lembrete", 16, 52, W - 32, H - 60, 12, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.55f));
     for (size_t i = 0; i < list.size() && y + rowH <= H - 6; i++, y += rowH) {
         const ReminderLine& r = list[i];
         float cy = y + rowH / 2;
@@ -6137,6 +6321,15 @@ static void DrawIconImage(Widget* wd, const std::wstring& key, const std::shared
     g_t->DrawBitmap(bmp, r, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 }
 
+// The starting shortcuts have English names; they show in the UI's language
+static std::wstring ShortcutLabel(const std::wstring& name) {
+    static const std::pair<PCWSTR, PCWSTR> known[] = {{L"File Explorer", L"Explorador de Arquivos"}, {L"Settings", L"Configurações"},
+                                                     {L"Calculator", L"Calculadora"}, {L"Notepad", L"Bloco de Notas"}};
+    for (const auto& k : known)
+        if (name == k.first) return T(k.second);
+    return name;
+}
+
 static void DrawShortcuts(Widget* wd) {
     auto list = ParseShortcuts(g_ui.shortcuts);
     int cols = wd->size == 0 ? 2 : 4, rows = wd->size == 0 ? 2 : wd->size == 1 ? 2 : wd->size == 2 ? 4 : 6;
@@ -6160,7 +6353,7 @@ static void DrawShortcuts(Widget* wd) {
             Text(list[i].name.substr(0, 1), cx - icon / 2, iy + icon / 2 - icon * 0.35f, icon, icon * 0.7f, icon * 0.45f,
                  DWRITE_FONT_WEIGHT_SEMI_BOLD, White(1), DWRITE_TEXT_ALIGNMENT_CENTER);
         }
-        Text(list[i].name, tile.left + 4, iy + icon + 4, tile.right - tile.left - 8, 18, 11.5f, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.9f),
+        Text(ShortcutLabel(list[i].name), tile.left + 4, iy + icon + 4, tile.right - tile.left - 8, 18, 11.5f, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.9f),
              DWRITE_TEXT_ALIGNMENT_CENTER);
         AddAction(wd, tile.left, tile.top, tile.right - tile.left, tile.bottom - tile.top, L"open:" + list[i].target);
     }
@@ -6180,7 +6373,8 @@ static void DrawStocks(Widget* wd) {
     float W = wd->w, H = wd->h;
     if (list.empty()) {
         Text(L"Bolsa", 16, 14, W - 32, 20, 14, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(1));
-        TextWrap(error.empty() ? L"Carregando…" : error, 16, 44, W - 32, H - 60, 12.5f, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.6f));
+        PCWSTR hint = g_ui.stocks.empty() ? L"Clique para escolher os códigos" : L"Carregando…";
+        TextWrap(error.empty() ? hint : error, 16, 44, W - 32, H - 60, 12.5f, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.6f));
         return;
     }
     auto change = [](const Quote& q) { return q.prev > 0 ? (q.price - q.prev) / q.prev * 100 : 0.0; };
@@ -6292,7 +6486,8 @@ static void DrawNews(Widget* wd) {
     if (wd->newsFirst > 0) list.erase(list.begin(), list.begin() + wd->newsFirst);
     if (list.empty()) {
         Text(L"Notícias", 16, 12, W - 32, 22, 15, DWRITE_FONT_WEIGHT_SEMI_BOLD, kRed);
-        TextWrap(error.empty() ? L"Carregando…" : error, 16, 44, W - 32, H - 60, 12.5f, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.6f));
+        PCWSTR hint = g_ui.newsFeeds.empty() ? L"Clique para escolher os sites de notícias" : L"Carregando…";
+        TextWrap(error.empty() ? hint : error, 16, 44, W - 32, H - 60, 12.5f, DWRITE_FONT_WEIGHT_NORMAL, Ink(0.6f));
         return;
     }
     const NewsItem& top = list[0];
@@ -6321,7 +6516,7 @@ static void DrawNews(Widget* wd) {
             TextWrap(top.title, 16, 56, W - 32, H - 68, 14, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(1));
         }
         pageMark(top.img != nullptr);
-        AddAction(wd, 0, 0, W, H, L"open:" + top.link);
+        AddAction(wd, 0, 0, W, H, L"url:" + top.link);
         return;
     }
     // Large and extra large: the main story's picture on top, the next ones in rows with a thumbnail
@@ -6335,7 +6530,7 @@ static void DrawNews(Widget* wd) {
         NewsTag(14, 14);
         Text(SourceLine(top), 16, heroH - 68, W - 32, 15, 10.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, White(0.75f));
         TextWrap(top.title, 16, heroH - 50, W - 32, 44, 15, DWRITE_FONT_WEIGHT_SEMI_BOLD, White(1));
-        AddAction(wd, 0, 0, W, heroH, L"open:" + top.link);
+        AddAction(wd, 0, 0, W, heroH, L"url:" + top.link);
         next = 1;
         y = heroH + 4;
     } else {
@@ -6356,7 +6551,7 @@ static void DrawNews(Widget* wd) {
         Text(SourceLine(n), 16, y + 8, tw, 15, 10.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(0.55f));
         TextWrap(n.title, 16, y + 24, tw, rowH - 30, 13, DWRITE_FONT_WEIGHT_SEMI_BOLD, Ink(1));
         if (i + 1 < rows && next + 1 < list.size()) Line(16, y + rowH - 0.5f, W - 16, y + rowH - 0.5f, 1, Ink(0.08f));
-        AddAction(wd, 8, y, W - 16, rowH, L"open:" + n.link);
+        AddAction(wd, 8, y, W - 16, rowH, L"url:" + n.link);
     }
 }
 
@@ -6406,8 +6601,8 @@ static int TodayKey() {
 }
 
 static void SaveUsage() {
-    std::wstring s = std::to_wstring(g_usageDay) + L"\n";
-    for (auto& u : g_usage) s += CleanValue(u.name) + L"\t" + std::to_wstring((long long)u.secs) + L"\n";
+    std::wstring s = std::to_wstring(g_usageDay) + kRecSep;
+    for (auto& u : g_usage) s += CleanValue(u.name) + L"\t" + std::to_wstring((long long)u.secs) + kRecSep;
     Wh_SetStringValue(L"screenTime", s.c_str());
 }
 
@@ -6415,7 +6610,7 @@ static void SaveUsage() {
 static void TrackUsage() {
     int today = TodayKey();
     if (g_usageDay < 0) {
-        auto lines = Split(ReadValue(L"screenTime"), L'\n');
+        auto lines = Split(ReadValue(L"screenTime"), kRecSep);
         if (!lines.empty() && _wtoi(lines[0].c_str()) == today) {
             for (size_t i = 1; i < lines.size(); i++) {
                 auto f = Split(lines[i], L'\t');
@@ -7727,9 +7922,8 @@ static void DrawSettings(Widget* wd) {
         float block = row.labelH + (hasDesc ? 2 + row.descH : 0);
         float top = (row.r.top + row.r.bottom) / 2 - block / 2;
         float labelRight = row.ctl.left - 16;
-        if (it.type != kCfgButton || true)
-            CText(it.label, D2D1::RectF(row.r.left + in, top, labelRight, top + row.labelH), 13.5f, DWRITE_FONT_WEIGHT_NORMAL,
-                  Fg(unused ? 0.55f : 0.94f));
+        CText(it.label, D2D1::RectF(row.r.left + in, top, labelRight, top + row.labelH), 13.5f, DWRITE_FONT_WEIGHT_NORMAL,
+              Fg(unused ? 0.55f : 0.94f));
         if (hasDesc)
             CText(it.desc, D2D1::RectF(row.r.left + in, top + row.labelH + 2, labelRight, top + block + 4), 11.5f,
                   DWRITE_FONT_WEIGHT_NORMAL, Fg(unused ? 0.42f : 0.55f), DWRITE_TEXT_ALIGNMENT_LEADING, true);
@@ -8692,28 +8886,31 @@ static void SaveNoteNow(bool finishing) {
         SYSTEMTIME st;
         GetLocalTime(&st);
         wchar_t name[64];
-        swprintf(name, 64, L"\\Notas\\Nota %04d-%02d-%02d %02d%02d%02d.txt", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute,
-                 st.wSecond);
-        SHCreateDirectoryExW(nullptr, (NotesFolder() + L"\\Notas").c_str(), nullptr);
-        g_edit.path = NotesFolder() + name;
+        swprintf(name, 64, L"\\Note %04d-%02d-%02d %02d%02d%02d.txt", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+        SHCreateDirectoryExW(nullptr, NotesDir().c_str(), nullptr);  // the first note makes the folder
+        g_edit.path = NotesDir() + name;
     }
     std::wstring out;  // Windows line ends, so any editor shows the lines
     for (wchar_t c : g_edit.text) out += c == L'\n' ? std::wstring(L"\r\n") : std::wstring(1, c);
     if (WriteTextFile(g_edit.path, out)) g_edit.dirty = false;
 }
 
-// Rewrites Lembretes.txt with one line changed (empty text: the line goes away) or a new line on top
+// Rewrites Reminders.txt with one line changed (empty text: the line goes away) or a new line on top
 static void WriteReminder(int line, const std::wstring& text) {
     std::wstring rp = RemindersPath();
-    std::wstring old = ReadTextFile(rp, 16 * 1024 * 1024);
+    std::wstring old;
+    ReadResult rr = ReadText(rp, 16 * 1024 * 1024, &old);
+    if (rr == ReadResult::Failed) return;  // never write over what couldn't be read
     std::wstring t = Trimmed(text);
     for (auto& c : t)
         if (c == L'\n') c = L' ';
     if (line < 0) {
         if (t.empty()) return;
+        if (rr == ReadResult::Missing) SHCreateDirectoryExW(nullptr, NotesFolder().c_str(), nullptr);  // the first reminder
         WriteTextFile(rp, L"[ ] " + t + L"\n" + old);
         return;
     }
+    if (rr != ReadResult::Ok) return;
     auto lines = Split(old, L'\n');
     if (line >= (int)lines.size()) return;
     std::wstring& l = lines[line];
@@ -8742,8 +8939,7 @@ static void FinishEdit(bool keep = true) {
         if (g_edit.selecting && GetCapture() == wd->hwnd) ReleaseCapture();
     }
     if (g_edit.mode == 1) {
-        g_edit.dirty = true;
-        SaveNoteNow(true);  // a note is always kept, even with Esc (as on the Mac)
+        SaveNoteNow(true);  // what was typed is kept, even with Esc (as on the Mac); untouched, the file isn't written
     } else if (keep) {
         WriteReminder(g_edit.mode == 2 ? -1 : g_edit.line, g_edit.text);
     }
@@ -9077,9 +9273,12 @@ static bool RunActionAt(Widget* wd, D2D1_POINT_2F p) {
             FinishEdit(true);
             return true;
         }
-        if (a.rfind(L"open:", 0) == 0) {
+        if (a.rfind(L"open:", 0) == 0) {  // the user's own shortcuts
             std::wstring target = a.substr(5);
             if (!target.empty()) ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        } else if (a.rfind(L"url:", 0) == 0) {  // links from the network: web pages only
+            std::wstring target = a.substr(4);
+            if (IsWebUrl(target)) ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         } else if (a.rfind(L"toggle:", 0) == 0) {
             ToggleReminder(_wtoi(a.c_str() + 7));
             Render(wd);
@@ -9090,7 +9289,11 @@ static bool RunActionAt(Widget* wd, D2D1_POINT_2F p) {
             WIN32_FILE_ATTRIBUTE_DATA fa;
             bool big = GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fa) && (fa.nFileSizeHigh || fa.nFileSizeLow > 256 * 1024);
             if (big) ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);  // too long for the widget
-            else BeginEdit(wd, 1, path, -1, NoCR(ReadTextFile(path, 1024 * 1024)));
+            else {
+                std::wstring text;
+                if (ReadText(path, 1024 * 1024, &text) == ReadResult::Ok) BeginEdit(wd, 1, path, -1, NoCR(text));
+                else ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);  // let its own app deal with it
+            }
         } else if (a == L"newrem") {
             BeginEdit(wd, 2, L"", -1, L"");
         } else if (a.rfind(L"editrem:", 0) == 0) {
@@ -9164,6 +9367,8 @@ static void OpenMediaApp(const std::wstring& aumid) {
     ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
+static void OpenSettings(int section);
+
 // A click (not a drag) opens what the widget shows, as on the Mac
 static void OpenFor(Widget* wd) {
     PCWSTR target = nullptr;
@@ -9171,14 +9376,22 @@ static void OpenFor(Widget* wd) {
     switch (wd->kind) {
         case W_CLOCK: target = L"ms-clock:"; break;
         case W_WEATHER:
-            url = L"https://www.google.com/search?q=tempo+" + UrlEncode(g_ui.city);
+            if (!HasCity(g_ui)) {
+                OpenSettings(SEC_WEATHER);
+                return;
+            }
+            url = L"https://www.google.com/search?q=" + UrlEncode(T(L"previsão do tempo") + L" " + g_ui.city);
             target = url.c_str();
             break;
         case W_SYSTEM: target = L"taskmgr.exe"; break;
         case W_CALENDAR: target = L"outlookcal:"; break;
         case W_WORLD: target = L"ms-clock:"; break;
         case W_SUN:
-            url = L"https://www.google.com/search?q=nascer+do+sol+" + UrlEncode(g_ui.city);
+            if (!HasCity(g_ui)) {
+                OpenSettings(SEC_WEATHER);
+                return;
+            }
+            url = L"https://www.google.com/search?q=" + UrlEncode(T(L"nascer e pôr do sol") + L" " + g_ui.city);
             target = url.c_str();
             break;
         case W_BATTERY: target = L"ms-settings:bluetooth"; break;
@@ -9190,7 +9403,14 @@ static void OpenFor(Widget* wd) {
             break;
         }
         case W_NOTIF: target = L"ms-actioncenter:"; break;
+        case W_NEWS:
+            if (g_ui.newsFeeds.empty()) OpenSettings(SEC_NEWS);  // the stories open themselves
+            return;
         case W_STOCKS:
+            if (g_ui.stocks.empty()) {
+                OpenSettings(SEC_STOCKS);
+                return;
+            }
             url = L"https://finance.yahoo.com/";
             target = url.c_str();
             break;
@@ -9336,8 +9556,10 @@ static void ShowMenu(Widget* target, POINT cursor) {
     int pw, ph;
     WindowSize(wd, &pw, &ph);
     int m = (int)std::lround(kMargin * wd->scale);
-    int x = std::clamp((int)cursor.x - m, (int)mi.rcWork.left - m, (int)mi.rcWork.right - pw + m);
-    int y = std::clamp((int)cursor.y - m, (int)mi.rcWork.top - m, (int)mi.rcWork.bottom - ph + m);
+    // Kept on the screen; one taller (or wider) than the screen starts at its top (or left)
+    int left = (int)mi.rcWork.left - m, top = (int)mi.rcWork.top - m;
+    int x = std::clamp((int)cursor.x - m, left, std::max(left, (int)mi.rcWork.right - pw + m));
+    int y = std::clamp((int)cursor.y - m, top, std::max(top, (int)mi.rcWork.bottom - ph + m));
     wd->hwnd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST, kClassName, L"MacOS Widgets", WS_POPUP, x, y, pw,
                                ph, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (!wd->hwnd) {
@@ -9416,7 +9638,11 @@ static void RunMenu(int id, const std::wstring& key) {
     } else if (id == 4) {
         OpenSettings(-1);
     } else if (id == 5) {
-        std::wstring target = key == L"reminders" ? RemindersPath() : NotesFolder() + L"\\Notas";
+        std::wstring target = key == L"reminders" ? RemindersPath() : NotesDir();
+        if (GetFileAttributesW(target.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            target = NotesFolder();  // nothing saved yet: the folder they'll go in (asked for, so it's made)
+            SHCreateDirectoryExW(nullptr, target.c_str(), nullptr);
+        }
         ShellExecuteW(nullptr, L"open", target.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     } else if (id == 6) {
         ImportIcs(nullptr);
@@ -9448,7 +9674,7 @@ static LRESULT CALLBACK WidgetProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     try {
         return WidgetProcInner(hwnd, msg, wp, lp);
     } catch (...) {
-        Wh_Log(L"Erro inesperado na mensagem 0x%04X", msg);
+        Wh_Log(L"Unexpected error in message 0x%04X", msg);
         return DefWindowProcW(hwnd, msg, wp, lp);
     }
 }
@@ -9809,7 +10035,7 @@ static void BackupSave(HWND owner) {
             if (it.key[0] != L'#') out += std::wstring(it.key) + L"\t" + CleanValue(CfgShared(it)) + L"\n";
         out += L"[themes]\n";
         for (const auto& t : g_themeVals)
-            for (const auto& p : t.second) out += t.first + L"\t" + p.first + L"\t" + CleanValue(p.second) + L"\n";
+            for (const auto& p : t.second) out += t.first + L"\t" + p.first + L"\t" + CleanValue(p.second.value) + L"\n";
     }
     out += L"[widgets]\n";
     for (const WidgetDef& d : kWidgetDefs) {
@@ -9852,7 +10078,7 @@ static void BackupLoad(HWND owner) {
                     g_themeVals.push_back({f[0], {}});
                     vals = &g_themeVals.back().second;
                 }
-                vals->push_back({f[1], f[2]});
+                vals->push_back({f[1], {f[2], CfgTab(*it)}});
             }
         }
         CfgSaveStored();
@@ -10336,7 +10562,8 @@ struct Duplication {
 
 static bool OpenDuplication(Duplication& d) {
     d = Duplication{};
-    HMODULE d3d = LoadLibraryW(L"d3d11.dll"), dxgi = LoadLibraryW(L"dxgi.dll");
+    HMODULE d3d = LoadLibraryExW(L"d3d11.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32),
+            dxgi = LoadLibraryExW(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     auto create = d3d ? (PFN_D3D11_CREATE_DEVICE)(void*)GetProcAddress(d3d, "D3D11CreateDevice") : nullptr;
     auto factory = dxgi ? (HRESULT(WINAPI*)(REFIID, void**))(void*)GetProcAddress(dxgi, "CreateDXGIFactory1") : nullptr;
     ComPtr<IDXGIFactory1> f;
@@ -10681,24 +10908,6 @@ static void RebuildWidgets() {
 static void StartWorkers();
 
 static DWORD WINAPI UiThread(LPVOID) {
-    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);  // in case the process' couldn't be set
-
-    // Only one copy of the widgets at a time. When the mod is updated, Windhawk closes the old process and starts the new
-    // one at the same moment: the new one waits here for the old one to let go (it does as soon as its widgets are gone)
-    // instead of giving up, so an update never needs the mod turned off and on
-    bool mine = false;
-    while (g_running && !mine) {
-        DWORD w = WaitForSingleObject(g_instanceMutex, 200);
-        mine = w == WAIT_OBJECT_0 || w == WAIT_ABANDONED;
-        if (w == WAIT_FAILED) break;
-    }
-    if (!mine) {
-        SetEvent(g_uiReady);
-        return 0;
-    }
-    g_ownsInstance = true;
-    StartWorkers();
-
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     MSG msg;
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // creates the message queue
@@ -10811,9 +11020,6 @@ static DWORD WINAPI UiThread(LPVOID) {
     g_dw.Reset();
     g_d2d.Reset();
     CoUninitialize();
-    // The widgets are gone: a new copy (an update) may start now, even while this one finishes its downloads
-    ReleaseMutex(g_instanceMutex);
-    g_ownsInstance = false;
     return 0;
 }
 
@@ -10821,7 +11027,7 @@ static DWORD WINAPI UiThread(LPVOID) {
 // Windhawk entry points
 // ---------------------------------------------------------------------------
 
-// A worker thread that can't take Explorer down: an unexpected error only stops that thread's widgets from updating
+// A worker thread whose unexpected error only stops that thread's widgets from updating, not the whole process
 static std::atomic<int> g_workersAlive{0};
 
 template <class F>
@@ -10831,10 +11037,22 @@ static std::thread GuardedThread(PCWSTR name, F body) {
         try {
             body();
         } catch (...) {
-            Wh_Log(L"%s: erro inesperado, parou de atualizar", name);
+            Wh_Log(L"%s: unexpected error, stopped updating", name);
         }
         g_workersAlive--;
     });
+}
+
+// The threads that fetch and measure
+static void StartWorkers() {
+    try {
+        g_dataThread = GuardedThread(L"Data", DataThread);
+        g_sensorThread = GuardedThread(L"Sensors", SensorThread);
+        g_glassThread = GuardedThread(L"Glass", GlassThread);
+        g_coverThread = GuardedThread(L"Covers", CoverThread);
+    } catch (...) {
+        Wh_Log(L"Could not start the worker threads");
+    }
 }
 
 BOOL WhTool_ModInit() {
@@ -10842,33 +11060,18 @@ BOOL WhTool_ModInit() {
     // the clock, the music's progress and the live glass)
     PROCESS_POWER_THROTTLING_STATE pt = {PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED, 0};
     SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &pt, sizeof(pt));
-    // Sharp at any scale: sizes and positions in real pixels on every monitor
-    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    // Only one copy at a time: the UI thread takes this before showing anything (see UiThread)
-    g_instanceMutex = CreateMutexW(nullptr, FALSE, L"Local\\MacOSWidgets_Windhawk_Instance");
-    if (!g_instanceMutex) return TRUE;
 
     LoadSettings();
     g_running = true;
     g_uiReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_uiThread = CreateThread(nullptr, 0, UiThread, nullptr, 0, &g_uiThreadId);
+    if (!g_uiThread) return FALSE;
+    WaitForSingleObject(g_uiReady, 5000);  // its message queue exists: settings changes can be posted to it
+    StartWorkers();
     return TRUE;
 }
 
-// The threads that fetch and measure, started by the UI thread once this copy is the only one
-static void StartWorkers() {
-    try {
-        g_dataThread = GuardedThread(L"Dados", DataThread);
-        g_sensorThread = GuardedThread(L"Sensores", SensorThread);
-        g_glassThread = GuardedThread(L"Vidro", GlassThread);
-        g_coverThread = GuardedThread(L"Capas", CoverThread);
-    } catch (...) {
-        Wh_Log(L"Could not start the worker threads");
-    }
-}
-
 void WhTool_ModSettingsChanged() {
-    if (!g_instanceMutex) return;
     LoadSettings();
     {
         std::lock_guard<std::mutex> lock(g_dataMutex);
@@ -10879,20 +11082,22 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    if (!g_instanceMutex) return;
-    for (int i = 0; i < 120 && g_searches > 0; i++) Sleep(50);  // a city search still running
-    g_running = false;
+    {
+        // Under the lock, so a thread about to wait can't miss it and sleep its full timeout
+        std::lock_guard<std::mutex> lock(g_dataMutex);
+        g_running = false;
+    }
     g_cv.notify_all();
-    // The widgets close first, so an update's new copy shows up at once; downloads still running finish after
+    HttpAbortAll();  // downloads in progress end now, and no new one starts
     if (g_uiThread) {
         PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_uiThread, 5000);
         CloseHandle(g_uiThread);
         g_uiThread = nullptr;
     }
-    // Workers in the middle of a download get up to 3 s; the process ends right after this anyway (ExitProcess),
-    // and waiting longer would only hold up the next copy
-    for (int i = 0; i < 60 && g_workersAlive > 0; i++) Sleep(50);
+    // With the downloads cancelled the workers are out in moments; one stuck elsewhere is left behind rather than
+    // holding up the process' exit
+    for (int i = 0; i < 100 && (g_workersAlive > 0 || g_searches > 0); i++) Sleep(20);
     for (std::thread* t : {&g_dataThread, &g_sensorThread, &g_glassThread, &g_coverThread})
         if (t->joinable()) {
             if (g_workersAlive == 0) t->join();
@@ -10901,8 +11106,6 @@ void WhTool_ModUninit() {
     g_uiThreadId = 0;
     if (g_uiReady) CloseHandle(g_uiReady);
     g_uiReady = nullptr;
-    CloseHandle(g_instanceMutex);
-    g_instanceMutex = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -10970,25 +11173,16 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        // MacOS Widgets: after an update the old process may still be closing; wait for it (up to 30 s)
-        // instead of quitting, so the widgets come back by themselves
-        for (int tries = 0;; tries++) {
-            g_toolModProcessMutex =
-                CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-            if (!g_toolModProcessMutex) {
-                Wh_Log(L"CreateMutex failed");
-                ExitProcess(1);
-            }
-            if (GetLastError() != ERROR_ALREADY_EXISTS) {
-                break;
-            }
-            CloseHandle(g_toolModProcessMutex);
-            g_toolModProcessMutex = nullptr;
-            if (tries >= 120) {
-                Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-                ExitProcess(1);
-            }
-            Sleep(250);
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
         }
 
         if (!WhTool_ModInit()) {
