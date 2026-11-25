@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              spotlight-for-windows
-// @name            Spotlight Search for Windows
+// @name            Liquid Search
 // @description     Liquid-glass Spotlight-style launcher with themes, animations, hover zoom, recents and all-drive file search
 // @version         3.3.1
 // @author          itzderix
@@ -11,7 +11,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Liquid Glass Spotlight for Windows
+# Liquid Search 
 
 ![Spotlight for Windows](https://raw.githubusercontent.com/itzderix/spotlight-screenshots/main/Screenshot%202026-11-24%20122542%20%282%29.png)
 
