@@ -2,7 +2,7 @@
 // @id              top-drag-split-layouts
 // @name            Top Drag Split Layouts
 // @description     Own snap layouts bar at the top center with a top/bottom split, plus a window chooser for the remaining zones
-// @version         1.0
+// @version         1.1
 // @author          khorkovenko
 // @github          https://github.com/khorkovenko
 // @include         windhawk.exe
@@ -19,8 +19,9 @@ half + two quarters and four quarters. Hover a zone to preview it and release
 the mouse to place the window there. Only the hovered zone is previewed.
 
 After the first window is placed, the next empty zone of the same layout shows
-your other open windows. Click one to place it there. Press Esc, click empty
-space or switch to another window to stop.
+your other open windows. Click one to place it there. The X on a window closes
+that window. Press Esc, click the X in the top right corner, click empty space
+or switch to another window to stop choosing; all windows stay as they are.
 
 Dropping a window on the very top edge places it in the top half instead of
 maximizing it.
@@ -38,8 +39,8 @@ that the Windows settings below change. They remain after the mod is disabled or
 removed. To get the Windows snap layouts back, turn the mod setting off and
 enable them again in Settings > System > Multitasking > Snap windows.
 
-Windows does not allow Explorer to move windows of programs running as
-administrator, so such windows cannot be placed by this mod.
+Windows does not allow programs to move windows of programs running as
+administrator, so such windows may not be placed by this mod.
 */
 // ==/WindhawkModReadme==
 
@@ -152,6 +153,7 @@ bool Place(HWND hwnd, RECT z) {
 }
 
 void HideChooser() {
+    UnregisterHotKey(g_chooser, 1);
     for (int i = 0; i < g_count; i++)
         if (g_thumbs[i])
             DwmUnregisterThumbnail(g_thumbs[i]);
@@ -188,11 +190,11 @@ void ShowChooser(RECT b) {
     g_font = CreateFont(-Sc(14), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0,
                         CLEARTYPE_QUALITY, 0, L"Segoe UI");
 
-    int w = b.right - b.left, h = b.bottom - b.top, p = Sc(24);
+    int w = b.right - b.left, h = b.bottom - b.top, p = Sc(24), top = Sc(56);
     int cols = 1, tw = 0;
     for (int c = 1; c <= g_count; c++) {
         int r = (g_count + c - 1) / c;
-        int byW = (w - p * (c + 1)) / c, byH = (h - p * (r + 1)) / r * 16 / 10;
+        int byW = (w - p * (c + 1)) / c, byH = (h - top - p * (r + 1)) / r * 16 / 10;
         int s = byW < byH ? byW : byH;
         if (s > tw) {
             tw = s;
@@ -200,7 +202,8 @@ void ShowChooser(RECT b) {
         }
     }
     int rows = (g_count + cols - 1) / cols, th = tw * 10 / 16;
-    int x0 = (w - cols * tw - (cols - 1) * p) / 2, y0 = (h - rows * th - (rows - 1) * p) / 2;
+    int x0 = (w - cols * tw - (cols - 1) * p) / 2;
+    int y0 = top + (h - top - rows * th - (rows - 1) * p) / 2;
 
     SetWindowPos(g_chooser, HWND_TOPMOST, b.left, b.top, w, h, SWP_NOACTIVATE);
 
@@ -231,6 +234,7 @@ void ShowChooser(RECT b) {
     }
 
     g_shownAt = GetTickCount();
+    RegisterHotKey(g_chooser, 1, MOD_NOREPEAT, VK_ESCAPE);
     ShowWindow(g_chooser, SW_SHOW);
     SetForegroundWindow(g_chooser);
     InvalidateRect(g_chooser, nullptr, TRUE);
@@ -244,12 +248,44 @@ void NextChooser() {
         ShowChooser(ZoneIn(g_work, L.z[g_zone]));
 }
 
+RECT CloseRect(int i) {
+    if (i < 0) {
+        RECT rc;
+        GetClientRect(g_chooser, &rc);
+        int s = Sc(32), m = Sc(12);
+        return {rc.right - m - s, m, rc.right - m, m + s};
+    }
+    int s = Sc(24), m = Sc(6);
+    RECT& t = g_tiles[i];
+    return {t.right - m - s, t.top + m, t.right - m, t.top + m + s};
+}
+
 int HitTile(LPARAM lp) {
     POINT pt{(short)LOWORD(lp), (short)HIWORD(lp)};
-    for (int i = 0; i < g_count; i++)
+    RECT r = CloseRect(-1);
+    if (PtInRect(&r, pt))
+        return 2 * MAXWIN;
+    for (int i = 0; i < g_count; i++) {
+        r = CloseRect(i);
+        if (PtInRect(&r, pt))
+            return MAXWIN + i;
         if (PtInRect(&g_tiles[i], pt))
             return i;
+    }
     return -1;
+}
+
+void DrawClose(HDC dc, RECT r, bool hot) {
+    Fill(dc, r, hot ? RGB(196, 43, 28) : RGB(72, 72, 72));
+    HPEN pen = CreatePen(PS_SOLID, Sc(2), RGB(255, 255, 255));
+    HGDIOBJ old = SelectObject(dc, pen);
+    int d = (r.right - r.left) * 3 / 10;
+    MoveToEx(dc, r.left + d, r.top + d, nullptr);
+    LineTo(dc, r.right - d, r.bottom - d);
+    MoveToEx(dc, r.right - d, r.top + d, nullptr);
+    LineTo(dc, r.left + d, r.bottom - d);
+    SelectObject(dc, old);
+    DeleteObject(pen);
 }
 
 void PaintBar(HDC dc, RECT rc) {
@@ -273,10 +309,12 @@ void PaintChooser(HDC dc, RECT rc) {
         GetWindowText(g_wins[i], title, 256);
         RECT tr = g_tiles[i];
         tr.left += Sc(10);
-        tr.right -= Sc(10);
+        tr.right -= Sc(36);
         tr.bottom = tr.top + Sc(36);
         DrawText(dc, title, -1, &tr, DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+        DrawClose(dc, CloseRect(i), g_hover == MAXWIN + i);
     }
+    DrawClose(dc, CloseRect(-1), g_hover == 2 * MAXWIN);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -303,7 +341,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_LBUTTONUP: {
             int i = HitTile(lp);
-            HWND pick = i >= 0 ? g_wins[i] : nullptr;
+            if (i >= MAXWIN && i < 2 * MAXWIN) {
+                HWND victim = g_wins[i - MAXWIN];
+                PostMessage(victim, WM_CLOSE, 0, 0);
+                if (g_nused < MAXWIN)
+                    g_used[g_nused++] = victim;
+                ShowChooser(ZoneIn(g_work, g_layouts[g_layout].z[g_zone]));
+                return 0;
+            }
+            HWND pick = i >= 0 && i < MAXWIN ? g_wins[i] : nullptr;
             HideChooser();
             if (!pick)
                 return 0;
@@ -319,6 +365,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_KEYDOWN:
             if (wp == VK_ESCAPE)
                 HideChooser();
+            return 0;
+        case WM_HOTKEY:
+            HideChooser();
             return 0;
         case WM_ACTIVATE:
             if (LOWORD(wp) == WA_INACTIVE)
