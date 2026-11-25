@@ -5,8 +5,7 @@
 // @version         1.0.0
 // @author          notactuallyoak
 // @github          https://github.com/notactuallyoak
-// @include         explorer.exe
-// @compilerOptions -luser32
+// @include         windhawk.exe
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -17,25 +16,37 @@
 Hold your chosen **modifier key** (or mouse side button) and scroll the mouse
 wheel over any window to smoothly adjust its opacity.
 
-## Features
-- **Customizable Keybind:** Choose between `Alt`, `Ctrl`, `Shift`, `Win`,
-  `Ctrl + Alt`, `Ctrl + Shift`, `Alt + Shift`, or mouse side buttons
-  (`Mouse Back` / `Mouse Forward`).
+## Relation to `scroll-window-opacity`
+This mod builds on the concept of [Scroll Window Opacity](https://windhawk.net/mods/scroll-window-opacity)
+by Sondre Myrmel, expanding it for multi-modifier workflows and touchpad/mouse
+ergonomics:
+- **Additional Triggers:** Supports `Win`, `Ctrl + Alt`, `Ctrl + Shift`,
+  `Alt + Shift`, and mouse side buttons (`Mouse Button 4` / `Mouse Button 5`).
 - **Quick Reset (`Modifier + Middle-Click`):** Hold your trigger modifier and
-  middle-click any window to immediately restore `100%` opacity.
-- **No Accidental Start Menu / Menu Bar Focus:** Automatically suppresses
-  Windows' `Alt` menu bar highlight and `Win` Start Menu popup after scrolling.
-- **Zero Overhead at 100%:** Restoring `100%` opacity removes the
-  `WS_EX_LAYERED` window style for native rendering performance.
+  middle-click any window to immediately restore its original opacity.
+- **Titlebar-Only Mode:** Optional setting to restrict scrolling to the top
+  titlebar region so normal scrolling inside documents or browsers is unaffected.
+- **Menu Bar / Start Menu Suppression:** Prevents releasing `Alt` or `Win` after
+  scrolling from accidentally focusing the app's menu bar or opening the Start
+  Menu.
+- **High-Resolution Wheel & Touchpad Support:** Accumulates fractional wheel
+  deltas so precision touchpads adjust opacity smoothly.
 
 ## Settings Reference
 | Setting | Default | Description |
 | :--- | :---: | :--- |
 | **Trigger Keybind (Hold + Scroll)** | `Alt` | Key combination or mouse side button required while scrolling. |
-| **Opacity Step (%)** | `10` | Transparency change per scroll wheel notch (`1`–`50`). |
+| **Opacity Step (%)** | `10` | Transparency change per full scroll wheel notch (`1`–`50`). |
 | **Minimum Opacity (%)** | `25` | Lowest allowed opacity (`10`–`90`). |
 | **Titlebar Only** | `false` | Restrict scrolling to the top titlebar area instead of the entire window. |
-| **Modifier + Middle-Click Resets to 100%** | `true` | Instantly restore full opacity when middle-clicking with the modifier held. |
+| **Modifier + Middle-Click Resets Opacity** | `true` | Instantly restore original opacity when middle-clicking with the modifier held. |
+
+## Notes on Shortcut Conflicts
+Depending on your chosen trigger, holding a modifier while scrolling overrides
+that shortcut over eligible windows (for example, `Ctrl + Scroll` zooms in
+browsers, `Shift + Scroll` scrolls horizontally, and `Alt + Scroll` fast-scrolls
+in some editors). Enable **Titlebar Only** or choose `Ctrl + Alt` / mouse side
+buttons if you want to keep in-app modifier scrolling intact.
 */
 // ==/WindhawkModReadme==
 
@@ -64,19 +75,28 @@ wheel over any window to smoothly adjust its opacity.
   $name: Titlebar Only
   $description: Only trigger when the cursor is over the window's titlebar.
 - middleClickReset: true
-  $name: Modifier + Middle-Click Resets to 100%
-  $description: Hold the trigger modifier and middle-click a window to reset its opacity to 100%.
+  $name: Modifier + Middle-Click Resets Opacity
+  $description: Hold the trigger modifier and middle-click a window to restore its original opacity.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <windows.h>
-#include <unordered_map>
-#include <mutex>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cwchar>
+#include <mutex>
+#include <unordered_map>
+#include <unordered_set>
 
-enum class TriggerModifier {
+constexpr UINT WM_APP_ADJUST_OPACITY = WM_APP + 1;
+constexpr UINT WM_APP_RESET_OPACITY  = WM_APP + 2;
+
+// Unassigned virtual key used to mask Alt/Win release from triggering menu bar or Start menu
+constexpr WORD kMenuMaskVk = 0xE8;
+
+enum class TriggerModifier : int {
     Alt,
     Ctrl,
     Shift,
@@ -89,21 +109,37 @@ enum class TriggerModifier {
 };
 
 struct {
-    TriggerModifier modifier;
-    int alphaStep;
-    int minAlpha;
-    bool titlebarOnly;
-    bool middleClickReset;
+    std::atomic<TriggerModifier> modifier{TriggerModifier::Alt};
+    std::atomic<int> alphaStep{26};
+    std::atomic<int> minAlpha{64};
+    std::atomic<bool> titlebarOnly{false};
+    std::atomic<bool> middleClickReset{true};
 } g_settings;
 
+struct WindowOpacityState {
+    bool wasInitiallyLayered = false;
+    DWORD origFlags = 0;
+    COLORREF origColorKey = 0;
+    BYTE origAlpha = 255;
+    BYTE currentAlpha = 255;
+    int wheelRemainder = 0;
+};
+
 std::mutex g_stateMutex;
-std::unordered_map<HWND, BYTE> g_windowAlphas;
+std::unordered_map<HWND, WindowOpacityState> g_trackedWindows;
+std::unordered_set<HWND> g_blockedWindows;
 
 HANDLE g_hookThread = nullptr;
 DWORD g_hookThreadId = 0;
+HANDLE g_hookThreadReady = nullptr;
 HHOOK g_mouseHook = nullptr;
 HHOOK g_keyboardHook = nullptr;
-bool g_gestureTriggered = false;
+
+HANDLE g_workerThread = nullptr;
+DWORD g_workerThreadId = 0;
+HANDLE g_workerThreadReady = nullptr;
+
+std::atomic<bool> g_gestureTriggered{false};
 
 HMODULE GetCurrentModuleHandle() {
     HMODULE hMod = nullptr;
@@ -115,35 +151,56 @@ HMODULE GetCurrentModuleHandle() {
     return hMod;
 }
 
-void LoadSettings() {
-    PCWSTR modStr = Wh_GetStringSetting(L"triggerModifier");
-    if (wcscmp(modStr, L"ctrl") == 0) {
-        g_settings.modifier = TriggerModifier::Ctrl;
-    } else if (wcscmp(modStr, L"shift") == 0) {
-        g_settings.modifier = TriggerModifier::Shift;
-    } else if (wcscmp(modStr, L"win") == 0) {
-        g_settings.modifier = TriggerModifier::Win;
-    } else if (wcscmp(modStr, L"ctrl_alt") == 0) {
-        g_settings.modifier = TriggerModifier::CtrlAlt;
-    } else if (wcscmp(modStr, L"ctrl_shift") == 0) {
-        g_settings.modifier = TriggerModifier::CtrlShift;
-    } else if (wcscmp(modStr, L"alt_shift") == 0) {
-        g_settings.modifier = TriggerModifier::AltShift;
-    } else if (wcscmp(modStr, L"xbutton1") == 0) {
-        g_settings.modifier = TriggerModifier::XButton1;
-    } else if (wcscmp(modStr, L"xbutton2") == 0) {
-        g_settings.modifier = TriggerModifier::XButton2;
-    } else {
-        g_settings.modifier = TriggerModifier::Alt;
+UINT GetWindowDpiSafe(HWND hWnd) {
+    static auto pGetDpiForWindow = reinterpret_cast<UINT(WINAPI*)(HWND)>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
+    if (pGetDpiForWindow) {
+        UINT dpi = pGetDpiForWindow(hWnd);
+        if (dpi > 0) return dpi;
     }
-    Wh_FreeStringSetting(modStr);
+    return 96;
+}
+
+int GetCaptionHeightForWindow(HWND hWnd) {
+    UINT dpi = GetWindowDpiSafe(hWnd);
+    static auto pGetSystemMetricsForDpi = reinterpret_cast<int(WINAPI*)(int, UINT)>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetSystemMetricsForDpi"));
+    if (pGetSystemMetricsForDpi) {
+        return pGetSystemMetricsForDpi(SM_CYCAPTION, dpi) +
+               (pGetSystemMetricsForDpi(SM_CYFRAME, dpi) * 2);
+    }
+    return MulDiv(36, dpi, 96);
+}
+
+void LoadSettings() {
+    WindhawkUtils::StringSetting modStr = WindhawkUtils::StringSetting::make(L"triggerModifier");
+    TriggerModifier parsedMod = TriggerModifier::Alt;
+    if (wcscmp(modStr.get(), L"ctrl") == 0) {
+        parsedMod = TriggerModifier::Ctrl;
+    } else if (wcscmp(modStr.get(), L"shift") == 0) {
+        parsedMod = TriggerModifier::Shift;
+    } else if (wcscmp(modStr.get(), L"win") == 0) {
+        parsedMod = TriggerModifier::Win;
+    } else if (wcscmp(modStr.get(), L"ctrl_alt") == 0) {
+        parsedMod = TriggerModifier::CtrlAlt;
+    } else if (wcscmp(modStr.get(), L"ctrl_shift") == 0) {
+        parsedMod = TriggerModifier::CtrlShift;
+    } else if (wcscmp(modStr.get(), L"alt_shift") == 0) {
+        parsedMod = TriggerModifier::AltShift;
+    } else if (wcscmp(modStr.get(), L"xbutton1") == 0) {
+        parsedMod = TriggerModifier::XButton1;
+    } else if (wcscmp(modStr.get(), L"xbutton2") == 0) {
+        parsedMod = TriggerModifier::XButton2;
+    }
 
     int stepPct = std::clamp(Wh_GetIntSetting(L"alphaStepPercent"), 1, 50);
     int minPct  = std::clamp(Wh_GetIntSetting(L"minAlphaPercent"), 10, 90);
-    g_settings.alphaStep        = static_cast<int>(std::round((stepPct / 100.0) * 255.0));
-    g_settings.minAlpha         = static_cast<int>(std::round((minPct / 100.0) * 255.0));
-    g_settings.titlebarOnly     = Wh_GetIntSetting(L"titlebarOnly");
-    g_settings.middleClickReset = Wh_GetIntSetting(L"middleClickReset");
+
+    g_settings.modifier.store(parsedMod, std::memory_order_relaxed);
+    g_settings.alphaStep.store(static_cast<int>(std::round((stepPct / 100.0) * 255.0)), std::memory_order_relaxed);
+    g_settings.minAlpha.store(static_cast<int>(std::round((minPct / 100.0) * 255.0)), std::memory_order_relaxed);
+    g_settings.titlebarOnly.store(Wh_GetIntSetting(L"titlebarOnly") != 0, std::memory_order_relaxed);
+    g_settings.middleClickReset.store(Wh_GetIntSetting(L"middleClickReset") != 0, std::memory_order_relaxed);
 }
 
 bool IsTriggerModifierPressed() {
@@ -153,7 +210,7 @@ bool IsTriggerModifierPressed() {
     bool win   = ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0) ||
                  ((GetAsyncKeyState(VK_RWIN) & 0x8000) != 0);
 
-    switch (g_settings.modifier) {
+    switch (g_settings.modifier.load(std::memory_order_relaxed)) {
         case TriggerModifier::Alt:       return alt && !ctrl && !shift && !win;
         case TriggerModifier::Ctrl:      return ctrl && !alt && !shift && !win;
         case TriggerModifier::Shift:     return shift && !alt && !ctrl && !win;
@@ -167,8 +224,22 @@ bool IsTriggerModifierPressed() {
     return false;
 }
 
+bool IsWindowKnownBlocked(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    return g_blockedWindows.count(hWnd) > 0;
+}
+
+void MarkWindowBlocked(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    g_blockedWindows.insert(hWnd);
+}
+
 bool IsValidTargetWindow(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd)) {
+        return false;
+    }
+
+    if (IsWindowKnownBlocked(hWnd)) {
         return false;
     }
 
@@ -197,97 +268,235 @@ bool IsValidTargetWindow(HWND hWnd) {
     return true;
 }
 
-bool IsCursorOverTitlebar(HWND hWnd, POINT pt) {
-    DWORD_PTR hitResult = HTNOWHERE;
-    LRESULT sent = SendMessageTimeoutW(
-        hWnd,
-        WM_NCHITTEST,
-        0,
-        MAKELPARAM(pt.x, pt.y),
-        SMTO_ABORTIFHUNG | SMTO_BLOCK,
-        35,
-        &hitResult
-    );
-    if (sent != 0) {
-        LRESULT ht = static_cast<LRESULT>(hitResult);
-        if (ht == HTCAPTION || ht == HTMINBUTTON || ht == HTMAXBUTTON || ht == HTCLOSE) {
-            return true;
+// Fast non-blocking titlebar bounds check safe for use inside WH_MOUSE_LL
+bool IsCursorInTitlebarBounds(HWND hWnd, POINT pt) {
+    RECT rc = {0};
+    if (!GetWindowRect(hWnd, &rc)) {
+        return false;
+    }
+    int captionHeight = GetCaptionHeightForWindow(hWnd);
+    return (pt.x >= rc.left && pt.x <= rc.right &&
+            pt.y >= rc.top && pt.y <= rc.top + captionHeight);
+}
+
+void PruneStaleHandlesLocked() {
+    for (auto it = g_trackedWindows.begin(); it != g_trackedWindows.end();) {
+        if (!IsWindow(it->first)) {
+            it = g_trackedWindows.erase(it);
+        } else {
+            ++it;
         }
     }
-
-    RECT rc = {0};
-    if (GetWindowRect(hWnd, &rc)) {
-        return (pt.y >= rc.top && pt.y <= rc.top + 40);
+    for (auto it = g_blockedWindows.begin(); it != g_blockedWindows.end();) {
+        if (!IsWindow(*it)) {
+            it = g_blockedWindows.erase(it);
+        } else {
+            ++it;
+        }
     }
-    return false;
 }
 
-void ResetWindowOpacity(HWND hWnd) {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    if (!g_windowAlphas.count(hWnd)) {
+void RestoreWindowState(HWND hWnd, const WindowOpacityState& state) {
+    if (!IsWindow(hWnd)) {
         return;
     }
 
-    g_windowAlphas.erase(hWnd);
-    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-    SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
-    RedrawWindow(hWnd, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
-}
-
-void AdjustWindowOpacity(HWND hWnd, int wheelDelta) {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-
-    BYTE currentAlpha = 255;
-    auto it = g_windowAlphas.find(hWnd);
-    if (it != g_windowAlphas.end()) {
-        currentAlpha = it->second;
-    }
-
-    int steps = wheelDelta / WHEEL_DELTA;
-    if (steps == 0) {
-        steps = (wheelDelta > 0) ? 1 : -1;
-    }
-
-    int newAlpha = std::clamp(
-        static_cast<int>(currentAlpha) + (steps * g_settings.alphaStep),
-        g_settings.minAlpha,
-        255
-    );
-
-    if (newAlpha == currentAlpha) {
-        return;
-    }
-
-    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-    if (newAlpha >= 255) {
-        g_windowAlphas.erase(hWnd);
+    if (state.wasInitiallyLayered) {
+        SetLayeredWindowAttributes(hWnd, state.origColorKey, state.origAlpha, state.origFlags);
+    } else {
+        LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
         SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
         SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
         RedrawWindow(hWnd, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
-    } else {
-        if (!(exStyle & WS_EX_LAYERED)) {
-            SetLastError(0);
-            if (SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED) == 0 && GetLastError() != 0) {
-                return;
-            }
-        }
-        SetLayeredWindowAttributes(hWnd, 0, static_cast<BYTE>(newAlpha), LWA_ALPHA);
-        g_windowAlphas[hWnd] = static_cast<BYTE>(newAlpha);
     }
 }
 
-// Suppresses Alt menu-bar focus or Win Start Menu popup when releasing the modifier after scrolling
+void WorkerResetWindowOpacity(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    PruneStaleHandlesLocked();
+
+    auto it = g_trackedWindows.find(hWnd);
+    if (it != g_trackedWindows.end()) {
+        WindowOpacityState saved = it->second;
+        g_trackedWindows.erase(it);
+        RestoreWindowState(hWnd, saved);
+        return;
+    }
+
+    // Fallback if window was left layered before mod reload
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    if (exStyle & WS_EX_LAYERED) {
+        COLORREF key = 0;
+        BYTE alpha = 255;
+        DWORD flags = 0;
+        if (GetLayeredWindowAttributes(hWnd, &key, &alpha, &flags) && (flags & LWA_ALPHA) && alpha < 255) {
+            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
+            RedrawWindow(hWnd, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+        }
+    }
+}
+
+void WorkerAdjustWindowOpacity(HWND hWnd, int wheelDelta) {
+    if (!hWnd || !IsWindow(hWnd)) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(g_stateMutex);
+    PruneStaleHandlesLocked();
+
+    if (g_blockedWindows.count(hWnd)) {
+        return;
+    }
+
+    auto it = g_trackedWindows.find(hWnd);
+    if (it == g_trackedWindows.end()) {
+        LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+        WindowOpacityState initialState{};
+
+        if (exStyle & WS_EX_LAYERED) {
+            COLORREF key = 0;
+            BYTE alpha = 255;
+            DWORD flags = 0;
+            if (!GetLayeredWindowAttributes(hWnd, &key, &alpha, &flags)) {
+                // Window uses UpdateLayeredWindow; do not touch it
+                g_blockedWindows.insert(hWnd);
+                return;
+            }
+            initialState.wasInitiallyLayered = true;
+            initialState.origFlags = flags;
+            initialState.origColorKey = key;
+            initialState.origAlpha = alpha;
+            initialState.currentAlpha = (flags & LWA_ALPHA) ? alpha : 255;
+        } else {
+            initialState.wasInitiallyLayered = false;
+            initialState.origAlpha = 255;
+            initialState.currentAlpha = 255;
+        }
+
+        it = g_trackedWindows.emplace(hWnd, initialState).first;
+    }
+
+    WindowOpacityState& state = it->second;
+    state.wheelRemainder += wheelDelta;
+    int steps = state.wheelRemainder / WHEEL_DELTA;
+    if (steps == 0) {
+        return;
+    }
+    state.wheelRemainder %= WHEEL_DELTA;
+
+    int stepSize = g_settings.alphaStep.load(std::memory_order_relaxed);
+    int minAlpha = g_settings.minAlpha.load(std::memory_order_relaxed);
+    int targetAlpha = std::clamp(
+        static_cast<int>(state.currentAlpha) + (steps * stepSize),
+        minAlpha,
+        255
+    );
+
+    if (targetAlpha == state.currentAlpha) {
+        return;
+    }
+
+    if (targetAlpha >= 255 && !state.wasInitiallyLayered) {
+        WindowOpacityState saved = state;
+        g_trackedWindows.erase(it);
+        RestoreWindowState(hWnd, saved);
+        return;
+    }
+
+    LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+    bool addedLayered = false;
+    if (!(exStyle & WS_EX_LAYERED)) {
+        SetLastError(0);
+        if (SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED) == 0 && GetLastError() != 0) {
+            g_trackedWindows.erase(it);
+            g_blockedWindows.insert(hWnd);
+            return;
+        }
+        addedLayered = true;
+    }
+
+    DWORD applyFlags = LWA_ALPHA;
+    COLORREF applyKey = 0;
+    if (state.wasInitiallyLayered && (state.origFlags & LWA_COLORKEY)) {
+        applyFlags |= LWA_COLORKEY;
+        applyKey = state.origColorKey;
+    }
+
+    if (!SetLayeredWindowAttributes(hWnd, applyKey, static_cast<BYTE>(targetAlpha), applyFlags)) {
+        if (addedLayered) {
+            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle);
+        }
+        g_trackedWindows.erase(it);
+        g_blockedWindows.insert(hWnd);
+        return;
+    }
+
+    state.currentAlpha = static_cast<BYTE>(targetAlpha);
+}
+
+void InjectMenuMaskKey() {
+    INPUT inputs[2] = {};
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = kMenuMaskVk;
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = kMenuMaskVk;
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, inputs, sizeof(INPUT));
+}
+
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode == HC_ACTION && lParam && g_gestureTriggered) {
+    if (nCode == HC_ACTION && lParam && g_gestureTriggered.load(std::memory_order_relaxed)) {
         const KBDLLHOOKSTRUCT* kb = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
         if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+            TriggerModifier mod = g_settings.modifier.load(std::memory_order_relaxed);
             bool isAlt = (kb->vkCode == VK_LMENU || kb->vkCode == VK_RMENU || kb->vkCode == VK_MENU);
             bool isWin = (kb->vkCode == VK_LWIN || kb->vkCode == VK_RWIN);
-            if (isAlt || isWin) {
-                g_gestureTriggered = false;
-                keybd_event(VK_F24, 0, 0, 0);
-                keybd_event(VK_F24, 0, KEYEVENTF_KEYUP, 0);
+            bool isCtrl = (kb->vkCode == VK_LCONTROL || kb->vkCode == VK_RCONTROL || kb->vkCode == VK_CONTROL);
+            bool isShift = (kb->vkCode == VK_LSHIFT || kb->vkCode == VK_RSHIFT || kb->vkCode == VK_SHIFT);
+
+            bool matchesTriggerKey = false;
+            bool needsMenuMask = false;
+
+            switch (mod) {
+                case TriggerModifier::Alt:
+                    matchesTriggerKey = isAlt;
+                    needsMenuMask = isAlt;
+                    break;
+                case TriggerModifier::Win:
+                    matchesTriggerKey = isWin;
+                    needsMenuMask = isWin;
+                    break;
+                case TriggerModifier::Ctrl:
+                    matchesTriggerKey = isCtrl;
+                    break;
+                case TriggerModifier::Shift:
+                    matchesTriggerKey = isShift;
+                    break;
+                case TriggerModifier::CtrlAlt:
+                    matchesTriggerKey = isCtrl || isAlt;
+                    needsMenuMask = isAlt;
+                    break;
+                case TriggerModifier::CtrlShift:
+                    matchesTriggerKey = isCtrl || isShift;
+                    break;
+                case TriggerModifier::AltShift:
+                    matchesTriggerKey = isAlt || isShift;
+                    needsMenuMask = isAlt;
+                    break;
+                default:
+                    break;
+            }
+
+            if (matchesTriggerKey) {
+                g_gestureTriggered.store(false, std::memory_order_relaxed);
+                if (needsMenuMask) {
+                    InjectMenuMaskKey();
+                }
             }
         }
     }
@@ -297,13 +506,15 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && lParam) {
         const MSLLHOOKSTRUCT* ms = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
+        TriggerModifier mod = g_settings.modifier.load(std::memory_order_relaxed);
 
-        // Suppress Back/Forward action on XButton release if it was used as a scroll modifier
-        if (wParam == WM_XBUTTONUP && g_gestureTriggered &&
-            (g_settings.modifier == TriggerModifier::XButton1 ||
-             g_settings.modifier == TriggerModifier::XButton2)) {
-            g_gestureTriggered = false;
-            return 1;
+        if (wParam == WM_XBUTTONUP && g_gestureTriggered.load(std::memory_order_relaxed)) {
+            WORD xButton = HIWORD(ms->mouseData);
+            if ((mod == TriggerModifier::XButton1 && xButton == XBUTTON1) ||
+                (mod == TriggerModifier::XButton2 && xButton == XBUTTON2)) {
+                g_gestureTriggered.store(false, std::memory_order_relaxed);
+                return 1;
+            }
         }
 
         if (wParam == WM_MOUSEWHEEL && IsTriggerModifierPressed()) {
@@ -311,24 +522,33 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
             HWND hRoot = hPoint ? GetAncestor(hPoint, GA_ROOT) : nullptr;
 
             if (IsValidTargetWindow(hRoot)) {
-                if (!g_settings.titlebarOnly || IsCursorOverTitlebar(hRoot, ms->pt)) {
-                    g_gestureTriggered = true;
+                bool titlebarOnly = g_settings.titlebarOnly.load(std::memory_order_relaxed);
+                if (!titlebarOnly || IsCursorInTitlebarBounds(hRoot, ms->pt)) {
                     short wheelDelta = static_cast<short>(HIWORD(ms->mouseData));
-                    AdjustWindowOpacity(hRoot, wheelDelta);
-                    return 1;
+                    if (PostThreadMessageW(g_workerThreadId, WM_APP_ADJUST_OPACITY,
+                                           reinterpret_cast<WPARAM>(hRoot),
+                                           static_cast<LPARAM>(wheelDelta))) {
+                        g_gestureTriggered.store(true, std::memory_order_relaxed);
+                        return 1;
+                    }
                 }
             }
         }
 
-        if (wParam == WM_MBUTTONDOWN && g_settings.middleClickReset && IsTriggerModifierPressed()) {
+        if (wParam == WM_MBUTTONDOWN &&
+            g_settings.middleClickReset.load(std::memory_order_relaxed) &&
+            IsTriggerModifierPressed()) {
             HWND hPoint = WindowFromPoint(ms->pt);
             HWND hRoot = hPoint ? GetAncestor(hPoint, GA_ROOT) : nullptr;
 
             if (IsValidTargetWindow(hRoot)) {
-                if (!g_settings.titlebarOnly || IsCursorOverTitlebar(hRoot, ms->pt)) {
-                    g_gestureTriggered = true;
-                    ResetWindowOpacity(hRoot);
-                    return 1;
+                bool titlebarOnly = g_settings.titlebarOnly.load(std::memory_order_relaxed);
+                if (!titlebarOnly || IsCursorInTitlebarBounds(hRoot, ms->pt)) {
+                    if (PostThreadMessageW(g_workerThreadId, WM_APP_RESET_OPACITY,
+                                           reinterpret_cast<WPARAM>(hRoot), 0)) {
+                        g_gestureTriggered.store(true, std::memory_order_relaxed);
+                        return 1;
+                    }
                 }
             }
         }
@@ -337,17 +557,40 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
+DWORD WINAPI WorkerThreadProc(LPVOID) {
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent(g_workerThreadReady);
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == WM_APP_ADJUST_OPACITY) {
+            WorkerAdjustWindowOpacity(
+                reinterpret_cast<HWND>(msg.wParam),
+                static_cast<int>(msg.lParam)
+            );
+        } else if (msg.message == WM_APP_RESET_OPACITY) {
+            WorkerResetWindowOpacity(reinterpret_cast<HWND>(msg.wParam));
+        }
+    }
+
+    return 0;
+}
+
 DWORD WINAPI HookThreadProc(LPVOID) {
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
     HMODULE hMod = GetCurrentModuleHandle();
     g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, hMod, 0);
     if (!g_mouseHook) {
         Wh_Log(L"Failed to install mouse hook: %lu", GetLastError());
+        SetEvent(g_hookThreadReady);
         return 1;
     }
 
     g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, hMod, 0);
+    SetEvent(g_hookThreadReady);
 
-    MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
@@ -367,37 +610,272 @@ DWORD WINAPI HookThreadProc(LPVOID) {
 void RestoreAllWindows() {
     std::lock_guard<std::mutex> lock(g_stateMutex);
 
-    for (const auto& [hWnd, alpha] : g_windowAlphas) {
-        if (IsWindow(hWnd)) {
-            LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
-            RedrawWindow(hWnd, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
-        }
+    for (const auto& [hWnd, state] : g_trackedWindows) {
+        RestoreWindowState(hWnd, state);
     }
-    g_windowAlphas.clear();
+    g_trackedWindows.clear();
+    g_blockedWindows.clear();
 }
 
-BOOL Wh_ModInit() {
-    Wh_Log(L"Scroll Window Transparency v1.1.0 initialized");
+BOOL WhTool_ModInit() {
+    Wh_Log(L"Scroll Window Transparency v" WH_MOD_VERSION L" initialized");
     LoadSettings();
+
+    g_workerThreadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_workerThreadReady) {
+        return FALSE;
+    }
+
+    g_workerThread = CreateThread(nullptr, 0, WorkerThreadProc, nullptr, 0, &g_workerThreadId);
+    if (!g_workerThread) {
+        CloseHandle(g_workerThreadReady);
+        g_workerThreadReady = nullptr;
+        return FALSE;
+    }
+    WaitForSingleObject(g_workerThreadReady, INFINITE);
+
+    g_hookThreadReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hookThreadReady) {
+        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_workerThread, INFINITE);
+        CloseHandle(g_workerThread);
+        g_workerThread = nullptr;
+        CloseHandle(g_workerThreadReady);
+        g_workerThreadReady = nullptr;
+        return FALSE;
+    }
 
     g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_hookThreadId);
-    return g_hookThread != nullptr;
+    if (!g_hookThread) {
+        CloseHandle(g_hookThreadReady);
+        g_hookThreadReady = nullptr;
+        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_workerThread, INFINITE);
+        CloseHandle(g_workerThread);
+        g_workerThread = nullptr;
+        CloseHandle(g_workerThreadReady);
+        g_workerThreadReady = nullptr;
+        return FALSE;
+    }
+    WaitForSingleObject(g_hookThreadReady, INFINITE);
+
+    if (!g_mouseHook) {
+        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+        CloseHandle(g_hookThreadReady);
+        g_hookThreadReady = nullptr;
+
+        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_workerThread, INFINITE);
+        CloseHandle(g_workerThread);
+        g_workerThread = nullptr;
+        CloseHandle(g_workerThreadReady);
+        g_workerThreadReady = nullptr;
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     LoadSettings();
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     if (g_hookThread) {
         PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hookThread, 2000);
+        WaitForSingleObject(g_hookThread, INFINITE);
         CloseHandle(g_hookThread);
         g_hookThread = nullptr;
+    }
+    if (g_hookThreadReady) {
+        CloseHandle(g_hookThreadReady);
+        g_hookThreadReady = nullptr;
+    }
+
+    if (g_workerThread) {
+        PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_workerThread, INFINITE);
+        CloseHandle(g_workerThread);
+        g_workerThread = nullptr;
+    }
+    if (g_workerThreadReady) {
+        CloseHandle(g_workerThreadReady);
+        g_workerThreadReady = nullptr;
     }
 
     RestoreAllWindows();
     Wh_Log(L"Scroll Window Transparency unloaded");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    bool isService = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isService) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        void* entryPoint =
+            (BYTE*)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
+                      1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcessInternalW failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
