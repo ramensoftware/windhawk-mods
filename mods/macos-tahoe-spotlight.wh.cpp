@@ -19,6 +19,10 @@ A faithful **macOS 26 Tahoe Spotlight Search** launcher built with real-time
 idle overhead** (all DXGI capture and GPU work stops completely the instant
 Spotlight hides), and deep Windows integration.
 
+![macOS 26 Tahoe Spotlight collapsed pill and mode orbs](https://raw.githubusercontent.com/Badalemo/windhawk-mods-media/main/spotlight-pill.png)
+
+![macOS 26 Tahoe Spotlight expanded search view](https://raw.githubusercontent.com/Badalemo/windhawk-mods-media/main/spotlight.png)
+
 ## Highlights
 - **1:1 macOS 26 Tahoe Appearance**:
   - **Collapsed State**: Floating frosted Liquid Glass `Spotlight Search` pill
