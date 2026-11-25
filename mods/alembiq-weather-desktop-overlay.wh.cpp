@@ -2,7 +2,18 @@
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
 // @description     Atmospheric effects and live weather forecast visualization for the Windows desktop (Direct2D overlay)
-// @version         1.8.3
+// @version         1.8.4
+// @author          alembiq
+// @github          https://github.com/alembiqspace
+// @include         windhawk.exe
+// @compilerOptions -ld2d1 -ldwrite -lwininet -luser32 -lgdi32 -lshell32
+// ==/WindhawkMod==
+
+// ==WindhawkMod==
+// @id              alembiq-weather-desktop-overlay
+// @name            Desktop Weather & Particles Overlay
+// @description     Direct2D weather precipitation, atmospheric, ecological, and flood-level overlay for the Windows desktop with live forecast integration, interactive floating HUD, and performance quality scaling.
+// @version         2.9.18
 // @author          alembiq
 // @github          https://github.com/alembiqspace
 // @include         windhawk.exe
@@ -2053,7 +2064,8 @@ void CycleSettingOption(const std::wstring& actionId) {
     }
 }
 
-std::string HttpGetUtf8(const std::wstring& url, const std::wstring& userAgent = L"WindhawkWeatherMod/2.9") {
+std::string HttpGetUtf8(const std::wstring& url,
+                        const std::wstring& userAgent = L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) WindhawkWeatherOverlay/2.9") {
     URL_COMPONENTSW parts = {};
     parts.dwStructSize = sizeof(parts);
     wchar_t host[256] = {};
@@ -2089,24 +2101,33 @@ std::string HttpGetUtf8(const std::wstring& url, const std::wstring& userAgent =
         return {};
     }
 
-    HINTERNET hRequest = HttpOpenRequestW(hConnect, L"GET", path, nullptr, nullptr, nullptr, flags, 0);
+    const wchar_t* acceptTypes[] = {L"application/json", L"*/*", nullptr};
+    HINTERNET hRequest = HttpOpenRequestW(hConnect, L"GET", path, nullptr, nullptr, acceptTypes, flags, 0);
     std::string response;
-    if (hRequest && HttpSendRequestW(hRequest, nullptr, 0, nullptr, 0)) {
-        DWORD statusCode = 0;
-        DWORD statusLen = sizeof(statusCode);
-        if (HttpQueryInfoW(hRequest, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &statusCode, &statusLen, nullptr) &&
-            statusCode == 200) {
-            char buf[4096];
-            DWORD bytesRead = 0;
-            while (InternetReadFile(hRequest, buf, sizeof(buf), &bytesRead) && bytesRead > 0) {
-                response.append(buf, bytesRead);
+    if (hRequest) {
+        const wchar_t* extraHeaders = L"Accept: application/json\r\n";
+        if (HttpSendRequestW(hRequest, extraHeaders, static_cast<DWORD>(wcslen(extraHeaders)), nullptr, 0)) {
+            DWORD statusCode = 0;
+            DWORD statusLen = sizeof(statusCode);
+            if (HttpQueryInfoW(hRequest, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &statusCode, &statusLen, nullptr) &&
+                statusCode == 200) {
+                char buf[4096];
+                DWORD bytesRead = 0;
+                while (InternetReadFile(hRequest, buf, sizeof(buf), &bytesRead) && bytesRead > 0) {
+                    response.append(buf, bytesRead);
+                }
+                Wh_Log(L"HTTP GET 200 OK (%zu bytes) from %s", response.size(), host);
+            } else {
+                char errBuf[321] = {};
+                DWORD errRead = 0;
+                InternetReadFile(hRequest, errBuf, 320, &errRead);
+                errBuf[errRead] = '\0';
+                Wh_Log(L"HTTP GET unexpected status: %u (err=%u) from %s | body: %S",
+                       statusCode, GetLastError(), host, errBuf);
             }
-            Wh_Log(L"HTTP GET 200 OK (%zu bytes) from %s", response.size(), host);
         } else {
-            Wh_Log(L"HTTP GET unexpected status: %u (err=%u) from %s", statusCode, GetLastError(), host);
+            Wh_Log(L"HttpSendRequestW failed: %u for %s", GetLastError(), url.c_str());
         }
-    } else {
-        Wh_Log(L"HttpSendRequestW failed: %u for %s", GetLastError(), url.c_str());
     }
 
     if (hRequest) {
@@ -2483,33 +2504,15 @@ bool ParseWeatherJson(const std::string& json, ForecastSnapshot& outSnap, const 
 }
 
 int MetNorwaySymbolToWmo(const std::string& sym) {
-    if (sym.find("thunder") != std::string::npos) {
-        return 95;
-    }
-    if (sym.find("snow") != std::string::npos) {
-        return 71;
-    }
-    if (sym.find("sleet") != std::string::npos) {
-        return 66;
-    }
-    if (sym.find("heavyrain") != std::string::npos) {
-        return 65;
-    }
-    if (sym.find("rain") != std::string::npos) {
-        return 61;
-    }
-    if (sym.find("fog") != std::string::npos) {
-        return 45;
-    }
-    if (sym.find("cloudy") != std::string::npos && sym.find("partly") == std::string::npos) {
-        return 3;
-    }
-    if (sym.find("partlycloudy") != std::string::npos || sym.find("fair") != std::string::npos) {
-        return 2;
-    }
-    if (sym.find("clearsky") != std::string::npos) {
-        return 0;
-    }
+    if (sym.find("thunder") != std::string::npos) return 95;
+    if (sym.find("snow") != std::string::npos) return 71;
+    if (sym.find("sleet") != std::string::npos) return 66;
+    if (sym.find("heavyrain") != std::string::npos) return 65;
+    if (sym.find("rain") != std::string::npos) return 61;
+    if (sym.find("fog") != std::string::npos) return 45;
+    if (sym.find("cloudy") != std::string::npos && sym.find("partly") == std::string::npos) return 3;
+    if (sym.find("partlycloudy") != std::string::npos || sym.find("fair") != std::string::npos) return 2;
+    if (sym.find("clearsky") != std::string::npos) return 0;
     return 1;
 }
 
@@ -3075,10 +3078,14 @@ bool FetchSingleWeatherSource(const std::wstring& src, const Settings& cfg, Fore
         if (!cfg.hasValidCoords) {
             return false;
         }
+        const std::wstring amp(1, static_cast<wchar_t>(38));
         std::wstring url =
             L"https://api.open-meteo.com/v1/forecast?latitude=" + latStr +
-            L"&longitude=" + lonStr +
-            L"¤t=weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,temperature_2m,apparent_temperature,dew_point_2m,relative_humidity_2m,pressure_msl,cloud_cover,visibility,is_day,uv_index,precipitation&daily=sunrise,sunset&timezone=auto";
+            amp + L"longitude=" + lonStr +
+            amp + L"current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,is_day,uv_index" +
+            amp + L"daily=sunrise,sunset" +
+            amp + L"timezone=auto";
+        Wh_Log(L"Fetching Open-Meteo: %s", url.c_str());
         std::string body = HttpGetUtf8(url);
         if (body.empty() || !ParseWeatherJson(body, outSnap, L"Open-Meteo")) {
             return false;
@@ -3086,8 +3093,9 @@ bool FetchSingleWeatherSource(const std::wstring& src, const Settings& cfg, Fore
         if (NeedsAirQualityFetch(cfg)) {
             std::wstring aqUrl =
                 L"https://air-quality-api.open-meteo.com/v1/air-quality?latitude=" + latStr +
-                L"&longitude=" + lonStr +
-                L"¤t=european_aqi,pm2_5,alder_pollen,birch_pollen,grass_pollen,ragweed_pollen&timezone=auto";
+                amp + L"longitude=" + lonStr +
+                amp + L"current=european_aqi,pm2_5,alder_pollen,birch_pollen,grass_pollen,ragweed_pollen" +
+                amp + L"timezone=auto";
             std::string aqBody = HttpGetUtf8(aqUrl);
             if (!aqBody.empty()) {
                 ParseAirQualityJson(aqBody, outSnap);
