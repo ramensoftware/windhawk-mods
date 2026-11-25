@@ -10655,8 +10655,22 @@ static void RenderAll() {
 }
 
 static void RebuildWidgets() {
-    DestroyWidgets();
+    // The new widgets come up before the old ones go: destroying first left the desktop empty for a moment (every
+    // widget gone, then back) on each change of size, Arrange Widgets or settings. Captures don't see our windows
+    // (the live glass excludes them, the other mode reads the desktop's own picture), so the old ones being there
+    // changes nothing in the new glass, and they're out of g_widgets, so their cells count as free
+    FinishEdit(true);
+    AbortDrag();
+    std::vector<Widget*> old;
+    old.swap(g_widgets);
+    for (Widget* wd : old) SetWindowLongPtrW(wd->hwnd, GWLP_USERDATA, 0);  // no more input for them
+    FreeDesktopPicture();
     CreateWidgets();
+    for (Widget* wd : old) {
+        ReleaseSurface(wd);
+        if (wd->hwnd) DestroyWindow(wd->hwnd);
+        delete wd;
+    }
     if (g_cfg.wd) {
         SetWindowDisplayAffinity(g_cfg.wd->hwnd, g_ui.liveGlass ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
         Capture(g_cfg.wd);
