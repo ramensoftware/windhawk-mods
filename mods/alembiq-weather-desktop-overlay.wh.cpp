@@ -2,18 +2,7 @@
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
 // @description     Atmospheric effects and live weather forecast visualization for the Windows desktop (Direct2D overlay)
-// @version         1.7.1
-// @author          alembiq
-// @github          https://github.com/alembiqspace
-// @include         windhawk.exe
-// @compilerOptions -ld2d1 -ldwrite -lwininet -luser32 -lgdi32 -lshell32
-// ==/WindhawkMod==
-
-// ==WindhawkMod==
-// @id              alembiq-weather-desktop-overlay
-// @name            Desktop Weather & Particles Overlay
-// @description     Direct2D weather precipitation, atmospheric, ecological, and flood-level overlay for the Windows desktop with live forecast integration, interactive floating HUD, and performance quality scaling.
-// @version         2.9.11
+// @version         1.7.2
 // @author          alembiq
 // @github          https://github.com/alembiqspace
 // @include         windhawk.exe
@@ -27,9 +16,9 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
 ### Features
 - **Performance Quality Scaling:** `[System] Performance mode` (`low`, `medium`, `high`) scales particle counts, cloud layers, sun rays, moon detail, lightning branches, wave smoothness, rain splashes on `high`, and HUD detail.
 - **Precipitation (`[Precipitation]`):** Supports `off`, `auto`, `rain`, `snow`, and `hail` with configurable fall direction, `auto` (forecast precipitation-driven speed scaled per snow/rain/hail) or `custom` fall speed, and intensity.
-- **Sky (`[Sky]`):** Intensity-based drifting clouds with edge fade at monitor borders, a UV-reactive sun with soft rays, and a real-phase moon with surface shading, independent movement modes, and cloud occlusion toggle. Hovering the cursor over clouds, sun, or moon fades them to the configured cursor-hover opacity percentage (default `5%`) so desktop icons remain visible.
+- **Sky (`[Sky]`):** Intensity-based drifting clouds with edge fade at monitor borders, a UV-reactive sun with soft rays and per-monitor visibility (`primary` / `all`), and a real-phase moon with surface shading, independent movement modes, per-monitor visibility (`primary` / `all`), and cloud occlusion toggle. Hovering the cursor over clouds, sun, or moon fades them to the configured cursor-hover opacity percentage (default `5%`) so desktop icons remain visible.
 - **Effects (`[Effects]`):** System-clock time-of-day tinting, wind gusts, frost/heat tint, night stars, air quality haze/particles, floating pollen, flood-level water, and atmospheric layers (`clear`, `partlyCloudy`, `overcast`, `dust`, `fog`, `smog`, `thunderstorm`, `aurora`, `mirage`, `rainbow`).
-- **Draggable Temperature Button & Interactive Table:** Drag the circular button (sized in pixels with auto-fitting single-line font) or click it to open an auto-sized table below desktop icons without blocking icon clicks. Sections (`[Sky]`, `[Precipitation]`, `[Effects]`) start collapsed and expand one at a time; manual edit fields appear left of mode buttons only when active/manual (hidden on `auto` / `off`).
+- **Draggable Temperature Button & Interactive Table:** Drag the circular button (sized in pixels with auto-fitting single-line font; shows a gear icon when no temperature forecast is available yet) or click it to open an auto-sized table below desktop icons without blocking icon clicks. Sections (`[Sky]`, `[Precipitation]`, `[Effects]`) start collapsed and expand one at a time; manual edit fields appear left of mode buttons only when active/manual (hidden on `auto` / `off`).
 
 ### Network & Privacy
 - **What Is Sent & When:** When `primarySource` is set to `open_meteo` with valid `lat/lon` coordinates (default: Belgrade `44.7866/20.4489`), the mod sends an HTTPS `GET` request to `https://api.open-meteo.com/v1/forecast` (and `https://air-quality-api.open-meteo.com/v1/air-quality` when air quality or pollen is needed) containing only your configured coordinates and requested fields. Requests run on startup, on settings changes, on manual sync, every `[Weather] Update interval (min)` (default: `30` minutes), and every `60` seconds after a failed attempt.
@@ -61,15 +50,12 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
     - above_taskbar: Above taskbar (Shell_TrayWnd)
     - screen_bottom: Bottom edge of screen
     - custom_offset: Custom offset from bottom (px)
-- bottomOffsetPx: 10
-  $name: "[System] Custom bottom offset (px)"
-  $description: "Vertical offset in px above bottom edge when bottomBoundaryMode is custom_offset. Range: -500 to 1000. Default: 10."
 - taskbarAsBorder: true
   $name: "[System] Taskbar as a border"
   $description: "When enabled in above_taskbar mode, uses the taskbar work area bottom edge as the lower screen border. Default: true."
 - customOffset: "0/0/0/10"
   $name: "[System] Custom offset (px)"
-  $description: "Insets in px formatted as 'left/right/top/bottom'. Default: '0/0/0/10'."
+  $description: "Insets in px formatted as 'left/right/top/bottom' (4th value sets bottom offset when bottomBoundaryMode is custom_offset). Default: '0/0/0/10'."
 - multiMonitorMode: primary
   $name: "[System] Monitors"
   $description: "Render on primary monitor or all monitors. Allowed: primary, all. Default: primary."
@@ -159,6 +145,12 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
     - off: Off
     - auto: Auto (daytime)
     - on: On
+- sunMonitorMode: primary
+  $name: "[Sky] Sun monitors"
+  $description: "Show sun on primary monitor or all monitors. Allowed: primary, all. Default: primary."
+  $options:
+    - primary: Primary monitor
+    - all: All monitors
 - sunMotionMode: rtl_arc
   $name: "[Sky] Sun movement"
   $description: "Movement mode for the Sun: fixed, ltr_line/ltr_arc, rtl_line/rtl_arc, or vertical (system clock or forecast sunrise/sunset)."
@@ -187,6 +179,12 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
     - off: Off
     - auto: Auto (night / night time-of-day)
     - on: On
+- moonMonitorMode: primary
+  $name: "[Sky] Moon monitors"
+  $description: "Show moon on primary monitor or all monitors. Allowed: primary, all. Default: primary."
+  $options:
+    - primary: Primary monitor
+    - all: All monitors
 - moonMotionMode: rtl_arc
   $name: "[Sky] Moon movement"
   $description: "Movement mode for the Moon: fixed, ltr_line/ltr_arc, rtl_line/rtl_arc, or vertical (system clock or forecast sunset/sunrise)."
@@ -432,6 +430,7 @@ enum class CelestialMotionMode {
     Fixed, LtrLine, LtrLineForecast, LtrArc, LtrArcForecast,
     RtlLine, RtlLineForecast, RtlArc, RtlArcForecast, Vertical, VerticalForecast
 };
+enum class CelestialMonitorMode { Primary, All };
 enum class FallDirMode { Auto, Down, DownLeft, DownRight };
 enum class ExpandedSection { None, Sky, Precipitation, Effects };
 enum class HudFieldId {
@@ -525,7 +524,6 @@ struct Settings {
     std::wstring layerAttachMode = L"auto";
     PerformanceMode performanceMode = PerformanceMode::High;
     std::wstring bottomBoundaryMode = L"above_taskbar";
-    int bottomOffsetPx = 10;
     bool taskbarAsBorder = true;
     CustomInsetsPx customOffset{0, 0, 0, 10};
     std::wstring multiMonitorMode = L"primary";
@@ -559,10 +557,12 @@ struct Settings {
     TriStateMode cloudsMode = TriStateMode::Auto;
     int cloudsIntensity = 35;
     TriStateMode sunMode = TriStateMode::Auto;
+    CelestialMonitorMode sunMonitorMode = CelestialMonitorMode::Primary;
     CelestialMotionMode sunMotionMode = CelestialMotionMode::RtlArc;
     ArcGeometry sunGeom{7, 82, 82};
     double sunUvOverride = -1.0;
     TriStateMode moonMode = TriStateMode::Auto;
+    CelestialMonitorMode moonMonitorMode = CelestialMonitorMode::Primary;
     CelestialMotionMode moonMotionMode = CelestialMotionMode::RtlArc;
     ArcGeometry moonGeom{6, 82, 82};
     double moonPhaseOverride = -1.0;
@@ -726,8 +726,12 @@ std::vector<FallingItem> g_falling;
 LightningFlash g_lightning;
 
 float GetQualityScale(PerformanceMode mode) {
-    if (mode == PerformanceMode::Low) return 0.55f;
-    if (mode == PerformanceMode::High) return 1.35f;
+    if (mode == PerformanceMode::Low) {
+        return 0.55f;
+    }
+    if (mode == PerformanceMode::High) {
+        return 1.35f;
+    }
     return 1.0f;
 }
 
@@ -979,17 +983,29 @@ std::vector<std::wstring> SplitSlashTokens(const std::wstring& raw) {
 
 PerformanceMode ParsePerformanceMode(const std::wstring& s) {
     std::wstring v = ToLower(Trim(s));
-    if (v == L"low") return PerformanceMode::Low;
-    if (v == L"medium") return PerformanceMode::Medium;
+    if (v == L"low") {
+        return PerformanceMode::Low;
+    }
+    if (v == L"medium") {
+        return PerformanceMode::Medium;
+    }
     return PerformanceMode::High;
 }
 
 PrecipMode ParsePrecipMode(const std::wstring& s) {
     std::wstring v = ToLower(Trim(s));
-    if (v == L"off") return PrecipMode::Off;
-    if (v == L"rain") return PrecipMode::Rain;
-    if (v == L"snow") return PrecipMode::Snow;
-    if (v == L"hail") return PrecipMode::Hail;
+    if (v == L"off") {
+        return PrecipMode::Off;
+    }
+    if (v == L"rain") {
+        return PrecipMode::Rain;
+    }
+    if (v == L"snow") {
+        return PrecipMode::Snow;
+    }
+    if (v == L"hail") {
+        return PrecipMode::Hail;
+    }
     return PrecipMode::Auto;
 }
 
@@ -999,42 +1015,88 @@ PrecipSpeedMode ParsePrecipSpeedMode(const std::wstring& s) {
 
 TriStateMode ParseTriState(const std::wstring& s) {
     std::wstring v = ToLower(Trim(s));
-    if (v == L"on") return TriStateMode::On;
-    if (v == L"off") return TriStateMode::Off;
+    if (v == L"on") {
+        return TriStateMode::On;
+    }
+    if (v == L"off") {
+        return TriStateMode::Off;
+    }
     return TriStateMode::Auto;
 }
 
 TimeOfDayMode ParseTimeOfDayMode(const std::wstring& s) {
     std::wstring v = ToLower(Trim(s));
-    if (v == L"off") return TimeOfDayMode::Off;
-    if (v == L"dawn") return TimeOfDayMode::Dawn;
-    if (v == L"day") return TimeOfDayMode::Day;
-    if (v == L"sunset") return TimeOfDayMode::Sunset;
-    if (v == L"night") return TimeOfDayMode::Night;
+    if (v == L"off") {
+        return TimeOfDayMode::Off;
+    }
+    if (v == L"dawn") {
+        return TimeOfDayMode::Dawn;
+    }
+    if (v == L"day") {
+        return TimeOfDayMode::Day;
+    }
+    if (v == L"sunset") {
+        return TimeOfDayMode::Sunset;
+    }
+    if (v == L"night") {
+        return TimeOfDayMode::Night;
+    }
     return TimeOfDayMode::Auto;
+}
+
+CelestialMonitorMode ParseCelestialMonitorMode(const std::wstring& s) {
+    return ToLower(Trim(s)) == L"all" ? CelestialMonitorMode::All : CelestialMonitorMode::Primary;
 }
 
 CelestialMotionMode ParseCelestialMotion(const std::wstring& s) {
     std::wstring v = ToLower(Trim(s));
-    if (v == L"fixed") return CelestialMotionMode::Fixed;
-    if (v == L"ltr_line") return CelestialMotionMode::LtrLine;
-    if (v == L"ltr_line_forecast") return CelestialMotionMode::LtrLineForecast;
-    if (v == L"ltr_arc") return CelestialMotionMode::LtrArc;
-    if (v == L"ltr_arc_forecast") return CelestialMotionMode::LtrArcForecast;
-    if (v == L"rtl_line") return CelestialMotionMode::RtlLine;
-    if (v == L"rtl_line_forecast") return CelestialMotionMode::RtlLineForecast;
-    if (v == L"rtl_arc") return CelestialMotionMode::RtlArc;
-    if (v == L"rtl_arc_forecast") return CelestialMotionMode::RtlArcForecast;
-    if (v == L"vertical") return CelestialMotionMode::Vertical;
-    if (v == L"vertical_forecast") return CelestialMotionMode::VerticalForecast;
+    if (v == L"fixed") {
+        return CelestialMotionMode::Fixed;
+    }
+    if (v == L"ltr_line") {
+        return CelestialMotionMode::LtrLine;
+    }
+    if (v == L"ltr_line_forecast") {
+        return CelestialMotionMode::LtrLineForecast;
+    }
+    if (v == L"ltr_arc") {
+        return CelestialMotionMode::LtrArc;
+    }
+    if (v == L"ltr_arc_forecast") {
+        return CelestialMotionMode::LtrArcForecast;
+    }
+    if (v == L"rtl_line") {
+        return CelestialMotionMode::RtlLine;
+    }
+    if (v == L"rtl_line_forecast") {
+        return CelestialMotionMode::RtlLineForecast;
+    }
+    if (v == L"rtl_arc") {
+        return CelestialMotionMode::RtlArc;
+    }
+    if (v == L"rtl_arc_forecast") {
+        return CelestialMotionMode::RtlArcForecast;
+    }
+    if (v == L"vertical") {
+        return CelestialMotionMode::Vertical;
+    }
+    if (v == L"vertical_forecast") {
+        return CelestialMotionMode::VerticalForecast;
+    }
     return CelestialMotionMode::RtlArc;
 }
 
 FallDirMode ParseFallDir(const std::wstring& s) {
     std::wstring v = ToLower(Trim(s));
-    if (v == L"down") return FallDirMode::Down;
-    if (v == L"down_left" || v == L"left") return FallDirMode::DownLeft;
-    if (v == L"down_right" || v == L"right") return FallDirMode::DownRight;
+    if (v == L"down") {
+        return FallDirMode::Down;
+    }
+    if (v == L"down_left" || v == L"left") {
+        return FallDirMode::DownLeft;
+    }
+    if (v == L"down_right" || v == L"right") {
+        return FallDirMode::DownRight;
+    }
     return FallDirMode::Auto;
 }
 
@@ -1051,28 +1113,64 @@ const wchar_t* WindDegToCompass(double deg) {
     if (norm < 0.0) {
         norm += 360.0;
     }
-    if (norm >= 337.5 || norm < 22.5) return L"N";
-    if (norm < 67.5) return L"NE";
-    if (norm < 112.5) return L"E";
-    if (norm < 157.5) return L"SE";
-    if (norm < 202.5) return L"S";
-    if (norm < 247.5) return L"SW";
-    if (norm < 292.5) return L"W";
+    if (norm >= 337.5 || norm < 22.5) {
+        return L"N";
+    }
+    if (norm < 67.5) {
+        return L"NE";
+    }
+    if (norm < 112.5) {
+        return L"E";
+    }
+    if (norm < 157.5) {
+        return L"SE";
+    }
+    if (norm < 202.5) {
+        return L"S";
+    }
+    if (norm < 247.5) {
+        return L"SW";
+    }
+    if (norm < 292.5) {
+        return L"W";
+    }
     return L"NW";
 }
 
 const wchar_t* WmoCodeToLabel(int code) {
-    if (code < 0) return L"No forecast";
-    if (code == 0) return L"Clear sky";
-    if (code == 1) return L"Mainly clear";
-    if (code == 2) return L"Partly cloudy";
-    if (code == 3) return L"Overcast";
-    if (code == 45 || code == 48) return L"Fog";
-    if (code >= 51 && code <= 57) return L"Drizzle";
-    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return L"Rain";
-    if (code == 71 || code == 73 || code == 75 || code == 77 || code == 85 || code == 86) return L"Snow";
-    if (code == 95) return L"Thunderstorm";
-    if (code == 96 || code == 99) return L"Thunderstorm + Hail";
+    if (code < 0) {
+        return L"No forecast";
+    }
+    if (code == 0) {
+        return L"Clear sky";
+    }
+    if (code == 1) {
+        return L"Mainly clear";
+    }
+    if (code == 2) {
+        return L"Partly cloudy";
+    }
+    if (code == 3) {
+        return L"Overcast";
+    }
+    if (code == 45 || code == 48) {
+        return L"Fog";
+    }
+    if (code >= 51 && code <= 57) {
+        return L"Drizzle";
+    }
+    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) {
+        return L"Rain";
+    }
+    if (code == 71 || code == 73 || code == 75 || code == 77 || code == 85 || code == 86) {
+        return L"Snow";
+    }
+    if (code == 95) {
+        return L"Thunderstorm";
+    }
+    if (code == 96 || code == 99) {
+        return L"Thunderstorm + Hail";
+    }
     return L"Mixed weather";
 }
 
@@ -1088,13 +1186,27 @@ double ComputeRealMoonPhase() {
 }
 
 const wchar_t* MoonPhaseToLabel(double phase01) {
-    if (phase01 < 0.0625 || phase01 >= 0.9375) return L"New Moon";
-    if (phase01 < 0.1875) return L"Waxing Crescent";
-    if (phase01 < 0.3125) return L"First Quarter";
-    if (phase01 < 0.4375) return L"Waxing Gibbous";
-    if (phase01 < 0.5625) return L"Full Moon";
-    if (phase01 < 0.6875) return L"Waning Gibbous";
-    if (phase01 < 0.8125) return L"Last Quarter";
+    if (phase01 < 0.0625 || phase01 >= 0.9375) {
+        return L"New Moon";
+    }
+    if (phase01 < 0.1875) {
+        return L"Waxing Crescent";
+    }
+    if (phase01 < 0.3125) {
+        return L"First Quarter";
+    }
+    if (phase01 < 0.4375) {
+        return L"Waxing Gibbous";
+    }
+    if (phase01 < 0.5625) {
+        return L"Full Moon";
+    }
+    if (phase01 < 0.6875) {
+        return L"Waning Gibbous";
+    }
+    if (phase01 < 0.8125) {
+        return L"Last Quarter";
+    }
     return L"Waning Crescent";
 }
 
@@ -1292,30 +1404,70 @@ bool TryParseHexColorStrict(const std::wstring& hexRaw, float defaultAlpha, D2D1
 
 void ApplySkyPrecipColors(const std::wstring& raw, Settings& cfg) {
     std::vector<std::wstring> parts = SplitSlashTokens(raw);
-    if (parts.size() > 0) TryParseHexColorStrict(parts[0], 0.78f, cfg.colorRain);
-    if (parts.size() > 1) cfg.hasCustomSnowColor = TryParseHexColorStrict(parts[1], 0.96f, cfg.colorSnow);
-    if (parts.size() > 2) TryParseHexColorStrict(parts[2], 0.95f, cfg.colorHail);
-    if (parts.size() > 3) cfg.hasCustomCloudsColor = TryParseHexColorStrict(parts[3], 0.34f, cfg.colorClouds);
-    if (parts.size() > 4) cfg.hasCustomSunColor = TryParseHexColorStrict(parts[4], 0.88f, cfg.colorSun);
-    if (parts.size() > 5) cfg.hasCustomMoonColor = TryParseHexColorStrict(parts[5], 0.94f, cfg.colorMoon);
+    if (parts.size() > 0) {
+        TryParseHexColorStrict(parts[0], 0.78f, cfg.colorRain);
+    }
+    if (parts.size() > 1) {
+        cfg.hasCustomSnowColor = TryParseHexColorStrict(parts[1], 0.96f, cfg.colorSnow);
+    }
+    if (parts.size() > 2) {
+        TryParseHexColorStrict(parts[2], 0.95f, cfg.colorHail);
+    }
+    if (parts.size() > 3) {
+        cfg.hasCustomCloudsColor = TryParseHexColorStrict(parts[3], 0.34f, cfg.colorClouds);
+    }
+    if (parts.size() > 4) {
+        cfg.hasCustomSunColor = TryParseHexColorStrict(parts[4], 0.88f, cfg.colorSun);
+    }
+    if (parts.size() > 5) {
+        cfg.hasCustomMoonColor = TryParseHexColorStrict(parts[5], 0.94f, cfg.colorMoon);
+    }
 }
 
 void ApplyEffectsColors(const std::wstring& raw, Settings& cfg) {
     std::vector<std::wstring> parts = SplitSlashTokens(raw);
-    if (parts.size() > 0) cfg.hasCustomTimeOfDayColor = TryParseHexColorStrict(parts[0], 0.16f, cfg.colorTimeOfDay);
-    if (parts.size() > 1) cfg.hasCustomClearColor = TryParseHexColorStrict(parts[1], 0.25f, cfg.colorClear);
-    if (parts.size() > 2) cfg.hasCustomPartlyCloudyColor = TryParseHexColorStrict(parts[2], 0.22f, cfg.colorPartlyCloudy);
-    if (parts.size() > 3) cfg.hasCustomOvercastColor = TryParseHexColorStrict(parts[3], 0.35f, cfg.colorOvercast);
-    if (parts.size() > 4) cfg.hasCustomDustColor = TryParseHexColorStrict(parts[4], 0.28f, cfg.colorDust);
-    if (parts.size() > 5) cfg.hasCustomFogColor = TryParseHexColorStrict(parts[5], 0.35f, cfg.colorFog);
-    if (parts.size() > 6) cfg.hasCustomSmogColor = TryParseHexColorStrict(parts[6], 0.36f, cfg.colorSmog);
-    if (parts.size() > 7) cfg.hasCustomThunderstormColor = TryParseHexColorStrict(parts[7], 0.95f, cfg.colorThunderstorm);
-    if (parts.size() > 8) cfg.hasCustomAuroraColor = TryParseHexColorStrict(parts[8], 0.32f, cfg.colorAurora);
-    if (parts.size() > 9) cfg.hasCustomMirageColor = TryParseHexColorStrict(parts[9], 0.25f, cfg.colorMirage);
-    if (parts.size() > 10) cfg.hasCustomRainbowColor = TryParseHexColorStrict(parts[10], 0.35f, cfg.colorRainbow);
-    if (parts.size() > 11) cfg.hasCustomAirQualityColor = TryParseHexColorStrict(parts[11], 0.24f, cfg.colorAirQuality);
-    if (parts.size() > 12) cfg.hasCustomPollenColor = TryParseHexColorStrict(parts[12], 0.72f, cfg.colorPollen);
-    if (parts.size() > 13) cfg.hasCustomFloodWaterColor = TryParseHexColorStrict(parts[13], 0.42f, cfg.colorFloodWater);
+    if (parts.size() > 0) {
+        cfg.hasCustomTimeOfDayColor = TryParseHexColorStrict(parts[0], 0.16f, cfg.colorTimeOfDay);
+    }
+    if (parts.size() > 1) {
+        cfg.hasCustomClearColor = TryParseHexColorStrict(parts[1], 0.25f, cfg.colorClear);
+    }
+    if (parts.size() > 2) {
+        cfg.hasCustomPartlyCloudyColor = TryParseHexColorStrict(parts[2], 0.22f, cfg.colorPartlyCloudy);
+    }
+    if (parts.size() > 3) {
+        cfg.hasCustomOvercastColor = TryParseHexColorStrict(parts[3], 0.35f, cfg.colorOvercast);
+    }
+    if (parts.size() > 4) {
+        cfg.hasCustomDustColor = TryParseHexColorStrict(parts[4], 0.28f, cfg.colorDust);
+    }
+    if (parts.size() > 5) {
+        cfg.hasCustomFogColor = TryParseHexColorStrict(parts[5], 0.35f, cfg.colorFog);
+    }
+    if (parts.size() > 6) {
+        cfg.hasCustomSmogColor = TryParseHexColorStrict(parts[6], 0.36f, cfg.colorSmog);
+    }
+    if (parts.size() > 7) {
+        cfg.hasCustomThunderstormColor = TryParseHexColorStrict(parts[7], 0.95f, cfg.colorThunderstorm);
+    }
+    if (parts.size() > 8) {
+        cfg.hasCustomAuroraColor = TryParseHexColorStrict(parts[8], 0.32f, cfg.colorAurora);
+    }
+    if (parts.size() > 9) {
+        cfg.hasCustomMirageColor = TryParseHexColorStrict(parts[9], 0.25f, cfg.colorMirage);
+    }
+    if (parts.size() > 10) {
+        cfg.hasCustomRainbowColor = TryParseHexColorStrict(parts[10], 0.35f, cfg.colorRainbow);
+    }
+    if (parts.size() > 11) {
+        cfg.hasCustomAirQualityColor = TryParseHexColorStrict(parts[11], 0.24f, cfg.colorAirQuality);
+    }
+    if (parts.size() > 12) {
+        cfg.hasCustomPollenColor = TryParseHexColorStrict(parts[12], 0.72f, cfg.colorPollen);
+    }
+    if (parts.size() > 13) {
+        cfg.hasCustomFloodWaterColor = TryParseHexColorStrict(parts[13], 0.42f, cfg.colorFloodWater);
+    }
 }
 
 void LoadSettingsFromWh() {
@@ -1329,7 +1481,6 @@ void LoadSettingsFromWh() {
     next.layerAttachMode = ToLower(Trim(readStr(L"layerAttachMode", L"auto")));
     next.performanceMode = ParsePerformanceMode(readStr(L"performanceMode", L"high"));
     next.bottomBoundaryMode = ToLower(Trim(readStr(L"bottomBoundaryMode", L"above_taskbar")));
-    next.bottomOffsetPx = ParseIntRangeOrDefault(Wh_GetIntSetting(L"bottomOffsetPx"), -500, 1000, 10);
     next.taskbarAsBorder = Wh_GetIntSetting(L"taskbarAsBorder") != 0;
     ParseCustomInsetsString(readStr(L"customOffset", L"0/0/0/10"), next.customOffset);
     next.multiMonitorMode = ToLower(Trim(readStr(L"multiMonitorMode", L"primary")));
@@ -1341,6 +1492,12 @@ void LoadSettingsFromWh() {
     next.fallbackSource = ToLower(Trim(readStr(L"fallbackSource", L"off")));
     next.coordsRaw = Trim(readStr(L"coords", L"44.7866/20.4489"));
     next.hasValidCoords = TryParseCoordsString(next.coordsRaw, next.latitude, next.longitude);
+    if (!next.hasValidCoords && next.primarySource == L"open_meteo") {
+        next.coordsRaw = L"44.7866/20.4489";
+        next.latitude = 44.7866;
+        next.longitude = 20.4489;
+        next.hasValidCoords = true;
+    }
     next.customApiUrl = Trim(readStr(L"customApiUrl", L""));
     next.localWeatherPath = Trim(readStr(L"localWeatherPath", L""));
     next.updateIntervalMin = ParseIntRangeOrDefault(Wh_GetIntSetting(L"updateIntervalMin"), 1, 1440, 30);
@@ -1372,12 +1529,14 @@ void LoadSettingsFromWh() {
     next.cloudsMode = ParseTriState(readStr(L"cloudsMode", L"auto"));
     next.cloudsIntensity = ParseIntRangeOrDefault(Wh_GetIntSetting(L"cloudsIntensity"), 0, 100, 35);
     next.sunMode = ParseTriState(readStr(L"sunMode", L"auto"));
+    next.sunMonitorMode = ParseCelestialMonitorMode(readStr(L"sunMonitorMode", L"primary"));
     next.sunMotionMode = ParseCelestialMotion(readStr(L"sunMotionMode", L"rtl_arc"));
     ParseArcGeometryString(readStr(L"sunGeometry", L"7-82/82"), ArcGeometry{7, 82, 82}, next.sunGeom);
     double uvVal = -1.0;
     next.sunUvOverride = (TryParseDoubleStrict(readStr(L"sunUvOverride", L"-1"), uvVal) &&
                           ((uvVal >= 0.0 && uvVal <= 20.0) || std::abs(uvVal + 1.0) < 1e-6)) ? uvVal : -1.0;
     next.moonMode = ParseTriState(readStr(L"moonMode", L"auto"));
+    next.moonMonitorMode = ParseCelestialMonitorMode(readStr(L"moonMonitorMode", L"primary"));
     next.moonMotionMode = ParseCelestialMotion(readStr(L"moonMotionMode", L"rtl_arc"));
     ParseArcGeometryString(readStr(L"moonGeometry", L"6-82/82"), ArcGeometry{6, 82, 82}, next.moonGeom);
     double phaseVal = -1.0;
@@ -1532,8 +1691,12 @@ void CycleSettingOption(const std::wstring& actionId) {
     }
 
     auto nextTri = [](TriStateMode m) -> TriStateMode {
-        if (m == TriStateMode::Auto) return TriStateMode::On;
-        if (m == TriStateMode::On) return TriStateMode::Off;
+        if (m == TriStateMode::Auto) {
+            return TriStateMode::On;
+        }
+        if (m == TriStateMode::On) {
+            return TriStateMode::Off;
+        }
         return TriStateMode::Auto;
     };
 
@@ -1541,53 +1704,92 @@ void CycleSettingOption(const std::wstring& actionId) {
         std::lock_guard<std::mutex> lock(g_mutex);
         Settings& cur = g_settings;
         if (actionId == L"cycle_perf") {
-            cur.performanceMode = (cur.performanceMode == PerformanceMode::Low) ? PerformanceMode::Medium :
-                                  ((cur.performanceMode == PerformanceMode::Medium) ? PerformanceMode::High : PerformanceMode::Low);
+            cur.performanceMode = (cur.performanceMode == PerformanceMode::Low)
+                ? PerformanceMode::Medium
+                : ((cur.performanceMode == PerformanceMode::Medium) ? PerformanceMode::High : PerformanceMode::Low);
         } else if (actionId == L"cycle_source") {
-            cur.primarySource = (cur.primarySource == L"open_meteo") ? L"custom_api" :
-                                ((cur.primarySource == L"custom_api") ? L"local_file" :
-                                 ((cur.primarySource == L"local_file") ? L"off" : L"open_meteo"));
+            cur.primarySource = (cur.primarySource == L"open_meteo")
+                ? L"custom_api"
+                : ((cur.primarySource == L"custom_api")
+                    ? L"local_file"
+                    : ((cur.primarySource == L"local_file") ? L"off" : L"open_meteo"));
         } else if (actionId == L"cycle_clouds") {
             cur.cloudsMode = nextTri(cur.cloudsMode);
         } else if (actionId == L"cycle_sun") {
             cur.sunMode = nextTri(cur.sunMode);
+        } else if (actionId == L"cycle_sun_mon") {
+            cur.sunMonitorMode = (cur.sunMonitorMode == CelestialMonitorMode::Primary)
+                ? CelestialMonitorMode::All
+                : CelestialMonitorMode::Primary;
         } else if (actionId == L"cycle_moon") {
             cur.moonMode = nextTri(cur.moonMode);
+        } else if (actionId == L"cycle_moon_mon") {
+            cur.moonMonitorMode = (cur.moonMonitorMode == CelestialMonitorMode::Primary)
+                ? CelestialMonitorMode::All
+                : CelestialMonitorMode::Primary;
         } else if (actionId == L"toggle_celestial_front") {
             cur.celestialInFrontOfClouds = !cur.celestialInFrontOfClouds;
         } else if (actionId == L"cycle_precip_mode") {
-            cur.precipitationMode = (cur.precipitationMode == PrecipMode::Auto) ? PrecipMode::Rain :
-                                    ((cur.precipitationMode == PrecipMode::Rain) ? PrecipMode::Snow :
-                                     ((cur.precipitationMode == PrecipMode::Snow) ? PrecipMode::Hail :
-                                      ((cur.precipitationMode == PrecipMode::Hail) ? PrecipMode::Off : PrecipMode::Auto)));
+            cur.precipitationMode = (cur.precipitationMode == PrecipMode::Auto)
+                ? PrecipMode::Rain
+                : ((cur.precipitationMode == PrecipMode::Rain)
+                    ? PrecipMode::Snow
+                    : ((cur.precipitationMode == PrecipMode::Snow)
+                        ? PrecipMode::Hail
+                        : ((cur.precipitationMode == PrecipMode::Hail) ? PrecipMode::Off : PrecipMode::Auto)));
         } else if (actionId == L"cycle_precip_dir") {
-            cur.precipFallDirection = (cur.precipFallDirection == FallDirMode::Auto) ? FallDirMode::Down :
-                                        ((cur.precipFallDirection == FallDirMode::Down) ? FallDirMode::DownLeft :
-                                         ((cur.precipFallDirection == FallDirMode::DownLeft) ? FallDirMode::DownRight : FallDirMode::Auto));
+            cur.precipFallDirection = (cur.precipFallDirection == FallDirMode::Auto)
+                ? FallDirMode::Down
+                : ((cur.precipFallDirection == FallDirMode::Down)
+                    ? FallDirMode::DownLeft
+                    : ((cur.precipFallDirection == FallDirMode::DownLeft) ? FallDirMode::DownRight : FallDirMode::Auto));
         } else if (actionId == L"cycle_precip_speed") {
-            cur.precipSpeedMode = (cur.precipSpeedMode == PrecipSpeedMode::Auto) ? PrecipSpeedMode::Custom : PrecipSpeedMode::Auto;
+            cur.precipSpeedMode = (cur.precipSpeedMode == PrecipSpeedMode::Auto)
+                ? PrecipSpeedMode::Custom
+                : PrecipSpeedMode::Auto;
         } else if (actionId == L"cycle_tod") {
-            cur.timeOfDayMode = (cur.timeOfDayMode == TimeOfDayMode::Auto) ? TimeOfDayMode::Dawn :
-                                ((cur.timeOfDayMode == TimeOfDayMode::Dawn) ? TimeOfDayMode::Day :
-                                 ((cur.timeOfDayMode == TimeOfDayMode::Day) ? TimeOfDayMode::Sunset :
-                                  ((cur.timeOfDayMode == TimeOfDayMode::Sunset) ? TimeOfDayMode::Night :
-                                   ((cur.timeOfDayMode == TimeOfDayMode::Night) ? TimeOfDayMode::Off : TimeOfDayMode::Auto))));
-        } else if (actionId == L"cycle_fx_clear") cur.effectClear = nextTri(cur.effectClear);
-        else if (actionId == L"cycle_fx_partly") cur.effectPartlyCloudy = nextTri(cur.effectPartlyCloudy);
-        else if (actionId == L"cycle_fx_overcast") cur.effectOvercast = nextTri(cur.effectOvercast);
-        else if (actionId == L"cycle_fx_dust") cur.effectDust = nextTri(cur.effectDust);
-        else if (actionId == L"cycle_fx_fog") cur.effectFog = nextTri(cur.effectFog);
-        else if (actionId == L"cycle_fx_smog") cur.effectSmog = nextTri(cur.effectSmog);
-        else if (actionId == L"cycle_fx_storm") cur.effectThunderstorm = nextTri(cur.effectThunderstorm);
-        else if (actionId == L"cycle_fx_aurora") cur.effectAurora = nextTri(cur.effectAurora);
-        else if (actionId == L"cycle_fx_mirage") cur.effectMirage = nextTri(cur.effectMirage);
-        else if (actionId == L"cycle_fx_rainbow") cur.effectRainbow = nextTri(cur.effectRainbow);
-        else if (actionId == L"cycle_fx_wind") cur.effectWindStreams = nextTri(cur.effectWindStreams);
-        else if (actionId == L"cycle_fx_thermal") cur.effectThermal = nextTri(cur.effectThermal);
-        else if (actionId == L"cycle_fx_stars") cur.effectNightStars = nextTri(cur.effectNightStars);
-        else if (actionId == L"cycle_fx_aq") cur.effectAirQuality = nextTri(cur.effectAirQuality);
-        else if (actionId == L"cycle_fx_pollen") cur.effectPollen = nextTri(cur.effectPollen);
-        else if (actionId == L"cycle_fx_flood") cur.effectFloodWater = nextTri(cur.effectFloodWater);
+            cur.timeOfDayMode = (cur.timeOfDayMode == TimeOfDayMode::Auto)
+                ? TimeOfDayMode::Dawn
+                : ((cur.timeOfDayMode == TimeOfDayMode::Dawn)
+                    ? TimeOfDayMode::Day
+                    : ((cur.timeOfDayMode == TimeOfDayMode::Day)
+                        ? TimeOfDayMode::Sunset
+                        : ((cur.timeOfDayMode == TimeOfDayMode::Sunset)
+                            ? TimeOfDayMode::Night
+                            : ((cur.timeOfDayMode == TimeOfDayMode::Night) ? TimeOfDayMode::Off : TimeOfDayMode::Auto))));
+        } else if (actionId == L"cycle_fx_clear") {
+            cur.effectClear = nextTri(cur.effectClear);
+        } else if (actionId == L"cycle_fx_partly") {
+            cur.effectPartlyCloudy = nextTri(cur.effectPartlyCloudy);
+        } else if (actionId == L"cycle_fx_overcast") {
+            cur.effectOvercast = nextTri(cur.effectOvercast);
+        } else if (actionId == L"cycle_fx_dust") {
+            cur.effectDust = nextTri(cur.effectDust);
+        } else if (actionId == L"cycle_fx_fog") {
+            cur.effectFog = nextTri(cur.effectFog);
+        } else if (actionId == L"cycle_fx_smog") {
+            cur.effectSmog = nextTri(cur.effectSmog);
+        } else if (actionId == L"cycle_fx_storm") {
+            cur.effectThunderstorm = nextTri(cur.effectThunderstorm);
+        } else if (actionId == L"cycle_fx_aurora") {
+            cur.effectAurora = nextTri(cur.effectAurora);
+        } else if (actionId == L"cycle_fx_mirage") {
+            cur.effectMirage = nextTri(cur.effectMirage);
+        } else if (actionId == L"cycle_fx_rainbow") {
+            cur.effectRainbow = nextTri(cur.effectRainbow);
+        } else if (actionId == L"cycle_fx_wind") {
+            cur.effectWindStreams = nextTri(cur.effectWindStreams);
+        } else if (actionId == L"cycle_fx_thermal") {
+            cur.effectThermal = nextTri(cur.effectThermal);
+        } else if (actionId == L"cycle_fx_stars") {
+            cur.effectNightStars = nextTri(cur.effectNightStars);
+        } else if (actionId == L"cycle_fx_aq") {
+            cur.effectAirQuality = nextTri(cur.effectAirQuality);
+        } else if (actionId == L"cycle_fx_pollen") {
+            cur.effectPollen = nextTri(cur.effectPollen);
+        } else if (actionId == L"cycle_fx_flood") {
+            cur.effectFloodWater = nextTri(cur.effectFloodWater);
+        }
         g_arcCacheDirty = true;
     }
     if (g_weatherWakeEvent) {
@@ -1651,26 +1853,54 @@ std::string HttpGetUtf8(const std::wstring& url) {
         Wh_Log(L"HttpSendRequestW failed: %u", GetLastError());
     }
 
-    if (hRequest) InternetCloseHandle(hRequest);
+    if (hRequest) {
+        InternetCloseHandle(hRequest);
+    }
     InternetCloseHandle(hConnect);
     InternetCloseHandle(hSession);
     return response;
 }
 
 double EstimatePrecipMmFromWmo(int code) {
-    if (code == 51 || code == 56) return 0.3;
-    if (code == 53) return 0.8;
-    if (code == 55 || code == 57) return 1.8;
-    if (code == 61 || code == 80) return 1.5;
-    if (code == 63 || code == 81) return 4.0;
-    if (code == 65 || code == 82) return 8.5;
-    if (code == 66) return 1.5;
-    if (code == 67) return 5.0;
-    if (code == 71 || code == 85) return 0.8;
-    if (code == 73 || code == 77) return 2.2;
-    if (code == 75 || code == 86) return 5.5;
-    if (code == 95) return 6.0;
-    if (code == 96 || code == 99) return 9.0;
+    if (code == 51 || code == 56) {
+        return 0.3;
+    }
+    if (code == 53) {
+        return 0.8;
+    }
+    if (code == 55 || code == 57) {
+        return 1.8;
+    }
+    if (code == 61 || code == 80) {
+        return 1.5;
+    }
+    if (code == 63 || code == 81) {
+        return 4.0;
+    }
+    if (code == 65 || code == 82) {
+        return 8.5;
+    }
+    if (code == 66) {
+        return 1.5;
+    }
+    if (code == 67) {
+        return 5.0;
+    }
+    if (code == 71 || code == 85) {
+        return 0.8;
+    }
+    if (code == 73 || code == 77) {
+        return 2.2;
+    }
+    if (code == 75 || code == 86) {
+        return 5.5;
+    }
+    if (code == 95) {
+        return 6.0;
+    }
+    if (code == 96 || code == 99) {
+        return 9.0;
+    }
     return 0.0;
 }
 
@@ -1774,6 +2004,13 @@ bool ExtractNumberScoped(const std::string& json, size_t scope, const std::strin
     return true;
 }
 
+bool ExtractNumberAnyScope(const std::string& json, size_t primaryScope, const std::string& key, double& val) {
+    if (ExtractNumberScoped(json, primaryScope, key, val)) {
+        return true;
+    }
+    return ExtractNumberScoped(json, 0, key, val);
+}
+
 void ParseAirQualityJson(const std::string& json, ForecastSnapshot& outSnap) {
     if (json.empty()) {
         return;
@@ -1783,10 +2020,10 @@ void ParseAirQualityJson(const std::string& json, ForecastSnapshot& outSnap) {
         scope = 0;
     }
     double v = 0.0;
-    if (ExtractNumberScoped(json, scope, "european_aqi", v) || ExtractNumberScoped(json, scope, "us_aqi", v)) {
+    if (ExtractNumberAnyScope(json, scope, "european_aqi", v) || ExtractNumberAnyScope(json, scope, "us_aqi", v)) {
         outSnap.aqiValue = std::max(0.0, v);
     }
-    if (ExtractNumberScoped(json, scope, "pm2_5", v)) {
+    if (ExtractNumberAnyScope(json, scope, "pm2_5", v)) {
         outSnap.pm25Value = std::max(0.0, v);
     }
     double maxPollen = 0.0;
@@ -1796,7 +2033,7 @@ void ParseAirQualityJson(const std::string& json, ForecastSnapshot& outSnap) {
     };
     for (const char* pk : pollenKeys) {
         double pv = 0.0;
-        if (ExtractNumberScoped(json, scope, pk, pv) && pv > maxPollen) {
+        if (ExtractNumberAnyScope(json, scope, pk, pv) && pv > maxPollen) {
             maxPollen = pv;
         }
     }
@@ -1806,56 +2043,67 @@ void ParseAirQualityJson(const std::string& json, ForecastSnapshot& outSnap) {
 bool ParseWeatherJson(const std::string& json, ForecastSnapshot& outSnap) {
     size_t scope = json.find("\"current\":");
     if (scope == std::string::npos) {
+        scope = json.find("\"current_weather\":");
+    }
+    if (scope == std::string::npos) {
         scope = 0;
     }
+
     double spd = 0.0;
-    if (ExtractNumberScoped(json, scope, "wind_speed_10m", spd) ||
-        ExtractNumberScoped(json, scope, "windspeed", spd) ||
-        ExtractNumberScoped(json, scope, "wind_speed", spd)) {
+    if (ExtractNumberAnyScope(json, scope, "wind_speed_10m", spd) ||
+        ExtractNumberAnyScope(json, scope, "windspeed", spd) ||
+        ExtractNumberAnyScope(json, scope, "wind_speed", spd)) {
         outSnap.windSpeedKmh = std::max(0.0, spd);
     }
     double gusts = 0.0;
-    if (ExtractNumberScoped(json, scope, "wind_gusts_10m", gusts) || ExtractNumberScoped(json, scope, "wind_gusts", gusts)) {
+    if (ExtractNumberAnyScope(json, scope, "wind_gusts_10m", gusts) ||
+        ExtractNumberAnyScope(json, scope, "wind_gusts", gusts)) {
         outSnap.windGustsKmh = std::max(0.0, gusts);
     } else {
         outSnap.windGustsKmh = outSnap.windSpeedKmh;
     }
     double deg = -1.0;
-    if (ExtractNumberScoped(json, scope, "wind_direction_10m", deg) ||
-        ExtractNumberScoped(json, scope, "winddirection", deg) ||
-        ExtractNumberScoped(json, scope, "wind_deg", deg)) {
+    if (ExtractNumberAnyScope(json, scope, "wind_direction_10m", deg) ||
+        ExtractNumberAnyScope(json, scope, "winddirection", deg) ||
+        ExtractNumberAnyScope(json, scope, "wind_deg", deg)) {
         outSnap.windDirDeg = deg;
         outSnap.windDirSign = (outSnap.windSpeedKmh > 0.2) ? WindDegToSign(deg) : 0;
     } else {
         outSnap.windDirDeg = 0.0;
         outSnap.windDirSign = 0;
     }
+
+    bool hasTemp = false;
     double tempC = 15.0;
-    if (ExtractNumberScoped(json, scope, "temperature_2m", tempC) || ExtractNumberScoped(json, scope, "temperature", tempC)) {
+    if (ExtractNumberAnyScope(json, scope, "temperature_2m", tempC) ||
+        ExtractNumberAnyScope(json, scope, "temperature", tempC)) {
         outSnap.tempC = tempC;
+        hasTemp = true;
     }
     double appTemp = outSnap.tempC;
-    outSnap.apparentTempC = ExtractNumberScoped(json, scope, "apparent_temperature", appTemp)
+    outSnap.apparentTempC = ExtractNumberAnyScope(json, scope, "apparent_temperature", appTemp)
         ? appTemp
         : outSnap.tempC;
+
     double hum = 55.0;
-    if (ExtractNumberScoped(json, scope, "relative_humidity_2m", hum)) {
+    if (ExtractNumberAnyScope(json, scope, "relative_humidity_2m", hum)) {
         outSnap.humidityPct = std::clamp(hum, 0.0, 100.0);
     }
     double cloud = 20.0;
-    ExtractNumberScoped(json, scope, "cloud_cover", cloud);
+    ExtractNumberAnyScope(json, scope, "cloud_cover", cloud);
     outSnap.cloudCoverPct = std::clamp(cloud, 0.0, 100.0);
     double vis = 12000.0;
-    ExtractNumberScoped(json, scope, "visibility", vis);
+    ExtractNumberAnyScope(json, scope, "visibility", vis);
     outSnap.visibilityM = std::max(0.0, vis);
     double isDayNum = 1.0;
-    ExtractNumberScoped(json, scope, "is_day", isDayNum);
+    ExtractNumberAnyScope(json, scope, "is_day", isDayNum);
     outSnap.isDay = (isDayNum > 0.5);
     double uv = 2.0;
-    if (ExtractNumberScoped(json, scope, "uv_index", uv) ||
-        ExtractNumberScoped(json, scope, "uv", uv)) {
+    if (ExtractNumberAnyScope(json, scope, "uv_index", uv) ||
+        ExtractNumberAnyScope(json, scope, "uv", uv)) {
         outSnap.uvIndex = std::max(0.0, uv);
     }
+
     double sr = 6.5;
     double ss = 18.0;
     if (TryExtractIsoTimeHour(json, "sunrise", sr) && TryExtractIsoTimeHour(json, "sunset", ss)) {
@@ -1864,21 +2112,23 @@ bool ParseWeatherJson(const std::string& json, ForecastSnapshot& outSnap) {
         outSnap.sunsetHour = ss;
     }
     double aqiNum = 0.0;
-    if (ExtractNumberScoped(json, scope, "european_aqi", aqiNum) ||
-        ExtractNumberScoped(json, scope, "us_aqi", aqiNum)) {
+    if (ExtractNumberAnyScope(json, scope, "european_aqi", aqiNum) ||
+        ExtractNumberAnyScope(json, scope, "us_aqi", aqiNum)) {
         outSnap.aqiValue = std::max(0.0, aqiNum);
     }
     double pmNum = 0.0;
-    if (ExtractNumberScoped(json, scope, "pm2_5", pmNum)) {
+    if (ExtractNumberAnyScope(json, scope, "pm2_5", pmNum)) {
         outSnap.pm25Value = std::max(0.0, pmNum);
     }
+
     double wmo = -999.0;
-    if (ExtractNumberScoped(json, scope, "weather_code", wmo) ||
-        ExtractNumberScoped(json, scope, "weathercode", wmo)) {
-        outSnap.weatherCode = static_cast<int>(wmo);
+    bool hasCode = ExtractNumberAnyScope(json, scope, "weather_code", wmo) ||
+                   ExtractNumberAnyScope(json, scope, "weathercode", wmo);
+    if (hasCode || hasTemp) {
+        outSnap.weatherCode = hasCode ? static_cast<int>(wmo) : 0;
         double mm = 0.0;
-        outSnap.precipMm = (ExtractNumberScoped(json, scope, "precipitation", mm) ||
-                            ExtractNumberScoped(json, scope, "rain", mm))
+        outSnap.precipMm = (ExtractNumberAnyScope(json, scope, "precipitation", mm) ||
+                            ExtractNumberAnyScope(json, scope, "rain", mm))
             ? std::max(0.0, mm)
             : EstimatePrecipMmFromWmo(outSnap.weatherCode);
         ApplyForecastMetrics(
@@ -1888,17 +2138,18 @@ bool ParseWeatherJson(const std::string& json, ForecastSnapshot& outSnap) {
             outSnap.precipMm, outSnap.aqiValue, outSnap.pm25Value,
             outSnap.pollenMaxValue, outSnap.isDay, outSnap.hasPrecip,
             outSnap.precipKind, outSnap.effects);
-        outSnap.valid = true;
+        outSnap.valid = hasTemp;
         SYSTEMTIME st = {};
         GetLocalTime(&st);
         wchar_t timeBuf[32] = {};
         swprintf_s(timeBuf, L"%02u:%02u", st.wHour, st.wMinute);
         outSnap.lastUpdateText = timeBuf;
-        Wh_Log(L"Parsed forecast: code=%d temp=%.1fC clouds=%.0f%% wind=%.1fkm/h",
-               outSnap.weatherCode, outSnap.tempC, outSnap.cloudCoverPct, outSnap.windSpeedKmh);
+        Wh_Log(L"Parsed forecast: validTemp=%d code=%d temp=%.1fC clouds=%.0f%% wind=%.1fkm/h",
+               outSnap.valid ? 1 : 0, outSnap.weatherCode, outSnap.tempC,
+               outSnap.cloudCoverPct, outSnap.windSpeedKmh);
         return true;
     }
-    Wh_Log(L"Failed to parse weather_code from JSON");
+    Wh_Log(L"Failed to parse weather_code or temperature from JSON");
     return false;
 }
 
@@ -2022,7 +2273,7 @@ int ComputeBottomLimitYForRect(const Settings& cfg, int monTop, int monBottom, i
             baseBottom = std::min(baseBottom, static_cast<int>(trayRect.top));
         }
     } else if (cfg.bottomBoundaryMode == L"custom_offset") {
-        baseBottom -= cfg.bottomOffsetPx;
+        baseBottom -= cfg.customOffset.bottom;
     }
     baseBottom -= cfg.customOffset.bottom;
     return std::clamp(baseBottom, monTop + 10, monBottom);
@@ -2450,7 +2701,8 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 }
 
 void SpawnFallingItem(FallingItem& item, std::mt19937& rng, ObjectKind kind, float vx, bool randomY, PerformanceMode perf) {
-    std::uniform_real_distribution<float> phaseDist(0.0f, 6.2831853f), alphaDist(0.65f, 0.96f);
+    std::uniform_real_distribution<float> phaseDist(0.0f, 6.2831853f);
+    std::uniform_real_distribution<float> alphaDist(0.65f, 0.96f);
     item.kind = kind;
     item.swayPhase = phaseDist(rng);
     item.angle = phaseDist(rng);
@@ -2471,7 +2723,9 @@ void SpawnFallingItem(FallingItem& item, std::mt19937& rng, ObjectKind kind, flo
         item.y = -24.0f;
     }
 
-    float depthMul = (perf == PerformanceMode::Low) ? 1.0f : ((item.depthTier == 0) ? 0.75f : ((item.depthTier == 2) ? 1.25f : 1.0f));
+    float depthMul = (perf == PerformanceMode::Low)
+        ? 1.0f
+        : ((item.depthTier == 0) ? 0.75f : ((item.depthTier == 2) ? 1.25f : 1.0f));
     if (kind == ObjectKind::Rain) {
         item.size = 13.0f * depthMul;
         item.spin = 0.0f;
@@ -2572,13 +2826,25 @@ bool EnsureDirectWrite(float fontSizePx, float circleFontPx) {
         return false;
     }
     if (std::abs(g_cachedFontSizePx - fontSizePx) > 0.1f) {
-        if (g_hudPillFormat) { g_hudPillFormat->Release(); g_hudPillFormat = nullptr; }
-        if (g_hudTitleFormat) { g_hudTitleFormat->Release(); g_hudTitleFormat = nullptr; }
-        if (g_hudBodyFormat) { g_hudBodyFormat->Release(); g_hudBodyFormat = nullptr; }
+        if (g_hudPillFormat) {
+            g_hudPillFormat->Release();
+            g_hudPillFormat = nullptr;
+        }
+        if (g_hudTitleFormat) {
+            g_hudTitleFormat->Release();
+            g_hudTitleFormat = nullptr;
+        }
+        if (g_hudBodyFormat) {
+            g_hudBodyFormat->Release();
+            g_hudBodyFormat = nullptr;
+        }
         g_cachedFontSizePx = fontSizePx;
     }
     if (std::abs(g_cachedCircleFontPx - circleFontPx) > 0.1f) {
-        if (g_hudCircleFormat) { g_hudCircleFormat->Release(); g_hudCircleFormat = nullptr; }
+        if (g_hudCircleFormat) {
+            g_hudCircleFormat->Release();
+            g_hudCircleFormat = nullptr;
+        }
         g_cachedCircleFontPx = circleFontPx;
     }
     if (!g_hudTitleFormat) {
@@ -2611,11 +2877,26 @@ bool EnsureDirectWrite(float fontSizePx, float circleFontPx) {
 }
 
 void CleanupDirectWrite() {
-    if (g_hudPillFormat) { g_hudPillFormat->Release(); g_hudPillFormat = nullptr; }
-    if (g_hudCircleFormat) { g_hudCircleFormat->Release(); g_hudCircleFormat = nullptr; }
-    if (g_hudTitleFormat) { g_hudTitleFormat->Release(); g_hudTitleFormat = nullptr; }
-    if (g_hudBodyFormat) { g_hudBodyFormat->Release(); g_hudBodyFormat = nullptr; }
-    if (g_dwriteFactory) { g_dwriteFactory->Release(); g_dwriteFactory = nullptr; }
+    if (g_hudPillFormat) {
+        g_hudPillFormat->Release();
+        g_hudPillFormat = nullptr;
+    }
+    if (g_hudCircleFormat) {
+        g_hudCircleFormat->Release();
+        g_hudCircleFormat = nullptr;
+    }
+    if (g_hudTitleFormat) {
+        g_hudTitleFormat->Release();
+        g_hudTitleFormat = nullptr;
+    }
+    if (g_hudBodyFormat) {
+        g_hudBodyFormat->Release();
+        g_hudBodyFormat = nullptr;
+    }
+    if (g_dwriteFactory) {
+        g_dwriteFactory->Release();
+        g_dwriteFactory = nullptr;
+    }
     g_cachedFontSizePx = 0.0f;
     g_cachedCircleFontPx = 0.0f;
 }
@@ -2766,7 +3047,8 @@ void DrawVerticalGradientTint(ID2D1DCRenderTarget* rt, D2D1_COLOR_F topCol, D2D1
 
 void DrawTimeOfDayLayer(ID2D1DCRenderTarget* rt, const Settings& cfg, double hour,
                       bool& outIsNight, const wchar_t*& outPhaseLabel) {
-    D2D1_COLOR_F topCol{}, botCol{};
+    D2D1_COLOR_F topCol{};
+    D2D1_COLOR_F botCol{};
     GetSystemTimeOfDayPalette(hour, topCol, botCol, outIsNight, outPhaseLabel);
     if (cfg.timeOfDayMode == TimeOfDayMode::Off) {
         return;
@@ -2893,7 +3175,7 @@ void DrawSunLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const Se
                   bool active, double hour, const ForecastSnapshot& snap,
                   float uvIndex, float cloudDimFactor, double timeSec,
                   bool hasCursor, float curRelX, float curRelY) {
-    if (!active || cfg.sunGeom.radius <= 0) {
+    if (!active || cfg.sunGeom.radius <= 0 || g_monitorRects.empty()) {
         return;
     }
     float uvT = std::clamp((uvIndex - 2.0f) / 9.0f, 0.0f, 1.0f);
@@ -2909,7 +3191,9 @@ void DrawSunLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const Se
     int rayCount = (cfg.performanceMode == PerformanceMode::Low) ? 0 : ((cfg.performanceMode == PerformanceMode::High) ? 16 : 12);
     float glowMult = (cfg.performanceMode == PerformanceMode::High) ? 3.2f : 2.7f;
 
-    for (const auto& mon : g_monitorRects) {
+    size_t monCount = (cfg.sunMonitorMode == CelestialMonitorMode::All) ? g_monitorRects.size() : 1;
+    for (size_t mIdx = 0; mIdx < monCount; ++mIdx) {
+        const auto& mon = g_monitorRects[mIdx];
         float radius = 0.0f;
         float cx = 0.0f;
         float cy = 0.0f;
@@ -2964,7 +3248,7 @@ void DrawMoonLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const S
                    bool active, double hour, const ForecastSnapshot& snap,
                    double moonPhase01, float cloudDimFactor,
                    bool hasCursor, float curRelX, float curRelY) {
-    if (!active || cfg.moonGeom.radius <= 0) {
+    if (!active || cfg.moonGeom.radius <= 0 || g_monitorRects.empty()) {
         return;
     }
     D2D1_COLOR_F base = cfg.hasCustomMoonColor ? cfg.colorMoon : D2D1::ColorF(0.88f, 0.92f, 1.0f, 0.95f);
@@ -2973,7 +3257,9 @@ void DrawMoonLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const S
     double illum = 0.5 * (1.0 - std::cos(phase * 2.0 * kPi));
     float sideSign = (phase <= 0.5) ? 1.0f : -1.0f;
 
-    for (const auto& mon : g_monitorRects) {
+    size_t monCount = (cfg.moonMonitorMode == CelestialMonitorMode::All) ? g_monitorRects.size() : 1;
+    for (size_t mIdx = 0; mIdx < monCount; ++mIdx) {
+        const auto& mon = g_monitorRects[mIdx];
         float r = 0.0f;
         float cx = 0.0f;
         float cy = 0.0f;
@@ -3327,6 +3613,26 @@ void DrawRoundedPillButton(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
     rt->DrawTextW(ctrl.btnText.c_str(), static_cast<UINT32>(ctrl.btnText.size()), g_hudPillFormat, ctrl.rect, brush);
 }
 
+void DrawGearSettingsIcon(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
+                        float cx, float cy, float radius, D2D1_COLOR_F col) {
+    brush->SetOpacity(1.0f);
+    brush->SetColor(col);
+    float outerR = radius * 0.56f;
+    float innerR = radius * 0.38f;
+    float holeR = radius * 0.20f;
+    int teeth = 8;
+    for (int i = 0; i < teeth; ++i) {
+        double ang = (2.0 * kPi * i) / teeth;
+        float tx = cx + static_cast<float>(std::cos(ang)) * outerR;
+        float ty = cy + static_cast<float>(std::sin(ang)) * outerR;
+        float tSize = std::max(2.0f, radius * 0.14f);
+        rt->FillRectangle(D2D1::RectF(tx - tSize * 0.5f, ty - tSize * 0.5f, tx + tSize * 0.5f, ty + tSize * 0.5f), brush);
+    }
+    rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), innerR, innerR), brush);
+    brush->SetColor(D2D1::ColorF(0.08f, 0.10f, 0.15f, 1.0f));
+    rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), holeR, holeR), brush);
+}
+
 void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                            const Settings& cfg, const ForecastSnapshot& snap,
                            bool activePrecip, const GeneralEffectsState& activeFx,
@@ -3334,7 +3640,8 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                            float uvIndex, double moonPhase01, int bottomLimitY) {
     float btnR = cfg.hudButtonRadiusPx;
     bool expanded = g_hudExpanded.load();
-    std::wstring labelText = L"--°";
+    bool showGearIcon = (!expanded && !snap.valid);
+    std::wstring labelText;
     if (expanded) {
         labelText = L"×";
     } else if (snap.valid) {
@@ -3382,9 +3689,20 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
     g_hudBtnR.store(btnR);
 
     auto triBadge = [](TriStateMode m) -> std::pair<std::wstring, D2D1_COLOR_F> {
-        if (m == TriStateMode::On) return {L"ON", D2D1::ColorF(0.25f, 0.85f, 0.48f, 0.9f)};
-        if (m == TriStateMode::Off) return {L"OFF", D2D1::ColorF(0.85f, 0.35f, 0.35f, 0.9f)};
+        if (m == TriStateMode::On) {
+            return {L"ON", D2D1::ColorF(0.25f, 0.85f, 0.48f, 0.9f)};
+        }
+        if (m == TriStateMode::Off) {
+            return {L"OFF", D2D1::ColorF(0.85f, 0.35f, 0.35f, 0.9f)};
+        }
         return {L"A", D2D1::ColorF(0.35f, 0.68f, 1.0f, 0.9f)};
+    };
+
+    auto monBadge = [](CelestialMonitorMode m) -> std::pair<std::wstring, D2D1_COLOR_F> {
+        if (m == CelestialMonitorMode::All) {
+            return {L"ALL", D2D1::ColorF(0.25f, 0.85f, 0.48f, 0.9f)};
+        }
+        return {L"1ST", D2D1::ColorF(0.45f, 0.72f, 0.98f, 0.9f)};
     };
 
     struct HudRow {
@@ -3408,43 +3726,43 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         L"cycle_source", cfg.primarySource, D2D1::ColorF(0.45f, 0.72f, 0.98f, 0.9f),
         cfg.primarySource != L"off" ? HudFieldId::Coords : HudFieldId::None
     });
-    rows.push_back({L"Condition", snap.valid ? WmoCodeToLabel(snap.weatherCode) : L"N/A", false, L"", L"", D2D1::ColorF(0,0,0,0), HudFieldId::None});
+    rows.push_back({L"Condition", snap.valid ? WmoCodeToLabel(snap.weatherCode) : L"N/A", false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
     if (snap.valid) {
         swprintf_s(buf, L"%.1f °C", snap.tempC);
     } else {
         swprintf_s(buf, L"-- °C");
     }
-    rows.push_back({L"Temperature", buf, false, L"", L"", D2D1::ColorF(0,0,0,0), HudFieldId::None});
+    rows.push_back({L"Temperature", buf, false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
     if (snap.valid) {
         swprintf_s(buf, L"%.1f km/h (%s)", snap.windSpeedKmh, WindDegToCompass(snap.windDirDeg));
     } else {
         swprintf_s(buf, L"-- km/h");
     }
-    rows.push_back({L"Wind", buf, false, L"", L"", D2D1::ColorF(0,0,0,0), HudFieldId::None});
+    rows.push_back({L"Wind", buf, false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
     if (snap.valid) {
         swprintf_s(buf, L"%.0f%%", snap.cloudCoverPct);
     } else {
         swprintf_s(buf, L"--%%");
     }
-    rows.push_back({L"Cloud cover", buf, false, L"", L"", D2D1::ColorF(0,0,0,0), HudFieldId::None});
+    rows.push_back({L"Cloud cover", buf, false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
     if (snap.valid) {
         swprintf_s(buf, L"%.1f mm", snap.precipMm);
     } else {
         swprintf_s(buf, L"-- mm");
     }
-    rows.push_back({L"Precipitation", buf, false, L"", L"", D2D1::ColorF(0,0,0,0), HudFieldId::None});
+    rows.push_back({L"Precipitation", buf, false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
     if (snap.valid) {
         swprintf_s(buf, L"%.1f", snap.uvIndex);
     } else {
         swprintf_s(buf, L"--");
     }
-    rows.push_back({L"UV index", buf, false, L"", L"", D2D1::ColorF(0,0,0,0), HudFieldId::None});
+    rows.push_back({L"UV index", buf, false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
     if (snap.valid) {
         swprintf_s(buf, L"%.0f / PM2.5 %.1f", snap.aqiValue, snap.pm25Value);
     } else {
         swprintf_s(buf, L"-- AQI");
     }
-    rows.push_back({L"Air quality", buf, false, L"", L"", D2D1::ColorF(0,0,0,0), HudFieldId::None});
+    rows.push_back({L"Air quality", buf, false, L"", L"", D2D1::ColorF(0, 0, 0, 0), HudFieldId::None});
 
     rows.push_back({
         L"[Sky]", expSec == ExpandedSection::Sky ? L"Expanded" : L"Collapsed", true,
@@ -3475,6 +3793,17 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
             cfg.sunMode == TriStateMode::On ? HudFieldId::SunUvOverride : HudFieldId::None
         });
 
+        auto sMon = monBadge(cfg.sunMonitorMode);
+        rows.push_back({
+            L"Sun monitors",
+            L"",
+            false,
+            L"cycle_sun_mon",
+            sMon.first,
+            sMon.second,
+            HudFieldId::None
+        });
+
         auto mB = triBadge(cfg.moonMode);
         swprintf_s(buf, L"%.2f", moonPhase01);
         rows.push_back({
@@ -3485,6 +3814,17 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
             mB.first,
             mB.second,
             cfg.moonMode == TriStateMode::On ? HudFieldId::MoonPhaseOverride : HudFieldId::None
+        });
+
+        auto mMon = monBadge(cfg.moonMonitorMode);
+        rows.push_back({
+            L"Moon monitors",
+            L"",
+            false,
+            L"cycle_moon_mon",
+            mMon.first,
+            mMon.second,
+            HudFieldId::None
         });
 
         rows.push_back({
@@ -3503,15 +3843,20 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         L"sec_precip", expSec == ExpandedSection::Precipitation ? L"HIDE" : L"OPEN", D2D1::ColorF(0.40f, 0.78f, 1.0f, 0.9f), HudFieldId::None
     });
     if (expSec == ExpandedSection::Precipitation) {
-        const wchar_t* pModeStr = (cfg.precipitationMode == PrecipMode::Auto) ? L"A" :
-                                  ((cfg.precipitationMode == PrecipMode::Rain) ? L"RAIN" :
-                                   ((cfg.precipitationMode == PrecipMode::Snow) ? L"SNOW" :
-                                    ((cfg.precipitationMode == PrecipMode::Hail) ? L"HAIL" : L"OFF")));
+        const wchar_t* pModeStr = (cfg.precipitationMode == PrecipMode::Auto)
+            ? L"A"
+            : ((cfg.precipitationMode == PrecipMode::Rain)
+                ? L"RAIN"
+                : ((cfg.precipitationMode == PrecipMode::Snow)
+                    ? L"SNOW"
+                    : ((cfg.precipitationMode == PrecipMode::Hail) ? L"HAIL" : L"OFF")));
         rows.push_back({L"Mode", L"", false, L"cycle_precip_mode", pModeStr, D2D1::ColorF(0.35f, 0.72f, 1.0f, 0.9f), HudFieldId::None});
 
-        const wchar_t* dStr = (cfg.precipFallDirection == FallDirMode::Auto) ? L"A" :
-                              ((cfg.precipFallDirection == FallDirMode::Down) ? L"DOWN" :
-                               ((cfg.precipFallDirection == FallDirMode::DownLeft) ? L"LEFT" : L"RIGHT"));
+        const wchar_t* dStr = (cfg.precipFallDirection == FallDirMode::Auto)
+            ? L"A"
+            : ((cfg.precipFallDirection == FallDirMode::Down)
+                ? L"DOWN"
+                : ((cfg.precipFallDirection == FallDirMode::DownLeft) ? L"LEFT" : L"RIGHT"));
         rows.push_back({L"Direction", L"", false, L"cycle_precip_dir", dStr, D2D1::ColorF(0.45f, 0.78f, 1.0f, 0.9f), HudFieldId::None});
 
         swprintf_s(buf, L"%.1f m/s", cfg.precipFallSpeedMps);
@@ -3533,7 +3878,7 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
             false,
             L"",
             L"",
-            D2D1::ColorF(0,0,0,0),
+            D2D1::ColorF(0, 0, 0, 0),
             showPrecipInt ? HudFieldId::PrecipIntensity : HudFieldId::None
         });
     }
@@ -3558,19 +3903,24 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
             false,
             L"",
             L"",
-            D2D1::ColorF(0,0,0,0),
+            D2D1::ColorF(0, 0, 0, 0),
             anyManualFx ? HudFieldId::EffectsIntensity : HudFieldId::None
         });
 
-        const wchar_t* perfStr = (cfg.performanceMode == PerformanceMode::High) ? L"HIGH" :
-                                 ((cfg.performanceMode == PerformanceMode::Medium) ? L"MEDIUM" : L"LOW");
+        const wchar_t* perfStr = (cfg.performanceMode == PerformanceMode::High)
+            ? L"HIGH"
+            : ((cfg.performanceMode == PerformanceMode::Medium) ? L"MEDIUM" : L"LOW");
         rows.push_back({L"Performance", L"", false, L"cycle_perf", perfStr, D2D1::ColorF(0.30f, 0.85f, 0.65f, 0.9f), HudFieldId::None});
 
-        const wchar_t* todStr = (cfg.timeOfDayMode == TimeOfDayMode::Auto) ? L"A" :
-                                ((cfg.timeOfDayMode == TimeOfDayMode::Dawn) ? L"DAWN" :
-                                 ((cfg.timeOfDayMode == TimeOfDayMode::Day) ? L"DAY" :
-                                  ((cfg.timeOfDayMode == TimeOfDayMode::Sunset) ? L"SUNSET" :
-                                   ((cfg.timeOfDayMode == TimeOfDayMode::Night) ? L"NIGHT" : L"OFF"))));
+        const wchar_t* todStr = (cfg.timeOfDayMode == TimeOfDayMode::Auto)
+            ? L"A"
+            : ((cfg.timeOfDayMode == TimeOfDayMode::Dawn)
+                ? L"DAWN"
+                : ((cfg.timeOfDayMode == TimeOfDayMode::Day)
+                    ? L"DAY"
+                    : ((cfg.timeOfDayMode == TimeOfDayMode::Sunset)
+                        ? L"SUNSET"
+                        : ((cfg.timeOfDayMode == TimeOfDayMode::Night) ? L"NIGHT" : L"OFF"))));
         rows.push_back({L"Time of day", L"", false, L"cycle_tod", todStr, D2D1::ColorF(0.95f, 0.72f, 0.35f, 0.9f), HudFieldId::None});
 
         auto addFxRow = [&](const wchar_t* name, TriStateMode m, const wchar_t* act) {
@@ -3735,9 +4085,13 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         : D2D1::ColorF(cfg.colorHudText.r, cfg.colorHudText.g, cfg.colorHudText.b, 0.50f));
     rt->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(btnCx, btnCy), btnR, btnR), brush, isDragging ? 2.2f : 1.6f);
 
-    brush->SetColor(cfg.colorHudText);
-    rt->DrawTextW(labelText.c_str(), static_cast<UINT32>(labelText.size()), g_hudCircleFormat,
-                  D2D1::RectF(btnCx - btnR, btnCy - btnR, btnCx + btnR, btnCy + btnR), brush);
+    if (showGearIcon) {
+        DrawGearSettingsIcon(rt, brush, btnCx, btnCy, btnR, cfg.colorHudText);
+    } else {
+        brush->SetColor(cfg.colorHudText);
+        rt->DrawTextW(labelText.c_str(), static_cast<UINT32>(labelText.size()), g_hudCircleFormat,
+                      D2D1::RectF(btnCx - btnR, btnCy - btnR, btnCx + btnR, btnCy + btnR), brush);
+    }
     (void)activePrecip;
     (void)activeFx;
     (void)todLabel;
@@ -3785,12 +4139,39 @@ void RenderFrame(const Settings& cfg, const ForecastSnapshot& snap, bool activeP
         DrawMoonLayer(g_surface.rt, g_surface.sharedBrush, cfg, moonOn, hour, snap, moonPhase01, cloudDimFactor, hasCursor, curRelX, curRelY);
     }
 
-    if (fx.clear) { D2D1_COLOR_F cTop = cfg.hasCustomClearColor ? cfg.colorClear : D2D1::ColorF(1.0f, 0.94f, 0.72f, 0.16f); D2D1_COLOR_F cBot = cTop; cBot.a *= 0.2f; DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k); }
-    if (fx.partlyCloudy) { D2D1_COLOR_F cTop = cfg.hasCustomPartlyCloudyColor ? cfg.colorPartlyCloudy : D2D1::ColorF(0.90f, 0.93f, 0.97f, 0.18f); D2D1_COLOR_F cBot = cTop; cBot.a *= 0.35f; DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k); }
-    if (fx.overcast) { D2D1_COLOR_F cTop = cfg.hasCustomOvercastColor ? cfg.colorOvercast : D2D1::ColorF(0.50f, 0.55f, 0.62f, 0.28f); D2D1_COLOR_F cBot = cTop; cBot.a *= 0.65f; DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k); }
-    if (fx.dust) { D2D1_COLOR_F cTop = cfg.hasCustomDustColor ? cfg.colorDust : D2D1::ColorF(0.84f, 0.68f, 0.45f, 0.10f); D2D1_COLOR_F cBot = cfg.hasCustomDustColor ? cfg.colorDust : D2D1::ColorF(0.84f, 0.68f, 0.45f, 0.26f); DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k); }
-    if (fx.fog) { D2D1_COLOR_F cTop = cfg.hasCustomFogColor ? cfg.colorFog : D2D1::ColorF(0.84f, 0.88f, 0.92f, 0.14f); D2D1_COLOR_F cBot = cfg.hasCustomFogColor ? cfg.colorFog : D2D1::ColorF(0.84f, 0.88f, 0.92f, 0.34f); DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k); }
-    if (fx.smog) { D2D1_COLOR_F cTop = cfg.hasCustomSmogColor ? cfg.colorSmog : D2D1::ColorF(0.54f, 0.48f, 0.40f, 0.16f); D2D1_COLOR_F cBot = cfg.hasCustomSmogColor ? cfg.colorSmog : D2D1::ColorF(0.54f, 0.48f, 0.40f, 0.36f); DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k); }
+    if (fx.clear) {
+        D2D1_COLOR_F cTop = cfg.hasCustomClearColor ? cfg.colorClear : D2D1::ColorF(1.0f, 0.94f, 0.72f, 0.16f);
+        D2D1_COLOR_F cBot = cTop;
+        cBot.a *= 0.2f;
+        DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k);
+    }
+    if (fx.partlyCloudy) {
+        D2D1_COLOR_F cTop = cfg.hasCustomPartlyCloudyColor ? cfg.colorPartlyCloudy : D2D1::ColorF(0.90f, 0.93f, 0.97f, 0.18f);
+        D2D1_COLOR_F cBot = cTop;
+        cBot.a *= 0.35f;
+        DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k);
+    }
+    if (fx.overcast) {
+        D2D1_COLOR_F cTop = cfg.hasCustomOvercastColor ? cfg.colorOvercast : D2D1::ColorF(0.50f, 0.55f, 0.62f, 0.28f);
+        D2D1_COLOR_F cBot = cTop;
+        cBot.a *= 0.65f;
+        DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k);
+    }
+    if (fx.dust) {
+        D2D1_COLOR_F cTop = cfg.hasCustomDustColor ? cfg.colorDust : D2D1::ColorF(0.84f, 0.68f, 0.45f, 0.10f);
+        D2D1_COLOR_F cBot = cfg.hasCustomDustColor ? cfg.colorDust : D2D1::ColorF(0.84f, 0.68f, 0.45f, 0.26f);
+        DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k);
+    }
+    if (fx.fog) {
+        D2D1_COLOR_F cTop = cfg.hasCustomFogColor ? cfg.colorFog : D2D1::ColorF(0.84f, 0.88f, 0.92f, 0.14f);
+        D2D1_COLOR_F cBot = cfg.hasCustomFogColor ? cfg.colorFog : D2D1::ColorF(0.84f, 0.88f, 0.92f, 0.34f);
+        DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k);
+    }
+    if (fx.smog) {
+        D2D1_COLOR_F cTop = cfg.hasCustomSmogColor ? cfg.colorSmog : D2D1::ColorF(0.54f, 0.48f, 0.40f, 0.16f);
+        D2D1_COLOR_F cBot = cfg.hasCustomSmogColor ? cfg.colorSmog : D2D1::ColorF(0.54f, 0.48f, 0.40f, 0.36f);
+        DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k);
+    }
     if (fx.airQuality) {
         DrawAirQualityLayer(g_surface.rt, g_surface.sharedBrush, cfg, snap, k, timeSec);
     }
@@ -4017,14 +4398,24 @@ void RenderWorkerLoop() {
         }
 
         double hour = GetLocalHourFloat();
-        D2D1_COLOR_F d1{}, d2{};
+        D2D1_COLOR_F d1{};
+        D2D1_COLOR_F d2{};
         bool isNightClock = false;
         const wchar_t* todLabel = L"Day";
         GetSystemTimeOfDayPalette(hour, d1, d2, isNightClock, todLabel);
-        if (cfg.timeOfDayMode == TimeOfDayMode::Dawn) { isNightClock = false; todLabel = L"Dawn"; }
-        else if (cfg.timeOfDayMode == TimeOfDayMode::Day) { isNightClock = false; todLabel = L"Day"; }
-        else if (cfg.timeOfDayMode == TimeOfDayMode::Sunset) { isNightClock = false; todLabel = L"Sunset"; }
-        else if (cfg.timeOfDayMode == TimeOfDayMode::Night) { isNightClock = true; todLabel = L"Night"; }
+        if (cfg.timeOfDayMode == TimeOfDayMode::Dawn) {
+            isNightClock = false;
+            todLabel = L"Dawn";
+        } else if (cfg.timeOfDayMode == TimeOfDayMode::Day) {
+            isNightClock = false;
+            todLabel = L"Day";
+        } else if (cfg.timeOfDayMode == TimeOfDayMode::Sunset) {
+            isNightClock = false;
+            todLabel = L"Sunset";
+        } else if (cfg.timeOfDayMode == TimeOfDayMode::Night) {
+            isNightClock = true;
+            todLabel = L"Night";
+        }
 
         float cloudPct01 = 0.0f;
         if (cfg.cloudsMode == TriStateMode::On) {
@@ -4073,7 +4464,9 @@ void RenderWorkerLoop() {
         }
 
         if (activeFx.thunderstorm) {
-            float flashProb = (cfg.performanceMode == PerformanceMode::High) ? 0.45f : ((cfg.performanceMode == PerformanceMode::Low) ? 0.20f : 0.35f);
+            float flashProb = (cfg.performanceMode == PerformanceMode::High)
+                ? 0.45f
+                : ((cfg.performanceMode == PerformanceMode::Low) ? 0.20f : 0.35f);
             if (g_lightning.timer > 0.0f) {
                 g_lightning.timer = std::max(0.0f, g_lightning.timer - dt);
             } else if ((static_cast<float>(rng() % 10000) / 10000.0f) < flashProb * dt) {
