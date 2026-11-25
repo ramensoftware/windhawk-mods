@@ -29,7 +29,8 @@ each icon, and they move along that frame whenever something changes.
   get the whole frame. Optionally, the corners an open or maximized app
   doesn't get are drawn dimmed, so the whole frame shows.
 - **Minimized app**: an underline. It's dimmed when the app's windows are
-  on another virtual desktop, or suspended like some Store apps.
+  on another virtual desktop, or suspended like some Store apps. Its length
+  is measured along the frame, so on a round frame it's an arc.
 - **Several windows**: a grey dot on the left edge, or another shape (a
   square, a diamond, a half dot, half diamond or branch, a plus, X or
   equal sign), or the number of windows.
@@ -90,8 +91,9 @@ Progress keeps moving even with them off, like the native progress bar.
   marks' line thickness on the app in front. Empty colors mean your
   accent color; `#Light|#Dark` sets a color per theme, and
   `#FF0000,#00FF00` a gradient.
-- **Open and Maximized Windows**: the marks' shape, whether maximized
-  windows keep their bottom corners, and the dimmed missing corners.
+- **Open and Maximized Windows**: the marks' shape (rounded, diagonal or
+  straight corners), whether maximized windows keep their bottom corners,
+  and the dimmed missing corners.
 - **Minimized Apps**: the underline's length and ends, and its dimmed
   variant for apps running off screen.
 - **Apps With Several Windows**, **Apps With a Badge**: the shape (none, a
@@ -144,7 +146,7 @@ inactive and the log says so.
     $description: How far the frame's outer edge sits from the icon's edges, in pixels. 0 puts it on the icon's edges, positive values move it outwards, negative values over the icon. One value for all sides, two for horizontal and vertical, or four.
   - CornerRadius: '4'
     $name: Corner radius
-    $description: One value for all corners, two for the top and bottom corners, or four for top-left, top-right, bottom-right and bottom-left.
+    $description: One value for all corners, two for the top and bottom corners, or four for top-left, top-right, bottom-right and bottom-left. Half the frame's width or height or more makes it a circle (or a pill).
   - Thickness: '2'
     $name: Thickness
     $description: Line thickness of the corner marks and the underline, in pixels. It grows inwards from the frame's outer edge. The app in front can have its own, under Appearance.
@@ -184,9 +186,11 @@ inactive and the log says so.
     $description: Length of each mark's straight part beyond the corner, in pixels. 0 draws just the corners.
   - CornerStyle: rounded
     $name: Corner style
+    $description: Straight draws a sharp right angle, whatever the frame's corner radius; its marks still reach as far along each edge as the rounded ones.
     $options:
     - rounded: Rounded (a quarter circle)
     - diagonal: Diagonal (a straight cut)
+    - straight: Straight (a right angle)
   - RoundedEnds: true
     $name: Rounded ends
     $description: Rounds the ends of each mark; off, they are square.
@@ -207,7 +211,7 @@ inactive and the log says so.
 - Minimized:
   - Length: '12'
     $name: Underline length
-    $description: In pixels. 0 spans the whole straight part of the bottom edge; longer values are capped to it.
+    $description: In pixels, measured along the frame, so with round bottom corners or a circular frame the underline curves with them. 0 spans the whole bottom, up to the middle of the bottom corners; longer values are capped to it.
   - Rounded: true
     $name: Rounded ends
     $description: Rounds the underline's ends; off, they are square.
@@ -449,6 +453,7 @@ struct Settings {
     double IndDimOpacityLight = 0.2, IndDimOpacityDark = 0.2;
     double IndLeg = 5.0;
     bool IndDiagonal = false;
+    bool IndStraight = false;  // right-angled corners: the frame drawn with no radius
     bool IndRoundedEnds = true;
 
     // Window rules.
@@ -472,7 +477,7 @@ struct Settings {
     std::vector<winrt::Windows::UI::Color> BadgeLight, BadgeDark;
 
     // Minimized apps: a centered piece of the frame's bottom edge.
-    double MinLength = 12.0; // 0 = the whole straight part of the bottom edge
+    double MinLength = 12.0; // along the path; 0 = as far as it may reach (see UnderlineMaxHalf)
     bool MinRounded = true;
     // Running off screen (cloaked, not minimized): a dimmed underline.
     bool MinHiddenEnabled = true;
@@ -1079,6 +1084,7 @@ void LoadSettings() {
     g_settings.IndLeg = ParseDouble(indLegStr.get(), 5.0);
     WindhawkUtils::StringSetting indStyleStr(Wh_GetStringSetting(L"Corners.CornerStyle"));
     g_settings.IndDiagonal = indStyleStr.get() && wcscmp(indStyleStr.get(), L"diagonal") == 0;
+    g_settings.IndStraight = indStyleStr.get() && wcscmp(indStyleStr.get(), L"straight") == 0;
     g_settings.IndRoundedEnds = Wh_GetIntSetting(L"Corners.RoundedEnds") != 0;
 
     WindhawkUtils::StringSetting minLenStr(Wh_GetStringSetting(L"Minimized.Length"));
@@ -1260,8 +1266,17 @@ FrameMetrics ComputeFrameMetrics(double W, double H, double t, const double radi
     m.cx = (m.x0 + m.x1) / 2.0;
     m.cy = (m.y0 + m.y1) / 2.0;
     m.half = std::min(m.x1 - m.x0, m.y1 - m.y0) / 2.0;
+    // Every edge keeps a straight part at its middle, at least a pixel long,
+    // even on a round frame (a radius of half its size): the connected
+    // corners meet there, flat end to flat end, and so do the underline's
+    // halves. On a curve the two ends were cut square to the curve's
+    // flattened chords on either side, which lean apart, and left a wedge
+    // between them: a seam with the corners connected (the split corners'
+    // round caps covered it).
+    constexpr double kMiddleFlat = 0.5;  // each side of the middle
+    double maxRadius = std::max(0.0, m.half - kMiddleFlat);
     for (int k = 0; k < 4; k++) {
-        m.r[k] = std::clamp(radius[k], 0.0, m.half);
+        m.r[k] = std::clamp(radius[k], 0.0, maxRadius);
         m.arc[k] = diagonal ? m.r[k] * std::sqrt(2.0) : m.r[k] * 3.14159265358979323846 / 2.0;
     }
     if (grid && grid->valid && grid->scale > 0.01) {
@@ -3524,12 +3539,19 @@ bool EnsureRenderer(std::shared_ptr<ButtonEntry> const& entry, FrameworkElement 
     // thick while it scales them.
     auto shapes = r.visual.Shapes();
     r.frameGroup = r.compositor.CreateContainerShape();
+    // Mitered joins up to twice half the line's thickness: a straight
+    // corner's right angle (its miter at about 1.41) stays sharp instead of
+    // beveled, as composition's default limit of 1 would have it.
     for (int k = kSlotTL; k <= kSlotBL; k++) {
         r.slots[k].shape.IsStrokeNonScaling(true);
+        r.slots[k].shape.StrokeLineJoin(wuc::CompositionStrokeLineJoin::Miter);
+        r.slots[k].shape.StrokeMiterLimit(2.0f);
         r.frameGroup.Shapes().Append(r.slots[k].shape);
     }
     for (auto& twin : r.fills) {
         twin.shape.IsStrokeNonScaling(true);
+        twin.shape.StrokeLineJoin(wuc::CompositionStrokeLineJoin::Miter);
+        twin.shape.StrokeMiterLimit(2.0f);
         r.frameGroup.Shapes().Append(twin.shape);
     }
     shapes.Append(r.frameGroup);
@@ -3599,12 +3621,13 @@ bool SameFrame(const FrameMetrics& a, const FrameMetrics& b) {
 bool UpdateFramePath(IndicatorRenderer& r, const FrameBox& box, const Settings& localSettings, double thickness,
                      const PixelGrid& grid, bool* thicknessOnly = nullptr) {
     if (thicknessOnly) *thicknessOnly = false;
-    FrameMetrics m = ComputeFrameMetrics(box.W, box.H, thickness, localSettings.FrameRadius, localSettings.IndDiagonal,
-                                         &grid);
+    // The straight style is the frame with square corners (see LegFor).
+    static constexpr double kNoRadius[4] = {0.0, 0.0, 0.0, 0.0};
+    const double* radius = localSettings.IndStraight ? kNoRadius : localSettings.FrameRadius;
+    FrameMetrics m = ComputeFrameMetrics(box.W, box.H, thickness, radius, localSettings.IndDiagonal, &grid);
     FrameMetrics mb = std::abs(thickness - localSettings.FrameThickness) < 0.001
         ? m
-        : ComputeFrameMetrics(box.W, box.H, localSettings.FrameThickness, localSettings.FrameRadius,
-                              localSettings.IndDiagonal, &grid);
+        : ComputeFrameMetrics(box.W, box.H, localSettings.FrameThickness, radius, localSettings.IndDiagonal, &grid);
     // Room for the pulse too: the frame grows past the box when it scales
     // above 1. The same for both thicknesses, so activating an app doesn't
     // move the visual.
@@ -3751,6 +3774,26 @@ void SetSignTarget(SignTarget& sign, bool active, int kind, double x, double y, 
     sign.colors = colors;
 }
 
+// How far each half of the underline may reach from the bottom center,
+// along the path: the bottom edge's straight part, then into each bottom
+// corner up to its middle (45 degrees round it). Measured along the path,
+// the underline bends with the corners, so a round frame (a radius of half
+// its size, its straight parts a pixel long, see ComputeFrameMetrics) still
+// gets one: an arc of the asked length. Not past the middle: a whole bottom
+// half would read as an open window's cup.
+double UnderlineMaxHalf(const FrameMetrics& m) {
+    double left = std::max(0.0, m.cx - (m.x0 + m.r[kSlotBL])) + m.arc[kSlotBL] / 2.0;
+    double right = std::max(0.0, (m.x1 - m.r[kSlotBR]) - m.cx) + m.arc[kSlotBR] / 2.0;
+    return std::min(left, right);
+}
+
+// A corner mark's legs (see CornerExtent). The straight style's corners have
+// no radius, so its legs also cover what the rounded corner would: a mark
+// reaches as far along each edge in every style.
+double LegFor(const Settings& localSettings, int k) {
+    return localSettings.IndLeg + (localSettings.IndStraight ? std::max(0.0, localSettings.FrameRadius[k]) : 0.0);
+}
+
 // A corner mark: the arc and a leg on each side. Round caps reach half a
 // thickness past each end, so the ends are pulled in by that much (as far as
 // the leg allows) to keep the visible length.
@@ -3794,7 +3837,7 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
         t.collapseInPlace = state == 0;
         if ((state == 1 || state == 2) && (mask & (1 << k))) {
             t.shown = true;
-            CornerExtent(m, k, localSettings.IndLeg, localSettings.IndRoundedEnds, t.a, t.b);
+            CornerExtent(m, k, LegFor(localSettings, k), localSettings.IndRoundedEnds, t.a, t.b);
         }
     }
 
@@ -3817,7 +3860,7 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
             t.shown = true;
             t.dim = true;
             t.colors = dimColors;
-            CornerExtent(m, k, localSettings.IndLeg, localSettings.IndRoundedEnds, t.a, t.b);
+            CornerExtent(m, k, LegFor(localSettings, k), localSettings.IndRoundedEnds, t.a, t.b);
         }
     }
 
@@ -3875,9 +3918,10 @@ void ComputeSlotTargets(SlotTarget targets[kSlotCount], LabelTarget labels[kLabe
 
     // The underline: the BL and BR shapes as its two halves, meeting flat at
     // the bottom center. Along the path the bottom edge runs right to left,
-    // so the BL half starts at the center and the BR half ends there.
+    // so the BL half starts at the center and the BR half ends there. Its
+    // length is measured along the path (see UnderlineMaxHalf).
     if (state == 3 || state == 4) {
-        double maxHalf = std::max(0.0, std::min(m.cx - (m.x0 + m.r[kSlotBL]), (m.x1 - m.r[kSlotBR]) - m.cx));
+        double maxHalf = UnderlineMaxHalf(m);
         double halfLen = localSettings.MinLength > 0.0 ? std::min(localSettings.MinLength / 2.0, maxHalf) : maxHalf;
         double outer = localSettings.MinRounded ? std::max(0.0, halfLen - m.t / 2.0) : halfLen;
         auto& bl = targets[kSlotBL];
@@ -4690,7 +4734,9 @@ void EnsureProgressObjects(IndicatorRenderer& r) {
 }
 
 // The underline's sweep: the BL and BR shapes become the two bars, moving
-// left to right along the bottom edge's straight part, cut to it.
+// left to right along the underline's track (see UnderlineMaxHalf), cut to
+// it. The track's positions are path distances from the bottom center, so
+// on a round frame the bars follow its curve.
 // Their ends are expressions of the bars' positions, kept in a property set
 // that keyframe animations move. Along the path the bottom edge runs right
 // to left (s = sBottomMid + cx - x), so a bar's right end is its TrimStart.
@@ -5235,12 +5281,13 @@ void UpdateIndicator(FrameworkElement const& button, std::shared_ptr<ButtonEntry
         if (state == 3 || state == 4) progressMode = 1;
         else if ((state == 1 || state == 2) && std::abs(localSettings.PulseScale - 1.0) > 0.001) progressMode = 2;
     }
-    // The sweep runs along the whole straight part of the bottom edge, with
-    // bars as long as the underline (its visible length, caps included).
+    // The sweep runs along the whole track the underline may take (see
+    // UnderlineMaxHalf), with bars as long as the underline (its visible
+    // length, caps included).
     double trackL = 0.0, trackR = 0.0, barW = 0.0;
     if (progressMode == 1) {
         const auto& m = r.metrics;
-        double maxHalf = std::max(0.0, std::min(m.cx - (m.x0 + m.r[kSlotBL]), (m.x1 - m.r[kSlotBR]) - m.cx));
+        double maxHalf = UnderlineMaxHalf(m);
         double halfLen = localSettings.MinLength > 0.0 ? std::min(localSettings.MinLength / 2.0, maxHalf) : maxHalf;
         trackL = m.cx - maxHalf;
         trackR = m.cx + maxHalf;
