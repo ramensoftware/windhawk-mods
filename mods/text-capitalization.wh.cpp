@@ -88,11 +88,11 @@ modifier keys are held for too long.
 /*
 - OpenPickerHotkey: "ctrl+alt+80"
   $name: Open picker from selected text
-  $description: Copy the current selection into the read-only preview and open the case picker.
+  $description: Copy the current selection into the read-only preview and open the case picker. Modifiers ctrl/alt/shift (ctrl or alt required; win is not supported). Empty disables the shortcut.
   #! $format: hotkey
 - ApplyHotkey: "ctrl+alt+77"
   $name: Apply saved case immediately
-  $description: Apply the saved case to the current selection without opening the picker.
+  $description: Apply the saved case to the current selection without opening the picker. Modifiers ctrl/alt/shift (ctrl or alt required; win is not supported). Empty disables the shortcut.
   #! $format: hotkey
 */
 // ==/WindhawkModSettings==
@@ -427,12 +427,17 @@ Shortcut LoadShortcutSetting(const wchar_t* name, const Shortcut& fallback) {
     Shortcut result = fallback;
     WindhawkUtils::StringSetting value = WindhawkUtils::StringSetting::make(name);
     const wchar_t* v = value.get();
+    if (!v || !*v) {
+        result.vk = 0;
+        result.ctrl = result.alt = result.shift = false;
+        Wh_Log(L"%s is empty; shortcut disabled", name);
+        return result;
+    }
     if (ParseShortcut(v, &result)) {
-        Wh_Log(L"%s = \"%s\" -> %s", name, v ? v : L"",
-               FormatShortcut(result).c_str());
+        Wh_Log(L"%s = \"%s\" -> %s", name, v, FormatShortcut(result).c_str());
     } else {
         result = fallback;
-        Wh_Log(L"%s = \"%s\" is invalid, using %s", name, v ? v : L"",
+        Wh_Log(L"%s = \"%s\" is invalid, using %s", name, v,
                FormatShortcut(fallback).c_str());
     }
     return result;
@@ -1803,13 +1808,6 @@ void WhTool_ModUninit() {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk-mods/pull/1916
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
 // Paste the code below as part of the mod code, and use these callbacks:
 // * WhTool_ModInit
 // * WhTool_ModSettingsChanged
