@@ -2310,7 +2310,7 @@ bool HookWindowsUIXamlDiscovery() {
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(wuxMod, windowsUIXamlDllHooks, ARRAYSIZE(windowsUIXamlDllHooks)) || !FrameworkElement_ArrangeOv
+    if (!WindhawkUtils::HookSymbols(wuxMod, windowsUIXamlDllHooks, ARRAYSIZE(windowsUIXamlDllHooks)) || !FrameworkElement_ArrangeOverride_Orig) {
         Wh_Log(L"Optional Windows.UI.Xaml.dll ArrangeOverride symbol did not resolve.");
         return false;
     }
