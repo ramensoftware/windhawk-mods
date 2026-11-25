@@ -2,12 +2,103 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-25T03:02:57.000Z</updated>
+    <updated>2026-11-25T06:02:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[No-Click Touchpad: Tap & Hold 1.1]]></title>
+        <id>https://windhawk.net/mods/no-click-touchpad-tap-and-hold#500c9a5ef28ce9c6b9bb00d85e14d8dadaaffebe</id>
+        <link href="https://windhawk.net/mods/no-click-touchpad-tap-and-hold"/>
+        <updated>2026-11-25T06:02:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a &quot;Taps to right-click&quot; setting. With two taps, a single tap in the corner does nothing and a quick double tap right-clicks.</li>
+<li>&quot;Two taps, one tap left-clicks&quot; works the same, but a single corner tap left-clicks about half a second later.</li>
+</ul>
+]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Touchpad Relaxed Hand Tracking 1.2.1]]></title>
+        <id>https://windhawk.net/mods/touchpad-relaxed-hand-tracking#579149e78863cacf0bd0d4922d9beac306d8507c</id>
+        <link href="https://windhawk.net/mods/touchpad-relaxed-hand-tracking"/>
+        <updated>2026-11-25T06:02:38.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Steadier speed multiplier (improved &quot;flicks&quot;):</strong> the higher multiplier no longer drops at the start and end of each movement, when fingers don't move in unison (most noticeable with five fingers down). The lower multiplier now only takes over after a confirmed movement with fewer fingers.</li>
+<li><strong>No more accidental clicks with five fingers resting:</strong> touchpads usually report up to five contacts, and a thumb split in two at the pad's edge made the pad take turns among them; those swaps no longer click.</li>
+<li>5-3 fingers moving default speed Increased to 2.0 after this update's precision gain.</li>
+<li>Readme and settings review.</li>
+</ul>
+]]></content>
+        <author>
+            <name>3DDinosaur</name>
+            <uri>https://github.com/3DDinosaur</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Nimbus Menu 2.0.0]]></title>
+        <id>https://windhawk.net/mods/nimbus-menu#d24319c9fa752c9a0649de112ec7f8f2668cdfb1</id>
+        <link href="https://windhawk.net/mods/nimbus-menu"/>
+        <updated>2026-11-25T06:02:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Tray: the icons of the apps running in the background, next to the status area. Inline with arrows, behind one button (pin the ones you want outside), or in a grid or list panel. Clicks go to the app itself; the middle button pins; drag an icon onto another to reorder.</li>
+<li>Control center: one dock button opens do not disturb, Bluetooth, night light, shortcuts (project, cast, captions, accessibility), each monitor's brightness (DDC/CI), sound, power and any other item placed there. Each item opens its full panel inside it, and it scrolls on small screens.</li>
+<li>Every status item can be in the dock, the control center and Start at once, or off.</li>
+<li>Bluetooth: turn it on and off, paired devices with their battery, connect and disconnect headsets and speakers.</li>
+<li>Notifications: Windows' notifications also show as Nimbus cards (corner of your choice, paused under the mouse, never over games), with their buttons; a bell opens the list, newest first; Win+N can open it. Optional: hide Windows' own banners (asks first, restored when turned off). Its own sounds (15 to pick, or Windows' own), one for notifications and one for reminders.</li>
+<li>Player: what any app plays in Windows' media controls: cover, title, time, controls, shuffle and repeat, that app's volume, switch between apps. In the dock as the cover and title, the cover, the title, bars moving with the sound, or an icon.</li>
+<li>Devices: wireless batteries (Bluetooth, Xbox controllers, and USB receivers through BatteryHub when installed), with warnings at 20% and 10%.</li>
+<li>Notes and reminders: notes stay until deleted; reminders come as Nimbus notifications, late too if the PC was off.</li>
+<li>Shelf: drop files on the dock to keep them for a moment, then drag them anywhere; Ctrl+V turns a copied picture or text into a file.</li>
+<li>Start: smarter search (no accents needed, initials like &quot;vsc&quot;, one typo, common nicknames, what you open most first), keyboard navigation in every tab, power buttons that ask before restart or shut down, and a right-click menu with sign out, hibernate and restart to advanced options. All apps refreshes when an app is installed or removed.</li>
+<li>Power modes follow Windows' power plans (High performance, Balanced, Power saver).</li>
+<li>Its own settings window with a live preview; Windhawk's settings tab is empty on purpose (1.x settings carry over). A guided setup asks a few questions on the first run.</li>
+<li>Follows Windows' high contrast and &quot;Animation effects&quot; off.</li>
+<li>Start's Status tab in the control center's look (time, player, round switches, sliders, tray, power, rows), its parts in any order (&quot;Organize&quot;: drag them, or Alt + arrows), saved per account.</li>
+<li>Sound panel, simple (the default, as before) or complete (Settings › Status area › Sound): the apps playing on the left and every output on the right. Drag an app onto an output to play it there too, from one output to another to move it, × to take it off one; choose the default output and the one for calls. Complete is off by default because it changes Windows' sound output: the default and communications outputs (IPolicyConfig) and each app's output (the AudioPolicyConfig factory Windows' own Sound settings use), both undocumented by Microsoft; an app on a second output is a copy Nimbus plays through process loopback (documented, Windows 10 2004+) while it runs. An app that picks its own outputs (TeamSpeak, Discord) is muted on the one it's taken off. Going back to Simple puts everything back (every app on the default, copies off, those mutes undone). Listed in the readme's &quot;What it changes in Windows&quot;.</li>
+<li>Notification sounds stay audible during calls (Nimbus' audio session opts out of Windows' communications ducking).</li>
+<li>Many fixes: dock clicks on admin windows, panels anchored to their item, faster panels (slow reads moved to worker threads).</li>
+</ul>
+]]></content>
+        <author>
+            <name>igoredm</name>
+            <uri>https://github.com/igoredm</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Tabs Session Saver Revamped 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-tabs-session-saver-revamped#6e094d2b1e6df46729aed0eb81861b924423f0a3</id>
+        <link href="https://windhawk.net/mods/explorer-tabs-session-saver-revamped"/>
+        <updated>2026-11-25T06:02:26.000Z</updated>
+        <content type="html"><![CDATA[<h1>Explorer Tabs Session Saver Revamped</h1>
+<p>This mod saves your open File Explorer tabs and automatically restores them whenever you reopen File Explorer.</p>
+<p>It is an enhanced successor to <a href="https://windhawk.net/mods/explorer-tabs-session-saver">Explorer Tabs Session Saver</a> by <a href="https://github.com/noX1st">noX1st</a>, fixing several core issues and edge cases.</p>
+<p><img src="https://i.imgur.com/5ehPFaL.gif" alt="Demonstration"></p>
+<h3>Improvements Over the Original Mod</h3>
+<ul>
+<li><strong>No Extra &quot;Blank&quot; Tab on Restore:</strong> When File Explorer opens to a default start location (<em>Home</em> or <em>This PC</em>), the initial left-most tab is navigated in-place (<code>IWebBrowser2::Navigate</code> / <code>IShellBrowser::BrowseObject</code>) instead of spawning a separate <code>ShellExecuteExW</code> call for the first saved tab. If Explorer is opened for a specific folder (e.g. <em>&quot;Show in folder&quot;</em> or a folder shortcut), that folder and its selection are preserved and your saved tabs open alongside it.</li>
+<li><strong>Fixes Sidebar Auto-Scrolling to the Bottom:</strong> Prevents File Explorer's Navigation Pane (<code>SysTreeView32</code>) from jumping or flickering to the bottom when restoring tabs with Explorer Tab Utility.</li>
+<li><strong>Persistent Session Protection:</strong> Opening File Explorer and closing it immediately without interacting with the restored tabs will no longer delete or lose your saved session.</li>
+<li><strong>Atomic Multi-Tab Window Close:</strong> Ignores tabs belonging to a top-level Explorer window that is already in the middle of closing, preventing partial tab lists from overwriting your session when closing a multi-tab window.</li>
+<li><strong>Per-User UTF-8 Session Storage:</strong> Stores sessions per Windows user account (<code>LastExplorerTabs-&lt;SID&gt;.txt</code>) in UTF-8 so folder paths with accented or Unicode characters are preserved and multi-user accounts do not collide.</li>
+<li><strong>Clean Mod Reload / Unload:</strong> Joins worker threads and unsubclasses controls deterministically on unload.</li>
+</ul>
+<h3>Notes</h3>
+<ul>
+<li>Works independently of the built-in Windows feature <em>&quot;Restore previous folder windows at logon&quot;</em>.</li>
+<li><strong>Important:</strong> To restore tabs into a single File Explorer window, <a href="https://github.com/w4po/ExplorerTabUtility">Explorer Tab Utility</a> (with its <strong>&quot;Window Hook&quot;</strong> feature enabled) or a similar tab-merging utility is required. Otherwise, each tab will be restored in its own separate window.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Peter2oo1</name>
+            <uri>https://github.com/Peter2oo1</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Better Volume Mixer 1.6.4]]></title>
         <id>https://windhawk.net/mods/better-volume-mixer#f58273a1d3e10723a01c3aac1e4f2fcc45ad327c</id>
@@ -287,266 +378,6 @@
         <author>
             <name>caotu2005</name>
             <uri>https://github.com/caotu2005</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Language Cursor 1.0.0]]></title>
-        <id>https://windhawk.net/mods/language-cursor#c2a5b795c4f2a875ee16d53da32a57a761bbf54d</id>
-        <link href="https://windhawk.net/mods/language-cursor"/>
-        <updated>2026-11-23T02:01:07.000Z</updated>
-        <content type="html"><![CDATA[<h1>Language Cursor</h1>
-<p>Shows the current keyboard layout as a small badge next to the mouse pointer,
-so you know which language you are about to type in before you press a key. It
-follows the layout of the app you are working in.</p>
-<p><img src="https://i.imgur.com/tph9cXo.png" alt="Badge next to the text caret, with the Caps Lock and Num Lock marks">
-<img src="https://i.imgur.com/YMY9W4X.png" alt="Badge for the Ukrainian layout with the Caps Lock mark">
-<img src="https://i.imgur.com/vFnIUrc.png" alt="Badge with the Caps Lock and Num Lock marks"></p>
-<h2>Indicator modes</h2>
-<ul>
-<li><strong>Label next to pointer</strong>: a floating badge that follows the mouse pointer.</li>
-<li><strong>Label inside text cursor</strong>: the label is drawn into the I-beam pointer that
-Windows shows over text fields. This replaces the system I-beam pointer while
-the mod is running.</li>
-<li><strong>Off</strong>: no badge. Custom pointers per language still apply.</li>
-</ul>
-<h2>When the badge is shown</h2>
-<ul>
-<li><strong>Always</strong>.</li>
-<li><strong>Only over text fields</strong>: while the pointer is an I-beam.</li>
-<li><strong>Briefly after switching language</strong>: for a duration you choose.</li>
-</ul>
-<p>With <strong>Show at the text caret while typing</strong> turned on, the badge moves next to
-the text caret when you start typing, and goes back to the mouse pointer when
-you move the mouse. This works in apps that report where their caret is.</p>
-<p>It can also hide when the pointer is hidden and in full-screen apps. You can
-set its position around the pointer, distance, font size, opacity, corner
-roundness and drop shadow.</p>
-<h2>Caps Lock and Num Lock</h2>
-<p>The label can also show a mark while a lock key is on: <code>⇪</code> for Caps Lock and
-<code>#</code> for Num Lock. Each one has its own setting. The marks are part of the text
-label, so they aren't shown on badges that use an image.</p>
-<h2>Per-language styles</h2>
-<p>Add one entry per keyboard layout under <strong>Languages</strong>. Each entry can set:</p>
-<ul>
-<li>a label of up to 6 characters (by default the language code, such as <code>EN</code>);</li>
-<li>a background color as hex RGB, such as <code>#FFB900</code>;</li>
-<li>an image shown in place of the label (PNG, JPG, BMP or GIF, first frame);</li>
-<li>a custom mouse pointer (CUR or ANI) used while that layout is active.</li>
-</ul>
-<p>The layout is identified by its locale, such as <code>uk-UA</code>, <code>en-US</code>, <code>en-GB</code> or
-<code>pl-PL</code>, or by its HKL value as 8 or 16 hex digits. Layouts without an entry
-get an automatic label and color. Paths may contain environment variables such
-as <code>%USERPROFILE%</code>, and the files must stay available.</p>
-<h2>Custom pointers and safety</h2>
-<p>Custom pointers and the text-cursor mode change the Windows system pointers.
-The mod restores the Windows pointer scheme when it is disabled or unloaded,
-and on its next start if it was closed unexpectedly while pointers were
-changed. To restore them by hand, open Windows Mouse settings &gt; Pointers and
-click Apply.</p>
-<p>Restoring reloads the whole Windows pointer scheme, so pointers that another
-mod or app changed at run time are reset too.</p>
-<h2>Performance</h2>
-<p>The mod runs in its own <code>windhawk.exe</code> process, not inside Explorer or other
-apps, and installs no hooks. It checks
-the pointer 60 times a second only while the badge is visible and the pointer
-is moving, and slows down to about 8 checks a second when nothing is happening.
-While the badge sits at the text caret, the mod also asks the app you are typing
-in for its caret position 8 to 20 times a second.</p>
-<h2>Limitations</h2>
-<ul>
-<li>The badge isn't shown over the secure desktop (UAC prompts, lock screen), and
-may not appear over some full-screen games.</li>
-<li>Animated GIF images show only their first frame.</li>
-<li>Showing the badge at the text caret depends on the app. Some apps don't
-report the caret position, and there the badge stays with the mouse pointer.</li>
-<li><strong>Only over text fields</strong> and the text-cursor mode work with the standard
-Windows I-beam pointer. Apps that draw their own text pointer are not
-detected.</li>
-<li>The label I-beam in text-cursor mode is always black and white. It does not
-follow a custom pointer color or scheme.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Sanekx Arcs</name>
-            <uri>https://github.com/SanekxArcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Mini Folders 1.1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-mini-folders#65b2be5786e0ca955b406c5a8bd74ddd0fa7e897</id>
-        <link href="https://windhawk.net/mods/taskbar-mini-folders"/>
-        <updated>2026-11-23T01:04:38.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Works with a vertical taskbar (on the left or right side of the screen): the mini folders form a column and the panel opens beside the taskbar.</li>
-<li>New position: after a chosen number of taskbar icons.</li>
-<li>New &quot;Hide this mini folder&quot; switch for each mini folder, to hide it for a while without deleting it.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Sanekx Arcs</name>
-            <uri>https://github.com/SanekxArcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mac-style Text Navigation 0.1]]></title>
-        <id>https://windhawk.net/mods/mac-text-keys#e09e6faca14d07424add55f33cb197ab1fa5ea43</id>
-        <link href="https://windhawk.net/mods/mac-text-keys"/>
-        <updated>2026-11-23T01:04:33.000Z</updated>
-        <content type="html"><![CDATA[<h1>Mac-style Text Navigation</h1>
-<p>Makes the modifier keys behave like on macOS when moving the text cursor:
-<strong>Ctrl acts like Cmd</strong> and <strong>Alt acts like Option</strong>.</p>
-<table>
-<thead>
-<tr>
-<th>Shortcut</th>
-<th>Does the same as (Windows)</th>
-<th>macOS equivalent</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Ctrl + ←</td>
-<td>Home (start of line)</td>
-<td>Cmd + ←</td>
-</tr>
-<tr>
-<td>Ctrl + →</td>
-<td>End (end of line)</td>
-<td>Cmd + →</td>
-</tr>
-<tr>
-<td>Alt + ←</td>
-<td>Ctrl + ← (previous word)</td>
-<td>Option + ←</td>
-</tr>
-<tr>
-<td>Alt + →</td>
-<td>Ctrl + → (next word)</td>
-<td>Option + →</td>
-</tr>
-</tbody>
-</table>
-<p>Holding <strong>Shift</strong> as well extends the selection, as expected.</p>
-<h2>Notes</h2>
-<ul>
-<li>The mod runs in a dedicated background <code>windhawk.exe</code> process and uses a
-global low-level keyboard hook, so it works in every application.</li>
-<li>The remapping applies everywhere, not only in text fields. For example,
-Alt+Left/Right no longer go Back/Forward in browsers, File Explorer and
-Settings, and Ctrl+Left/Right lose app-specific meanings (such as jumping to
-the edge of a data region in Excel). Use the &quot;Excluded programs&quot; setting for
-apps where you want the original behavior.</li>
-<li>Windows running as administrator are not affected unless Windhawk itself
-runs elevated (a Windows security restriction).</li>
-<li>Ctrl+Alt combinations (including AltGr) and combinations with the Win key
-are left untouched.</li>
-<li>Modifiers produced by remapping tools that inject input (e.g. PowerToys
-Keyboard Manager, AutoHotkey) are not recognized. Remaps done through the
-scancode map (e.g. SharpKeys) work.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Caio Lemos</name>
-            <uri>https://github.com/lemoscaio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Ookla Speed Test for Network Menu 1.0]]></title>
-        <id>https://windhawk.net/mods/system-tray-network-speedtest#a27c37d29fd6e31d56bd6ecbd78138b0429c98d6</id>
-        <link href="https://windhawk.net/mods/system-tray-network-speedtest"/>
-        <updated>2026-11-23T01:04:28.000Z</updated>
-        <content type="html"><![CDATA[<h1>Ookla Speed Test for Network Menu</h1>
-<p>Right-clicking the network icon in the Windows 11 taskbar and choosing
-<strong>Run internet speed test</strong> normally opens a web page in your browser. This mod
-replaces it with a native flyout above the taskbar that runs the official
-<strong>Ookla Speedtest CLI</strong> in the background and shows the test live.</p>
-<h2>Screenshots</h2>
-<table>
-<thead>
-<tr>
-<th>Download</th>
-<th>Upload</th>
-<th>History</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/download.png" alt="Download"></td>
-<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/upload.png" alt="Upload"></td>
-<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/history.png" alt="History"></td>
-</tr>
-</tbody>
-</table>
-<h2>Features</h2>
-<ul>
-<li>Live gauge (0 to 2,000+ Mbps) drawn as a soft light bar with smooth motion:
-blue for download, purple for upload.</li>
-<li>Ping, jitter, download and upload measured by Ookla. The server is always
-picked automatically.</li>
-<li><strong>Test history</strong>: when a test finishes, the flyout moves to a list of the last
-100 tests (date and time, IP, server, download, upload, ping) with the new
-test on top. Click a row to open its result page on speedtest.net.</li>
-<li><strong>Copy</strong> puts the result, including the speedtest.net link, on the clipboard.</li>
-<li>Follows the Windows light/dark theme, transparency, DPI and the
-&quot;Animation effects&quot; setting. Keyboard (Tab, arrows, Enter, Esc) and screen
-reader accessible.</li>
-<li>Interface in English or Portuguese, following the Windows display language.</li>
-</ul>
-<h2>Requirements</h2>
-<ol>
-<li>Download the <strong>Speedtest CLI for Windows</strong> from
-<a href="https://www.speedtest.net/apps/cli">speedtest.net/apps/cli</a> and extract
-<code>speedtest.exe</code>.</li>
-<li>Put it at <code>%LOCALAPPDATA%\Programs\speedtest\speedtest.exe</code> (the default),
-or set its path in the mod settings.</li>
-</ol>
-<h2>Ookla license and privacy</h2>
-<p>Before the first test, the flyout explains what Ookla receives and links
-Ookla's <a href="https://www.speedtest.net/about/eula">EULA</a>,
-<a href="https://www.speedtest.net/about/terms">Terms of Use</a> and
-<a href="https://www.speedtest.net/about/privacy">Privacy Policy</a>. No test runs until
-you click <strong>Accept and test</strong>. Only then does the mod start <code>speedtest.exe</code>
-with <code>--accept-license --accept-gdpr</code>. The acceptance is stored separately for
-each Windows user.</p>
-<p>The Speedtest CLI also records the acceptance in its own file,
-<code>%APPDATA%\Ookla\Speedtest CLI\speedtest-cli.ini</code>, which stays after the mod
-is removed. Delete that folder to reset it.</p>
-<h2>Network access</h2>
-<p>The mod opens no connections itself. It runs <code>speedtest.exe</code>, which:</p>
-<ul>
-<li>contacts Ookla's servers to pick a test server, then downloads from and
-uploads to that Speedtest server;</li>
-<li>uploads the result to speedtest.net, where Ookla stores it (the result link
-in the history points there).</li>
-</ul>
-<p>Ookla receives your public IP address, your internet provider and the test
-results, under its privacy policy.</p>
-<p>A test runs every time the flyout opens, and on Start, Repeat or Retry. Set
-<strong>Start the test automatically</strong> to <strong>Never</strong> to make tests click-only (<em>Auto</em>
-already waits for a click on metered connections). Clicking a history row or
-a terms link opens speedtest.net in your browser.</p>
-<h2>Data usage</h2>
-<p>Ookla does not cap a test: on a 2 Gbps line one test moves about 4-5 GB. With
-<strong>Start the test automatically</strong> set to <em>Auto</em>, the flyout waits for a click
-when Windows reports the connection as metered.</p>
-<h2>Notes</h2>
-<ul>
-<li>Stop, Esc, closing the flyout or disabling the mod ends <code>speedtest.exe</code>
-immediately (it runs inside a kill-on-close job object).</li>
-<li>The history lives in the mod's own Windhawk storage, separately for each
-Windows user, and is removed with the mod.</li>
-<li><a href="https://windhawk.net/mods/network-speedtest-native">Network Menu Speed Test</a>
-intercepts the same link. If both are installed, disable one of them.</li>
-</ul>
-<h2>Credits</h2>
-<p>Based on <a href="https://windhawk.net/mods/network-speedtest-native">Network Menu Speed Test</a>
-by Alessandro-Vecchio, which provides the hooks and the original flyout. This
-mod swaps its Cloudflare engine for the Ookla Speedtest CLI and adds the light
-bar, the smooth motion and the test history.</p>
-]]></content>
-        <author>
-            <name>joaomgabaldi</name>
-            <uri>https://github.com/joaomgabaldi</uri>
         </author>
     </entry>
 </feed>

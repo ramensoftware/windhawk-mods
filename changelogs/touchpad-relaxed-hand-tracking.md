@@ -1,3 +1,10 @@
+## 1.2.1 ([Nov 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/579149e78863cacf0bd0d4922d9beac306d8507c/mods/touchpad-relaxed-hand-tracking.wh.cpp))
+
+* **Steadier speed multiplier (improved "flicks"):** the higher multiplier no longer drops at the start and end of each movement, when fingers don't move in unison (most noticeable with five fingers down). The lower multiplier now only takes over after a confirmed movement with fewer fingers.    
+* **No more accidental clicks with five fingers resting:** touchpads usually report up to five contacts, and a thumb split in two at the pad's edge made the pad take turns among them; those swaps no longer click.   
+* 5-3 fingers moving default speed Increased to 2.0 after this update's precision gain.   
+*  Readme and settings review.
+
 ## 1.2.0 ([Nov 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bccd6babe55b52d78e9caecec8b027cf2ad0b31f/mods/touchpad-relaxed-hand-tracking.wh.cpp))
 
 * **Improved click stability:** more assertive tap-hold drag action and pointer position while clicking.

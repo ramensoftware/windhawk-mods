@@ -401,6 +401,36 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4398b4841ab98d76e16b35d93af4f2e561e62ea3/mods/desktop-window-keys.wh.cpp"
       }
     },
+    "dynamic-window-manager": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795587228422,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795587228422,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Armaninyow",
+        "compilerOptions": "-luser32 -ldwmapi -lshell32",
+        "description": "Sizes, maximizes and positions new application windows according to user-defined per-application rules",
+        "github": "https://github.com/armaninyow",
+        "include": [
+          "windhawk.exe",
+          "taskmgr.exe"
+        ],
+        "license": "MIT",
+        "name": "Dynamic Window Manager",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7903",
+      "source": {
+        "sha256": "3b0fd8485d39c16bbc39cf8b8a665939bf9f684eda18c99ea692939a99bdb68e",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/a863dc5fbdc274745667b4ab64c7a7eef42fbc41/mods/dynamic-window-manager.wh.cpp"
+      }
+    },
     "enable-preview-pane-for-downloads": {
       "details": {
         "defaultSorting": 0,
@@ -590,34 +620,6 @@
       "source": {
         "sha256": "d832f666a0299ff805d50180bad1fcb12d3304da1545b000c8d0c969b3eac5e7",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/54e6d828af78702136c1aec003528aa1fcc136b8/mods/explorer-tab-memory.wh.cpp"
-      }
-    },
-    "explorer-tabs-session-saver-revamped": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795061322192,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795061322192,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Peter2oo1",
-        "compilerOptions": "-lshlwapi -lole32 -loleaut32 -lshell32 -luuid -lcomctl32 -ladvapi32",
-        "description": "Saves and restores File Explorer tabs on reopen, without blank extra tabs or sidebar scroll glitches",
-        "github": "https://github.com/Peter2oo1",
-        "include": [
-          "explorer.exe"
-        ],
-        "name": "Explorer Tabs Session Saver Revamped",
-        "version": "1.0.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7645",
-      "source": {
-        "sha256": "4ed5ce94075b5359c4182850b0ac5c80c795c70aff97139e65e1fc614d3f37a8",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/721a9137674f8c731562f377925c9027c7af0a6d/mods/explorer-tabs-session-saver-revamped.wh.cpp"
       }
     },
     "extra-dim": {

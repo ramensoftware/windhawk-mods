@@ -7822,6 +7822,30 @@
         "version": "1.0.0"
       }
     },
+    "explorer-tabs-session-saver-revamped": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795586546000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "trendingSorting": 0,
+        "updated": 1795586546000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Peter2oo1",
+        "compilerOptions": "-lshlwapi -lole32 -loleaut32 -lshell32 -luuid -lcomctl32 -ladvapi32",
+        "description": "Saves and restores File Explorer tabs on reopen, without blank extra tabs or sidebar scroll glitches",
+        "github": "https://github.com/Peter2oo1",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Explorer Tabs Session Saver Revamped",
+        "version": "1.0.0"
+      }
+    },
     "explorer-tags": {
       "details": {
         "defaultSorting": 10670,
@@ -12930,12 +12954,12 @@
         "ratingUsers": 21,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1795132910000,
+        "updated": 1795586552000,
         "users": 99
       },
       "metadata": {
         "author": "igoredm",
-        "compilerOptions": "-lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshell32 -lshlwapi -lshcore -lpropsys -ladvapi32",
+        "compilerOptions": "-lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -ldwmapi -lshell32 -lshlwapi -lshcore -lpropsys -ladvapi32 -lcomdlg32 -lwlanapi -lversion -lcomctl32 -lsetupapi -lruntimeobject -lwinmm",
         "description": "Replaces the Windows taskbar with a light dock and its own Start menu (also on the Windows key): smoked glass, macOS-like zoom, live window previews, one bar per monitor, file search with Everything",
         "github": "https://github.com/igoredm",
         "homepage": "https://github.com/igoredm/nimbus-menu",
@@ -12944,7 +12968,7 @@
           "explorer.exe"
         ],
         "name": "Nimbus Menu",
-        "version": "1.1.0"
+        "version": "2.0.0"
       }
     },
     "no-click-touchpad-tap-and-hold": {
@@ -12956,7 +12980,7 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1794963811000,
+        "updated": 1795586563000,
         "users": 12
       },
       "metadata": {
@@ -12970,7 +12994,7 @@
           "windhawk-mod-uiaccess.exe"
         ],
         "name": "No-Click Touchpad: Tap & Hold",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "no-flash-window": {
@@ -21207,7 +21231,7 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1795276825000,
+        "updated": 1795586558000,
         "users": 32
       },
       "metadata": {
@@ -21222,7 +21246,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Touchpad Relaxed Hand Tracking",
-        "version": "1.2.0"
+        "version": "1.2.1"
       }
     },
     "touhou-kbd-binds": {
