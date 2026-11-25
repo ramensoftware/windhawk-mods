@@ -26,15 +26,15 @@
 /*
 # Windows 11 Taskbar Folders (x64)
 
-**English** — Right-click an empty part of the taskbar and select **Create folder…**. Open a folder with one click. Use **+** to search installed apps or choose a file. Drag apps to reorder them. In an app’s Windows menu, choose **Move to** followed by the folder name. The folder’s **⋯** menu lets you rename or remove it.
+**English** — Right-click an empty part of the taskbar and select **Create folder…**. Open a folder with one click. Drag shortcuts from the desktop or File Explorer into the open folder. Use **+** to search installed apps or choose a file. Drag apps to reorder them. In an app’s Windows menu, choose **Move to** followed by the folder name. The folder’s **⋯** menu lets you rename or remove it.
 
-**Italiano** — Fai clic destro su uno spazio vuoto della barra e scegli **Crea cartella…**. Apri la cartella con un clic. Con **+** puoi cercare le app installate o scegliere un file. Trascina le app per riordinarle. Nel menu di Windows di un’app scegli **Sposta in** seguito dal nome della cartella. Dal menu **⋯** puoi rinominare o rimuovere la cartella.
+**Italiano** — Fai clic destro su uno spazio vuoto della barra e scegli **Crea cartella…**. Apri la cartella con un clic. Trascina i collegamenti dal desktop o da Esplora file nella cartella aperta. Con **+** puoi cercare le app installate o scegliere un file. Trascina le app per riordinarle. Nel menu di Windows di un’app scegli **Sposta in** seguito dal nome della cartella. Dal menu **⋯** puoi rinominare o rimuovere la cartella.
 
-**Español** — Haz clic derecho en un espacio vacío de la barra y elige **Crear carpeta…**. Abre la carpeta con un clic. Usa **+** para buscar aplicaciones instaladas o elegir un archivo. Arrastra las aplicaciones para reordenarlas. En el menú de Windows de una aplicación, elige **Mover a** y el nombre de la carpeta. Desde **⋯** puedes cambiar el nombre de la carpeta o quitarla.
+**Español** — Haz clic derecho en un espacio vacío de la barra y elige **Crear carpeta…**. Abre la carpeta con un clic. Arrastra accesos directos desde el escritorio o el Explorador de archivos a la carpeta abierta. Usa **+** para buscar aplicaciones instaladas o elegir un archivo. Arrastra las aplicaciones para reordenarlas. En el menú de Windows de una aplicación, elige **Mover a** y el nombre de la carpeta. Desde **⋯** puedes cambiar el nombre de la carpeta o quitarla.
 
-**Français** — Faites un clic droit sur un espace vide de la barre et choisissez **Créer un dossier…**. Un clic ouvre le dossier. Avec **+**, recherchez une application installée ou choisissez un fichier. Faites glisser les applications pour les réorganiser. Dans le menu Windows d’une application, choisissez **Déplacer vers** suivi du nom du dossier. Le menu **⋯** permet de renommer ou de supprimer le dossier.
+**Français** — Faites un clic droit sur un espace vide de la barre et choisissez **Créer un dossier…**. Un clic ouvre le dossier. Faites glisser des raccourcis depuis le bureau ou l’Explorateur de fichiers vers le dossier ouvert. Avec **+**, recherchez une application installée ou choisissez un fichier. Faites glisser les applications pour les réorganiser. Dans le menu Windows d’une application, choisissez **Déplacer vers** suivi du nom du dossier. Le menu **⋯** permet de renommer ou de supprimer le dossier.
 
-**Deutsch** — Klicken Sie mit der rechten Maustaste auf eine freie Stelle der Taskleiste und wählen Sie **Ordner erstellen…**. Ein Klick öffnet den Ordner. Mit **+** suchen Sie installierte Apps oder wählen eine Datei aus. Ziehen Sie Apps an ihre gewünschte Position. Im Windows-Menü einer App wählen Sie **Nach „Ordnername“ verschieben**. Über **⋯** können Sie den Ordner umbenennen oder entfernen.
+**Deutsch** — Klicken Sie mit der rechten Maustaste auf eine freie Stelle der Taskleiste und wählen Sie **Ordner erstellen…**. Ein Klick öffnet den Ordner. Ziehen Sie Verknüpfungen vom Desktop oder aus dem Datei-Explorer in den geöffneten Ordner. Mit **+** suchen Sie installierte Apps oder wählen eine Datei aus. Ziehen Sie Apps an ihre gewünschte Position. Im Windows-Menü einer App wählen Sie **Nach „Ordnername“ verschieben**. Über **⋯** können Sie den Ordner umbenennen oder entfernen.
 
 | | English | Italiano | Español | Français | Deutsch |
 |---|---|---|---|---|---|
@@ -48,6 +48,7 @@ The mod keeps each Windows account's folder layout in Windhawk's mod storage. Ex
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
+#include <shellapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <sddl.h>
@@ -2114,7 +2115,7 @@ struct Ease {
 struct TileMotion {
     Ease hover, press, dx, dy;
 };
-enum : UINT_PTR { kFrameTimer = 87, kDragPageTimer = 88 };
+enum : UINT_PTR { kFrameTimer = 87, kDragPageTimer = 88, kDropActivationTimer = 89 };
 static bool allowMotion() {
     BOOL effects = TRUE;
     HIGHCONTRASTW hc{sizeof(hc)};
@@ -2147,6 +2148,7 @@ struct FolderPanel {
     AppSearch search;
     int cellWidth = 0, cellHeight = 0, iconSize = 0, lineHeight = 0;
     bool browsing = false;
+    bool dropReleaseSeen = false;
     int pressed = -1, dropTarget = -1;
     POINT start{};
     bool dragging = false, ghost = false, choosing = false, autoScroll = false;
@@ -3422,6 +3424,34 @@ static void beginAdding(const wstring& dest) {
     gridEntrance(1);
     SetFocus(panel.filter);
 }
+static bool addFilesToFolder(const wstring& dest,
+                             const std::vector<wstring>& paths,
+                             bool reportUnsupported) {
+    if (stopping || !lookup(groups, dest) || paths.empty())
+        return false;
+    std::vector<App> apps;
+    for (const auto& path : paths) {
+        if (!appFile(path))
+            continue;
+        DWORD attributes = GetFileAttributesW(path.c_str());
+        if (attributes == INVALID_FILE_ATTRIBUTES ||
+            (attributes & FILE_ATTRIBUTE_DIRECTORY))
+            continue;
+        if (auto app = fromPath(path))
+            apps.push_back(std::move(*app));
+    }
+    if (stopping)
+        return false;
+    if (apps.empty()) {
+        if (reportUnsupported)
+            note(uiText(UiString::NoUsableFile));
+        return false;
+    }
+    return edit([&](Model& m) {
+        for (const auto& app : apps)
+            transfer(m, dest, app);
+    });
+}
 static void workerFinished(UINT msg) {
     if (msg == kCatalogDone) {
         if (collectCatalog() && panel.window && panel.choosing &&
@@ -3436,20 +3466,7 @@ static void workerFinished(UINT msg) {
     filesReady = false;
     auto paths = std::move(selectedPaths);
     auto dest = std::exchange(fileDestination, wstring{});
-    bool added = false;
-    if (!stopping && lookup(groups, dest) && !paths.empty()) {
-        std::vector<App> apps;
-        for (auto& path : paths)
-            if (auto app = fromPath(path))
-                apps.push_back(std::move(*app));
-        if (!apps.empty())
-            added = edit([&](Model& m) {
-                for (const auto& a : apps)
-                    transfer(m, dest, a);
-            });
-        else
-            note(uiText(UiString::NoUsableFile));
-    }
+    bool added = addFilesToFolder(dest, paths, true);
     if (!stopping && panel.window && panel.browsing && panel.folder == dest) {
         panel.browsing = false;
         if (added) {
@@ -3465,6 +3482,42 @@ static void workerFinished(UINT msg) {
     if (FAILED(filesStatus) && !stopping)
         note(uiText(UiString::PickerFailed));
 }
+static bool primaryMouseButtonDown() {
+    int key = GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
+    return (GetAsyncKeyState(key) & 0x8000) != 0;
+}
+static void dropIntoPanel(HWND w, HDROP drop) {
+    std::vector<wstring> paths;
+    {
+        struct DropFiles {
+            HDROP handle;
+            ~DropFiles() { DragFinish(handle); }
+        } guard{drop};
+        if (stopping || panel.window != w || panel.closing || panel.browsing)
+            return;
+        const UINT count = DragQueryFileW(drop, UINT_MAX, nullptr, 0);
+        for (UINT i = 0; i < count; i++) {
+            const UINT length = DragQueryFileW(drop, i, nullptr, 0);
+            if (!length)
+                continue;
+            wstring path(length + 1, L'\0');
+            if (DragQueryFileW(drop, i, path.data(), length + 1) == length) {
+                path.resize(length);
+                paths.push_back(std::move(path));
+            }
+        }
+    }
+    const auto dest = panel.folder;
+    KillTimer(w, kDropActivationTimer);
+    SetForegroundWindow(w);
+    if (addFilesToFolder(dest, paths, false) && panel.window == w) {
+        if (panel.choosing) {
+            panel.choosing = false;
+            panel.page = 0;
+        }
+        syncPanel();
+    }
+}
 static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
     try {
         switch (msg) {
@@ -3477,7 +3530,19 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                     tickPanel();
                     return 0;
                 }
+                if (wp == kDropActivationTimer) {
+                    if (primaryMouseButtonDown()) {
+                        panel.dropReleaseSeen = false;
+                    } else if (std::exchange(panel.dropReleaseSeen, true)) {
+                        KillTimer(w, kDropActivationTimer);
+                        PostMessageW(w, kCheckActivation, 0, 0);
+                    }
+                    return 0;
+                }
                 break;
+            case WM_DROPFILES:
+                dropIntoPanel(w, reinterpret_cast<HDROP>(wp));
+                return 0;
             case WM_MOUSEWHEEL:
             case WM_MOUSEHWHEEL:
                 if (pageWheel(msg, wp))
@@ -3558,22 +3623,30 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                 drawCommand(*reinterpret_cast<DRAWITEMSTRUCT*>(lp));
                 return TRUE;
             case WM_ACTIVATE:
-                if (!panel.browsing && LOWORD(wp) == WA_INACTIVE &&
-                    panel.window == w) {
-                    POINT p{};
-                    GetCursorPos(&p);
-                    if (!(isIn(panel.anchor, p) &&
-                          (GetAsyncKeyState(VK_LBUTTON) & 0x8000)))
-                        PostMessageW(w, kCheckActivation, 0, 0);
+                if (panel.window == w && !panel.browsing) {
+                    if (LOWORD(wp) == WA_INACTIVE) {
+                        POINT p{};
+                        GetCursorPos(&p);
+                        const bool buttonDown = primaryMouseButtonDown();
+                        if (!buttonDown || !isIn(panel.anchor, p))
+                            PostMessageW(w, kCheckActivation, buttonDown, 0);
+                    } else {
+                        KillTimer(w, kDropActivationTimer);
+                    }
                 }
                 break;
             case kCheckActivation: {
-                if (panel.browsing)
+                if (panel.browsing || panel.closing)
                     return 0;
                 HWND active = GetForegroundWindow();
                 if (active && active != w && !IsChild(w, active) &&
-                    GetAncestor(active, GA_ROOTOWNER) != w)
-                    dismissPanel();
+                    GetAncestor(active, GA_ROOTOWNER) != w) {
+                    // Explorer can activate as soon as a file drag starts.
+                    // Give the shell a chance to deliver the drop after release.
+                    panel.dropReleaseSeen = false;
+                    if (!wp || !SetTimer(w, kDropActivationTimer, 40, nullptr))
+                        dismissPanel();
+                }
                 return 0;
             }
             case kClosePanel:
@@ -3676,9 +3749,18 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                     return 0;
                 }
                 break;
-            case WM_DESTROY:
+            case WM_DESTROY: {
                 finishDrag();
                 KillTimer(w, kFrameTimer);
+                KillTimer(w, kDropActivationTimer);
+                DragAcceptFiles(w, FALSE);
+                MSG drop{};
+                while (PeekMessageW(&drop, w, WM_DROPFILES, WM_DROPFILES,
+                                    PM_NOREMOVE) && drop.message == WM_DROPFILES) {
+                    PeekMessageW(&drop, w, WM_DROPFILES, WM_DROPFILES,
+                                 PM_REMOVE);
+                    DragFinish(reinterpret_cast<HDROP>(drop.wParam));
+                }
                 releasePreviousPage();
                 for (const auto& icon : panel.glyphs)
                     if (icon.handle)
@@ -3701,6 +3783,7 @@ static LRESULT CALLBACK panelProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
                     panel.icons = nullptr;
                 }
                 return 0;
+            }
             case WM_NCDESTROY:
                 if (panel.background)
                     DeleteObject(panel.background);
@@ -3827,6 +3910,7 @@ static void openPanel(const wstring& id,
     ListView_SetBkColor(panel.list, panel.surface);
     ListView_SetTextBkColor(panel.list, CLR_NONE);
     ListView_SetTextColor(panel.list, panel.foreground);
+    DragAcceptFiles(panel.window, TRUE);
     refreshPanel();
     panel.reveal.set(panel.motion ? 0 : 1);
     revealPanel();
