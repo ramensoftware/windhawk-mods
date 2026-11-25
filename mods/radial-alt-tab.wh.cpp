@@ -28,7 +28,8 @@ Replaces the Alt+Tab switcher with a full-screen view split into two halves:
   toward a window to select it.
 - Release **Alt** to switch to the selected window. No click is needed.
 - Tab / Shift+Tab, the arrow keys and the mouse wheel also change the selection.
-- Left click switches right away, right click or **Esc** cancels.
+- Left click switches right away. Right click closes the selected window; if
+  it has unsaved changes, the app asks first. **Esc** cancels.
 
 The view opens and closes instantly, without animations.
 
@@ -355,7 +356,7 @@ LRESULT CALLBACK MouseProc(int code, WPARAM wp, LPARAM lp) {
         PostMessage(g_wnd, WM_APP_JOY, (WPARAM)dx, (LPARAM)dy);
     } else if (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN) {
         g_session = false;
-        PostMessage(g_wnd, WM_APP_END, wp == WM_LBUTTONDOWN, 0);
+        PostMessage(g_wnd, WM_APP_END, wp == WM_LBUTTONDOWN ? 1 : 2, 0);
     } else if (wp == WM_MOUSEWHEEL) {
         PostMessage(g_wnd, WM_APP_STEP, (short)HIWORD(m->mouseData) > 0 ? -1 : 1, 0);
     }
@@ -430,8 +431,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_APP_END:
             KillTimer(hwnd, 1);
             Close();
-            if (wp && g_sel < g_count)
+            if (wp && g_sel < g_count) {
                 Activate(g_list[g_sel]);
+                if (wp == 2)
+                    PostMessage(g_list[g_sel], WM_CLOSE, 0, 0);
+            }
             g_count = 0;
             return 0;
         case WM_SETCURSOR:
