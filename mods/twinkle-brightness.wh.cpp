@@ -329,6 +329,7 @@ enum class SnapshotKind {
     WmiLevels,   // Laptop screens read again after a brightness event
     AllLevels,   // All displays read again
     Enumerated,  // Displays detected again
+    Probed,      // Monitors that didn't answer were tried again, in vain
 };
 
 enum class OsdPosition {
@@ -751,6 +752,7 @@ std::condition_variable g_cv;
 bool g_requestEnumerate = false;
 bool g_requestRefresh = false;
 bool g_requestRefreshWmi = false;
+bool g_requestProbe = false;
 bool g_requestStop = false;
 bool g_busy = false;
 std::condition_variable g_idleCv;
@@ -1226,6 +1228,9 @@ void Refresh(bool wmiOnly) {
 
 // When the mod last set a laptop screen's level; see BrightnessEventThread.
 std::atomic<DWORD> g_lastWmiSetTick;
+// When the worker reads the laptop levels again after its own writes, 0 if
+// not needed. Worker thread only.
+DWORD g_wmiRecheckAt;
 
 bool Apply(HwDisplay& d, int raw) {
     bool ok = false;
@@ -1233,8 +1238,18 @@ bool Apply(HwDisplay& d, int raw) {
         ok = DdcSet(d.physical,
                     (DWORD)std::lround(raw * (double)d.vcpMax / 100.0));
     } else if (d.info.method == Method::Wmi) {
+        // The event for this write can arrive before WmiSet returns.
+        g_lastWmiSetTick = GetTickCount();
         ok = WmiSet(d.wmiPath, raw);
         g_lastWmiSetTick = GetTickCount();
+        // Events are skipped right after the mod's own writes, and the UI
+        // ignores hardware levels for 2 seconds after a change, so read
+        // the levels once more after that: a brightness key pressed
+        // meanwhile isn't lost.
+        g_wmiRecheckAt = GetTickCount() + 2500;
+        if (!g_wmiRecheckAt) {
+            g_wmiRecheckAt = 1;
+        }
     }
     if (ok) {
         d.info.raw = raw;
@@ -1355,27 +1370,70 @@ void StopBrightnessEvents() {
     }
 }
 
+// Tries the external monitors that couldn't be controlled again, without
+// detecting all displays again. Returns false if a full detection is needed
+// instead, because a monitor had no DDC/CI handle.
+bool Probe(bool* changed) {
+    *changed = false;
+    for (auto& d : g_displays) {
+        if (d.info.ddcFailed && !d.physical) {
+            return false;
+        }
+    }
+    for (auto& d : g_displays) {
+        if (!d.info.ddcFailed) {
+            continue;
+        }
+        DWORD current, maximum;
+        if (DdcGet(d.physical, &current, &maximum, 3)) {
+            d.info.method = Method::Ddc;
+            d.info.ddcFailed = false;
+            d.vcpMax = maximum;
+            d.info.raw =
+                ClampPercent((int)std::lround(current * 100.0 / maximum));
+            Wh_Log(L"Display answered: %s", d.info.name.c_str());
+            *changed = true;
+        }
+    }
+    return true;
+}
+
 DWORD WINAPI WorkerThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
     while (true) {
-        bool enumerate, refresh, refreshWmi, stop;
+        bool enumerate, refresh, refreshWmi, probe, stop;
         std::map<std::wstring, int> sets;
         {
             std::unique_lock<std::mutex> lock(g_mutex);
-            g_cv.wait(lock, [] {
+            auto ready = [] {
                 return g_requestEnumerate || g_requestRefresh ||
-                       g_requestRefreshWmi || g_requestStop ||
-                       !g_pendingSet.empty();
-            });
+                       g_requestRefreshWmi || g_requestProbe ||
+                       g_requestStop || !g_pendingSet.empty();
+            };
+            while (!ready()) {
+                if (!g_wmiRecheckAt) {
+                    g_cv.wait(lock);
+                    continue;
+                }
+                int remaining = (int)(g_wmiRecheckAt - GetTickCount());
+                if (remaining <= 0) {
+                    g_wmiRecheckAt = 0;
+                    g_requestRefreshWmi = true;
+                    break;
+                }
+                g_cv.wait_for(lock, std::chrono::milliseconds(remaining));
+            }
             enumerate = g_requestEnumerate;
             refresh = g_requestRefresh;
             refreshWmi = g_requestRefreshWmi;
+            probe = g_requestProbe;
             stop = g_requestStop;
             sets.swap(g_pendingSet);
             g_requestEnumerate = false;
             g_requestRefresh = false;
             g_requestRefreshWmi = false;
+            g_requestProbe = false;
             g_busy = true;
         }
 
@@ -1391,6 +1449,11 @@ DWORD WINAPI WorkerThread(LPVOID) {
             enumerate = true;
         }
 
+        bool probeChanged = false;
+        if (probe && !enumerate && !stop && !Probe(&probeChanged)) {
+            enumerate = true;
+        }
+
         if (enumerate) {
             Enumerate();
             ApplyAll(failed);
@@ -1398,7 +1461,13 @@ DWORD WINAPI WorkerThread(LPVOID) {
             if (!stop) {
                 StartBrightnessEvents();
             }
-        } else if (refresh || refreshWmi) {
+        } else if (probe) {
+            // A monitor that answered now has a slider: lay out the panel
+            // again. Otherwise only the next try is scheduled.
+            Publish(probeChanged ? SnapshotKind::Enumerated
+                                 : SnapshotKind::Probed);
+        }
+        if (!enumerate && (refresh || refreshWmi)) {
             Refresh(!refresh);
             Publish(refresh ? SnapshotKind::AllLevels : SnapshotKind::WmiLevels);
         }
@@ -1436,6 +1505,12 @@ void RequestEnumerate() {
     g_cv.notify_one();
 }
 
+void RequestProbe() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    g_requestProbe = true;
+    g_cv.notify_one();
+}
+
 void RequestRefresh() {
     std::lock_guard<std::mutex> lock(g_mutex);
     g_requestRefresh = true;
@@ -1465,7 +1540,7 @@ bool WaitUntilIdle(DWORD timeoutMs) {
     std::unique_lock<std::mutex> lock(g_mutex);
     return g_idleCv.wait_for(lock, std::chrono::milliseconds(timeoutMs), [] {
         return !g_busy && g_pendingSet.empty() && !g_requestEnumerate &&
-               !g_requestRefresh && !g_requestRefreshWmi;
+               !g_requestRefresh && !g_requestRefreshWmi && !g_requestProbe;
     });
 }
 
@@ -1579,21 +1654,30 @@ std::vector<UiDisplay*> ControllableDisplays() {
     return result;
 }
 
-// The default name in English, so that settings written with it keep
-// matching when Windows uses another language.
-PCWSTR EnglishDefaultName(const DisplayInfo& info) {
+// The default name in English, also when it was numbered ("Ekran (2)"),
+// so that settings written with it keep matching when Windows uses another
+// language. Empty if the display has its own name.
+std::wstring EnglishDefaultName(const DisplayInfo& info) {
     for (Str id : {Str::BuiltInDisplay, Str::Display}) {
-        if (info.name == Tr(id)) {
-            return kStringsEn[(int)id];
+        std::wstring local = Tr(id);
+        if (info.name.compare(0, local.size(), local) != 0) {
+            continue;
+        }
+        std::wstring rest = info.name.substr(local.size());
+        bool numbered = rest.size() > 3 && rest.compare(0, 2, L" (") == 0 &&
+                        rest.back() == L')' &&
+                        std::all_of(rest.begin() + 2, rest.end() - 1, iswdigit);
+        if (rest.empty() || numbered) {
+            return kStringsEn[(int)id] + rest;
         }
     }
-    return nullptr;
+    return L"";
 }
 
 bool NameMatches(const DisplayInfo& info, const std::wstring& match) {
-    PCWSTR english = EnglishDefaultName(info);
+    std::wstring english = EnglishDefaultName(info);
     return ContainsI(info.name, match) || ContainsI(info.id, match) ||
-           (english && ContainsI(english, match));
+           (!english.empty() && ContainsI(english, match));
 }
 
 std::vector<UiDisplay*> MatchDisplays(const std::wstring& match) {
@@ -1625,8 +1709,9 @@ void RefreshDisplays() {
 }
 
 // After an enumeration: if an external monitor couldn't be controlled, try
-// again 3, 10 and 30 seconds after each try. Monitors without DDC/CI are left alone
-// after that.
+// it again 3, 10 and 30 seconds after each try. Only the monitors that
+// failed are read again, unless one had no DDC/CI handle. Monitors without
+// DDC/CI are left alone after that.
 void ScheduleAutoReenumerate() {
     bool failed = std::any_of(g_lastSnapshot.begin(), g_lastSnapshot.end(),
                               [](const DisplayInfo& info) {
@@ -2469,7 +2554,7 @@ int HitTestRow(POINT pt, bool trackOnly) {
         if (trackOnly) {
             int cy = (row.track.top + row.track.bottom) / 2;
             if (pt.x >= row.track.left - S(12) &&
-                pt.x <= row.track.right + S(4) && pt.y >= cy - S(14) &&
+                pt.x <= row.track.right + S(10) && pt.y >= cy - S(14) &&
                 pt.y <= cy + S(14)) {
                 return (int)i;
             }
@@ -2542,13 +2627,18 @@ LRESULT CALLBACK EditBoxProc(HWND hwnd,
         case WM_KILLFOCUS:
             PostMessage(g_hwndPanel, WM_APP_END_EDIT, 1, 0);
             break;
+        case WM_NCDESTROY:
+            RemoveWindowSubclass(hwnd, EditBoxProc, 0);
+            break;
     }
     return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 RECT ValueRect(const PanelRow& row) {
     int cy = (row.track.top + row.track.bottom) / 2;
-    return {row.track.right + S(6), cy - S(13), g_panelWidth - S(14),
+    // Starts past the slider's hit area (the thumb's radius) and where the
+    // number is drawn.
+    return {row.track.right + S(11), cy - S(13), g_panelWidth - S(14),
             cy + S(13)};
 }
 
@@ -3680,6 +3770,8 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             }
             if (enumerated) {
                 g_reenumPending = false;
+            }
+            if (enumerated || kind == SnapshotKind::Probed) {
                 ScheduleAutoReenumerate();
             }
             if (!g_haveSnapshot) {
@@ -3733,7 +3825,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                     break;
                 case TIMER_AUTO_REENUM:
                     KillTimer(hwnd, TIMER_AUTO_REENUM);
-                    hw::RequestEnumerate();
+                    hw::RequestProbe();
                     break;
                 case TIMER_SCHEDULE:
                     RunScheduleCheck(false);
