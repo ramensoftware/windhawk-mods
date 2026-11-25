@@ -737,11 +737,11 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    bool isService = false;
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -751,7 +751,7 @@ BOOL Wh_ModInit() {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
             wcscmp(argv[i], L"-service-stop") == 0) {
-            isService = true;
+            isExcluded = true;
             break;
         }
     }
@@ -768,7 +768,7 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
@@ -794,8 +794,8 @@ BOOL Wh_ModInit() {
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
-        void* entryPoint =
-            (BYTE*)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
@@ -840,7 +840,7 @@ void Wh_ModAfterInit() {
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
         DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
@@ -861,7 +861,7 @@ void Wh_ModAfterInit() {
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
                                  nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
                                  nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"CreateProcessInternalW failed");
+        Wh_Log(L"CreateProcess failed");
         return;
     }
 
