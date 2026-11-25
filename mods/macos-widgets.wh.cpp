@@ -6,6 +6,7 @@
 // @author          Thiago Silva
 // @github          https://github.com/brideinflame-rgb
 // @homepage        https://github.com/brideinflame-rgb/Mac-OS-Widgets
+// @donateUrl       https://livepix.gg/kurokobr
 // @include         windhawk.exe
 // @architecture    x86-64
 // @compilerOptions -ld2d1 -ldwrite -ldwmapi -lwinhttp -lruntimeobject -lole32 -loleaut32 -luser32 -lgdi32 -lshell32 -lwindowscodecs -lsetupapi -liphlpapi -luuid -ladvapi32 -lversion -lpdh
@@ -85,6 +86,13 @@ wallpaper and the icons, and is lighter.
 - Right-click: size, Edit Location, Remove Widget, show/hide each widget, Arrange Widgets (puts all of them in order, the
   biggest first, without leaving any out) and the Settings.
 - The widgets stay right above the desktop: Win+D doesn't hide them.
+
+---
+
+## Support the project
+If you enjoy MacOS Widgets, you can support its development with a Pix donation:
+
+**[Donate with LivePix (Pix)](https://livepix.gg/kurokobr)**
 */
 // ==/WindhawkModReadme==
 
