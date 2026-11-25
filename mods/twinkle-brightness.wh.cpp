@@ -95,7 +95,8 @@ link button).
   **Refresh displays** in the tray menu.
 - **A monitor stops responding after sleep:** choose **Refresh displays**, or
   turn the monitor off and on with its power button. Monitors that don't
-  answer at first are detected again automatically after 3, 10 and 30 seconds.
+  answer at first are detected again automatically, up to three times in the
+  first minute.
 - **A hotkey does nothing:** another program may already use that combination.
   Check the Windhawk log for "RegisterHotKey failed". The default
   `Ctrl+Alt+Up`/`Ctrl+Alt+Down` are also used by Visual Studio Code (add a
@@ -289,7 +290,8 @@ This mod is not affiliated with Twinkle Tray or its author.
 // Constants
 
 constexpr UINT WM_APP_TRAY = WM_APP + 1;
-constexpr UINT WM_APP_SNAPSHOT = WM_APP + 2;  // wParam: 1 = full enumeration
+// wParam: a SnapshotKind.
+constexpr UINT WM_APP_SNAPSHOT = WM_APP + 2;
 constexpr UINT WM_APP_SETTINGS = WM_APP + 3;
 constexpr UINT WM_APP_SHUTDOWN = WM_APP + 4;
 constexpr UINT WM_APP_END_EDIT = WM_APP + 6;  // Panel; wParam: 1 = apply
@@ -323,6 +325,12 @@ enum MenuId : UINT {
 
 enum class HotkeyAction { Increase, Decrease, Set, TurnOff, Panel };
 enum class ThemeMode { Auto, Dark, Light };
+enum class SnapshotKind {
+    WmiLevels,   // Laptop screens read again after a brightness event
+    AllLevels,   // All displays read again
+    Enumerated,  // Displays detected again
+};
+
 enum class OsdPosition {
     BottomCenter,
     TopCenter,
@@ -1216,6 +1224,9 @@ void Refresh(bool wmiOnly) {
     }
 }
 
+// When the mod last set a laptop screen's level; see BrightnessEventThread.
+std::atomic<DWORD> g_lastWmiSetTick;
+
 bool Apply(HwDisplay& d, int raw) {
     bool ok = false;
     if (d.info.method == Method::Ddc) {
@@ -1223,6 +1234,7 @@ bool Apply(HwDisplay& d, int raw) {
                     (DWORD)std::lround(raw * (double)d.vcpMax / 100.0));
     } else if (d.info.method == Method::Wmi) {
         ok = WmiSet(d.wmiPath, raw);
+        g_lastWmiSetTick = GetTickCount();
     }
     if (ok) {
         d.info.raw = raw;
@@ -1250,7 +1262,7 @@ std::map<std::wstring, int> ApplyAll(const std::map<std::wstring, int>& sets) {
     return failed;
 }
 
-void Publish(bool enumerated) {
+void Publish(SnapshotKind kind) {
     std::vector<DisplayInfo> infos;
     for (const auto& d : g_displays) {
         infos.push_back(d.info);
@@ -1260,7 +1272,7 @@ void Publish(bool enumerated) {
         g_snapshot = std::move(infos);
     }
     if (HWND hwnd = g_hwndMain) {
-        PostMessage(hwnd, WM_APP_SNAPSHOT, enumerated ? 1 : 0, 0);
+        PostMessage(hwnd, WM_APP_SNAPSHOT, (WPARAM)kind, 0);
     }
 }
 
@@ -1295,15 +1307,17 @@ DWORD WINAPI BrightnessEventThread(LPVOID) {
         if (hr == WBEM_S_TIMEDOUT) {
             continue;
         }
-        if (FAILED(hr)) {
+        if (hr != WBEM_S_NO_ERROR || !returned || !object) {
             break;
         }
-        if (returned && object) {
-            object->Release();
-            std::lock_guard<std::mutex> lock(g_mutex);
-            g_requestRefreshWmi = true;
-            g_cv.notify_one();
+        object->Release();
+        // The mod's own writes raise events too: skip those.
+        if (GetTickCount() - g_lastWmiSetTick < 1000) {
+            continue;
         }
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_requestRefreshWmi = true;
+        g_cv.notify_one();
     }
     if (events) {
         events->Release();
@@ -1320,6 +1334,11 @@ void StartBrightnessEvents() {
                               [](const HwDisplay& d) {
                                   return d.info.method == Method::Wmi;
                               });
+    if (g_eventThread &&
+        WaitForSingleObject(g_eventThread, 0) == WAIT_OBJECT_0) {
+        CloseHandle(g_eventThread);
+        g_eventThread = nullptr;
+    }
     if (anyWmi && !g_eventThread) {
         g_eventStop = false;
         g_eventThread =
@@ -1375,13 +1394,13 @@ DWORD WINAPI WorkerThread(LPVOID) {
         if (enumerate) {
             Enumerate();
             ApplyAll(failed);
-            Publish(true);
+            Publish(SnapshotKind::Enumerated);
             if (!stop) {
                 StartBrightnessEvents();
             }
         } else if (refresh || refreshWmi) {
             Refresh(!refresh);
-            Publish(false);
+            Publish(refresh ? SnapshotKind::AllLevels : SnapshotKind::WmiLevels);
         }
 
         if (stop) {
@@ -1560,12 +1579,29 @@ std::vector<UiDisplay*> ControllableDisplays() {
     return result;
 }
 
+// The default name in English, so that settings written with it keep
+// matching when Windows uses another language.
+PCWSTR EnglishDefaultName(const DisplayInfo& info) {
+    for (Str id : {Str::BuiltInDisplay, Str::Display}) {
+        if (info.name == Tr(id)) {
+            return kStringsEn[(int)id];
+        }
+    }
+    return nullptr;
+}
+
+bool NameMatches(const DisplayInfo& info, const std::wstring& match) {
+    PCWSTR english = EnglishDefaultName(info);
+    return ContainsI(info.name, match) || ContainsI(info.id, match) ||
+           (english && ContainsI(english, match));
+}
+
 std::vector<UiDisplay*> MatchDisplays(const std::wstring& match) {
     std::vector<UiDisplay*> result;
     for (auto& d : g_displays) {
         if (d.Controllable() &&
             (match.empty() || ContainsI(d.label, match) ||
-             ContainsI(d.info.name, match) || ContainsI(d.info.id, match))) {
+             NameMatches(d.info, match))) {
             result.push_back(&d);
         }
     }
@@ -1589,7 +1625,7 @@ void RefreshDisplays() {
 }
 
 // After an enumeration: if an external monitor couldn't be controlled, try
-// again after 3, 10 and 30 seconds. Monitors without DDC/CI are left alone
+// again 3, 10 and 30 seconds after each try. Monitors without DDC/CI are left alone
 // after that.
 void ScheduleAutoReenumerate() {
     bool failed = std::any_of(g_lastSnapshot.begin(), g_lastSnapshot.end(),
@@ -1683,8 +1719,7 @@ void RebuildDisplays(const std::vector<DisplayInfo>& snapshot,
         d.info = info;
         d.label = info.name;
         for (const auto& cfg : g_settings.displays) {
-            if (ContainsI(info.name, cfg.match) ||
-                ContainsI(info.id, cfg.match)) {
+            if (NameMatches(info, cfg.match)) {
                 if (!cfg.name.empty()) {
                     d.label = cfg.name;
                 }
@@ -2414,11 +2449,9 @@ void UpdatePanel() {
     if (!g_hwndPanel || !IsWindowVisible(g_hwndPanel)) {
         return;
     }
-    if (g_editBox) {
-        // Keep the layout while the user types; just repaint.
-        InvalidateRect(g_hwndPanel, nullptr, FALSE);
-        return;
-    }
+    // The rows are laid out again, so an open edit box would refer to a
+    // stale row.
+    EndEdit(false);
     if (GetCapture() == g_hwndPanel) {
         ReleaseCapture();
     }
@@ -2436,7 +2469,7 @@ int HitTestRow(POINT pt, bool trackOnly) {
         if (trackOnly) {
             int cy = (row.track.top + row.track.bottom) / 2;
             if (pt.x >= row.track.left - S(12) &&
-                pt.x <= row.track.right + S(12) && pt.y >= cy - S(14) &&
+                pt.x <= row.track.right + S(4) && pt.y >= cy - S(14) &&
                 pt.y <= cy + S(14)) {
                 return (int)i;
             }
@@ -2609,7 +2642,8 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
 
         case WM_LBUTTONDBLCLK: {
-            // Double-click the number (or the slider) to type a level.
+            // Double-click the number to type a level. Elsewhere, the second
+            // click acts as a normal click.
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             for (size_t i = 0; i < g_rows.size(); i++) {
                 RECT r = ValueRect(g_rows[i]);
@@ -2618,11 +2652,7 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     return 0;
                 }
             }
-            int row = HitTestRow(pt, true);
-            if (row >= 0) {
-                BeginEdit(row);
-            }
-            return 0;
+            return PanelWndProc(hwnd, WM_LBUTTONDOWN, wParam, lParam);
         }
 
         case WM_APP_END_EDIT:
@@ -3629,14 +3659,24 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             return 0;
 
         case WM_APP_SNAPSHOT: {
-            bool enumerated = wParam != 0;
+            auto kind = (SnapshotKind)wParam;
+            bool enumerated = kind == SnapshotKind::Enumerated;
             g_lastSnapshot = hw::TakeSnapshot();
-            g_lastHwReadTick = GetTickCount();
             RebuildDisplays(g_lastSnapshot, true);
-            UpdatePanel();
+            if (enumerated) {
+                UpdatePanel();  // The displays may have changed.
+            } else if (IsWindowVisible(g_hwndPanel)) {
+                // Only the levels changed: keep a drag or the edit box going.
+                InvalidateRect(g_hwndPanel, nullptr, FALSE);
+            }
             UpdateTrayTip();
-            if (!g_deferredHotkeys.empty()) {
-                RunDeferredHotkeys();
+            // Only a read of all displays is fresh enough for the hotkeys
+            // that wait for monitor levels.
+            if (kind != SnapshotKind::WmiLevels) {
+                g_lastHwReadTick = GetTickCount();
+                if (!g_deferredHotkeys.empty()) {
+                    RunDeferredHotkeys();
+                }
             }
             if (enumerated) {
                 g_reenumPending = false;
