@@ -2,11 +2,11 @@
 // @id              top-drag-split-layouts
 // @name            Top Drag Split Layouts
 // @description     Own snap layouts bar at the top center with a top/bottom split, plus a window chooser for the remaining zones
-// @version         1.1
+// @version         1.0
 // @author          khorkovenko
 // @github          https://github.com/khorkovenko
 // @include         windhawk.exe
-// @compilerOptions -ldwmapi -lshcore -lgdi32 -ladvapi32 -lshell32
+// @compilerOptions -ldwmapi -lshcore -lgdi32 -lshell32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -15,29 +15,33 @@
 # Top Drag Split Layouts
 Drag a window to the top center of the screen. A layouts bar appears with six
 layouts: top/bottom halves, left/right halves, thirds, two thirds + one third,
-half + two quarters and four quarters. Hover a zone to preview it and release
-the mouse to place the window there. Only the hovered zone is previewed.
+half + two quarters and four quarters. The top half is selected by default;
+hover another zone to select it instead. A preview shows the area the window
+will be stretched to, and releasing the mouse places the window there. The bar
+and the preview appear instantly, without animations.
 
 After the first window is placed, the next empty zone of the same layout shows
 your other open windows. Click one to place it there. The X on a window closes
 that window. Press Esc, click the X in the top right corner, click empty space
 or switch to another window to stop choosing; all windows stay as they are.
 
-Dropping a window on the very top edge places it in the top half instead of
-maximizing it.
+Moving a window to a screen edge or corner also opens the bar and selects the
+matching zone: the left or right edge selects the left or right half, the top or
+bottom edge the top or bottom half, and a corner the matching quarter. The
+preview shows the area, and dropping the window there places it in that zone.
 
-With "Turn off Windows snap layouts" enabled, the built-in Windows snap layouts
-(the bar shown when dragging a window to the top of the screen and the flyout
-shown when hovering the maximize button) are turned off, so they don't overlap
-this mod's bar. Explorer reads this setting when it starts, so restart Windows
-Explorer once after enabling it.
+With "Turn off Windows edge snapping while dragging" enabled, Windows doesn't
+maximize or snap windows dragged to the screen edges, and doesn't show its gray
+full-screen or half-screen previews. The mod turns this off for the current
+session only, with `SystemParametersInfo(SPI_SETDOCKMOVING)` without saving it,
+and turns it back on when the setting is turned off or the mod is disabled.
+Nothing is written to the registry; after signing out and in again, Windows
+uses its saved setting.
 
-The mod does this by writing two values under
-`HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced`:
-`EnableSnapBar = 0` and `EnableSnapAssistFlyout = 0`. These are the same values
-that the Windows settings below change. They remain after the mod is disabled or
-removed. To get the Windows snap layouts back, turn the mod setting off and
-enable them again in Settings > System > Multitasking > Snap windows.
+The built-in Windows snap layouts bar appears in the same place when a window
+is dragged to the top of the screen. To use only this mod's bar, turn off "Show
+snap layouts when I drag a window to the top of my screen" in Settings > System
+> Multitasking > Snap windows. The mod doesn't change this Windows setting.
 
 Windows does not allow programs to move windows of programs running as
 administrator, so such windows may not be placed by this mod.
@@ -46,12 +50,14 @@ administrator, so such windows may not be placed by this mod.
 
 // ==WindhawkModSettings==
 /*
-- showPreview: true
-  $name: Show preview while dragging
 - snapAssist: true
   $name: Offer windows for the remaining zones
-- hideNative: true
-  $name: Turn off Windows snap layouts
+- noEdgeSnap: true
+  $name: Turn off Windows edge snapping while dragging
+  $description: >-
+    Stops Windows from maximizing or snapping windows dragged to the screen
+    edges, and from showing its previews. Applies to the current session only
+    and is turned back on when this setting is off or the mod is disabled.
 */
 // ==/WindhawkModSettings==
 
@@ -78,18 +84,17 @@ const Layout g_layouts[] = {
 };
 constexpr int NL = sizeof(g_layouts) / sizeof(g_layouts[0]);
 constexpr int MAXWIN = 12;
-const PCWSTR g_native[] = {L"EnableSnapBar", L"EnableSnapAssistFlyout"};
-constexpr WCHAR ADVANCED[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
 
 struct {
-    bool preview;
+    bool noEdgeSnap;
     bool assist;
-    bool hideNative;
 } settings;
 
 HANDLE g_thread;
 DWORD g_threadId;
 HWND g_bar, g_preview, g_chooser, g_hwnd;
+BOOL g_oldDock = TRUE;
+bool g_dockChanged;
 HFONT g_font;
 RECT g_work;
 POINT g_start;
@@ -405,9 +410,36 @@ void CALLBACK TrackProc(HWND, UINT, UINT_PTR, DWORD) {
     RECT last = GroupRect(NL - 1);
     int bw = last.right + Sc(10), bh = last.bottom + Sc(10);
     int bx = (mi.rcMonitor.left + mi.rcMonitor.right - bw) / 2, by = mi.rcWork.top + Sc(8);
-    bool show = pt.y < by + bh + Sc(80) && pt.x > bx - Sc(100) && pt.x < bx + bw + Sc(100);
+    int dx = pt.x - g_start.x, dy = pt.y - g_start.y, d = GetSystemMetrics(SM_CXDRAG);
+    bool moved = dx * dx + dy * dy >= d * d;
+    RECT m = mi.rcMonitor;
+    int e = Sc(6), c = Sc(40);
+    auto free = [&](int ox, int oy) {
+        return moved && !MonitorFromPoint({pt.x + ox, pt.y + oy}, MONITOR_DEFAULTTONULL);
+    };
+    bool L = pt.x <= m.left + e && free(-2 * e, 0);
+    bool R = pt.x >= m.right - 1 - e && free(2 * e, 0);
+    bool T = pt.y <= m.top + e && free(0, -2 * e);
+    bool B = pt.y >= m.bottom - 1 - e && free(0, 2 * e);
+    int h = L ? 0 : R ? 1 : -1, v = T ? 0 : B ? 1 : -1;
+    if (h < 0 && v >= 0)
+        h = pt.x <= m.left + c ? 0 : pt.x >= m.right - c ? 1 : -1;
+    if (v < 0 && h >= 0 && (L || R))
+        v = pt.y <= m.top + c ? 0 : pt.y >= m.bottom - c ? 1 : -1;
 
     int hl = -1, hz = -1;
+    if (h >= 0 && v >= 0) {
+        hl = 5;
+        hz = v * 2 + h;
+    } else if (h >= 0) {
+        hl = 1;
+        hz = h;
+    } else if (v >= 0) {
+        hl = 0;
+        hz = v;
+    }
+    bool show = hl >= 0 ||
+                (pt.y < by + bh + Sc(80) && pt.x > bx - Sc(100) && pt.x < bx + bw + Sc(100));
     for (int l = 0; show && l < NL; l++)
         for (int z = 0; z < g_layouts[l].n; z++) {
             RECT c = CellRect(l, z);
@@ -418,6 +450,8 @@ void CALLBACK TrackProc(HWND, UINT, UINT_PTR, DWORD) {
                 hz = z;
             }
         }
+    if (show && hl < 0)
+        hl = hz = 0;
 
     if (show)
         SetWindowPos(g_bar, HWND_TOPMOST, bx, by, bw, bh, SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -430,7 +464,7 @@ void CALLBACK TrackProc(HWND, UINT, UINT_PTR, DWORD) {
         InvalidateRect(g_bar, nullptr, FALSE);
     }
 
-    if (hl >= 0 && settings.preview) {
+    if (hl >= 0) {
         RECT z = ZoneIn(g_work, g_layouts[hl].z[hz]);
         SetWindowPos(g_preview, g_hwnd, z.left, z.top, z.right - z.left, z.bottom - z.top,
                      SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -511,16 +545,21 @@ DWORD WINAPI ThreadProc(LPVOID) {
     g_preview = CreateWindowEx(
         WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
         pc.lpszClassName, nullptr, WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst, nullptr);
+    SetLayeredWindowAttributes(g_preview, 0, 80, LWA_ALPHA);
+
     g_bar = CreateWindowEx(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
         uc.lpszClassName, nullptr, WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst, nullptr);
     g_chooser = CreateWindowEx(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, uc.lpszClassName, nullptr,
                                WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, inst, nullptr);
-    SetLayeredWindowAttributes(g_preview, 0, 80, LWA_ALPHA);
     SetLayeredWindowAttributes(g_bar, 0, 245, LWA_ALPHA);
     int round = 2;
-    DwmSetWindowAttribute(g_preview, 33, &round, sizeof(round));
     DwmSetWindowAttribute(g_bar, 33, &round, sizeof(round));
+    DwmSetWindowAttribute(g_preview, 33, &round, sizeof(round));
+    BOOL noAnim = TRUE;
+    HWND windows[] = {g_bar, g_preview, g_chooser};
+    for (HWND w : windows)
+        DwmSetWindowAttribute(w, DWMWA_TRANSITIONS_FORCEDISABLED, &noAnim, sizeof(noAnim));
 
     HWINEVENTHOOK moveHook =
         SetWinEventHook(EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND,
@@ -552,14 +591,21 @@ DWORD WINAPI ThreadProc(LPVOID) {
     return 0;
 }
 
+void SetDocking(bool off) {
+    if (off && !g_dockChanged) {
+        SystemParametersInfo(SPI_GETDOCKMOVING, 0, &g_oldDock, 0);
+        SystemParametersInfo(SPI_SETDOCKMOVING, 0, (PVOID)FALSE, 0);
+        g_dockChanged = true;
+    } else if (!off && g_dockChanged) {
+        SystemParametersInfo(SPI_SETDOCKMOVING, 0, (PVOID)(INT_PTR)g_oldDock, 0);
+        g_dockChanged = false;
+    }
+}
+
 void LoadSettings() {
-    settings.preview = Wh_GetIntSetting(L"showPreview");
     settings.assist = Wh_GetIntSetting(L"snapAssist");
-    settings.hideNative = Wh_GetIntSetting(L"hideNative");
-    DWORD off = 0;
-    if (settings.hideNative)
-        for (PCWSTR name : g_native)
-            RegSetKeyValue(HKEY_CURRENT_USER, ADVANCED, name, REG_DWORD, &off, sizeof(off));
+    settings.noEdgeSnap = Wh_GetIntSetting(L"noEdgeSnap");
+    SetDocking(settings.noEdgeSnap);
 }
 
 BOOL WhTool_ModInit() {
@@ -574,6 +620,7 @@ void WhTool_ModUninit() {
     }
     WaitForSingleObject(g_thread, INFINITE);
     CloseHandle(g_thread);
+    SetDocking(false);
 }
 
 void WhTool_ModSettingsChanged() {
