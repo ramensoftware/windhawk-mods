@@ -11,7 +11,7 @@
 // @description:fr-FR Regroupez vos applications dans des dossiers sur la barre des tâches de Windows 11. Un clic ouvre un dossier. Faites glisser les applications pour les réorganiser.
 // @description:de-DE Gruppieren Sie Apps in Ordnern auf der Windows-11-Taskleiste. Ein Klick öffnet den Ordner. Ziehen Sie die Apps zum Sortieren an die gewünschte Position.
 // @version         0.7.0
-// @author          Taskbar Folders
+// @author          mamt104
 // @github          https://github.com/mamt104
 // @license         MIT
 // @include         explorer.exe
@@ -19,7 +19,7 @@
 // @include         ShellHost.exe
 // @include         ShellAppRuntime.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32 -lcomdlg32 -ldwmapi -lmsimg32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32 -lcomdlg32 -ldwmapi -lmsimg32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -38,14 +38,19 @@
 
 | | English | Italiano | Español | Français | Deutsch |
 |---|---|---|---|---|---|
-| **⋯** | To pin an older folder, select **Pin to taskbar**. Windows may ask you to pin the shortcut once. | Per fissare una cartella precedente, scegli **Integra nella barra**. Windows potrebbe chiederti di fissare il collegamento una volta. | Para anclar una carpeta anterior, elige **Anclar a la barra de tareas**. Windows puede pedirte que ancles el acceso directo una vez. | Pour épingler un dossier existant, choisissez **Épingler à la barre des tâches**. Windows peut demander d’épingler son raccourci une fois. | Wählen Sie für einen bestehenden Ordner **An Taskleiste anheften**. Eventuell müssen Sie die Verknüpfung einmal in Windows anheften. |
 | **PgUp / PgDn** | Change page. While dragging, pause at a side edge to change pages. | Cambia pagina. Durante un trascinamento, fermati su un bordo laterale per cambiare pagina. | Cambia de página. Al arrastrar, detente en un borde lateral para pasar de página. | Change de page. Pendant un glisser-déposer, marquez une pause sur un bord latéral pour changer de page. | Blättert eine Seite. Beim Ziehen kurz am seitlichen Rand verweilen, um umzublättern. |
+### Compatibility
+
+Folders appear on the primary Windows 11 taskbar only. The mod groups existing app buttons and adds commands to the taskbar and app context menus. Taskbar Mini Folders offers its own independent launcher tiles.
+
+The mod keeps each Windows account's folder layout in Windhawk's mod storage. Existing folder layouts from the pre-release builds are copied into that storage on first use. Older pre-release shortcuts can be unpinned and removed in Windows.
 */
 // ==/WindhawkModReadme==
 
 #include <windhawk_utils.h>
 #include <shlobj.h>
 #include <shlwapi.h>
+#include <sddl.h>
 #include <propkey.h>
 #include <array>
 #include <thread>
@@ -75,6 +80,7 @@
 #include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <algorithm>
 #include <atomic>
 #include <filesystem>
@@ -157,9 +163,6 @@ enum class UiString : size_t {
     SaveFailed,
     Save,
     Cancel,
-    PinUnavailable,
-    PinInstructions,
-    PinFailed,
     CreateTitle,
     DirUnavailable,
     DirEmpty,
@@ -181,7 +184,6 @@ enum class UiString : size_t {
     RenameMenu,
     CreateMenu,
     RemoveMenu,
-    Integrate,
     MoveNamed,
     RenameTitle,
     RemovePrompt,
@@ -205,7 +207,6 @@ enum class UiString : size_t {
     PickerFailed,
     BrokenShortcut,
     Apps,
-    UnpinFirst,
     AppMissing,
     Count
 };
@@ -225,21 +226,6 @@ static constexpr PCWSTR strings[][5] = {
      L"Windows konnte die Änderung nicht speichern. Ihre bisherigen Ordner sind weiterhin verfügbar."},  // SaveFailed
     {L"Save", L"Salva", L"Guardar", L"Enregistrer", L"Speichern"},   // Save
     {L"Cancel", L"Annulla", L"Cancelar", L"Annuler", L"Abbrechen"},  // Cancel
-    {L"This version of Explorer doesn’t support native folder pins. You can still open the folder from the taskbar.",
-     L"Questa build di Explorer non espone il comando di avvio del pin. La cartella resta accessibile dalla barra.",
-     L"Esta versión del Explorador no admite el anclaje nativo. Puedes seguir abriendo la carpeta desde la barra.",
-     L"Cette version de l’Explorateur ne prend pas en charge l’épinglage natif. Le dossier reste accessible dans la barre des tâches.",
-     L"Diese Explorer-Version unterstützt das native Anheften nicht. Der Ordner lässt sich weiterhin über die Taskleiste öffnen."},  // PinUnavailable
-    {L"To pin “{0}”, right-click its shortcut and choose “Pin to taskbar”. You can also find the shortcut in Start. You only need to do this once.",
-     L"Per fissare «{0}», fai clic destro sul collegamento e scegli «Aggiungi alla barra delle applicazioni». Puoi trovarlo anche in Start. Basta farlo una volta.",
-     L"Para anclar «{0}», haz clic derecho en su acceso directo y elige «Anclar a la barra de tareas». También lo encontrarás en Inicio. Solo hace falta hacerlo una vez.",
-     L"Pour épingler «\u00A0{0}\u00A0», faites un clic droit sur son raccourci et choisissez «\u00A0Épingler à la barre des tâches\u00A0». Le raccourci se trouve aussi dans Démarrer. Une seule fois suffit.",
-     L"Um „{0}“ anzuheften, klicken Sie mit der rechten Maustaste auf die Verknüpfung und wählen Sie „An Taskleiste anheften“. Sie finden sie auch im Startmenü. Dies ist nur einmal nötig."},  // PinInstructions
-    {L"Windows couldn’t prepare the shortcut. Try again from the folder menu.",
-     L"Windows non ha completato la preparazione del pin. Puoi riprovare dal menu della cartella.",
-     L"Windows no ha podido preparar el acceso directo. Inténtalo de nuevo desde el menú de la carpeta.",
-     L"Windows n’a pas pu préparer le raccourci. Réessayez depuis le menu du dossier.",
-     L"Windows konnte die Verknüpfung nicht vorbereiten. Versuchen Sie es über das Ordnermenü erneut."},  // PinFailed
     {L"Create a taskbar folder", L"Crea cartella nella taskbar",
      L"Crear una carpeta en la barra de tareas",
      L"Créer un dossier dans la barre des tâches",
@@ -294,9 +280,6 @@ static constexpr PCWSTR strings[][5] = {
      L"Créer un dossier…", L"Ordner erstellen…"},  // CreateMenu
     {L"Remove folder…", L"Rimuovi cartella…", L"Quitar carpeta…",
      L"Supprimer le dossier…", L"Ordner entfernen…"},  // RemoveMenu
-    {L"Pin to taskbar", L"Integra nella barra", L"Anclar a la barra de tareas",
-     L"Épingler à la barre des tâches",
-     L"An Taskleiste anheften"},  // Integrate
     {L"Move to “{0}”", L"Sposta in «{0}»", L"Mover a «{0}»",
      L"Déplacer vers «\u00A0{0}\u00A0»", L"Nach „{0}“ verschieben"},  // MoveNamed
     {L"Rename folder", L"Rinomina cartella", L"Cambiar nombre de carpeta",
@@ -367,8 +350,6 @@ static constexpr PCWSTR strings[][5] = {
      L"Verknüpfung nicht verfügbar. Prüfen Sie, ob die App noch installiert ist."},  // BrokenShortcut
     {L"Applications", L"Applicazioni", L"Aplicaciones", L"Applications",
      L"Anwendungen"},  // Apps
-    {L"Hold Shift and right-click the pin. Choose “Unpin from taskbar”, then remove the folder from its three-dot menu.",
-     L"Tieni premuto Maiusc e fai clic destro sul pin. Scegli «Rimuovi dalla barra delle applicazioni», poi elimina la cartella dai tre puntini.", L"Mantén pulsada Mayús y haz clic derecho en el icono. Elige «Desanclar de la barra de tareas» y quita la carpeta desde su menú de tres puntos.", L"Maintenez Maj enfoncée et faites un clic droit sur l’icône. Choisissez «\u00A0Détacher de la barre des tâches\u00A0», puis supprimez le dossier depuis son menu à trois points.", L"Halten Sie die Umschalttaste gedrückt und klicken Sie mit der rechten Maustaste auf das Symbol. Wählen Sie „Von Taskleiste lösen“ und entfernen Sie den Ordner anschließend über sein Dreipunktmenü."},  // UnpinFirst
     {L"Windows couldn’t find the shortcut for this app.",
      L"Windows non ha trovato il collegamento di questa app.",
      L"Windows no ha encontrado el acceso directo de esta aplicación.",
@@ -424,10 +405,7 @@ static Model groups;
 static fs::path config;
 static bool loaded = false, locked = false;
 static std::atomic<bool> stopping = false;
-static void note(const wchar_t* s) {
-    MessageBoxW(nullptr, s, uiText(UiString::Title),
-                MB_OK | MB_ICONINFORMATION);
-}
+static void note(const wchar_t* text);
 static AppFolder* lookup(Model& m, const wstring& id) {
     auto i =
         std::find_if(m.begin(), m.end(), [&](auto& f) { return f.id == id; });
@@ -511,36 +489,65 @@ struct IgnoreCase {
         return _wcsicmp(a.c_str(), b.c_str()) < 0;
     }
 };
-using PinNames = std::map<wstring, wstring, IgnoreCase>;
-static std::mutex pinNameLock;
-static PinNames pinNames;
-static PinNames indexPinNames(const Model&);
-static void publishPinNames(PinNames next) {
-    std::lock_guard lock(pinNameLock);
-    pinNames.swap(next);
+static fs::path knownPath(REFKNOWNFOLDERID k);
+
+static wstring userSid() {
+    winrt::handle token;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, token.put()))
+        winrt::throw_last_error();
+
+    DWORD size = 0;
+    GetTokenInformation(token.get(), TokenUser, nullptr, 0, &size);
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || size < sizeof(TOKEN_USER))
+        winrt::throw_last_error();
+
+    std::vector<std::byte> data(size);
+    if (!GetTokenInformation(token.get(), TokenUser, data.data(), size, &size))
+        winrt::throw_last_error();
+    auto user = reinterpret_cast<const TOKEN_USER*>(data.data());
+    PWSTR sid = nullptr;
+    if (!ConvertSidToStringSidW(user->User.Sid, &sid))
+        winrt::throw_last_error();
+
+    std::unique_ptr<wchar_t, decltype(&LocalFree)> sidText(sid, LocalFree);
+    return sidText.get();
 }
+
+static void persist(const Model& m);
 static void loadModel() {
     if (loaded)
         return;
+    loaded = true;
     try {
-        PWSTR local = nullptr;
-        winrt::check_hresult(
-            SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &local));
-        fs::path dir = fs::path(local) / L"TaskbarFolders" / L"Xaml";
-        CoTaskMemFree(local);
-        config = dir / L"cartelle.json";
-        fs::create_directories(dir);
-        if (fs::exists(config))
+        // The API requires a buffer, including room for the terminator.
+        wstring storage(32768, L'\0');
+        const auto length = Wh_GetModStoragePath(storage.data(), storage.size());
+        if (!length)
+            throw std::runtime_error("Windhawk storage");
+        storage.resize(length);
+
+        auto directory = fs::path(storage) / userSid();
+        fs::create_directories(directory);
+        config = directory / L"folders.json";
+        if (fs::exists(config)) {
             groups = decode(bytes(config));
-        publishPinNames(indexPinNames(groups));
-        loaded = true;
+            return;
+        }
+
+        // The local pre-release used this path. Read it without changing it.
+        auto legacy = knownPath(FOLDERID_LocalAppData) / L"TaskbarFolders" /
+                      L"Xaml" / L"cartelle.json";
+        if (fs::exists(legacy)) {
+            groups = decode(bytes(legacy));
+            persist(groups);
+        }
     } catch (...) {
         locked = true;
-        loaded = true;
         Wh_Log(L"Could not read the folder configuration; saving is disabled.");
     }
 }
 static void persist(const Model& m) {
+    const bool exists = fs::exists(config);
     auto data = encode(m);
     auto tmp = config.parent_path() / guid();
     HANDLE h = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
@@ -552,7 +559,7 @@ static void persist(const Model& m) {
               WriteFile(h, data.data(), (DWORD)data.size(), &n, nullptr) &&
               n == data.size() && FlushFileBuffers(h);
     CloseHandle(h);
-    if (ok && fs::exists(config)) {
+    if (ok && exists) {
         auto backup = config;
         backup += L".bak";
         ok = ReplaceFileW(config.c_str(), tmp.c_str(), backup.c_str(), 0,
@@ -578,11 +585,9 @@ static bool edit(T change) {
         change(next);
         if (next == groups)
             return true;
-        auto names = indexPinNames(next);
         persist(next);
         groups = std::move(next);
         ++revision;
-        publishPinNames(std::move(names));
         requestLayout();
         return true;
     } catch (...) {
@@ -677,7 +682,13 @@ struct Tile {
     Button button{nullptr};
     wstring id;
 };
-static struct View {
+struct Faded {
+    winrt::weak_ref<FrameworkElement> e;
+    F::IInspectable old;
+};
+struct View {
+    HWND primary = nullptr;
+    HMONITOR monitor = nullptr;
     FrameworkElement frame{nullptr}, repeater{nullptr};
     C::Grid root{nullptr};
     C::Canvas overlay{nullptr};
@@ -686,6 +697,7 @@ static struct View {
     std::vector<std::function<void()>> frameOff;
     std::vector<Tile> tiles;
     std::vector<Hidden> hidden;
+    std::vector<Faded> faded;
     std::vector<DropJob> drops;
     std::vector<std::function<void()>> tileOff, menuOff;
     unsigned painted = ~0u;
@@ -694,7 +706,10 @@ static struct View {
     double reserved = 0;
     wstring dragApp;
     POINT down{};
-} ui;
+};
+// Explorer can exit without calling Wh_ModUninit. Release the XAML references
+// explicitly on the thread that owns them when the mod is disabled.
+[[clang::no_destroy]] static std::optional<View> ui;
 static HWND controller = nullptr;
 static std::atomic<HWND> published = nullptr;
 static DWORD uiThread = 0;
@@ -704,11 +719,11 @@ static const UINT actionMsg =
     RegisterWindowMessageW(L"TaskbarFoldersXaml.Action.065");
 static const UINT refreshMsg =
     RegisterWindowMessageW(L"TaskbarFoldersXaml.Refresh.065");
-static constexpr UINT kStop = WM_APP + 321;
-enum : UINT_PTR { kLayoutTimer = 0x7466, kDropTimer, kPinDragTimer };
+enum : UINT { kStop = WM_APP + 321, kCancelModal, kModalDrained };
+enum : UINT_PTR { kLayoutTimer = 0x7466, kDropTimer, kPinDragTimer, kModalDrainTimer };
 static void requestLayout() {
-    if (!stopping && controller && !ui.layoutPending)
-        ui.layoutPending = SetTimer(controller, kLayoutTimer, 65, nullptr) != 0;
+    if (!stopping && controller && ui && !ui->layoutPending)
+        ui->layoutPending = SetTimer(controller, kLayoutTimer, 65, nullptr) != 0;
 }
 static void off(std::vector<std::function<void()>>& v) {
     for (auto& f : v)
@@ -721,56 +736,124 @@ static void off(std::vector<std::function<void()>>& v) {
 static HWND tray() {
     return FindWindowW(L"Shell_TrayWnd", nullptr);
 }
+static bool isPrimaryRoot(FrameworkElement const& element) {
+    if (!ui || !ui->root || ui->rootDetached || !element ||
+        ui->primary != tray() ||
+        ui->monitor != MonitorFromWindow(ui->primary, MONITOR_DEFAULTTONULL))
+        return false;
+    auto root = ui->root.XamlRoot();
+    return root && element.XamlRoot() == root;
+}
+
 static void closePanel();
 static HWND panelOwner();
 static HINSTANCE moduleInstance();
 
-struct NameInput {
-    wstring initial, result;
-    const wchar_t* title;
+enum class ModalKind { Dialog, Menu };
+static std::optional<ModalKind> activeModal;
+static HWND modalDialog = nullptr;
+static bool drainModal = false;
+static HANDLE modalDrained = nullptr;
+
+class ModalScope {
+   public:
+    explicit ModalScope(ModalKind kind) : entered(!stopping && !activeModal) {
+        if (entered)
+            activeModal = kind;
+    }
+    ~ModalScope() {
+        if (!entered)
+            return;
+        modalDialog = nullptr;
+        activeModal.reset();
+        // Let the enclosing XAML/Win32 handler return before unloading.
+        if (drainModal && !PostMessageW(controller, kModalDrained, 0, 0) &&
+            !SetTimer(controller, kModalDrainTimer, 1, nullptr)) {
+            // The worker still synchronizes with this thread through kStop.
+            SetEvent(modalDrained);
+        }
+    }
+    explicit operator bool() const { return entered; }
+    ModalScope(const ModalScope&) = delete;
+    ModalScope& operator=(const ModalScope&) = delete;
+
+   private:
+    bool entered;
 };
-static INT_PTR CALLBACK nameProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
+
+struct DialogInput {
+    const wchar_t* title;
+    const wchar_t* text = nullptr;
+    bool confirm = false;
+    wstring initial, result;
+};
+static INT_PTR CALLBACK dialogProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_INITDIALOG) {
-        auto a = reinterpret_cast<NameInput*>(lp);
+        modalDialog = w;
+        if (stopping) {
+            EndDialog(w, IDCANCEL);
+            return TRUE;
+        }
+        auto input = reinterpret_cast<DialogInput*>(lp);
         SetWindowLongPtrW(w, DWLP_USER, lp);
-        SetWindowTextW(w, a->title);
+        SetWindowTextW(w, input->title);
         RECT r{};
         GetClientRect(w, &r);
-        int pad = 12, h = 28;
-        HWND e = CreateWindowExW(
-            WS_EX_CLIENTEDGE, L"EDIT", a->initial.c_str(),
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, pad, pad,
-            r.right - 2 * pad, h, w, (HMENU)100, nullptr, nullptr);
-        auto add = [&](int id, const wchar_t* t, int x, DWORD style) {
+        const int dpi = GetDpiForWindow(w);
+        auto scaled = [&](int value) { return MulDiv(value, dpi ? dpi : 96, 96); };
+        const int pad = scaled(12), height = scaled(28), button = scaled(78);
+        auto addButton = [&](int id, const wchar_t* label, int x, DWORD style) {
             return CreateWindowW(
-                L"BUTTON", t, WS_CHILD | WS_VISIBLE | WS_TABSTOP | style, x,
-                pad + h + 9, 78, h, w, (HMENU)(INT_PTR)id, nullptr, nullptr);
+                L"BUTTON", label, WS_CHILD | WS_VISIBLE | WS_TABSTOP | style,
+                x, r.bottom - pad - height, button, height, w,
+                reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), nullptr, nullptr);
         };
-        auto ok = add(IDOK, uiText(UiString::Save), r.right - pad - 164,
-                      BS_DEFPUSHBUTTON);
-        auto cancel =
-            add(IDCANCEL, uiText(UiString::Cancel), r.right - pad - 78, 0);
-        for (auto child : {e, ok, cancel})
-            SendMessageW(child, WM_SETFONT,
-                         (WPARAM)GetStockObject(DEFAULT_GUI_FONT), TRUE);
-        SendMessageW(e, EM_SETLIMITTEXT, 80, 0);
-        SendMessageW(e, EM_SETSEL, 0, -1);
-        SetFocus(e);
+        HWND content = nullptr;
+        if (input->text) {
+            content = CreateWindowW(
+                L"STATIC", input->text, WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX,
+                pad, pad, r.right - 2 * pad, r.bottom - height - 3 * pad,
+                w, nullptr, nullptr, nullptr);
+        } else {
+            content = CreateWindowExW(
+                WS_EX_CLIENTEDGE, L"EDIT", input->initial.c_str(),
+                WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, pad, pad,
+                r.right - 2 * pad, height, w, (HMENU)100, nullptr, nullptr);
+        }
+        const bool hasCancel = !input->text || input->confirm;
+        int right = r.right - pad - button;
+        HWND cancel = hasCancel ? addButton(IDCANCEL, uiText(UiString::Cancel), right, 0)
+                                : nullptr;
+        HWND ok = addButton(IDOK, input->text ? L"OK" : uiText(UiString::Save),
+                            hasCancel ? right - button - scaled(8) : right,
+                            BS_DEFPUSHBUTTON);
+        for (auto child : {content, ok, cancel})
+            if (child)
+                SendMessageW(child, WM_SETFONT,
+                             (WPARAM)GetStockObject(DEFAULT_GUI_FONT), TRUE);
+        if (!input->text) {
+            SendMessageW(content, EM_SETLIMITTEXT, 80, 0);
+            SendMessageW(content, EM_SETSEL, 0, -1);
+        }
+        SendMessageW(w, DM_SETDEFID, IDOK, 0);
+        SetFocus(input->text ? ok : content);
         return FALSE;
     }
     if (msg == WM_COMMAND && LOWORD(wp) == IDOK) {
-        wchar_t buf[82]{};
-        GetDlgItemTextW(w, 100, buf, 82);
-        wstring value = buf;
-        auto first = value.find_first_not_of(L" \r\n\t");
-        if (first == wstring::npos) {
-            SetFocus(GetDlgItem(w, 100));
-            return TRUE;
+        auto input = reinterpret_cast<DialogInput*>(GetWindowLongPtrW(w, DWLP_USER));
+        if (!input)
+            return FALSE;
+        if (!input->text) {
+            wchar_t buf[82]{};
+            GetDlgItemTextW(w, 100, buf, ARRAYSIZE(buf));
+            wstring value = buf;
+            auto first = value.find_first_not_of(L" \r\n\t");
+            if (first == wstring::npos) {
+                SetFocus(GetDlgItem(w, 100));
+                return TRUE;
+            }
+            input->result = value.substr(first, value.find_last_not_of(L" \r\n\t") - first + 1);
         }
-        value =
-            value.substr(first, value.find_last_not_of(L" \r\n\t") - first + 1);
-        reinterpret_cast<NameInput*>(GetWindowLongPtrW(w, DWLP_USER))->result =
-            value;
         EndDialog(w, IDOK);
         return TRUE;
     }
@@ -778,51 +861,47 @@ static INT_PTR CALLBACK nameProc(HWND w, UINT msg, WPARAM wp, LPARAM lp) {
         EndDialog(w, IDCANCEL);
         return TRUE;
     }
+    if (msg == WM_NCDESTROY && modalDialog == w)
+        modalDialog = nullptr;
     return FALSE;
 }
-static wstring nameDialog(wstring initial, const wchar_t* title) {
+
+static INT_PTR showDialog(DialogInput& input) {
+    ModalScope modal(ModalKind::Dialog);
+    if (!modal)
+        return IDCANCEL;
     struct alignas(DWORD) Template {
         DLGTEMPLATE d;
         WORD menu, cls, title;
     } t{};
     t.d.style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_CENTER;
-    t.d.cx = 200;
-    t.d.cy = 64;
-    NameInput args{initial, L"", title};
-    DialogBoxIndirectParamW(GetModuleHandleW(nullptr), &t.d, tray(), nameProc,
-                            (LPARAM)&args);
-    return args.result;
+    t.d.cx = input.text ? 240 : 200;
+    t.d.cy = input.text ? 90 : 64;
+    auto result = DialogBoxIndirectParamW(moduleInstance(), &t.d, tray(), dialogProc,
+                                         reinterpret_cast<LPARAM>(&input));
+    return stopping ? IDCANCEL : result;
 }
-// Native shortcuts have their own AppUserModelID. Windows owns the button,
-// its drag gesture, ordering, shell visual states and transitions.
+
+static wstring nameDialog(wstring initial, const wchar_t* title) {
+    DialogInput input{.title = title, .initial = std::move(initial)};
+    if (showDialog(input) == IDOK)
+        return std::move(input.result);
+    return {};
+}
+
+static void note(const wchar_t* text) {
+    DialogInput input{.title = uiText(UiString::Title), .text = text};
+    showDialog(input);
+}
+
+static bool confirmRemove(const wstring& name) {
+    DialogInput input{.title = name.c_str(),
+                      .text = uiText(UiString::RemovePrompt),
+                      .confirm = true};
+    return showDialog(input) == IDOK;
+}
+// Ignore folder shortcuts left by local pre-release builds.
 static constexpr wchar_t kPinPrefix[] = L"TaskbarFolders.Xaml.";
-static std::atomic<bool> nativeReady = false;
-static bool validFolderId(const wstring& id) {
-    GUID g{};
-    return id.size() == 38 && id.front() == L'{' && id.back() == L'}' &&
-           SUCCEEDED(CLSIDFromString(id.c_str(), &g));
-}
-static wstring pinId(const wstring& id) {
-    return validFolderId(id) ? wstring(kPinPrefix) + id.substr(1, 36) : L"";
-}
-static const AppFolder* folderForPin(const wstring& id) {
-    if (!prefix(id, kPinPrefix))
-        return nullptr;
-    for (const auto& f : groups)
-        if (equal(pinId(f.id), id))
-            return &f;
-    return nullptr;
-}
-// Shell name queries can arrive off the UI thread. They see only committed names.
-static PinNames indexPinNames(const Model& model) {
-    PinNames next;
-    for (const auto& f : model) {
-        auto id = pinId(f.id);
-        if (!id.empty())
-            next.emplace(std::move(id), f.name);
-    }
-    return next;
-}
 static fs::path knownPath(REFKNOWNFOLDERID k) {
     PWSTR p = nullptr;
     winrt::check_hresult(SHGetKnownFolderPath(k, 0, nullptr, &p));
@@ -836,12 +915,6 @@ static constexpr PROPERTYKEY kModelId = {
      0x4b39,
      {0xa8, 0xd0, 0xe1, 0xd4, 0x2d, 0xe1, 0xd5, 0xf3}},
     5};
-static constexpr PROPERTYKEY kPinTitle = {
-    {0xf29f85e0,
-     0x4ff9,
-     0x1068,
-     {0xab, 0x91, 0x08, 0x00, 0x2b, 0x27, 0xb3, 0xd9}},
-    2};
 static wstring shortcutId(const fs::path& p) {
     if (!equal(p.extension().wstring(), L".lnk"))
         return {};
@@ -857,33 +930,6 @@ static wstring shortcutId(const fs::path& p) {
     wstring id = v.vt == VT_LPWSTR && v.pwszVal ? v.pwszVal : L"";
     PropVariantClear(&v);
     return id;
-}
-static wstring linkTitle(wstring name) {
-    for (auto& c : name)
-        if (c < 32 || wcschr(L"<>:\"/\\|?*", c))
-            c = L'_';
-    while (!name.empty() && (name.back() == L' ' || name.back() == L'.'))
-        name.pop_back();
-    if (name.empty())
-        return L"Cartella";
-    auto stem = name.substr(0, name.find(L'.'));
-    if (equal(stem, L"CON") || equal(stem, L"PRN") || equal(stem, L"AUX") ||
-        equal(stem, L"NUL") ||
-        (stem.size() == 4 && (prefix(stem, L"COM") || prefix(stem, L"LPT")) &&
-         iswdigit(stem[3])))
-        name = L"_" + name;
-    return name;
-}
-struct PinPaths {
-    fs::path art, links, link, fallback;
-};
-static PinPaths pinPaths(const AppFolder& f, const fs::path& programs) {
-    if (!validFolderId(f.id))
-        throw std::runtime_error("folder id");
-    auto dir = config.parent_path() / L"Pin" / f.id;
-    auto links = programs / L"Cartelle della taskbar" / f.id;
-    return {dir / L"anteprima.ico", links,
-            links / (linkTitle(f.name) + L".lnk"), dir / L"Cartella"};
 }
 static fs::path pinnedLinks() {
     return knownPath(FOLDERID_RoamingAppData) /
@@ -1169,9 +1215,11 @@ struct Preview {
     std::vector<Pixels> icons;
     M::Imaging::WriteableBitmap image{nullptr};
 };
-static std::map<wstring, Preview> previews;
+[[clang::no_destroy]] static std::optional<std::map<wstring, Preview>> previews;
 static const Preview& previewFor(const AppFolder& folder) {
-    auto& cached = previews[folder.id];
+    if (!previews)
+        previews.emplace();
+    auto& cached = (*previews)[folder.id];
     const size_t count = std::min<size_t>(4, folder.apps.size());
     if (cached.image && cached.targets.size() == count &&
         std::equal(cached.targets.begin(), cached.targets.end(),
@@ -1216,299 +1264,12 @@ static const Preview& previewFor(const AppFolder& folder) {
     cached = std::move(next);
     return cached;
 }
-#pragma pack(push, 1)
-struct IcoHeader {
-    WORD reserved, type, count;
-};
-struct IcoEntry {
-    BYTE w, h, colors, reserved;
-    WORD planes, depth;
-    DWORD size, offset;
-};
-#pragma pack(pop)
-static void writeMosaic(const AppFolder& f, const fs::path& target) {
-    const auto& apps = previewFor(f).icons;
-    constexpr int sizes[] = {24, 32, 48, 64};
-    std::vector<IcoEntry> entries;
-    DWORD off = sizeof(IcoHeader) + ARRAYSIZE(sizes) * sizeof(IcoEntry);
-    for (int n : sizes) {
-        DWORD len =
-            sizeof(BITMAPINFOHEADER) + n * n * 4 + ((n + 31) / 32) * 4 * n;
-        entries.push_back({(BYTE)n, (BYTE)n, 0, 0, 1, 32, len, off});
-        off += len;
-    }
-    auto temp = target.parent_path() / (guid() + L".tmp");
-    try {
-        std::ofstream os(temp, std::ios::binary);
-        os.exceptions(std::ios::badbit | std::ios::failbit);
-        auto put = [&](const void* p, size_t size) {
-            os.write((const char*)p, size);
-        };
-        IcoHeader head{0, 1, ARRAYSIZE(sizes)};
-        put(&head, sizeof(head));
-        put(entries.data(), entries.size() * sizeof(IcoEntry));
-        for (int n : sizes) {
-            auto px = mosaicPixels(n, apps);
-            BITMAPINFOHEADER hdr{sizeof(hdr), n, 2 * n, 1, 32, BI_RGB};
-            put(&hdr, sizeof(hdr));
-            for (int y = n - 1; y >= 0; y--)
-                put(px.data() + y * n, 4 * n);
-            int stride = ((n + 31) / 32) * 4;
-            std::vector<BYTE> mask(stride * n);
-            for (int y = 0; y < n; y++)
-                for (int x = 0; x < n; x++)
-                    if (!px[(n - y - 1) * n + x][3])
-                        mask[y * stride + x / 8] |= (BYTE)(128 >> (x % 8));
-            put(mask.data(), mask.size());
-        }
-        os.close();
-        if (!MoveFileExW(temp.c_str(), target.c_str(),
-                         MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-            winrt::throw_last_error();
-    } catch (...) {
-        DeleteFileW(temp.c_str());
-        throw;
-    }
-}
-static void notifyLink(const fs::path& p, LONG what = SHCNE_UPDATEITEM) {
-    SHChangeNotify(what, SHCNF_PATHW | SHCNF_FLUSHNOWAIT, p.c_str(), nullptr);
-}
-static void writePinLink(const AppFolder& f,
-                         const PinPaths& p,
-                         const fs::path& dest) {
-    com_ptr<IShellLinkW> link;
-    winrt::check_hresult(CoCreateInstance(CLSID_ShellLink, nullptr,
-                                          CLSCTX_INPROC_SERVER,
-                                          IID_PPV_ARGS(link.put())));
-    winrt::check_hresult(
-        link->SetPath((knownPath(FOLDERID_Windows) / L"explorer.exe").c_str()));
-    winrt::check_hresult(
-        link->SetArguments((L"\"" + p.fallback.wstring() + L"\"").c_str()));
-    winrt::check_hresult(link->SetDescription(f.name.c_str()));
-    winrt::check_hresult(link->SetIconLocation(p.art.c_str(), 0));
-    auto props = link.as<IPropertyStore>();
-    auto setText = [&](REFPROPERTYKEY k, const wstring& s) {
-        PROPVARIANT v{};
-        v.vt = VT_LPWSTR;
-        v.pwszVal = const_cast<PWSTR>(s.c_str());
-        winrt::check_hresult(props->SetValue(k, v));
-    };
-    setText(kModelId, pinId(f.id));
-    setText(kPinTitle, f.name);
-    winrt::check_hresult(props->Commit());
-    auto temp = dest.parent_path() / (guid() + L".lnk");
-    try {
-        winrt::check_hresult(link.as<IPersistFile>()->Save(temp.c_str(), TRUE));
-        if (!MoveFileExW(temp.c_str(), dest.c_str(),
-                         MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-            winrt::throw_last_error();
-    } catch (...) {
-        DeleteFileW(temp.c_str());
-        throw;
-    }
-}
-struct PinStamp {
-    wstring name;
-    std::vector<wstring> apps;
-    fs::path imageFile;
-};
-static std::map<wstring, PinStamp> pinStamps;
-static wstring iconVersion(const std::string& data) {
-    uint64_t h = 14695981039346656037ULL;
-    for (unsigned char c : data) {
-        h ^= c;
-        h *= 1099511628211ULL;
-    }
-    wchar_t name[40];
-    swprintf_s(name, L"preview-%016llx.ico", (unsigned long long)h);
-    return name;
-}
-static void pruneArt(const fs::path& directory,
-                     const fs::path& keep,
-                     const fs::path& previous = {}) {
-    std::error_code ec;
-    for (fs::directory_iterator it(directory, ec), end; !ec && it != end;
-         it.increment(ec)) {
-        const auto file = it->path();
-        auto name = file.filename().wstring();
-        if (name.size() != 28 || !prefix(name, L"preview-") ||
-            !equal(file.extension().wstring(), L".ico") ||
-            equal(file.wstring(), keep.wstring()) ||
-            equal(file.wstring(), previous.wstring()) ||
-            !std::all_of(name.begin() + 8, name.begin() + 24,
-                         [](wchar_t c) { return iswxdigit(c) != 0; }))
-            continue;
-        if (it->is_regular_file(ec) && it->file_size(ec) < 131072 &&
-            iconVersion(bytes(file)) == name)
-            DeleteFileW(file.c_str());
-    }
-}
-static fs::path updatePinnedCopy(const fs::path& path,
-                                 const PinPaths& artwork,
-                                 const AppFolder& f) {
-    com_ptr<IShellLinkW> link;
-    winrt::check_hresult(CoCreateInstance(CLSID_ShellLink, nullptr,
-                                          CLSCTX_INPROC_SERVER,
-                                          IID_PPV_ARGS(link.put())));
-    auto file = link.as<IPersistFile>();
-    winrt::check_hresult(file->Load(path.c_str(), STGM_READ));
-    wchar_t oldPath[32768]{}, description[1024]{};
-    int index = 0;
-    winrt::check_hresult(
-        link->GetIconLocation(oldPath, ARRAYSIZE(oldPath), &index));
-    link->GetDescription(description, ARRAYSIZE(description));
-    auto store = link.as<IPropertyStore>();
-    PROPVARIANT title{};
-    bool sameTitle = SUCCEEDED(store->GetValue(kPinTitle, &title)) &&
-                     title.vt == VT_LPWSTR && title.pwszVal &&
-                     f.name == title.pwszVal;
-    PropVariantClear(&title);
-    store = nullptr;
-    if (index != 0 || !equal(artwork.art.wstring(), oldPath) ||
-        f.name != description || !sameTitle) {
-        auto tmp = path.parent_path() / (guid() + L".tmp");
-        if (!CopyFileW(path.c_str(), tmp.c_str(), TRUE))
-            winrt::throw_last_error();
-        try {
-            winrt::check_hresult(file->Load(tmp.c_str(), STGM_READWRITE));
-            winrt::check_hresult(link->SetIconLocation(artwork.art.c_str(), 0));
-            winrt::check_hresult(link->SetDescription(f.name.c_str()));
-            auto props = link.as<IPropertyStore>();
-            PROPVARIANT v{};
-            v.vt = VT_LPWSTR;
-            v.pwszVal = const_cast<PWSTR>(f.name.c_str());
-            winrt::check_hresult(props->SetValue(kPinTitle, v));
-            winrt::check_hresult(props->Commit());
-            winrt::check_hresult(file->Save(tmp.c_str(), TRUE));
-            props = nullptr;
-            file = nullptr;
-            link = nullptr;
-            if (!MoveFileExW(
-                    tmp.c_str(), path.c_str(),
-                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-                winrt::throw_last_error();
-        } catch (...) {
-            file = nullptr;
-            link = nullptr;
-            DeleteFileW(tmp.c_str());
-            throw;
-        }
-    }
-    notifyLink(path);
-    return fs::path(oldPath);
-}
-static void ensureAssets(const AppFolder& f,
-                         const PinPaths& p,
-                         const fs::path& pins) {
-    PinStamp stamp{f.name, {}};
-    for (size_t i = 0; i < std::min<size_t>(4, f.apps.size()); i++)
-        stamp.apps.push_back(f.apps[i].target);
-    auto it = pinStamps.find(f.id);
-    if (it != pinStamps.end() && it->second.name == stamp.name &&
-        it->second.apps == stamp.apps)
-        return;
-    fs::create_directories(p.fallback);
-    fs::create_directories(p.links);
-    bool prior = fs::exists(p.link);
-    if (prior && !equal(shortcutId(p.link), pinId(f.id)))
-        throw std::runtime_error("name collision");
-    auto versioned = p;
-    bool reuse = it != pinStamps.end() && it->second.apps == stamp.apps &&
-                 fs::exists(p.art) && fs::exists(it->second.imageFile);
-    if (reuse)
-        versioned.art = it->second.imageFile;
-    else {
-        writeMosaic(f, p.art);
-        versioned.art = p.art.parent_path() / iconVersion(bytes(p.art));
-        fs::copy_file(p.art, versioned.art, fs::copy_options::skip_existing);
-    }
-    stamp.imageFile = versioned.art;
-    writePinLink(f, versioned, p.link);
-    notifyLink(p.link, prior ? SHCNE_UPDATEITEM : SHCNE_CREATE);
-    if (!reuse)
-        notifyLink(versioned.art);
-    fs::path previous;
-    for (const auto& copy : ownLinks(pins, pinId(f.id)))
-        previous = updatePinnedCopy(copy, versioned, f);
-    pruneArt(p.art.parent_path(), versioned.art, previous);
-    for (const auto& old : ownLinks(p.links, pinId(f.id)))
-        if (!equal(old.wstring(), p.link.wstring()) && DeleteFileW(old.c_str()))
-            notifyLink(old, SHCNE_DELETE);
-    SHFILEINFOW info{};
-    if (!reuse && SHGetFileInfoW(p.link.c_str(), 0, &info, sizeof(info),
-                                 SHGFI_SYSICONINDEX)) {
-        auto art = versioned.art.wstring();
-        SHUpdateImageW(art.data(), 0, 0, info.iIcon);
-    }
-    pinStamps[f.id] = std::move(stamp);
-}
-static bool pinVerb(const fs::path& p, const char* verb) {
-    auto item = shellItem(p.wstring());
-    if (!item)
-        return false;
-    com_ptr<IContextMenu> menu;
-    if (FAILED(item->BindToHandler(nullptr, BHID_SFUIObject,
-                                   IID_PPV_ARGS(menu.put()))))
-        return false;
-    auto h = CreatePopupMenu();
-    if (!h)
-        return false;
-    auto hr =
-        menu->QueryContextMenu(h, 0, 1, 0x7fff, CMF_NORMAL | CMF_EXTENDEDVERBS);
-    bool ok = false;
-    if (SUCCEEDED(hr))
-        for (UINT i = 0; i < HRESULT_CODE(hr); i++) {
-            char name[100]{};
-            if (SUCCEEDED(menu->GetCommandString(i, GCS_VERBA, nullptr, name,
-                                                 ARRAYSIZE(name))) &&
-                _stricmp(name, verb) == 0) {
-                CMINVOKECOMMANDINFO cmd{sizeof(cmd)};
-                cmd.hwnd = tray();
-                cmd.lpVerb = MAKEINTRESOURCEA(i);
-                cmd.nShow = SW_SHOWNORMAL;
-                ok = SUCCEEDED(menu->InvokeCommand(&cmd));
-                break;
-            }
-        }
-    DestroyMenu(h);
-    return ok;
-}
-static void integrate(const wstring& id) {
-    try {
-        auto f = lookup(groups, id);
-        if (!f)
-            return;
-        if (!nativeReady.load()) {
-            note(uiText(UiString::PinUnavailable));
-            return;
-        }
-        const auto name = f->name;
-        auto p = pinPaths(*f, knownPath(FOLDERID_Programs));
-        pinStamps.erase(id);
-        ensureAssets(*f, p, pinnedLinks());
-        if (pinVerb(p.link, "taskbarpin")) {
-            requestLayout();
-            return;
-        }
-        note(formatUi(UiString::PinInstructions, name).c_str());
-        PIDLIST_ABSOLUTE item = nullptr;
-        winrt::check_hresult(
-            SHParseDisplayName(p.link.c_str(), nullptr, &item, 0, nullptr));
-        auto hr = SHOpenFolderAndSelectItems(item, 0, nullptr, 0);
-        CoTaskMemFree(item);
-        winrt::check_hresult(hr);
-    } catch (...) {
-        note(uiText(UiString::PinFailed));
-    }
-}
 static void createFolder() {
     loadModel();
     auto n = nameDialog(L"", uiText(UiString::CreateTitle));
     if (n.empty())
         return;
-    auto id = guid();
-    if (edit([&](Model& m) { m.push_back({id, n, {}}); }))
-        integrate(id);
+    edit([&](Model& m) { m.push_back({guid(), n, {}}); });
 }
 struct Menu {
     HMENU h = CreatePopupMenu();
@@ -1531,10 +1292,18 @@ struct Menu {
         GetCursorPos(&pt);
         if (!owner)
             owner = tray();
+        if (!h || !owner)
+            return 0;
+        ModalScope modal(ModalKind::Menu);
+        if (!modal)
+            return 0;
         SetForegroundWindow(owner);
-        return TrackPopupMenuEx(h,
-                                TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
-                                pt.x, pt.y, owner, nullptr);
+        if (stopping)
+            return 0;
+        auto result = TrackPopupMenuEx(
+            h, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, owner,
+            nullptr);
+        return stopping ? 0 : result;
     }
 };
 static void moveTo(const wstring& dest, const App& a) {
@@ -1558,7 +1327,8 @@ static std::optional<App> fromPath(wstring path) {
 // File picking runs on its own short-lived UI thread. The taskbar remains interactive.
 enum : UINT { kFilesDone = WM_APP + 540, kCatalogDone };
 static constexpr wchar_t kFilesClass[] = L"TaskbarFolders.Files.052";
-static std::thread fileThread, catalogThread;
+[[clang::no_destroy]] static std::optional<std::thread> fileThread;
+[[clang::no_destroy]] static std::optional<std::thread> catalogThread;
 static std::atomic<HWND> fileWindow{};
 static std::atomic<bool> filesReady = false, catalogReady = false;
 static std::vector<wstring> selectedPaths;
@@ -1970,7 +1740,7 @@ static HRESULT filesStatus = S_OK;
 static bool browse(const wstring& dest, HWND notify, RECT anchor) {
     if (stopping || !notify)
         return false;
-    if (fileThread.joinable()) {
+    if (fileThread) {
         if (HWND h = fileWindow.load())
             SetForegroundWindow(h);
         return false;
@@ -1981,7 +1751,7 @@ static bool browse(const wstring& dest, HWND notify, RECT anchor) {
     wstring title = uiText(UiString::FromFile);
     if (f)
         title += L" — " + f->name;
-    fileThread = std::thread([notify, anchor, title] {
+    fileThread.emplace([notify, anchor, title] {
         FilesWindow state;
         auto hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         HRESULT status = S_OK;
@@ -2048,9 +1818,10 @@ static std::vector<App> readAppCatalog() {
     return result;
 }
 static bool collectCatalog() {
-    if (!catalogThread.joinable() || !catalogReady.load())
+    if (!catalogThread || !catalogReady.load())
         return false;
-    catalogThread.join();
+    catalogThread->join();
+    catalogThread.reset();
     ++catalogGeneration;
     installedApps = std::move(incomingApps);
     catalogFailed = incomingFailed;
@@ -2060,11 +1831,11 @@ static bool collectCatalog() {
 }
 static void wantCatalog(HWND notify) {
     collectCatalog();
-    if (stopping || !notify || catalogThread.joinable() ||
+    if (stopping || !notify || catalogThread ||
         (catalogTime &&
          GetTickCount64() - catalogTime < (catalogFailed ? 10000 : 120000)))
         return;
-    catalogThread = std::thread([notify] {
+    catalogThread.emplace([notify] {
         auto init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         std::vector<App> apps;
         try {
@@ -2163,32 +1934,28 @@ struct AppSearch {
 static void stopWorkers() {
     if (HWND w = fileWindow.load())
         PostMessageW(w, WM_CLOSE, 0, 0);
-    if (fileThread.joinable())
-        fileThread.join();
-    if (catalogThread.joinable())
-        catalogThread.join();
+    if (fileThread) {
+        fileThread->join();
+        fileThread.reset();
+    }
+    if (catalogThread) {
+        catalogThread->join();
+        catalogThread.reset();
+    }
 }
 
 static void beginAdding(const wstring&);
-static bool pinnedFolder(const wstring&);
-static void removeFolderPin(wstring);
-enum class FolderAction { Add = 1, Rename, Create, Remove, Integrate, Move };
+enum class FolderAction { Add = 1, Rename, Create, Remove, Move };
 struct MenuAction {
     FolderAction kind;
     wstring folder;
     wstring label;
 };
-static std::vector<MenuAction> folderActions(const wstring& dest,
-                                             bool offerPin) {
-    std::vector<MenuAction> result{
-        {FolderAction::Add, dest, uiText(UiString::AddAppsMenu)},
-        {FolderAction::Rename, dest, uiText(UiString::RenameMenu)},
-        {FolderAction::Create, {}, uiText(UiString::CreateMenu)},
-        {FolderAction::Remove, dest, uiText(UiString::RemoveMenu)}};
-    if (offerPin)
-        result.push_back(
-            {FolderAction::Integrate, dest, uiText(UiString::Integrate)});
-    return result;
+static std::vector<MenuAction> folderActions(const wstring& dest) {
+    return {{FolderAction::Add, dest, uiText(UiString::AddAppsMenu)},
+            {FolderAction::Rename, dest, uiText(UiString::RenameMenu)},
+            {FolderAction::Create, {}, uiText(UiString::CreateMenu)},
+            {FolderAction::Remove, dest, uiText(UiString::RemoveMenu)}};
 }
 static std::vector<MenuAction> appActions(const Model& folders) {
     std::vector<MenuAction> result;
@@ -2217,9 +1984,6 @@ static void runFolderAction(MenuAction action) {
     wstring name = f->name;
     closePanel();
     switch (action.kind) {
-        case FolderAction::Integrate:
-            integrate(action.folder);
-            break;
         case FolderAction::Rename: {
             auto n = nameDialog(name, uiText(UiString::RenameTitle));
             if (!n.empty())
@@ -2230,10 +1994,12 @@ static void runFolderAction(MenuAction action) {
             break;
         }
         case FolderAction::Remove:
-            if (MessageBoxW(tray(), uiText(UiString::RemovePrompt),
-                            name.c_str(),
-                            MB_OKCANCEL | MB_ICONQUESTION) == IDOK)
-                removeFolderPin(action.folder);
+            if (confirmRemove(name))
+                edit([&](Model& m) {
+                    std::erase_if(m, [&](const AppFolder& folder) {
+                        return folder.id == action.folder;
+                    });
+                });
             break;
         default:
             break;
@@ -2243,7 +2009,7 @@ static void runFolderAction(MenuAction action) {
 static void manage(wstring dest) {
     if (!lookup(groups, dest))
         return;
-    auto actions = folderActions(dest, !pinnedFolder(dest));
+    auto actions = folderActions(dest);
     Menu menu;
     for (size_t i = 0; i < actions.size(); ++i) {
         if (actions[i].kind == FolderAction::Remove)
@@ -3509,7 +3275,7 @@ static void refreshPanel() {
     PCWSTR emptyText = uiText(UiString::Empty);
     if (panel.choosing)
         emptyText = !searching                 ? uiText(UiString::TypeOrBrowse)
-                    : catalogThread.joinable() ? uiText(UiString::Searching)
+                    : catalogThread ? uiText(UiString::Searching)
                     : catalogFailed            ? uiText(UiString::NoCatalog)
                                                : uiText(UiString::NoResults);
     SetWindowTextW(panel.empty, emptyText);
@@ -3663,9 +3429,10 @@ static void workerFinished(UINT msg) {
             refreshPanel();
         return;
     }
-    if (!fileThread.joinable() || !filesReady.load())
+    if (!fileThread || !filesReady.load())
         return;
-    fileThread.join();
+    fileThread->join();
+    fileThread.reset();
     filesReady = false;
     auto paths = std::move(selectedPaths);
     auto dest = std::exchange(fileDestination, wstring{});
@@ -4068,45 +3835,58 @@ static void openPanel(const wstring& id,
     SetForegroundWindow(panel.window);
     SetFocus(panel.apps.empty() ? panel.add : panel.list);
 }
+static std::optional<RECT> onScreen(FrameworkElement const& element) {
+    if (!isPrimaryRoot(element) ||
+        element.Visibility() == X::Visibility::Collapsed)
+        return std::nullopt;
+    auto root = element.XamlRoot();
+    if (!root)
+        return std::nullopt;
+    auto host = root.Content().try_as<FrameworkElement>();
+    double scale = root.RasterizationScale();
+    if (!host || scale <= 0)
+        return std::nullopt;
+    HWND bridge = FindWindowExW(
+        ui->primary, nullptr,
+        L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
+    POINT origin{};
+    if (!ClientToScreen(bridge ? bridge : ui->primary, &origin))
+        return std::nullopt;
+    auto pos = element.TransformToVisual(host).TransformPoint({0, 0});
+    return RECT{origin.x + lround(pos.X * scale),
+                origin.y + lround(pos.Y * scale),
+                origin.x + lround((pos.X + element.ActualWidth()) * scale),
+                origin.y + lround((pos.Y + element.ActualHeight()) * scale)};
+}
 static void showFolder(const wstring& dest, FrameworkElement const& anchor) {
-    HWND owner = tray();
-    RECT bar{};
-    if (!owner || !GetWindowRect(owner, &bar))
+    if (!ui || !isPrimaryRoot(ui->frame) || (anchor && !isPrimaryRoot(anchor)))
         return;
-    POINT p{};
-    GetCursorPos(&p);
-    RECT rect{p.x - 1, bar.top, p.x + 1, bar.bottom};
-    if (auto root = anchor ? anchor.XamlRoot() : nullptr) {
-        auto host = root.Content().try_as<FrameworkElement>();
-        if (host) {
-            auto pos = anchor.TransformToVisual(host).TransformPoint({0, 0});
-            double scale = root.RasterizationScale();
-            HWND bridge = FindWindowExW(
-                owner, nullptr,
-                L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
-            POINT start{};
-            if (ClientToScreen(bridge ? bridge : owner, &start)) {
-                int left = start.x + lround(pos.X * scale),
-                    top = start.y + lround(pos.Y * scale);
-                rect = {left, top,
-                        left + (LONG)lround(anchor.ActualWidth() * scale),
-                        top + (LONG)lround(anchor.ActualHeight() * scale)};
-            }
-        }
+    HWND owner = ui->primary;
+    RECT bar{};
+    if (!GetWindowRect(owner, &bar))
+        return;
+    FrameworkElement target = anchor;
+    if (!target) {
+        auto tile = std::find_if(ui->tiles.begin(), ui->tiles.end(),
+                                 [&](auto const& t) { return t.id == dest; });
+        if (tile != ui->tiles.end())
+            target = tile->button;
     }
-    openPanel(dest, rect, bar, owner,
-              !anchor || anchor.ActualTheme() == X::ElementTheme::Dark);
+    LONG middle = bar.left + (bar.right - bar.left) / 2;
+    RECT fallback{middle - 1, bar.top, middle + 1, bar.bottom};
+    openPanel(dest, onScreen(target).value_or(fallback), bar, owner,
+              ui->frame.ActualTheme() == X::ElementTheme::Dark);
 }
 static void onDrop(const wstring& dest, X::DragEventArgs const& e) {
     e.Handled(true);
-    if (!ui.dragApp.empty())
-        if (auto a = byId(ui.dragApp)) {
+    if (!ui->dragApp.empty())
+        if (auto a = byId(ui->dragApp)) {
             moveTo(dest, *a);
-            ui.dragApp.clear();
+            ui->dragApp.clear();
             return;
         }
     if (e.DataView().Contains(Data::StandardDataFormats::StorageItems())) {
-        ui.drops.push_back({dest, e.DataView().GetStorageItemsAsync()});
+        ui->drops.push_back({dest, e.DataView().GetStorageItemsAsync()});
         SetTimer(controller, kDropTimer, 75, nullptr);
     }
 }
@@ -4127,17 +3907,17 @@ static Button makeTile(const AppFolder& f) {
     mosaic.Source(previewFor(f).image);
     b.Content(mosaic);
     auto id = f.id;
-    click(b, ui.tileOff, [id, w = winrt::make_weak(b)]() {
+    click(b, ui->tileOff, [id, w = winrt::make_weak(b)]() {
         if (auto v = w.get())
             showFolder(id, v);
     });
     b.AllowDrop(true);
     auto over = b.DragOver([](auto&&, auto&& e) {
         try {
-            if (!ui.dragApp.empty() ||
+            if (!ui->dragApp.empty() ||
                 e.DataView().Contains(
                     Data::StandardDataFormats::StorageItems())) {
-                e.AcceptedOperation(ui.dragApp.empty()
+                e.AcceptedOperation(ui->dragApp.empty()
                                         ? Data::DataPackageOperation::Copy
                                         : Data::DataPackageOperation::Move);
                 e.Handled(true);
@@ -4151,7 +3931,7 @@ static Button makeTile(const AppFolder& f) {
         } catch (...) {
         }
     });
-    ui.tileOff.push_back([w = winrt::make_weak(b), over, drop]() {
+    ui->tileOff.push_back([w = winrt::make_weak(b), over, drop]() {
         if (auto v = w.get()) {
             v.DragOver(over);
             v.Drop(drop);
@@ -4176,384 +3956,45 @@ static void restore(Hidden& h) {
     else
         e.SetValue(X::UIElement::VisibilityProperty(), h.old);
 }
-static void resetNative();
+static void syncOpacity(const std::vector<FrameworkElement>&);
 static void clearView() {
-    resetNative();
     if (controller) {
         KillTimer(controller, kLayoutTimer);
         KillTimer(controller, kDropTimer);
         KillTimer(controller, kPinDragTimer);
     }
-    off(ui.frameOff);
     closePanel();
-    off(ui.tileOff);
-    off(ui.menuOff);
-    for (auto& h : ui.hidden)
+    if (!ui)
+        return;
+    off(ui->frameOff);
+    off(ui->tileOff);
+    off(ui->menuOff);
+    syncOpacity({});
+    for (auto& h : ui->hidden)
         try {
             restore(h);
         } catch (...) {
         }
-    if (ui.marginSet && ui.repeater)
-        ui.repeater.Margin(ui.baseMargin);
-    detach(ui.root, ui.overlay);
-    detach(ui.root, ui.strip);
-    ui = View{};
-    previews.clear();
-}
-struct NativeButton {
-    FrameworkElement element;
-    wstring id;
-};
-static std::vector<NativeButton> buttons;
-static bool pinnedFolder(const wstring& id) {
-    auto key = pinId(id);
-    if (key.empty())
-        return false;
-    return std::any_of(buttons.begin(), buttons.end(),
-                       [&](const auto& b) { return equal(key, b.id); });
-}
-static void removeFolderPin(wstring dest) {
-    auto f = lookup(groups, dest);
-    if (!f)
-        return;
-    auto old = *f;
-    if (validFolderId(dest)) {
-        auto links = ownLinks(pinnedLinks(), pinId(dest));
-        if (pinnedFolder(dest) || !links.empty()) {
-            bool removed = false;
-            for (auto& p : links)
-                if (pinVerb(p, "taskbarunpin")) {
-                    removed = true;
-                    break;
-                }
-            if (!removed) {
-                note(uiText(UiString::UnpinFirst));
-                return;
-            }
+    for (auto& job : ui->drops)
+        try {
+            job.op.Cancel();
+        } catch (...) {
         }
+    try {
+        if (ui->marginSet && ui->repeater)
+            ui->repeater.Margin(ui->baseMargin);
+    } catch (...) {
     }
-    if (!edit([&](Model& m) {
-            std::erase_if(m, [&](auto& g) { return g.id == dest; });
-        }) ||
-        !validFolderId(dest))
-        return;
-    auto p = pinPaths(old, knownPath(FOLDERID_Programs));
-    for (auto& file : ownLinks(p.links, pinId(dest)))
-        if (DeleteFileW(file.c_str()))
-            notifyLink(file, SHCNE_DELETE);
-    pruneArt(p.art.parent_path(), {});
-    std::error_code ec;
-    fs::remove(p.links, ec);
-    fs::remove(p.art, ec);
-    fs::remove(p.fallback, ec);
-    fs::remove(p.art.parent_path(), ec);
-    pinStamps.erase(dest);
-}
-static std::vector<std::function<void()>> dropOff;
-static std::vector<NativeButton> dropHosts;
-struct LiveIcon {
-    FrameworkElement host{nullptr};
-    C::Image glyph{nullptr};
-    wstring id;
-    M::ImageSource drawn{nullptr};
-    F::IInspectable oldLocal{nullptr};
-    X::Data::BindingBase binding{nullptr};
-    int64_t token = 0;
-};
-static std::vector<LiveIcon> liveIcons;
-static C::Image pinGlyph(const FrameworkElement& host) {
-    C::Image exact{nullptr}, inPanel{nullptr};
-    int candidates = 0;
-    visit(host, [&](const FrameworkElement& e) {
-        if (auto img = e.try_as<C::Image>()) {
-            if (e.Name() == L"Icon") {
-                exact = img;
-                return false;
-            }
-            auto parent =
-                M::VisualTreeHelper::GetParent(e).try_as<FrameworkElement>();
-            if (parent && parent.Name() == L"IconPanel") {
-                ++candidates;
-                inPanel = img;
-            }
-        }
-        return !exact;
-    });
-    return exact ? exact : (candidates == 1 ? inPanel : nullptr);
-}
-static void restoreGlyph(LiveIcon& live) {
-    auto dp = C::Image::SourceProperty();
-    live.glyph.UnregisterPropertyChangedCallback(dp, live.token);
-    if (live.glyph.Source() != live.drawn)
-        return;
-    if (live.binding)
-        live.glyph.SetBinding(dp, live.binding);
-    else if (live.oldLocal == X::DependencyProperty::UnsetValue())
-        live.glyph.ClearValue(dp);
-    else
-        live.glyph.SetValue(dp, live.oldLocal);
-}
-static void syncGlyphs(const std::vector<NativeButton>& hosts) {
-    struct Target {
-        const NativeButton* b;
-        C::Image glyph;
-    };
-    std::vector<Target> targets;
-    for (const auto& b : hosts)
-        if (auto g = pinGlyph(b.element))
-            targets.push_back({&b, g});
-    for (auto it = liveIcons.begin(); it != liveIcons.end();) {
-        if (std::any_of(targets.begin(), targets.end(), [&](const Target& t) {
-                return t.glyph == it->glyph && equal(t.b->id, it->id);
-            })) {
-            ++it;
-            continue;
-        }
-        restoreGlyph(*it);
-        it = liveIcons.erase(it);
+    try {
+        detach(ui->root, ui->overlay);
+    } catch (...) {
     }
-    for (const auto& t : targets) {
-        auto f = folderForPin(t.b->id);
-        if (!f)
-            continue;
-        auto it =
-            std::find_if(liveIcons.begin(), liveIcons.end(),
-                         [&](const LiveIcon& l) { return l.glyph == t.glyph; });
-        auto dp = C::Image::SourceProperty();
-        bool fresh = it == liveIcons.end();
-        if (fresh) {
-            LiveIcon state;
-            state.host = t.b->element;
-            state.glyph = t.glyph;
-            state.id = t.b->id;
-            state.token = t.glyph.RegisterPropertyChangedCallback(
-                dp, [](auto&&, auto&&) { requestLayout(); });
-            liveIcons.push_back(std::move(state));
-            it = std::prev(liveIcons.end());
-        }
-        auto wanted = previewFor(*f).image;
-        auto shown = t.glyph.Source();
-        if (fresh || shown != it->drawn) {
-            auto expression = t.glyph.GetBindingExpression(dp);
-            it->binding = expression ? expression.ParentBinding() : nullptr;
-            it->oldLocal = t.glyph.ReadLocalValue(dp);
-        }
-        if (shown != wanted) {
-            t.glyph.Source(wanted);
-        }
-        it->drawn = wanted;
+    try {
+        detach(ui->root, ui->strip);
+    } catch (...) {
     }
-}
-// The taskbar can keep the same XAML button and tooltip after its .lnk is renamed.
-// Keep the native tooltip container (placement, theme and open/close animations).
-struct PinCaption {
-    FrameworkElement host{nullptr}, owner{nullptr}, target{nullptr};
-    C::ToolTip tip{nullptr};
-    X::DependencyProperty property{nullptr};
-    wstring id, name;
-    bool accessible = false;
-    F::IInspectable original{nullptr}, written{nullptr};
-    X::Data::BindingBase binding{nullptr};
-    int64_t changed{}, replaced{};
-    winrt::event_token opened{};
-};
-struct CaptionTarget {
-    FrameworkElement host, owner;
-    C::ToolTip tip;
-    wstring id;
-    bool accessible = false;
-};
-static std::vector<PinCaption> pinCaptions;
-static bool ownsCaption(const PinCaption& c, const F::IInspectable& value) {
-    if (!c.written)
-        return false;
-    if (c.written == value)
-        return true;
-    // A string-typed dependency property can rebox its effective value on each read.
-    auto text = value.try_as<F::IReference<hstring>>();
-    return c.accessible && text && text.Value() == c.name;
-}
-static void applyCaption(PinCaption& c, const wstring& name) {
-    auto current = c.target.GetValue(c.property);
-    bool ours = ownsCaption(c, current);
-    if (ours && name == c.name)
-        return;
-    if (!ours) {
-        auto expr = c.target.GetBindingExpression(c.property);
-        c.binding = expr ? expr.ParentBinding() : nullptr;
-        c.original = c.target.ReadLocalValue(c.property);
-        c.written = nullptr;
-        if (auto str = current.try_as<F::IReference<hstring>>();
-            str && str.Value() == name)
-            return;
-    }
-    c.name = name;
-    c.written = winrt::box_value(hstring(name));
-    c.target.SetValue(c.property, c.written);
-}
-static void restoreCaption(PinCaption& c) {
-    c.target.UnregisterPropertyChangedCallback(c.property, c.changed);
-    if (c.tip) {
-        c.tip.Opened(c.opened);
-        c.owner.UnregisterPropertyChangedCallback(
-            C::ToolTipService::ToolTipProperty(), c.replaced);
-    }
-    if (!ownsCaption(c, c.target.GetValue(c.property)))
-        return;
-    if (c.binding)
-        c.target.SetBinding(c.property, c.binding);
-    else if (c.original == X::DependencyProperty::UnsetValue())
-        c.target.ClearValue(c.property);
-    else
-        c.target.SetValue(c.property, c.original);
-}
-static void syncPinCaptions(const std::vector<NativeButton>& hosts) {
-    std::vector<CaptionTarget> targets;
-    for (const auto& b : hosts) {
-        if (!folderForPin(b.id))
-            continue;
-        size_t before = targets.size();
-        visit(b.element, [&](const FrameworkElement& owner) {
-            auto value = C::ToolTipService::GetToolTip(owner);
-            if (value) {
-                // If the template acquired an inner tooltip, retire our synthetic root label.
-                bool synthetic = std::any_of(
-                    pinCaptions.begin(), pinCaptions.end(), [&](const auto& c) {
-                        return !c.accessible && c.owner == owner && !c.tip &&
-                               c.written == value &&
-                               (!c.original ||
-                                c.original ==
-                                    X::DependencyProperty::UnsetValue());
-                    });
-                if (!synthetic)
-                    targets.push_back(
-                        {b.element, owner, value.try_as<C::ToolTip>(), b.id});
-            }
-            return true;
-        });
-        if (targets.size() == before)
-            targets.push_back({b.element, b.element, nullptr, b.id});
-        targets.push_back({b.element, b.element, nullptr, b.id, true});
-    }
-    auto matches = [](const PinCaption& c, const CaptionTarget& t) {
-        return c.host == t.host && c.owner == t.owner && c.tip == t.tip &&
-               c.accessible == t.accessible && equal(c.id, t.id);
-    };
-    for (auto i = pinCaptions.begin(); i != pinCaptions.end();) {
-        if (std::any_of(targets.begin(), targets.end(),
-                        [&](const auto& t) { return matches(*i, t); })) {
-            ++i;
-            continue;
-        }
-        restoreCaption(*i);
-        i = pinCaptions.erase(i);
-    }
-    for (auto& t : targets) {
-        auto f = folderForPin(t.id);
-        if (!f)
-            continue;
-        auto i = std::find_if(pinCaptions.begin(), pinCaptions.end(),
-                              [&](const auto& c) { return matches(c, t); });
-        if (i == pinCaptions.end()) {
-            PinCaption c;
-            c.host = t.host;
-            c.owner = t.owner;
-            c.tip = t.tip;
-            c.id = t.id;
-            c.accessible = t.accessible;
-            c.target = t.tip ? t.tip.as<FrameworkElement>() : t.owner;
-            if (t.accessible)
-                c.property =
-                    X::Automation::AutomationProperties::NameProperty();
-            else
-                c.property = t.tip ? C::ContentControl::ContentProperty()
-                                   : C::ToolTipService::ToolTipProperty();
-            auto changed = [](auto&&, auto&&) { requestLayout(); };
-            c.changed =
-                c.target.RegisterPropertyChangedCallback(c.property, changed);
-            if (t.tip) {
-                c.replaced = t.owner.RegisterPropertyChangedCallback(
-                    C::ToolTipService::ToolTipProperty(), changed);
-                c.opened =
-                    t.tip.Opened([](const F::IInspectable& sender, auto&&) {
-                        if (stopping)
-                            return;
-                        try {
-                            for (auto& entry : pinCaptions)
-                                if (entry.tip == sender &&
-                                    equal(appKey(entry.host), entry.id)) {
-                                    if (auto folder = folderForPin(entry.id))
-                                        applyCaption(entry, folder->name);
-                                }
-                        } catch (...) {
-                        }
-                    });
-            }
-            pinCaptions.push_back(std::move(c));
-            i = std::prev(pinCaptions.end());
-        }
-        applyCaption(*i, f->name);
-    }
-}
-
-static void resetNative() {
-    syncPinCaptions({});
-    syncGlyphs({});
-    off(dropOff);
-    dropHosts.clear();
-    buttons.clear();
-}
-static void setNativeDrops(const std::vector<NativeButton>& hosts) {
-    if (hosts.size() == dropHosts.size() &&
-        std::equal(hosts.begin(), hosts.end(), dropHosts.begin(),
-                   [](const auto& a, const auto& b) {
-                       return a.element == b.element && a.id == b.id;
-                   }))
-        return;
-    off(dropOff);
-    dropHosts = hosts;
-    for (const auto& b : hosts) {
-        auto e = b.element;
-        auto f = folderForPin(b.id);
-        if (!f)
-            continue;
-        auto old = e.ReadLocalValue(X::UIElement::AllowDropProperty());
-        auto over = winrt::box_value(
-            X::DragEventHandler([](auto&&, X::DragEventArgs const& arg) {
-                try {
-                    if (ui.dragApp.empty() &&
-                        arg.DataView().Contains(
-                            Data::StandardDataFormats::StorageItems())) {
-                        arg.AcceptedOperation(Data::DataPackageOperation::Copy);
-                        arg.Handled(true);
-                    }
-                } catch (...) {
-                }
-            }));
-        auto drop = winrt::box_value(X::DragEventHandler(
-            [id = f->id](auto&&, X::DragEventArgs const& arg) {
-                try {
-                    if (ui.dragApp.empty() &&
-                        arg.DataView().Contains(
-                            Data::StandardDataFormats::StorageItems()))
-                        onDrop(id, arg);
-                } catch (...) {
-                }
-            }));
-        e.AllowDrop(true);
-        e.AddHandler(X::UIElement::DragOverEvent(), over, true);
-        e.AddHandler(X::UIElement::DropEvent(), drop, true);
-        dropOff.push_back([e, old, over, drop] {
-            e.RemoveHandler(X::UIElement::DragOverEvent(), over);
-            e.RemoveHandler(X::UIElement::DropEvent(), drop);
-            if (e.AllowDrop()) {
-                if (old == X::DependencyProperty::UnsetValue())
-                    e.ClearValue(X::UIElement::AllowDropProperty());
-                else
-                    e.SetValue(X::UIElement::AllowDropProperty(), old);
-            }
-        });
-    }
+    ui.reset();
+    previews.reset();
 }
 // A process can have a taskbar button without being pinned (for example a one-off file picker).
 // Keep ordinary executable windows out of suggestions unless a pinned shortcut actually points there.
@@ -4608,8 +4049,8 @@ static std::vector<App> taskbarChoices(const AppFolder& folder) {
     std::set<wstring> seen;
     std::optional<std::set<wstring>> binaries;
     const auto pinDirectory = pinnedLinks();
-    if (ui.repeater)
-        visit(ui.repeater, [&](FrameworkElement const& e) {
+    if (ui->repeater)
+        visit(ui->repeater, [&](FrameworkElement const& e) {
             if (winrt::get_class_name(e) != L"Taskbar.TaskListButton")
                 return true;
             auto id = appKey(e);
@@ -4641,27 +4082,8 @@ static std::vector<App> taskbarChoices(const AppFolder& folder) {
     return choices;
 }
 static bool under(FrameworkElement const& e, POINT pt) {
-    if (!e || !ui.root || e.Visibility() == X::Visibility::Collapsed)
-        return false;
-    auto source = ui.root.XamlRoot();
-    if (!source)
-        return false;
-    auto host = source.Content().try_as<FrameworkElement>();
-    if (!host)
-        return false;
-    auto pos = e.TransformToVisual(host).TransformPoint({0, 0});
-    auto scale = source.RasterizationScale();
-    HWND hwnd = tray();
-    // The XAML island can start after the window's left edge on some taskbar layouts.
-    HWND island = FindWindowExW(
-        hwnd, nullptr, L"Windows.UI.Composition.DesktopWindowContentBridge",
-        nullptr);
-    POINT origin{};
-    if (!ClientToScreen(island ? island : hwnd, &origin))
-        return false;
-    double x = (pt.x - origin.x) / scale, y = (pt.y - origin.y) / scale;
-    return x >= pos.X && x < pos.X + e.ActualWidth() && y >= pos.Y &&
-           y < pos.Y + e.ActualHeight();
+    auto rect = onScreen(e);
+    return rect && PtInRect(&*rect, pt);
 }
 static void reparent(Button const& b, C::Panel const& p) {
     auto old = M::VisualTreeHelper::GetParent(b).try_as<C::Panel>();
@@ -4670,34 +4092,29 @@ static void reparent(Button const& b, C::Panel const& p) {
     detach(old, b);
     p.Children().Append(b);
 }
-static void syncOpacity(const std::vector<FrameworkElement>&);
 static void scan() {
-    if (!ui.frame || !ui.root || !ui.overlay)
+    if (!ui || !ui->frame || !ui->root || !ui->overlay)
         return;
-    if (revision != ui.painted) {
-        off(ui.tileOff);
-        ui.overlay.Children().Clear();
-        ui.strip.Children().Clear();
-        ui.tiles.clear();
-        for (auto& f : groups) {
-            if (validFolderId(f.id))
-                try {
-                    auto p = pinPaths(f, knownPath(FOLDERID_Programs));
-                    if (fs::exists(p.art))
-                        ensureAssets(f, p, pinnedLinks());
-                } catch (...) {
-                    Wh_Log(L"Folder preview update deferred.");
-                }
-            ui.tiles.push_back({makeTile(f), f.id});
-        }
-        std::erase_if(previews, [](const auto& entry) {
-            return !lookup(groups, entry.first);
-        });
-        ui.painted = revision;
+    if (revision != ui->painted) {
+        off(ui->tileOff);
+        ui->overlay.Children().Clear();
+        ui->strip.Children().Clear();
+        ui->tiles.clear();
+        for (auto& f : groups)
+            ui->tiles.push_back({makeTile(f), f.id});
+        if (previews)
+            std::erase_if(*previews, [](const auto& entry) {
+                return !lookup(groups, entry.first);
+            });
+        ui->painted = revision;
     }
-    buttons.clear();
-    if (ui.repeater && !groups.empty())
-        visit(ui.repeater, [](FrameworkElement const& e) {
+    struct AppButton {
+        FrameworkElement element;
+        wstring id;
+    };
+    std::vector<AppButton> buttons;
+    if (ui->repeater && !groups.empty())
+        visit(ui->repeater, [&](FrameworkElement const& e) {
             if (winrt::get_class_name(e) != L"Taskbar.TaskListButton")
                 return true;
             auto id = appKey(e);
@@ -4707,17 +4124,6 @@ static void scan() {
         });
     std::map<wstring, FrameworkElement> anchors;
     std::vector<FrameworkElement> childrenToHide;
-    std::vector<NativeButton> hosts;
-    std::set<wstring> pinned;
-    if (nativeReady.load())
-        for (auto& b : buttons)
-            if (auto f = folderForPin(b.id)) {
-                hosts.push_back(b);
-                pinned.insert(f->id);
-            }
-    syncPinCaptions(hosts);
-    syncGlyphs(hosts);
-    setNativeDrops(hosts);
     for (auto const& b : buttons) {
         if (prefix(b.id, kPinPrefix))
             continue;
@@ -4730,12 +4136,12 @@ static void scan() {
             });
         if (f == groups.end())
             continue;
-        if (!pinned.contains(f->id) && !anchors.contains(f->id))
+        if (!anchors.contains(f->id))
             anchors.emplace(f->id, b.element);
         else
             childrenToHide.push_back(b.element);
     }
-    for (auto it = ui.hidden.begin(); it != ui.hidden.end();) {
+    for (auto it = ui->hidden.begin(); it != ui->hidden.end();) {
         auto e = it->item.get();
         if (e && std::find(childrenToHide.begin(), childrenToHide.end(), e) !=
                      childrenToHide.end()) {
@@ -4743,35 +4149,29 @@ static void scan() {
             continue;
         }
         restore(*it);
-        it = ui.hidden.erase(it);
+        it = ui->hidden.erase(it);
     }
     for (auto& e : childrenToHide)
         if (e.Visibility() != X::Visibility::Collapsed) {
-            ui.hidden.push_back(
+            ui->hidden.push_back(
                 {winrt::make_weak(e),
                  e.ReadLocalValue(X::UIElement::VisibilityProperty())});
             e.Visibility(X::Visibility::Collapsed);
         }
     int loose = 0;
     std::vector<FrameworkElement> hideGlyphs;
-    for (auto const& tile : ui.tiles) {
-        if (pinned.contains(tile.id)) {
-            detach(
-                M::VisualTreeHelper::GetParent(tile.button).try_as<C::Panel>(),
-                tile.button);
-            continue;
-        }
+    for (auto const& tile : ui->tiles) {
         auto i = anchors.find(tile.id);
         if (i == anchors.end() || i->second.ActualWidth() < 2 ||
             i->second.Visibility() == X::Visibility::Collapsed) {
-            reparent(tile.button, ui.strip);
+            reparent(tile.button, ui->strip);
             loose++;
             continue;
         }
         auto anchor = i->second;
-        auto pos = anchor.TransformToVisual(ui.overlay).TransformPoint({0, 0});
+        auto pos = anchor.TransformToVisual(ui->overlay).TransformPoint({0, 0});
         auto width = anchor.ActualWidth(), height = anchor.ActualHeight();
-        reparent(tile.button, ui.overlay);
+        reparent(tile.button, ui->overlay);
         if (tile.button.Width() != width)
             tile.button.Width(width);
         if (tile.button.Height() != std::max(1., height))
@@ -4782,8 +4182,8 @@ static void scan() {
             C::Canvas::SetTop(tile.button, pos.Y);
         hideGlyphs.push_back(anchor);
     }
-    for (auto const& tile : ui.tiles)
-        if (M::VisualTreeHelper::GetParent(tile.button) == ui.strip) {
+    for (auto const& tile : ui->tiles)
+        if (M::VisualTreeHelper::GetParent(tile.button) == ui->strip) {
             if (tile.button.Width() != 40)
                 tile.button.Width(40);
             if (tile.button.Height() != 38)
@@ -4791,21 +4191,16 @@ static void scan() {
         }
     syncOpacity(hideGlyphs);
     double gap = loose * 40.;
-    if (ui.repeater && gap != ui.reserved) {
-        if (!ui.marginSet)
-            ui.baseMargin = ui.repeater.Margin();
-        auto m = ui.baseMargin;
+    if (ui->repeater && gap != ui->reserved) {
+        if (!ui->marginSet)
+            ui->baseMargin = ui->repeater.Margin();
+        auto m = ui->baseMargin;
         m.Right += gap;
-        ui.repeater.Margin(m);
-        ui.marginSet = gap != 0;
-        ui.reserved = gap;
+        ui->repeater.Margin(m);
+        ui->marginSet = gap != 0;
+        ui->reserved = gap;
     }
 }
-struct Faded {
-    winrt::weak_ref<FrameworkElement> e;
-    F::IInspectable old;
-};
-static std::vector<Faded> faded;
 static void unfade(Faded& f) {
     if (auto e = f.e.get(); e && e.Opacity() == 0) {
         if (!f.old || f.old == X::DependencyProperty::UnsetValue())
@@ -4815,13 +4210,17 @@ static void unfade(Faded& f) {
     }
 }
 static void syncOpacity(const std::vector<FrameworkElement>& wanted) {
+    auto& faded = ui->faded;
     for (auto i = faded.begin(); i != faded.end();) {
         auto e = i->e.get();
         if (e && std::find(wanted.begin(), wanted.end(), e) != wanted.end()) {
             ++i;
             continue;
         }
-        unfade(*i);
+        try {
+            unfade(*i);
+        } catch (...) {
+        }
         i = faded.erase(i);
     }
     for (auto const& e : wanted)
@@ -4833,7 +4232,7 @@ static void syncOpacity(const std::vector<FrameworkElement>& wanted) {
         }
 }
 static void collectDrops() {
-    for (auto i = ui.drops.begin(); i != ui.drops.end();) {
+    for (auto i = ui->drops.begin(); i != ui->drops.end();) {
         auto status = i->op.Status();
         if (status == F::AsyncStatus::Started) {
             ++i;
@@ -4854,39 +4253,32 @@ static void collectDrops() {
         } catch (...) {
             Wh_Log(L"Could not read the dropped shortcut.");
         }
-        i = ui.drops.erase(i);
+        i = ui->drops.erase(i);
     }
-    if (ui.drops.empty())
+    if (ui->drops.empty())
         KillTimer(controller, kDropTimer);
 }
 static void trackPinRelease() {
-    if (!ui.dragApp.empty() && (GetAsyncKeyState(VK_LBUTTON) & 0x8000))
+    if (!ui->dragApp.empty() && (GetAsyncKeyState(VK_LBUTTON) & 0x8000))
         return;
     KillTimer(controller, kPinDragTimer);
-    auto id = std::exchange(ui.dragApp, wstring{});
+    auto id = std::exchange(ui->dragApp, wstring{});
     if (id.empty())
         return;
     POINT p{};
     GetCursorPos(&p);
-    if (std::abs(p.x - ui.down.x) >= GetSystemMetrics(SM_CXDRAG) ||
-        std::abs(p.y - ui.down.y) >= GetSystemMetrics(SM_CYDRAG)) {
+    if (std::abs(p.x - ui->down.x) >= GetSystemMetrics(SM_CXDRAG) ||
+        std::abs(p.y - ui->down.y) >= GetSystemMetrics(SM_CYDRAG)) {
         if (prefix(id, kPinPrefix)) {
             requestLayout();
             return;
         }
         wstring dest;
-        for (auto& b : buttons)
-            if (auto f = folderForPin(b.id); f && under(b.element, p)) {
-                dest = f->id;
+        for (auto& t : ui->tiles)
+            if (M::VisualTreeHelper::GetParent(t.button) && under(t.button, p)) {
+                dest = t.id;
                 break;
             }
-        if (dest.empty())
-            for (auto& t : ui.tiles)
-                if (M::VisualTreeHelper::GetParent(t.button) &&
-                    under(t.button, p)) {
-                    dest = t.id;
-                    break;
-                }
         if (!dest.empty())
             if (auto a = byId(id))
                 moveTo(dest, *a);
@@ -4894,40 +4286,40 @@ static void trackPinRelease() {
     requestLayout();
 }
 static void watchFrame() {
-    auto root = ui.root;
-    auto unload = root.Unloaded([](auto&&, auto&&) { ui.rootDetached = true; });
-    ui.frameOff.push_back([root, unload] { root.Unloaded(unload); });
+    auto root = ui->root;
+    auto unload = root.Unloaded([](auto&&, auto&&) { ui->rootDetached = true; });
+    ui->frameOff.push_back([root, unload] { root.Unloaded(unload); });
     auto load = root.Loaded([](auto&&, auto&&) {
-        ui.rootDetached = false;
+        ui->rootDetached = false;
         requestLayout();
     });
-    ui.frameOff.push_back([root, load] { root.Loaded(load); });
+    ui->frameOff.push_back([root, load] { root.Loaded(load); });
     auto size = root.SizeChanged([](auto&&, auto&&) {
         if (!groups.empty())
             requestLayout();
     });
-    ui.frameOff.push_back([root, size] { root.SizeChanged(size); });
-    auto repeater = ui.repeater;
+    ui->frameOff.push_back([root, size] { root.SizeChanged(size); });
+    auto repeater = ui->repeater;
     auto token = repeater.LayoutUpdated([](auto&&, auto&&) {
         if (!groups.empty())
             requestLayout();
     });
-    ui.frameOff.push_back([repeater, token] { repeater.LayoutUpdated(token); });
+    ui->frameOff.push_back([repeater, token] { repeater.LayoutUpdated(token); });
     I::PointerEventHandler press = [](auto&&,
                                       I::PointerRoutedEventArgs const& e) {
         try {
             if (stopping || groups.empty() ||
                 !e.GetCurrentPoint(nullptr).Properties().IsLeftButtonPressed())
                 return;
-            GetCursorPos(&ui.down);
-            dismissOutside(ui.down);
+            GetCursorPos(&ui->down);
+            dismissOutside(ui->down);
             auto node = e.OriginalSource().try_as<X::DependencyObject>();
             while (node) {
                 auto el = node.try_as<FrameworkElement>();
                 if (el &&
                     winrt::get_class_name(el) == L"Taskbar.TaskListButton") {
-                    ui.dragApp = appKey(el);
-                    if (!ui.dragApp.empty())
+                    ui->dragApp = appKey(el);
+                    if (!ui->dragApp.empty())
                         SetTimer(controller, kPinDragTimer, 65, nullptr);
                     break;
                 }
@@ -4938,7 +4330,7 @@ static void watchFrame() {
     };
     auto boxedPress = winrt::box_value(press);
     root.AddHandler(X::UIElement::PointerPressedEvent(), boxedPress, true);
-    ui.frameOff.push_back([root, boxedPress] {
+    ui->frameOff.push_back([root, boxedPress] {
         root.RemoveHandler(X::UIElement::PointerPressedEvent(), boxedPress);
     });
 }
@@ -5015,17 +4407,16 @@ static void retryJumpHost() {
 
 static void stageNative(const wstring& id, const ITEMIDLIST* pidl) {
     clearSelection();
-    if (id.empty() && !pidl) {
+    if ((id.empty() && !pidl) || prefix(id, kPinPrefix)) {
         wakeJumpHosts();
         return;
     }
     NativeSelection next;
-    auto f = folderForPin(id);
-    next.actions = f ? folderActions(f->id, false) : appActions(groups);
+    next.actions = appActions(groups);
     next.appId = id;
-    if (!f && pidl)
+    if (pidl)
         next.shortcut.reset(ILCloneFull(pidl));
-    if (!f && id.empty() && !next.shortcut)
+    if (id.empty() && !next.shortcut)
         return;
     nextTicket = nextTicket % 0x7ffffffeU + 1;
     next.ticket = nextTicket;
@@ -5077,10 +4468,25 @@ static void invokeNativeAction(WPARAM seq, LPARAM ordinal) {
 
 static LRESULT CALLBACK controlProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     try {
-        if (msg == kStop) {
-            syncOpacity({});
+        if (stopping && msg == kCancelModal) {
+            if (!activeModal)
+                return 0;
+            drainModal = true;
+            if (activeModal == ModalKind::Menu)
+                EndMenu();
+            else if (modalDialog)
+                EndDialog(modalDialog, IDCANCEL);
+            return 1;
+        }
+        if (stopping && (msg == kModalDrained ||
+                         (msg == WM_TIMER && wp == kModalDrainTimer))) {
+            KillTimer(h, kModalDrainTimer);
+            if (drainModal && !activeModal)
+                SetEvent(modalDrained);
+            return 0;
+        }
+        if (stopping && msg == kStop) {
             clearView();
-            buttons.clear();
             DestroyWindow(h);
             controller = nullptr;
             published = nullptr;
@@ -5095,9 +4501,12 @@ static LRESULT CALLBACK controlProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (msg == WM_TIMER) {
             if (wp == kLayoutTimer) {
                 KillTimer(h, kLayoutTimer);
-                ui.layoutPending = false;
-                scan();
-                syncPanel();
+                if (ui) {
+                    ui->layoutPending = false;
+                    scan();
+                    if (!stopping)
+                        syncPanel();
+                }
                 return 0;
             }
             if (wp == kDropTimer) {
@@ -5148,6 +4557,24 @@ static bool ensureControl() {
     loadModel();
     return true;
 }
+static bool isPrimaryFrame(FrameworkElement const& frame, HWND primary,
+                           HMONITOR monitor) {
+    if (GetSystemMetrics(SM_CMONITORS) == 1 &&
+        !FindWindowW(L"Shell_SecondaryTrayWnd", nullptr))
+        return true;
+    // The taskbar frames share a UI thread. Use the actual screen position of
+    // the frame to identify the owning taskbar window on multi-monitor setups.
+    auto bounds =
+        X::Automation::Peers::FrameworkElementAutomationPeer(frame)
+            .GetBoundingRectangle();
+    if (bounds.Width <= 0 || bounds.Height <= 0)
+        return false;
+    POINT center{lround(bounds.X + bounds.Width / 2),
+                 lround(bounds.Y + bounds.Height / 2)};
+    RECT bar{};
+    return MonitorFromPoint(center, MONITOR_DEFAULTTONULL) == monitor &&
+           GetWindowRect(primary, &bar) && PtInRect(&bar, center);
+}
 static void ensureFrame(FrameworkElement const& frame) {
     if (stopping || !frame || !frame.XamlRoot())
         return;
@@ -5155,7 +4582,10 @@ static void ensureFrame(FrameworkElement const& frame) {
     if (!primary ||
         GetWindowThreadProcessId(primary, nullptr) != GetCurrentThreadId())
         return;
-    if (ui.root && !ui.rootDetached && ui.frame == frame && ui.root.XamlRoot())
+    HMONITOR monitor = MonitorFromWindow(primary, MONITOR_DEFAULTTONULL);
+    if (ui && ui->frame == frame && isPrimaryRoot(frame))
+        return;
+    if (!monitor || !isPrimaryFrame(frame, primary, monitor))
         return;
     C::Grid root{nullptr};
     FrameworkElement repeater{nullptr};
@@ -5168,22 +4598,24 @@ static void ensureFrame(FrameworkElement const& frame) {
     });
     if (!root || !repeater || !ensureControl())
         return;
-    syncOpacity({});
     clearView();
-    ui.frame = frame;
-    ui.root = root;
-    ui.repeater = repeater;
-    ui.overlay = C::Canvas();
-    ui.strip = C::StackPanel();
-    ui.strip.Orientation(C::Orientation::Horizontal);
-    ui.strip.HorizontalAlignment(X::HorizontalAlignment::Right);
-    ui.strip.VerticalAlignment(X::VerticalAlignment::Center);
-    C::Grid::SetColumnSpan(ui.overlay,
+    ui.emplace();
+    ui->primary = primary;
+    ui->monitor = monitor;
+    ui->frame = frame;
+    ui->root = root;
+    ui->repeater = repeater;
+    ui->overlay = C::Canvas();
+    ui->strip = C::StackPanel();
+    ui->strip.Orientation(C::Orientation::Horizontal);
+    ui->strip.HorizontalAlignment(X::HorizontalAlignment::Right);
+    ui->strip.VerticalAlignment(X::VerticalAlignment::Center);
+    C::Grid::SetColumnSpan(ui->overlay,
                            std::max(1u, root.ColumnDefinitions().Size()));
-    C::Grid::SetColumnSpan(ui.strip,
+    C::Grid::SetColumnSpan(ui->strip,
                            std::max(1u, root.ColumnDefinitions().Size()));
-    root.Children().Append(ui.overlay);
-    root.Children().Append(ui.strip);
+    root.Children().Append(ui->overlay);
+    root.Children().Append(ui->strip);
     watchFrame();
     scan();
 }
@@ -5216,6 +4648,20 @@ static FrameworkElement buttonOf(X::DependencyObject e) {
 }
 // Taskbar.View sometimes calls ShowJumpView synchronously, sometimes via a posted
 // message. Stage the XAML target only as a fallback; the native group is authoritative.
+static bool attachPrimaryFor(FrameworkElement const& source) {
+    if (isPrimaryRoot(source))
+        return true;
+    for (auto node = source ? source.as<X::DependencyObject>() : nullptr;
+         node;
+         node = M::VisualTreeHelper::GetParent(node)) {
+        auto element = node.try_as<FrameworkElement>();
+        if (element && winrt::get_class_name(element) == L"Taskbar.TaskbarFrame") {
+            ensureFrame(element);
+            return isPrimaryRoot(source);
+        }
+    }
+    return false;
+}
 static thread_local bool contextActive = false;
 static void __fastcall taskContext(void* self,
                                    X::UIElement const& sender,
@@ -5225,14 +4671,20 @@ static void __fastcall taskContext(void* self,
         ~Scope() { contextActive = previous; }
     } scope;
     try {
-        if (!stopping && controller && GetCurrentThreadId() == uiThread) {
+        if (!stopping) {
             auto e = buttonOf(sender);
             if (!e)
                 e = buttonOf(
                     args.OriginalSource().try_as<X::DependencyObject>());
-            stageNative(e ? appKey(e) : L"", nullptr);
-            selection.awaitingGroup = selection.ticket != 0;
-            contextActive = true;
+            if (attachPrimaryFor(e) && controller &&
+                GetCurrentThreadId() == uiThread) {
+                stageNative(appKey(e), nullptr);
+                selection.awaitingGroup = selection.ticket != 0;
+                contextActive = true;
+            } else if (GetCurrentThreadId() == uiThread && selection.ticket) {
+                clearSelection();
+                wakeJumpHosts();
+            }
         }
     } catch (...) {
         if (controller && GetCurrentThreadId() == uiThread)
@@ -5246,7 +4698,7 @@ static void addBlankCommands(
                        ? std::vector<MenuAction>{{FolderAction::Create,
                                                   {},
                                                   uiText(UiString::CreateMenu)}}
-                       : folderActions(blankFolder, !pinnedFolder(blankFolder));
+                       : folderActions(blankFolder);
     unsigned index = 0;
     for (auto& action : actions) {
         C::MenuFlyoutItem entry;
@@ -5258,7 +4710,7 @@ static void addBlankCommands(
             } catch (...) {
             }
         });
-        ui.menuOff.push_back([items, w = winrt::make_weak(entry), t] {
+        ui->menuOff.push_back([items, w = winrt::make_weak(entry), t] {
             if (auto v = w.get()) {
                 v.Click(t);
                 uint32_t position{};
@@ -5286,27 +4738,24 @@ static void __fastcall blank(FrameworkElement const& sender,
     } scope;
     try {
         if (!stopping) {
-            auto e = sender;
-            while (e) {
-                if (winrt::get_class_name(e) == L"Taskbar.TaskbarFrame") {
-                    ensureFrame(e);
-                    break;
-                }
-                e = M::VisualTreeHelper::GetParent(e)
-                        .try_as<FrameworkElement>();
-            }
-            if (controller && GetCurrentThreadId() == uiThread) {
-                inBlank = true;
+            auto origin = args.OriginalSource().try_as<FrameworkElement>();
+            bool primaryContext = attachPrimaryFor(origin ? origin : sender);
+            if (GetCurrentThreadId() == uiThread && selection.ticket) {
                 clearSelection();
-                off(ui.menuOff);
+                wakeJumpHosts();
+            }
+            if (primaryContext && controller && ui &&
+                GetCurrentThreadId() == uiThread) {
+                inBlank = true;
+                off(ui->menuOff);
                 auto node = args.OriginalSource().try_as<X::DependencyObject>();
                 while (node) {
                     auto b = node.try_as<Button>();
                     if (b) {
                         auto i = std::find_if(
-                            ui.tiles.begin(), ui.tiles.end(),
+                            ui->tiles.begin(), ui->tiles.end(),
                             [&](auto& t) { return t.button == b; });
-                        if (i != ui.tiles.end()) {
+                        if (i != ui->tiles.end()) {
                             blankFolder = i->id;
                             break;
                         }
@@ -5334,7 +4783,7 @@ static void __fastcall blank(FrameworkElement const& sender,
 static void __fastcall append(void* self,
                               C::MenuFlyoutItemBase const& original) {
     oldAppend(self, original);
-    if (!inBlank || added || stopping || !ui.root ||
+    if (!inBlank || added || stopping || !ui || !ui->root ||
         GetCurrentThreadId() != uiThread)
         return;
     added = true;
@@ -5357,7 +4806,7 @@ static int WINAPI frameMove(void* self, void* args) {
     auto hr = oldPointer(self, args);
     if (!stopping && (!published.load() || GetCurrentThreadId() == uiThread))
         try {
-            if (!ui.root || ui.rootDetached)
+            if (!ui || !isPrimaryRoot(ui->frame))
                 ensureFrame(fromAbi(self));
         } catch (...) {
         }
@@ -5378,88 +4827,6 @@ using GetShortcut = const ITEMIDLIST*(WINAPI*)(void*);
 static Jump oldJump;
 static GetId groupId;
 static GetShortcut groupShortcut;
-using GroupTip = HRESULT(WINAPI*)(void*, void*, PWSTR, int);
-using LauncherName = HRESULT(WINAPI*)(void*, PWSTR*);
-static GroupTip oldGroupTip = nullptr;
-static LauncherName oldLauncherName = nullptr;
-static std::optional<wstring> currentPinName(void* group) {
-    if (stopping || !group || !groupId)
-        return {};
-    auto raw = groupId(group);
-    if (!raw || _wcsnicmp(raw, kPinPrefix, ARRAYSIZE(kPinPrefix) - 1))
-        return {};
-    std::lock_guard lock(pinNameLock);
-    auto i = pinNames.find(raw);
-    if (i == pinNames.end())
-        return {};
-    return i->second;
-}
-static HRESULT WINAPI groupTip(void* group,
-                               void* item,
-                               PWSTR buffer,
-                               int length) {
-    try {
-        if (buffer && length > 0)
-            if (auto name = currentPinName(group))
-                return StringCchCopyW(buffer, length, name->c_str());
-    } catch (...) {
-    }
-    return oldGroupTip(group, item, buffer, length);
-}
-static HRESULT WINAPI launcherName(void* group, PWSTR* result) {
-    try {
-        if (result)
-            if (auto name = currentPinName(group))
-                return SHStrDupW(name->c_str(), result);
-    } catch (...) {
-    }
-    return oldLauncherName(group, result);
-}
-using NativeClick = HRESULT(WINAPI*)(void*, void*, void*, const void*);
-using NativeLaunch = HRESULT(WINAPI*)(void*, void*, const POINT&, int);
-static NativeClick oldClick = nullptr;
-static NativeLaunch oldLaunch = nullptr;
-static bool openPin(void* group) {
-    if (stopping || !controller || GetCurrentThreadId() != uiThread || !group ||
-        !groupId)
-        return false;
-    auto raw = groupId(group);
-    if (!raw || !prefix(raw, kPinPrefix))
-        return false;
-    auto f = folderForPin(raw);
-    if (!f)
-        return false;
-    FrameworkElement anchor{nullptr};
-    for (const auto& b : buttons)
-        if (equal(b.id, raw)) {
-            anchor = b.element;
-            break;
-        }
-    showFolder(f->id, anchor);
-    return true;
-}
-static HRESULT WINAPI clickPin(void* self,
-                               void* group,
-                               void* item,
-                               const void* options) {
-    try {
-        if (openPin(group))
-            return S_OK;
-    } catch (...) {
-    }
-    return oldClick(self, group, item, options);
-}
-static HRESULT WINAPI launchPin(void* self,
-                                void* group,
-                                const POINT& pt,
-                                int flags) {
-    try {
-        if (openPin(group))
-            return S_OK;
-    } catch (...) {
-    }
-    return oldLaunch(self, group, pt, flags);
-}
 static HRESULT WINAPI jump(void* self, void* group, void* item, bool flag) {
     try {
         if (!stopping && controller && GetCurrentThreadId() == uiThread) {
@@ -5474,8 +4841,12 @@ static HRESULT WINAPI jump(void* self, void* group, void* item, bool flag) {
                 selection.awaitingGroup = false;
                 if (pidl)
                     selection.shortcut.reset(ILCloneFull(pidl));
-            } else
+            } else if (contextActive) {
                 stageNative(id, pidl);
+            } else if (selection.ticket) {
+                clearSelection();
+                wakeJumpHosts();
+            }
         }
     } catch (...) {
         if (controller && GetCurrentThreadId() == uiThread)
@@ -5495,12 +4866,15 @@ struct JumpFooter {
     C::StackPanel existing{nullptr};
     bool hadLocalNull{};
 };
-static thread_local JumpFooter footer;
+[[clang::no_destroy]] static thread_local std::optional<JumpFooter> footer;
 static thread_local HWND hostWindow = nullptr;
 static std::mutex hostsLock;
 static std::vector<HWND> hosts;
 static void clearFooter() {
-    auto old = std::exchange(footer, JumpFooter{});
+    if (!footer)
+        return;
+    auto old = std::move(*footer);
+    footer.reset();
     if (!old.rows)
         return;
     try {
@@ -5607,8 +4981,8 @@ static bool attachJump(HWND ctl) {
         clearFooter();
         return true;
     }
-    if (footer.controller == ctl && footer.ticket == seq && footer.rows &&
-        footer.rows.XamlRoot())
+    if (footer && footer->controller == ctl && footer->ticket == seq && footer->rows &&
+        footer->rows.XamlRoot())
         return true;
     clearFooter();
     if (GetTickCount64() - time > 7000)
@@ -5667,11 +5041,10 @@ static bool attachJump(HWND ctl) {
     }
     auto prop = header ? C::ListViewBase::HeaderProperty()
                        : C::ListViewBase::FooterProperty();
-    footer = {system, rows,     {},
-              {},     ctl,      seq,
-              header, existing, !system.ReadLocalValue(prop)};
+    footer.emplace(system, rows, winrt::event_token{}, winrt::event_token{},
+                   ctl, seq, header, existing, !system.ReadLocalValue(prop));
     try {
-        footer.clicked = rows.ItemClick(
+        footer->clicked = rows.ItemClick(
             [ctl, seq](auto const& sender, C::ItemClickEventArgs const& args) {
                 try {
                     if (stopping)
@@ -5686,10 +5059,10 @@ static bool attachJump(HWND ctl) {
                 } catch (...) {
                 }
             });
-        footer.unloaded =
+        footer->unloaded =
             system.Unloaded([time](auto const& sender, auto const&) {
                 try {
-                    if (footer.system == sender) {
+                    if (footer && footer->system == sender) {
                         clearFooter();
                         if (hostWindow && !stopping &&
                             GetTickCount64() - time < 450)
@@ -5751,7 +5124,7 @@ static void startJumpProbe() {
     probeJump();
 }
 static LRESULT CALLBACK hostProc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
-    if (m == kStop) {
+    if (stopping && m == kStop) {
         stopJumpProbe();
         try {
             clearFooter();
@@ -5866,22 +5239,6 @@ static bool wireGroups(HMODULE m) {
     if (!m || groupHooks.exchange(true))
         return false;
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
-        {{LR"(public: virtual long __cdecl CTaskGroup::GetToolTipText(struct ITaskItem *,unsigned short *,int))"},
-         &oldGroupTip,
-         groupTip,
-         true},
-        {{LR"(public: virtual long __cdecl CTaskGroup::GetLauncherName(unsigned short * *))"},
-         &oldLauncherName,
-         launcherName,
-         true},
-        {{LR"(public: virtual long __cdecl CTaskListWnd::HandleClick(struct ITaskGroup *,struct ITaskItem *,struct winrt::Windows::System::LauncherOptions const &))"},
-         &oldClick,
-         clickPin,
-         true},
-        {{LR"(public: virtual long __cdecl CTaskBand::Launch(struct ITaskGroup *,struct tagPOINT const &,enum LaunchFromTaskbarOptions))"},
-         &oldLaunch,
-         launchPin,
-         true},
         {{LR"(public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void))"},
          &groupId},
         {{LR"(public: virtual struct _ITEMIDLIST_ABSOLUTE const * __cdecl CTaskGroup::GetShortcutIDList(void))"},
@@ -5894,7 +5251,6 @@ static bool wireGroups(HMODULE m) {
          true}};
     bool ok = WindhawkUtils::HookSymbols(m, taskbarDllHooks,
                                          ARRAYSIZE(taskbarDllHooks));
-    nativeReady = ok && groupId && (oldClick || oldLaunch);
     return ok;
 }
 static decltype(&LoadLibraryExW) oldLoad;
@@ -5912,6 +5268,11 @@ BOOL Wh_ModInit() {
     wchar_t path[MAX_PATH]{};
     GetModuleFileNameW(nullptr, path, MAX_PATH);
     explorer = equal(fs::path(path).filename().wstring(), L"explorer.exe");
+    if (explorer) {
+        modalDrained = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!modalDrained)
+            return FALSE;
+    }
     bool messages = WindhawkUtils::SetFunctionHook(DispatchMessageW, dispatch,
                                                    &oldDispatch);
     if (!explorer)
@@ -5923,7 +5284,11 @@ BOOL Wh_ModInit() {
         load && WindhawkUtils::SetFunctionHook(load, onLoad, &oldLoad);
     bool ok = wireView(viewModule());
     wireGroups(GetModuleHandleW(L"taskbar.dll"));
-    return ok || loader;
+    if (!ok && !loader) {
+        CloseHandle(std::exchange(modalDrained, nullptr));
+        return FALSE;
+    }
+    return TRUE;
 }
 void Wh_ModAfterInit() {
     if (explorer) {
@@ -5935,8 +5300,11 @@ void Wh_ModAfterInit() {
 }
 void Wh_ModBeforeUninit() {
     stopping = true;
-    if (auto w = published.load())
+    if (auto w = published.load()) {
+        if (SendMessageW(w, kCancelModal, 0, 0))
+            WaitForSingleObject(modalDrained, INFINITE);
         SendMessageW(w, kStop, 0, 0);
+    }
     stopWorkers();
     std::vector<HWND> copy;
     {
@@ -5948,6 +5316,8 @@ void Wh_ModBeforeUninit() {
             SendMessageW(w, kStop, 0, 0);
 }
 void Wh_ModUninit() {
+    if (modalDrained)
+        CloseHandle(std::exchange(modalDrained, nullptr));
     UnregisterClassW(kFilesClass, moduleInstance());
     UnregisterClassW(kPanelClass, moduleInstance());
     UnregisterClassW(kController, moduleInstance());
