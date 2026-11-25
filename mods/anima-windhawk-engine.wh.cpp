@@ -8,13 +8,11 @@
 // @donateUrl       https://ko-fi.com/tubeo5866
 // @homepage        https://tubb3ll.xyz
 // @include         windhawk.exe
-// @compilerOptions -lkernel32 -lruntimeobject -lwindowsapp -ldwmapi -luuid -lgdiplus -lgdi32 -lshell32 -luser32 -lcomctl32 -lcomdlg32 -lole32 -lurlmon -luxtheme -lwininet -lshlwapi -ladvapi32
+// @compilerOptions -lkernel32 -lwtsapi32 -ld2d1 -ld3d11 -lruntimeobject -lwindowsapp -ldwmapi -luuid -lgdiplus -lgdi32 -lshell32 -luser32 -lcomctl32 -lcomdlg32 -lole32 -lurlmon -luxtheme -lwininet -lshlwapi -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-
-![an ugly logo ](https://raw.githubusercontent.com/TuBeo5866/tubeo5866.github.io/refs/heads/main/files/icon.png)
 
 # AnimaWindhawkEngine
 
@@ -50,7 +48,15 @@ The **AWHE Browser** (AnimaWindhawkEngine Browser) is a built-in image discovery
 
 ### Network access
 
-Opening the Workshop for the first time in a session or choosing **Refresh** requests the index from `raw.githubusercontent.com` in the `tubeo5866/anima-windhawk-engine` repository. The Workshop also downloads metadata and preview images that are missing from its local cache. Choosing **Install** downloads the selected media file from the same host. All other mod features work offline, including the tray icon and both windows.
+Opening the Workshop for the first time in a session or choosing **Refresh** requests the index from `raw.githubusercontent.com` in the `tubeo5866/anima-windhawk-engine` repository. The Workshop refreshes pack metadata and caches the index and previews for offline browsing. Install and Update download the selected pack’s media and animation frames from the same host. All other mod features work offline, including the tray icon and both windows.
+
+## Desktop controls
+
+Drop supported files onto the manager to import them. Right-click a desktop item and choose **Duplicate** for an independent copy. Over an interactive item, use Ctrl + wheel to resize, Shift + wheel to rotate, or Alt + wheel to adjust opacity. Ctrl + Alt + Shift + H temporarily hides or restores all visible items. App settings includes fullscreen hiding and edge snapping. Each item has its own flip, color and shadow settings. Animated media also supports speed, reverse, ping-pong and a loop limit.
+
+## Scenes and playback
+
+In App settings, save or open a scene JSON file to switch layouts. The sidebar shows up to three recent or scheduled profiles above Workshop. Scenes store local file references and per-item settings. Schedule a scene at a local 24-hour time while the mod is running. On each item, you can follow the active virtual desktop or fade near the pointer. MP4 audio starts muted. Forward playback supports volume control, and reverse playback is silent. The resource-saving dialog lets you allow covered or locked playback to pause and battery playback to slow down, or keep playing. You can revisit this choice in App settings.
 
 ## Usage
 
@@ -88,7 +94,9 @@ workshop/pets/<your-image-name>/
 }
 ```
 
-**Step 4**: Open a pull request from your fork back to this repo’s main branch.
+For a sprite sheet, set `file` to the sheet PNG and add numeric `frameWidth`, `frameHeight`, and `fps`. Every tile plays in row-major order. For a PNG sequence, set `frames` to an ordered array of PNG filenames and `file` to the first frame. Bump the string `version` for every pack update.
+
+**Step 4**: Add your folder name to the existing string array in `workshop/index.json` and open a pull request to the Workshop repository’s main branch.
 
 That’s it! Once your pull request is approved and merged, your image will automatically appear in the Workshop tab inside the manager for everyone to download.
 
@@ -130,6 +138,13 @@ The manager window is heavily made and based on by [Mac Island & Dock](https://w
 // Source code is published under the GNU General Public License v3.0.
 
 #include <atomic>
+#include <array>
+#include <list>
+#include <sstream>
+#include <filesystem>
+#include <stdexcept>
+#include <chrono>
+#include <fstream>
 #include <windows.h>
 #include <windowsx.h>
 
@@ -138,6 +153,10 @@ The manager window is heavily made and based on by [Mac Island & Dock](https://w
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Data.Json.h>
+#include <winrt/Windows.Media.Core.h>
+#include <winrt/Windows.Media.Playback.h>
+#include <wtsapi32.h>
 #include <climits>
 #include <winrt/Windows.UI.h>
 #include <winrt/Windows.UI.Text.h>
@@ -147,6 +166,7 @@ The manager window is heavily made and based on by [Mac Island & Dock](https://w
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Automation.h>
+#include <winrt/Windows.UI.Xaml.Automation.Peers.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
@@ -155,6 +175,8 @@ The manager window is heavily made and based on by [Mac Island & Dock](https://w
 #include <winrt/Windows.Storage.Streams.h>
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 #include <dwmapi.h>
+#include <d2d1_3.h>
+#include <d3d11.h>
 #include <robuffer.h>
 #include <roapi.h>
 #include <memory>
@@ -207,7 +229,20 @@ static GlobalSettings g_settings;
 // Runtime item model
 // ============================================================================
 
+namespace json = winrt::Windows::Data::Json;
+namespace fs = std::filesystem;
+using FrameKey = std::array<int, 14>;
 struct PetItem {
+    FrameKey presented{};
+    int presentedAlpha = -1;
+    std::wstring sourcePath;
+    GUID homeDesktop{};
+    bool followDesktop = false, hoverFade = false, muted = true;
+    bool nearCursor = false, covered = false, otherDesktop = false;
+    int volume = 70;
+    ULONGLONG audioCheck = 0;
+    bool audioFailed = false, audioPlaying = false;
+    winrt::Windows::Media::Playback::MediaPlayer audio{nullptr};
     std::wstring filePath;
     std::wstring registryKey;
     std::wstring folderKey;
@@ -237,12 +272,72 @@ struct PetItem {
     bool enabled = true;
     int posX = 80;
     int posY = 80;
+    bool flipX = false, flipY = false, grayscale = false, shadow = false;
+    bool reverse = false, pingPong = false, returning = false;
+    int brightness = 100, hue = 0, tint = 0, speed = 100, loops = 0;
+    unsigned completed = 0;
+    int wheelRemainder = 0, wheelMode = 0;
     bool dragging = false;
     POINT dragStartCursor{};
     POINT dragOriginWnd{};
 };
 
 static std::vector<PetItem> g_items;
+static bool hideFullscreen = true, fullscreen = false, panic = false;
+static bool snapEdges = false, panicAvailable = false;
+
+static bool conservePower = true, pauseCovered = true, onBattery = false,
+            sessionLocked = false;
+enum class SavingChoice { Ask, Allow, KeepPlaying };
+static SavingChoice savingChoice = SavingChoice::Ask;
+static HWND savingDialog = nullptr;
+static bool lockOccurred = false;
+static void ShowSavingDialog();
+static bool SavingAllowed() {
+    return savingChoice == SavingChoice::Allow;
+}
+static winrt::com_ptr<IVirtualDesktopManager> desktops;
+static bool VisibleItem(const PetItem& item) {
+    return item.enabled && !item.hidden && !panic && !fullscreen;
+}
+
+static void RefreshVisibility() {
+    for (auto& item : g_items)
+        if (item.hwnd)
+            ShowWindow(item.hwnd,
+                       VisibleItem(item) ? SW_SHOWNOACTIVATE : SW_HIDE);
+}
+
+static void UpdateFullscreen() {
+    QUERY_USER_NOTIFICATION_STATE state{};
+    bool hide = hideFullscreen &&
+                SUCCEEDED(SHQueryUserNotificationState(&state)) &&
+                (state == QUNS_RUNNING_D3D_FULL_SCREEN ||
+                 state == QUNS_PRESENTATION_MODE);
+    HWND fg = GetForegroundWindow();
+    if (!hide && hideFullscreen && fg && fg != GetShellWindow() &&
+        fg != GetDesktopWindow() && IsWindowVisible(fg) && !IsIconic(fg)) {
+        wchar_t cls[64]{};
+        GetClassNameW(fg, cls, 64);
+        RECT rect{};
+        MONITORINFO info{sizeof(info)};
+        DWORD pid{};
+        GetWindowThreadProcessId(fg, &pid);
+        hide = pid != GetCurrentProcessId() && wcscmp(cls, L"WorkerW") &&
+               wcscmp(cls, L"Progman") && wcscmp(cls, L"Shell_TrayWnd") &&
+               GetWindowRect(fg, &rect) &&
+               GetMonitorInfoW(MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST),
+                               &info) &&
+               rect.left <= info.rcMonitor.left &&
+               rect.top <= info.rcMonitor.top &&
+               rect.right >= info.rcMonitor.right &&
+               rect.bottom >= info.rcMonitor.bottom;
+    }
+    if (fullscreen != hide) {
+        fullscreen = hide;
+        RefreshVisibility();
+    }
+}
 
 // ============================================================================
 // Forward declarations
@@ -297,6 +392,7 @@ enum class WorkshopView { Grid = 0, List = 1, TwoCol = 2 };
 
 // One entry fetched from GitHub
 struct WorkshopItem {
+    std::wstring metadata, installedVersion, revision;
     std::wstring slug;  // folder name under workshop/pets/
     std::wstring name;
     std::wstring author;
@@ -317,6 +413,8 @@ struct WorkshopItem {
 };
 
 static std::vector<WorkshopItem> g_workshopItems;
+static std::wstring workshopTag;
+static bool favoritesOnly = false;
 static std::wstring g_workshopError;  // non-empty = last fetch failed
 static bool g_workshopFetching = false;
 static bool g_workshopFetched = false;
@@ -334,6 +432,7 @@ static const wchar_t kWorkshopRepoName[] = L"anima-windhawk-engine";
 
 // Hot-key ID registered with RegisterHotKey (Win+Alt+P → open manager)
 #define HOTKEY_OPEN_MANAGER 1
+static constexpr int kToggleMediaHotkey = 2;
 
 // ============================================================================
 // Menu command IDs
@@ -554,10 +653,34 @@ static void ReadLibraryFolders() {
     }
 }
 static void DeleteImageRecord(const std::wstring& key) {
-    for (PCWSTR field :
-         {L"Path", L"Position", L"Enabled", L"AlwaysOnTop", L"ClickThrough",
-          L"LockPosition", L"ScalePercent", L"OpacityPercent",
-          L"RotationDegrees", L"FpsLimit", L"Paused", L"Removed"})
+    for (PCWSTR field : {L"Path",
+                         L"Position",
+                         L"FollowDesktop",
+                         L"HoverFade",
+                         L"Muted",
+                         L"Volume",
+                         L"DesktopId",
+                         L"Enabled",
+                         L"AlwaysOnTop",
+                         L"ClickThrough",
+                         L"LockPosition",
+                         L"ScalePercent",
+                         L"OpacityPercent",
+                         L"RotationDegrees",
+                         L"FpsLimit",
+                         L"Paused",
+                         L"Removed",
+                         L"FlipHorizontal",
+                         L"FlipVertical",
+                         L"Grayscale",
+                         L"Shadow",
+                         L"Tint",
+                         L"Brightness",
+                         L"Hue",
+                         L"PlaybackSpeed",
+                         L"Reverse",
+                         L"PingPong",
+                         L"LoopCount"})
         Wh_DeleteValue(Record(key, field).c_str());
 }
 static bool RemoveLibraryFolder(const std::wstring& key) {
@@ -670,6 +793,21 @@ static void SyncImageState(PetItem& item, bool load) {
         }
         PutNumber(key, static_cast<int>(value));
     };
+    sync(L"FollowDesktop", item.followDesktop, 0, 1);
+    sync(L"HoverFade", item.hoverFade, 0, 1);
+    sync(L"Muted", item.muted, 0, 1);
+    sync(L"Volume", item.volume, 0, 100);
+    sync(L"FlipHorizontal", item.flipX, 0, 1);
+    sync(L"FlipVertical", item.flipY, 0, 1);
+    sync(L"Grayscale", item.grayscale, 0, 1);
+    sync(L"Shadow", item.shadow, 0, 1);
+    sync(L"Tint", item.tint, 0, 100);
+    sync(L"Brightness", item.brightness, 0, 200);
+    sync(L"Hue", item.hue, 0, 359);
+    sync(L"PlaybackSpeed", item.speed, 10, 400);
+    sync(L"Reverse", item.reverse, 0, 1);
+    sync(L"PingPong", item.pingPong, 0, 1);
+    sync(L"LoopCount", item.loops, 0, 100);
     sync(L"Enabled", item.enabled, 0, 1);
     sync(L"AlwaysOnTop", item.alwaysOnTop, 0, 1);
     sync(L"ClickThrough", item.clickThrough, 0, 1);
@@ -700,62 +838,6 @@ static std::wstring GetWorkshopDir() {
         (attrs & FILE_ATTRIBUTE_REPARSE_POINT))
         return {};
     return path;
-}
-
-// Minimal JSON string-value extractor (no deps, handles simple flat JSON).
-static std::wstring JsonGetString(const std::string& json, const char* key) {
-    std::string k = std::string("\"") + key + "\"";
-    size_t p = json.find(k);
-    if (p == std::string::npos)
-        return {};
-    p = json.find('"', p + k.size());
-    if (p == std::string::npos)
-        return {};
-    size_t start = p + 1;
-    size_t end = start;
-    while (end < json.size() &&
-           (json[end] != '"' || (end > 0 && json[end - 1] == '\\')))
-        end++;
-    std::string val = json.substr(start, end - start);
-    // UTF-8 → wstring
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, val.c_str(), -1, nullptr, 0);
-    std::wstring out(wlen, 0);
-    MultiByteToWideChar(CP_UTF8, 0, val.c_str(), -1, &out[0], wlen);
-    if (!out.empty() && out.back() == 0)
-        out.pop_back();
-    return out;
-}
-
-// Extract a JSON string array e.g. ["a","b","c"]
-static std::vector<std::wstring> JsonGetStringArray(const std::string& json,
-                                                    const char* key) {
-    std::string k = std::string("\"") + key + "\"";
-    size_t p = json.find(k);
-    if (p == std::string::npos)
-        return {};
-    p = json.find('[', p + k.size());
-    if (p == std::string::npos)
-        return {};
-    size_t end = json.find(']', p);
-    if (end == std::string::npos)
-        return {};
-    std::string arr = json.substr(p + 1, end - p - 1);
-    std::vector<std::wstring> out;
-    size_t i = 0;
-    while ((i = arr.find('"', i)) != std::string::npos) {
-        size_t s = i + 1, e = s;
-        while (e < arr.size() && (arr[e] != '"' || arr[e - 1] == '\\'))
-            e++;
-        std::string sv = arr.substr(s, e - s);
-        int wl = MultiByteToWideChar(CP_UTF8, 0, sv.c_str(), -1, nullptr, 0);
-        std::wstring w(wl, 0);
-        MultiByteToWideChar(CP_UTF8, 0, sv.c_str(), -1, &w[0], wl);
-        if (!w.empty() && w.back() == 0)
-            w.pop_back();
-        out.push_back(w);
-        i = e + 1;
-    }
-    return out;
 }
 
 // Build raw.githubusercontent.com URL for a file in the workshop
@@ -821,7 +903,11 @@ static std::string HttpGet(const std::wstring& url) {
                              INTERNET_FLAG_SECURE,
                          0);
     std::string body;
-    if (hConn) {
+    DWORD status = 0, size = sizeof(status);
+    if (hConn &&
+        HttpQueryInfoW(hConn, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
+                       &status, &size, nullptr) &&
+        status == 200) {
         char buf[4096];
         DWORD read = 0;
         while (InternetReadFile(hConn, buf, sizeof(buf), &read) && read) {
@@ -831,8 +917,9 @@ static std::string HttpGet(const std::wstring& url) {
             }
             body.append(buf, read);
         }
-        InternetCloseHandle(hConn);
     }
+    if (hConn)
+        InternetCloseHandle(hConn);
     InternetCloseHandle(hInet);
     return body;
 }
@@ -840,9 +927,59 @@ static std::string HttpGet(const std::wstring& url) {
 // Download a URL to a local file path (blocking).
 static bool HttpDownloadFile(const std::wstring& url,
                              const std::wstring& dest) {
-    HRESULT hr =
-        URLDownloadToFileW(nullptr, url.c_str(), dest.c_str(), 0, nullptr);
-    return SUCCEEDED(hr);
+    if (dest.empty())
+        return false;
+    HINTERNET session =
+        InternetOpenW(L"AnimaWindhawkEngine/1.0", INTERNET_OPEN_TYPE_PRECONFIG,
+                      nullptr, nullptr, 0);
+    if (!session)
+        return false;
+    DWORD timeout = 15000;
+    InternetSetOptionW(session, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout,
+                       sizeof(timeout));
+    InternetSetOptionW(session, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout,
+                       sizeof(timeout));
+    HINTERNET request =
+        InternetOpenUrlW(session, url.c_str(), nullptr, 0,
+                         INTERNET_FLAG_RELOAD | INTERNET_FLAG_SECURE |
+                             INTERNET_FLAG_NO_CACHE_WRITE,
+                         0);
+    DWORD status = 0, n = sizeof(status);
+    bool ok =
+        request &&
+        HttpQueryInfoW(request, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
+                       &status, &n, nullptr) &&
+        status == 200;
+    auto temp = dest + L".part";
+    HANDLE out = ok ? CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr,
+                                  CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr)
+                    : INVALID_HANDLE_VALUE;
+    if (out != INVALID_HANDLE_VALUE) {
+        DWORD bytes = 0, total = 0;
+        char buffer[32768];
+        while ((ok = InternetReadFile(request, buffer, sizeof(buffer),
+                                      &bytes) != FALSE) &&
+               bytes) {
+            DWORD written = 0;
+            total += bytes;
+            if (total > 128u * 1024 * 1024 ||
+                !WriteFile(out, buffer, bytes, &written, nullptr) ||
+                written != bytes) {
+                ok = false;
+                break;
+            }
+        }
+        CloseHandle(out);
+        ok = ok && total &&
+             MoveFileExW(temp.c_str(), dest.c_str(), MOVEFILE_REPLACE_EXISTING);
+        if (!ok)
+            DeleteFileW(temp.c_str());
+    } else
+        ok = false;
+    if (request)
+        InternetCloseHandle(request);
+    InternetCloseHandle(session);
+    return ok;
 }
 
 // Keep this value in sync with the @version metadata above.
@@ -870,6 +1007,85 @@ static void LoadBuildInfo() {
     }
 }
 
+static std::string ReadSmallFile(const std::wstring& path) {
+    std::ifstream f(fs::path(path), std::ios::binary | std::ios::ate);
+    auto size = f.tellg();
+    if (size <= 0 || size > 1024 * 1024)
+        return {};
+    std::string data(static_cast<size_t>(size), '\0');
+    f.seekg(0);
+    return f.read(data.data(), data.size()) ? data : std::string{};
+}
+
+static bool WriteSmallFile(const std::wstring& path, const std::string& data) {
+    if (path.empty() || data.empty() || data.size() > 1024 * 1024)
+        return false;
+    GUID id{};
+    wchar_t unique[40]{};
+    if (FAILED(CoCreateGuid(&id)) || !StringFromGUID2(id, unique, 40))
+        return false;
+    std::wstring temp = path + unique;
+    HANDLE f = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE)
+        return false;
+    DWORD written = 0;
+    bool ok = WriteFile(f, data.data(), static_cast<DWORD>(data.size()),
+                        &written, nullptr) &&
+              written == data.size() && FlushFileBuffers(f);
+    CloseHandle(f);
+    if (ok &&
+        MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING))
+        return true;
+    DeleteFileW(temp.c_str());
+    return false;
+}
+
+static std::wstring PackKey(const std::wstring& slug, PCWSTR field) {
+    return Setting((L"Workshop." + slug + L"." + field).c_str());
+}
+
+struct Pack {
+    std::wstring file;
+    std::vector<std::wstring> frames;
+    int width{}, height{}, fps{12};
+};
+
+static Pack ParsePack(const json::JsonObject& meta) {
+    Pack pack;
+    auto number = [&](PCWSTR name, int fallback, int low, int high) {
+        double value = meta.GetNamedNumber(name, fallback);
+        if (!(value >= low && value <= high) || value != std::floor(value))
+            throw std::invalid_argument("Invalid pack dimensions or rate");
+        return static_cast<int>(value);
+    };
+    pack.file = meta.GetNamedString(L"file").c_str();
+    if (!SafeWorkshopName(pack.file) || !HasSupportedExt(pack.file))
+        throw std::invalid_argument("Invalid media name");
+    pack.width = number(L"frameWidth", 0, 0, 512);
+    pack.height = number(L"frameHeight", 0, 0, 512);
+    pack.fps = number(L"fps", 12, 1, 60);
+    if (meta.HasKey(L"frames")) {
+        auto frames = meta.GetNamedArray(L"frames");
+        if (!frames.Size() || frames.Size() > 300)
+            throw std::invalid_argument("Invalid sequence length");
+        for (auto v : frames) {
+            std::wstring name(v.GetString());
+            if (!SafeWorkshopName(name) ||
+                _wcsicmp(PathFindExtensionW(name.c_str()), L".png"))
+                throw std::invalid_argument("Invalid PNG frame");
+            pack.frames.push_back(name);
+        }
+    }
+    if ((pack.width == 0) != (pack.height == 0) ||
+        (pack.width &&
+         (!pack.frames.empty() ||
+          _wcsicmp(PathFindExtensionW(pack.file.c_str()), L".png"))) ||
+        (!pack.frames.empty() && pack.frames.front() != pack.file))
+        throw std::invalid_argument("Invalid animation layout");
+    return pack;
+}
+
 // ---- Workshop fetch thread ----
 // Fetches the Workshop index and fills missing metadata and preview caches.
 struct WorkshopFetchResult {
@@ -879,45 +1095,43 @@ struct WorkshopFetchResult {
 
 static DWORD WINAPI WorkshopFetchThread(LPVOID param) {
     auto* res = new WorkshopFetchResult();
+    HRESULT hr = RoInitialize(RO_INIT_MULTITHREADED);
+    if (FAILED(hr)) {
+        res->error = L"Could not initialize the Workshop worker.";
+        PostMessageW(g_hCtrlWnd, WM_WS_FETCH_DONE, 1, (LPARAM)res);
+        return 0;
+    }
+    struct Apartment {
+        ~Apartment() { RoUninitialize(); }
+    } apartment;
     std::wstring wsDir = GetWorkshopDir();
     std::string listing = HttpGet(WorkshopIndexUrl());
-    if (listing.empty()) {
-        res->error =
-            L"Could not reach the workshop index. Check your internet "
-            L"connection.";
+    auto indexCache = WorkshopChild(wsDir, L"catalog.json");
+    auto validIndex = [](const std::string& data) {
+        try {
+            json::JsonArray a = json::JsonArray::Parse(winrt::to_hstring(data));
+            for (auto v : a)
+                if (!SafeWorkshopName(std::wstring(v.GetString())))
+                    return false;
+            return true;
+        } catch (...) {
+            return false;
+        }
+    };
+    bool online = validIndex(listing);
+    if (online)
+        WriteSmallFile(indexCache, listing);
+    else
+        listing = ReadSmallFile(indexCache);
+    if (!validIndex(listing)) {
+        res->error = L"Workshop unavailable. No cached catalog exists yet.";
         PostMessageW(g_hCtrlWnd, WM_WS_FETCH_DONE, 1, (LPARAM)res);
         return 0;
     }
 
-    // Parse flat JSON string array — extract every quoted value inside [ ... ]
     std::vector<std::wstring> slugs;
-    {
-        size_t arrStart = listing.find('[');
-        size_t arrEnd = listing.find(']');
-        if (arrStart != std::string::npos && arrEnd != std::string::npos &&
-            arrEnd > arrStart) {
-            size_t p = arrStart;
-            while ((p = listing.find('"', p + 1)) != std::string::npos &&
-                   p < arrEnd) {
-                size_t q = listing.find('"', p + 1);
-                if (q == std::string::npos || q >= arrEnd)
-                    break;
-                std::string s = listing.substr(p + 1, q - p - 1);
-                if (!s.empty()) {
-                    int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1,
-                                                nullptr, 0);
-                    if (n > 1) {
-                        std::wstring ws(n, L'\0');
-                        MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &ws[0],
-                                            n);
-                        ws.resize(n - 1);
-                        slugs.push_back(std::move(ws));
-                    }
-                }
-                p = q + 1;
-            }
-        }
-    }
+    for (auto v : json::JsonArray::Parse(winrt::to_hstring(listing)))
+        slugs.emplace_back(v.GetString().c_str());
 
     if (slugs.empty()) {
         res->error = L"No items found in the workshop yet. Check back later!";
@@ -940,47 +1154,60 @@ static DWORD WINAPI WorkshopFetchThread(LPVOID param) {
         auto metaPath = WorkshopChild(petDir, L"meta.json");
         if (metaPath.empty())
             continue;
-        if (GetFileAttributesW(metaPath.c_str()) == INVALID_FILE_ATTRIBUTES)
-            HttpDownloadFile(WorkshopRawUrl(slug, L"meta.json"), metaPath);
-
-        // Parse meta.json
-        {
-            HANDLE hf =
-                CreateFileW(metaPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
-                            nullptr, OPEN_EXISTING, 0, nullptr);
-            if (hf != INVALID_HANDLE_VALUE) {
-                DWORD sz = GetFileSize(hf, nullptr);
-                if (!sz || sz > 1024 * 1024) {
-                    CloseHandle(hf);
-                    continue;
-                }
-                std::string buf(sz, '\0');
-                DWORD rd;
-                ReadFile(hf, &buf[0], sz, &rd, nullptr);
-                CloseHandle(hf);
-                item.name = JsonGetString(buf, "name");
-                item.author = JsonGetString(buf, "author");
-                item.description = JsonGetString(buf, "description");
-                item.version = JsonGetString(buf, "version");
-                item.file = JsonGetString(buf, "file");
-                item.previewFile = JsonGetString(buf, "preview");
-                item.tags = JsonGetStringArray(buf, "tags");
+        auto data = online ? HttpGet(WorkshopRawUrl(slug, L"meta.json"))
+                           : std::string{};
+        auto parse = [&](const std::string& bytes) {
+            try {
+                auto meta = json::JsonObject::Parse(winrt::to_hstring(bytes));
+                auto pack = ParsePack(meta);
+                item.file = pack.file;
+                item.name = meta.GetNamedString(L"name", L"").c_str();
+                item.author = meta.GetNamedString(L"author", L"").c_str();
+                item.description =
+                    meta.GetNamedString(L"description", L"").c_str();
+                item.version = meta.GetNamedString(L"version", L"").c_str();
+                item.previewFile =
+                    meta.GetNamedString(L"preview", L"preview.png").c_str();
+                item.tags.clear();
+                if (meta.HasKey(L"tags"))
+                    for (auto t : meta.GetNamedArray(L"tags"))
+                        item.tags.emplace_back(t.GetString().c_str());
+                item.metadata = winrt::to_hstring(bytes).c_str();
+                return true;
+            } catch (...) {
+                return false;
             }
-        }
+        };
+        if (parse(data))
+            WriteSmallFile(metaPath, data);
+        else if (!parse(ReadSmallFile(metaPath)))
+            continue;
         if (item.name.empty())
             item.name = slug;
         if (item.previewFile.empty())
             item.previewFile = L"preview.png";
 
         // preview image
-        auto prevPath = WorkshopChild(petDir, item.previewFile);
+        auto previewName = item.previewFile;
+        if (SafeWorkshopName(item.version))
+            previewName = L"preview-" + item.version + L"-" + previewName;
+        auto prevPath = WorkshopChild(petDir, previewName);
         auto instPath = WorkshopChild(petDir, item.file);
         if (instPath.empty() || prevPath.empty() ||
             !HasSupportedExt(item.file) || !HasSupportedExt(item.previewFile) ||
             !_wcsicmp(PathFindExtensionW(item.previewFile.c_str()), L".mp4"))
             continue;
-        if (GetFileAttributesW(prevPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+        if (online &&
+            GetFileAttributesW(prevPath.c_str()) == INVALID_FILE_ATTRIBUTES)
             HttpDownloadFile(WorkshopRawUrl(slug, item.previewFile), prevPath);
+        if (GetFileAttributesW(prevPath.c_str()) != INVALID_FILE_ATTRIBUTES)
+            PutString(PackKey(slug, L"CachedPreview"), previewName);
+        else {
+            prevPath = WorkshopChild(
+                petDir, ReadString(PackKey(slug, L"CachedPreview")));
+            if (prevPath.empty())
+                prevPath = WorkshopChild(petDir, item.previewFile);
+        }
         item.localPreviewPath = prevPath;
 
         // Mark as installed only if the file exists on disk AND is registered
@@ -991,6 +1218,10 @@ static DWORD WINAPI WorkshopFetchThread(LPVOID param) {
             item.localImagePath = instPath;
         }
 
+        auto anchor = ReadString(PackKey(slug, L"Anchor"));
+        if (!anchor.empty())
+            item.localImagePath = WorkshopChild(petDir, anchor);
+        item.installedVersion = ReadString(PackKey(slug, L"Version"));
         res->items.push_back(std::move(item));
     }
 
@@ -1002,20 +1233,60 @@ static DWORD WINAPI WorkshopFetchThread(LPVOID param) {
 struct WorkshopInstallParam {
     int index;
     std::wstring slug;
-    std::wstring file;
+    std::wstring metadata;
+    std::wstring revision;
 };
 
+static bool LoadPackFrames(PetItem&, const Pack&, const std::wstring&, size_t&);
 static DWORD WINAPI WorkshopInstallThread(LPVOID param) {
-    auto* p = (WorkshopInstallParam*)param;
-    std::wstring url = WorkshopRawUrl(p->slug, p->file);
-    auto dest =
-        WorkshopChild(WorkshopChild(GetWorkshopDir(), p->slug), p->file);
-    bool ok = !dest.empty() && HasSupportedExt(p->file) &&
-              HttpDownloadFile(url, dest);
-    int idx = p->index;
-    delete p;
+    std::unique_ptr<WorkshopInstallParam> p(
+        static_cast<WorkshopInstallParam*>(param));
+    if (FAILED(RoInitialize(RO_INIT_MULTITHREADED))) {
+        PostMessageW(g_hCtrlWnd, WM_WS_INSTALL_DONE, p->index, 1);
+        return 0;
+    }
+    bool ok = false;
+    auto root = WorkshopChild(GetWorkshopDir(), p->slug);
+    auto dir = WorkshopChild(root, p->revision);
+    try {
+        auto pack = ParsePack(json::JsonObject::Parse(p->metadata));
+        if (dir.empty() || !CreateDirectoryW(dir.c_str(), nullptr))
+            throw std::runtime_error("Cannot stage pack");
+        std::set<std::wstring> files(pack.frames.begin(), pack.frames.end());
+        files.insert(pack.file);
+        size_t totalBytes = 0;
+        for (const auto& name : files) {
+            auto dest = WorkshopChild(dir, name);
+            if (dest.empty() ||
+                !HttpDownloadFile(WorkshopRawUrl(p->slug, name), dest))
+                throw std::runtime_error("Missing pack file");
+            std::error_code ec;
+            auto size = fs::file_size(dest, ec);
+            if (ec || size > 128u * 1024 * 1024 ||
+                totalBytes + size > 256u * 1024 * 1024)
+                throw std::runtime_error("Pack exceeds download limit");
+            totalBytes += static_cast<size_t>(size);
+        }
+        if (pack.width || !pack.frames.empty()) {
+            PetItem test;
+            size_t decoded = 0;
+            test.sourcePath = WorkshopChild(dir, pack.file);
+            if (!LoadPackFrames(test, pack, dir, decoded))
+                throw std::runtime_error("Invalid animation");
+            for (auto* frame : test.decodedFrames)
+                delete frame;
+        }
+        ok = WriteSmallFile(WorkshopChild(dir, L"package.json"),
+                            winrt::to_string(p->metadata));
+    } catch (...) {
+    }
+    if (!ok && !dir.empty()) {
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+    }
     if (g_hCtrlWnd)
-        PostMessageW(g_hCtrlWnd, WM_WS_INSTALL_DONE, (WPARAM)idx, ok ? 0 : 1);
+        PostMessageW(g_hCtrlWnd, WM_WS_INSTALL_DONE, p->index, ok ? 0 : 1);
+    RoUninitialize();
     return 0;
 }
 
@@ -1053,7 +1324,15 @@ static void Workshop_StartInstall(int idx) {
     if (it.installing || g_workshopFetching)
         return;
     it.installing = true;
-    auto* p = new WorkshopInstallParam{idx, it.slug, it.file};
+    GUID id{};
+    if (FAILED(CoCreateGuid(&id))) {
+        it.installing = false;
+        return;
+    }
+    wchar_t guid[40]{};
+    StringFromGUID2(id, guid, 40);
+    it.revision = L"rev-" + std::wstring(guid + 1, 36);
+    auto* p = new WorkshopInstallParam{idx, it.slug, it.metadata, it.revision};
     if (!StartWorkshopWorker(WorkshopInstallThread, p)) {
         it.installing = false;
         delete p;
@@ -1138,28 +1417,35 @@ static HBITMAP Workshop_LoadPreview(const std::wstring& path,
 // name/author/tags).
 static std::vector<int> Workshop_FilteredIndices() {
     std::vector<int> out;
+    std::wistringstream query(g_workshopFilter);
+    std::vector<std::wstring> terms;
+    for (std::wstring term; query >> term;)
+        terms.push_back(term);
+    auto contains = [](const std::wstring& value, const std::wstring& term) {
+        return StrStrIW(value.c_str(), term.c_str()) != nullptr;
+    };
     for (int i = 0; i < (int)g_workshopItems.size(); i++) {
-        if (g_workshopFilter.empty()) {
-            out.push_back(i);
+        const auto& item = g_workshopItems[i];
+        if ((favoritesOnly && !Number(PackKey(item.slug, L"Favorite"), 0)) ||
+            (!workshopTag.empty() &&
+             std::find(item.tags.begin(), item.tags.end(), workshopTag) ==
+                 item.tags.end()))
             continue;
-        }
-        auto& it = g_workshopItems[i];
-        auto lc = [](std::wstring s) {
-            for (auto& c : s)
-                c = (wchar_t)towlower(c);
-            return s;
-        };
-        if (lc(it.name).find(g_workshopFilter) != std::wstring::npos ||
-            lc(it.author).find(g_workshopFilter) != std::wstring::npos ||
-            lc(it.description).find(g_workshopFilter) != std::wstring::npos) {
+        bool match =
+            std::all_of(terms.begin(), terms.end(), [&](const auto& term) {
+                if (term.front() == L'@')
+                    return term.size() > 1 &&
+                           contains(item.author, term.substr(1));
+                if (term.front() == L'#')
+                    return term.size() > 1 &&
+                           std::any_of(item.tags.begin(), item.tags.end(),
+                                       [&](const auto& tag) {
+                                           return contains(tag, term.substr(1));
+                                       });
+                return contains(item.name, term);
+            });
+        if (match)
             out.push_back(i);
-            continue;
-        }
-        for (auto& t : it.tags)
-            if (lc(t).find(g_workshopFilter) != std::wstring::npos) {
-                out.push_back(i);
-                break;
-            }
     }
     return out;
 }
@@ -1281,10 +1567,69 @@ static HBITMAP CreateThumb(PetItem& it, int sz = 96) {
 // Rendering  (unchanged from v1.0)
 // ============================================================================
 
+static POINT RecoverPosition(const PetItem& it, POINT position) {
+    MONITORINFO info{sizeof(info)};
+    if (!GetMonitorInfoW(MonitorFromPoint(position, MONITOR_DEFAULTTONEAREST),
+                         &info))
+        return position;
+    const RECT& work = info.rcWork;
+    const double radians = it.rotationDegrees * 3.141592653589793 / 180;
+    const double scale = it.scalePercent / 100.0;
+    const double c = fabs(cos(radians)), s = fabs(sin(radians));
+    auto extent = [&](double pixels) {
+        return std::max(1L, std::lround(scale * pixels)) + (it.shadow ? 8 : 0);
+    };
+    const LONG w = extent(it.baseWidth * c + it.baseHeight * s);
+    const LONG h = extent(it.baseHeight * c + it.baseWidth * s);
+    return {
+        std::clamp(position.x, work.left, std::max(work.left, work.right - w)),
+        std::clamp(position.y, work.top, std::max(work.top, work.bottom - h))};
+}
+
+static bool AdvancePlayback(PetItem& it) {
+    const UINT last = it.frameCount - 1;
+    const UINT start = it.reverse ? last : 0;
+    const int step = it.reverse != it.returning ? -1 : 1;
+    int next = static_cast<int>(it.currentFrame) + step;
+    if (next < 0 || next > static_cast<int>(last)) {
+        if (it.pingPong && !it.returning) {
+            it.returning = true;
+            next = static_cast<int>(it.currentFrame) - step;
+        } else {
+            if (++it.completed == static_cast<unsigned>(it.loops) && it.loops)
+                return false;
+            it.returning = false;
+            next = it.pingPong ? static_cast<int>(start) - step
+                               : static_cast<int>(start);
+        }
+    }
+    it.currentFrame = static_cast<UINT>(next);
+    return true;
+}
+
+// The render thread owns every cached bitmap. Selection into a DC is temporary.
+struct CachedSurface {
+    HWND owner{};
+    FrameKey key{};
+    HBITMAP bitmap{};
+    void* pixels{};
+    int width{}, height{};
+    size_t bytes{};
+    ~CachedSurface() {
+        if (bitmap)
+            DeleteObject(bitmap);
+    }
+};
+static std::list<CachedSurface> frameCache;
+static size_t cachedBytes = 0;
+static constexpr size_t frameBudget = 64u * 1024 * 1024;
+static constexpr size_t maxSurfaces = 128;
 static void RenderItem(PetItem& it) {
-    if (!it.hwnd || !it.image)
+    if (!it.hwnd || !it.image || !VisibleItem(it) || it.otherDesktop ||
+        (SavingAllowed() && (it.covered || sessionLocked)))
         return;
 
+    auto* visual = it.image;
     double scale = (it.scalePercent <= 0 ? 1 : it.scalePercent) / 100.0;
     int dstW = std::max(1, (int)std::lround(it.baseWidth * scale));
     int dstH = std::max(1, (int)std::lround(it.baseHeight * scale));
@@ -1295,70 +1640,177 @@ static void RenderItem(PetItem& it) {
     int canvasW = std::max(1, (int)std::lround(dstW * cosA + dstH * sinA));
     int canvasH = std::max(1, (int)std::lround(dstW * sinA + dstH * cosA));
 
+    if (it.shadow) {
+        canvasW += 8;
+        canvasH += 8;
+    }
+    int alpha = it.hoverFade && it.nearCursor ? 75 : 255;
+    FrameKey key{
+        static_cast<int>(it.currentFrame),
+        canvasW,
+        canvasH,
+        it.scalePercent,
+        it.rotationDegrees,
+        it.opacityPercent,
+        it.flipX,
+        it.flipY,
+        it.grayscale,
+        it.shadow,
+        it.brightness,
+        it.hue,
+        it.tint,
+        it.frameCount > 1};
+    if (it.presentedAlpha == alpha && it.presented == key)
+        return;
+    auto found = std::find_if(
+        frameCache.begin(), frameCache.end(), [&](const auto& entry) {
+            return entry.owner == it.hwnd && entry.key == key;
+        });
+    bool hit = found != frameCache.end();
+    auto size64 = static_cast<ULONGLONG>(canvasW) * canvasH * 4;
+    if (size64 > SIZE_MAX || canvasW > INT_MAX / 4)
+        return;
+    size_t bytes = static_cast<size_t>(size64);
+    CachedSurface temporary;
+    CachedSurface* surface = &temporary;
+    if (hit) {
+        frameCache.splice(frameCache.begin(), frameCache, found);
+        surface = &frameCache.front();
+    } else if (bytes <= frameBudget) {
+        while (cachedBytes + bytes > frameBudget ||
+               frameCache.size() >= maxSurfaces) {
+            auto& last = frameCache.back();
+            cachedBytes -= last.bytes;
+            if (!temporary.bitmap && last.width == canvasW &&
+                last.height == canvasH) {
+                std::swap(temporary.bitmap, last.bitmap);
+                temporary.pixels = last.pixels;
+            }
+            frameCache.pop_back();
+        }
+        frameCache.emplace_front();
+        surface = &frameCache.front();
+        std::swap(surface->bitmap, temporary.bitmap);
+        surface->pixels = temporary.pixels;
+        surface->bytes = bytes;
+        surface->width = canvasW;
+        surface->height = canvasH;
+        cachedBytes += bytes;
+    }
     HDC screenDC = GetDC(nullptr);
     HDC memDC = CreateCompatibleDC(screenDC);
-
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = canvasW;
-    bmi.bmiHeader.biHeight = -canvasH;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    void* bits = nullptr;
-    HBITMAP hBmp =
-        CreateDIBSection(memDC, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    HBITMAP hOld = (HBITMAP)SelectObject(memDC, hBmp);
-
-    if (bits) {
+    if (!hit && !surface->bitmap) {
+        BITMAPINFO bmi{};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = canvasW;
+        bmi.bmiHeader.biHeight = -canvasH;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+        surface->bitmap = CreateDIBSection(memDC, &bmi, DIB_RGB_COLORS,
+                                           &surface->pixels, nullptr, 0);
+    }
+    auto old = memDC && surface->bitmap ? SelectObject(memDC, surface->bitmap)
+                                        : nullptr;
+    if (!old || old == HGDI_ERROR) {
+        if (!hit && surface != &temporary) {
+            cachedBytes -= surface->bytes;
+            frameCache.pop_front();
+        }
+        if (memDC)
+            DeleteDC(memDC);
+        if (screenDC)
+            ReleaseDC(nullptr, screenDC);
+        return;
+    }
+    if (!hit) {
+        surface->owner = it.hwnd;
+        surface->key = key;
+        void* bits = surface->pixels;
         Gdiplus::Bitmap canvasBmp(canvasW, canvasH, canvasW * 4,
                                   PixelFormat32bppPARGB, (BYTE*)bits);
         Gdiplus::Graphics g(&canvasBmp);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        g.SetInterpolationMode(
+            it.frameCount > 1
+                ? Gdiplus::InterpolationModeBilinear
+                : Gdiplus::InterpolationModeHighQualityBicubic);
         g.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
         g.Clear(Gdiplus::Color(0, 0, 0, 0));
         g.TranslateTransform((Gdiplus::REAL)(canvasW / 2.0),
                              (Gdiplus::REAL)(canvasH / 2.0));
         g.RotateTransform((Gdiplus::REAL)it.rotationDegrees);
+        g.ScaleTransform(it.flipX ? -1.f : 1.f, it.flipY ? -1.f : 1.f);
         g.TranslateTransform((Gdiplus::REAL)(-dstW / 2.0),
                              (Gdiplus::REAL)(-dstH / 2.0));
 
         int op = std::max(10, std::min(100, it.opacityPercent));
-        if (op < 100) {
+        if (it.shadow) {
+            Gdiplus::ColorMatrix shade{};
+            shade.m[3][3] = 0.35f * op / 100;
+            shade.m[4][4] = 1;
+            Gdiplus::ImageAttributes shadow;
+            shadow.SetColorMatrix(&shade);
+            g.DrawImage(visual, Gdiplus::Rect(3, 3, dstW, dstH), 0, 0,
+                        (INT)visual->GetWidth(), (INT)visual->GetHeight(),
+                        Gdiplus::UnitPixel, &shadow);
+            g.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
+        }
+        if (op < 100 || it.grayscale || it.brightness != 100 || it.hue ||
+            it.tint) {
             Gdiplus::ColorMatrix cm = {
                 {{1, 0, 0, 0, 0},
                  {0, 1, 0, 0, 0},
                  {0, 0, 1, 0, 0},
                  {0, 0, 0, (Gdiplus::REAL)(op / 100.0), 0},
                  {0, 0, 0, 0, 1}}};
+            const double angle = it.hue * 3.141592653589793 / 180;
+            const double c = cos(angle), t = (1 - c) / 3,
+                         u = sin(angle) / sqrt(3.0);
+            const double rotation[3][3] = {{c + t, t + u, t - u},
+                                           {t - u, c + t, t + u},
+                                           {t + u, t - u, c + t}};
+            const double luminance[] = {0.2126, 0.7152, 0.0722};
+            const double warm[] = {1, 0.78, 0.55};
+            for (int i = 0; i < 3; ++i) {
+                for (int j = 0; j < 3; ++j) {
+                    double channel =
+                        it.grayscale ? luminance[i] : rotation[i][j];
+                    cm.m[i][j] =
+                        static_cast<float>(channel * it.brightness / 100 *
+                                           (1 + (warm[j] - 1) * it.tint / 100));
+                }
+            }
             Gdiplus::ImageAttributes attr;
             attr.SetColorMatrix(&cm);
             Gdiplus::Rect dr(0, 0, dstW, dstH);
-            g.DrawImage(it.image, dr, 0, 0, (Gdiplus::REAL)it.baseWidth,
-                        (Gdiplus::REAL)it.baseHeight, Gdiplus::UnitPixel,
+            g.DrawImage(visual, dr, 0, 0, (Gdiplus::REAL)visual->GetWidth(),
+                        (Gdiplus::REAL)visual->GetHeight(), Gdiplus::UnitPixel,
                         &attr);
         } else {
-            g.DrawImage(it.image, 0, 0, dstW, dstH);
+            g.DrawImage(visual, 0, 0, dstW, dstH);
         }
     }
 
     RECT wr{};
     GetWindowRect(it.hwnd, &wr);
-    SetWindowPos(it.hwnd, nullptr, 0, 0, canvasW, canvasH,
-                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    if (wr.right - wr.left != canvasW || wr.bottom - wr.top != canvasH)
+        SetWindowPos(it.hwnd, nullptr, 0, 0, canvasW, canvasH,
+                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 
     POINT ptSrc = {0, 0};
     POINT ptDst = {wr.left, wr.top};
     SIZE sizeWnd = {canvasW, canvasH};
-    BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    UpdateLayeredWindow(it.hwnd, screenDC, &ptDst, &sizeWnd, memDC, &ptSrc, 0,
-                        &blend, ULW_ALPHA);
-
-    SelectObject(memDC, hOld);
-    if (hBmp)
-        DeleteObject(hBmp);
+    BLENDFUNCTION blend = {
+        AC_SRC_OVER, 0,
+        static_cast<BYTE>(it.hoverFade && it.nearCursor ? 75 : 255),
+        AC_SRC_ALPHA};
+    if (UpdateLayeredWindow(it.hwnd, screenDC, &ptDst, &sizeWnd, memDC, &ptSrc,
+                            0, &blend, ULW_ALPHA)) {
+        it.presented = key;
+        it.presentedAlpha = alpha;
+    }
+    SelectObject(memDC, old);
     DeleteDC(memDC);
     ReleaseDC(nullptr, screenDC);
 }
@@ -1509,12 +1961,43 @@ static std::wstring HotkeyToString(UINT mods, UINT vk) {
 
 // Keep the shortcut on the controller so it also works after the manager
 // closes.
+static std::wstring hotkeyNotice;
+
+static bool WindowsShortcut(UINT mods, UINT vk) {
+    mods &= MOD_WIN | MOD_CONTROL | MOD_ALT | MOD_SHIFT;
+    if (vk == VK_F12)
+        return true;
+    if (mods == MOD_WIN) {
+        if ((vk >= '0' && vk <= '9') ||
+            (vk >= 'A' && vk <= 'Z' &&
+             wcschr(L"ABCDEFGHIJKLMNOPQRSTUVWXZ", vk)))
+            return true;
+        return vk == VK_TAB || vk == VK_SPACE || vk == VK_ESCAPE ||
+               vk == VK_HOME || vk == VK_PAUSE || vk == VK_SNAPSHOT ||
+               (vk >= VK_LEFT && vk <= VK_DOWN);
+    }
+    if (mods == (MOD_WIN | MOD_SHIFT))
+        return vk == 'S' || vk == 'R' || vk == 'M' ||
+               (vk >= '0' && vk <= '9') || (vk >= VK_LEFT && vk <= VK_DOWN);
+    if (mods == (MOD_WIN | MOD_CONTROL))
+        return vk == 'D' || vk == VK_F4 || vk == VK_LEFT || vk == VK_RIGHT;
+    if (mods == MOD_ALT)
+        return vk == VK_TAB || vk == VK_ESCAPE || vk == VK_F4 || vk == VK_SPACE;
+    return (mods == MOD_CONTROL && vk == VK_ESCAPE) ||
+           (mods == (MOD_CONTROL | MOD_SHIFT) && vk == VK_ESCAPE) ||
+           (mods == (MOD_CONTROL | MOD_ALT) && vk == VK_DELETE);
+}
+
 static void ReapplyHotkey() {
     if (g_hCtrlWnd) {
         UnregisterHotKey(g_hCtrlWnd, HOTKEY_OPEN_MANAGER);
-        if (g_hotkeyVk)
-            RegisterHotKey(g_hCtrlWnd, HOTKEY_OPEN_MANAGER, g_hotkeyMods,
-                           g_hotkeyVk);
+        if (g_hotkeyVk && (WindowsShortcut(g_hotkeyMods, g_hotkeyVk) ||
+                           !RegisterHotKey(g_hCtrlWnd, HOTKEY_OPEN_MANAGER,
+                                           g_hotkeyMods, g_hotkeyVk))) {
+            hotkeyNotice = L"Saved shortcut unavailable. Choose another.";
+        } else {
+            hotkeyNotice.clear();
+        }
     }
 }
 
@@ -1636,11 +2119,20 @@ static LRESULT CALLBACK LLKeyProc(int nCode, WPARAM wParam, LPARAM lParam) {
         return 1;  // swallow but don't commit
     }
 
+    if (WindowsShortcut(mods, vk) ||
+        !RegisterHotKey(g_hCtrlWnd, HOTKEY_OPEN_MANAGER, mods, vk)) {
+        hotkeyNotice =
+            HotkeyToString(mods, vk) +
+            L" is unavailable. Try another shortcut, or press Escape.";
+        PostMessageW(g_hManagerWnd, WM_APP + 20, 0, 0);
+        return 1;
+    }
+
+    hotkeyNotice.clear();
     g_hotkeyCapturing = false;
     g_hotkeyMods = mods;
     g_hotkeyVk = vk;
     StopKeyCapture();
-    ReapplyHotkey();
     SaveHotkey();
     if (g_hManagerWnd)
         PostMessageW(g_hManagerWnd, WM_APP + 20, 0, 0);
@@ -1690,7 +2182,7 @@ static void RunImageMenuAction(int idx, int cmd) {
             break;
         case kPetMenuShow:
             pet.hidden = false;
-            if (pet.enabled && pet.hwnd)
+            if (VisibleItem(pet) && pet.hwnd)
                 ShowWindow(pet.hwnd, SW_SHOWNOACTIVATE);
             break;
         case kPetMenuBringToFront:
@@ -1707,17 +2199,18 @@ static void RunImageMenuAction(int idx, int cmd) {
             ForgetStoredPosition(pet.registryKey);
             break;
         case kPetMenuClone: {
-            // Duplicate the path entry and do a live reload
-            if (pet.folderKey.empty()) {
-                // Find the original path and append a copy
-                for (auto& p : g_settings.imagePaths) {
-                    if (p == pet.filePath) {
-                        g_settings.imagePaths.push_back(p);
-                        SaveImagePaths(g_settings.imagePaths);
-                        break;
-                    }
-                }
-            }
+            if (!configWritable)
+                break;
+            auto paths = g_settings.imagePaths;
+            paths.push_back(pet.filePath);
+            SaveImagePaths(paths);
+            if (imageOrder.size() != paths.size())
+                break;
+            g_settings.imagePaths = std::move(paths);
+            PetItem copy = pet;
+            copy.registryKey = imageOrder.back();
+            SyncImageState(copy, false);
+            SaveStoredPosition(copy.registryKey, pet.posX + 24, pet.posY + 24);
             PostMessageW(g_hCtrlWnd, WM_APP_RELOAD_ITEMS_ONLY, 0, 0);
             break;
         }
@@ -1841,7 +2334,9 @@ static void PositionNavPill(HWND hwnd) {
     } else
         anchor = Named<Button>(page == Page::App ? L"App" : L"Workshop");
     auto pill = Named<controls::Border>(L"NavPill");
-    bool visible = anchor && anchor.IsLoaded() && anchor.ActualHeight() > 0;
+    bool visible =
+        anchor && anchor.IsLoaded() && anchor.ActualHeight() > 0 &&
+        (page != Page::Pet || Named<controls::Grid>(L"MediaPane").Visibility() == xaml::Visibility::Visible);
     winrt::Windows::Foundation::Point pt{};
     if (visible) {
         pt = anchor.TransformToVisual(overlay).TransformPoint(
@@ -1970,17 +2465,19 @@ static Button Action(StackPanel parent, const wchar_t* title, F run) {
     parent.Children().Append(button);
     return button;
 }
+static bool ManagerAnimationsEnabled();
 static void SyncChoiceState(controls::Primitives::ToggleButton const& button) {
-    auto sync = [](auto const& sender, auto const&) {
+    auto sync = [](auto const& sender, bool animate) {
         auto control = sender.template as<controls::Primitives::ToggleButton>();
         auto checked = control.IsChecked();
         xaml::VisualStateManager::GoToState(
             control, checked && checked.Value() ? L"AnimaOn" : L"AnimaOff",
-            false);
+            animate && control.IsLoaded() && ManagerAnimationsEnabled());
     };
-    button.Loaded(sync);
-    button.Checked(sync);
-    button.Unchecked(sync);
+    button.Loaded([sync](auto const& sender, auto const&) { sync(sender, false); });
+    auto changed = [sync](auto const& sender, auto const&) { sync(sender, true); };
+    button.Checked(changed);
+    button.Unchecked(changed);
 }
 static controls::Grid FieldRow(StackPanel parent) {
     if (parent.Children().Size()) {
@@ -2072,16 +2569,112 @@ static void Choice(StackPanel parent,
     controls::Grid::SetColumn(choices, 1);
     row.Children().Append(choices);
 }
+static bool ManagerAnimationsEnabled() {
+    BOOL enabled = FALSE;
+    return SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &enabled, 0) &&
+           enabled;
+}
+
+static void FadeTabFocus(const winrt::Windows::Foundation::IInspectable&,
+                         const xaml::RoutedEventArgs& args) {
+    if (!managerRoot || !ManagerAnimationsEnabled())
+        return;
+    auto target = args.OriginalSource().try_as<controls::Control>();
+    if (!target || target.FocusState() != xaml::FocusState::Keyboard)
+        return;
+    using xaml::Media::Animation::Storyboard;
+    auto fade = managerRoot.Resources()
+                    .Lookup(winrt::box_value(L"TabFade"))
+                    .as<Storyboard>();
+    fade.Stop();
+    Storyboard::SetTarget(fade.Children().GetAt(0), target);
+    fade.Begin();
+}
+
+static controls::Flyout DropdownFlyout(
+    controls::Primitives::FlyoutPlacementMode placement) {
+    controls::Flyout menu;
+    menu.Placement(placement);
+    menu.FlyoutPresenterStyle(managerRoot.Resources()
+                                  .Lookup(winrt::box_value(L"OptionMenu"))
+                                  .as<xaml::Style>());
+    return menu;
+}
+
+static void StyleDropdownOption(Button option) {
+    option.Template(managerRoot.Resources()
+                        .Lookup(winrt::box_value(L"ActionFace"))
+                        .as<controls::ControlTemplate>());
+    option.HorizontalAlignment(xaml::HorizontalAlignment::Stretch);
+    option.HorizontalContentAlignment(xaml::HorizontalAlignment::Left);
+    option.Padding({4, 5, 4, 5});
+    option.BorderThickness({0, 0, 0, 0});
+    option.CornerRadius({4, 4, 4, 4});
+}
+
+static controls::Flyout ActionDropdown(
+    controls::Primitives::FlyoutPlacementMode placement) {
+    auto menu = DropdownFlyout(placement);
+    StackPanel list;
+    if (placement ==
+            controls::Primitives::FlyoutPlacementMode::TopEdgeAlignedRight &&
+        ManagerAnimationsEnabled()) {
+        xaml::Media::Animation::EntranceThemeTransition entrance;
+        entrance.FromHorizontalOffset(0);
+        entrance.FromVerticalOffset(12);
+        xaml::Media::Animation::TransitionCollection transitions;
+        transitions.Append(entrance);
+        list.Transitions(transitions);
+    }
+    list.MinWidth(144);
+    list.Spacing(2);
+    menu.Opening([list](auto&&, auto&&) {
+        if (managerRoot)
+            list.RequestedTheme(managerRoot.RequestedTheme());
+    });
+    list.GotFocus(FadeTabFocus);
+    menu.Content(list);
+    return menu;
+}
+
+template <class F>
+static void AddDropdownAction(controls::Flyout menu,
+                              PCWSTR caption,
+                              F run,
+                              bool enabled = true) {
+    Button option;
+    StyleDropdownOption(option);
+    option.Padding({10, 5, 10, 5});
+    option.Background(xaml::Media::SolidColorBrush({0, 0, 0, 0}));
+    option.Content(winrt::box_value(winrt::hstring(caption)));
+    option.IsEnabled(enabled);
+    option.Click([weak = winrt::make_weak(menu), run](auto&&, auto&&) {
+        if (auto flyout = weak.get())
+            flyout.Hide();
+        run();
+    });
+    menu.Content().as<StackPanel>().Children().Append(option);
+}
+
+static void DropdownDivider(controls::Flyout menu) {
+    controls::Border divider;
+    divider.Height(1);
+    divider.Margin({6, 2, 6, 2});
+    divider.Background(
+        Brush(LightManager() ? RGB(210, 210, 210) : RGB(65, 65, 65)));
+    menu.Content().as<StackPanel>().Children().Append(divider);
+}
+
 // A field-width flyout uses the same selection marker as the sidebar.
 template <class F>
 static void Dropdown(StackPanel parent,
                      const wchar_t* title,
                      const wchar_t* description,
-                     std::initializer_list<const wchar_t*> options,
+                     const std::vector<std::wstring>& values,
                      int selected,
-                     F run) {
+                     F run,
+                     bool appearance = true) {
     auto row = SettingRow(parent, title, description);
-    auto values = std::vector<std::wstring>(options.begin(), options.end());
     Button field;
     field.Width(156);
     field.HorizontalContentAlignment(xaml::HorizontalAlignment::Stretch);
@@ -2100,33 +2693,25 @@ static void Dropdown(StackPanel parent,
     controls::Grid::SetColumn(field, 1);
     row.Children().Append(field);
 
-    controls::Flyout menu;
-    menu.Placement(
+    auto menu = DropdownFlyout(
         controls::Primitives::FlyoutPlacementMode::BottomEdgeAlignedLeft);
-    menu.FlyoutPresenterStyle(managerRoot.Resources()
-                                  .Lookup(winrt::box_value(L"OptionMenu"))
-                                  .as<xaml::Style>());
     auto weakMenu = winrt::make_weak(menu);
     auto current = std::make_shared<int>(selected);
     auto changed = std::make_shared<bool>(false);
-    menu.Closed([changed](auto&&, auto&&) {
+    menu.Closed([changed, appearance](auto&&, auto&&) {
         if (*changed && g_hManagerWnd)
-            PostMessageW(g_hManagerWnd, kApplyManagerAppearance, 1, 0);
+            PostMessageW(g_hManagerWnd,
+                         appearance ? kApplyManagerAppearance : WM_APP + 42, 1,
+                         0);
         *changed = false;
     });
     StackPanel list;
     list.RequestedTheme(managerRoot.RequestedTheme());
+    list.GotFocus(FadeTabFocus);
     list.Width(field.Width() - 10);
     for (int i = 0; i < (int)values.size(); ++i) {
         Button option;
-        option.Template(managerRoot.Resources()
-                            .Lookup(winrt::box_value(L"ActionFace"))
-                            .as<controls::ControlTemplate>());
-        option.HorizontalAlignment(xaml::HorizontalAlignment::Stretch);
-        option.HorizontalContentAlignment(xaml::HorizontalAlignment::Left);
-        option.Padding({4, 5, 4, 5});
-        option.BorderThickness({0, 0, 0, 0});
-        option.CornerRadius({4, 4, 4, 4});
+        StyleDropdownOption(option);
         option.Background(xaml::Media::SolidColorBrush(
             LightManager()
                 ? winrt::Windows::UI::Color{static_cast<BYTE>(
@@ -2160,7 +2745,11 @@ static void Dropdown(StackPanel parent,
         });
         list.Children().Append(option);
     }
-    menu.Content(list);
+    controls::ScrollViewer choices;
+    choices.MaxHeight(320);
+    choices.VerticalScrollBarVisibility(controls::ScrollBarVisibility::Auto);
+    choices.Content(list);
+    menu.Content(choices);
     field.Flyout(menu);
 }
 static void ReloadItems() {
@@ -2190,6 +2779,44 @@ static void AddImages() {
     SaveImagePaths(g_settings.imagePaths);
     ReloadItems();
 }
+static LRESULT CALLBACK ForwardDroppedMedia(HWND hwnd,
+                                            UINT message,
+                                            WPARAM wp,
+                                            LPARAM lp,
+                                            UINT_PTR id,
+                                            DWORD_PTR owner) {
+    if (message == WM_DROPFILES)
+        return SendMessageW(reinterpret_cast<HWND>(owner), message, wp, lp);
+    if (message == WM_NCDESTROY)
+        RemoveWindowSubclass(hwnd, ForwardDroppedMedia, id);
+    return DefSubclassProc(hwnd, message, wp, lp);
+}
+
+static void ImportDroppedMedia(HDROP drop) {
+    auto paths = g_settings.imagePaths;
+    const UINT count = DragQueryFileW(drop, 0xffffffff, nullptr, 0);
+    for (UINT i = 0; i < count; ++i) {
+        UINT length = DragQueryFileW(drop, i, nullptr, 0);
+        std::wstring path(length + 1, L'\0');
+        if (!length ||
+            DragQueryFileW(drop, i, path.data(), length + 1) != length)
+            continue;
+        path.resize(length);
+        DWORD attributes = GetFileAttributesW(path.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES &&
+            !(attributes & FILE_ATTRIBUTE_DIRECTORY) && HasSupportedExt(path))
+            paths.push_back(std::move(path));
+    }
+    DragFinish(drop);
+    if (configWritable && paths.size() != g_settings.imagePaths.size()) {
+        SaveImagePaths(paths);
+        if (imageOrder.size() == paths.size()) {
+            g_settings.imagePaths = std::move(paths);
+            ReloadItems();
+        }
+    }
+}
+
 static controls::Image Thumbnail(HBITMAP handle, int width, int height) {
     controls::Image image;
     image.Width(width);
@@ -2230,11 +2857,14 @@ static Button OverflowButton(const std::wstring& name) {
                                                     L"Actions for " + name);
     return more;
 }
-static void PetList() {
+static void PetList(int changedFolder = -1) {
     auto list = Named<controls::ListView>(L"Pets");
     auto query = Named<controls::TextBox>(L"Search").Text();
     updatingList = true;
-    list.Items().Clear();
+    auto rows = list.Items();
+    unsigned insertAt = 0;
+    if (changedFolder < 0)
+        rows.Clear();
     auto appendItem = [&](int i) {
         auto& pet = g_items[i];
         if (!query.empty() && !StrStrIW(pet.fileName.c_str(), query.c_str()))
@@ -2277,30 +2907,27 @@ static void PetList() {
             };
             if (!current())
                 return;
-            controls::MenuFlyout menu;
+            auto menu =
+                ActionDropdown(controls::Primitives::FlyoutPlacementMode::
+                                   BottomEdgeAlignedLeft);
             auto add = [&](PCWSTR caption, int command, bool enabled = true) {
-                controls::MenuFlyoutItem item;
-                item.Template(managerRoot.Resources()
-                                  .Lookup(winrt::box_value(L"MenuEntryFace"))
-                                  .as<controls::ControlTemplate>());
-                item.UseSystemFocusVisuals(true);
-                item.Text(caption);
-                item.IsEnabled(enabled);
-                item.Click([i, current, command](auto&&, auto&&) {
-                    if (current())
-                        RunImageMenuAction(i, command);
-                });
-                menu.Items().Append(item);
+                AddDropdownAction(
+                    menu, caption,
+                    [i, current, command] {
+                        if (current())
+                            RunImageMenuAction(i, command);
+                    },
+                    enabled);
             };
             const auto& media = g_items[i];
             add(media.hidden ? L"Show" : L"Hide",
                 media.hidden ? kPetMenuShow : kPetMenuHide);
             add(L"Bring to front", kPetMenuBringToFront);
-            menu.Items().Append(controls::MenuFlyoutSeparator{});
+            DropdownDivider(menu);
             add(L"Reset position", kPetMenuResetPos);
-            add(L"Clone", kPetMenuClone, media.folderKey.empty());
+            add(L"Clone", kPetMenuClone, configWritable);
             add(L"Reload image", kPetMenuReload);
-            menu.Items().Append(controls::MenuFlyoutSeparator{});
+            DropdownDivider(menu);
             add(L"Remove from list", kPetMenuDelete,
                 media.folderKey.empty() || configWritable);
             menu.ShowAt(sender.template as<Button>());
@@ -2310,10 +2937,57 @@ static void PetList() {
         if (!pet.folderKey.empty())
             row.Margin({12, 1, 0, 1});
         row.Content(content);
-        list.Items().Append(row);
+        if (changedFolder >= 0)
+            rows.InsertAt(insertAt++, row);
+        else
+            rows.Append(row);
         if (page == Page::Pet && i == g_managerSel)
             list.SelectedItem(row);
     };
+    if (changedFolder >= 0) {
+        // Keep the other realized rows in place so XAML can animate just the
+        // inserted and removed children, including movement of following rows.
+        if (changedFolder < static_cast<int>(libraryFolders.size())) {
+            const auto& folder = libraryFolders[changedFolder];
+            for (unsigned pos = 0; pos < rows.Size(); ++pos) {
+                auto header = rows.GetAt(pos).as<controls::ListViewItem>();
+                if (winrt::unbox_value<int>(header.Tag()) != -1 - changedFolder)
+                    continue;
+                bool expanded = folder.expanded || !query.empty();
+                auto line = header.Content().as<controls::Grid>();
+                line.Children().GetAt(0).as<controls::FontIcon>().Glyph(
+                    expanded ? L"\uE70D" : L"\uE76C");
+                insertAt = pos + 1;
+                auto isChild = [&] {
+                    if (insertAt >= rows.Size())
+                        return false;
+                    int tag = winrt::unbox_value<int>(
+                        rows.GetAt(insertAt).as<controls::ListViewItem>().Tag());
+                    return tag >= 0 && tag < static_cast<int>(g_items.size()) &&
+                           g_items[tag].folderKey == folder.key;
+                };
+                list.SelectedIndex(-1);
+                if (!expanded) {
+                    while (isChild())
+                        rows.RemoveAt(insertAt);
+                } else if (!isChild()) {
+                    for (int i = 0; i < static_cast<int>(g_items.size()); ++i)
+                        if (g_items[i].folderKey == folder.key)
+                            appendItem(i);
+                }
+                // Restore the active media row if it is still visible.
+                if (page == Page::Pet && g_managerSel >= 0)
+                    for (unsigned i = 0; i < rows.Size(); ++i)
+                        if (winrt::unbox_value<int>(rows.GetAt(i).as<controls::ListViewItem>().Tag()) == g_managerSel) {
+                            list.SelectedIndex(static_cast<int>(i));
+                            break;
+                        }
+                break;
+            }
+        }
+        updatingList = false;
+        return;
+    }
     for (int i = 0; i < (int)g_items.size(); ++i)
         if (g_items[i].folderKey.empty())
             appendItem(i);
@@ -2354,19 +3028,15 @@ static void PetList() {
         controls::Grid::SetColumn(caption, 2);
         line.Children().Append(caption);
         Button more = OverflowButton(name);
-        controls::MenuFlyout menu;
-        controls::MenuFlyoutItem remove;
-        remove.Template(managerRoot.Resources()
-                            .Lookup(winrt::box_value(L"MenuEntryFace"))
-                            .as<controls::ControlTemplate>());
-        remove.UseSystemFocusVisuals(true);
-        remove.Text(L"Remove from list");
-        remove.IsEnabled(configWritable);
-        remove.Click([key = folder.key](auto&&, auto&&) {
-            if (RemoveLibraryFolder(key))
-                ReloadItems();
-        });
-        menu.Items().Append(remove);
+        auto menu = ActionDropdown(
+            controls::Primitives::FlyoutPlacementMode::BottomEdgeAlignedLeft);
+        AddDropdownAction(
+            menu, L"Remove from list",
+            [key = folder.key] {
+                if (RemoveLibraryFolder(key))
+                    ReloadItems();
+            },
+            configWritable);
         more.Flyout(menu);
         controls::Grid::SetColumn(more, 3);
         line.Children().Append(more);
@@ -2469,6 +3139,522 @@ static int MonitorRefreshRate(HWND hwnd) {
         return (int)mode.dmDisplayFrequency;
     return 60;
 }
+namespace workshopExport {
+struct Draft {
+    fs::path source, destination;
+    std::vector<BYTE> preview;
+    std::wstring author, description, version = L"1.0", tags, frames;
+    Pack animation;
+    bool details = false;
+};
+
+enum Field {
+    Paste = 100,
+    Browse,
+    Author,
+    Description,
+    Version,
+    Tags,
+    Mode,
+    Width,
+    Height,
+    Frames,
+    Fps
+};
+
+static std::wstring Trim(std::wstring text) {
+    auto first = text.find_first_not_of(L" \r\n\t");
+    if (first == text.npos)
+        return {};
+    return text.substr(first, text.find_last_not_of(L" \r\n\t") - first + 1);
+}
+
+static std::wstring FieldText(HWND dlg, int id) {
+    HWND edit = GetDlgItem(dlg, id);
+    std::wstring text(GetWindowTextLengthW(edit) + 1, L'\0');
+    text.resize(
+        GetWindowTextW(edit, text.data(), static_cast<int>(text.size())));
+    return Trim(text);
+}
+
+static std::vector<std::wstring> Split(const std::wstring& text,
+                                       wchar_t separator) {
+    std::wistringstream input(text);
+    std::vector<std::wstring> result;
+    std::wstring part;
+    while (std::getline(input, part, separator))
+        if (auto value = Trim(part); !value.empty())
+            result.push_back(value);
+    return result;
+}
+
+static std::vector<BYTE> ReadPreview(const fs::path& path) {
+    if (_wcsicmp(path.extension().c_str(), L".png"))
+        return {};
+    std::ifstream in(path, std::ios::binary | std::ios::ate);
+    auto size = in.tellg();
+    if (size <= 0 || size > 256 * 1024 * 1024)
+        return {};
+    std::vector<BYTE> bytes(static_cast<size_t>(size));
+    in.seekg(0);
+    if (!in.read(reinterpret_cast<char*>(bytes.data()), size))
+        return {};
+    return bytes;
+}
+
+static bool IsPng(const std::vector<BYTE>& bytes) {
+    constexpr BYTE signature[]{137, 80, 78, 71, 13, 10, 26, 10};
+    if (bytes.size() < sizeof(signature) ||
+        memcmp(bytes.data(), signature, sizeof(signature)))
+        return false;
+    winrt::com_ptr<IStream> stream;
+    stream.attach(
+        SHCreateMemStream(bytes.data(), static_cast<UINT>(bytes.size())));
+    if (!stream)
+        return false;
+    Gdiplus::Bitmap bitmap(stream.get());
+    GUID format{};
+    return bitmap.GetRawFormat(&format) == Gdiplus::Ok &&
+           IsEqualGUID(format, Gdiplus::ImageFormatPNG) && bitmap.GetWidth() &&
+           bitmap.GetHeight();
+}
+
+static fs::path DroppedPng(HDROP drop) {
+    if (DragQueryFileW(drop, 0xFFFFFFFF, nullptr, 0) != 1)
+        return {};
+    std::wstring path(DragQueryFileW(drop, 0, nullptr, 0) + 1, L'\0');
+    path.resize(
+        DragQueryFileW(drop, 0, path.data(), static_cast<UINT>(path.size())));
+    return path;
+}
+
+static std::vector<BYTE> ClipboardPng(HWND dlg) {
+    std::vector<BYTE> bytes;
+    fs::path path;
+    if (!OpenClipboard(dlg))
+        return bytes;
+    struct Close {
+        ~Close() { CloseClipboard(); }
+    } close;
+    for (auto format : {L"PNG", L"image/png"}) {
+        HANDLE data = GetClipboardData(RegisterClipboardFormatW(format));
+        SIZE_T size = data ? GlobalSize(data) : 0;
+        if (size && size <= 256 * 1024 * 1024) {
+            bytes.resize(size);
+            if (auto p = GlobalLock(data)) {
+                memcpy(bytes.data(), p, size);
+                GlobalUnlock(data);
+                return bytes;
+            }
+            bytes.clear();
+        }
+    }
+    if (auto drop = GetClipboardData(CF_HDROP))
+        path = DroppedPng(static_cast<HDROP>(drop));
+    return path.empty() ? bytes : ReadPreview(path);
+}
+
+static void AcceptPreview(HWND dlg, Draft& draft, std::vector<BYTE> bytes) {
+    if (!IsPng(bytes)) {
+        MessageBoxW(dlg,
+                    L"Choose a PNG file or paste an image copied as PNG. "
+                    L"If your image uses another format, convert it to PNG and "
+                    L"try again.",
+                    L"PNG preview required", MB_ICONWARNING);
+        return;
+    }
+    draft.preview = std::move(bytes);
+    EndDialog(dlg, IDOK);
+}
+
+static int Number(HWND dlg, int id, int maximum, int fallback = 0) {
+    auto text = FieldText(dlg, id);
+    if (text.empty() && fallback)
+        return fallback;
+    if (text.empty() || text.find_first_not_of(L"0123456789") != text.npos)
+        throw std::wstring(L"Enter a whole number from 1 to ") +
+            std::to_wstring(maximum) + L".";
+    long n = wcstol(text.c_str(), nullptr, 10);
+    if (n < 1 || n > maximum)
+        throw std::wstring(L"Enter a whole number from 1 to ") +
+            std::to_wstring(maximum) + L".";
+    return static_cast<int>(n);
+}
+
+static void Save(HWND dlg, Draft& draft) {
+    auto tags = Split(FieldText(dlg, Tags), L',');
+    auto author = FieldText(dlg, Author),
+         description = FieldText(dlg, Description),
+         version = FieldText(dlg, Version);
+    if (author.empty() || description.empty() || version.empty() ||
+        tags.empty())
+        throw std::wstring(
+            L"Enter an author, description, version, and at least one tag.");
+    if (fs::exists(draft.destination))
+        throw std::wstring(
+            L"This export folder already exists. Move or rename it and try "
+            L"again.\n\n") +
+            draft.destination.wstring();
+
+    json::JsonObject meta;
+    auto put = [&](PCWSTR key, const std::wstring& value) {
+        meta.SetNamedValue(key, json::JsonValue::CreateStringValue(value));
+    };
+    auto putNumber = [&](PCWSTR key, int value) {
+        meta.SetNamedValue(key, json::JsonValue::CreateNumberValue(value));
+    };
+    put(L"name", draft.source.stem().wstring());
+    put(L"author", author);
+    put(L"description", description);
+    put(L"version", version);
+    put(L"preview", L"preview.png");
+    json::JsonArray tagList;
+    for (auto& tag : tags)
+        tagList.Append(json::JsonValue::CreateStringValue(tag));
+    meta.SetNamedValue(L"tags", tagList);
+
+    auto filename = draft.source.filename().wstring();
+    if (!SafeWorkshopName(filename) ||
+        !_wcsicmp(filename.c_str(), L"preview.png"))
+        filename = L"media" + draft.source.extension().wstring();
+    put(L"file", filename);
+    int mode =
+        static_cast<int>(SendDlgItemMessageW(dlg, Mode, CB_GETCURSEL, 0, 0));
+    std::vector<std::pair<fs::path, std::wstring>> assets{
+        {draft.source, filename}};
+    if (mode && _wcsicmp(draft.source.extension().c_str(), L".png"))
+        throw std::wstring(
+            L"Select a PNG item to export a sprite sheet or PNG sequence.");
+    if (mode)
+        putNumber(L"fps", Number(dlg, Fps, 60, 12));
+    if (mode == 1) {
+        putNumber(L"frameWidth", Number(dlg, Width, 512));
+        putNumber(L"frameHeight", Number(dlg, Height, 512));
+    } else if (mode == 2) {
+        auto names = Split(FieldText(dlg, Frames), L';');
+        if (names.empty() || names.size() > 300 ||
+            names.front() != draft.source.filename().wstring())
+            throw std::wstring(
+                L"List 1–300 PNG filenames separated by semicolons. Start with "
+                L"the selected item's exact filename.");
+        json::JsonArray sequence;
+        assets.clear();
+        for (const auto& name : names) {
+            fs::path path(name);
+            if (path.filename() != path || path.has_root_path() ||
+                name.find_first_of(L"/\\:") != name.npos ||
+                _wcsicmp(path.extension().c_str(), L".png"))
+                throw std::wstring(
+                    L"Each frame must be a PNG filename beside the selected "
+                    L"item.");
+            auto out = L"frame-" + std::to_wstring(assets.size() + 1) + L".png";
+            assets.emplace_back(draft.source.parent_path() / path, out);
+            sequence.Append(json::JsonValue::CreateStringValue(out));
+        }
+        put(L"file", assets.front().second);
+        meta.SetNamedValue(L"frames", sequence);
+    }
+    auto pack = ParsePack(meta);
+    fs::create_directories(draft.destination.parent_path());
+    GUID guid{};
+    wchar_t suffix[40]{};
+    if (FAILED(CoCreateGuid(&guid)) || !StringFromGUID2(guid, suffix, 40))
+        throw std::wstring(L"Could not create an export folder.");
+    auto staging = draft.destination.parent_path() / suffix;
+    if (!fs::create_directory(staging))
+        throw std::wstring(L"Could not create an export folder.");
+    try {
+        uintmax_t total = 0;
+        for (auto& [source, out] : assets) {
+            auto size = fs::file_size(source);
+            if (size > 128u * 1024 * 1024 ||
+                (total += size) > 256u * 1024 * 1024)
+                throw std::wstring(
+                    L"The media exceeds the Workshop download limit.");
+            fs::copy_file(source, staging / out);
+        }
+        if (mode) {
+            PetItem test;
+            test.sourcePath = (staging / pack.file).wstring();
+            size_t decoded = 0;
+            if (!LoadPackFrames(test, pack, staging.wstring(), decoded))
+                throw std::wstring(
+                    L"Check tile dimensions or frame sizes. Frames must match, "
+                    L"fit within 512 × 512, and meet the Workshop frame and "
+                    L"memory limits.");
+            for (auto* frame : test.decodedFrames)
+                delete frame;
+        }
+        std::ofstream preview(staging / L"preview.png", std::ios::binary);
+        preview.write(reinterpret_cast<const char*>(draft.preview.data()),
+                      draft.preview.size());
+        preview.close();
+        if (!preview || !WriteSmallFile((staging / L"meta.json").wstring(),
+                                        winrt::to_string(meta.Stringify())))
+            throw std::wstring(L"Could not write the preview or metadata.");
+        if (!MoveFileW(staging.c_str(), draft.destination.c_str()))
+            throw std::wstring(
+                L"Could not publish the export folder. Check its location and "
+                L"permissions.");
+    } catch (...) {
+        std::error_code ec;
+        fs::remove_all(staging, ec);
+        throw;
+    }
+}
+
+static HWND Control(HWND dlg,
+                    PCWSTR cls,
+                    PCWSTR text,
+                    int id,
+                    int x,
+                    int y,
+                    int w,
+                    int h,
+                    DWORD style) {
+    RECT r{x, y, x + w, y + h};
+    MapDialogRect(dlg, &r);
+    HWND child =
+        CreateWindowExW(!wcscmp(cls, L"EDIT") ? WS_EX_CLIENTEDGE : 0, cls, text,
+                        WS_CHILD | WS_VISIBLE | style, r.left, r.top,
+                        r.right - r.left, r.bottom - r.top, dlg,
+                        reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)),
+                        GetModuleHandleW(nullptr), nullptr);
+    if (!child)
+        throw std::wstring(L"Could not create the export controls.");
+    SendMessageW(child, WM_SETFONT, SendMessageW(dlg, WM_GETFONT, 0, 0), TRUE);
+    return child;
+}
+
+static LRESULT CALLBACK
+PasteKey(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR id, DWORD_PTR) {
+    if (msg == WM_KEYDOWN && wp == 'V' && GetKeyState(VK_CONTROL) < 0) {
+        PostMessageW(GetParent(hwnd), WM_COMMAND, Paste, 0);
+        return 0;
+    }
+    if (msg == WM_NCDESTROY)
+        RemoveWindowSubclass(hwnd, PasteKey, id);
+    return DefSubclassProc(hwnd, msg, wp, lp);
+}
+
+static void UpdateFields(HWND dlg) {
+    auto mode = SendDlgItemMessageW(dlg, Mode, CB_GETCURSEL, 0, 0);
+    EnableWindow(GetDlgItem(dlg, Width), mode == 1);
+    EnableWindow(GetDlgItem(dlg, Height), mode == 1);
+    EnableWindow(GetDlgItem(dlg, Frames), mode == 2);
+    EnableWindow(GetDlgItem(dlg, Fps), mode != 0);
+}
+
+static void BuildDialog(HWND dlg, Draft& draft) {
+    SetWindowTextW(dlg, draft.details ? L"Workshop pack details"
+                                      : L"Choose a Workshop preview");
+    auto label = [&](PCWSTR text, int y, int w, int h) {
+        Control(dlg, L"STATIC", text, -1, 10, y, w, h, 0);
+    };
+    auto button = [&](PCWSTR text, int id, int x, int y, int w) {
+        auto hwnd = Control(
+            dlg, L"BUTTON", text, id, x, y, w, 16,
+            WS_TABSTOP | (id == IDOK ? BS_DEFPUSHBUTTON : BS_PUSHBUTTON));
+        if (!draft.details)
+            SetWindowSubclass(hwnd, PasteKey, 1, 0);
+    };
+    if (!draft.details) {
+        DragAcceptFiles(dlg, TRUE);
+        label(
+            L"Drop one PNG file here, paste a PNG from the clipboard (Ctrl+V), "
+            L"or browse for a file.",
+            12, 277, 33);
+        button(L"Paste PNG", Paste, 10, 52, 82);
+        button(L"Browse…", Browse, 98, 52, 82);
+        button(L"Cancel", IDCANCEL, 204, 52, 78);
+        return;
+    }
+    auto field = [&](PCWSTR title, int id, int y, std::wstring value) {
+        label(title, y + 2, 102, 14);
+        Control(dlg, L"EDIT", value.c_str(), id, 116, y, 200, 14,
+                ES_AUTOHSCROLL | WS_TABSTOP);
+    };
+    field(L"Author *", Author, 10, draft.author);
+    field(L"Description *", Description, 29, draft.description);
+    field(L"Version *", Version, 48, draft.version);
+    field(L"Tags * (comma-separated)", Tags, 67, draft.tags);
+    label(L"Animation format", 89, 100, 14);
+    auto combo = Control(dlg, L"COMBOBOX", L"", Mode, 116, 86, 200, 70,
+                         WS_TABSTOP | CBS_DROPDOWNLIST);
+    for (auto title : {L"Original media", L"PNG sprite sheet", L"PNG sequence"})
+        SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(title));
+    SendMessageW(combo, CB_SETCURSEL,
+                 draft.animation.width             ? 1
+                 : !draft.animation.frames.empty() ? 2
+                                                   : 0,
+                 0);
+    auto dimension = [](int n) {
+        return n ? std::to_wstring(n) : std::wstring{};
+    };
+    field(L"Tile width (px)", Width, 106, dimension(draft.animation.width));
+    field(L"Tile height (px)", Height, 125, dimension(draft.animation.height));
+    field(L"Frames (in order)", Frames, 144, draft.frames);
+    field(L"Frames per second", Fps, 163, std::to_wstring(draft.animation.fps));
+    label(
+        L"For a sequence, enter PNG filenames from the same folder, separated "
+        L"by semicolons. Start with the selected image.",
+        185, 306, 27);
+    button(L"Export", IDOK, 149, 215, 80);
+    button(L"Cancel", IDCANCEL, 236, 215, 80);
+    UpdateFields(dlg);
+}
+
+static INT_PTR CALLBACK Procedure(HWND dlg, UINT msg, WPARAM wp, LPARAM lp) {
+    auto* draft = reinterpret_cast<Draft*>(GetWindowLongPtrW(dlg, DWLP_USER));
+    try {
+        if (msg == WM_INITDIALOG) {
+            draft = reinterpret_cast<Draft*>(lp);
+            SetWindowLongPtrW(dlg, DWLP_USER, lp);
+            BuildDialog(dlg, *draft);
+            return TRUE;
+        }
+        if (!draft)
+            return FALSE;
+        if (!draft->details && msg == WM_DROPFILES) {
+            auto drop = reinterpret_cast<HDROP>(wp);
+            struct Finish {
+                HDROP drop;
+                ~Finish() { DragFinish(drop); }
+            } finish{drop};
+            AcceptPreview(dlg, *draft, ReadPreview(DroppedPng(drop)));
+            return TRUE;
+        }
+        if (msg == WM_CLOSE || (msg == WM_COMMAND && LOWORD(wp) == IDCANCEL)) {
+            EndDialog(dlg, IDCANCEL);
+            return TRUE;
+        }
+        if (msg != WM_COMMAND)
+            return FALSE;
+        if (!draft->details && LOWORD(wp) == Paste)
+            AcceptPreview(dlg, *draft, ClipboardPng(dlg));
+        else if (!draft->details && LOWORD(wp) == Browse) {
+            wchar_t path[32768]{};
+            OPENFILENAMEW pick{sizeof(pick)};
+            pick.hwndOwner = dlg;
+            pick.lpstrFilter = L"PNG image\0*.png\0All files\0*.*\0";
+            pick.lpstrFile = path;
+            pick.nMaxFile = std::size(path);
+            pick.Flags = OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
+            if (GetOpenFileNameW(&pick))
+                AcceptPreview(dlg, *draft, ReadPreview(path));
+        } else if (draft->details && LOWORD(wp) == Mode &&
+                   HIWORD(wp) == CBN_SELCHANGE)
+            UpdateFields(dlg);
+        else if (draft->details && LOWORD(wp) == IDOK) {
+            Save(dlg, *draft);
+            EndDialog(dlg, IDOK);
+        } else
+            return FALSE;
+        return TRUE;
+    } catch (const std::wstring& reason) {
+        MessageBoxW(dlg, reason.c_str(), L"Workshop export", MB_ICONWARNING);
+    } catch (...) {
+        MessageBoxW(dlg,
+                    L"Could not complete this step. Check that all named files "
+                    L"exist and that the output folder is writable.",
+                    L"Workshop export", MB_ICONWARNING);
+    }
+    if (msg == WM_INITDIALOG)
+        EndDialog(dlg, IDCANCEL);
+    return TRUE;
+}
+
+static bool ShowStep(Draft& draft) {
+    // Variable-length fields follow the DLGTEMPLATE header on WORD boundaries.
+    alignas(DWORD) WORD words[96]{};
+    auto* dialog = reinterpret_cast<DLGTEMPLATE*>(words);
+    dialog->style = WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME |
+                    DS_CENTER | DS_SETFONT;
+    dialog->cx = draft.details ? 326 : 292;
+    dialog->cy = draft.details ? 241 : 80;
+    WORD* font = reinterpret_cast<WORD*>(dialog + 1) + 3;
+    *font++ = 9;
+    memcpy(font, L"Segoe UI", sizeof(L"Segoe UI"));
+    auto result = DialogBoxIndirectParamW(GetModuleHandleW(nullptr), dialog,
+                                          g_hManagerWnd, Procedure,
+                                          reinterpret_cast<LPARAM>(&draft));
+    if (result == -1)
+        throw std::wstring(L"Could not open the export dialog.");
+    return result == IDOK;
+}
+
+static void Run() {
+    auto* item = SelectedPet();
+    if (!item)
+        return;
+    try {
+        Draft draft;
+        draft.source = item->sourcePath;
+        if (!fs::is_regular_file(draft.source) ||
+            !HasSupportedExt(draft.source.wstring()))
+            throw std::wstring(L"The selected media file is unavailable.");
+        PWSTR local = nullptr;
+        winrt::check_hresult(
+            SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &local));
+        fs::path root(local);
+        CoTaskMemFree(local);
+        draft.destination = root / L"AnimaWindhawkEngine" / L"Export Packs" /
+                            draft.source.stem() / L"pets";
+        wchar_t user[257]{};
+        DWORD count = std::size(user);
+        if (GetUserNameW(user, &count))
+            draft.author = user;
+        if (item->sourcePath != item->filePath) {
+            auto metadata = ReadSmallFile(
+                (draft.source.parent_path() / L"package.json").wstring());
+            if (!metadata.empty()) {
+                auto meta =
+                    json::JsonObject::Parse(winrt::to_hstring(metadata));
+                draft.animation = ParsePack(meta);
+                draft.description =
+                    meta.GetNamedString(L"description", L"").c_str();
+                draft.version = meta.GetNamedString(L"version", L"1.0").c_str();
+                if (meta.HasKey(L"tags"))
+                    for (auto tag : meta.GetNamedArray(L"tags")) {
+                        if (!draft.tags.empty())
+                            draft.tags += L", ";
+                        draft.tags += tag.GetString().c_str();
+                    }
+            }
+        }
+        for (const auto& name : draft.animation.frames) {
+            if (!draft.frames.empty())
+                draft.frames += L"; ";
+            draft.frames += name;
+        }
+        if (draft.frames.empty())
+            draft.frames = draft.source.filename().wstring();
+        if (!ShowStep(draft))
+            return;
+        draft.details = true;
+        if (!ShowStep(draft))
+            return;
+        auto message = L"Workshop pack exported to:\n" +
+                       draft.destination.wstring() +
+                       L"\n\n1. Fork tubeo5866/anima-windhawk-engine on GitHub."
+                       L"\n2. Choose a unique folder name, such as "
+                       L"example-pet-name. Upload the contents of this export "
+                       L"to workshop/pets/example-pet-name/ in your fork."
+                       L"\n3. Add that same folder name to workshop/index.json."
+                       L"\n4. Open a pull request to the original repository.";
+        MessageBoxW(g_hManagerWnd, message.c_str(), L"Workshop export complete",
+                    MB_ICONINFORMATION);
+    } catch (const std::wstring& reason) {
+        MessageBoxW(g_hManagerWnd, reason.c_str(), L"Workshop export",
+                    MB_ICONWARNING);
+    } catch (...) {
+        MessageBoxW(g_hManagerWnd,
+                    L"Could not prepare the selected item for export.",
+                    L"Workshop export", MB_ICONWARNING);
+    }
+}
+}  // namespace workshopExport
+
 static void PetPage(StackPanel body) {
     auto* pet = SelectedPet();
     if (!pet) {
@@ -2484,13 +3670,18 @@ static void PetPage(StackPanel body) {
             if (!item)
                 return;
             item->*field = value;
+            if (field == &PetItem::reverse || field == &PetItem::pingPong ||
+                field == &PetItem::paused) {
+                item->completed = 0;
+                item->returning = false;
+            }
+            RenderItem(*item);
             SyncImageState(*item, false);
             ApplyTopmost(*item);
             ApplyClickThrough(*item);
             if (item->hwnd)
-                ShowWindow(item->hwnd, item->enabled && !item->hidden
-                                           ? SW_SHOWNOACTIVATE
-                                           : SW_HIDE);
+                ShowWindow(item->hwnd,
+                           VisibleItem(*item) ? SW_SHOWNOACTIVATE : SW_HIDE);
         });
     };
     flag(L"Enabled", &PetItem::enabled);
@@ -2499,6 +3690,18 @@ static void PetPage(StackPanel body) {
     flag(L"Lock position", &PetItem::lockPosition);
     if (pet->frameCount > 1)
         flag(L"Pause animation", &PetItem::paused);
+    flag(L"Follow the active virtual desktop", &PetItem::followDesktop);
+    flag(L"Fade near the pointer", &PetItem::hoverFade);
+    if (!_wcsicmp(PathFindExtensionW(pet->sourcePath.c_str()), L".mp4"))
+        flag(L"Mute audio", &PetItem::muted);
+    flag(L"Flip horizontally", &PetItem::flipX);
+    flag(L"Flip vertically", &PetItem::flipY);
+    flag(L"Grayscale", &PetItem::grayscale);
+    flag(L"Drop shadow", &PetItem::shadow);
+    if (pet->frameCount > 1) {
+        flag(L"Reverse playback", &PetItem::reverse);
+        flag(L"Ping-pong playback", &PetItem::pingPong);
+    }
     auto appearance = Group(body, L"Appearance");
     auto slider = [&](const wchar_t* name, int low, int high,
                       int PetItem::* field) {
@@ -2547,6 +3750,8 @@ static void PetPage(StackPanel body) {
                     return;
                 if (auto* item = SelectedPet()) {
                     item->*field = (int)args.NewValue();
+                    if (field == &PetItem::loops)
+                        item->completed = 0;
                     SyncImageState(*item, false);
                     auto text = number.Text();
                     wchar_t* end = nullptr;
@@ -2574,8 +3779,38 @@ static void PetPage(StackPanel body) {
     slider(L"Scale (%)", 1, 500, &PetItem::scalePercent);
     slider(L"Rotation (°)", 0, 359, &PetItem::rotationDegrees);
     slider(L"Opacity (%)", 10, 100, &PetItem::opacityPercent);
+    slider(L"Brightness (%)", 0, 200, &PetItem::brightness);
+    if (!_wcsicmp(PathFindExtensionW(pet->sourcePath.c_str()), L".mp4"))
+        slider(L"Volume (%)", 0, 100, &PetItem::volume);
+    slider(L"Warm tint (%)", 0, 100, &PetItem::tint);
+    slider(L"Hue (°)", 0, 359, &PetItem::hue);
+    if (pet->frameCount > 1) {
+        appearance = Group(body, L"Playback");
+        slider(L"Speed (%)", 10, 400, &PetItem::speed);
+        slider(L"Loop count (0 = endless)", 0, 100, &PetItem::loops);
+        Action(appearance, L"Restart playback", [] {
+            auto* item = SelectedPet();
+            if (!item || item->frameCount <= 1)
+                return;
+            item->returning = false;
+            item->completed = 0;
+            item->paused = false;
+            item->currentFrame = item->reverse ? item->frameCount - 1 : 0;
+            if (item->decodedFrames.empty())
+                item->image->SelectActiveFrame(&Gdiplus::FrameDimensionTime,
+                                               item->currentFrame);
+            else
+                item->image = item->decodedFrames[item->currentFrame];
+            item->lastFrameTick = GetTickCount64();
+            RenderItem(*item);
+            SyncImageState(*item, false);
+            RenderPage();
+        });
+    }
     if (pet->isGif)
         slider(L"FPS Limit", 5, pet->monitorHz, &PetItem::fpsLimit);
+    auto publishing = Group(body, L"Workshop");
+    Action(publishing, L"Export to Workshop…", workshopExport::Run);
 }
 static void ImportFolder() {
     BROWSEINFOW info{};
@@ -2595,7 +3830,10 @@ static void ImportFolder() {
 }
 static void WorkshopCards(StackPanel cards) {
     cards.Children().Clear();
-    if (g_workshopFetching || !g_workshopError.empty()) {
+    if (!g_workshopError.empty() && !g_workshopItems.empty())
+        cards.Children().Append(Label(g_workshopError));
+    if (g_workshopFetching ||
+        (!g_workshopError.empty() && g_workshopItems.empty())) {
         cards.Children().Append(
             Label(g_workshopFetching ? L"Loading workshop…" : g_workshopError));
         return;
@@ -2609,7 +3847,7 @@ static void WorkshopCards(StackPanel cards) {
             ? 1
             : (g_workshopView == WorkshopView::TwoCol
                    ? 2
-                   : std::max(2, (int)(managerRoot.ActualWidth() - 280) / 210));
+                   : std::max(2, (int)(managerRoot.ActualWidth() - 280) / 315));
     int slot = 0;
     for (int idx : matches) {
         if (!slot) {
@@ -2643,27 +3881,65 @@ static void WorkshopCards(StackPanel cards) {
         }
         if (!tags.empty())
             card.Children().Append(Label(tags, 12));
-        auto install = Action(card,
-                              item.installing  ? L"Installing…"
-                              : item.installed ? L"Reinstall"
-                                               : L"Install",
-                              [idx] {
-                                  Workshop_StartInstall(idx);
-                                  RenderPage();
-                              });
+        StackPanel actions;
+        actions.Orientation(controls::Orientation::Horizontal);
+        actions.Spacing(4);
+        controls::ScrollViewer actionScroll;
+        actionScroll.HorizontalScrollMode(controls::ScrollMode::Enabled);
+        actionScroll.HorizontalScrollBarVisibility(
+            controls::ScrollBarVisibility::Auto);
+        actionScroll.VerticalScrollBarVisibility(
+            controls::ScrollBarVisibility::Disabled);
+        actionScroll.Content(actions);
+        card.Children().Append(actionScroll);
+        bool favorite = Number(PackKey(item.slug, L"Favorite"), 0) != 0;
+        Action(actions, favorite ? L"Unfavorite" : L"Favorite",
+               [idx, favorite] {
+                   PutNumber(PackKey(g_workshopItems[idx].slug, L"Favorite"),
+                             !favorite);
+                   RenderPage();
+               });
+        auto install =
+            Action(actions,
+                   item.installing ? L"Installing…"
+                   : item.installed && item.version != item.installedVersion
+                       ? L"Update"
+                   : item.installed ? L"Reinstall"
+                                    : L"Install",
+                   [idx] {
+                       Workshop_StartInstall(idx);
+                       RenderPage();
+                   });
         install.IsEnabled(!item.installing);
         if (item.installed)
-            Action(card, L"Uninstall", [idx] {
+            Action(actions, L"Uninstall", [idx] {
                 Workshop_Uninstall(idx);
                 RenderPage();
             }).IsEnabled(!item.installing);
     }
 }
+static void AddSearchIcon(controls::Grid host, controls::TextBox search) {
+    search.Padding({34, 4, 10, 4});
+    controls::FontIcon icon;
+    icon.FontFamily(
+        xaml::Media::FontFamily(L"Segoe Fluent Icons, Segoe MDL2 Assets"));
+    icon.Glyph(L"\uE721");
+    icon.FontSize(14);
+    icon.Opacity(0.75);
+    icon.Margin({10, 0, 0, 0});
+    icon.HorizontalAlignment(xaml::HorizontalAlignment::Left);
+    icon.VerticalAlignment(xaml::VerticalAlignment::Center);
+    icon.IsHitTestVisible(false);
+    xaml::Automation::AutomationProperties::SetAccessibilityView(
+        icon, xaml::Automation::Peers::AccessibilityView::Raw);
+    host.Children().Append(icon);
+}
+
 static void WorkshopPage(StackPanel body) {
     if (!g_workshopFetched && !g_workshopFetching)
         Workshop_StartFetch();
     controls::TextBox search;
-    search.PlaceholderText(L"Search names, authors or tags");
+    search.PlaceholderText(L"Search names, @authors or #tags");
     search.Text(g_workshopFilter);
     auto tools = Group(body, L"Browse");
     auto toolbar = StackPanel();
@@ -2674,6 +3950,7 @@ static void WorkshopPage(StackPanel body) {
     search.HorizontalAlignment(xaml::HorizontalAlignment::Stretch);
     auto searchRow = FieldRow(tools);
     searchRow.Children().Append(search);
+    AddSearchIcon(searchRow, search);
     controls::Grid::SetColumn(toolbar, 1);
     searchRow.Children().Append(toolbar);
     StackPanel cards;
@@ -2685,6 +3962,23 @@ static void WorkshopPage(StackPanel body) {
             c = (wchar_t)towlower(c);
         WorkshopCards(cards);
     });
+    Toggle(tools, L"Favorites only", favoritesOnly, [cards](bool value) {
+        favoritesOnly = value;
+        WorkshopCards(cards);
+    });
+    std::set<std::wstring> unique;
+    for (const auto& item : g_workshopItems)
+        unique.insert(item.tags.begin(), item.tags.end());
+    std::vector<std::wstring> tags{L"All tags"};
+    tags.insert(tags.end(), unique.begin(), unique.end());
+    auto found = std::find(tags.begin() + 1, tags.end(), workshopTag);
+    int selected =
+        found == tags.end() ? 0 : static_cast<int>(found - tags.begin());
+    if (!selected)
+        workshopTag.clear();
+    Dropdown(
+        tools, L"Tag", nullptr, tags, selected,
+        [tags](int i) { workshopTag = i ? tags[i] : L""; }, false);
     Choice(tools, L"Layout", {L"Grid", L"List", L"Two columns"},
            (int)g_workshopView, [cards](int index) {
                g_workshopView = (WorkshopView)index;
@@ -2786,7 +4080,443 @@ static void ChooseDecoder() {
     if (SaveText(L"FFmpegPath", file))
         ReloadItems();
 }
+static std::wstring ScenePicker(bool save) {
+    wchar_t path[32768]{};
+    OPENFILENAMEW dialog{sizeof(dialog)};
+    dialog.hwndOwner = g_hManagerWnd;
+    dialog.lpstrFilter = L"Media layout (*.json)\0*.json\0\0";
+    dialog.lpstrDefExt = L"json";
+    dialog.lpstrFile = path;
+    dialog.nMaxFile = std::size(path);
+    dialog.Flags = OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST |
+                   (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+    return (save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog)) ? path
+                                                                          : L"";
+}
+
+// Scenes describe visible media and overrides. Cache and binary media stay
+// local.
+static bool SaveScene(const std::wstring& path) {
+    if (g_items.size() > 1000)
+        return false;
+    json::JsonArray list;
+    for (const auto& item : g_items) {
+        json::JsonObject entry;
+        auto save = [&](PCWSTR key, int value) {
+            entry.SetNamedValue(key, json::JsonValue::CreateNumberValue(value));
+        };
+        entry.SetNamedValue(L"path",
+                            json::JsonValue::CreateStringValue(item.filePath));
+        entry.SetNamedValue(
+            L"id", json::JsonValue::CreateStringValue(item.registryKey));
+        save(L"x", item.posX);
+        save(L"y", item.posY);
+        save(L"hidden", item.hidden);
+        save(L"FollowDesktop", item.followDesktop);
+        save(L"HoverFade", item.hoverFade);
+        save(L"Muted", item.muted);
+        save(L"Volume", item.volume);
+        save(L"FlipHorizontal", item.flipX);
+        save(L"FlipVertical", item.flipY);
+        save(L"Grayscale", item.grayscale);
+        save(L"Shadow", item.shadow);
+        save(L"Tint", item.tint);
+        save(L"Brightness", item.brightness);
+        save(L"Hue", item.hue);
+        save(L"PlaybackSpeed", item.speed);
+        save(L"Reverse", item.reverse);
+        save(L"PingPong", item.pingPong);
+        save(L"LoopCount", item.loops);
+        save(L"Enabled", item.enabled);
+        save(L"AlwaysOnTop", item.alwaysOnTop);
+        save(L"ClickThrough", item.clickThrough);
+        save(L"LockPosition", item.lockPosition);
+        save(L"ScalePercent", item.scalePercent);
+        save(L"OpacityPercent", item.opacityPercent);
+        save(L"RotationDegrees", item.rotationDegrees);
+        save(L"FpsLimit", item.fpsLimit);
+        save(L"Paused", item.paused);
+        list.Append(entry);
+    }
+    json::JsonObject scene;
+    scene.SetNamedValue(L"format", json::JsonValue::CreateStringValue(
+                                       L"AnimaWindhawkEngine.scene.1"));
+    scene.SetNamedValue(L"media", list);
+    return WriteSmallFile(path, winrt::to_string(scene.Stringify()));
+}
+
+static bool LoadScene(const std::wstring& path) {
+    if (!configWritable)
+        return false;
+    try {
+        auto scene =
+            json::JsonObject::Parse(winrt::to_hstring(ReadSmallFile(path)));
+        if (scene.GetNamedString(L"format") != L"AnimaWindhawkEngine.scene.1")
+            return false;
+        auto list = scene.GetNamedArray(L"media");
+        if (list.Size() > 1000)
+            return false;
+        struct Entry {
+            std::wstring path, id;
+            PetItem settings;
+        };
+        std::vector<Entry> entries;
+        for (const auto& value : list) {
+            auto obj = value.GetObject();
+            Entry e;
+            e.path = obj.GetNamedString(L"path").c_str();
+            e.id = obj.GetNamedString(L"id", L"").c_str();
+            if (!fs::path(e.path).is_absolute() ||
+                e.path.starts_with(L"\\\\") || !HasSupportedExt(e.path) ||
+                PathIsUNCW(e.path.c_str()) ||
+                GetFileAttributesW(e.path.c_str()) == INVALID_FILE_ATTRIBUTES)
+                return false;
+            auto& item = e.settings;
+            auto readField = [&](PCWSTR key, auto& field, int low, int high) {
+                auto n = obj.GetNamedNumber(key, static_cast<int>(field));
+                if (!(n >= low && n <= high) || std::floor(n) != n)
+                    throw std::invalid_argument("Invalid scene value");
+                field = static_cast<int>(n);
+            };
+            readField(L"x", item.posX, INT_MIN, INT_MAX);
+            readField(L"y", item.posY, INT_MIN, INT_MAX);
+            readField(L"hidden", item.hidden, 0, 1);
+            readField(L"FollowDesktop", item.followDesktop, 0, 1);
+            readField(L"HoverFade", item.hoverFade, 0, 1);
+            readField(L"Muted", item.muted, 0, 1);
+            readField(L"Volume", item.volume, 0, 100);
+            readField(L"FlipHorizontal", item.flipX, 0, 1);
+            readField(L"FlipVertical", item.flipY, 0, 1);
+            readField(L"Grayscale", item.grayscale, 0, 1);
+            readField(L"Shadow", item.shadow, 0, 1);
+            readField(L"Tint", item.tint, 0, 100);
+            readField(L"Brightness", item.brightness, 0, 200);
+            readField(L"Hue", item.hue, 0, 359);
+            readField(L"PlaybackSpeed", item.speed, 10, 400);
+            readField(L"Reverse", item.reverse, 0, 1);
+            readField(L"PingPong", item.pingPong, 0, 1);
+            readField(L"LoopCount", item.loops, 0, 100);
+            readField(L"Enabled", item.enabled, 0, 1);
+            readField(L"AlwaysOnTop", item.alwaysOnTop, 0, 1);
+            readField(L"ClickThrough", item.clickThrough, 0, 1);
+            readField(L"LockPosition", item.lockPosition, 0, 1);
+            readField(L"ScalePercent", item.scalePercent, 1, 500);
+            readField(L"OpacityPercent", item.opacityPercent, 10, 100);
+            readField(L"RotationDegrees", item.rotationDegrees, 0, 359);
+            readField(L"FpsLimit", item.fpsLimit, 5, INT_MAX);
+            readField(L"Paused", item.paused, 0, 1);
+            entries.push_back(std::move(e));
+        }
+        // Resolve each occurrence separately, including clones with identical
+        // paths.
+        std::vector<bool> used(g_items.size());
+        auto resolve = [&](const Entry& entry) -> int {
+            int fallback = -1;
+            for (size_t i = 0; i < g_items.size(); ++i) {
+                if (used[i] ||
+                    _wcsicmp(g_items[i].filePath.c_str(), entry.path.c_str()))
+                    continue;
+                if (g_items[i].registryKey == entry.id)
+                    return static_cast<int>(i);
+                if (fallback < 0)
+                    fallback = static_cast<int>(i);
+            }
+            return fallback;
+        };
+        auto paths = g_settings.imagePaths;
+        for (const auto& e : entries) {
+            int i = resolve(e);
+            if (i < 0)
+                paths.push_back(e.path);
+            else
+                used[i] = true;
+        }
+        if (paths.size() != g_settings.imagePaths.size()) {
+            SaveImagePaths(paths);
+            if (imageOrder.size() != paths.size())
+                return false;
+            g_settings.imagePaths = std::move(paths);
+            ReloadAll(false);
+        }
+        used.assign(g_items.size(), false);
+        std::vector<int> order;
+        for (const auto& e : entries) {
+            int i = resolve(e);
+            if (i < 0)
+                return false;
+            used[i] = true;
+            order.push_back(i);
+        }
+        for (size_t n = 0; n < entries.size(); ++n) {
+            auto& e = entries[n];
+            auto& live = g_items[order[n]];
+            e.settings.registryKey = live.registryKey;
+            e.settings.isGif = live.isGif;
+            e.settings.frameCount = live.frameCount;
+            SyncImageState(e.settings, false);
+            e.settings.baseWidth = live.baseWidth;
+            e.settings.baseHeight = live.baseHeight;
+            auto pos =
+                RecoverPosition(e.settings, {e.settings.posX, e.settings.posY});
+            live.posX = pos.x;
+            live.posY = pos.y;
+            live.hidden = e.settings.hidden;
+            if (live.hwnd)
+                SetWindowPos(live.hwnd, nullptr, pos.x, pos.y, 0, 0,
+                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            SaveStoredPosition(live.registryKey, pos.x, pos.y);
+        }
+        for (size_t i = 0; i < used.size(); ++i)
+            if (!used[i]) {
+                g_items[i].enabled = false;
+                SyncImageState(g_items[i], false);
+            }
+        ReloadAll(false);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+static void RememberProfile(const std::wstring& path);
+static void PopulateProfiles() {
+    if (!managerRoot)
+        return;
+    auto panel = Named<StackPanel>(L"ProfileLinks");
+    panel.Children().Clear();
+    auto recent = ReadList(Setting(L"RecentProfiles"));
+    for (const auto& time : ReadList(Setting(L"SceneTimes"))) {
+        auto file = ReadText((L"Scene." + time).c_str());
+        if (!file.empty() &&
+            std::none_of(recent.begin(), recent.end(), [&](const auto& p) {
+                return !_wcsicmp(p.c_str(), file.c_str());
+            }))
+            recent.push_back(file);
+    }
+
+    auto styleProfileLink = [](Button button) {
+        button.Style(managerRoot.Resources()
+                         .Lookup(winrt::box_value(L"SidebarGroupButton"))
+                         .as<xaml::Style>());
+        button.Padding({30, 6, 10, 6});
+    };
+    if (recent.empty()) {
+        auto button = Action(panel, L"Open profile…", [] {
+            auto path = ScenePicker(false);
+            if (path.empty())
+                return;
+            if (LoadScene(path))
+                RememberProfile(path);
+            else
+                MessageBoxW(g_hManagerWnd,
+                            L"Could not open the selected layout.", L"Profiles",
+                            MB_ICONWARNING);
+        });
+        styleProfileLink(button);
+    }
+    for (size_t i = 0; i < std::min<size_t>(3, recent.size()); ++i) {
+        auto path = recent[i];
+        auto title = fs::path(path).stem().wstring();
+        auto button = Action(panel, title.c_str(), [path] {
+            if (LoadScene(path))
+                RememberProfile(path);
+            else
+                MessageBoxW(g_hManagerWnd,
+                            L"Could not open this profile. Check the scene and "
+                            L"its media files.",
+                            L"Profiles", MB_ICONWARNING);
+        });
+        styleProfileLink(button);
+        controls::ToolTipService::SetToolTip(
+            button, winrt::box_value(winrt::hstring(path)));
+    }
+}
+static void RememberProfile(const std::wstring& path) {
+    auto recent = ReadList(Setting(L"RecentProfiles"));
+    recent.erase(std::remove_if(recent.begin(), recent.end(),
+                                [&](const auto& p) {
+                                    return !_wcsicmp(p.c_str(), path.c_str());
+                                }),
+                 recent.end());
+    recent.insert(recent.begin(), path);
+    if (recent.size() > 3)
+        recent.resize(3);
+    if (StoreList(Setting(L"RecentProfiles"), recent))
+        PopulateProfiles();
+}
+static void SaveLayoutAs() {
+    auto path = ScenePicker(true);
+    if (path.empty())
+        return;
+    if (SaveScene(path))
+        RememberProfile(path);
+    else
+        MessageBoxW(g_hManagerWnd, L"Could not save the layout.", L"Layouts",
+                    MB_ICONWARNING);
+}
+
+static void ManageLayoutFile(bool remove) {
+    auto source = ScenePicker(false);
+    if (source.empty())
+        return;
+    auto bytes = ReadSmallFile(source);
+    try {
+        auto scene = json::JsonObject::Parse(winrt::to_hstring(bytes));
+        if (scene.GetNamedString(L"format") != L"AnimaWindhawkEngine.scene.1")
+            throw std::invalid_argument("layout format");
+        scene.GetNamedArray(L"media");
+    } catch (...) {
+        MessageBoxW(g_hManagerWnd,
+                    L"Select an AnimaWindhawkEngine layout JSON file.",
+                    L"Layouts", MB_ICONWARNING);
+        return;
+    }
+    if (!remove) {
+        auto dest = ScenePicker(true);
+        if (dest.empty() || !_wcsicmp(source.c_str(), dest.c_str()))
+            return;
+        if (WriteSmallFile(dest, bytes))
+            RememberProfile(dest);
+        else
+            MessageBoxW(g_hManagerWnd, L"Could not copy the layout.",
+                        L"Layouts", MB_ICONWARNING);
+        return;
+    }
+    auto prompt = L"Delete this saved layout file?\n\n" + source;
+    if (MessageBoxW(g_hManagerWnd, prompt.c_str(), L"Delete layout",
+                    MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES)
+        return;
+    if (!DeleteFileW(source.c_str())) {
+        MessageBoxW(g_hManagerWnd, L"Could not delete the layout.", L"Layouts",
+                    MB_ICONWARNING);
+        return;
+    }
+    auto recent = ReadList(Setting(L"RecentProfiles"));
+    std::erase_if(recent, [&](const auto& p) {
+        return !_wcsicmp(p.c_str(), source.c_str());
+    });
+    StoreList(Setting(L"RecentProfiles"), recent);
+    auto slots = ReadList(Setting(L"SceneTimes"));
+    std::erase_if(slots, [&](const auto& t) {
+        auto key = L"Scene." + t;
+        if (_wcsicmp(ReadText(key.c_str()).c_str(), source.c_str()))
+            return false;
+        Wh_DeleteValue(Setting(key).c_str());
+        return true;
+    });
+    StoreList(Setting(L"SceneTimes"), slots);
+    PopulateProfiles();
+    RenderPage();
+}
+
+static void SceneControls(StackPanel body) {
+    auto group = Group(body, L"Scenes");
+    auto layoutRow = SettingRow(group, L"Layouts");
+    StackPanel files;
+    files.Orientation(controls::Orientation::Horizontal);
+    files.Spacing(6);
+    controls::Grid::SetColumn(files, 1);
+    layoutRow.Children().Append(files);
+    Action(files, L"Save…", SaveLayoutAs);
+    Action(files, L"Open…", [] {
+        auto path = ScenePicker(false);
+        if (path.empty())
+            return;
+        if (LoadScene(path))
+            RememberProfile(path);
+        else
+            MessageBoxW(g_hManagerWnd,
+                        L"Could not restore this layout. Check that its media "
+                        L"files exist.",
+                        L"Scenes", MB_ICONWARNING);
+    });
+    Button manage;
+    manage.Content(winrt::box_value(L"Manage layouts…"));
+    auto fileMenu = ActionDropdown(
+        controls::Primitives::FlyoutPlacementMode::BottomEdgeAlignedRight);
+    AddDropdownAction(fileMenu, L"Save current layout…", SaveLayoutAs);
+    AddDropdownAction(fileMenu, L"Copy layout…",
+                      [] { ManageLayoutFile(false); });
+    AddDropdownAction(fileMenu, L"Delete layout…",
+                      [] { ManageLayoutFile(true); });
+    manage.Flyout(fileMenu);
+    files.Children().Append(manage);
+    auto row = SettingRow(group, L"Daily scene",
+                          L"Enter a local time (24-hour HH:MM).");
+    StackPanel actions;
+    actions.Orientation(controls::Orientation::Horizontal);
+    actions.Spacing(4);
+    controls::TextBox time;
+    time.Width(76);
+    time.PlaceholderText(L"HH:MM");
+    actions.Children().Append(time);
+    Action(actions, L"Schedule…", [time] {
+        std::wstring t(time.Text());
+        if (t.size() != 5 || t[2] != L':' ||
+            t.find_first_not_of(L"0123456789:") != t.npos ||
+            t.find(L':') != 2 || t.rfind(L':') != 2 || t.substr(0, 2) > L"23" ||
+            t.substr(3) > L"59") {
+            MessageBoxW(g_hManagerWnd, L"Use a time from 00:00 to 23:59.",
+                        L"Scenes", MB_ICONINFORMATION);
+            return;
+        }
+        auto file = ScenePicker(false);
+        if (file.empty())
+            return;
+        auto slots = ReadList(Setting(L"SceneTimes"));
+        if (std::find(slots.begin(), slots.end(), t) == slots.end())
+            slots.push_back(t);
+        if (PutString(Setting((L"Scene." + t).c_str()), file))
+            StoreList(Setting(L"SceneTimes"), slots);
+        PopulateProfiles();
+        RenderPage();
+    });
+    controls::Grid::SetColumn(actions, 1);
+    row.Children().Append(actions);
+    for (auto& t : ReadList(Setting(L"SceneTimes"))) {
+        auto name =
+            fs::path(ReadText((L"Scene." + t).c_str())).stem().wstring();
+        auto line = SettingRow(group, (t + L" · " + name).c_str());
+        Button remove;
+        remove.Content(winrt::box_value(L"Remove"));
+        remove.Click([t](auto&&, auto&&) {
+            auto slots = ReadList(Setting(L"SceneTimes"));
+            slots.erase(std::remove(slots.begin(), slots.end(), t),
+                        slots.end());
+            if (StoreList(Setting(L"SceneTimes"), slots))
+                Wh_DeleteValue(Setting((L"Scene." + t).c_str()).c_str());
+            PopulateProfiles();
+            RenderPage();
+        });
+        controls::Grid::SetColumn(remove, 1);
+        line.Children().Append(remove);
+    }
+}
+
+static void CheckSceneSchedule() {
+    SYSTEMTIME now{};
+    GetLocalTime(&now);
+    static DWORD lastMinute = 0xffffffff;
+    DWORD stamp =
+        (((now.wYear * 13u + now.wMonth) * 32 + now.wDay) * 24 + now.wHour) *
+            60 +
+        now.wMinute;
+    if (stamp == lastMinute)
+        return;
+    lastMinute = stamp;
+    wchar_t slot[8];
+    swprintf_s(slot, L"%02u:%02u", now.wHour, now.wMinute);
+    auto path = ReadText((std::wstring(L"Scene.") + slot).c_str());
+    if (path.empty())
+        return;
+    if (LoadScene(path))
+        RememberProfile(path);
+    else
+        Wh_Log(L"Could not restore scheduled scene: %s", path.c_str());
+}
+
 static void AppPage(StackPanel body) {
+    SceneControls(body);
     auto colors = Group(body, L"Appearance");
     Dropdown(colors, L"Theme", L"Choose how the manager appears.",
              {L"Dark", L"Light", L"System"}, (int)g_managerTheme,
@@ -2801,6 +4531,32 @@ static void AppPage(StackPanel body) {
             g_accentIndex = index;
             SaveNumber(L"Accent", index);
         });
+    auto desktop = Group(body, L"Desktop media");
+    Action(desktop, L"Choose automatic playback behavior…",
+           [] { ShowSavingDialog(); });
+    Toggle(desktop, L"Limit animation to 8 FPS on battery", conservePower,
+           [](bool on) {
+               conservePower = on;
+               SaveNumber(L"ConservePower", on);
+           });
+    Toggle(desktop, L"Pause fully covered media", pauseCovered, [](bool on) {
+        pauseCovered = on;
+        SaveNumber(L"PauseCovered", on);
+    });
+    Toggle(desktop, L"Hide during fullscreen apps and presentations",
+           hideFullscreen, [](bool enabled) {
+               hideFullscreen = enabled;
+               SaveNumber(L"HideFullscreen", enabled);
+               UpdateFullscreen();
+           });
+    Toggle(desktop, L"Snap to monitor work-area edges", snapEdges,
+           [](bool enabled) {
+               snapEdges = enabled;
+               SaveNumber(L"SnapEdges", enabled);
+           });
+    SettingRow(
+        desktop, L"Hide or show all media",
+        panicAvailable ? L"Ctrl + Alt + Shift + H" : L"Shortcut unavailable");
     auto startup = Group(body, L"Startup");
     Toggle(startup, L"Launch this manager at sign-in", ManagerAtSignIn(),
            [](bool on) {
@@ -2818,14 +4574,21 @@ static void AppPage(StackPanel body) {
     });
     auto decoder = Group(body, L"Media decoder");
     auto path = DecoderPath();
-    decoder.Children().Append(
-        Label(path.empty() ? L"Choose FFmpeg for WebP, APNG and MP4." : path));
-    Action(decoder, L"Choose ffmpeg.exe", [] { ChooseDecoder(); });
+    auto decoderRow = SettingRow(
+        decoder,
+        path.empty() ? L"Choose FFmpeg for WebP, APNG and MP4." : path.c_str());
+    StackPanel decoderActions;
+    decoderActions.VerticalAlignment(xaml::VerticalAlignment::Center);
+    controls::Grid::SetColumn(decoderActions, 1);
+    decoderRow.Children().Append(decoderActions);
+    Action(decoderActions, L"Choose ffmpeg.exe", [] { ChooseDecoder(); });
     auto keys = Group(body, L"Manager hotkey");
     auto shortcut =
         g_hotkeyCapturing
             ? std::wstring(L"Press a shortcut, or Escape to cancel.")
             : HotkeyToString(g_hotkeyMods, g_hotkeyVk);
+    if (!hotkeyNotice.empty())
+        shortcut = hotkeyNotice;
     auto shortcutRow = SettingRow(keys, L"Open manager", shortcut.c_str());
     StackPanel shortcuts;
     shortcuts.Orientation(controls::Orientation::Horizontal);
@@ -2834,6 +4597,7 @@ static void AppPage(StackPanel body) {
     shortcutRow.Children().Append(shortcuts);
     Action(shortcuts, L"Set shortcut", [] {
         UnregisterHotKey(g_hCtrlWnd, HOTKEY_OPEN_MANAGER);
+        hotkeyNotice.clear();
         StartKeyCapture();
         g_hotkeyCapturing = g_hKeyHook != nullptr;
         if (!g_hotkeyCapturing)
@@ -2848,7 +4612,25 @@ static void AppPage(StackPanel body) {
         ReapplyHotkey();
         RenderPage();
     });
-    Action(body, L"Replay welcome guide", [] { ShowWelcomeGuide(); });
+    auto footer = FieldRow(body);
+    StackPanel left, right;
+    controls::Grid::SetColumn(right, 1);
+    footer.Children().Append(left);
+    footer.Children().Append(right);
+    Action(left, L"Replay welcome guide", [] { ShowWelcomeGuide(); });
+    Action(right, L"Keyboard shortcuts...", [] {
+        std::wstring help =
+            L"Open manager: " + HotkeyToString(g_hotkeyMods, g_hotkeyVk);
+        help += L"\nHide or show all media: ";
+        help += panicAvailable ? L"Ctrl + Alt + Shift + H" : L"Unavailable";
+        help +=
+            L"\n\nOver desktop media\nCtrl + wheel: resize\nShift + wheel: "
+            L"rotate\nAlt + wheel: change opacity"
+            L"\n\nIn the manager\nTab / Shift + Tab: next / previous "
+            L"control\nEscape: cancel shortcut capture";
+        MessageBoxW(g_hManagerWnd, help.c_str(), L"Keyboard shortcuts",
+                    MB_OK | MB_ICONINFORMATION);
+    });
 }
 static void RenderPage() {
     if (!managerRoot)
@@ -2877,11 +4659,27 @@ static void RenderPage() {
     }
     UpdateNavigation();
     Named<TextBlock>(L"Title").Text(title);
-    Named<TextBlock>(L"Build").Text(std::wstring(L"v") + kModVersion + L" · b." +
-                                    g_windowsBuild);
+    Named<TextBlock>(L"Build").Text(std::wstring(L"v") + kModVersion +
+                                    L" · b." + g_windowsBuild);
 }
-static void Navigate(Page next, bool mediaChanged = false) {
-    bool changed = page != next || mediaChanged;
+static void Navigate(Page next, int mediaIndex = -1) {
+    bool changed =
+        page != next || (mediaIndex >= 0 && mediaIndex != g_managerSel);
+    bool lower = static_cast<int>(next) > static_cast<int>(page);
+    if (mediaIndex >= 0) {
+        if (page == Page::Pet) {
+            lower = mediaIndex > g_managerSel;
+            for (auto item : Named<controls::ListView>(L"Pets").Items()) {
+                auto tag = winrt::unbox_value<int>(
+                    item.as<controls::ListViewItem>().Tag());
+                if (tag == g_managerSel || tag == mediaIndex) {
+                    lower = tag == g_managerSel;
+                    break;
+                }
+            }
+        }
+        g_managerSel = mediaIndex;
+    }
     page = next;
     if (page != Page::Pet)
         Named<controls::ListView>(L"Pets").SelectedIndex(-1);
@@ -2893,12 +4691,16 @@ static void Navigate(Page next, bool mediaChanged = false) {
                          .Lookup(winrt::box_value(L"PageSlide"))
                          .as<Storyboard>();
         slide.Stop();
-        BOOL animate = TRUE;
-        if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animate, 0) &&
-            animate) {
+        if (ManagerAnimationsEnabled()) {
+            auto movement = slide.Children()
+                                .GetAt(0)
+                                .as<xaml::Media::Animation::DoubleAnimation>();
+            movement.From(lower ? 16.0 : -16.0);
             Storyboard::SetTarget(
-                slide.Children().GetAt(0),
+                movement,
                 Named<xaml::Media::TranslateTransform>(L"PageOffset"));
+            Storyboard::SetTarget(slide.Children().GetAt(1),
+                                  Named<controls::Grid>(L"PagePanel"));
             slide.Begin();
         }
     }
@@ -2994,6 +4796,60 @@ static void AttachIsland(HWND hwnd,
     input = source.try_as<IDesktopWindowXamlSourceNative2>();
 }
 
+static constexpr UINT_PTR kGroupTimer = 92;
+struct SidebarMotion {
+    bool profiles{};
+    double progress{}, start{};
+    ULONGLONG since{};
+};
+static SidebarMotion sidebarMotion;
+
+static void StepSidebar(HWND hwnd) {
+    auto& motion = sidebarMotion;
+    double t = motion.since ? std::min(1.0, (GetTickCount64() - motion.since) / 200.0) : 1;
+    double goal = motion.profiles ? 1.0 : 0.0;
+    double f = goal + (motion.start - goal) * std::pow(1.0 - t, 3);
+    motion.progress = f;
+    auto media = Named<controls::Grid>(L"MediaPane");
+    auto links = Named<StackPanel>(L"ProfileLinks");
+    auto group = Named<controls::Grid>(L"LibraryGroup");
+    auto mediaRow = Named<controls::RowDefinition>(L"MediaListRow");
+    auto profilesRow = Named<controls::RowDefinition>(L"ProfilesRow");
+    media.Opacity(1 - f);
+    links.Opacity(f);
+    Named<xaml::Media::RotateTransform>(L"MediaAngle").Angle(90 * (1 - f));
+    Named<xaml::Media::RotateTransform>(L"ProfilesAngle").Angle(90 * f);
+    if (t >= 1) {
+        KillTimer(hwnd, kGroupTimer);
+        motion.since = 0;
+        media.Visibility(motion.profiles ? xaml::Visibility::Collapsed : xaml::Visibility::Visible);
+        links.Visibility(motion.profiles ? xaml::Visibility::Visible : xaml::Visibility::Collapsed);
+        mediaRow.Height({motion.profiles ? 0.0 : 1.0, motion.profiles ? xaml::GridUnitType::Pixel : xaml::GridUnitType::Star});
+        profilesRow.Height({1, xaml::GridUnitType::Auto});
+        return;
+    }
+    double room = std::max(0.0, group.ActualHeight() -
+        Named<Button>(L"MediaHeader").ActualHeight() - Named<Button>(L"ProfilesHeader").ActualHeight());
+    links.Measure({static_cast<float>(group.ActualWidth()), INFINITY});
+    mediaRow.Height({room * (1 - f), xaml::GridUnitType::Pixel});
+    profilesRow.Height({std::min(room, static_cast<double>(links.DesiredSize().Height)) * f, xaml::GridUnitType::Pixel});
+}
+
+static void SelectSidebarGroup(HWND hwnd, bool profiles) {
+    auto& motion = sidebarMotion;
+    if (motion.profiles == profiles)
+        return;
+    motion.profiles = profiles;
+    motion.start = motion.progress;
+    for (auto name : {L"MediaPane", L"ProfileLinks"})
+        Named<xaml::FrameworkElement>(name).Visibility(xaml::Visibility::Visible);
+    Named<controls::Grid>(L"MediaPane").IsHitTestVisible(!profiles);
+    Named<StackPanel>(L"ProfileLinks").IsHitTestVisible(profiles);
+    motion.since = ManagerAnimationsEnabled() && SetTimer(hwnd, kGroupTimer, 16, nullptr)
+                       ? GetTickCount64() : 0;
+    StepSidebar(hwnd);
+}
+
 static void BuildManager(HWND hwnd) {
     managerStartupStage = L"Activate manager manifest";
     ManagerManifestScope manifest;
@@ -3004,8 +4860,29 @@ static void BuildManager(HWND hwnd) {
                       LR"XAML(
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <Grid.Resources>
+    <ResourceDictionary>
+    <ResourceDictionary.ThemeDictionaries>
+      <ResourceDictionary x:Key="Default">
+        <SolidColorBrush x:Key="GroupLabelBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="GroupHoverBrush" Color="#B0B0B0"/>
+      </ResourceDictionary>
+      <ResourceDictionary x:Key="Light">
+        <SolidColorBrush x:Key="GroupLabelBrush" Color="#383838"/>
+        <SolidColorBrush x:Key="GroupHoverBrush" Color="#101010"/>
+      </ResourceDictionary>
+      <ResourceDictionary x:Key="HighContrast">
+        <SolidColorBrush x:Key="GroupLabelBrush" Color="{ThemeResource SystemColorButtonTextColor}"/>
+        <SolidColorBrush x:Key="GroupHoverBrush" Color="{ThemeResource SystemColorHighlightColor}"/>
+      </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
     <Storyboard x:Key="PageSlide">
-      <DoubleAnimation Storyboard.TargetProperty="X" From="14" To="0" Duration="0:0:0.16" FillBehavior="Stop">
+      <DoubleAnimation Storyboard.TargetProperty="Y" From="14" To="0" Duration="0:0:0.16" FillBehavior="Stop">
+        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+      </DoubleAnimation>
+      <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.42" To="1" Duration="0:0:0.16" FillBehavior="Stop"/>
+    </Storyboard>
+    <Storyboard x:Key="TabFade">
+      <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.45" To="1" Duration="0:0:0.18" FillBehavior="Stop">
         <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
       </DoubleAnimation>
     </Storyboard>
@@ -3026,6 +4903,26 @@ static void BuildManager(HWND hwnd) {
         <ContentPresenter x:Name="Caption" Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" Margin="{TemplateBinding Padding}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
       </Grid>
     </ControlTemplate>
+    <Style x:Key="SidebarGroupButton" TargetType="Button">
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="UseSystemFocusVisuals" Value="True"/>
+      <Setter Property="Padding" Value="10,6"/>
+      <Setter Property="MinHeight" Value="32"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Foreground" Value="{ThemeResource GroupLabelBrush}"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+        <Grid Background="Transparent">
+          <VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="CommonStates">
+            <VisualState x:Name="Normal"/>
+            <VisualState x:Name="PointerOver"><VisualState.Setters><Setter Target="Caption.Foreground" Value="{ThemeResource GroupHoverBrush}"/></VisualState.Setters></VisualState>
+            <VisualState x:Name="Pressed"><VisualState.Setters><Setter Target="Caption.Foreground" Value="{ThemeResource GroupHoverBrush}"/></VisualState.Setters></VisualState>
+            <VisualState x:Name="Disabled"><VisualState.Setters><Setter Target="Caption.Opacity" Value="0.45"/></VisualState.Setters></VisualState>
+          </VisualStateGroup></VisualStateManager.VisualStateGroups>
+          <ContentPresenter x:Name="Caption" Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" FontWeight="{TemplateBinding FontWeight}" Margin="{TemplateBinding Padding}" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+        </Grid>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
     <Style x:Key="ManagerButtonStyle" TargetType="Button">
       <Setter Property="Template" Value="{StaticResource ActionFace}"/>
       <Setter Property="UseSystemFocusVisuals" Value="True"/>
@@ -3054,18 +4951,6 @@ static void BuildManager(HWND hwnd) {
       </ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style TargetType="ListViewItem"><Setter Property="CornerRadius" Value="5"/><Setter Property="Margin" Value="0,1"/><Setter Property="Padding" Value="4,2"/></Style>
-    <ControlTemplate x:Key="MenuEntryFace" TargetType="MenuFlyoutItem">
-      <Grid Background="Transparent" MinHeight="32">
-        <VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="CommonStates">
-          <VisualState x:Name="Normal"/>
-          <VisualState x:Name="PointerOver"><VisualState.Setters><Setter Target="EntrySurface.Opacity" Value="0.09"/></VisualState.Setters></VisualState>
-          <VisualState x:Name="Pressed"><VisualState.Setters><Setter Target="EntrySurface.Opacity" Value="0.14"/></VisualState.Setters></VisualState>
-          <VisualState x:Name="Disabled"><VisualState.Setters><Setter Target="EntryLabel.Opacity" Value="0.4"/></VisualState.Setters></VisualState>
-        </VisualStateGroup></VisualStateManager.VisualStateGroups>
-        <Border x:Name="EntrySurface" CornerRadius="5" Margin="3,1" Background="{TemplateBinding Foreground}" Opacity="0"/>
-        <TextBlock x:Name="EntryLabel" Text="{TemplateBinding Text}" Foreground="{TemplateBinding Foreground}" Margin="12,4" VerticalAlignment="Center"/>
-      </Grid>
-    </ControlTemplate>
     <ControlTemplate x:Key="PetRowFace" TargetType="ListViewItem">
       <Grid Background="Transparent" MinHeight="40">
         <VisualStateManager.VisualStateGroups><VisualStateGroup x:Name="CommonStates">
@@ -3083,19 +4968,46 @@ static void BuildManager(HWND hwnd) {
     <ControlTemplate x:Key="PillSwitch" TargetType="ToggleButton">
       <Grid Background="Transparent" Width="44" Height="32">
         <VisualStateManager.VisualStateGroups>
-          <VisualStateGroup x:Name="ChoiceStates"><VisualState x:Name="AnimaOff"/><VisualState x:Name="AnimaOn"><VisualState.Setters>
-            <Setter Target="OnTrack.Opacity" Value="1"/><Setter Target="Knob.HorizontalAlignment" Value="Right"/>
-            <Setter Target="Knob.Background" Value="White"/>
-          </VisualState.Setters></VisualState></VisualStateGroup>
-          <VisualStateGroup x:Name="CommonStates"><VisualState x:Name="Normal"/><VisualState x:Name="PointerOver"><VisualState.Setters>
-            <Setter Target="Knob.Width" Value="14"/><Setter Target="Knob.Height" Value="14"/>
-          </VisualState.Setters></VisualState><VisualState x:Name="Pressed"><VisualState.Setters>
-            <Setter Target="Knob.Width" Value="16"/>
-          </VisualState.Setters></VisualState></VisualStateGroup>
+          <VisualStateGroup x:Name="ChoiceStates">
+            <VisualStateGroup.Transitions>
+              <VisualTransition GeneratedDuration="0:0:0.16"><VisualTransition.GeneratedEasingFunction><CubicEase EasingMode="EaseOut"/></VisualTransition.GeneratedEasingFunction></VisualTransition>
+            </VisualStateGroup.Transitions>
+            <VisualState x:Name="AnimaOff"><Storyboard>
+              <DoubleAnimation Storyboard.TargetName="ThumbSlide" Storyboard.TargetProperty="X" To="0" Duration="0"/>
+              <DoubleAnimation Storyboard.TargetName="OnTrack" Storyboard.TargetProperty="Opacity" To="0" Duration="0"/>
+              <DoubleAnimation Storyboard.TargetName="CheckedKnob" Storyboard.TargetProperty="Opacity" To="0" Duration="0"/>
+            </Storyboard></VisualState>
+            <VisualState x:Name="AnimaOn"><Storyboard>
+              <DoubleAnimation Storyboard.TargetName="ThumbSlide" Storyboard.TargetProperty="X" To="20" Duration="0"/>
+              <DoubleAnimation Storyboard.TargetName="OnTrack" Storyboard.TargetProperty="Opacity" To="1" Duration="0"/>
+              <DoubleAnimation Storyboard.TargetName="CheckedKnob" Storyboard.TargetProperty="Opacity" To="1" Duration="0"/>
+            </Storyboard></VisualState>
+          </VisualStateGroup>
+          <VisualStateGroup x:Name="CommonStates"><VisualStateGroup.Transitions><VisualTransition GeneratedDuration="0:0:0.08"/></VisualStateGroup.Transitions>
+            <VisualState x:Name="Normal"><Storyboard>
+              <DoubleAnimation Storyboard.TargetName="ThumbScale" Storyboard.TargetProperty="ScaleX" To="1" Duration="0"/>
+              <DoubleAnimation Storyboard.TargetName="ThumbScale" Storyboard.TargetProperty="ScaleY" To="1" Duration="0"/>
+            </Storyboard></VisualState>
+            <VisualState x:Name="PointerOver"><Storyboard>
+              <DoubleAnimation Storyboard.TargetName="ThumbScale" Storyboard.TargetProperty="ScaleX" To="1.16" Duration="0"/>
+              <DoubleAnimation Storyboard.TargetName="ThumbScale" Storyboard.TargetProperty="ScaleY" To="1.16" Duration="0"/>
+            </Storyboard></VisualState>
+            <VisualState x:Name="Pressed"><Storyboard>
+              <DoubleAnimation Storyboard.TargetName="ThumbScale" Storyboard.TargetProperty="ScaleX" To="1.45" Duration="0"/>
+              <DoubleAnimation Storyboard.TargetName="ThumbScale" Storyboard.TargetProperty="ScaleY" To="1.16" Duration="0"/>
+            </Storyboard></VisualState>
+          </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
         <Border Height="20" Width="42" CornerRadius="10" BorderThickness="1" BorderBrush="{TemplateBinding Foreground}" Opacity="0.65"/>
         <Border x:Name="OnTrack" Height="20" Width="42" CornerRadius="10" Background="{TemplateBinding Background}" Opacity="0"/>
-        <Border x:Name="Knob" Width="12" Height="12" CornerRadius="6" Margin="5,0" HorizontalAlignment="Left" VerticalAlignment="Center" Background="{TemplateBinding Foreground}"/>
+        <Grid Width="12" Height="12" Margin="6,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Center">
+          <Grid.RenderTransform><TranslateTransform x:Name="ThumbSlide"/></Grid.RenderTransform>
+          <Grid RenderTransformOrigin="0.5,0.5">
+            <Grid.RenderTransform><ScaleTransform x:Name="ThumbScale"/></Grid.RenderTransform>
+            <Border CornerRadius="6" Background="{TemplateBinding Foreground}"/>
+            <Border x:Name="CheckedKnob" CornerRadius="6" Background="White" Opacity="0"/>
+          </Grid>
+        </Grid>
       </Grid>
     </ControlTemplate>
     <ControlTemplate x:Key="RadioPill" TargetType="RadioButton">
@@ -3120,38 +5032,50 @@ static void BuildManager(HWND hwnd) {
         </StackPanel>
       </Grid>
     </ControlTemplate>
+    </ResourceDictionary>
   </Grid.Resources>
   <Grid.ColumnDefinitions><ColumnDefinition Width="234"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
   <Grid Margin="12">
     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <Grid Grid.Row="1" RowSpacing="3"><Grid.RowDefinitions><RowDefinition Height="36"/><RowDefinition Height="36"/></Grid.RowDefinitions>
-        <Button x:Name="Workshop" Grid.Row="0" AutomationProperties.Name="Workshop" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="14,0" BorderThickness="0">
-          <StackPanel Orientation="Horizontal" Spacing="10"><FontIcon Glyph="&#xE719;" FontSize="16"/><TextBlock Text="Workshop"/></StackPanel>
-        </Button>
-        <Button x:Name="App" Grid.Row="1" AutomationProperties.Name="App settings" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="14,0" BorderThickness="0">
-          <StackPanel Orientation="Horizontal" Spacing="10"><FontIcon Glyph="&#xE713;" FontSize="16"/><TextBlock Text="App settings"/></StackPanel>
-        </Button>
-
+    <Grid x:Name="LibraryGroup" Grid.Row="0" Margin="0,0,0,6">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition x:Name="MediaListRow" Height="*"/><RowDefinition Height="Auto"/><RowDefinition x:Name="ProfilesRow" Height="Auto"/></Grid.RowDefinitions>
+      <Button x:Name="MediaHeader" Style="{StaticResource SidebarGroupButton}" AutomationProperties.Name="Media library">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <FontIcon x:Name="MediaChevron" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Glyph="&#xE76C;" RenderTransformOrigin="0.5,0.5"><FontIcon.RenderTransform><RotateTransform x:Name="MediaAngle" Angle="90"/></FontIcon.RenderTransform></FontIcon>
+          <TextBlock Text="Media library" FontWeight="Bold" VerticalAlignment="Center"/>
+        </StackPanel>
+      </Button>
+      <Grid x:Name="MediaPane" Grid.Row="1">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <Grid x:Name="LibrarySearchField" Margin="0,4,0,0">
+        <TextBox x:Name="Search" PlaceholderText="Search media"/>
       </Grid>
-    <Grid Grid.Row="0" Margin="0,0,0,6">
-      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-      <TextBlock Text="Media library" FontWeight="SemiBold" Margin="8,0,0,6"/>
-      <TextBox x:Name="Search" Grid.Row="1" PlaceholderText="Search media"/>
-      <ListView x:Name="Pets" Grid.Row="2" Margin="0,6,0,0" SelectionMode="Single"/>
+        <ListView x:Name="Pets" Grid.Row="1" Margin="0,6,0,0" SelectionMode="Single">
+          <ListView.ItemContainerTransitions><TransitionCollection><AddDeleteThemeTransition/><ReorderThemeTransition/></TransitionCollection></ListView.ItemContainerTransitions>
+        </ListView>
+      </Grid>
+      <Button x:Name="ProfilesHeader" Grid.Row="2" Style="{StaticResource SidebarGroupButton}" AutomationProperties.Name="Profiles">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <FontIcon x:Name="ProfilesChevron" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Glyph="&#xE76C;" RenderTransformOrigin="0.5,0.5"><FontIcon.RenderTransform><RotateTransform x:Name="ProfilesAngle" Angle="0"/></FontIcon.RenderTransform></FontIcon>
+          <TextBlock Text="Profiles" FontWeight="Bold" VerticalAlignment="Center"/>
+        </StackPanel>
+      </Button>
+      <StackPanel x:Name="ProfileLinks" Grid.Row="3" Spacing="2" Visibility="Collapsed"/>
     </Grid>
+    <StackPanel x:Name="NavBottom" Grid.Row="1" Spacing="3">
+      <Button x:Name="Workshop" Height="36" AutomationProperties.Name="Workshop" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="14,0" BorderThickness="0">
+        <StackPanel Orientation="Horizontal" Spacing="10"><FontIcon Glyph="&#xE719;" FontSize="16"/><TextBlock Text="Workshop"/></StackPanel>
+      </Button>
+      <Button x:Name="App" Height="36" AutomationProperties.Name="App settings" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="14,0" BorderThickness="0">
+        <StackPanel Orientation="Horizontal" Spacing="10"><FontIcon Glyph="&#xE713;" FontSize="16"/><TextBlock Text="App settings"/></StackPanel>
+      </Button>
+    </StackPanel>
     <StackPanel Grid.Row="2" Margin="0,8,0,0" Spacing="6">
       <Grid ColumnSpacing="2">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
         <Button x:Name="Import" Content="Import media…" HorizontalAlignment="Stretch"/>
         <Button x:Name="ImportOptions" Grid.Column="1" AutomationProperties.Name="Import options" HorizontalAlignment="Stretch" Padding="0">
           <FontIcon Glyph="&#xE70D;" FontSize="11"/>
-          <Button.Flyout><Flyout Placement="TopEdgeAlignedRight">
-            <StackPanel MinWidth="144" Spacing="2">
-              <StackPanel.Transitions><TransitionCollection><EntranceThemeTransition FromVerticalOffset="12" FromHorizontalOffset="0"/></TransitionCollection></StackPanel.Transitions>
-              <Button Style="{StaticResource ManagerButtonStyle}" Tag="images" Content="from images" HorizontalAlignment="Stretch"/>
-              <Button Style="{StaticResource ManagerButtonStyle}" Tag="folder" Content="from folder" HorizontalAlignment="Stretch"/>
-            </StackPanel>
-          </Flyout></Button.Flyout>
         </Button>
       </Grid>
       <TextBlock x:Name="Build" Opacity="0.7" TextAlignment="Center" FontSize="11" TextWrapping="Wrap"/>
@@ -3162,7 +5086,7 @@ static void BuildManager(HWND hwnd) {
       </Border>
     </Canvas>
   </Grid>
-  <Grid Grid.Column="1" Margin="24,20,16,0">
+  <Grid x:Name="PagePanel" Grid.Column="1" Margin="24,20,16,0">
     <Grid.RenderTransform><TranslateTransform x:Name="PageOffset"/></Grid.RenderTransform>
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
     <TextBlock x:Name="Title" FontSize="28" FontWeight="SemiBold" Margin="0,0,0,20" TextTrimming="CharacterEllipsis"/>
@@ -3172,11 +5096,19 @@ static void BuildManager(HWND hwnd) {
   </Grid>
 </Grid>)XAML")
                       .as<controls::Grid>();
+    managerRoot.GotFocus(FadeTabFocus);
     managerRoot.LayoutUpdated([hwnd](auto&&, auto&&) {
         if (managerRoot)
             PositionNavPill(hwnd);
     });
+    Named<Button>(L"MediaHeader").Click([hwnd](auto&&, auto&&) {
+        SelectSidebarGroup(hwnd, false);
+    });
+    Named<Button>(L"ProfilesHeader").Click([hwnd](auto&&, auto&&) {
+        SelectSidebarGroup(hwnd, true);
+    });
     managerSource.Content(managerRoot);
+    PopulateProfiles();
     RECT client{};
     GetClientRect(hwnd, &client);
     SetWindowPos(islandWindow, nullptr, 0, 0, client.right, client.bottom,
@@ -3188,20 +5120,16 @@ static void BuildManager(HWND hwnd) {
         Navigate(Page::Workshop);
     });
     Named<Button>(L"App").Click([](auto&&, auto&&) { Navigate(Page::App); });
-    auto importMenu =
-        Named<Button>(L"ImportOptions").Flyout().as<controls::Flyout>();
-    for (auto element : importMenu.Content().as<StackPanel>().Children()) {
-        auto choice = element.as<Button>();
-        bool folder =
-            winrt::unbox_value<winrt::hstring>(choice.Tag()) == L"folder";
-        choice.Click(
-            [folder, weak = winrt::make_weak(importMenu)](auto&&, auto&&) {
-                if (auto menu = weak.get())
-                    menu.Hide();
-                PostMessageW(g_hManagerWnd, WM_APP + 33, folder, 0);
-            });
-    }
+    auto importMenu = ActionDropdown(
+        controls::Primitives::FlyoutPlacementMode::TopEdgeAlignedRight);
+    AddDropdownAction(importMenu, L"from images",
+                      [] { PostMessageW(g_hManagerWnd, WM_APP + 33, 0, 0); });
+    AddDropdownAction(importMenu, L"from folder",
+                      [] { PostMessageW(g_hManagerWnd, WM_APP + 33, 1, 0); });
+    Named<Button>(L"ImportOptions").Flyout(importMenu);
     Named<Button>(L"Import").Click([](auto&&, auto&&) { AddImages(); });
+    AddSearchIcon(Named<controls::Grid>(L"LibrarySearchField"),
+                  Named<controls::TextBox>(L"Search"));
     Named<controls::TextBox>(L"Search").TextChanged(
         [](auto&&, auto&&) { PetList(); });
     Named<controls::ListView>(L"Pets").SelectionChanged(
@@ -3219,12 +5147,10 @@ static void BuildManager(HWND hwnd) {
                 DWORD value = folder.expanded;
                 if (configWritable)
                     PutNumber(Record(folder.key, L"Expanded"), value);
-                PostMessageW(g_hManagerWnd, WM_APP + 34, 0, 0);
+                PostMessageW(g_hManagerWnd, WM_APP + 34, static_cast<WPARAM>(-1 - index), 0);
                 return;
             }
-            bool changed = g_managerSel != index;
-            g_managerSel = index;
-            Navigate(Page::Pet, changed);
+            Navigate(Page::Pet, index);
         });
     page = Page::Pet;
     g_managerSel = g_items.empty() ? -1 : 0;
@@ -3233,6 +5159,7 @@ static void BuildManager(HWND hwnd) {
 }
 static void CloseManagerIsland() {
     navMotion = NavigationMotion{};
+    sidebarMotion = {};
     managerInput = nullptr;
     islandWindow = nullptr;
     if (managerSource) {
@@ -3257,6 +5184,10 @@ static LRESULT CALLBACK ManagerWndProc(HWND hwnd,
                 }
                 break;
             case WM_TIMER:
+                if (wp == kGroupTimer && managerRoot) {
+                    StepSidebar(hwnd);
+                    return 0;
+                }
                 if (wp == kNavTimer) {
                     StepNavPill(hwnd);
                     return 0;
@@ -3264,10 +5195,22 @@ static LRESULT CALLBACK ManagerWndProc(HWND hwnd,
                 break;
             case WM_CREATE:
                 BuildManager(hwnd);
+                DragAcceptFiles(hwnd, TRUE);
+                if (islandWindow &&
+                    SetWindowSubclass(islandWindow, ForwardDroppedMedia, 1,
+                                      reinterpret_cast<DWORD_PTR>(hwnd)))
+                    DragAcceptFiles(islandWindow, TRUE);
+                return 0;
+            case WM_DROPFILES:
+                ImportDroppedMedia(reinterpret_cast<HDROP>(wp));
+                return 0;
+            case WM_APP + 42:
+                if (managerRoot && page == Page::Workshop)
+                    RenderPage();
                 return 0;
             case WM_APP + 34:
                 if (managerRoot)
-                    PetList();
+                    PetList(static_cast<int>(wp));
                 return 0;
             case WM_APP + 33:
                 if (wp)
@@ -3305,12 +5248,9 @@ static LRESULT CALLBACK ManagerWndProc(HWND hwnd,
                 return 0;
             case WM_APP_OPEN_MANAGER:
                 if ((size_t)wp < g_items.size()) {
-                    bool changed = page != Page::Pet || g_managerSel != (int)wp;
-                    g_managerSel = (int)wp;
-                    page = Page::Pet;
                     Named<controls::TextBox>(L"Search").Text(L"");
+                    Navigate(Page::Pet, static_cast<int>(wp));
                     PetList();
-                    Navigate(page, changed);
                 }
                 return 0;
             case WM_APP_RELOAD:
@@ -3363,392 +5303,229 @@ static LRESULT CALLBACK ManagerWndProc(HWND hwnd,
 // Embedded project logo shared by the tray and both windows.
 // ============================================================================
 
-static HICON LoadManagerIcon() {
-    // CreateIconFromResourceEx accepts a PNG icon resource on modern Windows.
-    static BYTE logo[] = {
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
-        0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x40,
-        0x00, 0x00, 0x00, 0x40, 0x08, 0x06, 0x00, 0x00, 0x00, 0xaa,
-        0x69, 0x71, 0xde, 0x00, 0x00, 0x00, 0x01, 0x73, 0x52, 0x47,
-        0x42, 0x00, 0xae, 0xce, 0x1c, 0xe9, 0x00, 0x00, 0x00, 0x04,
-        0x67, 0x41, 0x4d, 0x41, 0x00, 0x00, 0xb1, 0x8f, 0x0b, 0xfc,
-        0x61, 0x05, 0x00, 0x00, 0x00, 0x09, 0x70, 0x48, 0x59, 0x73,
-        0x00, 0x00, 0x0e, 0xc2, 0x00, 0x00, 0x0e, 0xc2, 0x01, 0x15,
-        0x28, 0x4a, 0x80, 0x00, 0x00, 0x00, 0x19, 0x74, 0x45, 0x58,
-        0x74, 0x53, 0x6f, 0x66, 0x74, 0x77, 0x61, 0x72, 0x65, 0x00,
-        0x50, 0x61, 0x69, 0x6e, 0x74, 0x2e, 0x4e, 0x45, 0x54, 0x20,
-        0x35, 0x2e, 0x31, 0x2e, 0x31, 0x32, 0x13, 0x01, 0x47, 0x74,
-        0x00, 0x00, 0x00, 0xb8, 0x65, 0x58, 0x49, 0x66, 0x49, 0x49,
-        0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x05, 0x00, 0x1a, 0x01,
-        0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x4a, 0x00, 0x00, 0x00,
-        0x1b, 0x01, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x52, 0x00,
-        0x00, 0x00, 0x28, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00,
-        0x02, 0x00, 0x00, 0x00, 0x31, 0x01, 0x02, 0x00, 0x11, 0x00,
-        0x00, 0x00, 0x5a, 0x00, 0x00, 0x00, 0x69, 0x87, 0x04, 0x00,
-        0x01, 0x00, 0x00, 0x00, 0x6c, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0xf2, 0x76, 0x01, 0x00, 0xe8, 0x03, 0x00, 0x00,
-        0xf2, 0x76, 0x01, 0x00, 0xe8, 0x03, 0x00, 0x00, 0x50, 0x61,
-        0x69, 0x6e, 0x74, 0x2e, 0x4e, 0x45, 0x54, 0x20, 0x35, 0x2e,
-        0x31, 0x2e, 0x31, 0x32, 0x00, 0x00, 0x03, 0x00, 0x00, 0x90,
-        0x07, 0x00, 0x04, 0x00, 0x00, 0x00, 0x30, 0x32, 0x33, 0x30,
-        0x01, 0xa0, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
-        0x00, 0x00, 0x05, 0xa0, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00,
-        0x96, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
-        0x01, 0x00, 0x02, 0x00, 0x04, 0x00, 0x00, 0x00, 0x52, 0x39,
-        0x38, 0x00, 0x02, 0x00, 0x07, 0x00, 0x04, 0x00, 0x00, 0x00,
-        0x30, 0x31, 0x30, 0x30, 0x00, 0x00, 0x00, 0x00, 0x83, 0x7f,
-        0x2f, 0x1c, 0x72, 0xd0, 0xd3, 0xdf, 0x00, 0x00, 0x0d, 0x7e,
-        0x49, 0x44, 0x41, 0x54, 0x78, 0x5e, 0xed, 0x9b, 0x7d, 0x78,
-        0x54, 0xd5, 0x9d, 0xc7, 0xbf, 0xe7, 0xde, 0x99, 0x4c, 0x32,
-        0xc9, 0x04, 0xcd, 0xfb, 0x0b, 0x21, 0x21, 0x81, 0xc0, 0x82,
-        0x40, 0x04, 0xdd, 0xd2, 0x27, 0xe9, 0x16, 0x02, 0xb8, 0x42,
-        0x5d, 0x01, 0x71, 0x95, 0xd2, 0xa2, 0x56, 0x81, 0xa7, 0xdd,
-        0x6a, 0xed, 0xba, 0xd4, 0xfa, 0x96, 0x9a, 0x1a, 0x9b, 0xda,
-        0x5d, 0xdd, 0xba, 0xd5, 0x52, 0x2b, 0x45, 0xe1, 0xc1, 0xa5,
-        0xa9, 0x18, 0x0a, 0x5a, 0x2b, 0xe0, 0x23, 0xed, 0x03, 0xc1,
-        0xa0, 0x45, 0x79, 0xab, 0xc9, 0x34, 0x92, 0x80, 0x09, 0x99,
-        0xbc, 0x91, 0x84, 0x64, 0x92, 0x49, 0xe6, 0xe5, 0xde, 0xb3,
-        0x7f, 0x64, 0xee, 0xcd, 0xb9, 0xe7, 0xde, 0x3b, 0x73, 0x33,
-        0xb1, 0xcf, 0x53, 0xb7, 0x7e, 0x9e, 0x67, 0x1e, 0x72, 0x7e,
-        0xe7, 0xdc, 0xdf, 0x3d, 0xe7, 0x7b, 0xce, 0xfd, 0x9d, 0xdf,
-        0xb9, 0x33, 0x10, 0x4c, 0x0c, 0x02, 0x80, 0x2e, 0x9f, 0xff,
-        0xd0, 0xf5, 0xd3, 0x33, 0xbe, 0xb8, 0x9f, 0x10, 0x62, 0xa7,
-        0x94, 0x86, 0xd4, 0x4a, 0x22, 0xd8, 0x25, 0x39, 0xe8, 0x15,
-        0x05, 0xdb, 0x92, 0x17, 0xdf, 0xbe, 0xb9, 0x55, 0x69, 0xaf,
-        0x75, 0x61, 0x0a, 0x01, 0x40, 0x2b, 0x2b, 0x2b, 0x17, 0x7b,
-        0x07, 0x47, 0x0e, 0x3a, 0xe3, 0x5d, 0x2e, 0xa5, 0xc2, 0xfd,
-        0xe7, 0xb6, 0xe7, 0xf7, 0xbe, 0xfe, 0xcb, 0xfb, 0xb5, 0xcd,
-        0xa3, 0xa2, 0xde, 0x7b, 0xcd, 0xca, 0x6f, 0xec, 0x9a, 0x77,
-        0x6d, 0xd1, 0xd7, 0xc3, 0x65, 0xf2, 0xc1, 0x89, 0xc6, 0xc3,
-        0xbf, 0x3f, 0xf2, 0xbf, 0x2b, 0x95, 0x46, 0x13, 0x65, 0xee,
-        0xdd, 0xe5, 0x7b, 0x5f, 0x2e, 0x99, 0x7e, 0xeb, 0xf5, 0x7c,
-        0x85, 0xc2, 0xe9, 0x0b, 0xb5, 0xef, 0xbc, 0x74, 0xe4, 0xd6,
-        0x2d, 0x00, 0x5a, 0xf8, 0xba, 0x48, 0x6c, 0xdc, 0xb8, 0xf1,
-        0x96, 0xfc, 0xfc, 0x82, 0x57, 0x6c, 0x36, 0x31, 0x81, 0xb5,
-        0x4b, 0x01, 0xd1, 0x57, 0x55, 0x5d, 0x91, 0x18, 0x2e, 0x4e,
-        0x44, 0xd4, 0xc4, 0xdb, 0x57, 0x7f, 0xf3, 0x89, 0xd9, 0x25,
-        0x59, 0x0f, 0x10, 0x66, 0xa4, 0x52, 0xc0, 0x26, 0x57, 0x55,
-        0x3f, 0x26, 0x02, 0x80, 0xc0, 0x34, 0xb6, 0xc4, 0x8c, 0xec,
-        0x25, 0x3f, 0x2e, 0xce, 0x59, 0x66, 0x3a, 0x78, 0x00, 0x98,
-        0x99, 0xb3, 0x74, 0x59, 0x71, 0xce, 0xf2, 0xad, 0xbc, 0x3d,
-        0x1a, 0xd9, 0x59, 0x53, 0x7f, 0xce, 0x0f, 0x1e, 0x00, 0x04,
-        0x9b, 0x14, 0x5f, 0x59, 0x59, 0xb9, 0x38, 0x5c, 0xb4, 0x3a,
-        0x78, 0x00, 0x98, 0x5a, 0x3c, 0x37, 0xef, 0xdf, 0xd9, 0xc1,
-        0x87, 0x51, 0x7d, 0x4c, 0x58, 0x80, 0x2f, 0xcf, 0xb9, 0x6f,
-        0x96, 0xd3, 0x71, 0x35, 0x6f, 0xd6, 0x90, 0xe8, 0x48, 0x41,
-        0xd9, 0xec, 0x6f, 0x2e, 0xe0, 0xed, 0xd1, 0x70, 0xd8, 0x9d,
-        0x53, 0x78, 0x1b, 0x00, 0x10, 0x01, 0xc2, 0xd0, 0xe0, 0xe8,
-        0x5b, 0x00, 0xe2, 0xf8, 0xba, 0x28, 0x10, 0x7e, 0x95, 0x53,
-        0x0a, 0xda, 0xdb, 0xe9, 0xbf, 0x57, 0x29, 0x5b, 0x15, 0x80,
-        0x71, 0x42, 0x02, 0xca, 0x5f, 0x9e, 0xbe, 0xb3, 0x7d, 0x9e,
-        0xbe, 0x73, 0xfd, 0xe3, 0x75, 0xe3, 0x50, 0xc8, 0x12, 0x6f,
-        0xb3, 0x80, 0xe9, 0xec, 0x26, 0xc4, 0x27, 0x4d, 0x01, 0x20,
-        0xf2, 0xf6, 0x28, 0x50, 0xde, 0xa7, 0x1c, 0xb4, 0x0d, 0x6e,
-        0x7b, 0xa9, 0xea, 0x85, 0x70, 0x91, 0x58, 0x15, 0x40, 0x71,
-        0x62, 0x07, 0xa8, 0x3a, 0x0b, 0x03, 0xbe, 0x8e, 0x6d, 0xfd,
-        0xc3, 0xad, 0x2f, 0x8d, 0x37, 0x1b, 0x87, 0x80, 0x98, 0x0e,
-        0x26, 0x46, 0x62, 0xf1, 0x67, 0x70, 0x0d, 0x65, 0xc7, 0xac,
-        0x29, 0x44, 0x64, 0xc9, 0xdc, 0xfb, 0xbf, 0xb8, 0x69, 0xf9,
-        0xfe, 0xe6, 0xc2, 0xcc, 0xb2, 0x99, 0x8a, 0x4d, 0x14, 0x6c,
-        0xa3, 0x02, 0x11, 0x47, 0xb5, 0x2d, 0xc7, 0xa0, 0xa0, 0xac,
-        0x5d, 0xff, 0x14, 0x8e, 0xc3, 0xd6, 0xc9, 0xcc, 0xdf, 0x46,
-        0x44, 0xf2, 0xc3, 0x42, 0x00, 0x60, 0xcb, 0x96, 0x2d, 0x33,
-        0x04, 0x7b, 0x90, 0xbf, 0x46, 0x53, 0xb6, 0x22, 0x00, 0x01,
-        0x80, 0x45, 0x45, 0x1b, 0x16, 0xcc, 0xcf, 0x5f, 0x9d, 0xe7,
-        0x4a, 0xc8, 0x50, 0x1d, 0x48, 0x72, 0x30, 0x41, 0x96, 0x25,
-        0x25, 0x3a, 0x6b, 0xb0, 0x09, 0x8e, 0x79, 0x00, 0xd6, 0x01,
-        0x48, 0x30, 0x9e, 0x09, 0x15, 0x0a, 0xc0, 0xb6, 0x62, 0xc5,
-        0x8a, 0x87, 0x05, 0x9b, 0xb1, 0x2f, 0x06, 0x5f, 0xf8, 0x5f,
-        0x7e, 0x50, 0x3c, 0x74, 0xed, 0xda, 0xb5, 0x77, 0x67, 0xa4,
-        0x67, 0xee, 0x63, 0x03, 0x20, 0x95, 0x41, 0x2f, 0x5d, 0x1c,
-        0xa8, 0x62, 0x1b, 0x5a, 0x11, 0x80, 0x02, 0x40, 0x93, 0xe7,
-        0x0f, 0x44, 0xa6, 0xe3, 0x13, 0x34, 0x38, 0xd2, 0x29, 0x9f,
-        0x6a, 0x79, 0xf5, 0xf8, 0xc9, 0x96, 0x3d, 0xc7, 0xbc, 0x23,
-        0x5d, 0xba, 0x01, 0x16, 0x66, 0x96, 0x66, 0x15, 0x66, 0x96,
-        0x3d, 0x0d, 0x20, 0x99, 0xaf, 0x33, 0xc0, 0x36, 0xf7, 0x1f,
-        0x16, 0x54, 0x10, 0xc1, 0x7c, 0x60, 0x82, 0x3d, 0x24, 0xdc,
-        0x79, 0xe7, 0x9d, 0x6b, 0xc3, 0x45, 0xdd, 0xfd, 0x78, 0x66,
-        0x14, 0xcd, 0x7a, 0xca, 0x66, 0x17, 0x1d, 0x4a, 0x99, 0x52,
-        0xe0, 0x52, 0x7b, 0xdb, 0xea, 0x97, 0xf7, 0x3c, 0xfd, 0x2c,
-        0x2b, 0xa0, 0x15, 0x01, 0x30, 0x67, 0xea, 0xca, 0x87, 0x17,
-        0x16, 0xde, 0xf6, 0xac, 0x10, 0x0e, 0x19, 0x3d, 0x83, 0xcd,
-        0xfe, 0xda, 0xfa, 0xef, 0x7c, 0xfd, 0xc4, 0xc7, 0x2f, 0x1f,
-        0xfd, 0xa0, 0x79, 0xcf, 0xe1, 0xbd, 0xf5, 0xf7, 0xdd, 0xd9,
-        0xeb, 0xbd, 0xa0, 0x06, 0x47, 0x00, 0x48, 0x8c, 0x4f, 0x25,
-        0x37, 0x5e, 0xfb, 0x83, 0x6c, 0x8b, 0xf7, 0x20, 0xae, 0xa4,
-        0xab, 0xe2, 0x59, 0x03, 0x95, 0x41, 0xa5, 0x90, 0x3c, 0xa4,
-        0x36, 0x20, 0x40, 0x41, 0xc1, 0xf4, 0x7d, 0x5f, 0xbb, 0xf5,
-        0x3e, 0xcd, 0x0c, 0x9a, 0x11, 0x1f, 0x97, 0xa8, 0x11, 0x5e,
-        0x0e, 0xda, 0xe4, 0x1d, 0x3b, 0x76, 0xfc, 0x0e, 0x40, 0x80,
-        0x15, 0xd0, 0x4a, 0xe7, 0xb0, 0xb8, 0xf8, 0x9e, 0xdb, 0x52,
-        0x5d, 0xd3, 0xd5, 0xe0, 0xd7, 0xd9, 0xff, 0x51, 0xdf, 0xa9,
-        0x0b, 0x7b, 0x7f, 0x0d, 0x60, 0x18, 0xc0, 0xd0, 0xe9, 0x0b,
-        0x7b, 0x77, 0x77, 0x5d, 0x69, 0xd4, 0xc5, 0x02, 0x99, 0x86,
-        0x42, 0x00, 0x2e, 0x87, 0x8b, 0xa6, 0xb3, 0x1b, 0xae, 0xd3,
-        0x46, 0xeb, 0x90, 0x38, 0x2a, 0xc9, 0xa1, 0xc7, 0x28, 0x63,
-        0x25, 0x04, 0x28, 0x2c, 0xce, 0xf8, 0x2e, 0xdb, 0xce, 0x0c,
-        0x93, 0x25, 0xa2, 0xdb, 0x46, 0x2d, 0x09, 0x00, 0xd0, 0x20,
-        0x5b, 0x22, 0x84, 0x88, 0xdc, 0x80, 0xc4, 0xb7, 0xcf, 0xfe,
-        0xe4, 0xb4, 0xcf, 0xaf, 0xdd, 0x11, 0x09, 0x04, 0x01, 0xc0,
-        0x6c, 0x00, 0x36, 0x93, 0x3e, 0x29, 0x3e, 0x34, 0xab, 0x07,
-        0x00, 0x02, 0xc1, 0x91, 0x5e, 0x51, 0x88, 0x5b, 0x1f, 0x29,
-        0x89, 0x89, 0x84, 0xfe, 0x32, 0x63, 0x2c, 0x0a, 0x00, 0x3f,
-        0x5b, 0x20, 0x44, 0xb4, 0x73, 0xf7, 0xa0, 0xcd, 0x9d, 0x47,
-        0xef, 0x6f, 0xea, 0x38, 0x72, 0x86, 0xb1, 0x21, 0x3f, 0xfd,
-        0xfa, 0xf8, 0x2d, 0x2b, 0xde, 0x38, 0xb2, 0xa0, 0x60, 0xdd,
-        0x1d, 0xac, 0x9d, 0x41, 0x19, 0x8c, 0x7a, 0x9e, 0x00, 0x80,
-        0x50, 0x48, 0xf6, 0x75, 0xf5, 0x78, 0xee, 0x25, 0xd4, 0x9e,
-        0xcf, 0xda, 0xc7, 0x20, 0xd1, 0x76, 0x0a, 0x05, 0x5e, 0x28,
-        0x43, 0x4d, 0xa2, 0x09, 0x90, 0x04, 0xe0, 0xab, 0x36, 0xd1,
-        0x51, 0xac, 0x18, 0x3a, 0xfa, 0x1b, 0x86, 0x8e, 0x36, 0x3c,
-        0xf7, 0x2c, 0x77, 0x03, 0x19, 0xc0, 0x69, 0x02, 0xd2, 0xc0,
-        0xd8, 0xe0, 0x74, 0xa4, 0x90, 0x6b, 0xa6, 0xdd, 0x94, 0xb6,
-        0xa8, 0x70, 0xfd, 0x6d, 0xac, 0x9d, 0x65, 0xc3, 0x86, 0x0d,
-        0xb7, 0x3d, 0xb8, 0xf5, 0xe1, 0x4e, 0xd1, 0x1e, 0x12, 0x10,
-        0x0e, 0x56, 0x1d, 0x1d, 0xed, 0xeb, 0x77, 0xee, 0xdc, 0x79,
-        0x60, 0xb0, 0x97, 0x3e, 0x2c, 0x05, 0x44, 0x3f, 0xfb, 0x18,
-        0x08, 0xb6, 0x50, 0xf2, 0x0d, 0x37, 0xdc, 0x10, 0x29, 0xcd,
-        0x4e, 0x58, 0xba, 0x74, 0xe9, 0x13, 0x82, 0x5d, 0x52, 0x63,
-        0x0a, 0xa5, 0xc0, 0x99, 0x0f, 0xce, 0xbf, 0x0a, 0x40, 0x97,
-        0x9c, 0x45, 0x13, 0x20, 0xa5, 0x30, 0xb3, 0xf4, 0x27, 0x85,
-        0x99, 0x65, 0x19, 0x8a, 0xa1, 0x7b, 0xa0, 0xf1, 0xed, 0xc6,
-        0x4b, 0x07, 0x9f, 0x09, 0x0b, 0xc0, 0xa9, 0x4a, 0x35, 0x81,
-        0x8c, 0x41, 0x33, 0xc3, 0x2c, 0xd3, 0xa6, 0x4e, 0xff, 0x4f,
-        0x67, 0x92, 0x23, 0x93, 0xf5, 0x34, 0x3a, 0x3a, 0xea, 0x00,
-        0x80, 0x67, 0x5f, 0x78, 0x6c, 0x77, 0x55, 0x75, 0x45, 0xb6,
-        0x1c, 0x14, 0xd5, 0x47, 0x90, 0x08, 0x20, 0xd7, 0xcc, 0x29,
-        0x79, 0x7c, 0xbc, 0xb5, 0x0e, 0xd7, 0xfc, 0x6b, 0x16, 0x3d,
-        0xc8, 0x3e, 0x3a, 0x72, 0x50, 0x1c, 0x79, 0xfd, 0xd0, 0xce,
-        0x4d, 0x61, 0x01, 0x34, 0x7d, 0x8e, 0x26, 0x80, 0x6d, 0xd5,
-        0xc2, 0x27, 0x72, 0xd8, 0xdc, 0x9f, 0x40, 0x18, 0x0a, 0x07,
-        0x3f, 0x1d, 0x94, 0x8e, 0x67, 0x89, 0x5a, 0xcc, 0xb3, 0x42,
-        0xbb, 0x2d, 0x3e, 0x95, 0x2d, 0x13, 0x02, 0x14, 0xe4, 0x17,
-        0x3d, 0x16, 0x2e, 0xca, 0x00, 0xfa, 0xf9, 0xe5, 0x9c, 0xe8,
-        0x4c, 0x76, 0xb2, 0x65, 0x0e, 0xdb, 0x14, 0xd7, 0xd5, 0x7c,
-        0x3f, 0x24, 0x00, 0x43, 0xbc, 0x1f, 0x44, 0x10, 0x40, 0x51,
-        0xa9, 0x57, 0xa6, 0xa1, 0x00, 0x00, 0x78, 0x47, 0xba, 0xe5,
-        0x33, 0x17, 0xf7, 0x35, 0x9d, 0x6b, 0x7d, 0xbd, 0x86, 0x69,
-        0xa7, 0x71, 0x78, 0xf6, 0x93, 0x03, 0xbf, 0x3a, 0x73, 0x71,
-        0xdf, 0x79, 0xef, 0x48, 0xb7, 0xc6, 0x4e, 0x08, 0x51, 0x12,
-        0x18, 0xf0, 0x33, 0xc0, 0xfb, 0x00, 0x00, 0x91, 0x38, 0x32,
-        0x39, 0x53, 0xd4, 0x6b, 0xd8, 0x3e, 0x53, 0x7d, 0x35, 0x7b,
-        0x86, 0xd0, 0x54, 0x9a, 0x09, 0x00, 0x00, 0x2e, 0x00, 0x73,
-        0xc3, 0x91, 0x1c, 0x6d, 0x97, 0x4f, 0x7a, 0x77, 0xbc, 0xb3,
-        0x6e, 0xc9, 0x7b, 0x1f, 0xef, 0x3c, 0x68, 0xd0, 0x21, 0x00,
-        0x20, 0x27, 0x9b, 0x5f, 0x79, 0x7d, 0xc7, 0x3b, 0xeb, 0x96,
-        0x5e, 0xea, 0xfd, 0x50, 0xb3, 0x42, 0x28, 0x95, 0xb3, 0x00,
-        0x64, 0x99, 0xdc, 0x4f, 0xd3, 0x21, 0x4a, 0x81, 0xee, 0xf6,
-        0x11, 0x4b, 0x7b, 0x7d, 0x18, 0xb6, 0x2f, 0x49, 0xab, 0x57,
-        0xaf, 0xde, 0x28, 0xd8, 0x43, 0xe3, 0x36, 0x0a, 0x34, 0x9c,
-        0xf9, 0xe4, 0x15, 0xa6, 0x8d, 0x06, 0xa3, 0x0e, 0x01, 0x00,
-        0x9d, 0x97, 0xbf, 0xe6, 0xab, 0x9b, 0x97, 0x1f, 0x78, 0x6d,
-        0x6a, 0xda, 0x42, 0x07, 0xc6, 0xfc, 0xc8, 0x00, 0x3a, 0xa3,
-        0xe4, 0xeb, 0x32, 0x80, 0x4e, 0x4a, 0xd9, 0xb0, 0x05, 0xe4,
-        0xa5, 0x2d, 0x5a, 0x5c, 0x9c, 0x5d, 0xfe, 0xa3, 0xb1, 0xc3,
-        0x94, 0x7e, 0x7a, 0x14, 0x28, 0x05, 0xea, 0xeb, 0xdf, 0xfd,
-        0xde, 0x0b, 0x3b, 0x9f, 0xdc, 0xa9, 0x1d, 0x98, 0x91, 0xde,
-        0x3a, 0xe8, 0xfa, 0x35, 0xdf, 0xaa, 0x2c, 0x29, 0xb9, 0x76,
-        0xbb, 0xfa, 0xfc, 0x53, 0xe0, 0xec, 0xc9, 0xb6, 0xed, 0xb5,
-        0x6f, 0xfe, 0xaa, 0xca, 0xcc, 0x89, 0x99, 0x00, 0xb8, 0xbe,
-        0xe8, 0x6b, 0x1b, 0xe7, 0xe5, 0xdf, 0x9c, 0x9d, 0xe8, 0x48,
-        0xe1, 0xab, 0x60, 0x32, 0x08, 0xc5, 0xa6, 0xf3, 0x99, 0xea,
-        0x9a, 0x1e, 0xb7, 0x6c, 0xfe, 0x83, 0xeb, 0xc3, 0xf9, 0x80,
-        0xca, 0xc6, 0x7f, 0xfd, 0xce, 0x0f, 0x05, 0xbb, 0xa4, 0x66,
-        0x6c, 0x72, 0x50, 0x0c, 0x1c, 0x3e, 0x7c, 0xf8, 0x69, 0x26,
-        0xe7, 0x07, 0x00, 0xb8, 0xcf, 0xb5, 0x6e, 0xd7, 0xec, 0x04,
-        0xf6, 0x90, 0xf8, 0xfd, 0xef, 0x3d, 0xd2, 0xb6, 0x69, 0xd3,
-        0xa6, 0x9b, 0xd8, 0xbe, 0xcc, 0x9c, 0x93, 0xf3, 0x6d, 0xcd,
-        0x9b, 0x9f, 0xa0, 0x8d, 0xee, 0x7b, 0x73, 0xc7, 0x16, 0x00,
-        0x6d, 0xe3, 0x56, 0x2d, 0xba, 0xce, 0x32, 0x68, 0x96, 0x31,
-        0x19, 0x7b, 0x8e, 0x66, 0x01, 0x28, 0x02, 0x50, 0x6c, 0xf2,
-        0x29, 0x02, 0x30, 0x93, 0x10, 0xfd, 0x31, 0x5b, 0x89, 0x25,
-        0x2c, 0x05, 0x33, 0x33, 0x1e, 0xe5, 0x12, 0x1d, 0xb6, 0xa4,
-        0x0e, 0x6c, 0xef, 0x1b, 0x2f, 0x7e, 0x3b, 0xe0, 0x0f, 0x35,
-        0x29, 0x65, 0x42, 0x80, 0x84, 0xc4, 0xb8, 0xa9, 0xe9, 0xa9,
-        0x59, 0x3f, 0x55, 0x5b, 0x8f, 0xc1, 0x4d, 0x0c, 0x01, 0x00,
-        0x25, 0x82, 0x1b, 0x4d, 0x9a, 0x4e, 0x00, 0xc3, 0x0e, 0x60,
-        0x6c, 0x19, 0xbb, 0x36, 0x2d, 0xff, 0xed, 0xa1, 0x7b, 0x96,
-        0xd5, 0x1e, 0xba, 0x67, 0xd9, 0xbe, 0x83, 0xc6, 0x9f, 0xda,
-        0x83, 0x9b, 0x96, 0xef, 0x7f, 0x2b, 0x2f, 0x6d, 0x91, 0x41,
-        0x94, 0x26, 0x94, 0xf7, 0x69, 0xb6, 0x2c, 0x39, 0x08, 0x00,
-        0x08, 0x44, 0xd0, 0xa5, 0xda, 0x36, 0x31, 0x3e, 0x8d, 0xb7,
-        0x19, 0x10, 0xf1, 0x25, 0x0a, 0x2f, 0x00, 0x05, 0x10, 0xb7,
-        0xb0, 0xf0, 0xf6, 0xdb, 0xd3, 0x93, 0x67, 0x6a, 0xde, 0xfb,
-        0xb9, 0x12, 0x32, 0xc9, 0xfc, 0xfc, 0x35, 0xd3, 0x16, 0x14,
-        0xdc, 0x52, 0xb4, 0xa0, 0x60, 0xed, 0x74, 0xe3, 0xcf, 0x2d,
-        0x33, 0xe6, 0xe7, 0xaf, 0xce, 0x4b, 0x8a, 0x4f, 0x37, 0x18,
-        0x18, 0xa5, 0xfc, 0xd2, 0x66, 0x05, 0xa1, 0x14, 0x68, 0x3c,
-        0xdb, 0xba, 0x43, 0x5b, 0x3d, 0x56, 0x05, 0x00, 0xa2, 0x10,
-        0x97, 0xcb, 0x57, 0x10, 0xa2, 0x4b, 0x6c, 0xc6, 0x05, 0xa6,
-        0xc0, 0x87, 0xef, 0x35, 0xbe, 0x05, 0x60, 0x44, 0xd3, 0x82,
-        0x83, 0x17, 0x00, 0x00, 0x6c, 0xff, 0x38, 0xe3, 0x8e, 0x17,
-        0x73, 0x53, 0x17, 0x68, 0xf6, 0xe7, 0xc9, 0x42, 0x40, 0x44,
-        0x00, 0x33, 0x01, 0x18, 0x9e, 0xf9, 0x03, 0x7e, 0xc9, 0xfd,
-        0xda, 0xef, 0xb6, 0x7f, 0x8b, 0xb7, 0x2b, 0xb4, 0xb5, 0xf4,
-        0xff, 0x97, 0x36, 0xb4, 0xaa, 0x79, 0x87, 0x12, 0xa4, 0xb2,
-        0xd8, 0xd9, 0x96, 0x82, 0xe2, 0xe8, 0x9b, 0xef, 0xbc, 0xf2,
-        0x15, 0xfe, 0x51, 0xe6, 0x61, 0x05, 0x50, 0x63, 0x67, 0x38,
-        0xd7, 0xd7, 0xc0, 0x05, 0xf6, 0xa8, 0xf0, 0xed, 0xf3, 0xd2,
-        0xae, 0x4b, 0xde, 0xbc, 0xfc, 0xc0, 0x1f, 0x17, 0x15, 0x6d,
-        0xf8, 0xe7, 0xb0, 0x49, 0xbd, 0x07, 0xa5, 0xc0, 0xf9, 0x66,
-        0x77, 0x75, 0xb8, 0x68, 0xb0, 0x7a, 0x80, 0x97, 0x7f, 0xfd,
-        0xcc, 0xb6, 0xfa, 0xfa, 0x77, 0x1f, 0xd2, 0x06, 0x43, 0xc9,
-        0xb5, 0x66, 0xe5, 0x37, 0x7e, 0x0a, 0x40, 0x58, 0x59, 0xbe,
-        0x61, 0x97, 0x60, 0x97, 0xd4, 0xf3, 0x3f, 0xf7, 0xb8, 0x19,
-        0xfa, 0x04, 0x5f, 0xb1, 0xf2, 0xda, 0xc7, 0x4b, 0x72, 0x52,
-        0xe6, 0xfd, 0x20, 0x3f, 0x7d, 0xf1, 0xcd, 0x57, 0x25, 0xe6,
-        0xaa, 0x6a, 0x5e, 0x1e, 0x6c, 0xf1, 0x1f, 0x6d, 0x78, 0xae,
-        0xbe, 0x28, 0xeb, 0x4b, 0x39, 0x63, 0x21, 0x28, 0x3a, 0xcd,
-        0x9d, 0x47, 0xdb, 0x67, 0x64, 0x7f, 0xb9, 0x70, 0x46, 0xd6,
-        0x3f, 0xe5, 0x39, 0x1d, 0x29, 0x04, 0x00, 0x28, 0x28, 0xce,
-        0xb5, 0xd5, 0xfe, 0x26, 0x7d, 0xce, 0x27, 0xb5, 0x36, 0xe7,
-        0xc8, 0x0e, 0xc1, 0x2e, 0xb9, 0x08, 0x01, 0xa4, 0x80, 0x1d,
-        0x55, 0xd5, 0x8f, 0x7e, 0x01, 0xc0, 0xfb, 0xbc, 0x9f, 0x30,
-        0x44, 0x19, 0x50, 0xc5, 0x23, 0x4f, 0x06, 0xc5, 0xb8, 0x90,
-        0xba, 0x9b, 0x48, 0x01, 0x31, 0x54, 0x55, 0x5d, 0x11, 0x1f,
-        0xb6, 0xab, 0x7d, 0x93, 0x02, 0xe2, 0x68, 0x55, 0x75, 0x85,
-        0xee, 0x15, 0x3b, 0x8f, 0x66, 0x30, 0xf7, 0x2c, 0xab, 0x7d,
-        0x6d, 0x41, 0xc1, 0x2d, 0xeb, 0x58, 0xdb, 0x80, 0xcf, 0x23,
-        0xef, 0x39, 0x7a, 0xf7, 0xe3, 0x8d, 0xed, 0x87, 0x9e, 0x64,
-        0xed, 0x16, 0x99, 0xf6, 0x6f, 0x37, 0x1e, 0x6e, 0x9a, 0x9d,
-        0xbb, 0xc2, 0x01, 0x00, 0xfe, 0x84, 0x8f, 0xd0, 0x67, 0x3f,
-        0xd8, 0x60, 0x77, 0xfa, 0xd3, 0x04, 0x7b, 0x50, 0x3d, 0x5f,
-        0x58, 0x10, 0x40, 0xc5, 0x40, 0x80, 0x60, 0x55, 0x75, 0x45,
-        0x42, 0xc5, 0x23, 0x4f, 0x06, 0xc4, 0xb8, 0xb1, 0x03, 0x55,
-        0xd8, 0xee, 0xaf, 0xaa, 0xae, 0x30, 0x3b, 0x9b, 0xa8, 0x70,
-        0x31, 0x40, 0xfb, 0x92, 0x74, 0xd0, 0xd7, 0x21, 0xd7, 0xd4,
-        0x6d, 0x79, 0xb0, 0xb1, 0xfd, 0xd0, 0xcf, 0x59, 0xfb, 0x04,
-        0x50, 0x23, 0x77, 0xc0, 0xd1, 0x82, 0xe1, 0x94, 0x03, 0x08,
-        0x0e, 0x25, 0xb5, 0x6a, 0x9b, 0xa8, 0x58, 0x5a, 0x59, 0xfa,
-        0x8d, 0x64, 0x72, 0x70, 0x02, 0x08, 0x9a, 0x28, 0xed, 0xe9,
-        0xff, 0x73, 0xe0, 0xa3, 0xb6, 0x37, 0x7f, 0x16, 0x3e, 0x90,
-        0x58, 0xec, 0xa0, 0x06, 0x97, 0x40, 0x44, 0x51, 0xc6, 0x28,
-        0x86, 0x52, 0x6a, 0x01, 0x22, 0xc1, 0x99, 0xd1, 0xbb, 0x9c,
-        0xd8, 0x82, 0xe9, 0x6c, 0x23, 0xdf, 0xe8, 0xe0, 0x00, 0x80,
-        0x6e, 0xd6, 0x66, 0x8e, 0xe1, 0x23, 0xa8, 0xd9, 0x0d, 0x28,
-        0x05, 0x9a, 0x1a, 0x3c, 0xdb, 0x58, 0x9b, 0x19, 0xac, 0x00,
-        0x2e, 0x4a, 0x65, 0xf5, 0x9b, 0x19, 0x9f, 0xbf, 0x8f, 0x1e,
-        0x3c, 0xf5, 0xc4, 0x25, 0x00, 0x4a, 0x67, 0x63, 0x91, 0x3e,
-        0xf4, 0xfb, 0x0f, 0x1f, 0xf7, 0x0c, 0x5c, 0xfd, 0x2a, 0x20,
-        0x8e, 0x00, 0x44, 0x86, 0x60, 0x0f, 0xda, 0x08, 0x19, 0x17,
-        0x93, 0xca, 0xa0, 0xae, 0xe4, 0x84, 0x1b, 0x01, 0x5c, 0xd0,
-        0x5e, 0x6a, 0x8c, 0x6f, 0xd4, 0xab, 0xbe, 0x27, 0x04, 0x00,
-        0xc1, 0x26, 0xd9, 0xb6, 0x6e, 0xdd, 0xfa, 0x7d, 0x81, 0x79,
-        0x9f, 0x70, 0xf1, 0xe2, 0x85, 0xb5, 0xbf, 0xd9, 0xff, 0x8b,
-        0x07, 0xd8, 0x76, 0x66, 0x28, 0x02, 0x88, 0xc5, 0xd9, 0xe5,
-        0xcf, 0x17, 0x64, 0x2c, 0x5e, 0xa9, 0x54, 0x7c, 0xdc, 0xf1,
-        0xc7, 0xe6, 0x96, 0xae, 0xba, 0x75, 0x00, 0x7a, 0xc6, 0x9b,
-        0x4f, 0x98, 0x8e, 0xa9, 0xb3, 0x84, 0xef, 0x86, 0xe2, 0x2f,
-        0xca, 0x66, 0xfa, 0xc9, 0x21, 0x51, 0xaa, 0xac, 0xac, 0x3c,
-        0x11, 0x2e, 0x1a, 0xcd, 0xae, 0x86, 0xee, 0x1e, 0xcf, 0xdd,
-        0x54, 0x1e, 0x3f, 0x8f, 0x10, 0x01, 0x24, 0x31, 0x31, 0xe9,
-        0x29, 0x65, 0x5d, 0xc8, 0x41, 0x3b, 0xdd, 0xb5, 0x6b, 0x97,
-        0x65, 0x7f, 0x8a, 0x00, 0x42, 0xf9, 0xbc, 0xad, 0x6b, 0xd9,
-        0xc8, 0x4f, 0xa9, 0xdc, 0x0a, 0xe0, 0x2c, 0x80, 0xa0, 0x15,
-        0x47, 0x06, 0x10, 0x00, 0x81, 0xf2, 0xf2, 0xf2, 0x1e, 0x42,
-        0x40, 0xcd, 0x3d, 0x68, 0x2a, 0x8c, 0x55, 0x62, 0xd8, 0xbd,
-        0x7b, 0xf7, 0x3e, 0x2a, 0xd9, 0xfa, 0x58, 0x9b, 0x41, 0x3a,
-        0xad, 0x64, 0xa2, 0x51, 0xfd, 0xa9, 0x8f, 0x80, 0x4c, 0x43,
-        0x7c, 0xaa, 0xc9, 0x6e, 0x21, 0x51, 0x1d, 0x19, 0x40, 0x01,
-        0xa0, 0xb2, 0xb2, 0xb2, 0x8e, 0x4a, 0x02, 0x9f, 0xb1, 0x31,
-        0x4c, 0xdc, 0x35, 0xa5, 0xda, 0x43, 0x95, 0x16, 0x4a, 0xf9,
-        0x98, 0x10, 0x09, 0x55, 0x00, 0x7d, 0xf2, 0x43, 0xf8, 0xb7,
-        0x2a, 0x93, 0xc1, 0x74, 0xfe, 0x75, 0xf3, 0x67, 0x0d, 0xc3,
-        0x6b, 0x28, 0x05, 0x3a, 0xdb, 0xbc, 0x0f, 0x00, 0x68, 0xe7,
-        0xeb, 0xcc, 0x50, 0x96, 0x3c, 0x19, 0x1a, 0xe9, 0x49, 0x75,
-        0xd8, 0x93, 0xd2, 0xbb, 0xae, 0x34, 0x76, 0x75, 0x5d, 0x71,
-        0x5f, 0xf9, 0x53, 0xf3, 0xee, 0x6d, 0xdd, 0x03, 0xee, 0x93,
-        0x5c, 0xfb, 0x98, 0x48, 0x9f, 0x52, 0x94, 0x93, 0x96, 0x96,
-        0x52, 0x42, 0x25, 0x41, 0xa2, 0x92, 0x20, 0x33, 0x1f, 0x7a,
-        0xee, 0x54, 0xf3, 0x1e, 0xf7, 0xf9, 0xd3, 0xfb, 0xf9, 0x6b,
-        0x22, 0x31, 0x23, 0x6f, 0x61, 0x28, 0xc9, 0xe5, 0x5c, 0x4a,
-        0x25, 0x81, 0x32, 0x3e, 0xa9, 0xfb, 0x6c, 0xfb, 0x73, 0xbb,
-        0xf7, 0xfe, 0x4f, 0x65, 0xf8, 0xbd, 0x84, 0xa1, 0x48, 0xd1,
-        0x88, 0x74, 0x51, 0xa4, 0xba, 0x48, 0x44, 0xba, 0x2e, 0xd6,
-        0xba, 0xc9, 0xa0, 0xf1, 0xab, 0xbb, 0x49, 0x79, 0x79, 0x79,
-        0x49, 0x76, 0x76, 0xf6, 0x1b, 0x36, 0x9b, 0xed, 0x2a, 0x4a,
-        0x69, 0x88, 0x10, 0x62, 0xab, 0xaf, 0xaf, 0x7f, 0xaa, 0xa9,
-        0xa9, 0xe9, 0x47, 0x7c, 0x5b, 0xab, 0xc4, 0xea, 0xd3, 0x95,
-        0x53, 0xfc, 0x68, 0x6a, 0xf1, 0xe2, 0x87, 0x00, 0x1a, 0x82,
-        0xc1, 0x8b, 0x3e, 0xcb, 0x10, 0x62, 0xa7, 0x72, 0xe8, 0xca,
-        0x48, 0x7f, 0xe7, 0xbf, 0x74, 0x9f, 0x3b, 0x72, 0x5a, 0x53,
-        0xc5, 0x16, 0x00, 0x60, 0xf3, 0xe6, 0xcd, 0xf7, 0xe6, 0xe6,
-        0xe6, 0x3e, 0xc7, 0xda, 0xdc, 0x6e, 0xf7, 0x7b, 0x35, 0x35,
-        0x35, 0xca, 0x4f, 0x54, 0x26, 0x4c, 0xac, 0x3e, 0xa7, 0x95,
-        0xad, 0x3f, 0x91, 0x9c, 0x3b, 0xeb, 0x0b, 0xbc, 0x3d, 0x56,
-        0x46, 0xfa, 0x3c, 0xf7, 0x35, 0xbf, 0xbd, 0xfd, 0x79, 0xd6,
-        0xa6, 0x3b, 0x0e, 0xbb, 0xdd, 0xee, 0xf7, 0x7d, 0x3e, 0x1f,
-        0x1f, 0x45, 0x4d, 0xdf, 0xeb, 0x5b, 0x61, 0x12, 0x3e, 0xad,
-        0xb4, 0x99, 0x14, 0x3a, 0x01, 0x8e, 0x1d, 0x3b, 0xd6, 0xd5,
-        0xdd, 0xdd, 0xad, 0xf9, 0x2e, 0x30, 0xa6, 0xbd, 0x8a, 0x21,
-        0x76, 0x9f, 0xfa, 0x33, 0x78, 0x70, 0x74, 0x28, 0x34, 0xd4,
-        0xd5, 0x32, 0x38, 0xd4, 0xd5, 0xe2, 0xb5, 0xfa, 0x19, 0xee,
-        0xf9, 0x64, 0xc4, 0xdb, 0x71, 0xbe, 0xc3, 0xdb, 0xd9, 0x5c,
-        0xc7, 0xfb, 0xd3, 0x3d, 0x02, 0x00, 0xf2, 0xef, 0xba, 0xeb,
-        0x2e, 0x77, 0x41, 0x41, 0x81, 0x7a, 0x92, 0x72, 0xbb, 0xdd,
-        0xc7, 0x6b, 0x6a, 0x6a, 0xca, 0xb4, 0xcd, 0x26, 0x44, 0x4c,
-        0x3e, 0xa7, 0x95, 0xad, 0xaf, 0x4b, 0xce, 0x9d, 0x55, 0xaa,
-        0x94, 0x43, 0x7e, 0x9f, 0xd4, 0xd7, 0xfc, 0xc1, 0x75, 0xfc,
-        0x73, 0x3c, 0x19, 0x74, 0x2b, 0xe0, 0x6f, 0x19, 0xff, 0x40,
-        0x4f, 0xb0, 0xfb, 0xdc, 0x11, 0x4d, 0x16, 0x38, 0x59, 0x3e,
-        0x53, 0x02, 0x84, 0x31, 0x5a, 0xb5, 0x31, 0xf3, 0x59, 0x14,
-        0xe0, 0x53, 0xe5, 0x73, 0x01, 0x78, 0xc3, 0xdf, 0x1b, 0x56,
-        0x05, 0xd0, 0x6d, 0x47, 0xff, 0x5f, 0xb0, 0x2a, 0x00, 0xbf,
-        0x87, 0x4f, 0x88, 0x55, 0xab, 0x56, 0x39, 0xd3, 0xd3, 0xd3,
-        0x75, 0xaf, 0xda, 0x27, 0x8a, 0x63, 0x4a, 0x9a, 0x3d, 0x7b,
-        0xe1, 0x2a, 0x83, 0x6f, 0x9d, 0x2c, 0x61, 0x18, 0x3c, 0x8d,
-        0x8c, 0xba, 0x3d, 0x7b, 0x78, 0x78, 0x58, 0xf2, 0x78, 0x3c,
-        0x1d, 0xe1, 0xf6, 0x46, 0xd7, 0x44, 0x42, 0x4e, 0x4d, 0x4d,
-        0xbd, 0x3a, 0x25, 0x25, 0x45, 0xf3, 0x85, 0x88, 0xdb, 0xed,
-        0xae, 0xab, 0xa9, 0xa9, 0xf9, 0x12, 0x6b, 0xe3, 0x99, 0x56,
-        0x76, 0xfb, 0xb1, 0xe4, 0xdc, 0xd9, 0x9a, 0x5c, 0x21, 0x30,
-        0xd4, 0x37, 0xec, 0xf7, 0xf6, 0xf6, 0x5b, 0x9b, 0x3c, 0x42,
-        0x00, 0xd8, 0xfa, 0xce, 0xff, 0xe9, 0x29, 0xaf, 0xa7, 0xe9,
-        0xbf, 0xf9, 0x5a, 0x98, 0x0c, 0x46, 0x27, 0xc0, 0x5f, 0x83,
-        0x58, 0x12, 0xa1, 0x58, 0x19, 0x6c, 0xff, 0xcb, 0xfb, 0xad,
-        0x75, 0x35, 0x86, 0x67, 0x0a, 0x0b, 0x2a, 0xfe, 0xd5, 0xb0,
-        0x10, 0x57, 0xf4, 0xa9, 0x70, 0x8c, 0x98, 0xfe, 0xa6, 0xc1,
-        0xf2, 0x0a, 0xf0, 0xf9, 0x7c, 0x72, 0x4f, 0x4f, 0x4f, 0xc0,
-        0xe4, 0x1a, 0x53, 0x28, 0xa5, 0x34, 0x33, 0x33, 0x33, 0x2e,
-        0x21, 0x21, 0x41, 0x23, 0x76, 0xac, 0x2b, 0x40, 0x0a, 0x8c,
-        0xc8, 0xa3, 0x57, 0xba, 0x2d, 0xf5, 0x23, 0xfe, 0xaa, 0x0c,
-        0xbb, 0x18, 0x97, 0x20, 0x0c, 0xb6, 0xff, 0xe5, 0x50, 0x6b,
-        0x5d, 0xcd, 0x8d, 0x7c, 0x3d, 0x4c, 0x9c, 0xe8, 0x04, 0xf0,
-        0x78, 0x3c, 0x0d, 0x39, 0x39, 0x39, 0x4b, 0x2a, 0x2b, 0x2b,
-        0x7b, 0x62, 0x58, 0x35, 0x72, 0x69, 0x69, 0xe9, 0xe2, 0xd2,
-        0xd2, 0xd2, 0x3a, 0xa7, 0xd3, 0xa9, 0xbe, 0x74, 0x8d, 0x45,
-        0x80, 0x90, 0xdf, 0x27, 0x5d, 0x76, 0x1f, 0x2f, 0xbb, 0xec,
-        0x7e, 0xf7, 0x84, 0x95, 0x7e, 0xcc, 0x5e, 0xfd, 0x1f, 0xe9,
-        0x62, 0x9c, 0xb3, 0x84, 0xca, 0xa1, 0x53, 0x0d, 0xb5, 0x3f,
-        0x36, 0xfc, 0xde, 0x21, 0xaa, 0x13, 0x00, 0xf0, 0x7a, 0xbd,
-        0xbd, 0xe1, 0xc1, 0x23, 0xbc, 0x9c, 0x26, 0xf2, 0xc1, 0xf1,
-        0xe3, 0xc7, 0x2f, 0x85, 0x57, 0xcf, 0xa4, 0xf0, 0x0f, 0xf6,
-        0x04, 0x2e, 0xbb, 0xdf, 0xbd, 0x14, 0x2e, 0xf2, 0xf7, 0xd1,
-        0x7d, 0xdc, 0x07, 0x9e, 0xe9, 0xfa, 0x68, 0x6f, 0xd5, 0x21,
-        0xb3, 0xc1, 0xc3, 0xaa, 0x00, 0x94, 0x5a, 0xff, 0x7f, 0x05,
-        0x26, 0x88, 0x94, 0x52, 0xa3, 0xd5, 0x36, 0x31, 0xc6, 0x5e,
-        0xae, 0x47, 0xfc, 0xc1, 0xc3, 0x44, 0x99, 0xec, 0xc0, 0x3e,
-        0xf3, 0x7c, 0x2e, 0x00, 0x6f, 0xf8, 0x7b, 0xe3, 0x73, 0x01,
-        0x78, 0x83, 0x09, 0x9f, 0x56, 0x42, 0xc2, 0x62, 0xc1, 0xa7,
-        0x36, 0x11, 0x72, 0x4c, 0x49, 0xb3, 0xe7, 0x5c, 0x77, 0x13,
-        0xfb, 0x33, 0x98, 0x58, 0xd0, 0x04, 0x63, 0xa3, 0xc8, 0xac,
-        0xcb, 0x03, 0xac, 0xec, 0xd9, 0x51, 0x88, 0xc9, 0x27, 0x9f,
-        0x07, 0x00, 0x80, 0x7f, 0xf0, 0x72, 0x9f, 0xdf, 0xdb, 0xdb,
-        0x49, 0x08, 0x89, 0xf0, 0xfd, 0x20, 0x07, 0x21, 0x71, 0x54,
-        0x96, 0x7b, 0x83, 0xc3, 0x57, 0xee, 0xe8, 0x38, 0x75, 0x50,
-        0xf3, 0x93, 0x7e, 0xab, 0x2b, 0xe0, 0x6f, 0x06, 0x47, 0x72,
-        0x5a, 0x4a, 0x72, 0xee, 0xac, 0x39, 0xae, 0x9c, 0xe2, 0x62,
-        0xcb, 0x9f, 0xec, 0x99, 0x05, 0xc9, 0xb9, 0xb3, 0x16, 0x39,
-        0xd3, 0xf2, 0xca, 0x79, 0x7f, 0x9f, 0x39, 0x01, 0x62, 0x25,
-        0xe4, 0xf7, 0x49, 0x83, 0x97, 0xdc, 0xba, 0xdf, 0x20, 0x59,
-        0x15, 0xc0, 0xc2, 0xf3, 0x3a, 0x61, 0x2c, 0xf8, 0xfc, 0xd4,
-        0x0e, 0x43, 0xf0, 0x0f, 0xf4, 0x04, 0x7b, 0x1a, 0x8f, 0x75,
-        0xf1, 0xf6, 0xff, 0x03, 0x99, 0xf8, 0x73, 0x61, 0xaa, 0x46,
-        0x46, 0xe5, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
-        0xae, 0x42, 0x60, 0x82,
+static std::wstring taskbarIconPath;
+static bool taskbarLaunch = false;
+
+static void CacheTaskbarIcon(const D2D1_MAPPED_RECT& pixels, UINT size) {
+    if (userFiles.empty() || !size || size > 255)
+        return;
+    // An ICO directory followed by a bottom-up 32-bit DIB and its AND mask.
+    DWORD stride = size * 4, maskStride = ((size + 31) / 32) * 4;
+    DWORD imageBytes = sizeof(BITMAPINFOHEADER) + (stride + maskStride) * size;
+    std::string ico;
+    auto append = [&](const auto& v) {
+        ico.append(reinterpret_cast<const char*>(&v), sizeof(v));
     };
-    return CreateIconFromResourceEx(logo, sizeof(logo), TRUE, 0x00030000, 0, 0,
-                                    LR_DEFAULTCOLOR);
+    append(WORD{0});
+    append(WORD{1});
+    append(WORD{1});
+    append(static_cast<BYTE>(size));
+    append(static_cast<BYTE>(size));
+    append(WORD{0});
+    append(WORD{1});
+    append(WORD{32});
+    append(imageBytes);
+    append(DWORD{22});
+    BITMAPINFOHEADER header{};
+    header.biSize = sizeof(header);
+    header.biWidth = size;
+    header.biHeight = size * 2;
+    header.biPlanes = 1;
+    header.biBitCount = 32;
+    header.biSizeImage = stride * size;
+    append(header);
+    std::string mask(maskStride * size, '\0');
+    for (UINT y = 0; y < size; ++y) {
+        auto row = pixels.bits + (size - 1 - y) * pixels.pitch;
+        for (UINT x = 0; x < size; ++x) {
+            const auto* pixel = row + 4 * x;
+            BYTE a = pixel[3];
+            if (!a)
+                mask[y * maskStride + x / 8] |=
+                    static_cast<char>(0x80 >> (x % 8));
+            for (int c = 0; c < 3; ++c)
+                append(static_cast<BYTE>(
+                    a ? std::min(255, (pixel[c] * 255 + a / 2) / a) : 0));
+            append(a);
+        }
+    }
+    ico += mask;
+    auto path = userFiles + L"\\manager.ico";
+    if (ReadSmallFile(path) == ico || WriteSmallFile(path, ico))
+        taskbarIconPath = path;
+}
+
+static void SetTaskbarIdentity(HWND hwnd) {
+    if (!hwnd || taskbarIconPath.empty())
+        return;
+    wchar_t exe[32768]{};
+    DWORD n = GetModuleFileNameW(nullptr, exe, std::size(exe));
+    if (!n || n >= std::size(exe))
+        return;
+    winrt::com_ptr<IPropertyStore> props;
+    if (FAILED(SHGetPropertyStoreForWindow(hwnd, IID_PPV_ARGS(props.put()))))
+        return;
+    // System.AppUserModel properties: relaunch command, icon, display name and
+    // ID.
+    const GUID appModel = {0x9f4c2855,
+                           0x9f79,
+                           0x4b39,
+                           {0xa8, 0xd0, 0xe1, 0xd4, 0x2d, 0xe1, 0xd5, 0xf3}};
+    auto set = [&](DWORD id, const std::wstring& value) {
+        PROPERTYKEY key{appModel, id};
+        PROPVARIANT pv{};
+        pv.vt = VT_LPWSTR;
+        pv.pwszVal = const_cast<LPWSTR>(value.c_str());
+        return props->SetValue(key, pv);
+    };
+    auto command = std::wstring(L"\"") + exe +
+                   L"\" -tool-mod \"" WH_MOD_ID L"\" -anima-manager";
+    if (FAILED(set(2, command)) || FAILED(set(3, taskbarIconPath + L",0")) ||
+        FAILED(set(4, L"AnimaWindhawkEngine")) ||
+        FAILED(set(5, L"TuBeo5866.AnimaWindhawkEngine.Manager")) ||
+        FAILED(props->Commit()))
+        Wh_Log(L"Unable to set the manager taskbar icon properties");
+}
+
+static HICON LoadManagerIcon() {
+    static constexpr char logo[] =
+        R"svg(<svg viewBox="0 0 64 64" version="1.1" xmlns="http://www.w3.org/2000/svg" >
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 55.5 1 L 56 5.5 L 55 5.5 L 55.5 1 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 23.5 7 L 25 9.5 L 24 9.5 L 23.5 7 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 7 13 L 9 13.5 L 8 18 L 6 17.5 L 7 13 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 27.5 19 L 28 21.5 L 27 21.5 L 27.5 19 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 11.5 20 L 21 20.5 L 11.5 21 L 11.5 20 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 56.5 20 L 57 22.5 L 56 22.5 L 56.5 20 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 34.5 25 L 35 28.5 L 34 28.5 L 34.5 25 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 23.5 26 L 24 29.5 L 23 29.5 L 23.5 26 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 8.5 29 L 7.5 31 L 8.5 29 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 53.5 30 L 54 32.5 L 53 32.5 L 53.5 30 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 4.5 39 L 5 63.5 L 4 63.5 L 4.5 39 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 25.5 39 L 26 46.5 L 25 46.5 L 25.5 39 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 44.5 40 L 45 47.5 L 44 47.5 L 44.5 40 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 44.5 52 L 45 59.5 L 44 59.5 L 44.5 52 Z " />
+<path fill="rgb(0,1,1)" stroke="rgb(0,1,1)" stroke-width="1" opacity="0.06666666666666667" d="M 25.5 53 L 26 63.5 L 25 63.5 L 25.5 53 Z " />
+<path fill="rgb(104,70,182)" stroke="rgb(104,70,182)" stroke-width="1" opacity="0.9019607843137255" d="M 14.5 0 Q 20.5 -1.5 22 1.5 L 20.5 1 Q 15 -0.5 13.5 2 L 14.5 0 Z " />
+<path fill="rgb(104,70,182)" stroke="rgb(104,70,182)" stroke-width="1" opacity="0.9019607843137255" d="M 12.5 3 L 13 5.5 L 11 6.5 L 12.5 3 Z " />
+<path fill="rgb(104,70,182)" stroke="rgb(104,70,182)" stroke-width="1" opacity="0.9019607843137255" d="M 22.5 3 L 23 7.5 L 22 7.5 L 22.5 3 Z " />
+<path fill="rgb(104,70,182)" stroke="rgb(104,70,182)" stroke-width="1" opacity="0.9019607843137255" d="M 23.5 9 L 26 13.5 L 26 17.5 L 25 17.5 L 25 13.5 Q 21.9 12.4 23.5 9 Z " />
+<path fill="rgb(104,70,182)" stroke="rgb(104,70,182)" stroke-width="1" opacity="0.9019607843137255" d="M 9.5 10 L 10 13.5 L 9 13.5 L 9.5 10 Z " />
+<path fill="rgb(104,70,182)" stroke="rgb(104,70,182)" stroke-width="1" opacity="0.9019607843137255" d="M 13.5 10 L 14 12.5 L 11 17.5 L 11 21 L 21 21 L 21 17.5 Q 18.3 16.8 19 12.5 L 20 12.5 L 22 20.5 L 20.5 22 L 11.5 22 Q 9.3 21.3 10 17.5 Q 13.3 15.3 13.5 10 Z " />
+<path fill="rgb(104,70,182)" stroke="rgb(104,70,182)" stroke-width="1" opacity="0.9019607843137255" d="M 8.5 15 L 9 17.5 L 7 19.5 L 7 22.5 Q 3.6 24.6 3.5 30 L 3 26.5 L 6 22.5 L 6 19.5 L 8.5 15 Z " />
+<path fill="rgb(104,70,182)" stroke="rgb(104,70,182)" stroke-width="1" opacity="0.9019607843137255" d="M 26.5 19 Q 25.9 24.1 29 25.5 L 26 23.5 L 26.5 19 Z " />
+<path fill="rgb(104,70,182)" stroke="rgb(104,70,182)" stroke-width="1" opacity="0.9019607843137255" d="M 11.5 25 L 22 25.5 L 11.5 26 L 11.5 25 Z " />
+<path fill="rgb(104,70,182)" stroke="rgb(104,70,182)" stroke-width="1" opacity="0.9019607843137255" d="M 23.5 25 L 25 28.5 L 24 28.5 L 23.5 25 Z " />
+<path fill="rgb(104,70,182)" stroke="rgb(104,70,182)" stroke-width="1" opacity="0.9019607843137255" d="M 6.5 30 L 7 33.5 L 3.5 35 L 2 31.5 L 3 31.5 Q 1.9 35.7 6 34 L 6.5 30 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 36.5 0 L 35.5 2 L 36.5 0 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 57.5 0 L 56.5 2 L 57.5 0 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 15 5 Q 18 3.8 17 7.5 L 15 8.5 L 15 5 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 10.5 6 L 11 8.5 L 10 8.5 L 10.5 6 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 55.5 6 L 54.5 8 L 55.5 6 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 60.5 7 L 59.5 9 L 60.5 7 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 43.5 8 L 44.5 10 L 43.5 8 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 38.5 12 L 39.5 14 L 38 13.5 L 37.5 15 L 37 13.5 L 38.5 12 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 37.5 17 L 36.5 19 L 37.5 17 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 52.5 17 L 51.5 19 L 52.5 17 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 57.5 17 L 56.5 19 L 57.5 17 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 42.5 23 L 43.5 25 L 42.5 23 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 54.5 28 L 53.5 30 L 54.5 28 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 52.5 33 L 51.5 35 L 52.5 33 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 4.5 36 L 5 38.5 L 4 38.5 L 4.5 36 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 25.5 36 L 26 38.5 L 25 38.5 L 25.5 36 Z " />
+<path fill="rgb(91,78,126)" stroke="rgb(91,78,126)" stroke-width="1" opacity="0.5490196078431373" d="M 55.5 52 L 58 52.5 L 55.5 53 L 55.5 52 Z " />
+<path fill="rgb(0,0,0)" stroke="rgb(0,0,0)" stroke-width="1" opacity="0" d="M 0 0 L 13 0.5 L 12 6 Q 9 4.8 10 8.5 L 9 13 Q 5.7 11.7 7 16.5 L 6 21.5 L 4 23.5 L 4.5 25 Q 1.5 24.1 3 28.5 L 2 35 L 7 35 L 7 31.5 Q 10.1 29.8 8.5 28 L 10 28 L 10.5 26 L 23 26 L 25 35 L 33 35 L 33 30.5 L 35 28.5 L 36 19 Q 40 20.4 38 13.5 L 41 15.5 L 42 25 Q 46 23.6 44 30.5 L 45 35 Q 52.1 36.8 54 32.5 L 55 23 Q 58 24.3 57 20.5 L 56.5 19 Q 59.5 19.9 58 15.5 L 62 0 L 64 0.5 L 64 64 L 60 64 L 59.5 60 L 45 60 L 45 52 Q 53.4 51 58 53 L 58 48 L 45 48 L 45 40 L 59.5 40 L 60 36 L 39 36 L 39 63.5 L 38.5 64 L 31 64 L 31 36.5 L 30.5 36 L 25 36 L 25 48 L 10 48 L 10 36 L 4 36 L 4 63.5 L 0 64 L 0 0 Z " />
+<path fill="rgb(0,0,0)" stroke="rgb(0,0,0)" stroke-width="1" opacity="0" d="M 22.5 0 L 36 0.5 L 33 10.5 L 34 13 Q 30 11.6 32 18.5 L 31 25 L 29 25 Q 30.1 22.3 27.5 23 L 28 21.5 L 26 16.5 L 26 12.5 L 24 10.5 L 25 8.5 L 23 6.5 L 22.5 0 Z " />
+<path fill="rgb(0,0,0)" stroke="rgb(0,0,0)" stroke-width="1" opacity="0" d="M 42 0 L 57 0.5 L 55 1 L 54 12.5 L 52 15.5 L 52.5 17 Q 49.8 16.4 51 22.5 L 49.5 29 L 48 19 Q 44 20.4 46 13.5 L 43 7.5 L 43 5.5 L 42 0 Z " />
+<path fill="rgb(0,0,0)" stroke="rgb(0,0,0)" stroke-width="1" opacity="0" d="M 14 10 Q 19.2 7.9 18 12.5 L 21 20 L 11.5 20 L 11 18.5 Q 15.1 16.2 14 10 Z " />
+<path fill="rgb(0,0,0)" stroke="rgb(0,0,0)" stroke-width="1" opacity="0" d="M 11.5 52 L 25 52 L 25 64 L 10 64 L 10 53.5 L 11.5 52 Z " />
+<path fill="rgb(127,126,128)" stroke="rgb(127,126,128)" stroke-width="1" opacity="0.984313725490196" d="M 37.5 0 Q 41.3 -0.8 42 1.5 L 43 8.5 L 46 14.5 L 46 18.5 L 48 20.5 L 49.5 30 L 51 19.5 L 54 13.5 L 54 8.5 Q 57 7.5 56 2.5 L 58.5 0 L 62 1.5 L 61 6.5 L 59 8.5 L 58 16.5 L 56 18.5 L 55 27.5 L 50.5 35 Q 46 36 45 33.5 L 44 24.5 L 42 22.5 L 41 14.5 L 38.5 12 L 37 14.5 L 38 16.5 L 36 18.5 L 33 33.5 L 31.5 35 Q 26.3 36.3 25 33.5 Q 24 27 28.5 26 L 31 24.5 L 32 14.5 L 34 12.5 L 35 7.5 L 35 2.5 L 37.5 0 Z " />
+<path fill="rgb(127,126,128)" stroke="rgb(127,126,128)" stroke-width="1" opacity="0.984313725490196" d="M 5 37 L 9 37 L 9 47.5 L 10.5 49 L 24.5 49 Q 28.8 47.3 27 39.5 L 26 37 L 30 37.5 L 30 64 L 27 63.5 L 27 53.5 L 24.5 51 L 11.5 51 L 9 52 L 9 63.5 L 6 64 L 6 39.5 L 5 37 Z " />
+<path fill="rgb(144,98,252)" stroke="rgb(144,98,252)" stroke-width="1" opacity="0.996078431372549" d="M 14.5 1 Q 20.5 -0.5 22 2.5 L 22 7.5 L 25 13.5 L 26 23.5 L 28 26.5 L 25 28.5 L 23.5 25 L 10.5 25 L 7 28.5 L 6 34 Q 1.5 35.8 3 30.5 L 7 22.5 L 7 19.5 L 9 17.5 L 10 9.5 L 14.5 1 Z M 15 4 L 15 9 L 10 18 Q 9 21 12 22 L 21 22 L 22 21 L 20 13 L 17 9 Q 19 3 15 4 Z " />
+<path fill="rgb(43,86,126)" stroke="rgb(43,86,126)" stroke-width="1" opacity="0.996078431372549" d="M 40 37 L 58.5 37 L 59 38.5 Q 57.8 41.3 56.5 39 L 45.5 39 L 44 40.5 Q 42.3 47.3 45.5 49 L 56.5 49 L 57 52 L 44 52 L 44 59.5 L 45.5 61 L 59 61 L 58.5 64 L 40 64 L 40 37 Z " />
+<path fill="rgb(93,93,93)" stroke="rgb(93,93,93)" stroke-width="1" opacity="0.8941176470588236" d="M 5.5 36 Q 9.3 35.3 10 37.5 L 10 48 L 24.5 48 L 24.5 49 L 10.5 49 L 9 47.5 L 9 37.5 L 5.5 37 L 5.5 36 Z " />
+<path fill="rgb(93,93,93)" stroke="rgb(93,93,93)" stroke-width="1" opacity="0.8941176470588236" d="M 26.5 36 Q 30.3 35.3 31 37.5 L 30.5 64 L 30 37 Q 25.6 38 26.5 36 Z " />
+<path fill="rgb(93,93,93)" stroke="rgb(93,93,93)" stroke-width="1" opacity="0.8941176470588236" d="M 5.5 39 L 6 63.5 L 5 63.5 L 5.5 39 Z " />
+<path fill="rgb(93,93,93)" stroke="rgb(93,93,93)" stroke-width="1" opacity="0.8941176470588236" d="M 26.5 39 L 27 46.5 L 26 46.5 L 26.5 39 Z " />
+<path fill="rgb(93,93,93)" stroke="rgb(93,93,93)" stroke-width="1" opacity="0.8941176470588236" d="M 11.5 51 L 25 51.5 L 11.5 52 L 11.5 51 Z " />
+<path fill="rgb(93,93,93)" stroke="rgb(93,93,93)" stroke-width="1" opacity="0.8941176470588236" d="M 9.5 52 L 10 63.5 L 9 63.5 L 9.5 52 Z " />
+<path fill="rgb(93,93,93)" stroke="rgb(93,93,93)" stroke-width="1" opacity="0.8941176470588236" d="M 26.5 53 L 27 63.5 L 26 63.5 L 26.5 53 Z " />
+<path fill="rgb(35,56,86)" stroke="rgb(35,56,86)" stroke-width="1" opacity="0.7686274509803922" d="M 16.5 8 L 17.5 10 L 16.5 8 Z " />
+<path fill="rgb(35,56,86)" stroke="rgb(35,56,86)" stroke-width="1" opacity="0.7686274509803922" d="M 10.5 25 L 8.5 28 L 10.5 25 Z " />
+<path fill="rgb(35,56,86)" stroke="rgb(35,56,86)" stroke-width="1" opacity="0.7686274509803922" d="M 39 36 L 58.5 36 L 60 37.5 L 58.5 40 L 59 38.5 L 58.5 37 L 40 37 L 39.5 64 L 39 36 Z " />
+<path fill="rgb(35,56,86)" stroke="rgb(35,56,86)" stroke-width="1" opacity="0.7686274509803922" d="M 45.5 39 L 57 39.5 L 45.5 40 L 45.5 39 Z " />
+<path fill="rgb(35,56,86)" stroke="rgb(35,56,86)" stroke-width="1" opacity="0.7686274509803922" d="M 45.5 48 L 56.5 48 L 58 49.5 L 57.5 52 L 57 49 L 45.5 49 L 45.5 48 Z " />
+<path fill="rgb(35,56,86)" stroke="rgb(35,56,86)" stroke-width="1" opacity="0.7686274509803922" d="M 45.5 60 L 58.5 60 L 60 61.5 L 58.5 61 L 45.5 61 L 45.5 60 Z " />
+</svg>)svg";
+    constexpr UINT size = 64;
+    winrt::com_ptr<IStream> stream;
+    stream.attach(SHCreateMemStream(reinterpret_cast<const BYTE*>(logo),
+                                    sizeof(logo) - 1));
+    if (!stream)
+        return nullptr;
+
+    // Render once in memory. WARP also works without a hardware GPU.
+    winrt::com_ptr<ID3D11Device> d3d;
+    winrt::com_ptr<IDXGIDevice> dxgi;
+    winrt::com_ptr<ID2D1Factory1> factory;
+    winrt::com_ptr<ID2D1Device> device;
+    winrt::com_ptr<ID2D1DeviceContext> context;
+    winrt::com_ptr<ID2D1DeviceContext5> svgContext;
+    if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr,
+                                 D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
+                                 D3D11_SDK_VERSION, d3d.put(), nullptr,
+                                 nullptr)) ||
+        FAILED(d3d->QueryInterface(IID_PPV_ARGS(dxgi.put()))) ||
+        FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                                 __uuidof(ID2D1Factory1), nullptr,
+                                 factory.put_void())) ||
+        FAILED(factory->CreateDevice(dxgi.get(), device.put())) ||
+        FAILED(device->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
+                                           context.put())) ||
+        FAILED(context->QueryInterface(IID_PPV_ARGS(svgContext.put()))))
+        return nullptr;
+
+    winrt::com_ptr<ID2D1SvgDocument> document;
+    winrt::com_ptr<ID2D1Bitmap1> target;
+    winrt::com_ptr<ID2D1Bitmap1> readback;
+    D2D1_BITMAP_PROPERTIES1 properties{};
+    properties.pixelFormat = {DXGI_FORMAT_B8G8R8A8_UNORM,
+                              D2D1_ALPHA_MODE_PREMULTIPLIED};
+    properties.dpiX = properties.dpiY = 96;
+    properties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET;
+    if (FAILED(svgContext->CreateSvgDocument(stream.get(), {size, size},
+                                             document.put())) ||
+        FAILED(context->CreateBitmap({size, size}, nullptr, 0, &properties,
+                                     target.put())))
+        return nullptr;
+
+    context->SetTarget(target.get());
+    context->BeginDraw();
+    const D2D1_COLOR_F transparent{};
+    context->Clear(&transparent);
+    svgContext->DrawSvgDocument(document.get());
+    HRESULT drawResult = context->EndDraw();
+    context->SetTarget(nullptr);
+    properties.bitmapOptions =
+        D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+    if (FAILED(drawResult) ||
+        FAILED(context->CreateBitmap({size, size}, nullptr, 0, &properties,
+                                     readback.put())) ||
+        FAILED(readback->CopyFromBitmap(nullptr, target.get(), nullptr)))
+        return nullptr;
+
+    D2D1_MAPPED_RECT pixels{};
+    if (FAILED(readback->Map(D2D1_MAP_OPTIONS_READ, &pixels)))
+        return nullptr;
+    HICON icon = nullptr;
+    {
+        Gdiplus::Bitmap bitmap(size, size, pixels.pitch, PixelFormat32bppPARGB,
+                               pixels.bits);
+        bitmap.GetHICON(&icon);
+    }
+    if (icon)
+        CacheTaskbarIcon(pixels, size);
+    readback->Unmap();
+    return icon;
 }
 
 // ============================================================================
@@ -3795,6 +5572,7 @@ static void OpenPetManager(int focusIndex) {
                      (LPARAM)g_hManagerIcon);
     }
 
+    SetTaskbarIdentity(g_hManagerWnd);
     ShowWindow(g_hManagerWnd, SW_SHOW);
     UpdateWindow(g_hManagerWnd);
     SetForegroundWindow(g_hManagerWnd);
@@ -3830,14 +5608,63 @@ static LRESULT CALLBACK ItemWndProc(HWND hwnd,
                 it->dragOriginWnd = {r.left, r.top};
             }
             return 0;
+        case WM_MOUSEWHEEL: {
+            int mode = GetKeyState(VK_MENU) < 0                     ? 3
+                       : (GET_KEYSTATE_WPARAM(wParam) & MK_SHIFT)   ? 2
+                       : (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) ? 1
+                                                                    : 0;
+            if (!it || !mode)
+                break;
+            if (it->wheelMode != mode)
+                it->wheelRemainder = 0;
+            it->wheelMode = mode;
+            it->wheelRemainder += GET_WHEEL_DELTA_WPARAM(wParam);
+            int steps = it->wheelRemainder / WHEEL_DELTA;
+            it->wheelRemainder %= WHEEL_DELTA;
+            if (!steps)
+                return 0;
+            if (mode == 1)
+                it->scalePercent =
+                    std::clamp(it->scalePercent + 5 * steps, 1, 500);
+            else if (mode == 2)
+                it->rotationDegrees =
+                    ((it->rotationDegrees + 5 * steps) % 360 + 360) % 360;
+            else
+                it->opacityPercent =
+                    std::clamp(it->opacityPercent + 5 * steps, 10, 100);
+            SyncImageState(*it, false);
+            RenderItem(*it);
+            if (managerRoot && page == Page::Pet && SelectedPet() == it)
+                RenderPage();
+            return 0;
+        }
         case WM_MOUSEMOVE:
             if (it && it->dragging) {
                 POINT cur{};
                 GetCursorPos(&cur);
                 int dx = cur.x - it->dragStartCursor.x;
                 int dy = cur.y - it->dragStartCursor.y;
-                SetWindowPos(hwnd, nullptr, it->dragOriginWnd.x + dx,
-                             it->dragOriginWnd.y + dy, 0, 0,
+                POINT pos{it->dragOriginWnd.x + dx, it->dragOriginWnd.y + dy};
+                RECT rect{};
+                MONITORINFO monitor{sizeof(monitor)};
+                if (snapEdges && GetWindowRect(hwnd, &rect) &&
+                    GetMonitorInfoW(
+                        MonitorFromPoint(cur, MONITOR_DEFAULTTONEAREST),
+                        &monitor)) {
+                    const RECT& work = monitor.rcWork;
+                    LONG right = work.right - (rect.right - rect.left);
+                    LONG bottom = work.bottom - (rect.bottom - rect.top);
+                    int tolerance = MulDiv(12, GetDpiForWindow(hwnd), 96);
+                    if (labs(pos.x - work.left) <= tolerance)
+                        pos.x = work.left;
+                    else if (labs(pos.x - right) <= tolerance)
+                        pos.x = right;
+                    if (labs(pos.y - work.top) <= tolerance)
+                        pos.y = work.top;
+                    else if (labs(pos.y - bottom) <= tolerance)
+                        pos.y = bottom;
+                }
+                SetWindowPos(hwnd, nullptr, pos.x, pos.y, 0, 0,
                              SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
             }
             return 0;
@@ -3872,6 +5699,7 @@ static LRESULT CALLBACK ItemWndProc(HWND hwnd,
                     break;
                 }
 
+            const auto menuKey = it->registryKey;
             HMENU m = CreatePopupMenu();
             AppendMenuW(m, MF_STRING, kCmdOpenManager,
                         L"Open in Media Manager");
@@ -3887,6 +5715,8 @@ static LRESULT CALLBACK ItemWndProc(HWND hwnd,
             AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
             AppendMenuW(m, MF_STRING, kCmdBringToFront, L"Bring to front");
             AppendMenuW(m, MF_STRING, kCmdHideThis, L"Hide this item");
+            AppendMenuW(m, configWritable ? MF_STRING : MF_GRAYED,
+                        kPetMenuClone, L"Duplicate");
             AppendMenuW(m, MF_STRING, kCmdResetPosition, L"Reset position");
             AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
             AppendMenuW(m, MF_STRING, kCmdReloadAll, L"Reload all images");
@@ -3898,7 +5728,15 @@ static LRESULT CALLBACK ItemWndProc(HWND hwnd,
                                      pt.y, 0, hwnd, nullptr);
             DestroyMenu(m);
 
+            if (idx < 0 || idx >= static_cast<int>(g_items.size()) ||
+                g_items[idx].hwnd != hwnd ||
+                g_items[idx].registryKey != menuKey)
+                return 0;
+            it = &g_items[idx];
             switch (cmd) {
+                case kPetMenuClone:
+                    RunImageMenuAction(idx, kPetMenuClone);
+                    break;
                 case kCmdOpenManager:
                     OpenPetManager(idx);
                     break;
@@ -3965,7 +5803,7 @@ static HWND CreateItemWindow(PetItem& it) {
         CreateWindowExW(exStyle, kItemWndClass, it.fileName.c_str(), WS_POPUP,
                         it.posX, it.posY, it.baseWidth, it.baseHeight, nullptr,
                         nullptr, GetModuleHandleW(nullptr), &it);
-    if (hwnd && it.enabled)
+    if (hwnd && VisibleItem(it))
         ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     return hwnd;
 }
@@ -4227,7 +6065,7 @@ static bool LoadDecodedMedia(PetItem& it,
         L" -hide_banner -loglevel error -nostdin -y -protocol_whitelist "
         L"file,pipe"
         L" -threads 2 -i " +
-        MediaQuote(it.filePath) + L" -map 0:v:0 -an -sn -dn -vf " +
+        MediaQuote(it.sourcePath) + L" -map 0:v:0 -an -sn -dn -vf " +
         MediaQuote(
             L"scale=w='min(512,iw)':h='min(512,ih)':force_original_aspect_"
             L"ratio=decrease,fps=20") +
@@ -4323,8 +6161,222 @@ static bool LoadDecodedMedia(PetItem& it,
     return true;
 }
 
+static void SampleEnvironment() {
+    SYSTEM_POWER_STATUS power{};
+    onBattery = GetSystemPowerStatus(&power) &&
+                (power.ACLineStatus == 0 || power.SystemStatusFlag == 1);
+    POINT cursor{};
+    GetCursorPos(&cursor);
+    HWND fg = GetForegroundWindow();
+    GUID desktop{};
+    BOOL fgCurrent = FALSE;
+    bool haveDesktop =
+        desktops && fg &&
+        SUCCEEDED(desktops->IsWindowOnCurrentVirtualDesktop(fg, &fgCurrent)) &&
+        fgCurrent && SUCCEEDED(desktops->GetWindowDesktopId(fg, &desktop)) &&
+        !IsEqualGUID(desktop, GUID_NULL);
+    for (auto& item : g_items) {
+        if (!item.hwnd)
+            continue;
+        BOOL current = TRUE;
+        if (desktops &&
+            SUCCEEDED(desktops->IsWindowOnCurrentVirtualDesktop(item.hwnd,
+                                                                &current)) &&
+            !current && item.followDesktop && haveDesktop)
+            current =
+                SUCCEEDED(desktops->MoveWindowToDesktop(item.hwnd, desktop));
+        if (!item.followDesktop && current && configWritable && haveDesktop &&
+            !IsEqualGUID(item.homeDesktop, desktop)) {
+            GUID actual{};
+            if (SUCCEEDED(desktops->GetWindowDesktopId(item.hwnd, &actual)) &&
+                !IsEqualGUID(actual, GUID_NULL) &&
+                !IsEqualGUID(item.homeDesktop, actual)) {
+                item.homeDesktop = actual;
+                Wh_SetBinaryValue(
+                    Record(item.registryKey, L"DesktopId").c_str(), &actual,
+                    sizeof(actual));
+            }
+        }
+        item.otherDesktop = !current;
+        RECT rect{};
+        if (!GetWindowRect(item.hwnd, &rect))
+            continue;
+        RECT hoverBounds = rect;
+        InflateRect(&hoverBounds, 18, 18);
+        bool hover = item.hoverFade && PtInRect(&hoverBounds, cursor);
+        if (item.nearCursor != hover) {
+            item.nearCursor = hover;
+            RenderItem(item);
+        }
+        item.covered = false;
+        if (!pauseCovered || !VisibleItem(item) || !item.hwnd)
+            continue;
+        // Subtract opaque windows above this item. Ignore cloaked, layered and
+        // shaped windows.
+        HRGN remaining = CreateRectRgnIndirect(&rect);
+        if (!remaining)
+            continue;
+        for (HWND above = GetWindow(item.hwnd, GW_HWNDPREV); above;
+             above = GetWindow(above, GW_HWNDPREV)) {
+            if (!IsWindowVisible(above) || IsIconic(above) ||
+                (GetWindowLongPtrW(above, GWL_EXSTYLE) &
+                 (WS_EX_LAYERED | WS_EX_TRANSPARENT)))
+                continue;
+            DWORD cloaked{};
+            RECT bounds{}, overlap{};
+            if (FAILED(DwmGetWindowAttribute(above, DWMWA_CLOAKED, &cloaked,
+                                             sizeof(cloaked))) ||
+                cloaked ||
+                FAILED(DwmGetWindowAttribute(above, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                             &bounds, sizeof(bounds))))
+                continue;
+            InflateRect(&bounds, -8, -8);
+            if (!IntersectRect(&overlap, &rect, &bounds))
+                continue;
+            HRGN area = CreateRectRgnIndirect(&overlap);
+            if (!area)
+                continue;
+            int shape = GetWindowRgn(above, area);
+            int result = SIMPLEREGION;
+            if (shape == ERROR) {
+                SetRectRgn(area, overlap.left, overlap.top, overlap.right,
+                           overlap.bottom);
+                result = CombineRgn(remaining, remaining, area, RGN_DIFF);
+            }
+            DeleteObject(area);
+            if (result == NULLREGION) {
+                item.covered = true;
+                break;
+            }
+        }
+        DeleteObject(remaining);
+    }
+}
+
+static void UpdateAudio(PetItem& item, bool audible) {
+    try {
+        if (!audible || item.muted || !item.volume || item.audioFailed ||
+            item.reverse || item.returning) {
+            if (item.audioPlaying) {
+                item.audio.Pause();
+                item.audioPlaying = false;
+                item.audioCheck = 0;
+            }
+            return;
+        }
+        if (_wcsicmp(PathFindExtensionW(item.sourcePath.c_str()), L".mp4"))
+            return;
+        auto now = GetTickCount64();
+        if (item.audioPlaying && now < item.audioCheck)
+            return;
+        item.audioCheck = now + 150;
+        if (!item.audio) {
+            wchar_t uri[32768];
+            DWORD n = std::size(uri);
+            winrt::check_hresult(
+                UrlCreateFromPathW(item.sourcePath.c_str(), uri, &n, 0));
+            item.audio = winrt::Windows::Media::Playback::MediaPlayer();
+            item.audio.AutoPlay(false);
+            item.audio.CommandManager().IsEnabled(false);
+            item.audio.Source(
+                winrt::Windows::Media::Core::MediaSource::CreateFromUri(
+                    winrt::Windows::Foundation::Uri(uri)));
+        }
+        if (!item.audioPlaying) {
+            item.audio.Play();
+            item.audioPlaying = true;
+        }
+        auto playback = item.audio.PlaybackSession();
+        using State = winrt::Windows::Media::Playback::MediaPlaybackState;
+        if (playback.PlaybackState() == State::Opening ||
+            playback.PlaybackState() == State::None)
+            return;
+        auto expected = std::chrono::milliseconds(item.currentFrame * 50);
+        auto delta = playback.Position() - expected;
+        if (delta > std::chrono::milliseconds(200) ||
+            delta < -std::chrono::milliseconds(200))
+            playback.Position(expected);
+        int fps = SavingAllowed() && conservePower && onBattery
+                      ? std::min(8, g_settings.maxFps)
+                      : g_settings.maxFps;
+        int frameMs = std::max(5000 / item.speed, (1000 + fps - 1) / fps);
+        playback.PlaybackRate(50.0 / frameMs);
+        if (playback.PlaybackState() == State::Paused)
+            item.audio.Play();
+        item.audio.Volume(item.volume / 100.0);
+
+    } catch (const winrt::hresult_error&) {
+        item.audio = nullptr;
+        item.audioPlaying = false;
+        item.audioFailed = true;
+        Wh_Log(L"Audio unavailable for %s", item.fileName.c_str());
+    }
+}
+
+static bool LoadPackFrames(PetItem& item,
+                           const Pack& pack,
+                           const std::wstring& dir,
+                           size_t& totalBytes) {
+    std::vector<std::unique_ptr<Gdiplus::Bitmap>> frames;
+    size_t bytes = 0;
+    auto append = [&](Gdiplus::Bitmap& image, UINT x, UINT y, UINT w, UINT h) {
+        size_t cost = size_t(w) * h * 4;
+        if (!w || !h || w > 512 || h > 512 || frames.size() >= 300 ||
+            bytes + cost > 128u * 1024 * 1024 ||
+            totalBytes + bytes + cost > 256u * 1024 * 1024 ||
+            (!frames.empty() &&
+             (frames[0]->GetWidth() != w || frames[0]->GetHeight() != h)))
+            return false;
+        std::unique_ptr<Gdiplus::Bitmap> copy(image.Clone(
+            static_cast<INT>(x), static_cast<INT>(y), static_cast<INT>(w),
+            static_cast<INT>(h), PixelFormat32bppPARGB));
+        if (!copy || copy->GetLastStatus() != Gdiplus::Ok)
+            return false;
+        frames.push_back(std::move(copy));
+        bytes += cost;
+        return true;
+    };
+    if (pack.width) {
+        Gdiplus::Bitmap sheet(item.sourcePath.c_str());
+        UINT w = sheet.GetWidth(), h = sheet.GetHeight();
+        if (!w || !h || w % pack.width || h % pack.height ||
+            static_cast<ULONGLONG>(w) * h > 32u * 1024 * 1024)
+            return false;
+        for (UINT y = 0; y < h; y += pack.height)
+            for (UINT x = 0; x < w; x += pack.width)
+                if (!append(sheet, x, y, pack.width, pack.height))
+                    return false;
+    } else {
+        for (const auto& name : pack.frames) {
+            Gdiplus::Bitmap frame(WorkshopChild(dir, name).c_str());
+            if (!append(frame, 0, 0, frame.GetWidth(), frame.GetHeight()))
+                return false;
+        }
+    }
+    if (frames.empty())
+        return false;
+    for (auto& frame : frames)
+        item.decodedFrames.push_back(frame.release());
+    item.image = item.decodedFrames.front();
+    item.baseWidth = item.image->GetWidth();
+    item.baseHeight = item.image->GetHeight();
+    item.frameCount = static_cast<UINT>(frames.size());
+    item.frameDelaysMs.assign(item.frameCount, 1000 / pack.fps);
+    totalBytes += bytes;
+    return true;
+}
+
 static void DestroyAllItems() {
+    frameCache.clear();
+    cachedBytes = 0;
     for (auto& it : g_items) {
+        if (it.audio) {
+            try {
+                it.audio.Close();
+            } catch (const winrt::hresult_error&) {
+            }
+            it.audio = nullptr;
+        }
         if (it.hwnd)
             DestroyWindow(it.hwnd);
         if (it.decodedFrames.empty())
@@ -4390,6 +6442,7 @@ static void ReloadAll(bool rereadSettings) {
     std::wstring selectedKey;
     if (auto selected = SelectedPet())
         selectedKey = selected->registryKey;
+    std::set<std::wstring> hiddenItems;
     std::map<std::wstring, POINT> positions;
     std::map<std::wstring, std::vector<POINT>> unnamedPositions;
     for (const auto& item : g_items) {
@@ -4401,6 +6454,8 @@ static void ReloadAll(bool rereadSettings) {
             unnamedPositions[item.filePath].push_back(pos);
         else
             positions[item.registryKey] = pos;
+        if (item.hidden && !item.registryKey.empty())
+            hiddenItems.insert(item.registryKey);
     }
     DestroyAllItems();
     // Only re-read from Windhawk settings when triggered externally (e.g. mod
@@ -4457,7 +6512,31 @@ static void ReloadAll(bool rereadSettings) {
             // A missing decoder must preserve the saved folder.
             emptyFolders.erase(folderKey);
         }
-        if (NeedsMediaDecoder(path)) {
+        it.sourcePath = path;
+        auto parent = fs::path(path).parent_path();
+        auto slug = parent.filename().wstring();
+        Pack pack;
+        std::wstring dir;
+        if (SafeWorkshopName(slug) &&
+            !_wcsicmp(parent.parent_path().c_str(), GetWorkshopDir().c_str()) &&
+            !_wcsicmp(ReadString(PackKey(slug, L"Anchor")).c_str(),
+                      fn.c_str())) {
+            dir = WorkshopChild(parent.wstring(),
+                                ReadString(PackKey(slug, L"Active")));
+            try {
+                pack = ParsePack(json::JsonObject::Parse(winrt::to_hstring(
+                    ReadSmallFile(WorkshopChild(dir, L"package.json")))));
+                it.sourcePath = WorkshopChild(dir, pack.file);
+            } catch (...) {
+                continue;
+            }
+        }
+        if (pack.width || !pack.frames.empty()) {
+            if (!LoadPackFrames(it, pack, dir, decodedBytes)) {
+                failures += fn + L": invalid sprite or PNG sequence.\n";
+                continue;
+            }
+        } else if (NeedsMediaDecoder(it.sourcePath)) {
             if (_wcsicmp(PathFindExtensionW(path.c_str()), L".mp4") == 0 &&
                 std::find(warnedVideos.begin(), warnedVideos.end(), path) ==
                     warnedVideos.end()) {
@@ -4466,7 +6545,7 @@ static void ReloadAll(bool rereadSettings) {
                             L"MP4 support is experimental. Importing an MP4 "
                             L"file may cause performance drops "
                             L"and temporarily freeze the manager while "
-                            L"decoding. Playback is silent. "
+                            L"decoding. Audio is muted by default. "
                             L"Short, low-resolution clips are recommended.",
                             L"Experimental MP4 import", MB_OK | MB_ICONWARNING);
             }
@@ -4481,7 +6560,7 @@ static void ReloadAll(bool rereadSettings) {
                 continue;
             }
         } else {
-            auto* img = new Gdiplus::Image(path.c_str());
+            auto* img = new Gdiplus::Image(it.sourcePath.c_str());
             if (img->GetLastStatus() != Gdiplus::Ok) {
                 delete img;
                 continue;
@@ -4519,7 +6598,16 @@ static void ReloadAll(bool rereadSettings) {
         if (it.registryKey.empty() && folderKey.empty())
             it.registryKey = ImageKey(path, usedKeys);
         usedKeys.push_back(it.registryKey);
+        it.hidden = hiddenItems.count(it.registryKey) != 0;
         SyncImageState(it, true);
+        if (it.reverse && it.frameCount > 1) {
+            it.currentFrame = it.frameCount - 1;
+            if (it.decodedFrames.empty())
+                it.image->SelectActiveFrame(&Gdiplus::FrameDimensionTime,
+                                            it.currentFrame);
+            else
+                it.image = it.decodedFrames[it.currentFrame];
+        }
         POINT storedPos{};
         const int offset =
             inset + 40 * static_cast<int>(g_items.size() % cascadeSlots);
@@ -4536,8 +6624,7 @@ static void ReloadAll(bool rereadSettings) {
                 prior.erase(prior.begin());
             }
         }
-        if (!MonitorFromPoint(position, MONITOR_DEFAULTTONULL))
-            position = fallback;
+        position = RecoverPosition(it, position);
         it.posX = position.x;
         it.posY = position.y;
         if (!hasStoredPos || storedPos.x != position.x ||
@@ -4547,6 +6634,22 @@ static void ReloadAll(bool rereadSettings) {
         g_items.push_back(std::move(it));
         PetItem& ref = g_items.back();
         ref.hwnd = CreateItemWindow(ref);
+        if (ref.hwnd && desktops && configWritable) {
+            auto key = Record(ref.registryKey, L"DesktopId");
+            GUID home{};
+            bool restored =
+                !ref.followDesktop &&
+                Wh_GetBinaryValue(key.c_str(), &home, sizeof(home)) ==
+                    sizeof(home) &&
+                SUCCEEDED(desktops->MoveWindowToDesktop(ref.hwnd, home));
+            if (restored)
+                ref.homeDesktop = home;
+            else if (SUCCEEDED(desktops->GetWindowDesktopId(ref.hwnd, &home)) &&
+                     !IsEqualGUID(home, GUID_NULL)) {
+                ref.homeDesktop = home;
+                Wh_SetBinaryValue(key.c_str(), &home, sizeof(home));
+            }
+        }
         if (ref.isGif)
             ref.monitorHz = MonitorRefreshRate(ref.hwnd);
         if (ref.hwnd)
@@ -4586,7 +6689,7 @@ static void ShowAllHidden() {
     for (auto& it : g_items)
         if (it.hidden && it.hwnd) {
             it.hidden = false;
-            if (it.enabled)
+            if (VisibleItem(it))
                 ShowWindow(it.hwnd, SW_SHOWNOACTIVATE);
         }
 }
@@ -4603,9 +6706,21 @@ static HWND readyDialog = nullptr;
 static INT_PTR CALLBACK ReadyDialogProc(HWND hwnd,
                                         UINT msg,
                                         WPARAM wp,
-                                        LPARAM) {
+                                        LPARAM lp) {
     if (msg == WM_INITDIALOG) {
-        SetWindowTextW(hwnd, L"AnimaWindhawkEngine");
+        if (!g_hManagerIcon)
+            g_hManagerIcon = LoadManagerIcon();
+        if (g_hManagerIcon) {
+            SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
+                         reinterpret_cast<LPARAM>(g_hManagerIcon));
+            SendMessageW(hwnd, WM_SETICON, ICON_BIG,
+                         reinterpret_cast<LPARAM>(g_hManagerIcon));
+            SetTaskbarIdentity(hwnd);
+        }
+        if (lp)
+            savingDialog = hwnd;
+        SetWindowTextW(hwnd, lp ? L"Pause media to save resources?"
+                                : L"AnimaWindhawkEngine");
         auto add = [&](PCWSTR cls, PCWSTR text, DWORD style, RECT bounds,
                        int id) {
             MapDialogRect(hwnd, &bounds);
@@ -4620,11 +6735,40 @@ static INT_PTR CALLBACK ReadyDialogProc(HWND hwnd,
                              SendMessageW(hwnd, WM_GETFONT, 0, 0), TRUE);
             return control;
         };
+        if (lp) {
+            add(L"STATIC",
+                L"Allow automatic playback changes? Fully covered media and "
+                L"locked sessions can pause. On battery, animation can slow to "
+                L"8 FPS. You can change this choice in App settings.",
+                SS_LEFT, {12, 10, 270, 62}, -1);
+            add(L"BUTTON", L"Allow saving", WS_TABSTOP, {60, 68, 158, 88},
+                IDYES);
+            SetFocus(add(L"BUTTON", L"Keep playing",
+                         WS_TABSTOP | BS_DEFPUSHBUTTON, {164, 68, 268, 88},
+                         IDNO));
+            return FALSE;
+        }
         add(L"STATIC",
             L"AnimaWindhawkEngine loaded successfully and is ready to use.",
             SS_LEFT, {12, 10, 220, 36}, -1);
         SetFocus(add(L"BUTTON", L"OK", WS_TABSTOP | BS_DEFPUSHBUTTON,
                      {168, 42, 220, 57}, IDOK));
+        return FALSE;
+    }
+    if (hwnd == savingDialog) {
+        if (msg == WM_CLOSE ||
+            (msg == WM_COMMAND &&
+             (LOWORD(wp) == IDYES || LOWORD(wp) == IDNO ||
+              LOWORD(wp) == IDCANCEL || LOWORD(wp) == IDOK))) {
+            savingChoice = msg == WM_COMMAND && LOWORD(wp) == IDYES
+                               ? SavingChoice::Allow
+                               : SavingChoice::KeepPlaying;
+            SaveNumber(L"SavingChoice", static_cast<DWORD>(savingChoice));
+            DestroyWindow(hwnd);
+            return TRUE;
+        }
+        if (msg == WM_NCDESTROY)
+            savingDialog = nullptr;
         return FALSE;
     }
     if (msg == WM_CLOSE ||
@@ -4638,24 +6782,40 @@ static INT_PTR CALLBACK ReadyDialogProc(HWND hwnd,
         readyDialog = nullptr;
     return FALSE;
 }
-static void ShowReadyDialog() {
+static HWND CreateNotice(bool saving) {
     struct alignas(DWORD) ReadyTemplate {
         DLGTEMPLATE dialog;
         WORD menu, windowClass, title, pointSize;
         wchar_t font[9];
     };
     static_assert(offsetof(ReadyTemplate, menu) == sizeof(DLGTEMPLATE));
-    const ReadyTemplate layout = {
-        {WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | DS_CENTER |
-             DS_SETFONT,
-         WS_EX_APPWINDOW | WS_EX_TOPMOST, 0, 0, 0, 232, 65},
-        0,
-        0,
-        0,
-        9,
-        L"Segoe UI"};
-    readyDialog = CreateDialogIndirectParamW(
-        GetModuleHandleW(nullptr), &layout.dialog, nullptr, ReadyDialogProc, 0);
+    ReadyTemplate layout = {{WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU |
+                                 DS_CENTER | DS_SETFONT,
+                             WS_EX_APPWINDOW | WS_EX_TOPMOST, 0, 0, 0, 232, 65},
+                            0,
+                            0,
+                            0,
+                            9,
+                            L"Segoe UI"};
+    if (saving) {
+        layout.dialog.cx = 280;
+        layout.dialog.cy = 96;
+    }
+    return CreateDialogIndirectParamW(GetModuleHandleW(nullptr), &layout.dialog,
+                                      nullptr, ReadyDialogProc, saving ? 1 : 0);
+}
+static void ShowSavingDialog() {
+    if (savingDialog) {
+        SetForegroundWindow(savingDialog);
+        return;
+    }
+    if (sessionLocked)
+        return;
+    if (!CreateNotice(true))
+        Wh_Log(L"Could not display resource-saving prompt.");
+}
+static void ShowReadyDialog() {
+    readyDialog = CreateNotice(false);
     if (readyDialog) {
         SetWindowPos(readyDialog, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
@@ -4894,14 +7054,16 @@ static void ShowWelcomeGuide(bool recordFirstRun) {
     }
     // The welcome window owns its icon independently of the manager.
     // This also works on first run before the manager has ever been opened.
-    g_hWelcomeIcon =
-        g_hManagerIcon ? CopyIcon(g_hManagerIcon) : LoadManagerIcon();
+    if (!g_hManagerIcon)
+        g_hManagerIcon = LoadManagerIcon();
+    g_hWelcomeIcon = g_hManagerIcon ? CopyIcon(g_hManagerIcon) : nullptr;
     if (g_hWelcomeIcon) {
         SendMessageW(g_hWelcomeWnd, WM_SETICON, ICON_BIG,
                      (LPARAM)g_hWelcomeIcon);
         SendMessageW(g_hWelcomeWnd, WM_SETICON, ICON_SMALL,
                      (LPARAM)g_hWelcomeIcon);
     }
+    SetTaskbarIdentity(g_hWelcomeWnd);
     ShowWindow(g_hWelcomeWnd, SW_SHOWNORMAL);
     UpdateWindow(g_hWelcomeWnd);
     if (recordFirstRun) {
@@ -5064,19 +7226,28 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd,
                 auto& it = g_workshopItems[idx];
                 it.installing = false;
                 if (ok) {
-                    it.installed = true;
-                    it.localImagePath =
-                        GetWorkshopDir() + L"\\" + it.slug + L"\\" + it.file;
-                    // Add to the global path list and reload
-                    bool already = false;
-                    for (auto& p : g_settings.imagePaths)
-                        if (p == it.localImagePath) {
-                            already = true;
-                            break;
+                    auto root = WorkshopChild(GetWorkshopDir(), it.slug);
+                    auto anchor = ReadString(PackKey(it.slug, L"Anchor"));
+                    if (anchor.empty())
+                        anchor = it.file;
+                    auto path = WorkshopChild(root, anchor);
+                    auto src = WorkshopChild(WorkshopChild(root, it.revision),
+                                             it.file);
+                    ok = !path.empty() && !src.empty() &&
+                         (GetFileAttributesW(path.c_str()) !=
+                              INVALID_FILE_ATTRIBUTES ||
+                          CopyFileW(src.c_str(), path.c_str(), TRUE)) &&
+                         PutString(PackKey(it.slug, L"Anchor"), anchor) &&
+                         PutString(PackKey(it.slug, L"Active"), it.revision);
+                    if (ok) {
+                        PutString(PackKey(it.slug, L"Version"), it.version);
+                        it.installedVersion = it.version;
+                        it.localImagePath = path;
+                        if (!it.installed) {
+                            g_settings.imagePaths.push_back(path);
+                            SaveImagePaths(g_settings.imagePaths);
                         }
-                    if (!already) {
-                        g_settings.imagePaths.push_back(it.localImagePath);
-                        SaveImagePaths(g_settings.imagePaths);
+                        it.installed = true;
                         PostMessageW(g_hCtrlWnd, WM_APP_RELOAD_ITEMS_ONLY, 0,
                                      0);
                     }
@@ -5089,10 +7260,29 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd,
             return 0;
         }
 
+        case WM_WTSSESSION_CHANGE:
+            if (wParam == WTS_SESSION_LOCK) {
+                sessionLocked = true;
+                lockOccurred = true;
+            }
+            if (wParam == WTS_SESSION_UNLOCK)
+                sessionLocked = false;
+            return 0;
         case WM_DISPLAYCHANGE:
-            for (auto& pet : g_items)
+            for (auto& pet : g_items) {
+                POINT pos = RecoverPosition(pet, {pet.posX, pet.posY});
+                if (pos.x != pet.posX || pos.y != pet.posY) {
+                    pet.posX = pos.x;
+                    pet.posY = pos.y;
+                    if (pet.hwnd)
+                        SetWindowPos(
+                            pet.hwnd, nullptr, pos.x, pos.y, 0, 0,
+                            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                    SaveStoredPosition(pet.registryKey, pos.x, pos.y);
+                }
                 if (pet.isGif)
                     pet.monitorHz = MonitorRefreshRate(pet.hwnd);
+            }
             if (g_settings.maxFps > 0)
                 ApplyTimer();
             if (managerRoot && page == Page::Pet)
@@ -5102,6 +7292,11 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd,
             ShowWelcomeGuide(true);
             return 0;
         case WM_HOTKEY:
+            if (wParam == kToggleMediaHotkey) {
+                panic = !panic;
+                RefreshVisibility();
+                return 0;
+            }
             if (wParam == HOTKEY_OPEN_MANAGER)
                 OpenPetManager();
             return 0;
@@ -5142,7 +7337,40 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd,
                 }
 
                 ULONGLONG now = GetTickCount64();
+                static ULONGLONG nextFullscreenCheck = 0;
+                if (now >= nextFullscreenCheck) {
+                    UpdateFullscreen();
+                    SampleEnvironment();
+                    // Present pending edits when a previously suppressed item
+                    // becomes visible.
+                    for (auto& item : g_items)
+                        RenderItem(item);
+                    if (savingChoice == SavingChoice::Ask && !sessionLocked &&
+                        !savingDialog &&
+                        std::any_of(g_items.begin(), g_items.end(),
+                                    [](const auto& item) {
+                                        return VisibleItem(item) &&
+                                               !item.otherDesktop &&
+                                               item.frameCount > 1 && !item.paused &&
+                                               (lockOccurred || item.covered ||
+                                                (conservePower && onBattery));
+                                    }))
+                        ShowSavingDialog();
+                    CheckSceneSchedule();
+                    nextFullscreenCheck = now + 500;
+                }
                 for (auto& it : g_items) {
+                    bool active =
+                        VisibleItem(it) && !it.otherDesktop &&
+                        !(SavingAllowed() && (sessionLocked || it.covered));
+                    UpdateAudio(it, active && !it.paused &&
+                                        !(it.loops &&
+                                          it.completed >=
+                                              static_cast<unsigned>(it.loops)));
+                    if (!active ||
+                        (it.loops &&
+                         it.completed >= static_cast<unsigned>(it.loops)))
+                        continue;
                     if (it.frameCount <= 1 || it.paused ||
                         it.frameDelaysMs.empty())
                         continue;
@@ -5150,9 +7378,14 @@ static LRESULT CALLBACK ControllerWndProc(HWND hwnd,
                                                   it.frameDelaysMs.size()];
                     int fps = it.isGif ? std::min(it.fpsLimit, it.monitorHz)
                                        : g_settings.maxFps;
+                    if (SavingAllowed() && conservePower && onBattery)
+                        fps = std::min(fps, 8);
+                    delay = static_cast<UINT>(static_cast<ULONGLONG>(delay) *
+                                              100 / it.speed);
                     delay = std::max(delay, 1u + 999u / static_cast<UINT>(fps));
                     if (now - it.lastFrameTick >= delay) {
-                        it.currentFrame = (it.currentFrame + 1) % it.frameCount;
+                        if (!AdvancePlayback(it))
+                            continue;
                         if (it.decodedFrames.empty())
                             it.image->SelectActiveFrame(
                                 &Gdiplus::FrameDimensionTime, it.currentFrame);
@@ -5246,15 +7479,32 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
         std::min<DWORD>(kAccentIndexSystem, ConfigNumber(L"Accent", 0));
     g_workshopView = static_cast<WorkshopView>(
         std::min<DWORD>(2, ConfigNumber(L"WorkshopLayout", 0)));
+    savingChoice = static_cast<SavingChoice>(
+        std::min<DWORD>(2, ConfigNumber(L"SavingChoice", 0)));
+    lockOccurred = false;
+    conservePower = ConfigNumber(L"ConservePower", 1) != 0;
+    pauseCovered = ConfigNumber(L"PauseCovered", 1) != 0;
+    CoCreateInstance(CLSID_VirtualDesktopManager, nullptr, CLSCTX_INPROC_SERVER,
+                     IID_PPV_ARGS(desktops.put()));
+    WTSRegisterSessionNotification(g_hCtrlWnd, NOTIFY_FOR_THIS_SESSION);
+    hideFullscreen = ConfigNumber(L"HideFullscreen", 1) != 0;
+    snapEdges = ConfigNumber(L"SnapEdges", 0) != 0;
+    UpdateFullscreen();
     LoadHotkey();
-    if (g_hotkeyVk)
-        RegisterHotKey(g_hCtrlWnd, HOTKEY_OPEN_MANAGER, g_hotkeyMods,
-                       g_hotkeyVk);
+    ReapplyHotkey();
+    panic = false;
+    panicAvailable =
+        RegisterHotKey(g_hCtrlWnd, kToggleMediaHotkey,
+                       MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT,
+                       'H') != FALSE;
 
     if (!workerQuitting)
         ReloadAll();
     if (!workerQuitting) {
-        OpenManagerAtSignIn();
+        if (taskbarLaunch)
+            OpenPetManager();
+        else
+            OpenManagerAtSignIn();
         ShowReadyDialog();
     }
 
@@ -5272,6 +7522,10 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
         }
         if (GetMessageW(&msg, nullptr, 0, 0) <= 0)
             break;
+        if (savingDialog &&
+            (msg.hwnd == savingDialog || IsChild(savingDialog, msg.hwnd)) &&
+            IsDialogMessageW(savingDialog, &msg))
+            continue;
         if (readyDialog &&
             (msg.hwnd == readyDialog || IsChild(readyDialog, msg.hwnd)) &&
             IsDialogMessageW(readyDialog, &msg))
@@ -5310,6 +7564,8 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
         disableProcess = nullptr;
     }
 
+    if (savingDialog)
+        DestroyWindow(savingDialog);
     if (readyDialog)
         DestroyWindow(readyDialog);
     if (g_hWelcomeWnd)
@@ -5319,6 +7575,8 @@ static DWORD WINAPI WorkerThreadProc(LPVOID) {
         DestroyWindow(g_hManagerWnd);
         g_hManagerWnd = nullptr;
     }
+    desktops = nullptr;
+    WTSUnRegisterSessionNotification(g_hCtrlWnd);
     DestroyAllItems();
     if (g_hCtrlWnd) {
         DestroyWindow(g_hCtrlWnd);
@@ -5503,6 +7761,9 @@ BOOL Wh_ModInit() {
         }
     }
 
+    for (int i = 1; i < argc; ++i)
+        if (!wcscmp(argv[i], L"-anima-manager") && isCurrentToolModProcess)
+            taskbarLaunch = true;
     LocalFree(argv);
 
     if (isExcluded) {
@@ -5518,6 +7779,18 @@ BOOL Wh_ModInit() {
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            if (taskbarLaunch) {
+                auto ctrl = FindWindowW(kCtrlWndClass,
+                                        L"AnimaWindhawkEngineController");
+                if (ctrl) {
+                    DWORD pid = 0;
+                    GetWindowThreadProcessId(ctrl, &pid);
+                    AllowSetForegroundWindow(pid);
+                    PostMessageW(ctrl, WM_APP_OPEN_MANAGER,
+                                 static_cast<WPARAM>(-1), 0);
+                    ExitProcess(0);
+                }
+            }
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
         }
