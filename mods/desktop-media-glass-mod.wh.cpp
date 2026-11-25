@@ -11,11 +11,55 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*...*/
+/*
+# Desktop Media Glass mod
+
+Interactive glass media player for Windows media sessions.
+*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
-/*...*/
+/*
+- PositionPreset: topRight
+  $name: Position preset
+  $options:
+    - topLeft: Top Left
+    - topRight: Top Right
+    - bottomLeft: Bottom Left
+    - bottomRight: Bottom Right
+    - custom: Custom
+- PositionX: 100
+  $name: Custom X Position
+- PositionY: 100
+  $name: Custom Y Position
+- PositionMargin: 24
+  $name: Margin
+- ScalePercent: 100
+  $name: Scale (%)
+  $description: Scale widget from 50% to 150%
+- GlassOpacity: 190
+  $name: Glass Opacity (0-255)
+- ThemePreset: glass
+  $name: Theme preset
+  $options:
+    - glass: Glass
+    - cyberpunk: Cyberpunk
+    - pastelNote: Pastel Note
+    - cartoon: Cartoon
+    - synthwave: Synthwave
+    - ocean: Ocean
+    - forest: Forest
+    - sunset: Sunset
+    - frost: Frost Glass
+- UseCustomAccent: false
+  $name: Use custom accent color
+- AccentColor: '#B8FF5E'
+  $name: Accent Color (HEX)
+- UseCustomGlassColor: false
+  $name: Use custom glass color
+- GlassColor: '#2B3740'
+  $name: Glass Color (HEX)
+*/
 // ==/WindhawkModSettings==
 
 #include <windows.h>
