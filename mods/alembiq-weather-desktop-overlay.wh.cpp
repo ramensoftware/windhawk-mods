@@ -2,11 +2,11 @@
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
 // @description     Atmospheric effects and live weather forecast visualization for the Windows desktop (Direct2D weather and seasonal particle overlay)
-// @version         1.5.2
+// @version         1.5.3
 // @author          alembiq
 // @github          https://github.com/alembiqspace
 // @include         windhawk.exe
-// @compilerOptions -ld2d1 -ldwrite -lwininet -luser32 -lgdi32 -lshell32 -lole32
+// @compilerOptions -ld2d1 -ldwrite -lwininet -luser32 -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -1624,10 +1624,8 @@ int ComputeBottomLimitYForRect(const Settings& cfg, int monTop, int monBottom, i
         }
         HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
         RECT trayRect = {};
-        if (hTray && GetWindowRect(hTray, &trayRect)) {
-            if (cfg.taskbarAsBorder) {
-                baseBottom = std::min(baseBottom, static_cast<int>(trayRect.top));
-            }
+        if (hTray && GetWindowRect(hTray, &trayRect) && cfg.taskbarAsBorder) {
+            baseBottom = std::min(baseBottom, static_cast<int>(trayRect.top));
         }
     } else if (cfg.bottomBoundaryMode == L"custom_offset") {
         baseBottom -= cfg.bottomOffsetPx;
@@ -1727,8 +1725,19 @@ bool IsFullscreenAppActive() {
 }
 
 bool IsWindowCloaked(HWND hwnd) {
+    using DwmGetWindowAttributeFn = HRESULT(WINAPI*)(HWND, DWORD, PVOID, DWORD);
+    static HMODULE hDwmapi = GetModuleHandleW(L"dwmapi.dll");
+    if (!hDwmapi) {
+        hDwmapi = LoadLibraryW(L"dwmapi.dll");
+    }
+    if (!hDwmapi) return false;
+
+    static auto pfnDwmGetWindowAttribute =
+        reinterpret_cast<DwmGetWindowAttributeFn>(GetProcAddress(hDwmapi, "DwmGetWindowAttribute"));
+    if (!pfnDwmGetWindowAttribute) return false;
+
     DWORD cloaked = 0;
-    if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)))) {
+    if (SUCCEEDED(pfnDwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked)))) {
         return cloaked != 0;
     }
     return false;
@@ -2186,7 +2195,7 @@ void DrawDriftingCloudsLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brus
             float rx = (72.0f + (i % 4) * 32.0f) * (0.72f + cloudPct01 * 0.50f);
             float ry = (24.0f + (i % 3) * 11.0f) * (0.72f + cloudPct01 * 0.45f);
 
-            float edgeFade = ComputeMonitorEdgeFade(mon, cx, cy, rx + 35.0f);
+            float edgeFade = ComputeMonitorEdgeFade(mon, cx, cy, rx + 45.0f);
             if (edgeFade <= 0.01f) continue;
 
             float alpha = std::clamp(base.a * (0.38f + cloudPct01 * 0.72f) *
