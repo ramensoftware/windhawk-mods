@@ -2,7 +2,7 @@
 // @id              explorer-extras
 // @name            Explorer Extras
 // @description     Additions for File Explorer, one switch per feature: Columns (Miller columns), a details and preview pane (PDF, text, Markdown, images, video, sound), colour labels (tags), and a toolbar with tighter gaps, a resizable search box and round corners.
-// @version         1.0.20
+// @version         1.0.21
 // @author          AristideBH
 // @github          https://github.com/AristideBH
 // @donateUrl       https://ko-fi.com/aristidebh
@@ -64,7 +64,7 @@ Tidy the top of the window. Each part is a setting, and one switch gives Explore
 
 ## Good to know
 
-- **Labels stay in your files.** They are written into the files themselves (an NTFS stream), so they stay there after the mod is disabled or uninstalled, and also on a network share that supports named streams. To take them off, use **Clear tags** (in the pane or the right-click menu) while the mod is still running.
+- **Labels stay in your files.** Labels are off by default, because they are the one part of the mod that changes files: turn on **Show labels** to use them. They are written into the files themselves (an NTFS stream), so they stay there after the mod is disabled or uninstalled, and also on a network share that supports named streams. To take them off, use **Clear tags** (in the pane or the right-click menu) while the mod is still running.
 - **Removing the mod** leaves Explorer as it was, apart from those labels.
 - **Works with QuickLook.** Explorer's own view follows the active column, so [QuickLook](https://github.com/QL-Win/QuickLook) previews the selected item as it does anywhere else.
 - **Tested** daily on Windows 11 24H2 (build 26100) on ARM64, in French and English. x86-64 was tested up to version 0.55.
@@ -176,9 +176,9 @@ If you like it, you can support the work on Ko-fi: https://ko-fi.com/aristidebh
     $name: Previews
   $name: Details pane
 - labels:
-  - labelsOn: true
+  - labelsOn: false
     $name: Show labels
-    $description: Labels are coloured dots on files and folders, drawn in File Explorer and in Columns. They are kept in the file itself and need an NTFS drive.
+    $description: Labels are coloured dots on files and folders, drawn in File Explorer and in Columns. They are kept in the file itself (they stay there if the mod is removed) and need an NTFS drive. Off by default.
   - labelsGroup: true
     $name: Sort and group by tags
     $description: Adds the labels to Explorer’s own Tags property, so Sort by, Group by and the Tags column use them. The tags a file already has are kept. Takes effect when a folder is shown again.
@@ -705,7 +705,7 @@ constexpr SettingInfo kSettings[] = {
     {L"livePreview", L"details.previews.livePreview", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"previewImages", L"details.previews.previewImages", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"previewMedia", L"details.previews.previewMedia", SettingKind::Bool, 1, L"", 0, 0, false},
-    {L"labelsOn", L"labels.labelsOn", SettingKind::Bool, 1, L"", 0, 0, false},
+    {L"labelsOn", L"labels.labelsOn", SettingKind::Bool, 0, L"", 0, 0, false},
     {L"labelsGroup", L"labels.labelsGroup", SettingKind::Bool, 1, L"", 0, 0, false},
     {L"colourName0", L"labels.names.colourName0", SettingKind::String, 0, L"Gray", 0, 0, false},
     {L"colourName1", L"labels.names.colourName1", SettingKind::String, 0, L"Red", 0, 0, false},
