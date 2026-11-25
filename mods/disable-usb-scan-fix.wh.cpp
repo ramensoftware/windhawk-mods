@@ -4,12 +4,13 @@
 // @name:ru-RU      Отключение предупреждений о проверке USB-накопителей в Windows 11
 // @description     Blocks USB scan dialogs and disk repair notifications on Windows 11
 // @description:ru-RU Блокирует окна и уведомления о проверке USB-накопителей в Windows 11
-// @version         1.1
+// @version         1.2
 // @author          d-p4d-67
 // @github          https://github.com/d-p4d-67
 // @include         explorer.exe
-// @include         rundll32.exe
-// @compilerOptions -lcomctl32 -luser32 -lruntimeobject -lole32 -loleaut32
+// @homepage        https://github.com/d-p4d-67/Disable-USB-Scan-and-Fix-Dialog-Windows-11
+// @architecture    x86-64
+// @compilerOptions -lruntimeobject -lole32 -loleaut32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -24,9 +25,10 @@ AutoPlay notifications without disabling the AutoPlay service.
 - Leaves non-matching notifications and dialogs unchanged.
 - Does not modify the registry or repair the filesystem.
 
-The notification hook and absence of the warning dialog were verified on
-the author's Windows installation. Other Windows builds and languages
-have not been tested.
+Version 1.1 was tested on the author's Windows 11 installation in Russian.
+Version 1.2 improves hook lifetime management and targets Explorer only;
+local runtime testing of this revision is pending. English matching and
+other Windows builds have not been verified.
 
 **Warning:** This mod hides disk warnings. It does not fix filesystem
 errors or protect against data loss. Back up important files and check
@@ -40,7 +42,10 @@ drives manually when necessary.
 службы автозапуска. Поддерживает русский и английский текст предупреждений.
 Другие уведомления и окна, не соответствующие фильтру, не блокируются.
 
-Проверено на компьютере автора. Другие сборки Windows не тестировались.
+Версия 1.1 проверена на компьютере автора с русским интерфейсом Windows 11.
+Версия 1.2 содержит исправления по результатам проверки кода; локальное
+тестирование новой версии ещё предстоит. Английский интерфейс и другие
+сборки Windows не проверены.
 
 **Важно:** мод скрывает предупреждения, но не исправляет ошибки файловой
 системы и не предотвращает потерю данных.
@@ -51,7 +56,8 @@ drives manually when necessary.
 #include <roapi.h>
 #include <commctrl.h>
 #include <string>
-#include <cwctype>
+#include <algorithm>
+#include <windhawk_utils.h>
 #include <winrt/Windows.UI.Notifications.h>
 #include <winrt/Windows.Data.Xml.Dom.h>
 
@@ -70,6 +76,7 @@ using TaskDialogIndirect_t = HRESULT(WINAPI*)(
 );
 
 TaskDialogIndirect_t TaskDialogIndirect_Original = nullptr;
+HMODULE g_dialogModule = nullptr;
 
 std::wstring GetDialogText(
     HINSTANCE instance,
@@ -133,13 +140,7 @@ bool ContainsIgnoreCase(
     return false;
 }
 
-bool IsSkipButton(std::wstring text) {
-    size_t pos;
-
-    while ((pos = text.find(L'&')) !=
-           std::wstring::npos) {
-        text.erase(pos, 1);
-    }
+bool IsSkipButton(const std::wstring& text) {
 
     return
         ContainsIgnoreCase(
@@ -152,13 +153,7 @@ bool IsSkipButton(std::wstring text) {
         );
 }
 
-bool IsRepairButton(std::wstring text) {
-    size_t pos;
-
-    while ((pos = text.find(L'&')) !=
-           std::wstring::npos) {
-        text.erase(pos, 1);
-    }
+bool IsRepairButton(const std::wstring& text) {
 
     return
         ContainsIgnoreCase(
@@ -196,6 +191,9 @@ HRESULT WINAPI TaskDialogIndirect_Hook(
                 config->hInstance,
                 item.pszButtonText
             );
+
+            text.erase(std::remove(text.begin(), text.end(), L'&'),
+                       text.end());
 
             if (IsSkipButton(text)) {
                 foundSkip = true;
@@ -235,7 +233,8 @@ HRESULT WINAPI TaskDialogIndirect_Hook(
 }
 
 bool InitDialogHook() {
-    HMODULE module = LoadLibraryW(L"comctl32.dll");
+    HMODULE module = LoadLibraryExW(L"comctl32.dll", nullptr,
+                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     if (!module) {
         Wh_Log(L"Failed to load comctl32.dll");
@@ -249,18 +248,21 @@ bool InitDialogHook() {
 
     if (!target) {
         Wh_Log(L"TaskDialogIndirect not found");
+        FreeLibrary(module);
         return false;
     }
 
-    bool result = Wh_SetFunctionHook(
-        reinterpret_cast<void*>(target),
-        reinterpret_cast<void*>(
-            TaskDialogIndirect_Hook
-        ),
-        reinterpret_cast<void**>(
-            &TaskDialogIndirect_Original
-        )
+    bool result = WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<TaskDialogIndirect_t>(target),
+        TaskDialogIndirect_Hook,
+        &TaskDialogIndirect_Original
     );
+
+    if (result) {
+        g_dialogModule = module;
+    } else {
+        FreeLibrary(module);
+    }
 
     Wh_Log(
         L"Dialog hook: %s",
@@ -280,6 +282,7 @@ using ToastShow_t = HRESULT(WINAPI*)(
 );
 
 ToastShow_t ToastShow_Original = nullptr;
+HMODULE g_toastModule = nullptr;
 
 bool IsDiskWarning(const std::wstring& text) {
     bool russian =
@@ -386,21 +389,31 @@ bool InitToastHook() {
             void** vtable =
                 *reinterpret_cast<void***>(abi);
 
-            result = Wh_SetFunctionHook(
-                vtable[6],
-                reinterpret_cast<void*>(
-                    ToastShow_Hook
-                ),
-                reinterpret_cast<void**>(
+            // Keep the implementation DLL loaded after RoUninitialize
+            // and until Windhawk has removed the hook.
+            if (GetModuleHandleExW(
+                    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                    reinterpret_cast<LPCWSTR>(vtable[6]),
+                    &g_toastModule)) {
+                result = WindhawkUtils::SetFunctionHook(
+                    reinterpret_cast<ToastShow_t>(vtable[6]),
+                    ToastShow_Hook,
                     &ToastShow_Original
-                )
-            );
+                );
+                if (!result) {
+                    FreeLibrary(g_toastModule);
+                    g_toastModule = nullptr;
+                }
+            } else {
+                Wh_Log(L"Unable to retain toast implementation module: %lu",
+                       GetLastError());
+            }
         }
 
     } catch (const winrt::hresult_error& error) {
         Wh_Log(
-            L"Toast initialization failed: %s",
-            error.message().c_str()
+            L"Toast initialization failed: 0x%08X",
+            static_cast<unsigned int>(error.code().value)
         );
     } catch (...) {
         Wh_Log(L"Unknown toast initialization error");
@@ -424,7 +437,7 @@ bool InitToastHook() {
 
 BOOL Wh_ModInit() {
     Wh_Log(
-        L"Disable USB Scan and Fix Dialog v1.1"
+        L"Disable USB Scan and Fix Dialog v1.2"
     );
 
     bool dialogOk = InitDialogHook();
@@ -444,6 +457,15 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    // Windhawk removes hooks before calling Wh_ModUninit.
+    if (g_toastModule) {
+        FreeLibrary(g_toastModule);
+        g_toastModule = nullptr;
+    }
+    if (g_dialogModule) {
+        FreeLibrary(g_dialogModule);
+        g_dialogModule = nullptr;
+    }
     Wh_Log(
         L"USB Scan and Fix blocker unloaded"
     );
