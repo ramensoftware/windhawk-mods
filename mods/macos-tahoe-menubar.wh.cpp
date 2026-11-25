@@ -17,6 +17,10 @@
 
 Turns the top edge of your screen into a standalone **macOS 26/27 Tahoe Menu Bar**:
 
+![macOS 26 Tahoe Menu Bar](https://raw.githubusercontent.com/Badalemo/windhawk-mods-media/main/menubar.png)
+
+![macOS 26 Tahoe Menu Bar demo](https://raw.githubusercontent.com/Badalemo/windhawk-mods-media/main/menubar-demo.gif)
+
 - **Dynamic Active App Menus**: Logo menu, active app name, File, Edit, View, Go,
   and Window menus tailored to the focused window.
 - **Control Center & Quick Toggles**: Wi-Fi, Bluetooth, Output Volume, Display
