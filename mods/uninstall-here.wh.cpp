@@ -897,25 +897,24 @@ BOOL Wh_ModInit() {
     DeleteVerb scalarDelete = nullptr;
     DeleteVerb vectorDelete = nullptr;
     WindhawkUtils::SYMBOL_HOOK startTileDataDllHooks[] = {
-        {{L"?Execute@SettingsUninstallVerb@Private@UnifiedTile@Shell@WindowsInternal@@UEAAJPEAUIVerbExecutionArgs@345@@Z"},
+        {{L"public: virtual long __cdecl WindowsInternal::Shell::UnifiedTile::Private::SettingsUninstallVerb::Execute(struct WindowsInternal::Shell::UnifiedTile::IVerbExecutionArgs *)"},
          &g_originalExecute, ExecuteHook},
-        {{L"?RuntimeClassInitialize@SettingsUninstallVerb@Private@UnifiedTile@Shell@WindowsInternal@@QEAAJPEAUIVerbEnumerationArgs@345@PEAUIVerbStringHelperStatics@2345@PEAUHSTRING__@@2_NPEBG@Z"},
+        {{L"public: long __cdecl WindowsInternal::Shell::UnifiedTile::Private::SettingsUninstallVerb::RuntimeClassInitialize(struct WindowsInternal::Shell::UnifiedTile::IVerbEnumerationArgs *,struct WindowsInternal::Shell::UnifiedTile::Private::IVerbStringHelperStatics *,struct HSTRING__ *,struct HSTRING__ *,bool,unsigned short const *)"},
          &g_originalInit, InitHook},
-        {{L"??_GSettingsUninstallVerb@Private@UnifiedTile@Shell@WindowsInternal@@UEAAPEAXI@Z"},
+        {{L"public: virtual void * __cdecl WindowsInternal::Shell::UnifiedTile::Private::SettingsUninstallVerb::`scalar deleting destructor'(unsigned int)"},
          &scalarDelete, nullptr, true},
-        {{L"??_ESettingsUninstallVerb@Private@UnifiedTile@Shell@WindowsInternal@@UEAAPEAXI@Z"},
+        {{L"public: virtual void * __cdecl WindowsInternal::Shell::UnifiedTile::Private::SettingsUninstallVerb::`vector deleting destructor'(unsigned int)"},
          &vectorDelete, nullptr, true},
-        {{L"?GetVerbs@AppResolverTransformer@DataStoreCache@@UEAAJPEAUIUnifiedTile@UnifiedTile@Shell@WindowsInternal@@PEAUIVerbEnumerationArgs@456@PEAPEAU?$IVectorView@PEAVTileVerb@UnifiedTile@Shell@WindowsInternal@@@Collections@Foundation@Windows@@@Z"},
+        {{L"public: virtual long __cdecl DataStoreCache::AppResolverTransformer::GetVerbs(struct WindowsInternal::Shell::UnifiedTile::IUnifiedTile *,struct WindowsInternal::Shell::UnifiedTile::IVerbEnumerationArgs *,struct Windows::Foundation::Collections::IVectorView<class WindowsInternal::Shell::UnifiedTile::TileVerb *> * *)"},
          &g_originalAppResolver, AppResolverHook, true},
-        {{L"?GetVerbs@TileStoreTransformer@DataStoreCache@@UEAAJPEAUIUnifiedTile@UnifiedTile@Shell@WindowsInternal@@PEAUIVerbEnumerationArgs@456@PEAPEAU?$IVectorView@PEAVTileVerb@UnifiedTile@Shell@WindowsInternal@@@Collections@Foundation@Windows@@@Z"},
+        {{L"public: virtual long __cdecl DataStoreCache::TileStoreTransformer::GetVerbs(struct WindowsInternal::Shell::UnifiedTile::IUnifiedTile *,struct WindowsInternal::Shell::UnifiedTile::IVerbEnumerationArgs *,struct Windows::Foundation::Collections::IVectorView<class WindowsInternal::Shell::UnifiedTile::TileVerb *> * *)"},
          &g_originalTileStore, TileStoreHook, true},
-        {{L"?GetVerbs@StateRepositoryTransformer@DataStoreCache@@UEAAJPEAUIUnifiedTile@UnifiedTile@Shell@WindowsInternal@@PEAUIVerbEnumerationArgs@456@PEAPEAU?$IVectorView@PEAVTileVerb@UnifiedTile@Shell@WindowsInternal@@@Collections@Foundation@Windows@@@Z"},
+        {{L"public: virtual long __cdecl DataStoreCache::StateRepositoryTransformer::GetVerbs(struct WindowsInternal::Shell::UnifiedTile::IUnifiedTile *,struct WindowsInternal::Shell::UnifiedTile::IVerbEnumerationArgs *,struct Windows::Foundation::Collections::IVectorView<class WindowsInternal::Shell::UnifiedTile::TileVerb *> * *)"},
          &g_originalStateRepository, StateRepositoryHook, true},
     };
-    const WH_HOOK_SYMBOLS_OPTIONS options{sizeof(options), nullptr, TRUE, nullptr};
     const bool symbolsFound =
         WindhawkUtils::HookSymbols(g_startTileData, startTileDataDllHooks,
-                                   ARRAYSIZE(startTileDataDllHooks), &options) &&
+                                   ARRAYSIZE(startTileDataDllHooks)) &&
         (g_originalAppResolver || g_originalTileStore || g_originalStateRepository) &&
         (scalarDelete || vectorDelete);
     // Some builds give both destructor symbols the same address.
