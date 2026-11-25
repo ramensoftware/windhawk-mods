@@ -1887,6 +1887,7 @@ def validate_specific_keywords(path: Path, mod_source: str):
         (r'\bWh_FindCloseSymbol\b', 'Wh_FindCloseSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
         (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
         (r'\bonlineCacheUrl\b', 'onlineCacheUrl', 'It\'s usually best to let Windhawk handle the online symbol cache'),
+        (r'\bWH_HOOK_SYMBOLS_OPTIONS\b', 'WH_HOOK_SYMBOLS_OPTIONS', 'Use the default symbol options unless absolutely necessary'),
         (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
         (r'\b__ptr64\b', '__ptr64', 'Windhawk doesn\'t use symbols with __ptr64 markers (UNDNAME_NO_PTR64)'),
         (r'\b__try\b', '__try', 'Using SEH is usually discouraged'),
@@ -1900,6 +1901,9 @@ def validate_specific_keywords(path: Path, mod_source: str):
     )
     online_cache_url_accepted = is_symbol_option_accepted(
         MOD_ONLINE_CACHE_URL_TARGETS, mod_id, mod_source
+    )
+    specific_symbol_option_mentioned = re.search(
+        r'\b(noUndecoratedSymbols|onlineCacheUrl)\b', mod_source
     )
 
     for line_num, line in enumerate(mod_source_lines, start=1):
@@ -1915,6 +1919,13 @@ def validate_specific_keywords(path: Path, mod_source: str):
                     continue
 
                 if word == 'onlineCacheUrl' and online_cache_url_accepted:
+                    continue
+
+                # Skip WH_HOOK_SYMBOLS_OPTIONS when covered by a specific option
+                if (
+                    word == 'WH_HOOK_SYMBOLS_OPTIONS'
+                    and specific_symbol_option_mentioned
+                ):
                     continue
 
                 add_review_item(
