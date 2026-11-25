@@ -25,19 +25,20 @@ Replace or hide the logo shown to the left of the search box in the
 * **Built-in arrow**: an "enter" arrow icon that follows the light or dark
   theme.
 * **Custom image**: any `.png`, `.jpg`, `.ico` or `.svg` file. A square image
-  (for example 128×128) with a transparent background works best.
+  (for example 128x128) with a transparent background works best.
 * **Hidden**: removes the logo, the search box moves to the left.
 
 The size of the logo can be changed as well.
 
 ## Notes
 
+* If the Command Palette is already running when the mod is enabled, restart
+  the Command Palette once (for example from its tray icon, or by ending
+  `Microsoft.CmdPal.UI.exe`) so that the mod can find the logo.
+* Settings changes apply immediately. Disabling the mod restores the original
+  logo.
 * The Command Palette has no setting for this logo, so the mod changes it at
-  runtime through XAML diagnostics, the same technique used by the Windows 11
-  Styler mods. No app files are modified.
-* Changes apply immediately. Disabling the mod restores the original logo.
-* Only one XAML diagnostics consumer can be active per process, so tools such as
-  UWPSpy can't be attached to the Command Palette while the mod is enabled.
+  runtime. No app files are modified.
 * Tested with Command Palette 0.13 on Windows 11.
 
 ## Credits
@@ -63,13 +64,13 @@ by Microsoft (MIT License), mirrored horizontally.
     Custom image. Example: C:\Users\Public\Pictures\logo.png
 - size: 20
   $name: Size
-  $description: Width of the logo in pixels. The default logo is 20.
+  $description: Size of the logo in pixels. The default logo is 20.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 
-#include <atomic>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -77,7 +78,6 @@ by Microsoft (MIT License), mirrored horizontally.
 
 #include <shcore.h>
 #include <shlwapi.h>
-#include <xamlom.h>
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Storage.Streams.h>
@@ -89,41 +89,96 @@ by Microsoft (MIT License), mirrored horizontally.
 
 namespace wf = winrt::Windows::Foundation;
 namespace wss = winrt::Windows::Storage::Streams;
+namespace mud = winrt::Microsoft::UI::Dispatching;
 namespace mux = winrt::Microsoft::UI::Xaml;
 namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
+namespace muxm = winrt::Microsoft::UI::Xaml::Media;
 namespace muxi = winrt::Microsoft::UI::Xaml::Media::Imaging;
+
+////////////////////////////////////////////////////////////////////////////////
+// Settings
 
 enum class LogoMode { Arrow, Custom, Hidden };
 
-struct {
-    LogoMode logo;
+struct Settings {
+    LogoMode logo = LogoMode::Arrow;
     std::wstring customImagePath;
-    int size;
-} g_settings;
+    int size = 20;
+};
 
-std::atomic<bool> g_tapInjected;
+// Written on the Windhawk thread, read on the UI thread.
+std::mutex g_settingsMutex;
+Settings g_settings;
 
-// The logo element. Only touched on its UI thread.
-winrt::weak_ref<muxc::Image> g_logoImage;
+Settings GetSettings() {
+    std::lock_guard lock(g_settingsMutex);
+    return g_settings;
+}
+
+int LogoSize(const Settings& settings) {
+    return settings.size > 0 ? settings.size : 20;
+}
+
+void LoadSettings() {
+    Settings settings;
+
+    WindhawkUtils::StringSetting logo(Wh_GetStringSetting(L"logo"));
+    if (wcscmp(logo, L"custom") == 0) {
+        settings.logo = LogoMode::Custom;
+    } else if (wcscmp(logo, L"hidden") == 0) {
+        settings.logo = LogoMode::Hidden;
+    } else {
+        settings.logo = LogoMode::Arrow;
+    }
+
+    WindhawkUtils::StringSetting path(Wh_GetStringSetting(L"customImagePath"));
+    settings.customImagePath = path.get();
+
+    // Accept paths copied with "Copy as path", which adds quotes.
+    auto& p = settings.customImagePath;
+    if (p.size() >= 2 && p.front() == L'"' && p.back() == L'"') {
+        p = p.substr(1, p.size() - 2);
+    }
+
+    settings.size = Wh_GetIntSetting(L"size");
+
+    std::lock_guard lock(g_settingsMutex);
+    g_settings = std::move(settings);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// State
+//
+// XAML objects are only created, used and released on the UI thread. The
+// globals that hold them have their destructors suppressed, since a destructor
+// would run on the wrong thread or after XAML has shut down.
+
+// The UI thread's dispatcher, usable from any thread.
+[[clang::no_destroy]] mud::DispatcherQueue g_dispatcher{nullptr};
+std::mutex g_dispatcherMutex;
+
+// Window contents being watched for the logo.
+struct WatchedRoot {
+    winrt::weak_ref<mux::FrameworkElement> root;
+    winrt::event_token layoutUpdatedToken;
+    ULONGLONG lastSearch = 0;
+};
+[[clang::no_destroy]] std::vector<WatchedRoot> g_watchedRoots;
+
+[[clang::no_destroy]] winrt::weak_ref<muxc::Image> g_logoImage;
 winrt::event_token g_themeChangedToken{};
 
+// The logo's original properties, restored when the mod is disabled.
+[[clang::no_destroy]] muxm::ImageSource g_originalSource{nullptr};
 struct {
     bool saved = false;
-    mux::Media::ImageSource source{nullptr};
     double width = 20;
+    double height = 0;
     double opacity = 1;
     mux::Thickness margin{0, 0, 6, 0};
 } g_original;
 
-HMODULE GetCurrentModuleHandle() {
-    HMODULE module;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           L"", &module)) {
-        return nullptr;
-    }
-    return module;
-}
+bool g_unloading = false;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Image sources
@@ -203,11 +258,7 @@ bool IsSvgPath(const std::wstring& path) {
     return ext && _wcsicmp(ext, L".svg") == 0;
 }
 
-int LogoSize() {
-    return g_settings.size > 0 ? g_settings.size : 20;
-}
-
-mux::Media::ImageSource CreateArrowSource(mux::ElementTheme theme) {
+muxm::ImageSource CreateArrowSource(mux::ElementTheme theme) {
     PCSTR color = theme == mux::ElementTheme::Light ? "#1F1F1F" : "#F2F2F2";
 
     char svg[sizeof(kArrowSvg) + 16];
@@ -223,13 +274,13 @@ mux::Media::ImageSource CreateArrowSource(mux::ElementTheme theme) {
     return source;
 }
 
-mux::Media::ImageSource CreateCustomSource() {
-    if (g_settings.customImagePath.empty()) {
+muxm::ImageSource CreateCustomSource(const Settings& settings) {
+    if (settings.customImagePath.empty()) {
         Wh_Log(L"No custom image path set");
         return nullptr;
     }
 
-    auto data = ReadFileBytes(g_settings.customImagePath);
+    auto data = ReadFileBytes(settings.customImagePath);
     if (data.empty()) {
         return nullptr;
     }
@@ -239,7 +290,7 @@ mux::Media::ImageSource CreateCustomSource() {
         return nullptr;
     }
 
-    if (IsSvgPath(g_settings.customImagePath)) {
+    if (IsSvgPath(settings.customImagePath)) {
         muxi::SvgImageSource source;
         source.SetSourceAsync(stream);
         return source;
@@ -247,20 +298,21 @@ mux::Media::ImageSource CreateCustomSource() {
 
     muxi::BitmapImage source;
     // Decode at a higher resolution for sharp results on high DPI displays.
-    source.DecodePixelWidth(LogoSize() * 3);
+    source.DecodePixelWidth(LogoSize(settings) * 3);
     source.SetSource(stream);
     return source;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Applying to the logo
+// Applying to the logo (UI thread)
 
 void SaveOriginal(muxc::Image const& image) {
     if (g_original.saved) {
         return;
     }
-    g_original.source = image.Source();
+    g_originalSource = image.Source();
     g_original.width = image.Width();
+    g_original.height = image.Height();
     g_original.opacity = image.Opacity();
     g_original.margin = image.Margin();
     g_original.saved = true;
@@ -270,8 +322,9 @@ void RestoreOriginal(muxc::Image const& image) {
     if (!g_original.saved) {
         return;
     }
-    image.Source(g_original.source);
+    image.Source(g_originalSource);
     image.Width(g_original.width);
+    image.Height(g_original.height);
     image.Opacity(g_original.opacity);
     image.Margin(g_original.margin);
 }
@@ -279,57 +332,55 @@ void RestoreOriginal(muxc::Image const& image) {
 void ApplyToLogo(muxc::Image const& image) {
     SaveOriginal(image);
 
-    if (g_settings.logo == LogoMode::Hidden) {
+    const Settings settings = GetSettings();
+
+    if (settings.logo == LogoMode::Hidden) {
         // Visibility is bound to the current page, so collapse the element by
         // size instead.
         image.Width(0);
+        image.Height(0);
         image.Opacity(0);
         image.Margin(mux::Thickness{0, 0, 0, 0});
         return;
     }
 
-    mux::Media::ImageSource source{nullptr};
-    if (g_settings.logo == LogoMode::Arrow) {
+    muxm::ImageSource source{nullptr};
+    if (settings.logo == LogoMode::Arrow) {
         source = CreateArrowSource(image.ActualTheme());
     } else {
-        source = CreateCustomSource();
+        source = CreateCustomSource(settings);
     }
 
-    image.Source(source ? source : g_original.source);
-    image.Width(LogoSize());
+    // Set the height as well, so that a tall image doesn't make the top bar
+    // taller. The default Stretch (Uniform) keeps the aspect ratio.
+    const int size = LogoSize(settings);
+    image.Source(source ? source : g_originalSource);
+    image.Width(size);
+    image.Height(size);
     image.Opacity(g_original.opacity);
     image.Margin(g_original.margin);
 }
 
 void AttachToLogo(muxc::Image const& image) {
-    if (auto previous = g_logoImage.get(); previous && previous != image) {
-        previous.ActualThemeChanged(g_themeChangedToken);
-    }
+    Wh_Log(L"Found the Command Palette logo");
 
     g_logoImage = winrt::make_weak(image);
 
     // The built-in arrow is drawn in a color that depends on the theme.
     g_themeChangedToken = image.ActualThemeChanged(
         [](mux::FrameworkElement const& sender, wf::IInspectable const&) {
-            if (g_settings.logo == LogoMode::Arrow) {
-                if (auto img = sender.try_as<muxc::Image>()) {
-                    ApplyToLogo(img);
+            try {
+                if (GetSettings().logo == LogoMode::Arrow) {
+                    if (auto img = sender.try_as<muxc::Image>()) {
+                        ApplyToLogo(img);
+                    }
                 }
+            } catch (...) {
+                Wh_Log(L"Error %08X", winrt::to_hresult());
             }
         });
 
     ApplyToLogo(image);
-}
-
-void DetachFromLogo(bool restore) {
-    auto image = g_logoImage.get();
-    if (!image) {
-        return;
-    }
-    image.ActualThemeChanged(g_themeChangedToken);
-    if (restore) {
-        RestoreOriginal(image);
-    }
 }
 
 bool IsLogoImage(muxc::Image const& image) {
@@ -348,15 +399,153 @@ bool IsLogoImage(muxc::Image const& image) {
     return uri.ends_with(L"/assets/icon.svg") && image.Width() <= 24;
 }
 
-// Runs a function on the logo's UI thread and waits for it.
-template <typename F>
-void RunOnLogoThread(F&& f) {
+mux::FrameworkElement FindChildByName(mux::DependencyObject const& parent,
+                                      std::wstring_view name,
+                                      int depth = 0) {
+    if (depth > 64) {
+        return nullptr;
+    }
+
+    int count = muxm::VisualTreeHelper::GetChildrenCount(parent);
+    for (int i = 0; i < count; i++) {
+        auto child = muxm::VisualTreeHelper::GetChild(parent, i);
+        if (auto element = child.try_as<mux::FrameworkElement>()) {
+            if (element.Name() == name) {
+                return element;
+            }
+        }
+        if (auto found = FindChildByName(child, name, depth + 1)) {
+            return found;
+        }
+    }
+
+    return nullptr;
+}
+
+muxc::Image FindLogoImage(mux::DependencyObject const& parent, int depth = 0) {
+    if (depth > 8) {
+        return nullptr;
+    }
+
+    int count = muxm::VisualTreeHelper::GetChildrenCount(parent);
+    for (int i = 0; i < count; i++) {
+        auto child = muxm::VisualTreeHelper::GetChild(parent, i);
+        if (auto image = child.try_as<muxc::Image>()) {
+            if (IsLogoImage(image)) {
+                return image;
+            }
+        }
+        if (auto found = FindLogoImage(child, depth + 1)) {
+            return found;
+        }
+    }
+
+    return nullptr;
+}
+
+bool IsLogoAttached() {
     auto image = g_logoImage.get();
-    if (!image) {
+    return image && image.XamlRoot();
+}
+
+void OnRootLayoutUpdated(WatchedRoot& watched) {
+    if (g_unloading || IsLogoAttached()) {
         return;
     }
 
-    auto dispatcher = image.DispatcherQueue();
+    // Layout updates can be frequent, don't search on each of them.
+    ULONGLONG now = GetTickCount64();
+    if (now - watched.lastSearch < 250) {
+        return;
+    }
+    watched.lastSearch = now;
+
+    auto root = watched.root.get();
+    if (!root) {
+        return;
+    }
+
+    // TopBarGrid is the named grid in ShellPage.xaml that holds the logo.
+    auto topBar = FindChildByName(root, L"TopBarGrid");
+    if (!topBar) {
+        return;
+    }
+
+    if (auto image = FindLogoImage(topBar)) {
+        AttachToLogo(image);
+    }
+}
+
+void WatchRoot(mux::FrameworkElement const& root) {
+    for (auto& watched : g_watchedRoots) {
+        if (watched.root.get() == root) {
+            return;
+        }
+    }
+
+    {
+        std::lock_guard lock(g_dispatcherMutex);
+        if (!g_dispatcher) {
+            g_dispatcher = root.DispatcherQueue();
+        }
+    }
+
+    Wh_Log(L"Watching window content");
+
+    WatchedRoot watched;
+    watched.root = winrt::make_weak(root);
+    auto weakRoot = watched.root;
+    watched.layoutUpdatedToken =
+        root.LayoutUpdated([weakRoot](wf::IInspectable const&,
+                                      wf::IInspectable const&) {
+            try {
+                for (auto& w : g_watchedRoots) {
+                    if (w.root == weakRoot) {
+                        OnRootLayoutUpdated(w);
+                        break;
+                    }
+                }
+            } catch (...) {
+                Wh_Log(L"Error %08X", winrt::to_hresult());
+            }
+        });
+
+    g_watchedRoots.push_back(std::move(watched));
+}
+
+// Undoes everything on the UI thread when the mod is disabled.
+void CleanupOnUiThread() {
+    g_unloading = true;
+
+    for (auto& watched : g_watchedRoots) {
+        if (auto root = watched.root.get()) {
+            root.LayoutUpdated(watched.layoutUpdatedToken);
+        }
+    }
+    g_watchedRoots.clear();
+
+    if (auto image = g_logoImage.get()) {
+        image.ActualThemeChanged(g_themeChangedToken);
+        RestoreOriginal(image);
+    }
+    g_logoImage = nullptr;
+
+    // If the logo is already gone, the original source is kept alive rather
+    // than released here, see the comment above the globals.
+    if (g_original.saved) {
+        g_originalSource = nullptr;
+        g_original.saved = false;
+    }
+}
+
+// Runs a function on the UI thread and waits for it to finish.
+template <typename F>
+void RunOnUiThread(F f) {
+    mud::DispatcherQueue dispatcher{nullptr};
+    {
+        std::lock_guard lock(g_dispatcherMutex);
+        dispatcher = g_dispatcher;
+    }
     if (!dispatcher) {
         return;
     }
@@ -380,378 +569,117 @@ void RunOnLogoThread(F&& f) {
         SetEvent(done);
     });
 
+    // The UI thread never waits for the Windhawk thread, so this can't
+    // deadlock. Waiting until the work ran guarantees it doesn't run after the
+    // mod is unloaded.
     if (queued) {
-        WaitForSingleObject(done, 5000);
+        WaitForSingleObject(done, INFINITE);
     }
     CloseHandle(done);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// XAML diagnostics. Based on the Windows 11 Styler mods by m417z.
+// Hooks
 
-class VisualTreeWatcher
-    : public winrt::implements<VisualTreeWatcher,
-                               IVisualTreeServiceCallback2,
-                               winrt::non_agile> {
-   public:
-    VisualTreeWatcher(winrt::com_ptr<IUnknown> site)
-        : m_xamlDiagnostics(site.as<IXamlDiagnostics>()) {
-        // Calling AdviseVisualTreeChange from the current thread can hang, so
-        // it's called from a new thread.
-        HANDLE thread = CreateThread(
-            nullptr, 0,
-            [](LPVOID param) -> DWORD {
-                auto watcher = reinterpret_cast<VisualTreeWatcher*>(param);
-                HRESULT hr = watcher->m_xamlDiagnostics.as<IVisualTreeService3>()
-                                 ->AdviseVisualTreeChange(watcher);
-                watcher->Release();
-                if (FAILED(hr)) {
-                    Wh_Log(L"AdviseVisualTreeChange failed: %08X", hr);
-                }
-                return 0;
-            },
-            this, 0, nullptr);
-        if (thread) {
-            AddRef();
-            CloseHandle(thread);
-        }
-    }
+// Called when the content of a WinUI window is set. The Command Palette's main
+// window sets its content once, when it's created.
+using WindowGenerated_put_Content_t = HRESULT(WINAPI*)(void* pThis,
+                                                       void* content);
+WindowGenerated_put_Content_t WindowGenerated_put_Content_Original;
+HRESULT WINAPI WindowGenerated_put_Content_Hook(void* pThis, void* content) {
+    Wh_Log(L">");
 
-    void UnadviseVisualTreeChange() {
-        HRESULT hr = m_xamlDiagnostics.as<IVisualTreeService3>()
-                         ->UnadviseVisualTreeChange(this);
-        if (FAILED(hr)) {
-            Wh_Log(L"UnadviseVisualTreeChange failed: %08X", hr);
-        }
-    }
+    HRESULT hr = WindowGenerated_put_Content_Original(pThis, content);
 
-   private:
-    HRESULT STDMETHODCALLTYPE
-    OnVisualTreeChange(ParentChildRelation,
-                       VisualElement element,
-                       VisualMutationType mutationType) override try {
-        if (mutationType != Add || !element.Type ||
-            wcscmp(element.Type, L"Microsoft.UI.Xaml.Controls.Image") != 0) {
-            return S_OK;
-        }
-
-        wf::IInspectable object;
-        HRESULT hr = m_xamlDiagnostics->GetIInspectableFromHandle(
-            element.Handle,
-            reinterpret_cast<::IInspectable**>(winrt::put_abi(object)));
-        if (FAILED(hr) || !object) {
-            return S_OK;
-        }
-
-        auto image = object.try_as<muxc::Image>();
-        if (image && IsLogoImage(image)) {
-            Wh_Log(L"Found the Command Palette logo");
-            AttachToLogo(image);
-        }
-
-        return S_OK;
-    } catch (...) {
-        Wh_Log(L"Error %08X", winrt::to_hresult());
-        // Returning an error stops further notifications.
-        return S_OK;
-    }
-
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle,
-                                                    VisualElementState,
-                                                    LPCWSTR) noexcept override {
-        return S_OK;
-    }
-
-    winrt::com_ptr<IXamlDiagnostics> m_xamlDiagnostics;
-};
-
-[[clang::no_destroy]] winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
-
-// {6B1E2D4A-7C3F-4E85-9A10-2F6D8C4B9E31}
-constexpr CLSID CLSID_CommandPaletteLogoTAP = {
-    0x6b1e2d4a,
-    0x7c3f,
-    0x4e85,
-    {0x9a, 0x10, 0x2f, 0x6d, 0x8c, 0x4b, 0x9e, 0x31}};
-
-class CommandPaletteLogoTAP
-    : public winrt::
-          implements<CommandPaletteLogoTAP, IObjectWithSite, winrt::non_agile> {
-   public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown* pUnkSite) override try {
-        if (g_visualTreeWatcher) {
-            g_visualTreeWatcher->UnadviseVisualTreeChange();
-            g_visualTreeWatcher = nullptr;
-        }
-
-        m_site.copy_from(pUnkSite);
-
-        if (m_site) {
-            // Decrease the refcount increased by InitializeXamlDiagnosticsEx.
-            FreeLibrary(GetCurrentModuleHandle());
-            g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(m_site);
-        }
-
-        return S_OK;
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid,
-                                      void** ppvSite) noexcept override {
-        return m_site.as(riid, ppvSite);
-    }
-
-   private:
-    winrt::com_ptr<IUnknown> m_site;
-};
-
-template <class T>
-struct SimpleFactory
-    : winrt::implements<SimpleFactory<T>, IClassFactory, winrt::non_agile> {
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown* pUnkOuter,
-                                             REFIID riid,
-                                             void** ppvObject) override try {
-        *ppvObject = nullptr;
-        if (pUnkOuter) {
-            return CLASS_E_NOAGGREGATION;
-        }
-        return winrt::make<T>().as(riid, ppvObject);
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override {
-        return S_OK;
-    }
-};
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
-
-__declspec(dllexport) STDAPI DllGetClassObject(REFCLSID rclsid,
-                                               REFIID riid,
-                                               LPVOID* ppv) try {
-    if (rclsid == CLSID_CommandPaletteLogoTAP) {
-        *ppv = nullptr;
-        return winrt::make<SimpleFactory<CommandPaletteLogoTAP>>().as(riid,
-                                                                       ppv);
-    }
-    return CLASS_E_CLASSNOTAVAILABLE;
-} catch (...) {
-    return winrt::to_hresult();
-}
-
-__declspec(dllexport) STDAPI DllCanUnloadNow() {
-    return winrt::get_module_lock() ? S_FALSE : S_OK;
-}
-
-#pragma clang diagnostic pop
-
-using InitializeXamlDiagnosticsEx_t = decltype(&InitializeXamlDiagnosticsEx);
-
-HRESULT InjectTAP() noexcept {
-    HMODULE module = GetCurrentModuleHandle();
-    if (!module) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    WCHAR location[MAX_PATH];
-    switch (GetModuleFileName(module, location, ARRAYSIZE(location))) {
-        case 0:
-        case ARRAYSIZE(location):
-            return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    HMODULE udk = GetModuleHandle(L"Microsoft.Internal.FrameworkUdk.dll");
-    if (!udk) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    auto initializeXamlDiagnosticsEx =
-        reinterpret_cast<InitializeXamlDiagnosticsEx_t>(
-            GetProcAddress(udk, "InitializeXamlDiagnosticsEx"));
-    if (!initializeXamlDiagnosticsEx) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    // The connection name isn't known, so try until one works. Reference:
-    // https://github.com/microsoft/microsoft-ui-xaml/blob/d74a0332cf0d5e58f12eddce1070fa7a79b4c2db/src/dxaml/xcp/dxaml/lib/DXamlCore.cpp#L2782
-    HRESULT hr = E_FAIL;
-    for (int i = 0; i < 10000; i++) {
-        WCHAR connectionName[256];
-        wsprintf(connectionName, L"WinUIVisualDiagConnection%d", i + 1);
-
-        hr = initializeXamlDiagnosticsEx(connectionName, GetCurrentProcessId(),
-                                         L"", location,
-                                         CLSID_CommandPaletteLogoTAP, nullptr);
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND)) {
-            break;
+    if (SUCCEEDED(hr) && content && !g_unloading) {
+        try {
+            mux::UIElement element{nullptr};
+            winrt::copy_from_abi(element, content);
+            if (auto root = element.try_as<mux::FrameworkElement>()) {
+                WatchRoot(root);
+            }
+        } catch (...) {
+            Wh_Log(L"Error %08X", winrt::to_hresult());
         }
     }
 
     return hr;
 }
 
-void InjectTAPOnce() {
-    if (g_tapInjected.exchange(true)) {
-        return;
-    }
-
-    HRESULT hr = InjectTAP();
-    Wh_Log(L"InjectTAP result: %08X", hr);
-    if (FAILED(hr)) {
-        g_tapInjected = false;
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Windows
-
-using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
-
-bool RunFromWindowThread(HWND hWnd,
-                         RunFromWindowThreadProc_t proc,
-                         PVOID procParam) {
-    static const UINT runFromWindowThreadRegisteredMsg =
-        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-
-    struct RUN_FROM_WINDOW_THREAD_PARAM {
-        RunFromWindowThreadProc_t proc;
-        PVOID procParam;
+bool HookMicrosoftUiXamlSymbols(HMODULE module) {
+    // Microsoft.UI.Xaml.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+        {
+            {LR"(public: virtual long __cdecl DirectUI::WindowGenerated::put_Content(struct ABI::Microsoft::UI::Xaml::IUIElement *))"},
+            &WindowGenerated_put_Content_Original,
+            WindowGenerated_put_Content_Hook,
+        },
     };
 
-    DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (threadId == 0) {
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+        Wh_Log(L"HookSymbols failed");
         return false;
     }
 
-    if (threadId == GetCurrentThreadId()) {
-        proc(procParam);
-        return true;
-    }
-
-    HHOOK hook = SetWindowsHookEx(
-        WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HC_ACTION) {
-                const CWPSTRUCT* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
-                if (cwp->message == runFromWindowThreadRegisteredMsg) {
-                    auto param =
-                        reinterpret_cast<RUN_FROM_WINDOW_THREAD_PARAM*>(
-                            cwp->lParam);
-                    param->proc(param->procParam);
-                }
-            }
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr, threadId);
-    if (!hook) {
-        return false;
-    }
-
-    RUN_FROM_WINDOW_THREAD_PARAM param{proc, procParam};
-    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0,
-                reinterpret_cast<LPARAM>(&param));
-
-    UnhookWindowsHookEx(hook);
     return true;
 }
 
-bool IsXamlWindow(HWND hWnd) {
-    WCHAR className[64];
-    if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
+bool g_xamlHooked = false;
+
+bool HookMicrosoftUiXamlIfLoaded() {
+    if (g_xamlHooked) {
         return false;
     }
-    return wcsncmp(className, L"WinUIDesktopWin32WindowClass", 28) == 0;
-}
 
-HWND FindXamlWindow() {
-    HWND found = nullptr;
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL {
-            DWORD processId = 0;
-            if (GetWindowThreadProcessId(hWnd, &processId) &&
-                processId == GetCurrentProcessId() && IsXamlWindow(hWnd)) {
-                *reinterpret_cast<HWND*>(lParam) = hWnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&found));
-    return found;
-}
-
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t CreateWindowExW_Original;
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
-                                 LPCWSTR lpClassName,
-                                 LPCWSTR lpWindowName,
-                                 DWORD dwStyle,
-                                 int X,
-                                 int Y,
-                                 int nWidth,
-                                 int nHeight,
-                                 HWND hWndParent,
-                                 HMENU hMenu,
-                                 HINSTANCE hInstance,
-                                 PVOID lpParam) {
-    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
-                                         dwStyle, X, Y, nWidth, nHeight,
-                                         hWndParent, hMenu, hInstance, lpParam);
-    if (hWnd && !g_tapInjected && IsXamlWindow(hWnd)) {
-        Wh_Log(L"XAML window created");
-        InjectTAPOnce();
+    HMODULE module = GetModuleHandle(L"Microsoft.UI.Xaml.dll");
+    if (!module) {
+        return false;
     }
-    return hWnd;
+
+    g_xamlHooked = true;
+    return HookMicrosoftUiXamlSymbols(module);
+}
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
+                                   HANDLE hFile,
+                                   DWORD dwFlags) {
+    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
+
+    if (module && !g_xamlHooked && lpLibFileName) {
+        PCWSTR fileName = wcsrchr(lpLibFileName, L'\\');
+        fileName = fileName ? fileName + 1 : lpLibFileName;
+        if (_wcsicmp(fileName, L"Microsoft.UI.Xaml.dll") == 0 &&
+            HookMicrosoftUiXamlIfLoaded()) {
+            Wh_ApplyHookOperations();
+        }
+    }
+
+    return module;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Mod lifecycle
-
-void LoadSettings() {
-    PCWSTR logo = Wh_GetStringSetting(L"logo");
-    if (wcscmp(logo, L"custom") == 0) {
-        g_settings.logo = LogoMode::Custom;
-    } else if (wcscmp(logo, L"hidden") == 0) {
-        g_settings.logo = LogoMode::Hidden;
-    } else {
-        g_settings.logo = LogoMode::Arrow;
-    }
-    Wh_FreeStringSetting(logo);
-
-    PCWSTR path = Wh_GetStringSetting(L"customImagePath");
-    std::wstring customImagePath = path;
-    Wh_FreeStringSetting(path);
-
-    // Accept paths copied with "Copy as path", which adds quotes.
-    if (customImagePath.size() >= 2 && customImagePath.front() == L'"' &&
-        customImagePath.back() == L'"') {
-        customImagePath = customImagePath.substr(1, customImagePath.size() - 2);
-    }
-    g_settings.customImagePath = customImagePath;
-
-    g_settings.size = Wh_GetIntSetting(L"size");
-}
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     LoadSettings();
 
-    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
-                                   &CreateWindowExW_Original);
+    if (GetModuleHandle(L"Microsoft.UI.Xaml.dll")) {
+        // The window already exists, so its content won't be set again.
+        Wh_Log(L"Command Palette is already running, restart it to apply");
+        HookMicrosoftUiXamlIfLoaded();
+    } else {
+        HMODULE kernelBase = GetModuleHandle(L"kernelbase.dll");
+        auto pLoadLibraryExW = reinterpret_cast<LoadLibraryExW_t>(
+            GetProcAddress(kernelBase, "LoadLibraryExW"));
+        WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
+    }
 
     return TRUE;
-}
-
-void Wh_ModAfterInit() {
-    Wh_Log(L">");
-
-    // The Command Palette may be running already.
-    if (HWND hWnd = FindXamlWindow()) {
-        RunFromWindowThread(hWnd, [](PVOID) { InjectTAPOnce(); }, nullptr);
-    }
 }
 
 void Wh_ModSettingsChanged() {
@@ -759,7 +687,7 @@ void Wh_ModSettingsChanged() {
 
     LoadSettings();
 
-    RunOnLogoThread([]() {
+    RunOnUiThread([]() {
         if (auto image = g_logoImage.get()) {
             ApplyToLogo(image);
         }
@@ -769,10 +697,5 @@ void Wh_ModSettingsChanged() {
 void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
-    RunOnLogoThread([]() { DetachFromLogo(/*restore=*/true); });
-
-    if (g_visualTreeWatcher) {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
-    }
+    RunOnUiThread([]() { CleanupOnUiThread(); });
 }
