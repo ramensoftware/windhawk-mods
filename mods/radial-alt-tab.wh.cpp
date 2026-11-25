@@ -65,8 +65,6 @@ constexpr UINT WM_APP_STEP = WM_APP + 2;
 constexpr UINT WM_APP_END = WM_APP + 3;
 constexpr UINT WM_APP_JOY = WM_APP + 4;
 constexpr UINT WM_APP_MOUSEHOOK = WM_APP + 5;
-constexpr DWORD CURSOR_IDS[] = {32512, 32513, 32514, 32515, 32516, 32642, 32643,
-                                32644, 32645, 32646, 32648, 32649, 32650, 32651};
 
 struct {
     int delay;
@@ -96,18 +94,6 @@ void SendKey(WORD vk, bool up) {
     in.ki.wVk = vk;
     in.ki.dwFlags = up ? KEYEVENTF_KEYUP : 0;
     SendInput(1, &in, sizeof(INPUT));
-}
-
-void HideCursor() {
-    BYTE andMask[128], xorMask[128];
-    memset(andMask, 0xFF, sizeof(andMask));
-    memset(xorMask, 0, sizeof(xorMask));
-    for (DWORD id : CURSOR_IDS)
-        SetSystemCursor(CreateCursor(g_inst, 0, 0, 32, 32, andMask, xorMask), id);
-}
-
-void RestoreCursor() {
-    SystemParametersInfo(SPI_SETCURSORS, 0, nullptr, 0);
 }
 
 BOOL CALLBACK EnumProc(HWND hwnd, LPARAM) {
@@ -200,10 +186,10 @@ void Open() {
     SetWindowPos(g_wnd, HWND_TOPMOST, g_mon.left, g_mon.top, w, h, SWP_NOACTIVATE);
     g_open = true;
     UpdatePreview();
-    HideCursor();
     ShowWindow(g_wnd, SW_SHOWNOACTIVATE);
     UpdateWindow(g_wnd);
     SetCursorPos(g_center.x, g_center.y);
+    SetCursor(nullptr);
     PostThreadMessage(g_hookThreadId, WM_APP_MOUSEHOOK, 1, 0);
 }
 
@@ -217,7 +203,6 @@ void Close() {
     g_thumb = nullptr;
     ShowWindow(g_wnd, SW_HIDE);
     SetCursorPos(g_savedPos.x, g_savedPos.y);
-    RestoreCursor();
 }
 
 void Paint(HDC dc, int w, int h) {
@@ -363,9 +348,11 @@ LRESULT CALLBACK MouseProc(int code, WPARAM wp, LPARAM lp) {
     if (code != HC_ACTION || !g_open)
         return CallNextHookEx(nullptr, code, wp, lp);
     auto* m = (MSLLHOOKSTRUCT*)lp;
+    int dx = m->pt.x - g_center.x, dy = m->pt.y - g_center.y;
+    if (wp == WM_MOUSEMOVE && !dx && !dy)
+        return CallNextHookEx(nullptr, code, wp, lp);
     if (wp == WM_MOUSEMOVE) {
-        PostMessage(g_wnd, WM_APP_JOY, (WPARAM)(m->pt.x - g_center.x),
-                    (LPARAM)(m->pt.y - g_center.y));
+        PostMessage(g_wnd, WM_APP_JOY, (WPARAM)dx, (LPARAM)dy);
     } else if (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN) {
         g_session = false;
         PostMessage(g_wnd, WM_APP_END, wp == WM_LBUTTONDOWN, 0);
