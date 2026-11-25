@@ -2068,6 +2068,15 @@ using FlyoutBase_ShowAt_t =
                    wux::DependencyObject const& placementTarget,
                    wuxcp::FlyoutShowOptions const& showOptions);
 
+bool ContainsInjectedElement(MenuItemsVector const& items) {
+    for (auto const& item : items) {
+        if (item.Name() == kInjectedElementName) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void InjectBeforeShow(void* pThis) {
     MenuBuildState* state = g_menuBuildState;
     if (!state || state->modifying || state->itemsIdentity ||
@@ -2081,7 +2090,7 @@ void InjectBeforeShow(void* pThis) {
         auto const& flyout = *reinterpret_cast<wuxcp::FlyoutBase const*>(pThis);
         if (auto menu = flyout.try_as<wuxc::MenuFlyout>()) {
             MenuItemsVector items = menu.Items();
-            if (items) {
+            if (items && !ContainsInjectedElement(items)) {
                 state->itemsIdentity = GetIdentity(items);
                 InjectElements(items, *state);
             }
@@ -2263,9 +2272,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
 
     if (!WindhawkUtils::HookSymbols(module, symbolHooks,
                                     ARRAYSIZE(symbolHooks))) {
-        Wh_Log(
-            L"Failed to hook Taskbar.View symbols, required symbols are "
-            L"missing");
+        Wh_Log(L"Failed to resolve Taskbar.View symbols");
         return false;
     }
 
