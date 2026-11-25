@@ -50,7 +50,7 @@ deleted whenever the mod is unloaded, so the files are downloaded again after ev
 **No setting turns the downloads off.** The only alternative is to put the exact files in `dl` by hand. Only the
 three requests to `msdl.microsoft.com` listed above are made; nothing user-specific is sent.
 
-From the DLLs this mod generates private copies in its `bin` folder. English, Italian and German page strings are
+From the DLLs this mod generates private copies in its `bin` folder. English, Italian, German, Spanish, French and Brazilian Portuguese page strings are
 embedded because the symbol server does not provide the `.mui` files. The original downloads are kept in `dl`;
 they can be reused offline. If a required DLL cannot be downloaded, a matching file can be placed in `dl`
 manually. Without the required files the Windows page stays in place; connect to the internet and restart
@@ -73,7 +73,7 @@ manually. Without the required files the Windows page stays in place; connect to
 - **Scope.** This mod runs in `explorer.exe`.
 
 ## Settings
-- **Page language**: *Automatic* follows the Windows display language for English, Italian and German, or uses English
+- **Page language**: *Automatic* follows the Windows display language for English, Italian, German, Spanish, French and Brazilian Portuguese, or uses English
   for other languages. Restart `explorer.exe` if the page has already been used in this session.
 - **Hide system UWP apps**, **Hide all Store/UWP apps**, **Additional apps to hide**, **Icon overrides**:
   These settings customize the applications and icons in the default programs list.
@@ -119,47 +119,50 @@ manually. Without the required files the Windows page stays in place; connect to
     - en-US: English
     - it-IT: Italiano
     - de-DE: Deutsch
+    - es-ES: Español
+    - fr-FR: Français
+    - pt-BR: Português (Brasil)
 - hideSystemApps: true
   $name: Hide system UWP apps
   $name:it-IT: Nascondi le app UWP di sistema
   $description: This setting hides internal Windows components (like MS-SEARCH, MS-ACTIONCENTER) that only register URL protocol associations from the Default Programs list
-  $description:it-IT: Nasconde dall'elenco Programmi predefiniti i componenti interni di Windows (come MS-SEARCH, MS-ACTIONCENTER) che registrano solo associazioni di protocolli URL
+  $description:it-IT: Questa impostazione nasconde dall'elenco Programmi predefiniti i componenti interni di Windows (come MS-SEARCH, MS-ACTIONCENTER) che registrano solo associazioni di protocolli URL
 - hideStoreApps: true
   $name: Hide all Store/UWP apps
   $name:it-IT: Nascondi tutte le app Store/UWP
   $description: This setting hides all Microsoft Store and UWP applications from the Default Programs list, keeping only Win32 desktop apps
-  $description:it-IT: Nasconde dall'elenco Programmi predefiniti tutte le applicazioni Microsoft Store e UWP, lasciando solo le app desktop Win32
+  $description:it-IT: Questa impostazione nasconde dall'elenco Programmi predefiniti tutte le applicazioni Microsoft Store e UWP, lasciando solo le app desktop Win32
 - additionalBlacklist:
   - Insert an app name here
   $name: Additional apps to hide
   $name:it-IT: App aggiuntive da nascondere
   $description: This setting lists app display names, registry names, or capability path substrings to hide from the Default Programs list. Matches against the display name shown in the Programs list, the app registry name, or capabilities path (case-insensitive).
-  $description:it-IT: Elenco di nomi visualizzati, nomi di registro o parti del percorso delle capacità delle app da nascondere dall'elenco Programmi predefiniti (senza distinzione tra maiuscole e minuscole).
+  $description:it-IT: Questa impostazione elenca i nomi visualizzati, i nomi di registro o le parti del percorso delle capacità delle app da nascondere dall'elenco Programmi predefiniti (senza distinzione tra maiuscole e minuscole).
 - iconOverrides:
   - - appName: Windows Disc Image Burner
       $name: App name
       $name:it-IT: Nome app
       $description: This setting specifies the app display name as shown in the Default Programs list, or the app registry name. Case-insensitive match.
-      $description:it-IT: Il nome dell'app come appare nell'elenco Programmi predefiniti, o il nome di registro. Senza distinzione tra maiuscole e minuscole.
+      $description:it-IT: Questa impostazione specifica il nome dell'app come appare nell'elenco Programmi predefiniti, o il nome di registro. Senza distinzione tra maiuscole e minuscole.
     - iconPath: C:\Windows\System32\imageres.dll
       $name: Icon DLL/EXE path
       $name:it-IT: Percorso DLL/EXE dell'icona
       $description: This setting specifies the full path to the DLL or EXE containing the icon resource.
-      $description:it-IT: Percorso completo della DLL o dell'EXE che contiene l'icona.
+      $description:it-IT: Questa impostazione specifica il percorso completo della DLL o dell'EXE che contiene l'icona.
     - iconIndex: -5205
       $name: Icon resource index
       $name:it-IT: Indice dell'icona
       $description: This setting specifies the icon resource ID (negative for resource ID, positive for ordinal).
-      $description:it-IT: ID della risorsa icona (negativo per ID di risorsa, positivo per numero d'ordine).
+      $description:it-IT: Questa impostazione specifica l'ID della risorsa icona (negativo per ID di risorsa, positivo per numero d'ordine).
   $name: Icon overrides
   $name:it-IT: Icone personalizzate
   $description: This setting overrides icons for specific apps in the Default Programs list.
-  $description:it-IT: Sostituisce le icone di app specifiche nell'elenco Programmi predefiniti.
+  $description:it-IT: Questa impostazione sostituisce le icone di app specifiche nell'elenco Programmi predefiniti.
 - registryFallback: false
   $name: Write the class key as a fallback
   $name:it-IT: Scrivi la chiave della classe come ripiego
-  $description: Off by default. If on, and an extension has no UserChoice key after the Windows Shell has set the default, the mod also writes the chosen ProgID to HKCU\Software\Classes\<extension>. The previous value is overwritten and is not restored when the mod is disabled.
-  $description:it-IT: Disattivata per impostazione predefinita. Se attiva, e un'estensione non ha la chiave UserChoice dopo che la Shell di Windows ha impostato il programma predefinito, la mod scrive anche il ProgID scelto in HKCU\Software\Classes\<estensione>. Il valore precedente viene sovrascritto e non viene ripristinato quando la mod viene disattivata.
+  $description: This setting is off by default. If on, and an extension has no UserChoice key after the Windows Shell has set the default, the mod also writes the chosen ProgID to HKCU\Software\Classes\<extension>. The previous value is overwritten and is not restored when the mod is disabled.
+  $description:it-IT: Questa impostazione è disattivata per impostazione predefinita. Se attiva, e un'estensione non ha la chiave UserChoice dopo che la Shell di Windows ha impostato il programma predefinito, la mod scrive anche il ProgID scelto in HKCU\Software\Classes\<estensione>. Il valore precedente viene sovrascritto e non viene ripristinato quando la mod viene disattivata.
 - keepFilesOnDisable: true
   $name: Keep downloaded files when the mod is disabled
   $name:it-IT: Conserva i file scaricati quando la mod viene disattivata
@@ -169,7 +172,7 @@ manually. Without the required files the Windows page stays in place; connect to
   $name: Enable debug logging
   $name:it-IT: Abilita il log di debug
   $description: This setting logs hook activity for debugging purposes
-  $description:it-IT: Registra l'attività degli hook a scopo di debug
+  $description:it-IT: Questa impostazione registra l'attività degli hook a scopo di debug
 */
 // ==/WindhawkModSettings==
 
@@ -558,11 +561,257 @@ static const StringEntry kDuiStrings[] = {
     {1001, L"11pt;Semibold;None;Segoe UI"},
 };
 
-enum class Language { English, Italian, German };
+static const StringEntry kSudEs[] = {
+    {1, L"Programas predeterminados"},
+    {2, L"Establecer asociaciones"},
+    {3, L"Elegir un valor predeterminado"},
+    {4, L"Establecer programas predeterminados"},
+    {7, L"Establecer asociaciones de programas"},
+    {10, L"Elige los programas que Windows usar\u00e1 para navegar por Internet, editar fotos, enviar correo electr\u00f3nico y reproducir m\u00fasica."},
+    {200, L"Error del Panel de control de programas predeterminados"},
+    {201, L"Se produjo un problema al cargar la p\u00e1gina \u00abEstablecer un programa predeterminado\u00bb. (C\u00f3digo de error: %1!lX!)"},
+    {202, L"(Selecciona un programa para obtener m\u00e1s informaci\u00f3n)"},
+    {203, L"Nombre"},
+    {204, L"Descripci\u00f3n"},
+    {205, L"Predeterminado actual"},
+    {206, L"Programas"},
+    {210, L"Extensiones"},
+    {211, L"Protocolos"},
+    {212, L"MAPI"},
+    {220, L"Enviar correo"},
+    {221, L"Comando para enviar correo"},
+    {222, L"Aplicaci\u00f3n desconocida"},
+    {223, L"Este programa tiene todos sus valores predeterminados"},
+    {224, L"Este programa tiene %1!lu! de %2!lu! valores predeterminados"},
+    {225, L"No seleccionado"},
+    {226, L"Usar el programa seleccionado para abrir de forma predeterminada todos los tipos de archivo y protocolos que admite."},
+    {227, L"Elige los tipos de archivo y protocolos que el programa seleccionado abrir\u00e1 de forma predeterminada."},
+    {228, L"Programas y caracter\u00edsticas"},
+    {229, L"Control parental"},
+    {231, L"Para cambiar las aplicaciones predeterminadas, ve a Configuraci\u00f3n > Sistema > Aplicaciones predeterminadas."},
+    {232, L"Aceptar"},
+    {240, L"Hacer que un tipo de archivo o protocolo (por ejemplo, .mp3 o http://) se abra siempre con un programa espec\u00edfico."},
+    {1169, L"Elegir los programas que Windows usa de forma predeterminada"},
+    {1170, L"Establecer programas predeterminados"},
+    {1171, L"Establecer un programa como predeterminado para todos los tipos de archivo y protocolos que puede abrir."},
+    {1172, L"Asociar un tipo de archivo o protocolo a un programa"},
+    {1173, L"Hacer que un tipo de archivo o protocolo (por ejemplo, .mp3 o http://) se abra siempre con un programa espec\u00edfico."},
+    {1174, L"Cambiar la configuraci\u00f3n de reproducci\u00f3n autom\u00e1tica"},
+    {1175, L"Reproducir CD u otros medios autom\u00e1ticamente"},
+    {1176, L"Configurar el acceso y los programas predeterminados del equipo"},
+    {1177, L"Controlar el acceso a determinados programas y establecer los valores predeterminados de este equipo."},
+    {1180, L"Aceptar"},
+    {1183, L"Establecer programas predeterminados"},
+    {1184, L"Establecer asociaciones para un programa"},
+    {1185, L"Selecciona las extensiones que quieres que este programa abra de forma predeterminada y haz clic en Guardar."},
+    {1186, L"Guardar"},
+    {1187, L"Cancelar"},
+    {1190, L"Lista de programas"},
+    {1192, L"Seleccionar todo"},
+    {1193, L"Para establecer un programa como predeterminado para todos los tipos de archivo y protocolos que puede abrir, selecci\u00f3nalo y haz clic en Establecer como predeterminado."},
+    {1194, L"Asociar un tipo de archivo o protocolo a un programa espec\u00edfico"},
+    {1195, L"Haz clic en una extensi\u00f3n para ver el programa que la abre actualmente de forma predeterminada. Para cambiarlo, haz clic en Cambiar programa."},
+    {1196, L"Cambiar programa..."},
+    {1197, L"No se ha seleccionado ninguna extensi\u00f3n o protocolo"},
+    {1198, L"Cerrar"},
+    {1199, L"Lista de programas disponibles para cambiar la configuraci\u00f3n predeterminada."},
+    {1200, L"Descripci\u00f3n del programa"},
+    {1201, L"Lista de asociaciones del programa"},
+    {1202, L"Selecciona las extensiones que quieres que este programa abra de forma predeterminada y haz clic en Guardar."},
+    {1203, L"No se ha seleccionado ninguna extensi\u00f3n o protocolo"},
+    {1205, L"Lista de extensiones"},
+    {1206, L"Haz clic en una extensi\u00f3n para ver el programa que la abre actualmente de forma predeterminada. Para cambiarlo, haz clic en Cambiar programa."},
+    {1207, L"&Establecer este programa como predeterminado"},
+    {1208, L"&Elegir opciones predeterminadas para este programa"},
+    {1209, L"Establecer programas predeterminados"},
+    {1210, L"Asociar un tipo de archivo o protocolo a un programa"},
+    {1211, L"Cambiar la configuraci\u00f3n de reproducci\u00f3n autom\u00e1tica"},
+    {1212, L"Configurar el acceso y los programas predeterminados del equipo"},
+    {1213, L"Programas predeterminados"},
+    {1214, L"Programas predeterminados"},
+    {1216, L"Establecer programas predeterminados"},
+    {1217, L"Establecer programas predeterminados"},
+    {1218, L"Establecer asociaciones para un programa"},
+    {1219, L"Establecer asociaciones para un programa"},
+    {1220, L"Asociar un tipo de archivo o protocolo a un programa espec\u00edfico"},
+    {1221, L"Asociar un tipo de archivo o protocolo a un programa espec\u00edfico"},
+    {1224, L"Ayuda"},
+    {1225, L"Ayuda"},
+    {1226, L"Ayuda"},
+    {1230, L"Cargando..."},
+    {1231, L"Cargando..."},
+};
+
+static const StringEntry kSudFr[] = {
+    {1, L"Programmes par d\u00e9faut"},
+    {2, L"D\u00e9finir les associations"},
+    {3, L"Choisir une valeur par d\u00e9faut"},
+    {4, L"D\u00e9finir les programmes par d\u00e9faut"},
+    {7, L"D\u00e9finir les associations de programmes"},
+    {10, L"Choisissez les programmes que Windows utilise pour naviguer sur le Web, modifier des photos, envoyer des e-mails et \u00e9couter de la musique."},
+    {200, L"Erreur du Panneau de configuration des programmes par d\u00e9faut"},
+    {201, L"Un probl\u00e8me s'est produit lors du chargement de la page \u00ab D\u00e9finir un programme par d\u00e9faut \u00bb. (Code d'erreur : %1!lX!)"},
+    {202, L"(S\u00e9lectionnez un programme pour plus d'informations)"},
+    {203, L"Nom"},
+    {204, L"Description"},
+    {205, L"Programme par d\u00e9faut actuel"},
+    {206, L"Programmes"},
+    {210, L"Extensions"},
+    {211, L"Protocoles"},
+    {212, L"MAPI"},
+    {220, L"Envoyer un courrier"},
+    {221, L"Commande d'envoi de courrier"},
+    {222, L"Application inconnue"},
+    {223, L"Ce programme poss\u00e8de toutes ses valeurs par d\u00e9faut"},
+    {224, L"Ce programme poss\u00e8de %1!lu! valeurs par d\u00e9faut sur %2!lu!"},
+    {225, L"Non s\u00e9lectionn\u00e9"},
+    {226, L"Utiliser le programme s\u00e9lectionn\u00e9 pour ouvrir par d\u00e9faut tous les types de fichiers et protocoles qu'il prend en charge."},
+    {227, L"Choisissez les types de fichiers et les protocoles que le programme s\u00e9lectionn\u00e9 ouvre par d\u00e9faut."},
+    {228, L"Programmes et fonctionnalit\u00e9s"},
+    {229, L"Contr\u00f4le parental"},
+    {231, L"Pour modifier les applications par d\u00e9faut, acc\u00e9dez \u00e0 Param\u00e8tres > Syst\u00e8me > Applications par d\u00e9faut."},
+    {232, L"OK"},
+    {240, L"Toujours ouvrir un type de fichier ou un protocole (par exemple .mp3 ou http://) avec un programme sp\u00e9cifique."},
+    {1169, L"Choisir les programmes utilis\u00e9s par d\u00e9faut par Windows"},
+    {1170, L"D\u00e9finir les programmes par d\u00e9faut"},
+    {1171, L"D\u00e9finir un programme par d\u00e9faut pour tous les types de fichiers et protocoles qu'il peut ouvrir."},
+    {1172, L"Associer un type de fichier ou un protocole \u00e0 un programme"},
+    {1173, L"Toujours ouvrir un type de fichier ou un protocole (par exemple .mp3 ou http://) avec un programme sp\u00e9cifique."},
+    {1174, L"Modifier les param\u00e8tres de lecture automatique"},
+    {1175, L"Lire automatiquement les CD ou autres m\u00e9dias"},
+    {1176, L"Configurer les programmes par d\u00e9faut et l'acc\u00e8s aux programmes"},
+    {1177, L"Contr\u00f4ler l'acc\u00e8s \u00e0 certains programmes et d\u00e9finir les valeurs par d\u00e9faut de cet ordinateur."},
+    {1180, L"OK"},
+    {1183, L"D\u00e9finir les programmes par d\u00e9faut"},
+    {1184, L"D\u00e9finir les associations d'un programme"},
+    {1185, L"S\u00e9lectionnez les extensions que ce programme doit ouvrir par d\u00e9faut, puis cliquez sur Enregistrer."},
+    {1186, L"Enregistrer"},
+    {1187, L"Annuler"},
+    {1190, L"Liste des programmes"},
+    {1192, L"Tout s\u00e9lectionner"},
+    {1193, L"Pour d\u00e9finir un programme par d\u00e9faut pour tous les types de fichiers et protocoles qu'il peut ouvrir, s\u00e9lectionnez-le, puis cliquez sur D\u00e9finir par d\u00e9faut."},
+    {1194, L"Associer un type de fichier ou un protocole \u00e0 un programme sp\u00e9cifique"},
+    {1195, L"Cliquez sur une extension pour voir le programme qui l'ouvre actuellement par d\u00e9faut. Pour le modifier, cliquez sur Changer de programme."},
+    {1196, L"Changer de programme..."},
+    {1197, L"Aucune extension ni aucun protocole s\u00e9lectionn\u00e9"},
+    {1198, L"Fermer"},
+    {1199, L"Liste des programmes disponibles pour modifier les param\u00e8tres par d\u00e9faut."},
+    {1200, L"Description du programme"},
+    {1201, L"Liste des associations du programme"},
+    {1202, L"S\u00e9lectionnez les extensions que ce programme doit ouvrir par d\u00e9faut, puis cliquez sur Enregistrer."},
+    {1203, L"Aucune extension ni aucun protocole s\u00e9lectionn\u00e9"},
+    {1205, L"Liste des extensions"},
+    {1206, L"Cliquez sur une extension pour voir le programme qui l'ouvre actuellement par d\u00e9faut. Pour le modifier, cliquez sur Changer de programme."},
+    {1207, L"&D\u00e9finir ce programme par d\u00e9faut"},
+    {1208, L"&Choisir les param\u00e8tres par d\u00e9faut de ce programme"},
+    {1209, L"D\u00e9finir les programmes par d\u00e9faut"},
+    {1210, L"Associer un type de fichier ou un protocole \u00e0 un programme"},
+    {1211, L"Modifier les param\u00e8tres de lecture automatique"},
+    {1212, L"Configurer les programmes par d\u00e9faut et l'acc\u00e8s aux programmes"},
+    {1213, L"Programmes par d\u00e9faut"},
+    {1214, L"Programmes par d\u00e9faut"},
+    {1216, L"D\u00e9finir les programmes par d\u00e9faut"},
+    {1217, L"D\u00e9finir les programmes par d\u00e9faut"},
+    {1218, L"D\u00e9finir les associations d'un programme"},
+    {1219, L"D\u00e9finir les associations d'un programme"},
+    {1220, L"Associer un type de fichier ou un protocole \u00e0 un programme sp\u00e9cifique"},
+    {1221, L"Associer un type de fichier ou un protocole \u00e0 un programme sp\u00e9cifique"},
+    {1224, L"Aide"},
+    {1225, L"Aide"},
+    {1226, L"Aide"},
+    {1230, L"Chargement..."},
+    {1231, L"Chargement..."},
+};
+
+static const StringEntry kSudPtBr[] = {
+    {1, L"Programas padr\u00e3o"},
+    {2, L"Definir associa\u00e7\u00f5es"},
+    {3, L"Escolher um padr\u00e3o"},
+    {4, L"Definir programas padr\u00e3o"},
+    {7, L"Definir associa\u00e7\u00f5es de programas"},
+    {10, L"Escolha os programas que o Windows usar\u00e1 para navegar na Web, editar fotos, enviar emails e reproduzir m\u00fasicas."},
+    {200, L"Erro do Painel de Controle de programas padr\u00e3o"},
+    {201, L"Ocorreu um problema ao carregar a p\u00e1gina \u00abDefinir um programa padr\u00e3o\u00bb. (C\u00f3digo de erro: %1!lX!)"},
+    {202, L"(Selecione um programa para obter mais informa\u00e7\u00f5es)"},
+    {203, L"Nome"},
+    {204, L"Descri\u00e7\u00e3o"},
+    {205, L"Padr\u00e3o atual"},
+    {206, L"Programas"},
+    {210, L"Extens\u00f5es"},
+    {211, L"Protocolos"},
+    {212, L"MAPI"},
+    {220, L"Enviar email"},
+    {221, L"Comando para enviar email"},
+    {222, L"Aplicativo desconhecido"},
+    {223, L"Este programa tem todos os seus padr\u00f5es"},
+    {224, L"Este programa tem %1!lu! de %2!lu! padr\u00f5es"},
+    {225, L"N\u00e3o selecionado"},
+    {226, L"Usar o programa selecionado para abrir por padr\u00e3o todos os tipos de arquivo e protocolos que ele suporta."},
+    {227, L"Escolha os tipos de arquivo e protocolos que o programa selecionado abre por padr\u00e3o."},
+    {228, L"Programas e Recursos"},
+    {229, L"Controle dos Pais"},
+    {231, L"Para alterar os aplicativos padr\u00e3o, acesse Configura\u00e7\u00f5es > Sistema > Aplicativos padr\u00e3o."},
+    {232, L"OK"},
+    {240, L"Fazer com que um tipo de arquivo ou protocolo (como .mp3 ou http://) seja sempre aberto por um programa espec\u00edfico."},
+    {1169, L"Escolher os programas que o Windows usa por padr\u00e3o"},
+    {1170, L"Definir programas padr\u00e3o"},
+    {1171, L"Definir um programa como padr\u00e3o para todos os tipos de arquivo e protocolos que ele pode abrir."},
+    {1172, L"Associar um tipo de arquivo ou protocolo a um programa"},
+    {1173, L"Fazer com que um tipo de arquivo ou protocolo (como .mp3 ou http://) seja sempre aberto por um programa espec\u00edfico."},
+    {1174, L"Alterar configura\u00e7\u00f5es de Reprodu\u00e7\u00e3o Autom\u00e1tica"},
+    {1175, L"Reproduzir CDs ou outras m\u00eddias automaticamente"},
+    {1176, L"Definir acesso a programas e padr\u00f5es do computador"},
+    {1177, L"Controlar o acesso a determinados programas e definir padr\u00f5es para este computador."},
+    {1180, L"OK"},
+    {1183, L"Definir programas padr\u00e3o"},
+    {1184, L"Definir associa\u00e7\u00f5es de um programa"},
+    {1185, L"Selecione as extens\u00f5es que este programa deve abrir por padr\u00e3o e clique em Salvar."},
+    {1186, L"Salvar"},
+    {1187, L"Cancelar"},
+    {1190, L"Lista de programas"},
+    {1192, L"Selecionar tudo"},
+    {1193, L"Para definir um programa como padr\u00e3o para todos os tipos de arquivo e protocolos que ele pode abrir, selecione-o e clique em Definir como padr\u00e3o."},
+    {1194, L"Associar um tipo de arquivo ou protocolo a um programa espec\u00edfico"},
+    {1195, L"Clique em uma extens\u00e3o para ver o programa que a abre atualmente por padr\u00e3o. Para alter\u00e1-lo, clique em Alterar programa."},
+    {1196, L"Alterar programa..."},
+    {1197, L"Nenhuma extens\u00e3o ou protocolo selecionado"},
+    {1198, L"Fechar"},
+    {1199, L"Lista de programas dispon\u00edveis para alterar as configura\u00e7\u00f5es padr\u00e3o."},
+    {1200, L"Descri\u00e7\u00e3o do programa"},
+    {1201, L"Lista de associa\u00e7\u00f5es do programa"},
+    {1202, L"Selecione as extens\u00f5es que este programa deve abrir por padr\u00e3o e clique em Salvar."},
+    {1203, L"Nenhuma extens\u00e3o ou protocolo selecionado"},
+    {1205, L"Lista de extens\u00f5es"},
+    {1206, L"Clique em uma extens\u00e3o para ver o programa que a abre atualmente por padr\u00e3o. Para alter\u00e1-lo, clique em Alterar programa."},
+    {1207, L"&Definir este programa como padr\u00e3o"},
+    {1208, L"&Escolher padr\u00f5es para este programa"},
+    {1209, L"Definir programas padr\u00e3o"},
+    {1210, L"Associar um tipo de arquivo ou protocolo a um programa"},
+    {1211, L"Alterar configura\u00e7\u00f5es de Reprodu\u00e7\u00e3o Autom\u00e1tica"},
+    {1212, L"Definir acesso a programas e padr\u00f5es do computador"},
+    {1213, L"Programas padr\u00e3o"},
+    {1214, L"Programas padr\u00e3o"},
+    {1216, L"Definir programas padr\u00e3o"},
+    {1217, L"Definir programas padr\u00e3o"},
+    {1218, L"Definir associa\u00e7\u00f5es de um programa"},
+    {1219, L"Definir associa\u00e7\u00f5es de um programa"},
+    {1220, L"Associar um tipo de arquivo ou protocolo a um programa espec\u00edfico"},
+    {1221, L"Associar um tipo de arquivo ou protocolo a um programa espec\u00edfico"},
+    {1224, L"Ajuda"},
+    {1225, L"Ajuda"},
+    {1226, L"Ajuda"},
+    {1230, L"Carregando..."},
+    {1231, L"Carregando..."},
+};
+
+enum class Language { English, Italian, German, Spanish, French, PortugueseBrazil };
 
 StringTable SudTable(Language language) {
     if (language == Language::Italian) return {kSudIt, ARRAYSIZE(kSudIt), L"it-IT"};
     if (language == Language::German) return {kSudDe, ARRAYSIZE(kSudDe), L"de-DE"};
+    if (language == Language::Spanish) return {kSudEs, ARRAYSIZE(kSudEs), L"es-ES"};
+    if (language == Language::French) return {kSudFr, ARRAYSIZE(kSudFr), L"fr-FR"};
+    if (language == Language::PortugueseBrazil) return {kSudPtBr, ARRAYSIZE(kSudPtBr), L"pt-BR"};
     return {kSudEn, ARRAYSIZE(kSudEn), L"en-US"};
 }
 // The strings of the DirectUI copy are language neutral: font specifications and the names read by screen readers.
@@ -2918,7 +3167,7 @@ HANDLE g_setupThread = nullptr;
 std::atomic<HINTERNET> g_request{nullptr};
 std::atomic<bool> g_keepFiles{true};
 std::atomic<bool> g_registryFallback{false}; // off by default: HKCU\Software\Classes\<ext> is written only on request
-std::atomic<int> g_languageSetting{0};      // 0 automatic, 1 English, 2 Italian, 3 German
+std::atomic<int> g_languageSetting{0};      // 0 automatic, 1 English, 2 Italian, 3 German, 4 Spanish, 5 French, 6 Brazilian Portuguese
 
 SRWLOCK g_stateLock = SRWLOCK_INIT;         // guards the block below
 std::wstring g_spadPath;                    // optional, unmodified Microsoft 1607 executable
@@ -4014,7 +4263,7 @@ HRESULT STDMETHODCALLTYPE CAssocArray_QueryInterface_hook(void* pThis, REFIID ri
 // and in windows.storage.dll later, so what is not found in one module is looked for in the other.
 
 // windows.storage.dll
-const WindhawkUtils::SYMBOL_HOOK windowsStorageDllHooks[] = {
+const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
     {
         {
             L"long __cdecl _SetAssociation(unsigned short const *,unsigned short const *,enum ASSOCIATIONTYPE,unsigned short const *)",
@@ -4204,7 +4453,7 @@ void InstallSystemHooks()
 
     HMODULE hStorage = LoadLibraryW(L"windows.storage.dll");
     if (hStorage &&
-        WindhawkUtils::HookSymbols(hStorage, windowsStorageDllHooks, ARRAYSIZE(windowsStorageDllHooks)))
+        WindhawkUtils::HookSymbols(hStorage, windowsStorageHooks, ARRAYSIZE(windowsStorageHooks)))
         Wh_Log(L"Resolved the symbols of windows.storage.dll");
 
     if (!SetAssociation_Original || !p_QueryAppIsDefault_Private) {
@@ -4301,9 +4550,17 @@ Language CurrentLanguage() {
     if (setting == 1) return Language::English;
     if (setting == 2) return Language::Italian;
     if (setting == 3) return Language::German;
-    const WORD primary = PRIMARYLANGID(GetUserDefaultUILanguage());
+    if (setting == 4) return Language::Spanish;
+    if (setting == 5) return Language::French;
+    if (setting == 6) return Language::PortugueseBrazil;
+    const LANGID uiLanguage = GetUserDefaultUILanguage();
+    const WORD primary = PRIMARYLANGID(uiLanguage);
     if (primary == LANG_ITALIAN) return Language::Italian;
     if (primary == LANG_GERMAN) return Language::German;
+    if (primary == LANG_SPANISH) return Language::Spanish;
+    if (primary == LANG_FRENCH) return Language::French;
+    if (primary == LANG_PORTUGUESE && SUBLANGID(uiLanguage) == SUBLANG_PORTUGUESE_BRAZILIAN)
+        return Language::PortugueseBrazil;
     return Language::English;
 }
 
@@ -4315,6 +4572,9 @@ void LoadSettings() {
             if (!wcscmp(s.value, L"en-US")) language = 1;
             else if (!wcscmp(s.value, L"it-IT")) language = 2;
             else if (!wcscmp(s.value, L"de-DE")) language = 3;
+            else if (!wcscmp(s.value, L"es-ES")) language = 4;
+            else if (!wcscmp(s.value, L"fr-FR")) language = 5;
+            else if (!wcscmp(s.value, L"pt-BR")) language = 6;
         }
     }
     g_languageSetting.store(language);
