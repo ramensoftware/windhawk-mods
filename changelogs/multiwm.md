@@ -1,3 +1,27 @@
+## 1.16.1 ([Nov 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a0a4a5b54e1b5e87f118e46f69058c0b699343cb/mods/multiwm.wh.cpp))
+
+**Functionality note**
+- **The `bsp` layout setting now means the new BSP layout.** Configurations
+  saved before 1.13.29 used `bsp` for Dwindle; those now open in BSP. Choose
+  Dwindle again in the layout settings to keep the old behaviour.
+
+**New**
+- **BSP layout.** New windows split the focused or biggest tile. Drag a window near a tile's edge to split it there, or drop it in the center to swap.
+- **Resize hotkeys.** Alt+= grows the focused window, Alt+- shrinks it and Alt+0 resets it. You can hold a key to repeat, and set the step size.
+- **Drag preview.** While you drag a tiled window, MultiWM shows where it will land. You can change the opacity, outline, corner radius, app icon size and fade time.
+- **Clearer hotkey feedback.** If another program already uses one of MultiWM's shortcuts, a toast names that program. A hotkey that can't do anything now tells you why.
+- **Support for the MultiWM Companion mod.**
+
+**Changes**
+- "Set Master Window" (Alt+M) is now **Layout Action**. It rotates the focused split in BSP and still promotes the focused window in other layouts.
+- "Adaptive Dwindle" settings are now **Adaptive Split** settings and apply to BSP as well. Splits go back to normal when the extra space is no longer needed, unless you've resized a window.
+- If you change the management mode with the hotkey or tray menu, it stays that way until MultiWM restarts or you change the setting.
+- The Floating default size now applies whenever a window floats for the first time, not only in Automatic mode.
+
+**Fixes and improvements**
+- Windows of apps that stop responding are handled better.
+- Minor bug fixes and improvements.
+
 ## 1.13.59 ([Oct 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b039ab01c4b034c0adea8c12b213192e8085bec9/mods/multiwm.wh.cpp))
 
 - added contributing section 

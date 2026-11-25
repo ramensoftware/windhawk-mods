@@ -687,51 +687,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
       }
     },
-    "multiwm-companion": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795471852872,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795471852872,
-        "users": 0
-      },
-      "metadata": {
-        "author": "meteoni",
-        "compilerOptions": "-ldwmapi",
-        "description": "Opens new windows directly in the slot MultiWM will give them, so they don't appear elsewhere first and jump.",
-        "exclude": [
-          "windhawk.exe",
-          "windhawk-mod.exe",
-          "windhawk-mod-uiaccess.exe",
-          "ShellExperienceHost.exe",
-          "StartMenuExperienceHost.exe",
-          "SearchHost.exe",
-          "LockApp.exe",
-          "SystemSettings.exe",
-          "TextInputHost.exe",
-          "Widgets.exe",
-          "ctfmon.exe",
-          "GameBarPresenceWriter.exe",
-          "backgroundTaskHost.exe",
-          "SecurityHealthSystray.exe"
-        ],
-        "github": "https://github.com/Meteoni",
-        "include": [
-          "*"
-        ],
-        "license": "MIT",
-        "name": "MultiWM Companion",
-        "version": "0.3.2"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7880",
-      "source": {
-        "sha256": "77fd430c0b37e65269c9d6abee9c066aed1517030831ab8b313d169980f50235",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/9989e5c525e7812affc4373d7b9285679f07f99c/mods/multiwm-companion.wh.cpp"
-      }
-    },
     "native-screen-recorder": {
       "details": {
         "defaultSorting": 0,

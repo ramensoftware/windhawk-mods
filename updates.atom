@@ -2,12 +2,129 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-25T18:03:29.000Z</updated>
+    <updated>2026-11-25T19:05:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MultiWM Companion 0.3.2]]></title>
+        <id>https://windhawk.net/mods/multiwm-companion#06b03acabc00a697cb9daf1518086a2c0c09191f</id>
+        <link href="https://windhawk.net/mods/multiwm-companion"/>
+        <updated>2026-11-25T19:05:11.000Z</updated>
+        <content type="html"><![CDATA[<h1>MultiWM Companion</h1>
+<p>An optional add-on for <a href="https://github.com/Meteoni/MultiWM">MultiWM</a>. Without it,
+a new window first appears where the app puts it, then jumps into its tile. With
+it, the window opens in its tile directly.</p>
+<h2>What it does</h2>
+<ul>
+<li>New windows open in the tile MultiWM will give them, with your gap, insets and
+window rules applied.</li>
+<li>Windows restored from the taskbar or the tray reappear in their own tile.</li>
+<li>Windows that will float (by a rule, in the Floating layout, or because they
+don't fit) open where they'll float.</li>
+<li>If a guess turns out wrong (say the app resizes itself right after opening),
+MultiWM moves the window as usual.</li>
+</ul>
+<p>Dialogs, tool windows, excluded windows, and windows that open maximized or
+fullscreen are left alone.</p>
+<h2>Requirements</h2>
+<ul>
+<li>MultiWM installed and running, in Automatic mode. In Manual mode this mod does
+nothing.</li>
+<li>A matching MultiWM release (see the version chart below). Try to update MultiWM
+and the companion together: mismatched versions may give no hints.</li>
+</ul>
+<h2>Compatibility</h2>
+<p>Don't combine with other mods that move windows before they appear, such as
+Window Centralizer or Center New Windows: both would move the same window.</p>
+<h2>Troubleshooting</h2>
+<p>Enable logging for this mod in Windhawk to see each placement decision.</p>
+<h2>Version chart</h2>
+<table>
+<thead>
+<tr>
+<th>Companion</th>
+<th>MultiWM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.3.2</td>
+<td>1.16.1+</td>
+</tr>
+</tbody>
+</table>
+]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[MultiWM 1.16.1]]></title>
+        <id>https://windhawk.net/mods/multiwm#a0a4a5b54e1b5e87f118e46f69058c0b699343cb</id>
+        <link href="https://windhawk.net/mods/multiwm"/>
+        <updated>2026-11-25T19:05:05.000Z</updated>
+        <content type="html"><![CDATA[<p><strong>Functionality note</strong></p>
+<ul>
+<li><strong>The <code>bsp</code> layout setting now means the new BSP layout.</strong> Configurations
+saved before 1.13.29 used <code>bsp</code> for Dwindle; those now open in BSP. Choose
+Dwindle again in the layout settings to keep the old behaviour.</li>
+</ul>
+<p><strong>New</strong></p>
+<ul>
+<li><strong>BSP layout.</strong> New windows split the focused or biggest tile. Drag a window near a tile's edge to split it there, or drop it in the center to swap.</li>
+<li><strong>Resize hotkeys.</strong> Alt+= grows the focused window, Alt+- shrinks it and Alt+0 resets it. You can hold a key to repeat, and set the step size.</li>
+<li><strong>Drag preview.</strong> While you drag a tiled window, MultiWM shows where it will land. You can change the opacity, outline, corner radius, app icon size and fade time.</li>
+<li><strong>Clearer hotkey feedback.</strong> If another program already uses one of MultiWM's shortcuts, a toast names that program. A hotkey that can't do anything now tells you why.</li>
+<li><strong>Support for the MultiWM Companion mod.</strong></li>
+</ul>
+<p><strong>Changes</strong></p>
+<ul>
+<li>&quot;Set Master Window&quot; (Alt+M) is now <strong>Layout Action</strong>. It rotates the focused split in BSP and still promotes the focused window in other layouts.</li>
+<li>&quot;Adaptive Dwindle&quot; settings are now <strong>Adaptive Split</strong> settings and apply to BSP as well. Splits go back to normal when the extra space is no longer needed, unless you've resized a window.</li>
+<li>If you change the management mode with the hotkey or tray menu, it stays that way until MultiWM restarts or you change the setting.</li>
+<li>The Floating default size now applies whenever a window floats for the first time, not only in Automatic mode.</li>
+</ul>
+<p><strong>Fixes and improvements</strong></p>
+<ul>
+<li>Windows of apps that stop responding are handled better.</li>
+<li>Minor bug fixes and improvements.</li>
+</ul>
+]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Yandex Music Transparency 1.2.8]]></title>
+        <id>https://windhawk.net/mods/yandex-music-transparency#5b2330146733bd5c376685c8caa8e90b84920731</id>
+        <link href="https://windhawk.net/mods/yandex-music-transparency"/>
+        <updated>2026-11-25T19:04:59.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added configurable opacity for active and inactive windows
+(<code>Alpha</code> / <code>InactiveAlpha</code>).</li>
+<li>Added &quot;fully opaque on hover&quot; option (<code>OpaqueOnHover</code>).</li>
+<li>Added &quot;fully opaque when maximized/fullscreen&quot; option
+(<code>OpaqueWhenMaximized</code>), applied immediately to avoid clashing with the
+system resize animation.</li>
+<li>Added smooth animated transitions between opacity levels
+(<code>SmoothTransitions</code>).</li>
+<li>Defaults: active opacity 220, inactive opacity 170 (inactive windows are now
+more transparent than the active value), smooth transitions on, fully
+opaque on hover off.</li>
+<li>Fixed restoring the original alpha on unload (the window's true original
+opacity is now captured once).</li>
+</ul>
+]]></content>
+        <author>
+            <name>NIKTO</name>
+            <uri>https://github.com/NIKTO-2</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mac Island & Dock 3.4.0]]></title>
         <id>https://windhawk.net/mods/mac-island-dock#1a8b68fc7e486beb33373928b5fb030b549eb5df</id>
@@ -775,62 +892,6 @@ is created, the approach worked out in
         <author>
             <name>alkali210</name>
             <uri>https://github.com/alkali210</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Charging Animation 1.1.0]]></title>
-        <id>https://windhawk.net/mods/charging-animation#c54356831d0987a31c493a22134ac721483b69e7</id>
-        <link href="https://windhawk.net/mods/charging-animation"/>
-        <updated>2026-11-25T02:01:12.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Introduce Aurora Ribbons, Hex Grid Pulse, Energy Fill, Particle Sparks, and Radar Sweep effects</li>
-<li>Expand total effect count from six to eleven with detailed effect behaviors and parameters</li>
-<li>Add new card styles: Capsule (Gradient), Halo Dial (Segments), Dot Matrix (Mono), Half Gauge (Arc), Ticker Strip (Marquee)</li>
-<li>Update animation parameters to apply to new effects including Strength, Duration, Motion, and Opacity</li>
-<li>Enhance unplug direction support for additional effects with detailed control</li>
-<li>Modify rendering logic to support new effects with optimized frame rates for performance</li>
-<li>Improve visual and interaction details for cards and animations, including dynamic coloring and positioning options</li>
-<li>Refactor code for effect initialization, rendering, and resource management to accommodate new effects</li>
-</ul>
-]]></content>
-        <author>
-            <name>DpakB</name>
-            <uri>https://github.com/DeepakBalaraman</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win+V Panel Tweaks 1.1.0]]></title>
-        <id>https://windhawk.net/mods/winv-panel-tweaks#ae0ed6f714070b28fc188653813e667190c0fccf</id>
-        <link href="https://windhawk.net/mods/winv-panel-tweaks"/>
-        <updated>2026-11-25T02:01:07.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Adds a &quot;Pinned&quot; button next to &quot;Clear all&quot; that shows only your pinned clipboard items. Click it again to show everything. &quot;Clear all&quot; is hidden while only pinned items are shown.</li>
-<li>Adds a Win+Alt+V shortcut that opens the panel showing only pinned items.</li>
-<li>The button and the shortcut can be turned off or changed in the new &quot;Pinned items&quot; settings group.</li>
-<li>The shortcut runs in a small separate Windhawk process.</li>
-</ul>
-]]></content>
-        <author>
-            <name>jayll1303</name>
-            <uri>https://github.com/jayll1303</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Window Centralizer 1.3.0]]></title>
-        <id>https://windhawk.net/mods/window-centralizer#12590c91b16c21c10ab8616e5d59042379f7ee51</id>
-        <link href="https://windhawk.net/mods/window-centralizer"/>
-        <updated>2026-11-25T02:01:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New option, <strong>Always center child windows</strong> (on by default), replacing the special case for standard dialogs: windows that belong to another (Save As, Properties, an app's settings) are centered whatever their size, while windows without an owner, such as a program's main window, follow the size limit. Dialogs of Windows itself without an owner, such as Run or Sound, count as child windows of the system; other programs dialogs opened alone, without an owner, follow the limit.</li>
-<li>Default hotkeys changed to Win+Shift+I (ignore) and Win+Ctrl+Shift+I (ignored list).</li>
-<li>Size limit default changed from 10 to 20%.</li>
-<li>Parent mode center on the unrelated window enabled by default.</li>
-<li>README and settings reviewed and reorganized.</li>
-</ul>
-]]></content>
-        <author>
-            <name>3DDinosaur</name>
-            <uri>https://github.com/3DDinosaur</uri>
         </author>
     </entry>
 </feed>

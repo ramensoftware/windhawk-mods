@@ -2,12 +2,66 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-25T17:01:34.000Z</updated>
+    <updated>2026-11-25T19:05:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MultiWM Companion 0.3.2]]></title>
+        <id>https://windhawk.net/mods/multiwm-companion#06b03acabc00a697cb9daf1518086a2c0c09191f</id>
+        <link href="https://windhawk.net/mods/multiwm-companion"/>
+        <updated>2026-11-25T19:05:11.000Z</updated>
+        <content type="html"><![CDATA[<h1>MultiWM Companion</h1>
+<p>An optional add-on for <a href="https://github.com/Meteoni/MultiWM">MultiWM</a>. Without it,
+a new window first appears where the app puts it, then jumps into its tile. With
+it, the window opens in its tile directly.</p>
+<h2>What it does</h2>
+<ul>
+<li>New windows open in the tile MultiWM will give them, with your gap, insets and
+window rules applied.</li>
+<li>Windows restored from the taskbar or the tray reappear in their own tile.</li>
+<li>Windows that will float (by a rule, in the Floating layout, or because they
+don't fit) open where they'll float.</li>
+<li>If a guess turns out wrong (say the app resizes itself right after opening),
+MultiWM moves the window as usual.</li>
+</ul>
+<p>Dialogs, tool windows, excluded windows, and windows that open maximized or
+fullscreen are left alone.</p>
+<h2>Requirements</h2>
+<ul>
+<li>MultiWM installed and running, in Automatic mode. In Manual mode this mod does
+nothing.</li>
+<li>A matching MultiWM release (see the version chart below). Try to update MultiWM
+and the companion together: mismatched versions may give no hints.</li>
+</ul>
+<h2>Compatibility</h2>
+<p>Don't combine with other mods that move windows before they appear, such as
+Window Centralizer or Center New Windows: both would move the same window.</p>
+<h2>Troubleshooting</h2>
+<p>Enable logging for this mod in Windhawk to see each placement decision.</p>
+<h2>Version chart</h2>
+<table>
+<thead>
+<tr>
+<th>Companion</th>
+<th>MultiWM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.3.2</td>
+<td>1.16.1+</td>
+</tr>
+</tbody>
+</table>
+]]></content>
+        <author>
+            <name>meteoni</name>
+            <uri>https://github.com/Meteoni</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Vista/7/8.1 Balloon Notifications Restorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/win7-balloon-notifications-restorer#1db1f371456e7411b70395663b2e27f67fd62faa</id>
@@ -1270,47 +1324,6 @@ counts and stack/module information, without window titles or AppID strings.</p>
         <author>
             <name>coldfeudal</name>
             <uri>https://github.com/coldfeudal</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 11 IME Tray Icon Fix 1.0]]></title>
-        <id>https://windhawk.net/mods/win11-ime-tray-icon-fix#da10276a4b482d9f59064f0f892081f37d4baffe</id>
-        <link href="https://windhawk.net/mods/win11-ime-tray-icon-fix"/>
-        <updated>2026-11-22T07:03:59.000Z</updated>
-        <content type="html"><![CDATA[<h1>Windows 11 IME Tray Icon Fix</h1>
-<h2>Default Stock Layout And The Bug</h2>
-<p><img src="https://raw.githubusercontent.com/yumeyao/windhawk-ime-tray-fix/refs/heads/master/doc/before-fix.gif" alt="Before Fix"></p>
-<pre><code class="language-text">  Screen Left  &lt;-----------------------------------------------------  Screen Right Edge
-  [Chevron ^]  |  [SysPager (Tray Icons)]  |  [IME Indicator]  |  [Clock]  |  [Show Desktop]
-</code></pre>
-<p>The notification area (<code>TrayNotifyWnd</code>) is <strong>anchored to the right edge</strong> of the screen, while child windows are laid out left-to-right. Notice that the <strong>IME Indicator sits right in the middle</strong>, between the third-party tray icons (<code>SysPager</code>) and the clock.</p>
-<p>When <strong>&quot;Let me set a different input method for each app window&quot;</strong> is enabled in a multilingual setup (e.g., English, Chinese, Japanese):</p>
-<ol>
-<li>While typing in an app, the indicator often displays <strong>2 glyphs</strong> (e.g., <code>CH</code> + <code>中</code> or <code>JP</code> + <code>あ</code>), occupying a wider slot.</li>
-<li>When you click a tray icon (such as Steam or WiFi), <code>WM_LBUTTONDOWN</code> immediately shifts focus to <code>explorer.exe</code>.</li>
-<li>The shell defaults to English, shrinking the indicator down to <strong>1 glyph</strong> (<code>ENG</code>).</li>
-<li>Because the clock on the right is pinned to the right edge, the shrunk width forces <strong>everything to the left of the indicator (<code>SysPager</code> and <code>Chevron ^</code>) to slide rightward</strong>.</li>
-<li>When <code>WM_LBUTTONUP</code> fires, the icon you aimed at has moved, and your click lands on whichever neighboring icon slid under your cursor.</li>
-</ol>
-<h2>The Fix</h2>
-<p><img src="https://raw.githubusercontent.com/yumeyao/windhawk-ime-tray-fix/refs/heads/master/doc/after-fix.gif" alt="After Fix"></p>
-<pre><code class="language-text">[IME Indicator]  |  [Chevron ^]  |  [SysPager (Tray Icons)]  |  [Clock]  |  [Show Desktop]
-</code></pre>
-<p>The indicator takes the first slot and everything that used to sit left of it moves right by the indicator's width. Thus, every band is now to the right of the indicator, sits at a fixed distance from the right edge and never moves.</p>
-<h5>Mimicking Docked Language Bar?</h5>
-<p>Yes. But the docked language bar is broken in win10 (unstable, and won't work in remote desktop - even if you enable this option in both sides, and the latest MSPY doesn't support it unless you turn on &quot;Use the old version of MSPY&quot;) and is completely removed in win11.</p>
-<h2>Notes and known limitations</h2>
-<ul>
-<li>This mod is separated from <a href="https://windhawk.net/mods/win10-ime-tray-icon-fix">the Win 10 fix</a> because the UI technology (XAML vs Win32) is completely different. So they share no common code.</li>
-<li>No alternative modes. You can adjust width / hide icon using the official (m417z) mods &quot;Taskbar height and icon size&quot; and &quot;Taskbar tray system icon tweaks&quot;.</li>
-<li>This mod alters the grid columns (indice), which might be changed by other mods too (Styler). The co-existence itself is fine, but recording the correct state (for editing settings / turning on or off  on-the-fly) across multiple mods is techniclaly impossible. It's recommended to use one mod alone, if you need both, create a custom style theme with the icons swapped.</li>
-<li>Source code and reverse engineering credit goes to AI bot (hy4). Heavily guided to follow the framework of the official mods above, with AI-hallucinated overhead (it added a repeating timer) dropped. But not fully revised (don't want to learn XAML 🙂).</li>
-<li><code>SystemTrayFrameGrid</code> can be a <code>Grid</code> or a <code>StackPanel</code>. Verified on Windows 11 24H2 LTSC (<code>Grid</code>) and 26H2 (<code>StackPanel</code>). Other versions should work as the mechanism is identical and the Windhawk should handle the injection properly, remain untested though.</li>
-</ul>
-]]></content>
-        <author>
-            <name>yumeyao</name>
-            <uri>https://github.com/yumeyao</uri>
         </author>
     </entry>
 </feed>
