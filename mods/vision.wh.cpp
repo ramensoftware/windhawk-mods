@@ -1,46 +1,55 @@
 // ==WindhawkMod==
 // @id              vision
 // @name            Vision
-// @description     Per-window opacity, Z-order pinning, and brightness-aware dimming via title-bar mouse gestures and optional header control
+// @description     Per-window opacity, always-on-top pinning, and soft dimming via title-bar mouse gestures and an optional title-bar % slider
 // @author          Ashix
-// @version         1.2026.1711
+// @version         1.2026.2511
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
 // @donateUrl       https://ko-fi.com/kashix
 // @include         windhawk-mod.exe
 // @include         windhawk.exe
-// @compilerOptions -lgdi32 -lgdiplus -ldwmapi -lwtsapi32 -lpsapi -luser32
+// @compilerOptions -lgdi32 -lgdiplus -ldwmapi -lwtsapi32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Vison
+# Vision
 
-Control any window's **opacity**, **always-on-top**, and **opacity & dimming filter** directly from its title bar.
+![Vision Screenshot](https://raw.githubusercontent.com/k-ashix/ashix-windhawk-mods/main/Vision/Vision.png)
+
+Control any window's **opacity**, **always-on-top** state, and **per-window dimming overlay** directly from its title bar.
 
 | Action | Default Trigger | Notes |
 |---|---|---|
 | Adjust Opacity | `Alt + Shift + Wheel` over title bar | 25%–100%, 5% step |
-| Toggle Pin (`TOPMOST`) | `Alt + Shift + Middle-Click` over title bar | Pins/unpins window |
-| Adjust Dim | `Ctrl + Wheel` over title bar | Soft overlay, never 100% pitch black |
-| Toggle Saved App Dim | `Ctrl + Double-Click` over title bar | Toggles ON/OFF without erasing per-app preset |
-| Header `%` Button & Slider | Optional (disabled by default) | Borderless circle `%` button; hover reveals slider |
+| Toggle Saved App Opacity | `Alt + Shift + Double-Click` over title bar | Toggles ON/OFF without erasing saved app opacity |
+| Toggle Pin (Always on Top) | `Alt + Shift + Middle-Click` over title bar | Pins or unpins the window |
+| Adjust Dim | `Ctrl + Wheel` over title bar | Soft per-window overlay, never 100% pitch black |
+| Toggle Saved App Dim | `Ctrl + Double-Click` over title bar | Toggles ON/OFF without erasing saved app dim |
+| Header `%` Button & Slider | Optional (disabled by default) | Minimal `%` indicator in the title bar; hover reveals a dim slider |
 
 ### Highlights
-- **Flicker-Free Capture Guard & Auto-Restore:** Detects Snipping Tool (`ScreenClippingHost.exe`, `SnippingTool.exe`), Screen Sketch, Xbox Game Bar, ShareX, and Lightshot sessions; holds dim & opacity states cleanly during capture without reset, flash, or Z-order jumping, and restores them automatically when capture ends.
-- **Unified Screenshot & Opacity Exclusion Control:** Supports `exclude_all`, `show_dim`, `show_controls`, and `show_all`, plus automatic window-opacity restoration during excluded captures so background windows never bleed through screenshots.
-- **Zero-Strip Atomic Resize Tracking:** Uses `CS_HREDRAW | CS_VREDRAW` brush-backed overlays without `SWP_NOCOPYBITS` so dragging a dimmed window's edge never flashes a black or white strip.
-- **Text Clarity & Crispness Block:** Optional `Text-Clarity` settings keep text crisp and readable when dimmed or translucent via hover/focus clarity boost, contrast-preserving dark backing, and smart alpha floor clamping.
-- **Hardware Brightness SSOT (Never Fights Monitor OSD / BenQ Eye-CareU):** External hardware/software brightness is always the Single Source of Truth (e.g., if your BenQ monitor is at 30%, that 30% is Vison's 100% baseline). Vison never polls or touches DDC/CI, WMI, or gamma ramps.
-- **Dual Compatible:** Runs as a dedicated Windhawk Tool Mod (`windhawk-mod.exe` & `windhawk.exe`) compatible with both Windhawk 1.7.3 and 2.0.
+- **Per-Window Dimming Relative to Your Current Monitor Brightness:** Dim any individual window (such as a bright PDF, browser, or editor) without changing your monitor's hardware brightness, gamma ramp, or OSD settings. Whatever brightness your display is set to is always treated as 100%.
+- **Saved Per-App Dim & Opacity Levels:** Each app remembers your last dim and opacity percentages per Windows user, so you can toggle them back on with a quick title-bar click.
+- **Optional Title-Bar `%` Control:** Enable a compact `%` badge in the active window's title bar that reveals a smooth slider on hover for one-handed dim adjustments.
+- **Screenshot & Recording Control:** Choose whether dim overlays, reduced opacity, and the title-bar slider are hidden from or included in screenshots and screen recordings (`exclude_all`, `show_dim`, `show_controls`, `show_all`).
+- **Clean Resize & Window Tracking:** Dim overlays follow window moves and resizes smoothly without flashing black or white strips, and never interfere with monitor control utilities or per-pixel transparent windows.
+- **Standalone Tool Mod:** Runs in its own dedicated Windhawk tool process (compatible with both Windhawk 1.7.3 and 2.0) and restores all modified windows when disabled or unloaded.
+
+### How Vision Differs from Similar Mods
+- **Background Dimmer** dims all *inactive* windows behind the active one using a global backdrop. Vision instead lets you manually dim *any specific window* (including the active one you are reading) to its own level with the scroll wheel or title-bar slider, and remembers that dim level per app.
+- **Scroll Window Opacity** adjusts window transparency with a modifier + scroll wheel, but does not offer a per-window dimming overlay, saved per-app dim/opacity quick-toggles, or a title-bar `%` slider.
+- **Middle Click Minimize** and **Always On Top Windows** focus on window state actions (minimize/close/pin via click or hotkey) without per-window dimming or opacity controls.
+- **Window Rules** applies static rules automatically when matching windows open, whereas Vision is designed for instant, interactive on-the-fly adjustments directly from any title bar.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- Triggers:
+- triggers:
   - opacityModifier: alt_shift
-    $name: Opacity & Pin Modifier Key
+    $name: Opacity & Pin Modifier
     $description: Key(s) held while scrolling or clicking a title bar to change opacity or pin
     $options:
       - alt_shift: Alt + Shift
@@ -50,8 +59,15 @@ Control any window's **opacity**, **always-on-top**, and **opacity & dimming fil
       - alt: Alt
       - ctrl: Ctrl
       - shift: Shift
+  - opacityToggleAction: double_left
+    $name: Toggle Saved App Opacity
+    $description: Mouse action with the Opacity Modifier on a title bar to toggle saved per-app opacity ON/OFF
+    $options:
+      - double_left: Double Left-Click
+      - middle: Middle Click
+      - disabled: Disabled
   - pinButton: middle
-    $name: Pin Window Mouse Button
+    $name: Pin Window Button
     $description: Mouse button pressed with the Opacity Modifier on a title bar to toggle Always-on-Top
     $options:
       - middle: Middle Click
@@ -60,8 +76,8 @@ Control any window's **opacity**, **always-on-top**, and **opacity & dimming fil
       - x2: Mouse Forward (XButton2)
       - disabled: Disabled
   - dimModifier: ctrl
-    $name: Dim Modifier Key
-    $description: Key(s) held while scrolling a title bar to adjust window dimming
+    $name: Dim Modifier
+    $description: Key(s) held while scrolling or clicking a title bar to adjust window dimming
     $options:
       - ctrl: Ctrl
       - alt: Alt
@@ -70,7 +86,7 @@ Control any window's **opacity**, **always-on-top**, and **opacity & dimming fil
       - alt_shift: Alt + Shift
       - ctrl_alt: Ctrl + Alt
   - dimToggleAction: double_left
-    $name: Quick Toggle Saved App Dim
+    $name: Toggle Saved App Dim
     $description: Mouse action with the Dim Modifier on a title bar to toggle saved per-app dim ON/OFF
     $options:
       - double_left: Double Left-Click
@@ -80,24 +96,25 @@ Control any window's **opacity**, **always-on-top**, and **opacity & dimming fil
     $name: Opacity Scroll Step (%)
     $description: Percentage change per mouse wheel notch (1-25)
   - opacityMin: 25
-    $name: Minimum Opacity Floor (%)
+    $name: Minimum Opacity (%)
     $description: Lowest allowed window opacity (10-95)
   - dimStep: 5
     $name: Dim Scroll Step (%)
     $description: Percentage change per mouse wheel notch (1-25)
   - dimMaxAlphaPercent: 90
-    $name: Maximum Dim Darkness Cap (%)
-    $description: Hard cap (10-95%) so dimmed windows always remain readable
-- Dimming:
+    $name: Maximum Dim Darkness (%)
+    $description: Upper limit on overlay darkness (10-95%) so dimmed windows stay readable
+  $name: Triggers
+- dimming:
   - mode: relative
-    $name: Dimming Response Curve (Hardware Brightness = 100% Baseline)
-    $description: Current monitor hardware/OSD brightness is always treated as 100% SSOT; Vison never alters or fights hardware brightness
+    $name: Dimming Curve
+    $description: How overlay darkness scales relative to your monitor's current brightness
     $options:
-      - relative: Linear Relative to Hardware Brightness (100% = current monitor)
-      - auto_scaled: Perceptual Eye-Care Curve (Gentle roll-off on low-brightness panels)
+      - relative: Linear (100% = current monitor brightness)
+      - auto_scaled: Gentle Curve (softer dimming at lower steps)
   - colorPreset: soft_charcoal
-    $name: Dim Filter Tint
-    $description: Predefined soft dim tints or choose Custom Hex Color below
+    $name: Dim Tint
+    $description: Predefined dim overlay color or Custom Hex Color below
     $options:
       - soft_charcoal: Soft Charcoal (#141418)
       - warm_slate: Warm Night Slate (#1A1614)
@@ -106,66 +123,69 @@ Control any window's **opacity**, **always-on-top**, and **opacity & dimming fil
       - oled_black: Deep OLED Black (#000000)
       - custom: Custom Hex Color
   - customHexColor: "#141418"
-    $name: Custom Dim Hex Color (#RRGGBB)
-    $description: Applied only when Dim Filter Tint is set to Custom Hex Color
+    $name: Custom Dim Color (#RRGGBB)
+    $description: Used only when Dim Tint is set to Custom Hex Color
   - persistWhenUnfocused: true
-    $name: Keep Dim Active When Out of Focus
-    $description: Keeps a dimmed window dimmed even when you switch to another app; turn off to dim only the focused window
+    $name: Keep Dim When Unfocused
+    $description: Keep a dimmed window dimmed after switching to another app; turn off to dim only the active window
   - captureBehavior: exclude_all
-    $name: Screenshot & Screen Recording Visibility
-    $description: Controls whether dim overlays, window opacity, and header controls are excluded or included in screenshots and recordings
+    $name: Screenshot Visibility
+    $description: Choose whether dim overlays, reduced opacity, and the title-bar control appear in screenshots and recordings
     $options:
-      - exclude_all: Exclude Both Dim & Decreased Opacity in Screenshots (Default)
-      - show_dim: Include Dim & Opacity in Screenshot (Hide Header Controls)
-      - show_controls: Show Header Controls Only (Exclude Dim & Opacity)
-      - show_all: Include Both Dim, Opacity & Controls in Screenshots
+      - exclude_all: Hide Dim, Opacity & Controls (Default)
+      - show_dim: Show Dim & Opacity (Hide Controls)
+      - show_controls: Show Controls Only (Hide Dim & Opacity)
+      - show_all: Show Dim, Opacity & Controls
   - restoreOpacityOnCapture: true
-    $name: Temporarily Restore 100% Window Opacity During Excluded Captures
-    $description: Prevents background text/windows from bleeding through translucent windows when taking a screenshot in Exclude mode, then restores opacity automatically
-- Text-Clarity:
-  - keepTextCrisp: true
-    $name: Keep Text Crisp When Dimmed or Translucent
-    $description: Preserves sharp text contrast and readability instead of washing out glyphs when dimming or lowering window opacity
+    $name: Restore Opacity During Excluded Captures
+    $description: Temporarily restore 100% window opacity during screenshots when opacity is excluded, then restore it afterward
+  $name: Dimming
+- textClarity:
+  - keepTextCrisp: false
+    $name: Enable Readability Boost
+    $description: Optional alpha adjustments (dark backing, focus lift, or higher opacity floor) to keep dimmed or translucent windows easier to read
   - crispMode: contrast_anchor
-    $name: Crisp Text Preservation Mode
-    $description: How Vison keeps text crisp while dimming or lowering opacity
+    $name: Readability Boost Mode
+    $description: How opacity and overlay alpha are adjusted when Readability Boost is enabled
     $options:
-      - contrast_anchor: Contrast-Anchored Backing (Prevents Background Bleed & Washed-Out Text)
-      - hover_focus_crisp: Crisp on Hover / Active Focus (Restores Full Text Clarity While Reading)
-      - smart_floor: Smart Readability Clamp (Caps Dim & Opacity at High-Contrast Floor)
+      - contrast_anchor: Dark Backing (adds a subtle dark overlay and raises window alpha)
+      - hover_focus_crisp: Focus Lift (restores 100% opacity and lightens dim on the active window)
+      - smart_floor: Minimum Floor (caps minimum opacity and brightness at a higher level)
   - crispStrength: 65
-    $name: Text Crispness & Contrast Anchor Strength (%)
-    $description: Strength of dark contrast backing and clarity preservation (20-95%) so text stays crisp
-- Header-Control:
+    $name: Readability Boost Strength (%)
+    $description: Strength of the readability adjustment (20-95%)
+  $name: Readability Boost
+- headerControl:
   - enabled: false
     $name: Show Header % Control
-    $description: Displays a minimal % indicator in the title bar when space is free; hovering reveals a dim slider
+    $description: Show a compact % indicator in the active window's title bar; hover to reveal a dim slider
   - position: after_title
-    $name: Header % Control Placement
-    $description: After App Title avoids all right-side window buttons; Before Caption Buttons places it on the right
+    $name: Control Placement
+    $description: Place the % indicator after the window title on the left or before the caption buttons on the right
     $options:
-      - after_title: After App Title (Left Side, Default)
-      - before_caption: Before Caption Buttons (Right Side)
+      - after_title: After Window Title (Left)
+      - before_caption: Before Caption Buttons (Right)
   - showFill: false
-    $name: Show Background Fill Under % Text
-    $description: Keep off for bare adaptive % text; turn on for an OLED Black circle fill behind the percentage
-- Reset:
-  - onWindowClose: true
-    $name: Reset When Window or App Closes
-    $description: Clean up overlay and active state when a window closes or an app exits (saved per-app presets remain)
-  - onSessionChange: true
-    $name: Reset on Lock / Logoff / Unlock
-    $description: Restore all windows to normal when your Windows session locks, logs off, or unlocks
+    $name: Show Circle Background
+    $description: Turn off for bare adaptive % text; turn on for a solid black circle behind the percentage
+  $name: Header % Control
+- reset:
+  - onLogoff: true
+    $name: Reset on Windows Logoff
+    $description: Restore all windows to normal when signing out of Windows (locking the screen keeps your active dims and pins)
+  $name: Reset
 */
 // ==/WindhawkModSettings==
+
+#include <windhawk_utils.h>
 
 #include <windows.h>
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <gdiplus.h>
+#include <sddl.h>
 #include <shellapi.h>
 #include <wtsapi32.h>
-#include <psapi.h>
 
 #include <algorithm>
 #include <atomic>
@@ -174,6 +194,7 @@ Control any window's **opacity**, **always-on-top**, and **opacity & dimming fil
 #include <cwctype>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #ifndef WDA_EXCLUDEFROMCAPTURE
@@ -184,12 +205,16 @@ Control any window's **opacity**, **always-on-top**, and **opacity & dimming fil
 #define DWMWA_EXTENDED_FRAME_BOUNDS 9
 #endif
 
-#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
-#define DWMWA_WINDOW_CORNER_PREFERENCE 33
-#endif
-
 #ifndef DWMWA_CLOAKED
 #define DWMWA_CLOAKED 14
+#endif
+
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
 #endif
 
 #ifndef EVENT_OBJECT_CLOAKED
@@ -206,14 +231,15 @@ constexpr UINT WM_APP_RELOAD_SETTINGS = WM_APP + 101;
 constexpr UINT WM_APP_HOOK_WHEEL      = WM_APP + 102;
 constexpr UINT WM_APP_HOOK_BUTTON     = WM_APP + 103;
 constexpr UINT WM_APP_HOOK_DBLCLICK   = WM_APP + 104;
+constexpr UINT WM_APP_MASK_ALT        = WM_APP + 105;
 constexpr UINT_PTR TIMER_ANIMATION    = 2;
 constexpr UINT_PTR TIMER_HOVER_CHECK  = 3;
 constexpr UINT_PTR TIMER_SAVE_PRESETS = 4;
 
-constexpr wchar_t kCtrlClass[]        = L"Vison_ControlWnd";
-constexpr wchar_t kDimClass[]         = L"Vison_DimOverlayWnd";
-constexpr wchar_t kBadgeClass[]       = L"Vison_HeaderBadgeWnd";
-constexpr wchar_t kSliderClass[]      = L"Vison_HeaderSliderWnd";
+constexpr wchar_t kCtrlClass[]        = L"Vision_ControlWnd";
+constexpr wchar_t kDimClass[]         = L"Vision_DimOverlayWnd";
+constexpr wchar_t kBadgeClass[]       = L"Vision_HeaderBadgeWnd";
+constexpr wchar_t kSliderClass[]      = L"Vision_HeaderSliderWnd";
 
 enum class ModCombo {
     AltShift,
@@ -254,6 +280,7 @@ enum class CrispTextMode {
 
 struct Settings {
     ModCombo opacityMod = ModCombo::AltShift;
+    ButtonAction opacityToggle = ButtonAction::DoubleLeft;
     ButtonAction pinButton = ButtonAction::Middle;
     ModCombo dimMod = ModCombo::Ctrl;
     ButtonAction dimToggle = ButtonAction::DoubleLeft;
@@ -264,7 +291,7 @@ struct Settings {
     DimMode dimMode = DimMode::Relative;
     CaptureMode captureMode = CaptureMode::ExcludeAll;
     bool restoreOpacityOnCapture = true;
-    bool keepTextCrisp = true;
+    bool keepTextCrisp = false;
     CrispTextMode crispMode = CrispTextMode::ContrastAnchor;
     int crispStrength = 65;
     COLORREF dimColor = RGB(0x14, 0x14, 0x18);
@@ -272,14 +299,18 @@ struct Settings {
     bool headerControlEnabled = false;
     bool headerAfterTitle = true;
     bool headerShowFill = false;
-    bool resetOnWindowClose = true;
-    bool resetOnSessionChange = true;
+    bool resetOnLogoff = true;
 };
 
 struct WindowState {
     HWND target = nullptr;
     std::wstring exeName;
     bool addedLayered = false;
+    bool hadLayered = false;
+    bool isPerPixelLayered = false;
+    BYTE origAlpha = 255;
+    COLORREF origColorKey = 0;
+    DWORD origLayeredFlags = 0;
     int opacityPct = 100;
     BYTE currentAlpha = 255;
     bool wasTopmost = false;
@@ -291,7 +322,6 @@ struct WindowState {
     RECT lastOverlayRect{};
     DWORD lastCornerPref = 0;
     bool isMoveSizing = false;
-    bool captureSuppressedOpacity = false;
 };
 
 struct AnimState {
@@ -357,15 +387,23 @@ struct CachedDIB {
 // State owned exclusively by the worker UI thread unless marked atomic.
 Settings g_settings;
 std::atomic<int> g_hookOpacityMod{static_cast<int>(ModCombo::AltShift)};
+std::atomic<int> g_hookOpacityToggle{static_cast<int>(ButtonAction::DoubleLeft)};
 std::atomic<int> g_hookPinButton{static_cast<int>(ButtonAction::Middle)};
 std::atomic<int> g_hookDimMod{static_cast<int>(ModCombo::Ctrl)};
 std::atomic<int> g_hookDimToggle{static_cast<int>(ButtonAction::DoubleLeft)};
+std::atomic<HWND> g_atomicCtrlWnd{nullptr};
+std::atomic<HWND> g_atomicBadgeWnd{nullptr};
+std::atomic<HWND> g_atomicSliderWnd{nullptr};
+
 HBRUSH g_dimBrush = nullptr;
 HANDLE g_workerThread = nullptr;
 DWORD g_workerThreadId = 0;
 HANDLE g_readyEvent = nullptr;
+HANDLE g_mouseHookThread = nullptr;
+DWORD g_mouseHookThreadId = 0;
+HANDLE g_hookReadyEvent = nullptr;
 HHOOK g_mouseHook = nullptr;
-HWINEVENTHOOK g_winEventHook = nullptr;
+std::vector<HWINEVENTHOOK> g_winEventHooks;
 ULONG_PTR g_gdiplusToken = 0;
 
 HWND g_ctrlWnd = nullptr;
@@ -388,7 +426,9 @@ LARGE_INTEGER g_qpcFreq{};
 CachedDIB g_badgeDib;
 CachedDIB g_sliderDib;
 
+std::wstring g_userSidSuffix;
 std::map<HWND, WindowState> g_ledger;
+std::unordered_map<DWORD, std::wstring> g_pidExeCache;
 std::map<std::wstring, int> g_appPresets;
 std::map<std::wstring, int> g_appOpacityPresets;
 std::atomic<bool> g_unloading{false};
@@ -398,16 +438,21 @@ float g_wheelAccumOpacity = 0.0f;
 float g_wheelAccumDim = 0.0f;
 float g_wheelAccumSlider = 0.0f;
 
-ULONGLONG g_lastCtrlDownTick = 0;
-POINT g_lastCtrlDownPt{};
+// Hook-thread-only gesture state (never accessed from the worker thread).
+ULONGLONG g_lastDimDownTick = 0;
+POINT g_lastDimDownPt{};
+ULONGLONG g_lastOpacityDownTick = 0;
+POINT g_lastOpacityDownPt{};
 bool g_swallowNextLeftUp = false;
+UINT g_swallowUpMsg = 0;
+WORD g_swallowUpXButton = 0;
+bool g_altMaskedForHold = false;
 
 // -----------------------------------------------------------------------------
 // Settings & Parsing
 // -----------------------------------------------------------------------------
 
 ModCombo ParseModCombo(PCWSTR s, ModCombo fallback) {
-    if (!s) return fallback;
     if (wcscmp(s, L"alt_shift") == 0) return ModCombo::AltShift;
     if (wcscmp(s, L"ctrl_shift") == 0) return ModCombo::CtrlShift;
     if (wcscmp(s, L"ctrl_alt") == 0) return ModCombo::CtrlAlt;
@@ -419,7 +464,6 @@ ModCombo ParseModCombo(PCWSTR s, ModCombo fallback) {
 }
 
 ButtonAction ParseButtonAction(PCWSTR s, ButtonAction fallback) {
-    if (!s) return fallback;
     if (wcscmp(s, L"middle") == 0) return ButtonAction::Middle;
     if (wcscmp(s, L"right") == 0) return ButtonAction::Right;
     if (wcscmp(s, L"x1") == 0) return ButtonAction::X1;
@@ -430,7 +474,6 @@ ButtonAction ParseButtonAction(PCWSTR s, ButtonAction fallback) {
 }
 
 COLORREF ParseHexColor(PCWSTR hex, COLORREF fallback) {
-    if (!hex) return fallback;
     if (*hex == L'#') ++hex;
     if (wcslen(hex) != 6) return fallback;
     wchar_t* end = nullptr;
@@ -451,87 +494,82 @@ void RefreshDimBrush(COLORREF color) {
 
 void LoadSettings() {
     Settings s;
-    PCWSTR str = Wh_GetStringSetting(L"triggers.opacityModifier");
-    s.opacityMod = ParseModCombo(str, ModCombo::AltShift);
-    Wh_FreeStringSetting(str);
 
-    str = Wh_GetStringSetting(L"triggers.pinButton");
-    s.pinButton = ParseButtonAction(str, ButtonAction::Middle);
-    Wh_FreeStringSetting(str);
+    auto opacityModStr = WindhawkUtils::StringSetting::make(L"triggers.opacityModifier");
+    s.opacityMod = ParseModCombo(opacityModStr.get(), ModCombo::AltShift);
 
-    str = Wh_GetStringSetting(L"triggers.dimModifier");
-    s.dimMod = ParseModCombo(str, ModCombo::Ctrl);
-    Wh_FreeStringSetting(str);
+    auto opacityToggleStr = WindhawkUtils::StringSetting::make(L"triggers.opacityToggleAction");
+    s.opacityToggle = ParseButtonAction(opacityToggleStr.get(), ButtonAction::DoubleLeft);
 
-    str = Wh_GetStringSetting(L"triggers.dimToggleAction");
-    s.dimToggle = ParseButtonAction(str, ButtonAction::DoubleLeft);
-    Wh_FreeStringSetting(str);
+    auto pinButtonStr = WindhawkUtils::StringSetting::make(L"triggers.pinButton");
+    s.pinButton = ParseButtonAction(pinButtonStr.get(), ButtonAction::Middle);
+
+    auto dimModStr = WindhawkUtils::StringSetting::make(L"triggers.dimModifier");
+    s.dimMod = ParseModCombo(dimModStr.get(), ModCombo::Ctrl);
+
+    auto dimToggleStr = WindhawkUtils::StringSetting::make(L"triggers.dimToggleAction");
+    s.dimToggle = ParseButtonAction(dimToggleStr.get(), ButtonAction::DoubleLeft);
 
     s.opacityStep = std::clamp(Wh_GetIntSetting(L"triggers.opacityStep"), 1, 25);
     s.opacityMin = std::clamp(Wh_GetIntSetting(L"triggers.opacityMin"), 10, 95);
     s.dimStep = std::clamp(Wh_GetIntSetting(L"triggers.dimStep"), 1, 25);
     s.dimMaxAlphaPercent = std::clamp(Wh_GetIntSetting(L"triggers.dimMaxAlphaPercent"), 10, 95);
 
-    str = Wh_GetStringSetting(L"dimming.mode");
-    s.dimMode = (str && wcscmp(str, L"auto_scaled") == 0) ? DimMode::AutoScaled : DimMode::Relative;
-    Wh_FreeStringSetting(str);
+    auto dimModeStr = WindhawkUtils::StringSetting::make(L"dimming.mode");
+    s.dimMode = (wcscmp(dimModeStr.get(), L"auto_scaled") == 0) ? DimMode::AutoScaled : DimMode::Relative;
 
-    str = Wh_GetStringSetting(L"dimming.colorPreset");
-    if (str && wcscmp(str, L"warm_slate") == 0) {
+    auto colorPresetStr = WindhawkUtils::StringSetting::make(L"dimming.colorPreset");
+    if (wcscmp(colorPresetStr.get(), L"warm_slate") == 0) {
         s.dimColor = RGB(0x1A, 0x16, 0x14);
-    } else if (str && wcscmp(str, L"cool_navy") == 0) {
+    } else if (wcscmp(colorPresetStr.get(), L"cool_navy") == 0) {
         s.dimColor = RGB(0x0E, 0x14, 0x1E);
-    } else if (str && wcscmp(str, L"neutral_gray") == 0) {
+    } else if (wcscmp(colorPresetStr.get(), L"neutral_gray") == 0) {
         s.dimColor = RGB(0x24, 0x24, 0x28);
-    } else if (str && wcscmp(str, L"oled_black") == 0) {
+    } else if (wcscmp(colorPresetStr.get(), L"oled_black") == 0) {
         s.dimColor = RGB(0x00, 0x00, 0x00);
-    } else if (str && wcscmp(str, L"custom") == 0) {
-        PCWSTR customHex = Wh_GetStringSetting(L"dimming.customHexColor");
-        s.dimColor = ParseHexColor(customHex, RGB(0x14, 0x14, 0x18));
-        Wh_FreeStringSetting(customHex);
+    } else if (wcscmp(colorPresetStr.get(), L"custom") == 0) {
+        auto customHexStr = WindhawkUtils::StringSetting::make(L"dimming.customHexColor");
+        s.dimColor = ParseHexColor(customHexStr.get(), RGB(0x14, 0x14, 0x18));
     } else {
         s.dimColor = RGB(0x14, 0x14, 0x18);
     }
-    Wh_FreeStringSetting(str);
 
     s.persistWhenUnfocused = Wh_GetIntSetting(L"dimming.persistWhenUnfocused") != 0;
 
-    str = Wh_GetStringSetting(L"dimming.captureBehavior");
-    if (str && wcscmp(str, L"show_dim") == 0) {
+    auto captureStr = WindhawkUtils::StringSetting::make(L"dimming.captureBehavior");
+    if (wcscmp(captureStr.get(), L"show_dim") == 0) {
         s.captureMode = CaptureMode::ShowDimOnly;
-    } else if (str && (wcscmp(str, L"show_controls") == 0 || wcscmp(str, L"ignore") == 0)) {
+    } else if (wcscmp(captureStr.get(), L"show_controls") == 0) {
         s.captureMode = CaptureMode::ShowControlsOnly;
-    } else if (str && wcscmp(str, L"show_all") == 0) {
+    } else if (wcscmp(captureStr.get(), L"show_all") == 0) {
         s.captureMode = CaptureMode::ShowAll;
     } else {
         s.captureMode = CaptureMode::ExcludeAll;
     }
-    Wh_FreeStringSetting(str);
 
     s.restoreOpacityOnCapture = Wh_GetIntSetting(L"dimming.restoreOpacityOnCapture") != 0;
 
     s.keepTextCrisp = Wh_GetIntSetting(L"textClarity.keepTextCrisp") != 0;
-    str = Wh_GetStringSetting(L"textClarity.crispMode");
-    if (str && wcscmp(str, L"hover_focus_crisp") == 0) {
+    auto crispModeStr = WindhawkUtils::StringSetting::make(L"textClarity.crispMode");
+    if (wcscmp(crispModeStr.get(), L"hover_focus_crisp") == 0) {
         s.crispMode = CrispTextMode::HoverFocusCrisp;
-    } else if (str && wcscmp(str, L"smart_floor") == 0) {
+    } else if (wcscmp(crispModeStr.get(), L"smart_floor") == 0) {
         s.crispMode = CrispTextMode::SmartFloor;
     } else {
         s.crispMode = CrispTextMode::ContrastAnchor;
     }
-    Wh_FreeStringSetting(str);
     s.crispStrength = std::clamp(Wh_GetIntSetting(L"textClarity.crispStrength"), 20, 95);
 
     s.headerControlEnabled = Wh_GetIntSetting(L"headerControl.enabled") != 0;
-    str = Wh_GetStringSetting(L"headerControl.position");
-    s.headerAfterTitle = !(str && wcscmp(str, L"before_caption") == 0);
-    Wh_FreeStringSetting(str);
+    auto headerPosStr = WindhawkUtils::StringSetting::make(L"headerControl.position");
+    s.headerAfterTitle = (wcscmp(headerPosStr.get(), L"before_caption") != 0);
     s.headerShowFill = Wh_GetIntSetting(L"headerControl.showFill") != 0;
-    s.resetOnWindowClose = Wh_GetIntSetting(L"reset.onWindowClose") != 0;
-    s.resetOnSessionChange = Wh_GetIntSetting(L"reset.onSessionChange") != 0;
+
+    s.resetOnLogoff = Wh_GetIntSetting(L"reset.onLogoff") != 0;
 
     g_settings = s;
     g_hookOpacityMod.store(static_cast<int>(s.opacityMod), std::memory_order_relaxed);
+    g_hookOpacityToggle.store(static_cast<int>(s.opacityToggle), std::memory_order_relaxed);
     g_hookPinButton.store(static_cast<int>(s.pinButton), std::memory_order_relaxed);
     g_hookDimMod.store(static_cast<int>(s.dimMod), std::memory_order_relaxed);
     g_hookDimToggle.store(static_cast<int>(s.dimToggle), std::memory_order_relaxed);
@@ -539,8 +577,33 @@ void LoadSettings() {
 }
 
 // -----------------------------------------------------------------------------
-// Per-App Preset Persistence (Windhawk Local Storage)
+// Per-User, Per-App Preset Persistence (Windhawk Local Storage)
 // -----------------------------------------------------------------------------
+
+std::wstring InitUserSidSuffix() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        return L"";
+    }
+
+    DWORD size = 0;
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    std::wstring suffix;
+    if (size > 0) {
+        std::vector<BYTE> buf(size);
+        if (GetTokenInformation(token, TokenUser, buf.data(), size, &size)) {
+            const auto* user = reinterpret_cast<const TOKEN_USER*>(buf.data());
+            LPWSTR sidStr = nullptr;
+            if (ConvertSidToStringSidW(user->User.Sid, &sidStr) && sidStr) {
+                suffix = L"_";
+                suffix += sidStr;
+                LocalFree(sidStr);
+            }
+        }
+    }
+    CloseHandle(token);
+    return suffix;
+}
 
 void ParsePresetMap(PCWSTR key, std::map<std::wstring, int>& outMap, int minVal, int maxVal) {
     outMap.clear();
@@ -574,13 +637,17 @@ void SerializePresetMap(PCWSTR key, const std::map<std::wstring, int>& inMap) {
 }
 
 void LoadPresetsFromStorage() {
-    ParsePresetMap(L"perAppDimPresets", g_appPresets, 0, 100);
-    ParsePresetMap(L"perAppOpacityPresets", g_appOpacityPresets, 10, 100);
+    std::wstring dimKey = L"perAppDimPresets" + g_userSidSuffix;
+    std::wstring opKey = L"perAppOpacityPresets" + g_userSidSuffix;
+    ParsePresetMap(dimKey.c_str(), g_appPresets, 0, 100);
+    ParsePresetMap(opKey.c_str(), g_appOpacityPresets, 10, 100);
 }
 
 void SavePresetsToStorage() {
-    SerializePresetMap(L"perAppDimPresets", g_appPresets);
-    SerializePresetMap(L"perAppOpacityPresets", g_appOpacityPresets);
+    std::wstring dimKey = L"perAppDimPresets" + g_userSidSuffix;
+    std::wstring opKey = L"perAppOpacityPresets" + g_userSidSuffix;
+    SerializePresetMap(dimKey.c_str(), g_appPresets);
+    SerializePresetMap(opKey.c_str(), g_appOpacityPresets);
 }
 
 // -----------------------------------------------------------------------------
@@ -615,19 +682,42 @@ bool IsModifierComboDown(ModCombo combo) {
     return false;
 }
 
-bool IsFullscreenActive() {
-    QUERY_USER_NOTIFICATION_STATE state = QUNS_ACCEPTS_NOTIFICATIONS;
-    if (SUCCEEDED(SHQueryUserNotificationState(&state))) {
-        if (state == QUNS_BUSY ||
-            state == QUNS_RUNNING_D3D_FULL_SCREEN ||
-            state == QUNS_PRESENTATION_MODE) {
-            return true;
+// Per-monitor fullscreen check so a fullscreen video on one display does not disable
+// gestures on other monitors.
+bool IsFullscreenOnTargetMonitor(HWND target, POINT pt) {
+    HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+    if (!hMon) return false;
+    MONITORINFO mi{sizeof(mi)};
+    if (!GetMonitorInfoW(hMon, &mi)) return false;
+
+    auto coversMonitor = [&](HWND hwnd) -> bool {
+        if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) || IsIconic(hwnd)) return false;
+        if (MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) != hMon) return false;
+        LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        // Standard titled/maximized windows are not fullscreen.
+        if ((style & WS_CAPTION) == WS_CAPTION) return false;
+        RECT rc{};
+        if (!GetWindowRect(hwnd, &rc)) return false;
+        return rc.left <= mi.rcMonitor.left && rc.top <= mi.rcMonitor.top &&
+               rc.right >= mi.rcMonitor.right && rc.bottom >= mi.rcMonitor.bottom;
+    };
+
+    if (coversMonitor(target)) return true;
+
+    HWND fg = GetForegroundWindow();
+    if (fg && fg != target && coversMonitor(fg)) {
+        wchar_t cls[64]{};
+        if (GetClassNameW(fg, cls, ARRAYSIZE(cls)) > 0) {
+            if (wcscmp(cls, L"Progman") == 0 || wcscmp(cls, L"WorkerW") == 0) {
+                return false;
+            }
         }
+        return true;
     }
     return false;
 }
 
-bool IsMonitorControlAppExe( const std::wstring& exe ) {
+bool IsMonitorControlAppExe(const std::wstring& exe) {
     if (exe.empty()) return false;
     return exe == L"eye-careu.exe" ||
            exe == L"eyecareu.exe" ||
@@ -663,10 +753,22 @@ bool IsProtectedWindow(HWND hwnd) {
     return false;
 }
 
+// Worker-thread cached exe-name lookup per PID to avoid repeated OpenProcess calls.
 std::wstring GetWindowExeName(HWND hwnd) {
+    auto ledgerIt = g_ledger.find(hwnd);
+    if (ledgerIt != g_ledger.end() && !ledgerIt->second.exeName.empty()) {
+        return ledgerIt->second.exeName;
+    }
+
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
     if (!pid) return L"";
+
+    auto cacheIt = g_pidExeCache.find(pid);
+    if (cacheIt != g_pidExeCache.end()) {
+        return cacheIt->second;
+    }
+
     HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!hProc) return L"";
     wchar_t path[MAX_PATH]{};
@@ -678,6 +780,11 @@ std::wstring GetWindowExeName(HWND hwnd) {
         for (auto& ch : result) ch = static_cast<wchar_t>(towlower(ch));
     }
     CloseHandle(hProc);
+
+    if (g_pidExeCache.size() >= 512) {
+        g_pidExeCache.clear();
+    }
+    g_pidExeCache.emplace(pid, result);
     return result;
 }
 
@@ -714,27 +821,35 @@ bool IsCaptureToolWindow(HWND hwnd) {
 
 BOOL CALLBACK FindActiveCaptureEnumProc(HWND hwnd, LPARAM lParam) {
     if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return TRUE;
+    wchar_t cls[128]{};
+    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) <= 0) return TRUE;
+
+    bool isCandidateClass = false;
+    if (wcsstr(cls, L"ScreenClipping") != nullptr ||
+        wcsstr(cls, L"Snipping") != nullptr ||
+        wcscmp(cls, L"ScreenSketch_Window") == 0) {
+        DWORD cloaked = 0;
+        if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) || cloaked == 0) {
+            *reinterpret_cast<bool*>(lParam) = true;
+            return FALSE;
+        }
+        return TRUE;
+    }
+
+    if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0 ||
+        wcscmp(cls, L"ApplicationFrameWindow") == 0) {
+        isCandidateClass = true;
+    }
+
+    if (!isCandidateClass) return TRUE;
+
     DWORD cloaked = 0;
     if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked != 0) {
         return TRUE;
     }
-    wchar_t cls[128]{};
-    if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) > 0) {
-        if (wcsstr(cls, L"ScreenClipping") != nullptr) {
-            *reinterpret_cast<bool*>(lParam) = true;
-            return FALSE;
-        }
-        if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0 ||
-            wcscmp(cls, L"ApplicationFrameWindow") == 0) {
-            std::wstring exe = GetWindowExeName(hwnd);
-            if (exe == L"screenclippinghost.exe" || exe == L"screensketch.exe") {
-                *reinterpret_cast<bool*>(lParam) = true;
-                return FALSE;
-            }
-        }
-    }
+
     std::wstring exe = GetWindowExeName(hwnd);
-    if (exe == L"screenclippinghost.exe") {
+    if (exe == L"screenclippinghost.exe" || exe == L"screensketch.exe") {
         *reinterpret_cast<bool*>(lParam) = true;
         return FALSE;
     }
@@ -751,10 +866,19 @@ bool IsAnyCaptureOverlayVisible() {
 
 HWND GetEffectiveForegroundTarget() {
     HWND fg = GetForegroundWindow();
-    if (fg && IsWindow(fg) && !IsProtectedWindow(fg) &&
-        !IsMonitorControlWindow(fg) && !IsCaptureToolWindow(fg)) {
-        g_lastNormalForeground = fg;
-        return fg;
+    if (fg && IsWindow(fg) && !IsProtectedWindow(fg)) {
+        std::wstring exe = GetWindowExeName(fg);
+        if (!IsMonitorControlAppExe(exe) && !IsCaptureToolExe(exe)) {
+            wchar_t cls[128]{};
+            bool isCapCls = (GetClassNameW(fg, cls, ARRAYSIZE(cls)) > 0) &&
+                            (wcsstr(cls, L"ScreenClipping") != nullptr ||
+                             wcsstr(cls, L"Snipping") != nullptr ||
+                             wcscmp(cls, L"ScreenSketch_Window") == 0);
+            if (!isCapCls) {
+                g_lastNormalForeground = fg;
+                return fg;
+            }
+        }
     }
     if (g_lastNormalForeground && IsWindow(g_lastNormalForeground) &&
         IsWindowVisible(g_lastNormalForeground) && !IsIconic(g_lastNormalForeground)) {
@@ -774,20 +898,9 @@ RECT GetVisualWindowRect(HWND hwnd) {
     return rc;
 }
 
-// =============================================================================
-// ARCHITECTURAL INVARIANT — HARDWARE BRIGHTNESS IS ALWAYS THE SSOT:
-// 1. Vison MUST NEVER fight, poll, read, or write hardware/driver brightness
-//    (never call DDC/CI SetMonitorBrightness/GetMonitorBrightness, WMI
-//    WmiSetBrightness, SetDeviceGammaRamp, or Night Light/ICC APIs).
-// 2. Whatever brightness the physical monitor or external controller (BenQ
-//    Eye-CareU, Display Pilot 2, B.I.+, Monitorian, Twinkle Tray, Windows OSD)
-//    is currently set to (e.g., 30% on a BenQ monitor) is ALWAYS treated as
-//    Vison's 100% baseline (0% overlay alpha = no overlay window).
-// 3. Dimming a window to X% in Vison simply places a passive per-window alpha
-//    filter over that single window relative to the monitor's current real
-//    output, and NEVER places a global HWND_TOPMOST overlay over normal windows
-//    or intercepts monitor-control software windows.
-// =============================================================================
+// Hardware brightness invariant: Vision never polls or modifies DDC/CI, WMI,
+// gamma ramps, or ICC profiles. Current monitor brightness is always 100%, and
+// dimming applies a passive per-window alpha overlay relative to that baseline.
 
 HWND FindInsertAfterAboveTarget(HWND target) {
     bool targetTop = (GetWindowLongPtrW(target, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
@@ -799,9 +912,7 @@ HWND FindInsertAfterAboveTarget(HWND target) {
         }
         bool prevTop = (GetWindowLongPtrW(prev, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
         if (!targetTop && prevTop) {
-            // Reached the lowest window in the TOPMOST band directly above our top normal window.
-            // Return HWND_TOP (not `prev`), because passing a TOPMOST handle to SetWindowPos
-            // promotes a non-topmost overlay into the TOPMOST band above Snipping Tool!
+            // Do not pass a TOPMOST window handle for a non-topmost overlay.
             return HWND_TOP;
         }
         return prev;
@@ -810,7 +921,7 @@ HWND FindInsertAfterAboveTarget(HWND target) {
 }
 
 // -----------------------------------------------------------------------------
-// Dim Overlay Management (Zero Hardware Polling — Always Respects Monitor OSD)
+// Dim Overlay Management
 // -----------------------------------------------------------------------------
 
 DWORD GetDimOverlayAffinity() {
@@ -843,8 +954,6 @@ bool IsWindowCloaked(HWND hwnd) {
 
 bool ShouldShowDimOverlay(const WindowState& st) {
     if (st.dimActive && st.dimBrightness < 100) return true;
-    // Contrast-Anchored Crisp Text: when window opacity < 100%, a subtle dark backing
-    // anchors background luminance so ClearType glyphs stay high-contrast and never wash out.
     if (g_settings.keepTextCrisp &&
         g_settings.crispMode == CrispTextMode::ContrastAnchor &&
         st.opacityPct < 100) {
@@ -864,7 +973,6 @@ BYTE ComputeOverlayAlpha(const WindowState& st) {
             } else if (g_settings.crispMode == CrispTextMode::HoverFocusCrisp) {
                 HWND effFg = GetEffectiveForegroundTarget();
                 if (st.target == effFg) {
-                    // Gently lift veil on the active reading window so text strokes stay crisp
                     int lift = (100 - effBrightness) * (g_settings.crispStrength / 2) / 100;
                     effBrightness = std::min(100, effBrightness + lift);
                 }
@@ -876,7 +984,6 @@ BYTE ComputeOverlayAlpha(const WindowState& st) {
             : t;
         double maxAlpha = (g_settings.dimMaxAlphaPercent / 100.0) * 255.0;
         if (g_settings.keepTextCrisp && g_settings.crispMode == CrispTextMode::ContrastAnchor) {
-            // Soften veil ceiling slightly when contrast-anchoring so dark text on light UI stays crisp
             double clarityScale = 1.0 - (g_settings.crispStrength / 320.0);
             maxAlpha *= std::clamp(clarityScale, 0.70, 0.95);
         }
@@ -886,7 +993,6 @@ BYTE ComputeOverlayAlpha(const WindowState& st) {
     if (g_settings.keepTextCrisp &&
         g_settings.crispMode == CrispTextMode::ContrastAnchor &&
         st.opacityPct < 100 && dimAlpha < 18.0) {
-        // Provide a crisp contrast anchor proportional to translucency so background text doesn't bleed
         double transRatio = (100.0 - st.opacityPct) / 100.0;
         double anchorAlpha = transRatio * (g_settings.crispStrength / 100.0) * 64.0;
         dimAlpha = std::max(dimAlpha, anchorAlpha);
@@ -910,9 +1016,12 @@ void PositionOverlayAboveTarget(WindowState& st, bool forceZOrder) {
     HWND target = st.target;
     if (!overlay || !IsWindow(overlay) || !target || !IsWindow(target)) return;
 
-    HWND effFg = GetEffectiveForegroundTarget();
-    if (IsIconic(target) || !IsWindowVisible(target) || IsWindowCloaked(target) ||
-        (!g_settings.persistWhenUnfocused && target != effFg)) {
+    bool hideForFocus = false;
+    if (!g_settings.persistWhenUnfocused) {
+        HWND effFg = GetEffectiveForegroundTarget();
+        hideForFocus = (target != effFg);
+    }
+    if (IsIconic(target) || !IsWindowVisible(target) || IsWindowCloaked(target) || hideForFocus) {
         if (IsWindowVisible(overlay)) ShowWindow(overlay, SW_HIDE);
         SetRectEmpty(&st.lastOverlayRect);
         return;
@@ -936,7 +1045,6 @@ void PositionOverlayAboveTarget(WindowState& st, bool forceZOrder) {
     bool bandMismatch = (targetTop != overlayTop);
     bool zOrderOk = !bandMismatch && IsOverlayDirectlyAboveTarget(overlay, target);
 
-    // During active capture sessions, never fight Z-order if already visible and sized.
     if (g_captureSessionActive && visible && !rectChanged) {
         return;
     }
@@ -945,8 +1053,6 @@ void PositionOverlayAboveTarget(WindowState& st, bool forceZOrder) {
         return;
     }
 
-    // Freeze corner-rounding preference to DWMWCP_DONOTROUND during interactive edge-resize
-    // so DWM's 1px rounded border anti-aliasing never creates a white/black edge seam.
     DWORD cornerPref = (IsZoomed(target) || st.isMoveSizing) ? 1 /*DWMWCP_DONOTROUND*/ : 2 /*DWMWCP_ROUND*/;
     if (cornerPref != st.lastCornerPref) {
         st.lastCornerPref = cornerPref;
@@ -960,8 +1066,6 @@ void PositionOverlayAboveTarget(WindowState& st, bool forceZOrder) {
         zOrderOk = IsOverlayDirectlyAboveTarget(overlay, target);
     }
 
-    // Do NOT pass SWP_NOCOPYBITS on resize: keeping existing client bits + CS_HREDRAW|CS_VREDRAW
-    // class background brush prevents any transient black/white strip along the dragged edge.
     UINT flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_DEFERERASE;
     if (!visible) flags |= SWP_SHOWWINDOW;
     if (!posChanged) flags |= SWP_NOMOVE;
@@ -976,12 +1080,12 @@ void PositionOverlayAboveTarget(WindowState& st, bool forceZOrder) {
         HWND insertAfter = FindInsertAfterAboveTarget(target);
         SetWindowPos(overlay, insertAfter, rc.left, rc.top, w, h, flags);
         if (!IsOverlayDirectlyAboveTarget(overlay, target)) {
-            // Only reorder overlay relative to target; never call SetWindowPos on target during capture or move-size
             SetWindowPos(overlay, target, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOREDRAW);
-            if (!st.isMoveSizing && !g_captureSessionActive) {
+            if (!st.isMoveSizing && !g_captureSessionActive && !IsHungAppWindow(target)) {
                 SetWindowPos(target, overlay, 0, 0, 0, 0,
-                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOREDRAW);
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER |
+                             SWP_NOREDRAW | SWP_ASYNCWINDOWPOS);
             }
         }
     }
@@ -1004,7 +1108,7 @@ void SyncDimOverlay(WindowState& st) {
 
     if (!st.overlayHwnd || !IsWindow(st.overlayHwnd)) {
         RECT rc = GetVisualWindowRect(st.target);
-        // Create unowned (hWndParent = nullptr) to avoid cross-thread input queue attachment and hung-app deadlocks.
+        // Unowned overlay avoids cross-thread input attachment and hung-app deadlocks.
         st.overlayHwnd = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
             kDimClass, L"", WS_POPUP,
@@ -1037,11 +1141,21 @@ WindowState& GetOrCreateLedgerEntry(HWND target) {
     LONG_PTR ex = GetWindowLongPtrW(target, GWL_EXSTYLE);
     st.wasTopmost = (ex & WS_EX_TOPMOST) != 0;
     if ((ex & WS_EX_LAYERED) != 0) {
+        st.hadLayered = true;
         BYTE a = 255;
+        COLORREF crKey = 0;
         DWORD flags = 0;
-        if (GetLayeredWindowAttributes(target, nullptr, &a, &flags) && (flags & LWA_ALPHA)) {
-            st.currentAlpha = a;
-            st.opacityPct = std::clamp(static_cast<int>(std::lround((a / 255.0) * 100.0)), 10, 100);
+        if (GetLayeredWindowAttributes(target, &crKey, &a, &flags)) {
+            st.origAlpha = a;
+            st.origColorKey = crKey;
+            st.origLayeredFlags = flags;
+            if ((flags & LWA_ALPHA) != 0) {
+                st.currentAlpha = a;
+                st.opacityPct = std::clamp(static_cast<int>(std::lround((a / 255.0) * 100.0)), 10, 100);
+            }
+        } else {
+            // UpdateLayeredWindow (per-pixel alpha) — never call SetLayeredWindowAttributes on it.
+            st.isPerPixelLayered = true;
         }
     }
     auto [inserted, _] = g_ledger.emplace(target, std::move(st));
@@ -1055,16 +1169,19 @@ void RestoreWindowState(WindowState& st) {
     st.overlayHwnd = nullptr;
     st.dimActive = false;
 
-    if (st.target && IsWindow(st.target)) {
-        if (st.addedLayered) {
-            LONG_PTR ex = GetWindowLongPtrW(st.target, GWL_EXSTYLE);
-            SetWindowLongPtrW(st.target, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
-        } else if (st.currentAlpha != 255) {
-            SetLayeredWindowAttributes(st.target, 0, 255, LWA_ALPHA);
+    if (st.target && IsWindow(st.target) && !IsHungAppWindow(st.target)) {
+        if (!st.isPerPixelLayered) {
+            if (st.addedLayered) {
+                LONG_PTR ex = GetWindowLongPtrW(st.target, GWL_EXSTYLE);
+                SetWindowLongPtrW(st.target, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
+            } else if (st.hadLayered && st.currentAlpha != st.origAlpha) {
+                SetLayeredWindowAttributes(st.target, st.origColorKey, st.origAlpha,
+                                           st.origLayeredFlags ? st.origLayeredFlags : LWA_ALPHA);
+            }
         }
         if (st.pinnedByMod && !st.wasTopmost) {
             SetWindowPos(st.target, HWND_NOTOPMOST, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
         }
     }
 }
@@ -1094,18 +1211,23 @@ UINT GetTargetDpi(HWND target) {
     return dpi ? dpi : 96;
 }
 
-bool DetectHeaderIsLight(HWND target, int sampleX, int sampleY) {
-    HDC screenDC = GetDC(nullptr);
-    COLORREF c = GetPixel(screenDC, sampleX, sampleY);
-    ReleaseDC(nullptr, screenDC);
-    if (c != CLR_INVALID) {
-        int r = GetRValue(c), g = GetGValue(c), b = GetBValue(c);
-        int lum = (299 * r + 587 * g + 114 * b) / 1000;
-        return lum > 135;
+bool DetectHeaderIsLight(HWND target) {
+    if (target && IsWindow(target)) {
+        BOOL darkMode = FALSE;
+        if (SUCCEEDED(DwmGetWindowAttribute(target, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                                            &darkMode, sizeof(darkMode)))) {
+            return !darkMode;
+        }
     }
-    BOOL darkMode = FALSE;
-    DwmGetWindowAttribute(target, 20 /*DWMWA_USE_IMMERSIVE_DARK_MODE*/, &darkMode, sizeof(darkMode));
-    return !darkMode;
+    DWORD appsUseLight = 1;
+    DWORD cb = sizeof(appsUseLight);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr,
+                     &appsUseLight, &cb) == ERROR_SUCCESS) {
+        return appsUseLight != 0;
+    }
+    return false;
 }
 
 void RenderBadgeLayered(HWND hwnd) {
@@ -1138,7 +1260,6 @@ void RenderBadgeLayered(HWND hwnd) {
         fmt.SetLineAlignment(Gdiplus::StringAlignmentCenter);
         Gdiplus::RectF box(0.0f, 0.0f, static_cast<float>(size), static_cast<float>(size));
 
-        // Bare text adapts to Light vs Dark header; filled pill always uses white on OLED Black.
         bool useDarkText = (!g_settings.headerShowFill && g_headerIsLight);
         Gdiplus::SolidBrush textBrush(useDarkText ? Gdiplus::Color(245, 10, 10, 14)
                                                   : Gdiplus::Color(252, 255, 255, 255));
@@ -1166,7 +1287,6 @@ void RenderSliderLayered(HWND hwnd) {
         g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
         g.Clear(Gdiplus::Color(0, 0, 0, 0));
 
-        // Minimal borderless pill background.
         float d = h - 1.0f;
         Gdiplus::GraphicsPath pill;
         pill.AddArc(0.5f, 0.5f, d, d, 90.0f, 180.0f);
@@ -1175,7 +1295,6 @@ void RenderSliderLayered(HWND hwnd) {
         Gdiplus::SolidBrush bg(Gdiplus::Color(245, 0, 0, 0));
         g.FillPath(&bg, &pill);
 
-        // Track and circular thumb only (no +/- buttons).
         float cy = h / 2.0f;
         float pad = h * 0.45f;
         float trackLeft = pad;
@@ -1264,7 +1383,6 @@ void PositionHeaderControls(HWND target, bool queryTargetIPC = true) {
         g_cachedCaptionReserve = captionReserve;
     }
 
-    // Skip borderless/non-caption popup windows that have no title bar.
     LONG_PTR style = GetWindowLongPtrW(target, GWL_STYLE);
     if ((style & WS_CAPTION) == 0 && needIPC) {
         DWORD_PTR capHit = HTNOWHERE;
@@ -1285,12 +1403,8 @@ void PositionHeaderControls(HWND target, bool queryTargetIPC = true) {
         int titlePx = needIPC ? MulDiv(64, dpi, 96) : g_cachedTitlePx;
         if (needIPC) {
             wchar_t title[128]{};
-            int titleLen = static_cast<int>(DefWindowProcW(target, WM_GETTEXT, ARRAYSIZE(title), reinterpret_cast<LPARAM>(title)));
-            if (titleLen <= 0) {
-                SendMessageTimeoutW(target, WM_GETTEXT, ARRAYSIZE(title), reinterpret_cast<LPARAM>(title),
-                                    SMTO_ABORTIFHUNG | SMTO_BLOCK, 15, nullptr);
-            }
-            if (title[0] != 0) {
+            // GetWindowTextW reads the stored caption of another process without sending WM_GETTEXT.
+            if (GetWindowTextW(target, title, ARRAYSIZE(title)) > 0 && title[0] != 0) {
                 HDC hdc = GetDC(nullptr);
                 Gdiplus::Graphics g(hdc);
                 Gdiplus::Font titleFont(L"Segoe UI", static_cast<float>(MulDiv(12, dpi, 96)),
@@ -1334,13 +1448,15 @@ void PositionHeaderControls(HWND target, bool queryTargetIPC = true) {
         g_cachedHeaderHwnd = target;
     }
 
-    if (!IsWindowVisible(g_badgeWnd)) {
-        g_headerIsLight = DetectHeaderIsLight(target, badgeX + badgeSize / 2, badgeY + badgeSize / 2);
+    if (needIPC || !IsWindowVisible(g_badgeWnd)) {
+        g_headerIsLight = DetectHeaderIsLight(target);
     }
 
     RenderBadgeLayered(g_badgeWnd);
     bool targetTopmost = (GetWindowLongPtrW(target, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
-    SetWindowPos(g_badgeWnd, targetTopmost ? HWND_TOPMOST : HWND_TOP,
+    bool badgeTopmost = (GetWindowLongPtrW(g_badgeWnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
+    HWND badgeZ = targetTopmost ? HWND_TOPMOST : (badgeTopmost ? HWND_NOTOPMOST : HWND_TOP);
+    SetWindowPos(g_badgeWnd, badgeZ,
                  badgeX, badgeY, badgeSize, badgeSize,
                  SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
 
@@ -1369,7 +1485,6 @@ int ComputeEffectiveOpacityPct(const WindowState& st) {
     int basePct = std::clamp(st.opacityPct, g_settings.opacityMin, 100);
     if (basePct >= 100) return 100;
 
-    // Exclude decreased opacity during screenshots/captures when captureBehavior excludes Vison effects
     if (g_captureSessionActive && ShouldExcludeOpacityDuringCapture()) {
         return 100;
     }
@@ -1384,7 +1499,6 @@ int ComputeEffectiveOpacityPct(const WindowState& st) {
             int crispMinFloor = std::clamp(35 + (g_settings.crispStrength / 2), g_settings.opacityMin, 92);
             return std::max(basePct, crispMinFloor);
         } else if (g_settings.crispMode == CrispTextMode::ContrastAnchor) {
-            // Boost effective glyph alpha slightly while the dark contrast-anchor overlay provides depth
             int boost = (100 - basePct) * (g_settings.crispStrength / 3) / 100;
             return std::clamp(basePct + boost, g_settings.opacityMin, 100);
         }
@@ -1393,15 +1507,14 @@ int ComputeEffectiveOpacityPct(const WindowState& st) {
 }
 
 bool EnsureTargetOpacityApplied(WindowState& st) {
-    if (!st.target || !IsWindow(st.target)) return false;
+    if (!st.target || !IsWindow(st.target) || st.isPerPixelLayered || IsHungAppWindow(st.target)) {
+        return false;
+    }
     st.opacityPct = std::clamp(st.opacityPct, g_settings.opacityMin, 100);
     int effPct = ComputeEffectiveOpacityPct(st);
     BYTE nextAlpha = static_cast<BYTE>(std::lround((effPct / 100.0) * 255.0));
 
     if (effPct >= 100) {
-        // If user opacity is genuinely 100%, remove WS_EX_LAYERED if we added it.
-        // If temporarily at 100% due to Capture Guard or HoverFocusCrisp, keep WS_EX_LAYERED
-        // and set alpha = 255 so restoring back to <100% never flashes or reallocates redirection surfaces!
         if (st.opacityPct >= 100) {
             if (st.addedLayered) {
                 LONG_PTR ex = GetWindowLongPtrW(st.target, GWL_EXSTYLE);
@@ -1410,16 +1523,21 @@ bool EnsureTargetOpacityApplied(WindowState& st) {
                     SetWindowLongPtrW(st.target, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
                 }
                 st.addedLayered = false;
-            } else if (st.currentAlpha != 255) {
-                SetLayeredWindowAttributes(st.target, 0, 255, LWA_ALPHA);
+                st.currentAlpha = 255;
+            } else if (st.hadLayered) {
+                if (st.currentAlpha != st.origAlpha) {
+                    SetLayeredWindowAttributes(st.target, st.origColorKey, st.origAlpha,
+                                               st.origLayeredFlags ? st.origLayeredFlags : LWA_ALPHA);
+                    st.currentAlpha = st.origAlpha;
+                }
             }
         } else {
             LONG_PTR ex = GetWindowLongPtrW(st.target, GWL_EXSTYLE);
             if ((ex & WS_EX_LAYERED) != 0 && st.currentAlpha != 255) {
                 SetLayeredWindowAttributes(st.target, 0, 255, LWA_ALPHA);
+                st.currentAlpha = 255;
             }
         }
-        st.currentAlpha = 255;
         return true;
     }
 
@@ -1435,14 +1553,19 @@ bool EnsureTargetOpacityApplied(WindowState& st) {
     } else {
         BYTE actualAlpha = 255;
         DWORD flags = 0;
-        if (!GetLayeredWindowAttributes(st.target, nullptr, &actualAlpha, &flags) ||
-            (flags & LWA_ALPHA) == 0 || actualAlpha != nextAlpha) {
+        if (!GetLayeredWindowAttributes(st.target, nullptr, &actualAlpha, &flags)) {
+            st.isPerPixelLayered = true;
+            return false;
+        }
+        if ((flags & LWA_ALPHA) == 0 || actualAlpha != nextAlpha) {
             needSetAttr = true;
         }
     }
 
     if (needSetAttr) {
-        if (!SetLayeredWindowAttributes(st.target, 0, nextAlpha, LWA_ALPHA)) {
+        DWORD setFlags = st.hadLayered ? (st.origLayeredFlags | LWA_ALPHA) : LWA_ALPHA;
+        COLORREF setKey = st.hadLayered ? st.origColorKey : 0;
+        if (!SetLayeredWindowAttributes(st.target, setKey, nextAlpha, setFlags)) {
             return false;
         }
     }
@@ -1475,11 +1598,34 @@ void ApplyOpacityStep(HWND target, int wheelDelta) {
     }
 }
 
+void ToggleSavedAppOpacity(HWND target) {
+    WindowState& st = GetOrCreateLedgerEntry(target);
+    if (st.opacityPct < 100) {
+        st.opacityPct = 100;
+    } else {
+        int preset = 80;
+        if (!st.exeName.empty()) {
+            auto it = g_appOpacityPresets.find(st.exeName);
+            if (it != g_appOpacityPresets.end() && it->second < 100) {
+                preset = it->second;
+            }
+        }
+        st.opacityPct = std::clamp(preset, g_settings.opacityMin, 100);
+    }
+    if (EnsureTargetOpacityApplied(st)) {
+        if (g_settings.keepTextCrisp && g_settings.crispMode == CrispTextMode::ContrastAnchor) {
+            SyncDimOverlay(st);
+        }
+    }
+}
+
 void TogglePinWindow(HWND target) {
+    if (IsHungAppWindow(target)) return;
     WindowState& st = GetOrCreateLedgerEntry(target);
     bool isTop = (GetWindowLongPtrW(target, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
     HWND zOrder = isTop ? HWND_NOTOPMOST : HWND_TOPMOST;
-    if (SetWindowPos(target, zOrder, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)) {
+    if (SetWindowPos(target, zOrder, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS)) {
         st.pinnedByMod = !isTop;
         if (st.dimActive && st.overlayHwnd) {
             PositionOverlayAboveTarget(st, true);
@@ -1524,7 +1670,7 @@ void ToggleSavedAppDim(HWND target) {
     if (st.dimActive) {
         st.dimActive = false;
         SyncDimOverlay(st);
-        } else {
+    } else {
         int preset = 70;
         if (!st.exeName.empty()) {
             auto it = g_appPresets.find(st.exeName);
@@ -1535,7 +1681,7 @@ void ToggleSavedAppDim(HWND target) {
         st.dimBrightness = preset;
         st.dimActive = true;
         SyncDimOverlay(st);
-        }
+    }
     RefreshHeaderControlsFor(target);
 }
 
@@ -1712,12 +1858,27 @@ LRESULT CALLBACK ControlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             HWND target = reinterpret_cast<HWND>(lParam);
             if (!target || !IsWindow(target) || IsMonitorControlWindow(target)) return 0;
             if (wParam == 1) ToggleSavedAppDim(target);
+            else if (wParam == 2) ToggleSavedAppOpacity(target);
             else TogglePinWindow(target);
             return 0;
         }
         case WM_APP_HOOK_DBLCLICK: {
             HWND target = reinterpret_cast<HWND>(lParam);
-            if (target && IsWindow(target) && !IsMonitorControlWindow(target)) ToggleSavedAppDim(target);
+            if (!target || !IsWindow(target) || IsMonitorControlWindow(target)) return 0;
+            if (wParam == 1) ToggleSavedAppOpacity(target);
+            else ToggleSavedAppDim(target);
+            return 0;
+        }
+        case WM_APP_MASK_ALT: {
+            // Inject an unassigned virtual key so releasing Alt after a gesture
+            // does not activate classic menu bars or trigger Alt+Shift layout switch.
+            INPUT inputs[2]{};
+            inputs[0].type = INPUT_KEYBOARD;
+            inputs[0].ki.wVk = 0xE8;
+            inputs[1].type = INPUT_KEYBOARD;
+            inputs[1].ki.wVk = 0xE8;
+            inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+            SendInput(2, inputs, sizeof(INPUT));
             return 0;
         }
         case WM_TIMER: {
@@ -1761,8 +1922,7 @@ LRESULT CALLBACK ControlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
         case WM_WTSSESSION_CHANGE: {
-            if (g_settings.resetOnSessionChange &&
-                (wParam == WTS_SESSION_LOCK || wParam == WTS_SESSION_UNLOCK || wParam == WTS_SESSION_LOGOFF)) {
+            if (g_settings.resetOnLogoff && wParam == WTS_SESSION_LOGOFF) {
                 RestoreAllWindows();
             }
             return 0;
@@ -1772,7 +1932,7 @@ LRESULT CALLBACK ControlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
 }
 
 // -----------------------------------------------------------------------------
-// Hooks (Fast Pre-Filtered WH_MOUSE_LL + Out-of-Context WinEvent)
+// Dedicated Mouse Hook Thread (Fast Pre-Filtered WH_MOUSE_LL)
 // -----------------------------------------------------------------------------
 
 bool MatchesButtonMsg(ButtonAction act, UINT msg, WPARAM mouseData) {
@@ -1785,10 +1945,13 @@ bool MatchesButtonMsg(ButtonAction act, UINT msg, WPARAM mouseData) {
     }
 }
 
-// Thread-safe target resolution for WH_MOUSE_LL without reading std::map<HWND, WindowState>.
 bool IsHookIgnoredWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return true;
-    if (hwnd == g_ctrlWnd || hwnd == g_badgeWnd || hwnd == g_sliderWnd) return true;
+    if (hwnd == g_atomicCtrlWnd.load(std::memory_order_relaxed) ||
+        hwnd == g_atomicBadgeWnd.load(std::memory_order_relaxed) ||
+        hwnd == g_atomicSliderWnd.load(std::memory_order_relaxed)) {
+        return true;
+    }
 
     wchar_t cls[128]{};
     if (GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) > 0) {
@@ -1806,16 +1969,13 @@ bool IsHookIgnoredWindow(HWND hwnd) {
     return false;
 }
 
-// Purely non-blocking geometry check for WH_MOUSE_LL (zero SendMessageTimeout and zero std::map access in hook).
 HWND FastTopBandTargetFromHook(POINT pt) {
-    if (IsFullscreenActive()) return nullptr;
     HWND raw = WindowFromPoint(pt);
     if (!raw) return nullptr;
     HWND target = GetAncestor(raw, GA_ROOT);
     if (!target || IsHookIgnoredWindow(target)) return nullptr;
+    if (IsFullscreenOnTargetMonitor(target, pt)) return nullptr;
 
-    // Never intercept wheel or clicks on popup widgets/OSDs (such as BenQ Eye-CareU,
-    // Display Pilot, Twinkle Tray, or system flyouts) that lack a standard caption bar.
     LONG_PTR style = GetWindowLongPtrW(target, GWL_STYLE);
     LONG_PTR exStyle = GetWindowLongPtrW(target, GWL_EXSTYLE);
     if ((style & WS_CAPTION) == 0 || (exStyle & WS_EX_NOACTIVATE) != 0) {
@@ -1830,22 +1990,48 @@ HWND FastTopBandTargetFromHook(POINT pt) {
     if (pt.x < rc.left || pt.x > rc.right || pt.y < rc.top || pt.y > rc.top + captionH) {
         return nullptr;
     }
-    // Exclude right-most native caption button area (Min/Max/Close) so clicks there are never swallowed.
     if (pt.x > rc.right - MulDiv(138, dpi ? dpi : 96, 96)) {
         return nullptr;
     }
     return target;
 }
 
+void MaybeMaskAltOnGesture(HWND ctrlWnd) {
+    if ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) {
+        if (!g_altMaskedForHold) {
+            g_altMaskedForHold = true;
+            PostMessageW(ctrlWnd, WM_APP_MASK_ALT, 0, 0);
+        }
+    }
+}
+
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode < 0 || g_unloading.load(std::memory_order_relaxed) || !g_ctrlWnd) {
+    HWND ctrlWnd = g_atomicCtrlWnd.load(std::memory_order_relaxed);
+    if (nCode < 0 || g_unloading.load(std::memory_order_relaxed) || !ctrlWnd) {
         return CallNextHookEx(nullptr, nCode, wParam, lParam);
+    }
+
+    if ((GetAsyncKeyState(VK_MENU) & 0x8000) == 0) {
+        g_altMaskedForHold = false;
     }
 
     const auto* info = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
     UINT msg = static_cast<UINT>(wParam);
 
+    // Swallow matching button-up for any swallowed non-left button-down.
+    if (g_swallowUpMsg && msg == g_swallowUpMsg &&
+        (msg != WM_XBUTTONUP || HIWORD(info->mouseData) == g_swallowUpXButton)) {
+        g_swallowUpMsg = 0;
+        g_swallowUpXButton = 0;
+        return 1;
+    }
+    if (msg == WM_LBUTTONUP && g_swallowNextLeftUp) {
+        g_swallowNextLeftUp = false;
+        return 1;
+    }
+
     ModCombo opacityMod = static_cast<ModCombo>(g_hookOpacityMod.load(std::memory_order_relaxed));
+    ButtonAction opacityToggle = static_cast<ButtonAction>(g_hookOpacityToggle.load(std::memory_order_relaxed));
     ButtonAction pinBtn = static_cast<ButtonAction>(g_hookPinButton.load(std::memory_order_relaxed));
     ModCombo dimMod = static_cast<ModCombo>(g_hookDimMod.load(std::memory_order_relaxed));
     ButtonAction dimToggle = static_cast<ButtonAction>(g_hookDimToggle.load(std::memory_order_relaxed));
@@ -1855,43 +2041,64 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
         bool dimDown = IsModifierComboDown(dimMod);
         if (opDown || dimDown) {
             if (HWND target = FastTopBandTargetFromHook(info->pt)) {
+                MaybeMaskAltOnGesture(ctrlWnd);
                 SHORT delta = static_cast<SHORT>(HIWORD(info->mouseData));
                 WPARAM wp = MAKEWPARAM(opDown ? 1 : 0, static_cast<WORD>(delta));
-                PostMessageW(g_ctrlWnd, WM_APP_HOOK_WHEEL, wp, reinterpret_cast<LPARAM>(target));
+                PostMessageW(ctrlWnd, WM_APP_HOOK_WHEEL, wp, reinterpret_cast<LPARAM>(target));
                 return 1;
             }
         }
-    } else if (msg == WM_LBUTTONDOWN && dimToggle == ButtonAction::DoubleLeft &&
-               IsModifierComboDown(dimMod)) {
-        if (HWND target = FastTopBandTargetFromHook(info->pt)) {
-            ULONGLONG now = GetTickCount64();
-            int dx = std::abs(info->pt.x - g_lastCtrlDownPt.x);
-            int dy = std::abs(info->pt.y - g_lastCtrlDownPt.y);
-            if (now - g_lastCtrlDownTick <= GetDoubleClickTime() &&
-                dx <= GetSystemMetrics(SM_CXDOUBLECLK) && dy <= GetSystemMetrics(SM_CYDOUBLECLK)) {
-                g_lastCtrlDownTick = 0;
-                g_swallowNextLeftUp = true;
-                PostMessageW(g_ctrlWnd, WM_APP_HOOK_DBLCLICK, 0, reinterpret_cast<LPARAM>(target));
-                return 1;
+    } else if (msg == WM_LBUTTONDOWN) {
+        bool dimDbl = (dimToggle == ButtonAction::DoubleLeft && IsModifierComboDown(dimMod));
+        bool opDbl = (opacityToggle == ButtonAction::DoubleLeft && IsModifierComboDown(opacityMod));
+        if (dimDbl || opDbl) {
+            if (HWND target = FastTopBandTargetFromHook(info->pt)) {
+                ULONGLONG now = GetTickCount64();
+                ULONGLONG& lastTick = dimDbl ? g_lastDimDownTick : g_lastOpacityDownTick;
+                POINT& lastPt = dimDbl ? g_lastDimDownPt : g_lastOpacityDownPt;
+                int dx = std::abs(info->pt.x - lastPt.x);
+                int dy = std::abs(info->pt.y - lastPt.y);
+                if (now - lastTick <= GetDoubleClickTime() &&
+                    dx <= GetSystemMetrics(SM_CXDOUBLECLK) && dy <= GetSystemMetrics(SM_CYDOUBLECLK)) {
+                    lastTick = 0;
+                    g_swallowNextLeftUp = true;
+                    MaybeMaskAltOnGesture(ctrlWnd);
+                    PostMessageW(ctrlWnd, WM_APP_HOOK_DBLCLICK, dimDbl ? 0 : 1,
+                                 reinterpret_cast<LPARAM>(target));
+                    return 1;
+                }
+                lastTick = now;
+                lastPt = info->pt;
             }
-            g_lastCtrlDownTick = now;
-            g_lastCtrlDownPt = info->pt;
         }
-    } else if (msg == WM_LBUTTONUP && g_swallowNextLeftUp) {
-        g_swallowNextLeftUp = false;
-        return 1;
     } else if (msg == WM_MBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_XBUTTONDOWN) {
         if (MatchesButtonMsg(pinBtn, msg, info->mouseData) &&
             IsModifierComboDown(opacityMod)) {
             if (HWND target = FastTopBandTargetFromHook(info->pt)) {
-                PostMessageW(g_ctrlWnd, WM_APP_HOOK_BUTTON, 0, reinterpret_cast<LPARAM>(target));
+                g_swallowUpMsg = msg + 1;
+                g_swallowUpXButton = HIWORD(info->mouseData);
+                MaybeMaskAltOnGesture(ctrlWnd);
+                PostMessageW(ctrlWnd, WM_APP_HOOK_BUTTON, 0, reinterpret_cast<LPARAM>(target));
                 return 1;
             }
         }
         if (MatchesButtonMsg(dimToggle, msg, info->mouseData) &&
             IsModifierComboDown(dimMod)) {
             if (HWND target = FastTopBandTargetFromHook(info->pt)) {
-                PostMessageW(g_ctrlWnd, WM_APP_HOOK_BUTTON, 1, reinterpret_cast<LPARAM>(target));
+                g_swallowUpMsg = msg + 1;
+                g_swallowUpXButton = HIWORD(info->mouseData);
+                MaybeMaskAltOnGesture(ctrlWnd);
+                PostMessageW(ctrlWnd, WM_APP_HOOK_BUTTON, 1, reinterpret_cast<LPARAM>(target));
+                return 1;
+            }
+        }
+        if (MatchesButtonMsg(opacityToggle, msg, info->mouseData) &&
+            IsModifierComboDown(opacityMod)) {
+            if (HWND target = FastTopBandTargetFromHook(info->pt)) {
+                g_swallowUpMsg = msg + 1;
+                g_swallowUpXButton = HIWORD(info->mouseData);
+                MaybeMaskAltOnGesture(ctrlWnd);
+                PostMessageW(ctrlWnd, WM_APP_HOOK_BUTTON, 2, reinterpret_cast<LPARAM>(target));
                 return 1;
             }
         }
@@ -1899,6 +2106,27 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
+
+DWORD WINAPI MouseHookThreadProc(LPVOID) {
+    MSG msg{};
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
+    if (g_hookReadyEvent) SetEvent(g_hookReadyEvent);
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        DispatchMessageW(&msg);
+    }
+
+    if (g_mouseHook) {
+        UnhookWindowsHookEx(g_mouseHook);
+        g_mouseHook = nullptr;
+    }
+    return 0;
+}
+
+// -----------------------------------------------------------------------------
+// Out-of-Context WinEvent Handling (Narrow Registered Ranges Only)
+// -----------------------------------------------------------------------------
 
 bool IsTransientPopupOrMenu(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return true;
@@ -1976,9 +2204,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                 DestroyWindow(it->second.overlayHwnd);
             }
             it->second.overlayHwnd = nullptr;
-            if (g_settings.resetOnWindowClose) {
-                g_ledger.erase(it);
-            }
+            g_ledger.erase(it);
         }
         if (hwnd == g_headerTarget) {
             g_headerTarget = nullptr;
@@ -1986,8 +2212,6 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
             if (g_badgeWnd) ShowWindow(g_badgeWnd, SW_HIDE);
             if (g_sliderWnd) ShowWindow(g_sliderWnd, SW_HIDE);
         }
-        // If a capture overlay (e.g. ScreenClippingHost) just closed without firing EVENT_SYSTEM_FOREGROUND,
-        // immediately restore all dimmed/translucent windows without flicker or delay.
         if (g_captureSessionActive || IsCaptureToolWindow(hwnd)) {
             SyncAllWindowsForCaptureAndFocus(GetEffectiveForegroundTarget(), false);
         }
@@ -2019,12 +2243,11 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         return;
     }
 
-    if (event == EVENT_SYSTEM_FOREGROUND || event == EVENT_SYSTEM_CAPTURESTART || event == EVENT_SYSTEM_CAPTUREEND) {
-        if (event == EVENT_SYSTEM_FOREGROUND && IsTransientPopupOrMenu(hwnd) && !IsCaptureToolWindow(hwnd)) {
+    if (event == EVENT_SYSTEM_FOREGROUND) {
+        if (IsTransientPopupOrMenu(hwnd) && !IsCaptureToolWindow(hwnd)) {
             return;
         }
-        if (event == EVENT_SYSTEM_FOREGROUND && !IsProtectedWindow(hwnd) &&
-            !IsMonitorControlWindow(hwnd) && !IsCaptureToolWindow(hwnd)) {
+        if (!IsProtectedWindow(hwnd) && !IsMonitorControlWindow(hwnd) && !IsCaptureToolWindow(hwnd)) {
             g_lastNormalForeground = hwnd;
         }
         SyncAllWindowsForCaptureAndFocus(GetEffectiveForegroundTarget(), false);
@@ -2078,12 +2301,41 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
     }
 }
 
+void RegisterNarrowWinEventHooks() {
+    struct Range {
+        DWORD minEvent;
+        DWORD maxEvent;
+    };
+    constexpr Range kRanges[] = {
+        {EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND},
+        {EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND},
+        {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND},
+        {EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE},
+        {EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE},
+        {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED},
+    };
+    for (const auto& r : kRanges) {
+        HWINEVENTHOOK h = SetWinEventHook(
+            r.minEvent, r.maxEvent,
+            nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        if (h) g_winEventHooks.push_back(h);
+    }
+}
+
+void UnregisterNarrowWinEventHooks() {
+    for (HWINEVENTHOOK h : g_winEventHooks) {
+        if (h) UnhookWinEvent(h);
+    }
+    g_winEventHooks.clear();
+}
+
 // -----------------------------------------------------------------------------
 // Worker Thread & Tool Mod Entry Points
 // -----------------------------------------------------------------------------
 
 DWORD WINAPI WorkerThreadProc(LPVOID) {
     QueryPerformanceFrequency(&g_qpcFreq);
+    g_userSidSuffix = InitUserSidSuffix();
     LoadSettings();
     LoadPresetsFromStorage();
 
@@ -2122,17 +2374,18 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         kBadgeClass, L"", WS_POPUP, 0, 0, 30, 30, nullptr, nullptr, hInst, nullptr);
     g_sliderWnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
-        kSliderClass, L"", WS_POPUP, 0, 0, 176, 30, nullptr, nullptr, hInst, nullptr);
+        kSliderClass, L"", WS_POPUP, 0, 0, 136, 28, nullptr, nullptr, hInst, nullptr);
+
+    g_atomicCtrlWnd.store(g_ctrlWnd, std::memory_order_release);
+    g_atomicBadgeWnd.store(g_badgeWnd, std::memory_order_release);
+    g_atomicSliderWnd.store(g_sliderWnd, std::memory_order_release);
 
     DWORD initAff = GetHeaderControlAffinity();
     if (g_badgeWnd) SetWindowDisplayAffinity(g_badgeWnd, initAff);
     if (g_sliderWnd) SetWindowDisplayAffinity(g_sliderWnd, initAff);
     if (g_ctrlWnd) WTSRegisterSessionNotification(g_ctrlWnd, NOTIFY_FOR_THIS_SESSION);
 
-    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
-    g_winEventHook = SetWinEventHook(
-        EVENT_SYSTEM_FOREGROUND, EVENT_OBJECT_UNCLOAKED,
-        nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    RegisterNarrowWinEventHooks();
 
     if (g_settings.headerControlEnabled) {
         HWND fg = GetForegroundWindow();
@@ -2149,15 +2402,19 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
-    if (g_mouseHook) { UnhookWindowsHookEx(g_mouseHook); g_mouseHook = nullptr; }
-    if (g_winEventHook) { UnhookWinEvent(g_winEventHook); g_winEventHook = nullptr; }
+    UnregisterNarrowWinEventHooks();
     if (g_ctrlWnd) WTSUnRegisterSessionNotification(g_ctrlWnd);
 
     SavePresetsToStorage();
     RestoreAllWindows();
+    g_pidExeCache.clear();
     g_badgeDib.Release();
     g_sliderDib.Release();
     if (g_dimBrush) { DeleteObject(g_dimBrush); g_dimBrush = nullptr; }
+
+    g_atomicSliderWnd.store(nullptr, std::memory_order_release);
+    g_atomicBadgeWnd.store(nullptr, std::memory_order_release);
+    g_atomicCtrlWnd.store(nullptr, std::memory_order_release);
 
     if (g_sliderWnd) { DestroyWindow(g_sliderWnd); g_sliderWnd = nullptr; }
     if (g_badgeWnd) { DestroyWindow(g_badgeWnd); g_badgeWnd = nullptr; }
@@ -2191,17 +2448,44 @@ BOOL WhTool_ModInit() {
         CloseHandle(g_readyEvent);
         g_readyEvent = nullptr;
     }
+
+    g_hookReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_mouseHookThread = CreateThread(nullptr, 0, MouseHookThreadProc, nullptr, 0, &g_mouseHookThreadId);
+    if (!g_mouseHookThread) {
+        if (g_hookReadyEvent) { CloseHandle(g_hookReadyEvent); g_hookReadyEvent = nullptr; }
+        if (g_workerThreadId) PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_workerThread, 5000);
+        CloseHandle(g_workerThread);
+        g_workerThread = nullptr;
+        g_workerThreadId = 0;
+        return FALSE;
+    }
+    if (g_hookReadyEvent) {
+        WaitForSingleObject(g_hookReadyEvent, 3000);
+        CloseHandle(g_hookReadyEvent);
+        g_hookReadyEvent = nullptr;
+    }
     return TRUE;
 }
 
 void WhTool_ModSettingsChanged() {
-    if (g_ctrlWnd && g_workerThreadId) {
-        PostMessageW(g_ctrlWnd, WM_APP_RELOAD_SETTINGS, 0, 0);
+    HWND ctrlWnd = g_atomicCtrlWnd.load(std::memory_order_acquire);
+    if (ctrlWnd) {
+        PostMessageW(ctrlWnd, WM_APP_RELOAD_SETTINGS, 0, 0);
     }
 }
 
 void WhTool_ModUninit() {
     g_unloading.store(true);
+    if (g_mouseHookThreadId) {
+        PostThreadMessageW(g_mouseHookThreadId, WM_QUIT, 0, 0);
+    }
+    if (g_mouseHookThread) {
+        WaitForSingleObject(g_mouseHookThread, 3000);
+        CloseHandle(g_mouseHookThread);
+        g_mouseHookThread = nullptr;
+        g_mouseHookThreadId = 0;
+    }
     if (g_workerThreadId) {
         PostThreadMessageW(g_workerThreadId, WM_QUIT, 0, 0);
     }
@@ -2236,19 +2520,27 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    bool isService = false;
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
-            isService = true;
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
             break;
         }
     }
@@ -2265,23 +2557,20 @@ BOOL Wh_ModInit() {
 
     LocalFree(argv);
 
-    if (isService) {
+    if (isExcluded) {
         return FALSE;
     }
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, FALSE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
-        DWORD waitRes = WaitForSingleObject(g_toolModProcessMutex, 5000);
-        if (waitRes != WAIT_OBJECT_0 && waitRes != WAIT_ABANDONED) {
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            CloseHandle(g_toolModProcessMutex);
-            g_toolModProcessMutex = nullptr;
             ExitProcess(1);
         }
 
@@ -2290,12 +2579,12 @@ BOOL Wh_ModInit() {
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
-        void* entryPoint =
-            (BYTE*)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
         Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
@@ -2313,19 +2602,54 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    WCHAR modulePath[MAX_PATH];
-    if (!GetModuleFileNameW(nullptr, modulePath, ARRAYSIZE(modulePath))) {
-        Wh_Log(L"GetModuleFileName failed");
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 +
+                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") /
+                       sizeof(WCHAR)) -
+                      1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
 
-    WCHAR commandLine[MAX_PATH + 256];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", modulePath, WH_MOD_ID);
-
-    STARTUPINFOW si = {sizeof(si)};
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
     PROCESS_INFORMATION pi;
-    if (!CreateProcessW(modulePath, commandLine, nullptr, nullptr, FALSE,
-                        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
     }
@@ -2338,6 +2662,7 @@ void Wh_ModSettingsChanged() {
     if (g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModSettingsChanged();
 }
 
@@ -2345,10 +2670,7 @@ void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
         return;
     }
-    if (g_toolModProcessMutex) {
-        ReleaseMutex(g_toolModProcessMutex);
-        CloseHandle(g_toolModProcessMutex);
-        g_toolModProcessMutex = nullptr;
-    }
+
     WhTool_ModUninit();
+    ExitProcess(0);
 }
