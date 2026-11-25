@@ -2,7 +2,7 @@
 // @id              desktop-shortcut-cleaner
 // @name            Desktop Shortcut Cleaner
 // @description     Hide desktop shortcut labels, arrows and admin shields, and replace the hover box with an icon-shaped glow, without changing File Explorer.
-// @version         1.3.0
+// @version         1.4.0
 // @author          ELSEGuy
 // @github          https://github.com/ELSEGuy
 // @license         MIT
@@ -33,7 +33,8 @@ with a soft glow that follows each icon's shape.
 - **Icon glow instead of the hover box.** The white box behind hovered,
   selected and drop-target icons is removed and replaced with a soft white
   glow built from the icon's own outline: subtle on hover, brighter when
-  selected.
+  selected. The glow fades in and out (unless Windows animation effects are
+  turned off).
 - **Solid icon while dragging.** Icons dragged from the desktop move as a
   solid icon instead of a faded copy, and the original spot stays empty
   until you drop. Hidden labels, arrows and shields stay hidden in the
@@ -103,7 +104,7 @@ by this project.
 
 - icon_glow: true
   $name: Replace hover box with icon glow
-  $description: On the desktop only, remove the white box shown behind hovered and selected icons and draw a soft white glow around the icon's shape instead. Selected icons glow brighter.
+  $description: On the desktop only, remove the white box shown behind hovered and selected icons and draw a soft white glow around the icon's shape instead. Selected icons glow brighter, and the glow fades in and out.
 
 - solid_drag: true
   $name: Solid icon while dragging
@@ -169,10 +170,37 @@ UINT g_dragImageMessage = 0;
 // thread (marking it active until the drop or cancel).
 std::atomic<bool> g_desktopDragActive{false};
 std::atomic<DWORD> g_desktopDragPendingTick{0};
+
+// Whether the dragged originals are currently hidden. Hiding starts when the
+// drag image window actually becomes visible (so there's never a moment with
+// two copies or none), and ends when the drag finishes.
+std::atomic<bool> g_hideDraggedOriginals{false};
+
+// Posted to the desktop ListView to start hiding on its own thread, when the
+// drag image window shows up on another thread.
+UINT g_hideDraggedMessage = 0;
+
+// The areas of the dragged items when hiding started (desktop thread only),
+// repainted when the drag ends.
+std::vector<RECT> g_draggedItemRects;
+
+// The labels of the dragged items (desktop thread only). The label's drop
+// shadow is drawn into an offscreen bitmap first, at coordinates that don't
+// match the item, so it's recognized by its text instead.
+std::vector<std::wstring> g_draggedItemLabels;
 constexpr DWORD kDragPendingWindowMs = 2000;
 
 std::unordered_set<std::wstring> g_shortcutNames;
 DWORD g_lastShortcutCacheTick = 0;
+
+// Cheap fingerprint of the desktop's item labels. Re-enumerating the desktop
+// namespace is comparatively slow, so it's only done when this changes (an
+// item was added, removed or renamed), or every kShortcutCacheMaxAgeMs as a
+// safety net.
+unsigned long long g_shortcutCacheFingerprint = 0;
+DWORD g_lastShortcutFingerprintTick = 0;
+constexpr DWORD kShortcutFingerprintIntervalMs = 250;
+constexpr DWORD kShortcutCacheMaxAgeMs = 10000;
 
 UINT g_linkOverlayMask = 0;
 int g_linkOverlaySlot = 0;
@@ -307,14 +335,52 @@ static HWND GetDesktopFolderView() {
 // Shortcut-name cache for text hiding
 // ---------------------------------------------------------------------------
 
-static void UpdateShortcutCache() {
+static unsigned long long GetDesktopLabelFingerprint(HWND listView) {
+    // FNV-1a over the item count and every label.
+    unsigned long long hash = 1469598103934665603ULL;
+    auto mix = [&hash](unsigned long long value) {
+        hash ^= value;
+        hash *= 1099511628211ULL;
+    };
+
+    int itemCount = ListView_GetItemCount(listView);
+    mix(static_cast<unsigned long long>(itemCount));
+
+    for (int item = 0; item < itemCount; item++) {
+        WCHAR label[MAX_PATH] = {};
+        LVITEMW lvItem = {};
+        lvItem.pszText = label;
+        lvItem.cchTextMax = ARRAYSIZE(label);
+        SendMessageW(listView, LVM_GETITEMTEXTW, item,
+                     reinterpret_cast<LPARAM>(&lvItem));
+
+        for (const WCHAR* c = label; *c; c++) {
+            mix(static_cast<unsigned long long>(*c));
+        }
+        mix(0xFFFF);
+    }
+
+    return hash;
+}
+
+static void UpdateShortcutCache(HWND listView) {
     DWORD now = GetTickCount();
 
     if (g_lastShortcutCacheTick != 0 &&
-        now - g_lastShortcutCacheTick < 500) {
+        now - g_lastShortcutFingerprintTick < kShortcutFingerprintIntervalMs) {
         return;
     }
 
+    g_lastShortcutFingerprintTick = now;
+
+    unsigned long long fingerprint = GetDesktopLabelFingerprint(listView);
+    if (g_lastShortcutCacheTick != 0 &&
+        fingerprint == g_shortcutCacheFingerprint &&
+        now - g_lastShortcutCacheTick < kShortcutCacheMaxAgeMs) {
+        return;
+    }
+
+    g_shortcutCacheFingerprint = fingerprint;
     g_lastShortcutCacheTick = now;
 
     std::unordered_set<std::wstring> fresh;
@@ -727,6 +793,122 @@ private:
     bool m_acquired;
 };
 
+// Per-shortcut cache for the shield rebuild, so a rebuild only re-reads
+// shortcuts that are new or changed, and only extracts icons it hasn't seen.
+// Used on the desktop thread only.
+struct ShortcutInfoCacheEntry {
+    FILETIME lastWriteTime = {};
+    ULONGLONG fileSize = 0;
+    bool ok = false;
+    std::wstring targetPath;
+    std::wstring iconPath;
+    int iconIndex = 0;
+};
+
+std::unordered_map<std::wstring, ShortcutInfoCacheEntry> g_shortcutInfoCache;
+std::unordered_map<std::wstring, HICON> g_rawIconCache;
+constexpr size_t kShortcutCachesMaxEntries = 512;
+
+static void ClearShortcutFileCaches() {
+    g_shortcutInfoCache.clear();
+    for (auto& entry : g_rawIconCache) {
+        if (entry.second) {
+            DestroyIcon(entry.second);
+        }
+    }
+    g_rawIconCache.clear();
+}
+
+static bool ReadShortcutIconInfoCached(const std::wstring& shortcutPath,
+                                       std::wstring* targetPath,
+                                       std::wstring* iconPath,
+                                       int* iconIndex) {
+    WIN32_FILE_ATTRIBUTE_DATA data = {};
+    if (!GetFileAttributesExW(shortcutPath.c_str(), GetFileExInfoStandard,
+                              &data)) {
+        g_shortcutInfoCache.erase(shortcutPath);
+        return false;
+    }
+
+    ULONGLONG fileSize =
+        (static_cast<ULONGLONG>(data.nFileSizeHigh) << 32) | data.nFileSizeLow;
+
+    auto it = g_shortcutInfoCache.find(shortcutPath);
+    if (it == g_shortcutInfoCache.end() ||
+        CompareFileTime(&it->second.lastWriteTime, &data.ftLastWriteTime) !=
+            0 ||
+        it->second.fileSize != fileSize) {
+        if (g_shortcutInfoCache.size() >= kShortcutCachesMaxEntries) {
+            g_shortcutInfoCache.clear();
+        }
+
+        ShortcutInfoCacheEntry entry;
+        entry.lastWriteTime = data.ftLastWriteTime;
+        entry.fileSize = fileSize;
+        entry.ok = ReadShortcutIconInfo(shortcutPath, &entry.targetPath,
+                                        &entry.iconPath, &entry.iconIndex);
+        it = g_shortcutInfoCache.insert_or_assign(shortcutPath,
+                                                  std::move(entry))
+                 .first;
+    }
+
+    if (!it->second.ok) {
+        return false;
+    }
+
+    *targetPath = it->second.targetPath;
+    *iconPath = it->second.iconPath;
+    *iconIndex = it->second.iconIndex;
+    return true;
+}
+
+// Returns a cached icon owned by the cache (don't destroy it).
+static HICON ExtractRawShortcutIconCached(const std::wstring& iconPath,
+                                          int iconIndex,
+                                          const std::wstring& targetPath,
+                                          int width,
+                                          int height) {
+    // Include the icon file's last-write time, so an updated program (with a
+    // new icon in its .exe) doesn't keep showing the old cached icon.
+    ULONGLONG iconFileTime = 0;
+    WIN32_FILE_ATTRIBUTE_DATA data = {};
+    if (!PathIsNetworkPathW(iconPath.c_str()) &&
+        GetFileAttributesExW(iconPath.c_str(), GetFileExInfoStandard,
+                             &data)) {
+        iconFileTime =
+            (static_cast<ULONGLONG>(data.ftLastWriteTime.dwHighDateTime)
+             << 32) |
+            data.ftLastWriteTime.dwLowDateTime;
+    }
+
+    std::wstring key = iconPath + L"|" + std::to_wstring(iconIndex) + L"|" +
+                       targetPath + L"|" + std::to_wstring(width) + L"x" +
+                       std::to_wstring(height) + L"|" +
+                       std::to_wstring(iconFileTime);
+
+    auto it = g_rawIconCache.find(key);
+    if (it != g_rawIconCache.end()) {
+        return it->second;
+    }
+
+    HICON icon =
+        ExtractRawShortcutIcon(iconPath, iconIndex, targetPath, width, height);
+    if (!icon) {
+        // Not cached, so a temporarily unavailable file is retried later.
+        return nullptr;
+    }
+
+    if (g_rawIconCache.size() >= kShortcutCachesMaxEntries) {
+        for (auto& entry : g_rawIconCache) {
+            DestroyIcon(entry.second);
+        }
+        g_rawIconCache.clear();
+    }
+
+    g_rawIconCache.emplace(std::move(key), icon);
+    return icon;
+}
+
 static void ClearGlowCache();
 
 static void ClearShieldedShortcutIconCache() {
@@ -965,23 +1147,15 @@ static ShieldRebuildResult UpdateShieldedShortcutIconCache(HWND desktopView,
                         std::wstring iconPath;
                         int iconIndex = 0;
 
-                        if (ReadShortcutIconInfo(
+                        if (ReadShortcutIconInfoCached(
                                 shortcutPath,
                                 &targetPath,
                                 &iconPath,
                                 &iconIndex) &&
                             TargetUsesRunAsAdminLayer(targetPath)) {
 
-                            Wh_Log(
-                                L"RUNASADMIN desktop shortcut: "
-                                L"item=\"%ls\" target=\"%ls\" "
-                                L"icon=\"%ls\" index=%d",
-                                displayName.c_str(),
-                                targetPath.c_str(),
-                                iconPath.c_str(),
-                                iconIndex);
-
-                            HICON rawIcon = ExtractRawShortcutIcon(
+                            // Owned by the raw icon cache.
+                            HICON rawIcon = ExtractRawShortcutIconCached(
                                 iconPath,
                                 iconIndex,
                                 targetPath,
@@ -993,7 +1167,6 @@ static ShieldRebuildResult UpdateShieldedShortcutIconCache(HWND desktopView,
                                     ImageList_AddIcon(
                                         freshImageList,
                                         rawIcon);
-                                DestroyIcon(rawIcon);
 
                                 if (cleanIndex >= 0) {
                                     cleanIndexByName[displayName] =
@@ -1121,8 +1294,8 @@ IImageList_Draw_t IImageList_Draw_Original = nullptr;
 //
 // The glow is built from the icon's own alpha channel: dilated by a pixel,
 // blurred, and filled with white. It's drawn underneath the icon, so only the
-// part outside the icon's shape shows. Each glow is built once per
-// (image list, image, size) and cached.
+// part outside the icon's shape shows. Each glow is built once per distinct
+// icon image (by its pixels) and size, and cached.
 // ---------------------------------------------------------------------------
 
 // Subtle look. Hovered icons use kGlowHoverAlpha, selected ones the brighter
@@ -1459,6 +1632,7 @@ static bool GetGlowBitmap(HIMAGELIST himl,
 enum class DesktopItemDrawState { None, Hot, Selected };
 
 struct DesktopItemDrawInfo {
+    int item = -1;
     DesktopItemDrawState state = DesktopItemDrawState::None;
     bool isSelected = false;
     bool isCut = false;  // Marked by Ctrl+X; Windows draws it faded.
@@ -1486,6 +1660,7 @@ static DesktopItemDrawInfo GetDesktopItemDrawInfo(HWND listView,
     UINT itemState = ListView_GetItemState(
         listView, item, LVIS_SELECTED | LVIS_DROPHILITED | LVIS_CUT);
 
+    info.item = item;
     info.isSelected = (itemState & LVIS_SELECTED) != 0;
     info.isCut = (itemState & LVIS_CUT) != 0;
 
@@ -1503,7 +1678,7 @@ static DesktopItemDrawInfo GetDesktopItemDrawInfo(HWND listView,
 // True while icons dragged from the desktop should be hidden at their
 // original spots.
 static bool ShouldHideDraggedOriginals() {
-    return g_settings.solid_drag && g_desktopDragActive &&
+    return g_settings.solid_drag && g_hideDraggedOriginals &&
            g_drawingDesktopHwnd && !g_isRenderingDragImage;
 }
 
@@ -1520,6 +1695,150 @@ static bool IsSelectedDesktopItemAt(HWND listView, int x, int y) {
     return item >= 0 && (hit.flags & LVHT_ONITEM) &&
            (ListView_GetItemState(listView, item, LVIS_SELECTED) &
             LVIS_SELECTED);
+}
+
+// ---------------------------------------------------------------------------
+// Glow fade
+//
+// The glow eases in and out instead of popping, like macOS-style short
+// feedback animations. Strength is interpolated by elapsed time, so a busy
+// system drops frames rather than slowing the fade down. Honors the Windows
+// "Animation effects" setting. Desktop thread only.
+// ---------------------------------------------------------------------------
+
+constexpr UINT_PTR kGlowFadeTimerId = 0x57484B47;
+constexpr UINT kGlowFadeFrameMs = 15;
+constexpr DWORD kGlowFadeMs = 120;
+// Keep repainting briefly past the end so the final value gets drawn.
+constexpr DWORD kGlowFadeSettleMs = 40;
+
+struct GlowFade {
+    float from = 0.0f;
+    float to = 0.0f;
+    DWORD startTick = 0;
+};
+
+std::unordered_map<int, GlowFade> g_glowFades;  // Keyed by item index.
+int g_glowFadeItemCount = -1;
+bool g_glowFadeTimerRunning = false;
+
+static bool AnimationsEnabled() {
+    static DWORD lastCheck = 0;
+    static bool enabled = true;
+
+    DWORD now = GetTickCount();
+    if (lastCheck == 0 || now - lastCheck > 1000) {
+        BOOL value = TRUE;
+        if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &value, 0)) {
+            enabled = value != FALSE;
+        }
+        lastCheck = now ? now : 1;
+    }
+
+    return enabled;
+}
+
+static float GlowFadeValue(const GlowFade& fade, DWORD now) {
+    DWORD elapsed = now - fade.startTick;
+    if (elapsed >= kGlowFadeMs) {
+        return fade.to;
+    }
+
+    float t = static_cast<float>(elapsed) / kGlowFadeMs;
+    t = t * t * (3.0f - 2.0f * t);  // Smoothstep.
+    return fade.from + (fade.to - fade.from) * t;
+}
+
+static void EnsureGlowFadeTimer(HWND listView) {
+    if (!g_glowFadeTimerRunning) {
+        SetTimer(listView, kGlowFadeTimerId, kGlowFadeFrameMs, nullptr);
+        g_glowFadeTimerRunning = true;
+    }
+}
+
+static void StopGlowFades(HWND listView) {
+    if (g_glowFadeTimerRunning) {
+        KillTimer(listView, kGlowFadeTimerId);
+        g_glowFadeTimerRunning = false;
+    }
+    g_glowFades.clear();
+}
+
+// Returns the glow strength to draw for an item now, given the strength it
+// should end up at.
+static BYTE GetFadedGlowAlpha(HWND listView, int item, BYTE target) {
+    if (!AnimationsEnabled()) {
+        g_glowFades.erase(item);
+        return target;
+    }
+
+    // Item indexes shift when items are added or removed.
+    int itemCount = ListView_GetItemCount(listView);
+    if (itemCount != g_glowFadeItemCount) {
+        g_glowFades.clear();
+        g_glowFadeItemCount = itemCount;
+    }
+
+    DWORD now = GetTickCount();
+    auto it = g_glowFades.find(item);
+
+    if (it == g_glowFades.end()) {
+        if (target == 0) {
+            return 0;
+        }
+
+        GlowFade fade;
+        fade.to = target;
+        fade.startTick = now;
+        it = g_glowFades.emplace(item, fade).first;
+        EnsureGlowFadeTimer(listView);
+    } else if (it->second.to != target) {
+        GlowFade& fade = it->second;
+        fade.from = GlowFadeValue(fade, now);
+        fade.to = target;
+        fade.startTick = now;
+        EnsureGlowFadeTimer(listView);
+    }
+
+    float value = GlowFadeValue(it->second, now);
+    if (value <= 0.5f && it->second.to == 0 &&
+        now - it->second.startTick >= kGlowFadeMs) {
+        g_glowFades.erase(it);
+        return 0;
+    }
+
+    return static_cast<BYTE>(value + 0.5f);
+}
+
+// Timer tick: repaint the glow area of every item still fading.
+static void OnGlowFadeTimer(HWND listView) {
+    DWORD now = GetTickCount();
+    bool anyActive = false;
+
+    for (auto it = g_glowFades.begin(); it != g_glowFades.end();) {
+        DWORD elapsed = now - it->second.startTick;
+        bool active = elapsed < kGlowFadeMs + kGlowFadeSettleMs;
+
+        if (active) {
+            RECT rect = {};
+            if (ListView_GetItemRect(listView, it->first, &rect, LVIR_ICON)) {
+                InflateRect(&rect, 14, 14);
+                InvalidateRect(listView, &rect, FALSE);
+            }
+            anyActive = true;
+        }
+
+        if (!active && it->second.to == 0) {
+            it = g_glowFades.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    if (!anyActive) {
+        KillTimer(listView, kGlowFadeTimerId);
+        g_glowFadeTimerRunning = false;
+    }
 }
 
 static void DrawIconGlow(HDC hdc,
@@ -1676,17 +1995,26 @@ HRESULT STDMETHODCALLTYPE IImageList_Draw_Hook(
         }
     }
 
-    if (glowApplies && itemInfo.state != DesktopItemDrawState::None) {
-        DrawIconGlow(local.hdcDst,
-                     glowImageList,
-                     glowIndex,
-                     local.x,
-                     local.y,
-                     local.cx,
-                     local.cy,
-                     itemInfo.state == DesktopItemDrawState::Selected
-                         ? kGlowSelectedAlpha
-                         : kGlowHoverAlpha);
+    if (glowApplies && itemInfo.item >= 0) {
+        BYTE target = itemInfo.state == DesktopItemDrawState::Selected
+                          ? kGlowSelectedAlpha
+                      : itemInfo.state == DesktopItemDrawState::Hot
+                          ? kGlowHoverAlpha
+                          : 0;
+
+        BYTE alpha =
+            GetFadedGlowAlpha(g_drawingDesktopHwnd, itemInfo.item, target);
+
+        if (alpha) {
+            DrawIconGlow(local.hdcDst,
+                         glowImageList,
+                         glowIndex,
+                         local.x,
+                         local.y,
+                         local.cx,
+                         local.cy,
+                         alpha);
+        }
     }
 
     if (g_settings.hide_arrows &&
@@ -1787,6 +2115,90 @@ static IImageList_Draw_t GetDesktopImageListDrawTarget() {
 // Desktop subclass
 // ---------------------------------------------------------------------------
 
+// Areas covered by the selected (dragged) items, with room for the glow.
+static std::vector<RECT> GetSelectedItemRects(HWND listView) {
+    std::vector<RECT> rects;
+
+    for (int item = ListView_GetNextItem(listView, -1, LVNI_SELECTED);
+         item >= 0;
+         item = ListView_GetNextItem(listView, item, LVNI_SELECTED)) {
+        RECT rect = {};
+        if (ListView_GetItemRect(listView, item, &rect, LVIR_BOUNDS)) {
+            InflateRect(&rect, 16, 16);
+            rects.push_back(rect);
+        }
+    }
+
+    return rects;
+}
+
+// Repaints the given areas right away instead of waiting for the low-priority
+// WM_PAINT, which can lag noticeably while the system is busy. Only the
+// desktop's own thread may paint synchronously.
+static void RepaintDesktopAreas(HWND listView, const std::vector<RECT>& rects) {
+    for (const RECT& rect : rects) {
+        InvalidateRect(listView, &rect, FALSE);
+    }
+
+    if (!rects.empty() &&
+        GetWindowThreadProcessId(listView, nullptr) == GetCurrentThreadId()) {
+        UpdateWindow(listView);
+    }
+}
+
+// Desktop thread only.
+static void BeginHidingDraggedOriginals(HWND listView) {
+    if (!g_settings.solid_drag || !g_desktopDragActive ||
+        g_hideDraggedOriginals) {
+        return;
+    }
+
+    g_draggedItemRects = GetSelectedItemRects(listView);
+
+    g_draggedItemLabels.clear();
+    for (int item = ListView_GetNextItem(listView, -1, LVNI_SELECTED);
+         item >= 0;
+         item = ListView_GetNextItem(listView, item, LVNI_SELECTED)) {
+        WCHAR label[MAX_PATH] = {};
+        LVITEMW lvItem = {};
+        lvItem.iSubItem = 0;
+        lvItem.pszText = label;
+        lvItem.cchTextMax = ARRAYSIZE(label);
+        SendMessageW(listView, LVM_GETITEMTEXTW, item,
+                     reinterpret_cast<LPARAM>(&lvItem));
+        if (label[0]) {
+            g_draggedItemLabels.push_back(label);
+        }
+    }
+
+    g_hideDraggedOriginals = true;
+    RepaintDesktopAreas(listView, g_draggedItemRects);
+}
+
+// Desktop thread only. Repaints the old spots and, after a move, the new ones.
+static void EndHidingDraggedOriginals(HWND listView) {
+    if (!g_hideDraggedOriginals.exchange(false)) {
+        return;
+    }
+
+    if (!IsWindow(listView)) {
+        g_draggedItemRects.clear();
+        g_draggedItemLabels.clear();
+        return;
+    }
+
+    g_draggedItemLabels.clear();
+
+    std::vector<RECT> rects = std::move(g_draggedItemRects);
+    g_draggedItemRects.clear();
+
+    for (const RECT& rect : GetSelectedItemRects(listView)) {
+        rects.push_back(rect);
+    }
+
+    RepaintDesktopAreas(listView, rects);
+}
+
 static bool AnyDesktopDrawingFeatureEnabled() {
     return g_settings.hide_text || g_settings.hide_all_text ||
            g_settings.hide_arrows || g_settings.hide_shields ||
@@ -1864,7 +2276,7 @@ LRESULT CALLBACK DesktopListSubclass(
         AnyDesktopDrawingFeatureEnabled()) {
 
         if (g_settings.hide_text && !g_settings.hide_all_text) {
-            UpdateShortcutCache();
+            UpdateShortcutCache(hWnd);
         }
 
         if (g_settings.hide_shields &&
@@ -1883,6 +2295,11 @@ LRESULT CALLBACK DesktopListSubclass(
 
         return DefSubclassProcAsDesktopDrawing(
             hWnd, false, hWnd, uMsg, wParam, lParam);
+    }
+
+    if (uMsg == WM_TIMER && wParam == kGlowFadeTimerId) {
+        OnGlowFadeTimer(hWnd);
+        return 0;
     }
 
     if (uMsg == WM_TIMER && wParam == kShieldRefreshTimerId) {
@@ -1907,16 +2324,24 @@ LRESULT CALLBACK DesktopListSubclass(
         return 0;
     }
 
+    if (g_hideDraggedMessage && uMsg == g_hideDraggedMessage) {
+        BeginHidingDraggedOriginals(hWnd);
+        return 0;
+    }
+
     if (g_uninitMessage && uMsg == g_uninitMessage) {
         // Runs on the desktop thread, between paints, so nothing is using the
         // caches while they're freed.
         KillTimer(hWnd, kShieldRefreshTimerId);
+        StopGlowFades(hWnd);
         ClearShieldedShortcutIconCache();
+        ClearShortcutFileCaches();
         return 0;
     }
 
     if (uMsg == WM_NCDESTROY) {
         KillTimer(hWnd, kShieldRefreshTimerId);
+        StopGlowFades(hWnd);
 
         HWND expected = hWnd;
         g_desktopListView.compare_exchange_strong(expected, nullptr);
@@ -1929,13 +2354,47 @@ LRESULT CALLBACK DesktopListSubclass(
 // Text drawing hooks
 // ---------------------------------------------------------------------------
 
-// The label of an item being dragged from the desktop, at its original spot.
-static bool IsDraggedOriginalLabel(const RECT* rect) {
-    if (!rect || !ShouldHideDraggedOriginals()) {
+// Whether drawn text is (a possibly ellipsized form of) a dragged label.
+static bool MatchesDraggedLabel(LPCWSTR text, int cch) {
+    if (!text || g_draggedItemLabels.empty()) {
         return false;
     }
 
-    return IsSelectedDesktopItemAt(g_drawingDesktopHwnd,
+    std::wstring drawn(text, cch < 0 ? wcslen(text) : static_cast<size_t>(cch));
+    if (drawn.empty()) {
+        return false;
+    }
+
+    // Long labels may be drawn shortened, ending with "..." or "\u2026".
+    std::wstring prefix;
+    if (drawn.size() > 3 && drawn.compare(drawn.size() - 3, 3, L"...") == 0) {
+        prefix = drawn.substr(0, drawn.size() - 3);
+    } else if (drawn.back() == L'\u2026') {
+        prefix = drawn.substr(0, drawn.size() - 1);
+    }
+
+    for (const std::wstring& label : g_draggedItemLabels) {
+        if (label == drawn ||
+            (!prefix.empty() && label.compare(0, prefix.size(), prefix) == 0)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// The label of an item being dragged from the desktop, at its original spot.
+static bool IsDraggedOriginalLabel(const RECT* rect, LPCWSTR text, int cch) {
+    if (!ShouldHideDraggedOriginals()) {
+        return false;
+    }
+
+    if (MatchesDraggedLabel(text, cch)) {
+        return true;
+    }
+
+    return rect &&
+           IsSelectedDesktopItemAt(g_drawingDesktopHwnd,
                                    (rect->left + rect->right) / 2,
                                    (rect->top + rect->bottom) / 2);
 }
@@ -1953,7 +2412,8 @@ int WINAPI DrawTextW_Hook(
     if (g_isDrawingDesktop &&
         text &&
         (ShouldHideLabel(text, cchText) ||
-         (!(format & DT_CALCRECT) && IsDraggedOriginalLabel(rect)))) {
+         (!(format & DT_CALCRECT) &&
+          IsDraggedOriginalLabel(rect, text, cchText)))) {
         return DrawTextW_Original(hdc, L"", 0, rect, format);
     }
 
@@ -1987,7 +2447,8 @@ HRESULT WINAPI DrawThemeTextEx_Hook(
     if (g_isDrawingDesktop &&
         text &&
         (ShouldHideLabel(text, cchText) ||
-         (!(flags & DT_CALCRECT) && IsDraggedOriginalLabel(rect)))) {
+         (!(flags & DT_CALCRECT) &&
+          IsDraggedOriginalLabel(rect, text, cchText)))) {
         return DrawThemeTextEx_Original(
             theme,
             hdc,
@@ -2108,6 +2569,27 @@ static bool ShouldMakeDragWindowSolid(HWND hWnd) {
            IsDragImageWindow(hWnd);
 }
 
+// Called after an API that may have shown the drag image window. Once it's
+// visible during a desktop drag, hide the originals in the same moment.
+static void OnDragImageWindowMaybeShown(HWND hWnd) {
+    if (!g_settings.solid_drag || !g_desktopDragActive ||
+        g_hideDraggedOriginals || !IsDragImageWindow(hWnd) ||
+        !IsWindowVisible(hWnd)) {
+        return;
+    }
+
+    HWND listView = g_desktopListView;
+    if (!listView) {
+        return;
+    }
+
+    if (GetWindowThreadProcessId(listView, nullptr) == GetCurrentThreadId()) {
+        BeginHidingDraggedOriginals(listView);
+    } else {
+        PostMessageW(listView, g_hideDraggedMessage, 0, 0);
+    }
+}
+
 volatile LONG g_solidDragLogCount = 0;
 
 static void LogSolidDrag(const WCHAR* api, BYTE originalAlpha) {
@@ -2130,17 +2612,23 @@ BOOL WINAPI UpdateLayeredWindow_Hook(HWND hWnd,
                                      COLORREF crKey,
                                      BLENDFUNCTION* pblend,
                                      DWORD dwFlags) {
+    BOOL result;
+
     if (pblend && (dwFlags & ULW_ALPHA) && ShouldMakeDragWindowSolid(hWnd)) {
         BLENDFUNCTION blend = *pblend;
         LogSolidDrag(L"UpdateLayeredWindow", blend.SourceConstantAlpha);
         blend.SourceConstantAlpha = 255;
-        return UpdateLayeredWindow_Original(hWnd, hdcDst, pptDst, psize,
-                                            hdcSrc, pptSrc, crKey, &blend,
-                                            dwFlags);
+        result = UpdateLayeredWindow_Original(hWnd, hdcDst, pptDst, psize,
+                                              hdcSrc, pptSrc, crKey, &blend,
+                                              dwFlags);
+    } else {
+        result = UpdateLayeredWindow_Original(hWnd, hdcDst, pptDst, psize,
+                                              hdcSrc, pptSrc, crKey, pblend,
+                                              dwFlags);
     }
 
-    return UpdateLayeredWindow_Original(hWnd, hdcDst, pptDst, psize, hdcSrc,
-                                        pptSrc, crKey, pblend, dwFlags);
+    OnDragImageWindowMaybeShown(hWnd);
+    return result;
 }
 
 using UpdateLayeredWindowIndirect_t = decltype(&UpdateLayeredWindowIndirect);
@@ -2157,10 +2645,14 @@ BOOL WINAPI UpdateLayeredWindowIndirect_Hook(
                      blend.SourceConstantAlpha);
         blend.SourceConstantAlpha = 255;
         copy.pblend = &blend;
-        return UpdateLayeredWindowIndirect_Original(hWnd, &copy);
+        BOOL result = UpdateLayeredWindowIndirect_Original(hWnd, &copy);
+        OnDragImageWindowMaybeShown(hWnd);
+        return result;
     }
 
-    return UpdateLayeredWindowIndirect_Original(hWnd, info);
+    BOOL result = UpdateLayeredWindowIndirect_Original(hWnd, info);
+    OnDragImageWindowMaybeShown(hWnd);
+    return result;
 }
 
 using SetLayeredWindowAttributes_t = decltype(&SetLayeredWindowAttributes);
@@ -2176,6 +2668,35 @@ BOOL WINAPI SetLayeredWindowAttributes_Hook(HWND hWnd,
     }
 
     return SetLayeredWindowAttributes_Original(hWnd, crKey, bAlpha, dwFlags);
+}
+
+using ShowWindow_t = decltype(&ShowWindow);
+ShowWindow_t ShowWindow_Original = nullptr;
+
+BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmdShow) {
+    BOOL result = ShowWindow_Original(hWnd, cmdShow);
+    OnDragImageWindowMaybeShown(hWnd);
+    return result;
+}
+
+using SetWindowPos_t = decltype(&SetWindowPos);
+SetWindowPos_t SetWindowPos_Original = nullptr;
+
+BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
+                              HWND insertAfter,
+                              int x,
+                              int y,
+                              int cx,
+                              int cy,
+                              UINT flags) {
+    BOOL result =
+        SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
+
+    if (flags & SWP_SHOWWINDOW) {
+        OnDragImageWindowMaybeShown(hWnd);
+    }
+
+    return result;
 }
 
 using DoDragDrop_t = decltype(&DoDragDrop);
@@ -2197,17 +2718,27 @@ HRESULT WINAPI DoDragDrop_Hook(IDataObject* dataObject,
     Wh_Log(L"Solid drag: desktop drag started");
 
     g_desktopDragActive = true;
-    InvalidateRect(desktop, nullptr, FALSE);
+
+    // The drag image window may already be visible; otherwise the originals
+    // are hidden when it shows up (see OnDragImageWindowMaybeShown).
+    HWND dragImage = nullptr;
+    while ((dragImage = FindWindowExW(nullptr, dragImage, L"SysDragImage",
+                                      nullptr))) {
+        DWORD pid = 0;
+        if (GetWindowThreadProcessId(dragImage, &pid) &&
+            pid == GetCurrentProcessId() && IsWindowVisible(dragImage)) {
+            BeginHidingDraggedOriginals(desktop);
+            break;
+        }
+    }
 
     HRESULT hr = DoDragDrop_Original(dataObject, dropSource, okEffects, effect);
 
     g_desktopDragActive = false;
     g_desktopDragPendingTick = 0;
 
-    // Bring the originals back (or draw them at their new spots).
-    if (IsWindow(desktop)) {
-        InvalidateRect(desktop, nullptr, FALSE);
-    }
+    // Bring the originals back (or draw them at their new spots) right away.
+    EndHidingDraggedOriginals(desktop);
 
     return hr;
 }
@@ -2313,6 +2844,8 @@ BOOL Wh_ModInit() {
     g_uninitMessage =
         RegisterWindowMessageW(L"DesktopShortcutCleaner_Uninit");
     g_dragImageMessage = RegisterWindowMessageW(L"ShellGetDragImage");
+    g_hideDraggedMessage =
+        RegisterWindowMessageW(L"DesktopShortcutCleaner_HideDragged");
 
     WindhawkUtils::SetFunctionHook(
         CreateWindowExW,
@@ -2379,6 +2912,16 @@ BOOL Wh_ModInit() {
             SetLayeredWindowAttributes,
             SetLayeredWindowAttributes_Hook,
             &SetLayeredWindowAttributes_Original);
+
+        WindhawkUtils::SetFunctionHook(
+            ShowWindow,
+            ShowWindow_Hook,
+            &ShowWindow_Original);
+
+        WindhawkUtils::SetFunctionHook(
+            SetWindowPos,
+            SetWindowPos_Hook,
+            &SetWindowPos_Original);
 
         if (HMODULE ole32 = LoadLibraryW(L"ole32.dll")) {
             if (auto proc = reinterpret_cast<DoDragDrop_t>(
