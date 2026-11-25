@@ -3,9 +3,8 @@
 // @name            Taskbar Live HUD - Fork
 // @description     Compact system monitoring widget for the taskbar: CPU, RAM, GPU, temperatures, disk speed, network speed, optional ping and a working set trimmer
 // @version         1.2.1
-// @author          MightyPotato22 (fork of Lemon's mod)
-// @github          https://github.com/MightyPotato22
-// @homepage        https://github.com/its-lemon
+// @author          MightyPotato22
+// @github          https://github.com/MightyPotato22 
 // @include         windhawk.exe
 // @compilerOptions -luser32 -lgdi32 -liphlpapi -lpsapi -ldwmapi -lshell32 -lgdiplus -ladvapi32 -lpdh -lole32 -loleaut32 -lwbemuuid
 // @license         MIT
