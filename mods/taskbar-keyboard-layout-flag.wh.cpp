@@ -215,7 +215,6 @@ std::atomic<HKL> g_lastKnownHkl{ nullptr };
 std::atomic<bool> g_modUnloading{ false };
 std::atomic<bool> g_systemTrayHookAttempted{ false };
 std::atomic<bool> g_win10IndicatorAttached{ false };
-std::atomic<bool> g_win11IndicatorDiscovered{ false };
 
 std::unordered_map<WORD, LANGID> g_deviceLayoutCache;
 std::unordered_map<LANGID, std::wstring> g_countryCodeCache;
@@ -1816,9 +1815,21 @@ wux::FrameworkElement GetFrameworkElementFromImplThis(void* pThis) {
     return element;
 }
 
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hWnd = nullptr;
+    while ((hWnd = FindWindowExW(nullptr, hWnd, L"Shell_TrayWnd", nullptr)) != nullptr) {
+        DWORD processId = 0;
+        if (GetWindowThreadProcessId(hWnd, &processId) &&
+            processId == GetCurrentProcessId()) {
+            return hWnd;
+        }
+    }
+    return nullptr;
+}
+
 HWND FindTaskbarHwndForCurrentThread() {
     DWORD tid = GetCurrentThreadId();
-    HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
+    HWND primary = FindCurrentProcessTaskbarWnd();
     if (primary && GetWindowThreadProcessId(primary, nullptr) == tid) {
         return primary;
     }
@@ -2148,7 +2159,6 @@ void TrackLanguageIconView(const wux::FrameworkElement& iconView) {
     }
 
     g_win11Indicators->push_back(std::move(entry));
-    g_win11IndicatorDiscovered.store(true, std::memory_order_release);
     UpdateWin11IndicatorFlag(g_win11Indicators->back());
 }
 
@@ -2250,18 +2260,6 @@ void WINAPI IconView_UpdateIcon_Hook(void* pThis) {
     }
 }
 
-using IconView_OnApplyTemplate_t = void(WINAPI*)(void* pThis);
-IconView_OnApplyTemplate_t IconView_OnApplyTemplate_Orig = nullptr;
-
-void WINAPI IconView_OnApplyTemplate_Hook(void* pThis) {
-    IconView_OnApplyTemplate_Orig(pThis);
-    try {
-        HandleIconViewInstance(pThis);
-        DiscoverExistingIndicatorsFromIconView(pThis);
-    } catch (...) {
-    }
-}
-
 using IconView_OnPointerEntered_t = void(WINAPI*)(void* pThis, void* pArgs);
 IconView_OnPointerEntered_t IconView_OnPointerEntered_Orig = nullptr;
 
@@ -2273,48 +2271,121 @@ void WINAPI IconView_OnPointerEntered_Hook(void* pThis, void* pArgs) {
     }
 }
 
-// One-shot discovery hook on DirectUI::FrameworkElement::ArrangeOverride in Windows.UI.Xaml.dll.
-// Runs only until the existing taskbar indicator(s) are discovered after mid-session enable,
-// avoiding any dependence on private SystemTray::IconView method symbol names.
-using FrameworkElement_ArrangeOverride_t = HRESULT(STDMETHODCALLTYPE*)(
-    void* pThis, winrt::Windows::Foundation::Size availableSize, winrt::Windows::Foundation::Size* returnValue);
-FrameworkElement_ArrangeOverride_t FrameworkElement_ArrangeOverride_Orig = nullptr;
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
+CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Orig = nullptr;
 
-HRESULT STDMETHODCALLTYPE FrameworkElement_ArrangeOverride_Hook(
-    void* pThis, winrt::Windows::Foundation::Size availableSize, winrt::Windows::Foundation::Size* returnValue) {
-    HRESULT hr = FrameworkElement_ArrangeOverride_Orig(pThis, availableSize, returnValue);
-    if (!g_win11IndicatorDiscovered.load(std::memory_order_acquire) &&
-        !g_modUnloading.load(std::memory_order_acquire) && pThis) {
-        try {
-            IUnknown* unk = static_cast<IUnknown*>(pThis);
-            wux::FrameworkElement fe{ nullptr };
-            if (SUCCEEDED(unk->QueryInterface(winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(fe))) && fe) {
-                ScanXamlRootOnce(fe.XamlRoot());
-            }
-        } catch (...) {
+using std_shared_ptr_TaskbarHost_dtor_t = void(WINAPI*)(void* pThis);
+std_shared_ptr_TaskbarHost_dtor_t std_shared_ptr_TaskbarHost_dtor_Orig = nullptr;
+
+using TaskbarHost_FrameHeight_t = int(WINAPI*)(void* pThis);
+TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Orig = nullptr;
+
+using TaskbarHost_GetFrame_t = void*(WINAPI*)(void* pThis, void** result);
+TaskbarHost_GetFrame_t TaskbarHost_GetFrame_Orig = nullptr;
+
+wux::XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
+    if (!taskbarHostSharedPtr || !taskbarHostSharedPtr[0]) {
+        return nullptr;
+    }
+
+    size_t taskbarElementIUnknownOffset = 0x10;
+
+#if defined(_M_X64)
+    if (TaskbarHost_FrameHeight_Orig) {
+        // 48:83EC 28 | sub rsp, 28
+        // 48:8B49 10 | mov rcx, qword ptr ds:[rcx+10]
+        const BYTE* b = reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Orig);
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC &&
+            b[4] == 0x48 && b[5] == 0x8B && b[6] == 0x49) {
+            taskbarElementIUnknownOffset = b[7];
         }
     }
-    return hr;
+#elif defined(_M_ARM64)
+    if (TaskbarHost_GetFrame_Orig) {
+        // F9400800 | ldr x0, [x0, #0x10]
+        const uint32_t* insn = reinterpret_cast<const uint32_t*>(TaskbarHost_GetFrame_Orig);
+        if ((insn[0] & 0xFFC003FF) == 0xF9400000) {
+            taskbarElementIUnknownOffset = ((insn[0] >> 10) & 0xFFF) << 3;
+        }
+    }
+#endif
+
+    auto* taskbarElementIUnknown = *reinterpret_cast<IUnknown**>(
+        reinterpret_cast<BYTE*>(taskbarHostSharedPtr[0]) + taskbarElementIUnknownOffset);
+    if (!taskbarElementIUnknown) {
+        return nullptr;
+    }
+
+    wux::FrameworkElement taskbarElement{ nullptr };
+    if (FAILED(taskbarElementIUnknown->QueryInterface(
+            winrt::guid_of<wux::FrameworkElement>(), winrt::put_abi(taskbarElement))) ||
+        !taskbarElement) {
+        return nullptr;
+    }
+
+    return taskbarElement.XamlRoot();
 }
 
-bool HookWindowsUIXamlDiscovery() {
-    HMODULE wuxMod = GetModuleHandleW(L"Windows.UI.Xaml.dll");
-    if (!wuxMod) return false;
-    // Windows.UI.Xaml.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+wux::XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
+    if (!hTaskbarWnd || !CTaskBand_GetTaskbarHost_Orig || !std_shared_ptr_TaskbarHost_dtor_Orig) {
+        return nullptr;
+    }
+
+    HWND hTaskSwWnd = FindWindowExW(hTaskbarWnd, nullptr, L"MSTaskSwWClass", nullptr);
+    if (!hTaskSwWnd) {
+        return nullptr;
+    }
+
+    void* taskBand = reinterpret_cast<void*>(GetWindowLongPtrW(hTaskSwWnd, 0));
+    if (!taskBand) {
+        return nullptr;
+    }
+
+    void* taskbarHostSharedPtr[2] = { nullptr, nullptr };
+    CTaskBand_GetTaskbarHost_Orig(taskBand, taskbarHostSharedPtr);
+    if (!taskbarHostSharedPtr[0]) {
+        return nullptr;
+    }
+
+    wux::XamlRoot xamlRoot = XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
+    std_shared_ptr_TaskbarHost_dtor_Orig(taskbarHostSharedPtr);
+    return xamlRoot;
+}
+
+bool HookTaskbarDllSymbols() {
+    HMODULE taskbarMod = GetModuleHandleW(L"taskbar.dll");
+    if (!taskbarMod) {
+        return false;
+    }
+
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
-            { L"public: virtual long __cdecl DirectUI::FrameworkElement::ArrangeOverride(struct Windows::Foundation::Size,struct Windows::Foundation::Size *)" },
-            &FrameworkElement_ArrangeOverride_Orig,
-            FrameworkElement_ArrangeOverride_Hook,
+            { L"public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const " },
+            &CTaskBand_GetTaskbarHost_Orig,
+            nullptr,
+            true
+        },
+        {
+            { L"public: __cdecl std::shared_ptr<class TaskbarHost>::~shared_ptr<class TaskbarHost>(void)" },
+            &std_shared_ptr_TaskbarHost_dtor_Orig,
+            nullptr,
+            true
+        },
+        {
+            { L"public: int __cdecl TaskbarHost::FrameHeight(void)const " },
+            &TaskbarHost_FrameHeight_Orig,
+            nullptr,
+            true
+        },
+        {
+            { L"public: class winrt::Windows::UI::Xaml::Controls::Frame __cdecl TaskbarHost::GetFrame(void)const " },
+            &TaskbarHost_GetFrame_Orig,
+            nullptr,
             true
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(wuxMod, hooks, ARRAYSIZE(hooks)) || !FrameworkElement_ArrangeOverride_Orig) {
-        Wh_Log(L"Optional Windows.UI.Xaml.dll ArrangeOverride symbol did not resolve.");
-        return false;
-    }
-    return true;
+    return WindhawkUtils::HookSymbols(taskbarMod, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks));
 }
 
 bool HookSystemTraySymbols(HMODULE systemTrayMod) {
@@ -2335,12 +2406,6 @@ bool HookSystemTraySymbols(HMODULE systemTrayMod) {
             true
         },
         {
-            { L"public: void __cdecl winrt::SystemTray::implementation::IconView::OnApplyTemplate(void)" },
-            &IconView_OnApplyTemplate_Orig,
-            IconView_OnApplyTemplate_Hook,
-            true
-        },
-        {
             { L"public: void __cdecl winrt::SystemTray::implementation::IconView::OnPointerEntered(struct winrt::Windows::UI::Xaml::Input::PointerRoutedEventArgs const &)" },
             &IconView_OnPointerEntered_Orig,
             IconView_OnPointerEntered_Hook,
@@ -2353,8 +2418,8 @@ bool HookSystemTraySymbols(HMODULE systemTrayMod) {
         return false;
     }
 
-    if (!IconView_UpdateIcon_Orig && !IconView_OnApplyTemplate_Orig && !IconView_OnPointerEntered_Orig) {
-        Wh_Log(L"Optional IconView discovery symbols did not resolve; using XAML layout discovery fallback.");
+    if (!IconView_UpdateIcon_Orig && !IconView_OnPointerEntered_Orig) {
+        Wh_Log(L"Optional IconView discovery symbols did not resolve.");
     }
 
     return true;
@@ -2409,8 +2474,9 @@ void WINAPI CleanupWin11IndicatorsOnUIThread(void*) {
 
 void DispatchToAllTaskbarUIThreads(RunFromWindowThreadProc_t proc) {
     std::unordered_set<DWORD> dispatchedThreads;
+    DWORD currentPid = GetCurrentProcessId();
 
-    HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
+    HWND primary = FindCurrentProcessTaskbarWnd();
     if (primary) {
         DWORD tid = GetWindowThreadProcessId(primary, nullptr);
         if (tid && dispatchedThreads.insert(tid).second) {
@@ -2420,8 +2486,9 @@ void DispatchToAllTaskbarUIThreads(RunFromWindowThreadProc_t proc) {
 
     HWND secondary = nullptr;
     while ((secondary = FindWindowExW(nullptr, secondary, L"Shell_SecondaryTrayWnd", nullptr)) != nullptr) {
-        DWORD tid = GetWindowThreadProcessId(secondary, nullptr);
-        if (tid && dispatchedThreads.insert(tid).second) {
+        DWORD pid = 0;
+        DWORD tid = GetWindowThreadProcessId(secondary, &pid);
+        if (pid == currentPid && tid && dispatchedThreads.insert(tid).second) {
             RunFromWindowThread(secondary, proc, nullptr);
         }
     }
@@ -2437,7 +2504,6 @@ void HandleLoadedModuleIfSystemTray(HMODULE mod) {
         wchar_t modPath[MAX_PATH] = {};
         GetModuleFileNameW(mod, modPath, ARRAYSIZE(modPath));
         Wh_Log(L"Hooking system tray module: %s", modPath);
-        HookWindowsUIXamlDiscovery();
         if (HookSystemTraySymbols(mod)) {
             Wh_ApplyHookOperations();
         }
@@ -2581,7 +2647,6 @@ void LoadSettings() {
 BOOL Wh_ModInit() {
     g_modUnloading.store(false, std::memory_order_release);
     g_win10IndicatorAttached.store(false, std::memory_order_relaxed);
-    g_win11IndicatorDiscovered.store(false, std::memory_order_relaxed);
     g_stopWatchdogMsg = RegisterWindowMessageW(L"Windhawk_StopWatchdog_" WH_MOD_ID);
     g_runFromWindowThreadMsg = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
@@ -2599,9 +2664,10 @@ BOOL Wh_ModInit() {
         WindhawkUtils::SetFunctionHook(pLoadLibraryExW, LoadLibraryExW_Hook, &LoadLibraryExW_Orig);
     }
 
+    HookTaskbarDllSymbols();
+
     HMODULE systemTrayMod = GetSystemTrayModuleHandle();
     if (systemTrayMod && !g_systemTrayHookAttempted.exchange(true)) {
-        HookWindowsUIXamlDiscovery();
         HookSystemTraySymbols(systemTrayMod);
     }
 
@@ -2644,26 +2710,42 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
-    if (g_modUnloading.load(std::memory_order_acquire) ||
-        g_systemTrayHookAttempted.load(std::memory_order_acquire)) {
+void WINAPI ScanExistingIndicatorsOnUIThread(void* param) {
+    if (g_modUnloading.load(std::memory_order_acquire)) {
         return;
     }
 
-    if (HMODULE systemTrayMod = GetSystemTrayModuleHandle()) {
-        if (!g_systemTrayHookAttempted.exchange(true)) {
-            HookWindowsUIXamlDiscovery();
-            if (HookSystemTraySymbols(systemTrayMod)) {
-                Wh_ApplyHookOperations();
+    try {
+        if (auto xamlRoot = GetTaskbarXamlRoot(static_cast<HWND>(param))) {
+            ScanXamlRootOnce(xamlRoot);
+        }
+    } catch (...) {
+    }
+}
+
+void Wh_ModAfterInit() {
+    if (g_modUnloading.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (!g_systemTrayHookAttempted.load(std::memory_order_acquire)) {
+        if (HMODULE systemTrayMod = GetSystemTrayModuleHandle()) {
+            if (!g_systemTrayHookAttempted.exchange(true)) {
+                if (HookSystemTraySymbols(systemTrayMod)) {
+                    Wh_ApplyHookOperations();
+                }
             }
         }
+    }
+
+    if (HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd()) {
+        RunFromWindowThread(hTaskbarWnd, ScanExistingIndicatorsOnUIThread, hTaskbarWnd);
     }
 }
 
 void Wh_ModUninit() {
     g_modUnloading.store(true, std::memory_order_release);
     g_win10IndicatorAttached.store(false, std::memory_order_relaxed);
-    g_win11IndicatorDiscovered.store(false, std::memory_order_relaxed);
 
     // 1. Restore Windows 11 XAML indicator TextBlocks and remove injected Image on the UI thread
     DispatchToAllTaskbarUIThreads(CleanupWin11IndicatorsOnUIThread);
