@@ -7,7 +7,7 @@
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lwinhttp -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lcomctl32
+// @compilerOptions -lwinhttp -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lcomctl32 -lbcrypt -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -20,7 +20,7 @@ This mod restores the classic **Default Programs** pages of Control Panel: *Set 
 The pages use Microsoft's original Windows 10 1607 `sud.dll`, not a recreation.
 
 No system file is replaced or modified. Disabling this mod restores the Windows page, but does not undo
-association changes or registry values written while it was enabled. See *Notes and limitations* below.
+association changes written while it was enabled. See *Notes and limitations* below.
 
 ## Screenshots
 ![Default Programs page](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/default1.PNG)
@@ -47,8 +47,8 @@ executable is unavailable or does not match, the original link is used instead.
 start) and every time the mod's settings change. A file is requested only if it is missing from `dl` or does not
 match; up to 3 attempts are made per file. With *Keep downloaded files when the mod is disabled* turned off, `dl` is
 deleted whenever the mod is unloaded, so the files are downloaded again after every disable, update or reload.
-**No setting turns the downloads off.** The only alternative is to put the exact files in `dl` by hand. Only the
-three requests to `msdl.microsoft.com` listed above are made; nothing user-specific is sent.
+**No setting turns the downloads off.** The only alternative is to put the exact files in `dl` by hand. The mod itself makes only the
+three requests to `msdl.microsoft.com` listed above; nothing user-specific is sent.
 
 From the DLLs this mod generates private copies in its `bin` folder. English, Italian, German, Spanish, French and Brazilian Portuguese page strings are
 embedded because the symbol server does not provide the `.mui` files. The original downloads are kept in `dl`;
@@ -65,11 +65,11 @@ manually. Without the required files the Windows page stays in place; connect to
   download matching symbols when they are not cached; an internet connection may be needed after installation
   or a Windows update. If symbols are unavailable, some compatibility fixes may not work.
 - **Program access and computer defaults.** When available, the verified 1607 executable is used for this link.
-- **Associations.** This mod attempts to use a matching Windows Shell handler to set file associations. The Shell
-  changes the default through its own API; this persists after the mod is disabled. Only if **Write the class key
-  as a fallback** is turned on (off by default) and there is no `UserChoice` key, the mod also writes the selected
-  ProgID to the current user's `Software\Classes` extension key. This is a persistent registry change that
-  overwrites the previous default value without saving it; the mod does not write `UserChoice` directly.
+- **Associations.** When you save file or protocol associations, the mod computes the Windows
+  association hash and writes the selected ProgID and hash to the current user's `UserChoice` registry key.
+  It deletes the old key first; this permanently changes the association and is not undone on unload.
+  A failed operation can leave the previous choice removed or incomplete. Windows protections can reject
+  changes, and Windows updates may invalidate the hash. Check the effective default after saving.
 - **Scope.** This mod runs in `explorer.exe`.
 
 ## Settings
@@ -77,21 +77,16 @@ manually. Without the required files the Windows page stays in place; connect to
   for other languages. Restart `explorer.exe` if the page has already been used in this session.
 - **Hide system UWP apps**, **Hide all Store/UWP apps**, **Additional apps to hide**, **Icon overrides**:
   These settings customize the applications and icons in the default programs list.
-- **Write the class key as a fallback**: Off by default. See *Associations* above.
 - **Keep downloaded files when the mod is disabled**: This setting is on by default, allowing the files to be
   reused without downloading them again.
 - **Enable debug logging**: This setting records additional information for troubleshooting.
 
 ## Notes and limitations
-- **Changing associations.** This mod attempts to apply your choices, but Windows may retain an existing
-  protected `UserChoice`. Check the actual default after saving and after restarting Windows, since a Shell
-  success result does not always mean the association changed or persisted.
-- File types whose target program or matching Shell handler cannot be resolved may not be changed. Changing
-  URL protocol associations through the restored page is not supported by this association helper.
-- With the fallback turned off, an extension that has no `UserChoice` key may not change; the page then reports
-  the failure. With it turned on, the mod can write a persistent per-user registry value. Disabling the mod
-  does not restore the previous value; an attempted change may leave a value behind even if the final result
-  cannot be confirmed. Do not delete a value without knowing what it contained before.
+- **Changing associations.** Changes persist after disabling the mod. Windows may refuse or reset a
+  protected default, particularly on systems with UserChoice Protection Driver (UCPD). No UCPD bypass or
+  helper process is used. Some associations may fail, and a failed write after deletion can leave the previous
+  default removed or incomplete. Check the actual default after saving and after restarting Windows.
+- File types or protocols whose target program cannot be resolved may not be changed.
 - If the generated DirectUI page cannot load, this mod may use an unmodified private copy instead. Its page
   strings may be missing or different. The log records the loading steps.
 - This mod uses older pages with newer Windows components. Some features may not work or may stop working after
@@ -100,7 +95,7 @@ manually. Without the required files the Windows page stays in place; connect to
   control accessibility names are in English. Private copies remain loaded until `explorer.exe` restarts.
 
 ## Credits
-- **repensky** for `sud-1607-fix` and the work on restoring the classic Default Programs pages.
+- **repensky** for the work on restoring the classic Default Programs pages.
 - **AdministratoX** (AdmXP8) for suggesting the 1607 `sud.dll` with the Windows 10 1703 DirectUI and for
   the technique of using older Control Panel pages from Microsoft's symbol server.
 - **RandomGuy5747** for the WinClassic restoration work, the 19041–19045 compatibility patches, the German translation and the Windows 7-style icon.
@@ -158,11 +153,6 @@ manually. Without the required files the Windows page stays in place; connect to
   $name:it-IT: Icone personalizzate
   $description: This setting overrides icons for specific apps in the Default Programs list.
   $description:it-IT: Questa impostazione sostituisce le icone di app specifiche nell'elenco Programmi predefiniti.
-- registryFallback: false
-  $name: Write the class key as a fallback
-  $name:it-IT: Scrivi la chiave della classe come ripiego
-  $description: This setting is off by default. If on, and an extension has no UserChoice key after the Windows Shell has set the default, the mod also writes the chosen ProgID to HKCU\Software\Classes\<extension>. The previous value is overwritten and is not restored when the mod is disabled.
-  $description:it-IT: Questa impostazione è disattivata per impostazione predefinita. Se attiva, e un'estensione non ha la chiave UserChoice dopo che la Shell di Windows ha impostato il programma predefinito, la mod scrive anche il ProgID scelto in HKCU\Software\Classes\<estensione>. Il valore precedente viene sovrascritto e non viene ripristinato quando la mod viene disattivata.
 - keepFilesOnDisable: true
   $name: Keep downloaded files when the mod is disabled
   $name:it-IT: Conserva i file scaricati quando la mod viene disattivata
@@ -184,6 +174,8 @@ manually. Without the required files the Windows page stays in place; connect to
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <commctrl.h>
+#include <bcrypt.h>
+#include <sddl.h>
 
 #include <algorithm>
 #include <atomic>
@@ -217,7 +209,7 @@ struct FileSpec {
     uint32_t maxSize;         // a download larger than this is not the file
     uint32_t timestamp;       // PE TimeDateStamp and SizeOfImage: what the key says the file is
     uint32_t imageSize;
-    const wchar_t* altName;   // another name accepted in <storage>\dl (the pre-renamed file of the sud-1607-fix package)
+    const wchar_t* altName;   // another name accepted in <storage>\dl (a pre-renamed DirectUI file)
     const char* sha256;       // pinned SHA-256 of the whole file (lowercase hex); a file without a pin is never accepted
     uint32_t fileSize;        // exact size in bytes (0 = not pinned; the SHA-256 still decides)
 };
@@ -1056,7 +1048,7 @@ int ReplaceAll(Bytes& b, const std::string& from, const std::string& to) {
     return count;
 }
 
-// Finds "dui70.dll", or "dui17.dll" (the name in the pre-renamed file of the sud-1607-fix package), in any case, as a
+// Finds "dui70.dll", or "dui17.dll" (a pre-renamed DirectUI file), in any case, as a
 // whole zero-terminated string; `count` is how many there are.
 size_t FindDuiImport(const Bytes& b, size_t& count) {
     static const char* const wants[] = {"dui70.dll", "dui17.dll"};
@@ -3166,7 +3158,6 @@ HANDLE g_stopEvent = nullptr;
 HANDLE g_setupThread = nullptr;
 std::atomic<HINTERNET> g_request{nullptr};
 std::atomic<bool> g_keepFiles{true};
-std::atomic<bool> g_registryFallback{false}; // off by default: HKCU\Software\Classes\<ext> is written only on request
 std::atomic<int> g_languageSetting{0};      // 0 automatic, 1 English, 2 Italian, 3 German, 4 Spanish, 5 French, 6 Brazilian Portuguese
 
 SRWLOCK g_stateLock = SRWLOCK_INIT;         // guards the block below
@@ -3415,12 +3406,12 @@ bool Download(const std::wstring& path, uint32_t expectedSize, Bytes& out) {
 
 
 // =====================================================================================================================
-// The fixes of sud-1607-fix by repensky (https://github.com/repensky), adapted: the hooks of the private copy of
+// Compatibility code adapted from work by repensky (https://github.com/repensky): the hooks of the private copy of
 // sud.dll are set when the copy is loaded, the lists of the settings are guarded by a lock, a missing symbol of
 // shell32.dll is no longer fatal.
 // =====================================================================================================================
 
-namespace sudfix {
+namespace compat {
 
 static SRWLOCK g_listLock = SRWLOCK_INIT;      // guards g_additionalBlacklist and g_iconOverrides
 
@@ -3499,121 +3490,358 @@ static bool FindIconOverride(LPCWSTR pszAppName, LPCWSTR pszDisplayName, IconOve
     return false;
 }
 
+// UserChoice compatibility implementation adapted from work by repensky and Stardust2955.
+// The previous choice is removed before a new one can be written; failures are reported.
+// Self-contained UserChoice hash (MD5 "patent hash")
 // ============================================================================
-// Serialize _SetUserChoiceAndHash
-// ============================================================================
+// Algorithm to compute the UserChoice "Hash" registry value
+//
+//   input  = UTF-16LE( lowercase( ext + sid + progId + writeTimeHex + constant ) ) + 00 00
+//   md5    = MD5( input )
+//   hash   = WordSwap( input, md5 ) XOR Reversible( input, md5 )   // 64-bit
+//   Hash   = Base64( little-endian 8 bytes of hash )
+//
+// where writeTimeHex is the UserChoice key's last-write FILETIME truncated to
+// the minute, formatted as 16 lowercase hex digits, and constant is
+// "User Choice set via Windows User Experience {D18B6DD5-6124-4341-9318-804003BAFA0B}"
+
+static const WCHAR kUserChoiceConstant[] =
+    L"User Choice set via Windows User Experience {D18B6DD5-6124-4341-9318-804003BAFA0B}";
+
+// Read a little-endian uint32 without aliasing UB
+static inline uint32_t ReadU32Le(const BYTE* p)
+{
+    uint32_t v;
+    memcpy(&v, p, sizeof(v));
+    return v;
+}
+
+// WordSwap half of the patent hash
+static void PatentHashWordSwap(const BYTE* a, int sz, const BYTE* md5,
+                               uint32_t& o1, uint32_t& o2)
+{
+    o1 = 0;
+    o2 = 0;
+    int ta = 0;
+    int ts = sz;
+    int ti = ((sz - 2) >> 1) + 1;
+
+    uint32_t c0 = (ReadU32Le(md5) | 1) + 0x69FB0000;
+    uint32_t c1 = (ReadU32Le(md5 + 4) | 1) + 0x13DB0000;
+
+    for (int i = ti; i > 0; i--) {
+        uint32_t n = ReadU32Le(a + ta) + o1;
+        ta += 8;
+        ts -= 2;
+
+        uint32_t v1 = 0x79F8A395 * (n * c0 - 0x10FA9605 * (n >> 16)) +
+                      0x689B6B9F * ((n * c0 - 0x10FA9605 * (n >> 16)) >> 16);
+        uint32_t v2 = 0xEA970001 * v1 - 0x3C101569 * (v1 >> 16);
+        uint32_t v3 = ReadU32Le(a + ta - 4) + v2;
+        uint32_t v4 = v3 * c1 - 0x3CE8EC25 * (v3 >> 16);
+        uint32_t v5 = 0x59C3AF2D * v4 - 0x2232E0F1 * (v4 >> 16);
+
+        o1 = 0x1EC90001 * v5 + 0x35BD1EC9 * (v5 >> 16);
+        o2 += o1 + v2;
+    }
+
+    if (ts == 1) {
+        uint32_t n = ReadU32Le(a + ta) + o1;
+
+        uint32_t v1 = n * c0 - 0x10FA9605 * (n >> 16);
+        uint32_t v2 = 0xEA970001 * (0x79F8A395 * v1 + 0x689B6B9F * (v1 >> 16)) -
+                      0x3C101569 * ((0x79F8A395 * v1 + 0x689B6B9F * (v1 >> 16)) >> 16);
+        uint32_t v3 = v2 * c1 - 0x3CE8EC25 * (v2 >> 16);
+
+        o1 = 0x1EC90001 * (0x59C3AF2D * v3 - 0x2232E0F1 * (v3 >> 16)) +
+             0x35BD1EC9 * ((0x59C3AF2D * v3 - 0x2232E0F1 * (v3 >> 16)) >> 16);
+        o2 += o1 + v2;
+    }
+}
+
+// Reversible half of the patent hash
+static void PatentHashReversible(const BYTE* a, int sz, const BYTE* md5,
+                                 uint32_t& o1, uint32_t& o2)
+{
+    o1 = 0;
+    o2 = 0;
+    int ta = 0;
+    int ts = sz;
+    int ti = ((sz - 2) >> 1) + 1;
+
+    uint32_t c0 = ReadU32Le(md5) | 1;
+    uint32_t c1 = ReadU32Le(md5 + 4) | 1;
+
+    for (int i = ti; i > 0; i--) {
+        uint32_t n = (ReadU32Le(a + ta) + o1) * c0;
+        n = 0xB1110000 * n - 0x30674EEF * (n >> 16);
+        ta += 8;
+        ts -= 2;
+
+        uint32_t v1 = 0x5B9F0000 * n - 0x78F7A461 * (n >> 16);
+        uint32_t v2 = 0x1D830000 * (0x12CEB96D * (v1 >> 16) - 0x46930000 * v1) +
+                      0x257E1D83 * ((0x12CEB96D * (v1 >> 16) - 0x46930000 * v1) >> 16);
+        uint32_t v3 = ReadU32Le(a + ta - 4) + v2;
+        uint32_t v4 = 0x16F50000 * c1 * v3 - 0x5D8BE90B * ((c1 * v3) >> 16);
+        uint32_t v5 = 0x96FF0000 * v4 - 0x2C7C6901 * (v4 >> 16);
+
+        o1 = 0x9F690000 * (0x2B890000 * v5 + 0x7C932B89 * (v5 >> 16)) -
+             0x405B6097 * ((0x2B890000 * v5 + 0x7C932B89 * (v5 >> 16)) >> 16);
+        o2 += o1 + v2;
+    }
+
+    if (ts == 1) {
+        uint32_t n = ReadU32Le(a + ta) + o1;
+
+        uint32_t v1 = 0xB1110000 * c0 * n - 0x30674EEF * ((c0 * n) >> 16);
+        uint32_t v2 = 0x5B9F0000 * v1 - 0x78F7A461 * (v1 >> 16);
+        uint32_t v3 = 0x1D830000 * (0x12CEB96D * (v2 >> 16) - 0x46930000 * v2) +
+                      0x257E1D83 * ((0x12CEB96D * (v2 >> 16) - 0x46930000 * v2) >> 16);
+        uint32_t v4 = 0x16F50000 * c1 * v3 - 0x5D8BE90B * ((c1 * v3) >> 16);
+        uint32_t v5 = 0x96FF0000 * v4 - 0x2C7C6901 * (v4 >> 16);
+
+        o1 = 0x9F690000 * (0x2B890000 * v5 + 0x7C932B89 * (v5 >> 16)) -
+             0x405B6097 * ((0x2B890000 * v5 + 0x7C932B89 * (v5 >> 16)) >> 16);
+        o2 += o1 + v2;
+    }
+}
+
+// MD5 via the Windows BCrypt API
+static bool ComputeMd5(const BYTE* data, DWORD size, BYTE out[16])
+{
+    BCRYPT_ALG_HANDLE hAlg = nullptr;
+    if (!BCRYPT_SUCCESS(BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_MD5_ALGORITHM,
+                                                    nullptr, 0)))
+        return false;
+
+    BCRYPT_HASH_HANDLE hHash = nullptr;
+    NTSTATUS st = BCryptCreateHash(hAlg, &hHash, nullptr, 0, nullptr, 0, 0);
+    if (BCRYPT_SUCCESS(st)) {
+        st = BCryptHashData(hHash, (PUCHAR)data, size, 0);
+        if (BCRYPT_SUCCESS(st)) st = BCryptFinishHash(hHash, out, 16, 0);
+        BCryptDestroyHash(hHash);
+    }
+    BCryptCloseAlgorithmProvider(hAlg, 0);
+    return BCRYPT_SUCCESS(st);
+}
+
+// Base64-encode (standard alphabet, no line breaks). out must hold
+// ((size + 2) / 3) * 4 + 1 WCHARs
+static void Base64Encode(const BYTE* data, DWORD size, WCHAR* out)
+{
+    static const WCHAR kChars[] =
+        L"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    DWORD i = 0, o = 0;
+    for (; i + 2 < size; i += 3) {
+        DWORD n = ((DWORD)data[i] << 16) | ((DWORD)data[i + 1] << 8) | data[i + 2];
+        out[o++] = kChars[(n >> 18) & 63];
+        out[o++] = kChars[(n >> 12) & 63];
+        out[o++] = kChars[(n >> 6) & 63];
+        out[o++] = kChars[n & 63];
+    }
+    if (i + 1 == size) {
+        DWORD n = (DWORD)data[i] << 16;
+        out[o++] = kChars[(n >> 18) & 63];
+        out[o++] = kChars[(n >> 12) & 63];
+        out[o++] = L'=';
+        out[o++] = L'=';
+    } else if (i + 2 == size) {
+        DWORD n = ((DWORD)data[i] << 16) | ((DWORD)data[i + 1] << 8);
+        out[o++] = kChars[(n >> 18) & 63];
+        out[o++] = kChars[(n >> 12) & 63];
+        out[o++] = kChars[(n >> 6) & 63];
+        out[o++] = L'=';
+    }
+    out[o] = 0;
+}
+
+// Compute the UserChoice Hash value for ext/sid/progId/writeTimeHex.
+// Returns the base64 hash in out (must hold 32 WCHARs), or false on failure
+static bool ComputeUserChoiceHash(const WCHAR* pszExtension,
+                                  const WCHAR* pszSid,
+                                  const WCHAR* pszProgId,
+                                  const WCHAR* pszWriteTimeHex,
+                                  WCHAR* out, DWORD cchOut)
+{
+    std::wstring input = pszExtension;
+    input += pszSid;
+    input += pszProgId;
+    input += pszWriteTimeHex;
+    input += kUserChoiceConstant;
+    for (auto& c : input) {
+        if (c >= L'A' && c <= L'Z')
+            c += (L'a' - L'A');
+    }
+
+    // UTF-16LE bytes plus two trailing zero bytes
+    std::vector<BYTE> bytes((input.size() + 1) * sizeof(WCHAR), 0);
+    memcpy(bytes.data(), input.data(), input.size() * sizeof(WCHAR));
+
+    BYTE md5[16] = {};
+    if (!ComputeMd5(bytes.data(), (DWORD)bytes.size(), md5))
+        return false;
+
+    int sz = (int)bytes.size();
+    int shifted = (sz >> 2) - ((sz >> 2) & 1) * 1;
+
+    uint32_t w1, w2, r1, r2;
+    PatentHashWordSwap(bytes.data(), shifted, md5, w1, w2);
+    PatentHashReversible(bytes.data(), shifted, md5, r1, r2);
+
+    uint32_t lo = w1 ^ r1;
+    uint32_t hi = w2 ^ r2;
+
+    BYTE raw[8];
+    memcpy(raw, &lo, 4);
+    memcpy(raw + 4, &hi, 4);
+
+    if (cchOut < 16)
+        return false;
+    Base64Encode(raw, sizeof(raw), out);
+    return true;
+}
+
+// Current user's SID as a string
+static bool GetCurrentUserSidString(WCHAR* out, DWORD cchOut)
+{
+    HANDLE hToken = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken))
+        return false;
+
+    DWORD cb = 0;
+    GetTokenInformation(hToken, TokenUser, nullptr, 0, &cb);
+    if (!cb) {
+        CloseHandle(hToken);
+        return false;
+    }
+
+    std::vector<BYTE> buf(cb);
+    if (!GetTokenInformation(hToken, TokenUser, buf.data(), cb, &cb)) {
+        CloseHandle(hToken);
+        return false;
+    }
+    CloseHandle(hToken);
+
+    TOKEN_USER* tu = (TOKEN_USER*)buf.data();
+    LPWSTR sidStr = nullptr;
+    if (!ConvertSidToStringSidW(tu->User.Sid, &sidStr))
+        return false;
+    bool ok = wcslen(sidStr) < cchOut;
+    if (ok)
+        wcscpy_s(out, cchOut, sidStr);
+    LocalFree(sidStr);
+    return ok;
+}
+
+// Last-write time of an open registry key, truncated to the minute, as
+// 16 lowercase hex digits (the format the hash algorithm expects)
+static bool GetKeyWriteTimeHex(HKEY hKey, WCHAR* out, DWORD cchOut)
+{
+    FILETIME ft = {};
+    if (RegQueryInfoKeyW(hKey, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, nullptr, &ft) != ERROR_SUCCESS)
+        return false;
+
+    ULARGE_INTEGER ul;
+    ul.LowPart = ft.dwLowDateTime;
+    ul.HighPart = ft.dwHighDateTime;
+    ULONGLONG truncated = ul.QuadPart - (ul.QuadPart % 600000000ULL);
+
+    if (cchOut < 17)
+        return false;
+    swprintf_s(out, cchOut, L"%08x%08x",
+               (DWORD)(truncated >> 32), (DWORD)(truncated & 0xFFFFFFFF));
+    return true;
+}
+
+// Self-contained replacement for shell32's _SetUserChoiceAndHash
+// Computes the UserChoice hash and writes ProgId + Hash directly to the key
+static long SetUserChoiceAndHashSelfContained(const WCHAR* pszExtension,
+                                              const WCHAR* pszProgId)
+{
+    if (!pszExtension || !pszExtension[0] || !pszProgId || !pszProgId[0] ||
+        wcslen(pszExtension) > 255 || wcschr(pszExtension, L'\\') ||
+        wcschr(pszExtension, L'/')) return E_INVALIDARG;
+    // Resolve the SID before touching an existing choice.
+    WCHAR sid[128] = {};
+    if (!GetCurrentUserSidString(sid, ARRAYSIZE(sid))) return E_FAIL;
+
+    // File extensions live under FileExts, URL protocols under UrlAssociations
+    bool isUrl = (pszExtension[0] != L'.');
+    WCHAR subKey[512] = {};
+    if (isUrl) {
+        swprintf_s(subKey, ARRAYSIZE(subKey),
+                   L"Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\%s\\UserChoice",
+                   pszExtension);
+    } else {
+        swprintf_s(subKey, ARRAYSIZE(subKey),
+                   L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\%s\\UserChoice",
+                   pszExtension);
+    }
+
+    // The UserChoice key is protected on Windows 10 1809+
+    // SetUserFTA trick (write to a fresh key)
+    LSTATUS deleteStatus = RegDeleteTreeW(HKEY_CURRENT_USER, subKey);
+    if (deleteStatus != ERROR_SUCCESS && deleteStatus != ERROR_FILE_NOT_FOUND &&
+        deleteStatus != ERROR_PATH_NOT_FOUND) return HRESULT_FROM_WIN32(deleteStatus);
+
+    // Open/create the UserChoice key
+    // The hash is computed from the current last-write time (key must exist)
+    HKEY hKey = nullptr;
+    LSTATUS ls = RegCreateKeyExW(HKEY_CURRENT_USER, subKey, 0, nullptr, 0,
+                                 KEY_READ | KEY_WRITE, nullptr, &hKey, nullptr);
+    if (ls != ERROR_SUCCESS) {
+        return HRESULT_FROM_WIN32(ls);
+    }
+    struct ChoiceKeyGuard {
+        HKEY key;
+        ~ChoiceKeyGuard() { RegCloseKey(key); }
+    } choiceKeyGuard{hKey};
+
+    WCHAR writeTimeHex[32] = {};
+    if (!GetKeyWriteTimeHex(hKey, writeTimeHex, ARRAYSIZE(writeTimeHex))) {
+        return E_FAIL;
+    }
+
+    WCHAR hash[32] = {};
+    if (!ComputeUserChoiceHash(pszExtension, sid, pszProgId, writeTimeHex,
+                               hash, ARRAYSIZE(hash))) {
+        return E_FAIL;
+    }
+
+    ls = RegSetValueExW(hKey, L"ProgId", 0, REG_SZ,
+                        (const BYTE*)pszProgId,
+                        (DWORD)((wcslen(pszProgId) + 1) * sizeof(WCHAR)));
+    if (ls == ERROR_SUCCESS) {
+        ls = RegSetValueExW(hKey, L"Hash", 0, REG_SZ,
+                            (const BYTE*)hash,
+                            (DWORD)((wcslen(hash) + 1) * sizeof(WCHAR)));
+    }
+    WCHAR finalWriteTimeHex[32] = {};
+    bool timeMatches = ls == ERROR_SUCCESS &&
+        GetKeyWriteTimeHex(hKey, finalWriteTimeHex, ARRAYSIZE(finalWriteTimeHex)) &&
+        wcscmp(writeTimeHex, finalWriteTimeHex) == 0;
+    if (ls != ERROR_SUCCESS) return HRESULT_FROM_WIN32(ls);
+    // A minute boundary during the write makes the stored hash invalid.
+    if (!timeMatches) return HRESULT_FROM_WIN32(ERROR_RETRY);
+    return S_OK;
+}
 
 using GenerateUserAssocChangeNotification_t = long(__cdecl*)(const WCHAR*);
 static GenerateUserAssocChangeNotification_t p_GenerateUserAssocChangeNotification = nullptr;
 
-// Shell handler route. No direct UserChoice writes.
-// A handler must identify the exact registered ProgID, and the effective
-// executable must agree after the operation; otherwise report failure.
-static bool AssocExecutable(LPCWSTR name, std::wstring& out) {
-    DWORD count = 0;
-    HRESULT hr = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_EXECUTABLE, name, L"open", nullptr, &count);
-    if ((hr != S_FALSE && hr != HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER)) || !count || count > 32768) return false;
-    std::vector<wchar_t> buf(count);
-    hr = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_EXECUTABLE, name, L"open", buf.data(), &count);
-    if (FAILED(hr) || !buf[0]) return false;
-    out = buf.data();
-    return true;
-}
-// Adapted approach inspired by win7-open-with-dialog (babamohammed, MIT):
-// find a Shell handler, call MakeDefault and, if no UserChoice key exists,
-// optionally persist a per-user class default. Never write UserChoice directly.
-static LSTATUS ReadChoice(const WCHAR* ext, std::wstring& choice) {
-    std::wstring path = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\";
-    path += ext; path += L"\\UserChoice";
-    HKEY key = nullptr;
-    LSTATUS st = RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, KEY_READ, &key);
-    if (st != ERROR_SUCCESS) return st;
-    wchar_t buf[512] = {}; DWORD size = sizeof(buf);
-    st = RegGetValueW(key, nullptr, L"ProgId", RRF_RT_REG_SZ, nullptr, buf, &size);
-    RegCloseKey(key);
-    if (st == ERROR_SUCCESS) choice = buf;
-    // A key without a readable ProgId is NOT equivalent to no key.
-    return ERROR_SUCCESS;
-}
-static long SafeSetUserChoiceAndHash(const WCHAR* extension, const WCHAR* progId) {
-    if (!extension || extension[0] != L'.' || !extension[1] || !progId || !*progId ||
-        wcschr(extension, L'\\') || wcschr(extension, L'/')) return E_INVALIDARG;
-    static thread_local bool active = false;
-    if (active) return E_FAIL;
-    struct Guard { bool& b; Guard(bool& x):b(x){b=true;} ~Guard(){b=false;} } guard(active);
+static long SafeSetUserChoiceAndHash(const WCHAR* extension, const WCHAR* progId)
+{
+    if (!g_csInitialized) return E_FAIL;
+    EnterCriticalSection(&g_csSetAssoc);
+    long hr = E_FAIL;
     try {
-        std::wstring intended;
-        if (!AssocExecutable(progId, intended) || intended.empty() || intended[0] == L'%') {
-            Wh_Log(L"[DP-OPENWITH] %s -> %s: executable unresolved; refused", extension, progId);
-            return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
-        }
-        HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        if (FAILED(init) && init != RPC_E_CHANGED_MODE) return init;
-        struct ComGuard { bool own; ~ComGuard(){if(own)CoUninitialize();} } cg{SUCCEEDED(init)};
-        IEnumAssocHandlers* e = nullptr;
-        HRESULT hr = SHAssocEnumHandlers(extension, ASSOC_FILTER_NONE, &e);
-        if (FAILED(hr) || !e) return FAILED(hr) ? hr : E_FAIL;
-        struct EnumGuard { IEnumAssocHandlers* p; ~EnumGuard(){p->Release();} } eg{e};
-        IAssocHandler* selected = nullptr; unsigned matches = 0;
-        IAssocHandler* h = nullptr; ULONG fetched = 0;
-        while (e->Next(1, &h, &fetched) == S_OK && fetched == 1 && h) {
-            PWSTR name = nullptr; HRESULT nh = h->GetName(&name);
-            bool match = SUCCEEDED(nh) && name &&
-                (!_wcsicmp(name, progId) || !_wcsicmp(name, intended.c_str()));
-            if (match) { ++matches; if (!selected) { selected = h; h->AddRef(); } }
-            if (name) CoTaskMemFree(name);
-            h->Release(); h = nullptr; fetched = 0;
-        }
-        struct HandlerGuard { IAssocHandler* p; ~HandlerGuard(){if(p)p->Release();} } hg{selected};
-        if (matches != 1 || !selected) {
-            Wh_Log(L"[DP-OPENWITH] %s -> %s: %u matches, refused", extension, progId, matches);
-            return HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
-        }
-        std::wstring before, after, actual;
-        LSTATUS beforeStatus = ReadChoice(extension, before);
-        hr = selected->MakeDefault(extension);
-        LSTATUS afterStatus = ReadChoice(extension, after);
-        Wh_Log(L"[DP-OPENWITH] %s target=%s exe=%s MakeDefault=0x%08lX before=%s beforeStatus=%ld after=%s afterStatus=%ld",
-            extension, progId, intended.c_str(), (unsigned long)hr,
-            before.empty()?L"(none/unreadable)":before.c_str(), (long)beforeStatus,
-            after.empty()?L"(none/unreadable)":after.c_str(), (long)afterStatus);
-        if (FAILED(hr)) return hr;
-        // Only when the UserChoice key is truly absent, like Open With's
-        // fallback; never modify or remove the protected key.
-        if (beforeStatus == ERROR_FILE_NOT_FOUND && afterStatus == ERROR_FILE_NOT_FOUND && !g_registryFallback.load()) {
-            Wh_Log(L"[DP-OPENWITH] %s: no UserChoice after MakeDefault; class-key fallback is off, nothing written", extension);
-        } else if (beforeStatus == ERROR_FILE_NOT_FOUND && afterStatus == ERROR_FILE_NOT_FOUND) {
-            HKEY progKey = nullptr;
-            LSTATUS st = RegOpenKeyExW(HKEY_CLASSES_ROOT, progId, 0, KEY_READ, &progKey);
-            if (st != ERROR_SUCCESS) return HRESULT_FROM_WIN32(st);
-            RegCloseKey(progKey);
-            std::wstring recheck; st = ReadChoice(extension, recheck);
-            if (st != ERROR_FILE_NOT_FOUND) return HRESULT_FROM_WIN32(ERROR_RETRY);
-            std::wstring keyPath = L"Software\\Classes\\"; keyPath += extension;
-            HKEY key = nullptr;
-            st = RegCreateKeyExW(HKEY_CURRENT_USER, keyPath.c_str(), 0, nullptr, 0,
-                                 KEY_SET_VALUE, nullptr, &key, nullptr);
-            if (st == ERROR_SUCCESS) {
-                st = RegSetValueExW(key, nullptr, 0, REG_SZ, (const BYTE*)progId,
-                                    (DWORD)((wcslen(progId)+1)*sizeof(wchar_t)));
-                RegCloseKey(key);
-            }
-            Wh_Log(L"[DP-OPENWITH] %s class fallback -> %s status=%ld (persistent HKCU)", extension, progId, (long)st);
-            if (st != ERROR_SUCCESS) return HRESULT_FROM_WIN32(st);
-        }
-        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSH, nullptr, nullptr);
-        std::wstring currentChoice;
-        LSTATUS currentStatus = ReadChoice(extension, currentChoice);
-        bool exeOk = AssocExecutable(extension, actual) && !_wcsicmp(actual.c_str(), intended.c_str());
-        Wh_Log(L"[DP-OPENWITH] %s effectiveExe=%s choice=%s status=%ld; exeMatch=%d, persistence unverified",
-            extension, actual.empty()?L"(unresolved)":actual.c_str(),
-            currentChoice.empty()?L"(none/unreadable)":currentChoice.c_str(), (long)currentStatus, exeOk);
-        // Exact ProgID or no protected choice plus matching executable: observed,
-        // not a guarantee of persistence. Other identities remain unconfirmed.
-        if (exeOk && ((currentStatus == ERROR_SUCCESS && !_wcsicmp(currentChoice.c_str(), progId)) ||
-                      currentStatus == ERROR_FILE_NOT_FOUND)) return S_OK;
-        return HRESULT_FROM_WIN32(ERROR_RETRY);
-    } catch (...) { Wh_Log(L"[DP-OPENWITH] exception; outcome unknown"); return E_FAIL; }
+        hr = SetUserChoiceAndHashSelfContained(extension, progId);
+    } catch (...) {
+        hr = E_OUTOFMEMORY;
+    }
+    LeaveCriticalSection(&g_csSetAssoc);
+    return hr;
 }
 
 static void NotifyAssocChanged(const WCHAR* pszExtension)
@@ -4382,8 +4610,30 @@ long __thiscall FillListViewWithMapiHandler_Hook(void* pThis, void* pAAR, void* 
     return 0; // S_OK
 }
 
+// Keep the association-array IID adaptation scoped to protocol enumeration.
+using AddProtocolsForApp_t = long(__cdecl*)(const WCHAR*, void*);
+static AddProtocolsForApp_t AddProtocolsForApp_Original = nullptr;
+long __cdecl AddProtocolsForApp_Hook(const WCHAR* name, void* associations)
+{
+    bool previous = g_inSudContext;
+    g_inSudContext = true;
+    long result = AddProtocolsForApp_Original(name, associations);
+    g_inSudContext = previous;
+    return result;
+}
+
 // The target is the private, language-named copy of the Microsoft 1607 page.
 const WindhawkUtils::SYMBOL_HOOK sudDllHooks[] = {
+    {
+        {
+            L"long __cdecl _AddProtocolsForApp(unsigned short const *,class CDPACoTaskMem<unsigned short> &)",
+            L"long __cdecl _AddProtocolsForApp(unsigned short const * __ptr64,class CDPACoTaskMem<unsigned short> & __ptr64)",
+            L"?_AddProtocolsForApp@@YAJPEBGAEAV?$CDPACoTaskMem@G@@@Z"
+        },
+        (void**)&AddProtocolsForApp_Original,
+        (void*)AddProtocolsForApp_Hook,
+        true
+    },
     {
         {
             L"unsigned long __cdecl _AsyncRestoreAppDefaults(void *)",
@@ -4500,7 +4750,7 @@ void Shutdown()
     }
 }
 
-}  // namespace sudfix
+}  // namespace compat
 
 
 // A downloaded, cached or hand-placed file is accepted only if it is exactly the pinned Microsoft file: pinned SHA-256
@@ -4579,7 +4829,6 @@ void LoadSettings() {
     }
     g_languageSetting.store(language);
     g_keepFiles.store(Wh_GetIntSetting(L"keepFilesOnDisable") != 0);
-    g_registryFallback.store(Wh_GetIntSetting(L"registryFallback") != 0);
 }
 
 // ---- loading --------------------------------------------------------------------------------------------------------
@@ -4786,7 +5035,7 @@ void RunSetup() {
     }
     g_getClassObject.store(getClassObject);
     // The fixes inside the private copy (symbols: Windhawk downloads them the first time).
-    sudfix::HookPrivateSud(pageModule);
+    compat::HookPrivateSud(pageModule);
     g_pageReady.store(true);
     Wh_Log(L"Ready: %s", pagePath.c_str());
 }
@@ -5012,7 +5261,7 @@ BOOL Wh_ModInit() {
     }
     g_stopping.store(false);
     LoadSettings();
-    sudfix::LoadSettings();
+    compat::LoadSettings();
     g_diagEnabled.store(Wh_GetIntSetting(L"enableLogging") != 0);
     Wh_Log(L"[DP-DIAG] Windows build=%lu debug=%d", build, g_diagEnabled.load());
 
@@ -5036,7 +5285,7 @@ BOOL Wh_ModInit() {
     void* exec = shell ? reinterpret_cast<void*>(GetProcAddress(shell, MAKEINTRESOURCEA(265))) : nullptr;
     bool spadHook = exec && Wh_SetFunctionHook(exec, reinterpret_cast<void*>(ShellExecCmdLine_Hook), reinterpret_cast<void**>(&ShellExecCmdLine_Orig));
     Wh_Log(L"[DP-SPAD] optional ShellExecCmdLine hook=%d", spadHook);
-    sudfix::InstallSystemHooks();
+    compat::InstallSystemHooks();
     if (!g_stopEvent) g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (g_stopEvent) ResetEvent(g_stopEvent);
     else { Wh_Log(L"[DP-DIAG] stop event creation failed error=%lu", GetLastError()); return FALSE; }
@@ -5049,7 +5298,7 @@ BOOL Wh_ModInit() {
 BOOL Wh_ModSettingsChanged(BOOL* reload) {
     *reload = FALSE;
     LoadSettings();
-    sudfix::LoadSettings();
+    compat::LoadSettings();
     g_diagEnabled.store(Wh_GetIntSetting(L"enableLogging") != 0);
     StartSetup();
     return TRUE;
@@ -5059,6 +5308,8 @@ void Wh_ModBeforeUninit() {
     g_stopping.store(true);
     if (g_stopEvent) SetEvent(g_stopEvent);
     CancelDownload();
+    // No hook operations may be installed after this callback returns.
+    if (g_setupThread) WaitForSingleObject(g_setupThread, INFINITE);
 }
 
 void Wh_ModUninit() {
@@ -5071,7 +5322,7 @@ void Wh_ModUninit() {
         g_setupThread = nullptr;
     }
     g_pageReady.store(false);
-    sudfix::Shutdown();
+    compat::Shutdown();
     try {
         std::wstring storage;
         {
