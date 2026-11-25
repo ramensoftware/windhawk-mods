@@ -127,12 +127,14 @@ background* off in the settings if you want them to open normally.
   only when it is in *Apps to force close*, or when it has no window, or hid its
   window to the tray after being asked, and you left it ticked in the checklist.
   The checklist opens with the full list of names, so you see each one before
-  you confirm. With the checklist off nothing is ended, only asked to close.
+  you confirm. With the checklist off apps are only asked to close; just the ones
+  under Apps to force close are ended.
 - The power plan is a system-wide setting that Windows keeps across restarts.
   It is only changed if you pick a plan in the settings. It is restored when
   you turn Game Mode off, when the mod is disabled or removed, and about 90
   seconds after the mod starts following a restart or crash. If Windhawk is
-  killed outright while Game Mode is on, the plan stays changed until then.
+  killed outright while Game Mode is on, the plan stays changed until you press
+  the hotkey again or sign in again.
 - An unreadable or half-written snapshot is discarded with a notification
   instead of blocking the hotkey.
 - If the PC restarted or crashed while Game Mode was on, the leftover snapshot
@@ -208,8 +210,8 @@ background* off in the settings if you want them to open normally.
   $name: Show the checklist before turning on and off
   $description: >-
     Shows the apps as a checklist first. Untick an app to leave it alone this
-    time. Enter confirms, Esc cancels. With this off nothing is ended, only
-    closed politely.
+    time. Enter confirms, Esc cancels. With this off apps are only asked to
+    close, except the ones under Apps to force close.
 - showProgress: true
   $name: Show a progress window
   $description: >-
@@ -1233,6 +1235,7 @@ Phase g_phase = Phase::Closed;
 CRITICAL_SECTION g_cs;
 bool g_csInit = false;
 HANDLE g_uiThread = nullptr, g_readyEvt = nullptr, g_answerEvt = nullptr;
+float g_activityAt = 0;   // when the window last had input or news (window's thread only)
 volatile LONG g_quit = 0, g_finishPending = 0, g_frames = 0, g_renderUs = 0;   // drawn frames and time spent drawing them, for the tests
 bool g_startRunning = false;
 struct Guard {
@@ -2514,7 +2517,6 @@ void ApplyFinish() {
 
 // The window's thread: creates the window, then draws and handles input until it is asked to stop.
 DWORD WINAPI UiThread(LPVOID) {
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
     GdiplusOn();
     static bool registered = false;
     HINSTANCE inst = GetModuleHandleW(nullptr);
@@ -2566,16 +2568,20 @@ DWORD WINAPI UiThread(LPVOID) {
     RenderLocked();
     ShowWindow(wnd, SW_SHOWNA);
     SetForegroundWindow(wnd);
+    g_activityAt = NowMs();
     SetEvent(g_readyEvt);
 
     while (!g_quit && g_wnd) {
+        const float frameStart = NowMs();
         MSG m;
         while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&m);
             DispatchMessageW(&m);
+            g_activityAt = NowMs();
         }
         if (InterlockedExchange(&g_finishPending, 0)) {
             ApplyFinish();
+            g_activityAt = NowMs();
         }
         if (g_phase == Phase::Done && g_doneAt >= 0 && NowMs() - g_doneAt > 16000 && g_hover < 0 && g_titleHover < 0) {
             break;   // closes itself a while after the work is done
@@ -2586,8 +2592,18 @@ DWORD WINAPI UiThread(LPVOID) {
         InterlockedIncrement(&g_frames);
         if (g_phase == Phase::Done && NowMs() - g_doneAt > 2200) {
             MsgWaitForMultipleObjects(0, nullptr, FALSE, 45, QS_ALLINPUT);   // nothing moves any more: draw less often
-        } else if (FAILED(DwmFlush())) {
-            Sleep(8);
+        } else if (g_phase != Phase::Running && NowMs() - g_activityAt > 1500) {
+            MsgWaitForMultipleObjects(0, nullptr, FALSE, 50, QS_ALLINPUT);   // nothing moves: no need to redraw every vblank
+        } else {
+            if (FAILED(DwmFlush())) {
+                Sleep(8);
+            }
+            if (g_phase == Phase::Running) {   // spinners and the bar: 60 frames a second are plenty
+                float rest = 16.0f - (NowMs() - frameStart);
+                if (rest > 1.0f) {
+                    MsgWaitForMultipleObjects(0, nullptr, FALSE, (DWORD)rest, QS_ALLINPUT);
+                }
+            }
         }
     }
     if (g_wnd) {
@@ -3747,14 +3763,50 @@ volatile LONG g_stop = 0;
 volatile DWORD g_deadline = 0;   // GetTickCount() value after which the watching ends
 std::set<HWND> g_minimized;      // only touched on the watcher's thread
 std::map<HWND, DWORD> g_pending;  // Store app frames whose app is not known yet (watcher's thread): window -> give up at
-ULONGLONG g_begin = 0;           // FILETIME of the moment watching began
+struct Started {
+    DWORD pid;
+    unsigned long long created;   // with the id, so a reused process id is never mistaken for it
+};
+std::vector<Started> g_started;   // the programs this mod started (guarded by g_cs)
 
-ULONGLONG CreatedAt(HANDLE ph) {
-    FILETIME c, e, k, u;
-    if (!GetProcessTimes(ph, &c, &e, &k, &u)) {
-        return 0;
+// Is this process one the mod started, or a child of one (launchers and updaters hand over to another program)?
+bool FromStarted(DWORD pid, const std::vector<Started>& started) {
+    if (started.empty()) {
+        return false;
     }
-    return ((ULONGLONG)c.dwHighDateTime << 32) | c.dwLowDateTime;
+    std::map<DWORD, ProcInfo> all;
+    for (const auto& p : ListProcesses()) {
+        all[p.pid] = p;
+    }
+    for (int depth = 0; depth < 8; depth++) {
+        auto it = all.find(pid);
+        if (it == all.end()) {
+            return false;
+        }
+        for (const auto& st : started) {
+            if (st.pid == it->second.pid && st.created == it->second.created) {
+                return true;
+            }
+        }
+        auto par = all.find(it->second.parent);
+        if (par == all.end() || par->second.created >= it->second.created) {
+            return false;   // the parent id was reused by something newer
+        }
+        pid = par->second.pid;
+    }
+    return false;
+}
+
+// Package family name of a Store app's process ("" when it has none).
+std::wstring FamilyOf(HANDLE ph) {
+    typedef LONG(WINAPI * Fn)(HANDLE, UINT32*, PWSTR);
+    static Fn fn = (Fn)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetPackageFamilyName");
+    WCHAR buf[128] = L"";
+    UINT32 n = 128;
+    if (!fn || fn(ph, &n, buf) != ERROR_SUCCESS) {
+        return L"";
+    }
+    return Lower(buf);
 }
 
 bool Matches(HWND h) {
@@ -3764,8 +3816,10 @@ bool Matches(HWND h) {
         return false;
     }
     std::vector<Target> targets;
+    std::vector<Started> started;
     EnterCriticalSection(&g_cs);
     targets = g_targets;
+    started = g_started;
     LeaveCriticalSection(&g_cs);
     HANDLE ph = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!ph) {
@@ -3773,7 +3827,7 @@ bool Matches(HWND h) {
     }
     std::wstring path = Lower(QueryPath(ph));
     std::wstring aumid = QueryAumid(ph);
-    ULONGLONG created = CreatedAt(ph);
+    std::wstring family = FamilyOf(ph);
     CloseHandle(ph);
     if (ExeKey(BaseName(path)) == L"applicationframehost") {
         // a Store app's window belongs to ApplicationFrameHost: look at the app behind it
@@ -3784,7 +3838,8 @@ bool Matches(HWND h) {
         }
         path = Lower(QueryPath(rp));
         aumid = QueryAumid(rp);
-        created = CreatedAt(rp);
+        family = FamilyOf(rp);
+        pid = real;
         CloseHandle(rp);
     }
     bool live = false;
@@ -3793,14 +3848,12 @@ bool Matches(HWND h) {
             continue;
         }
         live = true;
-        if ((!t.aumid.empty() && aumid == t.aumid) || (!t.path.empty() && path == t.path)) {
+        const std::wstring tFamily = Lower(t.aumid.substr(0, t.aumid.find(L'!')));
+        if ((!t.aumid.empty() && (aumid == t.aumid || (!family.empty() && family == tFamily))) || (!t.path.empty() && path == t.path)) {
             return true;
         }
     }
-    // Launchers, updaters and Store apps start a different program than the one that was saved. A window of a
-    // program that did not exist before the reopening began belongs to what is being reopened, as long as an
-    // app is still being watched for.
-    return live && created && created >= g_begin;
+    return live && FromStarted(pid, started);   // a launcher or updater handing over to the real program
 }
 
 void CALLBACK OnShow(HWINEVENTHOOK, DWORD, HWND h, LONG idObject, LONG idChild, DWORD, DWORD) {
@@ -3867,11 +3920,6 @@ void Begin() {
         g_csInit = true;
     }
     g_deadline = GetTickCount() + 13000;
-    {
-        FILETIME ft;
-        GetSystemTimeAsFileTime(&ft);
-        g_begin = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-    }
     if (g_thread && WaitForSingleObject(g_thread, 0) == WAIT_TIMEOUT) {
         return;   // already watching: the deadline above is enough
     }
@@ -3880,6 +3928,9 @@ void Begin() {
     }
     g_minimized.clear();
     g_pending.clear();
+    EnterCriticalSection(&g_cs);
+    g_started.clear();
+    LeaveCriticalSection(&g_cs);
     g_stop = 0;
     g_thread = CreateThread(nullptr, 0, WatchThread, nullptr, 0, nullptr);
 }
@@ -3898,6 +3949,16 @@ void Expect(const std::wstring& path, const std::wstring& aumid) {
     g_deadline = GetTickCount() + 13000;
 }
 
+// A program was started by this mod.
+void RecordStarted(DWORD pid, unsigned long long created) {
+    if (!g_csInit) {
+        return;
+    }
+    EnterCriticalSection(&g_cs);
+    g_started.push_back({pid, created});
+    LeaveCriticalSection(&g_cs);
+}
+
 void Stop() {
     if (g_thread) {
         g_stop = 1;
@@ -3908,6 +3969,7 @@ void Stop() {
     if (g_csInit) {
         EnterCriticalSection(&g_cs);
         g_targets.clear();
+        g_started.clear();
         LeaveCriticalSection(&g_cs);
     }
 }
@@ -3938,6 +4000,7 @@ bool Relaunch(const SavedApp& a) {
         return false;
     }
     CloseHandle(pi.hThread);
+    reopen::RecordStarted(pi.dwProcessId, QueryCreated(pi.hProcess));
     CloseHandle(pi.hProcess);
     return true;
 }
@@ -4237,6 +4300,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
             g_recoverTimer = 0;
             Recover();
         } else if (m.message == WM_APP_RELOAD) {
+            flow::Close();   // the window reads the settings on its own thread
             LoadSettings();
             RegisterHotkey();
         } else {
