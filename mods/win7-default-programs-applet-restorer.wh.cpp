@@ -37,9 +37,18 @@ This mod contains no Microsoft binaries. It downloads files from Microsoft's pub
 | `dui70.dll` | 10.0.15063.1155 (Windows 10 1703) | The DirectUI engine for the pages |
 | `ComputerDefaults.exe` | Windows 10 1607 | The classic program access and computer defaults link |
 
-The DLLs are checked against the PE timestamp and image size specified by the mod; their SHA-256 hashes are
-logged. The optional `ComputerDefaults.exe` is also checked against a pinned SHA-256. If the executable is
-unavailable or does not match, the original link is used instead.
+Every file is pinned: the mod accepts a file only if its exact size and SHA-256 match the values built into the
+mod (and its PE header matches the key on the server). This applies to the downloaded files, to the files already
+in the `dl` folder and to a file placed there by hand, so a file that did not come from Microsoft is never processed
+or loaded. `ComputerDefaults.exe` is checked in the same way, and again right before it is launched. If the
+executable is unavailable or does not match, the original link is used instead.
+
+**When the downloads happen.** The setup runs on a background thread when the mod loads (every `explorer.exe`
+start) and every time the mod's settings change. A file is requested only if it is missing from `dl` or does not
+match; up to 3 attempts are made per file. With *Keep downloaded files when the mod is disabled* turned off, `dl` is
+deleted whenever the mod is unloaded, so the files are downloaded again after every disable, update or reload.
+**No setting turns the downloads off.** The only alternative is to put the exact files in `dl` by hand. Only the
+three requests to `msdl.microsoft.com` listed above are made; nothing user-specific is sent.
 
 From the DLLs this mod generates private copies in its `bin` folder. English, Italian and German page strings are
 embedded because the symbol server does not provide the `.mui` files. The original downloads are kept in `dl`;
@@ -56,9 +65,11 @@ manually. Without the required files the Windows page stays in place; connect to
   download matching symbols when they are not cached; an internet connection may be needed after installation
   or a Windows update. If symbols are unavailable, some compatibility fixes may not work.
 - **Program access and computer defaults.** When available, the verified 1607 executable is used for this link.
-- **Associations.** This mod attempts to use a matching Windows Shell handler to set file associations. When
-  there is no `UserChoice` key, it may write the selected ProgID to the current user's `Software\Classes`
-  extension key as a fallback. This is a persistent registry change; the mod does not write `UserChoice` directly.
+- **Associations.** This mod attempts to use a matching Windows Shell handler to set file associations. The Shell
+  changes the default through its own API; this persists after the mod is disabled. Only if **Write the class key
+  as a fallback** is turned on (off by default) and there is no `UserChoice` key, the mod also writes the selected
+  ProgID to the current user's `Software\Classes` extension key. This is a persistent registry change that
+  overwrites the previous default value without saving it; the mod does not write `UserChoice` directly.
 - **Scope.** This mod runs in `explorer.exe`.
 
 ## Settings
@@ -66,6 +77,7 @@ manually. Without the required files the Windows page stays in place; connect to
   for other languages. Restart `explorer.exe` if the page has already been used in this session.
 - **Hide system UWP apps**, **Hide all Store/UWP apps**, **Additional apps to hide**, **Icon overrides**:
   These settings customize the applications and icons in the default programs list.
+- **Write the class key as a fallback**: Off by default. See *Associations* above.
 - **Keep downloaded files when the mod is disabled**: This setting is on by default, allowing the files to be
   reused without downloading them again.
 - **Enable debug logging**: This setting records additional information for troubleshooting.
@@ -76,7 +88,8 @@ manually. Without the required files the Windows page stays in place; connect to
   success result does not always mean the association changed or persisted.
 - File types whose target program or matching Shell handler cannot be resolved may not be changed. Changing
   URL protocol associations through the restored page is not supported by this association helper.
-- When no `UserChoice` exists, the fallback can write a persistent per-user registry value. Disabling the mod
+- With the fallback turned off, an extension that has no `UserChoice` key may not change; the page then reports
+  the failure. With it turned on, the mod can write a persistent per-user registry value. Disabling the mod
   does not restore the previous value; an attempted change may leave a value behind even if the final result
   cannot be confirmed. Do not delete a value without knowing what it contained before.
 - If the generated DirectUI page cannot load, this mod may use an unmodified private copy instead. Its page
@@ -142,6 +155,11 @@ manually. Without the required files the Windows page stays in place; connect to
   $name:it-IT: Icone personalizzate
   $description: This setting overrides icons for specific apps in the Default Programs list.
   $description:it-IT: Sostituisce le icone di app specifiche nell'elenco Programmi predefiniti.
+- registryFallback: false
+  $name: Write the class key as a fallback
+  $name:it-IT: Scrivi la chiave della classe come ripiego
+  $description: Off by default. If on, and an extension has no UserChoice key after the Windows Shell has set the default, the mod also writes the chosen ProgID to HKCU\Software\Classes\<extension>. The previous value is overwritten and is not restored when the mod is disabled.
+  $description:it-IT: Disattivata per impostazione predefinita. Se attiva, e un'estensione non ha la chiave UserChoice dopo che la Shell di Windows ha impostato il programma predefinito, la mod scrive anche il ProgID scelto in HKCU\Software\Classes\<estensione>. Il valore precedente viene sovrascritto e non viene ripristinato quando la mod viene disattivata.
 - keepFilesOnDisable: true
   $name: Keep downloaded files when the mod is disabled
   $name:it-IT: Conserva i file scaricati quando la mod viene disattivata
@@ -197,10 +215,21 @@ struct FileSpec {
     uint32_t timestamp;       // PE TimeDateStamp and SizeOfImage: what the key says the file is
     uint32_t imageSize;
     const wchar_t* altName;   // another name accepted in <storage>\dl (the pre-renamed file of the sud-1607-fix package)
+    const char* sha256;       // pinned SHA-256 of the whole file (lowercase hex); a file without a pin is never accepted
+    uint32_t fileSize;        // exact size in bytes (0 = not pinned; the SHA-256 still decides)
 };
+
+// Pinned values of the Microsoft files. Get them with: Get-FileHash <file> -Algorithm SHA256; (Get-Item <file>).Length
+constexpr char kSudSha256[] = "c47fce44d5cab0d7c09790c252fd6f12f4c56bafc72e035a150d3955b3c60740";
+constexpr uint32_t kSudFileSize = 655872;   // sud.dll 10.0.14393.726 (x64)
+constexpr char kDuiSha256[] = "11e0fd294026eca9261d4fb6d39625ac5de84c85ec3d6fcf031bc72cfb9463d3"; // dui70.dll 10.0.15063.1155 (x64)
+constexpr uint32_t kDuiFileSize = 1723392;
+constexpr uint32_t kSpadFileSize = 50176;   // ComputerDefaults.exe, Windows 10 1607 (x64)
+constexpr char kSpadSha256[] = "4978ad7650c44d4239ed6b77267dd21d50d33bbd3d875ace4131f2ded3a11804";
+
 constexpr FileSpec kFiles[] = {
-    {L"sud.dll", L"sud.dll/58785909a5000/sud.dll", 4u << 20, 0x58785909u, 0xA5000u, nullptr},
-    {L"dui70.dll", L"dui70.dll/9ECBA8E71ab000/dui70.dll", 4u << 20, 0x9ECBA8E7u, 0x1AB000u, L"dui17.dll"},
+    {L"sud.dll", L"sud.dll/58785909a5000/sud.dll", 4u << 20, 0x58785909u, 0xA5000u, nullptr, kSudSha256, kSudFileSize},
+    {L"dui70.dll", L"dui70.dll/9ECBA8E71ab000/dui70.dll", 4u << 20, 0x9ECBA8E7u, 0x1AB000u, L"dui17.dll", kDuiSha256, kDuiFileSize},
 };
 enum { kFileSud = 0, kFileDui = 1 };
 
@@ -2888,6 +2917,7 @@ HANDLE g_stopEvent = nullptr;
 HANDLE g_setupThread = nullptr;
 std::atomic<HINTERNET> g_request{nullptr};
 std::atomic<bool> g_keepFiles{true};
+std::atomic<bool> g_registryFallback{false}; // off by default: HKCU\Software\Classes\<ext> is written only on request
 std::atomic<int> g_languageSetting{0};      // 0 automatic, 1 English, 2 Italian, 3 German
 
 SRWLOCK g_stateLock = SRWLOCK_INIT;         // guards the block below
@@ -3224,14 +3254,8 @@ static bool FindIconOverride(LPCWSTR pszAppName, LPCWSTR pszDisplayName, IconOve
 // Serialize _SetUserChoiceAndHash
 // ============================================================================
 
-using SetUserChoiceAndHash_t = long(__cdecl*)(const WCHAR*, const WCHAR*);
-static SetUserChoiceAndHash_t p_SetUserChoiceAndHash = nullptr;
-
 using GenerateUserAssocChangeNotification_t = long(__cdecl*)(const WCHAR*);
 static GenerateUserAssocChangeNotification_t p_GenerateUserAssocChangeNotification = nullptr;
-
-using ClearPromptCountForApp_t = long(__cdecl*)(const WCHAR*, const WCHAR*);
-static ClearPromptCountForApp_t p_ClearPromptCountForApp = nullptr;
 
 // Shell handler route. No direct UserChoice writes.
 // A handler must identify the exact registered ProgID, and the effective
@@ -3307,7 +3331,9 @@ static long SafeSetUserChoiceAndHash(const WCHAR* extension, const WCHAR* progId
         if (FAILED(hr)) return hr;
         // Only when the UserChoice key is truly absent, like Open With's
         // fallback; never modify or remove the protected key.
-        if (beforeStatus == ERROR_FILE_NOT_FOUND && afterStatus == ERROR_FILE_NOT_FOUND) {
+        if (beforeStatus == ERROR_FILE_NOT_FOUND && afterStatus == ERROR_FILE_NOT_FOUND && !g_registryFallback.load()) {
+            Wh_Log(L"[DP-OPENWITH] %s: no UserChoice after MakeDefault; class-key fallback is off, nothing written", extension);
+        } else if (beforeStatus == ERROR_FILE_NOT_FOUND && afterStatus == ERROR_FILE_NOT_FOUND) {
             HKEY progKey = nullptr;
             LSTATUS st = RegOpenKeyExW(HKEY_CLASSES_ROOT, progId, 0, KEY_READ, &progKey);
             if (st != ERROR_SUCCESS) return HRESULT_FROM_WIN32(st);
@@ -3400,10 +3426,24 @@ using QueryAppIsDefault_Private_t = long(__thiscall*)(void*, const WCHAR*,
                                                        const WCHAR*, int*);
 static QueryAppIsDefault_Private_t p_QueryAppIsDefault_Private = nullptr;
 
+// True only for calls made by code of the private page (sud7.*.dll). Every other caller in explorer.exe (shell
+// extensions, other Explorer code) must reach the unchanged system implementation.
+static bool CalledFromPage(void* returnAddress)
+{
+    HMODULE from = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCWSTR>(returnAddress), &from)) return false;
+    SharedLock lock(g_stateLock);
+    return from && from == g_pageModule;
+}
+
 long __thiscall QueryAppIsDefault_Public_Hook(void* pThis, const WCHAR* pszQuery,
                                                int atType, int alLevel,
                                                const WCHAR* pszAppName, int* pfDefault)
 {
+    if (!CalledFromPage(__builtin_return_address(0)))
+        return QueryAppIsDefault_Public_Original(pThis, pszQuery, atType, alLevel, pszAppName, pfDefault);
+
     if (!pfDefault) return E_POINTER;
 
     void* pFullObject = (char*)pThis - 8;
@@ -3435,9 +3475,10 @@ long __thiscall QueryAppIsDefaultAll_Hook(void* pThis, int alLevel,
                                            const WCHAR* pszAppName, int* pfDefault)
 {
     // Validate the output pointer - if it looks like a small integer
-    // (not a real pointer), substitute a local variable to prevent crash
+    // (not a real pointer), substitute a local variable to prevent crash.
+    // Only for calls from the private page; all other callers are passed through untouched.
     int localDefault = 0;
-    if ((uintptr_t)pfDefault < 0x10000) {
+    if ((uintptr_t)pfDefault < 0x10000 && CalledFromPage(__builtin_return_address(0))) {
         if (g_enableLogging)
             Wh_Log(L"_QueryAppIsDefaultAll: fixing invalid pfDefault=%p for app=\"%s\"",
                    pfDefault, pszAppName ? pszAppName : L"(null)");
@@ -3967,8 +4008,13 @@ HRESULT STDMETHODCALLTYPE CAssocArray_QueryInterface_hook(void* pThis, REFIID ri
 // Windhawk's default symbol enumeration uses unannotated names. Decorated
 // alternatives are retained; symbol resolution is still required for these hooks.
 
-// shell32.dll, windows.storage.dll
-const WindhawkUtils::SYMBOL_HOOK shell32Hook_SetAssociation[] = {
+// One table per module, one HookSymbols call per module: Windhawk keeps a single resolved-symbol set per module,
+// so every extra call with a different list would load the (large) symbols of that module again.
+// Every entry is optional: the class that holds the association registration lives in shell32.dll up to Windows 10
+// and in windows.storage.dll later, so what is not found in one module is looked for in the other.
+
+// windows.storage.dll
+const WindhawkUtils::SYMBOL_HOOK windowsStorageDllHooks[] = {
     {
         {
             L"long __cdecl _SetAssociation(unsigned short const *,unsigned short const *,enum ASSOCIATIONTYPE,unsigned short const *)",
@@ -3976,12 +4022,8 @@ const WindhawkUtils::SYMBOL_HOOK shell32Hook_SetAssociation[] = {
         },
         (void**)&SetAssociation_Original,
         (void*)SetAssociation_Hook,
-        false
+        true
     },
-};
-
-// shell32.dll, windows.storage.dll
-const WindhawkUtils::SYMBOL_HOOK shell32Hook_QueryAppIsDefault[] = {
     {
         {
             L"public: virtual long __cdecl CApplicationAssociationRegistration::[IApplicationAssociationRegistration]::QueryAppIsDefault(unsigned short const *,enum ASSOCIATIONTYPE,enum ASSOCIATIONLEVEL,unsigned short const *,int *)",
@@ -3989,12 +4031,8 @@ const WindhawkUtils::SYMBOL_HOOK shell32Hook_QueryAppIsDefault[] = {
         },
         (void**)&QueryAppIsDefault_Public_Original,
         (void*)QueryAppIsDefault_Public_Hook,
-        false
+        true
     },
-};
-
-// shell32.dll, windows.storage.dll
-const WindhawkUtils::SYMBOL_HOOK shell32Hook_QueryAppIsDefaultAll[] = {
     {
         {
             L"public: virtual long __cdecl CApplicationAssociationRegistration::[IApplicationAssociationRegistrationInternal]::QueryAppIsDefaultAll(enum ASSOCIATIONLEVEL,unsigned short const *,int *)",
@@ -4002,20 +4040,7 @@ const WindhawkUtils::SYMBOL_HOOK shell32Hook_QueryAppIsDefaultAll[] = {
         },
         (void**)&QueryAppIsDefaultAll_Original,
         (void*)QueryAppIsDefaultAll_Hook,
-        false
-    },
-};
-
-// shell32.dll, windows.storage.dll
-const WindhawkUtils::SYMBOL_HOOK shell32Resolves[] = {
-    {
-        {
-            L"long __cdecl _SetUserChoiceAndHash(unsigned short const *,unsigned short const *)",
-            L"?_SetUserChoiceAndHash@@YAJPEBG0@Z"
-        },
-        (void**)&p_SetUserChoiceAndHash,
-        nullptr,
-        false
+        true
     },
     {
         {
@@ -4024,7 +4049,7 @@ const WindhawkUtils::SYMBOL_HOOK shell32Resolves[] = {
         },
         (void**)&p_QueryAppIsDefault_Private,
         nullptr,
-        false
+        true
     },
     {
         {
@@ -4037,26 +4062,62 @@ const WindhawkUtils::SYMBOL_HOOK shell32Resolves[] = {
     },
     {
         {
-            L"long __cdecl ClearPromptCountForApp(unsigned short const *,unsigned short const *)",
-            L"?ClearPromptCountForApp@@YAJPEBG0@Z"
-        },
-        (void**)&p_ClearPromptCountForApp,
-        nullptr,
-        true
-    },
-};
-
-// windows.storage.dll
-const WindhawkUtils::SYMBOL_HOOK windowsStorageHooks[] = {
-    {
-        {
             L"public: virtual long __cdecl CAssocArray::QueryInterface"
             L"(struct _GUID const &,void * *)"
         },
         (void**)&CAssocArray_QueryInterface_orig,
         (void*)CAssocArray_QueryInterface_hook,
-        false
-    }
+        true
+    },
+};
+
+// shell32.dll (used only for what windows.storage.dll lacked)
+const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
+    {
+        {
+            L"long __cdecl _SetAssociation(unsigned short const *,unsigned short const *,enum ASSOCIATIONTYPE,unsigned short const *)",
+            L"?_SetAssociation@@YAJPEBG0W4ASSOCIATIONTYPE@@0@Z"
+        },
+        (void**)&SetAssociation_Original,
+        (void*)SetAssociation_Hook,
+        true
+    },
+    {
+        {
+            L"public: virtual long __cdecl CApplicationAssociationRegistration::[IApplicationAssociationRegistration]::QueryAppIsDefault(unsigned short const *,enum ASSOCIATIONTYPE,enum ASSOCIATIONLEVEL,unsigned short const *,int *)",
+            L"?QueryAppIsDefault@?QIApplicationAssociationRegistration@@CApplicationAssociationRegistration@@UEAAJPEBGW4ASSOCIATIONTYPE@@W4ASSOCIATIONLEVEL@@0PEAH@Z"
+        },
+        (void**)&QueryAppIsDefault_Public_Original,
+        (void*)QueryAppIsDefault_Public_Hook,
+        true
+    },
+    {
+        {
+            L"public: virtual long __cdecl CApplicationAssociationRegistration::[IApplicationAssociationRegistrationInternal]::QueryAppIsDefaultAll(enum ASSOCIATIONLEVEL,unsigned short const *,int *)",
+            L"?QueryAppIsDefaultAll@?QIApplicationAssociationRegistrationInternal@@CApplicationAssociationRegistration@@UEAAJW4ASSOCIATIONLEVEL@@PEBGPEAH@Z"
+        },
+        (void**)&QueryAppIsDefaultAll_Original,
+        (void*)QueryAppIsDefaultAll_Hook,
+        true
+    },
+    {
+        {
+            L"private: long __cdecl CApplicationAssociationRegistration::_QueryAppIsDefault(unsigned short const *,enum ASSOCIATIONTYPE,enum ASSOCIATIONLEVEL,unsigned short const *,int *)",
+            L"?_QueryAppIsDefault@CApplicationAssociationRegistration@@AEAAJPEBGW4ASSOCIATIONTYPE@@W4ASSOCIATIONLEVEL@@0PEAH@Z"
+        },
+        (void**)&p_QueryAppIsDefault_Private,
+        nullptr,
+        true
+    },
+    {
+        {
+            L"long __cdecl GenerateUserAssocChangeNotification(unsigned short const *)",
+            L"?GenerateUserAssocChangeNotification@@YAJPEBG@Z"
+        },
+        (void**)&p_GenerateUserAssocChangeNotification,
+        nullptr,
+        true
+    },
 };
 
 // ============================================================================
@@ -4134,56 +4195,39 @@ void LoadSettings()
     LoadIconOverrides();
 }
 
-// The hooks of shell32.dll and windows.storage.dll (symbols: Windhawk downloads them the first time). The class that
-// holds the association registration lives in shell32.dll up to Windows 10 and in windows.storage.dll later, so
-// every table is tried in both.
+// The hooks of shell32.dll and windows.storage.dll (symbols: Windhawk downloads them the first time): one
+// HookSymbols call per module. windows.storage.dll first; shell32.dll only if something was not found there.
 void InstallSystemHooks()
 {
     InitializeCriticalSection(&g_csSetAssoc);
     g_csInitialized = true;
 
-    HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
     HMODULE hStorage = LoadLibraryW(L"windows.storage.dll");
-    HMODULE modules[2] = {hShell32, hStorage};
-    static const wchar_t* const moduleNames[2] = {L"shell32.dll", L"windows.storage.dll"};
+    if (hStorage &&
+        WindhawkUtils::HookSymbols(hStorage, windowsStorageDllHooks, ARRAYSIZE(windowsStorageDllHooks)))
+        Wh_Log(L"Resolved the symbols of windows.storage.dll");
 
-    auto hookAnywhere = [&](const wchar_t* what, const WindhawkUtils::SYMBOL_HOOK* table, size_t count) {
-        for (int i = 0; i < 2; i++) {
-            if (modules[i] && WindhawkUtils::HookSymbols(modules[i], table, count)) {
-                Wh_Log(L"Hooked %s in %s", what, moduleNames[i]);
-                return true;
-            }
-        }
-        Wh_Log(L"WARNING: Failed to hook %s in shell32.dll and windows.storage.dll", what);
-        return false;
-    };
-
-    bool all = hookAnywhere(L"_SetAssociation", shell32Hook_SetAssociation, ARRAYSIZE(shell32Hook_SetAssociation));
-    all = hookAnywhere(L"QueryAppIsDefault (public)", shell32Hook_QueryAppIsDefault, ARRAYSIZE(shell32Hook_QueryAppIsDefault)) && all;
-    all = hookAnywhere(L"_QueryAppIsDefaultAll", shell32Hook_QueryAppIsDefaultAll, ARRAYSIZE(shell32Hook_QueryAppIsDefaultAll)) && all;
-
-    for (int i = 0; i < 2 && (!p_SetUserChoiceAndHash || !p_QueryAppIsDefault_Private); i++)
-        if (modules[i]) WindhawkUtils::HookSymbols(modules[i], shell32Resolves, ARRAYSIZE(shell32Resolves));
-    if (p_SetUserChoiceAndHash)
-        Wh_Log(L"Resolved _SetUserChoiceAndHash");
-    else
-        Wh_Log(L"WARNING: Could not resolve _SetUserChoiceAndHash");
-    if (p_QueryAppIsDefault_Private)
-        Wh_Log(L"Resolved _QueryAppIsDefault");
-    else
-        Wh_Log(L"WARNING: Could not resolve _QueryAppIsDefault");
-    if (!p_GenerateUserAssocChangeNotification) Wh_Log(L"Using SHChangeNotify fallback");
-
-    if (hStorage) {
-        if (WindhawkUtils::HookSymbols(hStorage, windowsStorageHooks, ARRAYSIZE(windowsStorageHooks)))
-            Wh_Log(L"Hooked CAssocArray::QueryInterface");
-        else
-            Wh_Log(L"WARNING: Could not hook CAssocArray::QueryInterface");
+    if (!SetAssociation_Original || !p_QueryAppIsDefault_Private) {
+        HMODULE hShell32 = LoadLibraryW(L"shell32.dll");
+        if (hShell32 &&
+            WindhawkUtils::HookSymbols(hShell32, shell32DllHooks, ARRAYSIZE(shell32DllHooks)))
+            Wh_Log(L"Resolved the symbols of shell32.dll");
     }
 
-    if (!all || !p_SetUserChoiceAndHash || !p_QueryAppIsDefault_Private) {
-        // Report failure without enumerating every symbol. Existing per-hook
-        // messages identify which required hook or resolution was missing.
+    if (SetAssociation_Original) Wh_Log(L"Hooked _SetAssociation");
+    else Wh_Log(L"WARNING: Could not hook _SetAssociation");
+    if (QueryAppIsDefault_Public_Original) Wh_Log(L"Hooked QueryAppIsDefault (public)");
+    else Wh_Log(L"WARNING: Could not hook QueryAppIsDefault (public)");
+    if (QueryAppIsDefaultAll_Original) Wh_Log(L"Hooked _QueryAppIsDefaultAll");
+    else Wh_Log(L"WARNING: Could not hook _QueryAppIsDefaultAll");
+    if (p_QueryAppIsDefault_Private) Wh_Log(L"Resolved _QueryAppIsDefault");
+    else Wh_Log(L"WARNING: Could not resolve _QueryAppIsDefault");
+    if (CAssocArray_QueryInterface_orig) Wh_Log(L"Hooked CAssocArray::QueryInterface");
+    else Wh_Log(L"WARNING: Could not hook CAssocArray::QueryInterface");
+    if (!p_GenerateUserAssocChangeNotification) Wh_Log(L"Using SHChangeNotify fallback");
+
+    if (!SetAssociation_Original || !QueryAppIsDefault_Public_Original || !QueryAppIsDefaultAll_Original ||
+        !p_QueryAppIsDefault_Private) {
         Wh_Log(L"Some compatibility symbols or hooks are missing; check the preceding warnings");
     }
 }
@@ -4210,12 +4254,17 @@ void Shutdown()
 }  // namespace sudfix
 
 
-// A downloaded or hand-placed file is the one the key names if its PE header says so (time stamp, image size, x64).
+// A downloaded, cached or hand-placed file is accepted only if it is exactly the pinned Microsoft file: pinned SHA-256
+// and size, and a PE header that agrees with the key (time stamp, image size, x64). The PE fields alone can be forged,
+// so the hash is what decides; a spec without a pinned hash accepts nothing.
 bool Matches(const FileSpec& f, const Bytes& b) {
+    if (!f.sha256 || !*f.sha256) return false;
+    if (b.size() > f.maxSize || (f.fileSize && b.size() != f.fileSize)) return false;
     gen::Pe pe;
-    if (b.size() > f.maxSize || !pe.parse(b)) return false;
-    return gen::R16(b, pe.fh) == 0x8664 && gen::R32(b, pe.fh + 4) == f.timestamp &&
-           gen::R32(b, pe.opt + 56) == f.imageSize;
+    if (!pe.parse(b)) return false;
+    if (gen::R16(b, pe.fh) != 0x8664 || gen::R32(b, pe.fh + 4) != f.timestamp ||
+        gen::R32(b, pe.opt + 56) != f.imageSize) return false;
+    return Sha256Hex(b) == f.sha256;
 }
 
 // The verified bytes of one of the Microsoft files: from <storage>\dl if present and intact, else downloaded.
@@ -4229,11 +4278,11 @@ bool GetVerifiedFile(const std::wstring& dlDir, const FileSpec& f, Bytes& data) 
             Wh_Log(L"Downloading %s from %s (attempt %d)", f.name, kSymbolHost, attempt);
             if (Download(url, f.maxSize, data)) {
                 if (Matches(f, data)) {
-                    Wh_Log(L"%s downloaded, SHA-256 %S", f.name, Sha256Hex(data).c_str());
+                    Wh_Log(L"%s downloaded and verified (SHA-256 %S)", f.name, Sha256Hex(data).c_str());
                     if (!WriteFileAtomic(path, data)) Wh_Log(L"Could not save %s (continuing in memory)", f.name);
                     return true;
                 }
-                Wh_Log(L"%s: the downloaded file is not the one named by the URL (PE header differs); discarded", f.name);
+                Wh_Log(L"%s: the downloaded file is not the pinned Microsoft file (size, SHA-256 or PE header differs); discarded", f.name);
             }
             if (attempt < 3 && WaitForSingleObject(g_stopEvent, 2000 * attempt) == WAIT_OBJECT_0) break;
         }
@@ -4270,6 +4319,7 @@ void LoadSettings() {
     }
     g_languageSetting.store(language);
     g_keepFiles.store(Wh_GetIntSetting(L"keepFilesOnDisable") != 0);
+    g_registryFallback.store(Wh_GetIntSetting(L"registryFallback") != 0);
 }
 
 // ---- loading --------------------------------------------------------------------------------------------------------
@@ -4392,10 +4442,9 @@ void RunSetup() {
     std::wstring spadPath;
     const FileSpec spadSpec = {L"ComputerDefaults-1607.exe",
         L"ComputerDefaults.exe/57899B3C10000/ComputerDefaults.exe",
-        1u << 20, 0x57899B3Cu, 0x10000u, nullptr};
+        1u << 20, 0x57899B3Cu, 0x10000u, nullptr, kSpadSha256, kSpadFileSize};
     Bytes spad;
-    if (GetVerifiedFile(dlDir, spadSpec, spad) &&
-        Sha256Hex(spad) == "4978ad7650c44d4239ed6b77267dd21d50d33bbd3d875ace4131f2ded3a11804") {
+    if (GetVerifiedFile(dlDir, spadSpec, spad)) {
         const std::wstring candidate = binDir + L"\\ComputerDefaults-1607.exe";
         if (EnsureFile(candidate, spad)) {
             spadPath = candidate;
@@ -4570,15 +4619,34 @@ bool PrivateSpadTarget(void* caller, LPCWSTR target, std::wstring& replacement) 
     replacement = g_spadPath;
     return true;
 }
+// True if the open file has the pinned SHA-256. The handle was opened without write or delete sharing, so the file
+// cannot change between this check and the launch while the caller keeps the handle open.
+bool HandleHasSha256(HANDLE file, const char* expected) {
+    Sha256 hash;
+    for (;;) {
+        uint8_t buf[65536]; DWORD got = 0;
+        if (!ReadFile(file, buf, sizeof(buf), &got, nullptr)) return false;
+        if (!got) break;
+        hash.update(buf, got);
+    }
+    return hash.hex() == expected;
+}
 HRESULT WINAPI ShellExecCmdLine_Hook(HWND wnd, LPCWSTR command, LPCWSTR dir, INT show, void* unknown, DWORD flags) {
     try {
         std::wstring path;
         if (PrivateSpadTarget(__builtin_return_address(0), command, path)) {
-            std::wstring quoted = L"\"" + path + L"\"";
-            Wh_Log(L"[DP-SPAD] ShellExecCmdLine redirected to 1607 executable");
-            HRESULT hr = ShellExecCmdLine_Orig(wnd, quoted.c_str(), dir, show, unknown, flags);
-            Wh_Log(L"[DP-SPAD] ShellExecCmdLine hr=0x%08lX", (unsigned long)hr);
-            return hr;
+            // Check the executable again right before it is started (it can be elevated), and keep it open without
+            // write or delete sharing until the launch call returns.
+            FileHandle held(CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                        FILE_ATTRIBUTE_NORMAL, nullptr));
+            if (held.valid() && HandleHasSha256(held.get(), kSpadSha256)) {
+                std::wstring quoted = L"\"" + path + L"\"";
+                Wh_Log(L"[DP-SPAD] ShellExecCmdLine redirected to 1607 executable (re-verified)");
+                HRESULT hr = ShellExecCmdLine_Orig(wnd, quoted.c_str(), dir, show, unknown, flags);
+                Wh_Log(L"[DP-SPAD] ShellExecCmdLine hr=0x%08lX", (unsigned long)hr);
+                return hr;
+            }
+            Wh_Log(L"[DP-SPAD] 1607 executable missing or changed since setup; using original link");
         }
     } catch (...) { Wh_Log(L"[DP-SPAD] redirect failed; using original"); }
     return ShellExecCmdLine_Orig(wnd, command, dir, show, unknown, flags);
