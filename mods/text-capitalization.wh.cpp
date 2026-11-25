@@ -7,6 +7,7 @@
 // @github          https://github.com/rockinggreninja-bot
 // @include         windhawk.exe
 // @compilerOptions -lgdi32 -luser32 -ladvapi32 -lshell32
+// @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -85,12 +86,14 @@ modifier keys are held for too long.
 
 // ==WindhawkModSettings==
 /*
-- openShortcut: "ctrl+alt+P"
-  $name: Open picker shortcut
-  $description: "Modifiers (ctrl, alt, shift) and a key joined with +. The key can be a letter or a numeric VK code. Examples: ctrl+alt+P, ctrl+alt+80, ctrl+shift+0x50. Left Ctrl / left Alt only."
-- applyShortcut: "ctrl+alt+M"
-  $name: Apply saved case shortcut
-  $description: "Applies the last-used case directly, without the picker. Same format as above, e.g. ctrl+alt+M or ctrl+alt+77."
+- OpenPickerHotkey: "ctrl+alt+80"
+  $name: Open picker from selected text
+  $description: Copy the current selection into the read-only preview and open the case picker.
+  #! $format: hotkey
+- ApplyHotkey: "ctrl+alt+77"
+  $name: Apply saved case immediately
+  $description: Apply the saved case to the current selection without opening the picker.
+  #! $format: hotkey
 */
 // ==/WindhawkModSettings==
 
@@ -105,6 +108,7 @@ modifier keys are held for too long.
 #include <memory>
 #include <string>
 #include <vector>
+#include <windhawk_utils.h>
 
 namespace {
 
@@ -421,23 +425,23 @@ std::wstring FormatShortcut(const Shortcut& s) {
 
 Shortcut LoadShortcutSetting(const wchar_t* name, const Shortcut& fallback) {
     Shortcut result = fallback;
-    const wchar_t* value = Wh_GetStringSetting(name);
-    if (ParseShortcut(value, &result)) {
-        Wh_Log(L"%s = \"%s\" -> %s", name, value,
+    WindhawkUtils::StringSetting value = WindhawkUtils::StringSetting::make(name);
+    const wchar_t* v = value.get();
+    if (ParseShortcut(v, &result)) {
+        Wh_Log(L"%s = \"%s\" -> %s", name, v ? v : L"",
                FormatShortcut(result).c_str());
     } else {
         result = fallback;
-        Wh_Log(L"%s = \"%s\" is invalid, using %s", name, value ? value : L"",
+        Wh_Log(L"%s = \"%s\" is invalid, using %s", name, v ? v : L"",
                FormatShortcut(fallback).c_str());
     }
-    Wh_FreeStringSetting(value);
     return result;
 }
 
 void LoadSettings() {
-    g_openPacked = LoadShortcutSetting(L"openShortcut", kDefaultOpen).Pack();
+    g_openPacked = LoadShortcutSetting(L"OpenPickerHotkey", kDefaultOpen).Pack();
     g_applyPacked =
-        LoadShortcutSetting(L"applyShortcut", kDefaultApply).Pack();
+        LoadShortcutSetting(L"ApplyHotkey", kDefaultApply).Pack();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1364,7 +1368,7 @@ void CommitSelection(int index) {
     }
 
     g_caseMode = index;
-    Wh_SetIntValue(L"caseMode", index);
+    Wh_SetIntValue(L"ActiveMode", index);
 
     auto* job = new Job;
     job->kind = JobKind::Paste;
@@ -1751,7 +1755,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
 BOOL WhTool_ModInit() {
     LoadSettings();
 
-    int mode = Wh_GetIntValue(L"caseMode", 0);
+    int mode = Wh_GetIntValue(L"ActiveMode", 0);
     g_caseMode = (mode >= 0 && mode < kModeCount) ? mode : 0;
 
     g_pasteRendered = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -1885,9 +1889,10 @@ BOOL Wh_ModInit() {
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
-        DWORD_PTR entryPoint =
-            (DWORD_PTR)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook((void*)entryPoint, (void*)EntryPoint_Hook, nullptr);
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
@@ -1915,8 +1920,7 @@ void Wh_ModAfterInit() {
 
     WCHAR
     commandLine[MAX_PATH + 2 +
-                (sizeof(L" -tool-mod \"" WH_MOD_ID L"\"") / sizeof(WCHAR)) -
-                1];
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
@@ -1930,11 +1934,11 @@ void Wh_ModAfterInit() {
     }
 
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
         LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment,
-        LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
     CreateProcessInternalW_t pCreateProcessInternalW =
@@ -1951,8 +1955,7 @@ void Wh_ModAfterInit() {
     };
     PROCESS_INFORMATION pi;
     if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE,
-                                 CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
                                  nullptr, nullptr, &si, &pi, nullptr)) {
         Wh_Log(L"CreateProcess failed");
         return;
