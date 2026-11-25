@@ -1,14 +1,14 @@
 // ==WindhawkMod==
 // @id              dynamic-taskbar
 // @name            Dynamic Taskbar
-// @description     TranslucentTB-style dynamic taskbar appearance per monitor (Desktop, Visible Window, Maximized Window, rules, ignored windows, Peek & line controls)
+// @description     TranslucentTB-style per-monitor dynamic taskbar appearance (Desktop, Visible/Maximized states, #RRGGBBAA colors, rules, ignore lists, Peek/line toggles, and smooth transitions)
 // @version         1.0.0
 // @author          KnoxFury
 // @github          https://github.com/KnoxFury
-// @license         GPL-3.0
+// @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -ldwmapi -lgdi32 -lole32 -loleaut32 -lpsapi -lruntimeobject -lshlwapi
+// @compilerOptions -lcomctl32 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,48 +16,53 @@
 # Dynamic Taskbar
 
 Dynamically customize the Windows 11 taskbar appearance per monitor based on window
-state—similar to **TranslucentTB**, running directly inside `explorer.exe` with no
-separate background process and smooth fade transitions between states.
+state—implementing TranslucentTB's window-state, rule, and visual-chrome workflow
+natively inside `explorer.exe` with no separate background process and smooth
+animated transitions.
 
 ## Features
 
 ### Per-monitor dynamic states
 Each monitor's taskbar (`Shell_TrayWnd` and `Shell_SecondaryTrayWnd`) is evaluated
-independently using event-driven window hooks (`SetWinEventHook`), in priority order:
+independently using narrow, child-filtered `SetWinEventHook` watchers on a dedicated
+background thread:
 
 1. **Maximized window** (`maximizedWindowAppearance`) — Active when a non-ignored window is maximized on that monitor.
-2. **Visible window** (`visibleWindowAppearance`) — Active when a non-ignored window is visible on that monitor.
-3. **Desktop** (`desktopAppearance`) — Active when no non-ignored windows are visible on that monitor (and optionally when **Task View** is open).
+2. **Visible window** (`visibleWindowAppearance`) — Active when a non-ignored visible window exists on that monitor (also handles maximized windows if Maximized state is disabled).
+3. **Desktop** (`desktopAppearance`) — Active when no non-ignored windows are visible on that monitor (and optionally while **Task View** is open).
 
 ### Accent modes
 - **`clear`** — Transparent or custom-tinted background (`#RRGGBBAA`, e.g. `#00000000` for fully transparent).
-- **`blur`** — Gaussian blur backdrop with configurable **Blur radius** and tint color.
-- **`acrylic`** — Fluent Acrylic backdrop with blur, tint, luminosity, and subtle noise texture.
+- **`blur`** — Frosted Gaussian blur backdrop with configurable **Blur radius** (`0–100`) and `#RRGGBBAA` tint.
+- **`acrylic`** — Stronger composition-backed blur with enhanced saturation and `#RRGGBBAA` tint (uses at least `24` blur radius for multi-monitor XAML Island reliability).
 - **`opaque`** — Solid color background using your chosen `#RRGGBBAA` color at full opacity.
-- **`normal`** — Restores the default Windows 11 taskbar background.
+- **`normal`** — Restores the native Windows 11 taskbar background.
 
 ### Taskbar details & animations
-- **Show Aero Peek button** (`showPeek`) — Show or hide the far-corner "Show desktop" strip per state.
+- **Show Aero Peek button** (`showPeek`) — Show or hide the far-corner "Show desktop" strip (`ShowDesktopStack`) per state.
 - **Show taskbar border line** (`showLine`) — Show or hide the 1 px taskbar border line (`BackgroundStroke`) per state.
-- **Smooth transitions** (`transitionDurationMs`) — Configurable eased cross-fade / opacity animation (`180 ms` by default; set to `0` to switch instantly). Handles rapid mid-transition reversals seamlessly.
+- **Smooth transitions** (`transitionDurationMs`) — Configurable eased transition (`180 ms` by default; `0` disables animations):
+  - Fades `Opacity` smoothly when entering or leaving `clear` (`#00000000`)
+  - Interpolates RGBA colors smoothly between two solid tints
+  - Cross-fades non-transparent fills (`Blur <-> Normal`, `Acrylic <-> Opaque`) via a transient overlay rectangle
+  - Fades the border line and Aero Peek strip in sync and reverses cleanly mid-animation
 - **Task View follows Desktop** (`taskViewFollowsDesktop`) — Uses your Desktop appearance while Task View (`Win + Tab`) is open.
 
 ### Per-window rules & ignore lists
-- **Window rules** (under both **Visible window appearance** and **Maximized window appearance**): Override accent mode, color, blur radius, Peek, and border line for specific apps matched by:
+- **Window rules** (under both **Visible window appearance** and **Maximized window appearance**, active when that section is enabled): Override accent mode, `#RRGGBBAA` color, blur radius, Peek, and border line for specific windows matched by:
   - **Process name** (e.g. `notepad.exe` or `notepad`)
   - **Window class** (exact case-insensitive match)
   - **Window title** (case-insensitive substring match)
-- **Ignored windows** (`ignoredWindows`): Exclude specific windows by class, title substring, or process name so background/widget windows don't trigger Visible or Maximized states. Hidden, minimized, tool, and DWM-cloaked windows (including windows on other virtual desktops) are automatically ignored.
+- **Ignored windows** (`ignoredWindows`): Exclude specific windows by class, title substring, or process name. Hidden, minimized, tool, click-through overlay, shell host, and DWM-cloaked windows (including windows on other virtual desktops) are ignored automatically.
+
+## Comparison with existing mods
+- **Dynamic Taskbar Transparency** (`dynamic-taskbar-transparency`): Focuses on shell-interaction state transitions (Start, Search, Task View, tray/notification flyouts, and maximized windows) and specifically fades taskbar `Opacity` over captured or preset blur/acrylic styles without per-state `#RRGGBBAA` tinting, an `opaque` mode, a **Visible window** state, per-window rules (`process_name` / `window_class` / `window_title`), ignore lists, or per-state Aero Peek (`showPeek`) and border line (`showLine`) toggles. **Dynamic Taskbar** mirrors TranslucentTB's full window-centric desktop/visible/maximized rule model, custom `#RRGGBBAA` colorization, and per-state chrome controls via `CTaskBand::GetTaskbarHost` without using `InitializeXamlDiagnosticsEx`.
+- **Taskbar Background Helper** (`taskbar-background-helper`): Applies a single Win32 `SetWindowCompositionAttribute` background (`Always` or `Only when maximized`, with an excluded programs list) behind transparent taskbars styled with Windows 11 Taskbar Styler; it does not directly style `BackgroundFill`/`BackgroundStroke`/`ShowDesktopStack` per window rule or animate transitions.
 
 ## Compatibility notes
-- Exit or uninstall **TranslucentTB** before enabling this mod so nothing competes over the taskbar background elements.
-- Uses `CTaskBand::GetTaskbarHost` / `CSecondaryTaskBand::GetTaskbarHost` instead of `InitializeXamlDiagnosticsEx`, leaving XAML diagnostics free for other tools and cleanly restoring all original XAML properties if the mod is disabled or unloaded.
+- Exit or uninstall **TranslucentTB**, and do not use this mod simultaneously with **Dynamic Taskbar Transparency**, **Taskbar Background Helper**, or **Windows 11 Taskbar Styler** background themes (otherwise both will fight over `BackgroundFill` / `BackgroundStroke`).
+- Cleanly restores all original XAML values and detaches its hooks on mod disable/unload.
 - Designed for **Windows 11 (x86-64)**.
-
-### Credits & License
-Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
-- Blur/Acrylic Direct2D composition brush (`XamlBlurBrush`) adapted from [**TranslucentTB**](https://github.com/TranslucentTB/TranslucentTB) and [**Windows 11 Taskbar Styler**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/windows-11-taskbar-styler.wh.cpp) by **m417z**.
-- `TaskbarHost` XAML root lookup and taskbar thread dispatch patterns adapted from **m417z**'s Windows 11 taskbar mods and **EDM115**'s [**Taskbar multi-tray**](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-multi-tray.wh.cpp).
 */
 // ==/WindhawkModReadme==
 
@@ -80,6 +85,7 @@ Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
     $name: Show taskbar border line
   - blurRadius: 9
     $name: Blur radius
+    $description: Blur intensity (0-100; Acrylic mode enforces at least 24)
   $name: Desktop appearance
 - visibleWindowAppearance:
   - enabled: true
@@ -100,6 +106,7 @@ Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
     $name: Show taskbar border line
   - blurRadius: 9
     $name: Blur radius
+    $description: Blur intensity (0-100; Acrylic mode enforces at least 24)
   - rules:
     - - matchType: process_name
         $name: Match by
@@ -146,6 +153,7 @@ Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
     $name: Show taskbar border line
   - blurRadius: 9
     $name: Blur radius
+    $description: Blur intensity (0-100; Acrylic mode enforces at least 24)
   - rules:
     - - matchType: process_name
         $name: Match by
@@ -193,14 +201,11 @@ Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
 
 #include <algorithm>
 #include <atomic>
-#include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cwctype>
-#include <functional>
-#include <limits>
 #include <memory>
 #include <optional>
-#include <random>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -212,27 +217,18 @@ Licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
 #include <commctrl.h>
 #include <d2d1_1.h>
 #include <dwmapi.h>
-#include <psapi.h>
-#include <roapi.h>
 #include <shlwapi.h>
 #include <windows.graphics.effects.h>
-#include <winstring.h>
 
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Graphics.Effects.h>
-#include <winrt/Windows.Storage.Streams.h>
-#include <winrt/Windows.System.Power.h>
-#include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Composition.h>
-#include <winrt/Windows.UI.Core.h>
 #include <winrt/Windows.UI.ViewManagement.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
-#include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
-#include <winrt/Windows.UI.Xaml.Markup.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 #include <winrt/Windows.UI.Xaml.h>
@@ -249,20 +245,8 @@ inline constexpr winrt::guid winrt::impl::guid_v<
     winrt::impl::abi_t<winrt::Windows::Foundation::IPropertyValue>>{
     winrt::impl::guid_v<winrt::Windows::Foundation::IPropertyValue>};
 
-template <auto fn>
-struct deleter_from_fn {
-    template <typename T>
-    constexpr void operator()(T* arg) const {
-        fn(arg);
-    }
-};
-using string_setting_unique_ptr =
-    std::unique_ptr<const WCHAR[], deleter_from_fn<Wh_FreeStringSetting>>;
-
-// ============================================================================
-//  Direct2D Composition Effects & XamlBlurBrush (adapted from TranslucentTB / Taskbar Styler)
-// ============================================================================
-
+// Standard Windows SDK IGraphicsEffectD2D1Interop declaration
+// (omitted in MinGW's windows.graphics.effects.h).
 #ifndef BUILD_WINDOWS
 namespace ABI {
 #endif
@@ -289,10 +273,13 @@ typedef enum GRAPHICS_EFFECT_PROPERTY_MAPPING {
 
 #undef INTERFACE
 #define INTERFACE IGraphicsEffectD2D1Interop
-DECLARE_INTERFACE_IID_(IGraphicsEffectD2D1Interop, IUnknown, "2FC57384-A068-44D7-A331-30982FCF7177") {
+DECLARE_INTERFACE_IID_(IGraphicsEffectD2D1Interop,
+                       IUnknown,
+                       "2FC57384-A068-44D7-A331-30982FCF7177") {
     STDMETHOD(GetEffectId)(_Out_ GUID* id) PURE;
     STDMETHOD(GetNamedPropertyMapping)(
-        LPCWSTR name, _Out_ UINT* index,
+        LPCWSTR name,
+        _Out_ UINT* index,
         _Out_ GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) PURE;
     STDMETHOD(GetPropertyCount)(_Out_ UINT* count) PURE;
     STDMETHOD(GetProperty)(
@@ -320,489 +307,174 @@ inline constexpr winrt::guid winrt::impl::guid_v<
 
 namespace {
 
-typedef enum MY_D2D1_GAUSSIANBLUR_OPTIMIZATION {
-    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_SPEED = 0,
-    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED = 1,
-    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_QUALITY = 2,
-} MY_D2D1_GAUSSIANBLUR_OPTIMIZATION;
+// ============================================================================
+//  Clean Composition Backdrop Brush (MIT, built on Direct2D Effect CLSIDs)
+// ============================================================================
 
-struct CompositeEffect
-    : winrt::implements<CompositeEffect, wge::IGraphicsEffect,
+struct EffectPropEntry {
+    winrt::hstring name;
+    UINT d2dIndex = 0;
+    wf::IInspectable value{nullptr};
+};
+
+struct D2DEffectNode
+    : winrt::implements<D2DEffectNode,
+                        wge::IGraphicsEffect,
                         wge::IGraphicsEffectSource,
                         awge::IGraphicsEffectD2D1Interop> {
+    GUID effectId{};
+    winrt::hstring effectName;
+    std::vector<EffectPropEntry> properties;
+    std::vector<wge::IGraphicsEffectSource> sources;
+
+    winrt::hstring Name() { return effectName; }
+    void Name(winrt::hstring value) { effectName = std::move(value); }
+
     HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {
         if (!id) return E_INVALIDARG;
-        *id = CLSID_D2D1Composite;
+        *id = effectId;
         return S_OK;
     }
+
     HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(
-        LPCWSTR name, UINT* index,
+        LPCWSTR name,
+        UINT* index,
         awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
-        if (!index || !mapping) return E_INVALIDARG;
-        if (std::wstring_view(name) == L"Mode") {
-            *index = D2D1_COMPOSITE_PROP_MODE;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
+        if (!name || !index || !mapping) return E_INVALIDARG;
+        std::wstring_view target(name);
+        for (const auto& prop : properties) {
+            if (prop.name == target) {
+                *index = prop.d2dIndex;
+                *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
+                return S_OK;
+            }
         }
         return E_INVALIDARG;
     }
+
     HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {
         if (!count) return E_INVALIDARG;
-        *count = 1;
+        *count = static_cast<UINT>(properties.size());
         return S_OK;
     }
+
     HRESULT STDMETHODCALLTYPE GetProperty(
         UINT index,
         winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
         if (!value) return E_INVALIDARG;
-        if (index == D2D1_COMPOSITE_PROP_MODE) {
-            *value = wf::PropertyValue::CreateUInt32((UINT32)Mode)
-                         .as<winrt::impl::abi_t<wf::IPropertyValue>>()
-                         .detach();
-            return S_OK;
+        for (const auto& prop : properties) {
+            if (prop.d2dIndex == index) {
+                *value = prop.value.as<winrt::impl::abi_t<wf::IPropertyValue>>()
+                             .detach();
+                return S_OK;
+            }
         }
         return E_BOUNDS;
     } catch (...) {
         return winrt::to_hresult();
     }
+
     HRESULT STDMETHODCALLTYPE GetSource(
         UINT index, awge::IGraphicsEffectSource** source) noexcept override try {
         if (!source) return E_INVALIDARG;
-        winrt::copy_to_abi(Sources.at(index), *reinterpret_cast<void**>(source));
+        if (index >= sources.size()) return E_BOUNDS;
+        winrt::copy_to_abi(sources[index], *reinterpret_cast<void**>(source));
         return S_OK;
     } catch (...) {
         return winrt::to_hresult();
     }
+
     HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {
         if (!count) return E_INVALIDARG;
-        *count = static_cast<UINT>(Sources.size());
+        *count = static_cast<UINT>(sources.size());
         return S_OK;
     }
-    winrt::hstring Name() { return m_name; }
-    void Name(winrt::hstring name) { m_name = name; }
-
-    std::vector<wge::IGraphicsEffectSource> Sources;
-    D2D1_COMPOSITE_MODE Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
-
-private:
-    winrt::hstring m_name = L"CompositeEffect";
 };
 
-struct FloodEffect
-    : winrt::implements<FloodEffect, wge::IGraphicsEffect,
-                        wge::IGraphicsEffectSource,
-                        awge::IGraphicsEffectD2D1Interop> {
-    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {
-        if (!id) return E_INVALIDARG;
-        *id = CLSID_D2D1Flood;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(
-        LPCWSTR name, UINT* index,
-        awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
-        if (!index || !mapping) return E_INVALIDARG;
-        if (std::wstring_view(name) == L"Color") {
-            *index = D2D1_FLOOD_PROP_COLOR;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-        return E_INVALIDARG;
-    }
-    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {
-        if (!count) return E_INVALIDARG;
-        *count = 1;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetProperty(
-        UINT index,
-        winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
-        if (!value) return E_INVALIDARG;
-        if (index == D2D1_FLOOD_PROP_COLOR) {
-            *value = wf::PropertyValue::CreateSingleArray({
-                         Color.R / 255.0f,
-                         Color.G / 255.0f,
-                         Color.B / 255.0f,
-                         Color.A / 255.0f,
-                     })
-                         .as<winrt::impl::abi_t<wf::IPropertyValue>>()
-                         .detach();
-            return S_OK;
-        }
-        return E_BOUNDS;
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-    HRESULT STDMETHODCALLTYPE GetSource(
-        UINT, awge::IGraphicsEffectSource**) noexcept override {
-        return E_BOUNDS;
-    }
-    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {
-        if (!count) return E_INVALIDARG;
-        *count = 0;
-        return S_OK;
-    }
-    winrt::hstring Name() { return m_name; }
-    void Name(winrt::hstring name) { m_name = name; }
-
-    winrt::Windows::UI::Color Color{};
-
-private:
-    winrt::hstring m_name = L"FloodEffect";
-};
-
-struct BorderEffect
-    : winrt::implements<BorderEffect, wge::IGraphicsEffect,
-                        wge::IGraphicsEffectSource,
-                        awge::IGraphicsEffectD2D1Interop> {
-    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {
-        if (!id) return E_INVALIDARG;
-        *id = CLSID_D2D1Border;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(
-        LPCWSTR name, UINT* index,
-        awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
-        if (!index || !mapping) return E_INVALIDARG;
-        std::wstring_view nameView(name);
-        if (nameView == L"ExtendX") {
-            *index = D2D1_BORDER_PROP_EDGE_MODE_X;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-        if (nameView == L"ExtendY") {
-            *index = D2D1_BORDER_PROP_EDGE_MODE_Y;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-        return E_INVALIDARG;
-    }
-    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {
-        if (!count) return E_INVALIDARG;
-        *count = 2;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetProperty(
-        UINT index,
-        winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
-        if (!value) return E_INVALIDARG;
-        switch (index) {
-            case D2D1_BORDER_PROP_EDGE_MODE_X:
-                *value = wf::PropertyValue::CreateUInt32((UINT32)ExtendX)
-                             .as<winrt::impl::abi_t<wf::IPropertyValue>>()
-                             .detach();
-                return S_OK;
-            case D2D1_BORDER_PROP_EDGE_MODE_Y:
-                *value = wf::PropertyValue::CreateUInt32((UINT32)ExtendY)
-                             .as<winrt::impl::abi_t<wf::IPropertyValue>>()
-                             .detach();
-                return S_OK;
-            default:
-                return E_BOUNDS;
-        }
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-    HRESULT STDMETHODCALLTYPE GetSource(
-        UINT index, awge::IGraphicsEffectSource** source) noexcept override {
-        if (!source) return E_INVALIDARG;
-        if (index == 0 && Source) {
-            winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source));
-            return S_OK;
-        }
-        return E_BOUNDS;
-    }
-    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {
-        if (!count) return E_INVALIDARG;
-        *count = 1;
-        return S_OK;
-    }
-    winrt::hstring Name() { return m_name; }
-    void Name(winrt::hstring name) { m_name = name; }
-
-    wge::IGraphicsEffectSource Source{nullptr};
-    D2D1_BORDER_EDGE_MODE ExtendX = D2D1_BORDER_EDGE_MODE_WRAP;
-    D2D1_BORDER_EDGE_MODE ExtendY = D2D1_BORDER_EDGE_MODE_WRAP;
-
-private:
-    winrt::hstring m_name = L"BorderEffect";
-};
-
-struct GaussianBlurEffect
-    : winrt::implements<GaussianBlurEffect, wge::IGraphicsEffect,
-                        wge::IGraphicsEffectSource,
-                        awge::IGraphicsEffectD2D1Interop> {
-    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {
-        if (!id) return E_INVALIDARG;
-        *id = CLSID_D2D1GaussianBlur;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(
-        LPCWSTR name, UINT* index,
-        awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
-        if (!index || !mapping) return E_INVALIDARG;
-        std::wstring_view nameView(name);
-        if (nameView == L"BlurAmount") {
-            *index = D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-        if (nameView == L"Optimization") {
-            *index = D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-        if (nameView == L"BorderMode") {
-            *index = D2D1_GAUSSIANBLUR_PROP_BORDER_MODE;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-        return E_INVALIDARG;
-    }
-    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {
-        if (!count) return E_INVALIDARG;
-        *count = 3;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetProperty(
-        UINT index,
-        winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
-        if (!value) return E_INVALIDARG;
-        switch (index) {
-            case D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION:
-                *value = wf::PropertyValue::CreateSingle(BlurAmount)
-                             .as<winrt::impl::abi_t<wf::IPropertyValue>>()
-                             .detach();
-                return S_OK;
-            case D2D1_GAUSSIANBLUR_PROP_OPTIMIZATION:
-                *value = wf::PropertyValue::CreateUInt32((UINT32)Optimization)
-                             .as<winrt::impl::abi_t<wf::IPropertyValue>>()
-                             .detach();
-                return S_OK;
-            case D2D1_GAUSSIANBLUR_PROP_BORDER_MODE:
-                *value = wf::PropertyValue::CreateUInt32((UINT32)BorderMode)
-                             .as<winrt::impl::abi_t<wf::IPropertyValue>>()
-                             .detach();
-                return S_OK;
-            default:
-                return E_BOUNDS;
-        }
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-    HRESULT STDMETHODCALLTYPE GetSource(
-        UINT index, awge::IGraphicsEffectSource** source) noexcept override {
-        if (!source) return E_INVALIDARG;
-        if (index == 0) {
-            winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source));
-            return S_OK;
-        }
-        return E_BOUNDS;
-    }
-    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {
-        if (!count) return E_INVALIDARG;
-        *count = 1;
-        return S_OK;
-    }
-    winrt::hstring Name() { return m_name; }
-    void Name(winrt::hstring name) { m_name = name; }
-
-    wge::IGraphicsEffectSource Source{nullptr};
-    float BlurAmount = 9.0f;
-    MY_D2D1_GAUSSIANBLUR_OPTIMIZATION Optimization =
-        MY_D2D1_GAUSSIANBLUR_OPTIMIZATION_BALANCED;
-    D2D1_BORDER_MODE BorderMode = D2D1_BORDER_MODE_SOFT;
-
-private:
-    winrt::hstring m_name = L"GaussianBlurEffect";
-};
-
-struct ColorMatrixEffect
-    : winrt::implements<ColorMatrixEffect, wge::IGraphicsEffect,
-                        wge::IGraphicsEffectSource,
-                        awge::IGraphicsEffectD2D1Interop> {
-    HRESULT STDMETHODCALLTYPE GetEffectId(GUID* id) noexcept override {
-        if (!id) return E_INVALIDARG;
-        *id = CLSID_D2D1ColorMatrix;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetNamedPropertyMapping(
-        LPCWSTR name, UINT* index,
-        awge::GRAPHICS_EFFECT_PROPERTY_MAPPING* mapping) noexcept override {
-        if (!index || !mapping) return E_INVALIDARG;
-        std::wstring_view nameView(name);
-        if (nameView == L"ColorMatrix") {
-            *index = D2D1_COLORMATRIX_PROP_COLOR_MATRIX;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-        if (nameView == L"AlphaMode") {
-            *index = D2D1_COLORMATRIX_PROP_ALPHA_MODE;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-        if (nameView == L"ClampOutput") {
-            *index = D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT;
-            *mapping = awge::GRAPHICS_EFFECT_PROPERTY_MAPPING_DIRECT;
-            return S_OK;
-        }
-        return E_INVALIDARG;
-    }
-    HRESULT STDMETHODCALLTYPE GetPropertyCount(UINT* count) noexcept override {
-        if (!count) return E_INVALIDARG;
-        *count = 3;
-        return S_OK;
-    }
-    HRESULT STDMETHODCALLTYPE GetProperty(
-        UINT index,
-        winrt::impl::abi_t<wf::IPropertyValue>** value) noexcept override try {
-        if (!value) return E_INVALIDARG;
-        switch (index) {
-            case D2D1_COLORMATRIX_PROP_COLOR_MATRIX:
-                *value = wf::PropertyValue::CreateSingleArray(
-                             winrt::array_view<const float>(Matrix, Matrix + 20))
-                             .as<winrt::impl::abi_t<wf::IPropertyValue>>()
-                             .detach();
-                return S_OK;
-            case D2D1_COLORMATRIX_PROP_ALPHA_MODE:
-                *value = wf::PropertyValue::CreateUInt32(AlphaMode)
-                             .as<winrt::impl::abi_t<wf::IPropertyValue>>()
-                             .detach();
-                return S_OK;
-            case D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT:
-                *value = wf::PropertyValue::CreateBoolean(ClampOutput)
-                             .as<winrt::impl::abi_t<wf::IPropertyValue>>()
-                             .detach();
-                return S_OK;
-            default:
-                return E_BOUNDS;
-        }
-    } catch (...) {
-        return winrt::to_hresult();
-    }
-    HRESULT STDMETHODCALLTYPE GetSource(
-        UINT index, awge::IGraphicsEffectSource** source) noexcept override {
-        if (!source) return E_INVALIDARG;
-        if (index == 0 && Source) {
-            winrt::copy_to_abi(Source, *reinterpret_cast<void**>(source));
-            return S_OK;
-        }
-        return E_BOUNDS;
-    }
-    HRESULT STDMETHODCALLTYPE GetSourceCount(UINT* count) noexcept override {
-        if (!count) return E_INVALIDARG;
-        *count = 1;
-        return S_OK;
-    }
-    winrt::hstring Name() { return m_name; }
-    void Name(winrt::hstring name) { m_name = name; }
-
-    wge::IGraphicsEffectSource Source{nullptr};
-    float Matrix[20] = {
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
-        0, 0, 0, 0,
-    };
-    uint32_t AlphaMode = D2D1_COLORMATRIX_ALPHA_MODE_PREMULTIPLIED;
-    bool ClampOutput = false;
-
-private:
-    winrt::hstring m_name = L"ColorMatrixEffect";
-};
-
-thread_local float g_noiseStreamDensity =
-    std::numeric_limits<float>::quiet_NaN();
-thread_local winrt::Windows::Storage::Streams::InMemoryRandomAccessStream
-    g_noiseStream{nullptr};
-
-winrt::Windows::Storage::Streams::IRandomAccessStream CreateNoiseStream(
-    float density) {
-    if (density == g_noiseStreamDensity && g_noiseStream) {
-        return g_noiseStream.CloneStream();
-    }
-
-    constexpr int kSize = 256;
-    constexpr DWORD kBpp = 32;
-    constexpr DWORD rowSize = kSize * (kBpp / 8);
-    constexpr DWORD dataSize = rowSize * kSize;
-
-    BITMAPFILEHEADER fileHeader{
-        .bfType = 0x4D42,
-        .bfSize =
-            sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + dataSize,
-        .bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER),
-    };
-
-    BITMAPINFOHEADER infoHeader{
-        .biSize = sizeof(BITMAPINFOHEADER),
-        .biWidth = kSize,
-        .biHeight = kSize,
-        .biPlanes = 1,
-        .biBitCount = kBpp,
-        .biSizeImage = dataSize,
-    };
-
-    std::vector<uint8_t> pixels(dataSize);
-    float safeDensity = std::clamp(density, 0.001f, 1.0f);
-    float exponent = 1.0f / safeDensity;
-
-    uint8_t lut[256];
-    for (int i = 0; i < 256; i++) {
-        lut[i] = static_cast<uint8_t>(std::pow(i / 255.0f, exponent) * 255.0f);
-    }
-
-    std::mt19937 rng(0);
-    std::uniform_int_distribution<int> dist(0, 255);
-    for (size_t i = 0; i < pixels.size(); i += 4) {
-        uint8_t gray = lut[dist(rng)];
-        pixels[i] = gray;
-        pixels[i + 1] = gray;
-        pixels[i + 2] = gray;
-        pixels[i + 3] = 255;
-    }
-
-    winrt::Windows::Storage::Streams::InMemoryRandomAccessStream stream;
-    winrt::Windows::Storage::Streams::DataWriter writer(stream);
-    writer.WriteBytes(winrt::array_view<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(&fileHeader), sizeof(fileHeader)));
-    writer.WriteBytes(winrt::array_view<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(&infoHeader), sizeof(infoHeader)));
-    writer.WriteBytes(pixels);
-    writer.StoreAsync().get();
-    writer.DetachStream();
-
-    g_noiseStream = std::move(stream);
-    g_noiseStreamDensity = density;
-    return g_noiseStream.CloneStream();
-}
-
-class XamlBlurBrush : public Media::XamlCompositionBrushBaseT<XamlBlurBrush> {
+class BackdropTintBrush : public Media::XamlCompositionBrushBaseT<BackdropTintBrush> {
 public:
-    XamlBlurBrush(UIElement element,
-                  float blurAmount,
-                  winrt::Windows::UI::Color tint,
-                  std::optional<float> tintLuminosityOpacity,
-                  std::optional<float> tintSaturation,
-                  std::optional<float> noiseOpacity,
-                  std::optional<float> noiseDensity,
-                  std::optional<winrt::Windows::UI::Color> fallbackColor)
+    BackdropTintBrush(UIElement const& anchor,
+                      float blurAmount,
+                      winrt::Windows::UI::Color tint,
+                      bool acrylicMode)
         : m_compositor(
-              wuxh::ElementCompositionPreview::GetElementVisual(element)
+              wuxh::ElementCompositionPreview::GetElementVisual(anchor)
                   .Compositor()),
           m_blurAmount(blurAmount),
           m_tint(tint),
-          m_tintLuminosityOpacity(tintLuminosityOpacity),
-          m_tintSaturation(tintSaturation),
-          m_noiseOpacity(noiseOpacity),
-          m_noiseDensity(noiseDensity),
-          m_fallbackColor(fallbackColor) {}
+          m_acrylic(acrylicMode) {}
 
     void OnConnected() {
-        if (!CompositionBrush()) {
-            CompositionBrush(ShouldUseFallback() ? CreateFallbackBrush()
-                                                 : CreateEffectBrush());
+        if (CompositionBrush()) return;
+
+        bool effectsEnabled = true;
+        try {
+            winrt::Windows::UI::ViewManagement::UISettings ui;
+            effectsEnabled = ui.AdvancedEffectsEnabled();
+        } catch (...) {
         }
+
+        if (!effectsEnabled) {
+            CompositionBrush(m_compositor.CreateColorBrush(m_tint));
+            return;
+        }
+
+        auto blur = winrt::make_self<D2DEffectNode>();
+        blur->effectId = CLSID_D2D1GaussianBlur;
+        blur->effectName = L"GaussianBlur";
+        blur->sources.push_back(
+            wuc::CompositionEffectSourceParameter(L"backdrop"));
+        blur->properties = {
+            {L"BlurAmount", D2D1_GAUSSIANBLUR_PROP_STANDARD_DEVIATION,
+             wf::PropertyValue::CreateSingle(m_blurAmount)},
+            {L"BorderMode", D2D1_GAUSSIANBLUR_PROP_BORDER_MODE,
+             wf::PropertyValue::CreateUInt32(D2D1_BORDER_MODE_SOFT)},
+        };
+
+        wge::IGraphicsEffectSource backdropChain = *blur;
+
+        winrt::com_ptr<D2DEffectNode> saturationNode;
+        if (m_acrylic) {
+            constexpr UINT kD2dSaturationPropSaturation = 0;  // D2D1_SATURATION_PROP_SATURATION
+            saturationNode = winrt::make_self<D2DEffectNode>();
+            saturationNode->effectId = CLSID_D2D1Saturation;
+            saturationNode->effectName = L"Saturation";
+            saturationNode->sources.push_back(backdropChain);
+            saturationNode->properties = {
+                {L"Saturation", kD2dSaturationPropSaturation,
+                 wf::PropertyValue::CreateSingle(1.25f)},
+            };
+            backdropChain = *saturationNode;
+        }
+
+        auto flood = winrt::make_self<D2DEffectNode>();
+        flood->effectId = CLSID_D2D1Flood;
+        flood->effectName = L"TintFlood";
+        flood->properties = {
+            {L"Color", D2D1_FLOOD_PROP_COLOR,
+             wf::PropertyValue::CreateSingleArray({
+                 m_tint.R / 255.0f,
+                 m_tint.G / 255.0f,
+                 m_tint.B / 255.0f,
+                 m_tint.A / 255.0f,
+             })},
+        };
+
+        auto composite = winrt::make_self<D2DEffectNode>();
+        composite->effectId = CLSID_D2D1Composite;
+        composite->effectName = L"TintComposite";
+        composite->sources.push_back(backdropChain);
+        composite->sources.push_back(*flood);
+        composite->properties = {
+            {L"Mode", D2D1_COMPOSITE_PROP_MODE,
+             wf::PropertyValue::CreateUInt32(D2D1_COMPOSITE_MODE_SOURCE_OVER)},
+        };
+
+        auto factory = m_compositor.CreateEffectFactory(*composite);
+        auto effectBrush = factory.CreateBrush();
+        effectBrush.SetSourceParameter(
+            L"backdrop", m_compositor.CreateBackdropBrush());
+        CompositionBrush(effectBrush);
     }
 
     void OnDisconnected() {
@@ -813,125 +485,10 @@ public:
     }
 
 private:
-    bool ShouldUseFallback() const {
-        if (!m_fallbackColor) {
-            return false;
-        }
-        try {
-            winrt::Windows::UI::ViewManagement::UISettings uiSettings;
-            return !uiSettings.AdvancedEffectsEnabled();
-        } catch (...) {
-            return false;
-        }
-    }
-
-    wuc::CompositionBrush CreateFallbackBrush() {
-        return m_compositor.CreateColorBrush(m_fallbackColor.value_or(m_tint));
-    }
-
-    wuc::CompositionBrush CreateEffectBrush() {
-        auto backdropBrush = m_compositor.CreateBackdropBrush();
-
-        constexpr float kLumaR = 0.2126f;
-        constexpr float kLumaG = 0.7152f;
-        constexpr float kLumaB = 0.0722f;
-
-        auto blurEffect = winrt::make_self<GaussianBlurEffect>();
-        blurEffect->Source = wuc::CompositionEffectSourceParameter(L"backdrop");
-        blurEffect->BlurAmount = m_blurAmount;
-        blurEffect->Name(L"BlurEffect");
-
-        wge::IGraphicsEffectSource topOfStack = *blurEffect;
-
-        if (m_tintSaturation && *m_tintSaturation != 1.0f) {
-            float s = std::max(*m_tintSaturation, 0.0f);
-            float invS = 1.0f - s;
-
-            auto satMatrix = winrt::make_self<ColorMatrixEffect>();
-            satMatrix->Source = topOfStack;
-            auto& m = satMatrix->Matrix;
-            m[0] = invS * kLumaR + s; m[1] = invS * kLumaR;     m[2] = invS * kLumaR;     m[3] = 0.0f;
-            m[4] = invS * kLumaG;     m[5] = invS * kLumaG + s; m[6] = invS * kLumaG;     m[7] = 0.0f;
-            m[8] = invS * kLumaB;     m[9] = invS * kLumaB;     m[10] = invS * kLumaB + s; m[11] = 0.0f;
-            m[12] = 0.0f;             m[13] = 0.0f;             m[14] = 0.0f;              m[15] = 1.0f;
-            satMatrix->Name(L"SaturationEffect");
-            topOfStack = *satMatrix;
-        }
-
-        if (m_tintLuminosityOpacity && *m_tintLuminosityOpacity > 0.0f) {
-            float op = std::clamp(*m_tintLuminosityOpacity, 0.0f, 1.0f);
-            float tintLum = (m_tint.R / 255.0f) * kLumaR +
-                            (m_tint.G / 255.0f) * kLumaG +
-                            (m_tint.B / 255.0f) * kLumaB;
-
-            auto lumMatrix = winrt::make_self<ColorMatrixEffect>();
-            lumMatrix->Source = topOfStack;
-            auto& m = lumMatrix->Matrix;
-            m[0] = 1.0f - (kLumaR * op); m[1] = -(kLumaR * op);       m[2] = -(kLumaR * op);       m[3] = 0.0f;
-            m[4] = -(kLumaG * op);       m[5] = 1.0f - (kLumaG * op); m[6] = -(kLumaG * op);       m[7] = 0.0f;
-            m[8] = -(kLumaB * op);       m[9] = -(kLumaB * op);       m[10] = 1.0f - (kLumaB * op); m[11] = 0.0f;
-            m[12] = 0.0f;                m[13] = 0.0f;                m[14] = 0.0f;                 m[15] = 1.0f;
-            m[16] = tintLum * op;        m[17] = tintLum * op;        m[18] = tintLum * op;         m[19] = 0.0f;
-            lumMatrix->Name(L"LuminosityBlend");
-            topOfStack = *lumMatrix;
-        }
-
-        wuc::CompositionSurfaceBrush noiseBrush{nullptr};
-        if (m_noiseOpacity && *m_noiseOpacity > 0.0f) {
-            float density = m_noiseDensity.value_or(1.0f);
-            auto stream = CreateNoiseStream(density);
-            auto surface =
-                Media::LoadedImageSurface::StartLoadFromStream(stream);
-            noiseBrush = m_compositor.CreateSurfaceBrush(surface);
-            noiseBrush.Stretch(wuc::CompositionStretch::None);
-
-            auto borderEffect = winrt::make_self<BorderEffect>();
-            borderEffect->Source =
-                wuc::CompositionEffectSourceParameter(L"NoiseSource");
-
-            float nOp = std::clamp(*m_noiseOpacity, 0.0f, 1.0f);
-            auto opacityEffect = winrt::make_self<ColorMatrixEffect>();
-            opacityEffect->Source = *borderEffect;
-            opacityEffect->Matrix[0] = nOp;
-            opacityEffect->Matrix[5] = nOp;
-            opacityEffect->Matrix[10] = nOp;
-            opacityEffect->Matrix[15] = nOp;
-            opacityEffect->Name(L"NoiseOpacityEffect");
-
-            auto noiseComposite = winrt::make_self<CompositeEffect>();
-            noiseComposite->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
-            noiseComposite->Sources.push_back(topOfStack);
-            noiseComposite->Sources.push_back(*opacityEffect);
-            noiseComposite->Name(L"NoiseComposite");
-            topOfStack = *noiseComposite;
-        }
-
-        auto floodEffect = winrt::make_self<FloodEffect>();
-        floodEffect->Color = m_tint;
-        floodEffect->Name(L"FloodEffect");
-
-        auto compositeEffect = winrt::make_self<CompositeEffect>();
-        compositeEffect->Mode = D2D1_COMPOSITE_MODE_SOURCE_OVER;
-        compositeEffect->Sources.push_back(topOfStack);
-        compositeEffect->Sources.push_back(*floodEffect);
-
-        auto factory = m_compositor.CreateEffectFactory(*compositeEffect);
-        auto brush = factory.CreateBrush();
-        brush.SetSourceParameter(L"backdrop", backdropBrush);
-        if (noiseBrush) {
-            brush.SetSourceParameter(L"NoiseSource", noiseBrush);
-        }
-        return brush;
-    }
-
     wuc::Compositor m_compositor;
     float m_blurAmount;
     winrt::Windows::UI::Color m_tint;
-    std::optional<float> m_tintLuminosityOpacity;
-    std::optional<float> m_tintSaturation;
-    std::optional<float> m_noiseOpacity;
-    std::optional<float> m_noiseDensity;
-    std::optional<winrt::Windows::UI::Color> m_fallbackColor;
+    bool m_acrylic;
 };
 
 // ============================================================================
@@ -997,6 +554,9 @@ struct ModSettings {
     IgnoredWindowsConfig ignored;
     bool taskViewFollowsDesktop = true;
     int transitionDurationMs = 180;
+
+    bool hasTitleFilters = false;
+    bool hasProcessFilters = false;
 };
 
 ModSettings g_settings;
@@ -1015,7 +575,6 @@ std::wstring ToLowerTrimmed(std::wstring_view input) {
 }
 
 AccentMode ParseAccentMode(PCWSTR value, AccentMode fallback) {
-    if (!value) return fallback;
     if (_wcsicmp(value, L"clear") == 0) return AccentMode::Clear;
     if (_wcsicmp(value, L"blur") == 0) return AccentMode::Blur;
     if (_wcsicmp(value, L"acrylic") == 0) return AccentMode::Acrylic;
@@ -1027,7 +586,6 @@ AccentMode ParseAccentMode(PCWSTR value, AccentMode fallback) {
 // TranslucentTB stores colors as #RRGGBBAA (also accepts #RRGGBB).
 winrt::Windows::UI::Color ParseRgbaHex(
     PCWSTR str, winrt::Windows::UI::Color fallback) {
-    if (!str) return fallback;
     std::wstring_view sv(str);
     while (!sv.empty() && iswspace(sv.front())) sv.remove_prefix(1);
     while (!sv.empty() && iswspace(sv.back())) sv.remove_suffix(1);
@@ -1071,36 +629,34 @@ AppearanceConfig LoadAppearanceGroup(PCWSTR prefix,
                       ? (Wh_GetIntSetting(L"%s.enabled", prefix) != 0)
                       : true;
 
-    string_setting_unique_ptr accentStr(
-        Wh_GetStringSetting(L"%s.accent", prefix));
+    auto accentStr = WindhawkUtils::StringSetting::make(L"%s.accent", prefix);
     cfg.accent = ParseAccentMode(accentStr.get(), defAccent);
 
-    string_setting_unique_ptr colorStr(
-        Wh_GetStringSetting(L"%s.color", prefix));
+    auto colorStr = WindhawkUtils::StringSetting::make(L"%s.color", prefix);
     cfg.color = ParseRgbaHex(colorStr.get(), defColor);
 
     cfg.showPeek = Wh_GetIntSetting(L"%s.showPeek", prefix) != 0;
     cfg.showLine = Wh_GetIntSetting(L"%s.showLine", prefix) != 0;
-
-    int radius = Wh_GetIntSetting(L"%s.blurRadius", prefix);
-    cfg.blurRadius = static_cast<float>(std::clamp(radius > 0 ? radius : 9, 0, 100));
+    cfg.blurRadius = static_cast<float>(
+        std::clamp(Wh_GetIntSetting(L"%s.blurRadius", prefix), 0, 100));
     return cfg;
 }
 
 std::vector<WindowRule> LoadRulesList(PCWSTR prefix) {
     std::vector<WindowRule> out;
     for (int i = 0;; i++) {
-        string_setting_unique_ptr valStr(
-            Wh_GetStringSetting(L"%s.rules[%d].matchValue", prefix, i));
-        std::wstring matchVal = ToLowerTrimmed(valStr.get() ? valStr.get() : L"");
+        auto valStr = WindhawkUtils::StringSetting::make(
+            L"%s.rules[%d].matchValue", prefix, i);
+        auto typeStr = WindhawkUtils::StringSetting::make(
+            L"%s.rules[%d].matchType", prefix, i);
+        auto accentStr = WindhawkUtils::StringSetting::make(
+            L"%s.rules[%d].accent", prefix, i);
 
-        string_setting_unique_ptr typeStr(
-            Wh_GetStringSetting(L"%s.rules[%d].matchType", prefix, i));
-        string_setting_unique_ptr accentStr(
-            Wh_GetStringSetting(L"%s.rules[%d].accent", prefix, i));
         if (!typeStr.get()[0] && !accentStr.get()[0] && !valStr.get()[0]) {
             break;
         }
+
+        std::wstring matchVal = ToLowerTrimmed(valStr.get());
         if (matchVal.empty()) {
             continue;
         }
@@ -1115,18 +671,18 @@ std::vector<WindowRule> LoadRulesList(PCWSTR prefix) {
         }
         rule.matchValue = std::move(matchVal);
         rule.appearance.enabled = true;
-        rule.appearance.accent = ParseAccentMode(accentStr.get(), AccentMode::Clear);
+        rule.appearance.accent =
+            ParseAccentMode(accentStr.get(), AccentMode::Clear);
 
-        string_setting_unique_ptr colorStr(
-            Wh_GetStringSetting(L"%s.rules[%d].color", prefix, i));
+        auto colorStr = WindhawkUtils::StringSetting::make(
+            L"%s.rules[%d].color", prefix, i);
         rule.appearance.color = ParseRgbaHex(colorStr.get(), {0, 0, 0, 0});
         rule.appearance.showPeek =
             Wh_GetIntSetting(L"%s.rules[%d].showPeek", prefix, i) != 0;
         rule.appearance.showLine =
             Wh_GetIntSetting(L"%s.rules[%d].showLine", prefix, i) != 0;
-        int radius = Wh_GetIntSetting(L"%s.rules[%d].blurRadius", prefix, i);
-        rule.appearance.blurRadius =
-            static_cast<float>(std::clamp(radius > 0 ? radius : 9, 0, 100));
+        rule.appearance.blurRadius = static_cast<float>(std::clamp(
+            Wh_GetIntSetting(L"%s.rules[%d].blurRadius", prefix, i), 0, 100));
 
         out.push_back(std::move(rule));
     }
@@ -1136,14 +692,10 @@ std::vector<WindowRule> LoadRulesList(PCWSTR prefix) {
 std::vector<std::wstring> LoadIgnoredArray(PCWSTR key) {
     std::vector<std::wstring> list;
     for (int i = 0;; i++) {
-        string_setting_unique_ptr val(Wh_GetStringSetting(L"%s[%d]", key, i));
+        auto val = WindhawkUtils::StringSetting::make(L"%s[%d]", key, i);
         if (!val.get()[0]) {
-            // Stop only once we've probed beyond index 0 or empty array terminator:
-            // Note Windhawk terminates arrays with an empty string unless items follow;
-            // check next index once if index 0 is default placeholder empty string.
             if (i == 0) {
-                string_setting_unique_ptr next(
-                    Wh_GetStringSetting(L"%s[%d]", key, 1));
+                auto next = WindhawkUtils::StringSetting::make(L"%s[%d]", key, 1);
                 if (!next.get()[0]) break;
                 continue;
             }
@@ -1175,6 +727,17 @@ void LoadSettings() {
     s.transitionDurationMs =
         std::clamp(Wh_GetIntSetting(L"transitionDurationMs"), 0, 2000);
 
+    s.hasTitleFilters = !s.ignored.windowTitles.empty();
+    s.hasProcessFilters = !s.ignored.processNames.empty();
+    auto scanRules = [&](const std::vector<WindowRule>& rules) {
+        for (const auto& r : rules) {
+            if (r.matchType == RuleMatchType::WindowTitle) s.hasTitleFilters = true;
+            if (r.matchType == RuleMatchType::ProcessName) s.hasProcessFilters = true;
+        }
+    };
+    if (s.visibleWindow.enabled) scanRules(s.visibleRules);
+    if (s.maximizedWindow.enabled) scanRules(s.maximizedRules);
+
     AcquireSRWLockExclusive(&g_settingsLock);
     g_settings = std::move(s);
     ReleaseSRWLockExclusive(&g_settingsLock);
@@ -1188,7 +751,7 @@ ModSettings SnapshotSettings() {
 }
 
 // ============================================================================
-//  Explorer taskbar.dll Symbols & XAML Tree Access
+//  Explorer taskbar.dll Symbols, Primary HWND Cache & XAML Lookup
 // ============================================================================
 
 std::atomic<bool> g_modUnloading{false};
@@ -1210,11 +773,24 @@ std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original = nullptr;
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void* pThis);
 TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
 
-using CSecondaryTray_GetTrayWindow_t = HWND(WINAPI*)(void* pThis);
-CSecondaryTray_GetTrayWindow_t CSecondaryTray_GetTrayWindow_Original = nullptr;
-
 using CSecondaryTray_InitModelAndHost_t = void(WINAPI*)(void* pThis, void* taskbarModel);
 CSecondaryTray_InitModelAndHost_t CSecondaryTray_InitModelAndHost_Original = nullptr;
+
+using InternalGetWindowText_t = int(WINAPI*)(HWND, LPWSTR, int);
+InternalGetWindowText_t g_internalGetWindowText = nullptr;
+
+void ReadWindowTitleSafe(HWND hwnd, wchar_t* buf, int cchMax) {
+    if (!buf || cchMax <= 0) return;
+    buf[0] = L'\0';
+    if (g_internalGetWindowText) {
+        g_internalGetWindowText(hwnd, buf, cchMax);
+        return;
+    }
+    DWORD pid = 0;
+    if (GetWindowThreadProcessId(hwnd, &pid) && pid != GetCurrentProcessId()) {
+        GetWindowTextW(hwnd, buf, cchMax);
+    }
+}
 
 bool IsTaskbarWindow(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) return false;
@@ -1231,7 +807,18 @@ bool IsSecondaryTaskbarWindow(HWND hWnd) {
            _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0;
 }
 
+std::atomic<HWND> g_cachedPrimaryTaskbarWnd{nullptr};
+
 HWND FindPrimaryTaskbarWnd() {
+    HWND cached = g_cachedPrimaryTaskbarWnd.load(std::memory_order_acquire);
+    if (cached && IsWindow(cached)) {
+        wchar_t cls[32]{};
+        if (GetClassNameW(cached, cls, ARRAYSIZE(cls)) &&
+            _wcsicmp(cls, L"Shell_TrayWnd") == 0) {
+            return cached;
+        }
+    }
+
     HWND result = nullptr;
     EnumWindows(
         [](HWND hWnd, LPARAM lParam) -> BOOL {
@@ -1247,6 +834,9 @@ HWND FindPrimaryTaskbarWnd() {
             return TRUE;
         },
         reinterpret_cast<LPARAM>(&result));
+    if (result) {
+        g_cachedPrimaryTaskbarWnd.store(result, std::memory_order_release);
+    }
     return result;
 }
 
@@ -1266,26 +856,38 @@ std::vector<HWND> FindAllTaskbarWindows() {
     return list;
 }
 
+size_t ResolveTaskbarElementOffset() {
+    static const size_t resolved = []() -> size_t {
+        const BYTE* code =
+            static_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
+        for (int i = 0; code && i < 6; i++) {
+            WH_DISASM_RESULT dis{};
+            if (!Wh_Disasm(const_cast<BYTE*>(code), &dis)) break;
+            code += dis.length;
+            std::string_view text(dis.text);
+            if (text == "ret") break;
+            if (text.starts_with("add rcx, 0x")) {
+                size_t val =
+                    static_cast<size_t>(std::strtoull(dis.text + 11, nullptr, 16));
+                if (val > 0 && val <= 0x200) return val;
+            }
+            if (text.starts_with("lea rcx, [rcx+0x")) {
+                size_t val =
+                    static_cast<size_t>(std::strtoull(dis.text + 16, nullptr, 16));
+                if (val > 0 && val <= 0x200) return val;
+            }
+        }
+        return 0x10;
+    }();
+    return resolved;
+}
+
 XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
     if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
         return nullptr;
     }
 
-    size_t offset = 0x10;
-#if defined(_M_X64)
-    const BYTE* b = static_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
-    if (b && b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
-        b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
-        offset = b[7];
-    }
-#elif defined(_M_ARM64)
-    const DWORD* p = static_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
-    if (p && p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
-        p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
-        offset = (p[3] >> 12) & 0xFF;
-    }
-#endif
-
+    size_t offset = ResolveTaskbarElementOffset();
     XamlRoot result{nullptr};
     if (taskbarHostSharedPtr[0]) {
         auto* elemIUnknown = *reinterpret_cast<IUnknown**>(
@@ -1358,65 +960,9 @@ XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
     }
 }
 
-using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
-
-UINT g_runFromWindowThreadMsg = 0;
-
-bool RunFromWindowThread(HWND hWnd,
-                         RunFromWindowThreadProc_t proc,
-                         void* procParam) {
-    if (!g_runFromWindowThreadMsg) {
-        g_runFromWindowThreadMsg = RegisterWindowMessageW(
-            L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-    }
-
-    struct Param {
-        RunFromWindowThreadProc_t proc;
-        void* procParam;
-        bool started = false;
-        bool completed = false;
-    };
-
-    DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (!threadId) return false;
-    if (threadId == GetCurrentThreadId()) {
-        proc(procParam);
-        return true;
-    }
-
-    HHOOK hook = SetWindowsHookExW(
-        WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (nCode == HC_ACTION) {
-                const auto* cwp = reinterpret_cast<const CWPSTRUCT*>(lParam);
-                if (cwp->message == g_runFromWindowThreadMsg) {
-                    auto* p = reinterpret_cast<Param*>(cwp->lParam);
-                    if (!p->started) {
-                        p->started = true;
-                        p->proc(p->procParam);
-                        p->completed = true;
-                    }
-                }
-            }
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr, threadId);
-    if (!hook) return false;
-
-    Param p{proc, procParam};
-    SendMessageW(hWnd, g_runFromWindowThreadMsg, 0, reinterpret_cast<LPARAM>(&p));
-    UnhookWindowsHookEx(hook);
-    return p.completed;
-}
-
 // ============================================================================
 //  Window State & Rules Evaluation (per monitor)
 // ============================================================================
-
-struct MonInfoData {
-    HMONITOR hMon;
-    RECT rcMonitor;
-};
 
 struct WindowMetadata {
     HWND hwnd = nullptr;
@@ -1426,6 +972,10 @@ struct WindowMetadata {
     std::wstring titleLower;
     std::wstring processNameLower;
 };
+
+// Accessed only on Explorer's taskbar thread.
+[[clang::no_destroy]] std::optional<std::unordered_map<DWORD, std::wstring>>
+    g_pidProcessCache{std::in_place};
 
 bool IsBuiltInIgnoredClass(std::wstring_view cls) {
     return cls == L"progman" ||
@@ -1443,13 +993,13 @@ bool IsBuiltInIgnoredClass(std::wstring_view cls) {
            cls == L"tooltips_class32" ||
            cls == L"multitaskingviewframe" ||
            cls == L"xamlexplorerhostwindow" ||
+           cls == L"xamlexplorerhostislandwindow" ||
            cls == L"applicationmanager_desktopshellwindow";
 }
 
 bool ProcessMatchesExactOrStem(const std::wstring& procLower,
                                const std::wstring& patternLower) {
     if (procLower == patternLower) return true;
-    // Allow matching "notepad" against "notepad.exe" or vice versa
     if (patternLower.size() > 4 &&
         patternLower.compare(patternLower.size() - 4, 4, L".exe") == 0) {
         return procLower == patternLower.substr(0, patternLower.size() - 4);
@@ -1461,9 +1011,19 @@ bool ProcessMatchesExactOrStem(const std::wstring& procLower,
     return false;
 }
 
-std::wstring GetWindowProcessNameLower(HWND hwnd) {
+std::wstring GetWindowProcessNameLowerCached(
+    HWND hwnd, std::unordered_set<DWORD>& seenPids) {
     DWORD pid = 0;
     if (!GetWindowThreadProcessId(hwnd, &pid) || !pid) return {};
+    seenPids.insert(pid);
+
+    if (g_pidProcessCache) {
+        if (auto it = g_pidProcessCache->find(pid);
+            it != g_pidProcessCache->end()) {
+            return it->second;
+        }
+    }
+
     HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!hProc) return {};
     wchar_t path[MAX_PATH]{};
@@ -1471,8 +1031,12 @@ std::wstring GetWindowProcessNameLower(HWND hwnd) {
     BOOL ok = QueryFullProcessImageNameW(hProc, 0, path, &len);
     CloseHandle(hProc);
     if (!ok || len == 0) return {};
-    PCWSTR fileName = PathFindFileNameW(path);
-    return ToLowerTrimmed(fileName);
+
+    std::wstring name = ToLowerTrimmed(PathFindFileNameW(path));
+    if (g_pidProcessCache) {
+        (*g_pidProcessCache)[pid] = name;
+    }
+    return name;
 }
 
 bool IsTaskViewOpen() {
@@ -1495,13 +1059,33 @@ bool IsTaskViewOpen() {
                 reinterpret_cast<Ctx*>(lp)->open = true;
                 return FALSE;
             }
-            if (_wcsicmp(cls, L"XamlExplorerHostWindow") == 0 ||
+            if (_wcsicmp(cls, L"XamlExplorerHostIslandWindow") == 0 ||
+                _wcsicmp(cls, L"XamlExplorerHostWindow") == 0 ||
                 _wcsicmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
                 wchar_t title[128]{};
-                GetWindowTextW(hwnd, title, ARRAYSIZE(title));
+                ReadWindowTitleSafe(hwnd, title, ARRAYSIZE(title));
                 if (_wcsicmp(title, L"Task View") == 0) {
                     reinterpret_cast<Ctx*>(lp)->open = true;
                     return FALSE;
+                }
+                // Non-English fallback: Task View spans the full monitor while
+                // Alt+Tab in XamlExplorerHostIslandWindow is smaller.
+                if (_wcsicmp(cls, L"XamlExplorerHostIslandWindow") == 0) {
+                    RECT rc{};
+                    HMONITOR mon =
+                        MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL);
+                    MONITORINFO mi{};
+                    mi.cbSize = sizeof(mi);
+                    if (mon && GetMonitorInfoW(mon, &mi) &&
+                        GetWindowRect(hwnd, &rc)) {
+                        if ((rc.right - rc.left) >=
+                                (mi.rcMonitor.right - mi.rcMonitor.left - 4) &&
+                            (rc.bottom - rc.top) >=
+                                (mi.rcMonitor.bottom - mi.rcMonitor.top - 4)) {
+                            reinterpret_cast<Ctx*>(lp)->open = true;
+                            return FALSE;
+                        }
+                    }
                 }
             }
             return TRUE;
@@ -1543,6 +1127,7 @@ bool MatchesRule(const WindowMetadata& wm, const WindowRule& rule) {
 struct EnumWindowsCtx {
     const ModSettings* settings = nullptr;
     HWND foregroundWnd = nullptr;
+    std::unordered_set<DWORD> seenPids;
     std::vector<WindowMetadata> windows;
 };
 
@@ -1593,10 +1178,15 @@ std::vector<WindowMetadata> CollectActiveWindows(const ModSettings& settings) {
             wm.maximized = IsZoomed(hwnd) != FALSE;
             wm.classNameLower = std::move(clsLower);
 
-            wchar_t titleBuf[512]{};
-            GetWindowTextW(hwnd, titleBuf, ARRAYSIZE(titleBuf));
-            wm.titleLower = ToLowerTrimmed(titleBuf);
-            wm.processNameLower = GetWindowProcessNameLower(hwnd);
+            if (ctx->settings->hasTitleFilters) {
+                wchar_t titleBuf[512]{};
+                ReadWindowTitleSafe(hwnd, titleBuf, ARRAYSIZE(titleBuf));
+                wm.titleLower = ToLowerTrimmed(titleBuf);
+            }
+            if (ctx->settings->hasProcessFilters) {
+                wm.processNameLower =
+                    GetWindowProcessNameLowerCached(hwnd, ctx->seenPids);
+            }
 
             if (MatchesIgnoreList(wm, ctx->settings->ignored)) {
                 return TRUE;
@@ -1607,7 +1197,18 @@ std::vector<WindowMetadata> CollectActiveWindows(const ModSettings& settings) {
         },
         reinterpret_cast<LPARAM>(&ctx));
 
-    // Move foreground window to the front so its rules take priority.
+    // Prune closed PIDs so recycled PIDs never return stale process names.
+    if (g_pidProcessCache) {
+        for (auto it = g_pidProcessCache->begin();
+             it != g_pidProcessCache->end();) {
+            if (ctx.seenPids.find(it->first) == ctx.seenPids.end()) {
+                it = g_pidProcessCache->erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     if (ctx.foregroundWnd) {
         auto it = std::find_if(
             ctx.windows.begin(), ctx.windows.end(),
@@ -1653,7 +1254,7 @@ AppearanceConfig EvaluateAppearanceForMonitor(
     for (const auto& wm : windows) {
         if (!WindowOnMonitor(wm, targetMon, mi.rcMonitor)) continue;
 
-        if (wm.maximized) {
+        if (wm.maximized && settings.maximizedWindow.enabled) {
             hasMaximized = true;
             if (!matchedMaxRule) {
                 for (const auto& r : settings.maximizedRules) {
@@ -1663,7 +1264,8 @@ AppearanceConfig EvaluateAppearanceForMonitor(
                     }
                 }
             }
-        } else {
+        } else if (settings.visibleWindow.enabled) {
+            // Also treat maximized windows as visible when Maximized state is off.
             hasVisible = true;
             if (!matchedVisRule) {
                 for (const auto& r : settings.visibleRules) {
@@ -1692,7 +1294,7 @@ AppearanceConfig EvaluateAppearanceForMonitor(
 }
 
 // ============================================================================
-//  XAML Element Styling & State Tracking per Taskbar (UI-thread affine)
+//  XAML Element Styling & Animated State Tracking (taskbar UI thread)
 // ============================================================================
 
 template <typename Fn>
@@ -1729,13 +1331,10 @@ struct TrackedVisibilityElement {
 };
 
 struct TaskbarVisualState {
-    HWND taskbarWnd = nullptr;
-    winrt::weak_ref<FrameworkElement> rootFrame;
     std::vector<TrackedFillElement> fills;
     std::vector<TrackedVisibilityElement> strokes;
     std::vector<TrackedVisibilityElement> peeks;
 
-    // Optional sibling rectangle inside BackgroundFill's Grid for non-transparent cross-fades.
     Shapes::Rectangle fadeOverlay{nullptr};
     Controls::Panel fadeOverlayParent{nullptr};
 
@@ -1745,7 +1344,6 @@ struct TaskbarVisualState {
     Media::Brush currentBrush{nullptr};
     bool activeFillIsNative = true;
 
-    // Animation state (steady visual values live in cur*Opacity / curSolidColor)
     bool animating = false;
     LONGLONG animStartQpc = 0;
     int animDurationMs = 0;
@@ -1761,17 +1359,29 @@ struct TaskbarVisualState {
     double curPeekOp = 1.0, startPeekOp = 1.0, endPeekOp = 1.0;
 };
 
-// Accessed strictly from Explorer's taskbar thread.
-std::unordered_map<HWND, TaskbarVisualState> g_taskbarStates;
+// Accessed only from Explorer's taskbar thread; reset on unload so process
+// shutdown never releases XAML references on an arbitrary shutdown thread.
+[[clang::no_destroy]] std::optional<std::unordered_map<HWND, TaskbarVisualState>>
+    g_taskbarStates{std::in_place};
+
 constexpr UINT_PTR kReevaluateTimerId = 0x44545401ULL;
 constexpr UINT_PTR kRetryInitTimerId = 0x44545402ULL;
 constexpr UINT_PTR kAnimTimerId = 0x44545403ULL;
 int g_retryInitRemaining = 0;
-HWINEVENTHOOK g_winEventHookSystem = nullptr;
-HWINEVENTHOOK g_winEventHookObject = nullptr;
 bool g_evalPending = false;
 bool g_animTimerActive = false;
-bool g_hooksInstalled = false;
+bool g_subclassInstalled = false;
+
+UINT g_msgSetup = 0;
+UINT g_msgReapply = 0;
+UINT g_msgUninit = 0;
+UINT g_msgScheduleEval = 0;
+std::atomic<bool> g_evalPosted{false};
+
+// Dedicated WinEvent hook thread state.
+HANDLE g_winEventThread = nullptr;
+std::atomic<DWORD> g_winEventThreadId{0};
+UINT g_msgUpdateEventHooks = 0;
 
 double QueryPerfMsSince(LONGLONG startQpc) {
     static const LONGLONG freq = []() {
@@ -1814,16 +1424,11 @@ winrt::Windows::UI::Color EffectiveSolidColor(const AppearanceConfig& cfg) {
     return c;
 }
 
-void ApplyAppearanceToState(TaskbarVisualState& state,
-                            const AppearanceConfig& cfg,
-                            bool forceBrushRebuild,
-                            int transitionMs = 0);
-
 Media::Brush CreateBrushForConfig(UIElement const& anchor,
                                   const AppearanceConfig& cfg) {
     switch (cfg.accent) {
         case AccentMode::Normal:
-            return nullptr;  // signal to restore original fill
+            return nullptr;
         case AccentMode::Clear: {
             Media::SolidColorBrush brush;
             brush.Color(cfg.color);
@@ -1837,20 +1442,11 @@ Media::Brush CreateBrushForConfig(UIElement const& anchor,
             return brush;
         }
         case AccentMode::Blur:
-            return winrt::make<XamlBlurBrush>(
-                anchor, cfg.blurRadius, cfg.color,
-                std::nullopt, std::nullopt, std::nullopt, std::nullopt,
-                std::optional<winrt::Windows::UI::Color>{cfg.color});
-        case AccentMode::Acrylic: {
-            float blur = std::max(cfg.blurRadius, 24.0f);
-            return winrt::make<XamlBlurBrush>(
-                anchor, blur, cfg.color,
-                std::optional<float>{0.85f},
-                std::optional<float>{1.25f},
-                std::optional<float>{0.02f},
-                std::optional<float>{0.44f},
-                std::optional<winrt::Windows::UI::Color>{cfg.color});
-        }
+            return winrt::make<BackdropTintBrush>(
+                anchor, cfg.blurRadius, cfg.color, false);
+        case AccentMode::Acrylic:
+            return winrt::make<BackdropTintBrush>(
+                anchor, std::max(cfg.blurRadius, 24.0f), cfg.color, true);
     }
     return nullptr;
 }
@@ -1882,11 +1478,9 @@ bool EnsureFadeOverlay(TaskbarVisualState& state) {
     if (state.fadeOverlay && state.fadeOverlayParent) {
         try {
             if (auto r = primary.try_as<Shapes::Rectangle>()) {
-                if (auto ov = state.fadeOverlay) {
-                    ov.RadiusX(r.RadiusX());
-                    ov.RadiusY(r.RadiusY());
-                    ov.Margin(r.Margin());
-                }
+                state.fadeOverlay.RadiusX(r.RadiusX());
+                state.fadeOverlay.RadiusY(r.RadiusY());
+                state.fadeOverlay.Margin(r.Margin());
             }
             return true;
         } catch (...) {
@@ -2041,9 +1635,12 @@ void RegisterPropertyWatchers(HWND taskbarWnd, TaskbarVisualState& state) {
         f.propToken = sh.RegisterPropertyChangedCallback(
             Shapes::Shape::FillProperty(),
             [taskbarWnd](DependencyObject const&, DependencyProperty const&) {
-                if (g_modUnloading.load(std::memory_order_acquire)) return;
-                auto it = g_taskbarStates.find(taskbarWnd);
-                if (it == g_taskbarStates.end() || it->second.applying) return;
+                if (g_modUnloading.load(std::memory_order_acquire) ||
+                    !g_taskbarStates) {
+                    return;
+                }
+                auto it = g_taskbarStates->find(taskbarWnd);
+                if (it == g_taskbarStates->end() || it->second.applying) return;
                 auto& st = it->second;
                 if (st.hasLastApplied && !st.activeFillIsNative &&
                     !st.animating && st.currentBrush) {
@@ -2069,9 +1666,12 @@ void RegisterPropertyWatchers(HWND taskbarWnd, TaskbarVisualState& state) {
         s.propToken = el.RegisterPropertyChangedCallback(
             UIElement::VisibilityProperty(),
             [taskbarWnd](DependencyObject const&, DependencyProperty const&) {
-                if (g_modUnloading.load(std::memory_order_acquire)) return;
-                auto it = g_taskbarStates.find(taskbarWnd);
-                if (it == g_taskbarStates.end() || it->second.applying) return;
+                if (g_modUnloading.load(std::memory_order_acquire) ||
+                    !g_taskbarStates) {
+                    return;
+                }
+                auto it = g_taskbarStates->find(taskbarWnd);
+                if (it == g_taskbarStates->end() || it->second.applying) return;
                 auto& st = it->second;
                 if (st.hasLastApplied && !st.animating &&
                     !st.lastConfig.showLine) {
@@ -2097,9 +1697,12 @@ void RegisterPropertyWatchers(HWND taskbarWnd, TaskbarVisualState& state) {
         p.propToken = el.RegisterPropertyChangedCallback(
             UIElement::VisibilityProperty(),
             [taskbarWnd](DependencyObject const&, DependencyProperty const&) {
-                if (g_modUnloading.load(std::memory_order_acquire)) return;
-                auto it = g_taskbarStates.find(taskbarWnd);
-                if (it == g_taskbarStates.end() || it->second.applying) return;
+                if (g_modUnloading.load(std::memory_order_acquire) ||
+                    !g_taskbarStates) {
+                    return;
+                }
+                auto it = g_taskbarStates->find(taskbarWnd);
+                if (it == g_taskbarStates->end() || it->second.applying) return;
                 auto& st = it->second;
                 if (st.hasLastApplied && !st.animating &&
                     !st.lastConfig.showPeek) {
@@ -2141,20 +1744,17 @@ bool EnsureTaskbarTargetsCollected(HWND taskbarWnd, TaskbarVisualState& state) {
     state.lerpBrush = nullptr;
     state.hasLastApplied = false;
     state.animating = false;
-    state.taskbarWnd = taskbarWnd;
 
     XamlRoot root = GetTaskbarXamlRoot(taskbarWnd);
     if (!root) return false;
     FrameworkElement content = root.Content().try_as<FrameworkElement>();
     if (!content) return false;
 
-    state.rootFrame = winrt::make_weak(content);
-
     WalkDescendants(content, [&](FrameworkElement const& child) -> bool {
         try {
             auto name = child.Name();
             if (name == L"HoverFlyoutBackgroundControl") {
-                return false;  // do not override hover flyout backdrop
+                return false;
             }
             if (name == L"BackgroundFill") {
                 if (auto shape = child.try_as<Shapes::Shape>()) {
@@ -2265,7 +1865,6 @@ void ApplyAnimatedVisibilityGroup(std::vector<TrackedVisibilityElement>& group,
                     }
                 }
             } else {
-                // Keep visible during transition unless natively hidden when targetVisible.
                 if (el.Visibility() == Visibility::Collapsed &&
                     (targetVisible || opacity > 0.001)) {
                     el.Visibility(Visibility::Visible);
@@ -2315,11 +1914,9 @@ void StepTaskbarAnimation(TaskbarVisualState& state) {
                 state.fadeOverlay.Visibility(Visibility::Collapsed);
                 state.fadeOverlay.Fill(nullptr);
             } else {
-                // Incoming fill ramps up smoothly while outgoing overlay fades out.
                 double inv = 1.0 - t;
                 double inOp = 1.0 - inv * inv;
-                double outOp = inv;
-                state.fadeOverlay.Opacity(outOp);
+                state.fadeOverlay.Opacity(inv);
                 for (auto& f : state.fills) {
                     if (auto sh = f.shape.get()) {
                         sh.Opacity(inOp);
@@ -2373,8 +1970,9 @@ void StepTaskbarAnimation(TaskbarVisualState& state) {
 }
 
 void EnsureAnimTimerRunning() {
+    if (!g_taskbarStates) return;
     bool anyAnimating = false;
-    for (const auto& [tb, st] : g_taskbarStates) {
+    for (const auto& [tb, st] : *g_taskbarStates) {
         if (st.animating) {
             anyAnimating = true;
             break;
@@ -2396,13 +1994,11 @@ void ApplyAppearanceToState(TaskbarVisualState& state,
                             const AppearanceConfig& cfg,
                             bool forceBrushRebuild,
                             int transitionMs) {
-    if (state.applying) return;
-    if (state.fills.empty()) return;
+    if (state.applying || state.fills.empty()) return;
 
     auto anchor = state.fills[0].shape.get();
     if (!anchor) return;
 
-    // First application or animations disabled -> apply immediately.
     if (!state.hasLastApplied || transitionMs <= 0) {
         state.applying = true;
         state.animating = false;
@@ -2436,8 +2032,10 @@ void ApplyAppearanceToState(TaskbarVisualState& state,
         state.curFillOp = IsClearZero(cfg) ? 0.0 : 1.0;
         state.curLineOp = cfg.showLine ? 1.0 : 0.0;
         state.curPeekOp = cfg.showPeek ? 1.0 : 0.0;
-        ApplyAnimatedVisibilityGroup(state.strokes, state.curLineOp, cfg.showLine, true);
-        ApplyAnimatedVisibilityGroup(state.peeks, state.curPeekOp, cfg.showPeek, true);
+        ApplyAnimatedVisibilityGroup(
+            state.strokes, state.curLineOp, cfg.showLine, true);
+        ApplyAnimatedVisibilityGroup(
+            state.peeks, state.curPeekOp, cfg.showPeek, true);
 
         state.lastConfig = cfg;
         state.hasLastApplied = true;
@@ -2446,7 +2044,6 @@ void ApplyAppearanceToState(TaskbarVisualState& state,
         return;
     }
 
-    // Animated transition from current visual state -> cfg
     state.applying = true;
 
     const bool fillSame =
@@ -2488,8 +2085,6 @@ void ApplyAppearanceToState(TaskbarVisualState& state,
         }
 
         if (toClearZero) {
-            // Keep the currently visible brush (e.g. Normal or Blur) on BackgroundFill
-            // and fade its Opacity smoothly down to 0 before swapping to clear.
             state.currentBrush = CreateBrushForConfig(anchor, cfg);
             if (state.curFillOp > 0.01 && outgoingBrush) {
                 state.fadeClearAtEnd = true;
@@ -2509,8 +2104,6 @@ void ApplyAppearanceToState(TaskbarVisualState& state,
                 state.startFillOp = state.endFillOp = state.curFillOp = 0.0;
             }
         } else if (fromClearZero || state.fadeClearAtEnd) {
-            // Reversing a fade-out to clear, or fading in from clear -> target:
-            // If reversing clear->normal when BackgroundFill STILL holds native, keep it & ramp up!
             const bool toNative = (cfg.accent == AccentMode::Normal);
             if (!(state.fadeClearAtEnd && toNative && state.activeFillIsNative)) {
                 state.currentBrush =
@@ -2523,7 +2116,6 @@ void ApplyAppearanceToState(TaskbarVisualState& state,
             state.animDurationMs = std::max(
                 30, static_cast<int>(std::lround(transitionMs * remain)));
         } else if (IsSolidAccent(state.lastConfig) && IsSolidAccent(cfg)) {
-            // Direct smooth RGBA color interpolation between two solid brushes.
             state.startColor = state.colorLerp
                                    ? state.curColor
                                    : EffectiveSolidColor(state.lastConfig);
@@ -2538,7 +2130,6 @@ void ApplyAppearanceToState(TaskbarVisualState& state,
             ApplyFillElements(state, false, state.lerpBrush, 1.0);
             state.startFillOp = state.endFillOp = state.curFillOp = 1.0;
         } else {
-            // Non-transparent cross-fade (e.g. Blur <-> Normal, Acrylic <-> Opaque)
             const bool toNative = (cfg.accent == AccentMode::Normal);
             state.currentBrush =
                 toNative ? nullptr : CreateBrushForConfig(anchor, cfg);
@@ -2582,7 +2173,9 @@ void ApplyAppearanceToState(TaskbarVisualState& state,
 }
 
 void EvaluateAllTaskbars(bool forceApply = false) {
-    if (g_modUnloading.load(std::memory_order_acquire)) return;
+    if (g_modUnloading.load(std::memory_order_acquire) || !g_taskbarStates) {
+        return;
+    }
 
     std::vector<HWND> taskbars = FindAllTaskbarWindows();
     if (taskbars.empty()) return;
@@ -2595,18 +2188,18 @@ void EvaluateAllTaskbars(bool forceApply = false) {
                      : CollectActiveWindows(settings);
 
     std::unordered_set<HWND> liveSet(taskbars.begin(), taskbars.end());
-    for (auto it = g_taskbarStates.begin(); it != g_taskbarStates.end();) {
+    for (auto it = g_taskbarStates->begin(); it != g_taskbarStates->end();) {
         if (liveSet.find(it->first) == liveSet.end()) {
             RemoveFadeOverlay(it->second);
             DetachCallbacksFromState(it->second);
-            it = g_taskbarStates.erase(it);
+            it = g_taskbarStates->erase(it);
         } else {
             ++it;
         }
     }
 
     for (HWND tb : taskbars) {
-        auto& state = g_taskbarStates[tb];
+        auto& state = (*g_taskbarStates)[tb];
         if (!EnsureTaskbarTargetsCollected(tb, state)) {
             continue;
         }
@@ -2634,12 +2227,153 @@ void RequestCoalescedEvaluate(HWND primaryWnd = nullptr) {
     SetTimer(anchor, kReevaluateTimerId, 25, nullptr);
 }
 
+void StartRetryInitTimer(HWND primaryWnd, int attempts = 12) {
+    if (!primaryWnd || !IsWindow(primaryWnd)) return;
+    g_retryInitRemaining = std::max(g_retryInitRemaining, attempts);
+    SetTimer(primaryWnd, kRetryInitTimerId, 250, nullptr);
+}
+
 // ============================================================================
-//  Subclass & Event Hooks (running on Explorer's taskbar thread)
+//  Dedicated WinEvent Hook Thread (keeps Explorer's UI thread clean)
+// ============================================================================
+
+struct WinEventThreadHooks {
+    HWINEVENTHOOK foreground = nullptr;
+    HWINEVENTHOOK moveSizeEnd = nullptr;
+    HWINEVENTHOOK minimize = nullptr;
+    HWINEVENTHOOK objectVis = nullptr;
+    HWINEVENTHOOK locationChange = nullptr;
+    HWINEVENTHOOK cloaked = nullptr;
+    HWINEVENTHOOK nameChange = nullptr;
+};
+
+void CALLBACK WinEventProc(HWINEVENTHOOK,
+                           DWORD,
+                           HWND hwnd,
+                           LONG idObject,
+                           LONG idChild,
+                           DWORD,
+                           DWORD) {
+    if (g_modUnloading.load(std::memory_order_acquire)) return;
+    if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
+    if (g_evalPosted.load(std::memory_order_relaxed)) return;
+    if (GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD) return;
+
+    HWND primary = FindPrimaryTaskbarWnd();
+    if (!primary || !g_msgScheduleEval) return;
+
+    if (!g_evalPosted.exchange(true, std::memory_order_acq_rel)) {
+        PostMessageW(primary, g_msgScheduleEval, 0, 0);
+    }
+}
+
+void SyncTitleEventHook(WinEventThreadHooks& hooks, bool needTitleHook) {
+    if (needTitleHook && !hooks.nameChange) {
+        hooks.nameChange = SetWinEventHook(
+            EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE,
+            nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    } else if (!needTitleHook && hooks.nameChange) {
+        UnhookWinEvent(hooks.nameChange);
+        hooks.nameChange = nullptr;
+    }
+}
+
+DWORD WINAPI WinEventThreadProc(LPVOID) {
+    WinEventThreadHooks hooks;
+    hooks.foreground = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+        nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    hooks.moveSizeEnd = SetWinEventHook(
+        EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND,
+        nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    hooks.minimize = SetWinEventHook(
+        EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND,
+        nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    hooks.objectVis = SetWinEventHook(
+        EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE,
+        nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    hooks.locationChange = SetWinEventHook(
+        EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
+        nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    hooks.cloaked = SetWinEventHook(
+        EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED,
+        nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+
+    ModSettings s = SnapshotSettings();
+    SyncTitleEventHook(hooks, s.hasTitleFilters);
+
+    MSG msg;
+    // Force message queue creation before signaling ready via PeekMessage.
+    PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == g_msgUpdateEventHooks) {
+            ModSettings cur = SnapshotSettings();
+            SyncTitleEventHook(hooks, cur.hasTitleFilters);
+        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    if (hooks.foreground) UnhookWinEvent(hooks.foreground);
+    if (hooks.moveSizeEnd) UnhookWinEvent(hooks.moveSizeEnd);
+    if (hooks.minimize) UnhookWinEvent(hooks.minimize);
+    if (hooks.objectVis) UnhookWinEvent(hooks.objectVis);
+    if (hooks.locationChange) UnhookWinEvent(hooks.locationChange);
+    if (hooks.cloaked) UnhookWinEvent(hooks.cloaked);
+    if (hooks.nameChange) UnhookWinEvent(hooks.nameChange);
+    return 0;
+}
+
+void StartWinEventThread() {
+    if (g_winEventThread) return;
+    DWORD tid = 0;
+    g_winEventThread =
+        CreateThread(nullptr, 0, WinEventThreadProc, nullptr, 0, &tid);
+    if (g_winEventThread) {
+        g_winEventThreadId.store(tid, std::memory_order_release);
+    }
+}
+
+void StopWinEventThread() {
+    DWORD tid = g_winEventThreadId.exchange(0, std::memory_order_acq_rel);
+    if (tid) {
+        // Retry briefly in case the worker queue wasn't created yet.
+        for (int i = 0; i < 20 && !PostThreadMessageW(tid, WM_QUIT, 0, 0); i++) {
+            Sleep(5);
+        }
+    }
+    if (g_winEventThread) {
+        WaitForSingleObject(g_winEventThread, 2000);
+        CloseHandle(g_winEventThread);
+        g_winEventThread = nullptr;
+    }
+}
+
+// ============================================================================
+//  Primary Taskbar Subclass (UI-thread lifecycle & animations)
 // ============================================================================
 
 LRESULT CALLBACK PrimaryTaskbarSubclassProc(
     HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR) {
+    if (uMsg == g_msgUninit) {
+        g_evalPending = false;
+        g_animTimerActive = false;
+        g_evalPosted.store(false, std::memory_order_release);
+        KillTimer(hWnd, kReevaluateTimerId);
+        KillTimer(hWnd, kRetryInitTimerId);
+        KillTimer(hWnd, kAnimTimerId);
+
+        if (g_taskbarStates) {
+            for (auto& [tb, st] : *g_taskbarStates) {
+                RestoreStateToNative(st);
+            }
+            g_taskbarStates.reset();
+        }
+        g_pidProcessCache.reset();
+        return 0;
+    }
+
     if (g_modUnloading.load(std::memory_order_acquire)) {
         if (uMsg == WM_TIMER &&
             (wParam == kReevaluateTimerId || wParam == kRetryInitTimerId ||
@@ -2650,11 +2384,35 @@ LRESULT CALLBACK PrimaryTaskbarSubclassProc(
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
+    if (uMsg == g_msgSetup) {
+        g_cachedPrimaryTaskbarWnd.store(hWnd, std::memory_order_release);
+        StartWinEventThread();
+        EvaluateAllTaskbars(true);
+        StartRetryInitTimer(hWnd, 12);
+        return 0;
+    }
+
+    if (uMsg == g_msgReapply) {
+        if (DWORD tid = g_winEventThreadId.load(std::memory_order_acquire)) {
+            PostThreadMessageW(tid, g_msgUpdateEventHooks, 0, 0);
+        }
+        EvaluateAllTaskbars(true);
+        return 0;
+    }
+
+    if (uMsg == g_msgScheduleEval) {
+        g_evalPosted.store(false, std::memory_order_release);
+        RequestCoalescedEvaluate(hWnd);
+        return 0;
+    }
+
     if (uMsg == WM_TIMER) {
         if (wParam == kAnimTimerId) {
-            for (auto& [tb, st] : g_taskbarStates) {
-                if (st.animating) {
-                    StepTaskbarAnimation(st);
+            if (g_taskbarStates) {
+                for (auto& [tb, st] : *g_taskbarStates) {
+                    if (st.animating) {
+                        StepTaskbarAnimation(st);
+                    }
                 }
             }
             EnsureAnimTimerRunning();
@@ -2668,11 +2426,13 @@ LRESULT CALLBACK PrimaryTaskbarSubclassProc(
         }
         if (wParam == kRetryInitTimerId) {
             EvaluateAllTaskbars(true);
-            bool allReady = !g_taskbarStates.empty();
-            for (const auto& [tb, st] : g_taskbarStates) {
-                if (st.fills.empty()) {
-                    allReady = false;
-                    break;
+            bool allReady = g_taskbarStates && !g_taskbarStates->empty();
+            if (g_taskbarStates) {
+                for (const auto& [tb, st] : *g_taskbarStates) {
+                    if (st.fills.empty()) {
+                        allReady = false;
+                        break;
+                    }
                 }
             }
             if (allReady || --g_retryInitRemaining <= 0) {
@@ -2691,87 +2451,18 @@ LRESULT CALLBACK PrimaryTaskbarSubclassProc(
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-void CALLBACK WinEventProc(HWINEVENTHOOK,
-                           DWORD event,
-                           HWND hwnd,
-                           LONG idObject,
-                           LONG idChild,
-                           DWORD,
-                           DWORD) {
-    if (g_modUnloading.load(std::memory_order_acquire)) return;
-
-    if (event != EVENT_SYSTEM_FOREGROUND &&
-        event != EVENT_SYSTEM_MINIMIZESTART &&
-        event != EVENT_SYSTEM_MINIMIZEEND &&
-        event != EVENT_SYSTEM_MOVESIZESTART &&
-        event != EVENT_SYSTEM_MOVESIZEEND) {
-        if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd) {
-            return;
+void EnsurePrimaryTaskbarSubclassedAndSetup(HWND primary) {
+    if (!primary || !IsWindow(primary)) return;
+    g_cachedPrimaryTaskbarWnd.store(primary, std::memory_order_release);
+    if (!g_subclassInstalled) {
+        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+                primary, PrimaryTaskbarSubclassProc, 0)) {
+            g_subclassInstalled = true;
         }
     }
-
-    RequestCoalescedEvaluate();
-}
-
-void SetupTaskbarThread(void* param) {
-    if (g_modUnloading.load(std::memory_order_acquire)) return;
-    HWND primaryWnd = static_cast<HWND>(param);
-    if (!primaryWnd || !IsWindow(primaryWnd)) return;
-
-    if (!g_hooksInstalled) {
-        WindhawkUtils::SetWindowSubclassFromAnyThread(
-            primaryWnd, PrimaryTaskbarSubclassProc, 0);
-
-        g_winEventHookSystem = SetWinEventHook(
-            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND,
-            nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-        g_winEventHookObject = SetWinEventHook(
-            EVENT_OBJECT_CREATE, EVENT_OBJECT_UNCLOAKED,
-            nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-        g_hooksInstalled = true;
+    if (g_subclassInstalled) {
+        SendMessageW(primary, g_msgSetup, 0, 0);
     }
-
-    EvaluateAllTaskbars(true);
-    g_retryInitRemaining = 12;
-    SetTimer(primaryWnd, kRetryInitTimerId, 250, nullptr);
-}
-
-void ReapplyFromTaskbarThread(void* param) {
-    HWND primaryWnd = static_cast<HWND>(param);
-    if (primaryWnd && IsWindow(primaryWnd) && !g_hooksInstalled) {
-        SetupTaskbarThread(primaryWnd);
-        return;
-    }
-    EvaluateAllTaskbars(true);
-}
-
-void UninitFromTaskbarThread(void* param) {
-    HWND primaryWnd = static_cast<HWND>(param);
-
-    if (g_winEventHookSystem) {
-        UnhookWinEvent(g_winEventHookSystem);
-        g_winEventHookSystem = nullptr;
-    }
-    if (g_winEventHookObject) {
-        UnhookWinEvent(g_winEventHookObject);
-        g_winEventHookObject = nullptr;
-    }
-    g_evalPending = false;
-    g_animTimerActive = false;
-    g_hooksInstalled = false;
-
-    if (primaryWnd && IsWindow(primaryWnd)) {
-        KillTimer(primaryWnd, kReevaluateTimerId);
-        KillTimer(primaryWnd, kRetryInitTimerId);
-        KillTimer(primaryWnd, kAnimTimerId);
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
-            primaryWnd, PrimaryTaskbarSubclassProc);
-    }
-
-    for (auto& [tb, st] : g_taskbarStates) {
-        RestoreStateToNative(st);
-    }
-    g_taskbarStates.clear();
 }
 
 // ============================================================================
@@ -2783,7 +2474,7 @@ void WINAPI TrayUI_StartTaskbar_Hook(void* pThis) {
     if (g_modUnloading.load(std::memory_order_acquire)) return;
 
     if (HWND primary = FindPrimaryTaskbarWnd()) {
-        SetupTaskbarThread(primary);
+        EnsurePrimaryTaskbarSubclassedAndSetup(primary);
     }
 }
 
@@ -2794,6 +2485,7 @@ void WINAPI CSecondaryTray_InitModelAndHost_Hook(void* pThis,
 
     if (HWND primary = FindPrimaryTaskbarWnd()) {
         RequestCoalescedEvaluate(primary);
+        StartRetryInitTimer(primary, 12);
     }
 }
 
@@ -2836,17 +2528,14 @@ bool HookTaskbarDllSymbols() {
             TrayUI_StartTaskbar_Hook,
         },
         {
-            {LR"(public: virtual struct HWND__ * __cdecl CSecondaryTray::GetTrayWindow(void))"},
-            &CSecondaryTray_GetTrayWindow_Original,
-        },
-        {
             {LR"(public: virtual void __cdecl CSecondaryTray::InitModelAndHost(struct winrt::WindowsUdk::UI::Shell::TaskbarModel))"},
             &CSecondaryTray_InitModelAndHost_Original,
             CSecondaryTray_InitModelAndHost_Hook,
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(
+            module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"Failed to hook taskbar.dll symbols");
         return false;
     }
@@ -2861,20 +2550,37 @@ bool HookTaskbarDllSymbols() {
 
 BOOL Wh_ModInit() {
     g_modUnloading.store(false, std::memory_order_release);
+    if (HMODULE user32 = GetModuleHandleW(L"user32.dll")) {
+        g_internalGetWindowText = reinterpret_cast<InternalGetWindowText_t>(
+            GetProcAddress(user32, "InternalGetWindowText"));
+    }
+
+    g_msgSetup = RegisterWindowMessageW(L"Windhawk_DTT_Setup_" WH_MOD_ID);
+    g_msgReapply = RegisterWindowMessageW(L"Windhawk_DTT_Reapply_" WH_MOD_ID);
+    g_msgUninit = RegisterWindowMessageW(L"Windhawk_DTT_Uninit_" WH_MOD_ID);
+    g_msgScheduleEval =
+        RegisterWindowMessageW(L"Windhawk_DTT_ScheduleEval_" WH_MOD_ID);
+    g_msgUpdateEventHooks =
+        RegisterWindowMessageW(L"Windhawk_DTT_UpdateHooks_" WH_MOD_ID);
+
     LoadSettings();
     return HookTaskbarDllSymbols() ? TRUE : FALSE;
 }
 
 void Wh_ModAfterInit() {
     if (HWND primary = FindPrimaryTaskbarWnd()) {
-        RunFromWindowThread(primary, SetupTaskbarThread, primary);
+        EnsurePrimaryTaskbarSubclassedAndSetup(primary);
     }
 }
 
 void Wh_ModBeforeUninit() {
     g_modUnloading.store(true, std::memory_order_release);
+    StopWinEventThread();
+
     if (HWND primary = FindPrimaryTaskbarWnd()) {
-        if (!RunFromWindowThread(primary, UninitFromTaskbarThread, primary)) {
+        SendMessageW(primary, g_msgUninit, 0, 0);
+        if (g_subclassInstalled) {
+            g_subclassInstalled = false;
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 primary, PrimaryTaskbarSubclassProc);
         }
@@ -2884,6 +2590,6 @@ void Wh_ModBeforeUninit() {
 void Wh_ModSettingsChanged() {
     LoadSettings();
     if (HWND primary = FindPrimaryTaskbarWnd()) {
-        RunFromWindowThread(primary, ReapplyFromTaskbarThread, primary);
+        SendMessageW(primary, g_msgReapply, 0, 0);
     }
 }
