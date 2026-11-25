@@ -17,20 +17,19 @@ Hold your chosen **modifier key** (or mouse side button) and scroll the mouse
 wheel over any window to smoothly adjust its opacity.
 
 ## Relation to `scroll-window-opacity`
-This mod builds on the concept of [Scroll Window Opacity](https://windhawk.net/mods/scroll-window-opacity)
-by Sondre Myrmel, expanding it for multi-modifier workflows and touchpad/mouse
-ergonomics:
-- **Additional Triggers:** Supports `Win`, `Ctrl + Alt`, `Ctrl + Shift`,
-  `Alt + Shift`, and mouse side buttons (`Mouse Button 4` / `Mouse Button 5`).
+This mod shares the core modifier-plus-scroll concept of
+[Scroll Window Opacity](https://windhawk.net/mods/scroll-window-opacity) by
+Sondre Myrmel, and adds several extra workflow options:
+- **Additional Triggers:** Adds support for the `Win` key and mouse side
+  buttons (`Mouse Button 4` / `Mouse Button 5`) alongside `Alt`, `Ctrl`,
+  `Shift`, `Ctrl + Alt`, `Ctrl + Shift`, and `Alt + Shift`.
 - **Quick Reset (`Modifier + Middle-Click`):** Hold your trigger modifier and
   middle-click any window to immediately restore its original opacity.
 - **Titlebar-Only Mode:** Optional setting to restrict scrolling to the top
   titlebar region so normal scrolling inside documents or browsers is unaffected.
-- **Menu Bar / Start Menu Suppression:** Prevents releasing `Alt` or `Win` after
-  scrolling from accidentally focusing the app's menu bar or opening the Start
-  Menu.
-- **High-Resolution Wheel & Touchpad Support:** Accumulates fractional wheel
-  deltas so precision touchpads adjust opacity smoothly.
+- **Menu Bar / Start Menu Suppression:** Masks `Alt` and `Win` key releases
+  after scrolling so releasing the modifier does not focus the window's menu
+  bar or open the Start Menu.
 
 ## Settings Reference
 | Setting | Default | Description |
@@ -125,8 +124,11 @@ struct WindowOpacityState {
     int wheelRemainder = 0;
 };
 
-std::mutex g_stateMutex;
+// Accessed exclusively on g_workerThread (and in RestoreAllWindows after g_workerThread joins)
 std::unordered_map<HWND, WindowOpacityState> g_trackedWindows;
+
+// Protected by g_blockedMutex; lock is only ever held for fast memory lookups/inserts
+std::mutex g_blockedMutex;
 std::unordered_set<HWND> g_blockedWindows;
 
 HANDLE g_hookThread = nullptr;
@@ -151,18 +153,27 @@ HMODULE GetCurrentModuleHandle() {
     return hMod;
 }
 
-UINT GetWindowDpiSafe(HWND hWnd) {
-    static auto pGetDpiForWindow = reinterpret_cast<UINT(WINAPI*)(HWND)>(
-        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
-    if (pGetDpiForWindow) {
-        UINT dpi = pGetDpiForWindow(hWnd);
-        if (dpi > 0) return dpi;
+UINT GetMonitorDpiForWindowSafe(HWND hWnd) {
+    HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    if (hMon) {
+        static HMODULE hShcore = LoadLibraryW(L"shcore.dll");
+        if (hShcore) {
+            using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+            static auto pGetDpiForMonitor = reinterpret_cast<GetDpiForMonitor_t>(
+                GetProcAddress(hShcore, "GetDpiForMonitor"));
+            if (pGetDpiForMonitor) {
+                UINT dpiX = 96, dpiY = 96;
+                if (SUCCEEDED(pGetDpiForMonitor(hMon, 0, &dpiX, &dpiY)) && dpiX > 0) {
+                    return dpiX;
+                }
+            }
+        }
     }
     return 96;
 }
 
 int GetCaptionHeightForWindow(HWND hWnd) {
-    UINT dpi = GetWindowDpiSafe(hWnd);
+    UINT dpi = GetMonitorDpiForWindowSafe(hWnd);
     static auto pGetSystemMetricsForDpi = reinterpret_cast<int(WINAPI*)(int, UINT)>(
         GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetSystemMetricsForDpi"));
     if (pGetSystemMetricsForDpi) {
@@ -225,12 +236,19 @@ bool IsTriggerModifierPressed() {
 }
 
 bool IsWindowKnownBlocked(HWND hWnd) {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
+    std::lock_guard<std::mutex> lock(g_blockedMutex);
     return g_blockedWindows.count(hWnd) > 0;
 }
 
-void MarkWindowBlocked(HWND hWnd) {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
+void AddBlockedWindow(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_blockedMutex);
+    for (auto it = g_blockedWindows.begin(); it != g_blockedWindows.end();) {
+        if (!IsWindow(*it)) {
+            it = g_blockedWindows.erase(it);
+        } else {
+            ++it;
+        }
+    }
     g_blockedWindows.insert(hWnd);
 }
 
@@ -279,17 +297,10 @@ bool IsCursorInTitlebarBounds(HWND hWnd, POINT pt) {
             pt.y >= rc.top && pt.y <= rc.top + captionHeight);
 }
 
-void PruneStaleHandlesLocked() {
+void PruneStaleTrackedHandles() {
     for (auto it = g_trackedWindows.begin(); it != g_trackedWindows.end();) {
         if (!IsWindow(it->first)) {
             it = g_trackedWindows.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    for (auto it = g_blockedWindows.begin(); it != g_blockedWindows.end();) {
-        if (!IsWindow(*it)) {
-            it = g_blockedWindows.erase(it);
         } else {
             ++it;
         }
@@ -316,8 +327,7 @@ void WorkerResetWindowOpacity(HWND hWnd) {
         return;
     }
 
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    PruneStaleHandlesLocked();
+    PruneStaleTrackedHandles();
 
     auto it = g_trackedWindows.find(hWnd);
     if (it != g_trackedWindows.end()) {
@@ -327,31 +337,24 @@ void WorkerResetWindowOpacity(HWND hWnd) {
         return;
     }
 
-    // Fallback if window was left layered before mod reload
+    // Fallback if window was left translucent by a previous session; preserve WS_EX_LAYERED and flags
     LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     if (exStyle & WS_EX_LAYERED) {
         COLORREF key = 0;
         BYTE alpha = 255;
         DWORD flags = 0;
         if (GetLayeredWindowAttributes(hWnd, &key, &alpha, &flags) && (flags & LWA_ALPHA) && alpha < 255) {
-            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
-            SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED);
-            RedrawWindow(hWnd, nullptr, nullptr, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
+            SetLayeredWindowAttributes(hWnd, key, 255, flags);
         }
     }
 }
 
 void WorkerAdjustWindowOpacity(HWND hWnd, int wheelDelta) {
-    if (!hWnd || !IsWindow(hWnd)) {
+    if (!hWnd || !IsWindow(hWnd) || IsWindowKnownBlocked(hWnd)) {
         return;
     }
 
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-    PruneStaleHandlesLocked();
-
-    if (g_blockedWindows.count(hWnd)) {
-        return;
-    }
+    PruneStaleTrackedHandles();
 
     auto it = g_trackedWindows.find(hWnd);
     if (it == g_trackedWindows.end()) {
@@ -364,7 +367,7 @@ void WorkerAdjustWindowOpacity(HWND hWnd, int wheelDelta) {
             DWORD flags = 0;
             if (!GetLayeredWindowAttributes(hWnd, &key, &alpha, &flags)) {
                 // Window uses UpdateLayeredWindow; do not touch it
-                g_blockedWindows.insert(hWnd);
+                AddBlockedWindow(hWnd);
                 return;
             }
             initialState.wasInitiallyLayered = true;
@@ -414,7 +417,7 @@ void WorkerAdjustWindowOpacity(HWND hWnd, int wheelDelta) {
         SetLastError(0);
         if (SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED) == 0 && GetLastError() != 0) {
             g_trackedWindows.erase(it);
-            g_blockedWindows.insert(hWnd);
+            AddBlockedWindow(hWnd);
             return;
         }
         addedLayered = true;
@@ -432,7 +435,7 @@ void WorkerAdjustWindowOpacity(HWND hWnd, int wheelDelta) {
             SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle);
         }
         g_trackedWindows.erase(it);
-        g_blockedWindows.insert(hWnd);
+        AddBlockedWindow(hWnd);
         return;
     }
 
@@ -454,49 +457,44 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         const KBDLLHOOKSTRUCT* kb = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lParam);
         if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
             TriggerModifier mod = g_settings.modifier.load(std::memory_order_relaxed);
-            bool isAlt = (kb->vkCode == VK_LMENU || kb->vkCode == VK_RMENU || kb->vkCode == VK_MENU);
-            bool isWin = (kb->vkCode == VK_LWIN || kb->vkCode == VK_RWIN);
-            bool isCtrl = (kb->vkCode == VK_LCONTROL || kb->vkCode == VK_RCONTROL || kb->vkCode == VK_CONTROL);
+            bool isAlt   = (kb->vkCode == VK_LMENU || kb->vkCode == VK_RMENU || kb->vkCode == VK_MENU);
+            bool isWin   = (kb->vkCode == VK_LWIN || kb->vkCode == VK_RWIN);
+            bool isCtrl  = (kb->vkCode == VK_LCONTROL || kb->vkCode == VK_RCONTROL || kb->vkCode == VK_CONTROL);
             bool isShift = (kb->vkCode == VK_LSHIFT || kb->vkCode == VK_RSHIFT || kb->vkCode == VK_SHIFT);
 
-            bool matchesTriggerKey = false;
-            bool needsMenuMask = false;
-
+            // For combinations containing Alt, keep g_gestureTriggered set until Alt itself is released
             switch (mod) {
                 case TriggerModifier::Alt:
-                    matchesTriggerKey = isAlt;
-                    needsMenuMask = isAlt;
+                case TriggerModifier::CtrlAlt:
+                case TriggerModifier::AltShift:
+                    if (isAlt) {
+                        g_gestureTriggered.store(false, std::memory_order_relaxed);
+                        InjectMenuMaskKey();
+                    }
                     break;
                 case TriggerModifier::Win:
-                    matchesTriggerKey = isWin;
-                    needsMenuMask = isWin;
+                    if (isWin) {
+                        g_gestureTriggered.store(false, std::memory_order_relaxed);
+                        InjectMenuMaskKey();
+                    }
                     break;
                 case TriggerModifier::Ctrl:
-                    matchesTriggerKey = isCtrl;
+                    if (isCtrl) {
+                        g_gestureTriggered.store(false, std::memory_order_relaxed);
+                    }
                     break;
                 case TriggerModifier::Shift:
-                    matchesTriggerKey = isShift;
-                    break;
-                case TriggerModifier::CtrlAlt:
-                    matchesTriggerKey = isCtrl || isAlt;
-                    needsMenuMask = isAlt;
+                    if (isShift) {
+                        g_gestureTriggered.store(false, std::memory_order_relaxed);
+                    }
                     break;
                 case TriggerModifier::CtrlShift:
-                    matchesTriggerKey = isCtrl || isShift;
-                    break;
-                case TriggerModifier::AltShift:
-                    matchesTriggerKey = isAlt || isShift;
-                    needsMenuMask = isAlt;
+                    if (isCtrl || isShift) {
+                        g_gestureTriggered.store(false, std::memory_order_relaxed);
+                    }
                     break;
                 default:
                     break;
-            }
-
-            if (matchesTriggerKey) {
-                g_gestureTriggered.store(false, std::memory_order_relaxed);
-                if (needsMenuMask) {
-                    InjectMenuMaskKey();
-                }
             }
         }
     }
@@ -608,12 +606,12 @@ DWORD WINAPI HookThreadProc(LPVOID) {
 }
 
 void RestoreAllWindows() {
-    std::lock_guard<std::mutex> lock(g_stateMutex);
-
     for (const auto& [hWnd, state] : g_trackedWindows) {
         RestoreWindowState(hWnd, state);
     }
     g_trackedWindows.clear();
+
+    std::lock_guard<std::mutex> lock(g_blockedMutex);
     g_blockedWindows.clear();
 }
 
@@ -733,6 +731,12 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
     bool isService = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
@@ -744,7 +748,9 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
             isService = true;
             break;
         }
