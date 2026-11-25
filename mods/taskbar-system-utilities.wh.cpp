@@ -1,20 +1,56 @@
 // ==WindhawkMod==
-// @id              taskbar-system-utilities
-// @name            Taskbar System Utilities
-// @description     Native XAML taskbar tools (Restart Explorer, Clean Temp, Reduce Memory, Reset GPU, Get IP, Cache, DNS) and custom launch items (programs, folders, URLs, settings).
-// @version         1.3.1
-// @author          Marco Petrucci
-// @github          https://github.com/marco00petrucci
-// @donateUrl       https://www.paypal.me/marco00petrucci
-// @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lws2_32 -liphlpapi -lwininet -luser32
-// @license         MIT
+// @id                 taskbar-system-utilities
+// @name               Taskbar System Utilities
+// @name:it            Utilità di sistema nella barra delle applicazioni
+// @name:es            Utilidades del sistema en la barra de tareas
+// @name:fr            Utilitaires système dans la barre des tâches
+// @name:pt            Utilitários do sistema na barra de tarefas
+// @name:de            Systemdienstprogramme in der Taskleiste
+// @name:nl            Systeemhulpprogramma's op de taakbalk
+// @name:pl            Narzędzia systemowe na pasku zadań
+// @name:ru            Системные утилиты на панели задач
+// @name:uk            Системні утиліти на панелі завдань
+// @name:tr            Görev Çubuğu Sistem Yardımcı Programları
+// @name:zh-CN         任务栏系统实用工具
+// @name:zh-TW         工作列系統公用程式
+// @name:ja            タスクバー システムユーティリティ
+// @name:ko            작업 표시줄 시스템 유틸리티
+// @name:hi            टास्कबार सिस्टम यूटिलिटीज़
+// @name:id            Utilitas Sistem Bilah Tugas
+// @name:vi            Tiện ích hệ thống trên thanh tác vụ
+// @name:ar            أدوات النظام في شريط المهام
+// @description        Native XAML taskbar tools (Restart Explorer, Clean Temp, Reduce Memory, Reset GPU, Get IP, Cache, DNS) and custom launch items (programs, folders, URLs, settings).
+// @description:it     Strumenti XAML nativi nella barra delle applicazioni (Riavvia Esplora risorse, Pulizia file temporanei, Riduci memoria, Riavvia driver GPU, Ottieni IP, Cache, DNS) ed elementi personalizzati (programmi, cartelle, URL, impostazioni).
+// @description:es     Herramientas XAML nativas en la barra de tareas (Reiniciar Explorador, Limpiar temporales, Reducir memoria, Reiniciar GPU, Obtener IP, Caché, DNS) y elementos personalizados (programas, carpetas, URL, configuración).
+// @description:fr     Outils XAML natifs dans la barre des tâches (Redémarrer l'Explorateur, Nettoyer les fichiers temporaires, Réduire la mémoire, Réinitialiser le GPU, Obtenir l'IP, Cache, DNS) et éléments personnalisés (programmes, dossiers, URL, paramètres).
+// @description:pt     Ferramentas XAML nativas na barra de tarefas (Reiniciar Explorer, Limpar temporários, Reduzir memória, Reiniciar GPU, Obter IP, Cache, DNS) e itens personalizados (programas, pastas, URLs, configurações).
+// @description:de     Native XAML-Taskleisten-Tools (Explorer neu starten, Temporäre Dateien bereinigen, Speicher reduzieren, GPU zurücksetzen, IP abrufen, Cache, DNS) und benutzerdefinierte Startelemente (Programme, Ordner, URLs, Einstellungen).
+// @description:nl     Native XAML-taakbalkhulpprogramma's (Verkenner herstarten, Tijdelijke bestanden opschonen, Geheugen vrijmaken, GPU resetten, IP ophalen, Cache, DNS) en aangepaste startitems (programma's, mappen, URL's, instellingen).
+// @description:pl     Natywne narzędzia XAML paska zadań (Uruchom ponownie Eksplorator, Wyczyść pliki tymczasowe, Zmniejsz zużycie pamięci, Zresetuj sterownik GPU, Pobierz IP, Pamięć podręczna, DNS) oraz własne elementy uruchamiania (programy, foldery, adresy URL, ustawienia).
+// @description:ru     Нативные XAML-инструменты панели задач (перезапуск Проводника, очистка временных файлов, очистка памяти, сброс видеодрайвера, получение IP, кэш, DNS) и пользовательские пункты запуска (программы, папки, ссылки, настройки).
+// @description:uk     Нативні XAML-інструменти панелі завдань (перезапуск Провідника, очищення тимчасових файлів, зменшення пам'яті, скидання відеодрайвера, отримання IP, кеш, DNS) та власні елементи запуску (програми, папки, URL-адреси, налаштування).
+// @description:tr     Yerel XAML görev çubuğu araçları (Gezgini Yeniden Başlat, Geçici Dosyaları Temizle, Belleği Azalt, GPU Sürücüsünü Sıfırla, IP Al, Önbellek, DNS) ve özel başlatma öğeleri (programlar, klasörler, URL'ler, ayarlar).
+// @description:zh-CN  原生 XAML 任务栏工具（重启资源管理器、清理临时文件、释放内存、重置显卡驱动、获取 IP、清理缓存、刷新 DNS）以及自定义启动项（程序、文件夹、网址、系统设置）。
+// @description:zh-TW  原生 XAML 工作列工具（重新啟動檔案總管、清理暫存檔、釋放記憶體、重設顯示卡驅動程式、取得 IP、快取、DNS）以及自訂啟動項目（程式、資料夾、網址、設定）。
+// @description:ja     ネイティブ XAML タスクバーツール（エクスプローラーの再起動、一時ファイルの削除、メモリ解放、GPUドライバーのリセット、IPアドレス取得、キャッシュ再構築、DNSフラッシュ）およびカスタム起動項目（プログラム、フォルダー、URL、設定）。
+// @description:ko     네이티브 XAML 작업 표시줄 도구(탐색기 다시 시작, 임시 파일 정리, 메모리 줄이기, GPU 드라이버 재설정, IP 확인, 캐시 재구축, DNS 정리) 및 사용자 지정 실행 항목(프로그램, 폴더, URL, 설정).
+// @description:hi     नेटिव XAML टास्कबार टूल (एक्सप्लोरर रीस्टार्ट करें, टेम्प फ़ाइलें साफ़ करें, मेमोरी कम करें, GPU रीसेट करें, IP प्राप्त करें, कैश, DNS) और कस्टम लॉन्च आइटम (प्रोग्राम, फ़ोल्डर, URL, सेटिंग्स)।
+// @description:id     Alat bilah tugas XAML asli (Mulai Ulang Explorer, Bersihkan Temp, Kurangi Memori, Reset GPU, Dapatkan IP, Cache, DNS) dan item peluncuran kustom (program, folder, URL, pengaturan).
+// @description:vi     Công cụ thanh tác vụ XAML gốc (Khởi động lại Explorer, Dọn tệp tạm, Giảm bộ nhớ, Đặt lại GPU, Lấy IP, Bộ nhớ đệm, DNS) và các mục khởi chạy tùy chỉnh (chương trình, thư mục, URL, cài đặt).
+// @description:ar     أدوات شريط مهام XAML أصلية (إعادة تشغيل المستكشف، تنظيف الملفات المؤقتة، تقليل الذاكرة، إعادة ضبط بطاقة الرسوميات، معرفة عنوان IP، ذاكرة التخزين المؤقت، DNS) وعناصر تشغيل مخصصة (برامج، مجلدات، روابط، إعدادات).
+// @version            1.3.1
+// @author             Marco Petrucci
+// @github             https://github.com/marco00petrucci
+// @donateUrl          https://www.paypal.me/marco00petrucci
+// @include            explorer.exe
+// @architecture       x86-64
+// @compilerOptions    -DWIN32_LEAN_AND_MEAN -lole32 -loleaut32 -lruntimeobject -lshell32 -lws2_32 -liphlpapi -lwininet -luser32
+// @license            MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Taskbar System Utilities & Custom Items
+# Taskbar System Utilities
 
 System utilities with **native XAML result cards** and **zero UAC prompts**,
 plus your own customizable launch items, integrated natively into the Windows 11
@@ -530,8 +566,8 @@ bool IsHexDigit(wchar_t ch) {
 // Accepts hex code points ("E756", "0xE756", "U+E756", "\uE756", "\xE756")
 // as well as literal characters or emojis.
 std::wstring GlyphFromIconSetting(const std::wstring& icon, bool* isCodePoint) {
-    // Treat a single Private Use Area character (U+E000..U+F8FF) pasted directly
-    // as a Segoe Fluent Icons / MDL2 glyph.
+    // Treat a single Private Use Area character (U+E000..U+F8FF) pasted
+    // directly as a Segoe Fluent Icons / MDL2 glyph.
     if (icon.size() == 1 && icon[0] >= 0xE000 && icon[0] <= 0xF8FF) {
         *isCodePoint = true;
         return icon;
@@ -2042,12 +2078,13 @@ void InjectBeforeShow(void* pThis) {
     state->modifying = true;
 
     try {
-        auto const& flyout =
-            *reinterpret_cast<wuxcp::FlyoutBase const*>(pThis);
+        auto const& flyout = *reinterpret_cast<wuxcp::FlyoutBase const*>(pThis);
         if (auto menu = flyout.try_as<wuxc::MenuFlyout>()) {
             MenuItemsVector items = menu.Items();
-            state->itemsIdentity = GetIdentity(items);
-            InjectElements(items, *state);
+            if (items) {
+                state->itemsIdentity = GetIdentity(items);
+                InjectElements(items, *state);
+            }
         }
     } catch (winrt::hresult_error const& e) {
         Wh_Log(L"Failed to update taskbar menu before show: %08X %s",
@@ -2204,6 +2241,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             },
             &MenuFlyoutItemBaseVector_Append_Original,
             MenuFlyoutItemBaseVector_Append_Hook,
+            true,  // optional: may be absent or unused on newer builds
         },
         {
             {
@@ -2233,8 +2271,17 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
 
     if (!ContextMenus_ShowTaskbarSettingsContextMenu_Original &&
         !ContextMenus_ShowTaskbarSettingsContextMenuNoSettings_Original) {
-        Wh_Log(L"Failed to hook Taskbar.View symbols, no known version of "
-               L"ShowTaskbarSettingsContextMenu was found");
+        Wh_Log(
+            L"Failed to hook Taskbar.View symbols, no known version of "
+            L"ShowTaskbarSettingsContextMenu was found");
+        return false;
+    }
+
+    if (!MenuFlyoutItemBaseVector_Append_Original &&
+        !MenuFlyout_ShowAt_Original && !FlyoutBase_ShowAt_Original) {
+        Wh_Log(
+            L"Failed to hook Taskbar.View symbols, neither Append nor "
+            L"ShowAt symbols were found");
         return false;
     }
 
