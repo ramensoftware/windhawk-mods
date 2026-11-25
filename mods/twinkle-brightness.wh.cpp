@@ -2,12 +2,13 @@
 // @id              twinkle-brightness
 // @name            Twinkle Brightness
 // @description     Brightness sliders for every display in the system tray, with hotkeys, an on-screen indicator, time-based schedules, and idle dimming
-// @version         1.1.0
+// @description:tr-TR Sistem tepsisinde her ekran için parlaklık sürgüleri; kısayol tuşları, ekran göstergesi, zamanlama ve boşta karartma
+// @version         1.2.0
 // @author          isousluer
 // @github          https://github.com/isousluer
 // @homepage        https://github.com/isousluer/twinkle-brightness
 // @include         windhawk.exe
-// @compilerOptions -ldxva2 -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -ladvapi32
+// @compilerOptions -ldxva2 -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -ladvapi32 -lcomctl32
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -29,7 +30,9 @@ re-imagined as a lightweight Windhawk mod with no Electron runtime.
 
 - **Tray panel:** click the sun icon in the notification area to get a
   brightness slider for every display. The panel follows the Windows
-  light/dark theme and accent color.
+  light/dark theme and accent color. Double-click a level (or press F2) to
+  type an exact value. The sun's rays in the tray icon light up with the
+  brightness level, like a gauge.
 - **Link displays:** the chain button in the panel links the displays. While
   linked, one slider controls all displays and the hotkeys change all of them.
   Linked displays are always set to the same level: the first change brings
@@ -41,7 +44,8 @@ re-imagined as a lightweight Windhawk mod with no Electron runtime.
   brightness, turn the displays off, or open the panel. A hotkey can also
   target a specific display.
 - **On-screen indicator:** a small overlay shows the new level when you use a
-  hotkey, with one row per display when they are at different levels.
+  hotkey, with one row per display when they are at different levels. It can
+  be placed at the bottom or the top of the screen, in the center or a corner.
 - **Schedule:** change the brightness automatically at given times of the day,
   with a smooth transition.
 - **Idle dimming:** dim the displays after a period of inactivity and restore
@@ -50,6 +54,11 @@ re-imagined as a lightweight Windhawk mod with no Electron runtime.
   brightness to normalize displays that are brighter or darker than others.
 - **Tray menu:** refresh displays, turn displays off, pause automatic
   brightness, and copy display names/IDs for use in the settings.
+- **Changes from elsewhere:** levels changed with the laptop's brightness keys
+  or the Windows slider show up right away. Monitors don't report changes made
+  with their own buttons, so their levels are read again before a hotkey step.
+- **Languages:** English and Turkish, following the Windows display
+  language.
 
 ## How it works
 
@@ -85,7 +94,8 @@ link button).
   direct HDMI/DisplayPort/USB-C cable instead of a dock or adapter, then choose
   **Refresh displays** in the tray menu.
 - **A monitor stops responding after sleep:** choose **Refresh displays**, or
-  turn the monitor off and on with its power button.
+  turn the monitor off and on with its power button. Monitors that don't
+  answer at first are detected again automatically after 3, 10 and 30 seconds.
 - **A hotkey does nothing:** another program may already use that combination.
   Check the Windhawk log for "RegisterHotKey failed". The default
   `Ctrl+Alt+Up`/`Ctrl+Alt+Down` are also used by Visual Studio Code (add a
@@ -102,87 +112,158 @@ This mod is not affiliated with Twinkle Tray or its author.
 /*
 - theme: auto
   $name: Panel theme
+  $name:tr-TR: Panel teması
   $options:
   - auto: Follow Windows
   - dark: Dark
   - light: Light
+  $options:tr-TR:
+  - auto: Windows'u izle
+  - dark: Koyu
+  - light: Açık
 - showOsd: true
   $name: Show the on-screen indicator
+  $name:tr-TR: Ekran göstergesini göster
   $description: Shows the new brightness level when you use a hotkey
+  $description:tr-TR: Bir kısayol kullandığınızda yeni parlaklık seviyesini gösterir
+- osdPosition: bottomCenter
+  $name: Position of the on-screen indicator
+  $name:tr-TR: Ekran göstergesinin konumu
+  $options:
+  - bottomCenter: Bottom center
+  - topCenter: Top center
+  - topLeft: Top left
+  - topRight: Top right
+  - bottomLeft: Bottom left
+  - bottomRight: Bottom right
+  $options:tr-TR:
+  - bottomCenter: Alt orta
+  - topCenter: Üst orta
+  - topLeft: Sol üst
+  - topRight: Sağ üst
+  - bottomLeft: Sol alt
+  - bottomRight: Sağ alt
+- trayIconLevel: true
+  $name: Show the brightness level in the tray icon
+  $name:tr-TR: Tepsi simgesinde parlaklık seviyesini göster
+  $description: The sun's rays light up with the brightness level, like a gauge
+  $description:tr-TR: Güneşin ışınları, bir gösterge gibi parlaklık seviyesine göre yanar
 - hotkeys:
   - - keys: Ctrl+Alt+Up
       $name: Key combination
+      $name:tr-TR: Tuş kombinasyonu
       $description: For example Ctrl+Alt+Up, Win+Shift+PageDown or Ctrl+Alt+F1. Leave empty to disable this entry.
+      $description:tr-TR: Örneğin Ctrl+Alt+Up, Win+Shift+PageDown veya Ctrl+Alt+F1. Bu girdiyi devre dışı bırakmak için boş bırakın.
     - action: increase
       $name: Action
+      $name:tr-TR: Eylem
       $options:
       - increase: Increase brightness
       - decrease: Decrease brightness
       - set: Set brightness
       - turnOff: Turn off displays
       - panel: Open the brightness panel
+      $options:tr-TR:
+      - increase: Parlaklığı artır
+      - decrease: Parlaklığı azalt
+      - set: Parlaklığı ayarla
+      - turnOff: Ekranları kapat
+      - panel: Parlaklık panelini aç
     - value: 10
       $name: Amount (%)
+      $name:tr-TR: Miktar (%)
       $description: Step for increase/decrease, or the level for "Set brightness"
+      $description:tr-TR: Artırma/azaltma adımı ya da "Parlaklığı ayarla" için seviye
     - display: ""
       $name: Display
+      $name:tr-TR: Ekran
       $description: Part of the display's name or ID. Leave empty to follow the panel's link button, which changes all displays when it's on and the display with the active window when it's off.
+      $description:tr-TR: Ekranın adının veya kimliğinin bir kısmı. Boş bırakırsanız paneldeki bağlantı düğmesine uyar. Düğme açıkken tüm ekranlar, kapalıyken etkin pencerenin bulunduğu ekran değişir.
   - - keys: Ctrl+Alt+Down
     - action: decrease
     - value: 10
     - display: ""
   $name: Hotkeys
+  $name:tr-TR: Kısayol tuşları
 - schedule:
   - - time: ""
       $name: Time
+      $name:tr-TR: Saat
       $description: 24-hour time, for example 07:30 or 21:00. Leave empty to disable this entry.
+      $description:tr-TR: 24 saat biçiminde, örneğin 07:30 veya 21:00. Bu girdiyi devre dışı bırakmak için boş bırakın.
     - brightness: 50
       $name: Brightness (%)
+      $name:tr-TR: Parlaklık (%)
     - display: ""
       $name: Display
+      $name:tr-TR: Ekran
       $description: Part of the display's name or ID. Leave empty for all displays.
+      $description:tr-TR: Ekranın adının veya kimliğinin bir kısmı. Tüm ekranlar için boş bırakın.
   $name: Brightness schedule
+  $name:tr-TR: Parlaklık zamanlaması
   $description: Changes the brightness automatically at the given times of the day
+  $description:tr-TR: Parlaklığı günün belirtilen saatlerinde otomatik olarak değiştirir
 - scheduleOptions:
   - transitionSeconds: 30
     $name: Transition duration (seconds)
+    $name:tr-TR: Geçiş süresi (saniye)
     $description: How long the change to a scheduled level takes. 0 changes it instantly.
+    $description:tr-TR: Zamanlanmış seviyeye geçişin ne kadar süreceği. 0 hemen değiştirir.
   - applyOnStartup: true
     $name: Apply the latest entry on startup and after sleep
+    $name:tr-TR: Başlangıçta ve uykudan sonra en son girdiyi uygula
   $name: Schedule options
+  $name:tr-TR: Zamanlama seçenekleri
 - idle:
   - enabled: false
     $name: Dim the displays when idle
+    $name:tr-TR: Boşta kalınca ekranları karart
   - minutes: 5
     $name: Idle time (minutes)
+    $name:tr-TR: Boşta kalma süresi (dakika)
   - brightness: 10
     $name: Dimmed brightness (%)
+    $name:tr-TR: Karartılmış parlaklık (%)
     $description: Displays that are already darker than this are left alone
+    $description:tr-TR: Zaten bundan daha karanlık olan ekranlara dokunulmaz
   - ignoreFullscreen: true
     $name: Don't dim while a full-screen app is running
+    $name:tr-TR: Tam ekran bir uygulama çalışırken karartma
     $description: For example while watching a video or giving a presentation
+    $description:tr-TR: Örneğin video izlerken veya sunum yaparken
   $name: Idle dimming
+  $name:tr-TR: Boşta karartma
 - displays:
   - - match: ""
       $name: Display name or ID
+      $name:tr-TR: Ekran adı veya kimliği
       $description: Part of the display's name or ID. Use "Copy display info" in the tray menu to find it.
+      $description:tr-TR: Ekranın adının veya kimliğinin bir kısmı. Bulmak için tepsi menüsündeki "Ekran bilgilerini kopyala" seçeneğini kullanın.
     - name: ""
       $name: Custom name
+      $name:tr-TR: Özel ad
     - minBrightness: 0
       $name: Minimum brightness (%)
+      $name:tr-TR: En düşük parlaklık (%)
       $description: Hardware level used when the slider is at 0%. Use with the maximum to normalize displays.
+      $description:tr-TR: Sürgü %0'dayken kullanılan donanım seviyesi. Ekranları birbirine eşitlemek için en yüksek değerle birlikte kullanın.
     - maxBrightness: 100
       $name: Maximum brightness (%)
+      $name:tr-TR: En yüksek parlaklık (%)
       $description: Hardware level used when the slider is at 100%
+      $description:tr-TR: Sürgü %100'deyken kullanılan donanım seviyesi
     - hide: false
       $name: Hide this display
+      $name:tr-TR: Bu ekranı gizle
   $name: Per-display options
+  $name:tr-TR: Ekran başına seçenekler
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <windowsx.h>
 
+#include <commctrl.h>
 #include <dwmapi.h>
 #include <gdiplus.h>
 #include <lowlevelmonitorconfigurationapi.h>
@@ -211,6 +292,7 @@ constexpr UINT WM_APP_TRAY = WM_APP + 1;
 constexpr UINT WM_APP_SNAPSHOT = WM_APP + 2;  // wParam: 1 = full enumeration
 constexpr UINT WM_APP_SETTINGS = WM_APP + 3;
 constexpr UINT WM_APP_SHUTDOWN = WM_APP + 4;
+constexpr UINT WM_APP_END_EDIT = WM_APP + 6;  // Panel; wParam: 1 = apply
 
 constexpr UINT_PTR TIMER_REENUM = 1;
 constexpr UINT_PTR TIMER_SCHEDULE = 2;
@@ -218,6 +300,8 @@ constexpr UINT_PTR TIMER_IDLE = 3;
 constexpr UINT_PTR TIMER_FADE = 4;
 constexpr UINT_PTR TIMER_TOOLTIP = 5;
 constexpr UINT_PTR TIMER_MONITOR_OFF = 7;
+constexpr UINT_PTR TIMER_AUTO_REENUM = 8;
+constexpr UINT_PTR TIMER_HOTKEY_WAIT = 9;
 
 constexpr UINT_PTR TIMER_OSD_HIDE = 1;
 constexpr UINT_PTR TIMER_OSD_FADE = 2;
@@ -239,6 +323,94 @@ enum MenuId : UINT {
 
 enum class HotkeyAction { Increase, Decrease, Set, TurnOff, Panel };
 enum class ThemeMode { Auto, Dark, Light };
+enum class OsdPosition {
+    BottomCenter,
+    TopCenter,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Localization. English is the default; Turkish is used when it's the Windows
+// display language. Settings are localized in the settings block above.
+
+enum class Str {
+    AllDisplays,
+    NoDisplays,
+    NotAvailable,
+    NotAvailableSuffix,
+    Brightness,
+    Paused,
+    PausedTip,
+    DisplaysCount,  // "%d displays"
+    RefreshDisplays,
+    TurnOffDisplays,
+    PauseAutomatic,
+    CopyDisplayInfo,
+    LinkDisplays,
+    UnlinkDisplays,
+    BuiltInDisplay,
+    Display,
+    NotSupported,
+    Count
+};
+
+const PCWSTR kStringsEn[] = {
+    L"All displays",
+    L"No displays found",
+    L"Brightness control is not available",
+    L" - not available",
+    L"Brightness",
+    L"Automatic brightness paused",
+    L"(automatic brightness paused)",
+    L"%d displays",
+    L"Refresh displays",
+    L"Turn off displays",
+    L"Pause automatic brightness",
+    L"Copy display info",
+    L"Link displays",
+    L"Unlink displays",
+    L"Built-in display",
+    L"Display",
+    L"not supported",
+};
+
+const PCWSTR kStringsTr[] = {
+    L"Tüm ekranlar",
+    L"Ekran bulunamadı",
+    L"Parlaklık denetimi kullanılamıyor",
+    L" - kullanılamıyor",
+    L"Parlaklık",
+    L"Otomatik parlaklık duraklatıldı",
+    L"(otomatik parlaklık duraklatıldı)",
+    L"%d ekran",
+    L"Ekranları yenile",
+    L"Ekranları kapat",
+    L"Otomatik parlaklığı duraklat",
+    L"Ekran bilgilerini kopyala",
+    L"Ekranları bağla",
+    L"Ekranların bağlantısını kes",
+    L"Dahili ekran",
+    L"Ekran",
+    L"desteklenmiyor",
+};
+
+static_assert(ARRAYSIZE(kStringsEn) == (size_t)Str::Count);
+static_assert(ARRAYSIZE(kStringsTr) == (size_t)Str::Count);
+
+const PCWSTR* g_strings = kStringsEn;
+
+void InitLanguage() {
+    g_strings = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_TURKISH
+                    ? kStringsTr
+                    : kStringsEn;
+}
+
+PCWSTR Tr(Str id) {
+    return g_strings[(int)id];
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Settings
@@ -269,6 +441,8 @@ struct DisplayConfig {
 struct Settings {
     ThemeMode theme = ThemeMode::Auto;
     bool showOsd = true;
+    OsdPosition osdPosition = OsdPosition::BottomCenter;
+    bool trayIconLevel = true;
     std::vector<HotkeyConfig> hotkeys;
     std::vector<ScheduleEntry> schedule;
     int transitionSeconds = 30;
@@ -442,6 +616,14 @@ void LoadSettings() {
               : theme == L"light" ? ThemeMode::Light
                                   : ThemeMode::Auto;
     s.showOsd = GetIntSetting(L"showOsd") != 0;
+    std::wstring osdPosition = GetStringSetting(L"osdPosition");
+    s.osdPosition = osdPosition == L"topCenter"     ? OsdPosition::TopCenter
+                    : osdPosition == L"topLeft"     ? OsdPosition::TopLeft
+                    : osdPosition == L"topRight"    ? OsdPosition::TopRight
+                    : osdPosition == L"bottomLeft"  ? OsdPosition::BottomLeft
+                    : osdPosition == L"bottomRight" ? OsdPosition::BottomRight
+                                                    : OsdPosition::BottomCenter;
+    s.trayIconLevel = GetIntSetting(L"trayIconLevel") != 0;
 
     for (int i = 0; i < 32; i++) {
         std::wstring keys = GetStringSetting(IndexedName(L"hotkeys", i, L"keys"));
@@ -533,6 +715,10 @@ struct DisplayInfo {
     bool internal = false;
     Method method = Method::None;
     int raw = -1;  // Hardware brightness 0-100, -1 if unknown
+    // An external display that couldn't be controlled. Some monitors miss
+    // requests after a while without traffic, and right after startup Windows
+    // may not have a DDC/CI handle for them yet, so the UI detects again later.
+    bool ddcFailed = false;
 };
 
 std::atomic<HWND> g_hwndMain;
@@ -556,6 +742,7 @@ std::mutex g_mutex;
 std::condition_variable g_cv;
 bool g_requestEnumerate = false;
 bool g_requestRefresh = false;
+bool g_requestRefreshWmi = false;
 bool g_requestStop = false;
 bool g_busy = false;
 std::condition_variable g_idleCv;
@@ -568,16 +755,24 @@ IWbemServices* g_wmi = nullptr;
 
 constexpr BYTE VCP_BRIGHTNESS = 0x10;
 
-bool DdcGet(HANDLE handle, DWORD* current, DWORD* maximum) {
-    for (int attempt = 0; attempt < 3; attempt++) {
+// Some monitors miss or garble the first requests after a while without
+// DDC/CI traffic, so a read is retried with growing delays.
+bool DdcGet(HANDLE handle, DWORD* current, DWORD* maximum, int attempts = 3) {
+    static const DWORD delays[] = {40, 80, 150, 250, 400};
+    DWORD error = 0;
+    for (int attempt = 0; attempt < attempts; attempt++) {
         MC_VCP_CODE_TYPE type;
         if (GetVCPFeatureAndVCPFeatureReply(handle, VCP_BRIGHTNESS, &type,
                                             current, maximum) &&
             *maximum > 0) {
             return true;
         }
-        Sleep(40);
+        error = GetLastError();
+        if (attempt + 1 < attempts) {
+            Sleep(delays[std::min(attempt, (int)ARRAYSIZE(delays) - 1)]);
+        }
     }
+    Wh_Log(L"DDC/CI brightness read failed (error 0x%08X)", error);
     return false;
 }
 
@@ -891,8 +1086,13 @@ void Enumerate() {
             physical.resize(physicalCount);
             if (!GetPhysicalMonitorsFromHMONITOR(monitor, physicalCount,
                                                  physical.data())) {
+                Wh_Log(L"No DDC/CI handles for %s (error 0x%08X)", mi.szDevice,
+                       GetLastError());
                 physical.clear();
             }
+        } else {
+            Wh_Log(L"No physical monitors for %s (error 0x%08X)", mi.szDevice,
+                   GetLastError());
         }
 
         size_t count = std::max<size_t>(
@@ -923,7 +1123,7 @@ void Enumerate() {
             }
             if (d.info.name.empty()) {
                 d.info.name =
-                    d.info.internal ? L"Built-in display" : L"Display";
+                    Tr(d.info.internal ? Str::BuiltInDisplay : Str::Display);
             }
             d.info.key = d.info.id + L"|" + std::to_wstring(i);
 
@@ -959,13 +1159,15 @@ void Enumerate() {
                 useWmi();
             } else {
                 DWORD current, maximum;
-                if (d.physical && DdcGet(d.physical, &current, &maximum)) {
+                if (d.physical && DdcGet(d.physical, &current, &maximum, 5)) {
                     d.info.method = Method::Ddc;
                     d.vcpMax = maximum;
                     d.info.raw = ClampPercent(
                         (int)std::lround(current * 100.0 / maximum));
                 } else if (wmiIndex >= 0) {
                     useWmi();
+                } else if (!d.info.internal) {
+                    d.info.ddcFailed = true;
                 }
             }
 
@@ -990,11 +1192,11 @@ void Enumerate() {
     }
 }
 
-void Refresh() {
+void Refresh(bool wmiOnly) {
     std::map<std::wstring, int> wmiBrightness;
     bool wmiRead = false;
     for (auto& d : g_displays) {
-        if (d.info.method == Method::Ddc) {
+        if (d.info.method == Method::Ddc && !wmiOnly) {
             DWORD current, maximum;
             if (DdcGet(d.physical, &current, &maximum)) {
                 d.vcpMax = maximum;
@@ -1062,24 +1264,99 @@ void Publish(bool enumerated) {
     }
 }
 
+// Laptop and tablet screens: Windows reports brightness changes made with the
+// brightness keys or its own slider through WmiMonitorBrightnessEvent. This
+// thread waits for those events and asks the worker to read the levels again.
+std::atomic<bool> g_eventStop;
+HANDLE g_eventThread;
+
+DWORD WINAPI BrightnessEventThread(LPVOID) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    IWbemServices* services = WmiConnect();
+    IEnumWbemClassObject* events = nullptr;
+    if (services) {
+        BSTR language = SysAllocString(L"WQL");
+        BSTR query = SysAllocString(L"SELECT * FROM WmiMonitorBrightnessEvent");
+        if (FAILED(services->ExecNotificationQuery(
+                language, query,
+                WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr,
+                &events))) {
+            Wh_Log(L"Subscribing to brightness events failed");
+            events = nullptr;
+        }
+        SysFreeString(language);
+        SysFreeString(query);
+    }
+    // Next() returns after a timeout too, so that a stop request is noticed.
+    while (events && !g_eventStop) {
+        IWbemClassObject* object = nullptr;
+        ULONG returned = 0;
+        HRESULT hr = events->Next(2500, 1, &object, &returned);
+        if (hr == WBEM_S_TIMEDOUT) {
+            continue;
+        }
+        if (FAILED(hr)) {
+            break;
+        }
+        if (returned && object) {
+            object->Release();
+            std::lock_guard<std::mutex> lock(g_mutex);
+            g_requestRefreshWmi = true;
+            g_cv.notify_one();
+        }
+    }
+    if (events) {
+        events->Release();
+    }
+    if (services) {
+        services->Release();
+    }
+    CoUninitialize();
+    return 0;
+}
+
+void StartBrightnessEvents() {
+    bool anyWmi = std::any_of(g_displays.begin(), g_displays.end(),
+                              [](const HwDisplay& d) {
+                                  return d.info.method == Method::Wmi;
+                              });
+    if (anyWmi && !g_eventThread) {
+        g_eventStop = false;
+        g_eventThread =
+            CreateThread(nullptr, 0, BrightnessEventThread, nullptr, 0, nullptr);
+    }
+}
+
+void StopBrightnessEvents() {
+    if (g_eventThread) {
+        g_eventStop = true;
+        WaitForSingleObject(g_eventThread, 4000);
+        CloseHandle(g_eventThread);
+        g_eventThread = nullptr;
+    }
+}
+
 DWORD WINAPI WorkerThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
     while (true) {
-        bool enumerate, refresh, stop;
+        bool enumerate, refresh, refreshWmi, stop;
         std::map<std::wstring, int> sets;
         {
             std::unique_lock<std::mutex> lock(g_mutex);
             g_cv.wait(lock, [] {
                 return g_requestEnumerate || g_requestRefresh ||
-                       g_requestStop || !g_pendingSet.empty();
+                       g_requestRefreshWmi || g_requestStop ||
+                       !g_pendingSet.empty();
             });
             enumerate = g_requestEnumerate;
             refresh = g_requestRefresh;
+            refreshWmi = g_requestRefreshWmi;
             stop = g_requestStop;
             sets.swap(g_pendingSet);
             g_requestEnumerate = false;
             g_requestRefresh = false;
+            g_requestRefreshWmi = false;
             g_busy = true;
         }
 
@@ -1099,8 +1376,11 @@ DWORD WINAPI WorkerThread(LPVOID) {
             Enumerate();
             ApplyAll(failed);
             Publish(true);
-        } else if (refresh) {
-            Refresh();
+            if (!stop) {
+                StartBrightnessEvents();
+            }
+        } else if (refresh || refreshWmi) {
+            Refresh(!refresh);
             Publish(false);
         }
 
@@ -1121,6 +1401,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         g_idleCv.notify_all();
     }
 
+    StopBrightnessEvents();
     DestroyDisplays();
     if (g_wmi) {
         g_wmi->Release();
@@ -1165,7 +1446,7 @@ bool WaitUntilIdle(DWORD timeoutMs) {
     std::unique_lock<std::mutex> lock(g_mutex);
     return g_idleCv.wait_for(lock, std::chrono::milliseconds(timeoutMs), [] {
         return !g_busy && g_pendingSet.empty() && !g_requestEnumerate &&
-               !g_requestRefresh;
+               !g_requestRefresh && !g_requestRefreshWmi;
     });
 }
 
@@ -1219,6 +1500,12 @@ std::map<std::wstring, int> g_idleRestore;
 void SaveIdleRestore();
 long long g_lastScheduleCheck;
 bool g_reenumPending;
+int g_autoReenumCount;  // Automatic re-detections since the last trigger
+// External monitors don't report changes made with their own buttons, so a
+// relative hotkey step first reads the levels again if they are older than
+// a few seconds. The hotkeys pressed meanwhile wait for the new levels.
+DWORD g_lastHwReadTick;
+std::vector<int> g_deferredHotkeys;
 bool g_resumeCatchUp;
 int g_registeredHotkeys;
 std::wstring g_storagePrefix;
@@ -1292,6 +1579,33 @@ bool IsFading(const std::wstring& key) {
 
 void CancelFade(const std::wstring& key) {
     std::erase_if(g_fades, [&](const Fade& f) { return f.key == key; });
+}
+
+// Detects the displays again, e.g. from the Refresh button. Also allows the
+// automatic re-detections for displays that didn't answer.
+void RefreshDisplays() {
+    g_autoReenumCount = 0;
+    hw::RequestEnumerate();
+}
+
+// After an enumeration: if an external monitor couldn't be controlled, try
+// again after 3, 10 and 30 seconds. Monitors without DDC/CI are left alone
+// after that.
+void ScheduleAutoReenumerate() {
+    bool failed = std::any_of(g_lastSnapshot.begin(), g_lastSnapshot.end(),
+                              [](const DisplayInfo& info) {
+                                  return info.method == Method::None &&
+                                         info.ddcFailed;
+                              });
+    static const UINT delays[] = {3000, 10000, 30000};
+    if (!failed || g_autoReenumCount >= (int)ARRAYSIZE(delays)) {
+        return;
+    }
+    UINT delay = delays[g_autoReenumCount];
+    Wh_Log(L"A display couldn't be controlled, detecting again in %u ms",
+           delay);
+    g_autoReenumCount++;
+    SetTimer(g_hwndMain, TIMER_AUTO_REENUM, delay, nullptr);
 }
 
 void OnValuesChanged() {
@@ -1521,19 +1835,24 @@ void FillRoundRect(Gdiplus::Graphics& g,
     g.FillPath(&brush, &path);
 }
 
+// litRays: how many of the 8 rays are drawn at full strength, clockwise from
+// the top; the others are faint.
 void DrawSun(Gdiplus::Graphics& g,
              float cx,
              float cy,
              float size,
-             const Gdiplus::Color& color) {
+             const Gdiplus::Color& color,
+             int litRays = 8) {
     Gdiplus::SolidBrush brush(color);
     float r = size * 0.2f;
     g.FillEllipse(&brush, cx - r, cy - r, r * 2, r * 2);
-    Gdiplus::Pen pen(color, std::max(1.0f, size / 12.0f));
-    pen.SetStartCap(Gdiplus::LineCapRound);
-    pen.SetEndCap(Gdiplus::LineCapRound);
+    Gdiplus::Color faint(70, color.GetR(), color.GetG(), color.GetB());
     for (int i = 0; i < 8; i++) {
-        double a = i * 3.14159265358979 / 4;
+        Gdiplus::Pen pen(i < litRays ? color : faint,
+                         std::max(1.0f, size / 12.0f));
+        pen.SetStartCap(Gdiplus::LineCapRound);
+        pen.SetEndCap(Gdiplus::LineCapRound);
+        double a = (i - 2) * 3.14159265358979 / 4;
         float r1 = size * 0.32f, r2 = size * 0.46f;
         g.DrawLine(&pen, cx + (float)cos(a) * r1, cy + (float)sin(a) * r1,
                    cx + (float)cos(a) * r2, cy + (float)sin(a) * r2);
@@ -1608,9 +1927,32 @@ NOTIFYICONDATAW BaseNotifyIconData() {
     return nid;
 }
 
+// The number of the tray icon's 8 rays that are lit: the brightness as a
+// gauge, clockwise from the top. 8 when the setting is off or the level is
+// unknown.
+int g_trayIconLitRays = -1;
+
+int TrayLitRays() {
+    if (!g_settings.trayIconLevel) {
+        return 8;
+    }
+    int sum = 0, count = 0;
+    for (auto* d : ControllableDisplays()) {
+        if (d->value >= 0) {
+            sum += d->value;
+            count++;
+        }
+    }
+    if (!count) {
+        return 8;
+    }
+    return (int)std::ceil(sum / (double)count * 8 / 100.0);
+}
+
 HICON CreateSunIcon() {
     UINT dpi = GetDpiForSystem();
     int size = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
+    g_trayIconLitRays = TrayLitRays();
     Gdiplus::Bitmap bitmap(size, size, PixelFormat32bppARGB);
     {
         Gdiplus::Graphics g(&bitmap);
@@ -1619,7 +1961,8 @@ HICON CreateSunIcon() {
         Gdiplus::Color color = IsSystemDark()
                                    ? Gdiplus::Color(255, 255, 255, 255)
                                    : Gdiplus::Color(255, 0, 0, 0);
-        DrawSun(g, size / 2.0f, size / 2.0f, (float)size, color);
+        DrawSun(g, size / 2.0f, size / 2.0f, (float)size, color,
+                g_trayIconLitRays);
     }
     HICON icon = nullptr;
     bitmap.GetHICON(&icon);
@@ -1633,7 +1976,8 @@ std::wstring BuildTrayTip() {
                (d->value >= 0 ? std::to_wstring(d->value) + L"%" : L"?");
     }
     if (g_paused) {
-        tip += L"\n(automatic brightness paused)";
+        tip += L"\n";
+        tip += Tr(Str::PausedTip);
     }
     if (tip.size() > 127) {
         tip = tip.substr(0, 124) + L"...";
@@ -1693,6 +2037,9 @@ void UpdateTrayTip() {
     if (!g_trayAdded) {
         return;
     }
+    if (TrayLitRays() != g_trayIconLitRays) {
+        UpdateTrayIconImage();
+    }
     NOTIFYICONDATAW nid = BaseNotifyIconData();
     nid.uFlags |= NIF_TIP | NIF_SHOWTIP;
     wcsncpy_s(nid.szTip, BuildTrayTip().c_str(), _TRUNCATE);
@@ -1743,6 +2090,49 @@ int g_panelWidth;
 int g_panelHeight;
 int g_footerTop;
 DWORD g_panelHiddenTick;
+// Tooltips for the footer buttons; the text comes from TTN_GETDISPINFO.
+HWND g_panelTooltip;
+
+void UpdateButtonTooltips() {
+    if (!g_panelTooltip) {
+        return;
+    }
+    for (int i = 0; i < 3; i++) {
+        TOOLINFOW ti{};
+        ti.cbSize = sizeof(ti);
+        ti.hwnd = g_hwndPanel;
+        ti.uId = (UINT_PTR)i;
+        ti.rect = g_buttons[i];
+        SendMessageW(g_panelTooltip, TTM_NEWTOOLRECTW, 0, (LPARAM)&ti);
+    }
+}
+
+void CreateButtonTooltips() {
+    g_panelTooltip = CreateWindowExW(
+        WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_NOPREFIX,
+        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+        g_hwndPanel, nullptr, g_module, nullptr);
+    if (!g_panelTooltip) {
+        return;
+    }
+    for (int i = 0; i < 3; i++) {
+        TOOLINFOW ti{};
+        ti.cbSize = sizeof(ti);
+        ti.uFlags = TTF_SUBCLASS;
+        ti.hwnd = g_hwndPanel;
+        ti.uId = (UINT_PTR)i;
+        ti.lpszText = LPSTR_TEXTCALLBACKW;
+        SendMessageW(g_panelTooltip, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+    }
+}
+
+// Typing an exact level: an edit box over the row's number.
+HWND g_editBox;
+int g_editRow = -1;
+HFONT g_editFont;
+HBRUSH g_editBrush;
+COLORREF g_editTextColor;
+WNDPROC g_editDefaultProc;
 
 int S(int dip) {
     return MulDiv(dip, (int)g_panelDpi, 96);
@@ -1796,6 +2186,7 @@ void LayoutPanel() {
     if (!CanLink()) {
         SetRectEmpty(&g_buttons[2]);
     }
+    UpdateButtonTooltips();
 
     if (g_focusRow >= (int)g_rows.size()) {
         g_focusRow = -1;
@@ -1845,7 +2236,7 @@ void PaintPanel(HDC hdc) {
         g.Clear(t.background);
 
         if (g_rows.empty()) {
-            DrawLabel(g, L"No displays found",
+            DrawLabel(g, Tr(Str::NoDisplays),
                      Gdiplus::RectF(0, (float)S(12), (float)w, (float)S(60)),
                      (float)S(14), t.secondaryText,
                      Gdiplus::StringAlignmentCenter);
@@ -1855,7 +2246,7 @@ void PaintPanel(HDC hdc) {
             const PanelRow& row = g_rows[i];
             std::wstring label = row.display >= 0
                                      ? g_displays[row.display].label
-                                     : L"All displays";
+                                     : Tr(Str::AllDisplays);
             DrawLabel(g, label,
                      Gdiplus::RectF((float)S(20), (float)row.rect.top + S(6),
                                     (float)(w - S(40)), (float)S(22)),
@@ -1864,7 +2255,7 @@ void PaintPanel(HDC hdc) {
 
             float cy = (row.track.top + row.track.bottom) / 2.0f;
             if (!row.supported) {
-                DrawLabel(g, L"Brightness control is not available",
+                DrawLabel(g, Tr(Str::NotAvailable),
                          Gdiplus::RectF((float)S(20), cy - S(11),
                                         (float)(w - S(40)), (float)S(22)),
                          (float)S(13), t.secondaryText,
@@ -1876,6 +2267,9 @@ void PaintPanel(HDC hdc) {
             int value = RowValue(row);
             bool active = g_dragRow == (int)i || g_focusRow == (int)i;
             DrawSlider(g, row.track, value, t, scale, active);
+            if (g_editBox && g_editRow == (int)i) {
+                continue;  // The edit box shows the number.
+            }
             DrawLabel(g, value >= 0 ? std::to_wstring(value) : L"-",
                      Gdiplus::RectF((float)row.track.right + S(12), cy - S(11),
                                     (float)(w - S(20) - row.track.right - S(12)),
@@ -1888,7 +2282,7 @@ void PaintPanel(HDC hdc) {
         g.FillRectangle(&footerBrush, 0, g_footerTop, w, h - g_footerTop);
         Gdiplus::Pen footerLine(t.border, 1);
         g.DrawLine(&footerLine, 0, g_footerTop, w, g_footerTop);
-        DrawLabel(g, g_paused ? L"Automatic brightness paused" : L"Brightness",
+        DrawLabel(g, Tr(g_paused ? Str::Paused : Str::Brightness),
                  Gdiplus::RectF((float)S(20), (float)g_footerTop,
                                 (float)((CanLink() ? g_buttons[2].left
                                                    : g_buttons[0].left) -
@@ -1993,7 +2387,10 @@ void ShowPanel() {
     InvalidateRect(g_hwndPanel, nullptr, FALSE);
 }
 
+void EndEdit(bool apply);
+
 void HidePanel() {
+    EndEdit(false);
     if (!IsWindowVisible(g_hwndPanel)) {
         return;
     }
@@ -2016,6 +2413,11 @@ void TogglePanel() {
 
 void UpdatePanel() {
     if (!g_hwndPanel || !IsWindowVisible(g_hwndPanel)) {
+        return;
+    }
+    if (g_editBox) {
+        // Keep the layout while the user types; just repaint.
+        InvalidateRect(g_hwndPanel, nullptr, FALSE);
         return;
     }
     if (GetCapture() == g_hwndPanel) {
@@ -2082,6 +2484,102 @@ void MoveFocus(int direction) {
     InvalidateRect(g_hwndPanel, nullptr, FALSE);
 }
 
+COLORREF ToColorRef(const Gdiplus::Color& c) {
+    return RGB(c.GetR(), c.GetG(), c.GetB());
+}
+
+LRESULT CALLBACK EditBoxProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case WM_KEYDOWN:
+            if (wParam == VK_RETURN || wParam == VK_ESCAPE) {
+                PostMessage(g_hwndPanel, WM_APP_END_EDIT, wParam == VK_RETURN,
+                            0);
+                return 0;
+            }
+            break;
+        case WM_CHAR:
+            if (wParam == L'\r' || wParam == 27) {
+                return 0;  // No beep
+            }
+            break;
+        case WM_KILLFOCUS:
+            PostMessage(g_hwndPanel, WM_APP_END_EDIT, 1, 0);
+            break;
+    }
+    return CallWindowProcW(g_editDefaultProc, hwnd, msg, wParam, lParam);
+}
+
+RECT ValueRect(const PanelRow& row) {
+    int cy = (row.track.top + row.track.bottom) / 2;
+    return {row.track.right + S(6), cy - S(13), g_panelWidth - S(14),
+            cy + S(13)};
+}
+
+void BeginEdit(int rowIndex) {
+    EndEdit(false);
+    if (rowIndex < 0 || rowIndex >= (int)g_rows.size() ||
+        !g_rows[rowIndex].supported) {
+        return;
+    }
+    Theme t = GetTheme();
+    RECT r = ValueRect(g_rows[rowIndex]);
+    g_editRow = rowIndex;
+    g_editFont = CreateFontW(-S(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                             CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                             DEFAULT_PITCH, g_fontFamily.c_str());
+    g_editBrush = CreateSolidBrush(ToColorRef(t.hover));
+    g_editTextColor = ToColorRef(t.text);
+    g_editBox = CreateWindowExW(
+        0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_NUMBER | ES_CENTER,
+        r.left, r.top + S(3), r.right - r.left, r.bottom - r.top - S(6),
+        g_hwndPanel, nullptr, g_module, nullptr);
+    if (!g_editBox) {
+        EndEdit(false);
+        return;
+    }
+    SendMessageW(g_editBox, WM_SETFONT, (WPARAM)g_editFont, FALSE);
+    SendMessageW(g_editBox, EM_SETLIMITTEXT, 3, 0);
+    int value = RowValue(g_rows[rowIndex]);
+    if (value >= 0) {
+        SetWindowTextW(g_editBox, std::to_wstring(value).c_str());
+    }
+    SendMessageW(g_editBox, EM_SETSEL, 0, -1);
+    g_editDefaultProc = (WNDPROC)SetWindowLongPtrW(
+        g_editBox, GWLP_WNDPROC, (LONG_PTR)EditBoxProc);
+    SetFocus(g_editBox);
+    g_focusRow = rowIndex;
+    InvalidateRect(g_hwndPanel, nullptr, FALSE);
+}
+
+void EndEdit(bool apply) {
+    if (g_editBox) {
+        HWND edit = g_editBox;
+        g_editBox = nullptr;
+        WCHAR text[8] = L"";
+        GetWindowTextW(edit, text, ARRAYSIZE(text));
+        bool hadFocus = GetFocus() == edit;
+        DestroyWindow(edit);
+        if (apply && text[0] && g_editRow >= 0 &&
+            g_editRow < (int)g_rows.size()) {
+            SetRowValue(g_rows[g_editRow], _wtoi(text));
+        }
+        if (hadFocus && IsWindowVisible(g_hwndPanel)) {
+            SetFocus(g_hwndPanel);
+        }
+        InvalidateRect(g_hwndPanel, nullptr, FALSE);
+    }
+    g_editRow = -1;
+    if (g_editFont) {
+        DeleteObject(g_editFont);
+        g_editFont = nullptr;
+    }
+    if (g_editBrush) {
+        DeleteObject(g_editBrush);
+        g_editBrush = nullptr;
+    }
+}
+
 void TurnOffDisplays() {
     // Delay so that releasing the mouse button or hotkey does not wake the
     // displays again.
@@ -2107,8 +2605,57 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
         }
 
+        case WM_LBUTTONDBLCLK: {
+            // Double-click the number (or the slider) to type a level.
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            for (size_t i = 0; i < g_rows.size(); i++) {
+                RECT r = ValueRect(g_rows[i]);
+                if (g_rows[i].supported && PtInRect(&r, pt)) {
+                    BeginEdit((int)i);
+                    return 0;
+                }
+            }
+            int row = HitTestRow(pt, true);
+            if (row >= 0) {
+                BeginEdit(row);
+            }
+            return 0;
+        }
+
+        case WM_APP_END_EDIT:
+            EndEdit(wParam != 0);
+            return 0;
+
+        case WM_NOTIFY: {
+            auto* info = (NMTTDISPINFOW*)lParam;
+            if (info->hdr.hwndFrom == g_panelTooltip &&
+                info->hdr.code == TTN_GETDISPINFOW) {
+                Str text = info->hdr.idFrom == 0   ? Str::TurnOffDisplays
+                           : info->hdr.idFrom == 1 ? Str::RefreshDisplays
+                           : g_linked              ? Str::UnlinkDisplays
+                                                   : Str::LinkDisplays;
+                info->lpszText = (PWSTR)Tr(text);
+                return 0;
+            }
+            break;
+        }
+
+        case WM_CTLCOLOREDIT:
+            if ((HWND)lParam == g_editBox && g_editBrush) {
+                HDC dc = (HDC)wParam;
+                SetTextColor(dc, g_editTextColor);
+                LOGBRUSH lb;
+                GetObjectW(g_editBrush, sizeof(lb), &lb);
+                SetBkColor(dc, lb.lbColor);
+                return (LRESULT)g_editBrush;
+            }
+            break;
+
         case WM_LBUTTONDOWN: {
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            if (g_editBox) {
+                EndEdit(true);
+            }
             int row = HitTestRow(pt, true);
             if (row >= 0) {
                 g_dragRow = row;
@@ -2158,7 +2705,7 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 HidePanel();
                 TurnOffDisplays();
             } else if (PtInRect(&g_buttons[1], pt)) {
-                hw::RequestEnumerate();
+                RefreshDisplays();
             } else if (PtInRect(&g_buttons[2], pt)) {
                 SetLinked(!g_linked);
             }
@@ -2171,6 +2718,10 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             return 0;
 
         case WM_MOUSEWHEEL: {
+            // Touchpads and smooth-scrolling mice send many small deltas:
+            // step once per WHEEL_DELTA (one notch).
+            static int accumulator;
+            static int accumulatorRow = -1;
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(hwnd, &pt);
             int row = HitTestRow(pt, false);
@@ -2178,7 +2729,16 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 row = g_focusRow;
             }
             int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-            AdjustRow(row, delta > 0 ? 2 : -2);
+            if (row != accumulatorRow || (accumulator > 0) != (delta > 0)) {
+                accumulator = 0;
+                accumulatorRow = row;
+            }
+            accumulator += delta;
+            int steps = accumulator / WHEEL_DELTA;
+            accumulator %= WHEEL_DELTA;
+            if (steps) {
+                AdjustRow(row, steps * 2);
+            }
             return 0;
         }
 
@@ -2186,6 +2746,10 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             switch (wParam) {
                 case VK_ESCAPE:
                     HidePanel();
+                    break;
+                case VK_F2:
+                case VK_RETURN:
+                    BeginEdit(g_focusRow);
                     break;
                 case VK_UP:
                 case VK_TAB:
@@ -2246,12 +2810,14 @@ std::vector<OsdItem> BuildOsdItems(const std::vector<UiDisplay*>& targets) {
         if (targets.size() == 1) {
             label = targets[0]->label;
             if (!targets[0]->Controllable()) {
-                label += L" - not available";
+                label += Tr(Str::NotAvailableSuffix);
             }
         } else if (targets.size() == ControllableDisplays().size()) {
-            label = L"All displays";
+            label = Tr(Str::AllDisplays);
         } else {
-            label = std::to_wstring(targets.size()) + L" displays";
+            WCHAR buffer[64];
+            swprintf_s(buffer, Tr(Str::DisplaysCount), (int)targets.size());
+            label = buffer;
         }
         return {{label, targets[0]->value}};
     }
@@ -2299,8 +2865,30 @@ void ShowOsd(const std::vector<UiDisplay*>& targets, HMONITOR monitor) {
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
     GetMonitorInfoW(monitor, &mi);
-    POINT pos = {(mi.rcWork.left + mi.rcWork.right - w) / 2,
-                 mi.rcWork.bottom - h - px(48)};
+    const RECT& work = mi.rcWork;
+    int centerX = (work.left + work.right - w) / 2;
+    int margin = px(24);
+    POINT pos;
+    switch (g_settings.osdPosition) {
+        case OsdPosition::TopCenter:
+            pos = {centerX, work.top + px(48)};
+            break;
+        case OsdPosition::TopLeft:
+            pos = {work.left + margin, work.top + margin};
+            break;
+        case OsdPosition::TopRight:
+            pos = {work.right - w - margin, work.top + margin};
+            break;
+        case OsdPosition::BottomLeft:
+            pos = {work.left + margin, work.bottom - h - margin};
+            break;
+        case OsdPosition::BottomRight:
+            pos = {work.right - w - margin, work.bottom - h - margin};
+            break;
+        default:
+            pos = {centerX, work.bottom - h - px(48)};
+            break;
+    }
     SIZE size = {w, h};
 
     BITMAPINFO bmi{};
@@ -2530,11 +3118,29 @@ void ChangeDisplays(const std::vector<UiDisplay*>& targets,
     }
 }
 
-void OnHotkey(int id) {
+void OnHotkey(int id, bool levelsFresh = false) {
     if (id < 1 || id > (int)g_settings.hotkeys.size()) {
         return;
     }
     const HotkeyConfig& hk = g_settings.hotkeys[id - 1];
+
+    bool relative = hk.action == HotkeyAction::Increase ||
+                    hk.action == HotkeyAction::Decrease;
+    if (relative && !levelsFresh) {
+        bool anyDdc = std::any_of(
+            g_displays.begin(), g_displays.end(), [](const UiDisplay& d) {
+                return d.Controllable() && d.info.method == Method::Ddc;
+            });
+        if (!g_deferredHotkeys.empty() ||
+            (anyDdc && GetTickCount() - g_lastHwReadTick > 5000)) {
+            g_deferredHotkeys.push_back(id);
+            if (g_deferredHotkeys.size() == 1) {
+                hw::RequestRefresh();
+                SetTimer(g_hwndMain, TIMER_HOTKEY_WAIT, 1500, nullptr);
+            }
+            return;
+        }
+    }
     switch (hk.action) {
         case HotkeyAction::TurnOff:
             TurnOffDisplays();
@@ -2576,6 +3182,17 @@ void OnHotkey(int id) {
     }
     ChangeDisplays(targets, delta, setValue, g_linked);
     ShowOsd(targets, g_linked ? nullptr : monitor);
+}
+
+// Runs the hotkeys that waited for fresh levels, when the levels arrive or
+// after a timeout.
+void RunDeferredHotkeys() {
+    KillTimer(g_hwndMain, TIMER_HOTKEY_WAIT);
+    std::vector<int> ids;
+    ids.swap(g_deferredHotkeys);
+    for (int id : ids) {
+        OnHotkey(id, true);
+    }
 }
 
 // The taskbar, or the notification area's overflow flyout.
@@ -2883,7 +3500,7 @@ void CopyDisplayInfo() {
     for (const auto& d : g_displays) {
         PCWSTR method = d.info.method == Method::Ddc   ? L"DDC/CI"
                         : d.info.method == Method::Wmi ? L"WMI"
-                                                       : L"not supported";
+                                                       : Tr(Str::NotSupported);
         text += d.info.name + L"\t" + d.info.id + L"\t" + method + L"\r\n";
     }
     if (text.empty() || !OpenClipboard(g_hwndMain)) {
@@ -2909,12 +3526,12 @@ void CopyDisplayInfo() {
 
 void ShowTrayMenu(POINT pt) {
     HMENU menu = CreatePopupMenu();
-    AppendMenuW(menu, MF_STRING, MENU_REFRESH, L"Refresh displays");
-    AppendMenuW(menu, MF_STRING, MENU_TURN_OFF, L"Turn off displays");
+    AppendMenuW(menu, MF_STRING, MENU_REFRESH, Tr(Str::RefreshDisplays));
+    AppendMenuW(menu, MF_STRING, MENU_TURN_OFF, Tr(Str::TurnOffDisplays));
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING | (g_paused ? MF_CHECKED : 0), MENU_PAUSE,
-                L"Pause automatic brightness");
-    AppendMenuW(menu, MF_STRING, MENU_COPY_INFO, L"Copy display info");
+                Tr(Str::PauseAutomatic));
+    AppendMenuW(menu, MF_STRING, MENU_COPY_INFO, Tr(Str::CopyDisplayInfo));
 
     SetForegroundWindow(g_hwndMain);
     UINT cmd = TrackPopupMenuEx(menu,
@@ -2928,7 +3545,7 @@ void ShowTrayMenu(POINT pt) {
 
     switch (cmd) {
         case MENU_REFRESH:
-            hw::RequestEnumerate();
+            RefreshDisplays();
             break;
         case MENU_TURN_OFF:
             TurnOffDisplays();
@@ -3011,11 +3628,16 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         case WM_APP_SNAPSHOT: {
             bool enumerated = wParam != 0;
             g_lastSnapshot = hw::TakeSnapshot();
+            g_lastHwReadTick = GetTickCount();
             RebuildDisplays(g_lastSnapshot, true);
             UpdatePanel();
             UpdateTrayTip();
+            if (!g_deferredHotkeys.empty()) {
+                RunDeferredHotkeys();
+            }
             if (enumerated) {
                 g_reenumPending = false;
+                ScheduleAutoReenumerate();
             }
             if (!g_haveSnapshot) {
                 g_haveSnapshot = true;
@@ -3061,6 +3683,13 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             switch (wParam) {
                 case TIMER_REENUM:
                     KillTimer(hwnd, TIMER_REENUM);
+                    RefreshDisplays();
+                    break;
+                case TIMER_HOTKEY_WAIT:
+                    RunDeferredHotkeys();
+                    break;
+                case TIMER_AUTO_REENUM:
+                    KillTimer(hwnd, TIMER_AUTO_REENUM);
                     hw::RequestEnumerate();
                     break;
                 case TIMER_SCHEDULE:
@@ -3164,7 +3793,7 @@ DWORD WINAPI UiThread(LPVOID) {
     RegisterClassExW(&wc);
 
     wc.lpfnWndProc = PanelWndProc;
-    wc.style = CS_DROPSHADOW;
+    wc.style = CS_DROPSHADOW | CS_DBLCLKS;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.lpszClassName = L"TwinkleBrightness_Panel";
     RegisterClassExW(&wc);
@@ -3182,8 +3811,10 @@ DWORD WINAPI UiThread(LPVOID) {
     g_hwndMain = main;
     g_hwndPanel = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST, L"TwinkleBrightness_Panel",
-        L"Brightness", WS_POPUP, 0, 0, 0, 0, nullptr, nullptr, g_module,
+        L"Brightness", WS_POPUP | WS_CLIPCHILDREN, 0, 0, 0, 0, nullptr,
+        nullptr, g_module,
         nullptr);
+    CreateButtonTooltips();
     g_hwndOsd = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT |
                                     WS_EX_TOOLWINDOW | WS_EX_TOPMOST |
                                     WS_EX_NOACTIVATE,
@@ -3225,6 +3856,7 @@ BOOL WhTool_ModInit() {
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        (LPCWSTR)&WhTool_ModInit, &g_module);
     g_isWin11 = IsWindows11();
+    InitLanguage();
     LoadSettings();
 
     g_workerThread = CreateThread(nullptr, 0, hw::WorkerThread, nullptr, 0,
