@@ -9,7 +9,7 @@
 // @donateUrl       https://ko-fi.com/kashix
 // @include         windhawk-mod.exe
 // @include         windhawk.exe
-// @compilerOptions -lgdi32 -lgdiplus -ldwmapi -lwtsapi32 -ladvapi32
+// @compilerOptions -lgdi32 -lgdiplus -ldwmapi -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -64,7 +64,6 @@ Control any window's **opacity**, **always-on-top** state, and **per-window dimm
     $description: Mouse action with the Opacity Modifier on a title bar to toggle saved per-app opacity ON/OFF
     $options:
       - double_left: Double Left-Click
-      - middle: Middle Click
       - disabled: Disabled
   - pinButton: middle
     $name: Pin Window Button
@@ -169,11 +168,6 @@ Control any window's **opacity**, **always-on-top** state, and **per-window dimm
     $name: Show Circle Background
     $description: Turn off for bare adaptive % text; turn on for a solid black circle behind the percentage
   $name: Header % Control
-- reset:
-  - onLogoff: true
-    $name: Reset on Windows Logoff
-    $description: Restore all windows to normal when signing out of Windows (locking the screen keeps your active dims and pins)
-  $name: Reset
 */
 // ==/WindhawkModSettings==
 
@@ -185,7 +179,6 @@ Control any window's **opacity**, **always-on-top** state, and **per-window dimm
 #include <gdiplus.h>
 #include <sddl.h>
 #include <shellapi.h>
-#include <wtsapi32.h>
 
 #include <algorithm>
 #include <atomic>
@@ -299,7 +292,6 @@ struct Settings {
     bool headerControlEnabled = false;
     bool headerAfterTitle = true;
     bool headerShowFill = false;
-    bool resetOnLogoff = true;
 };
 
 struct WindowState {
@@ -415,6 +407,8 @@ HWND g_cachedHeaderHwnd = nullptr;
 bool g_captureSessionActive = false;
 int g_cachedCaptionReserve = 0;
 int g_cachedTitlePx = 0;
+bool g_cachedBadgeFallbackRight = false;
+bool g_cachedBadgeHiddenForTabs = false;
 int g_sliderBaseX = 0;
 int g_sliderBaseY = 0;
 bool g_sliderDragging = false;
@@ -427,8 +421,13 @@ CachedDIB g_badgeDib;
 CachedDIB g_sliderDib;
 
 std::wstring g_userSidSuffix;
+struct ExeCacheEntry {
+    HANDLE process = nullptr;
+    std::wstring exe;
+};
+
 std::map<HWND, WindowState> g_ledger;
-std::unordered_map<DWORD, std::wstring> g_pidExeCache;
+std::unordered_map<DWORD, ExeCacheEntry> g_pidExeCache;
 std::map<std::wstring, int> g_appPresets;
 std::map<std::wstring, int> g_appOpacityPresets;
 std::atomic<bool> g_unloading{false};
@@ -565,7 +564,6 @@ void LoadSettings() {
     s.headerAfterTitle = (wcscmp(headerPosStr.get(), L"before_caption") != 0);
     s.headerShowFill = Wh_GetIntSetting(L"headerControl.showFill") != 0;
 
-    s.resetOnLogoff = Wh_GetIntSetting(L"reset.onLogoff") != 0;
 
     g_settings = s;
     g_hookOpacityMod.store(static_cast<int>(s.opacityMod), std::memory_order_relaxed);
@@ -753,7 +751,26 @@ bool IsProtectedWindow(HWND hwnd) {
     return false;
 }
 
-// Worker-thread cached exe-name lookup per PID to avoid repeated OpenProcess calls.
+void ClearPidExeCache() {
+    for (auto& [_, entry] : g_pidExeCache) {
+        if (entry.process) CloseHandle(entry.process);
+    }
+    g_pidExeCache.clear();
+}
+
+void PruneExitedPidExeCache() {
+    for (auto it = g_pidExeCache.begin(); it != g_pidExeCache.end(); ) {
+        if (!it->second.process || WaitForSingleObject(it->second.process, 0) != WAIT_TIMEOUT) {
+            if (it->second.process) CloseHandle(it->second.process);
+            it = g_pidExeCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// Worker-thread cached exe-name lookup per PID with an open SYNCHRONIZE handle
+// so Windows cannot reuse the PID while cached and exited processes are evicted.
 std::wstring GetWindowExeName(HWND hwnd) {
     auto ledgerIt = g_ledger.find(hwnd);
     if (ledgerIt != g_ledger.end() && !ledgerIt->second.exeName.empty()) {
@@ -766,25 +783,33 @@ std::wstring GetWindowExeName(HWND hwnd) {
 
     auto cacheIt = g_pidExeCache.find(pid);
     if (cacheIt != g_pidExeCache.end()) {
-        return cacheIt->second;
+        if (cacheIt->second.process && WaitForSingleObject(cacheIt->second.process, 0) == WAIT_TIMEOUT) {
+            return cacheIt->second.exe;
+        }
+        if (cacheIt->second.process) CloseHandle(cacheIt->second.process);
+        g_pidExeCache.erase(cacheIt);
     }
 
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, pid);
     if (!hProc) return L"";
     wchar_t path[MAX_PATH]{};
     DWORD size = ARRAYSIZE(path);
     std::wstring result;
-    if (QueryFullProcessImageNameW(hProc, 0, path, &size)) {
-        const wchar_t* slash = wcsrchr(path, L'\\');
-        result = slash ? (slash + 1) : path;
-        for (auto& ch : result) ch = static_cast<wchar_t>(towlower(ch));
+    if (!QueryFullProcessImageNameW(hProc, 0, path, &size)) {
+        CloseHandle(hProc);
+        return L"";
     }
-    CloseHandle(hProc);
+    const wchar_t* slash = wcsrchr(path, L'\\');
+    result = slash ? (slash + 1) : path;
+    for (auto& ch : result) ch = static_cast<wchar_t>(towlower(ch));
 
     if (g_pidExeCache.size() >= 512) {
-        g_pidExeCache.clear();
+        PruneExitedPidExeCache();
+        if (g_pidExeCache.size() >= 512) {
+            ClearPidExeCache();
+        }
     }
-    g_pidExeCache.emplace(pid, result);
+    g_pidExeCache.emplace(pid, ExeCacheEntry{hProc, result});
     return result;
 }
 
@@ -1254,16 +1279,29 @@ void RenderBadgeLayered(HWND hwnd) {
         swprintf_s(label, L"%d%%", pct);
 
         float fontSize = (pct >= 100) ? (size * 0.34f) : (size * 0.39f);
-        Gdiplus::Font font(L"Segoe UI", fontSize, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
         Gdiplus::StringFormat fmt(Gdiplus::StringFormat::GenericTypographic());
         fmt.SetAlignment(Gdiplus::StringAlignmentCenter);
         fmt.SetLineAlignment(Gdiplus::StringAlignmentCenter);
         Gdiplus::RectF box(0.0f, 0.0f, static_cast<float>(size), static_cast<float>(size));
 
         bool useDarkText = (!g_settings.headerShowFill && g_headerIsLight);
-        Gdiplus::SolidBrush textBrush(useDarkText ? Gdiplus::Color(245, 10, 10, 14)
+        Gdiplus::SolidBrush textBrush(useDarkText ? Gdiplus::Color(248, 10, 10, 14)
                                                   : Gdiplus::Color(252, 255, 255, 255));
-        g.DrawString(label, -1, &font, box, &fmt, &textBrush);
+        if (!g_settings.headerShowFill) {
+            // Contrasting outline keeps bare text legible on custom-drawn dark or light title bars.
+            Gdiplus::FontFamily family(L"Segoe UI");
+            Gdiplus::GraphicsPath textPath;
+            textPath.AddString(label, -1, &family, Gdiplus::FontStyleBold, fontSize, box, &fmt);
+            Gdiplus::Pen outlinePen(useDarkText ? Gdiplus::Color(220, 255, 255, 255)
+                                                : Gdiplus::Color(215, 0, 0, 0),
+                                    std::max(2.0f, size * 0.085f));
+            outlinePen.SetLineJoin(Gdiplus::LineJoinRound);
+            g.DrawPath(&outlinePen, &textPath);
+            g.FillPath(&textBrush, &textPath);
+        } else {
+            Gdiplus::Font font(L"Segoe UI", fontSize, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+            g.DrawString(label, -1, &font, box, &fmt, &textBrush);
+        }
 
         POINT ptSrc{0, 0};
         SIZE wndSize{size, size};
@@ -1316,7 +1354,7 @@ void RenderSliderLayered(HWND hwnd) {
         g.FillEllipse(&thumbHalo, thumbX - thumbR * 1.35f, cy - thumbR * 1.35f, thumbR * 2.7f, thumbR * 2.7f);
         g.FillEllipse(&trackFill, thumbX - thumbR, cy - thumbR, thumbR * 2.0f, thumbR * 2.0f);
 
-        int dir = g_settings.headerAfterTitle ? -1 : 1;
+        int dir = (g_settings.headerAfterTitle && !g_cachedBadgeFallbackRight) ? -1 : 1;
         int slideOffset = dir * static_cast<int>(std::lround((1.0f - g_sliderAnim.current) * MulDiv(10, dpi, 96)));
         POINT ptDst{g_sliderBaseX + slideOffset, g_sliderBaseY};
         POINT ptSrc{0, 0};
@@ -1433,19 +1471,44 @@ void PositionHeaderControls(HWND target, bool queryTargetIPC = true) {
         }
     }
 
+    auto isFreeCaptionSlot = [&](int candidateX) -> bool {
+        int probeXs[2] = {candidateX + badgeSize / 4, candidateX + (badgeSize * 3) / 4};
+        int probeY = badgeY + badgeSize / 2;
+        for (int px : probeXs) {
+            DWORD_PTR hit = HTNOWHERE;
+            if (!SendMessageTimeoutW(target, WM_NCHITTEST, 0, MAKELPARAM(px, probeY),
+                                     SMTO_ABORTIFHUNG | SMTO_BLOCK, 15, &hit) ||
+                hit != HTCAPTION) {
+                return false;
+            }
+        }
+        return true;
+    };
+
     if (needIPC) {
-        DWORD_PTR hit = HTNOWHERE;
-        POINT centerPt{badgeX + badgeSize / 2, badgeY + badgeSize / 2};
-        if (SendMessageTimeoutW(target, WM_NCHITTEST, 0, MAKELPARAM(centerPt.x, centerPt.y),
-                                SMTO_ABORTIFHUNG | SMTO_BLOCK, 15, &hit)) {
-            if (hit == HTMINBUTTON || hit == HTMAXBUTTON || hit == HTCLOSE ||
-                hit == HTSYSMENU || hit == HTHELP) {
+        g_cachedBadgeFallbackRight = false;
+        g_cachedBadgeHiddenForTabs = false;
+        if (!isFreeCaptionSlot(badgeX)) {
+            int fallbackX = rc.right - std::max(captionReserve, MulDiv(172, dpi, 96)) - badgeSize;
+            if (g_settings.headerAfterTitle && fallbackX > rc.left + MulDiv(80, dpi, 96) &&
+                isFreeCaptionSlot(fallbackX)) {
+                badgeX = fallbackX;
+                g_cachedBadgeFallbackRight = true;
+            } else {
+                g_cachedBadgeHiddenForTabs = true;
+                g_cachedHeaderHwnd = target;
                 if (g_badgeWnd) ShowWindow(g_badgeWnd, SW_HIDE);
                 if (g_sliderWnd) ShowWindow(g_sliderWnd, SW_HIDE);
                 return;
             }
         }
         g_cachedHeaderHwnd = target;
+    } else if (g_cachedBadgeHiddenForTabs) {
+        if (g_badgeWnd) ShowWindow(g_badgeWnd, SW_HIDE);
+        if (g_sliderWnd) ShowWindow(g_sliderWnd, SW_HIDE);
+        return;
+    } else if (g_cachedBadgeFallbackRight) {
+        badgeX = rc.right - std::max(captionReserve, MulDiv(172, dpi, 96)) - badgeSize;
     }
 
     if (needIPC || !IsWindowVisible(g_badgeWnd)) {
@@ -1460,7 +1523,8 @@ void PositionHeaderControls(HWND target, bool queryTargetIPC = true) {
                  badgeX, badgeY, badgeSize, badgeSize,
                  SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
 
-    g_sliderBaseX = g_settings.headerAfterTitle
+    bool placeSliderRight = g_settings.headerAfterTitle && !g_cachedBadgeFallbackRight;
+    g_sliderBaseX = placeSliderRight
         ? (badgeX + badgeSize + MulDiv(6, dpi, 96))
         : (badgeX - sliderW - MulDiv(6, dpi, 96));
     g_sliderBaseY = badgeY - (sliderH - badgeSize) / 2;
@@ -1858,7 +1922,6 @@ LRESULT CALLBACK ControlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             HWND target = reinterpret_cast<HWND>(lParam);
             if (!target || !IsWindow(target) || IsMonitorControlWindow(target)) return 0;
             if (wParam == 1) ToggleSavedAppDim(target);
-            else if (wParam == 2) ToggleSavedAppOpacity(target);
             else TogglePinWindow(target);
             return 0;
         }
@@ -1918,12 +1981,6 @@ LRESULT CALLBACK ControlWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             } else if (wParam == TIMER_SAVE_PRESETS) {
                 KillTimer(hwnd, TIMER_SAVE_PRESETS);
                 SavePresetsToStorage();
-            }
-            return 0;
-        }
-        case WM_WTSSESSION_CHANGE: {
-            if (g_settings.resetOnLogoff && wParam == WTS_SESSION_LOGOFF) {
-                RestoreAllWindows();
             }
             return 0;
         }
@@ -2089,16 +2146,6 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 g_swallowUpXButton = HIWORD(info->mouseData);
                 MaybeMaskAltOnGesture(ctrlWnd);
                 PostMessageW(ctrlWnd, WM_APP_HOOK_BUTTON, 1, reinterpret_cast<LPARAM>(target));
-                return 1;
-            }
-        }
-        if (MatchesButtonMsg(opacityToggle, msg, info->mouseData) &&
-            IsModifierComboDown(opacityMod)) {
-            if (HWND target = FastTopBandTargetFromHook(info->pt)) {
-                g_swallowUpMsg = msg + 1;
-                g_swallowUpXButton = HIWORD(info->mouseData);
-                MaybeMaskAltOnGesture(ctrlWnd);
-                PostMessageW(ctrlWnd, WM_APP_HOOK_BUTTON, 2, reinterpret_cast<LPARAM>(target));
                 return 1;
             }
         }
@@ -2383,7 +2430,6 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     DWORD initAff = GetHeaderControlAffinity();
     if (g_badgeWnd) SetWindowDisplayAffinity(g_badgeWnd, initAff);
     if (g_sliderWnd) SetWindowDisplayAffinity(g_sliderWnd, initAff);
-    if (g_ctrlWnd) WTSRegisterSessionNotification(g_ctrlWnd, NOTIFY_FOR_THIS_SESSION);
 
     RegisterNarrowWinEventHooks();
 
@@ -2403,11 +2449,10 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
     }
 
     UnregisterNarrowWinEventHooks();
-    if (g_ctrlWnd) WTSUnRegisterSessionNotification(g_ctrlWnd);
 
     SavePresetsToStorage();
     RestoreAllWindows();
-    g_pidExeCache.clear();
+    ClearPidExeCache();
     g_badgeDib.Release();
     g_sliderDib.Release();
     if (g_dimBrush) { DeleteObject(g_dimBrush); g_dimBrush = nullptr; }
