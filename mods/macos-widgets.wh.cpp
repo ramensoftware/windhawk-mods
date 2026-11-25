@@ -11284,16 +11284,29 @@ BOOL Wh_ModInit() {
     }
 
     if (isCurrentToolModProcess) {
-        g_toolModProcessMutex =
-            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
-        if (!g_toolModProcessMutex) {
-            Wh_Log(L"CreateMutex failed");
-            ExitProcess(1);
-        }
+        // MacOS Widgets: the only change to the snippet. When the mod is updated, Windhawk starts the new tool
+        // process at the same moment it tells the old one to unload, so the new one usually finds the old one's
+        // mutex still there and quits, and the widgets only come back after disabling and enabling the mod. It
+        // waits for the old process to exit instead (up to 10 s).
+        for (int tries = 0;; tries++) {
+            g_toolModProcessMutex =
+                CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            if (!g_toolModProcessMutex) {
+                Wh_Log(L"CreateMutex failed");
+                ExitProcess(1);
+            }
 
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-            ExitProcess(1);
+            if (GetLastError() != ERROR_ALREADY_EXISTS) {
+                break;
+            }
+
+            CloseHandle(g_toolModProcessMutex);
+            g_toolModProcessMutex = nullptr;
+            if (tries >= 40) {
+                Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+                ExitProcess(1);
+            }
+            Sleep(250);
         }
 
         if (!WhTool_ModInit()) {
