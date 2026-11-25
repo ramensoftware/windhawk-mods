@@ -2300,7 +2300,7 @@ HRESULT STDMETHODCALLTYPE FrameworkElement_ArrangeOverride_Hook(
 bool HookWindowsUIXamlDiscovery() {
     HMODULE wuxMod = GetModuleHandleW(L"Windows.UI.Xaml.dll");
     if (!wuxMod) return false;
-
+    // Windows.UI.Xaml.dll
     WindhawkUtils::SYMBOL_HOOK windowsUIXamlDllHooks[] = {
         {
             { L"public: virtual long __cdecl DirectUI::FrameworkElement::ArrangeOverride(struct Windows::Foundation::Size,struct Windows::Foundation::Size *)" },
