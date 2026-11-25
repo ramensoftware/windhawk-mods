@@ -27,10 +27,7 @@ AutoPlay notifications without disabling the AutoPlay service.
 - Leaves non-matching notifications and dialogs unchanged.
 - Does not modify the registry or repair the filesystem.
 
-Version 1.1 was tested on the author's Windows 11 installation in Russian.
-Version 1.2 improves hook lifetime management and targets Explorer only;
-local runtime testing of this revision is pending. English matching and
-other Windows builds have not been verified.
+Tested on Windows 11 with a Russian display language. Both hooks initialized successfully, and USB disk warning notification blocking was confirmed in debug logs. English text matching, other Windows builds, and independent dialog interception have not been verified.
 
 **Warning:** This mod hides disk warnings. It does not fix filesystem
 errors or protect against data loss. Back up important files and check
@@ -44,10 +41,7 @@ drives manually when necessary.
 службы автозапуска. Поддерживает русский и английский текст предупреждений.
 Другие уведомления и окна, не соответствующие фильтру, не блокируются.
 
-Версия 1.1 проверена на компьютере автора с русским интерфейсом Windows 11.
-Версия 1.2 содержит исправления по результатам проверки кода; локальное
-тестирование новой версии ещё предстоит. Английский интерфейс и другие
-сборки Windows не проверены.
+Протестировано на Windows 11 с русским языком интерфейса. Инициализация обоих перехватов и блокировка уведомления о проверке USB-накопителя подтверждены логами. Английский интерфейс, другие сборки Windows и отдельный перехват диалогового окна не проверены.
 
 **Важно:** мод скрывает предупреждения, но не исправляет ошибки файловой
 системы и не предотвращает потерю данных.
