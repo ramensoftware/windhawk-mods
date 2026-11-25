@@ -2,7 +2,7 @@
 // @id              desktop-shortcut-cleaner
 // @name            Desktop Shortcut Cleaner
 // @description     Hide desktop shortcut labels, arrows and admin shields, and replace the hover box with an icon-shaped glow, without changing File Explorer.
-// @version         1.2.3
+// @version         1.3.0
 // @author          ELSEGuy
 // @github          https://github.com/ELSEGuy
 // @license         MIT
@@ -34,6 +34,10 @@ with a soft glow that follows each icon's shape.
   selected and drop-target icons is removed and replaced with a soft white
   glow built from the icon's own outline: subtle on hover, brighter when
   selected.
+- **Solid icon while dragging.** Icons dragged from the desktop move as a
+  solid icon instead of a faded copy, and the original spot stays empty
+  until you drop. Hidden labels, arrows and shields stay hidden in the
+  dragged image too.
 - **File Explorer is unchanged.** Arrows, shields, labels and highlights
   there stay exactly as Windows draws them.
 
@@ -68,12 +72,14 @@ with a soft glow that follows each icon's shape.
 
 ## Credits
 
-Based in part on desktop icon text-hiding code by kivsak. The desktop
-detection and icon-label hiding approach were adapted from their script,
-which hides the names of all desktop icons. This project extends that
-approach with its own shortcut-only label filtering. The desktop-only
-shortcut-arrow, administrator-shield and icon-glow handling are implemented
-separately by this project.
+Based in part on desktop icon text-hiding code by kivsak, from the
+"Hide Desktop Icon Text and Shortcut Arrows" mod (MIT license, as published
+in the Windhawk mods catalog). The desktop detection and icon-label hiding
+approach were adapted from their script, which hides the names of all
+desktop icons. This project extends that approach with its own
+shortcut-only label filtering. The desktop-only shortcut-arrow,
+administrator-shield, icon-glow and drag handling are implemented separately
+by this project.
 */
 // ==/WindhawkModReadme==
 
@@ -99,8 +105,16 @@ separately by this project.
   $name: Replace hover box with icon glow
   $description: On the desktop only, remove the white box shown behind hovered and selected icons and draw a soft white glow around the icon's shape instead. Selected icons glow brighter.
 
+- solid_drag: true
+  $name: Solid icon while dragging
+  $description: When dragging icons that started on the desktop, show the dragged icon fully opaque instead of a faded copy, and hide the original until the drag ends, so it feels like moving the real icon.
+
 */
 // ==/WindhawkModSettings==
+
+// Portions adapted from "Hide Desktop Icon Text and Shortcut Arrows" by
+// kivsak (https://github.com/kivsak), MIT license, as published in
+// ramensoftware/windhawk-mods.
 
 #include <windhawk_utils.h>
 
@@ -129,6 +143,7 @@ struct {
     bool hide_arrows;
     bool hide_shields;
     bool icon_glow;
+    bool solid_drag;
 } g_settings;
 
 thread_local bool g_isDrawingDesktop = false;
@@ -141,6 +156,20 @@ std::atomic<HWND> g_desktopListView{nullptr};
 // Sent to the desktop ListView on unload so its timer and caches are cleaned
 // up on the desktop thread itself.
 UINT g_uninitMessage = 0;
+
+// The desktop's SHELLDLL_DefView (the ListView's parent), also subclassed so
+// the drag image it asks for is drawn with the same hiding as the desktop.
+std::atomic<HWND> g_desktopDefView{nullptr};
+
+// The shell's "render a drag image" message (DI_GETDRAGIMAGE).
+UINT g_dragImageMessage = 0;
+
+// Solid-drag state. A drag that starts on the desktop first renders its drag
+// image (marking the drag as pending), then runs DoDragDrop on the desktop
+// thread (marking it active until the drop or cancel).
+std::atomic<bool> g_desktopDragActive{false};
+std::atomic<DWORD> g_desktopDragPendingTick{0};
+constexpr DWORD kDragPendingWindowMs = 2000;
 
 std::unordered_set<std::wstring> g_shortcutNames;
 DWORD g_lastShortcutCacheTick = 0;
@@ -175,6 +204,11 @@ thread_local bool g_isDrawingCleanShieldIcon = false;
 
 // Desktop ListView currently being painted on this thread (if any).
 thread_local HWND g_drawingDesktopHwnd = nullptr;
+
+// Set while the desktop renders the image shown under the cursor when
+// dragging icons. Labels, arrows and shields are hidden there too, but no
+// glow is drawn into it.
+thread_local bool g_isRenderingDragImage = false;
 
 // Set while rendering an icon into an offscreen bitmap to build its glow,
 // so the IImageList::Draw hook passes that draw straight through.
@@ -1424,13 +1458,21 @@ static bool GetGlowBitmap(HIMAGELIST himl,
 
 enum class DesktopItemDrawState { None, Hot, Selected };
 
-// Work out which desktop item an icon draw at (x, y, cx, cy) belongs to, and
-// whether that item is selected or hovered.
-static DesktopItemDrawState GetDesktopItemDrawState(HWND listView,
-                                                    int x,
-                                                    int y,
-                                                    int cx,
-                                                    int cy) {
+struct DesktopItemDrawInfo {
+    DesktopItemDrawState state = DesktopItemDrawState::None;
+    bool isSelected = false;
+    bool isCut = false;  // Marked by Ctrl+X; Windows draws it faded.
+};
+
+// Work out which desktop item an icon draw at (x, y, cx, cy) belongs to,
+// whether that item is selected or hovered, and whether it's cut.
+static DesktopItemDrawInfo GetDesktopItemDrawInfo(HWND listView,
+                                                  int x,
+                                                  int y,
+                                                  int cx,
+                                                  int cy) {
+    DesktopItemDrawInfo info;
+
     LVHITTESTINFO hit = {};
     hit.pt.x = x + cx / 2;
     hit.pt.y = y + cy / 2;
@@ -1438,22 +1480,46 @@ static DesktopItemDrawState GetDesktopItemDrawState(HWND listView,
     int item = static_cast<int>(SendMessageW(
         listView, LVM_HITTEST, 0, reinterpret_cast<LPARAM>(&hit)));
     if (item < 0 || !(hit.flags & LVHT_ONITEM)) {
-        return DesktopItemDrawState::None;
+        return info;
     }
+
+    UINT itemState = ListView_GetItemState(
+        listView, item, LVIS_SELECTED | LVIS_DROPHILITED | LVIS_CUT);
+
+    info.isSelected = (itemState & LVIS_SELECTED) != 0;
+    info.isCut = (itemState & LVIS_CUT) != 0;
 
     // Drop targets (while dragging icons onto another icon) are shown like
     // selected items, since their box is removed too.
-    if (ListView_GetItemState(listView, item,
-                              LVIS_SELECTED | LVIS_DROPHILITED) &
-        (LVIS_SELECTED | LVIS_DROPHILITED)) {
-        return DesktopItemDrawState::Selected;
+    if (itemState & (LVIS_SELECTED | LVIS_DROPHILITED)) {
+        info.state = DesktopItemDrawState::Selected;
+    } else if (ListView_GetHotItem(listView) == item) {
+        info.state = DesktopItemDrawState::Hot;
     }
 
-    if (ListView_GetHotItem(listView) == item) {
-        return DesktopItemDrawState::Hot;
-    }
+    return info;
+}
 
-    return DesktopItemDrawState::None;
+// True while icons dragged from the desktop should be hidden at their
+// original spots.
+static bool ShouldHideDraggedOriginals() {
+    return g_settings.solid_drag && g_desktopDragActive &&
+           g_drawingDesktopHwnd && !g_isRenderingDragImage;
+}
+
+// Whether the desktop item under the given point is selected (that is, one of
+// the items being dragged).
+static bool IsSelectedDesktopItemAt(HWND listView, int x, int y) {
+    LVHITTESTINFO hit = {};
+    hit.pt.x = x;
+    hit.pt.y = y;
+
+    int item = static_cast<int>(SendMessageW(
+        listView, LVM_HITTEST, 0, reinterpret_cast<LPARAM>(&hit)));
+
+    return item >= 0 && (hit.flags & LVHT_ONITEM) &&
+           (ListView_GetItemState(listView, item, LVIS_SELECTED) &
+            LVIS_SELECTED);
 }
 
 static void DrawIconGlow(HDC hdc,
@@ -1548,10 +1614,37 @@ HRESULT STDMETHODCALLTYPE IImageList_Draw_Hook(
     bool isDesktopIcon =
         desktopImageList && drawImageList == desktopImageList;
 
-    if (g_settings.icon_glow && isDesktopIcon) {
-        // Selected icons can be drawn with a blue blend tint; that's part of
-        // the selection box look, so drop it.
-        local.fStyle &= ~(ILD_BLEND25 | ILD_BLEND50);
+    DesktopItemDrawInfo itemInfo;
+    bool glowApplies = g_settings.icon_glow && isDesktopIcon &&
+                       g_drawingDesktopHwnd && !g_isRenderingDragImage;
+    bool hideDraggedOriginals = isDesktopIcon && ShouldHideDraggedOriginals();
+
+    if (glowApplies || hideDraggedOriginals) {
+        int iconWidth = 0;
+        int iconHeight = 0;
+        ImageList_GetIconSize(drawImageList, &iconWidth, &iconHeight);
+
+        itemInfo = GetDesktopItemDrawInfo(
+            g_drawingDesktopHwnd,
+            local.x,
+            local.y,
+            local.cx > 0 ? local.cx : iconWidth,
+            local.cy > 0 ? local.cy : iconHeight);
+
+        // The selected items are the ones being dragged: leave their
+        // original spots empty until the drag ends.
+        if (hideDraggedOriginals && itemInfo.isSelected) {
+            return S_OK;
+        }
+    }
+
+    if (glowApplies) {
+        // Selected icons are drawn with a blue blend tint, part of the
+        // selection box look, so drop it. Cut items use the same blend flags
+        // to look faded, so leave theirs alone.
+        if (!itemInfo.isCut) {
+            local.fStyle &= ~(ILD_BLEND25 | ILD_BLEND50);
+        }
     }
 
     // Admin-shield replacement: the image list/index actually drawn.
@@ -1583,29 +1676,17 @@ HRESULT STDMETHODCALLTYPE IImageList_Draw_Hook(
         }
     }
 
-    if (g_settings.icon_glow && isDesktopIcon && g_drawingDesktopHwnd) {
-        int iconWidth = 0;
-        int iconHeight = 0;
-        ImageList_GetIconSize(drawImageList, &iconWidth, &iconHeight);
-
-        int cx = local.cx > 0 ? local.cx : iconWidth;
-        int cy = local.cy > 0 ? local.cy : iconHeight;
-
-        DesktopItemDrawState state = GetDesktopItemDrawState(
-            g_drawingDesktopHwnd, local.x, local.y, cx, cy);
-
-        if (state != DesktopItemDrawState::None) {
-            DrawIconGlow(local.hdcDst,
-                         glowImageList,
-                         glowIndex,
-                         local.x,
-                         local.y,
-                         local.cx,
-                         local.cy,
-                         state == DesktopItemDrawState::Selected
-                             ? kGlowSelectedAlpha
-                             : kGlowHoverAlpha);
-        }
+    if (glowApplies && itemInfo.state != DesktopItemDrawState::None) {
+        DrawIconGlow(local.hdcDst,
+                     glowImageList,
+                     glowIndex,
+                     local.x,
+                     local.y,
+                     local.cx,
+                     local.cy,
+                     itemInfo.state == DesktopItemDrawState::Selected
+                         ? kGlowSelectedAlpha
+                         : kGlowHoverAlpha);
     }
 
     if (g_settings.hide_arrows &&
@@ -1706,6 +1787,67 @@ static IImageList_Draw_t GetDesktopImageListDrawTarget() {
 // Desktop subclass
 // ---------------------------------------------------------------------------
 
+static bool AnyDesktopDrawingFeatureEnabled() {
+    return g_settings.hide_text || g_settings.hide_all_text ||
+           g_settings.hide_arrows || g_settings.hide_shields ||
+           g_settings.icon_glow || g_settings.solid_drag;
+}
+
+// Runs a message with the desktop-drawing hooks active, as if the desktop
+// ListView were painting.
+static LRESULT DefSubclassProcAsDesktopDrawing(HWND listView,
+                                               bool isDragImage,
+                                               HWND hWnd,
+                                               UINT uMsg,
+                                               WPARAM wParam,
+                                               LPARAM lParam) {
+    bool previous = g_isDrawingDesktop;
+    HWND previousHwnd = g_drawingDesktopHwnd;
+    bool previousDragImage = g_isRenderingDragImage;
+
+    g_isDrawingDesktop = true;
+    g_drawingDesktopHwnd = listView;
+    g_isRenderingDragImage = isDragImage || previousDragImage;
+
+    LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+    if (isDragImage && g_settings.solid_drag) {
+        // The drag image window may be set up before DoDragDrop starts.
+        DWORD tick = GetTickCount();
+        g_desktopDragPendingTick = tick ? tick : 1;
+    }
+
+    g_isDrawingDesktop = previous;
+    g_drawingDesktopHwnd = previousHwnd;
+    g_isRenderingDragImage = previousDragImage;
+    return result;
+}
+
+static bool IsDragImageMessage(UINT uMsg) {
+    return (g_dragImageMessage && uMsg == g_dragImageMessage) ||
+           uMsg == LVM_CREATEDRAGIMAGE;
+}
+
+// Subclass of the desktop's SHELLDLL_DefView. dwRefData is the ListView.
+LRESULT CALLBACK DesktopDefViewSubclass(HWND hWnd,
+                                        UINT uMsg,
+                                        WPARAM wParam,
+                                        LPARAM lParam,
+                                        DWORD_PTR refData) {
+    if (IsDragImageMessage(uMsg) && AnyDesktopDrawingFeatureEnabled()) {
+        return DefSubclassProcAsDesktopDrawing(
+            reinterpret_cast<HWND>(refData), true, hWnd, uMsg, wParam,
+            lParam);
+    }
+
+    if (uMsg == WM_NCDESTROY) {
+        HWND expected = hWnd;
+        g_desktopDefView.compare_exchange_strong(expected, nullptr);
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
 LRESULT CALLBACK DesktopListSubclass(
     HWND hWnd,
     UINT uMsg,
@@ -1713,12 +1855,13 @@ LRESULT CALLBACK DesktopListSubclass(
     LPARAM lParam,
     DWORD_PTR) {
 
+    if (IsDragImageMessage(uMsg) && AnyDesktopDrawingFeatureEnabled()) {
+        return DefSubclassProcAsDesktopDrawing(
+            hWnd, true, hWnd, uMsg, wParam, lParam);
+    }
+
     if ((uMsg == WM_PAINT || uMsg == WM_PRINTCLIENT) &&
-        (g_settings.hide_text ||
-         g_settings.hide_all_text ||
-         g_settings.hide_arrows ||
-         g_settings.hide_shields ||
-         g_settings.icon_glow)) {
+        AnyDesktopDrawingFeatureEnabled()) {
 
         if (g_settings.hide_text && !g_settings.hide_all_text) {
             UpdateShortcutCache();
@@ -1738,17 +1881,8 @@ LRESULT CALLBACK DesktopListSubclass(
             }
         }
 
-        bool previous = g_isDrawingDesktop;
-        HWND previousHwnd = g_drawingDesktopHwnd;
-        g_isDrawingDesktop = true;
-        g_drawingDesktopHwnd = hWnd;
-
-        LRESULT result =
-            DefSubclassProc(hWnd, uMsg, wParam, lParam);
-
-        g_isDrawingDesktop = previous;
-        g_drawingDesktopHwnd = previousHwnd;
-        return result;
+        return DefSubclassProcAsDesktopDrawing(
+            hWnd, false, hWnd, uMsg, wParam, lParam);
     }
 
     if (uMsg == WM_TIMER && wParam == kShieldRefreshTimerId) {
@@ -1795,6 +1929,17 @@ LRESULT CALLBACK DesktopListSubclass(
 // Text drawing hooks
 // ---------------------------------------------------------------------------
 
+// The label of an item being dragged from the desktop, at its original spot.
+static bool IsDraggedOriginalLabel(const RECT* rect) {
+    if (!rect || !ShouldHideDraggedOriginals()) {
+        return false;
+    }
+
+    return IsSelectedDesktopItemAt(g_drawingDesktopHwnd,
+                                   (rect->left + rect->right) / 2,
+                                   (rect->top + rect->bottom) / 2);
+}
+
 using DrawTextW_t = decltype(&DrawTextW);
 DrawTextW_t DrawTextW_Original = nullptr;
 
@@ -1807,7 +1952,8 @@ int WINAPI DrawTextW_Hook(
 
     if (g_isDrawingDesktop &&
         text &&
-        ShouldHideLabel(text, cchText)) {
+        (ShouldHideLabel(text, cchText) ||
+         (!(format & DT_CALCRECT) && IsDraggedOriginalLabel(rect)))) {
         return DrawTextW_Original(hdc, L"", 0, rect, format);
     }
 
@@ -1840,7 +1986,8 @@ HRESULT WINAPI DrawThemeTextEx_Hook(
 
     if (g_isDrawingDesktop &&
         text &&
-        ShouldHideLabel(text, cchText)) {
+        (ShouldHideLabel(text, cchText) ||
+         (!(flags & DT_CALCRECT) && IsDraggedOriginalLabel(rect)))) {
         return DrawThemeTextEx_Original(
             theme,
             hdc,
@@ -1919,6 +2066,179 @@ HRESULT WINAPI DrawThemeBackgroundEx_Hook(HTHEME theme,
         theme, hdc, partId, stateId, rect, options);
 }
 
+// The dotted keyboard-focus rectangle (shown after pressing a key) used to sit
+// under the selection box. With the box removed it stands out on its own, so
+// it's hidden on the desktop too while the glow is on.
+using DrawFocusRect_t = decltype(&DrawFocusRect);
+DrawFocusRect_t DrawFocusRect_Original = nullptr;
+
+BOOL WINAPI DrawFocusRect_Hook(HDC hdc, const RECT* rect) {
+    if (g_isDrawingDesktop && g_settings.icon_glow) {
+        return TRUE;
+    }
+
+    return DrawFocusRect_Original(hdc, rect);
+}
+
+// ---------------------------------------------------------------------------
+// Solid drag
+//
+// While icons are dragged, the shell shows them in a layered "SysDragImage"
+// window drawn semi-transparent. For drags that start on the desktop, force
+// that window fully opaque, and hide the originals while the drag runs.
+// ---------------------------------------------------------------------------
+
+static bool IsDesktopDragImageTime() {
+    if (g_desktopDragActive) {
+        return true;
+    }
+
+    DWORD pending = g_desktopDragPendingTick;
+    return pending && GetTickCount() - pending < kDragPendingWindowMs;
+}
+
+static bool IsDragImageWindow(HWND hWnd) {
+    WCHAR className[32] = {};
+    return hWnd && GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+           wcscmp(className, L"SysDragImage") == 0;
+}
+
+static bool ShouldMakeDragWindowSolid(HWND hWnd) {
+    return g_settings.solid_drag && IsDesktopDragImageTime() &&
+           IsDragImageWindow(hWnd);
+}
+
+volatile LONG g_solidDragLogCount = 0;
+
+static void LogSolidDrag(const WCHAR* api, BYTE originalAlpha) {
+    if (InterlockedIncrement(&g_solidDragLogCount) <= 10) {
+        Wh_Log(L"Solid drag: %s on SysDragImage, alpha %u -> 255",
+               api,
+               originalAlpha);
+    }
+}
+
+using UpdateLayeredWindow_t = decltype(&UpdateLayeredWindow);
+UpdateLayeredWindow_t UpdateLayeredWindow_Original = nullptr;
+
+BOOL WINAPI UpdateLayeredWindow_Hook(HWND hWnd,
+                                     HDC hdcDst,
+                                     POINT* pptDst,
+                                     SIZE* psize,
+                                     HDC hdcSrc,
+                                     POINT* pptSrc,
+                                     COLORREF crKey,
+                                     BLENDFUNCTION* pblend,
+                                     DWORD dwFlags) {
+    if (pblend && (dwFlags & ULW_ALPHA) && ShouldMakeDragWindowSolid(hWnd)) {
+        BLENDFUNCTION blend = *pblend;
+        LogSolidDrag(L"UpdateLayeredWindow", blend.SourceConstantAlpha);
+        blend.SourceConstantAlpha = 255;
+        return UpdateLayeredWindow_Original(hWnd, hdcDst, pptDst, psize,
+                                            hdcSrc, pptSrc, crKey, &blend,
+                                            dwFlags);
+    }
+
+    return UpdateLayeredWindow_Original(hWnd, hdcDst, pptDst, psize, hdcSrc,
+                                        pptSrc, crKey, pblend, dwFlags);
+}
+
+using UpdateLayeredWindowIndirect_t = decltype(&UpdateLayeredWindowIndirect);
+UpdateLayeredWindowIndirect_t UpdateLayeredWindowIndirect_Original = nullptr;
+
+BOOL WINAPI UpdateLayeredWindowIndirect_Hook(
+    HWND hWnd,
+    const UPDATELAYEREDWINDOWINFO* info) {
+    if (info && info->pblend && (info->dwFlags & ULW_ALPHA) &&
+        ShouldMakeDragWindowSolid(hWnd)) {
+        UPDATELAYEREDWINDOWINFO copy = *info;
+        BLENDFUNCTION blend = *info->pblend;
+        LogSolidDrag(L"UpdateLayeredWindowIndirect",
+                     blend.SourceConstantAlpha);
+        blend.SourceConstantAlpha = 255;
+        copy.pblend = &blend;
+        return UpdateLayeredWindowIndirect_Original(hWnd, &copy);
+    }
+
+    return UpdateLayeredWindowIndirect_Original(hWnd, info);
+}
+
+using SetLayeredWindowAttributes_t = decltype(&SetLayeredWindowAttributes);
+SetLayeredWindowAttributes_t SetLayeredWindowAttributes_Original = nullptr;
+
+BOOL WINAPI SetLayeredWindowAttributes_Hook(HWND hWnd,
+                                            COLORREF crKey,
+                                            BYTE bAlpha,
+                                            DWORD dwFlags) {
+    if ((dwFlags & LWA_ALPHA) && ShouldMakeDragWindowSolid(hWnd)) {
+        LogSolidDrag(L"SetLayeredWindowAttributes", bAlpha);
+        bAlpha = 255;
+    }
+
+    return SetLayeredWindowAttributes_Original(hWnd, crKey, bAlpha, dwFlags);
+}
+
+using DoDragDrop_t = decltype(&DoDragDrop);
+DoDragDrop_t DoDragDrop_Original = nullptr;
+
+HRESULT WINAPI DoDragDrop_Hook(IDataObject* dataObject,
+                               IDropSource* dropSource,
+                               DWORD okEffects,
+                               DWORD* effect) {
+    HWND desktop = g_desktopListView;
+    bool fromDesktop =
+        g_settings.solid_drag && desktop && !g_desktopDragActive &&
+        GetWindowThreadProcessId(desktop, nullptr) == GetCurrentThreadId();
+
+    if (!fromDesktop) {
+        return DoDragDrop_Original(dataObject, dropSource, okEffects, effect);
+    }
+
+    Wh_Log(L"Solid drag: desktop drag started");
+
+    g_desktopDragActive = true;
+    InvalidateRect(desktop, nullptr, FALSE);
+
+    HRESULT hr = DoDragDrop_Original(dataObject, dropSource, okEffects, effect);
+
+    g_desktopDragActive = false;
+    g_desktopDragPendingTick = 0;
+
+    // Bring the originals back (or draw them at their new spots).
+    if (IsWindow(desktop)) {
+        InvalidateRect(desktop, nullptr, FALSE);
+    }
+
+    return hr;
+}
+
+// ---------------------------------------------------------------------------
+// Attaching to the desktop windows
+// ---------------------------------------------------------------------------
+
+// Subclasses the desktop ListView and its SHELLDLL_DefView parent, and
+// remembers both so they can be detached on unload.
+static void AttachToDesktopListView(HWND listView) {
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(
+            listView,
+            DesktopListSubclass,
+            0)) {
+        g_desktopListView = listView;
+    }
+
+    HWND defView = GetParent(listView);
+    WCHAR className[32] = {};
+    if (defView &&
+        GetClassNameW(defView, className, ARRAYSIZE(className)) &&
+        wcscmp(className, L"SHELLDLL_DefView") == 0 &&
+        WindhawkUtils::SetWindowSubclassFromAnyThread(
+            defView,
+            DesktopDefViewSubclass,
+            reinterpret_cast<DWORD_PTR>(listView))) {
+        g_desktopDefView = defView;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Catch desktop ListView recreation
 // ---------------------------------------------------------------------------
@@ -1956,13 +2276,7 @@ HWND WINAPI CreateWindowExW_Hook(
 
     if (hWnd && IsDesktopFolderView(hWnd)) {
         ClearShieldedShortcutIconCache();
-
-        if (WindhawkUtils::SetWindowSubclassFromAnyThread(
-                hWnd,
-                DesktopListSubclass,
-                0)) {
-            g_desktopListView = hWnd;
-        }
+        AttachToDesktopListView(hWnd);
     }
 
     return hWnd;
@@ -1987,6 +2301,9 @@ static void LoadSettings() {
 
     g_settings.icon_glow =
         Wh_GetIntSetting(L"icon_glow") != 0;
+
+    g_settings.solid_drag =
+        Wh_GetIntSetting(L"solid_drag") != 0;
 }
 
 BOOL Wh_ModInit() {
@@ -1995,6 +2312,7 @@ BOOL Wh_ModInit() {
 
     g_uninitMessage =
         RegisterWindowMessageW(L"DesktopShortcutCleaner_Uninit");
+    g_dragImageMessage = RegisterWindowMessageW(L"ShellGetDragImage");
 
     WindhawkUtils::SetFunctionHook(
         CreateWindowExW,
@@ -2039,6 +2357,38 @@ BOOL Wh_ModInit() {
                     &DrawThemeBackgroundEx_Original);
             }
         }
+
+        WindhawkUtils::SetFunctionHook(
+            DrawFocusRect,
+            DrawFocusRect_Hook,
+            &DrawFocusRect_Original);
+    }
+
+    if (g_settings.solid_drag) {
+        WindhawkUtils::SetFunctionHook(
+            UpdateLayeredWindow,
+            UpdateLayeredWindow_Hook,
+            &UpdateLayeredWindow_Original);
+
+        WindhawkUtils::SetFunctionHook(
+            UpdateLayeredWindowIndirect,
+            UpdateLayeredWindowIndirect_Hook,
+            &UpdateLayeredWindowIndirect_Original);
+
+        WindhawkUtils::SetFunctionHook(
+            SetLayeredWindowAttributes,
+            SetLayeredWindowAttributes_Hook,
+            &SetLayeredWindowAttributes_Original);
+
+        if (HMODULE ole32 = LoadLibraryW(L"ole32.dll")) {
+            if (auto proc = reinterpret_cast<DoDragDrop_t>(
+                    GetProcAddress(ole32, "DoDragDrop"))) {
+                WindhawkUtils::SetFunctionHook(
+                    proc,
+                    DoDragDrop_Hook,
+                    &DoDragDrop_Original);
+            }
+        }
     }
 
     if (g_settings.hide_arrows ||
@@ -2048,7 +2398,8 @@ BOOL Wh_ModInit() {
 
     if (g_settings.hide_arrows ||
         g_settings.hide_shields ||
-        g_settings.icon_glow) {
+        g_settings.icon_glow ||
+        g_settings.solid_drag) {
         if (IImageList_Draw_t drawTarget =
                 GetDesktopImageListDrawTarget()) {
             WindhawkUtils::SetFunctionHook(
@@ -2070,12 +2421,7 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(
-            desktop,
-            DesktopListSubclass,
-            0)) {
-        g_desktopListView = desktop;
-    }
+    AttachToDesktopListView(desktop);
 
     // The repaint builds the shield map on the desktop thread.
     InvalidateRect(desktop, nullptr, TRUE);
@@ -2085,6 +2431,12 @@ void Wh_ModAfterInit() {
 void Wh_ModUninit() {
     InterlockedExchange(&g_isUnloading, 1);
 
+    if (HWND defView = g_desktopDefView.exchange(nullptr)) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            defView,
+            DesktopDefViewSubclass);
+    }
+
     HWND desktop = g_desktopListView.exchange(nullptr);
     if (!desktop) {
         return;
@@ -2092,9 +2444,7 @@ void Wh_ModUninit() {
 
     // Kill the retry timer and free the caches on the desktop thread, then
     // remove the subclass from the exact window that was subclassed.
-    DWORD_PTR result = 0;
-    SendMessageTimeoutW(desktop, g_uninitMessage, 0, 0,
-                        SMTO_NORMAL | SMTO_ABORTIFHUNG, 2000, &result);
+    SendMessageW(desktop, g_uninitMessage, 0, 0);
 
     WindhawkUtils::RemoveWindowSubclassFromAnyThread(
         desktop,
