@@ -4,6 +4,7 @@
 // @description     Everything search inside File Explorer (native search box via UI Automation and a hotkey) and Win+S to EverythingToolbar
 // @version         0.9.3
 // @author          Frixed
+// @github          https://github.com/frixed
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -lshell32 -lshlwapi -lcomctl32 -luuid -lpropsys -ladvapi32 -lgdi32 -ldwmapi -luser32
 // ==/WindhawkMod==
@@ -63,6 +64,7 @@ EverythingToolbar.
 - The index warning option only changes what Explorer reads while the mod is
   loaded (`WholeFileSystem = 1` in the search preferences). The registry is not
   modified.
+[**Donate with PayPal**](https://www.paypal.com/donate?hosted_button_id=W7BHDHGZP6CHY)
 */
 // ==/WindhawkModReadme==
 
