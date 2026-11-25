@@ -10976,6 +10976,8 @@ static void RebuildWidgets() {
 
 static void StartWorkers();
 
+static std::atomic<bool> g_uiDone{false};  // the UI thread has saved what it had to (it's closing)
+
 static DWORD WINAPI UiThread(LPVOID) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     MSG msg;
@@ -11073,6 +11075,10 @@ static DWORD WINAPI UiThread(LPVOID) {
         Wh_Log(L"Direct2D/DirectWrite init failed");
     }
 
+    // What must not be lost goes first: the note being written and today's Screen Time
+    FinishEdit(true);
+    if (g_usageDay >= 0) SaveUsage();
+    g_uiDone = true;  // the rest is tidying up, which ending the process does anyway
     if (g_fgHook) UnhookWinEvent(g_fgHook);
     g_fgHook = nullptr;
     if (g_animTimer) KillTimer(nullptr, g_animTimer);
@@ -11084,7 +11090,6 @@ static DWORD WINAPI UiThread(LPVOID) {
     ClosePicker();
     CloseSettings();
     DestroyWidgets();
-    if (g_usageDay >= 0) SaveUsage();
     UnregisterClassW(kClassName, GetModuleHandleW(nullptr));
     g_dw.Reset();
     g_d2d.Reset();
@@ -11152,30 +11157,23 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
+    // The process ends right after this (ExitProcess), and an update's new copy starts at the same moment and gives
+    // up if this one is still around: so this only saves what matters and returns, without tidying up
     {
-        // Under the lock, so a thread about to wait can't miss it and sleep its full timeout
+        // Under the lock, so a thread about to wait can't miss it
         std::lock_guard<std::mutex> lock(g_dataMutex);
         g_running = false;
     }
     g_cv.notify_all();
-    HttpAbortAll();  // downloads in progress end now, and no new one starts
+    HttpAbortAll();
     if (g_uiThread) {
         PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_uiThread, 5000);
-        CloseHandle(g_uiThread);
-        g_uiThread = nullptr;
-    }
-    // With the downloads cancelled the workers are out in moments; one stuck elsewhere is left behind rather than
-    // holding up the process' exit
-    for (int i = 0; i < 100 && (g_workersAlive > 0 || g_searches > 0); i++) Sleep(20);
-    for (std::thread* t : {&g_dataThread, &g_sensorThread, &g_glassThread, &g_coverThread, &g_netThread})
-        if (t->joinable()) {
-            if (g_workersAlive == 0) t->join();
-            else t->detach();
+        for (int i = 0; i < 100 && !g_uiDone && WaitForSingleObject(g_uiThread, 10) == WAIT_TIMEOUT; i++) {
         }
-    g_uiThreadId = 0;
-    if (g_uiReady) CloseHandle(g_uiReady);
-    g_uiReady = nullptr;
+    }
+    // The threads are left to the end of the process (detached, so their objects don't object to it)
+    for (std::thread* t : {&g_dataThread, &g_sensorThread, &g_glassThread, &g_coverThread, &g_netThread})
+        if (t->joinable()) t->detach();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
