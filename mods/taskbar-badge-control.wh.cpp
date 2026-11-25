@@ -14,7 +14,7 @@
 
 // SPDX-License-Identifier: GPL-3.0-only
 // Based in part on m417z's GPL-3.0 taskbar-labels, taskbar-icon-size,
-// taskbar-start-button-position, and taskbar-reorder-right-drag mods:
+// taskbar-start-button-position, taskbar-reorder-right-drag, and taskbar-multirow mods:
 // https://github.com/ramensoftware/windhawk-mods
 
 // ==WindhawkModReadme==
@@ -50,8 +50,9 @@ global setting is off.
 
 ## Limits
 
-- Only the native Windows 11 x64 taskbar is supported.
+- Only the native Windows 11 taskbar is supported (x64 and ARM64).
 - Badges drawn into an application's base icon cannot be removed.
+- Applications whose identity cannot be resolved keep their badges.
 */
 // ==/WindhawkModReadme==
 
@@ -86,7 +87,7 @@ global setting is off.
 
 #include <algorithm>
 #include <atomic>
-#include <cwctype>
+#include <cstring>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -113,11 +114,11 @@ std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_moduleAttempted = false;
 std::atomic<bool> g_hooksReady = false;
 std::atomic<bool> g_filteringActive = false;
-// Serializes XAML work and lets unload drain an in-flight observation before
-// taking its state snapshot. Recursive because XAML writes can re-enter hooks.
+std::atomic<bool> g_cleanupFailed = false;
+// Drain in-flight callbacks before sending UI-thread cleanup messages, which a
+// nested message pump could otherwise dispatch reentrantly. Recursive for XAML.
 std::recursive_mutex g_visualMutex;
 UINT g_controlMessage;
-UINT g_bootstrapMessage;
 
 // Resolve existing roots directly, without waiting for an input/layout event.
 void* g_primaryBandVtable;
@@ -130,19 +131,43 @@ using ReleaseNativeHost = void(WINAPI*)(void*);
 ReleaseNativeHost g_releaseNativeHost;
 size_t g_hostElementOffset = 0;
 
-std::optional<size_t> DecodeHostElementOffset(BYTE const* code, size_t length) {
+std::optional<size_t> DecodeHostElementOffsetX64(BYTE const* code, size_t length) {
     // Known x64 TaskbarHost::FrameHeight prologue:
-    // sub rsp,28h; add rcx,<hosted-element offset>.
+    // sub rsp,<stack size>; add rcx,<hosted-element offset>.
     // Never guess an offset on an unknown build.
     if (length >= 8 && code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
-        code[3] == 0x28 && code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
+        code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
         code[7] >= sizeof(void*) && code[7] <= 0x78 && code[7] % sizeof(void*) == 0) {
         return code[7];
     }
     return std::nullopt;
 }
 
+std::optional<size_t> DecodeHostElementOffsetArm64(BYTE const* code, size_t length) {
+    // pacibsp; stp fp,lr,[sp,#-0x10]!; mov fp,sp; ldr x8,[x0,#offset]!
+    if (length < 16) return std::nullopt;
+    DWORD instructions[4];
+    std::memcpy(instructions, code, sizeof(instructions));
+    if (instructions[0] == 0xD503237F && (instructions[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        instructions[2] == 0x910003FD && (instructions[3] & 0xFFF00FE0) == 0xF8400C00) {
+        size_t offset = (instructions[3] >> 12) & 0xFF;
+        if (offset >= sizeof(void*) && offset % sizeof(void*) == 0) return offset;
+    }
+    return std::nullopt;
+}
+
+std::optional<size_t> DecodeHostElementOffset(BYTE const* code, size_t length) {
+#if defined(_M_X64)
+    return DecodeHostElementOffsetX64(code, length);
+#elif defined(_M_ARM64)
+    return DecodeHostElementOffsetArm64(code, length);
+#else
+#error "Unsupported architecture"
+#endif
+}
+
 bool ReadLocalMemory(void const* address, void* output, size_t size) {
+    // Bounded, discovery-only reads can reject an unreadable probe range.
     SIZE_T read = 0;
     return address && ReadProcessMemory(GetCurrentProcess(), address, output, size, &read) && read == size;
 }
@@ -208,9 +233,9 @@ bool InstallNativeRootSymbols() {
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &g_releaseNativeHost},
     };
     if (!WindhawkUtils::HookSymbols(module, symbols, ARRAYSIZE(symbols))) return false;
-    BYTE prologue[8];
+    DWORD prologue[4];
     if (!ReadLocalMemory(g_hostFrameHeight, prologue, sizeof(prologue))) return false;
-    auto offset = DecodeHostElementOffset(prologue, sizeof(prologue));
+    auto offset = DecodeHostElementOffset(reinterpret_cast<BYTE const*>(prologue), sizeof(prologue));
     if (!offset) {
         Wh_Log(L"Unrecognized TaskbarHost layout");
         return false;
@@ -224,9 +249,14 @@ std::wstring Normalize(std::wstring value) {
     const auto first = value.find_first_not_of(L" \t\r\n");
     if (first == std::wstring::npos) return {};
     value = value.substr(first, value.find_last_not_of(L" \t\r\n") - first + 1);
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](wchar_t c) { return std::towupper(c); });
-    return value;
+    int length = static_cast<int>(value.size());
+    int size = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, value.data(), length,
+                             nullptr, 0, nullptr, nullptr, 0);
+    winrt::check_bool(size != 0);
+    std::wstring normalized(size, L'\0');
+    winrt::check_bool(LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_UPPERCASE, value.data(), length,
+                                   normalized.data(), size, nullptr, nullptr, 0) != 0);
+    return normalized;
 }
 
 std::shared_ptr<const Settings> GetSettings() {
@@ -240,21 +270,16 @@ bool NeedsProcessPath(std::wstring_view rule) {
 
 void LoadSettings() {
     auto settings = std::make_shared<Settings>();
-    auto mode = Wh_GetStringSetting(L"mode");
-    settings->allowlist = mode && wcscmp(mode, L"allowlist") == 0;
-    Wh_FreeStringSetting(mode);
-    for (int i = 0; i < 1024; ++i) {
-        auto entry = Wh_GetStringSetting(L"applications[%d]", i);
-        bool end = !entry || !*entry;
-        if (!end) {
-            auto normalized = Normalize(entry);
-            if (!normalized.empty()) {
-                settings->needsProcessPaths |= NeedsProcessPath(normalized);
-                settings->applications.insert(std::move(normalized));
-            }
+    auto mode = WindhawkUtils::StringSetting::make(L"mode");
+    settings->allowlist = wcscmp(mode.get(), L"allowlist") == 0;
+    for (int i = 0;; ++i) {
+        auto entry = WindhawkUtils::StringSetting::make(L"applications[%d]", i);
+        if (!*entry.get()) break;
+        auto normalized = Normalize(entry.get());
+        if (!normalized.empty()) {
+            settings->needsProcessPaths |= NeedsProcessPath(normalized);
+            settings->applications.insert(std::move(normalized));
         }
-        Wh_FreeStringSetting(entry);
-        if (end) break;
     }
     {
         std::lock_guard lock(g_settingsMutex);
@@ -543,6 +568,7 @@ struct ThreadState : std::enable_shared_from_this<ThreadState> {
     bool retryArmed = false;
     bool stopping = false;
     bool walking = false;
+    std::atomic<bool> cleanupComplete = false;
 };
 
 void CancelPendingLayout(ButtonState& record) {
@@ -566,16 +592,37 @@ void RememberIdentityPaths(ThreadState& state, Identity& identity) {
 }
 
 std::mutex g_statesMutex;
-std::map<DWORD, std::shared_ptr<ThreadState>> g_states;
+// Release XAML references explicitly on their UI threads, never from a global
+// destructor during process shutdown under the loader lock.
+[[clang::no_destroy]] std::optional<std::map<DWORD, std::shared_ptr<ThreadState>>>
+    g_states{std::in_place};
 thread_local bool g_observing = false;
 
-void CaptureMask(Mask& mask, FrameworkElement const& element) {
+bool IsMaskOpacity(Inspectable const& value) {
+    auto number = value.try_as<winrt::Windows::Foundation::IReference<double>>();
+    return number && number.Value() == 0.0;
+}
+
+bool UpdateMaskSnapshot(Mask& mask, Inspectable const& local, Data::Binding const& binding,
+                        bool initial = false) {
+    // Animations can change the effective opacity while our local zero remains
+    // in place. Neither those notifications nor the animation ending own a new
+    // base value, so they must not replace the original snapshot.
+    if (!initial && IsMaskOpacity(local) && !binding) return false;
+    mask.originalLocal = local;
+    mask.originalBinding = binding;
+    return true;
+}
+
+void CaptureMask(Mask& mask, FrameworkElement const& element, bool initial = false) {
     auto property = UIElement::OpacityProperty();
-    mask.originalLocal = element.ReadLocalValue(property);
-    mask.originalBinding = nullptr;
+    auto local = element.ReadLocalValue(property);
+    if (!initial && IsMaskOpacity(local)) return;
+    Data::Binding binding{nullptr};
     if (auto expression = element.GetBindingExpression(property)) {
-        mask.originalBinding = expression.ParentBinding();
+        binding = expression.ParentBinding();
     }
+    UpdateMaskSnapshot(mask, local, binding, initial);
 }
 
 void RestoreMask(Mask& mask, FrameworkElement const& element) {
@@ -600,7 +647,7 @@ void SetMasked(ThreadState& state, FrameworkElement const& element, bool hide) {
         if (found == state.masks.end()) {
             auto mask = std::make_shared<Mask>();
             mask->element = winrt::make_weak(element);
-            CaptureMask(*mask, element);
+            CaptureMask(*mask, element, true);
             state.masks.push_back(mask);
             std::weak_ptr<Mask> weak = mask;
             try { mask->opacityToken = element.RegisterPropertyChangedCallback(
@@ -737,7 +784,7 @@ void WalkButtons(ThreadState& state, DependencyObject const& node, int depth = 0
 }
 
 bool TrackRoot(ThreadState& state, FrameworkElement const& element, PCWSTR reason);
-void RestoreAll(ThreadState& state);
+void RestoreAll(ThreadState& state) noexcept;
 LRESULT CALLBACK TaskbarSubclass(HWND, UINT, WPARAM, LPARAM, DWORD_PTR);
 
 bool AttachTaskbarWindow(ThreadState& state, HWND window) {
@@ -931,39 +978,57 @@ void Refresh(ThreadState& state) {
     PostWork(state);
 }
 
-void RestoreAll(ThreadState& state) {
+template <typename Action>
+bool CleanupAction(PCWSTR description, Action action) noexcept {
+    try {
+        action();
+        return true;
+    } catch (winrt::hresult_error const& error) {
+        Wh_Log(L"Cleanup (%s): %08X", description, static_cast<unsigned>(error.code().value));
+    } catch (...) {
+        Wh_Log(L"Cleanup (%s) failed", description);
+    }
+    g_cleanupFailed = true;
+    return false;
+}
+
+void RestoreAll(ThreadState& state) noexcept {
     state.stopping = true;
     KillTimer(state.window, g_controlMessage);
     state.retryArmed = false;
     for (auto const& item : state.roots) {
-        if (auto element = item.element.get()) {
-            if (item.loaded.value) element.Loaded(item.loaded);
-            if (item.unloaded.value) element.Unloaded(item.unloaded);
-            if (item.themeChanged.value) element.ActualThemeChanged(item.themeChanged);
-        }
+        CleanupAction(L"root events", [&] {
+            if (auto element = item.element.get()) {
+                if (item.loaded.value) element.Loaded(item.loaded);
+                if (item.unloaded.value) element.Unloaded(item.unloaded);
+                if (item.themeChanged.value) element.ActualThemeChanged(item.themeChanged);
+            }
+        });
     }
     for (auto const& item : state.repeaters) {
-        if (auto element = item.element.get()) {
-            if (item.prepared.value) element.ElementPrepared(item.prepared);
-            if (item.clearing.value) element.ElementClearing(item.clearing);
-            if (item.indexChanged.value) element.ElementIndexChanged(item.indexChanged);
-        }
+        CleanupAction(L"repeater events", [&] {
+            if (auto element = item.element.get()) {
+                if (item.prepared.value) element.ElementPrepared(item.prepared);
+                if (item.clearing.value) element.ElementClearing(item.clearing);
+                if (item.indexChanged.value) element.ElementIndexChanged(item.indexChanged);
+            }
+        });
     }
     for (auto const& [key, item] : state.buttons) {
-        if (auto element = item->element.get()) {
-            if (item->loaded.value) element.Loaded(item->loaded);
-            if (item->unloaded.value) element.Unloaded(item->unloaded);
-            CancelPendingLayout(*item);
-            if (item->templateToken) element.UnregisterPropertyChangedCallback(
-                Controls::Control::TemplateProperty(), *item->templateToken);
-        }
+        CleanupAction(L"button events", [&] {
+            if (auto element = item->element.get()) {
+                if (item->loaded.value) element.Loaded(item->loaded);
+                if (item->unloaded.value) element.Unloaded(item->unloaded);
+                CancelPendingLayout(*item);
+                if (item->templateToken) element.UnregisterPropertyChangedCallback(
+                    Controls::Control::TemplateProperty(), *item->templateToken);
+            }
+        });
     }
     for (auto& mask : state.masks) {
-        try {
+        CleanupAction(L"badge restoration", [&] {
             if (auto element = mask->element.get()) RestoreMask(*mask, element);
-        } catch (...) {
-            Wh_Log(L"Could not restore a detached badge visual");
-        }
+        });
     }
     state.masks.clear();
     state.roots.clear();
@@ -972,13 +1037,16 @@ void RestoreAll(ThreadState& state) {
     state.pending = {};
     state.identityPaths.clear();
     for (HWND window : state.windows) {
-        if (IsWindow(window)) WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, TaskbarSubclass);
+        CleanupAction(L"window subclass", [&] {
+            if (IsWindow(window)) WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, TaskbarSubclass);
+        });
     }
     state.windows.clear();
+    state.cleanupComplete = true;
 }
 
-LRESULT CALLBACK TaskbarSubclass(HWND window, UINT message, WPARAM wParam,
-                                 LPARAM lParam, DWORD_PTR reference) {
+LRESULT HandleTaskbarMessage(HWND window, UINT message, WPARAM wParam,
+                             LPARAM lParam, DWORD_PTR reference) {
     auto& state = *reinterpret_cast<ThreadState*>(reference);
     auto keepAlive = state.shared_from_this();
     if (message == WM_TIMER && wParam == g_controlMessage) {
@@ -992,6 +1060,7 @@ LRESULT CALLBACK TaskbarSubclass(HWND window, UINT message, WPARAM wParam,
     if (message == g_controlMessage) {
         if (wParam == 1) {
             RestoreAll(state);
+            return state.cleanupComplete ? 1 : 0;
         } else {
             state.pending.posted = false;
             if (wParam == 2) state.pending.all = true;
@@ -1032,6 +1101,18 @@ LRESULT CALLBACK TaskbarSubclass(HWND window, UINT message, WPARAM wParam,
     return result;
 }
 
+LRESULT CALLBACK TaskbarSubclass(HWND window, UINT message, WPARAM wParam,
+                                 LPARAM lParam, DWORD_PTR reference) {
+    try {
+        return HandleTaskbarMessage(window, message, wParam, lParam, reference);
+    } catch (...) {
+        g_cleanupFailed = true;
+        Wh_Log(L"Exception in taskbar window procedure");
+        // Do not replay a message which DefSubclassProc may already have handled.
+        return 0;
+    }
+}
+
 HWND FindTaskbarOnCurrentThread() {
     HWND result = nullptr;
     EnumThreadWindows(GetCurrentThreadId(), [](HWND window, LPARAM parameter) -> BOOL {
@@ -1049,11 +1130,13 @@ HWND FindTaskbarOnCurrentThread() {
 }
 
 std::shared_ptr<ThreadState> GetThreadState() {
+    if (g_unloading) return {};
     DWORD thread = GetCurrentThreadId();
     {
         std::lock_guard lock(g_statesMutex);
-        auto it = g_states.find(thread);
-        if (it != g_states.end() && !it->second->stopping && IsWindow(it->second->window)) return it->second;
+        if (!g_states) return {};
+        auto it = g_states->find(thread);
+        if (it != g_states->end() && !it->second->stopping && IsWindow(it->second->window)) return it->second;
     }
     HWND window = FindTaskbarOnCurrentThread();
     if (!window) return {};  // Do not manipulate XAML on an unrecognized UI thread.
@@ -1062,7 +1145,7 @@ std::shared_ptr<ThreadState> GetThreadState() {
     if (!AttachTaskbarWindow(*state, window)) return {};
     {
         std::lock_guard lock(g_statesMutex);
-        g_states[thread] = state;
+        (*g_states)[thread] = state;
     }
     Wh_Log(L"Tracking taskbar UI thread %lu", thread);
     return state;
@@ -1099,25 +1182,33 @@ bool TrackRoot(ThreadState& state, FrameworkElement const& element, PCWSTR reaso
     return true;
 }
 
-// Execute discovery setup on each taskbar's own UI thread, even when no button
-// has received an update since the mod was enabled. The temporary hook is
-// removed before bootstrap returns; no synthetic mouse events are used.
-LRESULT CALLBACK BootstrapThreadHook(int code, WPARAM wParam, LPARAM lParam) {
-    if (code == HC_ACTION && !g_unloading) {
-        auto message = reinterpret_cast<CWPSTRUCT const*>(lParam);
-        if (message->message == g_bootstrapMessage) {
-            try {
-                if (auto state = GetThreadState()) {
-                    state->pending.discovery = true;
-                    Refresh(*state);
-                    Wh_Log(L"Startup scan: %zu roots, %zu buttons", state->roots.size(), state->buttons.size());
-                }
-            } catch (...) {
-                Wh_Log(L"Taskbar bootstrap failed on UI thread");
-            }
-        }
+using RunFromWindowThreadProc = void(WINAPI*)(void*);
+
+bool RunFromWindowThread(HWND window, RunFromWindowThreadProc proc, void* parameter) {
+    static const UINT message = RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+    struct Parameters { RunFromWindowThreadProc proc; void* parameter; };
+    DWORD thread = GetWindowThreadProcessId(window, nullptr);
+    if (!message || !thread) return false;
+    if (thread == GetCurrentThreadId()) {
+        proc(parameter);
+        return true;
     }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
+    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                auto call = reinterpret_cast<CWPSTRUCT const*>(lParam);
+                if (call->message == message) {
+                    auto arguments = reinterpret_cast<Parameters*>(call->lParam);
+                    arguments->proc(arguments->parameter);
+                }
+            }
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        }, nullptr, thread);
+    if (!hook) return false;
+    Parameters arguments{proc, parameter};
+    SendMessageW(window, message, 0, reinterpret_cast<LPARAM>(&arguments));
+    UnhookWindowsHookEx(hook);
+    return true;
 }
 
 void BootstrapExistingTaskbars() {
@@ -1133,16 +1224,25 @@ void BootstrapExistingTaskbars() {
         return TRUE;
     }, reinterpret_cast<LPARAM>(&windows));
 
+    std::set<DWORD> visited;
     for (HWND window : windows) {
         DWORD thread = GetWindowThreadProcessId(window, nullptr);
-        if (!thread || g_unloading) continue;
-        HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, BootstrapThreadHook, nullptr, thread);
-        if (!hook) {
+        if (!thread || g_unloading || visited.contains(thread)) continue;
+        if (RunFromWindowThread(window, [](void*) {
+            std::lock_guard lock(g_visualMutex);
+            if (g_unloading) return;
+            try {
+                if (auto state = GetThreadState()) {
+                    state->pending.discovery = true;
+                    Refresh(*state);
+                    Wh_Log(L"Startup scan: %zu roots, %zu buttons", state->roots.size(), state->buttons.size());
+                }
+            } catch (...) { Wh_Log(L"Taskbar bootstrap failed on UI thread"); }
+        }, nullptr)) {
+            visited.insert(thread);
+        } else {
             Wh_Log(L"Could not install taskbar UI-thread hook");
-            continue;
         }
-        SendMessageW(window, g_bootstrapMessage, 0, 0);
-        UnhookWindowsHookEx(hook);
     }
 }
 
@@ -1272,16 +1372,20 @@ HMODULE WINAPI LoadLibraryHook(LPCWSTR path, HANDLE file, DWORD flags) {
 std::vector<std::shared_ptr<ThreadState>> StatesSnapshot() {
     std::lock_guard lock(g_statesMutex);
     std::vector<std::shared_ptr<ThreadState>> states;
-    for (auto const& [thread, state] : g_states) states.push_back(state);
+    if (g_states) {
+        for (auto const& [thread, state] : *g_states) states.push_back(state);
+    }
     return states;
 }
 
 BOOL Wh_ModInit() {
+    if (g_unloading) {
+        Wh_Log(L"An earlier cleanup could not finish; restart Explorer before enabling this mod again");
+        return FALSE;
+    }
     g_controlMessage = RegisterWindowMessageW(
         L"Windhawk.TaskbarBadgeControl.9C994C4A-50DA-470B-95DA-E6975C452979");
-    g_bootstrapMessage = RegisterWindowMessageW(
-        L"Windhawk.TaskbarBadgeControl.Bootstrap.6627C859-C99B-4017-9E01-34B325B228A0");
-    if (!g_controlMessage || !g_bootstrapMessage) return FALSE;
+    if (!g_controlMessage) return FALSE;
     LoadSettings();
     if (!InstallNativeRootSymbols()) {
         Wh_Log(L"Direct taskbar root lookup is unavailable; initialization aborted");
@@ -1309,25 +1413,58 @@ void Wh_ModAfterInit() {
     Wh_Log(L"Ready. Direct taskbar root discovery initialized; no input event is needed.");
 }
 
-BOOL Wh_ModSettingsChanged(BOOL*) {
+void Wh_ModSettingsChanged() {
     LoadSettings();
-    for (auto const& state : StatesSnapshot()) {
+    auto states = StatesSnapshot();
+    if (states.empty() && g_hooksReady) {
+        BootstrapExistingTaskbars();
+        return;
+    }
+    for (auto const& state : states) {
         if (IsWindow(state->window)) PostMessageW(state->window, g_controlMessage, 2, 0);
     }
-    return TRUE;
+}
+
+void KeepModuleLoadedAfterCleanupFailure() {
+    // A failed revocation can leave a delegate pointing into this DLL. Keep
+    // the code (now inert via g_unloading) mapped rather than leave a dangling
+    // callback. This exceptional path requires an Explorer restart to recover.
+    HMODULE module;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
+                          reinterpret_cast<PCWSTR>(&KeepModuleLoadedAfterCleanupFailure), &module)) {
+        Wh_Log(L"Cleanup incomplete; the mod remains mapped until Explorer exits");
+    } else {
+        Wh_Log(L"Could not retain the module after cleanup failure: %lu", GetLastError());
+    }
 }
 
 void Wh_ModBeforeUninit() {
     g_unloading = true;
-    { std::lock_guard drain(g_visualMutex); }
-    // Synchronous UI-thread cleanup: restore local values/bindings, kill timers,
-    // remove subclasses, and release XAML references before unloading our code.
-    for (auto const& state : StatesSnapshot()) {
-        if (IsWindow(state->window)) {
-            SendMessageW(state->window, g_controlMessage, 1, 0);
+    CleanupAction(L"mod unload", [] {
+        { std::lock_guard drain(g_visualMutex); }
+        // Restore and release UI-owned state before destroying its container.
+        bool released = true;
+        for (auto const& state : StatesSnapshot()) {
+            if (IsWindow(state->window)) {
+                SendMessageW(state->window, g_controlMessage, 1, 0);
+            }
+            released &= state->cleanupComplete.load();
         }
+        if (!released) {
+            // A missing UI thread is not permission to release XAML here.
+            g_cleanupFailed = true;
+            Wh_Log(L"Could not complete cleanup on every taskbar UI thread");
+        }
+        if (!g_cleanupFailed) {
+            std::lock_guard lock(g_statesMutex);
+            g_states.reset();
+        }
+    });
+    if (g_cleanupFailed) {
+        // Subclasses use raw state pointers; retain their backing state too if
+        // any callback revocation failed. It remains inert until process exit.
+        KeepModuleLoadedAfterCleanupFailure();
+    } else {
+        Wh_Log(L"Badge visuals restored; taskbar hooks unloading");
     }
-    std::lock_guard lock(g_statesMutex);
-    g_states.clear();
-    Wh_Log(L"Badge visuals restored; taskbar hooks unloading");
 }
