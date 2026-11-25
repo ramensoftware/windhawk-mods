@@ -26,6 +26,8 @@
 /*
 # Windows 11 Taskbar Folders (x64)
 
+![Example folder panel above its taskbar tile](https://raw.githubusercontent.com/mamt104/windhawk-mods/375fdc4ffb3f53ef02751e3e988a92d783723d69/windows-11-taskbar-folders-preview.png)
+
 **English** — Right-click an empty part of the taskbar and select **Create folder…**. Open a folder with one click. Drag shortcuts from the desktop or File Explorer into the open folder. Use **+** to search installed apps or choose a file. Drag apps to reorder them. In an app’s Windows menu, choose **Move to** followed by the folder name. The folder’s **⋯** menu lets you rename or remove it.
 
 **Italiano** — Fai clic destro su uno spazio vuoto della barra e scegli **Crea cartella…**. Apri la cartella con un clic. Trascina i collegamenti dal desktop o da Esplora file nella cartella aperta. Con **+** puoi cercare le app installate o scegliere un file. Trascina le app per riordinarle. Nel menu di Windows di un’app scegli **Sposta in** seguito dal nome della cartella. Dal menu **⋯** puoi rinominare o rimuovere la cartella.
