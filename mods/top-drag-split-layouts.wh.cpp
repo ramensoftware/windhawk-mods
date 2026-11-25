@@ -15,10 +15,11 @@
 # Top Drag Split Layouts
 Drag a window to the top center of the screen. A layouts bar appears with six
 layouts: top/bottom halves, left/right halves, thirds, two thirds + one third,
-half + two quarters and four quarters. The top half is selected by default;
-hover another zone to select it instead. A preview shows the area the window
-will be stretched to, and releasing the mouse places the window there. The bar
-and the preview appear instantly, without animations.
+half + two quarters and four quarters. The top half is lightly highlighted as a
+hint. Hover a zone to select it: a preview shows the area the window will be
+stretched to, and releasing the mouse places the window there. Releasing it
+without a selected zone leaves the window where it was dropped. The bar and the
+preview appear instantly, without animations.
 
 After the first window is placed, the next empty zone of the same layout shows
 your other open windows. Click one to place it there. The X on a window closes
@@ -299,7 +300,9 @@ void PaintBar(HDC dc, RECT rc) {
         Fill(dc, GroupRect(l), RGB(228, 228, 228));
         for (int z = 0; z < g_layouts[l].n; z++)
             Fill(dc, CellRect(l, z),
-                 l == g_hl && z == g_hz ? RGB(0, 120, 215) : RGB(200, 200, 200));
+                 l == g_hl && z == g_hz            ? RGB(0, 120, 215)
+                 : g_hl < 0 && l == 0 && z == 0 ? RGB(160, 200, 235)
+                                                   : RGB(200, 200, 200));
     }
 }
 
@@ -450,8 +453,6 @@ void CALLBACK TrackProc(HWND, UINT, UINT_PTR, DWORD) {
                 hz = z;
             }
         }
-    if (show && hl < 0)
-        hl = hz = 0;
 
     if (show)
         SetWindowPos(g_bar, HWND_TOPMOST, bx, by, bw, bh, SWP_NOACTIVATE | SWP_SHOWWINDOW);
@@ -517,7 +518,7 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
     GetMonitorInfo(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi);
     int dx = pt.x - g_start.x, dy = pt.y - g_start.y, d = GetSystemMetrics(SM_CXDRAG);
     bool edge = pt.y <= mi.rcMonitor.top + 1 && dx * dx + dy * dy >= d * d;
-    g_force = g_hl >= 0;
+    g_force = g_hl >= 0 && dx * dx + dy * dy >= d * d;
     if (!g_force && !edge)
         return;
 
