@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
-// @description     Weather effects (snow, rain, fog, wind, clear) and seasonal particles (snow, rain, leaves, poplar fluff, sakura) under desktop icons with window accumulation and shake physics.
-// @version         1.4.0
+// @description     Weather effects and seasonal particles under desktop icons with window accumulation and shake physics.
+// @version         1.4.2 stable
 // @author          alembiq
 // @github          https://github.com/alembiqspace
 // @include         explorer.exe
@@ -11,18 +11,23 @@
 
 // ==WindhawkModReadme==
 /*
-A lightweight **Direct2D** weather and seasonal particle overlay for the Windows desktop (`explorer.exe`). It brings live weather visuals, seasonal falling elements, and atmospheric layers to your desktop without cluttering icons or windows.
+A lightweight **Direct2D** weather and seasonal particle overlay for the Windows desktop. It brings live weather visuals, seasonal falling elements, and atmospheric layers to your desktop without cluttering icons or windows.
 
 ### Why Use It
 - **Alive Desktop Atmosphere:** Match your desktop environment to real-world weather or switch modes manually whenever you want a specific mood.
-- **Low System Impact:** Uses cached rendering resources, pauses during fullscreen apps, and idles down when no effects or particles are active.
+- **Safe Desktop Integration:** Runs as a standalone Windhawk tool overlay without hooking `explorer.exe`, preventing duplicate overlays or shell instability.
 - **Flexible Customization:** Adjust intensity, speed, scale, colors, screen bounds, and frame rate to fit multi-monitor setups and personal aesthetics.
 
 ### Features
 - **Precipitation & Seasonal Layers:** Supports rain (with subtle bottom puddles), snow (with bottom accumulation and lifetime fade), hail, plus date-based or manual seasonal layers (autumn leaves, extra snow, and petals).
 - **Atmospheric Effects:** Combines clear sunlight glow, partly cloudy, overcast, dust, fog, smog, thunderstorm flashes, aurora, mirage, and configurable rainbow and halo arcs.
 - **Weather Sources:** Pulls live data from **Open-Meteo**, a custom JSON API endpoint, or a local file, with `auto` / `on` / `off` control per effect.
-- **Cursor Interaction:** Choose `none`, `clear` (erase settled particles on contact), or `push` (gently nudge settled elements) with an adjustable radius.
+- **Cursor Interaction:** Choose `none`, `clear` (erase settled particles on contact), or `push` (gently nudge settled elements) with an adjustable radius when interacting directly with the desktop.
+
+### Network & Privacy
+- **No Unsolicited Requests by Default:** `[Weather] Latitude/Longitude` (`coords`) is empty by default. No external network requests are made until you configure valid coordinates (or a custom JSON API URL) and have at least one precipitation or atmosphere setting in `auto` mode.
+- **What Is Sent & When:** When `primarySource` is set to `open_meteo` with valid `lat/lon` coordinates and at least one setting uses `auto`, the mod sends an HTTPS `GET` request to `https://api.open-meteo.com/v1/forecast` containing only your configured coordinates and requested weather fields (`weather_code`, `wind_speed_10m`, `wind_direction_10m`, `temperature_2m`, `cloud_cover`, `visibility`, `is_day`). Requests run once on startup/settings change and then every `[Weather] Update interval (min)` (default: `30` minutes).
+- **How to Disable:** Set `[Weather] Primary source` (`primarySource`) to `off`, leave `[Weather] Latitude/Longitude` (`coords`) empty, or switch all precipitation and effect modes from `auto` to `on`/`off`.
 */
 // ==/WindhawkModReadme==
 
@@ -33,7 +38,7 @@ A lightweight **Direct2D** weather and seasonal particle overlay for the Windows
   $name: "[System] Layer attach mode"
   $description: "Controls Z-order placement of the desktop overlay. Allowed: auto, progman_direct, desktop_bottom. Default: auto."
   $options:
-    - auto: Auto (below SHELLDLL_DefView icons)
+    - auto: Auto (desktop layer)
     - progman_direct: Progman reference
     - desktop_bottom: Bottom of Z-order (HWND_BOTTOM)
 - bottomBoundaryMode: above_taskbar
@@ -58,9 +63,6 @@ A lightweight **Direct2D** weather and seasonal particle overlay for the Windows
 - pauseOnFullscreen: true
   $name: "[System] Pause on fullscreen apps"
   $description: "Pauses rendering while a fullscreen app is active. Default: true."
-- excludedProcesses: "obs64.exe, ApplicationFrameHost.exe"
-  $name: "[System] Excluded processes"
-  $description: "Comma-separated executable names (kept for compatibility). Default: obs64.exe, ApplicationFrameHost.exe."
 - cursorAction: clear
   $name: "[System] Cursor action"
   $description: "none = ignore cursor; clear = erase settled items on touch; push = gently nudge or interact with settled items."
@@ -72,19 +74,17 @@ A lightweight **Direct2D** weather and seasonal particle overlay for the Windows
   $name: "[System] Cursor radius (px)"
   $description: "Cursor action radius in pixels (10 to 500). Invalid/out-of-range resets to 95."
 
-# --- 2. ACCUMULATION TOGGLES ---
+# --- 2. ACCUMULATION ---
 - enableBottomAccumulation: true
   $name: "[Accum] Bottom accumulation"
   $description: "Enables/disables accumulation at the bottom boundary. When off, nothing accumulates even with side wind."
-- enableWindowAccumulation: false
-  $name: "[Accum] Window top accumulation"
-  $description: "Disabled by default for lighter performance; kept as a toggle flag."
 
 # --- 3. WEATHER SOURCES & SEASONS ---
 - primarySource: open_meteo
   $name: "[Weather] Primary source"
-  $description: "Primary forecast provider for auto modes. Allowed: open_meteo, custom_api, local_file. Default: open_meteo."
+  $description: "Primary forecast provider for auto modes. Allowed: off, open_meteo, custom_api, local_file. Default: open_meteo."
   $options:
+    - off: Off (disable forecast fetching)
     - open_meteo: Open-Meteo API
     - custom_api: Custom JSON URL
     - local_file: Local file
@@ -95,15 +95,15 @@ A lightweight **Direct2D** weather and seasonal particle overlay for the Windows
     - off: Off
     - open_meteo: Open-Meteo API
     - local_file: Local file
-- coords: "44.7866/20.4489"
+- coords: ""
   $name: "[Weather] Latitude/Longitude"
-  $description: "Format: lat/lon (e.g. 44.7866/20.4489). Latitude -90..90, longitude -180..180. Invalid resets to 44.7866/20.4489."
+  $description: "Format: lat/lon (e.g. 44.7866/20.4489). Latitude -90..90, longitude -180..180. Empty disables Open-Meteo requests."
 - customApiUrl: ""
   $name: "[Weather] Custom JSON API URL"
-  $description: "HTTP/HTTPS JSON endpoint (weather_code, condition, wind_speed_10m, wind_direction_10m, temperature_2m, cloud_cover, visibility, is_day)."
+  $description: "HTTP/HTTPS JSON endpoint (weather_code, wind_speed_10m, wind_direction_10m, temperature_2m, cloud_cover, visibility, is_day)."
 - localWeatherPath: ""
   $name: "[Weather] Local weather file path"
-  $description: "Path to local JSON or text weather file. Default: empty."
+  $description: "Path to local JSON weather file. Default: empty."
 - updateIntervalMin: 30
   $name: "[Weather] Update interval (min)"
   $description: "Forecast refresh period in minutes (1 to 1440). Invalid/out-of-range resets to 30."
@@ -324,16 +324,21 @@ A lightweight **Direct2D** weather and seasonal particle overlay for the Windows
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <wininet.h>
 #include <d2d1.h>
+#include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <ctime>
-#include <algorithm>
+#include <cwchar>
+#include <cwctype>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <string>
@@ -347,6 +352,7 @@ constexpr float kCapEdgeTaper = 8.0f;
 constexpr float kSnowKernel[] = {0.10f, 0.25f, 0.50f, 0.80f, 1.00f, 0.80f, 0.50f, 0.25f, 0.10f};
 constexpr float kSnowKernelSum = 4.30f;
 constexpr size_t kMaxSnowmanBalls = 3;
+constexpr wchar_t kOverlayWndClass[] = L"WindhawkDesktopWeatherOverlayClass";
 
 enum class ObjectKind {
     Rain,
@@ -446,8 +452,9 @@ struct Settings {
 
     std::wstring primarySource = L"open_meteo";
     std::wstring fallbackSource = L"off";
-    double latitude = 44.7866;
-    double longitude = 20.4489;
+    bool hasValidCoords = false;
+    double latitude = 0.0;
+    double longitude = 0.0;
     std::wstring customApiUrl;
     std::wstring localWeatherPath;
     int updateIntervalMin = 30;
@@ -638,8 +645,9 @@ double g_forecastWindSpeedKmh = 0.0;
 GeneralEffectsState g_forecastEffects;
 
 HWND g_overlayHwnd = nullptr;
-std::thread g_renderThread;
-std::thread g_weatherThread;
+HANDLE g_weatherWakeEvent = nullptr;
+[[clang::no_destroy]] std::optional<std::thread> g_renderThread;
+[[clang::no_destroy]] std::optional<std::thread> g_weatherThread;
 std::atomic<bool> g_running{false};
 
 ID2D1Factory* g_d2dFactory = nullptr;
@@ -657,11 +665,29 @@ std::vector<FallenItem> g_fallen;
 std::vector<BottomSnowball> g_bottomSnowballs;
 std::vector<SnowChunk> g_chunks;
 SnowCap g_bottomSnowCap;
+SnowCap g_seasonalSnowCap;
 LightningFlash g_lightning;
 
 bool IsSnowmanFullyAssembled(const std::vector<BottomSnowball>& balls) {
     if (balls.size() < kMaxSnowmanBalls) return false;
     return balls[1].stacked && balls[2].stacked;
+}
+
+bool HasAnyAutoSetting(const Settings& cfg) {
+    return cfg.precipitationMode == PrecipMode::Auto ||
+           cfg.precipFallDirection == FallDirMode::Auto ||
+           cfg.seasonalFallDirection == FallDirMode::Auto ||
+           cfg.effectClear == TriStateMode::Auto ||
+           cfg.effectPartlyCloudy == TriStateMode::Auto ||
+           cfg.effectOvercast == TriStateMode::Auto ||
+           cfg.effectDust == TriStateMode::Auto ||
+           cfg.effectFog == TriStateMode::Auto ||
+           cfg.effectSmog == TriStateMode::Auto ||
+           cfg.effectThunderstorm == TriStateMode::Auto ||
+           cfg.effectAurora == TriStateMode::Auto ||
+           cfg.effectMirage == TriStateMode::Auto ||
+           cfg.effectRainbow == TriStateMode::Auto ||
+           cfg.effectHalo == TriStateMode::Auto;
 }
 
 void RefreshArcCache(CachedArcLayout& cache, const ArcGeometry& geom, bool forceDirty) {
@@ -760,26 +786,20 @@ int SanitizePercent(int rawVal) {
     return ParseIntRangeOrDefault(rawVal, 0, 100, 25);
 }
 
-void ParseCoordsString(const std::wstring& raw, double& outLat, double& outLon) {
-    double defLat = 44.7866;
-    double defLon = 20.4489;
+bool TryParseCoordsString(const std::wstring& raw, double& outLat, double& outLon) {
     std::wstring s = Trim(raw);
+    if (s.empty()) return false;
     size_t sep = s.find(L'/');
     if (sep == std::wstring::npos) sep = s.find(L',');
-    if (sep == std::wstring::npos) {
-        outLat = defLat;
-        outLon = defLon;
-        return;
-    }
+    if (sep == std::wstring::npos) return false;
     double lat = 0.0, lon = 0.0;
     if (!TryParseDoubleStrict(s.substr(0, sep), lat) || !TryParseDoubleStrict(s.substr(sep + 1), lon) ||
         lat < -90.0 || lat > 90.0 || lon < -180.0 || lon > 180.0) {
-        outLat = defLat;
-        outLon = defLon;
-        return;
+        return false;
     }
     outLat = lat;
     outLon = lon;
+    return true;
 }
 
 int DaysInMonthSafe(int month) {
@@ -975,11 +995,9 @@ bool TryParseHexColorStrict(const std::wstring& hexRaw, float defaultAlpha, D2D1
 void LoadSettingsFromWh() {
     Settings next;
     auto readStr = [](LPCWSTR name, const std::wstring& defVal) -> std::wstring {
-        PCWSTR raw = Wh_GetStringSetting(name);
-        if (!raw) return defVal;
-        std::wstring out(raw);
-        Wh_FreeStringSetting(raw);
-        return out;
+        WindhawkUtils::StringSetting raw(Wh_GetStringSetting(name));
+        std::wstring out(raw.get());
+        return out.empty() ? defVal : out;
     };
 
     next.layerAttachMode = readStr(L"layerAttachMode", L"auto");
@@ -996,9 +1014,9 @@ void LoadSettingsFromWh() {
 
     next.enableBottomAccumulation = Wh_GetIntSetting(L"enableBottomAccumulation") != 0;
 
-    next.primarySource = readStr(L"primarySource", L"open_meteo");
-    next.fallbackSource = readStr(L"fallbackSource", L"off");
-    ParseCoordsString(readStr(L"coords", L"44.7866/20.4489"), next.latitude, next.longitude);
+    next.primarySource = ToLower(Trim(readStr(L"primarySource", L"open_meteo")));
+    next.fallbackSource = ToLower(Trim(readStr(L"fallbackSource", L"off")));
+    next.hasValidCoords = TryParseCoordsString(readStr(L"coords", L""), next.latitude, next.longitude);
     next.customApiUrl = Trim(readStr(L"customApiUrl", L""));
     next.localWeatherPath = Trim(readStr(L"localWeatherPath", L""));
     next.updateIntervalMin = ParseIntRangeOrDefault(Wh_GetIntSetting(L"updateIntervalMin"), 1, 1440, 30);
@@ -1071,9 +1089,14 @@ void LoadSettingsFromWh() {
     next.hasCustomRainbowColor = TryParseHexColorStrict(readStr(L"colorRainbow", L""), 0.35f, next.colorRainbow);
     next.hasCustomHaloColor = TryParseHexColorStrict(readStr(L"colorHalo", L""), 0.32f, next.colorHalo);
 
-    std::lock_guard<std::mutex> lock(g_mutex);
-    g_settings = next;
-    g_arcCacheDirty = true;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_settings = next;
+        g_arcCacheDirty = true;
+    }
+    if (g_weatherWakeEvent) {
+        SetEvent(g_weatherWakeEvent);
+    }
 }
 
 std::string HttpGetUtf8(const std::wstring& url) {
@@ -1086,10 +1109,20 @@ std::string HttpGetUtf8(const std::wstring& url) {
     parts.lpszUrlPath = path;
     parts.dwUrlPathLength = _countof(path);
 
-    if (!InternetCrackUrlW(url.c_str(), 0, 0, &parts)) return {};
+    if (!InternetCrackUrlW(url.c_str(), 0, 0, &parts)) {
+        Wh_Log(L"InternetCrackUrlW failed for URL");
+        return {};
+    }
 
-    HINTERNET hSession = InternetOpenW(L"WindhawkWeatherMod/2.0", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
-    if (!hSession) return {};
+    HINTERNET hSession = InternetOpenW(L"WindhawkWeatherMod/2.2", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+    if (!hSession) {
+        Wh_Log(L"InternetOpenW failed: %u", GetLastError());
+        return {};
+    }
+
+    DWORD timeoutMs = 5000;
+    InternetSetOptionW(hSession, INTERNET_OPTION_CONNECT_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
+    InternetSetOptionW(hSession, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
 
     DWORD flags = INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE;
     if (parts.nScheme == INTERNET_SCHEME_HTTPS) {
@@ -1099,6 +1132,7 @@ std::string HttpGetUtf8(const std::wstring& url) {
     HINTERNET hConnect = InternetConnectW(
         hSession, host, parts.nPort, nullptr, nullptr, INTERNET_SERVICE_HTTP, 0, 0);
     if (!hConnect) {
+        Wh_Log(L"InternetConnectW failed: %u", GetLastError());
         InternetCloseHandle(hSession);
         return {};
     }
@@ -1107,11 +1141,20 @@ std::string HttpGetUtf8(const std::wstring& url) {
         hConnect, L"GET", path, nullptr, nullptr, nullptr, flags, 0);
     std::string response;
     if (hRequest && HttpSendRequestW(hRequest, nullptr, 0, nullptr, 0)) {
-        char buf[4096];
-        DWORD bytesRead = 0;
-        while (InternetReadFile(hRequest, buf, sizeof(buf), &bytesRead) && bytesRead > 0) {
-            response.append(buf, bytesRead);
+        DWORD statusCode = 0;
+        DWORD statusLen = sizeof(statusCode);
+        if (HttpQueryInfoW(hRequest, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &statusCode, &statusLen, nullptr) &&
+            statusCode == 200) {
+            char buf[4096];
+            DWORD bytesRead = 0;
+            while (InternetReadFile(hRequest, buf, sizeof(buf), &bytesRead) && bytesRead > 0) {
+                response.append(buf, bytesRead);
+            }
+        } else {
+            Wh_Log(L"HTTP request returned non-200 status: %u", statusCode);
         }
+    } else {
+        Wh_Log(L"HttpSendRequestW failed: %u", GetLastError());
     }
 
     if (hRequest) InternetCloseHandle(hRequest);
@@ -1174,19 +1217,25 @@ void ApplyForecastMetrics(int code, double windKmh, double tempC, int cloudCover
 
 bool ParseWeatherJson(const std::string& json, bool& hasPrecip, ObjectKind& precipKind,
                       GeneralEffectsState& fx, double& windSpeed, int& windSign) {
+    size_t scope = json.find("\"current\":");
+    if (scope == std::string::npos) scope = 0;
+
     auto extractNumber = [&](const std::string& key, double& val) -> bool {
-        size_t pos = json.find("\"" + key + "\"");
+        size_t pos = json.find("\"" + key + "\"", scope);
         if (pos == std::string::npos) return false;
         pos = json.find(':', pos);
         if (pos == std::string::npos) return false;
         pos++;
         while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
-        try {
-            val = std::stod(json.substr(pos));
-            return std::isfinite(val);
-        } catch (...) {
+        if (pos >= json.size()) return false;
+        char* endPtr = nullptr;
+        errno = 0;
+        double parsed = std::strtod(json.c_str() + pos, &endPtr);
+        if (errno != 0 || endPtr == json.c_str() + pos || !std::isfinite(parsed)) {
             return false;
         }
+        val = parsed;
+        return true;
     };
 
     double spd = 0.0;
@@ -1216,6 +1265,7 @@ bool ParseWeatherJson(const std::string& json, bool& hasPrecip, ObjectKind& prec
                              vis, isDayNum > 0.5, hasPrecip, precipKind, fx);
         return true;
     }
+    Wh_Log(L"Failed to parse weather_code from weather JSON");
     return false;
 }
 
@@ -1224,6 +1274,7 @@ bool FetchWeatherSource(const std::wstring& src, const Settings& cfg, bool& hasP
                         double& windSpeed, int& windSign) {
     if (src == L"off") return false;
     if (src == L"open_meteo") {
+        if (!cfg.hasValidCoords) return false;
         std::wstringstream url;
         url << L"https://api.open-meteo.com/v1/forecast?latitude=" << cfg.latitude
             << L"&longitude=" << cfg.longitude
@@ -1242,7 +1293,10 @@ bool FetchWeatherSource(const std::wstring& src, const Settings& cfg, bool& hasP
         if (cfg.localWeatherPath.empty()) return false;
         HANDLE hFile = CreateFileW(cfg.localWeatherPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
                                      nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hFile == INVALID_HANDLE_VALUE) return false;
+        if (hFile == INVALID_HANDLE_VALUE) {
+            Wh_Log(L"Failed to open local weather file: %u", GetLastError());
+            return false;
+        }
         DWORD size = GetFileSize(hFile, nullptr);
         std::string content;
         if (size > 0 && size < 1024 * 1024) {
@@ -1268,28 +1322,39 @@ void WeatherWorkerLoop() {
             intervalSec = cfg.updateIntervalMin * 60;
         }
 
-        bool hasP = false;
-        ObjectKind pKind = ObjectKind::Rain;
-        GeneralEffectsState fx;
-        double wSpd = 0.0;
-        int wSign = 0;
+        bool shouldFetch = (cfg.primarySource != L"off") && HasAnyAutoSetting(cfg);
+        DWORD waitMs = static_cast<DWORD>(intervalSec) * 1000;
 
-        bool ok = FetchWeatherSource(cfg.primarySource, cfg, hasP, pKind, fx, wSpd, wSign);
-        if (!ok && cfg.fallbackSource != L"off" && cfg.fallbackSource != cfg.primarySource) {
-            ok = FetchWeatherSource(cfg.fallbackSource, cfg, hasP, pKind, fx, wSpd, wSign);
+        if (shouldFetch) {
+            bool hasP = false;
+            ObjectKind pKind = ObjectKind::Rain;
+            GeneralEffectsState fx;
+            double wSpd = 0.0;
+            int wSign = 0;
+
+            bool ok = FetchWeatherSource(cfg.primarySource, cfg, hasP, pKind, fx, wSpd, wSign);
+            if (!ok && cfg.fallbackSource != L"off" && cfg.fallbackSource != cfg.primarySource) {
+                ok = FetchWeatherSource(cfg.fallbackSource, cfg, hasP, pKind, fx, wSpd, wSign);
+            }
+
+            if (ok) {
+                std::lock_guard<std::mutex> lock(g_mutex);
+                g_hasForecastPrecip = hasP;
+                g_forecastPrecip = pKind;
+                g_forecastEffects = fx;
+                g_forecastWindSpeedKmh = wSpd;
+                g_forecastWindDirSign = wSign;
+            } else if ((cfg.primarySource == L"open_meteo" && cfg.hasValidCoords) ||
+                       (cfg.primarySource == L"custom_api" && !cfg.customApiUrl.empty()) ||
+                       (cfg.primarySource == L"local_file" && !cfg.localWeatherPath.empty())) {
+                waitMs = std::min<DWORD>(waitMs, 60000);
+            }
         }
 
-        if (ok) {
-            std::lock_guard<std::mutex> lock(g_mutex);
-            g_hasForecastPrecip = hasP;
-            g_forecastPrecip = pKind;
-            g_forecastEffects = fx;
-            g_forecastWindSpeedKmh = wSpd;
-            g_forecastWindDirSign = wSign;
-        }
-
-        for (int i = 0; i < intervalSec && g_running.load(); ++i) {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+        if (g_weatherWakeEvent) {
+            WaitForSingleObject(g_weatherWakeEvent, waitMs);
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(waitMs));
         }
     }
 }
@@ -1308,7 +1373,22 @@ void UpdateCanvasGeometry(const Settings& cfg) {
     }
 }
 
-int ComputeBottomLimitY(const Settings& cfg) {
+int ComputeBottomLimitYForX(const Settings& cfg, float worldX) {
+    if (cfg.multiMonitorMode == L"all") {
+        POINT pt = {static_cast<LONG>(worldX), g_canvasTop + g_canvasHeight / 2};
+        HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi = {sizeof(mi)};
+        if (GetMonitorInfoW(mon, &mi)) {
+            int baseBottom = mi.rcMonitor.bottom;
+            if (cfg.bottomBoundaryMode == L"above_taskbar") {
+                baseBottom = mi.rcWork.bottom;
+            } else if (cfg.bottomBoundaryMode == L"custom_offset") {
+                baseBottom -= cfg.bottomOffsetPx;
+            }
+            return std::clamp(baseBottom, mi.rcMonitor.top + 10, mi.rcMonitor.bottom);
+        }
+    }
+
     int baseBottom = g_canvasTop + g_canvasHeight;
     if (cfg.bottomBoundaryMode == L"above_taskbar") {
         HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
@@ -1342,30 +1422,99 @@ bool IsFullscreenAppActive() {
             fgRect.bottom >= mi.rcMonitor.bottom);
 }
 
-HWND FindShellDefViewHost() {
+bool IsDesktopOccluded() {
     HWND progman = FindWindowW(L"Progman", nullptr);
-    if (progman && FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr)) {
-        return progman;
-    }
+    HWND defView = nullptr;
     HWND workerW = nullptr;
     while ((workerW = FindWindowExW(nullptr, workerW, L"WorkerW", nullptr)) != nullptr) {
-        if (FindWindowExW(workerW, nullptr, L"SHELLDLL_DefView", nullptr)) {
-            return workerW;
+        HWND candidate = FindWindowExW(workerW, nullptr, L"SHELLDLL_DefView", nullptr);
+        if (candidate) {
+            defView = candidate;
+            break;
         }
     }
-    return progman;
+    if (!defView && progman) {
+        defView = FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr);
+    }
+
+    HWND topWnd = GetTopWindow(nullptr);
+    while (topWnd) {
+        if (topWnd != g_overlayHwnd && topWnd != progman && topWnd != defView && IsWindowVisible(topWnd)) {
+            LONG exStyle = GetWindowLongW(topWnd, GWL_EXSTYLE);
+            if (!(exStyle & WS_EX_TOOLWINDOW)) {
+                wchar_t cls[128] = {};
+                GetClassNameW(topWnd, cls, _countof(cls));
+                std::wstring clsStr = cls;
+                if (clsStr != L"WorkerW" && clsStr != L"Shell_TrayWnd" && clsStr != L"Shell_SecondaryTrayWnd") {
+                    RECT wndRect = {};
+                    if (GetWindowRect(topWnd, &wndRect) &&
+                        wndRect.left <= g_canvasLeft &&
+                        wndRect.top <= g_canvasTop &&
+                        wndRect.right >= g_canvasLeft + g_canvasWidth &&
+                        wndRect.bottom >= g_canvasTop + g_canvasHeight) {
+                        return true;
+                    }
+                }
+            }
+        }
+        topWnd = GetNextWindow(topWnd, GW_HWNDNEXT);
+    }
+    return false;
+}
+
+bool IsDesktopWindowAtPoint(POINT pt) {
+    HWND hwnd = WindowFromPoint(pt);
+    if (!hwnd) return false;
+    if (hwnd == g_overlayHwnd) return true;
+    wchar_t cls[128] = {};
+    GetClassNameW(hwnd, cls, _countof(cls));
+    std::wstring clsStr = cls;
+    return clsStr == L"Progman" ||
+           clsStr == L"WorkerW" ||
+           clsStr == L"SHELLDLL_DefView" ||
+           clsStr == L"SysListView32";
+}
+
+HWND FindDesktopInsertAfter(const std::wstring& mode, HWND overlay) {
+    if (mode == L"desktop_bottom") {
+        return HWND_BOTTOM;
+    }
+    HWND progman = FindWindowW(L"Progman", nullptr);
+    HWND defView = nullptr;
+    HWND workerW = nullptr;
+    while ((workerW = FindWindowExW(nullptr, workerW, L"WorkerW", nullptr)) != nullptr) {
+        HWND candidate = FindWindowExW(workerW, nullptr, L"SHELLDLL_DefView", nullptr);
+        if (candidate) {
+            defView = candidate;
+            break;
+        }
+    }
+    if (!defView && progman) {
+        defView = FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr);
+    }
+
+    if (mode == L"progman_direct") {
+        return progman ? progman : HWND_BOTTOM;
+    }
+
+    // В Windows 11 24H2+ SHELLDLL_DefView часто является дочерним окном Progman;
+    // размещаем оверлей в общем Z-порядке так, чтобы слой обоев не перекрывал его.
+    if (defView) {
+        HWND parent = GetParent(defView);
+        if (parent && parent != progman) {
+            return GetWindow(parent, GW_HWNDPREV) ? GetWindow(parent, GW_HWNDPREV) : HWND_BOTTOM;
+        }
+        HWND prev = GetWindow(defView, GW_HWNDPREV);
+        if (prev && prev != overlay) {
+            return prev;
+        }
+    }
+    return HWND_BOTTOM;
 }
 
 void PositionDesktopOverlay(HWND overlay, const std::wstring& mode) {
     if (!overlay) return;
-    HWND insertAfter = HWND_BOTTOM;
-    if (mode == L"auto") {
-        HWND host = FindShellDefViewHost();
-        if (host) insertAfter = host;
-    } else if (mode == L"progman_direct") {
-        HWND progman = FindWindowW(L"Progman", nullptr);
-        if (progman) insertAfter = progman;
-    }
+    HWND insertAfter = FindDesktopInsertAfter(mode, overlay);
     SetWindowPos(
         overlay,
         insertAfter,
@@ -1373,7 +1522,7 @@ void PositionDesktopOverlay(HWND overlay, const std::wstring& mode) {
         g_canvasTop,
         g_canvasWidth,
         g_canvasHeight,
-        SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        SWP_NOACTIVATE);
 }
 
 LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -1405,10 +1554,9 @@ D2D1_COLOR_F GetColorForKind(const Settings& cfg, ObjectKind kind) {
     return cfg.colorSnow;
 }
 
-float ComputeMaxCapHeightPx(const Settings& cfg) {
-    int maxAcc = cfg.precipMaxAccumulated;
+float ComputeMaxCapHeightPx(int maxAcc, double scale) {
     if (maxAcc <= 0) return 0.0f;
-    return std::clamp(10.0f + (maxAcc / 2000.0f) * 32.0f, 10.0f, 44.0f) * static_cast<float>(cfg.particleScale);
+    return std::clamp(10.0f + (maxAcc / 2000.0f) * 32.0f, 10.0f, 44.0f) * static_cast<float>(scale);
 }
 
 void OnSeasonalModeChanged(bool extraSnowActive) {
@@ -1422,6 +1570,7 @@ void OnSeasonalModeChanged(bool extraSnowActive) {
 
     if (!extraSnowActive) {
         g_bottomSnowballs.clear();
+        for (auto& c : g_seasonalSnowCap.cols) c.h = 0.0f;
     }
 }
 
@@ -1669,6 +1818,7 @@ void DrawMapleLeafWithFlip(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
         D2D1::Matrix3x2F::Rotation(angle * 57.29578f) *
         D2D1::Matrix3x2F::Translation(x, y) * oldXform);
 
+    brush->SetOpacity(1.0f);
     brush->SetColor(D2D1::ColorF(baseColor.r * shade, baseColor.g * shade, baseColor.b * shade, std::clamp(alpha, 0.05f, 1.0f)));
     D2D1_POINT_2F pts[10] = {
         {0.0f, -r},
@@ -1708,6 +1858,7 @@ void DrawNotchedPetalWithFlip(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* bru
         D2D1::Matrix3x2F::Rotation(angle * 57.29578f) *
         D2D1::Matrix3x2F::Translation(x, y) * oldXform);
 
+    brush->SetOpacity(1.0f);
     brush->SetColor(D2D1::ColorF(baseColor.r * shade, baseColor.g * shade, baseColor.b * shade, std::clamp(alpha, 0.05f, 1.0f)));
     rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(0.0f, 0.0f), r * 0.92f, r * 0.54f), brush);
     brush->SetColor(D2D1::ColorF(std::min(1.0f, baseColor.r * 1.04f), baseColor.g * 0.90f, baseColor.b * 0.92f, std::clamp(alpha * 0.55f, 0.05f, 0.8f)));
@@ -1724,6 +1875,7 @@ void DrawItemShape(CachedSurface& surf, const Settings& cfg,
         brush->SetColor(cfg.colorRain);
         brush->SetOpacity(std::clamp(alpha, 0.05f, 1.0f));
         surf.rt->DrawLine(D2D1::Point2F(x, y), D2D1::Point2F(x + vx * 0.02f, y + size), brush, 1.5f);
+        brush->SetOpacity(1.0f);
         return;
     }
 
@@ -1740,6 +1892,7 @@ void DrawItemShape(CachedSurface& surf, const Settings& cfg,
         brush->SetColor(GetColorForKind(cfg, kind));
         brush->SetOpacity(std::clamp(alpha, 0.05f, 1.0f));
         surf.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, y), size * 0.5f, size * 0.5f), brush);
+        brush->SetOpacity(1.0f);
         return;
     }
 
@@ -1769,6 +1922,7 @@ void DrawItemShape(CachedSurface& surf, const Settings& cfg,
     brush->SetColor(cfg.colorHail);
     brush->SetOpacity(std::clamp(alpha, 0.05f, 1.0f));
     surf.rt->FillRectangle(D2D1::RectF(x - size * 0.45f, y - size * 0.45f, x + size * 0.45f, y + size * 0.45f), brush);
+    brush->SetOpacity(1.0f);
     surf.rt->SetTransform(oldXform);
 }
 
@@ -1854,6 +2008,7 @@ void DrawRainPuddle(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, D2D1_C
     brush->SetOpacity(std::clamp(alpha * 0.55f, 0.05f, 0.75f));
     float width = std::max(8.0f, size * 1.4f);
     rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, y), width * 0.5f, 1.0f), brush);
+    brush->SetOpacity(1.0f);
 }
 
 void ComputeSnowballCentersStack(const std::vector<BottomSnowball>& balls, float bottomRelY,
@@ -1881,6 +2036,8 @@ void DrawSnowballsAndSnowman(CachedSurface& surf, const Settings& cfg,
     ComputeSnowballCentersStack(balls, bottomRelY, bx, by, count);
 
     ID2D1SolidColorBrush* brush = surf.sharedBrush;
+    brush->SetOpacity(1.0f);
+
     for (size_t i = 0; i < count; ++i) {
         const auto& sb = balls[i];
         float rx = sb.radius * (1.0f + sb.squash * 0.35f);
@@ -1892,8 +2049,9 @@ void DrawSnowballsAndSnowman(CachedSurface& surf, const Settings& cfg,
                 std::clamp(sb.alpha, 0.1f, 1.0f),
                 D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
         } else {
-            brush->SetColor(GetColorForKind(cfg, sb.kind));
-            brush->SetOpacity(std::clamp(sb.alpha, 0.1f, 1.0f));
+            D2D1_COLOR_F c = GetColorForKind(cfg, sb.kind);
+            c.a = std::clamp(sb.alpha, 0.1f, 1.0f);
+            brush->SetColor(c);
             surf.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(bx[i], by[i]), rx, ry), brush);
         }
     }
@@ -1909,12 +2067,10 @@ void DrawSnowballsAndSnowman(CachedSurface& surf, const Settings& cfg,
         float alpha = std::clamp(balls[bodyIdx].alpha, 0.15f, 1.0f);
 
         brush->SetColor(D2D1::ColorF(0.14f, 0.16f, 0.20f, alpha));
-        brush->SetOpacity(alpha);
         float btnR = std::max(2.0f, bodyR * 0.12f);
         surf.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(bodyX, bodyY), btnR, btnR), brush);
 
         brush->SetColor(D2D1::ColorF(0.36f, 0.21f, 0.10f, alpha));
-        brush->SetOpacity(alpha);
         float armThick = std::max(2.0f, bodyR * 0.12f);
         float armLen = std::max(14.0f, bodyR * 1.15f);
         surf.rt->DrawLine(
@@ -1935,7 +2091,6 @@ void DrawSnowballsAndSnowman(CachedSurface& surf, const Settings& cfg,
         float alpha = std::clamp(balls[headIdx].alpha, 0.15f, 1.0f);
 
         brush->SetColor(D2D1::ColorF(0.10f, 0.12f, 0.16f, alpha));
-        brush->SetOpacity(alpha);
         float eyeR = std::max(1.8f, headR * 0.13f);
         float eyeY = headY - headR * 0.22f;
         float eyeOffsetX = headR * 0.32f;
@@ -1943,7 +2098,6 @@ void DrawSnowballsAndSnowman(CachedSurface& surf, const Settings& cfg,
         surf.rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(headX + eyeOffsetX, eyeY), eyeR, eyeR), brush);
 
         brush->SetColor(D2D1::ColorF(0.95f, 0.42f, 0.08f, alpha));
-        brush->SetOpacity(alpha);
         float noseLen = std::max(7.0f, headR * 0.65f);
         float noseDir = (balls[headIdx].vx < -2.0f) ? -1.0f : 1.0f;
         surf.rt->DrawLine(
@@ -2004,6 +2158,7 @@ void DrawSmoothRainbow(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, con
         D2D1::ColorF(0.60f, 0.34f, 0.96f, 0.24f)
     };
 
+    brush->SetOpacity(1.0f);
     float shimmer = 0.92f + 0.08f * static_cast<float>(std::sin(timeSec * 1.4));
     for (int i = 0; i < 6; ++i) {
         D2D1_COLOR_F c = cfg.hasCustomRainbowColor ? cfg.colorRainbow : spectrum[i];
@@ -2015,7 +2170,6 @@ void DrawSmoothRainbow(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, con
         if (r <= 2.0f) break;
 
         brush->SetColor(D2D1::ColorF(c.r, c.g, c.b, alpha));
-        brush->SetOpacity(alpha);
         rt->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(g_rainbowCache.cx, g_rainbowCache.cy), r, r), brush, g_rainbowCache.bandThickness);
     }
 }
@@ -2050,8 +2204,8 @@ void DrawSmoothHalo(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const 
     }
 
     float ringAlpha = std::clamp(base.a * 0.85f * strength * pulse, 0.0f, 0.75f);
+    brush->SetOpacity(1.0f);
     brush->SetColor(D2D1::ColorF(base.r, base.g, base.b, ringAlpha));
-    brush->SetOpacity(ringAlpha);
     rt->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(g_haloCache.cx, g_haloCache.cy), g_haloCache.radius, g_haloCache.radius),
                     brush, std::max(2.0f, g_haloCache.radius * 0.025f));
 }
@@ -2061,6 +2215,7 @@ void DrawSmoothAurora(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, cons
     D2D1_COLOR_F base = cfg.hasCustomAuroraColor ? cfg.colorAurora : D2D1::ColorF(0.20f, 0.94f, 0.62f, 0.28f);
     float bandHeight = std::max(90.0f, static_cast<float>(g_canvasHeight) * 0.22f);
 
+    brush->SetOpacity(1.0f);
     for (int ribbon = 0; ribbon < 2; ++ribbon) {
         D2D1_COLOR_F cTop = base;
         cTop.a = std::clamp(base.a * (ribbon == 0 ? 1.0f : 0.65f) * strength, 0.0f, 0.65f);
@@ -2073,7 +2228,6 @@ void DrawSmoothAurora(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, cons
 
         float waveAlpha = std::clamp(cTop.a * 1.15f, 0.0f, 0.75f);
         brush->SetColor(D2D1::ColorF(cTop.r, cTop.g, cTop.b, waveAlpha));
-        brush->SetOpacity(waveAlpha);
         float prevX = 0.0f;
         float prevY = y0 + static_cast<float>(std::sin(timeSec * 1.1 + ribbon)) * 14.0f;
         for (float x = 24.0f; x <= static_cast<float>(g_canvasWidth); x += 24.0f) {
@@ -2085,9 +2239,9 @@ void DrawSmoothAurora(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, cons
     }
 }
 
-void DrawSmoothMirage(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const Settings& cfg, float strength, int bottomLimitY, double timeSec) {
+void DrawSmoothMirage(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const Settings& cfg, float strength, float defaultBottomRelY, double timeSec) {
     if (strength <= 0.004f) return;
-    float botY = static_cast<float>(bottomLimitY - g_canvasTop);
+    float botY = defaultBottomRelY;
     float bandH = std::max(50.0f, static_cast<float>(g_canvasHeight) * 0.14f);
     float topY = std::max(0.0f, botY - bandH);
 
@@ -2100,8 +2254,8 @@ void DrawSmoothMirage(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, cons
     DrawVerticalGradientTint(rt, topCol, botCol, topY, botY, 1.0f);
 
     float shAlpha = std::clamp(base.a * 0.75f * strength, 0.0f, 0.5f);
+    brush->SetOpacity(1.0f);
     brush->SetColor(D2D1::ColorF(base.r, base.g, base.b, shAlpha));
-    brush->SetOpacity(shAlpha);
     for (int line = 0; line < 3; ++line) {
         float baseLineY = topY + bandH * (0.35f + line * 0.25f);
         float prevX = 0.0f;
@@ -2115,10 +2269,38 @@ void DrawSmoothMirage(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, cons
     }
 }
 
-void RenderFrame(const Settings& cfg, const GeneralEffectsState& fx, int bottomLimitY, float precipVx, double timeSec, bool forceArcDirty) {
+void DrawBranchedLightning(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
+                         const LightningFlash& flash, float maxHeight, float alpha) {
+    brush->SetOpacity(1.0f);
+    brush->SetColor(D2D1::ColorF(brush->GetColor().r, brush->GetColor().g, brush->GetColor().b, alpha));
+
+    float curX = flash.xStart;
+    float curY = 0.0f;
+    int segs = 14;
+    float stepY = std::max(20.0f, maxHeight * 0.72f / segs);
+    for (int i = 0; i < segs; ++i) {
+        float t = static_cast<float>(i + 1) / segs;
+        float nextX = flash.xStart + (flash.xEnd - flash.xStart) * t + ((i % 2 == 0) ? 16.0f : -16.0f);
+        float nextY = curY + stepY;
+        rt->DrawLine(D2D1::Point2F(curX, curY), D2D1::Point2F(nextX, nextY), brush, 2.8f);
+
+        if (i == 4 || i == 8) {
+            float branchDir = (i == 4) ? 1.0f : -1.0f;
+            float b1x = nextX + branchDir * 28.0f;
+            float b1y = nextY + stepY * 1.4f;
+            rt->DrawLine(D2D1::Point2F(nextX, nextY), D2D1::Point2F(b1x, b1y), brush, 1.6f);
+            rt->DrawLine(D2D1::Point2F(b1x, b1y), D2D1::Point2F(b1x + branchDir * 16.0f, b1y + stepY * 1.1f), brush, 1.1f);
+        }
+
+        curX = nextX;
+        curY = nextY;
+    }
+}
+
+void RenderFrame(const Settings& cfg, const GeneralEffectsState& fx, int defaultBottomLimitY, float precipVx, double timeSec, bool forceArcDirty) {
     if (!g_overlayHwnd || !EnsureSurface(g_surface, g_canvasWidth, g_canvasHeight, cfg.colorSnow, cfg.hasCustomSnowColor)) return;
 
-    float bottomRelY = static_cast<float>(bottomLimitY - g_canvasTop);
+    float defaultBottomRelY = static_cast<float>(defaultBottomLimitY - g_canvasTop);
     float s = static_cast<float>(cfg.particleScale);
 
     RECT bindRect = {0, 0, g_canvasWidth, g_canvasHeight};
@@ -2160,7 +2342,7 @@ void RenderFrame(const Settings& cfg, const GeneralEffectsState& fx, int bottomL
         DrawVerticalGradientTint(g_surface.rt, cTop, cBot, 0.0f, hFloat, k);
     }
     if (fx.aurora) DrawSmoothAurora(g_surface.rt, g_surface.sharedBrush, cfg, k, timeSec);
-    if (fx.mirage) DrawSmoothMirage(g_surface.rt, g_surface.sharedBrush, cfg, k, bottomLimitY, timeSec);
+    if (fx.mirage) DrawSmoothMirage(g_surface.rt, g_surface.sharedBrush, cfg, k, defaultBottomRelY, timeSec);
     if (fx.rainbow) DrawSmoothRainbow(g_surface.rt, g_surface.sharedBrush, cfg, k, timeSec, forceArcDirty);
     if (fx.halo) DrawSmoothHalo(g_surface.rt, g_surface.sharedBrush, cfg, k, timeSec, forceArcDirty);
 
@@ -2168,19 +2350,7 @@ void RenderFrame(const Settings& cfg, const GeneralEffectsState& fx, int bottomL
         D2D1_COLOR_F tc = cfg.hasCustomThunderstormColor ? cfg.colorThunderstorm : D2D1::ColorF(0.86f, 0.93f, 1.0f, 0.95f);
         float tAlpha = std::clamp(g_lightning.timer * 4.2f * std::max(0.25f, k), 0.0f, 1.0f);
         g_surface.sharedBrush->SetColor(D2D1::ColorF(tc.r, tc.g, tc.b, tAlpha));
-        g_surface.sharedBrush->SetOpacity(tAlpha);
-        float curX = g_lightning.xStart;
-        float curY = 0.0f;
-        int segs = 14;
-        float stepY = std::max(20.0f, (bottomLimitY - g_canvasTop) * 0.72f / segs);
-        for (int i = 0; i < segs; ++i) {
-            float t = static_cast<float>(i + 1) / segs;
-            float nextX = g_lightning.xStart + (g_lightning.xEnd - g_lightning.xStart) * t + ((i % 2 == 0) ? 16.0f : -16.0f);
-            float nextY = curY + stepY;
-            g_surface.rt->DrawLine(D2D1::Point2F(curX, curY), D2D1::Point2F(nextX, nextY), g_surface.sharedBrush, 2.8f);
-            curX = nextX;
-            curY = nextY;
-        }
+        DrawBranchedLightning(g_surface.rt, g_surface.sharedBrush, g_lightning, defaultBottomRelY, tAlpha);
     }
 
     for (const auto& p : g_falling) {
@@ -2192,18 +2362,20 @@ void RenderFrame(const Settings& cfg, const GeneralEffectsState& fx, int bottomL
     }
 
     if (cfg.enableBottomAccumulation) {
-        DrawSnowCapSurface(g_surface.rt, g_bottomSnowCap, bottomRelY, cfg.colorSnow, cfg.hasCustomSnowColor, s);
+        DrawSnowCapSurface(g_surface.rt, g_bottomSnowCap, defaultBottomRelY, cfg.colorSnow, cfg.hasCustomSnowColor, s);
+        DrawSnowCapSurface(g_surface.rt, g_seasonalSnowCap, defaultBottomRelY, cfg.colorExtraSnow, true, s);
 
         for (const auto& fo : g_fallen) {
-            float drawY = bottomRelY + fo.relY;
+            float itemBottomRelY = static_cast<float>(ComputeBottomLimitYForX(cfg, static_cast<float>(g_canvasLeft) + fo.relX) - g_canvasTop);
+            float drawY = itemBottomRelY + fo.relY;
             if (fo.kind == ObjectKind::Rain) {
-                DrawRainPuddle(g_surface.rt, g_surface.sharedBrush, cfg.colorRain, fo.relX, bottomRelY - 1.0f, fo.size, fo.alpha);
+                DrawRainPuddle(g_surface.rt, g_surface.sharedBrush, cfg.colorRain, fo.relX, itemBottomRelY - 1.0f, fo.size, fo.alpha);
             } else {
                 DrawItemShape(g_surface, cfg, fo.kind, fo.relX, drawY, fo.size, fo.angle, fo.flip, fo.vx, fo.alpha, fo.shadeIdx);
             }
         }
 
-        DrawSnowballsAndSnowman(g_surface, cfg, g_bottomSnowballs, bottomRelY);
+        DrawSnowballsAndSnowman(g_surface, cfg, g_bottomSnowballs, defaultBottomRelY);
     }
 
     if (FAILED(g_surface.rt->EndDraw())) {
@@ -2225,15 +2397,40 @@ float ComputeHorizontalSpeedPxPerSec(FallDirMode dirMode, double mpsSpeed, int f
     return static_cast<float>(forecastSign) * basePx * windFactor;
 }
 
+void WaitWithMessagePump(DWORD ms) {
+    DWORD startTick = GetTickCount();
+    while (g_running.load()) {
+        DWORD elapsed = GetTickCount() - startTick;
+        if (elapsed >= ms) break;
+        DWORD remain = ms - elapsed;
+        DWORD res = MsgWaitForMultipleObjects(0, nullptr, FALSE, remain, QS_ALLINPUT);
+        if (res == WAIT_OBJECT_0) {
+            MSG msg;
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        } else {
+            break;
+        }
+    }
+}
+
 void RenderWorkerLoop() {
+    HMODULE modInstance = nullptr;
+    GetModuleHandleExW(
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCWSTR>(&OverlayWndProc),
+        &modInstance);
+
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.lpfnWndProc = OverlayWndProc;
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = L"WindhawkDesktopWeatherOverlayClass";
-    WNDCLASSEXW existing = {};
-    if (!GetClassInfoExW(wc.hInstance, wc.lpszClassName, &existing)) {
-        RegisterClassExW(&wc);
+    wc.hInstance = modInstance;
+    wc.lpszClassName = kOverlayWndClass;
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"RegisterClassExW failed: %u", GetLastError());
+        return;
     }
 
     std::mt19937 rng(static_cast<unsigned>(GetTickCount64()));
@@ -2250,8 +2447,15 @@ void RenderWorkerLoop() {
     bool hasPrevSeasonalKind = false;
 
     g_bottomSnowCap.seed = Hash32(0x12345678u);
+    g_seasonalSnowCap.seed = Hash32(0x87654321u);
 
     while (g_running.load()) {
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
         Settings cfg;
         bool hasForecastP = false;
         ObjectKind forecastP = ObjectKind::Rain;
@@ -2271,13 +2475,16 @@ void RenderWorkerLoop() {
             g_arcCacheDirty = false;
         }
 
-        if (cfg.pauseOnFullscreen && IsFullscreenAppActive()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        UpdateCanvasGeometry(cfg);
+
+        if ((cfg.pauseOnFullscreen && IsFullscreenAppActive()) || IsDesktopOccluded()) {
+            if (g_overlayHwnd && IsWindowVisible(g_overlayHwnd)) {
+                ShowWindow(g_overlayHwnd, SW_HIDE);
+            }
+            WaitWithMessagePump(250);
             lastTime = std::chrono::steady_clock::now();
             continue;
         }
-
-        UpdateCanvasGeometry(cfg);
 
         DWORD exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
         if (!g_overlayHwnd) {
@@ -2286,15 +2493,6 @@ void RenderWorkerLoop() {
                 g_canvasLeft, g_canvasTop, g_canvasWidth, g_canvasHeight,
                 nullptr, nullptr, wc.hInstance, nullptr);
             PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode);
-        } else if (++zOrderTick >= 45) {
-            zOrderTick = 0;
-            PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode);
-        }
-
-        MSG msg;
-        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
         }
 
         auto now = std::chrono::steady_clock::now();
@@ -2368,12 +2566,18 @@ void RenderWorkerLoop() {
             if (g_overlayHwnd && IsWindowVisible(g_overlayHwnd)) {
                 ShowWindow(g_overlayHwnd, SW_HIDE);
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            WaitWithMessagePump(200);
             lastTime = std::chrono::steady_clock::now();
             continue;
         }
-        if (g_overlayHwnd && !IsWindowVisible(g_overlayHwnd)) {
-            ShowWindow(g_overlayHwnd, SW_SHOWNOACTIVATE);
+        if (g_overlayHwnd) {
+            if (!IsWindowVisible(g_overlayHwnd)) {
+                ShowWindow(g_overlayHwnd, SWP_SHOWNOACTIVATE);
+            }
+            if (++zOrderTick >= 45) {
+                zOrderTick = 0;
+                PositionDesktopOverlay(g_overlayHwnd, cfg.layerAttachMode);
+            }
         }
 
         if (activeFx.thunderstorm) {
@@ -2415,28 +2619,34 @@ void RenderWorkerLoop() {
             }
         }
 
-        int bottomLimitY = ComputeBottomLimitY(cfg);
-        float bottomRelY = static_cast<float>(bottomLimitY - g_canvasTop);
+        int defaultBottomLimitY = ComputeBottomLimitYForX(cfg, static_cast<float>(g_canvasLeft) + g_canvasWidth * 0.5f);
+        float defaultBottomRelY = static_cast<float>(defaultBottomLimitY - g_canvasTop);
 
         if (static_cast<int>(g_bottomSnowCap.cols.size()) != g_canvasWidth) {
             g_bottomSnowCap.cols.assign(g_canvasWidth, SnowColumn{});
         }
+        if (static_cast<int>(g_seasonalSnowCap.cols.size()) != g_canvasWidth) {
+            g_seasonalSnowCap.cols.assign(g_canvasWidth, SnowColumn{});
+        }
         if (!cfg.enableBottomAccumulation || cfg.precipMaxAccumulated <= 0) {
             for (auto& c : g_bottomSnowCap.cols) c.h = 0.0f;
         }
-
-        if (g_bottomSnowCap.squash != 0.0f || g_bottomSnowCap.squashVel != 0.0f) {
-            g_bottomSnowCap.squashVel += (-220.0f * g_bottomSnowCap.squash - 16.0f * g_bottomSnowCap.squashVel) * dt;
-            g_bottomSnowCap.squash = std::clamp(g_bottomSnowCap.squash + g_bottomSnowCap.squashVel * dt, -0.35f, 0.35f);
-            if (std::abs(g_bottomSnowCap.squash) < 0.002f && std::abs(g_bottomSnowCap.squashVel) < 0.02f) {
-                g_bottomSnowCap.squash = g_bottomSnowCap.squashVel = 0.0f;
-            }
+        if (!cfg.enableBottomAccumulation || !extraSnowActive || cfg.seasonalMaxAccumulated <= 0) {
+            for (auto& c : g_seasonalSnowCap.cols) c.h = 0.0f;
         }
 
         if (cfg.precipLifetimeMin >= 0.0) {
-            float meltRate = ComputeMaxCapHeightPx(cfg) / std::max(3.0f, static_cast<float>(cfg.precipLifetimeMin * 60.0));
+            float meltRate = ComputeMaxCapHeightPx(cfg.precipMaxAccumulated, cfg.particleScale) /
+                             std::max(3.0f, static_cast<float>(cfg.precipLifetimeMin * 60.0));
             for (auto& c : g_bottomSnowCap.cols) {
                 if (c.h > 0.0f) c.h = std::max(0.0f, c.h - meltRate * dt);
+            }
+        }
+        if (cfg.seasonalLifetimeMin >= 0.0) {
+            float sMeltRate = ComputeMaxCapHeightPx(cfg.seasonalMaxAccumulated, cfg.particleScale) /
+                              std::max(3.0f, static_cast<float>(cfg.seasonalLifetimeMin * 60.0));
+            for (auto& c : g_seasonalSnowCap.cols) {
+                if (c.h > 0.0f) c.h = std::max(0.0f, c.h - sMeltRate * dt);
             }
         }
 
@@ -2460,14 +2670,20 @@ void RenderWorkerLoop() {
             p.x += (vx + sway) * dt;
             p.y += vy * dt;
 
+            float itemBottomRelY = static_cast<float>(ComputeBottomLimitYForX(cfg, static_cast<float>(g_canvasLeft) + p.x) - g_canvasTop);
             int maxAcc = GetMaxAccumulatedForKind(cfg, p.isSeasonalLayer);
             bool landed = false;
-            bool isSnowKind = (p.kind == ObjectKind::Snow || p.kind == ObjectKind::ExtraSnow);
 
-            if (cfg.enableBottomAccumulation && maxAcc > 0 && p.y >= bottomRelY - p.size * 0.30f) {
-                if (isSnowKind) {
+            if (cfg.enableBottomAccumulation && maxAcc > 0 && p.y >= itemBottomRelY - p.size * 0.30f) {
+                if (p.kind == ObjectKind::Snow) {
                     int col = std::clamp(static_cast<int>(p.x), 0, static_cast<int>(g_bottomSnowCap.cols.size()) - 1);
-                    AddSnowToCap(g_bottomSnowCap, col, 2.0f * s + 0.7f * p.size, ComputeMaxCapHeightPx(cfg), s);
+                    AddSnowToCap(g_bottomSnowCap, col, 2.0f * s + 0.7f * p.size,
+                                 ComputeMaxCapHeightPx(cfg.precipMaxAccumulated, cfg.particleScale), s);
+                    landed = true;
+                } else if (p.kind == ObjectKind::ExtraSnow) {
+                    int col = std::clamp(static_cast<int>(p.x), 0, static_cast<int>(g_seasonalSnowCap.cols.size()) - 1);
+                    AddSnowToCap(g_seasonalSnowCap, col, 2.0f * s + 0.7f * p.size,
+                                 ComputeMaxCapHeightPx(cfg.seasonalMaxAccumulated, cfg.particleScale), s);
                     landed = true;
                 } else if (countAccumulated(p.isSeasonalLayer) < maxAcc) {
                     FallenItem fo;
@@ -2497,10 +2713,12 @@ void RenderWorkerLoop() {
             ch.x += ch.vx * dt;
             ch.y += ch.vy * dt;
 
+            float chBottomRelY = static_cast<float>(ComputeBottomLimitYForX(cfg, static_cast<float>(g_canvasLeft) + ch.x) - g_canvasTop);
             bool settled = false;
-            if (ch.y >= bottomRelY && cfg.enableBottomAccumulation) {
-                int col = std::clamp(static_cast<int>(ch.x), 0, static_cast<int>(g_bottomSnowCap.cols.size()) - 1);
-                AddSnowToCap(g_bottomSnowCap, col, ch.area / kSnowKernelSum, ComputeMaxCapHeightPx(cfg), s);
+            if (ch.y >= chBottomRelY && cfg.enableBottomAccumulation && extraSnowActive && cfg.seasonalMaxAccumulated > 0) {
+                int col = std::clamp(static_cast<int>(ch.x), 0, static_cast<int>(g_seasonalSnowCap.cols.size()) - 1);
+                AddSnowToCap(g_seasonalSnowCap, col, ch.area / kSnowKernelSum,
+                             ComputeMaxCapHeightPx(cfg.seasonalMaxAccumulated, cfg.particleScale), s);
                 settled = true;
             }
             if (settled || ch.y > g_canvasHeight + 20.0f || ch.x < -80.0f || ch.x > g_canvasWidth + 80.0f) {
@@ -2512,6 +2730,7 @@ void RenderWorkerLoop() {
 
         POINT cursorPt = {};
         float cX = 0.0f, cY = 0.0f, cDx = 0.0f, cMoveLen = 0.0f;
+        bool cursorOverDesktop = false;
         bool needCursor = (cfg.cursorAction != CursorActionMode::None) || !g_bottomSnowballs.empty();
         if (needCursor && GetCursorPos(&cursorPt)) {
             cX = static_cast<float>(cursorPt.x - g_canvasLeft);
@@ -2520,18 +2739,19 @@ void RenderWorkerLoop() {
             prevCursorPt = cursorPt;
             hasPrevCursor = true;
             cMoveLen = std::abs(cDx);
+            cursorOverDesktop = IsDesktopWindowAtPoint(cursorPt);
         }
 
         float cRad = static_cast<float>(cfg.cursorRadiusPx);
         float maxBallR = static_cast<float>(cfg.snowballMaxRadiusPx);
         bool snowmanAssembled = IsSnowmanFullyAssembled(g_bottomSnowballs);
 
-        bool leftBtnDown = !g_bottomSnowballs.empty() && ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
+        bool leftBtnDown = !g_bottomSnowballs.empty() && cursorOverDesktop && ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
         if (leftBtnDown && !prevLeftBtnDown) {
             float bx[kMaxSnowmanBalls] = {};
             float by[kMaxSnowmanBalls] = {};
             size_t ballCount = 0;
-            ComputeSnowballCentersStack(g_bottomSnowballs, bottomRelY, bx, by, ballCount);
+            ComputeSnowballCentersStack(g_bottomSnowballs, defaultBottomRelY, bx, by, ballCount);
 
             bool hitBall = false;
             for (size_t i = 0; i < ballCount; ++i) {
@@ -2563,9 +2783,10 @@ void RenderWorkerLoop() {
         }
         prevLeftBtnDown = leftBtnDown;
 
-        if (extraSnowActive && cfg.enableBottomAccumulation && !snowmanAssembled &&
+        if (cursorOverDesktop && extraSnowActive && cfg.enableBottomAccumulation &&
+            cfg.seasonalMaxAccumulated > 0 && !snowmanAssembled &&
             cfg.cursorAction == CursorActionMode::Push &&
-            cMoveLen > 0.5f && std::abs(cY - bottomRelY) < cRad && !g_bottomSnowCap.cols.empty()) {
+            cMoveLen > 0.5f && std::abs(cY - defaultBottomRelY) < cRad && !g_seasonalSnowCap.cols.empty()) {
             int activeBallIdx = -1;
             for (size_t i = 0; i < g_bottomSnowballs.size(); ++i) {
                 if (!g_bottomSnowballs[i].full) {
@@ -2575,14 +2796,14 @@ void RenderWorkerLoop() {
             }
 
             float dirX = (cDx >= 0.0f) ? 1.0f : -1.0f;
-            int maxColIdx = static_cast<int>(g_bottomSnowCap.cols.size()) - 1;
+            int maxColIdx = static_cast<int>(g_seasonalSnowCap.cols.size()) - 1;
             int from = std::clamp(static_cast<int>(cX - cRad * 0.6f), 0, maxColIdx);
             int to = std::clamp(static_cast<int>(cX + cRad * 0.6f), 0, maxColIdx);
             float scooped = 0.0f;
             for (int c = from; c <= to; ++c) {
-                if (g_bottomSnowCap.cols[c].h > 0.2f) {
-                    scooped += g_bottomSnowCap.cols[c].h;
-                    g_bottomSnowCap.cols[c].h = 0.0f;
+                if (g_seasonalSnowCap.cols[c].h > 0.2f) {
+                    scooped += g_seasonalSnowCap.cols[c].h;
+                    g_seasonalSnowCap.cols[c].h = 0.0f;
                 }
             }
 
@@ -2627,9 +2848,10 @@ void RenderWorkerLoop() {
                 }
             }
 
-            if (cfg.cursorAction != CursorActionMode::None) {
+            if (cursorOverDesktop && cfg.cursorAction != CursorActionMode::None) {
+                float itemBottomRelY = static_cast<float>(ComputeBottomLimitYForX(cfg, static_cast<float>(g_canvasLeft) + fo.relX) - g_canvasTop);
                 float absX = fo.relX;
-                float absY = bottomRelY + fo.relY;
+                float absY = itemBottomRelY + fo.relY;
                 float dx = absX - cX;
                 float dy = absY - cY;
                 if (std::abs(dx) < cRad && std::abs(dy) < cRad) {
@@ -2662,7 +2884,7 @@ void RenderWorkerLoop() {
             float bx[kMaxSnowmanBalls] = {};
             float by[kMaxSnowmanBalls] = {};
             size_t ballCount = 0;
-            ComputeSnowballCentersStack(g_bottomSnowballs, bottomRelY, bx, by, ballCount);
+            ComputeSnowballCentersStack(g_bottomSnowballs, defaultBottomRelY, bx, by, ballCount);
 
             for (size_t i = 0; i < g_bottomSnowballs.size();) {
                 BottomSnowball& sb = g_bottomSnowballs[i];
@@ -2701,7 +2923,7 @@ void RenderWorkerLoop() {
                 float dy = curY - cY;
                 float reach = cRad + sb.radius;
 
-                if (cfg.cursorAction == CursorActionMode::Push &&
+                if (cursorOverDesktop && cfg.cursorAction == CursorActionMode::Push &&
                     std::abs(dx) < reach && std::abs(dy) < reach &&
                     (dx * dx + dy * dy) < reach * reach) {
                     if (snowmanAssembled) {
@@ -2746,10 +2968,13 @@ void RenderWorkerLoop() {
             }
         }
 
-        RenderFrame(cfg, activeFx, bottomLimitY, precipVx, timeSec, forceArcDirty);
+        RenderFrame(cfg, activeFx, defaultBottomLimitY, precipVx, timeSec, forceArcDirty);
 
-        int frameMs = 1000 / cfg.targetFps;
-        std::this_thread::sleep_for(std::chrono::milliseconds(frameMs));
+        bool hasAnimatedMotion = !g_falling.empty() || !g_fallen.empty() ||
+                                 !g_bottomSnowballs.empty() || !g_chunks.empty() ||
+                                 activeFx.thunderstorm || activeFx.aurora || activeFx.mirage;
+        DWORD sleepMs = hasAnimatedMotion ? static_cast<DWORD>(1000 / cfg.targetFps) : 120;
+        WaitWithMessagePump(sleepMs);
     }
 
     if (g_overlayHwnd) {
@@ -2761,24 +2986,183 @@ void RenderWorkerLoop() {
         g_d2dFactory->Release();
         g_d2dFactory = nullptr;
     }
+    UnregisterClassW(wc.lpszClassName, wc.hInstance);
+}
+
+BOOL WhTool_ModInit() {
+    LoadSettingsFromWh();
+    g_running.store(true);
+    g_weatherWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_weatherThread.emplace(WeatherWorkerLoop);
+    g_renderThread.emplace(RenderWorkerLoop);
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+    LoadSettingsFromWh();
+}
+
+void WhTool_ModUninit() {
+    g_running.store(false);
+    if (g_weatherWakeEvent) {
+        SetEvent(g_weatherWakeEvent);
+    }
+    if (g_weatherThread && g_weatherThread->joinable()) {
+        g_weatherThread->join();
+    }
+    g_weatherThread.reset();
+
+    if (g_renderThread && g_renderThread->joinable()) {
+        g_renderThread->join();
+    }
+    g_renderThread.reset();
+
+    if (g_weatherWakeEvent) {
+        CloseHandle(g_weatherWakeEvent);
+        g_weatherWakeEvent = nullptr;
+    }
 }
 
 } // namespace
 
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Creating-a-new-mod#running-code-in-windhawkexe
+////////////////////////////////////////////////////////////////////////////////
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EnterProtectedRegion() {
+    // Nothing to do.
+}
+
+void WINAPI LeaveProtectedRegion() {
+    // Nothing to do.
+}
+
 BOOL Wh_ModInit() {
-    LoadSettingsFromWh();
-    g_running.store(true);
-    g_weatherThread = std::thread(WeatherWorkerLoop);
-    g_renderThread = std::thread(RenderWorkerLoop);
+    bool isService = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0) {
+            isService = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isService) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutexW failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
+        IMAGE_NT_HEADERS* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
+            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint =
+            reinterpret_cast<BYTE*>(dosHeader) + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EnterProtectedRegion),
+                           nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
     return TRUE;
 }
 
-void Wh_ModUninit() {
-    g_running.store(false);
-    if (g_weatherThread.joinable()) g_weatherThread.join();
-    if (g_renderThread.joinable()) g_renderThread.join();
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR windhawkPath[MAX_PATH];
+    if (!GetModuleFileNameW(nullptr, windhawkPath, ARRAYSIZE(windhawkPath))) {
+        Wh_Log(L"GetModuleFileNameW failed");
+        return;
+    }
+
+    WCHAR* slash = wcsrchr(windhawkPath, L'\\');
+    if (!slash) {
+        Wh_Log(L"wcsrchr failed");
+        return;
+    }
+
+    slash[1] = L'\0';
+    wcscat_s(windhawkPath, L"windhawk.exe");
+
+    WCHAR commandLine[MAX_PATH * 2];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", windhawkPath, WH_MOD_ID);
+
+    STARTUPINFO si = {sizeof(si)};
+    PROCESS_INFORMATION pi;
+    if (!CreateProcessW(windhawkPath, commandLine, nullptr, nullptr, FALSE, 0,
+                        nullptr, nullptr, &si, &pi)) {
+        Wh_Log(L"CreateProcessW failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettingsFromWh();
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
