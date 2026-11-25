@@ -2,7 +2,7 @@
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
 // @description     Weather effects and seasonal particles under desktop icons with window accumulation and shake physics.
-// @version         1.4.2 stable
+// @version         1.4.3
 // @author          alembiq
 // @github          https://github.com/alembiqspace
 // @include         explorer.exe
@@ -1379,13 +1379,15 @@ int ComputeBottomLimitYForX(const Settings& cfg, float worldX) {
         HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
         MONITORINFO mi = {sizeof(mi)};
         if (GetMonitorInfoW(mon, &mi)) {
-            int baseBottom = mi.rcMonitor.bottom;
+            int monTop = static_cast<int>(mi.rcMonitor.top);
+            int monBottom = static_cast<int>(mi.rcMonitor.bottom);
+            int baseBottom = monBottom;
             if (cfg.bottomBoundaryMode == L"above_taskbar") {
-                baseBottom = mi.rcWork.bottom;
+                baseBottom = static_cast<int>(mi.rcWork.bottom);
             } else if (cfg.bottomBoundaryMode == L"custom_offset") {
                 baseBottom -= cfg.bottomOffsetPx;
             }
-            return std::clamp(baseBottom, mi.rcMonitor.top + 10, mi.rcMonitor.bottom);
+            return std::clamp(baseBottom, monTop + 10, monBottom);
         }
     }
 
@@ -1497,8 +1499,6 @@ HWND FindDesktopInsertAfter(const std::wstring& mode, HWND overlay) {
         return progman ? progman : HWND_BOTTOM;
     }
 
-    // В Windows 11 24H2+ SHELLDLL_DefView часто является дочерним окном Progman;
-    // размещаем оверлей в общем Z-порядке так, чтобы слой обоев не перекрывал его.
     if (defView) {
         HWND parent = GetParent(defView);
         if (parent && parent != progman) {
@@ -2572,7 +2572,7 @@ void RenderWorkerLoop() {
         }
         if (g_overlayHwnd) {
             if (!IsWindowVisible(g_overlayHwnd)) {
-                ShowWindow(g_overlayHwnd, SWP_SHOWNOACTIVATE);
+                ShowWindow(g_overlayHwnd, SW_SHOWNA);
             }
             if (++zOrderTick >= 45) {
                 zOrderTick = 0;
@@ -2989,7 +2989,7 @@ void RenderWorkerLoop() {
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
 }
 
-BOOL WhTool_ModInit() {
+BOOL WhTool_ModInitInternal() {
     LoadSettingsFromWh();
     g_running.store(true);
     g_weatherWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -2998,11 +2998,11 @@ BOOL WhTool_ModInit() {
     return TRUE;
 }
 
-void WhTool_ModSettingsChanged() {
+void WhTool_ModSettingsChangedInternal() {
     LoadSettingsFromWh();
 }
 
-void WhTool_ModUninit() {
+void WhTool_ModUninitInternal() {
     g_running.store(false);
     if (g_weatherWakeEvent) {
         SetEvent(g_weatherWakeEvent);
@@ -3024,6 +3024,18 @@ void WhTool_ModUninit() {
 }
 
 } // namespace
+
+BOOL WhTool_ModInit() {
+    return WhTool_ModInitInternal();
+}
+
+void WhTool_ModSettingsChanged() {
+    WhTool_ModSettingsChangedInternal();
+}
+
+void WhTool_ModUninit() {
+    WhTool_ModUninitInternal();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
