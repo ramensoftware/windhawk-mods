@@ -2,7 +2,7 @@
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
 // @description     Weather effects and seasonal particles under desktop icons with window accumulation and shake physics.
-// @version         1.4.3
+// @version         1.4.4
 // @author          alembiq
 // @github          https://github.com/alembiqspace
 // @include         explorer.exe
@@ -25,9 +25,9 @@ A lightweight **Direct2D** weather and seasonal particle overlay for the Windows
 - **Cursor Interaction:** Choose `none`, `clear` (erase settled particles on contact), or `push` (gently nudge settled elements) with an adjustable radius when interacting directly with the desktop.
 
 ### Network & Privacy
-- **No Unsolicited Requests by Default:** `[Weather] Latitude/Longitude` (`coords`) is empty by default. No external network requests are made until you configure valid coordinates (or a custom JSON API URL) and have at least one precipitation or atmosphere setting in `auto` mode.
-- **What Is Sent & When:** When `primarySource` is set to `open_meteo` with valid `lat/lon` coordinates and at least one setting uses `auto`, the mod sends an HTTPS `GET` request to `https://api.open-meteo.com/v1/forecast` containing only your configured coordinates and requested weather fields (`weather_code`, `wind_speed_10m`, `wind_direction_10m`, `temperature_2m`, `cloud_cover`, `visibility`, `is_day`). Requests run once on startup/settings change and then every `[Weather] Update interval (min)` (default: `30` minutes).
-- **How to Disable:** Set `[Weather] Primary source` (`primarySource`) to `off`, leave `[Weather] Latitude/Longitude` (`coords`) empty, or switch all precipitation and effect modes from `auto` to `on`/`off`.
+- **No Unsolicited Requests by Default:** `[Weather] Latitude/Longitude` (`coords`) is empty by default. No external network requests are made until you configure valid coordinates (or a custom JSON API URL) and have at least one forecast-driven setting (`precipitationMode`, `precipFallDirection`, `seasonalFallDirection`, or any general effect) in `auto` mode.
+- **What Is Sent & When:** When `primarySource` is set to `open_meteo` with valid `lat/lon` coordinates and at least one forecast-driven setting uses `auto`, the mod sends an HTTPS `GET` request to `https://api.open-meteo.com/v1/forecast` containing only your configured coordinates and requested weather fields (`weather_code`, `wind_speed_10m`, `wind_direction_10m`, `temperature_2m`, `cloud_cover`, `visibility`, `is_day`). Requests run on startup, on settings changes, every `[Weather] Update interval (min)` (default: `30` minutes), and every `60` seconds after a failed attempt.
+- **How to Disable:** Set `[Weather] Primary source` (`primarySource`) to `off`, leave `[Weather] Latitude/Longitude` (`coords`) empty, or switch all forecast-driven modes (including `precipFallDirection` and `seasonalFallDirection`) away from `auto`.
 */
 // ==/WindhawkModReadme==
 
@@ -434,6 +434,18 @@ struct CachedArcLayout {
     float cy = 0.0f;
     float bandThickness = 0.0f;
     bool valid = false;
+};
+
+struct MonitorBoundEntry {
+    int left = 0;
+    int right = 0;
+    int bottomY = 0;
+};
+
+struct FrameBottomBounds {
+    int fallbackBottomY = 0;
+    bool useMonitors = false;
+    std::vector<MonitorBoundEntry> monitors;
 };
 
 struct Settings {
@@ -1278,7 +1290,7 @@ bool FetchWeatherSource(const std::wstring& src, const Settings& cfg, bool& hasP
         std::wstringstream url;
         url << L"https://api.open-meteo.com/v1/forecast?latitude=" << cfg.latitude
             << L"&longitude=" << cfg.longitude
-            << L"¤t=weather_code,wind_speed_10m,wind_direction_10m,temperature_2m,cloud_cover,visibility,is_day";
+            << L"&" L"current=weather_code,wind_speed_10m,wind_direction_10m,temperature_2m,cloud_cover,visibility,is_day";
         std::string body = HttpGetUtf8(url.str());
         if (body.empty()) return false;
         return ParseWeatherJson(body, hasPrecip, precipKind, fx, windSpeed, windSign);
@@ -1373,24 +1385,21 @@ void UpdateCanvasGeometry(const Settings& cfg) {
     }
 }
 
-int ComputeBottomLimitYForX(const Settings& cfg, float worldX) {
-    if (cfg.multiMonitorMode == L"all") {
-        POINT pt = {static_cast<LONG>(worldX), g_canvasTop + g_canvasHeight / 2};
-        HMONITOR mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO mi = {sizeof(mi)};
-        if (GetMonitorInfoW(mon, &mi)) {
-            int monTop = static_cast<int>(mi.rcMonitor.top);
-            int monBottom = static_cast<int>(mi.rcMonitor.bottom);
-            int baseBottom = monBottom;
-            if (cfg.bottomBoundaryMode == L"above_taskbar") {
-                baseBottom = static_cast<int>(mi.rcWork.bottom);
-            } else if (cfg.bottomBoundaryMode == L"custom_offset") {
-                baseBottom -= cfg.bottomOffsetPx;
-            }
-            return std::clamp(baseBottom, monTop + 10, monBottom);
-        }
+BOOL CALLBACK CollectMonitorBoundsProc(HMONITOR hMon, HDC, LPRECT, LPARAM lParam) {
+    auto* list = reinterpret_cast<std::vector<MonitorBoundEntry>*>(lParam);
+    MONITORINFO mi = {sizeof(mi)};
+    if (GetMonitorInfoW(hMon, &mi)) {
+        MonitorBoundEntry entry;
+        entry.left = static_cast<int>(mi.rcMonitor.left);
+        entry.right = static_cast<int>(mi.rcMonitor.right);
+        entry.bottomY = static_cast<int>(mi.rcMonitor.bottom);
+        list->push_back(entry);
     }
+    return TRUE;
+}
 
+FrameBottomBounds BuildFrameBottomBounds(const Settings& cfg) {
+    FrameBottomBounds bounds;
     int baseBottom = g_canvasTop + g_canvasHeight;
     if (cfg.bottomBoundaryMode == L"above_taskbar") {
         HWND hTray = FindWindowW(L"Shell_TrayWnd", nullptr);
@@ -1401,7 +1410,46 @@ int ComputeBottomLimitYForX(const Settings& cfg, float worldX) {
     } else if (cfg.bottomBoundaryMode == L"custom_offset") {
         baseBottom -= cfg.bottomOffsetPx;
     }
-    return std::clamp(baseBottom, g_canvasTop + 10, g_canvasTop + g_canvasHeight);
+    bounds.fallbackBottomY = std::clamp(baseBottom, g_canvasTop + 10, g_canvasTop + g_canvasHeight);
+
+    if (cfg.multiMonitorMode == L"all") {
+        std::vector<MonitorBoundEntry> rawMons;
+        EnumDisplayMonitors(nullptr, nullptr, CollectMonitorBoundsProc, reinterpret_cast<LPARAM>(&rawMons));
+        for (const auto& m : rawMons) {
+            MONITORINFO mi = {sizeof(mi)};
+            POINT mid = {m.left + std::max(1, (m.right - m.left) / 2), g_canvasTop + g_canvasHeight / 2};
+            HMONITOR hm = MonitorFromPoint(mid, MONITOR_DEFAULTTONEAREST);
+            if (GetMonitorInfoW(hm, &mi)) {
+                int monTop = static_cast<int>(mi.rcMonitor.top);
+                int monBottom = static_cast<int>(mi.rcMonitor.bottom);
+                int y = monBottom;
+                if (cfg.bottomBoundaryMode == L"above_taskbar") {
+                    y = static_cast<int>(mi.rcWork.bottom);
+                } else if (cfg.bottomBoundaryMode == L"custom_offset") {
+                    y -= cfg.bottomOffsetPx;
+                }
+                bounds.monitors.push_back(MonitorBoundEntry{
+                    static_cast<int>(mi.rcMonitor.left),
+                    static_cast<int>(mi.rcMonitor.right),
+                    std::clamp(y, monTop + 10, monBottom)
+                });
+            }
+        }
+        bounds.useMonitors = !bounds.monitors.empty();
+    }
+    return bounds;
+}
+
+int LookupBottomLimitY(const FrameBottomBounds& bounds, float worldX) {
+    if (bounds.useMonitors) {
+        int ix = static_cast<int>(worldX);
+        for (const auto& m : bounds.monitors) {
+            if (ix >= m.left && ix < m.right) {
+                return m.bottomY;
+            }
+        }
+    }
+    return bounds.fallbackBottomY;
 }
 
 bool IsFullscreenAppActive() {
@@ -1502,7 +1550,9 @@ HWND FindDesktopInsertAfter(const std::wstring& mode, HWND overlay) {
     if (defView) {
         HWND parent = GetParent(defView);
         if (parent && parent != progman) {
-            return GetWindow(parent, GW_HWNDPREV) ? GetWindow(parent, GW_HWNDPREV) : HWND_BOTTOM;
+            HWND prev = GetWindow(parent, GW_HWNDPREV);
+            if (prev && prev != overlay) return prev;
+            return HWND_BOTTOM;
         }
         HWND prev = GetWindow(defView, GW_HWNDPREV);
         if (prev && prev != overlay) {
@@ -2297,10 +2347,11 @@ void DrawBranchedLightning(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
     }
 }
 
-void RenderFrame(const Settings& cfg, const GeneralEffectsState& fx, int defaultBottomLimitY, float precipVx, double timeSec, bool forceArcDirty) {
+void RenderFrame(const Settings& cfg, const GeneralEffectsState& fx, const FrameBottomBounds& bounds,
+                 float precipVx, double timeSec, bool forceArcDirty) {
     if (!g_overlayHwnd || !EnsureSurface(g_surface, g_canvasWidth, g_canvasHeight, cfg.colorSnow, cfg.hasCustomSnowColor)) return;
 
-    float defaultBottomRelY = static_cast<float>(defaultBottomLimitY - g_canvasTop);
+    float defaultBottomRelY = static_cast<float>(bounds.fallbackBottomY - g_canvasTop);
     float s = static_cast<float>(cfg.particleScale);
 
     RECT bindRect = {0, 0, g_canvasWidth, g_canvasHeight};
@@ -2366,7 +2417,7 @@ void RenderFrame(const Settings& cfg, const GeneralEffectsState& fx, int default
         DrawSnowCapSurface(g_surface.rt, g_seasonalSnowCap, defaultBottomRelY, cfg.colorExtraSnow, true, s);
 
         for (const auto& fo : g_fallen) {
-            float itemBottomRelY = static_cast<float>(ComputeBottomLimitYForX(cfg, static_cast<float>(g_canvasLeft) + fo.relX) - g_canvasTop);
+            float itemBottomRelY = static_cast<float>(LookupBottomLimitY(bounds, static_cast<float>(g_canvasLeft) + fo.relX) - g_canvasTop);
             float drawY = itemBottomRelY + fo.relY;
             if (fo.kind == ObjectKind::Rain) {
                 DrawRainPuddle(g_surface.rt, g_surface.sharedBrush, cfg.colorRain, fo.relX, itemBottomRelY - 1.0f, fo.size, fo.alpha);
@@ -2619,8 +2670,8 @@ void RenderWorkerLoop() {
             }
         }
 
-        int defaultBottomLimitY = ComputeBottomLimitYForX(cfg, static_cast<float>(g_canvasLeft) + g_canvasWidth * 0.5f);
-        float defaultBottomRelY = static_cast<float>(defaultBottomLimitY - g_canvasTop);
+        FrameBottomBounds bounds = BuildFrameBottomBounds(cfg);
+        float defaultBottomRelY = static_cast<float>(bounds.fallbackBottomY - g_canvasTop);
 
         if (static_cast<int>(g_bottomSnowCap.cols.size()) != g_canvasWidth) {
             g_bottomSnowCap.cols.assign(g_canvasWidth, SnowColumn{});
@@ -2670,7 +2721,7 @@ void RenderWorkerLoop() {
             p.x += (vx + sway) * dt;
             p.y += vy * dt;
 
-            float itemBottomRelY = static_cast<float>(ComputeBottomLimitYForX(cfg, static_cast<float>(g_canvasLeft) + p.x) - g_canvasTop);
+            float itemBottomRelY = static_cast<float>(LookupBottomLimitY(bounds, static_cast<float>(g_canvasLeft) + p.x) - g_canvasTop);
             int maxAcc = GetMaxAccumulatedForKind(cfg, p.isSeasonalLayer);
             bool landed = false;
 
@@ -2713,7 +2764,7 @@ void RenderWorkerLoop() {
             ch.x += ch.vx * dt;
             ch.y += ch.vy * dt;
 
-            float chBottomRelY = static_cast<float>(ComputeBottomLimitYForX(cfg, static_cast<float>(g_canvasLeft) + ch.x) - g_canvasTop);
+            float chBottomRelY = static_cast<float>(LookupBottomLimitY(bounds, static_cast<float>(g_canvasLeft) + ch.x) - g_canvasTop);
             bool settled = false;
             if (ch.y >= chBottomRelY && cfg.enableBottomAccumulation && extraSnowActive && cfg.seasonalMaxAccumulated > 0) {
                 int col = std::clamp(static_cast<int>(ch.x), 0, static_cast<int>(g_seasonalSnowCap.cols.size()) - 1);
@@ -2849,7 +2900,7 @@ void RenderWorkerLoop() {
             }
 
             if (cursorOverDesktop && cfg.cursorAction != CursorActionMode::None) {
-                float itemBottomRelY = static_cast<float>(ComputeBottomLimitYForX(cfg, static_cast<float>(g_canvasLeft) + fo.relX) - g_canvasTop);
+                float itemBottomRelY = static_cast<float>(LookupBottomLimitY(bounds, static_cast<float>(g_canvasLeft) + fo.relX) - g_canvasTop);
                 float absX = fo.relX;
                 float absY = itemBottomRelY + fo.relY;
                 float dx = absX - cX;
@@ -2968,7 +3019,7 @@ void RenderWorkerLoop() {
             }
         }
 
-        RenderFrame(cfg, activeFx, defaultBottomLimitY, precipVx, timeSec, forceArcDirty);
+        RenderFrame(cfg, activeFx, bounds, precipVx, timeSec, forceArcDirty);
 
         bool hasAnimatedMotion = !g_falling.empty() || !g_fallen.empty() ||
                                  !g_bottomSnowballs.empty() || !g_chunks.empty() ||
@@ -2989,7 +3040,9 @@ void RenderWorkerLoop() {
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
 }
 
-BOOL WhTool_ModInitInternal() {
+} // namespace
+
+BOOL WhTool_ModInit() {
     LoadSettingsFromWh();
     g_running.store(true);
     g_weatherWakeEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -2998,11 +3051,11 @@ BOOL WhTool_ModInitInternal() {
     return TRUE;
 }
 
-void WhTool_ModSettingsChangedInternal() {
+void WhTool_ModSettingsChanged() {
     LoadSettingsFromWh();
 }
 
-void WhTool_ModUninitInternal() {
+void WhTool_ModUninit() {
     g_running.store(false);
     if (g_weatherWakeEvent) {
         SetEvent(g_weatherWakeEvent);
@@ -3023,35 +3076,17 @@ void WhTool_ModUninitInternal() {
     }
 }
 
-} // namespace
-
-BOOL WhTool_ModInit() {
-    return WhTool_ModInitInternal();
-}
-
-void WhTool_ModSettingsChanged() {
-    WhTool_ModSettingsChangedInternal();
-}
-
-void WhTool_ModUninit() {
-    WhTool_ModUninitInternal();
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
 // processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Creating-a-new-mod#running-code-in-windhawkexe
+// https://github.com/ramensoftware/windhawk/wiki/Creating-a-new-mod#running-a-tool-mod-in-windhawkexe
 ////////////////////////////////////////////////////////////////////////////////
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
-void WINAPI EnterProtectedRegion() {
-    // Nothing to do.
-}
-
-void WINAPI LeaveProtectedRegion() {
-    // Nothing to do.
+void WINAPI EntryPoint_Hook() {
+    ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
@@ -3066,7 +3101,9 @@ BOOL Wh_ModInit() {
     }
 
     for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-service") == 0) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
             isService = true;
             break;
         }
@@ -3114,12 +3151,17 @@ BOOL Wh_ModInit() {
         void* entryPoint =
             reinterpret_cast<BYTE*>(dosHeader) + entryPointRVA;
 
-        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EnterProtectedRegion),
+        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook),
                            nullptr);
         return TRUE;
     }
 
     if (isToolModProcess) {
+        return FALSE;
+    }
+
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
         return FALSE;
     }
 
@@ -3138,23 +3180,16 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    WCHAR* slash = wcsrchr(windhawkPath, L'\\');
-    if (!slash) {
-        Wh_Log(L"wcsrchr failed");
-        return;
-    }
-
-    slash[1] = L'\0';
-    wcscat_s(windhawkPath, L"windhawk.exe");
-
     WCHAR commandLine[MAX_PATH * 2];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", windhawkPath, WH_MOD_ID);
 
     STARTUPINFO si = {sizeof(si)};
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
     PROCESS_INFORMATION pi;
-    if (!CreateProcessW(windhawkPath, commandLine, nullptr, nullptr, FALSE, 0,
-                        nullptr, nullptr, &si, &pi)) {
-        Wh_Log(L"CreateProcessW failed");
+    if (!CreateProcessInternalW(nullptr, windhawkPath, commandLine, nullptr,
+                                nullptr, FALSE, 0, nullptr, nullptr, &si,
+                                &pi)) {
+        Wh_Log(L"CreateProcessInternalW failed");
         return;
     }
 
