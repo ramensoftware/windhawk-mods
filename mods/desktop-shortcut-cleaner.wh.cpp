@@ -2,7 +2,7 @@
 // @id              desktop-shortcut-cleaner
 // @name            Desktop Shortcut Cleaner
 // @description     Hide desktop shortcut labels, arrows and admin shields, and replace the hover box with an icon-shaped glow, without changing File Explorer.
-// @version         1.4.0
+// @version         1.4.1
 // @author          ELSEGuy
 // @github          https://github.com/ELSEGuy
 // @license         MIT
@@ -19,7 +19,7 @@ Clean up the Windows 11 desktop without touching File Explorer: hide shortcut
 labels, arrows and administrator shields, and replace the white hover box
 with a soft glow that follows each icon's shape.
 
-![Hovering, selecting and dragging desktop icons: a soft white glow follows each icon's shape, and dragged icons move as a solid icon](https://raw.githubusercontent.com/ELSEGuy/desktop-shortcut-cleaner-Windhawk/47e7b1ad6c4c8ed5cb7a310b8b4c9dafe2b53446/Screnshot/glow_demo.gif)
+![Hovering, selecting, dragging and cutting desktop icons: a soft white glow follows each icon's shape, dragged icons move as a solid icon, and cut items fade](https://raw.githubusercontent.com/ELSEGuy/desktop-shortcut-cleaner-Windhawk/8930893b85c41b10534e1665d5c74d3bdfd2a131/Screnshot/glow_demo.gif)
 
 ## Features
 
@@ -53,13 +53,9 @@ with a soft glow that follows each icon's shape.
   plate. This mod removes the plate and draws a glow shaped like the icon
   instead. Both hook the same drawing, so don't enable the icon glow
   together with that mod.
-- **Administrator-shield hiding** isn't offered by any other mod.
 
 ## Known limitations
 
-- Labels are matched by their displayed text, so a non-shortcut item showing
-  the same name as a shortcut (for example `Notes.lnk` and `Notes.txt` with
-  extensions hidden) loses its label too.
 - Shield hiding covers the *Run this program as an administrator*
   compatibility setting only. Shortcuts to programs whose manifest requests
   elevation (many installers) keep their shield, as do shortcuts whose
@@ -73,14 +69,8 @@ with a soft glow that follows each icon's shape.
 
 ## Credits
 
-Based in part on desktop icon text-hiding code by kivsak, from the
-"Hide Desktop Icon Text and Shortcut Arrows" mod (MIT license, as published
-in the Windhawk mods catalog). The desktop detection and icon-label hiding
-approach were adapted from their script, which hides the names of all
-desktop icons. This project extends that approach with its own
-shortcut-only label filtering. The desktop-only shortcut-arrow,
-administrator-shield, icon-glow and drag handling are implemented separately
-by this project.
+Desktop detection and label hiding are adapted from kivsak's "Hide Desktop
+Icon Text and Shortcut Arrows" mod (MIT license).
 */
 // ==/WindhawkModReadme==
 
@@ -241,6 +231,12 @@ thread_local bool g_isRenderingDragImage = false;
 // Set while rendering an icon into an offscreen bitmap to build its glow,
 // so the IImageList::Draw hook passes that draw straight through.
 thread_local bool g_isGeneratingGlow = false;
+
+// The item the desktop ListView is drawing right now, from its custom-draw
+// item notification (-1 if unknown). Identifies which item an icon or label
+// belongs to even when icons overlap, where a position check would be
+// ambiguous.
+thread_local int g_paintingItem = -1;
 
 // ---------------------------------------------------------------------------
 // Desktop window helpers
@@ -1640,6 +1636,24 @@ struct DesktopItemDrawInfo {
 
 // Work out which desktop item an icon draw at (x, y, cx, cy) belongs to,
 // whether that item is selected or hovered, and whether it's cut.
+// The item being drawn at (x, y): the one announced by custom draw if known,
+// otherwise the item under that point.
+static int GetDesktopItemBeingDrawn(HWND listView, int x, int y) {
+    if (g_paintingItem >= 0 && !g_isRenderingDragImage &&
+        g_paintingItem < ListView_GetItemCount(listView)) {
+        return g_paintingItem;
+    }
+
+    LVHITTESTINFO hit = {};
+    hit.pt.x = x;
+    hit.pt.y = y;
+
+    int item = static_cast<int>(SendMessageW(
+        listView, LVM_HITTEST, 0, reinterpret_cast<LPARAM>(&hit)));
+
+    return item >= 0 && (hit.flags & LVHT_ONITEM) ? item : -1;
+}
+
 static DesktopItemDrawInfo GetDesktopItemDrawInfo(HWND listView,
                                                   int x,
                                                   int y,
@@ -1647,13 +1661,8 @@ static DesktopItemDrawInfo GetDesktopItemDrawInfo(HWND listView,
                                                   int cy) {
     DesktopItemDrawInfo info;
 
-    LVHITTESTINFO hit = {};
-    hit.pt.x = x + cx / 2;
-    hit.pt.y = y + cy / 2;
-
-    int item = static_cast<int>(SendMessageW(
-        listView, LVM_HITTEST, 0, reinterpret_cast<LPARAM>(&hit)));
-    if (item < 0 || !(hit.flags & LVHT_ONITEM)) {
+    int item = GetDesktopItemBeingDrawn(listView, x + cx / 2, y + cy / 2);
+    if (item < 0) {
         return info;
     }
 
@@ -1685,14 +1694,9 @@ static bool ShouldHideDraggedOriginals() {
 // Whether the desktop item under the given point is selected (that is, one of
 // the items being dragged).
 static bool IsSelectedDesktopItemAt(HWND listView, int x, int y) {
-    LVHITTESTINFO hit = {};
-    hit.pt.x = x;
-    hit.pt.y = y;
+    int item = GetDesktopItemBeingDrawn(listView, x, y);
 
-    int item = static_cast<int>(SendMessageW(
-        listView, LVM_HITTEST, 0, reinterpret_cast<LPARAM>(&hit)));
-
-    return item >= 0 && (hit.flags & LVHT_ONITEM) &&
+    return item >= 0 &&
            (ListView_GetItemState(listView, item, LVIS_SELECTED) &
             LVIS_SELECTED);
 }
@@ -2216,10 +2220,12 @@ static LRESULT DefSubclassProcAsDesktopDrawing(HWND listView,
     bool previous = g_isDrawingDesktop;
     HWND previousHwnd = g_drawingDesktopHwnd;
     bool previousDragImage = g_isRenderingDragImage;
+    int previousPaintingItem = g_paintingItem;
 
     g_isDrawingDesktop = true;
     g_drawingDesktopHwnd = listView;
     g_isRenderingDragImage = isDragImage || previousDragImage;
+    g_paintingItem = -1;
 
     LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
@@ -2232,6 +2238,7 @@ static LRESULT DefSubclassProcAsDesktopDrawing(HWND listView,
     g_isDrawingDesktop = previous;
     g_drawingDesktopHwnd = previousHwnd;
     g_isRenderingDragImage = previousDragImage;
+    g_paintingItem = previousPaintingItem;
     return result;
 }
 
@@ -2250,6 +2257,29 @@ LRESULT CALLBACK DesktopDefViewSubclass(HWND hWnd,
         return DefSubclassProcAsDesktopDrawing(
             reinterpret_cast<HWND>(refData), true, hWnd, uMsg, wParam,
             lParam);
+    }
+
+    // Track which item the ListView is about to draw. Item notifications are
+    // requested at the start of each paint; DefView still handles them as
+    // usual.
+    if (uMsg == WM_NOTIFY && lParam && g_isDrawingDesktop &&
+        (g_settings.icon_glow || g_settings.solid_drag)) {
+        auto* header = reinterpret_cast<NMHDR*>(lParam);
+        if (header->hwndFrom == reinterpret_cast<HWND>(refData) &&
+            header->code == NM_CUSTOMDRAW) {
+            auto* customDraw = reinterpret_cast<NMLVCUSTOMDRAW*>(lParam);
+
+            if (customDraw->nmcd.dwDrawStage == CDDS_PREPAINT) {
+                g_paintingItem = -1;
+                LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+                return result | CDRF_NOTIFYITEMDRAW;
+            }
+
+            if (customDraw->nmcd.dwDrawStage == CDDS_ITEMPREPAINT) {
+                g_paintingItem =
+                    static_cast<int>(customDraw->nmcd.dwItemSpec);
+            }
+        }
     }
 
     if (uMsg == WM_NCDESTROY) {
