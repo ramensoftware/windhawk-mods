@@ -15,6 +15,10 @@
 # macOS 26 Tahoe Minimize Animations
 Brings smooth macOS **Genie** (Modern Direct2D lamp-mesh & Classic scanline) and **Scale** animations for window minimize, restore, launch, and close on Windows 11.
 
+![macOS 26 Tahoe Minimize Animations](https://raw.githubusercontent.com/Badalemo/windhawk-mods-media/main/minimize.png)
+
+![macOS 26 Tahoe Minimize Animations demo](https://raw.githubusercontent.com/Badalemo/windhawk-mods-media/main/minimize-demo.gif)
+
 ## Features
 - **Three Animation Styles**:
   - **Modern Genie** (default): Direct2D mesh warp driven by the macOS lamp curve across Bottom, Left, and Right Dock positions.
