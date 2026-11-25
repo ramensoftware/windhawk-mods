@@ -1,3 +1,8 @@
+## 1.6.4 ([Nov 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f58273a1d3e10723a01c3aac1e4f2fcc45ad327c/mods/better-volume-mixer.wh.cpp))
+
+* Fixed volume percentage changing sizes by itself
+* Added a size option for the tray percentage
+
 ## 1.6.3 ([Nov 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3c964427620c63c6fe2613822c6482ac4bd62ffc/mods/better-volume-mixer.wh.cpp))
 
 * Added option to hide the close button

@@ -1381,7 +1381,7 @@
         "ratingUsers": 113,
         "reviews": 0,
         "trendingSorting": 4.182078155971304,
-        "updated": 1795028598000,
+        "updated": 1795575777000,
         "users": 4125
       },
       "metadata": {
@@ -1396,7 +1396,7 @@
         ],
         "license": "MIT",
         "name": "Better Volume Mixer",
-        "version": "1.6.3"
+        "version": "1.6.4"
       }
     },
     "block-smb-quick-access": {
@@ -8025,7 +8025,7 @@
         "ratingUsers": 28,
         "reviews": 0,
         "trendingSorting": 11.617630835127652,
-        "updated": 1795309370000,
+        "updated": 1795575772000,
         "users": 764
       },
       "metadata": {
@@ -8041,7 +8041,7 @@
         ],
         "license": "GPL-3.0-or-later",
         "name": "Explorer Translucent Menus",
-        "version": "1.3.0"
+        "version": "1.3.2"
       }
     },
     "explorer-tree-click-expand": {

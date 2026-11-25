@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-25T02:01:12.000Z</updated>
+    <updated>2026-11-25T03:02:57.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Better Volume Mixer 1.6.4]]></title>
+        <id>https://windhawk.net/mods/better-volume-mixer#f58273a1d3e10723a01c3aac1e4f2fcc45ad327c</id>
+        <link href="https://windhawk.net/mods/better-volume-mixer"/>
+        <updated>2026-11-25T03:02:57.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed volume percentage changing sizes by itself</li>
+<li>Added a size option for the tray percentage</li>
+</ul>
+]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Translucent Menus 1.3.2]]></title>
+        <id>https://windhawk.net/mods/explorer-translucent-menus#2ad733afc8627b693f3e0c41ab656b40e62b7627</id>
+        <link href="https://windhawk.net/mods/explorer-translucent-menus"/>
+        <updated>2026-11-25T03:02:52.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Match menu captions and symbols to the explicit Light or Dark palette, including Shell captions drawn in separate buffers.</li>
+<li>Apply the shared tooltip material to truncated navigation labels.</li>
+<li>Group material and hover settings. <strong>This will reset the custom values in settings.</strong></li>
+</ul>
+]]></content>
+        <author>
+            <name>alkali210</name>
+            <uri>https://github.com/alkali210</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Charging Animation 1.1.0]]></title>
         <id>https://windhawk.net/mods/charging-animation#c54356831d0987a31c493a22134ac721483b69e7</id>
@@ -516,100 +547,6 @@ bar, the smooth motion and the test history.</p>
         <author>
             <name>joaomgabaldi</name>
             <uri>https://github.com/joaomgabaldi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Volu - macOS Volume HUD 1.0.0]]></title>
-        <id>https://windhawk.net/mods/volu-macos-volume-hud#227d2e545520edddb70a93346d9a4028e9995db1</id>
-        <link href="https://windhawk.net/mods/volu-macos-volume-hud"/>
-        <updated>2026-11-23T01:04:23.000Z</updated>
-        <content type="html"><![CDATA[<h1>Volu - macOS Volume HUD</h1>
-<p><img src="https://raw.githubusercontent.com/Kouqqu/Volu/main/preview.png" alt="Volu - macOS Volume HUD"></p>
-<p>Authentic macOS-style translucent volume HUD for Windows with classic step click sounds.</p>
-<h3>Features</h3>
-<ul>
-<li><strong>Pixel-perfect design</strong>: Authentic macOS frosted glass HUD overlay with clean 16-step volume bar and soft drop shadow.</li>
-<li><strong>Audio feedback</strong>: Classic wooden and modern tactile volume step clicks. Silent on mute.</li>
-<li><strong>Smooth animations</strong>: Smooth fade-out transition with configurable on-screen duration.</li>
-<li><strong>Flexible positioning</strong>: Place the HUD at the center, top, or bottom of your screen.</li>
-<li><strong>Optional hotkeys</strong>: Global shortcuts (<code>Ctrl + Alt + Up</code>, <code>Ctrl + Alt + Down</code>, <code>Ctrl + Alt + V</code>), disabled by default to avoid shortcut conflicts.</li>
-<li><strong>Native flyout suppression</strong>: Intercepts physical media keys (<code>Volume Up</code>, <code>Volume Down</code>, <code>Mute</code>) system-wide using <code>RegisterHotKey</code>, suppressing the default Windows flyouts.</li>
-<li><strong>1/16 Quantization</strong>: Each key press changes volume by 1/16 (6.25%) matching macOS, instead of Windows' default 2%.</li>
-<li><strong>Dynamic device switching</strong>: Automatically follows the default audio output device when headphones, speakers, or Bluetooth devices are connected.</li>
-</ul>
-<h3>Key Capture &amp; Shortcuts</h3>
-<p>The mod captures physical volume keys system-wide via <code>RegisterHotKey</code>, so other apps no longer receive the volume keys:</p>
-<ul>
-<li><code>Volume Up</code> — Increase volume by 6.25% (1 step)</li>
-<li><code>Volume Down</code> — Decrease volume by 6.25% (1 step)</li>
-<li><code>Volume Mute</code> — Toggle mute</li>
-</ul>
-<p>Optional shortcuts (if enabled in settings):</p>
-<ul>
-<li><code>Ctrl + Alt + Up</code> — Volume Up</li>
-<li><code>Ctrl + Alt + Down</code> — Volume Down</li>
-<li><code>Ctrl + Alt + V</code> — Mute / Unmute</li>
-</ul>
-<h3>Comparison with Other OSD Mods</h3>
-<p>Unlike <code>win10-volume-brightness-osd</code> (which restores Windows 8/10 flyouts with brightness controls) or <code>osd-custom-pill</code> (which provides modern animated pills), Volu is focused exclusively on authentic macOS volume HUD fidelity:</p>
-<ul>
-<li>Classic square frosted glass aesthetics with multi-pass soft drop shadow.</li>
-<li>Authentic wooden and tactile step clicks.</li>
-<li>16-step quantization (6.25% per step) strictly synchronizing with the 16-segment bar.</li>
-<li>Lightweight tool mod architecture dedicated solely to volume control.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Kouqqu</name>
-            <uri>https://github.com/Kouqqu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Sharp Taskbar Icons After Remote Desktop 1.0]]></title>
-        <id>https://windhawk.net/mods/rdp-icon-refresh#bab10f73f69576c9cbd26dc6e0c9f866dfb7c321</id>
-        <link href="https://windhawk.net/mods/rdp-icon-refresh"/>
-        <updated>2026-11-22T21:03:00.000Z</updated>
-        <content type="html"><![CDATA[<h1>Sharp Taskbar Icons After Remote Desktop</h1>
-<p>Connecting with Remote Desktop from a device with a different display scale (for example
-the Microsoft Remote Desktop app on a phone, at 200–300%) switches the session to that
-scale, and Explorer renders the tray icons for it. When you come back to the local screen,
-Explorer doesn't render them again from the programs' icons — it rescales the copies it
-already made, so they stay blurry until the program or Explorer is restarted.</p>
-<p><img src="https://raw.githubusercontent.com/Solomag/windhawk-assets/main/rdp-icon-refresh/before-after.png" alt="Tray icons after a Remote Desktop session, before and after the refresh"></p>
-<p>This mod asks Explorer to render the icons again. For the tray it uses the copy of each
-icon that Explorer itself keeps for the tray button; as a fallback (for icons it can't
-find there), it remembers the icon each program gives the tray, by watching the
-<code>WM_COPYDATA</code> messages that <code>Shell_NotifyIcon</code> sends to the taskbar and Explorer's
-answers to them. When the session returns to the local console, it waits until the
-scale has stayed the same for a few seconds (Explorer may pass through an intermediate
-scale, and turns tray requests down while it rebuilds the taskbar) and then:</p>
-<ul>
-<li>asks Explorer to render every tray icon again (<code>NIM_MODIFY</code> with the icon Explorer
-itself keeps for that tray button, or the program's own icon handle for icons that
-aren't in the tray toolbars — what happens when the program is restarted, but
-without restarting anything). Explorer's copy is used because many programs destroy
-the handle they give the tray right after giving it;</li>
-<li>asks the taskbar to re-read the icon of every top-level window (<code>HSHELL_REDRAW</code>
-through the taskbar's shell hook message). Buttons of pinned programs that aren't
-running are not refreshed.</li>
-</ul>
-<p>If Explorer turns most tray icons down because it is still busy, or the scale changes
-again, the tray is refreshed again (for about a minute after returning).</p>
-<p>While the remote session is active, the mod checks the taskbar's scale every few
-seconds. If it never differed from the local screen's scale, nothing is done. The
-Windhawk log shows the scales and how many icons were refreshed.</p>
-<p>Icons that existed before the mod was enabled are handled too: their copies are read
-from the tray at refresh time. The exception is an icon a program registered by GUID
-before the mod was loaded: Explorer only accepts it by its GUID, which the mod learns
-when the program registers or updates the icon. Nothing is sent to other programs.</p>
-<p>Made for the Windows 10 taskbar (tested on Windows 10 22H2), and for Windows 11 versions
-whose taskbar still behaves like it; not tested on the newer Windows 11 taskbar. The
-newer Windows 11 (XAML) notification area has no tray toolbars, so there only icons
-registered while the mod was running are refreshed.</p>
-]]></content>
-        <author>
-            <name>Solo_mag</name>
-            <uri>https://github.com/Solomag</uri>
         </author>
     </entry>
 </feed>

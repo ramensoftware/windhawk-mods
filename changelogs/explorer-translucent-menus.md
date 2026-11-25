@@ -1,3 +1,9 @@
+## 1.3.2 ([Nov 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2ad733afc8627b693f3e0c41ab656b40e62b7627/mods/explorer-translucent-menus.wh.cpp))
+
+* Match menu captions and symbols to the explicit Light or Dark palette, including Shell captions drawn in separate buffers.
+* Apply the shared tooltip material to truncated navigation labels.
+* Group material and hover settings. **This will reset the custom values in settings.**
+
 ## 1.3.0 ([Nov 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7396cacb5edb6c4f8f9817e382b5633bbfc9010d/mods/explorer-translucent-menus.wh.cpp))
 
 * Add an opt-in material setting scoped to Explorer file-list infotips.
