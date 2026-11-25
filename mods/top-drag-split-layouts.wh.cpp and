@@ -3,7 +3,7 @@
 // @name            Top Drag Split Layouts
 // @description     Own snap layouts bar at the top center with a top/bottom split, plus a window chooser for the remaining zones
 // @version         1.0
-// @author          KH
+// @author          khorkovenko
 // @github          https://github.com/khorkovenko
 // @include         windhawk.exe
 // @compilerOptions -ldwmapi -lshcore -lgdi32 -ladvapi32 -lshell32
