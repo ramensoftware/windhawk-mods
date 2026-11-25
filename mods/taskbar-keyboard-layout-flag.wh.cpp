@@ -2301,7 +2301,7 @@ bool HookWindowsUIXamlDiscovery() {
     HMODULE wuxMod = GetModuleHandleW(L"Windows.UI.Xaml.dll");
     if (!wuxMod) return false;
 
-    WindhawkUtils::SYMBOL_HOOK wuxHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK windowsUIXamlDllHooks[] = {
         {
             { L"public: virtual long __cdecl DirectUI::FrameworkElement::ArrangeOverride(struct Windows::Foundation::Size,struct Windows::Foundation::Size *)" },
             &FrameworkElement_ArrangeOverride_Orig,
@@ -2310,7 +2310,7 @@ bool HookWindowsUIXamlDiscovery() {
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(wuxMod, wuxHooks, ARRAYSIZE(wuxHooks)) || !FrameworkElement_ArrangeOverride_Orig) {
+    if (!WindhawkUtils::HookSymbols(wuxMod, windowsUIXamlDllHooks, ARRAYSIZE(windowsUIXamlDllHooks)) || !FrameworkElement_ArrangeOv
         Wh_Log(L"Optional Windows.UI.Xaml.dll ArrangeOverride symbol did not resolve.");
         return false;
     }
@@ -2321,7 +2321,7 @@ bool HookSystemTraySymbols(HMODULE systemTrayMod) {
     if (!systemTrayMod) return false;
 
     // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {
             { L"public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void)" },
             &IconView_Init_Orig,
@@ -2348,7 +2348,7 @@ bool HookSystemTraySymbols(HMODULE systemTrayMod) {
         }
     };
 
-    if (!WindhawkUtils::HookSymbols(systemTrayMod, systemTrayHooks, ARRAYSIZE(systemTrayHooks))) {
+    if (!WindhawkUtils::HookSymbols(systemTrayMod, hooks, ARRAYSIZE(hooks))) {
         Wh_Log(L"Failed to hook required SystemTray::IconView symbols in system tray module.");
         return false;
     }
