@@ -3262,12 +3262,35 @@ static std::wstring AbsoluteUrl(const std::wstring& page, std::wstring href) {
 static std::vector<std::pair<std::wstring, std::wstring>> g_feedFound;  // address -> its feed (network thread only)
 static std::vector<std::pair<std::wstring, ULONGLONG>> g_feedMissing;   // address -> when no feed was found
 
+static long long ParseFeedDate(const std::wstring& raw);
+static long long UnixNow();
+
+// When the newest story of a feed came out (0: no dates)
+static long long NewestStory(const std::wstring& xml) {
+    long long best = 0;
+    for (PCWSTR tag : {L"<pubDate", L"<published", L"<updated", L"<dc:date"}) {
+        std::wstring open = tag, close = std::wstring(L"</") + (tag + 1) + L">";
+        for (size_t p = 0; (p = xml.find(open, p)) != std::wstring::npos;) {
+            size_t gt = xml.find(L'>', p), end = xml.find(close, p);
+            if (gt == std::wstring::npos || end == std::wstring::npos || end < gt) break;
+            best = std::max(best, ParseFeedDate(xml.substr(gt + 1, end - gt - 1)));
+            p = end;
+        }
+    }
+    return best;
+}
+
+// A site's own pages can point to feeds nobody updates any more (an old section, a region): one whose newest story
+// is older than this doesn't count
+constexpr long long kStaleFeed = 30LL * 24 * 3600;
+
 static std::wstring FeedXml(std::wstring url) {
     if (url.find(L"://") == std::wstring::npos) url = L"https://" + url;  // "g1.globo.com" is enough
     if (!IsWebUrl(url)) return L"";
     if (auto* known = FindIn(g_feedFound, url)) {
         std::wstring xml = FromUtf8(HttpGetUrl(*known));
-        if (IsFeed(xml)) return xml;  // else the site changed: searched again below
+        long long newest = IsFeed(xml) ? NewestStory(xml) : -1;
+        if (newest == 0 || (newest > 0 && UnixNow() - newest < kStaleFeed)) return xml;  // else searched again below
     }
     if (auto* when = FindIn(g_feedMissing, url))  // searched in vain not long ago: not again for half an hour
         if (GetTickCount64() - *when < 30 * 60 * 1000) return L"";
@@ -3290,16 +3313,32 @@ static std::wstring FeedXml(std::wstring url) {
     size_t scheme = url.find(L"://");
     std::wstring origin = url.substr(0, url.find(L'/', scheme + 3));
     std::wstring base = url.back() == L'/' ? url.substr(0, url.size() - 1) : url;
+    // Sites that keep their feeds under /rss/<site>/ (as g1.globo.com/rss/g1/)
+    std::wstring host = origin.substr(scheme + 3);
+    addTry(origin + L"/rss/" + host.substr(0, host.find(L'.')) + L"/");
     for (PCWSTR tail : {L"/feed", L"/rss", L"/rss.xml", L"/feed.xml", L"/index.xml", L"/atom.xml", L"/feed/"}) {
         addTry(base + tail);
         addTry(origin + tail);
     }
+    // Of the feeds found, the one with the newest stories (a recent one ends the search)
+    std::wstring bestUrl, bestXml;
+    long long bestWhen = -1;
     for (size_t i = 0; i < tries.size() && i < 10 && g_running; i++) {
         std::wstring xml = FromUtf8(HttpGetUrl(tries[i]));
         if (!IsFeed(xml)) continue;
-        if (auto* known = FindIn(g_feedFound, url)) *known = tries[i];
-        else g_feedFound.push_back({url, tries[i]});
-        return xml;
+        long long when = NewestStory(xml);
+        if (when > 0 && UnixNow() - when >= kStaleFeed) continue;  // abandoned
+        if (when > bestWhen) {
+            bestWhen = when;
+            bestUrl = tries[i];
+            bestXml = xml;
+        }
+        if (when > 0 && UnixNow() - when < 2 * 24 * 3600) break;
+    }
+    if (!bestUrl.empty()) {
+        if (auto* known = FindIn(g_feedFound, url)) *known = bestUrl;
+        else g_feedFound.push_back({url, bestUrl});
+        return bestXml;
     }
     if (page.empty()) return L"";  // the site didn't answer (no internet yet?): tried again soon
     if (auto* when = FindIn(g_feedMissing, url)) *when = GetTickCount64();
@@ -3345,7 +3384,11 @@ static bool FetchNews() {
             if (!n.title.empty() && !AutomaticStory(n)) items.push_back(n);
             p = xml.find(itemTag, end);
         }
-        // The newest of this feed, whatever order it lists them in (some put old ones first, or mix them)
+        // The newest of this feed, whatever order it lists them in (some put old ones first, or mix them); stories from
+        // more than 30 days ago aren't news
+        long long now = UnixNow();
+        items.erase(std::remove_if(items.begin(), items.end(), [&](const NewsItem& n) { return n.when > 0 && now - n.when > kStaleFeed; }),
+                    items.end());
         std::stable_sort(items.begin(), items.end(), [](const NewsItem& a, const NewsItem& b) { return a.when > b.when; });
         if (items.size() > 20) items.resize(20);
         // A title pattern repeated over and over is a series of automatic stories: only its first one stays
