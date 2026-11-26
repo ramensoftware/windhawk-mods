@@ -117,13 +117,13 @@ Licensed under **GPL-3.0**. Full source attribution and copyright notices are re
 /*
 - trayGap: 8
   $name: Gap before tray
-  $description: Space between right-side apps and the notification area or a reserved widget.
+  $description: Space between right-side apps and the notification area or a reserved widget. Negative values are treated as 0.
 - leftZoneIconSpacing: 0
   $name: Left zone icon spacing adjustment
-  $description: Extra space between app icons on the left, in pixels at 100% scaling. 0 keeps the Windows size. Negative values make the buttons, and their clickable areas, narrower. The reduction stops before it would cut the icon (about -8 with default icons) and does not apply to buttons with labels.
+  $description: Extra space between app icons on the left, in pixels at 100% scaling. 0 keeps the Windows size. Negative values make the buttons, and their clickable areas, narrower. The reduction stops before it would cut the icon (about -8 with default icons) and does not apply to buttons with labels. Accepted range: -24 to 48.
 - rightZoneIconSpacing: 0
   $name: Right zone icon spacing adjustment
-  $description: Same as above, for app icons on the right.
+  $description: Same as above, for app icons on the right. Accepted range: -24 to 48.
 - sectionDragging: true
   $name: Enable dragging between zones
   $description: Drag an app to the other side of the gap, or reorder within a side. Disable to keep native Windows dragging.
@@ -133,9 +133,6 @@ Licensed under **GPL-3.0**. Full source attribution and copyright notices are re
 - extraReservedWidgets: ""
   $name: Additional reserved widget names (advanced)
   $description: Up to 12 comma- or semicolon-separated XAML Name values. Widgets must be visible in RootGrid, outside the app list and tray, 8 to 650 DIP wide (max 60% of taskbar width), and inside the area before the tray. Do not list icon overlays. Leave empty if unsure.
-- debugLogging: false
-  $name: Debug logging
-  $description: Write detailed layout traces and app identity changes to the Windhawk log. Includes app IDs, which can contain file paths. Leave off unless you are troubleshooting.
 */
 // ==/WindhawkModSettings==
 
@@ -188,7 +185,6 @@ struct Settings {
     std::atomic<int> rightIconSpacing{0};
     std::atomic<bool> systemButtonsLeft{true};
     std::atomic<bool> sectionDragging{true};
-    std::atomic<bool> debugLogging{false};
 };
 
 Settings g_settings;
@@ -224,7 +220,6 @@ void LoadSettings() {
         static_cast<int>(Wh_GetIntSetting(L"rightZoneIconSpacing")), -24, 48);
     g_settings.systemButtonsLeft =
         Wh_GetIntSetting(L"systemButtonsLeft") != 0;
-    g_settings.debugLogging = Wh_GetIntSetting(L"debugLogging") != 0;
 
     // The RAII helper releases the Windhawk setting string after copying.
     std::wstring names =
@@ -787,8 +782,6 @@ struct TaskbarUiState {
     ULONGLONG lastCrowdingLog = 0;
     ULONGLONG lastCrowdingRetry = 0;
     ULONGLONG lastPostArrangeErrorLog = 0;
-    ULONGLONG lastLayoutTrace = 0;
-    int lastTracedPlan = -1;
     double lastSystemStart = 0, lastSystemWidth = 0;
     std::vector<winrt::weak_ref<FrameworkElement>> leftLive;
     std::vector<winrt::weak_ref<FrameworkElement>> rightLive;
@@ -1259,8 +1252,7 @@ double TrayEdgeForContent(FrameworkElement const& content,
         if (native > 0) return contentLeft + native;
         static thread_local ULONGLONG lastInvalidTrayLog = 0;
         auto now = GetTickCount64();
-        ULONGLONG interval = g_settings.debugLogging ? 2000 : 60000;
-        if (!lastInvalidTrayLog || now - lastInvalidTrayLog >= interval) {
+        if (!lastInvalidTrayLog || now - lastInvalidTrayLog >= 60000) {
             lastInvalidTrayLog = now;
             Wh_Log(L"TZ TRAY unverified geometry: x=%.1f width=%.1f rootWidth=%.1f; using native layout if no verified edge",
                    tx, tw, width);
@@ -1884,11 +1876,10 @@ void LoadAppOrders() {
 }
 
 // Remember each button's AppID for short XAML gaps and for change detection,
-// and log identity changes while debug logging is on. Nothing here is saved,
-// and no identity is ever guessed from titles, executables or positions.
+// and log identity changes. Nothing here is saved, and no identity is ever
+// guessed from titles, executables or positions.
 void TrackAppIdentities(std::vector<FrameworkElement> const& children) {
     auto& ui = Ui();
-    bool debug = g_settings.debugLogging.load();
     ULONGLONG now = GetTickCount64();
     std::unordered_map<void*, RememberedAppId> remembered;
     std::vector<std::wstring> nativeIds;
@@ -1902,14 +1893,13 @@ void TrackAppIdentities(std::vector<FrameworkElement> const& children) {
         bool sameElement = old != ui.rememberedIds.end() &&
                            old->second.element.get() == child;
         if (!id.empty()) {
-            if (debug && sameElement && old->second.id != id)
+            if (sameElement && old->second.id != id)
                 Wh_Log(L"TZ ID container %p changed '%ls' -> '%ls'", key,
                        old->second.id.c_str(), id.c_str());
             remembered[key] = RememberedAppId{child, id, now};
         } else if (sameElement && now - old->second.seen < kEmptyAppIdGraceMs) {
-            if (debug)
-                Wh_Log(L"TZ ID container %p temporarily empty, keeping '%ls'",
-                       key, old->second.id.c_str());
+            Wh_Log(L"TZ ID container %p temporarily empty, keeping '%ls'",
+                   key, old->second.id.c_str());
             id = old->second.id;
             remembered[key] = old->second;
         }
@@ -1918,16 +1908,14 @@ void TrackAppIdentities(std::vector<FrameworkElement> const& children) {
     ui.rememberedIds.swap(remembered);
 
     if (nativeIds != ui.nativeIds) {
-        if (debug) {
-            for (size_t i = 0; i < ui.nativeIds.size(); ++i)
-                if (!ContainsId(nativeIds, ui.nativeIds[i]))
-                    Wh_Log(L"TZ ID gone: slot %zu '%ls'", i,
-                           ui.nativeIds[i].c_str());
-            for (size_t i = 0; i < nativeIds.size(); ++i)
-                if (!ContainsId(ui.nativeIds, nativeIds[i]))
-                    Wh_Log(L"TZ ID new: slot %zu '%ls'", i,
-                           nativeIds[i].c_str());
-        }
+        for (size_t i = 0; i < ui.nativeIds.size(); ++i)
+            if (!ContainsId(nativeIds, ui.nativeIds[i]))
+                Wh_Log(L"TZ ID gone: slot %zu '%ls'", i,
+                       ui.nativeIds[i].c_str());
+        for (size_t i = 0; i < nativeIds.size(); ++i)
+            if (!ContainsId(ui.nativeIds, nativeIds[i]))
+                Wh_Log(L"TZ ID new: slot %zu '%ls'", i,
+                       nativeIds[i].c_str());
         ui.nativeIds = nativeIds;
     }
 }
@@ -2153,10 +2141,6 @@ struct Placement {
 // performs an ABI identity lookup; it never traverses or mutates the tree.
 thread_local std::unordered_map<void*, Placement> g_arrangePlan;
 thread_local bool g_useArrangePlan = false;
-// Debug logging counters; never used to make layout decisions.
-thread_local unsigned g_traceApplied = 0;
-thread_local unsigned g_traceWidthRefreshes = 0;
-thread_local unsigned g_traceListRefreshes = 0;
 
 void PlanElement(FrameworkElement const& element, double x, double width = 0) {
     // Rect.X is the margin-box origin, not the rendered border-box origin.
@@ -2526,7 +2510,6 @@ HRESULT WINAPI ElementArrange_Hook(void* self, winrt::Windows::Foundation::Rect 
     }
     HRESULT result = ElementArrange_Original(self, rect);
     if (SUCCEEDED(result) && arrangedElement) {
-        ++g_traceApplied;
         static std::atomic<bool> loggedCustomArrange{false};
         if (!loggedCustomArrange.exchange(true))
             Wh_Log(L"Taskbar discovery: custom element arrangement applied");
@@ -2655,7 +2638,6 @@ HRESULT WINAPI ArrangeOverride_Hook(
         Wh_Log(L"Taskbar discovery: taskbar layout identity verified (HWND %p)", window);
 
     bool planReady = false;
-    g_traceApplied = 0;
     try {
         if (EnsureArrangeHook()) {
             planReady = BuildLayoutPlan(arrangeRepeater);
@@ -2706,7 +2688,6 @@ HRESULT WINAPI ArrangeOverride_Hook(
             try {
                 if (std::abs(element.ActualWidth() -
                              placement.measuredWidth) > 0.05) {
-                    ++g_traceWidthRefreshes;
                     RequestRefresh();
                 }
             } catch (...) {
@@ -2724,7 +2705,6 @@ HRESULT WINAPI ArrangeOverride_Hook(
                 for (auto const& child : RepeaterElements(arrangeRepeater)) {
                     if (IsTaskButton(child) && ElementWidth(child) > 0 &&
                         !g_arrangePlan.count(winrt::get_abi(child))) {
-                        ++g_traceListRefreshes;
                         RequestRefresh();
                         break;
                     }
@@ -2733,77 +2713,6 @@ HRESULT WINAPI ArrangeOverride_Hook(
         } catch (...) {
             logPostArrangeError(L"button list check", winrt::to_hresult());
         }
-    }
-    // Debug only. Sample after native Arrange: distinguish a rejected plan, a
-    // plan not used by the native Arrange calls, and an applied but displaced
-    // button. Never changes coordinates, refreshes, or saved preferences.
-    if (g_settings.debugLogging.load()) try {
-        auto& ui = Ui();
-        ULONGLONG now = GetTickCount64();
-        bool changed = ui.lastTracedPlan != int(planReady);
-        if (!ui.lastLayoutTrace || now - ui.lastLayoutTrace >= 1000 ||
-            (changed && now - ui.lastLayoutTrace >= 150)) {
-            ui.lastLayoutTrace = now;
-            ui.lastTracedPlan = int(planReady);
-            auto content = arrangeRepeater && arrangeRepeater.XamlRoot()
-                ? arrangeRepeater.XamlRoot().Content().try_as<FrameworkElement>()
-                : nullptr;
-            double repeaterX = -1, repeaterWidth = -1, contentWidth = -1;
-            double liveTray = -1, watchedTray = -1, widgetLeft = -1;
-            double liveTrayWidth = -1, nativeTrayX = -1;
-            std::wstring trayHostClass = L"none", trayHostName = L"none";
-            double plannedX = -1, actualX = -1, actualLocalX = -1;
-            unsigned rightCount = 0;
-            size_t reservations = 0;
-            bool firstRight = true;
-            if (content) {
-                contentWidth = content.ActualWidth();
-                repeaterX = ElementX(arrangeRepeater, content);
-                repeaterWidth = arrangeRepeater.ActualWidth();
-                // Avoid calling TrayEdgeForContent: it mutates the normal
-                // locator cache. Read only the already-observed weak target.
-                auto tray = g_traySearch.find(window);
-                if (tray != g_traySearch.end()) {
-                    if (auto element = tray->second.element.get()) {
-                        liveTray = ElementX(element, content);
-                        liveTrayWidth = element.ActualWidth();
-                        if (auto host = TrayHostInRepeater(element, arrangeRepeater)) {
-                            trayHostClass = winrt::get_class_name(host).c_str();
-                            trayHostName = host.Name().c_str();
-                        }
-                    }
-                }
-                nativeTrayX = NativeTrayEdge(content);
-                auto watch = g_boundaryWatches.find(window);
-                if (watch != g_boundaryWatches.end()) {
-                    watchedTray = watch->second.trayX;
-                    reservations = watch->second.spans.size();
-                    if (reservations) widgetLeft = watch->second.spans.front().left;
-                }
-                for (auto const& child : RepeaterElements(arrangeRepeater)) {
-                    if (!IsTaskButton(child) || ButtonIsLeftSide(child)) continue;
-                    ++rightCount;
-                    if (!firstRight) continue;
-                    firstRight = false;
-                    auto planned = g_arrangePlan.find(winrt::get_abi(child));
-                    if (planned != g_arrangePlan.end()) plannedX = planned->second.x;
-                    actualX = ElementX(child, content);
-                    actualLocalX = child.ActualOffset().x;
-                }
-            }
-            Wh_Log(L"TZ TRACE hwnd=%p plan=%d valid=%d hr=0x%08X applied=%u placements=%zu right=%u content=%.1f repeaterX=%.1f repeaterWidth=%.1f trayLive=%.1f trayWidth=%.1f trayNative=%.1f trayHost=%ls trayHostName=%ls trayWatch=%.1f reserved=%zu widgetLeft=%.1f rightBound=%.1f rightWidth=%.1f plannedLocal=%.1f actualLocal=%.1f actualX=%.1f widthRefresh=%u listRefresh=%u",
-                window, int(planReady), int(ui.layoutValid),
-                static_cast<unsigned>(result), g_traceApplied, g_arrangePlan.size(),
-                rightCount, contentWidth, repeaterX, repeaterWidth, liveTray,
-                liveTrayWidth, nativeTrayX, trayHostClass.c_str(), trayHostName.c_str(),
-                watchedTray, reservations, widgetLeft, ui.lastRightBound,
-                ui.lastRightGroupWidth, plannedX, actualLocalX, actualX,
-                g_traceWidthRefreshes, g_traceListRefreshes);
-            g_traceWidthRefreshes = 0;
-            g_traceListRefreshes = 0;
-        }
-    } catch (...) {
-        LogDiscoveryFailure(11, L"layout trace unavailable", window);
     }
     return result;
 }
