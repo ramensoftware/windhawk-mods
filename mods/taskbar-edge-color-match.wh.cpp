@@ -2,7 +2,7 @@
 // @id              taskbar-edge-color-match
 // @name            Taskbar Edge Color Match
 // @description     Standalone mod that matches the Windows 11 taskbar color to the edge strip, majority screen color, or mixed mode, with true transparency on desktop, rounded corners, and top-to-bottom fade animation.
-// @version         2.5.68
+// @version         2.5.69
 // @author          Nitin Patel
 // @github          https://github.com/nitinp94
 // @include         explorer.exe
@@ -629,24 +629,25 @@ static HMODULE GetSystemTrayModuleHandle() {
 
 static bool HookTaskbarViewMeasureOverride(HMODULE mod) {
     if (!mod) return false;
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
          reinterpret_cast<void**>(&TaskbarFrame_MeasureOverride_Original),
          reinterpret_cast<void*>(TaskbarFrame_MeasureOverride_Hook),
          true},
     };
-    return WindhawkUtils::HookSymbols(mod, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(mod, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks));
 }
 
 static bool HookSystemTrayMeasureOverride(HMODULE mod) {
     if (!mod) return false;
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::SystemTrayFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
          reinterpret_cast<void**>(&SystemTrayFrame_MeasureOverride_Original),
          reinterpret_cast<void*>(SystemTrayFrame_MeasureOverride_Hook),
          true},
     };
-    return WindhawkUtils::HookSymbols(mod, hooks, ARRAYSIZE(hooks));
+    return WindhawkUtils::HookSymbols(mod, systemTrayDllHooks, ARRAYSIZE(systemTrayDllHooks));
 }
 
 static decltype(&LoadLibraryExW) LoadLibraryExW_Original = nullptr;
@@ -697,10 +698,10 @@ bool HookTaskbarDllSymbols() {
 
     bool anyHooked = false;
     for (const auto& e : entries) {
-        WindhawkUtils::SYMBOL_HOOK singleHook[1] = {
+        WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[1] = {
             {{e.symbol}, e.target},
         };
-        if (WindhawkUtils::HookSymbols(module, singleHook, 1)) {
+        if (WindhawkUtils::HookSymbols(module, taskbarDllHooks, 1)) {
             anyHooked = true;
         }
     }
@@ -2496,7 +2497,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_Log(L"Taskbar Edge Color Match v2.5.68 initialized");
+    Wh_Log(L"Taskbar Edge Color Match v2.5.69 initialized");
     return TRUE;
 }
 
