@@ -4,7 +4,7 @@
 // @name:zh-CN      锁屏闪烁标语
 // @description     Minecraft-style animated splash texts below the lock screen date.
 // @description:zh-CN 在锁屏日期下方显示 Minecraft 风格的动态标语。
-// @version         0.4.5
+// @version         0.4.6
 // @author          4tubborn
 // @github          https://github.com/4tubborn
 // @license         GPL-3.0-or-later
@@ -177,12 +177,7 @@ Licensed under GPL-3.0-or-later.
   - "Portable executable!"
   - "This program cannot be run in DOS mode."
   - "MZ!"
-  - "Your account has been suspended."
-  - "Your session has expired."
-  - "Your license has expired."
-  - "Access denied."
   - "Contact your system administrator."
-  - "This app can't run on your PC"
   - "0x8000FFFF"
   - "New Modern UI (New)"
   - "New Modern UI (Classic)"
@@ -291,7 +286,6 @@ struct FileStamp {
 struct FileCache {
     uint64_t pathRevision = 0;
     std::optional<FileStamp> stamp;
-    std::optional<uint64_t> contentHash;
 };
 
 static std::vector<std::wstring> ParseFileTexts(std::string const& bytes) {
@@ -318,7 +312,6 @@ static std::optional<std::vector<std::wstring>> ReadFileTexts(
     std::wstring const& path, FileCache& cache) {
     auto failed = [&cache] {
         cache.stamp.reset();
-        cache.contentHash.reset();
         return std::vector<std::wstring>{};
     };
     if (path.empty()) return failed();
@@ -346,7 +339,7 @@ static std::optional<std::vector<std::wstring>> ReadFileTexts(
         current.written = basic.LastWriteTime.QuadPart;
         current.changed = basic.ChangeTime.QuadPart;
         stamp = current;
-        if (cache.stamp == stamp && cache.contentHash) return std::nullopt;
+        if (cache.stamp == stamp) return std::nullopt;
     }
 
     std::string bytes(static_cast<size_t>(size.QuadPart), '\0');
@@ -357,14 +350,9 @@ static std::optional<std::vector<std::wstring>> ReadFileTexts(
         return failed();
     }
 
-    uint64_t hash = 14695981039346656037ull; // FNV-1a
-    for (unsigned char byte : bytes) {
-        hash = (hash ^ byte) * 1099511628211ull;
-    }
+    auto texts = ParseFileTexts(bytes);
     cache.stamp = stamp;
-    if (cache.contentHash == hash) return std::nullopt;
-    cache.contentHash = hash;
-    return ParseFileTexts(bytes);
+    return texts;
 }
 
 static void LoadSettings() {
@@ -664,7 +652,6 @@ static void RefreshOnShow() {
     LoadSettings();
     g_refresh = true;
     SetEvent(g_reloadFile);
-    UpdateVisibleSplash();
 }
 
 static void StartObserving() {
