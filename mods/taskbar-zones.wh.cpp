@@ -120,10 +120,10 @@ Licensed under **GPL-3.0**. Full source attribution and copyright notices are re
   $description: Space between right-side apps and the notification area or a reserved widget. Negative values are treated as 0.
 - leftZoneIconSpacing: 0
   $name: Left zone icon spacing adjustment
-  $description: Extra space between app icons on the left, in pixels at 100% scaling. 0 keeps the Windows size. Negative values make the buttons, and their clickable areas, narrower. The reduction stops before it would cut the icon (about -8 with default icons) and does not apply to buttons with labels. Accepted range: -24 to 48.
+  $description: Extra space between app icons on the left, in pixels at 100% scaling. 0 keeps the Windows size. Negative values make the buttons, and their clickable areas, narrower. The reduction stops before it would cut the icon (about -8 with default icons) and does not apply to buttons with labels. Accepted range is -24 to 48.
 - rightZoneIconSpacing: 0
   $name: Right zone icon spacing adjustment
-  $description: Same as above, for app icons on the right. Accepted range: -24 to 48.
+  $description: Same as above, for app icons on the right. Accepted range is -24 to 48.
 - sectionDragging: true
   $name: Enable dragging between zones
   $description: Drag an app to the other side of the gap, or reorder within a side. Disable to keep native Windows dragging.
