@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Highlight the taskbar icons and window previews of the apps you used last
-// @version         0.12.2
+// @version         0.12.3
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -71,12 +71,13 @@ the active window marked? Use the much lighter
 
 ## Settings
 
-- **Exclude list**: apps never highlighted, on icons or previews.
-- **Taskbar icons**: how many apps, decay, minimum focus time and when to
-  skip it, style, color (system accent or your own), intensity per rank,
-  side bar size, fill, accent border width.
+- **Taskbar** (first four): how many apps, decay, minimum focus time,
+  coming back to an app.
+- **Taskbar icons**: style, color (system accent or your own), intensity per
+  rank, side bar size, fill, accent border width.
 - **Thumbnail previews**: on/off, how many windows, their own decay and
   minimum focus time, single-window previews, styles, intensity per rank.
+- **Exclude list** (last): apps never highlighted, on icons or previews.
 
 The exclude list takes process names, paths or app IDs. Two buttons of one
 program (Total Commander and its Lister, for example) have different app
@@ -93,6 +94,10 @@ IDs; with the mod log on, each button's ID is shown as
 - **SOLIDWORKS** and other apps that show each open document as its own
   preview card manage those previews themselves, so their previews are not
   marked. Their taskbar icon is ranked normally.
+- "Use" is keyboard or mouse input anywhere while the app is in front.
+  Watching a long video or reading without touching anything is not use,
+  so such an app drops out after the decay time; mouse movement on another
+  monitor still counts for the app in front.
 - Enabled while Explorer is already running, the ranks appear after the
   first taskbar button changes (hover or a window switch).
 
@@ -110,55 +115,39 @@ IDs; with the mod log on, each button's ID is shown as
 
 // ==WindhawkModSettings==
 /*
-- excludedPrograms: [""]
-  $name: Exclude list
+- highlightCount: 3
+  $name: "Taskbar: number of highlighted apps"
+  $description: How many recently used apps to highlight on the taskbar (1–6 recommended)
+- decayMinutes: 30
+  $name: "Taskbar: decay time (minutes)"
   $description: >-
-    Apps that should never be highlighted (icons or previews). Entries can be
-    process names, paths or application IDs (Explorer's AppId of a taskbar
-    button is shown in the mod log as "Button identity: ... appId=", which
-    also tells apart two buttons of one exe), for example:
+    An app drops out this long after you last used it (keyboard or mouse
+    input while it was in front), so the app you work in stays highlighted.
+    Window previews have their own decay under Thumbnail previews.
+- minFocusSeconds: 8
+  $name: "Taskbar: minimum focus time (seconds)"
+  $description: >-
+    An app counts as used only after it stays in front this long, so passing
+    through it with Alt+Tab does not count. Window previews have their own
+    minimum under Thumbnail previews.
+- promoteMode: immediateTracked
+  $name: "Taskbar: coming back to an app"
+  $description: >-
+    Whether an app you switch back to becomes rank 1 at once or waits the
+    minimum focus time again.
 
-    mspaint.exe
+    At once if still in the list (default): at once when you used the app
+    within the decay time, even if it is not highlighted right now.
 
-    C:\Windows\System32\notepad.exe
+    At once only if highlighted: at once only when the app is highlighted
+    right now; others wait.
 
-    Microsoft.WindowsCalculator_8wekyb3d8bbwe!App
+    Always wait: every switch waits the minimum focus time.
+  $options:
+  - immediateTracked: At once if still in the list (default)
+  - immediateTopN: At once only if highlighted
+  - alwaysWait: Always wait
 - icons:
-    - highlightCount: 3
-      $name: Number of highlighted apps
-      $description: How many recent apps to highlight on the taskbar (1–6 recommended)
-    - decayMinutes: 30
-      $name: Decay time (minutes)
-      $description: >-
-        Time since you last used an app (keyboard or mouse input while it was
-        in front) before it drops out of the taskbar highlight list. The app
-        you are working in stays highlighted. (Preview windows use a separate
-        decay under Thumbnail previews.)
-    - minFocusSeconds: 8
-      $name: Minimum focus time (seconds)
-      $description: >-
-        Only count an app as recent if it stays focused at least this long.
-        Filters Alt+Tab noise. (Preview windows use a separate timer under
-        Thumbnail previews.)
-        See “When to skip min-focus” for re-focus of apps already in the list.
-    - promoteMode: immediateTracked
-      $name: When to skip min-focus
-      $description: >-
-        Controls instant promotion when you re-focus an app (confirmed apps still
-        become rank 1 once promoted — this only skips the wait timer).
-
-        Immediate if in recency map (default): an app whose last confirm is still
-        inside the decay window promotes immediately, even if it is not currently
-        highlighted. A confirm past that window waits again.
-
-        Immediate only if highlighted: instant only when the app is already in the
-        top-N highlighted set; rank 4+ and new apps wait the full min-focus time.
-
-        Always wait: every app focus (including re-focus) waits min-focus seconds.
-      $options:
-      - immediateTracked: Immediate if confirm is still inside decay (default)
-      - immediateTopN: Immediate only if already highlighted (top N)
-      - alwaysWait: Always wait min-focus time
     - glowStyle: leftBar
       $name: Highlight style
       $description: >-
@@ -216,8 +205,8 @@ IDs; with the mod log on, each button's ID is shown as
       $name: Highlight recent windows
       $description: >-
         When hovering a multi-window taskbar icon, rank that flyout’s thumbnails
-        by window recency and mark the top N. Single-window flyouts: see
-        "Also mark single-window previews".
+        by when you last used them and mark the top N. Single-window flyouts:
+        see "Also mark single-window previews".
     - highlightCount: 3
       $name: Number of highlighted windows
       $description: >-
@@ -228,19 +217,19 @@ IDs; with the mod log on, each button's ID is shown as
     - decayMinutes: 15
       $name: Decay time (minutes)
       $description: >-
-        Drop a window from preview recency this long after you last used it
-        (0 = never). Separate from app ranking decay.
+        A window's preview drops out this long after you last used it
+        (0 = never). Separate from the taskbar's decay time.
     - minFocusSeconds: 1
       $name: Minimum focus time (seconds)
       $description: >-
-        How long a window must stay focused before it enters that flyout’s
-        recency list. Separate from app ranking min focus (0 = immediate).
-        Clicking a thumbnail counts like any other focus.
+        How long a window must stay in front before its preview is ranked
+        (0 = at once). Separate from the taskbar's minimum focus time.
+        Clicking a thumbnail counts like any other switch.
     - singleWindow: false
       $name: Also mark single-window previews
       $description: >-
         Mark the preview of an app with only one window too, as rank 1 while
-        that window is recent (Preview minimum focus / Decay below), the same
+        that window is recent (the preview minimum focus and decay above), the same
         way the latest window of a multi-window flyout is marked. For a single
         window the mark therefore means "used within the preview decay";
         lower the decay to tighten it.
@@ -253,8 +242,8 @@ IDs; with the mod log on, each button's ID is shown as
         card. Whole plate with accent = tinted card with an accent border (the
         look of Taskbar Active Window Highlight). Title = a tinted plate over
         the title row. Title with accent = the same with an accent border.
-        Bar under title = thin line under the title (thickness follows Icons →
-        Side bar thickness). The plates follow the card's rounded corners and stay
+        Bar under title = thin line under the title (thickness follows Taskbar
+        icons → Side bar thickness). The plates follow the card's rounded corners and stay
         visible on hover.
       $options:
       - plate: Whole plate
@@ -295,9 +284,22 @@ IDs; with the mod log on, each button's ID is shown as
         0–100. Strength of the Whole plate and Title tint (half of it for the
         "with accent" styles, and for ranks 2+ when rank 1 uses one, so no
         lower rank is tinted more than rank 1). Bar under title uses the full
-        accent and ignores this. Independent of Icons → Fill opacity. Per-rank intensity
+        accent and ignores this. Independent of Taskbar icons → Fill opacity. Per-rank intensity
         still scales the result.
   $name: Thumbnail previews
+- excludedPrograms: [""]
+  $name: Exclude list
+  $description: >-
+    Apps that should never be highlighted (icons or previews). Entries can be
+    process names, paths or application IDs (Explorer's AppId of a taskbar
+    button is shown in the mod log as "Button identity: ... appId=", which
+    also tells apart two buttons of one exe), for example:
+
+    mspaint.exe
+
+    C:\Windows\System32\notepad.exe
+
+    Microsoft.WindowsCalculator_8wekyb3d8bbwe!App
 */
 // ==/WindhawkModSettings==
 
@@ -344,22 +346,8 @@ IDs; with the mod log on, each button's ID is shown as
 
 using namespace winrt::Windows::UI::Xaml;
 
-// Public IVirtualDesktopManager (Win10+). Defined here so we do not depend on
-// a particular SDK header / uuid.lib export of the CLSID.
-#ifndef __IVirtualDesktopManager_INTERFACE_DEFINED__
-#define __IVirtualDesktopManager_INTERFACE_DEFINED__
-MIDL_INTERFACE("a5cd92ff-29be-454c-8d04-d82879fb3f1b")
-IVirtualDesktopManager : public IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE IsWindowOnCurrentVirtualDesktop(
-        HWND topLevelWindow,
-        BOOL* onCurrentDesktop) = 0;
-    virtual HRESULT STDMETHODCALLTYPE GetWindowDesktopId(HWND topLevelWindow,
-                                                         GUID* desktopId) = 0;
-    virtual HRESULT STDMETHODCALLTYPE MoveWindowToDesktop(HWND topLevelWindow,
-                                                          REFGUID desktopId) = 0;
-};
-#endif
-
+// IVirtualDesktopManager comes from <shobjidl.h>. The CLSID is spelled out
+// so the build does not depend on a uuid library exporting it.
 // AA509086-5CA9-4C25-8F95-589D3C07B48A
 static const CLSID kClsidVirtualDesktopManager = {
     0xaa509086,
@@ -380,8 +368,7 @@ enum class GlowColorMode {
     Custom,
 };
 
-// 0.12.1: Frame / Full became Plate with accent / Plate (flush with the
-// native plate); the setting ids `frame` / `full` are kept.
+// Setting ids `frame` / `full` are older names of Plate with accent / Plate.
 enum class GlowStyle {
     PlateAccent,  // id `frame`: native plate, half fill, accent border
     Plate,        // id `full`: native plate, full Fill opacity
@@ -417,7 +404,7 @@ enum class PreviewStyle {
     Plate,      // tint whole preview card (hover-like plate)
     TitleBar,   // thin bar under the title, above the thumbnail image
     Outline,    // plate plus an accent border (card overlay)
-    TitleOutline,  // title plate plus an accent border (0.12.1)
+    TitleOutline,  // title plate plus an accent border
     None,       // not marked (ranks 2+ only)
 };
 
@@ -501,8 +488,7 @@ struct Settings {
     int previewIntensity[3] = {100, 70, 45};
     int previewMinFocusSeconds = 1;
     int previewDecayMinutes = 15;
-    // Rank 1 and ranks 2+ are styled separately (0.11.16; replaced the
-    // fixed "hybrid" option: rank 1 plate, ranks 2+ title tint = defaults).
+    // Rank 1 and ranks 2+ are styled separately.
     PreviewStyle previewTopStyle = PreviewStyle::Plate;
     PreviewStyle previewRestStyle = PreviewStyle::TitleBg;
     int previewOutlineThickness = 2;
@@ -619,8 +605,8 @@ struct HwndHash {
 
 // Explorer's AppId per taskbar window, from the button captures (UI
 // thread); read by the focus worker to key app recency. Upper case. Stored
-// with the window's PID so a recycled handle does not inherit an AppId
-// (Fable review 2.4). Pruned of dead windows when it grows, and on
+// with the window's PID so a recycled handle does not inherit an AppId.
+// Pruned of dead windows when it grows, and on
 // HSHELL_WINDOWDESTROYED.
 struct WindowAppIdEntry {
     std::wstring appIdUpper;
@@ -692,8 +678,8 @@ struct GuidEqual {
 };
 
 // App + window recency for one virtual desktop (session-wide, not per-monitor).
-// App-level (min-focus) confirmation of one window: the recency record
-// (Fable review 4.3, 0.11.46). The app is not stored with it: each rank
+// App-level (min-focus) confirmation of one window: the recency record.
+// The app is not stored with it: each rank
 // recompute looks the window up in Explorer's window -> AppId map, so a
 // window no captured button lists yet is simply not ranked yet (no
 // provisional keys), and a window whose AppId changes follows it. The same
@@ -726,49 +712,6 @@ struct DesktopRecencyState {
 
 std::mutex g_stateMutex;
 
-// Log lines produced while g_stateMutex is held are queued per thread and
-// written once the outermost DeferredLogScope ends, prefixed with the
-// function that produced them (Wh_Log's own prefix shows the destructor). Declare the scope before
-// the lock so it is destroyed after it: Wh_Log is OutputDebugString plus
-// file I/O, and the UI thread waits on this lock. Without a scope, logs
-// directly.
-thread_local std::vector<std::wstring> t_deferredLogs;
-thread_local int t_deferredLogDepth = 0;
-
-struct DeferredLogScope {
-    DeferredLogScope() { ++t_deferredLogDepth; }
-    ~DeferredLogScope() {
-        if (--t_deferredLogDepth != 0 || t_deferredLogs.empty()) {
-            return;
-        }
-        std::vector<std::wstring> lines;
-        lines.swap(t_deferredLogs);
-        for (const auto& line : lines) {
-            Wh_Log(L"%s", line.c_str());
-        }
-    }
-    DeferredLogScope(const DeferredLogScope&) = delete;
-    DeferredLogScope& operator=(const DeferredLogScope&) = delete;
-};
-
-#define LOG_DEFERRED(...)                                              \
-    do {                                                               \
-        if (t_deferredLogDepth == 0) {                                 \
-            Wh_Log(__VA_ARGS__);                                       \
-        } else {                                                       \
-            wchar_t deferredLogBuf_[1024];                             \
-            const int deferredLogPre_ = _snwprintf_s(                  \
-                deferredLogBuf_, _countof(deferredLogBuf_), _TRUNCATE, \
-                L"(%S) ", __func__);                                   \
-            if (deferredLogPre_ > 0) {                                 \
-                _snwprintf_s(deferredLogBuf_ + deferredLogPre_,        \
-                             _countof(deferredLogBuf_) -               \
-                                 deferredLogPre_,                      \
-                             _TRUNCATE, __VA_ARGS__);                  \
-            }                                                          \
-            t_deferredLogs.emplace_back(deferredLogBuf_);              \
-        }                                                              \
-    } while (0)
 std::unordered_map<GUID, DesktopRecencyState, GuidHash, GuidEqual> g_desktopMaps;
 GUID g_currentDesktopId{};
 bool g_haveCurrentDesktop = false;
@@ -955,7 +898,6 @@ bool RememberUiDispatcher(FrameworkElement el) {
         if (!dispatcher || !dispatcher.HasThreadAccess()) {
             return false;
         }
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_dispatchersMutex);
         if (!g_uiDispatchers) {
             return false;
@@ -972,7 +914,7 @@ bool RememberUiDispatcher(FrameworkElement el) {
                              GetCurrentProcess(), &thread, SYNCHRONIZE,
                              FALSE, 0)) {
             const DWORD error = GetLastError();
-            LOG_DEFERRED(L"Cannot capture UI thread: %u", error);
+            Wh_Log(L"Cannot capture UI thread: %u", error);
             return false;
         }
         winrt::handle ownedThread{thread};
@@ -1011,7 +953,7 @@ constexpr UINT kAccentRefreshDelayMs = 250;
 // Change notification on Explorer's VirtualDesktops registry key (public
 // RegNotifyChangeKeyValue). Windows writes CurrentVirtualDesktop there on a
 // switch, sometimes after the foreground change the switch causes (clicking
-// a flashing button of another desktop, 2026-11-18), so the write itself is
+// a flashing button of another desktop), so the write itself is
 // the signal. Hook thread only. When the watch could not be set up, every
 // foreground change re-reads the value instead.
 bool g_desktopKeyWatchActive = false;
@@ -1027,19 +969,18 @@ constexpr ULONGLONG kTransientRetryPollMs = 200;
 
 // All glow layers live on our overlay (never BackgroundElement — hover/active
 // storyboards own that and constantly wipe our styles). The mod writes no
-// property of a native element (the icon size boost went in 0.11.38).
+// property of a native element.
 constexpr PCWSTR kGlowElementName = L"WhRecentFocusGlow";
-// The side bar. Until 0.12.1 a second, 2px larger rectangle at low alpha
-// (L1) acted as a halo; XAML cannot blur it, so it showed as a hard rim.
+// The side bar.
 constexpr PCWSTR kGlowBarName = L"WhRecentFocusGlowBar";
 // Plate / Plate with accent: our copy of BackgroundElement, and of the
-// MultiWindowElement sliver on a multi-window button (0.12.1).
+// MultiWindowElement sliver on a multi-window button.
 constexpr PCWSTR kGlowContourName = L"WhRecentFocusContour";
 constexpr PCWSTR kGlowStackName = L"WhRecentFocusContourStack";
 
 // Intensity for a 0-based rank: the three configured values, then each
 // further rank fades by a quarter (floor 10 %, never above rank 3) so ranks
-// 4+ stay distinguishable (0.11.38; they used to repeat rank 3).
+// 4+ stay distinguishable.
 int RankIntensity(const int (&perRank)[3], int rankIdx) {
     if (rankIdx < 3) {
         return perRank[rankIdx < 0 ? 0 : rankIdx];
@@ -1056,10 +997,7 @@ constexpr PCWSTR kBackgroundElementName = L"BackgroundElement";
 constexpr PCWSTR kThumbGlowElementName = L"WhRecentFocusThumbGlow";
 // Card overlay Border beside BackgroundBorder (14-preview-overlay).
 constexpr wchar_t kThumbCardOverlayName[] = L"WhRecentFocusThumbCard";
-constexpr PCWSTR kThumbGlowLayerNames[] = {
-    L"WhRecentFocusThumbGlowL0",
-    L"WhRecentFocusThumbGlowL1",
-};
+constexpr PCWSTR kThumbGlowPlateName = L"WhRecentFocusThumbGlowL0";
 // Title-area overlays (separate so plate host can sit full-card).
 constexpr PCWSTR kThumbTitleBgName = L"WhRecentFocusThumbTitleBg";
 constexpr PCWSTR kThumbTitleBarName = L"WhRecentFocusThumbTitleBar";
@@ -1104,11 +1042,10 @@ IVirtualDesktopManager* EnsureVdm() {
     // CoCreate on the STA that will use it. UI threads must not create or
     // call this pointer — they read the cached desktop GUID instead.
     // Off that thread: no pointer at all (an STA pointer must not cross
-    // apartments; Neon review 1.6). No caller does this today.
+    // apartments). No caller does this today.
     if (!OnHookThread()) {
         return nullptr;
     }
-    DeferredLogScope logScope;  // logs after unlock
     std::lock_guard<std::mutex> lock(g_vdmMutex);
     if (g_vdm) {
         return g_vdm;
@@ -1117,7 +1054,7 @@ IVirtualDesktopManager* EnsureVdm() {
     HRESULT hr = CoCreateInstance(kClsidVirtualDesktopManager, nullptr,
                                   CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&vdm));
     if (FAILED(hr) || !vdm) {
-        LOG_DEFERRED(L"IVirtualDesktopManager create failed %08X", hr);
+        Wh_Log(L"IVirtualDesktopManager create failed %08X", hr);
         return nullptr;
     }
     g_vdm = vdm;
@@ -1192,7 +1129,7 @@ GUID ResolveCurrentDesktopId() {
     return g_currentDesktopId;
 }
 
-// Desktop to credit a confirmed focus to (Fable review 2.3). The pending
+// Desktop to credit a confirmed focus to. The pending
 // record keeps the registry's current desktop from when focus arrived, and
 // the registry lags a switch by a moment. At confirm (after min-focus) the
 // registry has caught up: if the window is on the current desktop (public
@@ -1218,7 +1155,6 @@ GUID ConfirmDesktopId(const GUID& pendingDesktop, HWND hwnd) {
 // read (i.e. a real switch, not startup). Safe to call without g_stateMutex.
 bool RefreshCurrentDesktopId() {
     const GUID id = ResolveCurrentDesktopId();
-    DeferredLogScope logScope;  // logs after unlock
     std::lock_guard<std::mutex> lock(g_stateMutex);
     const bool first = !g_haveCurrentDesktop;
     const bool changed = !InlineIsEqualGUID(id, g_currentDesktopId);
@@ -1226,7 +1162,7 @@ bool RefreshCurrentDesktopId() {
     g_haveCurrentDesktop = true;
     g_desktopMaps[id];
     if (changed) {
-        LOG_DEFERRED(L"Current virtual desktop: %s (%zu tracked)",
+        Wh_Log(L"Current virtual desktop: %s (%zu tracked)",
                GuidToLogString(id).c_str(), g_desktopMaps.size());
     }
     return !first && changed;
@@ -1270,13 +1206,12 @@ void OnVirtualDesktopSwitched(PCWSTR reason) {
     RefreshCurrentDesktopId();
     bool droppedPending = false;
     {
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_stateMutex);
         droppedPending = DropPendingIfWrongDesktopLocked();
         // Do not recompute here: grace was just cleared, so every path would
         // fail AppAppearsOnTaskbar. ApplyAllHighlights snapshots IsRunning
         // on the UI thread, then recomputes.
-        LOG_DEFERRED(L"Desktop switch (%s): current %s droppedPending=%d",
+        Wh_Log(L"Desktop switch (%s): current %s droppedPending=%d",
                reason, GuidToLogString(g_currentDesktopId).c_str(),
                droppedPending ? 1 : 0);
     }
@@ -1501,7 +1436,7 @@ DWORD PidFromHwnd(HWND hwnd) {
 
 // False when the handle was recycled into a different process, or when no
 // PID was stored (the window was already gone when it was recorded):
-// unknown is not a match (Neon review 1.5).
+// unknown is not a match.
 bool HwndMatchesStoredPid(HWND hwnd, DWORD storedPid) {
     if (!hwnd || !storedPid || !IsWindow(hwnd)) {
         return false;
@@ -1581,12 +1516,12 @@ HWND NormalizeFocusHwnd(HWND hWnd) {
     }
     // Owned windows (dialogs such as Lister's Find box) have no taskbar
     // button of their own; Explorer reports their owner as the active item
-    // (shadow log 2026-11-15: #32770 owned by TLister). Credit the owner, or
+    // (a #32770 dialog owned by Lister). Credit the owner, or
     // a Lister dialog — no AUMID, so path-keyed — counted as Total Commander.
     // Same process only; WS_EX_APPWINDOW asks for its own button, keep it.
     // Climb GW_OWNER step by step and keep the highest *visible* owner:
     // GA_ROOTOWNER would end at a hidden application window (Delphi's
-    // TApplication above Lister's TSEARCHTEXT find box, 0.11.6 capture), and
+    // TApplication above Lister's TSEARCHTEXT find box), and
     // that hidden window has no button. Stop early at an owner that asks for
     // its own button (WS_EX_APPWINDOW).
     if (!(GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_APPWINDOW)) {
@@ -1645,7 +1580,7 @@ std::wstring GetWindowAppUserModelId(HWND hWnd) {
     return id;
 }
 
-// The window AUMID is used only for the exclude list since 0.11.33, and
+// The window AUMID is used only for the exclude list, and
 // SHGetPropertyStoreForWindow is cross-process: skip it when the list is
 // empty (the default).
 std::wstring ExclusionAumid(HWND hWnd) {
@@ -1764,16 +1699,15 @@ bool ShouldIgnoreHwnd(HWND hWnd) {
 
 bool IsShellHostFileName(const std::wstring& fileNameUpper) {
     // ShellExperienceHost: jump lists, Action Center, clock/calendar flyout
-    // (2026-11-15: "Jump List for Total Commander" cancelled TC's min-focus).
-    // StartMenuExperienceHost was misspelled before 0.11.5 and never matched.
+    // (a Total Commander jump list used to cancel its minimum focus).
     return fileNameUpper == L"EXPLORER.EXE" ||
            fileNameUpper == L"SEARCHHOST.EXE" ||
            fileNameUpper == L"STARTMENUEXPERIENCEHOST.EXE" ||
            fileNameUpper == L"SHELLEXPERIENCEHOST.EXE" ||
            fileNameUpper == L"SHELLHOST.EXE" ||
            fileNameUpper == L"TEXTINPUTHOST.EXE" ||
-           // Lock screen: shell UI, not an app (0.11.49 sleep capture: it
-           // was confirmed as focus on wake).
+           // Lock screen: shell UI, not an app (it was confirmed as focus
+           // on wake).
            fileNameUpper == L"LOCKAPP.EXE";
 }
 
@@ -1820,7 +1754,7 @@ std::wstring GetWindowTitle(HWND hWnd) {
 }
 
 // App key = APPID:<Explorer AppId> of the taskbar button that lists this
-// window (0.11.33; was the window AUMID or process path). A window that no
+// window. A window that no
 // captured button lists yet (just opened, or the mod just loaded and
 // Explorer has not reported its buttons) gets a per-window key WINDOW:<hwnd>
 // (noButton set). That key only identifies the pending focus; recency is
@@ -1950,7 +1884,7 @@ FrameworkElement FindDescendantByName(FrameworkElement element, PCWSTR name) {
 // Explorer AppId and still lists a live window of it. Ranks without one keep
 // their history but take no slot. observedRunning is the last UI IsRunning
 // snapshot; it can stay set for a button Explorer parked without a final
-// state update, so a live window is required too (Fable review 2.1).
+// state update, so a live window is required too.
 // Grace covers Alt-Tab flicker, not a heartbeat. No weak.get() here.
 bool AppAppearsOnTaskbar(const std::wstring& key) {
     const std::wstring wantAppId = AppIdFromAppKey(key);
@@ -2001,8 +1935,8 @@ void DeriveAppsFromWindowsLocked(DesktopRecencyState& desk,
         const std::wstring key =
             appId.empty() ? std::wstring{} : std::wstring(L"APPID:") + appId;
         if (key != w.key && !key.empty()) {
-            LOG_DEFERRED(L"Window %p (%s) belongs to %s", hwnd,
-                         w.displayName.c_str(), key.c_str());
+            Wh_Log(L"Window %p (%s) belongs to %s", hwnd,
+                   w.displayName.c_str(), key.c_str());
         }
         w.key = key;
         if (!key.empty()) {
@@ -2050,10 +1984,10 @@ void RecomputeRanksForDesktopLocked(DesktopRecencyState& desk) {
             // its Lister windows are both TOTALCMD64.EXE).
             const ULONGLONG idleTenths =
                 (now - info.lastConfirmedFocusTick) / 6000;
-            LOG_DEFERRED(L"Decayed: %s key=%s (last use %llu.%llu min ago)",
-                         info.displayName.c_str(), info.key.c_str(),
-                         static_cast<unsigned long long>(idleTenths / 10),
-                         static_cast<unsigned long long>(idleTenths % 10));
+            Wh_Log(L"Decayed: %s key=%s (last use %llu.%llu min ago)",
+                   info.displayName.c_str(), info.key.c_str(),
+                   static_cast<unsigned long long>(idleTenths / 10),
+                   static_cast<unsigned long long>(idleTenths % 10));
             it = desk.appFocusMap.erase(it);
             continue;
         }
@@ -2066,11 +2000,11 @@ void RecomputeRanksForDesktopLocked(DesktopRecencyState& desk) {
         if (hidden != info.hiddenNoButton) {
             info.hiddenNoButton = hidden;
             if (hidden) {
-                LOG_DEFERRED(L"Hidden (no running button): %s key=%s",
-                             info.displayName.c_str(), info.key.c_str());
+                Wh_Log(L"Hidden (no running button): %s key=%s",
+                       info.displayName.c_str(), info.key.c_str());
             } else {
-                LOG_DEFERRED(L"Shown again (running button): %s",
-                             info.displayName.c_str());
+                Wh_Log(L"Shown again (running button): %s",
+                       info.displayName.c_str());
             }
         }
         if (hidden) {
@@ -2193,9 +2127,9 @@ void StampWindowRecencyLocked(DesktopRecencyState& desk,
     auto it = desk.windowFocusMap.find(hwnd);
     if (it != desk.windowFocusMap.end() && it->second.pid != 0 &&
         it->second.pid != pid) {
-        LOG_DEFERRED(L"HWND recycled, dropping stale preview recency: hwnd=%p "
-                     L"oldPid=%u newPid=%u",
-                     hwnd, it->second.pid, pid);
+        Wh_Log(L"HWND recycled, dropping stale preview recency: hwnd=%p "
+               L"oldPid=%u newPid=%u",
+               hwnd, it->second.pid, pid);
         desk.windowFocusMap.erase(it);
     }
     WindowFocusInfo& winfo = desk.windowFocusMap[hwnd];
@@ -2331,11 +2265,10 @@ void RefreshCachedAccent() {
 }
 
 // Accent changes arrive as window messages on the focus worker's hidden
-// top-level window (0.12.2, Neon review 2.2.1). Before, a
-// UISettings::ColorValuesChanged handler ran on a WinRT thread-pool thread:
-// revoking it on unload does not wait for a call already running, which could
-// still be in the mod's code after Windhawk unloads it. Broadcasts never
-// reached the old HWND_MESSAGE window; the WS_POPUP window (0.11.0) gets them.
+// top-level window. Not UISettings::ColorValuesChanged: its handler runs on
+// a WinRT thread-pool thread, and revoking it on unload does not wait for a
+// call already running, which could still be in the mod's code after
+// Windhawk unloads it.
 bool AccentChangeMessage(UINT msg, LPARAM lParam) {
     if (msg == WM_DWMCOLORIZATIONCOLORCHANGED) {
         return true;
@@ -2425,9 +2358,7 @@ bool TaskListButton_IsRunning(FrameworkElement taskListButtonElement) {
 // IsRunning, plus a short grace so Alt-Tab flicker does not drop glows.
 // Running states read for the first time (new buttons) or again after a
 // desktop / lock switch reset them. Summed per UI thread and logged once by
-// the next full pass: a lock or unlock used to log one "Identity state"
-// line per button (about 20 per switch, capture
-// manual-20261125-211736-720767).
+// the next full pass instead of one "Identity state" line per button.
 struct RunningReread {
     unsigned running = 0;
     unsigned stopped = 0;
@@ -2443,7 +2374,6 @@ bool ButtonCountsAsRunning(FrameworkElement button) {
     void* id = InspectableIdentity(button);
     bool grace = false;
     {
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_buttonStateMutex);
         ButtonState* state = FindButtonStateLocked(button, false);
         if (!state) {
@@ -2454,7 +2384,7 @@ bool ButtonCountsAsRunning(FrameworkElement button) {
             e.runningUnknown = false;
             ++(running ? t_runningReread.running : t_runningReread.stopped);
         } else if (running != e.observedRunning) {
-            LOG_DEFERRED(L"Identity state: button=%p running=%d->%d hwnd=%p pid=%u appId=%s",
+            Wh_Log(L"Identity state: button=%p running=%d->%d hwnd=%p pid=%u appId=%s",
                    id, e.observedRunning, running, e.sampleHwnd, e.samplePid,
                    e.appIdUpper.c_str());
         }
@@ -2506,8 +2436,8 @@ bool IsWindowAutomationId(const std::wstring& id) {
 
 // Uncombined taskbar buttons (Never Combine / combine when full) carry their
 // window in AutomationProperties.AutomationId: "Window: 0x<hwnd hex>"; group
-// buttons carry "Appid: <AUMID>" (UWPSpy dump 2026-11-15, two VS Code
-// windows). Explorer's identifier, not a display name. Callers must still
+// buttons carry "Appid: <AUMID>". Explorer's identifier, not a display
+// name. Callers must still
 // check the HWND against the group's windows.
 HWND GetButtonAutomationWindow(FrameworkElement button) {
     if (!button) {
@@ -2541,7 +2471,7 @@ bool IdentityMatchesRank(const ButtonIdentity& ident,
                          const AppFocusInfo& info) {
     // Per-window slot: only the button that lists exactly this window (an
     // uncombined button lists just its own). No AppId match, or every
-    // button of the app would light up (Never Combine, 2026-11-15).
+    // button of the app would light up.
     if (info.perWindow) {
         if (!info.lastHwnd || !info.lastPid ||
             !HwndMatchesStoredPid(info.lastHwnd, info.lastPid)) {
@@ -2562,9 +2492,7 @@ bool IdentityMatchesRank(const ButtonIdentity& ident,
     }
     // Uncombined buttons (Never Combine) each stand for one window. An
     // app-level rank (window not confirmed on its own yet) lights only the
-    // button of the app's last focused window, not every window of the app
-    // (user report 2026-11-16: all Calculator buttons lit after switching
-    // to Never Combine).
+    // button of the app's last focused window, not every window of the app.
     if (ident.uncombined) {
         return info.lastHwnd && info.lastPid &&
                HwndMatchesStoredPid(info.lastHwnd, info.lastPid) &&
@@ -2662,7 +2590,7 @@ FrameworkElement FindRunningIndicator(FrameworkElement iconPanel) {
 
 // Native pill is a 2–4px strip. Taskbar Styler themes restyle RunningIndicator
 // into a full-cell acrylic hover plate that would cover a side bar sitting
-// under it (UWPSpy: 39×38 acrylic on PointerOver vs #00FFFFFF at rest).
+// under it.
 bool RunningIndicatorLooksLikeHoverPlate(FrameworkElement ri,
                                          FrameworkElement iconPanel) {
     if (!ri || !iconPanel) {
@@ -2717,8 +2645,7 @@ void EnsureGlowHostZOrder(Controls::Panel panel, UIElement host) {
             bool above = name == L"OverlayIcon" ||
                          name == L"MultiWindowElement" ||
                          name == L"ProgressIndicator";
-            // Every style sits behind the glyph (0.12.1: the frame, now
-            // Plate with accent, used to be drawn above it).
+            // Every style sits behind the glyph.
             if (name == L"Icon" || name == L"DefaultIcon")
                 above = true;
             if (running && !RunningIndicatorLooksLikeHoverPlate(fe, panelFe))
@@ -2911,7 +2838,7 @@ bool ReadNativeGlowShape(FrameworkElement element,
                        // fallback.
     }
 }
-// What the plates copy from Windows' button, read once per paint (0.12.1):
+// What the plates copy from Windows' button, read once per paint:
 // the plate (a Styler hover plate or BackgroundElement, else the content
 // box) and, on a multi-window button, the MultiWindowElement sliver. Also
 // the signature of all of it for the paint cache.
@@ -3022,9 +2949,7 @@ void PaintNativeContour(Controls::Grid host,
     NativeGlowShape const& shape = shapes.main;
 
     // Plate with accent: accent border (accent thickness) and half the fill,
-    // as the preview "with accent" styles. Until 0.12.1 Frame was a 230-alpha
-    // stroke of the side bar's thickness with no fill (read as a focus ring),
-    // and Full 60 % of Fill opacity (paler than Windows' own plates).
+    // as the preview "with accent" styles.
     const bool accent = style == GlowStyle::PlateAccent;
     auto strokeColor = color;
     strokeColor.A = 255;
@@ -3063,7 +2988,7 @@ void PaintNativeContour(Controls::Grid host,
         // also subtracts the size, so the desired size is 0 and the plate
         // never sizes the button. With plain margins a plate kept the old
         // BackgroundElement size and held its button big after a Taskbar
-        // Styler theme shrank the others (BottomDensy, 2026-11-21); the next
+        // Styler theme shrank the others; the next
         // repaint read the held size, so the plate cache kept it.
         b.Margin(ZeroDesiredMargin(w, h, dx, dy));
         b.CornerRadius({InsetGlowRadius(s.corners.TopLeft, 0, w, h),
@@ -3085,18 +3010,18 @@ void PaintNativeContour(Controls::Grid host,
         return b;
     };
 
-    // Flush with the native plate (0.12.1), so it reads as the button's own
-    // plate lit up. Until 0.12.1 Frame / Full sat at Size % (92) inside it.
+    // Flush with the native plate, so it reads as the button's own
+    // plate lit up.
     if (!paint(kGlowContourName, shape, std::nullopt))
         return;
 
-    // Multi-window button (0.12.1): Windows narrows BackgroundElement by a
+    // Multi-window button: Windows narrows BackgroundElement by a
     // right margin of 4 and draws MultiWindowElement (Border, Width 16, right-
     // aligned, above the background) so a sliver sticks out: "(O))". Our
     // plate copies only the background, which left a faint native ")" next to
     // a tinted "(O)". Copy the sliver as well, under our plate, clipped to the
     // part right of the background so the tint does not double where they
-    // overlap. UWPSpy dump: tests/uwspy/captures/multiwin-20261119-212700.
+    // overlap.
     bool stacked = false;
     if (shapes.hasStack) {
         NativeGlowShape const& stack = shapes.stack;
@@ -3202,8 +3127,7 @@ TaskbarEdge TaskbarEdgeFromAppBar() {
 }
 
 // Prefer OrientationStates. A leftover RunningIndicator VA=Bottom from the
-// previous edge must not win: we used to treat a left taskbar as Bottom and
-// paint full-cell underlines of rank-dependent length.
+// previous edge must not win (a left taskbar would get full-cell underlines).
 // Do not use "wider than tall ⇒ horizontal": a left-edge button is 48×32.
 TaskbarEdge DetectTaskbarEdge(FrameworkElement iconPanel) {
     bool verticalState = IsInVisualState(iconPanel, L"VerticalOrientation");
@@ -3488,7 +3412,6 @@ void RevokeIconPanelLayoutWatchesOnThisDispatcher() {
         }
     }
     if (!keep.empty()) {
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
         for (auto& [id, watch] : keep) {
             auto panelRef = watch.panel;
@@ -3501,7 +3424,7 @@ void RevokeIconPanelLayoutWatchesOnThisDispatcher() {
                         }
                     }
                 } catch (...) {
-                    LOG_DEFERRED(L"ERROR: SizeChanged revoke failed");
+                    Wh_Log(L"ERROR: SizeChanged revoke failed");
                 }
             }
         }
@@ -3730,9 +3653,8 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
         }
         {
             // Skip an unchanged repaint. Explorer re-runs the button's
-            // visual states on every title change (IrfanView paging images:
-            // 8-16 a second, capture manual-20261120-150148); until the
-            // plates had this cache each run repainted them. The plates also
+            // visual states on every title change (an image viewer paging
+            // images: 8-16 a second). The plates also
             // compare Windows' shapes, which a window-count or hover change
             // alters without changing the panel size.
             auto painted = GetCachedPaintState(button);
@@ -3788,7 +3710,7 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
 
         if (t <= 0.0) {
             // With the plate signature, or Plate styles at intensity 0 missed
-            // the cache on every UpdateVisualStates (Neon review 1.7.1).
+            // the cache on every UpdateVisualStates.
             SetCachedPaintState(button, rankOneBased, settings->generation,
                                 edge, boxWi, boxHi,
                                 plateStyle && plateShapes.ok
@@ -3852,7 +3774,7 @@ void PruneTrackedButtons_UIThread() {
 // AppAppearsOnTaskbar runs off this thread and must not weak.get().
 // Weak refs are resolved outside g_buttonStateMutex: resolving touches every
 // cached XAML object, and after an idle period (pages trimmed) that once held
-// the lock for 14 ms while the worker may need it (perf run 2026-11-17).
+// the lock for 14 ms while the worker may need it.
 void PruneDeadButtonStates_UIThread() {
     std::vector<std::pair<void*, winrt::weak_ref<FrameworkElement>>> entries;
     {
@@ -3931,8 +3853,8 @@ TryGetItemFromContainer_TaskListWindowViewModel_t
 // WindowsUdk.UI.Shell public interfaces: task groups and task items
 // ---------------------------------------------------------------------------
 // Layouts from windowsudk.winmd (C:\Windows\SystemApps\
-// MicrosoftWindows.UndockedDevKit_cw5n1h2txyewy, build 26100-era, read
-// 2026-11-15). Only the slots up to the last method we call are declared;
+// MicrosoftWindows.UndockedDevKit_cw5n1h2txyewy, build 26100-era). Only the
+// slots up to the last method we call are declared;
 // earlier slots are placeholders whose parameter types do not matter because
 // we never call them. A changed interface has a new IID, so QueryInterface
 // fails and callers fall back.
@@ -4117,7 +4039,7 @@ winrt::com_ptr<IUnknown> GetWindowsUdkTaskItemFromTaskListButton(
 // Returns the button's WindowsUdk TaskGroup with its own reference. The
 // capture flag is reset by a scope guard, so an exception cannot leave
 // ITaskGroup::IsRunning answering false for Explorer and other mods on this
-// thread (Neon review 1.3).
+// thread.
 winrt::com_ptr<IUnknown> GetWindowsUdkTaskGroupFromTaskListButton(
     UIElement element) {
     if (!TryGetItemFromContainer_TaskListGroupViewModel_Original ||
@@ -4148,8 +4070,8 @@ winrt::com_ptr<IUnknown> GetWindowsUdkTaskGroupFromTaskListButton(
     g_capturedTaskGroup = nullptr;
     // If the IsMultiWindow -> ITaskGroup::IsRunning path changes in
     // Explorer, no group is ever captured and a grouped app's second window
-    // is never ranked. Say so once (Fable review 3.1). Single misses are
-    // normal (some view models do not ask their group, 0.11.42 log), so only
+    // is never ranked. Say so once. Single misses are
+    // normal (some view models do not ask their group), so only
     // many misses with no capture at all count.
     static std::atomic<unsigned> captureHits{0}, captureMisses{0};
     static std::atomic<bool> loggedCaptureMiss{false};
@@ -4219,9 +4141,8 @@ ButtonCapture CaptureButton(FrameworkElement button) {
         // Uncombined button (Never combine / combine when full): it stands
         // for one window. Explorer marks it with AutomationId
         // "Window: 0x<hwnd>" (combined buttons: "Appid: …") and binds it to
-        // that window's own TaskItem, without a group view model (0.11.14
-        // diag: windowVM=1 groupVM=0, one window). Require both to agree.
-        // (0.11.11-0.11.13 wrongly required a group of 2+ windows here.)
+        // that window's own TaskItem, without a group view model. Require
+        // both to agree.
         bool uncombined = false;
         if (HWND idWindow = GetButtonAutomationWindow(button)) {
             if (ownWindow ? ownWindow == idWindow
@@ -4233,7 +4154,6 @@ ButtonCapture CaptureButton(FrameworkElement button) {
         }
         {
             bool changed = false;
-            DeferredLogScope logScope;  // logs after unlock
             std::lock_guard<std::mutex> lock(g_uncombinedMutex);
             if (uncombined) {
                 changed = g_uncombinedWindowsByThread[GetCurrentThreadId()]
@@ -4244,7 +4164,7 @@ ButtonCapture CaptureButton(FrameworkElement button) {
                               .erase(ownWindow) > 0;
             }
             if (changed) {
-                LOG_DEFERRED(L"Button windows: button=%p own=%p -> %s",
+                Wh_Log(L"Button windows: button=%p own=%p -> %s",
                        data.buttonId, ownWindow,
                        uncombined ? L"uncombined (own slot)" : L"combined");
             }
@@ -4284,8 +4204,7 @@ ButtonCapture CaptureButton(FrameworkElement button) {
 // Button identity = Explorer's AppId (the key Explorer groups taskbar
 // buttons by) plus the button's window set, read synchronously on the UI
 // thread from the button's public WindowsUdk task item / group (a few COM
-// calls, ~10 us). Replaces the 0.10.3-0.11.31 asynchronous resolver (worker
-// process-path/AUMID lookups with serials, deadlines and rechecks). A
+// calls, ~10 us). A
 // changed AppId or window set invalidates the cached paint rank; a button
 // Explorer recycles for another app simply reports the new AppId.
 std::wstring EnsureButtonIdentity(FrameworkElement button) {
@@ -4297,7 +4216,6 @@ std::wstring EnsureButtonIdentity(FrameworkElement button) {
         return {};
     }
     ButtonCapture data = CaptureButton(button);
-    DeferredLogScope logScope;  // logs after unlock
     std::lock_guard<std::mutex> lock(g_buttonStateMutex);
     ButtonState* state = FindButtonStateLocked(button, true);
     if (!state) {
@@ -4312,7 +4230,7 @@ std::wstring EnsureButtonIdentity(FrameworkElement button) {
                         return a.hwnd == b.hwnd && a.pid == b.pid;
                     });
     if (e.appIdUpper != data.explorerAppId) {
-        LOG_DEFERRED(L"Button identity: button=%p appId=%s (was %s) windows=%zu "
+        Wh_Log(L"Button identity: button=%p appId=%s (was %s) windows=%zu "
                L"running=%d",
                id, data.explorerAppId.c_str(), e.appIdUpper.c_str(),
                data.windows.size(), data.running);
@@ -4419,11 +4337,10 @@ void ForEachLiveElementOnThisDispatcher(
 }
 
 // ItemsRepeater keeps recycled TaskListButtons parented, parked off-screen
-// (about -10000,-10000), with their last AutomationId / name (UWPSpy capture
-// uwspy-nevercombine). Their cached identity can still match a rank, so a
-// full rebind used to "bind" one rank to every parked copy. GetElementIndex
-// is -1 for an element the repeater does not currently show. No repeater
-// ancestor (unknown layout): treat as shown, as before.
+// (about -10000,-10000), with their last AutomationId / name. Their cached
+// identity can still match a rank and must not bind it. GetElementIndex is
+// -1 for an element the repeater does not currently show. No repeater
+// ancestor (unknown layout): treat as shown.
 bool IsRealizedTaskbarButton(FrameworkElement const& button) {
     try {
         DependencyObject child = button;
@@ -4444,9 +4361,9 @@ bool IsRealizedTaskbarButton(FrameworkElement const& button) {
 
 // Explorer reports a TaskListButton to the mod only when that button's
 // visual state changes, so after loading into a running Explorer most
-// buttons were unknown until hovered (TODO 2026-11-17). The first button
-// seen on a taskbar seeds every button its ItemsRepeater currently shows
-// (Fable review 3.2, option 1). Once per repeater; buttons realized later
+// buttons were unknown until hovered. The first button
+// seen on a taskbar seeds every button its ItemsRepeater currently shows.
+// Once per repeater; buttons realized later
 // report themselves. Returns true if new buttons were tracked.
 winrt::Microsoft::UI::Xaml::Controls::ItemsRepeater ButtonRepeater(
     FrameworkElement const& button) {
@@ -4491,11 +4408,16 @@ int SeedRepeater_UIThread(
     return tracked;
 }
 
+// Per UI thread. Heap-owning thread_locals are emptied by the unload
+// cleanup on their thread (ReleaseUiThreadLocals_UIThread): their
+// destructors would run only at thread exit, after the module is gone.
+thread_local std::unordered_set<void*> t_seededRepeaters;
+thread_local std::wstring t_lastLadderLog;
+
 bool SeedButtonsFromRepeater_UIThread(FrameworkElement const& button) {
-    static thread_local std::unordered_set<void*> seededRepeaters;
     auto repeater = ButtonRepeater(button);
     if (!repeater ||
-        !seededRepeaters.insert(InspectableIdentity(repeater)).second) {
+        !t_seededRepeaters.insert(InspectableIdentity(repeater)).second) {
         return false;
     }
     const int tracked = SeedRepeater_UIThread(repeater);
@@ -4575,14 +4497,14 @@ void ApplyAllHighlights_UIThread() {
                               }),
                live.end());
 
-    // Snapshot IsRunning before eligibility. Empty ranks used to return
-    // here and never refresh lastRunningTick / observedRunning, so idle
-    // decay and desktop-switch clears could not recover.
+    // Snapshot IsRunning before eligibility, also with no ranks: otherwise
+    // lastRunningTick / observedRunning go stale and idle decay and
+    // desktop-switch clears cannot recover.
     std::vector<std::wstring> buttonAppIds(live.size());
     std::vector<ButtonIdentity> idents(live.size());
     std::vector<char> running(live.size(), 0);
     // Bottom <-> top moves keep the panel size (no SizeChanged), so the pass
-    // refreshes the edge; once per pass, not per button (Fable review 5).
+    // refreshes the edge; once per pass, not per button.
     std::optional<TaskbarEdge> passEdge;
     for (size_t bi = 0; bi < live.size(); ++bi) {
         if (auto ip = GetIconPanel(live[bi])) {
@@ -4602,7 +4524,7 @@ void ApplyAllHighlights_UIThread() {
     }
     // The shown buttons are authoritative for which windows have their own
     // slot: when Never Combine is switched off, no button is uncombined any
-    // more and per-window ranks merge back into one app rank (0.11.35).
+    // more and per-window ranks merge back into one app rank.
     // Captures add windows as they appear; this pass also drops them.
     {
         std::unordered_set<HWND, HwndHash> shownUncombined;
@@ -4611,11 +4533,10 @@ void ApplyAllHighlights_UIThread() {
                 shownUncombined.insert(idents[bi].sampleHwnd);
             }
         }
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_uncombinedMutex);
         auto& mine = g_uncombinedWindowsByThread[GetCurrentThreadId()];
         if (shownUncombined != mine) {
-            LOG_DEFERRED(L"Uncombined windows (this taskbar): %zu -> %zu",
+            Wh_Log(L"Uncombined windows (this taskbar): %zu -> %zu",
                    mine.size(), shownUncombined.size());
             mine = std::move(shownUncombined);
         }
@@ -4624,7 +4545,6 @@ void ApplyAllHighlights_UIThread() {
     std::vector<AppFocusInfo> ranks;
     GUID deskId{};
     {
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_stateMutex);
         RecomputeRanksForDesktopLocked(CurrentDeskLocked());
         ranks = CurrentDeskLocked().rankedApps;
@@ -4632,8 +4552,8 @@ void ApplyAllHighlights_UIThread() {
     }
 
     // Ladder and bindings are logged only when they differ from this UI
-    // thread's last pass (capture manual-20261120-154409-086197: 1,251 of
-    // 1,565 passes repeated it). Pass 1 matches, pass 2 paints, so a
+    // thread's last pass (most passes repeat it). Pass 1 matches, pass 2
+    // paints, so a
     // "Glow rank" line still follows its "bind rank" line.
     std::vector<int> buttonRank(live.size(), 0);
     std::vector<std::wstring> boundNames(live.size());
@@ -4663,7 +4583,6 @@ void ApplyAllHighlights_UIThread() {
                       boundNames[bi] + L"," + buttonAppIds[bi];
         }
     }
-    thread_local std::wstring t_lastLadderLog;
     const bool ladderChanged = ladder != t_lastLadderLog;
     if (ladderChanged) {
         t_lastLadderLog = ladder;
@@ -4774,7 +4693,7 @@ WudkGetObject_t TaskItemThumbnailViewModel_get_TaskItemThumbnail;
 // Strongest resolve: the window Explorer itself bound to this card.
 // card -> ThumbnailSource (view model) -> TaskItemThumbnail -> ParentItem
 // -> WindowId. Per card, no ctor timing, no index; for UWP the WindowId is
-// the ApplicationFrameWindow (shadow log 2026-11-15), matching focus.
+// the ApplicationFrameWindow, matching focus.
 // Why a card did not resolve (diagnostics; 0 = resolved).
 enum class CardResolveFail : int {
     None = 0,
@@ -4960,8 +4879,8 @@ std::vector<FrameworkElement> CollectSiblingThumbnailViews(
 // ---------------------------------------------------------------------------
 // Closing a window from the flyout removes its card without rebinding the
 // others (no put_ThumbnailSource, no OnApplyTemplate), so the remaining
-// ranks kept their old paint until focus changed or the flyout reopened
-// (capture manual-20261115-152151, 15:23:03 -> 15:23:20). ElementClearing
+// ranks kept their old paint until focus changed or the flyout reopened.
+// ElementClearing
 // fires when the repeater removes or recycles a card. Subscribed once per
 // repeater on its UI thread; revoked there at unload.
 
@@ -4978,8 +4897,7 @@ std::unordered_map<void*, RepeaterClearingWatch> g_repeaterWatches;
 
 void WatchRepeaterElementClearing_UIThread(muxc::ItemsRepeater const& repeater) {
     // Unload revokes the watch on its dispatcher: subscribe only on one the
-    // drain knows (review-lessons "no SizeChanged without a drainable
-    // dispatcher"; Neon review 1.4.1).
+    // drain knows.
     if (!repeater || g_unloading.load() ||
         !RememberUiDispatcher(repeater.try_as<FrameworkElement>())) {
         return;
@@ -5132,7 +5050,7 @@ std::vector<FrameworkElement> CollectRepeaterThumbnailViews(
 }
 
 void TrackThumbView_UIThread(FrameworkElement thumbView) {
-    // Untracked without a drainable dispatcher (Neon review 1.4.1).
+    // Untracked without a drainable dispatcher.
     if (!thumbView || !RememberUiDispatcher(thumbView)) {
         return;
     }
@@ -5286,7 +5204,7 @@ FrameworkElement FindThumbnailBackgroundBorder(FrameworkElement thumbView) {
                 continue;
             }
             auto cn = winrt::get_class_name(child);
-            // Never our own card overlay (Neon review 1.7.6).
+            // Never our own card overlay.
             if (cn == L"Windows.UI.Xaml.Controls.Border" &&
                 child.Name() != kThumbCardOverlayName) {
                 return child;
@@ -5298,14 +5216,14 @@ FrameworkElement FindThumbnailBackgroundBorder(FrameworkElement thumbView) {
 }
 
 // ---------------------------------------------------------------------------
-// Card overlay (Plate / Outline preview styles, 0.11.16)
+// Card overlay (Whole plate / Whole plate with accent)
 // ---------------------------------------------------------------------------
 // Our own Border, inserted right above the card's BackgroundBorder and bound
 // to its geometry (size, margin, alignment, rounded corners), so it follows
 // Taskbar Styler themes without measuring. Same construction as
-// taskbar-active-window-highlight (EphremTil17, GPL-3.0). Before 0.11.16 the
-// plate recoloured BackgroundBorder itself, and the card's hover state
-// replaced that brush (rank-1 plate vanished on hover). The overlay sits
+// taskbar-active-window-highlight (EphremTil17, GPL-3.0). Recolouring
+// BackgroundBorder itself does not work: the card's hover state replaces
+// that brush. The overlay sits
 // above BackgroundBorder and below the title/thumbnail, so hover changes the
 // background underneath and still shows through a partial fill.
 
@@ -5489,8 +5407,6 @@ Controls::Grid EnsureThumbOverlayHost(Controls::Panel panel) {
                   VerticalAlignment="Stretch">
                 <Rectangle Name="WhRecentFocusThumbGlowL0"
                            IsHitTestVisible="False" Visibility="Collapsed"/>
-                <Rectangle Name="WhRecentFocusThumbGlowL1"
-                           IsHitTestVisible="False" Visibility="Collapsed"/>
                 <Border Name="WhRecentFocusThumbTitleBg"
                         IsHitTestVisible="False" Visibility="Collapsed"/>
                 <Rectangle Name="WhRecentFocusThumbTitleBar"
@@ -5516,7 +5432,7 @@ Controls::Grid EnsureThumbOverlayHost(Controls::Panel panel) {
     host.VerticalAlignment(VerticalAlignment::Stretch);
     host.IsHitTestVisible(false);
     ClearOurHostClip(host);
-    // Under the card content, right above its background (0.11.17): a title
+    // Under the card content, right above its background: a title
     // wash on top of the title made the text look dim at higher tint
     // opacity. Front only if this template has no BackgroundBorder here.
     if (!PlaceAboveCardBackground(panel, host)) {
@@ -5568,8 +5484,8 @@ void HideThumbOverlayChildren(Controls::Grid host) {
     if (!host) {
         return;
     }
-    for (auto name : {kThumbGlowLayerNames[0], kThumbGlowLayerNames[1],
-                      kThumbTitleBgName, kThumbTitleBarName}) {
+    for (auto name : {kThumbGlowPlateName, kThumbTitleBgName,
+                      kThumbTitleBarName}) {
         if (auto el = FindChildByName(host, name)) {
             try {
                 el.Visibility(Visibility::Collapsed);
@@ -5687,7 +5603,7 @@ FrameworkElement PickLiveFlyoutThumbOnThisDispatcher() {
 
 void SchedulePreviewFlyoutRefresh(FrameworkElement dispatcherAnchor) {
     // Only on this thread's dispatcher, and one the unload drain knows: the
-    // pending flag below is per thread (Neon review 1.4.1 / 3.2).
+    // pending flag below is per thread.
     if (!dispatcherAnchor || g_unloading.load() ||
         !RememberUiDispatcher(dispatcherAnchor)) {
         return;
@@ -5789,7 +5705,7 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
         const double thickness = static_cast<double>(
             (std::max)(2, (std::min)(8, settings->glowThickness)));
         // Fallback plate (card without BackgroundBorder) corner roundness:
-        // the former icons.glowRoundness default (setting removed in 0.11.38).
+        // 28 %.
         constexpr double roundnessFrac = 0.28;
         // Preview plate / titleBg use dedicated opacity (not taskbar fill).
         const int fillOpacitySetting =
@@ -5804,11 +5720,9 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
         PreviewStyle paintStyle = style;
 
         // Tint base. An accent style halves it so its same-colour border
-        // still reads (0.11.38). One tint level per flyout (0.12.1): with an
+        // still reads. One tint level per flyout: with an
         // accent style at rank 1, ranks 2+ in a non-accent style are halved
-        // too. Before, a rank-2 Title plate (Tint 40, intensity 85: 34 %)
-        // was tinted more than the rank-1 Whole plate with accent (20 %),
-        // against the ladder; the accent styles themselves are unchanged.
+        // too, so no lower rank is tinted more than rank 1.
         auto isAccent = [](PreviewStyle s) {
             return s == PreviewStyle::Outline ||
                    s == PreviewStyle::TitleOutline;
@@ -5885,7 +5799,7 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
             if (!painted) {
                 Controls::Grid host = EnsureThumbOverlayHost(panel);
                 HideThumbOverlayChildren(host);
-                if (auto plate = FindChildByName(host, kThumbGlowLayerNames[0])
+                if (auto plate = FindChildByName(host, kThumbGlowPlateName)
                                      .try_as<Shapes::Rectangle>()) {
                     const int plateA =
                         static_cast<int>(tintSetting * 2.55 + 0.5);
@@ -5913,12 +5827,10 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
 
         if (paintStyle == PreviewStyle::TitleBg ||
             paintStyle == PreviewStyle::TitleOutline) {
-            // Title / title with accent (0.12.1): a plate over the title row,
+            // Title / title with accent: a plate over the title row,
             // 4px in from the card's BackgroundBorder (left, top, right) with
             // the card's corner radius, ending under the title with the gap
-            // above the title mirrored below it. Before 0.12.1 the title tint
-            // sat 8px in from the panel with 4px corners and uneven gaps
-            // (thin tint left of the icon). The accent variant adds an
+            // above the title mirrored below it. The accent variant adds an
             // accent border and halves the tint, as Outline does for the card.
             const bool outline = paintStyle == PreviewStyle::TitleOutline;
             const double stroke =
@@ -6047,6 +5959,9 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
         Wh_Log(L"ApplyThumbnailHighlight error %08X", hr);
     }
 }
+
+// Per UI thread; emptied by ReleaseUiThreadLocals_UIThread at unload.
+thread_local std::wstring t_lastResolveLog;
 
 void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
     if (!anyThumb) {
@@ -6100,9 +6015,8 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
     // HWND per card (this flyout only — not a global window ladder): the
     // card's own view model, ParentItem.WindowId (Explorer's binding). Per
     // card; cannot shift when cards are removed or recycled. A card without
-    // one stays unmarked. (Before 0.11.19 also a DataContext/ctor-map pass and
-    // a repeater-index + captured Thumbnails pass; the first never matched
-    // on 26100-era builds, the second shifted after a card was closed.)
+    // one stays unmarked. Repeater order is no identity: it shifts when a card
+    // is closed.
     struct Scored {
         FrameworkElement view{nullptr};
         HWND hwnd = nullptr;
@@ -6174,15 +6088,13 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
             (std::min)(order.size(), static_cast<size_t>(limit));
         // Siblings are listed only when the set, a rank or a resolve failure
         // differs from this UI thread's last resolve: reopening the same
-        // flyout repeated about 2,100 sibling lines in a day (capture
-        // manual-20261120-154409-086197).
+        // flyout would repeat them every time.
         std::wstring sig = std::to_wstring(limit);
         for (const auto& s : scored) {
             sig += L"|" + std::to_wstring(reinterpret_cast<uintptr_t>(s.hwnd)) +
                    L"," + std::to_wstring(s.rank) + L"," +
                    std::to_wstring(static_cast<int>(s.fail));
         }
-        thread_local std::wstring t_lastResolveLog;
         const bool changed = sig != t_lastResolveLog;
         if (changed) {
             t_lastResolveLog = sig;
@@ -6244,8 +6156,8 @@ void RequestApplyPreviewVisuals() {
     }
     // Same as RequestApplyVisuals: if no dispatcher yet, wait for the first
     // TaskListButton / thumbnail OnApplyTemplate. Do not PostMessage to this
-    // focus thread — the WM_APP_REQUEST_PREVIEW_APPLY handler used to call
-    // this again, which spun at 100% CPU and starved WM_TIMER.
+    // focus thread: a handler calling this again spins at 100 % CPU and
+    // starves WM_TIMER.
     RunOnUiThread([]() {
         FrameworkElement el = PickLiveFlyoutThumbOnThisDispatcher();
         if (el) {
@@ -6257,9 +6169,8 @@ void RequestApplyPreviewVisuals() {
 // Expected at startup before any TaskListButton is seen — log once, not per call.
 std::atomic<bool> g_loggedNoDispatcherAnchor{false};
 
-// TryRunAsync: do not static_cast the operation object to bool (always true).
-// Some SDKs return IAsyncOperation<bool> (GetResults = queued); others
-// IAsyncAction (Status Error/Canceled = not queued).
+// TryRunAsync returns IAsyncOperation<bool> (GetResults = queued). Do not
+// static_cast the operation object to bool (always true).
 bool DispatcherOpWasQueued(
     winrt::Windows::Foundation::IAsyncOperation<bool> const& op) {
     if (!op) {
@@ -6277,15 +6188,6 @@ bool DispatcherOpWasQueued(
         return false;
     }
     return true;
-}
-
-bool DispatcherOpWasQueued(winrt::Windows::Foundation::IAsyncAction const& op) {
-    if (!op) {
-        return false;
-    }
-    auto const st = op.Status();
-    return st != winrt::Windows::Foundation::AsyncStatus::Error &&
-           st != winrt::Windows::Foundation::AsyncStatus::Canceled;
 }
 
 bool DispatcherTryRun(
@@ -6396,6 +6298,49 @@ std::vector<std::shared_ptr<UiDispatcher>> CollectUiDispatchers() {
 
 enum class DrainProof { SentinelRan, ThreadExited };
 
+BOOL CALLBACK TakeFirstThreadWindow(HWND hwnd, LPARAM out) {
+    *reinterpret_cast<HWND*>(out) = hwnd;
+    return FALSE;
+}
+
+// The sentinel ran, but its thread is still on its way out of mod code: the
+// Completed delegate calls SetEvent (which wakes the waiter) before it
+// returns, and the delegate and the sentinel are then released, all code in
+// this module. A message sent to a window of that thread is handled only
+// back in its message loop, after all of that. Unbounded like the rest of
+// the drain, but ends if the thread exits.
+void WaitUntilUiThreadLeftModCode(const UiDispatcher& ui) {
+    if (GetCurrentThreadId() == ui.threadId) {
+        return;  // drained on this thread: nothing of it is still running
+    }
+    bool loggedNoWindow = false;
+    for (;;) {
+        if (UiThreadExited(ui)) {
+            return;
+        }
+        HWND hwnd = nullptr;
+        EnumThreadWindows(ui.threadId, TakeFirstThreadWindow,
+                          reinterpret_cast<LPARAM>(&hwnd));
+        if (!hwnd) {
+            // A XAML UI thread owns windows. If none is found, there is no
+            // barrier to send; the brief wait below is all that is left.
+            if (!loggedNoWindow) {
+                Wh_Log(L"UI drain: thread %u has no window for the return "
+                       L"barrier", ui.threadId);
+                loggedNoWindow = true;
+            }
+            PauseDispatcherAttempt(ui);
+            return;
+        }
+        DWORD_PTR result = 0;
+        if (SendMessageTimeoutW(hwnd, WM_NULL, 0, 0, SMTO_NORMAL, 100,
+                                &result)) {
+            return;
+        }
+        // Timed out (thread busy) or the window just went away: try again.
+    }
+}
+
 DrainProof DrainOneUiDispatcher(
     const UiDispatcher& ui,
     const winrt::Windows::UI::Core::DispatchedHandler& handler,
@@ -6425,6 +6370,7 @@ DrainProof DrainOneUiDispatcher(
         }
         if (end == DispatcherOpEnd::Ran) {
             if (highRan) {
+                WaitUntilUiThreadLeftModCode(ui);
                 return DrainProof::SentinelRan;
             }
             highRan = true;
@@ -6500,7 +6446,7 @@ bool RunOnUiThread(const winrt::Windows::UI::Core::DispatchedHandler& handler) {
 
 
 // One queued full pass per UI thread: worker requests (RequestApplyVisuals)
-// and UI requests (ScheduleRefreshAllHighlights) coalesce (Fable review 5).
+// and UI requests (ScheduleRefreshAllHighlights) coalesce.
 // The flag is cleared when the pass starts, so a request made during a pass
 // queues the next one.
 std::mutex g_fullPassQueuedMutex;
@@ -6566,13 +6512,12 @@ void RequestApplyVisuals() {
     }
     if (!any) {
         // Buttons not tracked yet — will apply on next UpdateVisualStates.
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_stateMutex);
         const auto& ranks = CurrentDeskLocked().rankedApps;
-        LOG_DEFERRED(L"Ranks ready (%zu) — waiting for TaskListButton hooks",
+        Wh_Log(L"Ranks ready (%zu) — waiting for TaskListButton hooks",
                ranks.size());
         for (size_t i = 0; i < ranks.size(); i++) {
-            LOG_DEFERRED(L"  Rank %zu: %s", i + 1, ranks[i].displayName.c_str());
+            Wh_Log(L"  Rank %zu: %s", i + 1, ranks[i].displayName.c_str());
         }
     }
 }
@@ -6622,7 +6567,7 @@ void RefreshButtonHighlight(FrameworkElement button) {
     // belongs to another process. PID only — do not OpenProcess from
     // UpdateVisualStates.
     // A grouped button whose sample window closed while siblings remain is
-    // re-captured and re-ranked inline, without a visible off/on (Fable 2.2).
+    // re-captured and re-ranked inline, without a visible off/on.
     auto sampleDead = [](const ButtonIdentity& ident) {
         return ident.sampleHwnd &&
                (!IsWindow(ident.sampleHwnd) ||
@@ -6692,7 +6637,7 @@ void RefreshButtonHighlight(FrameworkElement button) {
 // The anchor only selects the dispatcher. The queued bind still runs if
 // that button is destroyed before Low priority.
 void ScheduleRefreshAllHighlights(FrameworkElement dispatcherAnchor) {
-    // Only on a dispatcher the unload drain knows (Neon review 1.4.1).
+    // Only on a dispatcher the unload drain knows.
     if (!dispatcherAnchor || g_unloading.load() ||
         !RememberUiDispatcher(dispatcherAnchor)) {
         return;
@@ -6738,15 +6683,19 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
         return;
     }
 
-    TrackButton_UIThread(button);
-    const bool seeded = SeedButtonsFromRepeater_UIThread(button);
-    RefreshButtonHighlight(button);
-    // Only an unknown rank (-1) or a pending sweep needs a full pass. Our
-    // overlays are own elements that Explorer's hover states do not reset,
-    // so a ranked button no longer re-binds every sibling (Fable review 5).
-    const int rank = GetCachedPaintState(button).rank;
-    if (seeded || rank < 0 || g_pendingOverlaySweep.load()) {
-        ScheduleRefreshAllHighlights(button);
+    // Nothing may throw into Explorer's frames.
+    try {
+        TrackButton_UIThread(button);
+        const bool seeded = SeedButtonsFromRepeater_UIThread(button);
+        RefreshButtonHighlight(button);
+        // Only an unknown rank (-1) or a pending sweep needs a full pass. Our
+        // overlays are own elements that Explorer's hover states do not
+        // reset, so a ranked button does not re-bind every sibling.
+        const int rank = GetCachedPaintState(button).rank;
+        if (seeded || rank < 0 || g_pendingOverlaySweep.load()) {
+            ScheduleRefreshAllHighlights(button);
+        }
+    } catch (...) {
     }
 }
 
@@ -6890,7 +6839,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
         return false;
     }
     // Button identity (TaskListButton -> view model -> WindowsUdk TaskItem /
-    // TaskGroup) lives here; before 0.11.20 this flag waited for taskbar.dll.
+    // TaskGroup) lives here.
     g_taskbandResolveReady = true;
 
     Wh_Log(L"Preview resolve: view model %s, rebind repaint %s",
@@ -6910,6 +6859,8 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     return true;
 }
 
+// Per UI thread; emptied by ReleaseUiThreadLocals_UIThread at unload.
+thread_local std::wstring t_lastFlyoutKey;
 HoverFlyoutModel_TargetItemKey_t HoverFlyoutModel_TargetItemKey_Original;
 void WINAPI HoverFlyoutModel_TargetItemKey_Hook(void* pThis, void* param1) {
     // Flyout retargeted to another button: clear and repaint (below).
@@ -6922,20 +6873,19 @@ void WINAPI HoverFlyoutModel_TargetItemKey_Hook(void* pThis, void* param1) {
     // previous app's views.
     try {
         // Explorer sets the same key repeatedly while one button's flyout
-        // stays open; clearing every tracked card each time was the cost
-        // (Fable review 5). Only a different button needs the clear.
-        static thread_local std::wstring lastKey;
+        // stays open; clearing every tracked card each time was the cost.
+        // Only a different button needs the clear.
         std::wstring key;
         if (param1) {
             key = reinterpret_cast<const winrt::hstring*>(param1)->c_str();
         }
         // An empty key (flyout closing) clears once, and has no cards to
-        // paint (Neon review 1.7.8).
+        // paint.
         const bool empty = key.empty();
-        if (empty ? !lastKey.empty() : key != lastKey) {
+        if (empty ? !t_lastFlyoutKey.empty() : key != t_lastFlyoutKey) {
             ClearAllThumbnailHighlights_UIThread();
         }
-        lastKey = std::move(key);
+        t_lastFlyoutKey = std::move(key);
         if (empty) {
             return;
         }
@@ -7001,8 +6951,8 @@ bool StillPendingForeground(const PendingFocus& pending,
                             std::wstring* outTitle) {
     // Same mapping as the focus path (child -> root, owned dialog -> owner),
     // so an owned dialog keeps its owner's pending focus alive. Raw HWND
-    // here made a Lister dialog (no AUMID) look like another app after
-    // 0.11.4/0.11.5, and its owner was never confirmed.
+    // here would make a Lister dialog look like another app, and its owner
+    // would never be confirmed.
     HWND foreground = NormalizeFocusHwnd(GetForegroundWindow());
     HWND confirmHwnd = pending.hwnd;
     std::wstring title = pending.windowTitle;
@@ -7049,8 +6999,8 @@ bool StillPendingForeground(const PendingFocus& pending,
     return true;
 }
 
-// The app and preview min-focus confirmations are one state machine (Fable
-// review 4.1): the deadline, the still-foreground check with the bounded
+// The app and preview min-focus confirmations are one state machine: the
+// deadline, the still-foreground check with the bounded
 // Alt-Tab grace, then a track-specific confirm. A track names its timer,
 // its seconds, its start tick and its retry field.
 struct MinFocusTrack {
@@ -7159,8 +7109,7 @@ bool MinFocusDeadlineReached(const MinFocusTrack& track,
             return false;
         }
         ArmHookTimer(track.timerId, delay);
-        // Only the start of a wait: it re-polls every 200 ms (bursts of 40
-        // lines in capture manual-20261120-154409-086197). It ends in a
+        // Only the start of a wait: it re-polls every 200 ms. It ends in a
         // confirmation or the "gave up" line.
         if (!track.preview && firstWait) {
             Wh_Log(L"Min-focus timer: transient FG, waiting on %s",
@@ -7209,7 +7158,6 @@ void OnPreviewMinFocusTimerElapsed(MinFocusConfirmMode mode) {
     const ULONGLONG now = GetTickCount64();
     pending.desktopId = ConfirmDesktopId(pending.desktopId, confirmHwnd);
     {
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_stateMutex);
         auto& desk =
             InlineIsEqualGUID(pending.desktopId, GUID_NULL)
@@ -7223,7 +7171,7 @@ void OnPreviewMinFocusTimerElapsed(MinFocusConfirmMode mode) {
                 g_pendingFocus = {};
             }
         }
-        LOG_DEFERRED(L"Preview focus confirmed: hwnd=%p %s title=\"%s\" (map=%zu "
+        Wh_Log(L"Preview focus confirmed: hwnd=%p %s title=\"%s\" (map=%zu "
                L"desktop=%s)",
                confirmHwnd, pending.displayName.c_str(), title.c_str(),
                desk.windowFocusMap.size(),
@@ -7252,7 +7200,7 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
         return;  // re-armed, waiting through Alt-Tab, or dropped
     }
     // The deadline check can retarget to a sibling window of the app; the
-    // pending focus is still keyed by the original one (Neon review 1.7.3).
+    // pending focus is still keyed by the original one.
     const HWND pendingHwnd = pending.hwnd;
     pending.hwnd = confirmHwnd;
     if (!title.empty()) {
@@ -7273,7 +7221,6 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
     const ULONGLONG now = GetTickCount64();
     pending.desktopId = ConfirmDesktopId(pending.desktopId, pending.hwnd);
     {
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_stateMutex);
         auto& desk =
             InlineIsEqualGUID(pending.desktopId, GUID_NULL)
@@ -7294,7 +7241,7 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
 
         // Preview min-focus is independent: do not stamp the current HWND
         // here. A window switch just before the app deadline must wait out
-        // previewStartTick (clicks too, since 0.11.20).
+        // previewStartTick (clicks too).
         if (g_pendingFocus.valid &&
             (g_pendingFocus.hwnd == pending.hwnd ||
              g_pendingFocus.processId == pending.processId)) {
@@ -7311,7 +7258,7 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
             rec == desk.windowAppFocus.end() || rec->second.key.empty()
                 ? std::wstring(L"(no button yet)")
                 : rec->second.key;
-        LOG_DEFERRED(L"Confirmed focus: %s window=%p app=%s (apps=%zu, "
+        Wh_Log(L"Confirmed focus: %s window=%p app=%s (apps=%zu, "
                L"windows=%zu, ranks=%zu, title=\"%s\" desktop=%s)",
                pending.displayName.c_str(), pending.hwnd, derived.c_str(),
                desk.appFocusMap.size(), desk.windowAppFocus.size(),
@@ -7325,8 +7272,7 @@ void OnMinFocusTimerElapsed(MinFocusConfirmMode mode) {
     // The preview track may have given up during a long Alt-Tab while the
     // app track kept waiting; the window is in front again now, so let it
     // confirm too (its deadline has passed: FromTimer re-checks the
-    // foreground). Otherwise this visit left no preview recency
-    // (state-machines.md, observation 2).
+    // foreground). Otherwise this visit left no preview recency.
     if (settings->previewHighlightEnabled) {
         bool previewPending = false;
         {
@@ -7365,7 +7311,7 @@ void ArmOrConfirmTrack(const MinFocusTrack& track,
 }
 
 // Keep the app min-focus one-shot alive. A stale WM_TIMER KillTimer's the
-// live timer; same-app FOREGROUND used to assume it was still running.
+// live timer, so same-app FOREGROUND cannot assume it is still running.
 void EnsurePendingAppTimer() {
     PendingFocus pending;
     {
@@ -7420,14 +7366,12 @@ void SchedulePreviewConfirm(bool windowAlreadyTracked) {
 }
 
 // ---------------------------------------------------------------------------
-// Last use (0.12.1): decay counts from when an app was last *used*, not from
+// Last use: decay counts from when an app was last *used*, not from
 // when it was switched to. While a confirmed window is in front, the decay
 // tick moves its recency forward to the last keyboard / mouse input
 // (GetLastInputInfo, session-wide); when it loses the foreground it is
 // stamped with the last input before that. Walking away stops the input
-// time, so everything still ages out from the last input. Before, an app
-// used without switching for longer than decayMinutes lost its highlight
-// while in use (capture manual-20261120-071227: Windows Sandbox).
+// time, so everything still ages out from the last input.
 // Only a stretch in front in which the window was confirmed counts: a visit
 // shorter than the minimum focus refreshes nothing, so it cannot jump ranks.
 // Focus thread only.
@@ -7444,7 +7388,7 @@ ULONGLONG LastInputTick64(ULONGLONG now) {
     }
     // dwTime is GetTickCount (32-bit); the difference survives wrap. Input
     // after `now` was read (a keystroke between the two calls) makes it
-    // negative: that is "now", not 49.7 days ago (Neon review 1.2).
+    // negative: that is "now", not 49.7 days ago.
     const int32_t ago =
         static_cast<int32_t>(static_cast<DWORD>(now) - lii.dwTime);
     if (ago <= 0) {
@@ -7501,7 +7445,7 @@ unsigned RefreshLastUseLocked(HWND hwnd, ULONGLONG since, ULONGLONG at) {
 // taskbar, desktop, lock screen): Windows often sends no second foreground
 // event when the user lands back on the same window, and the stretch stayed
 // on the switcher, so the app in use was never refreshed again and decayed
-// while used (Neon review 1.1.1). While a transient window is in front the
+// while used. While a transient window is in front the
 // decay tick refreshes nothing (it is not g_inFrontHwnd); leaving for
 // another app stamps the last input, a switch's own keystrokes included.
 void NoteForegroundForLastUse(HWND hwnd) {
@@ -7512,15 +7456,14 @@ void NoteForegroundForLastUse(HWND hwnd) {
     if (g_inFrontHwnd) {
         const ULONGLONG at = LastInputTick64(now);
         if (at) {
-            DeferredLogScope logScope;  // logs after unlock
             std::lock_guard<std::mutex> lock(g_stateMutex);
             if (const unsigned moved = RefreshLastUseLocked(
                     g_inFrontHwnd, g_inFrontSince, at)) {
-                LOG_DEFERRED(L"Last use: hwnd=%p left, used until %llus ago "
-                             L"(%s)",
-                             g_inFrontHwnd,
-                             static_cast<unsigned long long>((now - at) / 1000),
-                             LastUseMovedName(moved));
+                Wh_Log(L"Last use: hwnd=%p left, used until %llus ago "
+                       L"(%s)",
+                       g_inFrontHwnd,
+                       static_cast<unsigned long long>((now - at) / 1000),
+                       LastUseMovedName(moved));
             }
         }
     }
@@ -7558,7 +7501,7 @@ void HandleForegroundChanged(HWND hWnd) {
     // Without it, read here, before the transient check: switching to an
     // empty desktop gives the desktop / taskbar foreground, which is
     // transient. Every reader that sees the GUID change runs the full
-    // switch steps (state-machines.md, observation 3).
+    // switch steps.
     if (!g_desktopKeyWatchActive && RefreshCurrentDesktopId()) {
         OnVirtualDesktopSwitched(L"foreground");
     }
@@ -7664,7 +7607,7 @@ void HandleForegroundChanged(HWND hWnd) {
 
         // Same app as the pending focus: same key, or the same window whose
         // button became known meanwhile (WINDOW:<hwnd> -> APPID:), which
-        // must not restart the app wait (state-machines.md, observation 1).
+        // must not restart the app wait.
         const bool sameApp =
             g_pendingFocus.key == key ||
             (g_pendingFocus.hwnd == hWnd &&
@@ -7693,7 +7636,7 @@ void HandleForegroundChanged(HWND hWnd) {
                 // The app confirm stamped the previous window only; confirm
                 // again so this one gets its own record (last use, Never
                 // Combine slot). Its deadline counts from the app's start,
-                // usually already passed (Neon review 1.1.3).
+                // usually already passed.
                 g_pendingFocus.appConfirmed = false;
             }
             sameAppPending = true;
@@ -7759,7 +7702,7 @@ void OnDecayTimer() {
     }
     // A tick far past its interval: the machine slept (GetTickCount64 counts
     // sleep, so everything idle that long decays now) or the thread stalled.
-    // Before, only the late "Decay recompute" line showed it.
+    // Logged, since nothing else would show it.
     {
         const ULONGLONG now = GetTickCount64();
         if (g_lastDecayTick &&
@@ -7780,7 +7723,6 @@ void OnDecayTimer() {
     }
     RefreshInFrontLastUse();  // before decay: the app in use is not idle
     {
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_stateMutex);
         const auto& beforeApps = CurrentDeskLocked().rankedApps;
         keysBefore.reserve(beforeApps.size());
@@ -7789,7 +7731,7 @@ void OnDecayTimer() {
         }
         windowsBefore = CurrentDeskLocked().windowFocusMap.size();
         // Only the current desktop affects paint; the others are pruned
-        // below in separate short holds (Fable review 2.5).
+        // below in separate short holds.
         RecomputeRanksForDesktopLocked(CurrentDeskLocked());
         PruneWindowFocusMapLocked(CurrentDeskLocked());
         const auto& afterApps = CurrentDeskLocked().rankedApps;
@@ -7810,7 +7752,6 @@ void OnDecayTimer() {
         }
     }
     for (const GUID& id : otherDesktops) {
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_stateMutex);
         auto it = g_desktopMaps.find(id);
         if (it == g_desktopMaps.end() ||
@@ -7827,8 +7768,8 @@ void OnDecayTimer() {
     }
     // Same length can still be a different ladder ([A,B,C] -> [A,C,D]).
     // An empty list requests a few more sweeps so a missed clear can retry,
-    // then stops: an idle desktop used to run a full pass on every decay
-    // tick for hours (capture 2026-11-17, 0.11.39). Focus thread only.
+    // then stops, so an idle desktop does not run a full pass on every decay
+    // tick. Focus thread only.
     static int emptySweepsLeft = 0;
     if (keysBefore != keysAfter) {
         emptySweepsLeft = 2;
@@ -7855,7 +7796,7 @@ void OnDecayTimer() {
     StopDecayTimerIfIdle();
 }
 
-// HSHELL_WINDOWDESTROYED (Fable review 3.3): forget the window at once
+// HSHELL_WINDOWDESTROYED: forget the window at once
 // instead of on the next decay tick, and repaint so a closed app frees its
 // icon slot and preview mark without waiting. App recency itself stays
 // (other windows of the app, or re-open within decay). The handle is
@@ -7867,7 +7808,7 @@ void HandleWindowDestroyed(HWND hwnd) {
     bool known = false;
     bool previewChanged = false;
     bool droppedPending = false;
-    // The window in front closed: its last use is now (Neon review 1.1.2).
+    // The window in front closed: its last use is now.
     const bool wasInFront = hwnd == g_inFrontHwnd;
     const ULONGLONG lastUse =
         wasInFront ? LastInputTick64(GetTickCount64()) : 0;
@@ -7888,7 +7829,7 @@ void HandleWindowDestroyed(HWND hwnd) {
                 w != desk.windowAppFocus.end()) {
                 // Hand the window's recency to its app before the record
                 // goes: the recompute that folds it may not have run since
-                // the last stamp (Neon review 1.1.4). The window is already
+                // the last stamp. The window is already
                 // destroyed, so no liveness check here.
                 ULONGLONG tick = w->second.tick;
                 // Same rule as RefreshLastUseLocked: confirmed in this
@@ -8009,9 +7950,8 @@ void CALLBACK WinEventProc(HWINEVENTHOOK /*hWinEventHook*/,
 // After a settings change: drop the records of newly excluded apps on every
 // desktop. Focus thread (WM_APP_SETTINGS_CHANGED): it owns the maps and is an
 // STA, which ExclusionAumid (SHGetPropertyStoreForWindow) needs. Windhawk's
-// settings thread gives no COM guarantee, and an AUMID read failing there
-// let a newly excluded app keep its highlight (Neon review 1.6; before
-// 0.12.2 this ran in Wh_ModSettingsChanged).
+// settings thread gives no COM guarantee; an AUMID read failing there
+// would let a newly excluded app keep its highlight.
 void DropExcludedRecords() {
     size_t dropped = 0;
     std::unordered_set<HWND, HwndHash> windowHwnds;
@@ -8049,7 +7989,6 @@ void DropExcludedRecords() {
     }
 
     {
-        DeferredLogScope logScope;  // logs after unlock
         std::lock_guard<std::mutex> lock(g_stateMutex);
         for (auto& [id, desk] : g_desktopMaps) {
             (void)id;
@@ -8276,12 +8215,12 @@ struct DesktopKeyWatch {
 };
 
 // ---------------------------------------------------------------------------
-// Focus tracking starts with the taskbar (0.12.1). Windhawk loads the mod into
+// Focus tracking starts with the taskbar. Windhawk loads the mod into
 // every explorer.exe, also folder-window and COM-server processes that never
 // load Taskbar.View.dll. There the worker keeps only its hidden window and
 // waits: no shell hook, no WinEvents, no accent refresh, no registry
-// watch, and no focus logs (capture manual-20261120-154409-086197: seven such
-// processes logged the same focus events as the taskbar process).
+// watch, and no focus logs (each such process would log the taskbar
+// process's focus events again).
 // Started by WM_APP_TASKBAR_READY once the Taskbar.View hooks are in, or at
 // worker start when they already are. Focus thread only.
 // ---------------------------------------------------------------------------
@@ -8321,7 +8260,7 @@ void ActivateFocusTracking(HWND hwnd) {
         SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
                         nullptr, WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     if (!t.foregroundHook) {
-        // Before 0.12.1 this failed Wh_ModInit; now init is long over.
+        // Init is long over: log it, do not fail.
         if (shellHookRegistered) {
             Wh_Log(L"ERROR: SetWinEventHook failed: %u; focus from shell "
                    L"activations only",
@@ -8465,7 +8404,7 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
                 OnVirtualDesktopSwitched(L"registry");
             }
             // Fall through to the messages: a burst of registry writes must
-            // not hold WM_APP_SHUTDOWN in the queue (Neon review 3.1).
+            // not hold WM_APP_SHUTDOWN in the queue.
         } else if (r != WAIT_OBJECT_0 + handles) {
             Wh_Log(L"Focus thread wait failed: %u", GetLastError());
             break;
@@ -8497,7 +8436,6 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
 }
 
 bool StartWinEventHookThread() {
-    DeferredLogScope logScope;  // logs after unlock
     std::lock_guard<std::mutex> lock(g_winEventHookThreadMutex);
     if (g_winEventHookThread && HookThreadWindow()) {
         return true;
@@ -8507,8 +8445,8 @@ bool StartWinEventHookThread() {
             CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (!g_hookThreadReadyEvent) {
             const DWORD error = GetLastError();
-            LOG_DEFERRED(L"CreateEventW failed for hook-thread ready: %u",
-                         error);
+            Wh_Log(L"CreateEventW failed for hook-thread ready: %u",
+                   error);
             return false;
         }
     } else {
@@ -8518,7 +8456,7 @@ bool StartWinEventHookThread() {
         CreateThread(nullptr, 0, WinEventHookThread, nullptr, 0, nullptr);
     if (!hThread) {
         const DWORD error = GetLastError();
-        LOG_DEFERRED(L"CreateThread failed: %u", error);
+        Wh_Log(L"CreateThread failed: %u", error);
         if (g_hookThreadReadyEvent) {
             CloseHandle(g_hookThreadReadyEvent);
             g_hookThreadReadyEvent = nullptr;
@@ -8528,7 +8466,7 @@ bool StartWinEventHookThread() {
     g_winEventHookThread = hThread;
     WaitForSingleObject(g_hookThreadReadyEvent, INFINITE);
     if (!HookThreadWindow()) {
-        LOG_DEFERRED(L"Focus thread failed to create the message window");
+        Wh_Log(L"Focus thread failed to create the message window");
         WaitForSingleObject(hThread, INFINITE);
         CloseHandle(hThread);
         g_winEventHookThread = nullptr;
@@ -8538,7 +8476,7 @@ bool StartWinEventHookThread() {
         }
         return false;
     }
-    LOG_DEFERRED(L"WinEvent hook thread started");
+    Wh_Log(L"WinEvent hook thread started");
     return true;
 }
 
@@ -8577,18 +8515,17 @@ void StopWinEventHookThread() {
 // Settings load
 // ---------------------------------------------------------------------------
 
-// Settings transition 0.11 -> 0.12 (remove a release or two after 0.12.0).
-// 0.11.1 had one preview style for all ranks, `previews.style`
-// (plateTitle = default hybrid, plate, titleBg, titleBar). 0.11.16 split it
-// into `previews.topStyle` + `previews.restStyle`. Windhawk keeps the old
-// stored value and has no migration mechanism (m417z, Discord 2026-11-16), so
+// Settings transition from 0.11.1 (remove in 1.0). 0.11.1 had one preview
+// style for all ranks, `previews.style` (plateTitle = default hybrid,
+// plate, titleBg, titleBar), now `previews.topStyle` +
+// `previews.restStyle`. Windhawk keeps the old
+// stored value and has no migration mechanism, so
 // a user who had picked a non-default style would silently get the new
 // defaults. When both new keys are unset or still at their defaults, use the
 // old choice for both ranks until the user first saves settings: from then on
 // the settings page is what they see. A mod cannot write its own settings, so
 // the state lives in mod storage: 0 = not checked yet, 1 = legacy style in
-// use, 2 = done. Older dev-only values (e.g. "ring") and the old default map
-// to nothing.
+// use, 2 = done. Other values and the old default map to nothing.
 constexpr wchar_t kLegacyPreviewStyleState[] = L"legacyPreviewStyleState";
 
 bool LegacyPreviewStyle(PreviewStyle& out) {
@@ -8649,73 +8586,15 @@ E EnumSetting(PCWSTR name, const EnumName<E> (&table)[N], E fallback) {
     return fallback;
 }
 
-// Settings transition 0.11 -> 0.12, part 2 (0.12.2; remove with the
-// previews.style one, planned for 1.0). The app-ranking settings moved from
-// the top level into the Taskbar icons group, so their ids changed:
-// highlightCount, minFocusSeconds, promoteMode, decayMinutes ->
-// icons.<same>. The settings page shows the new keys at their defaults, so
-// the old values are used until the user first saves settings, like the
-// preview style above. Only a 0.11 install has old values stored:
-// previews.style existed only there and Windhawk stores every key of a mod's
-// settings together, so its presence gates the transition (without stored
-// settings the old values were the defaults anyway). Mod storage
-// "legacyAppSettingsState": 0 = not checked yet, 1 = old values in use,
-// 2 = done.
-constexpr wchar_t kLegacyAppSettingsState[] = L"legacyAppSettingsState";
-
-void ApplyLegacyAppSettings(Settings& s, bool userSavedSettings) {
-    int state = Wh_GetIntValue(kLegacyAppSettingsState, 0);
-    if (state == 2) {
-        return;
-    }
-    if (userSavedSettings) {
-        if (state == 1) {
-            Wh_Log(L"Settings: 0.11 app settings no longer applied (settings "
-                   L"saved)");
-        }
-        Wh_SetIntValue(kLegacyAppSettingsState, 2);
-        return;
-    }
-    if (state == 0) {
-        auto oldStyle = WindhawkUtils::StringSetting::make(L"previews.style");
-        auto newPromote =
-            WindhawkUtils::StringSetting::make(L"icons.promoteMode");
-        // Unset reads as 0 / empty; otherwise the defaults of 0.12.2.
-        const int count = Wh_GetIntSetting(L"icons.highlightCount");
-        const int minFocus = Wh_GetIntSetting(L"icons.minFocusSeconds");
-        const int decay = Wh_GetIntSetting(L"icons.decayMinutes");
-        const bool newAtDefaults =
-            (count == 0 || count == 3) && (minFocus == 0 || minFocus == 8) &&
-            (decay == 0 || decay == 30) &&
-            (!*newPromote.get() ||
-             wcscmp(newPromote.get(), L"immediateTracked") == 0);
-        state = (*oldStyle.get() && newAtDefaults) ? 1 : 2;
-        Wh_SetIntValue(kLegacyAppSettingsState, state);
-    }
-    if (state == 1) {
-        constexpr int kNoMax = 1 << 30;
-        s.highlightCount = ClampedIntSetting(L"highlightCount", 0, 16);
-        s.minFocusSeconds = ClampedIntSetting(L"minFocusSeconds", 0, kNoMax);
-        s.promoteMode = EnumSetting(L"promoteMode", kPromoteModeNames,
-                                    PromoteMode::ImmediateTracked);
-        s.decayMinutes = ClampedIntSetting(L"decayMinutes", 0, kNoMax);
-        Wh_Log(L"Settings: using the 0.11 app settings (count=%d minFocus=%ds "
-               L"promote=%s decay=%dmin) until settings are saved",
-               s.highlightCount, s.minFocusSeconds,
-               PromoteModeName(s.promoteMode), s.decayMinutes);
-    }
-}
-
 void LoadSettings(bool userSavedSettings) {
     Settings s;
     constexpr int kNoMax = 1 << 30;
 
-    s.highlightCount = ClampedIntSetting(L"icons.highlightCount", 0, 16);
-    s.minFocusSeconds = ClampedIntSetting(L"icons.minFocusSeconds", 0, kNoMax);
-    s.promoteMode = EnumSetting(L"icons.promoteMode", kPromoteModeNames,
+    s.highlightCount = ClampedIntSetting(L"highlightCount", 0, 16);
+    s.minFocusSeconds = ClampedIntSetting(L"minFocusSeconds", 0, kNoMax);
+    s.promoteMode = EnumSetting(L"promoteMode", kPromoteModeNames,
                                 PromoteMode::ImmediateTracked);
-    s.decayMinutes = ClampedIntSetting(L"icons.decayMinutes", 0, kNoMax);
-    ApplyLegacyAppSettings(s, userSavedSettings);
+    s.decayMinutes = ClampedIntSetting(L"decayMinutes", 0, kNoMax);
 
     s.glowStyle =
         EnumSetting(L"icons.glowStyle", kGlowStyleNames, GlowStyle::LeftBar);
@@ -8799,11 +8678,10 @@ BOOL Wh_ModInit() {
 
     g_unloading = false;
     LoadSettings(/*userSavedSettings=*/false);
-    // highlightCount=0 with previews off used to return FALSE here. Windhawk
-    // shows nothing for a failed init and then does not call
-    // Wh_ModSettingsChanged, so turning a highlight back on did nothing
-    // until the mod was toggled (Neon review 1.8.2). Now the mod loads and
-    // paints nothing until a setting asks for it.
+    // Nothing to paint (highlightCount=0, previews off) is not a failed init:
+    // Windhawk shows nothing for a failed init and then does not call
+    // Wh_ModSettingsChanged, so turning a highlight back on would do nothing
+    // until the mod was toggled.
     {
         auto settings = SettingsSnap();
         if (settings->highlightCount <= 0 &&
@@ -8827,7 +8705,7 @@ BOOL Wh_ModInit() {
                                    LoadLibraryExW_Hook,
                                    &LoadLibraryExW_Original);
 
-    // No taskbar.dll hooks since 0.11.20: button identity, windows, previews
+    // No taskbar.dll hooks: button identity, windows, previews
     // and focus all come from Taskbar.View.dll and public WindowsUdk
     // interfaces.
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
@@ -8858,6 +8736,17 @@ void Wh_ModAfterInit() {
     // process is known to host the taskbar.
 }
 
+// Heap-owning thread_locals of a UI thread. Their destructors would run only
+// at that thread's exit, long after the module is unloaded, so each disable
+// or update leaked them. Runs in the unload cleanup on each UI thread.
+void ReleaseUiThreadLocals_UIThread() {
+    std::unordered_set<void*>().swap(t_seededRepeaters);
+    std::wstring().swap(t_lastLadderLog);
+    std::wstring().swap(t_lastResolveLog);
+    std::wstring().swap(t_lastFlyoutKey);
+    std::wstring().swap(g_imagePathCache);
+}
+
 void Wh_ModUninit() {
     Wh_Log(L">");
     g_unloading = true;
@@ -8871,6 +8760,7 @@ void Wh_ModUninit() {
             ClearAllThumbnailHighlights_UIThread();
             RevokeIconPanelLayoutWatchesOnThisDispatcher();
             RevokeRepeaterWatchesOnThisDispatcher();
+            ReleaseUiThreadLocals_UIThread();
         })) {
         Wh_Log(L"ERROR: UI cleanup did not finish on every dispatcher");
     }
@@ -8902,10 +8792,10 @@ void Wh_ModUninit() {
         g_haveCurrentDesktop = false;
         g_pendingFocus = {};
     }
-    // The worker has exited; its last-use stretch goes with it.
+    // The worker has exited (and released the VDM); its last-use stretch
+    // goes with it.
     g_inFrontHwnd = nullptr;
     g_inFrontSince = 0;
-    ReleaseVdm();
     {
         std::lock_guard<std::mutex> lock(g_windowAppIdMutex);
         g_windowAppId.clear();
@@ -8943,7 +8833,7 @@ void Wh_ModSettingsChanged() {
 
     // Newly excluded apps are dropped on the focus worker
     // (DropExcludedRecords): it owns the recency maps and is the STA
-    // ExclusionAumid's SHGetPropertyStoreForWindow needs (Neon review 1.6).
+    // ExclusionAumid's SHGetPropertyStoreForWindow needs.
     PostToHookThread(WM_APP_SETTINGS_CHANGED);
     RequestApplyVisuals();
     RequestApplyPreviewVisuals();
