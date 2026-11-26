@@ -179,5 +179,16 @@ jobs:
           cd "${{ runner.temp }}/pages.git"
           git fetch "${{ runner.temp }}/deployment/deploy.bundle" pages
 
+          # The compiled mods and the source of each mod version are never
+          # rewritten, since deploy.ts reuses them, so a deployment that changes
+          # or removes one is refused. A mod that's removed on purpose has its
+          # files deleted from the pages branch first.
+          published=$(git diff --no-renames --diff-filter=a --name-only pages FETCH_HEAD -- ':(glob)mods/*/*.dll' ':(glob)mods/*/*.wh.cpp')
+          if [ -n "$published" ]; then
+            echo "::error::The deployment changes or removes published files"
+            printf '%s\n' "$published"
+            exit 1
+          fi
+
           echo Pushing to GitHub
           git push "https://x-access-token:$GITHUB_TOKEN@github.com/${{ github.repository }}.git" FETCH_HEAD:refs/heads/pages
