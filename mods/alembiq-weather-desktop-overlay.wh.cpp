@@ -2,7 +2,7 @@
 // @id              alembiq-weather-desktop-overlay
 // @name            Desktop Weather & Particles Overlay
 // @description     Atmospheric effects and live weather forecast visualization for the Windows desktop (Direct2D overlay)
-// @version         1.8.4.2
+// @version         1.8.4.3
 // @author          alembiq
 // @github          https://github.com/alembiqspace
 // @include         windhawk.exe
@@ -14,6 +14,7 @@
 A lightweight **Direct2D** weather and atmosphere overlay for the Windows desktop. It brings live weather precipitation, volumetric-style drifting clouds, a UV-reactive sun and lunar-phase moon, atmospheric layers, air quality, pollen, flood-level water, and a draggable temperature button with an interactive control & forecast table without cluttering icons or windows.
 
 ### Preview
+![Desktop Weather & Particles Overlay preview](https://raw.githubusercontent.com/alembiqspace/windhawk-mods/main/screenshots/desktop-weather-overlay-preview.png)
 
 ### Features
 - **Performance Quality Scaling:** `[System] Performance mode` (`low`, `medium`, `high`) scales particle counts, cloud layers, sun rays, moon detail, lightning branches, wave smoothness, rain splashes on `high`, and HUD detail.
@@ -24,15 +25,15 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
 - **Draggable Temperature Button & Interactive Table:** Drag the circular button (shows a gear icon when no temperature forecast is available yet) or click it to open an auto-sized table with unified forecast fields, `auto` multi-provider aggregation, italic/50%-opacity styling for unsupported fields, and `(i)` hover tooltips showing source and sync time.
 
 ### Network & Privacy
-- **No requests until location is set:** By default `coords` is empty (`""`) and no automatic fallback coordinates are used, so no network requests are made until you enter valid `lat/lon` coordinates.
+- **No requests until configured:** By default `coords` is empty (`""`) and no automatic fallback coordinates are used, so no network requests are made until you enter valid `lat/lon` coordinates (or configure `customApiUrl` / `localWeatherPath`).
 - **External endpoints & what is sent:**
   - `www.7timer.info` (`/bin/api.pl`): sends `lat` and `lon` coordinates.
   - `api.met.no` (`/weatherapi/locationforecast/2.0/compact`): sends `lat` and `lon` coordinates.
   - `api.open-meteo.com` (`/v1/forecast`) and `air-quality-api.open-meteo.com` (`/v1/air-quality`): sends `lat` and `lon` coordinates.
   - `api.weatherapi.com`, `api.openweathermap.org`, `weather.visualcrossing.com`, `api.tomorrow.io`: contacted only when their respective API key is configured; sends `lat`, `lon`, and the API key in the query string.
-  - Custom JSON API (`customApiUrl`) / Local file (`localWeatherPath`): contacts the configured URL (substituting `{lat}`, `{lon}`, `{key}`) or reads the local JSON file.
-- **When requests happen:** At startup when coordinates are configured, on the configured `updateIntervalMin` interval (default `30` min), on retry after a failed fetch, or when the forecast source or coordinates change.
-- **How to disable:** Leave `coords` empty or set `[Weather] Primary source` to `off`.
+  - Custom JSON API (`customApiUrl`) / Local file (`localWeatherPath`): contacts the configured URL (substituting `{lat}`, `{lon}`, and `{key}` from `customApiKey`) or reads the local JSON file.
+- **When requests happen:** At startup when configured, on the configured `updateIntervalMin` interval (default `30` min), on retry after a failed fetch, or when the forecast source, coordinates, keys, or endpoint paths change.
+- **How to disable:** Leave `coords` empty (and clear `customApiUrl` / `localWeatherPath`) or set `[Weather] Primary source` to `off`.
 */
 // ==/WindhawkModReadme==
 
@@ -63,9 +64,9 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
 - taskbarAsBorder: true
   $name: "[System] Taskbar as a border"
   $description: "When enabled in above_taskbar mode, uses the taskbar work area bottom edge as the lower screen border. Default: true."
-- customOffset: "10"
+- bottomInsetPx: 10
   $name: "[System] Bottom inset (px)"
-  $description: "Bottom margin offset in pixels applied in custom_offset mode (0 to 1000). Default: '10'."
+  $description: "Bottom margin offset in pixels applied in custom_offset mode (0 to 1000). Default: 10."
 - multiMonitorMode: primary
   $name: "[System] Monitors"
   $description: "Render on primary monitor or all monitors. Allowed: primary, all. Default: primary."
@@ -128,7 +129,10 @@ A lightweight **Direct2D** weather and atmosphere overlay for the Windows deskto
   $description: "Format: lat/lon (e.g. 44.7866/20.4489). Latitude -90..90, longitude -180..180. Empty by default (no requests until set)."
 - customApiUrl: ""
   $name: "[Weather] Custom JSON API URL"
-  $description: "HTTP/HTTPS JSON endpoint (supports {lat}, {lon}, {key} placeholders)."
+  $description: "HTTP/HTTPS JSON endpoint (supports {lat}, {lon}, and {key} from customApiKey)."
+- customApiKey: ""
+  $name: "[Weather] Custom JSON API key"
+  $description: "Key substituted into {key} placeholder for customApiUrl."
 - localWeatherPath: ""
   $name: "[Weather] Local weather file path"
   $description: "Path to local JSON weather file. Default: empty."
@@ -625,6 +629,7 @@ struct Settings {
     double latitude = 0.0;
     double longitude = 0.0;
     std::wstring customApiUrl;
+    std::wstring customApiKey;
     std::wstring localWeatherPath;
     int updateIntervalMin = 30;
 
@@ -826,7 +831,16 @@ float GetQualityScale(PerformanceMode mode) {
 }
 
 bool HasAnyForecastConsumer(const Settings& cfg) {
-    return cfg.primarySource != L"off" && cfg.hasValidCoords;
+    if (cfg.primarySource == L"off") {
+        return false;
+    }
+    if (cfg.primarySource == L"custom_api") {
+        return !cfg.customApiUrl.empty();
+    }
+    if (cfg.primarySource == L"local_file") {
+        return !cfg.localWeatherPath.empty();
+    }
+    return cfg.hasValidCoords;
 }
 
 bool NeedsAirQualityFetch(const Settings& cfg) {
@@ -1002,24 +1016,6 @@ bool TryParseCoordsString(const std::wstring& raw, double& outLat, double& outLo
     outLat = lat;
     outLon = lon;
     return true;
-}
-
-int ParseBottomInsetString(const std::wstring& raw, int defVal) {
-    std::wstring s = Trim(raw);
-    if (s.empty()) {
-        return defVal;
-    }
-    size_t lastSlash = s.rfind(L'/');
-    std::wstring token = (lastSlash != std::wstring::npos) ? Trim(s.substr(lastSlash + 1)) : s;
-    try {
-        int v = std::stoi(token);
-        if (v < 0 || v > 1000) {
-            return defVal;
-        }
-        return v;
-    } catch (...) {
-        return defVal;
-    }
 }
 
 void ParseHudButtonGeometryString(const std::wstring& raw, ArcGeometry defGeom, ArcGeometry& outGeom) {
@@ -1733,7 +1729,7 @@ void LoadSettingsFromWh() {
     next.performanceMode = ParsePerformanceMode(readStr(L"performanceMode", L"high"));
     next.bottomBoundaryMode = ToLower(Trim(readStr(L"bottomBoundaryMode", L"above_taskbar")));
     next.taskbarAsBorder = Wh_GetIntSetting(L"taskbarAsBorder") != 0;
-    next.bottomInsetPx = ParseBottomInsetString(readStr(L"customOffset", L"10"), 10);
+    next.bottomInsetPx = ParseIntRangeOrDefault(Wh_GetIntSetting(L"bottomInsetPx"), 0, 1000, 10);
     next.multiMonitorMode = ToLower(Trim(readStr(L"multiMonitorMode", L"primary")));
     int fpsRaw = Wh_GetIntSetting(L"targetFps");
     next.targetFps = (fpsRaw == 30 || fpsRaw == 60) ? fpsRaw : 60;
@@ -1753,6 +1749,7 @@ void LoadSettingsFromWh() {
         next.longitude = 0.0;
     }
     next.customApiUrl = Trim(readStr(L"customApiUrl", L""));
+    next.customApiKey = Trim(readStr(L"customApiKey", L""));
     next.localWeatherPath = Trim(readStr(L"localWeatherPath", L""));
     next.updateIntervalMin = ParseIntRangeOrDefault(Wh_GetIntSetting(L"updateIntervalMin"), 1, 1440, 30);
 
@@ -1769,13 +1766,6 @@ void LoadSettingsFromWh() {
     ParseHudButtonGeometryString(readStr(L"hudButtonGeometry", L"92/88"), ArcGeometry{24, 92, 88}, next.hudButtonGeom);
 
     std::wstring savedBtnPos = readStr(L"hudButtonPos", L"");
-    if (savedBtnPos.empty()) {
-        LPCWSTR persistedPos = Wh_GetStringSetting(L"hudButtonPos");
-        if (persistedPos) {
-            savedBtnPos = Trim(persistedPos);
-            Wh_FreeStringSetting(persistedPos);
-        }
-    }
     size_t slashPos = savedBtnPos.find(L'/');
     if (slashPos != std::wstring::npos) {
         double rx = 0.0;
@@ -1845,14 +1835,24 @@ void LoadSettingsFromWh() {
     bool wakeWeather = false;
     {
         std::lock_guard<std::mutex> lock(g_mutex);
-        bool sourceOrCoordsChanged = (next.primarySource != g_lastFetchedSource) ||
-                                      (next.hasValidCoords &&
-                                       (std::abs(next.latitude - g_lastFetchedLat) > 1e-6 ||
-                                        std::abs(next.longitude - g_lastFetchedLon) > 1e-6));
-        if (!next.hasValidCoords) {
+        bool coordsChanged = next.hasValidCoords &&
+                             (!g_settings.hasValidCoords ||
+                              std::abs(next.latitude - g_lastFetchedLat) > 1e-6 ||
+                              std::abs(next.longitude - g_lastFetchedLon) > 1e-6);
+        bool feedConfigChanged = (next.primarySource != g_lastFetchedSource) ||
+                                 (next.fallbackSource != g_settings.fallbackSource) ||
+                                 (next.autoProviderOrder != g_settings.autoProviderOrder) ||
+                                 (next.customApiUrl != g_settings.customApiUrl) ||
+                                 (next.customApiKey != g_settings.customApiKey) ||
+                                 (next.localWeatherPath != g_settings.localWeatherPath) ||
+                                 (next.weatherapiKey != g_settings.weatherapiKey) ||
+                                 (next.openweathermapKey != g_settings.openweathermapKey) ||
+                                 (next.visualCrossingKey != g_settings.visualCrossingKey) ||
+                                 (next.tomorrowIoKey != g_settings.tomorrowIoKey);
+        if (!HasAnyForecastConsumer(next)) {
             g_forecast = ForecastSnapshot{};
         }
-        if (sourceOrCoordsChanged) {
+        if (coordsChanged || feedConfigChanged) {
             g_forecastDirty = true;
             wakeWeather = true;
         }
@@ -1895,7 +1895,7 @@ void CommitEditedFieldValue(HudFieldId fieldId, const std::wstring& val) {
                 if (validNow) {
                     g_settings.latitude = newLat;
                     g_settings.longitude = newLon;
-                } else {
+                } else if (!HasAnyForecastConsumer(g_settings)) {
                     g_forecast = ForecastSnapshot{};
                 }
                 if (coordsChanged) {
@@ -3044,13 +3044,50 @@ bool ParseTomorrowIoJson(const std::string& json, ForecastSnapshot& outSnap) {
 }
 
 bool FetchSingleWeatherSource(const std::wstring& src, const Settings& cfg, ForecastSnapshot& outSnap) {
-    if (src == L"off" || src == L"auto" || !cfg.hasValidCoords) {
+    if (src == L"off" || src == L"auto") {
         return false;
     }
     const std::wstring amp(1, static_cast<wchar_t>(38));
-    std::wstring latStr = FormatCoordDot(cfg.latitude);
-    std::wstring lonStr = FormatCoordDot(cfg.longitude);
+    std::wstring latStr = cfg.hasValidCoords ? FormatCoordDot(cfg.latitude) : L"0.0000";
+    std::wstring lonStr = cfg.hasValidCoords ? FormatCoordDot(cfg.longitude) : L"0.0000";
     std::wstring apiKey = GetProviderApiKey(src, cfg);
+
+    if (src == L"custom_api") {
+        if (cfg.customApiUrl.empty()) {
+            return false;
+        }
+        std::wstring resolvedUrl = cfg.customApiUrl;
+        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{lat}", latStr);
+        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{lon}", lonStr);
+        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{key}", cfg.customApiKey);
+        std::string body = HttpGetUtf8(resolvedUrl);
+        return !body.empty() && ParseWeatherJson(body, outSnap, L"Custom API");
+    }
+    if (src == L"local_file") {
+        if (cfg.localWeatherPath.empty()) {
+            return false;
+        }
+        HANDLE hFile = CreateFileW(
+            cfg.localWeatherPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFile == INVALID_HANDLE_VALUE) {
+            return false;
+        }
+        DWORD size = GetFileSize(hFile, nullptr);
+        std::string content;
+        if (size > 0 && size < 1024 * 1024) {
+            content.resize(size);
+            DWORD read = 0;
+            ReadFile(hFile, content.data(), size, &read, nullptr);
+            content.resize(read);
+        }
+        CloseHandle(hFile);
+        return !content.empty() && ParseWeatherJson(content, outSnap, L"Local File");
+    }
+
+    if (!cfg.hasValidCoords) {
+        return false;
+    }
 
     if (src == L"open_meteo") {
         std::wstring url =
@@ -3125,38 +3162,6 @@ bool FetchSingleWeatherSource(const std::wstring& src, const Settings& cfg, Fore
                            latStr + L"," + lonStr + amp + L"apikey=" + apiKey;
         std::string body = HttpGetUtf8(url);
         return !body.empty() && ParseTomorrowIoJson(body, outSnap);
-    }
-    if (src == L"custom_api") {
-        if (cfg.customApiUrl.empty()) {
-            return false;
-        }
-        std::wstring resolvedUrl = cfg.customApiUrl;
-        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{lat}", latStr);
-        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{lon}", lonStr);
-        resolvedUrl = ReplaceAllSubstrings(resolvedUrl, L"{key}", cfg.weatherapiKey);
-        std::string body = HttpGetUtf8(resolvedUrl);
-        return !body.empty() && ParseWeatherJson(body, outSnap, L"Custom API");
-    }
-    if (src == L"local_file") {
-        if (cfg.localWeatherPath.empty()) {
-            return false;
-        }
-        HANDLE hFile = CreateFileW(
-            cfg.localWeatherPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
-            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hFile == INVALID_HANDLE_VALUE) {
-            return false;
-        }
-        DWORD size = GetFileSize(hFile, nullptr);
-        std::string content;
-        if (size > 0 && size < 1024 * 1024) {
-            content.resize(size);
-            DWORD read = 0;
-            ReadFile(hFile, content.data(), size, &read, nullptr);
-            content.resize(read);
-        }
-        CloseHandle(hFile);
-        return !content.empty() && ParseWeatherJson(content, outSnap, L"Local File");
     }
     return false;
 }
@@ -3301,7 +3306,7 @@ void WeatherWorkerLoop() {
             std::lock_guard<std::mutex> lock(g_mutex);
             cfg = g_settings;
             intervalSec = cfg.updateIntervalMin * 60;
-            needFetch = (cfg.primarySource != L"off") && HasAnyForecastConsumer(cfg) && g_forecastDirty;
+            needFetch = HasAnyForecastConsumer(cfg) && g_forecastDirty;
             if (needFetch) {
                 g_forecastDirty = false;
                 g_lastFetchedSource = cfg.primarySource;
@@ -3329,14 +3334,18 @@ void WeatherWorkerLoop() {
                 }
                 waitMs = std::min<DWORD>(waitMs, 60000);
             }
-        } else if (cfg.primarySource != L"off" && HasAnyForecastConsumer(cfg)) {
-            std::lock_guard<std::mutex> lock(g_mutex);
-            g_forecastDirty = true;
         }
+        DWORD waitRes = WAIT_TIMEOUT;
         if (g_weatherWakeEvent) {
-            WaitForSingleObject(g_weatherWakeEvent, waitMs);
+            waitRes = WaitForSingleObject(g_weatherWakeEvent, waitMs);
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(waitMs));
+        }
+        if (waitRes == WAIT_TIMEOUT) {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            if (HasAnyForecastConsumer(g_settings)) {
+                g_forecastDirty = true;
+            }
         }
     }
 }
@@ -4159,7 +4168,7 @@ float ComputeCursorHoverFadeMultiplier(float cx, float cy, float hitRadius, int 
 
 void DrawDriftingCloudsLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
                              const Settings& cfg, float cloudPct01, float windVx, double timeSec,
-                             bool hasCursor, float curRelX, float curRelY) {
+                             bool hasCursor, float curRelX, float curRelY, bool& outCursorNearSky) {
     if (cloudPct01 <= 0.01f) {
         return;
     }
@@ -4187,6 +4196,9 @@ void DrawDriftingCloudsLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brus
             float edgeFade = ComputeMonitorEdgeFade(mon, cx, cy, rx + 45.0f);
             float hoverFade = ComputeCursorHoverFadeMultiplier(
                 cx, cy, std::max(rx, ry), cfg.cursorHoverOpacityPct, hasCursor, curRelX, curRelY);
+            if (hoverFade < 0.999f) {
+                outCursorNearSky = true;
+            }
             float totalFade = edgeFade * hoverFade;
             if (totalFade <= 0.002f) {
                 continue;
@@ -4224,7 +4236,7 @@ void DrawDriftingCloudsLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brus
 void DrawSunLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const Settings& cfg,
                   bool active, double hour, const ForecastSnapshot& snap,
                   float uvIndex, float cloudDimFactor, double timeSec,
-                  bool hasCursor, float curRelX, float curRelY) {
+                  bool hasCursor, float curRelX, float curRelY, bool& outCursorNearSky) {
     if (!active || cfg.sunGeom.radius <= 0 || g_monitorRects.empty()) {
         return;
     }
@@ -4253,6 +4265,9 @@ void DrawSunLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const Se
         }
         float hoverFade = ComputeCursorHoverFadeMultiplier(
             cx, cy, radius * 1.9f, cfg.cursorHoverOpacityPct, hasCursor, curRelX, curRelY);
+        if (hoverFade < 0.999f) {
+            outCursorNearSky = true;
+        }
         float visFactor = baseVis * ComputeMonitorEdgeFade(mon, cx, cy, radius * 2.4f + 24.0f) * hoverFade;
         if (visFactor <= 0.002f) {
             continue;
@@ -4297,7 +4312,7 @@ void DrawSunLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const Se
 void DrawMoonLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const Settings& cfg,
                    bool active, double hour, const ForecastSnapshot& snap,
                    double moonPhase01, float cloudDimFactor,
-                   bool hasCursor, float curRelX, float curRelY) {
+                   bool hasCursor, float curRelX, float curRelY, bool& outCursorNearSky) {
     if (!active || cfg.moonGeom.radius <= 0 || g_monitorRects.empty()) {
         return;
     }
@@ -4319,6 +4334,9 @@ void DrawMoonLayer(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush, const S
         }
         float hoverFade = ComputeCursorHoverFadeMultiplier(
             cx, cy, r * 1.6f, cfg.cursorHoverOpacityPct, hasCursor, curRelX, curRelY);
+        if (hoverFade < 0.999f) {
+            outCursorNearSky = true;
+        }
         float visFactor = baseVis * ComputeMonitorEdgeFade(mon, cx, cy, r * 2.0f + 24.0f) * hoverFade;
         if (visFactor <= 0.002f) {
             continue;
@@ -5192,7 +5210,8 @@ void DrawForecastHudWidget(ID2D1DCRenderTarget* rt, ID2D1SolidColorBrush* brush,
 void RenderFrame(const Settings& cfg, const ForecastSnapshot& snap, const GeneralEffectsState& fx,
                  float cloudPct01, float uvIndex, double moonPhase01,
                  int bottomLimitY, float precipVx, double timeSec, bool forceArcDirty,
-                 bool hasCursor, float curRelX, float curRelY) {
+                 bool hasCursor, float curRelX, float curRelY, bool& outCursorNearSky) {
+    outCursorNearSky = false;
     if (!g_overlayHwnd || !EnsureSurface(g_surface, g_canvasWidth, g_canvasHeight, cfg.colorSnow, cfg.hasCustomSnowColor)) {
         return;
     }
@@ -5217,13 +5236,13 @@ void RenderFrame(const Settings& cfg, const ForecastSnapshot& snap, const Genera
                   (cfg.moonMode == TriStateMode::Auto && (isNightClock || (cfg.primarySource != L"off" && snap.valid && !snap.isDay)));
 
     if (!cfg.celestialInFrontOfClouds) {
-        DrawSunLayer(g_surface.rt, g_surface.sharedBrush, cfg, sunOn, hour, snap, uvIndex, cloudDimFactor, timeSec, hasCursor, curRelX, curRelY);
-        DrawMoonLayer(g_surface.rt, g_surface.sharedBrush, cfg, moonOn, hour, snap, moonPhase01, cloudDimFactor, hasCursor, curRelX, curRelY);
+        DrawSunLayer(g_surface.rt, g_surface.sharedBrush, cfg, sunOn, hour, snap, uvIndex, cloudDimFactor, timeSec, hasCursor, curRelX, curRelY, outCursorNearSky);
+        DrawMoonLayer(g_surface.rt, g_surface.sharedBrush, cfg, moonOn, hour, snap, moonPhase01, cloudDimFactor, hasCursor, curRelX, curRelY, outCursorNearSky);
     }
-    DrawDriftingCloudsLayer(g_surface.rt, g_surface.sharedBrush, cfg, cloudPct01, precipVx, timeSec, hasCursor, curRelX, curRelY);
+    DrawDriftingCloudsLayer(g_surface.rt, g_surface.sharedBrush, cfg, cloudPct01, precipVx, timeSec, hasCursor, curRelX, curRelY, outCursorNearSky);
     if (cfg.celestialInFrontOfClouds) {
-        DrawSunLayer(g_surface.rt, g_surface.sharedBrush, cfg, sunOn, hour, snap, uvIndex, cloudDimFactor, timeSec, hasCursor, curRelX, curRelY);
-        DrawMoonLayer(g_surface.rt, g_surface.sharedBrush, cfg, moonOn, hour, snap, moonPhase01, cloudDimFactor, hasCursor, curRelX, curRelY);
+        DrawSunLayer(g_surface.rt, g_surface.sharedBrush, cfg, sunOn, hour, snap, uvIndex, cloudDimFactor, timeSec, hasCursor, curRelX, curRelY, outCursorNearSky);
+        DrawMoonLayer(g_surface.rt, g_surface.sharedBrush, cfg, moonOn, hour, snap, moonPhase01, cloudDimFactor, hasCursor, curRelX, curRelY, outCursorNearSky);
     }
 
     if (fx.dust) {
@@ -5354,6 +5373,7 @@ void RenderWorkerLoop() {
     int prevTop = INT32_MIN;
     int prevW = -1;
     int prevH = -1;
+    bool prevCursorNearSky = false;
 
     while (g_running.load()) {
         MSG msg;
@@ -5554,13 +5574,17 @@ void RenderWorkerLoop() {
             }
         }
 
+        bool cursorNearSky = false;
         RenderFrame(cfg, snap, activeFx, cloudPct01, uvIndex, moonPhase01,
                     ComputeBottomLimitY(cfg), windCloudVx, timeSec, forceArcDirty,
-                    hasCursor, curRelX, curRelY);
+                    hasCursor, curRelX, curRelY, cursorNearSky);
+
+        bool hoverTransitioning = cursorNearSky || prevCursorNearSky;
+        prevCursorNearSky = cursorNearSky;
 
         bool hasFastMotion = !g_falling.empty() || activeFx.thunderstorm || activeFx.aurora || activeFx.mirage ||
                              activeFx.windStreams || activeFx.nightStars || activeFx.airQuality ||
-                             activeFx.pollen || activeFx.floodWater || g_hudExpanded.load();
+                             activeFx.pollen || activeFx.floodWater || g_hudExpanded.load() || hoverTransitioning;
         bool hasSlowMotion = (cloudPct01 > 0.01f) || sunActive || moonActive;
         DWORD waitMs = hasFastMotion
             ? static_cast<DWORD>(1000 / cfg.targetFps)
@@ -5624,11 +5648,18 @@ bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+
     // Exit the tool mod process.
     ExitThread(0);
 }
 
 BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+        return FALSE;
+    }
+
     bool isService = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
@@ -5692,12 +5723,6 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
-        Wh_Log(L"Session 0 process, skipping");
-        return FALSE;
-    }
-
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
@@ -5708,8 +5733,7 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR windhawkPath[MAX_PATH];
-    DWORD windhawkPathLen = GetModuleFileNameW(nullptr, windhawkPath, ARRAYSIZE(windhawkPath));
-    if (!windhawkPathLen || windhawkPathLen == ARRAYSIZE(windhawkPath)) {
+    if (!GetModuleFileNameW(nullptr, windhawkPath, ARRAYSIZE(windhawkPath))) {
         Wh_Log(L"GetModuleFileNameW failed");
         return;
     }
@@ -5720,8 +5744,33 @@ void Wh_ModAfterInit() {
     STARTUPINFO si = {sizeof(si)};
     si.dwFlags = STARTF_FORCEOFFFEEDBACK;
     PROCESS_INFORMATION pi;
-    if (!CreateProcessW(windhawkPath, commandLine, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
-        Wh_Log(L"CreateProcessW failed: %u", GetLastError());
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken,
+        LPCWSTR lpApplicationName,
+        LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes,
+        BOOL bInheritHandles,
+        DWORD dwCreationFlags,
+        LPVOID lpEnvironment,
+        LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hNewToken);
+
+    HMODULE kernelbaseModule = GetModuleHandleW(L"kernelbase.dll");
+    auto pCreateProcessInternalW = kernelbaseModule
+        ? reinterpret_cast<CreateProcessInternalW_t>(GetProcAddress(kernelbaseModule, "CreateProcessInternalW"))
+        : nullptr;
+
+    BOOL created = pCreateProcessInternalW
+        ? pCreateProcessInternalW(nullptr, windhawkPath, commandLine, nullptr, nullptr, FALSE,
+                                  NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi, nullptr)
+        : CreateProcessW(windhawkPath, commandLine, nullptr, nullptr, FALSE,
+                         NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi);
+    if (!created) {
+        Wh_Log(L"CreateProcess failed: %u", GetLastError());
         return;
     }
 
