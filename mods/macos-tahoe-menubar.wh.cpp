@@ -8,7 +8,7 @@
 // @include         windhawk.exe
 // @include         explorer.exe
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lpropsys -ldwmapi -ld2d1 -ld3d11 -ldxgi -ldwrite -lwindowscodecs -lgdi32 -luser32 -lversion -lshcore -lcomctl32 -lcomdlg32 -lpowrprof -lwlanapi -ldxva2 -ladvapi32
-// @license         MIT
+// @license         GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -31,7 +31,19 @@ Turns the top edge of your screen into a standalone **macOS 26/27 Tahoe Menu Bar
 - **Calendar & Clock**: Click the top-right date/time to open a Liquid Glass
   monthly calendar popup.
 - **Optional Dock Integration**: Clicking *Desktop & Dock Settings…* opens the
-  companion **macOS 26 Tahoe Dock** (`macos-tahoe-dock`) settings panel when running.
+  companion **macOS 26 Tahoe Dock** settings panel when active.
+
+## Important Notes
+- **Dark Mode toggle**: Clicking the Control Center Dark Mode tile (or *Switch to Light/Dark Mode* in the bar context menu) updates Windows' `AppsUseLightTheme` and `SystemUsesLightTheme` preference in the registry. This change persists until toggled back.
+- **Liquid Glass capture**: Optical refraction captures the screen behind the bar locally in GPU memory and hides the bar from screen capture while refraction is active. Press `Win+Ctrl+Shift+G` or switch **Optical refraction mode** to *Frosted Blur Only* when taking screenshots.
+
+## Comparison with Existing Menu Bar Mods
+Compared to [`mac-os-27-finder-bar`](https://windhawk.net/mods/mac-os-27-finder-bar), [`mac-island-dock`](https://windhawk.net/mods/mac-island-dock), and [`windhawk-topbar`](https://windhawk.net/mods/windhawk-topbar), **macOS 26 Tahoe Menu Bar** pairs the dual-process tray mirror with real-time DXGI curved-lens refraction glass (`Lens`, `Mirror Reflection`, `Convex Stretch`, and `Clear`/`Tinted` styles) matching the Tahoe Dock aesthetic, while keeping a compact top-edge menu bar + Control Center + monthly calendar layout.
+
+## Credits & License
+Licensed under **GPL-3.0**:
+- The DXGI Desktop Duplication Liquid Glass refraction engine, PaintCode squircle geometry, blur interop, and `.icns` reader are adapted from **MacOS Style Dock** by **Zach Vaughn** (`GPL-3.0`).
+- The dual-process `explorer.exe` tray-mirroring architecture is adapted from **Mac OS 27 Finder Bar** by **Thiago Silva** (`GPL-3.0`).
 */
 // ==/WindhawkModReadme==
 
@@ -146,6 +158,7 @@ Turns the top edge of your screen into a standalone **macOS 26/27 Tahoe Menu Bar
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <cstdio>
 #include <cwctype>
 #include <functional>
@@ -4152,6 +4165,7 @@ DWORD WINAPI HostThreadProc(LPVOID) {
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        reinterpret_cast<LPCWSTR>(&HostThreadProc), &hSelf);
 
+    bool attachedLate = false;
     for (int i = 0; i < 240; ++i) {
         HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
         DWORD pid = 0;
@@ -4160,13 +4174,23 @@ DWORD WINAPI HostThreadProc(LPVOID) {
             g_shellTray = tray;
             g_hook = SetWindowsHookExW(WH_CALLWNDPROC, CallWndProcHook, hSelf,
                                        tid);
+            attachedLate = (i == 0 && g_hook != nullptr);
             break;
         }
         if (WaitForSingleObject(g_stopEv, 500) == WAIT_OBJECT_0) {
             return 0;
         }
     }
+    if (!g_hook) {
+        return 0;
+    }
+    if (attachedLate) {
+        if (UINT tbMsg = RegisterWindowMessageW(L"TaskbarCreated")) {
+            PostMessageW(HWND_BROADCAST, tbMsg, 0, 0);
+        }
+    }
 
+    std::unordered_map<uint64_t, std::vector<BYTE>> cachedPackets;
     HWND lastClient = nullptr;
     HANDLE hs[2] = {g_stopEv, g_wakeEv};
     for (;;) {
@@ -4174,17 +4198,38 @@ DWORD WINAPI HostThreadProc(LPVOID) {
         if (w == WAIT_OBJECT_0) {
             break;
         }
-        HWND client =
-            FindWindowExW(HWND_MESSAGE, nullptr, kTrayClientClassName, nullptr);
-        if (client && client != lastClient) {
-            SendToClient(client, kTrayIpcHello, nullptr, 0);
-            lastClient = client;
-        }
         std::vector<std::vector<BYTE>> batch;
         AcquireSRWLockExclusive(&g_queueLock);
         batch.swap(g_queue);
         ReleaseSRWLockExclusive(&g_queueLock);
+        for (const auto& pkt : batch) {
+            if (pkt.size() >= sizeof(DWORD) * 5) {
+                TrayIpcMsg tm{};
+                memcpy(&tm, pkt.data(), std::min(pkt.size(), sizeof(tm)));
+                uint64_t key =
+                    (static_cast<uint64_t>(tm.nid.hWnd) << 32) | tm.nid.uID;
+                if (tm.message == NIM_DELETE) {
+                    cachedPackets.erase(key);
+                } else {
+                    cachedPackets[key] = pkt;
+                }
+            }
+        }
+        HWND client =
+            FindWindowExW(HWND_MESSAGE, nullptr, kTrayClientClassName, nullptr);
+        if (client && client != lastClient) {
+            SendToClient(client, kTrayIpcHello, nullptr, 0);
+            for (const auto& [k, cpkt] : cachedPackets) {
+                if (WaitForSingleObject(g_stopEv, 0) == WAIT_OBJECT_0) {
+                    break;
+                }
+                SendToClient(client, kTrayIpcFwd, cpkt.data(),
+                             static_cast<DWORD>(cpkt.size()));
+            }
+            lastClient = client;
+        }
         if (!client) {
+            lastClient = nullptr;
             continue;
         }
         for (auto& pkt : batch) {
@@ -4209,6 +4254,9 @@ void UnhookSafe() {
 }
 
 BOOL Init() {
+    if (Wh_GetIntSetting(L"finderBarShowTray") == 0) {
+        return TRUE;
+    }
     g_stopEv = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_wakeEv = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_stopEv || !g_wakeEv) {
@@ -5688,7 +5736,6 @@ LRESULT CALLBACK TrayClientWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return FALSE;
         }
         if (cds->dwData == kTrayIpcHello) {
-            RequestShellTrayIcons();
             return TRUE;
         }
         if (cds->dwData == kTrayIpcFwd && cds->lpData && cds->cbData >= 8) {
@@ -7732,8 +7779,10 @@ LRESULT CALLBACK FinderBarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                                  RenderFinderBar();
                              },
                              {}});
-                m.push_back({MenuEntry::Type::Action, L"Refresh Tray Icons",
-                             false, true, [] { RequestShellTrayIcons(); }, {}});
+                if (g_settings.finderBarShowTray) {
+                    m.push_back({MenuEntry::Type::Action, L"Refresh Tray Icons",
+                                 false, true, [] { RequestShellTrayIcons(); }, {}});
+                }
                 m.push_back(
                     {MenuEntry::Type::Separator, L"", false, false, nullptr, {}});
                 m.push_back({MenuEntry::Type::Action,
@@ -7950,7 +7999,6 @@ void InitFinderBar(HINSTANCE hInst) {
     if (g_dock.hwnd) {
         SetTimer(g_dock.hwnd, kTimerFinderBarStatus, 1000, nullptr);
     }
-    RequestShellTrayIcons();
 }
 
 void ShutdownFinderBar(HINSTANCE hInst) {
@@ -8283,7 +8331,8 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HRESULT oleHr = OleInitialize(nullptr);
 
-    HMODULE hCoreMsg = LoadLibraryW(L"CoreMessaging.dll");
+    HMODULE hCoreMsg = LoadLibraryExW(L"CoreMessaging.dll", nullptr,
+                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
     using CreateDispatcherQueueController_t = HRESULT(WINAPI*)(
         DispatcherQueueOptions,
         ABI::Windows::System::IDispatcherQueueController**);
@@ -8344,6 +8393,7 @@ DWORD WINAPI UiThreadProc(LPVOID) {
     ShutdownFinderBar(hSelf);
     UnregisterClassW(kMenuClassName, hSelf);
     ShutdownLiquidCapture();
+    g_dock.hostBackdrop = nullptr;
     g_gfx.Shutdown();
     ShutdownDispatcherQueue();
     if (SUCCEEDED(oleHr)) {
@@ -8380,14 +8430,15 @@ void WhTool_ModUninit() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Dual-process boilerplate: explorer.exe hosts the lightweight tray-icon mirror
-// hook, while windhawk.exe (-tool-mod) hosts the standalone Top Menu Bar.
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions (plus explorer.exe tray-mirror dispatch).
+// Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 ////////////////////////////////////////////////////////////////////////////////
 
 bool g_isExplorerProcess = false;
-bool g_isToolModProcessLauncher = false;
-HANDLE g_toolModProcessMutex = nullptr;
-HANDLE g_toolModClosingEvent = nullptr;
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
 
 bool IsCurrentProcessExplorer() {
     WCHAR path[MAX_PATH]{};
@@ -8400,6 +8451,7 @@ bool IsCurrentProcessExplorer() {
 }
 
 void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
     ExitThread(0);
 }
 
@@ -8409,7 +8461,7 @@ BOOL Wh_ModInit() {
         return ExplorerTrayHost::Init();
     }
 
-    DWORD sessionId = 0;
+    DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
         return FALSE;
@@ -8418,11 +8470,13 @@ BOOL Wh_ModInit() {
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
+
     for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
@@ -8431,6 +8485,7 @@ BOOL Wh_ModInit() {
             break;
         }
     }
+
     for (int i = 1; i < argc - 1; i++) {
         if (wcscmp(argv[i], L"-tool-mod") == 0) {
             isToolModProcess = true;
@@ -8440,64 +8495,46 @@ BOOL Wh_ModInit() {
             break;
         }
     }
+
     LocalFree(argv);
+
     if (isExcluded) {
         return FALSE;
     }
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
+
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            CloseHandle(g_toolModProcessMutex);
-            g_toolModProcessMutex = nullptr;
-            ULONGLONG start = GetTickCount64();
-            for (;;) {
-                Sleep(100);
-                HANDLE m = CreateMutexW(nullptr, TRUE,
-                                        L"windhawk-tool-mod_" WH_MOD_ID);
-                if (m && GetLastError() != ERROR_ALREADY_EXISTS) {
-                    g_toolModProcessMutex = m;
-                    break;
-                }
-                if (m) CloseHandle(m);
-                bool closing = false;
-                if (HANDLE ev = OpenEventW(
-                        SYNCHRONIZE, FALSE,
-                        L"windhawk-tool-mod-closing_" WH_MOD_ID)) {
-                    closing = WaitForSingleObject(ev, 0) == WAIT_OBJECT_0;
-                    CloseHandle(ev);
-                }
-                if (GetTickCount64() - start > (closing ? 12000u : 3000u)) {
-                    break;
-                }
-            }
-            if (!g_toolModProcessMutex) {
-                ExitProcess(1);
-            }
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
         }
-        g_toolModClosingEvent = CreateEventW(
-            nullptr, TRUE, FALSE, L"windhawk-tool-mod-closing_" WH_MOD_ID);
+
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
+
         IMAGE_DOS_HEADER* dosHeader =
-            reinterpret_cast<IMAGE_DOS_HEADER*>(GetModuleHandleW(nullptr));
-        IMAGE_NT_HEADERS* ntHeaders = reinterpret_cast<IMAGE_NT_HEADERS*>(
-            reinterpret_cast<BYTE*>(dosHeader) + dosHeader->e_lfanew);
-        void* entryPoint = reinterpret_cast<BYTE*>(dosHeader) +
-                           ntHeaders->OptionalHeader.AddressOfEntryPoint;
-        Wh_SetFunctionHook(entryPoint, reinterpret_cast<void*>(EntryPoint_Hook),
-                           nullptr);
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
         return TRUE;
     }
 
     if (isToolModProcess) {
         return FALSE;
     }
+
     g_isToolModProcessLauncher = true;
     return TRUE;
 }
@@ -8506,26 +8543,31 @@ void Wh_ModAfterInit() {
     if (g_isExplorerProcess || !g_isToolModProcessLauncher) {
         return;
     }
+
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
             return;
     }
-    WCHAR commandLine[MAX_PATH + 2 +
-                      (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) -
-                      1];
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
         }
     }
+
     using CreateProcessInternalW_t = BOOL(WINAPI*)(
         HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
         LPSECURITY_ATTRIBUTES lpProcessAttributes,
@@ -8534,27 +8576,35 @@ void Wh_ModAfterInit() {
         LPSTARTUPINFOW lpStartupInfo,
         LPPROCESS_INFORMATION lpProcessInformation,
         PHANDLE hRestrictedUserToken);
-    auto pCreateProcessInternalW =
-        reinterpret_cast<CreateProcessInternalW_t>(
-            GetProcAddress(kernelModule, "CreateProcessInternalW"));
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
     if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
         return;
     }
-    STARTUPINFOW si{.cb = sizeof(STARTUPINFOW),
-                    .dwFlags = STARTF_FORCEOFFFEEDBACK};
-    PROCESS_INFORMATION pi{};
-    if (pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                nullptr, nullptr, &si, &pi, nullptr)) {
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
     }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
 }
 
 void Wh_ModSettingsChanged() {
     if (g_isExplorerProcess || g_isToolModProcessLauncher) {
         return;
     }
+
     WhTool_ModSettingsChanged();
 }
 
@@ -8563,16 +8613,11 @@ void Wh_ModUninit() {
         ExplorerTrayHost::Uninit();
         return;
     }
+
     if (g_isToolModProcessLauncher) {
         return;
     }
-    if (g_toolModClosingEvent) {
-        SetEvent(g_toolModClosingEvent);
-    }
+
     WhTool_ModUninit();
-    if (g_toolModClosingEvent) {
-        CloseHandle(g_toolModClosingEvent);
-        g_toolModClosingEvent = nullptr;
-    }
     ExitProcess(0);
 }
