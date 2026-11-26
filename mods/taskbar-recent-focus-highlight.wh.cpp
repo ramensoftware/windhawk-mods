@@ -5959,7 +5959,7 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
         Wh_Log(L"ApplyThumbnailHighlight error %08X", hr);
     }
 }
-
+
 // Per UI thread; emptied by ReleaseUiThreadLocals_UIThread at unload.
 thread_local std::wstring t_lastResolveLog;
 
