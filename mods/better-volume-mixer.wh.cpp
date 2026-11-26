@@ -2,7 +2,7 @@
 // @id           better-volume-mixer
 // @name         Better Volume Mixer
 // @description  A customizable volume mixer for master and per-app volume, right from the system tray
-// @version      1.6.0
+// @version      1.6.4
 // @author       0Allu
 // @github       https://github.com/0Allu
 // @homepage     https://github.com/0Allu/better-volume-mixer
@@ -32,6 +32,7 @@ hidden, open the tray overflow menu and drag the icon onto the taskbar.
 * Optional alert sound when you change the volume
 * Muted master-volume indicator in the mixer
 * Tray icon that shows the master volume level
+* Optionally show the volume percentage as the tray icon, with adjustable size
 * Middle-click the tray icon to toggle master mute
 * Scroll over the tray icon to change master volume
 * Mouse-wheel volume adjustment
@@ -97,6 +98,15 @@ and enable **Hide volume icon** in its settings.
 - windowBorder: true
   $name: Window border
   $description: Show the thin outline Windows draws around the mixer.
+- trayIcon: icon
+  $name: Tray icon
+  $description: Show a speaker icon, or the master volume as a number.
+  $options:
+  - icon: Volume icon
+  - percent: Volume percentage
+- trayNumberSize: 100
+  $name: Tray percentage size
+  $description: From 50 to 100 percent of the largest size that fits in the tray.
 - volumeStep: 5
   $name: Mouse-wheel volume step
   $description: Percent per wheel step over a row or the tray icon, from 1 to 20.
@@ -122,6 +132,9 @@ and enable **Hide volume icon** in its settings.
 - closeWhenFocusIsLost: true
   $name: Close when focus is lost
   $description: Close the mixer when you click somewhere else.
+- closeButton: true
+  $name: Close button
+  $description: Show the X button in the mixer's top corner.
 - maxVisibleApps: "7"
   $name: Applications per page
   $description: App rows per page, limited by screen space. Master volume is not counted.
@@ -296,6 +309,9 @@ struct Settings {
     bool compactMode = false;
     bool windowBorder = true;
     bool closeWhenFocusIsLost = true;
+    bool closeButton = true;
+    bool trayPercent = false;
+    int trayNumberSize = 100;
     bool moveNotifications = true;
     bool animations = true;
     int backgroundOpacity = 85;
@@ -516,6 +532,8 @@ IAudioEndpointVolume* g_endpointVolume;
 EndpointVolumeNotification* g_endpointVolumeCallback;
 bool g_masterIconMuted;
 PCWSTR g_trayIconGlyph;    // The volume glyph the tray icon shows.
+int g_trayIconPercent = -1; // The number it shows in percentage mode.
+std::wstring g_trayTip;
 PCWSTR g_symbolFace = L"Segoe MDL2 Assets"; // The icon font in use.
 std::wstring g_endpointName;
 // COM interfaces and icons must never be released by a process-exit destructor.
@@ -658,6 +676,10 @@ void LoadSettings() {
         Wh_GetIntSetting(L"showAllSessions") != 0;
     g_settings.closeWhenFocusIsLost =
         Wh_GetIntSetting(L"closeWhenFocusIsLost") != 0;
+    g_settings.closeButton = Wh_GetIntSetting(L"closeButton") != 0;
+    WindhawkUtils::StringSetting tray = WindhawkUtils::StringSetting::make(L"trayIcon");
+    g_settings.trayPercent = wcscmp(tray.get(), L"percent") == 0;
+    g_settings.trayNumberSize = ClampInt(Wh_GetIntSetting(L"trayNumberSize"), 50, 100);
     g_settings.moveNotifications = Wh_GetIntSetting(L"moveNotifications") != 0;
     g_settings.animations = Wh_GetIntSetting(L"animations") != 0;
     g_settings.backgroundOpacity = ClampInt(Wh_GetIntSetting(L"backgroundOpacity"), 0, 100);
@@ -2386,7 +2408,9 @@ RECT TitleRect(int width) {
     return {Scale(24), Scale(11), width - Scale(60), Scale(39)};
 }
 
+// Empty when the close button is turned off.
 RECT CloseButtonRect(int width) {
+    if (!g_settings.closeButton) return {};
     if (IsCompact()) {
         return {width - Scale(44), Scale(12), width - Scale(16), Scale(40)};
     }
@@ -2396,8 +2420,10 @@ RECT CloseButtonRect(int width) {
 
 RECT OutputPickerRect(int width) {
     if (IsCompact()) {
-        // As far from the top edge as from the side.
-        return {Scale(12), Scale(12), width - Scale(52), Scale(40)};
+        // As far from the top edge as from the side. Without the close
+        // button, it takes the button's place too.
+        return {Scale(12), Scale(12), width - Scale(g_settings.closeButton ? 52 : 12),
+                Scale(40)};
     }
     return {Scale(12), Scale(44), width - Scale(12), Scale(74)};
 }
@@ -3698,14 +3724,17 @@ void RenderMixerContents(HDC dc, const RECT& client) {
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     RECT closeRect = CloseButtonRect(client.right);
-    if (g_paintMatte != 1) {
-        g_frameAnimating |= std::abs(g_closeHoverAmount -
-                                     (g_closeHovered ? 1.0f : 0.0f)) >= 0.001f;
-        g_closeHoverAmount = EaseTowards(g_closeHoverAmount, g_closeHovered ? 1.0f : 0.0f, 18.0f);
+    if (g_settings.closeButton) {
+        if (g_paintMatte != 1) {
+            g_frameAnimating |= std::abs(g_closeHoverAmount -
+                                         (g_closeHovered ? 1.0f : 0.0f)) >= 0.001f;
+            g_closeHoverAmount =
+                EaseTowards(g_closeHoverAmount, g_closeHovered ? 1.0f : 0.0f, 18.0f);
+        }
+        DrawSurface(dc, closeRect, Radius(8), g_theme.background, g_closeHoverAmount);
+        DrawLabel(dc, L"\uE8BB", closeRect, g_symbolFont, IconColor(),
+                  DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
-    DrawSurface(dc, closeRect, Radius(8), g_theme.background, g_closeHoverAmount);
-    DrawLabel(dc, L"\uE8BB", closeRect, g_symbolFont, IconColor(),
-              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     if (!g_audioAvailable) {
         RECT message = {Scale(24), HeaderHeight() + Scale(30),
@@ -4377,7 +4406,7 @@ void AddTrayIcon(HWND hWnd) {
     data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_GUID | NIF_SHOWTIP;
     data.uCallbackMessage = WM_APP_TRAY;
     data.hIcon = g_trayIcon;
-    wcscpy_s(data.szTip, L"Better Volume Mixer");
+    wcscpy_s(data.szTip, g_trayTip.empty() ? L"Better Volume Mixer" : g_trayTip.c_str());
     if (!Shell_NotifyIconW(NIM_ADD, &data)) {
         // A GUID can remain associated with an earlier Windhawk executable path.
         // Keep the same identity mode for all later operations on this icon.
@@ -4804,10 +4833,101 @@ HICON LoadMixerIcon(int pixels, bool tray = false, bool muted = false) {
                                          pixels, pixels, 0));
 }
 
-// Draws a volume glyph as an icon the way the taskbar draws its own icons:
-// with DirectWrite, at regular weight, with grayscale antialiasing. Compared
-// with the Windows 11 wifi icon, this matches it nearly pixel for pixel.
-HICON CreateGlyphIcon(int pixels, PCWSTR glyph, COLORREF color) {
+// Tabular figures give every digit the same width, so numbers with the same
+// count of digits take the same space.
+IDWriteTextLayout* CreateNumberLayout(IDWriteFactory* dwrite, IDWriteTextFormat* format,
+                                      IDWriteTypography* typography, const std::wstring& text,
+                                      float side, float size) {
+    IDWriteTextLayout* layout = nullptr;
+    UINT32 length = static_cast<UINT32>(text.size());
+    if (FAILED(dwrite->CreateTextLayout(text.c_str(), length, format, side, side, &layout))) {
+        return nullptr;
+    }
+    layout->SetFontSize(size, {0, length});
+    if (typography) layout->SetTypography(typography, {0, length});
+    return layout;
+}
+
+// The ink box that any number with this many digits can cover, from the
+// overhangs: how far the ink reaches past the layout box, which is negative
+// where it stops short. Sizing by this rather than by the number shown keeps
+// a 40 as large as a 35.
+bool MeasureDigits(IDWriteFactory* dwrite, IDWriteTextFormat* format,
+                   IDWriteTypography* typography, size_t digits, float side, float size,
+                   D2D1_RECT_F* bounds) {
+    // Starts inside out, so the first digit sets every edge.
+    *bounds = {side * 2.0f, side * 2.0f, -side, -side};
+    for (WCHAR digit = L'0'; digit <= L'9'; ++digit) {
+        IDWriteTextLayout* layout = CreateNumberLayout(
+            dwrite, format, typography, std::wstring(digits, digit), side, size);
+        if (!layout) return false;
+        DWRITE_OVERHANG_METRICS ink{};
+        HRESULT result = layout->GetOverhangMetrics(&ink);
+        layout->Release();
+        if (FAILED(result)) return false;
+        bounds->left = std::min(bounds->left, -ink.left);
+        bounds->top = std::min(bounds->top, -ink.top);
+        bounds->right = std::max(bounds->right, side + ink.right);
+        bounds->bottom = std::max(bounds->bottom, side + ink.bottom);
+    }
+    return bounds->right > bounds->left && bounds->bottom > bounds->top;
+}
+
+// A volume glyph fills the square at regular weight, which matches the
+// Windows 11 wifi icon nearly pixel for pixel. A number uses the taskbar
+// clock's font. Tray icons can't be larger than the small-icon size, so it
+// is made as large as the widest digits allow, then scaled by the setting.
+void DrawIconText(ID2D1RenderTarget* target, IDWriteFactory* dwrite, ID2D1Brush* brush,
+                  PCWSTR text, bool number, float side) {
+    IDWriteTextFormat* format = nullptr;
+    PCWSTR face = !number ? g_symbolFace
+                  : g_settings.windows10Style ? L"Segoe UI" : L"Segoe UI Variable Text";
+    if (FAILED(dwrite->CreateTextFormat(
+            face, nullptr, number ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
+            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, side, L"", &format))) {
+        return;
+    }
+    format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    if (!number) {
+        target->DrawText(text, static_cast<UINT32>(wcslen(text)), format,
+                         D2D1::RectF(0.0f, 0.0f, side, side), brush,
+                         D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+        format->Release();
+        return;
+    }
+
+    IDWriteTypography* typography = nullptr;
+    if (SUCCEEDED(dwrite->CreateTypography(&typography))) {
+        typography->AddFontFeature({DWRITE_FONT_FEATURE_TAG_TABULAR_FIGURES, 1});
+    }
+    // A single digit is sized like two, so 5 is no larger than 50.
+    size_t digits = std::max<size_t>(2, wcslen(text));
+    D2D1_RECT_F ink;
+    if (MeasureDigits(dwrite, format, typography, digits, side, side, &ink)) {
+        float fit = std::min({1.0f, side / (ink.right - ink.left),
+                              side / (ink.bottom - ink.top)});
+        float size = side * fit * g_settings.trayNumberSize / 100.0f;
+        IDWriteTextLayout* layout = nullptr;
+        if (MeasureDigits(dwrite, format, typography, digits, side, size, &ink) &&
+            (layout = CreateNumberLayout(dwrite, format, typography, text, side, size))) {
+            // Whole pixels vertically keep the tops and bottoms of the digits
+            // sharp.
+            D2D1_POINT_2F origin{
+                (side - (ink.right - ink.left)) / 2.0f - ink.left,
+                std::round((side - (ink.bottom - ink.top)) / 2.0f - ink.top)};
+            target->DrawTextLayout(origin, layout, brush, D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+            layout->Release();
+        }
+    }
+    if (typography) typography->Release();
+    format->Release();
+}
+
+// Draws text as an icon the way the taskbar draws its own icons: with
+// DirectWrite and grayscale antialiasing.
+HICON CreateGlyphIcon(int pixels, PCWSTR text, COLORREF color, bool number = false) {
     // Created once and kept for the life of the process.
     static ID2D1Factory* d2d = [] {
         ID2D1Factory* factory = nullptr;
@@ -4842,7 +4962,6 @@ HICON CreateGlyphIcon(int pixels, PCWSTR glyph, COLORREF color) {
     // White on black: the brightness of each pixel is the glyph's coverage.
     bool drawn = false;
     ID2D1DCRenderTarget* target = nullptr;
-    IDWriteTextFormat* format = nullptr;
     ID2D1SolidColorBrush* brush = nullptr;
     D2D1_RENDER_TARGET_PROPERTIES properties = D2D1::RenderTargetProperties(
         D2D1_RENDER_TARGET_TYPE_DEFAULT,
@@ -4850,24 +4969,14 @@ HICON CreateGlyphIcon(int pixels, PCWSTR glyph, COLORREF color) {
     RECT area{0, 0, pixels, pixels};
     if (SUCCEEDED(d2d->CreateDCRenderTarget(&properties, &target)) &&
         SUCCEEDED(target->BindDC(dc, &area)) &&
-        SUCCEEDED(dwrite->CreateTextFormat(g_symbolFace, nullptr, DWRITE_FONT_WEIGHT_NORMAL,
-                                           DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                                           static_cast<float>(pixels), L"", &format)) &&
         SUCCEEDED(target->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f), &brush))) {
-        format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-        format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
         target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
         target->BeginDraw();
         target->Clear(D2D1::ColorF(0.0f, 0.0f, 0.0f));
-        target->DrawText(glyph, static_cast<UINT32>(wcslen(glyph)), format,
-                         D2D1::RectF(0.0f, 0.0f, static_cast<float>(pixels),
-                                     static_cast<float>(pixels)),
-                         brush, D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+        DrawIconText(target, dwrite, brush, text, number, static_cast<float>(pixels));
         drawn = SUCCEEDED(target->EndDraw());
     }
     if (brush) brush->Release();
-    if (format) format->Release();
     if (target) target->Release();
     SelectObject(dc, previous);
     DeleteDC(dc);
@@ -4899,8 +5008,22 @@ HICON CreateGlyphIcon(int pixels, PCWSTR glyph, COLORREF color) {
     return icon;
 }
 
+int VolumePercent(float volume) {
+    return static_cast<int>(volume * 100.0f + 0.5f);
+}
+
 // The tray icon shows the volume level like the Windows volume icon does:
-// muted, silent, low, medium or high.
+// muted, silent, low, medium or high. In percentage mode it shows the number
+// instead, and the mute glyph while muted.
+HICON CreateVolumeIcon(int pixels, COLORREF color, float volume, bool muted) {
+    if (g_settings.trayPercent && !muted) {
+        WCHAR number[8];
+        swprintf_s(number, L"%d", VolumePercent(volume));
+        return CreateGlyphIcon(pixels, number, color, true);
+    }
+    return CreateGlyphIcon(pixels, VolumeGlyph(volume, muted), color);
+}
+
 HICON CreateTrayIcon(float volume, bool muted) {
     HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     UINT trayDpi = taskbar ? GetDpiForWindow(taskbar) : 96;
@@ -4911,26 +5034,50 @@ HICON CreateTrayIcon(float volume, bool muted) {
         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
         L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
     COLORREF color = light ? RGB(30, 32, 36) : RGB(248, 249, 252);
-    if (HICON icon = CreateGlyphIcon(pixels, VolumeGlyph(volume, muted), color)) {
-        return icon;
-    }
-    return LoadMixerIcon(pixels, true, muted);
+    HICON icon = CreateVolumeIcon(pixels, color, volume, muted);
+    return icon ? icon : LoadMixerIcon(pixels, true, muted);
 }
 
-void SetTrayIcon(HWND hWnd, HICON tray) {
-    if (!tray) return;
+// The tooltip reads like the Windows volume icon's: "Speakers: 47%".
+std::wstring TrayTip(float volume, bool muted) {
+    WCHAR level[16];
+    if (muted) {
+        wcscpy_s(level, L"Muted");
+    } else {
+        swprintf_s(level, L"%d%%", VolumePercent(volume));
+    }
+    std::wstring device = g_endpointName.empty() ? L"Volume" : g_endpointName;
+    // szTip holds 127 characters.
+    size_t room = 127 - 2 - wcslen(level);
+    if (device.size() > room) device = device.substr(0, room - 3) + L"...";
+    return device + L": " + level;
+}
+
+// Replaces the tray icon when one is given, and the tooltip when it changed.
+void SetTrayIcon(HWND hWnd, HICON tray, const std::wstring& tip) {
+    bool tipChanged = tip != g_trayTip;
+    if (!tray && !tipChanged) return;
     if (g_hWnd.load() == hWnd) {
         NOTIFYICONDATAW data = {};
         data.cbSize = sizeof(data);
         data.hWnd = hWnd;
         data.uID = TRAY_ICON_ID;
         if (g_trayUsesGuid) data.guidItem = MIXER_TRAY_GUID;
-        data.uFlags = NIF_ICON | (g_trayUsesGuid ? NIF_GUID : 0);
-        data.hIcon = tray;
+        data.uFlags = g_trayUsesGuid ? NIF_GUID : 0;
+        if (tray) {
+            data.uFlags |= NIF_ICON;
+            data.hIcon = tray;
+        }
+        if (tipChanged) {
+            data.uFlags |= NIF_TIP | NIF_SHOWTIP;
+            wcscpy_s(data.szTip, tip.c_str());
+        }
         if (!Shell_NotifyIconW(NIM_MODIFY, &data)) {
             Wh_Log(L"Mixer: tray icon update failed");
         }
     }
+    g_trayTip = tip;
+    if (!tray) return;
     if (g_trayIcon) DestroyIcon(g_trayIcon);
     g_trayIcon = tray;
 }
@@ -4938,8 +5085,9 @@ void SetTrayIcon(HWND hWnd, HICON tray) {
 void RefreshIconSizes(HWND hWnd) {
     bool muted = GetMasterMuted();
     float volume = GetMasterVolume();
-    SetTrayIcon(hWnd, CreateTrayIcon(volume, muted));
+    SetTrayIcon(hWnd, CreateTrayIcon(volume, muted), TrayTip(volume, muted));
     g_trayIconGlyph = VolumeGlyph(volume, muted);
+    g_trayIconPercent = VolumePercent(volume);
     HICON master = LoadMixerIcon(Scale(24), false, muted);
     if (master) {
         if (g_masterIcon) {
@@ -4957,16 +5105,19 @@ void RefreshIconSizes(HWND hWnd) {
 }
 
 // Called on every change of master volume, so it redraws only what changed:
-// the tray icon when the volume crosses into another level, the master row
-// icon when mute changes.
+// the tray icon when the volume crosses into another level (or, in percentage
+// mode, changes by a whole percent), the master row icon when mute changes.
 void RefreshMasterIcons(HWND hWnd, bool force) {
     bool muted = GetMasterMuted();
     float volume = GetMasterVolume();
     PCWSTR glyph = VolumeGlyph(volume, muted);
-    if (force || !g_trayIconGlyph || wcscmp(glyph, g_trayIconGlyph) != 0) {
-        SetTrayIcon(hWnd, CreateTrayIcon(volume, muted));
-        g_trayIconGlyph = glyph;
-    }
+    int percent = VolumePercent(volume);
+    bool changed = !g_trayIconGlyph || wcscmp(glyph, g_trayIconGlyph) != 0 ||
+                   (g_settings.trayPercent && percent != g_trayIconPercent);
+    SetTrayIcon(hWnd, force || changed ? CreateTrayIcon(volume, muted) : nullptr,
+                TrayTip(volume, muted));
+    g_trayIconGlyph = glyph;
+    g_trayIconPercent = percent;
     if (!force && muted == g_masterIconMuted) {
         return;
     }

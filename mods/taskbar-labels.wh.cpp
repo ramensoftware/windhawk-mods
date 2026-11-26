@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.6
+// @version         1.6.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -154,12 +154,19 @@ Labels can also be shown or hidden per-program in the settings.
     Set to zero for the default height, set to -1 to hide it
 - runningIndicatorVerticalOffset: 0
   $name: Running indicator vertical offset
+- alwaysShowProgramNameWhenCombined: false
+  $name: Always show the program name when combining
+  $description: >-
+    By default, when taskbar buttons are combined, a button with a single window
+    shows the window title instead of the program name
 - alwaysShowThumbnailLabels: false
   $name: Always show thumbnail labels
   $description: >-
     By default, thumbnail labels are shown on hover only if taskbar labels are
     hidden, but that might not be applied for all customizations that this mod
     offers
+
+    Ignored in newer Windows versions with the redesigned thumbnail previews
 - labelForSingleItem: "%name%"
   $name: Label for a single item
   $description: >-
@@ -234,6 +241,7 @@ struct {
     int spaceBetweenIconAndLabel;
     int runningIndicatorHeight;
     int runningIndicatorVerticalOffset;
+    bool alwaysShowProgramNameWhenCombined;
     bool alwaysShowThumbnailLabels;
     WindhawkUtils::StringSetting labelForSingleItem;
     WindhawkUtils::StringSetting labelForMultipleItems;
@@ -690,7 +698,7 @@ LONG_PTR WINAPI CTaskListWnd_GroupChanged_Hook(void* pThis,
         (BYTE*)pThis - 0x28, taskGroup, nullptr);
     if (taskBtnGroup) {
         numItems = CTaskBtnGroup_GetNumItems_Original(taskBtnGroup);
-        if (numItems == 1) {
+        if (numItems == 1 && !g_settings.alwaysShowProgramNameWhenCombined) {
             taskItem = CTaskBtnGroup_GetTaskItem_Original(taskBtnGroup, 0);
         }
     }
@@ -2265,8 +2273,9 @@ TaskListGroupViewModel_OnPropertyChanged_t
 // In the combining modes, an item with a single window is labeled with the
 // window title, as in the modes without combining.
 bool UseSingleWindowTitles() {
-    return !g_unloading && (g_settings.mode == Mode::labelsWithCombining ||
-                            g_settings.mode == Mode::noLabelsWithCombining);
+    return !g_unloading && !g_settings.alwaysShowProgramNameWhenCombined &&
+           (g_settings.mode == Mode::labelsWithCombining ||
+            g_settings.mode == Mode::noLabelsWithCombining);
 }
 
 // Returns an empty string unless the group has exactly one window.
@@ -2611,6 +2620,8 @@ void LoadSettings() {
         Wh_GetIntSetting(L"runningIndicatorHeight");
     g_settings.runningIndicatorVerticalOffset =
         Wh_GetIntSetting(L"runningIndicatorVerticalOffset");
+    g_settings.alwaysShowProgramNameWhenCombined =
+        Wh_GetIntSetting(L"alwaysShowProgramNameWhenCombined");
     g_settings.alwaysShowThumbnailLabels =
         Wh_GetIntSetting(L"alwaysShowThumbnailLabels");
     g_settings.labelForSingleItem =
@@ -3053,8 +3064,10 @@ BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
             return FALSE;
         }
     } else {
-        if (!HookTaskbarDllSymbols()) {
-            return FALSE;
+        if (g_settings.alwaysShowThumbnailLabels) {
+            if (!HookTaskbarDllSymbols()) {
+                return FALSE;
+            }
         }
 
         HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
@@ -3182,8 +3195,10 @@ void Wh_ModUninit() {
     Wh_Log(L">");
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
+
+    bool prevAlwaysShowThumbnailLabels = g_settings.alwaysShowThumbnailLabels;
 
     // The hooks read the settings on the taskbar thread.
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
@@ -3193,7 +3208,16 @@ void Wh_ModSettingsChanged() {
         LoadSettings();
     }
 
+    // The thumbnail hook is only set when the option is enabled.
+    if (g_hasNativeLabelsImplementation &&
+        g_settings.alwaysShowThumbnailLabels != prevAlwaysShowThumbnailLabels) {
+        *bReload = TRUE;
+        return TRUE;
+    }
+
     if (g_taskbarViewDllLoaded) {
         ApplySettings();
     }
+
+    return TRUE;
 }

@@ -6,7 +6,7 @@
 // @description:de-DE Jedes Fenster, sofort – genau dort, wo du es brauchst. Wechseln, anordnen und starten über die Minimieren-Schaltfläche oder ein Tastenkürzel
 // @description:fr-FR N'importe quelle fenêtre, instantanément, là où vous en avez besoin. Changez, organisez et lancez depuis le bouton Réduire ou un raccourci
 // @description:es-ES Cualquier ventana, al instante, justo donde la necesitas. Cambia, organiza y abre desde el botón Minimizar o un atajo
-// @version         1.6
+// @version         1.6.1
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
@@ -5485,6 +5485,19 @@ void CloseEntry(Panel& p, int i) {
     RefreshHotFromCursor(p);
 }
 
+// Ctrl+Backspace: where the previous word starts, as in most text boxes
+// (trailing spaces first, then the word itself).
+size_t PrevWordStart(const std::wstring& text, size_t caret) {
+    size_t i = std::min(caret, text.size());
+    while (i > 0 && iswspace(text[i - 1])) i--;
+    if (i > 0 && !iswalnum(text[i - 1])) {
+        while (i > 0 && !iswalnum(text[i - 1]) && !iswspace(text[i - 1])) i--;
+    } else {
+        while (i > 0 && iswalnum(text[i - 1])) i--;
+    }
+    return i;
+}
+
 LRESULT CALLBACK EditSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                                   DWORD_PTR) {
     Panel* p = g_panel;
@@ -5497,6 +5510,17 @@ LRESULT CALLBACK EditSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
             break;
         case WM_CHAR:
             if (wParam == L'\r' || wParam == 27) return 0;
+            if (wParam == 0x7F) {  // Ctrl+Backspace: delete the previous word
+                DWORD start = 0, end = 0;
+                SendMessageW(hwnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
+                if (start == end) {
+                    std::wstring text = GetWindowTitle(hwnd);
+                    start = (DWORD)PrevWordStart(text, end);
+                    SendMessageW(hwnd, EM_SETSEL, start, end);
+                }
+                SendMessageW(hwnd, EM_REPLACESEL, TRUE, (LPARAM)L"");
+                return 0;
+            }
             break;
         case WM_KILLFOCUS:
             if (p) PostMessageW(p->hwnd, WM_APP_EDIT_DONE, 1, 0);
@@ -6067,6 +6091,13 @@ LRESULT CALLBACK PanelWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (ch == 8) {  // backspace
                 if (!p.filter.empty()) {
                     p.filter.pop_back();
+                    ApplyFilter(p);
+                }
+                return 0;
+            }
+            if (ch == 0x7F) {  // Ctrl+Backspace: delete the previous word
+                if (!p.filter.empty()) {
+                    p.filter.erase(PrevWordStart(p.filter, p.filter.size()));
                     ApplyFilter(p);
                 }
                 return 0;

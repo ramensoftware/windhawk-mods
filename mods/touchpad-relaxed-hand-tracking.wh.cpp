@@ -2,7 +2,7 @@
 // @id              touchpad-relaxed-hand-tracking
 // @name            Touchpad Relaxed Hand Tracking
 // @description     Enables 5-2 fingers mouse pointer tracking for improved hand ergonomics (admin windows need Windhawk 2)
-// @version         1.1.0
+// @version         1.2.1
 // @author          3DDinosaur
 // @github          https://github.com/3DDinosaur
 // @include         windhawk.exe
@@ -16,48 +16,46 @@
 /*
 # Touchpad Relaxed Hand Tracking
 
-Move the pointer with more fingers resting on the precision touchpad, as if gliding a weightless mouse. Your hand can relax with more natural finger movements, instead of holding a single digit position over the pad.
+Move the pointer with more fingers resting on a precision touchpad, as if gliding a weightless mouse. Your hand can relax with more natural finger movements, instead of holding a single digit position over the pad.
 
 ## How it works
 
-- **Trigger:** with 5 (or as few as configured) fingers touching the pad.
-- **Disarm:** after all fingers leave the touchpad. Lifting some keeps the glide going.
-- **Movement:** each finger weighs as much as it moves, so resting fingers drop out and don't fight the others. The thumb is completely ignored (unless it is the only one touching, when Windows takes control). With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
-- **Click:** excludes the thumb. You don't need to lift all fingers. With more fingers resting, same as native - single finger (double) tap to (double) click, tap and hold to drag, tap-tap and hold to drag-select text. A hold lasts until another tap or the whole hand leaves the pad.
-- **Scrolling:** Windows 2-finger scroll is ignored while more-fingers-gliding. Instead, 2-finger tap-slide to scroll, while "inside" the more-fingers action (or with 2 fingers detection enabled). **Both will get activated if you start with 2 and rest more on the touchpad.**
+- **Trigger:** with 5, down to 2 fingers touching the pad. When only 1, Windows takes control. To avoid lag, activation has to be inclusive, where 4 contacts (even if disabled) contains 3 and 2, and those will be triggered when enabled. 
+- **Disarm:** after all fingers leave the touchpad. Lifting some keeps the tracking going.
+- **Movement:** each finger influences as much as it moves. Resting fingers fade and don't fight the others. The thumb is completely ignored (unless it is the only touching, when Windows takes control). With one or two fingers moving, the lower speed multiplier applies; with more moving together, the higher one.
+- **Click:** you only need to lift the tapping finger(s). Same as native - finger(s) (double) tap to (double) click, tap-hold to drag, tap-tap-hold to drag-select text by words, etc. **A hold lasts until another tap or the whole hand leaves the pad**. Excludes the thumb.
+- **Scrolling:** Windows touchpad scroll is ignored during more-fingers actions. You can 2-finger tap-slide to scroll while having other fingers on the pad. They will "hold" the scrolling operation until you lift all from the pad. Same in substitution for the system's, when 2-finger tracking is enabled. **Windows' scroll and mod's tracking both get activated if you start with 2 and rest more fingers on the touchpad.** Ideally you'll leave Windows' 2-finger scroll for the mod's. Pressing the **Scroll output switch hotkey** during the action swaps the output type, as the mod can't scroll hybridly like Windows does. Your last choice in each program is remembered, so the next scroll there already starts with it.
 
 ## The thumb
 
-It only helps start the glide and counts as a finger on the pad for the speed multiplier: **it never moves the pointer or clicks with more fingers touching the pad.** Alone, Windows takes control. Touchpads read a resting thumb poorly (it slides at its own angle and is often split in two touches), so leaving it out keeps the movement steady. It's recognized by where it lands: the touch farthest inside the hand (set by the **Hand** option) on the lower third of the pad or, with five touches down, the one farthest inside wherever it landed.
+It only adds to start tracking and for the speed multiplier: **never moves the pointer or clicks with more fingers touching the pad.** Alone, Windows takes control. Touchpads read a resting thumb poorly (it slides at its own angle and is often split in two touches), so leaving it out keeps the movement steady.   It's recognized by where it lands: the farthest point inside the hand (set by the **Hand** option) on the lower third of the pad or, with five contacts down, always the farthest inside. Prefer fast movements and sudden direction changes with only the opposing fingers.
 
-## 4 and 3 fingers detection
+## 4 and 3 finger tracking
 
-The options to start with four or three fingers conflict with the respective Windows swipes. **Disable them in Settings → Bluetooth & devices → Touchpad → Four-finger gestures (or Three) → Swipes: Nothing**. Otherwise Windows simultaneously triggers the swipe. Four and three-finger taps can keep their actions. If the Three Finger Drag mod is installed and set to the same finger count, both mods respond to the same swipe, so give them different counts.
+The options to start with four or three fingers conflict with the respective Windows swipes. **Disable them in Settings → Bluetooth & devices → Touchpad → Four-finger gestures (or Three) → Swipes: Nothing**. Otherwise Windows simultaneously triggers the swipe. Four and three-finger taps can keep their actions. If [Three Finger Drag](https://windhawk.net/mods/three-finger-drag) is installed, both mods will also respond.
 
-## 2 fingers detection
+## 2-finger tracking
 
-When active, two fingers do everything: glide, right click (tap) and scroll (tap-drag). Windows' own two-finger gestures have to be disabled in **Settings → Bluetooth & devices → Touchpad**: uncheck **Scroll & zoom → Drag two fingers to scroll** and **Taps → Tap with two fingers to right-click**. Otherwise both commands respond. On Windhawk 1.x, with two-finger detection active, programs running as administrator get no two-finger scroll at all, since Windows' will be disabled and the mod can't reach them.
+When active, two fingers do everything: track, right click (tap) and scroll (tap-slide). Windows' own two-finger gestures have to be disabled in **Settings → Bluetooth & devices → Touchpad**: uncheck **Scroll & zoom → Drag two fingers to scroll** and **Taps → Tap with two fingers to right-click**. Otherwise both commands respond. On Windhawk 1.x, with two-finger tracking active, programs running as administrator get no two-finger scroll at all, since Windows' will be disabled and the mod can't reach them.
 
 ## Speed
 
-The mod learns the touchpad's native speed and acceleration by watching ordinary one-finger use: for each range of finger speed, it compares how far the finger moved with how far Windows moved the pointer. The glide reproduces that curve, and the multipliers apply on top of it: **1.0 is the same as native**, 1.5 is 50% faster. When the touchpad speed is changed in Windows settings, the curve adjusts with use.
-
-Right after installing, before anything is learned, the glide uses a default speed. Using the touchpad normally for a few minutes, with slow and fast movements, is enough for it to learn.
+Right after installing, more-fingers tracking uses a default internal curve. The mod learns the touchpad's native speed and acceleration by watching some ordinary one-finger use, and reproduces its curve. When touchpad speed is modified in Windows settings, the curve adjusts with use. Multipliers for tracking with more and less fingers can be applied. **Prefer reaching with 5-3 fingers faster speed, and adjust/click/select with precise 2-1 fingers slower speed.**
 
 ## Diagnostics overlay
 
-Off by default. Set a **Diagnostics overlay hotkey** to open a window that shows how the mod reads each finger: green steers the pointer (bigger, more weight), gray rests, dark gray is the thumb, yellow may still tap, blue scrolls, orange holds, and a red ring is a palm. The dotted lines separate the pad's safety edge band and thumb zone, both for filtering and increased precision.
+Set a **Diagnostics overlay hotkey** to open a window that shows how the mod reads each finger: green steers the pointer (bigger, more weight), gray rests, dark gray is the thumb, yellow may still tap, blue scrolls, orange holds, and a red ring is a palm. Dotted lines separate the pad's safety edge band and thumb zone, both for filtering and increased precision.
 
 ## Limitations
 
 - Requires a precision touchpad.
-- Windows gestures can't be blocked by the mod. Windows picks the gesture by the fingers that came down last: starting with one finger and then resting four more, or lifting and resting fingers again, triggers the gesture for that count. **Disabling Windows three and four fingers swipes removes the conflict.**
+- Windows gestures can't be blocked by the mod. Windows picks the gesture by the fingers that came down last: starting with one finger and then resting four more, or lifting and resting fingers again, triggers the gesture for that count. **Disabling Windows 4-2 fingers swipes removes the conflict.** 4 and 3-finger taps remain compatible. 
 - **Programs running as administrator need Windhawk 2.** On Windhawk 1.x, while one is in the foreground, Windows doesn't communicate with the mod, and only the native gestures work.
 - Movements against the edge of the screen don't teach the curve, since the pointer stops there while the finger goes on.
 
 ## Credits
 
-Reading the touchpad follows the approach of the [Three Finger Drag](https://windhawk.net/mods/three-finger-drag) mod by RodrigoThomazi, under the GPL v3.
+Reading the touchpad follows the approach of [Three Finger Drag](https://windhawk.net/mods/three-finger-drag) mod by RodrigoThomazi, under the GPL v3.
 */
 // ==/WindhawkModReadme==
 
@@ -65,13 +63,13 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
 /*
 - hand: right
   $name: Hand
-  $description: The hand on the touchpad. To help filter thumb contrary movements.
+  $description: The hand on the touchpad. Helps identify the thumb to filter out its contrary movements. 
   $options:
   - right: Right
   - left: Left
 - tapToClick: high
   $name: Tap sensitivity
-  $description: Tapping with one or two fingers while others rest (three and four-finger taps belong to Windows settings). Low ignores more accidental touches, but needs firmer taps; High is the opposite.
+  $description: Tapping with one or two fingers while others rest (three and four-finger taps belong to Windows settings). Low ignores more accidental touches, but requires firmer taps; High is the opposite.
   $options:
   - "off": "Off"
   - low: Low
@@ -80,42 +78,45 @@ Reading the touchpad follows the approach of the [Three Finger Drag](https://win
 - tapFeedback: false
   $name: Tap and hold feedback
   $description: A small dot briefly appears beside the pointer when taps and holds are captured, since there's no button feedback.
-- multiplierMore: "1.5"
-  $name: 5-3 fingers speed multiplier
-  $description: When more fingers are gliding and you'd need room to travel. 1.0 is the system's touchpad speed and acceleration, 1.5 is 50% faster.
+- multiplierMore: "2.0"
+  $name: 5-3 fingers moving speed multiplier
+  $description: When more fingers move and you'd need room to travel. 1.0 is the system's touchpad speed and acceleration, 1.5 is 50% faster.
 - multiplierLess: "1.0"
-  $name: 2-1 fingers speed multiplier
-  $description: When fewer fingers move or are left gliding. 1.0 is native.
+  $name: 2-1 fingers moving speed multiplier
+  $description: When fewer fingers move, even with more touching the pad. 1.0 is native.
 - armFive: true
-  $name: 5 fingers detection
-  $description: The glide starts with five contacts, the thumb included. Off, it only starts with the counts enabled below.
+  $name: 5-finger tracking
+  $description: The mod takes over with five contacts, thumb included. Off, it only starts with the counts enabled below.
 - armFour: false
-  $name: 4 fingers detection
+  $name: 4+ finger tracking
   $description: You have to disable the four-finger swipes in Windows touchpad settings, otherwise it also responds.
 - armThree: false
-  $name: 3 fingers detection
+  $name: 3+ finger tracking
   $description: You have to disable the three-finger swipes in Windows touchpad settings, otherwise it also responds.
 - armTwo: false
-  $name: 2 fingers detection
-  $description: You have to disable "Drag two fingers to scroll" and "Tap with two fingers to right-click" in Windows touchpad settings. TAP to RIGHT CLICK, TAP-SLIDE to SCROLL. You can stay in the scroll operation by putting a finger (thumb) down while other 2 scroll.
+  $name: 2+ finger tracking
+  $description: You have to disable "Drag two fingers to scroll" and "Tap with two fingers to right-click" in Windows touchpad settings. TAP to RIGHT CLICK, TAP-SLIDE to SCROLL. For better control, you can stay in the scroll operation by having other finger(s) (thumb) down while two slide.
 - scrollReverse: false
   $name: Reverse scroll direction
-  $description: For the two-finger scroll. Off, page follows the fingers, like Windows default.
+  $description: Off, page follows the fingers, like Windows default.
 - scrollOutput: wheel
   $name: Scroll output
-  $description: Mouse wheel has a tighter response and more compatibility, but some programs (Excel) scroll badly. Touch scrolls smoothly in programs that support it, with their own inertia, but rolling a background window brings it to the front. Stay inside the scroll action with your thumb for better control.
+  $description: The default for every program, until the switch hotkey picks the other one there. Mouse wheel has tighter response and compatibility, but some programs (Excel) respond badly. Touch scrolls smoothly in programs that support it, with their own inertia, but rolling a background window brings it to the front.
   $options:
   - wheel: Mouse wheel
   - touch: Touch
+- scrollSwitch: "Win"
+  $name: Scroll output switch hotkey
+  $description: Pressed during a scroll switches output methods. The mod remembers your last choice in each program, so you don't have to switch there next time. Win, alone or + Ctrl, Alt, Shift.
 - diagHotkey: ""
   $name: Diagnostics overlay hotkey
-  $description: Shows how the mod reads each finger, for troubleshooting. Win + Ctrl, Alt, Shift + key, like Win+Shift+F.
+  $description: Shows how the mod reads each finger. Win + Ctrl, Alt, Shift + key, like Win+Shift+D. The window accepts only native one-finger dragging and resizing. 
 */
 // ==/WindhawkModSettings==
 
 // The touchpad is read as raw HID input (Raw Input with RIDEV_INPUTSINK), in a dedicated Windhawk process
-// (tool mod block at the end). The pointer is placed with SetCursorPos by the learned native curve, so that
-// it doesn't go through the mouse acceleration curve.
+// (tool mod block at the end). The pointer is moved by the learned native curve, with absolute SendInput moves
+// (SendCursorPos), so that it doesn't go through the mouse acceleration curve.
 
 #include <hidusage.h>
 #include <windowsx.h>
@@ -157,6 +158,9 @@ constexpr int kFingers = 5;
 // one stays, so that the multiplier doesn't flap.
 constexpr double kHandMovers = 2.7;
 constexpr double kFewMovers = 2.3;
+// The lower multiplier only takes over after the count stays under kFewMovers this long of movement: the fingers
+// don't stop or start together, and their dip at every stop and start dropped the hand to the lower multiplier.
+constexpr DWORD kFewHoldMs = 100;
 // A scroll's movement is judged over kSpeedWindowSec, like the glide's: under this, it's the resting fingers'
 // jitter, which goes back and forth and cancels out. Judged frame by frame, slow scrolling, which comes as one
 // unit of the pad every few frames, was all dropped as jitter: nothing moved, then it jumped.
@@ -202,16 +206,20 @@ constexpr DWORD kRefJoinMs = 300;
 //    farther in is never taken for a crossed index, which would leave the pinky the thumb until a third landed.
 // 2. Of the contacts which landed in this bottom share of the pad, the one farthest in is the thumb.
 // 3. Without any, with 5 contacts down, the one farthest in is the thumb, wherever it landed.
-// With 2, 3 or 4 fingers detection, a thumb is only looked for with one contact more than the smallest count on:
-// without the thumb down, rule 2 took a finger in the zone for it, and the glide or the scroll lost that finger.
+// With 2, 3 or 4 fingers tracking, these rules need one contact more than the smallest count on: without the
+// thumb down, rule 2 took a finger in the zone for it, and the glide or the scroll lost that finger. With fewer,
+// from two contacts up, the thumb is the one landed in the zone, farther in than every other and kThumbBelowMm
+// below them all: fingers lie at about the same height, a thumb well under them. Taken for a finger, a thumb
+// resting while other fingers started the glide moved the pointer with them.
 // Thumbs learned from where they landed went wrong with four fingers, where the pinky taught the other hand.
 constexpr double kThumbZone = 1.0 / 3;
 constexpr double kInwardMm = 5.0;
+constexpr double kThumbBelowMm = 15.0;
 // A finger slipping off the pad (at its edge) comes back as a new contact, which was judged again and could be
 // taken for the thumb: a contact landing within kReturnMs and kReturnMm of where one left is that finger back,
 // and keeps what it was.
-constexpr DWORD kReturnMs = 500;
-constexpr double kReturnMm = 15.0;
+constexpr DWORD kReturnMs = 250;
+constexpr double kReturnMm = 5.0;
 // A thumb lying flat can be reported as two contacts: one landing this close to the thumb, and closer to it than
 // to any finger, is part of it, above the zone too: its tip half lies there, and at half this distance it became
 // a finger which steered at the glide's start. That part comes and goes as the thumb rolls: it doesn't tap, and
@@ -236,14 +244,6 @@ constexpr DWORD kTogetherMs = 100;
 // landed until it lifts is the hand moving with a finger bouncing, which clicked while gliding.
 constexpr DWORD kTapStillMs = 150;
 constexpr double kTapHandMm = 1.5;
-// A click goes where the pointer was before the tap began: a finger lifting off drags its contact for a few
-// frames, and the tap shakes the hand, which moved the pointer off the target. The tap begins when its finger
-// lands, or when a resting finger lifted up to kAimLookbackMs before that, minus kAimLiftMs of drag. Not when
-// the hand glided more than kAimMaxMm since, or the pointer is farther than kAimMaxPx: that's a real move.
-constexpr DWORD kAimLookbackMs = 800;
-constexpr DWORD kAimLiftMs = 50;
-constexpr double kAimMaxMm = 3.0;
-constexpr int kAimMaxPx = 30;
 constexpr ULONG kNoId = (ULONG)-1;
 // Tap and hold: a finger landing within the double-click time and this close to where the last tap was holds
 // the primary button once it can't be a tap anymore, until the whole hand leaves or another tap.
@@ -251,13 +251,18 @@ constexpr double kHoldNearMm = 12.0;
 // A finger at the edge of the pad slips off it and back, and the touchpad reports a new contact each time, which
 // tapped: contacts landing this close to the edge never tap, pair or start a hold.
 constexpr double kEdgeMm = 5.0;
+// Touchpads commonly report five contacts at most: with five down and the thumb split in two, the pad takes turns
+// among them, and resting fingers vanished and came back as new contacts, which tapped. With five contacts down and
+// the thumb among them, a contact landing within this long of one vanishing is that swap: it lands as a flicker.
+constexpr DWORD kSwapMs = 100;
 // The first tap of a hold is judged looser than a click: a finger which came down after the start and lifted
 // within these, even if it didn't click, starts a hold when it comes back. A click needs the stricter profile, a
 // tap-and-hold only needs its return.
 constexpr DWORD kHoldTapMaxMs = 400;
-// Right after a click, the hold presses just outside the double-click rectangle around it: pressed at the
-// click's spot within the double-click time, Windows took it for the second click of a double click, and a file
-// opened instead of moving. Waiting out the double-click time instead held the drag back noticeably.
+// A finger back after the first tap's press went up (see TapPress) presses just outside the double-click rectangle
+// around the click: pressed at the click's spot within the double-click time, Windows took it for the second
+// click of a double click, and a file opened instead of moving. Waiting out the double-click time instead held the
+// drag back noticeably.
 
 // From the second tap on, each click is owed up to this long, waiting for the finger to come back. If it does,
 // the owed press goes down as it lands: lifting completes the click (a triple click on the third tap), staying
@@ -283,7 +288,7 @@ constexpr double kWheelStepUnits = 10;
 // tell it apart.
 constexpr ULONG_PTR kInputMark = 0x52484754;
 // After the fingers lift from a scroll moving faster than kInertiaMinSpeed (wheel units/s), it goes on and slows
-// down with time constant kInertiaTau (s), like the Windows touchpad. Any touch stops it.
+// down with time constant kInertiaTau (s), like the Windows touchpad. Any touch, or a key pressed, stops it.
 constexpr double kInertiaMinSpeed = 600.0;
 constexpr double kInertiaStopSpeed = 120.0;
 constexpr double kInertiaTau = 1.0;
@@ -336,7 +341,7 @@ constexpr double kPinchMm = 0.2;
 // Frames processed back to back would give a near-zero interval and spike the measured speed.
 constexpr double kMinFrameSec = 0.005;
 
-std::atomic<double> g_multMore{1.5};
+std::atomic<double> g_multMore{2.0};
 std::atomic<DWORD> g_lastReportTick;
 std::atomic<DWORD> g_pinchTick;
 std::atomic<double> g_multLess{1.0};
@@ -348,6 +353,10 @@ double g_unitMm = 1.0 / 12;                 // the pad's resolution: mm per repo
 std::atomic<int> g_hand{1};  // 1 right hand (thumb left of the fingers), -1 left hand
 std::atomic<bool> g_scrollReverse;
 std::atomic<bool> g_touchScroll;
+std::atomic<UINT> g_scrollSwitchMods;  // MOD_* flags, MOD_WIN among them, or 0 for none
+std::atomic<bool> g_switchUsed;  // the switch key is held and scrolled: set by the touchpad thread, cleared by its hook
+bool g_switchLatched;            // the other output is on, until the pad empties: touchpad thread only
+bool g_switchWasHeld = true;     // the switch key was held at the last read, for its presses (true: not read yet)
 std::atomic<bool> g_armThree;
 std::atomic<bool> g_armFour;
 std::atomic<bool> g_armFive{true};
@@ -373,6 +382,7 @@ HANDLE g_hookThread;
 DWORD g_hookThreadId;
 constexpr UINT kWheelBlockMessage = WM_APP + 1;
 constexpr UINT kHotkeySettingMessage = WM_APP + 2;  // posted to g_hWnd: the hotkey setting changed
+constexpr UINT kSwitchHookMessage = WM_APP + 3;     // posted to the hook thread: 1 hooks the switch key, 0 unhooks
 constexpr int kVizHotkeyId = 1;
 constexpr UINT_PTR kStaleTimerId = 1;
 constexpr UINT_PTR kTwoTapTimerId = 2;
@@ -380,6 +390,7 @@ constexpr UINT_PTR kInertiaTimerId = 3;
 constexpr UINT_PTR kDoubleTimerId = 4;
 constexpr UINT_PTR kShowPointerTimerId = 5;
 constexpr UINT_PTR kFeedbackTimerId = 6;
+constexpr UINT_PTR kTapUpTimerId = 7;
 
 void SetWheelBlock(bool on);
 
@@ -436,7 +447,6 @@ struct GoneContact {
 };
 
 std::deque<std::pair<DWORD, double>> g_travelLog;  // tick, g_state.travel then
-std::deque<std::pair<DWORD, POINT>> g_pointerLog;  // tick, pointer then
 std::unordered_map<HANDLE, Device> g_devices;
 std::vector<Contact> g_frame;
 ULONG g_frameExpected;
@@ -448,6 +458,7 @@ struct {
     bool anchorValid;
     std::unordered_map<ULONG, std::pair<double, double>> last;  // id -> previous position, mm
     bool fewMoving;  // the lower speed multiplier applies
+    DWORD fewSince;  // when the movers count went under kFewMovers, 0 while it isn't
     double accX, accY;
     std::unordered_map<ULONG, Track> tracks;
     bool recentClick;
@@ -465,9 +476,10 @@ struct {
     std::vector<GoneContact> gone;  // contacts which left in the last kReturnMs
     std::unordered_map<ULONG, DWORD> backAfter;  // contacts back this frame where one left: ms since it left
     bool pendingDouble;  // a click is owed, waiting for a possible hold
-    DWORD restLiftTime;  // when a resting finger last lifted with the hand still on the pad
+    bool tapDown;        // a first tap's button is down, its release waiting for a possible hold
     int lastHand;  // contacts down which aren't the thumb
     DWORD countChangeTime;
+    DWORD lossTime;  // when a contact last vanished, see kSwapMs
     std::vector<ULONG> refIds;  // the fingers which move the pointer
     std::unordered_map<ULONG, std::deque<TrailPoint>> trails;  // every finger's last kWeightWindowSec
     std::deque<Step> steps;                                    // the glide's last frames, newest last
@@ -547,8 +559,8 @@ double ReadMultiplier(PCWSTR name, double fallback) {
     return d > 0 ? std::clamp(d, 0.05, 10.0) : fallback;
 }
 
-// "Win+Alt+F": modifiers and one key, joined with +, in any case. Empty or unknown parts: false.
-bool ParseHotkey(PCWSTR text, UINT& mods, UINT& key) {
+// "Win+Shift+F"-style text, in any case: MOD_* flags, and the key, if any. False for a part it doesn't know.
+bool ParseKeys(PCWSTR text, UINT& mods, UINT& key) {
     mods = 0;
     key = 0;
     std::wstring all = text;
@@ -583,13 +595,20 @@ bool ParseHotkey(PCWSTR text, UINT& mods, UINT& key) {
         }
         start = end + 1;
     }
+    return true;
+}
+
+bool ParseHotkey(PCWSTR text, UINT& mods, UINT& key) {
+    if (!ParseKeys(text, mods, key)) {
+        return false;
+    }
     // Win and one more modifier: the hotkey is taken from every program while the mod runs, and without Win it
     // took keys they use (Shift+letter swallowed capitals); Win and a key alone are mostly Windows' own.
     return key && (mods & MOD_WIN) && (mods & (MOD_CONTROL | MOD_ALT | MOD_SHIFT));
 }
 
 void LoadSettings() {
-    g_multMore = ReadMultiplier(L"multiplierMore", 1.5);
+    g_multMore = ReadMultiplier(L"multiplierMore", 2.0);
     g_multLess = ReadMultiplier(L"multiplierLess", 1.0);
     g_armTwo = Wh_GetIntSetting(L"armTwo");
     UINT mods = 0;
@@ -603,6 +622,15 @@ void LoadSettings() {
     g_hand = wcscmp(WindhawkUtils::StringSetting::make(L"hand"), L"left") == 0 ? -1 : 1;
     g_scrollReverse = Wh_GetIntSetting(L"scrollReverse");
     g_touchScroll = wcscmp(WindhawkUtils::StringSetting::make(L"scrollOutput"), L"touch") == 0;
+    // Modifiers only, Win among them: held while scrolling, a key would type, and without Win, Ctrl zooms and
+    // Shift scrolls sideways.
+    UINT switchMods = 0;
+    UINT switchKey = 0;
+    if (!ParseKeys(WindhawkUtils::StringSetting::make(L"scrollSwitch"), switchMods, switchKey) || switchKey ||
+        !(switchMods & MOD_WIN)) {
+        switchMods = 0;
+    }
+    g_scrollSwitchMods = switchMods;
     g_armThree = Wh_GetIntSetting(L"armThree");
     g_armFour = Wh_GetIntSetting(L"armFour");
     g_armFive = Wh_GetIntSetting(L"armFive");
@@ -657,6 +685,134 @@ void SaveCurve() {
     g_curveDirty = false;
     g_lastSave = Now();
     LogCurve();
+}
+
+// Scroll output per program.
+
+// The output each program last scrolled with, where the switch key chose it: the next scroll over that program (the
+// window under the pointer, by its executable's name) starts with it. The mod can't tell whether the program
+// responded: the user's next press is the correction.
+constexpr size_t kRememberMax = 200;
+// LoadScrollApps' buffer, terminator included: a stored value which doesn't fit reads back empty, and the whole list
+// was lost. The list is capped by its saved length too.
+constexpr size_t kScrollAppsChars = 8192;
+std::unordered_map<std::wstring, bool> g_scrollApps;  // executable name, lower case -> touch output; touchpad thread
+std::wstring g_scrollApp;  // the program this touch's scroll started over, empty if unknown
+bool g_scrollAppRead;      // g_scrollApp was read in this touch
+bool g_scrollBase;         // the output this touch's scroll started with: touch
+
+// The saved length plus the terminator: "name:t" items joined with '|'.
+size_t ScrollAppsChars() {
+    size_t chars = 0;
+    for (const auto& [name, touch] : g_scrollApps) {
+        chars += name.size() + 3;
+    }
+    return chars;
+}
+
+// Stored as "name:t|name:w": ':' and '|' can't be in a file name.
+void LoadScrollApps() {
+    WCHAR text[kScrollAppsChars] = L"";
+    Wh_GetStringValue(L"scrollApps", text, ARRAYSIZE(text));
+    std::wstring all = text;
+    size_t start = 0;
+    while (start < all.size()) {
+        size_t end = all.find(L'|', start);
+        std::wstring item = all.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
+        size_t colon = item.rfind(L':');
+        if (colon != std::wstring::npos && colon > 0 && colon + 2 == item.size()) {
+            g_scrollApps[item.substr(0, colon)] = item[colon + 1] == L't';
+        }
+        if (end == std::wstring::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+}
+
+void SaveScrollApps() {
+    std::wstring all;
+    for (const auto& [name, touch] : g_scrollApps) {
+        if (!all.empty()) {
+            all += L'|';
+        }
+        all += name + (touch ? L":t" : L":w");
+    }
+    Wh_SetStringValue(L"scrollApps", all.c_str());
+}
+
+// The executable of a window's process, in lower case; empty if it can't be read.
+std::wstring ProcessName(HWND window) {
+    DWORD pid = 0;
+    if (!window || !GetWindowThreadProcessId(window, &pid) || !pid) {
+        return {};
+    }
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        return {};
+    }
+    std::wstring name;
+    WCHAR path[MAX_PATH * 2];
+    DWORD size = ARRAYSIZE(path);
+    if (QueryFullProcessImageNameW(process, 0, path, &size)) {
+        name = path;
+        name.erase(0, name.find_last_of(L'\\') + 1);
+        for (auto& ch : name) {
+            ch = towlower(ch);
+        }
+    }
+    CloseHandle(process);
+    return name;
+}
+
+// The program under the pointer, by its main window: a child window can belong to a process many programs share
+// (WebView2's msedgewebview2.exe, in Teams, Outlook and the Widgets). Store apps' main window is
+// ApplicationFrameHost's for all of them: there the child's process is the app.
+std::wstring AppUnderPointer() {
+    POINT pt;
+    HWND window = GetCursorPos(&pt) ? WindowFromPoint(pt) : nullptr;
+    if (!window) {
+        return {};
+    }
+    HWND root = GetAncestor(window, GA_ROOT);
+    std::wstring name = ProcessName(root ? root : window);
+    if (name == L"applicationframehost.exe") {
+        name = ProcessName(window);
+    }
+    return name;
+}
+
+// The output this touch's scroll starts with: the program's last choice, or the setting's.
+bool ScrollBase() {
+    if (!g_scrollAppRead) {
+        g_scrollAppRead = true;
+        g_scrollApp = AppUnderPointer();
+        auto it = g_scrollApps.find(g_scrollApp);
+        g_scrollBase = it != g_scrollApps.end() ? it->second : g_touchScroll.load();
+    }
+    return g_scrollBase;
+}
+
+// At the end of a touch. switched: the scroll ended on the other output than it started with.
+void RememberScrollOutput(bool switched) {
+    if (g_scrollAppRead && switched && !g_scrollApp.empty()) {
+        bool touch = !g_scrollBase;
+        bool changed = false;
+        if (touch == g_touchScroll) {
+            changed = g_scrollApps.erase(g_scrollApp) > 0;
+        } else if (g_scrollApps.count(g_scrollApp) ||
+                   (g_scrollApps.size() < kRememberMax &&
+                    ScrollAppsChars() + g_scrollApp.size() + 3 <= kScrollAppsChars)) {
+            changed = !g_scrollApps.count(g_scrollApp) || g_scrollApps[g_scrollApp] != touch;
+            g_scrollApps[g_scrollApp] = touch;
+        }
+        if (changed) {
+            SaveScrollApps();
+            Wh_Log(L"Scroll output for %s: %s", g_scrollApp.c_str(), touch ? L"touch" : L"wheel");
+        }
+    }
+    g_scrollAppRead = false;
+    g_scrollApp.clear();
 }
 
 int NearestBin(double speed) {
@@ -794,11 +950,12 @@ void Learn(const std::vector<const Contact*>& fingers, int touching, double t) {
     g_learn.c0 = cursor;
 }
 
-void SendPrimary(bool down);
+void SendPrimary(bool down, bool feedback = true);
 
 void FirePendingDouble(DWORD now);
+void TapUp();
 
-void TouchEnd();
+void TouchEnd(bool cancel = false);
 
 void EndGlide() {
     FirePendingDouble(GetTickCount());
@@ -808,10 +965,11 @@ void EndGlide() {
     }
     g_state.pairScroll = false;
     g_state.scrollSession = false;
+    RememberScrollOutput(g_switchLatched);
+    g_switchLatched = false;
+    g_switchWasHeld = true;
     TouchEnd();
     g_travelLog.clear();
-    g_pointerLog.clear();
-    g_state.restLiftTime = 0;
     g_state.refIds.clear();
     g_state.trails.clear();
     g_state.steps.clear();
@@ -833,10 +991,16 @@ void EndGlide() {
 }
 
 void FeedbackRelease();
+UINT HeldMods();
+void SwitchUnhook();
 
 void ResetSession() {
     EndGlide();
     FeedbackRelease();
+    // A switch key released where the hook doesn't run (the lock screen) left the next, unrelated release masked.
+    if (g_switchUsed && !(HeldMods() & g_scrollSwitchMods)) {
+        SwitchUnhook();
+    }
     g_frame.clear();
     g_frameExpected = 0;
 }
@@ -1050,7 +1214,7 @@ DWORD WINAPI BadgeThread(LPVOID param) {
     g_badge.dc = CreateCompatibleDC(nullptr);
     // Loaded at run time: linked, it needed dwmapi in the compiler options.
     using DwmFlushFn = HRESULT(WINAPI*)();
-    HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+    HMODULE dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     auto dwmFlush = dwm ? (DwmFlushFn)(void*)GetProcAddress(dwm, "DwmFlush") : nullptr;
     POINT last{LONG_MIN, LONG_MIN};
     while (!g_badge.quit) {
@@ -1228,7 +1392,8 @@ void SendPrimaryClick() {
     Feedback(false);
 }
 
-void SendPrimary(bool down) {
+// feedback: shown as the button goes; off where the caller shows it its own way.
+void SendPrimary(bool down, bool feedback) {
     bool swapped = GetSystemMetrics(SM_SWAPBUTTON);
     INPUT input{};
     input.type = INPUT_MOUSE;
@@ -1236,7 +1401,9 @@ void SendPrimary(bool down) {
                             : (swapped ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP);
     input.mi.dwExtraInfo = kInputMark;
     SendInput(1, &input, sizeof(input));
-    Feedback(down);
+    if (feedback) {
+        Feedback(down);
+    }
 }
 
 // An absolute move as input: unlike SetCursorPos, programs reading mouse input see it, and a drag with the
@@ -1367,7 +1534,8 @@ void ShowPointer() {
     }
 }
 
-void TouchEnd() {
+// cancel: lifted without the program's inertia, or a tap when it barely moved.
+void TouchEnd(bool cancel) {
     if (!g_touch.down) {
         return;
     }
@@ -1375,7 +1543,7 @@ void TouchEnd() {
     g_touch.passing = false;
     g_touch.gateX = 0;
     g_touch.gateY = 0;
-    InjectPan(g_touch.moved >= kTouchTapPx ? POINTER_FLAG_UP : POINTER_FLAG_UP | POINTER_FLAG_CANCELED);
+    InjectPan(!cancel && g_touch.moved >= kTouchTapPx ? POINTER_FLAG_UP : POINTER_FLAG_UP | POINTER_FLAG_CANCELED);
     SetTimer(g_hWnd, kShowPointerTimerId, kTouchShowMs, nullptr);
 }
 
@@ -1401,6 +1569,80 @@ void TouchPan(double dxMm, double dyMm) {
         Wh_Log(L"InjectTouchInput error: %u", GetLastError());
         g_touch.down = false;
     }
+}
+
+// The output for this frame: each press of the switch key during a scroll swaps it, until the pad empties
+// (EndGlide), and the program's last choice or the setting's comes back (see g_scrollApps). Released mid-scroll, the
+// output stays, and so does its inertia. A key already held when the scroll starts isn't a press: the user only sees
+// which output fails once scrolling.
+//
+// Released alone, Win opens Start and Alt the menu bar. Once the key scrolled, a keyboard hook on the hook thread
+// (only until its release) swallows that release and sends it again behind a key that does nothing (0xE8,
+// unassigned), which makes it a shortcut. Masked while held, the key's own repeats undid it, and Start still opened.
+// The first of the keys released is masked, injected ones included: a key remapped to Win by AutoHotkey or PowerToys
+// arrives injected.
+
+bool IsSwitchKey(DWORD vk) {
+    UINT mods = g_scrollSwitchMods;
+    return ((mods & MOD_WIN) && (vk == VK_LWIN || vk == VK_RWIN)) ||
+           ((mods & MOD_CONTROL) && (vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL)) ||
+           ((mods & MOD_ALT) && (vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU)) ||
+           ((mods & MOD_SHIFT) && (vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT));
+}
+
+// The modifiers held now, as MOD_* flags.
+UINT HeldMods() {
+    auto down = [](int vk) { return GetAsyncKeyState(vk) < 0; };
+    return (down(VK_LWIN) || down(VK_RWIN) ? MOD_WIN : 0) | (down(VK_CONTROL) ? MOD_CONTROL : 0) |
+           (down(VK_MENU) ? MOD_ALT : 0) | (down(VK_SHIFT) ? MOD_SHIFT : 0);
+}
+
+LRESULT CALLBACK SwitchKeyProc(int code, WPARAM wParam, LPARAM lParam) {
+    const KBDLLHOOKSTRUCT* k = (const KBDLLHOOKSTRUCT*)lParam;
+    if (code == HC_ACTION && g_switchUsed && (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) && IsSwitchKey(k->vkCode)) {
+        // Cleared first: the release sent again comes back through this hook and goes by.
+        g_switchUsed = false;
+        INPUT input[3]{};
+        for (int i = 0; i < 2; i++) {
+            input[i].type = INPUT_KEYBOARD;
+            input[i].ki.wVk = 0xE8;
+            input[i].ki.dwFlags = i ? KEYEVENTF_KEYUP : 0;
+            input[i].ki.dwExtraInfo = kInputMark;
+        }
+        // The release as it came, its extended flag and tag kept: without the flag a Win or right Alt stays down,
+        // and a remapper may not know its own key without its tag.
+        input[2].type = INPUT_KEYBOARD;
+        input[2].ki.wVk = (WORD)k->vkCode;
+        input[2].ki.wScan = (WORD)k->scanCode;
+        input[2].ki.dwFlags = KEYEVENTF_KEYUP | ((k->flags & LLKHF_EXTENDED) ? KEYEVENTF_EXTENDEDKEY : 0);
+        input[2].ki.dwExtraInfo = k->dwExtraInfo;
+        PostThreadMessage(GetCurrentThreadId(), kSwitchHookMessage, 0, 0);
+        // Not sent (an elevated window in front), the release goes as it is, so that the key doesn't stay down.
+        if (SendInput(ARRAYSIZE(input), input, sizeof(INPUT)) == ARRAYSIZE(input)) {
+            return 1;
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+void SwitchUnhook() {
+    g_switchUsed = false;
+    if (g_hookThreadId) {
+        PostThreadMessage(g_hookThreadId, kSwitchHookMessage, 0, 0);
+    }
+}
+
+bool TouchOutput() {
+    UINT mods = g_scrollSwitchMods;
+    bool held = mods && HeldMods() == mods;
+    if (held && !g_switchWasHeld) {
+        g_switchLatched = !g_switchLatched;
+        if (g_hookThreadId && !g_switchUsed.exchange(true)) {
+            PostThreadMessage(g_hookThreadId, kSwitchHookMessage, 1, 0);
+        }
+    }
+    g_switchWasHeld = held;
+    return ScrollBase() != g_switchLatched;
 }
 
 // Wheel units follow the fingers, without acceleration. Off, the page follows the fingers: down scrolls up.
@@ -1441,7 +1683,16 @@ void Scroll(double dxMm, double dyMm, double dt) {
         dyMm = 0;
         sy = 0;
     }
-    if (g_touchScroll) {
+    bool touch = TouchOutput();
+    // Switched: the contacts are canceled, which leaves the program no touch inertia to run over the wheel, and
+    // the wheel's velocity is dropped, which would run its inertia after the touch.
+    if (!touch && g_touch.down) {
+        TouchEnd(true);
+    } else if (touch && !g_touch.down) {
+        g_two.velX = 0;
+        g_two.velY = 0;
+    }
+    if (touch) {
         DWORD now = GetTickCount();
         if (dxMm || dyMm) {
             g_touch.lastMoveTick = now;
@@ -1493,7 +1744,25 @@ void StopInertia() {
     }
 }
 
+// Keys and buttons already down when the inertia began (the switch hotkey, a held Shift).
+bool g_inertiaKeys[256];
+
+// A key or button pressed during the inertia stops it, as Windows' own scroll does: the wheel going on, Ctrl
+// pressed for a shortcut zoomed the page.
+bool KeyPressedSinceInertia() {
+    for (int vk = 1; vk < 256; vk++) {
+        if (GetAsyncKeyState(vk) < 0 && !g_inertiaKeys[vk]) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void InertiaStep() {
+    if (KeyPressedSinceInertia()) {
+        StopInertia();
+        return;
+    }
     double t = Now();
     double dt = t - g_two.inertiaTime;
     g_two.inertiaTime = t;
@@ -1516,6 +1785,9 @@ void StartInertia() {
         return;
     }
     if (!g_two.inertia && std::hypot(g_two.velX, g_two.velY) >= kInertiaMinSpeed) {
+        for (int vk = 1; vk < 256; vk++) {
+            g_inertiaKeys[vk] = GetAsyncKeyState(vk) < 0;
+        }
         g_two.inertia = true;
         g_two.inertiaTime = Now();
         SetTimer(g_hWnd, kInertiaTimerId, kInertiaStepMs, nullptr);
@@ -1685,6 +1957,8 @@ void Move(double multiplier) {
         return;
     }
 
+    // The hand moving before the finger came back: the tap's release goes first, or the click would drag.
+    TapUp();
     POINT pos;
     if (GetCursorPos(&pos)) {
         SendCursorPos(pos.x + mx, pos.y + my);
@@ -1736,32 +2010,6 @@ double TravelSince(DWORD tick) {
     return g_state.travel - at;
 }
 
-void AimTap(const Track& t) {
-    DWORD start = t.born;
-    if (g_state.restLiftTime && (LONG)(t.born - g_state.restLiftTime) >= 0 &&
-        t.born - g_state.restLiftTime <= kAimLookbackMs) {
-        start = g_state.restLiftTime;
-    }
-    start -= kAimLiftMs;
-    if (TravelSince(start) > kAimMaxMm) {
-        return;
-    }
-    const POINT* at = nullptr;
-    for (const auto& e : g_pointerLog) {
-        if ((LONG)(e.first - start) > 0) {
-            break;
-        }
-        at = &e.second;
-    }
-    POINT pos;
-    if (!at || !GetCursorPos(&pos) || (pos.x == at->x && pos.y == at->y)) {
-        return;
-    }
-    if (std::abs(pos.x - at->x) <= kAimMaxPx && std::abs(pos.y - at->y) <= kAimMaxPx) {
-        SendCursorPos(at->x, at->y);
-    }
-}
-
 bool IsThumb(ULONG id);
 bool IsThumbPart(ULONG id);
 
@@ -1786,7 +2034,32 @@ bool IsTap(const Track& t, DWORD now, int touching) {
            t.maxDist <= tap.maxMm && HandStill(t);
 }
 
+// A first tap presses the button and holds its release for kDoubleWaitMs, as Windows does: back in time and
+// staying, the finger holds that same press. Clicked and then pressed again for the hold, a file already
+// selected in Explorer got the click on its name, and was renamed while it moved.
+void TapPress(DWORD now) {
+    GetCursorPos(&g_state.lastClickPos);
+    g_state.recentClick = true;
+    g_state.lastClickTime = now;
+    g_state.tapDown = true;
+    // Shown as a click from the tap, not for as long as the release waits: held and then shown again on release,
+    // it lasted twice a native tap's.
+    SendPrimary(true, false);
+    Feedback(false);
+    SetTimer(g_hWnd, kTapUpTimerId, kDoubleWaitMs, nullptr);
+    Wh_Log(L"Click");
+}
+
+void TapUp() {
+    if (g_state.tapDown) {
+        g_state.tapDown = false;
+        KillTimer(g_hWnd, kTapUpTimerId);
+        SendPrimary(false, false);
+    }
+}
+
 void FirePendingDouble(DWORD now) {
+    TapUp();
     if (g_state.pendingDouble) {
         g_state.pendingDouble = false;
         KillTimer(g_hWnd, kDoubleTimerId);
@@ -1819,6 +2092,7 @@ void ReleaseHold() {
 }
 
 void StartPairScroll(ULONG a, ULONG b) {
+    TapUp();
     g_state.pairScroll = true;
     g_state.scrollSession = true;
     g_state.scrollA = a;
@@ -1847,7 +2121,7 @@ void TwoFingerTap(DWORD now) {
 }
 
 // Windows doesn't recognize taps with other fingers resting; here, while gliding, they work as on the touchpad
-// alone: one finger taps (any number of times) and taps and holds, two fingers right click and tap-hold to
+// alone: one finger taps (any number of times) and taps and holds, two fingers right click and tap-slide to
 // scroll. The fingers which started the glide never tap, and nothing taps while the hand moves.
 void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<const Contact*>& tips, DWORD now,
                   int touching) {
@@ -1871,6 +2145,7 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<
         }
         Track t = it->second;
         it = g_state.tracks.erase(it);
+        g_state.lossTime = now;
         // The thumb is dead to taps: it lifting sends no owed click early and isn't a resting finger rising.
         if (t.thumb) {
             continue;
@@ -1899,7 +2174,6 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<
             if (p != g_state.tracks.end()) {
                 p->second.partnerUp = isTap ? now : 0;
             } else if (isTap && t.partnerUp && now - t.partnerUp <= kTogetherMs) {
-                AimTap(t);
                 TwoFingerTap(now);
             } else {
                 FirePendingDouble(now);
@@ -1920,15 +2194,14 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<
             if (!(t.afterClick && OweClick(now))) {
                 g_state.lastTapX = t.x0;
                 g_state.lastTapY = t.y0;
-                AimTap(t);
-                Click(now);
+                if (InDoubleClickTime(now)) {
+                    Click(now);
+                } else {
+                    TapPress(now);
+                }
             }
         } else {
             FirePendingDouble(now);
-            // The thumb leaving isn't the tapping finger rising: the click's aim doesn't go back to it.
-            if (touching > 0 && !t.thumb) {
-                g_state.restLiftTime = now;
-            }
         }
         if (!released && !t.pressed && !t.noTap && touching > 0 && tap.on && g_state.armed &&
             (LONG)(t.born - g_state.armTime) >= (LONG)tap.settleMs && now - t.born >= tap.minMs &&
@@ -1967,10 +2240,12 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<
             bool still = t.travelBefore <= kTapHandMm;
             bool settled = now - g_state.armTime >= tap.settleMs;
             bool edge = NearPadEdge(c->x, c->y);
-            // A flicker is a contact back where one just left. Any contact leaving used to count, anywhere on
-            // the pad: a thumb slipping off the edge or losing its Confidence made the fingers' taps fail.
+            // A flicker is a contact back where one just left, not any contact leaving anywhere on the pad: a thumb
+            // slipping off the edge or losing its Confidence made the fingers' taps fail.
             auto back = g_state.backAfter.find(c->id);
-            bool flicker = back != g_state.backAfter.end() && back->second <= tap.flickerMs;
+            bool swap = touching >= kFingers && now - g_state.lossTime <= kSwapMs &&
+                        std::any_of(tips.begin(), tips.end(), [](const Contact* o) { return IsThumb(o->id); });
+            bool flicker = (back != g_state.backAfter.end() && back->second <= tap.flickerMs) || swap;
             t.thumb = IsThumb(c->id);
             // The thumb, a flicker and a contact at the edge land on their own: they neither pair with a finger
             // landing at the same time nor cancel its tap, as the hand coming down does.
@@ -2020,7 +2295,18 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<
             if (!paired && !edge && !g_state.holding && !g_state.scrollSession && tap.on && g_state.armed && still &&
                 !flicker) {
                 double fromTap = std::hypot(c->x - g_state.lastTapX, c->y - g_state.lastTapY);
-                if (g_state.pendingDouble && fromTap <= kHoldNearMm) {
+                if (g_state.tapDown && fromTap <= kHoldNearMm) {
+                    // Back while the first tap's button is still down: the same press goes on. Lifting completes
+                    // the click (and owes the next one), staying holds it.
+                    g_state.tapDown = false;
+                    KillTimer(g_hWnd, kTapUpTimerId);
+                    Feedback(true);
+                    g_state.looseTapTime = 0;
+                    t.pressed = true;
+                    t.holdCandidate = true;
+                    t.afterClick = true;
+                    t.noTap = false;
+                } else if (g_state.pendingDouble && fromTap <= kHoldNearMm) {
                     // Back during an owed click: its press goes down now. Lifting completes it, staying holds it.
                     g_state.pendingDouble = false;
                     KillTimer(g_hWnd, kDoubleTimerId);
@@ -2101,6 +2387,9 @@ void UpdateTracks(const std::vector<const Contact*>& fingers, const std::vector<
 
 constexpr WCHAR kVizClassName[] = L"Touchpad_Relaxed_Hand_Overlay";
 constexpr int kVizWidth = 500;
+// Font heights in px at 96 DPI: the title on top, and the rest (the lines under it, the legend, the labels).
+constexpr int kVizTitleFont = 14;
+constexpr int kVizTextFont = 14;
 constexpr int kVizHeader = 80;
 constexpr int kVizLegend = 44;
 constexpr int kVizMargin = 12;
@@ -2159,9 +2448,9 @@ void VizSetDpi(UINT dpi) {
             DeleteObject(font);
         }
     }
-    g_viz.big = CreateFontW(-VizPx(16), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
+    g_viz.big = CreateFontW(-VizPx(kVizTitleFont), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
                             L"Segoe UI");
-    g_viz.small = CreateFontW(-VizPx(12), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
+    g_viz.small = CreateFontW(-VizPx(kVizTextFont), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0,
                               L"Segoe UI");
 }
 
@@ -2286,7 +2575,7 @@ void VizPublish(const std::vector<const Contact*>& tips, const std::vector<const
         swprintf_s(text, L"idle  ·  %u contacts", (UINT)tips.size());
         g_viz.shares.clear();
     } else {
-        std::wstring mode = L"GLIDE";
+        std::wstring mode = L"TRACKING";
         if (g_state.holding) {
             mode += L" · HOLD";
         }
@@ -2400,10 +2689,19 @@ void VizPaint(HWND hWnd) {
     DeleteObject(bg);
     SetBkMode(dc, TRANSPARENT);
 
+    // The lines on top don't wrap: they end in "..." where the window is narrow, and the pad keeps its place
+    // while their text changes every frame. The legend wraps.
     int margin = VizPx(kVizMargin);
+    auto line = [&](const std::wstring& text, int top, int right) {
+        TEXTMETRICW tm;
+        GetTextMetricsW(dc, &tm);
+        RECT r{margin, top, right, top + tm.tmHeight};
+        DrawTextW(dc, text.c_str(), (int)text.size(), &r, DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+        return (int)r.bottom;
+    };
     HGDIOBJ oldFont = SelectObject(dc, g_viz.big);
     SetTextColor(dc, RGB(240, 240, 240));
-    TextOutW(dc, margin, VizPx(8), g_viz.header.c_str(), (int)g_viz.header.size());
+    int textY = line(g_viz.header, VizPx(8), rc.right - VizPx(kVizCloseSize) - VizPx(12)) + VizPx(4);
     {
         int size = VizPx(kVizCloseSize);
         int inset = VizPx(6);
@@ -2420,17 +2718,46 @@ void VizPaint(HWND hWnd) {
     }
     SelectObject(dc, g_viz.small);
     SetTextColor(dc, RGB(170, 170, 170));
-    TextOutW(dc, margin, VizPx(32), g_viz.detail.c_str(), (int)g_viz.detail.size());
-    TextOutW(dc, margin, VizPx(50), g_viz.shares.c_str(), (int)g_viz.shares.size());
+    textY = line(g_viz.detail, textY, rc.right - margin);
+    textY = line(g_viz.shares, textY, rc.right - margin);
 
-    // The pad.
-    int padLeft = margin;
-    int padTop = VizPx(kVizHeader);
-    int padRight = rc.right - margin;
-    int padBottom = rc.bottom - VizPx(kVizLegend);
-    double scale = std::min((padRight - padLeft) / g_viz.padW, (padBottom - padTop) / g_viz.padH);
-    padRight = padLeft + (int)(g_viz.padW * scale);
-    padBottom = padTop + (int)(g_viz.padH * scale);
+    // The legend, its items flowing into as many lines as the width needs, laid out first to know its height.
+    struct {
+        VizRole role;
+        const wchar_t* name;
+        int x, line;
+    } legend[] = {{kVizSteer, L"steers"}, {kVizRest, L"resting"}, {kVizThumb, L"thumb"}, {kVizTap, L"maybe tap"},
+                  {kVizScroll, L"scroll"}, {kVizHold, L"hold"},   {kVizPalm, L"palm"}};
+    int gap = VizPx(14);
+    int lineHeight = VizPx(kVizTextFont + 6);
+    int lines = 1;
+    {
+        int lx = margin;
+        for (auto& item : legend) {
+            SIZE size;
+            GetTextExtentPoint32W(dc, item.name, (int)wcslen(item.name), &size);
+            int width = gap + size.cx;
+            if (lx > margin && lx + width > rc.right - margin) {
+                lx = margin;
+                lines++;
+            }
+            item.x = lx;
+            item.line = lines - 1;
+            lx += width + gap;
+        }
+    }
+    int legendTop = rc.bottom - VizPx(10) - lines * lineHeight;
+
+    // The pad, as large as fits, centered across.
+    int padTop = textY + VizPx(12);
+    int roomW = rc.right - 2 * margin;
+    int roomH = std::max(legendTop - VizPx(8) - padTop, 1);
+    double scale = std::min(roomW / g_viz.padW, roomH / g_viz.padH);
+    // The contacts shrink with the pad below its first size.
+    double dotScale = std::clamp(g_viz.padW * scale / VizPx(kVizWidth - 2 * kVizMargin), 0.4, 1.0);
+    int padLeft = margin + (roomW - (int)(g_viz.padW * scale)) / 2;
+    int padRight = padLeft + (int)(g_viz.padW * scale);
+    int padBottom = padTop + (int)(g_viz.padH * scale);
     HBRUSH padBrush = CreateSolidBrush(RGB(40, 40, 40));
     HPEN padPen = CreatePen(PS_SOLID, 1, RGB(80, 80, 80));
     HGDIOBJ oldBrush = SelectObject(dc, padBrush);
@@ -2472,7 +2799,7 @@ void VizPaint(HWND hWnd) {
     for (const VizDot& dot : g_viz.dots) {
         int cx = px(dot.x);
         int cy = py(dot.y);
-        int r = VizPx(dot.role == kVizSteer ? 9 + 16 * dot.weight : 10);
+        int r = std::max(2, VizPx((dot.role == kVizSteer ? 9 + 16 * dot.weight : 10) * dotScale));
         COLORREF color = VizColor(dot.role);
         HBRUSH brush = dot.role == kVizPalm ? (HBRUSH)GetStockObject(NULL_BRUSH) : CreateSolidBrush(color);
         HPEN pen = CreatePen(PS_SOLID, VizPx(dot.role == kVizPalm ? 3 : 1), dot.holdCandidate ? RGB(255, 152, 0) : color);
@@ -2496,7 +2823,7 @@ void VizPaint(HWND hWnd) {
             swprintf_s(label, L"#%u", dot.id);
         }
         SetTextColor(dc, RGB(220, 220, 220));
-        TextOutW(dc, cx + r + VizPx(3), cy - VizPx(7), label, (int)wcslen(label));
+        TextOutW(dc, cx + r + VizPx(3), cy - VizPx(kVizTextFont / 2.0), label, (int)wcslen(label));
     }
 
     // The direction the pointer took this frame, from the pad's center.
@@ -2508,24 +2835,18 @@ void VizPaint(HWND hWnd) {
     }
 
     // Legend.
-    struct {
-        VizRole role;
-        const wchar_t* name;
-    } legend[] = {{kVizSteer, L"steers"}, {kVizRest, L"resting"}, {kVizThumb, L"thumb"}, {kVizTap, L"maybe tap"},
-                  {kVizScroll, L"scroll"}, {kVizHold, L"hold"},   {kVizPalm, L"palm"}};
-    int lx = margin;
-    int ly = rc.bottom - VizPx(kVizLegend) + VizPx(14);
-    int gap = VizPx(14);
     for (const auto& item : legend) {
+        int ly = legendTop + item.line * lineHeight;
         HBRUSH brush = CreateSolidBrush(VizColor(item.role));
-        RECT sw{lx, ly + VizPx(2), lx + VizPx(10), ly + VizPx(12)};
+        // The swatch sits on the text's baseline, as the letters do.
+        SelectObject(dc, g_viz.small);
+        TEXTMETRICW tm;
+        GetTextMetricsW(dc, &tm);
+        RECT sw{item.x, ly + tm.tmAscent - VizPx(10), item.x + VizPx(10), ly + tm.tmAscent};
         FillRect(dc, &sw, brush);
         DeleteObject(brush);
         SetTextColor(dc, RGB(190, 190, 190));
-        TextOutW(dc, lx + gap, ly, item.name, (int)wcslen(item.name));
-        SIZE size;
-        GetTextExtentPoint32W(dc, item.name, (int)wcslen(item.name), &size);
-        lx += gap + size.cx + gap;
+        TextOutW(dc, item.x + gap, ly, item.name, (int)wcslen(item.name));
     }
 
     SelectObject(dc, oldFont);
@@ -2559,7 +2880,27 @@ bool VizOnClose(HWND hWnd, POINT screen) {
            screen.y < rc.top + inset + size;
 }
 
-// Dragged anywhere but the close button, which hides it. The spot it's dragged to is kept.
+// Sized from its edges and corners, which a thick frame lets Windows do; the frame takes no room
+// (WM_NCCALCSIZE), so the whole window is the drawing.
+LRESULT VizHitTest(HWND hWnd, POINT pt) {
+    if (VizOnClose(hWnd, pt)) {
+        return HTCLIENT;
+    }
+    RECT rc;
+    GetWindowRect(hWnd, &rc);
+    int edge = VizPx(6);
+    bool left = pt.x < rc.left + edge, right = pt.x >= rc.right - edge;
+    bool top = pt.y < rc.top + edge, bottom = pt.y >= rc.bottom - edge;
+    if (top) {
+        return left ? HTTOPLEFT : right ? HTTOPRIGHT : HTTOP;
+    }
+    if (bottom) {
+        return left ? HTBOTTOMLEFT : right ? HTBOTTOMRIGHT : HTBOTTOM;
+    }
+    return left ? HTLEFT : right ? HTRIGHT : HTCAPTION;
+}
+
+// Dragged anywhere but the close button, which hides it, and sized from its edges. Spot and size are kept.
 LRESULT CALLBACK VizWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_PAINT:
@@ -2567,8 +2908,23 @@ LRESULT CALLBACK VizWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             return 0;
         case WM_ERASEBKGND:
             return 1;
+        // The frame which lets it be sized takes no room and isn't painted: Windows painted it white for a moment
+        // on a click or drag.
+        case WM_NCCALCSIZE:
+        case WM_NCPAINT:
+            return 0;
+        case WM_NCACTIVATE:
+            return TRUE;
         case WM_NCHITTEST:
-            return VizOnClose(hWnd, {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}) ? HTCLIENT : HTCAPTION;
+            return VizHitTest(hWnd, {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
+        case WM_GETMINMAXINFO: {
+            MINMAXINFO* mmi = (MINMAXINFO*)lParam;
+            mmi->ptMinTrackSize = {VizPx(220), VizPx(200)};
+            return 0;
+        }
+        case WM_SIZE:
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
         case WM_LBUTTONUP: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ClientToScreen(hWnd, &pt);
@@ -2577,6 +2933,13 @@ LRESULT CALLBACK VizWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             }
             return 0;
         }
+        // A press from the mod's own tap doesn't move or size it: Windows' move loop runs on the touchpad thread,
+        // which then waited on it with the tap's button still down, and the pointer froze.
+        case WM_NCLBUTTONDOWN:
+            if (GetMessageExtraInfo() == (LPARAM)kInputMark) {
+                return 0;
+            }
+            break;
         // On the caption, a double click would maximize the window and a right click open its system menu.
         case WM_NCLBUTTONDBLCLK:
         case WM_NCRBUTTONUP:
@@ -2595,6 +2958,9 @@ LRESULT CALLBACK VizWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             GetWindowRect(hWnd, &rc);
             Wh_SetIntValue(L"overlayX", rc.left);
             Wh_SetIntValue(L"overlayY", rc.top);
+            // The size at 96 DPI, so that it opens alike on a monitor with another scale.
+            Wh_SetIntValue(L"overlayW", (int)std::lround((rc.right - rc.left) / g_viz.scale));
+            Wh_SetIntValue(L"overlayH", (int)std::lround((rc.bottom - rc.top) / g_viz.scale));
             return 0;
         }
     }
@@ -2621,7 +2987,8 @@ void VizCreate(HINSTANCE hInstance) {
     int y = saved ? savedY : work.bottom - kVizWidth;
     // Created at its spot first, so that its monitor's DPI is known, then sized for it.
     g_viz.hWnd = CreateWindowEx(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, kVizClassName,
-                                nullptr, WS_POPUP, x, y, kVizWidth, kVizWidth, nullptr, nullptr, hInstance, nullptr);
+                                nullptr, WS_POPUP | WS_THICKFRAME, x, y, kVizWidth, kVizWidth, nullptr, nullptr,
+                                hInstance, nullptr);
     if (!g_viz.hWnd) {
         Wh_Log(L"Overlay window error: %u", GetLastError());
         return;
@@ -2630,9 +2997,24 @@ void VizCreate(HINSTANCE hInstance) {
     int width = VizPx(kVizWidth);
     int height = VizPx(kVizHeader) + VizPx(kVizLegend) +
                  (int)((width - 2 * VizPx(kVizMargin)) * g_viz.padH / g_viz.padW) + VizPx(4);
+    int savedW = Wh_GetIntValue(L"overlayW", 0);
+    int savedH = Wh_GetIntValue(L"overlayH", 0);
+    if (savedW > 0 && savedH > 0) {
+        width = VizPx(savedW);
+        height = VizPx(savedH);
+    }
     if (!saved) {
         x = work.right - width - VizPx(16);
         y = work.bottom - height - VizPx(16);
+    }
+    // A size saved on a larger monitor fits this one's work area.
+    MONITORINFO mi{.cbSize = sizeof(mi)};
+    if (GetMonitorInfo(MonitorFromWindow(g_viz.hWnd, MONITOR_DEFAULTTONEAREST), &mi)) {
+        const RECT& r = mi.rcWork;
+        width = std::min(width, (int)(r.right - r.left));
+        height = std::min(height, (int)(r.bottom - r.top));
+        x = std::clamp(x, (int)r.left, (int)r.right - width);
+        y = std::clamp(y, (int)r.top, (int)r.bottom - height);
     }
     SetWindowPos(g_viz.hWnd, nullptr, x, y, width, height, SWP_NOZORDER | SWP_NOACTIVATE);
     SetLayeredWindowAttributes(g_viz.hWnd, 0, 225, LWA_ALPHA);
@@ -2806,6 +3188,25 @@ void FindThumbs(const std::vector<const Contact*>& tips, DWORD now) {
         }
     }
     if (contacts < needed) {
+        // See kThumbBelowMm.
+        if (contacts < 2) {
+            return;
+        }
+        for (const Contact* c : tips) {
+            if (IsThumbPart(c->id) || !g_state.landedLow[c->id]) {
+                continue;
+            }
+            bool underAll = std::all_of(tips.begin(), tips.end(), [&](const Contact* o) {
+                return o == c || IsThumbPart(o->id) ||
+                       (inside(o) - inside(c) > kInwardMm && c->y - o->y >= kThumbBelowMm);
+            });
+            if (underAll) {
+                if (!IsThumb(c->id)) {
+                    makeThumb(c);
+                }
+                break;
+            }
+        }
         return;
     }
     const Contact* low = nullptr;
@@ -2899,6 +3300,11 @@ void ProcessFrame() {
         return;
     }
     FeedbackScroll();
+    // A scroll held by a resting finger, its fingers up, reads the switch key too: never seen there, it didn't switch
+    // the scroll they come back to, and its release opened Start.
+    if (g_two.scrolling || g_state.scrollSession) {
+        TouchOutput();
+    }
 
     // A palm or thumb (Confidence = 0) only counts toward the whole hand's five: with three on, a two-finger
     // scroll with the thumb resting would start a glide. A count which is off doesn't start: its swipe is Windows'.
@@ -2909,6 +3315,7 @@ void ProcessFrame() {
         g_state.armed = true;
         g_state.armTime = now;
         g_state.fewMoving = count <= 2;
+        g_state.fewSince = 0;
         SetWheelBlock(true);
         SetTimer(g_hWnd, kStaleTimerId, kStaleFrameMs, nullptr);
         Wh_Log(L"Glide started");
@@ -2985,37 +3392,54 @@ void ProcessFrame() {
         reach[c->id] = std::hypot(c->x - trail.front().x, c->y - trail.front().y);
     }
 
-    // The speed multiplier counts every finger, the ones which joined later too: only the pointer's direction
-    // comes from the fingers which started the glide. The thumb counts as one finger moving with the hand, whatever
-    // it does itself: counted by its own movement, its sticking and slipping flipped the multiplier.
-    double movedSum = 0;
-    double movedSq = 0;
+    // The speed multiplier counts the fingers moving, the ones which joined later too: only the pointer's
+    // direction comes from the fingers which started the glide. The thumb counts by its own movement, up to the
+    // farthest finger's, its halves as one: counted as a finger moving with the hand whatever it did, a thumb
+    // resting with two fingers moving got the multiplier for more.
     double movedMost = 0;
-    int moving = 0;
+    double thumbMoved = -1;
     for (const Contact* c : used) {
-        if (!IsThumb(c->id)) {
-            double d = reach[c->id];
-            movedSum += d;
-            movedSq += d * d;
-            movedMost = std::max(movedMost, d);
-            moving++;
+        if (IsThumb(c->id)) {
+            thumbMoved = std::max(thumbMoved, reach[c->id]);
+        } else {
+            movedMost = std::max(movedMost, reach[c->id]);
         }
     }
-    if (moving && std::any_of(tips.begin(), tips.end(), [](const Contact* c) { return IsThumb(c->id); })) {
-        double d = movedSum / moving;
+    double movedSum = 0;
+    double movedSq = 0;
+    auto addMover = [&](double d) {
         movedSum += d;
         movedSq += d * d;
+    };
+    for (const Contact* c : used) {
+        if (!IsThumb(c->id)) {
+            addMover(reach[c->id]);
+        }
     }
-    if (movedMost >= kMoversMinMm) {
+    if (thumbMoved >= 0) {
+        addMover(std::min(thumbMoved, movedMost));
+    }
+    if (movedMost >= kMoversMinMm && movedSq > 0) {
         double movers = movedSum * movedSum / movedSq;
         if (g_vizOn) {
             g_viz.movers = movers;
         }
-        if (movers >= kHandMovers) {
-            g_state.fewMoving = false;
-        } else if (movers <= kFewMovers) {
-            g_state.fewMoving = true;
+        if (movers <= kFewMovers) {
+            if (!g_state.fewSince) {
+                g_state.fewSince = now | 1;
+            }
+            // Signed: with now even, fewSince is now + 1, one ms ahead.
+            if ((LONG)(now - g_state.fewSince) >= (LONG)kFewHoldMs) {
+                g_state.fewMoving = true;
+            }
+        } else {
+            g_state.fewSince = 0;
+            if (movers >= kHandMovers) {
+                g_state.fewMoving = false;
+            }
         }
+    } else {
+        g_state.fewSince = 0;
     }
 
     // Only the fingers which started the glide move the pointer, until they have all lifted: then those left
@@ -3160,15 +3584,8 @@ void ProcessFrame() {
         g_state.travel += std::hypot(dx, dy);
     }
     g_travelLog.push_back({now, g_state.travel});
-    while (g_travelLog.size() > 1 && now - g_travelLog.front().first > kAimLookbackMs + 500) {
+    while (g_travelLog.size() > 1 && now - g_travelLog.front().first > kTapStillMs + 500) {
         g_travelLog.pop_front();
-    }
-    POINT cursor;
-    if (GetCursorPos(&cursor)) {
-        g_pointerLog.push_back({now, cursor});
-        while (g_pointerLog.size() > 1 && now - g_pointerLog.front().first > kAimLookbackMs + 500) {
-            g_pointerLog.pop_front();
-        }
     }
     if (g_two.scrolling) {
         size_t a = 0;
@@ -3446,9 +3863,9 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
 
-// The hook runs on a thread of its own, which does nothing else: the system waits for it on every mouse
-// event, and on the touchpad thread, busy moving the pointer, it held all input, the touchpad's included,
-// for up to a second.
+// The hooks (the wheel block, and the switch key's) run on a thread of its own, which does nothing else: the system
+// waits for it on every mouse or key event, and on the touchpad thread, busy moving the pointer, the mouse hook held
+// all input, the touchpad's included, for up to a second.
 DWORD WINAPI HookThread(LPVOID readyEvent) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
@@ -3462,7 +3879,22 @@ DWORD WINAPI HookThread(LPVOID readyEvent) {
     SetEvent((HANDLE)readyEvent);
 
     HHOOK hook = nullptr;
+    HHOOK switchHook = nullptr;
     while (GetMessage(&msg, nullptr, 0, 0) > 0) {
+        // Unhooked only if the key wasn't used again meanwhile.
+        if (msg.message == kSwitchHookMessage) {
+            if (msg.wParam && !switchHook) {
+                switchHook = SetWindowsHookEx(WH_KEYBOARD_LL, SwitchKeyProc, hInstance, 0);
+                if (!switchHook) {
+                    Wh_Log(L"Switch key hook error: %u", GetLastError());
+                    g_switchUsed = false;
+                }
+            } else if (!msg.wParam && switchHook && !g_switchUsed) {
+                UnhookWindowsHookEx(switchHook);
+                switchHook = nullptr;
+            }
+            continue;
+        }
         if (msg.message != kWheelBlockMessage) {
             continue;
         }
@@ -3479,6 +3911,9 @@ DWORD WINAPI HookThread(LPVOID readyEvent) {
 
     if (hook) {
         UnhookWindowsHookEx(hook);
+    }
+    if (switchHook) {
+        UnhookWindowsHookEx(switchHook);
     }
     return 0;
 }
@@ -3526,6 +3961,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             }
             if (wParam == kDoubleTimerId) {
                 FirePendingDouble(GetTickCount());
+                return 0;
+            }
+            if (wParam == kTapUpTimerId) {
+                TapUp();
                 return 0;
             }
             if (wParam == kInertiaTimerId) {
@@ -3633,6 +4072,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
 
         RunMessageLoop();
 
+        // Disabled mid-gesture: a hold or a tap's press would stay down after the process exits.
+        ResetSession();
         FeedbackListen(false);
         SetWheelBlock(false);
         WTSUnRegisterSessionNotification(g_hWnd);
@@ -3645,6 +4086,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
     }
 
     UnregisterHotKey(g_hWnd, kVizHotkeyId);
+    SwitchUnhook();
     BadgeDestroy(hInstance);
     VizDestroy(hInstance);
     DestroyWindow(g_hWnd);
@@ -3658,6 +4100,7 @@ BOOL WhTool_ModInit() {
 
     LoadSettings();
     LoadCurve();
+    LoadScrollApps();
     g_lastSave = Now();
 
     HANDLE hookReady = CreateEvent(nullptr, TRUE, FALSE, nullptr);

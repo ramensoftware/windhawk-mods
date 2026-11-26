@@ -1,11 +1,12 @@
 import hashlib
 import json
 import re
+import shutil
+import urllib.request
 from pathlib import Path
 from typing import List
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
-import requests
 from compress_gif import compress_gif, is_gif
 
 URL_PATTERN = r"!\[[^\[\]]*\]\(\s*((?:https://i\.imgur\.com/|https://raw\.githubusercontent\.com)[^)]+?)\s*\)"
@@ -33,9 +34,6 @@ FETCH_URL_WORKAROUNDS = {
     # "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.PNG": "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/11-7.png",
     # "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.png": "https://raw.githubusercontent.com/QCQ171-C/mods-collection/refs/heads/main/Gallery/folder-thumbnail-tweaker/10-11.PNG",
 }
-
-session = requests.Session()
-session.headers.update({"User-Agent": "Mozilla/5.0"})
 
 
 def find_image_urls(file_path: Path) -> List[str]:
@@ -70,14 +68,14 @@ def image_url_to_path(url: str):
 
 def download_image(url: str, save_path: Path):
     url = FETCH_URL_WORKAROUNDS.get(url, url)
-    response = session.get(url, stream=True)
-    response.raise_for_status()
-
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-    with save_path.open("wb") as file:
-        for chunk in response.iter_content(chunk_size=8192):
-            if chunk:
-                file.write(chunk)
+    # Escapes what a URL can't hold as is, such as spaces, and keeps the
+    # existing escapes.
+    url = quote(url, safe="!#$%&'()*+,/:;=?@[]~")
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(request) as response:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        with save_path.open("wb") as file:
+            shutil.copyfileobj(response, file)
 
     print(f"Downloaded and saved: {save_path.name}")
 

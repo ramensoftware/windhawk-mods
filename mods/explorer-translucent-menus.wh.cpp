@@ -4,7 +4,7 @@
 // @name:zh-CN      Explorer 上下文菜单半透明
 // @description     Translucent materials and optional borderless classic context menus for File Explorer
 // @description:zh-CN 对 Explorer 经典上下文菜单应用半透明材质和可选无边框
-// @version         1.1.0
+// @version         1.3.2
 // @author          alkali210
 // @github          https://github.com/alkali210
 // @include         explorer.exe
@@ -19,7 +19,7 @@
 // https://github.com/ramensoftware/windhawk-mods/issues
 //
 // For pull requests, development takes place here:
-// https://github.com/alkali210/windhawk-mods
+// https://github.com/alkali210/my-windhawk-mods
 
 // clang-format off
 // ==WindhawkModReadme==
@@ -46,9 +46,9 @@ Tint and transparency adjustments
 
 ![tint](https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/02-tint-transparency.png)
 
-Borders and submenus
+Borders, submenus, hover highlights, and file tooltips
 
-![borders](https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/03-border-submenus.png)
+![Borders, submenus, custom hover highlight colors and corner radii, and a translucent file tooltip](https://raw.githubusercontent.com/alkali210/my-windhawk-mods/main/explorer-translucent-menus/screenshots/03-border-highlight.png)
 
 ## Requirements
 
@@ -61,7 +61,7 @@ use **Shift+F10**. Select **Native** to disable all hooks. For a temporary bypas
 enable **Hold Ctrl to bypass** in the settings, then hold **Ctrl** before opening
 a menu.
 
-## Materials
+## Materials and Tint
 
 | Material | Tint opacity |
 | --- | --- |
@@ -74,11 +74,27 @@ a menu.
 | Mica / Mica Alt | Fixed Windows recipes |
 
 Tint opacity changes the material, not text or icons. Theme selection controls
-the light or dark palette. Hover highlight opacity can be adjusted separately.
+the light or dark palette.
 
-The custom hover highlight's corner radius and inset are adjustable in
-device-independent pixels (DIP), scaled for the display DPI. 
-These settings have no effect when highlight opacity is 0 (use native highlight instead).
+**Match text and symbols to menu theme** is on by default. When **Menu theme**
+is explicitly set to Light or Dark, menu text and symbols (including title bar
+system command glyphs) use that palette even if another customization mixes
+light and dark foreground colors. This includes Shell-drawn captions on the
+desktop context menu, with distinct colors for disabled commands.
+**Follow Windows** or turning this option off keeps native foreground colors.
+Menu item icons are not recolored.
+
+## Hover highlight
+
+**Hover highlight color** accepts `#RRGGBB` (for example, `#FF6A00`).
+The default `auto` keeps the existing light and dark colors; invalid values
+also use those colors. Opacity is adjustable separately.
+The corner radius and inset are measured in device-independent pixels (DIP).
+These settings have no effect when highlight opacity is 0 (native highlight).
+
+When upgrading from a version without these groups, re-enter any custom
+material, tint, theme, highlight, or click animation values. Windhawk stores
+grouped settings under new keys. Settings outside the groups carry over.
 
 ## Appearance
 
@@ -87,10 +103,36 @@ preserves menu dimensions and works with rounded or square corners. Native
 mode and Ctrl bypass retain the complete Windows appearance.
 The option also protects the outline setting from later Shell/UxTheme updates
 while the modified menu is being tracked.
+When disabled, the theme draws the native border both during the opening
+animation and on later repaints.
+
+Enable **Apply material to title bar menu** to also style File Explorer's
+window menu, opened by right-clicking the title bar or pressing `Alt+Space`.
+It uses the same material, theme, border, corner, highlight, and mouse click
+animation settings as context menus. Opening animations and keyboard command
+activation remain native.
+
+Enable **Apply material to file information tooltips** to give File Explorer's
+file-list and desktop icon InfoTips the same material, tint, theme, corners,
+and border setting.
+Windows still supplies the text, layout, hover delay, and animations. A
+tooltip keeps its material through the native fade-out.
+
+Enable **Apply material to navigation pane label tooltips** to style the full
+label that appears when you hover over a truncated name in File Explorer's
+navigation pane. Windows still controls when and where the label opens and
+how it dismisses. Other navigation, toolbar, and taskbar tooltips are unchanged.
+
+These three options are enabled by default on new installs and can be turned
+off independently.
+
+Unloading or reloading the mod clears its state from existing tooltip windows
+before they can be reused.
 
 ### Menu item click animation
 
-**Menu item click animation** offers three choices for modified menus:
+Under **Hover highlight**, **Menu item click animation** offers three choices
+after mouse selection:
 
 | Choice | Behavior after clicking a command |
 | --- | --- |
@@ -99,8 +141,10 @@ while the modified menu is being tracked.
 | Recreate fade animation (default) | Fade a snapshot of the fully composited item for 350 ms |
 
 Replay captures the visible hover appearance before the pressed-state paint,
-including the material, text, and icons. Its non-interactive overlay runs on a
-separate thread, so executing the command does not wait for the animation.
+including the material, text, and icons. The fade is clipped to the custom
+highlight even when Windows drew the item offscreen. The non-interactive
+overlay runs on a separate thread, so menu command delivery does not wait
+for it to show or finish the fade.
 It respects Windows' selection-fade and UI-effects settings and never changes
 global animation preferences.
 
@@ -120,9 +164,10 @@ This mod keeps the Shell's immersive owner-draw enabled and preserves native
 menu layout, commands, and shell extensions. Effects are scoped to supported
 classic popups while a menu is tracked. Preparation validates resources before
 applying effects and exposes the popup to drawing hooks only after commit.
-Only successful state changes are recorded for cleanup. Unassociated memory
-DCs are left to Windows; owner-draw memory DCs require an exact synchronous
-WM_DRAWITEM match.
+Only successful state changes are recorded for cleanup. Memory DCs are left
+to Windows unless they match the exact target of a synchronous Shell
+`WM_DRAWITEM` or native popup drawing message. This preserves the native
+opening animation for menus drawn offscreen, including scrollbar context menus.
 GDI and UxTheme hooks are installed in Explorer, but forward to Windows outside
 a tracked menu. The scope is the popup effect, rather than a replacement for
 Explorer's overall interface rendering.
@@ -154,17 +199,18 @@ To continue using those mods in other applications while avoiding their Explorer
 exclude `explorer.exe` from their targets.
 
 This mod leaves Explorer's main window backdrop untouched and can complement ExplorerBlurMica.
+If the selected menu theme is opposite to the system color theme, and ExplorerBlurMica is used, then a mismatch between menu symbols (arrows, dots) and text may be observed in the explorer main window.
 
 Compatible with WinUI Context Menu Animation (disable Fade-in and enable
 Translucent Windows compatibility mode).
 
 Including other processes (such as `taskmgr.exe`) can also apply the effects of this
-mod to the Win32 menus of those processes.However, this mod is designed for
+mod to the Win32 menus of those processes. However, this mod is designed for
 `explorer.exe` and has not been extensively tested with other processes.
 
 The implementation uses version-dependent Windows interfaces: the composition
-attribute exports, UxTheme ordinal 74, the DarkMode::Menu theme, menu layout
-message 0x1e2, menu activation messages, and Shell window properties. It does not
+attribute exports, UxTheme ordinal 74, the DarkMode::Menu theme, native menu
+layout, activation and drawing messages, and Shell window properties. It does not
 read private Shell item structures, patch instructions, download symbols, or
 replace the menu loop.
 
@@ -174,6 +220,18 @@ Enable log output in Windhawk's Advanced tab to record menu preparation,
 material and border application results, native fallback reasons, and cleanup.
 There is no separate logging setting in this mod. Native mode registers no
 menu hooks, so it reports initialization rather than individual menu openings.
+
+For the title bar option, the initialization line reports `titleBarMenu=1`
+when enabled. Look for `Title bar menu` owner, entry, and system-menu lines,
+followed by the material result. With Windhawk logging disabled, these lines
+are not emitted even if the mod is loaded.
+
+For file-list and desktop icon InfoTips, look for `fileInfoTips=1` at
+initialization and a `File InfoTip` line when a tooltip receives the material.
+For truncated navigation labels, look for `navigationTooltips=1` and a
+`Navigation label tooltip` line.
+The `Material ... applied=1` log means DWM accepted the backdrop settings;
+it does not confirm that the native tooltip background was cleared.
 
 ## Credits and license
 
@@ -187,56 +245,75 @@ This implementation is distributed under GPL-3.0-or-later.
 
 // ==WindhawkModSettings==
 /*
-- backgroundEffect: acrylic
-  $name: Background material
-  $description: Applies only to classic Explorer popup menus. Native disables all modifications.
-  $options:
-  - none: Native
-  - solid: Solid
-  - transparent: Transparent
-  - acrylic: Acrylic (adjustable tint)
-  - modern-acrylic: Modern Acrylic
-  - system: System Acrylic
-  - mica: Mica
-  - mica-alt: Mica Alt
-- theme: auto
-  $name: Menu theme
-  $description: Select the palette for modified menus.
-  $options:
-  - auto: Follow Windows
-  - light: Light
-  - dark: Dark
-- tintOpacity: 35
-  $name: Tint opacity
-  $description: 0-100. Applies to Acrylic and Transparent.
-- lightTint: "#F5F5F5"
-  $name: Light tint color
-  $description: "#RRGGBB color for Solid, Transparent, Acrylic and Modern Acrylic in the light theme."
-- darkTint: "#202020"
-  $name: Dark tint color
-  $description: "#RRGGBB color for Solid, Transparent, Acrylic and Modern Acrylic in the dark theme."
-- highlightOpacity: 28
-  $name: Hover highlight opacity
-  $description: 1-100 for the custom highlight. Set to 0 to use the native highlight.
-- highlightRadius: 4
-  $name: Hover highlight corner radius
-  $description: Non-negative DIP, scaled with display DPI. Set to 0 for square corners.
-- highlightInset: 0
-  $name: Hover highlight inset
-  $description: Non-negative DIP on all sides, scaled with display DPI. A large inset can hide the highlight.
-- selectionFade: replay
-  $name: Menu item click animation
-  $description: Applies to modified menus only. Native can briefly show a black background; Replay fades a snapshot of the composited item. Menu opening animations are unchanged.
-  $options:
-  - native: Windows animation (may show black background)
-  - instant: Close immediately
-  - replay: Recreate fade animation
+- materialsAndTint:
+    - backgroundEffect: acrylic
+      $name: Background material
+      $description: Applies only to classic Explorer popup menus. Native disables all modifications.
+      $options:
+      - none: Native
+      - solid: Solid
+      - transparent: Transparent
+      - acrylic: Acrylic (adjustable tint)
+      - modern-acrylic: Modern Acrylic
+      - system: System Acrylic
+      - mica: Mica
+      - mica-alt: Mica Alt
+    - theme: auto
+      $name: Menu theme
+      $description: Select the palette for modified menus.
+      $options:
+      - auto: Follow Windows
+      - light: Light
+      - dark: Dark
+    - matchMenuForeground: true
+      $name: Match text and symbols to menu theme
+      $description: Use the selected Light or Dark palette for menu text and system symbols, including title bar menu glyphs. Follow Windows keeps native colors. Menu item icons are unchanged.
+    - tintOpacity: 35
+      $name: Tint opacity
+      $description: 0-100. Applies to Acrylic and Transparent.
+    - lightTint: "#F5F5F5"
+      $name: Light tint color
+      $description: "#RRGGBB color for Solid, Transparent, Acrylic and Modern Acrylic in the light theme."
+    - darkTint: "#202020"
+      $name: Dark tint color
+      $description: "#RRGGBB color for Solid, Transparent, Acrylic and Modern Acrylic in the dark theme."
+  $name: Materials and Tint
+- hoverHighlight:
+    - highlightOpacity: 28
+      $name: Hover highlight opacity
+      $description: 1-100 for the custom highlight. Set to 0 to use the native highlight.
+    - highlightColor: auto
+      $name: Hover highlight color
+      $description: "#RRGGBB for both themes, or auto for the default light and dark colors. Applies only to the custom highlight."
+    - highlightRadius: 4
+      $name: Hover highlight corner radius
+      $description: Non-negative DIP, scaled with display DPI. Set to 0 for square corners.
+    - highlightInset: 0
+      $name: Hover highlight inset
+      $description: Non-negative DIP on all sides, scaled with display DPI. A large inset can hide the highlight.
+    - selectionFade: replay
+      $name: Menu item click animation
+      $description: Applies to modified menus only. Native can briefly show a black background; Replay fades a snapshot of the composited item. Menu opening animations are unchanged.
+      $options:
+      - native: Windows animation (may show black background)
+      - instant: Close immediately
+      - replay: Recreate fade animation
+  $name: Hover highlight
 - roundedCorners: true
   $name: Rounded corners
-  $description: Request small rounded corners for modified menus.
-- hideMenuBorder: false
+  $description: Request small rounded corners for modified menus and tooltips.
+- hideMenuBorder: true
   $name: Hide menu border
-  $description: Suppress the outline on modified menus without changing their size.
+  $description: Suppress the outline on modified menus and tooltips without changing their size.
+- styleWindowMenu: true
+  $name: Apply material to title bar menu
+  $description: Apply the same appearance and mouse click animation settings to File Explorer's title bar menu (right-click or Alt+Space).
+- styleFileInfoTips: true
+  $name: Apply material to file information tooltips
+  $description: Use the menu material, tint, theme, corners and border setting for file-list and desktop icon tooltips.
+- styleNavigationTooltips: true
+  $name: Apply material to navigation pane label tooltips
+  $description: Style the full labels that appear when hovering over truncated item names in File Explorer's navigation pane. Other navigation and toolbar tooltips are unchanged.
 - repairIcons: true
   $name: Repair legacy icon transparency
   $description: Convert copied legacy RGB icons to premultiplied alpha without modifying the source bitmaps.
@@ -259,6 +336,8 @@ This implementation is distributed under GPL-3.0-or-later.
 #include <atomic>
 #include <cmath>
 #include <cwchar>
+#include <memory>
+#include <new>
 
 #include <windhawk_utils.h>
 
@@ -333,7 +412,7 @@ bool IsSystemMaterial(Material value) {
 int ClampPercent(int value) {
     return value < 0 ? 0 : value > 100 ? 100 : value;
 }
-COLORREF ParseTint(PCWSTR value, COLORREF fallback) {
+COLORREF ParseRgbColor(PCWSTR value, COLORREF fallback) {
     if (!value)
         return fallback;
     if (*value == L'#')
@@ -357,13 +436,21 @@ struct Settings {
     COLORREF lightTint = RGB(245, 245, 245);
     COLORREF darkTint = RGB(32, 32, 32);
     int theme = 0;  // 0=auto, 1=light, 2=dark
+    bool matchMenuForeground = true;
     int highlightOpacity = 28;
+    COLORREF highlightColor = CLR_INVALID;  // Default color for the popup theme.
     int highlightRadius = 4;
     int highlightInset = 0;
     bool repairIcons = true;
     bool removeIconBackground = true;
     bool hideMenuBorder = false;
+    bool styleWindowMenu = false;
+    bool styleFileInfoTips = false;
+    bool styleNavigationTooltips = false;
     SelectionFade selectionFade = SelectionFade::Replay;
+
+    bool MatchMenuForeground() const { return matchMenuForeground && theme != 0; }
+    bool StyleTooltips() const { return styleFileInfoTips || styleNavigationTooltips; }
 };
 Settings
     g_settings{};  // Immutable while hooks are active; settings cause reload.
@@ -377,10 +464,14 @@ using GetThemeClass_t = HRESULT(WINAPI*)(HTHEME, LPWSTR, int);
 GetThemeClass_t g_getThemeClass = nullptr;
 decltype(&TrackPopupMenu) g_trackPopupMenu = nullptr;
 decltype(&TrackPopupMenuEx) g_trackPopupMenuEx = nullptr;
+decltype(&CreateWindowExW) g_createWindowEx = nullptr;
+SRWLOCK g_surfaceSubclassLock = SRWLOCK_INIT;
 decltype(&DrawThemeBackground) g_drawThemeBackground = nullptr;
 decltype(&DrawThemeBackgroundEx) g_drawThemeBackgroundEx = nullptr;
 decltype(&DrawThemeText) g_drawThemeText = nullptr;
 decltype(&DrawThemeTextEx) g_drawThemeTextEx = nullptr;
+decltype(&CreateCompatibleDC) g_createCompatibleDC = nullptr;
+decltype(&DeleteDC) g_deleteDC = nullptr;
 decltype(&DrawTextW) g_drawText = nullptr;
 decltype(&FillRect) g_fillRect = nullptr;
 decltype(&BitBlt) g_bitBlt = nullptr;
@@ -405,7 +496,13 @@ struct CompositionData {
 using CompositionAttribute_t = BOOL(WINAPI*)(HWND, CompositionData*);
 CompositionAttribute_t g_setComposition = nullptr;
 CompositionAttribute_t g_getComposition = nullptr;
+constexpr UINT kUahDrawMenu = 0x0091;
+constexpr UINT kUahDrawMenuItem = 0x0092;
+constexpr UINT kUahNcPaintMenuPopup = 0x0095;
+constexpr UINT kMenuGetHandle = 0x01e1;  // MN_GETHMENU
 constexpr UINT kMenuSizeWindow = 0x01e2;
+constexpr UINT kMenuButtonDown = 0x01ed;  // MN_BUTTONDOWN
+constexpr UINT kMenuButtonUp = 0x01ef;    // MN_BUTTONUP
 thread_local unsigned t_textDepth = 0;
 thread_local unsigned t_observerDepth = 0;
 thread_local unsigned t_bitmapDepth = 0;
@@ -475,20 +572,13 @@ HighlightGeometry GetHighlightGeometry(int width, int height, UINT dpi) {
 
 enum class ReplayHighlightSpace { None, Screen, Item };
 
-// POD TLS only. In particular, nothing runs a destructor at process shutdown.
-struct SelectionReplay;
-struct Popup {
+struct Backdrop {
     HWND hwnd;
-    HMENU menu;
-    HBRUSH oldBrush;
-    HTHEME palette;
-    bool brushChanged;
     bool blurChanged;
     bool frameChanged;
     bool backdropChanged;
     bool cornerChanged;
     bool darkChanged;
-    bool active;
     bool dark;
     bool haveBackdrop;
     bool haveCorner;
@@ -503,21 +593,31 @@ struct Popup {
     bool haveAccent;
     bool accentChanged;
     bool applying;
+};
+
+// POD TLS only. In particular, nothing runs a destructor at process shutdown.
+struct SelectionReplay;
+struct Popup : Backdrop {
+    HMENU menu;
+    HBRUSH oldBrush;
+    HTHEME palette;
+    bool brushChanged;
+    bool active;
     bool subclassed;
     bool preparing;
     bool layingOut;
     RECT replayHighlightRect;
     UINT replayHighlightItemId;
     ReplayHighlightSpace replayHighlightSpace;
+    RECT windowMenuRow;  // Selected UAH item in popup client coordinates.
+    UINT windowMenuRowId;
     SelectionReplay* clickReplay;
     UINT replayPosition;
 };
 
-// Capture/Start/Discard preserve the caller's last-error value. Capture must run
-// on popup's owning thread, with physical screen coordinates and an already
-// painted selected row. Only the caller decides whether this is a supported,
-// active, enabled command row. Start immediately before native dismissal and
-// command dispatch; it waits for presentation, never for the fade's duration.
+// Replay helpers preserve last error. Capture runs on the popup's owning
+// thread in physical screen coordinates. Submit takes ownership after native
+// dismissal, without waiting for the worker to present the bitmap.
 // Stop is terminal and must run outside the replay worker, before mod unload.
 struct SelectionReplay {
     RECT screenRect;
@@ -531,10 +631,8 @@ SRWLOCK g_selectionReplayLock = SRWLOCK_INIT;
 HANDLE g_selectionReplayThread = nullptr;
 HANDLE g_selectionReplayStop = nullptr;
 HANDLE g_selectionReplayRequest = nullptr;
-HANDLE g_selectionReplayComplete = nullptr;
 bool g_selectionReplayStopping = false;  // Protected by the SRW lock.
 std::atomic<SelectionReplay*> g_selectionReplayPending{nullptr};
-std::atomic<bool> g_selectionReplayAccepted{false};
 
 struct SelectionReplayErrorGuard {
     DWORD error = GetLastError();
@@ -616,13 +714,13 @@ bool PresentSelectionReplay(const SelectionReplaySurface& surface,
 
 bool CreateSelectionReplaySurface(HINSTANCE instance, SelectionReplay* replay,
                                   SelectionReplaySurface& surface) {
+    surface.replay = replay;
     surface.dc = CreateCompatibleDC(nullptr);
     if (!surface.dc)
         return false;
     surface.oldBitmap = SelectObject(surface.dc, replay->bitmap);
     if (!surface.oldBitmap || surface.oldBitmap == HGDI_ERROR) {
         surface.oldBitmap = nullptr;
-        ClearSelectionReplaySurface(surface);
         return false;
     }
     surface.hwnd = CreateWindowExW(
@@ -636,15 +734,10 @@ bool CreateSelectionReplaySurface(HINSTANCE instance, SelectionReplay* replay,
     if (!surface.hwnd || !PresentSelectionReplay(surface, replay, 255) ||
         !SetWindowPos(surface.hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE |
-                          SWP_SHOWWINDOW) ||
-        FAILED(DwmFlush())) {
-        // replay remains caller-owned until every presentation step succeeds.
-        ClearSelectionReplaySurface(surface);
+                          SWP_SHOWWINDOW))
         return false;
-    }
     surface.started = GetTickCount64();
     surface.alpha = 255;
-    surface.replay = replay;
     return true;
 }
 
@@ -697,15 +790,12 @@ DWORD WINAPI SelectionReplayThreadProc(void*) {
         if (result == WAIT_OBJECT_0 || result == WAIT_FAILED)
             break;
         if (result == WAIT_OBJECT_0 + 1) {
-            ClearSelectionReplaySurface(surface);
-            SelectionReplay* replay =
-                g_selectionReplayPending.load(std::memory_order_acquire);
-            bool accepted = !replay ||
-                            CreateSelectionReplaySurface(instance, replay,
-                                                         surface);
-            g_selectionReplayAccepted.store(accepted, std::memory_order_release);
-            if (!SetEvent(g_selectionReplayComplete))
-                break;
+            if (SelectionReplay* replay = g_selectionReplayPending.exchange(
+                    nullptr, std::memory_order_acq_rel)) {
+                ClearSelectionReplaySurface(surface);
+                if (!CreateSelectionReplaySurface(instance, replay, surface))
+                    ClearSelectionReplaySurface(surface);
+            }
         } else if (result == WAIT_OBJECT_0 + ARRAYSIZE(events)) {
             // Bound each batch so message traffic cannot starve stop or fade.
             MSG message;
@@ -734,13 +824,11 @@ void CloseSelectionReplayWorkerHandles() {
         CloseHandle(g_selectionReplayStop);
     if (g_selectionReplayRequest)
         CloseHandle(g_selectionReplayRequest);
-    if (g_selectionReplayComplete)
-        CloseHandle(g_selectionReplayComplete);
     g_selectionReplayThread = nullptr;
     g_selectionReplayStop = nullptr;
     g_selectionReplayRequest = nullptr;
-    g_selectionReplayComplete = nullptr;
-    g_selectionReplayPending.store(nullptr, std::memory_order_relaxed);
+    DiscardSelectionReplay(g_selectionReplayPending.exchange(
+        nullptr, std::memory_order_acq_rel));
 }
 
 bool EnsureSelectionReplayWorker() {
@@ -754,9 +842,7 @@ bool EnsureSelectionReplayWorker() {
     }
     g_selectionReplayStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_selectionReplayRequest = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    g_selectionReplayComplete = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_selectionReplayStop || !g_selectionReplayRequest ||
-        !g_selectionReplayComplete) {
+    if (!g_selectionReplayStop || !g_selectionReplayRequest) {
         CloseSelectionReplayWorkerHandles();
         return false;
     }
@@ -769,29 +855,26 @@ bool EnsureSelectionReplayWorker() {
     return true;
 }
 
-// A null request cancels the preceding replay without creating another one.
-// The lock serializes callers through the acknowledgement. In particular, Stop
-// cannot close events while Start/Capture is using them. No animation wait here.
+// The newest queued replay replaces any unclaimed request. The worker takes
+// ownership with exchange, so a superseded bitmap can only be freed once.
 bool SubmitSelectionReplay(SelectionReplay* replay) {
-    g_selectionReplayAccepted.store(false, std::memory_order_relaxed);
-    g_selectionReplayPending.store(replay, std::memory_order_release);
-    if (!SetEvent(g_selectionReplayRequest)) {
-        g_selectionReplayPending.store(nullptr, std::memory_order_relaxed);
+    SelectionReplayErrorGuard errorGuard;
+    if (!replay)
         return false;
+    bool queued = false;
+    {
+        SelectionReplayLockGuard lockGuard;
+        if (!g_selectionReplayStopping && EnsureSelectionReplayWorker()) {
+            replay = g_selectionReplayPending.exchange(
+                replay, std::memory_order_acq_rel);
+            queued = SetEvent(g_selectionReplayRequest) != FALSE;
+            if (!queued)
+                DiscardSelectionReplay(g_selectionReplayPending.exchange(
+                    nullptr, std::memory_order_acq_rel));
+        }
     }
-    HANDLE events[] = {g_selectionReplayComplete, g_selectionReplayThread};
-    DWORD result = WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE,
-                                          INFINITE);
-    if (result != WAIT_OBJECT_0 && result != WAIT_OBJECT_0 + 1) {
-        // Valid owned handles should not fail a wait. If they do, drain the
-        // worker before deciding whether it ever accepted the incoming bitmap.
-        SetEvent(g_selectionReplayStop);
-        WaitForSingleObject(g_selectionReplayThread, INFINITE);
-    }
-    bool accepted =
-        g_selectionReplayAccepted.load(std::memory_order_acquire);
-    g_selectionReplayPending.store(nullptr, std::memory_order_relaxed);
-    return accepted;
+    DiscardSelectionReplay(replay);
+    return queued;
 }
 
 bool SelectionReplayContains(const RECT& outer, const RECT& inner) {
@@ -862,8 +945,7 @@ void ApplyReplayHighlightMask(DWORD* pixels, const HighlightGeometry& geometry) 
 SelectionReplay* CaptureSelectionReplay(HWND popup, const RECT& screenRect,
                                         bool maskHighlight) {
     SelectionReplayErrorGuard errorGuard;
-    SelectionReplayLockGuard lockGuard;
-    if (g_selectionReplayStopping ||
+    if (g_stopping.load(std::memory_order_relaxed) ||
         GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext()) !=
             DPI_AWARENESS_PER_MONITOR_AWARE)
         return nullptr;
@@ -890,15 +972,9 @@ SelectionReplay* CaptureSelectionReplay(HWND popup, const RECT& screenRect,
         !SelectionReplayContains(monitor.rcMonitor, screenRect) ||
         FAILED(DwmIsCompositionEnabled(&composition)) || !composition)
         return nullptr;
-    if (g_selectionReplayThread) {
-        DWORD result = WaitForSingleObject(g_selectionReplayThread, 0);
-        if (result == WAIT_OBJECT_0)
-            CloseSelectionReplayWorkerHandles();
-        else if (result != WAIT_TIMEOUT || !SubmitSelectionReplay(nullptr))
-            return nullptr;
-    }
-    // Flush this UI thread's GDI work and wait for its composed screen image,
-    // also removing the preceding replay from the next desktop capture.
+    // An earlier overlay may still be visible. Reject overlapping windows
+    // rather than waiting for the worker to cancel it before capture.
+    // Flush this UI thread's GDI work and wait for its composed screen image.
     if (!GdiFlush() || FAILED(DwmFlush()) ||
         !SelectionReplayCaptureVisible(popup, screenRect))
         return nullptr;
@@ -954,26 +1030,22 @@ SelectionReplay* CaptureSelectionReplay(HWND popup, const RECT& screenRect,
     return replay;
 }
 
-bool StartSelectionReplay(SelectionReplay* replay) {
-    SelectionReplayErrorGuard errorGuard;
-    if (!replay || !replay->bitmap)
-        return false;
-    SelectionReplayLockGuard lockGuard;
-    if (g_selectionReplayStopping || !EnsureSelectionReplayWorker())
-        return false;
-    return SubmitSelectionReplay(replay);
-}
-
 void StopSelectionReplays() {
     SelectionReplayErrorGuard errorGuard;
-    SelectionReplayLockGuard lockGuard;
-    g_selectionReplayStopping = true;
-    if (g_selectionReplayThread) {
-        SetEvent(g_selectionReplayStop);
-        // No owner HWND, SendMessage, UI callback or owner-thread cleanup is
-        // involved. Commands may block Explorer's UI without blocking this join.
-        WaitForSingleObject(g_selectionReplayThread, INFINITE);
+    HANDLE thread;
+    {
+        SelectionReplayLockGuard lockGuard;
+        if (g_selectionReplayStopping)
+            return;
+        g_selectionReplayStopping = true;
+        thread = g_selectionReplayThread;
+        if (thread)
+            SetEvent(g_selectionReplayStop);
     }
+    // Join on unload only, with no lock held across the wait.
+    if (thread)
+        WaitForSingleObject(thread, INFINITE);
+    SelectionReplayLockGuard lockGuard;
     CloseSelectionReplayWorkerHandles();
 }
 
@@ -1041,9 +1113,7 @@ bool EffectsAllowed(PCWSTR* reason = nullptr) {
     return enabled ? true : reject(L"transparency disabled");
 }
 
-bool UsesDarkMenus() {
-    if (g_settings.theme)
-        return g_settings.theme == 2;
+bool SystemUsesDarkMenus() {
     DWORD light = 1;
     DWORD size = sizeof(light);
     RegGetValueW(
@@ -1051,6 +1121,10 @@ bool UsesDarkMenus() {
         L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
         L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
     return !light;
+}
+
+bool UsesDarkMenus() {
+    return g_settings.theme ? g_settings.theme == 2 : SystemUsesDarkMenus();
 }
 
 // Only recognize the shell's own owner-draw PROPERTY. Never dereference its
@@ -1080,7 +1154,43 @@ bool IsSupportedMenu(HMENU menu, HWND owner, bool* shellOwnerDraw = nullptr) {
     return true;
 }
 
-bool ApplyBackdrop(Popup& popup) {
+bool ReadBackdrop(Backdrop& backdrop) {
+    HWND hwnd = backdrop.hwnd;
+    backdrop.haveBackdrop = SUCCEEDED(DwmGetWindowAttribute(
+        hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop.oldBackdrop,
+        sizeof(backdrop.oldBackdrop)));
+    if (!backdrop.haveBackdrop)
+        return false;
+    backdrop.haveCorner = SUCCEEDED(DwmGetWindowAttribute(
+        hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &backdrop.oldCorner,
+        sizeof(backdrop.oldCorner)));
+    backdrop.haveDark = SUCCEEDED(DwmGetWindowAttribute(
+        hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &backdrop.oldDark,
+        sizeof(backdrop.oldDark)));
+    if (g_settings.hideMenuBorder)
+        backdrop.haveBorderColor = SUCCEEDED(DwmGetWindowAttribute(
+            hwnd, DWMWA_BORDER_COLOR, &backdrop.oldBorderColor,
+            sizeof(backdrop.oldBorderColor)));
+    if (g_getComposition) {
+        CompositionData data{19, &backdrop.oldAccent, sizeof(backdrop.oldAccent)};
+        backdrop.haveAccent = g_getComposition(hwnd, &data) != FALSE;
+    }
+    return true;
+}
+
+bool EnableBackdropAlpha(Backdrop& backdrop) {
+    HRGN region = CreateRectRgn(0, 0, -1, -1);
+    if (!region)
+        return false;
+    DWM_BLURBEHIND blur{DWM_BB_ENABLE | DWM_BB_BLURREGION, TRUE, region, FALSE};
+    HRESULT result = DwmEnableBlurBehindWindow(backdrop.hwnd, &blur);
+    DeleteObject(region);
+    if (SUCCEEDED(result))
+        backdrop.blurChanged = true;
+    return SUCCEEDED(result);
+}
+
+bool ApplyBackdrop(Backdrop& popup) {
     if (popup.applying)
         return false;
     popup.applying = true;
@@ -1229,11 +1339,18 @@ bool ApplyBackdrop(Popup& popup) {
     return success;
 }
 
-bool HasPopupChanges(const Popup& popup) {
-    return popup.brushChanged || popup.blurChanged || popup.frameChanged ||
-           popup.accentChanged || popup.backdropChanged ||
-           popup.cornerChanged || popup.darkChanged || popup.borderColorChanged;
+bool HasBackdropChanges(const Backdrop& backdrop) {
+    return backdrop.blurChanged || backdrop.frameChanged ||
+           backdrop.accentChanged || backdrop.backdropChanged ||
+           backdrop.cornerChanged || backdrop.darkChanged ||
+           backdrop.borderColorChanged;
 }
+
+bool HasPopupChanges(const Popup& popup) {
+    return popup.brushChanged || HasBackdropChanges(popup);
+}
+
+void RestoreBackdrop(Backdrop& popup, bool destroying);
 
 void RestorePopup(Popup& popup, bool destroying = false) {
     DiscardSelectionReplay(popup.clickReplay);
@@ -1263,14 +1380,18 @@ void RestorePopup(Popup& popup, bool destroying = false) {
             }
         }
     }
+    RestoreBackdrop(popup, destroying);
+    ETM_LOG(L"Cleanup hwnd=%p menu=%p brushPending=%d", popup.hwnd, popup.menu,
+            popup.brushChanged);
+}
+
+void RestoreBackdrop(Backdrop& popup, bool destroying = false) {
     // Window-owned effects die with the HWND. Do not expose a native/bright
     // last frame by resetting attributes during WM_DESTROY/WM_NCDESTROY.
     if (destroying || !IsWindow(popup.hwnd)) {
         popup.blurChanged = popup.frameChanged = popup.accentChanged = false;
         popup.backdropChanged = popup.cornerChanged = popup.darkChanged = false;
         popup.borderColorChanged = false;
-        ETM_LOG(L"Cleanup hwnd=%p menu=%p window-destroyed", popup.hwnd,
-                popup.menu);
         return;
     }
     if (popup.accentChanged && g_setComposition) {
@@ -1335,10 +1456,10 @@ void RestorePopup(Popup& popup, bool destroying = false) {
             popup.hwnd, border, result, popup.haveBorderColor);
     }
     ETM_LOG(
-        L"Cleanup hwnd=%p menu=%p pending brush=%d blur=%d frame=%d accent=%d "
+        L"Backdrop cleanup hwnd=%p pending blur=%d frame=%d accent=%d "
         L"backdrop=%d corner=%d dark=%d border=%d",
-        popup.hwnd, popup.menu, popup.brushChanged, popup.blurChanged,
-        popup.frameChanged, popup.accentChanged, popup.backdropChanged,
+        popup.hwnd, popup.blurChanged, popup.frameChanged,
+        popup.accentChanged, popup.backdropChanged,
         popup.cornerChanged, popup.darkChanged, popup.borderColorChanged);
 }
 
@@ -1356,6 +1477,12 @@ LRESULT CALLBACK MenuPopupSubclass(HWND hwnd,
                                    UINT_PTR id,
                                    DWORD_PTR data);
 
+struct UahPaintTarget {
+    HWND hwnd;
+    HDC dc;
+    const DRAWITEMSTRUCT* item;
+};
+
 struct MenuScope {
     MenuScope* previous = nullptr;
     MenuScope* next = nullptr;
@@ -1364,20 +1491,25 @@ struct MenuScope {
     bool ownerSubclass = false;
     HWND owner = nullptr;
     HMENU rootMenu = nullptr;
+    const bool windowMenu;
     Popup popups[32]{};
     unsigned count = 0;
     HWND paintingWindow = nullptr;
     const DRAWITEMSTRUCT* drawingItem = nullptr;
+    const UahPaintTarget* uahPaint = nullptr;
     bool allowed = false;
     bool clickCommand = false;
     UINT commandId = 0;
+    LPARAM commandPoint = 0;
     UINT commandPosition = 0;
     HMENU commandMenu = nullptr;
     DWORD commandStyle = 0;
     SelectionReplay* commandReplay = nullptr;
 
-    explicit MenuScope(HMENU menu, HWND menuOwner, bool requestEffects)
-        : previous(t_scope), owner(menuOwner), rootMenu(menu) {
+    explicit MenuScope(HMENU menu, HWND menuOwner, bool requestEffects,
+                       bool windowMenu = false)
+        : previous(t_scope), owner(menuOwner), rootMenu(menu),
+          windowMenu(windowMenu) {
         // Even a bypassed nested call must hide the outer call's drawing scope.
         t_scope = this;
         AcquireSRWLockExclusive(&g_scopesLock);
@@ -1393,6 +1525,8 @@ struct MenuScope {
             ETM_LOG(L"Could not observe this menu thread: %lu", error);
             return;
         }
+        if (windowMenu)
+            return;  // Native window menu items do not need owner subclassing.
         // The owner is on this UI thread while its menu is tracked. A real
         // subclass gives WM_DRAWITEM a synchronous, valid parameter lifetime;
         // menu-window CWP/return notifications are not guaranteed to be paired.
@@ -1413,7 +1547,7 @@ struct MenuScope {
         // only after buffered painting and its final bypass check succeed.
     }
 
-    bool Ready() const { return messageHook && ownerSubclass; }
+    bool Ready() const { return messageHook && (windowMenu || ownerSubclass); }
 
     void DetachCallbacks() {
         allowed = false;
@@ -1456,7 +1590,8 @@ struct MenuScope {
     }
 
     Popup* Watch(HWND hwnd) {
-        if (!allowed || g_stopping.load(std::memory_order_relaxed))
+        if (!allowed || (windowMenu && !rootMenu) ||
+            g_stopping.load(std::memory_order_relaxed))
             return nullptr;
         Popup* popup = Find(hwnd);
         if (!popup) {
@@ -1500,37 +1635,49 @@ struct MenuScope {
             }
             ~Preparation() { popup->preparing = false; }
         } preparation(reusable);
-        MENUBARINFO bar{sizeof(bar)};
+        HMENU menu = nullptr;
+        if (windowMenu) {
+            // GetMenuBarInfo(OBJID_CLIENT) fails on native system popups.
+            // Accept only the handle reported by this owner's notification.
+            menu = reinterpret_cast<HMENU>(
+                SendMessageW(hwnd, kMenuGetHandle, 0, 0));
+            if (menu != rootMenu)
+                return;
+        } else {
+            MENUBARINFO bar{sizeof(bar)};
+            if (GetMenuBarInfo(hwnd, OBJID_CLIENT, 0, &bar))
+                menu = bar.hMenu;
+        }
         bool shellOwnerDraw = false;
         // During early layout the HWND can exist before it has a valid HMENU.
         // Do not cache that transient failure as a permanently skipped popup.
-        if (!GetMenuBarInfo(hwnd, OBJID_CLIENT, 0, &bar) || !bar.hMenu ||
-            GetMenuItemCount(bar.hMenu) <= 0) {
+        if (!menu || GetMenuItemCount(menu) <= 0) {
             ETM_LOG(L"Preparation pending hwnd=%p: menu handle/items not ready",
                     hwnd);
             return;
         }
-        if (!IsSupportedMenu(bar.hMenu, owner, &shellOwnerDraw)) {
+        if (!IsSupportedMenu(menu, owner, &shellOwnerDraw) ||
+            (windowMenu && shellOwnerDraw)) {
             ETM_LOG(
                 L"Native fallback hwnd=%p menu=%p: unsupported menu/owner-draw",
-                hwnd, bar.hMenu);
+                hwnd, menu);
             return;
         }
         MENUINFO info{sizeof(info)};
         info.fMask = MIM_BACKGROUND;
-        if (!GetMenuInfo(bar.hMenu, &info)) {
+        if (!GetMenuInfo(menu, &info)) {
             DWORD error = GetLastError();
             ETM_LOG(
                 L"Preparation failed hwnd=%p menu=%p stage=GetMenuInfo "
                 L"lastError=%lu",
-                hwnd, bar.hMenu, error);
+                hwnd, menu, error);
             return;
         }
         if (!shellOwnerDraw && info.hbrBack &&
             info.hbrBack != GetSysColorBrush(COLOR_MENU) &&
             info.hbrBack != reinterpret_cast<HBRUSH>(COLOR_MENU + 1)) {
             ETM_LOG(L"Native fallback hwnd=%p menu=%p: custom background brush",
-                    hwnd, bar.hMenu);
+                    hwnd, menu);
             return;
         }
         Popup& popup = *reusable;
@@ -1539,34 +1686,17 @@ struct MenuScope {
         popup.subclassed = subclassed;
         popup.preparing = true;
         popup.hwnd = hwnd;
-        popup.menu = bar.hMenu;
+        popup.menu = menu;
         popup.oldBrush = info.hbrBack;
         popup.dark = UsesDarkMenus();
         ETM_LOG(
             L"Preparing hwnd=%p menu=%p material=%s theme=%s shellOwnerDraw=%d",
             hwnd, popup.menu, MaterialName(g_settings.material),
             popup.dark ? L"dark" : L"light", shellOwnerDraw);
-        popup.haveBackdrop = SUCCEEDED(DwmGetWindowAttribute(
-            hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &popup.oldBackdrop,
-            sizeof(popup.oldBackdrop)));
-        if (!popup.haveBackdrop) {
+        if (!ReadBackdrop(popup)) {
             ETM_LOG(L"Native fallback hwnd=%p: previous backdrop is unreadable",
                     hwnd);
             return;
-        }
-        popup.haveCorner = SUCCEEDED(
-            DwmGetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE,
-                                  &popup.oldCorner, sizeof(popup.oldCorner)));
-        popup.haveDark = SUCCEEDED(
-            DwmGetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
-                                  &popup.oldDark, sizeof(popup.oldDark)));
-        if (g_settings.hideMenuBorder)
-            popup.haveBorderColor = SUCCEEDED(DwmGetWindowAttribute(
-                hwnd, DWMWA_BORDER_COLOR, &popup.oldBorderColor,
-                sizeof(popup.oldBorderColor)));
-        if (g_getComposition) {
-            CompositionData data{19, &popup.oldAccent, sizeof(popup.oldAccent)};
-            popup.haveAccent = g_getComposition(hwnd, &data) != FALSE;
         }
         popup.palette =
             OpenThemeData(hwnd, popup.dark ? L"DarkMode::Menu" : L"Menu");
@@ -1578,37 +1708,22 @@ struct MenuScope {
             RestorePopup(popup);
             return;
         }
-        HRGN region = CreateRectRgn(0, 0, -1, -1);
-        if (!region) {
-            DWORD error = GetLastError();
-            ETM_LOG(
-                L"Preparation failed hwnd=%p stage=CreateRectRgn lastError=%lu",
-                hwnd, error);
-            RestorePopup(popup);
-            return;
+        // System menus can use the default menu. Change only the popup HWND
+        // and its painting, never the system menu's shared brush.
+        if (!windowMenu) {
+            info.hbrBack = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+            if (!SetMenuInfo(popup.menu, &info)) {
+                DWORD error = GetLastError();
+                ETM_LOG(
+                    L"Preparation failed hwnd=%p stage=SetMenuInfo lastError=%lu",
+                    hwnd, error);
+                RestorePopup(popup);
+                return;
+            }
+            popup.brushChanged = true;
         }
-        info.hbrBack = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
-        if (!SetMenuInfo(popup.menu, &info)) {
-            DWORD error = GetLastError();
-            ETM_LOG(
-                L"Preparation failed hwnd=%p stage=SetMenuInfo lastError=%lu",
-                hwnd, error);
-            DeleteObject(region);
-            RestorePopup(popup);
-            return;
-        }
-        popup.brushChanged = true;
-        DWM_BLURBEHIND blur{DWM_BB_ENABLE | DWM_BB_BLURREGION, TRUE, region,
-                            FALSE};
-        HRESULT result = DwmEnableBlurBehindWindow(hwnd, &blur);
-        DeleteObject(region);
-        if (SUCCEEDED(result))
-            popup.blurChanged = true;
-        if (FAILED(result)) {
-            ETM_LOG(
-                L"Preparation failed hwnd=%p stage=DwmEnableBlurBehindWindow "
-                L"hr=0x%08lx",
-                hwnd, result);
+        if (!EnableBackdropAlpha(popup)) {
+            ETM_LOG(L"Preparation failed hwnd=%p stage=backdrop alpha", hwnd);
             RestorePopup(popup);
             return;
         }
@@ -1663,6 +1778,13 @@ LRESULT CALLBACK MenuMessages(int code, WPARAM wParam, LPARAM lParam) {
     MenuScope* scope = t_scope;
     if (code >= 0 && scope && scope->allowed) {
         const auto& message = *reinterpret_cast<const CWPSTRUCT*>(lParam);
+        if (scope->windowMenu && !scope->rootMenu &&
+            message.hwnd == scope->owner && message.message == WM_INITMENUPOPUP &&
+            HIWORD(message.lParam)) {
+            scope->rootMenu = reinterpret_cast<HMENU>(message.wParam);
+            ETM_LOG(L"Title bar system menu owner=%p menu=%p", scope->owner,
+                    scope->rootMenu);
+        }
         if (IsClassicPopup(message.hwnd)) {
             if (message.message == kMenuSizeWindow ||
                 message.message == WM_WINDOWPOSCHANGING)
@@ -1793,6 +1915,25 @@ bool ResolveReplayHighlight(const Popup& popup, const RECT& itemRect,
            SelectionReplayContains(itemRect, highlightRect);
 }
 
+bool GetReplayItemRect(const MenuScope& scope, const Popup& popup,
+                       UINT position, UINT itemId, RECT& rect) {
+    if (!scope.windowMenu)
+        return GetMenuItemRect(scope.owner, popup.menu, position, &rect);
+    // GetMenuItemRect can't locate the native system popup. UAH supplies its
+    // selected row before painting, even when the opening frame uses a DIB.
+    if (popup.windowMenuRowId != itemId || IsRectEmpty(&popup.windowMenuRow))
+        return false;
+    RECT client{};
+    if (!GetClientRect(popup.hwnd, &client) ||
+        !SelectionReplayContains(client, popup.windowMenuRow))
+        return false;
+    rect = popup.windowMenuRow;
+    SetLastError(ERROR_SUCCESS);
+    return MapWindowPoints(popup.hwnd, HWND_DESKTOP,
+                           reinterpret_cast<POINT*>(&rect), 2) ||
+           GetLastError() == ERROR_SUCCESS;
+}
+
 void CaptureMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
     SelectionReplayErrorGuard errorGuard;
     DiscardSelectionReplay(popup.clickReplay);
@@ -1812,8 +1953,8 @@ void CaptureMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
         !(item.fState & (MFS_DISABLED | MFS_GRAYED)) &&
         SystemParametersInfoW(SPI_GETSELECTIONFADE, 0, &enabled, 0) && enabled &&
         SystemParametersInfoW(SPI_GETUIEFFECTS, 0, &effects, 0) && effects &&
-        GetMenuItemRect(scope.owner, popup.menu,
-                        static_cast<UINT>(position), &rect)) {
+        GetReplayItemRect(scope, popup, static_cast<UINT>(position), item.wID,
+                          rect)) {
         bool maskHighlight = g_settings.highlightOpacity != 0;
         RECT captureRect = rect;
         if (maskHighlight &&
@@ -1825,7 +1966,8 @@ void CaptureMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
     }
 }
 
-bool HandleMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
+bool HandleMenuClick(MenuScope& scope, Popup& popup, WPARAM position,
+                     LPARAM clickPoint) {
     SelectionReplayErrorGuard errorGuard;
     if (!popup.active || g_settings.selectionFade == SelectionFade::Native)
         return false;
@@ -1840,7 +1982,8 @@ bool HandleMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
     MENUINFO info{sizeof(info)};
     info.fMask = MIM_STYLE;
     if (!GetMenuItemInfoW(popup.menu, static_cast<UINT>(position), TRUE, &item) ||
-        !GetMenuInfo(scope.rootMenu, &info) || item.hSubMenu ||
+        (!scope.windowMenu && !GetMenuInfo(scope.rootMenu, &info)) ||
+        item.hSubMenu ||
         (item.fType & MFT_SEPARATOR) ||
         (item.fState & (MFS_DISABLED | MFS_GRAYED)))
         return false;
@@ -1858,11 +2001,33 @@ bool HandleMenuClick(MenuScope& scope, Popup& popup, WPARAM position) {
     }
     scope.clickCommand = true;
     scope.commandId = item.wID;
+    scope.commandPoint = clickPoint;
     scope.commandPosition = static_cast<UINT>(position);
     scope.commandMenu = popup.menu;
     scope.commandStyle = info.dwStyle;
     scope.commandReplay = replay;
     return true;
+}
+
+HDC UahDrawDC(HMENU menu, UINT message, LPARAM lParam) {
+    if (!lParam)
+        return nullptr;
+    if (message == kUahDrawMenuItem) {
+        // UAHDRAWMENUITEM starts with a DRAWITEMSTRUCT.
+        const auto& item = *reinterpret_cast<const DRAWITEMSTRUCT*>(lParam);
+        if (item.CtlType == ODT_MENU &&
+            reinterpret_cast<HMENU>(item.hwndItem) == menu)
+            return item.hDC;
+    } else if (message == kUahDrawMenu || message == kUahNcPaintMenuPopup) {
+        struct UahMenuPrefix {
+            HMENU menu;
+            HDC dc;
+        };
+        const auto& draw = *reinterpret_cast<const UahMenuPrefix*>(lParam);
+        if (draw.menu == menu)
+            return draw.dc;
+    }
+    return nullptr;
 }
 
 LRESULT CALLBACK MenuPopupSubclass(HWND hwnd,
@@ -1886,12 +2051,43 @@ LRESULT CALLBACK MenuPopupSubclass(HWND hwnd,
         g_stopping.load(std::memory_order_relaxed))
         return DefSubclassProc(hwnd, message, wParam, lParam);
     // Freeze the hover appearance before Windows paints a pressed item.
-    if (message == 0x01ed)
+    if (message == kMenuButtonDown)
         CaptureMenuClick(*scope, *popup, wParam);
-    // MN_BUTTONUP is the native menu-item activation notification, not a raw
-    // mouse-up. Its item position is validated before changing dismissal.
-    if (message == 0x01ef && HandleMenuClick(*scope, *popup, wParam))
+    // MN_BUTTONUP is native menu-item activation, not a raw mouse-up.
+    if (message == kMenuButtonUp && HandleMenuClick(*scope, *popup, wParam, lParam))
         return 0;
+    if (popup->active) {
+        if (HDC dc = UahDrawDC(popup->menu, message, lParam)) {
+            // UAH paints the outline independently of DWM. Otherwise leave
+            // that draw native, including on the opening frame's memory DC.
+            if (message == kUahNcPaintMenuPopup) {
+                if (g_settings.hideMenuBorder)
+                    return TRUE;
+                return DefSubclassProc(hwnd, message, wParam, lParam);
+            }
+            // The opening frame can be drawn to a memory DC. Bind only the
+            // exact synchronous UAH target, separately from Shell WM_DRAWITEM.
+            UahPaintTarget paint{
+                hwnd, dc, message == kUahDrawMenuItem
+                    ? reinterpret_cast<const DRAWITEMSTRUCT*>(lParam)
+                    : nullptr};
+            const auto* previousPaint = scope->uahPaint;
+            scope->uahPaint = &paint;
+            if (const auto* item = paint.item;
+                scope->windowMenu && item &&
+                g_settings.selectionFade == SelectionFade::Replay) {
+                if (item->itemState & ODS_SELECTED) {
+                    popup->windowMenuRow = item->rcItem;
+                    popup->windowMenuRowId = item->itemID;
+                } else if (popup->windowMenuRowId == item->itemID) {
+                    popup->windowMenuRow = {};
+                }
+            }
+            LRESULT result = DefSubclassProc(hwnd, message, wParam, lParam);
+            scope->uahPaint = previousPaint;
+            return result;
+        }
+    }
     if (message == WM_NCPAINT && popup->active && g_settings.hideMenuBorder &&
         PaintBorderlessFrame(hwnd, wParam))
         return 0;
@@ -1921,6 +2117,43 @@ LRESULT CALLBACK MenuPopupSubclass(HWND hwnd,
     return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 
+struct ShellTextPaint {
+    HDC target = nullptr;
+    HDC inlineDCs[4];
+    std::unique_ptr<HDC[]> extraDCs;
+    size_t dcCount = 0;
+    size_t dcCapacity = ARRAYSIZE(inlineDCs);
+    bool dark = false;
+
+    HDC* DCs() { return extraDCs ? extraDCs.get() : inlineDCs; }
+
+    size_t FindDC(HDC dc) {
+        const HDC* dcs = DCs();
+        for (size_t i = 0; i < dcCount; ++i) {
+            if (dcs[i] == dc)
+                return i;
+        }
+        return dcCount;
+    }
+
+    void AddDC(HDC dc) {
+        if (dcCount == dcCapacity) {
+            SelectionReplayErrorGuard errorGuard;
+            const size_t capacity = dcCapacity * 2;
+            std::unique_ptr<HDC[]> grown(new (std::nothrow) HDC[capacity]);
+            if (!grown)
+                return;
+            const HDC* dcs = DCs();
+            for (size_t i = 0; i < dcCount; ++i)
+                grown[i] = dcs[i];
+            extraDCs.swap(grown);
+            dcCapacity = capacity;
+        }
+        DCs()[dcCount++] = dc;
+    }
+};
+thread_local ShellTextPaint* t_shellTextPaint = nullptr;
+
 LRESULT CALLBACK MenuOwnerSubclass(HWND hwnd,
                                    UINT message,
                                    WPARAM wParam,
@@ -1930,15 +2163,19 @@ LRESULT CALLBACK MenuOwnerSubclass(HWND hwnd,
     auto scope = reinterpret_cast<MenuScope*>(data);
     if (scope != t_scope || !scope->allowed)
         return DefSubclassProc(hwnd, message, wParam, lParam);
+    ShellTextPaint textPaint;
     struct DrawingContext {
         MenuScope* scope;
         HWND oldWindow;
         const DRAWITEMSTRUCT* oldItem;
+        ShellTextPaint* oldTextPaint;
         ~DrawingContext() {
             scope->paintingWindow = oldWindow;
             scope->drawingItem = oldItem;
+            t_shellTextPaint = oldTextPaint;
         }
-    } context{scope, scope->paintingWindow, scope->drawingItem};
+    } context{scope, scope->paintingWindow, scope->drawingItem, t_shellTextPaint};
+    t_shellTextPaint = nullptr;
     scope->paintingWindow = nullptr;
     scope->drawingItem = nullptr;
     if (message == WM_DRAWITEM && lParam) {
@@ -1952,6 +2189,11 @@ LRESULT CALLBACK MenuOwnerSubclass(HWND hwnd,
                     scope->paintingWindow = popup.hwnd;
                     scope->drawingItem =
                         &item;  // Valid until DefSubclassProc returns.
+                    if (g_settings.MatchMenuForeground()) {
+                        textPaint.target = item.hDC;
+                        textPaint.dark = popup.dark;
+                        t_shellTextPaint = &textPaint;
+                    }
                     break;
                 }
             }
@@ -1960,17 +2202,35 @@ LRESULT CALLBACK MenuOwnerSubclass(HWND hwnd,
     return DefSubclassProc(hwnd, message, wParam, lParam);
 }
 
+bool MatchPaintTarget(const MenuScope& scope, HDC dc, HWND& hwnd,
+                      const DRAWITEMSTRUCT*& item) {
+    if (scope.drawingItem && scope.drawingItem->hDC == dc) {
+        hwnd = scope.paintingWindow;
+        item = scope.drawingItem;
+    } else if (scope.uahPaint && scope.uahPaint->dc == dc) {
+        hwnd = scope.uahPaint->hwnd;
+        item = scope.uahPaint->item;
+    } else {
+        return false;
+    }
+    return true;
+}
+
 // Require a positive DC association, never the last observed popup. A memory
-// DC is accepted only as the exact synchronous WM_DRAWITEM target.
-Popup* DrawingPopupForDC(HDC dc) {
+// DC must match the exact synchronous Shell or native popup drawing target.
+Popup* DrawingPopupForDC(HDC dc, const DRAWITEMSTRUCT** drawItem = nullptr) {
     MenuScope* scope = t_scope;
     if (!scope || !scope->allowed || g_stopping.load(std::memory_order_relaxed))
         return nullptr;
-    // Shell may paint an owner-drawn item using a DC associated with its owner.
-    // Accept that DC only when it is exactly the verified WM_DRAWITEM DC.
-    HWND hwnd = scope->drawingItem && dc == scope->drawingItem->hDC
-                    ? scope->paintingWindow
-                    : WindowFromDC(dc);
+    HWND hwnd;
+    const DRAWITEMSTRUCT* item = nullptr;
+    if (!MatchPaintTarget(*scope, dc, hwnd, item)) {
+        if (drawItem)
+            return nullptr;
+        hwnd = WindowFromDC(dc);
+    } else if (drawItem) {
+        *drawItem = item;
+    }
     if (!hwnd || !IsClassicPopup(hwnd))
         return nullptr;
     Popup* popup = scope->Find(hwnd);
@@ -1979,15 +2239,55 @@ Popup* DrawingPopupForDC(HDC dc) {
                : nullptr;
 }
 
+HDC WINAPI CreateCompatibleDCHook(HDC source) {
+    auto* paint = t_shellTextPaint;
+    // Shell creates a DIB DC from the exact WM_DRAWITEM DC, not a UxTheme
+    // buffered paint from that DC. Never infer ownership from a generic memory DC.
+    if (!paint || paint->target != source || t_textDepth ||
+        g_stopping.load(std::memory_order_relaxed)) {
+        [[clang::musttail]] return g_createCompatibleDC(source);
+    }
+    CallGuard call;
+    HDC dc = g_createCompatibleDC(source);
+    if (dc)
+        paint->AddDC(dc);
+    return dc;
+}
+
+BOOL WINAPI DeleteDCHook(HDC dc) {
+    if (auto* paint = t_shellTextPaint; paint && dc) {
+        const size_t index = paint->FindDC(dc);
+        if (index != paint->dcCount) {
+            CallGuard call;
+            BOOL deleted = g_deleteDC(dc);
+            if (deleted) {
+                --paint->dcCount;
+                if (index != paint->dcCount)
+                    paint->DCs()[index] = paint->DCs()[paint->dcCount];
+            }
+            return deleted;
+        }
+    }
+    [[clang::musttail]] return g_deleteDC(dc);
+}
+
+const ShellTextPaint* ShellTextPaintForDC(HDC dc) {
+    auto* paint = t_shellTextPaint;
+    return paint && dc && !t_textDepth &&
+                   !g_stopping.load(std::memory_order_relaxed) &&
+                   paint->FindDC(dc) != paint->dcCount
+               ? paint : nullptr;
+}
+
+bool IsMenuTheme(HTHEME theme) {
+    wchar_t name[64]{};
+    return SUCCEEDED(g_getThemeClass(theme, name, ARRAYSIZE(name))) &&
+           _wcsicmp(name, L"Menu") == 0;
+}
+
 Popup* DrawingPopup(HTHEME theme, HDC dc) {
     Popup* popup = DrawingPopupForDC(dc);
-    if (!popup)
-        return nullptr;
-    wchar_t name[64]{};
-    if (FAILED(g_getThemeClass(theme, name, ARRAYSIZE(name))) ||
-        _wcsicmp(name, L"Menu") != 0)
-        return nullptr;
-    return popup;
+    return popup && IsMenuTheme(theme) ? popup : nullptr;
 }
 
 struct IconSurface {
@@ -2025,10 +2325,12 @@ void RememberReplayHighlight(Popup& popup, HDC dc, const RECT& rect) {
         popup.replayHighlightSpace = ReplayHighlightSpace::Screen;
         return;
     }
-    // A verified owner-draw DC may belong to the owner or be a memory DC.
+    // A verified drawing DC may belong to the owner or be a memory DC.
     // Remember its bounds relative to the item until its screen rect is known.
-    const DRAWITEMSTRUCT* item = t_scope ? t_scope->drawingItem : nullptr;
-    if (!item || t_scope->paintingWindow != popup.hwnd || item->hDC != dc ||
+    const DRAWITEMSTRUCT* item;
+    HWND hwnd;
+    if (!t_scope || !MatchPaintTarget(*t_scope, dc, hwnd, item) ||
+        hwnd != popup.hwnd || !item ||
         item->CtlType != ODT_MENU || !(item->itemState & ODS_SELECTED) ||
         reinterpret_cast<HMENU>(item->hwndItem) != popup.menu)
         return;
@@ -2081,7 +2383,9 @@ bool DrawHighlight(Popup& popup, HDC dc, const RECT* rect, const RECT* clip) {
         HighlightGeometry geometry =
             GetHighlightGeometry(width, height, GetDpiForWindow(popup.hwnd));
         int opacity = ClampPercent(g_settings.highlightOpacity);
-        COLORREF color = popup.dark ? RGB(128, 192, 255) : RGB(0, 105, 190);
+        COLORREF color = g_settings.highlightColor;
+        if (color == CLR_INVALID)
+            color = popup.dark ? RGB(128, 192, 255) : RGB(0, 105, 190);
         for (int y = 0; y < height; ++y)
             for (int x = 0; x < width; ++x) {
                 float coverage = geometry.Coverage(x, y);
@@ -2160,8 +2464,11 @@ bool ClearBackground(HTHEME theme,
         return false;
     switch (part) {
         case MENU_POPUPBACKGROUND:
-        case MENU_POPUPBORDERS:
         case MENU_POPUPGUTTER:
+            break;
+        case MENU_POPUPBORDERS:
+            if (!g_settings.hideMenuBorder)
+                return false;
             break;
         case MENU_POPUPITEM:
         case kPopupItemFocusable:
@@ -2183,26 +2490,110 @@ bool ClearBackground(HTHEME theme,
                   area.bottom - area.top, BLACKNESS) != FALSE;
 }
 
+struct InfoTipPaint {
+    HWND hwnd;
+    HDC printDC;
+    HTHEME theme;
+    bool dark;
+};
+thread_local const InfoTipPaint* t_infoTipPaint = nullptr;
+
+const InfoTipPaint* InfoTipPaintForDC(HDC dc) {
+    const auto* paint = t_infoTipPaint;
+    return paint && !g_stopping.load(std::memory_order_relaxed) &&
+                   (paint->printDC ? paint->printDC == dc
+                                   : WindowFromDC(dc) == paint->hwnd)
+               ? paint : nullptr;
+}
+
+bool PaintInfoTipBackground(HTHEME theme, HDC dc, int part, int state,
+                            const RECT* rect, const RECT* clip) {
+    if (!rect || IsRectEmpty(rect) || part != TTP_STANDARD)
+        return false;
+    const auto* paint = InfoTipPaintForDC(dc);
+    if (!paint)
+        return false;
+    // The list-view tooltip can draw with a different Tooltip theme handle
+    // from GetWindowTheme(hwnd). The scoped DC still identifies the surface.
+    if (theme != paint->theme) {
+        wchar_t themeClass[32];
+        if (FAILED(g_getThemeClass(theme, themeClass, ARRAYSIZE(themeClass))) ||
+            _wcsicmp(themeClass, L"Tooltip") != 0)
+            return false;
+    }
+    RECT area = *rect;
+    if (!g_settings.hideMenuBorder) {
+        // The standard tooltip theme is an image with a one-pixel outline.
+        // DTBG_OMITCONTENT still draws its opaque center. Keep only the edge.
+        InflateRect(&area, -1, -1);
+        if (IsRectEmpty(&area))
+            return false;
+        int saved = SaveDC(dc);
+        if (!saved)
+            return false;
+        bool clipped = (!clip || IntersectClipRect(dc, clip->left, clip->top,
+                                                    clip->right, clip->bottom) != ERROR) &&
+                       ExcludeClipRect(dc, area.left, area.top, area.right,
+                                       area.bottom) != ERROR;
+        t_infoTipPaint = nullptr;
+        HRESULT result = clipped
+            ? g_drawThemeBackgroundEx(theme, dc, part, state, rect, nullptr)
+            : E_FAIL;
+        t_infoTipPaint = paint;
+        RestoreDC(dc, saved);
+        if (FAILED(result))
+            return false;
+    }
+    if (clip && !IntersectRect(&area, &area, clip))
+        return true;
+    return PatBlt(dc, area.left, area.top, area.right - area.left,
+                  area.bottom - area.top, BLACKNESS) != FALSE;
+}
+
+COLORREF MenuTextColor(bool dark, bool disabled) {
+    return dark ? (disabled ? RGB(155, 155, 155) : RGB(245, 245, 245))
+                : (disabled ? RGB(120, 120, 120) : RGB(25, 25, 25));
+}
+
+void SetMenuTextColor(DTTOPTS& options, bool dark, int state) {
+    if (options.dwFlags & DTT_STATEID)
+        state = options.iStateId;
+    options.dwFlags |= DTT_TEXTCOLOR;
+    options.crText = MenuTextColor(dark, state == MPI_DISABLED || state == MPI_DISABLEDHOT);
+}
+
+HTHEME MenuBackgroundTheme(HTHEME theme, HDC dc, int part) {
+    if (part < MENU_POPUPCHECK || part > kPopupItemFocusable)
+        return theme;
+    const Popup* popup = DrawingPopup(theme, dc);
+    if (!popup)
+        return theme;
+    if (part == MENU_POPUPCHECK || part == MENU_POPUPCHECKBACKGROUND ||
+        part == MENU_POPUPSUBMENU ||
+        (part >= MENU_SYSTEMCLOSE && part <= MENU_SYSTEMRESTORE))
+        return g_settings.MatchMenuForeground() ? popup->palette : theme;
+    return popup->palette;
+}
+
 HRESULT WINAPI DrawThemeBackgroundHook(HTHEME theme,
                                        HDC dc,
                                        int part,
                                        int state,
                                        const RECT* rect,
                                        const RECT* clip) {
-    if (!t_scope) {
+    if (!t_scope && !t_infoTipPaint) {
         [[clang::musttail]] return g_drawThemeBackground(theme, dc, part, state,
                                                          rect, clip);
     }
     CallGuard call;
+    if (t_infoTipPaint && PaintInfoTipBackground(theme, dc, part, state, rect, clip))
+        return S_OK;
     if (PaintHotItem(theme, dc, part, state, rect, clip))
         return S_OK;
     if (ClearBackground(theme, dc, part, state, rect, clip))
         return S_OK;
-    if (part >= MENU_POPUPCHECK && part <= kPopupItemFocusable) {
-        if (Popup* popup = DrawingPopup(theme, dc))
-            theme = popup->palette;
-    }
-    return g_drawThemeBackground(theme, dc, part, state, rect, clip);
+    return g_drawThemeBackground(MenuBackgroundTheme(theme, dc, part), dc,
+                                 part, state, rect, clip);
 }
 
 HRESULT WINAPI DrawThemeBackgroundExHook(HTHEME theme,
@@ -2211,11 +2602,16 @@ HRESULT WINAPI DrawThemeBackgroundExHook(HTHEME theme,
                                          int state,
                                          const RECT* rect,
                                          const DTBGOPTS* opts) {
-    if (!t_scope) {
+    if (!t_scope && !t_infoTipPaint) {
         [[clang::musttail]] return g_drawThemeBackgroundEx(theme, dc, part,
                                                            state, rect, opts);
     }
     CallGuard call;
+    if (t_infoTipPaint && (!opts || (opts->dwSize == sizeof(*opts) &&
+                                   !(opts->dwFlags & ~DTBG_CLIPRECT))) &&
+        PaintInfoTipBackground(theme, dc, part, state, rect,
+            opts && (opts->dwFlags & DTBG_CLIPRECT) ? &opts->rcClip : nullptr))
+        return S_OK;
     // Preserve uncommon omit-border/content and mirrored drawing options.
     if ((!opts || (opts->dwSize == sizeof(*opts) &&
                    !(opts->dwFlags & ~DTBG_CLIPRECT))) &&
@@ -2229,14 +2625,11 @@ HRESULT WINAPI DrawThemeBackgroundExHook(HTHEME theme,
             theme, dc, part, state, rect,
             opts && (opts->dwFlags & DTBG_CLIPRECT) ? &opts->rcClip : nullptr))
         return S_OK;
-    if (part >= MENU_POPUPCHECK && part <= kPopupItemFocusable) {
-        if (Popup* popup = DrawingPopup(theme, dc))
-            theme = popup->palette;
-    }
-    return g_drawThemeBackgroundEx(theme, dc, part, state, rect, opts);
+    return g_drawThemeBackgroundEx(MenuBackgroundTheme(theme, dc, part), dc,
+                                   part, state, rect, opts);
 }
 
-bool DrawCompositedText(HTHEME theme,
+bool DrawCompositedText(HTHEME& theme,
                         HDC dc,
                         int part,
                         int state,
@@ -2245,15 +2638,31 @@ bool DrawCompositedText(HTHEME theme,
                         DWORD flags,
                         RECT* rect,
                         const DTTOPTS* options,
+                        bool composite,
                         HRESULT* result) {
     if (!rect || IsRectEmpty(rect) || (flags & DT_CALCRECT) ||
         (part != MENU_POPUPITEM && part != kPopupItemFocusable) ||
         (options && (options->dwSize != sizeof(*options) ||
-                     (options->dwFlags & (DTT_CALCRECT | DTT_CALLBACK)))))
+                     (options->dwFlags & DTT_CALCRECT))))
         return false;
-    Popup* popup = DrawingPopup(theme, dc);
+    const Popup* popup = DrawingPopup(theme, dc);
     if (!popup)
         return false;
+    const bool matching = g_settings.MatchMenuForeground();
+    if (matching)
+        theme = popup->palette;
+    if (!composite)
+        return false;
+    if (options && (options->dwFlags & DTT_CALLBACK)) {
+        if (!matching)
+            return false;
+        DTTOPTS adjusted = *options;
+        SetMenuTextColor(adjusted, popup->dark, state);
+        TextGuard guard;
+        *result = g_drawThemeTextEx(theme, dc, part, state, text, length,
+                                    flags, rect, &adjusted);
+        return true;
+    }
     TextGuard textGuard;
     // Top-down DIB is required by DTT_COMPOSITED. Clear only the temporary
     // buffer; EndBufferedPaint alpha-blends the glyphs over the existing menu.
@@ -2270,11 +2679,9 @@ bool DrawCompositedText(HTHEME theme,
     if (options)
         opts = *options;
     opts.dwSize = sizeof(opts);
-    opts.dwFlags |= DTT_COMPOSITED | DTT_TEXTCOLOR;
-    bool disabled = state == MPI_DISABLED || state == MPI_DISABLEDHOT;
-    opts.crText = popup->dark
-                      ? (disabled ? RGB(155, 155, 155) : RGB(245, 245, 245))
-                      : (disabled ? RGB(120, 120, 120) : RGB(25, 25, 25));
+    opts.dwFlags |= DTT_COMPOSITED;
+    if (matching)
+        SetMenuTextColor(opts, popup->dark, state);
     HGDIOBJ font = GetCurrentObject(dc, OBJ_FONT);
     if (font)
         SelectObject(bufferDC, font);
@@ -2301,8 +2708,8 @@ HRESULT WINAPI DrawThemeTextHook(HTHEME theme,
     CallGuard call;
     RECT bounds = rect ? *rect : RECT{};
     HRESULT result;
-    if (!flags2 && DrawCompositedText(theme, dc, part, state, text, length,
-                                      flags, &bounds, nullptr, &result))
+    if (DrawCompositedText(theme, dc, part, state, text, length,
+                           flags, &bounds, nullptr, !flags2, &result))
         return result;
     return g_drawThemeText(theme, dc, part, state, text, length, flags, flags2,
                            rect);
@@ -2322,9 +2729,23 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME theme,
             theme, dc, part, state, text, length, flags, rect, options);
     }
     CallGuard call;
+    // Explorer owner-draw composites captions into its own DIB. Change the
+    // color there, retaining its callback, font and alpha blend.
+    const auto* paint = ShellTextPaintForDC(dc);
+    if (paint && !(flags & DT_CALCRECT) &&
+        (part == MENU_POPUPITEM || part == kPopupItemFocusable) &&
+        options && options->dwSize == sizeof(*options) &&
+        (options->dwFlags & DTT_COMPOSITED) && !(options->dwFlags & DTT_CALCRECT) &&
+        IsMenuTheme(theme)) {
+        DTTOPTS adjusted = *options;
+        SetMenuTextColor(adjusted, paint->dark, state);
+        TextGuard guard;
+        return g_drawThemeTextEx(theme, dc, part, state, text, length, flags, rect,
+                                 &adjusted);
+    }
     HRESULT result;
     if (DrawCompositedText(theme, dc, part, state, text, length, flags, rect,
-                           options, &result))
+                           options, true, &result))
         return result;
     return g_drawThemeTextEx(theme, dc, part, state, text, length, flags, rect,
                              options);
@@ -2668,19 +3089,35 @@ int WINAPI FillRectHook(HDC dc, const RECT* rect, HBRUSH brush) {
 
 int WINAPI
 DrawTextHook(HDC dc, PCWSTR text, int length, RECT* rect, UINT flags) {
-    if (!t_scope) {
+    if (!t_scope && !t_infoTipPaint) {
         [[clang::musttail]] return g_drawText(dc, text, length, rect, flags);
     }
     CallGuard call;
-    Popup* popup =
-        !t_textDepth && rect && !IsRectEmpty(rect) &&
-                !(flags & (DT_CALCRECT | DT_MODIFYSTRING | DT_INTERNAL)) &&
-                t_scope && t_scope->drawingItem &&
-                t_scope->drawingItem->hDC == dc
-            ? DrawingPopupForDC(dc)
-            : nullptr;
-    if (!popup)
+    if (t_textDepth || !rect || IsRectEmpty(rect) ||
+        (flags & (DT_CALCRECT | DT_MODIFYSTRING | DT_INTERNAL)))
         return g_drawText(dc, text, length, rect, flags);
+
+    HTHEME theme;
+    int part, state;
+    COLORREF color;
+    if (const auto* paint = InfoTipPaintForDC(dc)) {
+        theme = paint->theme;
+        part = TTP_STANDARD;
+        state = TTSS_NORMAL;
+        color = paint->dark ? RGB(245, 245, 245) : RGB(25, 25, 25);
+    } else {
+        const DRAWITEMSTRUCT* item;
+        const bool matching = g_settings.MatchMenuForeground();
+        const Popup* popup = DrawingPopupForDC(dc, &item);
+        if (!popup || !item ||
+            (!matching && item != t_scope->drawingItem))
+            return g_drawText(dc, text, length, rect, flags);
+        bool disabled = item->itemState & (ODS_DISABLED | ODS_GRAYED);
+        theme = popup->palette;
+        part = MENU_POPUPITEM;
+        state = disabled ? MPI_DISABLED : MPI_NORMAL;
+        color = matching ? MenuTextColor(popup->dark, disabled) : GetTextColor(dc);
+    }
 
     TextGuard textGuard;
     BP_PAINTPARAMS params{sizeof(params)};
@@ -2695,11 +3132,6 @@ DrawTextHook(HDC dc, PCWSTR text, int length, RECT* rect, UINT flags) {
     if (HGDIOBJ font = GetCurrentObject(dc, OBJ_FONT))
         SelectObject(bufferDC, font);
     SetBkMode(bufferDC, TRANSPARENT);
-    bool disabled =
-        t_scope->drawingItem->itemState & (ODS_DISABLED | ODS_GRAYED);
-    COLORREF color = popup->dark
-                         ? (disabled ? RGB(155, 155, 155) : RGB(245, 245, 245))
-                         : (disabled ? RGB(120, 120, 120) : RGB(25, 25, 25));
     SetTextColor(bufferDC, color);
     int height = 0;
     DTTOPTS opts{sizeof(opts)};
@@ -2714,9 +3146,8 @@ DrawTextHook(HDC dc, PCWSTR text, int length, RECT* rect, UINT flags) {
         return result;
     };
     RECT bounds = *rect;
-    HRESULT result = g_drawThemeTextEx(popup->palette, bufferDC, MENU_POPUPITEM,
-                                       disabled ? MPI_DISABLED : MPI_NORMAL,
-                                       text, length, flags, &bounds, &opts);
+    HRESULT result = g_drawThemeTextEx(theme, bufferDC, part, state, text,
+                                       length, flags, &bounds, &opts);
     HRESULT end = EndBufferedPaint(buffer, SUCCEEDED(result));
     if (FAILED(result) || FAILED(end))
         return g_drawText(dc, text, length, rect, flags);
@@ -2758,16 +3189,13 @@ BOOL TrackMenu(HMENU menu, HWND owner, UINT flags, Invoke invoke) {
             result = invoke(flags);
             resultError = GetLastError();
             if (scope.clickCommand) {
-                // Present only after the native popup is gone: its saved-bits
+                // Queue only after the native popup is gone: its saved-bits
                 // teardown must not overwrite a newly shown replay surface.
-                bool started = scope.commandReplay &&
-                               StartSelectionReplay(scope.commandReplay);
-                if (!started)
-                    DiscardSelectionReplay(scope.commandReplay);
+                bool queued = SubmitSelectionReplay(scope.commandReplay);
                 scope.commandReplay = nullptr;
-                ETM_LOG(L"Click owner=%p command=%u mode=%u replay=%d", owner,
-                        scope.commandId,
-                        static_cast<unsigned>(g_settings.selectionFade), started);
+                ETM_LOG(L"Click owner=%p command=%u mode=%u replayQueued=%d",
+                        owner, scope.commandId,
+                        static_cast<unsigned>(g_settings.selectionFade), queued);
                 // Position-based menus do not return a command ID, even with
                 // TPM_RETURNCMD; that flag still suppresses notifications.
                 result = flags & TPM_RETURNCMD
@@ -2834,6 +3262,337 @@ BOOL WINAPI TrackPopupMenuExHook(HMENU menu,
     });
 }
 
+bool OpensWindowMenu(UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_SYSCOMMAND) {
+        UINT command = static_cast<UINT>(wParam) & 0xfff0;
+        return command == SC_MOUSEMENU || command == SC_KEYMENU;
+    }
+    if (message == WM_NCRBUTTONUP)
+        return wParam == HTCAPTION || wParam == HTSYSMENU;
+    return message == WM_CONTEXTMENU && lParam != -1;
+}
+
+LRESULT CALLBACK WindowMenuOwnerSubclass(HWND hwnd, UINT message, WPARAM wParam,
+                                          LPARAM lParam, DWORD_PTR) {
+    if (t_scope || !OpensWindowMenu(message, wParam, lParam))
+        return DefSubclassProc(hwnd, message, wParam, lParam);
+
+    DWORD incomingError = GetLastError();
+    PCWSTR reason;
+    if (!EffectsAllowed(&reason)) {
+        ETM_LOG(L"Title bar menu bypass owner=%p reason=%s", hwnd, reason);
+        SetLastError(incomingError);
+        return DefSubclassProc(hwnd, message, wParam, lParam);
+    }
+
+    CallGuard call;
+    bool buffered;
+    LRESULT result;
+    DWORD resultError;
+    {
+        // Explorer can enter the menu loop without calling the exported
+        // DefWindowProcW. Observe the owner before forwarding its message;
+        // only a system WM_INITMENUPOPUP authorizes rendering.
+        MenuScope scope(nullptr, hwnd, true, true);
+        HRESULT paint = scope.Ready() ? BufferedPaintInit() : E_FAIL;
+        buffered = SUCCEEDED(paint);
+        if (!buffered)
+            reason = L"menu callbacks or buffered painting unavailable";
+        scope.allowed = buffered && EffectsAllowed(&reason);
+        ETM_LOG(L"Title bar menu entry owner=%p message=0x%x effects=%d reason=%s",
+                hwnd, message, scope.allowed, reason);
+        if (!scope.allowed)
+            scope.DetachCallbacks();
+        SetLastError(incomingError);
+        result = DefSubclassProc(hwnd, message, wParam, lParam);
+        resultError = GetLastError();
+        if (scope.clickCommand) {
+            // The native loop has dismissed the popup. Preserve synchronous
+            // WM_SYSCOMMAND and its original mouse coordinates.
+            scope.DetachCallbacks();
+            bool queued = SubmitSelectionReplay(scope.commandReplay);
+            scope.commandReplay = nullptr;
+            ETM_LOG(L"Title bar click owner=%p command=0x%x replayQueued=%d",
+                    hwnd, scope.commandId, queued);
+            SendMessageW(hwnd, WM_SYSCOMMAND, scope.commandId, scope.commandPoint);
+        }
+    }
+    if (buffered)
+        BufferedPaintUnInit();
+    SetLastError(resultError);
+    return result;
+}
+
+constexpr PCWSTR kExplorerWindowClass = L"CabinetWClass";
+
+bool WindowClassIs(HWND hwnd, PCWSTR expected) {
+    wchar_t name[32];
+    return hwnd && GetClassNameW(hwnd, name, ARRAYSIZE(name)) &&
+           _wcsicmp(name, expected) == 0;
+}
+
+bool IsLocalWindow(HWND hwnd) {
+    DWORD pid = 0;
+    return GetWindowThreadProcessId(hwnd, &pid) && pid == GetCurrentProcessId();
+}
+
+bool IsWindowMenuOwner(HWND hwnd) {
+    return IsLocalWindow(hwnd) && WindowClassIs(hwnd, kExplorerWindowClass);
+}
+
+bool IsDesktopHost(HWND hwnd) {
+    return IsLocalWindow(hwnd) &&
+        (WindowClassIs(hwnd, L"Progman") || WindowClassIs(hwnd, L"WorkerW"));
+}
+
+constexpr PCWSTR kInfoTipStateProperty = L"ExplorerTranslucentMenus.InfoTipState";
+UINT g_detachInfoTipMessage;
+
+HWND InfoTipSource(HWND hwnd, bool& noCurrentTool) {
+    HWND owner = GetWindow(hwnd, GW_OWNER);
+    if (GetWindowLongPtrW(hwnd, GWL_STYLE) & TTS_BALLOON)
+        return nullptr;
+    TOOLINFOW tool{sizeof(tool)};
+    if (!SendMessageW(hwnd, TTM_GETCURRENTTOOLW, 0, reinterpret_cast<LPARAM>(&tool))) {
+        noCurrentTool = true;
+        return nullptr;
+    }
+    HWND target = (tool.uFlags & TTF_IDISHWND)
+        ? reinterpret_cast<HWND>(tool.uId) : tool.hwnd;
+    if (GetWindowThreadProcessId(target, nullptr) != GetCurrentThreadId())
+        return nullptr;
+
+    HWND root = GetAncestor(target, GA_ROOT);
+    if (owner && owner != root)
+        return nullptr;
+
+    HWND parent = GetAncestor(target, GA_PARENT);
+    if (g_settings.styleNavigationTooltips && owner && IsWindowMenuOwner(owner) &&
+        WindowClassIs(parent, L"NamespaceTreeControl") &&
+        WindowClassIs(target, WC_TREEVIEWW) &&
+        !(GetWindowLongPtrW(target, GWL_STYLE) & TVS_INFOTIP) &&
+        TreeView_GetToolTips(target) == hwnd)
+        return target;
+
+    if (!g_settings.styleFileInfoTips || !WindowClassIs(parent, L"SHELLDLL_DefView"))
+        return nullptr;
+    if (owner && IsWindowMenuOwner(owner) && WindowClassIs(target, L"DirectUIHWND"))
+        return target;
+
+    // The desktop list view's tooltip can be ownerless. Match the control
+    // it actually uses rather than accepting all tooltips on the desktop thread.
+    if (IsDesktopHost(root) && WindowClassIs(target, WC_LISTVIEWW) &&
+        ListView_GetToolTips(target) == hwnd)
+        return target;
+    return nullptr;
+}
+
+struct InfoTipState {
+    Backdrop backdrop{};
+    HWND source = nullptr;
+    unsigned calls = 0;
+    bool busy = false;
+    bool styled = false;
+    bool buffered = false;
+    bool detached = false;
+    bool destroying = false;
+
+    void Reset() {
+        styled = false;
+        source = nullptr;
+        busy = true;
+        if (HasBackdropChanges(backdrop))
+            RestoreBackdrop(backdrop, destroying);
+        if (buffered) {
+            BufferedPaintUnInit();
+            buffered = false;
+        }
+        busy = false;
+    }
+};
+
+struct InfoTipCall {
+    InfoTipState& state;
+    explicit InfoTipCall(InfoTipState& s) : state(s) { ++state.calls; }
+    ~InfoTipCall() {
+        if (!--state.calls && state.detached) {
+            SelectionReplayErrorGuard errorGuard;
+            state.Reset();
+            delete &state;
+        }
+    }
+};
+
+LRESULT CALLBACK InfoTipSubclass(HWND hwnd, UINT message, WPARAM wp, LPARAM lp,
+                                  DWORD_PTR) {
+    CallGuard call;
+    const bool detach = message == g_detachInfoTipMessage || message == WM_NCDESTROY;
+    const auto* pos = (message == WM_WINDOWPOSCHANGING ||
+                       message == WM_WINDOWPOSCHANGED)
+        ? reinterpret_cast<const WINDOWPOS*>(lp) : nullptr;
+    const bool show = pos && message == WM_WINDOWPOSCHANGING &&
+                      (pos->flags & SWP_SHOWWINDOW);
+    const bool hide = pos && message == WM_WINDOWPOSCHANGED &&
+                      (pos->flags & SWP_HIDEWINDOW);
+    const bool paint = message == WM_PAINT || message == WM_PRINTCLIENT ||
+                       (message == WM_PRINT && (lp & PRF_CLIENT));
+    if (!detach && !show && !hide && !paint)
+        return DefSubclassProc(hwnd, message, wp, lp);
+
+    DWORD incoming = GetLastError();
+    const InfoTipPaint* previousPaint = t_infoTipPaint;
+    if (paint)
+        t_infoTipPaint = nullptr;
+    auto* state = static_cast<InfoTipState*>(GetPropW(hwnd, kInfoTipStateProperty));
+    HWND source = nullptr;
+    if (!detach && !hide && (!state || !state->busy) &&
+        !g_stopping.load(std::memory_order_relaxed)) {
+        bool noCurrentTool = false;
+        source = InfoTipSource(hwnd, noCurrentTool);
+        // Querying a control sends a synchronous message. Read the property
+        // again in case that dispatch detached the subclass.
+        auto* current = static_cast<InfoTipState*>(GetPropW(hwnd, kInfoTipStateProperty));
+        if (state && !current)
+            source = nullptr;
+        // comctl32 clears its current tool before the fade-out timer hides
+        // the HWND. Repainting that last frame must not drop its backdrop.
+        else if (paint && current && current->styled && noCurrentTool &&
+                 IsWindowVisible(hwnd))
+            source = current->source;
+        state = current;
+    }
+    if (!state && source && !g_stopping.load(std::memory_order_relaxed)) {
+        state = new (std::nothrow) InfoTipState;
+        if (state && !SetPropW(hwnd, kInfoTipStateProperty, state)) {
+            delete state;
+            state = nullptr;
+        }
+    }
+    if (!state) {
+        SetLastError(incoming);
+        LRESULT result = DefSubclassProc(hwnd, message, wp, lp);
+        t_infoTipPaint = previousPaint;
+        return result;
+    }
+    InfoTipCall lifetime(*state);
+    if (detach) {
+        RemovePropW(hwnd, kInfoTipStateProperty);
+        state->styled = false;
+        state->detached = true;
+        state->destroying = message == WM_NCDESTROY;
+        if (!state->destroying && IsWindowVisible(hwnd))
+            InvalidateRect(hwnd, nullptr, TRUE);
+    } else if (!hide && !state->busy && state->source != source) {
+        state->Reset();
+        state->source = source;
+        if (!state->detached && source && !HasBackdropChanges(state->backdrop) &&
+            GetWindowTheme(hwnd) && EffectsAllowed()) {
+            state->busy = true;
+            auto& backdrop = state->backdrop;
+            backdrop = {};
+            backdrop.hwnd = hwnd;
+            backdrop.dark = UsesDarkMenus();
+            state->buffered = SUCCEEDED(BufferedPaintInit());
+            state->styled = state->buffered && ReadBackdrop(backdrop) &&
+                EnableBackdropAlpha(backdrop) && ApplyBackdrop(backdrop) &&
+                !state->detached;
+            state->busy = false;
+            if (state->styled) {
+                ETM_LOG(L"%s hwnd=%p view=%p material=%s",
+                        WindowClassIs(source, WC_TREEVIEWW) ? L"Navigation label tooltip"
+                                                           : L"File InfoTip",
+                        hwnd, source, MaterialName(g_settings.material));
+            } else {
+                state->Reset();
+                state->source = source;  // Keep this presentation native.
+            }
+        }
+    }
+
+    InfoTipPaint target{};
+    if (paint && source && state->styled && !state->busy) {
+        target = {hwnd, reinterpret_cast<HDC>(wp), GetWindowTheme(hwnd),
+                  state->backdrop.dark};
+        if (target.theme)
+            t_infoTipPaint = &target;
+    }
+    SetLastError(incoming);
+    LRESULT result = DefSubclassProc(hwnd, message, wp, lp);
+    t_infoTipPaint = previousPaint;
+    if (hide && !state->busy && !state->detached) {
+        SelectionReplayErrorGuard errorGuard;
+        state->Reset();
+    }
+    return result;
+}
+
+void AttachInfoTip(HWND hwnd) {
+    HWND owner = GetWindow(hwnd, GW_OWNER);
+    if (!owner || IsWindowMenuOwner(owner) || IsDesktopHost(owner))
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, InfoTipSubclass, 0);
+}
+
+void AttachWindowMenuOwner(HWND hwnd) {
+    BOOL attached = WindhawkUtils::SetWindowSubclassFromAnyThread(
+        hwnd, WindowMenuOwnerSubclass, 0);
+    ETM_LOG(L"Title bar menu owner=%p subclassed=%d", hwnd, attached);
+}
+
+BOOL CALLBACK VisitExplorerSurfaces(HWND hwnd, LPARAM attach) {
+    if (g_settings.styleWindowMenu && IsWindowMenuOwner(hwnd)) {
+        if (attach)
+            AttachWindowMenuOwner(hwnd);
+        else
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                hwnd, WindowMenuOwnerSubclass);
+    }
+    if (g_settings.StyleTooltips() && IsLocalWindow(hwnd) &&
+        WindowClassIs(hwnd, TOOLTIPS_CLASSW)) {
+        if (attach) {
+            AttachInfoTip(hwnd);
+        } else {
+            // Clean up on the window thread even if state publication is in
+            // flight. A cross-thread property check can miss that state.
+            SendMessageW(hwnd, g_detachInfoTipMessage, 0, 0);
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, InfoTipSubclass);
+        }
+    }
+    return TRUE;
+}
+
+HWND WINAPI CreateWindowExWHook(DWORD exStyle, PCWSTR className,
+                                PCWSTR windowName, DWORD style, int x, int y,
+                                int width, int height, HWND parent, HMENU menu,
+                                HINSTANCE instance, LPVOID param) {
+    if ((style & WS_CHILD) || !className ||
+        (!IS_INTRESOURCE(className) &&
+         !(g_settings.styleWindowMenu &&
+           _wcsicmp(className, kExplorerWindowClass) == 0) &&
+         !(g_settings.StyleTooltips() &&
+           _wcsicmp(className, TOOLTIPS_CLASSW) == 0))) {
+        [[clang::musttail]] return g_createWindowEx(
+            exStyle, className, windowName, style, x, y, width, height, parent,
+            menu, instance, param);
+    }
+    CallGuard call;
+    HWND hwnd = g_createWindowEx(exStyle, className, windowName, style, x, y,
+                                width, height, parent, menu, instance, param);
+    DWORD error = GetLastError();
+    if (hwnd) {
+        // The new window is on this thread; no cross-thread send under the lock.
+        AcquireSRWLockShared(&g_surfaceSubclassLock);
+        if (!g_stopping.load(std::memory_order_relaxed)) {
+            if (g_settings.styleWindowMenu && IsWindowMenuOwner(hwnd))
+                AttachWindowMenuOwner(hwnd);
+            else if (g_settings.StyleTooltips() && WindowClassIs(hwnd, TOOLTIPS_CLASSW))
+                AttachInfoTip(hwnd);
+        }
+        ReleaseSRWLockShared(&g_surfaceSubclassLock);
+    }
+    SetLastError(error);
+    return hwnd;
+}
+
 }  // namespace etm
 
 BOOL Wh_ModInit() {
@@ -2850,7 +3609,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     g_settings.material =
-        ParseMaterial(WindhawkUtils::StringSetting::make(L"backgroundEffect"));
+        ParseMaterial(WindhawkUtils::StringSetting::make(L"materialsAndTint.backgroundEffect"));
     if (g_settings.material == Material::Native) {
         ETM_LOG(L"Native mode: no hooks registered, no window effects changed");
         return TRUE;
@@ -2873,7 +3632,7 @@ BOOL Wh_ModInit() {
         ETM_LOG(L"Menu theme identification unavailable");
         return FALSE;
     }
-    g_settings.tintOpacity = Wh_GetIntSetting(L"tintOpacity");
+    g_settings.tintOpacity = Wh_GetIntSetting(L"materialsAndTint.tintOpacity");
     HMODULE user = GetModuleHandleW(L"user32.dll");
     g_setComposition = reinterpret_cast<CompositionAttribute_t>(
         GetProcAddress(user, "SetWindowCompositionAttribute"));
@@ -2884,27 +3643,40 @@ BOOL Wh_ModInit() {
         ETM_LOG(L"Adjustable Acrylic is unavailable; choose System Acrylic");
         return FALSE;
     }
-    g_settings.lightTint = ParseTint(
-        WindhawkUtils::StringSetting::make(L"lightTint"), RGB(245, 245, 245));
-    g_settings.darkTint = ParseTint(
-        WindhawkUtils::StringSetting::make(L"darkTint"), RGB(32, 32, 32));
-    auto themeSetting = WindhawkUtils::StringSetting::make(L"theme");
+    g_settings.lightTint = ParseRgbColor(
+        WindhawkUtils::StringSetting::make(L"materialsAndTint.lightTint"), RGB(245, 245, 245));
+    g_settings.darkTint = ParseRgbColor(
+        WindhawkUtils::StringSetting::make(L"materialsAndTint.darkTint"), RGB(32, 32, 32));
+    auto themeSetting = WindhawkUtils::StringSetting::make(L"materialsAndTint.theme");
     g_settings.theme = !_wcsicmp(themeSetting, L"dark")    ? 2
                        : !_wcsicmp(themeSetting, L"light") ? 1
                                                            : 0;
+    g_settings.matchMenuForeground =
+        Wh_GetIntSetting(L"materialsAndTint.matchMenuForeground") != 0;
     g_settings.highlightOpacity =
-        ClampPercent(Wh_GetIntSetting(L"highlightOpacity"));
-    int highlightRadius = Wh_GetIntSetting(L"highlightRadius");
-    int highlightInset = Wh_GetIntSetting(L"highlightInset");
+        ClampPercent(Wh_GetIntSetting(L"hoverHighlight.highlightOpacity"));
+    g_settings.highlightColor = ParseRgbColor(
+        WindhawkUtils::StringSetting::make(L"hoverHighlight.highlightColor"), CLR_INVALID);
+    int highlightRadius = Wh_GetIntSetting(L"hoverHighlight.highlightRadius");
+    int highlightInset = Wh_GetIntSetting(L"hoverHighlight.highlightInset");
     g_settings.highlightRadius = highlightRadius < 0 ? 0 : highlightRadius;
     g_settings.highlightInset = highlightInset < 0 ? 0 : highlightInset;
     g_settings.selectionFade = ParseSelectionFade(
-        WindhawkUtils::StringSetting::make(L"selectionFade"));
+        WindhawkUtils::StringSetting::make(L"hoverHighlight.selectionFade"));
     g_settings.repairIcons = Wh_GetIntSetting(L"repairIcons") != 0;
     g_settings.removeIconBackground =
         Wh_GetIntSetting(L"removeIconBackground") != 0;
     g_settings.roundedCorners = Wh_GetIntSetting(L"roundedCorners") != 0;
     g_settings.hideMenuBorder = Wh_GetIntSetting(L"hideMenuBorder") != 0;
+    g_settings.styleWindowMenu = Wh_GetIntSetting(L"styleWindowMenu") != 0;
+    g_settings.styleFileInfoTips = Wh_GetIntSetting(L"styleFileInfoTips") != 0;
+    g_settings.styleNavigationTooltips = Wh_GetIntSetting(L"styleNavigationTooltips") != 0;
+    if (g_settings.StyleTooltips()) {
+        g_detachInfoTipMessage =
+            RegisterWindowMessageW(L"ExplorerTranslucentMenus.DetachInfoTip." WH_MOD_ID);
+        if (!g_detachInfoTipMessage)
+            return FALSE;
+    }
     g_settings.ctrlBypass = Wh_GetIntSetting(L"ctrlBypass") != 0;
     g_stopping.store(false, std::memory_order_relaxed);
 
@@ -2930,21 +3702,39 @@ BOOL Wh_ModInit() {
         !WindhawkUtils::SetFunctionHook(AlphaBlend, AlphaBlendHook,
                                         &g_alphaBlend))
         return FALSE;
+    if (g_settings.MatchMenuForeground() &&
+        (!WindhawkUtils::SetFunctionHook(CreateCompatibleDC, CreateCompatibleDCHook,
+                                         &g_createCompatibleDC) ||
+         !WindhawkUtils::SetFunctionHook(DeleteDC, DeleteDCHook, &g_deleteDC)))
+        return FALSE;
     if (g_settings.hideMenuBorder &&
         !WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute,
                                         DwmSetWindowAttributeHook,
                                         &g_dwmSetWindowAttribute))
         return FALSE;
-    ETM_LOG(L"Initialized on Windows build %lu; only Explorer Win32 popups",
-            version.dwBuildNumber);
+    if ((g_settings.styleWindowMenu || g_settings.StyleTooltips()) &&
+        !WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExWHook,
+                                        &g_createWindowEx))
+        return FALSE;
+    ETM_LOG(L"Initialized on Windows build %lu material=%s titleBarMenu=%d fileInfoTips=%d navigationTooltips=%d",
+            version.dwBuildNumber, MaterialName(g_settings.material),
+            g_settings.styleWindowMenu, g_settings.styleFileInfoTips,
+            g_settings.styleNavigationTooltips);
     return TRUE;
 }
 
+void Wh_ModAfterInit() {
+    if (etm::g_createWindowEx)
+        EnumWindows(etm::VisitExplorerSurfaces, TRUE);
+}
+
 void Wh_ModBeforeUninit() {
+    AcquireSRWLockExclusive(&etm::g_surfaceSubclassLock);
     etm::g_stopping.store(true, std::memory_order_relaxed);
+    ReleaseSRWLockExclusive(&etm::g_surfaceSubclassLock);
     etm::StopSelectionReplays();
-    // Cancel active loops on their owning UI threads. Do not synchronously send
-    // across threads or hold a lock while waiting for shell extensions.
+    // Cancel active loops on their owning UI threads before removing the
+    // owner observers. Do not hold the scope lock across subclass removal.
     AcquireSRWLockShared(&etm::g_scopesLock);
     for (etm::MenuScope* scope = etm::g_scopes; scope; scope = scope->next) {
         if (scope->owner)
@@ -2952,6 +3742,8 @@ void Wh_ModBeforeUninit() {
         PostThreadMessageW(scope->threadId, WM_CANCELMODE, 0, 0);
     }
     ReleaseSRWLockShared(&etm::g_scopesLock);
+    if (etm::g_createWindowEx)
+        EnumWindows(etm::VisitExplorerSurfaces, FALSE);
 }
 
 void Wh_ModUninit() {
