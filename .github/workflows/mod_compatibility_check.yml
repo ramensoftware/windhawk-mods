@@ -17,6 +17,10 @@ on:
     branches:
       - main
 
+# The workflow token only checks out the repository.
+permissions:
+  contents: read
+
 env:
   PYTHONUTF8: '1'
 
