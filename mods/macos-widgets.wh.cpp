@@ -4633,6 +4633,8 @@ struct Widget {
     UINT64 capHash = 0;    // of the last picture taken behind it: the same picture doesn't rebuild the glass
     ULONGLONG capTick = 0;
     float lum = -1;
+    bool covered = false;      // a window is over it (see Covered)
+    ULONGLONG coverTick = 0;
     int textDark = -1;         // automatic text: black (1) or white (0) chosen from the glass behind it (-1: not yet)
     ULONGLONG textFlip = 0;    // when it last changed
     ComPtr<ID2D1Bitmap> snap;
@@ -7549,7 +7551,7 @@ static bool ApplyCapture(Widget* wd, const RECT& rc, std::vector<UINT32>&& px) {
     return true;
 }
 
-static bool ShowsDesktop(Widget* wd);
+static bool Covered(Widget* wd);
 
 static void Capture(Widget* wd) {
     RECT rc = CaptureRect(wd);
@@ -7581,7 +7583,7 @@ static void Capture(Widget* wd) {
                 GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
                 GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)};
     } else if (HDC desk = DesktopPicture()) {
-        if (g_deskFromScreen && !ShowsDesktop(wd)) {  // a window is over it on the screen: the glass stays as it was
+        if (g_deskFromScreen && wd != g_cfg.wd && Covered(wd)) {  // a window is over it on the screen: the glass stays as it was
             SelectObject(dc, old);
             DeleteObject(bmp);
             DeleteDC(dc);
@@ -11082,6 +11084,37 @@ static void TakeGlassBox() {
     for (auto& b : box) OnGlassShot(b.release());
 }
 
+// Is any window over the widget's glass, even a little? (the widgets sit right above the desktop, so every window
+// above them in the z-order that overlaps counts). Its picture would then carry that window's colors. Asked often:
+// the answer is kept for 150 ms
+static bool Covered(Widget* wd) {
+    ULONGLONG now = GetTickCount64();
+    if (now - wd->coverTick < 150) return wd->covered;
+    wd->coverTick = now;
+    static auto getAttr = [] {
+        HMODULE dwm = LoadLibraryExW(L"dwmapi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        return dwm ? (HRESULT(WINAPI*)(HWND, DWORD, PVOID, DWORD))(void*)GetProcAddress(dwm, "DwmGetWindowAttribute") : nullptr;
+    }();
+    RECT r;
+    GetWindowRect(wd->hwnd, &r);
+    int m = (int)std::lround(kMargin * wd->scale);
+    InflateRect(&r, -m, -m);  // the glass itself, not the shadow around it
+    wd->covered = false;
+    for (HWND w = GetTopWindow(nullptr); w && w != wd->hwnd; w = GetWindow(w, GW_HWNDNEXT)) {
+        if (!IsWindowVisible(w) || IsIconic(w) || IsOurWindow(w) || IsDeskClass(w)) continue;
+        LONG ex = GetWindowLongW(w, GWL_EXSTYLE);
+        if (ex & WS_EX_TRANSPARENT) continue;  // click-through overlays (recorders, game overlays) show what's under them
+        DWORD cloaked = 0;
+        if (getAttr && SUCCEEDED(getAttr(w, 14 /* DWMWA_CLOAKED */, &cloaked, sizeof(cloaked))) && cloaked) continue;
+        RECT wr, x;
+        if (GetWindowRect(w, &wr) && IntersectRect(&x, &wr, &r)) {
+            wd->covered = true;
+            break;
+        }
+    }
+    return wd->covered;
+}
+
 static void OnGlassShot(GlassShot* shot) {
     Widget* wd = nullptr;
     for (Widget* w : g_widgets)
@@ -11095,7 +11128,9 @@ static void OnGlassShot(GlassShot* shot) {
         // Still: only a picture of where it is now. Moving: the newest picture, even of a few pixels back (it is drawn
         // at its own place on the screen, and the border around the glass covers the difference)
         bool sameSize = now.right - now.left == shot->rc.right - shot->rc.left && now.bottom - now.top == shot->rc.bottom - shot->rc.top;
-        if ((moving ? sameSize : EqualRect(&now, &shot->rc)) && ApplyCapture(wd, shot->rc, std::move(shot->px))) Render(wd);
+        // A window over it: its picture would show the window, so the glass keeps the last one of the desktop
+        bool hidden = !moving && wd != g_cfg.wd && Covered(wd);
+        if (!hidden && (moving ? sameSize : EqualRect(&now, &shot->rc)) && ApplyCapture(wd, shot->rc, std::move(shot->px))) Render(wd);
     }
     delete shot;
 }
