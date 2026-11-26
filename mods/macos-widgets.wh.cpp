@@ -849,7 +849,8 @@ static const TrRow kTr[] = {
     {{L"Bloco de Notas", L"Notepad", L"Bloc de notas", L"Bloc-notes", L"Editor", L"Blocco note", L"记事本"}},
     {{L"Sua cidade", L"Your city", L"Tu ciudad", L"Votre ville", L"Deine Stadt", L"La tua città", L"你的城市"}},
     {{L"Widgets", L"Widgets", L"Widgets", L"Widgets", L"Widgets", L"Widget", L"小组件"}},
-    {{L"Quais widgets aparecem na área de trabalho e como eles se comportam", L"Which widgets appear on the desktop and how they behave", L"Qué widgets aparecen en el escritorio y cómo se comportan", L"Quels widgets apparaissent sur le bureau et comment ils se comportent", L"Welche Widgets auf dem Desktop erscheinen und wie sie sich verhalten", L"Quali widget compaiono sul desktop e come si comportano", L"桌面上显示哪些小组件以及它们的行为"}},
+    {{L"Como os widgets se movem, o vidro ao vivo e a cor de destaque", L"How the widgets move, the live glass and the accent color", L"Cómo se mueven los widgets, el vidrio en vivo y el color de acento", L"Comment les widgets se déplacent, le verre en direct et la couleur d'accent", L"Wie sich die Widgets bewegen, das Live-Glas und die Akzentfarbe", L"Come si muovono i widget, il vetro dal vivo e il colore di risalto", L"小组件如何移动、实时玻璃和强调色"}},
+    {{L"Quais widgets aparecem na área de trabalho", L"Which widgets appear on the desktop", L"Qué widgets aparecen en el escritorio", L"Quels widgets apparaissent sur le bureau", L"Welche Widgets auf dem Desktop erscheinen", L"Quali widget compaiono sul desktop", L"桌面上显示哪些小组件"}},
     {{L"Aparência", L"Appearance", L"Apariencia", L"Apparence", L"Darstellung", L"Aspetto", L"外观"}},
     {{L"O tema e, logo abaixo, tudo o que é dele: cada tema guarda o seu; o que ele não usa fica escondido", L"The theme and, right below it, everything that belongs to it: each theme keeps its own; what it doesn't use stays hidden", L"El tema y, justo debajo, todo lo suyo: cada tema guarda lo suyo; lo que no usa queda oculto", L"Le thème et, juste en dessous, tout ce qui lui appartient : chaque thème garde les siens ; ce qu'il n'utilise pas reste caché", L"Das Design und direkt darunter alles, was dazugehört: Jedes Design behält seine eigenen Werte; was es nicht nutzt, bleibt verborgen", L"Il tema e, subito sotto, tutto ciò che gli appartiene: ogni tema conserva i suoi; ciò che non usa resta nascosto", L"主题及其下方所属的所有设置：每个主题各自保存；不使用的设置会隐藏"}},
     {{L"Idioma", L"Language", L"Idioma", L"Langue", L"Sprache", L"Lingua", L"语言"}},
@@ -1322,13 +1323,14 @@ static PCWSTR WeekdayLetter(int d) {
 
 // The sections of Ajustes, in the side bar's order: the general ones, one per widget that has settings, Backup last
 enum CfgSectionId {
-    SEC_WIDGETS, SEC_APPEARANCE, SEC_LANGUAGE, SEC_CLOCK, SEC_WEATHER, SEC_WORLD, SEC_CALENDAR, SEC_NOTES, SEC_SHORTCUTS, SEC_STOCKS, SEC_NEWS,
+    SEC_WIDGETS, SEC_APPEARANCE, SEC_BEHAVIOR, SEC_LANGUAGE, SEC_CLOCK, SEC_WEATHER, SEC_WORLD, SEC_CALENDAR, SEC_NOTES, SEC_SHORTCUTS, SEC_STOCKS, SEC_NEWS,
     SEC_SENSORS, SEC_PHOTOS, SEC_HOME, SEC_BACKUP
 };
 static const CfgSection kCfgSections[] = {
-    {L"Widgets", L"Quais widgets aparecem na área de trabalho e como eles se comportam", L"", 0x30D158},
+    {L"Widgets", L"Quais widgets aparecem na área de trabalho", L"", 0x30D158},
     {L"Aparência", L"O tema e, logo abaixo, tudo o que é dele: cada tema guarda o seu; o que ele não usa fica escondido",
      L"", 0x0A84FF},
+    {L"Comportamento", L"Como os widgets se movem, o vidro ao vivo e a cor de destaque", L"\uE713", 0x8E8E93},
     {L"Idioma", L"O idioma dos widgets, dos menus e desta janela", L"\uF2B7", 0x007AFF},
     {L"Relógio", L"Como o widget Relógio mostra a hora", L"", 0x5E5CE6},
     {L"Tempo", L"A cidade do widget Tempo", L"", 0x64D2FF},
@@ -1427,17 +1429,16 @@ static const CfgItem kCfgItems[] = {
      nullptr, nullptr, 0},
     {SEC_WIDGETS, kCfgToggle, L"showSensors", L"Sensores", L"Temperaturas da CPU e da GPU, uso, clock, ventoinha e consumo, ao vivo", L"0",
      false, 0, 1, nullptr, nullptr, 0},
-    {SEC_WIDGETS, kCfgGroup, L"#g.behavior", L"Comportamento", nullptr, L"", false, 0, 0, nullptr, nullptr, 0},
-    {SEC_WIDGETS, kCfgToggle, L"lockPosition", L"Travar posição", L"Os widgets deixam de ser arrastados", L"0", false, 0, 1, nullptr,
+    {SEC_BEHAVIOR, kCfgToggle, L"lockPosition", L"Travar posição", L"Os widgets deixam de ser arrastados", L"0", false, 0, 1, nullptr,
      nullptr, 0},
-    {SEC_WIDGETS, kCfgToggle, L"showGrid", L"Mostrar a grade ao arrastar",
+    {SEC_BEHAVIOR, kCfgToggle, L"showGrid", L"Mostrar a grade ao arrastar",
      L"Ao arrastar um widget, todas as casas aparecem de leve; a casa onde ele vai ficar aparece sempre", L"0", false, 0, 1,
      nullptr, nullptr, 0},
-    {SEC_WIDGETS, kCfgToggle, L"liveGlass", L"Vidro ao vivo",
+    {SEC_BEHAVIOR, kCfgToggle, L"liveGlass", L"Vidro ao vivo",
      L"Ligado: vídeos e papéis de parede animados aparecem no vidro, mas usa mais o PC e os widgets somem de prints. Desligado: o "
      L"vidro mostra o papel de parede e os ícones, mais leve",
      L"1", false, 0, 1, nullptr, nullptr, 0},
-    {SEC_WIDGETS, kCfgColor, L"accentColor", L"Cor de destaque", L"As barras do widget Sistema", L"#0A84FF", false, 0, 0, nullptr,
+    {SEC_BEHAVIOR, kCfgColor, L"accentColor", L"Cor de destaque", L"As barras do widget Sistema", L"#0A84FF", false, 0, 0, nullptr,
      nullptr, 0},
 
     {SEC_APPEARANCE, kCfgChoice, L"theme", L"Tema", L"As cores e o vidro de tudo: widgets e esta janela", L"glass", false, 0, 0, nullptr,
