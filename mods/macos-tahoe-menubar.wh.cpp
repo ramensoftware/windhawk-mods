@@ -7929,9 +7929,9 @@ void UpdateTopAppBarReservation() {
     abd.hWnd = g_bar.topAppBarHwnd;
     abd.uCallbackMessage = kWmAppAppBar;
     if (!g_bar.topAppBarRegistered) {
-        if (!SHAppBarMessage(ABM_NEW, &abd)) {
-            return;
-        }
+        // FALSE also means the appbar is already registered, e.g. after a
+        // TaskbarCreated that wasn't an actual Explorer restart.
+        SHAppBarMessage(ABM_NEW, &abd);
         g_bar.topAppBarRegistered = true;
     }
     abd.uEdge = ABE_TOP;
