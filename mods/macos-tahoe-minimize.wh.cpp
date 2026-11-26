@@ -28,8 +28,15 @@ Brings smooth macOS **Genie** (Modern Direct2D lamp-mesh & Classic scanline) and
 - **Flash-Free Restore & Launch Animations**: Temporarily disables DWM transitions and uses DWM cloaking (`DWMWA_CLOAK`) + cached pre-minimize DIB snapshots so restored and newly launched windows never flash before animating.
 - **Optional Close & Auto-Hide Support**: Smooth edge-flowing close genie and automatic Windows taskbar reveal when auto-hide is active.
 
-## Credits
-The Direct2D **Modern Genie** mesh-warp engine, animation hooks, UI Automation taskbar fallback, and close-direction handling build upon the MIT-licensed [`macos-minimize-animation`](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/macos-minimize-animation.wh.cpp) mod by **Abdullah Masood** (<https://github.com/Abdullah-Masood-05>), incorporating contributions by **Potassiumuncher** (<https://github.com/Potassiumuncher>, Direct2D genie engine), **MrCrustyToast** (<https://github.com/MrCrustyToast>, close triggers), and **ReDrag** (`windows-animations`, Firefox first-window cloak check). **macOS 26 Tahoe Minimize Animations** extends this base with a rounded macOS **Scale** effect, Left/Right/Bottom side-dock genie orientations, and a deadlock-free IPC/RPC sync bridge for `macos-tahoe-dock`.
+## Credits & Differences from MacOS Minimize Animation
+The Direct2D **Modern Genie** mesh-warp engine, animation hooks, UI Automation taskbar fallback, and close-direction handling build upon the MIT-licensed [`macos-minimize-animation`](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/macos-minimize-animation.wh.cpp) mod by **Abdullah Masood** (<https://github.com/Abdullah-Masood-05>), incorporating contributions by **Potassiumuncher** (<https://github.com/Potassiumuncher>, Direct2D genie engine), **MrCrustyToast** (<https://github.com/MrCrustyToast>, close triggers), and **ReDrag** (`windows-animations`, Firefox first-window cloak check).
+
+**How this mod differs from `macos-minimize-animation`:**
+- Adds a rounded macOS **Scale** minimize/restore/launch effect (`scale`).
+- Extends the Direct2D Genie lamp-curve geometry to support **Left** and **Right** side-anchored docks in addition to Bottom.
+- Adds configurable **Fallback target** options (Taskbar UIA, Bottom center, Bottom right) and optional Dock IPC targeting.
+
+> **Important:** Do **not** enable this mod at the same time as `macos-minimize-animation` — both hook the same window transition APIs across all processes and will play duplicate animations.
 */
 // ==/WindhawkModReadme==
 
@@ -3087,6 +3094,9 @@ LRESULT HandleDefWindowProc(HWND hWnd,
                             OrigFn origFn) {
     if (g_msgRemoteAnim && Msg == g_msgRemoteAnim) {
         const WORD cmd = LOWORD(wParam);
+        if (cmd != kRemoteCmdMinimize && cmd != kRemoteCmdRestore) {
+            return 0;
+        }
         const int nCmdShow =
             static_cast<int>(static_cast<short>(HIWORD(wParam)));
         const uint32_t packed =
@@ -3454,16 +3464,6 @@ BOOL Wh_ModInit() {
     g_msgQueryIconCenter =
         RegisterWindowMessageW(L"WindhawkMacOSTahoe_QueryIconCenter");
     g_msgRemoteAnim = RegisterWindowMessageW(L"WindhawkMacOSTahoe_AnimCmd");
-
-    if (IsExplorerProcess()) {
-        int savedMinAnim = Wh_GetIntValue(L"restore_minanim", -1);
-        if (savedMinAnim != -1) {
-            ANIMATIONINFO ai{sizeof(ai), savedMinAnim};
-            SystemParametersInfoW(SPI_SETANIMATION, sizeof(ai), &ai,
-                                  SPIF_SENDCHANGE);
-            Wh_SetIntValue(L"restore_minanim", -1);
-        }
-    }
 
     LoadSettings();
 
