@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              taskbar-ai-quota
-// @name            Taskbar AI Quota
+// @name            Taskbar AI Usage Quota
 // @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, GitHub Copilot, and OpenCode Go on the Windows 11 taskbar
 // @description:de-DE Zeigt konfigurierbare Kontingentbalken für KI-Agenten- und LLM-Abos von Anthropic, OpenAI, Google Antigravity, GitHub Copilot und OpenCode Go in der Taskleiste von Windows 11
 // @description:es-ES Muestra barras configurables de las cuotas de suscripciones de agentes de IA y LLM de Anthropic, OpenAI, Google Antigravity, GitHub Copilot y OpenCode Go en la barra de tareas de Windows 11
@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.21.2
+// @version         2.27.1
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -23,7 +23,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar AI Quota
+# Taskbar AI Usage Quota
 
 A Windows 11 taskbar mod that shows subscription quota bars next to the system tray, or
 elsewhere in the tray or beside Start. On a taskbar at the left or right of the screen (Windows
@@ -66,7 +66,8 @@ signed-in local app or CLI session, which must remain running.
 
 ## Settings
 
-- **Accounts:** Add, reorder, hide, or remove accounts; per account, set its label, taskbar
+- **Accounts:** Add, reorder, hide, or remove accounts, each listed with its weekly usage, hidden
+  ones too; per account, set its label, taskbar
   quotas, identity (logo, logo with a number badge, or label, on its bars and tiles), history
   recording, and sign-in. Removing an account deletes its sign-in and, if you choose, its
   history.
@@ -80,13 +81,15 @@ signed-in local app or CLI session, which must remain running.
 - **Display:** Material of the details flyout and the settings and history windows (Acrylic,
   Mica, Mica Alt, Tinted wallpaper or Solid; needs Windows transparency effects), used or
   remaining, usage colors (default, colorblind or your own) and thresholds, stale marker,
-  provider outages, and how the details flyout charts Anthropic extra usage (its month, the
-  weekly window, or a bar).
-- **Behavior:** Choose the language, displays, hover details, polling, and alerts.
+  provider outages, how the details flyout charts Anthropic extra usage (its month, the
+  weekly window, or a bar), and its weekly and monthly charts' spans, at rest and with the
+  pointer on a quota's row (the whole window, or 12 to 48 hours each side of now).
+- **Behavior:** Choose the language, displays, hover details, work days (pace and projections
+  skip your days off on weekly and monthly quotas), polling (hidden accounts every
+  hour by default, at another interval, as often as visible ones, or not at all), and alerts.
 - **History:** Local recording is on by default per Windows user; keep history forever (the
   default) or for a number of days, and choose recording per account independently of taskbar
-  visibility. Hidden accounts stop polling unless you disable **Do not poll hidden accounts**
-  and enable their recording.
+  visibility. A hidden account records whenever it is polled.
 
 ## Usage history
 
@@ -96,8 +99,9 @@ view extra-spending/credit balances, and export CSV. Refresh/F5 reads local samp
 history starts when recording starts, with no backfill.
 All accounts defaults to Weekly over the past 7 days (set the time span in Settings > History);
 choose Short-term for short quotas.
-Weekly follows each Anthropic account's taskbar weekly selections. All meters is available
-for all accounts or a single account (its default), including weeklies hidden on the taskbar.
+Weekly follows each Anthropic account's taskbar weekly selections. If Fable is its only weekly
+bar, the sidebar shows Fable and that account opens on All meters with the regular Weekly line
+turned off in the legend. Click it to show the line again.
 Percentages, USD, and credits use separate axes. Connected samples use lines only; dots keep
 isolated readings visible.
 Percentages from different accounts or overlapping windows are not added together.
@@ -659,14 +663,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Systemdialoge können nicht sicher verfolgt werden; Vorgang abgebrochen."},
     {L"", L"Chart height", L"Diagrammhöhe"},
     {L"", L"Chart outline", L"Diagrammrahmen"},
+    {L"", L"Chart time span", L"Diagrammzeitraum"},
+    {L"", L"Chart time span on hover", L"Diagrammzeitraum beim Daraufzeigen"},
     {L"", L"Chart width", L"Diagrammbreite"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Diagramme, Statistiken und CSV-Export aus lokalen Messwerten, auch wenn die Aufzeichnung aus ist."},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"Wählen Sie „Benutzerdefiniert“ unter „Cloud-Abfrageintervall“, um dies zu bearbeiten."},
-    {L"", L"Choose Custom in Keep history to edit.",
-     L"Wählen Sie „Benutzerdefiniert“ unter „Verlauf aufbewahren“, um dies zu bearbeiten."},
-    {L"", L"Choose an identity position to change this.", L"Wählen Sie eine Identitätsposition, um dies zu ändern."},
     {L"", L"Claude logo", L"Claude-Logo"},
     {L"", L"Cloud poll interval", L"Cloud-Abfrageintervall"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -694,6 +695,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"hinzu und entfernen Sie es dann."},
     {L"", L"Could not update account visibility.", L"Die Sichtbarkeit des Kontos konnte nicht aktualisiert werden."},
     {L"", L"Credits max", L"Credits-Maximum"},
+    {L"", L"Custom hidden interval", L"Benutzerdefiniertes Intervall (ausgeblendete Konten)"},
     {L"", L"Custom interval", L"Benutzerdefiniertes Intervall"},
     {L"", L"Custom retention", L"Benutzerdefinierte Aufbewahrung"},
     {L"", L"Default time span", L"Standardzeitraum"},
@@ -730,17 +732,19 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"Update Windows to show them.",
      L"Die Taskleiste von Bildschirm {number} befindet sich an einem seitlichen Bildschirmrand: Ihr Infobereich "
      L"nimmt in diesem Windows-Build keine Balken auf. Aktualisieren Sie Windows, um sie anzuzeigen."},
-    {L"", L"Do not poll hidden accounts", L"Ausgeblendete Konten nicht abfragen"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus."},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
      L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus; ausgeblendete Konten werden nicht "
      L"abgefragt."},
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are polled less often.",
+     L"Zum Neuordnen ziehen. Der Schalter blendet ein Konto in der Taskleiste aus; ausgeblendete Konten werden "
+     L"seltener abgefragt."},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
      L"Jedes Konto legt selbst fest, ob es aufzeichnet: <link id=\"accounts\">Konten</link> > Verlauf aufzeichnen. "
-     L"Ausgeblendete Konten werden nicht aufgezeichnet, solange <link id=\"hidden\">Ausgeblendete Konten nicht "
-     L"abfragen</link> unter Verhalten aktiviert ist."},
+     L"Ein ausgeblendetes Konto zeichnet auf, wenn es abgefragt wird: <link id=\"hidden\">Verhalten</link> > "
+     L"Ausgeblendete Konten."},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -772,6 +776,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"{rows, plural, one{# Messwertzeile} other{# Messwertzeilen}} (ausgewähltes Konto) nach {path} "
      L"exportiert. Ohne Bezeichnungen; Zeiten in UTC."},
     {L"", L"Extra usage chart", L"Diagramm der Zusatznutzung"},
+    {L"", L"First work day", L"Erster Arbeitstag"},
     {L"", L"Free to use, modify and share.", L"Frei nutzbar, veränderbar und weitergebbar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -788,10 +793,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Gauge thickness", L"Stärke der Bogenanzeige"},
     {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
      L"Höhe in Pixeln; ein Kreisdiagramm pro Kontingent, ab dem dritten kleiner."},
-    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
-          L"them. Shared across Windows users.",
-     L"Ausgeblendete Konten werden weder abgefragt noch aufgezeichnet, auch wenn „Verlauf aufzeichnen“ aktiviert ist. "
-     L"Schalten Sie dies aus, um sie weiter aufzuzeichnen. Gilt für alle Windows-Benutzer."},
+    {L"", L"Hidden accounts", L"Ausgeblendete Konten"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"Der Verlauf folgt diesem Eintrag, auch nach einer erneuten Anmeldung. Verwenden Sie für ein anderes "
      L"Anbieterkonto einen neuen Eintrag."},
@@ -804,6 +806,10 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"session every minute.",
      L"Wie oft Anthropic, OpenAI, GitHub Copilot und OpenCode Go abgefragt werden. Antigravity fragt seine lokale "
      L"Sitzung jede Minute ab."},
+    {L"", L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: never more often "
+          L"than visible ones. Shared across Windows users.",
+     L"Wie oft in der Taskleiste ausgeblendete Konten abgefragt werden, für „Konten“ und den Nutzungsverlauf: nie "
+     L"öfter als sichtbare. Gilt für alle Windows-Benutzer."},
     {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
           L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
      L"Wie die Detailansicht die Zusatznutzung von Anthropic darstellt: über ihren Monat, über das Zeitfenster des "
@@ -818,8 +824,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Keep history", L"Verlauf aufbewahren"},
     {L"", L"Label", L"Bezeichnung"},
     {L"", L"Label font size", L"Schriftgröße der Bezeichnung"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Sprache, Bildschirme, Details beim Daraufzeigen, Abfragen und Benachrichtigungen."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Sprache, Bildschirme, Details beim Daraufzeigen, Arbeitstage, Abfragen und Benachrichtigungen."},
+    {L"", L"Last work day", L"Letzter Arbeitstag"},
     {L"", L"License", L"Lizenz"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"Standardmäßig hellgrau, auf einer hellen Taskleiste dunkel. „Anpassen…“ öffnet die Farbauswahl."},
@@ -871,6 +878,11 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Öffnet die Details eines Kontos, wenn der Zeiger darauf verweilt."},
     {L"", L"Orange from", L"Orange ab"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"Tempo und Prognosen zählen nur Ihre Arbeitstage und bleiben an Ihren freien Tagen unverändert, bei "
+     L"Kontingenten mit einem Zeitfenster von mehr als einem Tag. Nutzung an einem freien Tag zählt weiterhin, und "
+     L"die Reset-Zeiten bleiben, wie sie sind."},
     {L"", L"Pace markers", L"Tempomarkierungen"},
     {L"", L"Palette", L"Palette"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -892,16 +904,19 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"Prozentwerte verwenden die linke Achse; das schattierte Band markiert Ihren roten Schwellenwert. Im Balkenmodus "
      L"„Verbleibend“ (Einstellungen > Darstellung) zeigen sie, was übrig ist: Die Linien fallen also mit steigender "
      L"Nutzung, gehen nach dem Limit unter 0% und das Band liegt unten. „Zusatznutzung“ zeigt das verbrauchte Budget "
      L"von Anthropic, die verbrauchten AI Credits von GitHub Copilot und das verbrauchte Monatskontingent von OpenCode "
      L"Go (%) (links, im Modus „Verbleibend“ den Rest) sowie die verbleibenden Credits von OpenAI, die mit steigender "
-     L"Nutzung fallen, auf einer eigenen Achse. Dollar-Ausgaben erscheinen auf den Karten; „Alle Messgrößen“ zeichnet "
-     L"sie zusätzlich auf einer eigenen Achse. Konten ohne Messwerte im Zeitraum werden unter „Keine Messwerte im "
-     L"Zeitraum“ aufgeführt."},
+     L"Nutzung fallen, auf einer eigenen Achse. Dollar-Ausgaben erscheinen bei den Messwerten eines Anthropic-Budgets, "
+     L"auf dessen Karte und beim Zeigen auf dessen Linie. Ohne Monatslimit gibt es keine Budgetlinie: Die "
+     L"Dollar-Ausgaben erhalten eine eigene Karte, und „Alle Messgrößen“ zeichnet sie auf einer eigenen Achse. Konten "
+     L"ohne Messwerte im Zeitraum werden unter „Keine Messwerte im Zeitraum“ aufgeführt."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -974,9 +989,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Report an issue", L"Problem melden"},
     {L"", L"Reset Behavior to defaults", L"Verhalten auf Standard zurücksetzen"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
-          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
-     L"Verhalten auf die Standardwerte zurücksetzen?\n\nAutomatische Sprache, nur auf dem Hauptbildschirm anzeigen, "
-     L"Details beim Daraufzeigen anzeigen, alle 10 Minuten abfragen, ausgeblendete Konten nicht abfragen, "
+          L"hover, poll every 10 minutes, hidden accounts every hour, threshold notifications at red.",
+     L"Verhalten auf die Standardwerte zurücksetzen?\n\nAutomatische Sprache, nur auf dem Hauptbildschirm "
+     L"anzeigen, Details beim Daraufzeigen anzeigen, alle 10 Minuten abfragen, ausgeblendete Konten stündlich, "
      L"Schwellenwert-Benachrichtigungen bei Rot."},
     {L"", L"Reset Display to defaults", L"Darstellung auf Standard zurücksetzen"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
@@ -1038,10 +1053,6 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Short text", L"Kurztext"},
     {L"", L"Show details on hover", L"Details beim Daraufzeigen anzeigen"},
     {L"", L"Show on", L"Anzeigen auf"},
-    {L"", L"Show percentage text on hover or always to change this.",
-     L"Lassen Sie den Prozenttext beim Daraufzeigen oder immer anzeigen, um dies zu ändern."},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"Lassen Sie den Prozenttext anzeigen oder schalten Sie „Kontingentkürzel“ ein, um dies zu ändern."},
     {L"", L"Show provider outages", L"Anbieterausfälle anzeigen"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -1156,8 +1167,9 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Die Textfarbe der Taskleiste oder Claudes Orange. Die Detailansicht, „Konten“ und der Nutzungsverlauf "
      L"übernehmen sie."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
-          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
-          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -1165,8 +1177,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Dies sind gemessene Kontingentstände, keine Token und kein täglicher Verbrauch. Wählen Sie in der Seitenleiste "
      L"ein Konto oder „Alle Konten“ und eine Ansicht: „Kurzfristig“, „Wöchentlich“, „Zusatznutzung“ oder „Alle "
-     L"Messgrößen“. „Alle Konten“ beginnt mit „Wöchentlich“, ein einzelnes Konto mit „Alle Messgrößen“; jede Auswahl "
-     L"behält ihre Ansicht, bis das Fenster geschlossen wird. Das Fenster öffnet mit dem „Standardzeitraum“ aus "
+     L"Messgrößen“. „Alle Konten“ beginnt mit „Wöchentlich“, ein einzelnes Konto mit „Alle Messgrößen“. Ist Fable der einzige "
+     L"Wochenbalken des Kontos, ist die reguläre Wochenlinie zunächst ausgeblendet. Für beide Modi bleibt die gewählte Ansicht erhalten, bis das Fenster geschlossen wird. Das Fenster öffnet mit dem „Standardzeitraum“ aus "
      L"Einstellungen > Verlauf. „Wöchentlich“ folgt der Auswahl wöchentlicher Kontingente, die jedes Anthropic-Konto "
      L"in der Taskleiste zeigt; entfernte Konten behalten beide Wochenkontingente, und „Alle Messgrößen“ enthält auch "
      L"in der Taskleiste ausgeblendete Wochenkontingente. Die Kontingente Gemini, Argon und Claude/GPT von Antigravity "
@@ -1210,10 +1222,6 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"pull requests.",
      L"Die Übersetzungen sind maschinell erstellt. Korrekturen sind als <link id=\"issues\">GitHub-Issues</link> "
      L"oder Pull Requests willkommen."},
-    {L"", L"Turn off Reset countdown to change this.", L"Schalten Sie „Reset-Countdown“ aus, um dies zu ändern."},
-    {L"", L"Turn on Pace markers to change this.", L"Schalten Sie „Tempomarkierungen“ ein, um dies zu ändern."},
-    {L"", L"Turn on Record usage history to change this.",
-     L"Schalten Sie „Nutzungsverlauf aufzeichnen“ ein, um dies zu ändern."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Nicht verfügbare Kontingente werden automatisch ausgeblendet. Mindestens eines bleibt ausgewählt."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -1236,8 +1244,6 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"„Verbraucht“ füllt sich mit dem Verbrauch des Kontingents; „Verbleibend“ füllt sich mit dem Rest. Die Farben "
      L"folgen immer der Nutzung."},
-    {L"", L"Used on tiles when Identity is Label.",
-     L"Wird auf Kacheln verwendet, wenn „Identität“ auf „Bezeichnung“ steht."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  von Cleroth  ·  Windhawk-Mod"},
     {L"", L"Vertical bar length", L"Länge vertikaler Balken"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
@@ -1248,6 +1254,13 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
           L"hours before and after now.",
      L"Wöchentliche und monatliche Diagramme ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): das ganze Zeitfenster "
      L"oder 12 bis 48 Stunden vor und nach dem aktuellen Zeitpunkt."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Wöchentliche und monatliche Diagramme in der Detailansicht: das ganze Zeitfenster oder 12 bis 48 Stunden vor "
+     L"und nach dem aktuellen Zeitpunkt."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"Was eines dieser Diagramme zeigt, während der Zeiger in der Detailansicht auf der Zeile seines Kontingents "
+     L"verweilt."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"Was diese Diagramme zeigen, während der Zeiger auf dem Konto verweilt."},
     {L"", L"Where each account’s identity sits next to its bars.",
@@ -1260,7 +1273,10 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Weiß, der Standard, folgt der Textfarbe der Taskleiste. „Anpassen…“ öffnet die Farbauswahl."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Die Transparenzeffekte von Windows sind aus, daher erscheint es als „Einfarbig“."},
+    {L"", L"Work days only", L"Nur Arbeitstage"},
     {L"", L"Yellow from", L"Gelb ab"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Ihre Arbeitstage reichen von diesem Tag bis einschließlich zum letzten."},
     {L"", L"{exported} Includes both elapsed 7-day periods.",
      L"{exported} Enthält beide verstrichenen 7-Tage-Zeiträume."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
@@ -1337,6 +1353,12 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"account-state", L"Signed in", L"Angemeldet"},
     {L"account-state", L"Signing in…", L"Anmeldung läuft…"},
     {L"account-state", L"Waiting for the local app", L"Warten auf die lokale App"},
+    {L"account-state", L"{hours, plural, one{Hidden, polled every hour} other{Hidden, polled every # hours}}",
+     L"{hours, plural, one{Ausgeblendet, stündlich abgefragt} other{Ausgeblendet, alle # Stunden abgefragt}}"},
+    {L"account-state", L"{minutes, plural, one{Hidden, polled every minute} other{Hidden, polled every # minutes}}",
+     L"{minutes, plural, one{Ausgeblendet, jede Minute abgefragt} other{Ausgeblendet, alle # Minuten abgefragt}}"},
+    {L"account-usage", L"{quota}: {percent} left, read {time}", L"{quota}: {percent} übrig, Stand {time}"},
+    {L"account-usage", L"{quota}: {percent} used, read {time}", L"{quota}: {percent} verbraucht, Stand {time}"},
     {L"add-account", L"Sign in with a code on github.com", L"Anmeldung mit einem Code auf github.com"},
     {L"add-account", L"Sign in with an API key from the OpenCode console",
      L"Anmeldung mit einem API-Schlüssel aus der OpenCode-Konsole"},
@@ -1458,8 +1480,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"flyout-note", L"No premium request allowance on this plan.",
      L"Dieser Plan enthält keine Premium-Anforderungen."},
     {L"flyout-note", L"No quotas reported.", L"Keine Kontingente gemeldet."},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
-     L"Anmeldung erforderlich. Klicken Sie auf die Balken, um sich anzumelden."},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"Anmeldung erforderlich. Klicken Sie in der Taskleiste auf das Konto, um sich anzumelden."},
     {L"flyout-note", L"extra usage: unlimited", L"Zusatznutzung: unbegrenzt"},
     {L"flyout-note", L"rate limits: none reported", L"Ratenlimits: keine gemeldet"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -1478,6 +1500,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"{count, plural, one{# Wochen-Reset verfügbar} other{# Wochen-Resets verfügbar}}"},
     {L"free-resets", L"{resets} · expires {when}", L"{resets} · läuft {when} ab"},
     {L"free-resets", L"{resets} · next expires {when}", L"{resets} · nächster läuft {when} ab"},
+    {L"hidden-polling", L"Not polled", L"Nicht abgefragt"},
+    {L"hidden-polling", L"Same as visible accounts", L"Wie sichtbare Konten"},
     {L"history-about", L"Axes and units", L"Achsen und Einheiten"},
     {L"history-about", L"Cards", L"Karten"},
     {L"history-about", L"Legend and readout", L"Legende und Werteanzeige"},
@@ -1507,6 +1531,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-card", L"Peak {reading}", L"Höchstwert {reading}"},
     {L"history-card", L"Previous: {line}", L"Vorwoche: {line}"},
     {L"history-card", L"now", L"jetzt"},
+    {L"history-card", L"{amount} spent", L"{amount} ausgegeben"},
     {L"history-card", L"{title} — details only", L"{title} – nur Details"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -1533,6 +1558,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"history-range", L"7d", L"7 T"},
     {L"history-range", L"90d", L"90 T"},
     {L"history-range", L"All", L"Alles"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · {amount} ausgegeben · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} übrig (%)"},
@@ -1649,6 +1676,8 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"placement", L"Right of Start", L"Rechts von Start"},
     {L"plan", L"Visual test", L"Visueller Test"},
     {L"poll-interval", L"Custom", L"Benutzerdefiniert"},
+    {L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# Stunde} other{# Stunden}}"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# Minute} other{# Minuten}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
@@ -1738,6 +1767,7 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
     {L"settings-section", L"Language", L"Sprache"},
     {L"settings-section", L"Links", L"Links"},
     {L"settings-section", L"Matrix", L"Matrix"},
+    {L"settings-section", L"Pace and projection", L"Tempo und Prognose"},
     {L"settings-section", L"Pace markers", L"Tempomarkierungen"},
     {L"settings-section", L"Pies", L"Kreisdiagramme"},
     {L"settings-section", L"Placement", L"Platzierung"},
@@ -1851,8 +1881,14 @@ static constexpr I18nEntry kI18nCatalogDe[] = {
      L"Beim Tempo der letzten 24\u00A0Std.: Limit in ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"Beim Tempo seit {time}: Limit in ~{duration}"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
-     L"Beim Durchschnittstempo dieses Zeitfensters: Limit in ~{duration}"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"Bei diesem Tempo: Limit in ~{duration}"},
+    {L"weekday", L"Friday", L"Freitag"},
+    {L"weekday", L"Monday", L"Montag"},
+    {L"weekday", L"Saturday", L"Samstag"},
+    {L"weekday", L"Sunday", L"Sonntag"},
+    {L"weekday", L"Thursday", L"Donnerstag"},
+    {L"weekday", L"Tuesday", L"Dienstag"},
+    {L"weekday", L"Wednesday", L"Mittwoch"},
     {L"window-title", L"{app} — Settings", L"{app} – Einstellungen"},
     {L"window-title", L"{app} — Usage history", L"{app} – Nutzungsverlauf"},
 };
@@ -1954,13 +1990,11 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"No se pueden supervisar con seguridad los cuadros de diálogo nativos; se canceló la operación."},
     {L"", L"Chart height", L"Alto del gráfico"},
     {L"", L"Chart outline", L"Contorno del gráfico"},
+    {L"", L"Chart time span", L"Intervalo de los gráficos"},
+    {L"", L"Chart time span on hover", L"Intervalo de los gráficos al pasar el puntero"},
     {L"", L"Chart width", L"Ancho del gráfico"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Gráficos, estadísticas y exportación CSV a partir de muestras locales, también con el registro desactivado."},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"Elige Personalizado en Intervalo de consulta en la nube para editarlo."},
-    {L"", L"Choose Custom in Keep history to edit.", L"Elige Personalizado en Conservar historial para editarlo."},
-    {L"", L"Choose an identity position to change this.", L"Elige dónde se muestra la identidad para cambiar esto."},
     {L"", L"Claude logo", L"Logotipo de Claude"},
     {L"", L"Cloud poll interval", L"Intervalo de consulta en la nube"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -1986,6 +2020,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"eliminarla, agrega una cuenta con ese proveedor y esa etiqueta y luego quítala."},
     {L"", L"Could not update account visibility.", L"No se pudo actualizar la visibilidad de la cuenta."},
     {L"", L"Credits max", L"Máximo de créditos"},
+    {L"", L"Custom hidden interval", L"Intervalo personalizado de cuentas ocultas"},
     {L"", L"Custom interval", L"Intervalo personalizado"},
     {L"", L"Custom retention", L"Conservación personalizada"},
     {L"", L"Default time span", L"Intervalo predeterminado"},
@@ -2019,17 +2054,18 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"Update Windows to show them.",
      L"La barra de tareas de la pantalla {number} está en un lateral: su bandeja del sistema no admite barras en "
      L"esta compilación de Windows. Actualiza Windows para mostrarlas."},
-    {L"", L"Do not poll hidden accounts", L"No consultar las cuentas ocultas"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Arrastra para reordenar. El interruptor oculta una cuenta de la barra de tareas."},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
      L"Arrastra para reordenar. El interruptor oculta una cuenta de la barra de tareas; las cuentas ocultas no se "
      L"consultan."},
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
-     L"Cada cuenta elige si se registra: <link id=\"accounts\">Cuentas</link> > Registrar historial. Las cuentas "
-     L"ocultas no se registran mientras <link id=\"hidden\">No consultar las cuentas ocultas</link> esté activado en "
-     L"Comportamiento."},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are polled less often.",
+     L"Arrastra para reordenar. El interruptor oculta una cuenta de la barra de tareas; las cuentas ocultas se "
+     L"consultan con menos frecuencia."},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
+     L"Cada cuenta elige si se registra: <link id=\"accounts\">Cuentas</link> > Registrar historial. Una cuenta "
+     L"oculta se registra cuando se consulta: <link id=\"hidden\">Comportamiento</link> > Cuentas ocultas."},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -2061,6 +2097,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"{rows, plural, one{Se exportó # fila de métricas} many{Se exportaron # de filas de métricas} "
      L"other{Se exportaron # filas de métricas}} (cuenta seleccionada) a {path}. Sin etiquetas; horas en UTC."},
     {L"", L"Extra usage chart", L"Gráfico del uso adicional"},
+    {L"", L"First work day", L"Primer día laborable"},
     {L"", L"Free to use, modify and share.", L"Libre para usar, modificar y compartir."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -2077,10 +2114,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Gauge thickness", L"Grosor del medidor"},
     {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
      L"Alto en píxeles; un gráfico de sectores por cuota, más pequeño a partir del tercero."},
-    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
-          L"them. Shared across Windows users.",
-     L"Las cuentas ocultas no se consultan ni se registran, aunque Registrar historial esté activado. Desactívalo para "
-     L"seguir registrándolas. Compartido entre los usuarios de Windows."},
+    {L"", L"Hidden accounts", L"Cuentas ocultas"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"El historial sigue a esta entrada, incluso tras volver a iniciar sesión. Usa una entrada nueva para otro "
      L"inicio de sesión."},
@@ -2092,6 +2126,10 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"session every minute.",
      L"Con qué frecuencia se consultan Anthropic, OpenAI, GitHub Copilot y OpenCode Go. Antigravity consulta su sesión "
      L"local cada minuto."},
+    {L"", L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: never more often "
+          L"than visible ones. Shared across Windows users.",
+     L"Con qué frecuencia se consultan las cuentas ocultas de la barra de tareas, para Cuentas y el historial de "
+     L"uso: nunca más a menudo que las visibles. Compartido entre los usuarios de Windows."},
     {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
           L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
      L"Cómo representa el panel de detalles el uso adicional de Anthropic: a lo largo de su mes, a lo largo de la "
@@ -2106,8 +2144,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Keep history", L"Conservar historial"},
     {L"", L"Label", L"Etiqueta"},
     {L"", L"Label font size", L"Tamaño de fuente de la etiqueta"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Idioma, pantallas, detalles al pasar el puntero, consultas y notificaciones."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Idioma, pantallas, detalles al pasar el puntero, días laborables, consultas y notificaciones."},
+    {L"", L"Last work day", L"Último día laborable"},
     {L"", L"License", L"Licencia"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"Gris claro de forma predeterminada, oscuro en una barra de tareas clara. Personalizar… abre el selector de "
@@ -2159,6 +2198,10 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Abre los detalles de una cuenta cuando el puntero se detiene sobre ella."},
     {L"", L"Orange from", L"Naranja desde"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"El ritmo y las proyecciones cuentan solo tus días laborables y no avanzan en tus días libres, en las cuotas "
+     L"cuya ventana dura más de un día. El uso en un día libre sigue contando, y las horas de reinicio no cambian."},
     {L"", L"Pace markers", L"Marcadores de ritmo"},
     {L"", L"Palette", L"Paleta"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -2180,15 +2223,19 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"Los porcentajes usan el eje izquierdo; la franja sombreada marca tu umbral rojo. En el modo de barra Restante "
      L"(Configuración > Visualización) muestran lo que queda, así que las líneas bajan a medida que sube el uso, por "
      L"debajo del 0% al superar el límite, y la franja queda abajo. Uso adicional muestra el presupuesto usado de "
      L"Anthropic, los créditos de IA usados de GitHub Copilot y la asignación mensual usada de OpenCode Go (%) (lo "
      L"que queda, en modo Restante), y los créditos restantes de OpenAI, que bajan a medida que sube el uso, en su "
-     L"propio eje. El gasto en dólares aparece en las tarjetas; Todas las métricas también lo representa en su "
-     L"propio eje. Las cuentas sin lecturas en el intervalo aparecen en la tarjeta Sin lecturas en el intervalo."},
+     L"propio eje. El gasto en dólares aparece junto a las lecturas del presupuesto de Anthropic, en su tarjeta y al "
+     L"señalar su línea. Sin límite mensual no hay línea de presupuesto: el gasto en dólares tiene su propia tarjeta "
+     L"y Todas las métricas lo representa en su propio eje. Las cuentas sin lecturas en el intervalo aparecen en la "
+     L"tarjeta Sin lecturas en el intervalo."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -2259,10 +2306,10 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Report an issue", L"Informar de un problema"},
     {L"", L"Reset Behavior to defaults", L"Restablecer Comportamiento a los valores predeterminados"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
-          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
-     L"¿Restablecer Comportamiento a sus valores predeterminados?\n\nIdioma automático, mostrar solo en la pantalla "
-     L"principal, mostrar detalles al pasar el puntero, consultar cada 10 minutos, no consultar las cuentas ocultas, "
-     L"notificaciones de umbral en rojo."},
+          L"hover, poll every 10 minutes, hidden accounts every hour, threshold notifications at red.",
+     L"¿Restablecer Comportamiento a sus valores predeterminados?\n\nIdioma automático, mostrar solo en la "
+     L"pantalla principal, mostrar detalles al pasar el puntero, consultar cada 10 minutos, las cuentas ocultas "
+     L"cada hora, notificaciones de umbral en rojo."},
     {L"", L"Reset Display to defaults", L"Restablecer Visualización a los valores predeterminados"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
           L"reset too) with yellow from 50%, orange from 75% and red from 90%, stale data marked, additional OpenAI "
@@ -2323,10 +2370,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Short text", L"Texto corto"},
     {L"", L"Show details on hover", L"Mostrar detalles al pasar el puntero"},
     {L"", L"Show on", L"Mostrar en"},
-    {L"", L"Show percentage text on hover or always to change this.",
-     L"Elige Al pasar el puntero o Siempre en Texto de porcentaje para cambiar esto."},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"Muestra el texto de porcentaje o activa Claves de cuota para cambiar esto."},
     {L"", L"Show provider outages", L"Mostrar interrupciones del proveedor"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -2436,8 +2479,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"El color de texto de la barra de tareas o el naranja de Claude. Los detalles, Cuentas y el historial de uso "
      L"usan el mismo."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
-          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
-          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -2445,7 +2489,9 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Son niveles de cuota muestreados, no tokens ni consumo diario. Elige una cuenta en la barra lateral, o Todas "
      L"las cuentas, y una vista: Corto plazo, Semanal, Uso adicional o Todas las métricas. Todas las cuentas empieza "
-     L"en Semanal, y una sola cuenta en Todas las métricas; cada una conserva su vista hasta que se cierra la "
+     L"en Semanal. Una cuenta empieza en Todas las métricas. Si Fable es su única barra semanal, "
+     L"la línea semanal normal está oculta al principio. "
+     L"Cada modo conserva la vista elegida hasta que se cierra la "
      L"ventana. La ventana se abre con el Intervalo predeterminado definido en Configuración > Historial. Semanal "
      L"sigue, en cada cuenta de Anthropic, las cuotas semanales seleccionadas para la barra de tareas; las cuentas "
      L"quitadas conservan ambas semanales, y Todas las métricas incluye las semanales ocultas en la barra de tareas. "
@@ -2487,9 +2533,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"pull requests.",
      L"Las traducciones son automáticas. Puedes enviar correcciones como <link id=\"issues\">incidencias en "
      L"GitHub</link> o pull requests."},
-    {L"", L"Turn off Reset countdown to change this.", L"Desactiva Cuenta atrás de reinicio para cambiar esto."},
-    {L"", L"Turn on Pace markers to change this.", L"Activa Marcadores de ritmo para cambiar esto."},
-    {L"", L"Turn on Record usage history to change this.", L"Activa Registrar historial de uso para cambiar esto."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Las cuotas no disponibles se ocultan automáticamente. Al menos una queda seleccionada."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -2512,7 +2555,6 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"Usado se llena a medida que se consume la cuota; Restante se llena con lo que queda. Los colores siempre "
      L"siguen el uso."},
-    {L"", L"Used on tiles when Identity is Label.", L"Se usa en los mosaicos cuando Identidad es Etiqueta."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod",
      L"Versión {version}  ·  por Cleroth  ·  mod de Windhawk"},
     {L"", L"Vertical bar length", L"Longitud de barra vertical"},
@@ -2524,6 +2566,12 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
           L"hours before and after now.",
      L"Gráficos semanales y mensuales ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): la ventana completa, o de 12 a "
      L"48 horas antes y después de ahora."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Gráficos semanales y mensuales del panel de detalles: la ventana completa, o de 12 a 48 horas antes y después "
+     L"de ahora."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"Lo que muestra uno de esos gráficos mientras el puntero se detiene sobre la fila de su cuota en el panel."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"Lo que muestran esos gráficos mientras el puntero se detiene sobre la cuenta."},
     {L"", L"Where each account’s identity sits next to its bars.",
@@ -2537,7 +2585,10 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"color."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Los efectos de transparencia de Windows están desactivados, así que se muestra como Sólido."},
+    {L"", L"Work days only", L"Solo días laborables"},
     {L"", L"Yellow from", L"Amarillo desde"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Tus días laborables van desde este día hasta el último, ambos incluidos."},
     {L"", L"{exported} Includes both elapsed 7-day periods.",
      L"{exported} Incluye los dos periodos de 7 días transcurridos."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
@@ -2612,6 +2663,14 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"account-state", L"Signed in", L"Sesión iniciada"},
     {L"account-state", L"Signing in…", L"Iniciando sesión…"},
     {L"account-state", L"Waiting for the local app", L"Esperando a la aplicación local"},
+    {L"account-state", L"{hours, plural, one{Hidden, polled every hour} other{Hidden, polled every # hours}}",
+     L"{hours, plural, one{Oculta, se consulta cada hora} many{Oculta, se consulta cada # de horas} other{Oculta, "
+     L"se consulta cada # horas}}"},
+    {L"account-state", L"{minutes, plural, one{Hidden, polled every minute} other{Hidden, polled every # minutes}}",
+     L"{minutes, plural, one{Oculta, se consulta cada minuto} many{Oculta, se consulta cada # de minutos} "
+     L"other{Oculta, se consulta cada # minutos}}"},
+    {L"account-usage", L"{quota}: {percent} left, read {time}", L"{quota}: {percent} restante, leído: {time}"},
+    {L"account-usage", L"{quota}: {percent} used, read {time}", L"{quota}: {percent} usado, leído: {time}"},
     {L"add-account", L"Sign in with a code on github.com", L"Inicia sesión con un código en github.com"},
     {L"add-account", L"Sign in with an API key from the OpenCode console",
      L"Inicia sesión con una clave de API de la consola de OpenCode"},
@@ -2731,8 +2790,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"Este plan no incluye créditos de IA."},
     {L"flyout-note", L"No premium request allowance on this plan.", L"Este plan no incluye solicitudes premium."},
     {L"flyout-note", L"No quotas reported.", L"No se informó ninguna cuota."},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
-     L"Debes iniciar sesión. Haz clic en las barras para hacerlo."},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"Debes iniciar sesión. Haz clic en la cuenta en la barra de tareas para hacerlo."},
     {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
     {L"flyout-note", L"rate limits: none reported", L"límites de frecuencia: no se informó ninguno"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -2756,6 +2815,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"semanales disponibles}}"},
     {L"free-resets", L"{resets} · expires {when}", L"{resets} · caduca {when}"},
     {L"free-resets", L"{resets} · next expires {when}", L"{resets} · el próximo caduca {when}"},
+    {L"hidden-polling", L"Not polled", L"Sin consultar"},
+    {L"hidden-polling", L"Same as visible accounts", L"Igual que las cuentas visibles"},
     {L"history-about", L"Axes and units", L"Ejes y unidades"},
     {L"history-about", L"Cards", L"Tarjetas"},
     {L"history-about", L"Legend and readout", L"Leyenda y lectura de valores"},
@@ -2785,6 +2846,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"history-card", L"Peak {reading}", L"Máximo {reading}"},
     {L"history-card", L"Previous: {line}", L"Anterior: {line}"},
     {L"history-card", L"now", L"ahora"},
+    {L"history-card", L"{amount} spent", L"{amount} gastados"},
     {L"history-card", L"{title} — details only", L"{title} — solo detalles"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -2812,6 +2874,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"history-range", L"7d", L"7\u00A0d"},
     {L"history-range", L"90d", L"90\u00A0d"},
     {L"history-range", L"All", L"Todo"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · {amount} gastados · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} (% restante)"},
@@ -2931,6 +2995,8 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"placement", L"Right of Start", L"A la derecha de Inicio"},
     {L"plan", L"Visual test", L"Prueba visual"},
     {L"poll-interval", L"Custom", L"Personalizado"},
+    {L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# hora} many{# de horas} other{# horas}}"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# minuto} many{# de minutos} other{# minutos}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
@@ -3020,6 +3086,7 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
     {L"settings-section", L"Language", L"Idioma"},
     {L"settings-section", L"Links", L"Vínculos"},
     {L"settings-section", L"Matrix", L"Matriz"},
+    {L"settings-section", L"Pace and projection", L"Ritmo y proyección"},
     {L"settings-section", L"Pace markers", L"Marcadores de ritmo"},
     {L"settings-section", L"Pies", L"Sectores"},
     {L"settings-section", L"Placement", L"Ubicación"},
@@ -3132,8 +3199,14 @@ static constexpr I18nEntry kI18nCatalogEs[] = {
      L"Al ritmo de las últimas 24\u00A0h: límite en ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"Al ritmo desde {time}: límite en ~{duration}"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
-     L"Al ritmo medio de esta ventana: límite en ~{duration}"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"A este ritmo: límite en ~{duration}"},
+    {L"weekday", L"Friday", L"Viernes"},
+    {L"weekday", L"Monday", L"Lunes"},
+    {L"weekday", L"Saturday", L"Sábado"},
+    {L"weekday", L"Sunday", L"Domingo"},
+    {L"weekday", L"Thursday", L"Jueves"},
+    {L"weekday", L"Tuesday", L"Martes"},
+    {L"weekday", L"Wednesday", L"Miércoles"},
     {L"window-title", L"{app} — Settings", L"{app} — Configuración"},
     {L"window-title", L"{app} — Usage history", L"{app} — Historial de uso"},
 };
@@ -3237,16 +3310,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Impossible de suivre les boîtes de dialogue natives en toute sécurité\u202F; opération annulée."},
     {L"", L"Chart height", L"Hauteur des graphiques"},
     {L"", L"Chart outline", L"Contour des graphiques"},
+    {L"", L"Chart time span", L"Période des graphiques"},
+    {L"", L"Chart time span on hover", L"Période des graphiques au survol"},
     {L"", L"Chart width", L"Largeur des graphiques"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Graphiques, statistiques et export CSV à partir des échantillons locaux, même quand l’enregistrement est "
      L"désactivé."},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"Choisissez Personnalisé dans Intervalle d’interrogation cloud pour le modifier."},
-    {L"", L"Choose Custom in Keep history to edit.",
-     L"Choisissez Personnalisé dans Conserver l’historique pour le modifier."},
-    {L"", L"Choose an identity position to change this.",
-     L"Choisissez une position d’identité pour modifier ce paramètre."},
     {L"", L"Claude logo", L"Logo Claude"},
     {L"", L"Cloud poll interval", L"Intervalle d’interrogation cloud"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -3274,6 +3343,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"supprimer, ajoutez un compte avec le fournisseur et le libellé choisis, puis retirez-le."},
     {L"", L"Could not update account visibility.", L"Impossible de mettre à jour la visibilité du compte."},
     {L"", L"Credits max", L"Maximum de crédits"},
+    {L"", L"Custom hidden interval", L"Intervalle personnalisé des comptes masqués"},
     {L"", L"Custom interval", L"Intervalle personnalisé"},
     {L"", L"Custom retention", L"Conservation personnalisée"},
     {L"", L"Default time span", L"Période par défaut"},
@@ -3308,17 +3378,19 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"Update Windows to show them.",
      L"La barre des tâches de l’écran {number} est sur un côté de l’écran\u202F: sa zone de notification n’accepte pas de "
      L"barres sur cette build de Windows. Mettez à jour Windows pour les afficher."},
-    {L"", L"Do not poll hidden accounts", L"Ne pas interroger les comptes masqués"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Faites glisser pour réorganiser. L’interrupteur masque un compte de la barre des tâches."},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
      L"Faites glisser pour réorganiser. L’interrupteur masque un compte de la barre des tâches\u202F; les comptes masqués "
      L"ne sont pas interrogés."},
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
-     L"Chaque compte choisit s’il est enregistré\u202F: <link id=\"accounts\">Comptes</link> > Enregistrer l’historique. "
-     L"Les comptes masqués ne sont pas enregistrés tant que <link id=\"hidden\">Ne pas interroger les comptes "
-     L"masqués</link> est activé dans Comportement."},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are polled less often.",
+     L"Faites glisser pour réorganiser. L’interrupteur masque un compte de la barre des tâches\u202F; les comptes "
+     L"masqués sont interrogés moins souvent."},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
+     L"Chaque compte choisit s’il est enregistré\u202F: <link id=\"accounts\">Comptes</link> > Enregistrer "
+     L"l’historique. Un compte masqué est enregistré quand il est interrogé\u202F: <link "
+     L"id=\"hidden\">Comportement</link> > Comptes masqués."},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -3351,6 +3423,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"{rows, plural, one{# ligne d’indicateur exportée} many{# de lignes d’indicateurs exportées} other{# lignes "
      L"d’indicateurs exportées}} (compte sélectionné) vers {path}. Libellés omis\u202F; heures en UTC."},
     {L"", L"Extra usage chart", L"Graphique de l’utilisation supplémentaire"},
+    {L"", L"First work day", L"Premier jour de travail"},
     {L"", L"Free to use, modify and share.", L"Libre d’utilisation, de modification et de partage."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -3367,10 +3440,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Gauge thickness", L"Épaisseur de la jauge"},
     {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
      L"Hauteur en pixels\u202F; un disque par quota, plus petit à partir du troisième."},
-    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
-          L"them. Shared across Windows users.",
-     L"Les comptes masqués ne sont ni interrogés ni enregistrés, même si Enregistrer l’historique est activé. "
-     L"Désactivez cette option pour continuer à les enregistrer. Partagé entre les utilisateurs Windows."},
+    {L"", L"Hidden accounts", L"Comptes masqués"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"L’historique suit cette entrée, même après une nouvelle connexion. Utilisez une nouvelle entrée pour un autre "
      L"identifiant."},
@@ -3383,6 +3453,10 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"session every minute.",
      L"Fréquence d’interrogation d’Anthropic, OpenAI, GitHub Copilot et OpenCode Go. Antigravity interroge sa session "
      L"locale toutes les minutes."},
+    {L"", L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: never more often "
+          L"than visible ones. Shared across Windows users.",
+     L"Fréquence d’interrogation des comptes masqués de la barre des tâches, pour Comptes et l’historique "
+     L"d’utilisation\u202F: jamais plus souvent que les comptes visibles. Partagé entre les utilisateurs Windows."},
     {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
           L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
      L"Comment le volet des détails représente l’utilisation supplémentaire Anthropic\u202F: sur son mois, sur la "
@@ -3397,8 +3471,9 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Keep history", L"Conserver l’historique"},
     {L"", L"Label", L"Libellé"},
     {L"", L"Label font size", L"Taille de police du libellé"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Langue, écrans, détails au survol, interrogations et notifications."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Langue, écrans, détails au survol, jours de travail, interrogations et notifications."},
+    {L"", L"Last work day", L"Dernier jour de travail"},
     {L"", L"License", L"Licence"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"Gris clair par défaut, foncé sur une barre des tâches claire. Personnaliser… ouvre le sélecteur de couleurs."},
@@ -3449,6 +3524,11 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Ouvre les détails d’un compte quand le pointeur s’y arrête."},
     {L"", L"Orange from", L"Orange à partir de"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"Le rythme et les projections ne comptent que vos jours de travail et n’avancent pas pendant vos jours de "
+     L"repos, pour les quotas dont la fenêtre dépasse un jour. L’utilisation un jour de repos compte toujours, et "
+     L"les heures de réinitialisation ne changent pas."},
     {L"", L"Pace markers", L"Repères de rythme"},
     {L"", L"Palette", L"Palette"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -3470,16 +3550,19 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"Les pourcentages utilisent l’axe de gauche\u202F; la bande ombrée marque votre seuil rouge. En mode de barre Restant "
      L"(Paramètres > Affichage), ils indiquent ce qui reste\u202F: les lignes descendent quand l’utilisation augmente, "
      L"passent sous 0% au-delà de la limite, et la bande se place en bas. La vue Supplément affiche le budget "
      L"Anthropic utilisé, les crédits IA GitHub Copilot utilisés et le quota mensuel OpenCode Go utilisé (%) (ce qui "
      L"reste, en mode Restant), ainsi que les crédits OpenAI restants, qui baissent quand l’utilisation augmente, sur "
-     L"leur propre axe. Les dépenses en dollars figurent sur les cartes\u202F; la vue Tous les indicateurs les trace aussi "
-     L"sur leur propre axe. Les comptes sans relevé sur la période figurent dans la carte Aucun relevé sur la "
-     L"période."},
+     L"leur propre axe. Les dépenses en dollars accompagnent les relevés du budget Anthropic, sur sa carte et au survol "
+     L"de sa ligne. Sans limite mensuelle, il n’y a pas de ligne de budget\u202F: les dépenses en dollars ont leur propre "
+     L"carte, et la vue Tous les indicateurs les trace sur leur propre axe. Les comptes sans relevé sur la période "
+     L"figurent dans la carte Aucun relevé sur la période."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -3551,10 +3634,10 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Report an issue", L"Signaler un problème"},
     {L"", L"Reset Behavior to defaults", L"Réinitialiser la page Comportement"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
-          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
-     L"Réinitialiser la page Comportement\u202F?\n\nLangue automatique, affichage sur l’écran principal uniquement, détails "
-     L"au survol, interrogation toutes les 10\u00A0minutes, comptes masqués non interrogés, notifications de seuil au "
-     L"rouge."},
+          L"hover, poll every 10 minutes, hidden accounts every hour, threshold notifications at red.",
+     L"Réinitialiser la page Comportement\u202F?\n\nLangue automatique, affichage sur l’écran principal "
+     L"uniquement, détails au survol, interrogation toutes les 10\u00A0minutes, comptes masqués toutes les heures, "
+     L"notifications de seuil au rouge."},
     {L"", L"Reset Display to defaults", L"Réinitialiser la page Affichage"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
           L"reset too) with yellow from 50%, orange from 75% and red from 90%, stale data marked, additional OpenAI "
@@ -3615,10 +3698,6 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Short text", L"Texte court"},
     {L"", L"Show details on hover", L"Afficher les détails au survol"},
     {L"", L"Show on", L"Afficher sur"},
-    {L"", L"Show percentage text on hover or always to change this.",
-     L"Affichez le texte de pourcentage au survol ou toujours pour modifier ce paramètre."},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"Affichez le texte de pourcentage ou activez Codes de quota pour modifier ce paramètre."},
     {L"", L"Show provider outages", L"Afficher les pannes des fournisseurs"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -3731,8 +3810,9 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"La couleur du texte de la barre des tâches, ou l’orange de Claude. Les détails, Comptes et l’historique "
      L"d’utilisation suivent ce choix."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
-          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
-          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -3741,7 +3821,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Ce sont des niveaux de quota échantillonnés, pas des jetons ni une consommation quotidienne. Choisissez un "
      L"compte dans la barre latérale, ou Tous les comptes, et une vue\u202F: Court terme, Hebdomadaire, Supplément ou Tous "
      L"les indicateurs. Avec Tous les comptes, la fenêtre s’ouvre sur Hebdomadaire\u202F; avec un seul compte, sur Tous les "
-     L"indicateurs\u202F; chacun garde sa vue jusqu’à la fermeture de la fenêtre. La fenêtre s’ouvre sur la période définie "
+     L"indicateurs. Si Fable est sa seule barre hebdomadaire, la courbe hebdomadaire normale est masquée au départ. Chaque mode conserve la vue "
+     L"choisie jusqu’à la fermeture de la fenêtre. La fenêtre s’ouvre sur la période définie "
      L"dans Période par défaut (Paramètres > Historique). La vue Hebdomadaire suit les quotas hebdomadaires "
      L"sélectionnés pour la barre des tâches de chaque compte Anthropic\u202F; les comptes retirés gardent les deux quotas "
      L"hebdomadaires, et la vue Tous les indicateurs inclut les quotas hebdomadaires masqués dans la barre des tâches. "
@@ -3783,10 +3864,6 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"pull requests.",
      L"Les traductions sont automatiques. Les corrections sont les bienvenues sous forme d’<link "
      L"id=\"issues\">issues GitHub</link> ou de pull requests."},
-    {L"", L"Turn off Reset countdown to change this.", L"Désactivez Compte à rebours pour modifier ce paramètre."},
-    {L"", L"Turn on Pace markers to change this.", L"Activez Repères de rythme pour modifier ce paramètre."},
-    {L"", L"Turn on Record usage history to change this.",
-     L"Activez Enregistrer l’historique d’utilisation pour modifier ce paramètre."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Les quotas indisponibles sont masqués automatiquement. Au moins un reste sélectionné."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -3808,7 +3885,6 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"Utilisé se remplit à mesure que le quota est consommé\u202F; Restant se remplit avec ce qui reste. Les couleurs "
      L"suivent toujours l’utilisation."},
-    {L"", L"Used on tiles when Identity is Label.", L"Utilisé sur les vignettes quand Identité vaut Libellé."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Version {version}  ·  par Cleroth  ·  mod Windhawk"},
     {L"", L"Vertical bar length", L"Longueur des barres verticales"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
@@ -3819,6 +3895,12 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
           L"hours before and after now.",
      L"Graphiques hebdomadaires et mensuels ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo})\u202F: la fenêtre entière, ou de "
      L"12 à 48\u00A0heures avant et après l’instant présent."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Graphiques hebdomadaires et mensuels du volet des détails\u202F: la fenêtre entière, ou de 12 à 48\u00A0heures "
+     L"avant et après l’instant présent."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"Ce que l’un de ces graphiques affiche quand le pointeur s’arrête sur la ligne de son quota dans le volet."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"Ce que ces graphiques affichent quand le pointeur s’arrête sur le compte."},
     {L"", L"Where each account’s identity sits next to its bars.",
@@ -3832,7 +3914,10 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"couleurs."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Les effets de transparence de Windows sont désactivés\u202F: le matériau s’affiche donc comme Opaque."},
+    {L"", L"Work days only", L"Jours de travail uniquement"},
     {L"", L"Yellow from", L"Jaune à partir de"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Vos jours de travail vont de ce jour au dernier, inclus."},
     {L"", L"{exported} Includes both elapsed 7-day periods.",
      L"{exported} Comprend les deux périodes écoulées de 7\u00A0jours."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
@@ -3906,6 +3991,16 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"account-state", L"Signed in", L"Connecté"},
     {L"account-state", L"Signing in…", L"Connexion en cours…"},
     {L"account-state", L"Waiting for the local app", L"En attente de l’application locale"},
+    {L"account-state", L"{hours, plural, one{Hidden, polled every hour} other{Hidden, polled every # hours}}",
+     L"{hours, plural, one{Masqué, interrogé toutes les heures} many{Masqué, interrogé toutes les #\u00A0d’heures} "
+     L"other{Masqué, interrogé toutes les #\u00A0heures}}"},
+    {L"account-state", L"{minutes, plural, one{Hidden, polled every minute} other{Hidden, polled every # minutes}}",
+     L"{minutes, plural, one{Masqué, interrogé toutes les minutes} many{Masqué, interrogé toutes les "
+     L"#\u00A0de\u00A0minutes} other{Masqué, interrogé toutes les #\u00A0minutes}}"},
+    {L"account-usage", L"{quota}: {percent} left, read {time}",
+     L"{quota}\u202F: {percent} restants, relevé\u202F: {time}"},
+    {L"account-usage", L"{quota}: {percent} used, read {time}",
+     L"{quota}\u202F: {percent} utilisés, relevé\u202F: {time}"},
     {L"add-account", L"Sign in with a code on github.com", L"Connexion avec un code sur github.com"},
     {L"add-account", L"Sign in with an API key from the OpenCode console",
      L"Connexion avec une clé d’API de la console OpenCode"},
@@ -4029,8 +4124,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"Ce forfait n’inclut aucun crédit IA."},
     {L"flyout-note", L"No premium request allowance on this plan.", L"Ce forfait n’inclut aucune requête premium."},
     {L"flyout-note", L"No quotas reported.", L"Aucun quota signalé."},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
-     L"Connexion requise. Cliquez sur les barres pour vous connecter."},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"Connexion requise. Cliquez sur le compte dans la barre des tâches pour vous connecter."},
     {L"flyout-note", L"extra usage: unlimited", L"utilisation supplémentaire\u202F: illimitée"},
     {L"flyout-note", L"rate limits: none reported", L"limites de débit\u202F: aucune signalée"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -4054,6 +4149,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"disponibles} other{# réinitialisations hebdomadaires disponibles}}"},
     {L"free-resets", L"{resets} · expires {when}", L"{resets} · expire {when}"},
     {L"free-resets", L"{resets} · next expires {when}", L"{resets} · la prochaine expire {when}"},
+    {L"hidden-polling", L"Not polled", L"Non interrogés"},
+    {L"hidden-polling", L"Same as visible accounts", L"Comme les comptes visibles"},
     {L"history-about", L"Axes and units", L"Axes et unités"},
     {L"history-about", L"Cards", L"Cartes"},
     {L"history-about", L"Legend and readout", L"Légende et lecture des valeurs"},
@@ -4083,6 +4180,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"history-card", L"Peak {reading}", L"Pic {reading}"},
     {L"history-card", L"Previous: {line}", L"Précédent\u202F: {line}"},
     {L"history-card", L"now", L"maintenant"},
+    {L"history-card", L"{amount} spent", L"{amount} dépensés"},
     {L"history-card", L"{title} — details only", L"{title} — détails uniquement"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -4110,6 +4208,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"history-range", L"7d", L"7\u00A0j"},
     {L"history-range", L"90d", L"90\u00A0j"},
     {L"history-range", L"All", L"Tout"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · {amount} dépensés · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} (% restant)"},
@@ -4229,6 +4329,8 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"placement", L"Right of Start", L"À droite de Démarrer"},
     {L"plan", L"Visual test", L"Test visuel"},
     {L"poll-interval", L"Custom", L"Personnalisé"},
+    {L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{#\u00A0heure} many{#\u00A0d’heures} other{#\u00A0heures}}"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{#\u00A0minute} many{#\u00A0de\u00A0minutes} other{#\u00A0minutes}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
@@ -4319,6 +4421,7 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
     {L"settings-section", L"Language", L"Langue"},
     {L"settings-section", L"Links", L"Liens"},
     {L"settings-section", L"Matrix", L"Matrice"},
+    {L"settings-section", L"Pace and projection", L"Rythme et projection"},
     {L"settings-section", L"Pace markers", L"Repères de rythme"},
     {L"settings-section", L"Pies", L"Secteurs"},
     {L"settings-section", L"Placement", L"Emplacement"},
@@ -4431,8 +4534,14 @@ static constexpr I18nEntry kI18nCatalogFr[] = {
      L"Au rythme des dernières 24\u00A0h\u202F: limite dans ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"Au rythme observé depuis {time}\u202F: limite dans ~{duration}"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
-     L"Au rythme moyen de cette fenêtre\u202F: limite dans ~{duration}"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"À ce rythme\u202F: limite dans ~{duration}"},
+    {L"weekday", L"Friday", L"Vendredi"},
+    {L"weekday", L"Monday", L"Lundi"},
+    {L"weekday", L"Saturday", L"Samedi"},
+    {L"weekday", L"Sunday", L"Dimanche"},
+    {L"weekday", L"Thursday", L"Jeudi"},
+    {L"weekday", L"Tuesday", L"Mardi"},
+    {L"weekday", L"Wednesday", L"Mercredi"},
     {L"window-title", L"{app} — Settings", L"{app} — Paramètres"},
     {L"window-title", L"{app} — Usage history", L"{app} — Historique d’utilisation"},
 };
@@ -4515,13 +4624,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Cannot track native dialogs safely; operation cancelled.", L"ネイティブ ダイアログを安全に追跡できないため、操作をキャンセルしました。"},
     {L"", L"Chart height", L"グラフの高さ"},
     {L"", L"Chart outline", L"グラフの枠線"},
+    {L"", L"Chart time span", L"グラフの表示期間"},
+    {L"", L"Chart time span on hover", L"ホバー時のグラフの表示期間"},
     {L"", L"Chart width", L"グラフの幅"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"ローカルのサンプルからのグラフ、統計、CSV エクスポート。記録がオフでも使えます。"},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"編集するには、［クラウドのポーリング間隔］で［カスタム］を選択してください。"},
-    {L"", L"Choose Custom in Keep history to edit.", L"編集するには、［履歴の保持］で［カスタム］を選択してください。"},
-    {L"", L"Choose an identity position to change this.", L"変更するには、識別表示の位置を選択してください。"},
     {L"", L"Claude logo", L"Claude のロゴ"},
     {L"", L"Cloud poll interval", L"クラウドのポーリング間隔"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -4543,6 +4650,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"アカウントを保存できませんでした。コピーされたサインインは、変更しようとした新しい ID に残っています。削除するには、そのプロバイダーとラベルでアカウントを追加してから削除してください。"},
     {L"", L"Could not update account visibility.", L"アカウントの表示状態を更新できませんでした。"},
     {L"", L"Credits max", L"クレジット上限"},
+    {L"", L"Custom hidden interval", L"非表示アカウントのカスタム間隔"},
     {L"", L"Custom interval", L"カスタム間隔"},
     {L"", L"Custom retention", L"カスタムの保持期間"},
     {L"", L"Default time span", L"既定の期間"},
@@ -4569,13 +4677,15 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
           L"Update Windows to show them.",
      L"ディスプレイ {number} のタスク バーは画面の左右の端にあります。この Windows のビルドでは、そのシステム トレイにバーを表示できません。表示するには、Windows を更新してください。"},
-    {L"", L"Do not poll hidden accounts", L"非表示のアカウントをポーリングしない"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.", L"ドラッグして並べ替えます。スイッチでアカウントをタスク バーから非表示にします。"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
      L"ドラッグして並べ替えます。スイッチでアカウントをタスク バーから非表示にします。非表示のアカウントはポーリングされません。"},
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
-     L"記録するかどうかはアカウントごとに選択できます (［<link id=\"accounts\">アカウント</link>］>［履歴を記録］)。［動作］の［<link id=\"hidden\">非表示のアカウントをポーリングしない</link>］がオンの間、非表示のアカウントは記録されません。"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are polled less often.",
+     L"ドラッグして並べ替えます。スイッチでアカウントをタスク バーから非表示にします。非表示のアカウントはポーリングの頻度が下がります。"},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
+     L"記録するかどうかはアカウントごとに選択できます (［<link id=\"accounts\">アカウント</link>］>［履歴を記録］)。非表示のアカウントはポーリングされたときに記録されます (［<link "
+     L"id=\"hidden\">動作</link>］>［非表示のアカウント］)。"},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -4598,6 +4708,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"Labels omitted; times UTC.",
      L"{rows, plural, other{メーター # 行}} (選択したアカウント) を {path} にエクスポートしました。ラベルは省略、時刻は UTC です。"},
     {L"", L"Extra usage chart", L"追加使用量のグラフ"},
+    {L"", L"First work day", L"最初の勤務日"},
     {L"", L"Free to use, modify and share.", L"自由に使用、変更、共有できます。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -4613,10 +4724,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Gauge thickness", L"ゲージの太さ"},
     {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
      L"高さ (ピクセル単位)。クォータごとに円グラフが 1 つで、3 つ目以降は小さくなります。"},
-    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
-          L"them. Shared across Windows users.",
-     L"非表示のアカウントは、［履歴を記録］がオンでもポーリングも記録もされません。記録を続けるにはオフにしてください。"
-     L"Windows のユーザー間で共有されます。"},
+    {L"", L"Hidden accounts", L"非表示のアカウント"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"履歴は、サインインし直してもこのエントリに引き継がれます。別のアカウントでサインインする場合は、新しいエントリを使ってください。"},
     {L"", L"History recording is off. Saved history stays; nothing new is recorded.",
@@ -4625,6 +4733,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"Anthropic、OpenAI、GitHub Copilot、OpenCode Go をポーリングする頻度です。Antigravity はローカル セッションを 1 分ごとにポーリングします。"},
+    {L"", L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: never more often "
+          L"than visible ones. Shared across Windows users.",
+     L"タスク バーで非表示にしたアカウントを、［アカウント］と使用履歴のためにポーリングする頻度です。表示中のアカウントより頻繁にはなりません。Windows のユーザー間で共有されます。"},
     {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
           L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
      L"詳細フライアウトでの Anthropic の追加使用量の表示方法: その月のグラフ、週間クォータの期間に合わせた同じ目盛りのグラフ、またはバー。［使用量グラフ］のタイルで追加使用量に専用のグラフがある場合も、この設定に従います。"},
@@ -4637,8 +4748,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Keep history", L"履歴の保持"},
     {L"", L"Label", L"ラベル"},
     {L"", L"Label font size", L"ラベルのフォント サイズ"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"言語、ディスプレイ、ホバー時の詳細、ポーリング、通知。"},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"言語、ディスプレイ、ホバー時の詳細、勤務日、ポーリング、通知。"},
+    {L"", L"Last work day", L"最後の勤務日"},
     {L"", L"License", L"ライセンス"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"既定では薄い灰色、明るいタスク バーでは暗い色です。［カスタム…］でカラー ピッカーを開きます。"},
@@ -4682,6 +4794,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"ポインターを合わせたままにすると、アカウントの詳細を開きます。"},
     {L"", L"Orange from", L"オレンジのしきい値"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"ペースと予測は勤務日だけを数え、休みの日は進みません。期間が 1 日より長いクォータが対象です。休みの日の使用量も加算され、リセット時刻は変わりません。"},
     {L"", L"Pace markers", L"ペース マーカー"},
     {L"", L"Palette", L"パレット"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -4700,12 +4815,15 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"パーセントは左の軸を使い、網掛けの帯は赤のしきい値を示します。［残量］バー モード (［設定］>［表示］) では残りの分を表示するため、使用量が増えると線は下がり、上限を超えると 0% "
      L"を下回ります。帯は下端に表示されます。［追加使用量］には、Anthropic の予算、GitHub Copilot の AI クレジット、OpenCode Go の月間割り当ての使用量 (%) "
      L"(［残量］モードでは残り) と、OpenAI の残りクレジットが表示されます。OpenAI "
-     L"のクレジットは使用量が増えると下がり、専用の軸を使います。ドルでの支出はカードに表示され、［全メーター］では専用の軸にもプロットされます。期間内に測定値がないアカウントは、［期間内の測定値なし］に表示されます。"},
+     L"のクレジットは使用量が増えると下がり、専用の軸を使います。ドルでの支出は Anthropic "
+     L"の予算の測定値と一緒に、そのカードと、線をポイントしたときに表示されます。月間上限がない場合は予算の線がないため、ドルでの支出は専用のカードに表示され、［全メーター］では専用の軸にプロットされます。期間内に測定値がないアカウントは、［期間内の測定値なし］に表示されます。"},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -4763,9 +4881,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Report an issue", L"問題を報告"},
     {L"", L"Reset Behavior to defaults", L"動作を既定値にリセット"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
-          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
-     L"動作を既定値にリセットしますか？\n\n言語は自動、メイン ディスプレイのみに表示、ホバー時に詳細を表示、10 "
-     L"分ごとにポーリング、非表示のアカウントはポーリングしない、しきい値の通知は赤。"},
+          L"hover, poll every 10 minutes, hidden accounts every hour, threshold notifications at red.",
+     L"動作を既定値にリセットしますか？\n\n言語は自動、メイン ディスプレイのみに表示、ホバー時に詳細を表示、10 分ごとにポーリング、非表示のアカウントは 1 時間ごと、しきい値の通知は赤。"},
     {L"", L"Reset Display to defaults", L"表示を既定値にリセット"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
           L"reset too) with yellow from 50%, orange from 75% and red from 90%, stale data marked, additional OpenAI "
@@ -4811,9 +4928,6 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Short text", L"短いテキスト"},
     {L"", L"Show details on hover", L"ホバー時に詳細を表示"},
     {L"", L"Show on", L"表示先"},
-    {L"", L"Show percentage text on hover or always to change this.", L"変更するには、パーセント表示を［ホバー時に表示］か［常に表示］にしてください。"},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"変更するには、パーセント表示をオンにするか、［クォータ キー］をオンにしてください。"},
     {L"", L"Show provider outages", L"プロバイダーの障害を表示"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -4900,14 +5014,15 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
      L"タスク バーの文字色、または Claude のオレンジ。詳細フライアウト、［アカウント］ページ、使用履歴も同じ色になります。"},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
-          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
-          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
           L"own line and resets; overlapping limits are never added or merged. Short-window labels use recorded "
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
-     L"これはサンプリングしたクォータの水準であり、トークン数や日ごとの消費量ではありません。サイドバーでアカウントまたは［すべてのアカウント］を選択し、ビュー (［短期］、［週間］、［追加使用量］、［全メーター］) を選択してください。［すべてのアカウント］は［週間］で、個々のアカウントは［全メーター］で始まり、それぞれウィンドウを閉じるまでビューを保持します。ウィンドウは、［設定］>［履歴］で設定した［既定の期間］で開きます。［週間］は、各 Anthropic アカウントのタスク バーでの週間クォータの選択に従います。削除されたアカウントでは両方の週間クォータが残り、［全メーター］にはタスク バーで非表示の週間クォータも含まれます。Antigravity の Gemini、Argon、Claude/GPT のクォータは、対応する短期と週間のビューに表示されます。各クォータには独自の線とリセットがあり、重なり合う上限が加算や統合されることはありません。短期間のラベルには記録された期間 (不明な場合は現在の上限) を使います。Antigravity では制限となっているプールを表示し、これは変わることがあります。"},
+     L"これはサンプリングしたクォータの水準であり、トークン数や日ごとの消費量ではありません。サイドバーでアカウントまたは［すべてのアカウント］を選択し、ビュー (［短期］、［週間］、［追加使用量］、［全メーター］) を選択してください。［すべてのアカウント］は［週間］で開きます。個々のアカウントは［全メーター］で開きます。有効な週間バーが Fable だけの場合、通常の週間クォータの線は最初は非表示です。各モードで選んだビューはウィンドウを閉じるまで保持されます。ウィンドウは、［設定］>［履歴］で設定した［既定の期間］で開きます。［週間］は、各 Anthropic アカウントのタスク バーでの週間クォータの選択に従います。削除されたアカウントでは両方の週間クォータが残り、［全メーター］にはタスク バーで非表示の週間クォータも含まれます。Antigravity の Gemini、Argon、Claude/GPT のクォータは、対応する短期と週間のビューに表示されます。各クォータには独自の線とリセットがあり、重なり合う上限が加算や統合されることはありません。短期間のラベルには記録された期間 (不明な場合は現在の上限) を使います。Antigravity では制限となっているプールを表示し、これは変わることがあります。"},
     {L"", L"Thin caret, full-width line, edge notch, centered dot, or a time track: a small bar under each bar that "
           L"fills with the elapsed time.",
      L"細いキャレット、全幅の線、端の切れ込み、中央の点、または時間トラック (各バーの下で経過時間に応じて伸びる小さなバー)。"},
@@ -4935,9 +5050,6 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
      L"pull requests.",
      L"翻訳は機械翻訳です。修正は <link id=\"issues\">GitHub の Issue</link> またはプル リクエストでお寄せください。"},
-    {L"", L"Turn off Reset countdown to change this.", L"変更するには、［リセットまでの残り時間］をオフにしてください。"},
-    {L"", L"Turn on Pace markers to change this.", L"変更するには、［ペース マーカー］をオンにしてください。"},
-    {L"", L"Turn on Record usage history to change this.", L"変更するには、［使用履歴を記録］をオンにしてください。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"利用できないクォータは自動的に非表示になります。少なくとも 1 つは選択されたままです。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -4956,7 +5068,6 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Usage history guide", L"使用履歴ガイド"},
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"［使用量］ではクォータの消費につれてバーが伸び、［残量］では残りの分だけバーが表示されます。色は常に使用量に従います。"},
-    {L"", L"Used on tiles when Identity is Label.", L"［識別表示］が［ラベル］のとき、タイルで使われます。"},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"バージョン {version}  ·  作者 Cleroth  ·  Windhawk Mod"},
     {L"", L"Vertical bar length", L"縦バーの長さ"},
     {L"", L"Wait for the current sign-in to finish before changing identity.", L"ID を変更する前に、現在のサインインが完了するまでお待ちください。"},
@@ -4964,6 +5075,11 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
           L"hours before and after now.",
      L"週間と月間のグラフ ({key7d}、{keyFa}、{keyAr}、{keyEx}、{keyMo}): 期間全体、または現在の前後 12～48 時間。"},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"詳細フライアウトの週間と月間のグラフ: 期間全体、または現在の前後 12～48 時間。"},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"詳細フライアウトでポインターをクォータの行に合わせている間、そのグラフに表示する範囲。"},
     {L"", L"What those charts show while the pointer rests on the account.", L"ポインターをアカウントに合わせている間、それらのグラフに表示する範囲。"},
     {L"", L"Where each account’s identity sits next to its bars.", L"バーに対する各アカウントの識別表示の位置。"},
     {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "
@@ -4972,7 +5088,9 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"", L"White, the default, follows the taskbar’s text color. Custom... opens the color picker.",
      L"既定の白は、タスク バーの文字色に従います。［カスタム…］でカラー ピッカーを開きます。"},
     {L"", L"Windows transparency effects are off, so it shows as Solid.", L"Windows の透明効果がオフのため、［単色］として表示されます。"},
+    {L"", L"Work days only", L"勤務日のみ"},
     {L"", L"Yellow from", L"黄色のしきい値"},
+    {L"", L"Your work days run from this day through the last one.", L"勤務日は、この曜日から最後の勤務日までです。"},
     {L"", L"{exported} Includes both elapsed 7-day periods.", L"{exported}経過した 2 つの 7 日間を両方とも含みます。"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
@@ -5038,6 +5156,12 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"account-state", L"Signed in", L"サインイン済み"},
     {L"account-state", L"Signing in…", L"サインイン中…"},
     {L"account-state", L"Waiting for the local app", L"ローカル アプリを待機中"},
+    {L"account-state", L"{hours, plural, one{Hidden, polled every hour} other{Hidden, polled every # hours}}",
+     L"{hours, plural, other{非表示、# 時間ごとにポーリング}}"},
+    {L"account-state", L"{minutes, plural, one{Hidden, polled every minute} other{Hidden, polled every # minutes}}",
+     L"{minutes, plural, other{非表示、# 分ごとにポーリング}}"},
+    {L"account-usage", L"{quota}: {percent} left, read {time}", L"{quota}: 残り {percent}、{time} 時点"},
+    {L"account-usage", L"{quota}: {percent} used, read {time}", L"{quota}: {percent} 使用、{time} 時点"},
     {L"add-account", L"Sign in with a code on github.com", L"github.com でコードを使ってサインイン"},
     {L"add-account", L"Sign in with an API key from the OpenCode console", L"OpenCode コンソールの API キーでサインイン"},
     {L"add-account", L"Sign in with your browser", L"ブラウザーでサインイン"},
@@ -5155,7 +5279,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"このプランには AI クレジットの割り当てがありません。"},
     {L"flyout-note", L"No premium request allowance on this plan.", L"このプランにはプレミアム リクエストの割り当てがありません。"},
     {L"flyout-note", L"No quotas reported.", L"報告されたクォータはありません。"},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"サインインが必要です。バーをクリックしてサインインしてください。"},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"サインインが必要です。タスク バーのアカウントをクリックしてサインインしてください。"},
     {L"flyout-note", L"extra usage: unlimited", L"追加使用量: 無制限"},
     {L"flyout-note", L"rate limits: none reported", L"レート制限: 報告なし"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -5173,6 +5298,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
      L"{count, plural, other{週間リセットが # 回利用可能}}"},
     {L"free-resets", L"{resets} · expires {when}", L"{resets} · 期限: {when}"},
     {L"free-resets", L"{resets} · next expires {when}", L"{resets} · 次回の期限: {when}"},
+    {L"hidden-polling", L"Not polled", L"ポーリングしない"},
+    {L"hidden-polling", L"Same as visible accounts", L"表示中のアカウントと同じ"},
     {L"history-about", L"Axes and units", L"軸と単位"},
     {L"history-about", L"Cards", L"カード"},
     {L"history-about", L"Legend and readout", L"凡例と値の表示"},
@@ -5202,6 +5329,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"history-card", L"Peak {reading}", L"ピーク {reading}"},
     {L"history-card", L"Previous: {line}", L"前週: {line}"},
     {L"history-card", L"now", L"現在"},
+    {L"history-card", L"{amount} spent", L"支出 {amount}"},
     {L"history-card", L"{title} — details only", L"{title} — 詳細のみ"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -5227,6 +5355,8 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"history-range", L"7d", L"7日"},
     {L"history-range", L"90d", L"90日"},
     {L"history-range", L"All", L"全期間"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · 支出 {amount} · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} の残量 (%)"},
@@ -5338,6 +5468,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"placement", L"Right of Start", L"スタート ボタンの右"},
     {L"plan", L"Visual test", L"ビジュアル テスト"},
     {L"poll-interval", L"Custom", L"カスタム"},
+    {L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}", L"{hours, plural, other{# 時間}}"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}", L"{minutes, plural, other{分}}"},
     {L"preview", L"Preview", L"プレビュー"},
@@ -5423,6 +5554,7 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"settings-section", L"Language", L"言語"},
     {L"settings-section", L"Links", L"リンク"},
     {L"settings-section", L"Matrix", L"マトリックス"},
+    {L"settings-section", L"Pace and projection", L"ペースと予測"},
     {L"settings-section", L"Pace markers", L"ペース マーカー"},
     {L"settings-section", L"Pies", L"円グラフ"},
     {L"settings-section", L"Placement", L"表示位置"},
@@ -5525,7 +5657,14 @@ static constexpr I18nEntry kI18nCatalogJa[] = {
     {L"usage-band", L"From yellow", L"黄色以上"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"直近 24 時間のペース: 約 {duration}後に上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"{time} 以降のペース: 約 {duration}後に上限"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"この期間の平均ペース: 約 {duration}後に上限"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"現在のペース: 約 {duration}後に上限"},
+    {L"weekday", L"Friday", L"金曜日"},
+    {L"weekday", L"Monday", L"月曜日"},
+    {L"weekday", L"Saturday", L"土曜日"},
+    {L"weekday", L"Sunday", L"日曜日"},
+    {L"weekday", L"Thursday", L"木曜日"},
+    {L"weekday", L"Tuesday", L"火曜日"},
+    {L"weekday", L"Wednesday", L"水曜日"},
     {L"window-title", L"{app} — Settings", L"{app} — 設定"},
     {L"window-title", L"{app} — Usage history", L"{app} — 使用履歴"},
 };
@@ -5628,13 +5767,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Não é possível acompanhar as caixas de diálogo nativas com segurança; operação cancelada."},
     {L"", L"Chart height", L"Altura do gráfico"},
     {L"", L"Chart outline", L"Contorno do gráfico"},
+    {L"", L"Chart time span", L"Período dos gráficos"},
+    {L"", L"Chart time span on hover", L"Período dos gráficos ao passar o mouse"},
     {L"", L"Chart width", L"Largura do gráfico"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Gráficos, estatísticas e exportação CSV a partir de amostras locais, mesmo com o registro desativado."},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"Escolha Personalizado em Intervalo de consulta na nuvem para editar."},
-    {L"", L"Choose Custom in Keep history to edit.", L"Escolha Personalizado em Manter histórico para editar."},
-    {L"", L"Choose an identity position to change this.", L"Escolha uma posição de identidade para alterar isto."},
     {L"", L"Claude logo", L"Logo do Claude"},
     {L"", L"Cloud poll interval", L"Intervalo de consulta na nuvem"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -5660,6 +5797,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"excluí-lo, adicione uma conta com esse provedor e esse rótulo e depois remova-a."},
     {L"", L"Could not update account visibility.", L"Não foi possível atualizar a visibilidade da conta."},
     {L"", L"Credits max", L"Máximo de créditos"},
+    {L"", L"Custom hidden interval", L"Intervalo personalizado das contas ocultas"},
     {L"", L"Custom interval", L"Intervalo personalizado"},
     {L"", L"Custom retention", L"Retenção personalizada"},
     {L"", L"Default time span", L"Período padrão"},
@@ -5691,17 +5829,18 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"Update Windows to show them.",
      L"A barra de tarefas da tela {number} está em uma lateral da tela: a bandeja dela não aceita barras neste build "
      L"do Windows. Atualize o Windows para mostrá-las."},
-    {L"", L"Do not poll hidden accounts", L"Não consultar contas ocultas"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Arraste para reordenar. O botão de alternância oculta uma conta da barra de tarefas."},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
      L"Arraste para reordenar. O botão de alternância oculta uma conta da barra de tarefas; contas ocultas não são "
      L"consultadas."},
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
-     L"Cada conta escolhe se é registrada: <link id=\"accounts\">Contas</link> > Registrar histórico. Contas ocultas "
-     L"não são registradas enquanto <link id=\"hidden\">Não consultar contas ocultas</link> estiver ativado em "
-     L"Comportamento."},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are polled less often.",
+     L"Arraste para reordenar. O botão de alternância oculta uma conta da barra de tarefas; contas ocultas são "
+     L"consultadas com menos frequência."},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
+     L"Cada conta escolhe se é registrada: <link id=\"accounts\">Contas</link> > Registrar histórico. Uma conta "
+     L"oculta é registrada quando é consultada: <link id=\"hidden\">Comportamento</link> > Contas ocultas."},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -5736,6 +5875,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"other{# linhas de medidores exportadas}} (conta selecionada) para {path}. Rótulos omitidos; horários em "
      L"UTC."},
     {L"", L"Extra usage chart", L"Gráfico do uso adicional"},
+    {L"", L"First work day", L"Primeiro dia de trabalho"},
     {L"", L"Free to use, modify and share.", L"Livre para usar, modificar e compartilhar."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -5752,10 +5892,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Gauge thickness", L"Espessura do medidor"},
     {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
      L"Altura em pixels; uma pizza por cota, menores a partir da terceira."},
-    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
-          L"them. Shared across Windows users.",
-     L"Contas ocultas não são consultadas nem registradas, mesmo com Registrar histórico ativado. Desative para "
-     L"continuar registrando-as. Compartilhado entre os usuários do Windows."},
+    {L"", L"Hidden accounts", L"Contas ocultas"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"O histórico acompanha esta conta configurada, mesmo depois de entrar novamente. Para outro login, adicione "
      L"uma nova conta."},
@@ -5767,6 +5904,10 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"session every minute.",
      L"Com que frequência Anthropic, OpenAI, GitHub Copilot e OpenCode Go são consultados. O Antigravity consulta sua "
      L"sessão local a cada minuto."},
+    {L"", L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: never more often "
+          L"than visible ones. Shared across Windows users.",
+     L"Com que frequência as contas ocultas da barra de tarefas são consultadas, para Contas e o histórico de uso: "
+     L"nunca com mais frequência que as visíveis. Compartilhado entre os usuários do Windows."},
     {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
           L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
      L"Como o painel de detalhes representa o uso adicional da Anthropic: ao longo do seu mês, ao longo da janela da "
@@ -5781,8 +5922,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Keep history", L"Manter histórico"},
     {L"", L"Label", L"Rótulo"},
     {L"", L"Label font size", L"Tamanho da fonte do rótulo"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Idioma, telas, detalhes ao passar o mouse, consultas e notificações."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Idioma, telas, detalhes ao passar o mouse, dias de trabalho, consultas e notificações."},
+    {L"", L"Last work day", L"Último dia de trabalho"},
     {L"", L"License", L"Licença"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"Cinza-claro por padrão, escuro em uma barra de tarefas clara. Personalizar… abre o seletor de cores."},
@@ -5831,6 +5973,11 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Abre os detalhes de uma conta quando o ponteiro para sobre ela."},
     {L"", L"Orange from", L"Laranja a partir de"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"O ritmo e as projeções contam apenas seus dias de trabalho e não avançam nos seus dias de folga, para cotas "
+     L"cuja janela é maior que um dia. O uso em um dia de folga continua contando, e os horários de reinício não "
+     L"mudam."},
     {L"", L"Pace markers", L"Marcadores de ritmo"},
     {L"", L"Palette", L"Paleta"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -5852,15 +5999,19 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"As porcentagens usam o eixo esquerdo; a faixa sombreada marca o seu limite vermelho. No modo de barra "
      L"Restante (Configurações > Exibição), elas mostram o que resta, então as linhas descem conforme o uso aumenta, "
      L"ficando abaixo de 0% depois do limite, e a faixa fica embaixo. Uso adicional mostra o orçamento usado da "
      L"Anthropic, os créditos de IA usados do GitHub Copilot e a franquia mensal usada do OpenCode Go (%) (o "
      L"restante, no modo Restante) e, em um eixo próprio, os créditos restantes da OpenAI, que caem conforme o uso "
-     L"aumenta. Os gastos em dólares aparecem nos cartões; Todos os medidores também os traça em um eixo próprio. As "
-     L"contas sem leituras no período aparecem em Sem leituras no período."},
+     L"aumenta. Os gastos em dólares aparecem junto às leituras do orçamento da Anthropic, no cartão dele e ao "
+     L"apontar para a linha dele. Sem limite mensal não há linha de orçamento: os gastos em dólares ganham um cartão "
+     L"próprio, e Todos os medidores os traça em um eixo próprio. As contas sem leituras no período aparecem em Sem "
+     L"leituras no período."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -5930,9 +6081,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Report an issue", L"Relatar um problema"},
     {L"", L"Reset Behavior to defaults", L"Redefinir Comportamento para o padrão"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
-          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
+          L"hover, poll every 10 minutes, hidden accounts every hour, threshold notifications at red.",
      L"Redefinir Comportamento para o padrão?\n\nIdioma automático, mostrar somente na tela principal, mostrar "
-     L"detalhes ao passar o mouse, consultar a cada 10 minutos, não consultar contas ocultas, notificações de limite "
+     L"detalhes ao passar o mouse, consultar a cada 10 minutos, contas ocultas a cada hora, notificações de limite "
      L"no vermelho."},
     {L"", L"Reset Display to defaults", L"Redefinir Exibição para o padrão"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
@@ -5992,10 +6143,6 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Short text", L"Texto curto"},
     {L"", L"Show details on hover", L"Mostrar detalhes ao passar o mouse"},
     {L"", L"Show on", L"Mostrar em"},
-    {L"", L"Show percentage text on hover or always to change this.",
-     L"Mostre o texto de porcentagem ao passar o mouse ou sempre para alterar isto."},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"Mostre o texto de porcentagem ou ative Siglas das cotas para alterar isto."},
     {L"", L"Show provider outages", L"Mostrar interrupções dos provedores"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -6105,8 +6252,9 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"A cor do texto da barra de tarefas, ou o laranja do Claude. Os detalhes, Contas e o histórico de uso seguem "
      L"essa escolha."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
-          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
-          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -6114,7 +6262,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Estes são níveis de cota amostrados, não tokens nem consumo diário. Escolha uma conta na barra lateral, ou "
      L"Todas as contas, e uma visualização: Curto prazo, Semanal, Uso adicional ou Todos os medidores. Todas as "
-     L"contas começa em Semanal, e uma conta, em Todos os medidores; cada uma mantém sua visualização até a janela "
+     L"contas começa em Semanal. Uma conta começa em Todos os medidores. Se Fable for sua única barra semanal, "
+     L"a linha semanal normal começa oculta. Cada modo mantém a visualização escolhida até a janela "
      L"fechar. A janela abre no Período padrão definido em Configurações > Histórico. Semanal segue as cotas "
      L"semanais selecionadas para a barra de tarefas em cada conta da Anthropic; as contas removidas mantêm as duas "
      L"cotas semanais, e Todos os medidores inclui as cotas semanais ocultas na barra de tarefas. As cotas Gemini, "
@@ -6154,9 +6303,6 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"pull requests.",
      L"As traduções são automáticas. Correções são bem-vindas como <link id=\"issues\">issues no GitHub</link> ou "
      L"pull requests."},
-    {L"", L"Turn off Reset countdown to change this.", L"Desative Contagem até o reinício para alterar isto."},
-    {L"", L"Turn on Pace markers to change this.", L"Ative Marcadores de ritmo para alterar isto."},
-    {L"", L"Turn on Record usage history to change this.", L"Ative Registrar histórico de uso para alterar isto."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Cotas indisponíveis são ocultadas automaticamente. Pelo menos uma fica selecionada."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -6177,7 +6323,6 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"", L"Usage history guide", L"Guia do histórico de uso"},
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"Usado preenche conforme a cota é consumida; Restante preenche com o que sobra. As cores sempre seguem o uso."},
-    {L"", L"Used on tiles when Identity is Label.", L"Usado nos blocos quando Identidade é Rótulo."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod",
      L"Versão {version}  ·  por Cleroth  ·  mod do Windhawk"},
     {L"", L"Vertical bar length", L"Comprimento da barra vertical"},
@@ -6189,6 +6334,12 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
           L"hours before and after now.",
      L"Gráficos semanais e mensais ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): a janela inteira, ou de 12 a 48 "
      L"horas antes e depois do momento atual."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Gráficos semanais e mensais do painel de detalhes: a janela inteira, ou de 12 a 48 horas antes e depois do "
+     L"momento atual."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"O que um desses gráficos mostra enquanto o ponteiro para sobre a linha da sua cota no painel."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"O que esses gráficos mostram enquanto o ponteiro para sobre a conta."},
     {L"", L"Where each account’s identity sits next to its bars.",
@@ -6201,7 +6352,10 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"Branco, o padrão, segue a cor do texto da barra de tarefas. Personalizar… abre o seletor de cores."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Os efeitos de transparência do Windows estão desativados, então ele aparece como Sólido."},
+    {L"", L"Work days only", L"Somente dias de trabalho"},
     {L"", L"Yellow from", L"Amarelo a partir de"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Seus dias de trabalho vão deste dia até o último, inclusive."},
     {L"", L"{exported} Includes both elapsed 7-day periods.",
      L"{exported} Inclui os dois períodos de 7 dias já decorridos."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
@@ -6272,6 +6426,14 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"account-state", L"Signed in", L"Conectado"},
     {L"account-state", L"Signing in…", L"Entrando…"},
     {L"account-state", L"Waiting for the local app", L"Aguardando o app local"},
+    {L"account-state", L"{hours, plural, one{Hidden, polled every hour} other{Hidden, polled every # hours}}",
+     L"{hours, plural, one{Oculta, consultada a cada hora} many{Oculta, consultada a cada # de horas} "
+     L"other{Oculta, consultada a cada # horas}}"},
+    {L"account-state", L"{minutes, plural, one{Hidden, polled every minute} other{Hidden, polled every # minutes}}",
+     L"{minutes, plural, one{Oculta, consultada a cada minuto} many{Oculta, consultada a cada # de minutos} "
+     L"other{Oculta, consultada a cada # minutos}}"},
+    {L"account-usage", L"{quota}: {percent} left, read {time}", L"{quota}: {percent} restante, leitura: {time}"},
+    {L"account-usage", L"{quota}: {percent} used, read {time}", L"{quota}: {percent} usado, leitura: {time}"},
     {L"add-account", L"Sign in with a code on github.com", L"Entre com um código no github.com"},
     {L"add-account", L"Sign in with an API key from the OpenCode console",
      L"Entre com uma chave de API do console do OpenCode"},
@@ -6390,8 +6552,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"Este plano não inclui créditos de IA."},
     {L"flyout-note", L"No premium request allowance on this plan.", L"Este plano não inclui solicitações premium."},
     {L"flyout-note", L"No quotas reported.", L"Nenhuma cota informada."},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.",
-     L"É necessário entrar. Clique nas barras para entrar."},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"É necessário entrar. Clique na conta na barra de tarefas para entrar."},
     {L"flyout-note", L"extra usage: unlimited", L"uso adicional: ilimitado"},
     {L"flyout-note", L"rate limits: none reported", L"limites de taxa: nenhum informado"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -6415,6 +6577,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"reinícios semanais disponíveis}}"},
     {L"free-resets", L"{resets} · expires {when}", L"{resets} · expira {when}"},
     {L"free-resets", L"{resets} · next expires {when}", L"{resets} · o próximo expira {when}"},
+    {L"hidden-polling", L"Not polled", L"Sem consulta"},
+    {L"hidden-polling", L"Same as visible accounts", L"Igual às contas visíveis"},
     {L"history-about", L"Axes and units", L"Eixos e unidades"},
     {L"history-about", L"Cards", L"Cartões"},
     {L"history-about", L"Legend and readout", L"Legenda e leitura"},
@@ -6444,6 +6608,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"history-card", L"Peak {reading}", L"Pico {reading}"},
     {L"history-card", L"Previous: {line}", L"Anterior: {line}"},
     {L"history-card", L"now", L"agora"},
+    {L"history-card", L"{amount} spent", L"{amount} gastos"},
     {L"history-card", L"{title} — details only", L"{title} — só detalhes"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -6471,6 +6636,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"history-range", L"7d", L"7\u00A0d"},
     {L"history-range", L"90d", L"90\u00A0d"},
     {L"history-range", L"All", L"Tudo"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · {amount} gastos · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter}: restante (%)"},
@@ -6590,6 +6757,8 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"placement", L"Right of Start", L"À direita do Iniciar"},
     {L"plan", L"Visual test", L"Teste visual"},
     {L"poll-interval", L"Custom", L"Personalizado"},
+    {L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# hora} many{# de horas} other{# horas}}"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# minuto} many{# de minutos} other{# minutos}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
@@ -6679,6 +6848,7 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
     {L"settings-section", L"Language", L"Idioma"},
     {L"settings-section", L"Links", L"Links"},
     {L"settings-section", L"Matrix", L"Matriz"},
+    {L"settings-section", L"Pace and projection", L"Ritmo e projeção"},
     {L"settings-section", L"Pace markers", L"Marcadores de ritmo"},
     {L"settings-section", L"Pies", L"Pizzas"},
     {L"settings-section", L"Placement", L"Posicionamento"},
@@ -6790,8 +6960,14 @@ static constexpr I18nEntry kI18nCatalogPtBr[] = {
      L"No ritmo das últimas 24\u00A0h: limite em ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"No ritmo desde {time}: limite em ~{duration}"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
-     L"No ritmo médio desta janela: limite em ~{duration}"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"Neste ritmo: limite em ~{duration}"},
+    {L"weekday", L"Friday", L"Sexta-feira"},
+    {L"weekday", L"Monday", L"Segunda-feira"},
+    {L"weekday", L"Saturday", L"Sábado"},
+    {L"weekday", L"Sunday", L"Domingo"},
+    {L"weekday", L"Thursday", L"Quinta-feira"},
+    {L"weekday", L"Tuesday", L"Terça-feira"},
+    {L"weekday", L"Wednesday", L"Quarta-feira"},
     {L"window-title", L"{app} — Settings", L"{app} — Configurações"},
     {L"window-title", L"{app} — Usage history", L"{app} — Histórico de uso"},
 };
@@ -6893,13 +7069,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Не удаётся безопасно отслеживать системные диалоговые окна; операция отменена."},
     {L"", L"Chart height", L"Высота графика"},
     {L"", L"Chart outline", L"Контур графика"},
+    {L"", L"Chart time span", L"Период графиков"},
+    {L"", L"Chart time span on hover", L"Период графиков при наведении"},
     {L"", L"Chart width", L"Ширина графика"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"Графики, статистика и экспорт в CSV по локальным замерам, даже когда запись выключена."},
-    {L"", L"Choose Custom in Cloud poll interval to edit.",
-     L"Чтобы изменить, выберите «Другой» в списке «Интервал опроса облака»."},
-    {L"", L"Choose Custom in Keep history to edit.", L"Чтобы изменить, выберите «Другой» в списке «Хранить историю»."},
-    {L"", L"Choose an identity position to change this.", L"Чтобы изменить, выберите положение идентификации."},
     {L"", L"Claude logo", L"Логотип Claude"},
     {L"", L"Cloud poll interval", L"Интервал опроса облака"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -6925,6 +7099,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Чтобы удалить его, добавьте аккаунт с этим поставщиком и меткой, а затем удалите этот аккаунт."},
     {L"", L"Could not update account visibility.", L"Не удалось изменить видимость аккаунта."},
     {L"", L"Credits max", L"Максимум кредитов"},
+    {L"", L"Custom hidden interval", L"Свой интервал для скрытых аккаунтов"},
     {L"", L"Custom interval", L"Свой интервал"},
     {L"", L"Custom retention", L"Свой срок хранения"},
     {L"", L"Default time span", L"Период по умолчанию"},
@@ -6955,17 +7130,19 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"Update Windows to show them.",
      L"Панель задач дисплея {number} находится сбоку экрана: в этой сборке Windows её область уведомлений не может "
      L"разместить полосы. Обновите Windows, чтобы показать их."},
-    {L"", L"Do not poll hidden accounts", L"Не опрашивать скрытые аккаунты"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.",
      L"Перетащите, чтобы изменить порядок. Переключатель скрывает аккаунт с панели задач."},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
      L"Перетащите, чтобы изменить порядок. Переключатель скрывает аккаунт с панели задач; скрытые аккаунты не "
      L"опрашиваются."},
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are polled less often.",
+     L"Перетащите, чтобы изменить порядок. Переключатель скрывает аккаунт с панели задач; скрытые аккаунты "
+     L"опрашиваются реже."},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
      L"Каждый аккаунт сам определяет, записывать ли историю: <link id=\"accounts\">Аккаунты</link> > Записывать "
-     L"историю. История скрытых аккаунтов не записывается, пока в разделе «Поведение» включено <link id=\"hidden\">Не "
-     L"опрашивать скрытые аккаунты</link>."},
+     L"историю. История скрытого аккаунта записывается, когда он опрашивается: <link "
+     L"id=\"hidden\">Поведение</link> > Скрытые аккаунты."},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -6999,6 +7176,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"many{Экспортировано # строк показателей} other{Экспортировано # строки показателей}} (выбранный "
      L"аккаунт) в {path}. Метки не включены; время в UTC."},
     {L"", L"Extra usage chart", L"График доп. использования"},
+    {L"", L"First work day", L"Первый рабочий день"},
     {L"", L"Free to use, modify and share.", L"Можно свободно использовать, изменять и распространять."},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -7015,10 +7193,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Gauge thickness", L"Толщина шкалы"},
     {L"", L"Height in pixels; one pie per quota, smaller from the third on.",
      L"Высота в пикселях; по одной диаграмме на квоту, начиная с третьей — меньше."},
-    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
-          L"them. Shared across Windows users.",
-     L"Скрытые аккаунты не опрашиваются и не записываются, даже если включено «Записывать историю». Выключите, чтобы "
-     L"продолжить их запись. Общий параметр для всех пользователей Windows."},
+    {L"", L"Hidden accounts", L"Скрытые аккаунты"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"История привязана к этому аккаунту и сохраняется при повторном входе. Для входа под другим логином добавьте "
      L"новый аккаунт."},
@@ -7030,6 +7205,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"session every minute.",
      L"Как часто опрашиваются Anthropic, OpenAI, GitHub Copilot и OpenCode Go. Локальный сеанс Antigravity "
      L"опрашивается каждую минуту."},
+    {L"", L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: never more often "
+          L"than visible ones. Shared across Windows users.",
+     L"Как часто опрашиваются аккаунты, скрытые с панели задач, — для раздела «Аккаунты» и истории использования: "
+     L"не чаще, чем видимые. Общий параметр для всех пользователей Windows."},
     {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
           L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
      L"Как панель сведений показывает доп. использование Anthropic: за его месяц, за окно недельной квоты в том же "
@@ -7044,8 +7223,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Keep history", L"Хранить историю"},
     {L"", L"Label", L"Метка"},
     {L"", L"Label font size", L"Размер шрифта метки"},
-    {L"", L"Language, displays, hover details, polling and notifications.",
-     L"Язык, дисплеи, сведения при наведении, опрос и уведомления."},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.",
+     L"Язык, дисплеи, сведения при наведении, рабочие дни, опрос и уведомления."},
+    {L"", L"Last work day", L"Последний рабочий день"},
     {L"", L"License", L"Лицензия"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"По умолчанию светло-серый, тёмный на светлой панели задач. «Другой…» открывает выбор цвета."},
@@ -7094,6 +7274,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Opens an account’s details after the pointer rests on it.",
      L"Открывает сведения об аккаунте, когда указатель задерживается на нём."},
     {L"", L"Orange from", L"Оранжевый от"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"Темп и прогнозы учитывают только ваши рабочие дни и не растут в выходные — для квот с окном длиннее суток. "
+     L"Использование в выходной день по-прежнему учитывается, а время сброса не меняется."},
     {L"", L"Pace markers", L"Метки темпа"},
     {L"", L"Palette", L"Палитра"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -7116,15 +7300,19 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"Проценты откладываются по левой оси; затенённая зона отмечает ваш красный порог. В режиме полос «Осталось» "
      L"(Параметры > Отображение) они показывают остаток, поэтому линии опускаются по мере роста использования, уходя "
      L"ниже 0% после превышения лимита, а зона располагается внизу. Вид «Доп. использование» показывает использованный "
      L"бюджет Anthropic, использованные ИИ-кредиты GitHub Copilot и использованный месячный лимит OpenCode Go (%) (в "
      L"режиме «Осталось» — их остаток), а также, на отдельной оси, оставшиеся кредиты OpenAI, которые уменьшаются по "
-     L"мере использования. Расходы в долларах показываются на карточках; вид «Все показатели» также строит их на "
-     L"отдельной оси. Аккаунты без замеров за выбранный период перечислены в карточке «Нет замеров за период»."},
+     L"мере использования. Расходы в долларах показываются вместе с замерами бюджета Anthropic: на его карточке и при "
+     L"наведении на его линию. Без месячного лимита линии бюджета нет: расходы в долларах получают отдельную карточку, "
+     L"а вид «Все показатели» строит их на отдельной оси. Аккаунты без замеров за выбранный период перечислены в "
+     L"карточке «Нет замеров за период»."},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -7191,9 +7379,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Report an issue", L"Сообщить о проблеме"},
     {L"", L"Reset Behavior to defaults", L"Сбросить «Поведение» к значениям по умолчанию"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
-          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
+          L"hover, poll every 10 minutes, hidden accounts every hour, threshold notifications at red.",
      L"Сбросить «Поведение» к значениям по умолчанию?\n\nАвтоматический язык, показ только на основном дисплее, "
-     L"сведения при наведении, опрос каждые 10 минут, скрытые аккаунты не опрашиваются, уведомления о пороге на "
+     L"сведения при наведении, опрос каждые 10 минут, скрытые аккаунты — каждый час, уведомления о пороге на "
      L"красном уровне."},
     {L"", L"Reset Display to defaults", L"Сбросить «Отображение» к значениям по умолчанию"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
@@ -7253,10 +7441,6 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Short text", L"Короткий текст"},
     {L"", L"Show details on hover", L"Показывать сведения при наведении"},
     {L"", L"Show on", L"Показывать на"},
-    {L"", L"Show percentage text on hover or always to change this.",
-     L"Чтобы изменить, выберите показ текста процентов при наведении или всегда."},
-    {L"", L"Show percentage text or turn on Quota keys to change this.",
-     L"Чтобы изменить, включите показ текста процентов или «Обозначения квот»."},
     {L"", L"Show provider outages", L"Показывать сбои поставщиков"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -7363,8 +7547,9 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Цвет текста панели задач или оранжевый цвет Claude. Панель сведений, раздел «Аккаунты» и история использования "
      L"следуют этому выбору."},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
-          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
-          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
@@ -7372,7 +7557,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"Здесь показаны уровни квот по замерам, а не токены или суточный расход. Выберите на боковой панели аккаунт или "
      L"«Все аккаунты», а также вид: «Краткосрочные», «Неделя», «Доп. использование» или «Все показатели». «Все "
-     L"аккаунты» открываются на виде «Неделя», отдельный аккаунт — на виде «Все показатели»; каждый сохраняет свой вид "
+     L"аккаунты» открываются на виде «Неделя», отдельный аккаунт — на виде «Все показатели». Если из недельных полос включена "
+     L"только Fable, обычная недельная линия изначально скрыта. Выбранный вид сохраняется в каждом режиме "
      L"до закрытия окна. Окно открывается с периодом, заданным параметром «Период по умолчанию» в разделе Параметры > "
      L"История. Вид «Неделя» следует выбору недельных квот каждого аккаунта Anthropic на панели задач; у удалённых "
      L"аккаунтов остаются обе недельные квоты, а вид «Все показатели» включает и недельные квоты, скрытые на панели "
@@ -7414,10 +7600,6 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"pull requests.",
      L"Переводы выполнены автоматически. Исправления можно прислать через <link id=\"issues\">issues на "
      L"GitHub</link> или pull requests."},
-    {L"", L"Turn off Reset countdown to change this.", L"Чтобы изменить, выключите «Отсчёт до сброса»."},
-    {L"", L"Turn on Pace markers to change this.", L"Чтобы изменить, включите «Метки темпа»."},
-    {L"", L"Turn on Record usage history to change this.",
-     L"Чтобы изменить, включите «Записывать историю использования»."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.",
      L"Недоступные квоты скрываются автоматически. Хотя бы одна остаётся выбранной."},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
@@ -7439,8 +7621,6 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"«Использовано» заполняется по мере расхода квоты, «Осталось» показывает остаток. Цвета всегда следуют "
      L"использованию."},
-    {L"", L"Used on tiles when Identity is Label.",
-     L"Используется на плитках, если в поле «Идентификация» выбрано «Метка»."},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"Версия {version}  ·  автор Cleroth  ·  мод Windhawk"},
     {L"", L"Vertical bar length", L"Длина вертикальной полосы"},
     {L"", L"Wait for the current sign-in to finish before changing identity.",
@@ -7451,6 +7631,11 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
           L"hours before and after now.",
      L"Недельные и месячные графики ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): всё окно или от 12 до 48 часов до "
      L"и после текущего момента."},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"Недельные и месячные графики в панели сведений: всё окно или от 12 до 48 часов до и после текущего момента."},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"Что показывает один из этих графиков, пока указатель задерживается на строке его квоты в панели."},
     {L"", L"What those charts show while the pointer rests on the account.",
      L"Что эти графики показывают, пока указатель задерживается на аккаунте."},
     {L"", L"Where each account’s identity sits next to its bars.",
@@ -7463,7 +7648,10 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"Белый (по умолчанию) следует цвету текста панели задач. «Другой…» открывает выбор цвета."},
     {L"", L"Windows transparency effects are off, so it shows as Solid.",
      L"Эффекты прозрачности Windows выключены, поэтому он отображается как «Сплошной»."},
+    {L"", L"Work days only", L"Только рабочие дни"},
     {L"", L"Yellow from", L"Жёлтый от"},
+    {L"", L"Your work days run from this day through the last one.",
+     L"Ваши рабочие дни идут с этого дня по последний включительно."},
     {L"", L"{exported} Includes both elapsed 7-day periods.", L"{exported} Включает оба прошедших 7-дневных периода."},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
@@ -7531,6 +7719,14 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"account-state", L"Signed in", L"Вход выполнен"},
     {L"account-state", L"Signing in…", L"Выполняется вход…"},
     {L"account-state", L"Waiting for the local app", L"Ожидание приложения"},
+    {L"account-state", L"{hours, plural, one{Hidden, polled every hour} other{Hidden, polled every # hours}}",
+     L"{hours, plural, one{Скрыт, опрос каждый # час} few{Скрыт, опрос каждые # часа} many{Скрыт, опрос каждые # "
+     L"часов} other{Скрыт, опрос каждые # часа}}"},
+    {L"account-state", L"{minutes, plural, one{Hidden, polled every minute} other{Hidden, polled every # minutes}}",
+     L"{minutes, plural, one{Скрыт, опрос каждую # минуту} few{Скрыт, опрос каждые # минуты} many{Скрыт, опрос "
+     L"каждые # минут} other{Скрыт, опрос каждые # минуты}}"},
+    {L"account-usage", L"{quota}: {percent} left, read {time}", L"{quota}: осталось {percent}, данные на {time}"},
+    {L"account-usage", L"{quota}: {percent} used, read {time}", L"{quota}: использовано {percent}, данные на {time}"},
     {L"add-account", L"Sign in with a code on github.com", L"Вход с кодом на github.com"},
     {L"add-account", L"Sign in with an API key from the OpenCode console", L"Вход с ключом API из консоли OpenCode"},
     {L"add-account", L"Sign in with your browser", L"Вход через браузер"},
@@ -7649,7 +7845,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"В этом тарифе нет ИИ-кредитов."},
     {L"flyout-note", L"No premium request allowance on this plan.", L"В этом тарифе нет премиум-запросов."},
     {L"flyout-note", L"No quotas reported.", L"Нет данных о квотах."},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"Требуется вход. Щёлкните полосы, чтобы войти."},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"Требуется вход. Щёлкните аккаунт на панели задач, чтобы войти."},
     {L"flyout-note", L"extra usage: unlimited", L"доп. использование: без ограничений"},
     {L"flyout-note", L"rate limits: none reported", L"лимиты запросов: нет данных"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -7673,6 +7870,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"сбросов} other{Доступно # недельного сброса}}"},
     {L"free-resets", L"{resets} · expires {when}", L"{resets} · истекает {when}"},
     {L"free-resets", L"{resets} · next expires {when}", L"{resets} · ближайший истекает {when}"},
+    {L"hidden-polling", L"Not polled", L"Не опрашиваются"},
+    {L"hidden-polling", L"Same as visible accounts", L"Как видимые аккаунты"},
     {L"history-about", L"Axes and units", L"Оси и единицы измерения"},
     {L"history-about", L"Cards", L"Карточки"},
     {L"history-about", L"Legend and readout", L"Легенда и подсказка"},
@@ -7702,6 +7901,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-card", L"Peak {reading}", L"Пик {reading}"},
     {L"history-card", L"Previous: {line}", L"Прошлая: {line}"},
     {L"history-card", L"now", L"сейчас"},
+    {L"history-card", L"{amount} spent", L"Потрачено {amount}"},
     {L"history-card", L"{title} — details only", L"{title} — только сведения"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -7729,6 +7929,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"history-range", L"7d", L"7\u00A0д"},
     {L"history-range", L"90d", L"90\u00A0д"},
     {L"history-range", L"All", L"Всё"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · потрачено {amount} · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter}, осталось (%)"},
@@ -7847,6 +8049,8 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"placement", L"Right of Start", L"Справа от кнопки «Пуск»"},
     {L"plan", L"Visual test", L"Визуальный тест"},
     {L"poll-interval", L"Custom", L"Другой"},
+    {L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}",
+     L"{hours, plural, one{# час} few{# часа} many{# часов} other{# часа}}"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}",
      L"{minutes, plural, one{# минута} few{# минуты} many{# минут} other{# минуты}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}",
@@ -7938,6 +8142,7 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
     {L"settings-section", L"Language", L"Язык"},
     {L"settings-section", L"Links", L"Ссылки"},
     {L"settings-section", L"Matrix", L"Матрица"},
+    {L"settings-section", L"Pace and projection", L"Темп и прогноз"},
     {L"settings-section", L"Pace markers", L"Метки темпа"},
     {L"settings-section", L"Pies", L"Диаграммы"},
     {L"settings-section", L"Placement", L"Размещение"},
@@ -8049,8 +8254,14 @@ static constexpr I18nEntry kI18nCatalogRu[] = {
      L"При темпе за последние 24\u00A0ч: лимит через ~{duration}"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}",
      L"При темпе с {time}: лимит через ~{duration}"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}",
-     L"При среднем темпе этого окна: лимит через ~{duration}"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"При таком темпе: лимит через ~{duration}"},
+    {L"weekday", L"Friday", L"Пятница"},
+    {L"weekday", L"Monday", L"Понедельник"},
+    {L"weekday", L"Saturday", L"Суббота"},
+    {L"weekday", L"Sunday", L"Воскресенье"},
+    {L"weekday", L"Thursday", L"Четверг"},
+    {L"weekday", L"Tuesday", L"Вторник"},
+    {L"weekday", L"Wednesday", L"Среда"},
     {L"window-title", L"{app} — Settings", L"{app} — Параметры"},
     {L"window-title", L"{app} — Usage history", L"{app} — История использования"},
 };
@@ -8129,12 +8340,11 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Cannot track native dialogs safely; operation cancelled.", L"无法安全地跟踪原生对话框；操作已取消。"},
     {L"", L"Chart height", L"图表高度"},
     {L"", L"Chart outline", L"图表轮廓"},
+    {L"", L"Chart time span", L"图表时间范围"},
+    {L"", L"Chart time span on hover", L"悬停时的图表时间范围"},
     {L"", L"Chart width", L"图表宽度"},
     {L"", L"Charts, statistics and CSV export from local samples, also while recording is off.",
      L"基于本地样本的图表、统计和 CSV 导出，记录关闭时也可使用。"},
-    {L"", L"Choose Custom in Cloud poll interval to edit.", L"在“云端轮询间隔”中选择“自定义”后即可编辑。"},
-    {L"", L"Choose Custom in Keep history to edit.", L"在“保留历史”中选择“自定义”后即可编辑。"},
-    {L"", L"Choose an identity position to change this.", L"选择一个标识位置后即可更改。"},
     {L"", L"Claude logo", L"Claude 徽标"},
     {L"", L"Cloud poll interval", L"云端轮询间隔"},
     {L"", L"Codex Spark, hidden model lanes such as gpt-reserve, and the Spark plan name in OpenAI details.",
@@ -8156,6 +8366,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"无法保存账户。复制的登录信息仍保留在尝试使用的新标识下。要删除它，请添加一个使用所尝试的提供商和标签的账户，然后将其移除。"},
     {L"", L"Could not update account visibility.", L"无法更新账户的可见性。"},
     {L"", L"Credits max", L"积分上限"},
+    {L"", L"Custom hidden interval", L"隐藏账户的自定义间隔"},
     {L"", L"Custom interval", L"自定义间隔"},
     {L"", L"Custom retention", L"自定义保留期"},
     {L"", L"Default time span", L"默认时间范围"},
@@ -8182,14 +8393,14 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Display {number}’s taskbar is on a side of the screen: its tray takes no bars on this Windows build. "
           L"Update Windows to show them.",
      L"显示器 {number} 的任务栏位于屏幕侧边：在此 Windows 内部版本上，其系统托盘无法放置条形。请更新 Windows 以显示条形。"},
-    {L"", L"Do not poll hidden accounts", L"不轮询隐藏的账户"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar.", L"拖动可重新排序。开关可在任务栏上隐藏账户。"},
     {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are not polled.",
      L"拖动可重新排序。开关可在任务栏上隐藏账户；隐藏的账户不会被轮询。"},
-    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. Hidden "
-          L"accounts are not recorded while <link id=\"hidden\">Do not poll hidden accounts</link> is on in Behavior.",
-     L"每个账户可单独选择是否记录：<link id=\"accounts\">账户</link> > 记录历史。在“行为”中开启<link "
-     L"id=\"hidden\">不轮询隐藏的账户</link>时，隐藏的账户不会被记录。"},
+    {L"", L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are polled less often.",
+     L"拖动可重新排序。开关可在任务栏上隐藏账户；隐藏的账户轮询频率较低。"},
+    {L"", L"Each account chooses whether it records: <link id=\"accounts\">Accounts</link> > Record history. A hidden "
+          L"account records when it is polled: <link id=\"hidden\">Behavior</link> > Hidden accounts.",
+     L"每个账户可单独选择是否记录：<link id=\"accounts\">账户</link> > 记录历史。隐藏的账户在被轮询时才会记录：<link id=\"hidden\">行为</link> > 隐藏的账户。"},
     {L"", L"Each chip above the chart names a line with its color and width: click it to hide or show the line; point "
           L"at it to emphasize the line. Point at the chart to read every nearby or overlapping line, current and "
           L"previous week, at the recorded reading nearest the drawn line, never an interpolated value. Values are "
@@ -8212,6 +8423,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"Labels omitted; times UTC.",
      L"已将 {rows, plural, other{# 行指标数据}}（所选账户）导出到 {path}。已省略标签；时间为 UTC。"},
     {L"", L"Extra usage chart", L"额外用量图表"},
+    {L"", L"First work day", L"首个工作日"},
     {L"", L"Free to use, modify and share.", L"可自由使用、修改和分享。"},
     {L"", L"From <link id=\"simple_icons\">Simple Icons</link> (CC0 1.0); the GitHub Copilot mark from <link "
           L"id=\"octicons\">Primer Octicons</link> (MIT License, Copyright (c) 2026 GitHub Inc.). Google Antigravity "
@@ -8226,9 +8438,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Gauge size", L"仪表大小"},
     {L"", L"Gauge thickness", L"仪表粗细"},
     {L"", L"Height in pixels; one pie per quota, smaller from the third on.", L"高度（像素）；每个配额一个饼图，从第三个起变小。"},
-    {L"", L"Hidden accounts are neither polled nor recorded, even with Record history on. Turn off to keep recording "
-          L"them. Shared across Windows users.",
-     L"即使开启了“记录历史”，隐藏的账户也不会被轮询或记录。关闭此项可继续记录它们。所有 Windows 用户共享此设置。"},
+    {L"", L"Hidden accounts", L"隐藏的账户"},
     {L"", L"History follows this entry, even after signing in again. Use a new entry for a different login.",
      L"历史会跟随此条目，即使重新登录也是如此。其他登录请使用新条目。"},
     {L"", L"History recording is off. Saved history stays; nothing new is recorded.", L"历史记录功能已关闭。已保存的历史会保留；不会记录新数据。"},
@@ -8236,6 +8446,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"How often Anthropic, OpenAI, GitHub Copilot and OpenCode Go are polled. Antigravity polls its local "
           L"session every minute.",
      L"轮询 Anthropic、OpenAI、GitHub Copilot 和 OpenCode Go 的频率。Antigravity 每分钟轮询其本地会话。"},
+    {L"", L"How often accounts hidden from the taskbar are polled, for Accounts and usage history: never more often "
+          L"than visible ones. Shared across Windows users.",
+     L"为“账户”页和使用历史轮询任务栏上已隐藏账户的频率：不会比可见账户更频繁。所有 Windows 用户共享此设置。"},
     {L"", L"How the details flyout charts Anthropic extra usage: over its month, over the weekly quota’s window on "
           L"the same scale, or as a bar. Usage graph tiles follow it for an extra usage chart of their own.",
      L"详情浮窗显示 Anthropic 额外用量的方式：按其所在月份绘制图表、按每周配额的时段以相同刻度绘制图表，或显示为条形。“用量图表”磁贴中额外用量有单独图表时，也遵循此设置。"},
@@ -8248,7 +8461,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Keep history", L"保留历史"},
     {L"", L"Label", L"标签"},
     {L"", L"Label font size", L"标签字号"},
-    {L"", L"Language, displays, hover details, polling and notifications.", L"语言、显示器、悬停详情、轮询和通知。"},
+    {L"", L"Language, displays, hover details, work days, polling and notifications.", L"语言、显示器、悬停详情、工作日、轮询和通知。"},
+    {L"", L"Last work day", L"最后一个工作日"},
     {L"", L"License", L"许可证"},
     {L"", L"Light grey by default, dark on a light taskbar. Custom... opens the color picker.",
      L"默认为浅灰色，在浅色任务栏上为深色。“自定义…”会打开颜色选择器。"},
@@ -8289,6 +8503,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"打开 AI 配额设置。无法读取已保存的设置；已保留备份。"},
     {L"", L"Opens an account’s details after the pointer rests on it.", L"指针停留在账户上时打开其详情。"},
     {L"", L"Orange from", L"橙色起点"},
+    {L"", L"Pace and projections count only your work days and stay level through your days off, for quotas whose "
+          L"window is longer than a day. Usage on a day off still counts, and reset times stay as they are.",
+     L"节奏和预测只计入工作日，在休息日保持不变，适用于时段超过一天的配额。休息日的用量仍会计入，重置时间不变。"},
     {L"", L"Pace markers", L"节奏标记"},
     {L"", L"Palette", L"调色板"},
     {L"", L"Percent of the current reading’s standard size: the ring and its dot, or the plain dot.",
@@ -8307,11 +8524,14 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
           L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the limit, "
           L"and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI credits used "
           L"and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI credits remaining, "
-          L"which fall as usage rises, on their own axis. Dollar spending shows on the cards; All meters also plots "
-          L"it on its own axis. Accounts without readings in the range are listed under No readings.",
+          L"which fall as usage rises, on their own axis. Dollars spent show with an Anthropic budget's readings, on "
+          L"its card and when pointing at its line. Without a monthly limit there is no budget line: the dollars get "
+          L"their own card, and All meters plots them on their own axis. Accounts without readings in the range are "
+          L"listed under No readings.",
      L"百分比使用左侧坐标轴；阴影带标示你的红色阈值。在“剩余量”条形模式下（“设置 > 显示”），百分比显示剩余部分，因此线条随用量上升而下降，超过上限后低于 0%，阴影带则位于底部。“额外用量”显示 Anthropic "
      L"已用预算、GitHub Copilot 已用 AI 积分和 OpenCode Go 已用月度额度（%）（“剩余量”模式下为剩余），以及在单独坐标轴上显示的 OpenAI "
-     L"剩余积分（随用量上升而下降）。美元花费显示在卡片上；“全部指标”还会在单独的坐标轴上绘制它。范围内没有读数的账户会列在“范围内无读数”下。"},
+     L"剩余积分（随用量上升而下降）。美元花费随 Anthropic "
+     L"预算的读数一起显示：在其卡片上，以及指向其线条时。没有月度上限时就没有预算线条：美元花费会有单独的卡片，“全部指标”会在单独的坐标轴上绘制它。范围内没有读数的账户会列在“范围内无读数”下。"},
     {L"", L"Permanently clear ALL local usage history for this Windows user, including deleted accounts?\r\n\r\nThis "
           L"cannot be undone. Settings and sign-ins are not changed. If recording stays enabled, future polls will "
           L"record new history.",
@@ -8365,9 +8585,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Report an issue", L"报告问题"},
     {L"", L"Reset Behavior to defaults", L"将“行为”重置为默认值"},
     {L"", L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary display only, show details on "
-          L"hover, poll every 10 minutes, do not poll hidden accounts, threshold notifications at red.",
-     L"要将“行为”重置为默认值吗？\n\n自动选择语言、仅在主显示器上显示、悬停时显示详情、每 10 "
-     L"分钟轮询一次、不轮询隐藏的账户、在红色阈值时通知。"},
+          L"hover, poll every 10 minutes, hidden accounts every hour, threshold notifications at red.",
+     L"要将“行为”重置为默认值吗？\n\n自动选择语言、仅在主显示器上显示、悬停时显示详情、每 10 分钟轮询一次、隐藏的账户每小时轮询一次、在红色阈值时通知。"},
     {L"", L"Reset Display to defaults", L"将“显示”重置为默认值"},
     {L"", L"Reset Display to its defaults?\n\nAcrylic material, used bar mode, the default palette (custom colors "
           L"reset too) with yellow from 50%, orange from 75% and red from 90%, stale data marked, additional OpenAI "
@@ -8412,8 +8631,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Short text", L"短文本"},
     {L"", L"Show details on hover", L"悬停时显示详情"},
     {L"", L"Show on", L"显示于"},
-    {L"", L"Show percentage text on hover or always to change this.", L"将“百分比文本”设为“悬停时显示”或“始终显示”后即可更改。"},
-    {L"", L"Show percentage text or turn on Quota keys to change this.", L"显示百分比文本或开启“配额简称”后即可更改。"},
     {L"", L"Show provider outages", L"显示提供商故障"},
     {L"", L"Shown in details, and next to bars when Identity is Label. Unique per provider; renaming keeps the "
           L"sign-in and history.",
@@ -8494,15 +8711,16 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"The taskbar’s text color, or Claude’s orange. Details, Accounts and usage history match.",
      L"任务栏文字颜色，或 Claude 的橙色。详情、“账户”和使用历史中也会保持一致。"},
     {L"", L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, or All "
-          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly, one "
-          L"account on All meters; each keeps its view until the window closes. The window opens on the Default time "
+          L"accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on Weekly. One "
+          L"account starts on All meters. If Fable is its only weekly bar, the regular Weekly line starts hidden. "
+          L"Each mode keeps your choice until the window closes. The window opens on the Default time "
           L"span set in Settings > History. Weekly follows each Anthropic account's taskbar weekly selections; "
           L"removed accounts keep both weeklies, and All meters includes weeklies hidden on the taskbar. Antigravity "
           L"Gemini, Argon and Claude/GPT quotas share the matching short-term and weekly views. Each quota keeps its "
           L"own line and resets; overlapping limits are never added or merged. Short-window labels use recorded "
           L"durations (or the current limit when unknown). Antigravity shows limiting pools, which can change.",
      L"这些是采样得到的配额水平，而非 token "
-     L"数或每日消耗量。在侧栏中选择一个账户或“所有账户”，再选择一个视图：“短期”、“每周”、“额外用量”或“全部指标”。“所有账户”默认显示“每周”，单个账户默认显示“全部指标”；各自保留所选视图，直到窗口关闭。窗口打开时使用“设置 "
+     L"数或每日消耗量。在侧栏中选择一个账户或“所有账户”，再选择一个视图：“短期”、“每周”、“额外用量”或“全部指标”。“所有账户”默认显示“每周”，单个账户默认显示“全部指标”。如果该账户启用的每周配额条只有 Fable，常规每周配额曲线默认隐藏。两种模式各自保留所选视图，直到窗口关闭。窗口打开时使用“设置 "
      L"> 历史”中设定的“默认时间范围”。“每周”遵循每个 Anthropic 账户在任务栏上的每周配额选择；已移除的账户保留两种每周配额，“全部指标”还包括在任务栏上隐藏的每周配额。Antigravity 的 "
      L"Gemini、Argon 和 Claude/GPT 配额归入对应的“短期”和“每周”视图。每个配额保留各自的线条和重置；重叠的限额绝不会相加或合并。短时段标签使用记录的时长（未知时使用当前限额）。Antigravity "
      L"显示起限制作用的配额池，这些配额池可能会变化。"},
@@ -8532,9 +8750,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Translations are machine-made. Corrections are welcome as <link id=\"issues\">GitHub issues</link> or "
      L"pull requests.",
      L"翻译由机器生成。欢迎通过 <link id=\"issues\">GitHub 议题</link>或拉取请求提交更正。"},
-    {L"", L"Turn off Reset countdown to change this.", L"关闭“重置倒计时”后即可更改。"},
-    {L"", L"Turn on Pace markers to change this.", L"开启“节奏标记”后即可更改。"},
-    {L"", L"Turn on Record usage history to change this.", L"开启“记录使用历史”后即可更改。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected.", L"不可用的配额会自动隐藏。至少保留一个选中。"},
     {L"", L"Unavailable quotas hide automatically. At least one stays selected. Usage graphs show Credits as a number "
           L"on the {key7d} chart.",
@@ -8550,7 +8765,6 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Usage history guide", L"使用历史指南"},
     {L"", L"Used fills as quota is consumed; Remaining fills with what is left. Colors always follow usage.",
      L"“已用量”随配额消耗而填充；“剩余量”以剩余部分填充。颜色始终跟随用量。"},
-    {L"", L"Used on tiles when Identity is Label.", L"“标识”为“标签”时在磁贴上使用。"},
     {L"", L"Version {version}  ·  by Cleroth  ·  Windhawk mod", L"版本 {version}  ·  作者 Cleroth  ·  Windhawk 模组"},
     {L"", L"Vertical bar length", L"垂直条形长度"},
     {L"", L"Wait for the current sign-in to finish before changing identity.", L"请等待当前登录完成后再更改标识。"},
@@ -8558,6 +8772,11 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"Weekly and monthly charts ({key7d}, {keyFa}, {keyAr}, {keyEx}, {keyMo}): the whole window, or 12 to 48 "
           L"hours before and after now.",
      L"每周和每月图表（{key7d}、{keyFa}、{keyAr}、{keyEx}、{keyMo}）：显示整个时段，或当前时刻前后 12 至 48 小时。"},
+    {L"", L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 hours before and after "
+          L"now.",
+     L"详情浮窗中的每周和每月图表：显示整个时段，或当前时刻前后 12 至 48 小时。"},
+    {L"", L"What one of those charts shows while the pointer rests on its quota’s row in the flyout.",
+     L"指针停留在浮窗中某个配额所在的行上时，该配额图表显示的范围。"},
     {L"", L"What those charts show while the pointer rests on the account.", L"指针停留在账户上时，这些图表显示的范围。"},
     {L"", L"Where each account’s identity sits next to its bars.", L"每个账户的标识相对其条形的位置。"},
     {L"", L"Where the bars sit on the taskbar. Left side and Right of Start are experimental: the taskbar’s buttons "
@@ -8566,7 +8785,9 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"", L"White, the default, follows the taskbar’s text color. Custom... opens the color picker.",
      L"默认的白色跟随任务栏文字颜色。“自定义…”会打开颜色选择器。"},
     {L"", L"Windows transparency effects are off, so it shows as Solid.", L"Windows 透明效果已关闭，因此显示为“纯色”。"},
+    {L"", L"Work days only", L"仅工作日"},
     {L"", L"Yellow from", L"黄色起点"},
+    {L"", L"Your work days run from this day through the last one.", L"工作日从这一天开始，到最后一个工作日为止。"},
     {L"", L"{exported} Includes both elapsed 7-day periods.", L"{exported}包含两个已过去的 7 天时段。"},
     {L"account-details", L"{provider} · {plan} · {state}", L"{provider} · {plan} · {state}"},
     {L"account-details", L"{provider} · {state}", L"{provider} · {state}"},
@@ -8631,6 +8852,12 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"account-state", L"Signed in", L"已登录"},
     {L"account-state", L"Signing in…", L"正在登录…"},
     {L"account-state", L"Waiting for the local app", L"正在等待本地应用"},
+    {L"account-state", L"{hours, plural, one{Hidden, polled every hour} other{Hidden, polled every # hours}}",
+     L"{hours, plural, other{已隐藏，每 # 小时轮询}}"},
+    {L"account-state", L"{minutes, plural, one{Hidden, polled every minute} other{Hidden, polled every # minutes}}",
+     L"{minutes, plural, other{已隐藏，每 # 分钟轮询}}"},
+    {L"account-usage", L"{quota}: {percent} left, read {time}", L"{quota}：剩余 {percent}，读取于 {time}"},
+    {L"account-usage", L"{quota}: {percent} used, read {time}", L"{quota}：已用 {percent}，读取于 {time}"},
     {L"add-account", L"Sign in with a code on github.com", L"在 github.com 上使用代码登录"},
     {L"add-account", L"Sign in with an API key from the OpenCode console", L"使用 OpenCode 控制台中的 API 密钥登录"},
     {L"add-account", L"Sign in with your browser", L"通过浏览器登录"},
@@ -8746,7 +8973,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"flyout-note", L"No AI-credit allowance on this plan.", L"此计划不包含 AI 积分额度。"},
     {L"flyout-note", L"No premium request allowance on this plan.", L"此计划不包含高级请求额度。"},
     {L"flyout-note", L"No quotas reported.", L"未报告任何配额。"},
-    {L"flyout-note", L"Sign-in required. Click the bars to sign in.", L"需要登录。单击条形以登录。"},
+    {L"flyout-note", L"Sign-in required. Click the account on the taskbar to sign in.",
+     L"需要登录。单击任务栏上的账户以登录。"},
     {L"flyout-note", L"extra usage: unlimited", L"额外用量：无限制"},
     {L"flyout-note", L"rate limits: none reported", L"速率限制：未报告"},
     {L"free-resets", L"{count, plural, one{# Fable reset available} other{# Fable resets available}}",
@@ -8764,6 +8992,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
      L"{count, plural, other{可用每周重置 # 次}}"},
     {L"free-resets", L"{resets} · expires {when}", L"{resets} · 过期：{when}"},
     {L"free-resets", L"{resets} · next expires {when}", L"{resets} · 下一次过期：{when}"},
+    {L"hidden-polling", L"Not polled", L"不轮询"},
+    {L"hidden-polling", L"Same as visible accounts", L"与可见账户相同"},
     {L"history-about", L"Axes and units", L"坐标轴和单位"},
     {L"history-about", L"Cards", L"卡片"},
     {L"history-about", L"Legend and readout", L"图例和读数"},
@@ -8793,6 +9023,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-card", L"Peak {reading}", L"峰值 {reading}"},
     {L"history-card", L"Previous: {line}", L"前一周：{line}"},
     {L"history-card", L"now", L"现在"},
+    {L"history-card", L"{amount} spent", L"已花费 {amount}"},
     {L"history-card", L"{title} — details only", L"{title} — 仅详情"},
     {L"history-card", L"{title}<link id=\"status\"> · {status}</link>",
      L"{title}<link id=\"status\"> · {status}</link>"},
@@ -8818,6 +9049,8 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"history-range", L"7d", L"7天"},
     {L"history-range", L"90d", L"90天"},
     {L"history-range", L"All", L"全部"},
+    {L"history-reading", L"{value} · {amount} spent · {time}", L"{value} · 已花费 {amount} · {time}"},
+    {L"history-reading", L"{value} · {amount} · {time}", L"{value} · {amount} · {time}"},
     {L"history-reading", L"{value} · {time}", L"{value} · {time}"},
     {L"history-series", L"{account} · {meter}", L"{account} · {meter}"},
     {L"history-series", L"{meter} left (%)", L"{meter} 剩余（%）"},
@@ -8926,6 +9159,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"placement", L"Right of Start", L"“开始”右侧"},
     {L"plan", L"Visual test", L"视觉测试"},
     {L"poll-interval", L"Custom", L"自定义"},
+    {L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}", L"{hours, plural, other{# 小时}}"},
     {L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}", L"{minutes, plural, other{# 分钟}}"},
     {L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}", L"{minutes, plural, other{分钟}}"},
     {L"preview", L"Preview", L"预览"},
@@ -9011,6 +9245,7 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"settings-section", L"Language", L"语言"},
     {L"settings-section", L"Links", L"链接"},
     {L"settings-section", L"Matrix", L"矩阵"},
+    {L"settings-section", L"Pace and projection", L"节奏和预测"},
     {L"settings-section", L"Pace markers", L"节奏标记"},
     {L"settings-section", L"Pies", L"饼图"},
     {L"settings-section", L"Placement", L"放置位置"},
@@ -9110,7 +9345,14 @@ static constexpr I18nEntry kI18nCatalogZhHans[] = {
     {L"usage-band", L"From yellow", L"自黄色起"},
     {L"usage-projection", L"At the last 24h's rate: limit in ~{duration}", L"按过去 24 小时的速率：约 {duration}后达到上限"},
     {L"usage-projection", L"At the rate since {time}: limit in ~{duration}", L"按自 {time} 以来的速率：约 {duration}后达到上限"},
-    {L"usage-projection", L"At this window's average rate: limit in ~{duration}", L"按此窗口的平均速率：约 {duration}后达到上限"},
+    {L"usage-projection", L"At this rate: limit in ~{duration}", L"按当前速率：约 {duration}后达到上限"},
+    {L"weekday", L"Friday", L"星期五"},
+    {L"weekday", L"Monday", L"星期一"},
+    {L"weekday", L"Saturday", L"星期六"},
+    {L"weekday", L"Sunday", L"星期日"},
+    {L"weekday", L"Thursday", L"星期四"},
+    {L"weekday", L"Tuesday", L"星期二"},
+    {L"weekday", L"Wednesday", L"星期三"},
     {L"window-title", L"{app} — Settings", L"{app} — 设置"},
     {L"window-title", L"{app} — Usage history", L"{app} — 使用历史"},
 };
@@ -9713,8 +9955,8 @@ enum class SparklineExtra {
     Percent,  // Of the limit; the amount without one.
 };
 
-// How much of a window longer than its span a sparkline's chart shows: the whole window, or the
-// hours before and after now.
+// How much of a window longer than its span a chart shows (a sparkline's, the details flyout's):
+// the whole window, or the hours before and after now.
 enum class SparklineSpan {
     Window,
     Hours12,
@@ -9839,6 +10081,11 @@ enum class NotificationLevel {
     Red,
 };
 
+// Settings::hiddenPollMinutes in place of an interval: hidden accounts aren't polled, or are
+// polled as often as shown ones.
+static constexpr int kHiddenPollNever = 0;
+static constexpr int kHiddenPollAsShown = -1;
+
 struct Settings {
     std::vector<AccountConfig> accounts;
     TaskbarMonitorMode taskbarMonitorMode = TaskbarMonitorMode::Primary;
@@ -9858,7 +10105,9 @@ struct Settings {
     int historyRetentionDays = 0;
     // The range the usage history window opens on.
     HistoryUiRange historyDefaultRange = HistoryUiRange::Week;
-    bool skipHiddenPolling = true;
+    // Minutes between a hidden account's polls (AccountPollMinutes), or kHiddenPollNever or
+    // kHiddenPollAsShown.
+    int hiddenPollMinutes = 60;
     int barLength = 100;          // Stacked bars'
     int verticalBarLength = 32;   // Vertical bars', short enough to fit the taskbar
     int barThickness = 8;
@@ -9923,6 +10172,16 @@ struct Settings {
     // additional_rate_limits lines (Codex Spark, gpt-reserve, ...) and the Spark plan name.
     bool showOpenAiExtraLimits = false;
     ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;
+    // The details flyout's charts of long windows, and the chart's whose quota row the pointer
+    // rests on (none: as the others).
+    SparklineSpan flyoutChartSpan = SparklineSpan::Window;
+    std::optional<SparklineSpan> flyoutChartHoverSpan = SparklineSpan::Hours24;
+    // Quotas whose window is longer than a day pace and project over the week's work days only:
+    // every weekday from the first through the last (SYSTEMTIME::wDayOfWeek, 0: Sunday), wrapping
+    // past Saturday. The days stay while it is off.
+    bool workDays = false;
+    int firstWorkDay = 1;
+    int lastWorkDay = 5;
     UsagePalette usagePalette = UsagePalette::Default;
     // The Custom palette's colors, kept while another palette is chosen.
     std::array<COLORREF, 4> customUsageColors = kDefaultUsageColors;
@@ -9939,6 +10198,33 @@ struct Settings {
 // The tile style's percentage text: vertical bars keep their own.
 static PercentTextVisibility PercentTextVisibilityFor(const Settings& s) {
     return s.barLayout == BarLayout::Vertical ? s.verticalPercentTextVisibility : s.percentTextVisibility;
+}
+
+// Minutes between an account's polls: Antigravity's local server every minute, the others at the
+// cloud poll interval; a hidden account at the hidden interval, never more often than shown. 0: a
+// hidden account that isn't polled. `pollMinutes`, `hiddenPollMinutes`: the settings'.
+static int AccountPollMinutes(const AccountConfig& account, int pollMinutes, int hiddenPollMinutes) {
+    int shown = account.provider == L"antigravity" ? 1 : pollMinutes;
+    if (!account.hidden || hiddenPollMinutes < 0) return shown;
+    return hiddenPollMinutes ? std::max(hiddenPollMinutes, shown) : 0;
+}
+
+// How long after it was read an account's reading is stale: two of its polls; a hidden account's
+// that isn't polled, two of a shown one's.
+static ULONGLONG AccountStaleAfterMs(const AccountConfig& account, int pollMinutes, int hiddenPollMinutes) {
+    int minutes = AccountPollMinutes(account, pollMinutes, hiddenPollMinutes);
+    if (!minutes) minutes = AccountPollMinutes(account, pollMinutes, kHiddenPollAsShown);
+    return ULONGLONG(minutes) * 2 * 60000;
+}
+
+// Seconds an account waits after a rate limit that names no wait, the `refusals`th such one in a
+// row, polled every `pollMinutes`: that interval for the first two; then the interval rounded
+// down to 5 minutes, plus 5 minutes per further one and `jitterSeconds`, up to 15 minutes. An
+// interval of 15 minutes or more stays as it is.
+static int RateLimitWaitSeconds(int refusals, int pollMinutes, int jitterSeconds) {
+    int interval = pollMinutes * 60;
+    if (refusals <= 2 || interval >= 900) return interval;
+    return std::min(900, (interval / 300 + refusals - 2) * 300 + jitterSeconds);
 }
 
 static constexpr ULONGLONG kFiveHourWindowMs = 5ULL * 60 * 60 * 1000;
@@ -10103,6 +10389,34 @@ struct AccountData {
     bool stale = true;
     bool needsLogin = false;  // Sign-in required; left-click signs in instead of refreshing.
 };
+
+// An account's usage where one number stands for it (the Accounts list, the taskbar menu's Show
+// on taskbar entries): its weekly quota; its Fable or Argon weekly while that one is on the
+// taskbar and the weekly isn't; GitHub Copilot's only quota, its monthly allowance.
+struct AccountUsageSummary {
+    int bar = kWeeklyBar;  // The quota's QuotaBarIndex
+    double pct = -1;       // Used %; < 0: no reading
+    bool stale = false;    // The last poll failed, or the reading is older than AccountStaleAfterMs
+    ULONGLONG resetUnixMs = 0;  // Upcoming reset of this reading's window, when known
+};
+
+// A reading counts until its window resets: after that it says nothing about the new one.
+static AccountUsageSummary AccountUsageSummaryFor(const Settings& s, const AccountConfig& account,
+                                                  const AccountData& data, ULONGLONG now) {
+    AccountUsageSummary summary;
+    summary.bar = account.provider == L"copilot"                                     ? kExtraUsageBar :
+                  !account.showBars[kWeeklyBar] && account.showBars[kFableWeeklyBar] ? kFableWeeklyBar : kWeeklyBar;
+    const WindowUsage& usage = summary.bar == kExtraUsageBar  ? data.extraUsage :
+                               summary.bar == kFableWeeklyBar ? data.fableWeek : data.winWeek;
+    summary.stale = data.stale || !data.lastSuccessMs ||
+                    now - data.lastSuccessMs > AccountStaleAfterMs(account, s.pollMinutes, s.hiddenPollMinutes);
+    bool reset = usage.resetUnixMs > data.lastSuccessMs && now >= usage.resetUnixMs;
+    if (std::isfinite(usage.pct) && usage.pct >= 0 && !reset) {
+        summary.pct = usage.pct;
+        if (usage.resetUnixMs > now && usage.resetUnixMs > data.lastSuccessMs) summary.resetUnixMs = usage.resetUnixMs;
+    }
+    return summary;
+}
 
 // A provider's status page state, by severity: its worst watched component that isn't operational.
 enum class OutageLevel : uint8_t {
@@ -10501,6 +10815,7 @@ struct AppliedState {
     double labelOpacity = -1;
     uint32_t labelMarkColor = 0;  // The Label identity's outage glyph color; 0: plain text.
     Thickness identityMargin{-1, -1, -1, -1};  // Bar columns' identity, label or logo.
+    int identityShown = -1;  // Bar columns' identity: -1 unset, 0 collapsed, 1 shown.
     double columnOpacity = -1;
     int barMask = -1;
     int visible = -1;  // -1 unset, 0 collapsed, 1 visible.
@@ -10698,10 +11013,10 @@ struct FlyoutChartShape {
     std::vector<std::vector<winrt::Windows::Foundation::Point>> lines;  // Runs of 2+ readings.
     std::vector<winrt::Windows::Foundation::Point> dots;                // Isolated readings.
     winrt::Windows::Foundation::Point now{-1.f, -1.f};    // Current point; X is the now line.
-    winrt::Windows::Foundation::Point projectionEnd{-1.f, -1.f};  // X < 0 without a projection.
-    // The even-pace line's ends; X < 0 without one.
-    winrt::Windows::Foundation::Point paceFrom{-1.f, -1.f};
-    winrt::Windows::Foundation::Point paceTo{-1.f, -1.f};
+    // The projection from the current point on and the even-pace line, each with a corner where
+    // a day off starts or ends; empty without one.
+    std::vector<winrt::Windows::Foundation::Point> projection;
+    std::vector<winrt::Windows::Foundation::Point> pace;
     uint32_t color = 0;
 
     bool operator==(const FlyoutChartShape&) const = default;
@@ -10731,11 +11046,11 @@ struct FlyoutQuotaRow {
 
     // Usage chart, shown instead of the bar while the row has a recorded curve.
     FrameworkElement chart{nullptr};
-    wuxs::Line chartPace{nullptr};
+    wuxs::Polyline chartPace{nullptr};
     wuxs::Path chartArea{nullptr};
     wuxs::Path chartLines{nullptr};
     wuxs::Path chartDots{nullptr};
-    wuxs::Line chartProjection{nullptr};
+    wuxs::Polyline chartProjection{nullptr};
     wuxs::Line chartNow{nullptr};
     wuxs::Ellipse chartMarker{nullptr};
     FlyoutChartShape chartShape;
@@ -10785,6 +11100,17 @@ struct FlyoutPopup {
     // Quota grid columns: name/number and details. Charts give details a fixed width.
     ColumnDefinition namesColumn{nullptr};
     ColumnDefinition detailsColumn{nullptr};
+    // The quota rows' grid and its pointer delegates, which keep the pointer's last position over
+    // it, in the card's coordinates (none off it). `hoverRow`: the main row there (a
+    // FlyoutRowIndex; -1: none), whose chart takes the span on hover. `chartHoverSwap`: that span
+    // differs from the charts' own, so a change of row updates the card.
+    Grid rowsGrid{nullptr};
+    winrt::event_token rowsMovedToken{};
+    winrt::event_token rowsExitedToken{};
+    winrt::event_token rowsCanceledToken{};
+    std::optional<winrt::Windows::Foundation::Point> rowsPointer;
+    int hoverRow = -1;
+    bool chartHoverSwap = false;
     // Chart legend, shown while a row shows a chart.
     FrameworkElement legend{nullptr};
     FrameworkElement notes{nullptr};
@@ -10850,7 +11176,10 @@ struct QuotaUiInstance {
     bool frameSide = false;
     double frameThickness = 0;
     bool edgeChanged = false;
+    // The settings the grid was built from and their generation, or the later ones it took
+    // without a rebuild (KeepQuotaGrids).
     ULONGLONG buildSettingsGeneration = 0;
+    Settings buildSettings;
     bool buildVisualTestMode = false;
     // The language current at build, which the grid's updates, menus and flyouts keep: a grid
     // built in another one is never reused. Each update refreshes its regional number format
@@ -11438,6 +11767,21 @@ static std::wstring FormatLocalDayTime(SYSTEMTIME const& local) {
     return std::wstring(day) + L" " + FormatLocalTime(local);
 }
 
+// When a reading that is out of date was taken: its local time, with its weekday from a day back,
+// or the region's short date from six days back; empty when unreadable.
+static std::wstring FormatReadingTime(ULONGLONG unixMs, ULONGLONG now) {
+    constexpr ULONGLONG kDayMs = 24ULL * 3600 * 1000;
+    SYSTEMTIME local;
+    if (!UnixMsToLocalSystemTime(unixMs, &local)) return {};
+    if (now - unixMs < kDayMs) return FormatLocalTime(local);
+    wchar_t date[80];
+    if (now - unixMs < 6 * kDayMs ||
+        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE, &local, nullptr, date, ARRAYSIZE(date), nullptr) <= 0) {
+        return FormatLocalDayTime(local);
+    }
+    return date;
+}
+
 // A duration in its two largest units, dropping a zero second one: "1d 3h", "2h 15m", "4m 12s" or
 // "45s".
 static std::wstring FormatShortDuration(const I18nLocale& locale, ULONGLONG seconds) {
@@ -11967,7 +12311,7 @@ struct StoredToken {
 static std::mutex g_authMutex;
 static std::mutex g_authEpochMutex;
 // Per identity, bumped under g_authEpochMutex whenever its stored sign-in ends: replaced by a new
-// sign-in, deleted, or moved away by a rename (whose redirect leads saves on to the new identity).
+// sign-in, deleted, or renamed away (only a copied sign-in redirects saves to its new identity).
 // A save with an earlier epoch is stale; a refresh never bumps it.
 static std::vector<std::pair<uint64_t, ULONGLONG>> g_authEpochs;
 
@@ -11983,7 +12327,8 @@ static std::vector<AuthRenameRedirect> g_authRenameRedirects;
 // Per identity, bumped under g_authEpochMutex, after the token store changes, whenever its sign-in
 // is replaced, deleted or moved by a rename; never by a token refresh. The fetch thread keeps
 // details read through a login (the Anthropic plan, the Codex free resets' expiry) under it, so
-// another login never shows them.
+// another login never shows them; nor its reading (ClearPublishedReadingLocked; a rename moves it
+// with the sign-in, in the same section).
 static std::vector<std::pair<uint64_t, uint64_t>> g_signInGenerations;
 
 static uint64_t SignInGenerationLocked(uint64_t idHash) {
@@ -12105,6 +12450,18 @@ static void BumpAuthEpochLocked(uint64_t idHash) {
     g_authEpochs.push_back({idHash, 1});
 }
 
+// An identity's published reading goes with the sign-in it was read through: cleared in the
+// g_authEpochMutex section that bumps its sign-in generation (callers hold it). The fetch thread
+// reads the published data and the generations under that lock, so a reading it holds is its
+// account's sign-in's as of then.
+static void ClearPublishedReadingLocked(uint64_t idHash) {
+    std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
+    std::lock_guard<std::mutex> dataLock(g_dataMutex);
+    for (size_t i = 0; i < g_settings.accounts.size() && i < g_data.size(); i++) {
+        if (AccountIdentityHash(g_settings.accounts[i]) == idHash) g_data[i] = {};
+    }
+}
+
 // `newSignIn`: a sign-in's first token, rather than a refreshed one. It starts a new epoch, so a
 // token read before it (a refresh in flight) can't replace it.
 static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authEpoch,
@@ -12132,16 +12489,22 @@ static TokenSaveResult SaveStoredTokenIfCurrent(uint64_t idHash, ULONGLONG authE
     if (newSignIn) {
         BumpAuthEpochLocked(destinationIdentity);
         BumpSignInGenerationLocked(destinationIdentity);
+        ClearPublishedReadingLocked(destinationIdentity);
     }
     if (savedIdentity) *savedIdentity = destinationIdentity;
     return TokenSaveResult::Saved;
 }
 
+// A sign-in that couldn't be deleted is still the account's: its epoch ends all the same (saves
+// in flight go stale), its details and reading stay.
 static bool ClearStoredTokenAndBumpAuthEpoch(uint64_t idHash) {
     std::lock_guard<std::mutex> lk(g_authEpochMutex);
     bool cleared = ClearStoredToken(idHash);
     BumpAuthEpochLocked(idHash);
-    BumpSignInGenerationLocked(idHash);
+    if (cleared) {
+        BumpSignInGenerationLocked(idHash);
+        ClearPublishedReadingLocked(idHash);
+    }
     return cleared;
 }
 
@@ -14118,6 +14481,8 @@ static bool ParseAntigravityQuotaSummary(const std::string& body, AccountData* d
 static bool ParseAntigravityUserStatus(const std::string& body, AccountData* d,
                                        AccountError* error);
 
+// `foundServer`: one is running, whether it answered or its language server gave no endpoint or
+// token to ask it with.
 static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundServer = nullptr) {
     *info = {};
     if (foundServer) *foundServer = false;
@@ -14130,6 +14495,8 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
         DWORD pid;
         std::wstring mainCsrfToken;
         std::wstring extensionCsrfToken;
+        // Where a server started without a token on its command line writes it.
+        std::wstring discoveryFolder;
         std::vector<int> explicitMainPorts;
         int extensionPort = 0;
         bool cli = false;
@@ -14191,13 +14558,30 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
                  extensionCsrf.find_first_of(L"\r\n") != std::wstring::npos)) {
                 continue;
             }
-            if (!cli && mainCsrf.empty() && extensionCsrf.empty()) continue;
 
             Candidate candidate;
             candidate.pid = pe.th32ProcessID;
             candidate.mainCsrfToken = std::move(mainCsrf);
             candidate.extensionCsrfToken = std::move(extensionCsrf);
             candidate.cli = cli;
+            // A server given its token in its environment writes it to a discovery file under
+            // <home>\.gemini\<app data dir>\daemon.
+            if (candidate.mainCsrfToken.empty()) {
+                std::wstring appDataDir;
+                for (PCWSTR flag : std::array<PCWSTR, 2>{L"app_data_dir", L"app-data-dir"}) {
+                    appDataDir = ParseCmdLineFlag(cmdLine, flag);
+                    if (!appDataDir.empty()) break;
+                }
+                if (appDataDir.empty()) appDataDir = L"antigravity";
+                wchar_t home[MAX_PATH];
+                DWORD homeLength = GetEnvironmentVariableW(L"USERPROFILE", home, ARRAYSIZE(home));
+                if (homeLength > 0 && homeLength < ARRAYSIZE(home) &&
+                    appDataDir.find_first_of(L"\\/:") == std::wstring::npos &&
+                    appDataDir.find_first_not_of(L'.') != std::wstring::npos) {
+                    candidate.discoveryFolder =
+                        std::wstring(home, homeLength) + L"\\.gemini\\" + appDataDir + L"\\daemon";
+                }
+            }
             bool ide = lowerCmdLine.find(L"antigravity-ide") != std::wstring::npos ||
                        lowerCmdLine.find(L"antigravity ide") != std::wstring::npos ||  // i18n-en
                        lowerCmdLine.find(L"\\extensions\\antigravity\\") != std::wstring::npos ||
@@ -14259,6 +14643,35 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
             if (port == candidate.extensionPort) continue;
             if (std::find(ports.begin(), ports.end(), port) == ports.end()) ports.push_back(port);
         }
+
+        // The discovery file of the server's HTTP port names its PID and token. Files outlive
+        // their server and a later one can take the port: only one naming this PID counts.
+        if (candidate.mainCsrfToken.empty() && !candidate.discoveryFolder.empty()) {
+            for (int port : ports) {
+                winrt::file_handle file{CreateFileW(
+                    (candidate.discoveryFolder + L"\\hub_" + std::to_wstring(port) + L".json").c_str(),
+                    GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+                std::string text(4096, '\0');
+                DWORD read = 0;
+                if (!file || !ReadFile(file.get(), text.data(), (DWORD)text.size(), &read, nullptr)) {
+                    continue;
+                }
+                text.resize(read);
+                try {
+                    auto discovery = JsonObject::Parse(Utf8ToWide(text));
+                    std::wstring token = GetStr(discovery, L"csrfToken");
+                    if (GetNum(discovery, L"pid") == candidate.pid && !token.empty() &&
+                        token.find_first_of(L"\r\n") == std::wstring::npos) {
+                        candidate.mainCsrfToken = std::move(token);
+                        break;
+                    }
+                } catch (...) {
+                    // Not a discovery file.
+                }
+            }
+        }
+
         if (candidate.cli || !candidate.mainCsrfToken.empty()) {
             for (int port : ports) {
                 endpoints.push_back({port, true, &candidate.mainCsrfToken});
@@ -14269,6 +14682,7 @@ static bool DiscoverAntigravityServer(AntigravityServerInfo* info, bool* foundSe
             endpoints.push_back(
                 {candidate.extensionPort, false, &candidate.extensionCsrfToken});
         }
+        if (endpoints.empty() && !candidate.cli && foundServer) *foundServer = true;
 
         for (const auto& endpoint : endpoints) {
             if (g_unloading) return false;
@@ -16713,7 +17127,7 @@ static std::optional<BurnUpCurve> CopyBurnUpCurve(uint64_t historyId, int flyout
     auto account = std::find_if(g_settings.accounts.begin(), g_settings.accounts.end(),
         [&](const AccountConfig& candidate) { return candidate.historyId == historyId; });
     if (!g_settings.historyEnabled || g_historyIdsPendingSave || account == g_settings.accounts.end() ||
-        !account->recordHistory || (account->hidden && g_settings.skipHiddenPolling)) {
+        !account->recordHistory || (account->hidden && g_settings.hiddenPollMinutes == kHiddenPollNever)) {
         return std::nullopt;
     }
     uint32_t provider = HistoryProviderCode(account->provider);
@@ -17502,7 +17916,7 @@ static void FireThresholdNotification(const std::wstring& title, const std::wstr
                     return RegSetValueExW(key, name, 0, REG_SZ, reinterpret_cast<const BYTE*>(value),
                                           DWORD((wcslen(value) + 1) * sizeof(wchar_t)));
                 };
-                status = setValue(L"DisplayName", L"Taskbar AI Quota");  // i18n-en
+                status = setValue(L"DisplayName", L"Taskbar AI Usage Quota");  // i18n-en
                 LSTATUS iconStatus = icon.empty() ? ERROR_FILE_NOT_FOUND : setValue(L"IconUri", icon.c_str());
                 if (status == ERROR_SUCCESS && iconStatus != ERROR_SUCCESS) {
                     Wh_Log(L"Could not register the notifications' icon: %ld", iconStatus);
@@ -17617,12 +18031,10 @@ static constexpr ULONGLONG kDetailsRetryMs = 2ULL * 60 * 60 * 1000;  // Unless a
 // Returns the sign-in generation the result was read through. Once that sign-in is replaced,
 // removed or moved, the result is that login's, whatever it says (a rejected refresh included):
 // the fetch thread polls again rather than publish it. A refreshed token's stale save means just
-// that.
-static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retryAfterSec,
-                             AccountDetailsCache* details) {
-    d->error = {};
-    d->retryDeadlineMs = 0;
-    d->needsLogin = false;
+// that. If `d` belongs to an earlier generation, start from the current published reading:
+// empty after a sign-in or sign-out, carried with the token after a rename.
+static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, uint64_t readingGeneration,
+                             int* retryAfterSec, AccountDetailsCache* details) {
     uint64_t idHash = AccountIdentityHash(acc);
 
     // Antigravity uses local language server discovery, not OAuth.
@@ -17649,11 +18061,20 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
         bool configured;
         {
             std::lock_guard<std::mutex> settingsLock(g_settingsMutex);
-            configured = std::any_of(g_settings.accounts.begin(), g_settings.accounts.end(),
+            auto it = std::find_if(g_settings.accounts.begin(), g_settings.accounts.end(),
                 [&](const AccountConfig& account) { return AccountIdentityHash(account) == idHash; });
+            configured = it != g_settings.accounts.end();
+            if (signInGeneration != readingGeneration) {
+                std::lock_guard<std::mutex> dataLock(g_dataMutex);
+                size_t index = it - g_settings.accounts.begin();
+                *d = configured && index < g_data.size() ? g_data[index] : AccountData{};
+            }
         }
         signedIn = configured && LoadStoredToken(idHash, &tok) && !tok.accessToken.empty();
     }
+    d->error = {};
+    d->retryDeadlineMs = 0;
+    d->needsLogin = false;
     if (!signedIn) {
         d->stale = true;
         d->needsLogin = true;
@@ -17761,19 +18182,9 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
         }
     }
 
-    if (!r.ok) {
-        d->stale = true;
-        d->error = {AccountErrorCode::Network};
-        return signInGeneration;
-    }
-    if (r.status == 401) {
-        d->stale = true;
-        d->needsLogin = true;
-        d->error = {AccountErrorCode::Unauthorized};
-        return signInGeneration;
-    }
     // GitHub's rate limits answer 403 with Retry-After or a message naming the rate limit; any
-    // other 403 means the signed-in GitHub account has no Copilot seat or plan.
+    // other 403 means the signed-in GitHub account has no Copilot seat or plan. A rate limit's
+    // status and headers say enough, even when its body couldn't be read.
     bool githubRateLimited = false;
     if (copilot && r.status == 403) {
         std::string message = r.body;
@@ -17784,7 +18195,19 @@ static uint64_t FetchAccount(const AccountConfig& acc, AccountData* d, int* retr
     if (r.status == 429 || githubRateLimited) {
         d->stale = true;
         d->error = {AccountErrorCode::RateLimited};
-        *retryAfterSec = r.retryAfterSec > 0 ? r.retryAfterSec : 120;
+        // 0 when it names no wait: the polling loop picks one.
+        *retryAfterSec = r.retryAfterSec;
+        return signInGeneration;
+    }
+    if (!r.ok) {
+        d->stale = true;
+        d->error = {AccountErrorCode::Network};
+        return signInGeneration;
+    }
+    if (r.status == 401) {
+        d->stale = true;
+        d->needsLogin = true;
+        d->error = {AccountErrorCode::Unauthorized};
         return signInGeneration;
     }
     if (copilot && r.status == 403) {
@@ -17893,8 +18316,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
     std::vector<uint64_t> retryIdentityHashes;
     std::vector<ULONGLONG> retryDeadlineMs;
     std::vector<ULONGLONG> nextPollDeadlineMs;
+    // Each account's poll interval (AccountPollMinutes) as of the settings last seen.
+    std::vector<int> lastPollMinutes;
     // The sign-in generation each account's last poll read its token with.
     std::vector<uint64_t> pollSignInGeneration;
+    // Each account's rate limits in a row that named no wait (RateLimitWaitSeconds).
+    std::vector<int> rateLimitRefusals;
     std::vector<AccountDetailsCache> accountDetails;
     // Per-account notification arm state at the chosen threshold, indexed by QuotaBarIndex:
     // -1 unknown (primes without firing), 0 below/armed, 1 above/already notified.
@@ -17969,8 +18396,14 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         }
         std::vector<AccountConfig> accounts;
         std::vector<AccountData> results;
+        // The sign-in generation each account's reading in `results` was read through: its
+        // current one as the round starts (the published data is always its account's sign-in's,
+        // see ClearPublishedReadingLocked), then that of its poll.
+        std::vector<uint64_t> readingGeneration;
+        // Each account's poll interval in minutes (AccountPollMinutes); 0: not polled.
+        std::vector<int> pollMinutes;
         int intervalMin, notificationThreshold;
-        bool notificationsOn, historyEnabled, skipHiddenPolling;
+        bool notificationsOn, historyEnabled;
         int historyRetentionDays;
         ULONGLONG settingsGeneration, historyContinuityGeneration, curvePolicyGeneration;
         const uint64_t historyEpoch = g_historyEpoch.load();
@@ -17978,6 +18411,9 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         // this round's curves stale.
         bool rebuildAllCurves = g_burnUpRebuildRequested.exchange(false);
         {
+            // The auth lock keeps a sign-in change from falling between the generations and the
+            // published data read here.
+            std::lock_guard<std::mutex> authLock(g_authEpochMutex);
             std::lock_guard<std::mutex> lk(g_settingsMutex);
             accounts = g_settings.accounts;
             intervalMin = g_settings.pollMinutes;
@@ -17985,7 +18421,10 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             notificationsOn = g_settings.notificationLevel != NotificationLevel::Off;
             historyEnabled = g_settings.historyEnabled && !g_historyIdsPendingSave;
             historyRetentionDays = g_settings.historyRetentionDays;
-            skipHiddenPolling = g_settings.skipHiddenPolling;
+            for (const AccountConfig& account : accounts) {
+                pollMinutes.push_back(AccountPollMinutes(account, intervalMin, g_settings.hiddenPollMinutes));
+                readingGeneration.push_back(SignInGenerationLocked(AccountIdentityHash(account)));
+            }
             settingsGeneration = g_settingsGeneration;
             historyContinuityGeneration = g_historyContinuityGeneration;
             curvePolicyGeneration = g_burnUpPolicyGeneration.load();
@@ -18005,21 +18444,26 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             lastLoggedErrorStates.assign(accounts.size(), {});
 
             // Remap provider-directed Retry-After, normal poll deadlines, the sign-in they were
-            // read through and account details by stable account identity so settings changes
-            // don't cause another request for unchanged accounts.
+            // read through, rate limit counts and account details by stable account identity so
+            // settings changes don't cause another request for unchanged accounts.
             auto oldIdentityHashes = std::move(retryIdentityHashes);
             auto oldRetryDeadlineMs = std::move(retryDeadlineMs);
             auto oldNextPollDeadlineMs = std::move(nextPollDeadlineMs);
+            auto oldPollMinutes = std::exchange(lastPollMinutes, pollMinutes);
             auto oldPollSignInGeneration = std::move(pollSignInGeneration);
+            auto oldRateLimitRefusals = std::move(rateLimitRefusals);
             auto oldAccountDetails = std::move(accountDetails);
             std::vector<bool> oldDeadlineUsed(oldIdentityHashes.size(), false);
             retryIdentityHashes.resize(accounts.size());
             retryDeadlineMs.assign(accounts.size(), 0);
             nextPollDeadlineMs.assign(accounts.size(), 0);
             pollSignInGeneration.assign(accounts.size(), 0);
+            rateLimitRefusals.assign(accounts.size(), 0);
             accountDetails.assign(accounts.size(), {});
             for (size_t i = 0; i < accounts.size(); ++i) {
                 retryIdentityHashes[i] = AccountIdentityHash(accounts[i]);
+                // An identity new here (added, or renamed) starts from its current sign-in.
+                pollSignInGeneration[i] = readingGeneration[i];
                 for (size_t j = 0; j < oldIdentityHashes.size() &&
                                     j < oldRetryDeadlineMs.size(); ++j) {
                     if (!oldDeadlineUsed[j] &&
@@ -18028,16 +18472,30 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                         if (j < oldPollSignInGeneration.size()) {
                             pollSignInGeneration[i] = oldPollSignInGeneration[j];
                         }
+                        if (j < oldRateLimitRefusals.size()) rateLimitRefusals[i] = oldRateLimitRefusals[j];
                         if (j < oldAccountDetails.size()) {
                             accountDetails[i] = std::move(oldAccountDetails[j]);
                         }
                         if (j < oldNextPollDeadlineMs.size()) {
+                            // Its poll interval changed (the setting, or it was hidden or shown):
+                            // its next poll comes that interval after its reading, sooner or
+                            // later than it was due. Without a reading to count from, at most
+                            // that interval from now, and a hidden account whose last poll
+                            // failed waits all of it, not its early retry. Not polled, its
+                            // deadline waits as it is.
                             nextPollDeadlineMs[i] = oldNextPollDeadlineMs[j];
-                            ULONGLONG latestDeadline = NowUnixMs() +
-                                (accounts[i].provider == L"antigravity" ? 1ULL :
-                                 (ULONGLONG)intervalMin) * 60000;
-                            if (nextPollDeadlineMs[i] > latestDeadline) {
-                                nextPollDeadlineMs[i] = latestDeadline;
+                            ULONGLONG pollIntervalMs = (ULONGLONG)pollMinutes[i] * 60000;
+                            bool changed = j < oldPollMinutes.size() && oldPollMinutes[j] != pollMinutes[i];
+                            bool failed = bool(results[i].error);
+                            if (pollIntervalMs && changed && !failed && results[i].lastSuccessMs) {
+                                nextPollDeadlineMs[i] = results[i].lastSuccessMs + pollIntervalMs;
+                            } else if (pollIntervalMs && ((changed && failed && accounts[i].hidden) ||
+                                                          nextPollDeadlineMs[i] > NowUnixMs() + pollIntervalMs)) {
+                                nextPollDeadlineMs[i] = NowUnixMs() + pollIntervalMs;
+                            }
+                            // The flyout's countdown to a pending retry follows a moved deadline.
+                            if (results[i].retryDeadlineMs) {
+                                results[i].retryDeadlineMs = std::max(retryDeadlineMs[i], nextPollDeadlineMs[i]);
                             }
                         }
                         oldDeadlineUsed[j] = true;
@@ -18075,9 +18533,6 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         bool refreshSelected = !refreshAll && std::find(refreshRequested.begin(),
                                                         refreshRequested.end(), true) !=
                                                   refreshRequested.end();
-        // What the round started with, for polls whose sign-in changed (see FetchAccount).
-        const std::vector<AccountData> startResults = results;
-        std::vector<bool> polled(accounts.size(), false);
         std::vector<bool> fetchedOk(accounts.size(), false);
         std::vector<HistorySample> historyBatch;
         ULONGLONG nextRetryMs = 0;
@@ -18085,25 +18540,27 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         bool anyError = false;
         for (size_t i = 0; i < accounts.size() && !g_unloading; i++) {
             ULONGLONG nowMs = NowUnixMs();
-            // Hiding still stops polling by default. The explicit history exception never
-            // polls an unrecorded hidden account, including during Refresh all.
-            if (accounts[i].hidden && (skipHiddenPolling || !historyEnabled ||
-                                        !accounts[i].recordHistory)) continue;
-            // A poll through an earlier sign-in (replaced, removed or moved since) set that
-            // login's deadlines: the current one polls now.
-            if (pollSignInGeneration[i] != CurrentSignInGeneration(retryIdentityHashes[i])) {
+            // The account's sign-in was replaced or removed since its last poll: that login's
+            // deadlines and rate limit count go with it, so the current one polls now.
+            uint64_t signInGeneration = CurrentSignInGeneration(retryIdentityHashes[i]);
+            if (pollSignInGeneration[i] != signInGeneration) {
                 retryDeadlineMs[i] = 0;
                 nextPollDeadlineMs[i] = 0;
+                rateLimitRefusals[i] = 0;
             }
+            // A hidden account that isn't polled, Refresh all included.
+            if (!pollMinutes[i]) {
+                pollSignInGeneration[i] = signInGeneration;
+                continue;
+            }
+            // Not asked for in a refresh of chosen accounts: it waits for its own retry or poll,
+            // and one already due polls in the next round, which follows at once.
             if (refreshSelected && !refreshRequested[i]) {
-                if (retryDeadlineMs[i] > nowMs &&
-                    (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs)) {
-                    nextRetryMs = retryDeadlineMs[i];
-                } else if (nextPollDeadlineMs[i] > nowMs &&
-                           (nextPollMs == 0 || nextPollDeadlineMs[i] < nextPollMs)) {
-                    nextPollMs = nextPollDeadlineMs[i];
-                } else if (nextPollMs == 0 || nowMs < nextPollMs) {
-                    nextPollMs = nowMs;
+                if (retryDeadlineMs[i] > nowMs) {
+                    if (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs) nextRetryMs = retryDeadlineMs[i];
+                } else {
+                    ULONGLONG dueMs = std::max(nextPollDeadlineMs[i], nowMs);
+                    if (nextPollMs == 0 || dueMs < nextPollMs) nextPollMs = dueMs;
                 }
                 continue;
             }
@@ -18127,17 +18584,23 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 nextPollMs = nowMs;
                 break;
             }
+            const ULONGLONG pollIntervalMs = (ULONGLONG)pollMinutes[i] * 60000;
+            const uint64_t lastPollGeneration = pollSignInGeneration[i];
             int retryAfter = 0;
-            polled[i] = true;
-            pollSignInGeneration[i] =
-                FetchAccount(accounts[i], &results[i], &retryAfter, &accountDetails[i]);
+            pollSignInGeneration[i] = readingGeneration[i] =
+                FetchAccount(accounts[i], &results[i], readingGeneration[i], &retryAfter, &accountDetails[i]);
             // Its sign-in changed meanwhile: poll once more with the current one (none after a
             // sign-out). Should it change again, publication drops the result.
             if (pollSignInGeneration[i] != CurrentSignInGeneration(retryIdentityHashes[i])) {
-                results[i] = startResults[i];
                 retryAfter = 0;
-                pollSignInGeneration[i] =
-                    FetchAccount(accounts[i], &results[i], &retryAfter, &accountDetails[i]);
+                pollSignInGeneration[i] = readingGeneration[i] =
+                    FetchAccount(accounts[i], &results[i], readingGeneration[i], &retryAfter, &accountDetails[i]);
+            }
+            // Another sign-in than its last poll's: its notifications and rate limit count start
+            // over, as a new account's.
+            if (pollSignInGeneration[i] != lastPollGeneration) {
+                armState[i].fill(-1);
+                rateLimitRefusals[i] = 0;
             }
             // The journal rejects samples without a known provider code.
             uint32_t providerCode = HistoryProviderCode(accounts[i].provider);
@@ -18145,8 +18608,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 HistorySample sample;
                 sample.accountId = accounts[i].historyId;
                 sample.timeMs = NowUnixMs();
-                sample.intervalMs = (accounts[i].provider == L"antigravity" ? 1ULL :
-                                     (ULONGLONG)intervalMin) * 60000;
+                sample.intervalMs = pollIntervalMs;
                 // A settings pause/resume or poll-rate change must not bridge an interval
                 // where recording was disabled, even if it was shorter than two polls.
                 sample.session = historySession ^ (historyContinuityGeneration * 0x9e3779b97f4a7c15ULL);
@@ -18185,20 +18647,40 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 }
                 historyBatch.push_back(sample);
             }
+            // A rate limit that names no wait waits longer with each one in a row
+            // (RateLimitWaitSeconds). Refreshes are refused for 15 minutes of that at most: a
+            // longer wait is the account's interval, which its poll deadline keeps. A reading, or
+            // a rate limit naming its wait, starts the count over; other failures, which don't
+            // show the limit lifted, keep it.
+            bool waitsInterval = accounts[i].hidden;
+            if (results[i].error.code == AccountErrorCode::RateLimited && retryAfter <= 0) {
+                rateLimitRefusals[i]++;
+                unsigned jitter = 0;
+                BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&jitter), sizeof(jitter),
+                                BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+                int wait = RateLimitWaitSeconds(rateLimitRefusals[i], pollMinutes[i], int(jitter % 31));
+                Wh_Log(L"Fetch [%d] rate limited without a wait, %d in a row: next try in %d s", (int)i,
+                       rateLimitRefusals[i], wait);
+                retryAfter = std::min(wait, 900);
+                waitsInterval = true;
+            } else if (!results[i].error || results[i].error.code == AccountErrorCode::RateLimited) {
+                rateLimitRefusals[i] = 0;
+            }
+            // A failed poll retries when the provider says or after its rate limit's wait, else in
+            // two minutes if that is sooner than the interval; a hidden account's never polls more
+            // often than its interval. The flyout counts down to the later deadline.
             if (retryAfter > 0) {
-                nextPollDeadlineMs[i] = 0;
+                nextPollDeadlineMs[i] = waitsInterval ? NowUnixMs() + pollIntervalMs : 0;
                 retryDeadlineMs[i] = NowUnixMs() + (ULONGLONG)retryAfter * 1000;
-                results[i].retryDeadlineMs = retryDeadlineMs[i];
+                results[i].retryDeadlineMs = std::max(retryDeadlineMs[i], nextPollDeadlineMs[i]);
                 if (nextRetryMs == 0 || retryDeadlineMs[i] < nextRetryMs) {
                     nextRetryMs = retryDeadlineMs[i];
                 }
             } else {
                 retryDeadlineMs[i] = 0;
                 results[i].retryDeadlineMs = 0;
-                ULONGLONG pollDelayMs = accounts[i].provider == L"antigravity"
-                                            ? 60000
-                                            : (ULONGLONG)intervalMin * 60000;
-                if (results[i].error && !results[i].needsLogin &&
+                ULONGLONG pollDelayMs = pollIntervalMs;
+                if (results[i].error && !results[i].needsLogin && !accounts[i].hidden &&
                     accounts[i].provider != L"antigravity") {
                     pollDelayMs = std::min<ULONGLONG>(pollDelayMs, 120000);
                 }
@@ -18209,7 +18691,7 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
             }
 
             if (results[i].error) {
-                if (retryAfter <= 0 && !results[i].needsLogin &&
+                if (retryAfter <= 0 && !results[i].needsLogin && !accounts[i].hidden &&
                     accounts[i].provider != L"antigravity") {
                     anyError = true;
                 }
@@ -18235,16 +18717,19 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         int publishedThreshold = notificationThreshold;
         bool notificationsEnabled = notificationsOn;
         {
-            // What this round read through a sign-in replaced, removed or moved since isn't
-            // published, recorded or notified: the account polls again at once. Nor are account
-            // details read so (this round or an earlier one, the usage request failing since). The
-            // lock keeps a sign-in change from falling between these checks and the publication.
+            // A reading held through a sign-in replaced, removed or moved since, polled this
+            // round or not, isn't published, recorded or notified: the account shows none and
+            // polls again at once. Nor are account details read so (this round or an earlier one,
+            // the usage request failing since). The lock keeps a sign-in change from falling
+            // between these checks and the publication.
             std::lock_guard<std::mutex> authLock(g_authEpochMutex);
+            std::vector<bool> dropped(accounts.size(), false);
             for (size_t i = 0; i < accounts.size() && i < results.size() &&
                                i < accountDetails.size(); i++) {
                 uint64_t signInGeneration = SignInGenerationLocked(AccountIdentityHash(accounts[i]));
-                if (polled[i] && pollSignInGeneration[i] != signInGeneration) {
-                    results[i] = startResults[i];
+                if (readingGeneration[i] != signInGeneration) {
+                    dropped[i] = true;
+                    results[i] = {};
                     fetchedOk[i] = false;
                     std::erase_if(historyBatch, [&](const HistorySample& sample) {
                         return sample.accountId == accounts[i].historyId;
@@ -18276,10 +18761,12 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
                 remappedResults = previousCurrentResults;
                 remappedFetchedOk.assign(currentAccounts.size(), false);
                 std::vector<bool> oldResultUsed(results.size(), false);
+                // A dropped reading replaces nothing: what is published for its identity now (none
+                // after a sign-in change, a renamed account's own after renames back) stays.
                 for (size_t i = 0; i < currentAccounts.size(); i++) {
                     bool matched = false;
                     for (size_t j = 0; j < accounts.size() && j < results.size(); j++) {
-                        if (!oldResultUsed[j] &&
+                        if (!oldResultUsed[j] && !dropped[j] &&
                             AccountIdentityHash(accounts[j]) ==
                                 AccountIdentityHash(currentAccounts[i])) {
                             remappedResults[i] = results[j];
@@ -18414,16 +18901,13 @@ static DWORD WINAPI FetchThreadProc(LPVOID) {
         // Status pages after the round's polls and notifications, so they never hold them up.
         ULONGLONG statusDueTick = PollProviderStatuses(providerStatus);
 
+        // Until the earliest retry or poll: one that came due during the round, while later
+        // accounts or the status pages were read, runs at once.
         DWORD waitMs = (DWORD)intervalMin * 60000;
         if (anyError) waitMs = std::min(waitMs, (DWORD)120000);
         ULONGLONG nowMs = NowUnixMs();
-        if (nextRetryMs > nowMs) {
-            waitMs = (DWORD)std::min<ULONGLONG>(waitMs, nextRetryMs - nowMs);
-        }
-        if (nextPollMs <= nowMs && nextPollMs != 0) {
-            waitMs = 0;
-        } else if (nextPollMs > nowMs) {
-            waitMs = (DWORD)std::min<ULONGLONG>(waitMs, nextPollMs - nowMs);
+        for (ULONGLONG dueMs : {nextRetryMs, nextPollMs}) {
+            if (dueMs) waitMs = (DWORD)std::min<ULONGLONG>(waitMs, dueMs > nowMs ? dueMs - nowMs : 0);
         }
         // Local retention must wake independently of slow provider polling. Existing
         // per-account deadlines still prevent this wake from issuing early requests.
@@ -19330,6 +19814,121 @@ static FlyoutTheme LoadFlyoutTheme() {
     return theme;
 }
 
+// src/taskbar/work-clock.h
+// Work days: the working time of a quota window whose pace and projection skip the user's days
+// off, as plain values from explicit inputs. Pure: local time comes through its source.
+
+// A time's local date and time on this PC; false when it has none.
+using LocalTimeSource = std::function<bool(ULONGLONG unixMs, SYSTEMTIME* local)>;
+
+// The week's work days: every weekday from `first` through `last` (SYSTEMTIME::wDayOfWeek, 0:
+// Sunday), wrapping past Saturday. Without `local`, every day is one.
+struct WorkDays {
+    int first = 1, last = 5;
+    LocalTimeSource local;
+};
+
+// The settings' work days by `local`'s calendar: every day while the setting is off or its days
+// cover the week.
+static WorkDays WorkDaysFor(const Settings& settings, const LocalTimeSource& local) {
+    int first = std::clamp(settings.firstWorkDay, 0, 6), last = std::clamp(settings.lastWorkDay, 0, 6);
+    if (!settings.workDays || (last - first + 7) % 7 == 6) return {};
+    return {first, last, local};
+}
+
+// A quota window's working time: its span (WorkClockFor) without the days off in it.
+struct WorkClock {
+    ULONGLONG start = 0, reset = 0;
+    // The days off in the window, by local date: in order and apart, each run of them from its
+    // first instant to the first of the work day after it, inside the window.
+    std::vector<std::pair<ULONGLONG, ULONGLONG>> off;
+    ULONGLONG total = 0;  // Working time from start to reset; 0 without a window or a work day in it.
+
+    // Working time from `from` to `to`; outside the window every time counts.
+    ULONGLONG Work(ULONGLONG from, ULONGLONG to) const {
+        if (to <= from) return 0;
+        ULONGLONG work = to - from;
+        for (const auto& [begin, end] : off) {
+            ULONGLONG first = std::max(begin, from), last = std::min(end, to);
+            if (first < last) work -= last - first;
+        }
+        return work;
+    }
+
+    // The share of the window's working time passed at `time`: even use's share of the quota then.
+    double Elapsed(ULONGLONG time) const { return total ? double(Work(start, time)) / double(total) : 0; }
+
+    // Where a line from `from` to `to` that is straight in working time turns: both, and between
+    // them each day off's start and end.
+    std::vector<ULONGLONG> Corners(ULONGLONG from, ULONGLONG to) const {
+        std::vector<ULONGLONG> corners{from};
+        for (const auto& [begin, end] : off) {
+            for (ULONGLONG edge : {begin, end}) {
+                if (edge > from && edge < to) corners.push_back(edge);
+            }
+        }
+        corners.push_back(to);
+        return corners;
+    }
+};
+
+// The working time of `window`: all of it, less `days`' days off when it is longer than a day
+// (a shorter one runs whatever the day). A day off is every time `days.local` puts on its date:
+// the window is cut where a date ends and where the local clock is set forward or back, so a day
+// the clock changes on is as long as it was. A source that fails leaves every day a work day.
+static WorkClock WorkClockFor(const WorkDays& days, const WindowUsage& window) {
+    static constexpr long long kDayMs = 24LL * 60 * 60 * 1000;
+    WorkClock clock;
+    if (!window.windowDurationMs || window.resetUnixMs <= window.windowDurationMs) return clock;
+    clock.start = window.resetUnixMs - window.windowDurationMs;
+    clock.reset = window.resetUnixMs;
+    clock.total = window.windowDurationMs;
+    if (!days.local || window.windowDurationMs <= (ULONGLONG)kDayMs) return clock;
+
+    // A time on the local clock: milliseconds from 1970 by its date (the civil calendar's days,
+    // counted in years from March and 400-year eras) and time of day.
+    auto localMs = [&](ULONGLONG time) -> std::optional<long long> {
+        SYSTEMTIME local;
+        if (!days.local(time, &local) || local.wMonth < 1 || local.wMonth > 12) return std::nullopt;
+        int year = local.wYear - (local.wMonth < 3), ofEra = year % 400;
+        int ofYear = (153 * ((local.wMonth + 9) % 12) + 2) / 5 + local.wDay - 1;
+        long long day = year / 400 * 146097LL + ofEra * 365 + ofEra / 4 - ofEra / 100 + ofYear - 719468;
+        return day * kDayMs + ((local.wHour * 60 + local.wMinute) * 60 + local.wSecond) * 1000 + local.wMilliseconds;
+    };
+    std::vector<std::pair<ULONGLONG, ULONGLONG>> off;
+    for (ULONGLONG time = clock.start; time < clock.reset;) {
+        std::optional<long long> local = localMs(time);
+        if (!local || *local < 0) return clock;
+        // One stretch on one date: to the date's end as the local clock runs from here, or the
+        // reset; when the clock is set before then (its offset differs at the stretch's end), to
+        // that change, found between a time before it and one from it on.
+        const long long offset = *local - (long long)time;
+        ULONGLONG next = time + std::min<ULONGLONG>(kDayMs - *local % kDayMs, clock.reset - time);
+        std::optional<long long> last = localMs(next - 1);
+        if (!last) return clock;
+        if (*last - (long long)(next - 1) != offset) {
+            ULONGLONG before = time;
+            next--;
+            while (next - before > 1) {
+                ULONGLONG middle = before + (next - before) / 2;
+                std::optional<long long> probe = localMs(middle);
+                if (!probe) return clock;
+                (*probe - (long long)middle == offset ? before : next) = middle;
+            }
+        }
+        // 1970 started on a Thursday.
+        int weekday = int((*local / kDayMs + 4) % 7);
+        if ((weekday - days.first + 7) % 7 > (days.last - days.first + 7) % 7) {
+            if (!off.empty() && off.back().second == time) off.back().second = next;
+            else off.push_back({time, next});
+        }
+        time = next;
+    }
+    clock.off = std::move(off);
+    clock.total = clock.Work(clock.start, clock.reset);
+    return clock;
+}
+
 // src/taskbar/meter-model.h
 // Meter model: what every quota meter shows (fill, usage color, pace mark, text) and the tile,
 // ring, bar and pace tick geometry and colors, as plain values from explicit inputs. Pure: no XAML, WinRT,
@@ -19451,8 +20050,8 @@ static constexpr double kSparkNowLineWidth = 1, kSparkCaretHalfWidth = 2.4, kSpa
 static constexpr double kSparkInset = 2, kSparkPlotRadius = 3, kSparkChartGap = 4, kSparkOutlineStroke = 1;
 // Room for sparkline shapes past the plot: the largest ring around a point on its edge.
 static constexpr double kSparkOverflow = kSparkRingOuter * kSparklineReadingScaleMax / 100 + 0.4;
-// How far before and after now a long window's chart spans (MeterDisplay::sparklineAroundMs); 0:
-// the whole window.
+// How far before and after now a long window's chart spans (MeterDisplay::sparklineAroundMs, the
+// details flyout's FlyoutDisplay::chartAroundMs); 0: the whole window.
 static ULONGLONG SparklineAroundMs(SparklineSpan span) {
     static constexpr ULONGLONG kHourMs = 60 * 60 * 1000;
     switch (span) {
@@ -19614,6 +20213,25 @@ static uint32_t UsageHighlight(uint32_t argb, double lift = 0.06) {
     };
     auto rgb = lifted(k);
     return (argb & 0xFF000000) | encode(rgb[0]) << 16 | encode(rgb[1]) << 8 | encode(rgb[2]);
+}
+
+// A usage color as text on a window's surface (0xRRGGBB): itself on a dark one; on a light one,
+// the darker variants of the default and colorblind usage colors, and another color darkened in
+// OKLCH until it reads at 4.5:1 on white.
+static uint32_t UsageTextColor(uint32_t usage, bool light) {
+    static constexpr uint32_t kLightInks[][2] = {
+        {0xE53935, 0xC42B1C}, {0xFB8C00, 0xB35C00}, {0xFDD835, 0x876A00}, {0x43A047, 0x1D7A35},
+        {0xD55E00, 0xB75100}, {0xE69F00, 0x946700}, {0x56B4E9, 0x387597},
+    };
+    uint32_t rgb = usage & 0xFFFFFF;
+    if (!light) return rgb;
+    for (const auto& ink : kLightInks) {
+        if (ink[0] == rgb) return ink[1];
+    }
+    for (double lift = -0.02; 1.05 / (RelativeLuminance(rgb) + 0.05) < 4.5; lift -= 0.02) {
+        rgb = UsageHighlight(usage, lift) & 0xFFFFFF;
+    }
+    return rgb;
 }
 
 // Bar layouts' unfilled track, or their thin rail.
@@ -19956,10 +20574,12 @@ struct MeterDisplay {
     int orangeThreshold;
     int redThreshold;
     int pollMinutes;          // 2-1440.
+    int hiddenPollMinutes;    // Settings::hiddenPollMinutes, as set.
     std::array<uint32_t, 4> usageColors;  // UsagePaletteColors of the chosen palette.
     bool showPaceTicks;
     PaceTickStyle paceTickStyle;
     COLORREF paceTickColor;   // RGB only.
+    WorkDays workDays;        // The days pace and projections count (WorkDaysFor).
     PercentTextAlignment percentTextAlignment;
     bool showExtraBarAmounts;
     bool showStaleWarning;
@@ -19975,10 +20595,12 @@ struct MeterDisplay {
 
 // `locale`: the frame's language, `measure` its text widths. `taskbarHeight`: the taskbar's height
 // in DIPs, 0 if unknown (or on a side); tiles leave 4 DIPs above and below them. `sideWidth`:
-// MeterDisplay::sideWidth.
+// MeterDisplay::sideWidth. `localTime`: this PC's, which tells the work days; without it every day
+// is one.
 static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& locale,
                                     const TileTextMeasure& measure, ULONGLONG now, double rasterizationScale,
-                                    double taskbarHeight, double sideWidth = 0) {
+                                    double taskbarHeight, double sideWidth = 0,
+                                    const LocalTimeSource& localTime = {}) {
     int yellow = std::clamp(settings.yellowThreshold, 0, 100);
     int orange = std::clamp(settings.orangeThreshold, yellow, 100);
     sideWidth = std::isfinite(sideWidth) ? std::max(sideWidth, 0.0) : 0.0;
@@ -20040,10 +20662,12 @@ static MeterDisplay MeterDisplayFor(const Settings& settings, const I18nLocale& 
         .orangeThreshold = orange,
         .redThreshold = std::clamp(settings.redThreshold, orange, 100),
         .pollMinutes = std::clamp(settings.pollMinutes, 2, 24 * 60),
+        .hiddenPollMinutes = settings.hiddenPollMinutes,
         .usageColors = UsagePaletteColors(settings.usagePalette, settings.customUsageColors),
         .showPaceTicks = settings.showPaceTicks,
         .paceTickStyle = settings.paceTickStyle,
         .paceTickColor = settings.paceTickColor & 0x00FFFFFF,
+        .workDays = WorkDaysFor(settings, localTime),
         .percentTextAlignment = settings.percentTextAlignment,
         .showExtraBarAmounts = settings.showExtraBarAmounts,
         .showStaleWarning = settings.showStaleWarning,
@@ -20232,14 +20856,14 @@ static std::vector<TileTracePoint> VisualTestTrace(const AccountConfig& account,
     return trace;
 }
 
-// How far back a quota's projection measures its rate: a day, so it follows a start late in a
-// weekly window while sleep and breaks stay in the average. 5-hour windows (and a window's first
-// day) get their window's average; monthly extra usage passes 0 for it, since its percentage
-// moves with its budget.
+// How far back a quota's projection measures its rate: a day of its window's working time, so it
+// follows a start late in a weekly window while sleep and breaks stay in the average, and a day
+// off doesn't. 5-hour windows (and a window's first day) get their window's average; monthly
+// extra usage passes 0 for it, since its percentage moves with its budget.
 static constexpr ULONGLONG kProjectionLookbackMs = 24ULL * 60 * 60 * 1000;
 
 // A quota's projection from its current reading, to the reset or, reaching 100% before it, to
-// the limit.
+// the limit: straight in its window's working time, so level through a day off.
 struct UsageProjection {
     ULONGLONG fromMs = 0;   // The current reading's time: now, or the newest recorded reading if later.
     // The rate's span start: the window's start (its average), the lookback's cutoff, or the
@@ -20248,31 +20872,46 @@ struct UsageProjection {
     ULONGLONG toMs = 0;     // The reset, or the limit's time.
     double toUsed = 0;      // Used % at toMs; 100 at the limit.
     bool limit = false;
+
+    // Used % at `time` on the way from `fromUsed` at fromMs to toMs, by the window's `clock`.
+    double UsedAt(const WorkClock& clock, double fromUsed, ULONGLONG time) const {
+        ULONGLONG work = clock.Work(fromMs, toMs);
+        return work ? fromUsed + (toUsed - fromUsed) * double(clock.Work(fromMs, time)) / double(work) : fromUsed;
+    }
 };
 
-// Projects `reading` (fresh: the caller's check) above 0% and short of 100%, from 5% of its window
-// on and before its reset, at the average rate since its window started at 0%, or with a
-// `lookbackMs` ending after that, since the cutoff it gives. `trace` (oldest first) places the
-// cutoff's usage: interpolated between connected readings, across a recording gap only between
-// equal ones, else the span starts at the reading before the gap. Any decrease from there to the
-// current reading (a reset, a changed budget) falls back to the window's average.
-static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading,
+// Projects `reading` (fresh: the caller's check) above 0% and short of 100%, from 5% of its
+// window's working time (`clock`: its WorkClockFor) on and before its reset, at the average rate
+// over the working time since its window started at 0%, or with a `lookbackMs` of working time
+// ending after that, since the cutoff it gives. `trace` (oldest first) places the cutoff's usage:
+// interpolated between connected readings, across a recording gap only between equal ones, else
+// the span starts at the reading before the gap. Any decrease from there to the current reading
+// (a reset, a changed budget) falls back to the window's average. Usage on a day off counts in the
+// rise, not in the time it took. The limit is the first time the projection reaches 100%, which a
+// day off before the reset can follow.
+static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading, const WorkClock& clock,
                                                    const std::vector<TileTracePoint>& trace,
                                                    ULONGLONG now, ULONGLONG lookbackMs) {
     double pct = reading.pct;
-    if (pct <= 0 || pct >= 100 || !reading.windowDurationMs || reading.resetUnixMs <= reading.windowDurationMs) {
-        return std::nullopt;
-    }
-    ULONGLONG start = reading.resetUnixMs - reading.windowDurationMs;
+    if (pct <= 0 || pct >= 100 || !clock.total) return std::nullopt;
+    ULONGLONG start = clock.start;
     ULONGLONG from = trace.empty() ? now : std::max(now, trace.back().timeMs);
-    double elapsed = ((double)from - (double)start) / reading.windowDurationMs;
-    if (elapsed < 0.05 || from >= reading.resetUnixMs) return std::nullopt;
+    if (clock.Elapsed(from) < 0.05 || from >= clock.reset) return std::nullopt;
 
     TileTracePoint base{start, 0, false};
-    if (lookbackMs && from - start > lookbackMs) {
+    if (lookbackMs && clock.Work(start, from) > lookbackMs) {
+        // The cutoff: the latest time with the lookback's working time before the reading.
+        ULONGLONG cutoff = from, missing = lookbackMs;
+        for (auto dayOff = clock.off.rbegin(); dayOff != clock.off.rend(); ++dayOff) {
+            if (dayOff->first >= cutoff) continue;
+            ULONGLONG worked = cutoff - std::min(dayOff->second, cutoff);
+            if (worked >= missing) break;
+            missing -= worked;
+            cutoff = dayOff->first;
+        }
+        cutoff -= missing;
         // The readings around the cutoff: the window's start before the first, the current
         // reading after the last.
-        ULONGLONG cutoff = from - lookbackMs;
         auto next = std::upper_bound(trace.begin(), trace.end(), cutoff,
                                      [](ULONGLONG time, const TileTracePoint& point) { return time < point.timeMs; });
         TileTracePoint before = next == trace.begin() ? base : next[-1];
@@ -20295,13 +20934,31 @@ static std::optional<UsageProjection> ProjectUsage(const WindowUsage& reading,
 
     // Products before quotients keep exact cases exact (even use reaching 100% at the reset).
     double rise = pct - base.used;
-    double span = double(from - base.timeMs);
-    UsageProjection projection{from, base.timeMs, reading.resetUnixMs,
-                               pct + rise * double(reading.resetUnixMs - from) / span, false};
-    if (projection.toUsed > 100) {
-        projection.toMs = from + (ULONGLONG)std::llround((100 - pct) * span / rise);
+    double span = double(clock.Work(base.timeMs, from));
+    double left = double(clock.Work(from, clock.reset));
+    UsageProjection projection{from, base.timeMs, clock.reset, pct + rise * left / span, false};
+    // 100% to within the arithmetic's noise is reached: a limit met as a work day ends comes
+    // before the days off that follow, not after them.
+    static constexpr double kReached = 100 - 1e-9;
+    if (rise > 0 && projection.toUsed >= kReached) {
+        // The limit lies in the working time before the first day off that starts with it
+        // reached, else before the reset: that stretch starts at `at`, `worked` from the reading,
+        // and ends `room` from it.
+        double worked = 0, room = left;
+        ULONGLONG at = from;
+        for (const auto& [begin, end] : clock.off) {
+            if (end <= at) continue;
+            double stretch = begin > at ? double(begin - at) : 0;
+            if (pct + rise * (worked + stretch) / span >= kReached) {
+                room = worked + stretch;
+                break;
+            }
+            worked += stretch;
+            at = end;
+        }
+        projection.toMs = at + (ULONGLONG)std::llround(std::clamp((100 - pct) * span / rise, worked, room) - worked);
         projection.toUsed = 100;
-        projection.limit = true;
+        projection.limit = projection.toMs < clock.reset;
     }
     return projection;
 }
@@ -20332,6 +20989,14 @@ static const WindowUsage& ExtraUsageChartSpan(ExtraUsageChart chart, const Accou
     bool running = week.pct >= 0 && week.windowDurationMs > 0 && week.resetUnixMs > week.windowDurationMs &&
                    now >= week.resetUnixMs - week.windowDurationMs && now < week.resetUnixMs;
     return chart == ExtraUsageChart::Week && account.provider == L"anthropic" && running ? week : data.extraUsage;
+}
+
+// A chart's span (from `start`, `span` long) cut to `around` each side of `now` (SparklineAroundMs)
+// and kept inside it; one no longer than twice `around`, or with `around` 0, stays whole.
+static void NarrowChartSpan(ULONGLONG around, ULONGLONG now, ULONGLONG& start, ULONGLONG& span) {
+    if (!around || span <= 2 * around) return;
+    start = std::min(now > start + around ? now - around : start, start + span - 2 * around);
+    span = 2 * around;
 }
 
 // Bar layouts' corners, thin rail, pace tick and percent text placement, in DIPs along and across
@@ -20646,6 +21311,9 @@ struct QuotaMeter {
 struct AccountMeters {
     bool stale = false;
     bool warn = false;         // Stale with an error: the details flyout's stale marker.
+    // No quota shown and a poll reported why: bars then show their identity, alone, even while the
+    // identity position is Hidden.
+    bool failedUnread = false;
     IdentityMark mark = IdentityMark::None;
     // The outage mark's color (the usage palette's orange, or its red for a major outage) and size
     // in DIPs; 0 without one.
@@ -20692,7 +21360,8 @@ struct AccountMeters {
     // display.sparklineAroundMs, a window longer than twice it spans only that much each side of
     // now, kept inside the window: earlier readings drop out, the diagonal is the
     // window's even use across that span, and the projection stops at its end (with the limit mark
-    // only when it reaches the limit before then).
+    // only when it reaches the limit before then). In a window with days off (WorkClockFor), the
+    // diagonal and the projection are level through each of them.
     uint32_t sparkLimitColor = 0;
     double sparkChartHeight = 0;
     double sparkKeyFont = 0;  // The key and extra usage text, display.sparklineTextSize.
@@ -20727,11 +21396,10 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
     int orange = display.orangeThreshold;
     int red = display.redThreshold;
 
-    // Account state. Stale after two missed polls; Antigravity after two minutes.
-    ULONGLONG staleAfterMs = (account.provider == L"antigravity" ? 1ULL :
-                              (ULONGLONG)display.pollMinutes) * 2 * 60000;
+    // Account state. Stale after two missed polls.
     meters.stale = data.stale || data.lastSuccessMs == 0 ||
-                   display.now - data.lastSuccessMs > staleAfterMs;
+                   display.now - data.lastSuccessMs >
+                       AccountStaleAfterMs(account, display.pollMinutes, display.hiddenPollMinutes);
     meters.warn = display.showStaleWarning && meters.stale && bool(data.error);
     // An outage explains the staleness: its mark takes the stale mark's place.
     if (outage != OutageLevel::None) {
@@ -20753,6 +21421,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
             count++;
         }
     }
+    meters.failedUnread = !meters.barMask && bool(data.error);
 
     bool tiles = IsTileLayout(layout);
     bool concentric = layout == BarLayout::ConcentricRings;
@@ -20955,11 +21624,10 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
         // Color stays keyed to actual usage so depleting quota still reds out.
         m.color = UsageColor(wu.pct, meters.stale, yellow, orange, red, display.usageColors);
         m.key = QuotaKey(display.locale, account.provider, w);
-        m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 &&
-                        wu.resetUnixMs > wu.windowDurationMs && wu.windowDurationMs > 0 &&
-                        display.now >= wu.resetUnixMs - wu.windowDurationMs;
-        double remainingFraction = m.paceVisible ?
-            ((double)wu.resetUnixMs - (double)display.now) / wu.windowDurationMs : 0.0;
+        // The pace: the share of the window's working time passed; none without any.
+        const WorkClock clock = WorkClockFor(display.workDays, wu);
+        m.paceVisible = paceMarks && !meters.stale && wu.pct >= 0 && clock.total > 0 && display.now >= clock.start;
+        double remainingFraction = m.paceVisible ? 1.0 - clock.Elapsed(display.now) : 0.0;
 
         if (!tiles) {
             // Remaining mode shows the quota left (100 - used); n/a (pct < 0) stays unchanged
@@ -21173,11 +21841,7 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 start = over.resetUnixMs - over.windowDurationMs;
                 span = over.windowDurationMs;
             }
-            const ULONGLONG around = display.sparklineAroundMs;
-            if (timed(w) && around && span > 2 * around) {
-                start = std::min(now > start + around ? now - around : start, start + span - 2 * around);
-                span = 2 * around;
-            }
+            if (timed(w)) NarrowChartSpan(display.sparklineAroundMs, now, start, span);
             auto xAt = [&](ULONGLONG timeMs) {
                 return snap(std::clamp(((double)timeMs - (double)start) / (double)span, 0.0, 1.0) * width);
             };
@@ -21237,14 +21901,16 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                 return {std::move(figure)};
             };
             if (timed(w)) {
-                // The window's even use, 0% to 100% across the whole window, over the part of it in
-                // the span.
+                // The window's even use, 0% to 100% across its working time, over the part of it in
+                // the span: level through each day off.
                 const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
-                if (display.showPaceTicks && paceFrom < paceTo) {
-                    auto even = [&](ULONGLONG time) {
-                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
-                    };
-                    shapes[kSparkPace] = {{xAt(paceFrom), yAt(even(paceFrom)), {{xAt(paceTo), yAt(even(paceTo))}}}};
+                if (display.showPaceTicks && paceFrom < paceTo && clock.total) {
+                    const std::vector<ULONGLONG> corners = clock.Corners(paceFrom, paceTo);
+                    TileOutlineFigure even{xAt(paceFrom), yAt(100 * clock.Elapsed(paceFrom)), {}};
+                    for (size_t c = 1; c < corners.size(); c++) {
+                        even.segments.push_back({xAt(corners[c]), yAt(100 * clock.Elapsed(corners[c]))});
+                    }
+                    shapes[kSparkPace] = {std::move(even)};
                 }
                 // Readings before a span starting inside the window drop out.
                 const std::vector<TileTracePoint> drawn = start > windowStart ? TraceFrom(trace, start) : trace;
@@ -21275,22 +21941,24 @@ static AccountMeters AccountMeterState(const MeterDisplay& display, BarLayout la
                     // None for a window its provider reports at its limit, whatever its percentage.
                     std::optional<UsageProjection> projection;
                     if (!meters.stale && !data.opencodeLimited[w]) {
-                        projection = ProjectUsage(wu, trace, display.now,
+                        projection = ProjectUsage(wu, clock, trace, display.now,
                                                   w == kExtraUsageBar ? 0 : kProjectionLookbackMs);
                     }
                     if (projection) {
-                        // Cut at the span's end, before a later reset or limit.
+                        // Level through each day off; cut at the span's end, before a later reset
+                        // or limit.
                         ULONGLONG toMs = std::min(projection->toMs, start + span);
-                        double toUsed = projection->toUsed;
-                        if (toMs < projection->toMs) {
-                            toUsed = wu.pct + (toUsed - wu.pct) * ((double)toMs - (double)projection->fromMs) /
-                                                  ((double)projection->toMs - (double)projection->fromMs);
+                        const std::vector<ULONGLONG> corners = clock.Corners(projection->fromMs, toMs);
+                        TileOutlineFigure ahead{x, y, {}};
+                        for (size_t c = 1; c < corners.size(); c++) {
+                            ahead.segments.push_back(
+                                {xAt(corners[c]), yAt(projection->UsedAt(clock, wu.pct, corners[c]))});
                         }
-                        double endX = xAt(toMs), endY = yAt(toUsed);
-                        shapes[kSparkProjection] = {{x, y, {{endX, endY}}}};
                         if (projection->limit && toMs == projection->toMs) {
-                            shapes[kSparkLimit] = {circle(endX, endY, kSparkLimitRadius)};
+                            shapes[kSparkLimit] = {circle(ahead.segments.back().x, ahead.segments.back().y,
+                                                          kSparkLimitRadius)};
                         }
+                        shapes[kSparkProjection] = {std::move(ahead)};
                     }
                 }
             } else {
@@ -22457,18 +23125,16 @@ static void SetAccountVisibility(uint64_t identityHash, bool wantVisible) {
                     // Showing: keep the existing (possibly stale) data and only re-query if it has
                     // already gone stale, matching the UI's grey-out threshold. This stops repeated
                     // hide/show from triggering fetches and hitting provider rate limits.
-                    ULONGLONG staleIntervalMin =
-                        settingsSnapshot.accounts[accountIndex].provider == L"antigravity"
-                            ? 1
-                            : (ULONGLONG)settingsSnapshot.pollMinutes;
+                    ULONGLONG staleAfterMs = AccountStaleAfterMs(settingsSnapshot.accounts[accountIndex],
+                                                                 settingsSnapshot.pollMinutes,
+                                                                 settingsSnapshot.hiddenPollMinutes);
                     ULONGLONG now = NowUnixMs();
                     std::lock_guard<std::mutex> lk2(g_dataMutex);
                     if (accountIndex >= (int)g_data.size()) {
                         refreshNow = true;
                     } else {
                         const AccountData& d = g_data[accountIndex];
-                        refreshNow = d.stale || d.lastSuccessMs == 0 ||
-                                     now - d.lastSuccessMs > staleIntervalMin * 2 * 60000;
+                        refreshNow = d.stale || d.lastSuccessMs == 0 || now - d.lastSuccessMs > staleAfterMs;
                     }
                 }
             }
@@ -22499,11 +23165,16 @@ static void SetAccountVisibility(uint64_t identityHash, bool wantVisible) {
     PublishSettings(settingsSnapshot);
     Wh_SetStringValue(L"hiddenAccounts", hashes.c_str());
     // RefreshQuota re-queries only this account (and posts the UI); otherwise just repaint so the
-    // column collapses/reappears with its existing data without any network request.
+    // column collapses/reappears with its existing data, and wake the fetch thread, which polls the
+    // account only if its new interval already ran out since its reading.
     configLock.unlock();
     NotifySettingsWindowChanged();
-    if (refreshNow) RefreshQuotaByIdentity(identityHash);
-    else PostUiUpdate();
+    if (refreshNow) {
+        RefreshQuotaByIdentity(identityHash);
+    } else {
+        PostUiUpdate();
+        if (g_refreshEvent) SetEvent(g_refreshEvent);
+    }
 }
 
 // src/taskbar/flyout-material.h
@@ -22780,6 +23451,11 @@ struct FlyoutDisplay {
     bool refreshing = false;
     bool visualTestMode = false;
     ExtraUsageChart extraUsageChart = ExtraUsageChart::Month;  // MeterDisplay::extraUsageChart
+    // How far each side of now a long window's chart spans (SparklineAroundMs), and the chart's
+    // whose quota row the pointer rests on (none: as the others).
+    ULONGLONG chartAroundMs = 0;
+    std::optional<ULONGLONG> chartHoverAroundMs;
+    WorkDays workDays;  // MeterDisplay::workDays
     // What the provider's status page shows, and the taskbar mark's color for it (0: none).
     ProviderOutage outage;
     uint32_t outageColor = 0;
@@ -22807,8 +23483,9 @@ static std::array<const WindowUsage*, kFlyoutRowCount> FlyoutRowReadings(Account
             &d.antigravityThirdPartyWeek, &d.extraUsage};
 }
 
-// A projection's text when it reaches the limit before the reset, naming its rate's span, as the
-// details flyout and threshold notifications show it; empty otherwise.
+// A projection's text when it reaches the limit before the reset, naming its rate's span unless
+// that is its window's average, as the details flyout and threshold notifications show it; empty
+// otherwise.
 static std::wstring LimitProjectionText(const I18nLocale& locale, const std::optional<UsageProjection>& projected,
                                         const WindowUsage& reading) {
     if (!projected || !projected->limit) return {};
@@ -22824,13 +23501,13 @@ static std::wstring LimitProjectionText(const I18nLocale& locale, const std::opt
         return I18nText(locale, TrCtx(L"usage-projection", L"At the rate since {time}: limit in ~{duration}"),
                         {{L"time", FormatLocalDayTime(since)}, {L"duration", duration}});
     }
-    return I18nText(locale, TrCtx(L"usage-projection", L"At this window's average rate: limit in ~{duration}"),
+    return I18nText(locale, TrCtx(L"usage-projection", L"At this rate: limit in ~{duration}"),
                     {{L"duration", duration}});
 }
 
 // Fetch thread: the flyout's projection text for a fresh reading of a taskbar slot, from the
-// account's published curve (the flyout row's) and its lookback, in the notification's language.
-// Takes the settings and data locks; call holding neither.
+// account's published curve (the flyout row's), its lookback and the current work days, in the
+// notification's language. Takes the settings and data locks; call holding neither.
 static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_t historyId, int slot,
                                                const WindowUsage& reading) {
     static constexpr int kRows[kQuotaBarCount] = {kFlyoutFiveHourRow, kFlyoutWeeklyRow, kFlyoutFableRow,
@@ -22839,13 +23516,46 @@ static std::wstring NotificationProjectionText(const I18nLocale& locale, uint64_
     if (std::optional<BurnUpCurve> curve = CopyBurnUpCurve(historyId, kRows[slot], reading)) {
         for (const BurnUpPoint& point : curve->points) trace.push_back({point.timeMs, point.used, point.connect});
     }
-    return LimitProjectionText(
-        locale, ProjectUsage(reading, trace, NowUnixMs(), slot == kExtraUsageBar ? 0 : kProjectionLookbackMs),
-        reading);
+    WorkDays workDays;
+    {
+        std::lock_guard<std::mutex> lk(g_settingsMutex);
+        workDays = WorkDaysFor(g_settings, UnixMsToLocalSystemTime);
+    }
+    return LimitProjectionText(locale,
+                               ProjectUsage(reading, WorkClockFor(workDays, reading), trace, NowUnixMs(),
+                                            slot == kExtraUsageBar ? 0 : kProjectionLookbackMs),
+                               reading);
 }
 
-// Builds the card for `provider` into state.flyout.popup, registering its button delegates there
-// as they are created, in the grid's language. Values are filled by UpdateAccountFlyout.
+// Finds the main quota row under the pointer (FlyoutPopup::hoverRow) from its last position over
+// the rows, against their current layout: scrolling or a relayout can put another row under a
+// resting pointer. That row's chart takes the span on hover: a change updates the card while that
+// span differs from the charts' own, which may close the flyout. XAML calls may throw.
+static void UpdateFlyoutHoverRow(QuotaUiInstance& state) {
+    FlyoutPopup& popup = state.flyout.popup;
+    int row = -1;
+    if (popup.rowsPointer && popup.rowsGrid && popup.card) {
+        // The main rows come first, in FlyoutRowIndex order (the extra quotas' have no chart);
+        // a collapsed row has no height.
+        double y = popup.card.TransformToVisual(popup.rowsGrid).TransformPoint(*popup.rowsPointer).Y;
+        auto definitions = popup.rowsGrid.RowDefinitions();
+        for (uint32_t index = 0; index < std::min<uint32_t>(definitions.Size(), kFlyoutRowCount); index++) {
+            double height = definitions.GetAt(index).ActualHeight();
+            if (y >= 0 && y < height) {
+                row = (int)index;
+                break;
+            }
+            y -= height;
+        }
+    }
+    if (popup.hoverRow == row) return;
+    popup.hoverRow = row;
+    if (popup.chartHoverSwap) UpdateQuotaUi(state);
+}
+
+// Builds the card for `provider` into state.flyout.popup, registering its button and pointer
+// delegates there as they are created, in the grid's language. Values are filled by
+// UpdateAccountFlyout.
 static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provider,
                               bool visualTestMode) {
     FlyoutPopup& popup = state.flyout.popup;
@@ -22897,12 +23607,12 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
         pattern.Append(gap);
         return pattern;
     };
-    auto paceStroke = [&](wuxs::Line const& line) {
+    auto paceStroke = [&](wuxs::Shape const& line) {
         line.Stroke(theme.chartGuide);
         line.StrokeThickness(1);
         line.StrokeDashArray(dashes(3, 3));
     };
-    auto projectionStroke = [&](wuxs::Line const& line) {
+    auto projectionStroke = [&](wuxs::Shape const& line) {
         line.StrokeThickness(1.4);
         line.StrokeDashArray(dashes(1.5 / 1.4, 2.5 / 1.4));
         line.StrokeDashCap(PenLineCap::Round);
@@ -23057,6 +23767,38 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
     Grid rowsGrid;
     popup.namesColumn = addColumn(rowsGrid, kAuto);
     popup.detailsColumn = addColumn(rowsGrid, kStar);
+    // The pointer over the rows, for the span on hover of the chart in its row: the grid takes the
+    // pointer anywhere over it. XAML can miss the pointer leaving the popup, and reports no move
+    // when the rows move under it; the popup's poll (EnsureFlyoutTimers) covers both.
+    rowsGrid.Background(transparent);
+    popup.rowsGrid = rowsGrid;
+    popup.rowsMovedToken = rowsGrid.PointerMoved(
+        [hWnd, generation](winrt::Windows::Foundation::IInspectable const&,
+                           wuxi::PointerRoutedEventArgs const& e) {
+            if (g_unloading) return;
+            try {
+                auto* uiState = FindUiState(hWnd);
+                if (!uiState) return;
+                FlyoutPopup& popup = uiState->flyout.popup;
+                if (!popup.flyout || popup.generation != generation || !popup.card) return;
+                popup.rowsPointer = e.GetCurrentPoint(popup.card).Position();
+                UpdateFlyoutHoverRow(*uiState);
+            } catch (...) {}
+        });
+    auto rowsExited = [hWnd, generation](winrt::Windows::Foundation::IInspectable const&,
+                                         wuxi::PointerRoutedEventArgs const&) {
+        if (g_unloading) return;
+        try {
+            auto* uiState = FindUiState(hWnd);
+            if (!uiState) return;
+            FlyoutPopup& popup = uiState->flyout.popup;
+            if (!popup.flyout || popup.generation != generation) return;
+            popup.rowsPointer.reset();
+            UpdateFlyoutHoverRow(*uiState);
+        } catch (...) {}
+    };
+    popup.rowsExitedToken = rowsGrid.PointerExited(rowsExited);
+    popup.rowsCanceledToken = rowsGrid.PointerCanceled(rowsExited);
     ScrollViewer rowsScroller;
     rowsScroller.HorizontalScrollMode(ScrollMode::Disabled);
     rowsScroller.HorizontalScrollBarVisibility(ScrollBarVisibility::Disabled);
@@ -23223,10 +23965,10 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
             RectangleGeometry bounds;
             bounds.Rect({0, 0, (float)kFlyoutChartWidth, (float)kFlyoutChartHeight});
             canvas.Clip(bounds);
-            wuxs::Line pace;
-            paceStroke(pace);
-            canvas.Children().Append(pace);
-            row.chartPace = pace;
+            row.chartPace = wuxs::Polyline{};
+            paceStroke(row.chartPace);
+            collapsed(row.chartPace);
+            canvas.Children().Append(row.chartPace);
             row.chartArea = wuxs::Path{};
             canvas.Children().Append(row.chartArea);
             row.chartLines = wuxs::Path{};
@@ -23237,7 +23979,7 @@ static Border BuildFlyoutCard(QuotaUiInstance& state, std::wstring const& provid
             canvas.Children().Append(row.chartLines);
             row.chartDots = wuxs::Path{};
             canvas.Children().Append(row.chartDots);
-            row.chartProjection = wuxs::Line{};
+            row.chartProjection = wuxs::Polyline{};
             projectionStroke(row.chartProjection);
             collapsed(row.chartProjection);
             canvas.Children().Append(row.chartProjection);
@@ -23454,6 +24196,7 @@ static void UpdateAccountFlyout(
     bool copilot = account.provider == L"copilot";
     bool opencode = account.provider == L"opencode";
     const I18nLocale& locale = display.locale;
+    popup.chartHoverSwap = display.chartHoverAroundMs && *display.chartHoverAroundMs != display.chartAroundMs;
     wchar_t text[128];
     try {
         popup.title.Text(account.label);
@@ -23647,12 +24390,10 @@ static void UpdateAccountFlyout(
                 row.fillColor = colorValue;
             }
 
-            bool paced = !display.stale && wu.windowDurationMs > 0 &&
-                         wu.resetUnixMs > wu.windowDurationMs &&
-                         display.now >= wu.resetUnixMs - wu.windowDurationMs;
-            double elapsed = paced ?
-                std::clamp(1.0 - ((double)wu.resetUnixMs - (double)display.now) /
-                                     wu.windowDurationMs, 0.0, 1.0) : 0.0;
+            // The pace: the share of the window's working time passed; none without any.
+            const WorkClock clock = WorkClockFor(display.workDays, wu);
+            bool paced = !display.stale && clock.total > 0 && display.now >= clock.start;
+            double elapsed = paced ? std::clamp(clock.Elapsed(display.now), 0.0, 1.0) : 0.0;
             show(row.paceTick, paced);
             if (paced) {
                 double pacePct = (remainingMode ? 1.0 - elapsed : elapsed) * 100.0;
@@ -23666,13 +24407,13 @@ static void UpdateAccountFlyout(
             show(row.trend, overPace);
             row.unit.Foreground(overPace ? theme.warning : theme.mutedText);
 
-            // The usage graph tiles' projection; the text, naming the rate's span, when it
-            // reaches the limit before the reset. None once the limit is reached.
+            // The usage graph tiles' projection; the text when it reaches the limit before the
+            // reset. None once the limit is reached.
             static const std::vector<TileTracePoint> kNoTrace;
             const std::vector<TileTracePoint>& trace = r >= 0 ? traces[r] : kNoTrace;
             std::optional<UsageProjection> projected;
             if (r >= 0 && !display.stale && !limited) {
-                projected = ProjectUsage(wu, trace, display.now,
+                projected = ProjectUsage(wu, clock, trace, display.now,
                                          r == kFlyoutExtraRow ? 0 : kProjectionLookbackMs);
             }
             std::wstring projection = LimitProjectionText(locale, projected, wu);
@@ -23693,11 +24434,16 @@ static void UpdateAccountFlyout(
                 using winrt::Windows::Foundation::Point;
                 // A rolled-back clock can put now before the newest reading.
                 ULONGLONG now = std::max(display.now, trace.back().timeMs);
-                // The span drawn: the window; extra usage, its chart's (ExtraUsageChartSpan).
+                // The span drawn: the window (extra usage: its chart's, ExtraUsageChartSpan), or a long
+                // one's hours each side of now, kept inside it; the row under the pointer takes the
+                // span on hover.
                 const ULONGLONG windowStart = wu.resetUnixMs - wu.windowDurationMs;
                 const WindowUsage& over = r == kFlyoutExtraRow ?
                     ExtraUsageChartSpan(display.extraUsageChart, account, d, now) : wu;
-                const ULONGLONG start = over.resetUnixMs - over.windowDurationMs, span = over.windowDurationMs;
+                ULONGLONG start = over.resetUnixMs - over.windowDurationMs, span = over.windowDurationMs;
+                NarrowChartSpan(r == popup.hoverRow && display.chartHoverAroundMs ? *display.chartHoverAroundMs :
+                                                                                  display.chartAroundMs,
+                                now, start, span);
                 auto snap = [](double dip) { return (float)(std::round(dip * 4) / 4); };
                 auto xAt = [&](ULONGLONG timeMs) {
                     return snap(std::clamp(((double)timeMs - (double)start) / (double)span, 0.0, 1.0) *
@@ -23721,34 +24467,31 @@ static void UpdateAccountFlyout(
                 }
                 shape.now = {xAt(now), yAt(wu.pct)};
                 if (projected) {
-                    // Cut at the span's end, before a later reset or limit.
-                    ULONGLONG toMs = std::min(projected->toMs, start + span);
-                    double toUsed = projected->toUsed;
-                    if (toMs < projected->toMs) {
-                        toUsed = wu.pct + (toUsed - wu.pct) * ((double)toMs - (double)projected->fromMs) /
-                                              ((double)projected->toMs - (double)projected->fromMs);
+                    // Level through each day off; cut at the span's end, before a later reset or
+                    // limit.
+                    for (ULONGLONG time : clock.Corners(projected->fromMs, std::min(projected->toMs, start + span))) {
+                        shape.projection.push_back({xAt(time), yAt(projected->UsedAt(clock, wu.pct, time))});
                     }
-                    shape.projectionEnd = {xAt(toMs), yAt(toUsed)};
                 }
-                // The window's even use, 0% at its start to 100% at its reset, over the part of
-                // it in the span.
+                // The window's even use, 0% at its start to 100% at its reset across its working
+                // time, over the part of it in the span: level through each day off.
                 const ULONGLONG paceFrom = std::max(start, windowStart), paceTo = std::min(start + span, wu.resetUnixMs);
-                if (paceFrom < paceTo) {
-                    auto even = [&](ULONGLONG time) {
-                        return 100.0 * double(time - windowStart) / double(wu.windowDurationMs);
-                    };
-                    shape.paceFrom = {xAt(paceFrom), yAt(even(paceFrom))};
-                    shape.paceTo = {xAt(paceTo), yAt(even(paceTo))};
+                if (paceFrom < paceTo && clock.total) {
+                    for (ULONGLONG time : clock.Corners(paceFrom, paceTo)) {
+                        shape.pace.push_back({xAt(time), yAt(100 * clock.Elapsed(time))});
+                    }
                 }
                 shape.color = colorValue;
 
                 FlyoutChartShape& drawn = row.chartShape;
-                if (shape.paceFrom != drawn.paceFrom || shape.paceTo != drawn.paceTo) {
-                    show(row.chartPace, shape.paceFrom.X >= 0);
-                    row.chartPace.X1(shape.paceFrom.X);
-                    row.chartPace.Y1(shape.paceFrom.Y);
-                    row.chartPace.X2(shape.paceTo.X);
-                    row.chartPace.Y2(shape.paceTo.Y);
+                auto points = [](const std::vector<Point>& line) {
+                    PointCollection collection;
+                    for (Point point : line) collection.Append(point);
+                    return collection;
+                };
+                if (shape.pace != drawn.pace) {
+                    show(row.chartPace, !shape.pace.empty());
+                    row.chartPace.Points(points(shape.pace));
                 }
                 if (shape.lines != drawn.lines || shape.dots != drawn.dots) {
                     // Each run is a stroked figure over a filled one closed to the plot bottom.
@@ -23785,19 +24528,15 @@ static void UpdateAccountFlyout(
                     row.chartLines.Data(lines);
                     row.chartDots.Data(dots);
                 }
-                if (shape.now != drawn.now || shape.projectionEnd != drawn.projectionEnd) {
+                if (shape.now != drawn.now) {
                     row.chartNow.X1(shape.now.X);
                     row.chartNow.X2(shape.now.X);
                     Canvas::SetLeft(row.chartMarker, shape.now.X - 3.0);
                     Canvas::SetTop(row.chartMarker, shape.now.Y - 3.0);
-                    bool projectionShown = shape.projectionEnd.X >= 0;
-                    show(row.chartProjection, projectionShown);
-                    if (projectionShown) {
-                        row.chartProjection.X1(shape.now.X);
-                        row.chartProjection.Y1(shape.now.Y);
-                        row.chartProjection.X2(shape.projectionEnd.X);
-                        row.chartProjection.Y2(shape.projectionEnd.Y);
-                    }
+                }
+                if (shape.projection != drawn.projection) {
+                    show(row.chartProjection, !shape.projection.empty());
+                    row.chartProjection.Points(points(shape.projection));
                 }
                 if (shape.color != drawn.color) {
                     Brush usage = FlyoutShapeBrush(color);
@@ -23964,7 +24703,8 @@ static void UpdateAccountFlyout(
         show(popup.error, !error.empty());
         std::wstring status;
         if (d.needsLogin && !display.visualTestMode) {
-            status = I18nText(locale, TrCtx(L"flyout-note", L"Sign-in required. Click the bars to sign in."));
+            status = I18nText(locale, TrCtx(L"flyout-note",
+                                            L"Sign-in required. Click the account on the taskbar to sign in."));
         } else if (!visibleRows && d.lastSuccessMs && error.empty() && note.empty()) {
             status = I18nText(locale, TrCtx(L"flyout-note", L"No quotas reported."));
         }
@@ -24033,6 +24773,11 @@ static void CloseAccountFlyout(QuotaUiInstance& state) {
         try { handler.button.Click(handler.token); } catch (...) {}
     }
     popup.buttonHandlers.clear();
+    if (popup.rowsGrid) {
+        try { popup.rowsGrid.PointerMoved(popup.rowsMovedToken); } catch (...) {}
+        try { popup.rowsGrid.PointerExited(popup.rowsExitedToken); } catch (...) {}
+        try { popup.rowsGrid.PointerCanceled(popup.rowsCanceledToken); } catch (...) {}
+    }
     if (popup.flyout) {
         try { popup.flyout.Hide(); } catch (...) {}
     }
@@ -24145,6 +24890,14 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
                             Wh_Log(L"Flyout popup window class: %s", className);
                         }
                     }
+                    // The pointer's quota row, against the rows' current layout; off the popup's
+                    // window it is on none, whatever XAML last reported. A change can update the
+                    // card, which may close it; a failure leaves the dismissal below as it is.
+                    if (overTaskbar || !inside) popup.rowsPointer.reset();
+                    try {
+                        UpdateFlyoutHoverRow(*uiState);
+                    } catch (...) {}
+                    if (!popup.flyout) return;
                     if (inside) {
                         fo.pointerOutsideTick = 0;
                         return;
@@ -24179,7 +24932,7 @@ static void EnsureFlyoutTimers(QuotaUiInstance& state) {
 }
 
 // Opens the account's flyout off its column, past the taskbar's inner edge, replacing any open one.
-// It is transient: it never takes focus.
+// It is transient: it never takes focus, on opening or from a press inside it.
 static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
     // Not while the taskbar moved and the bars wait for their rebuild.
     if (g_unloading || !state.quotaGrid || state.edgeChanged || index < 0 ||
@@ -24257,6 +25010,10 @@ static void ShowAccountFlyout(QuotaUiInstance& state, int index) {
         flyout.ShouldConstrainToRootBounds(false);
         // Taskbar input stays live under the overlay so tiles keep hover, click and menu.
         flyout.OverlayInputPassThroughElement(rootContent);
+        // A press inside takes no focus (the presenter's content inherits this): a button taking
+        // it activates an inactive taskbar, which takes the focus back, and the flyout closes
+        // before the press becomes a click.
+        flyout.AllowFocusOnInteraction(false);
 
         HWND hWnd = state.hWnd;
         uint64_t generation = popup.generation;
@@ -24469,6 +25226,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             state.buildSettingsGeneration = g_settingsGeneration;
             settings = g_settings;
         }
+        state.buildSettings = settings;
         std::vector<AccountConfig>& accounts = settings.accounts;
         BarLayout barLayout = settings.barLayout;
         state.buildVisualTestMode = visualTestMode;
@@ -24705,8 +25463,9 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
             } else {
                 // The tiles' box: at least the tile height, up to 7 DIPs inside each side, holding
                 // the content centred across it: the identity beside, above or below the bars at
-                // the identity position, centred on them, or the bars alone while it is Hidden.
-                // UpdateQuotaUi sets the identity's margins.
+                // the identity position, centred on them; while it is Hidden, the bars alone, or
+                // without them the identity alone (AccountMeters::failedUnread). UpdateQuotaUi
+                // sets the identity's margins and shows it.
                 bool identityAcross = labelPosition == LabelPosition::Top ||
                                       labelPosition == LabelPosition::Bottom;
                 bool identityBeforeBars = labelPosition == LabelPosition::Left ||
@@ -24724,25 +25483,24 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 // The identity: the account label, or the logo with its badge and stale mark.
                 FrameworkElement identity{nullptr};
-                if (labelPosition != LabelPosition::Hidden) {
-                    if (accounts[i].tileIdentity == TileIdentity::Text) {
-                        TextBlock label;
-                        label.Text(accounts[i].label);
-                        label.FontSize(labelFontSize);
-                        label.Opacity(0.8);
-                        swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
-                        label.Name(name);
-                        refs.label = label;
-                        identity = label;
-                    } else {
-                        identity = BuildTileIdentity(accounts, i, barLayout, display, refs.tile);
-                        identities = true;
-                    }
-                    identity.VerticalAlignment(VerticalAlignment::Center);
-                    identity.HorizontalAlignment(identityAcross ? HorizontalAlignment::Center :
-                                                                  HorizontalAlignment::Left);
-                    if (identityBeforeBars) content.Children().Append(identity);
+                if (accounts[i].tileIdentity == TileIdentity::Text) {
+                    TextBlock label;
+                    label.Text(accounts[i].label);
+                    label.FontSize(labelFontSize);
+                    label.Opacity(0.8);
+                    swprintf(name, ARRAYSIZE(name), L"AiQuota_Label_%d", (int)i);
+                    label.Name(name);
+                    refs.label = label;
+                    identity = label;
+                } else {
+                    identity = BuildTileIdentity(accounts, i, barLayout, display, refs.tile);
+                    identities = true;
                 }
+                identity.VerticalAlignment(VerticalAlignment::Center);
+                identity.HorizontalAlignment(identityAcross ? HorizontalAlignment::Center :
+                                                              HorizontalAlignment::Left);
+                if (labelPosition == LabelPosition::Hidden) identity.Visibility(Visibility::Collapsed);
+                if (identityBeforeBars) content.Children().Append(identity);
 
                 StackPanel bars;
                 bars.Orientation(verticalBars ? Orientation::Horizontal : Orientation::Vertical);
@@ -24960,7 +25718,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
 
                 refs.barArea = bars.as<FrameworkElement>();
                 content.Children().Append(bars);
-                if (identity && !identityBeforeBars) content.Children().Append(identity);
+                if (!identityBeforeBars) content.Children().Append(identity);
                 col.Children().Append(content);
             }
 
@@ -25127,6 +25885,7 @@ static Grid BuildQuotaGrid(QuotaUiInstance& state) {
                 // Per-account show/hide checkboxes (checked = visible). Every column carries the
                 // same list; toggling sets global state, persists, and re-syncs all instances.
                 // The menu stays open for more toggles, even when one hides this column.
+                // UpdateQuotaUi gives each its account's usage, where a shortcut's text shows.
                 showSub = MenuFlyoutSubItem{};
                 showSub.Text(I18nText(locale, TrCtx(L"taskbar-action", L"Show on taskbar")));
                 SetXamlLanguage(showSub, locale);
@@ -25352,7 +26111,7 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
     state.buildLocale = I18nLocale(state.buildLocale.Language(), ReadNumberFormat());
     MeterDisplay display = MeterDisplayFor(settings, state.buildLocale, XamlTileTextMeasure(state.buildLocale),
                                            NowUnixMs(), state.rasterizationScale, state.taskbarHeight,
-                                           state.sideWidth);
+                                           state.sideWidth, UnixMsToLocalSystemTime);
     ULONGLONG now = display.now;
     if (visualTestMode) BuildVisualTestSnapshot(display, &accounts, &data);
     if (data.size() != accounts.size()) return;
@@ -25458,6 +26217,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                 } else if (ui.tile.identity) {
                     identity = ui.tile.identity;
                 }
+                // At the Hidden position it shows only alone, once a failed poll left no bar.
+                int identityShown =
+                    identity && (settings.labelPosition != LabelPosition::Hidden || meters.failedUnread);
                 if (identity) {
                     double side = kBarLogoSide * display.logoScale;
                     BadgeBox badge = ui.tile.badge ?
@@ -25482,7 +26244,10 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     ap.paceLight = paceLight;
                 }
 
-                if (barMask != ap.barMask) {
+                if (barMask != ap.barMask || identityShown != ap.identityShown) {
+                    if (identity) {
+                        identity.Visibility(identityShown ? Visibility::Visible : Visibility::Collapsed);
+                    }
                     int visibleCount = 0;
                     for (int w = 0; w < kQuotaBarCount; w++) {
                         if (barMask & (1 << w)) visibleCount++;
@@ -25514,11 +26279,12 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                     if (ui.content) {
                         // Without a quota or an identity shown, a small context-menu target stays.
                         double minimumHitSize =
-                            visibleCount || identity ? 0.0 : std::max(display.barThickness, 8);
+                            visibleCount || identityShown ? 0.0 : std::max(display.barThickness, 8);
                         ui.content.MinWidth(minimumHitSize);
                         ui.content.MinHeight(minimumHitSize);
                     }
                     ap.barMask = barMask;
+                    ap.identityShown = identityShown;
                 }
 
                 for (int w = 0; w < kQuotaBarCount; w++) {
@@ -25633,6 +26399,11 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
                                                 meters.stale, meters.warn, accountRefreshing,
                                                 visualTestMode};
                     flyoutDisplay.extraUsageChart = display.extraUsageChart;
+                    flyoutDisplay.chartAroundMs = SparklineAroundMs(settings.flyoutChartSpan);
+                    if (settings.flyoutChartHoverSpan) {
+                        flyoutDisplay.chartHoverAroundMs = SparklineAroundMs(*settings.flyoutChartHoverSpan);
+                    }
+                    flyoutDisplay.workDays = display.workDays;
                     flyoutDisplay.outage = outage;
                     flyoutDisplay.outageColor = meters.mark == IdentityMark::Outage ? meters.markColor : 0;
                     flyoutDisplay.locale = display.locale;
@@ -25679,7 +26450,19 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
 
         // Keep every instance's menu checkboxes and Hide items in sync with the shared hidden
         // state, live while a menu is open (programmatic IsChecked does not raise Click). The
-        // last visible account can't be hidden, so its checkbox and Hide item are disabled.
+        // last visible account can't be hidden, so its checkbox and Hide item are disabled. Each
+        // checkbox ends with its account's usage at a glance, hidden accounts' too: the
+        // percentage as the taskbar shows it (used or left; three digits at most), after when it
+        // was read once it is out of date; nothing without a reading.
+        std::vector<std::wstring> usageTexts(accounts.size());
+        for (size_t i = 0; i < accounts.size() && !state.accountToggleItems.empty(); i++) {
+            AccountUsageSummary usage = AccountUsageSummaryFor(settings, accounts[i], data[i], now);
+            if (usage.pct < 0) continue;
+            double shown = settings.barMode == BarMode::Remaining ? std::clamp(100 - usage.pct, 0.0, 100.0) : usage.pct;
+            usageTexts[i] = I18nFixed(state.buildLocale, std::min(shown, 999.0), 0) + L"%";
+            std::wstring read = usage.stale ? FormatReadingTime(data[i].lastSuccessMs, now) : std::wstring();
+            if (!read.empty()) usageTexts[i] = read + L" \u00B7 " + usageTexts[i];
+        }
         int visibleCount = (int)std::count_if(accounts.begin(), accounts.end(),
             [](const AccountConfig& account) { return !account.hidden; });
         for (auto& [idx, item] : state.accountToggleItems) {
@@ -25688,6 +26471,9 @@ static void UpdateQuotaUi(QuotaUiInstance& state) {
             if (item.IsChecked() != checked) item.IsChecked(checked);
             bool enabled = !checked || visibleCount > 1;
             if (item.IsEnabled() != enabled) item.IsEnabled(enabled);
+            if (std::wstring_view(item.KeyboardAcceleratorTextOverride()) != usageTexts[idx]) {
+                item.KeyboardAcceleratorTextOverride(usageTexts[idx]);
+            }
         }
         for (size_t i = 0; i < state.accountRefs.size(); i++) {
             MenuFlyoutItem const& hideItem = state.accountRefs[i].hideItem;
@@ -26576,6 +27362,66 @@ static LRESULT CALLBACK TaskbarWindowSubclassProc(HWND hWnd, UINT message, WPARA
         return result;
     }
     return DefSubclassProc(hWnd, message, wParam, lParam);
+}
+
+// After a settings change: whether every taskbar keeps its bars, each repainted and taken as built
+// from the current settings. A grid stays when the settings it was built from differ from them
+// only in what no built grid holds: the poll intervals and the work days, which each update
+// rereads for the stale mark, the pace and the projections, and what only polling, notifications
+// and history read. A difference in any other field, one added later included, rebuilds, and so
+// do bars on a taskbar the settings don't show them on (an injection under way as they changed)
+// and the setup tile, whose tooltip holds the stored settings' load state.
+static bool KeepQuotaGrids() {
+    std::vector<std::pair<HWND, DWORD>> windows;
+    {
+        std::lock_guard<std::mutex> lk(g_uiInstancesMutex);
+        if (!g_uiInstances) return false;
+        for (auto& state : *g_uiInstances) windows.push_back({state->hWnd, state->ownerThreadId});
+    }
+    std::vector<HWND> shown = FindCurrentProcessTaskbarWnds();
+    for (auto& window : windows) {
+        if (std::find(shown.begin(), shown.end(), window.first) == shown.end()) return false;
+        bool kept = RunFromWindowThread(window.first, [](void* param) -> bool {
+            auto [hWnd, ownerThreadId] = *static_cast<std::pair<HWND, DWORD>*>(param);
+            // On another thread (the window was replaced), the state isn't this thread's to read.
+            if (g_unloading || GetCurrentThreadId() != ownerThreadId) return false;
+            auto* state = FindUiState(hWnd);
+            if (!state || state->ownerThreadId != ownerThreadId || !state->quotaGrid || state->edgeChanged ||
+                state->buildSettings.accounts.empty()) {
+                return false;
+            }
+            Settings settings;
+            ULONGLONG generation;
+            {
+                std::lock_guard<std::mutex> lk(g_settingsMutex);
+                settings = g_settings;
+                generation = g_settingsGeneration;
+            }
+            // The position, the language and the visual test are read apart from the build's
+            // settings, as for a current grid (InjectQuotaGrid).
+            if (state->placement != settings.placement ||
+                &state->buildLocale.Language() != g_language.load(std::memory_order_acquire) ||
+                state->buildVisualTestMode != g_visualTestMode.load(std::memory_order_acquire)) {
+                return false;
+            }
+            auto held = [](Settings s) {
+                s.pollMinutes = s.hiddenPollMinutes = s.historyRetentionDays = 0;
+                s.workDays = false;
+                s.firstWorkDay = s.lastWorkDay = 0;
+                s.notificationLevel = {};
+                s.historyEnabled = false;
+                s.historyDefaultRange = {};
+                return s;
+            };
+            if (held(state->buildSettings) != held(settings)) return false;
+            state->buildSettings = std::move(settings);
+            state->buildSettingsGeneration = generation;
+            UpdateQuotaUi(*state);
+            return true;
+        }, &window);
+        if (!kept) return false;
+    }
+    return true;
 }
 
 static void RemoveAllQuotaGrids(bool waitForCompletion = false) {
@@ -27727,14 +28573,15 @@ static IDWriteTextLayout* UiInkedLayout(ID2D1RenderTarget* target, UiTargetCache
 // rectangle's top edge. Segmented: one tab stop choosing among `options` (action.value = the
 // selected one's value); the pointer targets each segment (UiFocusRef::link = its index).
 // Pill: a status chip tinted with its `ink`, a dot (hollow unless selected) before `text`; never
-// interactive. Chart: client-drawn, a tab stop while enabled (no action needed, never activated):
+// interactive. Meter: a 4 DIP track along the rectangle's middle, filled from its start up to
+// action.value within [minimum, maximum] in `color`, else its ink; never interactive. Chart: client-drawn, a tab stop while enabled (no action needed, never activated):
 // the pointer over it reports to the client, which may answer with a readout (ui/host.h), and
 // its arrows scroll the content. Custom: client-drawn whole; a decoration, or with an action a
 // control like a button (hot, pressed, a tab stop, activated, its tooltip) whose focus ring is
 // rounded at its ends.
 enum class UiItemKind : uint8_t {
     Nav, Card, Text, Glyph, Shape, Button, Link, Toggle, Dropdown, NumberBox, SpinButton, Option,
-    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule, Segmented, Pill, Chart, Custom
+    Slider, Swatch, Gallery, Preview, Chip, TextBox, Handle, Rule, Segmented, Pill, Meter, Chart, Custom
 };
 enum class UiButtonStyle : uint8_t { Standard, Accent, Subtle, Danger };
 
@@ -27788,6 +28635,7 @@ struct UiItem {
     std::vector<UiOption> options;   // Dropdown; menu Button; Segmented
     std::vector<UiRun> tooltip;      // Complete text shown after the hover delay (icon buttons, chips)
     float viewBox = 24;              // Shape: square view box mapped onto the rectangle
+    std::optional<D2D1_COLOR_F> color;  // Meter: its fill, a client color (high contrast ignores it)
     float opacity = 1;
     UiButtonStyle button = UiButtonStyle::Standard;  // Button; Card (Subtle)
     UiAction action;
@@ -27837,7 +28685,7 @@ struct UiFocusStop {
 
 static bool UiInteractiveKind(UiItemKind kind) {
     return kind != UiItemKind::Text && kind != UiItemKind::Glyph && kind != UiItemKind::Shape &&
-           kind != UiItemKind::Rule && kind != UiItemKind::Pill;
+           kind != UiItemKind::Rule && kind != UiItemKind::Pill && kind != UiItemKind::Meter;
 }
 
 // Reacts to the pointer and can be activated (a chart only reacts).
@@ -29010,6 +29858,20 @@ static void UiPaintItems(ID2D1RenderTarget* target, UiGraphics& g, UiTargetCache
                              UiLayout(g, item.text, label, std::max(r.right - 9 - (r.left + 19), 0.0f), false,
                                       DWRITE_TEXT_ALIGNMENT_LEADING, true),
                              {r.left + 19, centerY - label.lineHeight / 2}, ink);
+                break;
+            }
+            // Meter: a faint 4 DIP track; its fill, at least a dot for any value above the
+            // minimum, in the client's color, else its ink. High contrast: a slider's track and
+            // fill colors.
+            case UiItemKind::Meter: {
+                float share = item.maximum > item.minimum ?
+                    std::clamp(float(item.action.value - item.minimum) / float(item.maximum - item.minimum), 0.0f, 1.0f) : 0;
+                UiFillRect(target, cache, {r.left, centerY - 2, r.right, centerY + 2}, 2,
+                           hc ? p.controlStrong : UiFade(p.text, 0.16f), scale);
+                if (share > 0) {
+                    UiFillRect(target, cache, {r.left, centerY - 2, r.left + std::max(share * width, 4.0f), centerY + 2}, 2,
+                               hc ? p.highlight : item.color ? *item.color : UiInkColor(p, item.ink), scale);
+                }
                 break;
             }
             // Segmented control (history mockup .segctl): a control panel; the selected segment
@@ -32311,6 +33173,8 @@ static bool NormalizeSettings(Settings* s) {
         s->accounts[0].hidden = false;
     }
     s->pollMinutes = std::clamp(s->pollMinutes > 0 ? s->pollMinutes : 10, 2, 24 * 60);
+    s->hiddenPollMinutes = s->hiddenPollMinutes < 0 ? kHiddenPollAsShown :
+                           s->hiddenPollMinutes > 0 ? std::clamp(s->hiddenPollMinutes, 2, 24 * 60) : kHiddenPollNever;
     const I18nLanguage* language = I18nLanguageByTag(s->language);
     s->language = language ? std::wstring(language->tag) : std::wstring();
     s->historyRetentionDays = std::clamp(s->historyRetentionDays, 0, 3650);
@@ -32353,6 +33217,15 @@ static bool NormalizeSettings(Settings* s) {
         (*s->sparklineHoverSpan < SparklineSpan::Window || *s->sparklineHoverSpan > SparklineSpan::Hours48)) {
         s->sparklineHoverSpan = SparklineSpan::Hours24;
     }
+    if (s->flyoutChartSpan < SparklineSpan::Window || s->flyoutChartSpan > SparklineSpan::Hours48) {
+        s->flyoutChartSpan = SparklineSpan::Window;
+    }
+    if (s->flyoutChartHoverSpan &&
+        (*s->flyoutChartHoverSpan < SparklineSpan::Window || *s->flyoutChartHoverSpan > SparklineSpan::Hours48)) {
+        s->flyoutChartHoverSpan = SparklineSpan::Hours24;
+    }
+    if (s->firstWorkDay < 0 || s->firstWorkDay > 6) s->firstWorkDay = Settings().firstWorkDay;
+    if (s->lastWorkDay < 0 || s->lastWorkDay > 6) s->lastWorkDay = Settings().lastWorkDay;
     s->logoScale = std::clamp(s->logoScale > 0 ? s->logoScale : 100, kLogoScaleMin, kLogoScaleMax);
     s->badgeSize = std::clamp(s->badgeSize > 0 ? s->badgeSize : 13, kBadgeSizeMin, kBadgeSizeMax);
     s->badgeOffsetX = std::clamp(s->badgeOffsetX, -kBadgeOffsetMax, kBadgeOffsetMax);
@@ -32460,7 +33333,10 @@ static std::wstring SerializeSettings(const Settings& s) {
                                           s.historyDefaultRange == HistoryUiRange::Month ? L"month" :
                                           s.historyDefaultRange == HistoryUiRange::Quarter ? L"quarter" :
                                           s.historyDefaultRange == HistoryUiRange::All ? L"all" : L"week");
-        setBool(L"skipHiddenPolling", s.skipHiddenPolling);
+        setNumber(L"hiddenPollMinutes", s.hiddenPollMinutes);
+        // Builds before hidden intervals read only this switch: they poll hidden accounts as often
+        // as shown ones, or not at all, so an interval is not at all for them.
+        setBool(L"skipHiddenPolling", s.hiddenPollMinutes != kHiddenPollAsShown);
         setNumber(L"barLength", s.barLength);
         setNumber(L"verticalBarLength", s.verticalBarLength);
         setNumber(L"barThickness", s.barThickness);
@@ -32544,6 +33420,11 @@ static std::wstring SerializeSettings(const Settings& s) {
         setBool(L"openAiExtraLimits", s.showOpenAiExtraLimits);
         setString(L"extraUsageChart", s.extraUsageChart == ExtraUsageChart::Off ? L"off" :
                                       s.extraUsageChart == ExtraUsageChart::Week ? L"week" : L"month");
+        setString(L"flyoutChartSpan", spanName(s.flyoutChartSpan));
+        setString(L"flyoutChartHoverSpan", s.flyoutChartHoverSpan ? spanName(*s.flyoutChartHoverSpan) : L"off");
+        setBool(L"workDays", s.workDays);
+        setNumber(L"firstWorkDay", s.firstWorkDay);
+        setNumber(L"lastWorkDay", s.lastWorkDay);
         setNumber(L"yellowThreshold", s.yellowThreshold);
         setNumber(L"orangeThreshold", s.orangeThreshold);
         setNumber(L"redThreshold", s.redThreshold);
@@ -32637,7 +33518,12 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
                                 historyDefaultRange == L"month" ? HistoryUiRange::Month :
                                 historyDefaultRange == L"quarter" ? HistoryUiRange::Quarter :
                                 historyDefaultRange == L"all" ? HistoryUiRange::All : HistoryUiRange::Week;
-        s.skipHiddenPolling = getBoolDefault(L"skipHiddenPolling", true);
+        // Settings saved before hidden intervals have only the switch: on, or none, takes the
+        // default interval; off polled hidden accounts as often as shown ones.
+        double hiddenPollMinutes =
+            root.HasKey(L"hiddenPollMinutes") ? GetNum(root, L"hiddenPollMinutes", s.hiddenPollMinutes) :
+            getBoolDefault(L"skipHiddenPolling", true) ? s.hiddenPollMinutes : kHiddenPollAsShown;
+        if (std::isfinite(hiddenPollMinutes)) s.hiddenPollMinutes = (int)std::clamp(hiddenPollMinutes, -1.0, 24.0 * 60);
         s.barLength = (int)GetNum(root, L"barLength", 100);
         s.barThickness = (int)GetNum(root, L"barThickness", 8);
         s.barStyle = GetStr(root, L"barStyle") == L"rail" ? BarStyle::Rail : BarStyle::Track;
@@ -32804,6 +33690,16 @@ static bool DeserializeSettings(const std::wstring& json, Settings* out,
         std::wstring extraUsageChart = GetStr(root, L"extraUsageChart");
         s.extraUsageChart = extraUsageChart == L"off" ? ExtraUsageChart::Off :
                             extraUsageChart == L"week" ? ExtraUsageChart::Week : ExtraUsageChart::Month;
+        s.flyoutChartSpan = spanOf(L"flyoutChartSpan", SparklineSpan::Window);
+        s.flyoutChartHoverSpan = GetStr(root, L"flyoutChartHoverSpan") == L"off" ?
+                                     std::nullopt :
+                                     std::optional(spanOf(L"flyoutChartHoverSpan", SparklineSpan::Hours24));
+        s.workDays = getBoolDefault(L"workDays", false);
+        // A weekday that is missing or isn't one keeps its default.
+        double firstWorkDay = GetNum(root, L"firstWorkDay", s.firstWorkDay);
+        double lastWorkDay = GetNum(root, L"lastWorkDay", s.lastWorkDay);
+        if (firstWorkDay >= 0 && firstWorkDay <= 6 && firstWorkDay == (int)firstWorkDay) s.firstWorkDay = (int)firstWorkDay;
+        if (lastWorkDay >= 0 && lastWorkDay <= 6 && lastWorkDay == (int)lastWorkDay) s.lastWorkDay = (int)lastWorkDay;
         s.yellowThreshold = (int)GetNum(root, L"yellowThreshold", 50);
         s.orangeThreshold = (int)GetNum(root, L"orangeThreshold", 75);
         s.redThreshold = (int)GetNum(root, L"redThreshold", 90);
@@ -33118,7 +34014,7 @@ static void PublishSettings(Settings s, uint64_t oldIdentity, uint64_t newIdenti
     std::lock_guard<std::mutex> lk(g_settingsMutex);
     std::lock_guard<std::mutex> lk2(g_dataMutex);
     bool historyBoundary = s.historyEnabled != g_settings.historyEnabled ||
-                           s.skipHiddenPolling != g_settings.skipHiddenPolling ||
+                           s.hiddenPollMinutes != g_settings.hiddenPollMinutes ||
                            s.pollMinutes != g_settings.pollMinutes;
     for (const auto& account : s.accounts) {
         auto previous = std::find_if(g_settings.accounts.begin(), g_settings.accounts.end(),
@@ -33256,8 +34152,10 @@ static SettingsApplyResult ApplyOwnedSettings(Settings s, uint64_t oldIdentity =
     return SettingsApplyResult::Changed;
 }
 
+// After a published change, outside every lock: the bars stay when it can't affect any taskbar's
+// (KeepQuotaGrids), else all are rebuilt; the retry worker injects any that are missing either way.
 static void FinishSettingsApply(bool wakeFetch = true) {
-    RemoveAllQuotaGrids();
+    if (!KeepQuotaGrids()) RemoveAllQuotaGrids();
     StartRetryInject();
     if (wakeFetch && g_refreshEvent) SetEvent(g_refreshEvent);
 }
@@ -33496,8 +34394,12 @@ enum class SettingsField : uint8_t {
     // Behavior
     ShowOn,  // Monitor mode and number: 0 primary, -1 all, N display N
     ShowDetailsOnHover,
+    WorkDays,       // Pace and projections over work days only
+    FirstWorkDay,   // A weekday: 0 Sunday to 6 Saturday
+    LastWorkDay,
     PollMinutes,
-    SkipHiddenPolling,
+    HiddenPolling,      // Hidden accounts' polls: an interval in minutes, kHiddenPollNever or kHiddenPollAsShown
+    HiddenPollMinutes,  // Their interval's custom minutes
     Notifications,  // A NotificationLevel
     Language,       // This Windows user's language: 0 Automatic, else a language (kSettingsPseudoLanguage)
     // History
@@ -33568,6 +34470,8 @@ enum class SettingsField : uint8_t {
     ShowProviderOutages,
     ShowOpenAiExtraLimits,
     ExtraUsageChart,        // An ExtraUsageChart
+    FlyoutChartSpan,        // A SparklineSpan
+    FlyoutChartHoverSpan,   // A SparklineSpan, or -1: none
     // Accounts: fields of the account a draft's key names
     AccountLabel,         // Text, trimmed; unique per provider
     AccountTileIdentity,  // A TileIdentity
@@ -33616,7 +34520,8 @@ struct SettingsNumberRange {
 
 static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field) {
     switch (field) {
-        case SettingsField::PollMinutes: return SettingsNumberRange{2, 24 * 60};
+        case SettingsField::PollMinutes:
+        case SettingsField::HiddenPollMinutes: return SettingsNumberRange{2, 24 * 60};
         case SettingsField::RetentionDays: return SettingsNumberRange{1, 3650};
         case SettingsField::BarLength: return SettingsNumberRange{10, 500};
         case SettingsField::VerticalBarLength: return SettingsNumberRange{kVerticalBarLengthMin, kVerticalBarLengthMax};
@@ -33655,8 +34560,10 @@ static std::optional<SettingsNumberRange> SettingsFieldRange(SettingsField field
 static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
     switch (group) {
         case SettingsField::ResetBehavior:
-            return {SettingsField::ShowOn, SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
-                    SettingsField::SkipHiddenPolling, SettingsField::Notifications, SettingsField::Language};
+            return {SettingsField::ShowOn,        SettingsField::ShowDetailsOnHover, SettingsField::PollMinutes,
+                    SettingsField::HiddenPolling, SettingsField::HiddenPollMinutes,  SettingsField::Notifications,
+                    SettingsField::Language,      SettingsField::WorkDays,           SettingsField::FirstWorkDay,
+                    SettingsField::LastWorkDay};
         case SettingsField::ResetHistory:
             return {SettingsField::RecordHistory, SettingsField::KeepHistory, SettingsField::RetentionDays,
                     SettingsField::HistoryRange};
@@ -33694,7 +34601,8 @@ static std::vector<SettingsField> SettingsGroupFields(SettingsField group) {
                     SettingsField::YellowThreshold,     SettingsField::OrangeThreshold,
                     SettingsField::RedThreshold,        SettingsField::ShowStaleWarning,
                     SettingsField::ShowProviderOutages, SettingsField::ShowOpenAiExtraLimits,
-                    SettingsField::ExtraUsageChart};
+                    SettingsField::ExtraUsageChart,     SettingsField::FlyoutChartSpan,
+                    SettingsField::FlyoutChartHoverSpan};
         default: return {};
     }
 }
@@ -33706,8 +34614,13 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
                    s.taskbarMonitorMode == TaskbarMonitorMode::All     ? -1 :
                                                                          s.taskbarMonitorNumber;
         case SettingsField::ShowDetailsOnHover: return s.showDetailsOnHover;
+        case SettingsField::WorkDays: return s.workDays;
+        case SettingsField::FirstWorkDay: return s.firstWorkDay;
+        case SettingsField::LastWorkDay: return s.lastWorkDay;
         case SettingsField::PollMinutes: return s.pollMinutes;
-        case SettingsField::SkipHiddenPolling: return s.skipHiddenPolling;
+        case SettingsField::HiddenPolling: return s.hiddenPollMinutes;
+        case SettingsField::HiddenPollMinutes:
+            return s.hiddenPollMinutes > 0 ? s.hiddenPollMinutes : Settings().hiddenPollMinutes;
         case SettingsField::Notifications: return int(s.notificationLevel);
         case SettingsField::Language:
             for (size_t i = 0; i < std::size(kI18nLanguages); i++) {
@@ -33779,6 +34692,8 @@ static int SettingsFieldValue(const Settings& s, SettingsField field) {
         case SettingsField::ShowProviderOutages: return s.showProviderOutages;
         case SettingsField::ShowOpenAiExtraLimits: return s.showOpenAiExtraLimits;
         case SettingsField::ExtraUsageChart: return int(s.extraUsageChart);
+        case SettingsField::FlyoutChartSpan: return int(s.flyoutChartSpan);
+        case SettingsField::FlyoutChartHoverSpan: return s.flyoutChartHoverSpan ? int(*s.flyoutChartHoverSpan) : -1;
         default: return 0;
     }
 }
@@ -33798,8 +34713,15 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             if (value > 0) s.taskbarMonitorNumber = value;
             break;
         case SettingsField::ShowDetailsOnHover: s.showDetailsOnHover = value != 0; break;
+        case SettingsField::WorkDays: s.workDays = value != 0; break;
+        case SettingsField::FirstWorkDay: s.firstWorkDay = std::clamp(value, 0, 6); break;
+        case SettingsField::LastWorkDay: s.lastWorkDay = std::clamp(value, 0, 6); break;
         case SettingsField::PollMinutes: s.pollMinutes = value; break;
-        case SettingsField::SkipHiddenPolling: s.skipHiddenPolling = value != 0; break;
+        case SettingsField::HiddenPolling:
+            s.hiddenPollMinutes = value < 0 ? kHiddenPollAsShown :
+                                  value > 0 ? std::clamp(value, 2, 24 * 60) : kHiddenPollNever;
+            break;
+        case SettingsField::HiddenPollMinutes: s.hiddenPollMinutes = value; break;
         case SettingsField::Notifications:
             s.notificationLevel = NotificationLevel(std::clamp(value, int(NotificationLevel::Off),
                                                                int(NotificationLevel::Red)));
@@ -33848,11 +34770,14 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
         case SettingsField::SparklineRing: s.sparklineRing = value != 0; break;
         case SettingsField::SparklineReadingScale: s.sparklineReadingScale = value; break;
         case SettingsField::SparklineSpan:
-            s.sparklineSpan = SparklineSpan(std::clamp(value, int(SparklineSpan::Window), int(SparklineSpan::Hours48)));
+        case SettingsField::FlyoutChartSpan:
+            (field == SettingsField::SparklineSpan ? s.sparklineSpan : s.flyoutChartSpan) =
+                SparklineSpan(std::clamp(value, int(SparklineSpan::Window), int(SparklineSpan::Hours48)));
             break;
         case SettingsField::SparklineHoverSpan:
-            s.sparklineHoverSpan = value < 0 ? std::nullopt :
-                                   std::optional(SparklineSpan(std::min(value, int(SparklineSpan::Hours48))));
+        case SettingsField::FlyoutChartHoverSpan:
+            (field == SettingsField::SparklineHoverSpan ? s.sparklineHoverSpan : s.flyoutChartHoverSpan) =
+                value < 0 ? std::nullopt : std::optional(SparklineSpan(std::min(value, int(SparklineSpan::Hours48))));
             break;
         case SettingsField::LogoScale: s.logoScale = value; break;
         case SettingsField::ClaudeLogoBrand: s.logoBrands.claude = value != 0; break;
@@ -33929,6 +34854,8 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.showProviderOutages = defaults.showProviderOutages;
             s.showOpenAiExtraLimits = defaults.showOpenAiExtraLimits;
             s.extraUsageChart = defaults.extraUsageChart;
+            s.flyoutChartSpan = defaults.flyoutChartSpan;
+            s.flyoutChartHoverSpan = defaults.flyoutChartHoverSpan;
             break;
         case SettingsField::ResetLayout:
             s.barLayout = defaults.barLayout;
@@ -33981,8 +34908,11 @@ static void SettingsAssign(Settings& s, SettingsField field, int value) {
             s.taskbarMonitorMode = defaults.taskbarMonitorMode;
             s.taskbarMonitorNumber = defaults.taskbarMonitorNumber;
             s.showDetailsOnHover = defaults.showDetailsOnHover;
+            s.workDays = defaults.workDays;
+            s.firstWorkDay = defaults.firstWorkDay;
+            s.lastWorkDay = defaults.lastWorkDay;
             s.pollMinutes = defaults.pollMinutes;
-            s.skipHiddenPolling = defaults.skipHiddenPolling;
+            s.hiddenPollMinutes = defaults.hiddenPollMinutes;
             s.notificationLevel = defaults.notificationLevel;
             s.language = defaults.language;
             break;
@@ -34123,6 +35053,8 @@ struct SettingsAccountStatus {
     bool signedIn = false;     // A sign-in is stored (all but Antigravity)
     bool needsSignIn = false;  // The last poll asked for one
     bool signingIn = false;    // Its sign-in window is open
+    AccountUsageSummary usage; // Its usage at a glance, as of the load
+    std::wstring usageTime;    // When that was read, in local time; empty without a reading
 };
 
 struct SettingsStatus {
@@ -34767,11 +35699,15 @@ struct SettingsEdits {
 
 private:
     // The draft of a user action, created from the projection; a new revision clears any error.
-    // Keep history and its custom days set the same retention: either one's edit drops the
-    // other's draft and requests.
+    // Keep history and its custom days set the same retention, the hidden accounts' choice and
+    // its custom minutes the same interval: either one's edit drops the other's draft and
+    // requests.
     SettingsDraft& Touch(uint64_t key, SettingsField field) {
-        if (!key && (field == SettingsField::KeepHistory || field == SettingsField::RetentionDays)) {
-            Revert(0, field == SettingsField::KeepHistory ? SettingsField::RetentionDays : SettingsField::KeepHistory);
+        static constexpr std::pair<SettingsField, SettingsField> kPairs[] = {
+            {SettingsField::KeepHistory, SettingsField::RetentionDays},
+            {SettingsField::HiddenPolling, SettingsField::HiddenPollMinutes}};
+        for (auto [choice, custom] : kPairs) {
+            if (!key && (field == choice || field == custom)) Revert(0, field == choice ? custom : choice);
         }
         SettingsDraft* draft = Find(key, field);
         if (!draft) {
@@ -35037,14 +35973,10 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
                               oldAccount.provider != L"antigravity";
     TokenCopyResult tokenCopyResult = TokenCopyResult::SourceMissing;
     bool oldTokenCleared = true;
-    ULONGLONG oldAuthEpoch = 0;
-    ULONGLONG newAuthEpoch = 0;
     std::unique_lock<std::mutex> authEpochLock(g_authEpochMutex, std::defer_lock);
     if (sameProviderRename) {
         // Block epoch-gated saves only across the local copy/settings/delete transaction.
         authEpochLock.lock();
-        oldAuthEpoch = AuthEpochLocked(oldIdentity);
-        newAuthEpoch = AuthEpochLocked(newIdentity);
         tokenCopyResult = CopyStoredTokenForRename(oldIdentity, newIdentity);
         if (tokenCopyResult == TokenCopyResult::DestinationOccupied ||
             tokenCopyResult == TokenCopyResult::Failed) {
@@ -35061,12 +35993,14 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
     // Renames retain history; switching providers starts a new series during normalization.
     newAccount.historyId = oldAccount.provider == newAccount.provider ? oldAccount.historyId : 0;
     settings.accounts[index] = newAccount;
-    result.apply = ApplyOwnedSettings(
-        std::move(settings), sameProviderIdentityChange ? oldIdentity : 0,
-        sameProviderIdentityChange ? newIdentity : 0);
+    // Its polled data moves with its sign-in: Antigravity's (it has none) always, another
+    // provider's only when the sign-in was copied. A new label that takes over a retained sign-in
+    // starts without data.
+    const bool copied = tokenCopyResult == TokenCopyResult::Copied;
+    bool carryData = sameProviderIdentityChange && (!sameProviderRename || copied);
+    result.apply = ApplyOwnedSettings(std::move(settings), carryData ? oldIdentity : 0, carryData ? newIdentity : 0);
     if (result.apply == SettingsApplyResult::Failed) {
-        bool copiedTokenCleared = tokenCopyResult != TokenCopyResult::Copied ||
-                                  ClearStoredToken(newIdentity);
+        bool copiedTokenCleared = !copied || ClearStoredToken(newIdentity);
         if (authEpochLock.owns_lock()) authEpochLock.unlock();
         configLock.unlock();
         result.message =
@@ -35074,12 +36008,17 @@ static AccountCommandResult EditAccountCommand(AccountTarget target,
         return result;
     }
     if (sameProviderRename) {
-        oldTokenCleared = ClearStoredToken(oldIdentity);
+        // An empty source read can also mean a read error. Without a copy, leave the source
+        // alone and let its in-flight saves expire: the target may have its own sign-in.
+        if (copied) oldTokenCleared = ClearStoredToken(oldIdentity);
+        const ULONGLONG oldAuthEpoch = AuthEpochLocked(oldIdentity);
         BumpAuthEpochLocked(oldIdentity);
         BumpSignInGenerationLocked(oldIdentity);
         BumpSignInGenerationLocked(newIdentity);
-        g_authRenameRedirects.push_back(
-            {oldIdentity, oldAuthEpoch, newIdentity, newAuthEpoch});
+        if (copied) {
+            g_authRenameRedirects.push_back(
+                {oldIdentity, oldAuthEpoch, newIdentity, AuthEpochLocked(newIdentity)});
+        }
         authEpochLock.unlock();
     }
     result.account = PublishedAccountTarget(newIdentity);
@@ -35246,6 +36185,7 @@ struct SettingsProductionStore final : SettingsStore {
         // Each account's last poll (published in account order) and its sign-in: stored (only
         // its presence is read) and whether its sign-in window is open. OpenAI's Spark plan name
         // shows only with its extra limits, as in the details flyout.
+        const ULONGLONG now = NowUnixMs();
         bool signingIn = g_loginInProgress.load();
         uint64_t signingInIdentity = g_loginAccountIdentity.load();
         status.signInRunning = signingIn;
@@ -35258,6 +36198,10 @@ struct SettingsProductionStore final : SettingsStore {
                 accountStatus.error = data[i].error;
                 accountStatus.polled = data[i].lastSuccessMs != 0;
                 accountStatus.needsSignIn = data[i].needsLogin;
+                accountStatus.usage = AccountUsageSummaryFor(baseline.settings, account, data[i], now);
+                if (accountStatus.usage.pct >= 0) {
+                    accountStatus.usageTime = FormatReadingTime(data[i].lastSuccessMs, now);
+                }
             }
             if (account.provider == L"openai" && !baseline.settings.showOpenAiExtraLimits &&
                 (accountStatus.plan.find(L"Spark") != std::wstring::npos ||  // i18n-en
@@ -35434,12 +36378,15 @@ struct SettingsView {
     uint64_t dragKey = 0;               // The account card being dragged, drawn lifted at dragTop
     float dragTop = 0;                  // Content DIPs
     bool pollCustom = false;            // Custom chosen in Cloud poll interval
+    bool hiddenPollCustom = false;      // Custom chosen in Hidden accounts
     bool retentionCustom = false;       // Custom chosen in Keep history
+    UiThemeKind theme = UiThemeKind::Dark;  // The window's: usage colors as text follow it
     bool transparencyEffects = true;    // Windows' transparency effects setting; the window fills it
     float scale = 1;                    // Window DPI / 96: the preview's device pixels
     float previewScroll = 0;            // The preview strip's scroll right of its home, DIPs
                                         // (settings/preview.h)
-    ULONGLONG now = 0;                  // The preview's sample time
+    ULONGLONG now = 0;                  // Frame time for account countdowns and the preview
+    LocalTimeSource localTime;          // This PC's local time, which tells the preview its work days
     std::optional<bool> versionCopied;  // Copy version info's feedback for a moment: whether it copied
 };
 
@@ -35459,6 +36406,12 @@ static const SettingsDraft* SettingsViewDraft(const SettingsView& view, Settings
         if (!draft.key && draft.field == field) return &draft;
     }
     return nullptr;
+}
+
+// A setting another one turns off shows only while that one is on, or while it holds a value
+// being edited or one that couldn't be saved.
+static bool SettingsDependentShown(const SettingsView& view, bool on, SettingsField field) {
+    return on || SettingsViewDraft(view, field);
 }
 
 static UiAction SettingsCommand(SettingsField field, int value = 0) {
@@ -35482,6 +36435,26 @@ static std::vector<UiRun> SettingsStatusRuns(const std::vector<I18nRun>& runs, U
         out.push_back(run.link == L"status" ? UiRun{run.text, UiRunStyle::Normal, ink} : UiRun{run.text});
     }
     return out;
+}
+
+// A long window's chart spans as a dropdown's options (usage graph tiles', the details flyout's),
+// after Off for a span on hover.
+static std::vector<UiOption> SettingsSpanOptions(const I18nLocale& locale, bool off) {
+    std::vector<UiOption> options;
+    if (off) options.push_back({I18nText(locale, TrCtx(L"sparkline-span", L"Off")), -1});
+    options.push_back({I18nText(locale, TrCtx(L"sparkline-span", L"Whole window")), int(SparklineSpan::Window)});
+    const std::pair<int, SparklineSpan> hours[] = {{12, SparklineSpan::Hours12},
+                                                   {24, SparklineSpan::Hours24},
+                                                   {36, SparklineSpan::Hours36},
+                                                   {48, SparklineSpan::Hours48}};
+    for (auto [count, span] : hours) {
+        options.push_back(
+            {I18nText(locale,
+                      TrCtx(L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}"),
+                      {{L"hours", count}}),
+             int(span)});
+    }
+    return options;
 }
 
 // Shared cards; each returns its bottom.
@@ -35763,13 +36736,14 @@ static SettingsPreviewRow SettingsPreviewRowAt(const SettingsPreviewStrip& strip
 // color the tile chrome and the taskbar's text (logos without brand colors, labels, keys, tray).
 // Tests may pass accounts with their data (and their providers' outage levels, none without) to
 // lay out instead of the samples, whose outage is VisualTestOutage's; either shows only while
-// outage marks are on.
+// outage marks are on. `localTime`: MeterDisplayFor's.
 static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings& settings, const I18nLocale& locale,
                                                   double taskbarHeight, float scale, ULONGLONG now,
                                                   bool gallery, bool light, uint32_t text,
                                                   const std::vector<AccountConfig>* testAccounts = nullptr,
                                                   const std::vector<AccountData>* testData = nullptr,
-                                                  const std::vector<OutageLevel>* testOutages = nullptr) {
+                                                  const std::vector<OutageLevel>* testOutages = nullptr,
+                                                  const LocalTimeSource& localTime = {}) {
     using Op = SettingsPreviewOp;
     SettingsPreviewStrip strip;
     // Text as XAML lays it out: natural line height, width rounded up to device pixels.
@@ -35792,7 +36766,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
                                       font == TileFont::Text ? DWRITE_FONT_WEIGHT_NORMAL : DWRITE_FONT_WEIGHT_SEMI_BOLD})
                               .width);
         },
-        now, scale, taskbarHeight);
+        now, scale, taskbarHeight, 0, localTime);
     std::vector<AccountConfig> accounts;
     std::vector<AccountData> data;
     BuildVisualTestSnapshot(display, &accounts, &data);
@@ -35959,7 +36933,7 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // Bars (quota-grid.h, quota-update.h): the tiles' box, at least the tile height, its
             // padding inside each side, holding the content centered across it: the identity
             // beside, above or below a stack of bars at the identity position, centered on them,
-            // the identity gap between them while a bar shows; or the bars alone. Each bar a track
+            // the identity gap between them while a bar shows; or either alone. Each bar a track
             // or thin rail, its fill and pace tick, an optional quota key and the percentage text;
             // a time track's small bar adds to its cell under it (vertical bars: right of it).
             const bool vertical = layout == BarLayout::Vertical;
@@ -35990,7 +36964,8 @@ static SettingsPreviewStrip SettingsPreviewLayout(UiGraphics& g, const Settings&
             // (the icon font at the label's size, on its baseline), or the logo at its size; its
             // margins (BarIdentityMarginFor) make its box, with the label line's space beyond its
             // text as DirectWrite lays it out.
-            const bool shown = position != LabelPosition::Hidden;
+            // At the Hidden position it shows only alone, once a failed poll left no bar.
+            const bool shown = position != LabelPosition::Hidden || meters.failedUnread;
             const bool side = position == LabelPosition::Left || position == LabelPosition::Right;
             const bool labelForm = account.tileIdentity == TileIdentity::Text;
             const float logoSide = float(kBarLogoSide * display.logoScale);
@@ -36489,7 +37464,8 @@ static void SettingsPaintPreview(ID2D1RenderTarget* target, UiTargetCache& cache
     Settings settings = view.settings;
     if (gallery) settings.barLayout = BarLayout(item.action.value);
     SettingsPreviewStrip strip = SettingsPreviewLayout(g, settings, view.locale, view.status.taskbarHeight, scale,
-                                                       view.now, gallery, light, text);
+                                                       view.now, gallery, light, text, nullptr, nullptr, nullptr,
+                                                       view.localTime);
 
     D2D1_MATRIX_3X2_F base{};
     target->GetTransform(&base);
@@ -36722,7 +37698,8 @@ static float SettingsAddPreviewCard(UiGraphics& g, const SettingsView& view, std
                                     uint32_t& id, float x, float y, float width) {
     constexpr float kPadX = 1 + 14, kPadTop = 1 + 12, kRow = 20, kGap = 10, kPadBottom = 14 + 1;
     SettingsPreviewStrip strip = SettingsPreviewLayout(g, view.settings, view.locale, view.status.taskbarHeight,
-                                                       view.scale, view.now, false, false, 0);
+                                                       view.scale, view.now, false, false, 0, nullptr, nullptr,
+                                                       nullptr, view.localTime);
     float stripWidth = std::max(width - 2 * kPadX, 1.0f);
     const SettingsPreviewRow home = SettingsPreviewRowAt(strip, stripWidth, 0);
     const bool cut = home.tiles < 0 || home.tiles + strip.width > stripWidth;
@@ -36868,7 +37845,7 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
             items.push_back(std::move(line));
             lineTop += height;
         };
-        addLine(L"Taskbar AI Quota", UiFont::Subtitle, UiInk::Primary, 26);  // i18n-en: the product name
+        addLine(L"Taskbar AI Usage Quota", UiFont::Subtitle, UiInk::Primary, 26);  // i18n-en: the product name
         lineTop += 2;
         addLine(versionLine, UiFont::Caption, UiInk::Muted, versionHeight);
         addLine(summary, UiFont::Caption, UiInk::Muted, summaryHeight);
@@ -37013,10 +37990,14 @@ static float SettingsUiBuildAbout(UiGraphics& g, const SettingsView& view,
 }
 
 // src/settings/page-behavior.h
-// Settings > Behavior: this user's language, where the bars show, hover details, polling and
-// notifications (approved mockup behavior.png). Pure builder.
+// Settings > Behavior: this user's language, where the bars show, hover details, the work days of
+// pace and projections, polling (hidden accounts' too) and notifications (approved mockup
+// behavior.png, the work days aside). Pure builder.
 
 static constexpr int kSettingsPollPresets[] = {2, 5, 10, 15, 30, 60};
+// Hidden accounts' intervals, in minutes, and the dropdown's value for Custom.
+static constexpr int kSettingsHiddenPollPresets[] = {30, 60, 120, 240, 720, 1440};
+static constexpr int kSettingsHiddenPollCustom = -2;
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
@@ -37085,8 +38066,39 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
                                   SettingsField::ShowDetailsOnHover);
     }
 
-    // Updates: a preset interval, or Custom with its own number. Text typed into the custom box
-    // keeps Custom even while a partial number matches a preset.
+    // Pace and projection: the week's work days, Monday first. The days show with the switch on.
+    y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Pace and projection")));
+    {
+        UiCardSpec spec;
+        spec.title = I18nText(locale, Tr(L"Work days only"));
+        spec.description = {{I18nText(locale, Tr(L"Pace and projections count only your work days and stay level "
+                                                 L"through your days off, for quotas whose window is longer than a "
+                                                 L"day. Usage on a day off still counts, and reset times stay as "
+                                                 L"they are."))}};
+        y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::WorkDays);
+    }
+    const std::vector<UiOption> weekdays = {{I18nText(locale, TrCtx(L"weekday", L"Monday")), 1},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Tuesday")), 2},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Wednesday")), 3},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Thursday")), 4},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Friday")), 5},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Saturday")), 6},
+                                            {I18nText(locale, TrCtx(L"weekday", L"Sunday")), 0}};
+    for (SettingsField field : {SettingsField::FirstWorkDay, SettingsField::LastWorkDay}) {
+        if (!SettingsDependentShown(view, s.workDays, field)) continue;
+        UiCardSpec spec;
+        if (field == SettingsField::FirstWorkDay) {
+            spec.title = I18nText(locale, Tr(L"First work day"));
+            spec.description = {{I18nText(locale, Tr(L"Your work days run from this day through the last one."))}};
+        } else {
+            spec.title = I18nText(locale, Tr(L"Last work day"));
+        }
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, field, 200, weekdays,
+                                    SettingsFieldValue(s, field));
+    }
+
+    // Updates: a preset interval, or Custom, which shows a box for its own number. Text typed into
+    // the custom box keeps Custom even while a partial number matches a preset.
     y = UiAddSection(items, id, x, y + 20, width, I18nText(locale, TrCtx(L"settings-section", L"Updates")));
     bool preset = std::find(std::begin(kSettingsPollPresets), std::end(kSettingsPollPresets),
                             s.pollMinutes) != std::end(kSettingsPollPresets);
@@ -37108,25 +38120,52 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
         y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::PollMinutes,
                                     200, std::move(options), custom ? 0 : s.pollMinutes, 8);
     }
-    {
+    if (custom) {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Custom interval"));
         spec.description = {{I18nText(locale, Tr(L"2 to 1440 minutes."))}};
-        spec.enabled = custom;
-        if (!custom) spec.reason = I18nText(locale, Tr(L"Choose Custom in Cloud poll interval to edit."));
         // The unit agrees with the saved interval, not text still being typed.
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PollMinutes,
                                   I18nText(locale, TrCtx(L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}"),
                                            {{L"minutes", s.pollMinutes}}));
     }
+    // Hidden accounts: not polled, polled as the others, or at a slower interval: a preset, or
+    // Custom with its own number, as the cloud interval's.
+    bool hiddenPreset = std::find(std::begin(kSettingsHiddenPollPresets), std::end(kSettingsHiddenPollPresets),
+                                  s.hiddenPollMinutes) != std::end(kSettingsHiddenPollPresets);
+    const SettingsDraft* hiddenTyped = SettingsViewDraft(view, SettingsField::HiddenPollMinutes);
+    bool hiddenCustom = s.hiddenPollMinutes > 0 &&
+                        (view.hiddenPollCustom || !hiddenPreset || (hiddenTyped && hiddenTyped->text));
     {
+        std::vector<UiOption> options{
+            {I18nText(locale, TrCtx(L"hidden-polling", L"Not polled")), kHiddenPollNever},
+            {I18nText(locale, TrCtx(L"hidden-polling", L"Same as visible accounts")), kHiddenPollAsShown}};
+        for (int minutes : kSettingsHiddenPollPresets) {
+            options.push_back(
+                {minutes % 60 ?
+                     I18nText(locale, TrCtx(L"poll-interval", L"{minutes, plural, one{# minute} other{# minutes}}"),
+                              {{L"minutes", minutes}}) :
+                     I18nText(locale, TrCtx(L"poll-interval", L"{hours, plural, one{# hour} other{# hours}}"),
+                              {{L"hours", minutes / 60}}),
+                 minutes});
+        }
+        options.push_back({I18nText(locale, TrCtx(L"poll-interval", L"Custom")), kSettingsHiddenPollCustom});
         UiCardSpec spec;
-        spec.title = I18nText(locale, Tr(L"Do not poll hidden accounts"));
-        spec.description = {{I18nText(locale, Tr(L"Hidden accounts are neither polled nor recorded, even with Record "
-                                                 L"history on. Turn off to keep recording them. Shared across Windows "
-                                                 L"users."))}};
-        y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec,
-                                  SettingsField::SkipHiddenPolling);
+        spec.title = I18nText(locale, Tr(L"Hidden accounts"));
+        spec.description = {{I18nText(locale, Tr(L"How often accounts hidden from the taskbar are polled, for "
+                                                 L"Accounts and usage history: never more often than visible ones. "
+                                                 L"Shared across Windows users."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HiddenPolling, 200,
+                                    std::move(options), hiddenCustom ? kSettingsHiddenPollCustom : s.hiddenPollMinutes);
+    }
+    if (hiddenCustom) {
+        UiCardSpec spec;
+        spec.title = I18nText(locale, Tr(L"Custom hidden interval"));
+        spec.description = {{I18nText(locale, Tr(L"2 to 1440 minutes."))}};
+        // The unit agrees with the saved interval, not text still being typed.
+        y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HiddenPollMinutes,
+                                  I18nText(locale, TrCtx(L"poll-interval-unit", L"{minutes, plural, one{minute} other{minutes}}"),
+                                           {{L"minutes", SettingsFieldValue(s, SettingsField::HiddenPollMinutes)}}));
     }
 
     // Alerts: each level with its threshold from Display.
@@ -37150,7 +38189,8 @@ static float SettingsUiBuildBehavior(UiGraphics& g, const SettingsView& view,
 
     UiCardSpec reset;
     reset.title = I18nText(locale, Tr(L"Reset Behavior to defaults"));
-    reset.description = {{I18nText(locale, Tr(L"Language, displays, hover details, polling and notifications."))}};
+    reset.description = {
+        {I18nText(locale, Tr(L"Language, displays, hover details, work days, polling and notifications."))}};
     return SettingsAddButtonCard(g, items, id, x, y + 3 + 22, width, reset,
                                  SettingsField::ResetBehavior, I18nText(locale, TrCtx(L"button", L"Reset")));
 }
@@ -37197,8 +38237,9 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
             {I18nText(locale, Tr(L"Applies to this Windows user only. Turning it off keeps saved history."))});
         y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::RecordHistory);
     }
-    // Retention: a preset, Forever (0) or Custom (-1) with its own number. Text typed into the
-    // custom box keeps Custom even while a partial number matches a preset.
+    // Retention, while recording is on: a preset, Forever (0) or Custom (-1), which shows a box for
+    // its own number. Text typed into the custom box keeps Custom even while a partial number
+    // matches a preset.
     auto days = [&](int count) {
         return I18nText(locale, TrCtx(L"history-span", L"{days, plural, one{# day} other{# days}}"),
                         {{L"days", count}});
@@ -37214,26 +38255,20 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
                               [&](const UiOption& option) { return option.value == s.historyRetentionDays; });
     const SettingsDraft* typed = SettingsViewDraft(view, SettingsField::RetentionDays);
     bool custom = s.historyRetentionDays > 0 && (view.retentionCustom || !preset || (typed && typed->text));
-    std::wstring recordingOff = I18nText(locale, Tr(L"Turn on Record usage history to change this."));
-    {
+    if (SettingsDependentShown(view, s.historyEnabled, SettingsField::KeepHistory)) {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Keep history"));
         spec.description = {{I18nText(locale, Tr(L"Shared across Windows users. Forever has no size limit, so history "
                                                  L"keeps growing on disk; Antigravity readings older than 15 days are "
                                                  L"kept about 10 minutes apart. Day limits prune hourly, with a cap of "
                                                  L"about 60 MB."))}};
-        spec.enabled = s.historyEnabled;
-        if (!s.historyEnabled) spec.reason = recordingOff;
         y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::KeepHistory,
                                     200, std::move(options), custom ? -1 : s.historyRetentionDays);
     }
-    {
+    if (custom && SettingsDependentShown(view, s.historyEnabled, SettingsField::RetentionDays)) {
         UiCardSpec spec;
         spec.title = I18nText(locale, Tr(L"Custom retention"));
         spec.description = {{I18nText(locale, Tr(L"1 to 3650 days."))}};
-        spec.enabled = s.historyEnabled && custom;
-        if (!s.historyEnabled) spec.reason = recordingOff;
-        else if (!custom) spec.reason = I18nText(locale, Tr(L"Choose Custom in Keep history to edit."));
         // The unit agrees with the saved retention, not text still being typed.
         y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RetentionDays,
                                   I18nText(locale, TrCtx(L"retention-unit", L"{days, plural, one{days} other{days}}"),
@@ -37241,9 +38276,9 @@ static float SettingsUiBuildHistory(UiGraphics& g, const SettingsView& view,
     }
     y = UiAddInfoBar(g, items, id, SettingsControlId(SettingsField::RetentionDays, 8), x, y + 3, width,
                      I18nUiRuns(I18nRuns(locale, Tr(L"Each account chooses whether it records: <link "
-                                                    L"id=\"accounts\">Accounts</link> > Record history. Hidden "
-                                                    L"accounts are not recorded while <link id=\"hidden\">Do not "
-                                                    L"poll hidden accounts</link> is on in Behavior.")),
+                                                    L"id=\"accounts\">Accounts</link> > Record history. A hidden "
+                                                    L"account records when it is polled: <link "
+                                                    L"id=\"hidden\">Behavior</link> > Hidden accounts.")),
                                 {{L"accounts", {UiActionKind::Navigate, int(SettingsUiPage::Accounts)}},
                                  {L"hidden", {UiActionKind::Navigate, int(SettingsUiPage::Behavior)}}}));
 
@@ -37443,58 +38478,54 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         uint32_t cardId = SettingsControlId(SettingsField::BarLayout, 10);
         return UiAddCard(g, items, cardId, x, top, width, spec).card.bottom;
     };
-    const std::wstring unplaced = text(Tr(L"Choose an identity position to change this."));
 
-    // Logo identities in every style: the logo size and the colors of the logos that have brand
-    // colors, the badge's size and color, then its offsets. Bars need an identity position, except
-    // for the logo colors, which the flyout and the windows also show.
-    auto logoCards = [&](float top, bool placed) {
-        auto slider = [&](float at, I18nKey title, I18nKey description, SettingsField field) {
+    // Logo identities in every style, each card 3 DIP under the one before it (`bottom`): the logo
+    // size and the colors of the logos that have brand colors, the badge's size and color, then
+    // its offsets. Bars show them only with an identity position, except the logo colors, which
+    // the flyout and the windows also show.
+    auto logoCards = [&](float bottom, bool placed) {
+        auto slider = [&](I18nKey title, I18nKey description, SettingsField field) {
+            if (!SettingsDependentShown(view, placed, field)) return;
             UiCardSpec spec;
             spec.title = text(title);
             spec.description = {{text(description)}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
-            return SettingsAddSliderCard(g, view, items, id, x, at, width, spec, field);
+            bottom = SettingsAddSliderCard(g, view, items, id, x, bottom + 3, width, spec, field);
         };
-        auto brand = [&](float at, I18nKey title, I18nKey description, SettingsField field, I18nKey colors) {
+        auto brand = [&](I18nKey title, I18nKey description, SettingsField field, I18nKey colors) {
             UiCardSpec spec;
             spec.title = text(title);
             spec.description = {{text(description)}};
-            return SettingsAddDropdownCard(g, view, items, id, x, at, width, spec, field, 200,
-                                           {{text(TrCtx(L"logo-color", L"Taskbar text color")), 0}, {text(colors), 1}},
-                                           SettingsFieldValue(s, field));
+            bottom = SettingsAddDropdownCard(g, view, items, id, x, bottom + 3, width, spec, field, 200,
+                                             {{text(TrCtx(L"logo-color", L"Taskbar text color")), 0}, {text(colors), 1}},
+                                             SettingsFieldValue(s, field));
         };
-        top = slider(top, Tr(L"Logo size"), Tr(L"Percent of the standard size; rings keep it inside the hole."),
-                     SettingsField::LogoScale);
-        top = brand(top + 3, Tr(L"Claude logo"),
-                    Tr(L"The taskbar\u2019s text color, or Claude\u2019s orange. Details, Accounts and usage history "
-                       L"match."),
-                    SettingsField::ClaudeLogoBrand, TrCtx(L"logo-color", L"Orange"));
-        top = brand(top + 3, Tr(L"Antigravity logo"),
-                    Tr(L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient."),
-                    SettingsField::GeminiLogoBrand, TrCtx(L"logo-color", L"Gemini gradient"));
-        top = slider(top + 3, Tr(L"Badge size"),
-                     Tr(L"Text size of the number on a logo when several accounts share a provider, in pixels."),
-                     SettingsField::BadgeSize);
-        {
+        slider(Tr(L"Logo size"), Tr(L"Percent of the standard size; rings keep it inside the hole."),
+               SettingsField::LogoScale);
+        brand(Tr(L"Claude logo"),
+              Tr(L"The taskbar\u2019s text color, or Claude\u2019s orange. Details, Accounts and usage history match."),
+              SettingsField::ClaudeLogoBrand, TrCtx(L"logo-color", L"Orange"));
+        brand(Tr(L"Antigravity logo"),
+              Tr(L"The Gemini sparkle in the taskbar\u2019s text color, or its purple-to-blue gradient."),
+              SettingsField::GeminiLogoBrand, TrCtx(L"logo-color", L"Gemini gradient"));
+        slider(Tr(L"Badge size"),
+               Tr(L"Text size of the number on a logo when several accounts share a provider, in pixels."),
+               SettingsField::BadgeSize);
+        if (SettingsDependentShown(view, placed, SettingsField::BadgeColor)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Badge color"));
             spec.description = {{text(Tr(L"White, the default, follows the taskbar\u2019s text color. Custom... "
                                          L"opens the color picker."))}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
-            top = SettingsAddColorCard(g, view, items, id, x, top + 3, width, spec, SettingsField::BadgeColor,
-                                       SettingsField::BadgeColorCustom,
-                                       {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
-                                       s.badgeColor & 0x00FFFFFF);
+            bottom = SettingsAddColorCard(g, view, items, id, x, bottom + 3, width, spec, SettingsField::BadgeColor,
+                                          SettingsField::BadgeColorCustom,
+                                          {std::begin(kSettingsBadgeColors), std::end(kSettingsBadgeColors)},
+                                          s.badgeColor & 0x00FFFFFF);
         }
-        top = slider(top + 3, Tr(L"Badge horizontal offset"),
-                     Tr(L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the "
-                        L"hole on rings)."),
-                     SettingsField::BadgeOffsetX);
-        return slider(top + 3, Tr(L"Badge vertical offset"), Tr(L"Pixels down, or up when negative."),
-                      SettingsField::BadgeOffsetY);
+        slider(Tr(L"Badge horizontal offset"),
+               Tr(L"Pixels right, or left when negative, from the logo\u2019s lower-right corner (inside the hole on "
+                  L"rings)."),
+               SettingsField::BadgeOffsetX);
+        slider(Tr(L"Badge vertical offset"), Tr(L"Pixels down, or up when negative."), SettingsField::BadgeOffsetY);
+        return bottom;
     };
 
     if (bars) {
@@ -37534,7 +38565,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
         }
 
         // Identity: the link to each account's identity, where it sits; the Label form's size, the
-        // gap and the logo cards need a position.
+        // gap and the logo cards show with a position.
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
         bool placed = s.labelPosition != LabelPosition::Hidden;
         y = identityCard(y);
@@ -37550,26 +38581,22 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"identity-position", L"Hidden")), int(LabelPosition::Hidden)}},
                                         int(s.labelPosition));
         }
-        {
+        if (SettingsDependentShown(view, placed, SettingsField::LabelFontSize)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Label font size"));
             spec.description = {{text(Tr(L"Text of accounts whose identity is Label, in pixels."))}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelFontSize);
         }
-        {
+        if (SettingsDependentShown(view, placed, SettingsField::LabelGap)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Identity gap"));
             spec.description = {{text(Tr(L"Space between the identity and the bars."))}};
-            spec.enabled = placed;
-            if (!placed) spec.reason = unplaced;
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::LabelGap, pixels);
         }
-        y = logoCards(y + 3, placed);
+        y = logoCards(y, placed);
 
-        // Bar text: the percentage text (vertical bars' own), its alignment and the amounts that
-        // replace it, which need it shown; then quota keys, and the text size for either.
+        // Bar text: the percentage text (vertical bars' own), then, while it shows, its alignment
+        // and the amounts that replace it; quota keys, and the text size while either shows.
         y = section(y + 20, TrCtx(L"settings-section", L"Bar text"));
         const bool vertical = layout == BarLayout::Vertical;
         const bool percentShown = PercentTextVisibilityFor(s) != PercentTextVisibility::Never;
@@ -37588,13 +38615,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                  {text(TrCtx(L"percent-text", L"Always show")), int(PercentTextVisibility::Always)}},
                 int(PercentTextVisibilityFor(s)));
         }
-        const std::wstring textOff = text(Tr(L"Show percentage text on hover or always to change this."));
-        {
+        if (SettingsDependentShown(view, percentShown, SettingsField::PercentTextAlignment)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Percentage alignment"));
             spec.description = {{text(Tr(L"Adaptive: right side, moving left once the bar reaches the yellow threshold."))}};
-            spec.enabled = percentShown;
-            if (!percentShown) spec.reason = textOff;
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentTextAlignment,
                                         200,
                                         {{text(TrCtx(L"percent-alignment", L"Adaptive")), int(PercentTextAlignment::Adaptive)},
@@ -37603,13 +38627,11 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"percent-alignment", L"Right")), int(PercentTextAlignment::Right)}},
                                         int(s.percentTextAlignment));
         }
-        {
+        if (SettingsDependentShown(view, percentShown, SettingsField::ShowExtraBarAmounts)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Amounts on extra usage and credits"));
             spec.description = {{text(Tr(L"$ or credits instead of % on Anthropic extra usage, OpenAI credits and GitHub "
                                          L"Copilot AI credits: spent in Used mode, left in Remaining mode."))}};
-            spec.enabled = percentShown;
-            if (!percentShown) spec.reason = textOff;
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowExtraBarAmounts);
         }
         {
@@ -37621,13 +38643,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                            {L"keyEx", key(3)}, {L"keyCr", key(5)}, {L"keyMo", key(6)}})}};
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::ShowBarLabels);
         }
-        {
-            bool shown = s.showBarLabels || percentShown;
+        if (SettingsDependentShown(view, s.showBarLabels || percentShown, SettingsField::PercentFontSize)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar text size"));
             spec.description = {{text(Tr(L"Percentage text and quota keys, in pixels."))}};
-            spec.enabled = shown;
-            if (!shown) spec.reason = text(Tr(L"Show percentage text or turn on Quota keys to change this."));
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PercentFontSize);
         }
     } else if (IsFaceTile(layout)) {
@@ -37657,7 +38676,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::RingThickness);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     } else if (layout == BarLayout::Sparkline) {
         // Usage graphs: each chart's width and height, its text size, the extra usage on the weekly
         // chart, the long windows' span and its swap on hover, then the current position cues and
@@ -37706,24 +38725,6 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"sparkline-extra", L"Percent")), int(SparklineExtra::Percent)}},
                                         int(s.sparklineExtra));
         }
-        // The long windows' spans, after Off on hover.
-        auto spans = [&](bool off) {
-            std::vector<UiOption> options;
-            if (off) options.push_back({text(TrCtx(L"sparkline-span", L"Off")), -1});
-            options.push_back({text(TrCtx(L"sparkline-span", L"Whole window")), int(SparklineSpan::Window)});
-            const std::pair<int, SparklineSpan> hours[] = {{12, SparklineSpan::Hours12},
-                                                           {24, SparklineSpan::Hours24},
-                                                           {36, SparklineSpan::Hours36},
-                                                           {48, SparklineSpan::Hours48}};
-            for (auto [count, span] : hours) {
-                options.push_back(
-                    {I18nText(locale,
-                              TrCtx(L"sparkline-span", L"{hours, plural, one{# hour each side} other{# hours each side}}"),
-                              {{L"hours", count}}),
-                     int(span)});
-            }
-            return options;
-        };
         y = section(y + 20, TrCtx(L"settings-section", L"Time span"));
         {
             UiCardSpec spec;
@@ -37734,14 +38735,15 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                           {{L"key7d", key(1)}, {L"keyFa", key(2)}, {L"keyAr", key(4)},
                                            {L"keyEx", key(3)}, {L"keyMo", key(6)}})}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y, width, spec, SettingsField::SparklineSpan, 200,
-                                        spans(false), int(s.sparklineSpan));
+                                        SettingsSpanOptions(locale, false), int(s.sparklineSpan));
         }
         {
             UiCardSpec spec;
             spec.title = text(Tr(L"On hover"));
             spec.description = {{text(Tr(L"What those charts show while the pointer rests on the account."))}};
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineHoverSpan, 200,
-                                        spans(true), SettingsFieldValue(s, SettingsField::SparklineHoverSpan));
+                                        SettingsSpanOptions(locale, true),
+                                        SettingsFieldValue(s, SettingsField::SparklineHoverSpan));
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Current position"));
         struct Cue {
@@ -37772,7 +38774,7 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::SparklineReadingScale);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     } else if (layout == BarLayout::QuotaMatrix) {
         // Quota matrix: the numbers' size, the headline's.
         y = section(y + 20, TrCtx(L"settings-section", L"Matrix"));
@@ -37784,10 +38786,10 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddSliderCard(g, view, items, id, x, y, width, spec, SettingsField::HeadlineFontSize);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     } else {
-        // Headline tiles: the number's size, the countdown, then its bars' sizes and the bars'
-        // gap, which the countdown replaces.
+        // Headline tiles: the number's size, the countdown, then, unless the countdown replaces
+        // them, its bars' sizes and the bars' gap.
         y = section(y + 20, TrCtx(L"settings-section", L"Headline"));
         {
             UiCardSpec spec;
@@ -37804,41 +38806,33 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
             y = SettingsAddToggleCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineCountdown);
         }
         const bool segments = !s.headlineCountdown;
-        const std::wstring countdownOn = text(Tr(L"Turn off Reset countdown to change this."));
-        {
+        if (SettingsDependentShown(view, segments, SettingsField::HeadlineBarLength)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar length"));
             spec.description = {{text(Tr(L"Pixels along each quota\u2019s bar under the number."))}};
-            spec.enabled = segments;
-            if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarLength);
         }
-        {
+        if (SettingsDependentShown(view, segments, SettingsField::HeadlineBarThickness)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar thickness"));
             spec.description = {{text(Tr(L"Pixels across each bar."))}};
-            spec.enabled = segments;
-            if (!segments) spec.reason = countdownOn;
             y = SettingsAddSliderCard(g, view, items, id, x, y + 3, width, spec, SettingsField::HeadlineBarThickness);
         }
-        {
+        if (SettingsDependentShown(view, segments, SettingsField::BarGap)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Bar gap"));
             spec.description = {{text(Tr(L"Space between an account\u2019s bars."))}};
-            spec.enabled = segments;
-            if (!segments) spec.reason = countdownOn;
             y = SettingsAddNumberCard(g, view, items, id, x, y + 3, width, spec, SettingsField::BarGap, pixels);
         }
         y = section(y + 20, TrCtx(L"settings-section", L"Identity"));
-        y = logoCards(identityCard(y) + 3, true);
+        y = logoCards(identityCard(y), true);
     }
 
     // Pace markers: none on headline tiles or the quota matrix; the marker style is the bars'.
-    // Style and color need the markers on.
+    // Style and color show with the markers on.
     if (layout != BarLayout::LogoHeadline && layout != BarLayout::QuotaMatrix) {
         y = section(y + 20, TrCtx(L"settings-section", L"Pace markers"));
         bool on = s.showPaceTicks;
-        const std::wstring off = text(Tr(L"Turn on Pace markers to change this."));
         {
             UiCardSpec spec;
             spec.title = text(Tr(L"Pace markers"));
@@ -37849,13 +38843,11 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                              L"its usage."))}};
             y = SettingsAddToggleCard(g, view, items, id, x, y, width, spec, SettingsField::ShowPaceTicks);
         }
-        if (bars) {
+        if (bars && SettingsDependentShown(view, on, SettingsField::PaceTickStyle)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Marker style"));
             spec.description = {{text(Tr(L"Thin caret, full-width line, edge notch, centered dot, or a time track: a "
                                          L"small bar under each bar that fills with the elapsed time."))}};
-            spec.enabled = on;
-            if (!on) spec.reason = off;
             y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickStyle, 200,
                                         {{text(TrCtx(L"pace-marker", L"Caret")), int(PaceTickStyle::Caret)},
                                          {text(TrCtx(L"pace-marker", L"Full line")), int(PaceTickStyle::Line)},
@@ -37864,13 +38856,11 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
                                          {text(TrCtx(L"pace-marker", L"Time track")), int(PaceTickStyle::TimeTrack)}},
                                         int(s.paceTickStyle));
         }
-        {
+        if (SettingsDependentShown(view, on, SettingsField::PaceTickColor)) {
             UiCardSpec spec;
             spec.title = text(Tr(L"Marker color"));
             spec.description = {{text(Tr(L"Light grey by default, dark on a light taskbar. Custom... opens the color "
                                          L"picker."))}};
-            spec.enabled = on;
-            if (!on) spec.reason = off;
             y = SettingsAddColorCard(g, view, items, id, x, y + 3, width, spec, SettingsField::PaceTickColor,
                                      SettingsField::PaceTickColorCustom,
                                      {std::begin(kSettingsPaceColors), std::end(kSettingsPaceColors)},
@@ -37902,9 +38892,9 @@ static float SettingsUiBuildLayout(UiGraphics& g, const SettingsView& view, std:
 
 // src/settings/page-display.h
 // Settings > Display: the material of the details flyout and the windows, the bar mode, the
-// meters' usage colors and thresholds, the stale and outage marks, the OpenAI details and the
-// extra usage chart (approved mockup display.png, Appearance aside). The preview card is in the
-// shell's pinned header (settings/preview.h). Pure builder.
+// meters' usage colors and thresholds, the stale and outage marks, the OpenAI details, the extra
+// usage chart and the flyout charts' time spans (approved mockup display.png, Appearance aside).
+// The preview card is in the shell's pinned header (settings/preview.h). Pure builder.
 
 // Lays out the page from content y; returns the bottom of the last card.
 static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
@@ -38049,6 +39039,23 @@ static float SettingsUiBuildDisplay(UiGraphics& g, const SettingsView& view, std
                                      {text(TrCtx(L"extra-usage-chart", L"Week")), int(ExtraUsageChart::Week)}},
                                     int(s.extraUsageChart));
     }
+    {
+        UiCardSpec spec;
+        spec.title = text(Tr(L"Chart time span"));
+        spec.description = {{text(Tr(L"Weekly and monthly charts in the details flyout: the whole window, or 12 to 48 "
+                                     L"hours before and after now."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::FlyoutChartSpan, 200,
+                                    SettingsSpanOptions(locale, false), int(s.flyoutChartSpan));
+    }
+    {
+        UiCardSpec spec;
+        spec.title = text(Tr(L"Chart time span on hover"));
+        spec.description = {{text(Tr(L"What one of those charts shows while the pointer rests on its quota\u2019s row "
+                                     L"in the flyout."))}};
+        y = SettingsAddDropdownCard(g, view, items, id, x, y + 3, width, spec, SettingsField::FlyoutChartHoverSpan, 200,
+                                    SettingsSpanOptions(locale, true),
+                                    SettingsFieldValue(s, SettingsField::FlyoutChartHoverSpan));
+    }
 
     UiCardSpec reset;
     reset.title = text(Tr(L"Reset Display to defaults"));
@@ -38099,10 +39106,10 @@ static bool SettingsMoveAccountCards(std::vector<UiItem>& items, const std::vect
     return moved;
 }
 
-// Lays out the page from content y; returns the bottom of the last card. A dragged card is
-// built in its new place, then lifted to view.dragTop and drawn over the others.
+// Lays out the page from content y; returns the bottom of the last card and the delay until a
+// visible countdown changes. A dragged card is lifted to view.dragTop and drawn over the others.
 static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, std::vector<UiItem>& items,
-                                     uint32_t& id, float x, float y, float width) {
+                                     uint32_t& id, float x, float y, float width, UINT& tickInMs) {
     const Settings& s = view.settings;
     const I18nLocale& locale = view.locale;
     auto textWidth = [&](std::wstring_view text, UiFont font) {
@@ -38171,6 +39178,11 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
 
     int visible = int(std::count_if(s.accounts.begin(), s.accounts.end(),
                                     [](const AccountConfig& account) { return !account.hidden; }));
+    // Each card's usage at a glance: a percentage in the room of "100%", after a meter on a card
+    // wide enough for it.
+    const float percentWidth = textWidth(I18nFixed(locale, 100, 0) + L"%", UiFont::Note);
+    const float meterWidth = width >= 560 ? 48 : 0;
+    const std::array<uint32_t, 4> usageColors = UsagePaletteColors(s.usagePalette, s.customUsageColors);
     std::vector<UiItem> lifted;
     float top = y + 14;
     for (size_t i = 0; i < s.accounts.size() && i < view.accounts.size(); i++) {
@@ -38193,8 +39205,16 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         const bool anthropic = account.provider == L"anthropic", openai = account.provider == L"openai";
         const bool copilot = account.provider == L"copilot", opencode = account.provider == L"opencode";
         const bool signsIn = anthropic || openai || copilot || opencode;
-        const bool notPolled = account.hidden && (s.skipHiddenPolling || !s.historyEnabled || !account.recordHistory);
+        const bool notPolled = account.hidden && s.hiddenPollMinutes == kHiddenPollNever;
         const bool signInNeeded = signsIn && !status.signingIn && (!status.signedIn || status.needsSignIn);
+        // Its usage at a glance, as the taskbar shows it (used or left; three digits at most); none
+        // on a card that asks for a sign-in, whose button takes the room.
+        const AccountUsageSummary& usage = status.usage;
+        const bool usageRead = !signInNeeded && usage.pct >= 0 && (!usage.resetUnixMs || view.now < usage.resetUnixMs);
+        const bool showReset = usageRead && usage.resetUnixMs;
+        const double usageShown =
+            std::min(s.barMode == BarMode::Remaining ? std::clamp(100 - usage.pct, 0.0, 100.0) : usage.pct, 999.0);
+        const std::wstring usageText = usageRead ? I18nFixed(locale, usageShown, 0) + L"%" : L"\u2014";
         const int bars = SettingsAccountValue(account, SettingsField::AccountBars);
         std::vector<UiItem> cardItems;
         auto push = [&](UiItem item) { cardItems.push_back(std::move(item)); };
@@ -38202,6 +39222,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // Panel, lifted while dragged; the header (mockup .ahead, 68 DIP) expands it.
         constexpr float kHeader = 68;
         const float cy = top + kHeader / 2;
+        const float usageY = showReset ? cy - 9 : cy;
         UiItem panel;
         panel.id = control(SettingsField::AccountExpand, 1);
         panel.kind = UiItemKind::Card;
@@ -38217,7 +39238,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         push(header);
 
         // Grip, logo; then, laid out from the right but in reading (and focus) order: Sign in,
-        // quota keys, visibility, chevron.
+        // quota keys, usage, visibility, chevron.
         UiItem handle;
         handle.id = control(SettingsField::AccountMove);
         handle.kind = UiItemKind::Handle;
@@ -38253,6 +39274,62 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                     !account.hidden, account.hidden || visible > 1,
                     command(SettingsField::AccountHidden, !account.hidden), UiToggleText{});
         right -= 40 + 14;
+        float resetLeft = right;
+        // Usage, at the same spot on every card that shows it: the percentage, right-aligned,
+        // after its meter; both in the reading's usage color, grey once it is out of date. A dash
+        // without a reading.
+        if (!signInNeeded) {
+            const uint32_t color = UsageColor(usage.pct, usage.stale, s.yellowThreshold, s.orangeThreshold,
+                                              s.redThreshold, usageColors);
+            // The caption can extend under the quota chips on a narrow card. Keep them and the
+            // meter on the percentage's line, and leave room for the caption beside the status.
+            if (showReset) {
+                ULONGLONG leftMs = usage.resetUnixMs - view.now;
+                ULONGLONG minutes = 1 + (leftMs - 1) / 60000;
+                // Round up to minutes. Once the text shows days, it changes on an hour step.
+                UINT tick = UINT((leftMs - 1) % 60000 + 1);
+                if (minutes >= 24 * 60) tick += UINT(minutes % 60) * 60000;
+                if (!tickInMs || tick < tickInMs) tickInMs = tick;
+                std::wstring when = I18nText(locale, TrCtx(L"reset-when", L"in {duration}"),
+                                             {{L"duration", FormatShortDuration(locale, minutes * 60)}});
+                std::wstring text = I18nText(locale, TrCtx(L"quota-reset", L"Resets {when}"), {{L"when", when}});
+                resetLeft = right - textWidth(text, UiFont::Caption);
+                UiItem caption;
+                caption.id = id++;
+                caption.kind = UiItemKind::Text;
+                caption.font = UiFont::Caption;
+                caption.ink = UiInk::Muted;
+                caption.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
+                caption.rect = {resetLeft, cy + 2, right, cy + 18};
+                caption.runs.push_back({std::move(text)});
+                trailing.push_back(std::move(caption));
+            }
+            UiItem percent;
+            percent.id = id++;
+            percent.kind = UiItemKind::Text;
+            percent.font = UiFont::Note;
+            percent.ink = UiInk::Muted;
+            percent.align = DWRITE_TEXT_ALIGNMENT_TRAILING;
+            percent.rect = {right - percentWidth, usageY - 10, right, usageY + 10};
+            percent.runs.push_back({usageText});
+            if (usageRead && !usage.stale) {
+                percent.ink = UiInk::Primary;
+                percent.runs[0].color = UiRgb(UsageTextColor(color, view.theme == UiThemeKind::Light));
+            }
+            trailing.push_back(std::move(percent));
+            right -= percentWidth;
+            if (usageRead && meterWidth > 0) {
+                UiItem meter;
+                meter.id = id++;
+                meter.kind = UiItemKind::Meter;
+                meter.rect = {right - 8 - meterWidth, usageY - 8, right - 8, usageY + 8};
+                meter.maximum = 100;
+                meter.action.value = int(std::lround(std::min(usageShown, 100.0)));
+                meter.color = UiRgb(color & 0xFFFFFF);
+                trailing.push_back(std::move(meter));
+            }
+            right -= (meterWidth > 0 ? 8 + meterWidth : 0) + 14;
+        }
         for (int bar = kQuotaBarCount - 1; bar >= 0; bar--) {
             if (!((bars >> bar) & 1)) continue;
             std::wstring text = QuotaKey(view.locale, account.provider, bar);
@@ -38263,7 +39340,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             chip.font = UiFont::Caption;
             chip.text = text;
             chip.selected = true;
-            chip.rect = {right - chipWidth, cy - 10, right, cy + 10};
+            chip.rect = {right - chipWidth, usageY - 10, right, usageY + 10};
             trailing.push_back(std::move(chip));
             right -= chipWidth + 4;
         }
@@ -38288,7 +39365,9 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         // Label and "Provider · plan · status", the status in its color (the last poll's error on
         // its own), each one line before the controls. Where the details don't fit they drop the
         // plan, then the provider (its logo stays), then the status ellipsizes; the label
-        // ellipsizes. Anything left out or cut, the header's tooltip holds both lines whole.
+        // ellipsizes. Anything left out or cut, the header's tooltip holds both lines whole; it
+        // also shows for a reading that is out of date, and then names the usage's quota and when
+        // it was read.
         std::wstring stateText;
         UiInk stateInk = UiInk::Success;
         std::wstring error = AccountErrorText(view.locale, status.error, AccountErrorForm::Alone);
@@ -38305,6 +39384,20 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
             stateText = !signsIn && status.error.code == AccountErrorCode::AntigravityNotRunning ?
                             I18nText(view.locale, TrCtx(L"account-state", L"Local app not running")) : error;
             stateInk = UiInk::Caution;
+        } else if (account.hidden) {
+            // Its interval, in hours when it is whole ones.
+            int minutes = AccountPollMinutes(account, s.pollMinutes, s.hiddenPollMinutes);
+            stateText =
+                minutes % 60 ?
+                    I18nText(locale,
+                             TrCtx(L"account-state", L"{minutes, plural, one{Hidden, polled every minute} "
+                                                     L"other{Hidden, polled every # minutes}}"),
+                             {{L"minutes", minutes}}) :
+                    I18nText(locale,
+                             TrCtx(L"account-state", L"{hours, plural, one{Hidden, polled every hour} "
+                                                     L"other{Hidden, polled every # hours}}"),
+                             {{L"hours", minutes / 60}});
+            stateInk = UiInk::Secondary;
         } else if (!signsIn) {
             stateText = I18nText(locale, status.polled ? TrCtx(L"account-state", L"Local app running") :
                                                          TrCtx(L"account-state", L"Waiting for the local app"));
@@ -38325,7 +39418,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                                             {{L"provider", provider}, {L"plan", status.plan},
                                              {L"state", SettingsStatusArg(stateText)}}),
                                    stateInk);
-        const float textLeft = x + 77, textRight = std::max(right, textLeft + 40);
+        const float textLeft = x + 77, textRight = std::max(std::min(right, resetLeft - 14), textLeft + 40);
         auto fits = [&](const std::vector<UiRun>& runs, UiFont font) {
             return textWidth(UiRunsText(runs), font) <= textRight - textLeft;
         };
@@ -38346,9 +39439,20 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
         state.rect = {textLeft, cy + 2, textRight, cy + 18};
         state.runs = shown;
         state.trim = true;
-        if (!fits(title.runs, UiFont::Body) || !fits(details, UiFont::Caption)) {
+        if (!fits(title.runs, UiFont::Body) || !fits(details, UiFont::Caption) || (usageRead && usage.stale)) {
             cardItems[1].tooltip = {{account.label, UiRunStyle::Strong}, {L"\n"}};
             cardItems[1].tooltip.insert(cardItems[1].tooltip.end(), details.begin(), details.end());
+            if (usageRead) {
+                cardItems[1].tooltip.push_back({L"\n"});
+                cardItems[1].tooltip.push_back(
+                    {I18nText(locale,
+                              s.barMode == BarMode::Remaining ?
+                                  TrCtx(L"account-usage", L"{quota}: {percent} left, read {time}") :
+                                  TrCtx(L"account-usage", L"{quota}: {percent} used, read {time}"),
+                              {{L"quota", QuotaKey(locale, account.provider, usage.bar)},
+                               {L"percent", usageText},
+                               {L"time", status.usageTime.empty() ? L"?" : status.usageTime}})});
+            }
         }
         push(std::move(title));
         push(std::move(state));
@@ -38497,17 +39601,15 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                               std::move(options), true,
                               command(SettingsField::AccountTileIdentity, int(account.tileIdentity)));
             }
-            {
-                // Its placeholder is what the tile shows without it: the label without spaces.
-                bool used = account.tileIdentity == TileIdentity::Text;
-                const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
+            // Short text, while Identity is Label or its box holds text being edited or unsaved. Its
+            // placeholder is what the tile shows without it: the label without spaces.
+            if (const SettingsDraft* draft = draftOf(SettingsField::AccountTileText);
+                draft || account.tileIdentity == TileIdentity::Text) {
                 UiCardSpec spec;
                 spec.title = I18nText(locale, Tr(L"Short text"));
                 spec.description = {{I18nText(locale, Tr(L"The Label identity on tiles, up to 4 characters. Empty uses "
                                                          L"the label without spaces."))}};
                 spec.trailing = {96, 32};
-                spec.enabled = used;
-                if (!used) spec.reason = I18nText(locale, Tr(L"Used on tiles when Identity is Label."));
                 if (draft) spec.error = SettingsDraftErrorText(locale, *draft);
                 UiCardLayout layout = row(spec);
                 UiItem box;
@@ -38520,7 +39622,6 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                              [](wchar_t ch) { return !iswspace(ch); });
                 box.runs.push_back({std::move(placeholder)});
                 box.maximum = kSettingsTileTextLimit;
-                box.enabled = used;
                 box.action = command(SettingsField::AccountTileText);
                 push(box);
             }
@@ -38542,7 +39643,7 @@ static float SettingsUiBuildAccounts(UiGraphics& g, const SettingsView& view, st
                         Recording{L"\u25CF ", TrCtx(L"recording-status", L"Waiting"), UiInk::Caution} :
                     !account.historyId ?
                         Recording{L"\u25CF ", TrCtx(L"recording-status", L"Unavailable"), UiInk::Caution} :
-                    account.hidden && s.skipHiddenPolling ?
+                    notPolled ?
                         Recording{L"\u25CF ", TrCtx(L"recording-status", L"Paused while hidden"), UiInk::Caution} :
                     view.status.recording == SettingsRecording::StorageError ?
                         Recording{L"\u25CF ", TrCtx(L"recording-status", L"Not saving"), UiInk::Danger} :
@@ -38642,7 +39743,8 @@ static constexpr float kSettingsNavWidth = 260;
 static constexpr float kSettingsHeaderHeight = 56;
 static constexpr float kSettingsContentMaxWidth = 1000;
 
-static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_SIZE_F client,
+// Milliseconds from view.now until a countdown changes; zero when the frame needs no timer.
+static UINT SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_SIZE_F client,
                                  UiFrame& frame) {
     static constexpr std::pair<I18nKey, PCWSTR> kPages[] = {
         {TrCtx(L"settings-page", L"Accounts"), L"\uE716"}, {TrCtx(L"settings-page", L"Layout"), L"\uE8A9"},
@@ -38721,11 +39823,17 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             note.kind = UiItemKind::Text;
             note.font = UiFont::Note;
             note.ink = UiInk::Muted;
-            note.runs.push_back({I18nText(view.locale, view.settings.skipHiddenPolling ?
-                                                           Tr(L"Drag to reorder. Toggle hides an account from the "
-                                                              L"taskbar; hidden accounts are not polled.") :
-                                                           Tr(L"Drag to reorder. Toggle hides an account from the "
-                                                              L"taskbar."))});
+            // What hiding costs: no polls, or fewer of them.
+            const Settings& s = view.settings;
+            note.runs.push_back(
+                {I18nText(view.locale,
+                          s.hiddenPollMinutes == kHiddenPollNever ?
+                              Tr(L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are "
+                                 L"not polled.") :
+                          s.hiddenPollMinutes > s.pollMinutes ?
+                              Tr(L"Drag to reorder. Toggle hides an account from the taskbar; hidden accounts are "
+                                 L"polled less often.") :
+                              Tr(L"Drag to reorder. Toggle hides an account from the taskbar."))});
             float noteLeft = kSettingsNavWidth + left;
             header = 50 + UiLayoutSize(UiRichLayout(g, note.runs, UiFont::Note, right - noteLeft)).height;
             note.rect = {noteLeft, 50, right, header};
@@ -38748,9 +39856,10 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
 
     // Content, in viewport coordinates.
     float bottom = 0;
+    UINT tickInMs = 0;
     switch (SettingsUiPage(page)) {
         case SettingsUiPage::Accounts:
-            bottom = SettingsUiBuildAccounts(g, view, frame.content, id, left, 0, width);
+            bottom = SettingsUiBuildAccounts(g, view, frame.content, id, left, 0, width, tickInMs);
             break;
         case SettingsUiPage::About:
             bottom = SettingsUiBuildAbout(g, view, frame.content, id, left, 2, width);
@@ -38771,6 +39880,7 @@ static void SettingsUiBuildFrame(UiGraphics& g, const SettingsView& view, D2D1_S
             break;
     }
     frame.contentHeight = bottom + 28;
+    return tickInMs;
 }
 
 // src/settings/ui-window.h
@@ -38792,9 +39902,11 @@ static constexpr UINT_PTR kSettingsStepTimer = 0x5E00;
 static constexpr UINT_PTR kSettingsRefreshTimer = 0x5D00;
 // Copy version info's button shows whether it copied until this timer ends it.
 static constexpr UINT_PTR kSettingsCopiedTimer = 0x5C00;
+// The next change to an account card's countdown, without a poll or store reload.
+static constexpr UINT_PTR kSettingsCountdownTimer = 0x5B00;
 // The product name, English in every language: the general message boxes' caption, and in the
 // window's title.
-static constexpr PCWSTR kSettingsProductName = L"Taskbar AI Quota";  // i18n-en
+static constexpr PCWSTR kSettingsProductName = L"Taskbar AI Usage Quota";  // i18n-en
 
 // The window's title in a language.
 static std::wstring SettingsWindowTitle(const I18nLocale& locale) {
@@ -38819,14 +39931,14 @@ struct SettingsUiClient final : UiHostClient {
     SettingsEdits edits{store};
     std::map<SettingsField, std::pair<uint64_t, uint64_t>> steps;
 
-    // Window state. The title is in the language it was last set in. Custom poll and retention
-    // modes stick once chosen or typed into, so their boxes don't disable themselves when a
-    // partial number happens to match a preset. The preview's scroll belongs to the position it
-    // was built for. The last built view paints the preview; the color dialog's custom colors last
-    // for the window. Copy version info's result shows until kSettingsCopiedTimer.
+    // Window state. The title is in the language it was last set in. Custom poll, hidden poll and
+    // retention modes stick once chosen or typed into, so their boxes don't disable themselves
+    // when a partial number happens to match a preset. The preview's scroll belongs to the
+    // position it was built for. The last built view paints the preview; the color dialog's custom
+    // colors last for the window. Copy version info's result shows until kSettingsCopiedTimer.
     I18nLocale titleLocale;
     SettingsUiPage page = SettingsUiPage::Accounts;
-    bool pollCustom = false, retentionCustom = false;
+    bool pollCustom = false, hiddenPollCustom = false, retentionCustom = false;
     float previewScroll = 0;
     TaskbarPlacement previewPlacement = TaskbarPlacement::BeforeIcons;
     SettingsView view;
@@ -38981,15 +40093,18 @@ struct SettingsUiClient final : UiHostClient {
         view.version = WH_MOD_VERSION;
         view.settings = edits.Projection();
         UiHostSetBackdrop(host, MaterialBackdrop(view.settings.material));
+        view.theme = host.theme.kind;
         view.transparencyEffects = host.theme.transparency;
         view.status = edits.baseline.status;
         view.drafts = edits.drafts;
         view.pollCustom = pollCustom;
+        view.hiddenPollCustom = hiddenPollCustom;
         view.retentionCustom = retentionCustom;
         view.scale = UiHostScale(host);
         if (std::exchange(previewPlacement, view.settings.placement) != view.settings.placement) previewScroll = 0;
         view.previewScroll = previewScroll;
         view.now = NowUnixMs();
+        view.localTime = UnixMsToLocalSystemTime;
         view.versionCopied = versionCopied;
         for (size_t i = 0; i < view.settings.accounts.size() && i < edits.keys.size(); i++) {
             SettingsViewAccount account;
@@ -39019,7 +40134,12 @@ struct SettingsUiClient final : UiHostClient {
                 drag = {};
             }
         }
-        SettingsUiBuildFrame(*host.graphics, view, client, frame);
+        UINT tickInMs = SettingsUiBuildFrame(*host.graphics, view, client, frame);
+        if (tickInMs && !IsIconic(host.main)) {
+            SetTimer(host.main, kSettingsCountdownTimer, tickInMs, nullptr);
+        } else {
+            KillTimer(host.main, kSettingsCountdownTimer);
+        }
         for (const std::vector<UiItem>* items : {&frame.main, &frame.content}) {
             for (const UiItem& item : *items) {
                 if (item.kind != UiItemKind::Preview) continue;
@@ -39067,8 +40187,8 @@ struct SettingsUiClient final : UiHostClient {
             case UiActionKind::Command:
                 switch (field) {
                     case SettingsField::PollMinutes:
-                        // The interval dropdown: a preset, or 0 for Custom, which only enables
-                        // the custom box and moves focus there.
+                        // The interval dropdown: a preset, or 0 for Custom, which only shows the
+                        // custom box and moves focus there.
                         if (!action.value) {
                             pollCustom = true;
                             UiHostRequestRebuild(host, false);
@@ -39079,9 +40199,29 @@ struct SettingsUiClient final : UiHostClient {
                         KillStepTimer(host, field);
                         Report(host, edits.Commit(0, field, action.value));
                         break;
+                    case SettingsField::HiddenPolling: {
+                        // The hidden accounts dropdown: not polled, as shown ones, an interval, or
+                        // Custom, which drops a failed choice, shows the custom box and moves
+                        // focus there; without an interval yet, it starts at the default one. A
+                        // commit drops the custom box's draft (settings/edits.h).
+                        bool interval = edits.baseline.settings.hiddenPollMinutes > 0;
+                        hiddenPollCustom = action.value == kSettingsHiddenPollCustom;
+                        if (hiddenPollCustom && interval) {
+                            edits.Revert(0, field);
+                            UiHostRequestRebuild(host, false);
+                        } else {
+                            KillStepTimer(host, SettingsField::HiddenPollMinutes);
+                            Report(host, edits.Commit(0, field, hiddenPollCustom ? Settings().hiddenPollMinutes :
+                                                                                   action.value));
+                        }
+                        if (hiddenPollCustom) {
+                            UiHostRequestFocus(host, {SettingsControlId(SettingsField::HiddenPollMinutes), -1}, true);
+                        }
+                        break;
+                    }
                     case SettingsField::KeepHistory: {
                         // The retention dropdown: days, 0 for Forever, or -1 for Custom, which
-                        // drops a failed choice, enables the custom box and moves focus there.
+                        // drops a failed choice, shows the custom box and moves focus there.
                         // Leaving the committed Forever asks first (pruning is shared and final);
                         // Custom then starts at the most days. A commit drops the custom box's
                         // draft (settings/edits.h).
@@ -39123,8 +40263,8 @@ struct SettingsUiClient final : UiHostClient {
                             locale,
                             field == SettingsField::ResetBehavior ?
                                 Tr(L"Reset Behavior to its defaults?\n\nAutomatic language, show on the primary "
-                                   L"display only, show details on hover, poll every 10 minutes, do not poll hidden "
-                                   L"accounts, threshold notifications at red.") :
+                                   L"display only, show details on hover, poll every 10 minutes, hidden accounts "
+                                   L"every hour, threshold notifications at red.") :
                             field == SettingsField::ResetLayout ?
                                 Tr(L"Reset Layout to its defaults?\n\nThe {style} tile style, stacked bars 100 x 8 px "
                                    L"with labels on the left, 32 px rings, logos and number badges in the taskbar\u2019s "
@@ -39145,7 +40285,7 @@ struct SettingsUiClient final : UiHostClient {
                             break;
                         }
                         KillStepTimers(host);
-                        if (field == SettingsField::ResetBehavior) pollCustom = false;
+                        if (field == SettingsField::ResetBehavior) pollCustom = hiddenPollCustom = false;
                         if (field == SettingsField::ResetHistory) retentionCustom = false;
                         Report(host, edits.Reset(field));
                         break;
@@ -39194,8 +40334,9 @@ struct SettingsUiClient final : UiHostClient {
                         }
                         // English in every language: diagnostics for issue reports.
                         wchar_t text[128];
-                        swprintf(text, ARRAYSIZE(text), L"Taskbar AI Quota %s\r\nWindows %lu.%lu.%lu.%lu",  // i18n-en
-                                 WH_MOD_VERSION, os.dwMajorVersion, os.dwMinorVersion, os.dwBuildNumber, revision);
+                        swprintf(text, ARRAYSIZE(text), L"%s %s\r\nWindows %lu.%lu.%lu.%lu",  // i18n-en
+                                 kSettingsProductName, WH_MOD_VERSION, os.dwMajorVersion, os.dwMinorVersion,
+                                 os.dwBuildNumber, revision);
                         bool copied = false;
                         size_t bytes = (wcslen(text) + 1) * sizeof(wchar_t);
                         if (OpenClipboard(host.main)) {
@@ -39331,6 +40472,7 @@ struct SettingsUiClient final : UiHostClient {
                 // Typing supersedes a pending step: its timer no longer commits.
                 KillStepTimer(host, field);
                 if (field == SettingsField::PollMinutes) pollCustom = true;
+                if (field == SettingsField::HiddenPollMinutes) hiddenPollCustom = true;
                 if (field == SettingsField::RetentionDays) retentionCustom = true;
                 auto shown = boxNumbers.find({action.key, action.target});
                 edits.SetText(action.key, field, std::move(action.text),
@@ -39371,6 +40513,7 @@ struct SettingsUiClient final : UiHostClient {
                     break;
                 }
                 if (field == SettingsField::PollMinutes) pollCustom = true;
+                if (field == SettingsField::HiddenPollMinutes) hiddenPollCustom = true;
                 if (field == SettingsField::RetentionDays) retentionCustom = true;
                 steps[field] = {action.key, edits.Step(action.key, field, action.value, view.locale)};
                 SetTimer(host.main, kSettingsStepTimer + UINT_PTR(field), 250, nullptr);
@@ -39509,6 +40652,18 @@ struct SettingsUiClient final : UiHostClient {
                 }
                 return false;
             case WM_TIMER: {
+                if (wParam == kSettingsCountdownTimer) {
+                    KillTimer(host.main, kSettingsCountdownTimer);
+                    if (page == SettingsUiPage::Accounts && !host.closing && !Unloading() && !IsIconic(host.main)) {
+                        // Rebuilding closes popups. Don't interrupt a menu, modal or pointer gesture.
+                        if (modalDepth || closePreparation || host.popup.open || GetCapture()) {
+                            SetTimer(host.main, kSettingsCountdownTimer, 1000, nullptr);
+                        } else {
+                            UiHostRequestRebuild(host, false);
+                        }
+                    }
+                    return true;
+                }
                 if (wParam == kSettingsCopiedTimer) {
                     KillTimer(host.main, kSettingsCopiedTimer);
                     versionCopied.reset();
@@ -39781,12 +40936,19 @@ static constexpr COLORREF kHistoryColors[] = {
     RGB(115, 45, 200), RGB(0, 140, 170), RGB(35, 35, 35), RGB(220, 25, 35),
 };
 
+// The dollars recorded with a reading of `meter`, -1 without: Anthropic's extra usage spending
+// (meter 6) with its budget percentage (meter 3), the same spending over the monthly limit.
+static double HistorySpentWith(const HistorySample& sample, int meter) {
+    return meter == 3 && HistoryHasValue(sample, 6) ? sample.meters[6].value : -1;
+}
+
 struct HistoryStatistics {
     bool hasValue = false;
     double peak = 0;
     ULONGLONG peakTime = 0;
     double latest = 0;
     ULONGLONG latestTime = 0;
+    double peakSpent = -1, latestSpent = -1;  // HistorySpentWith those readings
     double coverageMs = 0;
     double nearLimitMs = 0;
     size_t validSamples = 0;
@@ -39819,6 +40981,8 @@ struct HistorySeries {
     int meter = 0;
     // Its short name (without the account in one account's view) and full title (with it)
     std::wstring legendTitle, hoverTitle;
+    // An extra budget whose dollars have no series: their short name; else empty
+    std::wstring spentTitle;
     COLORREF color = 0;
     int stroke = 3;  // Logical pixels; scoped quotas use 2, never thin 1px dashes.
     bool plotted = true;
@@ -39930,11 +41094,13 @@ static HistoryStatistics HistoryAnalyzeRows(const std::vector<HistorySample>& sa
             double value = sample.meters[meter].value;
             result.latest = value;
             result.latestTime = sample.timeMs;
+            result.latestSpent = HistorySpentWith(sample, meter);
             ++result.validSamples;
             if (!result.hasValue || value > result.peak) {
                 result.hasValue = true;
                 result.peak = value;
                 result.peakTime = sample.timeMs;
+                result.peakSpent = result.latestSpent;
             }
             if (previous && HistoryConnection(*previous, sample, meter) == HistoryBreak::None) {
                 double elapsed = double(sample.timeMs - previous->timeMs);
@@ -39963,7 +41129,9 @@ static HistoryStatistics HistoryAnalyzeRows(const std::vector<HistorySample>& sa
 
 // Series of the selected account (or every account) in the query's view: one per meter with
 // readings in either period, in account then meter order. An account with none is listed
-// without readings.
+// without readings. Dollars recorded with a budget percentage are that line's (HistorySpentWith,
+// named by its spentTitle): they get a series only when a reading in either period has none
+// (extra usage without a limit).
 static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& samples,
                                            const std::vector<HistoryUiAccount>& accounts,
                                            const HistorySeriesQuery& query,
@@ -39996,10 +41164,20 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
             if (!account.showFableWeekly) meters &= ~(1U << 2);
         }
         if (!meters) continue;
+        // Whether its dollars keep a series: some reading in either period has no budget percentage.
+        bool spentAlone = false;
+        if (meters & (1U << 6)) {
+            for (size_t row : account.rows) {
+                if (spentAlone || cancelled()) break;
+                const auto& sample = samples[row];
+                spentAlone = sample.timeMs >= query.readFrom && sample.timeMs < query.to &&
+                             HistoryHasValue(sample, 6) && !HistoryHasValue(sample, 3);
+            }
+        }
         size_t firstSeries = result.series.size();
         for (int meter = 0; meter < int(kHistoryMeterCount); ++meter) {
             if (cancelled()) break;
-            if (!(meters & (1U << meter))) continue;
+            if (!(meters & (1U << meter)) || (meter == 6 && !spentAlone)) continue;
             HistorySeries series;
             series.account = i;
             series.meter = meter;
@@ -40089,6 +41267,10 @@ static HistorySeriesSet HistoryBuildSeries(const std::vector<HistorySample>& sam
                                 {{L"account", account.label}, {L"meter", name}});
             };
             series.legendTitle = query.selected < 0 ? titled(label) : label;
+            if (meter == 3 && (meters & (1U << 6)) && !spentAlone) {
+                std::wstring spent = I18nText(locale, TrCtx(L"history-meter", L"Extra spending (USD)"));
+                series.spentTitle = query.selected < 0 ? titled(spent) : spent;
+            }
             series.hoverTitle =
                 titled(meter >= 6 ? label :
                                     I18nText(locale, query.remaining ? TrCtx(L"history-series", L"{meter} left (%)") :
@@ -40279,7 +41461,7 @@ struct HistoryUiViewAccount {
     bool removed = false;
     bool recordingOff = false;  // Its Record history is off
     bool paused = false;        // Hidden while hidden accounts aren't polled
-    double weeklyPct = -1;      // The latest poll's weekly (GitHub Copilot: AI credits) used %; < 0 unknown
+    double weeklyPct = -1;      // Latest weekly used % (Fable if the only weekly bar; Copilot: AI credits); < 0 unknown
     bool stale = false;         // That poll is stale: the value shows muted, cards never say "now"
     ULONGLONG lastPollMs = 0;   // The latest successful poll; 0 none
     bool operator==(const HistoryUiViewAccount&) const = default;
@@ -40287,7 +41469,8 @@ struct HistoryUiViewAccount {
 
 // A summary card (approved Q10 a): a series' chip name and line, a headline with the current
 // period's latest value ("now" when it is the account's latest fresh poll, else its time), then
-// its statistics lines. Details-only dollar spending has no line.
+// the dollars recorded with that value (an extra budget's without a series for them) and its
+// statistics lines. Details-only dollar spending has no line.
 struct HistoryUiCard {
     std::wstring title;
     std::wstring status;        // After the title, muted: the account's recording status
@@ -40308,13 +41491,14 @@ struct HistoryUiNoReadings {
 // A plotted series as the chart, its legend chip and the readout show it (approved q8a-filter):
 // the chip's item id (per history ID and meter, stable for the session), the chip's name (the
 // readout's too) and the full title, the series' color and width, the range of its readings in
-// both periods (with 0), and whether the legend hides it.
+// both periods (with 0), and whether the legend hides it. An extra budget whose dollars have no
+// line names them for their readout rows (HistorySeries::spentTitle).
 struct HistoryUiLine {
     uint32_t chip = 0;
     uint64_t historyId = 0;
     int meter = 0;
     size_t series = 0, account = 0;  // Its series (and card) in the set; its collected account
-    std::wstring name, title;
+    std::wstring name, title, spentName;
     COLORREF color = 0;
     int stroke = 3;
     double low = 0, high = 0;
@@ -40544,7 +41728,9 @@ static std::wstring HistoryUiValue(const I18nLocale& locale, int meter, double v
 // accounts without readings, from the view's accounts (parallel to the set's), selection,
 // comparison, bar mode, consent and language: every peak and its time, coverage with its share, time at or
 // above the red threshold the set was analyzed with for percentages, dollar spending's last and
-// peak readings, and an account's recording status once (in All accounts, on its first card).
+// peak readings, and an account's recording status once (in All accounts, on its first card). An
+// extra budget whose dollars have no series (HistorySeries::spentTitle) names them, the ones
+// spent in either bar mode, under its headline and with its peak (as spent beside a share left).
 // The Remaining bar mode shows percentages left: the peak is the lowest share left, the time at
 // or below what the threshold leaves.
 static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, ULONGLONG from, ULONGLONG to,
@@ -40575,9 +41761,15 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
         auto shown = [&](double value) {
             return HistoryUiValue(locale, series.meter, HistoryUiShown(series.meter, value, left), 0);
         };
-        auto reading = [&](double value, ULONGLONG time) {
-            return I18nText(locale, TrCtx(L"history-reading", L"{value} \u00B7 {time}"),
-                            {{L"value", shown(value)}, {L"time", HistoryUiTime(locale, time, now, localTime)}});
+        auto reading = [&](double value, ULONGLONG time, double spent) {
+            std::wstring text = shown(value), when = HistoryUiTime(locale, time, now, localTime);
+            if (series.spentTitle.empty() || spent < 0) {
+                return I18nText(locale, TrCtx(L"history-reading", L"{value} \u00B7 {time}"),
+                                {{L"value", text}, {L"time", when}});
+            }
+            return I18nText(locale, left ? TrCtx(L"history-reading", L"{value} \u00B7 {amount} spent \u00B7 {time}") :
+                                           TrCtx(L"history-reading", L"{value} \u00B7 {amount} \u00B7 {time}"),
+                            {{L"value", text}, {L"amount", HistoryUiValue(locale, 6, spent, 0)}, {L"time", when}});
         };
         auto peak = [&](const std::wstring& text) {
             return I18nText(locale, left ? TrCtx(L"history-card", L"Lowest {reading}") :
@@ -40590,6 +41782,10 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             bool latestPoll = !account.stale && account.lastPollMs && current.latestTime >= account.lastPollMs;
             card.when = latestPoll ? I18nText(locale, TrCtx(L"history-card", L"now")) :
                                      HistoryUiTime(locale, current.latestTime, now, localTime);
+            if (!series.spentTitle.empty() && current.latestSpent >= 0) {
+                card.lines.push_back(I18nText(locale, TrCtx(L"history-card", L"{amount} spent"),
+                                              {{L"amount", HistoryUiValue(locale, 6, current.latestSpent, 0)}}));
+            }
         }
         // Per period (comparing: current, then previous, each first line naming it). The headline
         // holds the current period's last dollar reading.
@@ -40611,9 +41807,9 @@ static void HistoryUiSetCards(HistoryUiView& view, const HistorySeriesSet& set, 
             }
             if (!series.plotted && period) {
                 line(I18nText(locale, TrCtx(L"history-card", L"Last recorded spend: {reading}"),
-                              {{L"reading", reading(stats.latest, stats.latestTime)}}));
+                              {{L"reading", reading(stats.latest, stats.latestTime, stats.latestSpent)}}));
             }
-            line(peak(reading(stats.peak, stats.peakTime)));
+            line(peak(reading(stats.peak, stats.peakTime, stats.peakSpent)));
             if (!series.plotted) continue;
             line(I18nText(locale, TrCtx(L"history-card", L"Coverage {hours} ({percent}%)"),
                           {{L"hours", HistoryUiHours(locale, stats.coverageMs)},
@@ -41057,7 +42253,8 @@ static UiReadoutRow HistoryChartRow(const I18nLocale& locale, std::wstring name,
 
 // The readout of picked points in the locale's language: one row each, in their order, keyed by
 // the recorded samples they name, the language and the decimal separator their values show (none:
-// key 0). Its overflow hint names what shows the rest.
+// key 0). An extra budget's point whose dollars have no line (HistoryUiLine::spentName) gets a
+// second row for them, in the line's swatch. Its overflow hint names what shows the rest.
 static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const HistoryChart& c,
                                             const std::vector<HistoryChartHit>& hits, const UiPalette& p,
                                             bool oneAccount, ULONGLONG now, const HistoryUiLocalTime& localTime) {
@@ -41077,9 +42274,15 @@ static UiTooltipContent HistoryChartReadout(const I18nLocale& locale, const Hist
         mix(line.chip);
         mix(uint64_t(hit.period));
         mix(point.sourceRow);
-        content.rows.push_back(HistoryChartRow(locale, line.name, HistoryChartColor(line, p), line.stroke, line.meter,
-                                               hit.period, HistoryUiShown(line.meter, point.value, c.remaining),
-                                               c.snapshot->samples[point.sourceRow].timeMs, now, localTime));
+        const HistorySample& sample = c.snapshot->samples[point.sourceRow];
+        D2D1_COLOR_F color = HistoryChartColor(line, p);
+        content.rows.push_back(HistoryChartRow(locale, line.name, color, line.stroke, line.meter, hit.period,
+                                               HistoryUiShown(line.meter, point.value, c.remaining), sample.timeMs, now,
+                                               localTime));
+        if (double spent = HistorySpentWith(sample, line.meter); spent >= 0 && !line.spentName.empty()) {
+            content.rows.push_back(HistoryChartRow(locale, line.spentName, color, line.stroke, 6, hit.period, spent,
+                                                   sample.timeMs, now, localTime));
+        }
     }
     if (content.rows.empty()) return {};
     content.key = key ? key : 1;
@@ -41540,10 +42743,10 @@ struct HistoryController {
     HistorySeriesSet series;
     HistorySeriesKey seriesKey;
 
-    // Navigation slots by history ID, for the session (never reused); the lines the legend hides
-    // for the session (history ID, meter), whatever the selection, view or range
+    // Navigation slots by history ID, for the session (never reused); explicit legend choices
+    // (history ID, meter) override the default across selections, views and ranges.
     std::map<uint64_t, uint32_t> slots;
-    std::vector<std::pair<uint64_t, int>> hidden;
+    std::map<std::pair<uint64_t, int>, bool> hiddenByChoice;
 
     // An operation's notice, and a request to focus the selected entry the window takes
     HistoryNotice notice;
@@ -41635,11 +42838,13 @@ struct HistoryController {
                 selectedId = key;
                 Compose();
                 break;
-            case HistoryUiCommand::View:
-                (view.selected < 0 ? allView : accountView) =
-                    HistoryView(std::clamp(value, 0, int(HistoryView::AllMeters)));
+            case HistoryUiCommand::View: {
+                auto choice = HistoryView(std::clamp(value, 0, int(HistoryView::AllMeters)));
+                if (view.selected < 0) allView = choice;
+                else accountView = choice;
                 Compose();
                 break;
+            }
             case HistoryUiCommand::Range:
                 range = HistoryUiRange(std::clamp(value, 0, int(HistoryUiRange::All)));
                 Load();
@@ -41680,9 +42885,11 @@ struct HistoryController {
                 DeleteHistory(key);
                 break;
             case HistoryUiCommand::Line: {
-                auto line = std::find(hidden.begin(), hidden.end(), std::pair{key, value});
-                if (line != hidden.end()) hidden.erase(line);
-                else hidden.push_back({key, value});
+                auto line = std::find_if(view.lines.begin(), view.lines.end(), [&](const HistoryUiLine& l) {
+                    return l.historyId == key && l.meter == value;
+                });
+                if (line == view.lines.end()) break;
+                hiddenByChoice[{key, value}] = !line->hidden;
                 Compose();
                 break;
             }
@@ -41865,7 +43072,9 @@ struct HistoryController {
             {TrCtx(L"history-about", L"Reading the charts"),
              Tr(L"These are sampled quota levels, not tokens or daily consumption. Choose an account in the sidebar, "
                 L"or All accounts, and a view: Short-term, Weekly, Extra usage or All meters. All accounts starts on "
-                L"Weekly, one account on All meters; each keeps its view until the window closes. The window opens on "
+                L"Weekly. One account starts on All meters. If Fable is its only weekly bar, the regular Weekly line "
+                L"starts hidden. Each mode "
+                L"keeps your choice until the window closes. The window opens on "
                 L"the Default time span set in Settings > History. Weekly follows each Anthropic account's taskbar "
                 L"weekly selections; removed accounts keep both weeklies, and All meters includes weeklies hidden on "
                 L"the taskbar. Antigravity Gemini, Argon and Claude/GPT quotas share the matching short-term and "
@@ -41883,9 +43092,10 @@ struct HistoryController {
                 L"(Settings > Display) they show what is left, so lines fall as usage rises, going below 0% past the "
                 L"limit, and the band sits at the bottom. Extra usage shows Anthropic budget used, GitHub Copilot AI "
                 L"credits used and OpenCode Go's monthly allowance used (%) (left, in the Remaining mode) and OpenAI "
-                L"credits remaining, which fall as usage rises, on their own axis. Dollar spending shows on the "
-                L"cards; All meters also plots it on its own axis. Accounts without readings in the range are listed "
-                L"under No readings.")},
+                L"credits remaining, which fall as usage rises, on their own axis. Dollars spent show with an "
+                L"Anthropic budget's readings, on its card and when pointing at its line. Without a monthly limit "
+                L"there is no budget line: the dollars get their own card, and All meters plots them on their own "
+                L"axis. Accounts without readings in the range are listed under No readings.")},
             {TrCtx(L"history-about", L"Lines and markers"),
              Tr(L"All accounts gives each account a color: primary quotas are thicker, scoped quotas thinner and "
                 L"tinted. One account gives each meter its own color. Solid lines: current. Dashed lines: previous "
@@ -42169,6 +43379,8 @@ struct HistoryController {
             MeterDisplayFor(s, v.locale, [](std::wstring_view, TileFont, double) { return 0.0; }, now, 1, 0);
         std::map<uint64_t, size_t> configured;
         for (size_t i = 0; i < s.accounts.size(); i++) configured.try_emplace(s.accounts[i].historyId, i);
+        v.view = allView;
+        bool hideRegularWeekly = false;
         for (const HistoryUiAccount& a : accounts) {
             HistoryUiViewAccount& account = v.accounts.emplace_back();
             account.historyId = a.id;
@@ -42177,20 +43389,23 @@ struct HistoryController {
             account.label = a.label;
             account.removed = !a.configured;
             account.recordingOff = a.configured && !a.recording;
-            account.paused = a.hidden && s.skipHiddenPolling;
-            // The flyout's weekly row (GitHub Copilot's: its AI credits row): the latest poll's
-            // used % and its staleness.
+            account.paused = a.hidden && s.hiddenPollMinutes == kHiddenPollNever;
+            const bool preferFable = a.configured && a.provider == 1 && !a.showWeekly && a.showFableWeekly;
             auto index = a.configured ? configured.find(a.id) : configured.end();
             if (index != configured.end() && index->second < settings.polls.size()) {
                 const AccountData& poll = settings.polls[index->second];
-                account.weeklyPct = a.provider == 4 ? poll.extraUsage.pct : poll.winWeek.pct;
+                account.weeklyPct = a.provider == 4 ? poll.extraUsage.pct :
+                                    preferFable     ? poll.fableWeek.pct : poll.winWeek.pct;
                 account.stale = AccountMeterState(display, s.barLayout, s.accounts[index->second], poll, 0, 0).stale;
                 account.lastPollMs = poll.lastSuccessMs;
             }
-            if (a.id == selectedId) v.selected = int(v.accounts.size()) - 1;
+            if (a.id == selectedId) {
+                v.selected = int(v.accounts.size()) - 1;
+                v.view = accountView;
+                hideRegularWeekly = preferFable;
+            }
         }
         if (v.selected < 0) selectedId = 0;
-        v.view = v.selected < 0 ? allView : accountView;
         v.range = range;
         v.compare = compare;
         v.recordingEnabled = s.historyEnabled;
@@ -42246,12 +43461,13 @@ struct HistoryController {
                 shown.account = line.account;
                 shown.name = line.legendTitle;
                 shown.title = line.hoverTitle;
+                shown.spentName = line.spentTitle;
                 shown.color = line.color;
                 shown.stroke = line.stroke;
                 shown.low = line.low;
                 shown.high = line.high;
-                shown.hidden = std::find(hidden.begin(), hidden.end(), std::pair{shown.historyId, shown.meter}) !=
-                               hidden.end();
+                auto choice = hiddenByChoice.find({shown.historyId, shown.meter});
+                shown.hidden = choice != hiddenByChoice.end() ? choice->second : hideRegularWeekly && line.meter == 1;
             }
         }
         bool changed = !(v == view);
@@ -42814,8 +44030,8 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
                                                                               nullptr;
 
     // Navigation pane (mockup .nav, .nitem): 38 DIP entries on a 41 DIP pitch, scrolling on its
-    // own. All accounts; configured accounts with their logo, label and weekly value (as their
-    // flyout's weekly row: used or remaining, in the usage color, muted while stale, a dash while
+    // own. All accounts; configured accounts with their logo, label and current percentage
+    // (used or remaining, in the usage color, muted while stale, a dash while
     // unknown); then the Removed group (mockup .ngroup: a 36 DIP header), muted and without values.
     // A label an entry cuts shows whole in its tooltip.
     frame.navPane = {0, 0, kHistoryUiNavWidth, std::max(client.height, 0.0f)};
@@ -42868,29 +44084,10 @@ static void HistoryUiBuildFrame(UiGraphics& g, const HistoryUiView& view, D2D1_S
                 double shown = view.remaining ? std::clamp(100 - account.weeklyPct, 0.0, 100.0) : account.weeklyPct;
                 value.text = HistoryUiNumber(locale, shown, 0) + L"%";
                 if (!account.stale) {
-                    // Light theme: darker variants of the default and colorblind usage colors,
-                    // readable on its surface; another color darkens in OKLCH until it reads at
-                    // 4.5:1 on white.
-                    static constexpr uint32_t kLightInks[][2] = {
-                        {0xE53935, 0xC42B1C}, {0xFB8C00, 0xB35C00}, {0xFDD835, 0x876A00}, {0x43A047, 0x1D7A35},
-                        {0xD55E00, 0xB75100}, {0xE69F00, 0x946700}, {0x56B4E9, 0x387597},
-                    };
                     uint32_t usage = UsageColor(account.weeklyPct, false, view.yellowThreshold, view.orangeThreshold,
                                                 view.redThreshold, view.usageColors);
-                    uint32_t rgb = usage & 0xFFFFFF;
-                    bool variant = false;
-                    for (const auto& ink : kLightInks) {
-                        if (light && ink[0] == rgb) {
-                            rgb = ink[1];
-                            variant = true;
-                        }
-                    }
-                    for (double lift = -0.02; light && !variant && 1.05 / (RelativeLuminance(rgb) + 0.05) < 4.5;
-                         lift -= 0.02) {
-                        rgb = UsageHighlight(usage, lift) & 0xFFFFFF;
-                    }
                     value.ink = UiInk::Inherit;
-                    value.color = UiRgb(rgb);
+                    value.color = UiRgb(UsageTextColor(usage, light));
                 }
             }
             entry.runs.push_back(std::move(value));
