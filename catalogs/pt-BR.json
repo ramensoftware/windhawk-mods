@@ -13009,7 +13009,7 @@
         "ratingUsers": 7,
         "reviews": 0,
         "trendingSorting": -0.832651234987052,
-        "updated": 1792472577000,
+        "updated": 1795723403000,
         "users": 370
       },
       "metadata": {
@@ -13017,14 +13017,15 @@
           "x86-64"
         ],
         "author": "Anixx",
-        "compilerOptions": "-luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lgdiplus",
+        "compilerOptions": "-luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lgdiplus -luxtheme -lwevtapi",
         "description": "Enables native titlebars in UWP apps",
         "github": "https://github.com/Anixx",
         "include": [
-          "ApplicationFrameHost.exe"
+          "ApplicationFrameHost.exe",
+          "dwm.exe"
         ],
         "name": "Remove UWP titlebars",
-        "version": "2.0.1"
+        "version": "2.1.0"
       }
     },
     "neiz-supersmile-audio-visualizer": {

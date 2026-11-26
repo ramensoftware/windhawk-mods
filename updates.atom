@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-26T19:01:02.000Z</updated>
+    <updated>2026-11-26T20:03:23.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove UWP titlebars 2.1.0]]></title>
+        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#a4f6f237f3826e0cfe1bf568ba89aa7905c88727</id>
+        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
+        <updated>2026-11-26T20:03:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/pull/7682">Merge changes by user o12r</a> (show maximize and minimize buttons when the theme is active):</li>
+</ul>
+<p>Fixes missing caption buttons when using this mod (only tested on Windows 11 25H2, build 26200). With 2.0.1 the native titlebar shows title and icon but no minimize/maximize/close.</p>
+<h3>Root cause</h3>
+<ol>
+<li><strong>All buttons hidden:</strong> ApplicationFrameHost calls <code>SetWindowThemeAttribute(WTA_NONCLIENT)</code> on the frame with flags <code>0x10007</code> / mask <code>0x1000F</code>. The undocumented bit <code>0x10000</code> makes DWM drop all caption buttons (stock UWP frames draw their own). Logged in AFH: DWM caption-button width goes from 49 → 0 on exactly that call.</li>
+<li><strong>Only close returns after fixing (1):</strong> frames are created with <code>CreateWindowInBandEx</code> type flags <code>0x3</code>. Bit <code>0x1</code> makes the window &quot;immersive&quot;, and uDWM's <code>CTopLevelWindow::GetCurrentStyle</code> adds close but skips minimize/maximize when <code>CWindowData::IsImmersiveWindow()</code> is true. Changing the type flags in AFH is not an option: clearing either bit stops the app's <code>CoreWindow</code> from being hosted in the frame (tested all combinations).</li>
+</ol>
+<h3>Changes (v2.1.0)</h3>
+<ul>
+<li><strong>AFH:</strong> hook <code>SetWindowThemeAttribute</code> and strip <code>0x10000</code> for <code>ApplicationFrameWindow</code>; on load, clear it on frames this mod already converted.</li>
+<li><strong>AFH:</strong> <code>WM_NCHITTEST</code> / NC button messages for <code>HTMINBUTTON</code>/<code>HTMAXBUTTON</code>/<code>HTCLOSE</code> go to <code>DefWindowProc</code>, so hit-testing, hover and clicks follow DWM's actual button rects instead of the UWP layout.</li>
+<li><strong>dwm.exe</strong> (new <code>@include</code>): hook <code>CTopLevelWindow::GetCurrentStyle</code> and add the min/max <code>NCAREA_FLAGS</code> bits (<code>0x100|0x200</code> + enabled <code>0x1000</code>/<code>0x2000</code>, same as the non-immersive path) only when the window already has a close button, is immersive, and has <code>WS_CAPTION|WS_SYSMENU</code> + min/max boxes. Stock UWP frames keep <code>0x10000</code>, never get the close bit, and are unaffected.</li>
+</ul>
+<h3>Notes</h3>
+<ul>
+<li>The dwm.exe part reads the style from <code>CWindowData+0x74</code> (as <code>GetCurrentStyle</code> does on uDWM 10.0.26100). It is sanity-checked, so on other builds it should be a no-op (close button only) rather than misbehave.</li>
+<li>Tested with OpenGlass (Win7 theme) and with OpenGlass stopped: Calculator and Settings show all three buttons, content is hosted normally, buttons respond.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Twinkle Brightness 1.2.0]]></title>
         <id>https://windhawk.net/mods/twinkle-brightness#e54cd77948e634febaae4ccb6647c9080b546712</id>
@@ -767,20 +798,6 @@ Enable only one session-restoration mod at a time.</p>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Titlebar For Everyone 0.6]]></title>
-        <id>https://windhawk.net/mods/titlebar-for-everyone#013121014c41a33836d6634e1dec9815d15ef5cd</id>
-        <link href="https://windhawk.net/mods/titlebar-for-everyone"/>
-        <updated>2026-11-26T04:01:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Exclude Steam Big Picture windows and SteamVR windows</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,22 @@
+## 2.1.0 ([Nov 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a4f6f237f3826e0cfe1bf568ba89aa7905c88727/mods/native-titlebars-uwp-lite.wh.cpp))
+
+* [Merge changes by user o12r](https://github.com/ramensoftware/windhawk-mods/pull/7682) (show maximize and minimize buttons when the theme is active):
+
+Fixes missing caption buttons when using this mod (only tested on Windows 11 25H2, build 26200). With 2.0.1 the native titlebar shows title and icon but no minimize/maximize/close.
+
+### Root cause
+1. **All buttons hidden:** ApplicationFrameHost calls `SetWindowThemeAttribute(WTA_NONCLIENT)` on the frame with flags `0x10007` / mask `0x1000F`. The undocumented bit `0x10000` makes DWM drop all caption buttons (stock UWP frames draw their own). Logged in AFH: DWM caption-button width goes from 49 → 0 on exactly that call.
+2. **Only close returns after fixing (1):** frames are created with `CreateWindowInBandEx` type flags `0x3`. Bit `0x1` makes the window "immersive", and uDWM's `CTopLevelWindow::GetCurrentStyle` adds close but skips minimize/maximize when `CWindowData::IsImmersiveWindow()` is true. Changing the type flags in AFH is not an option: clearing either bit stops the app's `CoreWindow` from being hosted in the frame (tested all combinations).
+
+### Changes (v2.1.0)
+- **AFH:** hook `SetWindowThemeAttribute` and strip `0x10000` for `ApplicationFrameWindow`; on load, clear it on frames this mod already converted.
+- **AFH:** `WM_NCHITTEST` / NC button messages for `HTMINBUTTON`/`HTMAXBUTTON`/`HTCLOSE` go to `DefWindowProc`, so hit-testing, hover and clicks follow DWM's actual button rects instead of the UWP layout.
+- **dwm.exe** (new `@include`): hook `CTopLevelWindow::GetCurrentStyle` and add the min/max `NCAREA_FLAGS` bits (`0x100|0x200` + enabled `0x1000`/`0x2000`, same as the non-immersive path) only when the window already has a close button, is immersive, and has `WS_CAPTION|WS_SYSMENU` + min/max boxes. Stock UWP frames keep `0x10000`, never get the close bit, and are unaffected.
+
+### Notes
+- The dwm.exe part reads the style from `CWindowData+0x74` (as `GetCurrentStyle` does on uDWM 10.0.26100). It is sanity-checked, so on other builds it should be a no-op (close button only) rather than misbehave.
+- Tested with OpenGlass (Win7 theme) and with OpenGlass stopped: Calculator and Settings show all three buttons, content is hosted normally, buttons respond.
+
 ## 2.0.1 ([Oct 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/90e067381451a3a716f239a37f3c0191f4c601a1/mods/native-titlebars-uwp-lite.wh.cpp))
 
 * Update screenshot
