@@ -2,7 +2,7 @@
 // @id              taskbar-edge-color-match
 // @name            Taskbar Edge Color Match
 // @description     Standalone mod that matches the Windows 11 taskbar color to the edge strip, majority screen color, or mixed mode, with true transparency on desktop, rounded corners, and top-to-bottom fade animation.
-// @version         2.5.70
+// @version         2.5.71
 // @author          Nitin Patel
 // @github          https://github.com/nitinp94
 // @include         explorer.exe
@@ -629,13 +629,14 @@ static HMODULE GetSystemTrayModuleHandle() {
 
 static bool HookTaskbarViewMeasureOverride(HMODULE mod) {
     if (!mod) return false;
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    // Taskbar.View.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
          reinterpret_cast<void**>(&TaskbarFrame_MeasureOverride_Original),
          reinterpret_cast<void*>(TaskbarFrame_MeasureOverride_Hook),
          true},
     };
-    return WindhawkUtils::HookSymbols(mod, taskbarViewDllHooks, ARRAYSIZE(taskbarViewDllHooks));
+    return WindhawkUtils::HookSymbols(mod, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks));
 }
 
 static bool HookSystemTrayMeasureOverride(HMODULE mod) {
@@ -2496,7 +2497,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    Wh_Log(L"Taskbar Edge Color Match v2.5.70 initialized");
+    Wh_Log(L"Taskbar Edge Color Match v2.5.71 initialized");
     return TRUE;
 }
 
