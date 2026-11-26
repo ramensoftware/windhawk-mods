@@ -1,3 +1,11 @@
+## 2.0.0 ([Nov 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e4c55d7f24c381f4731a3ddf66c7a0ea62623afb/mods/win10-1507-start-menu-recreation.wh.cpp))
+
+- Added a custom Windows 8.1 Update 3 skin
+- Improved the live tiles
+- Added custom Metro icons
+- Added a best-effort Weather gadget
+- Improved the documentation
+
 ## 1.1.0 ([Oct 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/62cf2a1111a1704ba3af634b8f75b6b19afd6577/mods/win10-1507-start-menu-recreation.wh.cpp))
 
 - Added keyboard navigation

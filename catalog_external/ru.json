@@ -59,6 +59,34 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/80d1d414458f03515a73ba2dfcba38934d5255dd/mods/aleph-canvas.wh.cpp"
       }
     },
+    "alt-tab-no-repeat": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "author": "ElektroGvozd",
+        "compilerOptions": "-luser32 -lshell32",
+        "description": "Disable automatic repetition of Alt+Tab",
+        "github": "https://github.com/ElektroGvozd",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Alt+Tab No Repeat",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7989",
+      "source": {
+        "sha256": "dc5434002299e6f800ed4bd02f321130d7ff429f783624b1a533e41cbec082f2",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/ea2cf1ed1044ee664399602779ace445e1d9c259/mods/alt-tab-no-repeat.wh.cpp"
+      }
+    },
     "attack-shark-x11-battery": {
       "details": {
         "defaultSorting": 0,
@@ -119,6 +147,71 @@
       "source": {
         "sha256": "86caa39e143e1ee16169439c9a601d8e30cf054d3513dbacb228eefc921cac76",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4da7f69797cfa500e72d037cb55a9c2ae8f6d873/mods/batteryhub-custom-taskbar-integration.wh.cpp"
+      }
+    },
+    "chrome-acrylic-titlebar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "shiinamachi",
+        "compilerOptions": "-ldwmapi -lshell32",
+        "description": "Show the Windows Acrylic backdrop behind Chrome's tab strip and toolbar",
+        "github": "https://github.com/kentakang",
+        "homepage": "https://github.com/shiinamachi",
+        "include": [
+          "chrome.exe"
+        ],
+        "license": "MIT",
+        "name": "Chrome Acrylic Titlebar",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7984",
+      "source": {
+        "sha256": "efe857cb5798b2d9833493cf9e8bfaec3549598823baeb733480499e9ac817a6",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/0a602a269829e0c5c0194daa662efa1aa8ee646e/mods/chrome-acrylic-titlebar.wh.cpp"
+      }
+    },
+    "command-palette-logo": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Don den Boef",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshcore -lshlwapi",
+        "description": "Replace or hide the logo next to the search box in the PowerToys Command Palette",
+        "github": "https://github.com/dondboef",
+        "include": [
+          "Microsoft.CmdPal.UI.exe"
+        ],
+        "license": "MIT",
+        "name": "Command Palette Logo",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7975",
+      "source": {
+        "sha256": "4544dc687bf73a3b4ada0dee67b86ecbccb34fae62fe1e0a3191de7ce9f89cf9",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/f3530cda755555d0b5ed061966a24d6fa4101ee1/mods/command-palette-logo.wh.cpp"
       }
     },
     "desktop-app-groups": {
@@ -285,7 +378,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795626308581,
+        "updated": 1795720052111,
         "users": 0
       },
       "metadata": {
@@ -294,23 +387,22 @@
         ],
         "author": "d-p4d-67",
         "compilerOptions": "-lruntimeobject -lole32 -loleaut32",
-        "description": "Блокирует окна и уведомления о проверке USB-накопителей в Windows 11",
+        "description": "Блокирует соответствующие уведомления о проверке USB-накопителей",
         "github": "https://github.com/d-p4d-67",
         "homepage": "https://github.com/d-p4d-67/Disable-USB-Scan-and-Fix-Dialog-Windows-11",
         "include": [
           "explorer.exe"
         ],
-        "name": "Отключение предупреждений о проверке USB-накопителей в Windows 11",
-        "version": "1.2"
+        "name": "Disable USB Scan and Fix Dialog Windows 11",
+        "version": "1.4"
       },
       "metadataEnglish": {
-        "description": "Blocks USB scan dialogs and disk repair notifications on Windows 11",
-        "name": "Disable USB Scan and Fix Dialog Windows 11"
+        "description": "Blocks matching USB drive scan and repair notifications"
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7943",
       "source": {
-        "sha256": "70abb73edd1e54b84caef532bdb4e1cf599afca553b7a902bee2c554c13310a8",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4d28566cedc71f0e62de49e059625721035f1dc1/mods/disable-usb-scan-fix.wh.cpp"
+        "sha256": "08016e6bfebd86e4ff0bd16150a1798677bc6ffca509cb4eb17e7fdca5d44b43",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/b5ff8c1c5e3932db133fce85e2a99b34db5602f3/mods/disable-usb-scan-fix.wh.cpp"
       }
     },
     "env-var-spoofer": {
@@ -465,6 +557,65 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d773c379780967b3cda18da5a2f6c996f5b054dd/mods/explorer-mouse-actions-plus.wh.cpp"
       }
     },
+    "google-drive-icon-refresh-fix": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "author": "osmanonurkoc",
+        "description": "Prevents Google Drive for Desktop from periodically refreshing Windows desktop icons and resetting the icon cache.",
+        "github": "https://github.com/osmanonurkoc",
+        "include": [
+          "GoogleDriveFS.exe"
+        ],
+        "name": "Fix Google Drive Desktop Icon Refresh",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/8004",
+      "source": {
+        "sha256": "4195d06b27c6527b96a086d330d2afeca57968bc498b4c21385dd7a168a35ff8",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d50d7a66ae00b94cceabe11df1289e7c34905f71/mods/google-drive-icon-refresh-fix.wh.cpp"
+      }
+    },
+    "lock-screen-splashes": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "4tubborn",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Minecraft-style animated splash texts below the lock screen date.",
+        "github": "https://github.com/4tubborn",
+        "include": [
+          "LockApp.exe"
+        ],
+        "license": "GPL-3.0-or-later",
+        "name": "Lock Screen Splashes",
+        "version": "0.4.6"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7940",
+      "source": {
+        "sha256": "1dc2ae51466e5e3968a66047a4769cee16010ffc7c4f3e07f9231d6664b67fd3",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/65f2f582f73e985387add8945734aa334f08a13b/mods/lock-screen-splashes.wh.cpp"
+      }
+    },
     "lockscreen-background": {
       "details": {
         "defaultSorting": 0,
@@ -499,6 +650,94 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/760b91ecf9f50687cd4b2ed315b32d32ad8372ea/mods/lockscreen-background.wh.cpp"
       }
     },
+    "macos-tahoe-menubar": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Badalemo",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lpropsys -ldwmapi -ld2d1 -ld3d11 -ldxgi -ldwrite -lwindowscodecs -lgdi32 -luser32 -lversion -lshcore -lcomctl32 -lcomdlg32 -lpowrprof -lwlanapi -ldxva2 -ladvapi32",
+        "description": "macOS 26/27 top menu bar with global active-app menus, Wi-Fi/Bluetooth/Audio/Battery Control Center, Calendar, mirrored system tray, and live Liquid Glass",
+        "github": "https://github.com/Badalemo",
+        "include": [
+          "windhawk.exe",
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "macOS 26 Tahoe Menu Bar (Finder Bar)",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7955",
+      "source": {
+        "sha256": "d620adf6be5a504ea0fb4292a7e7388b9fac7e70dc3aba15ae6d8ea90aa61bd0",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/7714f9225c6c22ceb6292424ebf763ffbe5a6643/mods/macos-tahoe-menubar.wh.cpp"
+      }
+    },
+    "macos-tahoe-minimize": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Badalemo",
+        "compilerOptions": "-ldwmapi -lgdi32 -ld2d1 -lole32 -loleaut32 -luuid -lshell32",
+        "description": "Adds smooth macOS Genie (Modern Direct2D & Classic) and Scale window minimize/restore/launch/close animations with optional macOS 26 Tahoe Dock sync",
+        "github": "https://github.com/Badalemo",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "macOS 26 Tahoe Minimize Animations",
+        "version": "2.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7957",
+      "source": {
+        "sha256": "a6a6d1990fa3ff97eec238a25235f4d17d196fe7fb3e54ef388e2b5f89dd05de",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/108a8a7069174b6bf121a8fe18a0637bb5ad365e/mods/macos-tahoe-minimize.wh.cpp"
+      }
+    },
+    "macos-tahoe-spotlight": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Badalemo",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lpropsys -ldwmapi -ld2d1 -ld3d11 -ldxgi -ldwrite -lwindowscodecs -lgdi32 -luser32 -lversion -lshcore -ladvapi32 -lcrypt32 -limm32 -lpsapi",
+        "description": "macOS 26 Tahoe Liquid Glass Spotlight Search (Alt+Space) with floating mode orbs, Everything disk search, Quick Look previews, inline calculator, clipboard history, process killer, windows switcher, bookmarks & Dock integration",
+        "github": "https://github.com/Badalemo",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "macOS 26 Tahoe Spotlight",
+        "version": "1.0.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7958",
+      "source": {
+        "sha256": "10c0b00f49e731865de1b51288d68898671fb81e6f5102e1312b1f768da7674a",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/d1b59b70f7b10de90dbb49c750793772d63de31d/mods/macos-tahoe-spotlight.wh.cpp"
+      }
+    },
     "macos-widgets": {
       "details": {
         "defaultSorting": 0,
@@ -530,6 +769,39 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/9e8cffe30ae7dfe51f344bbf55f46751f2eb86fa/mods/macos-widgets.wh.cpp"
       }
     },
+    "native-audio-router": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "KKKKeybird",
+        "compilerOptions": "-lruntimeobject -loleaut32 -lole32",
+        "description": "Choose a Windows output device from each Quick Settings mixer row",
+        "github": "https://github.com/KKKKeybird",
+        "homepage": "https://github.com/KKKKeybird/native-audio-router",
+        "include": [
+          "ShellHost.exe"
+        ],
+        "license": "MIT",
+        "name": "Native Audio Router",
+        "version": "0.0.7"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7988",
+      "source": {
+        "sha256": "b7de54c92f8676fca8ff0bbe93c978bdd357c969d3406c7551774e6c8fe150df",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6dbedd5cbee58eb9afcc1bd2b9bb671fd1aa6fb2/mods/native-audio-router.wh.cpp"
+      }
+    },
     "native-screen-recorder": {
       "details": {
         "defaultSorting": 0,
@@ -556,6 +828,35 @@
       "source": {
         "sha256": "cc703a9d0976754c146f7dde8adde969920ad616694ae8d1408480146d5cf42d",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/e4ff408e60ebef92cbff58b7b73e1d16d5e10136/mods/native-screen-recorder.wh.cpp"
+      }
+    },
+    "split-layouts-radial-switcher": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "author": "khorkovenko",
+        "compilerOptions": "-ldwmapi -lshcore -lgdi32 -lgdiplus -lshell32 -ladvapi32",
+        "description": "Drag windows to the top or the screen edges to arrange them in split layouts, and switch between windows and split groups with a radial Alt+Tab wheel",
+        "github": "https://github.com/khorkovenko",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Split Layouts & Radial Switcher",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/8003",
+      "source": {
+        "sha256": "087034146d7a88d0c81af083f1a77323d9d66dd047731a80dd986f9a02b5cf3a",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/bc4fcd2918260bb6dfaecd0cff85def48335bf19/mods/split-layouts-radial-switcher.wh.cpp"
       }
     },
     "spotlight-for-windows": {
@@ -780,6 +1081,38 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/c3a5fbe736ffb10eddce36be149d781558dceafd/mods/taskbar-badge-control.wh.cpp"
       }
     },
+    "taskbar-edge-color-match": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Nitin Patel",
+        "compilerOptions": "-lgdi32 -luser32 -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -ladvapi32",
+        "description": "Standalone mod that matches the Windows 11 taskbar color to the edge strip, majority screen color, or mixed mode, with true transparency on desktop, rounded corners, and top-to-bottom fade animation.",
+        "github": "https://github.com/nitinp94",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar Edge Color Match",
+        "version": "2.5.74"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7992",
+      "source": {
+        "sha256": "f9ac8d52a7755e116bd84969f46790c3000ece59bba951edeb76b218d8bf9bd3",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/55bc696c10f83fae30351bdad76ae4aff978de35/mods/taskbar-edge-color-match.wh.cpp"
+      }
+    },
     "taskbar-edge-stop": {
       "details": {
         "defaultSorting": 0,
@@ -840,6 +1173,35 @@
       "source": {
         "sha256": "fcb2728c22132c28805b93d65dc4a6ae81288d790db3dd9b111d626fb53322ac",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/92a146a1dfa6d6d580839ce32be520fbaf7bceee/mods/taskbar-extra-scroll-actions.wh.cpp"
+      }
+    },
+    "taskbar-live-hud-radar-fork": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "author": "MightyPotato22",
+        "compilerOptions": "-luser32 -lgdi32 -liphlpapi -lpsapi -ldwmapi -lshell32 -lgdiplus -ladvapi32 -lpdh -lole32 -loleaut32 -lwbemuuid",
+        "description": "Compact system monitoring widget for the taskbar: CPU, RAM, GPU, temperatures, disk speed, network speed, optional ping and a working set trimmer",
+        "github": "https://github.com/MightyPotato22",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Taskbar Live HUD - Fork",
+        "version": "1.2.1"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7922",
+      "source": {
+        "sha256": "9f00815ea8887b26e58268d2356cdd98c5116164d11310df91a274f96d20998e",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/220067a9480d3ceb66acb3910114c21f6ac8e90b/mods/taskbar-live-hud-radar-fork.wh.cpp"
       }
     },
     "taskbar-notification-bell-badge": {
@@ -929,6 +1291,36 @@
       "source": {
         "sha256": "e9ec05fa7d3938cbad13c7441e7db94b12f3e610e1f633af315233f51fc37dd0",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/5d03db9cf39a2833f192b71f7c0054ea08863297/mods/taskbar-wireless-battery-widget.wh.cpp"
+      }
+    },
+    "tile-windows": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1795720052111,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "trendingSorting": 0,
+        "updated": 1795720052111,
+        "users": 0
+      },
+      "metadata": {
+        "author": "laurensanp",
+        "compilerOptions": "-ldwmapi -lshell32",
+        "description": "Arrange all open windows across all monitors with one hotkey, sized by how much you use each app",
+        "github": "https://github.com/laurensanp",
+        "homepage": "https://github.com/laurensanp/tile-windows",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Tile Windows",
+        "version": "1.0"
+      },
+      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7987",
+      "source": {
+        "sha256": "b0d45406c6730953b647efd693cbc21163edb1e3cdedf2f23bc6b90ebd0ac7aa",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/87c5e395892e9a4ea5b9cb085a792dab07eb74da/mods/tile-windows.wh.cpp"
       }
     },
     "titlebar-opacity-button": {

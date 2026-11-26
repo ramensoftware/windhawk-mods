@@ -20602,7 +20602,7 @@
         "ratingUsers": 54,
         "reviews": 0,
         "trendingSorting": 8.641941060711302,
-        "updated": 1794780201000,
+        "updated": 1795719656000,
         "users": 1848
       },
       "metadata": {
@@ -20619,7 +20619,7 @@
         ],
         "license": "MIT",
         "name": "Taskbar System Utilities",
-        "version": "1.3"
+        "version": "1.3.1"
       }
     },
     "taskbar-thumbnail-hover-fix": {
@@ -21975,12 +21975,12 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1795590310000,
+        "updated": 1795719662000,
         "users": 14
       },
       "metadata": {
         "author": "isousluer",
-        "compilerOptions": "-ldxva2 -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -ladvapi32",
+        "compilerOptions": "-ldxva2 -lgdiplus -ldwmapi -lshcore -lgdi32 -luser32 -lshell32 -lole32 -loleaut32 -lwbemuuid -ladvapi32 -lcomctl32",
         "description": "Brightness sliders for every display in the system tray, with hotkeys, an on-screen indicator, time-based schedules, and idle dimming",
         "github": "https://github.com/isousluer",
         "homepage": "https://github.com/isousluer/twinkle-brightness",
@@ -21989,7 +21989,7 @@
         ],
         "license": "MIT",
         "name": "Twinkle Brightness",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "two-sided-snapping": {
@@ -23118,20 +23118,21 @@
         "ratingUsers": 7,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791916437000,
+        "updated": 1795719645000,
         "users": 83
       },
       "metadata": {
         "author": "babamohammed",
-        "compilerOptions": "-lole32 -luser32 -lgdi32 -ldwmapi -lshell32 -loleaut32 -luuid -lshcore -lcomctl32 -lshlwapi -ladvapi32 -lgdiplus -lpowrprof -lsecur32 -lmsimg32",
-        "description": "This mod recreates the Windows 10 RTM (1507) Start menu on Windows 10 and Windows 11",
+        "compilerOptions": "-lole32 -luser32 -lgdi32 -ldwmapi -lshell32 -loleaut32 -luuid -lshcore -lcomctl32 -lshlwapi -ladvapi32 -lgdiplus -lpowrprof -lsecur32 -lmsimg32 -lwinhttp",
+        "description": "This mod recreates the Windows 10 1507 and Windows 8.1 Update 3 Start menus",
         "github": "https://github.com/babamohammed2022",
         "include": [
-          "explorer.exe"
+          "explorer.exe",
+          "windhawk.exe"
         ],
         "license": "GPL-3.0",
-        "name": "Windows 10 1507 Start Menu Recreation",
-        "version": "1.1.0"
+        "name": "Windows 8.1/10 Start Menu Recreation",
+        "version": "2.0.0"
       }
     },
     "win10-colored-borders": {
@@ -24502,7 +24503,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1793476088000,
+        "updated": 1795719650000,
         "users": 63
       },
       "metadata": {
@@ -24511,7 +24512,7 @@
         ],
         "author": "babamohammed",
         "compilerOptions": "-lwininet -ladvapi32 -lole32",
-        "description": "This mod restores the legacy Family Safety Control Panel applet on Windows 10 and Windows 11",
+        "description": "This mod restores the legacy Family Safety Control Panel applet on Windows 10 and Windows 11, with an optional Windows 7 skin (Parental Controls)",
         "github": "https://github.com/babamohammed2022",
         "include": [
           "explorer.exe",
@@ -24519,8 +24520,8 @@
           "dllhost.exe",
           "svchost.exe"
         ],
-        "name": "Windows 8/8.1 Family Safety Applet Restorer",
-        "version": "1.0.0"
+        "name": "Windows 7/8/8.1 Parental Controls / Family Safety Applet Restorer",
+        "version": "1.1.0"
       }
     },
     "win8-network-flyout-restorer": {

@@ -1,3 +1,8 @@
+## 1.3.1 ([Nov 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cf14dbb32023207ff6ceb6bdbee234c3a2cc62f8/mods/taskbar-system-utilities.wh.cpp))
+
+* Fixed the taskbar menu items not showing on newer Windows 11 builds (25H2 26200.7171 and later), thanks to @Logiinx.
+* Added localized mod names and descriptions.
+
 ## 1.3 ([Nov 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ab22480f9d59785b176354b0441c4b4da4945d74/mods/taskbar-system-utilities.wh.cpp))
 
 - **Custom Menu Items**: Added support for launching custom programs, files, folders, scripts, URLs, `ms-settings:` pages, and `shell:` locations directly from the Windows 11 taskbar context menu (includes **Terminal** and **Control Panel** by default).

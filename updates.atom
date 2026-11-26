@@ -2,12 +2,80 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-26T08:04:27.000Z</updated>
+    <updated>2026-11-26T19:01:02.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Twinkle Brightness 1.2.0]]></title>
+        <id>https://windhawk.net/mods/twinkle-brightness#e54cd77948e634febaae4ccb6647c9080b546712</id>
+        <link href="https://windhawk.net/mods/twinkle-brightness"/>
+        <updated>2026-11-26T19:01:02.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Type an exact level: double-click a display's level in the panel, or press F2 or Enter on the focused row.</li>
+<li>The tray icon shows the brightness level: the sun's rays light up like a gauge. It can be turned off in the settings.</li>
+<li>New setting for the position of the on-screen indicator: the top or the bottom of the screen, centered or in a corner.</li>
+<li>Tooltips for the buttons at the bottom of the panel.</li>
+<li>Turkish translation of the panel, the menus and the settings.</li>
+<li>Brightness changes made outside the mod are picked up. Laptop screens report them right away, and monitors are read again before a hotkey step.</li>
+<li>Fixed: some monitors showed &quot;Brightness control is not available&quot; until the displays were refreshed by hand. DDC/CI reads are retried, and monitors that don't answer are detected again, up to three times in the first minute.</li>
+<li>Fixed: scrolling with a touchpad in the panel changed the brightness much too fast.</li>
+</ul>
+]]></content>
+        <author>
+            <name>isousluer</name>
+            <uri>https://github.com/isousluer</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar System Utilities 1.3.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-system-utilities#cf14dbb32023207ff6ceb6bdbee234c3a2cc62f8</id>
+        <link href="https://windhawk.net/mods/taskbar-system-utilities"/>
+        <updated>2026-11-26T19:00:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the taskbar menu items not showing on newer Windows 11 builds (25H2 26200.7171 and later), thanks to @Logiinx.</li>
+<li>Added localized mod names and descriptions.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Marco Petrucci</name>
+            <uri>https://github.com/marco00petrucci</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 7/8/8.1 Parental Controls / Family Safety Applet Restorer 1.1.0]]></title>
+        <id>https://windhawk.net/mods/win8-family-safety-applet-restorer#7f94980a6764df9bf4307b84de5ac80d87e2d9d5</id>
+        <link href="https://windhawk.net/mods/win8-family-safety-applet-restorer"/>
+        <updated>2026-11-26T19:00:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a Windows 7 skin (credits to RandomGuy5747 for the contribution)</li>
+</ul>
+]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 8.1/10 Start Menu Recreation 2.0.0]]></title>
+        <id>https://windhawk.net/mods/win10-1507-start-menu-recreation#e4c55d7f24c381f4731a3ddf66c7a0ea62623afb</id>
+        <link href="https://windhawk.net/mods/win10-1507-start-menu-recreation"/>
+        <updated>2026-11-26T19:00:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a custom Windows 8.1 Update 3 skin</li>
+<li>Improved the live tiles</li>
+<li>Added custom Metro icons</li>
+<li>Added a best-effort Weather gadget</li>
+<li>Improved the documentation</li>
+</ul>
+]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Clock & Weather 1.0.7]]></title>
         <id>https://windhawk.net/mods/desktop-clock-weather#9e30cde12c8838f10f8bca0cf40b5b213ec1ed54</id>
@@ -713,83 +781,6 @@ Enable only one session-restoration mod at a time.</p>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Ctrl+Backspace Fix for Win32 Text Boxes 1.1]]></title>
-        <id>https://windhawk.net/mods/ctrl-backspace-fix-for-win32-text-boxes#4e0a564186fa0f79c49e81942d2ab98725bfdcce</id>
-        <link href="https://windhawk.net/mods/ctrl-backspace-fix-for-win32-text-boxes"/>
-        <updated>2026-11-26T04:01:35.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved word-wise deletion for Unicode punctuation, CJK ideographs, Japanese kana, and Korean Hangul.</li>
-<li>Added support for ATL/WTL wrapped <code>Edit</code> controls, such as <a href="https://github.com/ramensoftware/windhawk-symbol-helper">Windhawk Symbol Helper</a>'s results text box.</li>
-<li>Treated masked password text as a single block to avoid leaking word boundaries.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Kitsune</name>
-            <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Modern Run Dialog UI For Windows 10 & 11 6.0.2.0]]></title>
-        <id>https://windhawk.net/mods/modern-run-dialog-ui#7628a658eb94c96fd7c44415780ae2a80aaea6fc</id>
-        <link href="https://windhawk.net/mods/modern-run-dialog-ui"/>
-        <updated>2026-11-26T03:04:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Fixed dialog position drift when typing (#7877):</strong> Fixed an issue where the Run dialog would jump or shift away from fixed positions (such as Bottom Left) as suggestions expanded or shrank, especially in Compact Mini-Pill Mode. Resizing now atomically preserves the configured anchor.</li>
-<li><strong>Fixed Background Opacity on Windows 11 Blur &amp; other themes (#7902):</strong> Wired the <strong>Background Opacity (<code>30–255</code>)</strong> setting so it visibly adjusts the translucency/tint of <strong>Windows 11 Blur</strong>, <strong>Liquid Glass</strong>, and solid themes even when no custom background image or GIF is set.</li>
-</ul>
-]]></content>
-        <author>
-            <name>caotu2005</name>
-            <uri>https://github.com/caotu2005</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Vista/7 Blocked Shutdown UX & Logoff Sequence 1.4]]></title>
-        <id>https://windhawk.net/mods/win7-bsdr#f1355869276b45e9dbbc9af1b738c6547b370120</id>
-        <link href="https://windhawk.net/mods/win7-bsdr"/>
-        <updated>2026-11-26T03:04:32.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix the issue where enabling the logoff sequence makes the system automatically log on again after logging off if a user account has no password set (by @repensky)</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Independent taskbar per monitor 1.7.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-independent-per-monitor#f11433e958a8f8a44449a19aefc096eedec76c22</id>
-        <link href="https://windhawk.net/mods/taskbar-independent-per-monitor"/>
-        <updated>2026-11-25T20:02:08.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>1.7.2</strong></p>
-<ul>
-<li>Pins made from a window button no longer break after the app restarts. With <em>Disable grouping on
-the taskbar</em>, the mod pins the app's Start menu shortcut instead. This is a temporary workaround
-for #7900, existing pins are not changed.</li>
-<li>The jump list of a window button shows <em>Pin to taskbar</em> again if the app is only pinned on another
-taskbar.</li>
-<li>Pinning from a window button puts the pin on that taskbar (before, it could end up on the main
-taskbar).</li>
-<li>Fixed a rare case where pinning an app on another taskbar too moved it to the end of the pin list.</li>
-<li>Code cleanup: shared helpers and automatic cleanup of system objects.</li>
-</ul>
-<p><strong>1.7.1</strong> (not released on its own, included here)</p>
-<ul>
-<li>Works together with mods that change taskbar grouping (e.g. <em>Disable grouping on the taskbar</em>,
-including <em>Pinned items remain in place</em>): pinning and unpinning from a window button now apply to the
-clicked taskbar. Before, <em>Unpin</em> could remove the pin from another taskbar.</li>
-<li>Readme in English, German, Russian, French and Spanish, with animated before/after pictures and a link
-for reporting bugs.</li>
-<li>The note about other mods is now a general hint instead of &quot;not compatible&quot;.</li>
-</ul>
-]]></content>
-        <author>
-            <name>2ndSky95</name>
-            <uri>https://github.com/2ndSky95</uri>
         </author>
     </entry>
 </feed>
