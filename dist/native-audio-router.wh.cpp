@@ -3,11 +3,11 @@
 // @name Native Audio Router
 // @description Choose a Windows output device from each Quick Settings mixer row
 // @description:zh-CN 在任务栏原生音量合成器中选择逐应用输出设备
-// @version 0.0.5
+// @version 0.0.6
 // @author KKKKeybird
 // @github https://github.com/KKKKeybird
 // @homepage https://github.com/KKKKeybird/native-audio-router
-// @architecture x86-64
+// @architecture amd64
 // @include ShellHost.exe
 // @compilerOptions -lruntimeobject -loleaut32 -lole32
 // @license MIT
@@ -40,6 +40,7 @@ for compatibility, test status, and source.
 #include <windows.h>
 #include <unknwn.h>
 #include <mmdeviceapi.h>
+#include <windhawk_utils.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -269,7 +270,10 @@ void Select(const F::IInspectable& model, const Selection& shown, int32_t index,
     if (awaiting ? change->applied == requested : current->index == index) return;
     const bool newChange = change == changes.end();
     if (newChange) changes.reserve(changes.size() + 1);
-    Property(model, L"SelectedOutput").SetValue(model, winrt::box_value(index));
+    const auto property = Property(model, L"SelectedOutput");
+    const auto value = winrt::box_value(index);
+    if (!property || generation != endpointGeneration.load()) return;
+    property.SetValue(model, value);
     const auto verifyUntil = GetTickCount64() + 1500;
     if (newChange) {
         changes.push_back({winrt::make_weak(model), reported, requested, verifyUntil});
@@ -333,9 +337,19 @@ void UpdateMenuRequest(Row& row) {
     const auto slider = row.slider.get();
     const auto model = row.requestModel.get();
     const bool opening = row.request == MenuRequest::Open;
-    if (!slider || !model || !slider.IsLoaded() || Model(slider) != model ||
+    if (!slider || !model ||
         (opening && row.button.FocusState() == X::FocusState::Unfocused)) {
         StopRequest(row);
+        return;
+    }
+    // A template hook can find the row before XAML finishes loading it.
+    if (!slider.IsLoaded()) {
+        if (GetTickCount64() >= row.deadline) StopRequest(row);
+        return;
+    }
+    const auto currentModel = Model(slider);
+    if (currentModel != model) {
+        if (currentModel || GetTickCount64() >= row.deadline) StopRequest(row);
         return;
     }
 
@@ -373,8 +387,13 @@ void RemoveRow(Row& row) {
     row.refresh.Stop();
     row.refresh.Tick(row.tick);
     row.button.Click(row.click);
-    ClearMenu(row);
-    row.menu.Hide();
+    try {
+        ClearMenu(row);
+        row.menu.Hide();
+    } catch (...) {
+        Wh_Log(L"Detached row menu could not be closed (0x%08X)",
+               static_cast<unsigned>(winrt::to_hresult().value));
+    }
     if (const auto grid = row.grid.get()) {
         Remove(grid.Children(), row.button);
         Remove(grid.ColumnDefinitions(), row.column);
@@ -495,6 +514,15 @@ void AddRow(const C::Slider& slider) {
 }
 
 void Scan(const X::FrameworkElement& mixer) {
+    // A XAML change made during discovery can synchronously raise focus.
+    static thread_local bool scanning = false;
+    if (scanning) return;
+    scanning = true;
+    struct ResetScan {
+        bool& active;
+        ~ResetScan() { active = false; }
+    } reset{scanning};
+
     std::erase_if(rows, [](auto& row) {
         if (row.grid.get()) return false;
         RemoveRow(row);
@@ -584,7 +612,14 @@ void Restore() {
         if (const auto element = mixer.element.get()) element.LayoutUpdated(mixer.layout);
     }
     mixers.clear();
-    for (auto& row : rows) RemoveRow(row);
+    for (auto& row : rows) {
+        try {
+            RemoveRow(row);
+        } catch (...) {
+            Wh_Log(L"Could not restore a mixer row (0x%08X)",
+                   static_cast<unsigned>(winrt::to_hresult().value));
+        }
+    }
     rows.clear();
     for (const auto& change : changes) {
         try {
@@ -606,29 +641,16 @@ void Restore() {
 BOOL Wh_ModInit() {
     const auto module = GetModuleHandleW(L"ControlCenter.dll");
     if (!module) return FALSE;
-    const WH_FIND_SYMBOL_OPTIONS options{sizeof(WH_FIND_SYMBOL_OPTIONS), nullptr, TRUE};
-    WH_FIND_SYMBOL symbol{};
-    const auto search = Wh_FindFirstSymbol(module, &options, &symbol);
-    if (!search) return FALSE;
-    void* applyTemplate{};
-    void* focus{};
-    void* loaded{};
-    do {
-        if (!symbol.symbolDecorated) continue;
-        const std::wstring_view name(symbol.symbolDecorated);
-        if (name == templateSymbol) applyTemplate = symbol.address;
-        if (name == focusSymbol) focus = symbol.address;
-        if (name == loadedSymbol) loaded = symbol.address;
-        if (applyTemplate && focus && loaded) break;
-    } while (Wh_FindNextSymbol(search, &symbol));
-    Wh_FindCloseSymbol(search);
-    if (!applyTemplate || !focus || !loaded) return FALSE;
-    return Wh_SetFunctionHook(applyTemplate, reinterpret_cast<void*>(OnTemplate),
-                              reinterpret_cast<void**>(&originalTemplate)) &&
-           Wh_SetFunctionHook(focus, reinterpret_cast<void*>(OnFocus),
-                              reinterpret_cast<void**>(&originalFocus)) &&
-           Wh_SetFunctionHook(loaded, reinterpret_cast<void*>(OnLoaded),
-                              reinterpret_cast<void**>(&originalLoaded));
+    const WH_HOOK_SYMBOLS_OPTIONS options{
+        .optionsSize = sizeof(WH_HOOK_SYMBOLS_OPTIONS),
+        .noUndecoratedSymbols = TRUE,
+    };
+    const WindhawkUtils::SYMBOL_HOOK controlCenterDllHooks[]{
+        {{templateSymbol}, &originalTemplate, OnTemplate},
+        {{focusSymbol}, &originalFocus, OnFocus},
+        {{loadedSymbol}, &originalLoaded, OnLoaded},
+    };
+    return WindhawkUtils::HookSymbols(module, controlCenterDllHooks, ARRAYSIZE(controlCenterDllHooks), &options);
 }
 
 void Wh_ModBeforeUninit() {
