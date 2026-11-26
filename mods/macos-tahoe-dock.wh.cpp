@@ -6024,8 +6024,17 @@ std::optional<StoredApp> ResolveShortcutFile(const std::wstring& lnkPath) {
     if (app.path.empty()) {
         app.path = ResolveWow64Path(targetRaw);
     }
-    app.args = args;
-    app.workdir = workdir;
+    auto expandEnvStr = [](PCWSTR raw) -> std::wstring {
+        if (!raw || !*raw) {
+            return {};
+        }
+        WCHAR buf[1024]{};
+        DWORD n = ExpandEnvironmentStringsW(raw, buf, ARRAYSIZE(buf));
+        return (n > 0 && n <= ARRAYSIZE(buf)) ? std::wstring(buf)
+                                               : std::wstring(raw);
+    };
+    app.args = expandEnvStr(args);
+    app.workdir = expandEnvStr(workdir);
 
     winrt::com_ptr<IPropertyStore> ps;
     if (SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(ps.put()))) && ps) {
@@ -7115,9 +7124,8 @@ void UpdateAppBarReservation() {
     abd.uCallbackMessage = kWmAppAppBar;
 
     if (!g_dock.appBarRegistered) {
-        if (!SHAppBarMessage(ABM_NEW, &abd)) {
-            return;
-        }
+        // FALSE also means the appbar is already registered (e.g. non-restart TaskbarCreated).
+        SHAppBarMessage(ABM_NEW, &abd);
         g_dock.appBarRegistered = true;
     }
 
@@ -8748,7 +8756,7 @@ bool LaunchAppItem(DockItem& item) {
             bypassWow64Shortcut ? resolvedShortcutWorkdir : item.workdir;
         SHELLEXECUTEINFOW sei{};
         sei.cbSize = sizeof(sei);
-        sei.fMask = SEE_MASK_NOASYNC;
+        sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_DOENVSUBST;
         sei.lpVerb = L"open";
         sei.lpFile = execPath.c_str();
         sei.lpParameters = execArgs.empty() ? nullptr : execArgs.c_str();
@@ -8827,7 +8835,7 @@ bool LaunchAppItemElevated(const DockItem& item) {
             bypassWow64Shortcut ? resolvedShortcutWorkdir : item.workdir;
         SHELLEXECUTEINFOW sei{};
         sei.cbSize = sizeof(sei);
-        sei.fMask = SEE_MASK_NOASYNC;
+        sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_DOENVSUBST;
         sei.lpVerb = L"runas";
         sei.lpFile = execPath.c_str();
         sei.lpParameters = execArgs.empty() ? nullptr : execArgs.c_str();
