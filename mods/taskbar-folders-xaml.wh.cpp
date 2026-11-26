@@ -40,6 +40,8 @@ In Windhawk settings, choose a folder design and place folders on either side of
 
 Folders appear on the main taskbar. Each Windows account has its own layout and copies of imported shortcuts. To pin a folder among your apps, choose **Pin to taskbar** in its menu and confirm in File Explorer. If you disable the mod, Windows keeps that pin. You can remove it with **Unpin from taskbar**.
 
+Developed together by mamt104 and ChatGPT (Codex). mamt104 designed the interactions, tested on Windows and reported the bugs that guided the fixes.
+
 ### Italiano
 
 Riunisci le app che usi insieme sotto una sola icona. Fai clic destro su uno spazio vuoto della barra e scegli **Crea cartella…**. Trascinaci i collegamenti dal desktop o da Esplora file. Per un’app già sulla barra, fai clic destro sulla sua icona e scegli **Sposta in** con il nome della cartella. Apri la cartella e fai clic su un’app per avviarla.
@@ -47,6 +49,8 @@ Riunisci le app che usi insieme sotto una sola icona. Fai clic destro su uno spa
 Trascina le app per riordinarle. Per spostarne più di una, tieni premuta la prima e fai clic sulle altre. Trascina un’app sul desktop per crearvi un collegamento. Nelle impostazioni puoi scegliere lo stile e mettere le cartelle a sinistra o a destra di Start. Le app aperte mantengono il proprio pulsante sulla barra e hanno un puntino nella cartella.
 
 Le cartelle compaiono sulla barra principale. Ogni account Windows conserva il proprio ordine e una copia dei collegamenti importati. Per fissare una cartella tra le app, scegli **Integra nella barra** e conferma in Esplora file. Se disattivi la mod, puoi rimuovere l’icona fissata dal menu di Windows.
+
+Progetto sviluppato insieme da mamt104 e ChatGPT (Codex). mamt104 ha progettato le interazioni, provato la mod su Windows e segnalato i bug che hanno guidato le correzioni.
 
 ### Español
 
@@ -56,6 +60,8 @@ Arrastra las aplicaciones para ordenarlas. Para mover varias, mantén pulsada la
 
 Las carpetas aparecen en la barra principal. Cada cuenta de Windows guarda su propia distribución y copias de los accesos directos importados. Para anclar una carpeta entre las aplicaciones, elige **Anclar a la barra de tareas** y confirma en el Explorador. Si desactivas el mod, puedes desanclar el icono desde el menú de Windows.
 
+Proyecto desarrollado por mamt104 y ChatGPT (Codex). mamt104 diseñó las interacciones, probó la mod en Windows y comunicó los fallos que guiaron las correcciones.
+
 ### Français
 
 Regroupez les applications que vous utilisez ensemble sous une seule icône. Faites un clic droit sur un espace vide de la barre des tâches et choisissez **Créer un dossier…**. Glissez-y des raccourcis depuis le bureau ou l’Explorateur de fichiers. Pour une application déjà dans la barre, faites un clic droit sur son icône et choisissez **Déplacer vers** avec le nom du dossier. Ouvrez le dossier et cliquez sur une application pour la lancer.
@@ -64,6 +70,8 @@ Faites glisser les applications pour les réorganiser. Pour en déplacer plusieu
 
 Les dossiers apparaissent sur la barre principale. Chaque compte Windows conserve sa propre disposition et une copie des raccourcis importés. Pour épingler un dossier parmi les applications, choisissez **Épingler à la barre des tâches** et confirmez dans l’Explorateur. Si vous désactivez le mod, vous pouvez détacher l’icône depuis le menu Windows.
 
+Projet développé par mamt104 et ChatGPT (Codex). mamt104 a conçu les interactions, testé le mod sous Windows et signalé les bugs qui ont guidé les corrections.
+
 ### Deutsch
 
 Fassen Sie häufig gemeinsam genutzte Apps unter einem Symbol zusammen. Klicken Sie mit der rechten Maustaste auf eine freie Stelle der Taskleiste und wählen Sie **Ordner erstellen…**. Ziehen Sie Verknüpfungen vom Desktop oder aus dem Datei-Explorer auf den Ordner. Ist eine App bereits in der Taskleiste, klicken Sie mit der rechten Maustaste auf ihr Symbol und wählen Sie den Eintrag mit dem gewünschten Ordnernamen. Öffnen Sie den Ordner und klicken Sie auf eine App, um sie zu starten.
@@ -71,6 +79,8 @@ Fassen Sie häufig gemeinsam genutzte Apps unter einem Symbol zusammen. Klicken 
 Ziehen Sie Apps, um sie zu sortieren. Um mehrere zu verschieben, halten Sie die erste kurz gedrückt und klicken Sie dann auf die weiteren Apps. Ziehen Sie eine App auf den Desktop, um dort eine Verknüpfung anzulegen. In den Einstellungen wählen Sie das Design und die Position links oder rechts von Start. Geöffnete Apps behalten ihre Schaltfläche in der Taskleiste und sind im Ordner mit einem Punkt markiert.
 
 Die Ordner erscheinen in der Haupttaskleiste. Jedes Windows-Konto speichert seine eigene Anordnung und Kopien der importierten Verknüpfungen. Um einen Ordner zwischen den Apps anzuheften, wählen Sie **An Taskleiste anheften** und bestätigen Sie im Explorer. Wenn Sie die Mod deaktivieren, können Sie das angeheftete Symbol über das Windows-Menü entfernen.
+
+Gemeinsam entwickelt von mamt104 und ChatGPT (Codex). mamt104 hat die Bedienung entworfen, die Mod unter Windows getestet und Fehler gemeldet, die anschließend behoben wurden.
 */
 // ==/WindhawkModReadme==
 
@@ -12627,7 +12637,7 @@ static bool wireView(HMODULE m) {
     if (!m || viewHooks.exchange(true))
         return false;
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK viewSymbolHooks[] = {
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *))"},
          &getButtonRunning,
          nullptr,
@@ -12655,8 +12665,8 @@ static bool wireView(HMODULE m) {
          &oldAppend,
          append,
          true}};
-    bool ok = WindhawkUtils::HookSymbols(m, taskbarViewDllHooks,
-                                         ARRAYSIZE(taskbarViewDllHooks));
+    bool ok = WindhawkUtils::HookSymbols(m, viewSymbolHooks,
+                                         ARRAYSIZE(viewSymbolHooks));
     if (!ok)
         Wh_Log(L"Taskbar symbols unavailable on this build.");
     return ok;
@@ -12665,7 +12675,7 @@ static bool wireGroups(HMODULE m) {
     if (!m || groupHooks.exchange(true))
         return false;
     // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK groupSymbolHooks[] = {
         {{LR"(public: virtual long __cdecl CTaskGroup::GetToolTipText(struct ITaskItem *,unsigned short *,int))"},
          &oldGroupTip,
          groupTip,
@@ -12692,8 +12702,8 @@ static bool wireGroups(HMODULE m) {
          &oldJump,
          jump,
          true}};
-    bool ok = WindhawkUtils::HookSymbols(m, taskbarDllHooks,
-                                         ARRAYSIZE(taskbarDllHooks));
+    bool ok = WindhawkUtils::HookSymbols(m, groupSymbolHooks,
+                                         ARRAYSIZE(groupSymbolHooks));
     nativeReady = ok && groupId && (oldClick || oldLaunch);
     return ok;
 }
