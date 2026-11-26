@@ -2,12 +2,249 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-11-26T06:00:25.000Z</updated>
+    <updated>2026-11-26T07:02:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Adaptive Tray Contrast 0.3.16]]></title>
+        <id>https://windhawk.net/mods/adaptive-tray-contrast#dd2b0cad4fd0a38e53c19fa604468577ef4f663a</id>
+        <link href="https://windhawk.net/mods/adaptive-tray-contrast"/>
+        <updated>2026-11-26T07:02:38.000Z</updated>
+        <content type="html"><![CDATA[<h1>Adaptive Tray Contrast</h1>
+<p>On a transparent Windows 11 taskbar, a light window can sit behind half the date while the other half is over dark wallpaper. This Windhawk mod chooses black or white for each clock and date character according to the background behind it.</p>
+<p>Supported monochrome tray icons and the Chinese/English input indicator adapt independently. Start, Search, Task View, Widgets and app buttons can switch button themes. For packaged apps that provide both light and dark icon variants, the mod uses the variant that suits each button's background. Colored tray icons and the colored part of the battery keep their original colors. A packaged app's themed icon can cover its own dynamic artwork.</p>
+<p>In 0.3.16, clicking the Chinese/English input indicator hides the previous tinted glyph while the new one is captured. When the native glyph already has the desired color, the mod displays it directly.</p>
+<h2>中文说明</h2>
+<p>在 Windows 11 的透明任务栏上，如果浅色窗口的边缘刚好穿过日期，同一行里，压在浅色窗口上的数字可以变黑，留在深色壁纸上的数字可以保持白色。时间和日期分别逐字符判断。</p>
+<p>模组也会分别调整受支持的单色托盘图标和中英文输入法指示器，切换开始、搜索、任务视图、小组件及应用按钮的深浅主题。打包应用如果自带深浅两套图标，模组会按每个按钮背后的画面选用对应图标。彩色托盘图标和电池的彩色部分保留原色；应用自带的动态图案可能被深浅版图标覆盖。</p>
+<p>从 0.3.16 起，点击“中／英”时会先撤下旧字的着色层，再用新字着色，减少切换瞬间的重影。如果系统原字已经是需要的颜色，就直接显示原字。</p>
+<h2>Demos · 实机演示</h2>
+<h3>App icons · 应用图标</h3>
+<p><strong>Drag a window · 缓慢拖动窗口</strong><br>
+Watch each supported app icon as the window edge passes behind its button.<br>
+窗口边缘扫过不同按钮时，各应用图标分别切换深浅版本。</p>
+<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/app-icons-window-drag.gif" alt="App icons as a window edge moves behind the taskbar"></p>
+<p><strong>Switch between full-screen apps · 切换全屏应用</strong><br>
+Compare the app icons as you switch apps and reveal the taskbar.<br>
+切换全屏应用，观察任务栏显示时应用图标的变化。</p>
+<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/app-icons-window-switch.gif" alt="App icons when switching between full-screen apps"></p>
+<h3>System tray, clock and date · 右侧托盘、时间和日期</h3>
+<p><strong>Drag a window · 缓慢拖动窗口</strong><br>
+Follow the window edge across the tray icons and individual clock and date characters.<br>
+留意窗口边缘经过右侧托盘和日期时，哪些图标、哪些数字先变色。</p>
+<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/tray-window-drag.gif" alt="Tray icons and individual characters as a window moves"></p>
+<p><strong>Switch between full-screen apps · 切换全屏应用</strong><br>
+Compare the right side of the taskbar against the different backgrounds.<br>
+切换全屏应用后，对比不同背景下右侧托盘、时间和日期的颜色。</p>
+<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/tray-window-switch.gif" alt="System tray, clock and date when switching between full-screen apps"></p>
+<h2>Settings · 设置</h2>
+<p>The default sampling interval is 80 ms (adjustable from 40 to 2000 ms). A longer interval samples less often and responds more slowly. Sharp background boundaries can cause brief flicker.</p>
+<p>默认每 80 毫秒采样一次，可在设置中调整为 40 至 2000 毫秒。间隔越长，采样越少，响应也越慢。图标恰好位于深浅交界处时可能短暂闪烁。</p>
+]]></content>
+        <author>
+            <name>StillDialing</name>
+            <uri>https://github.com/StillDialing</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Same-App Window Cycler (Alt+`) 0.1.4]]></title>
+        <id>https://windhawk.net/mods/same-app-window-cycler#a9a990a6a8bf04a18e3c7e40c93300a7b284512c</id>
+        <link href="https://windhawk.net/mods/same-app-window-cycler"/>
+        <updated>2026-11-26T07:02:33.000Z</updated>
+        <content type="html"><![CDATA[<h1>Same-App Window Cycler</h1>
+<p>Brings the macOS <strong>Cmd+`</strong> behavior to Windows. While an app has several
+windows open, press <strong>Alt+`</strong> to jump to its next window, or <strong>Alt+Shift+`</strong>
+to go to the previous one. Repeated presses walk through all of the app's
+windows, and Alt+Shift+` walks through them in the opposite order.</p>
+<p>The shortcut uses the physical key left of <code>1</code>. The key is mapped when the mod
+starts, so it follows the keyboard layout that is active at that time.</p>
+<h2>How it differs from the existing switcher mods</h2>
+<p>Simple Window Switcher, ClassicWindowSwitcher and Windows 7/8.1 Alt+Tab
+Recreation also offer an Alt+` &quot;windows of the current app&quot; mode, but all of
+them replace the native Alt+Tab and show their own switcher UI. This mod leaves
+Alt+Tab untouched and switches windows directly, with no UI. If you already use
+one of those mods for Alt+`, you don't need this one.</p>
+<h2>Conflicts</h2>
+<p>Alt+` is registered as a global hotkey, and only one program can own it.</p>
+<ul>
+<li>Simple Window Switcher registers Alt+` by default (<code>altBacktickBehavior: backward</code>), so if both mods are enabled, whichever registers first gets the
+key and the other one only logs a failure. Set its Alt+` behavior to &quot;none&quot;,
+or don't enable both.</li>
+<li>Windows 7/8.1 Alt+Tab Recreation catches Alt+` with a low-level keyboard hook
+and swallows it. With its <code>onlyThisAppHotkey</code> option on, that mod gets the key
+no matter which one registers first, and this mod's hotkey never fires.</li>
+<li>The same applies to other tools that use Alt+`, such as AutoHotkey scripts.</li>
+<li>Apps that have their own Alt+` or Alt+Shift+` shortcut stop receiving it
+while this mod is on.</li>
+</ul>
+<h2>How it works</h2>
+<p>The mod runs as a tool mod in a dedicated <code>windhawk.exe</code> process and registers a
+global hotkey. When pressed, it takes the foreground window, finds all other
+switchable top-level windows that belong to the same executable on the current
+virtual desktop, and activates the next one.</p>
+<h2>Limitations</h2>
+<ul>
+<li>Windows are grouped by executable path. UWP apps hosted by
+ApplicationFrameHost.exe are all treated as one &quot;app&quot;.</li>
+<li>Windows of elevated (administrator) apps may only flash instead of coming to
+the front.</li>
+<li>&quot;Always on top&quot; windows (such as Picture-in-Picture) are skipped while
+cycling, unless one of them is the current window.</li>
+<li>If you switch keyboard layouts and the key left of <code>1</code> produces a different
+virtual key, the hotkey stays on the key it was registered with. Disable and
+re-enable the mod after changing layouts.</li>
+</ul>
+]]></content>
+        <author>
+            <name>mdozkanji</name>
+            <uri>https://github.com/mdozkanji</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[AltTabs - Browser Tab Switcher HUD 1.2.0]]></title>
+        <id>https://windhawk.net/mods/alttabs#e2c26c23a2cca579ddfcb2072037bd790ae78f37</id>
+        <link href="https://windhawk.net/mods/alttabs"/>
+        <updated>2026-11-26T07:02:27.000Z</updated>
+        <content type="html"><![CDATA[<h1>AltTabs - Browser Tab Switcher HUD</h1>
+<p>Press <strong>Alt+Q</strong> while a Chrome, Edge or Brave window is focused to open a
+searchable list of the tabs in that window. Type to filter, pick a tab with
+the arrow keys, and press <strong>Enter</strong> to switch to it.</p>
+<p><img src="https://raw.githubusercontent.com/Dszae/AltTabs/8fdb2c819e758ff60a8b6b35ea9a46135c42e632/assets/hud.png" alt="AltTabs"></p>
+<h2>Keys</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Alt+Q</strong> or <strong>Alt+`</strong></td>
+<td>Open the list, with the tab after the current one selected. While it's open, press again to move down, or with Shift to move up.</td>
+</tr>
+<tr>
+<td>Typing</td>
+<td>Filter the tabs. Several words match tabs that contain all of them.</td>
+</tr>
+<tr>
+<td><strong>↑</strong> <strong>↓</strong>, <strong>Tab</strong>, <strong>Shift+Tab</strong></td>
+<td>Move the selection</td>
+</tr>
+<tr>
+<td><strong>Page Up</strong>, <strong>Page Down</strong></td>
+<td>Move the selection by a page</td>
+</tr>
+<tr>
+<td><strong>Enter</strong> or click</td>
+<td>Switch to the selected tab</td>
+</tr>
+<tr>
+<td><strong>Backspace</strong>, <strong>Ctrl+Backspace</strong></td>
+<td>Delete a character, clear the filter</td>
+</tr>
+<tr>
+<td><strong>Esc</strong></td>
+<td>Close the list</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Alt+`</strong> is the key above Tab on US keyboard layouts. The hotkeys are only
+taken over while a window of an enabled browser is focused. In other apps
+they work as usual.</p>
+<h2>Notes</h2>
+<ul>
+<li>Only the tabs of the focused browser window are listed. The current tab is
+marked with a blue bar.</li>
+<li>Tab titles are read with Windows UI Automation. Browsers don't expose tab
+addresses this way, so the site name next to a tab is taken from the end of
+its title, for example &quot;YouTube&quot; in &quot;Some video - YouTube&quot;. Tabs whose title
+doesn't end with a site name have no label.</li>
+<li>Opera should work too, but hasn't been tested. Vivaldi isn't supported, its
+tab bar is part of a web page.</li>
+<li>The first time the list is opened, the browser turns on its accessibility
+support, as it does for screen readers. This uses some extra CPU and memory
+in the browser while it's on.</li>
+<li>The mod runs in its own Windhawk process. It doesn't inject code into the
+browser or into Explorer.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Dszae</name>
+            <uri>https://github.com/Dszae</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Weather 1.6.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-weather#57aa4fa484da22f897006c168040cb4957025f99</id>
+        <link href="https://windhawk.net/mods/taskbar-weather"/>
+        <updated>2026-11-26T07:02:22.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Weather</h1>
+<p>The current weather at the left end of the taskbar, with a details card when
+you hover over it. It works on its own, without Windows Widgets.</p>
+<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/taskbar-weather.png" alt="Taskbar Weather preview"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>Weather icon, temperature and conditions</strong> on the taskbar, updated every
+ten minutes by default.</li>
+<li><strong>Hover card</strong> with the feels-like temperature, today's high and low,
+humidity and wind.</li>
+<li><strong>Click to refresh</strong> at any time.</li>
+<li><strong>Follows the Windows theme:</strong> dark text on a light taskbar, light text on a
+dark one. A setting can force either.</li>
+<li><strong>Celsius and km/h, or Fahrenheit and mph.</strong></li>
+<li><strong>No Widgets, MSN, Edge or location permission.</strong> Data comes from
+Open-Meteo, with no account or API key.</li>
+</ul>
+<h2>How it differs from other weather mods</h2>
+<p><a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a>
+can put weather text inside the clock, and
+<a href="https://windhawk.net/mods/micrographics-taskbar-clock">Micrographics Taskbar Clock</a>
+replaces the clock with one that can show a weather line.
+<a href="https://windhawk.net/mods/windhawk-topbar">TopBar for Windows</a> has a weather
+flyout in its own bar, and Desktop Live Overlay shows weather on the desktop.
+This mod adds its own icon and label at the left end of the stock taskbar,
+keeps the regular clock, shows a details card on hover, and needs no other
+mod.</p>
+<h2>Setup</h2>
+<p>Open the settings and enter your town's <strong>latitude</strong> and <strong>longitude</strong> in
+decimal degrees with a dot, for example <code>51.5074</code> and <code>-0.1278</code> (in most map
+apps, right-click a place to copy them). Add a <strong>place name</strong> to show it in the
+hover card.</p>
+<h2>Privacy and network use</h2>
+<p>The mod needs internet access. Your latitude and longitude, rounded to three
+decimals (about 100 m), are sent to <code>api.open-meteo.com</code> with every request:
+when the taskbar appears, after every settings change, at each update
+interval, once a minute while requests fail, when you click the label, when
+the PC wakes up and when the clock or time zone changes. Open-Meteo also sees
+your IP address. Nothing else is sent. Nothing is sent until both coordinates
+are filled in; clear them to stop all requests.</p>
+<h2>Notes</h2>
+<ul>
+<li>The label sits on top of the taskbar at the left offset you choose and does
+not push other buttons aside. With a centered taskbar, turn off Windows
+Widgets (it shows its own weather in the same place). With a left-aligned
+taskbar, raise the left offset so the label clears the Start button.</li>
+<li>Only the main taskbar shows the weather.</li>
+<li>The mod runs in its own background process, not inside Explorer, so a
+crash in the mod can't take Explorer down with it.</li>
+<li>If a request fails, the last reading stays and the card says when it was
+fetched. A reading is marked as stale once it is older than 30 minutes, or
+twice the update interval if that is longer.</li>
+<li>Vertical taskbars (left or right on Windows 10) are not supported. The
+label is not shown on them.</li>
+</ul>
+<h2>Credits</h2>
+<p>Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0).</p>
+]]></content>
+        <author>
+            <name>DavidHiFi</name>
+            <uri>https://github.com/DavidHiFi</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Extra Dim 1.0.0]]></title>
         <id>https://windhawk.net/mods/extra-dim#2dfb44c5d376a01d2952572278d396d1b24bea75</id>
@@ -1030,262 +1267,6 @@ follow a custom pointer color or scheme.</li>
         <author>
             <name>Sanekx Arcs</name>
             <uri>https://github.com/SanekxArcs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mac-style Text Navigation 0.1]]></title>
-        <id>https://windhawk.net/mods/mac-text-keys#e09e6faca14d07424add55f33cb197ab1fa5ea43</id>
-        <link href="https://windhawk.net/mods/mac-text-keys"/>
-        <updated>2026-11-23T01:04:33.000Z</updated>
-        <content type="html"><![CDATA[<h1>Mac-style Text Navigation</h1>
-<p>Makes the modifier keys behave like on macOS when moving the text cursor:
-<strong>Ctrl acts like Cmd</strong> and <strong>Alt acts like Option</strong>.</p>
-<table>
-<thead>
-<tr>
-<th>Shortcut</th>
-<th>Does the same as (Windows)</th>
-<th>macOS equivalent</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Ctrl + ←</td>
-<td>Home (start of line)</td>
-<td>Cmd + ←</td>
-</tr>
-<tr>
-<td>Ctrl + →</td>
-<td>End (end of line)</td>
-<td>Cmd + →</td>
-</tr>
-<tr>
-<td>Alt + ←</td>
-<td>Ctrl + ← (previous word)</td>
-<td>Option + ←</td>
-</tr>
-<tr>
-<td>Alt + →</td>
-<td>Ctrl + → (next word)</td>
-<td>Option + →</td>
-</tr>
-</tbody>
-</table>
-<p>Holding <strong>Shift</strong> as well extends the selection, as expected.</p>
-<h2>Notes</h2>
-<ul>
-<li>The mod runs in a dedicated background <code>windhawk.exe</code> process and uses a
-global low-level keyboard hook, so it works in every application.</li>
-<li>The remapping applies everywhere, not only in text fields. For example,
-Alt+Left/Right no longer go Back/Forward in browsers, File Explorer and
-Settings, and Ctrl+Left/Right lose app-specific meanings (such as jumping to
-the edge of a data region in Excel). Use the &quot;Excluded programs&quot; setting for
-apps where you want the original behavior.</li>
-<li>Windows running as administrator are not affected unless Windhawk itself
-runs elevated (a Windows security restriction).</li>
-<li>Ctrl+Alt combinations (including AltGr) and combinations with the Win key
-are left untouched.</li>
-<li>Modifiers produced by remapping tools that inject input (e.g. PowerToys
-Keyboard Manager, AutoHotkey) are not recognized. Remaps done through the
-scancode map (e.g. SharpKeys) work.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Caio Lemos</name>
-            <uri>https://github.com/lemoscaio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Ookla Speed Test for Network Menu 1.0]]></title>
-        <id>https://windhawk.net/mods/system-tray-network-speedtest#a27c37d29fd6e31d56bd6ecbd78138b0429c98d6</id>
-        <link href="https://windhawk.net/mods/system-tray-network-speedtest"/>
-        <updated>2026-11-23T01:04:28.000Z</updated>
-        <content type="html"><![CDATA[<h1>Ookla Speed Test for Network Menu</h1>
-<p>Right-clicking the network icon in the Windows 11 taskbar and choosing
-<strong>Run internet speed test</strong> normally opens a web page in your browser. This mod
-replaces it with a native flyout above the taskbar that runs the official
-<strong>Ookla Speedtest CLI</strong> in the background and shows the test live.</p>
-<h2>Screenshots</h2>
-<table>
-<thead>
-<tr>
-<th>Download</th>
-<th>Upload</th>
-<th>History</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/download.png" alt="Download"></td>
-<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/upload.png" alt="Upload"></td>
-<td><img src="https://raw.githubusercontent.com/joaomgabaldi/windhawk-mods/assets/system-tray-network-speedtest/history.png" alt="History"></td>
-</tr>
-</tbody>
-</table>
-<h2>Features</h2>
-<ul>
-<li>Live gauge (0 to 2,000+ Mbps) drawn as a soft light bar with smooth motion:
-blue for download, purple for upload.</li>
-<li>Ping, jitter, download and upload measured by Ookla. The server is always
-picked automatically.</li>
-<li><strong>Test history</strong>: when a test finishes, the flyout moves to a list of the last
-100 tests (date and time, IP, server, download, upload, ping) with the new
-test on top. Click a row to open its result page on speedtest.net.</li>
-<li><strong>Copy</strong> puts the result, including the speedtest.net link, on the clipboard.</li>
-<li>Follows the Windows light/dark theme, transparency, DPI and the
-&quot;Animation effects&quot; setting. Keyboard (Tab, arrows, Enter, Esc) and screen
-reader accessible.</li>
-<li>Interface in English or Portuguese, following the Windows display language.</li>
-</ul>
-<h2>Requirements</h2>
-<ol>
-<li>Download the <strong>Speedtest CLI for Windows</strong> from
-<a href="https://www.speedtest.net/apps/cli">speedtest.net/apps/cli</a> and extract
-<code>speedtest.exe</code>.</li>
-<li>Put it at <code>%LOCALAPPDATA%\Programs\speedtest\speedtest.exe</code> (the default),
-or set its path in the mod settings.</li>
-</ol>
-<h2>Ookla license and privacy</h2>
-<p>Before the first test, the flyout explains what Ookla receives and links
-Ookla's <a href="https://www.speedtest.net/about/eula">EULA</a>,
-<a href="https://www.speedtest.net/about/terms">Terms of Use</a> and
-<a href="https://www.speedtest.net/about/privacy">Privacy Policy</a>. No test runs until
-you click <strong>Accept and test</strong>. Only then does the mod start <code>speedtest.exe</code>
-with <code>--accept-license --accept-gdpr</code>. The acceptance is stored separately for
-each Windows user.</p>
-<p>The Speedtest CLI also records the acceptance in its own file,
-<code>%APPDATA%\Ookla\Speedtest CLI\speedtest-cli.ini</code>, which stays after the mod
-is removed. Delete that folder to reset it.</p>
-<h2>Network access</h2>
-<p>The mod opens no connections itself. It runs <code>speedtest.exe</code>, which:</p>
-<ul>
-<li>contacts Ookla's servers to pick a test server, then downloads from and
-uploads to that Speedtest server;</li>
-<li>uploads the result to speedtest.net, where Ookla stores it (the result link
-in the history points there).</li>
-</ul>
-<p>Ookla receives your public IP address, your internet provider and the test
-results, under its privacy policy.</p>
-<p>A test runs every time the flyout opens, and on Start, Repeat or Retry. Set
-<strong>Start the test automatically</strong> to <strong>Never</strong> to make tests click-only (<em>Auto</em>
-already waits for a click on metered connections). Clicking a history row or
-a terms link opens speedtest.net in your browser.</p>
-<h2>Data usage</h2>
-<p>Ookla does not cap a test: on a 2 Gbps line one test moves about 4-5 GB. With
-<strong>Start the test automatically</strong> set to <em>Auto</em>, the flyout waits for a click
-when Windows reports the connection as metered.</p>
-<h2>Notes</h2>
-<ul>
-<li>Stop, Esc, closing the flyout or disabling the mod ends <code>speedtest.exe</code>
-immediately (it runs inside a kill-on-close job object).</li>
-<li>The history lives in the mod's own Windhawk storage, separately for each
-Windows user, and is removed with the mod.</li>
-<li><a href="https://windhawk.net/mods/network-speedtest-native">Network Menu Speed Test</a>
-intercepts the same link. If both are installed, disable one of them.</li>
-</ul>
-<h2>Credits</h2>
-<p>Based on <a href="https://windhawk.net/mods/network-speedtest-native">Network Menu Speed Test</a>
-by Alessandro-Vecchio, which provides the hooks and the original flyout. This
-mod swaps its Cloudflare engine for the Ookla Speedtest CLI and adds the light
-bar, the smooth motion and the test history.</p>
-]]></content>
-        <author>
-            <name>joaomgabaldi</name>
-            <uri>https://github.com/joaomgabaldi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Volu - macOS Volume HUD 1.0.0]]></title>
-        <id>https://windhawk.net/mods/volu-macos-volume-hud#227d2e545520edddb70a93346d9a4028e9995db1</id>
-        <link href="https://windhawk.net/mods/volu-macos-volume-hud"/>
-        <updated>2026-11-23T01:04:23.000Z</updated>
-        <content type="html"><![CDATA[<h1>Volu - macOS Volume HUD</h1>
-<p><img src="https://raw.githubusercontent.com/Kouqqu/Volu/main/preview.png" alt="Volu - macOS Volume HUD"></p>
-<p>Authentic macOS-style translucent volume HUD for Windows with classic step click sounds.</p>
-<h3>Features</h3>
-<ul>
-<li><strong>Pixel-perfect design</strong>: Authentic macOS frosted glass HUD overlay with clean 16-step volume bar and soft drop shadow.</li>
-<li><strong>Audio feedback</strong>: Classic wooden and modern tactile volume step clicks. Silent on mute.</li>
-<li><strong>Smooth animations</strong>: Smooth fade-out transition with configurable on-screen duration.</li>
-<li><strong>Flexible positioning</strong>: Place the HUD at the center, top, or bottom of your screen.</li>
-<li><strong>Optional hotkeys</strong>: Global shortcuts (<code>Ctrl + Alt + Up</code>, <code>Ctrl + Alt + Down</code>, <code>Ctrl + Alt + V</code>), disabled by default to avoid shortcut conflicts.</li>
-<li><strong>Native flyout suppression</strong>: Intercepts physical media keys (<code>Volume Up</code>, <code>Volume Down</code>, <code>Mute</code>) system-wide using <code>RegisterHotKey</code>, suppressing the default Windows flyouts.</li>
-<li><strong>1/16 Quantization</strong>: Each key press changes volume by 1/16 (6.25%) matching macOS, instead of Windows' default 2%.</li>
-<li><strong>Dynamic device switching</strong>: Automatically follows the default audio output device when headphones, speakers, or Bluetooth devices are connected.</li>
-</ul>
-<h3>Key Capture &amp; Shortcuts</h3>
-<p>The mod captures physical volume keys system-wide via <code>RegisterHotKey</code>, so other apps no longer receive the volume keys:</p>
-<ul>
-<li><code>Volume Up</code> — Increase volume by 6.25% (1 step)</li>
-<li><code>Volume Down</code> — Decrease volume by 6.25% (1 step)</li>
-<li><code>Volume Mute</code> — Toggle mute</li>
-</ul>
-<p>Optional shortcuts (if enabled in settings):</p>
-<ul>
-<li><code>Ctrl + Alt + Up</code> — Volume Up</li>
-<li><code>Ctrl + Alt + Down</code> — Volume Down</li>
-<li><code>Ctrl + Alt + V</code> — Mute / Unmute</li>
-</ul>
-<h3>Comparison with Other OSD Mods</h3>
-<p>Unlike <code>win10-volume-brightness-osd</code> (which restores Windows 8/10 flyouts with brightness controls) or <code>osd-custom-pill</code> (which provides modern animated pills), Volu is focused exclusively on authentic macOS volume HUD fidelity:</p>
-<ul>
-<li>Classic square frosted glass aesthetics with multi-pass soft drop shadow.</li>
-<li>Authentic wooden and tactile step clicks.</li>
-<li>16-step quantization (6.25% per step) strictly synchronizing with the 16-segment bar.</li>
-<li>Lightweight tool mod architecture dedicated solely to volume control.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Kouqqu</name>
-            <uri>https://github.com/Kouqqu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Sharp Taskbar Icons After Remote Desktop 1.0]]></title>
-        <id>https://windhawk.net/mods/rdp-icon-refresh#bab10f73f69576c9cbd26dc6e0c9f866dfb7c321</id>
-        <link href="https://windhawk.net/mods/rdp-icon-refresh"/>
-        <updated>2026-11-22T21:03:00.000Z</updated>
-        <content type="html"><![CDATA[<h1>Sharp Taskbar Icons After Remote Desktop</h1>
-<p>Connecting with Remote Desktop from a device with a different display scale (for example
-the Microsoft Remote Desktop app on a phone, at 200–300%) switches the session to that
-scale, and Explorer renders the tray icons for it. When you come back to the local screen,
-Explorer doesn't render them again from the programs' icons — it rescales the copies it
-already made, so they stay blurry until the program or Explorer is restarted.</p>
-<p><img src="https://raw.githubusercontent.com/Solomag/windhawk-assets/main/rdp-icon-refresh/before-after.png" alt="Tray icons after a Remote Desktop session, before and after the refresh"></p>
-<p>This mod asks Explorer to render the icons again. For the tray it uses the copy of each
-icon that Explorer itself keeps for the tray button; as a fallback (for icons it can't
-find there), it remembers the icon each program gives the tray, by watching the
-<code>WM_COPYDATA</code> messages that <code>Shell_NotifyIcon</code> sends to the taskbar and Explorer's
-answers to them. When the session returns to the local console, it waits until the
-scale has stayed the same for a few seconds (Explorer may pass through an intermediate
-scale, and turns tray requests down while it rebuilds the taskbar) and then:</p>
-<ul>
-<li>asks Explorer to render every tray icon again (<code>NIM_MODIFY</code> with the icon Explorer
-itself keeps for that tray button, or the program's own icon handle for icons that
-aren't in the tray toolbars — what happens when the program is restarted, but
-without restarting anything). Explorer's copy is used because many programs destroy
-the handle they give the tray right after giving it;</li>
-<li>asks the taskbar to re-read the icon of every top-level window (<code>HSHELL_REDRAW</code>
-through the taskbar's shell hook message). Buttons of pinned programs that aren't
-running are not refreshed.</li>
-</ul>
-<p>If Explorer turns most tray icons down because it is still busy, or the scale changes
-again, the tray is refreshed again (for about a minute after returning).</p>
-<p>While the remote session is active, the mod checks the taskbar's scale every few
-seconds. If it never differed from the local screen's scale, nothing is done. The
-Windhawk log shows the scales and how many icons were refreshed.</p>
-<p>Icons that existed before the mod was enabled are handled too: their copies are read
-from the tray at refresh time. The exception is an icon a program registered by GUID
-before the mod was loaded: Explorer only accepts it by its GUID, which the mod learns
-when the program registers or updates the icon. Nothing is sent to other programs.</p>
-<p>Made for the Windows 10 taskbar (tested on Windows 10 22H2), and for Windows 11 versions
-whose taskbar still behaves like it; not tested on the newer Windows 11 taskbar. The
-newer Windows 11 (XAML) notification area has no tray toolbars, so there only icons
-registered while the mod was running are refreshed.</p>
-]]></content>
-        <author>
-            <name>Solo_mag</name>
-            <uri>https://github.com/Solomag</uri>
         </author>
     </entry>
 </feed>

@@ -29,37 +29,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/4b120b2bf65bbe07e66560d0a408bd5e2ef67540/mods/acrylic-media-pill.wh.cpp"
       }
     },
-    "adaptive-tray-contrast": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795471852872,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795545412441,
-        "users": 0
-      },
-      "metadata": {
-        "architecture": [
-          "x86-64"
-        ],
-        "author": "StillDialing",
-        "compilerOptions": "-lgdi32 -lole32 -loleaut32 -lruntimeobject -lshell32",
-        "description": "Adapts tray icons, clock and date characters, taskbar button themes and supported app icons to the background behind each.",
-        "github": "https://github.com/StillDialing",
-        "include": [
-          "explorer.exe"
-        ],
-        "name": "Adaptive Tray Contrast",
-        "version": "0.3.16"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7868",
-      "source": {
-        "sha256": "be27b3db816dfab23ea2c2d1d8fe742e73aae42bdc5b0694502f189b0e3c6edf",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6a05c10c82ddc65766e56ca07685043478e4d419/mods/adaptive-tray-contrast.wh.cpp"
-      }
-    },
     "aleph-canvas": {
       "details": {
         "defaultSorting": 0,
@@ -88,35 +57,6 @@
       "source": {
         "sha256": "fce119a614fe7a7043ae41d71e484fc989ec0f71581929ee8d96dd176310837b",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/80d1d414458f03515a73ba2dfcba38934d5255dd/mods/aleph-canvas.wh.cpp"
-      }
-    },
-    "alttabs": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795507391102,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795507391102,
-        "users": 0
-      },
-      "metadata": {
-        "author": "Dszae",
-        "compilerOptions": "-lole32 -loleaut32 -lshell32 -lgdi32 -ldwmapi",
-        "description": "Press Alt+Q in Chrome, Edge or Brave to search the open tabs of the window and switch to one with the keyboard",
-        "github": "https://github.com/Dszae",
-        "homepage": "https://github.com/Dszae/AltTabs",
-        "include": [
-          "windhawk.exe"
-        ],
-        "name": "AltTabs - Browser Tab Switcher HUD",
-        "version": "1.2.0"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/6964",
-      "source": {
-        "sha256": "f13925f0f2ca2be2e2f8cc95c645a65cf4d30010c39698dfb702f04da7ca3bb4",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/cf4a6e75824483f8bd638e65a7933c3615655c24/mods/alttabs.wh.cpp"
       }
     },
     "attack-shark-x11-battery": {
@@ -640,35 +580,6 @@
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/e4ff408e60ebef92cbff58b7b73e1d16d5e10136/mods/native-screen-recorder.wh.cpp"
       }
     },
-    "same-app-window-cycler": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795370788861,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795370788861,
-        "users": 0
-      },
-      "metadata": {
-        "author": "mdozkanji",
-        "compilerOptions": "-ldwmapi -lshell32",
-        "description": "macOS-style Cmd+` for Windows: cycle through the windows of the current app with Alt+` (Alt+Shift+` goes backwards)",
-        "github": "https://github.com/mdozkanji",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "Same-App Window Cycler (Alt+`)",
-        "version": "0.1.4"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7739",
-      "source": {
-        "sha256": "88281afc1a4585c497cb77d0cb7fdaec87398b63442427c8c83337091d330d51",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/6e9706ac0f9bbeb620d3c8e087a8e5c3f8ef7708/mods/same-app-window-cycler.wh.cpp"
-      }
-    },
     "spotlight-for-windows": {
       "details": {
         "defaultSorting": 0,
@@ -772,7 +683,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
         "trendingSorting": 0,
-        "updated": 1795637152917,
+        "updated": 1795676797078,
         "users": 0
       },
       "metadata": {
@@ -791,8 +702,8 @@
       },
       "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/7747",
       "source": {
-        "sha256": "4434c72ea99082c6ba3ed2e8f5e05e6905d9719f92ae2147bea97e53728d4b6b",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/ecec85a5f8ff6a95b9ae6bc3faebb76e77bd7d1e/mods/taskbar-app-state-indicators.wh.cpp"
+        "sha256": "cdc0a3ce25bd5b184e3feaaa92d510a56566c50fc3253188d6ff31b0fb31a08b",
+        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/439a065103ed2cab4ab3d6467fa5e614435967df/mods/taskbar-app-state-indicators.wh.cpp"
       }
     },
     "taskbar-app-volume-mixer": {
@@ -975,35 +886,6 @@
       "source": {
         "sha256": "e376e9096379b889de64c62ba7004a6a80e8bed4791ab7a57812773547f03dde",
         "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/a86034e6042bc1337a5c10f3a596ff06d346027a/mods/taskbar-notification-bell-badge.wh.cpp"
-      }
-    },
-    "taskbar-weather": {
-      "details": {
-        "defaultSorting": 0,
-        "published": 1795320601968,
-        "rating": 0,
-        "ratingBreakdown": [0, 0, 0, 0, 0],
-        "ratingUsers": 0,
-        "trendingSorting": 0,
-        "updated": 1795471852872,
-        "users": 0
-      },
-      "metadata": {
-        "author": "DavidHiFi",
-        "compilerOptions": "-lwinhttp -lgdiplus -lgdi32 -luser32 -ld2d1 -ldwrite -lshell32",
-        "description": "Current weather on the taskbar with a details card on hover. No Widgets, browser or API key needed",
-        "github": "https://github.com/DavidHiFi",
-        "include": [
-          "windhawk.exe"
-        ],
-        "license": "MIT",
-        "name": "Taskbar Weather",
-        "version": "1.6.1"
-      },
-      "pullRequest": "https://github.com/ramensoftware/windhawk-mods/pull/5834",
-      "source": {
-        "sha256": "789d28c43e8cdc92e178160d6331af8485ffdbc0457757a2a941da36beb4b64d",
-        "url": "https://raw.githubusercontent.com/ramensoftware/windhawk-mods/eb8cc7f8e45c20eb6fd4026a350afb74d6fb70f4/mods/taskbar-weather.wh.cpp"
       }
     },
     "taskbar-wireless-battery": {

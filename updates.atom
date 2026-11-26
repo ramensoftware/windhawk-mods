@@ -2,12 +2,249 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-26T06:00:25.000Z</updated>
+    <updated>2026-11-26T07:02:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Adaptive Tray Contrast 0.3.16]]></title>
+        <id>https://windhawk.net/mods/adaptive-tray-contrast#dd2b0cad4fd0a38e53c19fa604468577ef4f663a</id>
+        <link href="https://windhawk.net/mods/adaptive-tray-contrast"/>
+        <updated>2026-11-26T07:02:38.000Z</updated>
+        <content type="html"><![CDATA[<h1>Adaptive Tray Contrast</h1>
+<p>On a transparent Windows 11 taskbar, a light window can sit behind half the date while the other half is over dark wallpaper. This Windhawk mod chooses black or white for each clock and date character according to the background behind it.</p>
+<p>Supported monochrome tray icons and the Chinese/English input indicator adapt independently. Start, Search, Task View, Widgets and app buttons can switch button themes. For packaged apps that provide both light and dark icon variants, the mod uses the variant that suits each button's background. Colored tray icons and the colored part of the battery keep their original colors. A packaged app's themed icon can cover its own dynamic artwork.</p>
+<p>In 0.3.16, clicking the Chinese/English input indicator hides the previous tinted glyph while the new one is captured. When the native glyph already has the desired color, the mod displays it directly.</p>
+<h2>中文说明</h2>
+<p>在 Windows 11 的透明任务栏上，如果浅色窗口的边缘刚好穿过日期，同一行里，压在浅色窗口上的数字可以变黑，留在深色壁纸上的数字可以保持白色。时间和日期分别逐字符判断。</p>
+<p>模组也会分别调整受支持的单色托盘图标和中英文输入法指示器，切换开始、搜索、任务视图、小组件及应用按钮的深浅主题。打包应用如果自带深浅两套图标，模组会按每个按钮背后的画面选用对应图标。彩色托盘图标和电池的彩色部分保留原色；应用自带的动态图案可能被深浅版图标覆盖。</p>
+<p>从 0.3.16 起，点击“中／英”时会先撤下旧字的着色层，再用新字着色，减少切换瞬间的重影。如果系统原字已经是需要的颜色，就直接显示原字。</p>
+<h2>Demos · 实机演示</h2>
+<h3>App icons · 应用图标</h3>
+<p><strong>Drag a window · 缓慢拖动窗口</strong><br>
+Watch each supported app icon as the window edge passes behind its button.<br>
+窗口边缘扫过不同按钮时，各应用图标分别切换深浅版本。</p>
+<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/app-icons-window-drag.gif" alt="App icons as a window edge moves behind the taskbar"></p>
+<p><strong>Switch between full-screen apps · 切换全屏应用</strong><br>
+Compare the app icons as you switch apps and reveal the taskbar.<br>
+切换全屏应用，观察任务栏显示时应用图标的变化。</p>
+<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/app-icons-window-switch.gif" alt="App icons when switching between full-screen apps"></p>
+<h3>System tray, clock and date · 右侧托盘、时间和日期</h3>
+<p><strong>Drag a window · 缓慢拖动窗口</strong><br>
+Follow the window edge across the tray icons and individual clock and date characters.<br>
+留意窗口边缘经过右侧托盘和日期时，哪些图标、哪些数字先变色。</p>
+<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/tray-window-drag.gif" alt="Tray icons and individual characters as a window moves"></p>
+<p><strong>Switch between full-screen apps · 切换全屏应用</strong><br>
+Compare the right side of the taskbar against the different backgrounds.<br>
+切换全屏应用后，对比不同背景下右侧托盘、时间和日期的颜色。</p>
+<p><img src="https://raw.githubusercontent.com/StillDialing/adaptive-tray-contrast/74698893e81b32dd0d73b301024dc384c16dd2fe/images/tray-window-switch.gif" alt="System tray, clock and date when switching between full-screen apps"></p>
+<h2>Settings · 设置</h2>
+<p>The default sampling interval is 80 ms (adjustable from 40 to 2000 ms). A longer interval samples less often and responds more slowly. Sharp background boundaries can cause brief flicker.</p>
+<p>默认每 80 毫秒采样一次，可在设置中调整为 40 至 2000 毫秒。间隔越长，采样越少，响应也越慢。图标恰好位于深浅交界处时可能短暂闪烁。</p>
+]]></content>
+        <author>
+            <name>StillDialing</name>
+            <uri>https://github.com/StillDialing</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Same-App Window Cycler (Alt+`) 0.1.4]]></title>
+        <id>https://windhawk.net/mods/same-app-window-cycler#a9a990a6a8bf04a18e3c7e40c93300a7b284512c</id>
+        <link href="https://windhawk.net/mods/same-app-window-cycler"/>
+        <updated>2026-11-26T07:02:33.000Z</updated>
+        <content type="html"><![CDATA[<h1>Same-App Window Cycler</h1>
+<p>Brings the macOS <strong>Cmd+`</strong> behavior to Windows. While an app has several
+windows open, press <strong>Alt+`</strong> to jump to its next window, or <strong>Alt+Shift+`</strong>
+to go to the previous one. Repeated presses walk through all of the app's
+windows, and Alt+Shift+` walks through them in the opposite order.</p>
+<p>The shortcut uses the physical key left of <code>1</code>. The key is mapped when the mod
+starts, so it follows the keyboard layout that is active at that time.</p>
+<h2>How it differs from the existing switcher mods</h2>
+<p>Simple Window Switcher, ClassicWindowSwitcher and Windows 7/8.1 Alt+Tab
+Recreation also offer an Alt+` &quot;windows of the current app&quot; mode, but all of
+them replace the native Alt+Tab and show their own switcher UI. This mod leaves
+Alt+Tab untouched and switches windows directly, with no UI. If you already use
+one of those mods for Alt+`, you don't need this one.</p>
+<h2>Conflicts</h2>
+<p>Alt+` is registered as a global hotkey, and only one program can own it.</p>
+<ul>
+<li>Simple Window Switcher registers Alt+` by default (<code>altBacktickBehavior: backward</code>), so if both mods are enabled, whichever registers first gets the
+key and the other one only logs a failure. Set its Alt+` behavior to &quot;none&quot;,
+or don't enable both.</li>
+<li>Windows 7/8.1 Alt+Tab Recreation catches Alt+` with a low-level keyboard hook
+and swallows it. With its <code>onlyThisAppHotkey</code> option on, that mod gets the key
+no matter which one registers first, and this mod's hotkey never fires.</li>
+<li>The same applies to other tools that use Alt+`, such as AutoHotkey scripts.</li>
+<li>Apps that have their own Alt+` or Alt+Shift+` shortcut stop receiving it
+while this mod is on.</li>
+</ul>
+<h2>How it works</h2>
+<p>The mod runs as a tool mod in a dedicated <code>windhawk.exe</code> process and registers a
+global hotkey. When pressed, it takes the foreground window, finds all other
+switchable top-level windows that belong to the same executable on the current
+virtual desktop, and activates the next one.</p>
+<h2>Limitations</h2>
+<ul>
+<li>Windows are grouped by executable path. UWP apps hosted by
+ApplicationFrameHost.exe are all treated as one &quot;app&quot;.</li>
+<li>Windows of elevated (administrator) apps may only flash instead of coming to
+the front.</li>
+<li>&quot;Always on top&quot; windows (such as Picture-in-Picture) are skipped while
+cycling, unless one of them is the current window.</li>
+<li>If you switch keyboard layouts and the key left of <code>1</code> produces a different
+virtual key, the hotkey stays on the key it was registered with. Disable and
+re-enable the mod after changing layouts.</li>
+</ul>
+]]></content>
+        <author>
+            <name>mdozkanji</name>
+            <uri>https://github.com/mdozkanji</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[AltTabs - Browser Tab Switcher HUD 1.2.0]]></title>
+        <id>https://windhawk.net/mods/alttabs#e2c26c23a2cca579ddfcb2072037bd790ae78f37</id>
+        <link href="https://windhawk.net/mods/alttabs"/>
+        <updated>2026-11-26T07:02:27.000Z</updated>
+        <content type="html"><![CDATA[<h1>AltTabs - Browser Tab Switcher HUD</h1>
+<p>Press <strong>Alt+Q</strong> while a Chrome, Edge or Brave window is focused to open a
+searchable list of the tabs in that window. Type to filter, pick a tab with
+the arrow keys, and press <strong>Enter</strong> to switch to it.</p>
+<p><img src="https://raw.githubusercontent.com/Dszae/AltTabs/8fdb2c819e758ff60a8b6b35ea9a46135c42e632/assets/hud.png" alt="AltTabs"></p>
+<h2>Keys</h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Alt+Q</strong> or <strong>Alt+`</strong></td>
+<td>Open the list, with the tab after the current one selected. While it's open, press again to move down, or with Shift to move up.</td>
+</tr>
+<tr>
+<td>Typing</td>
+<td>Filter the tabs. Several words match tabs that contain all of them.</td>
+</tr>
+<tr>
+<td><strong>↑</strong> <strong>↓</strong>, <strong>Tab</strong>, <strong>Shift+Tab</strong></td>
+<td>Move the selection</td>
+</tr>
+<tr>
+<td><strong>Page Up</strong>, <strong>Page Down</strong></td>
+<td>Move the selection by a page</td>
+</tr>
+<tr>
+<td><strong>Enter</strong> or click</td>
+<td>Switch to the selected tab</td>
+</tr>
+<tr>
+<td><strong>Backspace</strong>, <strong>Ctrl+Backspace</strong></td>
+<td>Delete a character, clear the filter</td>
+</tr>
+<tr>
+<td><strong>Esc</strong></td>
+<td>Close the list</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Alt+`</strong> is the key above Tab on US keyboard layouts. The hotkeys are only
+taken over while a window of an enabled browser is focused. In other apps
+they work as usual.</p>
+<h2>Notes</h2>
+<ul>
+<li>Only the tabs of the focused browser window are listed. The current tab is
+marked with a blue bar.</li>
+<li>Tab titles are read with Windows UI Automation. Browsers don't expose tab
+addresses this way, so the site name next to a tab is taken from the end of
+its title, for example &quot;YouTube&quot; in &quot;Some video - YouTube&quot;. Tabs whose title
+doesn't end with a site name have no label.</li>
+<li>Opera should work too, but hasn't been tested. Vivaldi isn't supported, its
+tab bar is part of a web page.</li>
+<li>The first time the list is opened, the browser turns on its accessibility
+support, as it does for screen readers. This uses some extra CPU and memory
+in the browser while it's on.</li>
+<li>The mod runs in its own Windhawk process. It doesn't inject code into the
+browser or into Explorer.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Dszae</name>
+            <uri>https://github.com/Dszae</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Weather 1.6.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-weather#57aa4fa484da22f897006c168040cb4957025f99</id>
+        <link href="https://windhawk.net/mods/taskbar-weather"/>
+        <updated>2026-11-26T07:02:22.000Z</updated>
+        <content type="html"><![CDATA[<h1>Taskbar Weather</h1>
+<p>The current weather at the left end of the taskbar, with a details card when
+you hover over it. It works on its own, without Windows Widgets.</p>
+<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/taskbar-weather.png" alt="Taskbar Weather preview"></p>
+<h2>Features</h2>
+<ul>
+<li><strong>Weather icon, temperature and conditions</strong> on the taskbar, updated every
+ten minutes by default.</li>
+<li><strong>Hover card</strong> with the feels-like temperature, today's high and low,
+humidity and wind.</li>
+<li><strong>Click to refresh</strong> at any time.</li>
+<li><strong>Follows the Windows theme:</strong> dark text on a light taskbar, light text on a
+dark one. A setting can force either.</li>
+<li><strong>Celsius and km/h, or Fahrenheit and mph.</strong></li>
+<li><strong>No Widgets, MSN, Edge or location permission.</strong> Data comes from
+Open-Meteo, with no account or API key.</li>
+</ul>
+<h2>How it differs from other weather mods</h2>
+<p><a href="https://windhawk.net/mods/taskbar-clock-customization">Taskbar Clock Customization</a>
+can put weather text inside the clock, and
+<a href="https://windhawk.net/mods/micrographics-taskbar-clock">Micrographics Taskbar Clock</a>
+replaces the clock with one that can show a weather line.
+<a href="https://windhawk.net/mods/windhawk-topbar">TopBar for Windows</a> has a weather
+flyout in its own bar, and Desktop Live Overlay shows weather on the desktop.
+This mod adds its own icon and label at the left end of the stock taskbar,
+keeps the regular clock, shows a details card on hover, and needs no other
+mod.</p>
+<h2>Setup</h2>
+<p>Open the settings and enter your town's <strong>latitude</strong> and <strong>longitude</strong> in
+decimal degrees with a dot, for example <code>51.5074</code> and <code>-0.1278</code> (in most map
+apps, right-click a place to copy them). Add a <strong>place name</strong> to show it in the
+hover card.</p>
+<h2>Privacy and network use</h2>
+<p>The mod needs internet access. Your latitude and longitude, rounded to three
+decimals (about 100 m), are sent to <code>api.open-meteo.com</code> with every request:
+when the taskbar appears, after every settings change, at each update
+interval, once a minute while requests fail, when you click the label, when
+the PC wakes up and when the clock or time zone changes. Open-Meteo also sees
+your IP address. Nothing else is sent. Nothing is sent until both coordinates
+are filled in; clear them to stop all requests.</p>
+<h2>Notes</h2>
+<ul>
+<li>The label sits on top of the taskbar at the left offset you choose and does
+not push other buttons aside. With a centered taskbar, turn off Windows
+Widgets (it shows its own weather in the same place). With a left-aligned
+taskbar, raise the left offset so the label clears the Start button.</li>
+<li>Only the main taskbar shows the weather.</li>
+<li>The mod runs in its own background process, not inside Explorer, so a
+crash in the mod can't take Explorer down with it.</li>
+<li>If a request fails, the last reading stays and the card says when it was
+fetched. A reading is marked as stale once it is older than 30 minutes, or
+twice the update interval if that is longer.</li>
+<li>Vertical taskbars (left or right on Windows 10) are not supported. The
+label is not shown on them.</li>
+</ul>
+<h2>Credits</h2>
+<p>Weather data by <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0).</p>
+]]></content>
+        <author>
+            <name>DavidHiFi</name>
+            <uri>https://github.com/DavidHiFi</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Extra Dim 1.0.0]]></title>
         <id>https://windhawk.net/mods/extra-dim#2dfb44c5d376a01d2952572278d396d1b24bea75</id>
@@ -569,158 +806,6 @@ Window Centralizer or Center New Windows: both would move the same window.</p>
         <author>
             <name>meteoni</name>
             <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MultiWM 1.16.1]]></title>
-        <id>https://windhawk.net/mods/multiwm#a0a4a5b54e1b5e87f118e46f69058c0b699343cb</id>
-        <link href="https://windhawk.net/mods/multiwm"/>
-        <updated>2026-11-25T19:05:05.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>Functionality note</strong></p>
-<ul>
-<li><strong>The <code>bsp</code> layout setting now means the new BSP layout.</strong> Configurations
-saved before 1.13.29 used <code>bsp</code> for Dwindle; those now open in BSP. Choose
-Dwindle again in the layout settings to keep the old behaviour.</li>
-</ul>
-<p><strong>New</strong></p>
-<ul>
-<li><strong>BSP layout.</strong> New windows split the focused or biggest tile. Drag a window near a tile's edge to split it there, or drop it in the center to swap.</li>
-<li><strong>Resize hotkeys.</strong> Alt+= grows the focused window, Alt+- shrinks it and Alt+0 resets it. You can hold a key to repeat, and set the step size.</li>
-<li><strong>Drag preview.</strong> While you drag a tiled window, MultiWM shows where it will land. You can change the opacity, outline, corner radius, app icon size and fade time.</li>
-<li><strong>Clearer hotkey feedback.</strong> If another program already uses one of MultiWM's shortcuts, a toast names that program. A hotkey that can't do anything now tells you why.</li>
-<li><strong>Support for the MultiWM Companion mod.</strong></li>
-</ul>
-<p><strong>Changes</strong></p>
-<ul>
-<li>&quot;Set Master Window&quot; (Alt+M) is now <strong>Layout Action</strong>. It rotates the focused split in BSP and still promotes the focused window in other layouts.</li>
-<li>&quot;Adaptive Dwindle&quot; settings are now <strong>Adaptive Split</strong> settings and apply to BSP as well. Splits go back to normal when the extra space is no longer needed, unless you've resized a window.</li>
-<li>If you change the management mode with the hotkey or tray menu, it stays that way until MultiWM restarts or you change the setting.</li>
-<li>The Floating default size now applies whenever a window floats for the first time, not only in Automatic mode.</li>
-</ul>
-<p><strong>Fixes and improvements</strong></p>
-<ul>
-<li>Windows of apps that stop responding are handled better.</li>
-<li>Minor bug fixes and improvements.</li>
-</ul>
-]]></content>
-        <author>
-            <name>meteoni</name>
-            <uri>https://github.com/Meteoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Yandex Music Transparency 1.2.8]]></title>
-        <id>https://windhawk.net/mods/yandex-music-transparency#5b2330146733bd5c376685c8caa8e90b84920731</id>
-        <link href="https://windhawk.net/mods/yandex-music-transparency"/>
-        <updated>2026-11-25T19:04:59.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added configurable opacity for active and inactive windows
-(<code>Alpha</code> / <code>InactiveAlpha</code>).</li>
-<li>Added &quot;fully opaque on hover&quot; option (<code>OpaqueOnHover</code>).</li>
-<li>Added &quot;fully opaque when maximized/fullscreen&quot; option
-(<code>OpaqueWhenMaximized</code>), applied immediately to avoid clashing with the
-system resize animation.</li>
-<li>Added smooth animated transitions between opacity levels
-(<code>SmoothTransitions</code>).</li>
-<li>Defaults: active opacity 220, inactive opacity 170 (inactive windows are now
-more transparent than the active value), smooth transitions on, fully
-opaque on hover off.</li>
-<li>Fixed restoring the original alpha on unload (the window's true original
-opacity is now captured once).</li>
-</ul>
-]]></content>
-        <author>
-            <name>NIKTO</name>
-            <uri>https://github.com/NIKTO-2</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mac Island & Dock 3.4.0]]></title>
-        <id>https://windhawk.net/mods/mac-island-dock#1a8b68fc7e486beb33373928b5fb030b549eb5df</id>
-        <link href="https://windhawk.net/mods/mac-island-dock"/>
-        <updated>2026-11-25T18:03:29.000Z</updated>
-        <content type="html"><![CDATA[<p><strong>New</strong></p>
-<ul>
-<li>Power menu: &quot;Update and restart&quot; and &quot;Update and shut down&quot; while Windows has updates waiting, like the Start menu's. <code>UpdatesWaiting()</code> reads whether either of Windows' own pending-reboot keys exists (<code>WindowsUpdate\Auto Update\RebootRequired</code> or <code>Component Based Servicing\RebootPending</code>, <code>KEY_WOW64_64KEY</code> since the island is 32-bit), once each time the menu opens. The two rows (<code>PowerAction::UpdateRestart</code>, <code>UpdateShutDown</code>, added before <code>Count</code>) sit right above Restart and Shut down, follow those options and their confirmation, and call <code>InitiateShutdownW</code> with <code>SHUTDOWN_INSTALL_UPDATES</code>; if that fails, the plain restart or shut down runs instead, except with other accounts signed in (<code>ERROR_SHUTDOWN_USERS_LOGGED_ON</code>): Windows installs updates only with them signed out, so nothing runs and a notice says why.</li>
-<li>Neon theme (Vice in 3.3, renamed: the name in the settings and texts only, the stored keys <code>islandVice*</code> are the same): choose its colors, five palettes (Sunset, Miami, Synthwave, Toxic and Inferno) or one color of yours, and the island builds the whole neon from it (Look tab, under Colors). A &quot;Pure black background&quot; switch makes its background solid black under the neon, for OLED screens (<code>islandViceBlack</code>, only with Vice on), and &quot;Your own colors under the neon&quot; (<code>islandViceOwnBack</code>) gives the island and its panels your own fill, text and icon colors, solid, with the neon kept; picking one of your own colors with Vice on turns it on instead of switching to the &quot;Your own colors&quot; theme. <code>VicePaletteOf</code> makes a palette from your color in HSV (your hue in the middle, the two ends 40° away, the icons' color across from it and lighter, every color bright enough to glow). The colors are part of the theme (<code>IslandTheme::neon</code>), so they blend like any theme change.</li>
-<li>Neon theme: animated neon, off by default. The colors flow along the line and it glows like real neon (a brighter core and a wider glow that breathes), with sliders for its speed and strength (50% is the look without them). It runs on its own timer of about 30 steps a second (<code>kViceFlowTimerId</code>, <code>kIdleFrameSeconds</code> between steps at most) only while the option and the theme are on, the island is seen and not over a full-screen app, the animations are on and Windows' energy saver is off. While the island's own frames already run (the visualizer, a transition), it steps inside them instead (<code>StepViceFlow</code> in <code>AnimationFrame</code>) and the timer draws nothing, so there is one stream of draws. A frame where only its step changed is drawn again only where the neon is (<code>m_neonArea</code>, the same partial frames Faísca's picture uses) and only that part goes to the window. On a notch, the glow along the outline is drawn once into a bitmap and reused each frame, dimmed by the breathing (made again only when the shape, colors or strength change). The option says it uses more of the PC.</li>
-<li>Faísca's small pill when she's alone on the hidden island (ST LOTUS, Discord): &quot;Room on her small pill&quot; (<code>islandPetRoom</code>, %, 100 the room as before, 0 to 300, per profile, slider <code>kSliderPetRoom</code>, dimmed unless she's on the line) scales the room beside her through <code>PetRoomShare</code>: <code>PetLineRect</code> (Island, Fixed, notches), <code>PetSideRect</code> (upright) and the Bar's small pill when only she is on it (<code>HiddenClockRect</code>). With 3.4's Line opacity at 0% the pill is gone and this is her hover room.</li>
-<li><strong>Brightness wheel step</strong> (#7349): a new list under Screen brightness (<code>islandBrightnessStep</code>, per profile, 1/2/5/10%, 5% as before; <code>IslandPref::BrightnessStep</code>, <code>kChoiceBrightnessStep</code>, modeled on the Shelf holds list). <code>BrightnessWheelSteps</code> takes the chosen step from <code>kBrightnessSteps</code> instead of a fixed 5%, so the pill's brightness item and the control center's brightness sliders both follow it; touchpads still keep what's left of a step for the next turn.</li>
-<li><strong>Weekday in full on the clock</strong> (#7562): a new switch, &quot;Weekday in full&quot; (<code>islandWeekdayFull</code>, off, per profile, under &quot;Day of the week&quot; and dimmed while it's off). <code>Island::UpdateClock</code> writes the weekday with <code>dddd</code> instead of <code>ddd</code> in every date order (Windows writes the name in the island's language), so the pill's and the Bar's clocks follow. It keeps today's name and the seven <code>LOCALE_SDAYNAME</code> names, and <code>Island::Layout</code> measures the clock with each of them in place of today's (only when the text or its format changes, <code>m_clockFullKey</code>) and takes the widest, so the pill doesn't change width from one day to the next.</li>
-<li><strong>Banner size apart from the island</strong> (#7759): a new switch, <code>islandBannerApart</code> (<code>IslandPref::BannerApart</code>, off by default, per profile, under Banner size in the Banners section, dimmed without banners). <code>Island::BannerSizeFactor</code> divides the chosen banner size by the island's size when it's on, so the banner keeps the screen's scaling and its own size only; every banner measure, font (<code>UpdateFormats</code>, which now also reformats on the switch) and window room goes through it, in every style and notch.</li>
-<li><strong>A shortcut for the apps launcher</strong> (#7756): a third recorded island shortcut, like the click-through one: <code>islandLauncherKey</code> (<code>IslandPref::LauncherKey</code>, off by default, machine-wide and the main island's) with a <code>SettingKind::Shortcut</code> row (slot 2, <code>islandShortcut2</code>, <code>g_launcherShortcut</code>, no keys until recorded) under Apps (launcher). <code>ShortcutKeyProc</code> takes its keys (bit 128 of <code>g_shortcutKeys</code>) and posts <code>WM_APP_SHORTCUT</code> 6; the island on the main island's monitor with the launcher's notch runs the new <code>Island::OpenLauncherFromShortcut</code>, which toggles <code>m_launcherPanel</code> from its icon (from the island's middle without it, on the Bar too: <code>PanelPlace</code> falls back to the middle when neither the item nor the clock is on it). Over a full-screen app (the island hidden) its keys are pressed again for the app in front, like Win+N and Win+A. <code>SetIslandShortcut</code> and <code>CommandShortcutClashOf</code> refuse keys another island shortcut has; the backup keeps <code>islandShortcut2</code>.</li>
-<li><strong>Bluetooth headset battery low</strong> (#7302): a new status notice, <code>islandNoticeBluetoothLow</code> (<code>IslandPref::NoticeBluetoothLow</code>, <code>NoticeKind::BluetoothLow</code>, off by default, the main island's, under Status notices). While a Bluetooth audio device is connected, the new <code>Island::CheckBluetoothBatteries</code> runs every 5th status round of <code>Tick</code> (no new timer) and reads each one's battery once on a thread (<code>BluetoothBatteryProc</code>, the job's new <code>check</code>); <code>NoteBluetoothBattery</code> tells &quot;Low battery&quot; with its name under 20% and under 10%, each once per discharge by its address (again after it charged 10 points over it), drawn with the connection notice's red ring. The level read as it connects counts too, without a second notice.</li>
-<li><strong>Banner time</strong> (#7302): banners went after a fixed 5 seconds (<code>kBannerShownMs</code>). A new list, <code>islandBannerTime</code> (<code>kChoiceBannerTime</code>, <code>IslandPref::BannerTime</code>, 3/5/8/12/20 s, 5 by default, per profile, in the Banners section, dimmed without banners), and the new <code>BannerShownMs()</code> sets the banner timer in <code>Island::ShowToasts</code> for every banner that goes away by itself; calls, alarms, reminders and a status notice with its own time are as before.</li>
-<li><strong>A color for each task</strong> (#7776): the tasks' editor has a color row (<code>TasksPanel::LayoutColors</code> / <code>DrawColors</code>, <code>Part::ColorPick</code>): none or one of <code>kTaskColors</code> (macOS's eight). <code>Task::color</code> is kept at the end of the stamp field after &quot;#&quot; (<code>TaskColorField</code> / <code>ParseTaskColorField</code>), so old task lists load unchanged and older versions still read the stamp and the day. The task's circle and check take it (<code>TaskTint</code>, blending from the one before through a HoverFades key per change; <code>TaskCheckInk</code> keeps the check readable on yellow), and <code>TaskDay::color</code> carries it to the calendar: the task's circle in a day's list, its mark under the day and its line among the big day's events.</li>
-<li>What's playing panel: &quot;Song length instead of time left&quot; (<code>islandMediaTotalTime</code>, off by default, per profile, under &quot;Media panel style&quot;): the time at the right of the timeline shows the song's whole length (3:26) instead of the time left (-2:22), in every panel style (<code>MediaRightTime</code>, used by <code>MediaPanel::DrawTimeline</code>); dimmed while the panel can't open, like the style (Discord request).</li>
-<li>What's playing panel, Pixel style: &quot;Song times always shown&quot; (<code>islandMediaTimesAlways</code>, off by default, per profile, under &quot;Media panel style&quot;): the times under the wavy line stay shown instead of only while it's dragged or under the mouse (<code>MediaTimesShown</code>, used by <code>MediaPanel::DrawTimeline</code>). Switched while the panel is open they fade in or out (<code>m_timesAlways</code>, stepped in <code>MediaPanel::AnimateContents</code>, a frame asked from <code>OnLookChanged</code>, nothing running once it settles). Pixel's times sit 4 dp lower in <code>MediaPlayerLayout</code>, clear of the handle's bottom, so the time under the handle at the song's start or end stays readable (still inside the card's bottom row). Dimmed without the Pixel style (&quot;Only for the Pixel style&quot;, its &quot;?&quot; going to the style) and while the panel can't open (Discord request).</li>
-<li><strong>Four new island languages</strong>: the island speaks Indonesian (Bahasa Indonesia), Polish (Polski), Thai (ไทย) and Traditional Chinese (繁體中文), Windhawk's settings page too; choose one in the General tab, or it follows Windows. They join <code>TextLanguage</code> (after Korean, so a saved choice keeps its number; <code>kTextLanguages</code> 11 to 15). Each has its own table (<code>kIndonesianTexts</code>, <code>kPolishTexts</code>, <code>kThaiTexts</code>, <code>kTraditionalChineseTexts</code>: <code>kGermanTexts</code>' keys in its order, so <code>TableText</code>'s binary search works), its locale for the dates (<code>kTextLocales</code>), its own name in <code>ChoiceOption</code>, its flag in <code>DrawFlag</code> (Traditional Chinese with Simplified Chinese's flag, their names telling them apart: 简体中文 and 繁體中文), its search words, and Windhawk's settings page (<code>$name</code>, <code>$description</code> and <code>$options</code> for id-ID, pl-PL, th-TH and zh-TW, with the header's <code>@name</code> and <code>@description</code>). The texts are the translators' files (cslavioindo, salackij-bit, notactuallyoak, Parkerlu26) by key, the ones added since their export filled in.</li>
-<li>The Windows display language goes through the new <code>TextLanguageOfLangId</code>: Traditional Chinese for zh-TW, zh-HK and zh-MO (English before), Indonesian, Polish and Thai by their primary language.</li>
-<li>Each translator's GitHub name shows beside the language in the languages' lists (<code>kTextTranslators</code>, <code>DrawChoiceName</code>; the lists open wider to the left in <code>DrawDrop</code>, like the icon packs').</li>
-<li>What's new: older versions have no text in the new languages and read in English (<code>NotesLines</code> takes the first text for a null one); 3.4.0's entry is in the four. The weather's city search sends the language's two letters (<code>zh</code> for both scripts).</li>
-</ul>
-<p><strong>Improvements</strong></p>
-<ul>
-<li>While the island is minimized or hidden as the clock (the Bar too), the Caps Lock, Num Lock and keyboard language bubbles grow out of the line or the clock itself, in its shape, instead of a bubble apart under it (#7520). <code>EdgeTextRect</code> takes the hidden clock's height and place (or the line's), as wide as the text needs, and the shape morphs into it and back; the line's own contents are left out while it shows. Not on an upright pill or with the notches, where the bubble stays as before.</li>
-<li>Neon theme: &quot;Power menu as a pause menu&quot; (<code>islandVicePause</code>, on by default, per profile): off, the power menu is the usual one in Neon too (<code>VicePauseMenu</code>, which the power panel lays out from).</li>
-<li>Faísca alone on the hidden island's small pill (no time, timer or what's playing): Line opacity applies to it too (<code>PetPillSeeThrough</code>), so at 0% only she floats at the top; it turns solid again as a banner or a peeking app grows out of it, the edge strip still takes the mouse, in the Island, Fixed and Bar styles and over the Liquid Glass.</li>
-<li>Neon theme: its texts are easier to read. Bahnschrift is used semi-condensed instead of condensed (<code>UiStretch</code>): the capitals no longer touch at the pill's size, and it stays narrower than the other themes' font.</li>
-<li>Settings: a choice with several options opens as a list from its field, like Windows' own (<code>DropdownChoice</code>, <code>DrawDrop</code>, drawn in the settings window itself; keyboard and wheel work in it too). Buttons that do something, the picture choices, two-option rows and the setup assistant's choices stay as they were. The window is laid out in two columns: small options are half cards side by side, with their control at the right of the name (a list's field, the style's three choices with a little drawing each, the notches' list with a drawing of each, the color themes as a list with their names and swatches). A dimmed option shows a &quot;?&quot; in the accent beside its name instead of a reason line under it, so cards side by side keep the same height: the mouse on it (or a click) shows the reason in a bubble with a &quot;Change&quot; button, which opens what to change; that bubble springs in once the first is gone. What it changed comes back from an undo arrow beside the option's name, whose own bubble says what goes back (no more link on the card's corner). A list's scroll bar works like the page's: a faint track, wider with the mouse near it, its thumb dragged, a click on the track jumps there. The line under each name is a short one now (a few long names are shortened too), so the cards stay one or two lines tall; resting the mouse on them for a moment shows the whole name and line in a bubble (<code>SettingDescription</code>/<code>SettingName</code> with <code>whole</code>, <code>DrawInfoTip</code>), translated in every language.</li>
-<li><strong>Tray sizes, clearer</strong> (#6162 roadmap): the grid already has its own size (Grid columns, <code>islandTrayColumns</code>); &quot;Other apps' icons before scrolling&quot; (slider 3, <code>g_trayListIcons</code>) only changes the icons opening in the pill, so <code>ControlPanel::SliderDisabled</code> now dims it with the Grid and With names styles, and <code>DisabledReason</code> / <code>DisabledTarget</code> give the existing &quot;Only with the icons opening in the pill&quot; and point at the style's row.</li>
-<li><strong>Right click on the network button</strong> (#7563): with the new option <code>islandActionPages</code> (<code>IslandPref::ActionPages</code>, off by default so nothing changes until it's on, per profile, first in the control center buttons' section), <code>Island::OnMouseButton</code> sends a right click on a control center button of the pill (<code>IslandItem::QuickAction</code>) to its Windows Settings page, from the new <code>PillActionPage(ControlId)</code>: Wi-Fi to <code>ms-settings:network</code>, Bluetooth, Night light, Mobile hotspot, Airplane mode, Project and Cast (Display), Captions and Accessibility. The shortcuts have no page and keep showing the settings bubble, as anywhere else on the pill.</li>
-<li>Lyrics in the title's place (#7330): the hover texts now say where its limit is. &quot;Title width&quot; names the line sung in the title's place too, &quot;Lyrics replace the song title&quot; says the line gets the title's room (raise &quot;Title width&quot; if long lines are cut), and &quot;Longest line on the pill&quot; says that in the title's place &quot;Title width&quot; sets the limit (its own lengths are the lyrics item's). Texts only (the three <code>kDescriptions</code> entries and their 9 translations); no behavior changes.</li>
-</ul>
-<p><strong>Fixes</strong></p>
-<ul>
-<li>What's playing shows play, pause and the next song a moment after you press them on the island, even when the app tells Windows late (#7627). After a play, pause, previous, next or seek sent from the island, the media thread reads the sessions again 0.3, 1 and 3 seconds later (<code>kMediaRereadAfter</code>), as well as on Windows' own change events. Each reading is also given to the island before the cover is read (<code>publish</code> in <code>MediaThreadProc</code>), then again once the cover changed: a reading used to wait for the cover, and a cover that failed lost the whole reading. A missing cover is read again only every <code>kMediaCoverRetrySeconds</code> (3 s) once the song is a few seconds old, not at every event of its app, and a cover that fails no longer loses the whole reading. A song notice for a new title waits for its own cover instead of showing the one carried over from the song before (<code>MediaState::coverCarried</code>, set only when there is a cover, so an app that never sends one still shows the notice at once).</li>
-<li>A panel opened from the island no longer closes by itself over a game in borderless full screen when the game takes the focus back. On <code>WA_INACTIVE</code> with no mouse button down and the cursor over the panel (<code>FocusTakenWithoutClick</code>), the panel stays and closes once the mouse has been away from it for 0.6 s (<code>kPanelKeptTimerId</code>); a click elsewhere still closes it at once. It stays only while the window in front covers the panel's monitor (<code>CoversMonitor</code>, checked in <code>KeptTick</code>), so Alt+Tab or the Win key to another window closes it.</li>
-<li>The timer's fill shows on the Bar's line too, while the Bar is hidden as its line, like on the pill's line: the Bar's closing shape draws it with <code>DrawFill(..., asLine)</code> scaled by how far it is into the line, not as the small clock nor with a banner or a text bubble on it.</li>
-<li>A new alarm's AM/PM button shows the right one when the time format follows Windows (12 hours there) (#7764): that format gives the time whole, with no AM or PM apart, so the button fell back to &quot;AM&quot; while a click did switch the hour to PM (the alarm was saved as PM). It now goes by the hour when no marker comes apart, like the shortcuts' schedule button already did.</li>
-<li>An app's tray icon no longer shows twice on the island when the app names it in two ways (#7472): <code>OnTrayNotify</code> found an icon by its GUID when the message had one, else by its window and ID, while Windows knows the same icon by both. An app that adds it one way and changes it (or adds it again after the island asks, for apps started before the mod) the other way got a second entry. When the usual look finds nothing, an icon with the same window and ID known the other way is now the same icon, and it takes the GUID when one comes.</li>
-<li>With &quot;The island handles notifications&quot;, Windows' banners no longer come back now and then (#7046): <code>UpdateWindowsQuiet</code> gave Windows' &quot;Do not disturb&quot; up, as if the user had turned it off, in three cases that weren't the user. The island restarting in its process (a monitor change, waking up) turned it off as it closed, and the new one still read it on for a moment (Windows tells the state late, as the code already allowed after turning it on), took it for the user's and gave up a second later: a turn-off by the island less than 5 s ago is now waited out. &quot;Do not disturb&quot; on only by one of Windows' rules (a game, full screen) was left alone as the user's and went off with the rule: <code>DoNotDisturbChosen</code> now tells them apart (asked at most every <code>kDndChosenSeconds</code>, 5 s), and a rule's is taken as the island's own. And after the computer restarted with it on (<code>turnedDndOn</code> kept), off was taken for the user's doing: it's turned on again.</li>
-<li>The processor's temperature no longer shows a fixed figure some motherboards report (like 17° all the time): only a temperature that changes counts, and with none Windows is taken as not reporting it (#7685). The island reads only Windows' thermal zones, and many boards report a constant in one of them. <code>ThermalZoneWatch</code> keeps each zone's first figure, and a zone counts only once it has changed (<code>CpuTemperatureFrom</code>); none under 20 degrees counts either. With no zone counting after <code>kThermalStuckSeconds</code> (5 minutes), <code>g_cpuTempFound</code> turns 0: the item hides and the settings say Windows doesn't report it. It's looked at again every <code>kThermalLookAgainSeconds</code> (10 minutes) from a fresh watch, as a real zone in whole degrees can stay flat on an idle PC.</li>
-<li>Dock: icons no longer stay empty for apps whose icon comes a moment after they open (like Fortnite or SteelSeries GG with combined taskbar buttons): the dock looks for it again (#7217). A big icon read as none was kept as none until Explorer restarted, and on a button the taskbar reused for the app the picture was left empty. Now a miss is asked for again 1, 3, 8 and 20 s later, then every 60 s while it's shown (<code>kBigIconRetrySeconds</code>, <code>NoteBigIconRead</code>), with a timer on the taskbar's window drawing the dock then (<code>kBigIconRetryTimerId</code>).</li>
-<li>The Bar's glass turned solid after hiding and showing again (#7718): <code>GlassLayer::Show</code> set <code>g_glassCompositionFailed</code> on any exception of <code>ShowBlurred</code> (the report's log: <code>E_INVALIDARG</code> as the Bar came back), which kept the glass off until the island restarted. One failure now waits <code>kGlassRetrySeconds</code> and tries again (<code>m_refusedAt</code>, as when Windows refuses its blur), and the glass and shadow geometries never get a negative size or radius.</li>
-<li>With the Bar hidden as its line or its small pill with the time, a notification banner showed a gap below the line, where the open Bar would be: <code>Island::BannerRect</code> and the banner's drop started at <code>m_pill.bottom</code>. Both now start at the new <code>Island::BarShapeBottom</code>, the bottom of the Bar's shape as it is (following <code>m_hiddenClock</code>, with <code>m_hiddenClockScreen</code>, and <code>m_barLine</code>), so the banner moves with the Bar as it hides or comes back. The small pill (Faísca, the time) keeps what it shows meanwhile: on the Bar the banner is apart from it, so its contents and Faísca's see-through pill no longer go with <code>BannerMorph</code>.</li>
-</ul>
-]]></content>
-        <author>
-            <name>caliberda</name>
-            <uri>https://github.com/cesarkali</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Vista/7/8.1 Balloon Notifications Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-balloon-notifications-restorer#1db1f371456e7411b70395663b2e27f67fd62faa</id>
-        <link href="https://windhawk.net/mods/win7-balloon-notifications-restorer"/>
-        <updated>2026-11-25T17:01:34.000Z</updated>
-        <content type="html"><![CDATA[<h1>Windows Vista/7/8.1 Balloon Notifications Restorer</h1>
-<p>This mod tries to convert supported Windows 10 and Windows 11 toast notifications
-into classic notification-area balloons inspired by Windows Vista, 7 and 8.1.</p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/notification.png" alt="Classic balloon notification"></p>
-<h2>Setup</h2>
-<ul>
-<li>Use a compatible notification area, such as Windows 7/8/8.1 Taskbar Recreation.</li>
-<li>Restart Explorer after installing the mod. The mod includes an Explorer hook
-for legacy balloon notifications; an existing Windows legacy balloon policy
-is also recognized.</li>
-</ul>
-<p>Supported notifications are converted on a best-effort basis for selected
-applications, including Discord, WhatsApp, Telegram, PowerShell, Chrome, Edge,
-Firefox, Brave, Opera, Vivaldi, Teams, Slack and Outlook. Executable names vary by app version, and
-inclusion does not guarantee compatibility. Other applications can be added
-using Windhawk's advanced process inclusion settings.</p>
-<p>The mod tries to turn supported toast content into notification-area requests.
-The notification area determines how those requests are displayed.</p>
-<p>Tested on Windows 11 24H2 with Windows 8.1 Taskbar Recreation using a
-PowerShell notification.</p>
-<h2>Credits</h2>
-<p>The Explorer registry-query hook is inspired by
-<a href="https://windhawk.net/mods/legacy-balloon-notifications">Legacy XP-style balloon notifications</a> by Anixx.</p>
-]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
