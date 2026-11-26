@@ -1,10 +1,9 @@
 // ==WindhawkMod==
 // @id              disable-usb-scan-fix
 // @name            Disable USB Scan and Fix Dialog Windows 11
-// @name:ru-RU      Отключение предупреждений о проверке USB-накопителей в Windows 11
-// @description     Blocks USB scan dialogs and disk repair notifications on Windows 11
-// @description:ru-RU Блокирует окна и уведомления о проверке USB-накопителей в Windows 11
-// @version         1.2
+// @description     Blocks matching USB scan dialogs and disk repair notifications
+// @description:ru-RU Блокирует соответствующие окна и уведомления о проверке USB-накопителей
+// @version         1.3
 // @author          d-p4d-67
 // @github          https://github.com/d-p4d-67
 // @include         explorer.exe
@@ -17,34 +16,56 @@
 /*
 # Disable USB Scan and Fix Dialog Windows 11
 
-Suppresses matching Windows 11 USB drive scan and repair dialogs and
-AutoPlay notifications without disabling the AutoPlay service.
+Suppresses matching USB drive scan and repair notifications without globally
+disabling AutoPlay.
 
-![USB Scan and Fix dialog blocked](https://raw.githubusercontent.com/d-p4d-67/Disable-USB-Scan-and-Fix-Dialog-Windows-11/main/Disk_Check_dialog.png)
+![USB Scan and Fix dialog](https://raw.githubusercontent.com/d-p4d-67/Disable-USB-Scan-and-Fix-Dialog-Windows-11/main/Disk_Check_dialog.png)
 
-- Recognizes English and Russian warning text.
-- Automatically selects "Continue without scanning" for matching dialogs.
-- Leaves non-matching notifications and dialogs unchanged.
-- Does not modify the registry or repair the filesystem.
+## Features
 
-Tested on Windows 11 with a Russian display language. Both hooks initialized successfully, and USB disk warning notification blocking was confirmed in debug logs. English text matching, other Windows builds, and independent dialog interception have not been verified.
+- Automatically loads localized warning text from Windows system resources
+  (`twinui.dll`, string ID 9995).
+- No manual translation is needed when the corresponding resource is available.
+- English and Russian text patterns provide fallback matching.
+- Prevents associated scan dialogs from opening through suppressed notifications.
+- Non-matching notifications and dialogs are passed through.
 
-**Warning:** This mod hides disk warnings. It does not fix filesystem
-errors or protect against data loss. Back up important files and check
-drives manually when necessary.
+## Testing
+
+Tested on Windows 11 with Russian, German and French (Luxembourg) language
+settings, including after a Windows restart. On the tested USB drive, the
+warning notification, its associated dialog and automatic opening of File
+Explorer were suppressed. Other notifications continued to work.
+
+**Warning:** This mod hides warnings. It does not repair filesystem errors
+or prevent data loss. Back up important files and check drives manually when needed.
 
 ---
 
 # Отключение предупреждений о проверке USB-накопителей в Windows 11
 
-В Windows 11 блокирует соответствующие окна и уведомления автозапуска без отключения
-службы автозапуска. Поддерживает русский и английский текст предупреждений.
-Другие уведомления и окна, не соответствующие фильтру, не блокируются.
+Мод блокирует соответствующие предупреждения о проверке и исправлении
+USB-накопителей без глобального отключения автозапуска.
 
-Протестировано на Windows 11 с русским языком интерфейса. Инициализация обоих перехватов и блокировка уведомления о проверке USB-накопителя подтверждены логами. Английский интерфейс, другие сборки Windows и отдельный перехват диалогового окна не проверены.
+## Возможности
+
+- Автоматическая загрузка локализованного текста из системных ресурсов Windows
+  (`twinui.dll`, идентификатор строки 9995).
+- Ручной перевод не требуется, если соответствующий ресурс доступен.
+- Русские и английские шаблоны служат резервом.
+- Предотвращает открытие связанных диалоговых окон через заблокированные уведомления.
+- Уведомления и диалоги, не соответствующие фильтру, пропускаются.
+
+## Тестирование
+
+Проверено на Windows 11 с русскими, немецкими и французскими (Люксембург)
+языковыми настройками, в том числе после перезагрузки Windows. На проверенном
+USB-накопителе не появлялись предупреждение, связанное диалоговое окно и
+автоматическое открытие Проводника. Остальные уведомления продолжали работать.
 
 **Важно:** мод скрывает предупреждения, но не исправляет ошибки файловой
-системы и не предотвращает потерю данных.
+системы и не предотвращает потерю данных. Сохраняйте резервные копии и при
+необходимости проверяйте накопители вручную.
 */
 // ==/WindhawkModReadme==
 
@@ -52,7 +73,9 @@ drives manually when necessary.
 #include <roapi.h>
 #include <commctrl.h>
 #include <string>
+#include <vector>
 #include <algorithm>
+#include <utility>
 #include <windhawk_utils.h>
 #include <winrt/Windows.UI.Notifications.h>
 #include <winrt/Windows.Data.Xml.Dom.h>
@@ -60,409 +83,224 @@ drives manually when necessary.
 using namespace winrt;
 using namespace winrt::Windows::UI::Notifications;
 
-// ========================================
-// USB SCAN AND FIX DIALOG
-// ========================================
-
-using TaskDialogIndirect_t = HRESULT(WINAPI*)(
-    const TASKDIALOGCONFIG*,
-    int*,
-    int*,
-    BOOL*
-);
-
-TaskDialogIndirect_t TaskDialogIndirect_Original = nullptr;
-HMODULE g_dialogModule = nullptr;
-
-std::wstring GetDialogText(
-    HINSTANCE instance,
-    PCWSTR text
-) {
-    if (!text) {
-        return L"";
-    }
-
-    std::wstring result;
-
-    if (IS_INTRESOURCE(text)) {
-        wchar_t buffer[4096] = {};
-
-        int length = LoadStringW(
-            instance,
-            static_cast<UINT>(
-                reinterpret_cast<ULONG_PTR>(text)
-            ),
-            buffer,
-            ARRAYSIZE(buffer)
-        );
-
-        if (length > 0) {
-            result.assign(buffer, length);
-        }
-    } else {
-        result = text;
-    }
-
-    return result;
+std::wstring Trim(std::wstring s) {
+    const auto first = s.find_first_not_of(L" \t\r\n");
+    if (first == std::wstring::npos) return {};
+    return s.substr(first, s.find_last_not_of(L" \t\r\n") - first + 1);
 }
 
-bool ContainsIgnoreCase(
-    const std::wstring& text,
-    const std::wstring& pattern
-) {
-    if (pattern.empty()) {
-        return true;
-    }
+std::wstring NormalizeLabel(std::wstring s) {
+    s.erase(std::remove(s.begin(), s.end(), L'&'), s.end());
+    return Trim(std::move(s));
+}
 
-    if (text.size() < pattern.size()) {
-        return false;
-    }
+bool Equal(const std::wstring& a, const std::wstring& b) {
+    return !a.empty() && !b.empty() && a.size() == b.size() &&
+        CompareStringOrdinal(a.data(), static_cast<int>(a.size()),
+                             b.data(), static_cast<int>(b.size()), TRUE) == CSTR_EQUAL;
+}
 
-    for (size_t i = 0;
-         i <= text.size() - pattern.size();
-         i++) {
-
-        if (CompareStringOrdinal(
-                text.c_str() + i,
-                static_cast<int>(pattern.size()),
-                pattern.c_str(),
-                static_cast<int>(pattern.size()),
-                TRUE
-            ) == CSTR_EQUAL) {
+bool Contains(const std::wstring& text, const std::wstring& pattern) {
+    if (pattern.empty() || text.size() < pattern.size()) return false;
+    for (size_t i = 0; i <= text.size() - pattern.size(); ++i) {
+        if (CompareStringOrdinal(text.data() + i, static_cast<int>(pattern.size()),
+                                 pattern.data(), static_cast<int>(pattern.size()), TRUE) == CSTR_EQUAL)
             return true;
-        }
     }
-
     return false;
 }
 
-bool IsSkipButton(const std::wstring& text) {
-
-    return
-        ContainsIgnoreCase(
-            text,
-            L"continue without scanning"
-        ) ||
-        ContainsIgnoreCase(
-            text,
-            L"продолжить без проверки"
-        );
+bool KnownWarning(const std::wstring& text) {
+    return (Contains(text, L"Возникла проблема с этим диском") &&
+            Contains(text, L"Проверьте диск")) ||
+           ((Contains(text, L"There's a problem with this drive") ||
+             Contains(text, L"There is a problem with this drive") ||
+             Contains(text, L"There\u2019s a problem with this drive")) &&
+            Contains(text, L"scan"));
 }
 
-bool IsRepairButton(const std::wstring& text) {
+struct ResourceModule {
+    HMODULE handle;
+    ~ResourceModule() { if (handle) FreeLibrary(handle); }
+};
 
-    return
-        ContainsIgnoreCase(
-            text,
-            L"scan and fix"
-        ) ||
-        ContainsIgnoreCase(
-            text,
-            L"проверить и исправить"
-        );
-}
+std::vector<std::wstring> g_warningTexts;
 
-HRESULT WINAPI TaskDialogIndirect_Hook(
-    const TASKDIALOGCONFIG* config,
-    int* button,
-    int* radioButton,
-    BOOL* verification
-) {
-    if (config &&
-        config->cbSize == sizeof(TASKDIALOGCONFIG) &&
-        config->pButtons &&
-        config->cButtons == 2 &&
-        config->cRadioButtons == 0 &&
-        !config->pfCallback &&
-        button) {
-
-        bool foundSkip = false;
-        bool foundRepair = false;
-        int skipId = 0;
-
-        for (UINT i = 0; i < config->cButtons; i++) {
-            const auto& item = config->pButtons[i];
-
-            std::wstring text = GetDialogText(
-                config->hInstance,
-                item.pszButtonText
-            );
-
-            text.erase(std::remove(text.begin(), text.end(), L'&'),
-                       text.end());
-
-            if (IsSkipButton(text)) {
-                foundSkip = true;
-                skipId = item.nButtonID;
+void DiscoverLocalizedStrings() {
+    wchar_t directory[MAX_PATH] = {};
+    UINT n = GetSystemDirectoryW(directory, ARRAYSIZE(directory));
+    if (!n || n >= ARRAYSIZE(directory)) return;
+    const std::wstring root(directory, n);
+    constexpr DWORD flags = LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE;
+    // Let Windows resolve the language resources of the base PE module.
+    const auto warningPath = root + L"\\twinui.dll";
+    {
+        ResourceModule module{LoadLibraryExW(warningPath.c_str(), nullptr, flags)};
+        if (module.handle) {
+            wchar_t buffer[4096] = {};
+            int length = LoadStringW(module.handle, 9995, buffer, ARRAYSIZE(buffer));
+            if (length > 0) {
+                auto warning = Trim(std::wstring(buffer, length));
+                if (!warning.empty() && warning.find(L'%') == std::wstring::npos)
+                    g_warningTexts.push_back(warning);
+            } else {
+                Wh_Log(L"Windows loader resource 9995 unavailable: %lu", GetLastError());
             }
-
-            if (IsRepairButton(text)) {
-                foundRepair = true;
-            }
-        }
-
-        if (foundSkip && foundRepair) {
-            *button = skipId;
-
-            if (radioButton) {
-                *radioButton = 0;
-            }
-
-            if (verification) {
-                *verification = FALSE;
-            }
-
-            Wh_Log(
-                L"USB scan and fix dialog skipped"
-            );
-
-            return S_OK;
+        } else {
+            Wh_Log(L"Base twinui.dll unavailable: %lu", GetLastError());
         }
     }
+    Wh_Log(L"Automatic notification resources: %u",
+           static_cast<unsigned>(g_warningTexts.size()));
+}
 
-    return TaskDialogIndirect_Original(
-        config,
-        button,
-        radioButton,
-        verification
-    );
+std::wstring GetDialogText(HINSTANCE instance, PCWSTR text) {
+    if (!text) return {};
+    if (!IS_INTRESOURCE(text)) return text;
+    wchar_t buffer[4096] = {};
+    int length = LoadStringW(instance, static_cast<UINT>(reinterpret_cast<ULONG_PTR>(text)),
+                             buffer, ARRAYSIZE(buffer));
+    return length > 0 ? std::wstring(buffer, length) : std::wstring();
+}
+
+using TaskDialogIndirect_t = HRESULT(WINAPI*)(const TASKDIALOGCONFIG*, int*, int*, BOOL*);
+TaskDialogIndirect_t TaskDialogIndirect_Original = nullptr;
+HMODULE g_dialogModule = nullptr;
+
+// Keep both labels from the same language pair; never infer from button order.
+bool IsButtonPair(const std::wstring& a, const std::wstring& b) {
+    return (Contains(a, L"Continue without scanning") && Contains(b, L"Scan and fix")) ||
+           (Contains(a, L"Продолжить без проверки") && Contains(b, L"Проверить и исправить"));
+}
+
+HRESULT WINAPI TaskDialogIndirect_Hook(const TASKDIALOGCONFIG* config,
+                                       int* button, int* radioButton, BOOL* verification) {
+    try {
+
+        if (config && config->cbSize == sizeof(TASKDIALOGCONFIG) && config->pButtons &&
+            config->cButtons == 2) {
+            const auto& a = config->pButtons[0];
+            const auto& b = config->pButtons[1];
+            auto ta = NormalizeLabel(GetDialogText(config->hInstance, a.pszButtonText));
+            auto tb = NormalizeLabel(GetDialogText(config->hInstance, b.pszButtonText));
+            if (button && config->cRadioButtons == 0 && !config->pfCallback &&
+                !config->dwCommonButtons && a.nButtonID != b.nButtonID) {
+                bool ab = IsButtonPair(ta, tb);
+                bool ba = IsButtonPair(tb, ta);
+                if (ab != ba) {
+                    *button = ab ? a.nButtonID : b.nButtonID;
+                    if (radioButton) *radioButton = 0;
+                    if (verification) *verification = FALSE;
+                    Wh_Log(L"USB scan and fix dialog skipped");
+                    return S_OK;
+                }
+            }
+        }
+    } catch (...) {
+        // Fail open.
+    }
+    return TaskDialogIndirect_Original(config, button, radioButton, verification);
 }
 
 bool InitDialogHook() {
-    HMODULE module = LoadLibraryExW(L"comctl32.dll", nullptr,
-                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
-
-    if (!module) {
-        Wh_Log(L"Failed to load comctl32.dll");
-        return false;
-    }
-
-    auto target = GetProcAddress(
-        module,
-        "TaskDialogIndirect"
-    );
-
-    if (!target) {
-        Wh_Log(L"TaskDialogIndirect not found");
-        FreeLibrary(module);
-        return false;
-    }
-
-    bool result = WindhawkUtils::SetFunctionHook(
-        reinterpret_cast<TaskDialogIndirect_t>(target),
-        TaskDialogIndirect_Hook,
-        &TaskDialogIndirect_Original
-    );
-
-    if (result) {
-        g_dialogModule = module;
-    } else {
-        FreeLibrary(module);
-    }
-
-    Wh_Log(
-        L"Dialog hook: %s",
-        result ? L"OK" : L"FAILED"
-    );
-
-    return result;
+    HMODULE module = LoadLibraryExW(L"comctl32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) return false;
+    auto target = GetProcAddress(module, "TaskDialogIndirect");
+    bool ok = target && WindhawkUtils::SetFunctionHook(
+        reinterpret_cast<TaskDialogIndirect_t>(target), TaskDialogIndirect_Hook,
+        &TaskDialogIndirect_Original);
+    if (ok) g_dialogModule = module;
+    else FreeLibrary(module);
+    Wh_Log(L"Dialog hook: %s", ok ? L"OK" : L"FAILED");
+    return ok;
 }
 
-// ========================================
-// USB DISK WARNING NOTIFICATIONS
-// ========================================
-
-using ToastShow_t = HRESULT(WINAPI*)(
-    void*,
-    void*
-);
-
+using ToastShow_t = HRESULT(WINAPI*)(void*, void*);
 ToastShow_t ToastShow_Original = nullptr;
 HMODULE g_toastModule = nullptr;
 
-bool IsDiskWarning(const std::wstring& text) {
-    bool russian =
-        ContainsIgnoreCase(
-            text,
-            L"Возникла проблема с этим диском"
-        ) &&
-        ContainsIgnoreCase(
-            text,
-            L"Проверьте диск"
-        );
-
-    bool english =
-        (
-            ContainsIgnoreCase(
-                text,
-                L"There's a problem with this drive"
-            ) ||
-            ContainsIgnoreCase(
-                text,
-                L"There is a problem with this drive"
-            ) ||
-            ContainsIgnoreCase(
-                text,
-                L"There\u2019s a problem with this drive"
-            )
-        ) &&
-        ContainsIgnoreCase(
-            text,
-            L"scan"
-        );
-
-    return russian || english;
-}
-
-HRESULT WINAPI ToastShow_Hook(
-    void* self,
-    void* notification
-) {
-    if (notification) {
-        try {
-            ToastNotification toast{nullptr};
-
-            winrt::copy_from_abi(
-                toast,
-                notification
-            );
-
-            auto xml = toast.Content().GetXml();
-
-            std::wstring text(
-                xml.c_str(),
-                xml.size()
-            );
-
-            if (IsDiskWarning(text)) {
-                Wh_Log(
-                    L"USB disk warning toast blocked"
-                );
-
-                return S_OK;
-            }
-
-        } catch (...) {
-            // Do not block unknown notifications.
+bool IsDiskWarning(const std::vector<std::wstring>& texts) {
+    // The observed AutoPlay warning has two text nodes: drive name and body.
+    // This narrows matching, but is not proof of the sender's identity.
+    if (texts.size() != 2 || Trim(texts[0]).empty()) return false;
+    const auto body = Trim(texts[1]);
+    for (const auto& warning : g_warningTexts) {
+        if (Equal(body, warning)) {
+            return true;
         }
     }
+    return KnownWarning(body);
+}
 
-    return ToastShow_Original(
-        self,
-        notification
-    );
+HRESULT WINAPI ToastShow_Hook(void* self, void* notification) {
+    if (notification) {
+        try {
+
+            ToastNotification toast{nullptr};
+            winrt::copy_from_abi(toast, notification);
+            auto content = toast.Content();
+            auto nodes = content.GetElementsByTagName(L"text");
+            std::vector<std::wstring> texts;
+            for (uint32_t i = 0; i < nodes.Length(); ++i) {
+                auto value = nodes.Item(i).InnerText();
+                texts.emplace_back(value.c_str(), value.size());
+            }
+            if (IsDiskWarning(texts)) {
+                Wh_Log(L"USB disk warning toast blocked");
+                return S_OK;
+            }
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"Toast hook error: 0x%08X", static_cast<unsigned>(e.code().value));
+        } catch (...) {
+            Wh_Log(L"Toast hook: unexpected error");
+        }
+    }
+    return ToastShow_Original(self, notification);
 }
 
 bool InitToastHook() {
     HRESULT hr = RoInitialize(RO_INIT_MULTITHREADED);
-
     bool initialized = SUCCEEDED(hr);
-
-    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) {
-        Wh_Log(
-            L"WinRT initialization failed: 0x%08X",
-            static_cast<unsigned int>(hr)
-        );
-
-        return false;
-    }
-
-    bool result = false;
-
+    if (FAILED(hr) && hr != RPC_E_CHANGED_MODE) return false;
+    bool ok = false;
     try {
-        auto notifier =
-            ToastNotificationManager::
-            CreateToastNotifier(
-                L"Microsoft.Windows.AutoPlay"
-            );
-
-        auto toastInterface =
-            notifier.as<IToastNotifier>();
-
-        void* abi = winrt::get_abi(toastInterface);
-
+        auto notifier = ToastNotificationManager::CreateToastNotifier(L"Microsoft.Windows.AutoPlay");
+        auto iface = notifier.as<IToastNotifier>();
+        void* abi = winrt::get_abi(iface);
         if (abi) {
-            void** vtable =
-                *reinterpret_cast<void***>(abi);
-
-            // Keep the implementation DLL loaded after RoUninitialize
-            // and until Windhawk has removed the hook.
-            if (GetModuleHandleExW(
-                    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                    reinterpret_cast<LPCWSTR>(vtable[6]),
-                    &g_toastModule)) {
-                result = WindhawkUtils::SetFunctionHook(
-                    reinterpret_cast<ToastShow_t>(vtable[6]),
-                    ToastShow_Hook,
-                    &ToastShow_Original
-                );
-                if (!result) {
+            void** vtable = *reinterpret_cast<void***>(abi);
+            if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                                  reinterpret_cast<LPCWSTR>(vtable[6]), &g_toastModule)) {
+                ok = WindhawkUtils::SetFunctionHook(reinterpret_cast<ToastShow_t>(vtable[6]),
+                                                    ToastShow_Hook, &ToastShow_Original);
+                if (!ok) {
                     FreeLibrary(g_toastModule);
                     g_toastModule = nullptr;
                 }
-            } else {
-                Wh_Log(L"Unable to retain toast implementation module: %lu",
-                       GetLastError());
             }
         }
-
-    } catch (const winrt::hresult_error& error) {
-        Wh_Log(
-            L"Toast initialization failed: 0x%08X",
-            static_cast<unsigned int>(error.code().value)
-        );
+    } catch (const winrt::hresult_error& e) {
+        Wh_Log(L"Toast initialization failed: 0x%08X", static_cast<unsigned>(e.code().value));
     } catch (...) {
         Wh_Log(L"Unknown toast initialization error");
     }
-
-    if (initialized) {
-        RoUninitialize();
-    }
-
-    Wh_Log(
-        L"Toast hook: %s",
-        result ? L"OK" : L"FAILED"
-    );
-
-    return result;
+    if (initialized) RoUninitialize();
+    Wh_Log(L"Toast hook: %s", ok ? L"OK" : L"FAILED");
+    return ok;
 }
 
-// ========================================
-// WINDHAWK INITIALIZATION
-// ========================================
-
 BOOL Wh_ModInit() {
-    Wh_Log(
-        L"Disable USB Scan and Fix Dialog v1.2"
-    );
-
+    g_warningTexts.clear();
+    try { DiscoverLocalizedStrings(); }
+    catch (...) { Wh_Log(L"Automatic resource initialization incomplete"); }
+    Wh_Log(L"Disable USB Scan and Fix Dialog v1.3");
     bool dialogOk = InitDialogHook();
     bool toastOk = InitToastHook();
-
-    Wh_Log(
-        L"Dialog blocker: %s",
-        dialogOk ? L"ACTIVE" : L"INACTIVE"
-    );
-
-    Wh_Log(
-        L"Notification blocker: %s",
-        toastOk ? L"ACTIVE" : L"INACTIVE"
-    );
-
     return dialogOk || toastOk;
 }
 
 void Wh_ModUninit() {
-    // Windhawk removes hooks before calling Wh_ModUninit.
-    if (g_toastModule) {
-        FreeLibrary(g_toastModule);
-        g_toastModule = nullptr;
-    }
-    if (g_dialogModule) {
-        FreeLibrary(g_dialogModule);
-        g_dialogModule = nullptr;
-    }
-    Wh_Log(
-        L"USB Scan and Fix blocker unloaded"
-    );
+    if (g_toastModule) { FreeLibrary(g_toastModule); g_toastModule = nullptr; }
+    if (g_dialogModule) { FreeLibrary(g_dialogModule); g_dialogModule = nullptr; }
+    Wh_Log(L"USB Scan and Fix blocker unloaded");
 }
