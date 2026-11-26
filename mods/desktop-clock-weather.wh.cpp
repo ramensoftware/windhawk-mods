@@ -2,7 +2,7 @@
 // @id              desktop-clock-weather
 // @name            Desktop Clock & Weather
 // @description     Time, weekday, date and weekly weather on the desktop - behind icons, not clickable
-// @version         1.0.7
+// @version         1.0.8
 // @author          DineroOne
 // @license         MIT
 // @github          https://github.com/DineroOne
@@ -29,6 +29,8 @@ The optional **Adjust font color to wallpaper** switch picks a light or a dark t
 It first samples the pixels visible behind the widget, when the desktop is unobstructed. If screen capture
 is unavailable, it estimates brightness from the wallpaper file and Windows wallpaper layout settings.
 This processing is local; no wallpaper data is sent anywhere.
+
+Tested on Windows 10. Other Windows versions are not tested yet; reports are welcome.
 
 ## Why this is a separate mod
 
