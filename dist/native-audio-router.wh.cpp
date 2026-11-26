@@ -3,7 +3,7 @@
 // @name Native Audio Router
 // @description Choose a Windows output device from each Quick Settings mixer row
 // @description:zh-CN 在任务栏原生音量合成器中选择逐应用输出设备
-// @version 0.0.1
+// @version 0.0.2
 // @architecture x86-64
 // @include ShellHost.exe
 // @compilerOptions -lruntimeobject -loleaut32 -lole32
@@ -12,6 +12,7 @@
 
 #include <windows.h>
 #include <unknwn.h>
+#include <mmdeviceapi.h>
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -57,6 +58,31 @@ void (WINAPI* originalLoaded)(void*, void*, void*);
 std::atomic_bool stopping{};
 std::mutex dispatcherLock;
 Core::CoreDispatcher dispatcher{nullptr};
+std::atomic_uint64_t endpointGeneration{1};
+winrt::com_ptr<IMMDeviceEnumerator> endpointEnumerator;
+winrt::com_ptr<IMMNotificationClient> endpointNotifications;
+bool endpointWatchAttempted{};
+
+struct EndpointNotifications : winrt::implements<EndpointNotifications, IMMNotificationClient> {
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) noexcept override {
+        return Invalidate();
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) noexcept override { return Invalidate(); }
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) noexcept override { return Invalidate(); }
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole, LPCWSTR) noexcept override {
+        return flow == eRender ? Invalidate() : S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) noexcept override {
+        return Invalidate();
+    }
+
+    static HRESULT Invalidate() noexcept {
+        ++endpointGeneration;
+        return S_OK;
+    }
+};
+
+enum class MenuRequest { None, Warm, Open };
 
 struct Row {
     winrt::weak_ref<C::Grid> grid;
@@ -68,9 +94,9 @@ struct Row {
     std::vector<std::pair<C::ToggleMenuFlyoutItem, winrt::event_token>> itemClicks;
     X::DispatcherTimer refresh{nullptr};
     winrt::event_token tick{};
-    winrt::event_token closed{};
     ULONGLONG deadline{};
-    bool warming{};
+    MenuRequest request{MenuRequest::None};
+    winrt::weak_ref<F::IInspectable> requestModel;
 };
 
 struct Mixer {
@@ -83,6 +109,12 @@ struct Selection {
     std::vector<winrt::hstring> names;
 };
 
+struct CachedOutputs {
+    winrt::weak_ref<F::IInspectable> model;
+    uint64_t generation;
+    Selection selection;
+};
+
 struct Change {
     winrt::weak_ref<F::IInspectable> model;
     winrt::hstring original;
@@ -92,6 +124,25 @@ struct Change {
 std::vector<Row> rows;
 std::vector<Mixer> mixers;
 std::vector<Change> changes;
+std::vector<CachedOutputs> outputCache;
+
+void StartEndpointWatch() {
+    if (endpointWatchAttempted) return;
+    endpointWatchAttempted = true;
+    try {
+        winrt::com_ptr<IMMDeviceEnumerator> enumerator;
+        winrt::check_hresult(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                             CLSCTX_INPROC_SERVER, IID_PPV_ARGS(enumerator.put())));
+        auto notifications = winrt::make<EndpointNotifications>();
+        winrt::check_hresult(enumerator->RegisterEndpointNotificationCallback(notifications.get()));
+        endpointEnumerator = std::move(enumerator);
+        endpointNotifications = std::move(notifications);
+        Wh_Log(L"Audio endpoint change notifications registered");
+    } catch (...) {
+        Wh_Log(L"Endpoint notifications unavailable, device cache disabled (0x%08X)",
+               static_cast<unsigned>(winrt::to_hresult().value));
+    }
+}
 
 X::Data::ICustomProperty Property(const F::IInspectable& model, const wchar_t* name) {
     if (!model) return nullptr;
@@ -117,37 +168,30 @@ F::IInspectable Model(const C::Slider& slider) {
     return nullptr;
 }
 
+std::optional<uint32_t> ReadSelectedIndex(const F::IInspectable& model) {
+    const auto selected = Property(model, L"SelectedOutput");
+    if (!selected || !selected.CanRead()) return std::nullopt;
+    const auto value = selected.GetValue(model).try_as<F::IPropertyValue>();
+    if (!value || value.Type() != F::PropertyType::UInt32) return std::nullopt;
+    return value.GetUInt32();
+}
+
 std::optional<Selection> ReadSelection(const F::IInspectable& model) {
     const auto options = Property(model, L"PossibleOutputs");
-    const auto selected = Property(model, L"SelectedOutput");
     // On this native model, QuickActionDataProperty::CanWrite always returns
     // false. Its SetValue implementation still forwards SelectedOutput to
     // the Windows setting item. This applies only to the checked model class.
-    if (!options || !options.CanRead() || !selected || !selected.CanRead()) {
-        Wh_Log(L"Row does not expose native output options and selection");
-        return std::nullopt;
-    }
+    if (!options || !options.CanRead()) return std::nullopt;
     const auto list = options.GetValue(model).try_as<X::Interop::IBindableVector>();
-    const auto value = selected.GetValue(model).try_as<F::IPropertyValue>();
-    if (!list || !value || value.Type() != F::PropertyType::UInt32) {
-        Wh_Log(L"Unexpected native output types. List=%d, selection type=%d",
-               bool(list), value ? static_cast<int>(value.Type()) : -1);
-        return std::nullopt;
-    }
-    const auto index = value.GetUInt32();
+    if (!list) return std::nullopt;
+    const auto index = ReadSelectedIndex(model);
     const auto count = list.Size();
-    if (count == 0 || count > 128 || index >= count) {
-        Wh_Log(L"Invalid native output selection index %u for %u options", index, count);
-        return std::nullopt;
-    }
-    Selection state{static_cast<int32_t>(index), {}};
+    if (!index || count > 128 || *index >= count) return std::nullopt;
+    Selection state{static_cast<int32_t>(*index), {}};
     state.names.reserve(count);
     for (uint32_t i = 0; i < count; ++i) {
         auto name = winrt::unbox_value_or<winrt::hstring>(list.GetAt(i), L"");
-        if (name.empty()) {
-            Wh_Log(L"Native output label unavailable at index %u", i);
-            return std::nullopt;
-        }
+        if (name.empty()) return std::nullopt;
         state.names.push_back(std::move(name));
     }
     return state;
@@ -157,10 +201,14 @@ bool UniqueName(const Selection& state, const winrt::hstring& name) {
     return std::ranges::count(state.names, name) == 1;
 }
 
-void Select(const F::IInspectable& model, const Selection& shown, int32_t index) {
+void Select(const F::IInspectable& model, const Selection& shown, int32_t index, uint64_t generation) {
     const auto current = ReadSelection(model);
-    if (!current || current->names != shown.names || current->index != shown.index ||
-        current->index == index ||
+    if (!current || generation != endpointGeneration.load()) return;
+    if (current->names != shown.names) {
+        std::erase_if(outputCache, [&model](const auto& entry) { return entry.model.get() == model; });
+        return;
+    }
+    if (current->index != shown.index || current->index == index ||
         !UniqueName(*current, current->names[index]) ||
         !UniqueName(*current, current->names[current->index])) {
         return;
@@ -187,44 +235,24 @@ void ClearMenu(Row& row) {
     row.menu.Items().Clear();
 }
 
-bool FillMenu(Row& row, const C::Slider& slider, bool finalAttempt, bool opening) {
-    const auto& menu = row.menu;
-    const auto model = Model(slider);
-    const auto shown = ReadSelection(model);
-    const bool chinese = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_CHINESE;
-    const bool pending = (!shown || shown->names.size() == 1) && !finalAttempt;
-    if (pending && !opening) return false;
-    if (finalAttempt && shown && shown->names.size() == 1 &&
-        row.itemClicks.size() == 1 && row.itemClicks.front().first.Text() == shown->names.front()) {
-        return true;
-    }
+void ShowMenu(Row& row, const C::Slider& slider, const F::IInspectable& model,
+              const Selection& shown, uint64_t generation) {
     ClearMenu(row);
-    if (pending && !shown) {
-        C::MenuFlyoutItem loading;
-        loading.Text(chinese ? L"正在获取输出设备…" : L"Loading output devices…");
-        loading.IsEnabled(false);
-        menu.Items().Append(loading);
-        return false;
-    }
-    if (!shown) {
-        C::MenuFlyoutItem unavailable;
-        unavailable.Text(chinese ? L"输出设备暂不可用" : L"Output devices unavailable");
-        unavailable.IsEnabled(false);
-        menu.Items().Append(unavailable);
-        return true;
-    }
-    for (int32_t i = 0; i < static_cast<int32_t>(shown->names.size()); ++i) {
+    const auto& menu = row.menu;
+    for (int32_t i = 0; i < static_cast<int32_t>(shown.names.size()); ++i) {
         C::ToggleMenuFlyoutItem item;
-        item.Text(shown->names[i]);
-        item.IsChecked(i == shown->index);
-        item.IsEnabled(UniqueName(*shown, shown->names[i]));
+        item.Text(shown.names[i]);
+        item.IsChecked(i == shown.index);
+        item.IsEnabled(UniqueName(shown, shown.names[i]));
         const auto token = item.Click([weakSlider = winrt::make_weak(slider), weakModel = winrt::make_weak(model),
-                                       snapshot = *shown, i](auto&&, auto&&) {
-            if (stopping) return;
+                                       snapshot = shown, generation, i](auto&&, auto&&) {
+            if (stopping || generation != endpointGeneration.load()) return;
             try {
                 const auto currentSlider = weakSlider.get();
                 const auto currentModel = currentSlider ? Model(currentSlider) : nullptr;
-                if (currentModel && currentModel == weakModel.get()) Select(currentModel, snapshot, i);
+                if (currentModel && currentModel == weakModel.get()) {
+                    Select(currentModel, snapshot, i, generation);
+                }
             } catch (...) {
                 Wh_Log(L"Native output selection failed (0x%08X)", static_cast<unsigned>(winrt::to_hresult().value));
             }
@@ -233,8 +261,51 @@ bool FillMenu(Row& row, const C::Slider& slider, bool finalAttempt, bool opening
         menu.Items().Append(item);
     }
     Wh_Log(L"Native output menu opened with %zu options, selected index %d",
-           shown->names.size(), shown->index);
-    return !pending;
+           shown.names.size(), shown.index);
+    row.menu.ShowAt(row.button);
+}
+
+void StopRequest(Row& row) {
+    row.refresh.Stop();
+    row.request = MenuRequest::None;
+    row.requestModel = {};
+}
+
+void RequestMenu(Row& row, const F::IInspectable& model, MenuRequest request) {
+    row.request = request;
+    row.requestModel = winrt::make_weak(model);
+    row.deadline = GetTickCount64() + 1800;
+}
+
+void UpdateMenuRequest(Row& row) {
+    const auto slider = row.slider.get();
+    const auto model = row.requestModel.get();
+    const bool opening = row.request == MenuRequest::Open;
+    if (!slider || !model || !slider.IsLoaded() || Model(slider) != model ||
+        (opening && row.button.FocusState() == X::FocusState::Unfocused)) {
+        StopRequest(row);
+        return;
+    }
+
+    const auto generation = endpointGeneration.load();
+    auto selection = ReadSelection(model);
+    const bool expired = GetTickCount64() >= row.deadline;
+    if (generation != endpointGeneration.load() ||
+        (!expired && (!selection || selection->names.size() == 1))) {
+        if (expired) StopRequest(row);
+        return;
+    }
+    StopRequest(row);
+    if (!selection) return;
+
+    if (endpointEnumerator) {
+        std::erase_if(outputCache, [&model, generation](const auto& entry) {
+            const auto previous = entry.model.get();
+            return !previous || previous == model || entry.generation != generation;
+        });
+        outputCache.push_back({winrt::make_weak(model), generation, *selection});
+    }
+    if (opening) ShowMenu(row, slider, model, *selection, generation);
 }
 
 template <typename Collection, typename Item>
@@ -246,7 +317,6 @@ void Remove(const Collection& collection, const Item& item) {
 void RemoveRow(Row& row) {
     row.refresh.Stop();
     row.refresh.Tick(row.tick);
-    row.menu.Closed(row.closed);
     row.button.Click(row.click);
     ClearMenu(row);
     row.menu.Hide();
@@ -258,8 +328,14 @@ void RemoveRow(Row& row) {
 
 void AddRow(const C::Slider& slider) {
     const auto grid = X::Media::VisualTreeHelper::GetParent(slider).try_as<C::Grid>();
-    if (!grid || grid.ColumnDefinitions().Size() == 0 || !Model(slider)) return;
-    if (std::ranges::any_of(rows, [&grid](const auto& row) { return row.grid.get() == grid; })) return;
+    if (!grid || grid.ColumnDefinitions().Size() == 0) return;
+    const auto existing = std::ranges::find_if(rows, [&grid](const auto& row) { return row.grid.get() == grid; });
+    if (existing != rows.end()) {
+        existing->slider = winrt::make_weak(slider);
+        return;
+    }
+    const auto model = Model(slider);
+    if (!model) return;
 
     C::Button button;
     C::ColumnDefinition column;
@@ -281,25 +357,39 @@ void AddRow(const C::Slider& slider) {
                                ? L"输出设备" : L"Output device";
     X::Automation::AutomationProperties::SetName(button, title);
     C::ToolTipService::SetToolTip(button, winrt::box_value(title));
-    const auto click = button.Click([weakSlider = winrt::make_weak(slider)](auto&& sender, auto&&) {
+    const auto click = button.Click([](auto&& sender, auto&&) {
         if (stopping) return;
         try {
-            const auto current = weakSlider.get();
             const auto clicked = sender.template try_as<C::Button>();
             const auto row = std::ranges::find_if(rows, [&clicked](const auto& candidate) {
                 return candidate.button == clicked;
             });
-            if (current && row != rows.end()) {
-                row->refresh.Stop();
-                row->warming = false;
-                const bool ready = FillMenu(*row, current, false, true);
-                row->menu.ShowAt(clicked);
-                if (!ready) {
-                    row->deadline = GetTickCount64() + 1800;
-                    row->refresh.Interval(std::chrono::milliseconds(150));
-                    row->refresh.Start();
+            if (row == rows.end()) return;
+            const auto slider = row->slider.get();
+            const auto model = slider ? Model(slider) : nullptr;
+            for (auto& entry : rows) {
+                if (entry.request == MenuRequest::Open) StopRequest(entry);
+            }
+            StopRequest(*row);
+            if (!model) return;
+
+            const auto generation = endpointGeneration.load();
+            const auto cached = std::ranges::find_if(outputCache, [&model, generation](const auto& entry) {
+                return entry.generation == generation && entry.model.get() == model;
+            });
+            if (cached != outputCache.end()) {
+                const auto selected = ReadSelectedIndex(model);
+                if (selected && *selected < cached->selection.names.size() &&
+                    generation == endpointGeneration.load()) {
+                    cached->selection.index = static_cast<int32_t>(*selected);
+                    Wh_Log(L"Reused cached output list");
+                    ShowMenu(*row, slider, model, cached->selection, generation);
+                    return;
                 }
             }
+            RequestMenu(*row, model, MenuRequest::Open);
+            row->refresh.Interval(std::chrono::milliseconds(150));
+            row->refresh.Start();
         } catch (...) {
             Wh_Log(L"Output menu failed (0x%08X)", static_cast<unsigned>(winrt::to_hresult().value));
         }
@@ -308,34 +398,16 @@ void AddRow(const C::Slider& slider) {
         if (stopping) return;
         const auto source = sender.template try_as<X::DispatcherTimer>();
         if (!source) return;
+        const auto row = std::ranges::find_if(rows, [&source](const auto& entry) {
+            return entry.refresh == source;
+        });
+        if (row == rows.end() || row->request == MenuRequest::None) return;
         try {
-            const auto row = std::ranges::find_if(rows, [&source](const auto& entry) {
-                return entry.refresh == source;
-            });
-            if (row == rows.end()) return;
-            const auto slider = row->slider.get();
-            if (row->warming) {
-                row->warming = false;
-                row->refresh.Stop();
-                row->refresh.Interval(std::chrono::milliseconds(150));
-                if (slider) {
-                    const auto model = Model(slider);
-                    if (auto outputs = Property(model, L"PossibleOutputs"); outputs && outputs.CanRead()) {
-                        outputs.GetValue(model);
-                    }
-                }
-                return;
-            }
-            if (!slider || FillMenu(*row, slider, GetTickCount64() >= row->deadline, false)) {
-                row->refresh.Stop();
-            }
+            UpdateMenuRequest(*row);
         } catch (...) {
+            StopRequest(*row);
             Wh_Log(L"Output menu refresh failed (0x%08X)", static_cast<unsigned>(winrt::to_hresult().value));
-            try { source.Stop(); } catch (...) {}
         }
-    });
-    const auto closed = menu.Closed([weak = winrt::make_weak(refresh)](auto&&, auto&&) {
-        if (const auto timer = weak.get()) timer.Stop();
     });
 
     const auto columns = grid.ColumnDefinitions();
@@ -343,12 +415,20 @@ void AddRow(const C::Slider& slider) {
     C::Grid::SetColumn(button, static_cast<int>(columns.Size()));
     C::Grid::SetRow(button, C::Grid::GetRow(slider));
     rows.push_back({winrt::make_weak(grid), winrt::make_weak(slider), column, button,
-                    menu, click, {}, refresh, tick, closed, 0, true});
+                    menu, click, {}, refresh, tick, 0, MenuRequest::None, {}});
     try {
         columns.Append(column);
         grid.Children().Append(button);
-        refresh.Interval(std::chrono::milliseconds(80 + 30 * std::min<size_t>(rows.size(), 10)));
-        refresh.Start();
+        if (endpointEnumerator) {
+            const auto generation = endpointGeneration.load();
+            if (std::ranges::none_of(outputCache, [&model, generation](const auto& entry) {
+                    return entry.generation == generation && entry.model.get() == model;
+                })) {
+                RequestMenu(rows.back(), model, MenuRequest::Warm);
+                refresh.Interval(std::chrono::milliseconds(80 + 30 * std::min<size_t>(rows.size(), 10)));
+                refresh.Start();
+            }
+        }
     } catch (...) {
         RemoveRow(rows.back());
         rows.pop_back();
@@ -389,6 +469,7 @@ void Discover(void* object) noexcept {
             if (!dispatcher) dispatcher = mixer.Dispatcher();
             if (!dispatcher || !dispatcher.HasThreadAccess()) return;
         }
+        StartEndpointWatch();
         std::erase_if(mixers, [](const auto& entry) { return !entry.element.get(); });
         if (std::ranges::none_of(mixers, [&mixer](const auto& entry) {
                 return entry.element.get() == mixer;
@@ -433,6 +514,15 @@ void WINAPI OnLoaded(void* object, void* sender, void* args) {
 }
 
 void Restore() {
+    if (endpointEnumerator) {
+        const auto result = endpointEnumerator->UnregisterEndpointNotificationCallback(endpointNotifications.get());
+        if (FAILED(result)) {
+            Wh_Log(L"Could not unregister endpoint notifications (0x%08X)", static_cast<unsigned>(result));
+        }
+        endpointEnumerator = nullptr;
+        endpointNotifications = nullptr;
+    }
+    outputCache.clear();
     for (const auto& mixer : mixers) {
         if (const auto element = mixer.element.get()) element.LayoutUpdated(mixer.layout);
     }
