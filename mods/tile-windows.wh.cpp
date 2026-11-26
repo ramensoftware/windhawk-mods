@@ -17,22 +17,40 @@
 
 Arranges all your open app windows across all monitors with one hotkey, sized
 by how much you use each app. Press **Ctrl+Alt+W** to arrange, **Ctrl+Alt+R**
-to maximize everything again. Nothing happens until you press a hotkey.
+to put every window back where it was. Nothing happens until you press a
+hotkey.
+
+![Five apps arranged by Tile Windows on one monitor](https://raw.githubusercontent.com/laurensanp/tile-windows/95335922cbbccc911ff82c0f7f17bb88e7aae497/windhawk/screenshot.png)
 
 * **Main monitor** gets only the apps you work in directly (weight 3 and up:
   editor, browser...). Chat, music and tools go to the other monitors.
 * **Best fit, not a fixed grid:** each monitor gets the mix of side-by-side
   columns and stacked rows that gives important apps the most room while every
-  window stays readable. Each press picks another good layout (columns, rows,
-  mirrored), never the same one twice in a row.
+  window stays readable. Each press picks another good layout (columns or
+  rows, mirrored or not), never the same one twice in a row.
 * **Never unreadable:** windows don't get smaller than 500x300 (scaled with
   your display scaling). If too many apps are open, the least important ones
   are minimized.
 * **Respects apps' own minimum sizes** (Discord, Steam, Spotify can't get very
   small) and works them into the layout.
-* **Games are left alone** and **keep focus**: pressing the hotkey while in a
-  game doesn't pull you out of it.
+* **Real undo:** Ctrl+Alt+R puts each window back exactly as it was before the
+  first Ctrl+Alt+W: size, position, maximized or minimized. Trying several
+  layouts in a row doesn't lose that.
+* **Games are left alone** and **keep focus**: pressing either hotkey while in
+  a game doesn't pull you out of it.
 * Works with any number of monitors, resolutions and mixed display scaling.
+
+## How it differs from other tiling mods
+
+[Tiling Helper](https://windhawk.net/mods/tiling-helper),
+[MultiWM](https://windhawk.net/mods/multiwm) and
+[Adaptive Windows](https://windhawk.net/mods/adaptive-windows) arrange the
+windows by a layout scheme (master and stack, grids, per-desktop layouts).
+Tile Windows instead arranges all monitors at once by **how much you use each
+app**:
+the weight of an app decides how big its window gets, which monitor it goes
+to, and which apps get minimized when not everything fits. It only acts when
+you press the hotkey, so windows stay free to move in between.
 
 ## Settings
 
@@ -49,9 +67,12 @@ to maximize everything again. Nothing happens until you press a hotkey.
   monitors.
 * **Game folders:** anything started from these folders counts as a game and
   is never touched.
+* **Hotkeys:** Ctrl, Alt, Shift and Win with a letter, a digit or F1-F24. A
+  letter or digit needs at least one of Ctrl, Alt, Shift or Win.
 
-Windows of apps running as administrator can only be moved if Windhawk itself
-runs as administrator.
+Windows of apps running as administrator (e.g. Task Manager) can't be moved by
+a normal app, so they are left out and the other windows are arranged without
+them. Windows of apps that don't respond are left out too.
 
 Also available as a standalone PowerShell version:
 [laurensanp/tile-windows](https://github.com/laurensanp/tile-windows).
@@ -64,10 +85,13 @@ Also available as a standalone PowerShell version:
   $name: Tile hotkey
   $description: >-
     Arranges all windows. Ctrl, Alt, Shift and Win with a letter, a digit or
-    F1-F24, e.g. Ctrl+Alt+W.
+    F1-F24, e.g. Ctrl+Alt+W. A letter or digit needs at least one of Ctrl,
+    Alt, Shift or Win.
 - restoreHotkey: Ctrl+Alt+R
   $name: Restore hotkey
-  $description: Maximizes all windows again. Leave empty to turn it off.
+  $description: >-
+    Puts every window back as it was before tiling (size, position, maximized
+    or minimized). Leave empty to turn it off.
 - gap: 12
   $name: Gap
   $description: >-
@@ -138,6 +162,7 @@ Also available as a standalone PowerShell version:
 
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <windhawk_utils.h>
 
 #include <algorithm>
 #include <array>
@@ -186,11 +211,10 @@ std::wstring Trim(const std::wstring& s) {
     return s.substr(start, end - start + 1);
 }
 
+// `name` is the full setting name, e.g. weights[2].apps[0] (it has no %, so
+// it's safe as the format string).
 std::wstring ReadStringSetting(const std::wstring& name) {
-    PCWSTR value = Wh_GetStringSetting(name.c_str());
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return Trim(result);
+    return Trim(WindhawkUtils::StringSetting::make(name.c_str()).get());
 }
 
 // Reads an array of strings until the first empty entry, lowercased.
@@ -249,7 +273,8 @@ bool Contains(const std::vector<std::wstring>& list,
 }
 
 // "Ctrl+Alt+W" -> modifiers and virtual key. Supports Ctrl, Alt, Shift, Win
-// with a letter, digit or F1-F24.
+// with a letter, digit or F1-F24. A letter or digit needs at least one of Ctrl,
+// Alt, Shift or Win: alone it would take that key away from every app.
 bool ParseHotkey(const std::wstring& text, UINT* mods, UINT* vk) {
     *mods = MOD_NOREPEAT;
     *vk = 0;
@@ -285,7 +310,10 @@ bool ParseHotkey(const std::wstring& text, UINT* mods, UINT* vk) {
             return false;
         }
     }
-    return *vk != 0;
+    bool fKey = *vk >= VK_F1 && *vk <= VK_F24;
+    bool modifier =
+        (*mods & (MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_WIN)) != 0;
+    return *vk != 0 && (fKey || modifier);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -407,8 +435,6 @@ struct LayoutRequest {
     int y = 0;
     int width = 0;
     int height = 0;
-    // Mirror it so the first column faces the other monitor.
-    bool bigRight = false;
     int gap = 0;
     int minW = 0;
     int minH = 0;
@@ -417,7 +443,8 @@ struct LayoutRequest {
     int comfortH = 600;
     // > 0: a random pick (same seed = same pick) among the layouts nearly as
     // good as the best, also rows instead of columns and mirrored ones, but
-    // not `avoid` (the sig of the layout shown last). 0 = always the best.
+    // not `avoid` (the sig of the layout shown last). 0 = always the best
+    // one, in columns, not mirrored: what the layout tests check against.
     unsigned seed = 0;
     std::wstring avoid;
 };
@@ -436,7 +463,7 @@ Layout GetBestLayout(LayoutRequest req) {
     int maxRows = std::max(1, req.height / (req.minH + req.gap));
 
     // (rows instead of columns, mirrored)
-    std::vector<std::pair<bool, bool>> styles = {{false, req.bigRight}};
+    std::vector<std::pair<bool, bool>> styles = {{false, false}};
     if (req.seed) {
         styles = {{false, false}, {false, true}, {true, false}, {true, true}};
     }
@@ -672,12 +699,17 @@ BOOL CALLBACK CollectAppWindow(HWND hwnd, LPARAM param) {
     if (pid == GetCurrentProcessId()) {
         return TRUE;
     }
+    // Moving or resizing a hung window blocks until it responds.
+    if (IsHungAppWindow(hwnd)) {
+        return TRUE;
+    }
     list.push_back(hwnd);
     return TRUE;
 }
 
 // Real app windows only: visible, unowned, titled, resizable, not tool
-// windows, not cloaked (hidden UWP apps, other virtual desktops). In z-order.
+// windows, not cloaked (hidden UWP apps, other virtual desktops), not hung. In
+// z-order.
 std::vector<HWND> GetAppWindows() {
     std::vector<HWND> list;
     EnumWindows(CollectAppWindow, (LPARAM)&list);
@@ -737,16 +769,26 @@ RECT GetVisibleRect(HWND hwnd) {
     return rect;
 }
 
-// Places the window so its *visible* frame fills the slot. Returns false when
-// the window refused to shrink to the slot (app minimum size, e.g. Steam).
-// Never activates the window, so a game or app you are in keeps focus.
-bool PlaceWindow(HWND hwnd, int x, int y, int w, int h) {
+enum class Placed {
+    kOk,
+    // The window refused to shrink to the slot (app minimum size, e.g. Steam).
+    kTooBig,
+    // Windows doesn't let us move it (an app running as administrator).
+    kCannotMove,
+};
+
+// Places the window so its *visible* frame fills the slot. Never activates
+// the window, so a game or app you are in keeps focus.
+Placed PlaceWindow(HWND hwnd, int x, int y, int w, int h) {
     const UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW;
     if (IsIconic(hwnd) || IsZoomed(hwnd)) {
         // Back to normal size without focusing it.
         ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     }
-    SetWindowPos(hwnd, nullptr, x, y, w, h, flags);
+    if (!SetWindowPos(hwnd, nullptr, x, y, w, h, flags) &&
+        GetLastError() == ERROR_ACCESS_DENIED) {
+        return Placed::kCannotMove;
+    }
     if (IsZoomed(hwnd)) {
         // Some apps stay flagged maximized, which breaks their title bar.
         ShowWindow(hwnd, SW_SHOWNOACTIVATE);
@@ -757,7 +799,7 @@ bool PlaceWindow(HWND hwnd, int x, int y, int w, int h) {
     GetWindowRect(hwnd, &win);
     if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &vis,
                                      sizeof(vis)))) {
-        return true;
+        return Placed::kOk;
     }
     int l = vis.left - win.left;
     int t = vis.top - win.top;
@@ -767,7 +809,9 @@ bool PlaceWindow(HWND hwnd, int x, int y, int w, int h) {
         SetWindowPos(hwnd, nullptr, x - l, y - t, w + l + r, h + t + b, flags);
     }
     vis = GetVisibleRect(hwnd);
-    return vis.right - vis.left <= w + 2 && vis.bottom - vis.top <= h + 2;
+    return vis.right - vis.left <= w + 2 && vis.bottom - vis.top <= h + 2
+               ? Placed::kOk
+               : Placed::kTooBig;
 }
 
 // Gives focus back to `hwnd` if something else took it.
@@ -775,22 +819,7 @@ void Refocus(HWND hwnd) {
     if (!hwnd || GetForegroundWindow() == hwnd) {
         return;
     }
-    if (!SetForegroundWindow(hwnd)) {
-        ShowWindow(hwnd, SW_SHOW);
-    }
-}
-
-// Real pixels on every monitor, even with different scaling per monitor.
-void MakeThreadDpiAware() {
-    using SetThreadDpiAwarenessContext_t =
-        DPI_AWARENESS_CONTEXT(WINAPI*)(DPI_AWARENESS_CONTEXT);
-    auto pSetThreadDpiAwarenessContext =
-        (SetThreadDpiAwarenessContext_t)GetProcAddress(
-            GetModuleHandle(L"user32.dll"), "SetThreadDpiAwarenessContext");
-    if (pSetThreadDpiAwarenessContext) {
-        pSetThreadDpiAwarenessContext(
-            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    }
+    SetForegroundWindow(hwnd);
 }
 
 // Display scaling of the monitor: 1.0 = 100%, 1.5 = 150%.
@@ -853,13 +882,30 @@ std::vector<Screen> GetScreens() {
 std::vector<std::wstring> g_lastSigs;
 std::mt19937 g_rng{std::random_device{}()};
 
+// How each window looked before the first tiling, for the restore hotkey.
+// Tiling again (another layout) keeps what was saved first.
+std::map<HWND, WINDOWPLACEMENT> g_undo;
+
+void SaveForUndo(const std::vector<Item>& items) {
+    std::erase_if(g_undo,
+                  [](const auto& entry) { return !IsWindow(entry.first); });
+    for (const auto& item : items) {
+        if (g_undo.contains(item.hwnd)) {
+            continue;
+        }
+        WINDOWPLACEMENT wp{sizeof(wp)};
+        if (GetWindowPlacement(item.hwnd, &wp)) {
+            g_undo[item.hwnd] = wp;
+        }
+    }
+}
+
 void TileWindows(const Settings& settings) {
     HWND focus = GetForegroundWindow();
     std::vector<Screen> screens = GetScreens();
     if (screens.empty()) {
         return;
     }
-    int mainX = screens[0].bounds.left;
 
     // Weigh each open window; weight 0 and anything from a game folder is left
     // alone. Most-used first, ties keep the z-order (most recent first).
@@ -881,6 +927,7 @@ void TileWindows(const Settings& settings) {
     }
     std::stable_sort(items.begin(), items.end(),
                      [](const Item& a, const Item& b) { return a.w > b.w; });
+    SaveForUndo(items);
 
     auto groups = GetMonitorGroups(items, (int)screens.size());
     g_lastSigs.resize(screens.size());
@@ -901,7 +948,6 @@ void TileWindows(const Settings& settings) {
         req.y = a.top + half;
         req.width = areaW - gap;
         req.height = areaH - gap;
-        req.bigRight = a.left < mainX;
         req.gap = gap;
         req.minW = (int)std::lround(settings.minWidth * scale);
         req.minH = (int)std::lround(settings.minHeight * scale);
@@ -930,13 +976,20 @@ void TileWindows(const Settings& settings) {
                 g.pop_back();
             }
             bool again = false;
+            std::vector<HWND> cannotMove;
             for (size_t j = 0; j < g.size(); j++) {
                 const Slot& s = layout.slots[j];
-                if (PlaceWindow(g[j].hwnd, s[0] + half, s[1] + half, s[2] - gap,
-                                s[3] - gap)) {
+                Placed placed = PlaceWindow(g[j].hwnd, s[0] + half, s[1] + half,
+                                            s[2] - gap, s[3] - gap);
+                if (placed == Placed::kOk) {
                     continue;
                 }
                 again = true;
+                if (placed == Placed::kCannotMove) {
+                    // Leave it where it is and lay out the others again.
+                    cannotMove.push_back(g[j].hwnd);
+                    continue;
+                }
                 RECT v = GetVisibleRect(g[j].hwnd);
                 if (v.right - v.left > s[2] - gap + 2) {
                     g[j].minW = v.right - v.left + gap;
@@ -945,6 +998,10 @@ void TileWindows(const Settings& settings) {
                     g[j].minH = v.bottom - v.top + gap;
                 }
             }
+            std::erase_if(g, [&](const Item& it) {
+                return std::find(cannotMove.begin(), cannotMove.end(),
+                                 it.hwnd) != cannotMove.end();
+            });
             if (!again) {
                 break;
             }
@@ -954,22 +1011,27 @@ void TileWindows(const Settings& settings) {
     Refocus(focus);
 }
 
-// Undoes the tiling: maximizes every app window on the monitor it is on
-// (minimized ones too). Games and weight-0 apps stay untouched.
-void RestoreWindows(const Settings& settings) {
+// Undoes the tiling: puts every tiled window back to the size, position and
+// state (normal, maximized, minimized) it had before the first tiling. Windows
+// opened since stay as they are. Nothing is activated, so a game you are in
+// keeps focus: normal and minimized windows are restored without activation,
+// and maximized ones are maximized by their app (WM_SYSCOMMAND), which Windows
+// doesn't let take the focus from the foreground app.
+void RestoreWindows() {
     HWND focus = GetForegroundWindow();
-    for (HWND hwnd : GetAppWindows()) {
-        if (GetAppInfo(hwnd, settings).w <= 0) {
+    for (auto [hwnd, wp] : g_undo) {
+        if (!IsWindow(hwnd)) {
             continue;
         }
-        if (IsIconic(hwnd)) {
-            ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-        }
-        if (!IsZoomed(hwnd)) {
-            ShowWindow(hwnd, SW_MAXIMIZE);
+        bool maximized = wp.showCmd == SW_SHOWMAXIMIZED;
+        wp.showCmd = wp.showCmd == SW_SHOWMINIMIZED ? SW_SHOWMINNOACTIVE
+                                                    : SW_SHOWNOACTIVATE;
+        SetWindowPlacement(hwnd, &wp);
+        if (maximized) {
+            PostMessage(hwnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
         }
     }
-    // Maximizing focuses a window; give it back.
+    g_undo.clear();
     Refocus(focus);
 }
 
@@ -993,6 +1055,9 @@ std::shared_ptr<Settings> GetSettings() {
     return g_settings;
 }
 
+// The message box about hotkey problems, so a new one isn't stacked on top.
+HANDLE g_problemThread;
+
 DWORD WINAPI ShowHotkeyProblem(void* param) {
     std::unique_ptr<std::wstring> text((std::wstring*)param);
     MessageBox(nullptr, text->c_str(), L"Tile Windows",
@@ -1004,6 +1069,8 @@ void RegisterHotkeys(const Settings& settings) {
     UnregisterHotKey(nullptr, kHotkeyTile);
     UnregisterHotKey(nullptr, kHotkeyRestore);
     std::wstring problems;
+    UINT tileMods = 0;
+    UINT tileVk = 0;
     const std::pair<int, const std::wstring*> hotkeys[] = {
         {kHotkeyTile, &settings.tileHotkey},
         {kHotkeyRestore, &settings.restoreHotkey},
@@ -1015,31 +1082,47 @@ void RegisterHotkeys(const Settings& settings) {
         UINT mods;
         UINT vk;
         if (!ParseHotkey(*text, &mods, &vk)) {
-            problems += L"Can't read the hotkey \"" + *text +
-                        L"\" (use e.g. Ctrl+Alt+W).\n";
+            problems += L"Can't use the hotkey \"" + *text +
+                        L"\" (use e.g. Ctrl+Alt+W: a letter or digit needs "
+                        L"Ctrl, Alt, Shift or Win).\n";
+        } else if (id == kHotkeyRestore && tileMods == mods && tileVk == vk) {
+            problems += *text + L" is set for both hotkeys.\n";
         } else if (!RegisterHotKey(nullptr, id, mods, vk)) {
             problems += *text + L" is already used by another program.\n";
         } else {
             Wh_Log(L"Registered %s", text->c_str());
+            if (id == kHotkeyTile) {
+                tileMods = mods;
+                tileVk = vk;
+            }
         }
     }
-    if (!problems.empty()) {
-        Wh_Log(L"%s", problems.c_str());
-        // Shown on its own thread so the hotkeys that did work keep working.
-        auto* text = new std::wstring(
-            problems + L"Pick another hotkey in the mod settings.");
-        HANDLE thread =
-            CreateThread(nullptr, 0, ShowHotkeyProblem, text, 0, nullptr);
-        if (thread) {
-            CloseHandle(thread);
-        } else {
-            delete text;
+    if (problems.empty()) {
+        return;
+    }
+    Wh_Log(L"%s", problems.c_str());
+    if (g_problemThread) {
+        if (WaitForSingleObject(g_problemThread, 0) == WAIT_TIMEOUT) {
+            // The last message is still open.
+            return;
         }
+        CloseHandle(g_problemThread);
+        g_problemThread = nullptr;
+    }
+    // Shown on its own thread so the hotkeys that did work keep working.
+    auto* text = new std::wstring(problems +
+                                  L"Pick another hotkey in the mod settings.");
+    g_problemThread =
+        CreateThread(nullptr, 0, ShowHotkeyProblem, text, 0, nullptr);
+    if (!g_problemThread) {
+        delete text;
     }
 }
 
+// No DPI setup needed: the tool process (windhawk.exe in Windhawk 1.7,
+// windhawk-mod.exe in 2.0) is per-monitor DPI aware, so all sizes are real
+// pixels on every monitor.
 DWORD WINAPI HotkeyThread(void* readyEvent) {
-    MakeThreadDpiAware();
     MSG msg;
     // Creates the message queue before anyone posts to it.
     PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
@@ -1051,7 +1134,7 @@ DWORD WINAPI HotkeyThread(void* readyEvent) {
         if (msg.message == WM_HOTKEY && msg.wParam == kHotkeyTile) {
             TileWindows(*GetSettings());
         } else if (msg.message == WM_HOTKEY && msg.wParam == kHotkeyRestore) {
-            RestoreWindows(*GetSettings());
+            RestoreWindows();
         } else if (msg.message == kMsgReloadSettings) {
             RegisterHotkeys(*GetSettings());
         }
