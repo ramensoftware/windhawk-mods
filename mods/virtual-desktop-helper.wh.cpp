@@ -1435,7 +1435,8 @@ bool MoveActiveWindowByOffset(int direction, int* targetDesktopNumOut = nullptr,
   return true;
 }
 
-// pinState: 1 = pin, 0 = unpin, -1 = toggle.
+// pinState: 1 = pin, 0 = unpin, -1 = toggle. The optional hwnd is used by the
+// test harness; mod callers leave it null to act on the foreground window.
 bool SetActiveWindowPinned(int pinState, HWND hwnd = nullptr) {
   if (!InitializeVirtualDesktopAPI() || !g_pPinnedApps) {
     Wh_Log(L"Pin feature not available");
