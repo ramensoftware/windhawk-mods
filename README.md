@@ -2,7 +2,7 @@
 
 目标是在 Windows 11 快捷设置的原生应用音量混合器中，为每行增加一个输出设备选择入口。应用直接使用 Windows 逐应用路由播放主输出，其他选中端点接收该应用的 WASAPI 镜像。
 
-当前提供任务栏单设备路由预览 `0.0.3`，在可切换输出的原生应用音量行末尾增加设备菜单，使用 Windows 行模型中的 `PossibleOutputs` 和 `SelectedOutput`。多设备镜像仍在独立探针阶段。
+当前提供任务栏单设备路由预览 `0.0.2`，在原生应用音量行末尾增加输出设备菜单，使用 Windows 行模型中的 `PossibleOutputs` 和 `SelectedOutput`。多设备镜像仍在独立探针阶段。
 
 ## Windhawk 预览
 
