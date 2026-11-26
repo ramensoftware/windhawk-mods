@@ -35,7 +35,7 @@ Turns the top edge of your screen into a standalone **macOS 26/27 Tahoe Menu Bar
 
 ## Important Notes
 - **Dark Mode toggle**: Clicking the Control Center Dark Mode tile (or *Switch to Light/Dark Mode* in the bar context menu) updates Windows' `AppsUseLightTheme` and `SystemUsesLightTheme` preference in the registry. This change persists until toggled back.
-- **Liquid Glass capture**: Optical refraction captures the screen behind the bar locally in GPU memory and hides the bar from screen capture while refraction is active. Press `Win+Ctrl+Shift+G` or switch **Optical refraction mode** to *Frosted Blur Only* when taking screenshots.
+- **Liquid Glass capture**: Optical refraction captures the screen behind the bar locally in GPU memory and hides the bar from screen capture while refraction is active. Press `Ctrl+Win+Shift+M` or switch **Optical refraction mode** to *Frosted Blur Only* when taking screenshots.
 
 ## Comparison with Existing Menu Bar Mods
 Compared to [`mac-os-27-finder-bar`](https://windhawk.net/mods/mac-os-27-finder-bar), [`mac-island-dock`](https://windhawk.net/mods/mac-island-dock), and [`windhawk-topbar`](https://windhawk.net/mods/windhawk-topbar), **macOS 26 Tahoe Menu Bar** pairs the dual-process tray mirror with real-time DXGI curved-lens refraction glass (`Lens`, `Mirror Reflection`, `Convex Stretch`, and `Clear`/`Tinted` styles) matching the Tahoe Dock aesthetic, while keeping a compact top-edge menu bar + Control Center + monthly calendar layout.
@@ -4190,7 +4190,28 @@ DWORD WINAPI HostThreadProc(LPVOID) {
         }
     }
 
-    std::unordered_map<uint64_t, std::vector<BYTE>> cachedPackets;
+    struct CachedTrayIcon {
+        bool hasAdd = false;
+        bool hasGuid = false;
+        TrayIpcMsg addMsg{};
+        bool hasVersion = false;
+        TrayIpcMsg verMsg{};
+    };
+    std::vector<CachedTrayIcon> cachedIcons;
+    auto findCached = [&](const TrayIpcMsg& tm) -> std::vector<CachedTrayIcon>::iterator {
+        bool tmHasGuid = (tm.nid.uFlags & NIF_GUID) != 0;
+        return std::find_if(cachedIcons.begin(), cachedIcons.end(),
+                            [&](const CachedTrayIcon& e) {
+                                if (tmHasGuid && e.hasGuid &&
+                                    memcmp(&e.addMsg.nid.guidItem,
+                                           &tm.nid.guidItem, sizeof(GUID)) == 0) {
+                                    return true;
+                                }
+                                return e.addMsg.nid.hWnd == tm.nid.hWnd &&
+                                       e.addMsg.nid.uID == tm.nid.uID;
+                            });
+    };
+
     HWND lastClient = nullptr;
     HANDLE hs[2] = {g_stopEv, g_wakeEv};
     for (;;) {
@@ -4203,41 +4224,99 @@ DWORD WINAPI HostThreadProc(LPVOID) {
         batch.swap(g_queue);
         ReleaseSRWLockExclusive(&g_queueLock);
         for (const auto& pkt : batch) {
-            if (pkt.size() >= sizeof(DWORD) * 5) {
-                TrayIpcMsg tm{};
-                memcpy(&tm, pkt.data(), std::min(pkt.size(), sizeof(tm)));
-                uint64_t key =
-                    (static_cast<uint64_t>(tm.nid.hWnd) << 32) | tm.nid.uID;
-                if (tm.message == NIM_DELETE) {
-                    cachedPackets.erase(key);
+            if (pkt.size() < sizeof(DWORD) * 6) {
+                continue;
+            }
+            TrayIpcMsg tm{};
+            memcpy(&tm, pkt.data(), std::min(pkt.size(), sizeof(tm)));
+            tm.nid.cbSize = sizeof(TrayNID32);
+            auto it = findCached(tm);
+            if (tm.message == NIM_DELETE) {
+                if (it != cachedIcons.end()) {
+                    cachedIcons.erase(it);
+                }
+            } else if (tm.message == NIM_ADD) {
+                CachedTrayIcon entry;
+                entry.hasAdd = true;
+                entry.hasGuid = (tm.nid.uFlags & NIF_GUID) != 0;
+                entry.addMsg = tm;
+                entry.addMsg.message = NIM_ADD;
+                if (it != cachedIcons.end()) {
+                    *it = entry;
                 } else {
-                    cachedPackets[key] = pkt;
+                    cachedIcons.push_back(entry);
+                }
+            } else if (tm.message == NIM_MODIFY) {
+                if (it == cachedIcons.end()) {
+                    CachedTrayIcon entry;
+                    entry.hasAdd = true;
+                    entry.hasGuid = (tm.nid.uFlags & NIF_GUID) != 0;
+                    entry.addMsg = tm;
+                    entry.addMsg.message = NIM_ADD;
+                    cachedIcons.push_back(entry);
+                } else {
+                    TrayNID32& d = it->addMsg.nid;
+                    const TrayNID32& s = tm.nid;
+                    d.uFlags |= s.uFlags;
+                    if (s.uFlags & NIF_GUID) {
+                        d.guidItem = s.guidItem;
+                        it->hasGuid = true;
+                    }
+                    if (s.uFlags & NIF_MESSAGE) {
+                        d.uCallbackMessage = s.uCallbackMessage;
+                    }
+                    if (s.uFlags & NIF_ICON) {
+                        d.hIcon = s.hIcon;
+                    }
+                    if (s.uFlags & NIF_TIP) {
+                        memcpy(d.szTip, s.szTip, sizeof(d.szTip));
+                    }
+                    if (s.uFlags & NIF_STATE) {
+                        d.dwState = (d.dwState & ~s.dwStateMask) |
+                                    (s.dwState & s.dwStateMask);
+                        d.dwStateMask |= s.dwStateMask;
+                    }
+                }
+            } else if (tm.message == NIM_SETVERSION) {
+                if (it != cachedIcons.end()) {
+                    it->hasVersion = true;
+                    it->verMsg = tm;
                 }
             }
         }
         HWND client =
             FindWindowExW(HWND_MESSAGE, nullptr, kTrayClientClassName, nullptr);
+        bool replayed = false;
         if (client && client != lastClient) {
             SendToClient(client, kTrayIpcHello, nullptr, 0);
-            for (const auto& [k, cpkt] : cachedPackets) {
+            for (const auto& entry : cachedIcons) {
                 if (WaitForSingleObject(g_stopEv, 0) == WAIT_OBJECT_0) {
                     break;
                 }
-                SendToClient(client, kTrayIpcFwd, cpkt.data(),
-                             static_cast<DWORD>(cpkt.size()));
+                if (entry.hasAdd) {
+                    SendToClient(client, kTrayIpcFwd, &entry.addMsg,
+                                 sizeof(TrayIpcMsg));
+                }
+                if (entry.hasVersion) {
+                    SendToClient(client, kTrayIpcFwd, &entry.verMsg,
+                                 sizeof(TrayIpcMsg));
+                }
             }
             lastClient = client;
+            replayed = true;
         }
         if (!client) {
             lastClient = nullptr;
             continue;
         }
-        for (auto& pkt : batch) {
-            if (WaitForSingleObject(g_stopEv, 0) == WAIT_OBJECT_0) {
-                break;
+        if (!replayed) {
+            for (auto& pkt : batch) {
+                if (WaitForSingleObject(g_stopEv, 0) == WAIT_OBJECT_0) {
+                    break;
+                }
+                SendToClient(client, kTrayIpcFwd, pkt.data(),
+                             static_cast<DWORD>(pkt.size()));
             }
-            SendToClient(client, kTrayIpcFwd, pkt.data(),
-                         static_cast<DWORD>(pkt.size()));
         }
     }
     return 0;
@@ -4253,7 +4332,14 @@ void UnhookSafe() {
     }
 }
 
+bool IsRunning() {
+    return g_thread != nullptr;
+}
+
 BOOL Init() {
+    if (g_thread != nullptr) {
+        return TRUE;
+    }
     if (Wh_GetIntSetting(L"finderBarShowTray") == 0) {
         return TRUE;
     }
@@ -4272,7 +4358,7 @@ void Uninit() {
         SetEvent(g_stopEv);
     }
     if (g_thread) {
-        WaitForSingleObject(g_thread, 3000);
+        WaitForSingleObject(g_thread, INFINITE);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
@@ -7600,6 +7686,7 @@ LRESULT CALLBACK FinderBarWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     try {
         if (g_dock.taskbarCreatedMsg && msg == g_dock.taskbarCreatedMsg) {
             if (GetTickCount64() >= g_bar.ignoreTaskbarCreatedUntil) {
+                g_bar.topAppBarRegistered = false;
                 UpdateTopAppBarReservation();
             }
             return 0;
@@ -8601,7 +8688,16 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isExplorerProcess || g_isToolModProcessLauncher) {
+    if (g_isExplorerProcess) {
+        bool wantTray = Wh_GetIntSetting(L"finderBarShowTray") != 0;
+        if (wantTray && !ExplorerTrayHost::IsRunning()) {
+            ExplorerTrayHost::Init();
+        } else if (!wantTray && ExplorerTrayHost::IsRunning()) {
+            ExplorerTrayHost::Uninit();
+        }
+        return;
+    }
+    if (g_isToolModProcessLauncher) {
         return;
     }
 
