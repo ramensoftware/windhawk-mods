@@ -9,7 +9,7 @@
 // @description:pt-BR Mostra barras configuráveis das cotas de assinaturas de agentes de IA e LLMs da Anthropic, OpenAI, Google Antigravity, GitHub Copilot e OpenCode Go na barra de tarefas do Windows 11
 // @description:ru-RU Показывает настраиваемые полосы квот подписок на ИИ-агентов и LLM от Anthropic, OpenAI, Google Antigravity, GitHub Copilot и OpenCode Go на панели задач Windows 11
 // @description:zh-CN 在 Windows 11 任务栏上以可配置的条形显示 Anthropic、OpenAI、Google Antigravity、GitHub Copilot 和 OpenCode Go 的 AI 智能体/LLM 订阅配额
-// @version         2.27.1
+// @version         2.27.2
 // @author          Cleroth
 // @github          https://github.com/Cleroth
 // @include         explorer.exe
@@ -11768,12 +11768,13 @@ static std::wstring FormatLocalDayTime(SYSTEMTIME const& local) {
 }
 
 // When a reading that is out of date was taken: its local time, with its weekday from a day back,
-// or the region's short date from six days back; empty when unreadable.
+// or the region's short date from six days back; empty when unreadable. A reading ahead of the
+// clock (set back since) counts as just taken.
 static std::wstring FormatReadingTime(ULONGLONG unixMs, ULONGLONG now) {
     constexpr ULONGLONG kDayMs = 24ULL * 3600 * 1000;
     SYSTEMTIME local;
     if (!UnixMsToLocalSystemTime(unixMs, &local)) return {};
-    if (now - unixMs < kDayMs) return FormatLocalTime(local);
+    if (unixMs > now || now - unixMs < kDayMs) return FormatLocalTime(local);
     wchar_t date[80];
     if (now - unixMs < 6 * kDayMs ||
         GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_SHORTDATE, &local, nullptr, date, ARRAYSIZE(date), nullptr) <= 0) {
