@@ -1666,7 +1666,7 @@ void LoadLevelHistory() {
     std::wstring all = buf;
     size_t pos = 0;
     while (pos < all.size()) {
-        size_t end = all.find(L'\n', pos);
+        size_t end = all.find(L'\t', pos);
         if (end == std::wstring::npos) {
             end = all.size();
         }
@@ -1694,7 +1694,7 @@ void SaveLevelHistory() {
     std::wstring all;
     for (const auto& h : g_levelHistory) {
         WCHAR line[600];
-        _snwprintf_s(line, _TRUNCATE, L"%s|%d|%.2f|%lld\n", h.key.c_str(),
+        _snwprintf_s(line, _TRUNCATE, L"%s|%d|%.2f|%lld\t", h.key.c_str(),
                      h.charging ? 1 : 0, h.anchorPercent, h.anchorTime);
         if (all.size() + wcslen(line) >= 4000) {
             break;
@@ -3278,6 +3278,8 @@ wux::XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     }
 
     size_t taskbarElementIUnknownOffset = 0x10;
+
+#if defined(_M_X64)
     {
         // 48:83EC 28 | sub rsp,28
         // 48:83C1 48 | add rcx,48
@@ -3289,6 +3291,23 @@ wux::XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
             Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
         }
     }
+#elif defined(_M_ARM64)
+    {
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
+    }
+#else
+#error "Unsupported architecture"
+#endif
 
     wux::XamlRoot result{nullptr};
     if (taskbarHostSharedPtr[0]) {
