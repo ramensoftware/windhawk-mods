@@ -1950,7 +1950,7 @@
         "ratingUsers": 16,
         "reviews": 0,
         "trendingSorting": 57.5,
-        "updated": 1795046492000,
+        "updated": 1795669408000,
         "users": 575
       },
       "metadata": {
@@ -1972,7 +1972,7 @@
         ],
         "license": "MIT",
         "name": "Change More Fonts",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "change-qt-app-icon": {
@@ -11224,7 +11224,7 @@
         "ratingUsers": 163,
         "reviews": 2,
         "trendingSorting": 32.47713258220749,
-        "updated": 1794002604000,
+        "updated": 1795669418000,
         "users": 13078
       },
       "metadata": {
@@ -11235,13 +11235,13 @@
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lpowrprof",
         "description": "Dostosuj zegar ekranu blokady systemu Windows 11 za pomocą nowoczesnych stylów, wyświetlania daty i kontroli widżetów.",
         "github": "https://github.com/ali0zdas",
-        "homepage": "https://aliozdas.is-a.dev",
         "include": [
           "LockApp.exe"
         ],
-        "license": "MIT",
+        "license": "GPL-3.0-only",
         "name": "Stylizator zegara ekranu blokady",
-        "version": "0.6.0"
+        "twitter": "https://twitter.com/ali0zdas",
+        "version": "3.0.0"
       },
       "metadataEnglish": {
         "description": "Customize the Windows 11 lock screen clock with modern styles, date display, and widget controls.",
@@ -17334,7 +17334,7 @@
         "ratingUsers": 13,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1795320204000,
+        "updated": 1795669413000,
         "users": 77
       },
       "metadata": {
@@ -17353,7 +17353,7 @@
         ],
         "license": "MIT",
         "name": "Start Menu Groups",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "start-menu-open-location": {
@@ -17801,7 +17801,7 @@
         "ratingUsers": 15,
         "reviews": 0,
         "trendingSorting": 2.316344002609233,
-        "updated": 1794700886000,
+        "updated": 1795669424000,
         "users": 241
       },
       "metadata": {
@@ -17819,7 +17819,7 @@
         ],
         "license": "Apache-2.0",
         "name": "Task Manager Pause Button",
-        "version": "1.1.0"
+        "version": "1.1.1"
       }
     },
     "task-manager-tail": {

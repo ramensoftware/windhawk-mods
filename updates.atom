@@ -2,12 +2,112 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-11-26T04:01:51.000Z</updated>
+    <updated>2026-11-26T05:03:44.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Task Manager Pause Button 1.1.1]]></title>
+        <id>https://windhawk.net/mods/task-manager-pause-button#7e4ed06f199782d1e3c512e259ba5866b8590fb6</id>
+        <link href="https://windhawk.net/mods/task-manager-pause-button"/>
+        <updated>2026-11-26T05:03:44.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The previous version relied on Task Manager’s Ctrl-key pause, which only worked while the window had focus. Clicking the taskbar or choosing <strong>Open file location</strong> could make the process list start updating again while <strong>Pause</strong> was still active.</li>
+<li><strong>Pause</strong> now controls list updates directly, so the list stays frozen even when Task Manager loses focus.</li>
+<li>Thanks to @F404X for reporting the <strong>Open file location</strong> case in <a href="https://github.com/luizbizzio/task-manager-pause-button/issues/1">issue #1</a>.</li>
+</ul>
+]]></content>
+        <author>
+            <name>Luiz Bizzio</name>
+            <uri>https://github.com/luizbizzio</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Lock Screen Clock Styler 3.0.0]]></title>
+        <id>https://windhawk.net/mods/lock-screen-clock-styler#01c358fdfa0df94fd9192933fa37190a144f9c08</id>
+        <link href="https://windhawk.net/mods/lock-screen-clock-styler"/>
+        <updated>2026-11-26T05:03:38.000Z</updated>
+        <content type="html"><![CDATA[<h3>New Clock Style</h3>
+<ul>
+<li><strong>ANSI Shadow (Terminal ASCII):</strong> Added a new retro terminal ASCII block-art clock style (<code>ansiShadow</code>) with 4 phosphor color presets (Matrix Green, Amber CRT, Cyber Cyan, Classic Monochrome).</li>
+</ul>
+<h3>Per-Theme Customization Groups</h3>
+<p>Added dedicated per-theme customization sections with rich new options:</p>
+<ul>
+<li><strong>Retro Pixel (<code>pixelSettings</code>):</strong> LED dot shape (<code>Circle</code>, <code>Square</code>, <code>Rounded</code>), 14 curated LED colors, and frosted backplate toggle &amp; opacity (<code>0–255</code>).</li>
+<li><strong>Vertical Stack Clocks (<code>verticalSettings</code>):</strong> Row spacing adjustment, minute digit opacity control, 14 curated text colors, custom font selector (built-in Windows fonts), and drop-shadow toggle.</li>
+<li><strong>ANSI Shadow (<code>ansiSettings</code>):</strong> 4 terminal phosphor color presets (<code>amber</code>, <code>green</code>, <code>cyan</code>, <code>mono</code>), terminal prompt header bar toggle, phosphor glow toggle, and card opacity (<code>0–255</code>).</li>
+<li><strong>Flip Clocks (<code>flipSettings</code>):</strong> Frosted glass / card opacity, corner radius (<code>-1</code> theme default or custom), center split seam toggle, and 14 curated digit colors.</li>
+<li><strong>Minimalist Sonoma (<code>minimalistSettings</code>):</strong> Font weight selector, 14 curated text colors, custom font selector (built-in Windows fonts), and drop-shadow toggle.</li>
+<li><strong>Cyberpunk Sci-Fi HUD (<code>cyberpunkSettings</code>):</strong> 4 HUD color presets (<code>default</code>, <code>matrix</code>, <code>crimson</code>, <code>violet</code>), top telemetry header bar toggle, and chassis opacity (<code>0–255</code>).</li>
+</ul>
+<h3>Breaking &amp; Behavior Changes</h3>
+<ul>
+<li><strong>Minimalist Aura style removed:</strong> Existing <code>aura</code> configurations are automatically migrated to <strong>Minimalist Sonoma</strong> (<code>macos</code>).</li>
+<li><strong><code>hideDefaultClock</code> removed:</strong> The stock Windows lock screen clock is now always hidden whenever a custom clock style is active. To keep the stock Windows clock visible instead, select <strong>Default Clock Only</strong> (<code>defaultOnly</code>).</li>
+<li><strong><code>showSeconds</code> changed from a toggle to <code>auto</code> / <code>on</code> / <code>off</code>:</strong> Existing boolean toggle values fall back to <code>auto</code> (theme default: enabled on Retro Pixel, ANSI Shadow, and Cyberpunk HUD; disabled on Minimalist Sonoma). Users who previously turned seconds off can set <code>showSeconds</code> to <strong>Always Hide</strong> (<code>off</code>).</li>
+<li><strong><code>glassOpacity</code> moved:</strong> The Flip clock glass opacity setting is now located under the <strong>Flip Clock</strong> (<code>flipSettings.glassOpacity</code>) group. Users who had a custom value can re-apply it in the new group.</li>
+</ul>
+<h3>Improvements &amp; Polish</h3>
+<ul>
+<li><strong>14-Locale Settings UI:</strong> Added emoji prefixes across settings titles and polished translations across all 14 supported languages.</li>
+<li><strong>Refined Defaults:</strong> Updated default <code>clockFontSize</code> to <code>165</code> and tuned Retro Pixel &amp; Cyberpunk HUD defaults.</li>
+<li><strong>Updated Docs &amp; Screenshots:</strong> Refreshed README and mod screenshots for v3.0.0, and updated license to <code>GPL-3.0-only</code>.</li>
+</ul>
+]]></content>
+        <author>
+            <name>ali0zdas</name>
+            <uri>https://github.com/ali0zdas</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Start Menu Groups 1.1.0]]></title>
+        <id>https://windhawk.net/mods/start-menu-groups#1b6f2dfd4cff71c795209e87a86fbf1617620f4f</id>
+        <link href="https://windhawk.net/mods/start-menu-groups"/>
+        <updated>2026-11-26T05:03:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Rearrange groups and apps by dragging them right in Start, with no settings window and no administrator prompt: move groups, reorder apps or move them to another group, drop an app outside the tiles to make it an app on its own, and drop an app onto another app to put both in a new folder.</li>
+<li>New folders: put any number of apps in one cell of a tile, shown as a preview of their icons, and open them like a group. Supported in the settings, the settings window and Start.</li>
+<li>Opened groups and folders are centered over Start like Start's own folders, with grow and shrink animations, rounded corners and room for at least four rows.</li>
+<li>Tiles are stretched or shrunk slightly so each row of groups fills Start's width, with new left and right spacing settings.</li>
+<li>Works alongside Windows 11 Start Menu Styler and other mods that use XAML diagnostics.</li>
+<li>The groups show in any display language.</li>
+<li>The overflow cluster opens only the apps that didn't fit in the tile.</li>
+<li>The default horizontal gap between tiles is now 25 (was 30).</li>
+<li>The default websites no longer download favicons, so the default settings don't contact any server.</li>
+<li>Saving from the settings window checks the settings file before importing it and asks before overwriting changes made in Windhawk.</li>
+<li>Launched apps come to the front, and Start hides right after a launch.</li>
+<li>Settings window pages stretch to the full window width.</li>
+<li>Cleaner unloading of the mod.</li>
+</ul>
+]]></content>
+        <author>
+            <name>DanRotaru</name>
+            <uri>https://github.com/DanRotaru</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Change More Fonts 1.1.0]]></title>
+        <id>https://windhawk.net/mods/change-more-fonts#9a71122b19fc848f4eaa6acf412ddbc396fa8f55</id>
+        <link href="https://windhawk.net/mods/change-more-fonts"/>
+        <updated>2026-11-26T05:03:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Set a font or weight for each executable, or turn off replacement just for that app. If the override font is unavailable, the app uses the global font.</li>
+<li>Give a source font its own replacement, including a specific monospace font. List-only mode limits replacements to the families and rules you enter.</li>
+<li>Keep the full DirectWrite fallback list if any entry is in <strong>Keep these fonts</strong>.</li>
+<li>Fix Arial Bold showing up as Arial Black in classic controls. GDI and DirectWrite preserve the weight implied by family names like Segoe UI Semibold.</li>
+<li>Keep the replacement family when apps create bold or underlined variants of it.</li>
+<li>Skip font lookup and hook setup for renderers that start disabled.</li>
+<li>Refresh DirectWrite's font list when you save settings. The mod readme now explains what to check when a font doesn't change.</li>
+</ul>
+]]></content>
+        <author>
+            <name>xh1le</name>
+            <uri>https://github.com/xh1le</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Custom CMD "ver" Command Text 1.1]]></title>
         <id>https://windhawk.net/mods/custom-cmd-ver-command-text#6d372f22942b13c7bf1f93ef2b2ac3fa06859d58</id>
@@ -471,356 +571,6 @@ none was, reload the mod after connecting one.</p>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Battery Icon Customizer 1.0]]></title>
-        <id>https://windhawk.net/mods/battery-icon-customizer#0c5b0772f221271b77e91b75c36fb82acd0baf38</id>
-        <link href="https://windhawk.net/mods/battery-icon-customizer"/>
-        <updated>2026-11-25T08:02:31.000Z</updated>
-        <content type="html"><![CDATA[<h1>Taskbar Battery Icon Customizer</h1>
-<p>Give the Windows 11 taskbar battery icon a new look - no coding needed.</p>
-<p><img src="https://raw.githubusercontent.com/LoneFaizaan/battery-icon-customizer/8c7af22c99a4fc36276e0a709ddfc13248930a09/images/preview.png" alt="Preview of the available looks"></p>
-<p><img src="https://raw.githubusercontent.com/LoneFaizaan/battery-icon-customizer/8c7af22c99a4fc36276e0a709ddfc13248930a09/images/animations.gif" alt="Charger and charging animations"></p>
-<ul>
-<li><strong>Apple iOS style</strong> - a solid pill with the percentage cut out of it, green
-while charging, yellow in battery saver and red when low.</li>
-<li><strong>Classic style</strong> - the older, compact single-color Windows 11 battery.</li>
-<li><strong>Percentage only</strong> - replace the icon with just the number, with your
-choice of size, weight, font, % sign, charging bolt and an optional colored
-or outlined pill behind it.</li>
-<li><strong>Your own colors</strong> - pick a color for every state (on battery, charging,
-plugged in, battery saver, low, very low) from simple lists.</li>
-<li><strong>Battery percentage</strong> - next to the icon or inside the battery.</li>
-<li><strong>Animations</strong> - bounce, zoom or flash when you plug in; shake, drop or
-flash when you unplug; a &quot;filling up&quot; or breathing effect while charging;
-and a pulse or blink when the battery is low.</li>
-<li><strong>Size and spacing</strong> - make it bigger or line it up with the Wi-Fi and
-volume icons.</li>
-</ul>
-<h2>Getting started</h2>
-<ol>
-<li>Open the <strong>Settings</strong> tab.</li>
-<li>Choose a look from <strong>Quick look</strong> (for example <em>Apple iOS</em>) and click
-<strong>Save settings</strong>. The taskbar updates right away.</li>
-</ol>
-<p>Want something else? Set <strong>Quick look</strong> to <strong>Build my own</strong>, then choose:</p>
-<ul>
-<li><strong>Icon style</strong> - Windows 11, Classic Windows 11, Apple iOS, or Percentage
-only (then fine-tune it under <strong>Percentage-only style</strong>).</li>
-<li><strong>Color mode</strong> - <em>Automatic</em>, <em>Single color</em>, or <em>My own colors</em> (then pick a
-color for each battery state from the lists under <strong>Colors</strong>).</li>
-<li><strong>Show battery percentage</strong> - off, next to the icon, or inside it.</li>
-<li><strong>Size and spacing</strong> and <strong>Animations</strong> - these apply to every look,
-including Quick looks. Turn on &quot;Preview the charger animations&quot; to see the
-plug-in and unplug animations each time you save.</li>
-</ul>
-<p>Need an exact shade? Pick <strong>Custom</strong> in a color list and type a hex code such
-as <code>#FF4545</code> in the matching field of <strong>Exact colors</strong> at the bottom.</p>
-<h2>Tips</h2>
-<ul>
-<li>Single color but red when the battery is low: Color mode <em>My own colors</em>,
-set every color to <em>Same as the taskbar text</em>, and <strong>Low battery</strong> to <em>Red</em>.</li>
-<li><em>Automatic</em> colors in the Apple style follow iOS: white (or black on a light
-taskbar) normally, green when charging, yellow in battery saver and red at or
-below the low battery level.</li>
-<li>If Windows' own &quot;Battery percentage&quot; option is on, the mod hides it while it
-shows its own percentage, so it never appears twice.</li>
-</ul>
-<p>Requires a Windows 11 build with the new colored battery icon (Windows 11
-24H2/25H2 builds from late 2025 onwards).</p>
-]]></content>
-        <author>
-            <name>Faizaan</name>
-            <uri>https://github.com/LoneFaizaan</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Twinkle Brightness 1.1.0]]></title>
-        <id>https://windhawk.net/mods/twinkle-brightness#6ec92a920503db975426e6489bb3537a44b534fd</id>
-        <link href="https://windhawk.net/mods/twinkle-brightness"/>
-        <updated>2026-11-25T07:05:10.000Z</updated>
-        <content type="html"><![CDATA[<h1>Twinkle Brightness</h1>
-<p>Control the brightness of <strong>all your displays</strong> - external monitors and laptop
-screens - from a tray icon or the keyboard. Inspired by the
-excellent <a href="https://github.com/xanderfrangos/twinkle-tray">Twinkle Tray</a> app,
-re-imagined as a lightweight Windhawk mod with no Electron runtime.</p>
-<p><img src="https://raw.githubusercontent.com/isousluer/twinkle-brightness/main/assets/screenshot-panel.png" alt="Screenshot"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>Tray panel:</strong> click the sun icon in the notification area to get a
-brightness slider for every display. The panel follows the Windows
-light/dark theme and accent color.</li>
-<li><strong>Link displays:</strong> the chain button in the panel links the displays. While
-linked, one slider controls all displays and the hotkeys change all of them.
-Linked displays are always set to the same level: the first change brings
-them together. To make displays that differ in brightness look alike at the
-same level, use the per-display minimum and maximum. While unlinked, each
-display has its own slider and the hotkeys change the display with the
-active window.</li>
-<li><strong>Hotkeys:</strong> bind any key combination to increase, decrease or set the
-brightness, turn the displays off, or open the panel. A hotkey can also
-target a specific display.</li>
-<li><strong>On-screen indicator:</strong> a small overlay shows the new level when you use a
-hotkey, with one row per display when they are at different levels.</li>
-<li><strong>Schedule:</strong> change the brightness automatically at given times of the day,
-with a smooth transition.</li>
-<li><strong>Idle dimming:</strong> dim the displays after a period of inactivity and restore
-them as soon as you touch the mouse or keyboard.</li>
-<li><strong>Per-display options:</strong> custom names, hiding displays, and min/max
-brightness to normalize displays that are brighter or darker than others.</li>
-<li><strong>Tray menu:</strong> refresh displays, turn displays off, pause automatic
-brightness, and copy display names/IDs for use in the settings.</li>
-</ul>
-<h2>How it works</h2>
-<ul>
-<li><strong>External monitors</strong> are controlled with <strong>DDC/CI</strong> (VCP code <code>0x10</code>), the
-same channel the monitor's own on-screen menu uses. DDC/CI must be enabled in
-the monitor's menu. Some docks, adapters, KVM switches and VGA/DVI
-connections do not pass DDC/CI through.</li>
-<li><strong>Laptop and tablet screens</strong> are controlled through <strong>WMI</strong>, like the
-Windows brightness slider.</li>
-</ul>
-<p>The mod runs in its own dedicated <code>windhawk.exe</code> process (Windhawk &quot;tool mod&quot;)
-and does not inject code into Explorer or any other program.</p>
-<h2>Hotkey format</h2>
-<p>Combine <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code> and <code>Win</code> with one key, separated by <code>+</code>, for
-example <code>Ctrl+Alt+Up</code>, <code>Win+Shift+PageDown</code> or <code>Ctrl+Alt+F1</code>. Supported keys:
-<code>A</code>-<code>Z</code>, <code>0</code>-<code>9</code>, <code>F1</code>-<code>F24</code>, <code>Up</code>, <code>Down</code>, <code>Left</code>, <code>Right</code>, <code>PageUp</code>,
-<code>PageDown</code>, <code>Home</code>, <code>End</code>, <code>Insert</code>, <code>Delete</code>, <code>Space</code>, <code>Plus</code>, <code>Minus</code>,
-<code>NumpadPlus</code>, <code>NumpadMinus</code>, <code>Numpad0</code>-<code>Numpad9</code>.</p>
-<h2>Choosing displays in the settings</h2>
-<p>Hotkeys, schedule entries and per-display options accept a part of a display's
-<strong>name</strong> (as shown in the panel) or <strong>ID</strong>. Right-click the tray icon and choose
-<strong>Copy display info</strong> to copy the names and IDs of all connected displays.
-Leave the field empty to target all displays (for hotkeys: to follow the
-link button).</p>
-<h2>Troubleshooting</h2>
-<ul>
-<li><strong>A monitor says &quot;not supported&quot;:</strong> enable DDC/CI in its on-screen menu, use a
-direct HDMI/DisplayPort/USB-C cable instead of a dock or adapter, then choose
-<strong>Refresh displays</strong> in the tray menu.</li>
-<li><strong>A monitor stops responding after sleep:</strong> choose <strong>Refresh displays</strong>, or
-turn the monitor off and on with its power button.</li>
-<li><strong>A hotkey does nothing:</strong> another program may already use that combination.
-Check the Windhawk log for &quot;RegisterHotKey failed&quot;. The default
-<code>Ctrl+Alt+Up</code>/<code>Ctrl+Alt+Down</code> are also used by Visual Studio Code (add a
-cursor) and some Intel graphics drivers (rotate the screen); change them in
-the settings if you need those shortcuts.</li>
-<li><strong>The AMD Radeon software can interfere</strong> with DDC/CI brightness. Disable
-&quot;Custom Colors&quot; there if brightness changes have no effect.</li>
-</ul>
-<p>This mod is not affiliated with Twinkle Tray or its author.</p>
-]]></content>
-        <author>
-            <name>isousluer</name>
-            <uri>https://github.com/isousluer</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AutoClean 2.2026.2211]]></title>
-        <id>https://windhawk.net/mods/autoclean#c822be02a4206d4b849a83cbdc631aa81f7f3959</id>
-        <link href="https://windhawk.net/mods/autoclean"/>
-        <updated>2026-11-25T07:05:04.000Z</updated>
-        <content type="html"><![CDATA[<h1>AutoClean</h1>
-<p>Silent, event-driven background Temp folder and Recycle Bin cleaner running in a dedicated Windhawk Tool Mod process.</p>
-<p><img src="https://raw.githubusercontent.com/k-ashix/ashix-windhawk-mods/main/Auto_Clean/Auto_Clean.png" alt="AutoClean OLED Toast"></p>
-<h2>Action Triggers — Temp &amp; Recycle Bin</h2>
-<table>
-<thead>
-<tr>
-<th>Icon</th>
-<th>Shortcut / Trigger</th>
-<th>Action</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>🖱️</td>
-<td><code>3x Left-Click</code> (<code>Desktop &amp; Taskbar empty space</code>)</td>
-<td>Clean Temp folders immediately and show OLED corner toast</td>
-</tr>
-<tr>
-<td>🖱️</td>
-<td><code>Middle-Click</code> (<code>1x</code>/<code>2x</code>/<code>3x</code>, <code>Desktop &amp; Taskbar empty space</code>)</td>
-<td>Empty Recycle Bin immediately and show OLED corner toast</td>
-</tr>
-<tr>
-<td>🚀</td>
-<td><code>Windows Login / Startup</code></td>
-<td>Clean Temp folders (and optionally Recycle Bin) automatically after login</td>
-</tr>
-<tr>
-<td>📦</td>
-<td><code>Size Limit</code> (<code>KB</code>/<code>MB</code>/<code>GB</code>/<code>TB</code>)</td>
-<td>Prune oldest items first or full sweep when Temp or Recycle Bin hits limit</td>
-</tr>
-<tr>
-<td>🔢</td>
-<td><code>File Count Limit</code> (<code>X items</code>)</td>
-<td>Prune oldest-deleted items or empty Recycle Bin at <code>X</code> items</td>
-</tr>
-<tr>
-<td>⏱️</td>
-<td><code>Timer / Retention</code></td>
-<td>Clean Temp on a repeating schedule and expire Recycle Bin items older than your retention window</td>
-</tr>
-<tr>
-<td>⚠️</td>
-<td><code>Low Disk Space Emergency</code></td>
-<td>Free Temp and oldest Recycle Bin items on the low-space drive when free space crosses below the floor</td>
-</tr>
-</tbody>
-</table>
-<h2>How AutoClean Differs from Windows Storage Sense</h2>
-<p>Windows Storage Sense covers basic periodic Temp and Recycle Bin cleanup, whereas AutoClean adds:</p>
-<ul>
-<li><strong>True Event-Driven Watching</strong>: Uses <code>ReadDirectoryChangesW</code> for <code>%TEMP%</code> and <code>SHChangeNotifyRegister</code> on the Recycle Bin so idle CPU and disk usage stay at zero (secondary HDDs can spin down normally).</li>
-<li><strong>AI Agent <code>%TEMP%</code> Protection</strong>: Preserves local <code>%TEMP%</code> scratchpads and worktrees created by AI coding &amp; desktop agents (Claude Code, Codex, Hermes, OpenClaw, Gemini CLI, OpenCode, Cursor, Windsurf, Goose, Aider, Copilot, MCP) by default.</li>
-<li><strong>Instant Empty-Space Mouse Shortcuts</strong>: Triple left-click empty Desktop/Taskbar space to clean Temp, or middle-click empty space to empty the Recycle Bin, with UI Automation checks so taskbar buttons and desktop icons are never triggered.</li>
-<li><strong>Granular Controls &amp; Smart Deferral</strong>: Exact <code>KB</code>/<code>MB</code>/<code>GB</code>/<code>TB</code> size caps, oldest-first pruning to a target percentage, wildcard exclusions, fullscreen/battery deferral, single-shot Dry-Run simulation, and borderless OLED corner toasts.</li>
-</ul>
-<h2>Safety Guards</h2>
-<ul>
-<li><strong>Temp Path Validation</strong>: Refuses to clean drive roots, <code>%windir%</code>, <code>%USERPROFILE%</code>, or known user folders (Desktop, Documents, Downloads, Pictures, Music, Videos, AppData) if <code>%TEMP%</code> is misconfigured.</li>
-<li><strong>Minimum Age Grace Periods</strong>: Honored on all Temp sweeps (default 24 hours / 1440 minutes) and Recycle Bin pruning (default 24 hours / 1440 minutes) so active installers, build tools, PyInstaller payloads, and recent deletions stay protected.</li>
-<li><strong>Reparse-Point &amp; Attribute Safety</strong>: Skips junctions/symlinks, respects Windows file locks, and restores Read-Only/Hidden/System attributes if a locked file cannot be deleted.</li>
-<li><strong>Safe Recycle Bin Defaults</strong>: Automatic Recycle Bin size/count thresholds and startup cleaning are off by default; only 30-day age expiry is enabled out of the box.</li>
-</ul>
-]]></content>
-        <author>
-            <name>Ashix</name>
-            <uri>https://github.com/k-ashix</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ZoomIt 1.3.0]]></title>
-        <id>https://windhawk.net/mods/zoomit#30525bf79008309b9b868eb44aa0008965f8ad42</id>
-        <link href="https://windhawk.net/mods/zoomit"/>
-        <updated>2026-11-25T07:04:58.000Z</updated>
-        <content type="html"><![CDATA[<h1>ZoomIt</h1>
-<p>Zoom into any part of your screen and draw on it, straight from a hotkey. It
-works like Sysinternals ZoomIt, without a separate app running in the tray.</p>
-<p><img src="https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/zoomit.png" alt="ZoomIt preview"></p>
-<h2>Features</h2>
-<ul>
-<li><strong>Zoom with Ctrl+1.</strong> The screen under your mouse zooms in smoothly. Scroll
-or use the arrow keys to zoom further, and move the mouse to look around.</li>
-<li><strong>Draw with Ctrl+2.</strong> Draw on the screen as it is, or click while zoomed to
-draw on the zoomed view.</li>
-<li><strong>Shapes and highlighters.</strong> Hold Shift for a straight line, Ctrl for a box,
-Tab for a circle and Ctrl+Shift for an arrow. Shift plus a color key gives a
-see-through highlighter.</li>
-<li><strong>Text and blur.</strong> Press T to type on the screen and X to blur out private
-details.</li>
-<li><strong>Copy or save.</strong> Ctrl+C copies what you see and Ctrl+S saves it as a
-picture. Add Shift to pick an area first.</li>
-<li><strong>Works over admin windows.</strong> The hotkeys and drawing keep working while an
-app that runs as administrator is in front.</li>
-<li><strong>Your settings.</strong> Hotkeys, zoom level and speed, animation, pen color (six
-colors, system, the Windows accent color or your own hex), pen size,
-highlighter and blur strength, text font and size, save folder.</li>
-</ul>
-<h2>Keys while zoomed or drawing</h2>
-<table>
-<thead>
-<tr>
-<th>Key</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Mouse wheel, Up, Down</td>
-<td>Zoom in or out</td>
-</tr>
-<tr>
-<td>Left click</td>
-<td>Start drawing while zoomed</td>
-</tr>
-<tr>
-<td>Right click</td>
-<td>Stop drawing, or leave</td>
-</tr>
-<tr>
-<td>Esc</td>
-<td>Leave</td>
-</tr>
-<tr>
-<td>R, G, B, Y, O, P</td>
-<td>Red, green, blue, yellow, orange or pink pen</td>
-</tr>
-<tr>
-<td>Shift + a color key</td>
-<td>Highlighter in that color</td>
-</tr>
-<tr>
-<td>X</td>
-<td>Blur pen</td>
-</tr>
-<tr>
-<td>Ctrl + wheel, Ctrl + Up or Down</td>
-<td>Pen size, or text size while typing</td>
-</tr>
-<tr>
-<td>Hold Shift, Ctrl, Tab or Ctrl+Shift while dragging</td>
-<td>Line, box, circle or arrow</td>
-</tr>
-<tr>
-<td>T, Shift+T</td>
-<td>Type text, lined up left or right</td>
-</tr>
-<tr>
-<td>W, K</td>
-<td>White or black board</td>
-</tr>
-<tr>
-<td>E</td>
-<td>Erase all drawings</td>
-</tr>
-<tr>
-<td>Ctrl+Z</td>
-<td>Undo the last drawing</td>
-</tr>
-<tr>
-<td>Space</td>
-<td>Move the mouse to the middle of the screen</td>
-</tr>
-<tr>
-<td>Ctrl+C, Ctrl+Shift+C</td>
-<td>Copy the screen, or an area of it</td>
-</tr>
-<tr>
-<td>Ctrl+S, Ctrl+Shift+S</td>
-<td>Save the screen, or an area of it</td>
-</tr>
-</tbody>
-</table>
-<h2>Notes</h2>
-<ul>
-<li>Turn off ZoomIt in PowerToys or the ZoomIt app first. Two apps can't use the
-same hotkey.</li>
-<li>Write hotkeys like <code>Ctrl+1</code>, <code>Ctrl+Shift+Z</code> or <code>Win+Alt+F2</code>. Leave one empty
-to turn it off.</li>
-</ul>
-<h2>How it differs from WinDraw and Taskbar Snipper</h2>
-<p><a href="https://windhawk.net/mods/windraw">WinDraw</a> and
-<a href="https://windhawk.net/mods/taskbar-snipper">Taskbar Snipper</a> mark up the screen
-at its normal size. ZoomIt is a tool for presenting: it zooms into a still
-picture of the screen first, and you draw on the zoomed view, with a blur pen
-and text, on Sysinternals ZoomIt's own keys. If you only want to mark up the
-screen, WinDraw has more drawing tools.</p>
-<h2>Credits</h2>
-<p>Works like <a href="https://learn.microsoft.com/sysinternals/downloads/zoomit">ZoomIt</a>
-by Mark Russinovich (Sysinternals). Written from scratch for Windhawk; it shares
-no code with ZoomIt. MIT.</p>
-<p>To read text bigger under the mouse, try
-<a href="https://windhawk.net/mods/hover-text-magnifier">Hover Text Magnifier</a> by Math
-Shamenson.</p>
-]]></content>
-        <author>
-            <name>DavidHiFi</name>
-            <uri>https://github.com/DavidHiFi</uri>
         </author>
     </entry>
 </feed>
