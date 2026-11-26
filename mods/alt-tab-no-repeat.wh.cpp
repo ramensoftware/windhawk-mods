@@ -7,7 +7,15 @@
 // @github https://github.com/ElektroGvozd
 // @include       explorer.exe
 // ==/WindhawkMod==
+// ==WindhawkModReadme==
+/*
+# Alt+Tab No Repeat
 
+Prevents automatic repetition of Alt+Tab when the keys are held down.
+
+Press Alt+Tab to switch windows without continuous cycling caused by keyboard auto-repeat.
+*/
+// ==/WindhawkModReadme==
 #include <windows.h>
 
 static HHOOK hook = nullptr;
