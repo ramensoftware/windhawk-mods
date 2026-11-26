@@ -6233,7 +6233,7 @@ static ComPtr<IDWriteTextLayout> EditLayout(float w) {
     ComPtr<IDWriteTextFormat> fmt;
     ComPtr<IDWriteTextLayout> lay;
     if (FAILED(g_dw->CreateTextFormat(L"Segoe UI Variable Text", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-                                      DWRITE_FONT_STRETCH_NORMAL, note ? 13.0f : 13.0f, L"", &fmt)))
+                                      DWRITE_FONT_STRETCH_NORMAL, 13.0f, L"", &fmt)))
         return lay;
     fmt->SetWordWrapping(note ? DWRITE_WORD_WRAPPING_WRAP : DWRITE_WORD_WRAPPING_NO_WRAP);
     const std::wstring& t = g_edit.text;
