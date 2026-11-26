@@ -195,7 +195,7 @@ IDs; with the mod log on, each button's ID is shown as
       $name: Fill opacity
       $description: >-
         0–100. Side bar and Plate strength; half of it for Plate with accent.
-        (Thumbnail tints use Previews → Tint opacity.)
+        (Thumbnail tints use Thumbnail previews → Tint opacity.)
     - glowAccentThickness: 2
       $name: Accent thickness (px)
       $description: Border width for Plate with accent (1–8).
@@ -995,7 +995,7 @@ int RankIntensity(const int (&perRank)[3], int rankIdx) {
 constexpr PCWSTR kBackgroundElementName = L"BackgroundElement";
 // Thumbnail preview glow (own named overlays on TaskItemThumbnailView).
 constexpr PCWSTR kThumbGlowElementName = L"WhRecentFocusThumbGlow";
-// Card overlay Border beside BackgroundBorder (14-preview-overlay).
+// Card overlay Border beside BackgroundBorder.
 constexpr wchar_t kThumbCardOverlayName[] = L"WhRecentFocusThumbCard";
 constexpr PCWSTR kThumbGlowPlateName = L"WhRecentFocusThumbGlowL0";
 // Title-area overlays (separate so plate host can sit full-card).
