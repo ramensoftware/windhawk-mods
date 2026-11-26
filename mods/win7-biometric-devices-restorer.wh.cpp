@@ -9,7 +9,7 @@
 // @include         control.exe
 // @include         dllhost.exe
 // @include         svchost.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lwininet -ladvapi32 -lole32 -lshell32
 // ==/WindhawkMod==
 
