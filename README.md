@@ -1,8 +1,8 @@
 # Native Audio Router for Windows 11
 
-Native Audio Router 为 Windows 11 快捷设置的原生应用音量行加入设备菜单。当前预览 `0.0.5` 支持选择一个输出端点或跟随系统默认，使用 Windows 自身的逐应用输出设置。多设备镜像仍在独立探针阶段。
+Native Audio Router 为 Windows 11 快捷设置的原生应用音量行加入设备菜单。当前审核候选 `0.0.7` 支持选择一个输出端点或跟随系统默认，使用 Windows 自身的逐应用输出设置。多设备镜像仍在独立探针阶段。
 
-主分支包含 `0.0.6` Windhawk 审核候选。已发布的预览版在 Releases 中单独提供。
+主分支包含 Windhawk 审核候选。已发布的预览版在 Releases 中单独提供。
 
 ## 实机截图
 
@@ -18,7 +18,7 @@ Native Audio Router 为 Windows 11 快捷设置的原生应用音量行加入设
 
 ## Windhawk 预览
 
-从 [GitHub Releases](https://github.com/KKKKeybird/native-audio-router/releases) 下载 `native-audio-router.wh.cpp`，在 Windhawk 的本地模块编辑器中粘贴并编译。先打开一次任务栏快捷设置以加载 `ControlCenter.dll`，启用后重新进入声音输出页。若该页在启用前已经打开，将焦点移到任意应用音量行。部分应用需要重新开始播放才能迁移现有音频流。
+从 [GitHub Releases](https://github.com/KKKKeybird/native-audio-router/releases) 下载 `native-audio-router.wh.cpp`，在 Windhawk 的本地模块编辑器中粘贴并编译。启用后直接进入任务栏快捷设置的声音输出页即可；模块会等待 `ControlCenter.dll` 加载，无需先手动打开面板再重启模块。部分应用需要重新开始播放才能迁移现有音频流。
 
 也可使用仓库中的 [单文件模块源码](dist/native-audio-router.wh.cpp)。
 
@@ -29,7 +29,9 @@ Native Audio Router 为 Windows 11 快捷设置的原生应用音量行加入设
 ./scripts/build.ps1 -WindhawkRoot $windhawkDirectory
 ```
 
-第二条命令使用已有 Windhawk 安装的 Clang 生成本地 DLL。预览仅在布局结构与符号匹配时添加菜单。当前运行验证限 Windows 11 x64 构建 `26300.9974`。恢复目前依赖还可访问的行模型，应用退出或者 Shell 重启后的恢复仍待实现。
+第二条命令使用已有 Windhawk 安装的 Clang 生成本地 DLL。预览仅在布局结构与符号匹配时添加菜单。当前运行验证限 Windows 11 AMD64 构建 `26300.9974`。
+
+审核候选在写入前通过 Windhawk 本地存储记录应用及原始输出。禁用时会核对 Windows 的当前选择，再恢复仍可访问且未被其他操作覆盖的改动。ShellHost 重启后的记录仍保留。应用会话或设备不可访问时，恢复记录会保留，关闭模块期间无法继续执行恢复。设备列表在首次读取后复用，只有 Core Audio 报告输出端点变化时才重新查询。
 
 | 文档 | 内容 |
 | --- | --- |
