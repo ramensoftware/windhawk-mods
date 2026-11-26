@@ -2402,6 +2402,7 @@ struct BatteryInfo {
     bool charging = false, pc = false;
 };
 static std::vector<BatteryInfo> g_batteries;
+static std::atomic<ULONGLONG> g_batteryRefreshAt{0};  // a device came or went: read again at this time
 
 static void ReadBatteries() {
     std::vector<BatteryInfo> out;
@@ -3949,7 +3950,11 @@ static void DataThread() {
         // Only what a shown widget needs
         Settings s = GetSettings();
         ULONGLONG now = GetTickCount64();
-        if (s.showBattery && (!lastBattery || now - lastBattery > 60 * 1000)) {
+        // Every 15 s, and right away when a device connects or disconnects
+        ULONGLONG at = g_batteryRefreshAt;
+        bool deviceNow = at && now >= at;
+        if (deviceNow) g_batteryRefreshAt = 0;
+        if (s.showBattery && (deviceNow || !lastBattery || now - lastBattery > 15 * 1000)) {
             ReadBatteries();
             lastBattery = now;
         }
@@ -10049,6 +10054,11 @@ static LRESULT WidgetProcInner(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             if (wd && !settings && !menu && !g_placing) pos->flags |= SWP_NOZORDER;
             return 0;
         }
+        case WM_DEVICECHANGE:
+            // A device was connected or disconnected (sent to every top-level window): batteries read again, a
+            // moment later, once Windows has its level (one widget is enough to ask)
+            if (wd && wd->kind == W_BATTERY && wp == 0x0007 /* DBT_DEVNODES_CHANGED */) g_batteryRefreshAt = GetTickCount64() + 2000;
+            break;
         case WM_SETTINGCHANGE:
         case WM_THEMECHANGED:
         case WM_DISPLAYCHANGE:
