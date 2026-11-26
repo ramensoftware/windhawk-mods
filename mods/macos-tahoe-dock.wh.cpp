@@ -256,9 +256,13 @@ constexpr UINT kWmAppGlassFrame = WM_APP + 106;
 constexpr UINT kWmAppShellNotify = WM_APP + 107;
 constexpr UINT kWmAppTaskbarPinsChanged = WM_APP + 108;
 constexpr UINT kWmAppDeviceLost = WM_APP + 109;
+constexpr UINT kWmAppDeviceRedraw = WM_APP + 110;
 
 inline std::atomic<bool> g_deviceLostPending{false};
+inline std::atomic<bool> g_deviceRedrawPending{false};
+inline std::atomic<bool> g_settingRenderingDevice{false};
 void PostDeviceLostMessage();
+void PostDeviceRedrawMessage();
 
 constexpr UINT_PTR kTimerCursorPoll = 1;
 constexpr UINT_PTR kTimerTaskbarGuard = 2;
@@ -1334,7 +1338,9 @@ bool InitGraphics(wuc::Compositor const& compositor) {
     g_gfx.deviceReplacedToken = g_gfx.compGraphics.RenderingDeviceReplaced(
         [](wuc::CompositionGraphicsDevice const&,
            wuc::RenderingDeviceReplacedEventArgs const&) {
-            PostDeviceLostMessage();
+            if (!g_settingRenderingDevice.load(std::memory_order_acquire)) {
+                PostDeviceRedrawMessage();
+            }
         });
     return true;
 }
@@ -1342,8 +1348,7 @@ bool InitGraphics(wuc::Compositor const& compositor) {
 inline bool IsDeviceLostHresult(HRESULT hr) {
     return hr == DXGI_ERROR_DEVICE_REMOVED ||
            hr == DXGI_ERROR_DEVICE_RESET ||
-           hr == D2DERR_RECREATE_TARGET ||
-           hr == static_cast<HRESULT>(0x80000013);
+           hr == D2DERR_RECREATE_TARGET;
 }
 
 template <typename Fn>
@@ -6541,6 +6546,13 @@ void PostDeviceLostMessage() {
     }
 }
 
+void PostDeviceRedrawMessage() {
+    if (g_dock.hwnd &&
+        !g_deviceRedrawPending.exchange(true, std::memory_order_acq_rel)) {
+        PostMessageW(g_dock.hwnd, kWmAppDeviceRedraw, 0, 0);
+    }
+}
+
 constexpr WCHAR kDockClassName[] = L"WindhawkMacOS27DockWnd";
 constexpr WCHAR kAppBarClassName[] = L"WindhawkMacOS27AppBarWnd";
 
@@ -8698,25 +8710,49 @@ bool LaunchAppItem(DockItem& item) {
     }
 
     bool launched = false;
+    std::wstring resolvedShortcutPath;
+    std::wstring resolvedShortcutArgs = item.args;
+    std::wstring resolvedShortcutWorkdir = item.workdir;
+    bool bypassWow64Shortcut = false;
     if (!item.shortcutPath.empty() && FileExistsNonDir(item.shortcutPath)) {
-        SHELLEXECUTEINFOW sei{};
-        sei.cbSize = sizeof(sei);
-        sei.fMask = SEE_MASK_NOASYNC;
-        sei.lpVerb = L"open";
-        sei.lpFile = item.shortcutPath.c_str();
-        sei.nShow = SW_SHOWNORMAL;
-        launched = ShellExecuteExW(&sei) != FALSE;
+        if (auto resolved = ResolveShortcutFile(item.shortcutPath)) {
+            if (!resolved->path.empty() &&
+                NativeSystemPath(resolved->path) != resolved->path) {
+                bypassWow64Shortcut = true;
+                resolvedShortcutPath = NativeSystemPath(resolved->path);
+                if (!resolved->args.empty()) {
+                    resolvedShortcutArgs = resolved->args;
+                }
+                if (!resolved->workdir.empty()) {
+                    resolvedShortcutWorkdir = resolved->workdir;
+                }
+            }
+        }
+        if (!bypassWow64Shortcut) {
+            SHELLEXECUTEINFOW sei{};
+            sei.cbSize = sizeof(sei);
+            sei.fMask = SEE_MASK_NOASYNC;
+            sei.lpVerb = L"open";
+            sei.lpFile = item.shortcutPath.c_str();
+            sei.nShow = SW_SHOWNORMAL;
+            launched = ShellExecuteExW(&sei) != FALSE;
+        }
     }
-    if (!launched && !item.path.empty()) {
-        std::wstring execPath = NativeSystemPath(item.path);
+    if (!launched && (bypassWow64Shortcut || !item.path.empty())) {
+        std::wstring execPath = bypassWow64Shortcut
+                                    ? resolvedShortcutPath
+                                    : NativeSystemPath(item.path);
+        const std::wstring& execArgs =
+            bypassWow64Shortcut ? resolvedShortcutArgs : item.args;
+        const std::wstring& execWorkdir =
+            bypassWow64Shortcut ? resolvedShortcutWorkdir : item.workdir;
         SHELLEXECUTEINFOW sei{};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_NOASYNC;
         sei.lpVerb = L"open";
         sei.lpFile = execPath.c_str();
-        sei.lpParameters = item.args.empty() ? nullptr : item.args.c_str();
-        sei.lpDirectory =
-            item.workdir.empty() ? nullptr : item.workdir.c_str();
+        sei.lpParameters = execArgs.empty() ? nullptr : execArgs.c_str();
+        sei.lpDirectory = execWorkdir.empty() ? nullptr : execWorkdir.c_str();
         sei.nShow = SW_SHOWNORMAL;
         launched = ShellExecuteExW(&sei) != FALSE;
     }
@@ -8751,27 +8787,51 @@ bool LaunchAppItemElevated(const DockItem& item) {
         sei.nShow = SW_SHOWNORMAL;
         return ShellExecuteExW(&sei) != FALSE;
     }
+    std::wstring resolvedShortcutPath;
+    std::wstring resolvedShortcutArgs = item.args;
+    std::wstring resolvedShortcutWorkdir = item.workdir;
+    bool bypassWow64Shortcut = false;
     if (!item.shortcutPath.empty() && FileExistsNonDir(item.shortcutPath)) {
-        SHELLEXECUTEINFOW sei{};
-        sei.cbSize = sizeof(sei);
-        sei.fMask = SEE_MASK_NOASYNC;
-        sei.lpVerb = L"runas";
-        sei.lpFile = item.shortcutPath.c_str();
-        sei.nShow = SW_SHOWNORMAL;
-        if (ShellExecuteExW(&sei)) {
-            return true;
+        if (auto resolved = ResolveShortcutFile(item.shortcutPath)) {
+            if (!resolved->path.empty() &&
+                NativeSystemPath(resolved->path) != resolved->path) {
+                bypassWow64Shortcut = true;
+                resolvedShortcutPath = NativeSystemPath(resolved->path);
+                if (!resolved->args.empty()) {
+                    resolvedShortcutArgs = resolved->args;
+                }
+                if (!resolved->workdir.empty()) {
+                    resolvedShortcutWorkdir = resolved->workdir;
+                }
+            }
+        }
+        if (!bypassWow64Shortcut) {
+            SHELLEXECUTEINFOW sei{};
+            sei.cbSize = sizeof(sei);
+            sei.fMask = SEE_MASK_NOASYNC;
+            sei.lpVerb = L"runas";
+            sei.lpFile = item.shortcutPath.c_str();
+            sei.nShow = SW_SHOWNORMAL;
+            if (ShellExecuteExW(&sei)) {
+                return true;
+            }
         }
     }
-    if (!item.path.empty()) {
-        std::wstring execPath = NativeSystemPath(item.path);
+    if (bypassWow64Shortcut || !item.path.empty()) {
+        std::wstring execPath = bypassWow64Shortcut
+                                    ? resolvedShortcutPath
+                                    : NativeSystemPath(item.path);
+        const std::wstring& execArgs =
+            bypassWow64Shortcut ? resolvedShortcutArgs : item.args;
+        const std::wstring& execWorkdir =
+            bypassWow64Shortcut ? resolvedShortcutWorkdir : item.workdir;
         SHELLEXECUTEINFOW sei{};
         sei.cbSize = sizeof(sei);
         sei.fMask = SEE_MASK_NOASYNC;
         sei.lpVerb = L"runas";
         sei.lpFile = execPath.c_str();
-        sei.lpParameters = item.args.empty() ? nullptr : item.args.c_str();
-        sei.lpDirectory =
-            item.workdir.empty() ? nullptr : item.workdir.c_str();
+        sei.lpParameters = execArgs.empty() ? nullptr : execArgs.c_str();
+        sei.lpDirectory = execWorkdir.empty() ? nullptr : execWorkdir.c_str();
         sei.nShow = SW_SHOWNORMAL;
         return ShellExecuteExW(&sei) != FALSE;
     }
@@ -11188,6 +11248,23 @@ void ApplyCaptureExclusionToAllModWindows(bool excluded) {
     ApplyOverlayCaptureExclusion(affinity);
 }
 
+void ResetAndRedrawGpuSurfaces() {
+    if (!g_dock.hwnd) {
+        return;
+    }
+    ShutdownLiquidCapture();
+    g_dock.liquidPlate.ResetGpuResources();
+    g_dock.tooltip.liquidPlate.ResetGpuResources();
+    g_menus.mainPopup.liquidPlate.ResetGpuResources();
+    g_menus.subPopup.liquidPlate.ResetGpuResources();
+    ResetFlyoutGpuResources();
+    ClearIconCache();
+    g_dock.tooltip.currentText.clear();
+    RebuildShadowSurface();
+    SyncItemIconsAndTheme();
+    RequestAnimationFrame();
+}
+
 void OnGraphicsDeviceLost() {
     if (!g_dock.hwnd) {
         return;
@@ -11202,7 +11279,9 @@ void OnGraphicsDeviceLost() {
     if (InitD3DAndD2D() && g_gfx.compGraphics && g_gfx.d2dDevice) {
         auto gfxInterop =
             g_gfx.compGraphics.as<ICompositionGraphicsDeviceInteropLocal>();
+        g_settingRenderingDevice.store(true, std::memory_order_release);
         gfxInterop->SetRenderingDevice(g_gfx.d2dDevice.get());
+        g_settingRenderingDevice.store(false, std::memory_order_release);
     }
     g_dock.tooltip.currentText.clear();
     RebuildShadowSurface();
@@ -14681,6 +14760,11 @@ LRESULT CALLBACK DockWndProc(HWND hwnd,
             case kWmAppDeviceLost:
                 g_deviceLostPending.store(false, std::memory_order_release);
                 OnGraphicsDeviceLost();
+                return 0;
+
+            case kWmAppDeviceRedraw:
+                g_deviceRedrawPending.store(false, std::memory_order_release);
+                ResetAndRedrawGpuSurfaces();
                 return 0;
 
             case WM_HOTKEY:
