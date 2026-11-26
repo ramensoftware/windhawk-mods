@@ -64,6 +64,9 @@ and OpenCode Go an API key you paste from its console, with tokens and keys encr
 with Windows DPAPI. Antigravity uses its
 signed-in local app or CLI session, which must remain running.
 
+Every host the mod contacts, what each request sends and which setting stops it:
+[Network access](https://github.com/Cleroth/windhawk-taskbar-ai-quota/blob/master/docs/accounts.md#network-access).
+
 ## Settings
 
 - **Accounts:** Add, reorder, hide, or remove accounts, each listed with its weekly usage, hidden
