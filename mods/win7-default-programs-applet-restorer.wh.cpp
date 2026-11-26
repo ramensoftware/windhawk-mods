@@ -73,6 +73,9 @@ manually. Without the required files the Windows page stays in place; connect to
   this is a persistent registry change and is not undone when the mod is disabled. If a later step fails, the
   previous choice can be lost or the new key can be incomplete. Windows does not support this registry method,
   and Windows protections or updates can prevent it from working. Check the effective default after saving.
+  The same direct write applies to URL protocols (for example `http` and `https` when a browser is set as
+  default), both with **Save** in *Set associations for a program* and with *Set this program as default*.
+  The page reports success when the values were written; it does not verify that Windows applies the new default.
 - **Scope.** This mod runs in `explorer.exe`.
 
 ## Settings
@@ -88,7 +91,8 @@ manually. Without the required files the Windows page stays in place; connect to
 - **Changing associations.** Windows may reject or reset changes, especially protected associations on systems
   with UserChoice Protection Driver (UCPD). This mod does not disable the driver or delegate writes to another
   process. Partial failures can leave some defaults changed and others unchanged, or leave an incomplete choice.
-  Check the actual defaults after saving and after restarting Windows. To restore a choice, use Windows Settings.
+  A reported success does not guarantee that the effective default changed. Check the actual defaults after
+  saving and after restarting Windows. To restore a choice, use Windows Settings.
   The direct-write implementation has not been validated on every supported Windows version.
 - **Opening the page on Windows 11 23H2 and later.** If Windows redirects Default Programs to Settings,
   install and enable [Control Panel Revival](https://windhawk.net/mods/control-panel-revival) to stop that
