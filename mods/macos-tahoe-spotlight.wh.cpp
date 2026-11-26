@@ -7,7 +7,7 @@
 // @github          https://github.com/Badalemo
 // @include         windhawk.exe
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lpropsys -ldwmapi -ld2d1 -ld3d11 -ldxgi -ldwrite -lwindowscodecs -lgdi32 -luser32 -lversion -lshcore -ladvapi32 -lcrypt32 -limm32 -lpsapi
-// @license         MIT
+// @license         GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -33,8 +33,8 @@ Spotlight hides), and deep Windows integration.
     `Apps`, `Files`, `Actions`, `Clipboard`, `Windows`, `Settings`), and quick
     key badges.
   - **Right-Hand Quick Look Split Pane** (`Alt+P` or `Ctrl+I`): Live image
-    previews, monospace file viewer (`JetBrains Mono`), app details & **Pin to
-    Dock** integration, window/process controls, and clipboard previews.
+    previews, monospace file viewer (`JetBrains Mono`), app details,
+    window/process controls, and clipboard previews.
 - **Instant Multi-Source Search**:
   - **Apps**: Start Menu shortcuts, Desktop links, and Microsoft Store / UWP
     apps (`shell:AppsFolder`), with PATH tool matching, live filesystem watcher,
@@ -49,23 +49,32 @@ Spotlight hides), and deep Windows integration.
     matching running processes cleanly; `win:` switches/manages open windows;
     `tm`, `wt`, `ps`, `cmd`, `lock`, `sleep`, `bm:` (Bookmarks), `cfg:`
     (Settings), `>` (Actions).
-  - **Encrypted Clipboard History**: Captures text and screenshots (encrypted
-    per user with DPAPI) and pastes straight into the previously focused window.
+  - **Encrypted Clipboard History (Opt-In)**: Off by default. When enabled in
+    Settings, captures text and screenshots (encrypted per user with DPAPI) and
+    pastes straight into the previously focused window.
 
-> **Tip**: By default `Alt+Space` automatically overrides busy global
-> hotkeys (even if another launcher holds `Alt+Space`) without closing it, or
-> you can switch shortcuts cleanly in Settings.
+> **Tip**: Both this mod and `spotlight-launcher` default to `Alt+Space`.
+> **Override busy Alt+Space automatically** is off by default so existing
+> launchers keep their shortcut unless you opt in or pick another hotkey.
+> When DXGI Optical Liquid Glass is active, the screen behind Spotlight is
+> captured locally in GPU memory and Spotlight is excluded from screenshots;
+> switch **Optical refraction mode** to *Frosted Backdrop Only* to capture it.
 
 ## Credits & Differentiation
-Inline calculator, Everything IPC query integration, and DPAPI clipboard history
-patterns were inspired by David Ravelo's MIT-licensed
-[`spotlight-launcher`](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/spotlight-launcher.wh.cpp)
-(<https://github.com/DavidRaveloU>, Copyright (c) 2026-present David Ravelo).
-**macOS 26 Tahoe Spotlight** is a distinct macOS 26 Tahoe redesign featuring a
-collapsed frosted glass pill + 4 mode orbs, DXGI optical Liquid Glass
-refraction, a right-hand Quick Look split pane, `kl`/`kill` process termination,
-a `win:` window switcher, browser bookmarks, and direct **macOS 26 Tahoe Dock**
-(`macos-tahoe-dock`) IPC Pin-to-Dock integration.
+Licensed under **GPL-3.0**:
+- The DXGI Desktop Duplication Liquid Glass refraction engine, PaintCode
+  squircle geometry, and blur interop are adapted from **MacOS Style Dock** by
+  **Zach Vaughn** (`GPL-3.0`).
+- The inline calculator (`Calc`), SID/DPAPI/base64 helpers, clipboard storage
+  scheme, Everything IPC structs/parser, and JSON/bookmarks/recent readers are
+  adapted from [`spotlight-launcher`](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/spotlight-launcher.wh.cpp)
+  by **David Ravelo** (<https://github.com/DavidRaveloU>, Copyright (c)
+  2026-present David Ravelo, MIT License).
+- **How this mod differs from `spotlight-launcher`**: provides the macOS 26
+  Tahoe collapsed glass pill + 4 circular mode orbs, DXGI curved-lens refraction
+  glass, a right-hand Quick Look split pane, inline ghost autocomplete (`Tab`),
+  `kl`/`kill` process termination, and browser bookmark indexing enabled by
+  default.
 */
 // ==/WindhawkModReadme==
 
@@ -116,7 +125,7 @@ a `win:` window switcher, browser bookmarks, and direct **macOS 26 Tahoe Dock**
   - ctrlAltSpace: Ctrl + Alt + Space
   - shiftAltSpace: Shift + Alt + Space
   - winShiftS: Win + Shift + S (Alternate)
-- overrideBusyHotkey: true
+- overrideBusyHotkey: false
   $name: Override busy Alt+Space automatically
   $description: Use a lightweight keyboard hook when another app already claims Alt+Space (prevents Windows system menu popup too).
 - openMonitor: cursor
@@ -135,7 +144,7 @@ a `win:` window switcher, browser bookmarks, and direct **macOS 26 Tahoe Dock**
 - enableEverything: true
   $name: Use Everything for instant file search
   $description: Queries voidtools Everything over IPC when running; falls back to Windows folders automatically.
-- enableClipboardHistory: true
+- enableClipboardHistory: false
   $name: Clipboard history (Ctrl+4 / clip:)
   $description: Remember copied text and screenshots encrypted for your Windows account.
 - clipRetentionDays: 7
@@ -164,12 +173,34 @@ a `win:` window switcher, browser bookmarks, and direct **macOS 26 Tahoe Dock**
 */
 // ==/WindhawkModSettings==
 
-// MIT Attribution & License Notice:
-// Inline calculator, Everything IPC query, and DPAPI clipboard history
-// patterns were inspired by David Ravelo's spotlight-launcher (MIT License,
-// Copyright (c) 2026-present David Ravelo, https://github.com/DavidRaveloU).
-// Redesigned independently for macOS 26 Tahoe with optical Liquid Glass,
-// mode orbs, Quick Look split pane, kl/kill process killer, and Dock IPC.
+// License & Attribution Notice:
+// This mod is licensed under GPL-3.0.
+// - Optical Liquid Glass DXGI refraction engine, PaintCode squircle geometry,
+//   and blur interop adapted from MacOS Style Dock by Zach Vaughn (GPL-3.0).
+// - Inline calculator (Calc), SID/DPAPI/base64 helpers, clipboard storage
+//   scheme, Everything IPC structs/parser, and JSON/bookmarks/recent readers
+//   adapted from spotlight-launcher by David Ravelo
+//   (https://github.com/DavidRaveloU) under the MIT License below:
+//
+//   Copyright (c) 2026-present David Ravelo
+//
+//   Permission is hereby granted, free of charge, to any person obtaining a copy
+//   of this software and associated documentation files (the "Software"), to deal
+//   in the Software without restriction, including without limitation the rights
+//   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//   copies of the Software, and to permit persons to whom the Software is
+//   furnished to do so, subject to the following conditions:
+//
+//   The above copyright notice and this permission notice shall be included in all
+//   copies or substantial portions of the Software.
+//
+//   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+//   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//   SOFTWARE.
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -474,12 +505,12 @@ struct SpotlightSettings {
     int glassBlur = 52;
     int glassBrightnessLimit = 78;
     HotkeyCombo hotkeyCombo = HotkeyCombo::AltSpace;
-    bool overrideBusyHotkey = true;
+    bool overrideBusyHotkey = false;
     OpenMonitor openMonitor = OpenMonitor::Cursor;
     int verticalPosition = 24;
     bool disableInFullscreen = true;
     bool enableEverything = true;
-    bool enableClipboardHistory = true;
+    bool enableClipboardHistory = false;
     int clipRetentionDays = 7;
     bool enableBookmarks = true;
     bool enableCalculator = true;
@@ -4497,11 +4528,64 @@ std::wstring UsageKeyStr() { return L"spot.usage_" + CurrentUserSid(); }
 std::wstring PinnedKeyStr() { return L"spot.pins_" + CurrentUserSid(); }
 std::wstring LearnKeyStr() { return L"spot.learn_" + CurrentUserSid(); }
 
+std::wstring UserStatsFilePath(PCWSTR prefix) {
+    wchar_t dir[MAX_PATH]{};
+    size_t n = Wh_GetModStoragePath(dir, ARRAYSIZE(dir));
+    if (n == 0 || n >= ARRAYSIZE(dir)) return {};
+    std::wstring path = dir;
+    if (!path.empty() && path.back() != L'\\' && path.back() != L'/') {
+        path.push_back(L'\\');
+    }
+    CreateDirectoryW(path.c_str(), nullptr);
+    return path + prefix + L"_" + CurrentUserSid() + L".tsv";
+}
+
+std::wstring ReadUserStatsData(PCWSTR prefix, PCWSTR legacyKey, size_t legacyBuf) {
+    std::wstring fp = UserStatsFilePath(prefix);
+    std::vector<BYTE> bytes;
+    if (!fp.empty() && ReadFileBytesRaw(fp, bytes, 4 * 1024 * 1024)) {
+        int wlen = MultiByteToWideChar(
+            CP_UTF8, 0, reinterpret_cast<const char*>(bytes.data()),
+            static_cast<int>(bytes.size()), nullptr, 0);
+        if (wlen > 0) {
+            std::wstring w(static_cast<size_t>(wlen), L'\0');
+            MultiByteToWideChar(
+                CP_UTF8, 0, reinterpret_cast<const char*>(bytes.data()),
+                static_cast<int>(bytes.size()), w.data(), wlen);
+            return w;
+        }
+        return {};
+    }
+    if (legacyKey && *legacyKey && legacyBuf > 0) {
+        std::wstring raw(legacyBuf, L'\0');
+        size_t len = Wh_GetStringValue(legacyKey, raw.data(), raw.size());
+        raw.resize(len);
+        return raw;
+    }
+    return {};
+}
+
+void WriteUserStatsData(PCWSTR prefix, const std::wstring& content) {
+    std::wstring fp = UserStatsFilePath(prefix);
+    if (fp.empty()) return;
+    std::vector<BYTE> bytes;
+    if (!content.empty()) {
+        int u8len = WideCharToMultiByte(
+            CP_UTF8, 0, content.data(), static_cast<int>(content.size()),
+            nullptr, 0, nullptr, nullptr);
+        if (u8len > 0) {
+            bytes.resize(static_cast<size_t>(u8len));
+            WideCharToMultiByte(
+                CP_UTF8, 0, content.data(), static_cast<int>(content.size()),
+                reinterpret_cast<char*>(bytes.data()), u8len, nullptr, nullptr);
+        }
+    }
+    WriteFileBytesRaw(fp, bytes);
+}
+
 void LoadUserStats() {
     g_usageStats.clear();
-    std::wstring raw(32768, L'\0');
-    size_t len = Wh_GetStringValue(UsageKeyStr().c_str(), raw.data(), raw.size());
-    raw.resize(len);
+    std::wstring raw = ReadUserStatsData(L"usage", UsageKeyStr().c_str(), 32768);
     size_t pos = 0;
     while (pos < raw.size()) {
         size_t nl = raw.find(L'\n', pos);
@@ -4519,9 +4603,7 @@ void LoadUserStats() {
     }
 
     g_pinnedAppIds.clear();
-    std::wstring pins(16384, L'\0');
-    size_t plen = Wh_GetStringValue(PinnedKeyStr().c_str(), pins.data(), pins.size());
-    pins.resize(plen);
+    std::wstring pins = ReadUserStatsData(L"pins", PinnedKeyStr().c_str(), 16384);
     pos = 0;
     while (pos < pins.size()) {
         size_t nl = pins.find(L'\n', pos);
@@ -4532,9 +4614,7 @@ void LoadUserStats() {
     }
 
     g_learned.clear();
-    std::wstring lraw(16384, L'\0');
-    size_t llen = Wh_GetStringValue(LearnKeyStr().c_str(), lraw.data(), lraw.size());
-    lraw.resize(llen);
+    std::wstring lraw = ReadUserStatsData(L"learn", LearnKeyStr().c_str(), 16384);
     pos = 0;
     while (pos < lraw.size()) {
         size_t nl = lraw.find(L'\n', pos);
@@ -4562,7 +4642,7 @@ void SaveUsageStats() {
                std::to_wstring(kv.second.second) + L"\n";
         if (++saved >= 400) break;
     }
-    Wh_SetStringValue(UsageKeyStr().c_str(), out.c_str());
+    WriteUserStatsData(L"usage", out);
 }
 
 void SavePinnedApps() {
@@ -4570,7 +4650,7 @@ void SavePinnedApps() {
     for (const auto& k : g_pinnedAppIds) {
         out += k + L"\n";
     }
-    Wh_SetStringValue(PinnedKeyStr().c_str(), out.c_str());
+    WriteUserStatsData(L"pins", out);
 }
 
 void SaveLearned() {
@@ -4579,7 +4659,7 @@ void SaveLearned() {
         out += g_learned[i].query + L"\t" + g_learned[i].appId + L"\t" +
                std::to_wstring(g_learned[i].stamp) + L"\n";
     }
-    Wh_SetStringValue(LearnKeyStr().c_str(), out.c_str());
+    WriteUserStatsData(L"learn", out);
 }
 
 void RecordAppPick(AppEntry& app, const std::wstring& queryFold) {
@@ -4840,8 +4920,10 @@ DWORD WINAPI IndexWorkerProc(LPVOID param) {
                 std::wstring_view(rawPath.data() + pos, semi - pos));
             pos = semi + 1;
             if (dir.empty()) continue;
+            std::wstring scanDir = NativeSystemPath(
+                dir.back() == L'\\' || dir.back() == L'/' ? dir : dir + L"\\");
             WIN32_FIND_DATAW fd{};
-            HANDLE hf = FindFirstFileW(JoinPath(dir, L"*.exe").c_str(), &fd);
+            HANDLE hf = FindFirstFileW(JoinPath(scanDir, L"*.exe").c_str(), &fd);
             if (hf == INVALID_HANDLE_VALUE) continue;
             do {
                 if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
@@ -6434,14 +6516,21 @@ void CaptureClipboardEvent() {
                 int sw = std::abs(bih->biWidth);
                 int sh = std::abs(bih->biHeight);
                 if (bih->biSize >= sizeof(BITMAPINFOHEADER) && sw > 0 && sh > 0 &&
+                    (bih->biCompression == BI_RGB ||
+                     bih->biCompression == BI_BITFIELDS) &&
+                    (bih->biBitCount == 1 || bih->biBitCount == 4 ||
+                     bih->biBitCount == 8 || bih->biBitCount == 16 ||
+                     bih->biBitCount == 24 || bih->biBitCount == 32) &&
                     static_cast<uint64_t>(sw) * sh <= 48ULL * 1000 * 1000) {
                     size_t off = bih->biSize;
                     if (bih->biBitCount <= 8) {
-                        off += (static_cast<size_t>(1) << bih->biBitCount) *
-                               sizeof(RGBQUAD);
+                        DWORD maxCol = 1u << bih->biBitCount;
+                        DWORD cols = bih->biClrUsed
+                                         ? std::min(bih->biClrUsed, maxCol)
+                                         : maxCol;
+                        off += static_cast<size_t>(cols) * sizeof(RGBQUAD);
                     } else if (bih->biSize == sizeof(BITMAPINFOHEADER) &&
-                               (bih->biCompression == 3 ||
-                                bih->biCompression == 6)) {
+                               bih->biCompression == BI_BITFIELDS) {
                         off += 3 * sizeof(DWORD);
                     }
                     int tw = sw, th = sh;
@@ -6454,7 +6543,12 @@ void CaptureClipboardEvent() {
                             tw = std::max(1, sw * kMaxClipImageSide / sh);
                         }
                     }
-                    if (off < avail) {
+                    size_t stride =
+                        ((static_cast<size_t>(sw) * bih->biBitCount + 31) /
+                         32) *
+                        4;
+                    size_t need = stride * static_cast<size_t>(sh);
+                    if (need > 0 && off <= avail && need <= avail - off) {
                         BITMAPINFO dst{};
                         dst.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
                         dst.bmiHeader.biWidth = tw;
@@ -7631,13 +7725,14 @@ void ShellLaunchTarget(const std::wstring& target,
                        const std::wstring& args,
                        bool elevated) {
     if (target.empty()) return;
+    std::wstring resolved = NativeSystemPath(target);
     SHELLEXECUTEINFOW sei{};
     sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_FLAG_NO_UI;
     sei.lpVerb = elevated ? L"runas" : L"open";
-    sei.lpFile = target.c_str();
+    sei.lpFile = resolved.c_str();
     sei.lpParameters = args.empty() ? nullptr : args.c_str();
-    std::wstring dir = ParentDir(target);
+    std::wstring dir = ParentDir(resolved);
     sei.lpDirectory = dir.empty() ? nullptr : dir.c_str();
     sei.nShow = SW_SHOWNORMAL;
     ShellExecuteExW(&sei);
@@ -7657,20 +7752,18 @@ void ActivatePackagedAumid(const std::wstring& aumid) {
 void RevealInFileExplorer(const std::wstring& path) {
     if (path.empty()) return;
     std::wstring params = L"/select,\"" + path + L"\"";
-    ShellLaunchTarget(L"explorer.exe", params, false);
+    WCHAR winDir[MAX_PATH]{};
+    UINT n = GetWindowsDirectoryW(winDir, ARRAYSIZE(winDir));
+    std::wstring ex = (n > 0 && n < ARRAYSIZE(winDir))
+                          ? JoinPath(winDir, L"explorer.exe")
+                          : L"explorer.exe";
+    ShellLaunchTarget(ex, params, false);
 }
 
 bool FocusOrSwitchWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return false;
     if (IsIconic(hwnd)) ShowWindowAsync(hwnd, SW_RESTORE);
-    HWND fg = GetForegroundWindow();
-    DWORD fgTid = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-    DWORD curTid = GetCurrentThreadId();
-    if (fgTid && fgTid != curTid) AttachThreadInput(curTid, fgTid, TRUE);
-    BringWindowToTop(hwnd);
-    BOOL ok = SetForegroundWindow(hwnd);
-    if (fgTid && fgTid != curTid) AttachThreadInput(curTid, fgTid, FALSE);
-    return ok != FALSE;
+    return SetForegroundWindow(hwnd) != FALSE;
 }
 
 bool AdjustWindowsPrivilege(PCWSTR name) {
@@ -7694,27 +7787,45 @@ bool AdjustWindowsPrivilege(PCWSTR name) {
     return ok;
 }
 
+std::wstring SystemToolPath(PCWSTR exeName) {
+    WCHAR sysDir[MAX_PATH]{};
+    UINT n = GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir));
+    if (n > 0 && n < ARRAYSIZE(sysDir)) {
+        return NativeSystemPath(JoinPath(sysDir, exeName));
+    }
+    return exeName;
+}
+
+std::wstring WindowsToolPath(PCWSTR exeName) {
+    WCHAR winDir[MAX_PATH]{};
+    UINT n = GetWindowsDirectoryW(winDir, ARRAYSIZE(winDir));
+    if (n > 0 && n < ARRAYSIZE(winDir)) {
+        return JoinPath(winDir, exeName);
+    }
+    return exeName;
+}
+
 // Execute a single built-in action; returns true if Spotlight should stay open
 bool ExecuteBuiltinAction(const BuiltinAction& act) {
     std::wstring id = act.id;
     if (id == L"taskmgr") {
-        ShellLaunchTarget(L"taskmgr.exe", L"", false);
+        ShellLaunchTarget(SystemToolPath(L"taskmgr.exe"), L"", false);
     } else if (id == L"terminal") {
         ShellLaunchTarget(L"wt.exe", L"", false);
     } else if (id == L"powershell") {
-        ShellLaunchTarget(L"powershell.exe", L"", false);
+        ShellLaunchTarget(SystemToolPath(L"powershell.exe"), L"", false);
     } else if (id == L"cmd") {
-        ShellLaunchTarget(L"cmd.exe", L"", false);
+        ShellLaunchTarget(SystemToolPath(L"cmd.exe"), L"", false);
     } else if (id == L"explorer") {
-        ShellLaunchTarget(L"explorer.exe", L"", false);
+        ShellLaunchTarget(WindowsToolPath(L"explorer.exe"), L"", false);
     } else if (id == L"control") {
-        ShellLaunchTarget(L"control.exe", L"", false);
+        ShellLaunchTarget(SystemToolPath(L"control.exe"), L"", false);
     } else if (id == L"devmgmt") {
-        ShellLaunchTarget(L"mmc.exe", L"devmgmt.msc", false);
+        ShellLaunchTarget(SystemToolPath(L"mmc.exe"), L"devmgmt.msc", false);
     } else if (id == L"services") {
-        ShellLaunchTarget(L"mmc.exe", L"services.msc", false);
+        ShellLaunchTarget(SystemToolPath(L"mmc.exe"), L"services.msc", false);
     } else if (id == L"regedit") {
-        ShellLaunchTarget(L"regedit.exe", L"", true);
+        ShellLaunchTarget(WindowsToolPath(L"regedit.exe"), L"", true);
     } else if (id == L"lock") {
         LockWorkStation();
     } else if (id == L"sleep") {
@@ -9636,6 +9747,28 @@ void RenderSpotlightSurface() {
         const auto acc = GetAccentColor();
         const D2D1_COLOR_F accentCol = D2D1::ColorF(
             acc.R / 255.0f, acc.G / 255.0f, acc.B / 255.0f, 1.0f);
+        auto calcLum = [](const D2D1_COLOR_F& c) -> float {
+            return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+        };
+        D2D1_COLOR_F matchHiCol = accentCol;
+        if (dark) {
+            if (calcLum(matchHiCol) < 0.62f) {
+                matchHiCol = D2D1::ColorF(
+                    std::min(1.0f, matchHiCol.r * 0.45f + 0.55f * 0.42f),
+                    std::min(1.0f, matchHiCol.g * 0.45f + 0.55f * 0.78f),
+                    std::min(1.0f, matchHiCol.b * 0.45f + 0.55f * 1.00f),
+                    1.0f);
+                if (calcLum(matchHiCol) < 0.62f) {
+                    matchHiCol = D2D1::ColorF(0.55f, 0.82f, 1.0f, 1.0f);
+                }
+            }
+        } else {
+            if (calcLum(matchHiCol) > 0.45f) {
+                matchHiCol = D2D1::ColorF(
+                    matchHiCol.r * 0.55f, matchHiCol.g * 0.55f,
+                    matchHiCol.b * 0.55f, 1.0f);
+            }
+        }
         const D2D1_COLOR_F caretCol =
             D2D1::ColorF(0.14f, 0.50f, 0.96f, 1.0f);  // Apple Spotlight blue
 
@@ -10195,7 +10328,7 @@ void RenderSpotlightSurface() {
                                             r.hitRect.top + 25.0f};
                         DrawTitleWithHighlights(dc, fTitle.get(), r.title,
                                                 r.matchMask, titleRc,
-                                                textPrimary, accentCol);
+                                                textPrimary, matchHiCol);
                         if (!r.subtitle.empty()) {
                             winrt::com_ptr<ID2D1SolidColorBrush> subBr;
                             dc->CreateSolidColorBrush(textSecondary, subBr.put());
@@ -10673,6 +10806,11 @@ void OpenSpotlight(SpotlightMode initialMode) {
         g_spot.windowPx.right - g_spot.windowPx.left,
         g_spot.windowPx.bottom - g_spot.windowPx.top,
         SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    if (WantOpticalLiquidGlass()) {
+        ApplyCaptureExclusion(true);
+        g_liquidCapture.excludedApplied = true;
+        g_liquidCapture.excludedAtMs = GetTickCount64();
+    }
 
     if ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) {
         INPUT mask[2]{};
@@ -10684,15 +10822,12 @@ void OpenSpotlight(SpotlightMode initialMode) {
         SendInput(2, mask, sizeof(INPUT));
     }
 
-    // Ensure clean keyboard focus even when invoked across threads
-    HWND fg = GetForegroundWindow();
-    DWORD fgTid = fg ? GetWindowThreadProcessId(fg, nullptr) : 0;
-    DWORD curTid = GetCurrentThreadId();
-    if (fgTid && fgTid != curTid) AttachThreadInput(curTid, fgTid, TRUE);
+    // Ensure clean keyboard focus without cross-thread AttachThreadInput
+    INPUT wake{};
+    SendInput(1, &wake, sizeof(INPUT));
     BringWindowToTop(g_spot.hwnd);
     SetForegroundWindow(g_spot.hwnd);
     SetFocus(g_spot.hwnd);
-    if (fgTid && fgTid != curTid) AttachThreadInput(curTid, fgTid, FALSE);
 
     g_liquidCapture.highRate.store(true, std::memory_order_relaxed);
     EnsureAnimTimerRunning();
@@ -11750,6 +11885,13 @@ LRESULT CALLBACK SpotlightHostWndProc(HWND hwnd,
         case kWmAppSettings:
             LoadSettings();
             UpdateGlobalSpotlightHotkeys(hwnd);
+            if (!WantOpticalLiquidGlass()) {
+                if (g_liquidCapture.worker) StopLiquidCaptureWorker();
+                if (g_liquidCapture.excludedApplied) {
+                    ApplyCaptureExclusion(false);
+                    g_liquidCapture.excludedApplied = false;
+                }
+            }
             if (g_spot.visible) {
                 g_spot.darkMode = IsSystemDarkMode();
                 g_spot.sheetPlate.dirty = true;
@@ -11997,6 +12139,14 @@ DWORD WINAPI SpotlightUiThreadProc(LPVOID) {
 
     HideSpotlight(false);
     if (g_clipDirty) SaveClipHistory();
+    g_llHookActive.store(false, std::memory_order_release);
+    if (g_llHookThreadId) {
+        PostThreadMessageW(g_llHookThreadId, WM_QUIT, 0, 0);
+    }
+    if (g_watchStop) SetEvent(g_watchStop);
+    if (g_mediaStop) SetEvent(g_mediaStop);
+    if (g_mediaEvent) SetEvent(g_mediaEvent);
+    if (g_liquidCapture.stopEvent) SetEvent(g_liquidCapture.stopEvent);
     StopHotkeyHookThread();
     StopWatcher();
     StopMediaWorker();
@@ -12072,10 +12222,22 @@ void WhTool_ModUninit() {
     }
 }
 
-// Windhawk tool-mod boilerplate for windhawk.exe host
-bool g_isToolModProcessLauncher = false;
-HANDLE g_toolModProcessMutex = nullptr;
-HANDLE g_toolModClosingEvent = nullptr;
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
@@ -12083,7 +12245,7 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
-    DWORD sessionId = 0;
+    DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
         return FALSE;
@@ -12093,7 +12255,7 @@ BOOL Wh_ModInit() {
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -12126,53 +12288,23 @@ BOOL Wh_ModInit() {
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
 
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            CloseHandle(g_toolModProcessMutex);
-            g_toolModProcessMutex = nullptr;
-            ULONGLONG start = GetTickCount64();
-            for (;;) {
-                Sleep(100);
-                HANDLE m = CreateMutexW(nullptr, TRUE,
-                                        L"windhawk-tool-mod_" WH_MOD_ID);
-                if (m && GetLastError() != ERROR_ALREADY_EXISTS) {
-                    g_toolModProcessMutex = m;
-                    break;
-                }
-                if (m) {
-                    CloseHandle(m);
-                }
-                bool closing = false;
-                if (HANDLE ev = OpenEventW(
-                        SYNCHRONIZE, FALSE,
-                        L"windhawk-tool-mod-closing_" WH_MOD_ID)) {
-                    closing = WaitForSingleObject(ev, 0) == WAIT_OBJECT_0;
-                    CloseHandle(ev);
-                }
-                if (GetTickCount64() - start > (closing ? 12000u : 3000u)) {
-                    break;
-                }
-            }
-            if (!g_toolModProcessMutex) {
-                Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
-                ExitProcess(1);
-            }
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
         }
-
-        g_toolModClosingEvent = CreateEventW(
-            nullptr, TRUE, FALSE, L"windhawk-tool-mod-closing_" WH_MOD_ID);
 
         if (!WhTool_ModInit()) {
             ExitProcess(1);
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
@@ -12197,8 +12329,8 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
@@ -12211,9 +12343,9 @@ void Wh_ModAfterInit() {
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
             Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
@@ -12236,8 +12368,8 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFOW si{
-        .cb = sizeof(STARTUPINFOW),
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
@@ -12265,13 +12397,6 @@ void Wh_ModUninit() {
         return;
     }
 
-    if (g_toolModClosingEvent) {
-        SetEvent(g_toolModClosingEvent);
-    }
     WhTool_ModUninit();
-    if (g_toolModClosingEvent) {
-        CloseHandle(g_toolModClosingEvent);
-        g_toolModClosingEvent = nullptr;
-    }
     ExitProcess(0);
 }
