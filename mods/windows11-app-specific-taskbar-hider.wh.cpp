@@ -28,8 +28,8 @@ app.
 The mod hooks the APIs the shell uses to show and activate the taskbar
 (`ShowWindow`, `SetWindowPos`, `SetForegroundWindow`). While one of your target
 apps is active, any attempt to show or focus a taskbar window (primary or
-secondary monitor) is blocked. The work area of every monitor is expanded to
-the full monitor size, so maximized windows fill the screen, and the original
+secondary monitor) is blocked. The work area is extended over the taskbar's
+edge of each monitor, so maximized windows fill the screen, and the original
 work area is restored when the taskbar comes back.
 
 Focus changes are detected instantly via a foreground-window event. A light
@@ -52,6 +52,14 @@ taskbar if the shell recreates it.
 
 To find an app's EXE name, open Task Manager, go to the **Details** tab, and
 look at the **Name** column.
+
+Note: the windows of most Microsoft Store (UWP) apps belong to
+`ApplicationFrameHost.exe`, not to the app's own EXE, so in "Require focus"
+mode they aren't detected by their own name. Regular desktop apps, including
+desktop apps installed from the Store, work as expected.
+
+Only the taskbar's edge of the screen is given to apps. Space reserved by
+other docked toolbars is kept.
 */
 // ==/WindhawkModReadme==
 
@@ -76,9 +84,12 @@ look at the **Name** column.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
 #include <windows.h>
 #include <tlhelp32.h>
 
+#include <algorithm>
 #include <atomic>
 #include <string>
 #include <vector>
@@ -86,7 +97,8 @@ look at the **Name** column.
 namespace {
 
 constexpr DWORD kTickIntervalMs = 500;
-constexpr ULONGLONG kWorkAreaRecheckIntervalMs = 5000;
+constexpr ULONGLONG kWorkAreaRecheckIntervalMs = 1000;
+constexpr UINT kSettingChangeTimeoutMs = 100;
 constexpr UINT kMsgSettingsChanged = WM_APP + 1;
 
 struct Settings {
@@ -118,6 +130,11 @@ struct SavedWorkArea {
 };
 std::vector<SavedWorkArea> g_savedWorkAreas;
 ULONGLONG g_lastWorkAreaCheck = 0;
+
+// Taskbar windows hidden by this mod. Only these are shown again, so that
+// taskbars hidden by something else (e.g. another mod) stay hidden. Same
+// thread rules as g_savedWorkAreas.
+std::vector<HWND> g_hiddenTaskbars;
 
 // Some calls below (e.g. the work area change broadcast) dispatch incoming
 // sent messages, which can run the foreground event callback while an update
@@ -176,34 +193,62 @@ std::vector<HWND> GetTaskbarWindows() {
 // Work area
 // ---------------------------------------------------------------------
 
-BOOL CALLBACK CollectMonitorInfoProc(HMONITOR hMonitor,
-                                     HDC,
-                                     LPRECT,
-                                     LPARAM lParam) {
-    auto* monitors = reinterpret_cast<std::vector<MONITORINFO>*>(lParam);
-
-    MONITORINFO mi{};
-    mi.cbSize = sizeof(mi);
-    if (GetMonitorInfoW(hMonitor, &mi)) {
-        monitors->push_back(mi);
-    }
-
-    return TRUE;
+// Notifies all windows about the work area change. SPIF_SENDCHANGE isn't used
+// with SPI_SETWORKAREA, since it waits for every top-level window and would
+// block on a hung window. Hung windows are skipped here instead.
+void BroadcastWorkAreaChange() {
+    SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, SPI_SETWORKAREA, 0,
+                        SMTO_ABORTIFHUNG, kSettingChangeTimeoutMs, nullptr);
 }
 
-// Expands the work area of every monitor to the full monitor size. Can be
-// called repeatedly: monitors that are already expanded are skipped, and the
-// original work area is only saved the first time, so that it can be
-// restored later.
+// Expands the work area of each monitor that has a taskbar over the edge
+// the taskbar is docked to, so that maximized windows also cover the
+// taskbar's area. Space reserved by other appbars (e.g. docks) on other
+// edges is kept. Can be called repeatedly: monitors that are already
+// expanded are skipped, and the original work area is only saved the first
+// time, so that it can be restored later.
 void ExpandWorkAreas() {
     g_lastWorkAreaCheck = GetTickCount64();
 
-    std::vector<MONITORINFO> monitors;
-    EnumDisplayMonitors(nullptr, nullptr, CollectMonitorInfoProc,
-                        reinterpret_cast<LPARAM>(&monitors));
+    bool changed = false;
 
-    for (auto& mi : monitors) {
-        if (EqualRect(&mi.rcWork, &mi.rcMonitor)) {
+    for (HWND hTaskbar : GetTaskbarWindows()) {
+        RECT taskbarRect;
+        if (!GetWindowRect(hTaskbar, &taskbarRect)) {
+            continue;
+        }
+
+        HMONITOR hMonitor =
+            MonitorFromRect(&taskbarRect, MONITOR_DEFAULTTONULL);
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        if (!hMonitor || !GetMonitorInfoW(hMonitor, &mi)) {
+            continue;
+        }
+
+        // Extend the work area over the taskbar's edge of the monitor.
+        RECT newWork = mi.rcWork;
+        int taskbarWidth = taskbarRect.right - taskbarRect.left;
+        int taskbarHeight = taskbarRect.bottom - taskbarRect.top;
+        if (taskbarWidth >= taskbarHeight) {
+            int taskbarCenterY = (taskbarRect.top + taskbarRect.bottom) / 2;
+            int monitorCenterY = (mi.rcMonitor.top + mi.rcMonitor.bottom) / 2;
+            if (taskbarCenterY >= monitorCenterY) {
+                newWork.bottom = mi.rcMonitor.bottom;
+            } else {
+                newWork.top = mi.rcMonitor.top;
+            }
+        } else {
+            int taskbarCenterX = (taskbarRect.left + taskbarRect.right) / 2;
+            int monitorCenterX = (mi.rcMonitor.left + mi.rcMonitor.right) / 2;
+            if (taskbarCenterX >= monitorCenterX) {
+                newWork.right = mi.rcMonitor.right;
+            } else {
+                newWork.left = mi.rcMonitor.left;
+            }
+        }
+
+        if (EqualRect(&newWork, &mi.rcWork)) {
             continue;
         }
 
@@ -219,8 +264,13 @@ void ExpandWorkAreas() {
             g_savedWorkAreas.push_back({mi.rcMonitor, mi.rcWork});
         }
 
-        SystemParametersInfoW(SPI_SETWORKAREA, 0, &mi.rcMonitor,
-                              SPIF_SENDCHANGE);
+        if (SystemParametersInfoW(SPI_SETWORKAREA, 0, &newWork, 0)) {
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        BroadcastWorkAreaChange();
     }
 }
 
@@ -229,6 +279,8 @@ void RestoreWorkAreas() {
     // this function is interrupted by a nested update.
     std::vector<SavedWorkArea> savedWorkAreas = std::move(g_savedWorkAreas);
     g_savedWorkAreas.clear();
+
+    bool changed = false;
 
     for (const auto& saved : savedWorkAreas) {
         // Skip if the monitor layout changed in the meantime; the shell will
@@ -243,7 +295,13 @@ void RestoreWorkAreas() {
         }
 
         RECT workRect = saved.workRect;
-        SystemParametersInfoW(SPI_SETWORKAREA, 0, &workRect, SPIF_SENDCHANGE);
+        if (SystemParametersInfoW(SPI_SETWORKAREA, 0, &workRect, 0)) {
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        BroadcastWorkAreaChange();
     }
 }
 
@@ -343,24 +401,55 @@ bool IsAnyTargetProcessRunning(const std::vector<std::wstring>& targets) {
 // State
 // ---------------------------------------------------------------------
 
+// Hides the taskbars that are currently visible, and remembers them so that
+// they can be shown again later.
+void HideVisibleTaskbars() {
+    for (HWND hTaskbar : GetTaskbarWindows()) {
+        if (!IsWindowVisible(hTaskbar)) {
+            continue;
+        }
+
+        ShowWindowAsync(hTaskbar, SW_HIDE);
+
+        if (std::find(g_hiddenTaskbars.begin(), g_hiddenTaskbars.end(),
+                      hTaskbar) == g_hiddenTaskbars.end()) {
+            g_hiddenTaskbars.push_back(hTaskbar);
+        }
+    }
+}
+
 void ApplyTaskbarVisibility(bool hide) {
     // The taskbar windows belong to another thread. ShowWindowAsync doesn't
     // wait for that thread, so it can't deadlock if the taskbar thread is
     // busy or waiting for us. The hooks only block *show* attempts while
     // g_forceHidden is set, so hiding always goes through, and showing is
     // only done after g_forceHidden was cleared.
-    for (HWND hTaskbar : GetTaskbarWindows()) {
-        ShowWindowAsync(hTaskbar, hide ? SW_HIDE : SW_SHOWNA);
-    }
-
     if (hide) {
+        HideVisibleTaskbars();
         ExpandWorkAreas();
     } else {
+        // Move the list out first, so that it's in a consistent state even
+        // if this function is interrupted by a nested update.
+        std::vector<HWND> hiddenTaskbars = std::move(g_hiddenTaskbars);
+        g_hiddenTaskbars.clear();
+        for (HWND hTaskbar : hiddenTaskbars) {
+            if (IsWindow(hTaskbar)) {
+                ShowWindowAsync(hTaskbar, SW_SHOWNA);
+            }
+        }
+
         RestoreWorkAreas();
     }
 }
 
 void UpdateTaskbarStateOnce() {
+    // Only the explorer.exe process that owns the taskbar manages it and the
+    // work area. Other explorer.exe processes (separate folder window
+    // processes, /factory instances) do nothing.
+    if (!g_forceHidden && GetTaskbarWindows().empty()) {
+        return;
+    }
+
     bool masterEnabled;
     bool requireFocus;
     std::vector<std::wstring> targets;
@@ -403,16 +492,11 @@ void UpdateTaskbarStateOnce() {
     if (shouldHide) {
         // Re-hide taskbars that became visible through a path the hooks
         // don't cover, e.g. a taskbar recreated after a display change.
-        for (HWND hTaskbar : GetTaskbarWindows()) {
-            if (IsWindowVisible(hTaskbar)) {
-                Wh_Log(L"Re-hiding taskbar %p", hTaskbar);
-                ShowWindowAsync(hTaskbar, SW_HIDE);
-            }
-        }
+        HideVisibleTaskbars();
 
         // Re-expand the work area if it was reset, e.g. after a display
-        // change or when a monitor was connected. Done only every few
-        // seconds, since changing the work area notifies all windows.
+        // change or when a monitor was connected. Rate limited, since
+        // changing the work area notifies all windows.
         if (GetTickCount64() - g_lastWorkAreaCheck >=
             kWorkAreaRecheckIntervalMs) {
             ExpandWorkAreas();
@@ -571,17 +655,15 @@ void LoadSettings() {
     newSettings.requireFocus = Wh_GetIntSetting(L"requireFocus");
 
     for (int i = 0;; i++) {
-        PCWSTR value = Wh_GetStringSetting(L"targetProcesses[%d]", i);
-        bool hasValue = value && *value;
-        if (hasValue) {
-            std::wstring name = NormalizeExeName(value);
-            if (!name.empty()) {
-                newSettings.targetProcesses.push_back(std::move(name));
-            }
-        }
-        Wh_FreeStringSetting(value);
-        if (!hasValue) {
+        auto value =
+            WindhawkUtils::StringSetting::make(L"targetProcesses[%d]", i);
+        if (!*value.get()) {
             break;
+        }
+
+        std::wstring name = NormalizeExeName(value.get());
+        if (!name.empty()) {
+            newSettings.targetProcesses.push_back(std::move(name));
         }
     }
 
@@ -598,13 +680,13 @@ BOOL Wh_ModInit() {
     InitializeCriticalSection(&g_settingsLock);
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook,
-                       (void**)&ShowWindow_Original);
-    Wh_SetFunctionHook((void*)SetWindowPos, (void*)SetWindowPos_Hook,
-                       (void**)&SetWindowPos_Original);
-    Wh_SetFunctionHook((void*)SetForegroundWindow,
-                       (void*)SetForegroundWindow_Hook,
-                       (void**)&SetForegroundWindow_Original);
+    WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook,
+                                   &ShowWindow_Original);
+    WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
+                                   &SetWindowPos_Original);
+    WindhawkUtils::SetFunctionHook(SetForegroundWindow,
+                                   SetForegroundWindow_Hook,
+                                   &SetForegroundWindow_Original);
 
     return TRUE;
 }
