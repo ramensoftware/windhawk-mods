@@ -4633,6 +4633,8 @@ struct Widget {
     UINT64 capHash = 0;    // of the last picture taken behind it: the same picture doesn't rebuild the glass
     ULONGLONG capTick = 0;
     float lum = -1;
+    int textDark = -1;         // automatic text: black (1) or white (0) chosen from the glass behind it (-1: not yet)
+    ULONGLONG textFlip = 0;    // when it last changed
     ComPtr<ID2D1Bitmap> snap;
     ComPtr<ID2D1Effect> source, blurFx, mapXf, disp, color;
     ComPtr<ID2D1Bitmap> map;
@@ -8709,7 +8711,19 @@ static void Render(Widget* wd) {
     Theme t = g_ui.theme;
     g_darkText = t == Theme::Light ? true : t == Theme::Tinted ? Luma(ColorOf(g_ui.tintColor)) > 0.6f : false;
     if (g_ui.textColor >= 0) g_darkText = g_ui.textColor == 1;
-    else if ((t == Theme::Glass || t == Theme::Frost) && wd->lum >= 0) g_darkText = wd->lum > 0.55f;
+    else if ((t == Theme::Glass || t == Theme::Frost) && wd->lum >= 0) {
+        // With a margin, and at most every 2 s: an animated wallpaper close to the middle (a pulsing light, leaves
+        // moving) would otherwise flip the text between black and white over and over
+        ULONGLONG now = GetTickCount64();
+        if (wd->textDark < 0) {
+            wd->textDark = wd->lum > 0.55f;
+            wd->textFlip = now;
+        } else if (now - wd->textFlip > 2000 && (wd->textDark ? wd->lum < 0.45f : wd->lum > 0.65f)) {
+            wd->textDark = !wd->textDark;
+            wd->textFlip = now;
+        }
+        g_darkText = wd->textDark == 1;
+    }
 
     RECT bind = {0, 0, wd->pw, wd->ph};
     if (FAILED(wd->rt->BindDC(wd->memDC, &bind))) return;
